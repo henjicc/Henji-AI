@@ -93,5 +93,12 @@ export const agentToolCatalogEntrySchema = z.object({
   readOnly: z.boolean(),
   supportsPreview: z.boolean(),
   supportsUndo: z.boolean(),
+  whenToUse: z.array(z.string().min(1).max(500)).max(6),
+  avoidWhen: z.array(z.string().min(1).max(500)).max(6),
+  prerequisites: z.array(z.string().min(1).max(500)).max(8),
+  outputs: z.array(z.string().min(1).max(500)).max(8),
+  successEvidence: z.array(z.string().min(1).max(500)).max(8),
+  failureRecovery: z.array(z.string().min(1).max(500)).max(8),
+  parallelSafe: z.boolean(),
 }).strict()
 export type AgentToolCatalogEntry = z.infer<typeof agentToolCatalogEntrySchema>

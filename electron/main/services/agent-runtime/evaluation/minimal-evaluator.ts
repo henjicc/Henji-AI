@@ -11,11 +11,15 @@ export interface MinimalEvaluationToolExpectation {
 export interface MinimalEvaluationCase {
   id: string
   category: 'golden' | 'historical' | 'adversarial' | 'boundary' | 'security' | 'recovery'
+  baselineScenario?: 'generation' | 'ambiguous' | 'cross_workspace' | 'model_preference' | 'tool_recovery' | 'write_verification' | 'long_context'
   goal: string
   expectedIntent: string
   expectedTerminalStatuses: AgentRunStatus[]
   expectedTools: MinimalEvaluationToolExpectation[]
   forbiddenTools: string[]
+  acceptableToolSequences?: string[][]
+  successEvidence?: string[]
+  forbiddenBehaviors?: string[]
   expectedApprovalRisks?: Array<'R0' | 'R1' | 'R2' | 'R3'>
   maxLatencyMs: number
   maxInputTokens: number

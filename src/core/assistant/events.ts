@@ -144,7 +144,7 @@ const planUpdatedEventSchema = z.object({
   type: z.literal('PlanUpdated'),
   intent: z.string().min(1).max(100),
   summary: z.string().min(1).max(500),
-  toolDomains: z.array(z.string().min(1).max(100)).max(4),
+  toolDomains: z.array(z.string().min(1).max(100)).max(8),
 }).strict()
 
 const toolRequestedEventSchema = z.object({
@@ -203,7 +203,7 @@ const contextUpdatedEventSchema = z.object({
   type: z.literal('ContextUpdated'),
   turn: z.number().int().positive(),
   snapshotRevision: z.number().int().nonnegative(),
-  activeToolNames: z.array(z.string().min(1)).max(8),
+  activeToolNames: z.array(z.string().min(1)).max(12),
   estimatedTokens: z.number().int().nonnegative(),
 }).strict()
 
@@ -220,6 +220,21 @@ const artifactOffloadedEventSchema = z.object({
   artifactRef: z.string().min(1),
   source: z.string().min(1),
   originalBytes: z.number().int().nonnegative(),
+}).strict()
+
+const verificationCompletedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('VerificationCompleted'),
+  passed: z.boolean(),
+  summary: z.string().min(1).max(500),
+  evidence: z.array(z.string().min(1).max(500)).max(8),
+}).strict()
+
+const clarificationRequiredEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('ClarificationRequired'),
+  question: z.string().min(1).max(2_000),
+  reason: z.string().min(1).max(500),
 }).strict()
 
 const runCompletedEventSchema = z.object({
@@ -259,6 +274,8 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   contextUpdatedEventSchema,
   contextCompactedEventSchema,
   artifactOffloadedEventSchema,
+  verificationCompletedEventSchema,
+  clarificationRequiredEventSchema,
   runCompletedEventSchema,
   runFailedEventSchema,
   runCancelledEventSchema,

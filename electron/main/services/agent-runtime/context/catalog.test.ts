@@ -49,10 +49,23 @@ describe('AgentToolCatalogPlanner', () => {
       reason: '命中生成规则',
     }
     const names = planner.select(route, contextSnapshot()).map((item) => item.catalog.name)
+    expect(names).toContain('search_application_capabilities')
     expect(names).toContain('search_models')
     expect(names).toContain('get_model_schema')
     expect(names).toContain('create_visible_generation_task')
     expect(names).toContain('switch_workspace')
+  })
+
+  it('目录项提供工具使用、证据、恢复和并行语义', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const entry = registry.list(contextSnapshot()).find((item) => item.name === 'search_models')
+    expect(entry).toMatchObject({ parallelSafe: true })
+    expect(entry?.whenToUse.length).toBeGreaterThan(0)
+    expect(entry?.prerequisites.length).toBeGreaterThan(0)
+    expect(entry?.successEvidence.length).toBeGreaterThan(0)
+    expect(entry?.failureRecovery.length).toBeGreaterThan(0)
   })
 
   it('多词和供应商限定不会让图片生成能力误报为零项', () => {

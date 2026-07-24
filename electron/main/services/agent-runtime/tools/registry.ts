@@ -1,7 +1,7 @@
 import { agentToolCatalogEntrySchema, type AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
-import type { AgentToolDefinition, AgentToolRegistration } from './types'
+import type { AgentToolDefinition, AgentToolRegistration, AgentToolSemantics } from './types'
 
 const semanticSearchConcepts: ReadonlyArray<{ pattern: RegExp; concept: string }> = [
   { pattern: /(?:图片|图像|照片|相片|插画|海报|头像|壁纸|封面|图标|生图|image|picture|photo)/i, concept: 'media:image' },
@@ -38,7 +38,18 @@ function normalizeSearchValue(value: string): string {
 function searchScore(entry: AgentToolCatalogEntry, query: string): number {
   const normalized = normalizeSearchValue(query)
   if (!normalized) return 1
-  const text = normalizeSearchValue(`${entry.name} ${entry.title} ${entry.description} ${entry.category}`)
+  const text = normalizeSearchValue([
+    entry.name,
+    entry.title,
+    entry.description,
+    entry.category,
+    ...entry.whenToUse,
+    ...entry.avoidWhen,
+    ...entry.prerequisites,
+    ...entry.outputs,
+    ...entry.successEvidence,
+    ...entry.failureRecovery,
+  ].join(' '))
   const rawTerms = normalized.split(/[\s,，。;；:：/\\|]+/).filter(Boolean)
   const concepts = semanticSearchConcepts
     .filter((item) => item.pattern.test(normalized))
@@ -52,6 +63,56 @@ function searchScore(entry: AgentToolCatalogEntry, query: string): number {
     if (supportedConcepts.includes(concept)) score += 20
   }
   return score
+}
+
+function resolveToolSemantics(definition: AgentToolDefinition): Required<AgentToolSemantics> {
+  const parallelSafe = definition.semantics?.parallelSafe
+    ?? (definition.readOnly && !definition.destructive && definition.risk === 'R0')
+  return {
+    whenToUse: definition.semantics?.whenToUse ?? [definition.description],
+    avoidWhen: definition.semantics?.avoidWhen ?? [
+      definition.destructive
+        ? '目标、作用范围或用户授权不明确时不要使用。'
+        : '缺少必需输入或有更精确的查询工具时不要猜测参数。',
+    ],
+    prerequisites: definition.semantics?.prerequisites ?? (
+      definition.requiredContext.length > 0
+        ? definition.requiredContext.map((scope) => `宿主 ${scope} 作用域已就绪且 revision 未过期。`)
+        : ['无额外宿主作用域要求；输入仍必须通过 schema 校验。']
+    ),
+    outputs: definition.semantics?.outputs ?? [
+      '返回经过 output schema 校验和脱敏的结构化观察结果。',
+      definition.supportsUndo ? '成功结果可能包含可撤销引用。' : '不承诺可撤销引用。',
+    ],
+    successEvidence: definition.semantics?.successEvidence ?? [
+      '工具网关返回 completed，且结构化输出通过 schema 校验。',
+      definition.readOnly ? '读取结果包含请求目标的稳定标识或状态摘要。' : '写入结果包含目标标识及 resulting revision、状态或撤销引用。',
+    ],
+    failureRecovery: definition.semantics?.failureRecovery ?? [
+      'STALE_CONTEXT 或 CONFLICT：刷新宿主快照后重新规划。',
+      'TIMEOUT 或 NOT_READY：有限等待后再决定是否重试。',
+      'NOT_FOUND、INVALID_INPUT 或权限拒绝：修正目标/参数或向用户澄清。',
+    ],
+    parallelSafe,
+  }
+}
+
+function modelToolDescription(definition: AgentToolDefinition): string {
+  const semantics = resolveToolSemantics(definition)
+  return [
+    definition.description,
+    `适用：${semantics.whenToUse.join('；')}`,
+    `前置：${semantics.prerequisites.join('；')}`,
+    `成功证据：${semantics.successEvidence.join('；')}`,
+    `失败恢复：${semantics.failureRecovery.join('；')}`,
+    `并行：${semantics.parallelSafe ? '只读且并发键不冲突时可并行' : '必须串行'}`,
+  ].join('\n')
+}
+
+export interface AgentToolExecutionMetadata {
+  parallelSafe: boolean
+  concurrencyKey: string
+  risk: AgentToolDefinition['risk']
 }
 
 export class AgentToolRegistry {
@@ -98,6 +159,18 @@ export class AgentToolRegistry {
     })
   }
 
+  executionMetadata(name: string, input: unknown): AgentToolExecutionMetadata | null {
+    const definition = this.definitions.get(name)
+    if (!definition) return null
+    const parsed = definition.inputSchema.safeParse(input)
+    if (!parsed.success) return null
+    return {
+      parallelSafe: resolveToolSemantics(definition).parallelSafe,
+      concurrencyKey: definition.concurrencyKey(parsed.data),
+      risk: definition.risk,
+    }
+  }
+
   private isAvailable(definition: AgentToolDefinition, context: HostContextSnapshot | null): boolean {
     if (definition.side === 'backend') return true
     if (!context?.uiReady) return false
@@ -106,6 +179,7 @@ export class AgentToolRegistry {
   }
 
   private toCatalogEntry(definition: AgentToolDefinition): AgentToolCatalogEntry {
+    const semantics = resolveToolSemantics(definition)
     return agentToolCatalogEntrySchema.parse({
       name: definition.name,
       version: definition.version,
@@ -118,13 +192,14 @@ export class AgentToolRegistry {
       readOnly: definition.readOnly,
       supportsPreview: definition.supportsPreview,
       supportsUndo: definition.supportsUndo,
+      ...semantics,
     })
   }
 
   private toModelTool(definition: AgentToolDefinition): ModelStepTool {
     return {
       name: definition.name,
-      description: definition.description,
+      description: modelToolDescription(definition),
       inputSchema: definition.aiInputSchema,
       strict: true,
     }

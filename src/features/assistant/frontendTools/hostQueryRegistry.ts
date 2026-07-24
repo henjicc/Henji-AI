@@ -89,6 +89,19 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
       catalogVersion: 'model-registry/v1',
       models,
       nextCursor: start + models.length < filtered.length ? start + models.length : null,
+      selectionContext: {
+        requestedMediaType: query.input.mediaType ?? null,
+        requestedProviderId: query.input.providerId ?? null,
+        requestedTags: query.input.tags ?? [],
+        requestedQuery: query.input.query,
+        compatibleCandidateCount: filtered.length,
+        exclusionRules: [
+          '媒体类型不匹配',
+          '用户明确供应商不匹配',
+          '必需能力标签缺失',
+          '明确模型关键词不匹配',
+        ],
+      },
     }
   }],
   ['get_model_schema', async (query) => {

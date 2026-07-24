@@ -17,6 +17,16 @@ export interface AgentToolRetryPolicy {
   baseDelayMs: number
 }
 
+export interface AgentToolSemantics {
+  whenToUse?: string[]
+  avoidWhen?: string[]
+  prerequisites?: string[]
+  outputs?: string[]
+  successEvidence?: string[]
+  failureRecovery?: string[]
+  parallelSafe?: boolean
+}
+
 export interface AgentToolExecutionContext {
   runId: string
   threadId: string
@@ -30,6 +40,7 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   version: number
   title: string
   description: string
+  semantics?: AgentToolSemantics
   category: string
   side: AgentToolSide
   risk: AgentToolRisk

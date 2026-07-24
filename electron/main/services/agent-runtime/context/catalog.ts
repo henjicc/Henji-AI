@@ -18,6 +18,7 @@ const toolsByDomain: Readonly<Record<string, string[]>> = {
   diagnostics: ['query_diagnostic_events'],
   canvas: [
     'list_canvas_projects',
+    'get_canvas_node',
     'open_canvas_project',
     'create_canvas_project',
     'close_canvas_project',
@@ -88,11 +89,11 @@ export class AgentToolCatalogPlanner {
 
   select(route: AgentRouteDecision, context: HostContextSnapshot | null): AgentToolRegistration[] {
     const requested = route.toolDomains.flatMap((domain) => toolsByDomain[domain] ?? [])
-    const broadRoute = requested.length > 7
-    const discovered = route.path === 'primary' || broadRoute ? this.discoveredToolNames : []
-    const names = route.path === 'primary' || broadRoute
-      ? ['search_application_capabilities', ...requested, ...discovered]
-      : requested
+    const names = [
+      'search_application_capabilities',
+      ...this.discoveredToolNames,
+      ...requested,
+    ]
     return this.registry.registrations([...new Set(names)].slice(0, 8), context)
   }
 

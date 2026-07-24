@@ -1,11 +1,12 @@
 import { createMainLogger } from '../../logging'
 import {
   agentRunStateSchema,
+  type AgentApprovalRequest,
   type AgentEventInput,
   type AgentRunState,
   type AgentRunStatus,
 } from '../../../../../src/core/assistant/events'
-import { agentToolObservationSchema, type AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
+import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import {
   type HostContextSnapshot,
@@ -17,7 +18,6 @@ import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentIntentRouter } from '../context/router'
 import type { AgentRouteDecision } from '../context/types'
 import { AgentToolGatewayError } from '../tools/gateway'
-import { digestJson } from '../tools/security'
 import { AgentBudgetTracker } from './budget'
 import { AgentEventStream } from './event-stream'
 import { createInitialAgentRunState } from './initial-state'
@@ -28,22 +28,16 @@ import {
 import { selectAgentRuntimeModels } from './models'
 import {
   errorCode,
-  extractResultReferences,
-  extractResultScopeRevisions,
-  rejectedObservation,
   serializeError,
   toolMessage,
 } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
+import { AgentToolCallScheduler } from './tool-call-scheduler'
+import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
 import type { AgentRunnerOptions } from './types'
+import { AgentApprovalWaiter } from './approval-waiter'
 
 const logger = createMainLogger('main.agent_runtime')
-
-interface ApprovalWaiter {
-  approvalId: string
-  timer: ReturnType<typeof setTimeout>
-  resolve: (decision: 'approve' | 'reject' | 'expired') => void
-}
 
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -58,7 +52,7 @@ export class AgentRunner {
   private state: AgentRunState
   private pausedFrom: Exclude<AgentRunStatus, 'paused'> = 'running'
   private pauseWaiters: Array<() => void> = []
-  private approvalWaiter: ApprovalWaiter | null = null
+  private readonly approvalWaiter = new AgentApprovalWaiter()
   private currentModelRequestId: string | null = null
   private started = false
 
@@ -121,7 +115,7 @@ export class AgentRunner {
     this.abortController.abort(reason)
     if (this.currentModelRequestId) this.options.dependencies.cancelModelStep(this.currentModelRequestId)
     this.options.dependencies.gateway.approvals.expireRun(this.options.runId)
-    this.settleApprovalWaiter('reject')
+    this.approvalWaiter.settle('reject')
     const waiters = this.pauseWaiters
     this.pauseWaiters = []
     for (const resolve of waiters) resolve()
@@ -135,7 +129,7 @@ export class AgentRunner {
   }
 
   respondApproval(approvalId: string, decision: 'approve' | 'reject'): AgentRunState {
-    if (!this.approvalWaiter || this.approvalWaiter.approvalId !== approvalId) {
+    if (!this.approvalWaiter.matches(approvalId)) {
       throw new Error('审批不属于当前等待中的工具调用')
     }
     const resolved = this.options.dependencies.gateway.approvals.resolve(approvalId, this.options.runId, decision)
@@ -151,14 +145,14 @@ export class AgentRunner {
     this.state.waitingApprovalId = null
     if (this.machine.status === 'waiting_approval') this.transition('waiting_tool')
     else if (this.machine.status === 'paused') this.pausedFrom = 'waiting_tool'
-    this.settleApprovalWaiter(decision)
+    this.approvalWaiter.settle(decision)
     return this.getState()
   }
 
   private async execute(): Promise<void> {
     try {
       const snapshot = this.requireContext()
-      const router = new AgentIntentRouter((goal, host, signal) => this.classifyWithRouterModel(goal, host.revision, signal))
+      const router = new AgentIntentRouter((goal, host, signal) => this.classifyWithRouterModel(goal, host, signal))
       const route = await router.route(this.options.runId, this.options.request.goal, snapshot, this.abortController.signal)
       this.emit({
         type: 'PlanUpdated',
@@ -201,7 +195,13 @@ export class AgentRunner {
         }
         this.conversation.push(...result.responseMessages)
         if (result.toolCalls.length > 0) {
+          const observationStart = this.observations.length
           await this.executeToolCalls(result.toolCalls, route, currentSnapshot.scopeRevisions)
+          const recoveryGuidance = buildRecoveryGuidance(
+            this.observations.slice(observationStart),
+            this.options.dependencies.registry
+          )
+          if (recoveryGuidance) this.conversation.push({ role: 'user', content: recoveryGuidance })
           continue
         }
         const finalText = result.text.trim() || (result.structuredOutput ? JSON.stringify(result.structuredOutput) : '')
@@ -214,6 +214,45 @@ export class AgentRunner {
           })
           continue
         }
+        const verification = verifyAgentCompletion({
+          route,
+          finalText,
+          observations: this.observations,
+          registry: this.options.dependencies.registry,
+        })
+        this.emit({
+          type: 'VerificationCompleted',
+          passed: verification.passed,
+          summary: verification.summary,
+          evidence: verification.evidence,
+        })
+        logger.info('Agent 结果验证完成', {
+          event: verification.passed
+            ? 'agent_verification.completed'
+            : 'agent_verification.failed',
+          requestId: this.options.runId,
+          context: {
+            intent: route.intent,
+            passed: verification.passed,
+            evidenceCount: verification.evidence.length,
+          },
+        })
+        if (!verification.passed) {
+          this.budget.recordFailure()
+          this.budget.recordProgress(`verification:${verification.summary}`)
+          this.conversation.push({
+            role: 'user',
+            content: `结果验证未通过：${verification.summary} 请继续恢复、查询真实状态，或向用户提出一个明确问题。`,
+          })
+          continue
+        }
+        if (verification.clarificationRequired) {
+          this.emit({
+            type: 'ClarificationRequired',
+            question: finalText,
+            reason: verification.summary,
+          })
+        }
         this.complete(finalText)
       }
     } catch (error) {
@@ -221,15 +260,19 @@ export class AgentRunner {
     }
   }
 
-  private async classifyWithRouterModel(goal: string, revision: number, signal: AbortSignal): Promise<unknown> {
+  private async classifyWithRouterModel(
+    goal: string,
+    snapshot: HostContextSnapshot,
+    signal: AbortSignal
+  ): Promise<unknown> {
     this.throwIfCancelled()
-    const requestId = `${this.options.runId}:router:${revision}`
+    const requestId = `${this.options.runId}:router:${snapshot.revision}`
     this.currentModelRequestId = requestId
     try {
       const result = await runRouterModelClassification({
         runId: this.options.runId,
         goal,
-        revision,
+        snapshot,
         model: this.models.router,
         runModelStep: this.options.dependencies.runModelStep,
         signal,
@@ -281,159 +324,95 @@ export class AgentRunner {
     route: AgentRouteDecision,
     expectedRevisions: Partial<HostScopeRevisions>
   ): Promise<void> {
-    let currentExpectedRevisions = { ...expectedRevisions }
-    for (const call of calls.slice(0, 4)) {
-      await this.waitIfPaused()
-      this.throwIfCancelled()
-      this.budget.recordToolCall(`${call.toolName}:${digestJson(call.input)}`)
-      this.state.currentToolCallId = call.toolCallId
-      this.transition('waiting_tool')
-      this.emit({ type: 'ToolRequested', toolCallId: call.toolCallId, toolName: call.toolName, inputDigest: digestJson(call.input) })
-      this.emit({ type: 'ToolStarted', toolCallId: call.toolCallId, toolName: call.toolName })
-      try {
-        let result = await this.options.dependencies.gateway.execute({
-          runId: this.options.runId,
-          threadId: this.options.request.threadId,
-          toolCallId: call.toolCallId,
-          toolName: call.toolName,
-          input: call.input,
-          expectedRevisions: currentExpectedRevisions,
-          approvalMode: this.options.request.approvalMode,
-          explicitUserIntent: route.intent !== 'general',
-          signal: this.abortController.signal,
-        })
-        if (result.status === 'approval_required') {
-          this.state.waitingApprovalId = result.approval.approvalId
-          this.transition('waiting_approval')
-          const approvalDecision = this.waitForApproval(result.approval.approvalId, result.approval.expiresAt)
-          this.emit({ type: 'ApprovalRequired', toolCallId: call.toolCallId, approval: result.approval })
-          logger.info('Agent 工具需要审批', {
-            event: 'agent_approval.requested',
-            requestId: this.options.runId,
-            taskId: call.toolCallId,
-            context: {
-              approvalId: result.approval.approvalId,
-              toolName: call.toolName,
-              risk: result.approval.risk,
-              expiresAt: result.approval.expiresAt,
-            },
-          })
-          const decision = await approvalDecision
-          await this.waitIfPaused()
-          this.throwIfCancelled()
-          if (decision !== 'approve') {
-            const expired = decision === 'expired'
-            const observation = expired
-              ? agentToolObservationSchema.parse({
-                  source: { toolName: call.toolName, toolVersion: 1, toolCallId: call.toolCallId },
-                  trust: 'untrusted_observation',
-                  dataClasses: ['C0'],
-                  summary: '本次工具审批已过期。',
-                  output: { ok: false, error: { code: 'APPROVAL_EXPIRED' } },
-                })
-              : rejectedObservation(call)
-            this.observations.push(observation)
-            this.conversation.push(toolMessage(call, observation))
-            this.emit({
-              type: 'ToolFailed',
-              toolCallId: call.toolCallId,
-              toolName: call.toolName,
-              error: serializeError(new AgentToolGatewayError(
-                expired ? 'APPROVAL_EXPIRED' : 'APPROVAL_REJECTED',
-                expired ? '工具审批已过期' : '用户拒绝了工具调用'
-              )),
-            })
-            this.transition('running')
-            continue
-          }
-          result = await this.options.dependencies.gateway.execute({
-            runId: this.options.runId,
-            threadId: this.options.request.threadId,
-            toolCallId: call.toolCallId,
-            toolName: call.toolName,
-            input: call.input,
-            expectedRevisions: currentExpectedRevisions,
-            approvalId: result.approval.approvalId,
-            approvalMode: this.options.request.approvalMode,
-            explicitUserIntent: route.intent !== 'general',
-            signal: this.abortController.signal,
-          })
-        }
-        if (result.status !== 'completed') throw new Error('工具审批状态未收敛')
-        this.observations.push(result.observation)
-        this.conversation.push(toolMessage(call, result.observation))
-        const discoveredToolNames = this.catalogPlanner.rememberDiscovered(
-          call.toolName,
-          result.observation.output
-        )
-        if (discoveredToolNames.length > 0) {
-          logger.info('Agent 能力目录发现新工具', {
-            event: 'agent_catalog.discovery.completed',
-            requestId: this.options.runId,
-            taskId: call.toolCallId,
-            context: { toolNames: discoveredToolNames },
-          })
-        }
-        const resultingRevisions = extractResultScopeRevisions(result.observation.output)
-        if (resultingRevisions) currentExpectedRevisions = resultingRevisions
-        this.budget.recordProgress(`${call.toolName}:${digestJson(result.observation.output)}`)
-        this.emit({
-          type: 'ToolCompleted', toolCallId: call.toolCallId, toolName: call.toolName,
-          summary: result.observation.summary,
-          artifactRef: result.observation.artifactRef,
-          resultReferences: extractResultReferences(result.observation.output),
-        })
-      } catch (error) {
-        this.throwIfCancelled()
-        const serialized = serializeError(error)
-        const observation = agentToolObservationSchema.parse({
-          source: { toolName: call.toolName, toolVersion: 1, toolCallId: call.toolCallId },
-          trust: 'untrusted_observation',
-          dataClasses: ['C0'],
-          summary: `工具调用失败：${serialized.code}`,
-          output: { ok: false, error: serialized },
-        })
+    const scheduler = new AgentToolCallScheduler({
+      runId: this.options.runId,
+      threadId: this.options.request.threadId,
+      approvalMode: this.options.request.approvalMode,
+      supportsParallelTools: this.models.primary.capabilities.parallelTools,
+      gateway: this.options.dependencies.gateway,
+      registry: this.options.dependencies.registry,
+      catalogPlanner: this.catalogPlanner,
+      signal: this.abortController.signal,
+      waitIfPaused: () => this.waitIfPaused(),
+      throwIfCancelled: () => this.throwIfCancelled(),
+      recordToolCall: (signature) => this.budget.recordToolCall(signature),
+      recordProgress: (signature) => this.budget.recordProgress(signature),
+      setActiveToolCall: (toolCallId) => this.setActiveToolCall(toolCallId),
+      requestApproval: (call, approval) => this.requestToolApproval(call, approval),
+      onObservation: (call, observation) => {
         this.observations.push(observation)
         this.conversation.push(toolMessage(call, observation))
-        this.emit({ type: 'ToolFailed', toolCallId: call.toolCallId, toolName: call.toolName, error: serialized })
-      } finally {
-        this.state.currentToolCallId = null
-        this.state.waitingApprovalId = null
-        if (this.machine.status === 'waiting_tool' || this.machine.status === 'waiting_approval') this.transition('running')
-        else if (this.machine.status === 'paused') this.pausedFrom = 'running'
+      },
+      emit: (event) => this.emit(event),
+      onDiscoveredTools: (toolCallId, toolNames) => {
+        logger.info('Agent 能力目录发现新工具', {
+          event: 'agent_catalog.discovery.completed',
+          requestId: this.options.runId,
+          taskId: toolCallId,
+          context: { toolNames },
+        })
+      },
+    })
+    try {
+      await scheduler.execute(calls, route.intent !== 'general', expectedRevisions)
+    } finally {
+      this.setActiveToolCall(null)
+    }
+  }
+
+  private setActiveToolCall(toolCallId: string | null): void {
+    this.state.currentToolCallId = toolCallId
+    if (toolCallId) this.transition('waiting_tool')
+    else {
+      this.state.waitingApprovalId = null
+      if (this.machine.status === 'waiting_tool' || this.machine.status === 'waiting_approval') {
+        this.transition('running')
+      } else if (this.machine.status === 'paused') {
+        this.pausedFrom = 'running'
       }
     }
   }
 
-  private waitForApproval(approvalId: string, expiresAt: string): Promise<'approve' | 'reject' | 'expired'> {
-    return new Promise((resolve) => {
-      const delay = Math.max(0, Date.parse(expiresAt) - Date.now())
-      const timer = setTimeout(() => {
-        if (this.approvalWaiter?.approvalId !== approvalId) return
-        this.options.dependencies.gateway.approvals.expire(approvalId, this.options.runId)
-        const toolCallId = this.state.currentToolCallId
-        if (toolCallId) this.emit({ type: 'ApprovalResolved', toolCallId, approvalId, decision: 'expired' })
-        logger.warn('Agent 工具审批已过期', {
-          event: 'agent_approval.expired',
-          requestId: this.options.runId,
-          taskId: toolCallId ?? undefined,
-          context: { approvalId },
-        })
-        this.state.waitingApprovalId = null
-        if (this.machine.status === 'waiting_approval') this.transition('waiting_tool', '审批已过期')
-        else if (this.machine.status === 'paused') this.pausedFrom = 'waiting_tool'
-        this.settleApprovalWaiter('expired')
-      }, delay)
-      this.approvalWaiter = { approvalId, timer, resolve }
+  private async requestToolApproval(
+    call: ModelStepToolCall,
+    approval: AgentApprovalRequest
+  ): Promise<'approve' | 'reject' | 'expired'> {
+    this.state.currentToolCallId = call.toolCallId
+    this.state.waitingApprovalId = approval.approvalId
+    this.transition('waiting_approval')
+    const decision = this.approvalWaiter.wait({
+      approvalId: approval.approvalId,
+      expiresAt: approval.expiresAt,
+      onExpired: () => this.handleApprovalExpired(approval.approvalId),
     })
+    this.emit({ type: 'ApprovalRequired', toolCallId: call.toolCallId, approval })
+    logger.info('Agent 工具需要审批', {
+      event: 'agent_approval.requested',
+      requestId: this.options.runId,
+      taskId: call.toolCallId,
+      context: {
+        approvalId: approval.approvalId,
+        toolName: call.toolName,
+        risk: approval.risk,
+        expiresAt: approval.expiresAt,
+      },
+    })
+    return decision
   }
 
-  private settleApprovalWaiter(decision: 'approve' | 'reject' | 'expired'): void {
-    const waiter = this.approvalWaiter
-    if (!waiter) return
-    this.approvalWaiter = null
-    clearTimeout(waiter.timer)
-    waiter.resolve(decision)
+  private handleApprovalExpired(approvalId: string): void {
+    this.options.dependencies.gateway.approvals.expire(approvalId, this.options.runId)
+    const toolCallId = this.state.currentToolCallId
+    if (toolCallId) this.emit({ type: 'ApprovalResolved', toolCallId, approvalId, decision: 'expired' })
+    logger.warn('Agent 工具审批已过期', {
+      event: 'agent_approval.expired',
+      requestId: this.options.runId,
+      taskId: toolCallId ?? undefined,
+      context: { approvalId },
+    })
+    this.state.waitingApprovalId = null
+    if (this.machine.status === 'waiting_approval') this.transition('waiting_tool', '审批已过期')
+    else if (this.machine.status === 'paused') this.pausedFrom = 'waiting_tool'
   }
 
   private async waitIfPaused(): Promise<void> {

@@ -25,7 +25,8 @@ function createContext(): HostContextSnapshot {
 
 function createGateway(
   risk: 'R0' | 'R1' | 'R2' | 'R3' = 'R0',
-  readOnly = risk === 'R0'
+  readOnly = risk === 'R0',
+  failureMessage?: string
 ): { gateway: AgentToolGateway; calls: string[] } {
   const calls: string[] = []
   const registry = new AgentToolRegistry()
@@ -59,6 +60,7 @@ function createGateway(
     }),
     execute: async (input) => {
       calls.push(input.value)
+      if (failureMessage) throw new Error(failureMessage)
       return { echoed: input.value }
     },
     concurrencyKey: () => 'test',
@@ -151,6 +153,17 @@ describe('AgentToolGateway', () => {
     const { gateway } = createGateway()
     await expect(gateway.execute({ ...request({ value: 'ok' }), expectedRevisions: { generation: 1 } }))
       .rejects.toEqual(expect.objectContaining<Partial<AgentToolGatewayError>>({ code: 'STALE_CONTEXT' }))
+  })
+
+  it('把领域目标不存在和权限错误映射为统一恢复错误', async () => {
+    const missing = createGateway('R0', true, '[TASK_NOT_FOUND] 任务不存在')
+    await expect(missing.gateway.execute(request({ value: 'missing' }))).rejects.toMatchObject({
+      code: 'NOT_FOUND', recovery: 'user_action', retryable: false,
+    })
+    const denied = createGateway('R0', true, '[PERMISSION_DENIED] 无权读取')
+    await expect(denied.gateway.execute(request({ value: 'denied' }))).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED', recovery: 'user_action', retryable: false,
+    })
   })
 
   it('拒绝、过期和已消费审批都不能再次执行副作用', async () => {

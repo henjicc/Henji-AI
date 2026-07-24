@@ -3,16 +3,32 @@ import type {
   ModelStepResult,
   ModelStepTool,
 } from '../../../../../src/core/llm/modelStep'
+import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AGENT_INTENTS, AGENT_TOOL_DOMAINS } from '../context/types'
 import type { AgentRuntimeModel } from './models'
 import type { AgentModelStepExecutor } from './types'
 
 interface RouterModelExecutionInput {
   runId: string
   goal: string
-  revision: number
+  snapshot: HostContextSnapshot
   model: AgentRuntimeModel
   runModelStep: AgentModelStepExecutor
   signal: AbortSignal
+}
+
+function compactRouterSnapshot(snapshot: HostContextSnapshot): Record<string, unknown> {
+  return {
+    revision: snapshot.revision,
+    scopeRevisions: snapshot.scopeRevisions,
+    workspace: snapshot.workspace,
+    project: snapshot.project,
+    generation: snapshot.generation,
+    assets: snapshot.assets,
+    uiReady: snapshot.uiReady,
+    availableCommands: snapshot.availableCommands,
+    availableQueries: snapshot.availableQueries,
+  }
 }
 
 interface PrimaryModelExecutionInput {
@@ -48,11 +64,11 @@ function parseJsonObjectText(text: string): unknown {
 export async function runRouterModelClassification(
   input: RouterModelExecutionInput
 ): Promise<RouterModelClassificationResult> {
-  const requestId = `${input.runId}:router:${input.revision}`
+  const requestId = `${input.runId}:router:${input.snapshot.revision}`
   const result = await input.runModelStep({
     requestId,
     runId: input.runId,
-    stepId: `router:${input.revision}`,
+    stepId: `router:${input.snapshot.revision}`,
     providerId: input.model.providerId,
     modelId: input.model.modelId,
     adapter: input.model.adapter,
@@ -61,10 +77,18 @@ export async function runRouterModelClassification(
       '只判断用户真正想完成的目标，不执行工具。',
       '根据完整语义分类，不依赖固定关键词，也不要把内容题材误判成模型搜索。',
       'generate 表示生成图片、视频或音频；diagnose 表示寻找错误原因或解决办法；canvas 表示操作画布或项目；memory 表示用户明确要求查看、保存、纠正或删除助手长期记忆。',
+      'intent 是当前最可能主意图；candidateIntents 和 toolDomains 用于表达跨工作区、多步骤或不确定任务的合法候选，不能用它们请求越权能力。',
       '输出必须符合给定 JSON 结构。',
     ].join('\n'),
     messages: [
-      { role: 'user', content: input.goal },
+      {
+        role: 'user',
+        content: [
+          `用户目标：${input.goal}`,
+          '当前宿主快照（仅用于判断当前工作区、项目、可用命令和 revision）：',
+          JSON.stringify(compactRouterSnapshot(input.snapshot)),
+        ].join('\n'),
+      },
     ],
     output: {
       mode: 'object',
@@ -74,23 +98,18 @@ export async function runRouterModelClassification(
         properties: {
           intent: {
             type: 'string',
-            enum: [
-              'navigate',
-              'generate',
-              'inspect_model',
-              'read_generation',
-              'cancel_generation',
-              'diagnose',
-              'canvas',
-              'user_instructions',
-              'memory',
-              'general',
-            ],
+            enum: [...AGENT_INTENTS],
+          },
+          candidateIntents: {
+            type: 'array', maxItems: 4, items: { type: 'string', enum: [...AGENT_INTENTS] },
+          },
+          toolDomains: {
+            type: 'array', maxItems: 6, items: { type: 'string', enum: [...AGENT_TOOL_DOMAINS] },
           },
           complexity: { type: 'string', enum: ['simple', 'multi_step', 'ambiguous'] },
           reason: { type: 'string', maxLength: 500 },
         },
-        required: ['intent', 'complexity', 'reason'],
+        required: ['intent', 'candidateIntents', 'toolDomains', 'complexity', 'reason'],
         additionalProperties: false,
       },
     },

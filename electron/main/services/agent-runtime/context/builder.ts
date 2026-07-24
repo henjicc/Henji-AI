@@ -142,7 +142,7 @@ export class AgentContextBuilder {
       content: [
         '[当前目标与宿主上下文]',
         `目标：${input.goal}`,
-        `路由：${input.route.intent}/${input.route.path}；原因：${input.route.reason}`,
+        `路由：主意图=${input.route.intent}；候选意图=${input.route.candidateIntents?.join(',') || input.route.intent}；候选工具域=${input.route.toolDomains.join(',')}；原因：${input.route.reason}`,
         `宿主快照：${JSON.stringify(snapshotSummary(input))}`,
         input.userInstructions ? formatUserInstructions(input.userInstructions) : '',
         formatMemoryContext(input.memoryContext ?? []),

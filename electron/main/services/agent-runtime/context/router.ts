@@ -2,12 +2,20 @@ import { z } from 'zod'
 
 import { createMainLogger } from '../../logging'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import type { AgentIntent, AgentRouteDecision } from './types'
+import {
+  AGENT_INTENTS,
+  AGENT_TOOL_DOMAINS,
+  type AgentIntent,
+  type AgentRouteDecision,
+  type AgentToolDomain,
+} from './types'
 
 const logger = createMainLogger('main.agent_router')
 
 const routerModelDecisionSchema = z.object({
-  intent: z.enum(['navigate', 'generate', 'inspect_model', 'read_generation', 'cancel_generation', 'diagnose', 'canvas', 'toolbox', 'camera_stage', 'storyboard', 'image_edit', 'assets', 'workflow', 'user_instructions', 'memory', 'general']),
+  intent: z.enum(AGENT_INTENTS),
+  candidateIntents: z.array(z.enum(AGENT_INTENTS)).max(4).optional().default([]),
+  toolDomains: z.array(z.enum(AGENT_TOOL_DOMAINS)).max(6).optional().default([]),
   complexity: z.enum(['simple', 'multi_step', 'ambiguous']).optional().default('ambiguous'),
   reason: z.string().min(1).max(500).optional(),
 }).passthrough()
@@ -42,6 +50,22 @@ const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'path' | 'toolDo
   general: { path: 'primary', toolDomains: ['catalog'] },
 }
 
+function uniqueValues<TValue extends string>(values: TValue[], limit: number): TValue[] {
+  return [...new Set(values)].slice(0, limit)
+}
+
+function resolveCandidateDomains(
+  intent: AgentIntent,
+  candidateIntents: AgentIntent[],
+  requestedDomains: AgentToolDomain[]
+): AgentToolDomain[] {
+  return uniqueValues([
+    ...routePolicy[intent].toolDomains,
+    ...candidateIntents.flatMap((candidate) => routePolicy[candidate].toolDomains),
+    ...requestedDomains,
+  ], 8)
+}
+
 const taskIdPattern = /\btask-[a-z0-9-]+\b/i
 const cancelGenerationPattern = /(?:取消|停止|终止|cancel|stop).{0,24}\btask-[a-z0-9-]+\b/i
 const readGenerationPattern = /(?:查看|查询|状态|进度|status|progress).{0,24}\btask-[a-z0-9-]+\b|\btask-[a-z0-9-]+\b.{0,24}(?:查看|查询|状态|进度|status|progress)/i
@@ -66,6 +90,7 @@ function deterministicRoute(goal: string): AgentRouteDecision | null {
   const [match] = matches
   return {
     intent: match.intent,
+    candidateIntents: [match.intent],
     complexity: 'simple',
     ...routePolicy[match.intent],
     source: 'deterministic',
@@ -92,8 +117,17 @@ export class AgentIntentRouter {
         const classified = routerModelDecisionSchema.parse(await this.classifyWithModel(goal, snapshot, signal))
         const decision: AgentRouteDecision = {
           intent: classified.intent,
+          candidateIntents: uniqueValues([
+            classified.intent,
+            ...classified.candidateIntents,
+          ], 4),
           complexity: classified.complexity,
-          ...routePolicy[classified.intent],
+          path: routePolicy[classified.intent].path,
+          toolDomains: resolveCandidateDomains(
+            classified.intent,
+            classified.candidateIntents,
+            classified.toolDomains
+          ),
           source: 'router_model',
           reason: classified.reason?.trim() || `路由模型判断为 ${classified.intent} 任务`,
         }
@@ -120,6 +154,7 @@ export class AgentIntentRouter {
     }
     const fallback: AgentRouteDecision = {
       intent: 'general',
+      candidateIntents: ['general'],
       complexity: 'ambiguous',
       path: 'primary',
       toolDomains: ['catalog'],

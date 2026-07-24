@@ -161,6 +161,7 @@ describe('AgentRunner', () => {
     expect(runModelStep).toHaveBeenCalledTimes(2)
     expect(events.map((event) => event.sequence)).toEqual(events.map((_, index) => index + 1))
     expect(events.some((event) => event.type === 'PlanUpdated')).toBe(true)
+    expect(events.some((event) => event.type === 'VerificationCompleted' && event.passed)).toBe(true)
     expect(runner.getEventHistory()).toEqual(events)
   })
 

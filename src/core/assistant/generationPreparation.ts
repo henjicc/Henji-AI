@@ -93,6 +93,43 @@ function modelSearchText(model: ModelDefinition): string {
   ].join(' ').toLowerCase()
 }
 
+function modelDescriptionText(model: ModelDefinition): string {
+  if (!model.meta.description) return ''
+  return getI18nText(model.meta.description, 'zh') || getI18nText(model.meta.description, 'en')
+}
+
+function createSelectionEvidence(
+  model: ModelDefinition,
+  input: GenerationModelSearchInput,
+  matchedQueryTerms: string[]
+): Record<string, unknown> {
+  const description = modelDescriptionText(model)
+  return {
+    candidate: true,
+    availableInRegistry: true,
+    canonicalModelId: model.meta.canonicalModelId,
+    providerId: model.meta.provider,
+    recommendedByDescription: description.includes('推荐使用'),
+    qualitativeDescription: description,
+    tags: model.meta.tags ?? [],
+    matchedQueryTerms,
+    exclusionRules: [
+      '媒体类型不匹配',
+      '用户明确供应商不匹配',
+      '必需能力标签缺失',
+      '明确模型关键词不匹配',
+    ],
+    hardConstraints: {
+      mediaType: input.mediaType ?? null,
+      providerId: input.providerId ?? null,
+      requiredTags: input.tags ?? [],
+      mediaTypeMatched: !input.mediaType || model.meta.type === input.mediaType,
+      providerMatched: !input.providerId || model.meta.provider === input.providerId,
+      tagsMatched: (input.tags ?? []).every((tag) => model.meta.tags?.includes(tag)),
+    },
+  }
+}
+
 export function searchGenerationModels(input: GenerationModelSearchInput): Array<Record<string, unknown>> {
   const terms = normalizeTerms(input.query)
   const requestedTags = (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
@@ -113,6 +150,7 @@ export function searchGenerationModels(input: GenerationModelSearchInput): Array
       description: model.meta.description,
       tags: model.meta.tags ?? [],
       inputLimits: toSafeValue(model.inputLimits),
+      selectionEvidence: createSelectionEvidence(model, input, terms),
     }))
 }
 
@@ -247,5 +285,17 @@ export function prepareGenerationTask(input: GenerationPreparationInput): Record
     mediaType: model.meta.type,
     options: normalized,
     mediaLimits: limits,
+    selectionEvidence: {
+      selectedModelId: model.meta.id,
+      canonicalModelId: model.meta.canonicalModelId,
+      providerId: model.meta.provider,
+      availableInRegistry: true,
+      recommendedByDescription: modelDescriptionText(model).includes('推荐使用'),
+      qualitativeDescription: modelDescriptionText(model),
+      tags: model.meta.tags ?? [],
+      schemaValidated: true,
+      mediaTypeMatched: model.meta.type === input.mediaType,
+      requestBuilderValidated: Boolean(model.request?.builder),
+    },
   }
 }

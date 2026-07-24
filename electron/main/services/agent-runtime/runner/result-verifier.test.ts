@@ -1,0 +1,119 @@
+import { z } from 'zod'
+import { describe, expect, it } from 'vitest'
+
+import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
+import type { AgentRouteDecision } from '../context/types'
+import { defineAgentTool } from '../tools/define-tool'
+import { AgentToolRegistry } from '../tools/registry'
+import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
+
+const generateRoute: AgentRouteDecision = {
+  intent: 'generate',
+  candidateIntents: ['generate'],
+  complexity: 'simple',
+  path: 'workflow',
+  toolDomains: ['models', 'generation', 'navigation'],
+  source: 'router_model',
+  reason: '生成测试',
+}
+
+function observation(toolName: string, output: unknown): AgentToolObservation {
+  return {
+    source: { toolName, toolVersion: 1, toolCallId: `call-${toolName}` },
+    trust: 'untrusted_observation',
+    dataClasses: ['C0'],
+    summary: `${toolName} 测试结果`,
+    output,
+  }
+}
+
+function registryWithTool(input: { name: string; readOnly: boolean }): AgentToolRegistry {
+  const registry = new AgentToolRegistry()
+  registry.register(defineAgentTool({
+    name: input.name,
+    version: 1,
+    title: '测试工具',
+    description: '验证结果证据。',
+    category: 'generation',
+    side: 'backend',
+    risk: input.readOnly ? 'R0' : 'R1',
+    permission: 'test:run',
+    readOnly: input.readOnly,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 1_000,
+    retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: [],
+    inputSchema: z.object({}).strict(),
+    outputSchema: z.record(z.string(), z.unknown()),
+    aiInputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    execute: () => Promise.resolve({}),
+    concurrencyKey: () => input.name,
+    targetIds: () => ({}),
+    dataClasses: () => ['C0'],
+    summarize: () => '测试完成',
+  }))
+  return registry
+}
+
+describe('Agent result verifier', () => {
+  it('提交态允许如实结束但拒绝声称生成成功', () => {
+    const registry = registryWithTool({ name: 'create_visible_generation_task', readOnly: false })
+    const observations = [observation('create_visible_generation_task', {
+      taskId: 'task-1', status: 'submitted', revision: 2,
+    })]
+
+    expect(verifyAgentCompletion({
+      route: generateRoute,
+      finalText: '任务 task-1 已提交，当前正在排队或生成。',
+      observations,
+      registry,
+    }).passed).toBe(true)
+    expect(verifyAgentCompletion({
+      route: generateRoute,
+      finalText: '图片生成成功。',
+      observations,
+      registry,
+    }).passed).toBe(false)
+  })
+
+  it('写操作必须返回稳定引用、状态或 revision', () => {
+    const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
+    expect(verifyAgentCompletion({
+      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
+      finalText: '已经修改。',
+      observations: [observation('write_test_resource', { ok: true })],
+      registry,
+    }).passed).toBe(false)
+    expect(verifyAgentCompletion({
+      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
+      finalText: '节点 node-1 已写入。',
+      observations: [observation('write_test_resource', { nodeId: 'node-1' })],
+      registry,
+    }).passed).toBe(true)
+  })
+
+  it('未知写入副作用禁止自动重放并能转为清晰澄清', () => {
+    const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
+    const timeout = observation('write_test_resource', {
+      ok: false,
+      error: { code: 'TIMEOUT', message: '执行超时', retryable: true, recovery: 'wait' },
+    })
+    expect(buildRecoveryGuidance([timeout], registry)).toContain('副作用未知，禁止自动重放')
+
+    const invalid = observation('write_test_resource', {
+      ok: false,
+      error: { code: 'INVALID_INPUT', message: '目标不明确', retryable: true, recovery: 'user_action' },
+    })
+    const result = verifyAgentCompletion({
+      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
+      finalText: '目标项目不明确，请提供要修改的 projectId？',
+      observations: [invalid],
+      registry,
+    })
+    expect(result).toMatchObject({ passed: true, clarificationRequired: true })
+  })
+})

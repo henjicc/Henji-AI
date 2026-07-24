@@ -107,12 +107,13 @@ describe('AgentIntentRouter', () => {
     expect(classifier).toHaveBeenCalledOnce()
   })
 
-  it('router 模型只负责分类，工具域由本地策略决定', async () => {
+  it('router 候选只能扩展本地允许的工具域且不能改写执行路径', async () => {
     const router = new AgentIntentRouter(async () => ({
       intent: 'generate',
+      candidateIntents: ['assets'],
       complexity: 'simple',
       path: 'primary',
-      toolDomains: ['catalog'],
+      toolDomains: ['catalog', 'assets'],
       reason: '用户希望生成照片',
     }))
     const result = await router.route(
@@ -125,7 +126,8 @@ describe('AgentIntentRouter', () => {
       intent: 'generate',
       source: 'router_model',
       path: 'workflow',
-      toolDomains: ['models', 'generation', 'navigation'],
+      candidateIntents: ['generate', 'assets'],
+      toolDomains: ['models', 'generation', 'navigation', 'assets', 'catalog'],
     })
   })
 })

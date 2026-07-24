@@ -3,31 +3,52 @@ import type { AgentToolObservation } from '../../../../../src/core/assistant/too
 import type { ModelStepMessage, ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 
-export type AgentIntent =
-  | 'navigate'
-  | 'generate'
-  | 'inspect_model'
-  | 'read_generation'
-  | 'cancel_generation'
-  | 'diagnose'
-  | 'canvas'
-  | 'toolbox'
-  | 'camera_stage'
-  | 'storyboard'
-  | 'image_edit'
-  | 'assets'
-  | 'workflow'
-  | 'user_instructions'
-  | 'memory'
-  | 'general'
+export const AGENT_INTENTS = [
+  'navigate',
+  'generate',
+  'inspect_model',
+  'read_generation',
+  'cancel_generation',
+  'diagnose',
+  'canvas',
+  'toolbox',
+  'camera_stage',
+  'storyboard',
+  'image_edit',
+  'assets',
+  'workflow',
+  'user_instructions',
+  'memory',
+  'general',
+] as const
+export type AgentIntent = typeof AGENT_INTENTS[number]
+
+export const AGENT_TOOL_DOMAINS = [
+  'catalog',
+  'navigation',
+  'models',
+  'generation',
+  'diagnostics',
+  'canvas',
+  'toolbox',
+  'camera_stage',
+  'storyboard',
+  'image_edit',
+  'assets',
+  'workflows',
+  'user_instructions',
+  'memory',
+] as const
+export type AgentToolDomain = typeof AGENT_TOOL_DOMAINS[number]
 
 export type AgentRoutePath = 'workflow' | 'primary'
 
 export interface AgentRouteDecision {
   intent: AgentIntent
+  candidateIntents?: AgentIntent[]
   complexity: 'simple' | 'multi_step' | 'ambiguous'
   path: AgentRoutePath
-  toolDomains: string[]
+  toolDomains: AgentToolDomain[]
   source: 'deterministic' | 'router_model' | 'fallback'
   reason: string
 }

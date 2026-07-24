@@ -60,7 +60,21 @@ describe('generationPreparation', () => {
   })
 
   it('按配置搜索并裁剪单模型 schema', () => {
-    expect(searchGenerationModels({ mediaType: 'image', tags: ['text-to-image'] })).toHaveLength(1)
+    const models = searchGenerationModels({
+      mediaType: 'image', providerId: 'test-provider', tags: ['text-to-image'],
+    })
+    expect(models).toHaveLength(1)
+    expect(models[0].selectionEvidence).toMatchObject({
+      candidate: true,
+      availableInRegistry: true,
+      canonicalModelId: 'nano-banana',
+      providerId: 'test-provider',
+      hardConstraints: {
+        mediaTypeMatched: true,
+        providerMatched: true,
+        tagsMatched: true,
+      },
+    })
     const schema = getGenerationModelSchema(testModel.meta.id)
     expect(schema.schemaVersion).toBe('generation-model-schema/v2')
     expect(schema.params).toHaveLength(2)
@@ -74,6 +88,12 @@ describe('generationPreparation', () => {
       options: { quality: 'high' },
     })
     expect((prepared.options as Record<string, unknown>).quality).toBe('high')
+    expect(prepared.selectionEvidence).toMatchObject({
+      selectedModelId: testModel.meta.id,
+      providerId: 'test-provider',
+      schemaValidated: true,
+      mediaTypeMatched: true,
+    })
 
     expect(() => prepareGenerationTask({
       modelId: testModel.meta.id,
