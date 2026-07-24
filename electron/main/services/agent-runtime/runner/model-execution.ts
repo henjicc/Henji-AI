@@ -2,8 +2,10 @@ import type {
   ModelStepMessage,
   ModelStepResult,
   ModelStepTool,
+  ModelStepTraceMetadata,
 } from '../../../../../src/core/llm/modelStep'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import type { AgentContextBuilder } from '../context/builder'
 import { AGENT_INTENTS, AGENT_TOOL_DOMAINS } from '../context/types'
 import type { AgentRuntimeModel } from './models'
 import type { AgentModelStepExecutor } from './types'
@@ -38,6 +40,7 @@ interface PrimaryModelExecutionInput {
   system: string
   messages: ModelStepMessage[]
   tools?: ModelStepTool[]
+  trace?: ModelStepTraceMetadata
   runModelStep: AgentModelStepExecutor
   onTextDelta: (text: string) => void
 }
@@ -45,6 +48,27 @@ interface PrimaryModelExecutionInput {
 interface RouterModelClassificationResult {
   decision: unknown
   usage: ModelStepResult['usage']
+}
+
+export function buildPrimaryModelTraceMetadata(
+  turn: number,
+  context: ReturnType<AgentContextBuilder['build']>,
+  model: AgentRuntimeModel
+): ModelStepTraceMetadata {
+  return {
+    kind: 'primary',
+    turn,
+    snapshotRevision: context.snapshotRevision,
+    contextWindowBudget: model.limits.contextWindow,
+    maxOutputTokens: model.settings.maxOutputTokens,
+    estimatedTokens: context.estimatedTokens,
+    compacted: context.compacted,
+    beforeCompactionTokens: context.beforeCompactionTokens,
+    retainedLayers: context.retainedLayers,
+    droppedLayers: context.droppedLayers,
+    layerReports: context.layerReports,
+    activeToolNames: context.activeToolNames,
+  }
 }
 
 function parseJsonObjectText(text: string): unknown {
@@ -115,6 +139,12 @@ export async function runRouterModelClassification(
     },
     capabilities: input.model.capabilities,
     settings: input.model.settings,
+    trace: {
+      kind: 'router',
+      snapshotRevision: input.snapshot.revision,
+      contextWindowBudget: input.model.limits.contextWindow,
+      maxOutputTokens: input.model.settings.maxOutputTokens,
+    },
   }, () => undefined)
   if (input.signal.aborted) throw new Error('[task_cancelled] router cancelled')
   return {
@@ -144,6 +174,7 @@ export function runPrimaryAgentModelStep(
     output: { mode: 'text' },
     capabilities: input.model.capabilities,
     settings: input.model.settings,
+    trace: input.trace,
   }, (event) => {
     if (event.type === 'TextDelta') input.onTextDelta(event.text)
   })

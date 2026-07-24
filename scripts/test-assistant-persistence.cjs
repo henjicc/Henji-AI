@@ -26,6 +26,14 @@ const testFiles = [
     'assistant',
     'memory-store.test.ts'
   ),
+  path.join(
+    workspaceRoot,
+    'electron',
+    'main',
+    'services',
+    'logging',
+    'agent-trace-store.test.ts'
+  ),
 ]
 
 function cleanup() {

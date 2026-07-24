@@ -45,7 +45,16 @@ export const agentUtilityRpcRequestMessageSchema = z.object({
   type: z.literal('rpc.request'),
   protocolVersion: z.literal(AGENT_UTILITY_PROTOCOL_VERSION),
   rpcId: z.string().min(1),
-  operation: z.enum(['model.api_key', 'tool.execute', 'artifact.save', 'memory.retrieve']),
+  operation: z.enum([
+    'model.api_key',
+    'tool.execute',
+    'artifact.save',
+    'memory.retrieve',
+    'agent_trace.get_config',
+    'agent_trace.start',
+    'agent_trace.complete',
+    'agent_trace.fail',
+  ]),
   payload: z.unknown(),
 }).strict()
 

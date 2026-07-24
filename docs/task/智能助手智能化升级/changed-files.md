@@ -131,3 +131,16 @@
 - `scripts/electron-phase4-smoke.cjs`：冒烟错误保留资源来源 URL，提升失败诊断能力。
 - `package.json`：扩展助手专项评测入口。
 - `docs/task/智能助手智能化升级/`：同步 4.2 待验证状态、最终自动化结果、交接信息和统一手动测试清单。
+
+## 2026-07-25 · 助手请求追踪与日志可视化增强
+
+- `src/core/assistant/trace.ts`、`traceSanitize.ts`：新增追踪契约、双层脱敏、内联凭据清洗、媒体摘要和详情体积控制。
+- `src/core/llm/modelStep.ts`、`electron/main/services/agent-runtime/runner/model-execution.ts`、`runner.ts`：为路由和主模型步骤附加轮次、上下文预算、压缩与上下文层报告。
+- `electron/main/services/llm/sdk/provider.ts`、`model-step.ts`、`trace.ts`：通过 AI SDK Provider 自定义 fetch 捕获供应商最终请求，汇总最终响应、reasoning、工具调用、Token 和流式过程。
+- `electron/main/agent-utility.ts`、`src/core/assistant/utilityContracts.ts`、`electron/main/services/agent-runtime-manager/manager.ts`、`runtime.ts`：新增捕获配置、开始、完成、失败 RPC，并在 utility 异常时标记追踪中断。
+- `electron/main/services/agent-runtime/persistence/migrations.ts`、`electron/main/services/logging/agent-trace-store.ts`、`agent-trace-config.ts`、`index.ts`：新增 `agent_model_traces` 表、内存开关、摘要/详情查询、清理、保留和中断恢复。
+- `electron/main/ipc/logging.ts`、`electron/preload/index.ts`、`api.d.ts`、`src/platform/contracts/logging.ts`、`src/platform/adapters/electron/logging.ts`、`src/commands/logging.ts`：扩展既有 logging 平台接口。
+- `src/features/logs/LogsPanel.tsx`、`eventDisplay.ts`、`assistantTraceUtils.ts`、`components/AssistantTrace*.tsx`：新增事件日志/助手追踪切换、运行与轮次虚拟列表、统计、过滤分页、延迟详情、复制、原始 JSON 和相邻轮次对比。
+- `src/core/assistant/traceSanitize.test.ts`、`electron/main/services/llm/sdk/trace.test.ts`、`agent-runtime/runner/model-execution.test.ts`、`logging/agent-trace-store.test.ts`、`src/features/logs/assistantTraceUtils.test.ts`：覆盖请求脱敏、8 MiB 上限、上下文元数据、SQLite 持久化、中断和线性轮次差异。
+- `scripts/test-assistant-persistence.cjs`、`electron/main/services/assistant/memory-store.test.ts`：把追踪存储加入 Electron SQLite 专项，并修正记忆检索测试按正式契约传入意图。
+- `docs/task/智能助手智能化升级/`：同步本轮决策、进度、交接、变更、验证结果和新增手动测试项。

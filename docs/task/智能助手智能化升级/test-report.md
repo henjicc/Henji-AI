@@ -122,6 +122,32 @@
 - `npm run electron:smoke`：通过；5 个供应商状态、画布 2560×1360、61 帧，页面错误与控制台错误均为 0。
 - 冒烟回归：旧历史引用已不存在的本地视频时不再触发 `henji-media://` 403；历史保留，失效媒体跳过预览并记录结构化告警。
 
+## 2026-07-25 · 助手请求追踪自动化验证
+
+- `npx vitest run src/core/assistant/traceSanitize.test.ts electron/main/services/llm/sdk/trace.test.ts electron/main/services/llm/sdk/model-step.test.ts electron/main/services/agent-runtime/runner/model-execution.test.ts src/features/logs/assistantTraceUtils.test.ts`：5 个测试文件、16 项通过。
+- `npm run test:assistant-persistence`：Electron SQLite 持久化 10/10 通过，覆盖追踪聚合、详情二次脱敏、失败摘要和中断恢复。
+- `npm run test:assistant-eval`：21 个测试文件、74 项通过。
+- `npm test`：96 个测试文件、413 项通过；3 个 SQLite 测试文件、10 项在普通 Node 环境按条件跳过，均由 Electron 持久化入口执行。
+- `npx tsc --noEmit`、`npx tsc -p tsconfig.electron.json --noEmit`、前端 lint、Electron lint、`git diff --check`：通过。
+- `npm run electron:build`：通过；颜色和模型国际化检查通过，构建仅保留既有动态/静态导入提示。
+- 已自动验证：摘要/详细契约、上下文元数据、DeepSeek 原生 reasoning 参数、最终 HTTP 请求结构、请求头/URL/正文/错误二次脱敏、8 MiB 上限、Token/流式统计、SQLite 聚合、失败与中断状态、相邻轮次消息和工具差异。
+- 尚未用真实 Provider 验证：供应商线上最终请求与页面显示逐字段一致性、真实 reasoning/usage、实际失败响应头与错误正文。
+
+## 助手请求追踪新增手动测试
+
+启动前必须停止旧进程并重新执行 `npm run electron:dev`，确保主进程、preload、utility process 和数据库迁移使用本次代码。
+
+- [ ] 保持“助手详细追踪”关闭，发送包含路由和至少两轮主模型调用的任务；确认日志窗口“助手追踪”只显示摘要、模型、轮次、Token、耗时和状态，详情提示“仅摘要”。
+- [ ] 开启“助手详细追踪”后再发请求；确认新请求可查看 system、messages、工具 Schema、上下文层/压缩报告、最终 HTTP 请求、模型响应、流式统计和元数据，开关之前的请求不会补录详情。
+- [ ] 使用 DeepSeek reasoning 模型，确认逻辑配置与最终 HTTP Body 分区显示，最终 Body 中是供应商实际发送的原生 reasoning 参数；页面只显示供应商返回的 reasoning，不出现“隐藏思维链”声明。
+- [ ] 在可控测试输入中放入伪 API Key、Authorization、Cookie、Token、Secret、Password 和敏感 URL 查询参数；检查可视化、原始 JSON、数据库查询、普通日志、复制 JSON 与 cURL 均已脱敏。
+- [ ] 复制逻辑请求、HTTP 请求、脱敏 cURL 和完整追踪，确认内容与当前轮次一致、格式可用且不含真实凭据。
+- [ ] 连续执行多轮主模型请求，打开“与上一轮对比”；确认同一 runId 内只比较相邻主模型轮次，新增/删除/修改消息、工具、settings、providerOptions、压缩报告与 Token 增量正确。
+- [ ] 分别制造成功、模型失败、用户取消和 utility process 中断；确认完成、失败、取消、中断状态与耗时正确，重启后遗留运行中记录转为中断。
+- [ ] 测试关键词、供应商、模型、状态、日期过滤和“加载更早的追踪”；确认分页不重复轮次，清空当前日期或全部追踪不影响普通事件日志。
+- [ ] 开启详细追踪后退出并重新启动应用；确认开关自动恢复关闭，已保存的本地历史详情仍可按需读取。
+- [ ] 在大量轮次、长 system/messages、工具 Schema 和媒体引用下缩放日志窗口、滚动列表、切换可视化/原始 JSON；确认列表流畅、详情按选中轮次加载、窄窗口布局无重叠，超大内容显示截断提示且应用无明显卡顿。
+
 ## 最终统一手动测试清单
 
 启动前先停止旧进程并重新执行 `npm run electron:dev`。完整继承范围见 `任务/第一阶段-基线与准备/1.1-继承第七阶段手动测试基线.md`，本节是最终执行顺序和本轮新增观察点。

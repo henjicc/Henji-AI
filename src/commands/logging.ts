@@ -1,8 +1,15 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
+import type {
+  AgentTraceCaptureMode,
+  AgentTraceDetailResult,
+  AgentTraceQuery,
+  AgentTraceQueryResult,
+} from '@/core/assistant/trace'
 import type { LogCaptureMode, LogEventPushDto, LogQueryParams, LogQueryResult } from '@/platform/contracts/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 export type { LogCaptureMode, LogEventPushDto, LogQueryParams, LogQueryResult }
+export type { AgentTraceCaptureMode, AgentTraceDetailResult, AgentTraceQuery, AgentTraceQueryResult }
 
 export async function logFrontendEvents(events: LogEventBridgeDto[]): Promise<void> {
   if (!isDesktopRuntime() || events.length === 0) {
@@ -84,4 +91,29 @@ export async function queryLogEvents(params: LogQueryParams): Promise<LogQueryRe
   }
 
   return await getPlatform().logging.queryLogEvents(params)
+}
+
+export async function getAgentTraceCaptureMode(): Promise<AgentTraceCaptureMode> {
+  if (!isDesktopRuntime()) return 'summary'
+  return await getPlatform().logging.getAgentTraceCaptureMode()
+}
+
+export async function setAgentTraceCaptureMode(mode: AgentTraceCaptureMode): Promise<void> {
+  if (!isDesktopRuntime()) return
+  await getPlatform().logging.setAgentTraceCaptureMode(mode)
+}
+
+export async function queryAgentTraces(params: AgentTraceQuery): Promise<AgentTraceQueryResult> {
+  if (!isDesktopRuntime()) return { runs: [], hasMore: false }
+  return await getPlatform().logging.queryAgentTraces(params)
+}
+
+export async function getAgentTraceDetail(traceId: string): Promise<AgentTraceDetailResult | null> {
+  if (!isDesktopRuntime()) return null
+  return await getPlatform().logging.getAgentTraceDetail(traceId)
+}
+
+export async function clearAgentTraces(date?: string): Promise<void> {
+  if (!isDesktopRuntime()) return
+  await getPlatform().logging.clearAgentTraces(date)
 }

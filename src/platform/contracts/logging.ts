@@ -1,4 +1,10 @@
 import type { LogEventBridgeDto } from '@/core/logging/types'
+import type {
+  AgentTraceCaptureMode,
+  AgentTraceDetailResult,
+  AgentTraceQuery,
+  AgentTraceQueryResult,
+} from '@/core/assistant/trace'
 
 /**
  * 主进程实时推送的日志事件（含 `source`），与 `LogEventBridgeDto` 的区别是
@@ -45,4 +51,9 @@ export interface LoggingPlatform {
   listLogDates(): Promise<string[]>
   /** 按日期流式查询历史日志事件，过滤/分页均在主进程完成。 */
   queryLogEvents(params: LogQueryParams): Promise<LogQueryResult>
+  getAgentTraceCaptureMode(): Promise<AgentTraceCaptureMode>
+  setAgentTraceCaptureMode(mode: AgentTraceCaptureMode): Promise<void>
+  queryAgentTraces(params: AgentTraceQuery): Promise<AgentTraceQueryResult>
+  getAgentTraceDetail(traceId: string): Promise<AgentTraceDetailResult | null>
+  clearAgentTraces(date?: string): Promise<void>
 }

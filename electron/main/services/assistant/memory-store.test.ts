@@ -56,7 +56,15 @@ describeWithElectronSqlite('AgentMemoryStore', () => {
     })
 
     const memory = store.confirm(candidate.candidateId)
-    expect(store.retrieve('帮我生成一张图片', 'generation', null)).toEqual([
+    expect(store.retrieveDetailed({
+      goal: '帮我生成一张图片',
+      workspaceId: 'generation',
+      projectId: null,
+      intent: 'generate',
+      toolDomains: [],
+      stepSignals: [],
+      limit: 6,
+    }).entries).toEqual([
       expect.objectContaining({
         memoryId: memory.memoryId,
         layer: 'confirmed_preference',

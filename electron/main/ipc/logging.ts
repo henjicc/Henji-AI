@@ -1,14 +1,25 @@
 import {
   appendLogEvents,
+  getAgentTraceCaptureMode,
+  getAgentTraceStore,
   getLogCaptureMode,
   listLogDates,
   queryLogEvents,
   setLogCaptureMode,
+  setAgentTraceCaptureMode,
   type LogCaptureMode,
   type LogEventBridgeDto,
   type LogQueryParams,
   type LogQueryResult,
 } from '../services/logging'
+import {
+  agentTraceCaptureModeSchema,
+  agentTraceQuerySchema,
+  type AgentTraceCaptureMode,
+  type AgentTraceQuery,
+  type AgentTraceQueryResult,
+  type AgentTraceDetailResult,
+} from '../../../src/core/assistant/trace'
 import { openLogWindow } from '../windows/log-window'
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
 
@@ -18,6 +29,18 @@ interface LogEventsPayload {
 
 interface SetCaptureConfigPayload {
   mode: LogCaptureMode
+}
+
+interface SetAgentTraceCapturePayload {
+  mode: 'summary' | 'detailed'
+}
+
+interface AgentTraceDetailPayload {
+  traceId: string
+}
+
+interface ClearAgentTracePayload {
+  date?: string
 }
 
 const LOG_LEVELS = new Set(['trace', 'debug', 'info', 'warn', 'error'])
@@ -56,6 +79,31 @@ function parseCaptureConfigPayload(input: unknown): SetCaptureConfigPayload {
     throw new Error('Expected capture mode to be "standard" or "full"')
   }
   return { mode }
+}
+
+function parseAgentTraceCapturePayload(input: unknown): SetAgentTraceCapturePayload {
+  const record = parseRecord(input)
+  return { mode: agentTraceCaptureModeSchema.parse(record.mode) }
+}
+
+function parseAgentTraceQueryPayload(input: unknown): AgentTraceQuery {
+  return agentTraceQuerySchema.parse(parseRecord(input))
+}
+
+function parseAgentTraceDetailPayload(input: unknown): AgentTraceDetailPayload {
+  const record = parseRecord(input)
+  if (typeof record.traceId !== 'string' || !record.traceId.trim()) {
+    throw new Error('Expected traceId to be a non-empty string')
+  }
+  return { traceId: record.traceId }
+}
+
+function parseClearAgentTracePayload(input: unknown): ClearAgentTracePayload {
+  const record = parseRecord(input)
+  if (record.date !== undefined && (typeof record.date !== 'string' || !DATE_PATTERN.test(record.date))) {
+    throw new Error('Expected date in YYYY-MM-DD format')
+  }
+  return { date: record.date as string | undefined }
 }
 
 function parseLogQueryPayload(input: unknown): LogQueryParams {
@@ -137,4 +185,29 @@ export function registerLoggingIpc(): void {
   // 历史日志回读（2.3）：日期列表 + 按日期流式查询，过滤下沉在 query.ts 内完成。
   registerIpcHandler<void, string[]>('logging:listDates', parseVoid, () => listLogDates())
   registerIpcHandler<LogQueryParams, LogQueryResult>('logging:query', parseLogQueryPayload, (params) => queryLogEvents(params))
+  registerIpcHandler<void, AgentTraceCaptureMode>(
+    'logging:agentTrace:getCaptureMode',
+    parseVoid,
+    () => getAgentTraceCaptureMode()
+  )
+  registerIpcHandler<SetAgentTraceCapturePayload, void>(
+    'logging:agentTrace:setCaptureMode',
+    parseAgentTraceCapturePayload,
+    ({ mode }) => setAgentTraceCaptureMode(mode)
+  )
+  registerIpcHandler<AgentTraceQuery, AgentTraceQueryResult>(
+    'logging:agentTrace:query',
+    parseAgentTraceQueryPayload,
+    (params) => getAgentTraceStore().query(params)
+  )
+  registerIpcHandler<AgentTraceDetailPayload, AgentTraceDetailResult | null>(
+    'logging:agentTrace:getDetail',
+    parseAgentTraceDetailPayload,
+    ({ traceId }) => getAgentTraceStore().getDetail(traceId)
+  )
+  registerIpcHandler<ClearAgentTracePayload, void>(
+    'logging:agentTrace:clear',
+    parseClearAgentTracePayload,
+    ({ date }) => getAgentTraceStore().clear(date)
+  )
 }

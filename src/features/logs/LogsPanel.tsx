@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BrainCircuit, ListTree } from 'lucide-react'
 import { queryLogEvents } from '@/commands/logging'
 import { createLogger } from '@/core/logging'
+import { UiButton } from '@/components/ui'
 import { selectEventsByRequestId, useLogWindowStore } from './logStore'
 import { useLogHistoryQuery } from './useLogHistoryQuery'
 import { matchesKeyword, type DisplayLogEvent } from './eventDisplay'
@@ -8,6 +10,7 @@ import { LogFilterToolbar, type LevelFilter, type LogViewMode, type SourceFilter
 import { LogEventList } from './components/LogEventList'
 import { LogEventDetail } from './components/LogEventDetail'
 import { RequestChainView } from './components/RequestChainView'
+import { AssistantTracePanel } from './components/AssistantTracePanel'
 
 const logger = createLogger('features.logs.LogsPanel')
 /** 历史模式链路查询的单次上限：远大于实际单条请求链路的事件数量（通常几条到十几条）。 */
@@ -26,6 +29,7 @@ const CHAIN_QUERY_LIMIT = 500
  */
 export function LogsPanel(): JSX.Element {
   const { events: liveEvents, paused, pausedCount, setPaused, clear } = useLogWindowStore()
+  const [surface, setSurface] = useState<'events' | 'assistant'>('events')
   const [mode, setMode] = useState<LogViewMode>('live')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('all')
@@ -117,52 +121,70 @@ export function LogsPanel(): JSX.Element {
   }, [filteredEvents, selectedId])
 
   const selectedEvent: DisplayLogEvent | null = filteredEvents.find((event) => event.id === selectedId) || null
+  const traceRefreshToken = useMemo(
+    () => liveEvents.filter((event) => event.event.startsWith('agent_trace.step.')).length,
+    [liveEvents]
+  )
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <LogFilterToolbar
-        mode={mode}
-        onModeChange={setMode}
-        sourceFilter={sourceFilter}
-        onSourceFilterChange={setSourceFilter}
-        levelFilter={levelFilter}
-        onLevelFilterChange={setLevelFilter}
-        domainFilter={domainFilter}
-        onDomainFilterChange={setDomainFilter}
-        domainOptions={domainOptions}
-        keyword={keyword}
-        onKeywordChange={setKeyword}
-        errorOnly={errorOnly}
-        onErrorOnlyChange={setErrorOnly}
-        paused={paused}
-        onTogglePause={() => setPaused(!paused)}
-        onClear={clear}
-        onLookupRequestId={setChainRequestId}
-        historyDates={history.dates}
-        selectedHistoryDate={history.selectedDate}
-        onSelectedHistoryDateChange={history.setSelectedDate}
-        historyCorruptedLines={history.corruptedLines}
-      />
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-3 p-3">
-        <LogEventList
-          events={filteredEvents}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
-          paused={paused}
-          pausedCount={pausedCount}
-          filterSignature={filterSignature}
-          remoteHasMore={mode === 'history' ? history.hasMore : false}
-          onLoadMoreRemote={mode === 'history' ? history.loadMore : undefined}
-          remoteLoading={mode === 'history' ? history.loading : false}
-        />
-        <LogEventDetail event={selectedEvent} onViewChain={setChainRequestId} />
+      <div className="flex shrink-0 items-center gap-1 border-b border-border-dark/50 bg-panel px-3 py-1.5">
+        <UiButton type="button" size="sm" variant={surface === 'events' ? 'primary' : 'ghost'} onClick={() => setSurface('events')}>
+          <ListTree className="mr-1.5 h-3.5 w-3.5" />事件日志
+        </UiButton>
+        <UiButton type="button" size="sm" variant={surface === 'assistant' ? 'primary' : 'ghost'} onClick={() => setSurface('assistant')}>
+          <BrainCircuit className="mr-1.5 h-3.5 w-3.5" />助手追踪
+        </UiButton>
       </div>
-      <RequestChainView
-        isOpen={chainRequestId !== null}
-        onClose={() => setChainRequestId(null)}
-        requestId={chainRequestId ?? ''}
-        events={chainEvents}
-      />
+      {surface === 'assistant' ? (
+        <div className="min-h-0 flex-1"><AssistantTracePanel refreshToken={traceRefreshToken} /></div>
+      ) : (
+        <>
+          <LogFilterToolbar
+            mode={mode}
+            onModeChange={setMode}
+            sourceFilter={sourceFilter}
+            onSourceFilterChange={setSourceFilter}
+            levelFilter={levelFilter}
+            onLevelFilterChange={setLevelFilter}
+            domainFilter={domainFilter}
+            onDomainFilterChange={setDomainFilter}
+            domainOptions={domainOptions}
+            keyword={keyword}
+            onKeywordChange={setKeyword}
+            errorOnly={errorOnly}
+            onErrorOnlyChange={setErrorOnly}
+            paused={paused}
+            onTogglePause={() => setPaused(!paused)}
+            onClear={clear}
+            onLookupRequestId={setChainRequestId}
+            historyDates={history.dates}
+            selectedHistoryDate={history.selectedDate}
+            onSelectedHistoryDateChange={history.setSelectedDate}
+            historyCorruptedLines={history.corruptedLines}
+          />
+          <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,420px)_minmax(0,1fr)] gap-3 p-3">
+            <LogEventList
+              events={filteredEvents}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              paused={paused}
+              pausedCount={pausedCount}
+              filterSignature={filterSignature}
+              remoteHasMore={mode === 'history' ? history.hasMore : false}
+              onLoadMoreRemote={mode === 'history' ? history.loadMore : undefined}
+              remoteLoading={mode === 'history' ? history.loading : false}
+            />
+            <LogEventDetail event={selectedEvent} onViewChain={setChainRequestId} />
+          </div>
+          <RequestChainView
+            isOpen={chainRequestId !== null}
+            onClose={() => setChainRequestId(null)}
+            requestId={chainRequestId ?? ''}
+            events={chainEvents}
+          />
+        </>
+      )}
     </div>
   )
 }

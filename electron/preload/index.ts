@@ -449,6 +449,11 @@ const loggingApi: HenjiLoggingApi = {
   openLogWindow: () => nativeInvoke('logging:openWindow'),
   listLogDates: () => nativeInvoke('logging:listDates'),
   queryLogEvents: (params) => nativeInvoke('logging:query', params),
+  getAgentTraceCaptureMode: () => nativeInvoke('logging:agentTrace:getCaptureMode'),
+  setAgentTraceCaptureMode: (mode) => nativeInvoke('logging:agentTrace:setCaptureMode', { mode }),
+  queryAgentTraces: (params) => nativeInvoke('logging:agentTrace:query', params),
+  getAgentTraceDetail: (traceId) => nativeInvoke('logging:agentTrace:getDetail', { traceId }),
+  clearAgentTraces: (date) => nativeInvoke('logging:agentTrace:clear', { date }),
 }
 
 const updaterApi: HenjiUpdaterApi = {

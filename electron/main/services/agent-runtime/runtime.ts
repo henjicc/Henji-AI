@@ -34,6 +34,10 @@ import { getDb } from '../db'
 import { getLlmProviderApiKey } from '../keystore'
 import { getAgentMemoryStore } from '../assistant/memory'
 import { AgentRuntimeManager } from '../agent-runtime-manager/manager'
+import {
+  getAgentTraceCaptureMode,
+  getAgentTraceStore,
+} from '../logging'
 import { createInitialAgentRunState } from './runner/initial-state'
 import { AgentPersistenceStore } from './persistence/store'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
@@ -71,6 +75,7 @@ export class AgentRuntimeService {
   private readonly runs = new Map<string, AgentRunRecord>()
   private readonly activeByThread = new Map<string, string>()
   private readonly persistence = new AgentPersistenceStore(getDb())
+  private readonly agentTraceStore = getAgentTraceStore()
   private readonly memory = getAgentMemoryStore()
   private readonly registry = createBuiltinAgentToolRegistry((operation, context) => (
     this.invokeFrontend(operation, context)
@@ -84,6 +89,10 @@ export class AgentRuntimeService {
     onCheckpoint: (runId, state) => this.onCheckpoint(runId, state),
     onTerminal: (runId, state) => this.onTerminal(runId, state),
     onProcessFailure: (runIds, reason) => this.onProcessFailure(runIds, reason),
+    getAgentTraceCaptureMode,
+    startAgentTrace: (payload) => this.agentTraceStore.start(payload),
+    completeAgentTrace: (payload) => this.agentTraceStore.complete(payload),
+    failAgentTrace: (payload) => this.agentTraceStore.fail(payload),
   })
 
   constructor() {
@@ -265,6 +274,7 @@ export class AgentRuntimeService {
   }
 
   private onProcessFailure(runIds: string[], reason: string): void {
+    this.agentTraceStore.markInterrupted(runIds)
     for (const runId of runIds) {
       const record = this.runs.get(runId)
       const state = this.persistence.markRunRecoveryRequired(

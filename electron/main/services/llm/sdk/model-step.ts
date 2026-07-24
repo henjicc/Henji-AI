@@ -24,6 +24,17 @@ import {
 
 export type ModelStepEmitter = (event: ModelStepEvent) => void
 
+export interface ModelStepStreamTrace {
+  startedAt: number
+  firstChunkMs: number | null
+  totalEventCount: number
+  textDeltaCount: number
+  reasoningDeltaCount: number
+  toolCallCount: number
+  textCharacters: number
+  reasoningCharacters: number
+}
+
 function toAiMessages(messages: ModelStepMessage[]): ModelMessage[] {
   const validated = messages.map((message) => modelStepMessageSchema.parse(message))
   return validated as unknown as ModelMessage[]
@@ -113,7 +124,8 @@ export async function executeModelStepWithModel(
   rawInput: ModelStepInput,
   model: LanguageModel,
   emit: ModelStepEmitter,
-  signal: AbortSignal
+  signal: AbortSignal,
+  streamTrace?: ModelStepStreamTrace
 ): Promise<ModelStepResult> {
   const input = modelStepInputSchema.parse(rawInput)
   const startedAt = Date.now()
@@ -135,11 +147,24 @@ export async function executeModelStepWithModel(
   })
 
   for await (const part of result.fullStream) {
+    if (streamTrace) {
+      streamTrace.totalEventCount += 1
+      if (streamTrace.firstChunkMs === null) streamTrace.firstChunkMs = Date.now() - streamTrace.startedAt
+    }
     if (part.type === 'text-delta') emit({ type: 'TextDelta', text: part.text })
     else if (part.type === 'reasoning-delta') emit({ type: 'ReasoningDelta', text: part.text })
     else if (part.type === 'tool-call') emit({ type: 'ToolCall', toolCall: normalizeToolCall(part) })
     else if (part.type === 'error') throw part.error
     else if (part.type === 'abort') throw new Error('[task_cancelled] Model step aborted')
+    if (streamTrace && part.type === 'text-delta') {
+      streamTrace.textDeltaCount += 1
+      streamTrace.textCharacters += part.text.length
+    } else if (streamTrace && part.type === 'reasoning-delta') {
+      streamTrace.reasoningDeltaCount += 1
+      streamTrace.reasoningCharacters += part.text.length
+    } else if (streamTrace && part.type === 'tool-call') {
+      streamTrace.toolCallCount += 1
+    }
   }
 
   const [text, reasoningText, structuredOutput, toolCalls, response, finishReason, usage, providerMetadata, warnings] = await Promise.all([

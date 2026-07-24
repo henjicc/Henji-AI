@@ -34,6 +34,12 @@ import type {
 } from '../../src/core/assistant/memory'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../src/core/llm/modelStep'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '../../src/core/llm/capabilitySmoke'
+import type {
+  AgentTraceCaptureMode,
+  AgentTraceDetailResult,
+  AgentTraceQuery,
+  AgentTraceQueryResult,
+} from '../../src/core/assistant/trace'
 
 export interface HenjiIpcErrorEnvelope {
   name: string
@@ -777,6 +783,11 @@ export interface HenjiLoggingApi {
   listLogDates(): Promise<string[]>
   /** 按日期流式查询历史日志事件，过滤/分页均在主进程完成。 */
   queryLogEvents(params: HenjiLogQueryParams): Promise<HenjiLogQueryResult>
+  getAgentTraceCaptureMode(): Promise<AgentTraceCaptureMode>
+  setAgentTraceCaptureMode(mode: AgentTraceCaptureMode): Promise<void>
+  queryAgentTraces(params: AgentTraceQuery): Promise<AgentTraceQueryResult>
+  getAgentTraceDetail(traceId: string): Promise<AgentTraceDetailResult | null>
+  clearAgentTraces(date?: string): Promise<void>
 }
 
 export type HenjiUpdaterStatus =

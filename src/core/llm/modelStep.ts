@@ -30,6 +30,32 @@ export const modelStepToolSchema = z.object({
 })
 export type ModelStepTool = z.infer<typeof modelStepToolSchema>
 
+/**
+ * Agent 模型步骤的调试元数据。它只描述上下文构建结果，不改变供应商请求语义；
+ * 普通 LLM 调用可以省略该字段。
+ */
+export const modelStepTraceMetadataSchema = z.object({
+  kind: z.enum(['router', 'primary', 'summarizer', 'fallback', 'other']),
+  turn: z.number().int().positive().optional(),
+  snapshotRevision: z.number().int().nonnegative().optional(),
+  contextWindowBudget: z.number().int().positive().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+  estimatedTokens: z.number().int().nonnegative().optional(),
+  compacted: z.boolean().optional(),
+  beforeCompactionTokens: z.number().int().nonnegative().optional(),
+  retainedLayers: z.array(z.string().min(1).max(100)).max(32).optional(),
+  droppedLayers: z.array(z.string().min(1).max(100)).max(32).optional(),
+  layerReports: z.array(z.object({
+    id: z.string().min(1).max(100),
+    included: z.boolean(),
+    estimatedTokens: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+    reason: z.string().max(500),
+  }).strict()).max(32).optional(),
+  activeToolNames: z.array(z.string().min(1).max(200)).max(64).optional(),
+}).strict()
+export type ModelStepTraceMetadata = z.infer<typeof modelStepTraceMetadataSchema>
+
 export const modelStepInputSchema = z.object({
   requestId: z.string().min(1),
   runId: z.string().min(1),
@@ -63,6 +89,7 @@ export const modelStepInputSchema = z.object({
     timeoutMs: z.number().int().positive().optional(),
   }).optional(),
   providerOptions: z.record(z.string(), jsonRecordSchema).optional(),
+  trace: modelStepTraceMetadataSchema.optional(),
 })
 export type ModelStepInput = z.infer<typeof modelStepInputSchema>
 

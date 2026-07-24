@@ -17,6 +17,11 @@ import {
 import { agentWorkingSummarySchema } from '../../src/core/assistant/workingContext'
 import { agentStartRunRequestSchema } from '../../src/core/assistant/runtimeContracts'
 import {
+  agentTraceCaptureModeSchema,
+  type AgentTraceCaptureMode,
+} from '../../src/core/assistant/trace'
+import { sanitizeAgentTraceValue } from '../../src/core/assistant/traceSanitize'
+import {
   AGENT_UTILITY_PROTOCOL_VERSION,
   agentUtilityCommandMessageSchema,
   agentUtilityRpcResultMessageSchema,
@@ -39,7 +44,11 @@ import { DeterministicWorkflowService } from './services/agent-runtime/workflows
 import { createWorkflowTools } from './services/agent-runtime/workflows/tools'
 import { createMainLogger } from './services/logging'
 import { executeModelStepWithModel } from './services/llm/sdk/model-step'
-import { createModelStepLanguageModel } from './services/llm/sdk/provider'
+import { createModelStepLanguageModel, type ModelStepHttpTrace } from './services/llm/sdk/provider'
+import {
+  buildModelStepTraceDetail,
+  createModelStepStreamTrace,
+} from './services/llm/sdk/trace'
 
 const parentPort = process.parentPort
 if (!parentPort) throw new Error('Agent utility process 缺少父进程通信端口')
@@ -152,28 +161,40 @@ async function runUtilityModelStep(
   emit: (event: ModelStepEvent) => void
 ): Promise<ModelStepResult> {
   const input = modelStepInputSchema.parse(rawInput)
-  const keyResult = z.object({ apiKey: z.string().min(1) }).parse(
-    await rpc('model.api_key', { providerId: input.providerId })
-  )
   const controller = new AbortController()
+  const startedAt = Date.now()
+  const traceId = randomUUID()
+  const captureMode = await getAgentTraceCaptureMode()
+  const httpTrace: ModelStepHttpTrace = {}
+  const streamTrace = captureMode === 'detailed' ? createModelStepStreamTrace() : undefined
   activeModelSteps.set(input.requestId, controller)
+  await startAgentTrace(input, traceId, captureMode, startedAt)
   logger.info('utility 模型单步调用开始', {
     event: 'llm_model_step.run.start',
     requestId: input.runId,
     taskId: input.stepId,
     modelId: input.modelId,
     providerId: input.providerId,
+    context: { traceId, captureMode },
   })
   try {
-    const model = createModelStepLanguageModel(input, keyResult.apiKey)
-    const result = await executeModelStepWithModel(input, model, emit, controller.signal)
+    const keyResult = z.object({ apiKey: z.string().min(1) }).parse(
+      await rpc('model.api_key', { providerId: input.providerId })
+    )
+    const model = createModelStepLanguageModel(
+      input,
+      keyResult.apiKey,
+      captureMode === 'detailed' ? httpTrace : undefined
+    )
+    const result = await executeModelStepWithModel(input, model, emit, controller.signal, streamTrace)
+    await finishAgentTrace(input, traceId, captureMode, startedAt, httpTrace, streamTrace, result)
     logger.info('utility 模型单步调用完成', {
       event: 'llm_model_step.run.completed',
       requestId: input.runId,
       taskId: input.stepId,
       modelId: input.modelId,
       providerId: input.providerId,
-      context: { elapsedMs: result.elapsedMs, finishReason: result.finishReason },
+      context: { traceId, captureMode, elapsedMs: result.elapsedMs, finishReason: result.finishReason },
     })
     return result
   } catch (error) {
@@ -189,11 +210,132 @@ async function runUtilityModelStep(
       taskId: input.stepId,
       modelId: input.modelId,
       providerId: input.providerId,
-      error: classified,
+      context: { traceId, captureMode },
+      error: {
+        name: classified.name,
+        message: sanitizeAgentTraceValue(classified.message),
+      },
     })
+    await failAgentTrace(input, traceId, captureMode, startedAt, httpTrace, streamTrace, classified)
     throw classified
   } finally {
     activeModelSteps.delete(input.requestId)
+  }
+}
+
+async function getAgentTraceCaptureMode(): Promise<AgentTraceCaptureMode> {
+  try {
+    const result = z.object({ mode: agentTraceCaptureModeSchema }).parse(
+      await rpc('agent_trace.get_config', {})
+    )
+    return result.mode
+  } catch {
+    return 'summary'
+  }
+}
+
+async function startAgentTrace(
+  input: ModelStepInput,
+  traceId: string,
+  captureMode: AgentTraceCaptureMode,
+  startedAt: number
+): Promise<void> {
+  try {
+    await rpc('agent_trace.start', {
+      traceId,
+      runId: input.runId,
+      requestId: input.requestId,
+      stepId: input.stepId,
+      kind: input.trace?.kind ?? (input.stepId.startsWith('router:') ? 'router' : 'other'),
+      turn: input.trace?.turn,
+      providerId: input.providerId,
+      modelId: input.modelId,
+      startedAt: new Date(startedAt).toISOString(),
+      captureMode,
+    })
+  } catch (error) {
+    logger.warn('Agent 模型追踪开始记录失败', {
+      event: 'agent_trace.start.failed',
+      requestId: input.runId,
+      taskId: input.stepId,
+      context: { traceId, errorName: error instanceof Error ? error.name : 'unknown' },
+    })
+  }
+}
+
+async function finishAgentTrace(
+  input: ModelStepInput,
+  traceId: string,
+  captureMode: AgentTraceCaptureMode,
+  startedAt: number,
+  httpTrace: ModelStepHttpTrace,
+  streamTrace: ReturnType<typeof createModelStepStreamTrace> | undefined,
+  result: ModelStepResult
+): Promise<void> {
+  try {
+    const detail = captureMode === 'detailed' && streamTrace
+      ? buildModelStepTraceDetail(input, httpTrace, streamTrace, result)
+      : undefined
+    await rpc('agent_trace.complete', {
+      traceId,
+      completedAt: new Date().toISOString(),
+      elapsedMs: Date.now() - startedAt,
+      finishReason: result.finishReason,
+      usage: result.usage,
+      detail,
+    })
+  } catch (error) {
+    logger.warn('Agent 模型追踪完成记录失败', {
+      event: 'agent_trace.complete.failed',
+      requestId: input.runId,
+      taskId: input.stepId,
+      context: { traceId, errorName: error instanceof Error ? error.name : 'unknown' },
+    })
+  }
+}
+
+async function failAgentTrace(
+  input: ModelStepInput,
+  traceId: string,
+  captureMode: AgentTraceCaptureMode,
+  startedAt: number,
+  httpTrace: ModelStepHttpTrace,
+  streamTrace: ReturnType<typeof createModelStepStreamTrace> | undefined,
+  error: Error
+): Promise<void> {
+  try {
+    const detail = captureMode === 'detailed' && streamTrace
+      ? buildModelStepTraceDetail(input, httpTrace, streamTrace, undefined, error)
+      : undefined
+    await rpc('agent_trace.fail', {
+      traceId,
+      completedAt: new Date().toISOString(),
+      elapsedMs: Date.now() - startedAt,
+      status: error.message.startsWith('[task_cancelled]') ? 'cancelled' : 'failed',
+      usage: {
+        inputTokens: null,
+        inputNoCacheTokens: null,
+        cacheReadTokens: null,
+        cacheWriteTokens: null,
+        outputTokens: null,
+        textTokens: null,
+        reasoningTokens: null,
+        totalTokens: null,
+      },
+      error: {
+        name: error.name,
+        message: error.message,
+        code: error.message.match(/^\[([^\]]+)]/)?.[1],
+      },
+      detail,
+    })
+  } catch (traceError) {
+    logger.warn('Agent 模型追踪失败记录失败', {
+      event: 'agent_trace.fail.failed',
+      requestId: input.runId,
+      taskId: input.stepId,
+      context: { traceId, errorName: traceError instanceof Error ? traceError.name : 'unknown' },
+    })
   }
 }
 

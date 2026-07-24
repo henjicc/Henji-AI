@@ -12,6 +12,12 @@ import type { HostContextSnapshot } from '../../../../src/core/assistant/hostCon
 import type { AgentStartRunRequest } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentMemoryContextEntry } from '../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
+import type {
+  AgentTraceCompleteInput,
+  AgentTraceFailInput,
+  AgentTraceStartInput,
+} from '../../../../src/core/assistant/trace'
+import type { AgentTraceCaptureMode } from '../../../../src/core/assistant/trace'
 import {
   AGENT_UTILITY_PROTOCOL_VERSION,
   agentUtilityCheckpointMessageSchema,
@@ -39,6 +45,10 @@ interface AgentRuntimeManagerOptions {
   onCheckpoint: (runId: string, state: AgentRunState) => void
   onTerminal: (runId: string, state: AgentRunState) => void
   onProcessFailure: (runIds: string[], reason: string) => void
+  getAgentTraceCaptureMode: () => AgentTraceCaptureMode
+  startAgentTrace: (payload: AgentTraceStartInput) => void
+  completeAgentTrace: (payload: AgentTraceCompleteInput) => void
+  failAgentTrace: (payload: AgentTraceFailInput) => void
 }
 
 interface PendingCommand {
@@ -312,6 +322,17 @@ export class AgentRuntimeManager {
         }
       } else if (operation === 'artifact.save') {
         this.options.saveArtifact(payload)
+        data = { saved: true }
+      } else if (operation === 'agent_trace.get_config') {
+        data = { mode: this.options.getAgentTraceCaptureMode() }
+      } else if (operation === 'agent_trace.start') {
+        this.options.startAgentTrace(payload as AgentTraceStartInput)
+        data = { saved: true }
+      } else if (operation === 'agent_trace.complete') {
+        this.options.completeAgentTrace(payload as AgentTraceCompleteInput)
+        data = { saved: true }
+      } else if (operation === 'agent_trace.fail') {
+        this.options.failAgentTrace(payload as AgentTraceFailInput)
         data = { saved: true }
       } else {
         data = this.options.retrieveMemory(payload)

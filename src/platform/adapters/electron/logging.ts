@@ -33,5 +33,20 @@ export function createElectronLogging(): LoggingPlatform {
     queryLogEvents: async (params) => {
       return await getNativeLogging().queryLogEvents(params)
     },
+    getAgentTraceCaptureMode: async () => {
+      return await getNativeLogging().getAgentTraceCaptureMode()
+    },
+    setAgentTraceCaptureMode: async (mode) => {
+      await getNativeLogging().setAgentTraceCaptureMode(mode)
+    },
+    queryAgentTraces: async (params) => {
+      return await getNativeLogging().queryAgentTraces(params)
+    },
+    getAgentTraceDetail: async (traceId) => {
+      return await getNativeLogging().getAgentTraceDetail(traceId)
+    },
+    clearAgentTraces: async (date) => {
+      await getNativeLogging().clearAgentTraces(date)
+    },
   }
 }

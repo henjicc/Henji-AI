@@ -13,7 +13,7 @@ import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentBudgetTracker } from './budget'
 import { AgentEventStream } from './event-stream'
 import { createInitialAgentRunState } from './initial-state'
-import { runPrimaryAgentModelStep, runRouterModelClassification } from './model-execution'
+import { buildPrimaryModelTraceMetadata, runPrimaryAgentModelStep, runRouterModelClassification } from './model-execution'
 import { selectAgentRuntimeModels } from './models'
 import { errorCode, serializeError, toolMessage } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
@@ -27,7 +27,6 @@ import { AgentMemoryContextProvider } from './memory-context'
 import { emitAgentContextEvents } from './context-events'
 
 const logger = createMainLogger('main.agent_runtime')
-
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
   private readonly budget: AgentBudgetTracker
@@ -194,7 +193,7 @@ export class AgentRunner {
         )
         let result: ModelStepResult
         try {
-          result = await this.runPrimaryStep(turn, context.system, context.messages, context.tools)
+          result = await this.runPrimaryStep(turn, context)
           this.budget.recordSuccess()
         } catch (error) {
           this.currentModelRequestId = null
@@ -297,9 +296,7 @@ export class AgentRunner {
 
   private async runPrimaryStep(
     turn: number,
-    system: string,
-    messages: ModelStepMessage[],
-    tools: Parameters<typeof this.options.dependencies.runModelStep>[0]['tools']
+    context: ReturnType<AgentContextBuilder['build']>
   ): Promise<ModelStepResult> {
     const stepId = `step-${turn}`
     const requestId = `${this.options.runId}:${stepId}`
@@ -313,9 +310,10 @@ export class AgentRunner {
       runId: this.options.runId,
       turn,
       model: this.models.primary,
-      system,
-      messages,
-      tools,
+      system: context.system,
+      messages: context.messages,
+      tools: context.tools,
+      trace: buildPrimaryModelTraceMetadata(turn, context, this.models.primary),
       runModelStep: this.options.dependencies.runModelStep,
       onTextDelta: (text) => this.emit({ type: 'ModelDelta', stepId, text }),
     })
