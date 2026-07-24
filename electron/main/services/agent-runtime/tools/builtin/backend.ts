@@ -16,6 +16,12 @@ const applicationCapabilityCategorySchema = z.enum([
   'memory',
   'diagnostics',
   'canvas',
+  'toolbox',
+  'camera_stage',
+  'storyboard',
+  'image_edit',
+  'assets',
+  'workflows',
 ])
 
 function eraseToolDefinition<TInput, TOutput>(
@@ -69,6 +75,12 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
             'memory',
             'diagnostics',
             'canvas',
+            'toolbox',
+            'camera_stage',
+            'storyboard',
+            'image_edit',
+            'assets',
+            'workflows',
           ],
         },
         cursor: { type: 'integer', minimum: 0 },

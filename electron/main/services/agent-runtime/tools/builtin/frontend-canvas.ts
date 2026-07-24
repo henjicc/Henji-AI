@@ -8,6 +8,9 @@ import {
   requireFrontendSuccess,
   type FrontendToolInvoker,
 } from './frontend-utils'
+import { createFrontendCanvasMutationTools } from './frontend-canvas-mutations'
+import { createFrontendCanvasProjectTools } from './frontend-canvas-projects'
+import { createFrontendCanvasBatchTools } from './frontend-canvas-batch'
 
 const scopeRevisionsSchema = z.record(z.string(), z.number())
 const revisionOutput = {
@@ -145,6 +148,32 @@ export function createFrontendCanvasTools(invoke: FrontendToolInvoker): AgentToo
     undo: (output) => ({ kind: 'canvas_history', token: String(output.undoRef) }),
   })
 
+  const addAssetNode = defineAgentTool({
+    name: 'add_asset_to_canvas', version: 1, title: '把素材放入画布',
+    description: '按稳定 assetId 将素材作为受控输入节点放入明确画布项目；不接受任意本地路径。',
+    category: 'canvas', side: 'frontend', risk: 'R1', permission: 'canvas:write',
+    readOnly: false, destructive: false, openWorld: false, idempotent: true,
+    timeoutMs: 12_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+    supportsPreview: false, supportsUndo: true, requiredContext: ['canvas', 'assets'],
+    inputSchema: z.object({ projectId: z.string().min(1), assetId: z.string().min(1), placement: placementSchema }).strict(),
+    outputSchema: z.object({ projectId: z.string(), assetId: z.string(), mediaType: z.enum(['image', 'video', 'audio']), nodeId: z.string(), nodeType: z.string(), undoRef: z.string(), ...revisionOutput }).passthrough(),
+    aiInputSchema: {
+      type: 'object', properties: {
+        projectId: { type: 'string' }, assetId: { type: 'string' },
+        placement: { type: 'object', properties: { mode: { type: 'string', enum: ['viewport_center', 'right_of_node'] }, anchorNodeId: { type: 'string' } }, required: ['mode'], additionalProperties: false },
+      }, required: ['projectId', 'assetId', 'placement'], additionalProperties: false,
+    },
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
+      kind: 'command', command: {
+        name: 'add_asset_to_canvas', input,
+        expectedRevisions: expectedRevision(context.hostContext?.scopeRevisions, ['canvas', 'assets']),
+      },
+    }, context)),
+    concurrencyKey: (input) => `canvas:${input.projectId}`, targetIds: (input) => ({ projectId: input.projectId, assetId: input.assetId }), dataClasses: () => ['C1'],
+    summarize: (output) => `已将素材 ${String(output.assetId)} 放入画布节点 ${String(output.nodeId)}。`,
+    undo: (output) => ({ kind: 'canvas_history', token: String(output.undoRef) }),
+  })
+
   const connectNodes = defineAgentTool({
     name: 'connect_canvas_nodes', version: 1, title: '连接画布节点',
     description: '连接明确的上下游节点；宿主按节点注册表解析端口并拒绝不兼容、重复或循环连接。',
@@ -229,8 +258,12 @@ export function createFrontendCanvasTools(invoke: FrontendToolInvoker): AgentToo
     eraseToolDefinition(searchNodeTypes),
     eraseToolDefinition(getNodeSchema),
     eraseToolDefinition(addNode),
+    eraseToolDefinition(addAssetNode),
     eraseToolDefinition(connectNodes),
     eraseToolDefinition(focusNode),
     eraseToolDefinition(undoChange),
+    ...createFrontendCanvasProjectTools(invoke),
+    ...createFrontendCanvasMutationTools(invoke),
+    ...createFrontendCanvasBatchTools(invoke),
   ]
 }

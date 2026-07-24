@@ -30,6 +30,8 @@ import { createBuiltinAgentToolRegistry } from './services/agent-runtime/tools/b
 import { AgentToolGateway } from './services/agent-runtime/tools/gateway'
 import { AgentToolRegistry } from './services/agent-runtime/tools/registry'
 import type { AgentToolDefinition } from './services/agent-runtime/tools/types'
+import { DeterministicWorkflowService } from './services/agent-runtime/workflows/service'
+import { createWorkflowTools } from './services/agent-runtime/workflows/tools'
 import { createMainLogger } from './services/logging'
 import { executeModelStepWithModel } from './services/llm/sdk/model-step'
 import { createModelStepLanguageModel } from './services/llm/sdk/provider'
@@ -121,6 +123,12 @@ const gateway = new AgentToolGateway({
   registry,
   getHostContext: (runId) => hostContexts.get(runId) ?? null,
 })
+const workflowService = new DeterministicWorkflowService()
+for (const workflowTool of createWorkflowTools({
+  service: workflowService,
+  gateway,
+  getHostContext: (runId) => hostContexts.get(runId) ?? null,
+})) registry.register(workflowTool)
 const artifactStore = new AgentArtifactStore({
   save: (runId, artifact) => {
     void rpc('artifact.save', { runId, artifact }).catch((error) => {

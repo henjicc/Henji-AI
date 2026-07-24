@@ -2,14 +2,44 @@ import { z } from 'zod'
 
 import {
   addCanvasNodeCommandSchema,
+  addAssetToCanvasCommandSchema,
+  addAssetToLibraryCommandSchema,
+  addCameraStageObjectCommandSchema,
+  addCameraStageShotCommandSchema,
   cancelGenerationTaskCommandSchema,
+  commitCanvasBatchCommandSchema,
+  commitImageEditCommandSchema,
+  closeCanvasProjectCommandSchema,
   connectCanvasNodesCommandSchema,
+  createCameraStageProjectCommandSchema,
+  createCanvasProjectCommandSchema,
+  createImageEditPreviewCommandSchema,
   createVisibleGenerationTaskCommandSchema,
+  deleteAssetCommandSchema,
+  deleteCameraStageObjectCommandSchema,
+  deleteCameraStageProjectCommandSchema,
+  deleteCanvasNodesCommandSchema,
+  deleteCanvasProjectCommandSchema,
+  disconnectCanvasEdgeCommandSchema,
+  duplicateCameraStageObjectCommandSchema,
+  duplicateCanvasNodeCommandSchema,
   focusCanvasNodeCommandSchema,
+  groupCanvasNodesCommandSchema,
   hostCommandSchema,
+  openCameraStageProjectCommandSchema,
   openCanvasProjectCommandSchema,
+  removeAssetFromLibraryCommandSchema,
+  renameCameraStageProjectCommandSchema,
+  renameCanvasProjectCommandSchema,
+  selectAssetCommandSchema,
+  selectCanvasNodeCommandSchema,
+  selectToolboxToolCommandSchema,
+  setAssetTagsCommandSchema,
   switchWorkspaceCommandSchema,
   undoCanvasChangeCommandSchema,
+  updateCameraStageObjectCommandSchema,
+  updateCameraStageShotCommandSchema,
+  updateCanvasNodeCommandSchema,
   type HostCommand,
   type HostCommandName,
   type HostCommandResult,
@@ -17,14 +47,52 @@ import {
   type HostScope,
 } from '@/core/assistant/hostContracts'
 import {
+  GenerationPreparationError,
+  prepareGenerationTask,
+} from '@/core/assistant/generationPreparation'
+import {
   addCanvasNodeFromAgent,
   AgentCanvasActionError,
   connectCanvasNodesFromAgent,
   focusCanvasNodeFromAgent,
-  openCanvasProjectFromAgent,
   undoCanvasChangeFromAgent,
 } from '@/features/canvas/application/agentCanvasActions'
-import { switchWorkspace } from '@/stores/navigationStore'
+import { commitCanvasBatchFromAgent } from '@/features/canvas/application/agentCanvasBatch'
+import {
+  closeCanvasProjectFromAgent,
+  createCanvasProjectFromAgent,
+  deleteCanvasProjectFromAgent,
+  openCanvasProjectWithSummaryFromAgent,
+  renameCanvasProjectFromAgent,
+} from '@/features/canvas/application/agentCanvasProjects'
+import {
+  deleteCanvasNodesFromAgent,
+  disconnectCanvasEdgeFromAgent,
+  duplicateCanvasNodeFromAgent,
+  groupCanvasNodesFromAgent,
+  selectCanvasNodeFromAgent,
+  updateCanvasNodeFromAgent,
+} from '@/features/canvas/application/agentCanvasMutations'
+import { selectToolboxTool, switchWorkspace } from '@/stores/navigationStore'
+import {
+  addAssetToLibraryFromAgent,
+  addAssetToCanvasFromAgent,
+  addCameraStageObjectFromAgent,
+  addCameraStageShotFromAgent,
+  createCameraStageProjectFromAgent,
+  createImageEditPreviewFromAgent,
+  commitImageEditFromAgent,
+  deleteAssetFromAgent,
+  deleteCameraStageObjectFromAgent,
+  deleteCameraStageProjectFromAgent,
+  duplicateCameraStageObjectFromAgent,
+  removeAssetFromLibraryFromAgent,
+  openCameraStageProjectFromAgent,
+  renameCameraStageProjectFromAgent,
+  setAssetTagsFromAgent,
+  updateCameraStageObjectFromAgent,
+  updateCameraStageShotFromAgent,
+} from '@/features/assistant/hostActions'
 import {
   cancelVisibleGenerationTask,
   runVisibleGenerationTaskCommand,
@@ -78,17 +146,63 @@ const definitions: HostCommandDefinition[] = [
     return { workspace: command.input.workspace }
   }),
   defineHostCommand('open_canvas_project', openCanvasProjectCommandSchema, ['navigation', 'canvas'], async (command, context) => {
-    const result = await openCanvasProjectFromAgent(command.input.projectId, context.signal)
+    const result = await openCanvasProjectWithSummaryFromAgent(command.input.projectId, context.signal)
     switchWorkspace('nodes')
     return result
+  }),
+  defineHostCommand('create_canvas_project', createCanvasProjectCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    const result = await createCanvasProjectFromAgent(command.input.name)
+    switchWorkspace('nodes')
+    return result
+  }),
+  defineHostCommand('close_canvas_project', closeCanvasProjectCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await closeCanvasProjectFromAgent(command.input.projectId)
+  }),
+  defineHostCommand('rename_canvas_project', renameCanvasProjectCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await renameCanvasProjectFromAgent(command.input.projectId, command.input.name)
+  }),
+  defineHostCommand('delete_canvas_project', deleteCanvasProjectCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await deleteCanvasProjectFromAgent(command.input.projectId)
   }),
   defineHostCommand('add_canvas_node', addCanvasNodeCommandSchema, ['canvas'], async (command, context) => {
     throwIfAborted(context.signal)
     return addCanvasNodeFromAgent(command.input)
   }),
+  defineHostCommand('add_asset_to_canvas', addAssetToCanvasCommandSchema, ['canvas', 'assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await addAssetToCanvasFromAgent(command.input)
+  }),
+  defineHostCommand('duplicate_canvas_node', duplicateCanvasNodeCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return duplicateCanvasNodeFromAgent(command.input)
+  }),
+  defineHostCommand('update_canvas_node', updateCanvasNodeCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return updateCanvasNodeFromAgent(command.input)
+  }),
+  defineHostCommand('delete_canvas_nodes', deleteCanvasNodesCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return deleteCanvasNodesFromAgent(command.input.projectId, command.input.nodeIds)
+  }),
+  defineHostCommand('select_canvas_node', selectCanvasNodeCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return selectCanvasNodeFromAgent(command.input.projectId, command.input.nodeId)
+  }),
+  defineHostCommand('group_canvas_nodes', groupCanvasNodesCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return groupCanvasNodesFromAgent(command.input.projectId, command.input.nodeIds)
+  }),
   defineHostCommand('connect_canvas_nodes', connectCanvasNodesCommandSchema, ['canvas'], async (command, context) => {
     throwIfAborted(context.signal)
     return connectCanvasNodesFromAgent(command.input)
+  }),
+  defineHostCommand('disconnect_canvas_edge', disconnectCanvasEdgeCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return disconnectCanvasEdgeFromAgent(command.input.projectId, command.input.edgeId)
   }),
   defineHostCommand('focus_canvas_node', focusCanvasNodeCommandSchema, ['navigation', 'canvas'], async (command, context) => {
     throwIfAborted(context.signal)
@@ -99,17 +213,97 @@ const definitions: HostCommandDefinition[] = [
     throwIfAborted(context.signal)
     return undoCanvasChangeFromAgent(command.input.projectId, command.input.undoRef)
   }),
+  defineHostCommand('commit_canvas_batch', commitCanvasBatchCommandSchema, ['canvas'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await commitCanvasBatchFromAgent(command.input.planRef)
+  }),
+  defineHostCommand('select_toolbox_tool', selectToolboxToolCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    selectToolboxTool(command.input.toolId)
+    return { toolId: command.input.toolId }
+  }),
+  defineHostCommand('create_camera_stage_project', createCameraStageProjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await createCameraStageProjectFromAgent(command.input.name, command.input.mode)
+  }),
+  defineHostCommand('open_camera_stage_project', openCameraStageProjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    selectToolboxTool('cameraStage')
+    return await openCameraStageProjectFromAgent(command.input.projectId)
+  }),
+  defineHostCommand('rename_camera_stage_project', renameCameraStageProjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await renameCameraStageProjectFromAgent(command.input.projectId, command.input.name)
+  }),
+  defineHostCommand('delete_camera_stage_project', deleteCameraStageProjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await deleteCameraStageProjectFromAgent(command.input.projectId)
+  }),
+  defineHostCommand('add_camera_stage_object', addCameraStageObjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await addCameraStageObjectFromAgent(command.input)
+  }),
+  defineHostCommand('duplicate_camera_stage_object', duplicateCameraStageObjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await duplicateCameraStageObjectFromAgent(command.input)
+  }),
+  defineHostCommand('delete_camera_stage_object', deleteCameraStageObjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await deleteCameraStageObjectFromAgent(command.input)
+  }),
+  defineHostCommand('update_camera_stage_object', updateCameraStageObjectCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await updateCameraStageObjectFromAgent(command.input)
+  }),
+  defineHostCommand('add_camera_stage_shot', addCameraStageShotCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await addCameraStageShotFromAgent(command.input)
+  }),
+  defineHostCommand('update_camera_stage_shot', updateCameraStageShotCommandSchema, ['toolbox'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await updateCameraStageShotFromAgent(command.input)
+  }),
+  defineHostCommand('create_image_edit_preview', createImageEditPreviewCommandSchema, ['toolbox', 'assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await createImageEditPreviewFromAgent(command.input.assetId, command.input.operations)
+  }),
+  defineHostCommand('commit_image_edit', commitImageEditCommandSchema, ['toolbox', 'assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await commitImageEditFromAgent(command.input.previewRef, command.input.displayName)
+  }),
+  defineHostCommand('select_asset', selectAssetCommandSchema, ['assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    const result = await import('@/features/assistant/hostActions').then(({ selectAssetFromAgent }) => selectAssetFromAgent(command.input.assetId))
+    return result
+  }),
+  defineHostCommand('set_asset_tags', setAssetTagsCommandSchema, ['assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await setAssetTagsFromAgent(command.input.assetId, command.input.tags)
+  }),
+  defineHostCommand('add_asset_to_library', addAssetToLibraryCommandSchema, ['assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await addAssetToLibraryFromAgent(command.input.libraryId, command.input.assetId)
+  }),
+  defineHostCommand('remove_asset_from_library', removeAssetFromLibraryCommandSchema, ['assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await removeAssetFromLibraryFromAgent(command.input.libraryId, command.input.assetId)
+  }),
+  defineHostCommand('delete_asset', deleteAssetCommandSchema, ['assets'], async (command, context) => {
+    throwIfAborted(context.signal)
+    return await deleteAssetFromAgent(command.input.assetId)
+  }),
   defineHostCommand(
     'create_visible_generation_task',
     createVisibleGenerationTaskCommandSchema,
     ['generation'],
     async (command, context) => {
       throwIfAborted(context.signal)
+      const preparation = prepareGenerationTask(command.input)
       const taskId = await runVisibleGenerationTaskCommand({
         input: command.input.prompt,
         model: command.input.modelId,
         type: command.input.mediaType,
-        options: command.input.options,
+        options: preparation.options as DynamicValue,
       })
       if (!taskId) throw new HostCommandError('COMMAND_REJECTED', '生成任务未创建，请检查输入和当前模式', true)
       return { taskId, status: 'submitted' as const }
@@ -158,6 +352,17 @@ export async function executeHostCommand(commandInput: unknown, signal: AbortSig
     }
     if (error instanceof AgentCanvasActionError) {
       return { ok: false, error: { code: error.code, message: error.message, recoverable: error.recoverable, details: error.details } }
+    }
+    if (error instanceof GenerationPreparationError) {
+      return {
+        ok: false,
+        error: {
+          code: error.code === 'MODEL_NOT_FOUND' ? 'NOT_FOUND' : 'INVALID_INPUT',
+          message: error.message,
+          recoverable: true,
+          details: error.details,
+        },
+      }
     }
     if (error instanceof z.ZodError) {
       return { ok: false, error: { code: 'INVALID_INPUT', message: '宿主命令参数无效', recoverable: true, details: { issues: error.issues } } }

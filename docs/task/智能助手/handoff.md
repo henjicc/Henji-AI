@@ -2,9 +2,9 @@
 
 ## 当前工作
 
-- 当前阶段：第六阶段 · 后续增强已收口
-- 状态：6.1、6.2 已完成；6.4、6.5 实现完成待最终真机/长稳验证；6.3 因无真实需求取消
-- 下一任务：重新读取阶段记录并进入 7.1～7.4，全面接入内置生成、画布/项目、工具箱/素材与确定性跨工作区工作流
+- 当前阶段：第七阶段 · 内置能力全面接入
+- 状态：第七阶段代码实现完成，待最终统一手动验收
+- 下一任务：按《第七阶段-最终手动测试清单.md》重启 Electron 后一次性验证真实 Provider、鼠标交互、审批、跨工作区工作流、日志和长稳
 - 阻塞问题：无代码阻塞
 
 ## 下一步
@@ -43,6 +43,11 @@
 - 旧 `model-preferences.json` 已退出运行时读取和迁移链路；即使本地残留也不会影响 `user-instructions.md`，无需专门清理。
 - 真实 run `8aa28be8` 的失败不是模型未适配或 KIE 缺失，而是生成意图漏词、router 输出校验降级、能力目录整句/category 检索和发现结果未激活共同造成；以上代码路径均已修复，真实费用任务仍需用户复验。
 - 助手长期记忆已经实现但默认关闭；候选需确认，支持来源、scope、TTL、冲突、编辑删除清空和相关性检索。真实交互与隐私抽查留到最终测试。
+- 第七阶段工具目录已补齐 3D 工程/对象写工具、图片编辑 preview/commit 与分镜项目查询；utility 侧通过同一 `AgentToolGateway` 注册，main 侧不重复注册工作流工具。
+- 3D/分镜查询结果已改为受限摘要：只返回稳定 ID、计数、schema/editor 摘要和最多 32 项详情，不返回完整场景、节点或边 JSON。
+- 图片编辑操作现在共享 `src/core/assistant/imageEditContracts.ts`，工具入口和 renderer 宿主动作共同校验标记类型、坐标、尺寸、样式和裁剪边界。
+- `asset_edit_to_canvas` 已修正为通过 `add_asset_to_canvas` 使用真实 `assetId` 创建画布素材节点，不再留下空上传节点；该修复已重新通过 Electron 构建和 utility 握手。
+- 第七阶段自动验证：全量 80 个测试文件、363 个用例通过（2 个文件、6 个用例按环境跳过）；助手评测 9 个文件、33 个用例通过；Electron build、utility smoke、TypeScript、双侧 ESLint 通过。
 
 ## 必读交付物
 
@@ -74,3 +79,4 @@
 - `src/features/canvas/domain/agentCanvasCatalog.ts`
 - `src/features/canvas/application/agentCanvasActions.ts`
 - `docs/task/智能助手/任务/第五阶段-闭环验证/最小评测结果.md`
+- `docs/task/智能助手/第七阶段-最终手动测试清单.md`

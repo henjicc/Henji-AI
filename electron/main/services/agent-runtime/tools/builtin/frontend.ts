@@ -2,7 +2,9 @@ import { z } from 'zod'
 
 import { defineAgentTool } from '../define-tool'
 import type { AgentToolDefinition } from '../types'
+import { createFrontendAssetTools } from './frontend-assets'
 import { createFrontendCanvasTools } from './frontend-canvas'
+import { createFrontendToolboxTools } from './frontend-toolbox'
 import {
   eraseToolDefinition,
   expectedRevision,
@@ -77,6 +79,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
       query: z.string().max(500).default(''),
       mediaType: z.enum(['image', 'video', 'audio']).optional(),
       providerId: z.string().min(1).optional(),
+      tags: z.array(z.string().min(1).max(100)).max(8).optional(),
       cursor: z.number().int().nonnegative().default(0),
       limit: z.number().int().min(1).max(20).default(10),
     }).strict(),
@@ -93,6 +96,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
         query: { type: 'string' },
         mediaType: { type: 'string', enum: ['image', 'video', 'audio'] },
         providerId: { type: 'string' },
+        tags: { type: 'array', items: { type: 'string' }, maxItems: 8 },
         cursor: { type: 'integer', minimum: 0 },
         limit: { type: 'integer', minimum: 1, maximum: 20 },
       },
@@ -144,6 +148,70 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     targetIds: (input) => ({ modelId: input.modelId }),
     dataClasses: () => ['C0'],
     summarize: (output) => `已读取模型 ${String((output.meta as Record<string, unknown>).id ?? '')} 的参数结构。`,
+  })
+
+  const prepareGenerationTask = defineAgentTool({
+    name: 'prepare_generation_task',
+    version: 1,
+    title: '校验生成参数',
+    description: '在提交前按单个模型的配置验证媒体类型、必填项、参数范围、联动结果、媒体数量与请求构建。不会发送 Provider 请求；应在创建生成任务前调用。',
+    category: 'generation',
+    side: 'frontend',
+    risk: 'R0',
+    permission: 'generation:prepare',
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 5_000,
+    retryPolicy: { maxRetries: 1, baseDelayMs: 100 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: [],
+    inputSchema: z.object({
+      modelId: z.string().min(1),
+      prompt: z.string().max(32 * 1024),
+      mediaType: z.enum(['image', 'video', 'audio']),
+      params: z.record(z.string(), z.unknown()).optional(),
+    }).strict(),
+    outputSchema: z.object({
+      preparation: z.object({
+        prepared: z.literal(true),
+        modelId: z.string().min(1),
+        providerId: z.string().min(1),
+        mediaType: z.enum(['image', 'video', 'audio']),
+        options: z.record(z.string(), z.unknown()),
+      }).passthrough(),
+      revision: z.number().int().nonnegative(),
+      scopeRevisions: z.record(z.string(), z.number()),
+    }).passthrough(),
+    aiInputSchema: {
+      type: 'object',
+      properties: {
+        modelId: { type: 'string' },
+        prompt: { type: 'string' },
+        mediaType: { type: 'string', enum: ['image', 'video', 'audio'] },
+        params: { type: 'object', additionalProperties: true },
+      },
+      required: ['modelId', 'prompt', 'mediaType'],
+      additionalProperties: false,
+    },
+    execute: async (input, context) => requireFrontendSuccess(await invoke({
+      kind: 'query',
+      query: {
+        name: 'prepare_generation_task',
+        input: {
+          modelId: input.modelId,
+          prompt: input.prompt,
+          mediaType: input.mediaType,
+          options: input.params,
+        },
+      },
+    }, context)),
+    concurrencyKey: (input) => `generation_prepare:${input.modelId}`,
+    targetIds: (input) => ({ modelId: input.modelId }),
+    dataClasses: () => ['C1'],
+    summarize: (output) => `模型 ${String((output.preparation as Record<string, unknown>).modelId ?? '')} 的生成参数已通过配置校验。`,
   })
 
   const createGenerationTask = defineAgentTool({
@@ -301,10 +369,13 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     eraseToolDefinition(switchWorkspace),
     eraseToolDefinition(searchModels),
     eraseToolDefinition(getModelSchema),
+    eraseToolDefinition(prepareGenerationTask),
     eraseToolDefinition(createGenerationTask),
     eraseToolDefinition(getGenerationTask),
     eraseToolDefinition(cancelGenerationTask),
     ...createFrontendCanvasTools(invoke),
+    ...createFrontendToolboxTools(invoke),
+    ...createFrontendAssetTools(invoke),
   ]
 }
 

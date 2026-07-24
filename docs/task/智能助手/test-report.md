@@ -514,3 +514,69 @@
 ### 结论
 
 - 第六阶段实现没有代码阻塞；6.1、6.2 完成，6.4、6.5 保持待验证，6.3 按真实需求门槛取消。
+
+## 第七阶段 · 开始基线
+
+- 基线提交：`437c0e3`
+- 基线自动化：助手评测 9 文件、33 用例，SQLite 真库 6/6，renderer/Electron TypeScript、utilityProcess 构建与版本握手通过。
+- 本阶段新增验证目标：全量模型 schema 矩阵、项目/节点/边/批量 revision 与撤销、各内置领域稳定 ID/审批/补偿，以及至少 3 个代码持序的跨工作区工作流。
+
+## 第七阶段 · 内置能力全面接入实现收口
+
+- 验证状态：代码与自动化门槛通过；真实 Provider、真实 Electron 交互、日志抽查和长稳待最终统一手动验收
+- 验证日期：2026-07-24
+- 验证范围：生成/模型目录、画布项目/节点/边/批量、工具箱/3D/分镜/图片编辑/素材、utility registry 和三个确定性跨工作区工作流。
+
+### 已执行检查
+
+| 检查 | 结果 |
+|---|---|
+| 工具箱/图片编辑定向测试 | 通过；2 个文件、3 个用例 |
+| `npm run test:assistant-eval` | 通过；9 个文件、33 个用例 |
+| `npm test -- --run` | 通过；80 个测试文件、363 个用例；2 个文件、6 个用例按环境跳过 |
+| `npm run lint` | 通过；renderer 零 warning |
+| `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0` | 通过；Electron 零 warning |
+| `npx tsc --noEmit` | 通过 |
+| `npx tsc -p tsconfig.electron.json --noEmit` | 通过 |
+| `npm run gen:model-manifest` | 通过；生成 65 个模型清单 |
+| `npm run check:model-i18n` / `npm run check:colors` | 通过 |
+| `npm run electron:build` | 通过；main/preload/renderer/utility 均成功构建 |
+| `npm run electron:assistant-utility-smoke` | 通过；完成 `agent-utility/v1` 握手 |
+| `git diff --check` | 通过；仅有仓库 CRLF 转换提示 |
+
+### 自动化覆盖
+
+- 3D 工程重命名/删除、对象复制/删除/更新、图片编辑 preview/commit、分镜 list/get 已进入 registry，并按宿主 available command/query 过滤。
+- 图片编辑标记使用共享 discriminated union；非法类型、几何、样式、奇数点集和超界裁剪在入口拒绝。
+- 3D/分镜查询结果不再包含完整场景/节点/边 JSON，只包含稳定 ID、计数和最多 32 项摘要详情。
+- 画布批量提交使用单次历史组与 resulting revision；跨工作区工作流只使用固定代码步骤和 gateway 子调用，支持 ref 传递、暂停、恢复、取消、revision 冲突与补偿。
+
+### 待用户手动验证
+
+- 重启 `npm run electron:dev` 后按《第七阶段-最终手动测试清单.md》执行，不要只用裸 Vite 页面判断桌面能力。
+- 真实 Provider 生成/状态/取消、三种批准方式、3D/图片编辑/素材删除审批、画布鼠标交互、三个跨工作区工作流和长稳仍未由自动化代替。
+
+## 第七阶段 · 最终自动验证复验
+
+- 验证日期：2026-07-24
+- 验证状态：代码与自动化门槛通过；真实 Provider、真实 Electron 交互、日志抽查和长稳仍待用户手动验收。
+
+### 本轮新增修复
+
+- `asset_edit_to_canvas` 工作流原先只创建空上传节点；现改为调用 `add_asset_to_canvas`，将素材提交步骤返回的 `assetId` 绑定到画布节点。
+- 工作流仍由代码固定步骤顺序，模型只提供语义参数和引用，不可绕过统一工具网关。
+
+### 最终执行结果
+
+| 检查 | 结果 |
+|---|---|
+| `npm test -- --run` | 通过；80 个测试文件、363 个用例；2 个文件、6 个用例按环境跳过 |
+| `npm run test:assistant-eval` | 通过；9 个文件、33 个用例 |
+| `npm run electron:build` | 通过；main/preload/renderer/utility 均成功构建 |
+| `npm run electron:assistant-utility-smoke` | 通过；`agent-utility/v1` 握手成功 |
+| `git diff --check` | 通过；仅有仓库 CRLF 转换提示，无空白错误 |
+
+### 仍需手动验证
+
+- 按《第七阶段-最终手动测试清单.md》验证素材编辑后加入画布时节点确实引用新素材，而不是空上传节点。
+- 继续验证真实 Provider、三种批准方式、鼠标交互、跨工作区失败补偿、日志窗口/JSONL 和 30～60 分钟长稳。

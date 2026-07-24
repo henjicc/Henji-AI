@@ -9,6 +9,10 @@ const semanticSearchConcepts: ReadonlyArray<{ pattern: RegExp; concept: string }
   { pattern: /(?:音频|音乐|歌曲|配音|语音|音效|audio|music|song|voice)/i, concept: 'media:audio' },
   { pattern: /(?:生成|制作|创建|创作|绘制|渲染|generate|generation|create|make|draw|render)/i, concept: 'action:generate' },
   { pattern: /(?:模型|供应商|model|provider)/i, concept: 'catalog:model' },
+  { pattern: /(?:素材|资源|asset|library)/i, concept: 'workspace:assets' },
+  { pattern: /(?:编辑|裁剪|旋转|标注|edit|crop|rotate|mark)/i, concept: 'action:edit' },
+  { pattern: /(?:镜头|运镜|3d|camera|shot)/i, concept: 'action:camera' },
+  { pattern: /(?:工作流|编排|流程|workflow|orchestration)/i, concept: 'action:workflow' },
 ]
 
 const categorySearchConcepts: Readonly<Record<string, string[]>> = {
@@ -19,6 +23,12 @@ const categorySearchConcepts: Readonly<Record<string, string[]>> = {
   diagnostics: ['action:diagnose'],
   user_instructions: ['settings:user_instructions'],
   memory: ['settings:memory'],
+  toolbox: ['workspace:toolbox'],
+  camera_stage: ['workspace:toolbox', 'media:image', 'action:render', 'action:camera'],
+  storyboard: ['workspace:canvas', 'action:generate'],
+  image_edit: ['workspace:toolbox', 'media:image', 'action:edit'],
+  assets: ['workspace:assets', 'media:image', 'media:video', 'media:audio'],
+  workflows: ['action:generate', 'workspace:canvas', 'workspace:toolbox'],
 }
 
 function normalizeSearchValue(value: string): string {

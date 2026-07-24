@@ -3,25 +3,65 @@ import {
   type HostCommandResult,
   type HostQuery,
 } from '@/core/assistant/hostContracts'
-import { registry } from '@/core/ModelRegistry'
-import { getI18nText } from '@/core/types'
+import {
+  GenerationPreparationError,
+  getGenerationModelSchema,
+  prepareGenerationTask,
+  searchGenerationModels,
+} from '@/core/assistant/generationPreparation'
 import {
   AGENT_CANVAS_CATALOG_VERSION,
   getAgentCanvasNodeSchema,
   searchAgentCanvasNodeTypes,
 } from '@/features/canvas/domain/agentCanvasCatalog'
-import { useProjectStore } from '@/stores/projectStore'
-import { getVisibleGenerationTask } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
-
+import {
+  getCanvasNodeFromAgent,
+  getCanvasProjectFromAgent,
+  listCanvasProjectSummariesFromAgent,
+} from '@/features/canvas/application/agentCanvasQueries'
+import {
+  planCanvasBatchFromAgent,
+  previewCanvasBatchFromAgent,
+} from '@/features/canvas/application/agentCanvasBatch'
+import {
+  getAssetFromAgent,
+  getCameraStageProjectFromAgent,
+  getStoryboardProjectFromAgent,
+  getToolboxStateFromAgent,
+  listAssetLibrariesFromAgent,
+  listAssetTagsFromAgent,
+  listCameraStageProjectsFromAgent,
+  listStoryboardProjectsFromAgent,
+  listToolboxToolsFromAgent,
+  queryAssetsFromAgent,
+} from '@/features/assistant/hostActions'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
+import { getVisibleGenerationTask } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
 type HostQueryHandler = (query: HostQuery) => Promise<Record<string, unknown>>
 
 const handlers = new Map<HostQuery['name'], HostQueryHandler>([
   ['get_host_context', async () => ({ snapshot: createHostContextSnapshot() })],
-  ['list_canvas_projects', async () => {
-    if (!useProjectStore.getState().isHydrated) await useProjectStore.getState().hydrate()
-    return { projects: useProjectStore.getState().projects }
+  ['list_canvas_projects', async () => ({ projects: await listCanvasProjectSummariesFromAgent() })],
+  ['get_canvas_project', async (query) => {
+    if (query.name !== 'get_canvas_project') return {}
+    return getCanvasProjectFromAgent(query.input.projectId)
+  }],
+  ['get_canvas_node', async (query) => {
+    if (query.name !== 'get_canvas_node') return {}
+    return getCanvasNodeFromAgent(query.input.projectId, query.input.nodeId)
+  }],
+  ['plan_canvas_batch', async (query) => {
+    if (query.name !== 'plan_canvas_batch') return {}
+    return planCanvasBatchFromAgent(
+      query.input.projectId,
+      query.input.operations,
+      createHostContextSnapshot().scopeRevisions.canvas,
+    )
+  }],
+  ['preview_canvas_batch', async (query) => {
+    if (query.name !== 'preview_canvas_batch') return {}
+    return previewCanvasBatchFromAgent(query.input.planRef)
   }],
   ['search_canvas_node_types', async (query) => {
     if (query.name !== 'search_canvas_node_types') return {}
@@ -42,25 +82,9 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
   }],
   ['search_models', async (query) => {
     if (query.name !== 'search_models') return {}
-    const normalized = query.input.query.trim().toLowerCase()
-    const filtered = registry.listAllModels().filter((model) => {
-      if (query.input.mediaType && model.meta.type !== query.input.mediaType) return false
-      if (query.input.providerId && model.meta.provider !== query.input.providerId) return false
-      if (!normalized) return true
-      return `${model.meta.id} ${model.meta.canonicalModelId} ${getI18nText(model.meta.name, 'zh')} ${getI18nText(model.meta.name, 'en')} ${model.meta.description ? getI18nText(model.meta.description, 'zh') : ''} ${model.meta.description ? getI18nText(model.meta.description, 'en') : ''}`
-        .toLowerCase()
-        .includes(normalized)
-    })
+    const filtered = searchGenerationModels(query.input)
     const start = query.input.cursor
-    const models = filtered.slice(start, start + query.input.limit).map((model) => ({
-      modelId: model.meta.id,
-      canonicalModelId: model.meta.canonicalModelId,
-      providerId: model.meta.provider,
-      mediaType: model.meta.type,
-      name: model.meta.name,
-      description: model.meta.description,
-      tags: model.meta.tags ?? [],
-    }))
+    const models = filtered.slice(start, start + query.input.limit)
     return {
       catalogVersion: 'model-registry/v1',
       models,
@@ -69,30 +93,11 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
   }],
   ['get_model_schema', async (query) => {
     if (query.name !== 'get_model_schema') return {}
-    const model = registry.getModel(query.input.modelId)
-    if (!model) throw new Error('MODEL_NOT_FOUND')
-    const params = model.params.map((param) => ({
-      id: param.id,
-      type: param.type,
-      name: param.name,
-      description: param.description,
-      required: param.required === true,
-      default: param.default,
-      options: 'options' in param ? param.options : undefined,
-    }))
-    return {
-      schemaVersion: 'model-schema/v1',
-      meta: {
-        id: model.meta.id,
-        canonicalModelId: model.meta.canonicalModelId,
-        provider: model.meta.provider,
-        type: model.meta.type,
-        name: model.meta.name,
-        description: model.meta.description,
-        tags: model.meta.tags ?? [],
-      },
-      params: JSON.parse(JSON.stringify(params)) as unknown,
-    }
+    return getGenerationModelSchema(query.input.modelId)
+  }],
+  ['prepare_generation_task', async (query) => {
+    if (query.name !== 'prepare_generation_task') return {}
+    return { preparation: prepareGenerationTask(query.input) }
   }],
   ['get_generation_task', async (query) => {
     if (query.name !== 'get_generation_task') return {}
@@ -100,6 +105,28 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
     if (!task) throw new Error('TASK_NOT_FOUND')
     return { task }
   }],
+  ['list_toolbox_tools', async () => ({ tools: listToolboxToolsFromAgent() })],
+  ['get_toolbox_state', async () => ({ state: getToolboxStateFromAgent() })],
+  ['list_camera_stage_projects', async () => ({ projects: await listCameraStageProjectsFromAgent() })],
+  ['get_camera_stage_project', async (query) => {
+    if (query.name !== 'get_camera_stage_project') return {}
+    return { project: await getCameraStageProjectFromAgent(query.input.projectId) }
+  }],
+  ['list_storyboard_projects', async () => ({ projects: await listStoryboardProjectsFromAgent() })],
+  ['get_storyboard_project', async (query) => {
+    if (query.name !== 'get_storyboard_project') return {}
+    return { project: await getStoryboardProjectFromAgent(query.input.projectId) }
+  }],
+  ['query_assets', async (query) => {
+    if (query.name !== 'query_assets') return {}
+    return await queryAssetsFromAgent(query.input)
+  }],
+  ['get_asset', async (query) => {
+    if (query.name !== 'get_asset') return {}
+    return { asset: await getAssetFromAgent(query.input.assetId) }
+  }],
+  ['list_asset_libraries', async () => ({ libraries: await listAssetLibrariesFromAgent() })],
+  ['list_asset_tags', async () => ({ tags: await listAssetTagsFromAgent() })],
 ])
 
 export async function executeHostQuery(queryInput: unknown): Promise<Record<string, unknown>> {
@@ -122,13 +149,27 @@ export async function executeHostQueryResult(queryInput: unknown): Promise<HostC
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     if (
-      message === 'MODEL_NOT_FOUND'
+      error instanceof GenerationPreparationError && error.code === 'MODEL_NOT_FOUND'
+      || message === 'MODEL_NOT_FOUND'
       || message === 'TASK_NOT_FOUND'
       || message === 'CANVAS_NODE_TYPE_NOT_FOUND'
+      || message === 'NOT_FOUND'
+      || message === 'PROJECT_NOT_FOUND'
     ) {
       return {
         ok: false,
         error: { code: 'NOT_FOUND', message: '请求的宿主资源不存在', recoverable: false },
+      }
+    }
+    if (error instanceof GenerationPreparationError) {
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_INPUT',
+          message: error.message,
+          recoverable: true,
+          details: error.details,
+        },
       }
     }
     return {

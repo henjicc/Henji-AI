@@ -130,6 +130,58 @@
 - `minimal-evaluator.ts`、`package.json`：嵌套参数、安全/日志/费用指标和专用验证脚本。
 - 第六阶段 6.1～6.5、总览、实施方案与五份阶段记录：同步实现结果、取消项和最终待验收边界。
 
+## 第七阶段 · 开始
+
+- 已读取 7.1～7.4，准备审计生成、项目/画布、工具箱、3D、分镜、图片编辑和素材领域的稳定语义入口。
+
+## 第七阶段 · 内置能力全面接入实现收口
+
+### 新增
+
+- `electron/main/services/agent-runtime/tools/builtin/frontend-assets.ts`：素材查询、详情、集合、标签、选择、删除等 frontend Agent 工具。
+- `electron/main/services/agent-runtime/tools/builtin/frontend-canvas-projects.ts`、`frontend-canvas-mutations.ts`、`frontend-canvas-batch.ts`：画布项目、节点/边变更和批量 plan/preview/commit/undo 工具。
+- `electron/main/services/agent-runtime/tools/builtin/frontend-toolbox.ts`、测试：工具箱、3D 工程/对象/镜头、图片编辑 preview/commit、分镜查询 Agent 工具；测试覆盖注册过滤和图片编辑结构校验。
+- `electron/main/services/agent-runtime/workflows/definitions.ts`、`service.ts`、`tools.ts`、测试：三个确定性跨工作区工作流及暂停/恢复/取消/补偿。
+- `src/core/assistant/generationPreparation.ts` 及测试：生成前模型 schema、参数和联动校验。
+- `src/core/assistant/imageEditContracts.ts`：图片编辑操作与标记结构共享契约。
+- `src/features/assistant/hostActions.ts`：工具箱、3D、分镜、图片编辑和素材的 renderer 宿主语义动作与受限查询摘要。
+
+### 修改
+
+- `src/core/assistant/hostContracts.ts`：扩展第七阶段项目、工具箱、图片编辑、素材和工作流相关 HostCommand/HostQuery 契约。
+- `src/features/assistant/frontendTools/hostCommandRegistry.ts`、`hostQueryRegistry.ts`、`hostContext/hostContext.ts`：接入稳定宿主命令、查询、scope revision 和工作区能力发布。
+- `electron/main/services/agent-runtime/tools/builtin/frontend.ts`、`registry.ts`、`context/catalog.ts`、`context/router.ts`、`backend.ts`：注册、渐进发现和权限目录收口。
+- `electron/main/agent-utility.ts`：utility 侧注册 frontend proxy 与确定性工作流工具。
+- `src/features/canvas/application/agentCanvasActions.ts`、`agentCanvasCatalog.ts`：画布节点目录、参数 schema、持久化与冲突保护。
+- `docs/task/智能助手/00-任务总览.md`、7.1～7.4 任务文件、五份阶段记录：同步第七阶段实现、验证结果、决策、交接和手动测试清单。
+
+### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json`、`out/`：由构建/开发脚本生成，按仓库规则不提交。
+- 本阶段只扩展宿主命令、上下文与 Agent adapter；不复制领域业务，不暴露 DOM/ReactFlow/完整 store，不新增鼠标模拟。
+
+### 第七阶段 · 素材编辑工作流绑定修复与最终验证
+
+#### 新增
+
+- `electron/main/services/agent-runtime/tools/builtin/frontend-assets.ts`：新增 `add_asset_to_canvas` 宿主工具，将素材稳定 ID 绑定到画布节点。
+- `electron/main/services/agent-runtime/workflows/*`：素材编辑工作流步骤改为先提交素材、再通过 `assetId` 创建真实素材引用节点。
+
+#### 修改
+
+- `electron/main/services/agent-runtime/workflows/definitions.ts`、`service.ts`、`tools.ts`：修正 `asset_edit_to_canvas` 的步骤引用和补偿语义，避免创建没有素材引用的空上传节点。
+- `docs/task/智能助手/progress.md`、`decisions.md`、`handoff.md`、`test-report.md`、7.3/7.4 任务记录：补充绑定修复、最终验证结果和手动验收边界。
+
+#### 最终验证
+
+- `npm test -- --run`：80 个测试文件、363 个用例通过；2 个文件、6 个用例按环境跳过。
+- `npm run test:assistant-eval`：9 个文件、33 个用例通过。
+- `npm run electron:build`、`npm run electron:assistant-utility-smoke`、`git diff --check`：全部通过。
+
+#### 自动生成但未纳入改动
+
+- `resources/model-manifest.json`、`resources/progress-seeds.json`、`out/`：由验证命令生成，按仓库规则保持 Git 忽略。
+
 ## 第五阶段 · 手动反馈与架构纠偏
 
 ### 新增
