@@ -1,4 +1,9 @@
-import { imageEditMarkItemSchema, imageEditOperationSchema } from '@/core/assistant/imageEditContracts'
+import { createLogger } from '@/core/logging'
+import {
+  createMarkId,
+  hasImageEditEffect,
+  type ImageEditDocument,
+} from '@/core/imageEdit'
 import {
   addAssetToLibrary,
   createAsset,
@@ -21,10 +26,8 @@ import {
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import type { StageObjectPatch, StagePrimitiveKind } from '@/features/cameraStage/domain/sceneTypes'
-import { createMarkId, exportMarkedImage, type ImageMarkDoc, type MarkItem } from '@/features/imageMark'
-import { applyOrientationOpToDoc, type OrientationOp } from '@/features/imageMark/domain/geometry'
-import { createEmptyMarkDoc, hasMarkEffect } from '@/features/imageMark/domain/types'
 import { persistImageSource, readImageInfo } from '@/commands/image'
+import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
@@ -33,8 +36,11 @@ import { addCanvasNodeFromAgent } from '@/features/canvas/application/agentCanva
 import type { AssetDragPayload } from '@/features/assets/drag/assetDragPayload'
 import { notifyHostScopeChanged } from './hostContext/hostContext'
 import { listStoryboardProjectSummaries, getStoryboardProjectRecord } from '@/commands/storyboardProjects'
+import { buildImageEditDocumentFromAssistantOperations } from './imageEditAdapter'
 
 const MAX_DETAIL_ITEMS = 32
+const MAX_IMAGE_EDIT_PREVIEWS = 64
+const logger = createLogger('features.assistant.hostActions')
 
 function parseJsonValue(value: string): unknown {
   try {
@@ -67,7 +73,23 @@ function summarizeCollection(value: unknown, fields: string[]): { count: number;
   return { count: collection.length, ids, items, truncated: collection.length > MAX_DETAIL_ITEMS }
 }
 
-const imagePreviewRefs = new Map<string, { assetId: string; source: string; doc: ImageMarkDoc }>()
+const imagePreviewRefs = new Map<string, {
+  assetId: string
+  source: string
+  document: ImageEditDocument
+}>()
+
+function storeImageEditPreview(
+  previewRef: string,
+  preview: { assetId: string; source: string; document: ImageEditDocument }
+): void {
+  while (imagePreviewRefs.size >= MAX_IMAGE_EDIT_PREVIEWS) {
+    const oldestRef = imagePreviewRefs.keys().next().value
+    if (typeof oldestRef !== 'string') break
+    imagePreviewRefs.delete(oldestRef)
+  }
+  imagePreviewRefs.set(previewRef, preview)
+}
 
 function requireCurrentCameraProject(projectId: string): void {
   if (useCameraStageStore.getState().currentProjectId !== projectId) {
@@ -274,55 +296,60 @@ export async function getStoryboardProjectFromAgent(projectId: string): Promise<
 }
 
 export async function createImageEditPreviewFromAgent(assetId: string, operations: Record<string, unknown>[]): Promise<Record<string, unknown>> {
-  const asset = await inspectAsset(assetId)
-  if (asset.mediaType !== 'image') throw new Error('INVALID_INPUT')
-  const info = await readImageInfo(asset.filePath)
-  let doc = createEmptyMarkDoc()
-  let currentWidth = info.width
-  let currentHeight = info.height
-  for (const rawOperation of operations) {
-    const operation = imageEditOperationSchema.parse(rawOperation)
-    if (operation.kind === 'rotate_cw' || operation.kind === 'rotate_ccw' || operation.kind === 'flip_h' || operation.kind === 'flip_v') {
-      const opMap: Record<string, OrientationOp> = { rotate_cw: 'rotate-cw', rotate_ccw: 'rotate-ccw', flip_h: 'flip-h', flip_v: 'flip-v' }
-      const turns = operation.kind === 'rotate_cw' || operation.kind === 'rotate_ccw'
-        ? (operation.degrees ?? 90) / 90
-        : 1
-      for (let turn = 0; turn < turns; turn += 1) {
-        doc = applyOrientationOpToDoc(doc, currentWidth, currentHeight, opMap[operation.kind])
-        if (operation.kind === 'rotate_cw' || operation.kind === 'rotate_ccw') {
-          [currentWidth, currentHeight] = [currentHeight, currentWidth]
-        }
-      }
-    } else if (operation.kind === 'crop') {
-      if (!operation.crop) throw new Error('INVALID_INPUT')
-      if (operation.crop.x < 0 || operation.crop.y < 0 || operation.crop.x + operation.crop.width > currentWidth || operation.crop.y + operation.crop.height > currentHeight) throw new Error('INVALID_INPUT')
-      doc = { ...doc, crop: operation.crop }
-    } else {
-      if (!operation.item) throw new Error('INVALID_INPUT')
-      const parsed = imageEditMarkItemSchema.parse(operation.item)
-      const item = { ...parsed, id: parsed.id ?? createMarkId() } as MarkItem
-      doc = { ...doc, items: [...doc.items, item] }
+  logger.debug('image_edit.preview.create.start', { assetId, operationCount: operations.length })
+  try {
+    const asset = await inspectAsset(assetId)
+    if (asset.mediaType !== 'image') throw new Error('INVALID_INPUT')
+    const info = await readImageInfo(asset.filePath)
+    const document = buildImageEditDocumentFromAssistantOperations(operations, info)
+    const previewRef = `image-edit-preview:${createMarkId()}`
+    storeImageEditPreview(previewRef, { assetId, source: asset.filePath, document })
+    logger.info('image_edit.preview.create.completed', {
+      assetId,
+      previewRef,
+      operationCount: operations.length,
+    })
+    return {
+      previewRef,
+      assetId,
+      operationCount: operations.length,
+      hasEffect: hasImageEditEffect(document),
+      width: info.width,
+      height: info.height,
     }
+  } catch (error) {
+    logger.error('image_edit.preview.create.failed', {
+      assetId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
   }
-  const previewRef = `image-edit-preview:${createMarkId()}`
-  imagePreviewRefs.set(previewRef, { assetId, source: asset.filePath, doc })
-  return { previewRef, assetId, operationCount: operations.length, hasEffect: hasMarkEffect(doc), width: info.width, height: info.height }
 }
 
 export async function commitImageEditFromAgent(previewRef: string, displayName?: string): Promise<Record<string, unknown>> {
-  const preview = imagePreviewRefs.get(previewRef)
-  if (!preview) throw new Error('NOT_FOUND')
-  const rendered = await exportMarkedImage(preview.source, preview.doc)
-  const filePath = await persistImageSource(rendered)
-  const asset = await addMediaReferenceToLibrary({
-    filePath,
-    mediaType: 'image',
-    source: 'canvas',
-    displayName: displayName?.trim() || `编辑图片-${Date.now()}`,
-  })
-  imagePreviewRefs.delete(previewRef)
-  touchAssetScope()
-  return { previewRef, assetId: asset.id, filePath: asset.filePath, status: 'committed' }
+  logger.debug('image_edit.preview.commit.start', { previewRef })
+  try {
+    const preview = imagePreviewRefs.get(previewRef)
+    if (!preview) throw new Error('NOT_FOUND')
+    const rendered = await exportImageEditDocument(preview.source, preview.document)
+    const filePath = await persistImageSource(rendered)
+    const asset = await addMediaReferenceToLibrary({
+      filePath,
+      mediaType: 'image',
+      source: 'canvas',
+      displayName: displayName?.trim() || `编辑图片-${Date.now()}`,
+    })
+    imagePreviewRefs.delete(previewRef)
+    touchAssetScope()
+    logger.info('image_edit.preview.commit.completed', { previewRef, assetId: asset.id })
+    return { previewRef, assetId: asset.id, filePath: asset.filePath, status: 'committed' }
+  } catch (error) {
+    logger.error('image_edit.preview.commit.failed', {
+      previewRef,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
 }
 
 export async function queryAssetsFromAgent(input: Parameters<typeof queryAssets>[0]): Promise<Record<string, unknown>> {

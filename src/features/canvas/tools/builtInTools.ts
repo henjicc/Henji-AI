@@ -5,7 +5,14 @@ import {
   isUploadNode,
   type CanvasNode,
 } from '../domain/canvasNodes';
-import { createEmptyMarkDoc, stringifyMarkDoc } from '@/features/imageMark';
+import {
+  IMAGE_EDIT_OPERATION_IDS,
+  createEmptyImageEditDocument,
+  imageEditDocumentToMarkDoc,
+  stringifyImageEditDocument,
+  stringifyMarkDoc,
+} from '@/core/imageEdit';
+import { EXPORT_RESULT_DISPLAY_NAME } from '../domain/nodeDisplay';
 import type { CanvasToolPlugin } from './types';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 
@@ -19,13 +26,22 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
   label: '编辑',
   icon: 'edit',
   editor: 'edit',
+  dialog: {
+    widthClassName: 'w-[min(90vw,1560px)]',
+    resultNodeTitle: '编辑结果',
+  },
+  operationIds: Object.values(IMAGE_EDIT_OPERATION_IDS),
   supportsNode: (node) => supportsImageSourceNode(node) && Boolean(node.data.imageUrl),
-  createInitialOptions: () => ({
-    color: ANNOTATION_DEFAULT_STROKE_HEX,
-    lineWidthPercent: 0.4,
-    fontSizePercent: 10,
-    markDoc: stringifyMarkDoc(createEmptyMarkDoc()),
-  }),
+  createInitialOptions: () => {
+    const document = createEmptyImageEditDocument();
+    return {
+      color: ANNOTATION_DEFAULT_STROKE_HEX,
+      lineWidthPercent: 0.4,
+      fontSizePercent: 10,
+      document: stringifyImageEditDocument(document),
+      markDoc: stringifyMarkDoc(imageEditDocumentToMarkDoc(document)),
+    };
+  },
   fields: [],
   execute: async (sourceImageUrl, options, context) =>
     await context.processTool(NODE_TOOL_TYPES.edit, sourceImageUrl, options),
@@ -36,6 +52,11 @@ export const splitStoryboardToolPlugin: CanvasToolPlugin = {
   label: '切割',
   icon: 'split',
   editor: 'split',
+  dialog: {
+    widthClassName: 'w-[min(1120px,calc(100vw-40px))]',
+    resultNodeTitle: EXPORT_RESULT_DISPLAY_NAME.generic,
+    preloadStoryboardMetadata: true,
+  },
   supportsNode: (node) => supportsImageSourceNode(node) && Boolean(node.data.imageUrl),
   createInitialOptions: () => ({
     rows: 3,

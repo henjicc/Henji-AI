@@ -58,3 +58,34 @@
 ### 第二阶段提交
 
 - 第二阶段提交：`refactor: 重构图片编辑器会话与可伸缩工具面板`。
+
+## 第三阶段启动
+
+- 2026-07-25：读取并确认 3.1、3.2、3.3 任务文件，开始宿主适配迁移。
+- 本阶段代码变更将在各任务完成后追加；测试只更新 `test-report.md`，不在阶段内执行。
+
+## 第三阶段变更
+
+### 3.1 工具箱与查看器宿主
+
+- `src/features/imageMark/standalone/ImageMarkTool.tsx`：宿主改用 V2 文档、共享 `ImageEditor` 和统一导出端口，保留打开/拖入/粘贴/复制/保存/入库能力。
+- `src/features/imageMark/viewer/ViewerMarkEditor.tsx`：兼容读取旧会话，保存返回 V2 `ImageEditSession`。
+- `src/components/mediaViewer/ImageViewerModal.tsx`：查看器编辑边界改用 V2 会话。
+- `src/workspaces/GenerationWorkspace.tsx`、`types.ts`、`hooks/useTaskReplay.ts`、`hooks/useTaskGeneration.ts`、`application/visibleGenerationTaskCommand.ts`：内存、落盘和任务重放链路迁移到 V2 会话，旧数据继续兼容读取。
+
+### 3.2 画布适配
+
+- `src/features/canvas/tools/types.ts`、`registry.ts`、`builtInTools.ts`：注册对话框策略、结果标题、核心操作 ID 和重复/未知操作诊断。
+- `src/features/canvas/ui/tool-editors/EditToolEditor.tsx`：挂载共享 `ImageEditor`，双写 V2 `document` 与旧 `markDoc`。
+- `src/features/canvas/ui/NodeToolDialog.tsx`、`NodeActionToolbar.tsx`：标题、宽度、预加载、结果标题和工具标签改由插件声明驱动。
+- `src/features/canvas/application/toolProcessor.ts`：编辑/切割改为 handler 映射分发，图片编辑通过统一执行端口输出。
+
+### 3.3 智能助手协议
+
+- `src/features/assistant/imageEditAdapter.ts`：新增旧助手操作到 V2 图片编辑文档的纯转换适配器。
+- `src/features/assistant/hostActions.ts`：移除逐操作文档拼装，预览和提交复用统一执行端口，增加有界预览生命周期及结构化日志。
+
+### 第三阶段验证状态
+
+- 已完成变更范围、文件体积、裸 `any`、颜色字面量、原生控件和 `git diff --check` 的非执行审查。
+- 自动测试、TypeScript、ESLint、Electron 与鼠标交互验证按约定留到第四阶段统一执行。

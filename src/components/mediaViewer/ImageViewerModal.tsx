@@ -4,11 +4,11 @@ import { ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react';
 
 import { UiButton, UiIconButton } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
-import { type ImageMarkSession } from '@/features/imageMark';
+import type { ImageEditSession } from '@/core/imageEdit';
 import { ImageInfoPanel } from './ImageInfoPanel';
 import { useImageViewerTransform } from './useImageViewerTransform';
 
-// 标记编辑器依赖 konva，只在用户进入编辑模式时才挂载。
+// 图片编辑器依赖 konva，只在用户进入编辑模式时才挂载。
 // 静态导入会把 konva 压进启动 chunk，查看图片这一常见路径并不需要它。
 const ViewerMarkEditor = React.lazy(() =>
   import('@/features/imageMark').then((m) => ({ default: m.ViewerMarkEditor })),
@@ -32,10 +32,10 @@ export interface ImageViewerModalProps {
   filePaths?: string[];
   fromUpload?: boolean;
   isEditorMode?: boolean;
-  initialMarkSession?: ImageMarkSession;
+  initialEditSession?: ImageEditSession;
   onEnterEditor?: () => void;
   onExitEditor?: () => void;
-  onSaveEdit?: (dataUrl: string, session: ImageMarkSession) => void;
+  onSaveEdit?: (dataUrl: string, session: ImageEditSession) => void;
   onContextMenu?: (e: React.MouseEvent, filePath?: string) => void;
 }
 
@@ -67,7 +67,7 @@ export function ImageViewerModal({
   filePaths,
   fromUpload = false,
   isEditorMode = false,
-  initialMarkSession,
+  initialEditSession,
   onEnterEditor,
   onExitEditor,
   onSaveEdit,
@@ -194,7 +194,7 @@ export function ImageViewerModal({
           <React.Suspense fallback={null}>
             <ViewerMarkEditor
               imageUrl={imageUrl}
-              session={initialMarkSession}
+              session={initialEditSession}
               onClose={() => onExitEditor?.()}
               onSave={(dataUrl, session) => {
                 onSaveEdit?.(dataUrl, session);

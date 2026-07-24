@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ClipboardCopy, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
+import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
 import { UiButton } from '@/components/ui';
 import { useNotification } from '@/contexts/NotificationContext';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
@@ -11,9 +12,8 @@ import {
   saveImageSourceToPath,
 } from '@/commands/image';
 import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSource';
-import { createEmptyMarkDoc, type ImageMarkDoc } from '../domain/types';
-import { exportMarkedImage } from '../render/exportMarkedImage';
-import { MarkEditor } from '../editor/MarkEditor';
+import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
+import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
 
 const logger = createLogger('features.imageMark');
 
@@ -23,6 +23,7 @@ interface ImageMarkSource {
   url: string;
   /** 用于另存为默认文件名 */
   name: string;
+  sessionKey: number;
 }
 
 /**
@@ -34,10 +35,11 @@ export function ImageMarkTool(): JSX.Element {
   const [source, setSource] = useState<ImageMarkSource | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const docRef = useRef<ImageMarkDoc>(createEmptyMarkDoc());
+  const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
+  const sourceSequenceRef = useRef(0);
 
   const acceptSource = useCallback(async (url: string, name: string) => {
-    docRef.current = createEmptyMarkDoc();
+    documentRef.current = createEmptyImageEditDocument();
     // 打开/拖入的本地图片可能在媒体协议默认白名单之外,先授权其所在目录,
     // 否则 henji-media:// 会 403,编辑器会一直卡在"图片加载中"
     if (isLikelyLocalImagePath(url)) {
@@ -49,7 +51,8 @@ export function ImageMarkTool(): JSX.Element {
         });
       }
     }
-    setSource({ url, name });
+    sourceSequenceRef.current += 1;
+    setSource({ url, name, sessionKey: sourceSequenceRef.current });
     logger.info('image_mark.standalone.open.completed', { name });
   }, []);
 
@@ -64,6 +67,7 @@ export function ImageMarkTool(): JSX.Element {
   }, [acceptSource]);
 
   const handleOpenFile = useCallback(async () => {
+    logger.debug('image_mark.standalone.open.start');
     try {
       const selected = await openDialog({
         multiple: false,
@@ -128,8 +132,9 @@ export function ImageMarkTool(): JSX.Element {
       return;
     }
     setIsBusy(true);
+    logger.debug('image_mark.standalone.export.start', { action });
     try {
-      const dataUrl = await exportMarkedImage(source.url, docRef.current);
+      const dataUrl = await exportImageEditDocument(source.url, documentRef.current);
       if (action === 'copy') {
         await copyImageSourceToClipboard(dataUrl);
         logger.info('image_mark.standalone.copy.completed', { name: source.name });
@@ -144,7 +149,7 @@ export function ImageMarkTool(): JSX.Element {
           return;
         }
         await saveImageSourceToPath(dataUrl, targetPath);
-        logger.info('image_mark.standalone.save.completed', { targetPath });
+        logger.info('image_mark.standalone.save.completed');
         showNotification('已保存');
       } else {
         const filePath = await persistImageSource(dataUrl);
@@ -215,11 +220,11 @@ export function ImageMarkTool(): JSX.Element {
         </span>
       </div>
 
-      <MarkEditor
-        key={source.url}
+      <ImageEditor
+        key={source.sessionKey}
         sourceImageUrl={source.url}
-        onDocChange={(doc) => {
-          docRef.current = doc;
+        onDocumentChange={(document) => {
+          documentRef.current = document;
         }}
         toolbarActions={
           <>

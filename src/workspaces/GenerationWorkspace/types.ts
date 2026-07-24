@@ -1,4 +1,4 @@
-import type { ImageMarkSession } from '@/features/imageMark'
+import type { ImageEditSession } from '@/core/imageEdit'
 import type { MediaResult } from '@/types'
 
 export type MediaType = 'image' | 'video' | 'audio'
@@ -17,7 +17,7 @@ export interface GeneratorOptions extends DynamicValueMap {
   editStateFile?: string
 
   // 兼容旧模式：内联编辑状态（新逻辑优先使用 editStateFile;旧数据可能仍是 ImageEditState 形状,读取时统一 coerce）
-  imageEditStates?: Record<string, ImageMarkSession>
+  imageEditStates?: Record<string, ImageEditSession>
 }
 
 export interface GenerationTask {

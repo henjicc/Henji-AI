@@ -50,11 +50,19 @@ export interface ToolExecutionContext {
 export type ToolIconKey = 'edit' | 'split';
 export type ToolEditorKind = 'form' | 'edit' | 'split';
 
+export interface CanvasToolDialogDefinition {
+  widthClassName: string;
+  resultNodeTitle: string;
+  preloadStoryboardMetadata?: boolean;
+}
+
 export interface CanvasToolPlugin {
   type: NodeToolType;
   label: string;
   icon: ToolIconKey;
   editor: ToolEditorKind;
+  dialog: CanvasToolDialogDefinition;
+  operationIds?: string[];
   supportsNode: (node: CanvasNode) => boolean;
   createInitialOptions: (node: CanvasNode) => ToolOptions;
   fields: ToolFieldSchema[];

@@ -1,9 +1,14 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { createLogger } from '@/core/logging';
+import {
+  coerceImageEditSession,
+  type ImageEditDocument,
+  type ImageEditSession,
+  type ImageMarkSession,
+} from '@/core/imageEdit';
 import { UiButton } from '@/components/ui';
-import { createEmptyMarkDoc, type ImageMarkDoc, type ImageMarkSession } from '../domain/types';
-import { exportMarkedImage } from '../render/exportMarkedImage';
-import { MarkEditor } from '../editor/MarkEditor';
+import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
+import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
 
 const logger = createLogger('features.imageMark');
 
@@ -11,13 +16,13 @@ interface ViewerMarkEditorProps {
   /** 当前查看的图片(可能是已合成的编辑结果) */
   imageUrl: string;
   /** 已有编辑会话:基于原图 + 标记文档做非破坏性再编辑 */
-  session?: ImageMarkSession;
+  session?: ImageEditSession | ImageMarkSession;
   onClose: () => void;
-  onSave: (dataUrl: string, session: ImageMarkSession) => void;
+  onSave: (dataUrl: string, session: ImageEditSession) => void;
 }
 
 /**
- * 查看器编辑模式宿主:全屏包一层 MarkEditor,取消/保存挂在工具行右侧。
+ * 查看器编辑模式兼容宿主：全屏挂载共享 ImageEditor，保留原公开组件名。
  */
 export function ViewerMarkEditor({
   imageUrl,
@@ -25,8 +30,12 @@ export function ViewerMarkEditor({
   onClose,
   onSave,
 }: ViewerMarkEditorProps): JSX.Element {
-  const sourceUrl = session?.sourceUrl ?? imageUrl;
-  const docRef = useRef<ImageMarkDoc>(session?.doc ?? createEmptyMarkDoc());
+  const initialSession = useMemo(
+    () => coerceImageEditSession(session, imageUrl),
+    [imageUrl, session]
+  );
+  const sourceUrl = initialSession.sourceUrl;
+  const documentRef = useRef<ImageEditDocument>(initialSession.document);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = useCallback(async () => {
@@ -34,9 +43,12 @@ export function ViewerMarkEditor({
       return;
     }
     setIsSaving(true);
+    logger.debug('image_mark.viewer.save.start');
     try {
-      const dataUrl = await exportMarkedImage(sourceUrl, docRef.current);
-      onSave(dataUrl, { sourceUrl, doc: docRef.current });
+      const document = documentRef.current;
+      const dataUrl = await exportImageEditDocument(sourceUrl, document);
+      onSave(dataUrl, { sourceUrl, document });
+      logger.info('image_mark.viewer.save.completed');
     } catch (error) {
       logger.error('image_mark.viewer.save.failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -48,12 +60,12 @@ export function ViewerMarkEditor({
 
   return (
     <div className="h-full w-full bg-app p-4">
-      <MarkEditor
+      <ImageEditor
         key={sourceUrl}
         sourceImageUrl={sourceUrl}
-        initialDoc={session?.doc ?? null}
-        onDocChange={(doc) => {
-          docRef.current = doc;
+        initialDocument={initialSession.document}
+        onDocumentChange={(document) => {
+          documentRef.current = document;
         }}
         toolbarActions={
           <>
