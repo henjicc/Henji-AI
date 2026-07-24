@@ -3,6 +3,7 @@ import { GripVertical, PanelRightClose, PanelRightOpen, RotateCcw } from 'lucide
 import { UiIconButton } from '@/components/ui';
 import {
   clampImageEditorInspectorWidth,
+  clampImageEditorInspectorWidthToViewport,
   IMAGE_EDITOR_INSPECTOR_MAX_WIDTH,
   IMAGE_EDITOR_INSPECTOR_MIN_WIDTH,
   IMAGE_EDITOR_TOOL_RAIL_WIDTH,
@@ -28,11 +29,7 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
   draftWidthRef.current = draftWidth;
 
   const clampWidthToViewport = useCallback((width: number): number => {
-    const viewportMax = Math.max(
-      IMAGE_EDITOR_INSPECTOR_MIN_WIDTH,
-      Math.min(IMAGE_EDITOR_INSPECTOR_MAX_WIDTH, window.innerWidth - 360)
-    );
-    return Math.min(viewportMax, clampImageEditorInspectorWidth(width));
+    return clampImageEditorInspectorWidthToViewport(width, window.innerWidth);
   }, []);
 
   useEffect(() => {
@@ -106,7 +103,7 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
           <GripVertical className="absolute h-4 w-4 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
         </div>
         <aside
-          className="relative flex min-h-0 shrink-0 overflow-hidden border-l border-border-dark bg-surface-dark"
+          className="relative flex min-h-0 shrink-0 flex-col overflow-hidden border-l border-border-dark bg-surface-dark"
           style={{
             width: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : draftWidth,
             minWidth: collapsed ? IMAGE_EDITOR_TOOL_RAIL_WIDTH : IMAGE_EDITOR_INSPECTOR_MIN_WIDTH,

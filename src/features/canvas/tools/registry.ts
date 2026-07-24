@@ -5,7 +5,9 @@ import type { CanvasToolPlugin } from './types';
 
 export class CanvasToolRegistrationError extends Error {}
 
-function createToolRegistry(plugins: readonly CanvasToolPlugin[]): Map<NodeToolType, CanvasToolPlugin> {
+export function createCanvasToolRegistry(
+  plugins: readonly CanvasToolPlugin[]
+): Map<NodeToolType, CanvasToolPlugin> {
   const registry = new Map<NodeToolType, CanvasToolPlugin>();
   for (const plugin of plugins) {
     if (registry.has(plugin.type)) {
@@ -23,7 +25,7 @@ function createToolRegistry(plugins: readonly CanvasToolPlugin[]): Map<NodeToolT
   return registry;
 }
 
-const toolRegistry = createToolRegistry(builtInToolPlugins);
+const toolRegistry = createCanvasToolRegistry(builtInToolPlugins);
 
 export function getToolPlugin(toolType: NodeToolType): CanvasToolPlugin | null {
   return toolRegistry.get(toolType) ?? null;

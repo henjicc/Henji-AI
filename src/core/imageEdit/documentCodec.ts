@@ -55,10 +55,23 @@ function cloneJsonValue(value: unknown): unknown | undefined {
 }
 
 function parseOperation(value: unknown): ImageEditOperation | null {
-  if (!isRecord(value) || typeof value.id !== 'string' || !value.id || typeof value.operationId !== 'string' || !value.operationId || !isRecord(value.params)) return null;
+  if (
+    !isRecord(value)
+    || typeof value.id !== 'string'
+    || !value.id
+    || typeof value.operationId !== 'string'
+    || !value.operationId
+    || typeof value.enabled !== 'boolean'
+    || !isRecord(value.params)
+  ) return null;
   let params: object;
   if (value.operationId === IMAGE_EDIT_OPERATION_IDS.orientation) {
-    params = sanitizeMarkOrientation(value.params) satisfies OrientationOperationParams;
+    const orientation = sanitizeMarkOrientation(value.params);
+    if (
+      orientation.rotate !== value.params.rotate
+      || orientation.mirrored !== value.params.mirrored
+    ) return null;
+    params = orientation satisfies OrientationOperationParams;
   } else if (value.operationId === IMAGE_EDIT_OPERATION_IDS.annotations) {
     if (!Array.isArray(value.params.items)) return null;
     const items = parseMarkItems(value.params.items);
@@ -75,7 +88,7 @@ function parseOperation(value: unknown): ImageEditOperation | null {
   return {
     id: value.id,
     operationId: value.operationId,
-    enabled: value.enabled !== false,
+    enabled: value.enabled,
     params,
   };
 }

@@ -2,7 +2,7 @@ import { FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, X } from 'lucide-r
 import { UiChipButton } from '@/components/ui';
 import { CROP_RATIO_OPTIONS } from '@/features/imageMark/editor/shared';
 import type { OrientationOp } from '@/features/imageMark/domain/geometry';
-import { useMarkEditorContext } from '@/features/imageMark/editor/MarkEditorContext';
+import { useMarkEditorContext } from '@/features/imageMark/editor/useMarkEditorContext';
 
 const ICON_CLASS = 'h-4 w-4';
 const CHIP_CLASS = '!h-9 !gap-1.5 !px-2.5 !text-xs';

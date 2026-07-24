@@ -1,6 +1,6 @@
 import { createImageEditDocumentFromMarkDoc, imageEditDocumentToMarkDoc } from './document';
 import { parseImageEditDocument } from './documentCodec';
-import { parseMarkDoc, sanitizeMarkItem } from './markCodec';
+import { sanitizeMarkItem } from './markCodec';
 import {
   createEmptyMarkDoc,
   type ImageEditSession,

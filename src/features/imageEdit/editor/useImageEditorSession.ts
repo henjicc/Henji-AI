@@ -68,8 +68,9 @@ export function useImageEditorSession({
   const handleUndo = useCallback(() => {
     const previous = undoStack[undoStack.length - 1];
     if (!previous) return;
+    const current = documentRef.current;
     setUndoStack(undoStack.slice(0, -1));
-    setRedoStack((redo) => [...redo, documentRef.current].slice(-HISTORY_LIMIT));
+    setRedoStack((redo) => [...redo, current].slice(-HISTORY_LIMIT));
     documentRef.current = previous;
     setDocument(previous);
     onDocumentChangeRef.current?.(previous);
@@ -78,8 +79,9 @@ export function useImageEditorSession({
   const handleRedo = useCallback(() => {
     const next = redoStack[redoStack.length - 1];
     if (!next) return;
+    const current = documentRef.current;
     setRedoStack(redoStack.slice(0, -1));
-    setUndoStack((undo) => [...undo, documentRef.current].slice(-HISTORY_LIMIT));
+    setUndoStack((undo) => [...undo, current].slice(-HISTORY_LIMIT));
     documentRef.current = next;
     setDocument(next);
     onDocumentChangeRef.current?.(next);

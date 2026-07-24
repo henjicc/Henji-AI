@@ -10,6 +10,14 @@ export function clampImageEditorInspectorWidth(width: number): number {
   return Math.min(IMAGE_EDITOR_INSPECTOR_MAX_WIDTH, Math.max(IMAGE_EDITOR_INSPECTOR_MIN_WIDTH, Math.round(width)));
 }
 
+export function clampImageEditorInspectorWidthToViewport(width: number, viewportWidth: number): number {
+  const viewportMax = Math.max(
+    IMAGE_EDITOR_INSPECTOR_MIN_WIDTH,
+    Math.min(IMAGE_EDITOR_INSPECTOR_MAX_WIDTH, viewportWidth - 360)
+  );
+  return Math.min(viewportMax, clampImageEditorInspectorWidth(width));
+}
+
 interface ImageEditorUiState {
   activeInspectorToolId: string;
   inspectorWidth: number;

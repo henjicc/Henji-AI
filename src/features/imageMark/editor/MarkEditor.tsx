@@ -17,7 +17,8 @@ import {
 import { buildMosaicSourceCanvas, renderOrientedCanvas } from '../render/orientedImage';
 import { MarkCanvas } from './MarkCanvas';
 import { MarkToolbar } from './MarkToolbar';
-import { MarkEditorContextProvider, type MarkEditorContextValue } from './MarkEditorContext';
+import { MarkEditorContextProvider } from './MarkEditorContext';
+import type { MarkEditorContextValue } from './markEditorContextValue';
 import { useMarkController } from './useMarkController';
 import { useMarkHistory, type MarkHistoryController } from './useMarkHistory';
 import { useNonPassiveWheel } from './useNonPassiveWheel';

@@ -89,3 +89,36 @@
 
 - 已完成变更范围、文件体积、裸 `any`、颜色字面量、原生控件和 `git diff --check` 的非执行审查。
 - 自动测试、TypeScript、ESLint、Electron 与鼠标交互验证按约定留到第四阶段统一执行。
+
+## 第四阶段变更
+
+### 兼容与编辑器收口
+
+- `src/core/imageEdit/documentCodec.ts`：V2 操作严格校验 `enabled`、旋转与镜像参数，非法数据确定回退。
+- `src/core/imageEdit/legacy.ts`：移除未使用的兼容解析导入。
+- `src/features/imageEdit/editor/useImageEditorSession.ts`：修复撤销后重做快照读取时序。
+- `src/features/imageEdit/editor/ImageEditorShell.tsx`：修复检查器纵向布局并复用可测试的视口宽度约束。
+- `src/features/imageEdit/store/imageEditorUiStore.ts`：新增检查器视口宽度约束函数。
+- `src/features/imageEdit/tools/geometry/GeometryInspector.tsx`、`src/features/imageMark/editor/MarkEditor.tsx`、`MarkEditorContext.tsx`、`useMarkController.ts`：调整 Context 边界和 hook 依赖。
+- `src/features/imageMark/editor/markEditorContextValue.ts`、`useMarkEditorContext.ts`：拆分 Context 值与消费 hook，消除热更新告警和 Windows 文件名大小写冲突。
+- `src/features/canvas/tools/registry.ts`：导出注册表工厂，便于重复注册与未知核心操作验证。
+
+### 新增专项测试
+
+- `src/core/imageEdit/imageEdit.test.ts`：覆盖 V1/V2/旧会话迁移、未知操作保留、非法参数和操作执行端口。
+- `src/features/imageEdit/editor/useImageEditorSession.test.tsx`：覆盖统一历史、未来操作保留和面板宽度约束。
+- `src/features/canvas/tools/registry.test.ts`：覆盖画布注册策略、双格式初值和非法注册。
+- `src/features/canvas/application/toolProcessor.test.ts`：覆盖 V2 优先、旧 `markDoc` 回退和未知工具分发。
+- `src/features/assistant/imageEditAdapter.test.ts`：覆盖助手操作转换、全部标注类型和裁剪边界。
+
+### Electron 自动化
+
+- `scripts/lib/electronLaunch.cjs`：增加有界进程输出、退出等待、隔离用户目录和经过路径校验的临时目录清理。
+- `scripts/electron-phase4-smoke.cjs`：启用隔离测试数据，并为控制台错误补充来源位置。
+- `scripts/electron-phase4-dpi-check.cjs`：启用隔离测试数据。
+
+### 第四阶段验证状态
+
+- 图片编辑定向测试 17 项和全量 Vitest 404 项通过。
+- 颜色检查、前端/主进程 ESLint、Electron TypeScript、构建、smoke、6 组 DPI 检查和 `git diff --check` 通过。
+- 真实 Electron 鼠标交互保留到最终人工验收，所有任务状态保持待验证。

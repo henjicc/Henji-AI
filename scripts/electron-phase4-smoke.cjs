@@ -8,7 +8,7 @@ const TINY_PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR42mP8z8Dwn4GBgYGJAQoAHxcCArzxVaIAAAAASUVORK5CYII='
 
 async function launchElectronApp() {
-  return launchElectronAppBase({ mainEntry: MAIN_ENTRY, cwd: ROOT })
+  return launchElectronAppBase({ mainEntry: MAIN_ENTRY, cwd: ROOT, isolateUserData: true })
 }
 
 async function checkNativeBridge(page) {
@@ -199,7 +199,9 @@ async function main() {
     const page = app.page
     page.on('console', (message) => {
       if (message.type() === 'error') {
-        consoleErrors.push(message.text())
+        const location = message.location()
+        const source = location.url ? ` (${location.url}:${location.lineNumber + 1})` : ''
+        consoleErrors.push(`${message.text()}${source}`)
       }
     })
     page.on('pageerror', (error) => {

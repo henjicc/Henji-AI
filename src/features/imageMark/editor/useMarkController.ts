@@ -328,7 +328,7 @@ export function useMarkController({
       event.preventDefault();
       selectTool(shortcutTool);
     }
-  }, [handleDeleteSelected, handleRedo, handleStylePatch, handleUndo, pointer, selectTool, selectedId, setSelectedId, textEditing.textEditor]);
+  }, [handleDeleteSelected, handleRedo, handleStylePatch, handleUndo, history, pointer, selectTool, selectedId, setSelectedId, textEditing.textEditor]);
 
   // 标签原位输入的锚点必须随实时输入内容重算(与最终渲染用同一函数),
   // 否则确认时会因为占位符宽度与真实文字宽度不同而发生跳动
