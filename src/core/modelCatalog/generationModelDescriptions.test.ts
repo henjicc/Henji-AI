@@ -30,9 +30,15 @@ describe('generationModelDescriptions', () => {
     }
   })
 
-  it('空文案在维护者补充前不注入模型元数据', () => {
+  it('所有通用模型都有中文定性描述并可注入模型元数据', () => {
     expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(43)
-    expect(getGenerationModelDescription('seedream-4.5')).toBeUndefined()
+    for (const description of Object.values(GENERATION_MODEL_DESCRIPTIONS)) {
+      expect(description.zh.trim()).not.toBe('')
+    }
+    expect(getGenerationModelDescription('gpt-image-2')?.zh).toContain('推荐使用')
+    expect(getGenerationModelDescription('seedream-4.5')).toEqual(
+      GENERATION_MODEL_DESCRIPTIONS['seedream-4.5']
+    )
     expect(getGenerationModelDescription('not-adapted')).toBeUndefined()
   })
 })

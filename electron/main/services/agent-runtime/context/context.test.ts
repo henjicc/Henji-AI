@@ -237,6 +237,7 @@ describe('AgentContextBuilder', () => {
     expect(systemPrompt).toContain('使用空 query + mediaType')
     expect(systemPrompt).toContain('先切换到生成工作区')
     expect(systemPrompt).toContain('用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向')
+    expect(systemPrompt).toContain('优先使用通用描述中带有“推荐使用”字样的兼容模型')
     expect(systemPrompt).toContain('用户指令是用户主动维护的高优先级自然语言偏好')
     expect(String(result.messages[0].content)).toContain('图片生成优先使用 PPIO')
     expect(String(result.messages[0].content)).toContain('UNTRUSTED_USER_INSTRUCTIONS')
