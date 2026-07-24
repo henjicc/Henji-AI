@@ -129,6 +129,7 @@ export const IMAGE_EDIT_DOCUMENT_VERSION = 2 as const;
 
 export const IMAGE_EDIT_OPERATION_IDS = {
   orientation: 'image.orientation',
+  diffusion: 'image.diffusion',
   annotations: 'image.annotations',
   crop: 'image.crop',
 } as const;
@@ -167,6 +168,55 @@ export interface AnnotationOperationParams {
 
 export interface CropOperationParams {
   rect: MarkCropRect | null;
+}
+
+export type DiffusionMode = 'black_mist' | 'white_mist' | 'glow';
+export type DiffusionDensity = '1/8' | '1/4' | '1/2' | '1';
+export type DiffusionQuality = 'realtime' | 'high';
+
+/**
+ * 摄影柔光/辉光操作参数。
+ * 半径使用图片空间归一化值，不能写入屏幕像素或 CSS 尺寸。
+ */
+export interface DiffusionOperationParams {
+  schemaVersion: 1;
+  mode: DiffusionMode;
+  presetId: string | null;
+  strength: number;
+  density: DiffusionDensity;
+  source: {
+    thresholdEV: number;
+    softKneeEV: number;
+    power: number;
+    highlightRecovery: number;
+  };
+  scatter: {
+    highlightAmount: number;
+    microAmount: number;
+    nearRadius: number;
+    farRadius: number;
+    tailAmount: number;
+    tailShape: number;
+    anisotropy: number;
+    angle: number;
+    chromaticSpread: number;
+  };
+  tone: {
+    veil: number;
+    blackRetention: number;
+    highlightCompression: number;
+    scatterDesaturation: number;
+  };
+  detail: {
+    highFrequencyRetention: number;
+    midFrequencyRetention: number;
+  };
+  lens: {
+    focalLengthEq: number;
+    aperture: number;
+    positionVariation: number;
+  };
+  quality: DiffusionQuality;
 }
 
 export function createEmptyMarkOrientation(): MarkOrientation {

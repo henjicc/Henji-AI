@@ -1,5 +1,6 @@
 import { createEmptyImageEditDocument, createImageEditDocumentFromMarkDoc } from './document';
 import { parseMarkDoc, parseMarkItems, sanitizeMarkCrop, sanitizeMarkOrientation } from './markCodec';
+import { parseDiffusionOperationParams } from './operations';
 import {
   IMAGE_EDIT_DOCUMENT_VERSION,
   IMAGE_EDIT_OPERATION_IDS,
@@ -80,6 +81,12 @@ function parseOperation(value: unknown): ImageEditOperation | null {
   } else if (value.operationId === IMAGE_EDIT_OPERATION_IDS.crop) {
     if (value.params.rect !== null && sanitizeMarkCrop(value.params.rect) === null) return null;
     params = { rect: sanitizeMarkCrop(value.params.rect) } satisfies CropOperationParams;
+  } else if (value.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion) {
+    try {
+      params = parseDiffusionOperationParams(value.params);
+    } catch {
+      return null;
+    }
   } else {
     const cloned = cloneJsonValue(value.params);
     if (!isRecord(cloned)) return null;

@@ -10,6 +10,7 @@ import {
   type ImageMarkDoc,
   type OrientationOperationParams,
 } from './types';
+import { imageEditOperationRegistry } from './operations';
 
 const BUILT_IN_INSTANCE_IDS = {
   orientation: 'builtin-orientation',
@@ -57,6 +58,51 @@ export function createImageEditDocumentFromMarkDoc(doc: ImageMarkDoc): ImageEdit
 
 export function createEmptyImageEditDocument(): ImageEditDocument {
   return createImageEditDocumentFromMarkDoc(createEmptyMarkDoc());
+}
+
+/** 读取某个操作实例；实例不存在时返回 null。 */
+export function getImageEditOperation<TParams extends object = object>(
+  document: ImageEditDocument,
+  operationId: string
+): ImageEditOperation<TParams> | null {
+  const operation = document.operations.find((entry) => entry.operationId === operationId);
+  return (operation as ImageEditOperation<TParams> | undefined) ?? null;
+}
+
+/**
+ * 插入或替换操作实例。
+ * 新实例按注册表 order 插入，保证朝向 → 柔光 → 标注 → 裁剪的兼容顺序；
+ * 已存在实例保留其文档 ID 和位置。
+ */
+export function upsertImageEditOperation<TParams extends object>(
+  document: ImageEditDocument,
+  operation: ImageEditOperation<TParams>
+): ImageEditDocument {
+  const existingIndex = document.operations.findIndex((entry) => entry.operationId === operation.operationId);
+  if (existingIndex >= 0) {
+    const operations = [...document.operations];
+    operations[existingIndex] = { ...operation, id: operations[existingIndex].id };
+    return { ...document, operations };
+  }
+
+  const definition = imageEditOperationRegistry.get(operation.operationId);
+  const order = definition?.order ?? Number.MAX_SAFE_INTEGER;
+  const insertIndex = document.operations.findIndex((entry) => {
+    const entryOrder = imageEditOperationRegistry.get(entry.operationId)?.order ?? Number.MAX_SAFE_INTEGER;
+    return entryOrder > order;
+  });
+  const operations = [...document.operations];
+  if (insertIndex < 0) operations.push(operation);
+  else operations.splice(insertIndex, 0, operation);
+  return { ...document, operations };
+}
+
+export function createImageEditOperation<TParams extends object = object>(
+  operationId: string,
+  params: TParams,
+  id = `${operationId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+): ImageEditOperation<TParams> {
+  return { id, operationId, enabled: true, params };
 }
 
 export function imageEditDocumentToMarkDoc(document: ImageEditDocument): ImageMarkDoc {
@@ -108,6 +154,10 @@ export function replaceMarkDocInImageEditDocument(
 export function hasImageEditEffect(document: ImageEditDocument): boolean {
   return document.operations.some((operation) => {
     if (!operation.enabled) return false;
+    const definition = imageEditOperationRegistry.get(operation.operationId);
+    if (definition?.hasEffect) {
+      return definition.hasEffect(operation.params);
+    }
     if (operation.operationId === IMAGE_EDIT_OPERATION_IDS.orientation) {
       return !isNeutralOrientation(operation.params as OrientationOperationParams);
     }
