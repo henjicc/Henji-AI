@@ -6,10 +6,16 @@ import {
 } from '../../../../../src/core/assistant/events'
 import type { AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import { DEFAULT_AGENT_BUDGET } from './budget'
+import {
+  agentWorkingSummarySchema,
+  createAgentWorkingSummary,
+  type AgentWorkingSummary,
+} from '../../../../../src/core/assistant/workingContext'
 
 export function createInitialAgentRunState(
   runId: string,
-  request: AgentStartRunRequest
+  request: AgentStartRunRequest,
+  previousWorkingSummary?: AgentWorkingSummary
 ): AgentRunState {
   const now = new Date().toISOString()
   const budget = agentBudgetConfigSchema.parse({
@@ -44,5 +50,14 @@ export function createInitialAgentRunState(
       elapsedMs: 0,
     },
     lastScopeRevisions: null,
+    workingSummary: previousWorkingSummary
+      ? agentWorkingSummarySchema.parse({
+          ...previousWorkingSummary,
+          goal: request.goal,
+          activeStep: null,
+          pendingApprovals: [],
+          updatedAt: now,
+        })
+      : createAgentWorkingSummary(request.goal),
   })
 }

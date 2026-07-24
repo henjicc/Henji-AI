@@ -45,7 +45,7 @@ export const agentUtilityRpcRequestMessageSchema = z.object({
   type: z.literal('rpc.request'),
   protocolVersion: z.literal(AGENT_UTILITY_PROTOCOL_VERSION),
   rpcId: z.string().min(1),
-  operation: z.enum(['model.api_key', 'tool.execute', 'artifact.save']),
+  operation: z.enum(['model.api_key', 'tool.execute', 'artifact.save', 'memory.retrieve']),
   payload: z.unknown(),
 }).strict()
 
@@ -104,3 +104,7 @@ export const agentUtilityLogMessageSchema = z.object({
 export type AgentUtilityCommandAction = z.infer<
   typeof agentUtilityCommandMessageSchema
 >['action']
+
+export type AgentUtilityRpcOperation = z.infer<
+  typeof agentUtilityRpcRequestMessageSchema
+>['operation']

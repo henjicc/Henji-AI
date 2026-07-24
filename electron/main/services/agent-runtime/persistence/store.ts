@@ -18,6 +18,7 @@ import {
 import type { AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentContextArtifact } from '../context/types'
 import { createMainLogger } from '../../logging'
+import { assessInterruptedWorkingSummary } from '../runner/working-summary'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
@@ -302,6 +303,9 @@ export class AgentPersistenceStore {
       waitingApprovalId: null,
       updatedAt: now,
       error,
+      workingSummary: previous.workingSummary
+        ? assessInterruptedWorkingSummary(previous.workingSummary)
+        : undefined,
     })
     const event = agentEventSchema.parse({
       schemaVersion: AGENT_EVENT_SCHEMA_VERSION,

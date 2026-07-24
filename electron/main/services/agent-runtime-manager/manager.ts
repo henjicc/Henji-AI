@@ -11,6 +11,7 @@ import {
 import type { HostContextSnapshot } from '../../../../src/core/assistant/hostContracts'
 import type { AgentStartRunRequest } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentMemoryContextEntry } from '../../../../src/core/assistant/memory'
+import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
 import {
   AGENT_UTILITY_PROTOCOL_VERSION,
   agentUtilityCheckpointMessageSchema,
@@ -22,6 +23,7 @@ import {
   agentUtilityRpcRequestMessageSchema,
   agentUtilityRunEventMessageSchema,
   type AgentUtilityCommandAction,
+  type AgentUtilityRpcOperation,
 } from '../../../../src/core/assistant/utilityContracts'
 import { appendLogEvents, createMainLogger } from '../logging'
 
@@ -32,6 +34,7 @@ interface AgentRuntimeManagerOptions {
   getModelApiKey: (providerId: string) => string | null
   executeTool: (payload: unknown, signal: AbortSignal) => Promise<unknown>
   saveArtifact: (payload: unknown) => void
+  retrieveMemory: (payload: unknown) => unknown
   onEvent: (runId: string, event: AgentEvent) => void
   onCheckpoint: (runId: string, state: AgentRunState) => void
   onTerminal: (runId: string, state: AgentRunState) => void
@@ -67,7 +70,8 @@ export class AgentRuntimeManager {
     runId: string,
     request: AgentStartRunRequest,
     hostContext: HostContextSnapshot,
-    memoryContext: AgentMemoryContextEntry[]
+    memoryContext: AgentMemoryContextEntry[],
+    recoveryContext?: AgentWorkingSummary
   ): Promise<AgentRunState> {
     this.activeRunIds.add(runId)
     try {
@@ -76,6 +80,7 @@ export class AgentRuntimeManager {
         request,
         hostContext,
         memoryContext,
+        recoveryContext,
       }, 15_000)
       return agentRunStateSchema.parse(result)
     } catch (error) {
@@ -284,7 +289,7 @@ export class AgentRuntimeManager {
 
   private async handleRpc(
     rpcId: string,
-    operation: 'model.api_key' | 'tool.execute' | 'artifact.save',
+    operation: AgentUtilityRpcOperation,
     payload: unknown
   ): Promise<void> {
     try {
@@ -305,9 +310,11 @@ export class AgentRuntimeManager {
         } finally {
           this.rpcControllers.delete(rpcId)
         }
-      } else {
+      } else if (operation === 'artifact.save') {
         this.options.saveArtifact(payload)
         data = { saved: true }
+      } else {
+        data = this.options.retrieveMemory(payload)
       }
       this.postRpcResult(rpcId, true, data)
     } catch (error) {

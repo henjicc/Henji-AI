@@ -68,3 +68,36 @@
 - `package.json`：将审批等待器测试纳入助手专项回归。
 - `docs/task/智能助手智能化升级/00-任务总览.md`：清理已经过期的待执行状态。
 - `docs/task/智能助手智能化升级/progress.md`、`handoff.md`、`test-report.md`：同步最终测试结果与提交权限限制。
+
+## 2026-07-24 · 第三阶段开始
+
+- `docs/task/智能助手智能化升级/00-任务总览.md`：切换到第三阶段 3.1。
+- `docs/task/智能助手智能化升级/progress.md`：记录第三阶段执行顺序与统一手动测试约束。
+- `docs/task/智能助手智能化升级/decisions.md`：记录系统消息、摘要存储和记忆召回边界。
+- `docs/task/智能助手智能化升级/handoff.md`：更新第三阶段入口。
+- `docs/task/智能助手智能化升级/test-report.md`：记录第三阶段开始前自动化基线。
+
+## 2026-07-24 · 3.1 完成
+
+- `src/core/assistant/workingContext.ts`、`events.ts`：新增向后兼容的结构化工作摘要与压缩事件元数据。
+- `electron/main/services/agent-runtime/context/`：拆分静态 system、动态来源层、预算选择和结构化压缩入口。
+- `electron/main/services/agent-runtime/runner/model-execution.ts`：拒绝普通 messages 中的 system 消息。
+- `electron/main/services/agent-runtime/context/*.test.ts`：覆盖分层、注入边界、预算裁剪和工具消息配对。
+
+## 2026-07-24 · 3.2 完成
+
+- `src/core/assistant/workingContext.ts`、`events.ts`：定义工作摘要、步骤、证据、审批、恢复状态和事件元数据。
+- `electron/main/services/agent-runtime/runner/working-summary.ts`：由现有事件归约摘要，并在中断、重试、revision 变化和产物失效时重建恢复要求。
+- `electron/main/services/agent-runtime/context/compaction.ts`：用结构化摘要替代旧消息摘录，并保留工具调用与结果配对。
+- `electron/main/services/agent-runtime/persistence/store.ts`、`runtime.ts`：沿用现有检查点保存摘要，恢复时校验 revision、审批和产物引用。
+- `electron/main/services/agent-runtime/runner/recovery-guard.ts`、`tool-call-scheduler.ts`：未知写入副作用确认前禁止继续写入，同领域只读成功观察可解除保护。
+- 对应摘要、压缩、恢复保护、持久化和调度测试同步补充。
+
+## 2026-07-24 · 3.3 与第三阶段完成
+
+- `src/core/assistant/memory.ts`、`utilityContracts.ts`：增加分层召回查询、结果解释和 utility RPC 契约。
+- `electron/main/services/assistant/memory-relevance.ts`、`memory-store.ts`：按作用域、实体、意图、时效和用户纠正评分，输出命中、排除及截断信息。
+- `electron/main/services/agent-runtime/runner/memory-context.ts`：按目标、路由和步骤变化刷新记忆，失败时继续使用上次安全结果。
+- `electron/main/agent-utility.ts`、`agent-runtime-manager/manager.ts`：将记忆读取代理回主进程，不让 utility process 直接访问 SQLite。
+- `electron/main/services/agent-runtime/context/prompt-layers.ts`、`layer-budget.ts`、`builder.ts`：将相关记忆作为独立不可信层按预算注入。
+- `package.json`：将第三阶段新增测试纳入 `test:assistant-eval`。

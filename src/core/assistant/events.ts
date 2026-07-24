@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
 import { modelStepUsageSchema } from '../llm/modelStep'
+import { agentWorkingSummarySchema } from './workingContext'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v1' as const
 
@@ -69,6 +70,7 @@ export const agentRunStateSchema = z.object({
   budget: agentBudgetConfigSchema,
   usage: agentBudgetUsageSchema,
   lastScopeRevisions: hostScopeRevisionsSchema.nullable(),
+  workingSummary: agentWorkingSummarySchema.optional(),
 }).strict()
 export type AgentRunState = z.infer<typeof agentRunStateSchema>
 
@@ -153,6 +155,9 @@ const toolRequestedEventSchema = z.object({
   toolCallId: z.string().min(1),
   toolName: z.string().min(1),
   inputDigest: z.string().min(1),
+  category: z.string().min(1).max(100).optional(),
+  readOnly: z.boolean().optional(),
+  idempotent: z.boolean().optional(),
 }).strict()
 
 const toolStartedEventSchema = z.object({
@@ -168,6 +173,9 @@ const toolCompletedEventSchema = z.object({
   toolCallId: z.string().min(1),
   toolName: z.string().min(1),
   summary: z.string().max(2_000),
+  category: z.string().min(1).max(100).optional(),
+  readOnly: z.boolean().optional(),
+  idempotent: z.boolean().optional(),
   artifactRef: z.string().min(1).optional(),
   resultReferences: z.record(z.string(), z.string().max(500)).refine(
     (references) => Object.keys(references).length <= 8,
@@ -181,6 +189,9 @@ const toolFailedEventSchema = z.object({
   toolCallId: z.string().min(1),
   toolName: z.string().min(1),
   error: serializedAgentErrorSchema,
+  category: z.string().min(1).max(100).optional(),
+  readOnly: z.boolean().optional(),
+  idempotent: z.boolean().optional(),
 }).strict()
 
 const approvalRequiredEventSchema = z.object({
@@ -212,6 +223,10 @@ const contextCompactedEventSchema = z.object({
   type: z.literal('ContextCompacted'),
   beforeTokens: z.number().int().nonnegative(),
   afterTokens: z.number().int().nonnegative(),
+  reason: z.string().min(1).max(500).optional(),
+  retainedLayers: z.array(z.string().min(1).max(100)).max(16).optional(),
+  droppedLayers: z.array(z.string().min(1).max(100)).max(16).optional(),
+  summaryVersion: z.string().min(1).max(100).optional(),
 }).strict()
 
 const artifactOffloadedEventSchema = z.object({

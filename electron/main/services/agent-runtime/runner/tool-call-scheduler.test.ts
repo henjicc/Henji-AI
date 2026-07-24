@@ -43,7 +43,8 @@ function toolCall(index: number): ModelStepToolCall {
 function createScheduler(
   execute: (id: string) => Promise<{ id: string }>,
   observations: AgentToolObservation[],
-  events: AgentEventInput[]
+  events: AgentEventInput[],
+  executionGuard?: (call: ModelStepToolCall) => string | null
 ): AgentToolCallScheduler {
   const registry = new AgentToolRegistry()
   registry.register(defineAgentTool({
@@ -75,6 +76,35 @@ function createScheduler(
     dataClasses: () => ['C0'],
     summarize: (output) => `已读取 ${output.id}`,
   }))
+  registry.register(defineAgentTool({
+    name: 'write_test_resource',
+    version: 1,
+    title: '写入测试资源',
+    description: '写入独立测试资源。',
+    category: 'diagnostics',
+    side: 'backend',
+    risk: 'R0',
+    permission: 'test:write',
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 1_000,
+    retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: [],
+    inputSchema: z.object({ id: z.string() }).strict(),
+    outputSchema: z.object({ id: z.string() }).strict(),
+    aiInputSchema: {
+      type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false,
+    },
+    execute: async (input) => execute(input.id),
+    concurrencyKey: (input) => `test-write:${input.id}`,
+    targetIds: (input) => ({ id: input.id }),
+    dataClasses: () => ['C0'],
+    summarize: (output) => `已写入 ${output.id}`,
+  }))
   const gateway = new AgentToolGateway({ registry, getHostContext: hostContext })
   return new AgentToolCallScheduler({
     runId: 'run-scheduler',
@@ -94,6 +124,7 @@ function createScheduler(
     onObservation: (_call, observation) => observations.push(observation),
     emit: (event) => events.push(event),
     onDiscoveredTools: () => undefined,
+    executionGuard,
   })
 }
 
@@ -133,5 +164,34 @@ describe('AgentToolCallScheduler', () => {
     expect(observations).toHaveLength(10)
     expect(events.filter((event) => event.type === 'ToolFailed')).toHaveLength(2)
     expect(observations.slice(-2).every((item) => item.summary.includes('安全上限'))).toBe(true)
+  })
+
+  it('恢复守卫会阻止未知副作用确认前的写操作', async () => {
+    let executions = 0
+    const observations: AgentToolObservation[] = []
+    const events: AgentEventInput[] = []
+    const scheduler = createScheduler(async (id) => {
+      executions += 1
+      return { id }
+    }, observations, events, (call) => (
+      call.toolName === 'write_test_resource' ? '请先读取真实状态。' : null
+    ))
+
+    await scheduler.execute([{
+      toolCallId: 'call-write',
+      toolName: 'write_test_resource',
+      input: { id: 'resource-1' },
+      dynamic: false,
+    }], true, {})
+
+    expect(executions).toBe(0)
+    expect(observations[0]).toMatchObject({
+      output: { ok: false, error: { code: 'RECOVERY_VERIFICATION_REQUIRED' } },
+    })
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'ToolRequested', category: 'diagnostics', readOnly: false, idempotent: true,
+      }),
+    ]))
   })
 })

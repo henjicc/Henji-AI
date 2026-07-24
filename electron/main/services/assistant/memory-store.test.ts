@@ -57,7 +57,12 @@ describeWithElectronSqlite('AgentMemoryStore', () => {
 
     const memory = store.confirm(candidate.candidateId)
     expect(store.retrieve('帮我生成一张图片', 'generation', null)).toEqual([
-      expect.objectContaining({ memoryId: memory.memoryId }),
+      expect.objectContaining({
+        memoryId: memory.memoryId,
+        layer: 'confirmed_preference',
+        score: expect.any(Number),
+        retrievalReasons: expect.arrayContaining(['已确认偏好与当前选择任务相关']),
+      }),
     ])
   })
 

@@ -5,7 +5,12 @@ import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../.
 import type { AgentToolGateway } from '../tools/gateway'
 import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentArtifactStore } from '../context/offload'
-import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
+import type {
+  AgentMemoryContextEntry,
+  AgentMemoryRetrievalQuery,
+  AgentMemoryRetrievalResult,
+} from '../../../../../src/core/assistant/memory'
+import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 
 export type AgentModelStepExecutor = (
   input: ModelStepInput,
@@ -18,6 +23,10 @@ export interface AgentRunnerDependencies {
   getHostContext: (runId: string) => HostContextSnapshot | null
   runModelStep: AgentModelStepExecutor
   cancelModelStep: (requestId: string) => void
+  retrieveMemory?: (
+    query: AgentMemoryRetrievalQuery,
+    signal: AbortSignal
+  ) => Promise<AgentMemoryRetrievalResult>
   artifactStore?: AgentArtifactStore
   onEvent?: (event: AgentEvent) => void
   onCheckpoint?: (state: AgentRunState) => void
@@ -28,5 +37,6 @@ export interface AgentRunnerOptions {
   runId: string
   request: AgentStartRunRequest
   memoryContext?: AgentMemoryContextEntry[]
+  recoveryContext?: AgentWorkingSummary
   dependencies: AgentRunnerDependencies
 }

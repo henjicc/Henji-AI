@@ -44,6 +44,7 @@ export interface AgentToolCallSchedulerOptions {
   onObservation: (call: ModelStepToolCall, observation: AgentToolObservation) => void
   emit: (event: AgentEventInput) => void
   onDiscoveredTools: (toolCallId: string, toolNames: string[]) => void
+  executionGuard?: (call: ModelStepToolCall) => string | null
 }
 
 const MAX_TOOL_CALLS_PER_MODEL_STEP = 8
@@ -144,14 +145,27 @@ export class AgentToolCallScheduler {
     expectedRevisions: Partial<HostScopeRevisions>
   ): Promise<ToolCallOutcome> {
     this.options.recordToolCall(`${call.toolName}:${digestJson(call.input)}`)
+    const metadata = this.options.registry.executionMetadata(call.toolName, call.input)
     this.options.emit({
       type: 'ToolRequested',
       toolCallId: call.toolCallId,
       toolName: call.toolName,
       inputDigest: digestJson(call.input),
+      category: metadata?.category,
+      readOnly: metadata?.readOnly,
+      idempotent: metadata?.idempotent,
     })
     this.options.emit({ type: 'ToolStarted', toolCallId: call.toolCallId, toolName: call.toolName })
     try {
+      const guardReason = this.options.executionGuard?.(call)
+      if (guardReason) {
+        throw new AgentToolGatewayError(
+          'RECOVERY_VERIFICATION_REQUIRED',
+          guardReason,
+          false,
+          'user_action'
+        )
+      }
       let result = await this.options.gateway.execute({
         runId: this.options.runId,
         threadId: this.options.threadId,
@@ -214,6 +228,7 @@ export class AgentToolCallScheduler {
   }
 
   private recordOutcome(outcome: ToolCallOutcome): void {
+    const metadata = this.options.registry.executionMetadata(outcome.call.toolName, outcome.call.input)
     this.options.onObservation(outcome.call, outcome.observation)
     if (outcome.error) {
       this.options.emit({
@@ -221,6 +236,9 @@ export class AgentToolCallScheduler {
         toolCallId: outcome.call.toolCallId,
         toolName: outcome.call.toolName,
         error: outcome.error,
+        category: metadata?.category,
+        readOnly: metadata?.readOnly,
+        idempotent: metadata?.idempotent,
       })
       return
     }
@@ -239,6 +257,9 @@ export class AgentToolCallScheduler {
       toolCallId: outcome.call.toolCallId,
       toolName: outcome.call.toolName,
       summary: outcome.observation.summary,
+      category: metadata?.category,
+      readOnly: metadata?.readOnly,
+      idempotent: metadata?.idempotent,
       artifactRef: outcome.observation.artifactRef,
       resultReferences: extractResultReferences(outcome.observation.output),
     })
@@ -257,6 +278,9 @@ export class AgentToolCallScheduler {
       toolCallId: call.toolCallId,
       toolName: call.toolName,
       inputDigest: digestJson(call.input),
+      category: this.options.registry.executionMetadata(call.toolName, call.input)?.category,
+      readOnly: this.options.registry.executionMetadata(call.toolName, call.input)?.readOnly,
+      idempotent: this.options.registry.executionMetadata(call.toolName, call.input)?.idempotent,
     })
     this.options.onObservation(call, observation)
     this.options.emit({
@@ -264,6 +288,9 @@ export class AgentToolCallScheduler {
       toolCallId: call.toolCallId,
       toolName: call.toolName,
       error,
+      category: this.options.registry.executionMetadata(call.toolName, call.input)?.category,
+      readOnly: this.options.registry.executionMetadata(call.toolName, call.input)?.readOnly,
+      idempotent: this.options.registry.executionMetadata(call.toolName, call.input)?.idempotent,
     })
   }
 }

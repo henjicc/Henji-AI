@@ -113,6 +113,9 @@ export interface AgentToolExecutionMetadata {
   parallelSafe: boolean
   concurrencyKey: string
   risk: AgentToolDefinition['risk']
+  category: string
+  readOnly: boolean
+  idempotent: boolean
 }
 
 export class AgentToolRegistry {
@@ -168,6 +171,9 @@ export class AgentToolRegistry {
       parallelSafe: resolveToolSemantics(definition).parallelSafe,
       concurrencyKey: definition.concurrencyKey(parsed.data),
       risk: definition.risk,
+      category: definition.category,
+      readOnly: definition.readOnly,
+      idempotent: definition.idempotent,
     }
   }
 

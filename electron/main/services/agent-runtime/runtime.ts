@@ -14,6 +14,11 @@ import {
   agentDataClassSchema,
 } from '../../../../src/core/assistant/toolContracts'
 import type { AgentEvent, AgentRunState } from '../../../../src/core/assistant/events'
+import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
+import {
+  agentMemoryRetrievalQuerySchema,
+  type AgentMemoryRetrievalResult,
+} from '../../../../src/core/assistant/memory'
 import type {
   FrontendToolOperation,
   HostCommandResult,
@@ -32,6 +37,7 @@ import { AgentRuntimeManager } from '../agent-runtime-manager/manager'
 import { createInitialAgentRunState } from './runner/initial-state'
 import { AgentPersistenceStore } from './persistence/store'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
+import { prepareWorkingSummaryForRetry } from './runner/working-summary'
 
 interface AgentRunRecord {
   ownerWebContentsId: number
@@ -73,6 +79,7 @@ export class AgentRuntimeService {
     getModelApiKey: getLlmProviderApiKey,
     executeTool: (payload, signal) => this.executeToolInMain(payload, signal),
     saveArtifact: (payload) => this.saveArtifact(payload),
+    retrieveMemory: (payload) => this.retrieveMemory(payload),
     onEvent: (runId, event) => this.onRunEvent(runId, event),
     onCheckpoint: (runId, state) => this.onCheckpoint(runId, state),
     onTerminal: (runId, state) => this.onTerminal(runId, state),
@@ -84,13 +91,14 @@ export class AgentRuntimeService {
   }
 
   async startRun(owner: WebContents, request: AgentStartRunRequest): Promise<AgentStartRunResult> {
-    return await this.startRunWithParent(owner, request, null)
+    return await this.startRunWithParent(owner, request, null, undefined)
   }
 
   private async startRunWithParent(
     owner: WebContents,
     request: AgentStartRunRequest,
-    parentRunId: string | null
+    parentRunId: string | null,
+    recoveryContext: AgentWorkingSummary | undefined
   ): Promise<AgentStartRunResult> {
     const hostContext = getAssistantHostContext(owner.id)
     if (!hostContext?.uiReady) throw new Error('[host_not_ready] 宿主界面尚未就绪')
@@ -102,8 +110,15 @@ export class AgentRuntimeService {
       }
     }
 
+    const preparedRecoveryContext = recoveryContext
+      ? prepareWorkingSummaryForRetry(
+          recoveryContext,
+          hostContext.scopeRevisions,
+          recoveryContext.artifactRefs.filter((ref) => Boolean(this.persistence.loadArtifact(ref)))
+        )
+      : undefined
     const runId = randomUUID()
-    const initialState = createInitialAgentRunState(runId, request)
+    const initialState = createInitialAgentRunState(runId, request, preparedRecoveryContext)
     this.runs.set(runId, {
       ownerWebContentsId: owner.id,
       rendererSessionId: hostContext.rendererSessionId,
@@ -119,7 +134,13 @@ export class AgentRuntimeService {
         hostContext.workspace.id,
         hostContext.project.id
       )
-      const state = await this.manager.startRun(runId, request, hostContext, memoryContext)
+      const state = await this.manager.startRun(
+        runId,
+        request,
+        hostContext,
+        memoryContext,
+        preparedRecoveryContext
+      )
       this.updateState(runId, state)
       return { runId, state }
     } catch (error) {
@@ -204,7 +225,7 @@ export class AgentRuntimeService {
     const result = await this.startRunWithParent(owner, {
       ...request,
       userInstructions,
-    }, runId)
+    }, runId, previous.workingSummary)
     this.persistence.markRetried(runId)
     return result
   }
@@ -291,6 +312,10 @@ export class AgentRuntimeService {
   private saveArtifact(payload: unknown): void {
     const parsed = artifactPayloadSchema.parse(payload)
     this.persistence.saveArtifact(parsed.runId, parsed.artifact)
+  }
+
+  private retrieveMemory(payload: unknown): AgentMemoryRetrievalResult {
+    return this.memory.retrieveDetailed(agentMemoryRetrievalQuerySchema.parse(payload))
   }
 
   private requireRebindableRun(owner: WebContents, runId: string): AgentRunRecord {

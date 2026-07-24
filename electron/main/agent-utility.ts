@@ -10,13 +10,18 @@ import {
   hostContextSnapshotSchema,
   type HostContextSnapshot,
 } from '../../src/core/assistant/hostContracts'
-import { agentMemoryContextEntrySchema } from '../../src/core/assistant/memory'
+import {
+  agentMemoryContextEntrySchema,
+  agentMemoryRetrievalResultSchema,
+} from '../../src/core/assistant/memory'
+import { agentWorkingSummarySchema } from '../../src/core/assistant/workingContext'
 import { agentStartRunRequestSchema } from '../../src/core/assistant/runtimeContracts'
 import {
   AGENT_UTILITY_PROTOCOL_VERSION,
   agentUtilityCommandMessageSchema,
   agentUtilityRpcResultMessageSchema,
   type AgentUtilityCommandAction,
+  type AgentUtilityRpcOperation,
 } from '../../src/core/assistant/utilityContracts'
 import {
   modelStepInputSchema,
@@ -57,7 +62,7 @@ function post(message: Record<string, unknown>): void {
 }
 
 function rpc(
-  operation: 'model.api_key' | 'tool.execute' | 'artifact.save',
+  operation: AgentUtilityRpcOperation,
   payload: unknown,
   signal?: AbortSignal
 ): Promise<unknown> {
@@ -204,6 +209,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
     request: agentStartRunRequestSchema,
     hostContext: hostContextSnapshotSchema,
     memoryContext: z.array(agentMemoryContextEntrySchema).max(10).default([]),
+    recoveryContext: agentWorkingSummarySchema.optional(),
   }).strict().parse(payload)
   if (runners.has(parsed.runId)) throw new Error('[duplicate_run] 运行已存在')
   hostContexts.set(parsed.runId, parsed.hostContext)
@@ -211,6 +217,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
     runId: parsed.runId,
     request: parsed.request,
     memoryContext: parsed.memoryContext,
+    recoveryContext: parsed.recoveryContext,
     dependencies: {
       registry,
       gateway,
@@ -218,6 +225,9 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
       runModelStep: runUtilityModelStep,
       cancelModelStep: (requestId) => activeModelSteps.get(requestId)?.abort(),
       artifactStore,
+      retrieveMemory: async (query, signal) => agentMemoryRetrievalResultSchema.parse(
+        await rpc('memory.retrieve', query, signal)
+      ),
       onEvent: (event) => post({
         type: 'run.event',
         runId: parsed.runId,

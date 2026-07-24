@@ -14,6 +14,10 @@ import {
 } from '../../../../../src/core/assistant/runtimeContracts'
 import { runAgentSchemaMigrations } from './migrations'
 import { AgentPersistenceStore } from './store'
+import {
+  agentWorkingSummarySchema,
+  createAgentWorkingSummary,
+} from '../../../../../src/core/assistant/workingContext'
 
 function request(): AgentStartRunRequest {
   const now = new Date().toISOString()
@@ -182,5 +186,39 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
       error: { code: 'CHECKPOINT_VERSION_MISMATCH' },
     })
     expect(store.listRuns('thread-1')[0].recoveryStatus).toBe('recovery_required')
+  })
+
+  it('中断检查点保留结构化目标并标记未知写入需要先验证', () => {
+    const interrupted = state('waiting_tool')
+    interrupted.workingSummary = agentWorkingSummarySchema.parse({
+      ...createAgentWorkingSummary('创建一个生成任务'),
+      activeStep: {
+        stepId: 'call-write',
+        title: '创建生成任务',
+        status: 'active',
+        toolName: 'create_visible_generation_task',
+        toolCategory: 'generation',
+        readOnly: false,
+        idempotent: true,
+        summary: '',
+        evidence: [],
+        startedAt: new Date().toISOString(),
+        completedAt: null,
+      },
+    })
+    store.createRun('run-1', request(), interrupted)
+
+    store.markInterruptedRuns()
+
+    expect(store.loadState('run-1')).toMatchObject({
+      workingSummary: {
+        goal: '创建一个生成任务',
+        activeStep: null,
+        recovery: {
+          mode: 'verify_before_write',
+          toolName: 'create_visible_generation_task',
+        },
+      },
+    })
   })
 })

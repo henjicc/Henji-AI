@@ -2,6 +2,7 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
+import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 
 export const AGENT_INTENTS = [
   'navigate',
@@ -43,6 +44,35 @@ export type AgentToolDomain = typeof AGENT_TOOL_DOMAINS[number]
 
 export type AgentRoutePath = 'workflow' | 'primary'
 
+export const AGENT_CONTEXT_LAYER_IDS = [
+  'current_goal',
+  'host_state',
+  'plan_state',
+  'user_instructions',
+  'confirmed_memory',
+  'tool_contracts',
+  'observations',
+] as const
+export type AgentContextLayerId = typeof AGENT_CONTEXT_LAYER_IDS[number]
+
+export interface AgentContextLayer {
+  id: AgentContextLayerId
+  source: string
+  trust: 'trusted_runtime' | 'untrusted_user' | 'untrusted_memory' | 'untrusted_observation'
+  priority: number
+  required: boolean
+  maxTokens: number
+  content: string
+}
+
+export interface AgentContextLayerReport {
+  id: AgentContextLayerId
+  included: boolean
+  estimatedTokens: number
+  truncated: boolean
+  reason: string
+}
+
 export interface AgentRouteDecision {
   intent: AgentIntent
   candidateIntents?: AgentIntent[]
@@ -74,6 +104,7 @@ export interface AgentContextBuildInput {
   modelTools: ModelStepTool[]
   activeToolNames: string[]
   contextWindowBudget: number
+  workingSummary?: AgentWorkingSummary
 }
 
 export interface AgentContextBuildResult {
@@ -86,4 +117,8 @@ export interface AgentContextBuildResult {
   compacted: boolean
   beforeCompactionTokens: number
   offloaded: AgentContextArtifact[]
+  layerReports: AgentContextLayerReport[]
+  retainedLayers: AgentContextLayerId[]
+  droppedLayers: AgentContextLayerId[]
+  compactionReason: string | null
 }

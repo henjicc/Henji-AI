@@ -29,6 +29,7 @@ export const agentToolErrorCodeSchema = z.enum([
   'CANCELLED',
   'RESULT_TOO_LARGE',
   'EXECUTION_FAILED',
+  'RECOVERY_VERIFICATION_REQUIRED',
 ])
 export type AgentToolErrorCode = z.infer<typeof agentToolErrorCodeSchema>
 

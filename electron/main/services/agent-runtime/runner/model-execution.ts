@@ -126,6 +126,9 @@ export async function runRouterModelClassification(
 export function runPrimaryAgentModelStep(
   input: PrimaryModelExecutionInput
 ): Promise<ModelStepResult> {
+  if (input.messages.some((message) => message.role === 'system')) {
+    throw new Error('[invalid_context] 普通 Agent messages 中禁止 system 消息')
+  }
   const stepId = `step-${input.turn}`
   return input.runModelStep({
     requestId: `${input.runId}:${stepId}`,

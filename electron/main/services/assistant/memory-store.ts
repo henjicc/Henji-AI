@@ -9,6 +9,8 @@ import {
   agentMemorySettingsSchema,
   agentMemoryStateSchema,
   agentMemoryUpdateSchema,
+  agentMemoryRetrievalQuerySchema,
+  agentMemoryRetrievalResultSchema,
   type AgentMemoryCandidate,
   type AgentMemoryContextEntry,
   type AgentMemoryRecord,
@@ -17,9 +19,12 @@ import {
   type AgentMemorySettingsUpdate,
   type AgentMemoryState,
   type AgentMemoryUpdate,
+  type AgentMemoryRetrievalQuery,
+  type AgentMemoryRetrievalResult,
 } from '../../../../src/core/assistant/memory'
 import { createMainLogger } from '../logging'
 import { evaluateAgentMemoryProposal } from './memory-policy'
+import { scoreAgentMemory } from './memory-relevance'
 
 const logger = createMainLogger('main.agent_memory')
 const CANDIDATE_TTL_MS = 24 * 60 * 60 * 1_000
@@ -91,29 +96,6 @@ function candidateFromRow(row: CandidateRow): AgentMemoryCandidate {
     expiresAt: toIso(row.expires_at),
     createdAt: toIso(row.created_at),
   })
-}
-
-function scopeMatches(scope: AgentMemoryScope, workspaceId: string, projectId: string | null): boolean {
-  if (scope.type === 'global') return true
-  if (scope.type === 'workspace') return scope.id === workspaceId
-  return scope.id === projectId
-}
-
-function bigrams(value: string): Set<string> {
-  const compact = value.normalize('NFKC').toLowerCase().replace(/\s+/g, '')
-  const values = new Set<string>()
-  for (let index = 0; index < compact.length - 1; index += 1) {
-    values.add(compact.slice(index, index + 2))
-  }
-  return values
-}
-
-function relevance(goal: string, memory: AgentMemoryRecord): number {
-  const goalTerms = bigrams(goal)
-  const memoryTerms = bigrams(memory.content)
-  let overlap = 0
-  for (const term of memoryTerms) if (goalTerms.has(term)) overlap += 1
-  return overlap + (memory.kind === 'preference' ? 1 : 0)
 }
 
 export class AgentMemoryStore {
@@ -351,30 +333,83 @@ export class AgentMemoryStore {
     projectId: string | null,
     limit = 6
   ): AgentMemoryContextEntry[] {
-    if (!this.getSettings().enabled) return []
+    return this.retrieveDetailed({
+      goal,
+      workspaceId,
+      projectId,
+      toolDomains: [],
+      stepSignals: [],
+      limit,
+    }).entries
+  }
+
+  retrieveDetailed(input: AgentMemoryRetrievalQuery): AgentMemoryRetrievalResult {
+    const query = agentMemoryRetrievalQuerySchema.parse(input)
+    if (!this.getSettings().enabled) {
+      return agentMemoryRetrievalResultSchema.parse({
+        entries: [],
+        consideredCount: 0,
+        excludedCount: 0,
+        truncated: false,
+        exclusionReasons: ['长期记忆未启用，使用空记忆上下文'],
+        retrievedAt: new Date().toISOString(),
+      })
+    }
     this.expireStaleEntries()
-    const memories = (this.database.prepare(`
+    const records = (this.database.prepare(`
       SELECT * FROM agent_memories WHERE status = 'active' ORDER BY updated_at DESC LIMIT 200
-    `).all() as MemoryRow[])
-      .map(memoryFromRow)
-      .filter((memory) => scopeMatches(memory.scope, workspaceId, projectId))
-      .map((memory) => ({ memory, score: relevance(goal, memory) }))
-      .filter((item) => item.score > 0)
-      .sort((left, right) => right.score - left.score)
-      .slice(0, Math.max(1, Math.min(10, limit)))
-      .map(({ memory }) => agentMemoryContextEntrySchema.parse({
+    `).all() as MemoryRow[]).map(memoryFromRow)
+    const scored = records.flatMap((memory) => {
+      const relevance = scoreAgentMemory(memory, query)
+      return relevance ? [{ memory, relevance }] : []
+    }).sort((left, right) => (
+      right.relevance.score - left.relevance.score
+      || Date.parse(right.memory.updatedAt) - Date.parse(left.memory.updatedAt)
+    ))
+    const entries = scored.slice(0, query.limit).map(({ memory, relevance }) => (
+      agentMemoryContextEntrySchema.parse({
         memoryId: memory.memoryId,
         scope: memory.scope,
         kind: memory.kind,
         content: memory.content,
         sourceLabel: memory.sourceLabel,
         createdAt: memory.createdAt,
-      }))
+        updatedAt: memory.updatedAt,
+        expiresAt: memory.expiresAt,
+        layer: relevance.layer,
+        score: relevance.score,
+        retrievalReasons: relevance.reasons,
+      })
+    ))
+    const result = agentMemoryRetrievalResultSchema.parse({
+      entries,
+      consideredCount: records.length,
+      excludedCount: records.length - scored.length,
+      truncated: scored.length > entries.length,
+      exclusionReasons: [
+        ...(records.length > scored.length
+          ? [`${records.length - scored.length} 条记忆因作用域或任务相关性不足被排除`]
+          : []),
+        ...(scored.length > entries.length
+          ? [`${scored.length - entries.length} 条相关记忆因召回数量上限被截断`]
+          : []),
+      ],
+      retrievedAt: new Date().toISOString(),
+    })
     logger.debug('Agent 相关记忆检索完成', {
       event: 'agent_memory.retrieve.completed',
-      context: { count: memories.length, workspaceId, hasProject: Boolean(projectId) },
+      context: {
+        count: entries.length,
+        consideredCount: records.length,
+        excludedCount: result.excludedCount,
+        truncated: result.truncated,
+        exclusionReasons: result.exclusionReasons,
+        workspaceId: query.workspaceId,
+        hasProject: Boolean(query.projectId),
+        intent: query.intent,
+      },
     })
-    return memories
+    return result
   }
 
   private expireStaleEntries(): void {

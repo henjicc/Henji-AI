@@ -1,17 +1,9 @@
 import { createMainLogger } from '../../logging'
-import {
-  agentRunStateSchema,
-  type AgentApprovalRequest,
-  type AgentEventInput,
-  type AgentRunState,
-  type AgentRunStatus,
-} from '../../../../../src/core/assistant/events'
+import { agentRunStateSchema } from '../../../../../src/core/assistant/events'
+import type { AgentApprovalRequest, AgentEventInput, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
-import {
-  type HostContextSnapshot,
-  type HostScopeRevisions,
-} from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import { AgentContextBuilder } from '../context/builder'
 import { AgentArtifactStore } from '../context/offload'
 import { AgentToolCatalogPlanner } from '../context/catalog'
@@ -21,21 +13,18 @@ import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentBudgetTracker } from './budget'
 import { AgentEventStream } from './event-stream'
 import { createInitialAgentRunState } from './initial-state'
-import {
-  runPrimaryAgentModelStep,
-  runRouterModelClassification,
-} from './model-execution'
+import { runPrimaryAgentModelStep, runRouterModelClassification } from './model-execution'
 import { selectAgentRuntimeModels } from './models'
-import {
-  errorCode,
-  serializeError,
-  toolMessage,
-} from './runner-results'
+import { errorCode, serializeError, toolMessage } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
 import { AgentToolCallScheduler } from './tool-call-scheduler'
 import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
 import type { AgentRunnerOptions } from './types'
 import { AgentApprovalWaiter } from './approval-waiter'
+import { AgentRecoveryWriteGuard } from './recovery-guard'
+import { markWorkingSummaryRecoveryVerified, reduceAgentWorkingSummary } from './working-summary'
+import { AgentMemoryContextProvider } from './memory-context'
+import { emitAgentContextEvents } from './context-events'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -53,6 +42,8 @@ export class AgentRunner {
   private pausedFrom: Exclude<AgentRunStatus, 'paused'> = 'running'
   private pauseWaiters: Array<() => void> = []
   private readonly approvalWaiter = new AgentApprovalWaiter()
+  private readonly recoveryGuard: AgentRecoveryWriteGuard
+  private readonly memoryProvider: AgentMemoryContextProvider
   private currentModelRequestId: string | null = null
   private started = false
 
@@ -60,12 +51,12 @@ export class AgentRunner {
     this.models = selectAgentRuntimeModels(options.request)
     this.budget = new AgentBudgetTracker(options.request.budget)
     this.events = new AgentEventStream(options.runId)
-    this.contextBuilder = new AgentContextBuilder(
-      options.dependencies.artifactStore ?? new AgentArtifactStore()
-    )
+    this.contextBuilder = new AgentContextBuilder(options.dependencies.artifactStore ?? new AgentArtifactStore())
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
     if (options.dependencies.onEvent) this.events.subscribe(options.dependencies.onEvent)
-    this.state = createInitialAgentRunState(options.runId, options.request)
+    this.state = createInitialAgentRunState(options.runId, options.request, options.recoveryContext)
+    this.recoveryGuard = new AgentRecoveryWriteGuard(this.state.workingSummary, options.dependencies.registry)
+    this.memoryProvider = new AgentMemoryContextProvider(options.runId, options.memoryContext ?? [], options.dependencies.retrieveMemory)
   }
 
   start(): AgentRunState {
@@ -167,11 +158,18 @@ export class AgentRunner {
         this.state.turn = turn
         const currentSnapshot = this.requireContext()
         const registrations = this.catalogPlanner.select(route, currentSnapshot)
+        const memoryContext = await this.memoryProvider.retrieve({
+          goal: this.options.request.goal,
+          snapshot: currentSnapshot,
+          route,
+          summary: this.state.workingSummary,
+          signal: this.abortController.signal,
+        })
         const context = this.contextBuilder.build({
           runId: this.options.runId,
           goal: this.options.request.goal,
           userInstructions: this.options.request.userInstructions,
-          memoryContext: this.options.memoryContext,
+          memoryContext,
           snapshot: currentSnapshot,
           route,
           conversation: this.conversation,
@@ -179,8 +177,14 @@ export class AgentRunner {
           modelTools: registrations.map((item) => item.modelTool),
           activeToolNames: registrations.map((item) => item.catalog.name),
           contextWindowBudget: this.options.request.profile.settings.contextWindowBudget,
+          workingSummary: this.state.workingSummary,
         })
-        this.emitContextEvents(turn, context)
+        emitAgentContextEvents(
+          turn,
+          context,
+          this.state.workingSummary?.version,
+          (event) => this.emit(event)
+        )
         let result: ModelStepResult
         try {
           result = await this.runPrimaryStep(turn, context.system, context.messages, context.tools)
@@ -342,6 +346,9 @@ export class AgentRunner {
       onObservation: (call, observation) => {
         this.observations.push(observation)
         this.conversation.push(toolMessage(call, observation))
+        if (this.recoveryGuard.consumeVerification(call, observation) && this.state.workingSummary) {
+          this.state.workingSummary = markWorkingSummaryRecoveryVerified(this.state.workingSummary)
+        }
       },
       emit: (event) => this.emit(event),
       onDiscoveredTools: (toolCallId, toolNames) => {
@@ -352,6 +359,7 @@ export class AgentRunner {
           context: { toolNames },
         })
       },
+      executionGuard: (call) => this.recoveryGuard.validate(call),
     })
     try {
       await scheduler.execute(calls, route.intent !== 'general', expectedRevisions)
@@ -467,22 +475,14 @@ export class AgentRunner {
     if (previous !== next) this.emit({ type: 'RunStateChanged', previous, current: next, reason })
   }
 
-  private emitContextEvents(turn: number, context: ReturnType<AgentContextBuilder['build']>): void {
-    this.emit({
-      type: 'ContextUpdated', turn, snapshotRevision: context.snapshotRevision,
-      activeToolNames: context.activeToolNames, estimatedTokens: context.estimatedTokens,
-    })
-    if (context.compacted) {
-      this.emit({ type: 'ContextCompacted', beforeTokens: context.beforeCompactionTokens, afterTokens: context.estimatedTokens })
-    }
-    for (const artifact of context.offloaded) {
-      this.emit({ type: 'ArtifactOffloaded', artifactRef: artifact.artifactRef, source: artifact.source, originalBytes: artifact.originalBytes })
-    }
-  }
-
   private emit(input: AgentEventInput): void {
     const event = this.events.emit(input)
     this.state.sequence = event.sequence
+    this.state.workingSummary = reduceAgentWorkingSummary(
+      this.state.workingSummary,
+      event,
+      this.state.lastScopeRevisions
+    )
     this.refreshState()
     this.options.dependencies.onCheckpoint?.(this.getState())
   }
