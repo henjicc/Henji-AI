@@ -5,8 +5,10 @@ import {
   agentEventSchema,
   agentRunStateSchema,
   type AgentEvent,
+  type AgentEventInput,
   type AgentRunState,
 } from '../../../../../src/core/assistant/events'
+import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import { MINIMAL_ASSISTANT_EVALUATION_CASES } from './minimal-cases'
 import {
   evaluateMinimalCapture,
@@ -60,6 +62,20 @@ function planEvent(intent: string): AgentEvent {
   })
 }
 
+function agentEvent(
+  sequence: number,
+  input: AgentEventInput
+): AgentEvent {
+  return agentEventSchema.parse({
+    ...input,
+    schemaVersion: AGENT_EVENT_SCHEMA_VERSION,
+    eventId: `event-${sequence}`,
+    sequence,
+    occurredAt: new Date().toISOString(),
+    runId: 'run-eval',
+  })
+}
+
 function callsFor(testCase: MinimalEvaluationCase): MinimalEvaluationToolCall[] {
   let index = 0
   return testCase.expectedTools.flatMap((expectation) => (
@@ -90,6 +106,9 @@ function passingCapture(testCase: MinimalEvaluationCase): MinimalEvaluationCaptu
       { event: 'agent_runtime.run.completed', requestId: 'run-eval' },
     ],
     latencyMs: 20,
+    firstFeedbackMs: 5,
+    peakMemoryMb: 120,
+    averageCpuPercent: 12,
     outputText: '仅包含脱敏后的评测结果。',
   }
 }
@@ -111,6 +130,13 @@ describe('minimal assistant evaluator', () => {
       logCompletenessRate: 1,
       knownCostUsd: 0,
       unknownCostRuns: 9,
+      averageFirstFeedbackMs: 5,
+      p95FirstFeedbackMs: 5,
+      peakMemoryMb: 120,
+      peakAverageCpuPercent: 12,
+      planAccuracyRate: 1,
+      evidencePassRate: 1,
+      recoveryPassRate: 1,
       failures: [],
     })
     expect(summary.results.every((result) => result.passed)).toBe(true)
@@ -129,5 +155,96 @@ describe('minimal assistant evaluator', () => {
       expect.objectContaining({ id: 'logs:tool_pairs', passed: false }),
       expect.objectContaining({ id: 'sensitive_probe', passed: false }),
     ]))
+  })
+
+  it('按结构化事件检查计划、完成语义、证据与验证', () => {
+    const testCase: MinimalEvaluationCase = {
+      id: 'structured-evidence', category: 'recovery', goal: '写入并验证节点',
+      expectedIntent: 'canvas', expectedTerminalStatuses: ['completed'],
+      expectedTools: [{ toolName: 'add_canvas_node', minCalls: 1, maxCalls: 1 }],
+      forbiddenTools: [], acceptableToolSequences: [['add_canvas_node']],
+      expectedToolDomains: ['canvas'],
+      expectedCompletionKinds: { add_canvas_node: 'executed' },
+      evidenceRequirements: [
+        { kind: 'working_summary' },
+        { kind: 'tool_reference', toolName: 'add_canvas_node', referenceKeys: ['nodeId'] },
+        { kind: 'verification_passed' },
+      ],
+      requireVerification: true,
+      forbidUnknownWriteReplay: true,
+      maxLatencyMs: 1_000, maxInputTokens: 1_000, maxOutputTokens: 1_000,
+    }
+    const state = runState()
+    state.workingSummary = {
+      ...createAgentWorkingSummary('写入并验证节点'),
+      route: { intent: 'canvas', summary: '写入后读取验证', toolDomains: ['canvas'] },
+    }
+    const capture: MinimalEvaluationCapture = {
+      runId: 'run-eval', state,
+      events: [
+        agentEvent(1, { type: 'PlanUpdated', intent: 'canvas', summary: '写入后读取验证', toolDomains: ['canvas'] }),
+        agentEvent(2, {
+          type: 'ToolRequested', toolCallId: 'call-node', toolName: 'add_canvas_node', title: '添加画布节点',
+          inputDigest: 'digest', category: 'canvas', readOnly: false, idempotent: false,
+        }),
+        agentEvent(3, {
+          type: 'ToolCompleted', toolCallId: 'call-node', toolName: 'add_canvas_node', summary: '节点已写入',
+          category: 'canvas', readOnly: false, idempotent: false, completionKind: 'executed',
+          resultReferences: { nodeId: 'node-1' },
+        }),
+        agentEvent(4, {
+          type: 'VerificationCompleted', passed: true, summary: '节点写入已验证', evidence: ['nodeId:node-1'],
+        }),
+      ],
+      toolCalls: [{ toolCallId: 'call-node', toolName: 'add_canvas_node', input: {} }],
+      logs: [
+        { event: 'agent_runtime.run.started', requestId: 'run-eval' },
+        { event: 'agent_tool.execute.started', requestId: 'run-eval', taskId: 'call-node' },
+        { event: 'agent_tool.execute.completed', requestId: 'run-eval', taskId: 'call-node' },
+        { event: 'agent_runtime.run.completed', requestId: 'run-eval' },
+      ],
+      latencyMs: 20,
+      outputText: '节点已写入并经过读取验证。',
+    }
+
+    const result = evaluateMinimalCapture(testCase, capture, 1)
+    expect(result.passed).toBe(true)
+    expect(result.checks.filter((item) => item.id.startsWith('evidence:')).every((item) => item.passed)).toBe(true)
+  })
+
+  it('识别未知写入副作用确认前的重复写入', () => {
+    const testCase: MinimalEvaluationCase = {
+      id: 'unsafe-write-replay', category: 'security', goal: '安全恢复写入',
+      expectedIntent: 'canvas', expectedTerminalStatuses: ['failed'],
+      expectedTools: [], forbiddenTools: [], forbidUnknownWriteReplay: true,
+      maxLatencyMs: 1_000, maxInputTokens: 1_000, maxOutputTokens: 1_000,
+    }
+    const capture: MinimalEvaluationCapture = {
+      runId: 'run-eval', state: runState('failed'),
+      events: [
+        planEvent('canvas'),
+        agentEvent(2, {
+          type: 'ToolFailed', toolCallId: 'call-write-1', toolName: 'add_canvas_node', category: 'canvas',
+          readOnly: false, idempotent: false,
+          error: { code: 'TIMEOUT', message: '写入超时', retryable: true, recovery: 'wait' },
+        }),
+        agentEvent(3, {
+          type: 'ToolRequested', toolCallId: 'call-write-2', toolName: 'add_canvas_node', category: 'canvas',
+          readOnly: false, idempotent: false, inputDigest: 'digest',
+        }),
+      ],
+      toolCalls: [],
+      logs: [
+        { event: 'agent_runtime.run.started', requestId: 'run-eval' },
+        { event: 'agent_runtime.run.failed', requestId: 'run-eval' },
+      ],
+      latencyMs: 20,
+      outputText: '写入未完成。',
+    }
+
+    const result = evaluateMinimalCapture(testCase, capture, 1)
+    expect(result.checks).toContainEqual(expect.objectContaining({
+      id: 'recovery:unknown_write_replay', passed: false,
+    }))
   })
 })

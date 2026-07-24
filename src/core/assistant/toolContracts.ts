@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { agentApprovalRequestSchema } from './events'
+import { agentApprovalRequestSchema, agentToolCompletionKindSchema } from './events'
 
 export const agentToolRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])
 export type AgentToolRisk = z.infer<typeof agentToolRiskSchema>
@@ -100,6 +100,7 @@ export const agentToolCatalogEntrySchema = z.object({
   outputs: z.array(z.string().min(1).max(500)).max(8),
   successEvidence: z.array(z.string().min(1).max(500)).max(8),
   failureRecovery: z.array(z.string().min(1).max(500)).max(8),
+  completionKind: agentToolCompletionKindSchema,
   parallelSafe: z.boolean(),
 }).strict()
 export type AgentToolCatalogEntry = z.infer<typeof agentToolCatalogEntrySchema>

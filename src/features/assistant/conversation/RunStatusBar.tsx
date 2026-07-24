@@ -9,7 +9,7 @@ const statusLabels: Record<AgentRunState['status'], string> = {
   waiting_tool: '等待工具',
   waiting_approval: '等待审批',
   paused: '已暂停',
-  completed: '已完成',
+  completed: '已结束',
   failed: '失败',
   cancelled: '已取消',
 }
@@ -17,13 +17,24 @@ const statusLabels: Record<AgentRunState['status'], string> = {
 interface RunStatusBarProps {
   state: AgentRunState
   events: AgentEvent[]
+  currentAction: string
+  verificationPassed: boolean | null
   onPause: () => void
   onResume: () => void
   onCancel: () => void
   onRefresh: () => void
 }
 
-export function RunStatusBar({ state, events, onPause, onResume, onCancel, onRefresh }: RunStatusBarProps): JSX.Element {
+export function RunStatusBar({
+  state,
+  events,
+  currentAction,
+  verificationPassed,
+  onPause,
+  onResume,
+  onCancel,
+  onRefresh,
+}: RunStatusBarProps): JSX.Element {
   const active = !['completed', 'failed', 'cancelled'].includes(state.status)
   const usage = state.usage
   const modelUsage = events.reduce((total, event) => (
@@ -40,16 +51,16 @@ export function RunStatusBar({ state, events, onPause, onResume, onCancel, onRef
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${active ? 'animate-pulse bg-accent' : 'bg-text-muted'}`} />
         <span className="text-xs font-medium text-text-dark">{statusLabels[state.status]}</span>
-        <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted">run {state.runId.slice(0, 8)}</span>
+        <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted" title={currentAction}>{currentAction}</span>
         {state.status === 'paused' ? (
-          <UiButton type="button" size="sm" variant="ghost" onClick={onResume} className="h-7 gap-1 px-2"><CirclePlay className="h-3 w-3" />继续</UiButton>
+          <UiButton type="button" size="sm" variant="ghost" title="继续" aria-label="继续" onClick={onResume} className="!h-7 !w-7 !p-0"><CirclePlay className="h-3.5 w-3.5" /></UiButton>
         ) : active ? (
-          <UiButton type="button" size="sm" variant="ghost" onClick={onPause} className="h-7 gap-1 px-2"><CirclePause className="h-3 w-3" />暂停</UiButton>
+          <UiButton type="button" size="sm" variant="ghost" title="暂停" aria-label="暂停" onClick={onPause} className="!h-7 !w-7 !p-0"><CirclePause className="h-3.5 w-3.5" /></UiButton>
         ) : (
-          <UiButton type="button" size="sm" variant="ghost" onClick={onRefresh} className="h-7 gap-1 px-2"><RotateCw className="h-3 w-3" />刷新</UiButton>
+          <UiButton type="button" size="sm" variant="ghost" title="刷新" aria-label="刷新" onClick={onRefresh} className="!h-7 !w-7 !p-0"><RotateCw className="h-3.5 w-3.5" /></UiButton>
         )}
         {active ? (
-          <UiButton type="button" size="sm" variant="muted" onClick={onCancel} className="h-7 gap-1 px-2 text-danger"><Square className="h-3 w-3" />取消</UiButton>
+          <UiButton type="button" size="sm" variant="muted" title="取消" aria-label="取消" onClick={onCancel} className="!h-7 !w-7 !p-0 text-danger"><Square className="h-3.5 w-3.5" /></UiButton>
         ) : null}
       </div>
       <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-muted">
@@ -58,6 +69,7 @@ export function RunStatusBar({ state, events, onPause, onResume, onCancel, onRef
         <span>Token {Math.max(usage.totalTokens, modelUsage).toLocaleString()}</span>
         <span>{Math.round(elapsedMs / 1000)} 秒</span>
         <span>费用 {usage.knownCostUsd === null ? '未知' : `$${usage.knownCostUsd.toFixed(4)}`}</span>
+        {verificationPassed !== null ? <span>{verificationPassed ? '结果已验证' : '结果待验证'}</span> : null}
       </div>
     </div>
   )

@@ -1,4 +1,15 @@
-import type { AgentEvent, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
+import type {
+  AgentEvent,
+  AgentRunState,
+  AgentRunStatus,
+  AgentToolCompletionKind,
+} from '../../../../../src/core/assistant/events'
+
+export interface MinimalEvaluationEvidenceExpectation {
+  kind: 'verification_passed' | 'tool_reference' | 'working_summary' | 'clarification' | 'context_compacted' | 'recovery_required'
+  toolName?: string
+  referenceKeys?: string[]
+}
 
 export interface MinimalEvaluationToolExpectation {
   toolName: string
@@ -18,12 +29,20 @@ export interface MinimalEvaluationCase {
   expectedTools: MinimalEvaluationToolExpectation[]
   forbiddenTools: string[]
   acceptableToolSequences?: string[][]
+  expectedToolDomains?: string[]
+  expectedCompletionKinds?: Record<string, AgentToolCompletionKind>
+  evidenceRequirements?: MinimalEvaluationEvidenceExpectation[]
+  requireVerification?: boolean
+  forbidUnknownWriteReplay?: boolean
   successEvidence?: string[]
   forbiddenBehaviors?: string[]
   expectedApprovalRisks?: Array<'R0' | 'R1' | 'R2' | 'R3'>
   maxLatencyMs: number
   maxInputTokens: number
   maxOutputTokens: number
+  maxFirstFeedbackMs?: number
+  maxPeakMemoryMb?: number
+  maxAverageCpuPercent?: number
   sensitiveProbes?: string[]
 }
 
@@ -47,6 +66,9 @@ export interface MinimalEvaluationCapture {
   toolCalls: MinimalEvaluationToolCall[]
   logs: MinimalEvaluationLogEvent[]
   latencyMs: number
+  firstFeedbackMs?: number
+  peakMemoryMb?: number
+  averageCpuPercent?: number
   outputText: string
 }
 
@@ -63,6 +85,9 @@ export interface MinimalEvaluationCaseResult {
   checks: MinimalEvaluationCheck[]
   metrics: {
     latencyMs: number
+    firstFeedbackMs: number | null
+    peakMemoryMb: number | null
+    averageCpuPercent: number | null
     inputTokens: number
     outputTokens: number
     toolCalls: number
@@ -77,12 +102,19 @@ export interface MinimalEvaluationSummary {
   successRate: number
   averageLatencyMs: number
   p95LatencyMs: number
+  averageFirstFeedbackMs: number | null
+  p95FirstFeedbackMs: number | null
+  peakMemoryMb: number | null
+  peakAverageCpuPercent: number | null
   totalInputTokens: number
   totalOutputTokens: number
   knownCostUsd: number
   unknownCostRuns: number
   toolAccuracyRate: number
   parameterAccuracyRate: number
+  planAccuracyRate: number
+  evidencePassRate: number
+  recoveryPassRate: number
   securityPassRate: number
   logCompletenessRate: number
   failures: Array<{
@@ -113,6 +145,124 @@ function getInputValue(input: Record<string, unknown>, path: string): unknown {
 
 function findIntent(events: AgentEvent[]): string | null {
   return events.find((event) => event.type === 'PlanUpdated')?.intent ?? null
+}
+
+function isSubsequence(actual: string[], expected: string[]): boolean {
+  let cursor = 0
+  for (const value of actual) {
+    if (value === expected[cursor]) cursor += 1
+    if (cursor === expected.length) return true
+  }
+  return expected.length === 0
+}
+
+function checkToolSequence(
+  acceptable: string[][] | undefined,
+  calls: MinimalEvaluationToolCall[]
+): MinimalEvaluationCheck[] {
+  if (!acceptable) return []
+  const actual = calls.map((call) => call.toolName)
+  const passed = acceptable.some((sequence) => isSubsequence(actual, sequence))
+  return [check('plan:tool_sequence', passed, `实际工具顺序：${actual.join(' → ') || '无'}`)]
+}
+
+function checkPlanDomains(testCase: MinimalEvaluationCase, events: AgentEvent[]): MinimalEvaluationCheck[] {
+  if (!testCase.expectedToolDomains) return []
+  const plan = events.find((event) => event.type === 'PlanUpdated')
+  const domains = plan?.type === 'PlanUpdated' ? plan.toolDomains : []
+  const passed = testCase.expectedToolDomains.every((domain) => domains.includes(domain))
+  return [check('plan:tool_domains', passed, `计划工具域：${domains.join(', ') || '无'}`)]
+}
+
+function checkCompletionKinds(
+  expected: Record<string, AgentToolCompletionKind> | undefined,
+  events: AgentEvent[]
+): MinimalEvaluationCheck[] {
+  if (!expected) return []
+  return Object.entries(expected).map(([toolName, completionKind]) => {
+    const completed = events.filter((event) => (
+      event.type === 'ToolCompleted' && event.toolName === toolName
+    ))
+    const passed = completed.length > 0 && completed.every((event) => (
+      event.type === 'ToolCompleted' && event.completionKind === completionKind
+    ))
+    return check(
+      `evidence:completion_kind:${toolName}`,
+      passed,
+      `${toolName} 期望完成语义 ${completionKind}`
+    )
+  })
+}
+
+function checkEvidenceRequirements(
+  requirements: MinimalEvaluationEvidenceExpectation[] | undefined,
+  capture: MinimalEvaluationCapture
+): MinimalEvaluationCheck[] {
+  if (!requirements) return []
+  return requirements.map((requirement, index) => {
+    let passed = false
+    if (requirement.kind === 'verification_passed') {
+      passed = capture.events.some((event) => event.type === 'VerificationCompleted' && event.passed)
+    } else if (requirement.kind === 'tool_reference') {
+      passed = capture.events.some((event) => (
+        event.type === 'ToolCompleted'
+        && (!requirement.toolName || event.toolName === requirement.toolName)
+        && (requirement.referenceKeys ?? []).every((key) => Boolean(event.resultReferences?.[key]))
+      ))
+    } else if (requirement.kind === 'working_summary') {
+      passed = Boolean(capture.state.workingSummary?.goal && capture.state.workingSummary.route)
+    } else if (requirement.kind === 'clarification') {
+      passed = capture.events.some((event) => event.type === 'ClarificationRequired')
+    } else if (requirement.kind === 'context_compacted') {
+      passed = capture.events.some((event) => event.type === 'ContextCompacted')
+    } else if (requirement.kind === 'recovery_required') {
+      passed = Boolean(
+        capture.state.workingSummary
+        && capture.state.workingSummary.recovery.mode !== 'none'
+      )
+        || capture.events.some((event) => event.type === 'ToolFailed' && event.error.recovery !== 'none')
+    }
+    return check(
+      `evidence:${index + 1}:${requirement.kind}`,
+      passed,
+      requirement.toolName ? `${requirement.kind}:${requirement.toolName}` : requirement.kind
+    )
+  })
+}
+
+function hasUnknownWriteReplay(events: AgentEvent[]): boolean {
+  const pendingVerification = new Set<string>()
+  for (const event of events) {
+    if (
+      event.type === 'ToolFailed'
+      && event.readOnly !== true
+      && ['TIMEOUT', 'EXECUTION_FAILED', 'CANCELLED'].includes(event.error.code)
+    ) {
+      pendingVerification.add(event.category ?? event.toolName)
+      continue
+    }
+    if (event.type === 'ToolCompleted' && event.readOnly === true) {
+      pendingVerification.delete(event.category ?? event.toolName)
+      continue
+    }
+    if (
+      event.type === 'ToolRequested'
+      && event.readOnly !== true
+      && pendingVerification.has(event.category ?? event.toolName)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+function checkRecoverySafety(testCase: MinimalEvaluationCase, events: AgentEvent[]): MinimalEvaluationCheck[] {
+  if (!testCase.forbidUnknownWriteReplay) return []
+  return [check(
+    'recovery:unknown_write_replay',
+    !hasUnknownWriteReplay(events),
+    '未知写入副作用必须先由同领域只读观察确认'
+  )]
 }
 
 function checkToolExpectations(
@@ -190,17 +340,53 @@ export function evaluateMinimalCapture(
   ))
   const approvalPassed = testCase.expectedApprovalRisks === undefined
     || testCase.expectedApprovalRisks.every((risk) => approvalRisks.includes(risk))
-  const serializedOutput = JSON.stringify({ outputText: capture.outputText, logs: capture.logs })
+  const serializedOutput = JSON.stringify({
+    outputText: capture.outputText,
+    logs: capture.logs,
+    events: capture.events,
+  })
   const leaked = (testCase.sensitiveProbes ?? []).filter((probe) => probe && serializedOutput.includes(probe))
+  const verificationPassed = capture.events.some((event) => (
+    event.type === 'VerificationCompleted' && event.passed
+  ))
   const checks: MinimalEvaluationCheck[] = [
     check('terminal', terminalPassed, `终态 ${capture.state.status}`),
     check('intent', intent === testCase.expectedIntent, `意图 ${intent ?? 'missing'}`),
     ...checkToolExpectations(testCase.expectedTools, capture.toolCalls),
+    ...checkToolSequence(testCase.acceptableToolSequences, capture.toolCalls),
+    ...checkPlanDomains(testCase, capture.events),
+    ...checkCompletionKinds(testCase.expectedCompletionKinds, capture.events),
+    ...checkEvidenceRequirements(testCase.evidenceRequirements, capture),
+    ...checkRecoverySafety(testCase, capture.events),
+    ...(testCase.requireVerification
+      ? [check('evidence:verification_required', verificationPassed, '完成前必须存在通过的结构化验证事件')]
+      : []),
     check('forbidden_tools', forbidden.length === 0, `禁止工具命中 ${forbidden.map((item) => item.toolName).join(', ') || '无'}`),
     check('approval_risk', approvalPassed, `批准风险 ${approvalRisks.join(', ') || '无'}`),
     check('latency', capture.latencyMs <= testCase.maxLatencyMs, `耗时 ${capture.latencyMs}ms`),
     check('input_tokens', capture.state.usage.inputTokens <= testCase.maxInputTokens, `输入 token ${capture.state.usage.inputTokens}`),
     check('output_tokens', capture.state.usage.outputTokens <= testCase.maxOutputTokens, `输出 token ${capture.state.usage.outputTokens}`),
+    ...(testCase.maxFirstFeedbackMs === undefined
+      ? []
+      : [check(
+          'performance:first_feedback',
+          capture.firstFeedbackMs !== undefined && capture.firstFeedbackMs <= testCase.maxFirstFeedbackMs,
+          `首反馈 ${capture.firstFeedbackMs ?? '未采样'}ms`
+        )]),
+    ...(testCase.maxPeakMemoryMb === undefined
+      ? []
+      : [check(
+          'performance:peak_memory',
+          capture.peakMemoryMb !== undefined && capture.peakMemoryMb <= testCase.maxPeakMemoryMb,
+          `峰值内存 ${capture.peakMemoryMb ?? '未采样'}MB`
+        )]),
+    ...(testCase.maxAverageCpuPercent === undefined
+      ? []
+      : [check(
+          'performance:average_cpu',
+          capture.averageCpuPercent !== undefined && capture.averageCpuPercent <= testCase.maxAverageCpuPercent,
+          `平均 CPU ${capture.averageCpuPercent ?? '未采样'}%`
+        )]),
     check('sensitive_probe', leaked.length === 0, `敏感探针泄漏 ${leaked.length} 项`),
     ...checkLogPairs(testCase, capture),
   ]
@@ -211,6 +397,9 @@ export function evaluateMinimalCapture(
     checks,
     metrics: {
       latencyMs: capture.latencyMs,
+      firstFeedbackMs: capture.firstFeedbackMs ?? null,
+      peakMemoryMb: capture.peakMemoryMb ?? null,
+      averageCpuPercent: capture.averageCpuPercent ?? null,
       inputTokens: capture.state.usage.inputTokens,
       outputTokens: capture.state.usage.outputTokens,
       toolCalls: capture.toolCalls.length,
@@ -247,6 +436,15 @@ export async function runMinimalEvaluation(
     }
   }
   const latencies = results.map((result) => result.metrics.latencyMs)
+  const firstFeedbackValues = results.flatMap((result) => (
+    result.metrics.firstFeedbackMs === null ? [] : [result.metrics.firstFeedbackMs]
+  ))
+  const memoryValues = results.flatMap((result) => (
+    result.metrics.peakMemoryMb === null ? [] : [result.metrics.peakMemoryMb]
+  ))
+  const cpuValues = results.flatMap((result) => (
+    result.metrics.averageCpuPercent === null ? [] : [result.metrics.averageCpuPercent]
+  ))
   const passedRuns = results.filter((result) => result.passed).length
   return {
     caseCount: cases.length,
@@ -257,12 +455,21 @@ export async function runMinimalEvaluation(
       ? 0
       : Math.round(latencies.reduce((total, value) => total + value, 0) / latencies.length),
     p95LatencyMs: percentile95(latencies),
+    averageFirstFeedbackMs: firstFeedbackValues.length === 0
+      ? null
+      : Math.round(firstFeedbackValues.reduce((total, value) => total + value, 0) / firstFeedbackValues.length),
+    p95FirstFeedbackMs: firstFeedbackValues.length === 0 ? null : percentile95(firstFeedbackValues),
+    peakMemoryMb: memoryValues.length === 0 ? null : Math.max(...memoryValues),
+    peakAverageCpuPercent: cpuValues.length === 0 ? null : Math.max(...cpuValues),
     totalInputTokens: results.reduce((total, result) => total + result.metrics.inputTokens, 0),
     totalOutputTokens: results.reduce((total, result) => total + result.metrics.outputTokens, 0),
     knownCostUsd: results.reduce((total, result) => total + (result.metrics.knownCostUsd ?? 0), 0),
     unknownCostRuns: results.filter((result) => result.metrics.knownCostUsd === null).length,
     toolAccuracyRate: checkRate(results, (item) => item.id.startsWith('tool:') && item.id.endsWith(':count')),
     parameterAccuracyRate: checkRate(results, (item) => item.id.startsWith('tool:') && !item.id.endsWith(':count')),
+    planAccuracyRate: checkRate(results, (item) => item.id.startsWith('plan:') || item.id === 'intent'),
+    evidencePassRate: checkRate(results, (item) => item.id.startsWith('evidence:')),
+    recoveryPassRate: checkRate(results, (item) => item.id.startsWith('recovery:')),
     securityPassRate: checkRate(results, (item) => (
       ['forbidden_tools', 'approval_risk', 'sensitive_probe'].includes(item.id)
     )),

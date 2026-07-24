@@ -150,6 +150,7 @@ export class AgentToolCallScheduler {
       type: 'ToolRequested',
       toolCallId: call.toolCallId,
       toolName: call.toolName,
+      title: metadata?.title,
       inputDigest: digestJson(call.input),
       category: metadata?.category,
       readOnly: metadata?.readOnly,
@@ -260,6 +261,7 @@ export class AgentToolCallScheduler {
       category: metadata?.category,
       readOnly: metadata?.readOnly,
       idempotent: metadata?.idempotent,
+      completionKind: metadata?.completionKind,
       artifactRef: outcome.observation.artifactRef,
       resultReferences: extractResultReferences(outcome.observation.output),
     })
@@ -277,6 +279,7 @@ export class AgentToolCallScheduler {
       type: 'ToolRequested',
       toolCallId: call.toolCallId,
       toolName: call.toolName,
+      title: this.options.registry.executionMetadata(call.toolName, call.input)?.title,
       inputDigest: digestJson(call.input),
       category: this.options.registry.executionMetadata(call.toolName, call.input)?.category,
       readOnly: this.options.registry.executionMetadata(call.toolName, call.input)?.readOnly,

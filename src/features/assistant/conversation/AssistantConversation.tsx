@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlertCircle, Bot, BrainCircuit, ChevronRight, UserRound } from 'lucide-react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
 
 import { UiButton } from '@/components/ui'
 import {
@@ -17,8 +17,14 @@ import { useAssistantUiStore } from '../store/assistantUiStore'
 import { ApprovalCard } from './ApprovalCard'
 import { AssistantMarkdown } from './AssistantMarkdown'
 import { AssistantComposer } from './AssistantComposer'
+import { ExecutionPlanCard } from './ExecutionPlanCard'
 import { RunStatusBar } from './RunStatusBar'
-import { selectPendingApproval, selectToolActivities } from './agentRunReducer'
+import {
+  selectExecutionPresentation,
+  selectPendingApproval,
+  selectToolActivities,
+} from './agentRunReducer'
+import { describeErrorRecovery } from './errorPresentation'
 import { ToolActivityCard } from './ToolActivityCard'
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
@@ -30,6 +36,7 @@ const deferredBlockStyle: CSSProperties = {
 
 export function AssistantConversation(): JSX.Element {
   const run = useAgentRun()
+  const startRun = run.start
   const [document, setDocument] = useState<PromptDocumentV1>(() => createEmptyPromptDocument())
   const [resultError, setResultError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -53,49 +60,59 @@ export function AssistantConversation(): JSX.Element {
     setDocument(createPlainTextPromptDocument(pendingGoal))
     setPendingGoal(null)
     if (!busy) {
-      void run.start(pendingGoal).then((started) => {
+      void startRun(pendingGoal).then((started) => {
         if (started) setDocument(createEmptyPromptDocument())
       })
     }
-  }, [busy, pendingGoal, run, setPendingGoal])
+  }, [busy, pendingGoal, setPendingGoal, startRun])
 
   const tools = useMemo(() => selectToolActivities(run.view.events), [run.view.events])
   const approval = useMemo(() => selectPendingApproval(run.view.events), [run.view.events])
-  const plan = useMemo(() => [...run.view.events].reverse().find((event) => event.type === 'PlanUpdated'), [run.view.events])
-  const latestModelStep = useMemo(() => [...run.view.events].reverse().find((event) => event.type === 'ModelStarted'), [run.view.events])
+  const execution = useMemo(
+    () => selectExecutionPresentation(runState, run.view.events),
+    [run.view.events, runState]
+  )
+  const latestModelStep = useMemo(() => {
+    for (let index = run.view.events.length - 1; index >= 0; index -= 1) {
+      const event = run.view.events[index]
+      if (event.type === 'ModelStarted') return event
+    }
+    return null
+  }, [run.view.events])
   const streamedText = useMemo(() => {
-    if (!latestModelStep || latestModelStep.type !== 'ModelStarted') return ''
+    if (!latestModelStep) return ''
     return run.view.events.flatMap((event) => (
       event.type === 'ModelDelta' && event.stepId === latestModelStep.stepId ? [event.text] : []
     )).join('')
   }, [latestModelStep, run.view.events])
+  const deferredStreamedText = useDeferredValue(streamedText)
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const container = scrollRef.current
       if (container) container.scrollTop = container.scrollHeight
     })
     return () => cancelAnimationFrame(frame)
-  }, [approval, runState?.status, streamedText, tools.length])
+  }, [approval, deferredStreamedText, runState?.status, tools.length])
 
-  const submit = (goal: string): void => {
-    void run.start(goal).then((started) => {
+  const submit = useCallback((goal: string): void => {
+    void startRun(goal).then((started) => {
       if (started) setDocument(createEmptyPromptDocument())
     })
-  }
+  }, [startRun])
 
-  const openTask = (taskId: string): void => {
+  const openTask = useCallback((taskId: string): void => {
     setResultError(null)
     void openAssistantGenerationResult(taskId).then((opened) => {
       if (!opened) setResultError(`任务 ${taskId} 当前不存在或被筛选隐藏；你可以切到生成工作区后重新查找。`)
     })
-  }
+  }, [])
 
-  const openNode = (projectId: string, nodeId: string): void => {
+  const openNode = useCallback((projectId: string, nodeId: string): void => {
     setResultError(null)
     void openAssistantCanvasResult(projectId, nodeId).then((opened) => {
       if (!opened) setResultError(`节点 ${nodeId} 当前无法定位；项目可能已删除或画布尚未准备完成。`)
     })
-  }
+  }, [])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-app">
@@ -103,6 +120,8 @@ export function AssistantConversation(): JSX.Element {
         <RunStatusBar
           state={runState}
           events={run.view.events}
+          currentAction={execution.nextAction}
+          verificationPassed={execution.verification?.passed ?? null}
           onPause={() => void run.pause()}
           onResume={() => void run.resume()}
           onCancel={() => void run.cancel()}
@@ -130,22 +149,7 @@ export function AssistantConversation(): JSX.Element {
           </section>
         ) : null}
 
-        {plan?.type === 'PlanUpdated' ? (
-          <details style={deferredBlockStyle} className="group rounded-lg bg-accent/5 px-2 py-1.5">
-            <summary className="flex min-h-6 cursor-pointer list-none items-center gap-2 text-[11px] font-medium text-accent">
-              <BrainCircuit className="h-3.5 w-3.5 shrink-0" />
-              <span className="shrink-0">思考摘要</span>
-              <span className="min-w-0 flex-1 truncate font-normal text-text-muted">{plan.summary}</span>
-              <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
-            </summary>
-            <div className="pb-1 pl-5 pt-1">
-              <p className="text-[11px] leading-4 text-text-muted">{plan.summary}</p>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {plan.toolDomains.map((domain) => <span key={domain} className="rounded bg-surface-dark px-1.5 py-0.5 text-[10px] text-text-muted">{domain}</span>)}
-              </div>
-            </div>
-          </details>
-        ) : null}
+        {runState ? <ExecutionPlanCard presentation={execution} runStatus={runState.status} /> : null}
 
         {tools.map((tool) => (
           <ToolActivityCard
@@ -158,10 +162,10 @@ export function AssistantConversation(): JSX.Element {
 
         {approval ? <ApprovalCard approval={approval} onDecision={(decision) => void run.respondApproval(approval.approvalId, decision)} /> : null}
 
-        {streamedText && runState && !terminalStatuses.has(runState.status) ? (
+        {deferredStreamedText && runState && !terminalStatuses.has(runState.status) ? (
           <section style={deferredBlockStyle} className="mr-7 rounded-xl border border-border-dark bg-panel p-3">
             <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />回应生成中</div>
-            <AssistantMarkdown>{streamedText}</AssistantMarkdown>
+            <AssistantMarkdown>{deferredStreamedText}</AssistantMarkdown>
           </section>
         ) : null}
 
@@ -176,6 +180,7 @@ export function AssistantConversation(): JSX.Element {
           <section style={deferredBlockStyle} className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
             <div className="flex items-center gap-1.5 font-medium"><AlertCircle className="h-4 w-4" />{runState.error.code}</div>
             <p className="mt-1.5 leading-5">{runState.error.message}</p>
+            <p className="mt-1.5 leading-5 text-text-muted">下一步：{describeErrorRecovery(runState.error)}</p>
           </section>
         ) : null}
 

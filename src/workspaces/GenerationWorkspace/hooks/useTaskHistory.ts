@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react'
 import { exists, toDisplaySrc } from '@/platform/desktopApi'
 import { databaseService } from '@/services/database/DatabaseService'
 import type { HistoryRecord } from '@/services/database/types'
+import { grantMediaAccessForReference } from '@/services/largeUploadPolicy'
 import { getDataRoot, convertPathArray, convertPathString } from '@/utils/dataPath'
 import { isDesktop } from '@/utils/save'
 import type { GenerationTask, GeneratorOptions, TaskStatus } from '../types'
@@ -36,13 +37,35 @@ async function toDisplayUrl(fullPath: string, kind: 'image' | 'audio' | 'video')
   return toDisplaySrc(fullPath.replace(/\\/g, '/'))
 }
 
+interface ResolvedDisplayUrls {
+  urls: string[]
+  skippedCount: number
+}
+
+async function resolveDisplayUrls(
+  paths: string[],
+  kind: 'image' | 'audio' | 'video'
+): Promise<ResolvedDisplayUrls> {
+  const resolved = await Promise.all(paths.map(async (filePath): Promise<string | null> => {
+    if (!await exists(filePath)) return null
+    try {
+      await grantMediaAccessForReference(filePath)
+      return await toDisplayUrl(filePath, kind)
+    } catch {
+      return null
+    }
+  }))
+  const urls = resolved.filter((url): url is string => url !== null)
+  return { urls, skippedCount: resolved.length - urls.length }
+}
+
 async function toDisplayUrlString(
   absoluteFilePath: string,
   kind: 'image' | 'audio' | 'video'
-): Promise<string> {
+): Promise<string | null> {
   const paths = splitMulti(absoluteFilePath)
-  const urls = await Promise.all(paths.map((p) => toDisplayUrl(p, kind)))
-  return joinMulti(urls)
+  const { urls } = await resolveDisplayUrls(paths, kind)
+  return urls.length > 0 ? joinMulti(urls) : null
 }
 
 function parseHistoryTimestamp(value?: string | null): Date {
@@ -86,13 +109,22 @@ async function mapHistoryRecordToTask(record: HistoryRecord, dataRoot: string): 
     ? await convertPathArray(uploadedAudioFilePathsRel, dataRoot, false)
     : undefined
 
-  const images = uploadedFilePathsAbs
-    ? await Promise.all(uploadedFilePathsAbs.map((p) => toDisplayUrl(p, 'image')))
+  const imageResolution = uploadedFilePathsAbs
+    ? await resolveDisplayUrls(uploadedFilePathsAbs, 'image')
     : undefined
+  const videoResolution = uploadedVideoFilePathsAbs
+    ? await resolveDisplayUrls(uploadedVideoFilePathsAbs, 'video')
+    : undefined
+  const skippedInputCount = (imageResolution?.skippedCount ?? 0) + (videoResolution?.skippedCount ?? 0)
+  if (skippedInputCount > 0) {
+    logger.warn('历史记录引用的本地媒体不可访问，已跳过预览', {
+      event: 'generation_history.media_preview.skipped',
+      context: { historyId: record.id, skippedInputCount },
+    })
+  }
 
-  const videos = uploadedVideoFilePathsAbs
-    ? await Promise.all(uploadedVideoFilePathsAbs.map((p) => toDisplayUrl(p, 'video')))
-    : undefined
+  const images = imageResolution?.urls
+  const videos = videoResolution?.urls
 
   const absoluteResultFilePath = record.filePath
     ? await convertPathString(record.filePath, dataRoot, false)

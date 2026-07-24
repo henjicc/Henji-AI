@@ -1,9 +1,17 @@
 import { memo } from 'react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 interface AssistantMarkdownProps {
   children: string
+}
+
+const markdownComponents: Components = {
+  table: ({ children }) => (
+    <div className="ui-scrollbar my-2 max-w-full overflow-x-auto" data-assistant-markdown-table>
+      <table>{children}</table>
+    </div>
+  ),
 }
 
 function AssistantMarkdownView({ children }: AssistantMarkdownProps): JSX.Element {
@@ -20,10 +28,10 @@ function AssistantMarkdownView({ children }: AssistantMarkdownProps): JSX.Elemen
       '[&_li]:my-0.5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5',
       '[&_p]:my-1.5 [&_pre]:my-2 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-layer [&_pre]:p-2',
       '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
-      '[&_table]:my-2 [&_table]:w-full [&_table]:min-w-[360px] [&_table]:border-collapse [&_table]:text-xs',
+      '[&_table]:w-full [&_table]:min-w-[360px] [&_table]:border-collapse [&_table]:text-xs',
       '[&_td]:border [&_td]:border-border-dark [&_td]:p-1.5 [&_th]:border [&_th]:border-border-dark [&_th]:bg-layer [&_th]:p-1.5 [&_th]:text-left',
     ].join(' ')}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
+      <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>{children}</ReactMarkdown>
     </div>
   )
 }

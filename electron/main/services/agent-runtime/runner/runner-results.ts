@@ -67,6 +67,7 @@ export function extractResultReferences(output: unknown): Record<string, string>
   const references: Record<string, string> = {}
   const referenceKeys = [
     'taskId', 'projectId', 'nodeId', 'edgeId', 'undoRef', 'workspace', 'workspaceId', 'modelId',
+    'assetId', 'libraryId', 'previewRef', 'objectId', 'shotId', 'workflowId', 'workflowRunId',
   ] as const
   for (const key of referenceKeys) {
     const value = record[key]
@@ -78,7 +79,8 @@ export function extractResultReferences(output: unknown): Record<string, string>
     const taskId = nestedRecord.taskId ?? nestedRecord.id
     if (typeof taskId === 'string' && taskId.trim()) references.taskId = taskId.slice(0, 500)
   }
-  return Object.keys(references).length > 0 ? references : undefined
+  const bounded = Object.fromEntries(Object.entries(references).slice(0, 8))
+  return Object.keys(bounded).length > 0 ? bounded : undefined
 }
 
 export function extractResultScopeRevisions(output: unknown): HostScopeRevisions | null {

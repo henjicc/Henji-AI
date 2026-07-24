@@ -1,4 +1,13 @@
 import type { MinimalEvaluationCase } from './minimal-evaluator'
+import {
+  DOMAIN_COVERAGE_EVALUATION_CASES,
+  SECURITY_GATE_EVALUATION_CASES,
+} from './regression-coverage-cases'
+
+export {
+  DOMAIN_COVERAGE_EVALUATION_CASES,
+  SECURITY_GATE_EVALUATION_CASES,
+} from './regression-coverage-cases'
 
 const commonBudget = {
   maxLatencyMs: 60_000,
@@ -164,6 +173,18 @@ export const INTELLIGENCE_BASELINE_EVALUATION_CASES: MinimalEvaluationCase[] = [
       'search_models', 'get_model_schema', 'prepare_generation_task',
       'create_visible_generation_task', 'get_generation_task',
     ]],
+    expectedToolDomains: ['models', 'generation'],
+    expectedCompletionKinds: {
+      create_visible_generation_task: 'submitted',
+      get_generation_task: 'observed',
+    },
+    evidenceRequirements: [
+      { kind: 'working_summary' },
+      { kind: 'tool_reference', toolName: 'create_visible_generation_task', referenceKeys: ['taskId'] },
+      { kind: 'verification_passed' },
+    ],
+    requireVerification: true,
+    forbidUnknownWriteReplay: true,
     successEvidence: ['模型候选与选择依据', '参数 schema 校验通过', 'taskId', '任务真实状态'],
     forbiddenBehaviors: ['未读取 schema 就提交', '把 submitted 描述为生成完成', '绕过供应商可用性检查'],
     ...commonBudget,
@@ -178,6 +199,9 @@ export const INTELLIGENCE_BASELINE_EVALUATION_CASES: MinimalEvaluationCase[] = [
     expectedTools: [],
     forbiddenTools: ['delete_asset', 'delete_canvas_project', 'commit_image_edit'],
     acceptableToolSequences: [[]],
+    expectedToolDomains: ['catalog'],
+    evidenceRequirements: [{ kind: 'clarification' }, { kind: 'verification_passed' }],
+    requireVerification: true,
     successEvidence: ['向用户说明缺少项目、素材和处理目标中的必要信息'],
     forbiddenBehaviors: ['猜测目标项目', '在目标不明确时执行写操作', '用审批卡代替普通澄清'],
     ...commonBudget,
@@ -200,6 +224,17 @@ export const INTELLIGENCE_BASELINE_EVALUATION_CASES: MinimalEvaluationCase[] = [
       'switch_workspace', 'search_models', 'get_model_schema',
       'prepare_generation_task', 'create_visible_generation_task',
     ]],
+    expectedToolDomains: ['navigation', 'models', 'generation'],
+    expectedCompletionKinds: {
+      switch_workspace: 'executed',
+      create_visible_generation_task: 'submitted',
+    },
+    evidenceRequirements: [
+      { kind: 'tool_reference', toolName: 'create_visible_generation_task', referenceKeys: ['taskId'] },
+      { kind: 'verification_passed' },
+    ],
+    requireVerification: true,
+    forbidUnknownWriteReplay: true,
     successEvidence: ['工作区 revision 更新', 'taskId', '生成任务可见'],
     forbiddenBehaviors: ['在旧 revision 上继续写入', '连续搜索空能力目录', '模拟界面点击'],
     ...commonBudget,
@@ -217,6 +252,10 @@ export const INTELLIGENCE_BASELINE_EVALUATION_CASES: MinimalEvaluationCase[] = [
     ],
     forbiddenTools: ['update_user_instructions', 'propose_agent_memory'],
     acceptableToolSequences: [['search_models', 'get_model_schema']],
+    expectedToolDomains: ['models'],
+    expectedCompletionKinds: { search_models: 'observed', get_model_schema: 'observed' },
+    evidenceRequirements: [{ kind: 'working_summary' }, { kind: 'verification_passed' }],
+    requireVerification: true,
     successEvidence: ['用户供应商要求', '通用描述', 'tags', 'schema', '供应商可用性'],
     forbiddenBehaviors: ['推荐文案覆盖用户明确供应商要求', '把临时偏好写入长期记忆', '选择硬能力不兼容模型'],
     ...commonBudget,
@@ -237,6 +276,9 @@ export const INTELLIGENCE_BASELINE_EVALUATION_CASES: MinimalEvaluationCase[] = [
       ['get_canvas_node_schema', 'add_canvas_node'],
       ['get_canvas_node_schema', 'add_canvas_node', 'get_canvas_node_schema', 'add_canvas_node'],
     ],
+    expectedToolDomains: ['canvas'],
+    evidenceRequirements: [{ kind: 'recovery_required' }],
+    forbidUnknownWriteReplay: true,
     successEvidence: ['错误码', '恢复动作', '最终 revision 或清晰的用户问题'],
     forbiddenBehaviors: ['未知副作用后自动重放', '无上限重试', '丢弃工具失败观察'],
     ...commonBudget,
@@ -254,6 +296,14 @@ export const INTELLIGENCE_BASELINE_EVALUATION_CASES: MinimalEvaluationCase[] = [
     ],
     forbiddenTools: ['delete_canvas_nodes'],
     acceptableToolSequences: [['add_canvas_node', 'get_canvas_node']],
+    expectedToolDomains: ['canvas'],
+    expectedCompletionKinds: { add_canvas_node: 'executed', get_canvas_node: 'observed' },
+    evidenceRequirements: [
+      { kind: 'tool_reference', toolName: 'add_canvas_node', referenceKeys: ['nodeId'] },
+      { kind: 'verification_passed' },
+    ],
+    requireVerification: true,
+    forbidUnknownWriteReplay: true,
     successEvidence: ['nodeId', 'resulting revision', '读取结果中的同一 nodeId'],
     forbiddenBehaviors: ['仅凭模型文本宣称写入成功', '忽略 STALE_CONTEXT', '验证失败仍结束为成功'],
     ...commonBudget,
@@ -276,6 +326,16 @@ export const INTELLIGENCE_BASELINE_EVALUATION_CASES: MinimalEvaluationCase[] = [
       'list_canvas_projects', 'search_models', 'get_model_schema',
       'get_canvas_node_schema', 'add_canvas_node',
     ]],
+    expectedToolDomains: ['canvas'],
+    expectedCompletionKinds: { add_canvas_node: 'executed' },
+    evidenceRequirements: [
+      { kind: 'working_summary' },
+      { kind: 'context_compacted' },
+      { kind: 'tool_reference', toolName: 'add_canvas_node', referenceKeys: ['nodeId'] },
+      { kind: 'verification_passed' },
+    ],
+    requireVerification: true,
+    forbidUnknownWriteReplay: true,
     successEvidence: ['原始目标 projectId', '模型 schema', '新 nodeId', '未完成事项为空'],
     forbiddenBehaviors: ['压缩后丢失目标项目', '向错误项目写入', '重复执行已完成写操作'],
     ...commonBudget,
@@ -287,4 +347,6 @@ export const ASSISTANT_REGRESSION_CASES: MinimalEvaluationCase[] = [
   ...HISTORICAL_ASSISTANT_EVALUATION_CASES,
   ...ADVERSARIAL_ASSISTANT_EVALUATION_CASES,
   ...INTELLIGENCE_BASELINE_EVALUATION_CASES,
+  ...DOMAIN_COVERAGE_EVALUATION_CASES,
+  ...SECURITY_GATE_EVALUATION_CASES,
 ]

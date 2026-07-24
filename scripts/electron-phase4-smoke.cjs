@@ -199,7 +199,9 @@ async function main() {
     const page = app.page
     page.on('console', (message) => {
       if (message.type() === 'error') {
-        consoleErrors.push(message.text())
+        const location = message.location()
+        const source = location.url ? ` [${location.url}]` : ''
+        consoleErrors.push(`${message.text()}${source}`)
       }
     })
     page.on('pageerror', (error) => {

@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest'
 import {
   agentRunViewReducer,
   createInitialAgentRunViewState,
+  selectExecutionPresentation,
   selectPendingApproval,
   selectToolActivities,
 } from './agentRunReducer'
 import type { AgentEvent } from '@/core/assistant/events'
+import { createAgentWorkingSummary } from '@/core/assistant/workingContext'
 
 function event<TEvent extends AgentEvent>(value: Omit<TEvent, 'schemaVersion' | 'eventId' | 'occurredAt' | 'runId'>): TEvent {
   return {
@@ -81,5 +83,77 @@ describe('agentRunViewReducer', () => {
     expect(state.runState?.status).toBe('running')
     expect(state.runState?.sequence).toBe(5)
     expect(state.events).toEqual([older])
+
+    const otherRun = {
+      ...older,
+      eventId: 'event-other-run',
+      runId: 'run-2',
+      sequence: 6,
+    }
+    const unchanged = agentRunViewReducer(state, { type: 'event', event: otherRun })
+    expect(unchanged).toBe(state)
+  })
+
+  it('批量事件实时重建计划步骤并区分提交与验证状态', () => {
+    const initialState = {
+      schemaVersion: 'agent-event/v1' as const,
+      runId: 'run-1', threadId: 'thread-1', status: 'running' as const, sequence: 0, turn: 0,
+      currentStepId: null, currentToolCallId: null, waitingApprovalId: null,
+      startedAt: '2026-07-23T00:00:00.000Z', updatedAt: '2026-07-23T00:00:00.000Z',
+      finalText: null, error: null,
+      budget: {
+        maxTurns: 12, maxToolCalls: 24, maxDurationMs: 600_000, maxInputTokens: 120_000,
+        maxOutputTokens: 32_000, maxConsecutiveFailures: 3, maxRepeatedToolCalls: 2, maxNoProgressTurns: 3,
+      },
+      usage: {
+        turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
+        totalTokens: 0, knownCostUsd: null, consecutiveFailures: 0, noProgressTurns: 0, elapsedMs: 0,
+      },
+      lastScopeRevisions: null,
+      workingSummary: createAgentWorkingSummary('生成一张海报'),
+    }
+    const events: AgentEvent[] = [
+      event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
+        type: 'PlanUpdated', sequence: 1, intent: 'generate', summary: '选择模型后提交任务', toolDomains: ['models', 'generation'],
+      }),
+      event<Extract<AgentEvent, { type: 'ToolRequested' }>>({
+        type: 'ToolRequested', sequence: 2, toolCallId: 'call-create', toolName: 'create_visible_generation_task',
+        title: '创建可见生成任务', inputDigest: 'digest', category: 'generation', readOnly: false, idempotent: true,
+      }),
+      event<Extract<AgentEvent, { type: 'ToolCompleted' }>>({
+        type: 'ToolCompleted', sequence: 3, toolCallId: 'call-create', toolName: 'create_visible_generation_task',
+        summary: '任务已提交', category: 'generation', readOnly: false, idempotent: true,
+        completionKind: 'submitted', resultReferences: { taskId: 'task-1' },
+      }),
+      event<Extract<AgentEvent, { type: 'VerificationCompleted' }>>({
+        type: 'VerificationCompleted', sequence: 4, passed: true,
+        summary: '提交状态与最终答复一致', evidence: ['generation_status:submitted'],
+      }),
+    ]
+    const state = agentRunViewReducer({
+      runState: initialState, events: [], connection: 'connected', actionError: null,
+    }, { type: 'events', events })
+
+    expect(state.runState?.workingSummary).toMatchObject({
+      route: { intent: 'generate' },
+      completedSteps: [{ title: '创建可见生成任务', summary: '任务已提交' }],
+    })
+    expect(selectToolActivities(state.events)).toEqual([
+      expect.objectContaining({ title: '创建可见生成任务', completionKind: 'submitted' }),
+    ])
+    expect(selectExecutionPresentation(state.runState, state.events)).toMatchObject({
+      verification: { passed: true },
+      nextAction: '正在核对最新观察并决定下一步。',
+    })
+  })
+
+  it('澄清事件转换为用户可执行的下一步', () => {
+    const clarification = event<Extract<AgentEvent, { type: 'ClarificationRequired' }>>({
+      type: 'ClarificationRequired', sequence: 1,
+      question: '请提供需要处理的项目名称。', reason: '目标项目不明确',
+    })
+    const presentation = selectExecutionPresentation(null, [clarification])
+    expect(presentation.nextAction).toBe('请提供需要处理的项目名称。')
+    expect(presentation.clarification?.reason).toBe('目标项目不明确')
   })
 })

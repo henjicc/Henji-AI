@@ -35,7 +35,9 @@ describe('generationModelDescriptions', () => {
     for (const description of Object.values(GENERATION_MODEL_DESCRIPTIONS)) {
       expect(description.zh.trim()).not.toBe('')
     }
-    expect(getGenerationModelDescription('gpt-image-2')?.zh).toContain('推荐使用')
+    expect(getGenerationModelDescription('gpt-image-2')).toMatchObject({
+      zh: expect.stringContaining('推荐使用'),
+    })
     expect(getGenerationModelDescription('seedream-4.5')).toEqual(
       GENERATION_MODEL_DESCRIPTIONS['seedream-4.5']
     )

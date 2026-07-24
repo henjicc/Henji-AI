@@ -101,3 +101,33 @@
 - `electron/main/agent-utility.ts`、`agent-runtime-manager/manager.ts`：将记忆读取代理回主进程，不让 utility process 直接访问 SQLite。
 - `electron/main/services/agent-runtime/context/prompt-layers.ts`、`layer-budget.ts`、`builder.ts`：将相关记忆作为独立不可信层按预算注入。
 - `package.json`：将第三阶段新增测试纳入 `test:assistant-eval`。
+
+## 2026-07-24 · 第四阶段开始
+
+- `docs/task/智能助手智能化升级/00-任务总览.md`：切换到第四阶段 4.1。
+- `docs/task/智能助手智能化升级/任务/第四阶段-可解释性与持续验收/4.1-执行计划证据与界面可解释性.md`：将任务状态改为进行中。
+- `docs/task/智能助手智能化升级/progress.md`、`decisions.md`、`handoff.md`：记录第四阶段入口、界面事实来源和执行顺序。
+- `docs/task/智能助手智能化升级/test-report.md`：记录第四阶段开始前自动化基线与统一手动测试约束。
+
+## 2026-07-24 · 4.1 完成与 4.2 开始
+
+- `src/core/assistant/events.ts`、`toolContracts.ts`：增加工具用户可读名称与观察/提交/执行完成语义。
+- `src/core/assistant/workingSummaryReducer.ts`、`electron/main/services/agent-runtime/runner/working-summary.ts`：将工作摘要事件归约提取为前后端共享核心。
+- `electron/main/services/agent-runtime/tools/registry.ts`、`types.ts`、`builtin/frontend.ts`、`runner/tool-call-scheduler.ts`：从工具定义派生完成语义并写入事件，生成任务明确标记为已提交。
+- `src/features/assistant/conversation/`：新增紧凑执行计划和错误呈现，优化工具状态、Markdown 表格、验证证据与恢复下一步。
+- `src/features/assistant/hooks/useAgentRun.ts`：按动画帧批量归约实时事件，减少流式输出期间的界面更新次数。
+- `src/features/assistant/conversation/*.test.ts*`、对应 Runner/目录测试：覆盖事件回放、提交语义、可读名称、验证和 Markdown 结构。
+- `package.json`：将界面回放和 Markdown 测试纳入助手专项回归。
+
+## 2026-07-24 · 4.2 代码完成与待验证
+
+- `electron/main/services/agent-runtime/evaluation/minimal-evaluator.ts`、`minimal-evaluator.test.ts`：增加工具序列/领域、完成语义、证据、澄清、压缩、验证、未知写入重放和可选性能指标判定。
+- `electron/main/services/agent-runtime/evaluation/regression-cases.ts`、`regression-coverage-cases.ts`、`regression-cases.test.ts`：补齐智能性基线、领域覆盖和安全门槛，并拆分超长数据文件。
+- `electron/main/services/agent-runtime/runner/result-verifier.ts`、`runner-results.ts` 及测试：扩展澄清、结果引用和最终验证证据。
+- `electron/main/services/agent-runtime/context/catalog.test.ts`、`runner/tool-call-scheduler.test.ts`、`runner/working-summary.test.ts`：补充计划域、完成语义和共享摘要回归。
+- `src/features/assistant/conversation/agentRunReducer.ts`：修正恢复状态为空时的下一步选择，并通过完整前端类型检查。
+- `src/core/modelCatalog/generationModelDescriptions.test.ts`：补齐国际化联合类型的测试收窄。
+- `src/workspaces/GenerationWorkspace/hooks/useTaskHistory.ts`：历史媒体显示前检查文件并恢复有效授权，失效引用跳过预览并记录告警。
+- `scripts/electron-phase4-smoke.cjs`：冒烟错误保留资源来源 URL，提升失败诊断能力。
+- `package.json`：扩展助手专项评测入口。
+- `docs/task/智能助手智能化升级/`：同步 4.2 待验证状态、最终自动化结果、交接信息和统一手动测试清单。

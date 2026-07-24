@@ -146,7 +146,13 @@ describe('AgentToolCallScheduler', () => {
 
     expect(maxActive).toBe(2)
     expect(observations).toHaveLength(2)
-    expect(events.filter((event) => event.type === 'ToolCompleted')).toHaveLength(2)
+    expect(events.filter((event) => event.type === 'ToolRequested')).toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: '读取测试资源' })])
+    )
+    expect(events.filter((event) => event.type === 'ToolCompleted')).toEqual([
+      expect.objectContaining({ completionKind: 'observed' }),
+      expect.objectContaining({ completionKind: 'observed' }),
+    ])
   })
 
   it('超过单轮上限的每个调用都有失败观察而不是静默丢弃', async () => {

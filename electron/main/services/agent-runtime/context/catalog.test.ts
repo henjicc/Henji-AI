@@ -66,6 +66,9 @@ describe('AgentToolCatalogPlanner', () => {
     expect(entry?.prerequisites.length).toBeGreaterThan(0)
     expect(entry?.successEvidence.length).toBeGreaterThan(0)
     expect(entry?.failureRecovery.length).toBeGreaterThan(0)
+    expect(entry?.completionKind).toBe('observed')
+    expect(registry.list(contextSnapshot()).find((item) => item.name === 'create_visible_generation_task')?.completionKind)
+      .toBe('submitted')
   })
 
   it('多词和供应商限定不会让图片生成能力误报为零项', () => {

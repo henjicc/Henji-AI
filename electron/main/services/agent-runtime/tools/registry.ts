@@ -93,6 +93,8 @@ function resolveToolSemantics(definition: AgentToolDefinition): Required<AgentTo
       'TIMEOUT 或 NOT_READY：有限等待后再决定是否重试。',
       'NOT_FOUND、INVALID_INPUT 或权限拒绝：修正目标/参数或向用户澄清。',
     ],
+    completionKind: definition.semantics?.completionKind
+      ?? (definition.readOnly ? 'observed' : 'executed'),
     parallelSafe,
   }
 }
@@ -110,6 +112,8 @@ function modelToolDescription(definition: AgentToolDefinition): string {
 }
 
 export interface AgentToolExecutionMetadata {
+  title: string
+  completionKind: AgentToolCatalogEntry['completionKind']
   parallelSafe: boolean
   concurrencyKey: string
   risk: AgentToolDefinition['risk']
@@ -168,6 +172,8 @@ export class AgentToolRegistry {
     const parsed = definition.inputSchema.safeParse(input)
     if (!parsed.success) return null
     return {
+      title: definition.title,
+      completionKind: resolveToolSemantics(definition).completionKind,
       parallelSafe: resolveToolSemantics(definition).parallelSafe,
       concurrencyKey: definition.concurrencyKey(parsed.data),
       risk: definition.risk,

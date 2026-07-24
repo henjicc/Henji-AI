@@ -26,6 +26,9 @@ export const serializedAgentErrorSchema = z.object({
 }).strict()
 export type SerializedAgentError = z.infer<typeof serializedAgentErrorSchema>
 
+export const agentToolCompletionKindSchema = z.enum(['observed', 'submitted', 'executed'])
+export type AgentToolCompletionKind = z.infer<typeof agentToolCompletionKindSchema>
+
 export const agentBudgetConfigSchema = z.object({
   maxTurns: z.number().int().min(1).max(100),
   maxToolCalls: z.number().int().min(0).max(500),
@@ -154,6 +157,7 @@ const toolRequestedEventSchema = z.object({
   type: z.literal('ToolRequested'),
   toolCallId: z.string().min(1),
   toolName: z.string().min(1),
+  title: z.string().min(1).max(200).optional(),
   inputDigest: z.string().min(1),
   category: z.string().min(1).max(100).optional(),
   readOnly: z.boolean().optional(),
@@ -176,6 +180,7 @@ const toolCompletedEventSchema = z.object({
   category: z.string().min(1).max(100).optional(),
   readOnly: z.boolean().optional(),
   idempotent: z.boolean().optional(),
+  completionKind: agentToolCompletionKindSchema.optional(),
   artifactRef: z.string().min(1).optional(),
   resultReferences: z.record(z.string(), z.string().max(500)).refine(
     (references) => Object.keys(references).length <= 8,

@@ -60,6 +60,21 @@ function registryWithTool(input: { name: string; readOnly: boolean }): AgentTool
 }
 
 describe('Agent result verifier', () => {
+  it('模糊一般请求转换为结构化澄清', () => {
+    const result = verifyAgentCompletion({
+      route: {
+        ...generateRoute,
+        intent: 'general',
+        complexity: 'ambiguous',
+        toolDomains: ['catalog'],
+      },
+      finalText: '请提供需要处理的项目名称和具体操作？',
+      observations: [],
+      registry: new AgentToolRegistry(),
+    })
+    expect(result).toMatchObject({ passed: true, clarificationRequired: true })
+  })
+
   it('提交态允许如实结束但拒绝声称生成成功', () => {
     const registry = registryWithTool({ name: 'create_visible_generation_task', readOnly: false })
     const observations = [observation('create_visible_generation_task', {

@@ -2,9 +2,11 @@ import type {
   AgentApprovalRequest,
   AgentEvent,
   AgentRunState,
+  AgentToolCompletionKind,
   SerializedAgentError,
 } from '@/core/assistant/events'
 import type { AgentRunSnapshot } from '@/core/assistant/runtimeContracts'
+import { reduceAgentWorkingSummary } from '@/core/assistant/workingSummaryReducer'
 
 export type AgentRunConnection = 'idle' | 'recovering' | 'connected' | 'disconnected'
 
@@ -18,6 +20,7 @@ export interface AgentRunViewState {
 export type AgentRunViewAction =
   | { type: 'begin'; state: AgentRunState }
   | { type: 'event'; event: AgentEvent }
+  | { type: 'events'; events: AgentEvent[] }
   | { type: 'hydrate'; snapshot: AgentRunSnapshot }
   | { type: 'sync_state'; state: AgentRunState }
   | { type: 'connection'; connection: AgentRunConnection }
@@ -27,7 +30,11 @@ export type AgentRunViewAction =
 export interface AgentToolActivity {
   toolCallId: string
   toolName: string
+  title: string
   status: 'requested' | 'running' | 'completed' | 'failed'
+  category?: string
+  readOnly?: boolean
+  completionKind?: AgentToolCompletionKind
   inputDigest?: string
   summary?: string
   error?: SerializedAgentError
@@ -105,7 +112,30 @@ function applyEventToRunState(state: AgentRunState, event: AgentEvent): AgentRun
     default:
       break
   }
+  next.workingSummary = reduceAgentWorkingSummary(
+    next.workingSummary,
+    event,
+    next.lastScopeRevisions
+  )
   return next
+}
+
+function applyIncomingEvents(
+  state: AgentRunViewState,
+  incoming: AgentEvent[]
+): AgentRunViewState {
+  const relevant = state.runState
+    ? incoming.filter((event) => event.runId === state.runState?.runId)
+    : incoming
+  if (relevant.length === 0) return state
+  const events = mergeEvents(state.events, relevant)
+  let runState = state.runState
+  if (runState) {
+    for (const event of [...relevant].sort((left, right) => left.sequence - right.sequence)) {
+      if (event.sequence > runState.sequence) runState = applyEventToRunState(runState, event)
+    }
+  }
+  return { ...state, events, runState, connection: 'connected' }
 }
 
 export function agentRunViewReducer(
@@ -116,26 +146,20 @@ export function agentRunViewReducer(
     case 'begin':
       return { runState: action.state, events: [], connection: 'connected', actionError: null }
     case 'event':
-      if (state.runState && action.event.sequence <= state.runState.sequence) {
-        return {
-          ...state,
-          events: mergeEvents(state.events, [action.event]),
-          connection: 'connected',
-        }
-      }
-      return {
-        ...state,
-        events: mergeEvents(state.events, [action.event]),
-        runState: state.runState ? applyEventToRunState(state.runState, action.event) : state.runState,
-        connection: 'connected',
-      }
-    case 'hydrate':
-      return {
+      return applyIncomingEvents(state, [action.event])
+    case 'events':
+      return applyIncomingEvents(state, action.events)
+    case 'hydrate': {
+      const existingEvents = state.runState?.runId === action.snapshot.state.runId
+        ? state.events
+        : []
+      return applyIncomingEvents({
         runState: action.snapshot.state,
-        events: mergeEvents(state.events, action.snapshot.events),
-        connection: 'connected',
+        events: existingEvents,
+        connection: state.connection,
         actionError: null,
-      }
+      }, action.snapshot.events)
+    }
     case 'sync_state':
       return { ...state, runState: action.state, connection: 'connected', actionError: null }
     case 'connection':
@@ -169,7 +193,10 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
       activities.set(event.toolCallId, {
         toolCallId: event.toolCallId,
         toolName: event.toolName,
+        title: event.title ?? event.toolName,
         status: 'requested',
+        category: event.category,
+        readOnly: event.readOnly,
         inputDigest: event.inputDigest,
       })
     } else if (event.type === 'ToolStarted') {
@@ -177,6 +204,7 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
         ...current,
         toolCallId: event.toolCallId,
         toolName: event.toolName,
+        title: current?.title ?? event.toolName,
         status: 'running',
         startedAt: event.occurredAt,
       })
@@ -185,7 +213,11 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
         ...current,
         toolCallId: event.toolCallId,
         toolName: event.toolName,
+        title: current?.title ?? event.toolName,
         status: 'completed',
+        category: event.category ?? current?.category,
+        readOnly: event.readOnly ?? current?.readOnly,
+        completionKind: event.completionKind ?? (event.readOnly ? 'observed' : 'executed'),
         summary: event.summary,
         artifactRef: event.artifactRef,
         resultReferences: event.resultReferences,
@@ -196,11 +228,56 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
         ...current,
         toolCallId: event.toolCallId,
         toolName: event.toolName,
+        title: current?.title ?? event.toolName,
         status: 'failed',
+        category: event.category ?? current?.category,
+        readOnly: event.readOnly ?? current?.readOnly,
         error: event.error,
         completedAt: event.occurredAt,
       })
     }
   }
   return [...activities.values()]
+}
+
+export interface AgentExecutionPresentation {
+  summary: NonNullable<AgentRunState['workingSummary']> | null
+  verification: Extract<AgentEvent, { type: 'VerificationCompleted' }> | null
+  clarification: Extract<AgentEvent, { type: 'ClarificationRequired' }> | null
+  lastCompaction: Extract<AgentEvent, { type: 'ContextCompacted' }> | null
+  nextAction: string
+}
+
+export function selectExecutionPresentation(
+  state: AgentRunState | null,
+  events: AgentEvent[]
+): AgentExecutionPresentation {
+  let verification: AgentExecutionPresentation['verification'] = null
+  let clarification: AgentExecutionPresentation['clarification'] = null
+  let lastCompaction: AgentExecutionPresentation['lastCompaction'] = null
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (!verification && event.type === 'VerificationCompleted') verification = event
+    if (!clarification && event.type === 'ClarificationRequired') clarification = event
+    if (!lastCompaction && event.type === 'ContextCompacted') lastCompaction = event
+    if (verification && clarification && lastCompaction) break
+  }
+  const summary = state?.workingSummary ?? null
+  let nextAction = '正在理解目标并准备下一步。'
+  if (clarification) nextAction = clarification.question
+  else if (state?.status === 'waiting_approval') nextAction = '请查看审批内容，确认后助手才能继续执行。'
+  else if (summary && summary.recovery.mode !== 'none') nextAction = summary.recovery.reason
+  else if (summary?.activeStep) nextAction = `正在执行：${summary.activeStep.title}`
+  else if (state?.status === 'completed') {
+    nextAction = verification?.passed
+      ? '执行结果已通过结构化验证，请查看助手结论。'
+      : '执行已经结束，请查看助手结论和未完成事项。'
+  } else if (state?.status === 'failed') {
+    nextAction = state.error?.retryable
+      ? '本次运行未完成，可按错误建议处理后重新发起。'
+      : '本次运行无法继续，请查看错误原因并补充所需信息。'
+  } else if (summary?.completedSteps.length) {
+    nextAction = '正在核对最新观察并决定下一步。'
+  }
+  return { summary, verification, clarification, lastCompaction, nextAction }
 }

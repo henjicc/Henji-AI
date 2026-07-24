@@ -1,36 +1,22 @@
-import { CheckCircle2, ChevronDown, ExternalLink, LoaderCircle, Wrench, XCircle } from 'lucide-react'
-import type { CSSProperties } from 'react'
-import { useState } from 'react'
+import { CheckCircle2, ChevronDown, ExternalLink, LoaderCircle, SearchCheck, Send, Wrench, XCircle } from 'lucide-react'
+import { memo, useState, type CSSProperties } from 'react'
 
 import { UiButton } from '@/components/ui'
 
 import type { AgentToolActivity } from './agentRunReducer'
+import { describeErrorRecovery } from './errorPresentation'
 
-const toolLabels: Record<string, string> = {
-  search_application_capabilities: '搜索应用能力',
-  switch_workspace: '切换工作区',
-  search_models: '搜索模型',
-  get_model_schema: '读取模型参数',
-  create_visible_generation_task: '创建生成任务',
-  get_generation_task: '读取生成任务',
-  cancel_generation_task: '取消生成任务',
-  query_diagnostic_events: '查询诊断证据',
-  list_canvas_projects: '列出画布项目',
-  open_canvas_project: '打开画布项目',
-  search_canvas_node_types: '搜索画布节点类型',
-  get_canvas_node_schema: '读取画布节点结构',
-  add_canvas_node: '添加画布节点',
-  connect_canvas_nodes: '连接画布节点',
-  focus_canvas_node: '定位画布节点',
-  undo_canvas_change: '撤销画布操作',
-}
-
-const statusLabels: Record<AgentToolActivity['status'], string> = {
+const activeStatusLabels: Record<Exclude<AgentToolActivity['status'], 'completed'>, string> = {
   requested: '已请求',
   running: '执行中',
-  completed: '已完成',
-  failed: '失败',
+  failed: '未完成',
 }
+
+const completionLabels = {
+  observed: '已查询',
+  submitted: '已提交',
+  executed: '已执行',
+} as const
 
 const deferredCardStyle: CSSProperties = {
   contentVisibility: 'auto',
@@ -44,14 +30,21 @@ interface ToolActivityCardProps {
   onOpenNode: (projectId: string, nodeId: string) => void
 }
 
-export function ToolActivityCard({ activity, onOpenTask, onOpenNode }: ToolActivityCardProps): JSX.Element {
+function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivityCardProps): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const taskId = activity.resultReferences?.taskId
   const projectId = activity.resultReferences?.projectId
   const nodeId = activity.resultReferences?.nodeId
-  const hasDetails = Boolean(activity.summary || activity.error || activity.artifactRef)
+  const hasDetails = Boolean(activity.inputDigest || activity.summary || activity.error || activity.artifactRef || activity.resultReferences)
+  const statusLabel = activity.status === 'completed'
+    ? completionLabels[activity.completionKind ?? (activity.readOnly ? 'observed' : 'executed')]
+    : activeStatusLabels[activity.status]
   const icon = activity.status === 'completed'
-    ? <CheckCircle2 className="h-4 w-4 text-success" />
+    ? activity.completionKind === 'submitted'
+      ? <Send className="h-4 w-4 text-accent" />
+      : activity.completionKind === 'observed' || activity.readOnly
+        ? <SearchCheck className="h-4 w-4 text-success" />
+        : <CheckCircle2 className="h-4 w-4 text-success" />
     : activity.status === 'failed'
       ? <XCircle className="h-4 w-4 text-danger" />
       : activity.status === 'running'
@@ -62,10 +55,11 @@ export function ToolActivityCard({ activity, onOpenTask, onOpenNode }: ToolActiv
     <section style={deferredCardStyle} className="rounded-lg bg-surface-dark/80 px-2 py-1.5">
       <div className="flex min-h-6 items-center gap-2">
         {icon}
-        <div className="min-w-0 flex-1 truncate text-xs font-medium text-text-dark">
-          {toolLabels[activity.toolName] ?? activity.toolName}
+        <div className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="min-w-0 max-w-[45%] truncate text-xs font-medium text-text-dark">{activity.title}</span>
+          {activity.summary ? <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted">{activity.summary}</span> : null}
         </div>
-        <span className="text-[10px] tracking-wide text-text-muted">{statusLabels[activity.status]}</span>
+        <span className="shrink-0 text-[10px] tracking-wide text-text-muted">{statusLabel}</span>
         {taskId ? (
           <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenTask(taskId)} className="!h-6 gap-1 !px-1.5 text-[10px]">
             <ExternalLink className="h-3 w-3" />查看
@@ -94,8 +88,20 @@ export function ToolActivityCard({ activity, onOpenTask, onOpenNode }: ToolActiv
           {activity.summary ? <p className="text-[11px] leading-4 text-text-muted">{activity.summary}</p> : null}
           {activity.error ? (
             <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-[11px] leading-4 text-danger">
-              {activity.error.code} · {activity.error.message}
+              <div>{activity.error.message}</div>
+              <div className="mt-1 text-text-muted">下一步：{describeErrorRecovery(activity.error)}</div>
+              <div className="mt-1 text-[10px] text-text-muted">错误代码：{activity.error.code}</div>
             </div>
+          ) : null}
+          {activity.resultReferences ? (
+            <dl className="mt-1 grid gap-0.5 text-[10px] text-text-muted">
+              {Object.entries(activity.resultReferences).map(([key, value]) => (
+                <div key={key} className="flex min-w-0 gap-2">
+                  <dt className="shrink-0">{key}</dt>
+                  <dd className="min-w-0 break-all text-text-dark">{value}</dd>
+                </div>
+              ))}
+            </dl>
           ) : null}
           {activity.artifactRef ? <div className="mt-1 truncate text-[10px] text-text-muted">内部结果引用：{activity.artifactRef}</div> : null}
         </div>
@@ -103,3 +109,22 @@ export function ToolActivityCard({ activity, onOpenTask, onOpenNode }: ToolActiv
     </section>
   )
 }
+
+function sameActivity(left: AgentToolActivity, right: AgentToolActivity): boolean {
+  return left.toolCallId === right.toolCallId
+    && left.title === right.title
+    && left.status === right.status
+    && left.summary === right.summary
+    && left.error === right.error
+    && left.artifactRef === right.artifactRef
+    && left.resultReferences === right.resultReferences
+    && left.completionKind === right.completionKind
+    && left.readOnly === right.readOnly
+    && left.inputDigest === right.inputDigest
+}
+
+export const ToolActivityCard = memo(ToolActivityCardView, (previous, next) => (
+  sameActivity(previous.activity, next.activity)
+  && previous.onOpenTask === next.onOpenTask
+  && previous.onOpenNode === next.onOpenNode
+))

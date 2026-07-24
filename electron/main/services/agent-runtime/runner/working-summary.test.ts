@@ -31,7 +31,7 @@ describe('Agent 工作摘要', () => {
       type: 'PlanUpdated', intent: 'canvas', summary: '先读取目录再创建', toolDomains: ['canvas'],
     }), null)
     summary = reduceAgentWorkingSummary(summary, event({
-      type: 'ToolRequested', toolCallId: 'call-1', toolName: 'create_node', inputDigest: 'digest',
+      type: 'ToolRequested', toolCallId: 'call-1', toolName: 'create_node', title: '创建画布节点', inputDigest: 'digest',
       category: 'canvas', readOnly: false, idempotent: true,
     }), null)
     summary = reduceAgentWorkingSummary(summary, event({
@@ -43,7 +43,7 @@ describe('Agent 工作摘要', () => {
       route: { intent: 'canvas' },
       planVersion: 1,
       activeStep: null,
-      completedSteps: [{ toolName: 'create_node', status: 'completed' }],
+      completedSteps: [{ toolName: 'create_node', title: '创建画布节点', status: 'completed' }],
       evidence: [{ references: { nodeId: 'node-1' } }],
     })
   })

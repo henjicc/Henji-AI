@@ -219,6 +219,13 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     version: 1,
     title: '创建可见生成任务',
     description: '在生成工作区创建用户可见的图片、视频或音频生成任务。该动作会向外部 Provider 发送内容并可能产生费用。',
+    semantics: {
+      completionKind: 'submitted',
+      successEvidence: [
+        '返回稳定 taskId、submitted 状态和最新 generation revision。',
+        '该结果只证明任务已提交；只有后续状态查询为 completed、succeeded 或 success 才能声称生成完成。',
+      ],
+    },
     category: 'generation',
     side: 'frontend',
     risk: 'R2',

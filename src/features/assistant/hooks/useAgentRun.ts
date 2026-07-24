@@ -48,22 +48,43 @@ export function useAgentRun(): UseAgentRunResult {
   const approvalMode = useAssistantUiStore((state) => state.approvalMode)
   const activeRunIdRef = useRef(activeRunId)
   const bufferedEventsRef = useRef(new Map<string, AgentEvent[]>())
+  const pendingViewEventsRef = useRef<AgentEvent[]>([])
+  const viewFrameRef = useRef<number | null>(null)
   activeRunIdRef.current = activeRunId
 
-  useEffect(() => onAgentEvent((payload) => {
-    const currentRunId = activeRunIdRef.current
-    if (currentRunId === payload.runId) {
-      dispatch({ type: 'event', event: payload.event })
-      return
+  const queueViewEvent = useCallback((event: AgentEvent): void => {
+    pendingViewEventsRef.current.push(event)
+    if (viewFrameRef.current !== null) return
+    viewFrameRef.current = window.requestAnimationFrame(() => {
+      viewFrameRef.current = null
+      const events = pendingViewEventsRef.current
+      pendingViewEventsRef.current = []
+      if (events.length > 0) dispatch({ type: 'events', events })
+    })
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onAgentEvent((payload) => {
+      const currentRunId = activeRunIdRef.current
+      if (currentRunId === payload.runId) {
+        queueViewEvent(payload.event)
+        return
+      }
+      const pending = bufferedEventsRef.current.get(payload.runId) ?? []
+      pending.push(payload.event)
+      bufferedEventsRef.current.set(payload.runId, pending.slice(-200))
+      while (bufferedEventsRef.current.size > 3) {
+        const oldest = bufferedEventsRef.current.keys().next().value
+        if (typeof oldest === 'string') bufferedEventsRef.current.delete(oldest)
+      }
+    })
+    return () => {
+      unsubscribe()
+      if (viewFrameRef.current !== null) window.cancelAnimationFrame(viewFrameRef.current)
+      viewFrameRef.current = null
+      pendingViewEventsRef.current = []
     }
-    const pending = bufferedEventsRef.current.get(payload.runId) ?? []
-    pending.push(payload.event)
-    bufferedEventsRef.current.set(payload.runId, pending.slice(-200))
-    while (bufferedEventsRef.current.size > 3) {
-      const oldest = bufferedEventsRef.current.keys().next().value
-      if (typeof oldest === 'string') bufferedEventsRef.current.delete(oldest)
-    }
-  }), [])
+  }, [queueViewEvent])
 
   const refresh = useCallback(async (): Promise<void> => {
     const runId = activeRunIdRef.current
@@ -76,7 +97,7 @@ export function useAgentRun(): UseAgentRunResult {
         dispatch({ type: 'hydrate', snapshot })
         const buffered = bufferedEventsRef.current.get(runId) ?? []
         bufferedEventsRef.current.delete(runId)
-        for (const event of buffered) dispatch({ type: 'event', event })
+        if (buffered.length > 0) dispatch({ type: 'events', events: buffered })
         return
       } catch (error) {
         lastError = error
@@ -129,7 +150,7 @@ export function useAgentRun(): UseAgentRunResult {
       dispatch({ type: 'begin', state: result.state })
       const buffered = bufferedEventsRef.current.get(result.runId) ?? []
       bufferedEventsRef.current.delete(result.runId)
-      for (const event of buffered) dispatch({ type: 'event', event })
+      if (buffered.length > 0) dispatch({ type: 'events', events: buffered })
       logger.info('智能助手 UI 运行已启动', {
         event: 'assistant_ui.run.start.completed',
         requestId: result.runId,

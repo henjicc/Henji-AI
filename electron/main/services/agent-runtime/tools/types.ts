@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 
+import type { AgentToolCompletionKind } from '../../../../../src/core/assistant/events'
 import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import type {
   AgentDataClass,
@@ -24,6 +25,7 @@ export interface AgentToolSemantics {
   outputs?: string[]
   successEvidence?: string[]
   failureRecovery?: string[]
+  completionKind?: AgentToolCompletionKind
   parallelSafe?: boolean
 }
 

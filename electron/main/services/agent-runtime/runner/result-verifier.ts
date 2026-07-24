@@ -115,7 +115,16 @@ export function verifyAgentCompletion(input: {
   registry: AgentToolRegistry
 }): AgentCompletionVerification {
   if (input.route.intent === 'general' && input.observations.length === 0) {
-    return { passed: true, summary: '一般回答不需要工具证据。', evidence: [], clarificationRequired: false }
+    const clarificationRequired = input.route.complexity === 'ambiguous'
+      && /请提供|请确认|请选择|需要你|[?？]/.test(input.finalText)
+    return {
+      passed: true,
+      summary: clarificationRequired
+        ? '模糊目标已转换为清晰的用户问题，未执行写操作。'
+        : '一般回答不需要工具证据。',
+      evidence: [],
+      clarificationRequired,
+    }
   }
   if (input.observations.length === 0) {
     return { passed: false, summary: '缺少任何工具观察，无法证明任务完成。', evidence: [], clarificationRequired: false }
