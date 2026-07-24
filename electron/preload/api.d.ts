@@ -353,7 +353,12 @@ export interface HenjiLlmApi {
   modelStep(input: ModelStepInput, onEvent: (event: ModelStepEvent) => void): Promise<ModelStepResult>
   verifyModelCapabilities(request: ModelCapabilitySmokeRequest): Promise<ModelCapabilitySmokeResult>
   cancelTask(taskId: string): Promise<void>
-  discoverModels(providerId: string, baseUrl: string): Promise<Array<{ modelId: string; displayName: string }>>
+  discoverModels(providerId: string, baseUrl: string): Promise<Array<{
+    modelId: string
+    displayName: string
+    contextWindow: number | null
+    maxOutputTokens: number | null
+  }>>
 }
 
 export interface HenjiModelStepEventPayload {

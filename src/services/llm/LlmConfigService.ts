@@ -298,11 +298,21 @@ function ensureBuiltInModels(models: LlmModelConfig[], providers: LlmProviderCon
   ))
   const nextModels = [...withoutDeprecated]
   defaults.forEach(defaultModel => {
-    const exists = nextModels.some(model => (
+    const index = nextModels.findIndex(model => (
       model.providerId === defaultModel.providerId && model.modelId === defaultModel.modelId
     ))
-    if (!exists) {
+    if (index < 0) {
       nextModels.push(defaultModel)
+      return
+    }
+    const current = nextModels[index]
+    nextModels[index] = {
+      ...current,
+      capabilities: {
+        ...current.capabilities,
+        contextWindow: defaultModel.capabilities.contextWindow ?? current.capabilities.contextWindow,
+        maxOutputTokens: defaultModel.capabilities.maxOutputTokens ?? current.capabilities.maxOutputTokens,
+      },
     }
   })
   return nextModels.map(model => normalizeModel(model, providers))

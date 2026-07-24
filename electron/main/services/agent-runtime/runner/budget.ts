@@ -9,8 +9,8 @@ export const DEFAULT_AGENT_BUDGET: AgentBudgetConfig = {
   maxTurns: 12,
   maxToolCalls: 24,
   maxDurationMs: 10 * 60 * 1_000,
-  maxInputTokens: 120_000,
-  maxOutputTokens: 32_000,
+  maxInputTokens: null,
+  maxOutputTokens: null,
   maxConsecutiveFailures: 3,
   maxRepeatedToolCalls: 2,
   maxNoProgressTurns: 3,
@@ -105,10 +105,10 @@ export class AgentBudgetTracker {
     if (Date.now() - this.startedAt > this.config.maxDurationMs) {
       throw new AgentBudgetExceededError('MAX_DURATION', '已达到 Agent 最大运行时长')
     }
-    if (this.inputTokens > this.config.maxInputTokens) {
+    if (this.config.maxInputTokens !== null && this.inputTokens > this.config.maxInputTokens) {
       throw new AgentBudgetExceededError('MAX_INPUT_TOKENS', '已达到 Agent 输入 token 预算')
     }
-    if (this.outputTokens > this.config.maxOutputTokens) {
+    if (this.config.maxOutputTokens !== null && this.outputTokens > this.config.maxOutputTokens) {
       throw new AgentBudgetExceededError('MAX_OUTPUT_TOKENS', '已达到 Agent 输出 token 预算')
     }
     if (

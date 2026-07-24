@@ -221,9 +221,9 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
         <UiInput type="number" min={1000} value={profile.settings.timeoutMs} onChange={event => void updateSetting('timeoutMs', Number(event.target.value))} aria-label="超时毫秒" />
         <UiInput type="number" min={0} max={5} value={profile.settings.maxRetries} onChange={event => void updateSetting('maxRetries', Number(event.target.value))} aria-label="重试次数" />
         <UiInput type="number" min={1} value={profile.settings.maxOutputTokens} onChange={event => void updateSetting('maxOutputTokens', Number(event.target.value))} aria-label="最大输出 Token" />
-        <UiInput type="number" min={1} value={profile.settings.contextWindowBudget} onChange={event => void updateSetting('contextWindowBudget', Number(event.target.value))} aria-label="上下文预算 Token" />
+        <UiInput type="number" min={1} value={profile.settings.contextWindowBudget} onChange={event => void updateSetting('contextWindowBudget', Number(event.target.value))} aria-label="未知模型上下文回退 Token" />
       </div>
-      <div className="text-xs text-text-muted">依次为：超时毫秒、重试次数、最大输出 Token、上下文预算 Token。</div>
+      <div className="text-xs text-text-muted">依次为：超时毫秒、重试次数、单次期望输出 Token、未知模型上下文回退 Token。已配置模型优先使用各自能力上限。</div>
     </UiPanel>
   )
 }

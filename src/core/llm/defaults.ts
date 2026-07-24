@@ -19,6 +19,8 @@ export const DEFAULT_PPIO_PROVIDER_ID = 'ppio'
 export const DEFAULT_PPIO_BASE_URL = 'https://api.ppio.com/openai'
 export const DEFAULT_PPIO_MODEL_ID = 'deepseek/deepseek-v4-flash'
 export const DEFAULT_LLM_REASONING_EFFORT: LlmReasoningEffort = 'high'
+export const DEEPSEEK_V4_CONTEXT_WINDOW = 1_000_000
+export const DEEPSEEK_V4_MAX_OUTPUT_TOKENS = 384_000
 
 export const DEFAULT_LLM_CAPABILITIES: LlmCapabilities = {
   text: true,
@@ -35,6 +37,14 @@ export const DEFAULT_LLM_CAPABILITIES: LlmCapabilities = {
   contextWindow: null,
   maxOutputTokens: null,
   usage: true,
+}
+
+function createDeepSeekV4Capabilities(): LlmCapabilities {
+  return {
+    ...DEFAULT_LLM_CAPABILITIES,
+    contextWindow: DEEPSEEK_V4_CONTEXT_WINDOW,
+    maxOutputTokens: DEEPSEEK_V4_MAX_OUTPUT_TOKENS,
+  }
 }
 
 export const DEFAULT_PROMPT_PROFILE_ID = 'default-general-optimizer'
@@ -119,7 +129,7 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
       displayName: 'DeepSeek V4 Pro',
       adapter: 'openai',
       baseUrl: DEFAULT_PPIO_BASE_URL,
-      capabilities: DEFAULT_LLM_CAPABILITIES,
+      capabilities: createDeepSeekV4Capabilities(),
       enabled: true,
     },
     {
@@ -128,7 +138,7 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
       displayName: 'DeepSeek V4 Flash',
       adapter: 'openai',
       baseUrl: DEFAULT_PPIO_BASE_URL,
-      capabilities: DEFAULT_LLM_CAPABILITIES,
+      capabilities: createDeepSeekV4Capabilities(),
       enabled: true,
     },
     {
@@ -159,7 +169,7 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
       displayName: 'DeepSeek V4 Flash',
       adapter: 'deepseek',
       baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
-      capabilities: DEFAULT_LLM_CAPABILITIES,
+      capabilities: createDeepSeekV4Capabilities(),
       enabled: true,
     },
     {
@@ -168,7 +178,7 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
       displayName: 'DeepSeek V4 Pro',
       adapter: 'deepseek',
       baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
-      capabilities: DEFAULT_LLM_CAPABILITIES,
+      capabilities: createDeepSeekV4Capabilities(),
       enabled: true,
     },
   ]

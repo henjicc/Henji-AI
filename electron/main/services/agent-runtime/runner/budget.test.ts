@@ -42,4 +42,22 @@ describe('AgentBudgetTracker', () => {
     expect(() => timeBudget.assertWithinLimits()).toThrowError(/最大运行时长/)
     vi.useRealTimers()
   })
+
+  it('默认不按跨轮累计 Token 终止，显式限制仍然生效', () => {
+    const unlimited = new AgentBudgetTracker()
+    unlimited.recordModelUsage({
+      ...emptyUsage,
+      inputTokens: 150_000,
+      outputTokens: 40_000,
+      totalTokens: 190_000,
+    })
+    expect(unlimited.snapshot()).toMatchObject({ inputTokens: 150_000, outputTokens: 40_000 })
+
+    const limited = new AgentBudgetTracker({ maxInputTokens: 100, maxOutputTokens: 100 })
+    expect(() => limited.recordModelUsage({
+      ...emptyUsage,
+      inputTokens: 101,
+      totalTokens: 101,
+    })).toThrowError(/输入 token 预算/)
+  })
 })

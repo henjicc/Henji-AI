@@ -13,6 +13,10 @@ export interface AgentRuntimeModel {
   adapter: string
   baseUrl?: string
   capabilities: ModelStepCapabilities
+  limits: {
+    contextWindow: number
+    contextWindowSource: 'model' | 'profile_fallback'
+  }
   settings: {
     timeoutMs: number
     maxRetries: number
@@ -29,6 +33,7 @@ function findModel(
 }
 
 function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelConfig): AgentRuntimeModel {
+  const modelContextWindow = model.capabilities.contextWindow
   return {
     providerId: model.providerId,
     modelId: model.modelId,
@@ -42,6 +47,10 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
       reasoning: model.capabilities.reasoning,
       sampling: model.capabilities.sampling,
       usage: model.capabilities.usage,
+    },
+    limits: {
+      contextWindow: modelContextWindow ?? request.profile.settings.contextWindowBudget,
+      contextWindowSource: modelContextWindow === null ? 'profile_fallback' : 'model',
     },
     settings: {
       timeoutMs: request.profile.settings.timeoutMs,

@@ -181,9 +181,26 @@ const LlmSettingsSection: React.FC = () => {
       const discovered = await fetchOpenAiCompatibleModels(provider)
       const nextModels = [...config.models]
       discovered.forEach((item) => {
-        const exists = nextModels.some(model => model.providerId === provider.providerId && model.modelId === item.modelId)
-        if (!exists) {
-          nextModels.push(createModelFromInput(provider, item.modelId, item.displayName))
+        const index = nextModels.findIndex(model => (
+          model.providerId === provider.providerId && model.modelId === item.modelId
+        ))
+        const discoveredCapabilities = {
+          contextWindow: item.contextWindow,
+          maxOutputTokens: item.maxOutputTokens,
+        }
+        if (index < 0) {
+          nextModels.push(createModelFromInput(provider, item.modelId, item.displayName, discoveredCapabilities))
+          return
+        }
+        const current = nextModels[index]
+        nextModels[index] = {
+          ...current,
+          displayName: current.displayName || item.displayName,
+          capabilities: {
+            ...current.capabilities,
+            contextWindow: item.contextWindow ?? current.capabilities.contextWindow,
+            maxOutputTokens: item.maxOutputTokens ?? current.capabilities.maxOutputTokens,
+          },
         }
       })
       await persistConfig({ ...config, models: nextModels })

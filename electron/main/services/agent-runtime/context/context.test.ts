@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import { AgentContextBuilder } from './builder'
+import { AgentContextBuilder, resolveContextCompactionThreshold } from './builder'
 import { AgentIntentRouter } from './router'
 
 function contextSnapshot(): HostContextSnapshot {
@@ -129,6 +129,13 @@ describe('AgentIntentRouter', () => {
       candidateIntents: ['generate', 'assets'],
       toolDomains: ['models', 'generation', 'navigation', 'assets', 'catalog'],
     })
+  })
+})
+
+describe('resolveContextCompactionThreshold', () => {
+  it('按模型窗口与单次输出量保留响应空间', () => {
+    expect(resolveContextCompactionThreshold(1_000_000, 4_096)).toBe(982_904)
+    expect(resolveContextCompactionThreshold(64_000, 4_000)).toBe(47_200)
   })
 })
 

@@ -7,6 +7,8 @@ const logger = createLogger('services.llm.llmDiscoveryService')
 export interface DiscoveredModelItem {
   modelId: string
   displayName: string
+  contextWindow: number | null
+  maxOutputTokens: number | null
 }
 
 function getDefaultCapabilities(): LlmCapabilities {

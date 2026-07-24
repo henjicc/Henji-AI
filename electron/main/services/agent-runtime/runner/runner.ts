@@ -69,7 +69,13 @@ export class AgentRunner {
       requestId: this.options.runId,
       modelId: this.models.primary.modelId,
       providerId: this.models.primary.providerId,
-      context: { threadId: this.options.request.threadId, fellBack: this.models.fellBack },
+      context: {
+        threadId: this.options.request.threadId,
+        fellBack: this.models.fellBack,
+        contextWindow: this.models.primary.limits.contextWindow,
+        contextWindowSource: this.models.primary.limits.contextWindowSource,
+        maxOutputTokens: this.models.primary.settings.maxOutputTokens,
+      },
     })
     void this.execute()
     return this.getState()
@@ -176,7 +182,8 @@ export class AgentRunner {
           observations: this.observations.slice(-20),
           modelTools: registrations.map((item) => item.modelTool),
           activeToolNames: registrations.map((item) => item.catalog.name),
-          contextWindowBudget: this.options.request.profile.settings.contextWindowBudget,
+          contextWindowBudget: this.models.primary.limits.contextWindow,
+          maxOutputTokens: this.models.primary.settings.maxOutputTokens,
           workingSummary: this.state.workingSummary,
         })
         emitAgentContextEvents(

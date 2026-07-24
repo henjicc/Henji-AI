@@ -104,6 +104,7 @@ export interface AgentContextBuildInput {
   modelTools: ModelStepTool[]
   activeToolNames: string[]
   contextWindowBudget: number
+  maxOutputTokens?: number
   workingSummary?: AgentWorkingSummary
 }
 

@@ -21,6 +21,10 @@ describe('runPrimaryAgentModelStep', () => {
           sampling: true,
           usage: true,
         },
+        limits: {
+          contextWindow: 8_000,
+          contextWindowSource: 'profile_fallback',
+        },
         settings: {
           timeoutMs: 5_000,
           maxRetries: 0,

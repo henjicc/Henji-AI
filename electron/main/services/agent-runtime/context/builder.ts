@@ -15,6 +15,15 @@ import type {
 } from './types'
 
 const logger = createMainLogger('main.agent_context')
+const MAX_CONTEXT_BUFFER_TOKENS = 13_000
+
+export function resolveContextCompactionThreshold(
+  contextWindow: number,
+  maxOutputTokens = 0
+): number {
+  const contextBuffer = Math.min(MAX_CONTEXT_BUFFER_TOKENS, Math.floor(contextWindow * 0.2))
+  return Math.max(2_000, contextWindow - maxOutputTokens - contextBuffer)
+}
 
 function withoutSystemMessages(messages: ModelStepMessage[]): ModelStepMessage[] {
   return messages.filter((message) => message.role !== 'system')
@@ -38,7 +47,10 @@ export class AgentContextBuilder {
       [{ role: 'system', content: stableSystemPrompt }, ...fullLayerMessages, ...baseConversation],
       toolsJson()
     )
-    const threshold = Math.max(2_000, Math.floor(input.contextWindowBudget * 0.75))
+    const threshold = resolveContextCompactionThreshold(
+      input.contextWindowBudget,
+      input.maxOutputTokens
+    )
     const compacted = beforeCompactionTokens > threshold
     const conversation = compacted
       ? compactConversationMessages(baseConversation, 8, input.workingSummary)
@@ -106,6 +118,9 @@ export class AgentContextBuilder {
         activeToolCount: activeTools.length,
         estimatedTokens,
         beforeCompactionTokens,
+        contextWindow: input.contextWindowBudget,
+        compactionThreshold: threshold,
+        maxOutputTokens: input.maxOutputTokens ?? null,
         compacted,
         compactionReason,
         retainedLayers: selection.retainedLayers,
