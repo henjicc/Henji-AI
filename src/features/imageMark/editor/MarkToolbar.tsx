@@ -26,6 +26,7 @@ import { useNonPassiveWheel } from './useNonPassiveWheel';
 import type { NumericStyleKey } from './useMarkController';
 
 interface MarkToolbarProps {
+  variant?: 'legacy' | 'annotation';
   tool: MarkToolType;
   setTool: (tool: MarkToolType) => void;
   style: MarkEditorStyleState;
@@ -58,6 +59,7 @@ const ORIENTATION_BUTTONS: { op: OrientationOp; label: string; icon: typeof Rota
 ];
 
 export function MarkToolbar({
+  variant = 'legacy',
   tool,
   setTool,
   style,
@@ -76,6 +78,7 @@ export function MarkToolbar({
   canClear,
   actions,
 }: MarkToolbarProps): JSX.Element {
+  const annotationOnly = variant === 'annotation';
   const showWidth =
     tool === 'callout' || tool === 'rect' || tool === 'ellipse' || tool === 'arrow' || tool === 'pen' || tool === 'select';
   const showTextSize = tool === 'callout' || tool === 'text' || tool === 'number' || tool === 'select';
@@ -102,7 +105,7 @@ export function MarkToolbar({
       <div className="flex items-start gap-2">
         {actions && <div className="invisible flex shrink-0 items-center gap-2" aria-hidden>{actions}</div>}
         <div className="flex flex-1 flex-wrap items-center justify-center gap-2">
-          {TOOL_BUTTONS.map((button) => {
+          {TOOL_BUTTONS.filter((button) => !annotationOnly || button.type !== 'crop').map((button) => {
             const Icon = button.icon;
             return (
               <UiChipButton
@@ -119,23 +122,26 @@ export function MarkToolbar({
             );
           })}
 
-          <span className="mx-1 h-5 w-px bg-border-dark" />
-
-          {ORIENTATION_BUTTONS.map((button) => {
-            const Icon = button.icon;
-            return (
-              <UiChipButton
-                key={button.op}
-                type="button"
-                title={button.label}
-                className={CHIP_CLASS}
-                onClick={() => onOrientation(button.op)}
-              >
-                <Icon className={ICON_CLASS} />
-                {button.label}
-              </UiChipButton>
-            );
-          })}
+          {!annotationOnly && (
+            <>
+              <span className="mx-1 h-5 w-px bg-border-dark" />
+              {ORIENTATION_BUTTONS.map((button) => {
+                const Icon = button.icon;
+                return (
+                  <UiChipButton
+                    key={button.op}
+                    type="button"
+                    title={button.label}
+                    className={CHIP_CLASS}
+                    onClick={() => onOrientation(button.op)}
+                  >
+                    <Icon className={ICON_CLASS} />
+                    {button.label}
+                  </UiChipButton>
+                );
+              })}
+            </>
+          )}
 
           <span className="mx-1 h-5 w-px bg-border-dark" />
 
@@ -157,7 +163,7 @@ export function MarkToolbar({
 
       {/* 选项行:固定最小高度,切换工具不引起内容跳动 */}
       <div className="flex min-h-[36px] flex-wrap items-center justify-center gap-2">
-        {tool === 'crop' ? (
+        {!annotationOnly && tool === 'crop' ? (
           <>
             {CROP_RATIO_OPTIONS.map((option) => (
               <UiChipButton

@@ -1,1 +1,12 @@
 export * from './execution/browserImageEditExecution';
+export { ImageEditor } from './editor/ImageEditor';
+export type { ImageEditorProps } from './editor/ImageEditor';
+export { ImageEditorShell } from './editor/ImageEditorShell';
+export type { ImageEditorShellProps } from './editor/ImageEditorShell';
+export { ImageToolInspector } from './editor/ImageToolInspector';
+export { ImageToolPanel } from './editor/ImageToolPanel';
+export { ImageToolRail } from './editor/ImageToolRail';
+export { useImageEditorSession } from './editor/useImageEditorSession';
+export type { ImageEditorSession, UseImageEditorSessionParams } from './editor/useImageEditorSession';
+export * from './store/imageEditorUiStore';
+export * from './tools';
