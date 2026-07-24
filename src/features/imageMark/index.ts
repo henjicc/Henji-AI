@@ -13,3 +13,16 @@ export { exportMarkedImage } from './render/exportMarkedImage';
 export { MarkEditor, type MarkEditorProps } from './editor/MarkEditor';
 export { ViewerMarkEditor } from './viewer/ViewerMarkEditor';
 export type { MarkEditorStyleState } from './editor/shared';
+
+export {
+  coerceImageEditSession,
+  createEmptyImageEditDocument,
+  createImageEditDocumentFromMarkDoc,
+  decodeImageEditDocument,
+  imageEditDocumentToMarkDoc,
+  parseImageEditDocument,
+  replaceMarkDocInImageEditDocument,
+  stringifyImageEditDocument,
+  toImageMarkSession,
+} from '@/core/imageEdit';
+export type { ImageEditDocument, ImageEditOperation, ImageEditSession } from '@/core/imageEdit';

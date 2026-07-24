@@ -41,3 +41,6 @@ export { NodeConverter, nodeConverter } from './NodeConverter'
 export { ToolNodeRegistry, toolNodeRegistry } from './ToolNodeRegistry'
 export { defineToolNode } from './defineToolNode'
 export * from './tools'
+
+// 图片编辑核心契约
+export * from './imageEdit'
