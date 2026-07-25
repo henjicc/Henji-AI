@@ -64,4 +64,31 @@ npx vitest run                             # 单元测试
 
 看 `00-任务总览.md` 的「当前进度」与「任务清单」，找到第一个非「已完成」的任务，读它的任务文件，按其「执行步骤」做。
 
-（本文件在阶段交接时更新）
+## 七、第一阶段交接（2026-07-25）
+
+**状态：第一阶段（1.1/1.2/1.3）全部完成，下一步进入第二阶段。**
+
+第一阶段落地了什么（接手时可以直接用，不要重复建设）：
+
+| 能力 | 怎么用 |
+|---|---|
+| `veil` 六档白色半透明 | `bg-veil-faint` / `border-veil-subtle` / `border-veil-soft` / `border-veil` / `border-veil-strong` / `from-veil-bright` |
+| 具名特效阴影 | `shadow-panel`(浮层) / `shadow-node-selected` / `shadow-node-error` / `shadow-thumb` / `shadow-thumb-sm` |
+| 字号档位 | `text-4xs/3xs/2xs/13/14/15` + `text-xs/sm/base+` |
+| z-index 十档 | `z-raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar` |
+| 内联 zIndex | `Z_LAYERS`（`src/core/theme/zLayers.ts`） |
+| 画布节点描边 | `NODE_SELECTED_BORDER_CLASS` / `NODE_IDLE_BORDER_CLASS` / `NODE_IDLE_BORDER_STATIC_CLASS`（`src/features/canvas/ui/nodeControlStyles.ts`） |
+
+**第二阶段要注意的几个坑（都是第一阶段踩出来的）：**
+
+1. **透明度修饰符只能用 Tailwind 刻度值（步进 5）**。`bg-black/72`、`border-white/42` 这类不生成任何 CSS，既不报错也没效果。需要精确值用 `bg-black/[0.72]`。第一阶段已修 8 处这类静默失效。
+2. **ESLint 现在会硬拦** 内联字号/阴影/z-index/圆角/rgba 字面量。写了会直接报错，按提示改用登记档位。
+3. **`grep` 排查时不要只扫 `.tsx`**。第一阶段就因此漏掉了 `.ts` 里的 `z-[1000]`，靠 ESLint 才发现。
+4. **改共享组件优先于逐页面改**。Settings 试点已验证：`SectionCard` 一处改动覆盖 15 个调用点。第二阶段的 2.3（弹窗）、2.4（播放器）同样应先找杠杆点。
+5. **`check:surface` 的 `[C]` 手写弹窗基线是 15 处**，其中 3 个媒体查看器已确认豁免（记录 003），2.3 的目标是把剩余 12 处清掉。
+
+**未达成/遗留：**
+
+- 圆角标准类之间的档位收敛（约 285 处）**有意未做**，见 `decisions.md` D-003。
+- CI 未接入，因为 `.github/workflows/build.yml` 本身已失效（Tauri 残留），见 `重要记录.md` 记录 007。
+- 第一阶段的手动验证清单在 `test-report.md` 第二部分，**用户尚未执行**。若用户反馈某项有问题，先修再推进第二阶段。
