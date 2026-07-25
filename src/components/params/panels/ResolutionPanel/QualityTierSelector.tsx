@@ -64,7 +64,7 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
             >
               <span className="font-medium leading-none">{label}</span>
               {description && (
-                <span className="text-[11px] leading-none opacity-80">{description}</span>
+                <span className="text-2xs leading-none opacity-80">{description}</span>
               )}
             </UiOptionButton>
           )

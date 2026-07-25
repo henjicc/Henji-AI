@@ -103,7 +103,7 @@ const ObjectListPanel: React.FC = () => {
                       className="h-7 min-w-0 flex-1 px-2 py-0 text-sm"
                     />
                     {object.type === 'camera' && object.id === activeCameraId && (
-                      <span className="shrink-0 text-[11px] text-text-muted">取景</span>
+                      <span className="shrink-0 text-2xs text-text-muted">取景</span>
                     )}
                   </div>
                 ) : (
@@ -119,7 +119,7 @@ const ObjectListPanel: React.FC = () => {
                     </span>
                     <span className="truncate">{object.name}</span>
                     {object.type === 'camera' && object.id === activeCameraId && (
-                      <span className="ml-auto shrink-0 text-[11px] text-text-muted">取景</span>
+                      <span className="ml-auto shrink-0 text-2xs text-text-muted">取景</span>
                     )}
                   </UiOptionButton>
                 )}

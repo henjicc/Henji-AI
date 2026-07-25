@@ -67,7 +67,7 @@ export function LogEventList({
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-lg border border-border-dark/50 bg-black/20">
       {paused && (
-        <div className="shrink-0 border-b border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5 text-[11px] text-yellow-500/90">
+        <div className="shrink-0 border-b border-yellow-500/30 bg-yellow-500/10 px-3 py-1.5 text-2xs text-yellow-500/90">
           {t('logsWindow.list.paused')}{pausedCount > 0 ? ` (${pausedCount})` : ''}
         </div>
       )}

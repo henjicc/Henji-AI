@@ -60,16 +60,16 @@ export function ExecutionPlanCard({
     <details style={deferredBlockStyle} className="group rounded-lg border border-border-dark/70 bg-layer/70 px-2 py-1.5">
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2">
         <ListChecks className="h-3.5 w-3.5 shrink-0 text-accent" />
-        <span className="shrink-0 text-[11px] font-medium text-text-dark">执行计划</span>
-        <span className="min-w-0 flex-1 truncate text-[11px] text-text-muted">{nextAction}</span>
-        <span className="shrink-0 text-[10px] text-text-muted">
+        <span className="shrink-0 text-2xs font-medium text-text-dark">执行计划</span>
+        <span className="min-w-0 flex-1 truncate text-2xs text-text-muted">{nextAction}</span>
+        <span className="shrink-0 text-3xs text-text-muted">
           {planStatusLabel(presentation, runStatus)}
         </span>
         {hasDetails ? <ChevronRight className="h-3 w-3 shrink-0 text-text-muted transition-transform group-open:rotate-90" /> : null}
       </summary>
 
       {hasDetails ? (
-        <div className="border-t border-border-dark/70 pb-1 pl-5 pr-1 pt-2 text-[11px] leading-4 text-text-muted">
+        <div className="border-t border-border-dark/70 pb-1 pl-5 pr-1 pt-2 text-2xs leading-4 text-text-muted">
           {summary?.route ? (
             <div>
               <span className="font-medium text-text-dark">目标判断：</span>
@@ -135,7 +135,7 @@ export function ExecutionPlanCard({
             <span className="font-medium text-text-dark">下一步：</span>{nextAction}
           </div>
           {lastCompaction ? (
-            <div className="mt-1 text-[10px] text-text-muted">
+            <div className="mt-1 text-3xs text-text-muted">
               上下文已整理：{lastCompaction.beforeTokens.toLocaleString()} → {lastCompaction.afterTokens.toLocaleString()} token
             </div>
           ) : null}

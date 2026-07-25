@@ -127,7 +127,7 @@ export function VideoTrimTimeline({
           <div className="absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-text-dark" />
         </div>
       </div>
-      <div className="flex items-center justify-between text-[11px] text-text-muted">
+      <div className="flex items-center justify-between text-2xs text-text-muted">
         <span>{formatSeconds(start)}</span>
         <span>{formatSeconds(end - start)} / {formatSeconds(maxClipSeconds)}</span>
         <span>{formatSeconds(end)}</span>

@@ -5,7 +5,7 @@ export const NODE_CONTROL_MODEL_CHIP_CLASS = '!w-full !min-w-0 !max-w-[260px] !j
 export const NODE_CONTROL_PARAMS_CHIP_CLASS = '!max-w-[120px] !justify-start';
 
 export const NODE_CONTROL_PRIMARY_BUTTON_CLASS =
-  '!h-7 !rounded-lg !px-2.5 !text-[11px] !gap-1.5 border border-transparent';
+  '!h-7 !rounded-lg !px-2.5 !text-2xs !gap-1.5 border border-transparent';
 
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
 

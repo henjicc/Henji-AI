@@ -39,6 +39,14 @@
       {
         "selector": "Literal[value=/\\[#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\\]/]",
         "message": "禁止使用 Tailwind 任意十六进制颜色类（如 bg-[#xxxxxx]），请改为语义化颜色类。"
+      },
+      {
+        "selector": "Literal[value=/text-\\[(?:9|10|11)px\\]/]",
+        "message": "禁止内联 9/10/11px 字号，请使用已登记的 text-4xs / text-3xs / text-2xs。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/text-\\[(?:9|10|11)px\\]/]",
+        "message": "禁止内联 9/10/11px 字号，请使用已登记的 text-4xs / text-3xs / text-2xs。"
       }
     ]
   },

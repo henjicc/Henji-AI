@@ -112,16 +112,16 @@ export function ModelPickerList({
         >
           <div className="whitespace-nowrap border border-transparent px-8 text-xs">{searchPlaceholder}</div>
           <div className="mt-2 inline-flex gap-1">
-            <div className="inline-flex h-6 items-center rounded-md border border-transparent px-2 text-[11px]">
+            <div className="inline-flex h-6 items-center rounded-md border border-transparent px-2 text-2xs">
               {t('modelParams.allProviders', { defaultValue: '全部' })}
             </div>
             {providerOptions.map((provider) => (
               <div
                 key={provider.id}
-                className="inline-flex h-6 items-center gap-2 rounded-md border border-transparent px-2 text-[11px]"
+                className="inline-flex h-6 items-center gap-2 rounded-md border border-transparent px-2 text-2xs"
               >
                 <span>{provider.label}</span>
-                <span className="text-[10px]">{provider.count}</span>
+                <span className="text-3xs">{provider.count}</span>
               </div>
             ))}
           </div>
@@ -135,7 +135,7 @@ export function ModelPickerList({
                   {model.meta.icon && <span className="h-7 w-7 shrink-0" />}
                   <div className="flex flex-col">
                     <span className="whitespace-nowrap text-[13px]">{displayName}</span>
-                    <span className="whitespace-nowrap text-[11px]">
+                    <span className="whitespace-nowrap text-2xs">
                       {getProviderDisplayName(model.meta.provider)}
                       {functionLabels.length > 0 ? ` · ${functionLabels.join(' · ')}` : ''}
                     </span>
@@ -183,7 +183,7 @@ export function ModelPickerList({
               event.stopPropagation();
               onProviderFilterChange('all');
             }}
-            className="!h-6 shrink-0 !rounded-md !px-2 !text-[11px]"
+            className="!h-6 shrink-0 !rounded-md !px-2 !text-2xs"
           >
             {t('modelParams.allProviders', { defaultValue: '全部' })}
           </UiChipButton>
@@ -196,10 +196,10 @@ export function ModelPickerList({
                 event.stopPropagation();
                 onProviderFilterChange(provider.id);
               }}
-              className="!h-6 shrink-0 !rounded-md !px-2 !text-[11px]"
+              className="!h-6 shrink-0 !rounded-md !px-2 !text-2xs"
             >
               <span>{provider.label}</span>
-              <span className="text-[10px] text-text-muted/80">{provider.count}</span>
+              <span className="text-3xs text-text-muted/80">{provider.count}</span>
             </UiChipButton>
           ))}
         </div>
@@ -232,7 +232,7 @@ export function ModelPickerList({
               )}
               <div className="min-w-0 flex-1">
                 <div className={`truncate text-[13px] ${active ? 'text-white' : 'text-text-dark'}`}>{displayName}</div>
-                <div className={`truncate text-[11px] ${active ? 'text-white/70' : 'text-text-muted'}`}>
+                <div className={`truncate text-2xs ${active ? 'text-white/70' : 'text-text-muted'}`}>
                   {getProviderDisplayName(model.meta.provider)}
                   {functionLabels.length > 0 ? ` · ${functionLabels.join(' · ')}` : ''}
                 </div>

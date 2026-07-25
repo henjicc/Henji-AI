@@ -57,16 +57,16 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
         {icon}
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className="min-w-0 max-w-[45%] truncate text-xs font-medium text-text-dark">{activity.title}</span>
-          {activity.summary ? <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted">{activity.summary}</span> : null}
+          {activity.summary ? <span className="min-w-0 flex-1 truncate text-3xs text-text-muted">{activity.summary}</span> : null}
         </div>
-        <span className="shrink-0 text-[10px] tracking-wide text-text-muted">{statusLabel}</span>
+        <span className="shrink-0 text-3xs tracking-wide text-text-muted">{statusLabel}</span>
         {taskId ? (
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenTask(taskId)} className="!h-6 gap-1 !px-1.5 text-[10px]">
+          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenTask(taskId)} className="!h-6 gap-1 !px-1.5 text-3xs">
             <ExternalLink className="h-3 w-3" />查看
           </UiButton>
         ) : null}
         {projectId && nodeId ? (
-          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenNode(projectId, nodeId)} className="!h-6 gap-1 !px-1.5 text-[10px]">
+          <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenNode(projectId, nodeId)} className="!h-6 gap-1 !px-1.5 text-3xs">
             <ExternalLink className="h-3 w-3" />定位
           </UiButton>
         ) : null}
@@ -85,16 +85,16 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
       </div>
       {expanded ? (
         <div className="border-t border-border-dark/70 pb-1 pt-1.5">
-          {activity.summary ? <p className="text-[11px] leading-4 text-text-muted">{activity.summary}</p> : null}
+          {activity.summary ? <p className="text-2xs leading-4 text-text-muted">{activity.summary}</p> : null}
           {activity.error ? (
-            <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-[11px] leading-4 text-danger">
+            <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-2xs leading-4 text-danger">
               <div>{activity.error.message}</div>
               <div className="mt-1 text-text-muted">下一步：{describeErrorRecovery(activity.error)}</div>
-              <div className="mt-1 text-[10px] text-text-muted">错误代码：{activity.error.code}</div>
+              <div className="mt-1 text-3xs text-text-muted">错误代码：{activity.error.code}</div>
             </div>
           ) : null}
           {activity.resultReferences ? (
-            <dl className="mt-1 grid gap-0.5 text-[10px] text-text-muted">
+            <dl className="mt-1 grid gap-0.5 text-3xs text-text-muted">
               {Object.entries(activity.resultReferences).map(([key, value]) => (
                 <div key={key} className="flex min-w-0 gap-2">
                   <dt className="shrink-0">{key}</dt>
@@ -103,7 +103,7 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
               ))}
             </dl>
           ) : null}
-          {activity.artifactRef ? <div className="mt-1 truncate text-[10px] text-text-muted">内部结果引用：{activity.artifactRef}</div> : null}
+          {activity.artifactRef ? <div className="mt-1 truncate text-3xs text-text-muted">内部结果引用：{activity.artifactRef}</div> : null}
         </div>
       ) : null}
     </section>

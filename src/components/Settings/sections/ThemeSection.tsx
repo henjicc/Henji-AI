@@ -166,7 +166,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
             <UiButton
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-[11px]"
+              className="h-7 px-2 text-2xs"
               onClick={onResetThemeColors}
             >
               {t('actions.resetDefault')}

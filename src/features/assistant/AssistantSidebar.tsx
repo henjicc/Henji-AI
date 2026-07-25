@@ -99,7 +99,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             <div className="rounded-lg border border-accent/30 bg-accent/10 p-1.5 text-accent"><Sparkles className="h-3.5 w-3.5" /></div>
             <div className="min-w-0">
               <div className="truncate text-xs font-medium text-text-dark">智能助手</div>
-              <div className="truncate text-[10px] text-text-muted">受控工具执行轨道</div>
+              <div className="truncate text-3xs text-text-muted">受控工具执行轨道</div>
             </div>
             {mode === 'floating' ? <GripHorizontal className={`ml-1 h-4 w-4 text-text-muted ${interaction.dragging ? 'text-accent' : ''}`} /> : null}
           </div>

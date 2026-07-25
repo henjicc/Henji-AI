@@ -425,7 +425,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         onFrameDescriptionChange={handleFrameDescriptionChange}
       />
 
-      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-[10px] text-red-400">{error}</div>}
+      {error && <div className="canvas-node-lod-detail mb-1.5 shrink-0 text-3xs text-red-400">{error}</div>}
 
       <div className={`canvas-node-lod-detail flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
         <ModelInputRow

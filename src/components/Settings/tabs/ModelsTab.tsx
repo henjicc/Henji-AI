@@ -1,4 +1,5 @@
 import React from 'react'
+import { UI_SECTION_STACK_CLASS } from '@/components/ui'
 import ModelSettingsPanel from '../../ModelSettingsPanel'
 
 interface ModelsTabProps {
@@ -11,7 +12,7 @@ const ModelsTab: React.FC<ModelsTabProps> = ({ sectionId }) => {
   return (
     <div className="p-4">
       {currentSectionId === 'models-visibility' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <ModelSettingsPanel />
         </section>
       )}

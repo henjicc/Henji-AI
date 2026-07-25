@@ -181,10 +181,10 @@ const StagePathContextBar: React.FC = () => {
                     className="h-8 w-20 rounded-md px-2 text-right text-xs tabular-nums"
                     onChange={(event) => updateDetail({ delay: Math.max(0, Number(event.target.value)) })}
                   />
-                  <span className="text-[11px] text-text-muted">秒</span>
+                  <span className="text-2xs text-text-muted">秒</span>
                 </div>
               </label>
-              <p className="text-[11px] leading-4 text-text-muted">
+              <p className="text-2xs leading-4 text-text-muted">
                 本段过渡开始后，等待这段时间再让当前对象开始移动。
               </p>
             </div>

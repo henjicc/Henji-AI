@@ -68,14 +68,14 @@ export function AssistantTraceDetail({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-text-dark">{getTraceStepLabel(summary)}</span>
-              <span className="rounded border border-border-dark/50 bg-black/20 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+              <span className="rounded border border-border-dark/50 bg-black/20 px-1.5 py-0.5 font-mono text-3xs text-text-muted">
                 {summary.providerId}/{summary.modelId}
               </span>
-              <span className={`rounded px-1.5 py-0.5 text-[10px] ${statusClass(summary.status)}`}>
+              <span className={`rounded px-1.5 py-0.5 text-3xs ${statusClass(summary.status)}`}>
                 {statusLabel(summary.status)}
               </span>
             </div>
-            <div className="mt-1 font-mono text-[10px] text-text-muted">
+            <div className="mt-1 font-mono text-3xs text-text-muted">
               {summary.stepId} · {new Date(summary.startedAt).toLocaleString('zh-CN')}
             </div>
           </div>
@@ -133,7 +133,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
   return (
     <div className="space-y-2">
       {detail.capture.truncated && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-300">
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-2xs text-amber-300">
           该追踪已按体积限制截断：原始 {formatBytes(detail.capture.originalBytes)}，保存 {formatBytes(detail.capture.storedBytes)}；
           受影响区块：{detail.capture.sections.join('、') || '部分长内容'}。
         </div>
@@ -148,7 +148,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
         {context?.layerReports && context.layerReports.length > 0 && (
           <div className="mt-2 overflow-hidden rounded border border-border-dark/40">
             {context.layerReports.map((layer) => (
-              <div key={layer.id} className="grid grid-cols-[110px_70px_80px_minmax(0,1fr)] gap-2 border-b border-border-dark/30 px-2 py-1.5 text-[11px] last:border-b-0">
+              <div key={layer.id} className="grid grid-cols-[110px_70px_80px_minmax(0,1fr)] gap-2 border-b border-border-dark/30 px-2 py-1.5 text-2xs last:border-b-0">
                 <span className="font-mono text-text-dark">{layer.id}</span>
                 <span className={layer.included ? 'text-emerald-400' : 'text-text-muted'}>{layer.included ? '已注入' : '未注入'}</span>
                 <span className="font-mono text-text-muted">{formatTraceTokens(layer.estimatedTokens)}</span>
@@ -217,7 +217,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           {title}
         </span>
-        {badge && <span className="rounded bg-black/25 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">{badge}</span>}
+        {badge && <span className="rounded bg-black/25 px-1.5 py-0.5 font-mono text-3xs text-text-muted">{badge}</span>}
       </UiButton>
       {open && <div className="border-t border-border-dark/35 p-3">{children}</div>}
     </section>
@@ -227,7 +227,7 @@ function TraceSection({ title, badge, defaultOpen = false, children }: { title: 
 function MessageCard({ message, index }: { message: ModelStepMessage; index: number }): JSX.Element {
   return (
     <div className={`overflow-hidden rounded-md border ${roleClass(message.role)}`}>
-      <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider">
+      <div className="flex items-center justify-between border-b border-current/15 px-2 py-1 text-3xs font-semibold uppercase tracking-wider">
         <span>{message.role}</span><span className="font-mono opacity-60">#{index + 1}</span>
       </div>
       <div className="bg-black/15 p-2 text-xs text-text-dark">
@@ -238,7 +238,7 @@ function MessageCard({ message, index }: { message: ModelStepMessage; index: num
 }
 
 function Metric({ label, value }: { label: string; value: string }): JSX.Element {
-  return <div className="rounded border border-border-dark/35 bg-black/20 px-2 py-1.5"><div className="text-[9px] uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-[11px] text-text-dark" title={value}>{value}</div></div>
+  return <div className="rounded border border-border-dark/35 bg-black/20 px-2 py-1.5"><div className="text-4xs uppercase tracking-wider text-text-muted">{label}</div><div className="mt-0.5 truncate font-mono text-2xs text-text-dark" title={value}>{value}</div></div>
 }
 
 function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label: string; copied: boolean; disabled?: boolean; onClick: () => void; icon?: 'copy' | 'terminal' }): JSX.Element {
@@ -247,11 +247,11 @@ function CopyButton({ label, copied, disabled, onClick, icon = 'copy' }: { label
 }
 
 function LabeledBlock({ label, children }: { label: string; children: ReactNode }): JSX.Element {
-  return <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-text-muted">{label}</div>{children}</div>
+  return <div><div className="mb-1 text-3xs font-medium uppercase tracking-wider text-text-muted">{label}</div>{children}</div>
 }
 
 function TextBlock({ value }: { value: string }): JSX.Element {
-  return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-border-dark/35 bg-black/25 p-2 font-mono text-[11px] leading-relaxed text-text-dark">{value}</pre>
+  return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-border-dark/35 bg-black/25 p-2 font-mono text-2xs leading-relaxed text-text-dark">{value}</pre>
 }
 
 function EmptyText({ children }: { children: ReactNode }): JSX.Element {

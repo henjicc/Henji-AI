@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiButton } from '@/components/ui'
+import { UiButton, UI_SECTION_STACK_CLASS } from '@/components/ui'
 import { useApiKeys } from '../hooks/useApiKeys'
 import ApiKeyInput from '../components/ApiKeyInput'
 import { useI18n } from '@/hooks/useI18n'
@@ -70,7 +70,7 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
       ) : null}
 
       {currentSectionId === 'api-keys' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           {API_KEY_PROVIDERS.map(provider => {
             const placeholder = t(`apiKeys.providers.${provider.id}.placeholder`)
             const title = t(`apiKeys.providers.${provider.id}.title`)
@@ -105,19 +105,19 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
       )}
 
       {currentSectionId === 'api-upload' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <UploadSection />
         </section>
       )}
 
       {currentSectionId === 'api-llm' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <LlmSettingsSection />
         </section>
       )}
 
       {currentSectionId === 'api-agent-preferences' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <AgentUserInstructionsSection />
         </section>
       )}

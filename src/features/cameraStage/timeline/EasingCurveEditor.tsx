@@ -236,7 +236,7 @@ const EasingCurveEditor: React.FC<EasingCurveEditorProps> = ({ target, anchor, o
       </div>
 
       {applyTargets.length > 1 && (
-        <div className="mt-2 text-[11px] text-text-muted">批量应用到 {applyTargets.length} 个关键帧</div>
+        <div className="mt-2 text-2xs text-text-muted">批量应用到 {applyTargets.length} 个关键帧</div>
       )}
     </div>
   )
@@ -250,7 +250,7 @@ const HandleInput: React.FC<{
   onChange: (value: number) => void
 }> = ({ label, value, min, max, onChange }) => (
   <div className="flex items-center gap-1">
-    <span className="w-8 shrink-0 text-[11px] text-text-muted">{label}</span>
+    <span className="w-8 shrink-0 text-2xs text-text-muted">{label}</span>
     <NumberInput
       value={value}
       min={min}

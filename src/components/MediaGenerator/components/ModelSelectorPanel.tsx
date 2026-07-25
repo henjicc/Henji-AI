@@ -53,7 +53,7 @@ const GRID_COLUMNS = {
 }
 const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
 const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
-const MODEL_CARD_META_TEXT_CLASS = 'text-[11px] leading-4 text-zinc-400'
+const MODEL_CARD_META_TEXT_CLASS = 'text-2xs leading-4 text-zinc-400'
 
 function compareModelItems(
   a: { p: { id: string; name: string }; m: { id: string; type: 'image' | 'video' | 'audio'; name: string; seriesId?: string; seriesRank?: number } },

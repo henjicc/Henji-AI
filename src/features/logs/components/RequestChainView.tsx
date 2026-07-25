@@ -90,9 +90,9 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
                     <span className="truncate text-text-dark">
                       {display.emoji} {display.title}
                     </span>
-                    <span className="shrink-0 text-[11px] opacity-70">+{deltaMs}ms</span>
+                    <span className="shrink-0 text-2xs opacity-70">+{deltaMs}ms</span>
                   </div>
-                  <div className="mt-0.5 truncate text-[11px] opacity-70">
+                  <div className="mt-0.5 truncate text-2xs opacity-70">
                     {getDomainHint(event.domain)} · {event.source} · {new Date(event.timestamp).toLocaleTimeString('zh-CN')}
                   </div>
                 </UiButton>

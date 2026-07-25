@@ -20,14 +20,15 @@
   --success-rgb: 52 211 153;
   --warning-rgb: 251 191 36;
   --danger-rgb: 248 113 113;
+  /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费，
+     当前唯一消费者是 src/features/canvas/storyboard.css。
+     新代码请优先用语义化 Tailwind 类，不要在此新增。 */
   --ui-surface-panel: rgb(23, 23, 23);
   --ui-surface-field: rgba(10, 10, 10, 0.92);
   --ui-border-soft: rgba(255, 255, 255, 0.14);
-  --ui-border-strong: rgba(255, 255, 255, 0.24);
   --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
   --ui-radius-lg: 12px;
   --ui-radius-xl: 16px;
-  --ui-radius-2xl: 20px;
   --node-radius: 12px;
 }
 

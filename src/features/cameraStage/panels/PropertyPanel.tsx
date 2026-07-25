@@ -73,7 +73,7 @@ const Vec3Row: React.FC<Vec3RowProps> = ({
     <div className="flex gap-1.5">
       {AXES.map((axis) => (
         <div key={axis} className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-0.5 text-[10px] text-text-muted">
+          <div className="mb-1 flex items-center gap-0.5 text-3xs text-text-muted">
             {keyframe && (
               <KeyframeStopwatch
                 objectId={keyframe.objectId}

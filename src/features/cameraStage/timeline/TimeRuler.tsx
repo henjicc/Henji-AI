@@ -66,7 +66,7 @@ const TimeRuler: React.FC<TimeRulerProps> = ({
           }}
         >
           {tick.label && (
-            <span className="absolute left-1 top-0 whitespace-nowrap text-[10px] leading-none text-text-muted">
+            <span className="absolute left-1 top-0 whitespace-nowrap text-3xs leading-none text-text-muted">
               {formatLabel ? formatLabel(tick.time) : tick.label}
             </span>
           )}

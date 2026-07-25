@@ -47,8 +47,8 @@ export function AssistantTraceDiffDialog({
               <div className="mt-2 space-y-2">
                 {diff.messages.changed.map((item) => (
                   <div key={item.index} className="grid gap-2 rounded border border-border-dark/40 p-2 md:grid-cols-2">
-                    <div><div className="mb-1 text-[10px] text-red-300">上一轮 #{item.index + 1}</div><JsonTree value={item.previous} /></div>
-                    <div><div className="mb-1 text-[10px] text-emerald-300">当前轮 #{item.index + 1}</div><JsonTree value={item.current} /></div>
+                    <div><div className="mb-1 text-3xs text-red-300">上一轮 #{item.index + 1}</div><JsonTree value={item.previous} /></div>
+                    <div><div className="mb-1 text-3xs text-emerald-300">当前轮 #{item.index + 1}</div><JsonTree value={item.current} /></div>
                   </div>
                 ))}
               </div>
@@ -87,20 +87,20 @@ export function AssistantTraceDiffDialog({
 }
 
 function DiffBlock({ title, badge, children }: { title: string; badge?: string; children: ReactNode }): JSX.Element {
-  return <section className="rounded-lg border border-border-dark/45 bg-black/15"><div className="flex items-center justify-between border-b border-border-dark/35 px-3 py-2"><span className="text-xs font-medium text-text-dark">{title}</span>{badge && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-text-muted">{badge}</span>}</div><div className="p-3">{children}</div></section>
+  return <section className="rounded-lg border border-border-dark/45 bg-black/15"><div className="flex items-center justify-between border-b border-border-dark/35 px-3 py-2"><span className="text-xs font-medium text-text-dark">{title}</span>{badge && <span className="rounded bg-white/5 px-1.5 py-0.5 text-3xs text-text-muted">{badge}</span>}</div><div className="p-3">{children}</div></section>
 }
 
 function DeltaMetric({ label, value }: { label: string; value: number }): JSX.Element {
   const tone = value > 0 ? 'text-amber-300' : value < 0 ? 'text-emerald-300' : 'text-text-muted'
-  return <div className="rounded border border-border-dark/40 bg-black/20 p-2"><div className="text-[10px] text-text-muted">{label}</div><div className={`mt-1 font-mono text-sm ${tone}`}>{value > 0 ? '+' : ''}{formatTraceTokens(value)}</div></div>
+  return <div className="rounded border border-border-dark/40 bg-black/20 p-2"><div className="text-3xs text-text-muted">{label}</div><div className={`mt-1 font-mono text-sm ${tone}`}>{value > 0 ? '+' : ''}{formatTraceTokens(value)}</div></div>
 }
 
 function ChangeList({ title, values, tone }: { title: string; values: string[]; tone: 'added' | 'removed' | 'changed' | 'neutral' }): JSX.Element {
-  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-[10px] font-medium uppercase tracking-wider">{title} · {values.length}</div>{values.length === 0 ? <div className="text-[11px] opacity-60">无</div> : <div className="space-y-1">{values.map((value, index) => <div key={`${value}-${index}`} className="break-all rounded bg-black/15 px-1.5 py-1 font-mono text-[10px]">{value}</div>)}</div>}</div>
+  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-3xs font-medium uppercase tracking-wider">{title} · {values.length}</div>{values.length === 0 ? <div className="text-2xs opacity-60">无</div> : <div className="space-y-1">{values.map((value, index) => <div key={`${value}-${index}`} className="break-all rounded bg-black/15 px-1.5 py-1 font-mono text-3xs">{value}</div>)}</div>}</div>
 }
 
 function TextCompare({ label, value, tone }: { label: string; value: string; tone: 'added' | 'removed' }): JSX.Element {
-  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-[10px] font-medium">{label}</div><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words bg-black/15 p-2 font-mono text-[10px] leading-relaxed">{value}</pre></div>
+  return <div className={`rounded border p-2 ${toneClass(tone)}`}><div className="mb-1 text-3xs font-medium">{label}</div><pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words bg-black/15 p-2 font-mono text-3xs leading-relaxed">{value}</pre></div>
 }
 
 function toneClass(tone: 'added' | 'removed' | 'changed' | 'neutral'): string {

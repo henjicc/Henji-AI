@@ -79,14 +79,14 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
       </div>
 
       {camerasDiffer && (
-        <div className="rounded-md border border-border-dark bg-layer/60 px-2 py-1.5 text-[11px] leading-5 text-text-muted">
+        <div className="rounded-md border border-border-dark bg-layer/60 px-2 py-1.5 text-2xs leading-5 text-text-muted">
           机位切换：{cameraDisplayName(objects, shot.cameraId)} → {cameraDisplayName(objects, nextShot.cameraId)}。
           区间末端执行硬切；需要连续运镜时，请把两侧机位改为相同。
         </div>
       )}
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="flex flex-col gap-1 text-[11px] text-text-muted">
+        <label className="flex flex-col gap-1 text-2xs text-text-muted">
           时长（帧）
           <UiInput
             type="number"
@@ -108,13 +108,13 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
       </div>
 
       {!camerasDiffer && durationFrames === 0 && (
-        <div className="text-[11px] leading-5 text-text-muted">
+        <div className="text-2xs leading-5 text-text-muted">
           0 帧表示硬切；增加时长后即可编辑过渡路径。
         </div>
       )}
 
       <div className="border-t border-border-dark pt-2">
-        <div className="mb-1 text-[11px] text-text-muted">变化对象</div>
+        <div className="mb-1 text-2xs text-text-muted">变化对象</div>
         {changedObjects.length === 0 ? (
           <div className="py-3 text-center text-xs text-text-muted">这两个关键帧之间没有变化</div>
         ) : (
@@ -126,14 +126,14 @@ const TransitionPopover: React.FC<TransitionPopoverProps> = ({
                   <Icon size={13} className="shrink-0 text-text-muted" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs text-text-dark">{object.name}</div>
-                    <div className="truncate text-[10px] text-text-muted">
+                    <div className="truncate text-3xs text-text-muted">
                       {detailSummary(shot.transition.perObject[object.id] ?? {})}
                     </div>
                   </div>
                   <UiButton
                     size="sm"
                     variant="ghost"
-                    className="h-7 shrink-0 rounded-md px-2 text-[11px]"
+                    className="h-7 shrink-0 rounded-md px-2 text-2xs"
                     onClick={() => editObjectPath(object.id)}
                   >
                     <PenTool size={12} className="mr-1" />在视口编辑

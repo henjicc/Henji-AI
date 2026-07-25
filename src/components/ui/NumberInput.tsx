@@ -127,14 +127,14 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
             type="button"
             showBorder={false}
             onClick={() => stepBy(1)}
-            className="h-4 w-6 border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
+            className="h-4 w-6 border-0 bg-transparent p-0 text-3xs leading-none text-zinc-300 hover:text-zinc-200"
             disabled={disabled}
           >▲</UiIconButton>
           <UiIconButton
             type="button"
             showBorder={false}
             onClick={() => stepBy(-1)}
-            className="h-4 w-6 border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
+            className="h-4 w-6 border-0 bg-transparent p-0 text-3xs leading-none text-zinc-300 hover:text-zinc-200"
             disabled={disabled}
           >▼</UiIconButton>
         </div>

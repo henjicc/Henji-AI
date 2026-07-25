@@ -81,7 +81,7 @@ export function AssistantTraceToolbar({
           {historyDates.length === 0 ? <option value="">暂无历史</option> : historyDates.map((date) => <option key={date} value={date}>{date}</option>)}
         </UiSelect>
       )}
-      <label className="flex items-center gap-1.5 text-[11px] text-text-muted" title="完整上下文只保存在本机，并自动脱敏">
+      <label className="flex items-center gap-1.5 text-2xs text-text-muted" title="完整上下文只保存在本机，并自动脱敏">
         <UiCheckbox checked={captureMode === 'detailed'} onCheckedChange={(checked) => onCaptureModeChange(checked ? 'detailed' : 'summary')} />
         助手详细追踪
       </label>

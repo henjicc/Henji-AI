@@ -17,7 +17,7 @@ interface ModelProgressMessageProps {
 function ModelProgressMessageView({ update }: ModelProgressMessageProps): JSX.Element {
   return (
     <section style={progressMessageStyle} className="mr-7 rounded-lg border border-border-dark/70 bg-layer/70 px-2.5 py-2">
-      <div className="mb-1 flex items-center gap-1.5 text-[10px] font-medium text-text-muted">
+      <div className="mb-1 flex items-center gap-1.5 text-3xs font-medium text-text-muted">
         <Bot className="h-3.5 w-3.5 text-accent" />助手进展
       </div>
       <AssistantMarkdown>{update.text}</AssistantMarkdown>

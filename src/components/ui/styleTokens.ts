@@ -14,16 +14,59 @@ export const UI_ACCENT_HEX = APP_ACCENT_HEX;
 export const UI_WHITE_HEX = WHITE_HEX;
 export const UI_TEXT_LIGHT_HEX = TEXT_LIGHT_HEX;
 
+/* ---------------------------------------------------------------------------
+ * 排版层级令牌
+ *
+ * 项目此前 72% 的字号决策都落在 text-xs 及更小，层级实际上塌缩成"全是小字"，
+ * 只能靠边框/背景区分内容——这是过度卡片化的根源之一。
+ * 用这五档表达层级，优先靠字号字重建立结构，而不是靠画框。
+ * ------------------------------------------------------------------------- */
+
+/** 一级标题：页面/弹窗主标题 */
+export const UI_TEXT_TITLE_CLASS = 'text-base font-semibold text-text-dark';
+
+/** 二级标题：分区标题（UiGroup 的 title） */
+export const UI_TEXT_SECTION_CLASS = 'text-sm font-medium text-text-dark';
+
+/** 正文 */
+export const UI_TEXT_BODY_CLASS = 'text-sm text-text-dark';
+
+/** 字段标签 */
+export const UI_TEXT_LABEL_CLASS = 'text-sm font-medium text-zinc-300';
+
+/** 辅助说明/元信息 */
+export const UI_TEXT_META_CLASS = 'text-xs text-text-muted';
+
+/* ---------------------------------------------------------------------------
+ * 间距与分隔令牌
+ * ------------------------------------------------------------------------- */
+
+/** 分区之间的纵向间距 */
+export const UI_STACK_GAP_CLASS = 'space-y-6';
+
+/** 分区内部行之间的纵向间距 */
+export const UI_ROW_GAP_CLASS = 'space-y-3';
+
+/** 唯一允许的分隔线写法：一条线，不是一个框 */
+export const UI_DIVIDER_CLASS = 'border-t border-border-dark/60';
+
+/**
+ * 分区堆叠间距：去掉分区卡片后，靠这个间距 + 组标签建立层级。
+ * 比原先卡片时代的 space-y-5 更宽松，用留白换回呼吸感。
+ * 若将来需要更强切分，只改这一处（加 `divide-y divide-border-dark/60 [&>*+*]:pt-8`）。
+ */
+export const UI_SECTION_STACK_CLASS = 'space-y-8';
+
 export const UI_PANEL_SURFACE_CLASS =
-  'bg-panel border border-border-dark text-text-dark shadow-2xl';
+  'bg-panel border border-border-dark text-text-dark shadow-panel';
 
 export const UI_FIELD_SURFACE_CLASS =
   'bg-surface-dark border border-border-dark text-text-dark';
 
 export const UI_FIELD_CONTROL_HEIGHT_CLASS = 'h-[42px]';
 
-export const UI_FIELD_LABEL_CLASS =
-  'block text-sm font-medium text-zinc-300 mb-1.5';
+/** 字段标签（带块级布局与下间距的表单专用变体，视觉继承 UI_TEXT_LABEL_CLASS） */
+export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;
 
 export const UI_FIELD_FOCUS_CLASS =
   'outline-none focus:outline-none focus-visible:outline-none focus:ring-inset focus:ring-2 focus:ring-accent focus:ring-offset-0 focus:border-brand-500 transition-shadow duration-300 ease-out';

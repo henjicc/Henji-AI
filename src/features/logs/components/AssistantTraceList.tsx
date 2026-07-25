@@ -82,7 +82,7 @@ function RunCard({
             <div className="truncate text-xs font-medium text-text-dark">
               {run.goal?.trim() || `运行 ${compactId(run.runId)}`}
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] text-text-muted">
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-3xs text-text-muted">
               <span>{compactId(run.runId)}</span>
               <span>{run.requestCount} 次请求</span>
               <span>{formatTraceTokens(run.usage.totalTokens)} tok</span>
@@ -129,12 +129,12 @@ function TraceStepButton({
       <Icon className="mr-2 h-3.5 w-3.5 shrink-0 text-accent" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-[11px] font-medium text-text-dark">{getTraceStepLabel(step)}</span>
-          <span className="shrink-0 font-mono text-[10px] text-text-muted">
+          <span className="truncate text-2xs font-medium text-text-dark">{getTraceStepLabel(step)}</span>
+          <span className="shrink-0 font-mono text-3xs text-text-muted">
             {formatTraceDuration(step.elapsedMs)}
           </span>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-text-muted">
+        <div className="mt-1 flex items-center justify-between gap-2 text-3xs text-text-muted">
           <span className="truncate">{step.providerId} · {step.modelId}</span>
           <span className="shrink-0 font-mono">{formatTraceTokens(step.usage.totalTokens)} tok</span>
         </div>

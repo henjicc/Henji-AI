@@ -27,13 +27,13 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps): JSX.E
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-medium text-text-dark">{approval.title}</h3>
-            <span className="rounded border border-warning/30 px-1.5 py-0.5 text-[10px] text-warning">{approval.risk}</span>
+            <span className="rounded border border-warning/30 px-1.5 py-0.5 text-3xs text-warning">{approval.risk}</span>
           </div>
           <p className="mt-1 text-xs leading-5 text-text-muted">{approval.summary}</p>
         </div>
       </div>
 
-      <dl className="mt-3 grid gap-1.5 rounded-lg border border-border-dark bg-app/60 p-2.5 text-[11px] text-text-muted">
+      <dl className="mt-3 grid gap-1.5 rounded-lg border border-border-dark bg-app/60 p-2.5 text-2xs text-text-muted">
         <div className="flex justify-between gap-3"><dt>权限</dt><dd className="break-all text-right text-text-dark">{approval.permission}</dd></div>
         <div className="flex justify-between gap-3"><dt>作用域</dt><dd className="break-all text-right text-text-dark">{approval.scope}</dd></div>
         <div className="flex justify-between gap-3"><dt>可撤销</dt><dd className="text-text-dark">{approval.reversible ? '是' : '否'}</dd></div>
@@ -44,7 +44,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps): JSX.E
       </dl>
 
       {approval.risk === 'R3' ? (
-        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-warning">
+        <div className="mt-2 flex items-center gap-1.5 text-2xs text-warning">
           <AlertTriangle className="h-3.5 w-3.5" />高风险操作仅授权本次，不会被记住。
         </div>
       ) : null}
@@ -57,7 +57,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps): JSX.E
           <Check className="h-3.5 w-3.5" />仅批准本次
         </UiButton>
       </div>
-      {expired ? <div className="mt-2 text-right text-[11px] text-danger">本次审批已过期</div> : null}
+      {expired ? <div className="mt-2 text-right text-2xs text-danger">本次审批已过期</div> : null}
     </section>
   )
 }

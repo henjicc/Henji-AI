@@ -261,7 +261,7 @@ export function NodeHeader({
           </div>
         </div>
         {subtitle ? (
-          <div className={joinClasses('text-[11px] text-text-muted/80', subtitleClassName)}>
+          <div className={joinClasses('text-2xs text-text-muted/80', subtitleClassName)}>
             {subtitle}
           </div>
         ) : null}

@@ -25,17 +25,17 @@ export function LogEventRow({ event, selected, onSelect }: LogEventRowProps): JS
         <span className="truncate text-text-dark">
           {display.emoji} {display.title}
         </span>
-        <span className="shrink-0 text-[11px] uppercase tracking-wide opacity-70">{event.level}</span>
+        <span className="shrink-0 text-2xs uppercase tracking-wide opacity-70">{event.level}</span>
       </div>
-      <div className="mt-1 flex items-center gap-1 truncate text-[11px] opacity-80">
+      <div className="mt-1 flex items-center gap-1 truncate text-2xs opacity-80">
         <span className="rounded bg-white/5 px-1 py-0.5">{event.source}</span>
         <span>{getDomainHint(event.domain)}</span>
       </div>
       <div className="mt-1 truncate text-text-dark">{display.summary}</div>
       <div className="mt-1 flex items-center justify-between gap-2">
-        <span className="text-[11px] opacity-70">{new Date(event.timestamp).toLocaleTimeString('zh-CN')}</span>
+        <span className="text-2xs opacity-70">{new Date(event.timestamp).toLocaleTimeString('zh-CN')}</span>
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px] opacity-70">
+      <div className="mt-1 flex flex-wrap items-center gap-1 text-2xs opacity-70">
         <span>类型:{event.event}</span>
         {event.requestId ? <span>req:{compactId(event.requestId)}</span> : null}
         {event.taskId ? <span>task:{compactId(event.taskId)}</span> : null}

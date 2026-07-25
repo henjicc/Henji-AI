@@ -172,7 +172,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
               showBorder={false}
               onClick={() => handleStepChange(1)}
               disabled={disabled || (param.max !== undefined && safeValue >= param.max)}
-              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
+              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-zinc-300 hover:text-zinc-200"
             >
               ▲
             </UiIconButton>
@@ -181,7 +181,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
               showBorder={false}
               onClick={() => handleStepChange(-1)}
               disabled={disabled || (param.min !== undefined && safeValue <= param.min)}
-              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-[10px] leading-none text-zinc-300 hover:text-zinc-200"
+              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-zinc-300 hover:text-zinc-200"
             >
               ▼
             </UiIconButton>

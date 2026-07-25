@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { UI_SECTION_STACK_CLASS } from '@/components/ui'
 import React from 'react'
 import { useSettings } from '../hooks/useSettings'
 import BottomPanelSection from '../sections/BottomPanelSection'
@@ -78,7 +79,7 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
   return (
     <div className="p-4 space-y-5">
       {currentSectionId === 'interface-layout' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <BottomPanelSection
             enableAutoCollapse={settings.enableAutoCollapse}
             collapseDelay={settings.collapseDelay}
@@ -91,13 +92,13 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
       )}
 
       {currentSectionId === 'interface-canvas' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <CanvasSection />
         </section>
       )}
 
       {currentSectionId === 'interface-theme' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <ThemeSection
             themeTonePreset={themeTonePreset}
             uiRadiusPreset={uiRadiusPreset}

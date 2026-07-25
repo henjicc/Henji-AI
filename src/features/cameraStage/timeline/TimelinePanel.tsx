@@ -322,7 +322,7 @@ const TimelinePanel: React.FC = () => {
                   style={{ width: TIMELINE_LABEL_WIDTH }}
                 >
                   {plottedTracks.length === 0 ? (
-                    <span className="px-1 text-[11px] text-text-muted">选中一个对象查看其属性曲线</span>
+                    <span className="px-1 text-2xs text-text-muted">选中一个对象查看其属性曲线</span>
                   ) : (
                     plottedTracks.map((graph) => (
                       <div key={graph.path} className="flex items-center gap-1.5 px-1">
@@ -330,7 +330,7 @@ const TimelinePanel: React.FC = () => {
                           className="h-2 w-2 shrink-0 rounded-sm"
                           style={{ backgroundColor: axisColor(graph.path) }}
                         />
-                        <span className="truncate text-[11px] text-text-muted">{graph.label}</span>
+                        <span className="truncate text-2xs text-text-muted">{graph.label}</span>
                       </div>
                     ))
                   )}

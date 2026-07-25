@@ -51,7 +51,7 @@ export function RunStatusBar({
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${active ? 'animate-pulse bg-accent' : 'bg-text-muted'}`} />
         <span className="text-xs font-medium text-text-dark">{statusLabels[state.status]}</span>
-        <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted" title={currentAction}>{currentAction}</span>
+        <span className="min-w-0 flex-1 truncate text-3xs text-text-muted" title={currentAction}>{currentAction}</span>
         {state.status === 'paused' ? (
           <UiButton type="button" size="sm" variant="ghost" title="继续" aria-label="继续" onClick={onResume} className="!h-7 !w-7 !p-0"><CirclePlay className="h-3.5 w-3.5" /></UiButton>
         ) : active ? (
@@ -63,7 +63,7 @@ export function RunStatusBar({
           <UiButton type="button" size="sm" variant="muted" title="取消" aria-label="取消" onClick={onCancel} className="!h-7 !w-7 !p-0 text-danger"><Square className="h-3.5 w-3.5" /></UiButton>
         ) : null}
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-muted">
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-3xs text-text-muted">
         <span>轮次 {Math.max(usage.turns, state.turn)}/{state.budget.maxTurns}</span>
         <span>工具 {Math.max(usage.toolCalls, toolCalls)}/{state.budget.maxToolCalls}</span>
         <span>Token {Math.max(usage.totalTokens, modelUsage).toLocaleString()}</span>

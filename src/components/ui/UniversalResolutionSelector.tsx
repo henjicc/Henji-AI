@@ -290,7 +290,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                 />
                 <span className="text-xs text-zinc-400 whitespace-nowrap">PX</span>
               </div>
-              <div className="text-[11px] text-zinc-500 mt-1">
+              <div className="text-2xs text-zinc-500 mt-1">
                 {t('resolutionPanel.baseSizeHint', { min: baseSizeMin, max: baseSizeMax })}
               </div>
             </div>

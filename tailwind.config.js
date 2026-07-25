@@ -8,6 +8,31 @@ export default {
   ],
   theme: {
     extend: {
+      // 字号令牌：Tailwind 最小档 text-xs 是 12px，项目实际需要 9~11px 三档。
+      // 刻意使用字符串形式（只产出 font-size，不带 line-height），
+      // 与原先散落的 text-[11px] / text-[10px] / text-[9px] 计算值完全一致。
+      fontSize: {
+        '4xs': '9px',
+        '3xs': '10px',
+        '2xs': '11px',
+      },
+      // 浮层阴影唯一档位。内容区一律不用阴影，层次靠间距与排版建立。
+      // 取值刻意与 Tailwind shadow-2xl 完全一致，使现有 UiPanel 换名后像素无变化；
+      // 若后续要调整浮层阴影观感，只改这一处。
+      boxShadow: {
+        panel: '0 25px 50px -12px rgb(0 0 0 / 0.25)',
+      },
+      // 浮层层级：禁止再出现 z-[9999] / z-[2147483647] 这类任意值
+      zIndex: {
+        base: '0',
+        raised: '10',
+        sticky: '20',
+        dropdown: '30',
+        panel: '40',
+        modal: '50',
+        toast: '60',
+        drag: '70',
+      },
       colors: {
         bg: {
           DEFAULT: withOpacity('--bg-rgb'),

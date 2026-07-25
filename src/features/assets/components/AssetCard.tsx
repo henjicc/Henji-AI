@@ -80,7 +80,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
       </div>
       <div className="min-w-0 px-2.5 py-2">
         {editing ? <UiInput autoFocus className="!h-7 !px-1.5 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-sm text-text-dark" title="双击重命名" onDoubleClick={(event) => { event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
-        <div className="mt-1 flex items-center justify-between text-[11px] text-text-muted">
+        <div className="mt-1 flex items-center justify-between text-2xs text-text-muted">
           <span className="flex min-w-0 items-center gap-1"><span className="rounded bg-layer px-1.5 py-0.5">{t(`assetLibrary.${asset.mediaType}`)}</span>{asset.tags[0] && <span className="max-w-20 truncate rounded bg-layer px-1.5 py-0.5">{asset.tags[0]}</span>}{asset.tags.length > 1 && <span>+{asset.tags.length - 1}</span>}</span><span>{asset.width && asset.height ? `${asset.width}×${asset.height}` : ''}</span>
         </div>
       </div>

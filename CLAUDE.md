@@ -137,8 +137,12 @@ npm run lint                   # 前端 lint
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
-- **表面层级铁律**：同一层视觉深度只画一次边框/背景。最外层浮层/弹窗/侧栏用 `<UiPanel>`；面板内部分组必须用 `<UiPanel variant="inset">`/`variant="bare"`/纯留白，**禁止**在已有边框的容器里再叠 `border + bg-* + rounded`，禁止业务组件手写 `bg-panel` 卡片
-- **界面工作必读 skill**：新建或改造界面/面板/弹窗/设置分区前，先用 skill `henji-ui-surface`（含四层表面模型、决策树、禁止清单、性能分层规则）
+- **五级容器词汇表**：Region(`UiRegion`) → Group(`UiGroup`) → Divided(`UiGroup divided`) → Surface(`UiPanel variant="inset"`) → Card(`UiPanel`)。**普通内容分组默认用 `UiGroup`**（零装饰，标题 + 间距）；只有浮层/弹窗/侧栏/画布节点才允许用 Card
+- **表面层级铁律**：同一层视觉深度只画一次边框/背景；内层背景只能比外层更暗，不能更亮；卡片嵌套上限 1 层。**禁止**在已有边框的容器里再叠 `border + bg-* + rounded`，禁止业务组件手写 `bg-panel` 卡片
+- **排版优先于容器**：先用 `styleTokens.ts` 的 `UI_TEXT_TITLE/SECTION/BODY/LABEL/META_CLASS` 建立层级，再考虑是否需要容器装饰
+- **视觉数值登记制**：字号只用 `text-4xs/3xs/2xs/xs/sm/base+`（禁 `text-[Npx]`，ESLint 已拦 9/10/11px）；圆角只用 `rounded-lg/xl/full`；阴影只用 `shadow-panel` 且仅限浮层；层级只用 `z-dropdown/panel/modal/toast/drag`
+- **状态展示统一**：空/加载/错误一律用 `UiEmpty`/`UiLoading`/`UiError`，禁止页面内联手写状态块
+- **界面工作必读 skill**：新建或改造界面/面板/弹窗/设置分区前，先用 skill `henji-ui-surface`（含五级词汇表、卡片准入条件、决策树、复用对照表、自检清单、性能分层规则）
 - **表面检查**：界面改动后跑 `npm run check:surface`（默认只告警），要求不新增违规；确需独立卡片表面时加 `ui-surface-allow` 注释豁免并写明理由
 
 ### 7. 画布模块拆分约定

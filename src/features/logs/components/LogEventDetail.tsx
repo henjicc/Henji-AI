@@ -67,7 +67,7 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
         <div className="text-sm text-text-dark">
           {display.emoji} {display.title}
         </div>
-        <div className="mt-1 text-[11px] text-text-muted">
+        <div className="mt-1 text-2xs text-text-muted">
           {getDomainHint(event.domain)} · {event.source} · {new Date(event.timestamp).toLocaleString('zh-CN')}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -87,7 +87,7 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3 text-xs text-text-dark">
         {event.truncatedByLimit && (
-          <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-[11px] text-yellow-500/90">
+          <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 p-2 text-2xs text-yellow-500/90">
             {t('logsWindow.detail.truncatedNotice', { bytes: truncatedContext?.originalBytes ?? '?' })}
           </div>
         )}

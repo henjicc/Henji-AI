@@ -121,7 +121,7 @@ export function AudioPreviewCard({
                   </UiOptionButton>
                 )}
                 {canDrop && (
-                  <span className="text-[11px] text-zinc-500">
+                  <span className="text-2xs text-zinc-500">
                     {uploadHintText || '或拖放文件到此处'}
                   </span>
                 )}

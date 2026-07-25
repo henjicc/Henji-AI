@@ -309,7 +309,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
               onWheelCapture={onVolumeWheel}
             >
               {showVolumeValueTip && (
-                <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-[11px] text-zinc-200">
+                <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-2xs text-zinc-200">
                   {volumePercent}%
                 </div>
               )}

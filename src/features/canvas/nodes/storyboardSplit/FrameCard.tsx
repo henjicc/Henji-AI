@@ -149,7 +149,7 @@ export const FrameCard = memo(({
             draggable={false}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[11px] text-text-muted">
+          <div className="flex h-full w-full items-center justify-center text-2xs text-text-muted">
             空分镜
           </div>
         )}

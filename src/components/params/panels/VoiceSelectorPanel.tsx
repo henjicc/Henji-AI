@@ -167,7 +167,7 @@ const HoverScrollText: React.FC<HoverScrollTextProps> = ({ text, active }) => {
   return (
     <div
       ref={containerRef}
-      className="w-full overflow-hidden whitespace-nowrap text-left text-[11px] leading-tight text-text-muted"
+      className="w-full overflow-hidden whitespace-nowrap text-left text-2xs leading-tight text-text-muted"
     >
       <div className="inline-flex items-center">
         <span ref={cycleRef} className="inline-block pr-8">{text}</span>
@@ -463,7 +463,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                       variant="ghost"
                       size="sm"
                       disabled={deletingVoiceId === voice.id}
-                      className="absolute right-1 top-1 !h-6 !px-2 text-[11px]"
+                      className="absolute right-1 top-1 !h-6 !px-2 text-2xs"
                       onClick={(event) => {
                         event.preventDefault()
                         event.stopPropagation()

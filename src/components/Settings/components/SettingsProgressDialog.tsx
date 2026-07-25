@@ -1,4 +1,5 @@
 import React from 'react'
+import { UiPanel } from '@/components/ui'
 import type { MigrationProgress } from '../hooks/useDataPath'
 
 interface SettingsProgressDialogProps {
@@ -13,12 +14,12 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
   const ratio = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-modal flex items-center justify-center"
       data-dialog="true"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="absolute inset-0 bg-black/70" />
-      <div className="relative w-[400px] rounded-xl border border-border-dark bg-panel p-4 shadow-2xl">
+      <UiPanel className="relative w-[400px] p-4">
         <div className="text-white text-base">{title}</div>
         <div className="mt-4">
           <div className="text-sm text-zinc-300 mb-2 truncate">{progress.file}</div>
@@ -28,7 +29,7 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
           </div>
         </div>
         <div className="text-xs text-zinc-400 mt-4">{hint}</div>
-      </div>
+      </UiPanel>
     </div>
   )
 }

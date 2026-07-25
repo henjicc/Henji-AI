@@ -43,7 +43,7 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
             >
               <span className="font-medium leading-none">{label}</span>
               {option.aspectRatio && (
-                <span className="text-[11px] leading-none opacity-80">({option.aspectRatio})</span>
+                <span className="text-2xs leading-none opacity-80">({option.aspectRatio})</span>
               )}
             </UiOptionButton>
           )

@@ -158,7 +158,7 @@ const TimelineTrackList: React.FC<TimelineTrackListProps> = ({
                       group.childRows.map((row) => (
                         <div className="flex" style={{ height: TIMELINE_ROW_HEIGHT }} key={row.path}>
                           <LabelCell paddingLeft={44} background="app">
-                            <span className="truncate text-left text-[11px] text-text-muted">{row.label}</span>
+                            <span className="truncate text-left text-2xs text-text-muted">{row.label}</span>
                           </LabelCell>
                           <TrackLane track={row.track} {...laneProps} />
                         </div>

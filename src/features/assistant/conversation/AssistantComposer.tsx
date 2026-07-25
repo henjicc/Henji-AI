@@ -63,10 +63,10 @@ export function AssistantComposer({
             onSelect={onApprovalModeChange}
             minWidthStrategy="options"
             panelWidthStrategy="options"
-            buttonClassName="!h-7 !rounded-md !px-2 text-[11px]"
+            buttonClassName="!h-7 !rounded-md !px-2 text-2xs"
             panelClassName="text-xs"
           />
-          <span className="hidden truncate text-[10px] text-text-muted min-[440px]:inline">
+          <span className="hidden truncate text-3xs text-text-muted min-[440px]:inline">
             {approvalMode === 'ask'
               ? '风险操作逐次确认'
               : approvalMode === 'assistant_decides'

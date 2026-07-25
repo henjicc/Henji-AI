@@ -276,7 +276,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="ml-0.5 h-4 w-4" />}
               </UiIconButton>
-              <span className="shrink-0 text-[10px] leading-none tabular-nums text-text-muted/85">
+              <span className="shrink-0 text-3xs leading-none tabular-nums text-text-muted/85">
                 {formatDuration(currentTime)} / {durationLabel ?? formatDuration(effectiveDuration)}
               </span>
               <span className="min-w-0 flex-1" />
@@ -314,12 +314,12 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
         ) : isUploadVariant ? (
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1.5 text-text-muted/85">
             <Upload className="h-6 w-6 opacity-60" />
-            <span className="text-[11px]">{t('node.audioNode.uploadHint')}</span>
+            <span className="text-2xs">{t('node.audioNode.uploadHint')}</span>
           </div>
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-text-muted/85">
             <AudioLines className="h-6 w-6 opacity-60" />
-            <span className="text-[11px]">{t('node.audioNode.waitingResult')}</span>
+            <span className="text-2xs">{t('node.audioNode.waitingResult')}</span>
           </div>
         )}
 

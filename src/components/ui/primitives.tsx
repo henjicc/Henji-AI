@@ -221,21 +221,22 @@ interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
   variant?: UiPanelVariant;
 }
 
+// 圆角跟随层级：外层面板 rounded-xl，内嵌元素 rounded-lg。内层圆角不得大于外层。
 function resolveUiPanelSurface(variant: UiPanelVariant): string {
   if (variant === 'inset') {
-    return 'bg-app/40 text-text-dark';
+    return 'rounded-lg bg-app/40 text-text-dark';
   }
   if (variant === 'bare') {
-    return '';
+    return 'rounded-lg';
   }
-  return UI_PANEL_SURFACE_CLASS;
+  return `rounded-xl ${UI_PANEL_SURFACE_CLASS}`;
 }
 
 export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
   ({ className = '', variant = 'panel', ...props }, ref) => (
     <div
       ref={ref}
-      className={`rounded-xl ${resolveUiPanelSurface(variant)} ${className}`}
+      className={`${resolveUiPanelSurface(variant)} ${className}`}
       {...props}
     />
   )

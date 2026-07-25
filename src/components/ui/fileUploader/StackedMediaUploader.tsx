@@ -366,7 +366,7 @@ export function StackedMediaUploader({
                     <img src={file} alt={`参考 ${index + 1}`} className="absolute inset-0 block h-full w-full object-cover" draggable={false} />
                   )}
                   {isVideo && (
-                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 text-[10px] text-white">
+                    <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/30 text-3xs text-white">
                       ▶
                     </span>
                   )}
@@ -445,7 +445,7 @@ export function StackedMediaUploader({
         </div>
 
         {!hoverCapable && (
-          <div className="pointer-events-none absolute bottom-1 left-2 text-[10px] text-zinc-500">
+          <div className="pointer-events-none absolute bottom-1 left-2 text-3xs text-zinc-500">
             点按展开
           </div>
         )}

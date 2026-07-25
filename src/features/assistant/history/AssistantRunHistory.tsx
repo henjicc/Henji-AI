@@ -120,7 +120,7 @@ export function AssistantRunHistory({
               <MessageSquareText className="mr-2 h-3.5 w-3.5 shrink-0 text-text-muted" />
               <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
                 <span className="w-full truncate text-xs text-text-dark">{run.goal || '未命名任务'}</span>
-                <span className="w-full truncate text-[10px] font-normal text-text-muted">
+                <span className="w-full truncate text-3xs font-normal text-text-muted">
                   {statusLabels[run.status]} · {formatTime(run.updatedAt)}
                   {run.recoveryStatus === 'recovery_required' ? ' · 需要确认重试' : ''}
                 </span>

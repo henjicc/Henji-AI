@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { UiButton, UiIconButton, UiNavButton } from '@/components/ui'
+import { UiButton, UiIconButton, UiNavButton, UiPanel } from '@/components/ui'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
@@ -87,11 +87,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
+      className={`fixed inset-0 z-modal flex items-center justify-center bg-black/70 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
       onClick={handleClose}
     >
-      <div
-        className={`flex w-[min(90vw,1200px)] scale-100 transform overflow-hidden rounded-2xl border border-border-dark bg-panel shadow-2xl transition-all duration-300 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+      <UiPanel
+        className={`flex w-[min(90vw,1200px)] scale-100 transform overflow-hidden transition-all duration-300 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
         style={{ height: '76vh', minHeight: '500px', maxHeight: '940px' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -158,7 +158,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
             </UiButton>
           </div>
         </div>
-      </div>
+      </UiPanel>
     </div>
   )
 }

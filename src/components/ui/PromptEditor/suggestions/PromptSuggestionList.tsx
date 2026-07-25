@@ -107,7 +107,7 @@ export const PromptSuggestionList = forwardRef<
                 draggable={false}
               />
             ) : (
-              <span className="flex h-8 min-w-8 items-center justify-center rounded bg-layer px-1 text-[10px] text-text-muted">
+              <span className="flex h-8 min-w-8 items-center justify-center rounded bg-layer px-1 text-3xs text-text-muted">
                 {reference?.mediaType ?? '{{ }}'}
               </span>
             )}
@@ -120,14 +120,14 @@ export const PromptSuggestionList = forwardRef<
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="truncate text-xs text-text-dark">{getSuggestionLabel(item)}</span>
                   {variable?.group ? (
-                    <span className="shrink-0 rounded border border-border-dark px-1 py-0.5 text-[9px] text-text-muted">
+                    <span className="shrink-0 rounded border border-border-dark px-1 py-0.5 text-4xs text-text-muted">
                       {variable.group}
                     </span>
                   ) : null}
                 </span>
-                <span className="truncate text-[10px] text-text-muted">{getSuggestionKey(item)}</span>
+                <span className="truncate text-3xs text-text-muted">{getSuggestionKey(item)}</span>
                 {variable?.description ? (
-                  <span className="max-w-72 truncate text-[10px] text-text-muted">
+                  <span className="max-w-72 truncate text-3xs text-text-muted">
                     {variable.description}
                   </span>
                 ) : null}

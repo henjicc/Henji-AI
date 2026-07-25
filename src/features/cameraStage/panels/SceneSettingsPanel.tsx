@@ -329,7 +329,7 @@ const SceneSettingsPanel: React.FC = () => {
                 <div className="flex gap-1.5">
                   {LABEL_OFFSET_AXES.map((axis) => (
                     <div key={axis.key} className="min-w-0 flex-1">
-                      <div className="mb-1 text-[10px] text-text-muted">{axis.label}</div>
+                      <div className="mb-1 text-3xs text-text-muted">{axis.label}</div>
                       <NumberInput
                         value={labelSettings.offset[axis.key]}
                         min={-3}

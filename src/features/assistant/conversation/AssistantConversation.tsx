@@ -172,7 +172,7 @@ export function AssistantConversation(): JSX.Element {
 
         {currentGoal ? (
           <section style={deferredBlockStyle} className="ml-7 rounded-xl border border-border-dark bg-layer p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-muted"><UserRound className="h-3.5 w-3.5" />你的目标</div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><UserRound className="h-3.5 w-3.5" />你的目标</div>
             <p className="whitespace-pre-wrap break-words text-sm leading-6 text-text-dark">{currentGoal}</p>
           </section>
         ) : null}
@@ -198,14 +198,14 @@ export function AssistantConversation(): JSX.Element {
 
         {deferredStreamedText && runState && !terminalStatuses.has(runState.status) ? (
           <section style={deferredBlockStyle} className="mr-7 rounded-xl border border-border-dark bg-panel p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />回应生成中</div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />回应生成中</div>
             <AssistantMarkdown>{deferredStreamedText}</AssistantMarkdown>
           </section>
         ) : null}
 
         {runState?.finalText ? (
           <section style={deferredBlockStyle} className="mr-7 rounded-xl border border-border-dark bg-panel p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />助手</div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />助手</div>
             <AssistantMarkdown>{runState.finalText}</AssistantMarkdown>
           </section>
         ) : null}
@@ -225,7 +225,7 @@ export function AssistantConversation(): JSX.Element {
           </section>
         ) : null}
 
-        {run.view.connection === 'recovering' ? <div className="text-center text-[11px] text-text-muted">正在恢复运行事件…</div> : null}
+        {run.view.connection === 'recovering' ? <div className="text-center text-2xs text-text-muted">正在恢复运行事件…</div> : null}
       </div>
 
       <AssistantComposer

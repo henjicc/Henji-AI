@@ -159,7 +159,7 @@ export function UiDatePicker({
 
           <div className="grid grid-cols-7 gap-1 px-0.5 pb-1">
             {weekdayLabels.map((label) => (
-              <span key={label} className="text-center text-[11px] text-zinc-400">
+              <span key={label} className="text-center text-2xs text-zinc-400">
                 {label}
               </span>
             ))}

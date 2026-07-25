@@ -175,7 +175,7 @@ export function CanvasVideoPlayer({
             >
               {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
             </UiIconButton>
-            <span className="shrink-0 whitespace-nowrap text-[10px] leading-none tabular-nums text-white/90">
+            <span className="shrink-0 whitespace-nowrap text-3xs leading-none tabular-nums text-white/90">
               {formatTime(currentTime)} / {formatTime(duration)}
             </span>
             <span className="min-w-0 flex-1" />

@@ -59,7 +59,7 @@ const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, objectId,
         return (
           <div key={axis} className="flex items-center gap-1.5">
             <KeyframeStopwatch objectId={objectId} path={path} className="h-4 w-4" />
-            <span className="w-3 shrink-0 text-center text-[11px] text-text-muted">{AXIS_LABELS[axis]}</span>
+            <span className="w-3 shrink-0 text-center text-2xs text-text-muted">{AXIS_LABELS[axis]}</span>
             <UiRangeInput
               min={-180}
               max={180}

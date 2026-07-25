@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react'
-import { Dropdown, UiButton, UiIconButton, UiInput, UiModal, UiOptionButton, UiPanel, UiSwitch } from '@/components/ui'
+import { Dropdown, UiButton, UiEmpty, UiIconButton, UiInput, UiModal, UiOptionButton, UiPanel, UiSwitch } from '@/components/ui'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import ApiKeyInput from '../components/ApiKeyInput'
 import type { LlmModelConfig, LlmProviderConfig, LlmReasoningConfig, LlmReasoningEffort } from '@/core/llm/types'
@@ -263,9 +263,7 @@ const LlmSettingsSection: React.FC = () => {
 
       <div className="space-y-3">
         {providers.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border-dark bg-panel p-6 text-sm text-text-muted">
-            还没有供应商，先添加一个吧。
-          </div>
+          <UiEmpty size="sm" title="还没有供应商" description="先添加一个供应商，然后就能配置模型了。" />
         ) : providers.map(provider => {
           const expanded = expandedProviderId === provider.providerId
           const providerModels = config.models.filter(model => model.providerId === provider.providerId)
@@ -398,9 +396,10 @@ const LlmSettingsSection: React.FC = () => {
                               暂无模型，点击“获取模型列表”或“手动添加”。
                             </div>
                           ) : filteredModels.map(model => (
-                            <div
+                            <UiPanel
                               key={`${model.providerId}-${model.modelId}`}
-                              className="flex w-full items-center justify-between gap-3 rounded-lg border border-border-dark bg-surface-dark p-3 text-left"
+                              variant="inset"
+                              className="flex w-full items-center justify-between gap-3 p-3 text-left"
                             >
                               <div className="min-w-0 text-left">
                                 <div className="truncate text-sm font-medium text-text-dark">{model.displayName}</div>
@@ -433,7 +432,7 @@ const LlmSettingsSection: React.FC = () => {
                                   <Trash2 size={15} />
                                 </UiIconButton>
                               </div>
-                            </div>
+                            </UiPanel>
                           ))}
                         </div>
                       </div>
@@ -484,12 +483,12 @@ const LlmSettingsSection: React.FC = () => {
           </div>
 
           <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
-            <div className="rounded-lg border border-border-dark bg-layer px-3 py-2">
+            <UiPanel variant="inset" className="px-3 py-2">
               <div className="text-xs text-text-muted">当前编辑</div>
               <div className="truncate text-sm font-medium text-text-dark">
                 {activeProviderDraft.displayName || '新建供应商'}
               </div>
-            </div>
+            </UiPanel>
             <UiInput
               value={activeProviderDraft.displayName}
               onChange={(e) => setProviderDraftPatch({ displayName: e.target.value })}

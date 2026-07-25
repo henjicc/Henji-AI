@@ -85,7 +85,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-medium text-text-dark">状态关键帧</div>
-                <div className="mt-0.5 font-mono text-[10px] text-text-muted">
+                <div className="mt-0.5 font-mono text-3xs text-text-muted">
                   {formatShotTimecode(shot.time, 'secondsFrames', fps)}
                 </div>
               </div>
@@ -100,7 +100,7 @@ const StaticClipBlock: React.FC<StaticClipBlockProps> = ({
                 <Trash2 size={13} />
               </UiIconButton>
             </div>
-            <label className="grid gap-1 text-[11px] text-text-muted">
+            <label className="grid gap-1 text-2xs text-text-muted">
               名称
               <UiInput
                 value={draftName}

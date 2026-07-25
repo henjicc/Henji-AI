@@ -51,7 +51,7 @@ function JsonContainerNode({ label, value, depth, expandDepth }: JsonNodeProps):
 
   if (entries.length === 0) {
     return (
-      <div className="py-0.5 pl-1 font-mono text-[11px] text-text-muted">
+      <div className="py-0.5 pl-1 font-mono text-2xs text-text-muted">
         {label !== undefined && <span className="text-brand-300">{label}: </span>}
         <span>{isArray ? '[]' : '{}'}</span>
       </div>
@@ -64,7 +64,7 @@ function JsonContainerNode({ label, value, depth, expandDepth }: JsonNodeProps):
         type="button"
         variant="ghost"
         size="sm"
-        className="h-auto w-full justify-start gap-1 rounded px-1 py-0.5 text-left font-mono text-[11px] font-normal"
+        className="h-auto w-full justify-start gap-1 rounded px-1 py-0.5 text-left font-mono text-2xs font-normal"
         onClick={() => setExpanded((current) => !current)}
       >
         {expanded ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
@@ -96,7 +96,7 @@ function JsonLeafNode({ label, value }: JsonLeafNodeProps): JSX.Element {
     const display = isLong && !stringExpanded ? `${value.slice(0, LONG_STRING_THRESHOLD)}…` : value
 
     return (
-      <div className="py-0.5 pl-1 font-mono text-[11px]">
+      <div className="py-0.5 pl-1 font-mono text-2xs">
         {label !== undefined && <span className="text-brand-300">{label}: </span>}
         <span className="whitespace-pre-wrap break-all text-emerald-400">&quot;{display}&quot;</span>
         {isLong && (
@@ -104,7 +104,7 @@ function JsonLeafNode({ label, value }: JsonLeafNodeProps): JSX.Element {
             type="button"
             variant="ghost"
             size="sm"
-            className="ml-1 h-auto rounded px-1 py-0 text-[10px] font-normal text-brand-300"
+            className="ml-1 h-auto rounded px-1 py-0 text-3xs font-normal text-brand-300"
             onClick={() => setStringExpanded((current) => !current)}
           >
             {stringExpanded
@@ -121,7 +121,7 @@ function JsonLeafNode({ label, value }: JsonLeafNodeProps): JSX.Element {
     typeof value === 'number' ? 'text-sky-400' : typeof value === 'boolean' ? 'text-amber-400' : 'text-text-muted'
 
   return (
-    <div className="py-0.5 pl-1 font-mono text-[11px]">
+    <div className="py-0.5 pl-1 font-mono text-2xs">
       {label !== undefined && <span className="text-brand-300">{label}: </span>}
       <span className={valueColorClass}>{display}</span>
     </div>

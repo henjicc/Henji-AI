@@ -286,7 +286,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
           )}
         </div>
         {!isPrimaryCamera && (
-          <div className="text-[11px] text-text-muted">画幅由首个摄像机决定，如需更改请编辑首个摄像机</div>
+          <div className="text-2xs text-text-muted">画幅由首个摄像机决定，如需更改请编辑首个摄像机</div>
         )}
       </div>
 

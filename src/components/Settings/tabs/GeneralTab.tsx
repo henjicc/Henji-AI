@@ -1,4 +1,5 @@
 import React from 'react'
+import { UI_SECTION_STACK_CLASS } from '@/components/ui'
 import { useSettings } from '../hooks/useSettings'
 import LanguageSection from '../sections/LanguageSection'
 import HistorySection from '../sections/HistorySection'
@@ -21,7 +22,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
   return (
     <div className="p-4 space-y-5">
       {currentSectionId === 'general-basic' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <LanguageSection />
           <HistorySection
             maxHistoryCount={settings.maxHistoryCount}
@@ -31,7 +32,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
       )}
 
       {currentSectionId === 'general-storage' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <DataPathSection />
           <LargeUploadSection />
           <DownloadSection
@@ -46,7 +47,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
       )}
 
       {currentSectionId === 'general-behavior' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <ConcurrencySection
             maxConcurrentTasks={settings.maxConcurrentTasks}
             onChange={(value) => updateSetting('maxConcurrentTasks', value)}
@@ -71,7 +72,7 @@ const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
       )}
 
       {currentSectionId === 'general-maintenance' && (
-        <section className="space-y-5">
+        <section className={UI_SECTION_STACK_CLASS}>
           <UpdateSection />
         </section>
       )}
