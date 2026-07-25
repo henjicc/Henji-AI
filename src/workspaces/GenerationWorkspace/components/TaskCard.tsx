@@ -5,7 +5,16 @@ import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
 import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker"
 import { useGenerationTaskProgressStore } from "@/stores/generationTaskProgressStore"
-import { UiButton, UiIconButton } from "@/components/ui"
+import {
+  UiButton,
+  UiEmpty,
+  UiError,
+  UiIconButton,
+  UiLoading,
+  UI_INSET_SURFACE_CLASS,
+  UI_META_BADGE_ACCENT_CLASS,
+  UI_META_BADGE_CLASS,
+} from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
 import type { GenerationTask } from "../types"
@@ -33,6 +42,13 @@ export interface TaskCardProps {
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
   notify: (message: string, type?: 'success' | 'error') => void
 }
+
+/**
+ * 结果区插槽：固定高度 + 内嵌表面。
+ * 生成中/排队/失败都占同样高度，避免状态切换时列表跳动；
+ * 用 inset（比页面底色更暗）读作"凹进去的待填充槽位"，而不是浮起来的卡片。
+ */
+const RESULT_SLOT_CLASS = `h-64 rounded-lg ${UI_INSET_SURFACE_CLASS}`
 
 const TaskCard = React.memo(function TaskCard({
   task,
@@ -137,70 +153,62 @@ const TaskCard = React.memo(function TaskCard({
   const inputVideos = task.videos ?? []
 
   const renderResult = () => {
+    // 四种非成功状态统一走状态组件。h-64 必须保留：结果区高度固定，
+    // 生成过程中状态切换才不会让整条历史列表跳动。
     if (task.status === "queued") {
       return (
-        <div className="flex items-center justify-center h-64 bg-layer rounded-lg border-2 border-blue-500/30">
-          <div className="text-center">
-            <p className="text-blue-400 font-medium">{t("ui:workspace.status.queued")}</p>
-            <p className="text-zinc-400 text-sm mt-2">{t("ui:workspace.status.waiting")}</p>
-          </div>
-        </div>
+        <UiEmpty
+          size="sm"
+          className={RESULT_SLOT_CLASS}
+          title={t("ui:workspace.status.queued")}
+          description={t("ui:workspace.status.waiting")}
+        />
       )
     }
 
     if (task.status === "pending") {
       return (
-        <div className="flex items-center justify-center h-64 bg-layer rounded-lg">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent mb-2" />
-            <p className="text-zinc-400">{t("ui:workspace.status.preparing")}</p>
-          </div>
-        </div>
+        <UiLoading size="sm" className={RESULT_SLOT_CLASS} message={t("ui:workspace.status.preparing")} />
       )
     }
 
     if (task.status === "generating") {
       return (
-        <div className="flex items-center justify-center h-64 bg-layer rounded-lg">
-          <div className="text-center w-full px-6">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-accent mb-3" />
-            <p className="text-zinc-400 mb-3">{t("ui:workspace.status.generating")}</p>
-            {progressValue !== undefined && (
-              <ProgressBar progress={progressValue} className="mt-3" duration={getProgressTransitionDurationMs(progressValue)} />
-            )}
-          </div>
-        </div>
+        <UiLoading size="sm" className={RESULT_SLOT_CLASS} message={t("ui:workspace.status.generating")}>
+          {progressValue !== undefined && (
+            <ProgressBar progress={progressValue} duration={getProgressTransitionDurationMs(progressValue)} />
+          )}
+        </UiLoading>
       )
     }
 
     if (task.status === "error") {
       return (
-        <div className="flex items-center justify-center h-64 bg-app rounded-lg border-2 border-red-500/20">
-          <div className="text-center w-full px-6">
-            <p className="text-red-300 font-medium mb-2">{t("common:error")}</p>
-            <p className="text-zinc-300 text-sm break-words">{task.error || t("common:status.failed")}</p>
-            <div className="mt-5 flex justify-center gap-2">
-              <UiButton
-                variant="muted"
-                size="sm"
-                className="h-9 gap-1.5 px-4"
-                onClick={() => openAssistantForDiagnosis({
-                  title: '生成任务失败',
-                  message: task.error || '生成任务失败',
-                  taskId: task.id,
-                  errorCode: 'GENERATION_FAILED',
-                  domain: 'core.services.GenerationService',
-                  occurredAt: task.createdAt.toISOString(),
-                })}
-              >
-                <MessageCircleQuestion className="h-3.5 w-3.5" />问助手
-              </UiButton>
-              <UiButton variant="primary" size="sm" className="h-9 px-4" onClick={() => onRetryPolling(task)}>
-                {t("ui:retry")}
-              </UiButton>
-            </div>
-          </div>
-        </div>
+        <UiError
+          size="sm"
+          className={RESULT_SLOT_CLASS}
+          title={t("common:error")}
+          message={task.error || t("common:status.failed")}
+          onRetry={() => void onRetryPolling(task)}
+          retryLabel={t("ui:retry")}
+          actions={
+            <UiButton
+              variant="muted"
+              size="sm"
+              className="h-9 gap-1.5 px-4"
+              onClick={() => openAssistantForDiagnosis({
+                title: '生成任务失败',
+                message: task.error || '生成任务失败',
+                taskId: task.id,
+                errorCode: 'GENERATION_FAILED',
+                domain: 'core.services.GenerationService',
+                occurredAt: task.createdAt.toISOString(),
+              })}
+            >
+              <MessageCircleQuestion className="h-3.5 w-3.5" />问助手
+            </UiButton>
+          }
+        />
       )
     }
 
@@ -217,7 +225,7 @@ const TaskCard = React.memo(function TaskCard({
             return (
               <div
                 key={`${task.id}-img-${index}`}
-                className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50"
+                className={`relative w-64 overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}
                 onClick={() => handleImageClick(url, urls, filePaths)}
                 onContextMenu={(e) =>
                   showMenu(e, [
@@ -278,7 +286,7 @@ const TaskCard = React.memo(function TaskCard({
       const videoUrl = filePath ? toDisplaySrc(filePath.replace(/\\/g, "/")) : (urls[0] ?? "")
       return (
         <div
-          className="relative w-64 bg-layer rounded-lg overflow-hidden border border-zinc-700/50 cursor-pointer"
+          className={`relative w-64 cursor-pointer overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}
           onClick={() => handleVideoClick(videoUrl, filePath)}
           onContextMenu={(e) =>
             showMenu(e, [
@@ -376,25 +384,25 @@ const TaskCard = React.memo(function TaskCard({
             <TaskPrompt prompt={task.prompt} />
             <div className="flex items-center gap-3 mt-2 text-xs text-zinc-400">
               <div className="flex flex-wrap gap-2">
-                <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">
+                <span className={UI_META_BADGE_CLASS}>
                   {typeLabel}
                 </span>
-                <span className="bg-accent/10 border border-accent/40 text-brand-300 px-2 py-0.5 rounded">
+                <span className={UI_META_BADGE_ACCENT_CLASS}>
                   {modelName}
                 </span>
                 {task.dimensions && (
-                  <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">
+                  <span className={UI_META_BADGE_CLASS}>
                     {task.dimensions}
                   </span>
                 )}
                 {task.type === "video" && task.duration && (
-                  <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">{task.duration}</span>
+                  <span className={UI_META_BADGE_CLASS}>{task.duration}</span>
                 )}
                 {task.type === "audio" && task.duration && (
-                  <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded">{task.duration}</span>
+                  <span className={UI_META_BADGE_CLASS}>{task.duration}</span>
                 )}
                 {createdAtLabel && (
-                  <span className="bg-white/5 border border-white/10 px-2 py-0.5 rounded text-zinc-400">
+                  <span className={`${UI_META_BADGE_CLASS} text-zinc-400`}>
                     {createdAtLabel}
                   </span>
                 )}

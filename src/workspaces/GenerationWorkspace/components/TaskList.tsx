@@ -1,6 +1,7 @@
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
+import { UiEmpty } from '@/components/ui'
 import type { GenerationTask } from '../types'
 import TaskCard from './TaskCard'
 
@@ -57,9 +58,7 @@ export function TaskList({
         </div>
       )}
       {tasks.length === 0 && hasActiveFilters && (
-        <div className="rounded-xl border border-border-dark bg-surface-dark px-6 py-12 text-center">
-          <p className="text-sm text-zinc-300">{t('ui:workspaceFilters.emptyFiltered')}</p>
-        </div>
+        <UiEmpty title={t('ui:workspaceFilters.emptyFiltered')} />
       )}
       {tasks.length > 0 && tasks.map((task) => {
         return (

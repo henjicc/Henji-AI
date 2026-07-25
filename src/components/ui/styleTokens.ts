@@ -69,6 +69,15 @@ export const UI_PANEL_SURFACE_CLASS =
  */
 export const UI_INSET_SURFACE_CLASS = 'bg-app/40 text-text-dark';
 
+/**
+ * 元信息徽标（类型/尺寸/时长/时间这类只读标签）。
+ * 之前在 TaskCard 里同一串类名抄了 5 遍，收敛到这里；强调态用下面的 accent 变体。
+ */
+export const UI_META_BADGE_CLASS = 'bg-veil-faint border border-veil-subtle px-2 py-0.5 rounded';
+
+export const UI_META_BADGE_ACCENT_CLASS =
+  'bg-accent/10 border border-accent/40 text-brand-300 px-2 py-0.5 rounded';
+
 export const UI_FIELD_SURFACE_CLASS =
   'bg-surface-dark border border-border-dark text-text-dark';
 
