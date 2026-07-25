@@ -35,6 +35,23 @@ export const hostContextSnapshotSchema = z.object({
   }),
   generation: z.object({
     commandReady: z.boolean(),
+    /** 首轮模型选择用的紧凑目录；最终提交前仍需读取单模型 schema。 */
+    modelCatalog: z.object({
+      catalogVersion: z.literal('model-registry/v1'),
+      modelGroups: z.array(z.object({
+        canonicalModelId: z.string().min(1),
+        mediaType: z.enum(['image', 'video', 'audio']),
+        name: z.string().min(1),
+        description: z.string(),
+        tags: z.array(z.string()),
+        recommendedByDescription: z.boolean(),
+        providers: z.array(z.object({
+          providerId: z.string().min(1),
+          modelId: z.string().min(1),
+          priceEstimate: z.record(z.string(), z.unknown()),
+        }).strict()).min(1).max(100),
+      }).strict()).max(300),
+    }).strict().optional(),
   }),
   assets: z.object({
     view: z.enum(['closed', 'floating', 'workspace']),

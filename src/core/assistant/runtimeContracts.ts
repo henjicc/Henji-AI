@@ -69,6 +69,11 @@ const llmCapabilitiesSchema = modelStepCapabilitiesSchema.extend({
   maxOutputTokens: z.number().int().positive().nullable(),
 }).strict()
 
+const agentRuntimeReasoningSchema = z.object({
+  enabled: z.boolean(),
+  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
+}).strict()
+
 export const agentRuntimeModelConfigSchema = z.object({
   providerId: z.string().min(1),
   modelId: z.string().min(1),
@@ -76,6 +81,8 @@ export const agentRuntimeModelConfigSchema = z.object({
   adapter: z.string().min(1),
   baseUrl: z.string().optional(),
   capabilities: llmCapabilitiesSchema,
+  /** 供应商级思考配置；由渲染层随选定模型传入，运行时不自行猜测。 */
+  reasoning: agentRuntimeReasoningSchema.optional(),
   enabled: z.boolean(),
 }).strict()
 export type AgentRuntimeModelConfig = z.infer<typeof agentRuntimeModelConfigSchema>

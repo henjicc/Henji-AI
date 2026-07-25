@@ -120,6 +120,12 @@ function createOutput(input: ModelStepInput): ReturnType<typeof Output.text> | R
   })
 }
 
+function isDeepSeekThinkingEnabled(input: ModelStepInput): boolean {
+  return input.adapter?.trim().toLowerCase() === 'deepseek'
+    && input.capabilities.reasoning
+    && input.reasoning?.enabled === true
+}
+
 export async function executeModelStepWithModel(
   rawInput: ModelStepInput,
   model: LanguageModel,
@@ -141,8 +147,9 @@ export async function executeModelStepWithModel(
     timeout: settings.timeoutMs,
     maxRetries: settings.maxRetries,
     maxOutputTokens: settings.maxOutputTokens,
-    temperature: input.capabilities.sampling ? settings.temperature : undefined,
-    topP: input.capabilities.sampling ? settings.topP : undefined,
+    // DeepSeek 思考模式不支持采样参数；明确省略以避免“看似生效但实际被忽略”。
+    temperature: input.capabilities.sampling && !isDeepSeekThinkingEnabled(input) ? settings.temperature : undefined,
+    topP: input.capabilities.sampling && !isDeepSeekThinkingEnabled(input) ? settings.topP : undefined,
     providerOptions: buildModelStepProviderOptions(input),
   })
 

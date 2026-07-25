@@ -6,8 +6,10 @@ import type { ModelDefinition } from '@/core/types'
 
 import {
   GenerationPreparationError,
+  getGenerationModelCatalogBootstrap,
   getGenerationModelSchema,
   prepareGenerationTask,
+  searchGenerationModelCatalog,
   searchGenerationModels,
 } from './generationPreparation'
 
@@ -98,6 +100,39 @@ describe('generationPreparation', () => {
     const models = searchGenerationModels({ mediaType: 'image' })
     expect(models).toHaveLength(32)
     expect(Buffer.byteLength(JSON.stringify(models), 'utf8')).toBeLessThan(24 * 1024)
+  })
+
+  it('忽略误传的题材词并按供应商标识大小写归一化，避免无效重复搜索', () => {
+    const result = searchGenerationModelCatalog({
+      mediaType: 'image',
+      providerId: 'TEST-PROVIDER',
+      query: '剪纸风格',
+    })
+    expect(result.models).toHaveLength(1)
+    expect(result.appliedProviderId).toBe('test-provider')
+    expect(result.providerIdNormalized).toBe(true)
+    expect(result.matchedQueryTerms).toEqual([])
+    expect(result.ignoredQueryTerms).toEqual(['剪纸风格'])
+  })
+
+  it('首轮目录按基础模型合并供应商变体，保留选择所需的价格和推荐信息', () => {
+    registry.register({
+      ...testModel,
+      meta: { ...testModel.meta, id: 'agent-preparation-test-variant', provider: 'test-provider-2' },
+    })
+    const catalog = getGenerationModelCatalogBootstrap()
+    expect(catalog.modelGroups).toHaveLength(1)
+    expect(catalog.modelGroups[0]).toMatchObject({ canonicalModelId: 'nano-banana' })
+    expect(catalog.modelGroups[0].providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        providerId: 'test-provider',
+        priceEstimate: expect.objectContaining({ amount: 0.5, currency: '$' }),
+      }),
+      expect.objectContaining({
+        providerId: 'test-provider-2',
+        priceEstimate: expect.objectContaining({ comparableCnyAmount: 3.385 }),
+      }),
+    ]))
   })
 
   it('合并默认值并在提交前校验媒体和参数', () => {

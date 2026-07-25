@@ -18,8 +18,8 @@ export const stableSystemPrompt = [
   '选择图片、视频或音频生成模型时，tags、输入约束和参数 schema 是硬约束；通用描述只用于在兼容模型之间判断擅长方向，不得从描述推断未声明能力。',
   '搜索生成模型时，内容、题材和风格应保留在最终 prompt，不得作为模型目录 query；未明确指定模型名称时使用空 query + mediaType。用户指令或相关记忆明确偏好供应商时，首个搜索就附 providerId，避免先跨供应商搜索再逐个试探。',
   '执行生成任务时，如果创建工具尚未可用但存在工作区切换工具，应先切换到生成工作区，等待宿主上下文刷新后继续，不得据此声称应用没有生成能力。',
-  '模型选择优先级为：安全与真实能力硬约束 > 用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向；生成前必须搜索模型目录并读取最终候选的参数 schema。若用户要求省钱、低成本或测试，使用目录返回的价格估算并在首个搜索中传 sortBy=lowest_estimated_price；最终以参数校验后返回的实际参数估算为准。',
-  '若本轮已直接提供 search_models，不得先调用 search_application_capabilities。单一媒体类型的首个模型搜索默认已返回足量候选；除非筛选条件变化、需要下一页中特定候选，或结果为空，否则复用该结果，不得重复相同搜索。',
+  '模型选择优先级为：安全与真实能力硬约束 > 用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向。优先使用已注入的模型目录摘要；仅当用户点名的模型不在摘要、需要扩展候选或摘要缺失时才搜索。无论来源如何，提交前必须读取最终候选的参数 schema。若用户要求省钱、低成本或测试，使用目录返回的价格估算并在需要搜索时传 sortBy=lowest_estimated_price；最终以参数校验后返回的实际参数估算为准。',
+  '若本轮已直接提供模型目录摘要或 search_models，不得先调用 search_application_capabilities。单一媒体类型的首个模型搜索默认已返回足量候选；除非筛选条件变化、需要下一页中特定候选，或结果为空，否则复用该结果，不得重复相同搜索。若搜索结果标记 ignoredQueryTerms，说明把题材或风格词错误用于目录筛选：保留已匹配的供应商、类型、标签条件，忽略这些词后复用结果，不要重复相同查询。',
   '在满足上述硬约束且用户没有明确指定具体模型时，应优先使用通用描述中带有“推荐使用”字样的兼容模型；供应商偏好仍用于限定或排序候选，若存在多个推荐候选，再结合任务目标、质量、速度、成本和用户偏好选择。',
   '只有用户明确要求长期保存偏好或工作习惯时，才能调用用户指令或记忆候选工具并等待必要审批；不得把临时要求、敏感内容或模型推断擅自永久保存。',
   '画布任务必须先查询节点目录和单项 schema，再用明确 projectId、确定性 placement 和宿主返回的稳定 ID 添加、连接、定位或撤销；不得编造节点类型、参数和像素轨迹。',
@@ -138,6 +138,16 @@ export function buildAgentContextLayers(
   ))
   const offloaded = observations.flatMap((item) => item.artifact ? [item.artifact] : [])
   const layers = ([
+    {
+      id: 'model_catalog', source: 'host_generation_model_catalog', trust: 'trusted_runtime',
+      priority: 88, required: false, maxTokens: 7_000,
+      content: input.snapshot.generation.modelCatalog
+        ? JSON.stringify({
+            ...input.snapshot.generation.modelCatalog,
+            note: '这是本次运行开始时的紧凑模型目录，用于选择候选；必须在提交前读取最终候选的单模型 schema。',
+          })
+        : '',
+    },
     {
       id: 'current_goal', source: 'current_user_request', trust: 'untrusted_user',
       priority: 100, required: true, maxTokens: 1_500,

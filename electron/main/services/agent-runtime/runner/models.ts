@@ -13,6 +13,10 @@ export interface AgentRuntimeModel {
   adapter: string
   baseUrl?: string
   capabilities: ModelStepCapabilities
+  reasoning?: {
+    enabled: boolean
+    effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+  }
   limits: {
     contextWindow: number
     contextWindowSource: 'model' | 'profile_fallback'
@@ -48,6 +52,7 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
       sampling: model.capabilities.sampling,
       usage: model.capabilities.usage,
     },
+    reasoning: model.reasoning,
     limits: {
       contextWindow: modelContextWindow ?? request.profile.settings.contextWindowBudget,
       contextWindowSource: modelContextWindow === null ? 'profile_fallback' : 'model',

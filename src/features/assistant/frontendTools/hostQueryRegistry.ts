@@ -7,7 +7,7 @@ import {
   GenerationPreparationError,
   getGenerationModelSchema,
   prepareGenerationTask,
-  searchGenerationModels,
+  searchGenerationModelCatalog,
 } from '@/core/assistant/generationPreparation'
 import { createGenerationTaskRecoveryAdvice } from '@/core/assistant/generationTaskRecovery'
 import {
@@ -83,7 +83,8 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
   }],
   ['search_models', async (query) => {
     if (query.name !== 'search_models') return {}
-    const filtered = searchGenerationModels(query.input)
+    const search = searchGenerationModelCatalog(query.input)
+    const filtered = search.models
     const start = query.input.cursor
     const models = filtered.slice(start, start + query.input.limit)
     return {
@@ -93,15 +94,20 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
       selectionContext: {
         requestedMediaType: query.input.mediaType ?? null,
         requestedProviderId: query.input.providerId ?? null,
+        appliedProviderId: search.appliedProviderId,
+        providerIdNormalized: search.providerIdNormalized,
         requestedTags: query.input.tags ?? [],
         requestedSortBy: query.input.sortBy ?? 'registry',
         requestedQuery: query.input.query,
+        matchedQueryTerms: search.matchedQueryTerms,
+        ignoredQueryTerms: search.ignoredQueryTerms,
         compatibleCandidateCount: filtered.length,
         exclusionRules: [
           '媒体类型不匹配',
           '用户明确供应商不匹配',
           '必需能力标签缺失',
           '明确模型关键词不匹配',
+          '未命中模型目录的题材或风格词已忽略；它们应保留在最终 prompt，而非用于筛选模型。',
         ],
       },
     }

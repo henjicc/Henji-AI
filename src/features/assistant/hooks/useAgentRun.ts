@@ -129,10 +129,11 @@ export function useAgentRun(): UseAgentRunResult {
       const profile = config.agentProfiles.find((item) => item.id === config.selectedAgentProfileId)
         ?? config.agentProfiles[0]
       if (!profile) throw new Error('尚未配置智能助手模型档案')
-      const providerEnabled = new Map(config.providers.map((provider) => [provider.providerId, provider.enabled]))
+      const providers = new Map(config.providers.map((provider) => [provider.providerId, provider]))
       const models = config.models.map((model) => ({
         ...model,
-        enabled: model.enabled && providerEnabled.get(model.providerId) !== false,
+        enabled: model.enabled && providers.get(model.providerId)?.enabled !== false,
+        reasoning: providers.get(model.providerId)?.reasoning,
       }))
       logger.info('智能助手 UI 发起运行', {
         event: 'assistant_ui.run.start',

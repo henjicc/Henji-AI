@@ -41,6 +41,7 @@ describe('model step trace detail', () => {
         sampling: true,
         usage: true,
       },
+      reasoning: { enabled: true, effort: 'high' },
       settings: { maxOutputTokens: 4_000 },
       trace: {
         kind: 'primary',
@@ -76,7 +77,12 @@ describe('model step trace detail', () => {
         method: 'POST',
         url: 'https://api.deepseek.com/v1/chat/completions?api_key=secret',
         headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
-        body: { model: input.modelId, reasoning: true, max_tokens: 4_000 },
+        body: {
+          model: input.modelId,
+          thinking: { type: 'enabled' },
+          reasoning_effort: 'high',
+          max_tokens: 4_000,
+        },
       },
       response: { status: 200, headers: { 'content-type': 'text/event-stream' } },
     }, stream, result)
@@ -85,7 +91,11 @@ describe('model step trace detail', () => {
     expect(detail.logicalRequest.context?.contextWindowBudget).toBe(1_000_000)
     expect(detail.httpRequest?.headers.Authorization).toBe('***')
     expect(detail.httpRequest?.url).toContain('api_key=***')
-    expect(detail.httpRequest?.body).toMatchObject({ reasoning: true, max_tokens: 4_000 })
+    expect(detail.httpRequest?.body).toMatchObject({
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'high',
+      max_tokens: 4_000,
+    })
     expect(detail.response?.usage.inputTokens).toBe(120)
     expect(detail.response?.reasoningText).toBe('供应商返回的推理摘要')
     expect(detail.stream?.firstChunkMs).toBe(120)

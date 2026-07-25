@@ -4,7 +4,12 @@ import { MockLanguageModelV3 } from 'ai/test'
 
 import type { ModelStepInput } from '../../../../../src/core/llm/modelStep'
 import { buildModelStepProviderOptions, executeModelStepWithModel } from './model-step'
-import { applyModelStepProviderNativeOptions, resolveModelStepBaseUrl, usesNativeJsonSchema } from './provider'
+import {
+  applyDeepSeekUsage,
+  applyModelStepProviderNativeOptions,
+  resolveModelStepBaseUrl,
+  usesNativeJsonSchema,
+} from './provider'
 
 const usage = {
   inputTokens: { total: 11, noCache: 7, cacheRead: 4, cacheWrite: 0 },
@@ -56,7 +61,15 @@ describe('executeModelStepWithModel', () => {
     expect(result.text).toBe('完成')
     expect(result.reasoningText).toBe('思考')
     expect(result.usage).toMatchObject({ inputTokens: 11, cacheReadTokens: 4, reasoningTokens: 2, totalTokens: 16 })
-    expect(result.responseMessages).toHaveLength(1)
+    expect(result.responseMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: 'assistant',
+        content: expect.arrayContaining([
+          expect.objectContaining({ type: 'reasoning', text: '思考' }),
+          expect.objectContaining({ type: 'text', text: '完成' }),
+        ]),
+      }),
+    ]))
     expect(events).toEqual(['TextDelta', 'ReasoningDelta'])
   })
 
@@ -173,9 +186,51 @@ describe('resolveModelStepBaseUrl', () => {
       ...supported,
       capabilities: { ...supported.capabilities, reasoning: false },
     }))).toBeUndefined()
-    expect(applyModelStepProviderNativeOptions({ model: 'deepseek-v4' }, true)).toEqual({
+    expect(applyModelStepProviderNativeOptions({ model: 'deepseek-v4' }, {
+      enabled: true,
+      effort: 'xhigh',
+    })).toEqual({
       model: 'deepseek-v4',
-      reasoning: true,
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'max',
+    })
+  })
+
+  it('DeepSeek 思考模式不发送不会生效的采样参数', async () => {
+    const model = new MockLanguageModelV3({
+      doStream: {
+        stream: simulateReadableStream({ chunks: [
+          { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
+        ] }),
+      },
+    })
+    await executeModelStepWithModel(createInput({
+      adapter: 'deepseek',
+      reasoning: { enabled: true, effort: 'high' },
+      settings: { temperature: 0.8, topP: 0.9 },
+    }), model, () => undefined, new AbortController().signal)
+    expect(model.doStreamCalls[0].temperature).toBeUndefined()
+    expect(model.doStreamCalls[0].topP).toBeUndefined()
+  })
+
+  it('合并 DeepSeek 返回的缓存命中用量', () => {
+    expect(applyDeepSeekUsage({
+      inputTokens: null,
+      inputNoCacheTokens: null,
+      cacheReadTokens: null,
+      cacheWriteTokens: null,
+      outputTokens: 10,
+      textTokens: 10,
+      reasoningTokens: 0,
+      totalTokens: 110,
+    }, {
+      prompt_cache_hit_tokens: 80,
+      prompt_cache_miss_tokens: 20,
+      prompt_tokens: 100,
+    })).toMatchObject({
+      inputTokens: 100,
+      inputNoCacheTokens: 20,
+      cacheReadTokens: 80,
     })
   })
 

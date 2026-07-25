@@ -45,6 +45,7 @@ export type AgentToolDomain = typeof AGENT_TOOL_DOMAINS[number]
 export type AgentRoutePath = 'workflow' | 'primary'
 
 export const AGENT_CONTEXT_LAYER_IDS = [
+  'model_catalog',
   'current_goal',
   'host_state',
   'plan_state',

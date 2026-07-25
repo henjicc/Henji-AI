@@ -44,7 +44,11 @@ import { DeterministicWorkflowService } from './services/agent-runtime/workflows
 import { createWorkflowTools } from './services/agent-runtime/workflows/tools'
 import { createMainLogger } from './services/logging'
 import { executeModelStepWithModel } from './services/llm/sdk/model-step'
-import { createModelStepLanguageModel, type ModelStepHttpTrace } from './services/llm/sdk/provider'
+import {
+  applyDeepSeekUsage,
+  createModelStepLanguageModel,
+  type ModelStepHttpTrace,
+} from './services/llm/sdk/provider'
 import {
   buildModelStepTraceDetail,
   createModelStepStreamTrace,
@@ -165,7 +169,7 @@ async function runUtilityModelStep(
   const startedAt = Date.now()
   const traceId = randomUUID()
   const captureMode = await getAgentTraceCaptureMode()
-  const httpTrace: ModelStepHttpTrace = {}
+  const httpTrace: ModelStepHttpTrace = { captureHttp: captureMode === 'detailed' }
   const streamTrace = captureMode === 'detailed' ? createModelStepStreamTrace() : undefined
   activeModelSteps.set(input.requestId, controller)
   await startAgentTrace(input, traceId, captureMode, startedAt)
@@ -184,9 +188,13 @@ async function runUtilityModelStep(
     const model = createModelStepLanguageModel(
       input,
       keyResult.apiKey,
-      captureMode === 'detailed' ? httpTrace : undefined
+      httpTrace
     )
-    const result = await executeModelStepWithModel(input, model, emit, controller.signal, streamTrace)
+    const rawResult = await executeModelStepWithModel(input, model, emit, controller.signal, streamTrace)
+    await httpTrace.usageCapture
+    const result = httpTrace.deepSeekUsage
+      ? { ...rawResult, usage: applyDeepSeekUsage(rawResult.usage, httpTrace.deepSeekUsage) }
+      : rawResult
     await finishAgentTrace(input, traceId, captureMode, startedAt, httpTrace, streamTrace, result)
     logger.info('utility 模型单步调用完成', {
       event: 'llm_model_step.run.completed',

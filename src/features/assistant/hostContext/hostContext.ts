@@ -11,6 +11,7 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { getGenerationModelCatalogBootstrap } from '@/core/assistant/generationPreparation'
 import {
   isVisibleGenerationTaskHandlerReady,
   subscribeVisibleGenerationTaskChanges,
@@ -188,7 +189,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       id: project.currentProjectId,
       selectedNodeId: canvas.selectedNodeId,
     },
-    generation: { commandReady: generationReady },
+    generation: { commandReady: generationReady, modelCatalog: getGenerationModelCatalogBootstrap() },
     assets: {
       view: assets.view,
       selectedAssetId: assets.selectedAsset?.id ?? null,

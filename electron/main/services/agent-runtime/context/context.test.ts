@@ -13,7 +13,18 @@ function contextSnapshot(): HostContextSnapshot {
     scopeRevisions: { navigation: 1, generation: 2, canvas: 1, toolbox: 0, assets: 0 },
     workspace: { id: 'generation', activeToolId: null },
     project: { id: 'project-1', selectedNodeId: null },
-    generation: { commandReady: true },
+    generation: {
+      commandReady: true,
+      modelCatalog: {
+        catalogVersion: 'model-registry/v1',
+        modelGroups: [{
+          canonicalModelId: 'test-image', mediaType: 'image',
+          name: '测试图片模型', description: '推荐使用！', tags: ['text-to-image'],
+          recommendedByDescription: true,
+          providers: [{ providerId: 'test', modelId: 'test-image', priceEstimate: { amount: 0.01, currency: 'CNY' } }],
+        }],
+      },
+    },
     assets: { view: 'closed', selectedAssetId: null },
     uiReady: true,
     availableCommands: ['switch_workspace', 'create_visible_generation_task'],
@@ -253,6 +264,8 @@ describe('AgentContextBuilder', () => {
     ))
     expect(String(userInstructionsLayer?.content)).toContain('图片生成优先使用 PPIO')
     expect(String(userInstructionsLayer?.content)).toContain('trust=untrusted_user')
+    expect(String(result.messages[0].content)).toContain('id=model_catalog')
+    expect(String(result.messages[0].content)).toContain('test-image')
   })
 
   it('用户指令只自动脱敏秘密并保留其他正常内容', () => {

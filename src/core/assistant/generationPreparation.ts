@@ -27,6 +27,19 @@ export interface GenerationPreparationInput {
   options?: Record<string, unknown>
 }
 
+export interface GenerationModelCatalogBootstrap {
+  catalogVersion: 'model-registry/v1'
+  modelGroups: Array<Record<string, unknown>>
+}
+
+export interface GenerationModelSearchResult {
+  models: Array<Record<string, unknown>>
+  appliedProviderId: string | null
+  ignoredQueryTerms: string[]
+  matchedQueryTerms: string[]
+  providerIdNormalized: boolean
+}
+
 export class GenerationPreparationError extends Error {
   constructor(
     readonly code: 'MODEL_NOT_FOUND' | 'INVALID_INPUT',
@@ -100,6 +113,14 @@ function modelSearchText(model: ModelDefinition): string {
   ].join(' ').toLowerCase()
 }
 
+function compactSearchText(value: string): string {
+  return value.replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase()
+}
+
+function matchesSearchTerm(text: string, term: string): boolean {
+  return text.includes(term) || compactSearchText(text).includes(compactSearchText(term))
+}
+
 function modelDescriptionText(model: ModelDefinition): string {
   if (!model.meta.description) return ''
   return getI18nText(model.meta.description, 'zh') || getI18nText(model.meta.description, 'en')
@@ -147,6 +168,15 @@ function createCatalogPriceEstimate(model: ModelDefinition): Record<string, unkn
   }
 }
 
+function createBootstrapPriceEstimate(model: ModelDefinition): Record<string, unknown> {
+  const estimate = createCatalogPriceEstimate(model)
+  return {
+    amount: estimate.amount,
+    currency: estimate.currency,
+    comparableCnyAmount: estimate.comparableCnyAmount,
+  }
+}
+
 function compactModelDescription(model: ModelDefinition): string {
   return modelDescriptionText(model).replace(/\s+/g, ' ').trim().slice(0, 80)
 }
@@ -187,40 +217,115 @@ function sortSearchCandidates(
 
 function createSelectionEvidence(
   model: ModelDefinition,
-  input: GenerationModelSearchInput,
-  matchedQueryTerms: string[]
+  matchedQueryTerms: string[],
+  ignoredQueryTerms: string[]
 ): Record<string, unknown> {
   const description = modelDescriptionText(model)
   return {
     recommendedByDescription: description.includes('推荐使用'),
     matchedQueryTerms,
+    ignoredQueryTerms,
     compatible: true,
   }
 }
 
-export function searchGenerationModels(input: GenerationModelSearchInput): Array<Record<string, unknown>> {
-  const terms = normalizeTerms(input.query)
-  const requestedTags = (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
-  const candidates = registry.listAllModels()
-    .filter((model) => {
-      if (input.mediaType && model.meta.type !== input.mediaType) return false
-      if (input.providerId && model.meta.provider !== input.providerId) return false
-      if (requestedTags.length && !requestedTags.every((tag) => model.meta.tags?.includes(tag))) return false
-      const text = modelSearchText(model)
-      return terms.every((term) => text.includes(term))
-    })
-    .map((model) => ({
-      modelId: model.meta.id,
-      canonicalModelId: model.meta.canonicalModelId,
+function toCatalogModel(model: ModelDefinition): Record<string, unknown> {
+  const description = compactModelDescription(model)
+  return {
+    modelId: model.meta.id,
+    canonicalModelId: model.meta.canonicalModelId,
+    providerId: model.meta.provider,
+    mediaType: model.meta.type,
+    name: getI18nText(model.meta.name, 'zh') || getI18nText(model.meta.name, 'en'),
+    description,
+    tags: (model.meta.tags ?? []).slice(0, 8),
+    priceEstimate: createCatalogPriceEstimate(model),
+    recommendedByDescription: description.includes('推荐使用'),
+  }
+}
+
+/**
+ * 提供给 Agent 的紧凑模型目录。它只用于首轮选择，最终提交前仍必须读取单模型 schema。
+ */
+export function getGenerationModelCatalogBootstrap(): GenerationModelCatalogBootstrap {
+  const groups = new Map<string, {
+    canonicalModelId: string
+    mediaType: GenerationMediaType
+    name: string
+    description: string
+    tags: string[]
+    recommendedByDescription: boolean
+    providers: Array<Record<string, unknown>>
+  }>()
+  for (const model of registry.listAllModels()) {
+    const key = `${model.meta.type}:${model.meta.canonicalModelId}`
+    const description = compactModelDescription(model)
+    const existing = groups.get(key)
+    const providerModel = {
       providerId: model.meta.provider,
+      modelId: model.meta.id,
+      priceEstimate: createBootstrapPriceEstimate(model),
+    }
+    if (existing) {
+      existing.providers.push(providerModel)
+      continue
+    }
+    groups.set(key, {
+      canonicalModelId: model.meta.canonicalModelId,
       mediaType: model.meta.type,
       name: getI18nText(model.meta.name, 'zh') || getI18nText(model.meta.name, 'en'),
-      description: compactModelDescription(model),
+      description,
       tags: (model.meta.tags ?? []).slice(0, 8),
-      priceEstimate: createCatalogPriceEstimate(model),
-      selectionEvidence: createSelectionEvidence(model, input, terms),
+      recommendedByDescription: description.includes('推荐使用'),
+      providers: [providerModel],
+    })
+  }
+  return {
+    catalogVersion: 'model-registry/v1',
+    modelGroups: [...groups.values()],
+  }
+}
+
+function resolveProviderId(
+  requestedProviderId: string | undefined,
+  models: ModelDefinition[]
+): { providerId: string | null; normalized: boolean } {
+  const trimmed = requestedProviderId?.trim()
+  if (!trimmed) return { providerId: null, normalized: false }
+  const actual = models.find((model) => model.meta.provider.toLowerCase() === trimmed.toLowerCase())?.meta.provider
+  return { providerId: actual ?? trimmed, normalized: actual !== undefined && actual !== trimmed }
+}
+
+export function searchGenerationModelCatalog(input: GenerationModelSearchInput): GenerationModelSearchResult {
+  const allModels = registry.listAllModels()
+  const terms = normalizeTerms(input.query)
+  const provider = resolveProviderId(input.providerId, allModels)
+  const matchedQueryTerms = terms.filter((term) => allModels.some((model) => matchesSearchTerm(modelSearchText(model), term)))
+  const ignoredQueryTerms = terms.filter((term) => !matchedQueryTerms.includes(term))
+  const requestedTags = (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
+  const models = allModels
+    .filter((model) => {
+      if (input.mediaType && model.meta.type !== input.mediaType) return false
+      if (provider.providerId && model.meta.provider !== provider.providerId) return false
+      if (requestedTags.length && !requestedTags.every((tag) => model.meta.tags?.includes(tag))) return false
+      const text = modelSearchText(model)
+      return matchedQueryTerms.every((term) => matchesSearchTerm(text, term))
+    })
+    .map((model) => ({
+      ...toCatalogModel(model),
+      selectionEvidence: createSelectionEvidence(model, matchedQueryTerms, ignoredQueryTerms),
     }))
-  return sortSearchCandidates(candidates, input.sortBy)
+  return {
+    models: sortSearchCandidates(models, input.sortBy),
+    appliedProviderId: provider.providerId,
+    ignoredQueryTerms,
+    matchedQueryTerms,
+    providerIdNormalized: provider.normalized,
+  }
+}
+
+export function searchGenerationModels(input: GenerationModelSearchInput): Array<Record<string, unknown>> {
+  return searchGenerationModelCatalog(input).models
 }
 
 export function getGenerationModelSchema(modelId: string): Record<string, unknown> {

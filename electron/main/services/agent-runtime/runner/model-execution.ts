@@ -138,6 +138,7 @@ export async function runRouterModelClassification(
       },
     },
     capabilities: input.model.capabilities,
+    reasoning: input.model.reasoning,
     settings: input.model.settings,
     trace: {
       kind: 'router',
@@ -173,6 +174,7 @@ export function runPrimaryAgentModelStep(
     tools: input.tools,
     output: { mode: 'text' },
     capabilities: input.model.capabilities,
+    reasoning: input.model.reasoning,
     settings: input.model.settings,
     trace: input.trace,
   }, (event) => {

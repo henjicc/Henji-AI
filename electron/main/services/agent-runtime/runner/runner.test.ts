@@ -221,10 +221,22 @@ describe('AgentRunner', () => {
           toolCalls: [{ toolCallId: 'tool-1', toolName: 'create_visible_generation_task', input: { prompt: '测试' }, dynamic: false }],
           responseMessages: [{
             role: 'assistant',
-            content: [{ type: 'tool-call', toolCallId: 'tool-1', toolName: 'create_visible_generation_task', input: { prompt: '测试' } }],
+            content: [
+              { type: 'reasoning', text: '需要先提交生成任务。' },
+              { type: 'tool-call', toolCallId: 'tool-1', toolName: 'create_visible_generation_task', input: { prompt: '测试' }, dynamic: false },
+            ],
           }],
         })
       }
+      expect(input.messages).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          role: 'assistant',
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: 'reasoning', text: '需要先提交生成任务。' }),
+            expect.objectContaining({ type: 'tool-call', toolCallId: 'tool-1' }),
+          ]),
+        }),
+      ]))
       return result(input, { text: '任务已创建', responseMessages: [{ role: 'assistant', content: '任务已创建' }] })
     })
     const runnerRef: { current: AgentRunner | null } = { current: null }
