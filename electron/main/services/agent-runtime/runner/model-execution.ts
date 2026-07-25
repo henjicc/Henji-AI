@@ -25,7 +25,11 @@ function compactRouterSnapshot(snapshot: HostContextSnapshot): Record<string, un
     scopeRevisions: snapshot.scopeRevisions,
     workspace: snapshot.workspace,
     project: snapshot.project,
-    generation: snapshot.generation,
+    generation: {
+      commandReady: snapshot.generation.commandReady,
+      modelCatalogAvailable: Boolean(snapshot.generation.modelCatalog),
+      modelCatalogGroupCount: snapshot.generation.modelCatalog?.modelGroups.length ?? 0,
+    },
     assets: snapshot.assets,
     uiReady: snapshot.uiReady,
     availableCommands: snapshot.availableCommands,

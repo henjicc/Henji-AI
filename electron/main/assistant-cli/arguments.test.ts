@@ -6,12 +6,13 @@ describe('parseAssistantCliArguments', () => {
   it('解析运行所需参数和可选项', () => {
     expect(parseAssistantCliArguments([
       '.', '--assistant-cli', '--goal', '生成一只小猫', '--approval', 'full_access',
-      '--trace', 'detailed', '--print-trace', '--timeout', '120000', '--thread', 'cli-test',
+      '--trace', 'detailed', '--print-trace', '--await-generation', '--timeout', '120000', '--thread', 'cli-test',
     ])).toEqual({
       goal: '生成一只小猫',
       approvalMode: 'full_access',
       captureMode: 'detailed',
       printTrace: true,
+      awaitGeneration: true,
       timeoutMs: 120000,
       threadId: 'cli-test',
     })

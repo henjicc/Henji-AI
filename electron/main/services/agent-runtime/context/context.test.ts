@@ -290,6 +290,34 @@ describe('AgentContextBuilder', () => {
     expect(String(result.messages[0].content)).toContain('test-image')
   })
 
+  it('明确图片目标时只注入图片模型目录，避免视频和音频目录占用上下文', () => {
+    const snapshot = contextSnapshot()
+    snapshot.generation.modelCatalog?.modelGroups.push({
+      canonicalModelId: 'test-video', mediaType: 'video',
+      name: '测试视频模型', description: '不应进入图片任务上下文', tags: ['text-to-video'],
+      recommendedByDescription: false,
+      providers: [{ providerId: 'test', modelId: 'test-video', priceEstimate: { amount: 0.1, currency: 'CNY' } }],
+    })
+    const result = new AgentContextBuilder().build({
+      runId: 'run-image-catalog',
+      goal: '生成一张剪纸风格的小猫图片',
+      snapshot,
+      route: {
+        intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['models', 'generation'],
+        source: 'deterministic', reason: '图片生成',
+      },
+      conversation: [],
+      observations: [],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 8_000,
+    })
+    const catalogLayer = result.messages.find((message) => String(message.content).includes('id=model_catalog'))
+    expect(String(catalogLayer?.content)).toContain('test-image')
+    expect(String(catalogLayer?.content)).not.toContain('test-video')
+    expect(String(catalogLayer?.content)).toContain('"mediaType":"image"')
+  })
+
   it('用户指令只自动脱敏秘密并保留其他正常内容', () => {
     const builder = new AgentContextBuilder()
     const result = builder.build({

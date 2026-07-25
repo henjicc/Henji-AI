@@ -13,7 +13,12 @@ import {
 } from '../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../src/core/assistant/events'
 import type { AgentTraceRunSummary } from '../../../src/core/assistant/trace'
-import { getAssistantHostContext } from '../services/assistant/frontend-tool-bridge'
+import type { HostCommandResult } from '../../../src/core/assistant/hostContracts'
+import {
+  createFrontendToolRequest,
+  getAssistantHostContext,
+  requestAssistantFrontendTool,
+} from '../services/assistant/frontend-tool-bridge'
 import { getAssistantUserInstructions } from '../services/assistant/user-instructions'
 import { getAgentRuntimeService } from '../services/agent-runtime/runtime'
 import { isTerminalAgentState } from '../services/agent-runtime/runner/state-machine'
@@ -23,6 +28,7 @@ import { getAppLocalDataDir } from '../services/system'
 import {
   type AssistantCliOptions,
 } from './arguments'
+import { waitForSubmittedGenerationTasks } from './generation-wait'
 
 const logger = createMainLogger('main.assistant_cli')
 const HOST_READY_TIMEOUT_MS = 30_000
@@ -134,6 +140,23 @@ async function waitForTerminalState(owner: WebContents, runId: string, timeoutMs
   return state
 }
 
+async function observeGenerationTask(
+  owner: WebContents,
+  runId: string,
+  taskId: string,
+  attempt: number
+): Promise<HostCommandResult> {
+  const callId = randomUUID()
+  return await requestAssistantFrontendTool(owner, createFrontendToolRequest({
+    runId,
+    toolCallId: `cli-await-generation:${taskId}:${attempt}`,
+    callId,
+    idempotencyKey: `${runId}:cli-await-generation:${taskId}:${attempt}:${callId}`,
+    deadline: Date.now() + 15_000,
+    operation: { kind: 'query', query: { name: 'get_generation_task', input: { taskId } } },
+  }))
+}
+
 async function run(options: AssistantCliOptions, owner: WebContents): Promise<number> {
   setAgentTraceCaptureMode(options.captureMode)
   await waitForHostContext(owner, HOST_READY_TIMEOUT_MS)
@@ -141,6 +164,7 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
   const request = createRunRequest(options, config, instructions.content)
   const runtime = getAgentRuntimeService()
   const started = await runtime.startRun(owner, request)
+  const deadline = Date.now() + options.timeoutMs
   const emittedSequences = new Set<number>()
   const writeEvent = (event: AgentEvent): void => {
     if (emittedSequences.has(event.sequence)) return
@@ -165,6 +189,17 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
       context: { threadId: request.threadId, captureMode: options.captureMode, approvalMode: request.approvalMode },
     })
     const state = await waitForTerminalState(owner, started.runId, options.timeoutMs + 5_000)
+    const generationWait = options.awaitGeneration
+      ? await waitForSubmittedGenerationTasks({
+          state,
+          timeoutMs: Math.max(0, deadline - Date.now()),
+          observe: async (taskId, attempt) => await observeGenerationTask(owner, started.runId, taskId, attempt),
+          onObservation: (task) => writeRecord({ type: 'generation_task_observation', runId: started.runId, task }),
+        })
+      : null
+    if (generationWait) {
+      writeRecord({ type: 'generation_task_wait', runId: started.runId, ...generationWait })
+    }
     const traces = getAgentTraceStore().query({ runId: started.runId, limit: 200 })
     const trace = traces.runs.find((item) => item.runId === started.runId)
     writeRecord({ type: 'finished', runId: started.runId, state })
@@ -172,9 +207,16 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
     logger.info('命令行助手运行结束', {
       event: 'assistant_cli.run.completed',
       requestId: started.runId,
-      context: { status: state.status, turns: state.usage.turns, totalTokens: state.usage.totalTokens },
+      context: {
+        status: state.status,
+        turns: state.usage.turns,
+        totalTokens: state.usage.totalTokens,
+        generationWaitStatus: generationWait?.status ?? null,
+      },
     })
-    return state.status === 'completed' ? 0 : 1
+    return state.status === 'completed' && (!generationWait || generationWait.status === 'completed' || generationWait.status === 'skipped')
+      ? 0
+      : 1
   } finally {
     unsubscribe()
   }

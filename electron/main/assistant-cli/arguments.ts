@@ -9,6 +9,7 @@ export interface AssistantCliOptions {
   approvalMode: AgentApprovalMode
   captureMode: AgentTraceCaptureMode
   printTrace: boolean
+  awaitGeneration: boolean
   timeoutMs: number
   threadId?: string
 }
@@ -55,6 +56,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   let approvalMode: AgentApprovalMode = 'assistant_decides'
   let captureMode: AgentTraceCaptureMode = 'summary'
   let printTrace = false
+  let awaitGeneration = false
   let timeoutMs = DEFAULT_TIMEOUT_MS
   let threadId: string | undefined
 
@@ -78,6 +80,9 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
       case '--print-trace':
         printTrace = true
         break
+      case '--await-generation':
+        awaitGeneration = true
+        break
       case '--timeout':
         timeoutMs = parseTimeout(requireValue(argv, index, argument))
         index += 1
@@ -95,7 +100,7 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   if (goal.length > 32 * 1024) throw new Error('参数 --goal 不能超过 32768 个字符')
   if (threadId && threadId.length > 200) throw new Error('参数 --thread 不能超过 200 个字符')
 
-  return { goal, approvalMode, captureMode, printTrace, timeoutMs, ...(threadId ? { threadId } : {}) }
+  return { goal, approvalMode, captureMode, printTrace, awaitGeneration, timeoutMs, ...(threadId ? { threadId } : {}) }
 }
 
 export function formatAssistantCliHelp(): string {
@@ -106,6 +111,7 @@ export function formatAssistantCliHelp(): string {
     '  --approval <ask|assistant_decides|full_access>  审批策略，默认 assistant_decides',
     '  --trace <summary|detailed>                      追踪捕获级别，默认 summary',
     '  --print-trace                                   在运行结束后输出已脱敏的详细追踪',
+    '  --await-generation                              保持无窗口宿主并等待本次提交的生成任务结束',
     '  --timeout <毫秒>                                最长运行时间，默认 600000，最大 3600000',
     '  --thread <标识>                                 指定运行线程标识',
     '  --help                                          显示本帮助',
