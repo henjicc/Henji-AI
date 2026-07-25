@@ -152,6 +152,7 @@ export const agentTraceRunSummarySchema = z.object({
 export type AgentTraceRunSummary = z.infer<typeof agentTraceRunSummarySchema>
 
 export const agentTraceQuerySchema = z.object({
+  runId: z.string().max(200).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   keyword: z.string().max(500).optional(),
   providerId: z.string().max(200).optional(),

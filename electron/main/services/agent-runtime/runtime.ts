@@ -51,6 +51,8 @@ interface AgentRunRecord {
   events: AgentEvent[]
 }
 
+export type AgentRunEventListener = (event: AgentEvent) => void
+
 const artifactPayloadSchema = z.object({
   runId: z.string().min(1),
   artifact: z.object({
@@ -74,6 +76,7 @@ const toolExecutionPayloadSchema = z.object({
 export class AgentRuntimeService {
   private readonly runs = new Map<string, AgentRunRecord>()
   private readonly activeByThread = new Map<string, string>()
+  private readonly eventListeners = new Map<string, Set<AgentRunEventListener>>()
   private readonly persistence = new AgentPersistenceStore(getDb())
   private readonly agentTraceStore = getAgentTraceStore()
   private readonly memory = getAgentMemoryStore()
@@ -216,6 +219,19 @@ export class AgentRuntimeService {
     })
   }
 
+  subscribeRunEvents(owner: WebContents, runId: string, listener: AgentRunEventListener): () => void {
+    this.requireRebindableRun(owner, runId)
+    const listeners = this.eventListeners.get(runId) ?? new Set<AgentRunEventListener>()
+    listeners.add(listener)
+    this.eventListeners.set(runId, listeners)
+    return () => {
+      const current = this.eventListeners.get(runId)
+      if (!current) return
+      current.delete(listener)
+      if (current.size === 0) this.eventListeners.delete(runId)
+    }
+  }
+
   listRuns(threadId?: string, limit = 30): AgentRunSummary[] {
     return this.persistence.listRuns(threadId, limit)
   }
@@ -255,6 +271,7 @@ export class AgentRuntimeService {
     record.events.push(event)
     if (record.events.length > 2_000) record.events.shift()
     this.persistence.appendEvent(event)
+    this.notifyRunEventListeners(runId, event)
     this.sendEvent(record, runId, event)
   }
 
@@ -271,6 +288,7 @@ export class AgentRuntimeService {
     if (record && this.activeByThread.get(record.threadId) === runId) {
       this.activeByThread.delete(record.threadId)
     }
+    this.eventListeners.delete(runId)
   }
 
   private onProcessFailure(runIds: string[], reason: string): void {
@@ -290,14 +308,28 @@ export class AgentRuntimeService {
       const terminalEvent = events[events.length - 1]
       if (record && terminalEvent) {
         record.events = events
+        this.notifyRunEventListeners(runId, terminalEvent)
         this.sendEvent(record, runId, terminalEvent)
       }
+      this.eventListeners.delete(runId)
     }
   }
 
   private updateState(runId: string, state: AgentRunState): void {
     const record = this.runs.get(runId)
     if (record) record.state = state
+  }
+
+  private notifyRunEventListeners(runId: string, event: AgentEvent): void {
+    const listeners = this.eventListeners.get(runId)
+    if (!listeners) return
+    for (const listener of listeners) {
+      try {
+        listener(event)
+      } catch {
+        // 命令行或诊断订阅者异常不能中断 Agent 运行。
+      }
+    }
   }
 
   private async executeToolInMain(payload: unknown, signal: AbortSignal): Promise<unknown> {

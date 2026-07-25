@@ -11,11 +11,16 @@ import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 const logger = createMainLogger('main.window')
 let mainWindow: BrowserWindow | null = null
 
+export interface CreateWindowOptions {
+  headless?: boolean
+}
+
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 }
 
-export function createWindow(): BrowserWindow {
+export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
+  const headless = options.headless === true
   const iconPath = resolveAppIconPath()
   const win = new BrowserWindow({
     width: 1200,
@@ -59,13 +64,13 @@ export function createWindow(): BrowserWindow {
     closeCameraStageRenderWindow()
   })
 
-  win.once('ready-to-show', () => {
+  if (!headless) win.once('ready-to-show', () => {
     if (win.isDestroyed()) return
     win.maximize()
     win.show()
   })
 
-  if (!win.isVisible()) {
+  if (!headless && !win.isVisible()) {
     setTimeout(() => {
       if (!win.isDestroyed() && !win.isVisible()) {
         win.maximize()

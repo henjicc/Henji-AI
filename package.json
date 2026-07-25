@@ -14,6 +14,7 @@
     "check:colors": "node scripts/check-color-tokens.cjs",
     "check:model-i18n": "node scripts/check-model-i18n.cjs",
     "logs:query": "node scripts/query-logs.cjs",
+    "assistant:cli": "node scripts/run-assistant-cli.cjs",
     "build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:model-i18n && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

@@ -14,10 +14,12 @@ const logger = createMainLogger('main.agent_router')
 
 const routerModelDecisionSchema = z.object({
   intent: z.enum(AGENT_INTENTS),
-  candidateIntents: z.array(z.enum(AGENT_INTENTS)).max(4).optional().default([]),
-  toolDomains: z.array(z.enum(AGENT_TOOL_DOMAINS)).max(6).optional().default([]),
-  complexity: z.enum(['simple', 'multi_step', 'ambiguous']).optional().default('ambiguous'),
-  reason: z.string().min(1).max(500).optional(),
+  // 供应商未强制 JSON Schema 时，附属字段偶发变形不应掩盖已识别的主意图。
+  // 工具权限仍只由本地 routePolicy 和白名单值决定，绝不采纳模型自由生成的对象。
+  candidateIntents: z.unknown().optional(),
+  toolDomains: z.unknown().optional(),
+  complexity: z.unknown().optional(),
+  reason: z.unknown().optional(),
 }).passthrough()
 
 export type RouterModelClassifier = (
@@ -52,6 +54,28 @@ const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'path' | 'toolDo
 
 function uniqueValues<TValue extends string>(values: TValue[], limit: number): TValue[] {
   return [...new Set(values)].slice(0, limit)
+}
+
+function selectEnumValues<TValue extends string>(
+  value: unknown,
+  allowed: readonly TValue[],
+  limit: number
+): TValue[] {
+  if (!Array.isArray(value)) return []
+  const allowedValues = new Set<string>(allowed)
+  return uniqueValues(value.filter((item): item is TValue => (
+    typeof item === 'string' && allowedValues.has(item)
+  )), limit)
+}
+
+function selectComplexity(value: unknown): AgentRouteDecision['complexity'] {
+  return value === 'simple' || value === 'multi_step' || value === 'ambiguous' ? value : 'ambiguous'
+}
+
+function selectReason(value: unknown, intent: AgentIntent): string {
+  if (typeof value !== 'string') return `路由模型判断为 ${intent} 任务`
+  const normalized = value.trim().slice(0, 500)
+  return normalized || `路由模型判断为 ${intent} 任务`
 }
 
 function resolveCandidateDomains(
@@ -115,21 +139,23 @@ export class AgentIntentRouter {
     if (this.classifyWithModel) {
       try {
         const classified = routerModelDecisionSchema.parse(await this.classifyWithModel(goal, snapshot, signal))
+        const candidateIntents = selectEnumValues(classified.candidateIntents, AGENT_INTENTS, 4)
+        const requestedDomains = selectEnumValues(classified.toolDomains, AGENT_TOOL_DOMAINS, 6)
         const decision: AgentRouteDecision = {
           intent: classified.intent,
           candidateIntents: uniqueValues([
             classified.intent,
-            ...classified.candidateIntents,
+            ...candidateIntents,
           ], 4),
-          complexity: classified.complexity,
+          complexity: selectComplexity(classified.complexity),
           path: routePolicy[classified.intent].path,
           toolDomains: resolveCandidateDomains(
             classified.intent,
-            classified.candidateIntents,
-            classified.toolDomains
+            candidateIntents,
+            requestedDomains
           ),
           source: 'router_model',
-          reason: classified.reason?.trim() || `路由模型判断为 ${classified.intent} 任务`,
+          reason: selectReason(classified.reason, classified.intent),
         }
         this.logDecision(runId, decision)
         return decision

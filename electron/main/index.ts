@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import path from 'node:path'
 import { registerAiRuntimeIpc } from './ipc/ai-runtime'
 import { registerAgentRuntimeIpc } from './ipc/agent-runtime'
 import { registerAudioIpc } from './ipc/audio'
@@ -29,8 +30,21 @@ import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
 import { runLogRetention } from './services/logging'
 import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
+import {
+  formatAssistantCliHelp,
+  isAssistantCliMode,
+  parseAssistantCliArguments,
+} from './assistant-cli/arguments'
+import { runAssistantCli } from './assistant-cli/runner'
 
 registerMediaProtocolScheme()
+
+if (isAssistantCliMode()) {
+  // safeStorage 依赖既有用户数据目录，不能改 sessionData；只隔离纯 Chromium 磁盘缓存。
+  app.commandLine.appendSwitch('disk-cache-dir', path.join(app.getPath('temp'), 'henji-assistant-cli-cache'))
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
+}
 
 const remoteDebuggingPort = process.env['HENJI_ELECTRON_REMOTE_DEBUGGING_PORT']
 if (remoteDebuggingPort) {
@@ -67,6 +81,30 @@ app.whenReady().then(() => {
   registerWindowIpc()
   initializeUpdater()
   void runLogRetention()
+  if (isAssistantCliMode()) {
+    let assistantCliOptions
+    try {
+      assistantCliOptions = parseAssistantCliArguments()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : '未知参数错误'
+      process.stdout.write(`${JSON.stringify({ type: 'error', message: '命令行参数无效', detail })}\n`)
+      process.exitCode = 1
+      app.quit()
+      return
+    }
+    if ('help' in assistantCliOptions) {
+      process.stdout.write(`${formatAssistantCliHelp()}\n`)
+      app.quit()
+      return
+    }
+    const cliWindow = createWindow({ headless: true })
+    void runAssistantCli(cliWindow.webContents, assistantCliOptions).then((exitCode) => {
+      process.exitCode = exitCode
+      app.quit()
+    })
+    return
+  }
+
   createWindow()
 
   app.on('activate', () => {

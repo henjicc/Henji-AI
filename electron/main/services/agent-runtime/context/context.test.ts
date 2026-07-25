@@ -118,6 +118,28 @@ describe('AgentIntentRouter', () => {
     expect(classifier).toHaveBeenCalledOnce()
   })
 
+  it('路由模型附属字段变形时保留已校验的主意图并回退本地工具域策略', async () => {
+    const router = new AgentIntentRouter(async () => ({
+      intent: 'generate',
+      candidateIntents: [],
+      toolDomains: { workspace: 'generation', mediaType: 'image' },
+      complexity: 'simple',
+      reason: '用户请求创建图片生成任务',
+    }))
+    const result = await router.route(
+      'run-malformed-router-output',
+      '创建一张图片',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({
+      intent: 'generate',
+      source: 'router_model',
+      complexity: 'simple',
+      toolDomains: ['models', 'generation', 'navigation'],
+    })
+  })
+
   it('router 候选只能扩展本地允许的工具域且不能改写执行路径', async () => {
     const router = new AgentIntentRouter(async () => ({
       intent: 'generate',

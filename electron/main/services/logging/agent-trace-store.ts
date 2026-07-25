@@ -283,6 +283,10 @@ export class AgentTraceStore {
     const query = agentTraceQuerySchema.parse(rawQuery)
     const clauses: string[] = []
     const params: Array<string | number> = []
+    if (query.runId) {
+      clauses.push('t.run_id = ?')
+      params.push(query.runId)
+    }
     if (query.date) {
       const { start, end } = localDateRange(query.date)
       clauses.push('t.started_at >= ? AND t.started_at < ?')
