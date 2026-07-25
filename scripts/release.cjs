@@ -378,7 +378,11 @@ async function main() {
 
   // 推送到远程
   info('步骤 7/7: 推送到远程仓库...');
-  exec('git push origin feat/electron-migration');
+  // 分支名不写死：迁移期曾硬编码 feat/electron-migration，合并回 main 后会推错分支
+  const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', { cwd: rootDir })
+    .toString()
+    .trim();
+  exec(`git push origin ${currentBranch}`);
   exec(`git push origin v${version}`);
   success('已推送到远程仓库');
   console.log();

@@ -18,8 +18,8 @@ import type {
   ImageEditExportFormat,
   ImageEditWorkerComposition,
   ImageEditWorkerCapabilities,
-  type ImageEditWorkerInitializationFailure,
-  type ImageEditWorkerInitializationFailureCode,
+  ImageEditWorkerInitializationFailure,
+  ImageEditWorkerInitializationFailureCode,
   ImageEditWorkerSource,
 } from './protocol'
 import { drawMarkItems } from '@/features/imageMark/render/drawMarks'

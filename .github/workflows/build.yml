@@ -2,160 +2,163 @@ name: Build Henji-AI
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
+# 同一分支/标签的重复推送只保留最新一次运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  # ---------------------------------------------------------------------------
+  # 质量门禁：每次 push / PR 都跑。速度快、无需签名凭据。
+  # 这是 UI 规范（check:colors / check:surface）与类型、测试的统一入口。
+  # ---------------------------------------------------------------------------
+  checks:
+    name: 代码检查
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Setup MSVC environment
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: amd64
-
-      - name: Update version
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: pwsh
-        run: |
-          $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
-          $CURRENT = (Get-Content package.json | ConvertFrom-Json).version
-          if ($CURRENT -ne $VERSION) {
-            npm version $VERSION --no-git-tag-version
-          }
-
-      - name: Install dependencies
+      # better-sqlite3 / sharp 在 Linux 上装原生模块会拖慢且本步骤不需要它们，
+      # 但 npm ci 仍需完整依赖树来解析 TS 类型，故正常安装。
+      - name: 安装依赖
         run: npm ci
 
-      - name: Build application
-        run: npm run tauri:build:ci
-
-      - name: Rename Windows installer
-        shell: pwsh
+      # manifest 与 seeds 是自动生成产物（Git 忽略），检查前必须先生成，
+      # 否则 check:model-i18n 与类型检查会因缺文件失败。
+      - name: 生成 manifest 与 seeds
         run: |
-          $VERSION = $env:GITHUB_REF -replace 'refs/tags/v', ''
-          $MSI_PATH = Get-ChildItem -Path "src-tauri/target/release/bundle/msi/*.msi" | Select-Object -First 1
-          $NEW_NAME = "Henji-AI_${VERSION}_x64_zh-CN.msi"
-          $NEW_PATH = Join-Path (Split-Path $MSI_PATH) $NEW_NAME
-          Move-Item -Path $MSI_PATH -Destination $NEW_PATH -Force
-          Write-Host "Renamed to: $NEW_NAME"
+          npm run gen:progress-seeds
+          npm run gen:model-manifest
 
-      - name: Upload Windows installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installer
-          path: src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: error
+      - name: 颜色令牌检查
+        run: npm run check:colors
 
-  build-macos:
-    runs-on: macos-latest
+      - name: 表面层级检查
+        run: npm run check:surface
+
+      - name: 模型 i18n 检查
+        run: npm run check:model-i18n
+
+      - name: ESLint（渲染层）
+        run: npm run lint
+
+      - name: ESLint（主进程）
+        run: npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
+
+      - name: 类型检查（渲染层）
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: 类型检查（主进程）
+        run: npx tsc -p tsconfig.electron.json --noEmit
+
+      - name: 单元测试
+        run: npx vitest run
+
+  # ---------------------------------------------------------------------------
+  # 安装包构建：只在推 v* 标签或手动触发时运行。
+  #
+  # 平台矩阵按「构建机架构与目标架构一致」拆分：better-sqlite3 需要编译、
+  # sharp 依赖按宿主架构安装的 @img/sharp-* 可选包，跨架构交叉编译容易失败，
+  # 因此 macOS x64 用 x64 runner、arm64 用 arm64 runner，各自只出自己那一份。
+  #
+  # max-parallel: 1 —— electron-builder 会把产物发布到同一个 GitHub Release，
+  # 并发发布会互相抢占（重复创建 / 覆盖 latest.yml），串行最稳。
+  # ---------------------------------------------------------------------------
+  build:
+    name: 构建 ${{ matrix.label }}
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: checks
+    strategy:
+      max-parallel: 1
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+            artifact: windows-x64
+          - os: macos-13
+            label: macOS x64
+            artifact: macos-x64
+          - os: macos-latest
+            label: macOS arm64
+            artifact: macos-arm64
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout repository
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: 安装 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-darwin,x86_64-apple-darwin
-
-      - name: Setup Rust cache
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - name: Update version
-        if: startsWith(github.ref, 'refs/tags/')
+      # 标签构建时以标签名为准对齐 package.json 版本，
+      # 否则 electron-builder 产物名与 Release 标签会不一致。
+      - name: 对齐版本号
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION="${GITHUB_REF#refs/tags/v}"
           CURRENT=$(node -p "require('./package.json').version")
           if [ "$CURRENT" != "$VERSION" ]; then
-            echo "Updating package.json version from $CURRENT to $VERSION"
+            echo "package.json 版本 $CURRENT → $VERSION"
             npm version "$VERSION" --no-git-tag-version
           else
-            echo "package.json already at version $VERSION — skipping npm version"
+            echo "package.json 已是 $VERSION，跳过"
           fi
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: npm ci
 
-      - name: Build application (Universal Binary)
+      # electron:build 内部已串联 gen:seeds / gen:manifest / check:* / tsc / electron-vite build
+      - name: 构建应用
+        run: npm run electron:build
+
+      # 未配置代码签名证书：显式关闭 macOS 自动签名发现，避免因找不到证书而失败。
+      # 产物为未签名状态，这是当前已知的发布限制。
+      - name: 打包并发布安装包
         env:
-          CC: ""
-          CXX: ""
-        run: npm run tauri:build:mac -- --target universal-apple-darwin
-
-      - name: Rename macOS DMG
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        shell: bash
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          DMG_PATH=$(find src-tauri/target/universal-apple-darwin/release/bundle/dmg -name "*.dmg" | head -n 1)
-          NEW_NAME="Henji-AI_${VERSION}_universal.dmg"
-          NEW_PATH="$(dirname "$DMG_PATH")/$NEW_NAME"
-          mv "$DMG_PATH" "$NEW_PATH"
-          echo "Renamed to: $NEW_NAME"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # electron-builder 自己发布：会同时上传 latest.yml / latest-mac.yml，
+            # 这是 electron-updater 自动更新能正常工作的前提，不能改用只传安装包的方式。
+            npx electron-builder --publish always
+          else
+            npx electron-builder --publish never
+          fi
 
-      - name: Upload macOS DMG
+      - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: macos-dmg
-          path: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          name: ${{ matrix.artifact }}
+          path: |
+            release/*.exe
+            release/*.msi
+            release/*.dmg
+            release/*.yml
+            release/*.blockmap
           if-no-files-found: error
-
-      - name: Upload macOS App Bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-app
-          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
-          if-no-files-found: warn
-
-  release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-windows, build-macos]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download Windows installer
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-installer
-          path: artifacts/windows
-
-      - name: Download macOS DMG
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-dmg
-          path: artifacts/macos
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            artifacts/windows/*.msi
-            artifacts/macos/*.dmg
-          draft: false
-          prerelease: false
-          generate_release_notes: false
+          retention-days: 14
