@@ -41,12 +41,44 @@
         "message": "禁止使用 Tailwind 任意十六进制颜色类（如 bg-[#xxxxxx]），请改为语义化颜色类。"
       },
       {
-        "selector": "Literal[value=/text-\\[(?:9|10|11)px\\]/]",
-        "message": "禁止内联 9/10/11px 字号，请使用已登记的 text-4xs / text-3xs / text-2xs。"
+        "selector": "Literal[value=/text-\\[[0-9.]+(px|rem)\\]/]",
+        "message": "禁止内联像素字号，请使用已登记档位：text-4xs/3xs/2xs/13/14/15 或 text-xs/sm/base。"
       },
       {
-        "selector": "TemplateElement[value.raw=/text-\\[(?:9|10|11)px\\]/]",
-        "message": "禁止内联 9/10/11px 字号，请使用已登记的 text-4xs / text-3xs / text-2xs。"
+        "selector": "TemplateElement[value.raw=/text-\\[[0-9.]+(px|rem)\\]/]",
+        "message": "禁止内联像素字号，请使用已登记档位：text-4xs/3xs/2xs/13/14/15 或 text-xs/sm/base。"
+      },
+      {
+        "selector": "Literal[value=/shadow-\\[/]",
+        "message": "禁止内联阴影，请使用已登记档位（shadow-panel / node-selected / node-error / thumb / thumb-sm），新特效请先在 tailwind.config.js 登记。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/shadow-\\[/]",
+        "message": "禁止内联阴影，请使用已登记档位（shadow-panel / node-selected / node-error / thumb / thumb-sm），新特效请先在 tailwind.config.js 登记。"
+      },
+      {
+        "selector": "Literal[value=/z-\\[/]",
+        "message": "禁止内联 z-index，请使用语义层级：z-raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/z-\\[/]",
+        "message": "禁止内联 z-index，请使用语义层级：z-raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar。"
+      },
+      {
+        "selector": "Literal[value=/(border|bg|from|to|via|ring|divide)-\\[rgba?\\(/]",
+        "message": "禁止 rgb/rgba 字面量，请使用语义色或已登记的 veil 档位（bg-veil-faint / border-veil / border-veil-strong 等）。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/(border|bg|from|to|via|ring|divide)-\\[rgba?\\(/]",
+        "message": "禁止 rgb/rgba 字面量，请使用语义色或已登记的 veil 档位（bg-veil-faint / border-veil / border-veil-strong 等）。"
+      },
+      {
+        "selector": "Literal[value=/rounded(-[a-z]+)?-\\[(?!var\\(|inherit)/]",
+        "message": "禁止内联圆角，请使用 rounded-lg（控件/内嵌）/ rounded-xl（浮层）/ rounded-2xl / rounded-3xl / rounded-full / rounded-hairline；画布节点用 rounded-[var(--node-radius)]。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/rounded(-[a-z]+)?-\\[(?!var\\(|inherit)/]",
+        "message": "禁止内联圆角，请使用 rounded-lg（控件/内嵌）/ rounded-xl（浮层）/ rounded-2xl / rounded-3xl / rounded-full / rounded-hairline；画布节点用 rounded-[var(--node-radius)]。"
       }
     ]
   },

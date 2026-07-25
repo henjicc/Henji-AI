@@ -170,11 +170,47 @@ const files = collectSourceFiles(srcRoot).filter(
 /** @type {{ relativePath: string, panelSurfaces: {lineNo:number,snippet:string}[], cardSurfaces: {lineNo:number,snippet:string}[] }[]} */
 const fileReports = [];
 
+/**
+ * 规则 C：手写弹窗。
+ * 业务组件同时出现全屏遮罩定位（fixed inset-0 / UI_CONTENT_OVERLAY_INSET_CLASS）
+ * 与半透明黑底，却没有走 UiModal / AlertDialog，说明自己搭了一套弹窗外壳。
+ * 这类实现会各自定义圆角、遮罩透明度、宽度与过渡，是弹窗观感不统一的根源。
+ * @type {{ relativePath: string, lineNo: number, snippet: string }[]}
+ */
+const dialogBypasses = [];
+
+const OVERLAY_POSITION_PATTERN = /fixed\s+inset-0|UI_CONTENT_OVERLAY_INSET_CLASS/;
+const OVERLAY_SCRIM_PATTERN = /bg-black\/|bg-black\s+bg-opacity-/;
+
 for (const file of files) {
   const raw = fs.readFileSync(file, 'utf8');
   if (raw.includes(FILE_ALLOW_MARKER)) continue;
 
   const lines = raw.split(/\r?\n/);
+
+  if (
+    OVERLAY_POSITION_PATTERN.test(raw) &&
+    OVERLAY_SCRIM_PATTERN.test(raw) &&
+    !/\bUiModal\b/.test(raw) &&
+    !/\bAlertDialog\b/.test(raw)
+  ) {
+    // 优先定位真正的遮罩用法行，而不是 import UI_CONTENT_OVERLAY_INSET_CLASS 那一行
+    const usageIndex = lines.findIndex(
+      (line) => OVERLAY_POSITION_PATTERN.test(line) && !/^\s*import\b/.test(line)
+    );
+    const hitIndex = usageIndex >= 0
+      ? usageIndex
+      : lines.findIndex((line) => OVERLAY_POSITION_PATTERN.test(line));
+    const lineNo = hitIndex >= 0 ? hitIndex + 1 : 1;
+    if (!hasLineAllowMarker(lines, lineNo)) {
+      dialogBypasses.push({
+        relativePath: path.relative(projectRoot, file).replace(/\\/g, '/'),
+        lineNo,
+        snippet: (lines[lineNo - 1] ?? '').trim().slice(0, 140),
+      });
+    }
+  }
+
   /** @type {{lineNo:number,snippet:string}[]} */
   const panelSurfaces = [];
   /** @type {{lineNo:number,snippet:string}[]} */
@@ -202,8 +238,8 @@ for (const file of files) {
   });
 }
 
-if (fileReports.length === 0) {
-  console.log('[check-surface-tokens] 通过：未检测到手写面板表面或疑似卡片套卡片。');
+if (fileReports.length === 0 && dialogBypasses.length === 0) {
+  console.log('[check-surface-tokens] 通过：未检测到手写面板表面、卡片套卡片或手写弹窗。');
   process.exit(0);
 }
 
@@ -237,7 +273,16 @@ for (const report of fileReports.sort(
   log('');
 }
 
-log(`共 ${totalFindings} 处，分布在 ${fileReports.length} 个文件。`);
+if (dialogBypasses.length > 0) {
+  log(`[C] 手写弹窗 ${dialogBypasses.length} 处 → 请改用 <UiModal> 或 <AlertDialog>`);
+  for (const item of dialogBypasses.sort((a, b) => a.relativePath.localeCompare(b.relativePath))) {
+    log(`      ${item.relativePath}:${item.lineNo}  ${item.snippet}`);
+  }
+  totalFindings += dialogBypasses.length;
+  log('');
+}
+
+log(`共 ${totalFindings} 处：表面问题 ${fileReports.length} 个文件，手写弹窗 ${dialogBypasses.length} 处。`);
 log('铁律：同一层视觉深度只画一次边框/背景。组件根表面只允许一处；确需例外时加 `ui-surface-allow` 注释豁免。');
 log('详细规则见 skill `henji-ui-surface`。\n');
 

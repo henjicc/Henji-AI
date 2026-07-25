@@ -22,7 +22,7 @@ describe('createSuggestionRenderer', () => {
 
     const mountedElement = mount.mock.calls[0]?.[0]
     expect(mountedElement).toBeInstanceOf(HTMLElement)
-    expect(mountedElement?.classList.contains('z-[1000]')).toBe(true)
+    expect(mountedElement?.classList.contains('z-dropdown')).toBe(true)
 
     lifecycle.onExit()
     expect(unmount).toHaveBeenCalledTimes(1)

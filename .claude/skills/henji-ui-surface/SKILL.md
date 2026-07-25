@@ -84,12 +84,23 @@ description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分
 | `UI_TEXT_LABEL_CLASS` | 字段标签 |
 | `UI_TEXT_META_CLASS` | 辅助说明、元信息 |
 
-字号只允许：`text-4xs`(9) / `text-3xs`(10) / `text-2xs`(11) / `text-xs` / `text-sm` / `text-base` 及以上。
-**禁止 `text-[Npx]`**（9/10/11px 已被 ESLint 拦截）。
+### 登记制视觉数值（以下全部由 ESLint 硬性拦截，写了会报错）
 
-圆角只三档：`rounded-lg`(控件/内嵌) / `rounded-xl`(浮层) / `rounded-full`(徽标)。内层圆角不得大于外层。
-阴影只一档：`shadow-panel`，且**只有浮层能用**，内容区一律无阴影。
-层级用语义 token：`z-dropdown` / `z-panel` / `z-modal` / `z-toast` / `z-drag`，禁止 `z-[9999]`。
+| 维度 | 允许的写法 | 禁止 |
+|---|---|---|
+| 字号 | `text-4xs`(9) `text-3xs`(10) `text-2xs`(11) `text-13` `text-14` `text-15` / `text-xs` `text-sm` `text-base`+ | `text-[Npx]` |
+| 圆角 | `rounded-lg`(控件/内嵌) `rounded-xl`(浮层) `rounded-2xl` `rounded-3xl` `rounded-full` `rounded-hairline`；画布节点 `rounded-[var(--node-radius)]` | 其他 `rounded-[...]` |
+| 阴影 | `shadow-panel`(仅浮层) / `shadow-node-selected` `shadow-node-error` `shadow-thumb` `shadow-thumb-sm`(具名特效) | `shadow-[...]` |
+| 白色半透明 | `veil` 六档：`bg-veil-faint` `border-veil-subtle` `border-veil-soft` `border-veil` `border-veil-strong` `from-veil-bright` | `border-[rgba(...)]` 等 rgba 字面量 |
+| 层级 | `z-raised` `z-sticky` `z-dropdown` `z-panel` `z-modal` `z-viewer` `z-toast` `z-tooltip` `z-drag` `z-titlebar` | `z-[9999]` 等任意值 |
+
+**内层圆角不得大于外层。阴影只有浮层能用，内容区一律无阴影。**
+
+必须内联 `style={{ zIndex }}` 时（如每帧改 transform 的拖拽层）用 `Z_LAYERS`（`src/core/theme/zLayers.ts`），它与 Tailwind 配置互为镜像，改一侧要同步另一侧。
+
+**透明度修饰符只能用 Tailwind 刻度值**（0/5/10/…/95/100，步进 5）。像 `bg-black/72`、`border-white/42` 这类非刻度值**不会生成任何 CSS**，是静默失效的坑；需要精确值时用 `bg-black/[0.72]` 或登记为具名色。
+
+画布内部（ReactFlow 节点 / minimap / Alt 拖拽副本）有自己独立的局部 z 刻度，见 `src/features/canvas/canvasUtils.ts`，不要和全局档位混用。
 
 ## 状态展示统一走这三个
 
@@ -224,14 +235,22 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 ## 完成前必跑
 
 ```bash
-npm run check:surface
-npm run check:colors
-npm run lint
+npm run check:surface && npm run check:colors && npm run lint
 ```
 
-`check:surface` 默认只告警不阻断（存量渐进治理）。**要求：不得新增违规**。改完后跑一次，确认输出里没有你新写的文件。确实需要独立卡片表面的例外（如画布节点外壳），在该行上方加注释 `ui-surface-allow` 豁免，并写明理由。
+`check:surface` 报三类问题：
 
-想卡死新增违规时用 `npm run check:surface:strict`（违规 exit 1）。
+- `[A]` 手写面板表面 → 改用 `<UiPanel>`
+- `[B]` 同文件多处卡片表面 → 疑似卡片套卡片，内层降级
+- `[C]` 手写弹窗（`fixed inset-0` + 黑色遮罩但没用 `UiModal`/`AlertDialog`）→ 改用 `UiModal`
+
+它默认只告警不阻断（存量渐进治理），已接入 `build` / `electron:build` 链路。**要求：不得新增违规**——改完跑一次，确认输出里没有你新写的文件。
+
+确需例外时在该行上方加注释 `ui-surface-allow` 并写明理由；只允许行级豁免，禁止文件级 `ui-surface-allow-file`（否则该文件将来真正的套娃也会被放行）。
+
+已确认的例外类别：全屏沉浸式媒体查看器（`mediaViewer/` 三个 Modal）不套用 `UiModal`——`UiModal` 是居中卡片语义，与铺满视口的查看器不匹配。
+
+存量清零后用 `npm run check:surface:strict`（违规 exit 1）卡死新增。
 
 ## 相关规范
 
