@@ -165,7 +165,7 @@ export function ImageViewerModal({
 
   return (
     <div
-      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-black/90 backdrop-blur-lg`}
+      className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-black/90`}
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 400ms ease',

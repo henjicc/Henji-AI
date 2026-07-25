@@ -56,7 +56,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             {/* 通知 UI */}
             {notification && (
                 <div
-                    className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-lg z-toast transition-opacity duration-300 ${notificationVisible ? 'opacity-100' : 'opacity-0'
+                    className={`fixed top-20 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-panel z-toast transition-opacity duration-300 ${notificationVisible ? 'opacity-100' : 'opacity-0'
                         }`}
                     style={{
                         backgroundColor: notification.type === 'success' ? 'rgba(34, 197, 94, 0.95)' : 'rgba(239, 68, 68, 0.95)',

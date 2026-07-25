@@ -95,14 +95,14 @@ export default function AlertDialog({
     <div className={rootClassName}>
       {/* 背景遮罩 */}
       <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/70"
         style={{ opacity, transition: 'opacity 180ms ease' }}
         onClick={handleClose}
       />
 
       {/* 弹窗内容 */}
       <UiPanel
-        className="relative p-4 w-[400px] shadow-2xl"
+        className="relative p-4 w-[400px] shadow-panel"
         style={{
           opacity,
           transform: `scale(${0.97 + 0.03 * opacity})`,

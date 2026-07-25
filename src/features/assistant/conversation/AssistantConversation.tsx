@@ -160,7 +160,7 @@ export function AssistantConversation(): JSX.Element {
       <div ref={scrollRef} className="ui-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
         {!runState && !currentGoal ? (
           <div className="flex min-h-full flex-col items-center justify-center px-8 text-center">
-            <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 text-accent shadow-lg">
+            <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 text-accent">
               <BrainCircuit className="h-6 w-6" />
             </div>
             <h2 className="mt-4 text-sm font-medium text-text-dark">让助手操作工作台</h2>

@@ -225,7 +225,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
             disabled={isUpdating || releaseInfo.updateStatus === 'downloading'}
             variant="primary"
             size="sm"
-            className="px-5 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
+            className="px-5"
           >
             {isUpdating ? t('updateDialog.actions.downloading', { defaultValue: '下载中' }) : actionLabel}
           </UiButton>

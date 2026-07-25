@@ -71,7 +71,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
     }
 
     return (
-        <div className="flex items-center gap-1.5 text-xs text-text-muted bg-surface-dark/50 px-3 py-1.5 rounded-lg border border-border-dark/50 backdrop-blur-sm">
+        <div className="flex items-center gap-1.5 text-xs text-text-muted bg-surface-dark/50 px-3 py-1.5 rounded-lg border border-border-dark/50">
             <svg
                 className="w-3.5 h-3.5 flex-shrink-0"
                 fill="none"

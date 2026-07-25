@@ -137,7 +137,7 @@ export function ProjectManager() {
               <UiPanel
                 key={project.id}
                 onClick={() => openProject(project.id)}
-                className="cursor-pointer border border-border-dark p-4 transition-all hover:border-primary/50 hover:shadow-lg group"
+                className="cursor-pointer border border-border-dark p-4 transition-colors hover:border-primary/50 group"
               >
                 <div className="flex items-start justify-between mb-2">
                   <h3 className="font-semibold text-text-dark truncate flex-1">

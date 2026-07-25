@@ -147,7 +147,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
           className={`
             !h-7 gap-1.5 px-3 py-1 rounded-md text-xs font-medium border-0
-            transition-all duration-200 ease-out
+            transition-colors duration-200 ease-out
             ${(tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id)
               ? 'bg-accent/30 !text-accent'
               : 'text-gray-400 hover:text-gray-200 hover:bg-white/10 bg-transparent'

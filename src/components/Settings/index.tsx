@@ -156,7 +156,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
               onClick={handleClose}
               variant="primary"
               size="sm"
-              className="h-[42px] px-5 text-base font-medium shadow-lg"
+              className="h-[42px] px-5 text-base font-medium"
             >
               {t('actions.close')}
             </UiButton>

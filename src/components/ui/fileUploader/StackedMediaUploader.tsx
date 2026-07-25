@@ -479,7 +479,7 @@ export function StackedMediaUploader({
     <Tooltip
       content={<span className="block text-zinc-300">{hintText}</span>}
       delay={250}
-      className="bg-zinc-950/95 border-zinc-600/70 shadow-2xl"
+      className="bg-zinc-950/95 border-zinc-600/70 shadow-panel"
     >
       {uploaderContent}
     </Tooltip>

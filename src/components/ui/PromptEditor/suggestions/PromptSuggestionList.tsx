@@ -70,7 +70,7 @@ export const PromptSuggestionList = forwardRef<
   if (items.length === 0) {
     return (
       <div
-        className="rounded-lg border border-border-dark bg-panel px-3 py-2 text-xs text-text-muted shadow-2xl"
+        className="rounded-lg border border-border-dark bg-panel px-3 py-2 text-xs text-text-muted shadow-panel"
         data-prompt-suggestion-portal="true"
       >
         没有匹配项
@@ -80,7 +80,7 @@ export const PromptSuggestionList = forwardRef<
 
   return (
     <div
-      className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-border-dark bg-panel p-1.5 shadow-2xl"
+      className="inline-flex w-max max-w-[calc(100vw-32px)] flex-col gap-1 rounded-lg border border-border-dark bg-panel p-1.5 shadow-panel"
       data-prompt-suggestion-portal="true"
       role="listbox"
       aria-label={items[0]?.kind === 'reference' ? '媒体引用候选' : '模板变量候选'}

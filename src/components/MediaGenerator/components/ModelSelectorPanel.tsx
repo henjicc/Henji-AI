@@ -375,7 +375,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                     >
                       <svg
-                        className={`h-3.5 w-3.5 transition-all ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-yellow-400 text-yellow-400' : 'fill-none text-zinc-500'}`}
+                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-yellow-400 text-yellow-400' : 'fill-none text-zinc-500'}`}
                         stroke="currentColor"
                         strokeWidth="2"
                         viewBox="0 0 24 24"

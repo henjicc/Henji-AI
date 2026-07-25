@@ -45,7 +45,7 @@ export const DockHeaderActions: React.FC<IDockviewHeaderActionsProps> = ({ conta
         <Menu size={14} />
       </UiIconButton>
       {open && (
-        <div className="absolute right-1 top-full z-50 mt-1 min-w-32 rounded-md border border-border-dark bg-surface-dark p-1 shadow-lg">
+        <div className="absolute right-1 top-full z-50 mt-1 min-w-32 rounded-md border border-border-dark bg-surface-dark p-1 shadow-panel">
           <UiButton
             variant="ghost"
             size="sm"

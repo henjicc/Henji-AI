@@ -387,7 +387,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (
-          <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-30 overflow-hidden rounded-2xl border border-accent/40 bg-app/70 backdrop-blur-md ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
+          <div className={`prompt-optimize-preview pointer-events-none absolute inset-0 z-30 overflow-hidden rounded-2xl border border-accent/40 bg-app/70 ${isPromptOptimizationPreviewClosing ? 'is-closing' : ''}`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
             <div
               ref={promptOptimizationScrollRef}
@@ -420,7 +420,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           onClick={onGenerate}
           disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
-          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-all duration-250 ${generateDisabled
+          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-[color,background-color,border-color,transform,filter] duration-250 ${generateDisabled
             ? '!border-zinc-700/25 !bg-zinc-800/65 !text-zinc-500'
             : '!border-brand-500/55 !bg-accent !text-white hover:scale-105 hover:brightness-110'
             }`}

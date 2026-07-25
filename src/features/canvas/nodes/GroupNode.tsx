@@ -24,7 +24,7 @@ export const GroupNode = memo(({ id, data, selected }: GroupNodeProps) => {
 
   return (
     <div
-      className={`group relative h-full w-full overflow-visible rounded-2xl border bg-veil-faint backdrop-blur-[1px] ${
+      className={`group relative h-full w-full overflow-visible rounded-2xl border bg-veil-faint ${
         selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_STATIC_CLASS

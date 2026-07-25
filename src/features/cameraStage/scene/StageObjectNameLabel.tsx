@@ -105,7 +105,7 @@ const StageObjectNameLabel: React.FC<StageObjectNameLabelProps> = ({ object, tar
         style={{ pointerEvents: 'none', userSelect: 'none' }}
       >
         <div
-          className="rounded-md border border-border-dark px-2 py-1 text-xs font-medium shadow-lg shadow-black/20"
+          className="rounded-md border border-border-dark px-2 py-1 text-xs font-medium shadow-panel"
           style={{
             color: settings.textColor,
             backgroundColor,

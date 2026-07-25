@@ -215,7 +215,7 @@ export default function FileUploader({
     return (
         <div
             ref={elementRef}
-            className={`flex items-center gap-2 transition-all duration-200 rounded-lg ${className}`}
+            className={`flex items-center gap-2 transition-colors duration-200 rounded-lg ${className}`}
             onDragEnter={handleDragEnter}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -303,7 +303,7 @@ export default function FileUploader({
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
                     >
-                        <div className={`relative w-12 h-16 rounded-lg shadow-lg ${isDraggingThis ? 'ring-2 ring-accent shadow-2xl' : ''} ${isCustomDragging ? 'ring-2 ring-accent' : ''}`}>
+                        <div className={`relative w-12 h-16 rounded-lg shadow-thumb-sm ${isDraggingThis ? 'ring-2 ring-accent shadow-thumb' : ''} ${isCustomDragging ? 'ring-2 ring-accent' : ''}`}>
                             {(() => {
                                 // 判断当前文件是视频还是图片
                                 // 优先使用 fileTypes 数组（精确），回退到 videoCount（位置判断）
@@ -348,7 +348,7 @@ export default function FileUploader({
                                     e.preventDefault()    // 防止默认行为
                                     onRemove(index)
                                 }}
-                                className="absolute -top-2 -right-2 h-5 w-5 border-0 bg-red-500 p-1 text-white opacity-0 shadow-lg transition-opacity duration-200 hover:bg-red-600 group-hover:opacity-100 z-20 pointer-events-auto"
+                                className="absolute -top-2 -right-2 h-5 w-5 border-0 bg-red-500 p-1 text-white opacity-0 shadow-thumb-sm transition-opacity duration-200 hover:bg-red-600 group-hover:opacity-100 z-20 pointer-events-auto"
                                 type="button"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -367,7 +367,7 @@ export default function FileUploader({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-lg ${isDragging ? 'border-accent bg-zinc-700/90' : 'border-zinc-700/50 bg-zinc-700/80 backdrop-blur-sm hover:border-zinc-700/50'} flex-shrink-0`}
+                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-zinc-700/90' : 'border-zinc-700/50 bg-zinc-700/80 hover:border-zinc-700/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-zinc-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">

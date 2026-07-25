@@ -47,7 +47,7 @@ export function FloatingInputPanel({
       onMouseMove={onMouseMove}
     >
       <div
-        className="relative cursor-pointer overflow-hidden rounded-3xl border border-border-dark bg-app shadow-2xl"
+        className="relative cursor-pointer overflow-hidden rounded-3xl border border-border-dark bg-app shadow-panel"
         style={{
           transition: 'max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',

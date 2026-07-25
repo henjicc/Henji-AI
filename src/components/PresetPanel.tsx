@@ -183,7 +183,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             display={t('ui:presets.label')}
             disabled={disabled}
             className="w-auto"
-            buttonClassName="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 backdrop-blur-lg rounded-lg transition-all duration-300 border border-zinc-700/50 flex items-center text-sm"
+            buttonClassName="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-colors duration-300 border border-zinc-700/50 flex items-center text-sm"
             panelWidth={420}
             alignment="aboveCenter"
             stableHeight={true}
@@ -203,7 +203,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                         <div className="h-[60px] relative">
                             {/* 输入名称区域 */}
                             <div
-                                className={`absolute inset-0 flex gap-2 items-center h-full transition-all duration-300 ${isSaving ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none scale-95'
+                                className={`absolute inset-0 flex gap-2 items-center h-full transition-[opacity,transform] duration-300 ${isSaving ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none scale-95'
                                     }`}
                             >
                                 <UiInput
@@ -246,7 +246,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                             </div>
                             {/* 快速保存按钮区域 */}
                             <div
-                                className={`absolute inset-0 grid grid-cols-3 gap-2 h-full transition-all duration-300 ${!isSaving ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none scale-95'
+                                className={`absolute inset-0 grid grid-cols-3 gap-2 h-full transition-[opacity,transform] duration-300 ${!isSaving ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none scale-95'
                                     }`}
                             >
                                 <UiOptionButton
@@ -324,7 +324,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                     type="button"
                                                     onClick={(e) => handleDeleteClick(preset.id, e)}
                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                    className="h-7 w-7 border-transparent bg-transparent opacity-0 transition-all duration-200 group-hover:opacity-100 hover:bg-red-500/20"
+                                                    className="h-7 w-7 border-transparent bg-transparent opacity-0 transition-[opacity,background-color] duration-200 group-hover:opacity-100 hover:bg-red-500/20"
                                                     title={t('ui:presets.deleteTitle')}
                                                 >
                                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
