@@ -48,7 +48,7 @@ npx tsc -p tsconfig.json --noEmit          # 渲染层类型检查
 npx vitest run                             # 单元测试
 ```
 
-基线：`vitest` 479 通过 / 11 跳过；`tsc` 仅存量 `src/core/imageEdit/worker/webgpuRuntime.ts` 报错（与本任务无关，可忽略）。
+基线：`vitest` 479 通过 / 11 跳过；双侧 `tsc` **全绿**（`webgpuRuntime.ts` 的存量 TS2206 已在 1.4 中修复）。
 
 ## 五、执行纪律（用户明确要求）
 
@@ -92,3 +92,34 @@ npx vitest run                             # 单元测试
 - 圆角标准类之间的档位收敛（约 285 处）**有意未做**，见 `decisions.md` D-003。
 - CI 未接入，因为 `.github/workflows/build.yml` 本身已失效（Tauri 残留），见 `重要记录.md` 记录 007。
 - 第一阶段的手动验证清单在 `test-report.md` 第二部分，**用户尚未执行**。若用户反馈某项有问题，先修再推进第二阶段。
+
+## 八、全部阶段完成后的交接（2026-07-25）
+
+**状态：三个阶段的代码工作全部完成，等待用户手动验证。**
+
+新增的可复用能力（在此基础上继续开发，不要重复造）：
+
+| 能力 | 用法 |
+|---|---|
+| 内嵌表面 | `<UiPanel variant="inset">`；非 div 元素用 `UI_INSET_SURFACE_CLASS` |
+| 元信息徽标 | `UI_META_BADGE_CLASS` / `UI_META_BADGE_ACCENT_CLASS` |
+| 长列表跳过渲染 | `UI_LIST_ITEM_SKIP_TALL_CLASS` |
+| 播放器表面 | `<AudioPlayer surface="plain">`（宿主已有层级时） |
+| 弹窗 | 一律 `UiModal`；它已自带 `data-dialog`、portal、过渡 |
+
+**门禁已是强制的**：`check:surface:strict` 进了 `build` / `electron:build` / CI，
+ESLint 硬拦内联字号/圆角/阴影/z-index/rgba。写违规写法会直接构建失败。
+
+**三条踩过的坑，别再踩：**
+
+1. **Tailwind 只认字面量类名**。`` `[contain-intrinsic-size:auto_${h}]` `` 这种运行时拼接
+   扫描不到，CSS 根本不生成。令牌一律写成字面量常量。
+2. **透明度修饰符只能用刻度值**（步进 5）。`/42`、`/72` 这类不生成任何 CSS。
+3. **JSX 注释不能放在表达式位置**。`{cond ? ( {/* c */} <El/> ) : null}` 是语法错误；
+   注释要放在 `{cond ? (` 这一行之上，或写成 `className={/* c */ "..."}`。
+
+**未完成/待用户决定：**
+
+- 3.2 是否还需进一步优化 —— 看用户对 `test-report.md` I 组的实测感受（D-008）
+- CI 在真实 runner 上的打包与发布未验证（`test-report.md` K 组）
+- 圆角标准类之间的档位收敛（约 285 处）有意未做（D-003）

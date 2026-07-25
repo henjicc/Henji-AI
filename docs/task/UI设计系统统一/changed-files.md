@@ -60,7 +60,49 @@
 
 ---
 
-（后续任务在此追加，格式见下）
+## 任务 1.4 CI 迁移到 Electron（`d9d33af`）
+- `.github/workflows/build.yml`：整份重写为 Electron 双 job
+- `src/core/imageEdit/worker/webgpuRuntime.ts`：删除 `import type` 内冗余 `type`（TS2206）
+- `scripts/release.cjs`：推送分支改为读取当前分支
+
+## 任务 2.1 助手侧栏（`3cd2b0d`）
+- `AssistantSidebar` / `AssistantConversation` / `AssistantMemoryPanel` / `ApprovalCard` /
+  `ExecutionPlanCard` / `ModelProgressMessage` / `ToolActivityCard` / `ToolActivityGroup`
+- 新增 `UI_INSET_SURFACE_CLASS`（`styleTokens.ts`），`UiPanel` 的 inset 变体改为消费它
+
+## 任务 2.2 任务卡（`5a5a1d1`）
+- `TaskCard`：四状态改状态组件、结果容器改 inset、徽标改令牌
+- `TaskList`：筛选空态改 `UiEmpty`
+- `styleTokens.ts`：新增 `UI_META_BADGE_CLASS` / `UI_META_BADGE_ACCENT_CLASS`
+
+## 任务 2.4 播放器与查看器（`6f4ffb5`）
+- `AudioPlayer`：新增 `surface` 变体；`TaskCard`、`AudioPreviewCard` 传 `plain`
+- `VideoViewerControls`：改用 `UI_PANEL_SURFACE_CLASS`
+
+## 任务 2.5 日志面板（`a00073d`）
+- `AssistantTraceDetail` / `AssistantTraceList`：表面改 inset
+
+## 任务 2.3 弹窗统一（`5404f79`）
+- 转 `UiModal`：`SettingsDialog`(覆盖6处调用) / `SettingsProgressDialog` / `RenameDialog` /
+  `ClearHistoryDialog` / `CreatePresetDialog` / `PresetManager` / `AddCustomModelDialog` /
+  `LargeUploadChoiceDialog` / `UpdateDialog` / `TestModePanel` / `Settings/index.tsx`
+- 豁免注释：三个 mediaViewer + `ProjectManager` 加载遮罩
+- `primitives.tsx`：`UiModal` 增加 `data-dialog`
+- `package.json` / `.github/workflows/build.yml`：门禁转 `check:surface:strict`
+
+## 任务 3.1 长列表（`57d176c`）
+- `styleTokens.ts`：新增 `UI_LIST_ITEM_SKIP_TALL_CLASS`
+- `TaskCard`：根节点加 content-visibility
+- **删除** `src/workspaces/GenerationWorkspace/components/MessageList.tsx`（零引用死代码）
+
+## 任务 3.3 装饰开销（`9e1cd9e`）
+- `transition-all` 替换：9 个文件
+- 阴影收敛：约 20 个文件
+- `backdrop-blur` 移除：10 处 / 8 个文件
+
+---
+
+（后续任务在此追加）
 
 <!--
 ## 任务 X.Y 任务名称

@@ -43,6 +43,25 @@
 - 同理不标注：`FloatingInputPanel`、`ImageMarkTool`（各只有 1 处表面）。
 - 影响任务：2.5 的「豁免标注」一节作废；2.5 实际只剩日志面板两处表面改造。真正需要豁免标记的是 2.3 的三个全屏媒体查看器（规则 C 是按文件报，与计数无关）。
 
+### D-007 长列表用 content-visibility 而非虚拟化
+
+- 日期：2026-07-25（任务 3.1）
+- 背景：历史上限 500 条、每条含图/视频，确实需要处理；`react-virtuoso` 也已是依赖。
+- 实际核查：`TaskList` **自身不是滚动容器**，滚动发生在其父级（`GenerationWorkspace` 的 `listContainerRef`），而 `useBottomPanel` 会在底部面板展开/收起时动态改这个容器的 `paddingBottom`，并对 `scrollTop` 做补偿；另有 `useScrollBehavior`、`useAutoScrollOnResize`、以及依赖 `tasks.length` 的自动滚底 effect。Virtuoso 需要接管滚动，会与这四处逻辑直接冲突。
+- 决定：改用 `content-visibility: auto` + `contain-intrinsic-size: auto 420px`。
+- 理由：能拿到"跳过视口外元素布局与绘制"这个主要收益，同时元素留在 DOM 里——`data-generation-task-id` 定位、原生拖拽、右键菜单、Ctrl+F 全部照常，且完全不碰滚动逻辑。代价只是滚动条长度在首次滚过前是估算值。
+- 影响任务：3.1 验收标准中"接入 Virtuoso"一条改为"接入 content-visibility"。若用户实测 500 条仍卡，再考虑用 Virtuoso 的 `customScrollParent` 模式重做。
+
+### D-008 放弃 3.2 的 contain:layout 方案，且 3.1 已覆盖其主要成本
+
+- 日期：2026-07-25（任务 3.2）
+- 背景：3.2 原计划的首选手段是给工作区容器加 `contain: layout`，把 resize 时的重排限制在容器内。
+- 实际核查：工作区子树内有 9 个文件使用 `position: fixed`（`FloatingInputPanel`、`NotificationToast`、画布的节点参数气泡/下载菜单/导出设置/来图选择器、`ModelPickerList`、资产库浮层与资产卡菜单）。`contain: layout` 会让容器成为这些元素的**包含块**，它们的视口定位会全部失效。
+- 决定：**不采用** `contain: layout`。
+- 补充结论：3.1 的 `content-visibility` 已经直接作用于 3.2 的根因——docked resize 每帧改 `paddingLeft/Right` 导致工作区重排，成本主要来自数百张任务卡；视口外卡片跳过布局后，这部分成本大幅下降。
+- 剩余手段（resize 期间降级渲染、改 inset 实现方式）都涉及可见的视觉取舍或较高风险，按 3.2 任务文件"不允许无测量直接优化"的要求，**留待用户实测后再决定是否还需要**。
+- 影响任务：3.2 状态为「已分析，待用户测量」，不是「已完成」。
+
 ### D-004 z-index 档位由实际需求反推，扩到 11 档
 
 - 日期：2026-07-25（任务 1.2）
