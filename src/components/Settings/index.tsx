@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { UiButton, UiIconButton, UiNavButton, UiPanel } from '@/components/ui'
+import { UiButton, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
@@ -86,14 +86,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   }
 
   return (
-    <div
-      className={`fixed inset-0 z-modal flex items-center justify-center bg-black/70 p-4 ${closing ? 'animate-fade-out' : 'animate-fade-in'}`}
-      onClick={handleClose}
+    <UiModal
+      isOpen={!closing}
+      title={t('title')}
+      onClose={handleClose}
+      hideHeader
+      overlayClassName="bg-black/70 p-4"
+      widthClassName="flex w-[min(90vw,1200px)] overflow-hidden"
+      contentClassName="flex min-h-0 flex-1"
     >
-      <UiPanel
-        className={`flex w-[min(90vw,1200px)] scale-100 transform overflow-hidden transition-all duration-300 ${closing ? 'animate-scale-out' : 'animate-scale-in'}`}
+      <div
+        className="flex w-full"
         style={{ height: '76vh', minHeight: '500px', maxHeight: '940px' }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex w-[156px] flex-col border-r border-border-dark bg-app">
           <div className="h-[58px] border-b border-border-dark" />
@@ -158,8 +162,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
             </UiButton>
           </div>
         </div>
-      </UiPanel>
-    </div>
+      </div>
+    </UiModal>
   )
 }
 

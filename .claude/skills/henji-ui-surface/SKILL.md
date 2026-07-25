@@ -187,7 +187,7 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 
 | 需求 | 必须用 | 不要做 |
 |---|---|---|
-| 弹窗 | `UiModal` | 手写 `fixed inset-0` + `bg-black/…` + 卡片（项目里已有 13 处这种历史债，别再加） |
+| 弹窗 | `UiModal` | 手写 `fixed inset-0` + `bg-black/…` + 卡片（存量已全部清零，`check:surface` 规则 C 会拦，别再加） |
 | 分组 | `UiGroup` | 手写 `border + bg` 的 div |
 | 页面标题区 | `UiPageHeader` | 手写 h2 + p |
 | 表单行 | `UiFormRow` | 手写 label + 间距 |
@@ -244,13 +244,13 @@ npm run check:surface && npm run check:colors && npm run lint
 - `[B]` 同文件多处卡片表面 → 疑似卡片套卡片，内层降级
 - `[C]` 手写弹窗（`fixed inset-0` + 黑色遮罩但没用 `UiModal`/`AlertDialog`）→ 改用 `UiModal`
 
-它默认只告警不阻断（存量渐进治理），已接入 `build` / `electron:build` 链路。**要求：不得新增违规**——改完跑一次，确认输出里没有你新写的文件。
+存量已全部清零，`check:surface:strict` 已接入 `build` / `electron:build` 与 CI，**违规会直接让构建失败**。改完必须跑一次确认通过。
 
 确需例外时在该行上方加注释 `ui-surface-allow` 并写明理由；只允许行级豁免，禁止文件级 `ui-surface-allow-file`（否则该文件将来真正的套娃也会被放行）。
 
 已确认的例外类别：全屏沉浸式媒体查看器（`mediaViewer/` 三个 Modal）不套用 `UiModal`——`UiModal` 是居中卡片语义，与铺满视口的查看器不匹配。
 
-存量清零后用 `npm run check:surface:strict`（违规 exit 1）卡死新增。
+`npm run check:surface`（告警式）可用于本地快速查看，构建链路走的是 `--strict`。
 
 ## 相关规范
 

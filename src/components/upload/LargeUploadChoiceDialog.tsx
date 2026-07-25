@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 
-import { UiButton, UiPanel } from '@/components/ui'
+import { UiButton, UiModal } from '@/components/ui'
 import Toggle from '@/components/ui/Toggle'
 import { useI18n } from '@/hooks/useI18n'
 import { useLargeUploadPromptStore } from '@/services/largeUploadPolicy'
@@ -28,8 +28,15 @@ export const LargeUploadChoiceDialog: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60">
-      <UiPanel className="w-[460px] space-y-4 p-5">
+    // 强制选择：必须选一种处理方式，所以 onClose 传空函数，点遮罩不关闭
+    <UiModal
+      isOpen
+      title={t('largeUpload.title')}
+      onClose={() => { /* 必须做出选择，不允许关闭 */ }}
+      hideHeader
+      widthClassName="w-[460px]"
+      contentClassName="space-y-4 p-5"
+    >
         <h3 className="text-base font-semibold text-text-dark">
           {t('largeUpload.title')}
         </h3>
@@ -68,7 +75,6 @@ export const LargeUploadChoiceDialog: React.FC = () => {
           />
           <p className="mt-2 text-xs text-zinc-500">{t('largeUpload.rememberHint')}</p>
         </div>
-      </UiPanel>
-    </div>
+    </UiModal>
   )
 }

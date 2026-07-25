@@ -7,7 +7,7 @@ const logger = createLogger('components.UpdateDialog')
  * 当检测到新版本时显示，提供更新、忽略或取消选项
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import {
   ReleaseInfo,
   downloadElectronUpdate,
@@ -16,7 +16,7 @@ import {
 } from '../services/updateChecker'
 import { addIgnoredVersion } from '../utils/updateConfig'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiIconButton, UiPanel } from '@/components/ui'
+import { UiButton, UiIconButton, UiModal } from '@/components/ui'
 
 interface UpdateDialogProps {
   releaseInfo: ReleaseInfo
@@ -26,18 +26,11 @@ interface UpdateDialogProps {
 
 const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion, onClose }) => {
   const { t } = useI18n('ui')
-  const [dialogOpacity, setDialogOpacity] = useState(0)
   const [isUpdating, setIsUpdating] = useState(false)
 
-  useEffect(() => {
-    requestAnimationFrame(() => setDialogOpacity(1))
-  }, [])
-
+  // 关闭动画由 UiModal 的 useDialogTransition 负责，这里直接回调
   const handleClose = () => {
-    setDialogOpacity(0)
-    setTimeout(() => {
-      onClose()
-    }, 180)
+    onClose()
   }
 
   const handleUpdate = async () => {
@@ -131,29 +124,14 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
   }
 
   return (
-    <div
-      className="fixed inset-0 z-modal flex items-center justify-center p-4"
-      data-dialog="true"
+    <UiModal
+      isOpen
+      title={t('update.title')}
+      onClose={handleClose}
+      hideHeader
+      widthClassName="w-full max-w-2xl overflow-hidden"
+      contentClassName=""
     >
-      {/* 背景遮罩 */}
-      <div
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-        style={{
-          opacity: dialogOpacity,
-          transition: 'opacity 180ms ease'
-        }}
-        onClick={handleClose}
-      />
-
-      {/* 对话框内容 */}
-      <UiPanel
-        className="relative w-full max-w-2xl overflow-hidden rounded-2xl"
-        style={{
-          opacity: dialogOpacity,
-          transform: `scale(${0.97 + 0.03 * dialogOpacity})`,
-          transition: 'opacity 180ms ease, transform 180ms ease'
-        }}
-      >
         {/* 头部 */}
         <div className="bg-gradient-to-r from-accent/10 to-transparent p-6 border-b border-zinc-700/50">
           <div className="flex items-start justify-between">
@@ -252,8 +230,6 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
             {isUpdating ? t('updateDialog.actions.downloading', { defaultValue: '下载中' }) : actionLabel}
           </UiButton>
         </div>
-      </UiPanel>
-
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 8px;
@@ -271,7 +247,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           background: rgba(113, 113, 122, 0.7);
         }
       `}</style>
-    </div>
+    </UiModal>
   )
 }
 

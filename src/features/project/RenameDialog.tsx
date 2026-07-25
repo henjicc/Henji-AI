@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UiButton, UiInput, UiPanel } from '@/components/ui';
-import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion';
-import { useDialogTransition } from '@/components/ui/useDialogTransition';
+import { UiButton, UiInput, UiModal } from '@/components/ui';
 
 interface RenameDialogProps {
   isOpen: boolean;
@@ -21,7 +19,6 @@ export function RenameDialog({
 }: RenameDialogProps) {
   const { t } = useTranslation();
   const [name, setName] = useState(defaultValue);
-  const { shouldRender, isVisible } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
 
   useEffect(() => {
     if (isOpen) {
@@ -44,42 +41,34 @@ export function RenameDialog({
     }
   };
 
-  if (!shouldRender) return null;
-
   return (
-    <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center`}>
-      <div
-        className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-        onClick={onClose}
-      />
-      <UiPanel className={`relative w-80 p-6 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-        <h2 className="text-lg font-semibold text-text-dark mb-4">{title}</h2>
-        <UiInput
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={t('project.namePlaceholder')}
-          className="h-10"
-          autoFocus
-        />
-        <div className="flex justify-end gap-2 mt-4">
-          <UiButton
-            onClick={onClose}
-            variant="ghost"
-            size="sm"
-          >
+    <UiModal
+      isOpen={isOpen}
+      title={title}
+      onClose={onClose}
+      hideHeader
+      widthClassName="w-80"
+      contentClassName="p-6"
+      footer={
+        <>
+          <UiButton onClick={onClose} variant="ghost" size="sm">
             {t('common.cancel')}
           </UiButton>
-          <UiButton
-            onClick={handleConfirm}
-            disabled={!name.trim()}
-            variant="primary"
-            size="sm"
-          >
+          <UiButton onClick={handleConfirm} disabled={!name.trim()} variant="primary" size="sm">
             {t('common.confirm')}
           </UiButton>
-        </div>
-      </UiPanel>
-    </div>
+        </>
+      }
+    >
+      <h2 className="mb-4 text-lg font-semibold text-text-dark">{title}</h2>
+      <UiInput
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={t('project.namePlaceholder')}
+        className="h-10"
+        autoFocus
+      />
+    </UiModal>
   );
 }

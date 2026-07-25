@@ -53,7 +53,7 @@ jobs:
         run: npm run check:colors
 
       - name: 表面层级检查
-        run: npm run check:surface
+        run: npm run check:surface:strict
 
       - name: 模型 i18n 检查
         run: npm run check:model-i18n

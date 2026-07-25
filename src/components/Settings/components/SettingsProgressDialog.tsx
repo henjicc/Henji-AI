@@ -1,5 +1,6 @@
 import React from 'react'
-import { UiPanel } from '@/components/ui'
+import { UiModal } from '@/components/ui'
+import { ProgressBar } from '@/components/ui/ProgressBar'
 import type { MigrationProgress } from '../hooks/useDataPath'
 
 interface SettingsProgressDialogProps {
@@ -9,30 +10,31 @@ interface SettingsProgressDialogProps {
   progress: MigrationProgress
 }
 
+/**
+ * 数据迁移进度弹窗。
+ *
+ * 刻意不可关闭：迁移过程中不能让用户点遮罩把它关掉，所以 onClose 传空函数。
+ */
 const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, title, hint, progress }) => {
-  if (!open) return null
   const ratio = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
   return (
-    <div
-      className="fixed inset-0 z-modal flex items-center justify-center"
-      data-dialog="true"
-      onClick={(e) => e.stopPropagation()}
+    <UiModal
+      isOpen={open}
+      title={title}
+      onClose={() => { /* 迁移进行中，刻意不允许关闭 */ }}
+      hideHeader
+      widthClassName="w-[400px]"
+      contentClassName="p-4"
     >
-      <div className="absolute inset-0 bg-black/70" />
-      <UiPanel className="relative w-[400px] p-4">
-        <div className="text-white text-base">{title}</div>
-        <div className="mt-4">
-          <div className="text-sm text-zinc-300 mb-2 truncate">{progress.file}</div>
-          <div className="text-xs text-zinc-400 mb-2">{progress.current} / {progress.total}</div>
-          <div className="w-full bg-zinc-800 rounded-full h-2">
-            <div className="bg-accent h-2 rounded-full transition-all duration-300" style={{ width: `${ratio}%` }} />
-          </div>
-        </div>
-        <div className="text-xs text-zinc-400 mt-4">{hint}</div>
-      </UiPanel>
-    </div>
+      <div className="text-base text-white">{title}</div>
+      <div className="mt-4">
+        <div className="mb-2 truncate text-sm text-zinc-300">{progress.file}</div>
+        <div className="mb-2 text-xs text-zinc-400">{progress.current} / {progress.total}</div>
+        <ProgressBar progress={ratio} showPercentage={false} duration={300} />
+      </div>
+      <div className="mt-4 text-xs text-zinc-400">{hint}</div>
+    </UiModal>
   )
 }
 
 export default SettingsProgressDialog
-

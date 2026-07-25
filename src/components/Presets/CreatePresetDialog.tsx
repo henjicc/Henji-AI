@@ -11,7 +11,7 @@ import React, { useState } from 'react'
 import { usePresetLoader } from '@/hooks/usePresetLoader'
 import type { CreatePresetInput } from '@/core/types/Preset'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiCheckbox, UiInput, UiPanel, UiTextAreaField } from '@/components/ui'
+import { UiButton, UiCheckbox, UiInput, UiModal, UiTextAreaField } from '@/components/ui'
 
 interface CreatePresetDialogProps {
   currentModelId: string
@@ -54,8 +54,14 @@ export function CreatePresetDialog({
   }
 
   return (
-    <div className="preset-dialog fixed inset-0 bg-black/50 flex items-center justify-center z-modal">
-      <UiPanel className="p-6 max-w-md w-full">
+    <UiModal
+      isOpen
+      title={t('ui:presets.create.title')}
+      onClose={onClose}
+      hideHeader
+      widthClassName="w-full max-w-md"
+      contentClassName="p-6"
+    >
         <h3 className="text-xl font-bold mb-4">{t('ui:presets.create.title')}</h3>
 
         <div className="form-group mb-4">
@@ -112,8 +118,7 @@ export function CreatePresetDialog({
             {saving ? t('ui:presets.create.saving') : t('common:save')}
           </UiButton>
         </div>
-      </UiPanel>
-    </div>
+    </UiModal>
   )
 }
 

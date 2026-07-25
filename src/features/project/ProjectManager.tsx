@@ -185,7 +185,7 @@ export function ProjectManager() {
       </div>
 
       {isOpeningProject && (
-        <div className={`pointer-events-none fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} bg-black/10`} />
+        <div className={/* ui-surface-allow: 打开项目时的加载遮罩，pointer-events-none 且无内容，不是弹窗 */ `pointer-events-none fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} bg-black/10`} />
       )}
 
       <RenameDialog

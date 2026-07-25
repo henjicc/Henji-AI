@@ -4,7 +4,7 @@
 
 import React, { useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiInput, UiPanel, UiTextAreaField } from '@/components/ui'
+import { UiButton, UiInput, UiModal, UiTextAreaField } from '@/components/ui'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 
 interface AddCustomModelDialogProps {
@@ -34,8 +34,14 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal">
-      <UiPanel className="w-full max-w-md p-6">
+    <UiModal
+      isOpen
+      title={t('customModels.addModel')}
+      onClose={onClose}
+      hideHeader
+      widthClassName="w-full max-w-md"
+      contentClassName="p-6"
+    >
         <h3 className="text-lg font-bold mb-4">{t('customModels.addModel')}</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -98,7 +104,6 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
             </UiButton>
           </div>
         </form>
-      </UiPanel>
-    </div>
+    </UiModal>
   )
 }

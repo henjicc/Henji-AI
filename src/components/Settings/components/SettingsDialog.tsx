@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiButton, UiPanel } from '@/components/ui'
+import { UiButton, UiModal } from '@/components/ui'
 
 type DialogActionVariant = 'primary' | 'secondary' | 'danger'
 
@@ -27,40 +27,34 @@ const getActionClass = (variant: DialogActionVariant | undefined): string => {
   return ''
 }
 
-const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, description, actions, onClose }) => {
-  if (!open) return null
-  return (
-    <div
-      className="fixed inset-0 z-modal flex items-center justify-center"
-      data-dialog="true"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClose?.()
-      }}
-    >
-      <div className="absolute inset-0 bg-black/70" />
-      <UiPanel
-        className="relative w-[400px] p-4"
-        onClick={(e) => e.stopPropagation()}
+/**
+ * 设置内的确认弹窗（6 处调用点共用）。
+ * 外壳统一走 UiModal：遮罩、portal、过渡、data-dialog 都由 primitive 负责，
+ * 这里只描述标题/说明/操作按钮。
+ */
+const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, description, actions, onClose }) => (
+  <UiModal
+    isOpen={open}
+    title={title}
+    onClose={() => onClose?.()}
+    hideHeader
+    widthClassName="w-[400px]"
+    contentClassName="p-4"
+    footer={actions.map(action => (
+      <UiButton
+        key={action.label}
+        size="sm"
+        variant={action.variant === 'primary' || action.variant === 'danger' ? 'primary' : 'muted'}
+        onClick={action.onClick}
+        className={`h-9 px-3 ${getActionClass(action.variant)}`}
       >
-        <div className="text-white text-base">{title}</div>
-        {description ? <div className="text-zinc-300 text-sm mt-2">{description}</div> : null}
-        <div className="mt-4 flex gap-2 justify-end">
-          {actions.map(action => (
-            <UiButton
-              key={action.label}
-              size="sm"
-              variant={action.variant === 'primary' || action.variant === 'danger' ? 'primary' : 'muted'}
-              onClick={(e) => { e.stopPropagation(); action.onClick() }}
-              className={`h-9 px-3 ${getActionClass(action.variant)}`}
-            >
-              {action.label}
-            </UiButton>
-          ))}
-        </div>
-      </UiPanel>
-    </div>
-  )
-}
+        {action.label}
+      </UiButton>
+    ))}
+  >
+    <div className="text-base text-white">{title}</div>
+    {description ? <div className="mt-2 text-sm text-zinc-300">{description}</div> : null}
+  </UiModal>
+)
 
 export default SettingsDialog

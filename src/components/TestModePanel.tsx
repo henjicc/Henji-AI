@@ -15,7 +15,7 @@ import { ExportPanel } from './debug/ExportPanel'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { useI18n } from '@/hooks/useI18n'
 import { openLogWindow } from '@/commands/logging'
-import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiPanel } from '@/components/ui'
+import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiModal } from '@/components/ui'
 import { X } from 'lucide-react'
 
 interface TestModePanelProps {
@@ -39,17 +39,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 }) => {
   const { t } = useI18n('ui')
   const [state, setState] = useState<TestModeState>(getTestModeState())
-  const [opacity, setOpacity] = useState(0)
   const [showFlowTracking, setShowFlowTracking] = useState(false)
   const [activeTab, setActiveTab] = useState<'options' | 'export'>('options')
-
-  useEffect(() => {
-    if (isOpen) {
-      setOpacity(1)
-    } else {
-      setOpacity(0)
-    }
-  }, [isOpen])
 
   useEffect(() => {
     const handleTestModeChange = (event: CustomEvent) => {
@@ -73,31 +64,20 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
     setState(getTestModeState())
   }
 
+  // 关闭动画由 UiModal 的 useDialogTransition 负责，这里直接回调
   const handleClose = () => {
-    setOpacity(0)
-    setTimeout(() => onClose(), 180)
+    onClose()
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 z-modal flex items-center justify-center">
-      {/* 背景遮罩 */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        style={{ opacity, transition: 'opacity 180ms ease' }}
-        onClick={handleClose}
-      />
-
-      {/* 面板内容 */}
-      <UiPanel
-        className="relative border-yellow-500/50 p-6 w-[600px] max-h-[80vh] overflow-y-auto shadow-2xl"
-        style={{
-          opacity,
-          transform: `scale(${0.97 + 0.03 * opacity})`,
-          transition: 'opacity 180ms ease, transform 180ms ease'
-        }}
-      >
+    <UiModal
+      isOpen={isOpen}
+      title={t('testMode.title')}
+      onClose={handleClose}
+      hideHeader
+      widthClassName="w-[600px] max-h-[80vh] overflow-y-auto border-yellow-500/50"
+      contentClassName="p-6"
+    >
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -292,8 +272,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             </div>
           </div>
         )}
-      </UiPanel>
-    </div>
+    </UiModal>
   )
 }
 

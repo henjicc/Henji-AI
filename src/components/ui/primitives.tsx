@@ -458,7 +458,13 @@ export function UiModal({
   // 挂到 document.body：祖先链上任何一个带 transform/filter 的面板都会给 fixed 定位
   // 重新建立包含块，导致弹窗被错误地约束在那个祖先容器内而不是真正居中于整个窗口。
   return createPortal(
-    <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center ${overlayClassName}`}>
+    // data-dialog：资产库边缘触发器靠它判断"当前有弹窗打开，别弹出侧栏"。
+    // 放在 UiModal 上，所有走 UiModal 的弹窗自动获得该行为，
+    // 不必再指望每个业务弹窗自己记得加这个属性。
+    <div
+      data-dialog="true"
+      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center ${overlayClassName}`}
+    >
       <div
         className={`absolute inset-0 bg-black/55 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}

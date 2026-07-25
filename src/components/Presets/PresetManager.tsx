@@ -13,7 +13,7 @@ import { usePresetLoader } from '@/hooks/usePresetLoader'
 import type { Preset } from '@/core/types/Preset'
 import { CreatePresetDialog } from './CreatePresetDialog'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiPanel } from '@/components/ui'
+import { UiButton, UiModal, UiPanel } from '@/components/ui'
 
 interface PresetItemProps {
   preset: Preset
@@ -117,8 +117,14 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
   }
 
   return (
-    <div className="preset-manager fixed inset-0 bg-black/50 flex items-center justify-center z-modal">
-      <UiPanel className="p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+    <UiModal
+      isOpen
+      title={t('ui:presets.manager.title')}
+      onClose={onClose}
+      hideHeader
+      widthClassName="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+      contentClassName="p-6 flex min-h-0 flex-1 flex-col"
+    >
         <div className="preset-header flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">{t('ui:presets.manager.title')}</h2>
           <div className="flex gap-2">
@@ -171,8 +177,7 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
             onClose={() => setShowCreateDialog(false)}
           />
         )}
-      </UiPanel>
-    </div>
+    </UiModal>
   )
 }
 
