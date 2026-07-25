@@ -110,7 +110,11 @@ export function ImageEditor({
         setPreviewSourceUrl(nextUrl);
         setPreviewOrientationApplied(true);
         setPreviewState(result.backend === 'sharp'
-          ? { phase: 'degraded', backend: result.backend, message: '正在使用 Sharp 兼容预览' }
+          ? {
+            phase: 'degraded',
+            backend: result.backend,
+            fallbackReason: result.diagnostics?.fallbackReason,
+          }
           : { phase: 'idle', backend: result.backend });
       } catch (error) {
         if (disposed || abortController.signal.aborted) return;

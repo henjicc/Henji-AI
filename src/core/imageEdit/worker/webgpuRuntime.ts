@@ -18,6 +18,8 @@ import type {
   ImageEditExportFormat,
   ImageEditWorkerComposition,
   ImageEditWorkerCapabilities,
+  type ImageEditWorkerInitializationFailure,
+  type ImageEditWorkerInitializationFailureCode,
   ImageEditWorkerSource,
 } from './protocol'
 import { drawMarkItems } from '@/features/imageMark/render/drawMarks'
@@ -51,6 +53,13 @@ interface RuntimeState {
   encodePipeline: GpuRenderPipeline
   diffusionRenderer: WebGpuDiffusionRenderer
   canvasFormat: string
+}
+
+class WorkerWebGpuInitializationError extends Error {
+  constructor(readonly failure: ImageEditWorkerInitializationFailure) {
+    super(failure.detail)
+    this.name = 'WorkerWebGpuInitializationError'
+  }
 }
 
 export interface WebGpuExportOptions {
@@ -90,7 +99,7 @@ export class WorkerWebGpuRuntime {
       this.state = state
       return this.describeCapabilities(state)
     } catch (error) {
-      return unavailableCapabilities(error instanceof Error ? error.message : String(error))
+      return unavailableCapabilities(describeInitializationFailure(error))
     }
   }
 
@@ -105,37 +114,52 @@ export class WorkerWebGpuRuntime {
     const state = await this.ensureState()
     const decoded = await this.acquireSource(source)
     try {
-      const composed = this.applyOrientation(decoded.bitmap, composition)
+      // 预览的所有 GPU 输入都必须先落在预算内。仅缩小最终 Canvas 会让超大原图仍被
+      // 上传为一张全尺寸 source texture，既拖慢调参，也会不必要地占用显存。
+      const previewSource = await createPreviewBitmap(decoded.bitmap, maxPixels)
       try {
+        const composed = this.applyOrientation(previewSource.bitmap, composition)
+        try {
         const sourceCacheKey = `${cacheKey ?? (source.kind === 'url' ? `url:${source.url}` : `blob:${Date.now()}`)}:${orientationCacheKey(composition)}`
-        const size = fitWithinPixelBudget(
-          composed.bitmap.width,
-          composed.bitmap.height,
-          maxPixels
-        )
         if (recipe) {
           const bitmap = await this.renderDiffusionBitmap(
             state,
             composed.bitmap,
-            size.width,
-            size.height,
+            composed.bitmap.width,
+            composed.bitmap.height,
             recipe,
             sourceCacheKey,
             isCancelled
           )
-          return { bitmap, width: size.width, height: size.height }
+          return {
+            bitmap,
+            width: composed.bitmap.width,
+            height: composed.bitmap.height,
+          }
         }
-        const intermediate = await this.createIntermediate(state, composed.bitmap, size.width, size.height)
+        const intermediate = await this.createIntermediate(
+          state,
+          composed.bitmap,
+          composed.bitmap.width,
+          composed.bitmap.height
+        )
         try {
-          const canvas = new OffscreenCanvas(size.width, size.height)
+          const canvas = new OffscreenCanvas(composed.bitmap.width, composed.bitmap.height)
           const context = getWebGpuContext(canvas)
           await this.renderToCanvas(state, intermediate, context, { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 })
-          return { bitmap: canvas.transferToImageBitmap(), width: size.width, height: size.height }
+          return {
+            bitmap: canvas.transferToImageBitmap(),
+            width: composed.bitmap.width,
+            height: composed.bitmap.height,
+          }
         } finally {
           intermediate.destroy()
         }
+        } finally {
+          if (composed.owned) composed.bitmap.close()
+        }
       } finally {
-        if (composed.owned) composed.bitmap.close()
+        if (previewSource.owned) previewSource.bitmap.close()
       }
     } finally {
       if (decoded.owned) decoded.bitmap.close()
@@ -284,42 +308,32 @@ export class WorkerWebGpuRuntime {
 
   private async createState(): Promise<RuntimeState> {
     if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
-      throw new Error('当前 Worker 不支持 OffscreenCanvas 或 ImageBitmap')
+      throw createInitializationError(
+        'worker-canvas-api-unavailable',
+        'Worker 未提供 OffscreenCanvas 或 ImageBitmap'
+      )
     }
-    const { provider, adapter, device } = await this.deviceManager.acquire()
+    const { provider, adapter, device } = await this.acquireDevice()
     const module = device.createShaderModule({ code: baselineShaderSource })
-    const canvasFormat = provider.getPreferredCanvasFormat()
+    const canvasFormat = this.getPreferredCanvasFormat(provider)
     const shared = {
       layout: 'auto',
       vertex: { module, entryPoint: 'vertex_main' },
       primitive: { topology: 'triangle-list' },
     }
-    const linearizePipeline = await createRenderPipelineChecked(device, {
-      ...shared,
-      fragment: {
-        module,
-        entryPoint: 'fragment_linearize',
-        targets: [{ format: 'rgba16float' }],
-      },
-    }, 'Worker WebGPU 线性化 Pipeline')
-    const encodePipeline = await createRenderPipelineChecked(device, {
-      ...shared,
-      fragment: {
-        module,
-        entryPoint: 'fragment_encode',
-        targets: [{ format: canvasFormat }],
-      },
-    }, 'Worker WebGPU 输出编码 Pipeline')
+    const { linearizePipeline, encodePipeline } = await this.createBaselinePipelines(
+      device,
+      module,
+      canvasFormat,
+      shared
+    )
     const sampler = device.createSampler({
       minFilter: 'linear',
       magFilter: 'linear',
       addressModeU: 'clamp-to-edge',
       addressModeV: 'clamp-to-edge',
     })
-    const diffusionRenderer = await WebGpuDiffusionRenderer.create(
-      device,
-      sampler
-    )
+    const diffusionRenderer = await this.createDiffusionRenderer(device, sampler)
     const state: RuntimeState = {
       provider,
       adapter,
@@ -331,6 +345,72 @@ export class WorkerWebGpuRuntime {
       canvasFormat,
     }
     return state
+  }
+
+  private async acquireDevice(): Promise<{
+    provider: GpuProvider
+    adapter: GpuAdapter
+    device: GpuDevice
+  }> {
+    try {
+      return await this.deviceManager.acquire()
+    } catch (error) {
+      const detail = getErrorDetail(error)
+      const code = detail.includes('navigator.gpu')
+        ? 'webgpu-api-unavailable'
+        : detail.includes('GPU adapter')
+          ? 'webgpu-adapter-unavailable'
+          : 'webgpu-device-request-failed'
+      throw createInitializationError(code, detail)
+    }
+  }
+
+  private getPreferredCanvasFormat(provider: GpuProvider): string {
+    try {
+      return provider.getPreferredCanvasFormat()
+    } catch (error) {
+      throw createInitializationError('webgpu-canvas-format-unavailable', error)
+    }
+  }
+
+  private async createBaselinePipelines(
+    device: GpuDevice,
+    module: unknown,
+    canvasFormat: string,
+    shared: { layout: string; vertex: unknown; primitive: { topology: string } }
+  ): Promise<{ linearizePipeline: GpuRenderPipeline; encodePipeline: GpuRenderPipeline }> {
+    try {
+      const linearizePipeline = await createRenderPipelineChecked(device, {
+        ...shared,
+        fragment: {
+          module,
+          entryPoint: 'fragment_linearize',
+          targets: [{ format: 'rgba16float' }],
+        },
+      }, 'Worker WebGPU 线性化 Pipeline')
+      const encodePipeline = await createRenderPipelineChecked(device, {
+        ...shared,
+        fragment: {
+          module,
+          entryPoint: 'fragment_encode',
+          targets: [{ format: canvasFormat }],
+        },
+      }, 'Worker WebGPU 输出编码 Pipeline')
+      return { linearizePipeline, encodePipeline }
+    } catch (error) {
+      throw createInitializationError('webgpu-baseline-pipeline-failed', error)
+    }
+  }
+
+  private async createDiffusionRenderer(
+    device: GpuDevice,
+    sampler: unknown
+  ): Promise<WebGpuDiffusionRenderer> {
+    try {
+      return await WebGpuDiffusionRenderer.create(device, sampler)
+    } catch (error) {
+      throw createInitializationError('webgpu-diffusion-pipeline-failed', error)
+    }
   }
 
   private async createIntermediate(
@@ -495,4 +575,53 @@ export class WorkerWebGpuRuntime {
 function orientationCacheKey(composition: ImageEditWorkerComposition | undefined): string {
   const orientation = composition?.orientation
   return orientation ? `${orientation.rotate}:${orientation.mirrored ? 'm' : 'n'}` : '0:n'
+}
+
+function describeInitializationFailure(error: unknown): ImageEditWorkerInitializationFailure {
+  if (error instanceof WorkerWebGpuInitializationError) return error.failure
+  return {
+    code: 'webgpu-initialization-unknown',
+    detail: sanitizeInitializationDetail(getErrorDetail(error)),
+  }
+}
+
+function createInitializationError(
+  code: ImageEditWorkerInitializationFailureCode,
+  error: unknown
+): WorkerWebGpuInitializationError {
+  return new WorkerWebGpuInitializationError({
+    code,
+    detail: sanitizeInitializationDetail(getErrorDetail(error)),
+  })
+}
+
+function getErrorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function sanitizeInitializationDetail(value: string): string {
+  const withoutPaths = value
+    .replace(/[A-Za-z]:[\\/][^\s)\],]+/g, '<path>')
+    .replace(/(?:https?|file):\/\/[^\s)\],]+/g, '<url>')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return (withoutPaths || 'unknown-initialization-error').slice(0, 180)
+}
+
+async function createPreviewBitmap(
+  bitmap: ImageBitmap,
+  maxPixels: number
+): Promise<{ bitmap: ImageBitmap; owned: boolean }> {
+  const size = fitWithinPixelBudget(bitmap.width, bitmap.height, maxPixels)
+  if (size.width === bitmap.width && size.height === bitmap.height) {
+    return { bitmap, owned: false }
+  }
+  return {
+    bitmap: await createImageBitmap(bitmap, {
+      resizeWidth: size.width,
+      resizeHeight: size.height,
+      resizeQuality: 'high',
+    }),
+    owned: true,
+  }
 }

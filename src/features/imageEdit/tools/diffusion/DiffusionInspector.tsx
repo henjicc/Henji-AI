@@ -1,19 +1,21 @@
-import { useMemo, useState, type PointerEvent } from 'react';
+import { useId, useMemo, useState, type PointerEvent } from 'react';
 import { ChevronDown, RotateCcw, Trash2 } from 'lucide-react';
 import {
   applyDiffusionPreset,
   createDefaultDiffusionOperationParams,
+  getDiffusionPreset,
   IMAGE_EDIT_OPERATION_IDS,
   listDiffusionPresets,
   type DiffusionOperationParams,
 } from '@/core/imageEdit';
-import { UiChipButton, UiRangeInput, UiSelect, UiSwitch } from '@/components/ui';
+import { Dropdown, UiChipButton, UiRangeInput, UiSwitch } from '@/components/ui';
 import { useImageEditorDocumentController } from '@/features/imageEdit/editor/ImageEditorDocumentContext';
 import { useI18n } from '@/hooks/useI18n';
 import {
   DIFFUSION_DENSITY_OPTIONS,
   DIFFUSION_MODE_OPTIONS,
   DIFFUSION_QUALITY_OPTIONS,
+  type DiffusionSelectOption,
   formatDiffusionNumber,
   formatDiffusionPercent,
   formatDiffusionRadius,
@@ -35,6 +37,37 @@ interface RangeFieldProps {
 interface DiffusionSectionProps {
   title: string;
   children: React.ReactNode;
+}
+
+interface DiffusionDropdownFieldProps<T extends string> {
+  label: string;
+  value: T;
+  options: readonly DiffusionSelectOption<T>[];
+  onChange: (value: T) => void;
+}
+
+function DiffusionDropdownField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: DiffusionDropdownFieldProps<T>): JSX.Element {
+  const labelId = useId();
+  return (
+    <div className="space-y-1.5 text-xs text-text-muted">
+      <span id={labelId}>{label}</span>
+      <Dropdown<T>
+        value={value}
+        options={options.map((option) => ({ ...option }))}
+        onSelect={onChange}
+        ariaLabelledBy={labelId}
+        className="w-full"
+        buttonClassName="w-full"
+        minWidthStrategy="none"
+        panelWidthStrategy="button"
+      />
+    </div>
+  );
 }
 
 function DiffusionRangeField({
@@ -74,33 +107,35 @@ function DiffusionRangeField({
 
 function DiffusionSection({ title, children }: DiffusionSectionProps): JSX.Element {
   const [open, setOpen] = useState(true);
+  const contentId = useId();
   return (
     <section className="border-b border-border-dark py-3 last:border-b-0">
       <UiChipButton
         type="button"
         className="!h-7 w-full justify-between !border-0 !bg-transparent !px-0 !text-xs"
         onClick={() => setOpen((previous) => !previous)}
+        aria-expanded={open}
+        aria-controls={contentId}
       >
         {title}
         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? '' : '-rotate-90'}`} />
       </UiChipButton>
-      {open ? <div className="space-y-3 pt-3">{children}</div> : null}
+      {open ? <div id={contentId} className="space-y-3 pt-3">{children}</div> : null}
     </section>
   );
 }
 
 export function DiffusionInspector(): JSX.Element {
   const controller = useImageEditorDocumentController();
-  const { t } = useI18n('ui');
+  const { t, tText } = useI18n('ui');
   const operation = controller.getOperation<DiffusionOperationParams>(IMAGE_EDIT_OPERATION_IDS.diffusion);
   const params = operation?.params ?? createDefaultDiffusionOperationParams();
   const presets = useMemo(() => listDiffusionPresets(), []);
+  const selectedPreset = params.presetId
+    ? getDiffusionPreset(params.presetId)
+    : undefined;
   const previewState = controller.previewState;
-  const previewStatus = previewState?.phase === 'compiling'
-    ? t('imageEditor.diffusion.compiling')
-    : previewState?.phase === 'rendering'
-      ? t('imageEditor.diffusion.rendering')
-      : previewState?.message;
+  const previewStatus = resolvePreviewStatus(previewState, t);
 
   const update = (patch: (current: DiffusionOperationParams) => DiffusionOperationParams): void => {
     controller.updateOperation<DiffusionOperationParams>(IMAGE_EDIT_OPERATION_IDS.diffusion, patch);
@@ -120,38 +155,37 @@ export function DiffusionInspector(): JSX.Element {
         <UiSwitch checked={operation?.enabled ?? false} onCheckedChange={setEnabled} aria-label={t('imageEditor.diffusion.enable')} />
       </div>
       {previewState && previewState.phase !== 'idle' ? (
-        <div className={`mb-3 rounded-lg border px-2.5 py-2 text-xs ${previewState.phase === 'failed' ? 'border-red-500/40 text-red-300' : 'border-border-dark text-text-muted'}`}>
+        <div role="status" aria-live="polite" className={`mb-3 rounded-lg border px-2.5 py-2 text-xs ${previewState.phase === 'failed' ? 'border-red-500/40 text-red-300' : 'border-border-dark text-text-muted'}`}>
           {previewStatus}
         </div>
       ) : previewState?.backend ? <div className="mb-3 text-xs text-text-muted">{t('imageEditor.diffusion.previewBackend')}：{previewState.backend === 'webgpu-worker' ? 'WebGPU' : previewState.backend}</div> : null}
 
-      <div className={`space-y-3 ${operation?.enabled ? '' : 'pointer-events-none opacity-60'}`}>
-        <label className="block space-y-1.5 text-xs text-text-muted">
-          <span>模式</span>
-          <UiSelect
-            value={params.mode}
-            onChange={(event) => update((current) => ({ ...current, mode: event.currentTarget.value as DiffusionOperationParams['mode'], presetId: null }))}
-          >
-            {DIFFUSION_MODE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </UiSelect>
-        </label>
-        <label className="block space-y-1.5 text-xs text-text-muted">
-          <span>通用预设</span>
-          <UiSelect
+      <fieldset disabled={!operation?.enabled} className="m-0 min-w-0 space-y-3 border-0 p-0 disabled:opacity-60">
+        <DiffusionDropdownField
+          label="模式"
+          value={params.mode}
+          options={DIFFUSION_MODE_OPTIONS}
+          onChange={(mode) => update((current) => ({ ...current, mode, presetId: null }))}
+        />
+        <div className="space-y-1.5 text-xs text-text-muted">
+          <DiffusionDropdownField
+            label={t('imageEditor.diffusion.preset.label')}
             value={params.presetId ?? ''}
-            onChange={(event) => {
-              const presetId = event.currentTarget.value;
+            options={[
+              { value: '', label: t('imageEditor.diffusion.preset.custom') },
+              ...presets.map((preset) => ({ value: preset.id, label: tText(preset.name) })),
+            ]}
+            onChange={(presetId) => {
               if (!presetId) update((current) => ({ ...current, presetId: null }));
               else update(() => applyDiffusionPreset(presetId as Parameters<typeof applyDiffusionPreset>[0]));
             }}
-          >
-            <option value="">自定义</option>
-            {presets.map((preset) => <option key={preset.id} value={preset.id}>{preset.id === 'black-mist-soft' ? '通用黑柔' : preset.id === 'white-mist-soft' ? '通用白柔' : '通用辉光'}</option>)}
-          </UiSelect>
-        </label>
+          />
+          {selectedPreset ? <span className="block leading-5 text-text-muted">{tText(selectedPreset.description)}</span> : null}
+        </div>
+        <p className="-mt-1 text-xs leading-5 text-text-muted">{t('imageEditor.diffusion.preset.sourceNotice')}</p>
         <div className="grid grid-cols-2 gap-2">
-          <label className="space-y-1.5 text-xs text-text-muted"><span>档位</span><UiSelect value={params.density} onChange={(event) => update((current) => ({ ...current, density: event.currentTarget.value as DiffusionOperationParams['density'] }))}>{DIFFUSION_DENSITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</UiSelect></label>
-          <label className="space-y-1.5 text-xs text-text-muted"><span>质量</span><UiSelect value={params.quality} onChange={(event) => update((current) => ({ ...current, quality: event.currentTarget.value as DiffusionOperationParams['quality'] }))}>{DIFFUSION_QUALITY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</UiSelect></label>
+          <DiffusionDropdownField label="档位" value={params.density} options={DIFFUSION_DENSITY_OPTIONS} onChange={(density) => update((current) => ({ ...current, density }))} />
+          <DiffusionDropdownField label="质量" value={params.quality} options={DIFFUSION_QUALITY_OPTIONS} onChange={(quality) => update((current) => ({ ...current, quality }))} />
         </div>
         <DiffusionRangeField label="强度" value={params.strength} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.strength)} onChange={(value) => update((current) => ({ ...current, strength: value, presetId: null }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
 
@@ -191,7 +225,7 @@ export function DiffusionInspector(): JSX.Element {
           <DiffusionRangeField label="光圈" value={params.lens.aperture} min={0.1} max={64} step={0.1} display={`f/${formatDiffusionNumber(params.lens.aperture, 1)}`} onChange={(value) => update((current) => ({ ...current, presetId: null, lens: { ...current.lens, aperture: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
           <DiffusionRangeField label="位置变化" value={params.lens.positionVariation} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.lens.positionVariation)} onChange={(value) => update((current) => ({ ...current, presetId: null, lens: { ...current.lens, positionVariation: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
         </DiffusionSection>
-      </div>
+      </fieldset>
 
       <div className="mt-3 flex gap-2">
         <UiChipButton type="button" className="!h-8 flex-1 !justify-center !text-xs" onClick={() => controller.resetOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)}><RotateCcw className="h-3.5 w-3.5" />{t('imageEditor.diffusion.reset')}</UiChipButton>
@@ -199,4 +233,23 @@ export function DiffusionInspector(): JSX.Element {
       </div>
     </div>
   );
+}
+
+function resolvePreviewStatus(
+  previewState: ReturnType<typeof useImageEditorDocumentController>['previewState'],
+  t: ReturnType<typeof useI18n>['t']
+): string | undefined {
+  if (previewState?.phase === 'compiling') return t('imageEditor.diffusion.compiling');
+  if (previewState?.phase === 'rendering') return t('imageEditor.diffusion.rendering');
+  if (previewState?.phase !== 'degraded') return previewState?.message;
+  if (previewState.fallbackReason === 'webgpu-api-unavailable') {
+    return t('imageEditor.diffusion.sharpFallbackApiUnavailable');
+  }
+  if (previewState.fallbackReason === 'webgpu-adapter-unavailable') {
+    return t('imageEditor.diffusion.sharpFallbackAdapterUnavailable');
+  }
+  if (previewState.fallbackReason === 'webgpu-device-recovery-exhausted') {
+    return t('imageEditor.diffusion.sharpFallbackRecoveryExhausted');
+  }
+  return t('imageEditor.diffusion.sharpFallbackInitializationFailed');
 }

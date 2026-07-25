@@ -38,6 +38,45 @@ function fakeBitmap(): ImageBitmap {
 }
 
 describe('WorkerImageEditClient', () => {
+  it('保留 Worker 初始化失败的可观测原因，交由统一执行器决定是否降级', async () => {
+    const worker = new MockWorker()
+    const client = new WorkerImageEditClient(() => worker)
+    const pending = client.initialize()
+    const request = worker.requests[0]
+    if (request.type !== 'initialize') throw new Error('未发送 Worker 初始化请求')
+
+    worker.emit({
+      type: 'capabilities',
+      requestId: request.requestId,
+      capabilities: {
+        available: false,
+        adapterName: null,
+        backend: null,
+        isFallbackAdapter: null,
+        features: [],
+        limits: {},
+        rgba16Float: { renderable: false, sampleable: false },
+        offscreenCanvas: true,
+        imageBitmap: true,
+        supportedExportFormats: [],
+        initializationFailure: {
+          code: 'webgpu-adapter-unavailable',
+          detail: 'Worker 未找到可用 GPU adapter',
+        },
+        reason: 'Worker 未找到可用 GPU adapter',
+      },
+    })
+
+    await expect(pending).resolves.toMatchObject({
+      available: false,
+      reason: 'Worker 未找到可用 GPU adapter',
+      initializationFailure: {
+        code: 'webgpu-adapter-unavailable',
+      },
+    })
+    client.destroy()
+  })
+
   it('只采纳最新 revision 并关闭过期 ImageBitmap', async () => {
     const worker = new MockWorker()
     const client = new WorkerImageEditClient(() => worker)

@@ -5,6 +5,7 @@ import {
   type DiffusionOperationParams,
   type ImageEditEncodedFormat,
   type ImageEditExecutionCapabilities,
+  type ImageEditExecutionDiagnostics,
   type ImageEditExecutionPort,
   type ImageEditExecutionRequest,
   type ImageEditExecutionResult,
@@ -12,11 +13,25 @@ import {
 } from '@/core/imageEdit';
 import { createLogger } from '@/core/logging';
 import { getPlatform } from '@/platform';
-import type { ImageEditWorkerCapabilities } from '@/core/imageEdit/worker/protocol';
+import type {
+  ImageEditWorkerCapabilities,
+  ImageEditWorkerInitializationFailureCode,
+} from '@/core/imageEdit/worker/protocol';
+import { fitWithinPixelBudget, IMAGE_EDIT_PREVIEW_MAX_PIXELS } from '@/core/imageEdit/worker/exportPrototype';
 import { WorkerImageEditClient } from './workerImageEditClient';
 
 const logger = createLogger('features.imageEdit.execution');
 const MAX_DEVICE_RECOVERY_ATTEMPTS = 2;
+
+interface WebGpuFallbackDiagnostic {
+  reason: NonNullable<ImageEditExecutionDiagnostics['fallbackReason']>;
+  deviceRecoveryAttempts: number;
+  initializationFailureCode?: ImageEditWorkerInitializationFailureCode;
+}
+
+type WorkerExecutionOutcome =
+  | { kind: 'completed'; result: ImageEditExecutionResult }
+  | { kind: 'fallback'; diagnostic: WebGpuFallbackDiagnostic };
 
 export class UnifiedImageEditExecution implements ImageEditExecutionPort {
   private workerClient: WorkerImageEditClient | null = null;
@@ -39,13 +54,17 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         height: orientedInfo.height,
         quality: request.quality ?? params.quality,
       });
+      logPreviewBudget(requestId, purpose, orientedInfo, request.maxPixels);
       const normalizedRequest = { ...request, requestId, document };
       const workerResult = await this.tryWorkerExecution(normalizedRequest, recipe, composition);
-      const result = workerResult ?? await this.executeSharpFallback(
-        normalizedRequest,
-        params,
-        composition
-      );
+      const result = workerResult.kind === 'completed'
+        ? workerResult.result
+        : await this.executeSharpFallback(
+          normalizedRequest,
+          params,
+          composition,
+          workerResult.diagnostic
+        );
       logger.info('image_edit.execution.completed', {
         requestId,
         purpose,
@@ -83,14 +102,28 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
     request: ImageEditExecutionRequest & { requestId: string },
     recipe: ReturnType<typeof compileDiffusionRecipe>,
     composition: ImageEditWorkerComposition
-  ): Promise<ImageEditExecutionResult | null> {
+  ): Promise<WorkerExecutionOutcome> {
     const client = this.workerClient ?? new WorkerImageEditClient();
     this.workerClient = client;
     for (let attempt = 0; attempt <= MAX_DEVICE_RECOVERY_ATTEMPTS; attempt += 1) {
-      const capabilities = this.workerCapabilities ?? await client.initialize();
+      let capabilities: ImageEditWorkerCapabilities;
+      try {
+        capabilities = this.workerCapabilities ?? await client.initialize();
+      } catch (error) {
+        this.workerCapabilities = null;
+        const diagnostic = createWebGpuFallbackDiagnostic(error, attempt);
+        logWebGpuFallback(request.requestId, request.purpose ?? 'export', diagnostic);
+        return { kind: 'fallback', diagnostic };
+      }
       if (!capabilities.available) {
         this.workerCapabilities = null;
-        return null;
+        const diagnostic = createWebGpuFallbackDiagnostic(
+          capabilities.reason ?? 'Worker WebGPU 初始化未返回可用设备',
+          attempt,
+          capabilities.initializationFailure?.code
+        );
+        logWebGpuFallback(request.requestId, request.purpose ?? 'export', diagnostic);
+        return { kind: 'fallback', diagnostic };
       }
       this.workerCapabilities = capabilities;
       try {
@@ -111,6 +144,8 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
               request.requestId
             );
             return {
+              kind: 'completed',
+              result: {
               kind: 'preview-frame',
               frame: preview.bitmap,
               document: request.document,
@@ -123,6 +158,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
               diagnostics: {
                 durationMs: preview.durationMs,
                 deviceRecoveryAttempts: attempt,
+              },
               },
             };
           }
@@ -164,27 +200,47 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
             },
           };
           if (exported.revision !== undefined) result.revision = exported.revision;
-          return result;
+          return { kind: 'completed', result };
         } finally {
           removeAbortListener();
           this.activeWorkerRequestIds.delete(request.requestId);
         }
       } catch (error) {
         if (isAbortError(error)) throw error;
-        if (!isRecoverableDeviceError(error) || attempt === MAX_DEVICE_RECOVERY_ATTEMPTS) {
-          if (isRecoverableDeviceError(error)) return null;
+        if (!isRecoverableDeviceError(error)) {
           throw error;
         }
+        if (attempt === MAX_DEVICE_RECOVERY_ATTEMPTS) {
+          this.workerCapabilities = null;
+          const diagnostic: WebGpuFallbackDiagnostic = {
+            reason: 'webgpu-device-recovery-exhausted',
+            deviceRecoveryAttempts: attempt,
+          };
+          logWebGpuFallback(request.requestId, request.purpose ?? 'export', diagnostic);
+          return { kind: 'fallback', diagnostic };
+        }
+        logger.warn('WebGPU 设备异常，准备重建后重试', {
+          event: 'image_edit.execution.webgpu.recovery.start',
+          requestId: request.requestId,
+          context: { recoveryAttempt: attempt + 1 },
+        });
         this.workerCapabilities = null;
       }
     }
-    return null;
+    return {
+      kind: 'fallback',
+      diagnostic: {
+        reason: 'webgpu-device-recovery-exhausted',
+        deviceRecoveryAttempts: MAX_DEVICE_RECOVERY_ATTEMPTS,
+      },
+    };
   }
 
   private async executeSharpFallback(
     request: ImageEditExecutionRequest & { requestId: string },
     params: DiffusionOperationParams,
-    composition: ImageEditWorkerComposition
+    composition: ImageEditWorkerComposition,
+    fallbackDiagnostic: WebGpuFallbackDiagnostic
   ): Promise<ImageEditExecutionResult> {
     throwIfAborted(request.signal);
     assertSharpCompositionSupported(composition);
@@ -193,6 +249,15 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
     if (!capabilities.available) {
       throw new Error(`Sharp 柔光降级不可用：${capabilities.reason ?? '未知原因'}`);
     }
+    logger.warn('WebGPU 不可用，切换 Sharp 兼容执行', {
+      event: 'image_edit.execution.fallback.sharp.start',
+      requestId: request.requestId,
+      context: {
+        purpose: request.purpose ?? 'export',
+        fallbackReason: fallbackDiagnostic.reason,
+        deviceRecoveryAttempts: fallbackDiagnostic.deviceRecoveryAttempts,
+      },
+    });
     const result = await platform.image.renderDiffusionFallback({
       requestId: request.requestId,
       source: request.sourceImageUrl,
@@ -220,7 +285,11 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         height: result.height,
         revision: request.revision,
         capabilities: executionCapabilities,
-        diagnostics: createFallbackDiagnostics(result.durationMs, result.unsupportedParameters),
+        diagnostics: createFallbackDiagnostics(
+          result.durationMs,
+          result.unsupportedParameters,
+          fallbackDiagnostic
+        ),
       };
     }
     return {
@@ -237,7 +306,11 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
       height: result.height,
       revision: request.revision,
       capabilities: executionCapabilities,
-      diagnostics: createFallbackDiagnostics(result.durationMs, result.unsupportedParameters),
+      diagnostics: createFallbackDiagnostics(
+        result.durationMs,
+        result.unsupportedParameters,
+        fallbackDiagnostic
+      ),
     };
   }
 }
@@ -311,13 +384,95 @@ function createCapabilities(
 
 function createFallbackDiagnostics(
   durationMs: number,
-  unsupportedParameters: readonly string[]
+  unsupportedParameters: readonly string[],
+  fallbackDiagnostic: WebGpuFallbackDiagnostic
 ): NonNullable<ImageEditExecutionResult['diagnostics']> {
   return {
     durationMs,
-    fallbackReason: 'webgpu-unavailable-or-device-recovery-exhausted',
+    fallbackReason: fallbackDiagnostic.reason,
+    deviceRecoveryAttempts: fallbackDiagnostic.deviceRecoveryAttempts,
     unsupportedParameters,
   };
+}
+
+export function classifyWebGpuFallbackReason(
+  error: unknown,
+  deviceRecoveryAttempts: number,
+  initializationFailureCode?: ImageEditWorkerInitializationFailureCode
+): NonNullable<ImageEditExecutionDiagnostics['fallbackReason']> {
+  if (deviceRecoveryAttempts >= MAX_DEVICE_RECOVERY_ATTEMPTS && isRecoverableDeviceError(error)) {
+    return 'webgpu-device-recovery-exhausted';
+  }
+  if (initializationFailureCode === 'webgpu-api-unavailable') {
+    return 'webgpu-api-unavailable';
+  }
+  if (initializationFailureCode === 'webgpu-adapter-unavailable') {
+    return 'webgpu-adapter-unavailable';
+  }
+  const message = getErrorMessage(error).toLowerCase();
+  if (message.includes('navigator.gpu') || message.includes('webgpu api')) {
+    return 'webgpu-api-unavailable';
+  }
+  if (message.includes('gpu adapter') || message.includes('可用 gpu')) {
+    return 'webgpu-adapter-unavailable';
+  }
+  return 'webgpu-initialization-failed';
+}
+
+function createWebGpuFallbackDiagnostic(
+  error: unknown,
+  deviceRecoveryAttempts: number,
+  initializationFailureCode?: ImageEditWorkerInitializationFailureCode
+): WebGpuFallbackDiagnostic {
+  return {
+    reason: classifyWebGpuFallbackReason(
+      error,
+      deviceRecoveryAttempts,
+      initializationFailureCode
+    ),
+    deviceRecoveryAttempts,
+    initializationFailureCode,
+  };
+}
+
+function logWebGpuFallback(
+  requestId: string,
+  purpose: 'preview' | 'export',
+  diagnostic: WebGpuFallbackDiagnostic
+): void {
+  logger.warn('WebGPU 不可用，准备使用兼容执行器', {
+    event: 'image_edit.execution.webgpu.unavailable',
+    requestId,
+    context: {
+      purpose,
+      fallbackReason: diagnostic.reason,
+      deviceRecoveryAttempts: diagnostic.deviceRecoveryAttempts,
+      initializationFailureCode: diagnostic.initializationFailureCode,
+    },
+  });
+}
+
+function logPreviewBudget(
+  requestId: string,
+  purpose: 'preview' | 'export',
+  sourceSize: { width: number; height: number },
+  requestedMaxPixels: number | undefined
+): void {
+  if (purpose !== 'preview') return;
+  const maxPixels = requestedMaxPixels ?? IMAGE_EDIT_PREVIEW_MAX_PIXELS;
+  if (!Number.isInteger(maxPixels) || maxPixels <= 0) return;
+  const previewSize = fitWithinPixelBudget(sourceSize.width, sourceSize.height, maxPixels);
+  logger.debug('预览像素预算已应用', {
+    event: 'image_edit.execution.preview.budget',
+    requestId,
+    context: {
+      sourceWidth: sourceSize.width,
+      sourceHeight: sourceSize.height,
+      previewWidth: previewSize.width,
+      previewHeight: previewSize.height,
+      maxPixels,
+    },
+  });
 }
 
 function mapSharpFormat(format: ImageEditEncodedFormat): 'png' | 'jpeg' | 'webp' {
@@ -349,10 +504,15 @@ function isAbortError(error: unknown): boolean {
 }
 
 function isRecoverableDeviceError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = getErrorMessage(error).toLowerCase();
   return message.includes('device-lost')
     || message.includes('设备丢失')
-    || message.includes('device-unavailable');
+    || message.includes('device-unavailable')
+    || message.includes('device unavailable');
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function createRequestId(): string {

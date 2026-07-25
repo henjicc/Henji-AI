@@ -91,3 +91,62 @@
 - `src/features/assistant/imageEditAdapter.ts`、`hostActions.ts`：助手更新 V2 文档时保留柔光及未知操作。
 - `src/features/imageEdit/editor/useImageEditorSession.test.tsx`、`src/features/assistant/imageEditAdapter.test.ts`：事务撤销与助手保留操作回归测试。
 - `docs/task/图片编辑器摄影柔光工具/` 下总览、第三阶段任务、进度、决策、交接、变更和测试记录。
+
+# 第四阶段 4.1 修改文件
+
+## 预设与 Inspector
+
+- `src/core/imageEdit/diffusionPresets.ts`：九档通用预设、来源/授权/适用范围元数据、公开参数映射与旧 ID 兼容读取。
+- `src/features/imageEdit/tools/diffusion/DiffusionInspector.tsx`：按核心元数据展示预设及多语言说明，不再按预设 ID 写 UI 分支。
+- `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：预设选择与无品牌方法参考提示。
+
+## 质量基线与测试
+
+- `src/core/imageEdit/testing/diffusionCharts.ts`：八张程序化质量测试图。
+- `src/core/imageEdit/testing/diffusionBaseline.ts`：Golden 索引、数值/感知阈值和校验函数。
+- `src/core/imageEdit/testing/diffusionCharts.test.ts`、`diffusionBaseline.test.ts`：测试图覆盖、预设追溯、模式差异和 Golden/阈值登记测试。
+
+## 任务记录
+
+- `docs/task/图片编辑器摄影柔光工具/` 下总览、4.1/4.2 任务、重要记录、进度、决策、交接、变更和测试记录。
+
+# 第四阶段 4.2 修改文件
+
+## 统一验收记录
+
+- `docs/task/图片编辑器摄影柔光工具/00-任务总览.md`、`任务/第四阶段-标定与统一验收/4.2-完成统一测试与验收.md`：自动验收结果、阻塞状态、环境与未验证项。
+- `progress.md`、`decisions.md`、`handoff.md`、`changed-files.md`、`test-report.md`、`重要记录.md`：测试结果、既有全量 TypeScript 基线、用户交接步骤和最终阻塞原因。
+
+本任务未新增运行时代码；构建自动生成的 `resources/model-manifest.json` 与 `resources/progress-seeds.json` 均为既有 Git 忽略产物，未纳入改动。
+
+# 第四阶段 4.2 纠正修改文件
+
+## 预览与降级执行
+
+- `src/core/imageEdit/execution.ts`：收紧可观测 WebGPU 降级原因类型。
+- `src/core/imageEdit/worker/webgpuRuntime.ts`：预览先以原生 ImageBitmap 预缩放到像素预算，再进入朝向/WebGPU 渲染；导出路径不变。
+- `src/features/imageEdit/execution/imageEditExecution.ts`：区分 WebGPU API、adapter、初始化和恢复耗尽；记录预览预算、恢复和 Sharp 降级结构化日志。
+- `src/features/imageEdit/execution/workerImageEditClient.ts`：初始化能力日志补充 backend、fallback adapter 与失败原因。
+- `src/features/imageEdit/editor/ImageEditor.tsx`、`ImageEditorDocumentContext.ts`：把稳定降级原因传给 Inspector，而不硬编码 Sharp 状态。
+
+## 统一 UI 与 Electron 启动
+
+- `src/components/ui/Dropdown.tsx`：现有通用 Dropdown 增加标签关联、ARIA、键盘导航和焦点状态。
+- `src/features/imageEdit/tools/diffusion/DiffusionInspector.tsx`：模式、预设、档位、质量改用统一 Dropdown；补齐折叠区、状态与禁用语义。
+- `src/i18n/locales/zh-CN/ui.json`、`src/i18n/locales/en-US/ui.json`：增加四类降级提示文案。
+- `electron/main/chromium-session-data.ts`、`electron/main/index.ts`：在 `ready` 前配置并验证独立 Chromium session-data 目录，不删除旧缓存。
+
+## 测试与任务记录
+
+- `src/components/ui/Dropdown.test.ts`：覆盖自定义下拉的键盘打开、选择与 ARIA 状态。
+- `src/features/imageEdit/execution/imageEditExecution.test.ts`：覆盖四类 WebGPU 降级诊断分类。
+- `src/features/imageEdit/execution/workerImageEditClient.test.ts`：覆盖 Worker 初始化失败原因的传递。
+- `docs/task/图片编辑器摄影柔光工具/` 下 `4.2`、`progress.md`、`decisions.md`、`handoff.md`、`changed-files.md`、`test-report.md`：纠正计划、验证结果和手动验收交接。
+
+## 4.2 WebGPU 启动纠正
+
+- `electron/main/chromium-session-data.ts`：开发态按 worktree 摘要隔离 `userData`，再配置独立 Chromium session-data；不会接触其他 worktree/原项目数据。
+- `electron/main/webgpu-runtime.ts`、`electron/main/index.ts`：在 `ready` 前配置 WebGPU/高性能 GPU 启动开关，并在 GPU 信息可用后记录安全的主进程特性状态。
+- `src/core/imageEdit/worker/protocol.ts`、`webgpuRuntimeSupport.ts`、`webgpuRuntime.ts`：将 Worker 初始化失败拆分为安全阶段码与脱敏详情。
+- `src/features/imageEdit/execution/workerImageEditClient.ts`、`imageEditExecution.ts`：以 requestId 记录 Worker 失败阶段、adapter/backend 与限制，并保持现有稳定降级提示。
+- `src/features/imageEdit/execution/imageEditExecution.test.ts`、`workerImageEditClient.test.ts`：覆盖初始化失败阶段码的稳定降级分类与协议传递。

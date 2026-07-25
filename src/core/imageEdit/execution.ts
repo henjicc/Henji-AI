@@ -5,6 +5,11 @@ export type ImageEditRenderPurpose = 'preview' | 'export';
 export type ImageEditRenderQuality = 'realtime' | 'high';
 export type ImageEditExecutionBackend = 'webgpu-worker' | 'sharp' | 'browser-canvas';
 export type ImageEditEncodedFormat = 'image/png' | 'image/jpeg' | 'image/webp';
+export type ImageEditFallbackReason =
+  | 'webgpu-api-unavailable'
+  | 'webgpu-adapter-unavailable'
+  | 'webgpu-initialization-failed'
+  | 'webgpu-device-recovery-exhausted';
 
 export interface ImageEditExecutionRequest {
   sourceImageUrl: string;
@@ -31,7 +36,7 @@ export interface ImageEditExecutionProgress {
 
 export interface ImageEditExecutionDiagnostics {
   durationMs?: number;
-  fallbackReason?: string;
+  fallbackReason?: ImageEditFallbackReason;
   deviceRecoveryAttempts?: number;
   unsupportedParameters?: readonly string[];
 }

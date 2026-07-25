@@ -8,6 +8,25 @@ export type ImageEditWorkerSource =
 
 export type ImageEditExportFormat = 'image/png' | 'image/jpeg' | 'image/webp'
 
+/**
+ * Worker 初始化失败时可安全写入日志的阶段码。它不携带路径、驱动版本或原始异常，
+ * 以免将运行环境细节带入渲染层。
+ */
+export type ImageEditWorkerInitializationFailureCode =
+  | 'worker-canvas-api-unavailable'
+  | 'webgpu-api-unavailable'
+  | 'webgpu-adapter-unavailable'
+  | 'webgpu-device-request-failed'
+  | 'webgpu-canvas-format-unavailable'
+  | 'webgpu-baseline-pipeline-failed'
+  | 'webgpu-diffusion-pipeline-failed'
+  | 'webgpu-initialization-unknown'
+
+export interface ImageEditWorkerInitializationFailure {
+  code: ImageEditWorkerInitializationFailureCode
+  detail: string
+}
+
 /** Worker 内可执行的固定操作顺序：朝向 → 柔光 → 标注 → 裁剪。 */
 export interface ImageEditWorkerComposition {
   orientation: OrientationOperationParams
@@ -85,6 +104,7 @@ export interface ImageEditWorkerCapabilities {
     hardCancellationSupported: false
     unsupportedParameters: readonly string[]
   }
+  initializationFailure?: ImageEditWorkerInitializationFailure
   reason?: string
 }
 

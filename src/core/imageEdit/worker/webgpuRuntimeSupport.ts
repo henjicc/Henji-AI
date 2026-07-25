@@ -1,5 +1,6 @@
 import type {
   ImageEditWorkerCapabilities,
+  ImageEditWorkerInitializationFailure,
   ImageEditWorkerSource,
 } from './protocol'
 
@@ -200,7 +201,7 @@ export function createUniformBuffer(
 }
 
 export function unavailableCapabilities(
-  reason: string
+  failure: ImageEditWorkerInitializationFailure
 ): ImageEditWorkerCapabilities {
   return {
     available: false,
@@ -213,7 +214,8 @@ export function unavailableCapabilities(
     offscreenCanvas: typeof OffscreenCanvas !== 'undefined',
     imageBitmap: typeof createImageBitmap !== 'undefined',
     supportedExportFormats: [],
-    reason,
+    initializationFailure: failure,
+    reason: failure.detail,
   }
 }
 

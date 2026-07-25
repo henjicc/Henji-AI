@@ -1,5 +1,9 @@
 import { createContext, useContext } from 'react';
-import type { ImageEditDocument, ImageEditOperation } from '@/core/imageEdit';
+import type {
+  ImageEditDocument,
+  ImageEditFallbackReason,
+  ImageEditOperation,
+} from '@/core/imageEdit';
 
 export interface ImageEditDocumentController {
   document: ImageEditDocument;
@@ -17,6 +21,7 @@ export interface ImageEditDocumentController {
 export interface ImageEditorPreviewState {
   phase: 'idle' | 'compiling' | 'rendering' | 'degraded' | 'failed';
   backend?: 'webgpu-worker' | 'sharp' | 'browser-canvas';
+  fallbackReason?: ImageEditFallbackReason;
   message?: string;
 }
 

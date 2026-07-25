@@ -180,6 +180,14 @@ export class WorkerImageEditClient {
           requestId: event.requestId,
           available: event.capabilities.available,
           adapterName: event.capabilities.adapterName,
+          backend: event.capabilities.backend,
+          isFallbackAdapter: event.capabilities.isFallbackAdapter,
+          limits: event.capabilities.available
+            ? event.capabilities.limits
+            : undefined,
+          initializationFailureCode: event.capabilities.initializationFailure?.code,
+          initializationFailureDetail: event.capabilities.initializationFailure?.detail,
+          reason: event.capabilities.reason,
         })
         settleSuccess(this.pendingCapabilities, event.requestId, event.capabilities)
         return

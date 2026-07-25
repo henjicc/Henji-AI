@@ -24,6 +24,8 @@ import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
+import { configureChromiumSessionData } from './chromium-session-data'
+import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runtime'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
 import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
 import { runLogRetention } from './services/logging'
@@ -31,6 +33,9 @@ import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
 
 registerMediaProtocolScheme()
+configureChromiumSessionData()
+configureWebGpuRuntime()
+registerWebGpuDiagnostics()
 
 const remoteDebuggingPort = process.env['HENJI_ELECTRON_REMOTE_DEBUGGING_PORT']
 if (remoteDebuggingPort) {
