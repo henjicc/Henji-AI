@@ -336,6 +336,7 @@ export function useTaskGeneration({
         mediaType: task.type,
         resultAvailable: Boolean(task.result),
         errorCode: task.error ? 'GENERATION_FAILED' : null,
+        errorMessage: task.error?.slice(0, 1_000) ?? null,
       }
     },
     cancel: async (taskId, reason) => {

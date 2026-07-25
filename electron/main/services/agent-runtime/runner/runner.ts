@@ -354,6 +354,7 @@ export class AgentRunner {
       onObservation: (call, observation) => {
         this.observations.push(observation)
         this.conversation.push(toolMessage(call, observation))
+        this.recoveryGuard.observe(call, observation)
         if (this.recoveryGuard.consumeVerification(call, observation) && this.state.workingSummary) {
           this.state.workingSummary = markWorkingSummaryRecoveryVerified(this.state.workingSummary)
         }

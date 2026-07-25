@@ -9,6 +9,7 @@ import {
   prepareGenerationTask,
   searchGenerationModels,
 } from '@/core/assistant/generationPreparation'
+import { createGenerationTaskRecoveryAdvice } from '@/core/assistant/generationTaskRecovery'
 import {
   AGENT_CANVAS_CATALOG_VERSION,
   getAgentCanvasNodeSchema,
@@ -117,7 +118,12 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
     if (query.name !== 'get_generation_task') return {}
     const task = getVisibleGenerationTask(query.input.taskId)
     if (!task) throw new Error('TASK_NOT_FOUND')
-    return { task }
+    return {
+      task: {
+        ...task,
+        recovery: createGenerationTaskRecoveryAdvice(task),
+      },
+    }
   }],
   ['list_toolbox_tools', async () => ({ tools: listToolboxToolsFromAgent() })],
   ['get_toolbox_state', async () => ({ state: getToolboxStateFromAgent() })],

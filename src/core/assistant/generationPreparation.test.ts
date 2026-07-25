@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'
@@ -129,5 +130,14 @@ describe('generationPreparation', () => {
       prompt: '一只猫',
       mediaType: 'video',
     })).toThrow('生成媒体类型与模型能力不匹配')
+  })
+
+  it('KIE Z-Image 比例配置与供应商接口文档保持一致', () => {
+    const source = readFileSync('src/models/kie/z-image.model.ts', 'utf8')
+    expect(source).toContain("{ value: '4:3', label: '4:3' }")
+    expect(source).toContain("{ value: '3:4', label: '3:4' }")
+    expect(source).toContain("{ value: '16:9', label: '16:9' }")
+    expect(source).toContain("{ value: '9:16', label: '9:16' }")
+    expect(source).not.toContain("{ value: '2:3', label: '2:3' }")
   })
 })

@@ -64,6 +64,7 @@ export interface VisibleGenerationTaskSummary {
   mediaType: MediaType
   resultAvailable: boolean
   errorCode: string | null
+  errorMessage: string | null
 }
 
 export interface VisibleGenerationTaskHandlers {

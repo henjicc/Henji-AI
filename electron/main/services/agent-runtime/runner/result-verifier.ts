@@ -50,6 +50,28 @@ function generationStatus(observations: AgentToolObservation[]): string | null {
   return null
 }
 
+function generationTaskRecoveryGuidance(observations: AgentToolObservation[]): string | null {
+  for (const observation of [...observations].reverse()) {
+    if (observation.source.toolName !== 'get_generation_task') continue
+    const task = asRecord(asRecord(observation.output)?.task)
+    if (!task || typeof task.status !== 'string') continue
+    const recovery = asRecord(task.recovery)
+    if (recovery?.strategy === 'correct_same_model_parameters'
+      && typeof recovery.sourceModelId === 'string'
+      && typeof recovery.sourceTaskId === 'string') {
+      return [
+        `[生成任务参数恢复要求] 任务 ${recovery.sourceTaskId} 被供应商判定为参数错误。`,
+        `必须保留模型 ${recovery.sourceModelId}，依次读取该模型 schema、修正允许值、prepare 后最多提交一次同模型修正任务。`,
+        '禁止搜索、读取或创建替代模型；若当前模型无法满足用户明确要求，应向用户说明并请求选择。',
+      ].join('')
+    }
+    if (['pending', 'queued', 'generating'].includes(task.status.toLowerCase())) {
+      return `任务 ${typeof task.taskId === 'string' ? task.taskId : ''} 当前为 ${task.status}；不得在同一 Agent 运行中立即重复读取该任务，向用户说明已提交并可在生成工作区查看。`
+    }
+  }
+  return null
+}
+
 function hasWriteEvidence(observation: AgentToolObservation): boolean {
   const output = asRecord(observation.output)
   if (!output) return false
@@ -83,7 +105,7 @@ export function buildRecoveryGuidance(
     const failure = observationFailure(observation)
     return failure ? [{ observation, failure }] : []
   })
-  if (failures.length === 0) return null
+  if (failures.length === 0) return generationTaskRecoveryGuidance(observations)
   const guidance = failures.map(({ observation, failure }) => {
     const definition = registry.get(observation.source.toolName)
     const writeMayHaveUnknownSideEffect = Boolean(definition && !definition.readOnly)

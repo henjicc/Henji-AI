@@ -131,4 +131,26 @@ describe('Agent result verifier', () => {
     })
     expect(result).toMatchObject({ passed: true, clarificationRequired: true })
   })
+
+  it('供应商参数错误要求保留原模型修正，生成中不重复轮询', () => {
+    const registry = registryWithTool({ name: 'get_generation_task', readOnly: true })
+    const parameterError = observation('get_generation_task', {
+      task: {
+        taskId: 'task-source',
+        status: 'error',
+        modelId: 'kie-z-image',
+        recovery: {
+          strategy: 'correct_same_model_parameters',
+          sourceTaskId: 'task-source',
+          sourceModelId: 'kie-z-image',
+        },
+      },
+    })
+    expect(buildRecoveryGuidance([parameterError], registry)).toContain('禁止搜索、读取或创建替代模型')
+
+    const generating = observation('get_generation_task', {
+      task: { taskId: 'task-next', status: 'generating' },
+    })
+    expect(buildRecoveryGuidance([generating], registry)).toContain('不得在同一 Agent 运行中立即重复读取')
+  })
 })

@@ -290,7 +290,7 @@ export function createFrontendBuiltinTools(invoke: FrontendToolInvoker): AgentTo
     name: 'get_generation_task',
     version: 1,
     title: '读取生成任务',
-    description: '按明确 taskId 读取脱敏后的生成任务状态。',
+    description: '按明确 taskId 读取脱敏后的生成任务状态、失败错误摘要和恢复约束。任务处于 pending、queued 或 generating 时不得在同一运行中立即重复轮询；任务为 error 且返回同模型参数修正约束时，必须保留原模型并按约束恢复。',
     category: 'generation',
     side: 'frontend',
     risk: 'R0',
