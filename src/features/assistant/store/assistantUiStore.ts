@@ -31,6 +31,8 @@ interface AssistantUiState {
   setFloatingPosition: (position: AssistantPanelPosition) => void
   setSize: (size: AssistantPanelSize) => void
   setActiveRun: (runId: string | null, goal?: string) => void
+  setThreadId: (threadId: string) => void
+  startNewConversation: () => void
   setPendingGoal: (goal: string | null) => void
   setApprovalMode: (mode: AgentApprovalMode) => void
 }
@@ -58,6 +60,13 @@ export const useAssistantUiStore = create<AssistantUiState>()(
         activeRunId,
         currentGoal: goal ?? state.currentGoal,
       })),
+      setThreadId: (threadId) => set({ threadId }),
+      startNewConversation: () => set({
+        threadId: `assistant-thread-${crypto.randomUUID()}`,
+        activeRunId: null,
+        currentGoal: '',
+        pendingGoal: null,
+      }),
       setPendingGoal: (pendingGoal) => set(pendingGoal
         ? { pendingGoal, open: true }
         : { pendingGoal: null }),

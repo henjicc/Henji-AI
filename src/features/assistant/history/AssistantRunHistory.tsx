@@ -34,8 +34,8 @@ function formatTime(value: string): string {
 export function AssistantRunHistory({
   onOpenConversation,
 }: AssistantRunHistoryProps): JSX.Element {
-  const threadId = useAssistantUiStore((state) => state.threadId)
   const setActiveRun = useAssistantUiStore((state) => state.setActiveRun)
+  const setThreadId = useAssistantUiStore((state) => state.setThreadId)
   const [runs, setRuns] = useState<AgentRunSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [retryingRunId, setRetryingRunId] = useState<string | null>(null)
@@ -45,19 +45,20 @@ export function AssistantRunHistory({
     setLoading(true)
     setError(null)
     try {
-      setRuns(await listAgentRuns(threadId, 50))
+      setRuns(await listAgentRuns(undefined, 50))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取运行历史失败')
     } finally {
       setLoading(false)
     }
-  }, [threadId])
+  }, [])
 
   useEffect(() => {
     void refresh()
   }, [refresh])
 
   const openRun = (run: AgentRunSummary): void => {
+    setThreadId(run.threadId)
     setActiveRun(run.runId, run.goal)
     onOpenConversation()
   }
@@ -67,6 +68,7 @@ export function AssistantRunHistory({
     setError(null)
     try {
       const result = await retryAgentRun(run.runId)
+      setThreadId(run.threadId)
       setActiveRun(result.runId, run.goal)
       onOpenConversation()
     } catch (cause) {
@@ -92,7 +94,7 @@ export function AssistantRunHistory({
         </UiIconButton>
       </div>
 
-      <div className="ui-scrollbar min-h-0 flex-1 space-y-1.5 overflow-y-auto p-3 [contain:layout_paint_style]">
+      <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto [contain:layout_paint_style]">
         {loading && runs.length === 0 ? (
           <div className="flex items-center justify-center gap-2 py-12 text-xs text-text-muted">
             <LoaderCircle className="h-4 w-4 animate-spin" />正在读取
@@ -104,45 +106,44 @@ export function AssistantRunHistory({
         ) : null}
 
         {runs.map((run) => (
-          <article
+          <div
             key={run.runId}
-            className="rounded-lg border border-border-dark bg-panel px-2.5 py-2 [content-visibility:auto] [contain-intrinsic-size:auto_64px]"
+            className="group flex min-h-[60px] items-stretch border-b border-border-dark [content-visibility:auto] [contain-intrinsic-size:auto_60px] last:border-b-0"
           >
-            <div className="flex items-start gap-2">
-              <UiButton
-                type="button"
-                variant="ghost"
-                onClick={() => openRun(run)}
-                className="min-w-0 flex-1 justify-start !px-1 !py-0 text-left"
-              >
-                <MessageSquareText className="mr-2 h-3.5 w-3.5 shrink-0 text-text-muted" />
-                <span className="min-w-0">
-                  <span className="block truncate text-xs text-text-dark">{run.goal || '未命名任务'}</span>
-                  <span className="mt-0.5 block text-[10px] font-normal text-text-muted">
-                    {statusLabels[run.status]} · {formatTime(run.updatedAt)}
-                    {run.recoveryStatus === 'recovery_required' ? ' · 需要确认重试' : ''}
-                  </span>
+            <UiButton
+              type="button"
+              variant="ghost"
+              onClick={() => openRun(run)}
+              title="打开此对话"
+              className="min-w-0 flex-1 justify-start !rounded-none !border-0 !bg-transparent !px-3 !py-2 text-left hover:!bg-surface-dark"
+            >
+              <MessageSquareText className="mr-2 h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                <span className="w-full truncate text-xs text-text-dark">{run.goal || '未命名任务'}</span>
+                <span className="w-full truncate text-[10px] font-normal text-text-muted">
+                  {statusLabels[run.status]} · {formatTime(run.updatedAt)}
+                  {run.recoveryStatus === 'recovery_required' ? ' · 需要确认重试' : ''}
                 </span>
-              </UiButton>
-              {run.canRetry ? (
-                <UiIconButton
-                  type="button"
-                  title="重新运行"
-                  onClick={() => void retry(run)}
-                  className="!h-7 !w-7 !rounded-md"
-                  disabled={retryingRunId !== null}
-                >
-                  {retryingRunId === run.runId
-                    ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                    : <RotateCcw className="h-3.5 w-3.5" />}
-                </UiIconButton>
-              ) : null}
-            </div>
-          </article>
+              </span>
+            </UiButton>
+            {run.canRetry ? (
+              <UiIconButton
+                type="button"
+                title="重新运行"
+                onClick={() => void retry(run)}
+                className="my-auto mr-2 !h-7 !w-7 !rounded-md"
+                disabled={retryingRunId !== null}
+              >
+                {retryingRunId === run.runId
+                  ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+                  : <RotateCcw className="h-3.5 w-3.5" />}
+              </UiIconButton>
+            ) : null}
+          </div>
         ))}
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
+          <div className="m-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span className="leading-5">{error}</span>
           </div>

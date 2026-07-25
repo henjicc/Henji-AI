@@ -1,4 +1,4 @@
-import { BrainCircuit, GripHorizontal, History, MessageSquareText, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
+import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type RefObject } from 'react'
 
 import { UiIconButton } from '@/components/ui'
@@ -22,6 +22,7 @@ interface AssistantSidebarProps {
 
 export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.Element {
   const [contentView, setContentView] = useState<'conversation' | 'history' | 'memory'>('conversation')
+  const [conversationVersion, setConversationVersion] = useState(0)
   const open = useAssistantUiStore((state) => state.open)
   const mode = useAssistantUiStore((state) => state.mode)
   const position = useAssistantUiStore((state) => state.floatingPosition)
@@ -30,6 +31,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
   const setMode = useAssistantUiStore((state) => state.setMode)
   const setFloatingPosition = useAssistantUiStore((state) => state.setFloatingPosition)
   const setSize = useAssistantUiStore((state) => state.setSize)
+  const startNewConversation = useAssistantUiStore((state) => state.startNewConversation)
   const { shouldRender, isVisible } = useDialogTransition(open, 180)
   const interaction = useAssistantPanelInteraction({
     enabled: open,
@@ -102,7 +104,18 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             {mode === 'floating' ? <GripHorizontal className={`ml-1 h-4 w-4 text-text-muted ${interaction.dragging ? 'text-accent' : ''}`} /> : null}
           </div>
           <div className="flex items-center gap-1" data-assistant-drag-ignore>
-            <UiIconButton type="button" active={contentView === 'conversation'} onClick={() => setContentView('conversation')} title="当前对话" className="!h-7 !w-7 !rounded-md"><MessageSquareText className="h-3.5 w-3.5" /></UiIconButton>
+            <UiIconButton
+              type="button"
+              onClick={() => {
+                startNewConversation()
+                setConversationVersion((version) => version + 1)
+                setContentView('conversation')
+              }}
+              title="新建对话"
+              className="!h-7 !w-7 !rounded-md"
+            >
+              <MessageSquarePlus className="h-3.5 w-3.5" />
+            </UiIconButton>
             <UiIconButton type="button" active={contentView === 'history'} onClick={() => setContentView('history')} title="运行历史" className="!h-7 !w-7 !rounded-md"><History className="h-3.5 w-3.5" /></UiIconButton>
             <UiIconButton type="button" active={contentView === 'memory'} onClick={() => setContentView('memory')} title="助手记忆" className="!h-7 !w-7 !rounded-md"><BrainCircuit className="h-3.5 w-3.5" /></UiIconButton>
             <UiIconButton type="button" active={mode === 'left'} onClick={() => setMode('left')} title={modeLabels.left} className="!h-7 !w-7 !rounded-md"><PanelLeft className="h-3.5 w-3.5" /></UiIconButton>
@@ -111,7 +124,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             <UiIconButton type="button" onClick={() => setOpen(false)} title="收起智能助手" hoverVariant="danger" className="!h-7 !w-7 !rounded-md"><X className="h-3.5 w-3.5" /></UiIconButton>
           </div>
         </header>
-        {contentView === 'conversation' ? <AssistantConversation /> : null}
+        {contentView === 'conversation' ? <AssistantConversation key={conversationVersion} /> : null}
         {contentView === 'history'
           ? <AssistantRunHistory onOpenConversation={() => setContentView('conversation')} />
           : null}
@@ -128,9 +141,6 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             onPointerDown={(event) => interaction.onResizePointerDown(event, 'width')}
             onKeyDown={(event) => interaction.onResizeKeyDown(event, 'width')}
           >
-            <div className={`pointer-events-none absolute inset-y-10 w-px transition-colors group-hover:bg-accent group-focus:bg-accent ${
-              mode === 'left' ? 'right-0' : 'left-0'
-            } ${interaction.resizing === 'width' ? 'bg-accent' : 'bg-border-dark'}`} />
           </div>
         ) : (
           <>
@@ -144,7 +154,6 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               onPointerDown={(event) => interaction.onResizePointerDown(event, 'width')}
               onKeyDown={(event) => interaction.onResizeKeyDown(event, 'width')}
             >
-              <div className={`pointer-events-none absolute inset-y-2 right-0 w-px transition-colors group-hover:bg-accent group-focus:bg-accent ${interaction.resizing === 'width' ? 'bg-accent' : 'bg-border-dark'}`} />
             </div>
             <div
               role="separator"
@@ -156,7 +165,6 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               onPointerDown={(event) => interaction.onResizePointerDown(event, 'height')}
               onKeyDown={(event) => interaction.onResizeKeyDown(event, 'height')}
             >
-              <div className={`pointer-events-none absolute bottom-0 inset-x-2 h-px transition-colors group-hover:bg-accent group-focus:bg-accent ${interaction.resizing === 'height' ? 'bg-accent' : 'bg-border-dark'}`} />
             </div>
             <div
               role="separator"
@@ -167,7 +175,6 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
               onPointerDown={(event) => interaction.onResizePointerDown(event, 'both')}
               onKeyDown={(event) => interaction.onResizeKeyDown(event, 'both')}
             >
-              <div className={`pointer-events-none absolute bottom-1 right-1 h-2.5 w-2.5 border-b border-r transition-colors group-hover:border-accent group-focus:border-accent ${interaction.resizing === 'both' ? 'border-accent' : 'border-border-dark'}`} />
             </div>
           </>
         )}
