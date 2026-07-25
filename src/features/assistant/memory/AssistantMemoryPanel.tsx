@@ -20,7 +20,7 @@ import {
   updateAgentMemoryRecord,
   updateAgentMemorySettings,
 } from '@/commands/assistant'
-import { Dropdown, UiButton, UiIconButton, UiSwitch, UiTextArea } from '@/components/ui'
+import { Dropdown, UiButton, UiIconButton, UiSwitch, UiTextArea, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentMemoryRecord, AgentMemoryState } from '@/core/assistant/memory'
 
 const ttlOptions = [
@@ -103,7 +103,7 @@ export function AssistantMemoryPanel(): JSX.Element {
 
         {state ? (
           <>
-            <div className="rounded-lg border border-border-dark bg-panel p-2.5">
+            <div className={`rounded-lg ${UI_INSET_SURFACE_CLASS} p-2.5`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-medium text-text-dark">长期记忆</div>
@@ -166,7 +166,7 @@ export function AssistantMemoryPanel(): JSX.Element {
             {state.memories.map((memory) => (
               <article
                 key={memory.memoryId}
-                className="rounded-lg border border-border-dark bg-panel p-2.5 [content-visibility:auto] [contain-intrinsic-size:auto_92px]"
+                className={`rounded-lg ${UI_INSET_SURFACE_CLASS} p-2.5 [content-visibility:auto] [contain-intrinsic-size:auto_92px]`}
               >
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">

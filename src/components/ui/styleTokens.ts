@@ -60,6 +60,15 @@ export const UI_SECTION_STACK_CLASS = 'space-y-8';
 export const UI_PANEL_SURFACE_CLASS =
   'bg-panel border border-border-dark text-text-dark shadow-panel';
 
+/**
+ * 内嵌表面（五级容器词汇表的第 4 级 Surface）。
+ *
+ * 只用更暗的底色做层次，不画边框不画阴影——内层背景只能比外层更暗，不能更亮。
+ * `<UiPanel variant="inset">` 就是它，元素类型不是 div（如 `<details>`/`<section>`）
+ * 时可以直接消费这个类串，不要另写一套 `bg-layer`/`bg-surface-dark` 的浅色底。
+ */
+export const UI_INSET_SURFACE_CLASS = 'bg-app/40 text-text-dark';
+
 export const UI_FIELD_SURFACE_CLASS =
   'bg-surface-dark border border-border-dark text-text-dark';
 

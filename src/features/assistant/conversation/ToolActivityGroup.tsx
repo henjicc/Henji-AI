@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronDown, SearchCheck } from 'lucide-react'
 import { useState } from 'react'
 
-import { UiButton } from '@/components/ui'
+import { UiButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 
 import type { AgentToolActivity, AgentToolActivityGroup } from './agentRunReducer'
 import { ToolActivityCard } from './ToolActivityCard'
@@ -37,7 +37,7 @@ export function ToolActivityGroup({
   }
 
   return (
-    <section className="rounded-md bg-surface-dark/60 px-1 py-0.5">
+    <section className={`rounded-md ${UI_INSET_SURFACE_CLASS} px-1 py-0.5`}>
       <UiButton
         type="button"
         variant="ghost"

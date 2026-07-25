@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import type { CSSProperties } from 'react'
 
+import { UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentRunStatus } from '@/core/assistant/events'
 
 import type { AgentExecutionPresentation } from './agentRunReducer'
@@ -57,7 +58,7 @@ export function ExecutionPlanCard({
   )
 
   return (
-    <details style={deferredBlockStyle} className="group rounded-lg border border-border-dark/70 bg-layer/70 px-2 py-1.5">
+    <details style={deferredBlockStyle} className={`group rounded-lg ${UI_INSET_SURFACE_CLASS} px-2 py-1.5`}>
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2">
         <ListChecks className="h-3.5 w-3.5 shrink-0 text-accent" />
         <span className="shrink-0 text-2xs font-medium text-text-dark">执行计划</span>

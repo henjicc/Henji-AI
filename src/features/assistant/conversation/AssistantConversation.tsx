@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
 
-import { UiButton } from '@/components/ui'
+import { UiButton, UiPanel } from '@/components/ui'
 import type { AgentEvent } from '@/core/assistant/events'
 import {
   createEmptyPromptDocument,
@@ -170,11 +170,12 @@ export function AssistantConversation(): JSX.Element {
           </div>
         ) : null}
 
+        {/* 用户消息短、需要边界感，用 inset（比侧栏底色更暗）；助手消息长，只留缩进不套容器 */}
         {currentGoal ? (
-          <section style={deferredBlockStyle} className="ml-7 rounded-xl border border-border-dark bg-layer p-3">
+          <UiPanel variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
             <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><UserRound className="h-3.5 w-3.5" />你的目标</div>
             <p className="whitespace-pre-wrap break-words text-sm leading-6 text-text-dark">{currentGoal}</p>
-          </section>
+          </UiPanel>
         ) : null}
 
         {runState ? <ExecutionPlanCard presentation={execution} runStatus={runState.status} /> : null}
@@ -197,21 +198,22 @@ export function AssistantConversation(): JSX.Element {
         {approval ? <ApprovalCard approval={approval} onDecision={(decision) => void run.respondApproval(approval.approvalId, decision)} /> : null}
 
         {deferredStreamedText && runState && !terminalStatuses.has(runState.status) ? (
-          <section style={deferredBlockStyle} className="mr-7 rounded-xl border border-border-dark bg-panel p-3">
+          <section style={deferredBlockStyle} className="mr-7">
             <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />回应生成中</div>
             <AssistantMarkdown>{deferredStreamedText}</AssistantMarkdown>
           </section>
         ) : null}
 
         {runState?.finalText ? (
-          <section style={deferredBlockStyle} className="mr-7 rounded-xl border border-border-dark bg-panel p-3">
+          <section style={deferredBlockStyle} className="mr-7">
             <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />助手</div>
             <AssistantMarkdown>{runState.finalText}</AssistantMarkdown>
           </section>
         ) : null}
 
+        {/* 错误块靠语义色底提示，不再加边框——它已在侧栏卡片内部，加框就是第二层卡片 */}
         {runState?.error ? (
-          <section style={deferredBlockStyle} className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
+          <section style={deferredBlockStyle} className="rounded-lg bg-danger/10 p-3 text-xs text-danger">
             <div className="flex items-center gap-1.5 font-medium"><AlertCircle className="h-4 w-4" />{runState.error.code}</div>
             <p className="mt-1.5 leading-5">{runState.error.message}</p>
             <p className="mt-1.5 leading-5 text-text-muted">下一步：{describeErrorRecovery(runState.error)}</p>
@@ -219,7 +221,7 @@ export function AssistantConversation(): JSX.Element {
         ) : null}
 
         {run.view.actionError || resultError ? (
-          <section style={deferredBlockStyle} className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
+          <section style={deferredBlockStyle} className="rounded-lg bg-danger/10 p-3 text-xs text-danger">
             <div className="flex items-start gap-2"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /><span className="leading-5">{run.view.actionError ?? resultError}</span></div>
             <UiButton type="button" size="sm" variant="ghost" onClick={() => { run.clearActionError(); setResultError(null) }} className="mt-2 h-7 px-2">知道了</UiButton>
           </section>

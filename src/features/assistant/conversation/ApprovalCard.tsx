@@ -19,9 +19,9 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps): JSX.E
   const targets = Object.entries(approval.targetIds)
 
   return (
-    <section style={deferredCardStyle} className="rounded-xl border border-warning/40 bg-warning/10 p-3" aria-label="等待审批">
+    <section style={deferredCardStyle} className="rounded-lg bg-warning/10 p-3" aria-label="等待审批">
       <div className="flex items-start gap-2.5">
-        <div className="mt-0.5 rounded-lg border border-warning/30 bg-warning/10 p-1.5 text-warning">
+        <div className="mt-0.5 rounded-lg bg-warning/10 p-1.5 text-warning">
           <ShieldCheck className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
@@ -33,7 +33,7 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps): JSX.E
         </div>
       </div>
 
-      <dl className="mt-3 grid gap-1.5 rounded-lg border border-border-dark bg-app/60 p-2.5 text-2xs text-text-muted">
+      <dl className="mt-3 grid gap-1.5 rounded-lg bg-app/60 p-2.5 text-2xs text-text-muted">
         <div className="flex justify-between gap-3"><dt>权限</dt><dd className="break-all text-right text-text-dark">{approval.permission}</dd></div>
         <div className="flex justify-between gap-3"><dt>作用域</dt><dd className="break-all text-right text-text-dark">{approval.scope}</dd></div>
         <div className="flex justify-between gap-3"><dt>可撤销</dt><dd className="text-text-dark">{approval.reversible ? '是' : '否'}</dd></div>

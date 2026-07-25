@@ -21,6 +21,7 @@ import {
   UI_FIELD_DISABLED_CLASS,
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
+  UI_INSET_SURFACE_CLASS,
   UI_OPTION_ITEM_ACTIVE_CLASS,
   UI_OPTION_ITEM_CLASS,
   UI_OPTION_ITEM_HOVER_CLASS,
@@ -224,7 +225,7 @@ interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
 // 圆角跟随层级：外层面板 rounded-xl，内嵌元素 rounded-lg。内层圆角不得大于外层。
 function resolveUiPanelSurface(variant: UiPanelVariant): string {
   if (variant === 'inset') {
-    return 'rounded-lg bg-app/40 text-text-dark';
+    return `rounded-lg ${UI_INSET_SURFACE_CLASS}`;
   }
   if (variant === 'bare') {
     return 'rounded-lg';

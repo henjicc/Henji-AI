@@ -1,7 +1,7 @@
 import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type RefObject } from 'react'
 
-import { UiIconButton } from '@/components/ui'
+import { UiIconButton, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 
 import { AssistantConversation } from './conversation/AssistantConversation'
@@ -85,7 +85,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
       <aside
         aria-label="智能助手"
         aria-hidden={!open}
-        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden border border-border-dark bg-panel shadow-2xl transition-[opacity,transform] duration-200 ease-out ${
+        className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${UI_PANEL_SURFACE_CLASS} transition-[opacity,transform] duration-200 ease-out ${
           mode === 'floating' ? 'rounded-2xl' : mode === 'left' ? 'rounded-r-2xl border-l-0' : 'rounded-l-2xl border-r-0'
         } ${isVisible ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}
       >
