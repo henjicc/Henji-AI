@@ -1,7 +1,7 @@
 import { Virtuoso } from 'react-virtuoso'
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Route, Sparkles } from 'lucide-react'
 
-import { UiButton } from '@/components/ui'
+import { UiButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceRunSummary, AgentTraceStatus, AgentTraceStepSummary } from '@/core/assistant/trace'
 import { compactId } from '../eventDisplay'
 import { formatTraceDuration, formatTraceTokens, getTraceStepLabel } from '../assistantTraceUtils'
@@ -75,7 +75,7 @@ function RunCard({
   onSelectTrace: (traceId: string) => void
 }): JSX.Element {
   return (
-    <div className="overflow-hidden rounded-md border border-border-dark/40 bg-panel/35">
+    <div className={`overflow-hidden rounded-md ${UI_INSET_SURFACE_CLASS}`}>
       <div className="border-b border-border-dark/30 px-2.5 py-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">

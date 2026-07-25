@@ -9,7 +9,7 @@ import {
   TerminalSquare,
 } from 'lucide-react'
 
-import { UiButton } from '@/components/ui'
+import { UiButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceDetailResult } from '@/core/assistant/trace'
 import type { ModelStepMessage } from '@/core/llm/modelStep'
 import { copyTextToClipboard } from '../copyFormats'
@@ -211,7 +211,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
 function TraceSection({ title, badge, defaultOpen = false, children }: { title: string; badge?: string; defaultOpen?: boolean; children: ReactNode }): JSX.Element {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="overflow-hidden rounded-lg border border-border-dark/45 bg-panel/30">
+    <section className={`overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
       <UiButton type="button" variant="ghost" size="sm" className="h-10 w-full justify-between rounded-none !border-0 !bg-transparent px-3" onClick={() => setOpen(!open)}>
         <span className="flex items-center gap-2 text-xs font-medium text-text-dark">
           {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
