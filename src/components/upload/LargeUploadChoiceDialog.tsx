@@ -28,7 +28,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60">
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/60">
       <UiPanel className="w-[460px] space-y-4 p-5">
         <h3 className="text-base font-semibold text-text-dark">
           {t('largeUpload.title')}

@@ -214,7 +214,6 @@ export function CameraStageNodeDialog(): JSX.Element | null {
       title={t('node.menu.cameraStage')}
       onClose={close}
       hideHeader
-      overlayClassName="!z-[90]"
       widthClassName="flex h-full w-full flex-col overflow-hidden !rounded-none !border-0"
       contentClassName="min-h-0 flex-1"
     >

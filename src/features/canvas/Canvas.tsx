@@ -34,7 +34,7 @@ import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
 import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
 import { areStringListsEqual } from '@/features/canvas/application/graphMediaResolver';
-import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
+import { canNodeBeManualConnectionSource, CANVAS_MINIMAP_Z_INDEX, DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
@@ -68,7 +68,7 @@ function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
   }
 
   return (
-    <div className="pointer-events-none absolute left-1/2 top-4 z-[12000] -translate-x-1/2">
+    <div className="pointer-events-none absolute left-1/2 top-4 z-toast -translate-x-1/2">
       <div
         key={toast.id}
         className={`rounded-lg border px-4 py-2 text-sm font-medium shadow-2xl backdrop-blur-md ${
@@ -504,7 +504,7 @@ export function Canvas() {
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />
         <MiniMap
           className="canvas-minimap nopan nowheel !border-border-dark !bg-surface-dark"
-          style={{ pointerEvents: 'all', zIndex: 10000 }}
+          style={{ pointerEvents: 'all', zIndex: CANVAS_MINIMAP_Z_INDEX }}
           nodeColor="rgba(120, 120, 120, 0.92)"
           maskColor="rgba(0, 0, 0, 0.62)"
           pannable

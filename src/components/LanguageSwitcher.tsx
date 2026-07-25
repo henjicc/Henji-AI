@@ -32,7 +32,7 @@ export function LanguageSwitcher() {
       {isOpen && (
         <>
           <div
-            className="fixed inset-0 z-10"
+            className="fixed inset-0 z-dropdown"
             onClick={() => setIsOpen(false)}
           />
           <UiPanel className="absolute right-0 z-20 mt-2 w-32 p-1">

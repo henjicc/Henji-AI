@@ -31,7 +31,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
   if (!open) return null
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-modal flex items-center justify-center"
       data-dialog="true"
       onClick={(e) => {
         e.stopPropagation()

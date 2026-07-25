@@ -243,7 +243,7 @@ const ShotTimelinePanel: React.FC = () => {
 
       {marquee.rect && (
         <div
-          className="pointer-events-none fixed z-50 border border-accent bg-accent/10"
+          className="pointer-events-none fixed z-dropdown border border-accent bg-accent/10"
           style={{
             left: marquee.rect.left,
             top: marquee.rect.top,

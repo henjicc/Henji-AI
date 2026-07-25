@@ -154,7 +154,7 @@ const EasingCurveEditor: React.FC<EasingCurveEditorProps> = ({ target, anchor, o
   return (
     <div
       ref={cardRef}
-      className="fixed z-50 rounded-lg border border-border-dark bg-surface-dark p-3 shadow-lg"
+      className="fixed z-dropdown rounded-lg border border-border-dark bg-surface-dark p-3 shadow-lg"
       style={{ left, top, width: POPOVER_WIDTH }}
       onPointerDown={(event) => event.stopPropagation()}
     >

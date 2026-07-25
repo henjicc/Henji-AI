@@ -117,7 +117,7 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
   }
 
   return (
-    <div className="preset-manager fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="preset-manager fixed inset-0 bg-black/50 flex items-center justify-center z-modal">
       <UiPanel className="p-6 max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
         <div className="preset-header flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">{t('ui:presets.manager.title')}</h2>

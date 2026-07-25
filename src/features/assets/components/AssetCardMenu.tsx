@@ -70,7 +70,7 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
   }
 
   return createPortal(
-    <UiPanel ref={ref} className={`fixed z-[120] w-80 p-3 transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 scale-100 opacity-100' : `${placeAbove ? 'translate-y-1' : '-translate-y-1'} scale-[0.98] opacity-0`}`} style={{ left, top, transformOrigin: placeAbove ? 'bottom center' : 'top center' }} data-asset-card-menu>
+    <UiPanel ref={ref} className={`fixed z-dropdown w-80 p-3 transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 scale-100 opacity-100' : `${placeAbove ? 'translate-y-1' : '-translate-y-1'} scale-[0.98] opacity-0`}`} style={{ left, top, transformOrigin: placeAbove ? 'bottom center' : 'top center' }} data-asset-card-menu>
       <div className="mb-3 truncate font-medium text-text-dark">{asset.displayName}</div>
       <div className="mb-1.5 text-xs text-text-muted">{t('assetLibrary.tags')}</div>
       <div className="mb-2 flex flex-wrap gap-1.5"><UiChipButton active disabled className="!h-7 !px-2 text-xs">{t(`assetLibrary.${asset.mediaType}`)}</UiChipButton>{tags.map((tag) => <UiChipButton key={tag} active className="!h-7 !px-2 text-xs" onClick={() => void applyTags(tags.filter((item) => item !== tag))}>{tag}</UiChipButton>)}</div>

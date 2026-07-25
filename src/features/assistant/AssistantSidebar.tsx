@@ -79,7 +79,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
     <div
       ref={interaction.panelRef}
       data-assistant-sidebar
-      className={`pointer-events-none fixed z-40 min-h-0 ${mode === 'floating' ? 'will-change-transform' : ''}`}
+      className={`pointer-events-none fixed z-panel min-h-0 ${mode === 'floating' ? 'will-change-transform' : ''}`}
       style={positionStyle}
     >
       <aside

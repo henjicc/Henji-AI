@@ -398,7 +398,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-lg flex items-center justify-center p-6"
+      className="fixed inset-0 z-viewer bg-black/90 backdrop-blur-lg flex items-center justify-center p-6"
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 500ms ease',

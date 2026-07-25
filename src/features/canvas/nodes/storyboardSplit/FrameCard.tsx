@@ -183,7 +183,7 @@ export const FrameCard = memo(({
         </div>
 
         <div
-          className="nodrag absolute inset-x-0 bottom-0 z-[5] overflow-hidden bg-gradient-to-t from-black/80 via-black/45 to-transparent"
+          className="nodrag absolute inset-x-0 bottom-0 z-raised overflow-hidden bg-gradient-to-t from-black/80 via-black/45 to-transparent"
           style={noteWrapperStyle}
           onPointerDown={(event) => event.stopPropagation()}
         >

@@ -163,7 +163,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-[2147483647] h-10 select-none border-b border-zinc-700/50 bg-panel px-3 text-white"
+      className="fixed top-0 left-0 right-0 z-titlebar h-10 select-none border-b border-zinc-700/50 bg-panel px-3 text-white"
       style={dragRegionStyle}
     >
       {isMacOS ? (

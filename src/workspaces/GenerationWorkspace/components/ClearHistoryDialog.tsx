@@ -28,7 +28,7 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-modal flex items-center justify-center">
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         style={{ opacity, transition: 'opacity 180ms ease' }}

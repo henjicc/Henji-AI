@@ -132,7 +132,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      className="fixed inset-0 z-modal flex items-center justify-center p-4"
       data-dialog="true"
     >
       {/* 背景遮罩 */}

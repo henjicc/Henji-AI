@@ -326,7 +326,7 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'model' && createPortal(
         <div
           ref={modelPanelRef}
-          className={`nodrag nowheel fixed z-[80] transition-opacity duration-200 ease-out ${
+          className={`nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
           style={buildAdaptivePanelStyle(modelPanelAnchor, modelPanelWidth, viewportWidth)}
@@ -358,7 +358,7 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'params' && selectedModel && createPortal(
         <div
           ref={paramsPanelRef}
-          className={`nodrag nowheel fixed z-[80] transition-opacity duration-200 ease-out ${
+          className={`nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
           style={buildPanelStyle(paramsPanelAnchor)}

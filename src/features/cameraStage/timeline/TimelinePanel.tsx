@@ -382,7 +382,7 @@ const TimelinePanel: React.FC = () => {
           </div>
           {marqueeBox && (
             <div
-              className="pointer-events-none fixed z-50 border border-primary/70 bg-primary/15"
+              className="pointer-events-none fixed z-dropdown border border-primary/70 bg-primary/15"
               style={marqueeBox}
             />
           )}

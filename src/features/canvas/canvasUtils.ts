@@ -10,7 +10,20 @@ import {
 } from '@/features/canvas/domain/nodeRegistry'
 
 export const DEFAULT_VIEWPORT: Viewport = { x: 0, y: 0, zoom: 1 }
+
+/*
+ * 画布内部的局部 z 刻度。
+ *
+ * 这套刻度与全局浮层层级（`src/core/theme/zLayers.ts` / Tailwind 的 z-* 语义类）
+ * 是两套独立体系：画布内的层叠由 ReactFlow 自己管理节点 z-index，数值区间与全局
+ * 浮层不可比较，也不要互相套用。画布整体作为一个元素参与全局层级即可。
+ */
+
+/** Alt 拖拽复制时的临时副本，需要盖住普通节点 */
 export const ALT_DRAG_COPY_Z_INDEX = 2000
+
+/** minimap 需要盖住包括 Alt 拖拽副本在内的所有画布内元素 */
+export const CANVAS_MINIMAP_Z_INDEX = 10000
 
 export interface PendingConnectStart {
   nodeId: string

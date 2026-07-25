@@ -29,7 +29,7 @@ const CanvasWorkspace = (): JSX.Element => {
               onClick={closeProject}
               variant="muted"
               size="sm"
-              className="absolute left-3 top-3 z-[80] px-3"
+              className="absolute left-3 top-3 z-sticky px-3"
             >
               返回项目
             </UiButton>

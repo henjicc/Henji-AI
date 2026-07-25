@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createLogger } from '@/core/logging'
+import { Z_LAYERS } from '@/core/theme/zLayers'
 import { detectShell, getPlatform } from '@/platform/runtime'
 import React, { createContext, useContext, useState, ReactNode, useRef, useCallback } from 'react'
 
@@ -188,7 +189,8 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
                         left: 0,
                         top: 0,
                         pointerEvents: 'none',
-                        zIndex: 9999,
+                        // 全局拖拽跟随层：必须盖住除标题栏以外的一切
+                        zIndex: Z_LAYERS.drag,
                         opacity: 0,  // 初始隐藏，等待第一次 mousemove 后显示
                     }}
                 >

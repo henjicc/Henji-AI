@@ -47,7 +47,7 @@ export function RenameDialog({
   if (!shouldRender) return null;
 
   return (
-    <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-[100] flex items-center justify-center`}>
+    <div className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center`}>
       <div
         className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}

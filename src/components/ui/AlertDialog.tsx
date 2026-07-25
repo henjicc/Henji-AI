@@ -88,8 +88,8 @@ export default function AlertDialog({
 
   const { icon, color } = getIconAndColor()
   const rootClassName = scope === 'container'
-    ? 'absolute inset-0 z-50 flex items-center justify-center'
-    : 'fixed inset-0 z-50 flex items-center justify-center'
+    ? 'absolute inset-0 z-modal flex items-center justify-center'
+    : 'fixed inset-0 z-modal flex items-center justify-center'
 
   return (
     <div className={rootClassName}>

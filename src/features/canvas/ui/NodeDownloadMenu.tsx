@@ -35,7 +35,7 @@ export function NodeDownloadMenu({
   return (
     <UiPanel
       ref={menuRef}
-      className={`fixed z-[120] min-w-[280px] p-2 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+      className={`fixed z-dropdown min-w-[280px] p-2 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
       style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
     >
       <UiOptionButton

@@ -35,7 +35,7 @@ export function IncomingImagePicker({
   return createPortal(
     <div
       ref={pickerMenuRef}
-      className="nowheel fixed z-[140] w-[120px] overflow-hidden"
+      className="nowheel fixed z-dropdown w-[120px] overflow-hidden"
       style={{ left: `${pickerState.x}px`, top: `${pickerState.y}px` }}
       onMouseDown={(event) => event.stopPropagation()}
       onWheelCapture={(event) => event.stopPropagation()}

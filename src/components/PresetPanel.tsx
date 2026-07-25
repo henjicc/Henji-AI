@@ -340,7 +340,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         {/* 删除确认弹窗 - 使用 portal 渲染到 body */}
                                         {deletingPresetId === preset.id && deleteButtonRect && createPortal(
                                             <div
-                                                className={`fixed z-[9999] transition-opacity duration-200 ${deletingClosing ? 'opacity-0' : (deletingAppearing ? 'opacity-100' : 'opacity-0')
+                                                className={`fixed z-modal transition-opacity duration-200 ${deletingClosing ? 'opacity-0' : (deletingAppearing ? 'opacity-100' : 'opacity-0')
                                                     }`}
                                                 style={{
                                                     left: `${deleteButtonRect.right - 200}px`,

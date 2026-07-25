@@ -91,7 +91,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
 
   return (
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/90 p-6 backdrop-blur-lg"
+      className="fixed inset-0 z-viewer flex items-center justify-center bg-black/90 p-6 backdrop-blur-lg"
       style={{
         opacity: overlayOpacity,
         transition: 'opacity 500ms ease',

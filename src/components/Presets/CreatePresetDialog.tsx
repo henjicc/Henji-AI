@@ -54,7 +54,7 @@ export function CreatePresetDialog({
   }
 
   return (
-    <div className="preset-dialog fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
+    <div className="preset-dialog fixed inset-0 bg-black/50 flex items-center justify-center z-modal">
       <UiPanel className="p-6 max-w-md w-full">
         <h3 className="text-xl font-bold mb-4">{t('ui:presets.create.title')}</h3>
 
