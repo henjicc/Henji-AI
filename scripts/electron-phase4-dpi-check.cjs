@@ -15,7 +15,7 @@ const SCENARIOS = [
 ]
 
 async function launchElectronApp() {
-  return launchElectronAppBase({ mainEntry: MAIN_ENTRY, cwd: ROOT })
+  return launchElectronAppBase({ mainEntry: MAIN_ENTRY, cwd: ROOT, isolateUserData: true })
 }
 
 async function checkScenario(page, session, scenario) {

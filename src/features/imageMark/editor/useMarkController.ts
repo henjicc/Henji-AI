@@ -14,7 +14,7 @@ import { percentToFontSize, percentToLineWidth, resolveLabelPlacement } from '..
 import { isLabeledMark, type ImageMarkDoc, type MarkToolType } from '../domain/types';
 import { TOOL_SHORTCUT_MAP, getMarkPosition, type MarkEditorStyleState } from './shared';
 import { useMarkCropOrientation } from './useMarkCropOrientation';
-import { useMarkHistory } from './useMarkHistory';
+import type { MarkHistoryController } from './useMarkHistory';
 import { useMarkPointer } from './useMarkPointer';
 import { useMarkStyleSync } from './useMarkStyleSync';
 import { useMarkTextEditing } from './useMarkTextEditing';
@@ -38,6 +38,7 @@ export interface UseMarkControllerParams {
   contentGroupRef: MutableRefObject<Konva.Group | null>;
   stageHostRef: MutableRefObject<HTMLDivElement | null>;
   textInputRef: MutableRefObject<HTMLTextAreaElement | null>;
+  history: MarkHistoryController;
 }
 
 /** 编辑器总控:组合历史、文字/标签、指针、裁剪/朝向子控制器,并承载选中、样式与键盘 */
@@ -58,6 +59,7 @@ export function useMarkController({
   contentGroupRef,
   stageHostRef,
   textInputRef,
+  history,
 }: UseMarkControllerParams) {
   const [selectedId, setSelectedIdState] = useState<string | null>(null);
   // 标签是否为当前激活的子选中目标(区别于其父图形);任何非标签路径的选中都清空它
@@ -87,13 +89,6 @@ export function useMarkController({
   const runInteractionCleanup = useCallback(() => {
     interactionCleanupRef.current();
   }, []);
-
-  const history = useMarkHistory({
-    docRef,
-    setDoc,
-    onDocChange,
-    onHistoryNavigate: runInteractionCleanup,
-  });
 
   // ==================== 坐标转换 ====================
 
@@ -188,6 +183,16 @@ export function useMarkController({
     pointer.setDraft(null);
   };
 
+  const handleUndo = useCallback(() => {
+    history.handleUndo();
+    runInteractionCleanup();
+  }, [history, runInteractionCleanup]);
+
+  const handleRedo = useCallback(() => {
+    history.handleRedo();
+    runInteractionCleanup();
+  }, [history, runInteractionCleanup]);
+
   // ==================== 工具切换 ====================
 
   const toolRef = useRef(tool);
@@ -260,12 +265,12 @@ export function useMarkController({
 
     if (command && key === 'z' && !event.shiftKey) {
       event.preventDefault();
-      history.handleUndo();
+      handleUndo();
       return;
     }
     if (command && (key === 'y' || (key === 'z' && event.shiftKey))) {
       event.preventDefault();
-      history.handleRedo();
+      handleRedo();
       return;
     }
     if (command) {
@@ -323,7 +328,7 @@ export function useMarkController({
       event.preventDefault();
       selectTool(shortcutTool);
     }
-  }, [handleDeleteSelected, handleStylePatch, history, pointer, selectTool, selectedId, setSelectedId, textEditing.textEditor]);
+  }, [handleDeleteSelected, handleRedo, handleStylePatch, handleUndo, history, pointer, selectTool, selectedId, setSelectedId, textEditing.textEditor]);
 
   // 标签原位输入的锚点必须随实时输入内容重算(与最终渲染用同一函数),
   // 否则确认时会因为占位符宽度与真实文字宽度不同而发生跳动
@@ -362,8 +367,8 @@ export function useMarkController({
     selectTool,
     commitDoc: history.commitDoc,
     commitItems: history.commitItems,
-    handleUndo: history.handleUndo,
-    handleRedo: history.handleRedo,
+    handleUndo,
+    handleRedo,
     handleDeleteSelected,
     handleClear,
     handleStylePatch,

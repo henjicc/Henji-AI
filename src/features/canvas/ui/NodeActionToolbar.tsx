@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next';
 const logger = createLogger('features.canvas.ui.NodeActionToolbar')
 
 import {
-  NODE_TOOL_TYPES,
   isExportImageNode,
   isCameraStageNode,
   isGroupNode,
@@ -18,7 +17,6 @@ import {
   isVideoMediaNode,
   isAudioMediaNode,
   type CanvasNode,
-  type NodeToolType,
 } from '@/features/canvas/domain/canvasNodes';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
@@ -138,16 +136,6 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       });
     }
   }, [addMedia, assetMedia, collecting, node.data.displayName, node.id, t]);
-
-  const resolveToolLabel = useCallback((toolType: NodeToolType) => {
-    if (toolType === NODE_TOOL_TYPES.edit) {
-      return t('tool.edit');
-    }
-    if (toolType === NODE_TOOL_TYPES.splitStoryboard) {
-      return t('tool.split');
-    }
-    return '';
-  }, [t]);
 
   useEffect(() => {
     return () => {
@@ -290,7 +278,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               }
             >
               <Icon className="h-3.5 w-3.5" />
-              {resolveToolLabel(tool.type)}
+              {tool.label}
             </UiChipButton>
           );
         })}

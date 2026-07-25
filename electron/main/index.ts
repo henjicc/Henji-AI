@@ -25,6 +25,8 @@ import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
+import { configureChromiumSessionData } from './chromium-session-data'
+import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runtime'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
 import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
 import { runLogRetention } from './services/logging'
@@ -38,6 +40,9 @@ import {
 import { runAssistantCli } from './assistant-cli/runner'
 
 registerMediaProtocolScheme()
+configureChromiumSessionData()
+configureWebGpuRuntime()
+registerWebGpuDiagnostics()
 
 if (isAssistantCliMode()) {
   // safeStorage 依赖既有用户数据目录，不能改 sessionData；只隔离纯 Chromium 磁盘缓存。

@@ -1,3 +1,5 @@
+import type { DiffusionOperationParams } from '@/core/imageEdit/types'
+
 export interface MergeStoryboardImagesPayload {
   frameSources: string[]
   rows: number
@@ -63,6 +65,36 @@ export interface ImageInfoResult {
   modifiedAt: number | null
 }
 
+export interface ImageDiffusionFallbackRequest {
+  requestId: string
+  source: string
+  purpose: 'preview' | 'export'
+  format: 'png' | 'jpeg' | 'webp'
+  quality?: number
+  maxPreviewPixels?: number
+  params: DiffusionOperationParams
+}
+
+export interface ImageDiffusionFallbackResult {
+  bytes: Uint8Array
+  width: number
+  height: number
+  format: 'png' | 'jpeg' | 'webp'
+  durationMs: number
+  hardCancellationSupported: false
+  unsupportedParameters: readonly string[]
+}
+
+export interface ImageDiffusionFallbackCapabilities {
+  available: boolean
+  supportedParameters: readonly string[]
+  unsupportedParameters: readonly string[]
+  maxPreviewPixels: number
+  hardCancellationSupported: false
+  supportedFormats: readonly ['png', 'jpeg', 'webp']
+  reason?: string
+}
+
 /**
  * 16 个图像处理原生命令（1.1 已核对，不含剪贴板相关 2 个命令，见 contracts/clipboard.ts）。
  */
@@ -87,4 +119,6 @@ export interface ImagePlatform {
   saveImageSourceToDirectory(source: string, targetDir: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToAppDebugDir(source: string, category: string, suggestedFileName?: string): Promise<string>
   readImageInfo(source: string): Promise<ImageInfoResult>
+  probeDiffusionFallback(): Promise<ImageDiffusionFallbackCapabilities>
+  renderDiffusionFallback(request: ImageDiffusionFallbackRequest): Promise<ImageDiffusionFallbackResult>
 }

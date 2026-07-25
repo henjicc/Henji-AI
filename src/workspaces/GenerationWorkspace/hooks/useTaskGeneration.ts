@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { GenerationService } from '@/core/services/GenerationService'
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
-import type { ImageMarkSession } from '@/features/imageMark'
+import type { ImageEditSession } from '@/core/imageEdit'
 import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
@@ -43,7 +43,7 @@ export interface UseTaskGenerationParams {
   updateProgress: (taskId: string, progress: number) => void
   notify: (message: string, type?: ToastNotification['type']) => void
   messages: UseTaskGenerationMessages
-  imageEditStatesRef: React.MutableRefObject<Map<string, ImageMarkSession>>
+  imageEditStatesRef: React.MutableRefObject<Map<string, ImageEditSession>>
   setUploadedImagesRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
   setUploadedFilePathsRef: React.MutableRefObject<React.Dispatch<React.SetStateAction<string[]>> | null>
 }

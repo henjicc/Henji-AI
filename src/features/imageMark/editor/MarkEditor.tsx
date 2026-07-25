@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type Konva from 'konva';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
 import { resolveImageDisplayUrl } from '@/services/imageSource';
@@ -17,8 +17,12 @@ import {
 import { buildMosaicSourceCanvas, renderOrientedCanvas } from '../render/orientedImage';
 import { MarkCanvas } from './MarkCanvas';
 import { MarkToolbar } from './MarkToolbar';
+import { MarkEditorContextProvider } from './MarkEditorContext';
+import type { MarkEditorContextValue } from './markEditorContextValue';
 import { useMarkController } from './useMarkController';
+import { useMarkHistory, type MarkHistoryController } from './useMarkHistory';
 import { useNonPassiveWheel } from './useNonPassiveWheel';
+import { ImageEditorShell } from '@/features/imageEdit/editor/ImageEditorShell';
 import {
   CROP_RATIO_OPTIONS,
   VIEWPORT_MIN_HEIGHT_PX,
@@ -29,6 +33,10 @@ import {
 
 export interface MarkEditorProps {
   sourceImageUrl: string;
+  /** 柔光 Worker 已在底图上应用朝向时，避免标注坐标被重复旋转。 */
+  sourceOrientationAlreadyApplied?: boolean;
+  /** 低分辨率预览仍按原图坐标编辑，避免标注与裁剪漂移。 */
+  logicalImageSize?: { width: number; height: number };
   initialDoc?: ImageMarkDoc | null;
   onDocChange?: (doc: ImageMarkDoc) => void;
   initialStyle?: Partial<MarkEditorStyleState>;
@@ -37,6 +45,19 @@ export interface MarkEditorProps {
   toolbarActions?: React.ReactNode;
   /** 根容器高度控制,默认适配对话框;全屏宿主传 h-full */
   className?: string;
+  /** legacy 保持旧纵向布局；shell 使用顶部标注栏与右侧工具面板。 */
+  layout?: 'legacy' | 'shell';
+  /** shell 布局的右侧工具与参数面板，内容位于 MarkEditor 上下文内。 */
+  rightPanel?: React.ReactNode;
+  /** 受控文档控制器；统一图片编辑器通过此边界接入 V2 会话。 */
+  documentController?: MarkEditorDocumentController;
+}
+
+export interface MarkEditorDocumentController {
+  doc: ImageMarkDoc;
+  setDoc: Dispatch<SetStateAction<ImageMarkDoc>>;
+  onDocChange?: (doc: ImageMarkDoc) => void;
+  history: MarkHistoryController;
 }
 
 /**
@@ -46,16 +67,21 @@ export interface MarkEditorProps {
  */
 export function MarkEditor({
   sourceImageUrl,
+  sourceOrientationAlreadyApplied = false,
+  logicalImageSize,
   initialDoc,
   onDocChange,
   initialStyle,
   onStyleChange,
   toolbarActions,
   className = 'h-[min(70vh,760px)]',
+  layout = 'legacy',
+  rightPanel,
+  documentController,
 }: MarkEditorProps): JSX.Element {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [doc, setDoc] = useState<ImageMarkDoc>(() => initialDoc ?? createEmptyMarkDoc());
+  const [localDoc, setLocalDoc] = useState<ImageMarkDoc>(() => initialDoc ?? createEmptyMarkDoc());
   const [tool, setToolState] = useState<MarkToolType>('callout');
   const [style, setStyle] = useState<MarkEditorStyleState>(() => ({
     color: initialStyle?.color ?? ANNOTATION_DEFAULT_STROKE_HEX,
@@ -73,6 +99,18 @@ export function MarkEditor({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const stageHostRef = useRef<HTMLDivElement | null>(null);
   const textInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const localDocRef = useRef(localDoc);
+  localDocRef.current = localDoc;
+  const localHistory = useMarkHistory({
+    docRef: localDocRef,
+    setDoc: setLocalDoc,
+    onDocChange,
+    onHistoryNavigate: () => undefined,
+  });
+  const doc = documentController?.doc ?? localDoc;
+  const setDoc = documentController?.setDoc ?? setLocalDoc;
+  const resolvedOnDocChange = documentController?.onDocChange ?? onDocChange;
+  const history = documentController?.history ?? localHistory;
 
   // ==================== 图片加载 ====================
 
@@ -104,8 +142,19 @@ export function MarkEditor({
     if (!image) {
       return null;
     }
+    if (sourceOrientationAlreadyApplied) {
+      const width = logicalImageSize?.width ?? image.naturalWidth;
+      const height = logicalImageSize?.height ?? image.naturalHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('无法初始化预览画布');
+      context.drawImage(image, 0, 0, width, height);
+      return canvas;
+    }
     return renderOrientedCanvas(image, { rotate: orientationRotate, mirrored: orientationMirrored });
-  }, [image, orientationRotate, orientationMirrored]);
+  }, [image, logicalImageSize?.height, logicalImageSize?.width, orientationRotate, orientationMirrored, sourceOrientationAlreadyApplied]);
 
   const imageWidth = orientedCanvas?.width ?? 0;
   const imageHeight = orientedCanvas?.height ?? 0;
@@ -174,7 +223,7 @@ export function MarkEditor({
   const controller = useMarkController({
     doc,
     setDoc,
-    onDocChange,
+    onDocChange: resolvedOnDocChange,
     imageWidth,
     imageHeight,
     baseSize,
@@ -188,6 +237,7 @@ export function MarkEditor({
     contentGroupRef,
     stageHostRef,
     textInputRef,
+    history,
   });
 
   // 选中标记后在画布上滚轮直接调节线宽/字号/打码强度
@@ -265,9 +315,9 @@ export function MarkEditor({
     );
   }
 
-  return (
-    <div className={`flex flex-col gap-3 ${className}`}>
-      <MarkToolbar
+  const toolbar = (
+    <MarkToolbar
+        variant={layout === 'shell' ? 'annotation' : 'legacy'}
         tool={tool}
         setTool={controller.selectTool}
         style={style}
@@ -286,8 +336,10 @@ export function MarkEditor({
         canClear={doc.items.length > 0}
         actions={toolbarActions}
       />
+  );
 
-      <MarkCanvas
+  const canvas = (
+    <MarkCanvas
         orientedCanvas={orientedCanvas}
         getMosaicSource={getMosaicSource}
         doc={doc}
@@ -323,6 +375,37 @@ export function MarkEditor({
         onCropChange={controller.handleCropChange}
         onCropCommit={controller.handleCropCommit}
       />
-    </div>
   );
+
+  const contextValue: MarkEditorContextValue = {
+    doc,
+    tool,
+    selectTool: controller.selectTool,
+    style,
+    onStylePatch: controller.handleStylePatch,
+    cropRatioValue,
+    onCropRatioChange: handleCropRatioChange,
+    onCropReset: controller.handleCropReset,
+    hasCrop: Boolean(doc.crop),
+    onOrientation: controller.applyOrientation,
+    history,
+  };
+
+  const content = layout === 'shell'
+    ? (
+      <ImageEditorShell
+        className={className}
+        toolbar={toolbar}
+        canvas={canvas}
+        sidePanel={rightPanel ?? <div className="flex-1" />}
+      />
+    )
+    : (
+      <div className={`flex flex-col gap-3 ${className}`}>
+        {toolbar}
+        {canvas}
+      </div>
+    );
+
+  return <MarkEditorContextProvider value={contextValue}>{content}</MarkEditorContextProvider>;
 }

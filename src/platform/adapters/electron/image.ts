@@ -32,5 +32,7 @@ export function createElectronImage(): ImagePlatform {
     saveImageSourceToDirectory: (source, targetDir, suggestedFileName) => getNativeImage().saveImageSourceToDirectory(source, targetDir, suggestedFileName),
     saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => getNativeImage().saveImageSourceToAppDebugDir(source, category, suggestedFileName),
     readImageInfo: (source) => getNativeImage().readImageInfo(source),
+    probeDiffusionFallback: () => getNativeImage().probeDiffusionFallback(),
+    renderDiffusionFallback: (request) => getNativeImage().renderDiffusionFallback(request),
   }
 }

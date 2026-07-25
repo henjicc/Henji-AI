@@ -355,6 +355,8 @@ const imageApi: HenjiImageApi = {
   saveImageSourceToDirectory: (source, targetDir, suggestedFileName) => nativeInvoke('image:saveImageSourceToDirectory', { source, targetDir, suggestedFileName }),
   saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => nativeInvoke('image:saveImageSourceToAppDebugDir', { source, category, suggestedFileName }),
   readImageInfo: (source) => nativeInvoke('image:readImageInfo', { source }),
+  probeDiffusionFallback: () => nativeInvoke('image:probeDiffusionFallback'),
+  renderDiffusionFallback: (request) => nativeInvoke('image:renderDiffusionFallback', request),
   compressImageSource: (payload) => nativeInvoke('image:compressImageSource', payload),
   generateThumbnailBytes: (payload) => nativeInvoke('image:generateThumbnailBytes', payload),
 }

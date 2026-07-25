@@ -13,7 +13,7 @@ import {
   useGenerationHistoryFilterStore,
   type GenerationHistoryMediaType,
 } from '@/stores/generationHistoryFilterStore.ts'
-import type { ImageMarkSession } from '@/features/imageMark'
+import type { ImageEditSession } from '@/core/imageEdit'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
 import { ClearHistoryDialog } from './GenerationWorkspace/components/ClearHistoryDialog'
@@ -187,7 +187,7 @@ const GenerationWorkspace: React.FC = () => {
     tasks,
     setTasks,
   })
-  const imageEditStatesRef = useRef<Map<string, ImageMarkSession>>(new Map())
+  const imageEditStatesRef = useRef<Map<string, ImageEditSession>>(new Map())
   const setUploadedImagesRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const setUploadedFilePathsRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)
   const generationMessages = useMemo(() => {
@@ -298,7 +298,7 @@ const GenerationWorkspace: React.FC = () => {
     setCurrentImage(currentImageList[nextIndex])
     setIsEditorMode(false)
   }
-  const handleSaveImageEdit = (dataUrl: string, session: ImageMarkSession) => {
+  const handleSaveImageEdit = (dataUrl: string, session: ImageEditSession) => {
     imageEditStatesRef.current.set(dataUrl, session)
     setCurrentImageList((prev) => {
       const next = [...prev]
@@ -592,7 +592,7 @@ const GenerationWorkspace: React.FC = () => {
         currentIndex={currentImageIndex}
         fromUpload={isFromUploadArea}
         isEditorMode={isEditorMode}
-        initialMarkSession={imageEditStatesRef.current.get(currentImage)}
+        initialEditSession={imageEditStatesRef.current.get(currentImage)}
         onClose={closeImageViewer}
         onNavigate={navigateImage}
         onEnterEditor={() => setIsEditorMode(true)}

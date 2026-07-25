@@ -10,8 +10,18 @@ export interface UseMarkHistoryParams {
   onHistoryNavigate: () => void;
 }
 
+export interface MarkHistoryController {
+  canUndo: boolean;
+  canRedo: boolean;
+  pushHistorySnapshot: (base: ImageMarkDoc) => void;
+  commitDoc: (next: ImageMarkDoc, recordHistory?: boolean) => void;
+  commitItems: (items: MarkItem[], recordHistory?: boolean) => void;
+  handleUndo: () => void;
+  handleRedo: () => void;
+}
+
 /** 文档提交 + 撤销/重做栈(快照上限 HISTORY_LIMIT) */
-export function useMarkHistory({ docRef, setDoc, onDocChange, onHistoryNavigate }: UseMarkHistoryParams) {
+export function useMarkHistory({ docRef, setDoc, onDocChange, onHistoryNavigate }: UseMarkHistoryParams): MarkHistoryController {
   const [undoStack, setUndoStack] = useState<ImageMarkDoc[]>([]);
   const [redoStack, setRedoStack] = useState<ImageMarkDoc[]>([]);
   const onHistoryNavigateRef = useRef(onHistoryNavigate);

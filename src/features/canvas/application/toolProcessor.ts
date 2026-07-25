@@ -3,6 +3,7 @@ import {
   type NodeToolType,
   type StoryboardFrameItem,
 } from '../domain/canvasNodes';
+import { createLogger } from '@/core/logging';
 import {
   canvasToDataUrl,
   detectAspectRatio,
@@ -11,7 +12,8 @@ import {
 } from './imageData';
 import { readStoryboardImageMetadata } from '@/commands/image';
 import { isDesktopRuntime } from '@/platform/runtime';
-import { exportMarkedImage, parseMarkDoc } from '@/features/imageMark';
+import { parseImageEditDocument } from '@/core/imageEdit';
+import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
 import type {
   IdGenerator,
   ImageSplitGateway,
@@ -19,39 +21,72 @@ import type {
   ToolProcessorResult,
 } from './ports';
 
+const logger = createLogger('features.canvas.application.toolProcessor');
+
+type ToolProcessingHandler = (
+  sourceImageUrl: string,
+  options: DynamicValueMap
+) => Promise<ToolProcessorResult>;
+
 export class CanvasToolProcessor implements ToolProcessor {
+  private readonly handlers: Map<NodeToolType, ToolProcessingHandler>;
+
   constructor(
     private readonly splitGateway: ImageSplitGateway,
     private readonly idGenerator: IdGenerator
-  ) {}
+  ) {
+    this.handlers = new Map<NodeToolType, ToolProcessingHandler>([
+      [NODE_TOOL_TYPES.edit, this.processImageEdit.bind(this)],
+      [NODE_TOOL_TYPES.splitStoryboard, this.processStoryboardSplit.bind(this)],
+    ]);
+  }
 
   async process(
     toolType: NodeToolType,
     sourceImageUrl: string,
     options: DynamicValueMap
   ): Promise<ToolProcessorResult> {
-    if (toolType === NODE_TOOL_TYPES.splitStoryboard) {
-      const metadata = await this.readStoryboardMetadata(sourceImageUrl);
-      return await this.splitStoryboard(
-        sourceImageUrl,
-        Number(options.rows ?? metadata?.gridRows ?? 3),
-        Number(options.cols ?? metadata?.gridCols ?? 3),
-        Number(options.lineThicknessPercent),
-        Number(options.lineThickness ?? 0),
-        metadata?.frameNotes
-      );
-    }
+    const handler = this.handlers.get(toolType);
+    if (!handler) throw new Error(`不支持的工具类型：${toolType}`);
 
-    if (toolType === NODE_TOOL_TYPES.edit) {
-      // 编辑(标记/裁剪/旋转)为矢量合成,统一走 imageMark 前端光栅化;
-      // 先本地化,避免远程源 CORS 污染画布。
-      const localSource = await persistImageLocally(sourceImageUrl);
-      return {
-        outputImageUrl: await exportMarkedImage(localSource, parseMarkDoc(options.markDoc)),
-      };
+    logger.debug('canvas.tool.execute.start', { toolId: toolType });
+    try {
+      const result = await handler(sourceImageUrl, options);
+      logger.info('canvas.tool.execute.completed', { toolId: toolType });
+      return result;
+    } catch (error) {
+      logger.error('canvas.tool.execute.failed', {
+        toolId: toolType,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
     }
+  }
 
-    throw new Error('不支持的工具类型');
+  private async processImageEdit(
+    sourceImageUrl: string,
+    options: DynamicValueMap
+  ): Promise<ToolProcessorResult> {
+    const localSource = await persistImageLocally(sourceImageUrl);
+    const document = parseImageEditDocument(options.document ?? options.markDoc);
+    return {
+      outputImageUrl: await exportImageEditDocument(localSource, document),
+    };
+  }
+
+  private async processStoryboardSplit(
+    sourceImageUrl: string,
+    options: DynamicValueMap
+  ): Promise<ToolProcessorResult> {
+    const metadata = await this.readStoryboardMetadata(sourceImageUrl);
+    return await this.splitStoryboard(
+      sourceImageUrl,
+      Number(options.rows ?? metadata?.gridRows ?? 3),
+      Number(options.cols ?? metadata?.gridCols ?? 3),
+      Number(options.lineThicknessPercent),
+      Number(options.lineThickness ?? 0),
+      metadata?.frameNotes
+    );
   }
 
   private async splitStoryboard(

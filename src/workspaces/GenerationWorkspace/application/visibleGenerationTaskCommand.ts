@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { registry } from '@/core/ModelRegistry'
-import type { ImageMarkSession } from '@/features/imageMark'
+import type { ImageEditSession } from '@/core/imageEdit'
 import { taskQueueManager } from '@/services/taskQueue'
 import { saveEditState } from '@/utils/editStatePersistence'
 import {
@@ -49,7 +49,7 @@ export interface VisibleGenerationTaskDependencies {
   setGenerating: (isGenerating: boolean) => void
   notify: (message: string, type?: ToastNotification['type']) => void
   messages: VisibleGenerationTaskMessages
-  imageEditStates: Map<string, ImageMarkSession>
+  imageEditStates: Map<string, ImageEditSession>
   setUploadedImages?: (images: string[]) => void
   setUploadedFilePaths?: (paths: string[]) => void
 }
@@ -281,7 +281,7 @@ export async function createVisibleGenerationTask(
   }
 
   const taskId = createTaskId()
-  const imageEditStates = (isStringArray(options.images) ? options.images : []).reduce<Record<string, ImageMarkSession>>((acc, url, index) => {
+  const imageEditStates = (isStringArray(options.images) ? options.images : []).reduce<Record<string, ImageEditSession>>((acc, url, index) => {
     const state = dependencies.imageEditStates.get(url)
     if (state) acc[String(index)] = state
     return acc

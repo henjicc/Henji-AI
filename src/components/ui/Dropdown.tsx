@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import {
   UI_FIELD_LABEL_CLASS,
@@ -28,6 +36,8 @@ type DropdownProps<T extends string | number | boolean> = {
   buttonLabelClassName?: string
   optionLabelClassName?: string
   panelClassName?: string
+  ariaLabel?: string
+  ariaLabelledBy?: string
   portal?: boolean
   zIndex?: number
   minWidthStrategy?: 'options' | 'display' | 'none'
@@ -48,6 +58,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     buttonLabelClassName,
     optionLabelClassName,
     panelClassName,
+    ariaLabel,
+    ariaLabelledBy,
     portal = true,
     zIndex = 1000,
     minWidthStrategy = 'display',
@@ -55,8 +67,12 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
+  const [activeOptionIndex, setActiveOptionIndex] = useState(-1)
   const ref = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const dropdownId = useId().replace(/:/g, '')
+  const panelId = `dropdown-panel-${dropdownId}`
   const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null)
   const [buttonMinWidthPx, setButtonMinWidthPx] = useState<number | null>(null)
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
@@ -66,6 +82,81 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const isSelectedOption = (optValue: T): boolean => {
     if (value === undefined) return false
     return String(value) === String(optValue)
+  }
+  const enabledOptionIndices = (): number[] => (options || [])
+    .map((option, index) => option.disabled ? -1 : index)
+    .filter((index) => index >= 0)
+  const selectOption = (option: DropdownOption<T>): void => {
+    if (option.disabled) return
+    onSelect?.(option.value)
+    setClosing(true)
+    setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+  }
+  const openPanel = (): void => {
+    const selectedIndex = (options || []).findIndex((option) => isSelectedOption(option.value) && !option.disabled)
+    setActiveOptionIndex(selectedIndex >= 0 ? selectedIndex : (enabledOptionIndices()[0] ?? -1))
+    setClosing(false)
+    setOpen(true)
+  }
+  const closePanel = (restoreFocus = false): void => {
+    if (!open) return
+    setClosing(true)
+    setTimeout(() => {
+      setOpen(false)
+      setClosing(false)
+      if (restoreFocus) triggerRef.current?.focus()
+    }, 200)
+  }
+  const moveActiveOption = (direction: 1 | -1): void => {
+    const indices = enabledOptionIndices()
+    if (indices.length === 0) return
+    const currentPosition = indices.indexOf(activeOptionIndex)
+    const nextPosition = currentPosition < 0
+      ? (direction === 1 ? 0 : indices.length - 1)
+      : (currentPosition + direction + indices.length) % indices.length
+    setActiveOptionIndex(indices[nextPosition])
+  }
+  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>): void => {
+    if (disabled) return
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (!open) openPanel()
+      else moveActiveOption(1)
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!open) openPanel()
+      else moveActiveOption(-1)
+      return
+    }
+    if (event.key === 'Home' && open) {
+      event.preventDefault()
+      setActiveOptionIndex(enabledOptionIndices()[0] ?? -1)
+      return
+    }
+    if (event.key === 'End' && open) {
+      event.preventDefault()
+      const indices = enabledOptionIndices()
+      setActiveOptionIndex(indices[indices.length - 1] ?? -1)
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      if (!open) {
+        openPanel()
+        return
+      }
+      const option = options?.[activeOptionIndex]
+      if (option) selectOption(option)
+      return
+    }
+    if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      closePanel(true)
+      return
+    }
+    if (event.key === 'Tab' && open) closePanel()
   }
   const getOptionLabels = useCallback((source?: DropdownOption<T>[]): string[] => {
     return (source || []).map((option) => String(option.label))
@@ -165,23 +256,67 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     }
   }, [open, portal])
 
+  const menuContent = renderPanel ? (
+    <div id={panelId} className="max-h-60 overflow-y-auto">{renderPanel()}</div>
+  ) : (
+    <div
+      id={panelId}
+      role="listbox"
+      aria-label={ariaLabel ?? label ?? resolvedDisplay}
+      aria-labelledby={ariaLabelledBy}
+      className="max-h-60 overflow-y-auto"
+    >
+      {(options || []).map((option, index) => {
+        const selected = isSelectedOption(option.value)
+        const active = activeOptionIndex === index
+        return (
+          <UiOptionButton
+            key={String(option.value)}
+            id={`${panelId}-option-${index}`}
+            role="option"
+            tabIndex={-1}
+            aria-selected={selected}
+            active={selected}
+            className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-200 ${option.disabled
+              ? 'cursor-not-allowed opacity-50'
+              : selected
+                ? `${UI_DROPDOWN_OPTION_ACTIVE_CLASS} cursor-pointer`
+                : 'cursor-pointer'
+            } ${active ? 'ring-1 ring-accent ring-inset' : ''}`}
+            onMouseEnter={() => setActiveOptionIndex(index)}
+            onClick={() => selectOption(option)}
+          >
+            <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-sm'}`}>{option.label}</span>
+          </UiOptionButton>
+        )
+      })}
+    </div>
+  )
+
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiButton
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         variant="muted"
         onClick={() => {
           if (disabled) return
           if (open) {
-            setClosing(true)
-            setTimeout(() => { setOpen(false); setClosing(false) }, 200)
+            closePanel()
           } else {
-            setOpen(true)
+            openPanel()
           }
         }}
+        onKeyDown={handleTriggerKeyDown}
         data-dropdown-button
+        aria-haspopup="listbox"
+        aria-expanded={open && !closing}
+        aria-controls={panelId}
+        aria-activedescendant={open && activeOptionIndex >= 0 ? `${panelId}-option-${activeOptionIndex}` : undefined}
+        aria-label={ariaLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
+        aria-labelledby={ariaLabelledBy}
         className={
           `${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 h-[38px] ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
           } ${buttonClassName || 'w-full'}`
@@ -212,32 +347,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
               }}
               data-dropdown-portal="true"
             >
-              {renderPanel ? (
-                <div className="max-h-60 overflow-y-auto">{renderPanel()}</div>
-              ) : (
-                <div className="max-h-60 overflow-y-auto">
-                  {(options || []).map(opt => (
-                    <UiOptionButton
-                    key={String(opt.value)}
-                    active={isSelectedOption(opt.value)}
-                    className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
-                      ? 'opacity-50 cursor-not-allowed'
-                      : isSelectedOption(opt.value)
-                        ? `${UI_DROPDOWN_OPTION_ACTIVE_CLASS} cursor-pointer`
-                        : 'cursor-pointer'
-                        }`}
-                    onClick={() => {
-                      if (opt.disabled) return
-                        onSelect && onSelect(opt.value)
-                        setClosing(true)
-                        setTimeout(() => { setOpen(false); setClosing(false) }, 200)
-                      }}
-                    >
-                      <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-sm'}`}>{opt.label}</span>
-                    </UiOptionButton>
-                  ))}
-                </div>
-              )}
+              {menuContent}
             </div>,
             document.body
           )
@@ -248,32 +358,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"
           >
-            {renderPanel ? (
-              <div className="max-h-60 overflow-y-auto">{renderPanel()}</div>
-            ) : (
-              <div className="max-h-60 overflow-y-auto">
-                {(options || []).map(opt => (
-                  <UiOptionButton
-                  key={String(opt.value)}
-                  active={isSelectedOption(opt.value)}
-                  className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-200 ${opt.disabled
-                      ? 'opacity-50 cursor-not-allowed'
-                      : isSelectedOption(opt.value)
-                        ? `${UI_DROPDOWN_OPTION_ACTIVE_CLASS} cursor-pointer`
-                        : 'cursor-pointer'
-                      }`}
-                  onClick={() => {
-                    if (opt.disabled) return
-                      onSelect && onSelect(opt.value)
-                      setClosing(true)
-                      setTimeout(() => { setOpen(false); setClosing(false) }, 200)
-                    }}
-                  >
-                    <span className={`block truncate whitespace-nowrap ${optionLabelClassName || 'text-sm'}`}>{opt.label}</span>
-                  </UiOptionButton>
-                ))}
-              </div>
-            )}
+            {menuContent}
           </div>
         )
       )}

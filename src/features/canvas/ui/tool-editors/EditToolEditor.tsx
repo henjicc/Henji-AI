@@ -1,11 +1,13 @@
 import { useRef, useState } from 'react';
 import {
-  MarkEditor,
-  parseMarkDoc,
+  imageEditDocumentToMarkDoc,
+  parseImageEditDocument,
+  stringifyImageEditDocument,
   stringifyMarkDoc,
-  type ImageMarkDoc,
-  type MarkEditorStyleState,
-} from '@/features/imageMark';
+  type ImageEditDocument,
+} from '@/core/imageEdit';
+import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
+import type { MarkEditorStyleState } from '@/features/imageMark';
 import type { VisualToolEditorProps } from './types';
 
 function toNumber(value: DynamicValue): number | undefined {
@@ -13,15 +15,16 @@ function toNumber(value: DynamicValue): number | undefined {
 }
 
 /**
- * 画布"编辑"工具编辑器:统一 MarkEditor 的画布宿主。
- * 文档序列化进节点工具 options.markDoc,应用时由 toolProcessor 统一导出。
+ * 画布图片编辑宿主：复用共享 ImageEditor，并兼容双写旧 markDoc。
  */
 export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: VisualToolEditorProps): JSX.Element {
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  // 对话框打开时的初始文档;此后 MarkEditor 内部维护状态,单向回写 options
-  const [initialDoc] = useState<ImageMarkDoc>(() => parseMarkDoc(options.markDoc));
+  // 对话框打开时读取一次初始文档；此后由共享编辑会话单向回写 options。
+  const [initialDocument] = useState<ImageEditDocument>(() =>
+    parseImageEditDocument(options.document ?? options.markDoc)
+  );
   const [initialStyle] = useState<Partial<MarkEditorStyleState>>(() => ({
     color: typeof options.color === 'string' ? options.color : undefined,
     lineWidthPercent: toNumber(options.lineWidthPercent),
@@ -32,12 +35,16 @@ export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: Vis
   }));
 
   return (
-    <MarkEditor
+    <ImageEditor
       sourceImageUrl={sourceImageUrl}
-      initialDoc={initialDoc}
+      initialDocument={initialDocument}
       initialStyle={initialStyle}
-      onDocChange={(doc) => {
-        onOptionsChange({ ...optionsRef.current, markDoc: stringifyMarkDoc(doc) });
+      onDocumentChange={(document) => {
+        onOptionsChange({
+          ...optionsRef.current,
+          document: stringifyImageEditDocument(document),
+          markDoc: stringifyMarkDoc(imageEditDocumentToMarkDoc(document)),
+        });
       }}
       onStyleChange={(style) => {
         onOptionsChange({

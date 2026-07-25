@@ -18,6 +18,11 @@ import {
   splitImage,
   splitImageSource,
 } from '../services/image/ops'
+import {
+  probeSharpDiffusionFallback,
+  renderSharpDiffusionFallback,
+  type SharpDiffusionFallbackRequest,
+} from '../services/image/diffusion-fallback'
 import type {
   CropImageSourcePayloadDto,
   MergeStoryboardImagesPayloadDto,
@@ -119,6 +124,12 @@ export function registerImageIpc(): void {
     return saveImageSourceToAppDebugDir(source, category, suggestedFileName)
   })
   registerIpcHandler<string, Awaited<ReturnType<typeof readImageInfo>>>('image:readImageInfo', (input) => parseStringField(input, 'source'), (source) => readImageInfo(source))
+  registerIpcHandler<undefined, Awaited<ReturnType<typeof probeSharpDiffusionFallback>>>('image:probeDiffusionFallback', () => undefined, () => {
+    return probeSharpDiffusionFallback()
+  })
+  registerIpcHandler<SharpDiffusionFallbackRequest, Awaited<ReturnType<typeof renderSharpDiffusionFallback>>>('image:renderDiffusionFallback', parseDiffusionFallbackPayload, (payload) => {
+    return renderSharpDiffusionFallback(payload)
+  })
   registerIpcHandler<CompressImageSourcePayload, Awaited<ReturnType<typeof compressImageSource>>>('image:compressImageSource', parseCompressImageSourcePayload, (payload) => {
     return compressImageSource(payload.source, {
       maxPixels: payload.maxPixels,
@@ -130,6 +141,27 @@ export function registerImageIpc(): void {
     const bytes = await generateImageThumbnailBytes(source, maxSize)
     return { bytes }
   })
+}
+
+function parseDiffusionFallbackPayload(input: unknown): SharpDiffusionFallbackRequest {
+  const record = parseRecord(input)
+  const purpose = record.purpose
+  const format = record.format
+  if (purpose !== 'preview' && purpose !== 'export') {
+    throw new Error('Expected purpose to be preview or export')
+  }
+  if (format !== 'png' && format !== 'jpeg' && format !== 'webp') {
+    throw new Error('Expected format to be png, jpeg or webp')
+  }
+  return {
+    requestId: readString(record, 'requestId'),
+    source: readString(record, 'source'),
+    purpose,
+    format,
+    quality: readOptionalNumber(record, 'quality'),
+    maxPreviewPixels: readOptionalNumber(record, 'maxPreviewPixels'),
+    params: record.params,
+  }
 }
 
 function parseSplitImagePayload(input: unknown): SplitImagePayload {

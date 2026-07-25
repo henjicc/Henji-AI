@@ -5,13 +5,10 @@ import { useTranslation } from 'react-i18next';
 const logger = createLogger('features.canvas.ui.NodeToolDialog')
 
 import {
-  NODE_TOOL_TYPES,
   isExportImageNode,
   isImageEditNode,
   isUploadNode,
-  type NodeToolType,
 } from '@/features/canvas/domain/canvasNodes';
-import { EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
 import {
   canvasEventBus,
   canvasToolProcessor,
@@ -108,7 +105,7 @@ export function NodeToolDialog() {
     const initialOptions = activePlugin.createInitialOptions(sourceNode);
     setOptions(initialOptions);
 
-    if (activePlugin.editor !== 'split' || !sourceImageUrl) {
+    if (!activePlugin.dialog.preloadStoryboardMetadata || !sourceImageUrl) {
       return () => {
         cancelled = true;
       };
@@ -143,7 +140,9 @@ export function NodeToolDialog() {
   }, [dialogKey, sourceNode, activePlugin, sourceImageUrl]);
 
   useEffect(() => {
-    const requiresSplitPreload = activePlugin?.editor === 'split' && Boolean(sourceImageUrl);
+    const requiresSplitPreload = Boolean(
+      activePlugin?.dialog.preloadStoryboardMetadata && sourceImageUrl
+    );
     if (!requiresSplitPreload || !sourceImageUrl) {
       setIsSplitImageReady(true);
       return;
@@ -177,7 +176,7 @@ export function NodeToolDialog() {
     return () => {
       cancelled = true;
     };
-  }, [activePlugin?.editor, sourceImageUrl]);
+  }, [activePlugin?.dialog.preloadStoryboardMetadata, sourceImageUrl]);
 
   const closeDialog = useCallback(() => {
     // 立即清空本地编辑选项,避免取消后未保存的标注在重开时被重新读取
@@ -185,25 +184,6 @@ export function NodeToolDialog() {
     setError(null);
     canvasEventBus.publish('tool-dialog/close', undefined);
   }, []);
-
-  const resolveToolLabel = useCallback((toolType: NodeToolType | undefined) => {
-    if (!toolType) {
-      return '';
-    }
-    if (toolType === NODE_TOOL_TYPES.edit) {
-      return t('tool.edit');
-    }
-    if (toolType === NODE_TOOL_TYPES.splitStoryboard) {
-      return t('tool.split');
-    }
-    return '';
-  }, [t]);
-  const resolveResultNodeTitle = useCallback((toolType: NodeToolType | undefined) => {
-    if (toolType === NODE_TOOL_TYPES.edit) {
-      return t('toolDialog.editResultTitle');
-    }
-    return EXPORT_RESULT_DISPLAY_NAME.generic;
-  }, [t]);
 
   const handleApply = useCallback(async () => {
     if (!activeToolDialog || !sourceNode || !sourceImageUrl || !activePlugin) {
@@ -213,6 +193,10 @@ export function NodeToolDialog() {
 
     setIsProcessing(true);
     setError(null);
+    logger.debug('canvas.tool.dialog.apply.start', {
+      toolId: activePlugin.type,
+      nodeId: sourceNode.id,
+    });
 
     try {
       const result = await activePlugin.execute(sourceImageUrl, options, {
@@ -239,7 +223,7 @@ export function NodeToolDialog() {
           prepared.aspectRatio,
           prepared.previewImageUrl,
           {
-            defaultTitle: resolveResultNodeTitle(activeToolDialog.toolType),
+            defaultTitle: activePlugin.dialog.resultNodeTitle,
             resultKind: 'generic',
             aspectRatioStrategy: 'provided',
             sizeStrategy: 'autoMinEdge',
@@ -250,8 +234,17 @@ export function NodeToolDialog() {
         }
       }
 
+      logger.info('canvas.tool.dialog.apply.completed', {
+        toolId: activePlugin.type,
+        nodeId: sourceNode.id,
+      });
       closeDialog();
     } catch (processError) {
+      logger.error('canvas.tool.dialog.apply.failed', {
+        toolId: activePlugin.type,
+        nodeId: sourceNode.id,
+        error: processError instanceof Error ? processError.message : String(processError),
+      });
       setError(processError instanceof Error ? processError.message : t('toolDialog.processFailed'));
     } finally {
       setIsProcessing(false);
@@ -266,22 +259,11 @@ export function NodeToolDialog() {
     addDerivedExportNode,
     addEdge,
     closeDialog,
-    resolveResultNodeTitle,
     t,
   ]);
 
-  const widthClassName = useMemo(() => {
-    if (!activePlugin) {
-      return 'w-[min(460px,calc(100vw-40px))]';
-    }
-    if (activePlugin.editor === 'edit') {
-      return 'w-[min(90vw,1560px)]';
-    }
-    if (activePlugin.editor === 'split') {
-      return 'w-[min(1120px,calc(100vw-40px))]';
-    }
-    return 'w-[min(460px,calc(100vw-40px))]';
-  }, [activePlugin]);
+  const widthClassName = activePlugin?.dialog.widthClassName
+    ?? 'w-[min(460px,calc(100vw-40px))]';
 
   const editorContent = useMemo(() => {
     if (!activePlugin) {
@@ -326,7 +308,7 @@ export function NodeToolDialog() {
   return (
     <UiModal
       isOpen={isOpen}
-      title={`${resolveToolLabel(activePlugin?.type)}${t('toolDialog.suffix')}`}
+      title={`${activePlugin?.label ?? ''}${t('toolDialog.suffix')}`}
       onClose={closeDialog}
       widthClassName={widthClassName}
       footer={

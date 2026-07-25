@@ -517,6 +517,26 @@
       "title": "滤镜",
       "intensity": "强度",
       "apply": "应用滤镜"
+    },
+    "diffusion": {
+      "tool": "辉光/柔光",
+      "description": "参数按图片空间保存，预览与导出共用同一配方。",
+      "enable": "启用辉光/柔光",
+      "compiling": "正在编译柔光预览…",
+      "rendering": "正在渲染柔光预览…",
+      "sharpFallback": "正在使用 Sharp 兼容预览",
+      "sharpFallbackApiUnavailable": "当前 Electron 未启用 WebGPU，已切换到 Sharp 兼容预览（效果为近似，导出仍按原图尺寸处理）。",
+      "sharpFallbackAdapterUnavailable": "未找到可用的 WebGPU 图形设备，已切换到 Sharp 兼容预览（效果为近似，导出仍按原图尺寸处理）。",
+      "sharpFallbackInitializationFailed": "WebGPU 初始化失败，已切换到 Sharp 兼容预览（效果为近似，导出仍按原图尺寸处理）。",
+      "sharpFallbackRecoveryExhausted": "WebGPU 设备丢失且自动重建未成功，已切换到 Sharp 兼容预览（效果为近似，导出仍按原图尺寸处理）。",
+      "previewBackend": "预览后端",
+      "reset": "重置",
+      "remove": "移除效果",
+      "preset": {
+        "label": "通用预设",
+        "custom": "自定义",
+        "sourceNotice": "预设仅参考公开方法，不对应任何品牌滤镜或镜头档位。"
+      }
     }
   },
   "modelscopeCustomModel": {
