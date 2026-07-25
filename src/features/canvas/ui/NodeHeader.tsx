@@ -46,7 +46,7 @@ export const NODE_HEADER_ICON_TITLE_ADJUST: HeaderAdjust = { x: -8, y: 8, scale:
 export const NODE_HEADER_PRICE_ADJUST: HeaderAdjust = { x: -8, y: 0, scale: 1 };
 
 export const NODE_HEADER_TONE_CLASS = 'text-white/55';
-export const NODE_HEADER_TITLE_CLASS = 'text-[14px] font-normal';
+export const NODE_HEADER_TITLE_CLASS = 'text-14 font-normal';
 export const NODE_HEADER_META_CLASS = 'text-xs text-text-muted';
 export const NODE_HEADER_FLOATING_POSITION_CLASS = 'absolute -top-8 left-2 right-2 z-20';
 // 标题不再用 max-w-[60%] 限宽：百分比宽度作用在"宽度由内容撑出"的祖先链上时
@@ -196,7 +196,7 @@ export function NodeHeader({
             }
           }}
           className={joinClasses(
-            `nodrag nowheel h-6 min-w-[70px] w-full max-w-full rounded border px-2 text-[13px] font-normal ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS}`,
+            `nodrag nowheel h-6 min-w-[70px] w-full max-w-full rounded border px-2 text-13 font-normal ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS}`,
             titleClassName
           )}
         />

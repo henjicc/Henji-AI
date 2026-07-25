@@ -134,7 +134,7 @@ export function ModelPickerList({
                 <div key={model.meta.id} className="inline-flex items-start gap-2.5 border border-transparent px-2.5 py-1.5">
                   {model.meta.icon && <span className="h-7 w-7 shrink-0" />}
                   <div className="flex flex-col">
-                    <span className="whitespace-nowrap text-[13px]">{displayName}</span>
+                    <span className="whitespace-nowrap text-13">{displayName}</span>
                     <span className="whitespace-nowrap text-2xs">
                       {getProviderDisplayName(model.meta.provider)}
                       {functionLabels.length > 0 ? ` · ${functionLabels.join(' · ')}` : ''}
@@ -231,7 +231,7 @@ export function ModelPickerList({
                 </div>
               )}
               <div className="min-w-0 flex-1">
-                <div className={`truncate text-[13px] ${active ? 'text-white' : 'text-text-dark'}`}>{displayName}</div>
+                <div className={`truncate text-13 ${active ? 'text-white' : 'text-text-dark'}`}>{displayName}</div>
                 <div className={`truncate text-2xs ${active ? 'text-white/70' : 'text-text-muted'}`}>
                   {getProviderDisplayName(model.meta.provider)}
                   {functionLabels.length > 0 ? ` · ${functionLabels.join(' · ')}` : ''}

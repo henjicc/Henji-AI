@@ -17,6 +17,8 @@ import {
   NODE_CONTROL_CHIP_CLASS,
   NODE_CONTROL_ICON_CLASS,
   NODE_CONTROL_PRIMARY_BUTTON_CLASS,
+  NODE_IDLE_BORDER_CLASS,
+  NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { mediaPortId } from '@/features/canvas/domain/socketTypes';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -270,8 +272,8 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
       className={`
         group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
         ${selected
-          ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
-          : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
+          ? NODE_SELECTED_BORDER_CLASS
+          : NODE_IDLE_BORDER_CLASS}
       `}
       style={{ width: `${resolvedNodeWidth}px`, height: `${resolvedNodeHeight}px` }}
       onClick={() => setSelectedNode(id)}
@@ -286,7 +288,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
 
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
         <div
-          className="grid overflow-hidden rounded-lg border border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.14)]"
+          className="grid overflow-hidden rounded-lg border border-veil-soft bg-veil-soft"
           style={{
             gap: `${STORYBOARD_GRID_GAP_PX}px`,
             width: `${frameLayout.gridWidth}px`,

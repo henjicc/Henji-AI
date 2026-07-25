@@ -313,7 +313,7 @@ export function StackedMediaUploader({
       onDrop={(event) => void handleDrop(event)}
       onMouseUp={() => void handleCustomDrop()}
     >
-      <div className={`relative min-h-[82px] rounded-2xl bg-zinc-900/28 p-1.5 transition-colors ${isDragging ? 'bg-zinc-800/55' : ''}`}>
+      <div className={`relative min-h-[82px] rounded-2xl bg-zinc-900/30 p-1.5 transition-colors ${isDragging ? 'bg-zinc-800/55' : ''}`}>
         <div className="relative h-[66px] overflow-visible">
           {files.map((file, index) => {
             const isVideo = fileTypes ? fileTypes[index] === 'video' : false
@@ -352,7 +352,7 @@ export function StackedMediaUploader({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-[11px] ${UI_UPLOADER_CARD_BORDER_CLASS} bg-zinc-800/35 p-0 shadow-[0_8px_16px_rgba(0,0,0,0.45)] transition-transform duration-200 ease-out hover:scale-[1.1]`}
+                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-xl ${UI_UPLOADER_CARD_BORDER_CLASS} bg-zinc-800/35 p-0 shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
@@ -373,7 +373,7 @@ export function StackedMediaUploader({
                 </UiButton>
                 <UiIconButton
                   type="button"
-                  className={`absolute -right-1 -top-1 h-5 w-5 border-zinc-500/55 bg-zinc-900/92 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                  className={`absolute -right-1 -top-1 h-5 w-5 border-zinc-500/55 bg-zinc-900/90 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onRemove(index)
@@ -429,8 +429,8 @@ export function StackedMediaUploader({
                 variant="muted"
                 size="sm"
                 className={`p-0 text-zinc-100 ${plusUseCardShape
-                  ? `h-[64px] w-[48px] rounded-[11px] ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-zinc-900 text-2xl shadow-[0_8px_18px_rgba(0,0,0,0.38)] transition-transform duration-200 ease-out hover:scale-[1.1]`
-                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-zinc-500/55 bg-zinc-700/82 text-base shadow-[0_6px_14px_rgba(0,0,0,0.42)] transition-transform duration-200 ease-out hover:scale-[1.1]'
+                  ? `h-[64px] w-[48px] rounded-xl ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-zinc-900 text-2xl shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`
+                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-zinc-500/55 bg-zinc-700/80 text-base shadow-thumb-sm transition-transform duration-200 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {
                   event.stopPropagation()

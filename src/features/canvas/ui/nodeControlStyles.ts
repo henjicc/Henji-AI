@@ -24,7 +24,7 @@ export const NODE_PORT_NODE_CLASS = `${NODE_PORT_BASE_CLASS} group-hover:!opacit
  * 避免"不同控件类型各自圆角"导致的不统一感。
  */
 export const NODE_ROW_CARD_CLASS =
-  'rounded-lg border border-[rgba(255,255,255,0.1)] bg-bg-dark/45 transition-colors';
+  'rounded-lg border border-veil-subtle bg-bg-dark/45 transition-colors';
 
 export const NODE_ROW_CLASS =
   `group/row relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
@@ -41,5 +41,21 @@ export const NODE_ROW_GAP_CLASS = 'gap-1.5';
 
 /** 结果节点生成失败时的红色描边（配合 NodeGenerationError 覆盖层使用） */
 export const NODE_GENERATION_ERROR_BORDER_CLASS =
-  'border-red-500/70 shadow-[0_0_0_1px_rgba(239,68,68,0.28)]';
+  'border-red-500/70 shadow-node-error';
+
+/**
+ * 节点外壳的选中 / 未选中描边。
+ *
+ * 这两组类此前在 11 个节点文件里各写一遍（完全相同的三元表达式），
+ * 属于"同功能多份实现"。收敛到这里后新增节点直接复用，改描边只改一处。
+ *
+ * 用法：
+ *   className={`... ${selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_CLASS}`}
+ */
+export const NODE_SELECTED_BORDER_CLASS = 'border-accent shadow-node-selected';
+
+export const NODE_IDLE_BORDER_CLASS = 'border-veil hover:border-veil-strong';
+
+/** 不需要 hover 反馈的节点（如分组节点）用这个 */
+export const NODE_IDLE_BORDER_STATIC_CLASS = 'border-veil';
 

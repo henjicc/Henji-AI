@@ -239,10 +239,10 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       ref={wrapperRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      className="flex h-full min-h-0 flex-col bg-zinc-900/42 outline-none"
+      className="flex h-full min-h-0 flex-col bg-zinc-900/40 outline-none"
     >
       {/* 筛选区域 - 固定在顶部 */}
-      <div className="flex-shrink-0 bg-zinc-900/46 p-4 pb-2">
+      <div className="flex-shrink-0 bg-zinc-900/45 p-4 pb-2">
         {/* 搜索框 */}
         <div className="mb-3">
           <div className="text-xs text-zinc-400 mb-2">{t('search.label')}</div>

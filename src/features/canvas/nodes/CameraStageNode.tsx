@@ -21,7 +21,7 @@ import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
-import { NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+import { NODE_IDLE_BORDER_CLASS, NODE_PORT_NODE_CLASS, NODE_PORT_VISIBLE_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { createLogger } from '@/core/logging';
@@ -127,8 +127,8 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
       className={`
         group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-0 transition-colors duration-150
         ${selected
-          ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
-          : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
+          ? NODE_SELECTED_BORDER_CLASS
+          : NODE_IDLE_BORDER_CLASS}
       `}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}

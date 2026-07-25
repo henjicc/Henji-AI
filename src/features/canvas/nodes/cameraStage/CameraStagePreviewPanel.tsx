@@ -40,7 +40,7 @@ export function CameraStagePreviewPanel({
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text-muted/85">
           <Clapperboard className="h-7 w-7 opacity-60" />
-          <span className="px-4 text-center text-[12px] leading-6">{t('node.cameraStage.empty')}</span>
+          <span className="px-4 text-center text-xs leading-6">{t('node.cameraStage.empty')}</span>
         </div>
       )}
 

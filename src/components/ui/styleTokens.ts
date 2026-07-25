@@ -94,5 +94,5 @@ export const UI_OPTION_ITEM_ACTIVE_CLASS =
 export const UI_DROPDOWN_OPTION_ACTIVE_CLASS =
   '!bg-brand-600 !text-white hover:!bg-brand-600';
 
-export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-[1.5px] border-white/42';
-export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-[1.5px] !border-white/42';
+export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-1.5 border-veil-strong';
+export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-1.5 !border-veil-strong';

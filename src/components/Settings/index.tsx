@@ -105,7 +105,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
                   onClick={() => handleTabSelect(tab.id)}
                 >
                 <tab.icon className="h-[18px] w-[18px] shrink-0" />
-                <span className="ml-3 font-medium text-[15px] leading-none text-left">{tab.label}</span>
+                <span className="ml-3 font-medium text-15 leading-none text-left">{tab.label}</span>
               </UiNavButton>
             ))}
           </div>
@@ -152,7 +152,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
               onClick={handleClose}
               variant="primary"
               size="sm"
-              className="h-[42px] px-5 text-[16px] font-medium shadow-lg"
+              className="h-[42px] px-5 text-base font-medium shadow-lg"
             >
               {t('actions.close')}
             </UiButton>

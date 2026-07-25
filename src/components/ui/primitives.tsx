@@ -466,7 +466,7 @@ export function UiModal({
         className={`relative transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${widthClassName}`}
       >
         {!hideHeader && (
-          <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.1)] px-4 py-3">
+          <div className="flex items-center justify-between border-b border-veil-subtle px-4 py-3">
             <h2 className="text-sm font-medium text-text-dark">{title}</h2>
             <UiIconButton className="h-8 w-8" onClick={onClose}>
               <X className="h-4 w-4" />
@@ -477,7 +477,7 @@ export function UiModal({
         <div className={contentClassName}>{children}</div>
 
         {footer && (
-          <div className="flex justify-end gap-2 border-t border-[rgba(255,255,255,0.1)] px-4 py-3">
+          <div className="flex justify-end gap-2 border-t border-veil-subtle px-4 py-3">
             {footer}
           </div>
         )}

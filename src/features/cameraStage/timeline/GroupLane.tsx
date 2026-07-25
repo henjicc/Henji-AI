@@ -142,7 +142,7 @@ const GroupLane: React.FC<GroupLaneProps> = ({
             tabIndex={-1}
             data-keyframe-keys={keys.join(',')}
             aria-label={`分组关键帧 ${time.toFixed(2)}s`}
-            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-[1px] ${
+            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-hairline ${
               eased ? 'h-3.5 w-2.5' : 'h-2.5 w-2.5 rotate-45'
             }`}
             style={{

@@ -48,7 +48,7 @@ export function NodeDownloadMenu({
       </UiOptionButton>
 
       {downloadPresetPaths.length > 0 ? (
-        <div className="mt-1 space-y-1 border-t border-[rgba(255,255,255,0.1)] pt-2">
+        <div className="mt-1 space-y-1 border-t border-veil-subtle pt-2">
           {downloadPresetPaths.map((path) => (
             <UiOptionButton
               key={path}
@@ -65,7 +65,7 @@ export function NodeDownloadMenu({
           ))}
         </div>
       ) : (
-        <div className="mt-1 border-t border-[rgba(255,255,255,0.1)] px-2.5 pt-2 text-xs text-text-muted">
+        <div className="mt-1 border-t border-veil-subtle px-2.5 pt-2 text-xs text-text-muted">
           {noPresetHintLabel}
         </div>
       )}

@@ -132,7 +132,7 @@ const TrackLane: React.FC<TrackLaneProps> = ({
             tabIndex={-1}
             data-keyframe-keys={key}
             aria-label={`关键帧 ${keyframe.time.toFixed(2)}s`}
-            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-[1px] ${
+            className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-hairline ${
               isEased(keyframe.easing) ? 'h-3.5 w-2.5' : 'h-2.5 w-2.5 rotate-45'
             }`}
             style={{

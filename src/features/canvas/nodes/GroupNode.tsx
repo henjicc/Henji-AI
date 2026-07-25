@@ -7,6 +7,8 @@ import { CANVAS_NODE_TYPES, type GroupNodeData } from '@/features/canvas/domain/
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { useCanvasStore } from '@/stores/canvasStore';
 
+import { NODE_SELECTED_BORDER_CLASS, NODE_IDLE_BORDER_STATIC_CLASS } from '@/features/canvas/ui/nodeControlStyles';
+
 type GroupNodeProps = {
   id: string;
   data: GroupNodeData;
@@ -22,10 +24,10 @@ export const GroupNode = memo(({ id, data, selected }: GroupNodeProps) => {
 
   return (
     <div
-      className={`group relative h-full w-full overflow-visible rounded-[18px] border bg-[rgba(255,255,255,0.03)] backdrop-blur-[1px] ${
+      className={`group relative h-full w-full overflow-visible rounded-2xl border bg-veil-faint backdrop-blur-[1px] ${
         selected
-          ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.35)]'
-          : 'border-[rgba(255,255,255,0.26)]'
+          ? NODE_SELECTED_BORDER_CLASS
+          : NODE_IDLE_BORDER_STATIC_CLASS
       }`}
     >
       <NodeHeader

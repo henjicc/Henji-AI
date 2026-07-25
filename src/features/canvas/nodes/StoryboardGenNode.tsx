@@ -40,7 +40,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
-import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles'
+import { NODE_IDLE_BORDER_CLASS, NODE_ROW_GAP_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import {
   STORYBOARD_GEN_ICON_ADJUST,
@@ -385,8 +385,8 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
       className={`
         group relative flex h-full flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/95 p-3 transition-colors duration-150
         ${selected
-          ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
-          : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'
+          ? NODE_SELECTED_BORDER_CLASS
+          : NODE_IDLE_BORDER_CLASS
         }
       `}
       style={{ width: `${resolvedNodeWidth}px`, height: `${resolvedNodeHeight}px` }}

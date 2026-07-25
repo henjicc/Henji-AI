@@ -35,8 +35,10 @@ import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
 import {
+  NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
+  NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import {
@@ -329,8 +331,8 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
       className={`
         group relative overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/85 p-0 transition-colors duration-150
         ${selected
-          ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
-          : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
+          ? NODE_SELECTED_BORDER_CLASS
+          : NODE_IDLE_BORDER_CLASS}
       `}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={handleNodeClick}
@@ -363,7 +365,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         >
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text-muted/85">
             <Upload className="h-7 w-7 opacity-60" />
-            <span className="px-3 text-center text-[12px] leading-6">{t('node.upload.hint')}</span>
+            <span className="px-3 text-center text-xs leading-6">{t('node.upload.hint')}</span>
           </div>
         </label>
       )}

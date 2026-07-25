@@ -205,7 +205,7 @@ export function MarkCanvas({
   return (
     <div
       ref={viewportRef}
-      className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-[rgba(255,255,255,0.12)] bg-bg-dark/85"
+      className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-veil-subtle bg-bg-dark/85"
     >
       <div
         ref={stageHostRef}

@@ -15,8 +15,10 @@ import { isNodeUsingDefaultDisplayName, resolveNodeDisplayName } from '@/feature
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import {
   NODE_GENERATION_ERROR_BORDER_CLASS,
+  NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
+  NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
@@ -219,8 +221,8 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
         ${generationError
           ? NODE_GENERATION_ERROR_BORDER_CLASS
           : selected
-            ? 'border-accent shadow-[0_0_0_1px_rgba(59,130,246,0.32)]'
-            : 'border-[rgba(255,255,255,0.22)] hover:border-[rgba(255,255,255,0.34)]'}
+            ? NODE_SELECTED_BORDER_CLASS
+            : NODE_IDLE_BORDER_CLASS}
       `}
       style={{ width: AUDIO_NODE_WIDTH, height: AUDIO_NODE_HEIGHT }}
       onClick={handleNodeClick}
@@ -327,7 +329,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
           <div className="pointer-events-none absolute inset-0 overflow-hidden">
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
-              className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-[rgba(255,255,255,0.4)] to-[rgba(255,255,255,0.06)] ease-out"
+              className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-veil-bright to-veil-faint ease-out"
               style={{ transform: `scaleX(${progress})`, transition: `transform ${transitionDurationMs}ms ease-out` }}
             />
           </div>
