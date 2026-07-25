@@ -14,6 +14,7 @@ import {
   UI_INSET_SURFACE_CLASS,
   UI_META_BADGE_ACCENT_CLASS,
   UI_META_BADGE_CLASS,
+  UI_LIST_ITEM_SKIP_TALL_CLASS,
 } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
@@ -49,6 +50,7 @@ export interface TaskCardProps {
  * 用 inset（比页面底色更暗）读作"凹进去的待填充槽位"，而不是浮起来的卡片。
  */
 const RESULT_SLOT_CLASS = `h-64 rounded-lg ${UI_INSET_SURFACE_CLASS}`
+
 
 const TaskCard = React.memo(function TaskCard({
   task,
@@ -362,7 +364,13 @@ const TaskCard = React.memo(function TaskCard({
   }
 
   return (
-    <div className="rounded-xl p-3" data-generation-task-id={task.id} tabIndex={-1}>
+    // 历史最多 500 条且每条含图/视频，视口外的卡片跳过布局与绘制。
+    // 不用虚拟化：滚动容器在父级且带 paddingBottom 补偿逻辑，接管滚动会与之冲突。
+    <div
+      className={`rounded-xl p-3 ${UI_LIST_ITEM_SKIP_TALL_CLASS}`}
+      data-generation-task-id={task.id}
+      tabIndex={-1}
+    >
       <div className="flex items-start gap-3">
         <TaskInputPreview
           taskId={task.id}

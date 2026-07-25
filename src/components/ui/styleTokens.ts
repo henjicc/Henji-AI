@@ -78,6 +78,24 @@ export const UI_META_BADGE_CLASS = 'bg-veil-faint border border-veil-subtle px-2
 export const UI_META_BADGE_ACCENT_CLASS =
   'bg-accent/10 border border-accent/40 text-brand-300 px-2 py-0.5 rounded';
 
+/**
+ * 长列表项的渲染跳过。
+ *
+ * `content-visibility: auto` 让浏览器跳过视口外元素的布局与绘制，
+ * `contain-intrinsic-size: auto <len>` 让它记住上次渲染的真实高度（所以可变高度也适用）。
+ *
+ * 相比虚拟化的取舍：元素仍然留在 DOM 里，因此 `document.querySelector` 定位、
+ * 原生拖拽、右键菜单、Ctrl+F 都照常工作，也不用接管滚动容器；
+ * 代价是滚动条长度在首次滚过之前是估算值。
+ *
+ * ⚠️ 必须写成**字面量常量**，不能用函数按参数拼类名：
+ * Tailwind 是静态扫描源码文本的，`` `[contain-intrinsic-size:auto_${h}]` `` 这种运行时拼接
+ * 它看不到，最终不会生成任何 CSS（和非刻度透明度一样是静默失效）。
+ * 需要别的估值高度时，在这里再加一个字面量常量。
+ */
+export const UI_LIST_ITEM_SKIP_TALL_CLASS =
+  '[content-visibility:auto] [contain-intrinsic-size:auto_420px]';
+
 export const UI_FIELD_SURFACE_CLASS =
   'bg-surface-dark border border-border-dark text-text-dark';
 
