@@ -1,16 +1,23 @@
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import {
+  DEFAULT_USD_TO_CNY_RATE,
+  convertPriceAmount,
+  resolvePricingCurrency,
+} from '@/core/pricing/priceDisplay'
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
 import { getI18nText, type ModelDefinition, type ParamDef } from '@/core/types'
 
 export type GenerationMediaType = 'image' | 'video' | 'audio'
+export type GenerationModelSearchSort = 'registry' | 'recommended' | 'lowest_estimated_price'
 
 export interface GenerationModelSearchInput {
   query?: string
   mediaType?: GenerationMediaType
   providerId?: string
   tags?: string[]
+  sortBy?: GenerationModelSearchSort
 }
 
 export interface GenerationPreparationInput {
@@ -98,6 +105,86 @@ function modelDescriptionText(model: ModelDefinition): string {
   return getI18nText(model.meta.description, 'zh') || getI18nText(model.meta.description, 'en')
 }
 
+/**
+ * 将模型当前参数的价格规则转为可安全提供给 Agent 的估算值。
+ * 搜索阶段使用配置默认值；真正提交前会再次用已解析的参数计算一次。
+ */
+function createPriceEstimate(
+  model: ModelDefinition,
+  params = registry.getDefaultValues(model.meta.id)
+): Record<string, unknown> {
+  const calculated = registry.calculatePrice(model.meta.id, params)
+  const amount = Number.isFinite(calculated) && calculated >= 0 ? calculated : null
+  const sourceCurrency = resolvePricingCurrency(model.pricing.currency)
+  const comparableCnyAmount = amount !== null && sourceCurrency
+    ? convertPriceAmount(amount, sourceCurrency, 'CNY', DEFAULT_USD_TO_CNY_RATE)
+    : null
+
+  return {
+    amount,
+    currency: model.pricing.currency,
+    display: amount === null ? '价格暂不可估算' : `${model.pricing.currency}${amount.toFixed(4)}`,
+    billingMode: model.pricing.fixed !== undefined ? 'fixed' : 'dynamic',
+    basis: '当前参数估算',
+    description: model.pricing.description ?? null,
+    comparableCnyAmount,
+    comparableCnyExchangeRate: sourceCurrency === 'USD' ? DEFAULT_USD_TO_CNY_RATE : null,
+    comparisonNote: sourceCurrency
+      ? '人民币比较值仅用于候选排序；动态计费模型以提交前的实际参数估算为准。'
+      : '该货币暂不参与跨币种比较；以模型原始价格为准。',
+  }
+}
+
+function createCatalogPriceEstimate(model: ModelDefinition): Record<string, unknown> {
+  const estimate = createPriceEstimate(model)
+  return {
+    amount: estimate.amount,
+    currency: estimate.currency,
+    display: estimate.display,
+    billingMode: estimate.billingMode,
+    comparableCnyAmount: estimate.comparableCnyAmount,
+    description: typeof estimate.description === 'string' ? estimate.description.slice(0, 80) : null,
+  }
+}
+
+function compactModelDescription(model: ModelDefinition): string {
+  return modelDescriptionText(model).replace(/\s+/g, ' ').trim().slice(0, 80)
+}
+
+function priceSortValue(candidate: Record<string, unknown>): number {
+  const price = candidate.priceEstimate
+  if (!price || typeof price !== 'object' || Array.isArray(price)) return Number.POSITIVE_INFINITY
+  const value = (price as Record<string, unknown>).comparableCnyAmount
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number.POSITIVE_INFINITY
+}
+
+function recommendedSortValue(candidate: Record<string, unknown>): number {
+  const evidence = candidate.selectionEvidence
+  if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) return 0
+  return (evidence as Record<string, unknown>).recommendedByDescription === true ? 1 : 0
+}
+
+function sortSearchCandidates(
+  candidates: Array<Record<string, unknown>>,
+  sortBy: GenerationModelSearchSort | undefined
+): Array<Record<string, unknown>> {
+  if (!sortBy || sortBy === 'registry') return candidates
+  return candidates
+    .map((candidate, index) => ({ candidate, index }))
+    .sort((left, right) => {
+      if (sortBy === 'recommended') {
+        const recommendedDelta = recommendedSortValue(right.candidate) - recommendedSortValue(left.candidate)
+        if (recommendedDelta !== 0) return recommendedDelta
+      }
+      if (sortBy === 'lowest_estimated_price') {
+        const priceDelta = priceSortValue(left.candidate) - priceSortValue(right.candidate)
+        if (priceDelta !== 0) return priceDelta
+      }
+      return left.index - right.index
+    })
+    .map(({ candidate }) => candidate)
+}
+
 function createSelectionEvidence(
   model: ModelDefinition,
   input: GenerationModelSearchInput,
@@ -105,35 +192,16 @@ function createSelectionEvidence(
 ): Record<string, unknown> {
   const description = modelDescriptionText(model)
   return {
-    candidate: true,
-    availableInRegistry: true,
-    canonicalModelId: model.meta.canonicalModelId,
-    providerId: model.meta.provider,
     recommendedByDescription: description.includes('推荐使用'),
-    qualitativeDescription: description,
-    tags: model.meta.tags ?? [],
     matchedQueryTerms,
-    exclusionRules: [
-      '媒体类型不匹配',
-      '用户明确供应商不匹配',
-      '必需能力标签缺失',
-      '明确模型关键词不匹配',
-    ],
-    hardConstraints: {
-      mediaType: input.mediaType ?? null,
-      providerId: input.providerId ?? null,
-      requiredTags: input.tags ?? [],
-      mediaTypeMatched: !input.mediaType || model.meta.type === input.mediaType,
-      providerMatched: !input.providerId || model.meta.provider === input.providerId,
-      tagsMatched: (input.tags ?? []).every((tag) => model.meta.tags?.includes(tag)),
-    },
+    compatible: true,
   }
 }
 
 export function searchGenerationModels(input: GenerationModelSearchInput): Array<Record<string, unknown>> {
   const terms = normalizeTerms(input.query)
   const requestedTags = (input.tags ?? []).map((tag) => tag.trim()).filter(Boolean)
-  return registry.listAllModels()
+  const candidates = registry.listAllModels()
     .filter((model) => {
       if (input.mediaType && model.meta.type !== input.mediaType) return false
       if (input.providerId && model.meta.provider !== input.providerId) return false
@@ -146,12 +214,13 @@ export function searchGenerationModels(input: GenerationModelSearchInput): Array
       canonicalModelId: model.meta.canonicalModelId,
       providerId: model.meta.provider,
       mediaType: model.meta.type,
-      name: model.meta.name,
-      description: model.meta.description,
-      tags: model.meta.tags ?? [],
-      inputLimits: toSafeValue(model.inputLimits),
+      name: getI18nText(model.meta.name, 'zh') || getI18nText(model.meta.name, 'en'),
+      description: compactModelDescription(model),
+      tags: (model.meta.tags ?? []).slice(0, 8),
+      priceEstimate: createCatalogPriceEstimate(model),
       selectionEvidence: createSelectionEvidence(model, input, terms),
     }))
+  return sortSearchCandidates(candidates, input.sortBy)
 }
 
 export function getGenerationModelSchema(modelId: string): Record<string, unknown> {
@@ -169,6 +238,7 @@ export function getGenerationModelSchema(modelId: string): Record<string, unknow
       tags: model.meta.tags ?? [],
     },
     inputLimits: toSafeValue(model.inputLimits),
+    priceEstimate: createPriceEstimate(model),
     params: model.params.map(serializeParam),
     linkageCount: model.linkages?.length ?? 0,
   }
@@ -285,6 +355,7 @@ export function prepareGenerationTask(input: GenerationPreparationInput): Record
     mediaType: model.meta.type,
     options: normalized,
     mediaLimits: limits,
+    priceEstimate: createPriceEstimate(model, normalized),
     selectionEvidence: {
       selectedModelId: model.meta.id,
       canonicalModelId: model.meta.canonicalModelId,

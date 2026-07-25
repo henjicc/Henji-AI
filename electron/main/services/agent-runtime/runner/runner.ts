@@ -319,9 +319,12 @@ export class AgentRunner {
     })
     this.throwIfCancelled()
     this.budget.recordModelUsage(result.usage)
+    const displayText = result.text.trim()
     this.emit({
       type: 'ModelCompleted', stepId, finishReason: result.finishReason,
-      toolCallCount: result.toolCalls.length, usage: result.usage,
+      toolCallCount: result.toolCalls.length,
+      ...(displayText ? { displayText: displayText.slice(0, 2_000) } : {}),
+      usage: result.usage,
     })
     this.currentModelRequestId = null
     this.state.currentStepId = null

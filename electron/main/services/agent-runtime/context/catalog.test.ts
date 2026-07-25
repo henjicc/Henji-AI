@@ -49,7 +49,7 @@ describe('AgentToolCatalogPlanner', () => {
       reason: '命中生成规则',
     }
     const names = planner.select(route, contextSnapshot()).map((item) => item.catalog.name)
-    expect(names).toContain('search_application_capabilities')
+    expect(names).not.toContain('search_application_capabilities')
     expect(names).toContain('search_models')
     expect(names).toContain('get_model_schema')
     expect(names).toContain('create_visible_generation_task')

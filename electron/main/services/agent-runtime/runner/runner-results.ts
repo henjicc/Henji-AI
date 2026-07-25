@@ -37,7 +37,10 @@ export function toolMessage(
   call: ModelStepToolCall,
   observation: AgentToolObservation
 ): ModelStepMessage {
-  const output = shouldOffloadObservation(observation.output)
+  // 模型目录是一次性筛选候选的核心证据；允许其在 24 KiB 内直接进入工具消息，
+  // 避免“结果过早卸载 → 模型看不到候选 → 再次搜索”的循环。
+  const offloadThreshold = call.toolName === 'search_models' ? 24 * 1024 : undefined
+  const output = shouldOffloadObservation(observation.output, offloadThreshold)
     ? { summary: observation.summary, largeResultOmitted: true }
     : { summary: observation.summary, data: sanitizeObservationValue(observation.output) }
   return {

@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import {
   agentRunViewReducer,
   createInitialAgentRunViewState,
+  groupToolActivitiesForDisplay,
   selectExecutionPresentation,
+  selectModelPublicUpdates,
   selectPendingApproval,
   selectToolActivities,
 } from './agentRunReducer'
@@ -54,6 +56,61 @@ describe('agentRunViewReducer', () => {
       status: 'completed', resultReferences: { taskId: 'task-1' },
     })])
     expect(selectPendingApproval([requested, completed, approval])?.approvalId).toBe('approval-1')
+  })
+
+  it('将连续完成的只读查询收纳为默认折叠组，但保留写操作和失败项', () => {
+    const activities = [
+      {
+        toolCallId: 'read-1', toolName: 'search_models', title: '搜索生成模型',
+        status: 'completed' as const, readOnly: true,
+      },
+      {
+        toolCallId: 'read-2', toolName: 'get_model_schema', title: '读取模型参数结构',
+        status: 'completed' as const, readOnly: true,
+      },
+      {
+        toolCallId: 'write-1', toolName: 'create_visible_generation_task', title: '创建可见生成任务',
+        status: 'completed' as const, readOnly: false,
+      },
+      {
+        toolCallId: 'read-failed', toolName: 'get_generation_task', title: '读取生成任务',
+        status: 'failed' as const, readOnly: true,
+      },
+    ]
+
+    expect(groupToolActivitiesForDisplay(activities)).toEqual([
+      expect.objectContaining({
+        activities: activities.slice(0, 2),
+        collapsedByDefault: true,
+      }),
+      expect.objectContaining({ activities: [activities[2]], collapsedByDefault: false }),
+      expect.objectContaining({ activities: [activities[3]], collapsedByDefault: false }),
+    ])
+  })
+
+  it('保留携带工具调用的公开模型说明，不把最终回答重复放入进展流', () => {
+    const events: AgentEvent[] = [
+      event<Extract<AgentEvent, { type: 'ModelCompleted' }>>({
+        type: 'ModelCompleted', sequence: 1, stepId: 'step-1', finishReason: 'tool-calls',
+        toolCallCount: 1, displayText: '我先根据你的偏好筛选兼容模型。',
+        usage: {
+          inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
+          outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
+        },
+      }),
+      event<Extract<AgentEvent, { type: 'ModelCompleted' }>>({
+        type: 'ModelCompleted', sequence: 2, stepId: 'step-2', finishReason: 'stop',
+        toolCallCount: 0, displayText: '任务已经提交。',
+        usage: {
+          inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
+          outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
+        },
+      }),
+    ]
+
+    expect(selectModelPublicUpdates(events)).toEqual([
+      { stepId: 'step-1', sequence: 1, text: '我先根据你的偏好筛选兼容模型。' },
+    ])
   })
 
   it('重复或较旧事件只补齐历史，不回退当前运行状态', () => {

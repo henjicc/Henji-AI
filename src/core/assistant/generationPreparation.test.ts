@@ -46,7 +46,7 @@ const testModel: ModelDefinition = {
   linkages: [],
   endpoints: '/test',
   request: { builder: (params) => ({ prompt: params.prompt, quality: params.quality }) },
-  pricing: { currency: '$', fixed: 0 },
+  pricing: { currency: '$', fixed: 0.5, description: '测试模型基础价格' },
 }
 
 describe('generationPreparation', () => {
@@ -65,19 +65,38 @@ describe('generationPreparation', () => {
     })
     expect(models).toHaveLength(1)
     expect(models[0].selectionEvidence).toMatchObject({
-      candidate: true,
-      availableInRegistry: true,
-      canonicalModelId: 'nano-banana',
-      providerId: 'test-provider',
-      hardConstraints: {
-        mediaTypeMatched: true,
-        providerMatched: true,
-        tagsMatched: true,
-      },
+      compatible: true,
+      recommendedByDescription: false,
+    })
+    expect(models[0].priceEstimate).toMatchObject({
+      amount: 0.5,
+      currency: '$',
+      billingMode: 'fixed',
+      comparableCnyAmount: 3.385,
     })
     const schema = getGenerationModelSchema(testModel.meta.id)
     expect(schema.schemaVersion).toBe('generation-model-schema/v2')
     expect(schema.params).toHaveLength(2)
+    expect(schema.priceEstimate).toMatchObject({ amount: 0.5, currency: '$' })
+  })
+
+  it('批量候选以紧凑卡片返回，足以一次传递更多模型而不触发目录卸载', () => {
+    for (let index = 0; index < 31; index += 1) {
+      registry.register({
+        ...testModel,
+        meta: {
+          ...testModel.meta,
+          id: `agent-preparation-batch-${index}`,
+          canonicalModelId: 'nano-banana',
+          name: { zh: `候选 ${index}`, en: `Candidate ${index}` },
+          description: { zh: `推荐使用！${'高质量商业视觉'.repeat(12)}`, en: 'Recommended for commercial visual output.' },
+        },
+      })
+    }
+
+    const models = searchGenerationModels({ mediaType: 'image' })
+    expect(models).toHaveLength(32)
+    expect(Buffer.byteLength(JSON.stringify(models), 'utf8')).toBeLessThan(24 * 1024)
   })
 
   it('合并默认值并在提交前校验媒体和参数', () => {
@@ -94,6 +113,7 @@ describe('generationPreparation', () => {
       schemaValidated: true,
       mediaTypeMatched: true,
     })
+    expect(prepared.priceEstimate).toMatchObject({ amount: 0.5, currency: '$' })
 
     expect(() => prepareGenerationTask({
       modelId: testModel.meta.id,

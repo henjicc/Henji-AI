@@ -12,8 +12,11 @@ function recordCount(value: unknown): number {
   return Object.keys(value).length
 }
 
-export function shouldOffloadObservation(output: unknown): boolean {
-  return Buffer.byteLength(JSON.stringify(output), 'utf8') > OFFLOAD_BYTE_THRESHOLD
+export function shouldOffloadObservation(
+  output: unknown,
+  byteThreshold = OFFLOAD_BYTE_THRESHOLD
+): boolean {
+  return Buffer.byteLength(JSON.stringify(output), 'utf8') > byteThreshold
     || recordCount(output) > OFFLOAD_RECORD_THRESHOLD
 }
 

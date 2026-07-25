@@ -141,6 +141,8 @@ const modelCompletedEventSchema = z.object({
   stepId: z.string().min(1),
   finishReason: z.string().min(1),
   toolCallCount: z.number().int().nonnegative(),
+  /** 仅保存模型实际产生、可向用户展示的文本；不包含 reasoning。 */
+  displayText: z.string().min(1).max(2_000).optional(),
   usage: modelStepUsageSchema,
 }).strict()
 

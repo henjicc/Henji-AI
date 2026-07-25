@@ -44,6 +44,18 @@ export interface AgentToolActivity {
   completedAt?: string
 }
 
+export interface AgentToolActivityGroup {
+  groupId: string
+  activities: AgentToolActivity[]
+  collapsedByDefault: boolean
+}
+
+export interface AgentModelPublicUpdate {
+  stepId: string
+  sequence: number
+  text: string
+}
+
 export function createInitialAgentRunViewState(): AgentRunViewState {
   return { runState: null, events: [], connection: 'idle', actionError: null }
 }
@@ -238,6 +250,57 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
     }
   }
   return [...activities.values()]
+}
+
+function canCollapseToolActivity(activity: AgentToolActivity): boolean {
+  return activity.readOnly === true && activity.status === 'completed'
+}
+
+/**
+ * 连续完成的只读工具默认折叠：运行中的查询仍实时可见，完成后才收纳，
+ * 既保留每一步的可追溯性，也避免大量目录/参数读取挤占对话和拖慢布局。
+ */
+export function groupToolActivitiesForDisplay(
+  activities: AgentToolActivity[]
+): AgentToolActivityGroup[] {
+  const groups: AgentToolActivityGroup[] = []
+  let pendingReadOnly: AgentToolActivity[] = []
+
+  const flushReadOnly = (): void => {
+    if (pendingReadOnly.length === 0) return
+    const first = pendingReadOnly[0]
+    const last = pendingReadOnly[pendingReadOnly.length - 1]
+    groups.push({
+      groupId: `read:${first.toolCallId}:${last.toolCallId}`,
+      activities: pendingReadOnly,
+      collapsedByDefault: pendingReadOnly.length > 1,
+    })
+    pendingReadOnly = []
+  }
+
+  for (const activity of activities) {
+    if (canCollapseToolActivity(activity)) {
+      pendingReadOnly.push(activity)
+      continue
+    }
+    flushReadOnly()
+    groups.push({
+      groupId: `action:${activity.toolCallId}`,
+      activities: [activity],
+      collapsedByDefault: false,
+    })
+  }
+  flushReadOnly()
+  return groups
+}
+
+/** 仅取携带工具调用的模型公开说明；最终无工具回答由最终消息卡单独显示，避免重复。 */
+export function selectModelPublicUpdates(events: AgentEvent[]): AgentModelPublicUpdate[] {
+  return events.flatMap((event) => (
+    event.type === 'ModelCompleted' && event.toolCallCount > 0 && event.displayText
+      ? [{ stepId: event.stepId, sequence: event.sequence, text: event.displayText }]
+      : []
+  ))
 }
 
 export interface AgentExecutionPresentation {

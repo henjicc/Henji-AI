@@ -2,6 +2,7 @@ import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, ty
 import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
 
 import { UiButton } from '@/components/ui'
+import type { AgentEvent } from '@/core/assistant/events'
 import {
   createEmptyPromptDocument,
   createPlainTextPromptDocument,
@@ -20,18 +21,31 @@ import { AssistantComposer } from './AssistantComposer'
 import { ExecutionPlanCard } from './ExecutionPlanCard'
 import { RunStatusBar } from './RunStatusBar'
 import {
+  groupToolActivitiesForDisplay,
   selectExecutionPresentation,
+  selectModelPublicUpdates,
   selectPendingApproval,
   selectToolActivities,
 } from './agentRunReducer'
 import { describeErrorRecovery } from './errorPresentation'
-import { ToolActivityCard } from './ToolActivityCard'
+import { ModelProgressMessage } from './ModelProgressMessage'
+import { ToolActivityGroup } from './ToolActivityGroup'
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
 const deferredBlockStyle: CSSProperties = {
   contentVisibility: 'auto',
   containIntrinsicSize: 'auto 96px',
   contain: 'layout paint style',
+}
+
+function latestToolEventSequence(events: AgentEvent[]): number {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.type === 'ToolRequested' || event.type === 'ToolStarted' || event.type === 'ToolCompleted' || event.type === 'ToolFailed') {
+      return event.sequence
+    }
+  }
+  return 0
 }
 
 export function AssistantConversation(): JSX.Element {
@@ -41,6 +55,11 @@ export function AssistantConversation(): JSX.Element {
   const [resultError, setResultError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const pendingHandledRef = useRef<string | null>(null)
+  const toolActivitiesCacheRef = useRef<{
+    runId: string | null
+    eventSequence: number
+    activities: ReturnType<typeof selectToolActivities>
+  } | null>(null)
   const activeRunId = useAssistantUiStore((state) => state.activeRunId)
   const currentGoal = useAssistantUiStore((state) => state.currentGoal)
   const pendingGoal = useAssistantUiStore((state) => state.pendingGoal)
@@ -66,7 +85,16 @@ export function AssistantConversation(): JSX.Element {
     }
   }, [busy, pendingGoal, setPendingGoal, startRun])
 
-  const tools = useMemo(() => selectToolActivities(run.view.events), [run.view.events])
+  const toolEventSequence = latestToolEventSequence(run.view.events)
+  const cachedToolActivities = toolActivitiesCacheRef.current
+  const tools = cachedToolActivities?.runId === activeRunId && cachedToolActivities.eventSequence === toolEventSequence
+    ? cachedToolActivities.activities
+    : selectToolActivities(run.view.events)
+  if (tools !== cachedToolActivities?.activities) {
+    toolActivitiesCacheRef.current = { runId: activeRunId, eventSequence: toolEventSequence, activities: tools }
+  }
+  const toolGroups = useMemo(() => groupToolActivitiesForDisplay(tools), [tools])
+  const modelUpdates = useMemo(() => selectModelPublicUpdates(run.view.events), [run.view.events])
   const approval = useMemo(() => selectPendingApproval(run.view.events), [run.view.events])
   const execution = useMemo(
     () => selectExecutionPresentation(runState, run.view.events),
@@ -151,14 +179,20 @@ export function AssistantConversation(): JSX.Element {
 
         {runState ? <ExecutionPlanCard presentation={execution} runStatus={runState.status} /> : null}
 
-        {tools.map((tool) => (
-          <ToolActivityCard
-            key={tool.toolCallId}
-            activity={tool}
-            onOpenTask={openTask}
-            onOpenNode={openNode}
-          />
-        ))}
+        {modelUpdates.map((update) => <ModelProgressMessage key={update.stepId} update={update} />)}
+
+        {toolGroups.length > 0 ? (
+          <section aria-label="助手工具执行记录" className="space-y-1">
+            {toolGroups.map((group) => (
+              <ToolActivityGroup
+                key={group.groupId}
+                group={group}
+                onOpenTask={openTask}
+                onOpenNode={openNode}
+              />
+            ))}
+          </section>
+        ) : null}
 
         {approval ? <ApprovalCard approval={approval} onDecision={(decision) => void run.respondApproval(approval.approvalId, decision)} /> : null}
 

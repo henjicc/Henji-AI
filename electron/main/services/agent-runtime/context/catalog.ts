@@ -88,11 +88,13 @@ export class AgentToolCatalogPlanner {
   constructor(private readonly registry: AgentToolRegistry) {}
 
   select(route: AgentRouteDecision, context: HostContextSnapshot | null): AgentToolRegistration[] {
-    const requested = route.toolDomains.flatMap((domain) => toolsByDomain[domain] ?? [])
+    const directDomains = route.toolDomains.filter((domain) => domain !== 'catalog')
+    const requested = directDomains.flatMap((domain) => toolsByDomain[domain] ?? [])
+    const needsCapabilityDiscovery = requested.length === 0
     const names = [
-      'search_application_capabilities',
-      ...this.discoveredToolNames,
       ...requested,
+      ...this.discoveredToolNames,
+      ...(needsCapabilityDiscovery ? ['search_application_capabilities'] : []),
     ]
     return this.registry.registrations([...new Set(names)].slice(0, 8), context)
   }

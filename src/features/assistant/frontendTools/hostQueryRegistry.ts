@@ -93,6 +93,7 @@ const handlers = new Map<HostQuery['name'], HostQueryHandler>([
         requestedMediaType: query.input.mediaType ?? null,
         requestedProviderId: query.input.providerId ?? null,
         requestedTags: query.input.tags ?? [],
+        requestedSortBy: query.input.sortBy ?? 'registry',
         requestedQuery: query.input.query,
         compatibleCandidateCount: filtered.length,
         exclusionRules: [

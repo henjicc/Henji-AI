@@ -52,7 +52,7 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
         : <Wrench className="h-4 w-4 text-text-muted" />
 
   return (
-    <section style={deferredCardStyle} className="rounded-lg bg-surface-dark/80 px-2 py-1.5">
+    <section style={deferredCardStyle} className="rounded-md bg-surface-dark/60 px-2 py-1">
       <div className="flex min-h-6 items-center gap-2">
         {icon}
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
