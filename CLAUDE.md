@@ -36,12 +36,15 @@ npm run electron:smoke         # Electron 构建产物冒烟验收
 npm run electron:canvas-stress # Electron 画布压测
 npm run electron:dpi-check     # Electron DPI/分辨率检查
 npm run electron:updater-e2e   # 本地模拟 updater 端到端
+npm run assistant:cli -- --goal "任务描述" --trace detailed # 无窗口执行真实智能助手并输出 JSONL
 npm run gen:model-manifest     # 生成模型清单到 resources/model-manifest.json
 npm run gen:progress-seeds     # 生成进度 seeds 到 resources/progress-seeds.json
 npm run check:colors           # 颜色规范检查
 npm run check:model-i18n       # 模型 i18n key 校验
 npm run lint                   # 前端 lint
 ```
+
+`assistant:cli` 复用正式智能助手与工具链，结束时会输出 `runId`；可用 `npm run logs:query -- --chain <runId>` 查询整条运行链路。`--print-trace` 会输出本机已脱敏的详细追踪；涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。
 
 **注意**: 项目使用 `@/` 作为 `src/` 的路径别名。
 
