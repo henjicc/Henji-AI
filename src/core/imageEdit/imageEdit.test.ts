@@ -7,15 +7,18 @@ import {
   UnsupportedImageEditOperationError,
   coerceImageEditSession,
   createBuiltInImageEditOperationRegistry,
+  createDefaultDiffusionOperationParams,
   createEmptyImageEditDocument,
   createImageEditDocumentFromMarkDoc,
   createImageEditExecutionPort,
+  compileDiffusionRecipe,
   decodeImageEditDocument,
   imageEditDocumentToMarkDoc,
   replaceMarkDocInImageEditDocument,
   type ImageEditDocument,
   type ImageMarkDoc,
 } from './index';
+import { determineDiffusionInvalidation } from './webgpu/diffusionRenderer';
 
 function createMarkDoc(): ImageMarkDoc {
   return {
@@ -94,6 +97,25 @@ describe('图片编辑文档兼容契约', () => {
       }],
     });
     expect(invalidEnabled.issues).toEqual(['invalid-operation']);
+
+    const duplicateBuiltIn = decodeImageEditDocument({
+      version: 2,
+      operations: [
+        {
+          id: 'diffusion-1',
+          operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+          enabled: true,
+          params: createDefaultDiffusionOperationParams(),
+        },
+        {
+          id: 'diffusion-2',
+          operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+          enabled: true,
+          params: createDefaultDiffusionOperationParams(),
+        },
+      ],
+    });
+    expect(duplicateBuiltIn.issues).toEqual(['duplicate-built-in-operation']);
   });
 
   it('兼容旧编辑状态和旧会话并优先保留原图来源', () => {
@@ -141,11 +163,41 @@ describe('图片操作注册与执行端口', () => {
     const port = createImageEditExecutionPort(registry, executor);
 
     await expect(port.execute({ sourceImageUrl: 'source-image', document })).resolves.toEqual({
+      kind: 'encoded-export',
+      output: { kind: 'url', url: 'rendered-image' },
       outputImageUrl: 'rendered-image',
       document,
       executorId: 'test-executor',
+      backend: 'webgpu-worker',
+      width: 0,
+      height: 0,
+      capabilities: {
+        executorId: 'test-executor',
+        backends: ['webgpu-worker'],
+        supportedOperationIds: [
+          IMAGE_EDIT_OPERATION_IDS.orientation,
+          IMAGE_EDIT_OPERATION_IDS.diffusion,
+          IMAGE_EDIT_OPERATION_IDS.annotations,
+          IMAGE_EDIT_OPERATION_IDS.crop,
+        ],
+        purposes: ['preview', 'export'],
+        qualities: ['realtime', 'high'],
+        exportFormats: ['image/png', 'image/jpeg', 'image/webp'],
+        hardCancellationSupported: false,
+      },
     });
     expect(executor.execute).toHaveBeenCalledWith({ sourceImageUrl: 'source-image', document });
+    await expect(port.execute({
+      sourceImageUrl: 'source-image',
+      document,
+      purpose: 'preview',
+      revision: 2,
+    })).resolves.toMatchObject({
+      kind: 'preview-frame',
+      frame: 'rendered-image',
+      outputImageUrl: 'rendered-image',
+      revision: 2,
+    });
 
     const duplicate: ImageEditDocument = {
       ...document,
@@ -160,7 +212,7 @@ describe('图片操作注册与执行端口', () => {
     };
     await expect(port.execute({ sourceImageUrl: 'source-image', document: unknown }))
       .rejects.toBeInstanceOf(UnsupportedImageEditOperationError);
-    expect(executor.execute).toHaveBeenCalledTimes(1);
+    expect(executor.execute).toHaveBeenCalledTimes(2);
   });
 
   it('禁止同一个操作定义重复注册', () => {
@@ -175,5 +227,81 @@ describe('图片操作注册与执行端口', () => {
     };
     registry.register(definition);
     expect(() => registry.register(definition)).toThrow('图片操作已注册：image.test');
+  });
+});
+
+describe('摄影柔光共享配方', () => {
+  it('编译六层归一化半径和权重，不引入屏幕尺寸语义', () => {
+    const params = createDefaultDiffusionOperationParams();
+    const recipe = compileDiffusionRecipe(params, {
+      width: 6000,
+      height: 4000,
+      quality: 'high',
+    });
+
+    expect(recipe.version).toBe(1);
+    expect(recipe.scales).toHaveLength(6);
+    expect(recipe.scales.reduce((sum, scale) => sum + scale.weight, 0)).toBeCloseTo(1, 12);
+    expect(recipe.scales.every((scale) => scale.radius > 0 && scale.radius <= 1)).toBe(true);
+    expect(recipe.scales.map((scale) => scale.radius)).toEqual(
+      [...recipe.scales].map((scale) => scale.radius).sort((left, right) => left - right)
+    );
+    expect(recipe.image.aspectCorrection).toEqual([1, 1.5]);
+    expect(recipe.energy.directRetention + recipe.energy.scatterFraction).toBeCloseTo(1, 12);
+  });
+
+  it('三种模式编译为不同源图、长尾与雾幕响应', () => {
+    const base = createDefaultDiffusionOperationParams();
+    const compileMode = (mode: typeof base.mode) =>
+      compileDiffusionRecipe({ ...base, mode }, { width: 1920, height: 1080 });
+    const black = compileMode('black_mist');
+    const white = compileMode('white_mist');
+    const glow = compileMode('glow');
+
+    expect(black.source.microGain).toBeLessThan(white.source.microGain);
+    expect(glow.source.highlightGain).toBeGreaterThan(black.source.highlightGain);
+    expect(white.energy.veil).toBeGreaterThan(black.energy.veil);
+    expect(glow.energy.veil).toBe(0);
+    expect(glow.scales[5].weight).toBeGreaterThan(black.scales[5].weight);
+  });
+
+  it('按源图、金字塔和最终合成依赖区分缓存失效', () => {
+    const params = createDefaultDiffusionOperationParams();
+    const recipe = compileDiffusionRecipe(params, { width: 1920, height: 1080 });
+    const input = { sourceKey: 'source-a', width: 1920, height: 1080, recipe };
+    expect(determineDiffusionInvalidation(null, input)).toBe('source');
+
+    const cache = {
+      sourceKey: 'source-a',
+      width: 1920,
+      height: 1080,
+      sourceSignature: JSON.stringify([
+        recipe.mode,
+        recipe.source,
+        recipe.optics.positionVariation,
+      ]),
+      pyramidSignature: JSON.stringify([
+        recipe.quality,
+        recipe.scales,
+        recipe.optics.anisotropy,
+        recipe.optics.angleRadians,
+      ]),
+    };
+    const toneOnlyRecipe = {
+      ...recipe,
+      tone: { ...recipe.tone, blackRetention: 0.5 },
+    };
+    expect(determineDiffusionInvalidation(cache, {
+      ...input,
+      recipe: toneOnlyRecipe,
+    })).toBe('composite');
+    expect(determineDiffusionInvalidation(cache, {
+      ...input,
+      recipe: { ...recipe, quality: 'high' },
+    })).toBe('pyramid');
+    expect(determineDiffusionInvalidation(cache, {
+      ...input,
+      sourceKey: 'source-b',
+    })).toBe('source');
   });
 });

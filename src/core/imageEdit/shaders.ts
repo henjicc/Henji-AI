@@ -1,6 +1,6 @@
 import diffusionShaderSource from './shaders/diffusion.wgsl?raw';
 
-/** Renderer 读取的共享 WGSL；Rust 端通过 include_str! 读取同一文件。 */
+/** WebGPU Worker 预览与导出共同使用的柔光 WGSL 入口。 */
 export const DIFFUSION_SHADER_SOURCE = diffusionShaderSource;
 
-export const DIFFUSION_SHADER_VERSION = 'diffusion-wgsl-v1';
+export const DIFFUSION_SHADER_VERSION = 'diffusion-wgsl-v2-multiscale';

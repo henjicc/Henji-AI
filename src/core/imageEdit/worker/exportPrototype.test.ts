@@ -6,6 +6,9 @@ import {
   IMAGE_EDIT_GLOBAL_SCATTER_MAX_DIMENSION,
 } from './exportPrototype'
 import { isImageEditWorkerEvent } from './protocol'
+import { createDefaultDiffusionOperationParams } from '../diffusionParams'
+import { compileDiffusionRecipe } from '../diffusionRecipe'
+import { rebaseDiffusionRecipeForTile } from '../webgpu/exportRenderer'
 
 describe('图片编辑 Worker 导出原型', () => {
   it('把 24MP 图片拆成有 halo 的完整无重叠逻辑 Tile', () => {
@@ -46,5 +49,19 @@ describe('图片编辑 Worker 导出原型', () => {
     expect(isImageEditWorkerEvent({ type: 'capabilities' })).toBe(true)
     expect(isImageEditWorkerEvent({ type: 'untrusted-event' })).toBe(false)
     expect(isImageEditWorkerEvent(null)).toBe(false)
+  })
+
+  it('Tile 重基准保持原图半径对应的像素尺度', () => {
+    const recipe = compileDiffusionRecipe(
+      createDefaultDiffusionOperationParams(),
+      { width: 6000, height: 4000, quality: 'high' }
+    )
+    const tileRecipe = rebaseDiffusionRecipeForTile(recipe, 1664, 1664)
+    expect(
+      tileRecipe.scales[0].radius * tileRecipe.image.referenceDimension
+    ).toBeCloseTo(
+      recipe.scales[0].radius * recipe.image.referenceDimension,
+      10
+    )
   })
 })

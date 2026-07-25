@@ -7,6 +7,8 @@ import {
   createEmptyMarkDoc,
   createImageEditDocumentFromMarkDoc,
   createMarkId,
+  imageEditDocumentToMarkDoc,
+  replaceMarkDocInImageEditDocument,
   type ImageEditDocument,
   type MarkItem,
 } from '@/core/imageEdit';
@@ -44,11 +46,15 @@ function isOrientationOperation(
 
 export function buildImageEditDocumentFromAssistantOperations(
   values: readonly unknown[],
-  sourceSize: AssistantImageEditSourceSize
+  sourceSize: AssistantImageEditSourceSize,
+  existingDocument?: ImageEditDocument
 ): ImageEditDocument {
-  let doc = createEmptyMarkDoc();
+  let doc = existingDocument ? imageEditDocumentToMarkDoc(existingDocument) : createEmptyMarkDoc();
   let currentWidth = sourceSize.width;
   let currentHeight = sourceSize.height;
+  if (doc.orientation.rotate === 90 || doc.orientation.rotate === 270) {
+    [currentWidth, currentHeight] = [currentHeight, currentWidth];
+  }
 
   for (const value of values) {
     const operation = imageEditOperationSchema.parse(value);
@@ -89,5 +95,7 @@ export function buildImageEditDocumentFromAssistantOperations(
     doc = { ...doc, items: [...doc.items, item] };
   }
 
-  return createImageEditDocumentFromMarkDoc(doc);
+  return existingDocument
+    ? replaceMarkDocInImageEditDocument(existingDocument, doc)
+    : createImageEditDocumentFromMarkDoc(doc);
 }

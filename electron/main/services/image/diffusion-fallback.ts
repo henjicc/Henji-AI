@@ -2,6 +2,10 @@ import { performance } from 'node:perf_hooks'
 import { createMainLogger } from '../logging'
 import { loadSharp } from './sharp-loader'
 import { resolveSourceBytes } from './source'
+import {
+  compileDiffusionRecipe,
+} from '../../../../src/core/imageEdit/diffusionRecipe'
+import { parseDiffusionOperationParams } from '../../../../src/core/imageEdit/diffusionParams'
 
 export type SharpDiffusionMode = 'black-diffusion' | 'white-diffusion' | 'glow'
 export type SharpDiffusionPurpose = 'preview' | 'export'
@@ -14,7 +18,7 @@ export interface SharpDiffusionFallbackRequest {
   format: SharpDiffusionFormat
   quality?: number
   maxPreviewPixels?: number
-  params: Record<string, unknown>
+  params: unknown
 }
 
 export interface SharpDiffusionFallbackResult {
@@ -24,6 +28,7 @@ export interface SharpDiffusionFallbackResult {
   format: SharpDiffusionFormat
   durationMs: number
   hardCancellationSupported: false
+  unsupportedParameters: readonly string[]
 }
 
 export interface SharpDiffusionFallbackCapabilities {
@@ -108,12 +113,12 @@ export async function renderSharpDiffusionFallback(
   })
 
   try {
-    const parsed = parseParams(request.params)
     const { bytes: sourceBytes } = await resolveSourceBytes(request.source)
     const sharp = await loadSharp()
     const metadata = await sharp(sourceBytes).metadata()
     const sourceWidth = Math.max(1, metadata.width ?? 1)
     const sourceHeight = Math.max(1, metadata.height ?? 1)
+    const parsed = parseParams(request.params, sourceWidth, sourceHeight)
     const outputSize = request.purpose === 'preview'
       ? fitWithinPixelBudget(
         sourceWidth,
@@ -159,6 +164,7 @@ export async function renderSharpDiffusionFallback(
       format: request.format,
       durationMs,
       hardCancellationSupported: false,
+      unsupportedParameters: parsed.unsupportedParameters,
     }
   } catch (error) {
     logger.error('Sharp 柔光降级失败', {
@@ -174,11 +180,33 @@ export async function renderSharpDiffusionFallback(
   }
 }
 
-function parseParams(params: Record<string, unknown>): {
+function parseParams(params: unknown, width: number, height: number): {
   mode: SharpDiffusionMode
   strength: number
   radiusPixels: number
+  unsupportedParameters: readonly string[]
 } {
+  if (isRecord(params) && params.schemaVersion === 1) {
+    const parsed = parseDiffusionOperationParams(params)
+    const recipe = compileDiffusionRecipe(parsed, {
+      width,
+      height,
+      quality: parsed.quality,
+    })
+    const radiusPixels = recipe.scales.reduce(
+      (sum, scale) => sum + scale.radius * scale.weight,
+      0
+    ) * recipe.image.referenceDimension
+    return {
+      mode: mapMode(parsed.mode),
+      strength: recipe.strength,
+      radiusPixels: Math.max(0.3, Math.min(1000, radiusPixels)),
+      unsupportedParameters: UNSUPPORTED_PARAMETERS,
+    }
+  }
+  if (!isRecord(params)) {
+    throw new Error('Sharp 柔光降级 params 必须是对象')
+  }
   const unsupported = Object.keys(params).filter(
     (key) => !SUPPORTED_PARAMETERS.includes(key as typeof SUPPORTED_PARAMETERS[number])
   )
@@ -206,7 +234,18 @@ function parseParams(params: Record<string, unknown>): {
     mode: mode as SharpDiffusionMode,
     strength,
     radiusPixels,
+    unsupportedParameters: [],
   }
+}
+
+function mapMode(mode: 'black_mist' | 'white_mist' | 'glow'): SharpDiffusionMode {
+  if (mode === 'black_mist') return 'black-diffusion'
+  if (mode === 'white_mist') return 'white-diffusion'
+  return 'glow'
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
 function fitWithinPixelBudget(

@@ -2,10 +2,12 @@ import {
   isImageEditWorkerEvent,
   type ImageEditExportFormat,
   type ImageEditWorkerCapabilities,
+  type ImageEditWorkerComposition,
   type ImageEditWorkerEvent,
   type ImageEditWorkerRequest,
   type ImageEditWorkerSource,
 } from '@/core/imageEdit/worker/protocol'
+import type { DiffusionRecipe } from '@/core/imageEdit/diffusionRecipe'
 import { createLogger } from '@/core/logging'
 
 const logger = createLogger('features.imageEdit.worker')
@@ -36,13 +38,20 @@ export interface WorkerImageEditExportResult {
   width: number
   height: number
   durationMs: number
+  revision?: number
 }
 
 export interface WorkerImageEditExportOptions {
+  requestId?: string
   format: ImageEditExportFormat
   quality?: number
+  renderQuality?: 'realtime' | 'high'
+  revision?: number
+  recipe?: DiffusionRecipe
+  composition?: ImageEditWorkerComposition
   tileSize?: number
   halo?: number
+  globalScatterMaxDimension?: number
   onProgress?: (completedTiles: number, totalTiles: number) => void
 }
 
@@ -85,11 +94,14 @@ export class WorkerImageEditClient {
   preview(
     source: ImageEditWorkerSource,
     revision: number,
-    maxPixels?: number
+    maxPixels?: number,
+    recipe?: DiffusionRecipe,
+    composition?: ImageEditWorkerComposition,
+    explicitRequestId?: string
   ): Promise<WorkerImageEditPreviewResult> {
     this.assertActive()
     this.latestRequestedRevision = Math.max(this.latestRequestedRevision, revision)
-    const requestId = createRequestId('preview')
+    const requestId = explicitRequestId ?? createRequestId('preview')
     logger.debug('image_edit.worker.preview.start', { requestId, revision })
     const promise = createPendingPromise(this.pendingPreviews, requestId)
     this.worker.postMessage({
@@ -97,6 +109,8 @@ export class WorkerImageEditClient {
       requestId,
       revision,
       source,
+      recipe,
+      composition,
       maxPixels,
     })
     return promise
@@ -107,7 +121,7 @@ export class WorkerImageEditClient {
     options: WorkerImageEditExportOptions
   ): { requestId: string; result: Promise<WorkerImageEditExportResult> } {
     this.assertActive()
-    const requestId = createRequestId('export')
+    const requestId = options.requestId ?? createRequestId('export')
     logger.info('image_edit.worker.export.start', {
       requestId,
       format: options.format,
@@ -118,11 +132,16 @@ export class WorkerImageEditClient {
     this.worker.postMessage({
       type: 'export',
       requestId,
+      revision: options.revision,
       source,
+      recipe: options.recipe,
+      composition: options.composition,
+      renderQuality: options.renderQuality,
       format: options.format,
       quality: options.quality,
       tileSize: options.tileSize,
       halo: options.halo,
+      globalScatterMaxDimension: options.globalScatterMaxDimension,
     })
     return { requestId, result }
   }
@@ -185,6 +204,7 @@ export class WorkerImageEditClient {
           width: event.width,
           height: event.height,
           durationMs: event.durationMs,
+          revision: event.revision,
         })
         this.exportProgress.delete(event.requestId)
         settleSuccess(this.pendingExports, event.requestId, {

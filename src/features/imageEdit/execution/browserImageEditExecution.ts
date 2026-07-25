@@ -6,6 +6,8 @@ import {
   type ImageEditDocument,
 } from '@/core/imageEdit';
 import { exportMarkedImage } from '@/features/imageMark/render/exportMarkedImage';
+import { persistImageBinary } from '@/commands/image';
+import { imageEditExecutionPort } from './imageEditExecution';
 
 export const browserImageEditExecutionPort = createImageEditExecutionPort(
   imageEditOperationRegistry,
@@ -32,6 +34,35 @@ export async function exportImageEditDocument(
   sourceImageUrl: string,
   document: ImageEditDocument
 ): Promise<string> {
+  const hasDiffusion = document.operations.some((operation) =>
+    operation.enabled && operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion
+  );
+  if (hasDiffusion) {
+    const result = await imageEditExecutionPort.execute({
+      sourceImageUrl,
+      document,
+      purpose: 'export',
+      quality: 'high',
+      format: 'image/png',
+    });
+    if (result.kind !== 'encoded-export') {
+      throw new Error('柔光导出未返回编码结果');
+    }
+    if (result.output.kind === 'url') return result.output.url;
+    return await persistImageBinary(
+      result.output.bytes,
+      extensionFromFormat(result.output.format)
+    );
+  }
   const result = await browserImageEditExecutionPort.execute({ sourceImageUrl, document });
-  return result.outputImageUrl;
+  if (result.kind !== 'encoded-export' || result.output.kind !== 'url') {
+    throw new Error('浏览器图片编辑兼容执行器未返回图片 URL');
+  }
+  return result.output.url;
+}
+
+function extensionFromFormat(format: 'image/png' | 'image/jpeg' | 'image/webp'): string {
+  if (format === 'image/jpeg') return 'jpg';
+  if (format === 'image/webp') return 'webp';
+  return 'png';
 }

@@ -45,6 +45,7 @@ export interface GpuDevice {
   lost: Promise<{ reason?: string; message?: string }>
   createShaderModule(descriptor: unknown): unknown
   createRenderPipeline(descriptor: unknown): GpuRenderPipeline
+  createRenderPipelineAsync?: (descriptor: unknown) => Promise<GpuRenderPipeline>
   createSampler(descriptor: unknown): unknown
   createTexture(descriptor: unknown): GpuTexture
   createBuffer(descriptor: unknown): GpuBuffer
@@ -157,6 +158,45 @@ export function renderPass(
   pass.draw(6)
   pass.end()
   device.queue.submit([encoder.finish()])
+}
+
+export function renderPipelinePass(
+  device: GpuDevice,
+  pipeline: GpuRenderPipeline,
+  entries: readonly unknown[],
+  target: GpuTexture
+): void {
+  const bindGroup = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries,
+  })
+  const encoder = device.createCommandEncoder()
+  const pass = encoder.beginRenderPass({
+    colorAttachments: [{
+      view: target.createView(),
+      clearValue: { r: 0, g: 0, b: 0, a: 0 },
+      loadOp: 'clear',
+      storeOp: 'store',
+    }],
+  })
+  pass.setPipeline(pipeline)
+  pass.setBindGroup(0, bindGroup)
+  pass.draw(6)
+  pass.end()
+  device.queue.submit([encoder.finish()])
+}
+
+export function createUniformBuffer(
+  device: GpuDevice,
+  values: Float32Array
+): GpuBuffer {
+  const alignedSize = Math.ceil(values.byteLength / 16) * 16
+  const buffer = device.createBuffer({
+    size: alignedSize,
+    usage: BUFFER_UNIFORM | BUFFER_COPY_DST,
+  })
+  device.queue.writeBuffer(buffer, 0, values)
+  return buffer
 }
 
 export function unavailableCapabilities(

@@ -1,5 +1,6 @@
 export * from './execution/browserImageEditExecution';
 export * from './execution/workerImageEditClient';
+export * from './execution/imageEditExecution';
 export { ImageEditor } from './editor/ImageEditor';
 export type { ImageEditorProps } from './editor/ImageEditor';
 export { ImageEditorShell } from './editor/ImageEditorShell';

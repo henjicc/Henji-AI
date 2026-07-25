@@ -1,6 +1,7 @@
-import { ScanLine } from 'lucide-react';
+import { ScanLine, Sparkles } from 'lucide-react';
 import { IMAGE_EDIT_OPERATION_IDS } from '@/core/imageEdit';
 import { GeometryInspector } from './geometry/GeometryInspector';
+import { DiffusionInspector } from './diffusion/DiffusionInspector';
 import type { ImageEditorToolDefinition } from './types';
 
 export class ImageEditorToolRegistrationError extends Error {}
@@ -31,6 +32,13 @@ imageEditorToolRegistry.register({
   operationId: IMAGE_EDIT_OPERATION_IDS.orientation,
   icon: ScanLine,
   inspector: GeometryInspector,
+});
+imageEditorToolRegistry.register({
+  id: 'diffusion',
+  label: '辉光/柔光',
+  operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+  icon: Sparkles,
+  inspector: DiffusionInspector,
 });
 
 export function getImageEditorTools(): ImageEditorToolDefinition[] {

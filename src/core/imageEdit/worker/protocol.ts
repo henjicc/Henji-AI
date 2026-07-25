@@ -1,8 +1,19 @@
+import type { DiffusionRecipe } from '../diffusionRecipe'
+import type { ImageEditRenderQuality } from '../execution'
+import { IMAGE_EDIT_OPERATION_IDS, type AnnotationOperationParams, type CropOperationParams, type OrientationOperationParams } from '../types'
+
 export type ImageEditWorkerSource =
   | { kind: 'url'; url: string }
   | { kind: 'blob'; blob: Blob }
 
 export type ImageEditExportFormat = 'image/png' | 'image/jpeg' | 'image/webp'
+
+/** Worker 内可执行的固定操作顺序：朝向 → 柔光 → 标注 → 裁剪。 */
+export interface ImageEditWorkerComposition {
+  orientation: OrientationOperationParams
+  annotations?: AnnotationOperationParams
+  crop?: CropOperationParams
+}
 
 export interface ImageEditWorkerInitRequest {
   type: 'initialize'
@@ -14,17 +25,25 @@ export interface ImageEditWorkerPreviewRequest {
   requestId: string
   revision: number
   source: ImageEditWorkerSource
+  recipe?: DiffusionRecipe
+  composition?: ImageEditWorkerComposition
+  quality?: ImageEditRenderQuality
   maxPixels?: number
 }
 
 export interface ImageEditWorkerExportRequest {
   type: 'export'
   requestId: string
+  revision?: number
   source: ImageEditWorkerSource
+  recipe?: DiffusionRecipe
+  composition?: ImageEditWorkerComposition
+  renderQuality?: ImageEditRenderQuality
   format: ImageEditExportFormat
   quality?: number
   tileSize?: number
   halo?: number
+  globalScatterMaxDimension?: number
 }
 
 export interface ImageEditWorkerCancelRequest {
@@ -57,6 +76,15 @@ export interface ImageEditWorkerCapabilities {
   offscreenCanvas: boolean
   imageBitmap: boolean
   supportedExportFormats: ImageEditExportFormat[]
+  executionBackend?: 'webgpu-worker'
+  supportedOperationIds?: readonly string[]
+  supportedQualities?: readonly ImageEditRenderQuality[]
+  hardCancellationSupported?: true
+  fallback?: {
+    backend: 'sharp'
+    hardCancellationSupported: false
+    unsupportedParameters: readonly string[]
+  }
   reason?: string
 }
 
@@ -79,13 +107,44 @@ export interface ImageEditWorkerPreviewCompletedEvent {
 export interface ImageEditWorkerExportProgressEvent {
   type: 'export-progress'
   requestId: string
+  stage?: 'decode' | 'source' | 'scatter' | 'composite' | 'encode'
   completedTiles: number
   totalTiles: number
+}
+
+export function withImageEditWorkerExecutionCapabilities(
+  capabilities: ImageEditWorkerCapabilities
+): ImageEditWorkerCapabilities {
+  return {
+    ...capabilities,
+    executionBackend: 'webgpu-worker',
+    supportedOperationIds: [
+      IMAGE_EDIT_OPERATION_IDS.orientation,
+      IMAGE_EDIT_OPERATION_IDS.diffusion,
+      IMAGE_EDIT_OPERATION_IDS.annotations,
+      IMAGE_EDIT_OPERATION_IDS.crop,
+    ],
+    supportedQualities: ['realtime', 'high'],
+    hardCancellationSupported: true,
+    fallback: {
+      backend: 'sharp',
+      hardCancellationSupported: false,
+      unsupportedParameters: [
+        'source',
+        'tone',
+        'detail',
+        'lens',
+        'scatter.anisotropy',
+        'scatter.chromaticSpread',
+      ],
+    },
+  }
 }
 
 export interface ImageEditWorkerExportCompletedEvent {
   type: 'export-completed'
   requestId: string
+  revision?: number
   bytes: Uint8Array
   format: ImageEditExportFormat
   width: number

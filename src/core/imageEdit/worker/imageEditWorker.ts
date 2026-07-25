@@ -8,6 +8,7 @@ import type {
   ImageEditWorkerPreviewRequest,
   ImageEditWorkerRequest,
 } from './protocol'
+import { withImageEditWorkerExecutionCapabilities } from './protocol'
 
 const workerScope = self as DedicatedWorkerGlobalScope
 const runtime = new WorkerWebGpuRuntime()
@@ -32,7 +33,7 @@ workerScope.onmessage = (message: MessageEvent<ImageEditWorkerRequest>): void =>
         postEvent({
           type: 'capabilities',
           requestId: request.requestId,
-          capabilities,
+          capabilities: withImageEditWorkerExecutionCapabilities(capabilities),
         })
       })
       return
@@ -72,7 +73,14 @@ async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<vo
   }
   const startedAt = performance.now()
   try {
-    const result = await runtime.renderPreview(request.source, request.maxPixels)
+    const result = await runtime.renderPreview(
+      request.source,
+      request.maxPixels,
+      request.recipe,
+      request.composition,
+      request.source.kind === 'url' ? request.source.url : request.requestId,
+      () => isCancelled(request.requestId)
+    )
     if (request.revision < latestPreviewRevision || isCancelled(request.requestId)) {
       result.bitmap.close()
       postCancelled(request.requestId)
@@ -102,6 +110,9 @@ async function handleExport(request: ImageEditWorkerExportRequest): Promise<void
       quality: request.quality,
       tileSize: request.tileSize,
       halo: request.halo,
+      globalScatterMaxDimension: request.globalScatterMaxDimension,
+      recipe: request.recipe,
+      composition: request.composition,
       isCancelled: () => isCancelled(request.requestId),
       onProgress: (completedTiles, totalTiles) => {
         postEvent({
@@ -116,6 +127,7 @@ async function handleExport(request: ImageEditWorkerExportRequest): Promise<void
     postEvent({
       type: 'export-completed',
       requestId: request.requestId,
+      revision: request.revision,
       bytes,
       format: request.format,
       width: result.width,

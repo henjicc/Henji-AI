@@ -4,6 +4,7 @@ import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEmptyImageEditDocument,
+  IMAGE_EDIT_OPERATION_IDS,
   imageEditDocumentToMarkDoc,
   type ImageEditOperation,
 } from '@/core/imageEdit';
@@ -53,6 +54,28 @@ describe('useImageEditorSession', () => {
     expect(imageEditDocumentToMarkDoc(result.current.document).crop).not.toBeNull();
     expect(result.current.document.operations[1]).toEqual(futureOperation);
     expect(onDocumentChange).toHaveBeenCalledTimes(3);
+  });
+
+  it('把连续柔光滑块更新合并为一条文档历史记录', () => {
+    const { result } = renderHook(() => useImageEditorSession({}));
+    act(() => {
+      result.current.documentController.beginTransaction();
+      result.current.documentController.updateOperation(IMAGE_EDIT_OPERATION_IDS.diffusion, (params) => ({
+        ...params,
+        strength: 0.2,
+      }));
+      result.current.documentController.updateOperation(IMAGE_EDIT_OPERATION_IDS.diffusion, (params) => ({
+        ...params,
+        strength: 0.5,
+      }));
+      result.current.documentController.commitTransaction();
+    });
+
+    expect(result.current.markController.history.canUndo).toBe(true);
+    expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)?.params).toMatchObject({ strength: 0.5 });
+
+    act(() => result.current.markController.history.handleUndo());
+    expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)).toBeNull();
   });
 });
 

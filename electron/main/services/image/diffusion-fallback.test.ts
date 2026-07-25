@@ -5,6 +5,7 @@ import {
   renderSharpDiffusionFallback,
   UnsupportedSharpDiffusionParametersError,
 } from './diffusion-fallback'
+import { createDefaultDiffusionOperationParams } from '../../../../src/core/imageEdit/diffusionParams'
 
 async function createTestSource(width: number, height: number): Promise<string> {
   const bytes = await sharp({
@@ -62,5 +63,19 @@ describe('Sharp 柔光降级原型', () => {
         chromaticSpread: 0.2,
       },
     })).rejects.toBeInstanceOf(UnsupportedSharpDiffusionParametersError)
+  })
+
+  it('完整公共参数通过共享配方降级，并显式返回能力限制', async () => {
+    const source = await createTestSource(320, 180)
+    const result = await renderSharpDiffusionFallback({
+      requestId: 'fallback-shared-recipe',
+      source,
+      purpose: 'export',
+      format: 'png',
+      params: createDefaultDiffusionOperationParams(),
+    })
+    expect(result.bytes.byteLength).toBeGreaterThan(0)
+    expect(result.unsupportedParameters).toContain('scaleWeights')
+    expect(result.hardCancellationSupported).toBe(false)
   })
 })

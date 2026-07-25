@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import {
   createMarkId,
   hasImageEditEffect,
+  parseImageEditDocument,
   type ImageEditDocument,
 } from '@/core/imageEdit'
 import {
@@ -295,13 +296,21 @@ export async function getStoryboardProjectFromAgent(projectId: string): Promise<
   }
 }
 
-export async function createImageEditPreviewFromAgent(assetId: string, operations: Record<string, unknown>[]): Promise<Record<string, unknown>> {
+export async function createImageEditPreviewFromAgent(
+  assetId: string,
+  operations: Record<string, unknown>[],
+  existingDocument?: unknown
+): Promise<Record<string, unknown>> {
   logger.debug('image_edit.preview.create.start', { assetId, operationCount: operations.length })
   try {
     const asset = await inspectAsset(assetId)
     if (asset.mediaType !== 'image') throw new Error('INVALID_INPUT')
     const info = await readImageInfo(asset.filePath)
-    const document = buildImageEditDocumentFromAssistantOperations(operations, info)
+    const document = buildImageEditDocumentFromAssistantOperations(
+      operations,
+      info,
+      existingDocument === undefined ? undefined : parseImageEditDocument(existingDocument)
+    )
     const previewRef = `image-edit-preview:${createMarkId()}`
     storeImageEditPreview(previewRef, { assetId, source: asset.filePath, document })
     logger.info('image_edit.preview.create.completed', {

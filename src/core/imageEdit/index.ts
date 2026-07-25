@@ -5,6 +5,8 @@ export * from './documentCodec';
 export * from './legacy';
 export * from './operations';
 export * from './execution';
+export * from './diffusionRecipe';
+export * from './diffusionPresets';
 export * from './webgpu';
 export * from './worker/protocol';
 export * from './worker/exportPrototype';

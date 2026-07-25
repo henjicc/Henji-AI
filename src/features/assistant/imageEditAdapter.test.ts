@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ANNOTATION_DEFAULT_STROKE_HEX, ANNOTATION_DEFAULT_TEXT_HEX } from '@/core/theme/colorTokens';
-import { imageEditDocumentToMarkDoc } from '@/core/imageEdit';
+import { createEmptyImageEditDocument, createImageEditOperation, imageEditDocumentToMarkDoc, IMAGE_EDIT_OPERATION_IDS, upsertImageEditOperation } from '@/core/imageEdit';
 import { buildImageEditDocumentFromAssistantOperations } from './imageEditAdapter';
 
 describe('智能助手图片编辑适配', () => {
@@ -66,5 +66,28 @@ describe('智能助手图片编辑适配', () => {
     expect(() => buildImageEditDocumentFromAssistantOperations([
       { kind: 'rotate_cw', degrees: 45 },
     ], { width: 400, height: 200 })).toThrow();
+  });
+
+  it('更新助手标注时保留既有柔光与未知 V2 操作', () => {
+    const existing = upsertImageEditOperation(
+      createEmptyImageEditDocument(),
+      createImageEditOperation(IMAGE_EDIT_OPERATION_IDS.diffusion, {
+        schemaVersion: 1,
+        mode: 'black_mist', presetId: null, strength: 0.3, density: '1/4',
+        source: { thresholdEV: 1, softKneeEV: 1, power: 1, highlightRecovery: 0 },
+        scatter: { highlightAmount: 0.1, microAmount: 0, nearRadius: 0, farRadius: 0.04, tailAmount: 0, tailShape: 2, anisotropy: 0, angle: 0, chromaticSpread: 0 },
+        tone: { veil: 0, blackRetention: 1, highlightCompression: 0, scatterDesaturation: 0 },
+        detail: { highFrequencyRetention: 1, midFrequencyRetention: 1 },
+        lens: { focalLengthEq: 50, aperture: 2.8, positionVariation: 0 }, quality: 'realtime',
+      })
+    );
+    existing.operations.splice(2, 0, { id: 'future', operationId: 'image.future', enabled: true, params: { amount: 1 } });
+    const updated = buildImageEditDocumentFromAssistantOperations([
+      { kind: 'mark', item: { type: 'text', x: 2, y: 3, text: '保留', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 12 } },
+    ], { width: 100, height: 100 }, existing);
+
+    expect(updated.operations.find((operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion)).toBeDefined();
+    expect(updated.operations.find((operation) => operation.operationId === 'image.future')).toBeDefined();
+    expect(imageEditDocumentToMarkDoc(updated).items).toHaveLength(1);
   });
 });

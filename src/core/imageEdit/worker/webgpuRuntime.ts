@@ -1,20 +1,32 @@
 import baselineShaderSource from './baseline.wgsl?raw'
+import type { DiffusionRecipe } from '../diffusionRecipe'
 import {
-  createImageEditExportPlan,
+  createRenderPipelineChecked,
+  ImageEditWebGpuDeviceManager,
+} from '../webgpu/deviceManager'
+import { WebGpuDiffusionRenderer } from '../webgpu/diffusionRenderer'
+import {
+  rebaseDiffusionRecipeForTile,
+  renderDiffusionExport,
+} from '../webgpu/exportRenderer'
+import {
   fitWithinPixelBudget,
   IMAGE_EDIT_PREVIEW_MAX_PIXELS,
 } from './exportPrototype'
 import { collectRelevantGpuLimits } from './webgpuCapabilities'
 import type {
   ImageEditExportFormat,
+  ImageEditWorkerComposition,
   ImageEditWorkerCapabilities,
   ImageEditWorkerSource,
 } from './protocol'
+import { drawMarkItems } from '@/features/imageMark/render/drawMarks'
+import { createImageEditCanvas } from '@/features/imageMark/render/canvasAdapter'
+import { renderOrientedImage } from '@/features/imageMark/render/orientedImage'
+import { clampCropRect } from '@/features/imageMark/domain/geometry'
 import {
-  assertNotCancelled,
   createViewportBuffer,
   decodeSource,
-  getGpuProvider,
   getWebGpuContext,
   renderPass,
   unavailableCapabilities,
@@ -37,6 +49,7 @@ interface RuntimeState {
   sampler: unknown
   linearizePipeline: GpuRenderPipeline
   encodePipeline: GpuRenderPipeline
+  diffusionRenderer: WebGpuDiffusionRenderer
   canvasFormat: string
 }
 
@@ -45,14 +58,26 @@ export interface WebGpuExportOptions {
   quality?: number
   tileSize?: number
   halo?: number
+  globalScatterMaxDimension?: number
+  recipe?: DiffusionRecipe
+  composition?: ImageEditWorkerComposition
   isCancelled: () => boolean
   onProgress: (completedTiles: number, totalTiles: number) => void
 }
 
 export class WorkerWebGpuRuntime {
   private state: RuntimeState | null = null
+  private readonly deviceManager = new ImageEditWebGpuDeviceManager()
   private deviceLostHandler: ((reason: string) => void) | null = null
   private cachedUrlSource: { url: string; bitmap: ImageBitmap } | null = null
+
+  constructor() {
+    this.deviceManager.onDeviceLost((reason) => {
+      this.state?.diffusionRenderer.destroy()
+      this.state = null
+      this.deviceLostHandler?.(reason)
+    })
+  }
 
   onDeviceLost(handler: (reason: string) => void): void {
     this.deviceLostHandler = handler
@@ -60,8 +85,8 @@ export class WorkerWebGpuRuntime {
 
   async initialize(): Promise<ImageEditWorkerCapabilities> {
     try {
-      const state = await this.createState()
       this.disposeState()
+      const state = await this.createState()
       this.state = state
       return this.describeCapabilities(state)
     } catch (error) {
@@ -71,38 +96,46 @@ export class WorkerWebGpuRuntime {
 
   async renderPreview(
     source: ImageEditWorkerSource,
-    maxPixels = IMAGE_EDIT_PREVIEW_MAX_PIXELS
+    maxPixels = IMAGE_EDIT_PREVIEW_MAX_PIXELS,
+    recipe?: DiffusionRecipe,
+    composition?: ImageEditWorkerComposition,
+    cacheKey?: string,
+    isCancelled?: () => boolean
   ): Promise<{ bitmap: ImageBitmap; width: number; height: number }> {
     const state = await this.ensureState()
     const decoded = await this.acquireSource(source)
     try {
-      const size = fitWithinPixelBudget(
-        decoded.bitmap.width,
-        decoded.bitmap.height,
-        maxPixels
-      )
-      const intermediate = await this.createIntermediate(
-        state,
-        decoded.bitmap,
-        size.width,
-        size.height
-      )
+      const composed = this.applyOrientation(decoded.bitmap, composition)
       try {
-        const canvas = new OffscreenCanvas(size.width, size.height)
-        const context = getWebGpuContext(canvas)
-        await this.renderToCanvas(state, intermediate, context, {
-          scaleX: 1,
-          scaleY: 1,
-          offsetX: 0,
-          offsetY: 0,
-        })
-        return {
-          bitmap: canvas.transferToImageBitmap(),
-          width: size.width,
-          height: size.height,
+        const sourceCacheKey = `${cacheKey ?? (source.kind === 'url' ? `url:${source.url}` : `blob:${Date.now()}`)}:${orientationCacheKey(composition)}`
+        const size = fitWithinPixelBudget(
+          composed.bitmap.width,
+          composed.bitmap.height,
+          maxPixels
+        )
+        if (recipe) {
+          const bitmap = await this.renderDiffusionBitmap(
+            state,
+            composed.bitmap,
+            size.width,
+            size.height,
+            recipe,
+            sourceCacheKey,
+            isCancelled
+          )
+          return { bitmap, width: size.width, height: size.height }
+        }
+        const intermediate = await this.createIntermediate(state, composed.bitmap, size.width, size.height)
+        try {
+          const canvas = new OffscreenCanvas(size.width, size.height)
+          const context = getWebGpuContext(canvas)
+          await this.renderToCanvas(state, intermediate, context, { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 })
+          return { bitmap: canvas.transferToImageBitmap(), width: size.width, height: size.height }
+        } finally {
+          intermediate.destroy()
         }
       } finally {
-        intermediate.destroy()
+        if (composed.owned) composed.bitmap.close()
       }
     } finally {
       if (decoded.owned) decoded.bitmap.close()
@@ -116,76 +149,114 @@ export class WorkerWebGpuRuntime {
     const state = await this.ensureState()
     const decoded = await this.acquireSource(source)
     try {
-      this.assertTextureSize(state, decoded.bitmap.width, decoded.bitmap.height)
-      const plan = createImageEditExportPlan(
-        decoded.bitmap.width,
-        decoded.bitmap.height,
-        {
+      const composed = this.applyOrientation(decoded.bitmap, options.composition)
+      try {
+        const recipe = options.recipe
+        if (!recipe) throw new Error('柔光导出请求缺少共享执行配方')
+        const exportSourceKey = source.kind === 'url'
+          ? `url:${source.url}`
+          : `blob-export:${Date.now()}`
+        return await renderDiffusionExport({
+        width: composed.bitmap.width,
+        height: composed.bitmap.height,
+        recipe,
+        format: options.format,
+        quality: options.quality,
         tileSize: options.tileSize,
         halo: options.halo,
-        }
-      )
-      const intermediate = await this.createIntermediate(
-        state,
-        decoded.bitmap,
-        decoded.bitmap.width,
-        decoded.bitmap.height
-      )
-      const output = new OffscreenCanvas(decoded.bitmap.width, decoded.bitmap.height)
-      const outputContext = output.getContext('2d')
-      if (!outputContext) throw new Error('OffscreenCanvas 2D context 不可用')
-
-      try {
-        for (const tile of plan.tiles) {
-          assertNotCancelled(options.isCancelled)
-          const tileCanvas = new OffscreenCanvas(tile.expandedWidth, tile.expandedHeight)
-          const tileContext = getWebGpuContext(tileCanvas)
-          await this.renderToCanvas(state, intermediate, tileContext, {
-            scaleX: tile.expandedWidth / decoded.bitmap.width,
-            scaleY: tile.expandedHeight / decoded.bitmap.height,
-            offsetX: tile.expandedX / decoded.bitmap.width,
-            offsetY: tile.expandedY / decoded.bitmap.height,
+        globalScatterMaxDimension: options.globalScatterMaxDimension,
+        isCancelled: options.isCancelled,
+        onProgress: options.onProgress,
+        renderGlobal: async (width, height) => {
+          const resized = await createImageBitmap(composed.bitmap, {
+            resizeWidth: width,
+            resizeHeight: height,
+            resizeQuality: 'high',
           })
-          assertNotCancelled(options.isCancelled)
-          const tileBitmap = tileCanvas.transferToImageBitmap()
           try {
-            outputContext.drawImage(
+            return await this.renderDiffusionBitmap(
+              state,
+              resized,
+              width,
+              height,
+              recipe,
+              `${exportSourceKey}:${orientationCacheKey(options.composition)}:global:${width}x${height}`,
+              options.isCancelled
+            )
+          } finally {
+            resized.close()
+          }
+        },
+        renderTile: async (tile) => {
+          const tileBitmap = await createImageBitmap(
+            composed.bitmap,
+            tile.expandedX,
+            tile.expandedY,
+            tile.expandedWidth,
+            tile.expandedHeight
+          )
+          try {
+            return await this.renderDiffusionBitmap(
+              state,
               tileBitmap,
-              tile.cropX,
-              tile.cropY,
-              tile.width,
-              tile.height,
-              tile.x,
-              tile.y,
-              tile.width,
-              tile.height
+              tile.expandedWidth,
+              tile.expandedHeight,
+              rebaseDiffusionRecipeForTile(
+                recipe,
+                tile.expandedWidth,
+                tile.expandedHeight
+              ),
+              `${exportSourceKey}:${orientationCacheKey(options.composition)}:tile:${tile.index}`,
+              options.isCancelled
             )
           } finally {
             tileBitmap.close()
           }
-          options.onProgress(tile.index + 1, plan.totalTiles)
-        }
-
-        assertNotCancelled(options.isCancelled)
-        const blob = await output.convertToBlob({
-          type: options.format,
-          quality: options.quality,
+        },
+        postProcess: async (canvas) => this.applyAnnotationsAndCrop(canvas, options.composition),
         })
-        return {
-          bytes: new Uint8Array(await blob.arrayBuffer()),
-          width: decoded.bitmap.width,
-          height: decoded.bitmap.height,
-        }
       } finally {
-        intermediate.destroy()
+        if (composed.owned) composed.bitmap.close()
       }
     } finally {
       if (decoded.owned) decoded.bitmap.close()
     }
   }
 
+  private applyOrientation(
+    bitmap: ImageBitmap,
+    composition: ImageEditWorkerComposition | undefined
+  ): { bitmap: ImageBitmap; owned: boolean } {
+    const orientation = composition?.orientation
+    if (!orientation || (orientation.rotate === 0 && !orientation.mirrored)) {
+      return { bitmap, owned: false }
+    }
+    const canvas = renderOrientedImage(bitmap, orientation, 'offscreen') as OffscreenCanvas
+    return { bitmap: canvas.transferToImageBitmap(), owned: true }
+  }
+
+  private async applyAnnotationsAndCrop(
+    canvas: OffscreenCanvas,
+    composition: ImageEditWorkerComposition | undefined
+  ): Promise<OffscreenCanvas> {
+    if (composition?.annotations?.items.length) {
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('OffscreenCanvas 2D context 不可用')
+      drawMarkItems(context, composition.annotations.items, canvas.width, canvas.height, {
+        baseCanvas: canvas,
+        canvasKind: 'offscreen',
+      })
+    }
+    if (!composition?.crop?.rect) return canvas
+    const crop = clampCropRect(composition.crop.rect, canvas.width, canvas.height)
+    const { canvas: cropped, context } = createImageEditCanvas(crop.width, crop.height, 'offscreen')
+    context.drawImage(canvas, crop.x, crop.y, crop.width, crop.height, 0, 0, cropped.width, cropped.height)
+    return cropped as OffscreenCanvas
+  }
+
   destroy(): void {
     this.disposeState()
+    this.deviceManager.destroy()
     this.cachedUrlSource?.bitmap.close()
     this.cachedUrlSource = null
   }
@@ -212,15 +283,10 @@ export class WorkerWebGpuRuntime {
   }
 
   private async createState(): Promise<RuntimeState> {
-    const provider = getGpuProvider()
-    if (!provider) throw new Error('当前 Worker 未暴露 navigator.gpu')
     if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
       throw new Error('当前 Worker 不支持 OffscreenCanvas 或 ImageBitmap')
     }
-    const adapter = await provider.requestAdapter({ powerPreference: 'high-performance' })
-    if (!adapter) throw new Error('Worker 未找到可用 GPU adapter')
-    const device = await adapter.requestDevice()
-    device.pushErrorScope('validation')
+    const { provider, adapter, device } = await this.deviceManager.acquire()
     const module = device.createShaderModule({ code: baselineShaderSource })
     const canvasFormat = provider.getPreferredCanvasFormat()
     const shared = {
@@ -228,46 +294,42 @@ export class WorkerWebGpuRuntime {
       vertex: { module, entryPoint: 'vertex_main' },
       primitive: { topology: 'triangle-list' },
     }
-    const linearizePipeline = device.createRenderPipeline({
+    const linearizePipeline = await createRenderPipelineChecked(device, {
       ...shared,
       fragment: {
         module,
         entryPoint: 'fragment_linearize',
         targets: [{ format: 'rgba16float' }],
       },
-    })
-    const encodePipeline = device.createRenderPipeline({
+    }, 'Worker WebGPU 线性化 Pipeline')
+    const encodePipeline = await createRenderPipelineChecked(device, {
       ...shared,
       fragment: {
         module,
         entryPoint: 'fragment_encode',
         targets: [{ format: canvasFormat }],
       },
+    }, 'Worker WebGPU 输出编码 Pipeline')
+    const sampler = device.createSampler({
+      minFilter: 'linear',
+      magFilter: 'linear',
+      addressModeU: 'clamp-to-edge',
+      addressModeV: 'clamp-to-edge',
     })
-    const pipelineError = await device.popErrorScope()
-    if (pipelineError) {
-      device.destroy()
-      throw new Error(`Worker WebGPU Pipeline 校验失败：${pipelineError.message ?? '未知错误'}`)
-    }
+    const diffusionRenderer = await WebGpuDiffusionRenderer.create(
+      device,
+      sampler
+    )
     const state: RuntimeState = {
       provider,
       adapter,
       device,
-      sampler: device.createSampler({
-        minFilter: 'linear',
-        magFilter: 'linear',
-        addressModeU: 'clamp-to-edge',
-        addressModeV: 'clamp-to-edge',
-      }),
+      sampler,
       linearizePipeline,
       encodePipeline,
+      diffusionRenderer,
       canvasFormat,
     }
-    void device.lost.then((info) => {
-      if (this.state?.device !== device) return
-      this.state = null
-      this.deviceLostHandler?.(info.message || info.reason || 'WebGPU device lost')
-    })
     return state
   }
 
@@ -315,6 +377,43 @@ export class WorkerWebGpuRuntime {
     } finally {
       uniform.destroy()
       sourceTexture.destroy()
+    }
+  }
+
+  private async renderDiffusionBitmap(
+    state: RuntimeState,
+    decoded: ImageBitmap,
+    width: number,
+    height: number,
+    recipe: DiffusionRecipe,
+    sourceKey: string,
+    isCancelled?: () => boolean
+  ): Promise<ImageBitmap> {
+    const rendered = await state.diffusionRenderer.render({
+      sourceKey,
+      width,
+      height,
+      recipe,
+      isCancelled,
+      createLinearBase: async () => await this.createIntermediate(
+        state,
+        decoded,
+        width,
+        height
+      ),
+    })
+    try {
+      const canvas = new OffscreenCanvas(width, height)
+      const context = getWebGpuContext(canvas)
+      await this.renderToCanvas(state, rendered.texture, context, {
+        scaleX: 1,
+        scaleY: 1,
+        offsetX: 0,
+        offsetY: 0,
+      })
+      return canvas.transferToImageBitmap()
+    } finally {
+      rendered.release()
     }
   }
 
@@ -387,7 +486,13 @@ export class WorkerWebGpuRuntime {
   }
 
   private disposeState(): void {
-    this.state?.device.destroy()
+    this.state?.diffusionRenderer.destroy()
+    this.deviceManager.invalidate()
     this.state = null
   }
+}
+
+function orientationCacheKey(composition: ImageEditWorkerComposition | undefined): string {
+  const orientation = composition?.orientation
+  return orientation ? `${orientation.rotate}:${orientation.mirrored ? 'm' : 'n'}` : '0:n'
 }

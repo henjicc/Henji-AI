@@ -33,6 +33,10 @@ import {
 
 export interface MarkEditorProps {
   sourceImageUrl: string;
+  /** 柔光 Worker 已在底图上应用朝向时，避免标注坐标被重复旋转。 */
+  sourceOrientationAlreadyApplied?: boolean;
+  /** 低分辨率预览仍按原图坐标编辑，避免标注与裁剪漂移。 */
+  logicalImageSize?: { width: number; height: number };
   initialDoc?: ImageMarkDoc | null;
   onDocChange?: (doc: ImageMarkDoc) => void;
   initialStyle?: Partial<MarkEditorStyleState>;
@@ -63,6 +67,8 @@ export interface MarkEditorDocumentController {
  */
 export function MarkEditor({
   sourceImageUrl,
+  sourceOrientationAlreadyApplied = false,
+  logicalImageSize,
   initialDoc,
   onDocChange,
   initialStyle,
@@ -136,8 +142,19 @@ export function MarkEditor({
     if (!image) {
       return null;
     }
+    if (sourceOrientationAlreadyApplied) {
+      const width = logicalImageSize?.width ?? image.naturalWidth;
+      const height = logicalImageSize?.height ?? image.naturalHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('无法初始化预览画布');
+      context.drawImage(image, 0, 0, width, height);
+      return canvas;
+    }
     return renderOrientedCanvas(image, { rotate: orientationRotate, mirrored: orientationMirrored });
-  }, [image, orientationRotate, orientationMirrored]);
+  }, [image, logicalImageSize?.height, logicalImageSize?.width, orientationRotate, orientationMirrored, sourceOrientationAlreadyApplied]);
 
   const imageWidth = orientedCanvas?.width ?? 0;
   const imageHeight = orientedCanvas?.height ?? 0;

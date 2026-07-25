@@ -1,11 +1,17 @@
 import { useCallback, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
+  createImageEditOperation,
   createEmptyImageEditDocument,
+  getImageEditOperation,
   imageEditDocumentToMarkDoc,
+  imageEditOperationRegistry,
   replaceMarkDocInImageEditDocument,
+  upsertImageEditOperation,
   type ImageEditDocument,
+  type ImageEditOperation,
   type ImageMarkDoc,
 } from '@/core/imageEdit';
+import type { ImageEditDocumentController } from './ImageEditorDocumentContext';
 import type { MarkEditorDocumentController } from '@/features/imageMark/editor/MarkEditor';
 import type { MarkHistoryController } from '@/features/imageMark/editor/useMarkHistory';
 import { HISTORY_LIMIT } from '@/features/imageMark/editor/shared';
@@ -19,6 +25,7 @@ export interface ImageEditorSession {
   document: ImageEditDocument;
   markDoc: ImageMarkDoc;
   markController: MarkEditorDocumentController;
+  documentController: ImageEditDocumentController;
 }
 
 export function useImageEditorSession({
@@ -32,6 +39,7 @@ export function useImageEditorSession({
   onDocumentChangeRef.current = onDocumentChange;
   const [undoStack, setUndoStack] = useState<ImageEditDocument[]>([]);
   const [redoStack, setRedoStack] = useState<ImageEditDocument[]>([]);
+  const transactionBaseRef = useRef<ImageEditDocument | null>(null);
 
   const setMarkDoc = useCallback<Dispatch<SetStateAction<ImageMarkDoc>>>((updater) => {
     setDocument((previous) => {
@@ -56,6 +64,12 @@ export function useImageEditorSession({
     setDocument(next);
     onDocumentChangeRef.current?.(next);
   }, [pushHistorySnapshot]);
+
+  const updateDocumentWithoutHistory = useCallback((next: ImageEditDocument) => {
+    documentRef.current = next;
+    setDocument(next);
+    onDocumentChangeRef.current?.(next);
+  }, []);
 
   const commitMarkDoc = useCallback((next: ImageMarkDoc, recordHistory = true) => {
     commitDocument(replaceMarkDocInImageEditDocument(documentRef.current, next), recordHistory);
@@ -112,5 +126,89 @@ export function useImageEditorSession({
     history,
   }), [history, markDoc, notifyMarkDocChange, setMarkDoc]);
 
-  return { document, markDoc, markController };
+  const beginTransaction = useCallback(() => {
+    if (!transactionBaseRef.current) {
+      transactionBaseRef.current = documentRef.current;
+    }
+  }, []);
+
+  const commitTransaction = useCallback(() => {
+    const base = transactionBaseRef.current;
+    transactionBaseRef.current = null;
+    if (base && base !== documentRef.current) {
+      pushHistorySnapshot(base);
+    }
+  }, [pushHistorySnapshot]);
+
+  const cancelTransaction = useCallback(() => {
+    const base = transactionBaseRef.current;
+    transactionBaseRef.current = null;
+    if (base) updateDocumentWithoutHistory(base);
+  }, [updateDocumentWithoutHistory]);
+
+  const updateOperation = useCallback<ImageEditDocumentController['updateOperation']>((operationId, update) => {
+    const definition = imageEditOperationRegistry.get(operationId);
+    if (!definition) throw new Error(`未注册的图片编辑操作：${operationId}`);
+    const current = getImageEditOperation(documentRef.current, operationId);
+    const currentParams = (current?.params ?? definition.createDefaultParams()) as object;
+    const updateParams = update as unknown as (params: object) => object;
+    const nextParams = definition.parseParams(updateParams(currentParams));
+    const nextOperation: ImageEditOperation = current
+      ? { ...current, params: nextParams }
+      : createImageEditOperation(operationId, nextParams);
+    const nextDocument = upsertImageEditOperation(documentRef.current, nextOperation);
+    if (transactionBaseRef.current) {
+      updateDocumentWithoutHistory(nextDocument);
+      return;
+    }
+    commitDocument(nextDocument);
+  }, [commitDocument, updateDocumentWithoutHistory]);
+
+  const setOperationEnabled = useCallback((operationId: string, enabled: boolean) => {
+    const current = getImageEditOperation(documentRef.current, operationId);
+    if (!current) {
+      if (!enabled) return;
+      updateOperation(operationId, (params) => params);
+      return;
+    }
+    const nextDocument = upsertImageEditOperation(documentRef.current, { ...current, enabled });
+    if (transactionBaseRef.current) updateDocumentWithoutHistory(nextDocument);
+    else commitDocument(nextDocument);
+  }, [commitDocument, updateDocumentWithoutHistory, updateOperation]);
+
+  const resetOperation = useCallback((operationId: string) => {
+    const definition = imageEditOperationRegistry.get(operationId);
+    if (!definition) throw new Error(`未注册的图片编辑操作：${operationId}`);
+    const current = getImageEditOperation(documentRef.current, operationId);
+    const nextOperation: ImageEditOperation = current
+      ? { ...current, enabled: true, params: definition.createDefaultParams() }
+      : createImageEditOperation(operationId, definition.createDefaultParams());
+    const nextDocument = upsertImageEditOperation(documentRef.current, nextOperation);
+    if (transactionBaseRef.current) updateDocumentWithoutHistory(nextDocument);
+    else commitDocument(nextDocument);
+  }, [commitDocument, updateDocumentWithoutHistory]);
+
+  const removeOperation = useCallback((operationId: string) => {
+    const nextDocument = {
+      ...documentRef.current,
+      operations: documentRef.current.operations.filter((operation) => operation.operationId !== operationId),
+    };
+    if (nextDocument.operations.length === documentRef.current.operations.length) return;
+    if (transactionBaseRef.current) updateDocumentWithoutHistory(nextDocument);
+    else commitDocument(nextDocument);
+  }, [commitDocument, updateDocumentWithoutHistory]);
+
+  const documentController = useMemo<ImageEditDocumentController>(() => ({
+    document,
+    getOperation: (operationId) => getImageEditOperation(document, operationId),
+    beginTransaction,
+    updateOperation,
+    setOperationEnabled,
+    resetOperation,
+    removeOperation,
+    commitTransaction,
+    cancelTransaction,
+  }), [beginTransaction, cancelTransaction, commitTransaction, document, removeOperation, resetOperation, setOperationEnabled, updateOperation]);
+
+  return { document, markDoc, markController, documentController };
 }

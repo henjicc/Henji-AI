@@ -126,11 +126,21 @@ export function decodeImageEditDocument(value: unknown): ImageEditDocumentDecode
       return { document: createEmptyImageEditDocument(), sourceFormat: 'invalid', migrated: false, issues: ['invalid-operation'] };
     }
     const ids = new Set<string>();
+    const builtInOperationIds = new Set<string>();
     for (const operation of operations) {
       if (!operation || ids.has(operation.id)) {
         return { document: createEmptyImageEditDocument(), sourceFormat: 'invalid', migrated: false, issues: ['duplicate-operation-instance'] };
       }
       ids.add(operation.id);
+      if (
+        Object.values(IMAGE_EDIT_OPERATION_IDS).includes(
+          operation.operationId as typeof IMAGE_EDIT_OPERATION_IDS[keyof typeof IMAGE_EDIT_OPERATION_IDS]
+        )
+        && builtInOperationIds.has(operation.operationId)
+      ) {
+        return { document: createEmptyImageEditDocument(), sourceFormat: 'invalid', migrated: false, issues: ['duplicate-built-in-operation'] };
+      }
+      builtInOperationIds.add(operation.operationId);
     }
     return {
       document: { version: IMAGE_EDIT_DOCUMENT_VERSION, operations: operations as ImageEditOperation[] },
