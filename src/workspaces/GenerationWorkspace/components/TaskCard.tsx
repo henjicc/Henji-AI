@@ -333,6 +333,7 @@ const TaskCard = React.memo(function TaskCard({
       const filePath = task.result.filePath
       return (
         <AudioPlayer
+          surface="plain"
           src={task.result.url}
           filePath={filePath}
           onContextMenu={(e) =>

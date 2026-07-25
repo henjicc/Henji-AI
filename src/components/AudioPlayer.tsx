@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { downloadAudioFile, saveAudioFromUrl } from '@/utils/save'
-import { UiIconButton, UiRangeInput } from '@/components/ui'
+import { UiIconButton, UiRangeInput, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
 import Waveform from './Waveform'
 import { useI18n } from '@/hooks/useI18n'
 import { useAudioWaveform } from '@/hooks/useAudioWaveform'
@@ -17,6 +17,14 @@ interface AudioPlayerProps {
   rightActions?: React.ReactNode
   autoPlay?: boolean
   active?: boolean
+  /**
+   * 外壳表面由**宿主**决定，而不是播放器自己硬定：
+   * - `card`（默认）：完整卡片表面，用于播放器是主体内容的场景（如音频查看器弹窗）
+   * - `plain`：无边框无背景，用于外层已有层级的场景（任务卡结果区、语音克隆预览卡内）
+   *
+   * 默认值保持 `card`，未传参的调用点行为不变。
+   */
+  surface?: 'card' | 'plain'
 }
 
 const AudioPlayer: React.FC<AudioPlayerProps> = ({
@@ -30,6 +38,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
   rightActions,
   autoPlay = false,
   active = true,
+  surface = 'card',
 }) => {
   const { t } = useI18n()
   const audioRef = useRef<HTMLAudioElement>(null)
@@ -255,7 +264,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
 
   return (
     <div
-      className={`${compact ? 'w-full min-w-0' : 'w-[36rem]'} bg-panel/70 rounded-xl border border-zinc-700/50 p-4 outline-none ${className || ''}`}
+      className={`${compact ? 'w-full min-w-0' : 'w-[36rem]'} ${surface === 'card' ? `rounded-xl p-4 ${UI_PANEL_SURFACE_CLASS}` : 'p-0'} outline-none ${className || ''}`}
       onContextMenu={onContextMenu}
       tabIndex={0}
       onKeyDown={(e) => {
@@ -308,6 +317,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
               className={`absolute left-[calc(100%+0.5rem)] top-1/2 z-20 -translate-y-1/2 ${volumeSliderWidthClass}`}
               onWheelCapture={onVolumeWheel}
             >
+              {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}
               {showVolumeValueTip && (
                 <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-2xs text-zinc-200">
                   {volumePercent}%

@@ -86,13 +86,14 @@ export function AudioPreviewCard({
         <div>
           {contentAction && <div className="mb-2 flex justify-end">{contentAction}</div>}
           <AudioPlayer
+            surface="plain"
             src={src}
             filePath={filePath}
             rightActions={playerRightActions}
             compact
             waveformWidth={compact ? 236 : 280}
             waveformHeight={compact ? 40 : 58}
-            className={`!w-full !max-w-none !rounded-lg !border-border-dark/70 !bg-surface-dark/35 ${compact ? '!p-2.5' : '!p-3'}`}
+            className={`!w-full !max-w-none ${compact ? '!p-2.5' : '!p-3'}`}
           />
         </div>
       ) : (

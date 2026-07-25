@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiIconButton } from '@/components/ui'
+import { UiIconButton, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import {
   DownloadIcon,
@@ -93,7 +93,8 @@ export function VideoViewerControls({
         pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none',
       }}
     >
-      <div className="bg-panel/90 border border-zinc-700/50 rounded-xl px-4 py-3 text-white flex flex-col gap-3">
+      {/* 控件条悬浮在全屏视频之上，属于浮层，卡片表面是合法的；改用统一的面板令牌 */}
+      <div className={`flex flex-col gap-3 rounded-xl px-4 py-3 ${UI_PANEL_SURFACE_CLASS}`}>
         <div
           ref={progressBarRef}
           className="progress-container"
