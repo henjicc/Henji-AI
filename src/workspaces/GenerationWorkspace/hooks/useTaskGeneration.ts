@@ -11,6 +11,7 @@ import { isRecord, isStringArray } from '../utils/typeGuards'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
+import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { taskQueueManager } from '@/services/taskQueue'
 import {
@@ -286,6 +287,8 @@ export function useTaskGeneration({
       })
     } finally {
       delete lastProgressRef.current[taskId]
+      // 任务链路结束（成功/失败/转轮询完成后），清掉瞬态进度，避免 store 残留
+      useGenerationTaskProgressStore.getState().clearProgress(taskId)
     }
   }, [generateWithService, messages.genericGenerateFailed, notify, updateProgress, updateTask])
 
@@ -331,7 +334,8 @@ export function useTaskGeneration({
       return {
         taskId: task.id,
         status: task.status,
-        progress: task.progress ?? 0,
+        // 生成中的实时进度只在瞬态 store 里；task.progress 只保留终态快照（成功时的 100）
+        progress: useGenerationTaskProgressStore.getState().progress[taskId] ?? task.progress ?? 0,
         modelId: task.model,
         mediaType: task.type,
         resultAvailable: Boolean(task.result),

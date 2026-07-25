@@ -12,6 +12,8 @@
     "gen:progress-seeds": "node scripts/generate-progress-seeds.cjs",
     "gen:model-manifest": "node scripts/generate-model-manifest.cjs",
     "check:colors": "node scripts/check-color-tokens.cjs",
+    "check:surface": "node scripts/check-surface-tokens.cjs",
+    "check:surface:strict": "node scripts/check-surface-tokens.cjs --strict",
     "check:model-i18n": "node scripts/check-model-i18n.cjs",
     "logs:query": "node scripts/query-logs.cjs",
     "assistant:cli": "node scripts/run-assistant-cli.cjs",

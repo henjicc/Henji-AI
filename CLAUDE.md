@@ -137,6 +137,9 @@ npm run lint                   # 前端 lint
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
+- **表面层级铁律**：同一层视觉深度只画一次边框/背景。最外层浮层/弹窗/侧栏用 `<UiPanel>`；面板内部分组必须用 `<UiPanel variant="inset">`/`variant="bare"`/纯留白，**禁止**在已有边框的容器里再叠 `border + bg-* + rounded`，禁止业务组件手写 `bg-panel` 卡片
+- **界面工作必读 skill**：新建或改造界面/面板/弹窗/设置分区前，先用 skill `henji-ui-surface`（含四层表面模型、决策树、禁止清单、性能分层规则）
+- **表面检查**：界面改动后跑 `npm run check:surface`（默认只告警），要求不新增违规；确需独立卡片表面时加 `ui-surface-allow` 注释豁免并写明理由
 
 ### 7. 画布模块拆分约定
 

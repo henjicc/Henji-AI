@@ -4,6 +4,7 @@ import { useI18n } from "@/hooks/useI18n"
 import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
 import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker"
+import { useGenerationTaskProgressStore } from "@/stores/generationTaskProgressStore"
 import { UiButton, UiIconButton } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
@@ -20,7 +21,6 @@ import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/open
 
 export interface TaskCardProps {
   task: GenerationTask
-  progress: number | undefined
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
   onCopyImage: (filePath?: string) => Promise<void>
   onRegenerate: (task: GenerationTask) => Promise<void>
@@ -36,7 +36,6 @@ export interface TaskCardProps {
 
 const TaskCard = React.memo(function TaskCard({
   task,
-  progress: progressValue,
   onDownload,
   onCopyImage,
   onRegenerate,
@@ -50,6 +49,8 @@ const TaskCard = React.memo(function TaskCard({
   notify,
 }: TaskCardProps): JSX.Element {
   const { t, i18n } = useI18n()
+  // 进度自订阅：只有本任务进度变化时才重渲染这一张卡，不牵动整个工作区
+  const progressValue = useGenerationTaskProgressStore((state) => state.progress[task.id])
   const { addMedia, collecting } = useAddToAssetLibrary()
   const resultFilePaths = React.useMemo(() => task.result?.filePath ? splitMulti(task.result.filePath) : [], [task.result?.filePath])
   const [collectedPaths, setCollectedPaths] = React.useState<Set<string>>(() => new Set())
@@ -469,8 +470,9 @@ const TaskCard = React.memo(function TaskCard({
     </div>
   )
 }, (prev, next) => {
-  // Only re-render when task or progress actually changed
-  return prev.task === next.task && prev.progress === next.progress
+  // 进度已改为组件内自订阅 store，这里只需比较 task 引用；
+  // 进度变化通过 zustand selector 精准触发本卡重渲染
+  return prev.task === next.task
 })
 
 export default TaskCard

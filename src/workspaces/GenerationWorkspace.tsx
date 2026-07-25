@@ -29,6 +29,7 @@ import { useTaskCleanup } from './GenerationWorkspace/hooks/useTaskCleanup'
 import { useTaskGeneration } from './GenerationWorkspace/hooks/useTaskGeneration'
 import { useTaskReplay } from './GenerationWorkspace/hooks/useTaskReplay'
 import { useTaskState } from './GenerationWorkspace/hooks/useTaskState'
+import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { useAutoResumePolling } from './GenerationWorkspace/hooks/useAutoResumePolling'
 import { useTestModeShortcuts } from './GenerationWorkspace/hooks/useTestModeShortcuts'
 import { useToast } from './GenerationWorkspace/hooks/useToast'
@@ -38,6 +39,10 @@ import { useTaskFilters } from './GenerationWorkspace/hooks/useTaskFilters'
 import { splitMulti } from './GenerationWorkspace/utils/multiFile'
 
 const FLOATING_INPUT_PANEL_MAX_WIDTH_PX = 1100
+
+// 稳定引用：删除/清空任务时清掉对应的瞬态进度，避免 store 里残留已结束任务的条目
+const clearGenerationTaskProgress = (taskId: string): void =>
+  useGenerationTaskProgressStore.getState().clearProgress(taskId)
 
 const GenerationWorkspace: React.FC = () => {
   const { t } = useI18n()
@@ -186,6 +191,7 @@ const GenerationWorkspace: React.FC = () => {
   const { deleteTask, clearFailedTasks, clearAllTasks } = useTaskCleanup({
     tasks,
     setTasks,
+    clearTaskProgress: clearGenerationTaskProgress,
   })
   const imageEditStatesRef = useRef<Map<string, ImageEditSession>>(new Map())
   const setUploadedImagesRef = useRef<React.Dispatch<React.SetStateAction<string[]>> | null>(null)

@@ -206,11 +206,36 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
 
 UiChipButton.displayName = 'UiChipButton';
 
-export const UiPanel = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
-  ({ className = '', ...props }, ref) => (
+type UiPanelVariant = 'panel' | 'inset' | 'bare';
+
+interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
+  /**
+   * 表面变体，用来避免"卡片套卡片"：
+   * - `panel`（默认）：完整浮层表面（边框 + 背景 + 阴影），用于最外层独立面板/弹窗
+   * - `inset`：内嵌分区，仅用更暗的背景做层次，无边框无阴影，用于已在某个 panel 内部再分组
+   * - `bare`：纯语义分组容器，无边框无背景无阴影，只保留圆角，靠留白区分层次
+   *
+   * 铁律：同一层视觉深度只画一次边框/背景。进入一个已经有边框的容器后，
+   * 内部分组请用 `inset` 或 `bare`，不要再套一层 `panel`，也不要手写 `border + bg-*` 的 div。
+   */
+  variant?: UiPanelVariant;
+}
+
+function resolveUiPanelSurface(variant: UiPanelVariant): string {
+  if (variant === 'inset') {
+    return 'bg-app/40 text-text-dark';
+  }
+  if (variant === 'bare') {
+    return '';
+  }
+  return UI_PANEL_SURFACE_CLASS;
+}
+
+export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
+  ({ className = '', variant = 'panel', ...props }, ref) => (
     <div
       ref={ref}
-      className={`rounded-xl ${UI_PANEL_SURFACE_CLASS} ${className}`}
+      className={`rounded-xl ${resolveUiPanelSurface(variant)} ${className}`}
       {...props}
     />
   )

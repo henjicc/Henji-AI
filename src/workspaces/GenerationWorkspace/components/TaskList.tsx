@@ -62,12 +62,10 @@ export function TaskList({
         </div>
       )}
       {tasks.length > 0 && tasks.map((task) => {
-        const progressValue = task.progress
         return (
           <TaskCard
             key={task.id}
             task={task}
-            progress={progressValue}
             showMenu={showMenu}
             onDownload={onDownload}
             onCopyImage={onCopyImage}

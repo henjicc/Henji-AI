@@ -6,6 +6,7 @@ import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
+import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 
 const logger = createLogger('workspaces.GenerationWorkspace.hooks.continuePollingTask')
 
@@ -46,7 +47,9 @@ export async function continuePollingTask({
     if (task.images) options.images = task.images
 
     updateTask(task.id, { status: 'generating', error: undefined, serverTaskId })
-    let currentProgress = Math.max(1, task.progress ?? 0)
+    // 进度地板优先取瞬态 store 中的现值（进度已不再写进 task），回退到 task 快照
+    const storedProgress = useGenerationTaskProgressStore.getState().progress[task.id]
+    let currentProgress = Math.max(1, storedProgress ?? task.progress ?? 0)
     updateProgress(task.id, currentProgress)
 
     // 先查缓存结果（主进程轮询完成但渲染层已重载的场景）
@@ -120,6 +123,8 @@ export async function continuePollingTask({
         createdAt: new Date(),
       },
     })
+    // 任务已进入 success（不再渲染进度条），清掉瞬态进度
+    useGenerationTaskProgressStore.getState().clearProgress(task.id)
   } catch (error) {
     logger.error('[Workspace] 继续轮询失败', error)
     const errorMessage = toUserMessage(error) || genericGenerateFailed
@@ -128,6 +133,7 @@ export async function continuePollingTask({
       error: errorMessage,
       serverTaskId: extractServerTaskIdFromErrorMessage(errorMessage) ?? serverTaskId,
     })
+    useGenerationTaskProgressStore.getState().clearProgress(task.id)
   }
 }
 
