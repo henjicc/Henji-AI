@@ -77,3 +77,49 @@
 - 决定：明确区分两套体系。画布内部保留自己的局部刻度（魔数提为具名常量，如 `CANVAS_MINIMAP_Z_INDEX`），不套用全局档位；组件内部的小数值局部层叠不必登记。全局契约只管"整块浮层之间"的先后。
 - 理由：ReactFlow 自己管理节点 z-index，强行统一会破坏画布内部层叠；而画布整体作为一个元素参与全局层级已经足够。
 - 影响范围：1.2 验收标准中"`src/` 下 z-index 只出现语义类"一条按此理解——指全局浮层，不含局部层叠与负 z 的隐藏测量元素。
+
+### D-009 选项集合静息态不描边，但要有判据
+
+- 日期：2026-07-26（收尾任务）
+- 背景：用户对着截图提出"鼠标没停留、也不是选中项时是不是不该有边框背景"。这是对项目早期一个有意设计的反问——当初把这些当"按钮"，所以逐项给了边框。
+- 认定的根因：**边框表达的是"边界"，不是"可点击"**。一屏里几十个选项各自描边时，边框互相抵消、不再传递任何信息，只剩视觉重量；可点击性由 hover 反馈 + 排布规律已经表达充分。
+- 决定：新增 `UiOptionButton` 的 `menu` 变体（静息无边框无底色，hover 出 `bg-layer`，选中态实底），并按下面的判据推广。**不改默认变体**——那会一次波及 30 个调用点，用户无从判断哪里变了。
+
+#### 判据（两条都满足才用 `menu`）
+
+1. **是同质选项的集合**：≥3 个由 `map` 渲染的并列 peer，或语义明确的二选一分段。孤立单个按钮不算。
+2. **去掉框之后形状还在**，满足任一即可：
+   - 已被可见容器圈住（浮层面板、弹窗左栏、下拉列表）——容器已经画过一次边界
+   - 每项自带足以撑出形状的内容（缩略图、图标块、多行文本、比例示意图）
+   - 是二维网格 → 补一层 `bg-veil-faint` 撑格子，**但仍不描边**
+
+#### 刻意保留边框的 12 个调用点及理由
+
+| 位置 | 理由 |
+|---|---|
+| `NumberInput` marks、`CompositeRadio`、`VoiceSelectorPanel` 筛选 chips、`CharacterPoseSection` 体型、`EasingCurveEditor` 缓动预设、`PlaybackControls` 秒/帧 | 纯文字 chip，直接落在面板底色上，去框后变裸文字，点击可供性丢失（不满足判据 2） |
+| `ToolboxWorkspace` 工具卡、`CameraStageProjectList` 工程卡 | 是内容入口卡不是选项，走 Card |
+| `CameraStageProjectList` 创建模式二选一、`ModelscopeCustomModelManager` 类型二选一 | 带长描述的大块二选一，框即命中区域 |
+| `RadioInput` | 表单单选，框即命中区域 |
+| `BasicInputComponents` 文件按钮、`AudioPreviewCard` 上传按钮 | 是动作按钮不是选项，`variant="flat"` 合适 |
+
+#### 未改但效果已一致的三处
+
+`UiDatePicker` 日期格、`NodeActionToolbar` 工具栏、`AssistantTraceList` 追踪行
+用的是 `UiButton variant="ghost"` + 手写 `!border-transparent !bg-transparent`，
+**视觉结果已经是正确的静息态**，只是没走变体。转成 `UiOptionButton` 会改变它们的选中态配色
+（各自有定制），收益是 DRY 而非观感，风险大于收益，故保留并在此登记。
+
+#### 顺带修掉的不一致
+
+- 画布模型选择器与生成页模型选择器的选中态此前一个是 `bg-accent`、一个是 `bg-brand-600`，现统一走 `UI_OPTION_ITEM_ACTIVE_CLASS`
+- 比例/分辨率一族 8 处手写的 `!bg-accent !border-accent !text-white` 一并收敛到同一令牌
+- 已确认 `--brand-*` 全部由 `runtimeTheme.ts` 从 accent 派生，改强调色时会跟随，不存在 D-00x 里那类"设置不生效"的问题
+
+#### 一个静默失效的坑（已在 skill 登记）
+
+`menu` 变体的静息态**刻意不写 `bg-transparent`**：button 的透明背景由 preflight 保证，
+写出来反而会和调用方补的 `bg-veil-faint` 在同一 CSS 属性上打架，
+胜负取决于 Tailwind 产物顺序而非 className 顺序。已用生成的 CSS 复验：
+`.bg-veil-faint`(3840) 在 `.bg-transparent`(3836) 之后、`.hover\:bg-layer:hover`(6736) 在两者之后且特异性更高，
+去掉 `bg-transparent` 后行为确定。

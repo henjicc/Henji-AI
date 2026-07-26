@@ -429,8 +429,9 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                           }
                           onChange(aspectParam.id, option.value)
                         }}
+                        variant="menu"
                         className={`w-[78px] px-2 py-2 text-xs flex-col justify-center gap-2 ${
-                          isActive ? '!bg-accent !border-accent !text-white' : ''
+                          isActive ? '' : 'bg-veil-faint'
                         }`}
                         style={{ height: `${ASPECT_ITEM_HEIGHT}px` }}
                       >
@@ -496,8 +497,9 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                             onChange(resolutionParam.id, nextValue)
                           }
                         }}
+                        variant="menu"
                         className={`w-[78px] px-2 py-1.5 text-sm justify-center ${
-                          isActive ? '!bg-accent !border-accent !text-white' : ''
+                          isActive ? '' : 'bg-veil-faint'
                         } ${
                           !sizeDerivedSpec && 'disabled' in option && option.disabled
                             ? 'opacity-50 cursor-not-allowed'

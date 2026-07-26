@@ -118,3 +118,50 @@
 ### 删除
 - `路径`：原因
 -->
+
+---
+
+## 收尾：选项集合静息态收敛
+
+提交：`067087a`（第一步） + `<本次>`（第二步）
+
+### 修改 — 组件契约
+
+- `src/components/ui/primitives.tsx`：`UiOptionButton` 新增 `menu` 变体（静息无边框无底色，hover 出 `bg-layer`，选中态实底）；静息态刻意不写 `bg-transparent`，避免与调用方补的 `bg-veil-faint` 在同一属性上打架
+- `src/workspaces/GenerationWorkspace/components/TaskCard.tsx`：6 个图标按钮改 `showBorder={false} appearance="hover-only"`（第一步）
+
+### 修改 — 转 `variant="menu"`（浮层/容器内的同质列表）
+
+- `src/components/LanguageSwitcher.tsx`
+- `src/components/ui/Dropdown.tsx`
+- `src/components/ui/PromptEditor/suggestions/PromptSuggestionList.tsx`：同时删掉手写的 `!border-transparent !bg-transparent …`
+- `src/components/Settings/sections/LlmSettingsSection.tsx`：供应商列表
+- `src/components/ModelSettingsPanel.tsx`：模型可见性列表
+- `src/components/MediaGenerator/components/PromptOptimizationSelectorPanel.tsx`（第一步，`card` → `menu`）
+- `src/components/MediaGenerator/components/PromptOptimizationProfilesPanel.tsx`（`card` → `menu`）
+- `src/features/canvas/NodeSelectionMenu.tsx`：删手写覆盖
+- `src/features/canvas/ui/NodeDownloadMenu.tsx`：2 处
+- `src/features/canvas/nodes/storyboardSplit/IncomingImagePicker.tsx`
+- `src/features/canvas/params/ModelPickerList.tsx`：删手写覆盖 + 删掉不再需要的 `UI_COLOR_ACCENT_*` 导入，选中态改走公共令牌
+- `src/features/cameraStage/panels/ObjectListPanel.tsx`
+
+### 修改 — 转 `menu` + `bg-veil-faint`（二维网格，需要撑格子）
+
+- `src/components/MediaGenerator/components/ModelSelectorPanel.tsx`（第一步）
+- `src/components/MediaGenerator/components/AspectResolutionPanel.tsx`：2 处，去掉手写 `!bg-accent`
+- `src/components/params/panels/ResolutionPanel/AspectRatioSelector.tsx`：2 处，同上
+- `src/components/params/panels/ResolutionPanel/PresetResolutionSelector.tsx`：同上
+- `src/components/params/panels/ResolutionPanel/QualityTierSelector.tsx`：同上
+- `src/components/ui/UniversalResolutionSelector.tsx`：2 处
+- `src/components/params/panels/VoiceSelectorPanel.tsx`：语音网格（`card` → `menu`）
+
+### 修改 — 测试与文档
+
+- `src/components/ui/PromptEditor/suggestions/PromptSuggestionList.test.tsx`：断言从"含 `!bg-transparent`"改为语义断言（未选中含 `border-transparent` 且无实底，选中有实底）
+- `.claude/skills/henji-ui-surface/SKILL.md`：新增「选项集合的静息态：不描边」一节（判据、反例表、静默失效坑）；禁止清单 +2 条；自检清单 +1 条
+- `docs/task/UI设计系统统一/test-report.md`：补齐第二、三阶段与本次收尾的手动验证清单（此前只覆盖第一阶段），现为 A~N 共 14 组
+
+### 发现但未处理
+
+- `src/components/MediaGenerator/components/ResolutionPanel.tsx`：**零引用死代码**（仅自引用），未改也未删，另行处理
+- `src/components/debug/ExportPanel.tsx`：完全手写覆盖了配色（`bg-yellow-500` / `bg-zinc-800/50`），是 debug 面板，未纳入本次收敛

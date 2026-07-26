@@ -55,10 +55,11 @@ export const QualityTierSelector: React.FC<QualityTierSelectorProps> = ({
             <UiOptionButton
               type="button"
               active={value === option.value}
+              variant="menu"
               key={option.value}
               onClick={() => onChange(option.value)}
               className={`w-[78px] px-2 py-1.5 text-sm justify-center ${
-                value === option.value ? '!bg-accent !border-accent !text-white' : ''
+                value === option.value ? '' : 'bg-veil-faint'
               }`}
               style={{ height: description ? '52px' : '42px' }}
             >

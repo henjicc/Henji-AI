@@ -214,7 +214,7 @@ export function PromptOptimizationProfilesPanel({
               key={profile.id}
               type="button"
               active={profile.id === selectedProfile.id}
-              variant="card"
+              variant="menu"
               onClick={() => selectProfile(profile.id)}
               className="w-full justify-between gap-2"
             >

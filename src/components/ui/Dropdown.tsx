@@ -277,6 +277,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
             tabIndex={-1}
             aria-selected={selected}
             active={selected}
+            variant="menu"
             className={`w-full rounded-none border-0 px-3 py-2 transition-colors duration-200 ${option.disabled
               ? 'cursor-not-allowed opacity-50'
               : selected

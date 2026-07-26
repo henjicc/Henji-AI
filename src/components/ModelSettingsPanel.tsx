@@ -289,6 +289,7 @@ const ModelSettingsPanel: React.FC = () => {
                         key={model.id}
                         type="button"
                         active={!isHidden}
+                        variant="menu"
                         onClick={() => toggleModelVisibility(provider.id, model.id)}
                         className={`mb-1 w-full justify-between px-3 py-2.5 ${isHidden ? 'opacity-40' : 'opacity-100'}`}
                       >

@@ -466,6 +466,7 @@ const LlmSettingsSection: React.FC = () => {
                 key={provider.providerId}
                 type="button"
                 active={providerDraft?.providerId === provider.providerId}
+                variant="menu"
                 className="flex w-full items-center justify-between gap-2 px-3 py-2.5"
                 onClick={() => setProviderDraft({ ...provider })}
               >

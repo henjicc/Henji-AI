@@ -40,6 +40,7 @@ export function LanguageSwitcher() {
               <UiOptionButton
                 active={lang.code === currentLanguage}
                 key={lang.code}
+                variant="menu"
                 onClick={() => handleLanguageChange(lang.code)}
                 className="w-full px-4 py-2 text-left text-sm"
               >

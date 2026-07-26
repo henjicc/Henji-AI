@@ -122,7 +122,8 @@ export function NodeSelectionMenu({
         return (
           <UiOptionButton
             key={item.type}
-            className="w-full gap-3 rounded-lg !border-transparent !bg-transparent px-3 py-2.5 !transition-none hover:!border-transparent hover:!bg-layer"
+            variant="menu"
+            className="w-full gap-3 rounded-lg px-3 py-2.5 !transition-none"
             onClick={() => {
               handleClose();
               setTimeout(() => onSelect(item.type), UI_POPOVER_TRANSITION_MS + 10);

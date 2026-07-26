@@ -92,7 +92,8 @@ export const PromptSuggestionList = forwardRef<
           <UiOptionButton
             key={`${item.kind}:${getSuggestionKey(item)}`}
             active={index === selectedIndex}
-            className={`w-full min-w-0 gap-2 ${index === selectedIndex ? '' : '!border-transparent !bg-transparent hover:!border-transparent hover:!bg-layer'}`}
+            variant="menu"
+            className="w-full min-w-0 gap-2"
             role="option"
             aria-selected={index === selectedIndex}
             onMouseDown={(event) => event.preventDefault()}

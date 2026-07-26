@@ -6,8 +6,6 @@ import { getI18nText } from '@/core/types/I18nText';
 import type { ModelDefinition } from '@/core/types';
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags';
 import {
-  UI_COLOR_ACCENT_BG_CLASS,
-  UI_COLOR_ACCENT_SOFT_BORDER_CLASS,
   UiChipButton,
   UiIconButton,
   UiInput,
@@ -215,11 +213,8 @@ export function ModelPickerList({
               ref={active ? selectedModelRef : undefined}
               key={model.meta.id}
               active={active}
-              className={`w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 ${
-                active
-                  ? `!${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} !${UI_COLOR_ACCENT_BG_CLASS}`
-                  : '!border-transparent !bg-transparent hover:!border-transparent hover:!bg-layer'
-              }`}
+              variant="menu"
+              className="w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5"
               onClick={(event) => {
                 event.stopPropagation();
                 onModelChange(model.meta.id);

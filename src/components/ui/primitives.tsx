@@ -77,6 +77,10 @@ interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
    * 用于**同质选项的集合**（菜单项、模型网格、列表项）：一屏里几十个选项各自描边时，
    * 边框互相抵消、不再传递任何信息，只剩视觉重量。可点击性由 hover 反馈与排布规律表达，
    * 不需要静息态的框。孤立的单个按钮不适用，那种情况下框才真的在划定边界。
+   *
+   * 静息态刻意**不写 `bg-transparent`**：button 的透明背景由 preflight 保证，
+   * 而写出来会和调用方补的 `bg-veil-faint`（二维网格撑格子用）在同一 CSS 属性上打架，
+   * 胜负取决于 Tailwind 产物里的先后顺序而非 className 顺序，是个静默失效的坑。
    */
   variant?: 'default' | 'card' | 'flat' | 'menu';
 }
@@ -258,7 +262,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       if (variant === 'menu') {
         return active
           ? UI_OPTION_ITEM_ACTIVE_CLASS
-          : 'border-transparent bg-transparent text-text-dark hover:bg-layer';
+          : 'border-transparent text-text-dark hover:bg-layer';
       }
 
       if (variant === 'card') {

@@ -50,6 +50,7 @@ export function IncomingImagePicker({
               <UiOptionButton
                 key={`${pickerState.frameId}-${item.imageUrl}`}
                 type="button"
+                variant="menu"
                 className="w-full gap-2 px-2 py-2 text-sm"
                 onClick={(event) => {
                   event.stopPropagation();

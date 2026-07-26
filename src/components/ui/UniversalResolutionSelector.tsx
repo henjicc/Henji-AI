@@ -311,6 +311,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     key={String(option.value)}
                     type="button"
                     active={value === option.value}
+                    variant="menu"
                     disabled={option.disabled}
                     onClick={() => {
                       if (!option.disabled) {
@@ -318,8 +319,8 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                       }
                     }}
                     className={`px-2 py-3 ${config.type === 'resolution' ? 'text-sm' : 'text-xs'} flex-col justify-center gap-2 ${
-                      option.disabled ? 'opacity-50 cursor-not-allowed bg-zinc-700/30' : ''
-                    }`}
+                      value === option.value ? '' : 'bg-veil-faint'
+                    } ${option.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {config.visualize && config.type !== 'resolution' && renderVisualization(option.value)}
                     <span className="font-medium">
@@ -344,13 +345,16 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     key={String(quality.value)}
                     type="button"
                     active={qualityValue === quality.value}
+                    variant="menu"
                     disabled={quality.disabled}
                     onClick={() => {
                       if (!quality.disabled) {
                         onQualityChange(quality.value)
                       }
                     }}
-                    className={`px-3 py-2 text-sm justify-center ${quality.disabled ? 'opacity-50 cursor-not-allowed bg-zinc-700/30' : ''}`}
+                    className={`px-3 py-2 text-sm justify-center ${
+                      qualityValue === quality.value ? '' : 'bg-veil-faint'
+                    } ${quality.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {quality.label}
                   </UiOptionButton>

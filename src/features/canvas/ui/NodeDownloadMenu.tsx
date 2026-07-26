@@ -40,6 +40,7 @@ export function NodeDownloadMenu({
     >
       <UiOptionButton
         type="button"
+        variant="menu"
         className="h-9 w-full gap-2 text-sm"
         onClick={onSaveAs}
       >
@@ -53,6 +54,7 @@ export function NodeDownloadMenu({
             <UiOptionButton
               key={path}
               type="button"
+              variant="menu"
               className="h-9 w-full gap-2 text-xs"
               onClick={() => {
                 onSaveToPreset(path);

@@ -109,6 +109,7 @@ const ObjectListPanel: React.FC = () => {
                 ) : (
                   <UiOptionButton
                     active={isSelected}
+                    variant="menu"
                     onClick={() => setSelected(object.id)}
                     onDoubleClick={() => beginRename(object)}
                     className="min-w-0 flex-1 gap-2 py-1.5 text-sm"

@@ -438,16 +438,17 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
                 <div key={voice.id} className="relative">
                   <UiOptionButton
                     type="button"
-                    variant="card"
+                    variant="menu"
                     active={active}
                     onClick={() => onChange(voice.id)}
                     onMouseEnter={() => setHoveredVoiceId(voice.id)}
                     onMouseLeave={() => setHoveredVoiceId(null)}
-                    className={
+                    // 二维网格：静息态留一层极淡底色撑出格子形状，不再叠边框
+                    className={`${active ? '' : 'bg-veil-faint'} ${
                       hasDescription
                         ? 'h-auto min-h-[58px] w-full flex-col items-start justify-center gap-1 px-3 py-2'
                         : 'h-[52px] w-full flex-col items-start justify-center px-3 py-2'
-                    }
+                    }`}
                   >
                     <span className="w-full truncate text-left text-sm leading-tight">{voice.name}</span>
                     {hasDescription && (
