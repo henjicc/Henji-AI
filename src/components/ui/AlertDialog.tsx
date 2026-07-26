@@ -116,7 +116,7 @@ export default function AlertDialog({
         </div>
 
         {/* 消息内容 */}
-        <div className="ui-scrollbar max-h-[280px] overflow-y-auto text-zinc-300 text-sm mt-2 whitespace-pre-line break-words">
+        <div className="ui-scrollbar max-h-[280px] overflow-y-auto text-text-soft text-sm mt-2 whitespace-pre-line break-words">
           {message}
         </div>
 

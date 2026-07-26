@@ -8,6 +8,9 @@
   --border-rgb: 64 64 64;
   --text-rgb: 255 255 255;
   --text-muted-rgb: 163 163 163;
+  /* 文字四档中间两级，由 runtimeTheme 从 text/text-muted 派生，会跟随主题预设 */
+  --text-soft-rgb: 214 214 214;
+  --text-faint-rgb: 114 114 114;
   --accent-rgb: 59 130 246;
   --app-rgb: 10 10 10;
   --canvas-rgb: 10 10 10;

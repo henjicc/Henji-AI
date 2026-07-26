@@ -77,7 +77,7 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
   return (
     <div className="flex flex-col h-full max-h-full overflow-hidden">
       <div className="px-4 pt-3 pb-2">
-        <div className="text-xs text-zinc-400 mb-2">{t('modelscopeCustomModelPanel.label')}</div>
+        <div className="text-xs text-text-muted mb-2">{t('modelscopeCustomModelPanel.label')}</div>
         <Dropdown
           value={value || ''}
           display={display}
@@ -86,15 +86,15 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
           buttonClassName="w-full"
         />
         {selectedModel && (
-          <div className="mt-2 text-xs text-zinc-500">
-            <span className="text-zinc-400">{t('modelscopeCustomModelPanel.modelIdLabel')}</span>
+          <div className="mt-2 text-xs text-text-faint">
+            <span className="text-text-muted">{t('modelscopeCustomModelPanel.modelIdLabel')}</span>
             <span className="break-all">{selectedModel.id}</span>
           </div>
         )}
       </div>
 
       <div className="px-4">
-        <div className="border-t border-zinc-700/50" />
+        <div className="border-t border-border-dark/50" />
       </div>
 
       <div className="flex-1 min-h-0 px-4 pb-4 pt-3 overflow-hidden">

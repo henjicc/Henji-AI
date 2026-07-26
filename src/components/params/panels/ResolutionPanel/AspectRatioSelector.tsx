@@ -39,7 +39,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="block text-xs text-zinc-400">
+      <label className="block text-xs text-text-muted">
         {t('resolutionPanel.aspectRatio', { defaultValue: '比例' })}
       </label>
       <div className="flex flex-wrap justify-start gap-2">

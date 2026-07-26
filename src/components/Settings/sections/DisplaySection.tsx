@@ -45,7 +45,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
         onText={onText}
         offText={offText}
       />
-      <p className="mt-2 text-xs text-zinc-500">{t('sections.display.priceHint')}</p>
+      <p className="mt-2 text-xs text-text-faint">{t('sections.display.priceHint')}</p>
 
       <div className="mt-4 border-t border-border-dark pt-4">
         <div className={`space-y-3 ${showPriceEstimate ? '' : 'opacity-60'}`}>
@@ -58,7 +58,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
             className="w-full"
             disabled={!showPriceEstimate}
           />
-          <p className="text-xs text-zinc-500">{t('sections.display.currencyModeHint')}</p>
+          <p className="text-xs text-text-faint">{t('sections.display.currencyModeHint')}</p>
 
           <NumberInput
             label={t('sections.display.exchangeRateLabel')}
@@ -71,7 +71,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
             widthClassName="w-full"
             disabled={!showPriceEstimate}
           />
-          <p className="text-xs text-zinc-500">{t('sections.display.exchangeRateHint')}</p>
+          <p className="text-xs text-text-faint">{t('sections.display.exchangeRateHint')}</p>
         </div>
 
         <div className="mt-4 border-t border-border-dark pt-4">
@@ -83,7 +83,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.display.autoFocusHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.display.autoFocusHint')}</p>
         </div>
       </div>
     </SectionCard>

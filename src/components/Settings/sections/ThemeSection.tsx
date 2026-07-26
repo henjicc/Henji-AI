@@ -129,7 +129,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
         </div>
 
         <div className="space-y-3">
-          <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <div className="text-xs font-medium uppercase tracking-wider text-text-muted">
             {t('sections.theme.palette.label')}
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -160,7 +160,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+            <div className="text-xs font-medium uppercase tracking-wider text-text-muted">
               {t('sections.theme.accent.label')}
             </div>
             <UiButton
@@ -198,7 +198,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <div className="text-xs font-medium uppercase tracking-wider text-text-muted">
             {t('sections.theme.portable.label')}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -238,13 +238,13 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
         </div>
 
         <UiPanel className="p-3">
-          <div className="mb-3 text-xs font-medium uppercase tracking-wider text-zinc-400">
+          <div className="mb-3 text-xs font-medium uppercase tracking-wider text-text-muted">
             {t('sections.theme.advanced.label')}
           </div>
           <div className="grid grid-cols-1 gap-3">
             {THEME_COLOR_TOKENS.map((token) => (
               <div key={token} className="rounded-lg border border-border-dark bg-surface-dark p-2">
-                <div className="mb-2 text-xs text-zinc-300">{t(tokenLabelKeyMap[token])}</div>
+                <div className="mb-2 text-xs text-text-soft">{t(tokenLabelKeyMap[token])}</div>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {getTokenColorOptions(token).map((option) => (
                     <UiIconButton

@@ -24,7 +24,7 @@ const LargeUploadSection: React.FC = () => {
       description={t('sections.largeUpload.description')}
     >
       <div className="flex items-center justify-between gap-4">
-        <label className="text-sm font-medium text-zinc-300">
+        <label className="text-sm font-medium text-text-soft">
           {t('sections.largeUpload.strategyLabel')}
         </label>
         <Dropdown
@@ -36,7 +36,7 @@ const LargeUploadSection: React.FC = () => {
           buttonClassName="h-[34px] w-full bg-surface-dark border-border-dark"
         />
       </div>
-      <p className="mt-2 text-xs text-zinc-500">{t('sections.largeUpload.hint')}</p>
+      <p className="mt-2 text-xs text-text-faint">{t('sections.largeUpload.hint')}</p>
     </SectionCard>
   )
 }

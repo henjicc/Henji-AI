@@ -341,7 +341,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
           <div className="space-y-3 pb-2">
           <div className="grid grid-cols-[minmax(280px,1.45fr)_auto_auto_auto_minmax(240px,1fr)] items-end gap-3">
             <div className="min-w-0 space-y-2">
-              <label className="block text-xs text-zinc-400">音色名称</label>
+              <label className="block text-xs text-text-muted">音色名称</label>
               <UiInput
                 value={panelValue.voiceName}
                 onChange={(event) => patchValue({ voiceName: event.target.value })}
@@ -351,7 +351,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-xs text-zinc-400">降噪</label>
+              <label className="block text-xs text-text-muted">降噪</label>
               <Toggle
                 checked={panelValue.needNoiseReduction}
                 onChange={(next) => patchValue({ needNoiseReduction: next })}
@@ -361,7 +361,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-xs text-zinc-400">音量归一化</label>
+              <label className="block text-xs text-text-muted">音量归一化</label>
               <Toggle
                 checked={panelValue.needVolumeNormalization}
                 onChange={(next) => patchValue({ needVolumeNormalization: next })}
@@ -371,7 +371,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-xs text-zinc-400">校验阈值</label>
+              <label className="block text-xs text-text-muted">校验阈值</label>
               <NumberInput
                 value={panelValue.accuracy}
                 onChange={(next) => patchValue({
@@ -385,7 +385,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               />
             </div>
             <div className="min-w-0 space-y-2">
-              <label className="block text-xs text-zinc-400">试听模型</label>
+              <label className="block text-xs text-text-muted">试听模型</label>
               <Dropdown
                 value={panelValue.previewModel}
                 display={panelValue.previewModel}
@@ -432,7 +432,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
           />
 
           <div className="space-y-2">
-            <label className="text-xs text-zinc-400">试听文本</label>
+            <label className="text-xs text-text-muted">试听文本</label>
             <UiInput
               value={panelValue.previewText}
               onChange={(event) => patchValue({ previewText: event.target.value })}
@@ -475,7 +475,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
             onFileDrop={(file) => { void handleSelectAudioFile(file, 'prompt') }}
           />
             <div className="w-full space-y-2">
-              <label className="text-xs text-zinc-400">Prompt 对应文本（与示例音频一致）</label>
+              <label className="text-xs text-text-muted">Prompt 对应文本（与示例音频一致）</label>
               <UiInput
                 value={panelValue.promptText}
                 onChange={(event) => patchValue({ promptText: event.target.value })}

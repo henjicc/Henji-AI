@@ -22,7 +22,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
 
     return (
         <div className={`w-full ${className}`}>
-            <div className={`w-full ${height} bg-zinc-700 rounded overflow-hidden`}>
+            <div className={`w-full ${height} bg-layer rounded overflow-hidden`}>
                 <div
                     className="h-full rounded ease-out"
                     style={{
@@ -33,7 +33,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                 />
             </div>
             {showPercentage && (
-                <div className="mt-2 text-sm text-zinc-400 text-right">
+                <div className="mt-2 text-sm text-text-muted text-right">
                     {Math.floor(normalizedProgress)}%
                 </div>
             )}

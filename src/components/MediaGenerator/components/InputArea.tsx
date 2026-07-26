@@ -382,7 +382,7 @@ const InputArea: React.FC<InputAreaProps> = ({
                   : t('inputArea.placeholder.default')
             }
             className="relative isolate overflow-visible rounded-2xl"
-            editorShellClassName="!rounded-2xl !border-zinc-700/35 !bg-transparent transition-colors duration-200 focus-within:!border-zinc-500/50 focus-within:!ring-0"
+            editorShellClassName="!rounded-2xl !border-border-dark/35 !bg-transparent transition-colors duration-200 focus-within:!border-veil-soft focus-within:!ring-0"
             editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} max-h-[260px] overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
@@ -421,7 +421,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
           className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-[color,background-color,border-color,transform,filter] duration-250 ${generateDisabled
-            ? '!border-zinc-700/25 !bg-zinc-800/65 !text-zinc-500'
+            ? '!border-border-dark/25 !bg-surface-dark/65 !text-text-faint'
             : '!border-brand-500/55 !bg-accent !text-white hover:scale-105 hover:brightness-110'
             }`}
           >

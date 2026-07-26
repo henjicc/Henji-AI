@@ -95,7 +95,7 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
 
   return (
     <div className="w-auto">
-      <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+      <label className="block text-sm font-medium text-text-soft mb-1.5">
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>

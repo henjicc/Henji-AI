@@ -183,7 +183,7 @@ function StackPreview({
     return (
       <div
         key={`${taskId}-${kind}-${index}`}
-        className={`relative w-12 h-12 flex-shrink-0 rounded overflow-hidden border border-zinc-700/50 bg-zinc-800/70 cursor-pointer transition-[margin,opacity] duration-200 ease-out ${
+        className={`relative w-12 h-12 flex-shrink-0 rounded overflow-hidden border border-veil-subtle bg-black/20 cursor-pointer transition-[margin,opacity] duration-200 ease-out ${
           index === 0 ? '' : (expanded ? 'ml-1' : '-ml-3')
         } ${index >= visible.length ? (fadeIn ? 'opacity-100' : 'opacity-0') : 'opacity-100'}`}
         style={{ zIndex: 20 - index }}
@@ -224,7 +224,7 @@ function StackPreview({
       {displayItems.map(renderThumb)}
       {showExtra && (
         <div
-          className={`absolute top-0 w-12 h-12 flex-shrink-0 rounded border border-zinc-700/50 bg-zinc-800/70 flex items-center justify-center text-xs text-zinc-300 cursor-pointer transition-[opacity,transform] duration-200 ease-out ${
+          className={`absolute top-0 w-12 h-12 flex-shrink-0 rounded border border-veil-subtle bg-black/20 flex items-center justify-center text-xs text-text-soft cursor-pointer transition-[opacity,transform] duration-200 ease-out ${
             extraVisible ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-1 pointer-events-none'
           }`}
           style={{ left: collapsedWidth - base, zIndex: 0 }}

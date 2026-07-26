@@ -24,8 +24,8 @@ function getRequestDisplayValue(trace: AiRuntimeTrace): DynamicValue {
 export function ApiTraceViewer({ traceRecord, compact = false }: ApiTraceViewerProps): JSX.Element {
   const { model, prompt, timestamp, trace, type } = traceRecord
   const blockClassName = compact
-    ? 'max-h-56 overflow-y-auto rounded-lg border border-zinc-700/50 bg-black/40 p-3 text-2xs text-gray-200'
-    : 'max-h-72 overflow-y-auto rounded-lg border border-zinc-700/50 bg-black/40 p-3 text-xs text-gray-200'
+    ? 'max-h-56 overflow-y-auto rounded-lg border border-border-dark/50 bg-black/40 p-3 text-2xs text-gray-200'
+    : 'max-h-72 overflow-y-auto rounded-lg border border-border-dark/50 bg-black/40 p-3 text-xs text-gray-200'
 
   return (
     <div className="space-y-3">

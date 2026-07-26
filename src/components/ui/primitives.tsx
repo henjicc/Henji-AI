@@ -158,7 +158,7 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
       className={`relative inline-flex h-14 w-full items-center gap-1.5 rounded-none border-0 bg-transparent px-4 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${
         active
           ? '!bg-layer text-accent after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-[\'\']'
-          : 'text-zinc-400 hover:bg-surface-dark hover:text-zinc-100'
+          : 'text-text-muted hover:bg-surface-dark hover:text-text-dark'
       } ${className}`}
       {...props}
     />
@@ -303,7 +303,7 @@ export function UiTextArea({ className = '', textHistory, value, ...props }: UiT
   return (
     <textarea
       value={value}
-      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
       {...historyProps}
     />
@@ -321,7 +321,7 @@ export const UiTextAreaField = forwardRef<HTMLTextAreaElement, UiTextAreaProps>(
       <textarea
         ref={ref}
         value={value}
-        className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`w-full resize-none rounded-lg border px-3 py-2.5 text-sm placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
         {...historyProps}
       />
@@ -342,7 +342,7 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
       <input
         ref={ref}
         value={value}
-        className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-zinc-400 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`w-full rounded-lg border px-3 py-2 text-sm placeholder:text-text-muted ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
         {...historyProps}
       />
@@ -358,9 +358,9 @@ export const UiRangeInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribute
       ref={ref}
       type="range"
       className={`h-5 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
-      [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-zinc-600/80
+      [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-layer/80
       [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-accent
-      [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-zinc-600/80
+      [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-layer/80
       [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent
       ${className}`}
       {...props}
@@ -450,7 +450,7 @@ export function UiSelect({ className = '', children, ...props }: UiSelectProps) 
       >
         {children}
       </select>
-      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+      <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
     </div>
   );
 }

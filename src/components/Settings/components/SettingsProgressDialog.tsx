@@ -28,11 +28,11 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
     >
       <div className="text-base text-white">{title}</div>
       <div className="mt-4">
-        <div className="mb-2 truncate text-sm text-zinc-300">{progress.file}</div>
-        <div className="mb-2 text-xs text-zinc-400">{progress.current} / {progress.total}</div>
+        <div className="mb-2 truncate text-sm text-text-soft">{progress.file}</div>
+        <div className="mb-2 text-xs text-text-muted">{progress.current} / {progress.total}</div>
         <ProgressBar progress={ratio} showPercentage={false} duration={300} />
       </div>
-      <div className="mt-4 text-xs text-zinc-400">{hint}</div>
+      <div className="mt-4 text-xs text-text-muted">{hint}</div>
     </UiModal>
   )
 }

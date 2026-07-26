@@ -122,7 +122,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
               aria-label={t('actions.close')}
               showBorder={false}
               appearance="hover-only"
-              className="!h-9 !w-9 rounded-lg text-zinc-300 hover:text-white"
+              className="!h-9 !w-9 rounded-lg text-text-soft hover:text-white"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

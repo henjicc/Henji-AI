@@ -34,7 +34,7 @@ export const UI_TEXT_SECTION_CLASS = 'text-sm font-medium text-text-dark';
 export const UI_TEXT_BODY_CLASS = 'text-sm text-text-dark';
 
 /** 字段标签 */
-export const UI_TEXT_LABEL_CLASS = 'text-sm font-medium text-zinc-300';
+export const UI_TEXT_LABEL_CLASS = 'text-sm font-medium text-text-soft';
 
 /** 辅助说明/元信息 */
 export const UI_TEXT_META_CLASS = 'text-xs text-text-muted';

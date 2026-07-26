@@ -29,25 +29,25 @@ function PresetItem({ preset, currentModelId, onApply, onToggleFavorite, onDelet
   const isCompatible = isGlobal || preset.modelId === currentModelId
 
   return (
-    <UiPanel className="preset-item mb-3 border p-4 hover:bg-zinc-700/35">
+    <UiPanel className="preset-item mb-3 border p-4 hover:bg-layer/35">
       <div className="flex justify-between items-start">
         <div className="preset-info flex-1">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-semibold text-lg">{preset.name}</h3>
             {preset.isFavorite && <span className="text-yellow-500">★</span>}
             {isGlobal && (
-              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded">
+              <span className="text-xs bg-blue-900 text-blue-200 px-2 py-1 rounded">
                 {t('ui:presets.labels.global')}
               </span>
             )}
             {!isCompatible && (
-              <span className="text-xs bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 px-2 py-1 rounded">
+              <span className="text-xs bg-orange-900 text-orange-200 px-2 py-1 rounded">
                 {t('ui:presets.labels.incompatible')}
               </span>
             )}
           </div>
           {preset.description && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">{preset.description}</p>
+            <p className="text-sm text-gray-400 mb-2">{preset.description}</p>
           )}
           <div className="text-xs text-gray-500">
             <span>{preset.modelId || t('ui:presets.labels.allModels')}</span>

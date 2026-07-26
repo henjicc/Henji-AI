@@ -179,3 +179,30 @@
   - 搜索框去掉 zinc 覆盖，清空按钮改 `appearance="hover-only"`
   - 分隔线 `bg-zinc-600/50` → `bg-border-dark`；收藏星标 `text-zinc-500`/`hover:bg-zinc-700/60` → `text-text-muted`/`hover:bg-layer`
 - `src/components/ui/styleTokens.ts`：删除 `UI_CHIP_ACTIVE_STRONG_CLASS`（从未生效，见 D-010），原位留注释
+
+## 收尾（续二）：固定调色板收敛为语义色
+
+提交：`<待填>`
+
+### 新增
+
+- `--text-soft-rgb` / `--text-faint-rgb`（`src/index.css` 默认值 + `tailwind.config.js` 语义色 + `runtimeTheme.applyTextScale` 派生）
+- `.eslintrc.json`：拦截 `*-zinc-*` 的两条 `no-restricted-syntax`
+
+### 修改
+
+- 66 个文件、292 处 `zinc-*` → 语义色（映射表见 D-011）
+- `ModelscopeCustomModelManager.tsx` / `PresetManager.tsx`：删掉 15 处死的 `dark:` 双分支
+- `TestModePanel.tsx`：6 处卡片表面 → Surface（`bg-app/40`，去边框）
+- `TaskInputPreview.tsx`：2 处 48px 缩略图 → `border-veil-subtle bg-black/20`（是媒体 chrome 不是卡片）
+- `DragDropContext.tsx`：拖拽预览图加行级 `ui-surface-allow`（拖拽幽灵不是面板容器）
+- `ModelSettingsPanel.tsx`：供应商卡去掉表面覆盖，标题条改用分隔线
+- `UpdateDialog.tsx`：底部按钮区去掉额外底色，只留分隔线
+- `StackedMediaUploader.tsx`：拖拽高亮改互斥三元（此前从未生效）；Tooltip 去掉表面覆盖
+- `.claude/skills/henji-ui-surface/SKILL.md`：新增「同属性叠类 = 静默失效」「颜色必须跟随主题」两节；登记表加颜色一行；禁止清单 +4；自检清单 +3
+- `CLAUDE.md`：同步两条约束
+
+### 删除
+
+- `src/components/MediaGenerator/components/ResolutionPanel.tsx`：零引用死文件
+- `UI_CHIP_ACTIVE_STRONG_CLASS`（上一提交）

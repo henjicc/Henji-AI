@@ -313,7 +313,10 @@ export function StackedMediaUploader({
       onDrop={(event) => void handleDrop(event)}
       onMouseUp={() => void handleCustomDrop()}
     >
-      <div className={`relative min-h-[82px] rounded-2xl bg-zinc-900/30 p-1.5 transition-colors ${isDragging ? 'bg-zinc-800/55' : ''}`}>
+      {/* 拖拽高亮写成三元互斥：此前是 `bg-zinc-900/30` 打底再叠 `bg-zinc-800/55`，
+          两个 bg 同属性打架，而 zinc-900 在 Tailwind 产物里排在 zinc-800 之后，
+          所以底色永远赢——拖拽高亮其实一直没显示出来 */}
+      <div className={`relative min-h-[82px] rounded-2xl p-1.5 transition-colors ${isDragging ? 'bg-surface-dark/55' : 'bg-panel/30'}`}>
         <div className="relative h-[66px] overflow-visible">
           {files.map((file, index) => {
             const isVideo = fileTypes ? fileTypes[index] === 'video' : false
@@ -352,14 +355,14 @@ export function StackedMediaUploader({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-xl ${UI_UPLOADER_CARD_BORDER_CLASS} bg-zinc-800/35 p-0 shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`}
+                  className={`relative h-[64px] w-[48px] overflow-hidden rounded-xl ${UI_UPLOADER_CARD_BORDER_CLASS} bg-surface-dark/35 p-0 shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onFileClick?.(file, files)
                   }}
                 >
                   {isAudio ? (
-                    <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/75">
+                    <div className="absolute inset-0 flex items-center justify-center bg-panel/75">
                       <AudioPreviewIcon />
                     </div>
                   ) : (
@@ -373,7 +376,7 @@ export function StackedMediaUploader({
                 </UiButton>
                 <UiIconButton
                   type="button"
-                  className={`absolute -right-1 -top-1 h-5 w-5 border-zinc-500/55 bg-zinc-900/90 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                  className={`absolute -right-1 -top-1 h-5 w-5 border-veil-soft bg-panel/90 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                   onClick={(event) => {
                     event.stopPropagation()
                     onRemove(index)
@@ -384,7 +387,7 @@ export function StackedMediaUploader({
                 {onReplace && (
                   <UiIconButton
                     type="button"
-                    className={`absolute -bottom-1 -right-1 z-20 h-5 w-5 rounded border-zinc-500/70 bg-zinc-900/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    className={`absolute -bottom-1 -right-1 z-20 h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
                       event.stopPropagation()
                       beginFilePickerLock()
@@ -399,7 +402,7 @@ export function StackedMediaUploader({
                 {onTrim && isVideo && (
                   <UiIconButton
                     type="button"
-                    className={`absolute -bottom-1 -left-1 z-20 h-5 w-5 rounded border-zinc-500/70 bg-zinc-900/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
+                    className={`absolute -bottom-1 -left-1 z-20 h-5 w-5 rounded border-veil bg-panel/95 p-0 transition-opacity ${expanded ? 'opacity-0 group-hover:opacity-100' : 'pointer-events-none opacity-0'}`}
                     onClick={(event) => {
                       event.stopPropagation()
                       onTrim(index)
@@ -428,9 +431,9 @@ export function StackedMediaUploader({
                 type="button"
                 variant="muted"
                 size="sm"
-                className={`p-0 text-zinc-100 ${plusUseCardShape
-                  ? `h-[64px] w-[48px] rounded-xl ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-zinc-900 text-2xl shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`
-                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-zinc-500/55 bg-zinc-700/80 text-base shadow-thumb-sm transition-transform duration-200 ease-out hover:scale-[1.1]'
+                className={`p-0 text-text-dark ${plusUseCardShape
+                  ? `h-[64px] w-[48px] rounded-xl ${UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS} !bg-panel text-2xl shadow-thumb transition-transform duration-200 ease-out hover:scale-[1.1]`
+                  : 'h-[29px] w-[29px] aspect-square !rounded-full border-veil-soft bg-layer/80 text-base shadow-thumb-sm transition-transform duration-200 ease-out hover:scale-[1.1]'
                   }`}
                 onClick={(event) => {
                   event.stopPropagation()
@@ -445,7 +448,7 @@ export function StackedMediaUploader({
         </div>
 
         {!hoverCapable && (
-          <div className="pointer-events-none absolute bottom-1 left-2 text-3xs text-zinc-500">
+          <div className="pointer-events-none absolute bottom-1 left-2 text-3xs text-text-faint">
             点按展开
           </div>
         )}
@@ -477,9 +480,8 @@ export function StackedMediaUploader({
 
   return (
     <Tooltip
-      content={<span className="block text-zinc-300">{hintText}</span>}
+      content={<span className="block text-text-soft">{hintText}</span>}
       delay={250}
-      className="bg-zinc-950/95 border-zinc-600/70 shadow-panel"
     >
       {uploaderContent}
     </Tooltip>

@@ -47,13 +47,13 @@ export function TaskList({
       <div className="mb-4">
         <div>
           <h2 className="text-xl font-bold">{t('history:title')}</h2>
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-1 text-xs text-text-muted">
             {t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}
           </p>
         </div>
       </div>
       {totalCount === 0 && (
-        <div className="py-20 text-center text-zinc-500">
+        <div className="py-20 text-center text-text-faint">
           {t('history:empty')}
         </div>
       )}

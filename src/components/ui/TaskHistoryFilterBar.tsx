@@ -198,7 +198,7 @@ export function UiTaskHistoryFilterBar({
           <div className="relative flex items-center justify-end gap-1">
             <div className="relative shrink-0">
               <span ref={iconAnchorRef} className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2" />
-              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+              <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
               <UiInput
                 ref={inputRef}
                 value={keyword}
@@ -288,7 +288,7 @@ export function UiTaskHistoryFilterBar({
           </div>
 
           {timePreset === 'custom' && (
-            <div className="flex items-center gap-1 text-xs text-zinc-400">
+            <div className="flex items-center gap-1 text-xs text-text-muted">
               <UiDatePicker
                 value={startDate}
                 onChange={onStartDateChange}

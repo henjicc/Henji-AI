@@ -140,7 +140,7 @@ const ModelSettingsPanel: React.FC = () => {
       case 'image': return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
       case 'video': return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
       case 'audio': return 'bg-green-500/20 text-green-400 border-green-500/30'
-      default: return 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30'
+      default: return 'bg-layer/40 text-text-muted border-border-dark'
     }
   }
 
@@ -167,8 +167,8 @@ const ModelSettingsPanel: React.FC = () => {
     <div className="space-y-5 animate-fade-in">
       {/* 快速操作区域 */}
       <div>
-        <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">{t('modelSettings.quickActionsTitle')}</h4>
-        <UiPanel className="space-y-3 border-zinc-700/40 bg-zinc-800/30 p-4">
+        <h4 className="text-xs font-medium text-text-muted mb-3 uppercase tracking-wider">{t('modelSettings.quickActionsTitle')}</h4>
+        <UiPanel className="space-y-3 border-border-dark/40 bg-surface-dark/30 p-4">
           {/* 全局操作 */}
           <div className="flex gap-2 flex-wrap">
             <UiButton
@@ -198,8 +198,8 @@ const ModelSettingsPanel: React.FC = () => {
           </div>
 
           {/* 按供应商操作 */}
-          <div className="pt-3 border-t border-zinc-700/30">
-            <p className="text-xs text-zinc-500 mb-2">{t('modelSettings.byProvider')}</p>
+          <div className="pt-3 border-t border-border-dark/30">
+            <p className="text-xs text-text-faint mb-2">{t('modelSettings.byProvider')}</p>
             <div className="flex gap-2 flex-wrap">
               {providers.map(provider => {
                 const isVisible = isProviderVisible(provider.id)
@@ -219,8 +219,8 @@ const ModelSettingsPanel: React.FC = () => {
           </div>
 
           {/* 按类型操作 */}
-          <div className="pt-3 border-t border-zinc-700/30">
-            <p className="text-xs text-zinc-500 mb-2">{t('modelSettings.byType')}</p>
+          <div className="pt-3 border-t border-border-dark/30">
+            <p className="text-xs text-text-faint mb-2">{t('modelSettings.byType')}</p>
             <div className="flex gap-2 flex-wrap">
               {(['image', 'video', 'audio'] as const).map(type => {
                 const isVisible = isTypeVisible(type)
@@ -243,17 +243,17 @@ const ModelSettingsPanel: React.FC = () => {
 
       {/* 模型列表 */}
       <div>
-        <h4 className="text-xs font-medium text-zinc-400 mb-3 uppercase tracking-wider">{t('modelSettings.listTitle')}</h4>
+        <h4 className="text-xs font-medium text-text-muted mb-3 uppercase tracking-wider">{t('modelSettings.listTitle')}</h4>
         <div className="space-y-3">
           {providers.map(provider => {
             const stats = getProviderStats(provider)
             return (
-              <UiPanel key={provider.id} className="overflow-hidden border-zinc-700/40 bg-zinc-800/30">
-                {/* 供应商标题 */}
-                <div className="px-4 py-3 bg-zinc-900/50 border-b border-zinc-700/30 flex items-center justify-between">
+              <UiPanel key={provider.id} className="overflow-hidden">
+                {/* 供应商标题：卡片内部只用分隔线切分，不再叠一层底色 */}
+                <div className="px-4 py-3 border-b border-border-dark flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <h5 className="text-sm font-medium text-white">{provider.name}</h5>
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-xs text-text-faint">
                       {t('modelSettings.visibleCount', { visible: stats.visible, total: stats.total })}
                     </span>
                   </div>
@@ -267,13 +267,13 @@ const ModelSettingsPanel: React.FC = () => {
                     >
                       {t('modelSettings.actions.showAll')}
                     </UiButton>
-                    <span className="text-zinc-600">|</span>
+                    <span className="text-text-faint">|</span>
                     <UiButton
                       type="button"
                       size="sm"
                       variant="ghost"
                       onClick={() => hideAllModelsForProvider(provider.id)}
-                      className="h-7 px-2.5 text-xs text-zinc-400"
+                      className="h-7 px-2.5 text-xs text-text-muted"
                     >
                       {t('modelSettings.actions.hideAll')}
                     </UiButton>
@@ -299,7 +299,7 @@ const ModelSettingsPanel: React.FC = () => {
                             {getTypeLabel(model.type)}
                           </span>
                         </div>
-                        <div className="text-xs text-zinc-500">
+                        <div className="text-xs text-text-faint">
                           {isHidden ? t('modelSettings.status.hidden') : t('modelSettings.status.visible')}
                         </div>
                       </UiOptionButton>

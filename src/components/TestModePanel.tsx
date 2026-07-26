@@ -105,7 +105,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
         {/* 测试模式开关 */}
         <div className="mb-6">
-          <div className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg border border-zinc-700/50">
+          <div className="flex items-center justify-between p-4 rounded-lg bg-app/40">
             <div>
               <div className="text-white font-medium">{t('testMode.enable.title')}</div>
               <div className="text-sm text-gray-400 mt-1">
@@ -117,7 +117,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
               onClick={handleToggleTestMode}
               variant="ghost"
               className={`relative w-14 h-7 rounded-full transition-colors ${
-                state.enabled ? 'bg-yellow-500' : 'bg-zinc-600'
+                state.enabled ? 'bg-yellow-500' : 'bg-layer'
               }`}
             >
               <div
@@ -132,7 +132,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {/* 标签页切换 */}
         {state.enabled && (
           <div className="mb-6">
-            <div className="flex gap-2 border-b border-zinc-700/50">
+            <div className="flex gap-2 border-b border-border-dark/50">
               <UiChipButton
                 type="button"
                 onClick={() => setActiveTab('options')}
@@ -166,7 +166,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             <div className="space-y-3">
               {/* 跳过请求 */}
               <div
-                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
                 onClick={() => handleToggleOption('skipRequest')}
               >
                 <div>
@@ -184,7 +184,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
               {/* 输出参数 */}
               <div
-                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
                 onClick={() => handleToggleOption('logParams')}
               >
                 <div>
@@ -202,7 +202,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
               {/* 开发者工具 */}
               <div
-                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
                 onClick={() => handleToggleOption('enableDevTools')}
               >
                 <div>
@@ -220,7 +220,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
               {/* 参数流转追踪 */}
               <div
-                className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                className="flex items-center justify-between p-3 rounded-lg bg-app/40 cursor-pointer hover:bg-app/60 transition-colors"
                 onClick={() => setShowFlowTracking(prev => !prev)}
               >
                 <div>
@@ -264,7 +264,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {state.enabled && activeTab === 'options' && (
           <div>
             <h3 className="text-white font-medium mb-3">{t('testMode.logsWindow.title')}</h3>
-            <div className="flex items-center justify-between p-3 bg-zinc-800/30 rounded-lg border border-zinc-700/30">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-app/40">
               <div className="text-xs text-gray-400">{t('testMode.logsWindow.description')}</div>
               <UiButton type="button" size="sm" onClick={() => void openLogWindow()}>
                 {t('testMode.logsWindow.openButton')}

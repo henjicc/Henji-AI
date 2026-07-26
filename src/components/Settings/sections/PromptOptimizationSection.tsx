@@ -29,7 +29,7 @@ const PromptOptimizationSection: React.FC<PromptOptimizationSectionProps> = ({
         onSelect={(value) => onChangeBehavior(value as PromptOptimizationButtonBehavior)}
         className="w-full"
       />
-      <p className="mt-2 text-xs text-zinc-500">{t('sections.promptOptimization.hint')}</p>
+      <p className="mt-2 text-xs text-text-faint">{t('sections.promptOptimization.hint')}</p>
     </SectionCard>
   )
 }

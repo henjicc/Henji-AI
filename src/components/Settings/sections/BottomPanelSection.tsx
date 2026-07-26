@@ -36,7 +36,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.interface.autoCollapseHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.interface.autoCollapseHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
@@ -50,7 +50,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
             widthClassName="w-full"
             disabled={!enableAutoCollapse}
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.interface.collapseDelayHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.interface.collapseDelayHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
@@ -63,7 +63,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.interface.collapseOnScrollHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.interface.collapseOnScrollHint')}</p>
         </div>
       </div>
     </SectionCard>

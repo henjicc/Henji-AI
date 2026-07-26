@@ -135,6 +135,8 @@ npm run lint                   # 前端 lint
 - **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
 - **颜色令牌规则**：颜色值统一由 `src/index.css`（CSS 变量）+ `tailwind.config.js`（语义色映射）+ `src/core/theme/colorTokens.ts`（TS 常量）提供
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`
+- **禁止固定调色板（ESLint 硬拦）**：一切 `*-zinc-*` 都不会跟随主题预设（设置→界面→主题外观可整体替换 9 个语义色），必须改用语义色。底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`（中间两档由 `runtimeTheme.applyTextScale` 派生）；边框 `border-border-dark`；叠在图片/视频/画布上的边框与底色用 `veil` 六档
+- **同属性叠类会静默失效**：两个工具类落在同一 CSS 属性上时，胜负看 Tailwind 产物顺序而非 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。`index.html` 写死 `class="dark"`，`dark:` 变体的基础值是死代码
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 - **五级容器词汇表**：Region(`UiRegion`) → Group(`UiGroup`) → Divided(`UiGroup divided`) → Surface(`UiPanel variant="inset"`) → Card(`UiPanel`)。**普通内容分组默认用 `UiGroup`**（零装饰，标题 + 间距）；只有浮层/弹窗/侧栏/画布节点才允许用 Card

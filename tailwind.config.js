@@ -86,6 +86,18 @@ export default {
           DEFAULT: withOpacity('--text-muted-rgb'),
           dark: withOpacity('--text-muted-rgb'),
         },
+        // 文字四档：text（标题/强调） > text-soft（次要正文） > text-muted（说明）
+        // > text-faint（占位/禁用）。中间两档由 runtimeTheme.applyTextScale 从
+        // text/text-muted 派生，取代此前硬编码的 text-zinc-300 / text-zinc-500
+        // ——那两个不会跟随主题预设，切到「石墨灰阶」后会和周围语义色脱节。
+        'text-soft': {
+          DEFAULT: withOpacity('--text-soft-rgb'),
+          dark: withOpacity('--text-soft-rgb'),
+        },
+        'text-faint': {
+          DEFAULT: withOpacity('--text-faint-rgb'),
+          dark: withOpacity('--text-faint-rgb'),
+        },
         // 白色半透明「薄纱」层：画布节点边框、玻璃质感底色、渐变高光统一走这套档位。
         // 此前散落 49 处 rgba(255,255,255,X) 字面量、共 14 种不同透明度，
         // 既违反「禁止 rgb/rgba 字面量」，也让同一视觉意图有十几种写法。

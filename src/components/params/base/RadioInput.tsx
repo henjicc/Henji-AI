@@ -43,7 +43,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
 
   return (
     <div className="w-auto">
-      <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+      <label className="block text-sm font-medium text-text-soft mb-1.5">
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
@@ -67,7 +67,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
               <div className="relative w-[18px] h-[18px] min-w-[18px] mt-0.5">
                 <div
                   className={`w-[18px] h-[18px] rounded-full border-2 transition-colors ${
-                    isSelected ? 'border-accent' : 'border-zinc-700/50'
+                    isSelected ? 'border-accent' : 'border-border-dark/50'
                   }`}
                 >
                   {isSelected && (
@@ -76,9 +76,9 @@ export const RadioInput: React.FC<RadioInputProps> = ({
                 </div>
               </div>
               <div className="flex-1">
-                <div className="text-sm font-medium text-zinc-200">{getOptionLabel(option)}</div>
+                <div className="text-sm font-medium text-text-dark">{getOptionLabel(option)}</div>
                 {getOptionDescription(option) && (
-                  <div className="text-xs text-zinc-500 mt-1">{getOptionDescription(option)}</div>
+                  <div className="text-xs text-text-faint mt-1">{getOptionDescription(option)}</div>
                 )}
               </div>
             </UiOptionButton>

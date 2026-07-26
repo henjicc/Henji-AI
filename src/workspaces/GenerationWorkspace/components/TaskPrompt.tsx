@@ -15,7 +15,7 @@ export function TaskPrompt({ prompt }: TaskPromptProps): JSX.Element {
   return (
     <div className="min-w-0 flex-1 rounded-lg">
       <div
-        className="text-sm text-zinc-200 leading-5 pr-10"
+        className="text-sm text-text-dark leading-5 pr-10"
         style={clampStyle}
         title={prompt}
       >

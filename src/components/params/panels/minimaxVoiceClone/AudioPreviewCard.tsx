@@ -76,8 +76,8 @@ export function AudioPreviewCard({
       {(title || subtitle || headerAction) && (
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
-            <div className="text-xs text-zinc-400">{title || ''}</div>
-            {subtitle ? <div className="text-xs text-zinc-300">{subtitle}</div> : null}
+            <div className="text-xs text-text-muted">{title || ''}</div>
+            {subtitle ? <div className="text-xs text-text-soft">{subtitle}</div> : null}
           </div>
           {headerAction && <div className="shrink-0">{headerAction}</div>}
         </div>
@@ -100,7 +100,7 @@ export function AudioPreviewCard({
         <div
           className={`rounded-lg border border-dashed px-3 text-center text-xs ${compact ? 'h-[88px]' : 'h-[132px]'} ${dragActive
             ? 'border-accent bg-accent/10 text-accent'
-            : 'border-border-dark/70 text-zinc-500'
+            : 'border-border-dark/70 text-text-faint'
             }`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -122,7 +122,7 @@ export function AudioPreviewCard({
                   </UiOptionButton>
                 )}
                 {canDrop && (
-                  <span className="text-2xs text-zinc-500">
+                  <span className="text-2xs text-text-faint">
                     {uploadHintText || '或拖放文件到此处'}
                   </span>
                 )}

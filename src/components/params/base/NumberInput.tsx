@@ -141,7 +141,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <div className={hasMarks ? 'w-auto min-w-[200px]' : 'w-fit'}>
-      <label className="mb-1.5 block text-sm font-medium text-zinc-300">
+      <label className="mb-1.5 block text-sm font-medium text-text-soft">
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
@@ -172,7 +172,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
               showBorder={false}
               onClick={() => handleStepChange(1)}
               disabled={disabled || (param.max !== undefined && safeValue >= param.max)}
-              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-zinc-300 hover:text-zinc-200"
+              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-text-soft hover:text-text-dark"
             >
               ▲
             </UiIconButton>
@@ -181,7 +181,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
               showBorder={false}
               onClick={() => handleStepChange(-1)}
               disabled={disabled || (param.min !== undefined && safeValue <= param.min)}
-              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-zinc-300 hover:text-zinc-200"
+              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-text-soft hover:text-text-dark"
             >
               ▼
             </UiIconButton>

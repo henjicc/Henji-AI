@@ -33,7 +33,7 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
       contentClassName="p-4"
     >
       <div className="text-base text-white">{t('ui:workspace.clearDialog.title')}</div>
-      <div className="mt-2 text-sm text-zinc-300">{t('ui:workspace.clearDialog.subtitle')}</div>
+      <div className="mt-2 text-sm text-text-soft">{t('ui:workspace.clearDialog.subtitle')}</div>
 
       <div className="mt-4 flex flex-col gap-2">
         <UiButton

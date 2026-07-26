@@ -154,3 +154,50 @@
 
 `ModelSelectorPanel` 的 zinc 硬编码从 13 处降到 3 处（剩下的是与比例面板一致的 `text-zinc-400` 标签）：
 搜索框覆盖、清空按钮、分隔线、收藏星标全部改走令牌或 `appearance="hover-only"`。
+
+### D-011 固定调色板全量收敛为语义色
+
+- 日期：2026-07-26（收尾续，用户要求"其他地方也统一按这个风格"）
+- 关键依据不是美观，是**正确性**：设置 → 界面 → 主题外观允许用户整体替换 9 个语义色。
+  预设「石墨灰阶」把 `textMuted` 改成 `#D4D4D4`（亮灰）、`panel` 改成 `#262626`，
+  但 292 处 `zinc-*` 硬编码原地不动 —— 切主题后必然和周围脱节。
+  这与此前修掉的"节点选中描边不跟随强调色"是同一类缺陷，只是面更大。
+
+#### 补了两档文字色
+
+界面实际需要四档文字（标题/次要正文/说明/占位），但主题方案只暴露 `text` 与 `textMuted` 两档，
+中间两档一直是 `text-zinc-300` / `text-zinc-500` 硬编码。
+
+决定：**不扩大用户可见的主题设置**（那会牵动设置 UI、预设、导入导出、迁移），
+改为在 `runtimeTheme.applyTextScale` 里从 `text`/`textMuted` 派生：
+
+- `--text-soft-rgb` = mix(text → textMuted, 0.45)
+- `--text-faint-rgb` = mix(textMuted → black, 0.30)
+
+在三个预设下都验证过单调性（默认 214/114、石墨灰阶 236/148、深黑灰阶 189/80）。
+
+#### 映射表
+
+| 原 | 新 | 差值 |
+|---|---|---|
+| `bg-zinc-950/900/800/700/600` | `bg-app / panel / surface-dark / layer / layer` | 前四档几乎像素等价（如 zinc-800 `#27272a` vs surface `#262626`） |
+| `text-zinc-100/200` → `300` → `400` → `500/600` | `text-text-dark / soft / muted / faint` | 400→muted 几乎等价 |
+| `border-zinc-700/600` | `border-border-dark` | `#3f3f46` vs `#404040`，等价 |
+| 叠在图片/视频上的 `border-zinc-500/*` | `border-veil-soft` / `border-veil` | veil 刻意与主题无关（媒体 chrome） |
+
+292 处 → 0。另删掉 15 处 `dark:` 双分支（`index.html` 写死 `class="dark"` 且从不切换，基础值是死代码）。
+
+#### 被这次清理暴露出来的存量问题
+
+1. **表面检查此前被硬编码挡住**：`check:surface` 只认 `bg-panel/surface-dark/app/layer`，
+   写成 `bg-zinc-800/30` 就绕过了。zinc 清零后当场报出 9 处存量违规（`TestModePanel` 6 处套卡片、
+   `TaskInputPreview` 2 处、`DragDropContext` 1 处），已全部修掉。
+2. **`StackedMediaUploader` 的拖拽高亮从来没亮过**：底色 `bg-zinc-900/30` 与高亮 `bg-zinc-800/55`
+   抢同一属性，而 zinc-900 在产物里排在 zinc-800 之后，底色永远赢。已改为互斥三元。
+   这是同属性叠类坑的第三个实例（前两个见 D-009、D-010）。
+3. `src/components/MediaGenerator/components/ResolutionPanel.tsx` 零引用死文件，已删除。
+
+#### 门禁
+
+新增 ESLint `no-restricted-syntax` 两条（`Literal` + `TemplateElement`）拦截 `*-zinc-*`，
+已用探针文件反向验证确实触发、且合规写法正确放行。

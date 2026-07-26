@@ -508,7 +508,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           >
             <UiIconButton
               onClick={onClose}
-              className="absolute top-2 right-2 rounded-full bg-zinc-800/80 text-white hover:bg-zinc-700/80 pointer-events-auto"
+              className="absolute top-2 right-2 rounded-full bg-surface-dark/80 text-white hover:bg-layer/80 pointer-events-auto"
               title={t('common:close')}
             >
               <CloseIcon />

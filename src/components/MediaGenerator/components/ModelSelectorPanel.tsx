@@ -50,7 +50,7 @@ const GRID_COLUMNS = {
 }
 const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
 const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
-const MODEL_CARD_META_TEXT_CLASS = 'text-2xs leading-4 text-zinc-400'
+const MODEL_CARD_META_TEXT_CLASS = 'text-2xs leading-4 text-text-muted'
 
 function compareModelItems(
   a: { p: { id: string; name: string }; m: { id: string; type: 'image' | 'video' | 'audio'; name: string; seriesId?: string; seriesRank?: number } },
@@ -235,14 +235,14 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       tabIndex={-1}
       onKeyDown={handleKeyDown}
       // 表面由 PanelTrigger 的外壳统一提供，这里不再叠自己的底色
-      // ——此前的 bg-zinc-900/40 + /45 是让本面板比比例/分辨率面板整体偏暗的原因
+      // ——此前的 bg-panel/40 + /45 是让本面板比比例/分辨率面板整体偏暗的原因
       className="flex h-full min-h-0 flex-col outline-none"
     >
       {/* 筛选区域 - 固定在顶部 */}
       <div className="flex-shrink-0 p-4 pb-2">
         {/* 搜索框 */}
         <div className="mb-3">
-          <div className="text-xs text-zinc-400 mb-2">{t('search.label')}</div>
+          <div className="text-xs text-text-muted mb-2">{t('search.label')}</div>
           <div className="relative">
             <UiInput
               ref={searchInputRef}
@@ -270,7 +270,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         </div>
         {/* 供应商 / 类型筛选 */}
         <div className="mb-3">
-          <div className="text-xs text-zinc-400 mb-2">{t('filters.providerType')}</div>
+          <div className="text-xs text-text-muted mb-2">{t('filters.providerType')}</div>
           <div className="flex flex-wrap gap-2">
             <UiOptionButton
               type="button"
@@ -316,7 +316,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         </div>
         {/* 功能筛选 */}
         <div className="mb-3">
-          <div className="text-xs text-zinc-400 mb-2">{t('filters.function')}</div>
+          <div className="text-xs text-text-muted mb-2">{t('filters.function')}</div>
           <div className="flex flex-wrap gap-2">
             {[
               { label: t('all'), value: 'all' },

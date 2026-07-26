@@ -101,7 +101,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
               className={`px-3 py-2 rounded text-sm transition-colors ${
                 exportType === option.value
                   ? 'bg-yellow-500 text-black font-medium'
-                  : 'bg-zinc-800/50 text-gray-300 hover:bg-zinc-700/50'
+                  : 'bg-surface-dark/50 text-gray-300 hover:bg-layer/50'
               }`}
             >
               {option.label}

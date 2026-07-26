@@ -197,7 +197,7 @@ export const DragDropProvider: React.FC<DragDropProviderProps> = ({ children }) 
                     <img
                         src={previewUrl}
                         alt="Dragging"
-                        className="max-w-16 max-h-16 object-contain rounded-lg shadow-panel border-2 border-accent bg-zinc-900/80"
+                        className={/* ui-surface-allow: 拖拽跟随层的预览缩略图，跟随鼠标浮在最上层，不是面板容器 */ "max-w-16 max-h-16 object-contain rounded-lg shadow-panel border-2 border-accent bg-panel/80"}
                     />
                 </div>
             )}

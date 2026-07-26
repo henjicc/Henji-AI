@@ -21,7 +21,7 @@ const HistorySection: React.FC<HistorySectionProps> = ({ maxHistoryCount, onChan
         step={1}
         widthClassName="w-full"
       />
-      <p className="mt-2 text-xs text-zinc-500">{t('sections.history.limitHint')}</p>
+      <p className="mt-2 text-xs text-text-faint">{t('sections.history.limitHint')}</p>
     </SectionCard>
   )
 }

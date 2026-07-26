@@ -40,7 +40,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
         <h3 className="text-base font-semibold text-text-dark">
           {t('largeUpload.title')}
         </h3>
-        <p className="text-sm leading-relaxed text-zinc-300">
+        <p className="text-sm leading-relaxed text-text-soft">
           {t('largeUpload.message', { name: current.fileName, size: current.sizeMB })}
         </p>
 
@@ -52,7 +52,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
           >
             {t('largeUpload.copyButton')}
           </UiButton>
-          <p className="px-1 text-xs text-zinc-500">{t('largeUpload.copyHint')}</p>
+          <p className="px-1 text-xs text-text-faint">{t('largeUpload.copyHint')}</p>
 
           <UiButton
             variant="muted"
@@ -61,7 +61,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
           >
             {t('largeUpload.referenceButton')}
           </UiButton>
-          <p className="px-1 text-xs text-zinc-500">{t('largeUpload.referenceHint')}</p>
+          <p className="px-1 text-xs text-text-faint">{t('largeUpload.referenceHint')}</p>
         </div>
 
         <div className="border-t border-border-dark pt-3">
@@ -73,7 +73,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
             offText={t('largeUpload.rememberOff')}
             className="flex w-full items-center justify-between gap-4"
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('largeUpload.rememberHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('largeUpload.rememberHint')}</p>
         </div>
     </UiModal>
   )

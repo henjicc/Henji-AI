@@ -210,7 +210,7 @@ export function VideoViewerControls({
         </div>
       </div>
       {isBuffering && (
-        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-zinc-300">
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-text-soft">
           {t('ui:workspace.status.buffering')}
         </div>
       )}

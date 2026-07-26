@@ -36,7 +36,7 @@ const CanvasSection: React.FC = () => {
   return (
     <SectionCard title={t('sections.canvas.title')}>
       <div className="flex items-center justify-between gap-4">
-        <label className="text-sm font-medium text-zinc-300">
+        <label className="text-sm font-medium text-text-soft">
           {t('sections.canvas.lodLabel')}
         </label>
         <Dropdown

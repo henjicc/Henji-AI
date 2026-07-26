@@ -98,9 +98,55 @@ description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分
 | 表单单选 `RadioInput` | 框就是命中区域 |
 | 动作按钮（"上传音频"、"选择文件"）| 是按钮不是选项，走 `variant="flat"` |
 
-### 一个静默失效的坑
+## 同属性叠类 = 静默失效（本仓库最常见的隐蔽 bug）
 
-`menu` 变体的静息态**刻意不写 `bg-transparent`**：button 的透明背景由 preflight 保证，写出来反而会和调用方补的 `bg-veil-faint` 在同一 CSS 属性上打架 —— 胜负取决于 Tailwind 产物里的先后顺序，而不是 className 里的顺序。同一属性上叠两个工具类时，务必先确认哪个会赢。
+> **两个工具类落在同一个 CSS 属性上时，胜负看 Tailwind 产物里的先后顺序，不看 className 里的顺序。**
+
+`className={"bg-panel/30 " + (dragging ? "bg-surface-dark/55" : "")}` 读起来像"拖拽时换底色"，
+实际上谁在生成的 CSS 里靠后谁赢，和你写的顺序无关。这类 bug 不报错、不警告，只是"那个效果一直没出现"。
+
+本项目已经因此踩过三次：
+
+| 现象 | 真相 |
+|---|---|
+| 筛选 chip 的选中态是"蓝框+灰底"而不是实心蓝 | 变体自带的 `bg-layer` 排在调用方传的 `bg-brand-600` 之后，令牌从未生效 |
+| 上传区的拖拽高亮从来没亮过 | 底色 `bg-zinc-900/30` 排在高亮 `bg-zinc-800/55` 之后 |
+| `UiOptionButton` 的 `menu` 变体差点盖掉网格底色 | 变体里的 `bg-transparent` 会和调用方的 `bg-veil-faint` 抢 |
+
+**三条做法，按优先级：**
+
+1. **写成互斥三元**：`dragging ? 'bg-surface-dark/55' : 'bg-panel/30'` —— 任何时刻只有一个类，根本不存在打架。
+2. **变体里不写"默认值等于浏览器默认"的类**（如 button 的 `bg-transparent`，preflight 已经保证），给调用方留出覆盖空间。
+3. **确实要叠**：先用 `npx tailwindcss -i src/index.css -o /tmp/x.css` 生成 CSS，`grep -n` 两个类看谁在后面；或者直接上 `!` 强制。
+
+排查命令：
+
+```bash
+npx tailwindcss -i src/index.css -o /tmp/x.css && grep -n "^\.bg-panel {\|^\.bg-surface-dark {" /tmp/x.css
+```
+
+同理，**透明度修饰符只能用 Tailwind 刻度值**（步进 5：`/25` `/35` `/45` 都行，`/42` `/72` 不生成任何 CSS）。
+
+## 颜色必须跟随主题
+
+设置 → 界面 → 主题外观里，用户可以整体替换 9 个语义色（`bg/surface/border/text/textMuted/app/canvas/panel/layer`），
+强调色还会派生出 `brand-300/500/600/700`。**任何 `zinc-*` 这类固定调色板都不会跟着动**——
+用户切到「石墨灰阶」后，硬编码的地方会原地不动，和周围脱节。
+
+四档文字色里，中间两档 `text-soft` / `text-faint` 由 `runtimeTheme.applyTextScale` 从
+`text` / `textMuted` 派生，所以整条梯度都跟随主题。对照表：
+
+| 别再写 | 改用 |
+|---|---|
+| `bg-zinc-950 / 900 / 800 / 700` | `bg-app / bg-panel / bg-surface-dark / bg-layer` |
+| `text-zinc-100/200` `300` `400` `500/600` | `text-text-dark` `text-text-soft` `text-text-muted` `text-text-faint` |
+| `border-zinc-700/600` | `border-border-dark` |
+| 叠在图片/视频/画布上的边框与底色 | `veil` 六档（它刻意是白色半透明，与主题无关是有意的） |
+
+ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neutral-*` 等其他固定色板。
+
+⚠️ 另外：`index.html` 写死 `class="dark"` 且从不切换，**`dark:` 变体的基础值是死代码**。
+不要写 `text-zinc-600 dark:text-zinc-400` 这种双分支，直接写最终值。
 
 ## 用排版建立层级，而不是用框
 
@@ -119,6 +165,7 @@ description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分
 
 | 维度 | 允许的写法 | 禁止 |
 |---|---|---|
+| 颜色 | 语义色：底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`；边框 `border-border-dark`；媒体与玻璃质感边框用 `veil` 档位 | 一切 `*-zinc-*` 等固定调色板 |
 | 字号 | `text-4xs`(9) `text-3xs`(10) `text-2xs`(11) `text-13` `text-14` `text-15` / `text-xs` `text-sm` `text-base`+ | `text-[Npx]` |
 | 圆角 | `rounded-lg`(控件/内嵌) `rounded-xl`(浮层) `rounded-2xl` `rounded-3xl` `rounded-full` `rounded-hairline`；画布节点 `rounded-[var(--node-radius)]` | 其他 `rounded-[...]` |
 | 阴影 | `shadow-panel`(仅浮层) / `shadow-node-selected` `shadow-node-error` `shadow-thumb` `shadow-thumb-sm`(具名特效) | `shadow-[...]` |
@@ -129,7 +176,6 @@ description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分
 
 必须内联 `style={{ zIndex }}` 时（如每帧改 transform 的拖拽层）用 `Z_LAYERS`（`src/core/theme/zLayers.ts`），它与 Tailwind 配置互为镜像，改一侧要同步另一侧。
 
-**透明度修饰符只能用 Tailwind 刻度值**（0/5/10/…/95/100，步进 5）。像 `bg-black/72`、`border-white/42` 这类非刻度值**不会生成任何 CSS**，是静默失效的坑；需要精确值时用 `bg-black/[0.72]` 或登记为具名色。
 
 画布内部（ReactFlow 节点 / minimap / Alt 拖拽副本）有自己独立的局部 z 刻度，见 `src/features/canvas/canvasUtils.ts`，不要和全局档位混用。
 
@@ -172,6 +218,10 @@ description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分
 | 用 `UiIconButton` 默认态（自带边框）做工具栏密集图标 | `showBorder={false}` 或 `appearance="hover-only"` |
 | 容器内的同质选项集合逐项描边 | `UiOptionButton variant="menu"`，见"选项集合的静息态" |
 | 在 `UiOptionButton` 调用点手写 `!border-transparent !bg-transparent hover:!bg-layer` | 用 `variant="menu"`，别再复制这串 |
+| 面板/弹窗内部再叠一层自己的底色（`bg-zinc-900/40` 这类） | 表面由外壳统一提供；要切分用分隔线，要下沉用 `inset` |
+| 用 `panelClassName` 覆盖 `PanelTrigger` / `Dropdown` 的外壳表面 | 不传即可；同级浮层长得不一样多半就是这么来的 |
+| `zinc-*` / `gray-*` 等固定调色板 | 语义色，见「颜色必须跟随主题」 |
+| `text-zinc-600 dark:text-zinc-400` 双分支 | 直接写最终值，`dark:` 的基础值是死代码 |
 | 给已经带边框的控件外面再包一层框 | 去掉外层框 |
 | 为"填充空白"添加卡片、边框、阴影 | 留白 / 调整间距 |
 | 同一屏出现 3 层以上叠加边框 | 重新走上面的决策树 |
@@ -257,6 +307,9 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 有没有"比父级更亮"的背景块？有就该是 `inset` 或 bare
 - [ ] 有没有为了填空白而加的卡片/边框/阴影？删掉
 - [ ] 容器里并列的可点项，静息态还在逐个描边吗？该是 `UiOptionButton variant="menu"`
+- [ ] 有没有 `zinc-*` / `gray-*`？改强调色或换主题预设时它们不会跟着动
+- [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
+- [ ] 新面板有没有再叠一层自己的底色？表面应该由外壳统一提供
 - [ ] 空/加载/错误三态是否都走了 `UiEmpty/UiLoading/UiError`
 - [ ] 字号是否全部来自登记档位（无 `text-[Npx]`）
 - [ ] 圆角是否只用了 `rounded-lg/xl/full`，且内层不大于外层

@@ -367,10 +367,10 @@ export default function FileUploader({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-zinc-700/90' : 'border-zinc-700/50 bg-zinc-700/80 hover:border-zinc-700/50'} flex-shrink-0`}
+                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-layer/90' : 'border-border-dark/50 bg-layer/80 hover:border-border-dark/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-zinc-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text-muted'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                     </svg>
                 </UiButton>

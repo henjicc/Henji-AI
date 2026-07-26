@@ -52,7 +52,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   if (param.editor?.kind === 'prompt') {
     return (
       <div className="w-auto">
-        <label className="mb-1.5 block text-sm font-medium text-zinc-300">
+        <label className="mb-1.5 block text-sm font-medium text-text-soft">
           {displayName}
           {param.required && <span className="ml-1 text-red-500">*</span>}
         </label>
@@ -76,7 +76,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   if (param.multiline) {
     return (
       <div className="w-auto">
-        <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+        <label className="block text-sm font-medium text-text-soft mb-1.5">
           {displayName}
           {param.required && <span className="text-red-500 ml-1">*</span>}
         </label>
@@ -95,7 +95,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   // 单行文本输入
   return (
     <div className="w-auto">
-      <label className="block text-sm font-medium text-zinc-300 mb-1.5">
+      <label className="block text-sm font-medium text-text-soft mb-1.5">
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>

@@ -155,5 +155,5 @@ function statusDot(status: AgentTraceStatus): string {
   if (status === 'running') return 'bg-sky-400'
   if (status === 'failed') return 'bg-red-400'
   if (status === 'cancelled') return 'bg-amber-400'
-  return 'bg-zinc-400'
+  return 'bg-text-muted'
 }

@@ -128,7 +128,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   return (
     <div className="flex flex-col h-full">
       <UiPanel className="mb-3 p-2.5 bg-blue-900/20 border-blue-800/60">
-        <div className="text-xs text-blue-700 dark:text-blue-300">
+        <div className="text-xs text-blue-300">
           {t('modelscopeCustomModel.tip.prefix')}
           <UiButton
             type="button"
@@ -155,9 +155,9 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           {t('modelscopeCustomModel.addNew')}
         </UiButton>
       ) : (
-        <UiPanel className="mb-3 p-3 border-zinc-700/60 bg-zinc-700/25">
+        <UiPanel className="mb-3 p-3 border-border-dark/60 bg-layer/25">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('modelscopeCustomModel.addNew')}</div>
+            <div className="text-xs font-medium text-text-muted">{t('modelscopeCustomModel.addNew')}</div>
             <UiIconButton
               type="button"
               onClick={() => {
@@ -165,7 +165,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 setNewModelId('')
                 setNewModelName('')
               }}
-              className="h-8 w-8 border-transparent bg-transparent text-zinc-400 hover:bg-zinc-700/60"
+              className="h-8 w-8 border-transparent bg-transparent text-text-muted hover:bg-layer/60"
               aria-label={t('common:close')}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -191,7 +191,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               inputClassName="w-full text-sm"
             />
             <div className="flex flex-col gap-2">
-              <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('modelscopeCustomModel.form.modelType')}</div>
+              <div className="text-xs font-medium text-text-muted">{t('modelscopeCustomModel.form.modelType')}</div>
               <div className="grid grid-cols-2 gap-2">
                 <UiOptionButton
                   type="button"
@@ -238,7 +238,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       )}
       <div className="flex-1 overflow-y-auto">
         {models.length === 0 ? (
-          <div className="text-center text-sm text-zinc-400 py-8">
+          <div className="text-center text-sm text-text-muted py-8">
             {t('modelscopeCustomModel.empty')}
           </div>
         ) : (
@@ -246,11 +246,11 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
             {models.map(model => (
               <UiPanel
                 key={model.id}
-                className="p-3 border-zinc-700/60 bg-zinc-700/25 hover:border-zinc-600/70"
+                className="p-3 border-border-dark/60 bg-layer/25 hover:border-border-dark/70"
               >
                 {editingId === model.id ? (
                   <div className="flex flex-col gap-2">
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400 break-all">
+                  <div className="text-xs text-text-muted break-all">
                       {t('modelscopeCustomModel.form.modelId')}: {model.id}
                     </div>
                     <TextInput
@@ -261,7 +261,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       inputClassName="w-full text-sm"
                     />
                     <div className="flex flex-col gap-2">
-                      <div className="text-xs font-medium text-zinc-600 dark:text-zinc-400">{t('modelscopeCustomModel.form.modelType')}</div>
+                      <div className="text-xs font-medium text-text-muted">{t('modelscopeCustomModel.form.modelType')}</div>
                       <div className="grid grid-cols-2 gap-2">
                         <UiOptionButton
                           type="button"
@@ -305,20 +305,20 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 ) : (
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-zinc-800 dark:text-zinc-200 truncate">
+                      <div className="text-sm font-medium text-text-dark truncate">
                         {model.name}
                       </div>
-                      <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 break-all">
+                      <div className="text-xs text-text-muted mt-1 break-all">
                         {model.id}
                       </div>
                       <div className="flex gap-2 mt-1.5">
                         {model.modelType.imageGeneration && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-900/30 text-blue-300">
                             {t('modelscopeCustomModel.types.imageGeneration')}
                           </span>
                         )}
                         {model.modelType.imageEditing && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-green-900/30 text-green-300">
                             {t('modelscopeCustomModel.types.imageEditing')}
                           </span>
                         )}

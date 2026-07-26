@@ -53,7 +53,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
     ))}
   >
     <div className="text-base text-white">{title}</div>
-    {description ? <div className="mt-2 text-sm text-zinc-300">{description}</div> : null}
+    {description ? <div className="mt-2 text-sm text-text-soft">{description}</div> : null}
   </UiModal>
 )
 

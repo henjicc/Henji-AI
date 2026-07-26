@@ -34,7 +34,7 @@ const DataPathSection: React.FC = () => {
   return (
     <>
       <SectionCard title={t('sections.dataPath.title')}>
-        <label className="block text-sm font-medium mb-2 text-zinc-300">
+        <label className="block text-sm font-medium mb-2 text-text-soft">
           {t('sections.dataPath.pathLabel')}
         </label>
         <div className="flex items-stretch gap-2">
@@ -62,7 +62,7 @@ const DataPathSection: React.FC = () => {
             {t('actions.resetDefault')}
           </UiButton>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">{t('sections.dataPath.pathHint')}</p>
+        <p className="mt-2 text-xs text-text-faint">{t('sections.dataPath.pathHint')}</p>
       </SectionCard>
 
       <SettingsDialog

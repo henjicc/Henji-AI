@@ -49,7 +49,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.download.enableHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.download.enableHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableQuickDownload ? 'pointer-events-none' : ''}`}>
@@ -62,11 +62,11 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.download.buttonOnlyHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.download.buttonOnlyHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableQuickDownload ? 'pointer-events-none' : ''}`}>
-          <label className="block text-sm font-medium mb-2 text-zinc-300">
+          <label className="block text-sm font-medium mb-2 text-text-soft">
             {t('sections.download.pathLabel')}
           </label>
           <div className="flex items-stretch gap-2">
@@ -87,7 +87,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               {t('actions.select')}
             </UiButton>
           </div>
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.download.pathHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.download.pathHint')}</p>
         </div>
       </div>
     </SectionCard>

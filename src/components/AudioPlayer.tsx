@@ -275,7 +275,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
         }
       }}
     >
-      <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-zinc-300`}>
+      <div className={`${compact ? 'mb-1.5' : 'mb-2'} flex items-center justify-between text-xs text-text-soft`}>
         <span>{format(currentTime)}</span>
         <span>{format(waveDuration ?? duration)}</span>
       </div>
@@ -306,7 +306,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
       <div className={`${compact ? 'mt-2' : 'mt-3'} flex items-center justify-between`}>
         <div ref={volumeContainerRef} className="relative flex items-center">
           <UiIconButton
-            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-zinc-300 hover:opacity-70`}
+            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-text-soft hover:opacity-70`}
             title={t('ui:audioPlayer.volume')}
             onClick={() => setShowVolumeSlider((value) => !value)}
           >
@@ -319,7 +319,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
             >
               {/* 音量数值 tooltip 是浮层，边框背景是其在波形上可读所必需的 */}
               {showVolumeValueTip && (
-                <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-2xs text-zinc-200">
+                <div className="pointer-events-none absolute -top-6 left-1/2 -translate-x-1/2 rounded-md border border-border-dark/70 bg-surface-dark/95 px-1.5 py-0.5 text-2xs text-text-dark">
                   {volumePercent}%
                 </div>
               )}
@@ -343,7 +343,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           )}
         </div>
         <div className="flex items-center">
-          <UiIconButton onClick={togglePlay} className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-zinc-300 hover:opacity-70`} title={t('ui:audioPlayer.playPause')}>
+          <UiIconButton onClick={togglePlay} className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent text-text-soft hover:opacity-70`} title={t('ui:audioPlayer.playPause')}>
             {isPlaying ? (
               <Pause className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />
             ) : (
@@ -356,7 +356,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({
           <UiIconButton
             onClick={() => { void handleDownload() }}
             disabled={isDownloading}
-            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent ${isDownloading ? 'text-zinc-500 opacity-40 cursor-not-allowed' : 'text-zinc-300 hover:opacity-70'} transition-opacity`}
+            className={`${compact ? '!h-7 !w-7' : '!h-8 !w-8'} border-0 bg-transparent ${isDownloading ? 'text-text-faint opacity-40 cursor-not-allowed' : 'text-text-soft hover:opacity-70'} transition-opacity`}
             title={t('common:actions.download')}
           >
             <Download className={`${compact ? 'h-[18px] w-[18px]' : 'h-5 w-5'}`} />

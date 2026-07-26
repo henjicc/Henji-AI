@@ -24,7 +24,7 @@ const UploadSection: React.FC = () => {
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-          <label className="text-sm font-medium text-zinc-300">
+          <label className="text-sm font-medium text-text-soft">
             {t('sections.upload.providerLabel')}
           </label>
           <Dropdown
@@ -46,7 +46,7 @@ const UploadSection: React.FC = () => {
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-zinc-500">{t('sections.upload.fallbackHint')}</p>
+          <p className="mt-2 text-xs text-text-faint">{t('sections.upload.fallbackHint')}</p>
         </div>
       </div>
     </SectionCard>

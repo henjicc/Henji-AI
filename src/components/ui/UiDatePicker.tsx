@@ -125,10 +125,10 @@ export function UiDatePicker({
         className="!h-8 !w-full !justify-between !rounded-md !px-2 !text-xs"
         title={ariaLabel}
       >
-        <span className={`truncate ${selectedIso ? 'text-text-dark' : 'text-zinc-400'}`}>
+        <span className={`truncate ${selectedIso ? 'text-text-dark' : 'text-text-muted'}`}>
           {selectedIso ? toDisplayDate(selectedIso) : placeholder}
         </span>
-        <Calendar className="h-3.5 w-3.5 text-zinc-400" />
+        <Calendar className="h-3.5 w-3.5 text-text-muted" />
       </UiButton>
 
       {isOpen && (
@@ -159,7 +159,7 @@ export function UiDatePicker({
 
           <div className="grid grid-cols-7 gap-1 px-0.5 pb-1">
             {weekdayLabels.map((label) => (
-              <span key={label} className="text-center text-2xs text-zinc-400">
+              <span key={label} className="text-center text-2xs text-text-muted">
                 {label}
               </span>
             ))}

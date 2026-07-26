@@ -23,7 +23,7 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="block text-xs text-zinc-400">
+      <label className="block text-xs text-text-muted">
         {t('resolutionPanel.resolution', { defaultValue: '分辨率' })}
       </label>
       <div className="flex flex-wrap justify-start gap-2">

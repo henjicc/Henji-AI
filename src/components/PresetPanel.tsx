@@ -183,7 +183,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             display={t('ui:presets.label')}
             disabled={disabled}
             className="w-auto"
-            buttonClassName="px-4 py-2 bg-zinc-700/50 hover:bg-zinc-600/50 rounded-lg transition-colors duration-300 border border-zinc-700/50 flex items-center text-sm"
+            buttonClassName="px-4 py-2 bg-layer/50 hover:bg-layer/50 rounded-lg transition-colors duration-300 border border-border-dark/50 flex items-center text-sm"
             panelWidth={420}
             alignment="aboveCenter"
             stableHeight={true}
@@ -197,7 +197,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                 <div className="p-4 h-full flex flex-col max-h-[500px]">
                     {/* 顶部区域：快速保存或输入名称 */}
                     <div className="mb-4 space-y-2">
-                        <div className="text-xs text-zinc-400 mb-2">
+                        <div className="text-xs text-text-muted mb-2">
                             {isSaving ? t('ui:presets.inputNameToSave') : t('ui:presets.quickSave')}
                         </div>
                         <div className="h-[60px] relative">
@@ -283,14 +283,14 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                         </div>
                     </div>
                     {/* 分割线 */}
-                    <div className="h-px bg-zinc-700/50 my-3"></div>
+                    <div className="h-px bg-layer/50 my-3"></div>
                     {/* 预设列表 */}
                     <div className="flex-1 overflow-y-auto">
-                        <div className="text-xs text-zinc-400 mb-2 flex items-center justify-between">
+                        <div className="text-xs text-text-muted mb-2 flex items-center justify-between">
                             <span>{t('ui:presets.myPresets', { count: presets.length })}</span>
                         </div>
                         {presets.length === 0 ? (
-                            <div className="text-center text-zinc-500 text-sm py-8">
+                            <div className="text-center text-text-faint text-sm py-8">
                                 {t('ui:presets.empty')}
                             </div>
                         ) : (
@@ -302,7 +302,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                         onClick={() => {
                                             onLoadPreset(preset)
                                         }}
-                                        className="px-3 py-2.5 bg-zinc-700/40 hover:bg-zinc-700/60 rounded-lg border border-zinc-700/50 cursor-pointer transition-colors duration-200 group relative"
+                                        className="px-3 py-2.5 bg-layer/40 hover:bg-layer/60 rounded-lg border border-border-dark/50 cursor-pointer transition-colors duration-200 group relative"
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -316,7 +316,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                             </div>
                                             <div className="flex items-center gap-2 flex-shrink-0">
                                                 {/* 时间戳 */}
-                                                <span className="text-xs text-zinc-500">
+                                                <span className="text-xs text-text-faint">
                                                     {formatTimeAgo(preset.updatedAt)}
                                                 </span>
                                                 {/* 删除按钮 */}
@@ -334,7 +334,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                             </div>
                                         </div>
                                         {/* 预览信息 */}
-                                        <div className="mt-1 text-xs text-zinc-500 truncate">
+                                        <div className="mt-1 text-xs text-text-faint truncate">
                                             {preset.prompt.substring(0, 50)}{preset.prompt.length > 50 ? '...' : ''}
                                         </div>
                                         {/* 删除确认弹窗 - 使用 portal 渲染到 body */}

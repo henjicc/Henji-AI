@@ -23,10 +23,10 @@ export default function Toggle(props: ToggleProps) {
         onClick={() => !disabled && onChange(!checked)}
         disabled={disabled}
         className={`px-3 py-2 h-[38px] !text-15 leading-none rounded-lg border ${disabled
-            ? 'bg-zinc-800/30 text-zinc-500 border-zinc-700/30 cursor-not-allowed opacity-50'
+            ? 'bg-surface-dark/30 text-text-faint border-border-dark/30 cursor-not-allowed opacity-50'
             : checked
               ? '!bg-accent !text-white !border-accent hover:brightness-110'
-              : 'bg-zinc-800/70 text-zinc-300 border-zinc-700/50'
+              : 'bg-surface-dark/70 text-text-soft border-border-dark/50'
           }`}
       >
         {checked ? onText : offText}

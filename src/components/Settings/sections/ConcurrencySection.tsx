@@ -21,8 +21,8 @@ const ConcurrencySection: React.FC<ConcurrencySectionProps> = ({ maxConcurrentTa
         step={1}
         widthClassName="w-full"
       />
-      <p className="mt-2 text-xs text-zinc-500">{t('sections.concurrency.hint')}</p>
-      <p className="mt-1 text-xs text-zinc-500">{t('sections.concurrency.queueHint')}</p>
+      <p className="mt-2 text-xs text-text-faint">{t('sections.concurrency.hint')}</p>
+      <p className="mt-1 text-xs text-text-faint">{t('sections.concurrency.queueHint')}</p>
     </SectionCard>
   )
 }

@@ -153,6 +153,22 @@ function applyAccentScale(root: HTMLElement, accentHex: string): void {
   root.style.setProperty('--brand-700-rgb', toRgbVarValue(brand700));
 }
 
+/**
+ * 文字色补档。
+ *
+ * 主题方案只暴露 `text` 与 `textMuted` 两档，但界面实际需要四档
+ * （标题 / 次要正文 / 说明 / 占位）。此前中间两档是硬编码的 zinc-300 / zinc-500
+ * 硬编码的——它们不会跟随主题预设，用户切到「石墨灰阶」（textMuted 变成亮灰）后
+ * 就会和周围的语义色脱节。这里从 text/textMuted 派生出来，让四档整体跟随。
+ */
+function applyTextScale(root: HTMLElement, textHex: string, textMutedHex: string): void {
+  const soft = mixColor(textHex, textMutedHex, 0.45);
+  const faint = mixColor(textMutedHex, BLACK_HEX, 0.3);
+
+  root.style.setProperty('--text-soft-rgb', toRgbVarValue(soft));
+  root.style.setProperty('--text-faint-rgb', toRgbVarValue(faint));
+}
+
 export function normalizeThemeColorScheme(input?: Partial<ThemeColorScheme>): ThemeColorScheme {
   return THEME_COLOR_TOKENS.reduce<ThemeColorScheme>((acc, token) => {
     const fallback = DEFAULT_THEME_COLOR_SCHEME[token];
@@ -211,5 +227,6 @@ export function applyRuntimeTheme(config: RuntimeThemeConfig): void {
     root.style.setProperty(cssVarName, toRgbVarValue(normalizedColors[token]));
   }
 
+  applyTextScale(root, normalizedColors.text, normalizedColors.textMuted);
   applyAccentScale(root, config.accentColor);
 }

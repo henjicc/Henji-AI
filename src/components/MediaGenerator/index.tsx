@@ -402,7 +402,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       )}
 
       {/* 底部工具栏：按钮 + 价格估算 */}
-      <div className="mt-2.5 flex items-center justify-between border-t border-zinc-800/70 px-1 pt-2.5">
+      <div className="mt-2.5 flex items-center justify-between border-t border-surface-dark/70 px-1 pt-2.5">
         <div className="flex items-center gap-2">
           {/* 清除历史按钮 */}
           <UiButton

@@ -365,7 +365,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
           {(aspectParam || sizeDerivedSpec) && (
             <div className="flex flex-col gap-2">
               <div className="mx-auto" style={toSectionWidthStyle(alignedSectionWidth)}>
-                <label className="mb-2 block text-xs text-zinc-400">
+                <label className="mb-2 block text-xs text-text-muted">
                   {aspectLabel}
                 </label>
                 <div className="flex flex-wrap justify-start gap-2">
@@ -459,7 +459,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
           {resolutionParam && (
             <div className="flex flex-col gap-2">
               <div className="mx-auto" style={toSectionWidthStyle(alignedSectionWidth)}>
-                <label className="mb-2 block text-xs text-zinc-400">
+                <label className="mb-2 block text-xs text-text-muted">
                   {resolutionLabel}
                 </label>
                 <div className="flex flex-wrap justify-start gap-2">
