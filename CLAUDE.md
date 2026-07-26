@@ -142,6 +142,7 @@ npm run lint                   # 前端 lint
 - **同属性叠类会静默失效**：两个工具类落在同一 CSS 属性上时，胜负看 Tailwind 产物顺序而非 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。`index.html` 写死 `class="dark"`，`dark:` 变体的基础值是死代码
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)`，不能写 `#hex` 或 `rgba(数字…)`
 - **全局主题变量只能放 `src/index.css`**：`storyboard.css` 这类被工作区懒加载的样式表里放全局变量，会导致设置项在用户打开对应工作区之前完全不生效
+- **布局定位不得藏在外观样式表**：`scrollbar.css` 等具名样式表只能承担文件名承诺的外观或行为；`position`、`top/right/bottom/left` 与 `z-index` 必须直接写在组件 className（动态层级用 `Z_LAYERS`），让布局参照系在 JSX 中可见。确需 CSS 例外时必须就地注释原因
 - **控件高度两档**：`UI_FIELD_CONTROL_HEIGHT_CLASS`(42px) / `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`(38px)，不要手写 `h-[38px]`
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 - **五级容器词汇表**：Region(`UiRegion`) → Group(`UiGroup`) → Divided(`UiGroup divided`) → Surface(`UiPanel variant="inset"`) → Card(`UiPanel`)。**普通内容分组默认用 `UiGroup`**（零装饰，标题 + 间距）；只有浮层/弹窗/侧栏/画布节点才允许用 Card

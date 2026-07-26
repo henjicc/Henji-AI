@@ -61,3 +61,42 @@
 - 第一阶段四个任务文件
 
 未记录或提交 `out/`、临时截图、日志、`resources/model-manifest.json`、`resources/progress-seeds.json` 等生成产物。
+
+## 2026-07-27 第二阶段
+
+### 生成工作区布局
+
+- `src/styles/scrollbar.css`
+- `src/workspaces/GenerationWorkspace.tsx`
+- `src/workspaces/GenerationWorkspace/components/FloatingInputPanel.tsx`
+- `src/workspaces/GenerationWorkspace/components/TaskList.tsx`
+- `CLAUDE.md`
+- `.claude/skills/henji-ui-surface/SKILL.md`
+- `.codex/skills/henji-ui-surface/SKILL.md`
+
+### 设置弹窗信息架构
+
+- `src/components/Settings/index.tsx`
+- `src/components/Settings/components/SectionCard.tsx`
+- `src/components/Settings/components/SettingItem.tsx`
+- `src/components/Settings/components/ApiKeyInput.tsx`
+- `src/components/Settings/sections/AssetLibrarySection.tsx`
+
+### 工作区页面头
+
+- `src/features/project/ProjectManager.tsx`
+- `src/workspaces/ToolboxWorkspace.tsx`
+- `src/features/assets/AssetLibrarySurface.tsx`
+
+### 任务记录
+
+- `docs/task/界面实测巡检与优化/00-任务总览.md`
+- `docs/task/界面实测巡检与优化/重要记录.md`
+- `docs/task/界面实测巡检与优化/progress.md`
+- `docs/task/界面实测巡检与优化/decisions.md`
+- `docs/task/界面实测巡检与优化/handoff.md`
+- `docs/task/界面实测巡检与优化/changed-files.md`
+- `docs/task/界面实测巡检与优化/test-report.md`
+- 第二阶段三个任务文件
+
+构建过程刷新了被 Git 忽略的 manifest、seeds 与 `out/`，均未纳入提交。

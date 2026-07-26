@@ -166,6 +166,22 @@ ESLint 已硬拦 `zinc / gray / neutral / slate / stone` 五个中性色板。
 ⚠️ 另外：`index.html` 写死 `class="dark"` 且从不切换，**`dark:` 变体的基础值是死代码**。
 不要写 `text-zinc-600 dark:text-zinc-400` 这种双分支，直接写最终值。
 
+### 布局定位不得藏在外观样式表里
+
+> **样式表只做它的文件名承诺的事。**
+
+`scrollbar.css` 只能负责滚动行为与滚动条外观，不得顺手把业务容器写成
+`position: fixed`；否则读 JSX 时完全看不出元素脱离了哪个布局参照系，父级的
+padding、flex 收缩与助手插入量也会被静默绕开。
+
+- `position`、`top`、`right`、`bottom`、`left`、`z-index` 必须直接写在组件 `className`
+- 动态 `zIndex` 使用 `Z_LAYERS`，不要把任意层级藏进 CSS
+- 全局变量只放 `src/index.css`；局部样式表只影响对应局部模块
+- 确实只能写在 CSS 的例外，必须在声明旁就地注释原因
+
+判断标准：只读组件 JSX 时，应能看出元素是普通流、相对定位、绝对定位还是视口固定，
+以及它以哪个父级作为包含块。
+
 ## 毛玻璃是一个「材质」，不是一个 blur 值
 
 > **只写 `backdrop-filter: blur()` 得到的是「模糊 + 降不透明度」，看起来廉价。**
