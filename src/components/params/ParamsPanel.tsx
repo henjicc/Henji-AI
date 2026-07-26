@@ -9,6 +9,7 @@ import { registry } from '@/core/ModelRegistry'
 import { LinkageEngine } from '@/core/linkage'
 import { useModelParams } from '@/hooks/useModelParams'
 import { ParamRenderer } from './ParamRenderer'
+import { UiEmpty } from '@/components/ui'
 import { isParamDisabled, isParamVisible } from './paramVisibility'
 import type { ParamDef } from '@/core/types'
 import './ParamsPanel.css'
@@ -88,13 +89,10 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
       })
     }, [getFilteredOptions, visibleSchema])
 
-    // 加载状态
+    // 空态统一走 UiEmpty：原先是手写 div + ParamsPanel.css 里的 .params-panel-empty，
+    // 那份 CSS 还硬编码了 #a1a1aa（不跟随主题）
     if (!schema || schema.length === 0) {
-      return (
-        <div className="params-panel-empty">
-          该模型没有可配置参数
-        </div>
-      )
+      return <UiEmpty size="sm" title="该模型没有可配置参数" />
     }
 
     return (

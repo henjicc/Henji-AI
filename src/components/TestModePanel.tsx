@@ -87,7 +87,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
           <UiIconButton
             type="button"
             onClick={handleClose}
-            className="h-8 w-8 border-0 bg-transparent text-gray-400 hover:text-white hover:bg-white/10"
+            className="h-8 w-8 border-0 bg-transparent text-text-muted hover:text-white hover:bg-white/10"
           >
             <X className="h-5 w-5" />
           </UiIconButton>
@@ -108,7 +108,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
           <div className="flex items-center justify-between p-4 rounded-lg bg-app/40">
             <div>
               <div className="text-white font-medium">{t('testMode.enable.title')}</div>
-              <div className="text-sm text-gray-400 mt-1">
+              <div className="text-sm text-text-muted mt-1">
                 {t('testMode.enable.description')}
               </div>
             </div>
@@ -139,7 +139,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'options'
                     ? 'text-yellow-500 border-yellow-500 bg-yellow-500/10'
-                    : 'text-gray-400 hover:text-gray-300 border-transparent bg-transparent'
+                    : 'text-text-muted hover:text-text-soft border-transparent bg-transparent'
                 }`}
               >
                 {t('testMode.tabs.options')}
@@ -150,7 +150,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'export'
                     ? 'text-yellow-500 border-yellow-500 bg-yellow-500/10'
-                    : 'text-gray-400 hover:text-gray-300 border-transparent bg-transparent'
+                    : 'text-text-muted hover:text-text-soft border-transparent bg-transparent'
                 }`}
               >
                 {t('testMode.tabs.export')}
@@ -171,7 +171,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
               >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.skipRequest.title')}</div>
-                  <div className="text-xs text-gray-400 mt-1">
+                  <div className="text-xs text-text-muted mt-1">
                     {t('testMode.options.skipRequest.description')}
                   </div>
                 </div>
@@ -189,7 +189,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
               >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.logParams.title')}</div>
-                  <div className="text-xs text-gray-400 mt-1">
+                  <div className="text-xs text-text-muted mt-1">
                     {t('testMode.options.logParams.description')}
                   </div>
                 </div>
@@ -207,7 +207,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
               >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.enableDevTools.title')}</div>
-                  <div className="text-xs text-gray-400 mt-1">
+                  <div className="text-xs text-text-muted mt-1">
                     {t('testMode.options.enableDevTools.description')}
                   </div>
                 </div>
@@ -225,7 +225,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
               >
                 <div>
                   <div className="text-white text-sm">{t('testMode.options.flowTracking.title')}</div>
-                  <div className="text-xs text-gray-400 mt-1">
+                  <div className="text-xs text-text-muted mt-1">
                     {t('testMode.options.flowTracking.description')}
                   </div>
                 </div>
@@ -265,7 +265,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
           <div>
             <h3 className="text-white font-medium mb-3">{t('testMode.logsWindow.title')}</h3>
             <div className="flex items-center justify-between p-3 rounded-lg bg-app/40">
-              <div className="text-xs text-gray-400">{t('testMode.logsWindow.description')}</div>
+              <div className="text-xs text-text-muted">{t('testMode.logsWindow.description')}</div>
               <UiButton type="button" size="sm" onClick={() => void openLogWindow()}>
                 {t('testMode.logsWindow.openButton')}
               </UiButton>

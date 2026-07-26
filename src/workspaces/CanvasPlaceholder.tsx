@@ -8,7 +8,7 @@ const NodeEditorPlaceholder: React.FC = () => {
     const { t } = useI18n('ui')
     return (
         <div className="flex-1 flex items-center justify-center h-full bg-app">
-            <div className="text-gray-500 text-lg">{t('placeholders.developing')}</div>
+            <div className="text-text-faint text-lg">{t('placeholders.developing')}</div>
         </div>
     )
 }

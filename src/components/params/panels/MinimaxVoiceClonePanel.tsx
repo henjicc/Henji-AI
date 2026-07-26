@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
-import { UiButton, UiInput } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiInput } from '@/components/ui'
 import NumberInput from '@/components/ui/NumberInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { createLogger } from '@/core/logging'
@@ -347,7 +347,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
                 onChange={(event) => patchValue({ voiceName: event.target.value })}
                 placeholder="必填，用于保存到音色库"
                 maxLength={40}
-                className="h-[38px]"
+                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS}`}
               />
             </div>
             <div className="space-y-2">
@@ -437,7 +437,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
               value={panelValue.previewText}
               onChange={(event) => patchValue({ previewText: event.target.value })}
               placeholder="输入用于试听合成的文本"
-              className="h-[38px] w-full"
+              className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
             />
           </div>
 
@@ -481,7 +481,7 @@ export const MinimaxVoiceClonePanel: React.FC<MinimaxVoiceClonePanelProps> = ({
                 onChange={(event) => patchValue({ promptText: event.target.value })}
                 placeholder="可选；填写时需同时上传示例音频"
                 maxLength={400}
-                className="h-[38px] w-full"
+                className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
               />
             </div>
           </div>

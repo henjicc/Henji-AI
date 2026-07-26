@@ -139,7 +139,9 @@ npm run lint                   # 前端 lint
 - **毛玻璃是材质不是 blur 值（ESLint 硬拦一切 `backdrop-blur-*`）**：用 `ui-glass` 类（`src/index.css`，含 blur + saturate + 受光边 + 噪点四层），遮罩用 `ui-glass-scrim`；只写 blur 会得到「模糊+降不透明度」的廉价观感。只用于压在图片/视频/画布上的浮层，压在纯色 UI 上的一律用不透明底色。质感调整只改 `--ui-glass-*` 变量；「设置→界面→毛玻璃效果」关掉时整套材质退化成不透明底色
 - **动效四档（`src/components/ui/motion.ts`）**：时长只用 `duration-150/200/300/500`（对应 `UI_DURATION.fast/base/slow/viewer`）。缓动已由 `tailwind.config.js` 的 `transitionTimingFunction.DEFAULT` 全局设为 ease-out，不用每处写；唯一登记的例外是 `UI_EASE_STACK`。内联 `style={{ transition }}` 走 `uiTransition()`，禁止 `transition: all`。用 `setTimeout` 卸载动画组件时，那个 ms 必须与 className 里的 `duration-*` 同档，否则过渡收尾被硬切。过渡布局属性前先确认无法用 transform 替代（已登记的例外见 skill）
 - **同属性叠类会静默失效**：两个工具类落在同一 CSS 属性上时，胜负看 Tailwind 产物顺序而非 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。`index.html` 写死 `class="dark"`，`dark:` 变体的基础值是死代码
-- **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
+- **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)`，不能写 `#hex` 或 `rgba(数字…)`
+- **全局主题变量只能放 `src/index.css`**：`storyboard.css` 这类被工作区懒加载的样式表里放全局变量，会导致设置项在用户打开对应工作区之前完全不生效
+- **控件高度两档**：`UI_FIELD_CONTROL_HEIGHT_CLASS`(42px) / `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`(38px)，不要手写 `h-[38px]`
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 - **五级容器词汇表**：Region(`UiRegion`) → Group(`UiGroup`) → Divided(`UiGroup divided`) → Surface(`UiPanel variant="inset"`) → Card(`UiPanel`)。**普通内容分组默认用 `UiGroup`**（零装饰，标题 + 间距）；只有浮层/弹窗/侧栏/画布节点才允许用 Card
 - **表面层级铁律**：同一层视觉深度只画一次边框/背景；内层背景只能比外层更暗，不能更亮；卡片嵌套上限 1 层。**禁止**在已有边框的容器里再叠 `border + bg-* + rounded`，禁止业务组件手写 `bg-panel` 卡片

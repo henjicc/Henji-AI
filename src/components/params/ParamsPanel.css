@@ -9,13 +9,6 @@
   padding: 16px;
 }
 
-.params-panel-empty {
-  padding: 32px;
-  text-align: center;
-  color: var(--color-text-secondary, #a1a1aa);
-  font-size: 14px;
-}
-
 /* 参数渲染器容器 */
 .param-renderer {
   display: flex;
@@ -24,57 +17,15 @@
 }
 
 /* 参数输入组件 */
-.param-input {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.param-input label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text-primary, #18181b);
-}
-
-.param-input input,
-.param-input textarea,
-.param-input select {
-  padding: 8px 12px;
-  border: 1px solid var(--color-border, #e4e4e7);
-  border-radius: 6px;
-  font-size: 14px;
-  background: var(--color-bg, #ffffff);
-  color: var(--color-text-primary, #18181b);
-}
-
-.param-input input:focus,
-.param-input textarea:focus,
-.param-input select:focus {
-  outline: none;
-  border-color: var(--color-primary, #3b82f6);
-}
-
-.param-input input:disabled,
-.param-input textarea:disabled,
-.param-input select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 禁用消息 */
-.param-disabled-message {
-  font-size: 12px;
-  color: var(--color-warning, #f59e0b);
-  margin-top: 4px;
-}
-
 /* 错误提示 */
 .param-renderer-error {
   padding: 12px;
-  background: var(--color-error-bg, #fef2f2);
-  border: 1px solid var(--color-error, #ef4444);
+  /* 原本回退到 #fef2f2（浅粉底）——那是亮色主题的值，在深色应用里格外突兀。
+     改走 --danger-rgb，同时跟随主题。 */
+  background: rgb(var(--danger-rgb) / 0.12);
+  border: 1px solid rgb(var(--danger-rgb) / 0.45);
   border-radius: 6px;
-  color: var(--color-error, #ef4444);
+  color: rgb(var(--danger-rgb));
   font-size: 12px;
 }
 

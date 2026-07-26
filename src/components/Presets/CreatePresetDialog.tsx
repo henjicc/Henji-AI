@@ -92,7 +92,7 @@ export function CreatePresetDialog({
             />
             <span className="text-sm font-medium">{t('ui:presets.create.globalLabel')}</span>
           </label>
-          <p className="text-xs text-gray-500 mt-1 ml-6">
+          <p className="text-xs text-text-faint mt-1 ml-6">
             {isGlobal
               ? t('ui:presets.create.globalHint')
               : t('ui:presets.create.modelHint', { modelId: currentModelId })

@@ -21,7 +21,7 @@ const LoadingPlaceholder: React.FC = () => {
     const { t } = useI18n()
     return (
         <div className="flex-1 flex items-center justify-center">
-            <div className="text-gray-400">{t('common:loading')}</div>
+            <div className="text-text-muted">{t('common:loading')}</div>
         </div>
     )
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { UiIconButton, UiInput } from './primitives'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS } from './styleTokens'
 
 type NumberInputProps = {
   label?: string
@@ -116,7 +117,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
               e.currentTarget.blur()
             }
           }}
-          className={`${widthClassName} h-[38px] appearance-none pr-8`}
+          className={`${widthClassName} ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} appearance-none pr-8`}
           min={min}
           max={max}
           step={step}

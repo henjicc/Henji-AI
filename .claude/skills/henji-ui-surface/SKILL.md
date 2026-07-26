@@ -143,7 +143,25 @@ npx tailwindcss -i src/index.css -o /tmp/x.css && grep -n "^\.bg-panel {\|^\.bg-
 | `border-zinc-700/600` | `border-border-dark` |
 | 叠在图片/视频/画布上的边框与底色 | `veil` 六档（它刻意是白色半透明，与主题无关是有意的） |
 
-ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neutral-*` 等其他固定色板。
+ESLint 已硬拦 `zinc / gray / neutral / slate / stone` 五个中性色板。
+`red / green / yellow / blue / orange / purple` 等是语义色与分类色，**不在禁止范围内**。
+
+### 纯 CSS 文件同样受约束
+
+`.css` 里不能写 `#hex` 也不能写 `rgba(数字…)`，只能写 `rgb(var(--xxx-rgb) / a)`。
+`npm run check:colors` 现在会扫 `.ts/.tsx/.css` 三种；只有
+`src/index.css` 与 `src/core/theme/colorTokens.ts` 两个「令牌定义处」豁免。
+
+扩展这条检查时当场抓出 70 处存量硬编码，包括**三种互不相同的蓝**
+（`#3b82f6` 才是应用强调色，`#007eff` 用在视频控件与分辨率面板，`#1890ff` 用在上传组件）
+和一整套亮色主题回退值（`--color-*` 变量从未定义，实际回退到 `#ffffff`/`#18181b`）。
+
+### 全局主题变量不能放懒加载的样式表里
+
+`data-theme-tone` / `data-ui-radius` 的取值规则曾写在
+`src/features/canvas/storyboard.css`——那个文件由 `CanvasWorkspace.tsx` 懒加载，
+结果「设置 → 界面 → 圆角尺寸 / 色调」在用户没打开过画布之前完全不生效。
+**全局主题变量只能放 `src/index.css`**（它在 `main.tsx` 里全局引入）。
 
 ⚠️ 另外：`index.html` 写死 `class="dark"` 且从不切换，**`dark:` 变体的基础值是死代码**。
 不要写 `text-zinc-600 dark:text-zinc-400` 这种双分支，直接写最终值。
@@ -362,7 +380,7 @@ style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
 
 - **间距用 4 的倍数**：`gap-2 / gap-3 / gap-4`、`p-3 / p-4`；不要出现 `p-[13px]` 这类随手值。
 - **同级元素间距统一**：一个分区内所有行用同一个 `space-y-*`，不要一行 `mt-2` 一行 `mt-3`。
-- **控件高度统一**：字段类控件走 `UI_FIELD_CONTROL_HEIGHT_CLASS`（42px）；不要每处自定义高度。
+- **控件高度统一**：两档具名令牌 —— `UI_FIELD_CONTROL_HEIGHT_CLASS`（42px，独立表单字段）与 `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`（38px，参数面板/逐行控件/面板触发器）。两个值都不是 Tailwind 刻度，所以不要每处手写 `h-[38px]` / `h-[42px]`。
 - **文字层级只用三档**：主文本 `text-text-dark`、次要 `text-text-muted`、强调 `text-accent`。不要引入第四种灰。
 - **圆角跟随层级**：L1 用 `rounded-xl`，L2/L3 用 `rounded-lg`。内层圆角不得大于外层。
 - **颜色只用语义类**：`bg-app` / `bg-panel` / `bg-surface-dark` / `bg-layer` / `text-text-muted` / `border-border-dark`。禁止十六进制（`npm run check:colors` 会拦）。
@@ -438,7 +456,9 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 有没有"比父级更亮"的背景块？有就该是 `inset` 或 bare
 - [ ] 有没有为了填空白而加的卡片/边框/阴影？删掉
 - [ ] 容器里并列的可点项，静息态还在逐个描边吗？该是 `UiOptionButton variant="menu"`
-- [ ] 有没有 `zinc-*` / `gray-*`？改强调色或换主题预设时它们不会跟着动
+- [ ] 有没有 `zinc-*` / `gray-*` / `slate-*`？改强调色或换主题预设时它们不会跟着动
+- [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`
+- [ ] 新加的全局样式/变量放对文件了吗？懒加载的样式表里不能放全局主题变量
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
 - [ ] 新面板有没有再叠一层自己的底色？表面应该由外壳统一提供
 - [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `ui-glass` / `ui-glass-scrim`

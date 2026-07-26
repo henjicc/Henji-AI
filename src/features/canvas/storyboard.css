@@ -1,54 +1,15 @@
-:root {
-  --bg-rgb: 23 23 23;
-  --surface-rgb: 38 38 38;
-  --border-rgb: 64 64 64;
-  --text-rgb: 255 255 255;
-  --text-muted-rgb: 163 163 163;
-  --accent-rgb: 59 130 246;
-  --ui-surface-panel: rgb(23, 23, 23);
-  --ui-surface-field: rgba(10, 10, 10, 0.92);
-  --ui-border-soft: rgba(255, 255, 255, 0.14);
-  --ui-border-strong: rgba(255, 255, 255, 0.24);
-  --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
-  --ui-radius-lg: 12px;
-  --ui-radius-xl: 16px;
-  --ui-radius-2xl: 20px;
-  --node-radius: 12px;
-}
-
-:root[data-ui-radius='compact'] {
-  --ui-radius-lg: 10px;
-  --ui-radius-xl: 12px;
-  --ui-radius-2xl: 16px;
-  --node-radius: 10px;
-}
-
-:root[data-ui-radius='large'] {
-  --ui-radius-lg: 14px;
-  --ui-radius-xl: 20px;
-  --ui-radius-2xl: 26px;
-  --node-radius: 16px;
-}
-
-:root[data-theme-tone='warm'] {
-  --bg-rgb: 38 38 38;
-  --surface-rgb: 64 64 64;
-  --border-rgb: 82 82 82;
-  --text-rgb: 255 255 255;
-  --text-muted-rgb: 212 212 212;
-}
-
-:root[data-theme-tone='cool'] {
-  --bg-rgb: 10 10 10;
-  --surface-rgb: 23 23 23;
-  --border-rgb: 38 38 38;
-  --text-rgb: 245 245 245;
-  --text-muted-rgb: 163 163 163;
-}
+/**
+ * 画布（含分镜）专属样式。
+ *
+ * ⚠️ 这个文件是**懒加载**的（`CanvasWorkspace.tsx` 里 import），
+ * 所以任何全局生效的东西都不能放在这里。原先主题色调（`data-theme-tone`）
+ * 与圆角预设（`data-ui-radius`）的规则写在这儿，导致用户没打开过画布工作区时
+ * 这两个设置项完全不生效——已全部迁到 `src/index.css`。
+ */
 
 .ui-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: rgba(163, 163, 163, 0.56) transparent;
+  scrollbar-color: rgb(var(--text-muted-rgb) / 0.56) transparent;
 }
 
 .ui-scrollbar::-webkit-scrollbar {
@@ -62,11 +23,11 @@
 
 .ui-scrollbar::-webkit-scrollbar-thumb {
   border-radius: 9999px;
-  background: rgba(163, 163, 163, 0.5);
+  background: rgb(var(--text-muted-rgb) / 0.5);
 }
 
 .ui-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgba(163, 163, 163, 0.72);
+  background: rgb(var(--text-muted-rgb) / 0.72);
 }
 
 .ui-panel {
@@ -123,9 +84,9 @@
 
 .canvas-minimap .react-flow__minimap-mask {
   cursor: grab;
-  stroke: rgba(160, 160, 160, 0.92);
+  stroke: rgb(var(--text-muted-rgb) / 0.92);
   stroke-width: 1.4px;
-  fill: rgba(90, 90, 90, 0.2);
+  fill: rgb(var(--border-rgb) / 0.35);
 }
 
 .canvas-minimap .react-flow__minimap-mask:active {

@@ -108,7 +108,7 @@ export function CustomModelManager() {
       </div>
 
       {models.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
+        <div className="text-center py-8 text-text-faint">
           <p>{t('customModels.empty')}</p>
         </div>
       ) : (
@@ -121,9 +121,9 @@ export function CustomModelManager() {
               <div className="flex-1">
                 <div className="font-medium">{model.name}</div>
                 {model.description && (
-                  <div className="text-sm text-gray-500">{model.description}</div>
+                  <div className="text-sm text-text-faint">{model.description}</div>
                 )}
-                <div className="text-xs text-gray-400 mt-1">
+                <div className="text-xs text-text-muted mt-1">
                   {model.modelUrl}
                 </div>
               </div>
@@ -135,7 +135,7 @@ export function CustomModelManager() {
                   className={`px-3 py-1 rounded text-sm ${
                     model.isEnabled
                       ? 'bg-green-500 text-white'
-                      : 'bg-gray-300 text-gray-700'
+                      : 'bg-layer text-text-muted'
                   }`}
                 >
                   {model.isEnabled ? t('customModels.enabled') : t('customModels.disabled')}

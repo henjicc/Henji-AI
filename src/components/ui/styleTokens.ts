@@ -98,7 +98,17 @@ export const UI_META_BADGE_ACCENT_CLASS =
 export const UI_FIELD_SURFACE_CLASS =
   'bg-surface-dark border border-border-dark text-text-dark';
 
+/* ---------------------------------------------------------------------------
+ * 字段控件高度：两档，都不是 Tailwind 刻度（h-9=36 / h-10=40 都不合），
+ * 所以登记为具名令牌，不要在调用点各写一遍 `h-[38px]` / `h-[42px]`。
+ * 实测收敛前 `h-[38px]` 散落 17 处、`h-[42px]` 散落 4 处，是事实标准但没登记。
+ * ------------------------------------------------------------------------- */
+
+/** 标准档 42px：独立表单字段（输入框、下拉、主按钮） */
 export const UI_FIELD_CONTROL_HEIGHT_CLASS = 'h-[42px]';
+
+/** 紧凑档 38px：参数面板、逐行控件、面板触发器等密集布局 */
+export const UI_FIELD_CONTROL_HEIGHT_SM_CLASS = 'h-[38px]';
 
 /** 字段标签（带块级布局与下间距的表单专用变体，视觉继承 UI_TEXT_LABEL_CLASS） */
 export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;

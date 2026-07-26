@@ -8,12 +8,7 @@ import React, {
   type KeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  UI_FIELD_LABEL_CLASS,
-  UI_DROPDOWN_OPTION_ACTIVE_CLASS,
-  UI_TRIGGER_BUTTON_CLASS,
-  UI_TRIGGER_PANEL_CLASS,
-} from './styleTokens'
+import { UI_DROPDOWN_OPTION_ACTIVE_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton, UiOptionButton } from './primitives'
 import { resolveDropdownDisplay } from './dropdownUtils'
 
@@ -319,7 +314,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         aria-label={ariaLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
         aria-labelledby={ariaLabelledBy}
         className={
-          `${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 h-[38px] ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+          `${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
           } ${buttonClassName || 'w-full'}`
         }
         style={{

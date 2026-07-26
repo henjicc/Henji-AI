@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -164,7 +164,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
             max={param.max}
             step={step}
             placeholder={placeholderText}
-            className="h-[38px] w-28 pr-8"
+            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-28 pr-8`}
           />
           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
             <UiIconButton

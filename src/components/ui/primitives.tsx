@@ -10,23 +10,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motion';
-import {
-  UI_BUTTON_RESET_CLASS,
-  UI_COLOR_ACCENT_BG_CLASS,
-  UI_COLOR_ACCENT_SOFT_BG_CLASS,
-  UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS,
-  UI_COLOR_ACCENT_SOFT_BORDER_CLASS,
-  UI_COLOR_ACCENT_TEXT_CLASS,
-  UI_FIELD_CONTROL_HEIGHT_CLASS,
-  UI_FIELD_DISABLED_CLASS,
-  UI_FIELD_FOCUS_CLASS,
-  UI_FIELD_SURFACE_CLASS,
-  UI_INSET_SURFACE_CLASS,
-  UI_OPTION_ITEM_ACTIVE_CLASS,
-  UI_OPTION_ITEM_CLASS,
-  UI_OPTION_ITEM_HOVER_CLASS,
-  UI_PANEL_SURFACE_CLASS,
-} from './styleTokens';
+import { UI_BUTTON_RESET_CLASS, UI_COLOR_ACCENT_BG_CLASS, UI_COLOR_ACCENT_SOFT_BG_CLASS, UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS, UI_COLOR_ACCENT_SOFT_BORDER_CLASS, UI_COLOR_ACCENT_TEXT_CLASS, UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_DISABLED_CLASS, UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UI_INSET_SURFACE_CLASS, UI_OPTION_ITEM_ACTIVE_CLASS, UI_OPTION_ITEM_CLASS, UI_OPTION_ITEM_HOVER_CLASS, UI_PANEL_SURFACE_CLASS } from './styleTokens';
 import { useDialogTransition } from './useDialogTransition';
 import {
   type ScopedTextHistoryBinding,
@@ -445,7 +429,7 @@ export function UiSelect({ className = '', children, ...props }: UiSelectProps) 
   return (
     <div className="relative">
       <select
-        className={`h-[38px] w-full appearance-none rounded-lg border px-3 pr-8 text-sm ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full appearance-none rounded-lg border px-3 pr-8 text-sm ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
         {...props}
       >
         {children}

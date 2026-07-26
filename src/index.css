@@ -45,16 +45,64 @@
   --success-rgb: 52 211 153;
   --warning-rgb: 251 191 36;
   --danger-rgb: 248 113 113;
-  /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费，
-     当前唯一消费者是 src/features/canvas/storyboard.css。
+  /* 组件级令牌（第三层）：仅供无法使用 Tailwind 类的纯 CSS 文件消费
+     （storyboard.css / ParamsPanel.css / ResolutionPanel 的 styles.css 等）。
      新代码请优先用语义化 Tailwind 类，不要在此新增。 */
   --ui-surface-panel: rgb(23, 23, 23);
   --ui-surface-field: rgba(10, 10, 10, 0.92);
   --ui-border-soft: rgba(255, 255, 255, 0.14);
+  --ui-border-strong: rgba(255, 255, 255, 0.24);
   --ui-shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.38);
   --ui-radius-lg: 12px;
   --ui-radius-xl: 16px;
+  --ui-radius-2xl: 20px;
   --node-radius: 12px;
+}
+
+/*
+ * 圆角预设与主题色调预设。
+ *
+ * ⚠️ 这两组规则原先写在 `src/features/canvas/storyboard.css` 里，而那个文件是
+ * `CanvasWorkspace.tsx` 懒加载的——结果「设置 → 界面 → 圆角尺寸 / 色调」在用户
+ * 没打开过画布工作区之前完全不生效，进过画布之后才突然应用。
+ * 全局主题变量必须待在这个全局加载的文件里。
+ *
+ * `runtimeTheme.applyRuntimeTheme` 负责往 documentElement 写 `data-ui-radius`
+ * 与 `data-theme-tone`，这里只负责这两个属性对应的取值。
+ */
+:root[data-ui-radius='compact'] {
+  --ui-radius-lg: 10px;
+  --ui-radius-xl: 12px;
+  --ui-radius-2xl: 16px;
+  --node-radius: 10px;
+}
+
+:root[data-ui-radius='large'] {
+  --ui-radius-lg: 14px;
+  --ui-radius-xl: 20px;
+  --ui-radius-2xl: 26px;
+  --node-radius: 16px;
+}
+
+/*
+ * 色调预设只改中性色梯度，不动强调色。
+ * 注意：这里的值会被 `applyRuntimeTheme` 写的**内联样式**覆盖（内联优先级更高），
+ * 所以用户在「主题外观」里自定义过 9 个语义色之后色调预设就不再起作用——这是预期行为。
+ */
+:root[data-theme-tone='warm'] {
+  --bg-rgb: 38 38 38;
+  --surface-rgb: 64 64 64;
+  --border-rgb: 82 82 82;
+  --text-rgb: 255 255 255;
+  --text-muted-rgb: 212 212 212;
+}
+
+:root[data-theme-tone='cool'] {
+  --bg-rgb: 10 10 10;
+  --surface-rgb: 23 23 23;
+  --border-rgb: 38 38 38;
+  --text-rgb: 245 245 245;
+  --text-muted-rgb: 163 163 163;
 }
 
 /*
@@ -142,17 +190,17 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(163, 163, 163, 0.4);
+  background: rgb(var(--text-muted-rgb) / 0.4);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(163, 163, 163, 0.65);
+  background: rgb(var(--text-muted-rgb) / 0.65);
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(163, 163, 163, 0.5) transparent;
+  scrollbar-color: rgb(var(--text-muted-rgb) / 0.5) transparent;
 }
 
 /* 动画关键帧 */
@@ -564,13 +612,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(163, 163, 163, 0.4);
+  background: rgb(var(--text-muted-rgb) / 0.4);
   border-radius: 999px;
   transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(163, 163, 163, 0.65);
+  background: rgb(var(--text-muted-rgb) / 0.65);
 }
 
 /* 图片查看器动画 */
@@ -691,7 +739,7 @@ body {
 }
 
 .dropdown-scroll {
-  scrollbar-color: rgba(163, 163, 163, 0.5) transparent;
+  scrollbar-color: rgb(var(--text-muted-rgb) / 0.5) transparent;
 }
 
 .dropdown-scroll::-webkit-scrollbar-track {
@@ -699,7 +747,7 @@ body {
 }
 
 .dropdown-scroll {
-  scrollbar-color: rgba(163, 163, 163, 0.5) transparent;
+  scrollbar-color: rgb(var(--text-muted-rgb) / 0.5) transparent;
 }
 
 /* Number input spinner removal */
@@ -724,7 +772,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .progress-container {
   width: 100%;
   height: 6px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(var(--text-rgb) / 0.2);
   border-radius: 3px;
   cursor: pointer;
   position: relative;
@@ -737,7 +785,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .progress-bar {
   height: 100%;
-  background: #007eff;
+  background: rgb(var(--accent-rgb));
   border-radius: 3px;
   width: 0%;
   position: relative;
@@ -752,7 +800,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   transform: translateY(-50%);
   width: 12px;
   height: 12px;
-  background: #007eff;
+  background: rgb(var(--accent-rgb));
   border-radius: 50%;
   opacity: 0;
   transition: opacity 0.2s;
@@ -785,7 +833,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .btn:hover {
   background: none;
   transform: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgb(var(--text-rgb) / 0.6);
 }
 
 .btn svg {
@@ -801,7 +849,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .time-display {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgb(var(--text-rgb) / 0.9);
   min-width: 100px;
   text-align: center;
 }
@@ -815,7 +863,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .volume-slider {
   width: 80px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(var(--text-rgb) / 0.2);
   border-radius: 2px;
   cursor: pointer;
   position: relative;
@@ -864,7 +912,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .speed-display:hover {
   background: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgb(var(--text-rgb) / 0.6);
 }
 
 .speed-display svg {
@@ -914,12 +962,12 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .speed-option:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgb(var(--text-rgb) / 0.1);
 }
 
 .speed-option.active {
-  background: rgba(0, 126, 255, 0.3);
-  color: #007eff;
+  background: rgb(var(--accent-rgb) / 0.3);
+  color: rgb(var(--accent-rgb));
 }
 
 .controls-right {
@@ -935,7 +983,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .loop-active {
-  color: #007eff;
+  color: rgb(var(--accent-rgb));
 }
 
 @media (max-width: 768px) {
@@ -958,7 +1006,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .volume-percent {
-  color: rgba(255, 255, 255, 0.95);
+  color: rgb(var(--text-rgb) / 0.95);
   font-size: 15px;
   font-weight: 500;
   min-width: 32px;
@@ -969,7 +1017,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   position: relative;
   width: 6px;
   height: 140px;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgb(var(--text-rgb) / 0.15);
   border-radius: 3px;
   cursor: pointer;
 }
@@ -979,7 +1027,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   bottom: 0;
   left: 0;
   width: 100%;
-  background: #007eff;
+  background: rgb(var(--accent-rgb));
   border-radius: 3px;
   pointer-events: none;
 }
@@ -990,7 +1038,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   transform: translate(-50%, 50%);
   width: 10px;
   height: 10px;
-  background: #fff;
+  background: rgb(var(--text-rgb));
   border-radius: 50%;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
   pointer-events: none;
@@ -1009,7 +1057,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   border: 1px solid var(--ui-glass-edge);
   box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
   border-radius: 0.75rem;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--ui-shadow-panel);
   padding: 0.5rem;
   min-width: 180px;
   z-index: 9999;
@@ -1029,7 +1077,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 }
 
 .context-menu-item:hover:not(.disabled) {
-  background: rgba(113, 113, 122, 0.5);
+  background: rgb(var(--border-rgb) / 0.5);
 }
 
 .context-menu-item.disabled {
@@ -1051,7 +1099,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .context-menu-divider {
   height: 1px;
-  background: rgba(113, 113, 122, 0.3);
+  background: rgb(var(--border-rgb) / 0.3);
   margin: 0.25rem 0;
 }
 

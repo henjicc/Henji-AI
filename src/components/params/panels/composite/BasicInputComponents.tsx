@@ -2,7 +2,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
-import { UiInput, UiOptionButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiInput, UiOptionButton } from '@/components/ui'
 import { getI18nText, type I18nText } from '@/core/types'
 
 interface CompositeComponentProps<TConfig> {
@@ -93,7 +93,7 @@ export const CompositeTextInput: React.FC<CompositeComponentProps<TextInputConfi
       placeholder={placeholder}
       maxLength={config.maxLength}
       disabled={disabled}
-      className="h-[38px] w-full"
+      className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
     />
   )
 }
@@ -119,7 +119,7 @@ export const CompositeNumberInput: React.FC<CompositeComponentProps<NumberInputC
       step={config.step}
       placeholder={placeholder}
       disabled={disabled}
-      className="h-[38px] w-full"
+      className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
       onChange={(event) => {
         const parsed = Number(event.target.value)
         if (!Number.isFinite(parsed)) {
@@ -301,7 +301,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
         <UiOptionButton
           type="button"
           variant="flat"
-          className="!h-[38px] !px-3 !py-2 text-sm leading-none"
+          className={`!${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} !px-3 !py-2 text-sm leading-none`}
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >
@@ -311,7 +311,7 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
           <UiOptionButton
             type="button"
             variant="flat"
-            className="!h-[38px] !px-3 !py-2 text-sm leading-none"
+            className={`!${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} !px-3 !py-2 text-sm leading-none`}
             disabled={disabled}
             onClick={() => {
               setErrorText('')

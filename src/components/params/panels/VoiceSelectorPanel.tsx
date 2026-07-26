@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UiButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiInput, UiOptionButton } from '@/components/ui'
 import {
   buildVoiceFeatureTags,
   resolveVoiceFeatureTags,
@@ -422,7 +422,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索音色名称或描述"
-            className="h-[38px] w-full"
+            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-full`}
           />
         </div>
       )}

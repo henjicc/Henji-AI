@@ -1,4 +1,16 @@
 /**
+ * 上传组件样式。
+ *
+ * ⚠️ 现状说明：这份样式表**没有被任何文件 import**，而 `ImageUpload` / `VideoUpload`
+ * 用的正是这里的类名——也就是说这两个组件目前渲染出来是完全无样式的。
+ * 之所以一直没人发现，是因为参数类型 `image-upload` / `video-upload` 没有任何模型在声明
+ * （主上传路径走的是 `FileUploader` / `StackedMediaUploader`），这条渲染分支实际不可达。
+ *
+ * 这里只把颜色改成语义变量，保证真要启用时能跟随主题；是否彻底删掉这条遗留分支
+ * （连带 ParamRenderer 的映射与 ComponentTypes 里的类型声明）属于产品决策，未在本次处理。
+ */
+
+/**
  * 上传组件样式
  */
 
@@ -18,24 +30,24 @@
 .upload-area {
   width: 120px;
   height: 120px;
-  border: 2px dashed #d9d9d9;
+  border: 2px dashed rgb(var(--border-rgb));
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.3s;
-  background-color: #fafafa;
+  background-color: rgb(var(--text-rgb));
 }
 
 .upload-area:hover:not(.disabled):not(.uploading) {
-  border-color: #1890ff;
-  background-color: #f0f8ff;
+  border-color: rgb(var(--accent-rgb));
+  background-color: rgb(var(--accent-rgb) / 0.12);
 }
 
 .upload-area.dragging {
-  border-color: #1890ff;
-  background-color: #e6f7ff;
+  border-color: rgb(var(--accent-rgb));
+  background-color: rgb(var(--accent-rgb) / 0.18);
   transform: scale(1.02);
 }
 
@@ -47,7 +59,7 @@
 .upload-area.disabled {
   cursor: not-allowed;
   opacity: 0.5;
-  background-color: #f5f5f5;
+  background-color: rgb(var(--surface-rgb));
 }
 
 /* 上传提示 */
@@ -61,17 +73,17 @@
 }
 
 .upload-icon {
-  color: #8c8c8c;
+  color: rgb(var(--text-muted-rgb));
 }
 
 .upload-text {
   font-size: 14px;
-  color: #595959;
+  color: rgb(var(--text-rgb));
 }
 
 .upload-limit {
   font-size: 12px;
-  color: #8c8c8c;
+  color: rgb(var(--text-muted-rgb));
 }
 
 /* 上传进度 */
@@ -85,8 +97,8 @@
 .upload-spinner {
   width: 24px;
   height: 24px;
-  border: 3px solid #f0f0f0;
-  border-top-color: #1890ff;
+  border: 3px solid rgb(var(--border-rgb));
+  border-top-color: rgb(var(--accent-rgb));
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -102,8 +114,8 @@
   height: 120px;
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #d9d9d9;
-  background-color: #fafafa;
+  border: 1px solid rgb(var(--border-rgb));
+  background-color: rgb(var(--text-rgb));
 }
 
 .preview-content {
@@ -142,7 +154,7 @@
   padding: 0;
   border: none;
   border-radius: 4px;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgb(var(--app-rgb) / 0.6);
   color: white;
   cursor: pointer;
   display: flex;
@@ -152,24 +164,24 @@
 }
 
 .preview-btn:hover {
-  background-color: rgba(0, 0, 0, 0.8);
+  background-color: rgb(var(--app-rgb) / 0.8);
   transform: scale(1.1);
 }
 
 .preview-btn-edit {
-  background-color: rgba(24, 144, 255, 0.8);
+  background-color: rgb(var(--text-soft-rgb) / 0.8);
 }
 
 .preview-btn-edit:hover {
-  background-color: rgba(24, 144, 255, 1);
+  background-color: rgb(var(--text-soft-rgb) / 1);
 }
 
 .preview-btn-delete {
-  background-color: rgba(255, 77, 79, 0.8);
+  background-color: rgb(var(--text-muted-rgb) / 0.8);
 }
 
 .preview-btn-delete:hover {
-  background-color: rgba(255, 77, 79, 1);
+  background-color: rgb(var(--text-muted-rgb) / 1);
 }
 
 /* 预览元数据 */
@@ -179,7 +191,7 @@
   left: 0;
   right: 0;
   padding: 4px 8px;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: rgb(var(--app-rgb) / 0.6);
   color: white;
   font-size: 11px;
   display: flex;

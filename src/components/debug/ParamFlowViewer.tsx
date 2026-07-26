@@ -8,7 +8,7 @@ import type { ParamFlowRecord, FlowStage } from '@/core/debug/types'
 import { ValueDisplay } from './ValueDisplay'
 import { SourceBadge } from './SourceBadge'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton } from '@/components/ui'
+import { UiButton, UiPanel } from '@/components/ui'
 
 interface ParamFlowViewerProps {
   record: ParamFlowRecord
@@ -19,11 +19,11 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
   const { t } = useI18n('ui')
 
   return (
-    <div className="border border-gray-700 rounded-lg p-4 mt-4 bg-gray-900">
+    <UiPanel className="p-4 mt-4">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-white">{t('debug.paramFlow.title')}</h3>
         <div className="flex gap-2 items-center">
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-text-muted">
             {t('debug.paramFlow.modelLabel')}: {record.modelId}
           </span>
           {onExport && (
@@ -44,7 +44,7 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
           <StageView key={index} stage={stage} />
         ))}
       </div>
-    </div>
+    </UiPanel>
   )
 }
 
@@ -87,7 +87,7 @@ function StageView({ stage }: StageViewProps) {
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4">
+    <div className="bg-surface-dark rounded-lg p-4">
       <h4 className={`text-sm font-semibold mb-3 ${getStageColor()}`}>
         {getStageTitle()}
       </h4>
@@ -95,16 +95,16 @@ function StageView({ stage }: StageViewProps) {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-700">
-              <th className="text-left py-2 px-3 text-gray-400 font-medium">{t('debug.paramFlow.table.param')}</th>
-              <th className="text-left py-2 px-3 text-gray-400 font-medium">{t('debug.paramFlow.table.value')}</th>
-              <th className="text-left py-2 px-3 text-gray-400 font-medium">{t('debug.paramFlow.table.source')}</th>
+            <tr className="border-b border-border-dark">
+              <th className="text-left py-2 px-3 text-text-muted font-medium">{t('debug.paramFlow.table.param')}</th>
+              <th className="text-left py-2 px-3 text-text-muted font-medium">{t('debug.paramFlow.table.value')}</th>
+              <th className="text-left py-2 px-3 text-text-muted font-medium">{t('debug.paramFlow.table.source')}</th>
             </tr>
           </thead>
           <tbody>
             {paramEntries.map(([key, record]) => (
-              <tr key={key} className="border-b border-gray-700 last:border-0">
-                <td className="py-2 px-3 text-gray-300 font-mono text-xs">
+              <tr key={key} className="border-b border-border-dark last:border-0">
+                <td className="py-2 px-3 text-text-soft font-mono text-xs">
                   {key}
                 </td>
                 <td className="py-2 px-3">

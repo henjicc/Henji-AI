@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { UiButton, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_CLASS, UiButton, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
@@ -163,7 +163,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
               onClick={handleClose}
               variant="primary"
               size="sm"
-              className="h-[42px] px-5 text-base font-medium"
+              className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} px-5 text-base font-medium`}
             >
               {t('actions.close')}
             </UiButton>

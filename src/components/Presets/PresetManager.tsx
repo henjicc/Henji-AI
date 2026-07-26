@@ -47,9 +47,9 @@ function PresetItem({ preset, currentModelId, onApply, onToggleFavorite, onDelet
             )}
           </div>
           {preset.description && (
-            <p className="text-sm text-gray-400 mb-2">{preset.description}</p>
+            <p className="text-sm text-text-muted mb-2">{preset.description}</p>
           )}
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-text-faint">
             <span>{preset.modelId || t('ui:presets.labels.allModels')}</span>
             <span className="mx-2">·</span>
             <span>{t('ui:presets.labels.usageCount', { count: preset.useCount })}</span>
@@ -149,11 +149,11 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
 
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-gray-500">{t('common:loading')}</div>
+            <div className="text-text-faint">{t('common:loading')}</div>
           </div>
         ) : presets.length === 0 ? (
           <div className="flex items-center justify-center py-8">
-            <div className="text-gray-500">{t('ui:presets.manager.empty')}</div>
+            <div className="text-text-faint">{t('ui:presets.manager.empty')}</div>
           </div>
         ) : (
           <div className="preset-list overflow-y-auto flex-1">
