@@ -41,7 +41,7 @@ export function PromptOptimizationSelectorPanel({
               key={profile.id}
               type="button"
               active={profile.id === selectedProfileId}
-              variant="card"
+              variant="menu"
               onClick={() => onSelectProfile(profile.id)}
               className="w-full justify-start gap-2 px-3 py-3 text-left"
               disabled={optimizing}

@@ -71,7 +71,14 @@ interface UiSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
 
 interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
-  variant?: 'default' | 'card' | 'flat';
+  /**
+   * `menu`：静息态完全透明，只靠 hover 与选中态表达状态。
+   *
+   * 用于**同质选项的集合**（菜单项、模型网格、列表项）：一屏里几十个选项各自描边时，
+   * 边框互相抵消、不再传递任何信息，只剩视觉重量。可点击性由 hover 反馈与排布规律表达，
+   * 不需要静息态的框。孤立的单个按钮不适用，那种情况下框才真的在划定边界。
+   */
+  variant?: 'default' | 'card' | 'flat' | 'menu';
 }
 
 interface UiInputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -248,6 +255,12 @@ UiPanel.displayName = 'UiPanel';
 export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>(
   ({ className = '', active = false, variant = 'default', ...props }, ref) => {
     const stateClass = (() => {
+      if (variant === 'menu') {
+        return active
+          ? UI_OPTION_ITEM_ACTIVE_CLASS
+          : 'border-transparent bg-transparent text-text-dark hover:bg-layer';
+      }
+
       if (variant === 'card') {
         return active
           ? 'border-accent bg-brand-600 text-white'

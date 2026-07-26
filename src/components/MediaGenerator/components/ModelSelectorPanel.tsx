@@ -9,7 +9,6 @@ import {
   UiInput,
   UiMarqueeText,
   UiOptionButton,
-  UI_CARD_ACTIVE_STRONG_CLASS,
   UI_CHIP_ACTIVE_STRONG_CLASS,
   UI_HIGHLIGHT_RING_INSET_CLASS
 } from '@/components/ui'
@@ -354,11 +353,12 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 data-close-on-select
                 onClick={() => onModelSelect(p.id, m.id)}
                 active={isSelected}
-                variant="card"
-                className={`relative w-full flex-col items-start border px-3 py-2.5 ${isSelected
-                  ? UI_CARD_ACTIVE_STRONG_CLASS
-                  : 'border-zinc-700/45 bg-zinc-600/10 text-zinc-100 hover:border-zinc-600/55 hover:bg-zinc-700/40'
-                  } ${isHighlighted ? UI_HIGHLIGHT_RING_INSET_CLASS : ''}`}
+                variant="menu"
+                // 网格是二维的：静息态留一层极淡底色撑出格子形状（否则列边界会糊），
+                // 但不再描边——底色已经表达过一次边界，边框是多余的第二次。
+                className={`relative w-full flex-col items-start px-3 py-2.5 ${
+                  isSelected ? '' : 'bg-veil-faint'
+                } ${isHighlighted ? UI_HIGHLIGHT_RING_INSET_CLASS : ''}`}
               >
                 {/* 两列两行（表格式）: 左列=名称/供应商，右列=收藏/类型 */}
                 <div className={`grid w-full grid-cols-[minmax(0,1fr)_auto] ${MODEL_CARD_COLUMN_GAP_CLASS} ${MODEL_CARD_ROW_GAP_CLASS}`}>

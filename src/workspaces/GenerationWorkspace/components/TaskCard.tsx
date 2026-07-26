@@ -422,7 +422,9 @@ const TaskCard = React.memo(function TaskCard({
           <div className="absolute top-0 right-0 flex gap-2">
             <UiIconButton
               onClick={() => onUsePrompt(task.prompt)}
-              className="!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50"
+              showBorder={false}
+              appearance="hover-only"
+              className="!h-8 !w-8"
               title={t("ui:workspace.actions.usePrompt")}
             >
               <UsePromptIcon className="h-4 w-4" />
@@ -433,7 +435,9 @@ const TaskCard = React.memo(function TaskCard({
                   for (const fp of splitMulti(task.result!.filePath!)) await collectResult(fp, task.type)
                 }}
                 disabled={collecting}
-                className={`!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50 ${resultFilePaths.length > 0 && resultFilePaths.every((filePath) => collectedPaths.has(filePath)) ? '!text-emerald-400' : ''}`}
+                showBorder={false}
+                appearance="hover-only"
+                className={`!h-8 !w-8 ${resultFilePaths.length > 0 && resultFilePaths.every((filePath) => collectedPaths.has(filePath)) ? '!text-emerald-400' : ''}`}
                 title={t("ui:assetLibrary.collect")}
               >
                 {resultFilePaths.length > 0 && resultFilePaths.every((filePath) => collectedPaths.has(filePath)) ? <FolderCheck className="h-4 w-4" /> : <FolderPlus className="h-4 w-4" />}
@@ -446,7 +450,9 @@ const TaskCard = React.memo(function TaskCard({
                     await onDownload(fp, true)
                   }
                 }}
-                className="!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50"
+                showBorder={false}
+              appearance="hover-only"
+              className="!h-8 !w-8"
                 title={t("common:actions.download")}
               >
                 <DownloadIcon className="h-4 w-4" />
@@ -454,7 +460,9 @@ const TaskCard = React.memo(function TaskCard({
             )}
             <UiIconButton
               onClick={() => onRegenerate(task)}
-              className="!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50"
+              showBorder={false}
+              appearance="hover-only"
+              className="!h-8 !w-8"
               title={t("ui:workspace.actions.regenerate")}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -463,7 +471,9 @@ const TaskCard = React.memo(function TaskCard({
             </UiIconButton>
             <UiIconButton
               onClick={() => onReedit(task)}
-              className="!h-8 !w-8 bg-zinc-700/40 hover:bg-zinc-600/50"
+              showBorder={false}
+              appearance="hover-only"
+              className="!h-8 !w-8"
               title={t("ui:workspace.actions.reedit")}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -473,7 +483,9 @@ const TaskCard = React.memo(function TaskCard({
             <UiIconButton
               onClick={() => onDelete(task.id)}
               hoverVariant="danger"
-              className="!h-8 !w-8 bg-zinc-700/40"
+              showBorder={false}
+              appearance="hover-only"
+              className="!h-8 !w-8"
               title={t("common:delete")}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
