@@ -7,6 +7,7 @@ import {
   UiIconButton,
   UiInput,
   UiPanel,
+  UiSwitch,
 } from '@/components/ui';
 import SectionCard from '../components/SectionCard';
 import { useI18n } from '@/hooks/useI18n';
@@ -27,10 +28,12 @@ import SettingsDialog from '../components/SettingsDialog';
 interface ThemeSectionProps {
   themeTonePreset: ThemeTonePreset;
   uiRadiusPreset: UiRadiusPreset;
+  uiBlurEnabled: boolean;
   accentColor: string;
   colors: ThemeColorScheme;
   onChangeThemeTone: (preset: ThemeTonePreset) => void;
   onChangeUiRadius: (preset: UiRadiusPreset) => void;
+  onChangeUiBlurEnabled: (enabled: boolean) => void;
   onChangeAccentColor: (color: string) => void;
   onChangeThemeColor: (token: ThemeColorToken, color: string) => void;
   onApplyPalette: (colors: Partial<ThemeColorScheme>) => void;
@@ -54,10 +57,12 @@ const tokenLabelKeyMap: Record<ThemeColorToken, string> = {
 const ThemeSection: React.FC<ThemeSectionProps> = ({
   themeTonePreset,
   uiRadiusPreset,
+  uiBlurEnabled,
   accentColor,
   colors,
   onChangeThemeTone,
   onChangeUiRadius,
+  onChangeUiBlurEnabled,
   onChangeAccentColor,
   onChangeThemeColor,
   onApplyPalette,
@@ -126,6 +131,18 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
             onSelect={(value) => onChangeUiRadius(value as UiRadiusPreset)}
             className="w-full"
           />
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-sm font-medium text-text-soft">
+              {t('sections.theme.blur.label')}
+            </div>
+            <div className="mt-1 text-xs text-text-faint">
+              {t('sections.theme.blur.hint')}
+            </div>
+          </div>
+          <UiSwitch checked={uiBlurEnabled} onCheckedChange={onChangeUiBlurEnabled} />
         </div>
 
         <div className="space-y-3">

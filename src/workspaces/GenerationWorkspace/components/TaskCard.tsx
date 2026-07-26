@@ -327,7 +327,7 @@ const TaskCard = React.memo(function TaskCard({
         >
           <video src={videoUrl} className="w-full h-auto block" draggable={false} muted preload="metadata" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="h-10 w-10 rounded-full bg-panel/60 backdrop-blur-sm flex items-center justify-center text-white">
+            <div className="h-10 w-10 rounded-full bg-panel/60 backdrop-blur-ui flex items-center justify-center text-white">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
                 <path d="M8 5v14l11-7z" />
               </svg>

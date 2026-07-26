@@ -18,7 +18,7 @@ export function NotificationToast({ notification, visible }: NotificationToastPr
       }`}
     >
       <div
-        className={`px-6 py-3 rounded-xl shadow-panel backdrop-blur-md border flex items-center gap-3 ${
+        className={`px-6 py-3 rounded-xl shadow-panel border flex items-center gap-3 ${
           isSuccess
             ? 'bg-green-500/20 border-green-500/30 text-green-100'
             : 'bg-red-500/20 border-red-500/30 text-red-100'

@@ -235,9 +235,18 @@
       "collapseOnScrollHint": "Only collapse while scrolling history"
     },
     "assetLibrary": {
-      "title": "Asset Library", "tabAction": "Title-bar click action", "floating": "Open floating panel", "workspace": "Open full workspace",
-      "panelPosition": "Floating panel position", "top": "Top", "left": "Left", "right": "Right",
-      "edgeTrigger": "Enable edge trigger", "edgeHint": "Suppressed during canvas interaction and pointer dragging", "triggerEdge": "Trigger edge", "delay": "Trigger delay ({{value}} ms)"
+      "title": "Asset Library",
+      "tabAction": "Title-bar click action",
+      "floating": "Open floating panel",
+      "workspace": "Open full workspace",
+      "panelPosition": "Floating panel position",
+      "top": "Top",
+      "left": "Left",
+      "right": "Right",
+      "edgeTrigger": "Enable edge trigger",
+      "edgeHint": "Suppressed during canvas interaction and pointer dragging",
+      "triggerEdge": "Trigger edge",
+      "delay": "Trigger delay ({{value}} ms)"
     },
     "theme": {
       "title": "Theme Appearance",
@@ -253,6 +262,10 @@
         "compact": "Compact",
         "default": "Default",
         "large": "Large"
+      },
+      "blur": {
+        "label": "Frosted Glass",
+        "hint": "Blur the backdrop when a panel sits over images, video, or the canvas. Turning it off uses solid backgrounds and lowers compositing cost."
       },
       "palette": {
         "label": "Palette Presets"

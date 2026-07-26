@@ -71,7 +71,7 @@ function CanvasConnectionToast({ toast }: { toast: CanvasToastState | null }) {
     <div className="pointer-events-none absolute left-1/2 top-4 z-toast -translate-x-1/2">
       <div
         key={toast.id}
-        className={`rounded-lg border px-4 py-2 text-sm font-medium shadow-panel backdrop-blur-md ${
+        className={`rounded-lg border px-4 py-2 text-sm font-medium shadow-panel ${
           toast.type === 'success'
             ? 'border-green-500/30 bg-green-500/20 text-green-100'
             : 'border-red-400/30 bg-red-500/15 text-red-100'

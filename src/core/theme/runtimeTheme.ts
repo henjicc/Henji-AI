@@ -27,6 +27,11 @@ export interface RuntimeThemeConfig {
   uiRadiusPreset: UiRadiusPreset;
   accentColor: string;
   colors: ThemeColorScheme;
+  /**
+   * 界面毛玻璃。刻意不进 RuntimeThemePayload——它是观感/性能偏好，
+   * 不属于可导出分享的配色方案。这里只负责把它同步到 documentElement。
+   */
+  uiBlurEnabled: boolean;
 }
 
 export interface RuntimeThemePayload {
@@ -177,7 +182,10 @@ export function normalizeThemeColorScheme(input?: Partial<ThemeColorScheme>): Th
   }, { ...DEFAULT_THEME_COLOR_SCHEME });
 }
 
-export function createRuntimeThemePayload(config: RuntimeThemeConfig): RuntimeThemePayload {
+/** 导出的是可分享的配色方案，不含 uiBlurEnabled 这类本机观感偏好 */
+export function createRuntimeThemePayload(
+  config: Omit<RuntimeThemeConfig, 'uiBlurEnabled'>
+): RuntimeThemePayload {
   return {
     version: 1,
     themeTonePreset: config.themeTonePreset,
@@ -225,6 +233,12 @@ export function applyRuntimeTheme(config: RuntimeThemeConfig): void {
   for (const token of THEME_COLOR_TOKENS) {
     const cssVarName = THEME_COLOR_VAR_MAP[token];
     root.style.setProperty(cssVarName, toRgbVarValue(normalizedColors[token]));
+  }
+
+  if (config.uiBlurEnabled) {
+    delete root.dataset.uiBlur;
+  } else {
+    root.dataset.uiBlur = 'off';
   }
 
   applyTextScale(root, normalizedColors.text, normalizedColors.textMuted);

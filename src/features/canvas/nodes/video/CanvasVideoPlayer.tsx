@@ -131,7 +131,7 @@ export function CanvasVideoPlayer({
           <UiIconButton
             aria-label="播放"
             showBorder={false}
-            className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full !border-white/15 !bg-black/50 !text-white shadow-panel backdrop-blur-md hover:!bg-black/65"
+            className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full !border-white/15 !bg-black/50 !text-white shadow-panel backdrop-blur-ui hover:!bg-black/65"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();

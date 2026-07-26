@@ -39,6 +39,11 @@ export default {
         thumb: '0 8px 16px rgb(0 0 0 / 0.45)',
         'thumb-sm': '0 6px 14px rgb(0 0 0 / 0.42)',
       },
+      // 毛玻璃唯一档位。业务代码一律写 `backdrop-blur-ui`，不要再用 Tailwind 自带的
+      // sm/md/lg/xl —— 那会让"同一视觉意图有六种写法"重演，也躲开设置里的开关。
+      backdropBlur: {
+        ui: 'var(--ui-blur)',
+      },
       borderRadius: {
         // 时间轴关键帧菱形标记的极小圆角
         hairline: '1px',

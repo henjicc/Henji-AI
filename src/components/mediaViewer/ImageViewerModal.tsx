@@ -15,7 +15,7 @@ const ViewerMarkEditor = React.lazy(() =>
 );
 
 const VIEWER_CONTROL_CLASS =
-  'inline-flex h-10 items-center justify-center rounded-full border border-white/20 bg-black/60 px-4 text-sm text-white backdrop-blur-xl';
+  'inline-flex h-10 items-center justify-center rounded-full border border-white/20 bg-black/60 px-4 text-sm text-white backdrop-blur-ui';
 const VIEWER_ICON_BUTTON_CLASS =
   '!h-10 !w-10 !rounded-full !border-white/20 !bg-black/60 !text-white hover:!bg-black/70';
 
@@ -180,7 +180,7 @@ export function ImageViewerModal({
           <UiButton
             variant="muted"
             size="sm"
-            className="rounded-full px-4 backdrop-blur-xl"
+            className="rounded-full px-4 backdrop-blur-ui"
             onClick={onEnterEditor}
             title={t('common.edit', '编辑')}
           >

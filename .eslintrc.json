@@ -49,6 +49,14 @@
         "message": "禁止 zinc 等固定调色板：它不会跟随主题预设。请用语义色：bg-app/panel/surface-dark/layer、text-text-dark/text-soft/text-muted/text-faint、border-border-dark，媒体与玻璃质感边框用 veil 档位。"
       },
       {
+        "selector": "Literal[value=/backdrop-blur-(?!ui\\b)/]",
+        "message": "毛玻璃只有 backdrop-blur-ui 一档（取值来自 --ui-blur）。用 Tailwind 自带的 sm/md/lg/xl 会让同一视觉意图出现多种写法，也躲开「设置→界面→毛玻璃效果」的开关。"
+      },
+      {
+        "selector": "TemplateElement[value.raw=/backdrop-blur-(?!ui\\b)/]",
+        "message": "毛玻璃只有 backdrop-blur-ui 一档（取值来自 --ui-blur）。用 Tailwind 自带的 sm/md/lg/xl 会让同一视觉意图出现多种写法，也躲开「设置→界面→毛玻璃效果」的开关。"
+      },
+      {
         "selector": "Literal[value=/text-\\[[0-9.]+(px|rem)\\]/]",
         "message": "禁止内联像素字号，请使用已登记档位：text-4xs/3xs/2xs/13/14/15 或 text-xs/sm/base。"
       },

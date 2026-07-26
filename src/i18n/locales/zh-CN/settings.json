@@ -235,9 +235,18 @@
       "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠"
     },
     "assetLibrary": {
-      "title": "资产库行为", "tabAction": "标题栏点击行为", "floating": "打开悬浮面板", "workspace": "进入完整工作区",
-      "panelPosition": "悬浮面板位置", "top": "顶部", "left": "左侧", "right": "右侧",
-      "edgeTrigger": "启用鼠标触边唤起", "edgeHint": "画布交互和按键拖动期间不会触发", "triggerEdge": "触发边缘", "delay": "触发延迟（{{value}} ms）"
+      "title": "资产库行为",
+      "tabAction": "标题栏点击行为",
+      "floating": "打开悬浮面板",
+      "workspace": "进入完整工作区",
+      "panelPosition": "悬浮面板位置",
+      "top": "顶部",
+      "left": "左侧",
+      "right": "右侧",
+      "edgeTrigger": "启用鼠标触边唤起",
+      "edgeHint": "画布交互和按键拖动期间不会触发",
+      "triggerEdge": "触发边缘",
+      "delay": "触发延迟（{{value}} ms）"
     },
     "theme": {
       "title": "主题外观",
@@ -253,6 +262,10 @@
         "compact": "紧凑",
         "default": "默认",
         "large": "舒展"
+      },
+      "blur": {
+        "label": "毛玻璃效果",
+        "hint": "浮层压在图片、视频、画布之上时虚化背景。关闭后统一改用不透明底色，可减少合成开销。"
       },
       "palette": {
         "label": "主题色板"

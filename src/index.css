@@ -11,6 +11,13 @@
   /* 文字四档中间两级，由 runtimeTheme 从 text/text-muted 派生，会跟随主题预设 */
   --text-soft-rgb: 214 214 214;
   --text-faint-rgb: 114 114 114;
+  /*
+   * 毛玻璃唯一档位。此前散落 6 个不同数值（Tailwind 的 sm/md/xl 三档 + CSS 里
+   * 手写的 10/12/24px 两套系统并存），同一视觉意图有六种写法。
+   * 收敛成一个变量后，「设置 → 界面 → 毛玻璃效果」关掉时把它置 0 即可全局生效。
+   * 用法：Tailwind 写 `backdrop-blur-ui`，CSS 写 `backdrop-filter: blur(var(--ui-blur))`。
+   */
+  --ui-blur: 12px;
   --accent-rgb: 59 130 246;
   --app-rgb: 10 10 10;
   --canvas-rgb: 10 10 10;
@@ -33,6 +40,11 @@
   --ui-radius-lg: 12px;
   --ui-radius-xl: 16px;
   --node-radius: 12px;
+}
+
+/* 关闭毛玻璃：所有走 --ui-blur 的地方一起变成不模糊，组件不需要各自适配 */
+:root[data-ui-blur='off'] {
+  --ui-blur: 0px;
 }
 
 html,
@@ -397,13 +409,11 @@ body,
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.992);
-    backdrop-filter: blur(0);
   }
 
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
-    backdrop-filter: blur(12px);
   }
 }
 
@@ -411,13 +421,11 @@ body,
   from {
     opacity: 1;
     transform: translateY(0) scale(1);
-    backdrop-filter: blur(12px);
   }
 
   to {
     opacity: 0;
     transform: translateY(-5px) scale(0.996);
-    backdrop-filter: blur(0);
   }
 }
 
@@ -809,7 +817,7 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(var(--ui-blur));
   z-index: 20;
   opacity: 0;
   pointer-events: none;
@@ -925,8 +933,8 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .context-menu {
   position: fixed;
   background: rgba(19, 19, 19, 0.75);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(var(--ui-blur));
+  backdrop-filter: blur(var(--ui-blur));
   border: 1px solid rgba(113, 113, 122, 0.5);
   border-radius: 0.75rem;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);

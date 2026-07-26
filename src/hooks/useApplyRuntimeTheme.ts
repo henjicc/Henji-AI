@@ -7,6 +7,7 @@ export function useApplyRuntimeTheme(): void {
   const uiRadiusPreset = useSettingsStore((state) => state.uiRadiusPreset);
   const accentColor = useSettingsStore((state) => state.accentColor);
   const colors = useSettingsStore((state) => state.themeColors);
+  const uiBlurEnabled = useSettingsStore((state) => state.uiBlurEnabled);
 
   useEffect(() => {
     applyRuntimeTheme({
@@ -14,7 +15,8 @@ export function useApplyRuntimeTheme(): void {
       uiRadiusPreset,
       accentColor,
       colors,
+      uiBlurEnabled,
     });
-  }, [themeTonePreset, uiRadiusPreset, accentColor, colors]);
+  }, [themeTonePreset, uiRadiusPreset, accentColor, colors, uiBlurEnabled]);
 }
 

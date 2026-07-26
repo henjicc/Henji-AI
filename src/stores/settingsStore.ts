@@ -55,6 +55,8 @@ interface SettingsState {
   logCaptureMode: LogCaptureMode;
   uiRadiusPreset: UiRadiusPreset;
   themeTonePreset: ThemeTonePreset;
+  /** 界面毛玻璃效果。关闭后 `--ui-blur` 置 0，所有走该令牌的浮层一起变成不模糊 */
+  uiBlurEnabled: boolean;
   accentColor: string;
   themeColors: ThemeColorScheme;
   assetTabAction: AssetTabAction;
@@ -83,6 +85,7 @@ interface SettingsState {
   setLogCaptureMode: (mode: LogCaptureMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
+  setUiBlurEnabled: (enabled: boolean) => void;
   setAccentColor: (color: string) => void;
   setThemeColor: (token: ThemeColorToken, color: string) => void;
   setThemeColors: (colors: Partial<ThemeColorScheme>) => void;
@@ -206,6 +209,7 @@ export const useSettingsStore = create<SettingsState>()(
       logCaptureMode: 'standard',
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
+      uiBlurEnabled: true,
       accentColor: SETTINGS_ACCENT_HEX,
       themeColors: DEFAULT_THEME_COLOR_SCHEME,
       assetTabAction: 'floating',
@@ -267,6 +271,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
       setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
+      setUiBlurEnabled: (uiBlurEnabled) => set({ uiBlurEnabled }),
       setAccentColor: (color) => set({ accentColor: normalizeHexColor(color) }),
       setThemeColor: (token, color) =>
         set((state) => ({

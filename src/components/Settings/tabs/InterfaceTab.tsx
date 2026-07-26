@@ -29,6 +29,8 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
   const themeColors = useSettingsStore((state) => state.themeColors)
   const setThemeTonePreset = useSettingsStore((state) => state.setThemeTonePreset)
   const setUiRadiusPreset = useSettingsStore((state) => state.setUiRadiusPreset)
+  const uiBlurEnabled = useSettingsStore((state) => state.uiBlurEnabled)
+  const setUiBlurEnabled = useSettingsStore((state) => state.setUiBlurEnabled)
   const setAccentColor = useSettingsStore((state) => state.setAccentColor)
   const setThemeColor = useSettingsStore((state) => state.setThemeColor)
   const setThemeColors = useSettingsStore((state) => state.setThemeColors)
@@ -102,10 +104,12 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
           <ThemeSection
             themeTonePreset={themeTonePreset}
             uiRadiusPreset={uiRadiusPreset}
+            uiBlurEnabled={uiBlurEnabled}
             accentColor={accentColor}
             colors={themeColors}
             onChangeThemeTone={setThemeTonePreset}
             onChangeUiRadius={setUiRadiusPreset}
+            onChangeUiBlurEnabled={setUiBlurEnabled}
             onChangeAccentColor={setAccentColor}
             onChangeThemeColor={setThemeColor}
             onApplyPalette={setThemeColors}
