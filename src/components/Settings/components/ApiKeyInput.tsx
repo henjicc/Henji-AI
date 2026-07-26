@@ -1,6 +1,6 @@
 import React from 'react'
 import { Eye, EyeOff } from 'lucide-react'
-import { UiButton, UiInput, UI_FIELD_CONTROL_HEIGHT_CLASS } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput } from '@/components/ui'
 
 interface ApiKeyInputProps {
   label?: string
@@ -28,7 +28,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   const toggleLabel = visible ? hideLabel : showLabel
   return (
     <div className="mb-4">
-      {label ? <label className="mb-2 block text-sm font-medium text-text-dark">{label}</label> : null}
+      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <div className="flex gap-2">
         <UiInput
           type={visible ? 'text' : 'password'}
@@ -48,7 +48,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
         </UiButton>
       </div>
-      {hint ? <div className="mt-2 text-xs text-text-muted">{hint}</div> : null}
+      {hint ? <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { UI_FIELD_CONTROL_HEIGHT_CLASS, UI_TEXT_TITLE_CLASS, UiButton, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
+import { UI_TEXT_TITLE_CLASS, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
@@ -103,74 +103,64 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       contentClassName="flex min-h-0 flex-1"
     >
       <div
-        className="flex w-full"
-        style={{ height: '76vh', minHeight: '500px', maxHeight: '940px' }}
+        className="flex w-full flex-col bg-app"
+        style={{ height: 'calc(76vh - 72px)', minHeight: '440px', maxHeight: '868px' }}
       >
-        <div className="flex w-[156px] flex-col border-r border-border-dark bg-app">
-          {/* 这一格原先是纯占位（只有边框没有内容），弹窗又用了 hideHeader，
-              结果整个设置面板没有标题、左上角是个突兀的空格子。 */}
-          <div className={`flex h-[58px] items-center border-b border-border-dark px-4 ${UI_TEXT_TITLE_CLASS}`}>
-            {t('title')}
-          </div>
-          <div className="flex-1 py-3">
-            {tabs.map(tab => (
-                <UiNavButton
-                  key={tab.id}
-                  active={activeTab === tab.id}
-                  onClick={() => handleTabSelect(tab.id)}
-                >
-                <tab.icon className="h-[18px] w-[18px] shrink-0" />
-                <span className="ml-3 font-medium text-15 leading-none text-left">{tab.label}</span>
-              </UiNavButton>
-            ))}
-          </div>
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border-dark px-4">
+          <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>
+          <UiIconButton
+            onClick={handleClose}
+            aria-label={t('actions.close')}
+            showBorder={false}
+            appearance="hover-only"
+            className="!h-9 !w-9 rounded-lg text-text-soft hover:text-white"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </UiIconButton>
         </div>
 
-        <div className="flex h-full flex-1 flex-col bg-app">
-          <div className="flex h-[58px] items-center justify-end border-b border-border-dark bg-app px-3">
-            <UiIconButton
-              onClick={handleClose}
-              aria-label={t('actions.close')}
-              showBorder={false}
-              appearance="hover-only"
-              className="!h-9 !w-9 rounded-lg text-text-soft hover:text-white"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </UiIconButton>
-          </div>
-
-          <div className="flex-1 min-h-0 flex">
-            <div className="w-[190px] border-r border-border-dark bg-app py-3">
-              <div className="space-y-1.5">
-                {activeSections.map(section => (
-                  <UiNavButton
-                    key={section.id}
-                    active={activeSectionId === section.id}
-                    onClick={() => handleSectionSelect(section.id)}
-                    className="!h-10 !px-3 !gap-0 text-sm"
-                  >
-                    {section.label}
-                  </UiNavButton>
-                ))}
-              </div>
+        <div className="flex min-h-0 flex-1">
+          <nav
+            aria-label={t('title')}
+            className="ui-scrollbar w-52 shrink-0 overflow-y-auto border-r border-border-dark p-2"
+          >
+            <div className="space-y-1">
+              {tabs.map(tab => {
+                const expanded = activeTab === tab.id
+                return (
+                  <div key={tab.id}>
+                    <UiNavButton
+                      aria-expanded={expanded}
+                      onClick={() => handleTabSelect(tab.id)}
+                      className={`!h-10 !rounded-lg !px-3 ${expanded ? '!text-text-dark' : ''}`}
+                    >
+                      <tab.icon className="h-[18px] w-[18px] shrink-0" />
+                      <span className="ml-2 text-left text-sm font-medium leading-none">{tab.label}</span>
+                    </UiNavButton>
+                    {expanded ? (
+                      <div className="space-y-1 py-1">
+                        {activeSections.map(section => (
+                          <UiNavButton
+                            key={section.id}
+                            active={activeSectionId === section.id}
+                            onClick={() => handleSectionSelect(section.id)}
+                            className="!h-9 !rounded-lg !pl-11 !pr-3 text-sm"
+                          >
+                            {section.label}
+                          </UiNavButton>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )
+              })}
             </div>
+          </nav>
 
-            <div ref={contentRef} className="settings-scroll-body flex-1 overflow-y-auto bg-app">
-              {ActiveTabComponent && <ActiveTabComponent sectionId={activeSectionId} />}
-            </div>
-          </div>
-
-          <div className="flex justify-end border-t border-border-dark bg-app px-5 py-4">
-            <UiButton
-              onClick={handleClose}
-              variant="primary"
-              size="sm"
-              className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} px-5 text-base font-medium`}
-            >
-              {t('actions.close')}
-            </UiButton>
+          <div ref={contentRef} className="settings-scroll-body min-w-0 flex-1 overflow-y-auto">
+            {ActiveTabComponent && <ActiveTabComponent sectionId={activeSectionId} />}
           </div>
         </div>
       </div>
