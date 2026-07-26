@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, FolderOpen, Pencil, Trash2, PackageOpen, PackageCheck } from 'lucide-react';
 import { createLogger } from '@/core/logging';
-import { UiButton, UiEmpty, UiError, UiIconButton, UiPanel } from '@/components/ui';
+import { UiButton, UiEmpty, UiError, UiIconButton, UiPageHeader, UiPanel, UiRegion } from '@/components/ui';
 import { useProjectStore } from '@/stores/projectStore';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
 import { exportProjectToPackage } from '@/services/projectPackage/exportProject';
@@ -90,34 +90,37 @@ export function ProjectManager(): JSX.Element {
   };
 
   return (
-    <div className="ui-scrollbar h-full w-full overflow-auto p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <h1 className="text-2xl font-bold text-text-dark">{t('project.title')}</h1>
-          <div className="flex items-center gap-2">
-            <UiButton
-              onClick={() => {
-                void handleImportClick();
-              }}
-              variant="muted"
-              size="sm"
-              className="gap-2 px-4"
-              disabled={isImporting}
-            >
-              <PackageOpen className="w-4 h-4" />
-              {isImporting ? t('project.importing') : t('project.importPackage')}
-            </UiButton>
-            <UiButton
-              onClick={handleCreateProject}
-              variant="primary"
-              size="sm"
-              className="gap-2 px-4"
-            >
-              <Plus className="w-5 h-5" />
-              {t('project.newProject')}
-            </UiButton>
-          </div>
-        </div>
+    <div className="ui-scrollbar h-full w-full overflow-auto p-6">
+      <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto">
+        <UiPageHeader
+          className="mb-8"
+          title={t('project.title')}
+          actions={(
+            <>
+              <UiButton
+                onClick={() => {
+                  void handleImportClick();
+                }}
+                variant="muted"
+                size="sm"
+                className="gap-2 px-4"
+                disabled={isImporting}
+              >
+                <PackageOpen className="w-4 h-4" />
+                {isImporting ? t('project.importing') : t('project.importPackage')}
+              </UiButton>
+              <UiButton
+                onClick={handleCreateProject}
+                variant="primary"
+                size="sm"
+                className="gap-2 px-4"
+              >
+                <Plus className="w-5 h-5" />
+                {t('project.newProject')}
+              </UiButton>
+            </>
+          )}
+        />
 
         {packageError && <UiError size="xs" className="mb-4" message={packageError} />}
 
@@ -178,7 +181,7 @@ export function ProjectManager(): JSX.Element {
             ))}
           </div>
         )}
-      </div>
+      </UiRegion>
 
       {isOpeningProject && (
         <div className={/* ui-surface-allow: 打开项目时的加载遮罩，pointer-events-none 且无内容，不是弹窗 */ `pointer-events-none fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} bg-black/10`} />

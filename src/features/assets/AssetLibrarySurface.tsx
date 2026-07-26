@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, Search, X } from 'lucide-react'
-import { Dropdown, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
+import { Dropdown, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
@@ -153,27 +153,43 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   }
 
   return (
-    <div className="relative flex h-full min-h-0 overflow-hidden bg-app text-text-dark">
-      <AssetLibrarySidebar
-        libraries={libraries}
-        activeId={libraryId}
-        activeMediaType={mediaType}
-        activeSort={sort}
-        labels={{
-          all: t('assetLibrary.all'), recent: t('assetLibrary.recent'), image: t('assetLibrary.image'), video: t('assetLibrary.video'), audio: t('assetLibrary.audio'),
-          categories: t('assetLibrary.categories'), create: t('assetLibrary.createLibrary'), placeholder: t('assetLibrary.libraryName'), confirmDelete: t('assetLibrary.confirmDeleteLibrary'),
-        }}
-        onShowAll={() => selectSystemView(null, 'created')}
-        onShowRecent={() => selectSystemView(null, 'recent')}
-        onShowMediaType={(type) => selectSystemView(type, 'created')}
-        onSelect={(id) => setLibraryId(id)}
-        onCreate={(name) => mutate(() => createAssetLibrary(name), true)}
-        onRename={(library, name) => mutate(() => renameAssetLibrary(library.id, name), true)}
-        onDelete={deleteLibrary}
-      />
-      <main className="flex min-w-0 flex-1 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-app text-text-dark">
+      {mode === 'workspace' ? (
+        <div className="shrink-0 p-6 pb-4">
+          <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto">
+            <UiPageHeader
+              title={t('topbar.tabs.assets')}
+              description={t('assetLibrary.count', { count: page.total })}
+              actions={onBack ? (
+                <UiButton variant="muted" size="sm" className="gap-2" onClick={onBack}>
+                  <ArrowLeft className="h-4 w-4" />
+                  {t('assetLibrary.back')}
+                </UiButton>
+              ) : undefined}
+            />
+          </UiRegion>
+        </div>
+      ) : null}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <AssetLibrarySidebar
+          libraries={libraries}
+          activeId={libraryId}
+          activeMediaType={mediaType}
+          activeSort={sort}
+          labels={{
+            all: t('assetLibrary.all'), recent: t('assetLibrary.recent'), image: t('assetLibrary.image'), video: t('assetLibrary.video'), audio: t('assetLibrary.audio'),
+            categories: t('assetLibrary.categories'), create: t('assetLibrary.createLibrary'), placeholder: t('assetLibrary.libraryName'), confirmDelete: t('assetLibrary.confirmDeleteLibrary'),
+          }}
+          onShowAll={() => selectSystemView(null, 'created')}
+          onShowRecent={() => selectSystemView(null, 'recent')}
+          onShowMediaType={(type) => selectSystemView(type, 'created')}
+          onSelect={(id) => setLibraryId(id)}
+          onCreate={(name) => mutate(() => createAssetLibrary(name), true)}
+          onRename={(library, name) => mutate(() => renameAssetLibrary(library.id, name), true)}
+          onDelete={deleteLibrary}
+        />
+        <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 px-3">
-          {mode === 'workspace' && onBack && <UiIconButton onClick={onBack} title={t('assetLibrary.back')}><ArrowLeft className="h-4 w-4" /></UiIconButton>}
           <div className="relative min-w-[150px] flex-1"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" /><UiInput className="!h-10 pl-9" value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder={t('assetLibrary.search')} /></div>
           <Dropdown<'all' | AssetMediaType> value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
           <Dropdown<'created' | 'recent'> value={sort} options={[{ value: 'created', label: t('assetLibrary.newest') }, { value: 'recent', label: t('assetLibrary.recent') }]} onSelect={setSort} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
@@ -222,7 +238,8 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
             </UiIconButton>
           </div>
         </footer>
-      </main>
+        </main>
+      </div>
       <AssetPreviewOverlay asset={previewAsset} onClose={() => setPreviewAsset(null)} />
       {menuState && <AssetCardMenu asset={menuState.asset} anchor={menuState.anchor} libraries={libraries} availableTags={availableTags} onClose={() => setMenuState(null)} onToggleLibrary={async (nextLibraryId, included) => { await (included ? addAssetToLibrary(nextLibraryId, menuState.asset.id) : removeAssetFromLibrary(nextLibraryId, menuState.asset.id)); await loadAssets(1, true) }} onSetTags={async (tags) => { await setAssetTags(menuState.asset.id, tags); await refreshLibraries(); await loadAssets(1, true) }} onDelete={async () => { await deleteAsset(menuState.asset.id); setMenuState(null); await loadAssets(1, true) }} />}
     </div>

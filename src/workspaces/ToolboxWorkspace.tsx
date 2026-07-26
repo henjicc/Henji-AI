@@ -1,7 +1,7 @@
 import React from 'react'
 import { ArrowLeft, Clapperboard, SquarePen } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { UiIconButton, UiOptionButton } from '@/components/ui'
+import { UiIconButton, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import CameraStageApp from '@/features/cameraStage/CameraStageApp'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import ImageMarkTool from '@/features/imageMark/standalone/ImageMarkTool'
@@ -75,23 +75,28 @@ const ToolboxWorkspace: React.FC = () => {
 
   return (
     <div className="h-full overflow-y-auto bg-app">
-      <div className="mx-auto max-w-4xl px-6 py-8">
-        <div className="mb-1 text-lg font-medium text-text-dark">工具箱</div>
-        <div className="mb-6 text-sm text-text-muted">独立于生成和画布的实用工具集合</div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {TOOLS.map((tool) => (
-            <UiOptionButton
-              key={tool.id}
-              variant="card"
-              className="h-auto flex-col !items-start gap-2 p-4 text-left"
-              onClick={() => selectToolboxTool(tool.id)}
-            >
-              <tool.icon size={22} className="text-text-muted" />
-              <span className="text-sm font-medium">{tool.name}</span>
-              <span className="text-xs leading-relaxed text-text-muted">{tool.description}</span>
-            </UiOptionButton>
-          ))}
-        </div>
+      <div className="p-6">
+        <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto">
+          <UiPageHeader
+            className="mb-6"
+            title="工具箱"
+            description="独立于生成和画布的实用工具集合"
+          />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {TOOLS.map((tool) => (
+              <UiOptionButton
+                key={tool.id}
+                variant="card"
+                className="h-auto flex-col !items-start gap-2 p-4 text-left"
+                onClick={() => selectToolboxTool(tool.id)}
+              >
+                <tool.icon size={22} className="text-text-muted" />
+                <span className="text-sm font-medium">{tool.name}</span>
+                <span className="text-xs leading-relaxed text-text-muted">{tool.description}</span>
+              </UiOptionButton>
+            ))}
+          </div>
+        </UiRegion>
       </div>
     </div>
   )

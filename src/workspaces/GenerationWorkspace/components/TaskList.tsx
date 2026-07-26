@@ -2,7 +2,7 @@ import React from 'react'
 import { History } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
-import { UiEmpty } from '@/components/ui'
+import { UiEmpty, UiPageHeader, UiRegion } from '@/components/ui'
 import type { GenerationTask } from '../types'
 import TaskCard from './TaskCard'
 
@@ -44,15 +44,11 @@ export function TaskList({
   const { t } = useI18n()
 
   return (
-    <div className="max-w-6xl mx-auto w-[90%] space-y-6">
-      <div className="mb-4">
-        <div>
-          <h2 className="text-xl font-bold">{t('history:title')}</h2>
-          <p className="mt-1 text-xs text-text-muted">
-            {t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}
-          </p>
-        </div>
-      </div>
+    <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto space-y-6">
+      <UiPageHeader
+        title={t('history:title')}
+        description={t('ui:workspaceFilters.resultsCount', { matched: matchedCount, total: totalCount })}
+      />
       {totalCount === 0 && (
         <UiEmpty
           icon={<History className="h-10 w-10" />}
@@ -82,6 +78,6 @@ export function TaskList({
           />
         )
       })}
-    </div>
+    </UiRegion>
   )
 }
