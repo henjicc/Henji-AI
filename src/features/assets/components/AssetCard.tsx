@@ -76,7 +76,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
           className="absolute right-1.5 top-1.5 !h-7 !w-7 opacity-0 group-hover:opacity-100"
           onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget.getBoundingClientRect()) }}
         ><MoreHorizontal className="h-4 w-4" /></UiIconButton>
-        {asset.mediaType !== 'image' && <UiIconButton showBorder={false} aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 !h-10 !w-10 -translate-x-1/2 -translate-y-1/2 !bg-black/45 !text-white backdrop-blur-ui hover:!bg-black/60" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
+        {asset.mediaType !== 'image' && <UiIconButton showBorder={false} aria-label={t('audioPlayer.playPause')} className="ui-glass absolute left-1/2 top-1/2 !h-10 !w-10 -translate-x-1/2 -translate-y-1/2 !rounded-full !border-transparent !bg-transparent !text-white" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
       </div>
       <div className="min-w-0 px-2.5 py-2">
         {editing ? <UiInput autoFocus className="!h-7 !px-1.5 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-sm text-text-dark" title="双击重命名" onDoubleClick={(event) => { event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}

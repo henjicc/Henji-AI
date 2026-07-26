@@ -121,14 +121,14 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
       <UiIconButton
         type="button"
         onClick={() => setCollapsed(!collapsed)}
-        className="!h-9 !w-9 shrink-0 !rounded-full !border-white/15 !bg-black/55 !text-white backdrop-blur-ui hover:!bg-black/70"
+        className="ui-glass !h-9 !w-9 shrink-0 !rounded-full !border-transparent !bg-transparent !text-white"
         title={t('viewer.toggleInfo', '显示/隐藏图片信息（Tab）')}
       >
         <Info className="h-4 w-4" />
       </UiIconButton>
 
       <div
-        className={`overflow-hidden rounded-xl border border-white/10 bg-black/45 text-white shadow-panel backdrop-blur-ui transition-opacity duration-200 ${
+        className={`ui-glass overflow-hidden rounded-xl text-white shadow-panel transition-opacity duration-200 ${
           collapsed ? 'pointer-events-none opacity-0' : 'opacity-100'
         }`}
         aria-hidden={collapsed}

@@ -12,12 +12,27 @@
   --text-soft-rgb: 214 214 214;
   --text-faint-rgb: 114 114 114;
   /*
-   * 毛玻璃唯一档位。此前散落 6 个不同数值（Tailwind 的 sm/md/xl 三档 + CSS 里
-   * 手写的 10/12/24px 两套系统并存），同一视觉意图有六种写法。
-   * 收敛成一个变量后，「设置 → 界面 → 毛玻璃效果」关掉时把它置 0 即可全局生效。
-   * 用法：Tailwind 写 `backdrop-blur-ui`，CSS 写 `backdrop-filter: blur(var(--ui-blur))`。
+   * 毛玻璃「材质」。
+   *
+   * 关键认识：只写 blur 得到的是"模糊 + 降不透明度"，看起来廉价。
+   * 真正的玻璃质感需要四层一起上，缺一层就塌成贴纸：
+   *   1. blur       —— 虚化背景
+   *   2. saturate   —— 模糊会把颜色摊平成灰泥，必须把饱和度捞回来（Apple 的 material 全部带这个）
+   *   3. 受光边缘   —— 玻璃边缘会接光，靠 edge 描边 + 顶部内阴影表达
+   *   4. 噪点       —— 纯平渐变在深色背景上会出色带，看着像塑料（微软 Acrylic 把噪点列为必需层）
+   *
+   * 用法：**不要**自己拼 blur + bg + border，直接用 `.ui-glass`（见下方定义）。
+   * 需要调整质感时只改这里的变量，全局一起变。
    */
-  --ui-blur: 12px;
+  --ui-blur: 24px;
+  --ui-glass-filter: blur(var(--ui-blur)) saturate(180%) brightness(1.06);
+  --ui-glass-tint: rgb(0 0 0 / 0.34);
+  --ui-glass-edge: rgb(255 255 255 / 0.16);
+  --ui-glass-sheen: rgb(255 255 255 / 0.1);
+  --ui-glass-grain: 0.04;
+  /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
+  --ui-scrim-blur: 10px;
+  --ui-scrim-tint: rgb(0 0 0 / 0.42);
   --accent-rgb: 59 130 246;
   --app-rgb: 10 10 10;
   --canvas-rgb: 10 10 10;
@@ -42,9 +57,62 @@
   --node-radius: 12px;
 }
 
-/* 关闭毛玻璃：所有走 --ui-blur 的地方一起变成不模糊，组件不需要各自适配 */
+/*
+ * 关闭毛玻璃：整套材质一起退化成不透明底色。
+ * 注意不能只把 blur 置 0——那样 34% 的黑底叠在清晰背景上会看不清内容，
+ * 所以 tint 同时换成接近实心的面板色，噪点与提亮也一并关掉。
+ */
 :root[data-ui-blur='off'] {
   --ui-blur: 0px;
+  --ui-glass-filter: none;
+  --ui-glass-tint: rgb(var(--panel-rgb) / 0.94);
+  --ui-glass-grain: 0;
+  --ui-scrim-blur: 0px;
+  --ui-scrim-tint: rgb(0 0 0 / 0.55);
+}
+
+/*
+ * 毛玻璃材质。业务代码写 `ui-glass` 一个类即可，不要再自己拼
+ * `backdrop-blur-* + bg-black/xx + border-white/xx`——那样每处的质感都会不一样，
+ * 也躲开了设置里的开关。圆角、尺寸、定位仍由调用方的 Tailwind 类决定。
+ *
+ * ⚠️ 必须放在 `@layer components` 里。写在裸 CSS 中的话，它在产物里会排在
+ * `@tailwind utilities` 之后，`position: relative` 就会盖掉调用方的 `absolute`，
+ * 让所有绝对定位的玻璃控件跑位。放进 components 层后 utilities 稳定胜出。
+ */
+@layer components {
+  .ui-glass {
+    position: relative;
+    background-color: var(--ui-glass-tint);
+    -webkit-backdrop-filter: var(--ui-glass-filter);
+    backdrop-filter: var(--ui-glass-filter);
+    border: 1px solid var(--ui-glass-edge);
+    /* 顶部一道受光边：玻璃与贴纸的区别主要在这里 */
+    box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
+  }
+
+  /*
+   * 噪点层。压在材质之上、内容之下，用 overlay 混合让它只扰动明暗不改变色相。
+   * feTurbulence 生成，不引入外部资源。
+   */
+  .ui-glass::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: var(--ui-glass-grain);
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
+    background-size: 140px 140px;
+  }
+
+  /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */
+  .ui-glass-scrim {
+    background-color: var(--ui-scrim-tint);
+    -webkit-backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
+    backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
+  }
 }
 
 html,
@@ -810,14 +878,17 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%) translateY(4px);
-  background: rgba(30, 30, 30, 0.95);
+  background: var(--ui-glass-tint);
+  border: 1px solid var(--ui-glass-edge);
+  box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
   border-radius: 6px;
   padding: 8px;
   padding-bottom: 18px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  backdrop-filter: blur(var(--ui-blur));
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  backdrop-filter: var(--ui-glass-filter);
   z-index: 20;
   opacity: 0;
   pointer-events: none;
@@ -932,10 +1003,11 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 /* Context Menu Styles */
 .context-menu {
   position: fixed;
-  background: rgba(19, 19, 19, 0.75);
-  -webkit-backdrop-filter: blur(var(--ui-blur));
-  backdrop-filter: blur(var(--ui-blur));
-  border: 1px solid rgba(113, 113, 122, 0.5);
+  background: var(--ui-glass-tint);
+  -webkit-backdrop-filter: var(--ui-glass-filter);
+  backdrop-filter: var(--ui-glass-filter);
+  border: 1px solid var(--ui-glass-edge);
+  box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
   border-radius: 0.75rem;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
   padding: 0.5rem;

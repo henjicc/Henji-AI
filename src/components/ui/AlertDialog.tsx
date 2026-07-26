@@ -95,7 +95,7 @@ export default function AlertDialog({
     <div className={rootClassName}>
       {/* 背景遮罩 */}
       <div
-        className="absolute inset-0 bg-black/70"
+        className="ui-glass-scrim absolute inset-0"
         style={{ opacity, transition: 'opacity 180ms ease' }}
         onClick={handleClose}
       />

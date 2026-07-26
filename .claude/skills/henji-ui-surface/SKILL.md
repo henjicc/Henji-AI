@@ -148,21 +148,38 @@ ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neut
 ⚠️ 另外：`index.html` 写死 `class="dark"` 且从不切换，**`dark:` 变体的基础值是死代码**。
 不要写 `text-zinc-600 dark:text-zinc-400` 这种双分支，直接写最终值。
 
-## 毛玻璃只有一档，且只用在一种场景
+## 毛玻璃是一个「材质」，不是一个 blur 值
 
-> **模糊只用在「浮层压在内容不可预测的东西上」——图片、视频、画布。**
-> 压在应用自身纯色 UI 上的浮层（通知、菜单、弹窗、任务卡）一律用不透明底色，
-> 更清楚，也省掉一次读取背景纹理的合成开销。
+> **只写 `backdrop-filter: blur()` 得到的是「模糊 + 降不透明度」，看起来廉价。**
 
-档位只有一个：Tailwind 写 `backdrop-blur-ui`，纯 CSS 写 `backdrop-filter: blur(var(--ui-blur))`。
-**ESLint 硬拦 Tailwind 自带的 `backdrop-blur-sm/md/lg/xl`。**
+真正的玻璃质感需要四层一起上，缺一层就塌成贴纸：
 
-收敛之前这里散落 6 个不同数值、跨 Tailwind 与手写 CSS 两套系统，
-同一个视觉意图有六种写法，谁也说不清什么时候该加。
+| 层 | 作用 | 漏了会怎样 |
+|---|---|---|
+| `blur` | 虚化背景 | —— |
+| `saturate(180%)` | 把颜色捞回来 | 背景摊平成灰泥（Apple 的 material 全部带这个） |
+| 受光边缘 | 边缘描边 + 顶部内阴影 | 像一块贴纸，不像玻璃 |
+| 噪点 | 极低透明度的 overlay 噪声 | 深色上出色带，看着像塑料（微软 Acrylic 把噪点列为必需层） |
 
-统一到单一变量之后，「设置 → 界面 → 毛玻璃效果」关掉时只需把 `--ui-blur` 置 0，
-所有地方一起生效，组件不需要各自适配——**开关是收口的副产品，不是收口的替代品**。
-如果哪天要调整强度，也只改 `src/index.css` 里那一个值。
+**用法：写 `ui-glass` 一个类**（定义在 `src/index.css`），遮罩写 `ui-glass-scrim`。
+圆角、尺寸、定位仍由调用方的 Tailwind 类给。**ESLint 硬拦一切 `backdrop-blur-*`**。
+
+调质感只改 `src/index.css` 里那几个 `--ui-glass-*` 变量，全局一起变。
+
+### 什么时候才该用
+
+> 只用在**浮层压住内容不可预测的东西**上 —— 图片、视频、画布。
+
+压在应用自身纯色 UI 上的浮层（通知、任务卡、普通面板）一律用不透明底色：更清楚，
+也省掉一次读取背景纹理的合成开销。
+
+### 两个实现上的坑
+
+1. **`.ui-glass` 必须放在 `@layer components` 里**。写在裸 CSS 中它会排在
+   `@tailwind utilities` 之后，其中的 `position: relative` 会盖掉调用方的 `absolute`，
+   所有绝对定位的玻璃控件都会跑位。
+2. **关闭开关时不能只把 blur 置 0**。那样半透明黑底叠在清晰背景上会看不清内容，
+   必须让 tint 同时退化成接近实心的面板色。
 
 ## 用排版建立层级，而不是用框
 
@@ -237,7 +254,7 @@ ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neut
 | 面板/弹窗内部再叠一层自己的底色（`bg-zinc-900/40` 这类） | 表面由外壳统一提供；要切分用分隔线，要下沉用 `inset` |
 | 用 `panelClassName` 覆盖 `PanelTrigger` / `Dropdown` 的外壳表面 | 不传即可；同级浮层长得不一样多半就是这么来的 |
 | `zinc-*` / `gray-*` 等固定调色板 | 语义色，见「颜色必须跟随主题」 |
-| `backdrop-blur-sm/md/lg/xl` | `backdrop-blur-ui`；且先确认这个浮层真的压在媒体/画布上 |
+| 自己拼 `backdrop-blur-* + bg-black/xx + border-white/xx` | `ui-glass`；且先确认这个浮层真的压在媒体/画布上 |
 | `text-zinc-600 dark:text-zinc-400` 双分支 | 直接写最终值，`dark:` 的基础值是死代码 |
 | 给已经带边框的控件外面再包一层框 | 去掉外层框 |
 | 为"填充空白"添加卡片、边框、阴影 | 留白 / 调整间距 |
@@ -327,7 +344,7 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 有没有 `zinc-*` / `gray-*`？改强调色或换主题预设时它们不会跟着动
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
 - [ ] 新面板有没有再叠一层自己的底色？表面应该由外壳统一提供
-- [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `backdrop-blur-ui`
+- [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `ui-glass` / `ui-glass-scrim`
 - [ ] 空/加载/错误三态是否都走了 `UiEmpty/UiLoading/UiError`
 - [ ] 字号是否全部来自登记档位（无 `text-[Npx]`）
 - [ ] 圆角是否只用了 `rounded-lg/xl/full`，且内层不大于外层

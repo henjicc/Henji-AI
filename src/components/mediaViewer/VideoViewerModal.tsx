@@ -436,7 +436,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
         >
           {hasAudio !== false && (
             <div
-              className="absolute top-4 left-4 bg-black/70 backdrop-blur-ui px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
+              className="ui-glass absolute top-4 left-4 px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
               style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
             >
               {muted || volume === 0 ? (
