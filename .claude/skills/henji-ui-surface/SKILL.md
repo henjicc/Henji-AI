@@ -1,6 +1,6 @@
 ---
 name: henji-ui-surface
-description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分区/节点 UI 时使用。给出表面层级（surface/elevation）铁律、UiPanel variant 选择、何时不该加边框背景、逐行参数与控件的排版规范、以及避免整页重绘的状态分层规则。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"这个界面卡顿/拖动掉帧"。
+description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分区/节点 UI，或调整颜色、毛玻璃、动画、层级时使用。涵盖表面层级（surface/elevation）铁律、五级容器词汇表、选项集合静息态、语义色与主题跟随、毛玻璃材质、动效档位、z-index 契约、排版层级、以及避免整页重绘的状态分层规则。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"统一一下 UI/配色/动画/模糊"、"这个动画太快/太慢/很生硬"、"这个界面卡顿/拖动掉帧"、"切换主题后有些地方没变色"。
 ---
 
 # Henji-AI 界面表面与层级规范
@@ -170,6 +170,19 @@ ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neut
 
 > 只用在**浮层压住内容不可预测的东西**上 —— 图片、视频、画布。
 
+**"要不要给所有按钮/边框都加上模糊，省得有的有有的没有？"——不要，而且这不是审美问题。**
+
+`backdrop-filter` 模糊的是**元素背后的东西**。按钮坐在 `bg-panel` 这种不透明底色上时，
+背后只有一片纯色：把纯色模糊 24px，结果还是同一片纯色。
+**视觉上零差别，代价是每个按钮多一个合成层。**
+
+所以"有的有有的没有"不是不一致，是正确行为——模糊只在背景有变化时才可见。
+判断方法一句话：**它背后是别的界面（纯色）还是用户的内容（图片/视频/画布）？**
+
+真想让界面整体更有玻璃感，正确方向不是给按钮加模糊，而是**让浮层自身半透明**
+（助手侧栏、模型选择面板、画布节点工具条），这样它们的模糊才有东西可模糊。
+那是产品方向调整，动手前先和用户确认。
+
 压在应用自身纯色 UI 上的浮层（通知、任务卡、普通面板）一律用不透明底色：更清楚，
 也省掉一次读取背景纹理的合成开销。
 
@@ -180,6 +193,52 @@ ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neut
    所有绝对定位的玻璃控件都会跑位。
 2. **关闭开关时不能只把 blur 置 0**。那样半透明黑底叠在清晰背景上会看不清内容，
    必须让 tint 同时退化成接近实心的面板色。
+
+## 动效：三档时长，一种缓动
+
+收敛前实测：**8 种时长**（200/150/300/250/220/100/75/500）、两种缓动混用、
+42 处裸 `transition`，且 JS 计时常量与 CSS 时长对不上。
+
+档位定义在 `src/components/ui/motion.ts`：
+
+| 档 | 值 | 用途 |
+|---|---|---|
+| `fast` | 150ms | hover、颜色、开关、小控件 |
+| `base` | 200ms | 弹窗、浮层、下拉、面板开合 —— **默认档** |
+| `slow` | 300ms | 大面积位移、侧栏模式切换 |
+
+缓动统一 `ease-out`（进场/退场都该减速落位）。
+**Tailwind 不写 `ease-*` 时默认是 `ease-in-out`**，起步和收尾都慢，小尺度 UI 上显得拖沓，
+所以要显式写出来。
+
+### JS 计时必须和 CSS 时长同档
+
+组件常见写法是"先播淡出、再用 `setTimeout` 卸载"。两个数字对不上就会把过渡截断：
+
+```tsx
+// ❌ 卸载比过渡早 20ms，淡出收尾被硬切（不报错，只是"关起来有点生硬"）
+useDialogTransition(isOpen, 180)          // JS
+className="transition-opacity duration-200"  // CSS
+
+// ✅ 两边同档
+useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS)  // = UI_DURATION.base
+className={`transition-opacity ${UI_DURATION_CLASS.base} ${UI_EASE_CLASS}`}
+```
+
+⚠️ 不能写 `` `duration-${UI_DURATION.base}` `` —— Tailwind 扫不到运行时拼接的类名，
+不会生成任何 CSS。两边都写字面量，`motion.test.ts` 负责保证它们不漂移。
+
+### 过渡什么、不过渡什么
+
+| 结论 | 说明 |
+|---|---|
+| ✅ `opacity` / `transform` | 只走合成器，不触发布局与绘制 |
+| ✅ `transition-colors` | 颜色变化，代价可接受 |
+| ❌ 裸 `transition` | 它会把 `backdrop-filter` 也纳入过渡——每帧重算模糊，是最贵的一种 |
+| ❌ `transition-all` | 已归零，别再引入 |
+| ❌ 布局属性（`width`/`height`/`padding`/`margin`/`top`/`left`） | 过渡期间每帧重排。要位移用 `transform: translate`，要伸缩优先 `scale` |
+
+确需过渡多个属性时**显式列举**：`transition-[opacity,transform]`。
 
 ## 用排版建立层级，而不是用框
 
@@ -199,6 +258,7 @@ ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neut
 | 维度 | 允许的写法 | 禁止 |
 |---|---|---|
 | 颜色 | 语义色：底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`；边框 `border-border-dark`；媒体与玻璃质感边框用 `veil` 档位 | 一切 `*-zinc-*` 等固定调色板 |
+| 动效 | 时长 `duration-150/200/300`（对应 `UI_DURATION` 三档）；缓动 `ease-out`；过渡属性显式列举 | 裸 `transition`、`transition-all`、过渡布局属性 |
 | 字号 | `text-4xs`(9) `text-3xs`(10) `text-2xs`(11) `text-13` `text-14` `text-15` / `text-xs` `text-sm` `text-base`+ | `text-[Npx]` |
 | 圆角 | `rounded-lg`(控件/内嵌) `rounded-xl`(浮层) `rounded-2xl` `rounded-3xl` `rounded-full` `rounded-hairline`；画布节点 `rounded-[var(--node-radius)]` | 其他 `rounded-[...]` |
 | 阴影 | `shadow-panel`(仅浮层) / `shadow-node-selected` `shadow-node-error` `shadow-thumb` `shadow-thumb-sm`(具名特效) | `shadow-[...]` |
@@ -345,6 +405,9 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
 - [ ] 新面板有没有再叠一层自己的底色？表面应该由外壳统一提供
 - [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `ui-glass` / `ui-glass-scrim`
+- [ ] 动效时长是否落在 150/200/300 三档？缓动是否显式写了 `ease-out`？
+- [ ] 有 `setTimeout` 卸载动画组件吗？那个数字必须和 className 里的 `duration-*` 同档
+- [ ] 过渡的是 `opacity`/`transform` 吗？别过渡宽高间距，也别用裸 `transition`
 - [ ] 空/加载/错误三态是否都走了 `UiEmpty/UiLoading/UiError`
 - [ ] 字号是否全部来自登记档位（无 `text-[Npx]`）
 - [ ] 圆角是否只用了 `rounded-lg/xl/full`，且内层不大于外层
@@ -358,6 +421,12 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 
 ```bash
 npm run check:surface && npm run check:colors && npm run lint
+```
+
+改了动效档位或 `motion.ts` 再补一条（它保证 ms 数值与 `duration-*` 类不漂移）：
+
+```bash
+npx vitest run src/components/ui/motion.test.ts
 ```
 
 `check:surface` 报三类问题：
