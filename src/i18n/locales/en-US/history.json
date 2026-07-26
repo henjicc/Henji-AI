@@ -1,6 +1,7 @@
 {
   "title": "History",
   "empty": "No history yet",
+  "emptyHint": "Your results will appear here after the first generation.",
   "clear": "Clear History",
   "confirmClear": "Are you sure you want to clear all history?",
   "delete": "Delete",

@@ -9,7 +9,7 @@ import {
   TerminalSquare,
 } from 'lucide-react'
 
-import { UiButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import { UiButton, UiEmpty, UiLoading, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceDetailResult } from '@/core/assistant/trace'
 import type { ModelStepMessage } from '@/core/llm/modelStep'
 import { copyTextToClipboard } from '../copyFormats'
@@ -43,8 +43,10 @@ export function AssistantTraceDetail({
 
   if (!result) {
     return (
-      <div className="flex h-full items-center justify-center rounded-lg border border-border-dark/50 bg-black/20 p-6 text-center text-xs text-text-muted">
-        {loading ? '正在加载追踪详情…' : '请选择左侧的一轮模型请求'}
+      <div className="h-full rounded-lg border border-border-dark/50 bg-black/20 p-3">
+        {loading
+          ? <UiLoading className="h-full" size="sm" message="正在加载追踪详情…" />
+          : <UiEmpty className="h-full" size="sm" title="请选择左侧的一轮模型请求" />}
       </div>
     )
   }
@@ -172,7 +174,7 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
       </TraceSection>
 
       <TraceSection title="工具定义" badge={`${tools.length} 个`}>
-        {tools.length === 0 ? <EmptyText>本轮没有向模型提供工具</EmptyText> : <JsonTree value={tools} />}
+        {tools.length === 0 ? <UiEmpty size="xs" title="本轮没有向模型提供工具" /> : <JsonTree value={tools} />}
       </TraceSection>
 
       <TraceSection title="最终 HTTP 请求" badge={detail.httpRequest ? detail.httpRequest.method : '未捕获'} defaultOpen>
@@ -184,11 +186,11 @@ function TraceVisualDetail({ detail }: { detail: NonNullable<AgentTraceDetailRes
             </div>
             <JsonTree value={{ headers: detail.httpRequest.headers, body: detail.httpRequest.body }} />
           </div>
-        ) : <EmptyText>没有捕获到最终网络请求</EmptyText>}
+        ) : <UiEmpty size="xs" title="没有捕获到最终网络请求" />}
       </TraceSection>
 
       <TraceSection title="模型响应" badge={response?.finishReason} defaultOpen>
-        {!response ? <EmptyText>该请求没有完整响应</EmptyText> : (
+        {!response ? <UiEmpty size="xs" title="该请求没有完整响应" /> : (
           <div className="space-y-2">
             {response.reasoningText && <LabeledBlock label="供应商返回的推理内容"><TextBlock value={response.reasoningText} /></LabeledBlock>}
             <LabeledBlock label="最终文本"><TextBlock value={response.text || '无文本输出'} /></LabeledBlock>
@@ -252,10 +254,6 @@ function LabeledBlock({ label, children }: { label: string; children: ReactNode 
 
 function TextBlock({ value }: { value: string }): JSX.Element {
   return <pre className="max-h-[440px] overflow-auto whitespace-pre-wrap break-words rounded border border-border-dark/35 bg-black/25 p-2 font-mono text-2xs leading-relaxed text-text-dark">{value}</pre>
-}
-
-function EmptyText({ children }: { children: ReactNode }): JSX.Element {
-  return <div className="py-3 text-center text-xs text-text-muted">{children}</div>
 }
 
 function roleClass(role: ModelStepMessage['role']): string {

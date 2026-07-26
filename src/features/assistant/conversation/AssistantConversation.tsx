@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
 
-import { UiButton, UiPanel } from '@/components/ui'
+import { UiButton, UiEmpty, UiPanel } from '@/components/ui'
 import type { AgentEvent } from '@/core/assistant/events'
 import {
   createEmptyPromptDocument,
@@ -159,15 +159,12 @@ export function AssistantConversation(): JSX.Element {
 
       <div ref={scrollRef} className="ui-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
         {!runState && !currentGoal ? (
-          <div className="flex min-h-full flex-col items-center justify-center px-8 text-center">
-            <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 text-accent">
-              <BrainCircuit className="h-6 w-6" />
-            </div>
-            <h2 className="mt-4 text-sm font-medium text-text-dark">让助手操作工作台</h2>
-            <p className="mt-2 text-xs leading-5 text-text-muted">
-              可以切换工作区、查模型、创建可见生成任务、编排画布节点，或基于脱敏日志诊断错误。所有动作都经过受控工具网关。
-            </p>
-          </div>
+          <UiEmpty
+            className="min-h-full px-8"
+            icon={<BrainCircuit className="h-7 w-7" />}
+            title="让助手操作工作台"
+            description="可以切换工作区、查模型、创建可见生成任务、编排画布节点，或基于脱敏日志诊断错误。所有动作都经过受控工具网关。"
+          />
         ) : null}
 
         {/* 用户消息短、需要边界感，用 inset（比侧栏底色更暗）；助手消息长，只留缩进不套容器 */}

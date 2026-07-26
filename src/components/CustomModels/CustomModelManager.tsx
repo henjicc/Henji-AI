@@ -11,10 +11,10 @@ import { getCustomModelService } from '@/services/customModels/CustomModelServic
 import { databaseService } from '@/services/database/DatabaseService'
 import { AddCustomModelDialog } from './AddCustomModelDialog'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiChipButton, UiPanel } from '@/components/ui'
+import { UiButton, UiChipButton, UiEmpty, UiLoading, UiPanel } from '@/components/ui'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 
-export function CustomModelManager() {
+export function CustomModelManager(): JSX.Element {
   const [models, setModels] = useState<CustomModel[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddDialog, setShowAddDialog] = useState(false)
@@ -91,7 +91,7 @@ export function CustomModelManager() {
   }
 
   if (loading) {
-    return <div className="p-4">{t('customModels.loading')}</div>
+    return <UiLoading message={t('customModels.loading')} />
   }
 
   return (
@@ -108,9 +108,7 @@ export function CustomModelManager() {
       </div>
 
       {models.length === 0 ? (
-        <div className="text-center py-8 text-text-faint">
-          <p>{t('customModels.empty')}</p>
-        </div>
+        <UiEmpty size="sm" title={t('customModels.empty')} />
       ) : (
         <div className="space-y-2">
           {models.map(model => (

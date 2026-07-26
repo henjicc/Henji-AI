@@ -1,4 +1,5 @@
 import React from 'react'
+import { History } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
 import { UiEmpty } from '@/components/ui'
@@ -53,11 +54,13 @@ export function TaskList({
         </div>
       </div>
       {totalCount === 0 && (
-        <div className="py-20 text-center text-text-faint">
-          {t('history:empty')}
-        </div>
+        <UiEmpty
+          icon={<History className="h-10 w-10" />}
+          title={t('history:empty')}
+          description={t('history:emptyHint')}
+        />
       )}
-      {tasks.length === 0 && hasActiveFilters && (
+      {tasks.length === 0 && totalCount > 0 && hasActiveFilters && (
         <UiEmpty title={t('ui:workspaceFilters.emptyFiltered')} />
       )}
       {tasks.length > 0 && tasks.map((task) => {

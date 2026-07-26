@@ -1,8 +1,8 @@
-import { AlertCircle, History, LoaderCircle, MessageSquareText, RefreshCw, RotateCcw } from 'lucide-react'
+import { History, LoaderCircle, MessageSquareText, RefreshCw, RotateCcw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { listAgentRuns, retryAgentRun } from '@/commands/assistant'
-import { UiButton, UiIconButton } from '@/components/ui'
+import { UiButton, UiEmpty, UiError, UiIconButton, UiLoading } from '@/components/ui'
 import type { AgentRunSummary } from '@/core/assistant/persistence'
 
 import { useAssistantUiStore } from '../store/assistantUiStore'
@@ -96,13 +96,11 @@ export function AssistantRunHistory({
 
       <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto [contain:layout_paint_style]">
         {loading && runs.length === 0 ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-xs text-text-muted">
-            <LoaderCircle className="h-4 w-4 animate-spin" />正在读取
-          </div>
+          <UiLoading size="sm" message="正在读取" />
         ) : null}
 
         {!loading && runs.length === 0 ? (
-          <div className="py-12 text-center text-xs leading-5 text-text-muted">还没有可恢复的运行记录。</div>
+          <UiEmpty size="sm" title="还没有可恢复的运行记录" />
         ) : null}
 
         {runs.map((run) => (
@@ -143,10 +141,7 @@ export function AssistantRunHistory({
         ))}
 
         {error ? (
-          <div className="m-3 flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="leading-5">{error}</span>
-          </div>
+          <UiError size="xs" className="m-3" message={error} />
         ) : null}
       </div>
     </section>

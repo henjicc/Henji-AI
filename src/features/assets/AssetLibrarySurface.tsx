@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertCircle, ArrowLeft, ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, RefreshCw, Search, X } from 'lucide-react'
-import { Dropdown, UiButton, UiChipButton, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
+import { ArrowLeft, ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, Search, X } from 'lucide-react'
+import { Dropdown, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
@@ -187,9 +187,18 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square animate-pulse rounded-xl bg-layer" />)}</div>
             </div>
           ) : error ? (
-            <div className="flex h-full flex-col items-center justify-center gap-3 text-text-muted"><AlertCircle className="h-9 w-9" /><span>{error}</span><UiButton onClick={() => void loadAssets(1, true)}><RefreshCw className="mr-2 h-4 w-4" />{t('assetLibrary.retry')}</UiButton></div>
+            <UiError
+              className="h-full"
+              message={error}
+              onRetry={() => void loadAssets(1, true)}
+              retryLabel={t('assetLibrary.retry')}
+            />
           ) : page.items.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center text-center text-text-muted"><FolderPlus className="mb-3 h-10 w-10" /><div>{keyword || mediaType || libraryId ? t('assetLibrary.noResults') : t('assetLibrary.empty')}</div></div>
+            <UiEmpty
+              className="h-full"
+              icon={<FolderPlus className="h-10 w-10" />}
+              title={keyword || mediaType || libraryId ? t('assetLibrary.noResults') : t('assetLibrary.empty')}
+            />
           ) : (
             <>
               <div className={`grid gap-3 transition-opacity duration-150 ${loading ? 'pointer-events-none opacity-60' : 'opacity-100'}`} aria-busy={loading} style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{page.items.map((asset) => <AssetCard key={asset.id} asset={asset} selected={selected?.id === asset.id} eager={mode === 'floating'} thumbnailFit={thumbnailFit} onSelect={setSelected} onMenu={(nextAsset, anchor) => setMenuState({ asset: nextAsset, anchor })} onPreview={setPreviewAsset} onRename={rename} />)}</div>

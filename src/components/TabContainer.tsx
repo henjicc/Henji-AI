@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useState } from 'react'
 import type { RefObject } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import type { WorkspaceId } from '@/core/types/workspace'
+import { UiLoading } from '@/components/ui'
 
 // 懒加载工作区组件
 const GenerationWorkspace = lazy(() => import('../workspaces/GenerationWorkspace'))
@@ -16,14 +17,9 @@ interface TabContainerProps {
     insetRight?: number
 }
 
-// Loading 占位组件
 const LoadingPlaceholder: React.FC = () => {
     const { t } = useI18n()
-    return (
-        <div className="flex-1 flex items-center justify-center">
-            <div className="text-text-muted">{t('common:loading')}</div>
-        </div>
-    )
+    return <UiLoading className="h-full" message={t('common:loading')} />
 }
 
 /**

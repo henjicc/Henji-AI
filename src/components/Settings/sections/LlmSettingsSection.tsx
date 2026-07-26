@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react'
-import { Dropdown, UiButton, UiEmpty, UiIconButton, UiInput, UiModal, UiOptionButton, UiPanel, UiSwitch } from '@/components/ui'
+import { Dropdown, UiButton, UiEmpty, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton, UiPanel, UiSwitch } from '@/components/ui'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import ApiKeyInput from '../components/ApiKeyInput'
 import type { LlmModelConfig, LlmProviderConfig, LlmReasoningConfig, LlmReasoningEffort } from '@/core/llm/types'
@@ -241,7 +241,7 @@ const LlmSettingsSection: React.FC = () => {
   }
 
   if (loading) {
-    return <div className="p-4 text-sm text-text-muted">正在加载 LLM 配置...</div>
+    return <UiLoading message="正在加载 LLM 配置…" />
   }
 
   const defaultProviderDraft = providers[0] ? { ...providers[0] } : createDefaultProvider()
@@ -392,9 +392,11 @@ const LlmSettingsSection: React.FC = () => {
 
                         <div className="space-y-2">
                           {filteredModels.length === 0 ? (
-                            <div className="rounded-xl border border-dashed border-border-dark p-4 text-sm text-text-muted">
-                              暂无模型，点击“获取模型列表”或“手动添加”。
-                            </div>
+                            <UiEmpty
+                              size="sm"
+                              title={modelKeyword ? '没有匹配的模型' : '暂无模型'}
+                              description={modelKeyword ? '请调整搜索关键词后重试。' : '点击“获取模型列表”或“手动添加”。'}
+                            />
                           ) : filteredModels.map(model => (
                             <UiPanel
                               key={`${model.providerId}-${model.modelId}`}

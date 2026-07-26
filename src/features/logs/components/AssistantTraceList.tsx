@@ -1,7 +1,7 @@
 import { Virtuoso } from 'react-virtuoso'
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Route, Sparkles } from 'lucide-react'
 
-import { UiButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import { UiButton, UiEmpty, UiLoading, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceRunSummary, AgentTraceStatus, AgentTraceStepSummary } from '@/core/assistant/trace'
 import { compactId } from '../eventDisplay'
 import { formatTraceDuration, formatTraceTokens, getTraceStepLabel } from '../assistantTraceUtils'
@@ -27,8 +27,10 @@ export function AssistantTraceList({
 }: AssistantTraceListProps): JSX.Element {
   if (runs.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center rounded-lg border border-border-dark/50 bg-black/20 p-6 text-center text-xs text-text-muted">
-        {loading ? '正在读取助手追踪…' : '暂无助手模型请求记录'}
+      <div className="h-full rounded-lg border border-border-dark/50 bg-black/20 p-3">
+        {loading
+          ? <UiLoading className="h-full" size="sm" message="正在读取助手追踪…" />
+          : <UiEmpty className="h-full" size="sm" title="暂无助手模型请求记录" />}
       </div>
     )
   }

@@ -1,11 +1,9 @@
 import React from 'react'
-import { UI_ACCENT_HEX } from './styleTokens'
-import { uiTransition } from './motion'
+import { UI_DATA_TWEEN_MS, uiTransition } from './motion'
 
 interface ProgressBarProps {
     progress: number
     className?: string
-    color?: string
     height?: string
     showPercentage?: boolean
     duration?: number  // 动画持续时间（毫秒）
@@ -14,10 +12,9 @@ interface ProgressBarProps {
 export const ProgressBar: React.FC<ProgressBarProps> = ({
     progress,
     className = '',
-    color = UI_ACCENT_HEX,
     height = 'h-2',
     showPercentage = true,
-    duration = 2800  // 默认 2800ms，提供丝滑的动画效果
+    duration = UI_DATA_TWEEN_MS
 }) => {
     const normalizedProgress = Math.min(100, Math.max(0, progress))
 
@@ -25,11 +22,10 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
         <div className={`w-full ${className}`}>
             <div className={`w-full ${height} bg-layer rounded overflow-hidden`}>
                 <div
-                    className="h-full rounded ease-out"
+                    className="h-full w-full origin-left bg-accent"
                     style={{
-                        width: `${normalizedProgress}%`,
-                        backgroundColor: color,
-                        transition: uiTransition(['width'], duration)
+                        transform: `scaleX(${normalizedProgress / 100})`,
+                        transition: uiTransition(['transform'], duration)
                     }}
                 />
             </div>

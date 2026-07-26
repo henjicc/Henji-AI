@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   UI_DIALOG_TRANSITION_MS,
+  UI_DATA_TWEEN_MS,
   UI_DURATION,
   UI_DURATION_CLASS,
   UI_POPOVER_TRANSITION_MS,
@@ -21,5 +22,10 @@ describe('动效档位', () => {
     const registered: number[] = Object.values(UI_DURATION);
     expect(registered).toContain(UI_DIALOG_TRANSITION_MS);
     expect(registered).toContain(UI_POPOVER_TRANSITION_MS);
+  });
+
+  it('数据补间档独立于交互反馈档位', () => {
+    expect(UI_DATA_TWEEN_MS).toBe(2800);
+    expect(Object.values(UI_DURATION)).not.toContain(UI_DATA_TWEEN_MS);
   });
 });

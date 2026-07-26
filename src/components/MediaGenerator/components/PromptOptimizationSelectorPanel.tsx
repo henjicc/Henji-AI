@@ -1,6 +1,6 @@
 import React from 'react'
 import { Settings2, Sparkles } from 'lucide-react'
-import { UiButton, UiOptionButton } from '@/components/ui'
+import { UiButton, UiEmpty, UiOptionButton } from '@/components/ui'
 import type { PromptOptimizationProfile } from '@/core/llm/types'
 
 interface PromptOptimizationSelectorPanelProps {
@@ -52,9 +52,11 @@ export function PromptOptimizationSelectorPanel({
           ))}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border-dark bg-app px-4 py-5 text-sm text-text-muted">
-          还没有可用的优化配置，请先点击右上角编辑配置进行创建或启用。
-        </div>
+        <UiEmpty
+          size="sm"
+          title="还没有可用的优化配置"
+          description="请点击右上角编辑配置进行创建或启用。"
+        />
       )}
     </div>
   )

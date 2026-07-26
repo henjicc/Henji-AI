@@ -8,7 +8,7 @@ import { readJsonFromAppData } from '../utils/save'
 import { remove } from '@/platform/desktopApi'
 import PanelTrigger from './ui/PanelTrigger'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
+import { UiButton, UiEmpty, UiIconButton, UiInput, UiOptionButton, UiPanel } from '@/components/ui'
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { useNotification } from '@/contexts/NotificationContext'
@@ -290,9 +290,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                             <span>{t('ui:presets.myPresets', { count: presets.length })}</span>
                         </div>
                         {presets.length === 0 ? (
-                            <div className="text-center text-text-faint text-sm py-8">
-                                {t('ui:presets.empty')}
-                            </div>
+                            <UiEmpty size="sm" title={t('ui:presets.empty')} />
                         ) : (
                             <div className="space-y-2">
                                 {presets.map(preset => (

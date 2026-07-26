@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiModal } from '@/components/ui'
+import { UiButton, UiEmpty, UiModal } from '@/components/ui'
 import { compactId, getDomainHint, getEventDisplay, type DisplayLogEvent } from '../eventDisplay'
 import { chainToJson, chainToMarkdown, copyTextToClipboard } from '../copyFormats'
 import { JsonTree } from './JsonTree'
@@ -66,7 +66,7 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
 
       <div className="max-h-[60vh] space-y-1 overflow-y-auto pr-1">
         {events.length === 0 ? (
-          <div className="p-4 text-center text-xs text-text-muted">{t('logsWindow.chain.empty')}</div>
+          <UiEmpty size="xs" title={t('logsWindow.chain.empty')} />
         ) : (
           events.map((event) => {
             const display = getEventDisplay(event)

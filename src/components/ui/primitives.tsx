@@ -3,15 +3,11 @@ import {
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type InputHTMLAttributes,
-  type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
-import { createPortal } from 'react-dom';
-import { Check, ChevronDown, X } from 'lucide-react';
-import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motion';
+import { Check, ChevronDown } from 'lucide-react';
 import { UI_BUTTON_RESET_CLASS, UI_COLOR_ACCENT_FILL_TEXT_CLASS, UI_COLOR_ACCENT_SOFT_BG_CLASS, UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS, UI_COLOR_ACCENT_SOFT_BORDER_CLASS, UI_COLOR_ACCENT_TEXT_CLASS, UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_DISABLED_CLASS, UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UI_INSET_SURFACE_CLASS, UI_OPTION_ITEM_ACTIVE_CLASS, UI_OPTION_ITEM_CLASS, UI_OPTION_ITEM_HOVER_CLASS, UI_PANEL_SURFACE_CLASS } from './styleTokens';
-import { useDialogTransition } from './useDialogTransition';
 import {
   type ScopedTextHistoryBinding,
   useScopedTextHistoryProps,
@@ -79,18 +75,6 @@ interface UiTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
 
 function resolveTextHistoryValue(value: string | number | readonly string[] | undefined): string {
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
-}
-
-interface UiModalProps {
-  isOpen: boolean;
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-  footer?: ReactNode;
-  widthClassName?: string;
-  contentClassName?: string;
-  hideHeader?: boolean;
-  overlayClassName?: string;
 }
 
 function resolveButtonVariant(variant: ButtonVariant): string {
@@ -415,7 +399,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
       {...props}
     >
       <span
-        className={`pointer-events-none ml-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-200 ${
+        className={`pointer-events-none ml-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-150 ${
           checked ? 'translate-x-5' : 'translate-x-0'
         }`}
       />
@@ -436,61 +420,5 @@ export function UiSelect({ className = '', children, ...props }: UiSelectProps) 
       </select>
       <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" />
     </div>
-  );
-}
-
-export function UiModal({
-  isOpen,
-  title,
-  onClose,
-  children,
-  footer,
-  widthClassName = 'w-[460px]',
-  contentClassName = 'px-4 py-4',
-  hideHeader = false,
-  overlayClassName = '',
-}: UiModalProps) {
-  const { shouldRender, isVisible } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
-
-  if (!shouldRender) {
-    return null;
-  }
-
-  // 挂到 document.body：祖先链上任何一个带 transform/filter 的面板都会给 fixed 定位
-  // 重新建立包含块，导致弹窗被错误地约束在那个祖先容器内而不是真正居中于整个窗口。
-  return createPortal(
-    // data-dialog：资产库边缘触发器靠它判断"当前有弹窗打开，别弹出侧栏"。
-    // 放在 UiModal 上，所有走 UiModal 的弹窗自动获得该行为，
-    // 不必再指望每个业务弹窗自己记得加这个属性。
-    <div
-      data-dialog="true"
-      className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center ${overlayClassName}`}
-    >
-      <div
-        className={`ui-glass-scrim absolute inset-0 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
-        onClick={onClose}
-      />
-      <UiPanel
-        className={`relative transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${widthClassName}`}
-      >
-        {!hideHeader && (
-          <div className="flex items-center justify-between border-b border-veil-subtle px-4 py-3">
-            <h2 className="text-sm font-medium text-text-dark">{title}</h2>
-            <UiIconButton className="h-8 w-8" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </UiIconButton>
-          </div>
-        )}
-
-        <div className={contentClassName}>{children}</div>
-
-        {footer && (
-          <div className="flex justify-end gap-2 border-t border-veil-subtle px-4 py-3">
-            {footer}
-          </div>
-        )}
-      </UiPanel>
-    </div>,
-    document.body
   );
 }

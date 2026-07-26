@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { UiModal } from '@/components/ui'
+import { UiEmpty, UiLoading, UiModal } from '@/components/ui'
 import type { AgentTraceDiff } from '../assistantTraceUtils'
 import { formatTraceTokens } from '../assistantTraceUtils'
 import { JsonTree } from './JsonTree'
@@ -22,9 +22,9 @@ export function AssistantTraceDiffDialog({
   return (
     <UiModal isOpen={isOpen} onClose={onClose} title={title} widthClassName="w-[min(1120px,94vw)]" contentClassName="max-h-[78vh] overflow-y-auto">
       {loading ? (
-        <div className="p-8 text-center text-xs text-text-muted">正在计算相邻轮次差异…</div>
+        <UiLoading size="sm" message="正在计算相邻轮次差异…" />
       ) : !diff ? (
-        <div className="p-8 text-center text-xs text-text-muted">上一轮或当前轮次没有保存详细追踪，无法对比。</div>
+        <UiEmpty size="sm" title="无法对比" description="上一轮或当前轮次没有保存详细追踪。" />
       ) : (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">

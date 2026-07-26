@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
-import { UiButton, UiIconButton, UiInput, UiModal, UiOptionButton } from '@/components/ui'
+import { UiButton, UiEmpty, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton } from '@/components/ui'
 import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cameraStageProjects'
 import type { StageEditorMode } from '../domain/shotTypes'
 import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
@@ -116,11 +116,9 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
         </div>
 
         {loading ? (
-          <div className="pt-10 text-center text-sm text-text-muted">加载中…</div>
+          <UiLoading size="sm" message="加载中…" />
         ) : projects.length === 0 ? (
-          <div className="pt-10 text-center text-sm text-text-muted">
-            还没有工程，点击右上「新建工程」开始
-          </div>
+          <UiEmpty size="sm" title="还没有工程" description="点击右上「新建工程」开始。" />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {projects.map((project) => (

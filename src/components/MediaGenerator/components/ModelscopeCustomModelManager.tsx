@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { UiButton, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
+import { UiButton, UiEmpty, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
 import {
@@ -238,9 +238,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       )}
       <div className="flex-1 overflow-y-auto">
         {models.length === 0 ? (
-          <div className="text-center text-sm text-text-muted py-8">
-            {t('modelscopeCustomModel.empty')}
-          </div>
+          <UiEmpty size="sm" title={t('modelscopeCustomModel.empty')} />
         ) : (
           <div className="space-y-2">
             {models.map(model => (

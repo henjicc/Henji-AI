@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiEmpty, UiInput, UiOptionButton } from '@/components/ui'
 import {
   buildVoiceFeatureTags,
   resolveVoiceFeatureTags,
@@ -480,9 +480,7 @@ export const VoiceSelectorPanel: React.FC<VoiceSelectorPanelProps> = ({
           </div>
 
           {filteredVoices.length === 0 && (
-            <div className="py-6 text-center text-xs text-text-muted">
-              未找到匹配音色
-            </div>
+            <UiEmpty size="xs" title="未找到匹配音色" />
           )}
         </div>
       </div>

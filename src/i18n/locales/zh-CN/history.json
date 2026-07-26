@@ -1,6 +1,7 @@
 {
   "title": "历史记录",
   "empty": "暂无历史记录",
+  "emptyHint": "完成一次生成后，结果会显示在这里。",
   "clear": "清空历史",
   "confirmClear": "确定要清空所有历史记录吗？",
   "delete": "删除",

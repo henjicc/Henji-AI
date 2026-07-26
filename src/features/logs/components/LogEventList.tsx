@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton } from '@/components/ui'
+import { UiButton, UiEmpty } from '@/components/ui'
 import type { DisplayLogEvent } from '../eventDisplay'
 import { LogEventRow } from './LogEventRow'
 
@@ -73,7 +73,7 @@ export function LogEventList({
       )}
       <div className="flex-1 overflow-y-auto">
         {visibleEvents.length === 0 ? (
-          <div className="px-3 py-6 text-center text-xs text-text-muted">{t('logsWindow.list.empty')}</div>
+          <UiEmpty size="sm" title={t('logsWindow.list.empty')} />
         ) : (
           <>
             {visibleEvents.map((event) => (

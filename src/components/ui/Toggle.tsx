@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
-import { UiButton } from './primitives'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS } from './styleTokens'
+import { useId, type ReactNode } from 'react'
+import { UiSwitch } from './primitives'
+import { UI_FIELD_LABEL_CLASS } from './styleTokens'
 
 type ToggleProps = {
   label?: ReactNode
@@ -12,25 +12,22 @@ type ToggleProps = {
   disabled?: boolean
 }
 
-export default function Toggle(props: ToggleProps) {
+export default function Toggle(props: ToggleProps): JSX.Element {
   const { label, checked, onChange, onText = '开启', offText = '关闭', className, disabled = false } = props
+  const labelId = useId()
+
   return (
-    <div className={className}>
-      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
-      <UiButton
-        type="button"
-        variant={disabled ? 'ghost' : 'muted'}
-        onClick={() => !disabled && onChange(!checked)}
+    <div className={`flex min-w-0 items-center justify-between gap-3 ${className ?? ''}`}>
+      {label ? <span id={labelId} className={`min-w-0 ${UI_FIELD_LABEL_CLASS}`}>{label}</span> : null}
+      <UiSwitch
+        checked={checked}
+        onCheckedChange={onChange}
         disabled={disabled}
-        className={`px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} !text-15 leading-none rounded-lg border ${disabled
-            ? 'bg-surface-dark/30 text-text-faint border-border-dark/30 cursor-not-allowed opacity-50'
-            : checked
-              ? '!bg-brand-500 !text-white !border-brand-500 hover:brightness-110'
-              : 'bg-surface-dark/70 text-text-soft border-border-dark/50'
-          }`}
-      >
-        {checked ? onText : offText}
-      </UiButton>
+        aria-labelledby={label ? labelId : undefined}
+        aria-label={label ? undefined : checked ? onText : offText}
+        title={checked ? onText : offText}
+        className="shrink-0"
+      />
     </div>
   )
 }

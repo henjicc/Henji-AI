@@ -13,7 +13,7 @@ import { usePresetLoader } from '@/hooks/usePresetLoader'
 import type { Preset } from '@/core/types/Preset'
 import { CreatePresetDialog } from './CreatePresetDialog'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiModal, UiPanel } from '@/components/ui'
+import { UiButton, UiEmpty, UiLoading, UiModal, UiPanel } from '@/components/ui'
 
 interface PresetItemProps {
   preset: Preset
@@ -148,13 +148,9 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="text-text-faint">{t('common:loading')}</div>
-          </div>
+          <UiLoading size="sm" message={t('common:loading')} />
         ) : presets.length === 0 ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="text-text-faint">{t('ui:presets.manager.empty')}</div>
-          </div>
+          <UiEmpty size="sm" title={t('ui:presets.manager.empty')} />
         ) : (
           <div className="preset-list overflow-y-auto flex-1">
             {presets.map(preset => (

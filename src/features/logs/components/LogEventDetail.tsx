@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton } from '@/components/ui'
+import { UiButton, UiEmpty } from '@/components/ui'
 import { getDomainHint, getEventDisplay, type DisplayLogEvent } from '../eventDisplay'
 import { copyTextToClipboard, eventToJson, eventToMarkdown } from '../copyFormats'
 import { JsonTree } from './JsonTree'
@@ -42,8 +42,8 @@ export function LogEventDetail({ event, onViewChain }: LogEventDetailProps): JSX
 
   if (!event) {
     return (
-      <div className="flex h-full items-center justify-center rounded-lg border border-border-dark/50 bg-black/20 p-3 text-xs text-text-muted">
-        {t('logsWindow.detail.empty')}
+      <div className="h-full rounded-lg border border-border-dark/50 bg-black/20 p-3">
+        <UiEmpty className="h-full" size="sm" title={t('logsWindow.detail.empty')} />
       </div>
     )
   }

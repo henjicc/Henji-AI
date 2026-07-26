@@ -16,7 +16,7 @@ export function RenameDialog({
   defaultValue = '',
   onClose,
   onConfirm,
-}: RenameDialogProps) {
+}: RenameDialogProps): JSX.Element {
   const { t } = useTranslation();
   const [name, setName] = useState(defaultValue);
 
@@ -26,18 +26,16 @@ export function RenameDialog({
     }
   }, [isOpen, defaultValue]);
 
-  const handleConfirm = () => {
+  const handleConfirm = (): void => {
     if (name.trim()) {
       onConfirm(name.trim());
       onClose();
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent): void => {
     if (e.key === 'Enter') {
       handleConfirm();
-    } else if (e.key === 'Escape') {
-      onClose();
     }
   };
 

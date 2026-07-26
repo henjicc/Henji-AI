@@ -4,7 +4,7 @@
  */
 
 import React from 'react'
-import { UiCheckbox } from '@/components/ui'
+import { UiCheckbox, UiEmpty } from '@/components/ui'
 
 interface MediaItem {
   id: string
@@ -55,9 +55,7 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
   return (
     <div className={`media-grid ${viewMode}`}>
       {items.length === 0 ? (
-        <div className="media-grid-empty">
-          暂无媒体文件
-        </div>
+        <UiEmpty size="sm" title="暂无媒体文件" />
       ) : (
         items.map(item => (
           <div

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, FolderOpen, Pencil, Trash2, PackageOpen, PackageCheck } from 'lucide-react';
 import { createLogger } from '@/core/logging';
-import { UiButton, UiIconButton, UiPanel } from '@/components/ui';
+import { UiButton, UiEmpty, UiError, UiIconButton, UiPanel } from '@/components/ui';
 import { useProjectStore } from '@/stores/projectStore';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
 import { exportProjectToPackage } from '@/services/projectPackage/exportProject';
@@ -11,7 +11,7 @@ import { RenameDialog } from './RenameDialog';
 
 const logger = createLogger('features.project.ProjectManager');
 
-export function ProjectManager() {
+export function ProjectManager(): JSX.Element {
   const { t } = useTranslation();
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
@@ -119,18 +119,14 @@ export function ProjectManager() {
           </div>
         </div>
 
-        {packageError && (
-          <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-400">
-            {packageError}
-          </div>
-        )}
+        {packageError && <UiError size="xs" className="mb-4" message={packageError} />}
 
         {projects.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-text-muted">
-            <FolderOpen className="w-16 h-16 mb-4 opacity-50" />
-            <p className="text-lg">{t('project.empty')}</p>
-            <p className="text-sm mt-2">{t('project.emptyHint')}</p>
-          </div>
+          <UiEmpty
+            icon={<FolderOpen className="h-12 w-12" />}
+            title={t('project.empty')}
+            description={t('project.emptyHint')}
+          />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {projects.map((project) => (

@@ -1,9 +1,7 @@
 import {
-  AlertCircle,
   BrainCircuit,
   Check,
   Edit3,
-  LoaderCircle,
   RefreshCw,
   Save,
   Trash2,
@@ -20,7 +18,17 @@ import {
   updateAgentMemoryRecord,
   updateAgentMemorySettings,
 } from '@/commands/assistant'
-import { Dropdown, UiButton, UiIconButton, UiSwitch, UiTextArea, UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import {
+  Dropdown,
+  UiButton,
+  UiEmpty,
+  UiError,
+  UiIconButton,
+  UiLoading,
+  UiSwitch,
+  UiTextArea,
+  UI_INSET_SURFACE_CLASS,
+} from '@/components/ui'
 import type { AgentMemoryRecord, AgentMemoryState } from '@/core/assistant/memory'
 
 const ttlOptions = [
@@ -96,9 +104,7 @@ export function AssistantMemoryPanel(): JSX.Element {
 
       <div className="ui-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto p-3 [contain:layout_paint_style]">
         {loading && !state ? (
-          <div className="flex items-center justify-center gap-2 py-12 text-xs text-text-muted">
-            <LoaderCircle className="h-4 w-4 animate-spin" />正在读取
-          </div>
+          <UiLoading size="sm" message="正在读取" />
         ) : null}
 
         {state ? (
@@ -228,9 +234,11 @@ export function AssistantMemoryPanel(): JSX.Element {
             ))}
 
             {state.memories.length === 0 && state.candidates.length === 0 ? (
-              <div className="py-8 text-center text-xs leading-5 text-text-muted">
-                暂无记忆。启用后，只有你明确要求“长期记住”并确认的内容才会保存。
-              </div>
+              <UiEmpty
+                size="sm"
+                title="暂无记忆"
+                description="启用后，只有你明确要求“长期记住”并确认的内容才会保存。"
+              />
             ) : null}
 
             {state.memories.length > 0 ? (
@@ -257,10 +265,7 @@ export function AssistantMemoryPanel(): JSX.Element {
         ) : null}
 
         {error ? (
-          <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 p-2 text-xs text-danger">
-            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span className="leading-5">{error}</span>
-          </div>
+          <UiError size="xs" message={error} />
         ) : null}
       </div>
     </section>

@@ -55,6 +55,14 @@ export const UI_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
 export const UI_EASE_STACK = 'cubic-bezier(0.15, 0.75, 0.3, 1)';
 
 /**
+ * 数据补间档：把离散到达的生成进度平滑成连续推进。
+ *
+ * 它不属于交互反馈的四档动效；时长与约 3 秒一次的进度采样间隔配套，
+ * 因此单独具名登记。新增数据补间前先确认是否能复用此档。
+ */
+export const UI_DATA_TWEEN_MS = 2800;
+
+/**
  * 内联 `style={{ transition }}` 的唯一出口。
  *
  * 内联过渡绕过了 Tailwind 类，也就绕过了档位约束——收敛前这里散落 9 种时长
