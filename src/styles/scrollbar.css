@@ -1,11 +1,5 @@
-/* Disable body scroll to prevent window-level scrollbar overlapping titlebar */
-/* Use a dedicated scroll container below the titlebar instead of window-level scroll */
+/* 生成历史容器只在这里声明滚动行为，定位由组件布局负责。 */
 .app-scroll-container {
-  position: fixed;
-  top: 40px;
-  left: 0;
-  right: 0;
-  bottom: 0;
   overflow-y: auto;
   scroll-behavior: auto !important;
   overflow-anchor: none;

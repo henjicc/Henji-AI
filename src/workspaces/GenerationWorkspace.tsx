@@ -478,7 +478,7 @@ const GenerationWorkspace: React.FC = () => {
   return (
     <div className="h-full flex-1 bg-app text-white flex flex-col relative overflow-hidden">
       <NotificationToast notification={notification} visible={notificationVisible} />
-      <main className="flex-1 flex flex-col relative z-10 pt-10">
+      <main className="relative z-10 flex min-h-0 flex-1 flex-col">
         <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2">
           <div
             className="relative flex flex-col items-center pointer-events-auto"
@@ -530,7 +530,7 @@ const GenerationWorkspace: React.FC = () => {
         </div>
         <div
           ref={listContainerRef}
-          className="flex-1 overflow-y-auto p-4 app-scroll-container"
+          className="app-scroll-container min-h-0 flex-1 overflow-y-auto p-6"
           style={{ paddingBottom: inputPadding }}
         >
           <div ref={contentRef}>

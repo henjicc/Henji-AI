@@ -38,10 +38,9 @@ export function FloatingInputPanel({
   return (
     <div
       ref={containerRef}
-      className="fixed bottom-5 left-1/2 -translate-x-1/2"
+      className="absolute bottom-5 left-1/2 z-panel -translate-x-1/2"
       style={{
-        zIndex: 20,
-        width: `min(calc(100vw - ${viewportGutterPx * 2}px), ${maxWidthPx}px)`,
+        width: `min(calc(100% - ${viewportGutterPx * 2}px), ${maxWidthPx}px)`,
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
