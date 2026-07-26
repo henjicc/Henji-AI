@@ -10,7 +10,7 @@
   --text-muted-rgb: 163 163 163;
   /* 文字四档中间两级，由 runtimeTheme 从 text/text-muted 派生，会跟随主题预设 */
   --text-soft-rgb: 214 214 214;
-  --text-faint-rgb: 114 114 114;
+  --text-faint-rgb: 139 139 139;
   /*
    * 毛玻璃「材质」。
    *
@@ -38,10 +38,13 @@
   --canvas-rgb: 10 10 10;
   --panel-rgb: 23 23 23;
   --layer-rgb: 64 64 64;
-  --brand-300-rgb: 122 174 255;
-  --brand-500-rgb: 76 136 255;
-  --brand-600-rgb: 47 98 209;
-  --brand-700-rgb: 45 79 138;
+  /* 这四档必须等于 runtimeTheme.applyAccentScale 用默认强调色算出的结果，
+     否则首帧用这里的值、脚本跑完换成派生值，启动时会闪一次色。
+     实测原先 brand-500 静态是 76 136 255 而派生是 50 111 209，差得很明显。 */
+  --brand-300-rgb: 133 178 249;
+  --brand-500-rgb: 50 111 209;
+  --brand-600-rgb: 40 88 167;
+  --brand-700-rgb: 32 72 135;
   --success-rgb: 52 211 153;
   --warning-rgb: 251 191 36;
   --danger-rgb: 248 113 113;

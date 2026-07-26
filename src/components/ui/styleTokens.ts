@@ -2,6 +2,14 @@ import { APP_ACCENT_HEX, TEXT_LIGHT_HEX, WHITE_HEX } from '@/core/theme/colorTok
 
 export const UI_COLOR_ACCENT_BORDER_CLASS = 'border-brand-500';
 export const UI_COLOR_ACCENT_BG_CLASS = 'bg-accent';
+/**
+ * 承载白字的实心强调底。
+ *
+ * 不能直接用 `bg-accent`：白字压在 accent(#3b82f6) 上实测只有 **3.68:1**，
+ * 未达 WCAG AA 的 4.5；`brand-500`（accent 压暗 15%）是 4.85:1，观感上仍是同一支亮蓝。
+ * 纯色块填充（进度条、裁剪手柄等无文字场景）继续用 UI_COLOR_ACCENT_BG_CLASS。
+ */
+export const UI_COLOR_ACCENT_FILL_TEXT_CLASS = 'bg-brand-500';
 export const UI_COLOR_ACCENT_TEXT_CLASS = 'text-brand-300';
 export const UI_COLOR_ACCENT_SOFT_BORDER_CLASS = 'border-accent';
 export const UI_COLOR_ACCENT_SOFT_BG_CLASS = 'bg-brand-600';

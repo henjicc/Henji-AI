@@ -405,11 +405,16 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       <div className="mt-2.5 flex items-center justify-between border-t border-surface-dark/70 px-1 pt-2.5">
         <div className="flex items-center gap-2">
           {/* 清除历史按钮 */}
+          {/* 破坏性动作：静息保持中性、hover 才出危险色。
+              与 `UiIconButton hoverVariant="danger"` 的表达一致。
+              此前是 variant="primary" 再叠 bg-red-600/75——既让"清除"抢走了主动作
+              （发送）的视觉权重，也是一处同属性叠类（红底能盖住 primary 的蓝底
+              只是因为它在 Tailwind 产物里排得更后）。 */}
           <UiButton
             type="button"
-            variant="primary"
+            variant="muted"
             onClick={onOpenClearHistory}
-            className="h-9 bg-red-600/75 hover:bg-red-600"
+            className="h-9 text-red-400 hover:border-red-500/40 hover:bg-red-600/25 hover:text-red-300"
           >
             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

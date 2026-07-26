@@ -457,6 +457,8 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 有没有为了填空白而加的卡片/边框/阴影？删掉
 - [ ] 容器里并列的可点项，静息态还在逐个描边吗？该是 `UiOptionButton variant="menu"`
 - [ ] 有没有 `zinc-*` / `gray-*` / `slate-*`？改强调色或换主题预设时它们不会跟着动
+- [ ] 用 `accent` 当文字色了吗？改用 `text-brand-300`；白字要压实心蓝的话底色用 `bg-brand-500`
+- [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该静息中性、hover 才出危险色
 - [ ] 改了 `.css` 文件吗？里面不能有 `#hex` 与 `rgba(数字…)`，只能 `rgb(var(--xxx-rgb) / a)`
 - [ ] 新加的全局样式/变量放对文件了吗？懒加载的样式表里不能放全局主题变量
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
@@ -474,6 +476,35 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 高频状态（进度/hover/拖拽）是否放在独立 store 而非大列表 state
 - [ ] 列表超过 ~50 项是否考虑了虚拟化
 
+## 对比度：静态检查查不到，必须实测
+
+颜色是否达标取决于**渲染后的实际叠加结果**，grep 无能为力。
+`npm run check:ui-visual` 会启动真实 Electron（复用 `electron:smoke` 的 CDP 链路），
+在渲染后的 DOM 上算四项：表面叠层数 / 文字对比度 / 内层圆角 / 非浮层阴影。
+
+首次跑出来 7 处对比度不达标，根因都在令牌层，不在调用点：
+
+| 现象 | 实测 | 根因 |
+|---|---|---|
+| 导航/标签/chip 的选中态文字 | **2.82:1** | 用了 `text-accent`。accent 是**填充色**，作文字色太深 |
+| 提示文字、空态文字 | **4.12:1** | `text-faint` 的派生比例（0.30）压太重 |
+| 主按钮的白字 | **3.68:1** | 白字压在 `bg-accent` 上先天不达标 |
+
+**结论沉淀成三条规则：**
+
+1. **`accent` 不能作文字色**，要用 `UI_COLOR_ACCENT_TEXT_CLASS`（`text-brand-300`，7.46:1）。
+   `accent` 只用于填充与描边。
+2. **承载白字的实心强调底用 `UI_COLOR_ACCENT_FILL_TEXT_CLASS`**（`bg-brand-500`，4.85:1），
+   不要用 `bg-accent`（3.68:1）。无文字的纯色块填充仍用 `bg-accent`。
+3. **改任何颜色令牌的派生比例后跑一次 `check:ui-visual`**。
+   `text-soft`/`text-faint`/`brand-*` 都是算出来的，改比例就是改对比度。
+
+### 顺带查出的一致性问题
+
+`index.css` 里 `brand-500/600/700` 的**静态默认值和 `applyAccentScale` 的派生结果不一致**
+（静态 `brand-500` 是 `76 136 255`，派生是 `50 111 209`）。首帧用静态值、脚本跑完换派生值，
+启动时会闪一次色，而且等于有两套真值。**静态默认值必须等于用默认强调色算出的结果。**
+
 ## 完成前必跑
 
 ```bash
@@ -485,6 +516,15 @@ npm run check:surface && npm run check:colors && npm run lint
 ```bash
 npx vitest run src/components/ui/motion.test.ts
 ```
+
+**改了颜色令牌、或想确认真实渲染效果**，跑视觉审计（需要先 `npm run electron:build`）：
+
+```bash
+npm run check:ui-visual
+```
+
+它会截图并逐屏输出四项指标，全 0 才算干净。想要截图请看脚本里的 `page.screenshot` 用法——
+观感问题（对齐、空格子、视觉权重错位）光看代码看不出来，得看图。
 
 `check:surface` 报三类问题：
 

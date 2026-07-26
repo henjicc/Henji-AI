@@ -25,7 +25,7 @@ export default function Toggle(props: ToggleProps) {
         className={`px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} !text-15 leading-none rounded-lg border ${disabled
             ? 'bg-surface-dark/30 text-text-faint border-border-dark/30 cursor-not-allowed opacity-50'
             : checked
-              ? '!bg-accent !text-white !border-accent hover:brightness-110'
+              ? '!bg-brand-500 !text-white !border-brand-500 hover:brightness-110'
               : 'bg-surface-dark/70 text-text-soft border-border-dark/50'
           }`}
       >

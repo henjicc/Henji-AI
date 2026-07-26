@@ -149,7 +149,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             !h-7 gap-1.5 px-3 py-1 rounded-md text-xs font-medium border-0
             transition-colors duration-200 ease-out
             ${(tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id)
-              ? 'bg-accent/30 !text-accent'
+              ? 'bg-accent/30 !text-brand-300'
               : 'text-text-muted hover:text-text-soft hover:bg-white/10 bg-transparent'
             }
           `}

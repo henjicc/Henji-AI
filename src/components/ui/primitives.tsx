@@ -10,7 +10,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, X } from 'lucide-react';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motion';
-import { UI_BUTTON_RESET_CLASS, UI_COLOR_ACCENT_BG_CLASS, UI_COLOR_ACCENT_SOFT_BG_CLASS, UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS, UI_COLOR_ACCENT_SOFT_BORDER_CLASS, UI_COLOR_ACCENT_TEXT_CLASS, UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_DISABLED_CLASS, UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UI_INSET_SURFACE_CLASS, UI_OPTION_ITEM_ACTIVE_CLASS, UI_OPTION_ITEM_CLASS, UI_OPTION_ITEM_HOVER_CLASS, UI_PANEL_SURFACE_CLASS } from './styleTokens';
+import { UI_BUTTON_RESET_CLASS, UI_COLOR_ACCENT_FILL_TEXT_CLASS, UI_COLOR_ACCENT_SOFT_BG_CLASS, UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS, UI_COLOR_ACCENT_SOFT_BORDER_CLASS, UI_COLOR_ACCENT_TEXT_CLASS, UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_DISABLED_CLASS, UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UI_INSET_SURFACE_CLASS, UI_OPTION_ITEM_ACTIVE_CLASS, UI_OPTION_ITEM_CLASS, UI_OPTION_ITEM_HOVER_CLASS, UI_PANEL_SURFACE_CLASS } from './styleTokens';
 import { useDialogTransition } from './useDialogTransition';
 import {
   type ScopedTextHistoryBinding,
@@ -95,7 +95,7 @@ interface UiModalProps {
 
 function resolveButtonVariant(variant: ButtonVariant): string {
   if (variant === 'primary') {
-    return `border border-transparent ${UI_COLOR_ACCENT_BG_CLASS} text-white hover:brightness-110`;
+    return `border border-transparent ${UI_COLOR_ACCENT_FILL_TEXT_CLASS} text-white hover:brightness-110`;
   }
 
   if (variant === 'ghost') {
@@ -141,7 +141,7 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
       ref={ref}
       className={`relative inline-flex h-14 w-full items-center gap-1.5 rounded-none border-0 bg-transparent px-4 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${
         active
-          ? '!bg-layer text-accent after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-[\'\']'
+          ? `!bg-layer ${UI_COLOR_ACCENT_TEXT_CLASS} after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-['']`
           : 'text-text-muted hover:bg-surface-dark hover:text-text-dark'
       } ${className}`}
       {...props}
@@ -194,7 +194,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
   ({ className = '', active = false, ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? 'border-brand-500 bg-layer text-accent' : 'text-text-dark hover:bg-layer'} ${className}`}
+      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? `border-brand-500 bg-layer ${UI_COLOR_ACCENT_TEXT_CLASS}` : 'text-text-dark hover:bg-layer'} ${className}`}
       {...props}
     />
   )
@@ -376,7 +376,7 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       aria-checked={checked}
       className={`inline-flex h-5 w-5 items-center justify-center rounded border transition-colors ${
         checked
-          ? 'border-accent bg-brand-600 text-accent'
+          ? 'border-accent bg-brand-600 text-white'
           : 'border-border-dark bg-bg-dark text-transparent hover:border-text-muted'
       } ${className}`}
       onClick={(event) => {

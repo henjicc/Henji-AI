@@ -146,7 +146,10 @@ function toRgbVarValue(hex: string): string {
 
 function applyAccentScale(root: HTMLElement, accentHex: string): void {
   const accent = normalizeHexColor(accentHex, SETTINGS_ACCENT_HEX);
-  const brand300 = mixColor(accent, WHITE_HEX, 0.3);
+  // 0.38 而不是 0.30：brand-300 是「accent 作文字色」的落点，
+  // 0.30 得到 rgb(118,168,249) 在最坏底色 bg-layer(#404040) 上只有 4.31:1；
+  // 0.38 得到 rgb(133,178,249)，4.81:1 达标，观感几乎无差。
+  const brand300 = mixColor(accent, WHITE_HEX, 0.38);
   const brand500 = mixColor(accent, BLACK_HEX, 0.15);
   const brand600 = mixColor(accent, BLACK_HEX, 0.32);
   const brand700 = mixColor(accent, BLACK_HEX, 0.45);
@@ -168,7 +171,9 @@ function applyAccentScale(root: HTMLElement, accentHex: string): void {
  */
 function applyTextScale(root: HTMLElement, textHex: string, textMutedHex: string): void {
   const soft = mixColor(textHex, textMutedHex, 0.45);
-  const faint = mixColor(textMutedHex, BLACK_HEX, 0.3);
+  // 0.15 而不是更重的比例：实测 0.30 得到 rgb(114) 只有 4.12:1，未达 WCAG AA 的 4.5。
+  // 0.15 得到 rgb(139)，在 bg-app(#0a0a0a) 与 bg-panel(#171717) 上分别是 5.81 / 5.26。
+  const faint = mixColor(textMutedHex, BLACK_HEX, 0.15);
 
   root.style.setProperty('--text-soft-rgb', toRgbVarValue(soft));
   root.style.setProperty('--text-faint-rgb', toRgbVarValue(faint));

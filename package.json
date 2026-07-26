@@ -37,7 +37,8 @@
     "electron:updater-e2e": "node scripts/electron-phase4-updater-e2e.cjs",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3",
     "release": "node scripts/release.cjs",
-    "gen:camera-stage-poses": "node scripts/generate-camera-stage-poses.cjs"
+    "gen:camera-stage-poses": "node scripts/generate-camera-stage-poses.cjs",
+    "check:ui-visual": "node scripts/ui-visual-audit.cjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.62",

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { UI_FIELD_CONTROL_HEIGHT_CLASS, UiButton, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_CLASS, UI_TEXT_TITLE_CLASS, UiButton, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
@@ -107,7 +107,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
         style={{ height: '76vh', minHeight: '500px', maxHeight: '940px' }}
       >
         <div className="flex w-[156px] flex-col border-r border-border-dark bg-app">
-          <div className="h-[58px] border-b border-border-dark" />
+          {/* 这一格原先是纯占位（只有边框没有内容），弹窗又用了 hideHeader，
+              结果整个设置面板没有标题、左上角是个突兀的空格子。 */}
+          <div className={`flex h-[58px] items-center border-b border-border-dark px-4 ${UI_TEXT_TITLE_CLASS}`}>
+            {t('title')}
+          </div>
           <div className="flex-1 py-3">
             {tabs.map(tab => (
                 <UiNavButton
