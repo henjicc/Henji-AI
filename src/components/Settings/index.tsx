@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { UiButton, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
+import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
@@ -52,9 +53,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const [closing, setClosing] = useState(false)
   const contentRef = useRef<HTMLDivElement | null>(null)
 
+  // 关闭分两步：先让 UiModal 播完淡出，再由 App 卸载本组件。
+  // 等待时长必须跟着 UiModal 的过渡走，此前写死 300ms 比实际过渡长 120ms，
+  // 那段时间里弹窗已经全透明却还占着 DOM。
   const handleClose = () => {
     setClosing(true)
-    setTimeout(onClose, 300)
+    setTimeout(onClose, UI_DIALOG_TRANSITION_MS)
   }
 
   const tabs = [
@@ -91,7 +95,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       title={t('title')}
       onClose={handleClose}
       hideHeader
-      overlayClassName="bg-black/70 p-4"
+      // 只给内边距，不要在这里再铺一层底色：UiModal 内部已经有一层会做淡入淡出的
+      // 遮罩，外层再叠 bg-black/70 会（1）把背景压到近 86% 黑，(2) 因为外层没有过渡，
+      // 打开时先闪一帧纯黑、关闭时黑幕又突然消失。
+      overlayClassName="p-4"
       widthClassName="flex w-[min(90vw,1200px)] overflow-hidden"
       contentClassName="flex min-h-0 flex-1"
     >
