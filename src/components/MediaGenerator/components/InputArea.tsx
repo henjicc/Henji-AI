@@ -420,7 +420,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           onClick={onGenerate}
           disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}
-          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-[color,background-color,border-color,transform,filter] duration-250 ${generateDisabled
+          className={`absolute bottom-3 right-3 h-10 w-10 !rounded-full transition-[color,background-color,border-color,transform,filter] duration-200 ${generateDisabled
             ? '!border-border-dark/25 !bg-surface-dark/65 !text-text-faint'
             : '!border-brand-500/55 !bg-accent !text-white hover:scale-105 hover:brightness-110'
             }`}

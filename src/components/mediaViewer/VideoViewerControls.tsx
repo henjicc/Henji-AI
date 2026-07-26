@@ -1,6 +1,7 @@
 import React from 'react'
 import { UiIconButton, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
+import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import {
   DownloadIcon,
   LoopIcon,
@@ -89,7 +90,7 @@ export function VideoViewerControls({
       className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl"
       style={{
         opacity: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 1 : 0,
-        transition: 'opacity 500ms ease',
+        transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none',
       }}
     >

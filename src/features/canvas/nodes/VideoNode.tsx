@@ -40,6 +40,7 @@ import { UiIconButton, UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { CanvasVideoPlayer } from './video/CanvasVideoPlayer';
+import { uiTransition } from '@/components/ui/motion';
 
 type VideoNodeProps = NodeProps & {
   id: string;
@@ -262,7 +263,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
               className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-veil-bright to-veil-faint ease-out"
-              style={{ transform: `scaleX(${progress})`, transition: `transform ${transitionDurationMs}ms ease-out` }}
+              style={{ transform: `scaleX(${progress})`, transition: uiTransition(['transform'], transitionDurationMs) }}
             />
           </div>
         )}

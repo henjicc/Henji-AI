@@ -498,7 +498,7 @@ const GenerationWorkspace: React.FC = () => {
             }}
           >
             <div className="pointer-events-auto absolute -top-6 h-16 w-[980px] max-w-[98vw]" />
-            <div className={`pointer-events-none transition-[opacity,transform] duration-220 ease-out ${
+            <div className={`pointer-events-none transition-[opacity,transform] duration-200 ${
               (isTopFilterVisible || hasActiveFilters)
                 ? 'pointer-events-auto translate-y-0 opacity-100'
                 : '-translate-y-2 opacity-0'

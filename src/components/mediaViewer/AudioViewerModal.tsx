@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { toDisplaySrc } from '@/platform/desktopApi'
 import AudioPlayer from '@/components/AudioPlayer'
+import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
 export interface AudioViewerModalProps {
   open: boolean
@@ -94,7 +95,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
       className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ "fixed inset-0 z-viewer flex items-center justify-center bg-black/90 p-6"}
       style={{
         opacity: overlayOpacity,
-        transition: 'opacity 500ms ease',
+        transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: open ? 'auto' : 'none',
       }}
       onClick={(event) => {
@@ -107,7 +108,7 @@ export function AudioViewerModal({ open, audioUrl, filePath, onClose, autoPlay =
         style={{
           opacity: playerOpacity * overlayOpacity,
           transform: `scale(${0.98 + 0.02 * playerOpacity})`,
-          transition: 'opacity 500ms ease, transform 500ms ease',
+          transition: uiTransition(['opacity', 'transform'], UI_DURATION.viewer),
         }}
       >
         <AudioPlayer src={playbackUrl} filePath={filePath} autoPlay={autoPlay} active={open} compact className="!w-[44rem] !max-w-[92vw]" />

@@ -13,7 +13,7 @@ export function NotificationToast({ notification, visible }: NotificationToastPr
 
   return (
     <div
-      className={`fixed top-12 left-1/2 z-toast -translate-x-1/2 transform transition-[opacity,transform] duration-500 ease-out ${
+      className={`fixed top-12 left-1/2 z-toast -translate-x-1/2 transform transition-[opacity,transform] duration-300 ${
         visible ? 'translate-y-0 opacity-100' : '-translate-y-8 opacity-0 pointer-events-none'
       }`}
     >

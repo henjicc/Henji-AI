@@ -31,6 +31,7 @@ import { useAssistantHostBridge } from '@/features/assistant/frontendTools/useAs
 import { AssistantSidebar } from '@/features/assistant/AssistantSidebar'
 import { toggleAssistant, useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
+import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
 const logger = createLogger('App')
 
@@ -161,7 +162,7 @@ const App: React.FC = () => {
         className="h-screen min-h-screen bg-app text-white flex flex-col relative overflow-hidden"
         style={{
           opacity: isReady ? 1 : 0,
-          transition: 'opacity 0.3s ease-in-out'
+          transition: uiTransition(['opacity'], UI_DURATION.slow)
         }}
       >
         {/* 标题栏（含 Tab 切换） */}

@@ -7,6 +7,7 @@ import { readFile } from '@/platform/desktopApi'
 import { isDesktop, inferMimeFromPath } from '../../utils/save'
 import { useReorderDrag } from './fileUploader/useReorderDrag'
 import { UiButton, UiIconButton, UiInput } from './primitives'
+import { UI_DURATION, uiTransition } from './motion'
 
 const logger = createLogger('components.ui.FileUploader')
 
@@ -293,7 +294,7 @@ export default function FileUploader({
                                 : isDroppingThis
                                     ? dropTransform
                                     : `translateX(${translateX}px) scale(${scale})`,
-                            transition: isDraggingThis ? 'none' : 'transform 0.15s cubic-bezier(0.4, 0, 0.2, 1)',
+                            transition: isDraggingThis ? 'none' : uiTransition(['transform'], UI_DURATION.fast),
                             pointerEvents: isDraggingThis || isDroppingThis ? 'none' : 'auto',
                             opacity: isDraggingThis ? 0.8 : 1,
                             visibility: 'visible',

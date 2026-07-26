@@ -36,6 +36,7 @@ import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasConten
 import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
 import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { uiTransition } from '@/components/ui/motion';
 
 type ImageNodeProps = NodeProps & {
   id: string;
@@ -157,7 +158,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
               className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-veil-bright to-veil-faint ease-out"
-              style={{ transform: `scaleX(${displayProgress})`, transition: `transform ${transitionDurationMs}ms ease-out` }}
+              style={{ transform: `scaleX(${displayProgress})`, transition: uiTransition(['transform'], transitionDurationMs) }}
             />
           </div>
         )}

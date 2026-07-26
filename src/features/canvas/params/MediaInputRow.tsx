@@ -26,6 +26,7 @@ import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
 import { readAssetDragPayload } from '@/features/assets/drag/assetDragPayload';
+import { UI_DURATION, uiTransition } from '@/components/ui/motion';
 
 interface MediaInputRowProps {
   nodeId: string;
@@ -268,7 +269,7 @@ export function MediaInputRow({
             // 步进量是按布局坐标量出来的固定网格，本地 transform 直接用，不需要再除 zoom
             itemStyle = {
               transform: `translateX(${(toIndex - fromIndex) * stepPxRef.current}px)`,
-              transition: 'transform 0.15s ease',
+              transition: uiTransition(['transform'], UI_DURATION.fast),
               position: 'relative',
               zIndex: 50,
             };
@@ -281,7 +282,7 @@ export function MediaInputRow({
             } else if (fromIndex > toIndex && index < fromIndex && index >= toIndex) {
               shiftX = stepPxRef.current;
             }
-            itemStyle = { transform: `translateX(${shiftX}px)`, transition: 'transform 0.15s ease' };
+            itemStyle = { transform: `translateX(${shiftX}px)`, transition: uiTransition(['transform'], UI_DURATION.fast) };
           }
 
           return (

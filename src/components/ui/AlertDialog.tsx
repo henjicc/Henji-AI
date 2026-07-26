@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { UiButton, UiPanel } from './primitives'
 import { useI18n } from '@/hooks/useI18n'
+import { UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 
 /** 弹窗底部的一个动作按钮 */
 export interface AlertDialogAction {
@@ -47,7 +48,7 @@ export default function AlertDialog({
 
   const handleClose = () => {
     setOpacity(0)
-    setTimeout(() => onClose(), 180)
+    setTimeout(() => onClose(), UI_DIALOG_TRANSITION_MS)
   }
 
   if (!isOpen) return null
@@ -96,7 +97,7 @@ export default function AlertDialog({
       {/* 背景遮罩 */}
       <div
         className="ui-glass-scrim absolute inset-0"
-        style={{ opacity, transition: 'opacity 180ms ease' }}
+        style={{ opacity, transition: uiTransition(['opacity'], UI_DIALOG_TRANSITION_MS) }}
         onClick={handleClose}
       />
 
@@ -106,7 +107,7 @@ export default function AlertDialog({
         style={{
           opacity,
           transform: `scale(${0.97 + 0.03 * opacity})`,
-          transition: 'opacity 180ms ease, transform 180ms ease'
+          transition: uiTransition(['opacity', 'transform'], UI_DIALOG_TRANSITION_MS)
         }}
       >
         {/* 标题 */}

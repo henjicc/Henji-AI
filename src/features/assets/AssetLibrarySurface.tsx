@@ -200,7 +200,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
         <footer className="flex h-12 shrink-0 items-center justify-end px-3 text-text-muted">
           <div ref={thumbnailControlsRef} className="flex items-center justify-end gap-1.5 overflow-hidden">
             <div className={`relative z-0 overflow-hidden transition-[width,transform] duration-200 ease-out ${thumbnailControlsOpen ? 'w-[300px] translate-x-0' : 'pointer-events-none w-0 translate-x-3'}`} aria-hidden={!thumbnailControlsOpen}>
-              <div className={`flex w-[300px] items-center gap-1.5 transition-opacity ${thumbnailControlsOpen ? 'delay-75 duration-150 opacity-100' : 'delay-0 duration-75 opacity-0'}`}>
+              <div className={`flex w-[300px] items-center gap-1.5 transition-opacity ${thumbnailControlsOpen ? 'delay-150 duration-150 opacity-100' : 'delay-0 duration-150 opacity-0'}`}>
                 <div className="mr-1 w-32 shrink-0">
                   <UiRangeInput aria-label={t('assetLibrary.thumbnailSize')} title={t('assetLibrary.thumbnailSize')} tabIndex={thumbnailControlsOpen ? 0 : -1} min={112} max={280} step={8} value={cardSize} onChange={(event) => setCardSize(Number(event.target.value))} />
                 </div>

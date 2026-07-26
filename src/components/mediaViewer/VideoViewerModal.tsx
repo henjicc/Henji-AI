@@ -9,6 +9,7 @@ import {
   VolumeOnIcon,
 } from './VideoViewerIcons'
 import { VideoViewerControls } from './VideoViewerControls'
+import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
 type VideoFrameRequestCallback = (now: number, metadata: { mediaTime: number }) => void
 interface RenderedVideoRect {
@@ -401,7 +402,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
       className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ "fixed inset-0 z-viewer bg-black/90 flex items-center justify-center p-6"}
       style={{
         opacity: overlayOpacity,
-        transition: 'opacity 500ms ease',
+        transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: open ? 'auto' : 'none',
       }}
       onClick={(e) => {
@@ -437,7 +438,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           {hasAudio !== false && (
             <div
               className="ui-glass absolute top-4 left-4 px-4 py-2 rounded-lg text-white z-10 flex items-center gap-2"
-              style={{ opacity: showVolumeIndicator ? 1 : 0, transition: 'opacity 200ms ease', pointerEvents: 'none' }}
+              style={{ opacity: showVolumeIndicator ? 1 : 0, transition: uiTransition(['opacity'], UI_DURATION.base), pointerEvents: 'none' }}
             >
               {muted || volume === 0 ? (
                 <VolumeMutedIcon className="w-5 h-5" />
@@ -452,7 +453,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             ref={videoRef}
             src={videoUrl}
             className="w-full h-full object-contain"
-            style={{ opacity: viewerOpacity * overlayOpacity, transition: 'opacity 500ms ease' }}
+            style={{ opacity: viewerOpacity * overlayOpacity, transition: uiTransition(['opacity'], UI_DURATION.viewer) }}
             onLoadedMetadata={() => {
               if (videoRef.current) {
                 setVideoDuration(videoRef.current.duration || 0)
@@ -503,7 +504,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               width: renderedVideoRect.width,
               height: renderedVideoRect.height,
               opacity: isOverlayControlsVisible ? 1 : 0,
-              transition: 'opacity 500ms ease',
+              transition: uiTransition(['opacity'], UI_DURATION.viewer),
             }}
           >
             <UiIconButton

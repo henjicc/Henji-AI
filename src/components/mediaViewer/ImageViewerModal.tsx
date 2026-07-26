@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react';
 
 import { UiButton, UiIconButton } from '@/components/ui';
-import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
+import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import type { ImageEditSession } from '@/core/imageEdit';
 import { ImageInfoPanel } from './ImageInfoPanel';
 import { useImageViewerTransform } from './useImageViewerTransform';
@@ -168,7 +168,7 @@ export function ImageViewerModal({
       className={/* ui-surface-allow: 全屏沉浸式媒体查看器，铺满视口，不是 UiModal 的居中卡片语义（见重要记录 003） */ `fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-viewer overflow-hidden bg-black/90`}
       style={{
         opacity: overlayOpacity,
-        transition: 'opacity 400ms ease',
+        transition: uiTransition(['opacity'], UI_DURATION.viewer),
         pointerEvents: open ? 'auto' : 'none',
       }}
       onClick={(e) => {

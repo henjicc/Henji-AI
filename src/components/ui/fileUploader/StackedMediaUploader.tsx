@@ -9,6 +9,7 @@ import { urlToFile } from '@/utils/imageConversion'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
 import { UiButton, UiIconButton, UiInput } from '../primitives'
 import { UI_UPLOADER_CARD_BORDER_CLASS, UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS } from '../styleTokens'
+import { UI_DURATION, UI_EASE, UI_EASE_STACK } from '../motion'
 import Tooltip from '../Tooltip'
 import { useReorderDrag } from './useReorderDrag'
 import { useStackedExpand } from './useStackedExpand'
@@ -299,7 +300,7 @@ export function StackedMediaUploader({
   const uploaderContent = (
     <div
       ref={elementRef}
-      className="relative shrink-0 transition-[width] duration-250 ease-out"
+      className="relative shrink-0 transition-[width] duration-300"
       style={{ width: shellWidth }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -341,11 +342,14 @@ export function StackedMediaUploader({
                 }}
                 className="group absolute"
                 style={{
-                  left: `${expanded ? expandedLeft : collapsedLeft}px`,
-                  top: `${expanded ? 4 : collapsedTop}px`,
+                  // 位移合并进 transform：left/top 是布局属性，过渡期间每帧重排；
+                  // translate 只走合成器。translate 必须写在 rotate/scale 之前，
+                  // 否则旋转缩放会一起作用到位移量上。
+                  left: 0,
+                  top: 0,
                   opacity: isDraggingThis ? 0.75 : opacity,
-                  transform: `rotate(${rotate}deg) scale(${scale})`,
-                  transition: 'left 280ms cubic-bezier(0.15,0.75,0.3,1), top 280ms cubic-bezier(0.15,0.75,0.3,1), transform 280ms cubic-bezier(0.15,0.75,0.3,1), opacity 180ms ease',
+                  transform: `translate(${expanded ? expandedLeft : collapsedLeft}px, ${expanded ? 4 : collapsedTop}px) rotate(${rotate}deg) scale(${scale})`,
+                  transition: `transform ${UI_DURATION.slow}ms ${UI_EASE_STACK}, opacity ${UI_DURATION.fast}ms ${UI_EASE}`,
                   pointerEvents: expanded || collapsedVisible ? 'auto' : 'none',
                   zIndex
                 }}
@@ -420,10 +424,10 @@ export function StackedMediaUploader({
             <div
               className="absolute"
               style={{
-                left: `${plusLeft}px`,
-                top: `${plusTop}px`,
-                transform: `rotate(${plusRotate}deg) scale(${plusUseCardShape ? 1 : 0.92})`,
-                transition: 'left 280ms cubic-bezier(0.15,0.75,0.3,1), top 280ms cubic-bezier(0.15,0.75,0.3,1), transform 280ms cubic-bezier(0.15,0.75,0.3,1), opacity 180ms ease',
+                left: 0,
+                top: 0,
+                transform: `translate(${plusLeft}px, ${plusTop}px) rotate(${plusRotate}deg) scale(${plusUseCardShape ? 1 : 0.92})`,
+                transition: `transform ${UI_DURATION.slow}ms ${UI_EASE_STACK}, opacity ${UI_DURATION.fast}ms ${UI_EASE}`,
                 zIndex: plusZIndex
               }}
             >

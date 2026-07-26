@@ -1,5 +1,6 @@
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
+import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
 interface FloatingInputPanelProps {
   containerRef: React.RefObject<HTMLDivElement>
@@ -49,7 +50,7 @@ export function FloatingInputPanel({
       <div
         className="relative cursor-pointer overflow-hidden rounded-3xl border border-border-dark bg-app shadow-panel"
         style={{
-          transition: 'max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: uiTransition(['max-height'], UI_DURATION.slow),
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
           minHeight: isCollapsed || isCollapsing ? '52px' : 'auto',
           opacity: 1,
@@ -63,9 +64,12 @@ export function FloatingInputPanel({
         <div
           className="absolute left-0 right-0"
           style={{
-            top: isCollapsed || isCollapsing ? '12px' : '-60px',
+            // 位移走 transform 而不是过渡 top：top 是布局属性，过渡期间每帧重排；
+            // translateY 只走合成器。12px → -60px 等价于位移 -72px。
+            top: '12px',
+            transform: isCollapsed || isCollapsing ? 'translateY(0)' : 'translateY(-72px)',
             opacity: isCollapsed || isCollapsing ? 1 : 0,
-            transition: 'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1), top 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+            transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow),
             padding: isCollapsed || isCollapsing ? '0 32px' : '0 22px',
           }}
         >
@@ -94,7 +98,7 @@ export function FloatingInputPanel({
           className="relative rounded-[inherit]"
           style={{
             opacity: !isCollapsed && !isCollapsing ? 1 : 0,
-            transition: 'opacity 0.4s ease 0.15s',
+            transition: uiTransition(['opacity'], UI_DURATION.slow, UI_DURATION.fast),
             pointerEvents: !isCollapsed && !isCollapsing ? 'auto' : 'none',
             display: !isCollapsed || isCollapsing ? 'block' : 'none',
           }}

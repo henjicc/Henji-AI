@@ -205,11 +205,18 @@ ESLint 已硬拦所有 `*-zinc-*`。同一条规则也适用于 `gray-*`、`neut
 |---|---|---|
 | `fast` | 150ms | hover、颜色、开关、小控件 |
 | `base` | 200ms | 弹窗、浮层、下拉、面板开合 —— **默认档** |
-| `slow` | 300ms | 大面积位移、侧栏模式切换 |
+| `slow` | 300ms | 大面积位移、通知 Toast、悬浮面板折叠、缩略图扇形展开 |
+| `viewer` | 500ms | 全屏媒体查看器的沉浸式淡入淡出 |
 
-缓动统一 `ease-out`（进场/退场都该减速落位）。
-**Tailwind 不写 `ease-*` 时默认是 `ease-in-out`**，起步和收尾都慢，小尺度 UI 上显得拖沓，
-所以要显式写出来。
+位移/覆盖面积越大，时长就该越长——`viewer` 不是随手加的档，是 7 处查看器实际在用的聚类。
+
+**缓动不需要每处写。** `tailwind.config.js` 已把 `transitionTimingFunction.DEFAULT`
+改成 `ease-out` 的值，所有 `transition-*` 工具类自动拿到正确缓动。
+（Tailwind 原本的默认是 `ease-in-out`，起步和收尾都慢，小尺度 UI 上显得拖沓。）
+需要别的缓动时才显式写 `ease-linear` / `ease-in`。
+
+唯一登记的例外缓动是 `UI_EASE_STACK`（缩略图扇形展开的弹性感），和具名阴影同一个逻辑：
+有具体功能语义才登记。**不要为了"想要点不一样"再发明缓动。**
 
 ### JS 计时必须和 CSS 时长同档
 
@@ -240,6 +247,36 @@ className={`transition-opacity ${UI_DURATION_CLASS.base} ${UI_EASE_CLASS}`}
 
 确需过渡多个属性时**显式列举**：`transition-[opacity,transform]`。
 
+### 内联 `style={{ transition }}` 走 `uiTransition()`
+
+内联过渡绕过 Tailwind 类，也就绕过了档位约束——收敛前这里散落 9 种时长与 5 种缓动。
+时长来自运行时数据（如进度学习给出的时长）或属性没有对应 Tailwind 类时，用这个出口：
+
+```tsx
+import { uiTransition, UI_DURATION } from '@/components/ui/motion'
+
+style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
+// 带延迟：uiTransition(['opacity'], UI_DURATION.slow, UI_DURATION.fast)
+```
+
+**绝不要传 `['all']`** —— 那会把 `background-color`、`backdrop-filter` 一起拖进过渡。
+
+### 无法用 transform 替代的布局过渡（已登记，不要"顺手优化"）
+
+这几处过渡的是布局属性，但**改不动**——容器宽度会驱动兄弟元素布局，transform 不参与布局：
+
+| 位置 | 属性 | 为什么改不了 |
+|---|---|---|
+| `StackedMediaUploader` / `TaskInputPreview` / `AssetLibrarySurface` | `width` | 容器宽度变化要带动兄弟重排，这正是需要的效果 |
+| `TabContainer` | `padding` | 助手停靠的 inset，工作区必须真的收缩；resize 期间已用 `--assistant-layout-transition-duration: 0ms` 关掉过渡 |
+| `LlmSettingsSection` | `grid-template-rows` | `0fr → 1fr` 是 auto-height 动画的推荐做法，替代方案（max-height / JS 测高）更差 |
+| `FloatingInputPanel` | `max-height` | 同上，折叠展开的高度动画 |
+| `TaskInputPreview` | `margin` | 缩略图堆叠的重叠间距，margin 影响兄弟位置 |
+
+**已经改掉的**：`FloatingInputPanel` 的 `top` 与 `StackedMediaUploader` 的 `left`/`top`
+都已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）。
+合并时注意 **`translate` 必须写在 `rotate`/`scale` 之前**，否则旋转缩放会一起作用到位移量上。
+
 ## 用排版建立层级，而不是用框
 
 项目此前 72% 的字号决策都落在 `text-xs` 及更小，层级塌缩成"全是小字"，于是只能靠边框背景区分内容。
@@ -258,7 +295,7 @@ className={`transition-opacity ${UI_DURATION_CLASS.base} ${UI_EASE_CLASS}`}
 | 维度 | 允许的写法 | 禁止 |
 |---|---|---|
 | 颜色 | 语义色：底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`；边框 `border-border-dark`；媒体与玻璃质感边框用 `veil` 档位 | 一切 `*-zinc-*` 等固定调色板 |
-| 动效 | 时长 `duration-150/200/300`（对应 `UI_DURATION` 三档）；缓动 `ease-out`；过渡属性显式列举 | 裸 `transition`、`transition-all`、过渡布局属性 |
+| 动效 | 时长 `duration-150/200/300/500`（对应 `UI_DURATION` 四档）；缓动走全局默认；过渡属性显式列举；内联过渡走 `uiTransition()` | 裸 `transition`、`transition-all`、`transition: all`、未登记时长、自造缓动 |
 | 字号 | `text-4xs`(9) `text-3xs`(10) `text-2xs`(11) `text-13` `text-14` `text-15` / `text-xs` `text-sm` `text-base`+ | `text-[Npx]` |
 | 圆角 | `rounded-lg`(控件/内嵌) `rounded-xl`(浮层) `rounded-2xl` `rounded-3xl` `rounded-full` `rounded-hairline`；画布节点 `rounded-[var(--node-radius)]` | 其他 `rounded-[...]` |
 | 阴影 | `shadow-panel`(仅浮层) / `shadow-node-selected` `shadow-node-error` `shadow-thumb` `shadow-thumb-sm`(具名特效) | `shadow-[...]` |
@@ -405,7 +442,7 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 同一个 className 里有没有两个类抢同一个 CSS 属性？改成互斥三元
 - [ ] 新面板有没有再叠一层自己的底色？表面应该由外壳统一提供
 - [ ] 加了模糊吗？只有压在图片/视频/画布上才该加，且只能用 `ui-glass` / `ui-glass-scrim`
-- [ ] 动效时长是否落在 150/200/300 三档？缓动是否显式写了 `ease-out`？
+- [ ] 动效时长是否落在 150/200/300/500 四档？（缓动已是全局默认，不用每处写）
 - [ ] 有 `setTimeout` 卸载动画组件吗？那个数字必须和 className 里的 `duration-*` 同档
 - [ ] 过渡的是 `opacity`/`transform` 吗？别过渡宽高间距，也别用裸 `transition`
 - [ ] 空/加载/错误三态是否都走了 `UiEmpty/UiLoading/UiError`

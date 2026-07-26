@@ -137,7 +137,7 @@ npm run lint                   # 前端 lint
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`
 - **禁止固定调色板（ESLint 硬拦）**：一切 `*-zinc-*` 都不会跟随主题预设（设置→界面→主题外观可整体替换 9 个语义色），必须改用语义色。底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`（中间两档由 `runtimeTheme.applyTextScale` 派生）；边框 `border-border-dark`；叠在图片/视频/画布上的边框与底色用 `veil` 六档
 - **毛玻璃是材质不是 blur 值（ESLint 硬拦一切 `backdrop-blur-*`）**：用 `ui-glass` 类（`src/index.css`，含 blur + saturate + 受光边 + 噪点四层），遮罩用 `ui-glass-scrim`；只写 blur 会得到「模糊+降不透明度」的廉价观感。只用于压在图片/视频/画布上的浮层，压在纯色 UI 上的一律用不透明底色。质感调整只改 `--ui-glass-*` 变量；「设置→界面→毛玻璃效果」关掉时整套材质退化成不透明底色
-- **动效三档（`src/components/ui/motion.ts`）**：时长只用 `duration-150/200/300`（对应 `UI_DURATION.fast/base/slow`），缓动显式写 `ease-out`。用 `setTimeout` 卸载动画组件时，那个 ms 必须与 className 里的 `duration-*` 同档，否则过渡收尾被硬切。禁止裸 `transition`（会连 `backdrop-filter` 一起过渡）与过渡布局属性，多属性请显式列举
+- **动效四档（`src/components/ui/motion.ts`）**：时长只用 `duration-150/200/300/500`（对应 `UI_DURATION.fast/base/slow/viewer`）。缓动已由 `tailwind.config.js` 的 `transitionTimingFunction.DEFAULT` 全局设为 ease-out，不用每处写；唯一登记的例外是 `UI_EASE_STACK`。内联 `style={{ transition }}` 走 `uiTransition()`，禁止 `transition: all`。用 `setTimeout` 卸载动画组件时，那个 ms 必须与 className 里的 `duration-*` 同档，否则过渡收尾被硬切。过渡布局属性前先确认无法用 transform 替代（已登记的例外见 skill）
 - **同属性叠类会静默失效**：两个工具类落在同一 CSS 属性上时，胜负看 Tailwind 产物顺序而非 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。`index.html` 写死 `class="dark"`，`dark:` 变体的基础值是死代码
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用

@@ -1,5 +1,6 @@
 import React from 'react'
 import { UI_ACCENT_HEX } from './styleTokens'
+import { uiTransition } from './motion'
 
 interface ProgressBarProps {
     progress: number
@@ -28,7 +29,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                     style={{
                         width: `${normalizedProgress}%`,
                         backgroundColor: color,
-                        transition: `all ${duration}ms ease-out`
+                        transition: uiTransition(['width'], duration)
                     }}
                 />
             </div>

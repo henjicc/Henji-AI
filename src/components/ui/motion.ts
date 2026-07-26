@@ -16,8 +16,14 @@ export const UI_DURATION = {
   fast: 150,
   /** 200ms：弹窗、浮层、下拉、面板开合 —— 默认档 */
   base: 200,
-  /** 300ms：大面积位移、侧栏模式切换 */
+  /** 300ms：大面积位移、侧栏模式切换、悬浮输入面板折叠 */
   slow: 300,
+  /**
+   * 500ms：全屏媒体查看器的沉浸式淡入淡出。
+   * 不是随手加的档——位移/覆盖面积越大，时长就该越长（标准动效原则），
+   * 且收敛前已有 7 处查看器在用 500ms，属于有真实理由的聚类。
+   */
+  viewer: 500,
 } as const;
 
 /** 与 UI_DURATION 一一对应的 Tailwind 类，必须是字面量 */
@@ -25,6 +31,7 @@ export const UI_DURATION_CLASS = {
   fast: 'duration-150',
   base: 'duration-200',
   slow: 'duration-300',
+  viewer: 'duration-500',
 } as const;
 
 /**
@@ -33,6 +40,38 @@ export const UI_DURATION_CLASS = {
  * 在小尺度 UI 上显得拖沓——所以要显式写。
  */
 export const UI_EASE_CLASS = 'ease-out';
+
+/** `ease-out` 的 timing-function 字面量，供内联 style 使用（与 UI_EASE_CLASS 等价） */
+export const UI_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
+
+/**
+ * 具名特效缓动：缩略图堆叠"扇形展开"的弹性感。
+ *
+ * 这是**登记过的例外**，不是可以随手用的第二种缓动——和 `shadow-node-selected`
+ * 那类具名阴影同一个逻辑：它有具体的功能语义（表达"卡片被推开"），
+ * 用 `ease-out` 会失去那份手感。新代码不要为了"想要点不一样"再发明缓动，
+ * 确有必要时在这里登记并写明理由。
+ */
+export const UI_EASE_STACK = 'cubic-bezier(0.15, 0.75, 0.3, 1)';
+
+/**
+ * 内联 `style={{ transition }}` 的唯一出口。
+ *
+ * 内联过渡绕过了 Tailwind 类，也就绕过了档位约束——收敛前这里散落 9 种时长
+ * 与 5 种缓动。确实需要内联时（时长来自运行时数据、或属性无对应 Tailwind 类）
+ * 走这个函数，档位和缓动就还在控制之内。
+ *
+ * 只列举真正会变的属性：**不要传 `['all']`**，那会把 `background-color`、
+ * `backdrop-filter` 这些也拖进过渡。
+ */
+export function uiTransition(
+  properties: readonly string[],
+  durationMs: number = UI_DURATION.base,
+  delayMs = 0
+): string {
+  const delay = delayMs > 0 ? ` ${delayMs}ms` : '';
+  return properties.map((property) => `${property} ${durationMs}ms ${UI_EASE}${delay}`).join(', ');
+}
 
 /** 弹窗（UiModal / AlertDialog / 设置）的进出场时长 */
 export const UI_DIALOG_TRANSITION_MS = UI_DURATION.base;

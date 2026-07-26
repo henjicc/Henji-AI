@@ -39,6 +39,18 @@ export default {
         thumb: '0 8px 16px rgb(0 0 0 / 0.45)',
         'thumb-sm': '0 6px 14px rgb(0 0 0 / 0.42)',
       },
+      // 把默认缓动改成 ease-out。Tailwind 原本的默认是 ease-in-out（起步和收尾都慢），
+      // 在小尺度 UI 上显得拖沓；而"进场退场都该减速落位"是标准动效原则。
+      //
+      // 改这一处，等于让全部 transition-* 工具类自动拿到正确缓动，
+      // 不必在 91 个调用点各写一遍 `ease-out`（那既是噪音，也总会漏）。
+      // 需要别的缓动时仍可用 `ease-linear`/`ease-in` 显式覆盖。
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0, 0, 0.2, 1)',
+      },
+      // 动效时长档位，与 src/components/ui/motion.ts 的 UI_DURATION 一一对应。
+      // Tailwind 自带 75/100/150/200/300/500/700/1000，这里不新增档位，
+      // 只是把"允许使用的"限定为 150/200/300/500——由 skill 与 code review 约束。
       borderRadius: {
         // 时间轴关键帧菱形标记的极小圆角
         hairline: '1px',

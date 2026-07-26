@@ -30,6 +30,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal';
 import Waveform from '@/components/Waveform';
+import { uiTransition } from '@/components/ui/motion';
 
 type AudioNodeProps = NodeProps & {
   id: string;
@@ -330,7 +331,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
             <div className="absolute inset-0 bg-bg-dark/55" />
             <div
               className="absolute left-0 top-0 h-full w-full origin-left bg-gradient-to-r from-veil-bright to-veil-faint ease-out"
-              style={{ transform: `scaleX(${progress})`, transition: `transform ${transitionDurationMs}ms ease-out` }}
+              style={{ transform: `scaleX(${progress})`, transition: uiTransition(['transform'], transitionDurationMs) }}
             />
           </div>
         )}
