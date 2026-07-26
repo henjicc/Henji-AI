@@ -14,7 +14,6 @@ import {
   UI_INSET_SURFACE_CLASS,
   UI_META_BADGE_ACCENT_CLASS,
   UI_META_BADGE_CLASS,
-  UI_LIST_ITEM_SKIP_TALL_CLASS,
 } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
@@ -124,7 +123,14 @@ const TaskCard = React.memo(function TaskCard({
     const fullUrls = filePaths.length > 0
       ? filePaths.map(fp => toDisplaySrc(fp.replace(/\\\\/g, '/')))
       : list
-    onOpenImageViewer(fullUrls[0], fullUrls, filePaths)
+    // 查看器用 `imageList.indexOf(currentImage)` 反推初始索引，所以这里必须把
+    // **被点的那一张**换算成对应的全分辨率 URL；此前固定传 fullUrls[0]，
+    // 于是一组多图时点第几张都只会打开第一张。
+    const clickedIndex = list.indexOf(url)
+    const initialUrl = clickedIndex >= 0 && clickedIndex < fullUrls.length
+      ? fullUrls[clickedIndex]
+      : fullUrls[0]
+    onOpenImageViewer(initialUrl, fullUrls, filePaths)
   }
 
   const handleVideoClick = (url: string, filePath?: string) => {
@@ -364,10 +370,13 @@ const TaskCard = React.memo(function TaskCard({
   }
 
   return (
-    // 历史最多 500 条且每条含图/视频，视口外的卡片跳过布局与绘制。
-    // 不用虚拟化：滚动容器在父级且带 paddingBottom 补偿逻辑，接管滚动会与之冲突。
+    // ⚠️ 这里曾经加过 `content-visibility:auto` + `contain-intrinsic-size:auto 420px`
+    // 来跳过视口外卡片的布局，但任务卡高度差异极大（排队态约 120px，多图结果可到 800px），
+    // 单一 420px 估算值在两个方向上都严重偏离：往回滚时占位高度被换成真实高度，
+    // 视口上方的内容尺寸突变，滚动锚定晚一帧补偿，表现就是"闪一下又跳回来"。
+    // content-visibility 只适合**行高基本一致**的长列表（如助手历史/记忆的等高行）。
     <div
-      className={`rounded-xl p-3 ${UI_LIST_ITEM_SKIP_TALL_CLASS}`}
+      className="rounded-xl p-3"
       data-generation-task-id={task.id}
       tabIndex={-1}
     >
