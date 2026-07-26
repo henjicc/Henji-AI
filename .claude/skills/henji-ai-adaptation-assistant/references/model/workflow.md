@@ -5,14 +5,16 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 
 # Henji Model Adaptation
 
+> 本文件已迁移到统一技能的 `references/model/` 分支。本文件中的 `references/<file>.md` 均指向同目录下的 `references/model/<file>.md`。
+
 按最小上下文加载执行。
 
 ## 1. 识别场景并路由
 
-- 先读取 `references/intake-checklist.md`，输出精简确认清单并等待用户确认。
-- 若用户需求是“新增供应商”，读取 `references/new-provider.md`。
-- 若用户需求是“现有供应商新增模型”，读取 `references/new-model-existing-provider.md`。
-- 若用户需求是“新模型且未接入对应供应商”，先读取 `references/new-provider.md`，再读取 `references/new-provider-and-model.md`。
+- 先读取 `references/model/intake-checklist.md`，输出精简确认清单并等待用户确认。
+- 若用户需求是“新增供应商”，读取 `references/model/new-provider.md`。
+- 若用户需求是“现有供应商新增模型”，读取 `references/model/new-model-existing-provider.md`。
+- 若用户需求是“新模型且未接入对应供应商”，先读取 `references/model/new-provider.md`，再读取 `references/model/new-provider-and-model.md`。
 
 ## 2. 按需补充读取
 
@@ -35,10 +37,10 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
     - 简单场景：纯自动切换，不暴露 `mode`；
     - 更重视用户心智可见性时：暴露 `mode`，默认显示“文/图生视频”，上传 2 张图后自动切到“首尾帧”。
   - 一旦再引入“多参考图”“视频编辑”“视频参考”这类分支，则升级为显式 `mode` 主导。
-- 设计参数顺序时，读取 `references/param-order-patterns.md`。
-- 处理“不展示参数/固定默认请求值”时，读取 `references/hidden-default-params.md`。
-- 判断图片/视频/音频差异时，读取 `references/modality-differences.md`。
-- 涉及比例/分辨率时，优先执行“智能比例 + 本地转具体值”的规则（见 `references/param-order-patterns.md`）。
+- 设计参数顺序时，读取 `references/model/param-order-patterns.md`。
+- 处理“不展示参数/固定默认请求值”时，读取 `references/model/hidden-default-params.md`。
+- 判断图片/视频/音频差异时，读取 `references/model/modality-differences.md`。
+- 涉及比例/分辨率时，优先执行“智能比例 + 本地转具体值”的规则（见 `references/model/param-order-patterns.md`）。
 
 ## 3. 执行规则
 
