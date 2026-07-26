@@ -7,7 +7,9 @@ export const UI_COLOR_ACCENT_SOFT_BORDER_CLASS = 'border-accent';
 export const UI_COLOR_ACCENT_SOFT_BG_CLASS = 'bg-brand-600';
 export const UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS = 'bg-layer';
 export const UI_COLOR_ACCENT_RING_CLASS = 'ring-brand-300';
-export const UI_CHIP_ACTIVE_STRONG_CLASS = 'border-brand-500 bg-brand-600 text-white';
+// 注：曾有过 UI_CHIP_ACTIVE_STRONG_CLASS，但它在 UiChipButton 上从未生效——
+// 变体自带的 `bg-layer` 在 Tailwind 产物里排在 `bg-brand-600` 之后，永远赢。
+// 需要"选中态实底"的选项集合请直接用 UiOptionButton，选中态走 UI_OPTION_ITEM_ACTIVE_CLASS。
 export const UI_CARD_ACTIVE_STRONG_CLASS = 'border-brand-500 bg-brand-700 text-white';
 export const UI_HIGHLIGHT_RING_INSET_CLASS = `ring-2 ${UI_COLOR_ACCENT_RING_CLASS} ring-inset`;
 export const UI_ACCENT_HEX = APP_ACCENT_HEX;

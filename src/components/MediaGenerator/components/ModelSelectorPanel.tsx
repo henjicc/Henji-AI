@@ -4,12 +4,10 @@ import { FILTERABLE_TAGS } from '@/core/types/ModelTags'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { getHiddenProviders, getHiddenTypes, getHiddenModels, getVisibleProviders } from '@/config/providers'
 import {
-  UiChipButton,
   UiIconButton,
   UiInput,
   UiMarqueeText,
   UiOptionButton,
-  UI_CHIP_ACTIVE_STRONG_CLASS,
   UI_HIGHLIGHT_RING_INSET_CLASS
 } from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
@@ -67,12 +65,10 @@ function compareModelItems(
   return compareModelsBySeries(a.m, b.m)
 }
 
+// 筛选项是同质选项集合，走 UiOptionButton：静息保留描边（纯文字 chip 去框会变裸文字），
+// 选中态由公共令牌给出，和下方模型网格、比例/分辨率面板是同一个蓝。
 function getFilterChipClass(active: boolean, dimmed = false): string {
-  const activeClass = UI_CHIP_ACTIVE_STRONG_CLASS
-  const idleClass =
-    'border-zinc-700/45 bg-zinc-800/85 text-zinc-100 hover:border-zinc-600/55 hover:bg-zinc-700/85'
-
-  return `h-8 px-3 text-xs ${active ? activeClass : idleClass} ${dimmed && !active ? 'opacity-40' : ''}`
+  return `h-8 px-3 text-xs ${dimmed && !active ? 'opacity-40' : ''}`
 }
 
 /**
@@ -238,10 +234,12 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       ref={wrapperRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
-      className="flex h-full min-h-0 flex-col bg-zinc-900/40 outline-none"
+      // 表面由 PanelTrigger 的外壳统一提供，这里不再叠自己的底色
+      // ——此前的 bg-zinc-900/40 + /45 是让本面板比比例/分辨率面板整体偏暗的原因
+      className="flex h-full min-h-0 flex-col outline-none"
     >
       {/* 筛选区域 - 固定在顶部 */}
-      <div className="flex-shrink-0 bg-zinc-900/45 p-4 pb-2">
+      <div className="flex-shrink-0 p-4 pb-2">
         {/* 搜索框 */}
         <div className="mb-3">
           <div className="text-xs text-zinc-400 mb-2">{t('search.label')}</div>
@@ -252,17 +250,18 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('selectModel')}
-              className="border-zinc-700/50 bg-zinc-800/70 pr-8 text-zinc-100 placeholder:text-zinc-500 hover:border-zinc-600/60"
+              className="pr-8"
             />
             {searchQuery && (
               <UiIconButton
                 type="button"
                 showBorder={false}
+                appearance="hover-only"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-1.5 top-1/2 h-7 w-7 -translate-y-1/2 border-transparent bg-transparent text-zinc-400 hover:bg-zinc-700/60"
+                className="absolute right-1.5 top-1/2 h-7 w-7 -translate-y-1/2"
                 title={t('search.clear')}
               >
-                <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </UiIconButton>
@@ -273,16 +272,16 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         <div className="mb-3">
           <div className="text-xs text-zinc-400 mb-2">{t('filters.providerType')}</div>
           <div className="flex flex-wrap gap-2">
-            <UiChipButton
+            <UiOptionButton
               type="button"
               active={modelFilterProvider === 'all'}
               onClick={() => onFilterProviderChange('all')}
               className={getFilterChipClass(modelFilterProvider === 'all')}
             >
               {t('all')}
-            </UiChipButton>
+            </UiOptionButton>
             {allProviders.map(p => (
-              <UiChipButton
+              <UiOptionButton
                 key={p.id}
                 type="button"
                 active={modelFilterProvider === p.id}
@@ -290,9 +289,9 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 className={getFilterChipClass(modelFilterProvider === p.id)}
               >
                 {t(`providers.${p.id}`, p.name)}
-              </UiChipButton>
+              </UiOptionButton>
             ))}
-            <div className="w-px bg-zinc-600/50 mx-1"></div>
+            <div className="w-px bg-border-dark mx-1"></div>
             {[
               { label: t('all'), value: 'all' },
               { label: t('favorites'), value: 'favorite' },
@@ -302,7 +301,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
             ].map(typeOption => {
               const isTypeHidden = typeOption.value !== 'all' && typeOption.value !== 'favorite' && hiddenTypes.has(typeOption.value)
               return (
-                <UiChipButton
+                <UiOptionButton
                   key={typeOption.value}
                   type="button"
                   active={modelFilterType === typeOption.value}
@@ -310,7 +309,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                   className={getFilterChipClass(modelFilterType === typeOption.value, isTypeHidden)}
                 >
                   {typeOption.label}
-                </UiChipButton>
+                </UiOptionButton>
               )
             })}
           </div>
@@ -326,7 +325,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 value: tag
               }))
             ].map(f => (
-              <UiChipButton
+              <UiOptionButton
                 key={f.value}
                 type="button"
                 active={modelFilterFunction === f.value}
@@ -334,7 +333,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 className={getFilterChipClass(modelFilterFunction === f.value)}
               >
                 {f.label}
-              </UiChipButton>
+              </UiOptionButton>
             ))}
           </div>
         </div>
@@ -371,11 +370,11 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       data-prevent-close
                       onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(e, p.id, m.id) }}
-                      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-zinc-500 transition-colors hover:bg-zinc-700/60"
+                      className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-text-muted transition-colors hover:bg-layer"
                       title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                     >
                       <svg
-                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-yellow-400 text-yellow-400' : 'fill-none text-zinc-500'}`}
+                        className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-yellow-400 text-yellow-400' : 'fill-none text-text-muted'}`}
                         stroke="currentColor"
                         strokeWidth="2"
                         viewBox="0 0 24 24"

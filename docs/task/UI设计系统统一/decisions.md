@@ -123,3 +123,34 @@
 胜负取决于 Tailwind 产物顺序而非 className 顺序。已用生成的 CSS 复验：
 `.bg-veil-faint`(3840) 在 `.bg-transparent`(3836) 之后、`.hover\:bg-layer:hover`(6736) 在两者之后且特异性更高，
 去掉 `bg-transparent` 后行为确定。
+
+### D-010 模型选择面板的配色与比例/分辨率面板对齐
+
+- 日期：2026-07-26（收尾任务，用户看过 D-009 效果后提出）
+- 用户反馈：比例/分辨率面板的格子边界"很不错"，但模型选择面板"颜色好像不一样"，且"筛选按钮的选中态和下面不一样"。
+- 查证到**三层叠加**导致两个同级浮层长得不一样：
+
+| 层 | 模型面板 | 比例/分辨率面板 |
+|---|---|---|
+| `PanelTrigger` 外壳 | `panelClassName` 覆盖成 `bg-surface-dark`（比默认亮一档） | 不传，用默认 `bg-panel` |
+| 面板根 | 额外叠 `bg-zinc-900/40` | 无 |
+| 筛选区 | 再叠 `bg-zinc-900/45` | 无 |
+
+- 决定：把三层全部去掉，模型面板直接用默认外壳表面。`panelClassName` 里的 `border-border-dark` 与 `shadow-panel` 本来就在 `UI_PANEL_SURFACE_CLASS` 里，整个 prop 是冗余的。
+
+#### 顺带发现：`UI_CHIP_ACTIVE_STRONG_CLASS` 从未生效
+
+筛选 chip 的选中态之所以是"蓝框 + 灰底"而不是预期的实心蓝，是因为
+`UiChipButton` 变体自带的 `bg-layer` 在 Tailwind 产物里排在 `bg-brand-600` **之后**
+（`.bg-brand-600` 3614 行 / `.bg-layer` 3679 行），调用方传的 `UI_CHIP_ACTIVE_STRONG_CLASS`
+永远输。这是 D-009 里记的那个坑的又一个实例，且这次它已经静默存在了很久。
+
+- 决定：筛选 chip 改用 `UiOptionButton`（它们本来就是"筛选选项"而不是工具栏开关），
+  静息保留描边（符合 D-009 判据：纯文字 chip 去框会变裸文字），
+  选中态自然走 `UI_OPTION_ITEM_ACTIVE_CLASS`，与模型网格、比例/分辨率格子同一个蓝。
+- `UI_CHIP_ACTIVE_STRONG_CLASS` 删除（0 消费者，且从未真正工作过），在原位留注释说明为什么不要再加回来。
+
+#### 一并收敛的手写颜色
+
+`ModelSelectorPanel` 的 zinc 硬编码从 13 处降到 3 处（剩下的是与比例面板一致的 `text-zinc-400` 标签）：
+搜索框覆盖、清空按钮、分隔线、收藏星标全部改走令牌或 `appearance="hover-only"`。

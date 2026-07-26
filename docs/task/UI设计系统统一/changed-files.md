@@ -165,3 +165,17 @@
 
 - `src/components/MediaGenerator/components/ResolutionPanel.tsx`：**零引用死代码**（仅自引用），未改也未删，另行处理
 - `src/components/debug/ExportPanel.tsx`：完全手写覆盖了配色（`bg-yellow-500` / `bg-zinc-800/50`），是 debug 面板，未纳入本次收敛
+
+## 收尾（续）：模型选择面板配色对齐
+
+提交：`<待填>`
+
+### 修改
+
+- `src/components/MediaGenerator/components/GeneratorConfigurationBar.tsx`：删掉模型面板的 `panelClassName`（它把外壳表面从默认 `bg-panel` 覆盖成了更亮的 `bg-surface-dark`）
+- `src/components/MediaGenerator/components/ModelSelectorPanel.tsx`：
+  - 去掉根容器 `bg-zinc-900/40` 与筛选区 `bg-zinc-900/45` 两层额外底色
+  - 4 个筛选 chip 从 `UiChipButton` 改为 `UiOptionButton`，选中态自然走公共令牌
+  - 搜索框去掉 zinc 覆盖，清空按钮改 `appearance="hover-only"`
+  - 分隔线 `bg-zinc-600/50` → `bg-border-dark`；收藏星标 `text-zinc-500`/`hover:bg-zinc-700/60` → `text-text-muted`/`hover:bg-layer`
+- `src/components/ui/styleTokens.ts`：删除 `UI_CHIP_ACTIVE_STRONG_CLASS`（从未生效，见 D-010），原位留注释

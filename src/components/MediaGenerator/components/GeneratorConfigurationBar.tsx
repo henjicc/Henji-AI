@@ -43,7 +43,6 @@ export function GeneratorConfigurationBar({
         display={`${currentProvider?.name}：${currentModel?.name || t('selectModel')}`}
         className="w-auto min-w-[180px] flex-shrink-0"
         panelWidth={1100}
-        panelClassName="border-border-dark bg-surface-dark shadow-panel"
         alignment="aboveCenter"
         stableHeight
         closeOnPanelClick={(target) => {
