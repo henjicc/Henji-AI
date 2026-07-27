@@ -317,6 +317,7 @@ const mediaApi: HenjiMediaApi = {
 const clipboardApi: HenjiClipboardApi = {
   readClipboardFiles: () => nativeInvoke('clipboard:readFiles'),
   readText: () => nativeInvoke('clipboard:readText'),
+  readImage: () => nativeInvoke('clipboard:readImage'),
   writeImageFromPath: (filePath) => nativeInvoke('clipboard:writeImageFromPath', { filePath }),
   writeImageFromSource: (source) => nativeInvoke('clipboard:writeImageFromSource', { source }),
 }

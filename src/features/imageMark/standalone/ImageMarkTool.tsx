@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ClipboardCopy, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, ClipboardPaste, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
 import {
+  PanelTrigger,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiIconButton,
+  UiOptionButton,
 } from '@/components/ui';
+import { readClipboardImage } from '@/commands/clipboard';
 import { useNotification } from '@/contexts/NotificationContext';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { allowMediaRoot, basename, dirname, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
@@ -79,6 +82,15 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     const dataUrl = await readFileAsDataUrl(file);
     await acceptSource(dataUrl, file.name || `image-${Date.now()}.png`);
   }, [acceptSource]);
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    const image = await readClipboardImage();
+    if (!image) {
+      showNotification('剪贴板里没有图片', 'error');
+      return;
+    }
+    await acceptSource(image.dataUrl, image.name);
+  }, [acceptSource, showNotification]);
 
   const handleOpenFile = useCallback(async () => {
     logger.debug('image_mark.standalone.open.start');
@@ -224,10 +236,16 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
           >
             <ImagePlus size={40} className="text-text-muted" />
             <div className={UI_TEXT_BODY_CLASS}>拖入图片、Ctrl+V 粘贴，或</div>
-            <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
-              <FolderOpen size={15} className="mr-1.5" />
-              打开图片
-            </UiButton>
+            <div className="flex items-center gap-2">
+              <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
+                <FolderOpen size={15} className="mr-1.5" />
+                从文件打开
+              </UiButton>
+              <UiButton variant="ghost" size="sm" onClick={() => void handlePasteFromClipboard()}>
+                <ClipboardPaste size={15} className="mr-1.5" />
+                粘贴剪贴板图片
+              </UiButton>
+            </div>
             <div className={`leading-relaxed ${UI_TEXT_META_CLASS}`}>
               支持序号、框选、箭头、文字、画笔、马赛克标记,以及裁剪与旋转翻转
             </div>
@@ -252,21 +270,48 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
         toolbarLeading={backButton}
         toolbarActions={
           <>
-            {/* 文件上下文与打开动作跟导出动作同侧,左侧只留返回,工具组才能真正居中 */}
-            <span className={`max-w-[180px] truncate ${UI_TEXT_META_CLASS}`} title={source.name}>
-              {source.name}
-            </span>
-            <UiIconButton
-              type="button"
-              showBorder={false}
-              appearance="hover-only"
-              className="h-8 w-8"
-              title="打开图片"
-              aria-label="打开图片"
-              onClick={() => void handleOpenFile()}
+            {/* 打开动作与导出动作同侧,左侧只留返回,工具组才能真正居中 */}
+            <PanelTrigger
+              panelWidth={172}
+              panelClassName="p-1"
+              closeOnPanelClick
+              renderPanel={() => (
+                <div className="flex flex-col gap-0.5">
+                  <UiOptionButton
+                    type="button"
+                    variant="menu"
+                    className="gap-2 text-sm"
+                    onClick={() => void handleOpenFile()}
+                  >
+                    <FolderOpen size={15} />
+                    从文件打开
+                  </UiOptionButton>
+                  <UiOptionButton
+                    type="button"
+                    variant="menu"
+                    className="gap-2 text-sm"
+                    onClick={() => void handlePasteFromClipboard()}
+                  >
+                    <ClipboardPaste size={15} />
+                    粘贴剪贴板图片
+                  </UiOptionButton>
+                </div>
+              )}
             >
-              <FolderOpen size={15} />
-            </UiIconButton>
+              {({ togglePanel }) => (
+                <UiIconButton
+                  type="button"
+                  showBorder={false}
+                  appearance="hover-only"
+                  className="h-8 w-8"
+                  title="打开图片"
+                  aria-label="打开图片"
+                  onClick={togglePanel}
+                >
+                  <FolderOpen size={15} />
+                </UiIconButton>
+              )}
+            </PanelTrigger>
             <span className="mx-0.5 h-5 w-px bg-border-dark" />
             <UiButton variant="ghost" size="sm" disabled={isBusy} onClick={() => void runExport('copy')}>
               <ClipboardCopy size={15} className="mr-1.5" />

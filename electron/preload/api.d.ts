@@ -722,9 +722,16 @@ export interface HenjiClipboardFileEntry {
   mimeType: string
 }
 
+export interface HenjiClipboardImage {
+  dataUrl: string
+  name: string
+  origin: 'bitmap' | 'file'
+}
+
 export interface HenjiClipboardApi {
   readClipboardFiles(): Promise<HenjiClipboardFileEntry[]>
   readText(): Promise<string>
+  readImage(): Promise<HenjiClipboardImage | null>
   writeImageFromPath(filePath: string): Promise<void>
   writeImageFromSource(source: string): Promise<void>
 }

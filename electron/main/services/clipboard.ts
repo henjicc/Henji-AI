@@ -10,6 +10,15 @@ export interface ClipboardFileEntryDto {
   mimeType: string
 }
 
+export interface ClipboardImageDto {
+  /** 统一为 data URL，调用方不需要关心剪贴板里原本是位图还是文件 */
+  dataUrl: string
+  /** 建议文件名，来自文件路径；位图截图则生成时间戳名 */
+  name: string
+  /** bitmap = 截图等原始位图；file = 从资源管理器复制的图片文件 */
+  origin: 'bitmap' | 'file'
+}
+
 function inferMimeFromPath(filePath: string): string {
   const lower = filePath.toLowerCase()
   if (lower.endsWith('.png')) return 'image/png'
@@ -102,6 +111,35 @@ export async function readClipboardFiles(): Promise<ClipboardFileEntryDto[]> {
 
 export function readClipboardText(): string {
   return clipboard.readText()
+}
+
+/**
+ * 主动从剪贴板取一张图片。
+ *
+ * 两种来源都要覆盖：截图之类的原始位图走 `readImage()`，从资源管理器复制的图片文件
+ * 走已有的文件列表读取。判断顺序放在这里而不是各调用方，避免每个界面各写一遍。
+ * 剪贴板里没有图片时返回 null，由调用方决定怎么提示。
+ */
+export async function readClipboardImage(): Promise<ClipboardImageDto | null> {
+  const image = clipboard.readImage()
+  if (!image.isEmpty()) {
+    return {
+      dataUrl: image.toDataURL(),
+      name: `clipboard-${Date.now()}.png`,
+      origin: 'bitmap',
+    }
+  }
+
+  for (const entry of await readClipboardFiles()) {
+    if (!entry.mimeType.startsWith('image/')) continue
+    return {
+      dataUrl: `data:${entry.mimeType};base64,${entry.data}`,
+      name: path.basename(entry.path),
+      origin: 'file',
+    }
+  }
+
+  return null
 }
 
 export async function writeImageFromPath(filePath: string): Promise<void> {

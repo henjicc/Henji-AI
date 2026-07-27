@@ -14,6 +14,7 @@ export function createElectronClipboard(): ClipboardPlatform {
   return {
     readClipboardFiles: () => getNativeClipboard().readClipboardFiles(),
     readText: () => getNativeClipboard().readText(),
+    readImage: () => getNativeClipboard().readImage(),
     writeImageFromPath: (filePath) => getNativeClipboard().writeImageFromPath(filePath),
     writeImageFromSource: (source) => getNativeClipboard().writeImageFromSource(source),
   }
