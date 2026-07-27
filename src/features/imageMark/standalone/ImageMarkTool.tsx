@@ -300,17 +300,12 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
               )}
             >
               {({ togglePanel }) => (
-                <UiIconButton
-                  type="button"
-                  showBorder={false}
-                  appearance="hover-only"
-                  className="h-8 w-8"
-                  title="打开图片"
-                  aria-label="打开图片"
-                  onClick={togglePanel}
-                >
-                  <FolderOpen size={15} />
-                </UiIconButton>
+                // 与「复制 / 加入资产库」同属次级动作，必须同档描边。
+                // 不要为了省宽度把它降成无边框图标——那是拿视觉语言解决布局问题。
+                <UiButton variant="ghost" size="sm" onClick={togglePanel} title="打开图片">
+                  <FolderOpen size={15} className="mr-1.5" />
+                  打开
+                </UiButton>
               )}
             </PanelTrigger>
             <span className="mx-0.5 h-5 w-px bg-border-dark" />
