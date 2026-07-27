@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiIconButton, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
+import { UiIconButton } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { Download, Pause, Play, Repeat, Volume2, VolumeX } from 'lucide-react'
@@ -87,8 +87,9 @@ export function VideoViewerControls({
         pointerEvents: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 'auto' : 'none',
       }}
     >
-      {/* 控件条悬浮在全屏视频之上，属于浮层，卡片表面是合法的；改用统一的面板令牌 */}
-      <div className={`flex flex-col gap-3 rounded-xl px-4 py-3 ${UI_PANEL_SURFACE_CLASS}`}>
+      {/* 控件条直接压在用户的视频画面上——背后是内容而非纯色 UI，所以走玻璃材质而非
+          不透明面板。毛玻璃开关关掉时 .ui-glass 会自动退化成近实心面板色。 */}
+      <div className="ui-glass flex flex-col gap-3 rounded-xl px-4 py-3 shadow-panel">
         <div
           ref={progressBarRef}
           className="progress-container"
@@ -137,7 +138,7 @@ export function VideoViewerControls({
                   {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 </div>
                 <div
-                  className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`}
+                  className={`ui-glass speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`}
                   onWheel={(e) => {
                     e.preventDefault()
                     const delta = e.deltaY > 0 ? -0.05 : 0.05
@@ -168,7 +169,7 @@ export function VideoViewerControls({
               onMouseLeave={() => setIsSpeedMenuOpen(false)}
             >
               <div className="speed-display" title={t('ui:viewer.speed')}>{playbackRate}x</div>
-              <div className={`speed-menu ${isSpeedMenuOpen ? 'active' : ''}`}>
+              <div className={`ui-glass speed-menu ${isSpeedMenuOpen ? 'active' : ''}`}>
                 {SPEED_OPTIONS.map((speed) => (
                   <div
                     key={speed}

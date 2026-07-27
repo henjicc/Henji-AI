@@ -120,8 +120,9 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
     <div className="absolute left-5 top-5 flex max-w-[min(420px,calc(100vw-40px))] items-start gap-2">
       <UiIconButton
         type="button"
+        appearance="glass"
         onClick={() => setCollapsed(!collapsed)}
-        className="ui-glass !h-9 !w-9 shrink-0 !rounded-full !border-transparent !bg-transparent !text-white"
+        className="!h-9 !w-9 shrink-0 !rounded-full"
         title={t('viewer.toggleInfo', '显示/隐藏图片信息（Tab）')}
       >
         <Info className="h-4 w-4" />

@@ -244,7 +244,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       {menuVisible && ReactDOM.createPortal(
         <div
           data-global-context-menu
-          className="context-menu animate-scale-in"
+          className="ui-glass context-menu animate-scale-in"
           style={{
             left: `${menuPosition.x}px`,
             top: `${menuPosition.y}px`,

@@ -4,10 +4,17 @@
  * 规则来源：CLAUDE.md「UI Primitive 单点落地」+ skill `henji-ui-surface`。
  * 核心铁律：同一层视觉深度只画一次边框/背景。
  *
- * 两条规则：
+ * 四条规则：
  *   A. 手写面板表面（border + bg-panel + rounded）—— 那是 <UiPanel> 的活，任意数量即告警
  *   B. 同一文件出现 >= 2 处卡片表面 —— 高度疑似"卡片套卡片"
+ *   C. 手写弹窗（fixed inset-0 + 黑遮罩，却没走 UiModal/AlertDialog）
+ *   D. `.css` 里手写毛玻璃（backdrop-filter），绕开 `.ui-glass`
  * 单个卡片表面不报（组件自己的根表面是合理的，比如画布节点外壳）。
+ *
+ * 规则 D 的由来：ESLint 只拦得住 `backdrop-blur-*` 工具类，拦不住 CSS 文件里直接写
+ * `backdrop-filter`。实测 `.context-menu` 与 `.speed-menu` 就是这么各抄了一份玻璃，
+ * 都抄漏了噪点层，`.context-menu` 还用第二条 box-shadow 把受光内阴影整条顶掉了。
+ * 正确做法是在元素上加 `ui-glass` 类，CSS 只留布局。
  *
  * 默认只告警（exit 0），便于存量渐进治理；加 --strict 时违规即失败（exit 1）。
  *
@@ -182,6 +189,48 @@ const dialogBypasses = [];
 const OVERLAY_POSITION_PATTERN = /fixed\s+inset-0|UI_CONTENT_OVERLAY_INSET_CLASS/;
 const OVERLAY_SCRIM_PATTERN = /bg-black\/|bg-black\s+bg-opacity-/;
 
+/**
+ * 规则 D：`.css` 里手写毛玻璃。
+ * 唯一允许出现 backdrop-filter 的地方是 src/index.css 中 `.ui-glass` / `.ui-glass-scrim`
+ * 这两个材质定义本身；其余任何 CSS 文件里出现即为绕开材质单点。
+ * @type {{ relativePath: string, lineNo: number, snippet: string }[]}
+ */
+const handRolledGlass = [];
+
+const GLASS_DEFINITION_FILE = path.join(srcRoot, 'index.css');
+const BACKDROP_FILTER_PATTERN = /backdrop-filter\s*:/;
+
+/** @param {string} dir @returns {string[]} */
+function collectStyleSheets(dir) {
+  /** @type {string[]} */
+  const result = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      result.push(...collectStyleSheets(fullPath));
+    } else if (path.extname(entry.name) === '.css') {
+      result.push(fullPath);
+    }
+  }
+  return result;
+}
+
+for (const file of collectStyleSheets(srcRoot)) {
+  // 材质定义处天然豁免：`.ui-glass` / `.ui-glass-scrim` 就住在这里
+  if (path.normalize(file) === path.normalize(GLASS_DEFINITION_FILE)) continue;
+
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  lines.forEach((line, index) => {
+    if (!BACKDROP_FILTER_PATTERN.test(line)) return;
+    if (hasLineAllowMarker(lines, index + 1)) return;
+    handRolledGlass.push({
+      relativePath: path.relative(projectRoot, file).replace(/\\/g, '/'),
+      lineNo: index + 1,
+      snippet: line.trim().slice(0, 140),
+    });
+  });
+}
+
 for (const file of files) {
   const raw = fs.readFileSync(file, 'utf8');
   if (raw.includes(FILE_ALLOW_MARKER)) continue;
@@ -238,8 +287,8 @@ for (const file of files) {
   });
 }
 
-if (fileReports.length === 0 && dialogBypasses.length === 0) {
-  console.log('[check-surface-tokens] 通过：未检测到手写面板表面、卡片套卡片或手写弹窗。');
+if (fileReports.length === 0 && dialogBypasses.length === 0 && handRolledGlass.length === 0) {
+  console.log('[check-surface-tokens] 通过：未检测到手写面板表面、卡片套卡片、手写弹窗或手写毛玻璃。');
   process.exit(0);
 }
 
@@ -282,7 +331,16 @@ if (dialogBypasses.length > 0) {
   log('');
 }
 
-log(`共 ${totalFindings} 处：表面问题 ${fileReports.length} 个文件，手写弹窗 ${dialogBypasses.length} 处。`);
+if (handRolledGlass.length > 0) {
+  log(`[D] CSS 手写毛玻璃 ${handRolledGlass.length} 处 → 请在元素上加 \`ui-glass\` 类，CSS 只留布局`);
+  for (const item of handRolledGlass.sort((a, b) => a.relativePath.localeCompare(b.relativePath))) {
+    log(`      ${item.relativePath}:${item.lineNo}  ${item.snippet}`);
+  }
+  totalFindings += handRolledGlass.length;
+  log('');
+}
+
+log(`共 ${totalFindings} 处：表面问题 ${fileReports.length} 个文件，手写弹窗 ${dialogBypasses.length} 处，手写毛玻璃 ${handRolledGlass.length} 处。`);
 log('铁律：同一层视觉深度只画一次边框/背景。组件根表面只允许一处；确需例外时加 `ui-surface-allow` 注释豁免。');
 log('详细规则见 skill `henji-ui-surface`。\n');
 

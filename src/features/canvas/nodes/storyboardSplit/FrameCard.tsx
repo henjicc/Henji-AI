@@ -157,7 +157,8 @@ export const FrameCard = memo(({
         <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/frame:opacity-100">
           <UiIconButton
             type="button"
-            className="!h-6 !w-6 rounded bg-black/60 p-1 text-white hover:bg-black/75"
+            appearance="glass"
+            className="!h-6 !w-6 !rounded p-1"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -170,7 +171,8 @@ export const FrameCard = memo(({
 
           <UiIconButton
             type="button"
-            className="!h-6 !w-6 rounded bg-black/60 p-1 text-white hover:bg-black/75"
+            appearance="glass"
+            className="!h-6 !w-6 !rounded p-1"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();

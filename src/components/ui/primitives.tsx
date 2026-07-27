@@ -31,7 +31,7 @@ import {
   useScopedTextHistoryProps,
 } from './useScopedTextHistory';
 
-type ButtonVariant = 'primary' | 'muted' | 'ghost' | 'plain';
+type ButtonVariant = 'primary' | 'muted' | 'ghost' | 'plain' | 'glass';
 
 type ButtonSize = 'sm' | 'md' | 'control' | 'field';
 
@@ -43,7 +43,8 @@ interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
   showBorder?: boolean;
-  appearance?: 'default' | 'hover-only';
+  /** `glass`：压在图片/视频/画布上时用，材质与交互态全部来自 `.ui-glass`，详见 resolveButtonVariant */
+  appearance?: 'default' | 'hover-only' | 'glass';
   hoverVariant?: 'default' | 'danger';
 }
 
@@ -107,10 +108,19 @@ function resolveTextHistoryValue(value: string | number | readonly string[] | un
  * ⚠️ `ghost` 与 `muted` 目前视觉等价（都是描边 + 底色），是历史命名，
  * 不要按字面理解成"无边框"——真正的无边框档是 `plain`。
  * 图标版的同档是 `UiIconButton appearance="hover-only" showBorder={false}`。
+ *
+ * `glass` 不在这三档之内，它是**材质**而非重量：只在按钮压住图片/视频/画布
+ * （背后是用户内容而非纯色 UI）时用。刻意不输出任何 border-color / bg 工具类——
+ * 那些是 utilities 层，会盖掉 components 层 `.ui-glass` 的 tint 与受光边，
+ * 把玻璃打回"只有 blur"的廉价观感。交互态由 `.ui-glass-interactive` 叠白纱提供。
  */
 function resolveButtonVariant(variant: ButtonVariant): string {
   if (variant === 'primary') {
     return `border border-transparent ${UI_COLOR_ACCENT_FILL_TEXT_CLASS} text-white hover:brightness-110`;
+  }
+
+  if (variant === 'glass') {
+    return 'ui-glass ui-glass-interactive text-white';
   }
 
   if (variant === 'plain') {
@@ -179,7 +189,11 @@ export function UiIconButton({
   ...props
 }: UiIconButtonProps) {
   const hoverOnly = appearance === 'hover-only';
-  const stateClass = active
+  const stateClass = appearance === 'glass'
+    // 玻璃档没有走 UI_FIELD_SURFACE_CLASS，禁用态要自己补，否则查看器的上/下一张
+    // 到头时按钮看起来仍可点
+    ? `ui-glass ui-glass-interactive text-white ${UI_FIELD_DISABLED_CLASS}${active ? ' !text-brand-300' : ''}`
+    : active
     ? (showBorder
       ? UI_MULTISELECT_ITEM_ACTIVE_CLASS
       : `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS}`)
@@ -225,7 +239,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
 
 UiChipButton.displayName = 'UiChipButton';
 
-type UiPanelVariant = 'panel' | 'inset' | 'bare';
+type UiPanelVariant = 'panel' | 'inset' | 'bare' | 'glass';
 
 interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
   /**
@@ -233,6 +247,8 @@ interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
    * - `panel`（默认）：完整浮层表面（边框 + 背景 + 阴影），用于最外层独立面板/弹窗
    * - `inset`：内嵌分区，仅用更暗的背景做层次，无边框无阴影，用于已在某个 panel 内部再分组
    * - `bare`：纯语义分组容器，无边框无背景无阴影，只保留圆角，靠留白区分层次
+   * - `glass`：与 `panel` 同级，但材质换成毛玻璃。**只在浮层压住用户内容
+   *   （图片 / 视频 / 画布）时用**——背后是纯色 UI 时模糊零收益，白多一个合成层。
    *
    * 铁律：同一层视觉深度只画一次边框/背景。进入一个已经有边框的容器后，
    * 内部分组请用 `inset` 或 `bare`，不要再套一层 `panel`，也不要手写 `border + bg-*` 的 div。
@@ -247,6 +263,9 @@ function resolveUiPanelSurface(variant: UiPanelVariant): string {
   }
   if (variant === 'bare') {
     return 'rounded-lg';
+  }
+  if (variant === 'glass') {
+    return 'ui-glass rounded-xl shadow-panel';
   }
   return `rounded-xl ${UI_PANEL_SURFACE_CLASS}`;
 }

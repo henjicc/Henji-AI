@@ -41,7 +41,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
         <div
             ref={menuRef}
             data-context-menu
-            className="context-menu animate-scale-in"
+            className="ui-glass context-menu animate-scale-in"
             style={{
                 left: `${position.x}px`,
                 top: `${position.y}px`

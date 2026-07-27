@@ -504,8 +504,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
             }}
           >
             <UiIconButton
+              appearance="glass"
               onClick={onClose}
-              className="absolute top-2 right-2 rounded-full bg-surface-dark/80 text-white hover:bg-layer/80 pointer-events-auto"
+              className="absolute top-2 right-2 !rounded-full pointer-events-auto"
               title={t('common:close')}
             >
               <X className="h-5 w-5" />

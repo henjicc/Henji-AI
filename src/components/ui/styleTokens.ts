@@ -169,6 +169,19 @@ export const UI_OPTION_ITEM_CLASS =
 export const UI_OPTION_ITEM_HOVER_CLASS =
   'hover:bg-layer hover:border-text-muted/50';
 
+/**
+ * 玻璃浮层**内部条目**的交互态（菜单项、工具条按钮）。
+ *
+ * 玻璃上不能沿用 `UI_OPTION_ITEM_HOVER_CLASS` 的 `hover:bg-layer`——`layer` 是不透明的
+ * `rgb(64 64 64)`，压在玻璃上会变成一块实心灰贴片，把底下的图片/画布整块糊掉。
+ * 玻璃的层次只能靠加白（veil），加灰会被 tint 直接吃掉。
+ *
+ * 玻璃元素**自身**可交互时（整块玻璃就是个按钮）用 `.ui-glass-interactive`，
+ * 它叠 background-image 而不是替换 background-color，能保住黑 tint。
+ */
+export const UI_GLASS_ITEM_HOVER_CLASS =
+  'hover:!bg-veil-soft hover:!border-veil-subtle hover:!text-white';
+
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
 

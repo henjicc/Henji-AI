@@ -69,14 +69,15 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
           <div className="flex h-full items-center justify-center text-text-muted"><MediaIcon className="h-10 w-10" /></div>
         )}
         {asset.inspectionStatus === 'missing' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 text-amber-300"><AlertTriangle className="h-7 w-7" /></div>
+          <div className="ui-glass-scrim absolute inset-0 flex items-center justify-center text-amber-300"><AlertTriangle className="h-7 w-7" /></div>
         )}
         <UiIconButton
+          appearance="glass"
           aria-label="menu"
           className="absolute right-1.5 top-1.5 !h-7 !w-7 opacity-0 group-hover:opacity-100"
           onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget.getBoundingClientRect()) }}
         ><MoreHorizontal className="h-4 w-4" /></UiIconButton>
-        {asset.mediaType !== 'image' && <UiIconButton showBorder={false} aria-label={t('audioPlayer.playPause')} className="ui-glass absolute left-1/2 top-1/2 !h-10 !w-10 -translate-x-1/2 -translate-y-1/2 !rounded-full !border-transparent !bg-transparent !text-white" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
+        {asset.mediaType !== 'image' && <UiIconButton appearance="glass" aria-label={t('audioPlayer.playPause')} className="absolute left-1/2 top-1/2 !h-10 !w-10 -translate-x-1/2 -translate-y-1/2 !rounded-full" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
       </div>
       <div className="min-w-0 px-2.5 py-2">
         {editing ? <UiInput autoFocus className="!h-7 !px-1.5 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className={`truncate ${UI_TEXT_BODY_CLASS}`} title="双击重命名" onDoubleClick={(event) => { event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}

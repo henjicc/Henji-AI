@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { Download, FolderOpen } from 'lucide-react';
-import { UI_TEXT_META_CLASS, UiOptionButton, UiPanel } from '@/components/ui';
+import { UI_GLASS_ITEM_HOVER_CLASS, UI_TEXT_META_CLASS, UiOptionButton, UiPanel } from '@/components/ui';
 
 interface DownloadMenuPosition {
   x: number;
@@ -35,13 +35,15 @@ export function NodeDownloadMenu({
   return (
     <UiPanel
       ref={menuRef}
+      /* 菜单弹在画布/图片节点之上，背后是用户内容，走玻璃材质；条目 hover 必须用白纱 */
+      variant="glass"
       className={`fixed z-dropdown min-w-[280px] p-2 transition-opacity duration-150 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
       style={{ left: `${menu.x}px`, top: `${menu.y}px` }}
     >
       <UiOptionButton
         type="button"
         variant="menu"
-        className="h-9 w-full gap-2 text-sm"
+        className={`h-9 w-full gap-2 text-sm ${UI_GLASS_ITEM_HOVER_CLASS}`}
         onClick={onSaveAs}
       >
         <Download className="h-4 w-4" />
@@ -55,7 +57,7 @@ export function NodeDownloadMenu({
               key={path}
               type="button"
               variant="menu"
-              className="h-9 w-full gap-2 text-xs"
+              className={`h-9 w-full gap-2 text-xs ${UI_GLASS_ITEM_HOVER_CLASS}`}
               onClick={() => {
                 onSaveToPreset(path);
               }}

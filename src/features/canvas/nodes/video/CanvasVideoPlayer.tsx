@@ -130,8 +130,8 @@ export function CanvasVideoPlayer({
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <UiIconButton
             aria-label="播放"
-            showBorder={false}
-            className="ui-glass nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full !border-transparent !bg-transparent !text-white shadow-panel"
+            appearance="glass"
+            className="nodrag nowheel pointer-events-auto !h-11 !w-11 !rounded-full shadow-panel"
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();

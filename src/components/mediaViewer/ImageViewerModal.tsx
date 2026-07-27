@@ -14,10 +14,13 @@ const ViewerMarkEditor = React.lazy(() =>
   import('@/features/imageMark').then((m) => ({ default: m.ViewerMarkEditor })),
 );
 
+/** 只读读数芯片（页码 / 缩放比例）：静态玻璃，无交互态 */
 const VIEWER_CONTROL_CLASS =
   'ui-glass inline-flex h-10 items-center justify-center rounded-full px-4 text-sm text-white';
-const VIEWER_ICON_BUTTON_CLASS =
-  '!h-10 !w-10 !rounded-full !border-white/20 !bg-black/60 !text-white hover:!bg-black/70';
+/** 玻璃上的圆形图标按钮，配合 `appearance="glass"`：这里只给形状，材质与交互态归 primitive */
+const VIEWER_ICON_BUTTON_CLASS = '!h-10 !w-10 !rounded-full';
+/** 玻璃上的胶囊按钮，配合 `variant="glass"` */
+const VIEWER_PILL_BUTTON_CLASS = '!h-10 !rounded-full !px-3';
 
 export interface ImageViewerModalProps {
   open: boolean;
@@ -178,9 +181,9 @@ export function ImageViewerModal({
       {editorAvailable && !isEditorMode && (
         <div className="absolute top-12 left-1/2 z-10 -translate-x-1/2">
           <UiButton
-            variant="muted"
+            variant="glass"
             size="sm"
-            className="ui-glass rounded-full px-4"
+            className="rounded-full px-4"
             onClick={onEnterEditor}
             title={t('common.edit', '编辑')}
           >
@@ -249,6 +252,7 @@ export function ImageViewerModal({
             {imageList.length > 1 && (
               <div className="flex items-center gap-3">
                 <UiIconButton
+                  appearance="glass"
                   onClick={() => onNavigate('prev')}
                   disabled={currentIndex <= 0}
                   className={VIEWER_ICON_BUTTON_CLASS}
@@ -257,6 +261,7 @@ export function ImageViewerModal({
                   <ChevronLeft className="h-5 w-5" />
                 </UiIconButton>
                 <UiIconButton
+                  appearance="glass"
                   onClick={() => onNavigate('next')}
                   disabled={currentIndex >= imageList.length - 1}
                   className={VIEWER_ICON_BUTTON_CLASS}
@@ -278,18 +283,18 @@ export function ImageViewerModal({
               </div>
               <UiButton
                 onClick={resetView}
-                variant="ghost"
+                variant="glass"
                 size="sm"
-                className={`${VIEWER_CONTROL_CLASS} !px-3 transition-colors hover:bg-white/10`}
+                className={VIEWER_PILL_BUTTON_CLASS}
                 title={t('viewer.reset', '重置视图')}
               >
                 <RotateCcw className="h-4 w-4" />
               </UiButton>
               <UiButton
                 onClick={onClose}
-                variant="ghost"
+                variant="glass"
                 size="sm"
-                className={`${VIEWER_CONTROL_CLASS} !px-3 transition-colors hover:bg-white/10`}
+                className={VIEWER_PILL_BUTTON_CLASS}
                 title={t('common.close', '关闭')}
               >
                 <X className="h-4 w-4" />

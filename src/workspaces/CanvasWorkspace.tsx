@@ -27,7 +27,8 @@ const CanvasWorkspace = (): JSX.Element => {
           <div className="relative h-full w-full">
             <UiButton
               onClick={closeProject}
-              variant="muted"
+              /* 悬浮在画布上，背后是用户内容而非纯色 UI */
+              variant="glass"
               size="sm"
               className="absolute left-3 top-3 z-sticky px-3"
             >

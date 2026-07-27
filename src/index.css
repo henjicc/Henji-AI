@@ -26,10 +26,22 @@
    */
   --ui-blur: 24px;
   --ui-glass-filter: blur(var(--ui-blur)) saturate(180%) brightness(1.06);
-  --ui-glass-tint: rgb(0 0 0 / 0.34);
+  --ui-glass-tint: rgb(0 0 0 / 0.4);
   --ui-glass-edge: rgb(255 255 255 / 0.16);
   --ui-glass-sheen: rgb(255 255 255 / 0.1);
   --ui-glass-grain: 0.04;
+  /*
+   * 玻璃上的交互态。**必须是白色半透明，不能用中性灰。**
+   *
+   * 灰色（如 `--border-rgb` = 64 64 64）在深色实底 UI 上有效，但压在带黑 tint 的
+   * 玻璃上、背后又是亮图片时会被 tint 完全吃掉——实测右键菜单的 hover 就是这么
+   * 变成"看不出来"的。玻璃的层次只能靠加白，不能靠加灰。
+   */
+  --ui-glass-hover: rgb(255 255 255 / 0.14);
+  --ui-glass-press: rgb(255 255 255 / 0.22);
+  --ui-glass-selected: rgb(255 255 255 / 0.18);
+  /* 玻璃浮层内部的分隔线：同理走白纱，不用 border 色 */
+  --ui-glass-divider: rgb(255 255 255 / 0.12);
   /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
   --ui-scrim-blur: 10px;
   --ui-scrim-tint: rgb(0 0 0 / 0.42);
@@ -156,6 +168,25 @@
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
     background-size: 140px 140px;
+  }
+
+  /*
+   * 玻璃元素自身可交互时（按钮、菜单条目所在的那块玻璃）的 hover / 按下反馈。
+   *
+   * 关键：不能用 `hover:bg-white/10` 这类工具类——那会把 background-color 整个换掉，
+   * 连同 `--ui-glass-tint` 的黑底一起丢，玻璃在亮图片上瞬间失去可读性。
+   * 这里改用 background-image 叠一层纯色渐变，压在 tint 之上而不是替换它。
+   */
+  .ui-glass-interactive {
+    transition: background-image 150ms ease-out;
+  }
+
+  .ui-glass-interactive:hover:not(:disabled) {
+    background-image: linear-gradient(var(--ui-glass-hover), var(--ui-glass-hover));
+  }
+
+  .ui-glass-interactive:active:not(:disabled) {
+    background-image: linear-gradient(var(--ui-glass-press), var(--ui-glass-press));
   }
 
   /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */
@@ -945,22 +976,20 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   fill: currentColor;
 }
 
+/* 材质由调用方的 `ui-glass` 类提供（见 VideoViewerControls.tsx），这里只管布局与出现动画。
+   position/z-index 保留在此：它依赖 .speed-control 作为定位父级，且属于视频控件内部的
+   局部层叠，不进全局 Z_LAYERS 体系。 */
 .speed-menu {
   position: absolute;
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%) translateY(4px);
-  background: var(--ui-glass-tint);
-  border: 1px solid var(--ui-glass-edge);
-  box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
   border-radius: 6px;
   padding: 8px;
   padding-bottom: 18px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  -webkit-backdrop-filter: var(--ui-glass-filter);
-  backdrop-filter: var(--ui-glass-filter);
   z-index: 20;
   opacity: 0;
   pointer-events: none;
@@ -983,15 +1012,18 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   white-space: nowrap;
   transition: background 0.2s;
   text-align: center;
+  /* 浮在 .ui-glass::after 噪点层之上 */
+  position: relative;
 }
 
 .speed-option:hover {
-  background: rgb(var(--text-rgb) / 0.1);
+  background: var(--ui-glass-hover);
 }
 
+/* accent 是填充色，作文字色只有 2.82:1；玻璃上更糟，改用 brand-300 */
 .speed-option.active {
-  background: rgb(var(--accent-rgb) / 0.3);
-  color: rgb(var(--accent-rgb));
+  background: var(--ui-glass-selected);
+  color: rgb(var(--brand-300-rgb));
 }
 
 .controls-right {
@@ -1072,16 +1104,21 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   width: 56px;
 }
 
-/* Context Menu Styles */
+/* Context Menu Styles
+ *
+ * 材质由调用方的 `ui-glass` 类提供（见 ContextMenu.tsx / GlobalContextMenuProvider.tsx），
+ * 这里只负责布局与投影。此前这里手抄了一份 blur+tint+edge，抄漏了噪点层，
+ * 并且第二条 box-shadow 把 .ui-glass 的受光内阴影整条顶掉了。
+ *
+ * position/z-index 例外说明：右键菜单必须压过自定义标题栏（z-titlebar = 100），
+ * 而它由 useContextMenu 直接按鼠标坐标定位、无 React 容器可挂 className，
+ * 故定位与层级保留在此处。
+ */
 .context-menu {
   position: fixed;
-  background: var(--ui-glass-tint);
-  -webkit-backdrop-filter: var(--ui-glass-filter);
-  backdrop-filter: var(--ui-glass-filter);
-  border: 1px solid var(--ui-glass-edge);
-  box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen);
   border-radius: 0.75rem;
-  box-shadow: var(--ui-shadow-panel);
+  /* 必须把 .ui-glass 的受光内阴影一起写出来，只写投影会让玻璃塌成贴纸 */
+  box-shadow: inset 0 1px 0 0 var(--ui-glass-sheen), var(--ui-shadow-panel);
   padding: 0.5rem;
   min-width: 180px;
   z-index: 9999;
@@ -1098,10 +1135,16 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   transition: background 0.2s;
   font-size: 0.875rem;
   user-select: none;
+  /* 噪点层是 .ui-glass::after（z 轴上压在材质之上），菜单项要浮在它之上才不被扰动 */
+  position: relative;
 }
 
 .context-menu-item:hover:not(.disabled) {
-  background: rgb(var(--border-rgb) / 0.5);
+  background: var(--ui-glass-hover);
+}
+
+.context-menu-item:active:not(.disabled) {
+  background: var(--ui-glass-press);
 }
 
 .context-menu-item.disabled {
@@ -1123,8 +1166,9 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 
 .context-menu-divider {
   height: 1px;
-  background: rgb(var(--border-rgb) / 0.3);
+  background: var(--ui-glass-divider);
   margin: 0.25rem 0;
+  position: relative;
 }
 
 /* ── 3D 镜头参考 dockview 主题映射 ──
