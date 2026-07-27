@@ -46,7 +46,8 @@
    */
   --ui-blur: 24px;
   --ui-glass-filter: blur(var(--ui-blur)) saturate(180%) brightness(1.06);
-  --ui-glass-tint: rgb(0 0 0 / 0.4);
+  /* 压住亮图片的直透，只保留足够的背景色与模糊辨识度。 */
+  --ui-glass-tint: rgb(0 0 0 / 0.66);
   --ui-glass-edge: rgb(255 255 255 / 0.16);
   --ui-glass-sheen: rgb(255 255 255 / 0.1);
   --ui-glass-grain: 0.04;
@@ -142,7 +143,7 @@
 
 /*
  * 关闭毛玻璃：整套材质一起退化成不透明底色。
- * 注意不能只把 blur 置 0——那样 34% 的黑底叠在清晰背景上会看不清内容，
+ * 注意不能只把 blur 置 0——那样 66% 的黑底叠在清晰背景上仍会透出干扰，
  * 所以 tint 同时换成接近实心的面板色，噪点与提亮也一并关掉。
  */
 :root[data-ui-blur='off'] {
