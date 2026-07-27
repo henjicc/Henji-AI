@@ -9,6 +9,7 @@ import {
 } from '@/core/imageEdit/worker/protocol'
 import type { DiffusionRecipe } from '@/core/imageEdit/diffusionRecipe'
 import { createLogger } from '@/core/logging'
+import { toFetchableMediaUrl } from '@/services/imageSource'
 
 const logger = createLogger('features.imageEdit.worker')
 
@@ -108,7 +109,7 @@ export class WorkerImageEditClient {
       type: 'preview',
       requestId,
       revision,
-      source,
+      source: normalizeWorkerSource(source),
       recipe,
       composition,
       maxPixels,
@@ -133,7 +134,7 @@ export class WorkerImageEditClient {
       type: 'export',
       requestId,
       revision: options.revision,
-      source,
+      source: normalizeWorkerSource(source),
       recipe: options.recipe,
       composition: options.composition,
       renderQuality: options.renderQuality,
@@ -306,6 +307,16 @@ function createDefaultWorker(): WorkerLike {
     new URL('../../../core/imageEdit/worker/imageEditWorker.ts', import.meta.url),
     { type: 'module', name: 'henji-image-edit-webgpu' }
   )
+}
+
+/**
+ * Worker 只能靠 fetch 读源图，而 fetch 不认 `file://` 和 `D:\...` 这类裸本地路径
+ * （两者都直接抛 "Failed to fetch"）。这里是渲染层交给 Worker 的唯一收口，
+ * 在此统一转换，调用方不需要、也不应该各自记得先转一次。
+ */
+function normalizeWorkerSource(source: ImageEditWorkerSource): ImageEditWorkerSource {
+  if (source.kind !== 'url') return source
+  return { ...source, url: toFetchableMediaUrl(source.url) }
 }
 
 function createRequestId(prefix: string): string {

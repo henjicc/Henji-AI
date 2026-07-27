@@ -6,6 +6,7 @@ import { useDragDrop } from '@/contexts/DragDropContext'
 import { readHenjiDragData, type HenjiDragTransferData } from '@/contexts/dragDataTransfer'
 import { useNativeDragDrop } from '@/hooks/useNativeDragDrop'
 import { urlToFile } from '@/utils/imageConversion'
+import { toFetchableMediaUrl } from '@/services/imageSource'
 import { inferMimeFromPath, isDesktop } from '@/utils/save'
 import { UiButton, UiIconButton, UiInput } from '../primitives'
 import { UI_UPLOADER_CARD_BORDER_CLASS, UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS } from '../styleTokens'
@@ -67,7 +68,7 @@ async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<
       return new File([blob], filename, { type: mime })
     }
 
-    return await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+    return await urlToFile(toFetchableMediaUrl(dragData.imageUrl), `image-${Date.now()}.jpg`)
   }
 
   if (dragData.type === 'video' && dragData.filePath && isDesktop()) {

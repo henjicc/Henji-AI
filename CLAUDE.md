@@ -192,6 +192,26 @@ npm run lint                   # 前端 lint
 - **媒体输入端口形态**：节点声明 `connectivity.targetHandleMode: 'rows'` + `ports.target.accepts` 后，媒体输入按类型生成专属端口并配 `MediaInputRow`；禁止继续手写单一 `id="target"` 的 Handle 来接收媒体
 - **禁止重复实现**：禁止在新节点里重新实现模型选择 chip、媒体上传缩略图、逐行参数布局——这些已是标准组件，再写一份即违反"禁止同功能多份实现"
 
+### 11. 媒体 URL 形态约束（高频踩坑，适配新工具/新链路时必查）
+
+项目里同一张图会以四种形态流动：**裸本地路径**（`D:\a\b.png`，画布节点 `imageUrl`、`filePath` 存的就是这种）、`file://`、`henji-media://`、以及 `http(s)/data/blob`。不同消费方接受的形态**不一样**，而类型上全是 `string`，编译期没有任何提示，所以这是本项目最容易反复踩的坑。
+
+**三类消费方，认死理：**
+
+| 消费方 | 可接受形态 | 不接受 |
+|---|---|---|
+| `fetch()`（含 Worker 内）、`createImageBitmap(await fetch())`、`urlToFile` | `henji-media://`、`http(s)`、`data:`、`blob:` | **裸路径、`file://`** |
+| `<img>/<video>/<audio> src`、CSS `url()` | 同上 | **裸路径、`file://`** |
+| 主进程 fs、`readImageInfo`、Sharp、`readFile`、协议 handler | **真实文件路径** | `henji-media://` |
+
+**规则：**
+
+- 交给 fetch / Worker 前，必须先过 `toFetchableMediaUrl()`（`@/services/imageSource`）；交给 `<img>` 等元素前用 `resolveImageDisplayUrl()`。两者等价，用名字表达意图。
+- 交给主进程按路径读文件的调用（`readImageInfo`、Sharp 回落、`readFile`）**必须保留原始路径**，不要顺手一起转换。同一个函数里两条路各用各的形态是正常的，不是不一致。
+- **转换点放在"有该要求的那层边界"，不要散在调用点。** 例如 Worker 的收口是 `WorkerImageEditClient`，在那里转一次，所有调用方自动受益；在每个业务调用点各转一次＝迟早漏一个。
+- 消费方无法自行转换时（如 `utils/` 不能依赖 `services/`），**必须显式报错并在错误信息里写明修复方式**，禁止让它退化成 `Failed to fetch`——这个信息量为零的报错正是排查成本的来源。
+- 新增能消费媒体 URL 的能力时，先回答"我这层接受哪种形态、由谁负责转换"，再写实现。
+
 ## 目录结构
 
 ```text

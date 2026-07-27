@@ -65,6 +65,21 @@ export function resolveImageDisplayUrl(imageUrl: string): string {
   return toDisplaySrc(imageUrl);
 }
 
+/**
+ * 转成「能被 fetch / Worker / createImageBitmap 直接读取」的 URL。
+ *
+ * 与 resolveImageDisplayUrl 走同一套转换，但名字表达的是另一类需求：任何要把 URL
+ * 交给 fetch（含 Worker 内 fetch）的地方都该用它。fetch 不接受 `file://`，也不接受
+ * `D:\...` 这类裸本地路径——两者都只会抛出没有定位价值的 "Failed to fetch"，
+ * 所以务必在交给 fetch 之前转换，而不是等失败了再查。
+ *
+ * 仍然要用真实文件路径的场景（主进程 fs 读写、readImageInfo、Sharp 回落）
+ * 不能用这个函数，必须保留原始路径。
+ */
+export function toFetchableMediaUrl(mediaUrl: string): string {
+  return resolveImageDisplayUrl(mediaUrl);
+}
+
 export async function persistImageLocally(source: string): Promise<string> {
   if (isLikelyLocalImagePath(source)) {
     return source;

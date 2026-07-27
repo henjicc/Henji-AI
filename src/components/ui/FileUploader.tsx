@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging'
 import React, { useRef, useState } from 'react'
 import { useNativeDragDrop } from '../../hooks/useNativeDragDrop'
 import { urlToFile } from '../../utils/imageConversion'
+import { toFetchableMediaUrl } from '@/services/imageSource'
 import { useDragDrop } from '../../contexts/DragDropContext'
 import { readFile } from '@/platform/desktopApi'
 import { isDesktop, inferMimeFromPath } from '../../utils/save'
@@ -170,7 +171,7 @@ export default function FileUploader({
                         file = new File([blob], filename, { type: mime })
                     } else {
                         // Fallback 到 URL 转换（开发环境或没有文件路径时）
-                        file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+                        file = await urlToFile(toFetchableMediaUrl(dragData.imageUrl), `image-${Date.now()}.jpg`)
                     }
 
                     handleFiles([file])
@@ -272,7 +273,7 @@ export default function FileUploader({
                                     const filename = dragData.filePath.split(/[\\/]/).pop() || `image-${Date.now()}.jpg`
                                     file = new File([blob], filename, { type: mime })
                                 } else {
-                                    file = await urlToFile(dragData.imageUrl, `image-${Date.now()}.jpg`)
+                                    file = await urlToFile(toFetchableMediaUrl(dragData.imageUrl), `image-${Date.now()}.jpg`)
                                 }
                                 onReplace(targetIndex, file)
                             } catch (error) {
