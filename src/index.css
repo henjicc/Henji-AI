@@ -164,6 +164,27 @@
     -webkit-backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
     backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
   }
+
+  /*
+   * 色相滑块轨道。色相光谱本身就是绝对颜色（和 veil 一样是刻意不跟随主题的），
+   * 用 hsl() 直接铺满一圈色相；轨道是伪元素，只能写在 CSS 里，不能用工具类表达。
+   * 由 `UiRangeInput trackTone="hue"` 独占使用，与默认轨道底色互斥，不叠加。
+   */
+  .ui-range-track-hue::-webkit-slider-runnable-track {
+    background: linear-gradient(
+      to right,
+      hsl(0 85% 55%), hsl(60 85% 55%), hsl(120 85% 55%), hsl(180 85% 55%),
+      hsl(240 85% 55%), hsl(300 85% 55%), hsl(360 85% 55%)
+    );
+  }
+
+  .ui-range-track-hue::-moz-range-track {
+    background: linear-gradient(
+      to right,
+      hsl(0 85% 55%), hsl(60 85% 55%), hsl(120 85% 55%), hsl(180 85% 55%),
+      hsl(240 85% 55%), hsl(300 85% 55%), hsl(360 85% 55%)
+    );
+  }
 }
 
 html,

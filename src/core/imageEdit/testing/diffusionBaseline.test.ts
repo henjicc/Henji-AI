@@ -24,7 +24,10 @@ describe('摄影柔光通用预设与 Golden 基线', () => {
       expect(preset.name.zh).toContain('通用');
       expect(preset.source.url).toMatch(/^https:\/\//);
       expect(preset.source.license).toContain('不声明品牌');
-      expect(applyDiffusionPreset(preset.id).presetId).toBe(preset.id);
+      // 预设已收敛成「模式 × 档位」，不再单独存 presetId：这两个字段就是它的身份。
+      const applied = applyDiffusionPreset(preset.id);
+      expect(applied.mode).toBe(preset.mode);
+      expect(applied.density).toBe(preset.intensity);
     }
   });
 

@@ -171,52 +171,60 @@ export interface CropOperationParams {
 }
 
 export type DiffusionMode = 'black_mist' | 'white_mist' | 'glow';
-export type DiffusionDensity = '1/8' | '1/4' | '1/2' | '1';
+/**
+ * 档位。柔光滤镜档位在摄影里习惯写成 1/8、1/4、1/2，而纯辉光没有这个传统，
+ * 所以这里存语义值，由 UI 按 mode 决定显示成「1/8」还是「弱」。
+ */
+export type DiffusionDensity = 'low' | 'medium' | 'high';
 export type DiffusionQuality = 'realtime' | 'high';
 
 /**
  * 摄影柔光/辉光操作参数。
  * 半径使用图片空间归一化值，不能写入屏幕像素或 CSS 尺寸。
  */
+/**
+ * 给辉光染色。色相/饱和度按 HSL 语义，亮度是对散射光的增减。
+ * 着色只作用于散射光，不改变直接光，因此不会整体偏色。
+ */
+export interface DiffusionTintParams {
+  enabled: boolean;
+  /** 0..360 */
+  hue: number;
+  /** 0..1 */
+  saturation: number;
+  /** -1..1 */
+  lightness: number;
+}
+
+/**
+ * 用户可调的柔光参数。
+ *
+ * 这里只保留用户能直观理解的七个量，每个可能驱动多个底层光学参数（映射见
+ * `diffusionRecipe.ts`）。像微扩散、雾幕、高光压缩这类区分黑柔/白柔的量**不在这里**——
+ * 它们由 `mode` 派生，因为把它们做成独立滑块既没人看得懂，调错了还会让黑柔和白柔
+ * 退化成同一个效果的强弱差别。
+ */
 export interface DiffusionOperationParams {
-  schemaVersion: 1;
+  schemaVersion: 2;
   mode: DiffusionMode;
-  presetId: string | null;
-  strength: number;
+  /** 档位：与 mode 一起决定基准参数组 */
   density: DiffusionDensity;
-  source: {
-    thresholdEV: number;
-    softKneeEV: number;
-    power: number;
-    highlightRecovery: number;
-  };
-  scatter: {
-    highlightAmount: number;
-    microAmount: number;
-    nearRadius: number;
-    farRadius: number;
-    tailAmount: number;
-    tailShape: number;
-    anisotropy: number;
-    angle: number;
-    chromaticSpread: number;
-  };
-  tone: {
-    veil: number;
-    blackRetention: number;
-    highlightCompression: number;
-    scatterDesaturation: number;
-  };
-  detail: {
-    highFrequencyRetention: number;
-    midFrequencyRetention: number;
-  };
-  lens: {
-    focalLengthEq: number;
-    aperture: number;
-    positionVariation: number;
-  };
   quality: DiffusionQuality;
+  /** 效果强度 0..1 */
+  strength: number;
+  /** 辉光范围 0..1 → 近/远散射半径 */
+  glowRange: number;
+  /** 高光响应 0..1 → 阈值 EV 与柔化拐点（越大越多区域参与发光） */
+  highlightResponse: number;
+  /** 光斑柔和度 0..1 → 长尾量与长尾形状 */
+  softness: number;
+  /** 黑位保持 0..1 */
+  blackRetention: number;
+  /** 细节保留 0..1 → 高频/中频保留 */
+  detailRetention: number;
+  /** 色彩保持 0..1 → 反向驱动散射去饱和 */
+  colorRetention: number;
+  tint: DiffusionTintParams;
 }
 
 export function createEmptyMarkOrientation(): MarkOrientation {

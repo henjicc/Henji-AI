@@ -4,7 +4,7 @@ import type {
   DiffusionQuality,
 } from './types';
 
-export const DIFFUSION_RECIPE_VERSION = 1 as const;
+export const DIFFUSION_RECIPE_VERSION = 2 as const;
 export const DIFFUSION_SCALE_COUNT = 6 as const;
 
 export interface DiffusionScaleRecipe {
@@ -32,12 +32,12 @@ export interface DiffusionRecipe {
     power: number;
     highlightGain: number;
     microGain: number;
+    /** 裁切高光外推量（资料 §7）。质量特性而非风格选择，故不作为用户参数。 */
     highlightRecovery: number;
   };
   scales: readonly DiffusionScaleRecipe[];
   energy: {
     scatterFraction: number;
-    directRetention: number;
     veil: number;
   };
   tone: {
@@ -49,10 +49,13 @@ export interface DiffusionRecipe {
     highFrequencyRetention: number;
     midFrequencyRetention: number;
   };
-  optics: {
-    anisotropy: number;
-    angleRadians: number;
-    chromaticSpread: number;
+  tint: {
+    /** 已归一到亮度 1 的染色系数，乘上去不改变散射光总亮度 */
+    rgb: readonly [number, number, number];
+    /** 0..1，染色混合量 */
+    amount: number;
+    /** 散射光增益，1 为不变 */
+    gain: number;
   };
 }
 
@@ -63,35 +66,58 @@ export interface CompileDiffusionRecipeOptions {
 }
 
 const DENSITY_MULTIPLIERS = {
-  '1/8': 0.5,
-  '1/4': 0.72,
-  '1/2': 0.88,
-  '1': 1,
+  low: 0.55,
+  medium: 0.78,
+  high: 1,
 } as const;
 
+/**
+ * 模式派生量。这些不是用户参数——微扩散、雾幕、高光压缩正是黑柔与白柔的区别所在，
+ * 做成滑块既没人看得懂，调错还会让两种模式退化成同一效果的强弱差别。
+ */
 const MODE_RESPONSE = {
   black_mist: {
-    highlightGain: 1,
-    microGain: 0.52,
+    highlightAmount: 0.5,
+    microAmount: 0.18,
     longTailBias: 0.82,
     energyScale: 0.72,
-    veilScale: 0.35,
+    veil: 0.035,
+    highlightCompression: 0.08,
+    desaturationScale: 0.35,
+    power: 1.35,
   },
   white_mist: {
-    highlightGain: 0.82,
-    microGain: 1.22,
+    highlightAmount: 0.44,
+    microAmount: 0.72,
     longTailBias: 1,
     energyScale: 0.9,
-    veilScale: 1,
+    veil: 0.11,
+    highlightCompression: 0.12,
+    desaturationScale: 0.8,
+    power: 1.05,
   },
   glow: {
-    highlightGain: 1.35,
-    microGain: 0.34,
+    highlightAmount: 0.72,
+    microAmount: 0.05,
     longTailBias: 1.3,
     energyScale: 1,
-    veilScale: 0,
+    veil: 0,
+    highlightCompression: 0.16,
+    desaturationScale: 0.3,
+    power: 1.6,
   },
 } as const;
+
+const NEAR_RADIUS_RANGE = [0.0015, 0.012] as const;
+const FAR_RADIUS_RANGE = [0.012, 0.2] as const;
+const THRESHOLD_EV_RANGE = [4, -1] as const;
+const TAIL_SHAPE_RANGE = [4.5, 1.4] as const;
+const MAX_TAIL_AMOUNT = 0.35;
+/**
+ * 裁切高光外推量。JPEG 把过曝区削平后真实峰值不可知，不外推的话灯光光晕会是
+ * 「边缘软、中心扁」的廉价观感（资料 §7）。这是画质修正，没有理由让用户去调。
+ */
+const HIGHLIGHT_RECOVERY = 0.35;
 
 export function compileDiffusionRecipe(
   params: DiffusionOperationParams,
@@ -105,21 +131,26 @@ export function compileDiffusionRecipe(
   const response = MODE_RESPONSE[params.mode];
   const minimumRadius = 1 / referenceDimension;
   const qualityRadiusScale = quality === 'high' ? 1 : 0.82;
-  const nearRadius = Math.max(minimumRadius, params.scatter.nearRadius);
+
+  // 半径按指数插值：线性插值会让滑块前半程几乎看不出变化，后半程又突然爆开。
+  const nearRadius = Math.max(
+    minimumRadius,
+    interpolateExponential(NEAR_RADIUS_RANGE, params.glowRange)
+  );
   const farRadius = Math.max(
     nearRadius,
-    params.scatter.farRadius * qualityRadiusScale
+    interpolateExponential(FAR_RADIUS_RANGE, params.glowRange) * qualityRadiusScale
   );
-  const weights = compileScaleWeights(
-    params.scatter.tailShape,
-    params.scatter.tailAmount,
-    response.longTailBias
-  );
+
+  const tailAmount = params.softness * MAX_TAIL_AMOUNT;
+  const tailShape = interpolateLinear(TAIL_SHAPE_RANGE, params.softness);
+  const weights = compileScaleWeights(tailShape, tailAmount, response.longTailBias);
   const scales = weights.map((weight, index) => ({
     index,
     radius: interpolateRadius(nearRadius, farRadius, index),
     weight,
   }));
+
   const strength = clamp01(params.strength * densityMultiplier);
   // 散射源 E 里已经带上了 highlightAmount / microAmount，这里再乘一次“源能量”是重复
   // 计价，会让扣除系数比加回系数小一个量级、变成凭空造光。合成阶段扣与加共用本系数，
@@ -142,34 +173,70 @@ export function compileDiffusionRecipe(
       ],
     },
     source: {
-      thresholdEV: params.source.thresholdEV,
-      softKneeEV: Math.max(1e-3, params.source.softKneeEV),
-      power: params.source.power,
-      highlightGain: params.scatter.highlightAmount * response.highlightGain,
-      microGain: params.scatter.microAmount * response.microGain,
-      highlightRecovery: params.source.highlightRecovery,
+      thresholdEV: interpolateLinear(THRESHOLD_EV_RANGE, params.highlightResponse),
+      softKneeEV: 0.6 + params.highlightResponse * 0.6,
+      power: response.power,
+      highlightGain: response.highlightAmount,
+      microGain: response.microAmount,
+      highlightRecovery: HIGHLIGHT_RECOVERY,
     },
     scales,
     energy: {
       scatterFraction,
-      directRetention: 1 - scatterFraction,
-      veil: params.tone.veil * strength * response.veilScale,
+      veil: response.veil * strength,
     },
     tone: {
-      blackRetention: params.tone.blackRetention,
-      highlightCompression: params.tone.highlightCompression,
-      scatterDesaturation: params.tone.scatterDesaturation,
+      blackRetention: params.blackRetention,
+      highlightCompression: response.highlightCompression,
+      scatterDesaturation: (1 - params.colorRetention) * response.desaturationScale,
     },
     detail: {
-      highFrequencyRetention: params.detail.highFrequencyRetention,
-      midFrequencyRetention: params.detail.midFrequencyRetention,
+      highFrequencyRetention: 0.55 + params.detailRetention * 0.45,
+      midFrequencyRetention: 0.9 + params.detailRetention * 0.1,
     },
-    optics: {
-      anisotropy: params.scatter.anisotropy,
-      angleRadians: params.scatter.angle * Math.PI / 180,
-      chromaticSpread: params.scatter.chromaticSpread,
-    },
+    tint: compileTint(params),
   };
+}
+
+/**
+ * 着色系数。色相/饱和度归一到亮度 1，因此染色本身不改变散射光总量；
+ * 亮度是刻意的艺术控制（资料 §6.3 的“艺术加法模式”），会在 ±50% 内偏离能量守恒。
+ */
+function compileTint(params: DiffusionOperationParams): DiffusionRecipe['tint'] {
+  if (!params.tint.enabled) {
+    return { rgb: [1, 1, 1], amount: 0, gain: 1 };
+  }
+  return {
+    rgb: normalizeToUnitLuminance(hslToRgb(params.tint.hue, params.tint.saturation, 0.5)),
+    amount: params.tint.saturation,
+    gain: 1 + params.tint.lightness * 0.5,
+  };
+}
+
+function hslToRgb(hue: number, saturation: number, lightness: number): [number, number, number] {
+  const c = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const hPrime = ((hue % 360) + 360) % 360 / 60;
+  const x = c * (1 - Math.abs((hPrime % 2) - 1));
+  const m = lightness - c / 2;
+  const [r, g, b] = pickHueSector(hPrime, c, x);
+  return [r + m, g + m, b + m];
+}
+
+function pickHueSector(hPrime: number, c: number, x: number): [number, number, number] {
+  if (hPrime < 1) return [c, x, 0];
+  if (hPrime < 2) return [x, c, 0];
+  if (hPrime < 3) return [0, c, x];
+  if (hPrime < 4) return [0, x, c];
+  if (hPrime < 5) return [x, 0, c];
+  return [c, 0, x];
+}
+
+function normalizeToUnitLuminance(
+  rgb: [number, number, number]
+): [number, number, number] {
+  const luminance = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  if (luminance <= 1e-6) return [1, 1, 1];
+  return [rgb[0] / luminance, rgb[1] / luminance, rgb[2] / luminance];
 }
 
 function compileScaleWeights(
@@ -191,6 +258,14 @@ function interpolateRadius(nearRadius: number, farRadius: number, index: number)
   if (nearRadius === farRadius) return nearRadius;
   const position = index / (DIFFUSION_SCALE_COUNT - 1);
   return nearRadius * Math.pow(farRadius / nearRadius, position);
+}
+
+function interpolateLinear(range: readonly [number, number], position: number): number {
+  return range[0] + (range[1] - range[0]) * clamp01(position);
+}
+
+function interpolateExponential(range: readonly [number, number], position: number): number {
+  return range[0] * Math.pow(range[1] / range[0], clamp01(position));
 }
 
 function assertImageDimension(value: number, name: string): void {

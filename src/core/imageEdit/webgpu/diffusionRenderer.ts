@@ -314,12 +314,7 @@ function resolveStepRadius(targetRadius: number, previousRadius: number): number
 }
 
 function createPyramidSignature(recipe: DiffusionRecipe): string {
-  return JSON.stringify([
-    recipe.quality,
-    recipe.scales,
-    recipe.optics.anisotropy,
-    recipe.optics.angleRadians,
-  ]);
+  return JSON.stringify([recipe.quality, recipe.scales]);
 }
 
 function createSourceUniform(recipe: DiffusionRecipe): Float32Array {
@@ -347,10 +342,6 @@ function createBlurUniform(
     recipe.image.aspectCorrection[1],
     radius,
     axis,
-    recipe.optics.anisotropy,
-    recipe.optics.angleRadians,
-    0,
-    0,
   ]);
 }
 
@@ -368,7 +359,10 @@ function createCompositeUniform(recipe: DiffusionRecipe): Float32Array {
     recipe.detail.highFrequencyRetention,
     recipe.detail.midFrequencyRetention,
     modeToNumber(recipe.mode),
-    recipe.optics.chromaticSpread,
+    // tint_rgb 是 vec3，WGSL 里对齐到 16 字节；它前面正好凑满 80 字节，所以可以紧接着写。
+    recipe.tint.rgb[0], recipe.tint.rgb[1], recipe.tint.rgb[2],
+    recipe.tint.amount,
+    recipe.tint.gain,
     0, 0, 0,
   ]);
 }

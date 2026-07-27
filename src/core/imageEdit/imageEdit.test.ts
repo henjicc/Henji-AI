@@ -239,7 +239,7 @@ describe('摄影柔光共享配方', () => {
       quality: 'high',
     });
 
-    expect(recipe.version).toBe(1);
+    expect(recipe.version).toBe(2);
     expect(recipe.scales).toHaveLength(6);
     expect(recipe.scales.reduce((sum, scale) => sum + scale.weight, 0)).toBeCloseTo(1, 12);
     expect(recipe.scales.every((scale) => scale.radius > 0 && scale.radius <= 1)).toBe(true);
@@ -247,7 +247,10 @@ describe('摄影柔光共享配方', () => {
       [...recipe.scales].map((scale) => scale.radius).sort((left, right) => left - right)
     );
     expect(recipe.image.aspectCorrection).toEqual([1, 1.5]);
-    expect(recipe.energy.directRetention + recipe.energy.scatterFraction).toBeCloseTo(1, 12);
+    // 扣除项与加回项共用 scatterFraction，尺度权重又归一化到 1，
+    // 因此散射系数落在 [0,1] 就等价于「不会凭空造光」。
+    expect(recipe.energy.scatterFraction).toBeGreaterThanOrEqual(0);
+    expect(recipe.energy.scatterFraction).toBeLessThanOrEqual(1);
   });
 
   it('三种模式编译为不同源图、长尾与雾幕响应', () => {
@@ -279,12 +282,7 @@ describe('摄影柔光共享配方', () => {
         recipe.mode,
         recipe.source,
       ]),
-      pyramidSignature: JSON.stringify([
-        recipe.quality,
-        recipe.scales,
-        recipe.optics.anisotropy,
-        recipe.optics.angleRadians,
-      ]),
+      pyramidSignature: JSON.stringify([recipe.quality, recipe.scales]),
     };
     const toneOnlyRecipe = {
       ...recipe,

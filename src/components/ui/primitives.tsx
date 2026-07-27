@@ -344,16 +344,31 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
 
 UiInput.displayName = 'UiInput';
 
-export const UiRangeInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>>(
-  ({ className = '', ...props }, ref) => (
+/** 轨道底色。`hue` 铺满色相光谱，供色相选择使用。 */
+export type UiRangeTrackTone = 'neutral' | 'hue';
+
+interface UiRangeInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
+  trackTone?: UiRangeTrackTone;
+}
+
+// 两种轨道底色必须互斥：都落在 background 上，叠着写的话胜负取决于 Tailwind
+// 产物顺序而非 className 顺序，会静默失效。
+const UI_RANGE_TRACK_TONE_CLASS: Record<UiRangeTrackTone, string> = {
+  neutral: '[&::-webkit-slider-runnable-track]:bg-layer/80 [&::-moz-range-track]:bg-layer/80',
+  hue: 'ui-range-track-hue',
+};
+
+export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
+  ({ className = '', trackTone = 'neutral', ...props }, ref) => (
     <input
       ref={ref}
       type="range"
       className={`h-5 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
-      [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-layer/80
+      [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
       [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-accent
-      [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-layer/80
+      [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full
       [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent
+      ${UI_RANGE_TRACK_TONE_CLASS[trackTone]}
       ${className}`}
       {...props}
     />

@@ -1,5 +1,5 @@
 import { createDefaultDiffusionOperationParams } from './diffusionParams';
-import type { DiffusionMode, DiffusionOperationParams } from './types';
+import type { DiffusionDensity, DiffusionMode, DiffusionOperationParams } from './types';
 
 export type DiffusionPresetIntensity = 'low' | 'medium' | 'high';
 
@@ -18,13 +18,18 @@ export type DiffusionPresetId =
 export type LegacyDiffusionPresetId = 'black-mist-soft' | 'white-mist-soft' | 'glow-soft';
 export type DiffusionPresetSelectionId = DiffusionPresetId | LegacyDiffusionPresetId;
 
+/**
+ * 预设就是「模式 × 档位」的调校基准，因此不再单独存 presetId：
+ * mode + density 已经唯一确定一组基准值，再存一个 ID 只会和用户的手动微调打架。
+ */
 export interface DiffusionPresetPatch {
   readonly strength: number;
-  readonly density: DiffusionOperationParams['density'];
-  readonly source?: Partial<DiffusionOperationParams['source']>;
-  readonly scatter?: Partial<DiffusionOperationParams['scatter']>;
-  readonly tone?: Partial<DiffusionOperationParams['tone']>;
-  readonly detail?: Partial<DiffusionOperationParams['detail']>;
+  readonly glowRange: number;
+  readonly highlightResponse: number;
+  readonly softness: number;
+  readonly blackRetention: number;
+  readonly detailRetention: number;
+  readonly colorRetention: number;
 }
 
 export interface DiffusionPresetDefinition {
@@ -69,55 +74,55 @@ const DIFFUSION_PRESETS: readonly DiffusionPresetDefinition[] = [
     id: 'black-mist-low', mode: 'black_mist', intensity: 'low',
     name: { zh: '通用黑柔 · 轻', en: 'General Black Mist · Low' },
     description: { zh: '轻微压低高光边缘，同时尽量保留黑位和细节。', en: 'A restrained highlight bloom with preserved blacks and detail.' },
-    parameters: { strength: 0.18, density: '1/8', scatter: { highlightAmount: 0.06, microAmount: 0.009, farRadius: 0.026, tailAmount: 0.035 }, tone: { veil: 0.004, blackRetention: 0.95, scatterDesaturation: 0.02 }, detail: { highFrequencyRetention: 0.97 } },
+    parameters: { strength: 0.3, glowRange: 0.28, highlightResponse: 0.4, softness: 0.1, blackRetention: 0.95, detailRetention: 0.93, colorRetention: 0.94 },
   }),
   createPreset({
     id: 'black-mist-medium', mode: 'black_mist', intensity: 'medium',
     name: { zh: '通用黑柔 · 中', en: 'General Black Mist · Medium' },
     description: { zh: '平衡高光散射、黑位保留与长尾雾幕。', en: 'Balanced highlight scatter, black retention, and long-tail haze.' },
-    parameters: { strength: 0.35, density: '1/4', scatter: { highlightAmount: 0.12, microAmount: 0.018, farRadius: 0.045, tailAmount: 0.06 }, tone: { veil: 0.012, blackRetention: 0.92, scatterDesaturation: 0.04 }, detail: { highFrequencyRetention: 0.94 } },
+    parameters: { strength: 0.45, glowRange: 0.47, highlightResponse: 0.44, softness: 0.17, blackRetention: 0.92, detailRetention: 0.87, colorRetention: 0.9 },
   }),
   createPreset({
     id: 'black-mist-high', mode: 'black_mist', intensity: 'high',
     name: { zh: '通用黑柔 · 强', en: 'General Black Mist · High' },
     description: { zh: '更明显的长尾散射，仍避免把暗部完全抬灰。', en: 'Pronounced long-tail scatter while avoiding a fully washed-out black point.' },
-    parameters: { strength: 0.56, density: '1/2', scatter: { highlightAmount: 0.2, microAmount: 0.03, nearRadius: 0.004, farRadius: 0.07, tailAmount: 0.11, tailShape: 2.1 }, tone: { veil: 0.022, blackRetention: 0.85, scatterDesaturation: 0.07 }, detail: { highFrequencyRetention: 0.9 } },
+    parameters: { strength: 0.62, glowRange: 0.63, highlightResponse: 0.5, softness: 0.31, blackRetention: 0.85, detailRetention: 0.78, colorRetention: 0.84 },
   }),
   createPreset({
     id: 'white-mist-low', mode: 'white_mist', intensity: 'low',
     name: { zh: '通用白柔 · 轻', en: 'General White Mist · Low' },
     description: { zh: '轻微微扩散与雾幕，适合保守地柔化亮部。', en: 'Subtle micro-diffusion and veil for conservative highlight softening.' },
-    parameters: { strength: 0.16, density: '1/8', scatter: { highlightAmount: 0.07, microAmount: 0.014, farRadius: 0.025, tailAmount: 0.025 }, tone: { veil: 0.012, blackRetention: 0.98, scatterDesaturation: 0.04 }, detail: { highFrequencyRetention: 0.98 } },
+    parameters: { strength: 0.28, glowRange: 0.26, highlightResponse: 0.46, softness: 0.07, blackRetention: 0.98, detailRetention: 0.96, colorRetention: 0.9 },
   }),
   createPreset({
     id: 'white-mist-medium', mode: 'white_mist', intensity: 'medium',
     name: { zh: '通用白柔 · 中', en: 'General White Mist · Medium' },
     description: { zh: '比黑柔更重视微扩散、雾幕和散射去饱和。', en: 'Prioritises micro-diffusion, veil, and scattered-light desaturation over black mist.' },
-    parameters: { strength: 0.28, density: '1/4', scatter: { highlightAmount: 0.1, microAmount: 0.024, farRadius: 0.04, tailAmount: 0.04 }, tone: { veil: 0.024, blackRetention: 0.96, scatterDesaturation: 0.07 }, detail: { highFrequencyRetention: 0.96 } },
+    parameters: { strength: 0.42, glowRange: 0.43, highlightResponse: 0.52, softness: 0.11, blackRetention: 0.96, detailRetention: 0.91, colorRetention: 0.84 },
   }),
   createPreset({
     id: 'white-mist-high', mode: 'white_mist', intensity: 'high',
     name: { zh: '通用白柔 · 强', en: 'General White Mist · High' },
     description: { zh: '更明显地拓展高光雾幕并降低散射饱和度。', en: 'Expands the highlight veil while visibly desaturating scattered light.' },
-    parameters: { strength: 0.48, density: '1/2', scatter: { highlightAmount: 0.17, microAmount: 0.042, farRadius: 0.065, tailAmount: 0.09 }, tone: { veil: 0.05, blackRetention: 0.92, scatterDesaturation: 0.12 }, detail: { highFrequencyRetention: 0.92 } },
+    parameters: { strength: 0.58, glowRange: 0.6, highlightResponse: 0.58, softness: 0.26, blackRetention: 0.92, detailRetention: 0.82, colorRetention: 0.74 },
   }),
   createPreset({
     id: 'glow-low', mode: 'glow', intensity: 'low',
     name: { zh: '通用辉光 · 轻', en: 'General Glow · Low' },
     description: { zh: '为高亮区域增加小范围光晕，不引入全局雾幕。', en: 'Adds a small highlight halo without introducing a global veil.' },
-    parameters: { strength: 0.24, density: '1/4', scatter: { highlightAmount: 0.1, microAmount: 0.014, farRadius: 0.035, tailAmount: 0.05 }, tone: { veil: 0, highlightCompression: 0.08, scatterDesaturation: 0.04 } },
+    parameters: { strength: 0.3, glowRange: 0.38, highlightResponse: 0.34, softness: 0.14, blackRetention: 0.94, detailRetention: 0.94, colorRetention: 0.94 },
   }),
   createPreset({
     id: 'glow-medium', mode: 'glow', intensity: 'medium',
     name: { zh: '通用辉光 · 中', en: 'General Glow · Medium' },
     description: { zh: '以高亮和长尾散射为主，保持全局黑位稳定。', en: 'Favours highlight and long-tail scatter while keeping the global black point stable.' },
-    parameters: { strength: 0.42, density: '1/2', scatter: { highlightAmount: 0.18, microAmount: 0.025, farRadius: 0.06, tailAmount: 0.1 }, tone: { veil: 0, highlightCompression: 0.12, scatterDesaturation: 0.07 } },
+    parameters: { strength: 0.46, glowRange: 0.57, highlightResponse: 0.4, softness: 0.29, blackRetention: 0.92, detailRetention: 0.9, colorRetention: 0.9 },
   }),
   createPreset({
     id: 'glow-high', mode: 'glow', intensity: 'high',
     name: { zh: '通用辉光 · 强', en: 'General Glow · High' },
     description: { zh: '扩展高光长尾与光晕范围，适合有明确高光主体的画面。', en: 'Extends the highlight tail and halo for images with clear bright subjects.' },
-    parameters: { strength: 0.62, density: '1', scatter: { highlightAmount: 0.28, microAmount: 0.04, nearRadius: 0.004, farRadius: 0.095, tailAmount: 0.17, tailShape: 1.8 }, tone: { veil: 0, highlightCompression: 0.2, scatterDesaturation: 0.12 }, detail: { highFrequencyRetention: 0.9 } },
+    parameters: { strength: 0.66, glowRange: 0.74, highlightResponse: 0.46, softness: 0.49, blackRetention: 0.9, detailRetention: 0.82, colorRetention: 0.84 },
   }),
 ];
 
@@ -142,6 +147,30 @@ export function applyDiffusionPreset(presetId: DiffusionPresetSelectionId): Diff
   return preset.apply(createDefaultDiffusionOperationParams());
 }
 
+/**
+ * 取「模式 × 档位」对应的调校基准。用户切换模式或档位时套用它，
+ * 因为同一组数值在黑柔和辉光下的观感差别很大，直接沿用上一模式的数值会很怪。
+ */
+export function resolveDiffusionPreset(
+  mode: DiffusionMode,
+  density: DiffusionDensity
+): DiffusionPresetDefinition {
+  const preset = DIFFUSION_PRESETS.find(
+    (entry) => entry.mode === mode && entry.intensity === density
+  );
+  if (!preset) throw new Error(`缺少柔光基准：${mode} / ${density}`);
+  return preset;
+}
+
+/** 切换模式/档位时保留用户已开启的着色设置，只替换光学参数。 */
+export function applyDiffusionPresetForSelection(
+  base: DiffusionOperationParams,
+  mode: DiffusionMode,
+  density: DiffusionDensity
+): DiffusionOperationParams {
+  return resolveDiffusionPreset(mode, density).apply(base);
+}
+
 function createPreset(
   preset: Omit<DiffusionPresetDefinition, 'version' | 'source' | 'applicability' | 'nonGuarantees' | 'apply'>
 ): DiffusionPresetDefinition {
@@ -157,19 +186,13 @@ function createPreset(
 
 function applyPresetPatch(
   base: DiffusionOperationParams,
-  preset: Pick<DiffusionPresetDefinition, 'id' | 'mode' | 'parameters'>
+  preset: Pick<DiffusionPresetDefinition, 'mode' | 'intensity' | 'parameters'>
 ): DiffusionOperationParams {
-  const { parameters } = preset;
   return {
     ...base,
     mode: preset.mode,
-    presetId: preset.id,
-    strength: parameters.strength,
-    density: parameters.density,
-    source: { ...base.source, ...parameters.source },
-    scatter: { ...base.scatter, ...parameters.scatter },
-    tone: { ...base.tone, ...parameters.tone },
-    detail: { ...base.detail, ...parameters.detail },
+    density: preset.intensity,
+    ...preset.parameters,
   };
 }
 

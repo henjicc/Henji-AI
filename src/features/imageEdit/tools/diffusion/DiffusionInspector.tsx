@@ -1,31 +1,34 @@
-import { useId, useMemo, useState, type PointerEvent } from 'react';
-import { ChevronDown, RotateCcw, Trash2 } from 'lucide-react';
+import type { PointerEvent, ReactNode } from 'react';
+import { RotateCcw, Trash2 } from 'lucide-react';
 import {
-  applyDiffusionPreset,
+  applyDiffusionPresetForSelection,
   createDefaultDiffusionOperationParams,
-  getDiffusionPreset,
   IMAGE_EDIT_OPERATION_IDS,
-  listDiffusionPresets,
+  type DiffusionDensity,
+  type DiffusionMode,
   type DiffusionOperationParams,
+  type DiffusionQuality,
 } from '@/core/imageEdit';
 import {
-  Dropdown,
   UI_TEXT_META_CLASS,
   UI_TEXT_SECTION_CLASS,
   UiChipButton,
+  UiGroup,
+  UiOptionButton,
   UiRangeInput,
   UiSwitch,
+  type UiRangeTrackTone,
 } from '@/components/ui';
 import { useImageEditorDocumentController } from '@/features/imageEdit/editor/ImageEditorDocumentContext';
 import { useI18n } from '@/hooks/useI18n';
 import {
-  DIFFUSION_DENSITY_OPTIONS,
   DIFFUSION_MODE_OPTIONS,
   DIFFUSION_QUALITY_OPTIONS,
-  type DiffusionSelectOption,
-  formatDiffusionNumber,
+  formatDiffusionDegrees,
   formatDiffusionPercent,
-  formatDiffusionRadius,
+  formatDiffusionSigned,
+  getDiffusionDensityOptions,
+  type DiffusionSelectOption,
 } from './diffusionUiMapping';
 
 interface RangeFieldProps {
@@ -35,46 +38,11 @@ interface RangeFieldProps {
   max: number;
   step: number;
   display: string;
+  trackTone?: UiRangeTrackTone;
   onChange: (value: number) => void;
   onBegin: () => void;
   onCommit: () => void;
   onCancel: () => void;
-}
-
-interface DiffusionSectionProps {
-  title: string;
-  children: React.ReactNode;
-}
-
-interface DiffusionDropdownFieldProps<T extends string> {
-  label: string;
-  value: T;
-  options: readonly DiffusionSelectOption<T>[];
-  onChange: (value: T) => void;
-}
-
-function DiffusionDropdownField<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: DiffusionDropdownFieldProps<T>): JSX.Element {
-  const labelId = useId();
-  return (
-    <div className={`space-y-1.5 ${UI_TEXT_META_CLASS}`}>
-      <span id={labelId}>{label}</span>
-      <Dropdown<T>
-        value={value}
-        options={options.map((option) => ({ ...option }))}
-        onSelect={onChange}
-        ariaLabelledBy={labelId}
-        className="w-full"
-        buttonClassName="w-full"
-        minWidthStrategy="none"
-        panelWidthStrategy="button"
-      />
-    </div>
-  );
 }
 
 function DiffusionRangeField({
@@ -84,6 +52,7 @@ function DiffusionRangeField({
   max,
   step,
   display,
+  trackTone,
   onChange,
   onBegin,
   onCommit,
@@ -101,6 +70,7 @@ function DiffusionRangeField({
         min={min}
         max={max}
         step={step}
+        trackTone={trackTone}
         onFocus={onBegin}
         onPointerDown={onBegin}
         onPointerUp={handlePointerUp}
@@ -112,35 +82,49 @@ function DiffusionRangeField({
   );
 }
 
-function DiffusionSection({ title, children }: DiffusionSectionProps): JSX.Element {
-  const [open, setOpen] = useState(true);
-  const contentId = useId();
+interface SegmentedFieldProps<T extends string> {
+  label: string;
+  value: T;
+  options: readonly DiffusionSelectOption<T>[];
+  onChange: (value: T) => void;
+}
+
+/**
+ * 同质选项集合，且外层面板已经画过一次边界，因此静息态不描边（见 skill henji-ui-surface
+ * 的「选项集合的静息态」）。
+ */
+function DiffusionSegmentedField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: SegmentedFieldProps<T>): JSX.Element {
   return (
-    <section className="border-b border-border-dark py-3 last:border-b-0">
-      <UiChipButton
-        type="button"
-        className="!h-7 w-full justify-between !border-0 !bg-transparent !px-0 !text-xs"
-        onClick={() => setOpen((previous) => !previous)}
-        aria-expanded={open}
-        aria-controls={contentId}
-      >
-        {title}
-        <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? '' : '-rotate-90'}`} />
-      </UiChipButton>
-      {open ? <div id={contentId} className="space-y-3 pt-3">{children}</div> : null}
-    </section>
+    <div className="space-y-1.5">
+      <span className={UI_TEXT_META_CLASS}>{label}</span>
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+        {options.map((option) => (
+          <UiOptionButton
+            key={option.value}
+            type="button"
+            variant="menu"
+            active={option.value === value}
+            className="justify-center text-xs"
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </UiOptionButton>
+        ))}
+      </div>
+    </div>
   );
 }
 
 export function DiffusionInspector(): JSX.Element {
   const controller = useImageEditorDocumentController();
-  const { t, tText } = useI18n('ui');
+  const { t } = useI18n('ui');
   const operation = controller.getOperation<DiffusionOperationParams>(IMAGE_EDIT_OPERATION_IDS.diffusion);
   const params = operation?.params ?? createDefaultDiffusionOperationParams();
-  const presets = useMemo(() => listDiffusionPresets(), []);
-  const selectedPreset = params.presetId
-    ? getDiffusionPreset(params.presetId)
-    : undefined;
   const previewState = controller.previewState;
   const previewStatus = resolvePreviewStatus(previewState, t);
 
@@ -150,90 +134,170 @@ export function DiffusionInspector(): JSX.Element {
   const beginRange = (): void => controller.beginTransaction();
   const commitRange = (): void => controller.commitTransaction();
   const cancelRange = (): void => controller.cancelTransaction();
-  const setEnabled = (enabled: boolean): void => controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.diffusion, enabled);
+  const setEnabled = (enabled: boolean): void =>
+    controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.diffusion, enabled);
+
+  // 同一组数值在黑柔和辉光下观感差别很大，切换模式/档位时套用对应基准，
+  // 而不是把上一模式的数值原样留着。
+  const selectMode = (mode: DiffusionMode): void =>
+    update((current) => applyDiffusionPresetForSelection(current, mode, current.density));
+  const selectDensity = (density: DiffusionDensity): void =>
+    update((current) => applyDiffusionPresetForSelection(current, current.mode, density));
+
+  const setUnit = (
+    key: 'strength' | 'glowRange' | 'highlightResponse' | 'softness'
+      | 'blackRetention' | 'detailRetention' | 'colorRetention'
+  ) => (value: number): void => update((current) => ({ ...current, [key]: value }));
+
+  const setTint = (patch: Partial<DiffusionOperationParams['tint']>): void =>
+    update((current) => ({ ...current, tint: { ...current.tint, ...patch } }));
+
+  const rangeHandlers = { onBegin: beginRange, onCommit: commitRange, onCancel: cancelRange };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <div className="mb-3 flex items-start justify-between gap-2">
         <h2 className={UI_TEXT_SECTION_CLASS}>{t('imageEditor.diffusion.tool')}</h2>
-        <UiSwitch checked={operation?.enabled ?? false} onCheckedChange={setEnabled} aria-label={t('imageEditor.diffusion.enable')} />
+        <UiSwitch
+          checked={operation?.enabled ?? false}
+          onCheckedChange={setEnabled}
+          aria-label={t('imageEditor.diffusion.enable')}
+        />
       </div>
       {previewState && previewState.phase !== 'idle' ? (
-        <div role="status" aria-live="polite" className={`mb-3 rounded-lg border px-2.5 py-2 text-xs ${previewState.phase === 'failed' ? 'border-red-500/40 text-red-300' : 'border-border-dark text-text-muted'}`}>
+        <div
+          role="status"
+          aria-live="polite"
+          className={`mb-3 rounded-lg border px-2.5 py-2 text-xs ${
+            previewState.phase === 'failed'
+              ? 'border-red-500/40 text-red-300'
+              : 'border-border-dark text-text-muted'
+          }`}
+        >
           {previewStatus}
         </div>
       ) : null}
 
-      <fieldset disabled={!operation?.enabled} className="m-0 min-w-0 space-y-3 border-0 p-0 disabled:opacity-60">
-        <DiffusionDropdownField
-          label="模式"
-          value={params.mode}
-          options={DIFFUSION_MODE_OPTIONS}
-          onChange={(mode) => update((current) => ({ ...current, mode, presetId: null }))}
-        />
-        <div className={`space-y-1.5 ${UI_TEXT_META_CLASS}`}>
-          <DiffusionDropdownField
-            label={t('imageEditor.diffusion.preset.label')}
-            value={params.presetId ?? ''}
-            options={[
-              { value: '', label: t('imageEditor.diffusion.preset.custom') },
-              ...presets.map((preset) => ({ value: preset.id, label: tText(preset.name) })),
-            ]}
-            onChange={(presetId) => {
-              if (!presetId) update((current) => ({ ...current, presetId: null }));
-              else update(() => applyDiffusionPreset(presetId as Parameters<typeof applyDiffusionPreset>[0]));
-            }}
+      <fieldset disabled={!operation?.enabled} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-60">
+        <UiGroup gap="row">
+          <DiffusionSegmentedField
+            label="模式"
+            value={params.mode}
+            options={DIFFUSION_MODE_OPTIONS}
+            onChange={selectMode}
           />
-          {selectedPreset ? <span className="block leading-5 text-text-muted">{tText(selectedPreset.description)}</span> : null}
-        </div>
-        <p className={`-mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('imageEditor.diffusion.preset.sourceNotice')}</p>
-        <div className="grid grid-cols-2 gap-2">
-          <DiffusionDropdownField label="档位" value={params.density} options={DIFFUSION_DENSITY_OPTIONS} onChange={(density) => update((current) => ({ ...current, density }))} />
-          <DiffusionDropdownField label="质量" value={params.quality} options={DIFFUSION_QUALITY_OPTIONS} onChange={(quality) => update((current) => ({ ...current, quality }))} />
-        </div>
-        <DiffusionRangeField label="强度" value={params.strength} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.strength)} onChange={(value) => update((current) => ({ ...current, strength: value, presetId: null }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
+          <DiffusionSegmentedField
+            label="档位"
+            value={params.density}
+            options={getDiffusionDensityOptions(params.mode)}
+            onChange={selectDensity}
+          />
+        </UiGroup>
 
-        <DiffusionSection title="光源">
-          <DiffusionRangeField label="阈值 EV" value={params.source.thresholdEV} min={-8} max={8} step={0.1} display={formatDiffusionNumber(params.source.thresholdEV, 1)} onChange={(value) => update((current) => ({ ...current, presetId: null, source: { ...current.source, thresholdEV: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="柔化拐点" value={params.source.softKneeEV} min={0} max={8} step={0.1} display={formatDiffusionNumber(params.source.softKneeEV, 1)} onChange={(value) => update((current) => ({ ...current, presetId: null, source: { ...current.source, softKneeEV: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="响应幂值" value={params.source.power} min={0.1} max={8} step={0.1} display={formatDiffusionNumber(params.source.power, 1)} onChange={(value) => update((current) => ({ ...current, presetId: null, source: { ...current.source, power: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="高光恢复" value={params.source.highlightRecovery} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.source.highlightRecovery)} onChange={(value) => update((current) => ({ ...current, presetId: null, source: { ...current.source, highlightRecovery: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-        </DiffusionSection>
+        <UiGroup gap="row" divided>
+          <DiffusionRangeField
+            label="强度" value={params.strength} min={0} max={1} step={0.01}
+            display={formatDiffusionPercent(params.strength)}
+            onChange={setUnit('strength')} {...rangeHandlers}
+          />
+          <DiffusionRangeField
+            label="辉光范围" value={params.glowRange} min={0} max={1} step={0.01}
+            display={formatDiffusionPercent(params.glowRange)}
+            onChange={setUnit('glowRange')} {...rangeHandlers}
+          />
+          <DiffusionRangeField
+            label="高光响应" value={params.highlightResponse} min={0} max={1} step={0.01}
+            display={formatDiffusionPercent(params.highlightResponse)}
+            onChange={setUnit('highlightResponse')} {...rangeHandlers}
+          />
+          <DiffusionRangeField
+            label="光斑柔和度" value={params.softness} min={0} max={1} step={0.01}
+            display={formatDiffusionPercent(params.softness)}
+            onChange={setUnit('softness')} {...rangeHandlers}
+          />
+          {/* 辉光不主动抬黑位，没有需要「保持」的东西，滑块在该模式下会是死的，故不显示。 */}
+          {params.mode === 'glow' ? null : (
+            <DiffusionRangeField
+              label="黑位保持" value={params.blackRetention} min={0} max={1} step={0.01}
+              display={formatDiffusionPercent(params.blackRetention)}
+              onChange={setUnit('blackRetention')} {...rangeHandlers}
+            />
+          )}
+          <DiffusionRangeField
+            label="细节保留" value={params.detailRetention} min={0} max={1} step={0.01}
+            display={formatDiffusionPercent(params.detailRetention)}
+            onChange={setUnit('detailRetention')} {...rangeHandlers}
+          />
+          <DiffusionRangeField
+            label="色彩保持" value={params.colorRetention} min={0} max={1} step={0.01}
+            display={formatDiffusionPercent(params.colorRetention)}
+            onChange={setUnit('colorRetention')} {...rangeHandlers}
+          />
+        </UiGroup>
 
-        <DiffusionSection title="散射">
-          <DiffusionRangeField label="高光散射" value={params.scatter.highlightAmount} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.scatter.highlightAmount)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, highlightAmount: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="微扩散" value={params.scatter.microAmount} min={0} max={1} step={0.001} display={formatDiffusionPercent(params.scatter.microAmount)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, microAmount: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="近距半径" value={params.scatter.nearRadius} min={0} max={params.scatter.farRadius} step={0.001} display={formatDiffusionRadius(params.scatter.nearRadius)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, nearRadius: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="远距半径" value={params.scatter.farRadius} min={params.scatter.nearRadius} max={1} step={0.001} display={formatDiffusionRadius(params.scatter.farRadius)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, farRadius: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="长尾" value={params.scatter.tailAmount} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.scatter.tailAmount)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, tailAmount: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="长尾形状" value={params.scatter.tailShape} min={1} max={16} step={0.1} display={formatDiffusionNumber(params.scatter.tailShape, 1)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, tailShape: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="各向异性" value={params.scatter.anisotropy} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.scatter.anisotropy)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, anisotropy: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="散射角度" value={params.scatter.angle} min={-360} max={360} step={1} display={`${Math.round(params.scatter.angle)}°`} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, angle: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="色散" value={params.scatter.chromaticSpread} min={0} max={0.25} step={0.001} display={formatDiffusionRadius(params.scatter.chromaticSpread)} onChange={(value) => update((current) => ({ ...current, presetId: null, scatter: { ...current.scatter, chromaticSpread: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-        </DiffusionSection>
+        <UiGroup
+          divided
+          gap="row"
+          title="着色"
+          titleTone="overline"
+          actions={
+            <UiSwitch
+              checked={params.tint.enabled}
+              onCheckedChange={(enabled) => setTint({ enabled })}
+              aria-label="启用着色"
+            />
+          }
+        >
+          {params.tint.enabled ? (
+            <>
+              <DiffusionRangeField
+                label="色相" value={params.tint.hue} min={0} max={360} step={1}
+                display={formatDiffusionDegrees(params.tint.hue)}
+                trackTone="hue"
+                onChange={(hue) => setTint({ hue })} {...rangeHandlers}
+              />
+              <DiffusionRangeField
+                label="饱和度" value={params.tint.saturation} min={0} max={1} step={0.01}
+                display={formatDiffusionPercent(params.tint.saturation)}
+                onChange={(saturation) => setTint({ saturation })} {...rangeHandlers}
+              />
+              <DiffusionRangeField
+                label="亮度" value={params.tint.lightness} min={-1} max={1} step={0.01}
+                display={formatDiffusionSigned(params.tint.lightness)}
+                onChange={(lightness) => setTint({ lightness })} {...rangeHandlers}
+              />
+            </>
+          ) : null}
+        </UiGroup>
 
-        <DiffusionSection title="色调">
-          <DiffusionRangeField label="雾幕" value={params.tone.veil} min={0} max={1} step={0.001} display={formatDiffusionPercent(params.tone.veil)} onChange={(value) => update((current) => ({ ...current, presetId: null, tone: { ...current.tone, veil: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="黑位保留" value={params.tone.blackRetention} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.tone.blackRetention)} onChange={(value) => update((current) => ({ ...current, presetId: null, tone: { ...current.tone, blackRetention: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="高光压缩" value={params.tone.highlightCompression} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.tone.highlightCompression)} onChange={(value) => update((current) => ({ ...current, presetId: null, tone: { ...current.tone, highlightCompression: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="散射去饱和" value={params.tone.scatterDesaturation} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.tone.scatterDesaturation)} onChange={(value) => update((current) => ({ ...current, presetId: null, tone: { ...current.tone, scatterDesaturation: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-        </DiffusionSection>
-
-        <DiffusionSection title="细节">
-          <DiffusionRangeField label="高频保留" value={params.detail.highFrequencyRetention} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.detail.highFrequencyRetention)} onChange={(value) => update((current) => ({ ...current, presetId: null, detail: { ...current.detail, highFrequencyRetention: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="中频保留" value={params.detail.midFrequencyRetention} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.detail.midFrequencyRetention)} onChange={(value) => update((current) => ({ ...current, presetId: null, detail: { ...current.detail, midFrequencyRetention: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-        </DiffusionSection>
-
-        <DiffusionSection title="镜头">
-          <DiffusionRangeField label="等效焦距" value={params.lens.focalLengthEq} min={1} max={1000} step={1} display={`${Math.round(params.lens.focalLengthEq)} mm`} onChange={(value) => update((current) => ({ ...current, presetId: null, lens: { ...current.lens, focalLengthEq: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="光圈" value={params.lens.aperture} min={0.1} max={64} step={0.1} display={`f/${formatDiffusionNumber(params.lens.aperture, 1)}`} onChange={(value) => update((current) => ({ ...current, presetId: null, lens: { ...current.lens, aperture: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-          <DiffusionRangeField label="位置变化" value={params.lens.positionVariation} min={0} max={1} step={0.01} display={formatDiffusionPercent(params.lens.positionVariation)} onChange={(value) => update((current) => ({ ...current, presetId: null, lens: { ...current.lens, positionVariation: value } }))} onBegin={beginRange} onCommit={commitRange} onCancel={cancelRange} />
-        </DiffusionSection>
+        <UiGroup gap="row" divided>
+          <DiffusionSegmentedField
+            label="质量"
+            value={params.quality}
+            options={DIFFUSION_QUALITY_OPTIONS}
+            onChange={(quality: DiffusionQuality) => update((current) => ({ ...current, quality }))}
+          />
+        </UiGroup>
       </fieldset>
 
-      <div className="mt-3 flex gap-2">
-        <UiChipButton type="button" className="!h-8 flex-1 !justify-center !text-xs" onClick={() => controller.resetOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)}><RotateCcw className="h-3.5 w-3.5" />{t('imageEditor.diffusion.reset')}</UiChipButton>
-        <UiChipButton type="button" className="!h-8 flex-1 !justify-center !text-xs" disabled={!operation} onClick={() => controller.removeOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)}><Trash2 className="h-3.5 w-3.5" />{t('imageEditor.diffusion.remove')}</UiChipButton>
+      <div className="mt-4 flex gap-2">
+        <UiChipButton
+          type="button"
+          className="!h-8 flex-1 !justify-center !text-xs"
+          onClick={() => controller.resetOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)}
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          {t('imageEditor.diffusion.reset')}
+        </UiChipButton>
+        <UiChipButton
+          type="button"
+          className="!h-8 flex-1 !justify-center !text-xs"
+          disabled={!operation}
+          onClick={() => controller.removeOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          {t('imageEditor.diffusion.remove')}
+        </UiChipButton>
       </div>
     </div>
   );
@@ -242,7 +306,7 @@ export function DiffusionInspector(): JSX.Element {
 function resolvePreviewStatus(
   previewState: ReturnType<typeof useImageEditorDocumentController>['previewState'],
   t: ReturnType<typeof useI18n>['t']
-): string | undefined {
+): ReactNode {
   if (previewState?.phase === 'compiling') return t('imageEditor.diffusion.compiling');
   if (previewState?.phase === 'rendering') return t('imageEditor.diffusion.rendering');
   if (previewState?.phase !== 'degraded') return previewState?.message;

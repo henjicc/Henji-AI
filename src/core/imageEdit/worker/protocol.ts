@@ -150,12 +150,12 @@ export function withImageEditWorkerExecutionCapabilities(
       backend: 'sharp',
       hardCancellationSupported: false,
       unsupportedParameters: [
-        'source',
-        'tone',
-        'detail',
-        'lens',
-        'scatter.anisotropy',
-        'scatter.chromaticSpread',
+        'highlightResponse',
+        'softness',
+        'blackRetention',
+        'detailRetention',
+        'colorRetention',
+        'tint',
       ],
     },
   }

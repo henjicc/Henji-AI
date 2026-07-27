@@ -114,9 +114,6 @@ struct BlurUniforms {
   aspect_correction: vec2<f32>,
   radius: f32,
   axis: f32,
-  anisotropy: f32,
-  angle: f32,
-  padding: vec2<f32>,
 };
 
 @group(0) @binding(0) var blur_input: texture_2d<f32>;
@@ -124,16 +121,12 @@ struct BlurUniforms {
 @group(0) @binding(2) var<uniform> blur_params: BlurUniforms;
 
 fn blur_direction() -> vec2<f32> {
-  let horizontal = vec2<f32>(cos(blur_params.angle), sin(blur_params.angle));
-  let vertical = vec2<f32>(-horizontal.y, horizontal.x);
-  let selected = select(horizontal, vertical, blur_params.axis > 0.5);
-  let anisotropy_scale = select(
-    1.0 + blur_params.anisotropy,
-    max(0.15, 1.0 - blur_params.anisotropy),
+  let selected = select(
+    vec2<f32>(1.0, 0.0),
+    vec2<f32>(0.0, 1.0),
     blur_params.axis > 0.5
   );
-  return selected * blur_params.aspect_correction
-    * blur_params.radius * anisotropy_scale;
+  return selected * blur_params.aspect_correction * blur_params.radius;
 }
 
 fn gaussian_sample(uv: vec2<f32>, direction: vec2<f32>) -> vec4<f32> {
@@ -170,7 +163,9 @@ struct CompositeUniforms {
   high_frequency_retention: f32,
   mid_frequency_retention: f32,
   mode: f32,
-  chromatic_spread: f32,
+  tint_rgb: vec3<f32>,
+  tint_amount: f32,
+  tint_gain: f32,
   padding_a: f32,
   padding_b: f32,
   padding_c: f32,
@@ -188,14 +183,8 @@ struct CompositeUniforms {
 /** 未经模糊的散射源 E，能量守恒的扣除项必须用它而不是模糊后的结果。 */
 @group(0) @binding(9) var composite_emitted: texture_2d<f32>;
 
-fn sample_chromatic(texture: texture_2d<f32>, uv: vec2<f32>, spread: f32) -> vec3<f32> {
-  if (spread <= 0.000001) {
-    return textureSampleLevel(texture, composite_sampler, uv, 0.0).rgb;
-  }
-  let red = textureSampleLevel(texture, composite_sampler, uv + vec2<f32>(spread, 0.0), 0.0).r;
-  let green = textureSampleLevel(texture, composite_sampler, uv, 0.0).g;
-  let blue = textureSampleLevel(texture, composite_sampler, uv - vec2<f32>(spread, 0.0), 0.0).b;
-  return vec3<f32>(red, green, blue);
+fn sample_scatter(texture: texture_2d<f32>, uv: vec2<f32>) -> vec3<f32> {
+  return textureSampleLevel(texture, composite_sampler, uv, 0.0).rgb;
 }
 
 @fragment
@@ -205,19 +194,12 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   if (base.a <= 0.00001) {
     return vec4<f32>(0.0);
   }
-  let spread = composite_params.chromatic_spread;
-  var scatter = sample_chromatic(scatter_0, uv, spread * 0.25)
-    * composite_params.weights_a.x;
-  scatter += sample_chromatic(scatter_1, uv, spread * 0.4)
-    * composite_params.weights_a.y;
-  scatter += sample_chromatic(scatter_2, uv, spread * 0.6)
-    * composite_params.weights_a.z;
-  scatter += sample_chromatic(scatter_3, uv, spread * 0.8)
-    * composite_params.weights_a.w;
-  scatter += sample_chromatic(scatter_4, uv, spread)
-    * composite_params.weights_b.x;
-  scatter += sample_chromatic(scatter_5, uv, spread * 1.25)
-    * composite_params.weights_b.y;
+  var scatter = sample_scatter(scatter_0, uv) * composite_params.weights_a.x;
+  scatter += sample_scatter(scatter_1, uv) * composite_params.weights_a.y;
+  scatter += sample_scatter(scatter_2, uv) * composite_params.weights_a.z;
+  scatter += sample_scatter(scatter_3, uv) * composite_params.weights_a.w;
+  scatter += sample_scatter(scatter_4, uv) * composite_params.weights_b.x;
+  scatter += sample_scatter(scatter_5, uv) * composite_params.weights_b.y;
 
   let scatter_luma = luminance(scatter);
   scatter = mix(
@@ -225,6 +207,12 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
     vec3<f32>(scatter_luma),
     composite_params.scatter_desaturation
   );
+
+  // 着色只作用于散射光，直接光不动，所以画面不会整体偏色。
+  // tint_rgb 已在 CPU 侧归一到亮度 1，染色本身不改变散射光总量；
+  // tint_gain 是刻意的艺术控制，会在 ±50% 内偏离能量守恒。
+  scatter *= mix(vec3<f32>(1.0), composite_params.tint_rgb, composite_params.tint_amount);
+  scatter *= composite_params.tint_gain;
 
   // 能量守恒（文档 §4.2）：O = I - f·E + f·(K * E)。
   //
@@ -244,17 +232,20 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   color += high_detail * composite_params.high_frequency_retention * 0.08;
   color += mid_detail * composite_params.mid_frequency_retention * 0.04;
 
-  if (composite_params.mode < 0.5) {
+  // 雾幕抬黑位，是白柔区别于黑柔的核心特征（资料 §6.2）。
+  if (composite_params.mode > 0.5 && composite_params.mode < 1.5) {
+    color += vec3<f32>(composite_params.veil) * (0.35 + scatter_luma);
+  }
+
+  // 黑位保持对两种柔光都有意义：黑柔靠它守住黑位，白柔靠它控制黑位被抬多少。
+  // 辉光不主动抬黑位（资料 §6.3），没有需要「保持」的东西，故不参与。
+  if (composite_params.mode < 1.5) {
     let black_guard = mix(
       luminance(base.rgb),
       1.0,
       composite_params.black_retention
     );
     color = mix(base.rgb, color, black_guard);
-  } else if (composite_params.mode < 1.5) {
-    color += vec3<f32>(composite_params.veil) * (0.35 + scatter_luma);
-  } else {
-    color = max(color - vec3<f32>(composite_params.veil), vec3<f32>(0.0));
   }
 
   let compressed = color / (

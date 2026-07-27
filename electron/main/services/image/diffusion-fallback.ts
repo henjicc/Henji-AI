@@ -35,14 +35,12 @@ export interface SharpDiffusionFallbackCapabilities {
   available: boolean
   supportedParameters: readonly ['mode', 'strength', 'radiusPixels']
   unsupportedParameters: readonly [
-    'thresholdEv',
-    'softKneeEv',
-    'power',
-    'veil',
+    'highlightResponse',
+    'softness',
     'blackRetention',
-    'highlightCompression',
-    'chromaticSpread',
-    'scatterDesaturation',
+    'detailRetention',
+    'colorRetention',
+    'tint',
     'scaleWeights'
   ]
   maxPreviewPixels: number
@@ -63,14 +61,12 @@ export class UnsupportedSharpDiffusionParametersError extends Error {
 const logger = createMainLogger('main.image_diffusion_fallback')
 const SUPPORTED_PARAMETERS = ['mode', 'strength', 'radiusPixels'] as const
 const UNSUPPORTED_PARAMETERS = [
-  'thresholdEv',
-  'softKneeEv',
-  'power',
-  'veil',
+  'highlightResponse',
+  'softness',
   'blackRetention',
-  'highlightCompression',
-  'chromaticSpread',
-  'scatterDesaturation',
+  'detailRetention',
+  'colorRetention',
+  'tint',
   'scaleWeights',
 ] as const
 const DEFAULT_MAX_PREVIEW_PIXELS = 1_000_000
@@ -186,7 +182,9 @@ function parseParams(params: unknown, width: number, height: number): {
   radiusPixels: number
   unsupportedParameters: readonly string[]
 } {
-  if (isRecord(params) && params.schemaVersion === 1) {
+  // 只认「带 schemaVersion 的共享参数对象」，具体版本与 v1 迁移都交给
+  // parseDiffusionOperationParams 判断；写死版本号会在每次 schema 升级时静默失效。
+  if (isRecord(params) && typeof params.schemaVersion === 'number') {
     const parsed = parseDiffusionOperationParams(params)
     const recipe = compileDiffusionRecipe(parsed, {
       width,
