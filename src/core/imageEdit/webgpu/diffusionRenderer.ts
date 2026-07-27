@@ -4,6 +4,7 @@ import {
   createRenderPipelineChecked,
   createShaderModuleChecked,
 } from './deviceManager';
+import { renderBloomPyramid } from './bloomPyramidRenderer';
 import { ImageEditTexturePool } from './texturePool';
 import {
   createUniformBuffer,
@@ -17,12 +18,14 @@ import {
 const TEXTURE_BINDING = 0x04;
 const TEXTURE_RENDER_ATTACHMENT = 0x10;
 const DIFFUSION_TEXTURE_USAGE = TEXTURE_BINDING | TEXTURE_RENDER_ATTACHMENT;
-const SCALE_DIVISORS = [1, 2, 4, 8, 16, 32] as const;
+const DIFFUSION_SCALE_DIVISORS = [1, 2, 4, 8, 16, 32] as const;
 
 interface DiffusionPipelines {
   source: GpuRenderPipeline;
   blurHorizontal: GpuRenderPipeline;
   blurVertical: GpuRenderPipeline;
+  bloomDownsample: GpuRenderPipeline;
+  bloomUpsample: GpuRenderPipeline;
   composite: GpuRenderPipeline;
 }
 
@@ -35,6 +38,7 @@ interface DiffusionCache {
   base: GpuTexture;
   source: GpuTexture;
   scales: GpuTexture[];
+  pyramidTextures: GpuTexture[];
 }
 
 export interface DiffusionRenderInput {
@@ -88,16 +92,32 @@ export class WebGpuDiffusionRenderer {
           targets: [{ format: 'rgba16float' }],
         },
       }, label);
-    const [source, blurHorizontal, blurVertical, composite] = await Promise.all([
+    const [
+      source,
+      blurHorizontal,
+      blurVertical,
+      bloomDownsample,
+      bloomUpsample,
+      composite,
+    ] = await Promise.all([
       create('fragment_source', '柔光源图 Pipeline'),
       create('fragment_blur_horizontal', '柔光横向模糊 Pipeline'),
       create('fragment_blur_vertical', '柔光纵向模糊 Pipeline'),
+      create('fragment_bloom_downsample', '辉光降采样 Pipeline'),
+      create('fragment_bloom_upsample', '辉光上采样 Pipeline'),
       create('fragment_composite', '柔光合成 Pipeline'),
     ]);
     return new WebGpuDiffusionRenderer(
       device,
       sampler,
-      { source, blurHorizontal, blurVertical, composite },
+      {
+        source,
+        blurHorizontal,
+        blurVertical,
+        bloomDownsample,
+        bloomUpsample,
+        composite,
+      },
       new ImageEditTexturePool(device, textureBudgetBytes)
     );
   }
@@ -179,6 +199,7 @@ export class WebGpuDiffusionRenderer {
         base,
         source,
         scales: [],
+        pyramidTextures: [],
       };
       await this.rebuildPyramid(input);
     } catch (error) {
@@ -197,8 +218,28 @@ export class WebGpuDiffusionRenderer {
       await this.rebuildSource(input);
       return;
     }
-    for (const texture of cache.scales) this.texturePool.release(texture);
+    for (const texture of cache.pyramidTextures) this.texturePool.release(texture);
     cache.scales = [];
+    cache.pyramidTextures = [];
+    if (input.recipe.mode === 'glow') {
+      const bloom = await renderBloomPyramid({
+        device: this.device,
+        sampler: this.sampler,
+        downsamplePipeline: this.pipelines.bloomDownsample,
+        upsamplePipeline: this.pipelines.bloomUpsample,
+        source: cache.source,
+        width: input.width,
+        height: input.height,
+        scales: input.recipe.scales,
+        acquireTexture: (width, height) => this.acquireTexture(width, height),
+        releaseTexture: (texture) => this.texturePool.release(texture),
+        isCancelled: input.isCancelled,
+      });
+      cache.scales = bloom.scales;
+      cache.pyramidTextures = bloom.textures;
+      cache.pyramidSignature = createPyramidSignature(input.recipe);
+      return;
+    }
     const scratch: GpuTexture[] = [];
     const uniforms: GpuBuffer[] = [];
     try {
@@ -209,7 +250,7 @@ export class WebGpuDiffusionRenderer {
       let previousRadius = 0;
       for (let index = 0; index < input.recipe.scales.length; index += 1) {
         assertNotCancelled(input.isCancelled);
-        const divisor = SCALE_DIVISORS[index];
+        const divisor = DIFFUSION_SCALE_DIVISORS[index];
         const width = Math.max(1, Math.ceil(input.width / divisor));
         const height = Math.max(1, Math.ceil(input.height / divisor));
         const horizontal = this.acquireTexture(width, height);
@@ -251,6 +292,7 @@ export class WebGpuDiffusionRenderer {
           vertical
         );
         cache.scales.push(vertical);
+        cache.pyramidTextures.push(vertical);
         previous = vertical;
         previousRadius = input.recipe.scales[index].radius;
       }
@@ -259,8 +301,9 @@ export class WebGpuDiffusionRenderer {
       cache.pyramidSignature = createPyramidSignature(input.recipe);
     } catch (error) {
       await this.device.queue.onSubmittedWorkDone().catch(() => undefined);
-      for (const texture of cache.scales) this.texturePool.release(texture);
+      for (const texture of cache.pyramidTextures) this.texturePool.release(texture);
       cache.scales = [];
+      cache.pyramidTextures = [];
       throw error;
     } finally {
       for (const buffer of uniforms) buffer.destroy();
@@ -281,7 +324,7 @@ export class WebGpuDiffusionRenderer {
     if (!this.cache) return;
     this.cache.base.destroy();
     this.texturePool.release(this.cache.source);
-    for (const texture of this.cache.scales) this.texturePool.release(texture);
+    for (const texture of this.cache.pyramidTextures) this.texturePool.release(texture);
     this.cache = null;
   }
 }

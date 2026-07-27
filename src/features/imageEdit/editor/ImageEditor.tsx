@@ -37,6 +37,7 @@ export function ImageEditor({
   const [previewState, setPreviewState] = useState<ImageEditorPreviewState>({ phase: 'idle' });
   const [sourceSize, setSourceSize] = useState<{ width: number; height: number } | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const sourceImageUrlRef = useRef(sourceImageUrl);
   const revisionRef = useRef(0);
   const diffusionEnabled = session.document.operations.some((operation) =>
     operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion && operation.enabled
@@ -63,6 +64,8 @@ export function ImageEditor({
   }, [sourceImageUrl]);
 
   useEffect(() => {
+    const sourceChanged = sourceImageUrlRef.current !== sourceImageUrl;
+    sourceImageUrlRef.current = sourceImageUrl;
     if (!diffusionEnabled) {
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
@@ -73,15 +76,18 @@ export function ImageEditor({
       setPreviewState({ phase: 'idle' });
       return;
     }
+    // 参数更新期间保留上一张已完成预览；只有底图变化时才立即退回新底图。
+    if (sourceChanged) {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+      setPreviewSourceUrl(sourceImageUrl);
+      setPreviewOrientationApplied(false);
+    }
     const revision = ++revisionRef.current;
     const abortController = new AbortController();
     let disposed = false;
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-    setPreviewSourceUrl(sourceImageUrl);
-    setPreviewOrientationApplied(false);
     setPreviewState({ phase: 'compiling' });
     void (async (): Promise<void> => {
       try {

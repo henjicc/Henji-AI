@@ -519,8 +519,8 @@
       "apply": "应用滤镜"
     },
     "diffusion": {
-      "tool": "辉光/柔光",
-      "enable": "启用辉光/柔光",
+      "tool": "发光",
+      "enable": "启用发光",
       "reset": "重置",
       "remove": "移除效果",
       "preset": {

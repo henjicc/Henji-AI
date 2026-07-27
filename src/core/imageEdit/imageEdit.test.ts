@@ -265,7 +265,8 @@ describe('摄影柔光共享配方', () => {
     expect(glow.source.highlightGain).toBeGreaterThan(black.source.highlightGain);
     expect(white.energy.veil).toBeGreaterThan(black.energy.veil);
     expect(glow.energy.veil).toBe(0);
-    expect(glow.scales[5].weight).toBeGreaterThan(black.scales[5].weight);
+    expect(glow.source.highlightRecovery).toBe(0);
+    expect(glow.detail.highFrequencyRetention).toBe(0);
   });
 
   it('按源图、金字塔和最终合成依赖区分缓存失效', () => {

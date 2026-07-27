@@ -35,7 +35,7 @@ imageEditorToolRegistry.register({
 });
 imageEditorToolRegistry.register({
   id: 'diffusion',
-  label: '辉光/柔光',
+  label: '发光',
   operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
   icon: Sparkles,
   inspector: DiffusionInspector,

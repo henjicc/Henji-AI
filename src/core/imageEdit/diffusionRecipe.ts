@@ -90,21 +90,23 @@ const MODE_RESPONSE = {
     highlightAmount: 0.44,
     microAmount: 0.72,
     longTailBias: 1,
-    energyScale: 0.9,
-    veil: 0.11,
-    highlightCompression: 0.12,
+    energyScale: 0.86,
+    veil: 0.075,
+    highlightCompression: 0.1,
     desaturationScale: 0.8,
     power: 1.05,
   },
   glow: {
-    highlightAmount: 0.72,
-    microAmount: 0.05,
-    longTailBias: 1.3,
+    // 辉光使用独立的数字 Bloom：亮通提取只保留阈值以上的增量，
+    // 因此这里不再沿用摄影扩散为防止造光而刻意压低的源增益。
+    highlightAmount: 1,
+    microAmount: 0,
+    longTailBias: 1,
     energyScale: 1,
     veil: 0,
-    highlightCompression: 0.16,
+    highlightCompression: 0,
     desaturationScale: 0.3,
-    power: 1.6,
+    power: 1,
   },
 } as const;
 
@@ -144,7 +146,9 @@ export function compileDiffusionRecipe(
 
   const tailAmount = params.softness * MAX_TAIL_AMOUNT;
   const tailShape = interpolateLinear(TAIL_SHAPE_RANGE, params.softness);
-  const weights = compileScaleWeights(tailShape, tailAmount, response.longTailBias);
+  const weights = params.mode === 'glow'
+    ? compileBloomScaleWeights(params.glowRange, params.softness)
+    : compileScaleWeights(tailShape, tailAmount, response.longTailBias);
   const scales = weights.map((weight, index) => ({
     index,
     radius: interpolateRadius(nearRadius, farRadius, index),
@@ -178,7 +182,8 @@ export function compileDiffusionRecipe(
       power: response.power,
       highlightGain: response.highlightAmount,
       microGain: response.microAmount,
-      highlightRecovery: HIGHLIGHT_RECOVERY,
+      // 数字 Bloom 保留原始高光核心，只扩散阈值以上的亮度，不猜测已裁切峰值。
+      highlightRecovery: params.mode === 'glow' ? 0 : HIGHLIGHT_RECOVERY,
     },
     scales,
     energy: {
@@ -187,12 +192,19 @@ export function compileDiffusionRecipe(
     },
     tone: {
       blackRetention: params.blackRetention,
-      highlightCompression: response.highlightCompression,
+      // 高光肩部属于效果的一部分；强度为 0 时必须严格保持原图。
+      highlightCompression: response.highlightCompression * strength,
       scatterDesaturation: (1 - params.colorRetention) * response.desaturationScale,
     },
     detail: {
-      highFrequencyRetention: 0.55 + params.detailRetention * 0.45,
-      midFrequencyRetention: 0.9 + params.detailRetention * 0.1,
+      // 细节补偿同样随效果强度归零，避免 0 强度仍出现额外锐化与增亮。
+      // 辉光是独立加法层，不应再次锐化底图；细节保留仅属于摄影柔光。
+      highFrequencyRetention: params.mode === 'glow'
+        ? 0
+        : (0.55 + params.detailRetention * 0.45) * strength,
+      midFrequencyRetention: params.mode === 'glow'
+        ? 0
+        : (0.9 + params.detailRetention * 0.1) * strength,
     },
     tint: compileTint(params),
   };
@@ -249,6 +261,21 @@ function compileScaleWeights(
     const nearWeight = Math.exp(-normalizedIndex * tailShape);
     const tailWeight = Math.pow(normalizedIndex, 1.5) * tailAmount * longTailBias;
     return Math.max(Number.EPSILON, nearWeight + tailWeight);
+  });
+  const sum = raw.reduce((total, weight) => total + weight, 0);
+  return raw.map((weight) => weight / sum);
+}
+
+/**
+ * Bloom 半径由固定小核的 mip 层级决定，范围与柔和度只负责把能量平滑分配到各层。
+ * 所有权重均为正且归一化，因而不会产生负瓣、二次峰值或随范围增加而凭空增亮。
+ */
+function compileBloomScaleWeights(glowRange: number, softness: number): number[] {
+  const decayPerLevel = interpolateLinear([0.92, 0.24], glowRange);
+  const raw = Array.from({ length: DIFFUSION_SCALE_COUNT }, (_, index) => {
+    const tailPosition = index / (DIFFUSION_SCALE_COUNT - 1);
+    const tailLift = 1 + softness * tailPosition * 1.5;
+    return Math.exp(-index * decayPerLevel) * tailLift;
   });
   const sum = raw.reduce((total, weight) => total + weight, 0);
   return raw.map((weight) => weight / sum);

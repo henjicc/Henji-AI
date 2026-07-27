@@ -519,8 +519,8 @@
       "apply": "Apply filter"
     },
     "diffusion": {
-      "tool": "Glow / Diffusion",
-      "enable": "Enable glow / diffusion",
+      "tool": "Glow",
+      "enable": "Enable glow",
       "reset": "Reset",
       "remove": "Remove effect",
       "preset": {

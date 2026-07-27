@@ -10,6 +10,7 @@ import {
   DIFFUSION_QUALITY_THRESHOLDS,
   validateDiffusionBaselineDefinitions,
 } from './diffusionBaseline';
+import diffusionShaderSource from '../shaders/diffusion.wgsl?raw';
 
 describe('摄影柔光通用预设与 Golden 基线', () => {
   it('为每种模式定义低、中、高三档可追溯预设', () => {
@@ -46,6 +47,85 @@ describe('摄影柔光通用预设与 Golden 基线', () => {
     expect(black.source.microGain).toBeLessThan(white.source.microGain);
     expect(glow.energy.veil).toBe(0);
     expect(glow.scales[5].weight).toBeGreaterThan(black.scales[5].weight);
+  });
+
+  it('强度为零时不残留高光压缩、雾幕或细节补偿', () => {
+    const params = applyDiffusionPreset('white-mist-high');
+    const recipe = compileDiffusionRecipe(
+      { ...params, strength: 0 },
+      { width: 1920, height: 1080 }
+    );
+
+    expect(recipe.energy.scatterFraction).toBe(0);
+    expect(recipe.energy.veil).toBe(0);
+    expect(recipe.tone.highlightCompression).toBe(0);
+    expect(recipe.detail.highFrequencyRetention).toBe(0);
+    expect(recipe.detail.midFrequencyRetention).toBe(0);
+  });
+
+  it('限制白柔强档雾幕，并让辉光强档保持纯加法配方', () => {
+    const white = compileDiffusionRecipe(
+      applyDiffusionPreset('white-mist-high'),
+      { width: 1920, height: 1080 }
+    );
+    const glow = compileDiffusionRecipe(
+      applyDiffusionPreset('glow-high'),
+      { width: 1920, height: 1080 }
+    );
+
+    expect(white.energy.veil).toBeLessThanOrEqual(0.04);
+    expect(white.energy.scatterFraction).toBeLessThan(0.45);
+    expect(glow.energy.scatterFraction).toBeLessThanOrEqual(1);
+    expect(glow.source.highlightRecovery).toBe(0);
+    expect(glow.tone.highlightCompression).toBe(0);
+    expect(glow.detail.highFrequencyRetention).toBe(0);
+    expect(glow.detail.midFrequencyRetention).toBe(0);
+    expect(glow.scales.reduce((sum, scale) => sum + scale.weight, 0)).toBeCloseTo(1);
+    expect(glow.scales.every((scale) => scale.weight > 0)).toBe(true);
+  });
+
+  it('着色器以底图频段补偿细节，并让高黑位保持优先保护暗部', () => {
+    expect(diffusionShaderSource).toContain('let high_detail = base.rgb - near_base;');
+    expect(diffusionShaderSource).toContain('let mid_detail = near_base - far_base;');
+    expect(diffusionShaderSource).not.toMatch(
+      /let high_detail = base\.rgb\s*-\s*textureSampleLevel\(scatter_0/
+    );
+    expect(diffusionShaderSource).toMatch(
+      /let black_guard = mix\(\s*1\.0,\s*shadow_response,\s*composite_params\.black_retention/
+    );
+    expect(diffusionShaderSource).toContain(
+      'color = compress_highlights(color, composite_params.highlight_compression);'
+    );
+  });
+
+  it('辉光使用 max RGB 软阈值、固定小核金字塔与保留底图的加法合成', () => {
+    expect(diffusionShaderSource).toContain(
+      'let brightness = max(color.r, max(color.g, color.b));'
+    );
+    expect(diffusionShaderSource).toContain('fn fragment_bloom_downsample');
+    expect(diffusionShaderSource).toContain('fn fragment_bloom_upsample');
+    expect(diffusionShaderSource).toContain(
+      'let headroom = clamp(1.0 - base_peak, 0.0, 1.0);'
+    );
+    expect(diffusionShaderSource).toContain(
+      'return vec4<f32>(base.rgb + bloom * headroom, base.a);'
+    );
+  });
+
+  it('辉光范围增大时把更多能量平滑分配到宽半径层', () => {
+    const lowRange = applyDiffusionPreset('glow-medium');
+    const narrow = compileDiffusionRecipe(
+      { ...lowRange, glowRange: 0.1, softness: 0.2 },
+      { width: 1920, height: 1080 }
+    );
+    const wide = compileDiffusionRecipe(
+      { ...lowRange, glowRange: 0.9, softness: 0.8 },
+      { width: 1920, height: 1080 }
+    );
+    const tailWeight = (recipe: typeof narrow): number =>
+      recipe.scales.slice(3).reduce((sum, scale) => sum + scale.weight, 0);
+
+    expect(tailWeight(wide)).toBeGreaterThan(tailWeight(narrow));
   });
 
   it('登记全部预设 Golden 和冻结/待运行时阈值', () => {

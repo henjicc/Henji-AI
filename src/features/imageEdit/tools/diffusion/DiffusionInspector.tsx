@@ -206,11 +206,14 @@ export function DiffusionInspector(): JSX.Element {
               onChange={setUnit('blackRetention')} {...rangeHandlers}
             />
           )}
-          <DiffusionRangeField
-            label="细节保留" value={params.detailRetention} min={0} max={1} step={0.01}
-            display={formatDiffusionPercent(params.detailRetention)}
-            onChange={setUnit('detailRetention')} {...rangeHandlers}
-          />
+          {/* 数字 Bloom 保留原底图并叠加光晕，不会软化底图细节。 */}
+          {params.mode === 'glow' ? null : (
+            <DiffusionRangeField
+              label="细节保留" value={params.detailRetention} min={0} max={1} step={0.01}
+              display={formatDiffusionPercent(params.detailRetention)}
+              onChange={setUnit('detailRetention')} {...rangeHandlers}
+            />
+          )}
           <DiffusionRangeField
             label="色彩保持" value={params.colorRetention} min={0} max={1} step={0.01}
             display={formatDiffusionPercent(params.colorRetention)}

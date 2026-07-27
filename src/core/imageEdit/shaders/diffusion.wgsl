@@ -74,12 +74,33 @@ fn highlight_response(value: f32) -> f32 {
   return pow(smooth_shoulder, max(source_params.power, 0.1));
 }
 
+/**
+ * 数字 Bloom 的亮通提取。用 max RGB 而非亮度判断高亮，避免纯蓝、纯红等高饱和
+ * 光源因为感知亮度系数偏低而无法稳定进入辉光。软拐点只提取阈值以上的增量，
+ * 不复制整块高光核心，因此强度拉高也不会把亮边继续推成大片死白。
+ */
+fn bloom_bright_pass(color: vec3<f32>) -> vec3<f32> {
+  let brightness = max(color.r, max(color.g, color.b));
+  let threshold = 0.18 * exp2(source_params.threshold_ev);
+  let knee = max(
+    threshold * clamp(source_params.soft_knee_ev / 2.4, 0.1, 0.5),
+    1e-5
+  );
+  var soft = clamp(brightness - threshold + knee, 0.0, 2.0 * knee);
+  soft = soft * soft / (4.0 * knee);
+  let contribution = max(brightness - threshold, soft) / max(brightness, 1e-5);
+  return color * contribution * source_params.highlight_gain;
+}
+
 @fragment
 fn fragment_source(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = source_params.offset + input.local_uv * source_params.scale;
   let color = textureSampleLevel(source_input, source_sampler, uv, 0.0);
   if (color.a <= 0.00001) {
     return vec4<f32>(0.0);
+  }
+  if (source_params.mode > 1.5) {
+    return vec4<f32>(bloom_bright_pass(color.rgb) * color.a, color.a);
   }
   let luma = luminance(color.rgb);
   let highlight = highlight_response(luma);
@@ -98,8 +119,6 @@ fn fragment_source(input: VertexOutput) -> @location(0) vec4<f32> {
     response *= mix(0.65, 1.0, highlight);
   } else if (source_params.mode < 1.5) {
     response += color.rgb * micro * 0.45;
-  } else {
-    response *= highlight * 0.65 + 0.35;
   }
   // 散射源不得超过像素自身的光量：物理上不可能从一个像素取走比它更多的光。
   // 不在源头封顶的话，合成阶段的 min() 会截断扣除项而加回项照旧，
@@ -138,6 +157,36 @@ fn gaussian_sample(uv: vec2<f32>, direction: vec2<f32>) -> vec4<f32> {
   return result;
 }
 
+/**
+ * Bloom 降采样使用全正权重的 13-tap tent 核。采样间距永远是输入纹理的相邻 texel，
+ * 半径由 mip 层级累积形成，不再把任意大半径乘到稀疏五点核上制造亮边复本。
+ */
+fn bloom_downsample(uv: vec2<f32>) -> vec4<f32> {
+  let dimensions = vec2<f32>(textureDimensions(blur_input));
+  let texel = vec2<f32>(1.0) / max(dimensions, vec2<f32>(1.0));
+  let half_texel = texel * 0.5;
+  var result = textureSampleLevel(blur_input, blur_sampler, uv, 0.0) * 0.125;
+  result += (
+    textureSampleLevel(blur_input, blur_sampler, uv + vec2<f32>(texel.x, 0.0), 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv - vec2<f32>(texel.x, 0.0), 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv + vec2<f32>(0.0, texel.y), 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv - vec2<f32>(0.0, texel.y), 0.0)
+  ) * 0.0625;
+  result += (
+    textureSampleLevel(blur_input, blur_sampler, uv + texel, 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv - texel, 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv + vec2<f32>(texel.x, -texel.y), 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv + vec2<f32>(-texel.x, texel.y), 0.0)
+  ) * 0.03125;
+  result += (
+    textureSampleLevel(blur_input, blur_sampler, uv + half_texel, 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv - half_texel, 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv + vec2<f32>(half_texel.x, -half_texel.y), 0.0)
+    + textureSampleLevel(blur_input, blur_sampler, uv + vec2<f32>(-half_texel.x, half_texel.y), 0.0)
+  ) * 0.125;
+  return result;
+}
+
 @fragment
 fn fragment_blur_horizontal(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = blur_params.offset + input.local_uv * blur_params.scale;
@@ -148,6 +197,40 @@ fn fragment_blur_horizontal(input: VertexOutput) -> @location(0) vec4<f32> {
 fn fragment_blur_vertical(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = blur_params.offset + input.local_uv * blur_params.scale;
   return gaussian_sample(uv, blur_direction());
+}
+
+@fragment
+fn fragment_bloom_downsample(input: VertexOutput) -> @location(0) vec4<f32> {
+  let uv = blur_params.offset + input.local_uv * blur_params.scale;
+  return bloom_downsample(uv);
+}
+
+@group(0) @binding(10) var bloom_low_input: texture_2d<f32>;
+
+fn bloom_upsample_low(uv: vec2<f32>) -> vec4<f32> {
+  let dimensions = vec2<f32>(textureDimensions(bloom_low_input));
+  let texel = vec2<f32>(1.0) / max(dimensions, vec2<f32>(1.0));
+  var result = textureSampleLevel(bloom_low_input, blur_sampler, uv, 0.0) * 0.25;
+  result += (
+    textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(texel.x, 0.0), 0.0)
+    + textureSampleLevel(bloom_low_input, blur_sampler, uv - vec2<f32>(texel.x, 0.0), 0.0)
+    + textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(0.0, texel.y), 0.0)
+    + textureSampleLevel(bloom_low_input, blur_sampler, uv - vec2<f32>(0.0, texel.y), 0.0)
+  ) * 0.125;
+  result += (
+    textureSampleLevel(bloom_low_input, blur_sampler, uv + texel, 0.0)
+    + textureSampleLevel(bloom_low_input, blur_sampler, uv - texel, 0.0)
+    + textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(texel.x, -texel.y), 0.0)
+    + textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(-texel.x, texel.y), 0.0)
+  ) * 0.0625;
+  return result;
+}
+
+@fragment
+fn fragment_bloom_upsample(input: VertexOutput) -> @location(0) vec4<f32> {
+  let uv = blur_params.offset + input.local_uv * blur_params.scale;
+  let high = textureSampleLevel(blur_input, blur_sampler, uv, 0.0);
+  return high * blur_params.radius + bloom_upsample_low(uv) * blur_params.axis;
 }
 
 struct CompositeUniforms {
@@ -187,6 +270,47 @@ fn sample_scatter(texture: texture_2d<f32>, uv: vec2<f32>) -> vec3<f32> {
   return textureSampleLevel(texture, composite_sampler, uv, 0.0).rgb;
 }
 
+/**
+ * 底图自身的归一化十字低通。细节补偿必须来自底图频段，不能拿散射源代替：
+ * 非高光区的散射源接近 0，用 base - scatter 会把整张底图当成“细节”重复加回。
+ */
+fn sample_base_cross(uv: vec2<f32>, radius: f32) -> vec3<f32> {
+  let dimensions = vec2<f32>(textureDimensions(composite_base));
+  let step = vec2<f32>(radius) / max(dimensions, vec2<f32>(1.0));
+  let center = textureSampleLevel(composite_base, composite_sampler, uv, 0.0).rgb;
+  let horizontal =
+    textureSampleLevel(composite_base, composite_sampler, uv - vec2<f32>(step.x, 0.0), 0.0).rgb
+    + textureSampleLevel(composite_base, composite_sampler, uv + vec2<f32>(step.x, 0.0), 0.0).rgb;
+  let vertical =
+    textureSampleLevel(composite_base, composite_sampler, uv - vec2<f32>(0.0, step.y), 0.0).rgb
+    + textureSampleLevel(composite_base, composite_sampler, uv + vec2<f32>(0.0, step.y), 0.0).rgb;
+  return center * 0.5 + (horizontal + vertical) * 0.125;
+}
+
+fn compress_highlight_channel(value: f32, amount: f32) -> f32 {
+  let safe_value = max(value, 0.0);
+  let shoulder = clamp(amount, 0.0, 0.45);
+  if (shoulder <= 1e-5) {
+    return safe_value;
+  }
+  let shoulder_start = 1.0 - shoulder;
+  if (safe_value <= shoulder_start) {
+    return safe_value;
+  }
+  // 起点处一阶导数为 1，随后渐近到 1；避免 FP16 合成超过 SDR 后被硬截断。
+  return shoulder_start + shoulder * (
+    1.0 - exp(-(safe_value - shoulder_start) / shoulder)
+  );
+}
+
+fn compress_highlights(color: vec3<f32>, amount: f32) -> vec3<f32> {
+  return vec3<f32>(
+    compress_highlight_channel(color.r, amount),
+    compress_highlight_channel(color.g, amount),
+    compress_highlight_channel(color.b, amount)
+  );
+}
+
 @fragment
 fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = composite_params.offset + input.local_uv * composite_params.scale;
@@ -194,12 +318,15 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   if (base.a <= 0.00001) {
     return vec4<f32>(0.0);
   }
-  var scatter = sample_scatter(scatter_0, uv) * composite_params.weights_a.x;
-  scatter += sample_scatter(scatter_1, uv) * composite_params.weights_a.y;
-  scatter += sample_scatter(scatter_2, uv) * composite_params.weights_a.z;
-  scatter += sample_scatter(scatter_3, uv) * composite_params.weights_a.w;
-  scatter += sample_scatter(scatter_4, uv) * composite_params.weights_b.x;
-  scatter += sample_scatter(scatter_5, uv) * composite_params.weights_b.y;
+  var scatter = sample_scatter(scatter_0, uv);
+  if (composite_params.mode < 1.5) {
+    scatter *= composite_params.weights_a.x;
+    scatter += sample_scatter(scatter_1, uv) * composite_params.weights_a.y;
+    scatter += sample_scatter(scatter_2, uv) * composite_params.weights_a.z;
+    scatter += sample_scatter(scatter_3, uv) * composite_params.weights_a.w;
+    scatter += sample_scatter(scatter_4, uv) * composite_params.weights_b.x;
+    scatter += sample_scatter(scatter_5, uv) * composite_params.weights_b.y;
+  }
 
   let scatter_luma = luminance(scatter);
   scatter = mix(
@@ -214,6 +341,17 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   scatter *= mix(vec3<f32>(1.0), composite_params.tint_rgb, composite_params.tint_amount);
   scatter *= composite_params.tint_gain;
 
+  if (composite_params.mode > 1.5) {
+    // 辉光保留原始底图，只叠加 Bloom。按底图峰值提供的显示余量整体缩放光晕，
+    // 既不会扣暗高光核心，也不会逐通道削顶产生青/灰脏边；纯白核心严格保持不变。
+    var bloom = scatter * composite_params.scatter_fraction;
+    let bloom_peak = max(bloom.r, max(bloom.g, bloom.b));
+    bloom /= max(1.0, bloom_peak);
+    let base_peak = max(base.r, max(base.g, base.b));
+    let headroom = clamp(1.0 - base_peak, 0.0, 1.0);
+    return vec4<f32>(base.rgb + bloom * headroom, base.a);
+  }
+
   // 能量守恒（文档 §4.2）：O = I - f·E + f·(K * E)。
   //
   // 扣除项必须用未模糊的源 E：模糊后的 scatter 在高光中心已被摊平，用它扣会扣得
@@ -225,33 +363,30 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   let direct = max(base.rgb - deduction, vec3<f32>(0.0));
   var color = direct + scatter * composite_params.scatter_fraction;
 
-  let high_detail = base.rgb
-    - textureSampleLevel(scatter_0, composite_sampler, uv, 0.0).rgb;
-  let mid_detail = base.rgb
-    - textureSampleLevel(scatter_2, composite_sampler, uv, 0.0).rgb;
+  let near_base = sample_base_cross(uv, 1.0);
+  let far_base = sample_base_cross(uv, 3.0);
+  let high_detail = base.rgb - near_base;
+  let mid_detail = near_base - far_base;
   color += high_detail * composite_params.high_frequency_retention * 0.08;
   color += mid_detail * composite_params.mid_frequency_retention * 0.04;
 
   // 雾幕抬黑位，是白柔区别于黑柔的核心特征（资料 §6.2）。
   if (composite_params.mode > 0.5 && composite_params.mode < 1.5) {
-    color += vec3<f32>(composite_params.veil) * (0.35 + scatter_luma);
+    color += vec3<f32>(composite_params.veil) * (0.2 + scatter_luma * 0.8);
   }
 
   // 黑位保持对两种柔光都有意义：黑柔靠它守住黑位，白柔靠它控制黑位被抬多少。
   // 辉光不主动抬黑位（资料 §6.3），没有需要「保持」的东西，故不参与。
   if (composite_params.mode < 1.5) {
+    let shadow_response = smoothstep(0.0, 0.25, luminance(base.rgb));
     let black_guard = mix(
-      luminance(base.rgb),
       1.0,
+      shadow_response,
       composite_params.black_retention
     );
     color = mix(base.rgb, color, black_guard);
   }
 
-  let compressed = color / (
-    vec3<f32>(1.0)
-      + color * composite_params.highlight_compression
-  );
-  color = mix(color, compressed, composite_params.highlight_compression);
+  color = compress_highlights(color, composite_params.highlight_compression);
   return vec4<f32>(max(color, vec3<f32>(0.0)), base.a);
 }
