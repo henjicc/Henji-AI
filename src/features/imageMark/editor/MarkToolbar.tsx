@@ -44,7 +44,9 @@ interface MarkToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   canClear: boolean;
-  /** 宿主动作(如 取消/保存),固定在工具行最右侧 */
+  /** 宿主前导内容(返回、打开文件、文件名),固定在命令带最左侧 */
+  leading?: React.ReactNode;
+  /** 宿主动作(如 取消/保存),固定在命令带最右侧 */
   actions?: React.ReactNode;
 }
 
@@ -76,6 +78,7 @@ export function MarkToolbar({
   canUndo,
   canRedo,
   canClear,
+  leading,
   actions,
 }: MarkToolbarProps): JSX.Element {
   const annotationOnly = variant === 'annotation';
@@ -101,10 +104,17 @@ export function MarkToolbar({
   }, tool);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-start gap-2">
-        {actions && <div className="invisible flex shrink-0 items-center gap-2" aria-hidden>{actions}</div>}
-        <div className="flex flex-1 flex-wrap items-center justify-center gap-2">
+    <div className="flex flex-col gap-1.5">
+      {/* 命令带:前导(返回/打开文件/文件名) → 工具组 → 宿主动作。整个视图只有这一条,
+          不要在它上下再加带（见 skill henji-ui-surface 的「页面骨架:横向条带」）。 */}
+      <div className="flex flex-wrap items-center gap-2">
+        {leading && (
+          <>
+            <div className="flex shrink-0 items-center gap-2">{leading}</div>
+            <span className="h-5 w-px shrink-0 bg-border-dark" />
+          </>
+        )}
+        <div className="flex flex-wrap items-center gap-2">
           {TOOL_BUTTONS.filter((button) => !annotationOnly || button.type !== 'crop').map((button) => {
             const Icon = button.icon;
             return (
@@ -158,11 +168,12 @@ export function MarkToolbar({
             清空
           </UiChipButton>
         </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
 
-      {/* 选项行:固定最小高度,切换工具不引起内容跳动 */}
-      <div className="flex min-h-[36px] flex-wrap items-center justify-center gap-2">
+      {/* 从属参数带:只随当前工具变化,不自带底色与边框,与命令带共用外壳那条 border-b。
+          固定最小高度,切换工具不引起内容跳动。 */}
+      <div className="flex min-h-9 flex-wrap items-center gap-2">
         {!annotationOnly && tool === 'crop' ? (
           <>
             {CROP_RATIO_OPTIONS.map((option) => (

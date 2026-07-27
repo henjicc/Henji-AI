@@ -18,6 +18,8 @@ export interface ImageEditorProps {
   onDocumentChange?: (document: ImageEditDocument) => void;
   initialStyle?: Partial<MarkEditorStyleState>;
   onStyleChange?: (style: MarkEditorStyleState) => void;
+  /** 宿主前导内容(返回/打开文件/文件名),注入命令带左侧,避免宿主另开一条带 */
+  toolbarLeading?: ReactNode;
   toolbarActions?: ReactNode;
   className?: string;
 }
@@ -28,6 +30,7 @@ export function ImageEditor({
   onDocumentChange,
   initialStyle,
   onStyleChange,
+  toolbarLeading,
   toolbarActions,
   className = 'h-[min(70vh,760px)]',
 }: ImageEditorProps): JSX.Element {
@@ -153,6 +156,7 @@ export function ImageEditor({
         initialDoc={session.markDoc}
         initialStyle={initialStyle}
         onStyleChange={onStyleChange}
+        toolbarLeading={toolbarLeading}
         toolbarActions={toolbarActions}
         className={className}
         layout="shell"

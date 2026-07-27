@@ -156,7 +156,8 @@ npm run lint                   # 前端 lint
 - **内联 zIndex** 用 `Z_LAYERS`（`src/core/theme/zLayers.ts`），与 `tailwind.config.js` 互为镜像需同步
 - **状态展示统一**：空/加载/错误一律用 `UiEmpty`/`UiLoading`/`UiError`，禁止页面内联手写状态块
 - **弹窗统一**：走 `UiModal` 或 `AlertDialog`，禁止手写 `fixed inset-0` + 遮罩 + 卡片外壳（全屏媒体查看器是已确认的例外）
-- **界面工作必读 skill**：新建或改造界面/面板/弹窗/设置分区前，先用 skill `henji-ui-surface`（含五级词汇表、卡片准入条件、决策树、复用对照表、自检清单、性能分层规则）
+- **页面骨架横向条带**：一个视图只画一条命令带（返回/标题/文件上下文/工具/导出动作全进这条），随工具变化的参数用紧贴其下、共用同一块底色与同一条 `border-b` 的从属带；连续操作条带上限 2 条。外层壳已有命令带时，内层功能组件必须把内容作为 props 注入（如 `toolbarActions`），不得再长一条自己的头带。画布/编辑区这类会随窗口长大的全屏工作面不是卡片，不套 `rounded + border` + 外层留白
+- **界面工作必读 skill**：新建或改造界面/面板/弹窗/设置分区前，先用 skill `henji-ui-surface`（含页面骨架条带上限、五级词汇表、卡片准入条件、决策树、复用对照表、自检清单、性能分层规则）
 - **表面检查**：界面改动后跑 `npm run check:surface`（报手写面板/卡片套卡片/手写弹窗三类）。存量已清零，`check:surface:strict` 已接入 build 链路与 CI，**违规会直接构建失败**；确需例外时加**行级** `ui-surface-allow` 注释并写明理由，禁止文件级豁免
 
 ### 7. 画布模块拆分约定

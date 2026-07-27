@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ClipboardCopy, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
-import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui';
+import {
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UiButton,
+  UiIconButton,
+} from '@/components/ui';
 import { useNotification } from '@/contexts/NotificationContext';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { allowMediaRoot, basename, dirname, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
@@ -26,10 +32,18 @@ interface ImageMarkSource {
   sessionKey: number;
 }
 
+export interface ImageMarkToolProps {
+  /** 返回工具箱。本工具自带命令带,返回按钮由它自己渲染,外层不再画标题带。 */
+  onBack?: () => void;
+}
+
 /**
  * 工具箱独立形态:打开/粘贴/拖入图片 → 快速标记 → 复制/另存为。
+ *
+ * 骨架约定:整个视图只有一条命令带 —— 空态是"返回 + 标题"，有图时把
+ * 返回/打开图片/文件名注入编辑器命令带左侧,不为它们单开一行。
  */
-export function ImageMarkTool(): JSX.Element {
+export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element {
   const { showNotification } = useNotification();
   const { addMedia, collecting } = useAddToAssetLibrary();
   const [source, setSource] = useState<ImageMarkSource | null>(null);
@@ -176,28 +190,47 @@ export function ImageMarkTool(): JSX.Element {
     }
   }, [addMedia, isBusy, showNotification, source]);
 
+  const backButton = onBack ? (
+    <UiIconButton
+      showBorder={false}
+      appearance="hover-only"
+      className="h-7 w-7"
+      title="返回工具箱"
+      aria-label="返回工具箱"
+      onClick={onBack}
+    >
+      <ArrowLeft size={15} />
+    </UiIconButton>
+  ) : null;
+
   if (!source) {
     return (
-      <div className="flex h-full items-center justify-center p-8">
-        <div
-          className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${
-            isDragOver ? 'border-accent bg-accent/10' : 'border-border-dark bg-surface-dark/40'
-          }`}
-          onDragOver={(event) => {
-            event.preventDefault();
-            setIsDragOver(true);
-          }}
-          onDragLeave={() => setIsDragOver(false)}
-          onDrop={handleDrop}
-        >
-          <ImagePlus size={40} className="text-text-muted" />
-          <div className={UI_TEXT_BODY_CLASS}>拖入图片、Ctrl+V 粘贴，或</div>
-          <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
-            <FolderOpen size={15} className="mr-1.5" />
-            打开图片
-          </UiButton>
-          <div className={`leading-relaxed ${UI_TEXT_META_CLASS}`}>
-            支持序号、框选、箭头、文字、画笔、马赛克标记,以及裁剪与旋转翻转
+      <div className="flex h-full flex-col">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
+          {backButton}
+          <span className={UI_TEXT_LABEL_CLASS}>图片编辑</span>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+          <div
+            className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${
+              isDragOver ? 'border-accent bg-accent/10' : 'border-border-dark bg-surface-dark/40'
+            }`}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragOver(true);
+            }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={handleDrop}
+          >
+            <ImagePlus size={40} className="text-text-muted" />
+            <div className={UI_TEXT_BODY_CLASS}>拖入图片、Ctrl+V 粘贴，或</div>
+            <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
+              <FolderOpen size={15} className="mr-1.5" />
+              打开图片
+            </UiButton>
+            <div className={`leading-relaxed ${UI_TEXT_META_CLASS}`}>
+              支持序号、框选、箭头、文字、画笔、马赛克标记,以及裁剪与旋转翻转
+            </div>
           </div>
         </div>
       </div>
@@ -206,26 +239,28 @@ export function ImageMarkTool(): JSX.Element {
 
   return (
     <div
-      className="flex h-full flex-col gap-3 p-4"
+      className="flex h-full flex-col"
       onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
     >
-      <div className="flex shrink-0 items-center gap-2">
-        <UiButton variant="ghost" size="sm" onClick={() => void handleOpenFile()}>
-          <FolderOpen size={15} className="mr-1.5" />
-          打开图片
-        </UiButton>
-        <span className={`max-w-[320px] truncate ${UI_TEXT_META_CLASS}`} title={source.name}>
-          {source.name}
-        </span>
-      </div>
-
       <ImageEditor
         key={source.sessionKey}
         sourceImageUrl={source.url}
         onDocumentChange={(document) => {
           documentRef.current = document;
         }}
+        toolbarLeading={
+          <>
+            {backButton}
+            <UiButton variant="ghost" size="sm" onClick={() => void handleOpenFile()}>
+              <FolderOpen size={15} className="mr-1.5" />
+              打开图片
+            </UiButton>
+            <span className={`max-w-[200px] truncate ${UI_TEXT_META_CLASS}`} title={source.name}>
+              {source.name}
+            </span>
+          </>
+        }
         toolbarActions={
           <>
             <UiButton variant="ghost" size="sm" disabled={isBusy} onClick={() => void runExport('copy')}>

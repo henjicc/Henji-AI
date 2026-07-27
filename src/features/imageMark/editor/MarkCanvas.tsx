@@ -205,12 +205,13 @@ export function MarkCanvas({
   return (
     <div
       ref={viewportRef}
-      className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-veil-subtle bg-bg-dark/85"
+      /* 铺满剩余空间的工作面不是卡片:不加 rounded/border,边界交给命令带那条 border-b */
+      className="relative min-h-0 flex-1 overflow-hidden bg-bg-dark/85"
     >
       <div
         ref={stageHostRef}
         tabIndex={0}
-        className="relative flex h-full w-full items-center justify-center p-2 outline-none"
+        className="relative flex h-full w-full items-center justify-center p-3 outline-none"
       >
         <div className="relative" style={{ width: stageWidth, height: stageHeight }}>
           <Stage

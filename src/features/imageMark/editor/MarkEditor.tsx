@@ -42,7 +42,10 @@ export interface MarkEditorProps {
   onDocChange?: (doc: ImageMarkDoc) => void;
   initialStyle?: Partial<MarkEditorStyleState>;
   onStyleChange?: (style: MarkEditorStyleState) => void;
-  /** 宿主动作(取消/保存/复制等),渲染在工具行最右侧 */
+  /** 宿主前导内容(返回/打开文件/文件名),渲染在命令带最左侧。
+   *  外层壳不要再为这些内容单开一条带。 */
+  toolbarLeading?: React.ReactNode;
+  /** 宿主动作(取消/保存/复制等),渲染在命令带最右侧 */
   toolbarActions?: React.ReactNode;
   /** 根容器高度控制,默认适配对话框;全屏宿主传 h-full */
   className?: string;
@@ -74,6 +77,7 @@ export function MarkEditor({
   onDocChange,
   initialStyle,
   onStyleChange,
+  toolbarLeading,
   toolbarActions,
   className = 'h-[min(70vh,760px)]',
   layout = 'legacy',
@@ -335,6 +339,7 @@ export function MarkEditor({
         canUndo={controller.canUndo}
         canRedo={controller.canRedo}
         canClear={doc.items.length > 0}
+        leading={toolbarLeading}
         actions={toolbarActions}
       />
   );

@@ -18,6 +18,11 @@ interface ToolboxToolMeta {
   name: string
   description: string
   icon: LucideIcon
+  /**
+   * 工具自带命令带（返回按钮由工具渲染在自己那条带里），外层不再画标题带。
+   * 一个视图只允许一条命令带，见 skill `henji-ui-surface` 的「页面骨架：横向条带」。
+   */
+  ownsCommandBar?: boolean
 }
 
 const TOOLS: ToolboxToolMeta[] = [
@@ -26,6 +31,7 @@ const TOOLS: ToolboxToolMeta[] = [
     name: '图片编辑',
     description: '打开或粘贴图片，快速打序号、框选、画箭头、加文字、打码，支持裁剪与旋转，一键复制或保存',
     icon: SquarePen,
+    ownsCommandBar: true,
   },
   {
     id: 'cameraStage',
@@ -35,12 +41,12 @@ const TOOLS: ToolboxToolMeta[] = [
   },
 ]
 
-function renderTool(id: ToolboxToolId): React.ReactNode {
+function renderTool(id: ToolboxToolId, onBack: () => void): React.ReactNode {
   switch (id) {
     case 'cameraStage':
       return <CameraStageApp />
     case 'imageMark':
-      return <ImageMarkTool />
+      return <ImageMarkTool onBack={onBack} />
   }
 }
 
@@ -49,7 +55,10 @@ const ToolboxWorkspace: React.FC = () => {
   const cameraStageView = useCameraStageSessionStore((state) => state.appView)
 
   const activeTool = TOOLS.find((tool) => tool.id === activeToolId)
-  const showToolHeader = activeToolId !== 'cameraStage' || cameraStageView !== 'editor'
+  const backToToolbox = () => selectToolboxTool(null)
+  // 3D 镜头参考只在编辑器形态下自带命令带；列表形态仍需要外层标题带提供返回。
+  const showToolHeader = !activeTool?.ownsCommandBar
+    && (activeToolId !== 'cameraStage' || cameraStageView !== 'editor')
 
   if (activeTool) {
     return (
@@ -61,14 +70,14 @@ const ToolboxWorkspace: React.FC = () => {
               appearance="hover-only"
               className="h-7 w-7"
               title="返回工具箱"
-              onClick={() => selectToolboxTool(null)}
+              onClick={backToToolbox}
             >
               <ArrowLeft size={15} />
             </UiIconButton>
             <span className={UI_TEXT_LABEL_CLASS}>{activeTool.name}</span>
           </div>
         )}
-        <div className="min-h-0 flex-1">{renderTool(activeTool.id)}</div>
+        <div className="min-h-0 flex-1">{renderTool(activeTool.id, backToToolbox)}</div>
       </div>
     )
   }

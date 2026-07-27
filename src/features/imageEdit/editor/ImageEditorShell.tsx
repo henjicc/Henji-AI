@@ -82,11 +82,12 @@ export function ImageEditorShell({ toolbar, canvas, sidePanel, className = '' }:
 
   return (
     <div className={`flex min-h-0 min-w-0 flex-col overflow-hidden ${className}`}>
-      <div className="shrink-0 border-b border-border-dark bg-surface-dark px-3 py-2">
+      {/* 命令带 + 从属参数带共用这一块底色与这一条 border-b,不允许在它上下再叠带 */}
+      <div className="shrink-0 border-b border-border-dark bg-surface-dark px-2 py-1.5">
         {toolbar}
       </div>
       <div className="flex min-h-0 min-w-0 flex-1">
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col p-3">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           {canvas}
         </main>
         <div

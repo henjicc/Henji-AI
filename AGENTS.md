@@ -133,10 +133,30 @@ npm run lint                   # 前端 lint
 - **通用优先**：能复用现有通用组件时，优先复用现成的 `Ui*`、`Dropdown`、`PanelTrigger` 等组件
 - **新增门槛**：只有在现有通用组件确实覆盖不了需求时，才考虑新增组件；动手前先告诉用户原因和替代方案，等用户确认后再创建
 - **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
+- **选中态词汇表**：导航（正在看哪里）使用中性层底 + 强调文字 + 方向指示条；单选项（当前值）使用强品牌实底 + 白字；多选/标签使用强调描边 + 中性层底 + 强调文字；布尔状态只强调 `UiSwitch` / `UiCheckbox` 控件本体，禁止用整行实底表达“已启用”
 - **颜色令牌规则**：颜色值统一由 `src/index.css`（CSS 变量）+ `tailwind.config.js`（语义色映射）+ `src/core/theme/colorTokens.ts`（TS 常量）提供
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`
-- **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动
+- **禁止固定调色板（ESLint 硬拦）**：一切 `*-zinc-*` 都不会跟随主题预设（设置→界面→主题外观可整体替换 9 个语义色），必须改用语义色。底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`（中间两档由 `runtimeTheme.applyTextScale` 派生）；边框 `border-border-dark`；叠在图片/视频/画布上的边框与底色用 `veil` 六档
+- **毛玻璃是材质不是 blur 值（ESLint 硬拦一切 `backdrop-blur-*`）**：用 `ui-glass` 类（`src/index.css`，含 blur + saturate + 受光边 + 噪点四层），遮罩用 `ui-glass-scrim`；只写 blur 会得到「模糊+降不透明度」的廉价观感。只用于压在图片/视频/画布上的浮层，压在纯色 UI 上的一律用不透明底色。质感调整只改 `--ui-glass-*` 变量；「设置→界面→毛玻璃效果」关掉时整套材质退化成不透明底色
+- **动效四档（`src/components/ui/motion.ts`）**：时长只用 `duration-150/200/300/500`（对应 `UI_DURATION.fast/base/slow/viewer`）。缓动已由 `tailwind.config.js` 的 `transitionTimingFunction.DEFAULT` 全局设为 ease-out，不用每处写；唯一登记的例外是 `UI_EASE_STACK`。内联 `style={{ transition }}` 走 `uiTransition()`，禁止 `transition: all`。用 `setTimeout` 卸载动画组件时，那个 ms 必须与 className 里的 `duration-*` 同档，否则过渡收尾被硬切。过渡布局属性前先确认无法用 transform 替代（已登记的例外见 skill）
+- **真实界面巡检分两条命令**：`npm run ui:tour` 生成六类界面、1440×900 / 960×640 两档尺寸的截图和 Markdown 索引，供人判断观感；`npm run check:ui-visual` 在同一场景清单上执行十一条可判定 DOM 规则并以退出码作为门禁。`accent` 不能作文字色（2.82:1），用 `UI_COLOR_ACCENT_TEXT_CLASS`；白字压实心蓝用 `UI_COLOR_ACCENT_FILL_TEXT_CLASS`（`bg-accent` 只有 3.68:1）。改颜色令牌的派生比例后必须复跑
+- **同属性叠类会静默失效**：两个工具类落在同一 CSS 属性上时，胜负看 Tailwind 产物顺序而非 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。`index.html` 写死 `class="dark"`，`dark:` 变体的基础值是死代码
+- **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)`，不能写 `#hex` 或 `rgba(数字…)`
+- **全局主题变量只能放 `src/index.css`**：`storyboard.css` 这类被工作区懒加载的样式表里放全局变量，会导致设置项在用户打开对应工作区之前完全不生效
+- **布局定位不得藏在外观样式表**：`scrollbar.css` 等具名样式表只能承担文件名承诺的外观或行为；`position`、`top/right/bottom/left` 与 `z-index` 必须直接写在组件 className（动态层级用 `Z_LAYERS`），让布局参照系在 JSX 中可见。两次已知案例是 `scrollbar.css` 藏 `position: fixed` 导致工作区逃逸助手插入量，以及懒加载的 `storyboard.css` 藏全局主题变量导致设置延迟生效；只 grep JSX 或按文件名查 CSS 都很难发现。确需 CSS 例外时必须就地注释原因
+- **控件高度两档**：`UI_FIELD_CONTROL_HEIGHT_CLASS`(42px) / `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`(38px)，不要手写 `h-[38px]`
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
+- **五级容器词汇表**：Region(`UiRegion`) → Group(`UiGroup`) → Divided(`UiGroup divided`) → Surface(`UiPanel variant="inset"`) → Card(`UiPanel`)。**普通内容分组默认用 `UiGroup`**（零装饰，标题 + 间距）；只有浮层/弹窗/侧栏/画布节点才允许用 Card
+- **表面层级铁律**：同一层视觉深度只画一次边框/背景；内层背景只能比外层更暗，不能更亮；卡片嵌套上限 1 层。**禁止**在已有边框的容器里再叠 `border + bg-* + rounded`，禁止业务组件手写 `bg-panel` 卡片
+- **排版优先于容器**：先用 `styleTokens.ts` 的 `UI_TEXT_TITLE/SECTION/BODY/LABEL/META_CLASS` 建立层级，再考虑是否需要容器装饰
+- **视觉数值登记制（ESLint 硬拦）**：字号 `text-4xs/3xs/2xs/13/14/15` 或 `text-xs/sm/base+`；圆角 `rounded-lg/xl/2xl/3xl/full/hairline`（画布节点用 `rounded-[var(--node-radius)]`）；阴影 `shadow-panel`(仅浮层) 或具名特效 `shadow-node-selected/node-error/thumb/thumb-sm`；白色半透明用 `veil` 六档；层级用 `z-raised/sticky/dropdown/panel/modal/viewer/toast/tooltip/drag/titlebar`。禁止一切 `text-[Npx]`/`rounded-[..]`/`shadow-[..]`/`z-[..]`/`*-[rgba(..)]`
+- **透明度修饰符只能用 Tailwind 刻度值**（步进 5）：`bg-black/72`、`border-white/42` 这类非刻度值**不生成任何 CSS**，是静默失效的坑；需要精确值用 `bg-black/[0.72]` 或登记具名色
+- **内联 zIndex** 用 `Z_LAYERS`（`src/core/theme/zLayers.ts`），与 `tailwind.config.js` 互为镜像需同步
+- **状态展示统一**：空/加载/错误一律用 `UiEmpty`/`UiLoading`/`UiError`，禁止页面内联手写状态块
+- **弹窗统一**：走 `UiModal` 或 `AlertDialog`，禁止手写 `fixed inset-0` + 遮罩 + 卡片外壳（全屏媒体查看器是已确认的例外）
+- **页面骨架横向条带**：一个视图只画一条命令带（返回/标题/文件上下文/工具/导出动作全进这条），随工具变化的参数用紧贴其下、共用同一块底色与同一条 `border-b` 的从属带；连续操作条带上限 2 条。外层壳已有命令带时，内层功能组件必须把内容作为 props 注入（如 `toolbarActions`），不得再长一条自己的头带。画布/编辑区这类会随窗口长大的全屏工作面不是卡片，不套 `rounded + border` + 外层留白
+- **界面工作必读 skill**：新建或改造界面/面板/弹窗/设置分区前，先读 `.codex/skills/henji-ui-surface/SKILL.md`（含页面骨架条带上限、五级词汇表、卡片准入条件、决策树、复用对照表、自检清单、性能分层规则）
+- **表面检查**：界面改动后跑 `npm run check:surface`（报手写面板/卡片套卡片/手写弹窗三类）。存量已清零，`check:surface:strict` 已接入 build 链路与 CI，**违规会直接构建失败**；确需例外时加**行级** `ui-surface-allow` 注释并写明理由，禁止文件级豁免
 
 ### 7. 画布模块拆分约定
 

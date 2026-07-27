@@ -59,7 +59,8 @@ export function ViewerMarkEditor({
   }, [isSaving, onSave, sourceUrl]);
 
   return (
-    <div className="h-full w-full bg-app p-4">
+    /* 全屏编辑宿主:编辑器铺满,不靠外层留白把它衬成一张浮起来的卡 */
+    <div className="h-full w-full bg-app">
       <ImageEditor
         key={sourceUrl}
         sourceImageUrl={sourceUrl}
