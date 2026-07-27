@@ -265,7 +265,7 @@ function resolveUiPanelSurface(variant: UiPanelVariant): string {
     return 'rounded-lg';
   }
   if (variant === 'glass') {
-    return 'ui-glass rounded-xl shadow-panel';
+    return 'ui-glass ui-glass-elevated rounded-xl';
   }
   return `rounded-xl ${UI_PANEL_SURFACE_CLASS}`;
 }

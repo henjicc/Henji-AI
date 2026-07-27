@@ -153,7 +153,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-app text-text-dark">
+    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden text-text-dark ${mode === 'floating' ? 'z-raised bg-transparent' : 'bg-app'}`}>
       {mode === 'workspace' ? (
         <div className="shrink-0 p-6 pb-4">
           <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto">

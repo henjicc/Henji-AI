@@ -160,8 +160,13 @@ export const UI_BUTTON_RESET_CLASS =
 export const UI_TRIGGER_BUTTON_CLASS =
   `${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_BUTTON_RESET_CLASS} flex items-center justify-between whitespace-nowrap`;
 
+/**
+ * 下拉菜单与 PanelTrigger 都是临时悬浮在当前内容之上的最外层表面。
+ * 统一使用一块完整玻璃，而不是让内部选项各自模糊；同一时刻通常只展开一块，
+ * 所以层数固定且会自动跟随“毛玻璃效果”开关退化为近实心面板。
+ */
 export const UI_TRIGGER_PANEL_CLASS =
-  `${UI_PANEL_SURFACE_CLASS} rounded-lg`;
+  'ui-glass ui-glass-elevated rounded-lg text-text-dark';
 
 export const UI_OPTION_ITEM_CLASS =
   'rounded-lg border border-border-dark bg-surface-dark text-text-dark transition-colors';

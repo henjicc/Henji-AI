@@ -234,7 +234,6 @@ export function UiTaskHistoryFilterBar({
               buttonClassName="!h-8 !px-2"
               minWidthStrategy="display"
               panelWidthStrategy="options"
-              panelClassName="bg-panel border-border-dark"
             />
 
             <Dropdown
@@ -247,7 +246,6 @@ export function UiTaskHistoryFilterBar({
               buttonClassName="!h-8 !px-2"
               minWidthStrategy="display"
               panelWidthStrategy="options"
-              panelClassName="bg-panel border-border-dark"
             />
 
             <Dropdown
@@ -260,7 +258,6 @@ export function UiTaskHistoryFilterBar({
               buttonClassName="!h-8 !px-2"
               minWidthStrategy="display"
               panelWidthStrategy="options"
-              panelClassName="bg-panel border-border-dark"
             />
 
             <Dropdown
@@ -273,7 +270,6 @@ export function UiTaskHistoryFilterBar({
               buttonClassName="!h-8 !px-2"
               minWidthStrategy="display"
               panelWidthStrategy="options"
-              panelClassName="bg-panel border-border-dark"
             />
 
             {showCloseButton && onClose && (
