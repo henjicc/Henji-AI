@@ -150,3 +150,33 @@
 - 第三阶段三个任务文件
 
 构建过程刷新了被 Git 忽略的 manifest、seeds 与 `out/`；未记录或提交临时清单、截图、日志及这些生成产物。
+
+## 2026-07-27 第四阶段
+
+### 生成历史图片比例与持久化
+
+- `src/workspaces/GenerationWorkspace/types.ts`
+- `src/workspaces/GenerationWorkspace/utils/resultImageDimensions.ts`
+- `src/workspaces/GenerationWorkspace/utils/resultImageDimensions.test.ts`
+- `src/workspaces/GenerationWorkspace/hooks/useTaskState.ts`
+- `src/workspaces/GenerationWorkspace/hooks/useTaskHistory.ts`
+- `src/workspaces/GenerationWorkspace/components/TaskCard.tsx`
+- `src/workspaces/GenerationWorkspace/components/TaskList.tsx`
+- `src/workspaces/GenerationWorkspace.tsx`
+
+### 文件职责拆分
+
+- `src/workspaces/GenerationWorkspace/components/TaskCardToolbar.tsx`
+
+### 任务记录
+
+- `docs/task/界面实测巡检与优化/00-任务总览.md`
+- `docs/task/界面实测巡检与优化/重要记录.md`
+- `docs/task/界面实测巡检与优化/progress.md`
+- `docs/task/界面实测巡检与优化/decisions.md`
+- `docs/task/界面实测巡检与优化/handoff.md`
+- `docs/task/界面实测巡检与优化/changed-files.md`
+- `docs/task/界面实测巡检与优化/test-report.md`
+- 第四阶段两个任务文件
+
+确认 `react-window` 与 `@types/react-window` 仅存在于依赖清单、源码零使用；本阶段只记录清理建议，没有修改 `package.json` 或 lockfile。构建过程刷新了被 Git 忽略的 manifest、seeds 与 `out/`，均不纳入提交。
