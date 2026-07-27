@@ -15,7 +15,18 @@ import { ExportPanel } from './debug/ExportPanel'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { useI18n } from '@/hooks/useI18n'
 import { openLogWindow } from '@/commands/logging'
-import { UiButton, UiCheckbox, UiChipButton, UiIconButton, UiModal } from '@/components/ui'
+import {
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
+  UI_TEXT_TITLE_CLASS,
+  UiButton,
+  UiCheckbox,
+  UiChipButton,
+  UiIconButton,
+  UiModal,
+} from '@/components/ui'
+import Toggle from '@/components/ui/Toggle'
 import { X } from 'lucide-react'
 
 interface TestModePanelProps {
@@ -82,7 +93,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" />
-            <h2 className="text-xl font-bold text-yellow-500">{t('testMode.title')}</h2>
+            <h2 className={UI_TEXT_TITLE_CLASS}>{t('testMode.title')}</h2>
           </div>
           <UiIconButton
             type="button"
@@ -95,7 +106,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
 
         {/* 快捷键提示 */}
         <div className="mb-6 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
-          <div className="text-sm text-yellow-500/80">
+          <div className={UI_TEXT_BODY_CLASS}>
             {t('testMode.shortcutLabel')} <kbd className="px-2 py-1 bg-black/30 rounded">Ctrl</kbd> +{' '}
             <kbd className="px-2 py-1 bg-black/30 rounded">Alt</kbd> +{' '}
             <kbd className="px-2 py-1 bg-black/30 rounded">Shift</kbd> +{' '}
@@ -107,25 +118,18 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         <div className="mb-6">
           <div className="flex items-center justify-between p-4 rounded-lg bg-app/40">
             <div>
-              <div className="text-white font-medium">{t('testMode.enable.title')}</div>
-              <div className="text-sm text-text-muted mt-1">
+              <div className={UI_TEXT_SECTION_CLASS}>{t('testMode.enable.title')}</div>
+              <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                 {t('testMode.enable.description')}
               </div>
             </div>
-            <UiButton
-              type="button"
-              onClick={handleToggleTestMode}
-              variant="ghost"
-              className={`relative w-14 h-7 rounded-full transition-colors ${
-                state.enabled ? 'bg-yellow-500' : 'bg-layer'
-              }`}
-            >
-              <div
-                className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform ${
-                  state.enabled ? 'translate-x-8' : 'translate-x-1'
-                }`}
-              />
-            </UiButton>
+            <Toggle
+              checked={state.enabled}
+              onChange={handleToggleTestMode}
+              onText={t('testMode.enable.title')}
+              offText={t('testMode.enable.title')}
+              ariaLabel={t('testMode.enable.title')}
+            />
           </div>
         </div>
 
@@ -135,23 +139,19 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
             <div className="flex gap-2 border-b border-border-dark/50">
               <UiChipButton
                 type="button"
+                active={activeTab === 'options'}
+                selectionRole="navigation"
                 onClick={() => setActiveTab('options')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  activeTab === 'options'
-                    ? 'text-yellow-500 border-yellow-500 bg-yellow-500/10'
-                    : 'text-text-muted hover:text-text-soft border-transparent bg-transparent'
-                }`}
+                className="px-4 py-2"
               >
                 {t('testMode.tabs.options')}
               </UiChipButton>
               <UiChipButton
                 type="button"
+                active={activeTab === 'export'}
+                selectionRole="navigation"
                 onClick={() => setActiveTab('export')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
-                  activeTab === 'export'
-                    ? 'text-yellow-500 border-yellow-500 bg-yellow-500/10'
-                    : 'text-text-muted hover:text-text-soft border-transparent bg-transparent'
-                }`}
+                className="px-4 py-2"
               >
                 {t('testMode.tabs.export')}
               </UiChipButton>
@@ -162,7 +162,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {/* 测试选项 */}
         {state.enabled && activeTab === 'options' && (
           <div className="mb-6">
-            <h3 className="text-white font-medium mb-3">{t('testMode.options.title')}</h3>
+            <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.options.title')}</h3>
             <div className="space-y-3">
               {/* 跳过请求 */}
               <div
@@ -170,8 +170,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 onClick={() => handleToggleOption('skipRequest')}
               >
                 <div>
-                  <div className="text-white text-sm">{t('testMode.options.skipRequest.title')}</div>
-                  <div className="text-xs text-text-muted mt-1">
+                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.skipRequest.title')}</div>
+                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                     {t('testMode.options.skipRequest.description')}
                   </div>
                 </div>
@@ -188,8 +188,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 onClick={() => handleToggleOption('logParams')}
               >
                 <div>
-                  <div className="text-white text-sm">{t('testMode.options.logParams.title')}</div>
-                  <div className="text-xs text-text-muted mt-1">
+                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.logParams.title')}</div>
+                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                     {t('testMode.options.logParams.description')}
                   </div>
                 </div>
@@ -206,8 +206,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 onClick={() => handleToggleOption('enableDevTools')}
               >
                 <div>
-                  <div className="text-white text-sm">{t('testMode.options.enableDevTools.title')}</div>
-                  <div className="text-xs text-text-muted mt-1">
+                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.enableDevTools.title')}</div>
+                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                     {t('testMode.options.enableDevTools.description')}
                   </div>
                 </div>
@@ -224,8 +224,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
                 onClick={() => setShowFlowTracking(prev => !prev)}
               >
                 <div>
-                  <div className="text-white text-sm">{t('testMode.options.flowTracking.title')}</div>
-                  <div className="text-xs text-text-muted mt-1">
+                  <div className={UI_TEXT_BODY_CLASS}>{t('testMode.options.flowTracking.title')}</div>
+                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                     {t('testMode.options.flowTracking.description')}
                   </div>
                 </div>
@@ -242,7 +242,7 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {/* 参数流转追踪可视化 */}
         {state.enabled && activeTab === 'options' && showFlowTracking && flowRecords.length > 0 && (
           <div className="mb-6">
-            <h3 className="text-white font-medium mb-3">{t('testMode.flowTracking.title')}</h3>
+            <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.flowTracking.title')}</h3>
             {flowRecords.map((record, index) => (
               <ParamFlowViewer
                 key={index}
@@ -263,9 +263,9 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
         {/* 独立日志窗口入口：日志完整捕获开关已移至日志窗口工具栏（见 2.1 decisions.md） */}
         {state.enabled && activeTab === 'options' && (
           <div>
-            <h3 className="text-white font-medium mb-3">{t('testMode.logsWindow.title')}</h3>
+            <h3 className={`mb-3 ${UI_TEXT_SECTION_CLASS}`}>{t('testMode.logsWindow.title')}</h3>
             <div className="flex items-center justify-between p-3 rounded-lg bg-app/40">
-              <div className="text-xs text-text-muted">{t('testMode.logsWindow.description')}</div>
+              <div className={UI_TEXT_META_CLASS}>{t('testMode.logsWindow.description')}</div>
               <UiButton type="button" size="sm" onClick={() => void openLogWindow()}>
                 {t('testMode.logsWindow.openButton')}
               </UiButton>

@@ -10,10 +10,20 @@ type ToggleProps = {
   offText?: string
   className?: string
   disabled?: boolean
+  ariaLabel?: string
 }
 
 export default function Toggle(props: ToggleProps): JSX.Element {
-  const { label, checked, onChange, onText = '开启', offText = '关闭', className, disabled = false } = props
+  const {
+    label,
+    checked,
+    onChange,
+    onText = '开启',
+    offText = '关闭',
+    className,
+    disabled = false,
+    ariaLabel,
+  } = props
   const labelId = useId()
 
   return (
@@ -24,7 +34,7 @@ export default function Toggle(props: ToggleProps): JSX.Element {
         onCheckedChange={onChange}
         disabled={disabled}
         aria-labelledby={label ? labelId : undefined}
-        aria-label={label ? undefined : checked ? onText : offText}
+        aria-label={label ? undefined : ariaLabel ?? (checked ? onText : offText)}
         title={checked ? onText : offText}
         className="shrink-0"
       />

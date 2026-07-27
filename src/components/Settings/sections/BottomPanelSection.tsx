@@ -3,6 +3,7 @@ import Toggle from '@/components/ui/Toggle'
 import NumberInput from '@/components/ui/NumberInput'
 import SectionCard from '../components/SectionCard'
 import { useI18n } from '@/hooks/useI18n'
+import { UI_TEXT_META_CLASS } from '@/components/ui'
 
 interface BottomPanelSectionProps {
   enableAutoCollapse: boolean
@@ -36,7 +37,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-text-faint">{t('sections.interface.autoCollapseHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.interface.autoCollapseHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
@@ -50,7 +51,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
             widthClassName="w-full"
             disabled={!enableAutoCollapse}
           />
-          <p className="mt-2 text-xs text-text-faint">{t('sections.interface.collapseDelayHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.interface.collapseDelayHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
@@ -63,7 +64,7 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-text-faint">{t('sections.interface.collapseOnScrollHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.interface.collapseOnScrollHint')}</p>
         </div>
       </div>
     </SectionCard>

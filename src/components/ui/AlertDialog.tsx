@@ -3,6 +3,7 @@ import { UiButton, UiPanel } from './primitives'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS } from './styleTokens'
 
 /** 弹窗底部的一个动作按钮 */
 export interface AlertDialogAction {
@@ -131,11 +132,11 @@ export default function AlertDialog({
         {/* 标题 */}
         <div className="flex items-center gap-2">
           <div className={color}>{icon}</div>
-          <div id={titleId} className="text-white text-base font-medium">{title}</div>
+          <div id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</div>
         </div>
 
         {/* 消息内容 */}
-        <div id={messageId} className="ui-scrollbar max-h-[280px] overflow-y-auto text-text-soft text-sm mt-2 whitespace-pre-line break-words">
+        <div id={messageId} className={`ui-scrollbar mt-2 max-h-[280px] overflow-y-auto whitespace-pre-line break-words ${UI_TEXT_BODY_CLASS}`}>
           {message}
         </div>
 

@@ -2,6 +2,8 @@ import React from 'react';
 import Dropdown from '@/components/ui/Dropdown';
 import {
   UI_FIELD_CONTROL_HEIGHT_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
   UiButton,
   UiColorInput,
   UiIconButton,
@@ -135,10 +137,10 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
 
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-text-soft">
+            <div className={UI_TEXT_LABEL_CLASS}>
               {t('sections.theme.blur.label')}
             </div>
-            <div className="mt-1 text-xs text-text-faint">
+            <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
               {t('sections.theme.blur.hint')}
             </div>
           </div>
@@ -146,7 +148,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
         </div>
 
         <div className="space-y-3">
-          <div className="text-xs font-medium uppercase tracking-wider text-text-muted">
+          <div className={`font-medium uppercase tracking-wider ${UI_TEXT_META_CLASS}`}>
             {t('sections.theme.palette.label')}
           </div>
           <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -158,7 +160,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
                 className="h-auto flex-col items-start gap-1.5 px-2 py-2"
                 onClick={() => onApplyPalette(preset.colors)}
               >
-                <div className="text-xs font-medium text-text-dark">
+                <div className={UI_TEXT_LABEL_CLASS}>
                   {i18n.language.startsWith('zh') ? preset.name.zh : preset.name.en}
                 </div>
                 <div className="flex items-center gap-1">
@@ -177,7 +179,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
 
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <div className="text-xs font-medium uppercase tracking-wider text-text-muted">
+            <div className={`font-medium uppercase tracking-wider ${UI_TEXT_META_CLASS}`}>
               {t('sections.theme.accent.label')}
             </div>
             <UiButton
@@ -215,7 +217,7 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
         </div>
 
         <div className="space-y-2">
-          <div className="text-xs font-medium uppercase tracking-wider text-text-muted">
+          <div className={`font-medium uppercase tracking-wider ${UI_TEXT_META_CLASS}`}>
             {t('sections.theme.portable.label')}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -255,13 +257,13 @@ const ThemeSection: React.FC<ThemeSectionProps> = ({
         </div>
 
         <UiPanel className="p-3">
-          <div className="mb-3 text-xs font-medium uppercase tracking-wider text-text-muted">
+          <div className={`mb-3 font-medium uppercase tracking-wider ${UI_TEXT_META_CLASS}`}>
             {t('sections.theme.advanced.label')}
           </div>
           <div className="grid grid-cols-1 gap-3">
             {THEME_COLOR_TOKENS.map((token) => (
               <div key={token} className="rounded-lg border border-border-dark bg-surface-dark p-2">
-                <div className="mb-2 text-xs text-text-soft">{t(tokenLabelKeyMap[token])}</div>
+                <div className={`mb-2 ${UI_TEXT_META_CLASS}`}>{t(tokenLabelKeyMap[token])}</div>
                 <div className="mb-2 flex flex-wrap gap-1.5">
                   {getTokenColorOptions(token).map((option) => (
                     <UiIconButton

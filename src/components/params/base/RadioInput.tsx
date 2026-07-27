@@ -8,7 +8,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RadioParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UiOptionButton } from '@/components/ui'
+import { UI_FIELD_LABEL_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiOptionButton } from '@/components/ui'
 
 interface RadioInputProps {
   param: RadioParamDef
@@ -43,7 +43,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
 
   return (
     <div className="w-auto">
-      <label className="block text-sm font-medium text-text-soft mb-1.5">
+      <label className={UI_FIELD_LABEL_CLASS}>
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
@@ -76,9 +76,9 @@ export const RadioInput: React.FC<RadioInputProps> = ({
                 </div>
               </div>
               <div className="flex-1">
-                <div className="text-sm font-medium text-text-dark">{getOptionLabel(option)}</div>
+                <div className={isSelected ? 'text-sm font-medium text-white' : UI_TEXT_LABEL_CLASS}>{getOptionLabel(option)}</div>
                 {getOptionDescription(option) && (
-                  <div className="text-xs text-text-faint mt-1">{getOptionDescription(option)}</div>
+                  <div className={isSelected ? 'mt-1 text-xs text-white/80' : `mt-1 ${UI_TEXT_META_CLASS}`}>{getOptionDescription(option)}</div>
                 )}
               </div>
             </UiOptionButton>

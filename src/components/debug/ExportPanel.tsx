@@ -11,7 +11,7 @@ import React, { useState } from 'react'
 import { exportService } from '@/core/export/ExportService'
 import type { ExportData, ExportType, CleanOptions } from '@/core/export/types'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiCheckbox, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UiButton, UiCheckbox, UiOptionButton } from '@/components/ui'
 
 interface ExportPanelProps {
   modelId: string
@@ -85,7 +85,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
     <div className="space-y-4">
       {/* 导出类型选择 */}
       <div>
-        <h4 className="text-white text-sm font-medium mb-2">{t('debug.export.title')}</h4>
+        <h4 className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('debug.export.title')}</h4>
         <div className="grid grid-cols-2 gap-2">
           {[
             { value: 'current-params', label: t('debug.export.type.currentParams') },
@@ -98,11 +98,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
               active={exportType === option.value}
               key={option.value}
               onClick={() => handleExportTypeChange(option.value as ExportType)}
-              className={`px-3 py-2 rounded text-sm transition-colors ${
-                exportType === option.value
-                  ? 'bg-yellow-500 text-black font-medium'
-                  : 'bg-surface-dark/50 text-text-soft hover:bg-layer/50'
-              }`}
+              className="px-3 py-2"
             >
               {option.label}
             </UiOptionButton>
@@ -112,7 +108,7 @@ export const ExportPanel: React.FC<ExportPanelProps> = ({ modelId, params, conte
 
       {/* 清理选项 */}
       <div>
-        <h4 className="text-white text-sm font-medium mb-2">{t('debug.export.clean.title')}</h4>
+        <h4 className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('debug.export.clean.title')}</h4>
         <div className="space-y-2">
           {[
             { key: 'removeDefaults', label: t('debug.export.clean.removeDefaults') },

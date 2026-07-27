@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 import type { ToolFieldSchema, ToolOptions } from '@/features/canvas/tools';
-import { UiColorInput, UiInput, UiSelect } from '@/components/ui';
+import { UI_TEXT_LABEL_CLASS, UiColorInput, UiInput, UiSelect } from '@/components/ui';
 import type { FormToolEditorProps } from './types';
 
 function readTextOption(options: ToolOptions, key: string): string {
@@ -84,7 +84,7 @@ export function FormToolEditor({ fields, options, onOptionsChange }: FormToolEdi
     <div className="space-y-4">
       {fields.map((field) => (
         <div key={field.key}>
-          <label className="mb-1 block text-xs text-text-muted">{field.label}</label>
+          <label className={`mb-1 block ${UI_TEXT_LABEL_CLASS}`}>{field.label}</label>
           {renderField(field)}
         </div>
       ))}

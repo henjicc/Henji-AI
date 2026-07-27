@@ -2,7 +2,15 @@ import { RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
-import { Dropdown, UiButton, UiInput, UiPanel } from '@/components/ui'
+import {
+  Dropdown,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
+  UiButton,
+  UiInput,
+  UiPanel,
+} from '@/components/ui'
 import { findAgentModelVerification } from '@/core/llm/agentProfiles'
 import { applyCapabilitySmokeToCapabilities } from '@/core/llm/capabilitySmokeCapabilities'
 import { createLogger } from '@/core/logging'
@@ -173,8 +181,8 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
   return (
     <UiPanel className="space-y-4 p-4">
       <div>
-        <div className="text-sm font-medium text-text-dark">智能助手模型</div>
-        <div className="text-xs text-text-muted">复用下方供应商与密钥；动态验证会发起最小真实请求，价格无可靠来源时保持未知。</div>
+        <div className={UI_TEXT_SECTION_CLASS}>智能助手模型</div>
+        <div className={UI_TEXT_META_CLASS}>复用下方供应商与密钥；动态验证会发起最小真实请求，价格无可靠来源时保持未知。</div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -189,7 +197,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           const key = effectiveReference ? modelKey(effectiveReference) : ''
           return (
             <div key={role} className="space-y-2 rounded-lg border border-border-dark bg-layer p-3">
-              <div className="text-sm font-medium text-text-dark">{roleLabels[role]}</div>
+              <div className={UI_TEXT_LABEL_CLASS}>{roleLabels[role]}</div>
               <Dropdown<string>
                 value={value}
                 display={display}
@@ -198,9 +206,9 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                 buttonClassName="w-full"
                 onSelect={selected => void updateRole(role, selected)}
               />
-              <div className="text-xs text-text-muted">{capabilitySummary(model)}</div>
+              <div className={UI_TEXT_META_CLASS}>{capabilitySummary(model)}</div>
               {verification ? (
-                <div className="space-y-1 text-xs text-text-muted">
+                <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
                   <div>验证于 {new Date(verification.verifiedAt).toLocaleString()} · {verification.totalLatencyMs} ms · 费用{verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : '未知'}</div>
                   <div>{verification.checks.map(check => `${check.id}:${check.status === 'passed' ? '通过' : '失败'}`).join(' · ')}</div>
                   <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
@@ -223,7 +231,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
         <UiInput type="number" min={1} value={profile.settings.maxOutputTokens} onChange={event => void updateSetting('maxOutputTokens', Number(event.target.value))} aria-label="最大输出 Token" />
         <UiInput type="number" min={1} value={profile.settings.contextWindowBudget} onChange={event => void updateSetting('contextWindowBudget', Number(event.target.value))} aria-label="未知模型上下文回退 Token" />
       </div>
-      <div className="text-xs text-text-muted">依次为：超时毫秒、重试次数、单次期望输出 Token、未知模型上下文回退 Token。已配置模型优先使用各自能力上限。</div>
+      <div className={UI_TEXT_META_CLASS}>依次为：超时毫秒、重试次数、单次期望输出 Token、未知模型上下文回退 Token。已配置模型优先使用各自能力上限。</div>
     </UiPanel>
   )
 }

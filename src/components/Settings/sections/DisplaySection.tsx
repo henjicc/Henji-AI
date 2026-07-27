@@ -5,6 +5,7 @@ import Toggle from '@/components/ui/Toggle'
 import SectionCard from '../components/SectionCard'
 import { useI18n } from '@/hooks/useI18n'
 import type { PriceEstimateCurrencyMode } from '@/core/pricing/priceDisplay'
+import { UI_TEXT_META_CLASS } from '@/components/ui'
 
 interface DisplaySectionProps {
   showPriceEstimate: boolean
@@ -45,7 +46,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
         onText={onText}
         offText={offText}
       />
-      <p className="mt-2 text-xs text-text-faint">{t('sections.display.priceHint')}</p>
+      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.display.priceHint')}</p>
 
       <div className="mt-4 border-t border-border-dark pt-4">
         <div className={`space-y-3 ${showPriceEstimate ? '' : 'opacity-60'}`}>
@@ -58,7 +59,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
             className="w-full"
             disabled={!showPriceEstimate}
           />
-          <p className="text-xs text-text-faint">{t('sections.display.currencyModeHint')}</p>
+          <p className={UI_TEXT_META_CLASS}>{t('sections.display.currencyModeHint')}</p>
 
           <NumberInput
             label={t('sections.display.exchangeRateLabel')}
@@ -71,7 +72,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
             widthClassName="w-full"
             disabled={!showPriceEstimate}
           />
-          <p className="text-xs text-text-faint">{t('sections.display.exchangeRateHint')}</p>
+          <p className={UI_TEXT_META_CLASS}>{t('sections.display.exchangeRateHint')}</p>
         </div>
 
         <div className="mt-4 border-t border-border-dark pt-4">
@@ -83,7 +84,7 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-text-faint">{t('sections.display.autoFocusHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.display.autoFocusHint')}</p>
         </div>
       </div>
     </SectionCard>

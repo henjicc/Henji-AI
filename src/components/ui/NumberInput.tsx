@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { UiIconButton, UiInput } from './primitives'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS } from './styleTokens'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS } from './styleTokens'
 
 type NumberInputProps = {
   label?: string
@@ -102,7 +102,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
 
   return (
     <div className={className}>
-      {label ? <label className="block text-sm font-medium mb-1 text-text-soft">{label}</label> : null}
+      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <div className={`relative inline-block ${widthClassName === 'w-full' ? 'w-full' : ''}`}>
         <UiInput
           ref={inputRef}

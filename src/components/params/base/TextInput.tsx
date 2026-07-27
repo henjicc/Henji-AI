@@ -10,7 +10,7 @@ import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TextParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { PromptEditor, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiInput, UiTextAreaField } from '@/components/ui'
+import { PromptEditor, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UiInput, UiTextAreaField } from '@/components/ui'
 import {
   resolveTextParamPromptDocument,
   resolveTextParamPromptVariables,
@@ -52,7 +52,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   if (param.editor?.kind === 'prompt') {
     return (
       <div className="w-auto">
-        <label className="mb-1.5 block text-sm font-medium text-text-soft">
+        <label className={UI_FIELD_LABEL_CLASS}>
           {displayName}
           {param.required && <span className="ml-1 text-red-500">*</span>}
         </label>
@@ -76,7 +76,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   if (param.multiline) {
     return (
       <div className="w-auto">
-        <label className="block text-sm font-medium text-text-soft mb-1.5">
+        <label className={UI_FIELD_LABEL_CLASS}>
           {displayName}
           {param.required && <span className="text-red-500 ml-1">*</span>}
         </label>
@@ -95,7 +95,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   // 单行文本输入
   return (
     <div className="w-auto">
-      <label className="block text-sm font-medium text-text-soft mb-1.5">
+      <label className={UI_FIELD_LABEL_CLASS}>
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>

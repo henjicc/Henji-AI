@@ -100,3 +100,53 @@
 - 第二阶段三个任务文件
 
 构建过程刷新了被 Git 忽略的 manifest、seeds 与 `out/`，均未纳入提交。
+
+## 2026-07-27 第三阶段
+
+### 选中态词汇表与布尔控件
+
+- `src/components/ui/styleTokens.ts`
+- `src/components/ui/primitives.tsx`
+- `src/components/ui/primitives.selection.test.tsx`
+- `src/components/ui/Toggle.tsx`
+- `src/components/ui/UiDatePicker.tsx`
+- `src/components/ui/PromptEditor/nodeViews/ReferenceNodeViews.tsx`
+- `src/components/WindowControls.tsx`
+- `src/components/TestModePanel.tsx`
+- `src/components/debug/ExportPanel.tsx`
+- `src/features/logs/components/AssistantTraceList.tsx`
+- `src/features/logs/components/LogEventRow.tsx`
+
+### 模型显示与管理
+
+- `src/components/ModelSettingsPanel.tsx`
+- `src/components/CustomModels/CustomModelManager.tsx`
+- `src/components/MediaGenerator/components/ModelscopeCustomModelManager.tsx`
+
+### 排版令牌七批迁移
+
+- 设置：`src/components/Settings/components/SettingsDialog.tsx`、`SettingsProgressDialog.tsx`，以及 `src/components/Settings/sections/`、`tabs/ApiKeysTab.tsx` 中本阶段有文本层级的 20 个调用点
+- 生成：`src/components/MediaGenerator/components/` 下输入、模型选择、比例分辨率、预设与提示词优化相关 8 个文件；`src/workspaces/GenerationWorkspace/components/` 下 `ClearHistoryDialog.tsx`、`NotificationToast.tsx`、`TaskCard.tsx`、`TaskPrompt.tsx`
+- 画布与项目：`src/features/canvas/ui/CanvasEmptyHint.tsx`、`NodeDownloadMenu.tsx`、四个 `tool-editors/` 文件；`src/features/project/ProjectManager.tsx`、`RenameDialog.tsx`
+- 智能助手：`src/features/assistant/AssistantSidebar.tsx`，`conversation/` 下 10 个展示组件，`history/AssistantRunHistory.tsx`、`memory/AssistantMemoryPanel.tsx`
+- 资产库：`src/features/assets/AssetLibrarySurface.tsx`、`components/AssetCard.tsx`、`AssetCardMenu.tsx`、`AssetLibrarySidebar.tsx`
+- 工具与编辑：`src/workspaces/ToolboxWorkspace.tsx`、`src/features/imageMark/editor/MarkEditor.tsx`、`standalone/ImageMarkTool.tsx`、`src/features/imageEdit/tools/diffusion/DiffusionInspector.tsx`、`geometry/GeometryInspector.tsx`
+- 公共组件与参数：`src/components/ui/` 下 12 个公共展示组件；`src/components/params/` 下基础输入、分辨率、复合面板与语音面板共 11 个文件
+
+本阶段共修改 91 个已跟踪 `src/` 文件并新增 1 个测试文件；完整精确清单以本阶段实现提交的 `git show --name-only` 为准。
+
+### 规范与任务记录
+
+- `CLAUDE.md`
+- `.claude/skills/henji-ui-surface/SKILL.md`
+- `.codex/skills/henji-ui-surface/SKILL.md`
+- `docs/task/界面实测巡检与优化/00-任务总览.md`
+- `docs/task/界面实测巡检与优化/重要记录.md`
+- `docs/task/界面实测巡检与优化/progress.md`
+- `docs/task/界面实测巡检与优化/decisions.md`
+- `docs/task/界面实测巡检与优化/handoff.md`
+- `docs/task/界面实测巡检与优化/changed-files.md`
+- `docs/task/界面实测巡检与优化/test-report.md`
+- 第三阶段三个任务文件
+
+构建过程刷新了被 Git 忽略的 manifest、seeds 与 `out/`；未记录或提交临时清单、截图、日志及这些生成产物。

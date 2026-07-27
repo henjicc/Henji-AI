@@ -1,4 +1,5 @@
 import React from 'react'
+import { UI_TEXT_BODY_CLASS } from '@/components/ui'
 
 export interface TaskPromptProps {
   prompt: string
@@ -15,7 +16,7 @@ export function TaskPrompt({ prompt }: TaskPromptProps): JSX.Element {
   return (
     <div className="min-w-0 flex-1 rounded-lg">
       <div
-        className="text-sm text-text-dark leading-5 pr-10"
+        className={`pr-10 leading-5 ${UI_TEXT_BODY_CLASS}`}
         style={clampStyle}
         title={prompt}
       >

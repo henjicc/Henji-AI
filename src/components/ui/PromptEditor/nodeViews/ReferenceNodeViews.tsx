@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 
 import type { PromptMediaType } from '@/core/inputs/promptDocument'
+import { UI_OPTION_ITEM_ACTIVE_CLASS } from '@/components/ui/styleTokens'
 import type { PromptEditorResourceRegistry } from '../resourceRegistry'
 import { PROMPT_ATOM_CLASS, PROMPT_MEDIA_ATOM_CLASS } from '../promptEditorStyles'
 
@@ -68,7 +69,7 @@ export function MediaReferenceNodeView({
       as="span"
       className={`${PROMPT_MEDIA_ATOM_CLASS} ${
         selected
-          ? 'border-accent bg-brand-600 text-white'
+          ? UI_OPTION_ITEM_ACTIVE_CLASS
           : reference
             ? 'border-border-dark bg-layer text-text-dark'
             : 'border-red-500/50 bg-surface-dark text-red-300'
@@ -112,7 +113,7 @@ export function TemplateVariableNodeView({
       as="span"
       className={`${PROMPT_ATOM_CLASS} ${
         selected
-          ? 'border-accent bg-brand-600 text-white'
+          ? UI_OPTION_ITEM_ACTIVE_CLASS
           : variable
             ? 'border-border-dark bg-layer text-text-dark'
             : 'border-red-500/50 bg-surface-dark text-red-300'

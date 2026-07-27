@@ -6,6 +6,7 @@ import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motio
 import { UiIconButton, UiPanel } from './primitives';
 import { useDialogFocusTrap } from './useDialogFocusTrap';
 import { useDialogTransition } from './useDialogTransition';
+import { UI_TEXT_TITLE_CLASS } from './styleTokens';
 
 interface UiModalProps {
   isOpen: boolean;
@@ -71,7 +72,7 @@ export function UiModal({
       >
         {!hideHeader && (
           <div className="flex items-center justify-between border-b border-veil-subtle px-4 py-3">
-            <h2 id={titleId} className="text-sm font-medium text-text-dark">{title}</h2>
+            <h2 id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</h2>
             <UiIconButton className="h-8 w-8" aria-label={`${title} - 关闭`} onClick={onClose}>
               <X className="h-4 w-4" />
             </UiIconButton>

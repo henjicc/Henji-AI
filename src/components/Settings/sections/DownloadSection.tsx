@@ -1,7 +1,7 @@
 import React from 'react'
 import { openDialog } from '@/platform/desktopApi'
 import Toggle from '@/components/ui/Toggle'
-import { UiButton, UiInput, UI_FIELD_CONTROL_HEIGHT_CLASS } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -49,7 +49,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-text-faint">{t('sections.download.enableHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.download.enableHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableQuickDownload ? 'pointer-events-none' : ''}`}>
@@ -62,11 +62,11 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-text-faint">{t('sections.download.buttonOnlyHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.download.buttonOnlyHint')}</p>
         </div>
 
         <div className={`transition-colors duration-300 ${!enableQuickDownload ? 'pointer-events-none' : ''}`}>
-          <label className="block text-sm font-medium mb-2 text-text-soft">
+          <label className={`${UI_FIELD_LABEL_CLASS} mb-2`}>
             {t('sections.download.pathLabel')}
           </label>
           <div className="flex items-stretch gap-2">
@@ -87,7 +87,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
               {t('actions.select')}
             </UiButton>
           </div>
-          <p className="mt-2 text-xs text-text-faint">{t('sections.download.pathHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.download.pathHint')}</p>
         </div>
       </div>
     </SectionCard>

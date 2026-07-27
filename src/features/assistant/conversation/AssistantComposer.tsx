@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { Send, Square } from 'lucide-react'
 
-import { Dropdown, PromptEditor, UiButton } from '@/components/ui'
+import { Dropdown, PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
 import {
   toModelPromptText,
@@ -53,7 +53,7 @@ export function AssistantComposer({
         submitShortcut="enter"
         onSubmit={submit}
         editorShellClassName="!rounded-xl !border-border-dark bg-surface-dark"
-        editorClassName="max-h-32 min-h-[72px] overflow-y-auto px-3 py-2.5 text-sm"
+        editorClassName={`max-h-32 min-h-[72px] overflow-y-auto px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
       />
       <div className="mt-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
@@ -66,7 +66,7 @@ export function AssistantComposer({
             buttonClassName="!h-7 !rounded-md !px-2 text-2xs"
             panelClassName="text-xs"
           />
-          <span className="hidden truncate text-3xs text-text-muted min-[440px]:inline">
+          <span className={`hidden truncate min-[440px]:inline ${UI_TEXT_META_CLASS}`}>
             {approvalMode === 'ask'
               ? '风险操作逐次确认'
               : approvalMode === 'assistant_decides'

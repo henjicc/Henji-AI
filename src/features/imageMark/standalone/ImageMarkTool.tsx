@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ClipboardCopy, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
-import { UiButton } from '@/components/ui';
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui';
 import { useNotification } from '@/contexts/NotificationContext';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { allowMediaRoot, basename, dirname, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
@@ -191,12 +191,12 @@ export function ImageMarkTool(): JSX.Element {
           onDrop={handleDrop}
         >
           <ImagePlus size={40} className="text-text-muted" />
-          <div className="text-sm text-text-dark">拖入图片、Ctrl+V 粘贴,或</div>
+          <div className={UI_TEXT_BODY_CLASS}>拖入图片、Ctrl+V 粘贴，或</div>
           <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
             <FolderOpen size={15} className="mr-1.5" />
             打开图片
           </UiButton>
-          <div className="text-xs leading-relaxed text-text-muted">
+          <div className={`leading-relaxed ${UI_TEXT_META_CLASS}`}>
             支持序号、框选、箭头、文字、画笔、马赛克标记,以及裁剪与旋转翻转
           </div>
         </div>
@@ -215,7 +215,7 @@ export function ImageMarkTool(): JSX.Element {
           <FolderOpen size={15} className="mr-1.5" />
           打开图片
         </UiButton>
-        <span className="max-w-[320px] truncate text-xs text-text-muted" title={source.name}>
+        <span className={`max-w-[320px] truncate ${UI_TEXT_META_CLASS}`} title={source.name}>
           {source.name}
         </span>
       </div>

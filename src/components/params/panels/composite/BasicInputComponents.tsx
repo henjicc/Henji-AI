@@ -2,7 +2,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import Dropdown from '@/components/ui/Dropdown'
 import Toggle from '@/components/ui/Toggle'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiInput, UiOptionButton } from '@/components/ui'
 import { getI18nText, type I18nText } from '@/core/types'
 
 interface CompositeComponentProps<TConfig> {
@@ -324,11 +324,11 @@ export const CompositeFileInput: React.FC<CompositeComponentProps<FileInputConfi
       </div>
 
       {selectedFileName && (
-        <div className="truncate text-xs text-text-dark" title={selectedFileName}>
+        <div className={`truncate ${UI_TEXT_BODY_CLASS}`} title={selectedFileName}>
           {selectedFileName}
         </div>
       )}
-      {hintText && <div className="text-xs text-text-muted">{hintText}</div>}
+      {hintText && <div className={UI_TEXT_META_CLASS}>{hintText}</div>}
       {errorText && <div className="text-xs text-red-400">{errorText}</div>}
     </div>
   )

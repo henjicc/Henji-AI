@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { PromptEditor, StackedMediaUploader, UiIconButton } from '@/components/ui'
+import { PromptEditor, StackedMediaUploader, UI_TEXT_BODY_CLASS, UiIconButton } from '@/components/ui'
 import type {
   PromptEditorHandle,
   PromptReferenceItem,
@@ -383,7 +383,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             }
             className="relative isolate overflow-visible rounded-2xl"
             editorShellClassName="!rounded-2xl !border-border-dark/35 !bg-transparent transition-colors duration-200 focus-within:!border-veil-soft focus-within:!ring-0"
-            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 text-sm leading-6 ${promptMinHeightClass} max-h-[260px] overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words`}
+            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 leading-6 ${promptMinHeightClass} max-h-[260px] overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words ${UI_TEXT_BODY_CLASS}`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (
@@ -391,7 +391,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/70 to-transparent" />
             <div
               ref={promptOptimizationScrollRef}
-              className="prompt-optimize-preview__stream h-full overflow-y-scroll px-4 py-3 pr-14 text-sm leading-6"
+              className={`prompt-optimize-preview__stream h-full overflow-y-scroll px-4 py-3 pr-14 leading-6 ${UI_TEXT_BODY_CLASS}`}
             >
               {displayedPromptOptimizationReasoningGlyphs.length > 0 ? (
                 <PromptOptimizationPreviewText

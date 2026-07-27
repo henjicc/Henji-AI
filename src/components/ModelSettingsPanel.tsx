@@ -2,7 +2,15 @@ import React, { useState } from 'react'
 import { getAvailableProviders } from '../utils/modelHelpers'
 import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiChipButton, UiOptionButton, UiPanel } from '@/components/ui'
+import {
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UiButton,
+  UiChipButton,
+  UiGroup,
+} from '@/components/ui'
+import Toggle from '@/components/ui/Toggle'
 
 const ModelSettingsPanel: React.FC = () => {
   const { t } = useI18n('settings')
@@ -14,7 +22,7 @@ const ModelSettingsPanel: React.FC = () => {
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => getHiddenModels())
 
-  const toggleModelVisibility = (providerId: string, modelId: string) => {
+  const toggleModelVisibility = (providerId: string, modelId: string): void => {
     const key = `${providerId}-${modelId}`
     const newHiddenModels = new Set(hiddenModels)
 
@@ -31,17 +39,17 @@ const ModelSettingsPanel: React.FC = () => {
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const isProviderVisible = (providerId: string) => {
+  const isProviderVisible = (providerId: string): boolean => {
     // 检查该供应商是否在隐藏列表中
     return !hiddenProviders.has(providerId)
   }
 
-  const isTypeVisible = (type: 'image' | 'video' | 'audio') => {
+  const isTypeVisible = (type: 'image' | 'video' | 'audio'): boolean => {
     // 检查该类型是否在隐藏列表中
     return !hiddenTypes.has(type)
   }
 
-  const toggleProviderVisibility = (providerId: string) => {
+  const toggleProviderVisibility = (providerId: string): void => {
     const newHiddenProviders = new Set(hiddenProviders)
 
     if (newHiddenProviders.has(providerId)) {
@@ -55,7 +63,7 @@ const ModelSettingsPanel: React.FC = () => {
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const showAllModelsForProvider = (providerId: string) => {
+  const showAllModelsForProvider = (providerId: string): void => {
     const provider = providers.find(p => p.id === providerId)
     if (!provider) return
 
@@ -70,7 +78,7 @@ const ModelSettingsPanel: React.FC = () => {
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const hideAllModelsForProvider = (providerId: string) => {
+  const hideAllModelsForProvider = (providerId: string): void => {
     const provider = providers.find(p => p.id === providerId)
     if (!provider) return
 
@@ -85,7 +93,7 @@ const ModelSettingsPanel: React.FC = () => {
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const toggleTypeVisibility = (type: 'image' | 'video' | 'audio') => {
+  const toggleTypeVisibility = (type: 'image' | 'video' | 'audio'): void => {
     const newHiddenTypes = new Set(hiddenTypes)
 
     if (newHiddenTypes.has(type)) {
@@ -99,7 +107,7 @@ const ModelSettingsPanel: React.FC = () => {
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const showAll = () => {
+  const showAll = (): void => {
     setHiddenProviders(new Set())
     saveHiddenProviders(new Set())
     setHiddenTypes(new Set())
@@ -109,14 +117,14 @@ const ModelSettingsPanel: React.FC = () => {
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const hideAll = () => {
+  const hideAll = (): void => {
     const allProviders = new Set(providers.map(p => p.id))
     setHiddenProviders(allProviders)
     saveHiddenProviders(allProviders)
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const resetToDefault = () => {
+  const resetToDefault = (): void => {
     setHiddenProviders(new Set())
     saveHiddenProviders(new Set())
     setHiddenTypes(new Set())
@@ -126,7 +134,7 @@ const ModelSettingsPanel: React.FC = () => {
     window.dispatchEvent(new Event('modelVisibilityChanged'))
   }
 
-  const getTypeLabel = (type: string) => {
+  const getTypeLabel = (type: string): string => {
     switch (type) {
       case 'image': return t('modelSettings.types.image')
       case 'video': return t('modelSettings.types.video')
@@ -135,7 +143,7 @@ const ModelSettingsPanel: React.FC = () => {
     }
   }
 
-  const getTypeBadgeColor = (type: string) => {
+  const getTypeBadgeColor = (type: string): string => {
     switch (type) {
       case 'image': return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
       case 'video': return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
@@ -144,7 +152,7 @@ const ModelSettingsPanel: React.FC = () => {
     }
   }
 
-  const isModelHidden = (providerId: string, modelId: string, modelType: string) => {
+  const isModelHidden = (providerId: string, modelId: string, modelType: string): boolean => {
     // 供应商被隐藏
     if (hiddenProviders.has(providerId)) return true
     // 类型被隐藏
@@ -154,27 +162,23 @@ const ModelSettingsPanel: React.FC = () => {
     return false
   }
 
-  const getProviderStats = (provider: Provider) => {
+  const getProviderStats = (provider: Provider): { total: number; visible: number } => {
     const total = provider.models.length
     const hidden = provider.models.filter(model =>
       isModelHidden(provider.id, model.id, model.type)
     ).length
     const visible = total - hidden
-    return { total, visible, hidden }
+    return { total, visible }
   }
 
   return (
-    <div className="space-y-5 animate-fade-in">
-      {/* 快速操作区域 */}
-      <div>
-        <h4 className="text-xs font-medium text-text-muted mb-3 uppercase tracking-wider">{t('modelSettings.quickActionsTitle')}</h4>
-        <UiPanel className="space-y-3 border-border-dark/40 bg-surface-dark/30 p-4">
-          {/* 全局操作 */}
-          <div className="flex gap-2 flex-wrap">
+    <div className="animate-fade-in space-y-8">
+      <UiGroup title={t('modelSettings.quickActionsTitle')} titleTone="overline" gap="stack">
+        <div className="flex flex-wrap gap-2">
             <UiButton
               type="button"
               size="sm"
-              variant="primary"
+              variant="muted"
               onClick={showAll}
             >
               {t('modelSettings.actions.showAll')}
@@ -195,12 +199,11 @@ const ModelSettingsPanel: React.FC = () => {
             >
               {t('modelSettings.actions.resetDefault')}
             </UiButton>
-          </div>
+        </div>
 
-          {/* 按供应商操作 */}
-          <div className="pt-3 border-t border-border-dark/30">
-            <p className="text-xs text-text-faint mb-2">{t('modelSettings.byProvider')}</p>
-            <div className="flex gap-2 flex-wrap">
+        <div>
+          <p className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('modelSettings.byProvider')}</p>
+          <div className="flex flex-wrap gap-2">
               {providers.map(provider => {
                 const isVisible = isProviderVisible(provider.id)
                 return (
@@ -209,19 +212,18 @@ const ModelSettingsPanel: React.FC = () => {
                     type="button"
                     active={isVisible}
                     onClick={() => toggleProviderVisibility(provider.id)}
-                    className={`h-8 px-3 text-xs ${!isVisible ? 'opacity-40' : ''}`}
+                    className="h-8 px-3 text-xs"
                   >
                     {provider.name}
                   </UiChipButton>
                 )
               })}
-            </div>
           </div>
+        </div>
 
-          {/* 按类型操作 */}
-          <div className="pt-3 border-t border-border-dark/30">
-            <p className="text-xs text-text-faint mb-2">{t('modelSettings.byType')}</p>
-            <div className="flex gap-2 flex-wrap">
+        <div>
+          <p className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('modelSettings.byType')}</p>
+          <div className="flex flex-wrap gap-2">
               {(['image', 'video', 'audio'] as const).map(type => {
                 const isVisible = isTypeVisible(type)
                 return (
@@ -230,87 +232,84 @@ const ModelSettingsPanel: React.FC = () => {
                     type="button"
                     active={isVisible}
                     onClick={() => toggleTypeVisibility(type)}
-                    className={`h-8 px-3 text-xs ${!isVisible ? 'opacity-40' : ''}`}
+                    className="h-8 px-3 text-xs"
                   >
                     {getTypeLabel(type)}
                   </UiChipButton>
                 )
               })}
-            </div>
           </div>
-        </UiPanel>
-      </div>
+        </div>
+      </UiGroup>
 
-      {/* 模型列表 */}
-      <div>
-        <h4 className="text-xs font-medium text-text-muted mb-3 uppercase tracking-wider">{t('modelSettings.listTitle')}</h4>
-        <div className="space-y-3">
-          {providers.map(provider => {
+      <UiGroup title={t('modelSettings.listTitle')} titleTone="overline" gap="stack">
+          {providers.map((provider, providerIndex) => {
             const stats = getProviderStats(provider)
             return (
-              <UiPanel key={provider.id} className="overflow-hidden">
-                {/* 供应商标题：卡片内部只用分隔线切分，不再叠一层底色 */}
-                <div className="px-4 py-3 border-b border-border-dark flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <h5 className="text-sm font-medium text-white">{provider.name}</h5>
-                    <span className="text-xs text-text-faint">
-                      {t('modelSettings.visibleCount', { visible: stats.visible, total: stats.total })}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
+              <UiGroup
+                key={provider.id}
+                divided={providerIndex > 0}
+                title={provider.name}
+                description={t('modelSettings.visibleCount', { visible: stats.visible, total: stats.total })}
+                gap="none"
+                actions={(
+                  <>
                     <UiButton
                       type="button"
                       size="sm"
-                      variant="ghost"
+                      variant="muted"
                       onClick={() => showAllModelsForProvider(provider.id)}
-                      className="h-7 px-2.5 text-xs text-brand-300"
+                      className="h-7 px-2.5 text-xs"
                     >
                       {t('modelSettings.actions.showAll')}
                     </UiButton>
-                    <span className="text-text-faint">|</span>
                     <UiButton
                       type="button"
                       size="sm"
-                      variant="ghost"
+                      variant="muted"
                       onClick={() => hideAllModelsForProvider(provider.id)}
-                      className="h-7 px-2.5 text-xs text-text-muted"
+                      className="h-7 px-2.5 text-xs"
                     >
                       {t('modelSettings.actions.hideAll')}
                     </UiButton>
-                  </div>
-                </div>
-
-                {/* 模型列表 */}
-                <div className="p-2">
+                  </>
+                )}
+              >
+                <div className="divide-y divide-border-dark/60">
                   {provider.models.map(model => {
                     const isHidden = isModelHidden(provider.id, model.id, model.type)
+                    const statusText = isHidden
+                      ? t('modelSettings.status.hidden')
+                      : t('modelSettings.status.visible')
                     return (
-                      <UiOptionButton
+                      <div
                         key={model.id}
-                        type="button"
-                        active={!isHidden}
-                        variant="menu"
-                        onClick={() => toggleModelVisibility(provider.id, model.id)}
-                        className={`mb-1 w-full justify-between px-3 py-2.5 ${isHidden ? 'opacity-40' : 'opacity-100'}`}
+                        className="flex min-h-12 items-center justify-between gap-4 py-2.5"
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm text-white">{model.name}</span>
+                        <div className={`flex min-w-0 items-center gap-3 ${isHidden ? 'opacity-60' : ''}`}>
+                          <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.name}</span>
                           <span className={`text-xs px-2 py-0.5 rounded border ${getTypeBadgeColor(model.type)}`}>
                             {getTypeLabel(model.type)}
                           </span>
                         </div>
-                        <div className="text-xs text-text-faint">
-                          {isHidden ? t('modelSettings.status.hidden') : t('modelSettings.status.visible')}
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className={UI_TEXT_META_CLASS}>{statusText}</span>
+                          <Toggle
+                            checked={!isHidden}
+                            onChange={() => toggleModelVisibility(provider.id, model.id)}
+                            onText={t('modelSettings.status.visible')}
+                            offText={t('modelSettings.status.hidden')}
+                            ariaLabel={`${model.name} · ${statusText}`}
+                          />
                         </div>
-                      </UiOptionButton>
+                      </div>
                     )
                   })}
                 </div>
-              </UiPanel>
+              </UiGroup>
             )
           })}
-        </div>
-      </div>
+      </UiGroup>
     </div>
   )
 }

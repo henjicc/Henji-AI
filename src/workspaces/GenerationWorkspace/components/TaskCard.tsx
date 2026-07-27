@@ -12,6 +12,7 @@ import {
   UiIconButton,
   UiLoading,
   UI_INSET_SURFACE_CLASS,
+  UI_TEXT_META_CLASS,
   UI_META_BADGE_ACCENT_CLASS,
   UI_META_BADGE_CLASS,
 } from "@/components/ui"
@@ -400,7 +401,7 @@ const TaskCard = React.memo(function TaskCard({
         <div className="min-w-0 flex-1 relative">
           <div className="pr-48">
             <TaskPrompt prompt={task.prompt} />
-            <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
+            <div className={`mt-2 flex items-center gap-3 ${UI_TEXT_META_CLASS}`}>
               <div className="flex flex-wrap gap-2">
                 <span className={UI_META_BADGE_CLASS}>
                   {typeLabel}

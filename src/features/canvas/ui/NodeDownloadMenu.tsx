@@ -1,6 +1,6 @@
 import type { RefObject } from 'react';
 import { Download, FolderOpen } from 'lucide-react';
-import { UiOptionButton, UiPanel } from '@/components/ui';
+import { UI_TEXT_META_CLASS, UiOptionButton, UiPanel } from '@/components/ui';
 
 interface DownloadMenuPosition {
   x: number;
@@ -67,7 +67,7 @@ export function NodeDownloadMenu({
           ))}
         </div>
       ) : (
-        <div className="mt-1 border-t border-veil-subtle px-2.5 pt-2 text-xs text-text-muted">
+        <div className={`mt-1 border-t border-veil-subtle px-2.5 pt-2 ${UI_TEXT_META_CLASS}`}>
           {noPresetHintLabel}
         </div>
       )}

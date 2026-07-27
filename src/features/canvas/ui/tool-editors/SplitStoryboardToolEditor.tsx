@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { UiInput, UiRangeInput } from '@/components/ui';
+import {
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
+  UiInput,
+  UiRangeInput,
+} from '@/components/ui';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import type { VisualToolEditorProps } from './types';
 import { NumberStepper } from './splitStoryboard/NumberStepper';
@@ -147,7 +152,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-2">
-        <div className="flex items-center justify-between text-xs text-text-muted">
+        <div className={`flex items-center justify-between ${UI_TEXT_META_CLASS}`}>
           <span>原图 + 切割预览</span>
           {naturalSize && (
             <span>
@@ -205,7 +210,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
           </div>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-text-muted">
+        <div className={`flex items-center gap-3 ${UI_TEXT_META_CLASS}`}>
           <div className="inline-flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-sm bg-red-400/70" />
             红色区域为切割时会丢弃的分割线像素
@@ -214,7 +219,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
       </div>
 
       <div className="space-y-4 rounded-xl border border-veil-subtle bg-bg-dark/75 p-3.5">
-        <div className="text-sm font-medium text-text-dark">切割参数</div>
+        <div className={UI_TEXT_SECTION_CLASS}>切割参数</div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
           <NumberStepper
@@ -234,7 +239,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs text-text-muted">
+          <div className={`flex items-center justify-between ${UI_TEXT_META_CLASS}`}>
             <span>分割线粗细</span>
             <span>
               {formatPercent(lineThicknessPercent)}
@@ -260,7 +265,7 @@ export function SplitStoryboardToolEditor({ sourceImageUrl, options, onOptionsCh
           />
         </div>
 
-        <div className="rounded-lg border border-veil-subtle bg-bg-dark/80 px-3 py-2 text-xs text-text-muted">
+        <div className={`rounded-lg border border-veil-subtle bg-bg-dark/80 px-3 py-2 ${UI_TEXT_META_CLASS}`}>
           <div className="flex items-center justify-between">
             <span>输出小格数量</span>
             <span className="font-medium text-text-dark">{rows * cols}</span>

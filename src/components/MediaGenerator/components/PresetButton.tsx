@@ -7,7 +7,7 @@
 import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PresetManager } from '@/components/Presets/PresetManager'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_TEXT_LABEL_CLASS, UiButton } from '@/components/ui'
 
 
 interface PresetButtonProps {
@@ -22,7 +22,7 @@ export function PresetButton({ currentModelId, disabled }: PresetButtonProps) {
   return (
     <>
       <div className="relative inline-block">
-        <label className="block text-sm font-medium mb-1 text-text-soft">{t('presets.label')}</label>
+        <label className={`mb-1 block ${UI_TEXT_LABEL_CLASS}`}>{t('presets.label')}</label>
         <UiButton
           variant="muted"
           size="sm"

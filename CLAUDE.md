@@ -133,6 +133,7 @@ npm run lint                   # 前端 lint
 - **通用优先**：能复用现有通用组件时，优先复用现成的 `Ui*`、`Dropdown`、`PanelTrigger` 等组件
 - **新增门槛**：只有在现有通用组件确实覆盖不了需求时，才考虑新增组件；动手前先告诉用户原因和替代方案，等用户确认后再创建
 - **样式令牌规则**：通用视觉 token 在 `src/components/ui/styleTokens.ts` 维护，业务组件不直接复制 token 字符串
+- **选中态词汇表**：导航（正在看哪里）使用中性层底 + 强调文字 + 方向指示条；单选项（当前值）使用强品牌实底 + 白字；多选/标签使用强调描边 + 中性层底 + 强调文字；布尔状态只强调 `UiSwitch` / `UiCheckbox` 控件本体，禁止用整行实底表达“已启用”
 - **颜色令牌规则**：颜色值统一由 `src/index.css`（CSS 变量）+ `tailwind.config.js`（语义色映射）+ `src/core/theme/colorTokens.ts`（TS 常量）提供
 - **颜色使用规则**：业务组件优先使用语义类（如 `bg-app`/`text-text-dark`/`border-border-dark`）与 `styleTokens`
 - **禁止固定调色板（ESLint 硬拦）**：一切 `*-zinc-*` 都不会跟随主题预设（设置→界面→主题外观可整体替换 9 个语义色），必须改用语义色。底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`（中间两档由 `runtimeTheme.applyTextScale` 派生）；边框 `border-border-dark`；叠在图片/视频/画布上的边框与底色用 `veil` 六档

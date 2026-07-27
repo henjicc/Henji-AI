@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiModal } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS, UiButton, UiModal } from '@/components/ui'
 
 export interface ClearHistoryDialogProps {
   open: boolean
@@ -32,8 +32,8 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
       widthClassName="w-[400px]"
       contentClassName="p-4"
     >
-      <div className="text-base text-white">{t('ui:workspace.clearDialog.title')}</div>
-      <div className="mt-2 text-sm text-text-soft">{t('ui:workspace.clearDialog.subtitle')}</div>
+      <div className={UI_TEXT_TITLE_CLASS}>{t('ui:workspace.clearDialog.title')}</div>
+      <div className={`mt-2 ${UI_TEXT_BODY_CLASS}`}>{t('ui:workspace.clearDialog.subtitle')}</div>
 
       <div className="mt-4 flex flex-col gap-2">
         <UiButton

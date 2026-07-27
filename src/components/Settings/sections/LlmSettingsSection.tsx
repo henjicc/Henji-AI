@@ -1,6 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react'
-import { Dropdown, UiButton, UiEmpty, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton, UiPanel, UiSwitch } from '@/components/ui'
+import {
+  Dropdown,
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
+  UiButton,
+  UiEmpty,
+  UiIconButton,
+  UiInput,
+  UiLoading,
+  UiModal,
+  UiOptionButton,
+  UiPanel,
+  UiSwitch,
+} from '@/components/ui'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import ApiKeyInput from '../components/ApiKeyInput'
 import type { LlmModelConfig, LlmProviderConfig, LlmReasoningConfig, LlmReasoningEffort } from '@/core/llm/types'
@@ -252,8 +267,8 @@ const LlmSettingsSection: React.FC = () => {
       <AgentModelProfilesSection config={config} saveConfig={saveConfig} />
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-sm font-medium text-text-dark">供应商配置</div>
-          <div className="text-xs text-text-muted">一行一个供应商，点击可展开详细设置</div>
+          <div className={UI_TEXT_SECTION_CLASS}>供应商配置</div>
+          <div className={UI_TEXT_META_CLASS}>一行一个供应商，点击可展开详细设置</div>
         </div>
         <UiButton type="button" variant="muted" onClick={() => openProviderManager()}>
           <Settings2 size={14} className="mr-1.5" />
@@ -288,7 +303,7 @@ const LlmSettingsSection: React.FC = () => {
                 }}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-text-dark">{provider.displayName}</div>
+                  <div className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{provider.displayName}</div>
                 </div>
                 <div className="flex items-center gap-3" onClick={(event) => event.stopPropagation()}>
                   <UiSwitch
@@ -309,7 +324,7 @@ const LlmSettingsSection: React.FC = () => {
                 <div className="min-h-0 overflow-hidden">
                   <div className={`px-4 py-4 transition-transform duration-200 ease-out ${expanded ? 'translate-y-0' : '-translate-y-2'}`}>
                     <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium text-text-dark">
+                      <div className={`flex items-center gap-2 ${UI_TEXT_LABEL_CLASS}`}>
                         <Settings2 size={15} />
                         <span>基础配置</span>
                       </div>
@@ -333,15 +348,15 @@ const LlmSettingsSection: React.FC = () => {
                         }}
                         placeholder="API 地址，例如 https://api.deepseek.com"
                       />
-                      <div className="text-xs text-text-muted">
+                      <div className={UI_TEXT_META_CLASS}>
                         预览：{resolveApiPreview(provider) || '请先填写 API 地址'}
                       </div>
 
                       {provider.reasoningConfigurable !== false ? (
                         <div className="grid gap-3 border-b border-border-dark pb-4 sm:grid-cols-[minmax(0,1fr)_330px]">
                           <div className="min-w-0">
-                            <div className="text-sm font-medium text-text-dark">思考模式</div>
-                            <div className="text-xs text-text-muted">关闭表示不请求思考过程；选择档位后会在优化时流式展示思考内容。</div>
+                            <div className={UI_TEXT_LABEL_CLASS}>思考模式</div>
+                            <div className={UI_TEXT_META_CLASS}>关闭表示不请求思考过程；选择档位后会在优化时流式展示思考内容。</div>
                           </div>
                           <Dropdown<ReasoningModeValue>
                             value={resolveReasoningMode(provider)}
@@ -363,8 +378,8 @@ const LlmSettingsSection: React.FC = () => {
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
-                            <div className="text-sm font-medium text-text-dark">模型</div>
-                            <div className="text-xs text-text-muted">支持自动获取或手动添加</div>
+                            <div className={UI_TEXT_LABEL_CLASS}>模型</div>
+                            <div className={UI_TEXT_META_CLASS}>支持自动获取或手动添加</div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <UiButton
@@ -404,8 +419,8 @@ const LlmSettingsSection: React.FC = () => {
                               className="flex w-full items-center justify-between gap-3 p-3 text-left"
                             >
                               <div className="min-w-0 text-left">
-                                <div className="truncate text-sm font-medium text-text-dark">{model.displayName}</div>
-                                <div className="truncate text-xs text-text-muted">{model.modelId}</div>
+                                <div className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.displayName}</div>
+                                <div className={`truncate ${UI_TEXT_META_CLASS}`}>{model.modelId}</div>
                               </div>
                               <div className="flex items-center gap-1">
                                 <UiIconButton
@@ -487,8 +502,8 @@ const LlmSettingsSection: React.FC = () => {
 
           <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
             <UiPanel variant="inset" className="px-3 py-2">
-              <div className="text-xs text-text-muted">当前编辑</div>
-              <div className="truncate text-sm font-medium text-text-dark">
+              <div className={UI_TEXT_META_CLASS}>当前编辑</div>
+              <div className={`truncate ${UI_TEXT_LABEL_CLASS}`}>
                 {activeProviderDraft.displayName || '新建供应商'}
               </div>
             </UiPanel>
@@ -516,10 +531,10 @@ const LlmSettingsSection: React.FC = () => {
               onChange={(e) => setProviderDraftPatch({ baseUrl: e.target.value })}
               placeholder="API 地址，例如 https://api.deepseek.com"
             />
-            <div className="text-xs text-text-muted">
+            <div className={UI_TEXT_META_CLASS}>
               预览：{resolveApiPreview(activeProviderDraft) || '请先填写 API 地址'}
             </div>
-            <label className="inline-flex items-center gap-2 text-sm text-text-dark">
+            <label className={`inline-flex items-center gap-2 ${UI_TEXT_BODY_CLASS}`}>
               <UiSwitch
                 checked={activeProviderDraft.enabled !== false}
                 onCheckedChange={(checked) => setProviderDraftPatch({ enabled: checked })}

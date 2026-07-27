@@ -1,6 +1,15 @@
 import React, { useMemo } from 'react'
 import { Plus, Save, Star, Trash2 } from 'lucide-react'
-import { PromptEditor, UiButton, UiCheckbox, UiInput, UiOptionButton } from '@/components/ui'
+import {
+  PromptEditor,
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
+  UiButton,
+  UiCheckbox,
+  UiInput,
+  UiOptionButton,
+} from '@/components/ui'
 import Dropdown from '@/components/ui/Dropdown'
 import { toLegacyPromptString, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { DEFAULT_DEEPSEEK_PROVIDER_ID, createDefaultLlmConfig } from '@/core/llm/defaults'
@@ -168,7 +177,7 @@ export function PromptOptimizationProfilesPanel({
 
   if (!config || !selectedProfile) {
     return (
-      <div className="p-4 text-sm text-text-muted">
+      <div className={`p-4 ${UI_TEXT_BODY_CLASS}`}>
         正在加载提示词优化配置...
       </div>
     )
@@ -200,9 +209,9 @@ export function PromptOptimizationProfilesPanel({
     <div className="flex max-h-[min(680px,calc(100vh-96px))] flex-col p-4">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-medium text-text-dark">提示词优化配置</div>
+          <div className={UI_TEXT_SECTION_CLASS}>提示词优化配置</div>
         </div>
-        <div className="text-xs text-text-muted">
+        <div className={UI_TEXT_META_CLASS}>
           {selectedProfile.isDefault ? '默认配置' : '非默认配置'}
         </div>
       </div>
@@ -294,7 +303,7 @@ export function PromptOptimizationProfilesPanel({
             rows={5}
             placeholder="User Template，使用 {{prompt}} 插入当前提示词"
           />
-          <div className="flex flex-wrap items-center gap-4 text-sm text-text-dark">
+          <div className={`flex flex-wrap items-center gap-4 ${UI_TEXT_BODY_CLASS}`}>
             <label className="inline-flex items-center gap-2">
               <UiCheckbox
                 checked={selectedProfile.capabilities.image}

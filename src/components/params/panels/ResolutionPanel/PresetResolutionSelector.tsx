@@ -6,7 +6,7 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { PresetOption } from './types'
 import { getI18nText } from '@/core/types'
-import { UiOptionButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UiOptionButton } from '@/components/ui'
 
 export interface PresetResolutionSelectorProps {
   value: string
@@ -23,7 +23,7 @@ export const PresetResolutionSelector: React.FC<PresetResolutionSelectorProps> =
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="block text-xs text-text-muted">
+      <label className={UI_TEXT_LABEL_CLASS}>
         {t('resolutionPanel.resolution', { defaultValue: '分辨率' })}
       </label>
       <div className="flex flex-wrap justify-start gap-2">

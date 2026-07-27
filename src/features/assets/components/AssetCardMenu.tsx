@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Trash2 } from 'lucide-react'
-import { UiButton, UiChipButton, UiInput, UiPanel } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UiButton, UiChipButton, UiInput, UiPanel } from '@/components/ui'
 import type { AssetLibraryRecord, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { useI18n } from '@/hooks/useI18n'
 
@@ -72,11 +72,11 @@ export const AssetCardMenu: React.FC<Props> = ({ asset, anchor, libraries, avail
   return createPortal(
     <UiPanel ref={ref} className={`fixed z-dropdown w-80 p-3 transition-[opacity,transform] duration-150 ease-out motion-reduce:transition-none ${visible ? 'translate-y-0 scale-100 opacity-100' : `${placeAbove ? 'translate-y-1' : '-translate-y-1'} scale-[0.98] opacity-0`}`} style={{ left, top, transformOrigin: placeAbove ? 'bottom center' : 'top center' }} data-asset-card-menu>
       <div className="mb-3 truncate font-medium text-text-dark">{asset.displayName}</div>
-      <div className="mb-1.5 text-xs text-text-muted">{t('assetLibrary.tags')}</div>
+      <div className={`mb-1.5 ${UI_TEXT_LABEL_CLASS}`}>{t('assetLibrary.tags')}</div>
       <div className="mb-2 flex flex-wrap gap-1.5"><UiChipButton active disabled className="!h-7 !px-2 text-xs">{t(`assetLibrary.${asset.mediaType}`)}</UiChipButton>{tags.map((tag) => <UiChipButton key={tag} active className="!h-7 !px-2 text-xs" onClick={() => void applyTags(tags.filter((item) => item !== tag))}>{tag}</UiChipButton>)}</div>
       <UiInput className="!h-8 !px-2 text-xs" value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addDraftTag() }} placeholder={t('assetLibrary.tagPlaceholder')} />
       {tagDraft && suggestions.length > 0 && <div className="mt-1 flex flex-wrap gap-1">{suggestions.map((tag) => <UiChipButton key={tag} className="!h-7 !px-2 text-xs" onClick={() => { setTagDraft(''); void applyTags([...tags, tag]) }}>{tag}</UiChipButton>)}</div>}
-      <div className="mb-1.5 mt-3 text-xs text-text-muted">{t('assetLibrary.membership')}</div>
+      <div className={`mb-1.5 mt-3 ${UI_TEXT_LABEL_CLASS}`}>{t('assetLibrary.membership')}</div>
       {libraries.length > 6 && <UiInput className="mb-2 !h-8 !px-2 text-xs" value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)} placeholder={t('assetLibrary.searchLibraries')} />}
       <div className="max-h-32 overflow-y-auto"><div className="flex flex-wrap gap-1.5">{filteredLibraries.map((library) => <UiChipButton key={library.id} active={libraryIds.includes(library.id)} className="!h-8 !px-2.5 text-xs" onClick={() => void toggleLibrary(library.id)}>{library.name}</UiChipButton>)}</div></div>
       <UiButton className="mt-3 w-full text-red-300 hover:bg-red-600/35" size="sm" onClick={() => void onDelete()}><Trash2 className="mr-2 h-4 w-4" />{t('assetLibrary.deleteAsset')}</UiButton>

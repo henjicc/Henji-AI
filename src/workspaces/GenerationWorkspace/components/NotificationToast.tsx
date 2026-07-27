@@ -1,5 +1,6 @@
 import React from 'react'
 import type { ToastNotification } from '../types'
+import { UI_TEXT_BODY_CLASS } from '@/components/ui'
 
 export interface NotificationToastProps {
   notification: ToastNotification | null
@@ -33,7 +34,7 @@ export function NotificationToast({ notification, visible }: NotificationToastPr
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         )}
-        <span className="font-medium text-sm">{notification.message}</span>
+        <span className={UI_TEXT_BODY_CLASS}>{notification.message}</span>
       </div>
     </div>
   )

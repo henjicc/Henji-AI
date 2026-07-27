@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Library, Pencil, Plus, Trash2, X } from 'lucide-react'
-import { UiIconButton, UiInput, UiNavButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UiIconButton, UiInput, UiNavButton } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType } from '@/platform/contracts/assetLibrary'
 
 interface SidebarLabels {
@@ -87,7 +87,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
         ))}
       </nav>
 
-      <div className="flex items-center justify-between px-3 pb-1 pt-2 text-xs font-medium text-text-muted">
+      <div className={`flex items-center justify-between px-3 pb-1 pt-2 ${UI_TEXT_LABEL_CLASS}`}>
         <span>{labels.categories}</span>
         <UiIconButton className="!h-7 !w-7" onClick={() => setCreating(true)} title={labels.create}><Plus className="h-3.5 w-3.5" /></UiIconButton>
       </div>

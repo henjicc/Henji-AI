@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { UiOptionButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiOptionButton } from '@/components/ui'
 import AudioPlayer from '@/components/AudioPlayer'
 import { Upload } from 'lucide-react'
 
@@ -76,8 +76,8 @@ export function AudioPreviewCard({
       {(title || subtitle || headerAction) && (
         <div className="mb-2 flex items-start justify-between gap-2">
           <div className="min-w-0 space-y-1">
-            <div className="text-xs text-text-muted">{title || ''}</div>
-            {subtitle ? <div className="text-xs text-text-soft">{subtitle}</div> : null}
+            <div className={UI_TEXT_META_CLASS}>{title || ''}</div>
+            {subtitle ? <div className={UI_TEXT_META_CLASS}>{subtitle}</div> : null}
           </div>
           {headerAction && <div className="shrink-0">{headerAction}</div>}
         </div>
@@ -122,7 +122,7 @@ export function AudioPreviewCard({
                   </UiOptionButton>
                 )}
                 {canDrop && (
-                  <span className="text-2xs text-text-faint">
+                  <span className={UI_TEXT_META_CLASS}>
                     {uploadHintText || '或拖放文件到此处'}
                   </span>
                 )}

@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiButton, UiModal } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS, UiButton, UiModal } from '@/components/ui'
 
 type DialogActionVariant = 'primary' | 'secondary' | 'danger'
 
@@ -52,8 +52,8 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, title, descriptio
       </UiButton>
     ))}
   >
-    <div className="text-base text-white">{title}</div>
-    {description ? <div className="mt-2 text-sm text-text-soft">{description}</div> : null}
+    <div className={UI_TEXT_TITLE_CLASS}>{title}</div>
+    {description ? <div className={`mt-2 ${UI_TEXT_BODY_CLASS}`}>{description}</div> : null}
   </UiModal>
 )
 

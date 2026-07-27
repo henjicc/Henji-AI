@@ -8,6 +8,7 @@ import {
 import type { SuggestionKeyDownProps, SuggestionProps } from '@tiptap/suggestion'
 
 import { UiOptionButton } from '@/components/ui/primitives'
+import { UI_TEXT_META_CLASS } from '@/components/ui/styleTokens'
 import type { PromptReferenceItem, PromptVariableItem } from '../types'
 
 export type PromptSuggestionItem =
@@ -70,7 +71,7 @@ export const PromptSuggestionList = forwardRef<
   if (items.length === 0) {
     return (
       <div
-        className="rounded-lg border border-border-dark bg-panel px-3 py-2 text-xs text-text-muted shadow-panel"
+        className={`rounded-lg border border-border-dark bg-panel px-3 py-2 shadow-panel ${UI_TEXT_META_CLASS}`}
         data-prompt-suggestion-portal="true"
       >
         没有匹配项

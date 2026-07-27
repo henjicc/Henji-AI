@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronDown, SearchCheck } from 'lucide-react'
 import { useState } from 'react'
 
-import { UiButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import { UI_INSET_SURFACE_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 
 import type { AgentToolActivity, AgentToolActivityGroup } from './agentRunReducer'
 import { ToolActivityCard } from './ToolActivityCard'
@@ -48,8 +48,8 @@ export function ToolActivityGroup({
         <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
           {expanded ? <CheckCircle2 className="h-3 w-3" /> : <SearchCheck className="h-3 w-3" />}
         </span>
-        <span className="shrink-0 text-2xs font-medium text-text-dark">已查询 {group.activities.length} 项</span>
-        <span className="min-w-0 flex-1 truncate text-3xs text-text-muted">{summarizeTitles(group.activities)}</span>
+        <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>已查询 {group.activities.length} 项</span>
+        <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>{summarizeTitles(group.activities)}</span>
         <ChevronDown className={`h-3 w-3 shrink-0 text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </UiButton>
 

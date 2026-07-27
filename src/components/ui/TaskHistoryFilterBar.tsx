@@ -8,6 +8,7 @@ import { useI18n } from '@/hooks/useI18n'
 import { UiIconButton, UiInput } from './primitives'
 import Dropdown from './Dropdown'
 import { UiDatePicker } from './UiDatePicker'
+import { UI_TEXT_META_CLASS } from './styleTokens'
 
 export interface UiTaskHistoryModelOption {
   label: string
@@ -288,7 +289,7 @@ export function UiTaskHistoryFilterBar({
           </div>
 
           {timePreset === 'custom' && (
-            <div className="flex items-center gap-1 text-xs text-text-muted">
+            <div className={`flex items-center gap-1 ${UI_TEXT_META_CLASS}`}>
               <UiDatePicker
                 value={startDate}
                 onChange={onStartDateChange}

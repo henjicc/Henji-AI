@@ -1,6 +1,6 @@
 import React from 'react'
 import { Settings2, Sparkles } from 'lucide-react'
-import { UiButton, UiEmpty, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_SECTION_CLASS, UiButton, UiEmpty, UiOptionButton } from '@/components/ui'
 import type { PromptOptimizationProfile } from '@/core/llm/types'
 
 interface PromptOptimizationSelectorPanelProps {
@@ -21,7 +21,7 @@ export function PromptOptimizationSelectorPanel({
   return (
     <div className="flex max-h-[min(560px,calc(100vh-96px))] flex-col p-3">
       <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="text-sm font-medium text-text-dark">选择提示词优化配置</div>
+        <div className={UI_TEXT_SECTION_CLASS}>选择提示词优化配置</div>
         <UiButton
           type="button"
           variant="ghost"

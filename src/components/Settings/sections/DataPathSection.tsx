@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiButton, UiInput, UI_FIELD_CONTROL_HEIGHT_CLASS } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import SettingsDialog from '../components/SettingsDialog'
 import SettingsProgressDialog from '../components/SettingsProgressDialog'
@@ -34,7 +34,7 @@ const DataPathSection: React.FC = () => {
   return (
     <>
       <SectionCard title={t('sections.dataPath.title')}>
-        <label className="block text-sm font-medium mb-2 text-text-soft">
+        <label className={`${UI_FIELD_LABEL_CLASS} mb-2`}>
           {t('sections.dataPath.pathLabel')}
         </label>
         <div className="flex items-stretch gap-2">
@@ -62,7 +62,7 @@ const DataPathSection: React.FC = () => {
             {t('actions.resetDefault')}
           </UiButton>
         </div>
-        <p className="mt-2 text-xs text-text-faint">{t('sections.dataPath.pathHint')}</p>
+        <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.dataPath.pathHint')}</p>
       </SectionCard>
 
       <SettingsDialog

@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UiButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
   renderPromptOptimizationTemplate,
@@ -354,7 +354,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
                 onConfigChange={setConfig}
               />
               {streaming && output ? (
-                <div className="mx-4 mb-4 max-h-28 overflow-y-auto rounded-lg border border-border-dark bg-app p-3 text-xs leading-5 text-text-muted">
+                <div className={`mx-4 mb-4 max-h-28 overflow-y-auto rounded-lg border border-border-dark bg-app p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
                   {output}
                 </div>
               ) : null}

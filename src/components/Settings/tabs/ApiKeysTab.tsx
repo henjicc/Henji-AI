@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiButton, UI_SECTION_STACK_CLASS } from '@/components/ui'
+import { UI_SECTION_STACK_CLASS, UI_TEXT_BODY_CLASS, UiButton } from '@/components/ui'
 import { useApiKeys } from '../hooks/useApiKeys'
 import ApiKeyInput from '../components/ApiKeyInput'
 import { useI18n } from '@/hooks/useI18n'
@@ -45,7 +45,7 @@ function renderGuideParts(
         onClick={() => openExternal(link.url)}
         variant="ghost"
         size="sm"
-        className="!inline !h-auto !min-h-0 !rounded-none !border-0 !bg-transparent !px-0 !py-0 align-baseline !text-sm !font-medium !leading-6 !text-brand-300 hover:!bg-transparent hover:!text-brand-300 hover:underline [&_svg]:ml-0.5 [&_svg]:inline-block [&_svg]:translate-y-[-1px]"
+        className={`!inline !h-auto !min-h-0 !rounded-none !border-0 !bg-transparent !px-0 !py-0 align-baseline !font-medium !leading-6 !text-brand-300 hover:!bg-transparent hover:!text-brand-300 hover:underline [&_svg]:ml-0.5 [&_svg]:inline-block [&_svg]:translate-y-[-1px] ${UI_TEXT_BODY_CLASS}`}
       >
         {labels[link.id] ?? link.id}
         <ExternalLink size={12} />
@@ -64,7 +64,7 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
   return (
     <div className="p-4 space-y-5">
       {showKeyMigrationHint ? (
-        <p className="rounded-lg border border-border-dark bg-layer px-3 py-2 text-sm leading-6 text-text-muted">
+        <p className={`rounded-lg border border-border-dark bg-layer px-3 py-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>
           {t('apiKeys.migrationHint')}
         </p>
       ) : null}
@@ -82,7 +82,6 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
               <SectionCard
                 key={provider.id}
                 title={title}
-                titleClassName="text-sm normal-case tracking-normal text-text-dark"
               >
                 <ApiKeyInput
                   value={keys[provider.id]}
@@ -94,7 +93,7 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
                   hideLabel={t('apiKeys.visibility.hide')}
                 />
                 {provider.links.length > 0 ? (
-                  <p className="text-sm leading-6 text-text-muted">
+                  <p className={`leading-6 ${UI_TEXT_BODY_CLASS}`}>
                     {renderGuideParts(guide, provider.links, linkLabels, openExternal)}
                   </p>
                 ) : null}
@@ -126,4 +125,3 @@ const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
 }
 
 export default ApiKeysTab
-

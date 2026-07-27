@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { UiButton, UiIconButton } from './primitives'
+import { UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS, UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS } from './styleTokens'
 
 interface CalendarCell {
   date: Date
@@ -134,7 +135,7 @@ export function UiDatePicker({
       {isOpen && (
         <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[248px] rounded-lg border border-border-dark bg-panel p-2 shadow-panel">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium text-text-dark">{monthLabel}</span>
+            <span className={UI_TEXT_SECTION_CLASS}>{monthLabel}</span>
             <div className="flex items-center gap-1">
               <UiIconButton
                 type="button"
@@ -159,7 +160,7 @@ export function UiDatePicker({
 
           <div className="grid grid-cols-7 gap-1 px-0.5 pb-1">
             {weekdayLabels.map((label) => (
-              <span key={label} className="text-center text-2xs text-text-muted">
+              <span key={label} className={`text-center ${UI_TEXT_META_CLASS}`}>
                 {label}
               </span>
             ))}
@@ -178,7 +179,7 @@ export function UiDatePicker({
                   size="sm"
                   className={`!h-8 !w-8 !min-h-0 !rounded-md !px-0 !text-sm !font-normal ${
                     isSelected
-                      ? '!border-accent !bg-brand-600 !text-white hover:!brightness-110'
+                      ? `${UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS} hover:!brightness-110`
                       : isToday
                         ? '!border-border-dark !bg-layer !text-text-dark'
                         : '!border-transparent !bg-transparent hover:!bg-layer'

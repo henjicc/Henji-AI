@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { UI_TEXT_BODY_CLASS } from '@/components/ui'
 
 interface AssistantMarkdownProps {
   children: string
@@ -17,7 +18,7 @@ const markdownComponents: Components = {
 function AssistantMarkdownView({ children }: AssistantMarkdownProps): JSX.Element {
   return (
     <div className={[
-      'min-w-0 break-words text-sm leading-6 text-text-dark',
+      `min-w-0 break-words leading-6 ${UI_TEXT_BODY_CLASS}`,
       '[&_a]:text-accent [&_a]:underline-offset-2 hover:[&_a]:underline',
       '[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border-dark [&_blockquote]:pl-3 [&_blockquote]:text-text-muted',
       '[&_code]:break-words [&_code]:rounded [&_code]:bg-layer [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.9em]',

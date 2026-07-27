@@ -137,7 +137,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   // Tab 组件 - 居中显示
   const TabBar = () => (
     <div
-      className="flex items-center gap-0.5 bg-black/20 rounded-lg p-0.5"
+      className="flex items-center gap-0.5 rounded-lg bg-app/40 p-0.5"
       style={noDragRegionStyle}
     >
       {tabs.map((tab) => (
@@ -145,14 +145,9 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           key={tab.id}
           type="button"
           onClick={() => tab.id === 'assets' ? onAssetClick?.() : onTabChange?.(tab.id)}
-          className={`
-            !h-7 gap-1.5 px-3 py-1 rounded-md text-xs font-medium border-0
-            transition-colors duration-200 ease-out
-            ${(tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id)
-              ? 'bg-accent/30 !text-brand-300'
-              : 'text-text-muted hover:text-text-soft hover:bg-white/10 bg-transparent'
-            }
-          `}
+          active={tab.id === 'assets' ? assetView !== 'closed' : activeTab === tab.id}
+          selectionRole="navigation"
+          className="!h-7 gap-1.5 rounded-md border-0 px-3 py-1 text-xs font-medium"
         >
           {tab.icon}
           <span>{tab.label}</span>
@@ -227,7 +222,15 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           </div>
 
           <div className="absolute right-3 top-1/2 -translate-y-1/2" style={noDragRegionStyle} data-window-nodrag>
-            <UiIconButton type="button" active={assistantOpen} onClick={onAssistantClick} className="!h-7 !w-7 border-0 bg-transparent" title="智能助手">
+            <UiIconButton
+              type="button"
+              active={assistantOpen}
+              showBorder={false}
+              appearance="hover-only"
+              onClick={onAssistantClick}
+              className="!h-7 !w-7"
+              title="智能助手"
+            >
               <Sparkles className="h-4 w-4" />
             </UiIconButton>
           </div>
@@ -256,8 +259,10 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             <UiIconButton
               type="button"
               active={assistantOpen}
+              showBorder={false}
+              appearance="hover-only"
               onClick={onAssistantClick}
-              className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-surface-dark/80"
+              className="!h-8 !w-8 !rounded"
               title="智能助手"
             >
               <Sparkles className="h-4 w-4" />

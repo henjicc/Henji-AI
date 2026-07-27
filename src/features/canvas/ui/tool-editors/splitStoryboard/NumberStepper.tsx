@@ -1,4 +1,4 @@
-import { UiButton, UiInput } from '@/components/ui';
+import { UI_TEXT_META_CLASS, UiButton, UiInput } from '@/components/ui';
 
 interface NumberStepperProps {
   label: string;
@@ -14,7 +14,7 @@ export function NumberStepper({ label, value, min, max, onChange }: NumberSteppe
 
   return (
     <div className="space-y-1.5">
-      <div className="text-xs text-text-muted">{label}</div>
+      <div className={UI_TEXT_META_CLASS}>{label}</div>
       <div className="flex items-center gap-2">
         <UiButton
           type="button"

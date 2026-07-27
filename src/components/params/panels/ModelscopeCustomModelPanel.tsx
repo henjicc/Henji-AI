@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import ModelscopeCustomModelManager from '@/components/MediaGenerator/components/ModelscopeCustomModelManager'
 import { useI18n } from '@/hooks/useI18n'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 import {
   modelscopeCustomModelService,
   type ModelscopeCustomModelEntry,
@@ -77,7 +78,7 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
   return (
     <div className="flex flex-col h-full max-h-full overflow-hidden">
       <div className="px-4 pt-3 pb-2">
-        <div className="text-xs text-text-muted mb-2">{t('modelscopeCustomModelPanel.label')}</div>
+        <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('modelscopeCustomModelPanel.label')}</div>
         <Dropdown
           value={value || ''}
           display={display}
@@ -86,7 +87,7 @@ export const ModelscopeCustomModelPanel: React.FC<ModelscopeCustomModelPanelProp
           buttonClassName="w-full"
         />
         {selectedModel && (
-          <div className="mt-2 text-xs text-text-faint">
+          <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
             <span className="text-text-muted">{t('modelscopeCustomModelPanel.modelIdLabel')}</span>
             <span className="break-all">{selectedModel.id}</span>
           </div>

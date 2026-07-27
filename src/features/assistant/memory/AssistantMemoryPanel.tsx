@@ -28,6 +28,10 @@ import {
   UiSwitch,
   UiTextArea,
   UI_INSET_SURFACE_CLASS,
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
 } from '@/components/ui'
 import type { AgentMemoryRecord, AgentMemoryState } from '@/core/assistant/memory'
 
@@ -90,7 +94,7 @@ export function AssistantMemoryPanel(): JSX.Element {
     <section className="flex min-h-0 flex-1 flex-col bg-app">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark px-3">
         <BrainCircuit className="h-3.5 w-3.5 text-accent" />
-        <span className="flex-1 text-xs font-medium text-text-dark">助手记忆</span>
+        <span className={`flex-1 ${UI_TEXT_SECTION_CLASS}`}>助手记忆</span>
         <UiIconButton
           type="button"
           title="刷新助手记忆"
@@ -112,8 +116,8 @@ export function AssistantMemoryPanel(): JSX.Element {
             <div className={`rounded-lg ${UI_INSET_SURFACE_CLASS} p-2.5`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs font-medium text-text-dark">长期记忆</div>
-                  <div className="mt-0.5 text-3xs leading-4 text-text-muted">默认关闭；只有已确认且与任务相关的少量内容会注入。</div>
+                  <div className={UI_TEXT_LABEL_CLASS}>长期记忆</div>
+                  <div className={`mt-0.5 leading-4 ${UI_TEXT_META_CLASS}`}>默认关闭；只有已确认且与任务相关的少量内容会注入。</div>
                 </div>
                 <UiSwitch
                   checked={state.settings.enabled}
@@ -124,7 +128,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                 />
               </div>
               <div className="mt-2 flex items-center justify-between gap-3 border-t border-border-dark pt-2">
-                <span className="text-2xs text-text-muted">默认过期时间</span>
+                <span className={UI_TEXT_META_CLASS}>默认过期时间</span>
                 <Dropdown<number>
                   value={state.settings.defaultTtlDays}
                   options={ttlOptions}
@@ -139,7 +143,7 @@ export function AssistantMemoryPanel(): JSX.Element {
             {state.candidates.map((candidate) => (
               <article key={candidate.candidateId} className="rounded-lg border border-accent/30 bg-accent/5 p-2.5">
                 <div className="text-3xs font-medium text-accent">待确认记忆</div>
-                <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-text-dark">{candidate.content}</p>
+                <p className={`mt-1 whitespace-pre-wrap break-words leading-5 ${UI_TEXT_BODY_CLASS}`}>{candidate.content}</p>
                 <div className="mt-2 flex justify-end gap-1.5">
                   <UiButton
                     type="button"
@@ -176,7 +180,7 @@ export function AssistantMemoryPanel(): JSX.Element {
               >
                 <div className="flex items-start gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="text-3xs text-text-muted">
+                    <div className={UI_TEXT_META_CLASS}>
                       {scopeLabel(memory)} · {memory.kind} · {new Date(memory.createdAt).toLocaleDateString('zh-CN')}
                     </div>
                     {editingId === memory.memoryId ? (
@@ -188,9 +192,9 @@ export function AssistantMemoryPanel(): JSX.Element {
                         className="mt-1.5 text-xs"
                       />
                     ) : (
-                      <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-text-dark">{memory.content}</p>
+                      <p className={`mt-1 whitespace-pre-wrap break-words leading-5 ${UI_TEXT_BODY_CLASS}`}>{memory.content}</p>
                     )}
-                    <div className="mt-1 text-3xs text-text-muted">来源：{memory.sourceLabel}</div>
+                    <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>来源：{memory.sourceLabel}</div>
                   </div>
                   <div className="flex shrink-0 gap-1">
                     {editingId === memory.memoryId ? (

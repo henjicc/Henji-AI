@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { AlertTriangle, FileAudio, Film, Image as ImageIcon, MoreHorizontal, Play } from 'lucide-react'
-import { UiIconButton, UiInput, UiPanel } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiInput, UiPanel } from '@/components/ui'
 import { clearCompactDragPreview, setCompactDragPreview, setCompactWaveformDragPreview } from '@/contexts/dragDataTransfer'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { assetRecordToDragPayload, writeAssetDragPayload } from '../drag/assetDragPayload'
@@ -79,8 +79,8 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
         {asset.mediaType !== 'image' && <UiIconButton showBorder={false} aria-label={t('audioPlayer.playPause')} className="ui-glass absolute left-1/2 top-1/2 !h-10 !w-10 -translate-x-1/2 -translate-y-1/2 !rounded-full !border-transparent !bg-transparent !text-white" onClick={(event) => { event.stopPropagation(); onPreview(asset) }}><Play className="h-4 w-4" /></UiIconButton>}
       </div>
       <div className="min-w-0 px-2.5 py-2">
-        {editing ? <UiInput autoFocus className="!h-7 !px-1.5 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className="truncate text-sm text-text-dark" title="双击重命名" onDoubleClick={(event) => { event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
-        <div className="mt-1 flex items-center justify-between text-2xs text-text-muted">
+        {editing ? <UiInput autoFocus className="!h-7 !px-1.5 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className={`truncate ${UI_TEXT_BODY_CLASS}`} title="双击重命名" onDoubleClick={(event) => { event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
+        <div className={`mt-1 flex items-center justify-between ${UI_TEXT_META_CLASS}`}>
           <span className="flex min-w-0 items-center gap-1"><span className="rounded bg-layer px-1.5 py-0.5">{t(`assetLibrary.${asset.mediaType}`)}</span>{asset.tags[0] && <span className="max-w-20 truncate rounded bg-layer px-1.5 py-0.5">{asset.tags[0]}</span>}{asset.tags.length > 1 && <span>+{asset.tags.length - 1}</span>}</span><span>{asset.width && asset.height ? `${asset.width}×${asset.height}` : ''}</span>
         </div>
       </div>

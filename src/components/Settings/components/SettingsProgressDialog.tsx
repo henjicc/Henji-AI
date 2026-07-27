@@ -1,5 +1,5 @@
 import React from 'react'
-import { UiModal } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UI_TEXT_TITLE_CLASS, UiModal } from '@/components/ui'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import type { MigrationProgress } from '../hooks/useDataPath'
 
@@ -26,13 +26,13 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
       widthClassName="w-[400px]"
       contentClassName="p-4"
     >
-      <div className="text-base text-white">{title}</div>
+      <div className={UI_TEXT_TITLE_CLASS}>{title}</div>
       <div className="mt-4">
-        <div className="mb-2 truncate text-sm text-text-soft">{progress.file}</div>
-        <div className="mb-2 text-xs text-text-muted">{progress.current} / {progress.total}</div>
+        <div className="mb-2 truncate text-text-soft">{progress.file}</div>
+        <div className={`mb-2 ${UI_TEXT_META_CLASS}`}>{progress.current} / {progress.total}</div>
         <ProgressBar progress={ratio} showPercentage={false} duration={300} />
       </div>
-      <div className="mt-4 text-xs text-text-muted">{hint}</div>
+      <div className={`mt-4 ${UI_TEXT_META_CLASS}`}>{hint}</div>
     </UiModal>
   )
 }

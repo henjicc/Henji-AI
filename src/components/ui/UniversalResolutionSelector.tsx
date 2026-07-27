@@ -5,7 +5,7 @@ import { ResolutionConfig } from '@/types/schema'
 import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { calculateVisualizationSize } from '@/utils/aspectRatio'
 import { useI18n } from '@/hooks/useI18n'
-import { UiInput, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiInput, UiOptionButton } from '@/components/ui'
 
 const logger = createLogger('components.ui.UniversalResolutionSelector')
 
@@ -270,7 +270,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
         <div className="p-4">
           {baseSizeEditable && onBaseSizeChange && (
             <div className="mb-3">
-              <label className="block text-xs text-text-muted mb-2">{t('resolutionPanel.baseSizeLabel')}</label>
+              <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>{t('resolutionPanel.baseSizeLabel')}</label>
               <div className="flex items-center gap-2">
                 <UiInput
                   type="number"
@@ -290,7 +290,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                 />
                 <span className="text-xs text-text-muted whitespace-nowrap">PX</span>
               </div>
-              <div className="text-2xs text-text-faint mt-1">
+              <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
                 {t('resolutionPanel.baseSizeHint', { min: baseSizeMin, max: baseSizeMax })}
               </div>
             </div>
@@ -298,7 +298,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
 
           {!hideAspectRatio && options.length > 0 && (
             <div className={config.qualityOptions || config.customInput ? 'mb-3' : ''}>
-              <label className="block text-xs text-text-muted mb-2">
+              <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>
                 {config.type === 'aspect_ratio'
                   ? t('resolutionPanel.aspectRatioLabel')
                   : config.type === 'size'
@@ -337,7 +337,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
           {qualityOptions.length > 0 && onQualityChange && (
             <div className={config.customInput ? 'mb-3' : ''}>
               {!hideAspectRatio && options.length > 0 && (
-                <label className="block text-xs text-text-muted mb-2">{t('resolutionPanel.qualitySelectLabel')}</label>
+                <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>{t('resolutionPanel.qualitySelectLabel')}</label>
               )}
               <div className={`grid gap-2 ${qualityColumnsClass}`}>
                 {qualityOptions.map((quality) => (
@@ -365,7 +365,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
 
           {config.customInput && onWidthChange && onHeightChange && (
             <div>
-              <label className="block text-xs text-text-muted mb-2">{t('resolutionPanel.customSizeLabel')}</label>
+              <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>{t('resolutionPanel.customSizeLabel')}</label>
               <div className="flex gap-2 items-center">
                 <div className="flex-1">
                   <UiInput

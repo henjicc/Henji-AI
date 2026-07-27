@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UiOptionButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UiOptionButton } from '@/components/ui'
 import { getI18nText } from '@/core/types'
 import {
   formatAspectRatioDisplayLabel,
@@ -365,7 +365,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
           {(aspectParam || sizeDerivedSpec) && (
             <div className="flex flex-col gap-2">
               <div className="mx-auto" style={toSectionWidthStyle(alignedSectionWidth)}>
-                <label className="mb-2 block text-xs text-text-muted">
+                <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>
                   {aspectLabel}
                 </label>
                 <div className="flex flex-wrap justify-start gap-2">
@@ -459,7 +459,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
           {resolutionParam && (
             <div className="flex flex-col gap-2">
               <div className="mx-auto" style={toSectionWidthStyle(alignedSectionWidth)}>
-                <label className="mb-2 block text-xs text-text-muted">
+                <label className={`mb-2 block ${UI_TEXT_LABEL_CLASS}`}>
                   {resolutionLabel}
                 </label>
                 <div className="flex flex-wrap justify-start gap-2">

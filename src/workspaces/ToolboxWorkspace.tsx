@@ -1,7 +1,7 @@
 import React from 'react'
 import { ArrowLeft, Clapperboard, SquarePen } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { UiIconButton, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import CameraStageApp from '@/features/cameraStage/CameraStageApp'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import ImageMarkTool from '@/features/imageMark/standalone/ImageMarkTool'
@@ -24,7 +24,7 @@ const TOOLS: ToolboxToolMeta[] = [
   {
     id: 'imageMark',
     name: '图片编辑',
-    description: '打开或粘贴图片,快速打序号、框选、画箭头、加文字、打码,支持裁剪与旋转,一键复制或保存',
+    description: '打开或粘贴图片，快速打序号、框选、画箭头、加文字、打码，支持裁剪与旋转，一键复制或保存',
     icon: SquarePen,
   },
   {
@@ -65,7 +65,7 @@ const ToolboxWorkspace: React.FC = () => {
             >
               <ArrowLeft size={15} />
             </UiIconButton>
-            <span className="text-sm font-medium text-text-dark">{activeTool.name}</span>
+            <span className={UI_TEXT_LABEL_CLASS}>{activeTool.name}</span>
           </div>
         )}
         <div className="min-h-0 flex-1">{renderTool(activeTool.id)}</div>
@@ -91,8 +91,8 @@ const ToolboxWorkspace: React.FC = () => {
                 onClick={() => selectToolboxTool(tool.id)}
               >
                 <tool.icon size={22} className="text-text-muted" />
-                <span className="text-sm font-medium">{tool.name}</span>
-                <span className="text-xs leading-relaxed text-text-muted">{tool.description}</span>
+                <span className={UI_TEXT_LABEL_CLASS}>{tool.name}</span>
+                <span className={`break-words leading-relaxed [text-wrap:pretty] ${UI_TEXT_META_CLASS}`}>{tool.description}</span>
               </UiOptionButton>
             ))}
           </div>

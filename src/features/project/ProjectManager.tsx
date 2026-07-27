@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, FolderOpen, Pencil, Trash2, PackageOpen, PackageCheck } from 'lucide-react';
 import { createLogger } from '@/core/logging';
-import { UiButton, UiEmpty, UiError, UiIconButton, UiPageHeader, UiPanel, UiRegion } from '@/components/ui';
+import { UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiPageHeader, UiPanel, UiRegion } from '@/components/ui';
 import { useProjectStore } from '@/stores/projectStore';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
 import { exportProjectToPackage } from '@/services/projectPackage/exportProject';
@@ -169,7 +169,7 @@ export function ProjectManager(): JSX.Element {
                     </UiIconButton>
                   </div>
                 </div>
-                <div className="text-xs text-text-muted">
+                <div className={UI_TEXT_META_CLASS}>
                   <p>
                     {t('project.nodes')}: {project.nodeCount}
                   </p>

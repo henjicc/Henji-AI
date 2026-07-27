@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronDown, ExternalLink, LoaderCircle, SearchCheck, Send, Wrench, XCircle } from 'lucide-react'
 import { memo, useState, type CSSProperties } from 'react'
 
-import { UiButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import { UI_INSET_SURFACE_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 
 import type { AgentToolActivity } from './agentRunReducer'
 import { describeErrorRecovery } from './errorPresentation'
@@ -56,10 +56,10 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
       <div className="flex min-h-6 items-center gap-2">
         {icon}
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="min-w-0 max-w-[45%] truncate text-xs font-medium text-text-dark">{activity.title}</span>
-          {activity.summary ? <span className="min-w-0 flex-1 truncate text-3xs text-text-muted">{activity.summary}</span> : null}
+          <span className={`min-w-0 max-w-[45%] truncate ${UI_TEXT_LABEL_CLASS}`}>{activity.title}</span>
+          {activity.summary ? <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>{activity.summary}</span> : null}
         </div>
-        <span className="shrink-0 text-3xs tracking-wide text-text-muted">{statusLabel}</span>
+        <span className={`shrink-0 tracking-wide ${UI_TEXT_META_CLASS}`}>{statusLabel}</span>
         {taskId ? (
           <UiButton type="button" size="sm" variant="ghost" onClick={() => onOpenTask(taskId)} className="!h-6 gap-1 !px-1.5 text-3xs">
             <ExternalLink className="h-3 w-3" />查看
@@ -85,16 +85,16 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
       </div>
       {expanded ? (
         <div className="border-t border-border-dark/70 pb-1 pt-1.5">
-          {activity.summary ? <p className="text-2xs leading-4 text-text-muted">{activity.summary}</p> : null}
+          {activity.summary ? <p className={`leading-4 ${UI_TEXT_META_CLASS}`}>{activity.summary}</p> : null}
           {activity.error ? (
             <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-2xs leading-4 text-danger">
               <div>{activity.error.message}</div>
               <div className="mt-1 text-text-muted">下一步：{describeErrorRecovery(activity.error)}</div>
-              <div className="mt-1 text-3xs text-text-muted">错误代码：{activity.error.code}</div>
+              <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>错误代码：{activity.error.code}</div>
             </div>
           ) : null}
           {activity.resultReferences ? (
-            <dl className="mt-1 grid gap-0.5 text-3xs text-text-muted">
+            <dl className={`mt-1 grid gap-0.5 ${UI_TEXT_META_CLASS}`}>
               {Object.entries(activity.resultReferences).map(([key, value]) => (
                 <div key={key} className="flex min-w-0 gap-2">
                   <dt className="shrink-0">{key}</dt>
@@ -103,7 +103,7 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
               ))}
             </dl>
           ) : null}
-          {activity.artifactRef ? <div className="mt-1 truncate text-3xs text-text-muted">内部结果引用：{activity.artifactRef}</div> : null}
+          {activity.artifactRef ? <div className={`mt-1 truncate ${UI_TEXT_META_CLASS}`}>内部结果引用：{activity.artifactRef}</div> : null}
         </div>
       ) : null}
     </section>

@@ -14,6 +14,7 @@ import { CharacterCount } from '@tiptap/extensions/character-count'
 import { Placeholder } from '@tiptap/extensions/placeholder'
 import { UndoRedo } from '@tiptap/extensions/undo-redo'
 import { EditorContent, useEditor } from '@tiptap/react'
+import { UI_TEXT_META_CLASS } from '../styleTokens'
 
 import { MediaReferenceExtension } from './extensions/mediaReference'
 import { TemplateVariableExtension } from './extensions/templateVariable'
@@ -338,7 +339,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           className={`${PROMPT_EDITOR_SHELL_CLASS} ${shellStateClass} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         />
         {(showCharacterCount || errorMessage) ? (
-          <div className="mt-1 flex items-start justify-between gap-2 text-xs">
+          <div className={`mt-1 flex items-start justify-between gap-2 ${UI_TEXT_META_CLASS}`}>
             <span className={error ? 'text-red-300' : 'text-text-muted'}>
               {errorMessage ?? ''}
             </span>

@@ -98,6 +98,22 @@ description: Henji-AI 新建或改造任何界面/面板/弹窗/侧栏/设置分
 | 表单单选 `RadioInput` | 框就是命中区域 |
 | 动作按钮（"上传音频"、"选择文件"）| 是按钮不是选项，走 `variant="flat"` |
 
+## 选中态词汇表：先判断语义，再选强度
+
+“选中”不是一种视觉，而是四种不同语义。业务层优先传递 `active` / `checked` 与
+`selectionRole`，由 `Ui*` primitive 消费 `styleTokens.ts` 中的状态令牌，不要在调用点
+复制蓝底、蓝框或强调文字。
+
+| 语义 | 表达 | 通用落点 |
+|---|---|---|
+| 导航：正在看哪里 | 中性层底 + 强调文字 + 方向指示条 | `UiNavButton active`；横向 chip 用 `selectionRole="navigation"` |
+| 单选：当前值是什么 | 强品牌实底 + 白字 | `UiOptionButton active` |
+| 多选/标签：集合中哪些已选 | 强调描边 + 中性层底 + 强调文字 | `UiChipButton active` |
+| 布尔：功能是否开启 | 强调色只进入开关轨道或复选框本体，整行保持静息 | `UiSwitch checked` / `UiCheckbox checked` |
+
+默认态不是第五种选中态：它保持当前表面的中性视觉。不要用整行实底表达“已启用”，
+也不要把筛选 chip 的多选语义画成单选项的强实底。
+
 ## 同属性叠类 = 静默失效（本仓库最常见的隐蔽 bug）
 
 > **两个工具类落在同一个 CSS 属性上时，胜负看 Tailwind 产物里的先后顺序，不看 className 里的顺序。**

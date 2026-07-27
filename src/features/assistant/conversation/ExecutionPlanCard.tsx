@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import type { CSSProperties } from 'react'
 
-import { UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import { UI_INSET_SURFACE_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 import type { AgentRunStatus } from '@/core/assistant/events'
 
 import type { AgentExecutionPresentation } from './agentRunReducer'
@@ -61,16 +61,16 @@ export function ExecutionPlanCard({
     <details style={deferredBlockStyle} className={`group rounded-lg ${UI_INSET_SURFACE_CLASS} px-2 py-1.5`}>
       <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2">
         <ListChecks className="h-3.5 w-3.5 shrink-0 text-accent" />
-        <span className="shrink-0 text-2xs font-medium text-text-dark">执行计划</span>
-        <span className="min-w-0 flex-1 truncate text-2xs text-text-muted">{nextAction}</span>
-        <span className="shrink-0 text-3xs text-text-muted">
+        <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行计划</span>
+        <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>{nextAction}</span>
+        <span className={`shrink-0 ${UI_TEXT_META_CLASS}`}>
           {planStatusLabel(presentation, runStatus)}
         </span>
         {hasDetails ? <ChevronRight className="h-3 w-3 shrink-0 text-text-muted transition-transform group-open:rotate-90" /> : null}
       </summary>
 
       {hasDetails ? (
-        <div className="border-t border-border-dark/70 pb-1 pl-5 pr-1 pt-2 text-2xs leading-4 text-text-muted">
+        <div className={`border-t border-border-dark/70 pb-1 pl-5 pr-1 pt-2 leading-4 ${UI_TEXT_META_CLASS}`}>
           {summary?.route ? (
             <div>
               <span className="font-medium text-text-dark">目标判断：</span>
@@ -136,7 +136,7 @@ export function ExecutionPlanCard({
             <span className="font-medium text-text-dark">下一步：</span>{nextAction}
           </div>
           {lastCompaction ? (
-            <div className="mt-1 text-3xs text-text-muted">
+            <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>
               上下文已整理：{lastCompaction.beforeTokens.toLocaleString()} → {lastCompaction.afterTokens.toLocaleString()} token
             </div>
           ) : null}

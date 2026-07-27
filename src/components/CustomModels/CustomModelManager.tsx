@@ -11,7 +11,8 @@ import { getCustomModelService } from '@/services/customModels/CustomModelServic
 import { databaseService } from '@/services/database/DatabaseService'
 import { AddCustomModelDialog } from './AddCustomModelDialog'
 import { useI18n } from '@/hooks/useI18n'
-import { UiButton, UiChipButton, UiEmpty, UiLoading, UiPanel } from '@/components/ui'
+import { UiButton, UiEmpty, UiLoading, UiPanel } from '@/components/ui'
+import Toggle from '@/components/ui/Toggle'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 
 export function CustomModelManager(): JSX.Element {
@@ -127,17 +128,15 @@ export function CustomModelManager(): JSX.Element {
               </div>
 
               <div className="flex items-center gap-2">
-                <UiChipButton
-                  active={model.isEnabled}
-                  onClick={() => handleToggleEnabled(model.id, model.isEnabled)}
-                  className={`px-3 py-1 rounded text-sm ${
-                    model.isEnabled
-                      ? 'bg-green-500 text-white'
-                      : 'bg-layer text-text-muted'
-                  }`}
-                >
-                  {model.isEnabled ? t('customModels.enabled') : t('customModels.disabled')}
-                </UiChipButton>
+                <Toggle
+                  checked={model.isEnabled}
+                  onChange={() => {
+                    void handleToggleEnabled(model.id, model.isEnabled)
+                  }}
+                  onText={t('customModels.enabled')}
+                  offText={t('customModels.disabled')}
+                  ariaLabel={`${model.name} · ${model.isEnabled ? t('customModels.enabled') : t('customModels.disabled')}`}
+                />
 
                 <UiButton
                   variant="primary"

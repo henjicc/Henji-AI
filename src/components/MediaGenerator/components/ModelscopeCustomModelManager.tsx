@@ -2,7 +2,16 @@ import { createLogger } from '@/core/logging'
 import React, { useState, useEffect } from 'react'
 import TextInput from '@/components/ui/TextInput'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import { UiButton, UiEmpty, UiIconButton, UiOptionButton, UiPanel } from '@/components/ui'
+import {
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UiButton,
+  UiEmpty,
+  UiIconButton,
+  UiOptionButton,
+  UiPanel,
+} from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
 import {
@@ -157,7 +166,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       ) : (
         <UiPanel className="mb-3 p-3 border-border-dark/60 bg-layer/25">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-medium text-text-muted">{t('modelscopeCustomModel.addNew')}</div>
+            <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.addNew')}</div>
             <UiIconButton
               type="button"
               onClick={() => {
@@ -191,7 +200,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               inputClassName="w-full text-sm"
             />
             <div className="flex flex-col gap-2">
-              <div className="text-xs font-medium text-text-muted">{t('modelscopeCustomModel.form.modelType')}</div>
+              <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
               <div className="grid grid-cols-2 gap-2">
                 <UiOptionButton
                   type="button"
@@ -248,7 +257,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               >
                 {editingId === model.id ? (
                   <div className="flex flex-col gap-2">
-                  <div className="text-xs text-text-muted break-all">
+                  <div className={`break-all ${UI_TEXT_META_CLASS}`}>
                       {t('modelscopeCustomModel.form.modelId')}: {model.id}
                     </div>
                     <TextInput
@@ -259,7 +268,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                       inputClassName="w-full text-sm"
                     />
                     <div className="flex flex-col gap-2">
-                      <div className="text-xs font-medium text-text-muted">{t('modelscopeCustomModel.form.modelType')}</div>
+                      <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.form.modelType')}</div>
                       <div className="grid grid-cols-2 gap-2">
                         <UiOptionButton
                           type="button"
@@ -303,10 +312,10 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 ) : (
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-text-dark truncate">
+                      <div className={`truncate ${UI_TEXT_BODY_CLASS}`}>
                         {model.name}
                       </div>
-                      <div className="text-xs text-text-muted mt-1 break-all">
+                      <div className={`mt-1 break-all ${UI_TEXT_META_CLASS}`}>
                         {model.id}
                       </div>
                       <div className="flex gap-2 mt-1.5">

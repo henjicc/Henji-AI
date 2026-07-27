@@ -1,6 +1,6 @@
 import { CirclePause, CirclePlay, RotateCw, Square } from 'lucide-react'
 
-import { UiButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS, UiButton } from '@/components/ui'
 import type { AgentEvent, AgentRunState } from '@/core/assistant/events'
 
 const statusLabels: Record<AgentRunState['status'], string> = {
@@ -50,8 +50,8 @@ export function RunStatusBar({
     <div className="border-b border-border-dark bg-panel px-3 py-2">
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${active ? 'animate-pulse bg-accent' : 'bg-text-muted'}`} />
-        <span className="text-xs font-medium text-text-dark">{statusLabels[state.status]}</span>
-        <span className="min-w-0 flex-1 truncate text-3xs text-text-muted" title={currentAction}>{currentAction}</span>
+        <span className={UI_TEXT_SECTION_CLASS}>{statusLabels[state.status]}</span>
+        <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`} title={currentAction}>{currentAction}</span>
         {state.status === 'paused' ? (
           <UiButton type="button" size="sm" variant="ghost" title="继续" aria-label="继续" onClick={onResume} className="!h-7 !w-7 !p-0"><CirclePlay className="h-3.5 w-3.5" /></UiButton>
         ) : active ? (
@@ -63,7 +63,7 @@ export function RunStatusBar({
           <UiButton type="button" size="sm" variant="muted" title="取消" aria-label="取消" onClick={onCancel} className="!h-7 !w-7 !p-0 text-danger"><Square className="h-3.5 w-3.5" /></UiButton>
         ) : null}
       </div>
-      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-3xs text-text-muted">
+      <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-1 ${UI_TEXT_META_CLASS}`}>
         <span>轮次 {Math.max(usage.turns, state.turn)}/{state.budget.maxTurns}</span>
         <span>工具 {Math.max(usage.toolCalls, toolCalls)}/{state.budget.maxToolCalls}</span>
         <span>Token {Math.max(usage.totalTokens, modelUsage).toLocaleString()}</span>

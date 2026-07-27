@@ -1,5 +1,5 @@
 import { UiInput } from './primitives'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS } from './styleTokens'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS } from './styleTokens'
 
 type TextInputProps = {
   label?: string
@@ -10,11 +10,11 @@ type TextInputProps = {
   inputClassName?: string
 }
 
-export default function TextInput(props: TextInputProps) {
+export default function TextInput(props: TextInputProps): JSX.Element {
   const { label, value, onChange, placeholder, className, inputClassName } = props
   return (
     <div className={className}>
-      {label ? <label className="block text-sm font-medium mb-1 text-text-soft">{label}</label> : null}
+      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <UiInput
         value={value}
         onChange={e => onChange(e.target.value)}

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next'
 import type { DropdownParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import Dropdown from '@/components/ui/Dropdown'
+import { UI_FIELD_LABEL_CLASS } from '@/components/ui'
 
 interface DropdownInputProps {
   param: DropdownParamDef
@@ -95,7 +96,7 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
 
   return (
     <div className="w-auto">
-      <label className="block text-sm font-medium text-text-soft mb-1.5">
+      <label className={UI_FIELD_LABEL_CLASS}>
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>

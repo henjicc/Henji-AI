@@ -1,4 +1,4 @@
-import { Dropdown, UiButton, UiCheckbox, UiInput, UiModal } from '@/components/ui'
+import { Dropdown, UI_TEXT_BODY_CLASS, UI_TEXT_LABEL_CLASS, UiButton, UiCheckbox, UiInput, UiModal } from '@/components/ui'
 import type { LlmCapabilities, LlmModelConfig } from '@/core/llm/types'
 
 const capabilityItems: Array<{
@@ -60,14 +60,14 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
     >
       <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
         <div className="space-y-1.5">
-          <div className="text-sm font-medium text-text-dark">模型 ID</div>
+          <div className={UI_TEXT_LABEL_CLASS}>模型 ID</div>
           <UiInput value={model?.modelId ?? ''} onChange={event => update({ modelId: event.target.value })} placeholder="例如 deepseek-v4-flash" />
         </div>
         <div className="space-y-1.5">
-          <div className="text-sm font-medium text-text-dark">模型名称</div>
+          <div className={UI_TEXT_LABEL_CLASS}>模型名称</div>
           <UiInput value={model?.displayName ?? ''} onChange={event => update({ displayName: event.target.value })} placeholder="例如 DeepSeek V4 Flash" />
         </div>
-        <div className="grid grid-cols-2 gap-2 text-sm text-text-dark">
+        <div className={`grid grid-cols-2 gap-2 ${UI_TEXT_BODY_CLASS}`}>
           {capabilityItems.map(item => (
             <label key={item.id} className="inline-flex items-center gap-2 rounded-lg border border-border-dark bg-app px-3 py-2">
               <UiCheckbox checked={model?.capabilities[item.id] === true} onCheckedChange={checked => updateCapabilities({ [item.id]: checked })} />

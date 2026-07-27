@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, Search, X } from 'lucide-react'
-import { Dropdown, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion } from '@/components/ui'
+import { Dropdown, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
@@ -218,7 +218,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           ) : (
             <>
               <div className={`grid gap-3 transition-opacity duration-150 ${loading ? 'pointer-events-none opacity-60' : 'opacity-100'}`} aria-busy={loading} style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{page.items.map((asset) => <AssetCard key={asset.id} asset={asset} selected={selected?.id === asset.id} eager={mode === 'floating'} thumbnailFit={thumbnailFit} onSelect={setSelected} onMenu={(nextAsset, anchor) => setMenuState({ asset: nextAsset, anchor })} onPreview={setPreviewAsset} onRename={rename} />)}</div>
-              <div ref={loadMoreRef} className="flex h-14 items-center justify-center text-xs text-text-muted">{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
+              <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
             </>
           )}
         </div>

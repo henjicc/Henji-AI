@@ -4,6 +4,7 @@ import Dropdown from '@/components/ui/Dropdown'
 import SectionCard from '../components/SectionCard'
 import { useI18n } from '@/hooks/useI18n'
 import { useSettingsStore, type CanvasLodLevel } from '@/stores/settingsStore'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 
 const LOD_LEVEL_OPTIONS: CanvasLodLevel[] = ['off', 'detail', 'balanced', 'performance']
 
@@ -36,7 +37,7 @@ const CanvasSection: React.FC = () => {
   return (
     <SectionCard title={t('sections.canvas.title')}>
       <div className="flex items-center justify-between gap-4">
-        <label className="text-sm font-medium text-text-soft">
+        <label className={UI_TEXT_LABEL_CLASS}>
           {t('sections.canvas.lodLabel')}
         </label>
         <Dropdown
@@ -48,7 +49,7 @@ const CanvasSection: React.FC = () => {
           buttonClassName="h-[34px] w-full bg-surface-dark border-border-dark"
         />
       </div>
-      <p className="mt-2 text-xs text-text-muted">{t('sections.canvas.lodHint')}</p>
+      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.canvas.lodHint')}</p>
 
       <div className="mt-4 border-t border-border-dark pt-4">
         <Toggle
@@ -59,7 +60,7 @@ const CanvasSection: React.FC = () => {
           onText={onText}
           offText={offText}
         />
-        <p className="mt-2 text-xs text-text-muted">{t('sections.canvas.imageViewerInfoHint')}</p>
+        <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.canvas.imageViewerInfoHint')}</p>
       </div>
 
       <div className="mt-4 border-t border-border-dark pt-4">
@@ -101,7 +102,7 @@ const CanvasSection: React.FC = () => {
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-text-muted">
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>
             {t('sections.canvas.storyboardAutoInferEmptyFrameHint')}
           </p>
         </div>

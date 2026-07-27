@@ -8,7 +8,7 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -141,7 +141,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <div className={hasMarks ? 'w-auto min-w-[200px]' : 'w-fit'}>
-      <label className="mb-1.5 block text-sm font-medium text-text-soft">
+      <label className={UI_FIELD_LABEL_CLASS}>
         {displayName}
         {param.required && <span className="text-red-500 ml-1">*</span>}
       </label>
@@ -188,7 +188,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           </div>
         </div>
 
-        {param.unit && <span className="text-sm text-text-muted">{param.unit}</span>}
+        {param.unit && <span className={UI_TEXT_META_CLASS}>{param.unit}</span>}
       </div>
 
       {hasMarks && (

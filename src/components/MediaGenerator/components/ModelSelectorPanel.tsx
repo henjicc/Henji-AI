@@ -8,7 +8,10 @@ import {
   UiInput,
   UiMarqueeText,
   UiOptionButton,
-  UI_HIGHLIGHT_RING_INSET_CLASS
+  UI_HIGHLIGHT_RING_INSET_CLASS,
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
 } from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
 import { PROVIDER_ORDER, MODEL_TYPE_ORDER, compareModelsBySeries } from '@/core/modelSortOrder'
@@ -50,7 +53,7 @@ const GRID_COLUMNS = {
 }
 const MODEL_CARD_COLUMN_GAP_CLASS = 'gap-x-2'
 const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
-const MODEL_CARD_META_TEXT_CLASS = 'text-2xs leading-4 text-text-muted'
+const MODEL_CARD_META_TEXT_CLASS = `${UI_TEXT_META_CLASS} leading-4`
 
 function compareModelItems(
   a: { p: { id: string; name: string }; m: { id: string; type: 'image' | 'video' | 'audio'; name: string; seriesId?: string; seriesRank?: number } },
@@ -242,7 +245,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
       <div className="flex-shrink-0 p-4 pb-2">
         {/* 搜索框 */}
         <div className="mb-3">
-          <div className="text-xs text-text-muted mb-2">{t('search.label')}</div>
+          <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('search.label')}</div>
           <div className="relative">
             <UiInput
               ref={searchInputRef}
@@ -270,7 +273,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         </div>
         {/* 供应商 / 类型筛选 */}
         <div className="mb-3">
-          <div className="text-xs text-text-muted mb-2">{t('filters.providerType')}</div>
+          <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('filters.providerType')}</div>
           <div className="flex flex-wrap gap-2">
             <UiOptionButton
               type="button"
@@ -316,7 +319,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         </div>
         {/* 功能筛选 */}
         <div className="mb-3">
-          <div className="text-xs text-text-muted mb-2">{t('filters.function')}</div>
+          <div className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>{t('filters.function')}</div>
           <div className="flex flex-wrap gap-2">
             {[
               { label: t('all'), value: 'all' },
@@ -363,7 +366,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 <div className={`grid w-full grid-cols-[minmax(0,1fr)_auto] ${MODEL_CARD_COLUMN_GAP_CLASS} ${MODEL_CARD_ROW_GAP_CLASS}`}>
                   <UiMarqueeText
                     text={m.name}
-                    className="col-start-1 row-start-1 min-w-0 text-left text-sm leading-5"
+                    className={`col-start-1 row-start-1 min-w-0 text-left leading-5 ${UI_TEXT_BODY_CLASS}`}
                   />
                   <div className="col-start-2 row-start-1 justify-self-end self-start">
                     <span

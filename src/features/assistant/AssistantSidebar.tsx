@@ -1,7 +1,7 @@
 import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type RefObject } from 'react'
 
-import { UiIconButton, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
+import { UI_PANEL_SURFACE_CLASS, UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS, UiIconButton } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 
 import { AssistantConversation } from './conversation/AssistantConversation'
@@ -98,8 +98,8 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
           <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
             <div className="rounded-lg border border-accent/30 bg-accent/10 p-1.5 text-accent"><Sparkles className="h-3.5 w-3.5" /></div>
             <div className="min-w-0">
-              <div className="truncate text-xs font-medium text-text-dark">智能助手</div>
-              <div className="truncate text-3xs text-text-muted">受控工具执行轨道</div>
+              <div className={`truncate ${UI_TEXT_SECTION_CLASS}`}>智能助手</div>
+              <div className={`truncate ${UI_TEXT_META_CLASS}`}>受控工具执行轨道</div>
             </div>
             {mode === 'floating' ? <GripHorizontal className={`ml-1 h-4 w-4 text-text-muted ${interaction.dragging ? 'text-accent' : ''}`} /> : null}
           </div>

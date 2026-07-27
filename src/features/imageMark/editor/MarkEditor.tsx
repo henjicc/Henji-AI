@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type Konva from 'konva';
 import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
+import { UI_TEXT_BODY_CLASS } from '@/components/ui';
 import { resolveImageDisplayUrl } from '@/services/imageSource';
 import {
   DEFAULT_LINE_WIDTH_PERCENT,
@@ -310,7 +311,7 @@ export function MarkEditor({
   if (!image) {
     return (
       <div className={`flex items-center justify-center rounded-xl border border-border-dark bg-bg-dark/85 ${className}`}>
-        <span className="text-sm text-text-muted">{loadFailed ? '图片加载失败' : '图片加载中…'}</span>
+        <span className={UI_TEXT_BODY_CLASS}>{loadFailed ? '图片加载失败' : '图片加载中…'}</span>
       </div>
     );
   }

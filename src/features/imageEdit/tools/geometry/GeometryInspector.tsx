@@ -1,5 +1,5 @@
 import { FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, X } from 'lucide-react';
-import { UiChipButton } from '@/components/ui';
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS, UiChipButton } from '@/components/ui';
 import { CROP_RATIO_OPTIONS } from '@/features/imageMark/editor/shared';
 import type { OrientationOp } from '@/features/imageMark/domain/geometry';
 import { useMarkEditorContext } from '@/features/imageMark/editor/useMarkEditorContext';
@@ -28,12 +28,12 @@ export function GeometryInspector(): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <div className="mb-4">
-        <h2 className="text-sm font-semibold text-text-dark">几何</h2>
-        <p className="mt-1 text-xs leading-5 text-text-muted">调整图片朝向和裁剪区域</p>
+        <h2 className={UI_TEXT_SECTION_CLASS}>几何</h2>
+        <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>调整图片朝向和裁剪区域</p>
       </div>
 
       <section className="border-b border-border-dark pb-4">
-        <h3 className="mb-2 text-xs font-medium text-text-muted">朝向</h3>
+        <h3 className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>朝向</h3>
         <div className="grid grid-cols-2 gap-2">
           {ORIENTATION_BUTTONS.map((button) => {
             const Icon = button.icon;
@@ -55,7 +55,7 @@ export function GeometryInspector(): JSX.Element {
 
       <section className="pt-4">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs font-medium text-text-muted">裁剪</h3>
+          <h3 className={UI_TEXT_LABEL_CLASS}>裁剪</h3>
           <UiChipButton
             type="button"
             active={tool === 'crop'}

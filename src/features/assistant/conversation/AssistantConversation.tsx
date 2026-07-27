@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
 
-import { UiButton, UiEmpty, UiPanel } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiPanel } from '@/components/ui'
 import type { AgentEvent } from '@/core/assistant/events'
 import {
   createEmptyPromptDocument,
@@ -170,8 +170,8 @@ export function AssistantConversation(): JSX.Element {
         {/* 用户消息短、需要边界感，用 inset（比侧栏底色更暗）；助手消息长，只留缩进不套容器 */}
         {currentGoal ? (
           <UiPanel variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
-            <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><UserRound className="h-3.5 w-3.5" />你的目标</div>
-            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-text-dark">{currentGoal}</p>
+            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你的目标</div>
+            <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{currentGoal}</p>
           </UiPanel>
         ) : null}
 
@@ -196,14 +196,14 @@ export function AssistantConversation(): JSX.Element {
 
         {deferredStreamedText && runState && !terminalStatuses.has(runState.status) ? (
           <section style={deferredBlockStyle} className="mr-7">
-            <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />回应生成中</div>
+            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />回应生成中</div>
             <AssistantMarkdown>{deferredStreamedText}</AssistantMarkdown>
           </section>
         ) : null}
 
         {runState?.finalText ? (
           <section style={deferredBlockStyle} className="mr-7">
-            <div className="mb-1.5 flex items-center gap-1.5 text-2xs font-medium text-text-muted"><Bot className="h-3.5 w-3.5" />助手</div>
+            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />助手</div>
             <AssistantMarkdown>{runState.finalText}</AssistantMarkdown>
           </section>
         ) : null}
@@ -224,7 +224,7 @@ export function AssistantConversation(): JSX.Element {
           </section>
         ) : null}
 
-        {run.view.connection === 'recovering' ? <div className="text-center text-2xs text-text-muted">正在恢复运行事件…</div> : null}
+        {run.view.connection === 'recovering' ? <div className={`text-center ${UI_TEXT_META_CLASS}`}>正在恢复运行事件…</div> : null}
       </div>
 
       <AssistantComposer

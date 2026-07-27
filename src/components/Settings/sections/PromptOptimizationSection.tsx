@@ -3,6 +3,7 @@ import Dropdown from '@/components/ui/Dropdown'
 import SectionCard from '../components/SectionCard'
 import { useI18n } from '@/hooks/useI18n'
 import type { PromptOptimizationButtonBehavior } from '@/core/llm/promptOptimizationBehavior'
+import { UI_TEXT_META_CLASS } from '@/components/ui'
 
 interface PromptOptimizationSectionProps {
   behavior: PromptOptimizationButtonBehavior
@@ -29,7 +30,7 @@ const PromptOptimizationSection: React.FC<PromptOptimizationSectionProps> = ({
         onSelect={(value) => onChangeBehavior(value as PromptOptimizationButtonBehavior)}
         className="w-full"
       />
-      <p className="mt-2 text-xs text-text-faint">{t('sections.promptOptimization.hint')}</p>
+      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.promptOptimization.hint')}</p>
     </SectionCard>
   )
 }

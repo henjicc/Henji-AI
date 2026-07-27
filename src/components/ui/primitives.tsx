@@ -7,7 +7,25 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
-import { UI_BUTTON_RESET_CLASS, UI_COLOR_ACCENT_FILL_TEXT_CLASS, UI_COLOR_ACCENT_SOFT_BG_CLASS, UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS, UI_COLOR_ACCENT_SOFT_BORDER_CLASS, UI_COLOR_ACCENT_TEXT_CLASS, UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_DISABLED_CLASS, UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UI_INSET_SURFACE_CLASS, UI_OPTION_ITEM_ACTIVE_CLASS, UI_OPTION_ITEM_CLASS, UI_OPTION_ITEM_HOVER_CLASS, UI_PANEL_SURFACE_CLASS } from './styleTokens';
+import {
+  UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
+  UI_BUTTON_RESET_CLASS,
+  UI_COLOR_ACCENT_FILL_TEXT_CLASS,
+  UI_FIELD_CONTROL_HEIGHT_CLASS,
+  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
+  UI_FIELD_DISABLED_CLASS,
+  UI_FIELD_FOCUS_CLASS,
+  UI_FIELD_SURFACE_CLASS,
+  UI_INSET_SURFACE_CLASS,
+  UI_MULTISELECT_ITEM_ACTIVE_CLASS,
+  UI_NAV_INDICATOR_BOTTOM_CLASS,
+  UI_NAV_INDICATOR_END_CLASS,
+  UI_NAV_ITEM_ACTIVE_CLASS,
+  UI_OPTION_ITEM_ACTIVE_CLASS,
+  UI_OPTION_ITEM_CLASS,
+  UI_OPTION_ITEM_HOVER_CLASS,
+  UI_PANEL_SURFACE_CLASS,
+} from './styleTokens';
 import {
   type ScopedTextHistoryBinding,
   useScopedTextHistoryProps,
@@ -31,6 +49,8 @@ interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
+  /** `navigation` 表示“正在看哪里”；默认 `toggle` 表示多选/标签开态。 */
+  selectionRole?: 'toggle' | 'navigation';
 }
 
 interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -123,9 +143,9 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
   ({ className = '', active = false, ...props }, ref) => (
     <button
       ref={ref}
-      className={`relative inline-flex h-14 w-full items-center gap-1.5 rounded-none border-0 bg-transparent px-4 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${
+      className={`relative inline-flex h-14 w-full items-center gap-1.5 rounded-none border-0 px-4 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${
         active
-          ? `!bg-layer ${UI_COLOR_ACCENT_TEXT_CLASS} after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-['']`
+          ? `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_END_CLASS}`
           : 'text-text-muted hover:bg-surface-dark hover:text-text-dark'
       } ${className}`}
       {...props}
@@ -144,44 +164,48 @@ export function UiIconButton({
   ...props
 }: UiIconButtonProps) {
   const hoverOnly = appearance === 'hover-only';
-  const shellClass = showBorder
-    ? `${UI_FIELD_SURFACE_CLASS} border`
-    : hoverOnly
-      ? 'border border-transparent bg-transparent'
-      : 'border border-border-dark bg-surface-dark';
-
   const stateClass = active
     ? (showBorder
-      ? `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-text-dark`
-      : `${UI_COLOR_ACCENT_TEXT_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS}`)
+      ? UI_MULTISELECT_ITEM_ACTIVE_CLASS
+      : `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS}`)
     : (showBorder
       ? hoverVariant === 'danger'
-        ? 'text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
-        : 'text-text-muted hover:bg-layer'
+        ? `${UI_FIELD_SURFACE_CLASS} text-text-muted hover:border-red-500/40 hover:bg-red-600/35`
+        : `${UI_FIELD_SURFACE_CLASS} text-text-muted hover:bg-layer`
       : hoverOnly
         ? hoverVariant === 'danger'
-          ? 'text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
-          : 'text-text-muted hover:border-border-dark hover:bg-surface-dark'
+          ? 'border-transparent text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
+          : 'border-transparent text-text-muted hover:border-border-dark hover:bg-surface-dark'
         : hoverVariant === 'danger'
-          ? 'text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
-          : 'text-text-muted');
+          ? 'border-border-dark bg-surface-dark text-text-muted hover:border-red-500/40 hover:bg-red-600/35'
+          : 'border-border-dark bg-surface-dark text-text-muted');
 
   return (
     <button
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${UI_BUTTON_RESET_CLASS} ${shellClass} ${stateClass} ${className}`}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${UI_BUTTON_RESET_CLASS} ${stateClass} ${className}`}
       {...props}
     />
   );
 }
 
 export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
-  ({ className = '', active = false, ...props }, ref) => (
-    <button
-      ref={ref}
-      className={`inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_SURFACE_CLASS} ${active ? `border-brand-500 bg-layer ${UI_COLOR_ACCENT_TEXT_CLASS}` : 'text-text-dark hover:bg-layer'} ${className}`}
-      {...props}
-    />
-  )
+  ({ className = '', active = false, selectionRole = 'toggle', ...props }, ref) => {
+    const stateClass = selectionRole === 'navigation'
+      ? active
+        ? `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_BOTTOM_CLASS}`
+        : 'border-transparent text-text-muted hover:bg-surface-dark hover:text-text-dark'
+      : active
+        ? UI_MULTISELECT_ITEM_ACTIVE_CLASS
+        : `${UI_FIELD_SURFACE_CLASS} text-text-dark hover:bg-layer`;
+
+    return (
+      <button
+        ref={ref}
+        className={`relative inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-sm transition-colors ${UI_BUTTON_RESET_CLASS} ${stateClass} ${className}`}
+        {...props}
+      />
+    );
+  }
 );
 
 UiChipButton.displayName = 'UiChipButton';
@@ -235,7 +259,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
 
       if (variant === 'card') {
         return active
-          ? 'border-accent bg-brand-600 text-white'
+          ? UI_OPTION_ITEM_ACTIVE_CLASS
           : 'border-border-dark bg-surface-dark text-text-dark hover:border-text-muted hover:bg-layer';
       }
 
@@ -360,7 +384,7 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       aria-checked={checked}
       className={`inline-flex h-5 w-5 items-center justify-center rounded border transition-colors ${
         checked
-          ? 'border-accent bg-brand-600 text-white'
+          ? `${UI_BOOLEAN_CONTROL_ACTIVE_CLASS} text-white`
           : 'border-border-dark bg-bg-dark text-transparent hover:border-text-muted'
       } ${className}`}
       onClick={(event) => {
@@ -387,7 +411,7 @@ export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
       aria-checked={checked}
       className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
         checked
-          ? 'border-brand-500 bg-brand-600'
+          ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
           : 'border-border-dark bg-surface-dark hover:border-text-muted/60'
       } ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       onClick={(event) => {

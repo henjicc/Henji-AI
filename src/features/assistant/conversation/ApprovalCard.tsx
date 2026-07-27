@@ -1,7 +1,7 @@
 import { AlertTriangle, Check, ShieldCheck, X } from 'lucide-react'
 import type { CSSProperties } from 'react'
 
-import { UiButton } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 import type { AgentApprovalRequest } from '@/core/assistant/events'
 
 interface ApprovalCardProps {
@@ -26,14 +26,14 @@ export function ApprovalCard({ approval, onDecision }: ApprovalCardProps): JSX.E
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-sm font-medium text-text-dark">{approval.title}</h3>
+            <h3 className={UI_TEXT_LABEL_CLASS}>{approval.title}</h3>
             <span className="rounded border border-warning/30 px-1.5 py-0.5 text-3xs text-warning">{approval.risk}</span>
           </div>
-          <p className="mt-1 text-xs leading-5 text-text-muted">{approval.summary}</p>
+          <p className={`mt-1 leading-5 ${UI_TEXT_BODY_CLASS}`}>{approval.summary}</p>
         </div>
       </div>
 
-      <dl className="mt-3 grid gap-1.5 rounded-lg bg-app/60 p-2.5 text-2xs text-text-muted">
+      <dl className={`mt-3 grid gap-1.5 rounded-lg bg-app/60 p-2.5 ${UI_TEXT_META_CLASS}`}>
         <div className="flex justify-between gap-3"><dt>权限</dt><dd className="break-all text-right text-text-dark">{approval.permission}</dd></div>
         <div className="flex justify-between gap-3"><dt>作用域</dt><dd className="break-all text-right text-text-dark">{approval.scope}</dd></div>
         <div className="flex justify-between gap-3"><dt>可撤销</dt><dd className="text-text-dark">{approval.reversible ? '是' : '否'}</dd></div>

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next'
 import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import type { AspectRatioOption } from './types'
 import { getI18nText } from '@/core/types'
-import { UiOptionButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UiOptionButton } from '@/components/ui'
 
 export interface AspectRatioSelectorProps {
   value: string
@@ -39,7 +39,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="block text-xs text-text-muted">
+      <label className={UI_TEXT_LABEL_CLASS}>
         {t('resolutionPanel.aspectRatio', { defaultValue: '比例' })}
       </label>
       <div className="flex flex-wrap justify-start gap-2">

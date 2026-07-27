@@ -8,7 +8,14 @@ import {
   listDiffusionPresets,
   type DiffusionOperationParams,
 } from '@/core/imageEdit';
-import { Dropdown, UiChipButton, UiRangeInput, UiSwitch } from '@/components/ui';
+import {
+  Dropdown,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
+  UiChipButton,
+  UiRangeInput,
+  UiSwitch,
+} from '@/components/ui';
 import { useImageEditorDocumentController } from '@/features/imageEdit/editor/ImageEditorDocumentContext';
 import { useI18n } from '@/hooks/useI18n';
 import {
@@ -54,7 +61,7 @@ function DiffusionDropdownField<T extends string>({
 }: DiffusionDropdownFieldProps<T>): JSX.Element {
   const labelId = useId();
   return (
-    <div className="space-y-1.5 text-xs text-text-muted">
+    <div className={`space-y-1.5 ${UI_TEXT_META_CLASS}`}>
       <span id={labelId}>{label}</span>
       <Dropdown<T>
         value={value}
@@ -85,7 +92,7 @@ function DiffusionRangeField({
   const handlePointerUp = (_event: PointerEvent<HTMLInputElement>): void => onCommit();
   return (
     <label className="block space-y-1.5">
-      <span className="flex items-center justify-between gap-3 text-xs text-text-muted">
+      <span className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
         <span>{label}</span>
         <span className="shrink-0 text-text-dark">{display}</span>
       </span>
@@ -149,8 +156,8 @@ export function DiffusionInspector(): JSX.Element {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-text-dark">{t('imageEditor.diffusion.tool')}</h2>
-          <p className="mt-1 text-xs leading-5 text-text-muted">{t('imageEditor.diffusion.description')}</p>
+          <h2 className={UI_TEXT_SECTION_CLASS}>{t('imageEditor.diffusion.tool')}</h2>
+          <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('imageEditor.diffusion.description')}</p>
         </div>
         <UiSwitch checked={operation?.enabled ?? false} onCheckedChange={setEnabled} aria-label={t('imageEditor.diffusion.enable')} />
       </div>
@@ -158,7 +165,7 @@ export function DiffusionInspector(): JSX.Element {
         <div role="status" aria-live="polite" className={`mb-3 rounded-lg border px-2.5 py-2 text-xs ${previewState.phase === 'failed' ? 'border-red-500/40 text-red-300' : 'border-border-dark text-text-muted'}`}>
           {previewStatus}
         </div>
-      ) : previewState?.backend ? <div className="mb-3 text-xs text-text-muted">{t('imageEditor.diffusion.previewBackend')}：{previewState.backend === 'webgpu-worker' ? 'WebGPU' : previewState.backend}</div> : null}
+      ) : previewState?.backend ? <div className={`mb-3 ${UI_TEXT_META_CLASS}`}>{t('imageEditor.diffusion.previewBackend')}：{previewState.backend === 'webgpu-worker' ? 'WebGPU' : previewState.backend}</div> : null}
 
       <fieldset disabled={!operation?.enabled} className="m-0 min-w-0 space-y-3 border-0 p-0 disabled:opacity-60">
         <DiffusionDropdownField
@@ -167,7 +174,7 @@ export function DiffusionInspector(): JSX.Element {
           options={DIFFUSION_MODE_OPTIONS}
           onChange={(mode) => update((current) => ({ ...current, mode, presetId: null }))}
         />
-        <div className="space-y-1.5 text-xs text-text-muted">
+        <div className={`space-y-1.5 ${UI_TEXT_META_CLASS}`}>
           <DiffusionDropdownField
             label={t('imageEditor.diffusion.preset.label')}
             value={params.presetId ?? ''}
@@ -182,7 +189,7 @@ export function DiffusionInspector(): JSX.Element {
           />
           {selectedPreset ? <span className="block leading-5 text-text-muted">{tText(selectedPreset.description)}</span> : null}
         </div>
-        <p className="-mt-1 text-xs leading-5 text-text-muted">{t('imageEditor.diffusion.preset.sourceNotice')}</p>
+        <p className={`-mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('imageEditor.diffusion.preset.sourceNotice')}</p>
         <div className="grid grid-cols-2 gap-2">
           <DiffusionDropdownField label="档位" value={params.density} options={DIFFUSION_DENSITY_OPTIONS} onChange={(density) => update((current) => ({ ...current, density }))} />
           <DiffusionDropdownField label="质量" value={params.quality} options={DIFFUSION_QUALITY_OPTIONS} onChange={(quality) => update((current) => ({ ...current, quality }))} />

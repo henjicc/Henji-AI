@@ -1,5 +1,6 @@
 import React from 'react'
 import { UI_DATA_TWEEN_MS, uiTransition } from './motion'
+import { UI_TEXT_META_CLASS } from './styleTokens'
 
 interface ProgressBarProps {
     progress: number
@@ -30,7 +31,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
                 />
             </div>
             {showPercentage && (
-                <div className="mt-2 text-sm text-text-muted text-right">
+                <div className={`mt-2 text-right ${UI_TEXT_META_CLASS}`}>
                     {Math.floor(normalizedProgress)}%
                 </div>
             )}

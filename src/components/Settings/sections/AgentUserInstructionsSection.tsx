@@ -7,7 +7,7 @@ import {
   resetAssistantUserInstructions,
   updateAssistantUserInstructions,
 } from '@/commands/assistant'
-import { PromptEditor, UiButton } from '@/components/ui'
+import { PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 import {
   ASSISTANT_USER_INSTRUCTIONS_MAX_CHARACTERS,
   getAssistantUserInstructionsWarnings,
@@ -111,7 +111,6 @@ export default function AgentUserInstructionsSection(): JSX.Element {
       <SectionCard
         title="用户指令"
         description="直接用自然语言描述长期偏好和工作习惯。除安全、权限、审批、真实能力和当前明确要求等硬约束外，用户指令优先于产品默认与模型描述。"
-        titleClassName="text-sm normal-case tracking-normal text-text-dark"
       >
         <PromptEditor
           mode="edit"
@@ -126,9 +125,9 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           error={warnings.length > 0}
           errorMessage={warnings.join('；')}
           editorShellClassName="bg-surface-dark"
-          editorClassName="ui-scrollbar min-h-[220px] max-h-[360px] overflow-y-auto px-3 py-2.5 text-sm"
+          editorClassName={`ui-scrollbar min-h-[220px] max-h-[360px] overflow-y-auto px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
         />
-        <p className="mt-3 text-xs leading-5 text-text-muted">
+        <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>
           这里只保存你主动填写或明确要求助手修改的内容。密钥、令牌、授权头和密码会在进入模型前自动脱敏；其他正常内容会完整传递。助手不会自动把对话、推断、日志或文件写入这里。
         </p>
       </SectionCard>
@@ -151,7 +150,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           清空指令
         </UiButton>
       </div>
-      <p className="break-all text-xs leading-5 text-text-muted">{status}</p>
+      <p className={`break-all leading-5 ${UI_TEXT_META_CLASS}`}>{status}</p>
     </div>
   )
 }

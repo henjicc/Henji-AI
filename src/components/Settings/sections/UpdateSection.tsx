@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import Toggle from '@/components/ui/Toggle'
-import { UiButton, UiChipButton } from '@/components/ui'
+import { UI_FIELD_LABEL_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton } from '@/components/ui'
 import SectionCard from '../components/SectionCard'
 import SettingsDialog from '../components/SettingsDialog'
 import { useUpdateConfig } from '../hooks/useUpdateConfig'
@@ -88,11 +88,11 @@ const UpdateSection: React.FC = () => {
               onText={onText}
               offText={offText}
             />
-            <p className="mt-2 text-xs text-text-faint">{t('sections.updates.enableHint')}</p>
+            <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.updates.enableHint')}</p>
           </div>
 
           <div className={`transition-colors duration-300 ${!config.enabled ? 'pointer-events-none' : ''}`}>
-            <label className="block text-sm font-medium mb-2 text-text-soft">
+            <label className={`${UI_FIELD_LABEL_CLASS} mb-2`}>
               {t('sections.updates.frequencyLabel')}
             </label>
             <div className="grid grid-cols-2 gap-2">
@@ -108,14 +108,14 @@ const UpdateSection: React.FC = () => {
                 </UiChipButton>
               ))}
             </div>
-            <p className="mt-2 text-xs text-text-faint">{t('sections.updates.frequencyHint')}</p>
+            <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.updates.frequencyHint')}</p>
           </div>
 
           <div className="space-y-3 border-t border-border-dark pt-3">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-text-soft font-medium">{t('sections.updates.currentVersionLabel')}</p>
-                <p className="text-xs text-text-faint mt-1 font-mono">{currentVersion}</p>
+                <p className={UI_TEXT_LABEL_CLASS}>{t('sections.updates.currentVersionLabel')}</p>
+                <p className={`mt-1 font-mono ${UI_TEXT_META_CLASS}`}>{currentVersion}</p>
               </div>
               <UiButton
                 onClick={handleCheck}
@@ -135,7 +135,7 @@ const UpdateSection: React.FC = () => {
             >
               {t('actions.clearIgnored')}
             </UiButton>
-            <p className="text-xs text-text-faint">{t('sections.updates.clearIgnoredHint')}</p>
+            <p className={UI_TEXT_META_CLASS}>{t('sections.updates.clearIgnoredHint')}</p>
           </div>
         </div>
       </SectionCard>

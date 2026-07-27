@@ -5,6 +5,7 @@ import SectionCard from '../components/SectionCard'
 import { useUploadSettings } from '../hooks/useUploadSettings'
 import { UPLOAD_PROVIDERS, type UploadProvider } from '@/core/config/providers'
 import { useI18n } from '@/hooks/useI18n'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 
 const UploadSection: React.FC = () => {
   const { t } = useI18n('settings')
@@ -24,7 +25,7 @@ const UploadSection: React.FC = () => {
     >
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-          <label className="text-sm font-medium text-text-soft">
+          <label className={UI_TEXT_LABEL_CLASS}>
             {t('sections.upload.providerLabel')}
           </label>
           <Dropdown
@@ -46,7 +47,7 @@ const UploadSection: React.FC = () => {
             onText={onText}
             offText={offText}
           />
-          <p className="mt-2 text-xs text-text-faint">{t('sections.upload.fallbackHint')}</p>
+          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.upload.fallbackHint')}</p>
         </div>
       </div>
     </SectionCard>

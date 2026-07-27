@@ -1,7 +1,7 @@
 import { Virtuoso } from 'react-virtuoso'
 import { Activity, AlertTriangle, CheckCircle2, Clock3, Route, Sparkles } from 'lucide-react'
 
-import { UiButton, UiEmpty, UiLoading, UI_INSET_SURFACE_CLASS } from '@/components/ui'
+import { UiButton, UiEmpty, UiLoading, UiNavButton, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceRunSummary, AgentTraceStatus, AgentTraceStepSummary } from '@/core/assistant/trace'
 import { compactId } from '../eventDisplay'
 import { formatTraceDuration, formatTraceTokens, getTraceStepLabel } from '../assistantTraceUtils'
@@ -119,13 +119,10 @@ function TraceStepButton({
 }): JSX.Element {
   const Icon = step.kind === 'router' ? Route : step.kind === 'primary' ? Sparkles : Activity
   return (
-    <UiButton
+    <UiNavButton
       type="button"
-      variant="ghost"
-      size="sm"
-      className={`h-auto w-full justify-start rounded-md px-2 py-2 text-left font-normal ${
-        selected ? '!border-accent/60 !bg-accent/10' : '!border-transparent !bg-transparent hover:!bg-white/5'
-      }`}
+      active={selected}
+      className="!h-auto justify-start !rounded-md !px-2 py-2 font-normal"
       onClick={onSelect}
     >
       <Icon className="mr-2 h-3.5 w-3.5 shrink-0 text-accent" />
@@ -142,7 +139,7 @@ function TraceStepButton({
         </div>
       </div>
       <span className={`ml-2 h-1.5 w-1.5 shrink-0 rounded-full ${statusDot(step.status)}`} />
-    </UiButton>
+    </UiNavButton>
   )
 }
 

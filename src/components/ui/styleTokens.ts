@@ -15,14 +15,42 @@ export const UI_COLOR_ACCENT_SOFT_BORDER_CLASS = 'border-accent';
 export const UI_COLOR_ACCENT_SOFT_BG_CLASS = 'bg-brand-600';
 export const UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS = 'bg-layer';
 export const UI_COLOR_ACCENT_RING_CLASS = 'ring-brand-300';
-// 注：曾有过 UI_CHIP_ACTIVE_STRONG_CLASS，但它在 UiChipButton 上从未生效——
-// 变体自带的 `bg-layer` 在 Tailwind 产物里排在 `bg-brand-600` 之后，永远赢。
-// 需要"选中态实底"的选项集合请直接用 UiOptionButton，选中态走 UI_OPTION_ITEM_ACTIVE_CLASS。
-export const UI_CARD_ACTIVE_STRONG_CLASS = 'border-brand-500 bg-brand-700 text-white';
 export const UI_HIGHLIGHT_RING_INSET_CLASS = `ring-2 ${UI_COLOR_ACCENT_RING_CLASS} ring-inset`;
 export const UI_ACCENT_HEX = APP_ACCENT_HEX;
 export const UI_WHITE_HEX = WHITE_HEX;
 export const UI_TEXT_LIGHT_HEX = TEXT_LIGHT_HEX;
+
+/* ---------------------------------------------------------------------------
+ * 选中态词汇表
+ *
+ * 1. 导航：弱强调，表示“正在看哪里”
+ * 2. 选项：强强调，表示“值是什么”
+ * 3. 多选：中强调，表示“集合里哪些已选”
+ * 4. 布尔：强调色只收在开关/复选框控件本身，不铺满整行
+ *
+ * 令牌只负责状态，不和静息态类叠加同一 CSS 属性。调用组件必须用互斥分支，
+ * 否则 Tailwind 产物顺序会让选中态静默失效。
+ * ------------------------------------------------------------------------- */
+
+/** 导航选中：中性底 + 强调文字。指示条由导航组件按方向补充。 */
+export const UI_NAV_ITEM_ACTIVE_CLASS =
+  `${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS} ${UI_COLOR_ACCENT_TEXT_CLASS}`;
+
+/** 纵向导航的末端指示条。 */
+export const UI_NAV_INDICATOR_END_CLASS =
+  "after:absolute after:right-0 after:top-0 after:h-full after:w-[3px] after:bg-accent after:content-['']";
+
+/** 横向导航的底部指示条。 */
+export const UI_NAV_INDICATOR_BOTTOM_CLASS =
+  "after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:bg-accent after:content-['']";
+
+/** 多选/标签选中：描边 + 中性底 + 强调文字。 */
+export const UI_MULTISELECT_ITEM_ACTIVE_CLASS =
+  `${UI_COLOR_ACCENT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS} ${UI_COLOR_ACCENT_TEXT_CLASS}`;
+
+/** 布尔控件开态：强调色只用于开关轨道或复选框本体。 */
+export const UI_BOOLEAN_CONTROL_ACTIVE_CLASS =
+  `${UI_COLOR_ACCENT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS}`;
 
 /* ---------------------------------------------------------------------------
  * 排版层级令牌
@@ -143,6 +171,10 @@ export const UI_OPTION_ITEM_HOVER_CLASS =
 
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
+
+/** 原语调用点确需覆盖内部表面时使用，避免业务组件重复拼 `!` 类串。 */
+export const UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS =
+  '!border-accent !bg-brand-600 !text-white hover:!bg-brand-600';
 
 export const UI_DROPDOWN_OPTION_ACTIVE_CLASS =
   '!bg-brand-600 !text-white hover:!bg-brand-600';
