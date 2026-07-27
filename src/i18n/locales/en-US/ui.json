@@ -520,7 +520,6 @@
     },
     "diffusion": {
       "tool": "Glow / Diffusion",
-      "description": "Parameters are stored in image space; preview and export share one recipe.",
       "enable": "Enable glow / diffusion",
       "compiling": "Compiling diffusion preview…",
       "rendering": "Rendering diffusion preview…",
@@ -529,7 +528,6 @@
       "sharpFallbackAdapterUnavailable": "No usable WebGPU graphics adapter was found. Switched to an approximate Sharp compatibility preview; export still uses the original image size.",
       "sharpFallbackInitializationFailed": "WebGPU initialization failed. Switched to an approximate Sharp compatibility preview; export still uses the original image size.",
       "sharpFallbackRecoveryExhausted": "The WebGPU device was lost and could not be rebuilt automatically. Switched to an approximate Sharp compatibility preview; export still uses the original image size.",
-      "previewBackend": "Preview backend",
       "reset": "Reset",
       "remove": "Remove effect",
       "preset": {

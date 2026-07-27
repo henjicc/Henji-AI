@@ -155,17 +155,14 @@ export function DiffusionInspector(): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
       <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <h2 className={UI_TEXT_SECTION_CLASS}>{t('imageEditor.diffusion.tool')}</h2>
-          <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('imageEditor.diffusion.description')}</p>
-        </div>
+        <h2 className={UI_TEXT_SECTION_CLASS}>{t('imageEditor.diffusion.tool')}</h2>
         <UiSwitch checked={operation?.enabled ?? false} onCheckedChange={setEnabled} aria-label={t('imageEditor.diffusion.enable')} />
       </div>
       {previewState && previewState.phase !== 'idle' ? (
         <div role="status" aria-live="polite" className={`mb-3 rounded-lg border px-2.5 py-2 text-xs ${previewState.phase === 'failed' ? 'border-red-500/40 text-red-300' : 'border-border-dark text-text-muted'}`}>
           {previewStatus}
         </div>
-      ) : previewState?.backend ? <div className={`mb-3 ${UI_TEXT_META_CLASS}`}>{t('imageEditor.diffusion.previewBackend')}：{previewState.backend === 'webgpu-worker' ? 'WebGPU' : previewState.backend}</div> : null}
+      ) : null}
 
       <fieldset disabled={!operation?.enabled} className="m-0 min-w-0 space-y-3 border-0 p-0 disabled:opacity-60">
         <DiffusionDropdownField
