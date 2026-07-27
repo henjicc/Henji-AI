@@ -63,6 +63,13 @@
   --ui-glass-selected: rgb(255 255 255 / 0.18);
   /* 玻璃浮层内部的分隔线：同理走白纱，不用 border 色 */
   --ui-glass-divider: rgb(255 255 255 / 0.12);
+  /*
+   * 玻璃内部中性控件只叠一层浅色纱，不再盖不透明灰底。
+   * 这不是额外的 backdrop-filter，因此不会增加毛玻璃合成层。
+   */
+  --ui-glass-control-tint: rgb(255 255 255 / 0.08);
+  --ui-glass-control-border: var(--ui-glass-divider);
+  --ui-glass-control-hover: var(--ui-glass-hover);
   /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
   --ui-scrim-blur: 10px;
   --ui-scrim-tint: rgb(0 0 0 / 0.42);
@@ -151,6 +158,9 @@
   --ui-glass-filter: none;
   --ui-glass-tint: rgb(var(--panel-rgb) / 0.94);
   --ui-glass-grain: 0;
+  --ui-glass-control-tint: rgb(var(--surface-rgb) / 1);
+  --ui-glass-control-border: rgb(var(--border-rgb) / 1);
+  --ui-glass-control-hover: rgb(var(--layer-rgb) / 1);
   --ui-scrim-blur: 0px;
   --ui-scrim-tint: rgb(0 0 0 / 0.55);
 }
@@ -259,6 +269,20 @@
 
   .ui-glass-interactive:active:not(:disabled) {
     background-image: linear-gradient(var(--ui-glass-press), var(--ui-glass-press));
+  }
+
+  /*
+   * 玻璃容器里的中性实底按钮随材质开关联动：开启时融入玻璃，关闭时由
+   * data-ui-blur='off' 上面的变量恢复为原来的 surface / border / layer 实底。
+   * 品牌选中态和主按钮不会带这个标记，因此不会被冲淡。
+   */
+  .ui-glass .ui-glass-adaptive-control {
+    background-color: var(--ui-glass-control-tint);
+    border-color: var(--ui-glass-control-border);
+  }
+
+  .ui-glass .ui-glass-adaptive-control:hover:not(:disabled) {
+    background-color: var(--ui-glass-control-hover);
   }
 
   /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */

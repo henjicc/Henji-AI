@@ -187,6 +187,12 @@ export const UI_OPTION_ITEM_HOVER_CLASS =
 export const UI_GLASS_ITEM_HOVER_CLASS =
   'hover:!bg-veil-soft hover:!border-veil-subtle hover:!text-white';
 
+/**
+ * 中性实底控件在 `.ui-glass` 内随毛玻璃开关联动；类本身不添加 blur，
+ * 也不影响普通不透明面板中的现有外观。
+ */
+export const UI_GLASS_ADAPTIVE_CONTROL_CLASS = 'ui-glass-adaptive-control';
+
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
 

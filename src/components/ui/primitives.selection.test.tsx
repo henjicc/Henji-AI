@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
+  UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
   UI_NAV_INDICATOR_END_CLASS,
@@ -12,8 +13,10 @@ import {
   UI_OPTION_ITEM_ACTIVE_CLASS,
 } from './styleTokens';
 import {
+  UiButton,
   UiCheckbox,
   UiChipButton,
+  UiIconButton,
   UiNavButton,
   UiOptionButton,
   UiSwitch,
@@ -62,6 +65,30 @@ describe('Ui primitives 选中态词汇表', () => {
     expectClasses(chip, UI_MULTISELECT_ITEM_ACTIVE_CLASS);
     expect(option.classList.contains('bg-layer')).toBe(false);
     expect(chip.classList.contains('bg-brand-500')).toBe(false);
+  });
+
+  it('只有中性静息项携带玻璃内层自适应标记', () => {
+    const view = render(
+      <>
+        <UiOptionButton>静息选项</UiOptionButton>
+        <UiOptionButton active>选中选项</UiOptionButton>
+        <UiChipButton>静息标签</UiChipButton>
+        <UiChipButton active>选中标签</UiChipButton>
+        <UiButton>中性动作</UiButton>
+        <UiButton variant="primary">主动作</UiButton>
+        <UiIconButton aria-label="中性图标动作" />
+        <UiIconButton active aria-label="选中图标动作" />
+      </>,
+    );
+
+    expect(view.getByRole('button', { name: '静息选项' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
+    expect(view.getByRole('button', { name: '选中选项' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
+    expect(view.getByRole('button', { name: '静息标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
+    expect(view.getByRole('button', { name: '选中标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
+    expect(view.getByRole('button', { name: '中性动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
+    expect(view.getByRole('button', { name: '主动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
+    expect(view.getByRole('button', { name: '中性图标动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
+    expect(view.getByRole('button', { name: '选中图标动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
   });
 
   it('布尔态只强调开关与复选框控件本体', () => {

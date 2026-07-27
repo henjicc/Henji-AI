@@ -16,6 +16,7 @@ import {
   UI_FIELD_DISABLED_CLASS,
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
+  UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_INSET_SURFACE_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
@@ -128,10 +129,10 @@ function resolveButtonVariant(variant: ButtonVariant): string {
   }
 
   if (variant === 'ghost') {
-    return 'border border-border-dark bg-surface-dark text-text-dark hover:bg-layer';
+    return `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} border border-border-dark bg-surface-dark text-text-dark hover:bg-layer`;
   }
 
-  return `${UI_FIELD_SURFACE_CLASS} border border-border-dark text-text-dark hover:bg-layer`;
+  return `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_SURFACE_CLASS} border border-border-dark text-text-dark hover:bg-layer`;
 }
 
 function resolveButtonSize(size: ButtonSize, variant: ButtonVariant): string {
@@ -189,6 +190,7 @@ export function UiIconButton({
   ...props
 }: UiIconButtonProps) {
   const hoverOnly = appearance === 'hover-only';
+  const adaptiveSurfaceClass = !active && appearance === 'default' ? UI_GLASS_ADAPTIVE_CONTROL_CLASS : '';
   const stateClass = appearance === 'glass'
     // 玻璃档没有走 UI_FIELD_SURFACE_CLASS，禁用态要自己补，否则查看器的上/下一张
     // 到头时按钮看起来仍可点
@@ -211,7 +213,7 @@ export function UiIconButton({
 
   return (
     <button
-      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${UI_BUTTON_RESET_CLASS} ${stateClass} ${className}`}
+      className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${UI_BUTTON_RESET_CLASS} ${adaptiveSurfaceClass} ${stateClass} ${className}`}
       {...props}
     />
   );
@@ -225,7 +227,7 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
         : 'border-transparent text-text-muted hover:bg-surface-dark hover:text-text-dark'
       : active
         ? UI_MULTISELECT_ITEM_ACTIVE_CLASS
-        : `${UI_FIELD_SURFACE_CLASS} text-text-dark hover:bg-layer`;
+        : `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_SURFACE_CLASS} text-text-dark hover:bg-layer`;
 
     return (
       <button
@@ -311,7 +313,7 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     return (
       <button
         ref={ref}
-        className={`inline-flex items-center rounded-lg border px-2.5 py-2 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${stateClass} ${className}`}
+        className={`inline-flex items-center rounded-lg border px-2.5 py-2 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${active ? '' : UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${stateClass} ${className}`}
         {...props}
       />
     );
