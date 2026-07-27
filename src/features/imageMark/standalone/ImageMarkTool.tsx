@@ -249,20 +249,25 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
         onDocumentChange={(document) => {
           documentRef.current = document;
         }}
-        toolbarLeading={
-          <>
-            {backButton}
-            <UiButton variant="ghost" size="sm" onClick={() => void handleOpenFile()}>
-              <FolderOpen size={15} className="mr-1.5" />
-              打开图片
-            </UiButton>
-            <span className={`max-w-[200px] truncate ${UI_TEXT_META_CLASS}`} title={source.name}>
-              {source.name}
-            </span>
-          </>
-        }
+        toolbarLeading={backButton}
         toolbarActions={
           <>
+            {/* 文件上下文与打开动作跟导出动作同侧,左侧只留返回,工具组才能真正居中 */}
+            <span className={`max-w-[180px] truncate ${UI_TEXT_META_CLASS}`} title={source.name}>
+              {source.name}
+            </span>
+            <UiIconButton
+              type="button"
+              showBorder={false}
+              appearance="hover-only"
+              className="h-8 w-8"
+              title="打开图片"
+              aria-label="打开图片"
+              onClick={() => void handleOpenFile()}
+            >
+              <FolderOpen size={15} />
+            </UiIconButton>
+            <span className="mx-0.5 h-5 w-px bg-border-dark" />
             <UiButton variant="ghost" size="sm" disabled={isBusy} onClick={() => void runExport('copy')}>
               <ClipboardCopy size={15} className="mr-1.5" />
               复制

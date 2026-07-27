@@ -105,16 +105,13 @@ export function MarkToolbar({
 
   return (
     <div className="flex flex-col gap-1.5">
-      {/* 命令带:前导(返回/打开文件/文件名) → 工具组 → 宿主动作。整个视图只有这一条,
-          不要在它上下再加带（见 skill henji-ui-surface 的「页面骨架:横向条带」）。 */}
-      <div className="flex flex-wrap items-center gap-2">
-        {leading && (
-          <>
-            <div className="flex shrink-0 items-center gap-2">{leading}</div>
-            <span className="h-5 w-px shrink-0 bg-border-dark" />
-          </>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
+      {/* 命令带:左(前导) / 中(工具组,视觉居中) / 右(宿主动作)。整个视图只有这一条,
+          不要在它上下再加带（见 skill henji-ui-surface 的「页面骨架:横向条带」）。
+          三列取 1fr auto 1fr:左右两侧各自不超出 1fr 时,中列精确居中于命令带;
+          某侧内容更宽时该列被撑开、中列相应偏移,但不会与两侧重叠。 */}
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">{leading}</div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
           {TOOL_BUTTONS.filter((button) => !annotationOnly || button.type !== 'crop').map((button) => {
             const Icon = button.icon;
             return (
@@ -155,25 +152,52 @@ export function MarkToolbar({
 
           <span className="mx-1 h-5 w-px bg-border-dark" />
 
-          <UiChipButton type="button" className={CHIP_CLASS} onClick={onUndo} disabled={!canUndo} title="撤销(Ctrl+Z)">
+          {/* 历史动作是动作不是选项:走 hover-only 图标,既不与工具组抢视觉权重,
+              也让工具组窄下来后能真正居中 */}
+          <UiIconButton
+            type="button"
+            showBorder={false}
+            appearance="hover-only"
+            className="h-8 w-8"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title="撤销(Ctrl+Z)"
+            aria-label="撤销"
+          >
             <Undo2 className={ICON_CLASS} />
-            撤销
-          </UiChipButton>
-          <UiChipButton type="button" className={CHIP_CLASS} onClick={onRedo} disabled={!canRedo} title="重做(Ctrl+Y)">
+          </UiIconButton>
+          <UiIconButton
+            type="button"
+            showBorder={false}
+            appearance="hover-only"
+            className="h-8 w-8"
+            onClick={onRedo}
+            disabled={!canRedo}
+            title="重做(Ctrl+Y)"
+            aria-label="重做"
+          >
             <Redo2 className={ICON_CLASS} />
-            重做
-          </UiChipButton>
-          <UiChipButton type="button" className={CHIP_CLASS} onClick={onClear} disabled={!canClear} title="清空全部标记">
+          </UiIconButton>
+          <UiIconButton
+            type="button"
+            showBorder={false}
+            appearance="hover-only"
+            hoverVariant="danger"
+            className="h-8 w-8"
+            onClick={onClear}
+            disabled={!canClear}
+            title="清空全部标记"
+            aria-label="清空全部标记"
+          >
             <Trash2 className={ICON_CLASS} />
-            清空
-          </UiChipButton>
+          </UiIconButton>
         </div>
-        {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
+        <div className="flex min-w-0 items-center justify-end gap-2">{actions}</div>
       </div>
 
       {/* 从属参数带:只随当前工具变化,不自带底色与边框,与命令带共用外壳那条 border-b。
           固定最小高度,切换工具不引起内容跳动。 */}
-      <div className="flex min-h-9 flex-wrap items-center gap-2">
+      <div className="flex min-h-9 flex-wrap items-center justify-center gap-2">
         {!annotationOnly && tool === 'crop' ? (
           <>
             {CROP_RATIO_OPTIONS.map((option) => (
