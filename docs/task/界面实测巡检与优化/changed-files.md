@@ -133,7 +133,7 @@
 - 工具与编辑：`src/workspaces/ToolboxWorkspace.tsx`、`src/features/imageMark/editor/MarkEditor.tsx`、`standalone/ImageMarkTool.tsx`、`src/features/imageEdit/tools/diffusion/DiffusionInspector.tsx`、`geometry/GeometryInspector.tsx`
 - 公共组件与参数：`src/components/ui/` 下 12 个公共展示组件；`src/components/params/` 下基础输入、分辨率、复合面板与语音面板共 11 个文件
 
-本阶段共修改 91 个已跟踪 `src/` 文件并新增 1 个测试文件；完整精确清单以本阶段实现提交的 `git show --name-only` 为准。
+本阶段共修改 91 个已跟踪 `src/` 文件并新增 1 个测试文件；完整精确清单见实现提交 `44aac8b` 的 `git show --name-only`。
 
 ### 规范与任务记录
 
