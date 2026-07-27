@@ -34,9 +34,13 @@
    *   saturate / brightness 的增量在噪声内 —— 质感四层不必为性能砍任何一层
    *   opacity:0 / visibility:hidden / display:none 的玻璃是**免费**的，浏览器会跳过
    *
+   * 另测：画布整体平移时 150 层 27.4fps，手势期间降级成实心可回到 60.4fps；
+   * 但该降级已移除——玻璃在手势起止的突变肉眼可见，而 48 层平移本来就有 60fps，
+   * 画布上带玻璃的只有未播放视频节点的播放键，正常工程到不了拐点。详见
+   * src/features/canvas/storyboard.css 中保留的说明。
+   *
    * 结论：要优化就**减少层数或合并成一块大玻璃**（如工具条：一块玻璃包住所有透明按钮，
-   * 而不是每个按钮各一块），不要靠调小 --ui-blur。
-   * 画布手势期间的降级见 src/features/canvas/storyboard.css。
+   * 而不是每个按钮各一块），不要靠调小 --ui-blur，也不要为未证实的瓶颈牺牲观感。
    */
   --ui-blur: 24px;
   --ui-glass-filter: blur(var(--ui-blur)) saturate(180%) brightness(1.06);
