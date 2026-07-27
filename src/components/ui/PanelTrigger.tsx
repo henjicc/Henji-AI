@@ -6,6 +6,7 @@ import {
 } from './panelTriggerClosePolicy'
 import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton } from './primitives'
+import { ChevronDown } from 'lucide-react'
 
 type PanelTriggerProps = {
   label?: string
@@ -310,7 +311,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           className={`${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`}
         >
           <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{display ?? ''}</span>
-          <svg className={`w-4 h-4 text-text-muted transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+          <ChevronDown className={`w-4 h-4 text-text-muted transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} />
         </UiButton>
       )}
       {(open || closing) && pos && createPortal(

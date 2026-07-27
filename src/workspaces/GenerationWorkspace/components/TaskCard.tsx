@@ -28,7 +28,7 @@ import { TaskPrompt } from "./TaskPrompt"
 import { CopyIcon, DownloadIcon } from "./TaskActionIcons"
 import { TaskCardToolbar } from './TaskCardToolbar'
 import { useHistoryDrag } from "../hooks/useHistoryDrag"
-import { FolderCheck, FolderPlus, MessageCircleQuestion } from 'lucide-react'
+import { FolderCheck, FolderPlus, MessageCircleQuestion, Play } from 'lucide-react'
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary'
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
@@ -368,9 +368,7 @@ const TaskCard = React.memo(function TaskCard({
           <video src={videoUrl} className="w-full h-auto block" draggable={false} muted preload="metadata" />
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="ui-glass h-10 w-10 rounded-full flex items-center justify-center text-white">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+              <Play className="h-6 w-6" />
             </div>
           </div>
         </div>

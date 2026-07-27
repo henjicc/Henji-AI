@@ -1,7 +1,8 @@
-import { AlertCircle, Clapperboard, LoaderCircle } from 'lucide-react';
+import { AlertCircle, LoaderCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
+import { ICON_TOOL_CAMERA_STAGE } from '@/core/theme/icons'
 
 interface CameraStagePreviewPanelProps {
   imageSource: string | null;
@@ -39,7 +40,7 @@ export function CameraStagePreviewPanel({
         />
       ) : (
         <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text-muted/85">
-          <Clapperboard className="h-7 w-7 opacity-60" />
+          <ICON_TOOL_CAMERA_STAGE className="h-7 w-7 opacity-60" />
           <span className="px-4 text-center text-xs leading-6">{t('node.cameraStage.empty')}</span>
         </div>
       )}

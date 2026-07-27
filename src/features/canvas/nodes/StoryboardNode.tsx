@@ -28,7 +28,8 @@ import { IncomingImagePicker } from '@/features/canvas/nodes/storyboardSplit/Inc
 import { exportStoryboardImages } from '@/features/canvas/nodes/storyboardSplit/exporting';
 import { useStoryboardSort } from '@/features/canvas/nodes/storyboardSplit/useStoryboardSort';
 import { buildFrameViewerImageList, buildIncomingImageItems } from '@/features/canvas/nodes/storyboardSplit/data';
-import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, SplitResultIcon, STORYBOARD_GRID_GAP_PX } from '@/features/canvas/nodes/storyboardSplit/shared';
+import { type PanelAnchor, resolveExportOptions, resolvePanelAnchor, STORYBOARD_GRID_GAP_PX } from '@/features/canvas/nodes/storyboardSplit/shared';
+import { ICON_STORYBOARD } from '@/core/theme/icons';
 import { computeStoryboardSplitBaseLayout, computeStoryboardSplitFrameLayout } from '@/features/canvas/nodes/storyboardSplit/layout';
 
 type StoryboardNodeProps = NodeProps & {
@@ -280,7 +281,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<SplitResultIcon className="h-3.5 w-3.5" />}
+        icon={<ICON_STORYBOARD className="h-3.5 w-3.5" />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}

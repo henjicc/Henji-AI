@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
-import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Library, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
 import { UI_TEXT_LABEL_CLASS, UiIconButton, UiInput, UiNavButton } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType } from '@/platform/contracts/assetLibrary'
 
@@ -71,7 +72,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
     <aside className="flex w-52 shrink-0 flex-col border-r border-border-dark bg-panel">
       <nav className="space-y-1 p-2">
         <UiNavButton active={activeId === null && activeMediaType === null && activeSort === 'created'} onClick={onShowAll} className="!h-10 !rounded-lg !px-3">
-          <Library className="h-4 w-4" />{labels.all}
+          <ICON_ASSET_LIBRARY className="h-4 w-4" />{labels.all}
         </UiNavButton>
         <UiNavButton active={activeId === null && activeSort === 'recent'} onClick={onShowRecent} className="!h-9 !rounded-lg !px-3">
           <Clock3 className="h-4 w-4" />{labels.recent}

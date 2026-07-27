@@ -1,6 +1,7 @@
 import React from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
+import { ChevronUp } from 'lucide-react'
 
 interface FloatingInputPanelProps {
   containerRef: React.RefObject<HTMLDivElement>
@@ -81,15 +82,7 @@ export function FloatingInputPanel({
                 {hintText}
               </span>
             </div>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 text-text-muted"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            </svg>
+            <ChevronUp className="h-5 w-5 text-text-muted" />
           </div>
         </div>
 

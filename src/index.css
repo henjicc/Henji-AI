@@ -860,10 +860,10 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   color: rgb(var(--text-rgb) / 0.6);
 }
 
+/* lucide 是描边图标，这里不能再设 fill，否则会被填成实心块 */
 .btn svg {
   width: 24px;
   height: 24px;
-  fill: currentColor;
 }
 
 .btn-play svg {

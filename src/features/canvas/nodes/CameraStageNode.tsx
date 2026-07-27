@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { Clapperboard } from 'lucide-react';
+import { ICON_TOOL_CAMERA_STAGE } from '@/core/theme/icons'
+;
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -136,7 +137,7 @@ export const CameraStageNode = memo(({ id, data, selected, width, height }: Came
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<Clapperboard className="h-4 w-4" />}
+        icon={<ICON_TOOL_CAMERA_STAGE className="h-4 w-4" />}
         titleText={resolveNodeDisplayName(CANVAS_NODE_TYPES.cameraStage, data)}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}

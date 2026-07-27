@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { UI_TEXT_TITLE_CLASS, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
-import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal } from 'lucide-react'
+import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
 import InterfaceTab from './tabs/InterfaceTab'
@@ -115,9 +115,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
             appearance="hover-only"
             className="!h-9 !w-9 rounded-lg text-text-soft hover:text-white"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <X className="h-5 w-5" />
           </UiIconButton>
         </div>
 

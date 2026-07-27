@@ -8,6 +8,7 @@ import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import type { AspectRatioOption } from './types'
 import { getI18nText } from '@/core/types'
 import { UI_TEXT_LABEL_CLASS, UiOptionButton } from '@/components/ui'
+import { Zap } from 'lucide-react'
 
 export interface AspectRatioSelectorProps {
   value: string
@@ -55,9 +56,7 @@ export const AspectRatioSelector: React.FC<AspectRatioSelectorProps> = ({
             style={{ height: '92px' }}
           >
             <div className="h-8 flex items-center justify-center">
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M13 2L3 14h8l-1 8 11-14h-8l1-6z" />
-              </svg>
+              <Zap className="h-5 w-5" />
             </div>
             <span className="font-medium leading-none">
               {t('resolutionPanel.smart', { defaultValue: '智能' })}

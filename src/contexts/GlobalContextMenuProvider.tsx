@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import ReactDOM from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
+import { Clipboard } from 'lucide-react'
 
 const logger = createLogger('contexts.GlobalContextMenuProvider')
 
@@ -255,9 +256,7 @@ const GlobalContextMenuProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             onClick={handlePaste}
           >
             <div className="context-menu-icon">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
+              <Clipboard className="w-4 h-4" />
             </div>
             <span>{t('actions.paste')}</span>
           </div>

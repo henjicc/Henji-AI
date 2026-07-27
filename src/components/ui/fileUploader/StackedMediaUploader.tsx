@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import React, { useEffect, useRef, useState } from 'react'
 import { readFile } from '@/platform/desktopApi'
-import { RefreshCw, Scissors } from 'lucide-react'
+import { AudioLines, RefreshCw, Scissors } from 'lucide-react'
 import { useDragDrop } from '@/contexts/DragDropContext'
 import { readHenjiDragData, type HenjiDragTransferData } from '@/contexts/dragDataTransfer'
 import { useNativeDragDrop } from '@/hooks/useNativeDragDrop'
@@ -92,16 +92,7 @@ async function dragTransferDataToFile(dragData: HenjiDragTransferData): Promise<
 
 function AudioPreviewIcon(): JSX.Element {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="h-8 w-8 text-white/90" fill="none">
-      <path d="M0 0h24v24H0z" fill="none" />
-      <path
-        d="M9 3v18M6 7v10m6-11v12m3-9v6m3-8v10m3-6v2M3 11v2"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
-    </svg>
+    <AudioLines className="h-8 w-8 text-white/90" />
   )
 }
 

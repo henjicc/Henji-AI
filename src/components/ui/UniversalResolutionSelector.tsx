@@ -6,6 +6,7 @@ import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { calculateVisualizationSize } from '@/utils/aspectRatio'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiInput, UiOptionButton } from '@/components/ui'
+import { ArrowLeftRight, Zap } from 'lucide-react'
 
 const logger = createLogger('components.ui.UniversalResolutionSelector')
 
@@ -241,9 +242,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
     if (ratio === null || ratio === undefined) {
       return (
         <div className="flex items-center justify-center h-8">
-          <svg className="w-6 h-6 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
-          </svg>
+          <Zap className="w-6 h-6 text-yellow-400" />
         </div>
       )
     }
@@ -379,9 +378,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
                     max={8192}
                   />
                 </div>
-                <svg className="w-4 h-4 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                </svg>
+                <ArrowLeftRight className="w-4 h-4 text-text-muted" />
                 <div className="flex-1">
                   <UiInput
                     type="number"

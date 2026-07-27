@@ -2,14 +2,7 @@ import React from 'react'
 import { UiIconButton, UI_PANEL_SURFACE_CLASS } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
-import {
-  DownloadIcon,
-  LoopIcon,
-  PauseIcon,
-  PlayIcon,
-  VolumeMutedIcon,
-  VolumeOnIcon,
-} from './VideoViewerIcons'
+import { Download, Pause, Play, Repeat, Volume2, VolumeX } from 'lucide-react'
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2] as const
 
@@ -126,7 +119,7 @@ export function VideoViewerControls({
 
         <div className="controls-main">
           <UiIconButton onClick={togglePlay} className="btn btn-play !h-auto !w-auto !border-0 !bg-transparent" title={t('ui:audioPlayer.playPause')}>
-            {isVideoPlaying ? <PauseIcon /> : <PlayIcon />}
+            {isVideoPlaying ? <Pause /> : <Play />}
           </UiIconButton>
           <div className="time-display">{formatTime(currentTime)} / {formatTime(videoDuration)}</div>
           <div className="controls-right">
@@ -141,7 +134,7 @@ export function VideoViewerControls({
                   onClick={() => setMuted((value) => !value)}
                   title={muted ? t('ui:viewer.unmute') : t('ui:viewer.mute')}
                 >
-                  {muted || volume === 0 ? <VolumeMutedIcon className="w-5 h-5" /> : <VolumeOnIcon className="w-5 h-5" />}
+                  {muted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 </div>
                 <div
                   className={`speed-menu volume-menu ${isVolumeMenuOpen ? 'active' : ''}`}
@@ -196,7 +189,7 @@ export function VideoViewerControls({
               onClick={() => setLoop((value) => !value)}
               title={t('ui:viewer.loop')}
             >
-              <LoopIcon />
+              <Repeat />
             </UiIconButton>
             {onDownload && filePath && (
               <UiIconButton
@@ -204,7 +197,7 @@ export function VideoViewerControls({
                 onClick={() => onDownload(filePath)}
                 title={t('common:actions.download')}
               >
-                <DownloadIcon />
+                <Download />
               </UiIconButton>
             )}
           </div>

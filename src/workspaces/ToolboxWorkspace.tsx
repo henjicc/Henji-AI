@@ -1,5 +1,6 @@
 import React from 'react'
-import { ArrowLeft, Clapperboard, SquarePen } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import { ICON_TOOL_CAMERA_STAGE, ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import type { LucideIcon } from 'lucide-react'
 import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import CameraStageApp from '@/features/cameraStage/CameraStageApp'
@@ -30,14 +31,14 @@ const TOOLS: ToolboxToolMeta[] = [
     id: 'imageMark',
     name: '图片编辑',
     description: '打开或粘贴图片，快速打序号、框选、画箭头、加文字、打码，支持裁剪与旋转，一键复制或保存',
-    icon: SquarePen,
+    icon: ICON_TOOL_IMAGE_EDIT,
     ownsCommandBar: true,
   },
   {
     id: 'cameraStage',
     name: '3D 镜头参考',
     description: '搭建三维场景、给角色摆姿势、调机位取景，一键截图给 AI 当参考图',
-    icon: Clapperboard,
+    icon: ICON_TOOL_CAMERA_STAGE,
   },
 ]
 

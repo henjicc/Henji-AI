@@ -408,6 +408,52 @@ style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
 都已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）。
 合并时注意 **`translate` 必须写在 `rotate`/`scale` 之前**，否则旋转缩放会一起作用到位移量上。
 
+## 图标也是视觉令牌
+
+和颜色、字号、动效一样：**同一个业务概念在全应用只能有一个图形。**
+
+治理前实测：「资产库」在顶部导航是手写的归档盒路径、在工具栏是 `LibraryBig`、在侧栏是
+`Library`——三处三样；「工具箱」tab 和「设置」按钮共用同一个齿轮；全项目 **74 处手写
+inline `<svg>`**，与 lucide-react 两套体系并存。根因就是图标从来没有登记处。
+
+### 两条规则
+
+1. **业务组件禁止手写 `<svg>`**，图标一律走 `lucide-react`。
+   这和「原生 `<button>` 只能落在 `primitives.tsx`」是同一条约束的两个面。
+2. **跨界面复用的业务概念图标**（资产库、工作区、工具、媒体类型…）必须引用
+   `src/core/theme/icons.ts` 的登记常量，改一个概念的图标只改那一行。
+
+**通用动作图标不必登记**：`X` / `Plus` / `Check` / `Trash2` / `Download` 直接从
+lucide 引入即可——lucide 的名字本身就是单一真源，再包一层别名只是徒增间接。
+判据是「这个图形在本仓库是否只表示一个业务概念」，是就登记，不是就直接用。
+
+### 私有图标模块是同一个坑的变体
+
+`VideoViewerIcons.tsx` 那种"本目录自己的一套图标"必须删掉，调用点直接用 lucide。
+它看起来像收敛，其实是又开了一套平行体系——播放器的播放键和别处的播放键会长得不一样。
+
+### 什么不是图标
+
+波形、缓动曲线、关键帧曲线图、画布连线预览——这些 `<svg>` 的路径**由数据算出来**，
+换成图标库是错的。它们在 `scripts/check-icon-tokens.cjs` 的豁免名单里，新增豁免要写明理由。
+
+判据一句话：**路径是写死的 → 图标；路径是算出来的 → 图形。**
+
+### 同一形状表示多个概念，是另一个问题
+
+`LayoutGrid` 目前同时是「画布」tab、「分组」节点和设置里的「界面」分区；`Wrench`
+既是工具箱又是助手的工具调用。这类冲突**不归登记表管**——登记表解决"一个概念多个形状"，
+这里是"一个形状多个概念"，只能靠换形状解决，且是设计判断，不要用脚本硬拦。
+
+### 检查
+
+```bash
+npm run check:icons          # 告警式
+npm run check:icons:strict   # 门禁式，已接入 build / electron:build
+```
+
+确需例外时在该行或上一行加注释 `icon-token-allow` 并写明理由。
+
 ## 用排版建立层级，而不是用框
 
 项目此前 72% 的字号决策都落在 `text-xs` 及更小，层级塌缩成"全是小字"，于是只能靠边框背景区分内容。
@@ -493,6 +539,9 @@ style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
 | 两条同底色条带中间夹一条透明带 | 合并成一条；确实要分就让中间那条也归属同一块底色 |
 | 全屏工作面（画布/编辑区/预览区）套 `rounded + border` + 外层留白 | 铺满，边界交给上方那条 `border-b` |
 | 同一视图里各条带用不同的横向 padding | 统一到同一个值，与其下内容区对齐 |
+| 业务组件手写 inline `<svg>` 画图标 | 用 lucide-react；确属图形则加入 `check-icon-tokens.cjs` 豁免并写明理由 |
+| 在调用点自己从 lucide 挑业务概念图标 | 用 `@/core/theme/icons` 的登记常量 |
+| 建一个「本目录自己的图标模块」 | 删掉，调用点直接用 lucide；私有图标集＝又一套平行体系 |
 
 ## 排版细节（避免"挤"和"散"）
 
@@ -587,6 +636,8 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 有没有"比父级更亮"的背景块？有就该是 `inset` 或 bare
 - [ ] 有没有为了填空白而加的卡片/边框/阴影？删掉
 - [ ] 容器里并列的可点项，静息态还在逐个描边吗？该是 `UiOptionButton variant="menu"`
+- [ ] 有手写 `<svg>` 吗？路径写死的就是图标，改用 lucide；路径算出来的才是图形
+- [ ] 用到跨界面的业务概念图标了吗？走 `@/core/theme/icons` 的登记常量，别在调用点自己挑
 - [ ] 有没有 `zinc-*` / `gray-*` / `slate-*`？改强调色或换主题预设时它们不会跟着动
 - [ ] 用 `accent` 当文字色了吗？改用 `text-brand-300`；白字要压实心蓝的话底色用 `bg-brand-500`
 - [ ] 破坏性动作（删除/清空）是不是 `variant="primary"`？那会抢走主动作的视觉权重，应该静息中性、hover 才出危险色
@@ -642,7 +693,7 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 ## 完成前必跑
 
 ```bash
-npm run check:surface && npm run check:colors && npm run lint
+npm run check:surface && npm run check:colors && npm run check:icons && npm run lint
 ```
 
 改了动效档位或 `motion.ts` 再补一条（它保证 ms 数值与 `duration-*` 类不漂移）：

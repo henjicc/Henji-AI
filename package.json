@@ -17,7 +17,7 @@
     "check:model-i18n": "node scripts/check-model-i18n.cjs",
     "logs:query": "node scripts/query-logs.cjs",
     "assistant:cli": "node scripts/run-assistant-cli.cjs",
-    "build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:surface:strict && npm run check:model-i18n && tsc && vite build",
+    "build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:surface:strict && npm run check:icons:strict && npm run check:model-i18n && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
@@ -27,7 +27,7 @@
     "lint:colors": "npm run check:colors",
     "lint:fix": "eslint src --ext ts,tsx --fix",
     "electron:dev": "npm run gen:progress-seeds && npm run gen:model-manifest && node scripts/electron-vite-dev.cjs",
-    "electron:build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:surface:strict && npm run check:model-i18n && tsc -p tsconfig.electron.json && electron-vite build",
+    "electron:build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:surface:strict && npm run check:icons:strict && npm run check:model-i18n && tsc -p tsconfig.electron.json && electron-vite build",
     "electron:pack": "npm run electron:build && electron-builder --dir",
     "electron:dist": "npm run electron:build && electron-builder",
     "electron:publish": "npm run electron:build && electron-builder --publish always",
@@ -40,7 +40,9 @@
     "release": "node scripts/release.cjs",
     "gen:camera-stage-poses": "node scripts/generate-camera-stage-poses.cjs",
     "ui:tour": "node scripts/ui-tour.cjs",
-    "check:ui-visual": "node scripts/ui-visual-audit.cjs"
+    "check:ui-visual": "node scripts/ui-visual-audit.cjs",
+    "check:icons": "node scripts/check-icon-tokens.cjs",
+    "check:icons:strict": "node scripts/check-icon-tokens.cjs --strict"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.62",

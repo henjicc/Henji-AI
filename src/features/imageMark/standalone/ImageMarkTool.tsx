@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ClipboardCopy, ClipboardPaste, FolderOpen, ImagePlus, LibraryBig, Save } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, ClipboardPaste, FolderOpen, ImagePlus, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
 import {
@@ -12,6 +12,7 @@ import {
   UiOptionButton,
 } from '@/components/ui';
 import { readClipboardImage } from '@/commands/clipboard';
+import { ICON_ASSET_LIBRARY } from '@/core/theme/icons';
 import { useNotification } from '@/contexts/NotificationContext';
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary';
 import { allowMediaRoot, basename, dirname, getPathForFile, openDialog, saveDialog } from '@/platform/desktopApi';
@@ -323,7 +324,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
               disabled={isBusy || collecting}
               onClick={() => void runExport('collect')}
             >
-              <LibraryBig size={15} className="mr-1.5" />
+              <ICON_ASSET_LIBRARY size={15} className="mr-1.5" />
               加入资产库
             </UiButton>
             <UiButton variant="primary" size="sm" disabled={isBusy} onClick={() => void runExport('save')}>

@@ -1,6 +1,7 @@
 import React from 'react'
 import type { ToastNotification } from '../types'
 import { UI_TEXT_BODY_CLASS } from '@/components/ui'
+import { Check, X } from 'lucide-react'
 
 export interface NotificationToastProps {
   notification: ToastNotification | null
@@ -26,13 +27,9 @@ export function NotificationToast({ notification, visible }: NotificationToastPr
         }`}
       >
         {isSuccess ? (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
+          <Check className="w-5 h-5" />
         ) : (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <X className="w-5 h-5" />
         )}
         <span className={UI_TEXT_BODY_CLASS}>{notification.message}</span>
       </div>

@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react';
+import { CircleX } from 'lucide-react'
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -86,14 +87,7 @@ export const DisconnectableEdge = memo(function DisconnectableEdge(props: EdgePr
             }}
             aria-label="断开连线"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
-              <path
-                fill="currentColor"
-                fillRule="evenodd"
-                d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12m7.707-3.707a1 1 0 0 0-1.414 1.414L10.586 12l-2.293 2.293a1 1 0 1 0 1.414 1.414L12 13.414l2.293 2.293a1 1 0 0 0 1.414-1.414L13.414 12l2.293-2.293a1 1 0 0 0-1.414-1.414L12 10.586z"
-                clipRule="evenodd"
-              />
-            </svg>
+            <CircleX className="h-5 w-5" />
           </UiIconButton>
         </EdgeLabelRenderer>
       )}

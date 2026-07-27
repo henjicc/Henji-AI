@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { Upload } from 'lucide-react'
 
 const logger = createLogger('components.params.upload.UploadArea')
 /**
@@ -107,9 +108,7 @@ export const UploadArea: React.FC<UploadAreaProps> = ({
         </div>
       ) : (
         <div className="upload-hint">
-          <svg className="upload-icon" viewBox="0 0 24 24" width="48" height="48">
-            <path fill="currentColor" d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
-          </svg>
+          <Upload className="upload-icon" />
           <span className="upload-text">{t('uploadArea.hint')}</span>
           <span className="upload-limit">
             {t('uploadArea.limit', {

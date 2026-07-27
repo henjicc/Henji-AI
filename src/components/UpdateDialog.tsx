@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { getPlatform } from '@/platform/runtime'
+import { CloudUpload, X } from 'lucide-react'
 
 const logger = createLogger('components.UpdateDialog')
 /**
@@ -137,20 +138,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-8 w-8 text-accent"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                  />
-                </svg>
+                <CloudUpload className="h-8 w-8 text-accent" />
                 <div>
                   <h2 className="text-xl font-bold text-white">{t('updateDialog.title')}</h2>
                   <p className="text-sm text-text-muted mt-1">
@@ -176,20 +164,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
               onClick={handleClose}
               className="rounded-full text-text-muted hover:text-white"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
+              <X className="h-5 w-5" />
             </UiIconButton>
           </div>
         </div>

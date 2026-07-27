@@ -15,6 +15,8 @@ import {
 } from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
 import { PROVIDER_ORDER, MODEL_TYPE_ORDER, compareModelsBySeries } from '@/core/modelSortOrder'
+import { X } from 'lucide-react'
+import { ICON_PRESET } from '@/core/theme/icons'
 interface ModelSelectorPanelProps {
   selectedProvider: string
   selectedModel: string
@@ -264,9 +266,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                 className="absolute right-1.5 top-1/2 h-7 w-7 -translate-y-1/2"
                 title={t('search.clear')}
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X className="w-4 h-4" />
               </UiIconButton>
             )}
           </div>
@@ -376,14 +376,9 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       className="inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-lg border border-transparent bg-transparent text-text-muted transition-colors hover:bg-layer"
                       title={favoriteModels.has(`${p.id}-${m.id}`) ? t('favorite.remove') : t('favorite.add')}
                     >
-                      <svg
+                      <ICON_PRESET
                         className={`h-3.5 w-3.5 transition-colors ${favoriteModels.has(`${p.id}-${m.id}`) ? 'fill-yellow-400 text-yellow-400' : 'fill-none text-text-muted'}`}
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                      </svg>
+                      />
                     </span>
                   </div>
                   <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${MODEL_CARD_META_TEXT_CLASS}`}>

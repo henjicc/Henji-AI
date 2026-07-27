@@ -18,6 +18,7 @@ import {
   modelscopeCustomModelService,
   type ModelscopeCustomModelEntry,
 } from '@/services/modelscopeCustomModels/ModelscopeCustomModelService'
+import { Plus, X } from 'lucide-react'
 
 const logger = createLogger('components.MediaGenerator.components.ModelscopeCustomModelManager')
 
@@ -158,9 +159,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           onClick={() => setIsAddingNew(true)}
           className="mb-3 gap-2"
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
+          <Plus className="w-4 h-4" />
           {t('modelscopeCustomModel.addNew')}
         </UiButton>
       ) : (
@@ -177,9 +176,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
               className="h-8 w-8 border-transparent bg-transparent text-text-muted hover:bg-layer/60"
               aria-label={t('common:close')}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-4 h-4" />
             </UiIconButton>
           </div>
           <div className="flex flex-col gap-2">

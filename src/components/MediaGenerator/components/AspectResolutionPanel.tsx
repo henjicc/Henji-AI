@@ -18,6 +18,7 @@ import {
   readImageRatio,
   type SizeDerivedSpec,
 } from './aspectResolutionPanelUtils'
+import { Zap } from 'lucide-react'
 
 interface AspectResolutionPanelProps {
   aspectParam?: ChoiceParamDescriptor
@@ -437,9 +438,7 @@ export const AspectResolutionPanel: React.FC<AspectResolutionPanelProps> = ({
                       >
                         <div className="h-8 flex items-center justify-center">
                           {option.smart ? (
-                            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M13 2L3 14h8l-1 8 11-14h-8l1-6z" />
-                            </svg>
+                            <Zap className="h-5 w-5" />
                           ) : option.ratio ? (
                             <div
                               className="border-2 border-current"

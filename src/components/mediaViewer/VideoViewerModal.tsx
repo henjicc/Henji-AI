@@ -3,11 +3,7 @@ import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
 import { UiIconButton } from '@/components/ui'
 import { readVideoInfo } from '@/commands/video'
-import {
-  CloseIcon,
-  VolumeMutedIcon,
-  VolumeOnIcon,
-} from './VideoViewerIcons'
+import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
@@ -441,9 +437,9 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               style={{ opacity: showVolumeIndicator ? 1 : 0, transition: uiTransition(['opacity'], UI_DURATION.base), pointerEvents: 'none' }}
             >
               {muted || volume === 0 ? (
-                <VolumeMutedIcon className="w-5 h-5" />
+                <VolumeX className="w-5 h-5" />
               ) : (
-                <VolumeOnIcon className="w-5 h-5" />
+                <Volume2 className="w-5 h-5" />
               )}
               <span className="text-base font-medium">{Math.round((muted ? 0 : volume) * 100)}%</span>
             </div>
@@ -512,7 +508,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
               className="absolute top-2 right-2 rounded-full bg-surface-dark/80 text-white hover:bg-layer/80 pointer-events-auto"
               title={t('common:close')}
             >
-              <CloseIcon />
+              <X className="h-5 w-5" />
             </UiIconButton>
           </div>
         </div>

@@ -5,7 +5,14 @@ import { UiChipButton, UiIconButton } from '@/components/ui'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import type { WorkspaceId } from '@/core/types/workspace'
 import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
-import { Sparkles } from 'lucide-react'
+import { Copy, Minus, Sparkles, Square, X, type LucideIcon } from 'lucide-react'
+import {
+  ICON_ASSET_LIBRARY,
+  ICON_SETTINGS,
+  ICON_WORKSPACE_CANVAS,
+  ICON_WORKSPACE_GENERATE,
+  ICON_WORKSPACE_TOOLBOX,
+} from '@/core/theme/icons'
 
 const logger = createLogger('components.WindowControls')
 
@@ -21,7 +28,8 @@ const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
 interface TabConfig {
   id: WorkspaceId
   label: string
-  icon: React.ReactNode
+  /** 概念图标一律取自 `@/core/theme/icons`，不在这里各自挑图形，也不手写 svg */
+  icon: LucideIcon
 }
 
 interface WindowControlsProps {
@@ -40,39 +48,10 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
   const [isMaximized, setIsMaximized] = React.useState<boolean>(false)
   const tabs: TabConfig[] = [
-    {
-      id: 'generation',
-      label: t('tabs.generation'),
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      )
-    },
-    {
-      id: 'nodes',
-      label: t('tabs.canvas'),
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-        </svg>
-      )
-    },
-    {
-      id: 'tools',
-      label: t('tabs.tools'),
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
-      )
-    },
-    {
-      id: 'assets',
-      label: t('tabs.assets'),
-      icon: <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7h16M5 7l1-3h12l1 3v13H5V7zm4 4h6" /></svg>
-    },
+    { id: 'generation', label: t('tabs.generation'), icon: ICON_WORKSPACE_GENERATE },
+    { id: 'nodes', label: t('tabs.canvas'), icon: ICON_WORKSPACE_CANVAS },
+    { id: 'tools', label: t('tabs.tools'), icon: ICON_WORKSPACE_TOOLBOX },
+    { id: 'assets', label: t('tabs.assets'), icon: ICON_ASSET_LIBRARY },
   ]
 
   React.useEffect(() => {
@@ -149,7 +128,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           selectionRole="navigation"
           className="!h-7 gap-1.5 rounded-md border-0 px-3 py-1 text-xs font-medium"
         >
-          {tab.icon}
+          <tab.icon className="h-3.5 w-3.5" />
           <span>{tab.label}</span>
         </UiChipButton>
       ))}
@@ -175,10 +154,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               className="!w-6 !h-6 !rounded-md border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('actions.settings')}
             >
-              <svg className="w-3.5 h-3.5 text-text-soft" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <ICON_SETTINGS className="h-3.5 w-3.5 text-text-soft" />
             </UiIconButton>
             <UiIconButton
               type="button"
@@ -186,9 +162,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               className="!w-3 !h-3 !rounded-full !border-0 !bg-red-400 hover:!bg-red-400/80 !p-0 group"
               title={t('windowControls.close')}
             >
-              <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </UiIconButton>
             <UiIconButton
               type="button"
@@ -196,9 +170,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               className="!w-3 !h-3 !rounded-full !border-0 !bg-yellow-400 hover:!bg-yellow-400/80 !p-0 group"
               title={t('windowControls.minimize')}
             >
-              <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h16" />
-              </svg>
+              <Minus className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </UiIconButton>
             <UiIconButton
               type="button"
@@ -206,9 +178,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               className="!w-3 !h-3 !rounded-full !border-0 !bg-green-500 hover:!bg-green-500/80 !p-0 group"
               title={t('windowControls.maximize')}
             >
-              <svg className="w-2 h-2 text-black/50 opacity-0 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8 8h8v8H8z" />
-              </svg>
+              <Square className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
             </UiIconButton>
           </div>
 
@@ -273,10 +243,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('actions.settings')}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <ICON_SETTINGS className="h-4 w-4" />
             </UiIconButton>
             <UiIconButton
               type="button"
@@ -284,9 +251,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('windowControls.minimize')}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M5 12h14" />
-              </svg>
+              <Minus className="h-4 w-4" />
             </UiIconButton>
             <UiIconButton
               type="button"
@@ -295,13 +260,9 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               title={t('windowControls.toggleMaximize')}
             >
               {isMaximized ? (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 2048" className="w-2.5 h-2.5" fill="currentColor">
-                  <path d="M2048 1638h-410v410H0V410h410V0h1638zM1434 614H205v1229h1229zm409-409H614v205h1024v1024h205z" />
-                </svg>
+                <Copy className="h-3.5 w-3.5" />
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="6" y="6" width="12" height="12" />
-                </svg>
+                <Square className="h-3.5 w-3.5" />
               )}
             </UiIconButton>
             <UiIconButton
@@ -310,9 +271,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-red-700/70"
               title={t('windowControls.close')}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
+              <X className="h-4 w-4" />
             </UiIconButton>
           </div>
         </>

@@ -9,6 +9,7 @@ import { isDesktop, inferMimeFromPath } from '../../utils/save'
 import { useReorderDrag } from './fileUploader/useReorderDrag'
 import { UiButton, UiIconButton, UiInput } from './primitives'
 import { UI_DURATION, uiTransition } from './motion'
+import { Play, Plus, X } from 'lucide-react'
 
 const logger = createLogger('components.ui.FileUploader')
 
@@ -325,9 +326,7 @@ export default function FileUploader({
                                             />
                                             {/* 播放图标覆盖层 */}
                                             <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg pointer-events-none">
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white opacity-90" fill="currentColor" viewBox="0 0 24 24">
-                                                    <path d="M8 5v14l11-7z" />
-                                                </svg>
+                                                <Play className="h-6 w-6 text-white opacity-90" />
                                             </div>
                                         </div>
                                     )
@@ -353,9 +352,7 @@ export default function FileUploader({
                                 className="absolute -top-2 -right-2 h-5 w-5 border-0 bg-red-500 p-1 text-white opacity-0 shadow-thumb-sm transition-opacity duration-200 hover:bg-red-600 group-hover:opacity-100 z-20 pointer-events-auto"
                                 type="button"
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                                <X className="h-3 w-3 text-white" />
                             </UiIconButton>
                         </div>
                     </div>
@@ -372,9 +369,7 @@ export default function FileUploader({
                     className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-layer/90' : 'border-border-dark/50 bg-layer/80 hover:border-border-dark/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text-muted'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
+                    <Plus className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text-muted'}`} />
                 </UiButton>
             )}
 
