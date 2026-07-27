@@ -5,8 +5,14 @@ export type MediaType = 'image' | 'video' | 'audio'
 
 export type TaskStatus = 'queued' | 'pending' | 'generating' | 'success' | 'error'
 
+export interface ResultImageDimensions {
+  width: number
+  height: number
+}
+
 export interface GeneratorOptions extends DynamicValueMap {
   size?: string
+  resultImageDimensions?: Array<ResultImageDimensions | null>
   images?: string[]
   uploadedFilePaths?: string[]
   videos?: string[]

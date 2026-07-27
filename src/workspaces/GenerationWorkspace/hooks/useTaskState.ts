@@ -1,6 +1,6 @@
 import type React from 'react'
 import { useCallback, useState } from 'react'
-import type { GenerationTask } from '../types'
+import type { GenerationTask, ResultImageDimensions } from '../types'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 
 export interface UseTaskStateReturn {
@@ -8,6 +8,11 @@ export interface UseTaskStateReturn {
   setTasks: React.Dispatch<React.SetStateAction<GenerationTask[]>>
   updateTask: (taskId: string, updates: Partial<GenerationTask>) => void
   updateProgress: (taskId: string, progress: number) => void
+  rememberResultImageDimensions: (
+    taskId: string,
+    imageIndex: number,
+    dimensions: ResultImageDimensions
+  ) => void
 }
 
 export function useTaskState(): UseTaskStateReturn {
@@ -23,5 +28,39 @@ export function useTaskState(): UseTaskStateReturn {
     useGenerationTaskProgressStore.getState().setProgress(taskId, progress)
   }, [])
 
-  return { tasks, setTasks, updateTask, updateProgress }
+  const rememberResultImageDimensions = useCallback((
+    taskId: string,
+    imageIndex: number,
+    dimensions: ResultImageDimensions
+  ): void => {
+    setTasks((currentTasks) => {
+      let changed = false
+      const nextTasks = currentTasks.map((task) => {
+        if (task.id !== taskId) return task
+        const currentDimensions = task.options?.resultImageDimensions
+        const existing = Array.isArray(currentDimensions) ? currentDimensions[imageIndex] : undefined
+        if (existing?.width === dimensions.width && existing.height === dimensions.height) return task
+
+        const nextDimensions = Array.isArray(currentDimensions) ? [...currentDimensions] : []
+        nextDimensions[imageIndex] = dimensions
+        changed = true
+        return {
+          ...task,
+          options: {
+            ...(task.options ?? {}),
+            resultImageDimensions: nextDimensions,
+          },
+        }
+      })
+      return changed ? nextTasks : currentTasks
+    })
+  }, [])
+
+  return {
+    tasks,
+    setTasks,
+    updateTask,
+    updateProgress,
+    rememberResultImageDimensions,
+  }
 }

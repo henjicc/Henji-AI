@@ -47,7 +47,13 @@ const clearGenerationTaskProgress = (taskId: string): void =>
 const GenerationWorkspace: React.FC = () => {
   const { t } = useI18n()
   useDataDirectoryInit()
-  const { tasks, setTasks, updateTask, updateProgress } = useTaskState()
+  const {
+    tasks,
+    setTasks,
+    updateTask,
+    updateProgress,
+    rememberResultImageDimensions,
+  } = useTaskState()
   const [isTasksLoaded, setIsTasksLoaded] = useState(false)
   const isInitialLoadRef = useRef(true)
   useLoadTaskHistory({ setTasks, setIsTasksLoaded, isInitialLoadRef })
@@ -547,6 +553,7 @@ const GenerationWorkspace: React.FC = () => {
               onReedit={handleReedit}
               onDelete={deleteTask}
               onUsePrompt={handleUsePrompt}
+              onRememberResultImageDimensions={rememberResultImageDimensions}
               onOpenImageViewer={(url, list, filePaths) => openImageViewer(url, list, filePaths, false)}
               onOpenVideoViewer={openVideoViewer}
               notify={notify}

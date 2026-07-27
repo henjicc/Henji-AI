@@ -9,7 +9,6 @@ import {
   UiButton,
   UiEmpty,
   UiError,
-  UiIconButton,
   UiLoading,
   UI_INSET_SURFACE_CLASS,
   UI_TEXT_META_CLASS,
@@ -18,17 +17,21 @@ import {
 } from "@/components/ui"
 import AudioPlayer from "@/components/AudioPlayer"
 import { getModelDisplayName } from "@/utils/modelHelpers"
-import type { GenerationTask } from "../types"
+import type { GenerationTask, ResultImageDimensions } from "../types"
 import { splitMulti } from "../utils/multiFile"
+import {
+  getResultImageSlotHeight,
+  resolveResultImageDimensions,
+} from "../utils/resultImageDimensions"
 import { TaskInputPreview } from "./TaskInputPreview"
 import { TaskPrompt } from "./TaskPrompt"
-import { CopyIcon, DownloadIcon, UsePromptIcon } from "./TaskActionIcons"
+import { CopyIcon, DownloadIcon } from "./TaskActionIcons"
+import { TaskCardToolbar } from './TaskCardToolbar'
 import { useHistoryDrag } from "../hooks/useHistoryDrag"
 import { FolderCheck, FolderPlus, MessageCircleQuestion } from 'lucide-react'
 import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibrary'
 import { checkAssetPaths } from '@/commands/assetLibrary'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
-
 export interface TaskCardProps {
   task: GenerationTask
   onDownload: (filePath: string, fromButton?: boolean) => Promise<void>
@@ -38,20 +41,38 @@ export interface TaskCardProps {
   onReedit: (task: GenerationTask) => void
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
+  onRememberResultImageDimensions: (
+    taskId: string,
+    imageIndex: number,
+    dimensions: ResultImageDimensions
+  ) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
   onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
   showMenu: (e: React.MouseEvent, items: MenuItem[]) => void
   notify: (message: string, type?: 'success' | 'error') => void
 }
-
 /**
- * 结果区插槽：固定高度 + 内嵌表面。
- * 生成中/排队/失败都占同样高度，避免状态切换时列表跳动；
+ * 结果区插槽：内嵌表面 + 可预知高度。
+ * 已知图片比例时提前匹配结果高度；缺少比例的旧任务回退到固定高度，
+ * 避免生成状态切换或图片解码时让历史列表二次跳动。
  * 用 inset（比页面底色更暗）读作"凹进去的待填充槽位"，而不是浮起来的卡片。
  */
-const RESULT_SLOT_CLASS = `h-64 rounded-lg ${UI_INSET_SURFACE_CLASS}`
+interface TaskStatusSlotProps {
+  dimensions: ResultImageDimensions | null
+  children: React.ReactNode
+}
 
-
+function TaskStatusSlot({ dimensions, children }: TaskStatusSlotProps): JSX.Element {
+  const height = getResultImageSlotHeight(dimensions)
+  return (
+    <div
+      className={`${height ? '' : 'h-64'} rounded-lg ${UI_INSET_SURFACE_CLASS}`}
+      style={height ? { height } : undefined}
+    >
+      {children}
+    </div>
+  )
+}
 const TaskCard = React.memo(function TaskCard({
   task,
   onDownload,
@@ -61,6 +82,7 @@ const TaskCard = React.memo(function TaskCard({
   onReedit,
   onDelete,
   onUsePrompt,
+  onRememberResultImageDimensions,
   onOpenImageViewer,
   onOpenVideoViewer,
   showMenu,
@@ -160,15 +182,21 @@ const TaskCard = React.memo(function TaskCard({
   const createdAtLabel = formatDate(task.createdAt)
   const inputImages = task.images ?? []
   const inputVideos = task.videos ?? []
+  const primaryResultImageDimensions = task.type === 'image'
+    ? resolveResultImageDimensions(task, 0)
+    : null
+  const renderStatusSlot = (content: React.ReactNode): JSX.Element => (
+    <TaskStatusSlot dimensions={primaryResultImageDimensions}>{content}</TaskStatusSlot>
+  )
 
   const renderResult = () => {
-    // 四种非成功状态统一走状态组件。h-64 必须保留：结果区高度固定，
-    // 生成过程中状态切换才不会让整条历史列表跳动。
+    // 四种非成功状态统一走状态组件；已知图片比例时提前使用结果高度，
+    // 未知比例时保留 h-64 作为老任务的稳定降级。
     if (task.status === "queued") {
-      return (
+      return renderStatusSlot(
         <UiEmpty
           size="sm"
-          className={RESULT_SLOT_CLASS}
+          className="h-full"
           title={t("ui:workspace.status.queued")}
           description={t("ui:workspace.status.waiting")}
         />
@@ -176,14 +204,14 @@ const TaskCard = React.memo(function TaskCard({
     }
 
     if (task.status === "pending") {
-      return (
-        <UiLoading size="sm" className={RESULT_SLOT_CLASS} message={t("ui:workspace.status.preparing")} />
+      return renderStatusSlot(
+        <UiLoading size="sm" className="h-full" message={t("ui:workspace.status.preparing")} />
       )
     }
 
     if (task.status === "generating") {
-      return (
-        <UiLoading size="sm" className={RESULT_SLOT_CLASS} message={t("ui:workspace.status.generating")}>
+      return renderStatusSlot(
+        <UiLoading size="sm" className="h-full" message={t("ui:workspace.status.generating")}>
           {progressValue !== undefined && (
             <ProgressBar progress={progressValue} duration={getProgressTransitionDurationMs(progressValue)} />
           )}
@@ -192,10 +220,10 @@ const TaskCard = React.memo(function TaskCard({
     }
 
     if (task.status === "error") {
-      return (
+      return renderStatusSlot(
         <UiError
           size="sm"
-          className={RESULT_SLOT_CLASS}
+          className="h-full"
           title={t("common:error")}
           message={task.error || t("common:status.failed")}
           onRetry={() => void onRetryPolling(task)}
@@ -231,6 +259,7 @@ const TaskCard = React.memo(function TaskCard({
         <div className="flex flex-wrap gap-3">
           {urls.map((url, index) => {
             const filePath = filePaths[index]
+            const imageDimensions = resolveResultImageDimensions(task, index)
             return (
               <div
                 key={`${task.id}-img-${index}`}
@@ -275,12 +304,22 @@ const TaskCard = React.memo(function TaskCard({
                 <img
                   src={url}
                   alt={t("ui:viewer.imageAlt")}
+                  width={imageDimensions?.width}
+                  height={imageDimensions?.height}
                   loading="lazy"
                   decoding="async"
                   className="w-full h-auto block cursor-grab active:cursor-grabbing select-none"
                   draggable={false}
-                  
-               />
+                  onLoad={(event) => {
+                    const { naturalWidth, naturalHeight } = event.currentTarget
+                    if (naturalWidth <= 0 || naturalHeight <= 0) return
+                    if (imageDimensions?.width === naturalWidth && imageDimensions.height === naturalHeight) return
+                    onRememberResultImageDimensions(task.id, index, {
+                      width: naturalWidth,
+                      height: naturalHeight,
+                    })
+                  }}
+                />
               </div>
             )
           })}
@@ -429,80 +468,24 @@ const TaskCard = React.memo(function TaskCard({
             </div>
           </div>
 
-          <div className="absolute top-0 right-0 flex gap-2">
-            <UiIconButton
-              onClick={() => onUsePrompt(task.prompt)}
-              showBorder={false}
-              appearance="hover-only"
-              className="!h-8 !w-8"
-              title={t("ui:workspace.actions.usePrompt")}
-            >
-              <UsePromptIcon className="h-4 w-4" />
-            </UiIconButton>
-            {task.result?.filePath && (
-              <UiIconButton
-                onClick={async () => {
-                  for (const fp of splitMulti(task.result!.filePath!)) await collectResult(fp, task.type)
-                }}
-                disabled={collecting}
-                showBorder={false}
-                appearance="hover-only"
-                className={`!h-8 !w-8 ${resultFilePaths.length > 0 && resultFilePaths.every((filePath) => collectedPaths.has(filePath)) ? '!text-emerald-400' : ''}`}
-                title={t("ui:assetLibrary.collect")}
-              >
-                {resultFilePaths.length > 0 && resultFilePaths.every((filePath) => collectedPaths.has(filePath)) ? <FolderCheck className="h-4 w-4" /> : <FolderPlus className="h-4 w-4" />}
-              </UiIconButton>
-            )}
-            {task.result?.filePath && (
-              <UiIconButton
-                onClick={async () => {
-                  for (const fp of splitMulti(task.result!.filePath!)) {
-                    await onDownload(fp, true)
-                  }
-                }}
-                showBorder={false}
-              appearance="hover-only"
-              className="!h-8 !w-8"
-                title={t("common:actions.download")}
-              >
-                <DownloadIcon className="h-4 w-4" />
-              </UiIconButton>
-            )}
-            <UiIconButton
-              onClick={() => onRegenerate(task)}
-              showBorder={false}
-              appearance="hover-only"
-              className="!h-8 !w-8"
-              title={t("ui:workspace.actions.regenerate")}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </UiIconButton>
-            <UiIconButton
-              onClick={() => onReedit(task)}
-              showBorder={false}
-              appearance="hover-only"
-              className="!h-8 !w-8"
-              title={t("ui:workspace.actions.reedit")}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </UiIconButton>
-            <UiIconButton
-              onClick={() => onDelete(task.id)}
-              hoverVariant="danger"
-              showBorder={false}
-              appearance="hover-only"
-              className="!h-8 !w-8"
-              title={t("common:delete")}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </UiIconButton>
-          </div>
+          <TaskCardToolbar
+            task={task}
+            collecting={collecting}
+            allResultsCollected={
+              resultFilePaths.length > 0 &&
+              resultFilePaths.every((filePath) => collectedPaths.has(filePath))
+            }
+            onUsePrompt={() => onUsePrompt(task.prompt)}
+            onCollectAll={async () => {
+              for (const filePath of resultFilePaths) await collectResult(filePath, task.type)
+            }}
+            onDownloadAll={async () => {
+              for (const filePath of resultFilePaths) await onDownload(filePath, true)
+            }}
+            onRegenerate={() => onRegenerate(task)}
+            onReedit={() => onReedit(task)}
+            onDelete={() => onDelete(task.id)}
+          />
         </div>
       </div>
       <div className="pt-3">{renderResult()}</div>

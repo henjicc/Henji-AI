@@ -309,6 +309,9 @@ export function useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef }: U
           if (task.result?.url) {
             optionsCopy['__resultUrl'] = task.result.url
           }
+          if (task.dimensions) {
+            optionsCopy['__dimensions'] = task.dimensions
+          }
 
           const historyRecord: Omit<HistoryRecord, 'createdAt' | 'updatedAt'> = {
             id: task.id,

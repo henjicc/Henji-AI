@@ -3,7 +3,7 @@ import { History } from 'lucide-react'
 import { useI18n } from '@/hooks/useI18n'
 import type { MenuItem } from '@/hooks/useContextMenu'
 import { UiEmpty, UiPageHeader, UiRegion } from '@/components/ui'
-import type { GenerationTask } from '../types'
+import type { GenerationTask, ResultImageDimensions } from '../types'
 import TaskCard from './TaskCard'
 
 export interface TaskListProps {
@@ -19,6 +19,11 @@ export interface TaskListProps {
   onReedit: (task: GenerationTask) => void
   onDelete: (taskId: string) => Promise<void>
   onUsePrompt: (prompt: string) => void
+  onRememberResultImageDimensions: (
+    taskId: string,
+    imageIndex: number,
+    dimensions: ResultImageDimensions
+  ) => void
   onOpenImageViewer: (url: string, list: string[], filePaths?: string[]) => void
   onOpenVideoViewer: (url: string, filePath?: string, trimRange?: { start: number; end: number }) => void
   notify: (message: string, type?: 'success' | 'error') => void
@@ -37,6 +42,7 @@ export function TaskList({
   onReedit,
   onDelete,
   onUsePrompt,
+  onRememberResultImageDimensions,
   onOpenImageViewer,
   onOpenVideoViewer,
   notify,
@@ -72,6 +78,7 @@ export function TaskList({
             onReedit={onReedit}
             onDelete={onDelete}
             onUsePrompt={onUsePrompt}
+            onRememberResultImageDimensions={onRememberResultImageDimensions}
             onOpenImageViewer={onOpenImageViewer}
             onOpenVideoViewer={onOpenVideoViewer}
             notify={notify}
