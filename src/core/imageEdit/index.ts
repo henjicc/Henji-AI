@@ -7,7 +7,6 @@ export * from './operations';
 export * from './execution';
 export * from './diffusionRecipe';
 export * from './diffusionPresets';
-export * from './webgpu';
 export * from './worker/protocol';
 export * from './worker/exportPrototype';
 export * from './worker/webgpuCapabilities';

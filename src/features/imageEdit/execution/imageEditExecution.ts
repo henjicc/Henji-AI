@@ -18,6 +18,7 @@ import type {
   ImageEditWorkerInitializationFailureCode,
 } from '@/core/imageEdit/worker/protocol';
 import { fitWithinPixelBudget, IMAGE_EDIT_PREVIEW_MAX_PIXELS } from '@/core/imageEdit/worker/exportPrototype';
+import { resolveImageDisplayUrl } from '@/services/imageSource';
 import { WorkerImageEditClient } from './workerImageEditClient';
 
 const logger = createLogger('features.imageEdit.execution');
@@ -136,7 +137,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
           );
           if ((request.purpose ?? 'export') === 'preview') {
             const preview = await client.preview(
-              { kind: 'url', url: request.sourceImageUrl },
+              createWorkerSource(request.sourceImageUrl),
               request.revision ?? 0,
               request.maxPixels,
               recipe,
@@ -163,7 +164,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
             };
           }
           const task = client.export(
-            { kind: 'url', url: request.sourceImageUrl },
+            createWorkerSource(request.sourceImageUrl),
             {
               requestId: request.requestId,
               revision: request.revision,
@@ -393,6 +394,17 @@ function createFallbackDiagnostics(
     deviceRecoveryAttempts: fallbackDiagnostic.deviceRecoveryAttempts,
     unsupportedParameters,
   };
+}
+
+/**
+ * Worker 里只能用 fetch 读源图，而 fetch 不认 `file://` 和 `D:\...` 这类裸本地路径
+ * （两者都直接抛 "Failed to fetch"）。这里统一转成 henji-media:// 再交给 Worker。
+ *
+ * 注意只转 Worker 这一路：readImageInfo 与 Sharp 回落都在主进程按真实路径读文件，
+ * 必须继续拿原始 sourceImageUrl。
+ */
+function createWorkerSource(sourceImageUrl: string): { kind: 'url'; url: string } {
+  return { kind: 'url', url: resolveImageDisplayUrl(sourceImageUrl) };
 }
 
 export function classifyWebGpuFallbackReason(
