@@ -144,9 +144,9 @@ export function UiPageHeader({
   ...props
 }: UiPageHeaderProps): JSX.Element {
   return (
-    <div className={`flex items-start justify-between gap-4 ${className}`} {...props}>
+    <div data-ui-page-header className={`flex items-start justify-between gap-4 ${className}`} {...props}>
       <div className="min-w-0">
-        <h2 className={UI_TEXT_TITLE_CLASS}>{title}</h2>
+        <h2 data-ui-page-title className={UI_TEXT_TITLE_CLASS}>{title}</h2>
         {description ? <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>{description}</p> : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}

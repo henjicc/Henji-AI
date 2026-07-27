@@ -124,3 +124,4 @@ dev-data/
 scratchpad_feed/
 nul
 .ui-audit/
+.ui-tour/

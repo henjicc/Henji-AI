@@ -36,6 +36,8 @@ npm run electron:smoke         # Electron 构建产物冒烟验收
 npm run electron:canvas-stress # Electron 画布压测
 npm run electron:dpi-check     # Electron DPI/分辨率检查
 npm run electron:updater-e2e   # 本地模拟 updater 端到端
+npm run ui:tour                # 真实 Electron 六界面两档尺寸截图巡检
+npm run check:ui-visual        # 真实 DOM 十一条可判定视觉规则
 npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generation # 无窗口执行真实智能助手、等待本次生成结果并输出 JSONL
 npm run gen:model-manifest     # 生成模型清单到 resources/model-manifest.json
 npm run gen:progress-seeds     # 生成进度 seeds 到 resources/progress-seeds.json
@@ -139,11 +141,11 @@ npm run lint                   # 前端 lint
 - **禁止固定调色板（ESLint 硬拦）**：一切 `*-zinc-*` 都不会跟随主题预设（设置→界面→主题外观可整体替换 9 个语义色），必须改用语义色。底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`（中间两档由 `runtimeTheme.applyTextScale` 派生）；边框 `border-border-dark`；叠在图片/视频/画布上的边框与底色用 `veil` 六档
 - **毛玻璃是材质不是 blur 值（ESLint 硬拦一切 `backdrop-blur-*`）**：用 `ui-glass` 类（`src/index.css`，含 blur + saturate + 受光边 + 噪点四层），遮罩用 `ui-glass-scrim`；只写 blur 会得到「模糊+降不透明度」的廉价观感。只用于压在图片/视频/画布上的浮层，压在纯色 UI 上的一律用不透明底色。质感调整只改 `--ui-glass-*` 变量；「设置→界面→毛玻璃效果」关掉时整套材质退化成不透明底色
 - **动效四档（`src/components/ui/motion.ts`）**：时长只用 `duration-150/200/300/500`（对应 `UI_DURATION.fast/base/slow/viewer`）。缓动已由 `tailwind.config.js` 的 `transitionTimingFunction.DEFAULT` 全局设为 ease-out，不用每处写；唯一登记的例外是 `UI_EASE_STACK`。内联 `style={{ transition }}` 走 `uiTransition()`，禁止 `transition: all`。用 `setTimeout` 卸载动画组件时，那个 ms 必须与 className 里的 `duration-*` 同档，否则过渡收尾被硬切。过渡布局属性前先确认无法用 transform 替代（已登记的例外见 skill）
-- **对比度必须实测**：`npm run check:ui-visual` 启动真实 Electron，在渲染后的 DOM 上算表面叠层/文字对比度/圆角嵌套/非浮层阴影。`accent` 不能作文字色（2.82:1），用 `UI_COLOR_ACCENT_TEXT_CLASS`；白字压实心蓝用 `UI_COLOR_ACCENT_FILL_TEXT_CLASS`（`bg-accent` 只有 3.68:1）。改颜色令牌的派生比例后必须复跑
+- **真实界面巡检分两条命令**：`npm run ui:tour` 生成六类界面、1440×900 / 960×640 两档尺寸的截图和 Markdown 索引，供人判断观感；`npm run check:ui-visual` 在同一场景清单上执行十一条可判定 DOM 规则并以退出码作为门禁。`accent` 不能作文字色（2.82:1），用 `UI_COLOR_ACCENT_TEXT_CLASS`；白字压实心蓝用 `UI_COLOR_ACCENT_FILL_TEXT_CLASS`（`bg-accent` 只有 3.68:1）。改颜色令牌的派生比例后必须复跑
 - **同属性叠类会静默失效**：两个工具类落在同一 CSS 属性上时，胜负看 Tailwind 产物顺序而非 className 顺序。优先写成互斥三元；确需叠加先生成 CSS 确认谁在后面。`index.html` 写死 `class="dark"`，`dark:` 变体的基础值是死代码
 - **颜色查改入口**：调色只允许在 `src/index.css`、`tailwind.config.js`、`src/components/ui/styleTokens.ts` 三处改动。`npm run check:colors` 会扫 `.ts/.tsx/.css`，纯 CSS 里只能写 `rgb(var(--xxx-rgb) / a)`，不能写 `#hex` 或 `rgba(数字…)`
 - **全局主题变量只能放 `src/index.css`**：`storyboard.css` 这类被工作区懒加载的样式表里放全局变量，会导致设置项在用户打开对应工作区之前完全不生效
-- **布局定位不得藏在外观样式表**：`scrollbar.css` 等具名样式表只能承担文件名承诺的外观或行为；`position`、`top/right/bottom/left` 与 `z-index` 必须直接写在组件 className（动态层级用 `Z_LAYERS`），让布局参照系在 JSX 中可见。确需 CSS 例外时必须就地注释原因
+- **布局定位不得藏在外观样式表**：`scrollbar.css` 等具名样式表只能承担文件名承诺的外观或行为；`position`、`top/right/bottom/left` 与 `z-index` 必须直接写在组件 className（动态层级用 `Z_LAYERS`），让布局参照系在 JSX 中可见。两次已知案例是 `scrollbar.css` 藏 `position: fixed` 导致工作区逃逸助手插入量，以及懒加载的 `storyboard.css` 藏全局主题变量导致设置延迟生效；只 grep JSX 或按文件名查 CSS 都很难发现。确需 CSS 例外时必须就地注释原因
 - **控件高度两档**：`UI_FIELD_CONTROL_HEIGHT_CLASS`(42px) / `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`(38px)，不要手写 `h-[38px]`
 - **新增交互控件时**：优先扩展 `Ui*`（如 `UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 - **五级容器词汇表**：Region(`UiRegion`) → Group(`UiGroup`) → Divided(`UiGroup divided`) → Surface(`UiPanel variant="inset"`) → Card(`UiPanel`)。**普通内容分组默认用 `UiGroup`**（零装饰，标题 + 间距）；只有浮层/弹窗/侧栏/画布节点才允许用 Card
@@ -444,6 +446,16 @@ npm run electron:smoke
 ```
 
 `npm run electron:build` / `npm run electron:dist` 较费时间，不要无必要地频繁执行。
+
+界面改动需要检查真实 Electron 时，先完成一次 `npm run electron:build`，再按职责运行：
+
+```bash
+npm run ui:tour                         # 生成截图与 index.md，人工看布局、权重和交互状态
+npm run ui:tour -- --only 设置 --size 960x640
+npm run check:ui-visual                 # 六类界面 × 两档尺寸 × 十一条 DOM 规则，失败退出码非 0
+```
+
+两条命令均使用隔离 userData，不读取真实数据库和密钥；输出目录 `.ui-tour/`、`.ui-audit/` 已被 Git 忽略。`ui:tour` 支持 `--only`、`--size`、`--out`，截图差异不进入 CI；`check:ui-visual` 负责表面叠层、对比度、圆角、阴影、CSS 隐藏定位、助手插入量逃逸、横向溢出、嵌套滚动、文本硬裁、过小命中区和页面标题字号一致性。
 
 ```powershell
 # 原生控件检查（命中应仅在 primitives.tsx）

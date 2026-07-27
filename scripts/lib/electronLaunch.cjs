@@ -90,7 +90,13 @@ async function firstApplicationPage(browser) {
   throw new Error('No Electron application page found over CDP')
 }
 
-async function launchElectronApp({ mainEntry, cwd, extraEnv = {}, isolateUserData = false } = {}) {
+async function launchElectronApp({
+  mainEntry,
+  cwd,
+  extraEnv = {},
+  isolateUserData = false,
+  useElectronApi = false,
+} = {}) {
   const userDataDir = isolateUserData ? createIsolatedUserDataDir() : null
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, mainEntry] : [mainEntry]
   const launchEnv = userDataDir
@@ -104,7 +110,7 @@ async function launchElectronApp({ mainEntry, cwd, extraEnv = {}, isolateUserDat
     fs.mkdirSync(launchEnv.LOCALAPPDATA, { recursive: true })
     fs.mkdirSync(launchEnv.APPDATA, { recursive: true })
   }
-  if (process.env.HENJI_SMOKE_USE_ELECTRON_API === '1') {
+  if (useElectronApi || process.env.HENJI_SMOKE_USE_ELECTRON_API === '1') {
     try {
       const app = await electron.launch({
         executablePath: electronExecutablePath,
@@ -117,8 +123,11 @@ async function launchElectronApp({ mainEntry, cwd, extraEnv = {}, isolateUserDat
         app,
         page: await app.firstWindow({ timeout: 30000 }),
         close: async () => {
-          await app.close()
-          await cleanupIsolatedUserDataDir(userDataDir)
+          try {
+            await app.close()
+          } finally {
+            await cleanupIsolatedUserDataDir(userDataDir)
+          }
         },
       }
     } catch (error) {

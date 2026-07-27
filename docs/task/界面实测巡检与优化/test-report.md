@@ -203,3 +203,53 @@
 ### 手动测试结果
 
 待全部阶段完成后由用户填写。K 组结果将决定 4.1 是否进入修复，以及 4.2 是否需要实施虚拟化；L 组通过后才能把 4.2 标记为完全完成。
+
+## 第五阶段
+
+### 自动检查
+
+- `node --check`：5 个新增/修改的 `.cjs` 脚本全部通过语法检查
+- `npm run test:ui-inspection`：通过，6 条测试覆盖默认尺寸、参数解析、非法尺寸、`--only`、输出路径、六界面与十一规则数量
+- `npm run check:surface:strict`：通过，未检测到手写面板、卡片套娃或手写弹窗
+- `npm run check:colors`：通过，未检测到硬编码颜色
+- `npm run lint`：通过，零警告
+- `npx tsc --noEmit --pretty false`：通过
+- `npm run check:model-i18n`：通过
+- `npm test -- --run`：通过，114 个测试文件通过、4 个跳过；492 条测试通过、11 条跳过
+- `npm run electron:build`：通过，主进程、preload、渲染层均构建成功
+- `.claude` / `.codex` 两份 `henji-ui-surface` skill SHA-256 一致
+- `npm run ui:tour`、`npm run check:ui-visual`：未执行。两条命令会打开并点击、悬浮、聚焦、右键操作真实 Electron；按项目约定交给用户最终集中测试。
+
+### 用户统一手动测试
+
+以下步骤是所有代码完成后的统一巡检入口。测试前正常退出正在运行的 `npm run electron:dev`。
+
+#### M. 巡检脚本与规则审计
+
+1. 构建一次干净产物：
+   ```powershell
+   npm run electron:build
+   ```
+2. 执行完整截图巡检：
+   ```powershell
+   npm run ui:tour
+   ```
+   期望命令成功退出，`.ui-tour/index.md` 列出生成、设置、画布、工具箱、资产库、助手六类界面，1440×900 与 960×640 两档共 32 张截图。
+3. 打开 `.ui-tour/index.md` 逐张检查：截图清晰、无残留弹窗污染；模型下拉、提示词聚焦、优化配置右键、设置主题/模型、工具箱悬浮、资产搜索/下拉、助手历史/输入聚焦状态均正确。
+4. 验证局部参数：
+   ```powershell
+   npm run ui:tour -- --only 设置 --size 960x640 --out .ui-tour/settings-small
+   ```
+   期望只生成 960×640 的 3 个设置场景，索引路径指向自定义目录。
+5. 执行十一条 DOM 规则：
+   ```powershell
+   npm run check:ui-visual
+   ```
+   期望六类界面 × 两档尺寸全部完成，表面叠层、对比度、圆角、阴影、CSS 隐藏定位、助手插入量逃逸、横向溢出、嵌套滚动、文本硬裁、过小命中区、页面标题字号一致性均为 0，退出码为 0。
+6. 打开 `.ui-audit/audit.json`，确认 `metadata.ruleCount` 为 11、`metadata.failures` 为空，`crossScene.pageTitleInconsistency` 为空。
+7. 执行 `git status --short`：`.ui-tour/`、`.ui-audit/`、`out/`、manifest 与 seeds 不应出现在待提交列表中。
+8. 若 `check:ui-visual` 有命中，不要直接添加大范围豁免；把对应场景、规则名和 `audit.json` 条目发回，再按真实根因修复或登记最小例外。
+
+### 手动测试结果
+
+待用户统一执行 A–M 组后填写。

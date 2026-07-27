@@ -1,183 +1,179 @@
 /**
- * 在真实渲染的 DOM 上跑规范审计。
- * 静态 grep 查不到的东西只有这里能查：实际叠了几层表面、真实对比度、
- * 同属性叠类的最终计算值、元素实际对齐。
+ * 在真实 Electron DOM 上执行可自动判定的界面规则。
+ * 截图与主观观感由 ui:tour 负责，本命令只输出规则结论并以退出码作为门禁。
  */
-const path = require('node:path')
 const fs = require('node:fs')
-const { launchElectronApp, waitForApp } = require('./lib/electronLaunch.cjs')
+const path = require('node:path')
+const { UI_AUDIT_RULES, auditUiDom } = require('./lib/uiAuditDom.cjs')
+const {
+  UI_INSPECTION_SCENES,
+  filterScenes,
+  formatWindowSize,
+  launchUiInspectionApp,
+  parseUiInspectionArgs,
+  resolveOutputDir,
+  setInspectionWindowSize,
+} = require('./lib/uiInspection.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out/main/index.cjs')
-const OUT_DIR = process.argv[2] || path.join(ROOT, '.ui-audit')
+const LOCAL_RULES = UI_AUDIT_RULES.filter((rule) => rule.key !== 'pageTitleInconsistency')
 
-const AUDIT = () => {
-  const out = { surfaceStacks: [], lowContrast: [], oversizedRadius: [], shadowOutsideOverlay: [], notes: [] }
+function printHelp() {
+  console.log(`Henji-AI 真实 DOM 视觉规则审计
 
-  const parseRgb = (s) => {
-    const m = /rgba?\(([^)]+)\)/.exec(s || '')
-    if (!m) return null
-    const p = m[1].split(',').map((x) => parseFloat(x))
-    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }
-  }
-  const lum = (c) => {
-    const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
-    return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b)
-  }
-  const over = (fg, bg) => {
-    const a = fg.a
-    return { r: fg.r * a + bg.r * (1 - a), g: fg.g * a + bg.g * (1 - a), b: fg.b * a + bg.b * (1 - a), a: 1 }
-  }
-  const effectiveBg = (el) => {
-    let node = el
-    let acc = null
-    while (node && node !== document.documentElement) {
-      const c = parseRgb(getComputedStyle(node).backgroundColor)
-      if (c && c.a > 0) {
-        acc = acc ? over(acc, c) : c
-        if (acc.a >= 0.999) return acc
-      }
-      node = node.parentElement
-    }
-    return acc || { r: 10, g: 10, b: 10, a: 1 }
-  }
-  const contrast = (a, b) => {
-    const l1 = lum(a), l2 = lum(b)
-    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
-  }
-  const label = (el) => {
-    const cls = (el.className || '').toString().slice(0, 90)
-    return `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} .${cls}`
-  }
+用法：
+  npm run check:ui-visual
+  npm run check:ui-visual -- --size 960x640
+  npm run check:ui-visual -- --only 设置
+  npm run check:ui-visual -- --out .ui-audit/my-run
 
-  const all = Array.from(document.querySelectorAll('body *'))
-    .filter((el) => {
-      const r = el.getBoundingClientRect()
-      return r.width > 4 && r.height > 4 && getComputedStyle(el).visibility !== 'hidden'
-    })
-
-  // ① 表面叠层：一条祖先链上有几个元素同时具备「可见边框 + 非透明背景」
-  const isSurface = (el) => {
-    const st = getComputedStyle(el)
-    const bw = parseFloat(st.borderTopWidth) || 0
-    const bc = parseRgb(st.borderTopColor)
-    const bg = parseRgb(st.backgroundColor)
-    return bw > 0 && bc && bc.a > 0.05 && bg && bg.a > 0.05
-  }
-  for (const el of all) {
-    if (!isSurface(el)) continue
-    let depth = 0
-    const chain = []
-    let node = el
-    while (node && node !== document.body) {
-      if (isSurface(node)) { depth += 1; chain.push(label(node)) }
-      node = node.parentElement
-    }
-    if (depth >= 3) out.surfaceStacks.push({ depth, chain: chain.slice(0, 4) })
-  }
-
-  // ② 文字对比度（WCAG AA 正文 4.5，大字 3.0）
-  for (const el of all) {
-    const txt = Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent.trim().length > 0)
-    if (!txt) continue
-    const st = getComputedStyle(el)
-    const fg = parseRgb(st.color)
-    if (!fg || fg.a < 0.05) continue
-    const bg = effectiveBg(el)
-    const c = contrast(over(fg, bg), bg)
-    const size = parseFloat(st.fontSize)
-    const bold = parseInt(st.fontWeight, 10) >= 700
-    const need = size >= 24 || (size >= 18.66 && bold) ? 3.0 : 4.5
-    if (c < need) {
-      out.lowContrast.push({
-        ratio: Math.round(c * 100) / 100, need, size,
-        text: (el.textContent || '').trim().slice(0, 34),
-        color: st.color, el: label(el),
-      })
-    }
-  }
-
-  // ③ 内层圆角大于外层
-  for (const el of all) {
-    const r = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0
-    if (r <= 0) continue
-    const p = el.parentElement
-    if (!p) continue
-    const pr = parseFloat(getComputedStyle(p).borderTopLeftRadius) || 0
-    const po = getComputedStyle(p).overflow
-    if (pr > 0 && r > pr + 1 && po !== 'visible') {
-      out.oversizedRadius.push({ child: r, parent: pr, el: label(el) })
-    }
-  }
-
-  // ④ 阴影用在非浮层：有 box-shadow 但既非 fixed/absolute 也不在 portal 里
-  for (const el of all) {
-    const st = getComputedStyle(el)
-    // Tailwind 的 ring 也是用 box-shadow 实现的，焦点环不是装饰阴影，必须放过
-    if (st.boxShadow === 'none' || st.boxShadow.includes('inset')) continue
-    if (/rgba?\([^)]*\)\s+0px\s+0px\s+0px\s+0px/.test(st.boxShadow)) continue
-    if (['fixed', 'absolute'].includes(st.position)) continue
-    let node = el, floating = false
-    while (node && node !== document.body) {
-      const p = getComputedStyle(node).position
-      if (p === 'fixed' || p === 'absolute') { floating = true; break }
-      node = node.parentElement
-    }
-    if (!floating) out.shadowOutsideOverlay.push({ el: label(el), shadow: st.boxShadow.slice(0, 60) })
-  }
-
-  const dedupe = (arr, key) => {
-    const seen = new Set()
-    return arr.filter((x) => { const k = key(x); if (seen.has(k)) return false; seen.add(k); return true })
-  }
-  out.surfaceStacks = dedupe(out.surfaceStacks, (x) => x.chain.join('|')).slice(0, 12)
-  out.lowContrast = dedupe(out.lowContrast, (x) => x.el + x.color).slice(0, 20)
-  out.oversizedRadius = dedupe(out.oversizedRadius, (x) => x.el).slice(0, 12)
-  out.shadowOutsideOverlay = dedupe(out.shadowOutsideOverlay, (x) => x.el).slice(0, 12)
-  out.notes.push(`扫描元素数 ${all.length}`)
-  return out
+规则通过时退出码为 0；任一规则命中或场景失败时退出码为 1。
+`)
 }
 
-async function run(page, name, results) {
-  const r = await page.evaluate(AUDIT)
-  results[name] = r
-  console.log(`\n===== ${name} =====  (${r.notes[0]})`)
-  const show = (title, arr, fmt) => {
-    console.log(`  ${title}: ${arr.length}`)
-    arr.slice(0, 8).forEach((x) => console.log('    ' + fmt(x)))
+function createPageTitleIssues(results) {
+  const bySurface = new Map()
+  for (const result of Object.values(results)) {
+    for (const title of result.pageTitles) {
+      if (!title.surface) continue
+      const key = title.surface
+      const current = bySurface.get(key)
+      if (!current || current.scene === title.scene) {
+        bySurface.set(key, title)
+      }
+    }
   }
-  show('表面叠 3 层以上', r.surfaceStacks, (x) => `depth=${x.depth}  ${x.chain[0]}`)
-  show('对比度不足', r.lowContrast, (x) => `${x.ratio}:1 (需${x.need}) ${x.size}px "${x.text}" ${x.color}`)
-  show('内层圆角>外层', r.oversizedRadius, (x) => `${x.child}>${x.parent}  ${x.el}`)
-  show('非浮层用阴影', r.shadowOutsideOverlay, (x) => `${x.el}`)
+  const titles = [...bySurface.values()]
+  const fontSizes = [...new Set(titles.map((title) => title.fontSize))]
+  if (titles.length < 2 || fontSizes.length === 1) return []
+  return [{
+    fontSizes,
+    titles: titles.map(({ surface, scene, text, fontSize, fontWeight, lineHeight }) => ({
+      surface,
+      scene,
+      text,
+      fontSize,
+      fontWeight,
+      lineHeight,
+    })),
+  }]
+}
+
+function formatIssue(ruleKey, issue) {
+  const formatters = {
+    surfaceStacks: (value) => `depth=${value.depth} ${value.chain[0]}`,
+    lowContrast: (value) => `${value.ratio}:1（需 ${value.required}）${value.size}px "${value.text}"`,
+    oversizedRadius: (value) => `${value.child}>${value.parent} ${value.element}`,
+    shadowOutsideOverlay: (value) => value.element,
+    hiddenPositioning: (value) => `${value.position} ${value.element}`,
+    insetEscape: (value) => `${value.element} ${value.bounds.join('..')}，期望 ${value.expected.join('..')}`,
+    horizontalOverflow: (value) => `${value.reason} ${value.element}`,
+    nestedScroll: (value) => `${value.inner} 嵌套于 ${value.outer}`,
+    hardTextClip: (value) => `"${value.text}" ${value.scrollWidth}>${value.clientWidth}`,
+    smallTargets: (value) => `${value.width}x${value.height} ${value.element}`,
+    pageTitleInconsistency: (value) => value.titles
+      .map((title) => `${title.surface}=${title.fontSize}px`)
+      .join('，'),
+  }
+  return formatters[ruleKey]?.(issue) || JSON.stringify(issue)
+}
+
+function printSceneResult(name, result) {
+  console.log(`\n===== ${name} =====（${result.notes[0]}）`)
+  for (const rule of LOCAL_RULES) {
+    const issues = result[rule.key]
+    console.log(`  ${rule.label}: ${issues.length}`)
+    for (const issue of issues.slice(0, 8)) {
+      console.log(`    ${formatIssue(rule.key, issue)}`)
+    }
+  }
+}
+
+function countIssues(results, crossScene) {
+  let count = crossScene.pageTitleInconsistency.length
+  for (const result of Object.values(results)) {
+    for (const rule of LOCAL_RULES) {
+      count += result[rule.key].length
+    }
+  }
+  return count
 }
 
 async function main() {
-  fs.mkdirSync(OUT_DIR, { recursive: true })
-  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, isolateUserData: true })
-  const { page } = app
+  const options = parseUiInspectionArgs(process.argv.slice(2), '.ui-audit')
+  if (options.help) {
+    printHelp()
+    return
+  }
+  const scenes = filterScenes(UI_INSPECTION_SCENES, options.only)
+  if (scenes.length === 0) {
+    throw new Error(`--only 没有匹配到场景。可用界面：${[...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].join('、')}`)
+  }
+
+  const outDir = resolveOutputDir(ROOT, options.outDir)
+  fs.mkdirSync(outDir, { recursive: true })
   const results = {}
+  const failures = []
+  const app = await launchUiInspectionApp({ root: ROOT, mainEntry: MAIN_ENTRY })
+
   try {
-    await waitForApp(page)
-    await page.waitForTimeout(1500)
-    await run(page, '生成工作区', results)
-
-    await page.locator('[aria-label*="设置"], [title*="设置"]').first().click({ timeout: 5000 })
-    await page.waitForTimeout(1000)
-    await run(page, '设置弹窗', results)
-    await page.keyboard.press('Escape')
-    await page.waitForTimeout(500)
-
-    try {
-      await page.getByRole('button', { name: /画布/ }).first().click({ timeout: 4000 })
-      await page.waitForTimeout(2000)
-      await run(page, '画布工作区', results)
-    } catch (e) { console.log('skip 画布:', String(e).slice(0, 80)) }
-
-    fs.writeFileSync(path.join(OUT_DIR, 'audit.json'), JSON.stringify(results, null, 2))
+    for (const size of options.sizes) {
+      await setInspectionWindowSize(app, size)
+      const sizeLabel = formatWindowSize(size)
+      for (const scene of scenes) {
+        const resultKey = `${sizeLabel} / ${scene.name}`
+        try {
+          await scene.setup(app.page)
+          const result = await app.page.evaluate(auditUiDom, {
+            scene: scene.name,
+            surface: scene.surface,
+          })
+          results[resultKey] = result
+          printSceneResult(resultKey, result)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          failures.push({ name: scene.name, size: sizeLabel, message })
+          console.error(`\n✗ ${resultKey}：${message}`)
+        }
+      }
+    }
   } finally {
     await app.close()
   }
+
+  const crossScene = {
+    pageTitleInconsistency: createPageTitleIssues(results),
+  }
+  const titleRule = UI_AUDIT_RULES.find((rule) => rule.key === 'pageTitleInconsistency')
+  console.log(`\n===== 跨界面 =====`)
+  console.log(`  ${titleRule.label}: ${crossScene.pageTitleInconsistency.length}`)
+  for (const issue of crossScene.pageTitleInconsistency) {
+    console.log(`    ${formatIssue(titleRule.key, issue)}`)
+  }
+
+  const report = {
+    metadata: {
+      generatedAt: new Date().toISOString(),
+      ruleCount: UI_AUDIT_RULES.length,
+      sceneCount: Object.keys(results).length,
+      failures,
+    },
+    scenes: results,
+    crossScene,
+  }
+  const reportPath = path.join(outDir, 'audit.json')
+  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8')
+  const issueCount = countIssues(results, crossScene)
+  console.log(`\n审计报告：${reportPath}`)
+  console.log(`规则：${UI_AUDIT_RULES.length} 条；命中：${issueCount}；场景失败：${failures.length}`)
+
+  if (issueCount > 0 || failures.length > 0) {
+    throw new Error(`视觉规则审计未通过：${issueCount} 个规则命中，${failures.length} 个场景失败`)
+  }
 }
 
-main().catch((e) => { console.error('FAILED:', e.message); process.exit(1) })
+main().catch((error) => {
+  console.error(`FAILED: ${error instanceof Error ? error.message : String(error)}`)
+  process.exitCode = 1
+})

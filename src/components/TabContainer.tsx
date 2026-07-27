@@ -40,6 +40,7 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
     return (
         <div
             ref={containerRef}
+            data-ui-workspace-inset-root
             className="flex-1 min-h-0 overflow-hidden pt-10 transition-[padding]"
             style={{
                 paddingLeft: insetLeft,

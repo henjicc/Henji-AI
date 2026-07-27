@@ -507,12 +507,15 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 同级元素间距是否统一（不要一行 `mt-2` 一行 `mt-3`）
 - [ ] 高频状态（进度/hover/拖拽）是否放在独立 store 而非大列表 state
 - [ ] 列表超过 ~50 项是否考虑了虚拟化
+- [ ] 界面改动后是否跑过 `npm run ui:tour`，查看六类界面、两档尺寸及交互状态的真实截图
 
 ## 对比度：静态检查查不到，必须实测
 
 颜色是否达标取决于**渲染后的实际叠加结果**，grep 无能为力。
-`npm run check:ui-visual` 会启动真实 Electron（复用 `electron:smoke` 的 CDP 链路），
-在渲染后的 DOM 上算四项：表面叠层数 / 文字对比度 / 内层圆角 / 非浮层阴影。
+`npm run check:ui-visual` 会用 Playwright Electron API 启动隔离的真实 Electron，
+在六类界面、1440×900 / 960×640 两档尺寸上检查十一项：表面叠层、文字对比度、
+内层圆角、非浮层阴影、CSS 隐藏定位、助手插入量逃逸、横向溢出、嵌套滚动、
+文本硬裁、过小命中区、页面标题字号一致性。任一命中都会返回非零退出码。
 
 首次跑出来 7 处对比度不达标，根因都在令牌层，不在调用点：
 
@@ -549,14 +552,16 @@ npm run check:surface && npm run check:colors && npm run lint
 npx vitest run src/components/ui/motion.test.ts
 ```
 
-**改了颜色令牌、或想确认真实渲染效果**，跑视觉审计（需要先 `npm run electron:build`）：
+**界面改动或改了颜色令牌**，先构建，再分别跑截图巡检与规则审计：
 
 ```bash
+npm run ui:tour
 npm run check:ui-visual
 ```
 
-它会截图并逐屏输出四项指标，全 0 才算干净。想要截图请看脚本里的 `page.screenshot` 用法——
-观感问题（对齐、空格子、视觉权重错位）光看代码看不出来，得看图。
+`ui:tour` 产出 `.ui-tour/index.md` 与截图，专门让人检查对齐、留白、视觉权重、hover /
+聚焦 / 下拉 / 右键状态；`check:ui-visual` 只输出规则结论与 `.ui-audit/audit.json`，
+不做像素差异。两者共用场景配置但职责分离，截图差异不作为 CI 门禁。
 
 `check:surface` 报三类问题：
 

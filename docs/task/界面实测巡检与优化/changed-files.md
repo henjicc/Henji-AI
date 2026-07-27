@@ -180,3 +180,40 @@
 - 第四阶段两个任务文件
 
 确认 `react-window` 与 `@types/react-window` 仅存在于依赖清单、源码零使用；本阶段只记录清理建议，没有修改 `package.json` 或 lockfile。构建过程刷新了被 Git 忽略的 manifest、seeds 与 `out/`，均不纳入提交。
+
+## 2026-07-27 第五阶段
+
+### 巡检脚本与共享基础设施
+
+- `scripts/ui-tour.cjs`
+- `scripts/ui-visual-audit.cjs`
+- `scripts/lib/uiInspection.cjs`
+- `scripts/lib/uiAuditDom.cjs`
+- `scripts/lib/uiInspection.test.cjs`
+- `scripts/lib/electronLaunch.cjs`
+- `package.json`
+- `.gitignore`
+
+### 无视觉影响的审计锚点
+
+- `src/components/ui/layout.tsx`
+- `src/components/TabContainer.tsx`
+
+### 项目规范
+
+- `CLAUDE.md`
+- `.claude/skills/henji-ui-surface/SKILL.md`
+- `.codex/skills/henji-ui-surface/SKILL.md`
+
+### 任务记录
+
+- `docs/task/界面实测巡检与优化/00-任务总览.md`
+- `docs/task/界面实测巡检与优化/重要记录.md`
+- `docs/task/界面实测巡检与优化/progress.md`
+- `docs/task/界面实测巡检与优化/decisions.md`
+- `docs/task/界面实测巡检与优化/handoff.md`
+- `docs/task/界面实测巡检与优化/changed-files.md`
+- `docs/task/界面实测巡检与优化/test-report.md`
+- `docs/task/界面实测巡检与优化/任务/第五阶段-巡检自动化固化/5.1-巡检脚本固化.md`
+
+构建过程刷新了被 Git 忽略的 `out/`、`resources/model-manifest.json` 与 `resources/progress-seeds.json`。未执行真实界面巡检，因此没有生成截图、审计报告或临时 userData；这些产物即使由用户最终测试生成也已被 Git 忽略。
