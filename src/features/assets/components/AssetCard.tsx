@@ -73,6 +73,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
         )}
         <UiIconButton
           appearance="glass"
+          data-ui-shared-glass="exclude"
           aria-label="menu"
           className="absolute right-1.5 top-1.5 !h-7 !w-7 opacity-0 group-hover:opacity-100"
           onClick={(event) => { event.stopPropagation(); onMenu(asset, event.currentTarget.getBoundingClientRect()) }}

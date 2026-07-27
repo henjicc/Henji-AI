@@ -117,7 +117,7 @@ export function ImageInfoPanel({ open, imageSource }: ImageInfoPanelProps): JSX.
   }
 
   return (
-    <div className="absolute left-5 top-5 flex max-w-[min(420px,calc(100vw-40px))] items-start gap-2">
+    <div className="absolute left-5 top-5 z-sticky flex max-w-[min(420px,calc(100vw-40px))] items-start gap-2">
       <UiIconButton
         type="button"
         appearance="glass"

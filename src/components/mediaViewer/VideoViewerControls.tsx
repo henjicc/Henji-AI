@@ -80,7 +80,7 @@ export function VideoViewerControls({
   return (
     <div
       ref={controlsContainerRef}
-      className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl"
+      className="absolute bottom-4 left-1/2 z-sticky w-[90%] max-w-3xl -translate-x-1/2"
       style={{
         opacity: isSpeedMenuOpen || isVolumeMenuOpen || isControlsVisible ? 1 : 0,
         transition: uiTransition(['opacity'], UI_DURATION.viewer),

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '@/hooks/useI18n'
-import { UiIconButton } from '@/components/ui'
+import { UiIconButton, UiSharedGlassHost } from '@/components/ui'
 import { readVideoInfo } from '@/commands/video'
 import { Volume2, VolumeX, X } from 'lucide-react'
 import { VideoViewerControls } from './VideoViewerControls'
@@ -405,7 +405,8 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div
+      <UiSharedGlassHost
+        minTargets={2}
         className="relative w-[92vw] h-[90vh] flex items-center justify-center"
         onMouseEnter={() => {
           setIsControlsVisible(true)
@@ -544,7 +545,7 @@ export function VideoViewerModal({ open, videoUrl, filePath, onClose, onDownload
           isBuffering={isBuffering}
           trimRange={trimRange}
         />
-      </div>
+      </UiSharedGlassHost>
     </div>,
     document.body,
   )

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, Search, X } from 'lucide-react'
-import { Dropdown, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion } from '@/components/ui'
+import { Dropdown, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
@@ -197,7 +197,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           {mode === 'floating' && <UiButton className="!h-10 shrink-0 px-4" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
           {onClose && <UiIconButton className="!h-10 !w-10 shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
         </header>
-        <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-gutter:stable]">
+        <UiSharedGlassHost ref={scrollRef} minTargets={4} className="min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-gutter:stable]">
           {loading && page.items.length === 0 ? (
             <div className="absolute inset-3 overflow-hidden" aria-busy="true">
               <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill,minmax(${cardSize}px,1fr))` }}>{Array.from({ length: 12 }).map((_, index) => <div key={index} className="aspect-square animate-pulse rounded-xl bg-layer" />)}</div>
@@ -221,7 +221,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               <div ref={loadMoreRef} className={`flex h-14 items-center justify-center ${UI_TEXT_META_CLASS}`}>{loadingMore ? <><LoaderCircle className="mr-2 h-4 w-4 animate-spin" />{t('assetLibrary.loadingMore')}</> : page.items.length < page.total ? t('assetLibrary.scrollForMore') : t('assetLibrary.allLoaded')}</div>
             </>
           )}
-        </div>
+        </UiSharedGlassHost>
         <footer className="flex h-12 shrink-0 items-center justify-end px-3 text-text-muted">
           <div ref={thumbnailControlsRef} className="flex items-center justify-end gap-1.5 overflow-hidden">
             <div className={`relative z-0 overflow-hidden transition-[width,transform] duration-200 ease-out ${thumbnailControlsOpen ? 'w-[300px] translate-x-0' : 'pointer-events-none w-0 translate-x-3'}`} aria-hidden={!thumbnailControlsOpen}>

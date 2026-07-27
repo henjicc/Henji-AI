@@ -59,16 +59,15 @@
   will-change: transform;
 }
 
-/* 这里曾经有过 `.canvas-viewport-moving .ui-glass` 手势期间降级成实心的规则。
-   性能上它是有效的（实测 150 层玻璃平移 27.4fps → 60.4fps），但已移除：
-
-   1. 玻璃在手势开始/结束时的一次突变肉眼可见，观感代价是实打实的；
-   2. 更关键的是它防的场景没被证实——同一组实测里 48 层玻璃平移仍是 60fps，
-      而画布上带玻璃的只有「未播放的视频节点播放键」这一种，正常工程到不了拐点。
-
-   为一个未证实的瓶颈付确定的观感代价，不划算。若将来真的出现大量视频节点导致
-   拖拽掉帧，正确做法是按可见节点数有条件地挂降级 class，而不是无条件常开。
-   完整实测数据见 src/index.css 毛玻璃令牌处的注释。 */
+/* 可见玻璃达到 64 个后才在手势期间临时取消 backdrop-filter。
+   64 是 60 层仍满帧、100 层降到 43.5fps 之间的保守拐点；正常工程完全不触发，
+   避免为少量节点付出材质突变。计数只在手势开始执行一次，见
+   useCanvasGlassPerformance.ts。高密度场景实测取消滤镜可从 27.4fps 恢复到 60.4fps。 */
+.canvas-glass-density-high.canvas-viewport-moving .react-flow__viewport .ui-glass {
+  background-color: rgb(var(--panel-rgb) / 0.94);
+  -webkit-backdrop-filter: none; /* ui-surface-allow：高密度手势期复用 ui-glass，仅临时取消滤镜 */
+  backdrop-filter: none; /* ui-surface-allow：与上一行成对覆盖 Chromium 标准属性 */
+}
 
 /* 低倍率内容 LOD：缩放低于阈值（见 useCanvasContentLod）时，Canvas 包装层
    挂 .canvas-lod-low，内容型节点正文（标 .canvas-node-lod-detail）只隐藏绘制、

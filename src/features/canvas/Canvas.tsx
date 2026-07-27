@@ -48,6 +48,7 @@ import { NodeToolDialog } from './ui/NodeToolDialog';
 import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
 import { useCanvasAssetDrop } from './hooks/useCanvasAssetDrop';
+import { useCanvasGlassPerformance } from './hooks/useCanvasGlassPerformance';
 
 interface CanvasToastState {
   message: string;
@@ -87,6 +88,7 @@ export function Canvas() {
   const { t } = useTranslation();
   const reactFlowInstance = useReactFlow<CanvasNode, CanvasEdge>();
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const { prepareGlassGesture, clearGlassGesture } = useCanvasGlassPerformance(wrapperRef);
   const isRestoringCanvasRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -377,9 +379,10 @@ export function Canvas() {
   const clearViewportGestureClasses = useCallback(() => {
     wrapperRef.current?.classList.remove('canvas-viewport-moving');
     wrapperRef.current?.classList.remove('canvas-viewport-panning');
+    clearGlassGesture();
     gestureStartZoomRef.current = null;
     isPanPromotedRef.current = false;
-  }, []);
+  }, [clearGlassGesture]);
 
   // 视口状态只在 moveEnd 时同步进 store：平移/缩放过程中每帧 set() 会把
   // 全画布节点的 zustand 选择器（含 O(节点+边) 的图遍历）都跑一遍，是大画布掉帧主因之一。
@@ -404,13 +407,14 @@ export function Canvas() {
     (_event: DynamicValue, viewport: Viewport) => {
       // 用 classList 直改 DOM，避免手势起点多一次 React 渲染。
       // `moving` 覆盖整个手势（暂停连线动画等）；`panning` 只在确认是平移时保留。
+      prepareGlassGesture();
       wrapperRef.current?.classList.add('canvas-viewport-moving');
       wrapperRef.current?.classList.add('canvas-viewport-panning');
       gestureStartZoomRef.current = viewport.zoom;
       isPanPromotedRef.current = true;
       cancelPendingViewportPersist();
     },
-    [cancelPendingViewportPersist]
+    [cancelPendingViewportPersist, prepareGlassGesture]
   );
 
   // 每帧调用：只做一次数值比较和一次 classList 操作，不触发 React 渲染，

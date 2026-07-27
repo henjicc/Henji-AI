@@ -5,7 +5,7 @@ import ContextMenu from '@/components/ContextMenu'
 import UpdateDialog from '@/components/UpdateDialog'
 import TestModeIndicator from '@/components/TestModeIndicator'
 import TestModePanel from '@/components/TestModePanel'
-import { UiTaskHistoryFilterBar } from '@/components/ui'
+import { UiSharedGlassHost, UiTaskHistoryFilterBar } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
 import { getModelDisplayName, getModelInfo, getProviderDisplayName } from '@/utils/modelHelpers'
@@ -531,8 +531,9 @@ const GenerationWorkspace: React.FC = () => {
             </div>
           </div>
         </div>
-        <div
+        <UiSharedGlassHost
           ref={listContainerRef}
+          minTargets={4}
           className="app-scroll-container min-h-0 flex-1 overflow-y-auto p-6"
           style={{ paddingBottom: inputPadding }}
         >
@@ -556,7 +557,7 @@ const GenerationWorkspace: React.FC = () => {
               notify={notify}
             />
           </div>
-        </div>
+        </UiSharedGlassHost>
         <FloatingInputPanel
           containerRef={inputContainerRef}
           isCollapsed={isPanelCollapsed}

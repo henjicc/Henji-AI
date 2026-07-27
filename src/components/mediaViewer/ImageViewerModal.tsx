@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, RotateCcw, X } from 'lucide-react';
 
-import { UiButton, UiIconButton } from '@/components/ui';
+import { UiButton, UiIconButton, UiSharedGlassHost } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DURATION, uiTransition } from '@/components/ui/motion';
 import type { ImageEditSession } from '@/core/imageEdit';
 import { ImageInfoPanel } from './ImageInfoPanel';
@@ -207,8 +207,9 @@ export function ImageViewerModal({
           </React.Suspense>
         </div>
       ) : (
-        <div
+        <UiSharedGlassHost
           ref={containerRef}
+          minTargets={3}
           className="absolute inset-0 flex items-center justify-center overflow-hidden p-4"
           style={{ overscrollBehavior: 'contain' }}
           onMouseMove={handleContainerMouseMove}
@@ -248,7 +249,7 @@ export function ImageViewerModal({
 
           <ImageInfoPanel open={open} imageSource={resolvedInfoSource} />
 
-          <div className="absolute bottom-8 left-1/2 flex -translate-x-1/2 flex-col items-center gap-3">
+          <div className="absolute bottom-8 left-1/2 z-sticky flex -translate-x-1/2 flex-col items-center gap-3">
             {imageList.length > 1 && (
               <div className="flex items-center gap-3">
                 <UiIconButton
@@ -301,7 +302,7 @@ export function ImageViewerModal({
               </UiButton>
             </div>
           </div>
-        </div>
+        </UiSharedGlassHost>
       )}
     </div>
   );

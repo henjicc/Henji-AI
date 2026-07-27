@@ -34,10 +34,12 @@
    *   saturate / brightness 的增量在噪声内 —— 质感四层不必为性能砍任何一层
    *   opacity:0 / visibility:hidden / display:none 的玻璃是**免费**的，浏览器会跳过
    *
-   * 另测：画布整体平移时 150 层 27.4fps，手势期间降级成实心可回到 60.4fps；
-   * 但该降级已移除——玻璃在手势起止的突变肉眼可见，而 48 层平移本来就有 60fps，
-   * 画布上带玻璃的只有未播放视频节点的播放键，正常工程到不了拐点。详见
-   * src/features/canvas/storyboard.css 中保留的说明。
+   * 共享层复测（2560x1400、DPR 1.5、RTX 4090、150 个圆形区域）：逐元素 30fps，
+   * 单层玻璃 + SVG alpha mask 60fps；去噪点或混合模式只有约 0.7fps 波动。
+   *
+   * 另测：画布整体平移时 150 层 27.4fps，手势期间取消滤镜可回到 60.4fps；
+   * 现在只在可见玻璃达到 64 个时触发，正常工程保留完整材质。详见
+   * src/features/canvas/storyboard.css 与 useCanvasGlassPerformance.ts。
    *
    * 结论：要优化就**减少层数或合并成一块大玻璃**（如工具条：一块玻璃包住所有透明按钮，
    * 而不是每个按钮各一块），不要靠调小 --ui-blur，也不要为未证实的瓶颈牺牲观感。
@@ -186,6 +188,52 @@
     mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/></filter><rect width='140' height='140' filter='url(%23n)'/></svg>");
     background-size: 140px 140px;
+  }
+
+  /*
+   * 同一区域存在多块玻璃时，UiSharedGlassHost 用一张 alpha mask 合并为单次
+   * backdrop-filter。目标元素只保留受光边与交互叠色；底色、模糊和噪点由
+   * 固定在宿主可见区域内的共享层一次性提供。
+   */
+  .ui-shared-glass-layer {
+    display: none;
+    /*
+     * ui-surface-allow：共享层必须夹在媒体内容与目标控件之间。目标是运行时发现的
+     * 现有 `.ui-glass`，无法在每个 JSX 调用点补一套层级类，因此使用组件内部
+     * 1 / 2 两级局部堆叠；它们不参与应用的全局 Z_LAYERS。
+     */
+    z-index: 1;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+  }
+
+  .ui-shared-glass-layer::after {
+    border-radius: 0;
+  }
+
+  .ui-shared-glass-host[data-ui-shared-glass-active='true'] > .ui-shared-glass-layer {
+    display: block;
+  }
+
+  .ui-shared-glass-host[data-ui-shared-glass-active='true']
+    .ui-glass:not(.ui-shared-glass-layer):not([data-ui-shared-glass='exclude']) {
+    z-index: 2;
+    background-color: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .ui-shared-glass-host[data-ui-shared-glass-active='true']
+    .ui-glass:not(.ui-shared-glass-layer):not([data-ui-shared-glass='exclude'])::after {
+    display: none;
+  }
+
+  .ui-shared-glass-host[data-ui-shared-glass-active='true']
+    .ui-glass[data-ui-shared-glass='exclude'] {
+    z-index: 2;
   }
 
   /*
