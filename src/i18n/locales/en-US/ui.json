@@ -521,13 +521,6 @@
     "diffusion": {
       "tool": "Glow / Diffusion",
       "enable": "Enable glow / diffusion",
-      "compiling": "Compiling diffusion preview…",
-      "rendering": "Rendering diffusion preview…",
-      "sharpFallback": "Using Sharp compatibility preview",
-      "sharpFallbackApiUnavailable": "WebGPU is not enabled in this Electron session. Switched to an approximate Sharp compatibility preview; export still uses the original image size.",
-      "sharpFallbackAdapterUnavailable": "No usable WebGPU graphics adapter was found. Switched to an approximate Sharp compatibility preview; export still uses the original image size.",
-      "sharpFallbackInitializationFailed": "WebGPU initialization failed. Switched to an approximate Sharp compatibility preview; export still uses the original image size.",
-      "sharpFallbackRecoveryExhausted": "The WebGPU device was lost and could not be rebuilt automatically. Switched to an approximate Sharp compatibility preview; export still uses the original image size.",
       "reset": "Reset",
       "remove": "Remove effect",
       "preset": {

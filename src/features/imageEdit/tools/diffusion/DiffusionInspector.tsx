@@ -1,4 +1,4 @@
-import type { PointerEvent, ReactNode } from 'react';
+import type { PointerEvent } from 'react';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import {
   applyDiffusionPresetForSelection,
@@ -125,9 +125,6 @@ export function DiffusionInspector(): JSX.Element {
   const { t } = useI18n('ui');
   const operation = controller.getOperation<DiffusionOperationParams>(IMAGE_EDIT_OPERATION_IDS.diffusion);
   const params = operation?.params ?? createDefaultDiffusionOperationParams();
-  const previewState = controller.previewState;
-  const previewStatus = resolvePreviewStatus(previewState, t);
-
   const update = (patch: (current: DiffusionOperationParams) => DiffusionOperationParams): void => {
     controller.updateOperation<DiffusionOperationParams>(IMAGE_EDIT_OPERATION_IDS.diffusion, patch);
   };
@@ -164,20 +161,6 @@ export function DiffusionInspector(): JSX.Element {
           aria-label={t('imageEditor.diffusion.enable')}
         />
       </div>
-      {previewState && previewState.phase !== 'idle' ? (
-        <div
-          role="status"
-          aria-live="polite"
-          className={`mb-3 rounded-lg border px-2.5 py-2 text-xs ${
-            previewState.phase === 'failed'
-              ? 'border-red-500/40 text-red-300'
-              : 'border-border-dark text-text-muted'
-          }`}
-        >
-          {previewStatus}
-        </div>
-      ) : null}
-
       <fieldset disabled={!operation?.enabled} className="m-0 min-w-0 space-y-4 border-0 p-0 disabled:opacity-60">
         <UiGroup gap="row">
           <DiffusionSegmentedField
@@ -301,23 +284,4 @@ export function DiffusionInspector(): JSX.Element {
       </div>
     </div>
   );
-}
-
-function resolvePreviewStatus(
-  previewState: ReturnType<typeof useImageEditorDocumentController>['previewState'],
-  t: ReturnType<typeof useI18n>['t']
-): ReactNode {
-  if (previewState?.phase === 'compiling') return t('imageEditor.diffusion.compiling');
-  if (previewState?.phase === 'rendering') return t('imageEditor.diffusion.rendering');
-  if (previewState?.phase !== 'degraded') return previewState?.message;
-  if (previewState.fallbackReason === 'webgpu-api-unavailable') {
-    return t('imageEditor.diffusion.sharpFallbackApiUnavailable');
-  }
-  if (previewState.fallbackReason === 'webgpu-adapter-unavailable') {
-    return t('imageEditor.diffusion.sharpFallbackAdapterUnavailable');
-  }
-  if (previewState.fallbackReason === 'webgpu-device-recovery-exhausted') {
-    return t('imageEditor.diffusion.sharpFallbackRecoveryExhausted');
-  }
-  return t('imageEditor.diffusion.sharpFallbackInitializationFailed');
 }
