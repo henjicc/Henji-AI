@@ -53,6 +53,28 @@
   will-change: transform;
 }
 
+/* 手势期间毛玻璃降级成实心。
+   backdrop-filter 的成本按「层数」算而不是按面积算，且背景每帧变化时翻倍——
+   实测（真实 Electron、1440x900、60Hz 上限，见下表）：
+
+     150 块小玻璃 · 背景静止          52.7fps   ← Chromium 能缓存滤镜结果
+     150 块小玻璃 · 背景每帧变        28.4fps
+     150 块小玻璃 · 整体平移(画布拖拽) 27.4fps
+     150 块小玻璃 · 平移中降级实心    60.4fps   ← 本规则
+      48 块小玻璃 · 平移              60.0fps   ← 资产库量级，本来就不吃紧
+
+   画布平移时每个节点上的玻璃（视频播放键等）都要每帧重新读回并模糊，是全项目最贵的
+   玻璃场景。手势中人眼看不见玻璃细节，停下立即恢复，所以这是零观感代价的纯赚。
+   与上面的 will-change 提升是同一套「手势期间降级」思路。
+
+   ⚠️ 只改 --ui-glass-* 变量，不直接写 backdrop-filter：降级值与设置里关掉毛玻璃时
+   （src/index.css 的 :root[data-ui-blur='off']）保持同一套，避免出现第二种退化观感。 */
+.canvas-viewport-moving .ui-glass {
+  --ui-glass-filter: none;
+  --ui-glass-tint: rgb(var(--panel-rgb) / 0.94);
+  --ui-glass-grain: 0;
+}
+
 /* 低倍率内容 LOD：缩放低于阈值（见 useCanvasContentLod）时，Canvas 包装层
    挂 .canvas-lod-low，内容型节点正文（标 .canvas-node-lod-detail）只隐藏绘制、
    保留布局（visibility 不改变几何，xyflow 的 handle 测量与连线锚点不受影响），

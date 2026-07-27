@@ -23,6 +23,20 @@
    *
    * 用法：**不要**自己拼 blur + bg + border，直接用 `.ui-glass`（见下方定义）。
    * 需要调整质感时只改这里的变量，全局一起变。
+   *
+   * 性能：成本按「同时可见的玻璃层数」算，不是按面积算。实测（真实 Electron、
+   * 1440x900、60Hz 上限、背景每帧变化）：
+   *   60 层 60fps ┃ 100 层 43.5fps ┃ 150 层 27fps ┃ 300 层 27fps
+   *   同样 792k px² 总面积：4 块大的 58.4fps，150 块小的 27fps —— 差 2 倍
+   *   1 块全屏 blur24 = 60fps（所以全屏遮罩根本不是问题）
+   *   150 块时 blur 4px→64px 只从 50fps 掉到 25fps —— 半径是次要因素，
+   *   固定开销（每层一次 backdrop 读回）才是大头
+   *   saturate / brightness 的增量在噪声内 —— 质感四层不必为性能砍任何一层
+   *   opacity:0 / visibility:hidden / display:none 的玻璃是**免费**的，浏览器会跳过
+   *
+   * 结论：要优化就**减少层数或合并成一块大玻璃**（如工具条：一块玻璃包住所有透明按钮，
+   * 而不是每个按钮各一块），不要靠调小 --ui-blur。
+   * 画布手势期间的降级见 src/features/canvas/storyboard.css。
    */
   --ui-blur: 24px;
   --ui-glass-filter: blur(var(--ui-blur)) saturate(180%) brightness(1.06);
