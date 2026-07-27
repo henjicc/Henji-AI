@@ -6,6 +6,9 @@
 // 完全一致；而 textureSample 依赖隐式求导，要求调用点处于一致控制流，会与 alpha
 // 提前返回、色散开关等分支冲突并直接导致整个 shader module 编译失败。
 
+/** 裁切高光外推的最大增益，防止把纯白面积重建成不受控的光源。 */
+const MAX_RECOVERY_GAIN: f32 = 3.0;
+
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) local_uv: vec2<f32>,
@@ -38,24 +41,32 @@ fn luminance(color: vec3<f32>) -> f32 {
 struct SourceUniforms {
   scale: vec2<f32>,
   offset: vec2<f32>,
-  threshold_linear: f32,
-  soft_knee_linear: f32,
+  threshold_ev: f32,
+  soft_knee_ev: f32,
   power: f32,
   highlight_gain: f32,
   micro_gain: f32,
   highlight_recovery: f32,
   mode: f32,
-  position_variation: f32,
+  padding: f32,
 };
 
 @group(0) @binding(0) var source_input: texture_2d<f32>;
 @group(0) @binding(1) var source_sampler: sampler;
 @group(0) @binding(2) var<uniform> source_params: SourceUniforms;
 
+/**
+ * 高光响应在 EV(log2) 空间求值。
+ *
+ * 线性空间里同一个 knee 宽度，在不同阈值处对应的感知过渡宽度会随亮度指数漂移，
+ * 导致「柔化拐点」与「阈值」两个参数互相干扰、亮部过渡突兀。EV 空间下 knee 是
+ * 恒定的档位宽度，两个参数才正交。
+ */
 fn highlight_response(value: f32) -> f32 {
-  let knee = max(source_params.soft_knee_linear, 0.000015);
+  let ev = log2(max(value, 1e-6) / 0.18);
+  let knee = max(source_params.soft_knee_ev, 1e-3);
   let shoulder = clamp(
-    (value - source_params.threshold_linear + knee) / (2.0 * knee),
+    (ev - source_params.threshold_ev + knee) / (2.0 * knee),
     0.0,
     1.0
   );
@@ -72,14 +83,16 @@ fn fragment_source(input: VertexOutput) -> @location(0) vec4<f32> {
   }
   let luma = luminance(color.rgb);
   let highlight = highlight_response(luma);
-  let recovered = mix(
-    color.rgb,
-    vec3<f32>(luma),
-    source_params.highlight_recovery * 0.35
-  );
   let micro = luma * luma * source_params.micro_gain;
-  var response = recovered * (
-    highlight * source_params.highlight_gain + micro
+
+  // 裁切高光恢复：JPEG 已把过曝区削平，真实峰值不可知。按接近饱和的程度做有界外推，
+  // 且只用于生成散射源、不改写可见原图（文档 §7）。
+  let peak = max(color.r, max(color.g, color.b));
+  let clipped = smoothstep(0.94, 1.0, peak);
+  let recovery = 1.0 + clipped * source_params.highlight_recovery * MAX_RECOVERY_GAIN;
+
+  var response = color.rgb * (
+    highlight * source_params.highlight_gain * recovery + micro
   );
   if (source_params.mode < 0.5) {
     response *= mix(0.65, 1.0, highlight);
@@ -88,7 +101,11 @@ fn fragment_source(input: VertexOutput) -> @location(0) vec4<f32> {
   } else {
     response *= highlight * 0.65 + 0.35;
   }
-  return vec4<f32>(max(response, vec3<f32>(0.0)) * color.a, color.a);
+  // 散射源不得超过像素自身的光量：物理上不可能从一个像素取走比它更多的光。
+  // 不在源头封顶的话，合成阶段的 min() 会截断扣除项而加回项照旧，
+  // 参数一拉高就变成凭空造光、整图发亮（文档 §3）。
+  let emitted = clamp(response, vec3<f32>(0.0), color.rgb);
+  return vec4<f32>(emitted * color.a, color.a);
 }
 
 struct BlurUniforms {
@@ -145,9 +162,7 @@ struct CompositeUniforms {
   offset: vec2<f32>,
   weights_a: vec4<f32>,
   weights_b: vec4<f32>,
-  strength: f32,
   scatter_fraction: f32,
-  direct_retention: f32,
   veil: f32,
   black_retention: f32,
   highlight_compression: f32,
@@ -156,7 +171,9 @@ struct CompositeUniforms {
   mid_frequency_retention: f32,
   mode: f32,
   chromatic_spread: f32,
-  padding: f32,
+  padding_a: f32,
+  padding_b: f32,
+  padding_c: f32,
 };
 
 @group(0) @binding(0) var composite_base: texture_2d<f32>;
@@ -168,6 +185,8 @@ struct CompositeUniforms {
 @group(0) @binding(6) var scatter_4: texture_2d<f32>;
 @group(0) @binding(7) var scatter_5: texture_2d<f32>;
 @group(0) @binding(8) var<uniform> composite_params: CompositeUniforms;
+/** 未经模糊的散射源 E，能量守恒的扣除项必须用它而不是模糊后的结果。 */
+@group(0) @binding(9) var composite_emitted: texture_2d<f32>;
 
 fn sample_chromatic(texture: texture_2d<f32>, uv: vec2<f32>, spread: f32) -> vec3<f32> {
   if (spread <= 0.000001) {
@@ -206,16 +225,22 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
     vec3<f32>(scatter_luma),
     composite_params.scatter_desaturation
   );
-  let deduction = min(
-    base.rgb,
-    scatter * composite_params.scatter_fraction
-  );
+
+  // 能量守恒（文档 §4.2）：O = I - f·E + f·(K * E)。
+  //
+  // 扣除项必须用未模糊的源 E：模糊后的 scatter 在高光中心已被摊平，用它扣会扣得
+  // 太少，中心不下沉，观感就是「贴上去的光晕」而不是「光从中心漏出去」。
+  // 扣和加还必须用同一个系数，否则每提一档强度就是在凭空造光（文档 §3）。
+  // 尺度权重与模糊核都已归一化到 1，因此全局能量自动守恒。
+  let emitted = textureSampleLevel(composite_emitted, composite_sampler, uv, 0.0).rgb;
+  let deduction = min(base.rgb, emitted * composite_params.scatter_fraction);
   let direct = max(base.rgb - deduction, vec3<f32>(0.0));
+  var color = direct + scatter * composite_params.scatter_fraction;
+
   let high_detail = base.rgb
     - textureSampleLevel(scatter_0, composite_sampler, uv, 0.0).rgb;
   let mid_detail = base.rgb
     - textureSampleLevel(scatter_2, composite_sampler, uv, 0.0).rgb;
-  var color = direct + scatter * composite_params.strength;
   color += high_detail * composite_params.high_frequency_retention * 0.08;
   color += mid_detail * composite_params.mid_frequency_retention * 0.04;
 

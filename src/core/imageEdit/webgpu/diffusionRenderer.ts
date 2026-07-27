@@ -127,6 +127,8 @@ export class WebGpuDiffusionRenderer {
             resource: texture.createView(),
           })),
           { binding: 8, resource: { buffer: uniform } },
+          // 未模糊的散射源，能量守恒的扣除项要用它
+          { binding: 9, resource: cache.source.createView() },
         ],
         output
       );
@@ -200,30 +202,39 @@ export class WebGpuDiffusionRenderer {
     const scratch: GpuTexture[] = [];
     const uniforms: GpuBuffer[] = [];
     try {
+      // 真正的逐级降采样金字塔：第 N 层从第 N-1 层的结果继续降 2 倍，而不是每层都回头
+      // 采样全分辨率源图。后者在宽尺度上等于用 5 个样本去覆盖 32×32 区域，严重欠采样，
+      // 点光源平移几个像素辉光总能量就会跳变（修复前实测波动 13.3%）。
+      let previous = cache.source;
+      let previousRadius = 0;
       for (let index = 0; index < input.recipe.scales.length; index += 1) {
         assertNotCancelled(input.isCancelled);
-        const divisor = input.recipe.quality === 'high'
-          ? SCALE_DIVISORS[index]
-          : Math.min(32, SCALE_DIVISORS[index] * (index >= 3 ? 2 : 1));
+        const divisor = SCALE_DIVISORS[index];
         const width = Math.max(1, Math.ceil(input.width / divisor));
         const height = Math.max(1, Math.ceil(input.height / divisor));
         const horizontal = this.acquireTexture(width, height);
         const vertical = this.acquireTexture(width, height);
         scratch.push(horizontal);
+        // 输入已经带着前几层累计的模糊量，而高斯方差可加，因此本层只补足差额，
+        // 累计后才等于配方中该层声明的有效半径。
+        const stepRadius = resolveStepRadius(
+          input.recipe.scales[index].radius,
+          previousRadius
+        );
         const horizontalUniform = createUniformBuffer(
           this.device,
-          createBlurUniform(input.recipe, index, 0)
+          createBlurUniform(input.recipe, stepRadius, 0)
         );
         const verticalUniform = createUniformBuffer(
           this.device,
-          createBlurUniform(input.recipe, index, 1)
+          createBlurUniform(input.recipe, stepRadius, 1)
         );
         uniforms.push(horizontalUniform, verticalUniform);
         renderPipelinePass(
           this.device,
           this.pipelines.blurHorizontal,
           [
-            { binding: 0, resource: cache.source.createView() },
+            { binding: 0, resource: previous.createView() },
             { binding: 1, resource: this.sampler },
             { binding: 2, resource: { buffer: horizontalUniform } },
           ],
@@ -240,6 +251,8 @@ export class WebGpuDiffusionRenderer {
           vertical
         );
         cache.scales.push(vertical);
+        previous = vertical;
+        previousRadius = input.recipe.scales[index].radius;
       }
       await this.device.queue.onSubmittedWorkDone();
       assertNotCancelled(input.isCancelled);
@@ -289,7 +302,15 @@ export function determineDiffusionInvalidation(
 }
 
 function createSourceSignature(recipe: DiffusionRecipe): string {
-  return JSON.stringify([recipe.mode, recipe.source, recipe.optics.positionVariation]);
+  return JSON.stringify([recipe.mode, recipe.source]);
+}
+
+/**
+ * 逐级金字塔里每一层只需补足到目标半径的差额。高斯卷积的方差可加，
+ * 即 σ_total² = σ_prev² + σ_step²，所以 step = sqrt(target² - prev²)。
+ */
+function resolveStepRadius(targetRadius: number, previousRadius: number): number {
+  return Math.sqrt(Math.max(0, targetRadius * targetRadius - previousRadius * previousRadius));
 }
 
 function createPyramidSignature(recipe: DiffusionRecipe): string {
@@ -304,27 +325,27 @@ function createPyramidSignature(recipe: DiffusionRecipe): string {
 function createSourceUniform(recipe: DiffusionRecipe): Float32Array {
   return new Float32Array([
     1, 1, 0, 0,
-    recipe.source.thresholdLinear,
-    recipe.source.softKneeLinear,
+    recipe.source.thresholdEV,
+    recipe.source.softKneeEV,
     recipe.source.power,
     recipe.source.highlightGain,
     recipe.source.microGain,
     recipe.source.highlightRecovery,
     modeToNumber(recipe.mode),
-    recipe.optics.positionVariation,
+    0,
   ]);
 }
 
 function createBlurUniform(
   recipe: DiffusionRecipe,
-  scaleIndex: number,
+  radius: number,
   axis: 0 | 1
 ): Float32Array {
   return new Float32Array([
     1, 1, 0, 0,
     recipe.image.aspectCorrection[0],
     recipe.image.aspectCorrection[1],
-    recipe.scales[scaleIndex].radius,
+    radius,
     axis,
     recipe.optics.anisotropy,
     recipe.optics.angleRadians,
@@ -339,9 +360,7 @@ function createCompositeUniform(recipe: DiffusionRecipe): Float32Array {
     1, 1, 0, 0,
     weights[0], weights[1], weights[2], weights[3],
     weights[4], weights[5], 0, 0,
-    recipe.strength,
     recipe.energy.scatterFraction,
-    recipe.energy.directRetention,
     recipe.energy.veil,
     recipe.tone.blackRetention,
     recipe.tone.highlightCompression,
@@ -350,7 +369,7 @@ function createCompositeUniform(recipe: DiffusionRecipe): Float32Array {
     recipe.detail.midFrequencyRetention,
     modeToNumber(recipe.mode),
     recipe.optics.chromaticSpread,
-    0,
+    0, 0, 0,
   ]);
 }
 

@@ -278,7 +278,6 @@ describe('摄影柔光共享配方', () => {
       sourceSignature: JSON.stringify([
         recipe.mode,
         recipe.source,
-        recipe.optics.positionVariation,
       ]),
       pyramidSignature: JSON.stringify([
         recipe.quality,

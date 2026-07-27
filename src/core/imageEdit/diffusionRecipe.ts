@@ -26,8 +26,9 @@ export interface DiffusionRecipe {
     aspectCorrection: readonly [number, number];
   };
   source: {
-    thresholdLinear: number;
-    softKneeLinear: number;
+    /** 高光响应在 EV(log2) 空间求值，故直接透传 EV，不再预先换算成线性值。 */
+    thresholdEV: number;
+    softKneeEV: number;
     power: number;
     highlightGain: number;
     microGain: number;
@@ -52,7 +53,6 @@ export interface DiffusionRecipe {
     anisotropy: number;
     angleRadians: number;
     chromaticSpread: number;
-    positionVariation: number;
   };
 }
 
@@ -121,12 +121,10 @@ export function compileDiffusionRecipe(
     weight,
   }));
   const strength = clamp01(params.strength * densityMultiplier);
-  const sourceEnergy = clamp01(
-    params.scatter.highlightAmount * response.highlightGain
-      + params.scatter.microAmount * response.microGain
-      + params.scatter.tailAmount * 0.25
-  );
-  const scatterFraction = clamp01(strength * sourceEnergy * response.energyScale);
+  // 散射源 E 里已经带上了 highlightAmount / microAmount，这里再乘一次“源能量”是重复
+  // 计价，会让扣除系数比加回系数小一个量级、变成凭空造光。合成阶段扣与加共用本系数，
+  // 尺度权重和模糊核又都归一化到 1，全局能量因此自动守恒。
+  const scatterFraction = clamp01(strength * response.energyScale);
 
   return {
     version: DIFFUSION_RECIPE_VERSION,
@@ -144,11 +142,8 @@ export function compileDiffusionRecipe(
       ],
     },
     source: {
-      thresholdLinear: 0.18 * Math.pow(2, params.source.thresholdEV),
-      softKneeLinear: Math.max(
-        1 / 65_535,
-        0.18 * (Math.pow(2, params.source.softKneeEV) - 1)
-      ),
+      thresholdEV: params.source.thresholdEV,
+      softKneeEV: Math.max(1e-3, params.source.softKneeEV),
       power: params.source.power,
       highlightGain: params.scatter.highlightAmount * response.highlightGain,
       microGain: params.scatter.microAmount * response.microGain,
@@ -173,7 +168,6 @@ export function compileDiffusionRecipe(
       anisotropy: params.scatter.anisotropy,
       angleRadians: params.scatter.angle * Math.PI / 180,
       chromaticSpread: params.scatter.chromaticSpread,
-      positionVariation: params.lens.positionVariation,
     },
   };
 }
