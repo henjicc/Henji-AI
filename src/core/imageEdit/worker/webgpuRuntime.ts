@@ -2,6 +2,7 @@ import baselineShaderSource from './baseline.wgsl?raw'
 import type { DiffusionRecipe } from '../diffusionRecipe'
 import {
   createRenderPipelineChecked,
+  createShaderModuleChecked,
   ImageEditWebGpuDeviceManager,
 } from '../webgpu/deviceManager'
 import { WebGpuDiffusionRenderer } from '../webgpu/diffusionRenderer'
@@ -314,7 +315,7 @@ export class WorkerWebGpuRuntime {
       )
     }
     const { provider, adapter, device } = await this.acquireDevice()
-    const module = device.createShaderModule({ code: baselineShaderSource })
+    const module = await this.createBaselineShaderModule(device)
     const canvasFormat = this.getPreferredCanvasFormat(provider)
     const shared = {
       layout: 'auto',
@@ -362,6 +363,18 @@ export class WorkerWebGpuRuntime {
           ? 'webgpu-adapter-unavailable'
           : 'webgpu-device-request-failed'
       throw createInitializationError(code, detail)
+    }
+  }
+
+  private async createBaselineShaderModule(device: GpuDevice): Promise<unknown> {
+    try {
+      return await createShaderModuleChecked(
+        device,
+        baselineShaderSource,
+        'Worker WebGPU 基线着色器'
+      )
+    } catch (error) {
+      throw createInitializationError('webgpu-baseline-pipeline-failed', error)
     }
   }
 
@@ -605,7 +618,9 @@ function sanitizeInitializationDetail(value: string): string {
     .replace(/(?:https?|file):\/\/[^\s)\],]+/g, '<url>')
     .replace(/\s+/g, ' ')
     .trim()
-  return (withoutPaths || 'unknown-initialization-error').slice(0, 180)
+  // 上限放宽到 400：WGSL 编译诊断带行列号和源码片段，180 字会把真正的原因截掉，
+  // 只剩下没有定位价值的前缀。
+  return (withoutPaths || 'unknown-initialization-error').slice(0, 400)
 }
 
 async function createPreviewBitmap(

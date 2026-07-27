@@ -2,6 +2,7 @@ import diffusionShaderSource from '../shaders/diffusion.wgsl?raw';
 import type { DiffusionRecipe } from '../diffusionRecipe';
 import {
   createRenderPipelineChecked,
+  createShaderModuleChecked,
 } from './deviceManager';
 import { ImageEditTexturePool } from './texturePool';
 import {
@@ -68,7 +69,11 @@ export class WebGpuDiffusionRenderer {
     sampler: unknown,
     textureBudgetBytes?: number
   ): Promise<WebGpuDiffusionRenderer> {
-    const module = device.createShaderModule({ code: diffusionShaderSource });
+    const module = await createShaderModuleChecked(
+      device,
+      diffusionShaderSource,
+      '柔光着色器'
+    );
     const shared = {
       layout: 'auto',
       vertex: { module, entryPoint: 'vertex_main' },

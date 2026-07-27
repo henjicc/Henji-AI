@@ -1,5 +1,10 @@
 // WebGPU Worker 多尺度摄影柔光着色器。
 // 所有散射在 Linear sRGB 代理空间完成，半径来自共享归一化配方。
+//
+// 采样一律使用 textureSampleLevel(..., 0.0)：本着色器的输入纹理都只有 1 级 mip
+// （创建时未传 mipLevelCount，采样器也没有 mipmapFilter），显式 LOD 与隐式求导结果
+// 完全一致；而 textureSample 依赖隐式求导，要求调用点处于一致控制流，会与 alpha
+// 提前返回、色散开关等分支冲突并直接导致整个 shader module 编译失败。
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -61,7 +66,7 @@ fn highlight_response(value: f32) -> f32 {
 @fragment
 fn fragment_source(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = source_params.offset + input.local_uv * source_params.scale;
-  let color = textureSample(source_input, source_sampler, uv);
+  let color = textureSampleLevel(source_input, source_sampler, uv, 0.0);
   if (color.a <= 0.00001) {
     return vec4<f32>(0.0);
   }
@@ -115,11 +120,11 @@ fn blur_direction() -> vec2<f32> {
 }
 
 fn gaussian_sample(uv: vec2<f32>, direction: vec2<f32>) -> vec4<f32> {
-  var result = textureSample(blur_input, blur_sampler, uv) * 0.227027;
-  result += textureSample(blur_input, blur_sampler, uv + direction * 1.384615) * 0.316216;
-  result += textureSample(blur_input, blur_sampler, uv - direction * 1.384615) * 0.316216;
-  result += textureSample(blur_input, blur_sampler, uv + direction * 3.230769) * 0.070270;
-  result += textureSample(blur_input, blur_sampler, uv - direction * 3.230769) * 0.070270;
+  var result = textureSampleLevel(blur_input, blur_sampler, uv, 0.0) * 0.227027;
+  result += textureSampleLevel(blur_input, blur_sampler, uv + direction * 1.384615, 0.0) * 0.316216;
+  result += textureSampleLevel(blur_input, blur_sampler, uv - direction * 1.384615, 0.0) * 0.316216;
+  result += textureSampleLevel(blur_input, blur_sampler, uv + direction * 3.230769, 0.0) * 0.070270;
+  result += textureSampleLevel(blur_input, blur_sampler, uv - direction * 3.230769, 0.0) * 0.070270;
   return result;
 }
 
@@ -166,18 +171,18 @@ struct CompositeUniforms {
 
 fn sample_chromatic(texture: texture_2d<f32>, uv: vec2<f32>, spread: f32) -> vec3<f32> {
   if (spread <= 0.000001) {
-    return textureSample(texture, composite_sampler, uv).rgb;
+    return textureSampleLevel(texture, composite_sampler, uv, 0.0).rgb;
   }
-  let red = textureSample(texture, composite_sampler, uv + vec2<f32>(spread, 0.0)).r;
-  let green = textureSample(texture, composite_sampler, uv).g;
-  let blue = textureSample(texture, composite_sampler, uv - vec2<f32>(spread, 0.0)).b;
+  let red = textureSampleLevel(texture, composite_sampler, uv + vec2<f32>(spread, 0.0), 0.0).r;
+  let green = textureSampleLevel(texture, composite_sampler, uv, 0.0).g;
+  let blue = textureSampleLevel(texture, composite_sampler, uv - vec2<f32>(spread, 0.0), 0.0).b;
   return vec3<f32>(red, green, blue);
 }
 
 @fragment
 fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = composite_params.offset + input.local_uv * composite_params.scale;
-  let base = textureSample(composite_base, composite_sampler, uv);
+  let base = textureSampleLevel(composite_base, composite_sampler, uv, 0.0);
   if (base.a <= 0.00001) {
     return vec4<f32>(0.0);
   }
@@ -207,9 +212,9 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   );
   let direct = max(base.rgb - deduction, vec3<f32>(0.0));
   let high_detail = base.rgb
-    - textureSample(scatter_0, composite_sampler, uv).rgb;
+    - textureSampleLevel(scatter_0, composite_sampler, uv, 0.0).rgb;
   let mid_detail = base.rgb
-    - textureSample(scatter_2, composite_sampler, uv).rgb;
+    - textureSampleLevel(scatter_2, composite_sampler, uv, 0.0).rgb;
   var color = direct + scatter * composite_params.strength;
   color += high_detail * composite_params.high_frequency_retention * 0.08;
   color += mid_detail * composite_params.mid_frequency_retention * 0.04;
