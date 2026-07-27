@@ -1,11 +1,18 @@
 import { FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, X } from 'lucide-react';
-import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS, UiChipButton } from '@/components/ui';
+import {
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UI_TEXT_SECTION_CLASS,
+  UiButton,
+  UiGroup,
+  UiOptionButton,
+} from '@/components/ui';
 import { CROP_RATIO_OPTIONS } from '@/features/imageMark/editor/shared';
 import type { OrientationOp } from '@/features/imageMark/domain/geometry';
 import { useMarkEditorContext } from '@/features/imageMark/editor/useMarkEditorContext';
 
 const ICON_CLASS = 'h-4 w-4';
-const CHIP_CLASS = '!h-9 !gap-1.5 !px-2.5 !text-xs';
+const OPTION_CLASS = 'h-9 justify-center gap-1.5 px-2.5 text-xs';
 
 const ORIENTATION_BUTTONS: { operation: OrientationOp; label: string; icon: typeof RotateCw }[] = [
   { operation: 'rotate-ccw', label: '左转', icon: RotateCcw },
@@ -32,65 +39,68 @@ export function GeometryInspector(): JSX.Element {
         <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>调整图片朝向和裁剪区域</p>
       </div>
 
-      <section className="border-b border-border-dark pb-4">
-        <h3 className={`mb-2 ${UI_TEXT_LABEL_CLASS}`}>朝向</h3>
+      <UiGroup title="朝向" titleTone="overline">
         <div className="grid grid-cols-2 gap-2">
           {ORIENTATION_BUTTONS.map((button) => {
             const Icon = button.icon;
             return (
-              <UiChipButton
+              <UiButton
                 key={button.operation}
                 type="button"
+                variant="plain"
+                size="sm"
                 title={button.label}
-                className={CHIP_CLASS}
                 onClick={() => onOrientation(button.operation)}
               >
-                <Icon className={ICON_CLASS} />
+                <Icon className={`mr-1.5 ${ICON_CLASS}`} />
                 {button.label}
-              </UiChipButton>
+              </UiButton>
             );
           })}
         </div>
-      </section>
+      </UiGroup>
 
-      <section className="pt-4">
+      <UiGroup divided className="pt-4">
         <div className="mb-2 flex items-center justify-between">
           <h3 className={UI_TEXT_LABEL_CLASS}>裁剪</h3>
-          <UiChipButton
+          <UiButton
             type="button"
-            active={tool === 'crop'}
-            className={CHIP_CLASS}
+            variant={tool === 'crop' ? 'primary' : 'ghost'}
+            size="sm"
             onClick={() => selectTool(tool === 'crop' ? 'select' : 'crop')}
           >
             {tool === 'crop' ? '退出裁剪' : '开始裁剪'}
-          </UiChipButton>
+          </UiButton>
         </div>
         <div className="flex flex-wrap gap-2">
           {CROP_RATIO_OPTIONS.map((option) => (
-            <UiChipButton
+            <UiOptionButton
               key={option.value}
               type="button"
+              variant="flat"
               active={cropRatioValue === option.value}
-              className={CHIP_CLASS}
+              className={OPTION_CLASS}
               onClick={() => {
                 selectTool('crop');
                 onCropRatioChange(option.value);
               }}
             >
               {option.label}
-            </UiChipButton>
+            </UiOptionButton>
           ))}
         </div>
-        <UiChipButton
+        <UiButton
           type="button"
-          className={`mt-3 ${CHIP_CLASS}`}
+          variant="plain"
+          size="sm"
+          className="mt-3"
           onClick={onCropReset}
           disabled={!hasCrop}
         >
-          <X className={ICON_CLASS} />
+          <X className={`mr-1.5 ${ICON_CLASS}`} />
           清除裁剪
-        </UiChipButton>
-      </section>
+        </UiButton>
+      </UiGroup>
     </div>
   );
 }

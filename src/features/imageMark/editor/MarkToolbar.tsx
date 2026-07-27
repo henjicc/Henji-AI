@@ -8,7 +8,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import { UiChipButton, UiColorInput, UiIconButton, UiRangeInput } from '@/components/ui';
+import { UiButton, UiChipButton, UiColorInput, UiIconButton, UiOptionButton, UiRangeInput } from '@/components/ui';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import {
   MAX_LINE_WIDTH_PERCENT,
@@ -50,7 +50,9 @@ interface MarkToolbarProps {
   actions?: React.ReactNode;
 }
 
-const CHIP_CLASS = '!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs';
+const CHIP_CLASS = '!h-8 !gap-1 !px-2.5 !py-1.5 !text-xs'
+// 单选参数值走 UiOptionButton，尺寸与命令带 chip 对齐
+const OPTION_CLASS = 'h-8 gap-1 px-2.5 py-1.5 text-xs';
 const ICON_CLASS = 'h-3.5 w-3.5';
 
 const ORIENTATION_BUTTONS: { op: OrientationOp; label: string; icon: typeof RotateCw }[] = [
@@ -112,6 +114,9 @@ export function MarkToolbar({
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
         <div className="flex min-w-0 items-center gap-2">{leading}</div>
         <div className="flex flex-wrap items-center justify-center gap-2">
+          {/* 工具是「模式」不是「动作」：点它改变的是接下来会发生什么，属于导航语义。
+              所以静息态不描边（同质选项集合逐个描边只剩视觉重量），选中态用中性层底 +
+              强调文字，而不是实底蓝——实底蓝留给命令带右端唯一的主动作。 */}
           {TOOL_BUTTONS.filter((button) => !annotationOnly || button.type !== 'crop').map((button) => {
             const Icon = button.icon;
             return (
@@ -119,6 +124,7 @@ export function MarkToolbar({
                 key={button.type}
                 type="button"
                 active={tool === button.type}
+                selectionRole="navigation"
                 title={`${button.label}(${button.shortcut})`}
                 onClick={() => setTool(button.type)}
                 className={CHIP_CLASS}
@@ -135,16 +141,17 @@ export function MarkToolbar({
               {ORIENTATION_BUTTONS.map((button) => {
                 const Icon = button.icon;
                 return (
-                  <UiChipButton
+                  <UiButton
                     key={button.op}
                     type="button"
+                    variant="plain"
+                    size="sm"
                     title={button.label}
-                    className={CHIP_CLASS}
                     onClick={() => onOrientation(button.op)}
                   >
-                    <Icon className={ICON_CLASS} />
+                    <Icon className={`mr-1 ${ICON_CLASS}`} />
                     {button.label}
-                  </UiChipButton>
+                  </UiButton>
                 );
               })}
             </>
@@ -201,44 +208,48 @@ export function MarkToolbar({
         {!annotationOnly && tool === 'crop' ? (
           <>
             {CROP_RATIO_OPTIONS.map((option) => (
-              <UiChipButton
+              <UiOptionButton
                 key={option.value}
                 type="button"
+                variant="flat"
                 active={cropRatioValue === option.value}
                 onClick={() => onCropRatioChange(option.value)}
-                className={CHIP_CLASS}
+                className={OPTION_CLASS}
               >
                 {option.label}
-              </UiChipButton>
+              </UiOptionButton>
             ))}
-            <UiChipButton
+            <UiButton
               type="button"
-              className={CHIP_CLASS}
+              variant="plain"
+              size="sm"
               onClick={onCropReset}
               disabled={!hasCrop}
             >
-              <X className={ICON_CLASS} />
+              <X className={`mr-1 ${ICON_CLASS}`} />
               清除裁剪
-            </UiChipButton>
+            </UiButton>
           </>
         ) : tool === 'mosaic' ? (
           <>
-            <UiChipButton
+            <UiOptionButton
               type="button"
+              variant="flat"
               active={style.mosaicMode === 'pixel'}
               onClick={() => onStylePatch({ mosaicMode: 'pixel' })}
-              className={CHIP_CLASS}
+              className={OPTION_CLASS}
             >
               马赛克
-            </UiChipButton>
-            <UiChipButton
+            </UiOptionButton>
+            <UiOptionButton
               type="button"
+              variant="flat"
               active={style.mosaicMode === 'blur'}
               onClick={() => onStylePatch({ mosaicMode: 'blur' })}
-              className={CHIP_CLASS}
+              className={OPTION_CLASS}
             >
               高斯模糊
-            </UiChipButton>
+            </UiOptionButton>
             <div ref={mosaicSliderRef} className="flex items-center gap-2" title="滚轮可调">
               <span className="text-xs text-text-muted">强度</span>
               <UiRangeInput
@@ -258,22 +269,24 @@ export function MarkToolbar({
             {tool === 'callout' && (
               <div className="mr-1 flex items-center gap-1">
                 <span className="text-xs text-text-muted">形状</span>
-                <UiChipButton
+                <UiOptionButton
                   type="button"
+                  variant="flat"
                   active={style.calloutShape === 'rect'}
                   onClick={() => onStylePatch({ calloutShape: 'rect' })}
-                  className={CHIP_CLASS}
+                  className={OPTION_CLASS}
                 >
                   矩形
-                </UiChipButton>
-                <UiChipButton
+                </UiOptionButton>
+                <UiOptionButton
                   type="button"
+                  variant="flat"
                   active={style.calloutShape === 'ellipse'}
                   onClick={() => onStylePatch({ calloutShape: 'ellipse' })}
-                  className={CHIP_CLASS}
+                  className={OPTION_CLASS}
                 >
                   圆形
-                </UiChipButton>
+                </UiOptionButton>
               </div>
             )}
             {showColor && (

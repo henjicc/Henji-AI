@@ -1,6 +1,6 @@
 ---
 name: henji-ui-surface
-description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧栏/设置分区/节点 UI，或调整颜色、毛玻璃、动画、层级时使用。涵盖页面骨架的横向条带上限、表面层级（surface/elevation）铁律、五级容器词汇表、选项集合静息态、语义色与主题跟随、毛玻璃材质、动效档位、z-index 契约、排版层级、以及避免整页重绘的状态分层规则。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"顶部堆了好几行/几个条/布局不合理"、"标题栏和工具栏能不能合并"、"这块儿怎么像张卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"统一一下 UI/配色/动画/模糊"、"这个动画太快/太慢/很生硬"、"这个界面卡顿/拖动掉帧"、"切换主题后有些地方没变色"。
+description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧栏/设置分区/节点 UI，或调整按钮层级、分隔线、颜色、图标、毛玻璃、动画、层级时使用。主文件涵盖页面骨架的横向条带上限、表面层级（surface/elevation）铁律、五级容器词汇表、动作按钮三档、分隔线准入、选项集合静息态与选中态词汇表；颜色/材质、动效、图标、排版令牌、性能分层、静默失效坑拆在 references/ 按需读。触发场景：用户要求"做一个 XX 面板/页面/弹窗"、"这个界面不好看/太挤/像卡片套卡片"、"顶部堆了好几行/几个条/布局不合理"、"标题栏和工具栏能不能合并"、"这块儿怎么像张卡片"、"帮我美化一下这个界面"、"加一个设置分区"、"统一一下 UI/配色/动画/模糊"、"这个动画太快/太慢/很生硬"、"这个界面卡顿/拖动掉帧"、"切换主题后有些地方没变色"、"为什么有的按钮有边框有的没有"、"这里要不要加分隔线"、"图标不一致"。
 ---
 
 # Henji-AI 界面表面与层级规范
@@ -14,6 +14,19 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 3. **该扁平的地方带了壳**：`UiPanel`/`UiIconButton`/`UiOptionButton` 的**默认值自带 border + bg**，每个组件都假设自己是最外层独立卡片。在容器内部使用时，就会多出一层不该有的边框背景。
 
 前两类是**同一个根因在两个方向上的表现**：每一层壳都以为自己是最外层，于是纵向各画一圈边框、横向各加一条头带。第 3 类则是表面 token 把 `border` 和 `bg` 打包绑死（见 `styleTokens.ts` 的 `UI_PANEL_SURFACE_CLASS` / `UI_FIELD_SURFACE_CLASS`），且没有"只分组、不画框"的官方写法。本 skill 提供这几条缺失的规则。
+
+## 参考文档（按需读，不要一次全读）
+
+本文件只放**每次改 UI 都要用**的骨架规则。细分主题拆在 `references/`：
+
+| 什么时候读 | 文件 |
+|---|---|
+| 调颜色、写 `.css`、加毛玻璃、改对比度 | `references/color-and-material.md` |
+| 写任何过渡/动画，或用 `setTimeout` 卸载动画组件 | `references/motion.md` |
+| 用到任何图标 | `references/icons.md` |
+| 定字号/圆角/阴影/层级/间距 | `references/typography-and-tokens.md` |
+| 界面卡顿、拖动掉帧、长列表 | `references/performance.md` |
+| "我改了但没生效" | `references/pitfalls.md` |
 
 ## 两条铁律（先记住这两句）
 
@@ -152,6 +165,66 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 判据：**这块区域会不会随窗口一起长大？** 会，就不是卡片。要给它一个更暗的底以便和 chrome 区分是可以的，但不要 `rounded` + `border` + 外层留白三件套——那三样凑齐就是卡片。
 
+## 动作层级：视觉重量 = 动作的重要性
+
+上面几节管容器和骨架，这一节管**按钮本身该有多重**。
+
+主流设计系统都是同一个阶梯（Material 的 filled/outlined/text、Apple 的
+prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对应三档：
+
+| 档 | `UiButton variant` | 图标版 | 用途 |
+|---|---|---|---|
+| 主 | `primary`（实底） | —— | **一个表面只允许一个**，这一屏的主动作 |
+| 次 | `ghost` / `muted`（描边） | `UiIconButton`（默认带边框） | 常用但非唯一的动作 |
+| 辅 | `plain`（无边框，hover 出底） | `UiIconButton showBorder={false} appearance="hover-only"` | 工具栏、行内辅助动作 |
+
+### 两条硬规则
+
+1. **一个表面只有一个主动作。** 出现第二个实底按钮，用户就不知道该点哪个。
+2. **同一组、同一层级的动作必须同档。**
+   不能因为"这里太挤了"把其中一个降档——那是**拿视觉语言解决布局问题**，
+   用户读到的信息会变成"这个按钮没那么重要"，而事实不是。
+
+> 实测踩过：图片编辑命令带右侧的「打开」和「复制 / 加入资产库」同属文件类次级动作，
+> 为了给工具组腾 44px 宽度被降成了无边框图标，一眼就看出不对。宽度问题要用缩短文案、
+> 图标化**整组**、或接受轻微偏移来解决，不能只降其中一个。
+
+⚠️ **`ghost` 与 `muted` 目前视觉等价**（都是描边 + 底色），是历史命名，
+不要按字面理解成"无边框"——真正的无边框档是 `plain`。
+
+### 动作 ≠ 模式
+
+工具栏里的工具（选择/标注/矩形…）**不是按钮**，是"我现在处于哪个模式"，
+点它改变的是"接下来会发生什么"，不是"立刻发生一件事"。
+它属于**选中态语言**，不属于动作层级：静息不描边，选中用中性层底 + 强调文字
+（`UiChipButton selectionRole="navigation"`），把实底强调色让给那个唯一的主动作。
+
+同理，参数面板里的"当前值是什么"（形状、比例、档位）是**单选**，
+用 `UiOptionButton active`（强实底 + 白字）——详见「选中态词汇表」。
+
+## 分隔线：分组的第二手段，不是第一手段
+
+分组有三级，**按顺序往下选，能停在上一级就别用下一级**：
+
+1. **间距**（格式塔邻近律）—— 首选，零视觉成本
+2. **分隔线** —— 间距不够用或空间紧张时
+3. **容器 / 边框** —— 最后手段（回到「五级容器词汇表」）
+
+### 准入判据（只有一条）
+
+> **两侧的交互语义根本不同，用户不会把它们当成一串连续操作。**
+
+| 场景 | 判定 |
+|---|---|
+| 工具组 ┃ 撤销/重做/清空 | ✅ **模式** vs **动作**——点工具是改变后续行为，点撤销是立刻发生一件事 |
+| 打开 ┃ 复制/加入资产库/另存为 | ❌ 都是动作，只是输入 vs 输出。差异远小于上一行，间距就够 |
+| 两组同类按钮，只是"感觉该分开" | ❌ 加大间距 |
+
+### 数量上限
+
+**一条 bar 上最多一条分隔线。** 第二条会把它切成三段，而右端的主动作实底本身
+已经是"终点"标志，再加竖线的信息增量接近零。
+
 ## 选项集合的静息态：不描边
 
 上面的决策树管容器，这一节管**容器里那一堆并列的可点项**（菜单项、模型网格、分辨率格子、列表行）。
@@ -194,297 +267,6 @@ description: Henji-AI 新建或改造任何界面/页面骨架/面板/弹窗/侧
 
 默认态不是第五种选中态：它保持当前表面的中性视觉。不要用整行实底表达“已启用”，
 也不要把筛选 chip 的多选语义画成单选项的强实底。
-
-## 同属性叠类 = 静默失效（本仓库最常见的隐蔽 bug）
-
-> **两个工具类落在同一个 CSS 属性上时，胜负看 Tailwind 产物里的先后顺序，不看 className 里的顺序。**
-
-`className={"bg-panel/30 " + (dragging ? "bg-surface-dark/55" : "")}` 读起来像"拖拽时换底色"，
-实际上谁在生成的 CSS 里靠后谁赢，和你写的顺序无关。这类 bug 不报错、不警告，只是"那个效果一直没出现"。
-
-本项目已经因此踩过三次：
-
-| 现象 | 真相 |
-|---|---|
-| 筛选 chip 的选中态是"蓝框+灰底"而不是实心蓝 | 变体自带的 `bg-layer` 排在调用方传的 `bg-brand-600` 之后，令牌从未生效 |
-| 上传区的拖拽高亮从来没亮过 | 底色 `bg-zinc-900/30` 排在高亮 `bg-zinc-800/55` 之后 |
-| `UiOptionButton` 的 `menu` 变体差点盖掉网格底色 | 变体里的 `bg-transparent` 会和调用方的 `bg-veil-faint` 抢 |
-
-**三条做法，按优先级：**
-
-1. **写成互斥三元**：`dragging ? 'bg-surface-dark/55' : 'bg-panel/30'` —— 任何时刻只有一个类，根本不存在打架。
-2. **变体里不写"默认值等于浏览器默认"的类**（如 button 的 `bg-transparent`，preflight 已经保证），给调用方留出覆盖空间。
-3. **确实要叠**：先用 `npx tailwindcss -i src/index.css -o /tmp/x.css` 生成 CSS，`grep -n` 两个类看谁在后面；或者直接上 `!` 强制。
-
-排查命令：
-
-```bash
-npx tailwindcss -i src/index.css -o /tmp/x.css && grep -n "^\.bg-panel {\|^\.bg-surface-dark {" /tmp/x.css
-```
-
-同理，**透明度修饰符只能用 Tailwind 刻度值**（步进 5：`/25` `/35` `/45` 都行，`/42` `/72` 不生成任何 CSS）。
-
-## 颜色必须跟随主题
-
-设置 → 界面 → 主题外观里，用户可以整体替换 9 个语义色（`bg/surface/border/text/textMuted/app/canvas/panel/layer`），
-强调色还会派生出 `brand-300/500/600/700`。**任何 `zinc-*` 这类固定调色板都不会跟着动**——
-用户切到「石墨灰阶」后，硬编码的地方会原地不动，和周围脱节。
-
-四档文字色里，中间两档 `text-soft` / `text-faint` 由 `runtimeTheme.applyTextScale` 从
-`text` / `textMuted` 派生，所以整条梯度都跟随主题。对照表：
-
-| 别再写 | 改用 |
-|---|---|
-| `bg-zinc-950 / 900 / 800 / 700` | `bg-app / bg-panel / bg-surface-dark / bg-layer` |
-| `text-zinc-100/200` `300` `400` `500/600` | `text-text-dark` `text-text-soft` `text-text-muted` `text-text-faint` |
-| `border-zinc-700/600` | `border-border-dark` |
-| 叠在图片/视频/画布上的边框与底色 | `veil` 六档（它刻意是白色半透明，与主题无关是有意的） |
-
-ESLint 已硬拦 `zinc / gray / neutral / slate / stone` 五个中性色板。
-`red / green / yellow / blue / orange / purple` 等是语义色与分类色，**不在禁止范围内**。
-
-### 纯 CSS 文件同样受约束
-
-`.css` 里不能写 `#hex` 也不能写 `rgba(数字…)`，只能写 `rgb(var(--xxx-rgb) / a)`。
-`npm run check:colors` 现在会扫 `.ts/.tsx/.css` 三种；只有
-`src/index.css` 与 `src/core/theme/colorTokens.ts` 两个「令牌定义处」豁免。
-
-扩展这条检查时当场抓出 70 处存量硬编码，包括**三种互不相同的蓝**
-（`#3b82f6` 才是应用强调色，`#007eff` 用在视频控件与分辨率面板，`#1890ff` 用在上传组件）
-和一整套亮色主题回退值（`--color-*` 变量从未定义，实际回退到 `#ffffff`/`#18181b`）。
-
-### 全局主题变量不能放懒加载的样式表里
-
-`data-theme-tone` / `data-ui-radius` 的取值规则曾写在
-`src/features/canvas/storyboard.css`——那个文件由 `CanvasWorkspace.tsx` 懒加载，
-结果「设置 → 界面 → 圆角尺寸 / 色调」在用户没打开过画布之前完全不生效。
-**全局主题变量只能放 `src/index.css`**（它在 `main.tsx` 里全局引入）。
-
-⚠️ 另外：`index.html` 写死 `class="dark"` 且从不切换，**`dark:` 变体的基础值是死代码**。
-不要写 `text-zinc-600 dark:text-zinc-400` 这种双分支，直接写最终值。
-
-### 布局定位不得藏在外观样式表里
-
-> **样式表只做它的文件名承诺的事。**
-
-`scrollbar.css` 只能负责滚动行为与滚动条外观，不得顺手把业务容器写成
-`position: fixed`；否则读 JSX 时完全看不出元素脱离了哪个布局参照系，父级的
-padding、flex 收缩与助手插入量也会被静默绕开。
-
-- `position`、`top`、`right`、`bottom`、`left`、`z-index` 必须直接写在组件 `className`
-- 动态 `zIndex` 使用 `Z_LAYERS`，不要把任意层级藏进 CSS
-- 全局变量只放 `src/index.css`；局部样式表只影响对应局部模块
-- 确实只能写在 CSS 的例外，必须在声明旁就地注释原因
-
-判断标准：只读组件 JSX 时，应能看出元素是普通流、相对定位、绝对定位还是视口固定，
-以及它以哪个父级作为包含块。
-
-## 毛玻璃是一个「材质」，不是一个 blur 值
-
-> **只写 `backdrop-filter: blur()` 得到的是「模糊 + 降不透明度」，看起来廉价。**
-
-真正的玻璃质感需要四层一起上，缺一层就塌成贴纸：
-
-| 层 | 作用 | 漏了会怎样 |
-|---|---|---|
-| `blur` | 虚化背景 | —— |
-| `saturate(180%)` | 把颜色捞回来 | 背景摊平成灰泥（Apple 的 material 全部带这个） |
-| 受光边缘 | 边缘描边 + 顶部内阴影 | 像一块贴纸，不像玻璃 |
-| 噪点 | 极低透明度的 overlay 噪声 | 深色上出色带，看着像塑料（微软 Acrylic 把噪点列为必需层） |
-
-**用法：写 `ui-glass` 一个类**（定义在 `src/index.css`），遮罩写 `ui-glass-scrim`。
-圆角、尺寸、定位仍由调用方的 Tailwind 类给。**ESLint 硬拦一切 `backdrop-blur-*`**。
-
-调质感只改 `src/index.css` 里那几个 `--ui-glass-*` 变量，全局一起变。
-
-### 什么时候才该用
-
-> 只用在**浮层压住内容不可预测的东西**上 —— 图片、视频、画布。
-
-**"要不要给所有按钮/边框都加上模糊，省得有的有有的没有？"——不要，而且这不是审美问题。**
-
-`backdrop-filter` 模糊的是**元素背后的东西**。按钮坐在 `bg-panel` 这种不透明底色上时，
-背后只有一片纯色：把纯色模糊 24px，结果还是同一片纯色。
-**视觉上零差别，代价是每个按钮多一个合成层。**
-
-所以"有的有有的没有"不是不一致，是正确行为——模糊只在背景有变化时才可见。
-判断方法一句话：**它背后是别的界面（纯色）还是用户的内容（图片/视频/画布）？**
-
-真想让界面整体更有玻璃感，正确方向不是给按钮加模糊，而是**让浮层自身半透明**
-（助手侧栏、模型选择面板、画布节点工具条），这样它们的模糊才有东西可模糊。
-那是产品方向调整，动手前先和用户确认。
-
-压在应用自身纯色 UI 上的浮层（通知、任务卡、普通面板）一律用不透明底色：更清楚，
-也省掉一次读取背景纹理的合成开销。
-
-### 两个实现上的坑
-
-1. **`.ui-glass` 必须放在 `@layer components` 里**。写在裸 CSS 中它会排在
-   `@tailwind utilities` 之后，其中的 `position: relative` 会盖掉调用方的 `absolute`，
-   所有绝对定位的玻璃控件都会跑位。
-2. **关闭开关时不能只把 blur 置 0**。那样半透明黑底叠在清晰背景上会看不清内容，
-   必须让 tint 同时退化成接近实心的面板色。
-
-## 动效：三档时长，一种缓动
-
-收敛前实测：**8 种时长**（200/150/300/250/220/100/75/500）、两种缓动混用、
-42 处裸 `transition`，且 JS 计时常量与 CSS 时长对不上。
-
-档位定义在 `src/components/ui/motion.ts`：
-
-| 档 | 值 | 用途 |
-|---|---|---|
-| `fast` | 150ms | hover、颜色、开关、小控件 |
-| `base` | 200ms | 弹窗、浮层、下拉、面板开合 —— **默认档** |
-| `slow` | 300ms | 大面积位移、通知 Toast、悬浮面板折叠、缩略图扇形展开 |
-| `viewer` | 500ms | 全屏媒体查看器的沉浸式淡入淡出 |
-
-位移/覆盖面积越大，时长就该越长——`viewer` 不是随手加的档，是 7 处查看器实际在用的聚类。
-
-**缓动不需要每处写。** `tailwind.config.js` 已把 `transitionTimingFunction.DEFAULT`
-改成 `ease-out` 的值，所有 `transition-*` 工具类自动拿到正确缓动。
-（Tailwind 原本的默认是 `ease-in-out`，起步和收尾都慢，小尺度 UI 上显得拖沓。）
-需要别的缓动时才显式写 `ease-linear` / `ease-in`。
-
-唯一登记的例外缓动是 `UI_EASE_STACK`（缩略图扇形展开的弹性感），和具名阴影同一个逻辑：
-有具体功能语义才登记。**不要为了"想要点不一样"再发明缓动。**
-
-### JS 计时必须和 CSS 时长同档
-
-组件常见写法是"先播淡出、再用 `setTimeout` 卸载"。两个数字对不上就会把过渡截断：
-
-```tsx
-// ❌ 卸载比过渡早 20ms，淡出收尾被硬切（不报错，只是"关起来有点生硬"）
-useDialogTransition(isOpen, 180)          // JS
-className="transition-opacity duration-200"  // CSS
-
-// ✅ 两边同档
-useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS)  // = UI_DURATION.base
-className={`transition-opacity ${UI_DURATION_CLASS.base} ${UI_EASE_CLASS}`}
-```
-
-⚠️ 不能写 `` `duration-${UI_DURATION.base}` `` —— Tailwind 扫不到运行时拼接的类名，
-不会生成任何 CSS。两边都写字面量，`motion.test.ts` 负责保证它们不漂移。
-
-### 过渡什么、不过渡什么
-
-| 结论 | 说明 |
-|---|---|
-| ✅ `opacity` / `transform` | 只走合成器，不触发布局与绘制 |
-| ✅ `transition-colors` | 颜色变化，代价可接受 |
-| ❌ 裸 `transition` | 它会把 `backdrop-filter` 也纳入过渡——每帧重算模糊，是最贵的一种 |
-| ❌ `transition-all` | 已归零，别再引入 |
-| ❌ 布局属性（`width`/`height`/`padding`/`margin`/`top`/`left`） | 过渡期间每帧重排。要位移用 `transform: translate`，要伸缩优先 `scale` |
-
-确需过渡多个属性时**显式列举**：`transition-[opacity,transform]`。
-
-### 内联 `style={{ transition }}` 走 `uiTransition()`
-
-内联过渡绕过 Tailwind 类，也就绕过了档位约束——收敛前这里散落 9 种时长与 5 种缓动。
-时长来自运行时数据（如进度学习给出的时长）或属性没有对应 Tailwind 类时，用这个出口：
-
-```tsx
-import { uiTransition, UI_DURATION } from '@/components/ui/motion'
-
-style={{ transition: uiTransition(['opacity', 'transform'], UI_DURATION.slow) }}
-// 带延迟：uiTransition(['opacity'], UI_DURATION.slow, UI_DURATION.fast)
-```
-
-**绝不要传 `['all']`** —— 那会把 `background-color`、`backdrop-filter` 一起拖进过渡。
-
-### 无法用 transform 替代的布局过渡（已登记，不要"顺手优化"）
-
-这几处过渡的是布局属性，但**改不动**——容器宽度会驱动兄弟元素布局，transform 不参与布局：
-
-| 位置 | 属性 | 为什么改不了 |
-|---|---|---|
-| `StackedMediaUploader` / `TaskInputPreview` / `AssetLibrarySurface` | `width` | 容器宽度变化要带动兄弟重排，这正是需要的效果 |
-| `TabContainer` | `padding` | 助手停靠的 inset，工作区必须真的收缩；resize 期间已用 `--assistant-layout-transition-duration: 0ms` 关掉过渡 |
-| `LlmSettingsSection` | `grid-template-rows` | `0fr → 1fr` 是 auto-height 动画的推荐做法，替代方案（max-height / JS 测高）更差 |
-| `FloatingInputPanel` | `max-height` | 同上，折叠展开的高度动画 |
-| `TaskInputPreview` | `margin` | 缩略图堆叠的重叠间距，margin 影响兄弟位置 |
-
-**已经改掉的**：`FloatingInputPanel` 的 `top` 与 `StackedMediaUploader` 的 `left`/`top`
-都已合并进 `transform`（绝对定位元素的位移没有理由走布局属性）。
-合并时注意 **`translate` 必须写在 `rotate`/`scale` 之前**，否则旋转缩放会一起作用到位移量上。
-
-## 图标也是视觉令牌
-
-和颜色、字号、动效一样：**同一个业务概念在全应用只能有一个图形。**
-
-治理前实测：「资产库」在顶部导航是手写的归档盒路径、在工具栏是 `LibraryBig`、在侧栏是
-`Library`——三处三样；「工具箱」tab 和「设置」按钮共用同一个齿轮；全项目 **74 处手写
-inline `<svg>`**，与 lucide-react 两套体系并存。根因就是图标从来没有登记处。
-
-### 两条规则
-
-1. **业务组件禁止手写 `<svg>`**，图标一律走 `lucide-react`。
-   这和「原生 `<button>` 只能落在 `primitives.tsx`」是同一条约束的两个面。
-2. **跨界面复用的业务概念图标**（资产库、工作区、工具、媒体类型…）必须引用
-   `src/core/theme/icons.ts` 的登记常量，改一个概念的图标只改那一行。
-
-**通用动作图标不必登记**：`X` / `Plus` / `Check` / `Trash2` / `Download` 直接从
-lucide 引入即可——lucide 的名字本身就是单一真源，再包一层别名只是徒增间接。
-判据是「这个图形在本仓库是否只表示一个业务概念」，是就登记，不是就直接用。
-
-### 私有图标模块是同一个坑的变体
-
-`VideoViewerIcons.tsx` 那种"本目录自己的一套图标"必须删掉，调用点直接用 lucide。
-它看起来像收敛，其实是又开了一套平行体系——播放器的播放键和别处的播放键会长得不一样。
-
-### 什么不是图标
-
-波形、缓动曲线、关键帧曲线图、画布连线预览——这些 `<svg>` 的路径**由数据算出来**，
-换成图标库是错的。它们在 `scripts/check-icon-tokens.cjs` 的豁免名单里，新增豁免要写明理由。
-
-判据一句话：**路径是写死的 → 图标；路径是算出来的 → 图形。**
-
-### 同一形状表示多个概念，是另一个问题
-
-`LayoutGrid` 目前同时是「画布」tab、「分组」节点和设置里的「界面」分区；`Wrench`
-既是工具箱又是助手的工具调用。这类冲突**不归登记表管**——登记表解决"一个概念多个形状"，
-这里是"一个形状多个概念"，只能靠换形状解决，且是设计判断，不要用脚本硬拦。
-
-### 检查
-
-```bash
-npm run check:icons          # 告警式
-npm run check:icons:strict   # 门禁式，已接入 build / electron:build
-```
-
-确需例外时在该行或上一行加注释 `icon-token-allow` 并写明理由。
-
-## 用排版建立层级，而不是用框
-
-项目此前 72% 的字号决策都落在 `text-xs` 及更小，层级塌缩成"全是小字"，于是只能靠边框背景区分内容。
-**先用这五档排版令牌（`styleTokens.ts`）表达层级，再考虑容器：**
-
-| 令牌 | 用途 |
-|---|---|
-| `UI_TEXT_TITLE_CLASS` | 页面/弹窗主标题 |
-| `UI_TEXT_SECTION_CLASS` | 分区标题 |
-| `UI_TEXT_BODY_CLASS` | 正文 |
-| `UI_TEXT_LABEL_CLASS` | 字段标签 |
-| `UI_TEXT_META_CLASS` | 辅助说明、元信息 |
-
-### 登记制视觉数值（以下全部由 ESLint 硬性拦截，写了会报错）
-
-| 维度 | 允许的写法 | 禁止 |
-|---|---|---|
-| 颜色 | 语义色：底面 `bg-app/panel/surface-dark/layer`；文字四档 `text-text-dark > text-text-soft > text-text-muted > text-text-faint`；边框 `border-border-dark`；媒体与玻璃质感边框用 `veil` 档位 | 一切 `*-zinc-*` 等固定调色板 |
-| 动效 | 时长 `duration-150/200/300/500`（对应 `UI_DURATION` 四档）；缓动走全局默认；过渡属性显式列举；内联过渡走 `uiTransition()` | 裸 `transition`、`transition-all`、`transition: all`、未登记时长、自造缓动 |
-| 字号 | `text-4xs`(9) `text-3xs`(10) `text-2xs`(11) `text-13` `text-14` `text-15` / `text-xs` `text-sm` `text-base`+ | `text-[Npx]` |
-| 圆角 | `rounded-lg`(控件/内嵌) `rounded-xl`(浮层) `rounded-2xl` `rounded-3xl` `rounded-full` `rounded-hairline`；画布节点 `rounded-[var(--node-radius)]` | 其他 `rounded-[...]` |
-| 阴影 | `shadow-panel`(仅浮层) / `shadow-node-selected` `shadow-node-error` `shadow-thumb` `shadow-thumb-sm`(具名特效) | `shadow-[...]` |
-| 白色半透明 | `veil` 六档：`bg-veil-faint` `border-veil-subtle` `border-veil-soft` `border-veil` `border-veil-strong` `from-veil-bright` | `border-[rgba(...)]` 等 rgba 字面量 |
-| 层级 | `z-raised` `z-sticky` `z-dropdown` `z-panel` `z-modal` `z-viewer` `z-toast` `z-tooltip` `z-drag` `z-titlebar` | `z-[9999]` 等任意值 |
-
-**内层圆角不得大于外层。阴影只有浮层能用，内容区一律无阴影。**
-
-必须内联 `style={{ zIndex }}` 时（如每帧改 transform 的拖拽层）用 `Z_LAYERS`（`src/core/theme/zLayers.ts`），它与 Tailwind 配置互为镜像，改一侧要同步另一侧。
-
-
-画布内部（ReactFlow 节点 / minimap / Alt 拖拽副本）有自己独立的局部 z 刻度，见 `src/features/canvas/canvasUtils.ts`，不要和全局档位混用。
 
 ## 状态展示统一走这三个
 
@@ -542,43 +324,10 @@ npm run check:icons:strict   # 门禁式，已接入 build / electron:build
 | 业务组件手写 inline `<svg>` 画图标 | 用 lucide-react；确属图形则加入 `check-icon-tokens.cjs` 豁免并写明理由 |
 | 在调用点自己从 lucide 挑业务概念图标 | 用 `@/core/theme/icons` 的登记常量 |
 | 建一个「本目录自己的图标模块」 | 删掉，调用点直接用 lucide；私有图标集＝又一套平行体系 |
-
-## 排版细节（避免"挤"和"散"）
-
-- **间距用 4 的倍数**：`gap-2 / gap-3 / gap-4`、`p-3 / p-4`；不要出现 `p-[13px]` 这类随手值。
-- **同级元素间距统一**：一个分区内所有行用同一个 `space-y-*`，不要一行 `mt-2` 一行 `mt-3`。
-- **控件高度统一**：两档具名令牌 —— `UI_FIELD_CONTROL_HEIGHT_CLASS`（42px，独立表单字段）与 `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`（38px，参数面板/逐行控件/面板触发器）。两个值都不是 Tailwind 刻度，所以不要每处手写 `h-[38px]` / `h-[42px]`。
-- **文字层级只用三档**：主文本 `text-text-dark`、次要 `text-text-muted`、强调 `text-accent`。不要引入第四种灰。
-- **圆角跟随层级**：L1 用 `rounded-xl`，L2/L3 用 `rounded-lg`。内层圆角不得大于外层。
-- **颜色只用语义类**：`bg-app` / `bg-panel` / `bg-surface-dark` / `bg-layer` / `text-text-muted` / `border-border-dark`。禁止十六进制（`npm run check:colors` 会拦）。
-
-## 性能：不要让界面整页重绘
-
-界面卡顿（拖动窗口掉帧、进度条期间整页发涩）在本项目里几乎总是同一个原因：**高频瞬态状态写进了持有大列表的那个 state**。
-
-**规则：高频/瞬态状态（进度、hover、拖拽坐标、播放位置）必须放独立 store，由最叶子的组件自订阅。**
-
-反例（已修复，勿复制）：`useTaskState.updateProgress` 曾用 `setTasks(prev => prev.map(...))` 写进度 —— 每次进度回调重建整个 tasks 数组 → 工作区根组件重渲染 → 所有 `useMemo`（过滤/排序）重跑 → 与拖拽 `pointermove` 抢主线程 → 拖动掉帧。
-
-正例（照这个写）：
-
-```ts
-// 1. 独立瞬态 store（参考 src/stores/generationTaskProgressStore.ts
-//    和 src/stores/canvasGenerationProgressStore.ts）
-export const useXxxProgressStore = create<...>((set) => ({ progress: {}, setProgress: ... }))
-
-// 2. 生产者：用 getState() 写，不进 React state
-useXxxProgressStore.getState().setProgress(id, value)
-
-// 3. 消费者：叶子组件自订阅，只有自己这一条变化时才重渲染
-const progress = useXxxProgressStore((state) => state.progress[id])
-```
-
-配套检查项：
-- store 的 `set` 里做**相等性短路**（值没实质变化就返回 `{}`），避免无意义通知。
-- 任务结束/删除时**清理条目**，别让 store 无限增长。
-- 瞬态状态**不进持久化、不进历史快照**。
-- 列表项用 `React.memo`，比较函数只比真正需要的引用。
+| 一个表面出现两个 `variant="primary"` | 只留一个主动作，其余降到 `ghost` |
+| 为了省宽度把同组动作里的一个降档 | 缩短文案 / 图标化**整组** / 接受轻微偏移，不要只动一个 |
+| 用分隔线分开两组同类动作 | 加大间距；分隔线只用于交互语义根本不同的两侧，一条 bar 最多一条 |
+| 把工具/模式切换写成带边框的按钮 | 那是选中态语言：`selectionRole="navigation"`，静息不描边 |
 
 ## 必须复用 vs 允许新增
 
@@ -612,6 +361,7 @@ const progress = useXxxProgressStore((state) => state.progress[id])
    a. 数条带：从窗口顶到内容区横着切了几刀？> 2 条就是骨架问题，先合并再谈别的
    b. 顺着 JSX 往上找外层壳：它是不是已经有一条命令带了？有就注入，不要再嵌
    c. 数边框层数、看有没有全屏工作面被套成卡片
+   d. 数实底按钮（应恰好 1 个）、看同组动作是否同档、数分隔线（一条 bar 最多 1 条）
 3. 定级：这块内容属于 Region / Group / Divided / Surface / Card 的哪一级
 4. 查复用表：需要的组件是否已存在 → 存在就复用
 5. 用排版令牌建立层级（标题/正文/元信息），先不加任何容器装饰
@@ -636,6 +386,9 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 有没有"比父级更亮"的背景块？有就该是 `inset` 或 bare
 - [ ] 有没有为了填空白而加的卡片/边框/阴影？删掉
 - [ ] 容器里并列的可点项，静息态还在逐个描边吗？该是 `UiOptionButton variant="menu"`
+- [ ] 这个表面有几个实底按钮？超过一个就不知道该点哪个
+- [ ] 同一组里的同级动作是不是同档？有没有为了省宽度把其中一个降档
+- [ ] 加分隔线了吗？两侧交互语义真的不同吗？一条 bar 最多一条
 - [ ] 有手写 `<svg>` 吗？路径写死的就是图标，改用 lucide；路径算出来的才是图形
 - [ ] 用到跨界面的业务概念图标了吗？走 `@/core/theme/icons` 的登记常量，别在调用点自己挑
 - [ ] 有没有 `zinc-*` / `gray-*` / `slate-*`？改强调色或换主题预设时它们不会跟着动
@@ -658,37 +411,6 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - [ ] 高频状态（进度/hover/拖拽）是否放在独立 store 而非大列表 state
 - [ ] 列表超过 ~50 项是否考虑了虚拟化
 - [ ] 界面改动后是否跑过 `npm run ui:tour`，查看六类界面、两档尺寸及交互状态的真实截图
-
-## 对比度：静态检查查不到，必须实测
-
-颜色是否达标取决于**渲染后的实际叠加结果**，grep 无能为力。
-`npm run check:ui-visual` 会用 Playwright Electron API 启动隔离的真实 Electron，
-在六类界面、1440×900 / 960×640 两档尺寸上检查十一项：表面叠层、文字对比度、
-内层圆角、非浮层阴影、CSS 隐藏定位、助手插入量逃逸、横向溢出、嵌套滚动、
-文本硬裁、过小命中区、页面标题字号一致性。任一命中都会返回非零退出码。
-
-首次跑出来 7 处对比度不达标，根因都在令牌层，不在调用点：
-
-| 现象 | 实测 | 根因 |
-|---|---|---|
-| 导航/标签/chip 的选中态文字 | **2.82:1** | 用了 `text-accent`。accent 是**填充色**，作文字色太深 |
-| 提示文字、空态文字 | **4.12:1** | `text-faint` 的派生比例（0.30）压太重 |
-| 主按钮的白字 | **3.68:1** | 白字压在 `bg-accent` 上先天不达标 |
-
-**结论沉淀成三条规则：**
-
-1. **`accent` 不能作文字色**，要用 `UI_COLOR_ACCENT_TEXT_CLASS`（`text-brand-300`，7.46:1）。
-   `accent` 只用于填充与描边。
-2. **承载白字的实心强调底用 `UI_COLOR_ACCENT_FILL_TEXT_CLASS`**（`bg-brand-500`，4.85:1），
-   不要用 `bg-accent`（3.68:1）。无文字的纯色块填充仍用 `bg-accent`。
-3. **改任何颜色令牌的派生比例后跑一次 `check:ui-visual`**。
-   `text-soft`/`text-faint`/`brand-*` 都是算出来的，改比例就是改对比度。
-
-### 顺带查出的一致性问题
-
-`index.css` 里 `brand-500/600/700` 的**静态默认值和 `applyAccentScale` 的派生结果不一致**
-（静态 `brand-500` 是 `76 136 255`，派生是 `50 111 209`）。首帧用静态值、脚本跑完换派生值，
-启动时会闪一次色，而且等于有两套真值。**静态默认值必须等于用默认强调色算出的结果。**
 
 ## 完成前必跑
 
@@ -742,3 +464,4 @@ npm run check:ui-visual
 - 组件复用与原生标签落点、颜色令牌三处入口：见 [CLAUDE.md](../../../CLAUDE.md) 的「UI Primitive 单点落地」与「关键约束」
 - 画布节点的行组件拼装：见 skill `canvas-node-builder`
 - 提示词编辑器、文件上传控件：必须复用 `PromptEditor` / `FileUploader`，不要重写
+

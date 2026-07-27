@@ -158,6 +158,8 @@ npm run lint                   # 前端 lint
 - **弹窗统一**：走 `UiModal` 或 `AlertDialog`，禁止手写 `fixed inset-0` + 遮罩 + 卡片外壳（全屏媒体查看器是已确认的例外）
 - **页面骨架横向条带**：一个视图只画一条命令带（返回/标题/文件上下文/工具/导出动作全进这条），随工具变化的参数用紧贴其下、共用同一块底色与同一条 `border-b` 的从属带；连续操作条带上限 2 条。外层壳已有命令带时，内层功能组件必须把内容作为 props 注入（如 `toolbarActions`），不得再长一条自己的头带。画布/编辑区这类会随窗口长大的全屏工作面不是卡片，不套 `rounded + border` + 外层留白
 - **界面工作必读 skill**：新建或改造界面/面板/弹窗/设置分区前，先用 skill `henji-ui-surface`（含页面骨架条带上限、五级词汇表、卡片准入条件、决策树、复用对照表、自检清单、性能分层规则）
+- **动作层级三档**：`primary` 实底（一个表面只允许一个主动作）/ `ghost`·`muted` 描边（次级动作，同组同级必须同档）/ `plain` 无边框（辅助动作，hover 出底；图标版是 `UiIconButton showBorder={false} appearance="hover-only"`）。禁止为省宽度把同组动作里的一个降档。⚠️ `ghost` 与 `muted` 视觉等价，是历史命名，真正的无边框档是 `plain`。工具/模式切换不属于动作层级，走 `selectionRole="navigation"`
+- **分隔线是分组的第二手段**：先用间距，间距不够再用分隔线，最后才是容器。准入判据只有一条——两侧交互语义根本不同（如工具 vs 动作）；两组同类动作只用间距。**一条 bar 上最多一条分隔线**
 - **图标是视觉令牌**：业务组件禁止手写 inline `<svg>`，图标一律走 `lucide-react`；跨界面复用的业务概念图标（资产库、工作区、工具、媒体类型）必须引用 `src/core/theme/icons.ts` 的登记常量，通用动作图标（`X`/`Plus`/`Check`/`Trash2`）直接从 lucide 引入即可。禁止建「本目录自己的图标模块」。波形、缓动曲线、连线预览这类**路径由数据算出**的 `<svg>` 不是图标，在 `scripts/check-icon-tokens.cjs` 豁免名单里。`npm run check:icons:strict` 已接入 build 链路
 - **表面检查**：界面改动后跑 `npm run check:surface`（报手写面板/卡片套卡片/手写弹窗三类）。存量已清零，`check:surface:strict` 已接入 build 链路与 CI，**违规会直接构建失败**；确需例外时加**行级** `ui-surface-allow` 注释并写明理由，禁止文件级豁免
 

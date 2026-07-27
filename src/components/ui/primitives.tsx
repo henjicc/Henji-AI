@@ -31,7 +31,7 @@ import {
   useScopedTextHistoryProps,
 } from './useScopedTextHistory';
 
-type ButtonVariant = 'primary' | 'muted' | 'ghost';
+type ButtonVariant = 'primary' | 'muted' | 'ghost' | 'plain';
 
 type ButtonSize = 'sm' | 'md' | 'control' | 'field';
 
@@ -97,9 +97,24 @@ function resolveTextHistoryValue(value: string | number | readonly string[] | un
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
 }
 
+/**
+ * 动作按钮的三档视觉重量，对应动作的重要性而非控件种类：
+ *
+ * - `primary` 实底：一个表面**只允许一个**，是这一屏的主动作
+ * - `ghost` / `muted` 描边：次级动作，同一组的同级动作必须同档
+ * - `plain` 无边框：辅助动作（工具栏、行内操作），hover 才出底
+ *
+ * ⚠️ `ghost` 与 `muted` 目前视觉等价（都是描边 + 底色），是历史命名，
+ * 不要按字面理解成"无边框"——真正的无边框档是 `plain`。
+ * 图标版的同档是 `UiIconButton appearance="hover-only" showBorder={false}`。
+ */
 function resolveButtonVariant(variant: ButtonVariant): string {
   if (variant === 'primary') {
     return `border border-transparent ${UI_COLOR_ACCENT_FILL_TEXT_CLASS} text-white hover:brightness-110`;
+  }
+
+  if (variant === 'plain') {
+    return 'border border-transparent text-text-muted hover:bg-layer hover:text-text-dark';
   }
 
   if (variant === 'ghost') {

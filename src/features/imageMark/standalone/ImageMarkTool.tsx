@@ -308,8 +308,9 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
                 </UiButton>
               )}
             </PanelTrigger>
-            <span className="mx-0.5 h-5 w-px bg-border-dark" />
-            <UiButton variant="ghost" size="sm" disabled={isBusy} onClick={() => void runExport('copy')}>
+            {/* 「打开」与右侧三个导出动作都是动作，只是方向相反，用间距分组即可。
+                分隔线留给交互语义根本不同的两侧（如工具 vs 动作），一条带上最多一条。 */}
+            <UiButton variant="ghost" size="sm" className="ml-2" disabled={isBusy} onClick={() => void runExport('copy')}>
               <ClipboardCopy size={15} className="mr-1.5" />
               复制
             </UiButton>
