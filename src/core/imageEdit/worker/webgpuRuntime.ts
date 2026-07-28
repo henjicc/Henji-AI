@@ -190,6 +190,7 @@ export class WorkerWebGpuRuntime {
         tileSize: options.tileSize,
         halo: options.halo,
         globalScatterMaxDimension: options.globalScatterMaxDimension,
+        maxTextureDimension: state.adapter.limits?.maxTextureDimension2D,
         isCancelled: options.isCancelled,
         onProgress: options.onProgress,
         renderGlobal: async (width, height) => {

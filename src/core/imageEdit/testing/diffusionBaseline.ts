@@ -43,7 +43,7 @@ export const DIFFUSION_QUALITY_THRESHOLDS: readonly DiffusionQualityThreshold[] 
   { id: 'webgpu-colour-delta', category: 'colour', status: 'pending-electron-runtime', target: '彩色色块非散射区域 ΔE00 ≤ 3，散射区域仅允许按预设去饱和', rationale: '避免色相漂移，同时保留可控的散射去饱和。' },
   { id: 'webgpu-detail-retention', category: 'detail', status: 'pending-electron-runtime', target: '中等预设锐边局部对比保留 ≥ 80%', rationale: '保证柔光不是无差别全图模糊。' },
   { id: 'webgpu-edge-and-alpha', category: 'alpha', status: 'pending-electron-runtime', target: '锐边与透明边缘不存在可见黑边；Alpha 通道逐像素保持不变', rationale: '导出合成与预乘处理必须经真实 Electron 验证。' },
-  { id: 'webgpu-tile-seam', category: 'tile', status: 'pending-electron-runtime', target: '1536/64 Tile 交界处 RGBA 最大差 ≤ 1/255', rationale: '正式多尺度 WGSL 需要重新验证，不能沿用线性基线结论。' },
+  { id: 'webgpu-tile-seam', category: 'tile', status: 'frozen', target: '散射最宽尺度超过 halo 时必须整图一次渲染，不得分块', rationale: '块只看得见自己那点内容加 halo(64px)，而辉光最宽尺度是长边的一半、柔光远端也有长边的 0.2，都远超 halo。此前靠调混合系数掩盖，实测会在 1536 网格上留下可见的矩形亮度台阶，只能靠不分块来消除。' },
   { id: 'sharp-perceptual-tolerance', category: 'fallback', status: 'pending-electron-runtime', target: '支持参数的纯柔光图与 WebGPU 对比 SSIM ≥ 0.92，平均 ΔE00 ≤ 6', rationale: 'Sharp 是兼容降级，不要求位级一致但必须避免明显偏色或结构损失。' },
 ];
 
