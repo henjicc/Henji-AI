@@ -67,7 +67,10 @@ function enqueue(task: () => Promise<void>): void {
 }
 
 async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<void> {
+  // 提前退出也要走 finally 的清理：拖滑块时绝大多数请求都从这里返回，
+  // 少删一次 cancelledRequestIds 就是每拖一下往 Set 里永久留一条。
   if (request.revision < latestPreviewRevision || isCancelled(request.requestId)) {
+    cancelledRequestIds.delete(request.requestId)
     postCancelled(request.requestId)
     return
   }

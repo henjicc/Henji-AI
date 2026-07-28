@@ -34,6 +34,15 @@ import {
 
 export interface MarkEditorProps {
   sourceImageUrl: string;
+  /**
+   * 已经画好的底图帧。给了它就不再走 `sourceImageUrl` 的 `<img>` 加载。
+   *
+   * 柔光预览每次改参数都会产出一张新底图，走 URL 的话必须
+   * 「canvas → toBlob(PNG) → objectURL → `<img>` 再解码」绕一圈；实测这一趟
+   * 1885×1060 要 19.8ms，是整条 GPU 管线（金字塔 3.1ms + 合成 3.0ms）的三倍多，
+   * 直接把实时调参拖到 30fps 以下。宿主已经拿着位图了，直接给画好的 canvas。
+   */
+  sourceFrame?: HTMLCanvasElement | null;
   /** 柔光 Worker 已在底图上应用朝向时，避免标注坐标被重复旋转。 */
   sourceOrientationAlreadyApplied?: boolean;
   /** 低分辨率预览仍按原图坐标编辑，避免标注与裁剪漂移。 */
@@ -71,6 +80,7 @@ export interface MarkEditorDocumentController {
  */
 export function MarkEditor({
   sourceImageUrl,
+  sourceFrame = null,
   sourceOrientationAlreadyApplied = false,
   logicalImageSize,
   initialDoc,
@@ -120,6 +130,8 @@ export function MarkEditor({
   // ==================== 图片加载 ====================
 
   useEffect(() => {
+    // 宿主直接给了画好的帧就不必再走一遍网络/解码。
+    if (sourceFrame) return;
     let cancelled = false;
     setLoadFailed(false);
     const img = new window.Image();
@@ -138,28 +150,34 @@ export function MarkEditor({
     return () => {
       cancelled = true;
     };
-  }, [sourceImageUrl]);
+  }, [sourceFrame, sourceImageUrl]);
 
   // ==================== 朝向位图与马赛克取样源 ====================
 
   const { rotate: orientationRotate, mirrored: orientationMirrored } = doc.orientation;
   const orientedCanvas = useMemo(() => {
-    if (!image) {
+    const source = sourceFrame ?? image;
+    if (!source) {
       return null;
     }
     if (sourceOrientationAlreadyApplied) {
-      const width = logicalImageSize?.width ?? image.naturalWidth;
-      const height = logicalImageSize?.height ?? image.naturalHeight;
+      const width = logicalImageSize?.width ?? source.width;
+      const height = logicalImageSize?.height ?? source.height;
+      // 已经是目标尺寸的话直接复用宿主给的那张，省掉一次全图重绘。
+      // orientedCanvas 全链路只读（当绘制源、取宽高、马赛克取样），共用是安全的。
+      if (sourceFrame && sourceFrame.width === width && sourceFrame.height === height) {
+        return sourceFrame;
+      }
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const context = canvas.getContext('2d');
       if (!context) throw new Error('无法初始化预览画布');
-      context.drawImage(image, 0, 0, width, height);
+      context.drawImage(source, 0, 0, width, height);
       return canvas;
     }
-    return renderOrientedCanvas(image, { rotate: orientationRotate, mirrored: orientationMirrored });
-  }, [image, logicalImageSize?.height, logicalImageSize?.width, orientationRotate, orientationMirrored, sourceOrientationAlreadyApplied]);
+    return renderOrientedCanvas(source, { rotate: orientationRotate, mirrored: orientationMirrored });
+  }, [image, sourceFrame, logicalImageSize?.height, logicalImageSize?.width, orientationRotate, orientationMirrored, sourceOrientationAlreadyApplied]);
 
   const imageWidth = orientedCanvas?.width ?? 0;
   const imageHeight = orientedCanvas?.height ?? 0;
