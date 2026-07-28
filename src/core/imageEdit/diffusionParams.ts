@@ -12,10 +12,10 @@ const DIFFUSION_MODES: DiffusionMode[] = ['black_mist', 'white_mist', 'glow'];
 const DIFFUSION_DENSITIES: DiffusionDensity[] = ['low', 'medium', 'high'];
 const DIFFUSION_QUALITIES: DiffusionQuality[] = ['realtime', 'high'];
 
-export const DIFFUSION_PARAMS_SCHEMA_VERSION = 2 as const;
+export const DIFFUSION_PARAMS_SCHEMA_VERSION = 3 as const;
 
 export function createDefaultDiffusionTintParams(): DiffusionTintParams {
-  return { enabled: false, hue: 210, saturation: 0.5, lightness: 0 };
+  return { enabled: false, hue: 210, saturation: 0.5, lightness: 0, coreWhite: 0.55 };
 }
 
 export function createDefaultDiffusionOperationParams(): DiffusionOperationParams {
@@ -31,6 +31,8 @@ export function createDefaultDiffusionOperationParams(): DiffusionOperationParam
     blackRetention: 0.92,
     detailRetention: 0.9,
     colorRetention: 0.92,
+    glowExposure: 0.5,
+    highlightRolloff: 0.6,
     tint: createDefaultDiffusionTintParams(),
   };
 }
@@ -40,11 +42,26 @@ export function parseDiffusionOperationParams(value: unknown): DiffusionOperatio
     throw new InvalidDiffusionOperationParamsError('柔光参数无效');
   }
   if (value.schemaVersion === 1) {
-    return migrateFromV1(value);
+    return migrateFromV2(migrateFromV1(value));
+  }
+  if (value.schemaVersion === 2) {
+    return migrateFromV2(readCommonFields(value));
   }
   if (value.schemaVersion !== DIFFUSION_PARAMS_SCHEMA_VERSION) {
     throw new InvalidDiffusionOperationParamsError('柔光参数版本无效');
   }
+  return {
+    ...readCommonFields(value),
+    glowExposure: readUnit(value, 'glowExposure'),
+    highlightRolloff: readUnit(value, 'highlightRolloff'),
+    tint: { ...readTint(value), coreWhite: readFiniteRange(readTintRecord(value), 'coreWhite', 0, 1) },
+  };
+}
+
+/** v2 与 v3 共有的字段。v3 新增项由调用方补齐，避免解析和迁移各写一份读取逻辑。 */
+function readCommonFields(
+  value: Record<string, unknown>
+): Omit<DiffusionOperationParams, 'glowExposure' | 'highlightRolloff'> {
   return {
     schemaVersion: DIFFUSION_PARAMS_SCHEMA_VERSION,
     mode: readEnum(value, 'mode', DIFFUSION_MODES),
@@ -58,6 +75,26 @@ export function parseDiffusionOperationParams(value: unknown): DiffusionOperatio
     detailRetention: readUnit(value, 'detailRetention'),
     colorRetention: readUnit(value, 'colorRetention'),
     tint: readTint(value),
+  };
+}
+
+/**
+ * v2 → v3 迁移。
+ *
+ * v2 的辉光靠 `headroom = 1 - 底图峰值` 做空间门控来防溢出，v3 改成线性相加 + 末端
+ * 保色相肩部，因此同样的 strength 在 v3 下会明显更亮。这里不去反推等效强度：
+ * 旧值对应的观感本身就是要修掉的那个（光源中心不发光），逐值还原没有意义。
+ * 迁移只补齐新字段的中性默认值，让旧文档能打开。
+ */
+function migrateFromV2(
+  value: Omit<DiffusionOperationParams, 'glowExposure' | 'highlightRolloff'>
+): DiffusionOperationParams {
+  const defaults = createDefaultDiffusionOperationParams();
+  return {
+    ...value,
+    glowExposure: defaults.glowExposure,
+    highlightRolloff: defaults.highlightRolloff,
+    tint: { ...value.tint, coreWhite: defaults.tint.coreWhite },
   };
 }
 
@@ -115,11 +152,17 @@ function migrateDensity(value: unknown): DiffusionDensity {
   return 'medium';
 }
 
-function readTint(value: Record<string, unknown>): DiffusionTintParams {
+function readTintRecord(value: Record<string, unknown>): Record<string, unknown> {
   const tint = value.tint;
   if (!isRecord(tint)) {
     throw new InvalidDiffusionOperationParamsError('柔光参数缺少分组：tint');
   }
+  return tint;
+}
+
+/** 只读 v2 就有的着色字段；v3 新增的 coreWhite 由调用方决定是严格读取还是取默认值。 */
+function readTint(value: Record<string, unknown>): DiffusionTintParams {
+  const tint = readTintRecord(value);
   if (typeof tint.enabled !== 'boolean') {
     throw new InvalidDiffusionOperationParamsError('柔光参数无效：tint.enabled');
   }
@@ -128,6 +171,7 @@ function readTint(value: Record<string, unknown>): DiffusionTintParams {
     hue: readFiniteRange(tint, 'hue', 0, 360),
     saturation: readFiniteRange(tint, 'saturation', 0, 1),
     lightness: readFiniteRange(tint, 'lightness', -1, 1),
+    coreWhite: createDefaultDiffusionTintParams().coreWhite,
   };
 }
 

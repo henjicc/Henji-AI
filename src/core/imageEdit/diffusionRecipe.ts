@@ -57,6 +57,19 @@ export interface DiffusionRecipe {
     /** 散射光增益，1 为不变 */
     gain: number;
   };
+  /** 仅辉光模式使用。摄影柔光走能量守恒，这一组量刻意不守恒。 */
+  glow: {
+    /** 线性叠加增益，允许 > 1：把光源推到过曝正是辉光的观感来源 */
+    exposure: number;
+    /** 保色相肩部起点；1 表示不滚降 */
+    shoulderKnee: number;
+    /** 越过肩部后颜色向白靠拢的比例 */
+    bleach: number;
+    /** 全分辨率紧致核在辉光里的占比，与金字塔互补加权 */
+    coreWeight: number;
+    /** 辉光最亮处向白靠拢的程度（Deep Glow 式强度渐变着色） */
+    tintCoreWhite: number;
+  };
 }
 
 export interface CompileDiffusionRecipeOptions {
@@ -120,6 +133,20 @@ const MAX_TAIL_AMOUNT = 0.35;
  * 「边缘软、中心扁」的廉价观感（资料 §7）。这是画质修正，没有理由让用户去调。
  */
 const HIGHLIGHT_RECOVERY = 0.35;
+
+/**
+ * 辉光曝光量程。摄影柔光的 scatterFraction 必须落在 [0,1] 才不会凭空造光，辉光没有
+ * 这个约束——光源被推到过曝、相邻光晕互相融合本身就是要的效果，靠合成末端的保色相
+ * 肩部收溢出而不是靠把增益锁在 1 以内。指数插值，否则滑块前半程几乎看不出变化。
+ */
+const GLOW_EXPOSURE_RANGE = [0.6, 6] as const;
+/** 肩部起点。滚降拉满时从 0.45 开始压，高光有足够长度渐近到白而不是硬切。 */
+const GLOW_SHOULDER_RANGE = [1, 0.45] as const;
+/**
+ * 全分辨率紧致核占比。金字塔最紧一级在 1/2 分辨率，光源近处 1~2px 的过渡在那里是
+ * 缺失的，光晕和光源核心之间会有一道断层。范围越小越依赖这个补偿。
+ */
+const GLOW_CORE_WEIGHT_RANGE = [0.3, 0.05] as const;
 
 export function compileDiffusionRecipe(
   params: DiffusionOperationParams,
@@ -207,6 +234,22 @@ export function compileDiffusionRecipe(
         : (0.9 + params.detailRetention * 0.1) * strength,
     },
     tint: compileTint(params),
+    glow: compileGlow(params, scatterFraction),
+  };
+}
+
+function compileGlow(
+  params: DiffusionOperationParams,
+  scatterFraction: number
+): DiffusionRecipe['glow'] {
+  const rolloff = clamp01(params.highlightRolloff);
+  return {
+    exposure: scatterFraction * interpolateExponential(GLOW_EXPOSURE_RANGE, params.glowExposure),
+    shoulderKnee: interpolateLinear(GLOW_SHOULDER_RANGE, rolloff),
+    // 只压不漂白会得到「有色但不亮」的塑料感：真实过曝是往白里跑，不是停在饱和色上。
+    bleach: rolloff * 0.8,
+    coreWeight: interpolateLinear(GLOW_CORE_WEIGHT_RANGE, params.glowRange),
+    tintCoreWhite: params.tint.enabled ? clamp01(params.tint.coreWhite) : 0,
   };
 }
 

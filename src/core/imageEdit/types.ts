@@ -194,6 +194,11 @@ export interface DiffusionTintParams {
   saturation: number;
   /** -1..1 */
   lightness: number;
+  /**
+   * 0..1 核心白热。辉光最亮处向白靠拢、只有尾部吃染色。
+   * 平铺一个颜色会像蒙了张色纸，因为真实光源的核心总是先到白再往外显色。
+   */
+  coreWhite: number;
 }
 
 /**
@@ -205,7 +210,7 @@ export interface DiffusionTintParams {
  * 退化成同一个效果的强弱差别。
  */
 export interface DiffusionOperationParams {
-  schemaVersion: 2;
+  schemaVersion: 3;
   mode: DiffusionMode;
   /** 档位：与 mode 一起决定基准参数组 */
   density: DiffusionDensity;
@@ -224,6 +229,14 @@ export interface DiffusionOperationParams {
   detailRetention: number;
   /** 色彩保持 0..1 → 反向驱动散射去饱和 */
   colorRetention: number;
+  /**
+   * 辉光曝光 0..1 → 线性叠加增益（仅辉光模式）。
+   * 摄影柔光要守恒，辉光不用：把光源推到过曝、让相邻光晕互相融合正是辉光的观感来源，
+   * 因此这里的量程刻意允许 > 1，溢出交给「高光滚降」在合成末端统一收。
+   */
+  glowExposure: number;
+  /** 高光滚降 0..1 → 合成末端保色相肩部的强度（仅辉光模式） */
+  highlightRolloff: number;
   tint: DiffusionTintParams;
 }
 

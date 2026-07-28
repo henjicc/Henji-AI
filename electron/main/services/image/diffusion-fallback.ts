@@ -40,6 +40,8 @@ export interface SharpDiffusionFallbackCapabilities {
     'blackRetention',
     'detailRetention',
     'colorRetention',
+    'glowExposure',
+    'highlightRolloff',
     'tint',
     'scaleWeights'
   ]
@@ -66,6 +68,8 @@ const UNSUPPORTED_PARAMETERS = [
   'blackRetention',
   'detailRetention',
   'colorRetention',
+  'glowExposure',
+  'highlightRolloff',
   'tint',
   'scaleWeights',
 ] as const

@@ -155,6 +155,8 @@ export function withImageEditWorkerExecutionCapabilities(
         'blackRetention',
         'detailRetention',
         'colorRetention',
+        'glowExposure',
+        'highlightRolloff',
         'tint',
       ],
     },

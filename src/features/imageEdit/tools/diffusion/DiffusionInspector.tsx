@@ -144,6 +144,7 @@ export function DiffusionInspector(): JSX.Element {
   const setUnit = (
     key: 'strength' | 'glowRange' | 'highlightResponse' | 'softness'
       | 'blackRetention' | 'detailRetention' | 'colorRetention'
+      | 'glowExposure' | 'highlightRolloff'
   ) => (value: number): void => update((current) => ({ ...current, [key]: value }));
 
   const setTint = (patch: Partial<DiffusionOperationParams['tint']>): void =>
@@ -198,6 +199,22 @@ export function DiffusionInspector(): JSX.Element {
             display={formatDiffusionPercent(params.softness)}
             onChange={setUnit('softness')} {...rangeHandlers}
           />
+          {/* 摄影柔光走能量守恒，没有「曝光」可言；只有辉光允许把光源推到过曝。 */}
+          {params.mode === 'glow' ? (
+            <DiffusionRangeField
+              label="辉光曝光" value={params.glowExposure} min={0} max={1} step={0.01}
+              display={formatDiffusionPercent(params.glowExposure)}
+              onChange={setUnit('glowExposure')} {...rangeHandlers}
+            />
+          ) : null}
+          {/* 黑柔/白柔的高光肩部由模式派生，拉出来会让两种模式退化成强弱差别。 */}
+          {params.mode === 'glow' ? (
+            <DiffusionRangeField
+              label="高光滚降" value={params.highlightRolloff} min={0} max={1} step={0.01}
+              display={formatDiffusionPercent(params.highlightRolloff)}
+              onChange={setUnit('highlightRolloff')} {...rangeHandlers}
+            />
+          ) : null}
           {/* 辉光不主动抬黑位，没有需要「保持」的东西，滑块在该模式下会是死的，故不显示。 */}
           {params.mode === 'glow' ? null : (
             <DiffusionRangeField
@@ -252,6 +269,14 @@ export function DiffusionInspector(): JSX.Element {
                 display={formatDiffusionSigned(params.tint.lightness)}
                 onChange={(lightness) => setTint({ lightness })} {...rangeHandlers}
               />
+              {/* 强度渐变着色只在辉光的加法层里有意义；柔光的散射被扣加抵消，没有可白热的核心。 */}
+              {params.mode === 'glow' ? (
+                <DiffusionRangeField
+                  label="核心白热" value={params.tint.coreWhite} min={0} max={1} step={0.01}
+                  display={formatDiffusionPercent(params.tint.coreWhite)}
+                  onChange={(coreWhite) => setTint({ coreWhite })} {...rangeHandlers}
+                />
+              ) : null}
             </>
           ) : null}
         </UiGroup>

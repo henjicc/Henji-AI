@@ -14,6 +14,7 @@ import {
   compileDiffusionRecipe,
   decodeImageEditDocument,
   imageEditDocumentToMarkDoc,
+  parseDiffusionOperationParams,
   replaceMarkDocInImageEditDocument,
   type ImageEditDocument,
   type ImageMarkDoc,
@@ -267,6 +268,38 @@ describe('摄影柔光共享配方', () => {
     expect(glow.energy.veil).toBe(0);
     expect(glow.source.highlightRecovery).toBe(0);
     expect(glow.detail.highFrequencyRetention).toBe(0);
+  });
+
+  /**
+   * 辉光是刻意不守恒的加法层：曝光允许超过 1，把光源推到过曝、让相邻光晕互相融合
+   * 正是它的观感来源。溢出由末端的保色相肩部收，不能靠把增益锁在 1 以内代劳——
+   * 后者就是「光源自己不发光、只有周围暗处才有光晕」的成因。
+   */
+  it('辉光曝光可以超过 1，且滚降越强肩部起点越低', () => {
+    const base = { ...createDefaultDiffusionOperationParams(), mode: 'glow' as const, density: 'high' as const };
+    const compile = (patch: Partial<typeof base>) =>
+      compileDiffusionRecipe({ ...base, ...patch }, { width: 1920, height: 1080 });
+
+    expect(compile({ strength: 1, glowExposure: 1 }).glow.exposure).toBeGreaterThan(1);
+    expect(compile({ strength: 1, glowExposure: 0 }).glow.exposure).toBeLessThan(1);
+    expect(compile({ highlightRolloff: 0 }).glow.shoulderKnee).toBe(1);
+    expect(compile({ highlightRolloff: 1 }).glow.shoulderKnee).toBeLessThan(1);
+    // 强度归零时必须严格无效果，否则「关掉」和「很弱」分不开。
+    expect(compile({ strength: 0, glowExposure: 1 }).glow.exposure).toBe(0);
+    // 范围越窄越依赖全分辨率紧致核补 1~2px 的近场过渡。
+    expect(compile({ glowRange: 0.05 }).glow.coreWeight)
+      .toBeGreaterThan(compile({ glowRange: 0.95 }).glow.coreWeight);
+  });
+
+  it('v2 柔光参数迁移到 v3 时补齐辉光曝光、滚降与核心白热', () => {
+    const { glowExposure, highlightRolloff, tint, ...rest } = createDefaultDiffusionOperationParams();
+    const { coreWhite, ...legacyTint } = tint;
+    const migrated = parseDiffusionOperationParams({ ...rest, schemaVersion: 2, tint: legacyTint });
+
+    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.glowExposure).toBe(glowExposure);
+    expect(migrated.highlightRolloff).toBe(highlightRolloff);
+    expect(migrated.tint.coreWhite).toBe(coreWhite);
   });
 
   it('按源图、金字塔和最终合成依赖区分缓存失效', () => {

@@ -249,9 +249,13 @@ struct CompositeUniforms {
   tint_rgb: vec3<f32>,
   tint_amount: f32,
   tint_gain: f32,
+  glow_exposure: f32,
+  glow_shoulder_knee: f32,
+  glow_bleach: f32,
+  glow_core_weight: f32,
+  glow_tint_core_white: f32,
   padding_a: f32,
   padding_b: f32,
-  padding_c: f32,
 };
 
 @group(0) @binding(0) var composite_base: texture_2d<f32>;
@@ -270,21 +274,44 @@ fn sample_scatter(texture: texture_2d<f32>, uv: vec2<f32>) -> vec3<f32> {
   return textureSampleLevel(texture, composite_sampler, uv, 0.0).rgb;
 }
 
-/**
- * 底图自身的归一化十字低通。细节补偿必须来自底图频段，不能拿散射源代替：
- * 非高光区的散射源接近 0，用 base - scatter 会把整张底图当成“细节”重复加回。
- */
-fn sample_base_cross(uv: vec2<f32>, radius: f32) -> vec3<f32> {
-  let dimensions = vec2<f32>(textureDimensions(composite_base));
+/** 归一化十字低通，权重 0.5 / 4×0.125，总和为 1，因此不改变局部平均亮度。 */
+fn cross_lowpass(
+  texture: texture_2d<f32>,
+  uv: vec2<f32>,
+  radius: f32
+) -> vec3<f32> {
+  let dimensions = vec2<f32>(textureDimensions(texture));
   let step = vec2<f32>(radius) / max(dimensions, vec2<f32>(1.0));
-  let center = textureSampleLevel(composite_base, composite_sampler, uv, 0.0).rgb;
+  let center = textureSampleLevel(texture, composite_sampler, uv, 0.0).rgb;
   let horizontal =
-    textureSampleLevel(composite_base, composite_sampler, uv - vec2<f32>(step.x, 0.0), 0.0).rgb
-    + textureSampleLevel(composite_base, composite_sampler, uv + vec2<f32>(step.x, 0.0), 0.0).rgb;
+    textureSampleLevel(texture, composite_sampler, uv - vec2<f32>(step.x, 0.0), 0.0).rgb
+    + textureSampleLevel(texture, composite_sampler, uv + vec2<f32>(step.x, 0.0), 0.0).rgb;
   let vertical =
-    textureSampleLevel(composite_base, composite_sampler, uv - vec2<f32>(0.0, step.y), 0.0).rgb
-    + textureSampleLevel(composite_base, composite_sampler, uv + vec2<f32>(0.0, step.y), 0.0).rgb;
+    textureSampleLevel(texture, composite_sampler, uv - vec2<f32>(0.0, step.y), 0.0).rgb
+    + textureSampleLevel(texture, composite_sampler, uv + vec2<f32>(0.0, step.y), 0.0).rgb;
   return center * 0.5 + (horizontal + vertical) * 0.125;
+}
+
+/**
+ * 保色相高光滚降。
+ *
+ * 逐通道压缩会让不同通道压掉不同的量，一团红色光晕越亮越偏黄；这里只对峰值通道求
+ * 肩部，其余通道等比跟随，色相与饱和比例都不动。肩部起点处一阶导为 1、随后渐近到
+ * 1.0，不会出现硬截断的死白台阶。
+ *
+ * 压缩掉的量再按比例把颜色往白里推：真实过曝就是往白跑，只压不漂白会停在饱和色上，
+ * 得到「有色但不亮」的塑料感。
+ */
+fn tonemap_glow(color: vec3<f32>, knee: f32, bleach: f32) -> vec3<f32> {
+  let peak = max(color.r, max(color.g, color.b));
+  if (knee >= 1.0 || peak <= knee) {
+    return color;
+  }
+  let range = max(1.0 - knee, 1e-4);
+  let rolled = knee + range * (1.0 - exp(-(peak - knee) / range));
+  let scaled = color * (rolled / max(peak, 1e-5));
+  let overflow = clamp((peak - rolled) / max(peak, 1e-5), 0.0, 1.0);
+  return mix(scaled, vec3<f32>(rolled), overflow * bleach);
 }
 
 fn compress_highlight_channel(value: f32, amount: f32) -> f32 {
@@ -326,6 +353,19 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
     scatter += sample_scatter(scatter_3, uv) * composite_params.weights_a.w;
     scatter += sample_scatter(scatter_4, uv) * composite_params.weights_b.x;
     scatter += sample_scatter(scatter_5, uv) * composite_params.weights_b.y;
+  } else {
+    // 辉光金字塔最紧一级在 1/2 分辨率，光源近处 2~3px 的过渡在那里够不到，光晕和
+    // 光源核心之间会留一道断层。这里直接对全分辨率的亮通源做十字低通补上，
+    // 比再挂两张全分辨率金字塔纹理便宜得多。互补加权、核权重总和为 1，
+    // 因此调紧致度不会顺带增亮。
+    //
+    // 半径取 2 而不是 1：1 个 texel 的十字中心权重占一半，出来几乎还是原图，
+    // 只等于给高光加了点亮度，看不出光晕；2 个 texel 才有可见的近场衰减。
+    scatter = mix(
+      scatter,
+      cross_lowpass(composite_emitted, uv, 2.0),
+      composite_params.glow_core_weight
+    );
   }
 
   let scatter_luma = luminance(scatter);
@@ -342,14 +382,37 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   scatter *= composite_params.tint_gain;
 
   if (composite_params.mode > 1.5) {
-    // 辉光保留原始底图，只叠加 Bloom。按底图峰值提供的显示余量整体缩放光晕，
-    // 既不会扣暗高光核心，也不会逐通道削顶产生青/灰脏边；纯白核心严格保持不变。
-    var bloom = scatter * composite_params.scatter_fraction;
+    var bloom = scatter * composite_params.glow_exposure;
+
+    // 强度渐变着色：辉光最亮处白热，只有尾部吃染色。平铺一个颜色会像蒙了张色纸，
+    // 因为真实光源的核心总是先到白，再往外才显出颜色。
     let bloom_peak = max(bloom.r, max(bloom.g, bloom.b));
-    bloom /= max(1.0, bloom_peak);
-    let base_peak = max(base.r, max(base.g, base.b));
-    let headroom = clamp(1.0 - base_peak, 0.0, 1.0);
-    return vec4<f32>(base.rgb + bloom * headroom, base.a);
+    let heat = smoothstep(0.35, 1.4, bloom_peak);
+    bloom = mix(
+      bloom,
+      vec3<f32>(bloom_peak),
+      heat * composite_params.glow_tint_core_white
+    );
+
+    // 线性相加，不按底图亮度做任何空间门控。
+    //
+    // 此前这里乘的是 headroom = 1 - 底图峰值：底图越亮能加的辉光越少，一个纯白灯泡
+    // 处 headroom 直接归零——光源自己完全不发光，只有周围暗处才出现光晕，中心挖空
+    // 往外冒，这是「贴图感」的主因。而且门控依据是底图亮度而非辉光形状，光晕里只要
+    // 挡着一个亮物体，光晕就会沿那个物体的边缘被啃掉一块。
+    //
+    // 同理也不再做 bloom /= max(1, bloom_peak)：那是逐像素的非线性缩放，亮处压得多、
+    // 暗处不压，等于直接把 PSF 的径向衰减曲线压平。
+    //
+    // 溢出统一交给末端的保色相肩部处理，这才是 SDR 收高光该用的手段。
+    return vec4<f32>(
+      tonemap_glow(
+        base.rgb + bloom,
+        composite_params.glow_shoulder_knee,
+        composite_params.glow_bleach
+      ),
+      base.a
+    );
   }
 
   // 能量守恒（文档 §4.2）：O = I - f·E + f·(K * E)。
@@ -363,8 +426,10 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   let direct = max(base.rgb - deduction, vec3<f32>(0.0));
   var color = direct + scatter * composite_params.scatter_fraction;
 
-  let near_base = sample_base_cross(uv, 1.0);
-  let far_base = sample_base_cross(uv, 3.0);
+  // 细节补偿必须来自底图频段，不能拿散射源代替：非高光区的散射源接近 0，
+  // 用 base - scatter 会把整张底图当成「细节」重复加回。
+  let near_base = cross_lowpass(composite_base, uv, 1.0);
+  let far_base = cross_lowpass(composite_base, uv, 3.0);
   let high_detail = base.rgb - near_base;
   let mid_detail = near_base - far_base;
   color += high_detail * composite_params.high_frequency_retention * 0.08;

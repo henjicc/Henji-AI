@@ -406,7 +406,13 @@ function createCompositeUniform(recipe: DiffusionRecipe): Float32Array {
     recipe.tint.rgb[0], recipe.tint.rgb[1], recipe.tint.rgb[2],
     recipe.tint.amount,
     recipe.tint.gain,
-    0, 0, 0,
+    recipe.glow.exposure,
+    recipe.glow.shoulderKnee,
+    recipe.glow.bleach,
+    recipe.glow.coreWeight,
+    recipe.glow.tintCoreWhite,
+    // 结构体尺寸要补到 16 字节的整数倍：前面到这里是 120 字节，补两个 f32 凑满 128。
+    0, 0,
   ]);
 }
 

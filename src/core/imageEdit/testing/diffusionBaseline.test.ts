@@ -104,11 +104,22 @@ describe('摄影柔光通用预设与 Golden 基线', () => {
     );
     expect(diffusionShaderSource).toContain('fn fragment_bloom_downsample');
     expect(diffusionShaderSource).toContain('fn fragment_bloom_upsample');
+    expect(diffusionShaderSource).toContain('base.rgb + bloom,');
+  });
+
+  /**
+   * 这两种写法都曾经在辉光合成里出现过，观感代价很大且不容易一眼看出来，所以钉住：
+   * headroom 门控让底图越亮能加的辉光越少，纯白光源处直接归零、光晕中心被挖空；
+   * 逐像素峰值归一是非线性缩放，亮处压得多暗处不压，直接把 PSF 径向衰减压平。
+   * 溢出该由末端的保色相肩部收，不该由这两个空间 hack 代劳。
+   */
+  it('辉光不按底图亮度做空间门控，也不逐像素归一化光晕', () => {
+    // 只看语句行；两处都在注释里被点名说明为什么不能再写回来。
+    expect(diffusionShaderSource).not.toMatch(/^\s*let headroom\b/m);
+    expect(diffusionShaderSource).not.toMatch(/^\s*bloom\s*\/=/m);
+    expect(diffusionShaderSource).toContain('fn tonemap_glow');
     expect(diffusionShaderSource).toContain(
-      'let headroom = clamp(1.0 - base_peak, 0.0, 1.0);'
-    );
-    expect(diffusionShaderSource).toContain(
-      'return vec4<f32>(base.rgb + bloom * headroom, base.a);'
+      'let rolled = knee + range * (1.0 - exp(-(peak - knee) / range));'
     );
   });
 

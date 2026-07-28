@@ -30,6 +30,9 @@ export interface DiffusionPresetPatch {
   readonly blackRetention: number;
   readonly detailRetention: number;
   readonly colorRetention: number;
+  /** 仅辉光基准会给值；黑柔/白柔用不到它们，给了反而会覆盖用户在辉光下的调校。 */
+  readonly glowExposure?: number;
+  readonly highlightRolloff?: number;
 }
 
 export interface DiffusionPresetDefinition {
@@ -110,19 +113,19 @@ const DIFFUSION_PRESETS: readonly DiffusionPresetDefinition[] = [
     id: 'glow-low', mode: 'glow', intensity: 'low',
     name: { zh: '通用辉光 · 轻', en: 'General Glow · Low' },
     description: { zh: '只扩散最亮区域，以小范围光晕轻微增强光感。', en: 'Blooms only the brightest regions with a restrained, compact halo.' },
-    parameters: { strength: 0.34, glowRange: 0.34, highlightResponse: 0.36, softness: 0.2, blackRetention: 1, detailRetention: 1, colorRetention: 0.96 },
+    parameters: { strength: 0.3, glowRange: 0.34, highlightResponse: 0.34, softness: 0.28, blackRetention: 1, detailRetention: 1, colorRetention: 0.96, glowExposure: 0.32, highlightRolloff: 0.5 },
   }),
   createPreset({
     id: 'glow-medium', mode: 'glow', intensity: 'medium',
     name: { zh: '通用辉光 · 中', en: 'General Glow · Medium' },
     description: { zh: '平滑扩展亮部光晕，同时保持高光核心和黑位稳定。', en: 'Smoothly expands highlights while preserving the source core and black point.' },
-    parameters: { strength: 0.58, glowRange: 0.56, highlightResponse: 0.44, softness: 0.48, blackRetention: 1, detailRetention: 1, colorRetention: 0.93 },
+    parameters: { strength: 0.42, glowRange: 0.5, highlightResponse: 0.42, softness: 0.45, blackRetention: 1, detailRetention: 1, colorRetention: 0.93, glowExposure: 0.5, highlightRolloff: 0.6 },
   }),
   createPreset({
     id: 'glow-high', mode: 'glow', intensity: 'high',
     name: { zh: '通用辉光 · 强', en: 'General Glow · High' },
-    description: { zh: '形成宽而连续的高光光晕，强效果下仍保留原始亮边结构。', en: 'Builds a broad continuous halo while retaining the original highlight structure.' },
-    parameters: { strength: 0.82, glowRange: 0.78, highlightResponse: 0.58, softness: 0.72, blackRetention: 1, detailRetention: 1, colorRetention: 0.9 },
+    description: { zh: '宽而连续的光晕，允许光源过曝并让相邻光晕互相融合。', en: 'A broad continuous halo that lets sources blow out and neighbouring halos merge.' },
+    parameters: { strength: 0.6, glowRange: 0.72, highlightResponse: 0.52, softness: 0.66, blackRetention: 1, detailRetention: 1, colorRetention: 0.9, glowExposure: 0.68, highlightRolloff: 0.72 },
   }),
 ];
 
