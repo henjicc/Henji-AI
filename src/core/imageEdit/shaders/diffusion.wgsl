@@ -133,6 +133,9 @@ struct BlurUniforms {
   aspect_correction: vec2<f32>,
   radius: f32,
   axis: f32,
+  /** 仅上采样使用。逐通道权重就是色散：三通道的能量分布错开，尾部才会显出色偏。 */
+  high_weight: vec3<f32>,
+  low_weight: vec3<f32>,
 };
 
 @group(0) @binding(0) var blur_input: texture_2d<f32>;
@@ -230,7 +233,12 @@ fn bloom_upsample_low(uv: vec2<f32>) -> vec4<f32> {
 fn fragment_bloom_upsample(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = blur_params.offset + input.local_uv * blur_params.scale;
   let high = textureSampleLevel(blur_input, blur_sampler, uv, 0.0);
-  return high * blur_params.radius + bloom_upsample_low(uv) * blur_params.axis;
+  let low = bloom_upsample_low(uv);
+  // alpha 不参与色散，跟着绿通道走即可：它只是用来判空的，不是可见颜色。
+  return vec4<f32>(
+    high.rgb * blur_params.high_weight + low.rgb * blur_params.low_weight,
+    high.a * blur_params.high_weight.g + low.a * blur_params.low_weight.g
+  );
 }
 
 struct CompositeUniforms {

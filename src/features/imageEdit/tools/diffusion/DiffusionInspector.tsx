@@ -144,7 +144,7 @@ export function DiffusionInspector(): JSX.Element {
   const setUnit = (
     key: 'strength' | 'glowRange' | 'highlightResponse' | 'softness'
       | 'blackRetention' | 'detailRetention' | 'colorRetention'
-      | 'glowExposure' | 'highlightRolloff'
+      | 'glowExposure' | 'highlightRolloff' | 'glowCoreWhite'
   ) => (value: number): void => update((current) => ({ ...current, [key]: value }));
 
   const setTint = (patch: Partial<DiffusionOperationParams['tint']>): void =>
@@ -215,6 +215,15 @@ export function DiffusionInspector(): JSX.Element {
               onChange={setUnit('highlightRolloff')} {...rangeHandlers}
             />
           ) : null}
+          {/* 真实感控制不是染色控制：彩色光源的核心本来就该是过曝的白，
+              所以放在主参数里，不跟着「着色」开关走。 */}
+          {params.mode === 'glow' ? (
+            <DiffusionRangeField
+              label="核心白热" value={params.glowCoreWhite} min={0} max={1} step={0.01}
+              display={formatDiffusionPercent(params.glowCoreWhite)}
+              onChange={setUnit('glowCoreWhite')} {...rangeHandlers}
+            />
+          ) : null}
           {/* 辉光不主动抬黑位，没有需要「保持」的东西，滑块在该模式下会是死的，故不显示。 */}
           {params.mode === 'glow' ? null : (
             <DiffusionRangeField
@@ -269,14 +278,6 @@ export function DiffusionInspector(): JSX.Element {
                 display={formatDiffusionSigned(params.tint.lightness)}
                 onChange={(lightness) => setTint({ lightness })} {...rangeHandlers}
               />
-              {/* 强度渐变着色只在辉光的加法层里有意义；柔光的散射被扣加抵消，没有可白热的核心。 */}
-              {params.mode === 'glow' ? (
-                <DiffusionRangeField
-                  label="核心白热" value={params.tint.coreWhite} min={0} max={1} step={0.01}
-                  display={formatDiffusionPercent(params.tint.coreWhite)}
-                  onChange={(coreWhite) => setTint({ coreWhite })} {...rangeHandlers}
-                />
-              ) : null}
             </>
           ) : null}
         </UiGroup>

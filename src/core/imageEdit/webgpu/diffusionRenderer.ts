@@ -230,7 +230,7 @@ export class WebGpuDiffusionRenderer {
         source: cache.source,
         width: input.width,
         height: input.height,
-        scales: input.recipe.scales,
+        levels: input.recipe.glow.levels,
         acquireTexture: (width, height) => this.acquireTexture(width, height),
         releaseTexture: (texture) => this.texturePool.release(texture),
         isCancelled: input.isCancelled,
@@ -357,7 +357,9 @@ function resolveStepRadius(targetRadius: number, previousRadius: number): number
 }
 
 function createPyramidSignature(recipe: DiffusionRecipe): string {
-  return JSON.stringify([recipe.quality, recipe.scales]);
+  // 辉光的金字塔由 glow.levels 驱动（层数随图片尺寸变），scales 只是它前六级的投影，
+  // 单看 scales 会漏掉层数与逐通道权重的变化，缓存就不会失效。
+  return JSON.stringify([recipe.quality, recipe.scales, recipe.glow.levels]);
 }
 
 function createSourceUniform(recipe: DiffusionRecipe): Float32Array {
@@ -385,6 +387,9 @@ function createBlurUniform(
     recipe.image.aspectCorrection[1],
     radius,
     axis,
+    // BlurUniforms 尾部的逐通道上采样权重只有辉光金字塔用得到，这里补零凑满结构体尺寸。
+    0, 0, 0, 0,
+    0, 0, 0, 0,
   ]);
 }
 

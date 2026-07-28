@@ -291,15 +291,31 @@ describe('摄影柔光共享配方', () => {
       .toBeGreaterThan(compile({ glowRange: 0.95 }).glow.coreWeight);
   });
 
-  it('v2 柔光参数迁移到 v3 时补齐辉光曝光、滚降与核心白热', () => {
-    const { glowExposure, highlightRolloff, tint, ...rest } = createDefaultDiffusionOperationParams();
-    const { coreWhite, ...legacyTint } = tint;
-    const migrated = parseDiffusionOperationParams({ ...rest, schemaVersion: 2, tint: legacyTint });
+  it('v2 柔光参数迁移到 v4 时补齐辉光曝光、滚降与核心白热', () => {
+    const defaults = createDefaultDiffusionOperationParams();
+    const { glowExposure, highlightRolloff, glowCoreWhite, ...rest } = defaults;
+    const migrated = parseDiffusionOperationParams({ ...rest, schemaVersion: 2 });
 
-    expect(migrated.schemaVersion).toBe(3);
+    expect(migrated.schemaVersion).toBe(4);
     expect(migrated.glowExposure).toBe(glowExposure);
     expect(migrated.highlightRolloff).toBe(highlightRolloff);
-    expect(migrated.tint.coreWhite).toBe(coreWhite);
+    expect(migrated.glowCoreWhite).toBe(glowCoreWhite);
+  });
+
+  /**
+   * v3 把核心白热放在「着色」分组下，导致不开着色时彩色光源的光晕从里到外一个颜色。
+   * v4 挪到顶层，迁移必须把用户已经调过的值搬过来而不是重置。
+   */
+  it('v3 的 tint.coreWhite 迁移到 v4 的顶层 glowCoreWhite', () => {
+    const { glowCoreWhite: _dropped, ...rest } = createDefaultDiffusionOperationParams();
+    const migrated = parseDiffusionOperationParams({
+      ...rest,
+      schemaVersion: 3,
+      tint: { ...rest.tint, coreWhite: 0.23 },
+    });
+
+    expect(migrated.schemaVersion).toBe(4);
+    expect(migrated.glowCoreWhite).toBe(0.23);
   });
 
   it('按源图、金字塔和最终合成依赖区分缓存失效', () => {
@@ -316,7 +332,7 @@ describe('摄影柔光共享配方', () => {
         recipe.mode,
         recipe.source,
       ]),
-      pyramidSignature: JSON.stringify([recipe.quality, recipe.scales]),
+      pyramidSignature: JSON.stringify([recipe.quality, recipe.scales, recipe.glow.levels]),
     };
     const toneOnlyRecipe = {
       ...recipe,
@@ -329,6 +345,12 @@ describe('摄影柔光共享配方', () => {
     expect(determineDiffusionInvalidation(cache, {
       ...input,
       recipe: { ...recipe, quality: 'high' },
+    })).toBe('pyramid');
+    // 辉光金字塔由 glow.levels 驱动，层数与逐通道权重变化必须让金字塔失效；
+    // 只看 scales 的话改了层数缓存不会重建，画面会停在旧的衰减曲线上。
+    expect(determineDiffusionInvalidation(cache, {
+      ...input,
+      recipe: { ...recipe, glow: { ...recipe.glow, levels: recipe.glow.levels.slice(0, 5) } },
     })).toBe('pyramid');
     expect(determineDiffusionInvalidation(cache, {
       ...input,

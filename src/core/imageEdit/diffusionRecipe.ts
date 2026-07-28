@@ -13,6 +13,13 @@ export interface DiffusionScaleRecipe {
   weight: number;
 }
 
+export interface DiffusionGlowLevel {
+  /** 相对全分辨率的降采样倍数，同时也是这一级的有效 σ（像素） */
+  divisor: number;
+  /** 逐通道权重。三通道略微错开就是色散，尾部因此显出色偏而不是等比放大的同一个颜色。 */
+  weight: readonly [number, number, number];
+}
+
 export interface DiffusionRecipe {
   version: typeof DIFFUSION_RECIPE_VERSION;
   mode: DiffusionMode;
@@ -59,6 +66,13 @@ export interface DiffusionRecipe {
   };
   /** 仅辉光模式使用。摄影柔光走能量守恒，这一组量刻意不守恒。 */
   glow: {
+    /**
+     * 逐倍频程的金字塔层。层数按图片尺寸铺到 mip 只剩几个像素为止，不是固定六级：
+     * 层数不够时最外层之后就没有更宽的尺度可叠，PSF 会从幂律突然退化成高斯并直接
+     * 归零，观感上就是「光晕有个看得见的外边界」。实测固定六级时衰减指数在
+     * 128px→256px 处从 3.3 跳到 8.7，512px 之后已经是 138。
+     */
+    levels: readonly DiffusionGlowLevel[];
     /** 线性叠加增益，允许 > 1：把光源推到过曝正是辉光的观感来源 */
     exposure: number;
     /** 保色相肩部起点；1 表示不滚降 */
@@ -148,6 +162,43 @@ const GLOW_SHOULDER_RANGE = [1, 0.45] as const;
  */
 const GLOW_CORE_WEIGHT_RANGE = [0.3, 0.05] as const;
 
+/**
+ * PSF 的径向衰减指数（A ∝ r^-n）。
+ *
+ * 每一级 mip 的降采样核与 tent 上采样核都归一到 1，所以每级都是面积归一的模糊：
+ * 点光源经过第 i 级后总能量不变、峰值 ∝ 1/σ_i²。整条 PSF 就是
+ *   A(r) = Σ w_i · exp(-r²/2σ_i²) / (2πσ_i²)
+ * 在半径 r 附近由 σ_i≈r 那一级主导，于是 A(r) ≈ w(σ=r)/r²。
+ * 想要 A ∝ r^-n，就要 w_i ∝ σ_i^(2-n)——各级等权得到 1/r²，每级减半得到 1/r³。
+ *
+ * 真实镜头与人眼的眩光大致落在 2~3 之间，所以量程取这一带。此前用的是
+ * exp(-i·decay) 的经验衰减，近场指数其实落在 2.4~2.9 是对的，问题全在层数不够。
+ */
+const GLOW_FALLOFF_EXPONENT_RANGE = [3.3, 2.05] as const;
+/**
+ * 参与加权的尺度区间，按**占长边的比例**定义，不是按工作分辨率的像素数。
+ *
+ * mip 的 divisor 是工作分辨率像素，而实时预览会先降到 200 万像素预算
+ * （webgpuRuntime.ts 的 IMAGE_EDIT_PREVIEW_MAX_PIXELS），所以同一个 divisor 在预览里
+ * 占画面的比例是导出时的两倍多。照 divisor 直接配权重的话，预览和导出的光晕相对尺寸
+ * 和亮度都对不上——实测预览会比导出亮 1.4~2.6 倍，等于对着一个会骗人的预览调参。
+ *
+ * anchor 在归一化比例上，两个分辨率就会挑到同一组归一化尺度。
+ */
+const GLOW_MIN_SIGMA_FRACTION = 1 / 1024;
+/** 最宽一级取长边的一半：光晕的「深」全在这条长尾上，截得早就退回普通高斯辉光。 */
+const GLOW_MAX_SIGMA_FRACTION = 1 / 2;
+const GLOW_MIN_LEVEL_COUNT = 4;
+const GLOW_MAX_LEVEL_COUNT = 12;
+/**
+ * 尾部色散量。真实玻璃与人眼的散射是有波长依赖的，光晕尾部会偏色而不是等比放大的
+ * 同一个颜色——这是「贵的辉光插件」最好认的特征之一。做法是给三通道略微不同的衰减
+ * 指数（红更远、蓝更近），再各自归一，因此不产生整体色偏，只产生径向的色相梯度。
+ *
+ * 属于画质修正而不是风格选择，和裁切高光外推一样不做成滑块。
+ */
+const GLOW_DISPERSION = 0.3;
+
 export function compileDiffusionRecipe(
   params: DiffusionOperationParams,
   options: CompileDiffusionRecipeOptions
@@ -173,14 +224,16 @@ export function compileDiffusionRecipe(
 
   const tailAmount = params.softness * MAX_TAIL_AMOUNT;
   const tailShape = interpolateLinear(TAIL_SHAPE_RANGE, params.softness);
-  const weights = params.mode === 'glow'
-    ? compileBloomScaleWeights(params.glowRange, params.softness)
-    : compileScaleWeights(tailShape, tailAmount, response.longTailBias);
-  const scales = weights.map((weight, index) => ({
-    index,
-    radius: interpolateRadius(nearRadius, farRadius, index),
-    weight,
-  }));
+  const glowLevels = compileGlowLevels(params, referenceDimension);
+  // 辉光的真实金字塔在 glow.levels 里（层数随图片尺寸变），scales 只保留前六级的
+  // 等价描述，供共享合成布局、缓存签名和 Sharp 降级的半径估算使用。
+  const scales = params.mode === 'glow'
+    ? glowLevelsToScales(glowLevels, referenceDimension)
+    : compileScaleWeights(tailShape, tailAmount, response.longTailBias).map((weight, index) => ({
+      index,
+      radius: interpolateRadius(nearRadius, farRadius, index),
+      weight,
+    }));
 
   const strength = clamp01(params.strength * densityMultiplier);
   // 散射源 E 里已经带上了 highlightAmount / microAmount，这里再乘一次“源能量”是重复
@@ -234,23 +287,91 @@ export function compileDiffusionRecipe(
         : (0.9 + params.detailRetention * 0.1) * strength,
     },
     tint: compileTint(params),
-    glow: compileGlow(params, scatterFraction),
+    glow: compileGlow(params, scatterFraction, glowLevels),
   };
 }
 
 function compileGlow(
   params: DiffusionOperationParams,
-  scatterFraction: number
+  scatterFraction: number,
+  levels: readonly DiffusionGlowLevel[]
 ): DiffusionRecipe['glow'] {
   const rolloff = clamp01(params.highlightRolloff);
   return {
+    levels,
     exposure: scatterFraction * interpolateExponential(GLOW_EXPOSURE_RANGE, params.glowExposure),
     shoulderKnee: interpolateLinear(GLOW_SHOULDER_RANGE, rolloff),
     // 只压不漂白会得到「有色但不亮」的塑料感：真实过曝是往白里跑，不是停在饱和色上。
     bleach: rolloff * 0.8,
     coreWeight: interpolateLinear(GLOW_CORE_WEIGHT_RANGE, params.glowRange),
-    tintCoreWhite: params.tint.enabled ? clamp01(params.tint.coreWhite) : 0,
+    // 真实感控制，不跟着色开关走：彩色光源的核心本来就该是过曝的白。
+    tintCoreWhite: clamp01(params.glowCoreWhite),
   };
+}
+
+/**
+ * 铺满归一化尺度区间内的全部倍频程，权重走幂律，逐通道错开指数得到尾部色散。
+ *
+ * divisor 始终从 2 开始逐级翻倍：金字塔每步只能降一半，一步降 4 倍以上会让固定小核
+ * 严重欠采样、亮边冒出复本。归一化尺度低于 GLOW_MIN_SIGMA_FRACTION 的那几级仍然要
+ * 生成（后面的层要从它们继续降），但权重记 0——这样归一化的分母只包含真正参与的
+ * 尺度，预览和导出就会落在同一组归一化尺度上。
+ */
+function compileGlowLevels(
+  params: DiffusionOperationParams,
+  referenceDimension: number
+): readonly DiffusionGlowLevel[] {
+  const count = resolveGlowLevelCount(referenceDimension);
+  const divisors = Array.from({ length: count }, (_, index) => 2 ** (index + 1));
+  const minDivisor = referenceDimension * GLOW_MIN_SIGMA_FRACTION;
+  const skipped = divisors.filter((divisor) => divisor < minDivisor).length;
+  const contributing = Math.max(1, count - skipped);
+  const exponent = interpolateLinear(GLOW_FALLOFF_EXPONENT_RANGE, params.glowRange);
+  // 红端衰减慢、蓝端衰减快，尾部因此偏暖、近场偏冷。
+  const channels = [-1, 0, 1].map((offset) =>
+    normalizeWeights(divisors.map((divisor, index) => {
+      if (divisor < minDivisor) return 0;
+      // 柔和度在幂律之上再抬一点远端，保留「光斑柔和度」原来的语义。
+      const tailPosition = (index - skipped) / Math.max(1, contributing - 1);
+      const tailLift = 1 + clamp01(params.softness) * tailPosition * 1.2;
+      return Math.pow(divisor, 2 - (exponent + offset * GLOW_DISPERSION * 0.25)) * tailLift;
+    }))
+  );
+  return divisors.map((divisor, index) => ({
+    divisor,
+    weight: [channels[0][index], channels[1][index], channels[2][index]] as const,
+  }));
+}
+
+/**
+ * 取真正参与加权的前六级折算成共享的 scales 形状；radius 是归一化的有效 σ，
+ * weight 取绿通道。零权重的那几级只是金字塔链路的中间产物，不能算进来——
+ * Sharp 降级按 Σ(radius×weight) 估算模糊半径，混入零权重会把半径整体拉偏。
+ */
+function glowLevelsToScales(
+  levels: readonly DiffusionGlowLevel[],
+  referenceDimension: number
+): DiffusionScaleRecipe[] {
+  const visible = levels
+    .filter((level) => level.weight[1] > 0)
+    .slice(0, DIFFUSION_SCALE_COUNT);
+  const total = visible.reduce((sum, level) => sum + level.weight[1], 0);
+  return visible.map((level, index) => ({
+    index,
+    radius: level.divisor / referenceDimension,
+    weight: total > 0 ? level.weight[1] / total : 1 / visible.length,
+  }));
+}
+
+function resolveGlowLevelCount(referenceDimension: number): number {
+  const octaves = Math.floor(Math.log2(referenceDimension * GLOW_MAX_SIGMA_FRACTION));
+  return Math.max(GLOW_MIN_LEVEL_COUNT, Math.min(GLOW_MAX_LEVEL_COUNT, octaves));
+}
+
+function normalizeWeights(raw: readonly number[]): number[] {
+  const sum = raw.reduce((total, weight) => total + weight, 0);
+  if (sum <= 0) return raw.map(() => 1 / Math.max(1, raw.length));
+  return raw.map((weight) => weight / sum);
 }
 
 /**
@@ -304,21 +425,6 @@ function compileScaleWeights(
     const nearWeight = Math.exp(-normalizedIndex * tailShape);
     const tailWeight = Math.pow(normalizedIndex, 1.5) * tailAmount * longTailBias;
     return Math.max(Number.EPSILON, nearWeight + tailWeight);
-  });
-  const sum = raw.reduce((total, weight) => total + weight, 0);
-  return raw.map((weight) => weight / sum);
-}
-
-/**
- * Bloom 半径由固定小核的 mip 层级决定，范围与柔和度只负责把能量平滑分配到各层。
- * 所有权重均为正且归一化，因而不会产生负瓣、二次峰值或随范围增加而凭空增亮。
- */
-function compileBloomScaleWeights(glowRange: number, softness: number): number[] {
-  const decayPerLevel = interpolateLinear([0.92, 0.24], glowRange);
-  const raw = Array.from({ length: DIFFUSION_SCALE_COUNT }, (_, index) => {
-    const tailPosition = index / (DIFFUSION_SCALE_COUNT - 1);
-    const tailLift = 1 + softness * tailPosition * 1.5;
-    return Math.exp(-index * decayPerLevel) * tailLift;
   });
   const sum = raw.reduce((total, weight) => total + weight, 0);
   return raw.map((weight) => weight / sum);

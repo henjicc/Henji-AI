@@ -12,10 +12,10 @@ const DIFFUSION_MODES: DiffusionMode[] = ['black_mist', 'white_mist', 'glow'];
 const DIFFUSION_DENSITIES: DiffusionDensity[] = ['low', 'medium', 'high'];
 const DIFFUSION_QUALITIES: DiffusionQuality[] = ['realtime', 'high'];
 
-export const DIFFUSION_PARAMS_SCHEMA_VERSION = 3 as const;
+export const DIFFUSION_PARAMS_SCHEMA_VERSION = 4 as const;
 
 export function createDefaultDiffusionTintParams(): DiffusionTintParams {
-  return { enabled: false, hue: 210, saturation: 0.5, lightness: 0, coreWhite: 0.55 };
+  return { enabled: false, hue: 210, saturation: 0.5, lightness: 0 };
 }
 
 export function createDefaultDiffusionOperationParams(): DiffusionOperationParams {
@@ -33,6 +33,7 @@ export function createDefaultDiffusionOperationParams(): DiffusionOperationParam
     colorRetention: 0.92,
     glowExposure: 0.5,
     highlightRolloff: 0.6,
+    glowCoreWhite: 0.55,
     tint: createDefaultDiffusionTintParams(),
   };
 }
@@ -47,6 +48,9 @@ export function parseDiffusionOperationParams(value: unknown): DiffusionOperatio
   if (value.schemaVersion === 2) {
     return migrateFromV2(readCommonFields(value));
   }
+  if (value.schemaVersion === 3) {
+    return migrateFromV3(value);
+  }
   if (value.schemaVersion !== DIFFUSION_PARAMS_SCHEMA_VERSION) {
     throw new InvalidDiffusionOperationParamsError('柔光参数版本无效');
   }
@@ -54,14 +58,32 @@ export function parseDiffusionOperationParams(value: unknown): DiffusionOperatio
     ...readCommonFields(value),
     glowExposure: readUnit(value, 'glowExposure'),
     highlightRolloff: readUnit(value, 'highlightRolloff'),
-    tint: { ...readTint(value), coreWhite: readFiniteRange(readTintRecord(value), 'coreWhite', 0, 1) },
+    glowCoreWhite: readUnit(value, 'glowCoreWhite'),
   };
 }
 
-/** v2 与 v3 共有的字段。v3 新增项由调用方补齐，避免解析和迁移各写一份读取逻辑。 */
+/**
+ * v3 → v4 迁移：核心白热从「着色」分组挪到顶层。
+ *
+ * 它是真实感控制不是染色控制——彩色光源的核心本来就该是过曝的白——放在
+ * 默认关闭的着色分组下，等于不开着色就整团光晕一个颜色。旧值原样搬过来。
+ */
+function migrateFromV3(value: Record<string, unknown>): DiffusionOperationParams {
+  const legacyCoreWhite = readTintRecord(value).coreWhite;
+  return {
+    ...readCommonFields(value),
+    glowExposure: readUnit(value, 'glowExposure'),
+    highlightRolloff: readUnit(value, 'highlightRolloff'),
+    glowCoreWhite: typeof legacyCoreWhite === 'number' && Number.isFinite(legacyCoreWhite)
+      ? clampUnit(legacyCoreWhite)
+      : createDefaultDiffusionOperationParams().glowCoreWhite,
+  };
+}
+
+/** v2 起就没变过的字段。各版本新增项由调用方补齐，避免解析和迁移各写一份读取逻辑。 */
 function readCommonFields(
   value: Record<string, unknown>
-): Omit<DiffusionOperationParams, 'glowExposure' | 'highlightRolloff'> {
+): Omit<DiffusionOperationParams, 'glowExposure' | 'highlightRolloff' | 'glowCoreWhite'> {
   return {
     schemaVersion: DIFFUSION_PARAMS_SCHEMA_VERSION,
     mode: readEnum(value, 'mode', DIFFUSION_MODES),
@@ -79,22 +101,22 @@ function readCommonFields(
 }
 
 /**
- * v2 → v3 迁移。
+ * v2 → v4 迁移。
  *
- * v2 的辉光靠 `headroom = 1 - 底图峰值` 做空间门控来防溢出，v3 改成线性相加 + 末端
- * 保色相肩部，因此同样的 strength 在 v3 下会明显更亮。这里不去反推等效强度：
+ * v2 的辉光靠 `headroom = 1 - 底图峰值` 做空间门控来防溢出，之后改成线性相加 + 末端
+ * 保色相肩部，因此同样的 strength 在新版下会明显更亮。这里不去反推等效强度：
  * 旧值对应的观感本身就是要修掉的那个（光源中心不发光），逐值还原没有意义。
  * 迁移只补齐新字段的中性默认值，让旧文档能打开。
  */
 function migrateFromV2(
-  value: Omit<DiffusionOperationParams, 'glowExposure' | 'highlightRolloff'>
+  value: Omit<DiffusionOperationParams, 'glowExposure' | 'highlightRolloff' | 'glowCoreWhite'>
 ): DiffusionOperationParams {
   const defaults = createDefaultDiffusionOperationParams();
   return {
     ...value,
     glowExposure: defaults.glowExposure,
     highlightRolloff: defaults.highlightRolloff,
-    tint: { ...value.tint, coreWhite: defaults.tint.coreWhite },
+    glowCoreWhite: defaults.glowCoreWhite,
   };
 }
 
@@ -160,7 +182,6 @@ function readTintRecord(value: Record<string, unknown>): Record<string, unknown>
   return tint;
 }
 
-/** 只读 v2 就有的着色字段；v3 新增的 coreWhite 由调用方决定是严格读取还是取默认值。 */
 function readTint(value: Record<string, unknown>): DiffusionTintParams {
   const tint = readTintRecord(value);
   if (typeof tint.enabled !== 'boolean') {
@@ -171,7 +192,6 @@ function readTint(value: Record<string, unknown>): DiffusionTintParams {
     hue: readFiniteRange(tint, 'hue', 0, 360),
     saturation: readFiniteRange(tint, 'saturation', 0, 1),
     lightness: readFiniteRange(tint, 'lightness', -1, 1),
-    coreWhite: createDefaultDiffusionTintParams().coreWhite,
   };
 }
 

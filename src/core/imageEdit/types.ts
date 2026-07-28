@@ -194,11 +194,6 @@ export interface DiffusionTintParams {
   saturation: number;
   /** -1..1 */
   lightness: number;
-  /**
-   * 0..1 核心白热。辉光最亮处向白靠拢、只有尾部吃染色。
-   * 平铺一个颜色会像蒙了张色纸，因为真实光源的核心总是先到白再往外显色。
-   */
-  coreWhite: number;
 }
 
 /**
@@ -210,7 +205,7 @@ export interface DiffusionTintParams {
  * 退化成同一个效果的强弱差别。
  */
 export interface DiffusionOperationParams {
-  schemaVersion: 3;
+  schemaVersion: 4;
   mode: DiffusionMode;
   /** 档位：与 mode 一起决定基准参数组 */
   density: DiffusionDensity;
@@ -237,6 +232,14 @@ export interface DiffusionOperationParams {
   glowExposure: number;
   /** 高光滚降 0..1 → 合成末端保色相肩部的强度（仅辉光模式） */
   highlightRolloff: number;
+  /**
+   * 核心白热 0..1（仅辉光模式）。辉光最亮处向白靠拢，只有外围才显出光源的颜色。
+   *
+   * 这是真实感控制而不是染色控制：一只亮青色灯泡拍出来，核心一定是过曝的白，
+   * 青色只出现在光晕外围。它在 v3 里错放在「着色」分组下，导致不开着色时
+   * 彩色光源的光晕从里到外一个颜色，像蒙了张色纸。
+   */
+  glowCoreWhite: number;
   tint: DiffusionTintParams;
 }
 
