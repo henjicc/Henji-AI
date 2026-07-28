@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { Suspense, lazy, useRef, useState } from 'react';
 import {
   imageEditDocumentToMarkDoc,
   parseImageEditDocument,
@@ -6,7 +6,10 @@ import {
   stringifyMarkDoc,
   type ImageEditDocument,
 } from '@/core/imageEdit';
-import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
+// 同 CameraStageNodeDialog：静态引入会把约 630KB 的图片编辑器钉进画布 chunk，
+// 而它只在画布的图片编辑对话框打开时才用得到。
+const ImageEditor = lazy(() => import('@/features/imageEdit/editor/ImageEditor')
+  .then((m) => ({ default: m.ImageEditor })));
 import type { MarkEditorStyleState } from '@/features/imageMark';
 import type { VisualToolEditorProps } from './types';
 
@@ -35,6 +38,7 @@ export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: Vis
   }));
 
   return (
+    <Suspense fallback={<div className="h-[min(76vh,900px)]" />}>
     <ImageEditor
       sourceImageUrl={sourceImageUrl}
       initialDocument={initialDocument}
@@ -59,5 +63,6 @@ export function EditToolEditor({ options, onOptionsChange, sourceImageUrl }: Vis
       }}
       className="h-[min(76vh,900px)]"
     />
+    </Suspense>
   );
 }

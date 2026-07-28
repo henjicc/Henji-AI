@@ -121,48 +121,45 @@ const App: React.FC = () => {
   }, [])
   // 应用初始化
   useEffect(() => {
+    // 启动链路每一段都可能把第一次切 Tab 堵在后面（画布的 hydrate 就排在 canvasProjectService
+    // 之后），所以每段都要能单独看到耗时，否则只能靠猜。
+    const step = async (event: string, run: () => Promise<unknown>): Promise<void> => {
+      const startedAt = performance.now()
+      try {
+        await run()
+        logger.info('启动阶段完成', { event, context: { durationMs: Math.round(performance.now() - startedAt) } })
+      } catch (error) {
+        logger.error('启动阶段失败', error, { event: `${event.replace(/\.completed$/, '')}.failed` })
+      }
+    }
+
     const initializeApp = async () => {
       // 0. 注册默认面板（必须在使用前注册）
       registerDefaultPanels()
 
-      // 1. 加载所有模型到 ModelRegistry
-      try {
-        await loadAllModels()
-        // logger.info('[App] Models loaded:', stats)
-      } catch (error) {
-        logger.error('[App] Failed to load models:', error)
-      }
+      // 模型注册表与数据库互不依赖，串行等待只会推迟后面所有人。
+      // 画布 hydrate 要等 canvasProjectService，所以这条链越早跑完越好。
+      await Promise.all([
+        step('app.startup.models.completed', loadAllModels),
+        step('app.startup.database.completed', async () => {
+          await databaseService.init()
+          await canvasProjectService.init()
+        }),
+      ])
 
-      // 2. 初始化数据库
-      try {
-        await databaseService.init()
-      } catch (error) {
-        logger.error('[App] Failed to initialize database:', error)
-      }
-
-      // 2.1 初始化画布项目存储
-      try {
-        await canvasProjectService.init()
-      } catch (error) {
-        logger.error('[App] Failed to initialize canvas project storage:', error)
-      }
-
-      // 2.2 同步各供应商密钥配置状态
-      // 不能等设置面板打开才同步：画布/生成前置校验读的就是这个状态，
-      // 冷启动不同步会拿持久化旧值误判"未配置 API Key"
-      await syncProviderKeyStatuses()
-
-      // 3. 加载启用的自定义模型
-      try {
-        const customModelService = getCustomModelService(databaseService)
-        await customModelService.loadEnabledModels()
-        await modelscopeCustomModelService.loadModelsToRegistry()
-      } catch (error) {
-        logger.error('[App] Failed to load custom models:', error)
-      }
+      // 供应商密钥状态与自定义模型都不参与首屏渲染，放到后面并行跑，不再挡住启动链。
+      // 密钥状态不能省：画布/生成前置校验读的就是它，冷启动不同步会误判"未配置 API Key"。
+      await Promise.all([
+        step('app.startup.provider_keys.completed', syncProviderKeyStatuses),
+        step('app.startup.custom_models.completed', async () => {
+          const customModelService = getCustomModelService(databaseService)
+          await customModelService.loadEnabledModels()
+          await modelscopeCustomModelService.loadModelsToRegistry()
+        }),
+      ])
     }
 
-    initializeApp()
+    void initializeApp()
   }, [])
 
   // 启动就绪状态

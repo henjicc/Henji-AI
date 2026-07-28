@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { UiModal } from '@/components/ui';
@@ -8,7 +8,9 @@ import {
 } from '@/commands/cameraStageRender';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { isCameraStageNode } from '@/features/canvas/domain/canvasNodes';
-import CameraStageEditor from '@/features/cameraStage/CameraStageEditor';
+// 静态引入会把整个 three.js 场景（约 2.7MB）钉进画布 chunk，切到画布就要下载并编译一遍；
+// 而它只有在双击 3D 节点、打开这个全屏对话框时才用得到。
+const CameraStageEditor = lazy(() => import('@/features/cameraStage/CameraStageEditor'));
 import {
   createNewProject,
   loadProjectIntoScene,
@@ -223,6 +225,11 @@ export function CameraStageNodeDialog(): JSX.Element | null {
             加载 3D 镜头参考…
           </div>
         ) : (
+          <Suspense fallback={(
+            <div className="flex h-full items-center justify-center text-sm text-text-muted">
+              加载 3D 镜头参考…
+            </div>
+          )}>
           <CameraStageEditor
             onBackToList={close}
             backLabel="返回画布"
@@ -259,6 +266,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
               onOutputKindChange: syncOutputKind,
             }}
           />
+          </Suspense>
         )}
       </div>
     </UiModal>

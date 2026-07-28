@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { UiCheckbox, UiEmpty } from '@/components/ui'
+import { formatDateTime } from '@/utils/datetimeFormat'
 
 interface MediaItem {
   id: string
@@ -40,15 +41,12 @@ export const MediaGrid: React.FC<MediaGridProps> = ({
     }
   }
 
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp)
-    return date.toLocaleDateString('zh-CN', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
+  const formatDate = (timestamp: number) => formatDateTime(timestamp, 'zh-CN', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 
   const isSelected = (itemId: string) => selectedItems.includes(itemId)
 

@@ -3,9 +3,11 @@ import { create } from 'zustand'
 import { createLogger } from '@/core/logging'
 import {
   DEFAULT_WORKSPACE_ID,
+  isStartupWorkspaceId,
   type ToolboxToolId,
   type WorkspaceId,
 } from '@/core/types/workspace'
+import { useSettingsStore } from '@/stores/settingsStore'
 import {
   useAssetLibraryStore,
   type AssetLibraryView,
@@ -21,8 +23,19 @@ interface NavigationState {
   setActiveToolId: (toolId: ToolboxToolId | null) => void
 }
 
+/**
+ * 启动时停在哪个工作区由设置决定。
+ *
+ * 读的是 zustand persist 已同步补水的 localStorage 值，所以这里直接取 state 即可；
+ * 值不合法（老版本数据、手改过存储）时回落默认工作区，不让导航卡在不存在的 Tab 上。
+ */
+function resolveInitialWorkspace(): WorkspaceId {
+  const configured = useSettingsStore.getState().startupWorkspace
+  return isStartupWorkspaceId(configured) ? configured : DEFAULT_WORKSPACE_ID
+}
+
 export const useNavigationStore = create<NavigationState>((set) => ({
-  activeWorkspace: DEFAULT_WORKSPACE_ID,
+  activeWorkspace: resolveInitialWorkspace(),
   activeToolId: null,
   revision: 0,
   setActiveWorkspace: (activeWorkspace) => set((state) => (

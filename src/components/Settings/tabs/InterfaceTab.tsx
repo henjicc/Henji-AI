@@ -4,6 +4,7 @@ import React from 'react'
 import { useSettings } from '../hooks/useSettings'
 import BottomPanelSection from '../sections/BottomPanelSection'
 import CanvasSection from '../sections/CanvasSection'
+import StartupSection from '../sections/StartupSection'
 import ThemeSection from '../sections/ThemeSection'
 import AssetLibrarySection from '../sections/AssetLibrarySection'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -82,6 +83,7 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
     <div className="p-4 space-y-5">
       {currentSectionId === 'interface-layout' && (
         <section className={UI_SECTION_STACK_CLASS}>
+          <StartupSection />
           <BottomPanelSection
             enableAutoCollapse={settings.enableAutoCollapse}
             collapseDelay={settings.collapseDelay}

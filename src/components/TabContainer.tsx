@@ -43,6 +43,7 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
     // 首屏渲染完成后利用空闲时间把其它工作区的 chunk 拉回来，
     // 让「第一次切 Tab」不再等模块下载/转译。只跑一次，不随 activeTab 重启。
     useEffect(() => prefetchWhenIdle(listPrefetchOrder(initialTabRef.current), {
+        strategy: 'idle',
         startDelayMs: import.meta.env.DEV ? 15000 : 0,
     }), [])
 

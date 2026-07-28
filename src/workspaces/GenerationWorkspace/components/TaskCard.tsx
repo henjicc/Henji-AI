@@ -5,6 +5,7 @@ import type { MenuItem } from "@/hooks/useContextMenu"
 import { ProgressBar } from "@/components/ui/ProgressBar"
 import { getProgressTransitionDurationMs } from "@/core/progress/progressTracker"
 import { useGenerationTaskProgressStore } from "@/stores/generationTaskProgressStore"
+import { formatDateTime } from "@/utils/datetimeFormat"
 import {
   UiButton,
   UiEmpty,
@@ -128,8 +129,7 @@ const TaskCard = React.memo(function TaskCard({
 
   const formatDate = (value?: Date): string => {
     if (!value) return ""
-    const locale = i18n.language || "zh-CN"
-    return value.toLocaleString(locale, {
+    return formatDateTime(value, i18n.language || "zh-CN", {
       year: "numeric",
       month: "numeric",
       day: "numeric",

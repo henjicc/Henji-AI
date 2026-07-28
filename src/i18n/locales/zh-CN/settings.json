@@ -232,7 +232,15 @@
       "collapseDelayLabel": "折叠延迟 (ms)",
       "collapseDelayHint": "鼠标离开面板后等待多久自动折叠",
       "collapseOnScrollLabel": "仅滚动时折叠",
-      "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠"
+      "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠",
+      "startupTitle": "启动",
+      "startupWorkspaceLabel": "启动默认页面",
+      "startupWorkspaceHint": "打开软件时直接停在这个页面，常用画布或工具箱时不必每次再切一次",
+      "startupWorkspaceOptions": {
+        "generation": "生成",
+        "nodes": "画布",
+        "tools": "工具箱"
+      }
     },
     "assetLibrary": {
       "title": "资产库行为",

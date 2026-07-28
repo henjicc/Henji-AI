@@ -232,7 +232,15 @@
       "collapseDelayLabel": "Collapse delay (ms)",
       "collapseDelayHint": "Delay before collapsing after mouse leaves",
       "collapseOnScrollLabel": "Collapse only on scroll",
-      "collapseOnScrollHint": "Only collapse while scrolling history"
+      "collapseOnScrollHint": "Only collapse while scrolling history",
+      "startupTitle": "Startup",
+      "startupWorkspaceLabel": "Default page on launch",
+      "startupWorkspaceHint": "Open the app directly on this page, so you do not have to switch every time",
+      "startupWorkspaceOptions": {
+        "generation": "Generate",
+        "nodes": "Canvas",
+        "tools": "Toolbox"
+      }
     },
     "assetLibrary": {
       "title": "Asset Library",

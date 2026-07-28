@@ -16,6 +16,7 @@ import {
   type ThemeTonePreset,
   type UiRadiusPreset,
 } from '@/core/theme/runtimeTheme';
+import type { StartupWorkspaceId } from '@/core/types/workspace';
 
 export type ProviderKeyStatusMap = Record<string, boolean>;
 /** 超过大文件阈值的本地媒体上传处理方式：每次询问 / 复制进数据目录 / 直接引用原文件 */
@@ -59,6 +60,8 @@ interface SettingsState {
   uiBlurEnabled: boolean;
   accentColor: string;
   themeColors: ThemeColorScheme;
+  /** 启动时默认停在哪个工作区。常用画布/工具箱的用户不必每次开机再切一次 */
+  startupWorkspace: StartupWorkspaceId;
   assetTabAction: AssetTabAction;
   assetPanelPosition: AssetPanelPosition;
   assetEdgeTriggerEnabled: boolean;
@@ -90,6 +93,7 @@ interface SettingsState {
   setThemeColor: (token: ThemeColorToken, color: string) => void;
   setThemeColors: (colors: Partial<ThemeColorScheme>) => void;
   resetThemeColors: () => void;
+  setStartupWorkspace: (workspace: StartupWorkspaceId) => void;
   setAssetTabAction: (action: AssetTabAction) => void;
   setAssetPanelPosition: (position: AssetPanelPosition) => void;
   setAssetEdgeTriggerEnabled: (enabled: boolean) => void;
@@ -212,6 +216,7 @@ export const useSettingsStore = create<SettingsState>()(
       uiBlurEnabled: true,
       accentColor: SETTINGS_ACCENT_HEX,
       themeColors: DEFAULT_THEME_COLOR_SCHEME,
+      startupWorkspace: 'generation',
       assetTabAction: 'floating',
       assetPanelPosition: 'top',
       assetEdgeTriggerEnabled: true,
@@ -288,6 +293,7 @@ export const useSettingsStore = create<SettingsState>()(
           }),
         })),
       resetThemeColors: () => set({ themeColors: DEFAULT_THEME_COLOR_SCHEME }),
+      setStartupWorkspace: (startupWorkspace) => set({ startupWorkspace }),
       setAssetTabAction: (assetTabAction) => set({ assetTabAction }),
       setAssetPanelPosition: (assetPanelPosition) => set({ assetPanelPosition }),
       setAssetEdgeTriggerEnabled: (assetEdgeTriggerEnabled) => set({ assetEdgeTriggerEnabled }),
