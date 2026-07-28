@@ -4,12 +4,11 @@ import {
   createRenderPipelineChecked,
   createShaderModuleChecked,
 } from './deviceManager';
-import { renderBloomPyramid } from './bloomPyramidRenderer';
+import { renderScatterPyramid } from './scatterPyramidRenderer';
 import { ImageEditTexturePool } from './texturePool';
 import {
   createUniformBuffer,
   renderPipelinePass,
-  type GpuBuffer,
   type GpuDevice,
   type GpuRenderPipeline,
   type GpuTexture,
@@ -18,14 +17,10 @@ import {
 const TEXTURE_BINDING = 0x04;
 const TEXTURE_RENDER_ATTACHMENT = 0x10;
 const DIFFUSION_TEXTURE_USAGE = TEXTURE_BINDING | TEXTURE_RENDER_ATTACHMENT;
-const DIFFUSION_SCALE_DIVISORS = [1, 2, 4, 8, 16, 32] as const;
-
 interface DiffusionPipelines {
   source: GpuRenderPipeline;
-  blurHorizontal: GpuRenderPipeline;
-  blurVertical: GpuRenderPipeline;
-  bloomDownsample: GpuRenderPipeline;
-  bloomUpsample: GpuRenderPipeline;
+  scatterDownsample: GpuRenderPipeline;
+  scatterUpsample: GpuRenderPipeline;
   composite: GpuRenderPipeline;
 }
 
@@ -114,17 +109,13 @@ export class WebGpuDiffusionRenderer {
       }, label);
     const [
       source,
-      blurHorizontal,
-      blurVertical,
-      bloomDownsample,
-      bloomUpsample,
+      scatterDownsample,
+      scatterUpsample,
       composite,
     ] = await Promise.all([
       create('fragment_source', '柔光源图 Pipeline'),
-      create('fragment_blur_horizontal', '柔光横向模糊 Pipeline'),
-      create('fragment_blur_vertical', '柔光纵向模糊 Pipeline'),
-      create('fragment_bloom_downsample', '辉光降采样 Pipeline'),
-      create('fragment_bloom_upsample', '辉光上采样 Pipeline'),
+      create('fragment_scatter_downsample', '柔光散射降采样 Pipeline'),
+      create('fragment_scatter_upsample', '柔光散射上采样 Pipeline'),
       create('fragment_composite', '柔光合成 Pipeline'),
     ]);
     return new WebGpuDiffusionRenderer(
@@ -132,10 +123,8 @@ export class WebGpuDiffusionRenderer {
       sampler,
       {
         source,
-        blurHorizontal,
-        blurVertical,
-        bloomDownsample,
-        bloomUpsample,
+        scatterDownsample,
+        scatterUpsample,
         composite,
       },
       new ImageEditTexturePool(device, textureBudgetBytes)
@@ -209,10 +198,7 @@ export class WebGpuDiffusionRenderer {
         [
           { binding: 0, resource: cache.base.createView() },
           { binding: 1, resource: this.sampler },
-          ...scatterScales.map((texture, index) => ({
-            binding: index + 2,
-            resource: texture.createView(),
-          })),
+          { binding: 2, resource: scatterScales[0].createView() },
           { binding: 8, resource: { buffer: uniform } },
           // 未模糊的散射源，能量守恒的扣除项要用它
           { binding: 9, resource: cache.source.createView() },
@@ -305,91 +291,24 @@ export class WebGpuDiffusionRenderer {
     },
     source: GpuTexture
   ): Promise<{ scales: GpuTexture[]; textures: GpuTexture[] }> {
-    if (input.recipe.mode === 'glow') {
-      const bloom = await renderBloomPyramid({
-        device: this.device,
-        sampler: this.sampler,
-        downsamplePipeline: this.pipelines.bloomDownsample,
-        upsamplePipeline: this.pipelines.bloomUpsample,
-        source,
-        width: input.width,
-        height: input.height,
-        levels: input.recipe.glow.levels,
-        acquireTexture: (width, height) => this.acquireTexture(width, height),
-        releaseTexture: (texture) => this.texturePool.release(texture),
-        isCancelled: input.isCancelled,
-      });
-      return { scales: bloom.scales, textures: bloom.textures };
-    }
-    const scales: GpuTexture[] = [];
-    const textures: GpuTexture[] = [];
-    const scratch: GpuTexture[] = [];
-    const uniforms: GpuBuffer[] = [];
-    try {
-      // 真正的逐级降采样金字塔：第 N 层从第 N-1 层的结果继续降 2 倍，而不是每层都回头
-      // 采样全分辨率源图。后者在宽尺度上等于用 5 个样本去覆盖 32×32 区域，严重欠采样，
-      // 点光源平移几个像素辉光总能量就会跳变（修复前实测波动 13.3%）。
-      let previous = source;
-      let previousRadius = 0;
-      for (let index = 0; index < input.recipe.scales.length; index += 1) {
-        assertNotCancelled(input.isCancelled);
-        const divisor = DIFFUSION_SCALE_DIVISORS[index];
-        const width = Math.max(1, Math.ceil(input.width / divisor));
-        const height = Math.max(1, Math.ceil(input.height / divisor));
-        const horizontal = this.acquireTexture(width, height);
-        const vertical = this.acquireTexture(width, height);
-        scratch.push(horizontal);
-        // 输入已经带着前几层累计的模糊量，而高斯方差可加，因此本层只补足差额，
-        // 累计后才等于配方中该层声明的有效半径。
-        const stepRadius = resolveStepRadius(
-          input.recipe.scales[index].radius,
-          previousRadius
-        );
-        const horizontalUniform = createUniformBuffer(
-          this.device,
-          createBlurUniform(input.recipe, stepRadius, 0)
-        );
-        const verticalUniform = createUniformBuffer(
-          this.device,
-          createBlurUniform(input.recipe, stepRadius, 1)
-        );
-        uniforms.push(horizontalUniform, verticalUniform);
-        renderPipelinePass(
-          this.device,
-          this.pipelines.blurHorizontal,
-          [
-            { binding: 0, resource: previous.createView() },
-            { binding: 1, resource: this.sampler },
-            { binding: 2, resource: { buffer: horizontalUniform } },
-          ],
-          horizontal
-        );
-        renderPipelinePass(
-          this.device,
-          this.pipelines.blurVertical,
-          [
-            { binding: 0, resource: horizontal.createView() },
-            { binding: 1, resource: this.sampler },
-            { binding: 2, resource: { buffer: verticalUniform } },
-          ],
-          vertical
-        );
-        scales.push(vertical);
-        textures.push(vertical);
-        previous = vertical;
-        previousRadius = input.recipe.scales[index].radius;
-      }
-      await this.device.queue.onSubmittedWorkDone();
-      assertNotCancelled(input.isCancelled);
-      return { scales, textures };
-    } catch (error) {
-      await this.device.queue.onSubmittedWorkDone().catch(() => undefined);
-      for (const texture of textures) this.texturePool.release(texture);
-      throw error;
-    } finally {
-      for (const buffer of uniforms) buffer.destroy();
-      for (const texture of scratch) this.texturePool.release(texture);
-    }
+    // 三种模式共用同一条散射构建：mip 链的采样间距恒为输入纹理的 1 texel，
+    // 半径由层级累积。柔光此前那条「归一化半径直接乘到稀疏五点核上」的可分离模糊
+    // 在每一级都严重欠采样（导出分辨率下第 0 级采样点间隔 49.5 texel），
+    // 产出的是五份错位副本而不是模糊，横竖各来一遍就是画面上的方格重影。
+    const pyramid = await renderScatterPyramid({
+      device: this.device,
+      sampler: this.sampler,
+      downsamplePipeline: this.pipelines.scatterDownsample,
+      upsamplePipeline: this.pipelines.scatterUpsample,
+      source,
+      width: input.width,
+      height: input.height,
+      levels: input.recipe.scatterLevels,
+      acquireTexture: (width, height) => this.acquireTexture(width, height),
+      releaseTexture: (texture) => this.texturePool.release(texture),
+      isCancelled: input.isCancelled,
+    });
+    return { scales: pyramid.scales, textures: pyramid.textures };
   }
 
   private acquireTexture(width: number, height: number): GpuTexture {
@@ -429,18 +348,10 @@ function createSourceSignature(recipe: DiffusionRecipe): string {
   return JSON.stringify([recipe.mode, recipe.source]);
 }
 
-/**
- * 逐级金字塔里每一层只需补足到目标半径的差额。高斯卷积的方差可加，
- * 即 σ_total² = σ_prev² + σ_step²，所以 step = sqrt(target² - prev²)。
- */
-function resolveStepRadius(targetRadius: number, previousRadius: number): number {
-  return Math.sqrt(Math.max(0, targetRadius * targetRadius - previousRadius * previousRadius));
-}
-
 function createPyramidSignature(recipe: DiffusionRecipe): string {
-  // 辉光的金字塔由 glow.levels 驱动（层数随图片尺寸变），scales 只是它前六级的投影，
+  // 金字塔由 scatterLevels 驱动（层数随图片尺寸与模式变），scales 只是它前六级的投影，
   // 单看 scales 会漏掉层数与逐通道权重的变化，缓存就不会失效。
-  return JSON.stringify([recipe.quality, recipe.scales, recipe.glow.levels]);
+  return JSON.stringify([recipe.quality, recipe.scatterLevels]);
 }
 
 function createSourceUniform(recipe: DiffusionRecipe): Float32Array {
@@ -450,27 +361,10 @@ function createSourceUniform(recipe: DiffusionRecipe): Float32Array {
     recipe.source.softKneeEV,
     recipe.source.power,
     recipe.source.highlightGain,
-    recipe.source.microGain,
+    recipe.source.scatterFloor,
     recipe.source.highlightRecovery,
     modeToNumber(recipe.mode),
     0,
-  ]);
-}
-
-function createBlurUniform(
-  recipe: DiffusionRecipe,
-  radius: number,
-  axis: 0 | 1
-): Float32Array {
-  return new Float32Array([
-    1, 1, 0, 0,
-    recipe.image.aspectCorrection[0],
-    recipe.image.aspectCorrection[1],
-    radius,
-    axis,
-    // BlurUniforms 尾部的逐通道上采样权重只有辉光金字塔用得到，这里补零凑满结构体尺寸。
-    0, 0, 0, 0,
-    0, 0, 0, 0,
   ]);
 }
 
@@ -478,15 +372,15 @@ function createCompositeUniform(
   recipe: DiffusionRecipe,
   scatterRegion?: readonly [number, number, number, number]
 ): Float32Array {
-  const weights = recipe.scales.map((scale) => scale.weight);
   const region = scatterRegion ?? [0, 0, 1, 1];
   return new Float32Array([
     1, 1, 0, 0,
-    weights[0], weights[1], weights[2], weights[3],
-    weights[4], weights[5], 0, 0,
+    // 散射金字塔已经在上采样阶段完成逐尺度加权；合成只读 scatter_0。
+    1, 0, 0, 0,
+    0, 0, 0, 0,
     recipe.energy.scatterFraction,
     recipe.energy.veil,
-    recipe.tone.blackRetention,
+    recipe.tone.shadowAbsorption,
     recipe.tone.highlightCompression,
     recipe.tone.scatterDesaturation,
     recipe.detail.highFrequencyRetention,
@@ -505,8 +399,11 @@ function createCompositeUniform(
     // 全局散射里的那片子区域。
     region[0], region[1],
     region[2], region[3],
-    // 结构体尺寸要补到 16 字节的整数倍：前面到这里是 136 字节，补两个 f32 凑满 144。
+    // scatter_tint 是 vec3，对齐到 16 字节；前面到这里是 136 字节，先补两个 f32 到 144。
     0, 0,
+    recipe.tone.scatterTint[0], recipe.tone.scatterTint[1], recipe.tone.scatterTint[2],
+    // 结构体尺寸也要补到 16 字节的整数倍：156 → 160。
+    0,
   ]);
 }
 

@@ -262,12 +262,28 @@ describe('摄影柔光共享配方', () => {
     const white = compileMode('white_mist');
     const glow = compileMode('glow');
 
-    expect(black.source.microGain).toBeLessThan(white.source.microGain);
+    // 两种柔光都让中暗部参与散射（这才有 loss of definition 和渗进暗部的 halation），
+    // 白柔的地板更高，于是雾更浓、反差掉得更多。辉光是亮通提取，地板必须是 0。
+    expect(black.source.scatterFloor).toBeGreaterThan(0);
+    expect(black.source.scatterFloor).toBeLessThan(white.source.scatterFloor);
+    expect(glow.source.scatterFloor).toBe(0);
     expect(glow.source.highlightGain).toBeGreaterThan(black.source.highlightGain);
     expect(white.energy.veil).toBeGreaterThan(black.energy.veil);
     expect(glow.energy.veil).toBe(0);
     expect(glow.source.highlightRecovery).toBe(0);
     expect(glow.detail.highFrequencyRetention).toBe(0);
+    // 黑颗粒只有黑柔/白柔有，且黑柔吸得更狠；辉光没有需要吸收的杂散光。
+    expect(black.tone.shadowAbsorption).toBeGreaterThan(white.tone.shadowAbsorption);
+    expect(glow.tone.shadowAbsorption).toBe(0);
+    // halation 色偏：黑柔偏暖，白柔中性；两者都归一到亮度 1，不改变散射总量。
+    expect(black.tone.scatterTint[0]).toBeGreaterThan(black.tone.scatterTint[2]);
+    expect(white.tone.scatterTint).toEqual([1, 1, 1]);
+    for (const recipe of [black, white, glow]) {
+      const luminance = 0.2126 * recipe.tone.scatterTint[0]
+        + 0.7152 * recipe.tone.scatterTint[1]
+        + 0.0722 * recipe.tone.scatterTint[2];
+      expect(luminance).toBeCloseTo(1, 10);
+    }
   });
 
   /**
@@ -332,11 +348,11 @@ describe('摄影柔光共享配方', () => {
         recipe.mode,
         recipe.source,
       ]),
-      pyramidSignature: JSON.stringify([recipe.quality, recipe.scales, recipe.glow.levels]),
+      pyramidSignature: JSON.stringify([recipe.quality, recipe.scatterLevels]),
     };
     const toneOnlyRecipe = {
       ...recipe,
-      tone: { ...recipe.tone, blackRetention: 0.5 },
+      tone: { ...recipe.tone, shadowAbsorption: 0.5 },
     };
     expect(determineDiffusionInvalidation(cache, {
       ...input,
@@ -346,11 +362,11 @@ describe('摄影柔光共享配方', () => {
       ...input,
       recipe: { ...recipe, quality: 'high' },
     })).toBe('pyramid');
-    // 辉光金字塔由 glow.levels 驱动，层数与逐通道权重变化必须让金字塔失效；
+    // 三种模式的金字塔都由 scatterLevels 驱动，层数与逐通道权重变化必须让缓存失效；
     // 只看 scales 的话改了层数缓存不会重建，画面会停在旧的衰减曲线上。
     expect(determineDiffusionInvalidation(cache, {
       ...input,
-      recipe: { ...recipe, glow: { ...recipe.glow, levels: recipe.glow.levels.slice(0, 5) } },
+      recipe: { ...recipe, scatterLevels: recipe.scatterLevels.slice(0, 5) },
     })).toBe('pyramid');
     expect(determineDiffusionInvalidation(cache, {
       ...input,

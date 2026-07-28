@@ -72,60 +72,68 @@ const COMMON_NON_GUARANTEES = [
   '不同显示器、曝光和高光范围会影响主观观感',
 ] as const;
 
+/**
+ * 三档强度大致对应摄影里 1/8、1/4、1/2 的观感量级。
+ *
+ * 有效柔化量 = strength × 档位系数 × 模式 energyScale × highlightGain，也就是「整幅画面
+ * 被换成散射版本的比例」。黑柔三档约 0.17 / 0.31 / 0.51，白柔约 0.21 / 0.40 / 0.67。
+ * 黑柔的 blackRetention 高、白柔低，是因为黑柔的黑颗粒本来就要把散进暗部的光吸掉，
+ * 白柔要留下那层奶雾。
+ */
 const DIFFUSION_PRESETS: readonly DiffusionPresetDefinition[] = [
   createPreset({
     id: 'black-mist-low', mode: 'black_mist', intensity: 'low',
     name: { zh: '通用黑柔 · 轻', en: 'General Black Mist · Low' },
-    description: { zh: '轻微压低高光边缘，同时尽量保留黑位和细节。', en: 'A restrained highlight bloom with preserved blacks and detail.' },
-    parameters: { strength: 0.3, glowRange: 0.28, highlightResponse: 0.4, softness: 0.1, blackRetention: 0.95, detailRetention: 0.93, colorRetention: 0.94 },
+    description: { zh: '轻微柔化并在亮部周围留下收敛的光晕，黑位几乎不动。', en: 'A restrained overall softening with a compact halo around highlights and untouched blacks.' },
+    parameters: { strength: 0.45, glowRange: 0.3, highlightResponse: 0.45, softness: 0.2, blackRetention: 0.9, detailRetention: 0.85, colorRetention: 0.95 },
   }),
   createPreset({
     id: 'black-mist-medium', mode: 'black_mist', intensity: 'medium',
     name: { zh: '通用黑柔 · 中', en: 'General Black Mist · Medium' },
-    description: { zh: '平衡高光散射、黑位保留与长尾雾幕。', en: 'Balanced highlight scatter, black retention, and long-tail haze.' },
-    parameters: { strength: 0.45, glowRange: 0.47, highlightResponse: 0.44, softness: 0.17, blackRetention: 0.92, detailRetention: 0.87, colorRetention: 0.9 },
+    description: { zh: '明确的柔焦与亮部渗色，反差和黑位仍然守得住。', en: 'Clear soft-focus and highlight bleed while contrast and the black point hold up.' },
+    parameters: { strength: 0.58, glowRange: 0.5, highlightResponse: 0.5, softness: 0.3, blackRetention: 0.88, detailRetention: 0.8, colorRetention: 0.92 },
   }),
   createPreset({
     id: 'black-mist-high', mode: 'black_mist', intensity: 'high',
     name: { zh: '通用黑柔 · 强', en: 'General Black Mist · High' },
-    description: { zh: '更明显的长尾散射，仍避免把暗部完全抬灰。', en: 'Pronounced long-tail scatter while avoiding a fully washed-out black point.' },
-    parameters: { strength: 0.62, glowRange: 0.63, highlightResponse: 0.5, softness: 0.31, blackRetention: 0.85, detailRetention: 0.78, colorRetention: 0.84 },
+    description: { zh: '厚重的柔焦与光晕，暗部靠黑颗粒吸收避免整体抬灰。', en: 'Heavy soft-focus and halation, with shadow absorption keeping the frame from washing out.' },
+    parameters: { strength: 0.75, glowRange: 0.7, highlightResponse: 0.55, softness: 0.4, blackRetention: 0.85, detailRetention: 0.72, colorRetention: 0.88 },
   }),
   createPreset({
     id: 'white-mist-low', mode: 'white_mist', intensity: 'low',
     name: { zh: '通用白柔 · 轻', en: 'General White Mist · Low' },
-    description: { zh: '轻微微扩散与雾幕，适合保守地柔化亮部。', en: 'Subtle micro-diffusion and veil for conservative highlight softening.' },
-    parameters: { strength: 0.28, glowRange: 0.26, highlightResponse: 0.46, softness: 0.07, blackRetention: 0.98, detailRetention: 0.96, colorRetention: 0.9 },
+    description: { zh: '薄薄一层奶雾，反差略降、黑位微微抬起。', en: 'A thin milky veil that eases contrast and lifts the black point slightly.' },
+    parameters: { strength: 0.42, glowRange: 0.4, highlightResponse: 0.5, softness: 0.3, blackRetention: 0.45, detailRetention: 0.8, colorRetention: 0.9 },
   }),
   createPreset({
     id: 'white-mist-medium', mode: 'white_mist', intensity: 'medium',
     name: { zh: '通用白柔 · 中', en: 'General White Mist · Medium' },
-    description: { zh: '比黑柔更重视微扩散、雾幕和散射去饱和。', en: 'Prioritises micro-diffusion, veil, and scattered-light desaturation over black mist.' },
-    parameters: { strength: 0.38, glowRange: 0.41, highlightResponse: 0.5, softness: 0.1, blackRetention: 0.97, detailRetention: 0.92, colorRetention: 0.86 },
+    description: { zh: '弥散范围明显更远，反差和锐度都被压下来。', en: 'A markedly wider haze that pulls down both contrast and definition.' },
+    parameters: { strength: 0.55, glowRange: 0.55, highlightResponse: 0.55, softness: 0.45, blackRetention: 0.4, detailRetention: 0.72, colorRetention: 0.85 },
   }),
   createPreset({
     id: 'white-mist-high', mode: 'white_mist', intensity: 'high',
     name: { zh: '通用白柔 · 强', en: 'General White Mist · High' },
-    description: { zh: '明显拓展高光雾幕，同时保护暗部不被整体抬灰。', en: 'Expands the highlight veil while protecting shadows from a global wash.' },
-    parameters: { strength: 0.52, glowRange: 0.56, highlightResponse: 0.54, softness: 0.22, blackRetention: 0.96, detailRetention: 0.86, colorRetention: 0.8 },
+    description: { zh: '浓重奶雾，黑位明显抬起，画面接近梦幻柔焦。', en: 'A dense milky haze with clearly lifted blacks, approaching a dreamy soft-focus look.' },
+    parameters: { strength: 0.72, glowRange: 0.7, highlightResponse: 0.6, softness: 0.6, blackRetention: 0.35, detailRetention: 0.62, colorRetention: 0.78 },
   }),
   createPreset({
     id: 'glow-low', mode: 'glow', intensity: 'low',
     name: { zh: '通用辉光 · 轻', en: 'General Glow · Low' },
     description: { zh: '只扩散最亮区域，以小范围光晕轻微增强光感。', en: 'Blooms only the brightest regions with a restrained, compact halo.' },
-    parameters: { strength: 0.3, glowRange: 0.34, highlightResponse: 0.34, softness: 0.28, blackRetention: 1, detailRetention: 1, colorRetention: 0.96, glowExposure: 0.36, highlightRolloff: 0.5 },
+    parameters: { strength: 0.5, glowRange: 0.35, highlightResponse: 0.42, softness: 0.3, blackRetention: 1, detailRetention: 1, colorRetention: 0.96, glowExposure: 0.5, highlightRolloff: 0.5 },
   }),
   createPreset({
     id: 'glow-medium', mode: 'glow', intensity: 'medium',
     name: { zh: '通用辉光 · 中', en: 'General Glow · Medium' },
     description: { zh: '平滑扩展亮部光晕，同时保持高光核心和黑位稳定。', en: 'Smoothly expands highlights while preserving the source core and black point.' },
-    parameters: { strength: 0.42, glowRange: 0.5, highlightResponse: 0.42, softness: 0.45, blackRetention: 1, detailRetention: 1, colorRetention: 0.93, glowExposure: 0.56, highlightRolloff: 0.6 },
+    parameters: { strength: 0.62, glowRange: 0.52, highlightResponse: 0.5, softness: 0.45, blackRetention: 1, detailRetention: 1, colorRetention: 0.93, glowExposure: 0.58, highlightRolloff: 0.62 },
   }),
   createPreset({
     id: 'glow-high', mode: 'glow', intensity: 'high',
     name: { zh: '通用辉光 · 强', en: 'General Glow · High' },
     description: { zh: '宽而连续的光晕，允许光源过曝并让相邻光晕互相融合。', en: 'A broad continuous halo that lets sources blow out and neighbouring halos merge.' },
-    parameters: { strength: 0.6, glowRange: 0.72, highlightResponse: 0.52, softness: 0.66, blackRetention: 1, detailRetention: 1, colorRetention: 0.9, glowExposure: 0.76, highlightRolloff: 0.72 },
+    parameters: { strength: 0.82, glowRange: 0.72, highlightResponse: 0.58, softness: 0.65, blackRetention: 1, detailRetention: 1, colorRetention: 0.9, glowExposure: 0.72, highlightRolloff: 0.75 },
   }),
 ];
 

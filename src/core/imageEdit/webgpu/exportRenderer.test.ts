@@ -86,7 +86,7 @@ describe('柔光导出分块策略', () => {
   });
 
   /**
-   * 黑柔/白柔的远端半径上限是长边的 0.2（3840 的图就是 768px），同样远超 64px halo，
+   * 黑柔/白柔的远端半径上限分别约为长边的 1/8、1/5，同样远超 64px halo，
    * 因此也不该分块。分块留给超出单遍预算的超大图。
    */
   it('黑柔与白柔同样整图一次渲染', async () => {
@@ -132,7 +132,7 @@ describe('柔光导出分块策略', () => {
 describe('Tile 重基准', () => {
   /**
    * scales.radius 按 referenceDimension 归一化，换参照系必须换算；
-   * glow.levels.divisor 是绝对像素数，而块是全分辨率裁剪不是缩图，换算反而会错。
+   * scatterLevels.divisor 是绝对像素数，而块是全分辨率裁剪不是缩图，换算反而会错。
    * 两者形态不同，容易被顺手一起改掉。
    */
   it('归一化半径跟着参照系换算，绝对像素的辉光层级保持不变', () => {
@@ -144,8 +144,8 @@ describe('Tile 重基准', () => {
 
     expect(tileRecipe.scales[0].radius * tileRecipe.image.referenceDimension)
       .toBeCloseTo(recipe.scales[0].radius * recipe.image.referenceDimension, 10);
-    expect(tileRecipe.glow.levels.map((level) => level.divisor))
-      .toEqual(recipe.glow.levels.map((level) => level.divisor));
+    expect(tileRecipe.scatterLevels.map((level) => level.divisor))
+      .toEqual(recipe.scatterLevels.map((level) => level.divisor));
   });
 
   /**
@@ -160,10 +160,20 @@ describe('Tile 重基准', () => {
     const scaled = rebaseDiffusionRecipeForScale(recipe, 2048, 1365);
 
     expect(scaled.image.referenceDimension).toBe(2048);
-    for (let i = 0; i < recipe.glow.levels.length; i += 1) {
-      const before = recipe.glow.levels[i].divisor / recipe.image.referenceDimension;
-      const after = scaled.glow.levels[i].divisor / scaled.image.referenceDimension;
-      expect(after).toBeCloseTo(before, 2);
+    for (let index = 1; index < scaled.scatterLevels.length; index += 1) {
+      expect(scaled.scatterLevels[index].divisor)
+        .toBe(scaled.scatterLevels[index - 1].divisor * 2);
+    }
+    for (const channel of [0, 1, 2] as const) {
+      const normalizedMean = (
+        target: typeof recipe,
+        levels: typeof recipe.scatterLevels
+      ): number => levels.reduce(
+        (sum, level) => sum + level.divisor * level.weight[channel],
+        0
+      ) / target.image.referenceDimension;
+      expect(normalizedMean(scaled, scaled.scatterLevels))
+        .toBeCloseTo(normalizedMean(recipe, recipe.scatterLevels), 2);
     }
   });
 });

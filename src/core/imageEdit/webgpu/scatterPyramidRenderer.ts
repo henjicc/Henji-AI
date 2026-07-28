@@ -1,4 +1,4 @@
-import { DIFFUSION_SCALE_COUNT, type DiffusionGlowLevel } from '../diffusionRecipe';
+import type { DiffusionScatterLevel } from '../diffusionRecipe';
 import {
   createUniformBuffer,
   renderPipelinePass,
@@ -8,7 +8,7 @@ import {
   type GpuTexture,
 } from '../worker/webgpuRuntimeSupport';
 
-export interface BloomPyramidRenderOptions {
+export interface ScatterPyramidRenderOptions {
   device: GpuDevice;
   sampler: unknown;
   downsamplePipeline: GpuRenderPipeline;
@@ -16,21 +16,21 @@ export interface BloomPyramidRenderOptions {
   source: GpuTexture;
   width: number;
   height: number;
-  levels: readonly DiffusionGlowLevel[];
+  levels: readonly DiffusionScatterLevel[];
   acquireTexture: (width: number, height: number) => GpuTexture;
   releaseTexture: (texture: GpuTexture) => void;
   isCancelled?: () => boolean;
 }
 
-export interface BloomPyramidRenderResult {
-  /** 第 0 张是已经逐级上采样并加权的最终 Bloom；其余只为补齐共享合成布局的六个绑定。 */
+export interface ScatterPyramidRenderResult {
+  /** 已经逐级上采样并加权的最终散射。 */
   scales: GpuTexture[];
   /** 本次创建且需要随缓存统一释放的全部纹理。 */
   textures: GpuTexture[];
 }
 
 /**
- * 构建数字 Bloom 的正权重 mip 金字塔。
+ * 构建三种柔光模式共用的正权重 mip 散射金字塔。
  *
  * 每层只从相邻上一级用固定小核降采样，再从最小层逐级 tent 上采样。半径来自层级，
  * 不来自稀疏采样点的大跨度跳跃，因此亮边剖面不会出现二次峰值或平行复本。
@@ -39,9 +39,9 @@ export interface BloomPyramidRenderResult {
  * 从幂律突然退化成高斯并直接归零，观感上就是光晕有一圈看得见的外边界。多出来的层
  * 几乎不要钱——第 i 级只有全分辨率的 1/4^i。
  */
-export async function renderBloomPyramid(
-  options: BloomPyramidRenderOptions
-): Promise<BloomPyramidRenderResult> {
+export async function renderScatterPyramid(
+  options: ScatterPyramidRenderOptions
+): Promise<ScatterPyramidRenderResult> {
   const downsampled: GpuTexture[] = [];
   const textures: GpuTexture[] = [];
   const uniforms: GpuBuffer[] = [];
@@ -103,7 +103,7 @@ export async function renderBloomPyramid(
 
     await options.device.queue.onSubmittedWorkDone();
     assertNotCancelled(options.isCancelled);
-    return { scales: padToCompositeBindings(accumulated, downsampled), textures };
+    return { scales: [accumulated], textures };
   } catch (error) {
     await options.device.queue.onSubmittedWorkDone().catch(() => undefined);
     for (const texture of textures) options.releaseTexture(texture);
@@ -111,22 +111,6 @@ export async function renderBloomPyramid(
   } finally {
     for (const buffer of uniforms) buffer.destroy();
   }
-}
-
-/**
- * 合成着色器固定有六个散射纹理绑定，而金字塔层数是变的。辉光只读第 0 张（已累计
- * 全部层），其余五个绑定必须存在但内容不重要——数量对不上会让绑定序号溢出到
- * uniform 和散射源上，所以这里严格补齐到六张。
- */
-function padToCompositeBindings(
-  accumulated: GpuTexture,
-  downsampled: readonly GpuTexture[]
-): GpuTexture[] {
-  const scales = [accumulated, ...downsampled.slice(1, DIFFUSION_SCALE_COUNT)];
-  while (scales.length < DIFFUSION_SCALE_COUNT) {
-    scales.push(downsampled[downsampled.length - 1]);
-  }
-  return scales;
 }
 
 function createDownsampleUniform(): Float32Array {

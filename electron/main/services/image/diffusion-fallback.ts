@@ -130,16 +130,19 @@ export async function renderSharpDiffusionFallback(
     const base = sharp(sourceBytes)
       .resize(outputSize.width, outputSize.height, { fit: 'fill' })
       .ensureAlpha()
+    // 黑柔/白柔按和 WebGPU 同一条公式做能量守恒的部分柔焦：O = (1-f)·I + f·blur(I)。
+    // 此前用的是 screen / soft-light 混合，那是「叠一层亮的上去」，只会整体提亮不会柔化，
+    // 和主链路的雾镜模型完全不是一回事。辉光仍是刻意不守恒的加法层，保持 screen。
+    const isGlow = parsed.mode === 'glow'
     const scatter = await base
       .clone()
       .blur(parsed.radiusPixels)
       .linear(parsed.strength, 0)
       .png()
       .toBuffer()
-    let pipeline = base.composite([{
-      input: scatter,
-      blend: parsed.mode === 'white-diffusion' ? 'soft-light' : 'screen',
-    }])
+    let pipeline = isGlow
+      ? base.composite([{ input: scatter, blend: 'screen' }])
+      : base.clone().linear(1 - parsed.strength, 0).composite([{ input: scatter, blend: 'add' }])
 
     if (parsed.mode === 'white-diffusion') {
       pipeline = pipeline.linear(1, Math.round(8 * parsed.strength))
@@ -195,10 +198,10 @@ function parseParams(params: unknown, width: number, height: number): {
       height,
       quality: parsed.quality,
     })
-    const radiusPixels = recipe.scales.reduce(
-      (sum, scale) => sum + scale.radius * scale.weight,
+    const radiusPixels = recipe.scatterLevels.reduce(
+      (sum, level) => sum + level.divisor * level.weight[1],
       0
-    ) * recipe.image.referenceDimension
+    )
     return {
       mode: mapMode(parsed.mode),
       strength: recipe.strength,

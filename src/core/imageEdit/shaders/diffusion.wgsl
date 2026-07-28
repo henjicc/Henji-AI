@@ -45,7 +45,7 @@ struct SourceUniforms {
   soft_knee_ev: f32,
   power: f32,
   highlight_gain: f32,
-  micro_gain: f32,
+  scatter_floor: f32,
   highlight_recovery: f32,
   mode: f32,
   padding: f32,
@@ -104,35 +104,35 @@ fn fragment_source(input: VertexOutput) -> @location(0) vec4<f32> {
   }
   let luma = luminance(color.rgb);
   let highlight = highlight_response(luma);
-  let micro = luma * luma * source_params.micro_gain;
+
+  // 真实雾镜的悬浮颗粒对**所有**入射光都散射，只是亮处绝对光量大，看起来才像
+  // 「高光在发光」。旧实现把 highlight_response 当成阈值开关，只有阈值以上的像素
+  // 才进散射源，于是中暗部既不糊也不会被相邻亮部渗进来——出来的是 bloom 插件，
+  // 不是柔光滤镜。这里把它降级成「高光多散一点」的偏置：地板以下也照样散射。
+  let scatter_ratio = mix(source_params.scatter_floor, 1.0, highlight);
+
+  // 散射源不得超过像素自身的光量：物理上不可能从一个像素取走比它更多的光。
+  // 不在源头封顶的话，合成阶段的 min() 会截断扣除项而加回项照旧，
+  // 参数一拉高就变成凭空造光、整图发亮（文档 §3）。
+  let emitted = min(
+    color.rgb * scatter_ratio * source_params.highlight_gain,
+    color.rgb
+  );
 
   // 裁切高光恢复：JPEG 已把过曝区削平，真实峰值不可知。按接近饱和的程度做有界外推，
-  // 且只用于生成散射源、不改写可见原图（文档 §7）。
+  // 且只用于生成散射源、不改写可见原图（文档 §7）。放在封顶之后：外推本来就要让
+  // 已裁切的像素散出比记录值更多的光，扣除项那侧仍由合成阶段的 min() 兜住。
   let peak = max(color.r, max(color.g, color.b));
   let clipped = smoothstep(0.94, 1.0, peak);
   let recovery = 1.0 + clipped * source_params.highlight_recovery * MAX_RECOVERY_GAIN;
 
-  var response = color.rgb * (
-    highlight * source_params.highlight_gain * recovery + micro
-  );
-  if (source_params.mode < 0.5) {
-    response *= mix(0.65, 1.0, highlight);
-  } else if (source_params.mode < 1.5) {
-    response += color.rgb * micro * 0.45;
-  }
-  // 散射源不得超过像素自身的光量：物理上不可能从一个像素取走比它更多的光。
-  // 不在源头封顶的话，合成阶段的 min() 会截断扣除项而加回项照旧，
-  // 参数一拉高就变成凭空造光、整图发亮（文档 §3）。
-  let emitted = clamp(response, vec3<f32>(0.0), color.rgb);
-  return vec4<f32>(emitted * color.a, color.a);
+  return vec4<f32>(emitted * recovery * color.a, color.a);
 }
 
-struct BlurUniforms {
+struct ScatterUniforms {
   scale: vec2<f32>,
   offset: vec2<f32>,
-  aspect_correction: vec2<f32>,
-  radius: f32,
-  axis: f32,
+  padding_a: vec4<f32>,
   /** 仅上采样使用。逐通道权重就是色散：三通道的能量分布错开，尾部才会显出色偏。 */
   high_weight: vec3<f32>,
   low_weight: vec3<f32>,
@@ -140,31 +140,13 @@ struct BlurUniforms {
 
 @group(0) @binding(0) var blur_input: texture_2d<f32>;
 @group(0) @binding(1) var blur_sampler: sampler;
-@group(0) @binding(2) var<uniform> blur_params: BlurUniforms;
-
-fn blur_direction() -> vec2<f32> {
-  let selected = select(
-    vec2<f32>(1.0, 0.0),
-    vec2<f32>(0.0, 1.0),
-    blur_params.axis > 0.5
-  );
-  return selected * blur_params.aspect_correction * blur_params.radius;
-}
-
-fn gaussian_sample(uv: vec2<f32>, direction: vec2<f32>) -> vec4<f32> {
-  var result = textureSampleLevel(blur_input, blur_sampler, uv, 0.0) * 0.227027;
-  result += textureSampleLevel(blur_input, blur_sampler, uv + direction * 1.384615, 0.0) * 0.316216;
-  result += textureSampleLevel(blur_input, blur_sampler, uv - direction * 1.384615, 0.0) * 0.316216;
-  result += textureSampleLevel(blur_input, blur_sampler, uv + direction * 3.230769, 0.0) * 0.070270;
-  result += textureSampleLevel(blur_input, blur_sampler, uv - direction * 3.230769, 0.0) * 0.070270;
-  return result;
-}
+@group(0) @binding(2) var<uniform> blur_params: ScatterUniforms;
 
 /**
- * Bloom 降采样使用全正权重的 13-tap tent 核。采样间距永远是输入纹理的相邻 texel，
+ * 散射降采样使用全正权重的 13-tap tent 核。采样间距永远是输入纹理的相邻 texel，
  * 半径由 mip 层级累积形成，不再把任意大半径乘到稀疏五点核上制造亮边复本。
  */
-fn bloom_downsample(uv: vec2<f32>) -> vec4<f32> {
+fn scatter_downsample(uv: vec2<f32>) -> vec4<f32> {
   let dimensions = vec2<f32>(textureDimensions(blur_input));
   let texel = vec2<f32>(1.0) / max(dimensions, vec2<f32>(1.0));
   let half_texel = texel * 0.5;
@@ -191,49 +173,37 @@ fn bloom_downsample(uv: vec2<f32>) -> vec4<f32> {
 }
 
 @fragment
-fn fragment_blur_horizontal(input: VertexOutput) -> @location(0) vec4<f32> {
+fn fragment_scatter_downsample(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = blur_params.offset + input.local_uv * blur_params.scale;
-  return gaussian_sample(uv, blur_direction());
+  return scatter_downsample(uv);
 }
 
-@fragment
-fn fragment_blur_vertical(input: VertexOutput) -> @location(0) vec4<f32> {
-  let uv = blur_params.offset + input.local_uv * blur_params.scale;
-  return gaussian_sample(uv, blur_direction());
-}
+@group(0) @binding(10) var scatter_low_input: texture_2d<f32>;
 
-@fragment
-fn fragment_bloom_downsample(input: VertexOutput) -> @location(0) vec4<f32> {
-  let uv = blur_params.offset + input.local_uv * blur_params.scale;
-  return bloom_downsample(uv);
-}
-
-@group(0) @binding(10) var bloom_low_input: texture_2d<f32>;
-
-fn bloom_upsample_low(uv: vec2<f32>) -> vec4<f32> {
-  let dimensions = vec2<f32>(textureDimensions(bloom_low_input));
+fn scatter_upsample_low(uv: vec2<f32>) -> vec4<f32> {
+  let dimensions = vec2<f32>(textureDimensions(scatter_low_input));
   let texel = vec2<f32>(1.0) / max(dimensions, vec2<f32>(1.0));
-  var result = textureSampleLevel(bloom_low_input, blur_sampler, uv, 0.0) * 0.25;
+  var result = textureSampleLevel(scatter_low_input, blur_sampler, uv, 0.0) * 0.25;
   result += (
-    textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(texel.x, 0.0), 0.0)
-    + textureSampleLevel(bloom_low_input, blur_sampler, uv - vec2<f32>(texel.x, 0.0), 0.0)
-    + textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(0.0, texel.y), 0.0)
-    + textureSampleLevel(bloom_low_input, blur_sampler, uv - vec2<f32>(0.0, texel.y), 0.0)
+    textureSampleLevel(scatter_low_input, blur_sampler, uv + vec2<f32>(texel.x, 0.0), 0.0)
+    + textureSampleLevel(scatter_low_input, blur_sampler, uv - vec2<f32>(texel.x, 0.0), 0.0)
+    + textureSampleLevel(scatter_low_input, blur_sampler, uv + vec2<f32>(0.0, texel.y), 0.0)
+    + textureSampleLevel(scatter_low_input, blur_sampler, uv - vec2<f32>(0.0, texel.y), 0.0)
   ) * 0.125;
   result += (
-    textureSampleLevel(bloom_low_input, blur_sampler, uv + texel, 0.0)
-    + textureSampleLevel(bloom_low_input, blur_sampler, uv - texel, 0.0)
-    + textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(texel.x, -texel.y), 0.0)
-    + textureSampleLevel(bloom_low_input, blur_sampler, uv + vec2<f32>(-texel.x, texel.y), 0.0)
+    textureSampleLevel(scatter_low_input, blur_sampler, uv + texel, 0.0)
+    + textureSampleLevel(scatter_low_input, blur_sampler, uv - texel, 0.0)
+    + textureSampleLevel(scatter_low_input, blur_sampler, uv + vec2<f32>(texel.x, -texel.y), 0.0)
+    + textureSampleLevel(scatter_low_input, blur_sampler, uv + vec2<f32>(-texel.x, texel.y), 0.0)
   ) * 0.0625;
   return result;
 }
 
 @fragment
-fn fragment_bloom_upsample(input: VertexOutput) -> @location(0) vec4<f32> {
+fn fragment_scatter_upsample(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = blur_params.offset + input.local_uv * blur_params.scale;
   let high = textureSampleLevel(blur_input, blur_sampler, uv, 0.0);
-  let low = bloom_upsample_low(uv);
+  let low = scatter_upsample_low(uv);
   // alpha 不参与色散，跟着绿通道走即可：它只是用来判空的，不是可见颜色。
   return vec4<f32>(
     high.rgb * blur_params.high_weight + low.rgb * blur_params.low_weight,
@@ -248,7 +218,7 @@ struct CompositeUniforms {
   weights_b: vec4<f32>,
   scatter_fraction: f32,
   veil: f32,
-  black_retention: f32,
+  shadow_absorption: f32,
   highlight_compression: f32,
   scatter_desaturation: f32,
   high_frequency_retention: f32,
@@ -273,16 +243,17 @@ struct CompositeUniforms {
   scatter_scale: vec2<f32>,
   padding_a: f32,
   padding_b: f32,
+  /**
+   * 散射光自身的色偏，已在 CPU 侧归一到亮度 1。黑柔的 halation 偏暖是这类滤镜公认
+   * 的特征；只乘在散射项上，直接光不动，所以画面不会整体偏色。
+   */
+  scatter_tint: vec3<f32>,
+  padding_c: f32,
 };
 
 @group(0) @binding(0) var composite_base: texture_2d<f32>;
 @group(0) @binding(1) var composite_sampler: sampler;
 @group(0) @binding(2) var scatter_0: texture_2d<f32>;
-@group(0) @binding(3) var scatter_1: texture_2d<f32>;
-@group(0) @binding(4) var scatter_2: texture_2d<f32>;
-@group(0) @binding(5) var scatter_3: texture_2d<f32>;
-@group(0) @binding(6) var scatter_4: texture_2d<f32>;
-@group(0) @binding(7) var scatter_5: texture_2d<f32>;
 @group(0) @binding(8) var<uniform> composite_params: CompositeUniforms;
 /** 未经模糊的散射源 E，能量守恒的扣除项必须用它而不是模糊后的结果。 */
 @group(0) @binding(9) var composite_emitted: texture_2d<f32>;
@@ -364,15 +335,10 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   if (base.a <= 0.00001) {
     return vec4<f32>(0.0);
   }
+  // 三种模式的逐尺度权重都已在金字塔上采样阶段累计进 scatter_0。此前黑柔/白柔
+  // 在这里重新叠六张稀疏大半径纹理，横竖采样副本就表现成规则方格和亮度台阶。
   var scatter = sample_scatter(scatter_0, scatter_uv);
-  if (composite_params.mode < 1.5) {
-    scatter *= composite_params.weights_a.x;
-    scatter += sample_scatter(scatter_1, scatter_uv) * composite_params.weights_a.y;
-    scatter += sample_scatter(scatter_2, scatter_uv) * composite_params.weights_a.z;
-    scatter += sample_scatter(scatter_3, scatter_uv) * composite_params.weights_a.w;
-    scatter += sample_scatter(scatter_4, scatter_uv) * composite_params.weights_b.x;
-    scatter += sample_scatter(scatter_5, scatter_uv) * composite_params.weights_b.y;
-  } else {
+  if (composite_params.mode > 1.5) {
     // 辉光金字塔最紧一级在 1/2 分辨率，光源近处 2~3px 的过渡在那里够不到，光晕和
     // 光源核心之间会留一道断层。这里直接对全分辨率的亮通源做十字低通补上，
     // 比再挂两张全分辨率金字塔纹理便宜得多。互补加权、核权重总和为 1，
@@ -395,8 +361,10 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   );
 
   // 着色只作用于散射光，直接光不动，所以画面不会整体偏色。
-  // tint_rgb 已在 CPU 侧归一到亮度 1，染色本身不改变散射光总量；
+  // scatter_tint 是模式自带的 halation 色偏（黑柔偏暖、白柔中性），tint_rgb 是用户着色，
+  // 两者都已在 CPU 侧归一到亮度 1，因此都不改变散射光总量；
   // tint_gain 是刻意的艺术控制，会在 ±50% 内偏离能量守恒。
+  scatter *= composite_params.scatter_tint;
   scatter *= mix(vec3<f32>(1.0), composite_params.tint_rgb, composite_params.tint_amount);
   scatter *= composite_params.tint_gain;
 
@@ -443,32 +411,32 @@ fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   let emitted = textureSampleLevel(composite_emitted, composite_sampler, uv, 0.0).rgb;
   let deduction = min(base.rgb, emitted * composite_params.scatter_fraction);
   let direct = max(base.rgb - deduction, vec3<f32>(0.0));
-  var color = direct + scatter * composite_params.scatter_fraction;
 
-  // 细节补偿必须来自底图频段，不能拿散射源代替：非高光区的散射源接近 0，
-  // 用 base - scatter 会把整张底图当成「细节」重复加回。
+  // 黑颗粒吸收的是「散进暗部的杂散光」，资料原话是它用来补回光扩散进暗部所损失的反差。
+  // 所以它只压加回项，不碰扣除项、柔焦和细节补偿。
+  //
+  // 旧实现写的是 mix(base, color, guard)，拐点还放在亮度 0.25：暗部等于整块撤销滤镜，
+  // 既没有柔焦也没有 halation，黑柔因此完全不像黑柔。拐点压到 0.02（线性光，约合
+  // sRGB 0.16），只有真正接近黑的地方才吸收，亮物体旁边的暗区照样吃得到光晕。
+  let shadow_response = smoothstep(0.0, 0.02, luminance(base.rgb));
+  let absorption = mix(1.0, shadow_response, composite_params.shadow_absorption);
+  var color = direct + scatter * composite_params.scatter_fraction * absorption;
+
+  // 细节补偿必须来自底图频段，不能拿散射源代替：散射源是底图乘上一个空间变化的比例，
+  // 用 base - scatter 得到的是「亮度调制的底图」而不是高频，等于把整张图重复加回。
+  //
+  // 系数从 0.08/0.04 抬到 0.3/0.15：散射源改成整幅画面之后，锐度损失是真实存在的
+  // （雾镜三件事之一就是 loss of definition），原来的系数小到「细节保留」滑块基本是死的。
   let near_base = cross_lowpass(composite_base, uv, 1.0);
   let far_base = cross_lowpass(composite_base, uv, 3.0);
   let high_detail = base.rgb - near_base;
   let mid_detail = near_base - far_base;
-  color += high_detail * composite_params.high_frequency_retention * 0.08;
-  color += mid_detail * composite_params.mid_frequency_retention * 0.04;
+  color += high_detail * composite_params.high_frequency_retention * 0.3;
+  color += mid_detail * composite_params.mid_frequency_retention * 0.15;
 
   // 雾幕抬黑位，是白柔区别于黑柔的核心特征（资料 §6.2）。
   if (composite_params.mode > 0.5 && composite_params.mode < 1.5) {
     color += vec3<f32>(composite_params.veil) * (0.2 + scatter_luma * 0.8);
-  }
-
-  // 黑位保持对两种柔光都有意义：黑柔靠它守住黑位，白柔靠它控制黑位被抬多少。
-  // 辉光不主动抬黑位（资料 §6.3），没有需要「保持」的东西，故不参与。
-  if (composite_params.mode < 1.5) {
-    let shadow_response = smoothstep(0.0, 0.25, luminance(base.rgb));
-    let black_guard = mix(
-      1.0,
-      shadow_response,
-      composite_params.black_retention
-    );
-    color = mix(base.rgb, color, black_guard);
   }
 
   color = compress_highlights(color, composite_params.highlight_compression);

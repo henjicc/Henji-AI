@@ -58,19 +58,17 @@ export interface WebGpuDiffusionExportResult {
  * 分块能否重建出这个配方的散射。
  *
  * 块只看得见自己那点内容加上 halo，所以只有当最宽的散射核落在 halo 里时，分块结果
- * 才可能和整图一致。辉光的最宽尺度是长边的一半（3840 的图就是 1920px），而 halo 是
- * 64px——差了三十倍，无论怎么调混合系数都会在块边界留下亮度台阶。
+ * 才可能和整图一致。三种模式现在共用散射金字塔，最宽尺度都远大于常规 halo，
+ * 无论怎么调混合系数，块内各算各的都会在块边界留下亮度台阶。
  */
 function tilesCanReproduceScatter(
   recipe: DiffusionRecipe,
   halo: number
 ): boolean {
-  const widestNormalized = recipe.mode === 'glow'
-    ? Math.max(...recipe.glow.levels
-      .filter((level) => level.weight[1] > 0)
-      .map((level) => level.divisor)) / recipe.image.referenceDimension
-    : Math.max(...recipe.scales.map((scale) => scale.radius));
-  return widestNormalized * recipe.image.referenceDimension <= halo;
+  const widest = Math.max(...recipe.scatterLevels
+    .filter((level) => level.weight[1] > 0)
+    .map((level) => level.divisor));
+  return widest <= halo;
 }
 
 function canRenderInSinglePass(options: WebGpuDiffusionExportOptions): boolean {
@@ -173,7 +171,7 @@ async function encodeOutput(
  * 把配方换算到「整图降采样后」的分辨率上，供全局散射使用。
  *
  * 和 `rebaseDiffusionRecipeForTile` 的区别正是这次最容易搞错的地方：
- * 块是**全分辨率裁剪**，绝对像素量（glow.levels.divisor）不变、归一化量（scales.radius）
+ * 块是**全分辨率裁剪**，绝对像素量（scatterLevels.divisor）不变、归一化量（scales.radius）
  * 要换算；而这里是**整图缩图**，归一化量天然不变、绝对像素量必须跟着缩。
  * 两个函数长得像，但换算的方向恰好相反，不要合并。
  */
@@ -192,13 +190,7 @@ export function rebaseDiffusionRecipeForScale(
       referenceDimension,
       aspectCorrection: [referenceDimension / width, referenceDimension / height],
     },
-    glow: {
-      ...recipe.glow,
-      levels: recipe.glow.levels.map((level) => ({
-        ...level,
-        divisor: Math.max(2, Math.round(level.divisor * scale)),
-      })),
-    },
+    scatterLevels: rebaseScatterLevelsForScale(recipe.scatterLevels, scale),
   };
 }
 
@@ -224,11 +216,55 @@ export function rebaseDiffusionRecipeForTile(
       ...scale,
       radius: Math.min(1, scale.radius * radiusScale),
     })),
-    // glow.levels 刻意不动：divisor 是绝对像素数，而块是全分辨率的裁剪而非缩图，
+    // scatterLevels 刻意不动：divisor 是绝对像素数，而块是全分辨率的裁剪而非缩图，
     // 同一个 divisor 在块内本来就代表同样大小的散射。scales.radius 需要换算是因为
     // 它按 referenceDimension 归一化过（模糊着色器里再乘 aspectCorrection 还原成像素），
     // 参照系一变就必须跟着变。两者形态不同，不要顺手一起换算。
   };
+}
+
+/**
+ * 把原配方的归一化散射尺度投影到缩图后的 2× mip 网格。
+ *
+ * 不能简单把 divisor 乘缩放率并取整：例如 2,4,8 可能会变成 2,2,3，后两级不再是
+ * 相邻 mip，固定小核又会开始跨区欠采样。这里把每一级能量按 log2 距离分配到相邻的
+ * 2^n 层，既保留总能量和相对半径，也保证金字塔每步只降一半。
+ */
+function rebaseScatterLevelsForScale(
+  levels: DiffusionRecipe['scatterLevels'],
+  scale: number
+): DiffusionRecipe['scatterLevels'] {
+  const maximumTarget = Math.max(2, ...levels.map((level) => level.divisor * scale));
+  const count = Math.max(1, Math.ceil(Math.log2(maximumTarget)));
+  const divisors = Array.from({ length: count }, (_, index) => 2 ** (index + 1));
+  const channelWeights = divisors.map(() => [0, 0, 0]);
+
+  for (const level of levels) {
+    const target = Math.max(2, level.divisor * scale);
+    const position = Math.max(0, Math.min(count - 1, Math.log2(target) - 1));
+    const lower = Math.floor(position);
+    const upper = Math.min(count - 1, lower + 1);
+    const upperAmount = position - lower;
+    for (const channel of [0, 1, 2] as const) {
+      channelWeights[lower][channel] += level.weight[channel] * (1 - upperAmount);
+      channelWeights[upper][channel] += level.weight[channel] * upperAmount;
+    }
+  }
+
+  for (const channel of [0, 1, 2] as const) {
+    const total = channelWeights.reduce((sum, weight) => sum + weight[channel], 0);
+    if (total <= 0) continue;
+    for (const weight of channelWeights) weight[channel] /= total;
+  }
+
+  return divisors.map((divisor, index) => ({
+    divisor,
+    weight: [
+      channelWeights[index][0],
+      channelWeights[index][1],
+      channelWeights[index][2],
+    ] as const,
+  }));
 }
 
 function assertNotCancelled(isCancelled: () => boolean): void {

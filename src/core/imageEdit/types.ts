@@ -214,11 +214,19 @@ export interface DiffusionOperationParams {
   strength: number;
   /** 辉光范围 0..1 → 近/远散射半径 */
   glowRange: number;
-  /** 高光响应 0..1 → 阈值 EV 与柔化拐点（越大越多区域参与发光） */
+  /**
+   * 高光响应 0..1 → 阈值 EV 与柔化拐点。
+   *
+   * 黑柔/白柔下它不是「谁参与散射」的开关：雾镜颗粒对所有入射光都散射，中暗部的散射
+   * 比例由模式自带的地板决定。这里只控制高光比中暗部多散多少。辉光下它才是亮通阈值。
+   */
   highlightResponse: number;
   /** 光斑柔和度 0..1 → 长尾量与长尾形状 */
   softness: number;
-  /** 黑位保持 0..1 */
+  /**
+   * 黑位保持 0..1 → 黑颗粒对「散进暗部的杂散光」的吸收量（仅黑柔/白柔）。
+   * 越大暗部越守得住原来的黑；白柔取值低，那层被抬起的奶雾正是它的特征。
+   */
   blackRetention: number;
   /** 细节保留 0..1 → 高频/中频保留 */
   detailRetention: number;

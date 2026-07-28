@@ -16,7 +16,7 @@ function amplitude(
   radiusPixels: number
 ): number {
   const recipe = compileDiffusionRecipe(params, dimensions);
-  return recipe.glow.levels.reduce((sum, level) => {
+  return recipe.scatterLevels.reduce((sum, level) => {
     if (level.weight[1] <= 0) return sum;
     const sigma = level.divisor;
     return sum + level.weight[1]
@@ -77,11 +77,11 @@ describe('辉光 PSF', () => {
 
   it('逐通道权重各自归一，只错开分布而不产生整体色偏', () => {
     const recipe = compileDiffusionRecipe(GLOW_PARAMS, { width: 3840, height: 2160 });
-    const contributing = recipe.glow.levels.filter((level) => level.weight[1] > 0);
+    const contributing = recipe.scatterLevels.filter((level) => level.weight[1] > 0);
 
     // 三通道各自和为 1：色散只改变能量在尺度间的分布，不改变每个通道的总量。
     for (const channel of [0, 1, 2]) {
-      const total = recipe.glow.levels.reduce((sum, level) => sum + level.weight[channel], 0);
+      const total = recipe.scatterLevels.reduce((sum, level) => sum + level.weight[channel], 0);
       expect(total).toBeCloseTo(1, 10);
     }
     // 红端衰减慢、蓝端快，于是尾部偏暖、近场偏冷。
@@ -94,10 +94,10 @@ describe('辉光 PSF', () => {
   it('尺度区间按占长边的比例选取，低于下限的层只作为链路中间产物不参与加权', () => {
     const recipe = compileDiffusionRecipe(GLOW_PARAMS, { width: 3840, height: 2160 });
     const reference = 3840;
-    const contributing = recipe.glow.levels.filter((level) => level.weight[1] > 0);
+    const contributing = recipe.scatterLevels.filter((level) => level.weight[1] > 0);
 
     // 金字塔必须每步只降一半，所以链路一定从 divisor=2 起，但它可能不参与加权。
-    expect(recipe.glow.levels[0].divisor).toBe(2);
+    expect(recipe.scatterLevels[0].divisor).toBe(2);
     expect(contributing[0].divisor / reference).toBeGreaterThanOrEqual(1 / 1024);
     expect(contributing[contributing.length - 1].divisor / reference).toBeLessThanOrEqual(1 / 2);
   });
