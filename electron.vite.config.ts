@@ -44,6 +44,36 @@ export default defineConfig({
       },
     },
     plugins: [react()],
+    optimizeDeps: {
+      // 这些三方库只出现在懒加载子树里（工具箱 3D/图片编辑、画布、提示词编辑器等）。
+      // 不显式登记时 Vite 会等用户第一次切到对应 Tab 才现场预构建依赖，
+      // 表现就是「切个 Tab 卡十几秒、还可能整页刷新」。登记后在 dev server 起来时一次性预构建。
+      include: [
+        '@tiptap/core',
+        '@tiptap/extension-document',
+        '@tiptap/extension-hard-break',
+        '@tiptap/extension-paragraph',
+        '@tiptap/extension-text',
+        '@tiptap/extensions/character-count',
+        '@tiptap/extensions/placeholder',
+        '@tiptap/extensions/undo-redo',
+        '@tiptap/pm/model',
+        '@tiptap/pm/state',
+        '@tiptap/pm/view',
+        '@tiptap/react',
+        '@tiptap/suggestion',
+        '@react-three/drei',
+        '@react-three/fiber',
+        'dockview-react',
+        'konva',
+        'konva/lib/Node',
+        'pica',
+        'react-konva',
+        'react-virtuoso',
+        'three',
+        'three-stdlib',
+      ],
+    },
     build: {
       outDir: 'out/renderer',
       rollupOptions: {

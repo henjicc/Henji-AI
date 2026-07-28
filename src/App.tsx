@@ -1,8 +1,7 @@
 import { createLogger } from '@/core/logging'
-import React, { useState, useEffect } from 'react'
+import React, { Suspense, lazy, useState, useEffect } from 'react'
 import WindowControls from './components/WindowControls'
 import TabContainer from './components/TabContainer'
-import SettingsModal from '@/components/Settings'
 import { databaseService } from './services/database/DatabaseService'
 import { canvasProjectService } from './services/canvasProjects'
 import { getCustomModelService } from './services/customModels/CustomModelService'
@@ -13,7 +12,6 @@ import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
 import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
 import { useLogWindowShortcut } from './hooks/useLogWindowShortcut'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
-import { AssetLibraryFloatingPanel } from '@/features/assets/AssetLibraryFloatingPanel'
 import { LargeUploadChoiceDialog } from '@/components/upload/LargeUploadChoiceDialog'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
@@ -28,12 +26,22 @@ import {
   useNavigationStore,
 } from '@/stores/navigationStore'
 import { useAssistantHostBridge } from '@/features/assistant/frontendTools/useAssistantHostBridge'
-import { AssistantSidebar } from '@/features/assistant/AssistantSidebar'
 import { toggleAssistant, useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 
 const logger = createLogger('App')
+
+// 设置面板、智能助手、资产悬浮面板都是「按需打开」的浮层，却各自拖着一大棵子树
+// （设置分区、Markdown 渲染、资产库列表）。放进启动同步图会让冷启动白解析一遍，
+// 因此改为首次打开时才加载；打开过之后保持挂载，退场动画不受影响。
+const SettingsModal = lazy(() => import('@/components/Settings'))
+const AssistantSidebar = lazy(() =>
+  import('@/features/assistant/AssistantSidebar').then((m) => ({ default: m.AssistantSidebar })),
+)
+const AssetLibraryFloatingPanel = lazy(() =>
+  import('@/features/assets/AssetLibraryFloatingPanel').then((m) => ({ default: m.AssetLibraryFloatingPanel })),
+)
 
 /**
  * 简化后的 App 组件
@@ -65,6 +73,9 @@ const App: React.FC = () => {
   const assistantMode = useAssistantUiStore((state) => state.mode)
   const assistantSize = useAssistantUiStore((state) => state.size)
   const assistantWorkspaceRef = React.useRef<HTMLDivElement>(null)
+  // 懒加载浮层的「装载闩」：打开过一次就一直挂着，避免每次开关都重新触发 Suspense
+  const [assistantMounted, setAssistantMounted] = useState(false)
+  const [assetPanelMounted, setAssetPanelMounted] = useState(false)
 
   const openAssetFloating = React.useCallback((): void => {
     openAssetLibrary('floating')
@@ -93,6 +104,12 @@ const App: React.FC = () => {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [assetView, closeAssets])
+  useEffect(() => {
+    if (assistantOpen) setAssistantMounted(true)
+  }, [assistantOpen])
+  useEffect(() => {
+    if (assetView === 'floating') setAssetPanelMounted(true)
+  }, [assetView])
   useEffect(() => {
     const handleAssistantShortcut = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey) || !event.shiftKey || event.key.toLowerCase() !== 'a') return
@@ -183,9 +200,13 @@ const App: React.FC = () => {
           insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
           insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
         />
-        <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
-        <AssistantSidebar workspaceRef={assistantWorkspaceRef} />
-        {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
+        <Suspense fallback={null}>
+          {assetPanelMounted && (
+            <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
+          )}
+          {assistantMounted && <AssistantSidebar workspaceRef={assistantWorkspaceRef} />}
+          {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
+        </Suspense>
         <LargeUploadChoiceDialog />
         <GlobalAlertDialog onAskAssistant={openAssistantForDiagnosis} />
       </div>

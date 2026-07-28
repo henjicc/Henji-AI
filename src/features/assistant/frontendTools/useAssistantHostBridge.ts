@@ -24,10 +24,15 @@ import {
   retainHostContextTracking,
   subscribeHostContext,
 } from '../hostContext/hostContext'
-import { executeHostCommand } from './hostCommandRegistry'
-import { executeHostQueryResult } from './hostQueryRegistry'
-
 const logger = createLogger('features.assistant.frontend_tools')
+
+// 两张宿主执行表静态依赖画布/3D 镜头/资产库的动作实现，是启动同步图里最重的一段，
+// 但只有智能助手真的下发前端工具时才会用到，因此推迟到首次执行时再加载。
+const loadHostCommandRegistry = (): Promise<typeof import('./hostCommandRegistry')> =>
+  import('./hostCommandRegistry')
+const loadHostQueryRegistry = (): Promise<typeof import('./hostQueryRegistry')> =>
+  import('./hostQueryRegistry')
+
 const completedLimit = 300
 
 export function useAssistantHostBridge(uiReady: boolean): void {
@@ -148,8 +153,10 @@ export function useAssistantHostBridge(uiReady: boolean): void {
         try {
           let result: HostCommandResult
           if (request.operation.kind === 'command') {
+            const { executeHostCommand } = await loadHostCommandRegistry()
             result = await executeHostCommand(request.operation.command, controller.signal)
           } else {
+            const { executeHostQueryResult } = await loadHostQueryRegistry()
             result = await executeHostQueryResult(request.operation.query)
           }
           await sendResult(request, result)

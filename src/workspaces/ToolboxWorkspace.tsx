@@ -1,13 +1,16 @@
-import React from 'react'
+import React, { Suspense, lazy } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import { ICON_TOOL_CAMERA_STAGE, ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import type { LucideIcon } from 'lucide-react'
-import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
-import CameraStageApp from '@/features/cameraStage/CameraStageApp'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiLoading, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
-import ImageMarkTool from '@/features/imageMark/standalone/ImageMarkTool'
 import type { ToolboxToolId } from '@/core/types/workspace'
 import { selectToolboxTool, useNavigationStore } from '@/stores/navigationStore'
+
+// 工具箱首页只是一张卡片列表，不该为它下载 3D 场景和图片编辑器。
+// 两个工具改为进入时才加载（TabContainer 会在空闲时预取，正常点进去感知不到等待）。
+const CameraStageApp = lazy(() => import('@/features/cameraStage/CameraStageApp'))
+const ImageMarkTool = lazy(() => import('@/features/imageMark/standalone/ImageMarkTool'))
 
 /**
  * 工具箱工作区：多工具入口首页 + 各工具的打开/返回导航。
@@ -78,7 +81,11 @@ const ToolboxWorkspace: React.FC = () => {
             <span className={UI_TEXT_LABEL_CLASS}>{activeTool.name}</span>
           </div>
         )}
-        <div className="min-h-0 flex-1">{renderTool(activeTool.id, backToToolbox)}</div>
+        <div className="min-h-0 flex-1">
+          <Suspense fallback={<UiLoading className="h-full" />}>
+            {renderTool(activeTool.id, backToToolbox)}
+          </Suspense>
+        </div>
       </div>
     )
   }

@@ -1,14 +1,16 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react'
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useI18n } from '@/hooks/useI18n'
 import type { WorkspaceId } from '@/core/types/workspace'
 import { UiLoading } from '@/components/ui'
+import { prefetchWhenIdle } from '@/utils/idlePrefetch'
+import { listPrefetchOrder, workspaceLoaders } from '../workspaces/workspaceLoaders'
 
-// 懒加载工作区组件
-const GenerationWorkspace = lazy(() => import('../workspaces/GenerationWorkspace'))
-const CanvasWorkspace = lazy(() => import('../workspaces/CanvasWorkspace'))
-const ToolboxWorkspace = lazy(() => import('../workspaces/ToolboxWorkspace'))
-const AssetLibraryWorkspace = lazy(() => import('../workspaces/AssetLibraryWorkspace'))
+// 懒加载工作区组件（loader 复用 workspaceLoaders，保证与空闲预取命中同一份模块缓存）
+const GenerationWorkspace = lazy(workspaceLoaders.generation)
+const CanvasWorkspace = lazy(workspaceLoaders.nodes)
+const ToolboxWorkspace = lazy(workspaceLoaders.tools)
+const AssetLibraryWorkspace = lazy(workspaceLoaders.assets)
 
 interface TabContainerProps {
     activeTab: WorkspaceId
@@ -30,12 +32,19 @@ const LoadingPlaceholder: React.FC = () => {
  */
 const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, insetLeft = 0, insetRight = 0 }) => {
     const [visitedTabs, setVisitedTabs] = useState<Set<WorkspaceId>>(() => new Set([activeTab]))
+    const initialTabRef = useRef(activeTab)
 
     useEffect(() => {
         if (!visitedTabs.has(activeTab)) {
             setVisitedTabs((prev) => new Set(prev).add(activeTab))
         }
     }, [activeTab, visitedTabs])
+
+    // 首屏渲染完成后利用空闲时间把其它工作区的 chunk 拉回来，
+    // 让「第一次切 Tab」不再等模块下载/转译。只跑一次，不随 activeTab 重启。
+    useEffect(() => prefetchWhenIdle(listPrefetchOrder(initialTabRef.current), {
+        startDelayMs: import.meta.env.DEV ? 15000 : 0,
+    }), [])
 
     return (
         <div
