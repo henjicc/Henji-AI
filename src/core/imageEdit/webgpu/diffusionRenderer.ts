@@ -41,6 +41,18 @@ interface DiffusionCache {
   pyramidTextures: GpuTexture[];
 }
 
+/**
+ * 一张可跨块复用的散射金字塔。
+ *
+ * 分块导出必须让所有块共用同一张散射：块只看得见自己那点内容加 halo，用块内数据
+ * 各算各的宽尺度散射，块边界一定对不上（导出图上那圈沿 Tile 网格的矩形亮度台阶）。
+ * 散射本身是低频的，按整图降采样后算一次就够，块只负责补全分辨率的底图。
+ */
+export interface DiffusionScatterPyramid {
+  scales: GpuTexture[];
+  release: () => void;
+}
+
 export interface DiffusionRenderInput {
   sourceKey: string;
   width: number;
@@ -48,6 +60,14 @@ export interface DiffusionRenderInput {
   recipe: DiffusionRecipe;
   createLinearBase: () => Promise<GpuTexture>;
   isCancelled?: () => boolean;
+  /**
+   * 外部提供的全局散射。给了它就不再为本次渲染建金字塔，改为按 `region` 取其中一片。
+   * `region` 是本块在整图里的归一化区域 [offsetX, offsetY, scaleX, scaleY]。
+   */
+  scatter?: {
+    pyramid: DiffusionScatterPyramid;
+    region: readonly [number, number, number, number];
+  };
 }
 
 export interface DiffusionRenderOutput {
@@ -122,6 +142,52 @@ export class WebGpuDiffusionRenderer {
     );
   }
 
+  /**
+   * 只建散射金字塔，不做合成。分块导出先按整图降采样算一次，所有块共用。
+   *
+   * 刻意不写进 `this.cache`：那份缓存服务于常规整图渲染，按 sourceKey 失效，
+   * 而全局散射的生命周期由调用方按整轮导出来管。
+   */
+  async buildScatterPyramid(input: {
+    width: number;
+    height: number;
+    recipe: DiffusionRecipe;
+    createLinearBase: () => Promise<GpuTexture>;
+    isCancelled?: () => boolean;
+  }): Promise<DiffusionScatterPyramid> {
+    assertNotCancelled(input.isCancelled);
+    const base = await input.createLinearBase();
+    const source = this.acquireTexture(input.width, input.height);
+    const uniform = createUniformBuffer(this.device, createSourceUniform(input.recipe));
+    try {
+      renderPipelinePass(
+        this.device,
+        this.pipelines.source,
+        [
+          { binding: 0, resource: base.createView() },
+          { binding: 1, resource: this.sampler },
+          { binding: 2, resource: { buffer: uniform } },
+        ],
+        source
+      );
+      await this.device.queue.onSubmittedWorkDone();
+      const built = await this.buildPyramidTextures(input, source);
+      return {
+        scales: built.scales,
+        release: () => {
+          for (const texture of built.textures) this.texturePool.release(texture);
+          this.texturePool.release(source);
+        },
+      };
+    } catch (error) {
+      this.texturePool.release(source);
+      throw error;
+    } finally {
+      base.destroy();
+      uniform.destroy();
+    }
+  }
+
   async render(input: DiffusionRenderInput): Promise<DiffusionRenderOutput> {
     assertNotCancelled(input.isCancelled);
     const invalidation = determineDiffusionInvalidation(this.cache, input);
@@ -129,10 +195,11 @@ export class WebGpuDiffusionRenderer {
     else if (invalidation === 'pyramid') await this.rebuildPyramid(input);
     const cache = this.cache;
     if (!cache) throw new Error('柔光渲染缓存未初始化');
+    const scatterScales = input.scatter?.pyramid.scales ?? cache.scales;
     const output = this.acquireTexture(input.width, input.height);
     const uniform = createUniformBuffer(
       this.device,
-      createCompositeUniform(input.recipe)
+      createCompositeUniform(input.recipe, input.scatter?.region)
     );
     try {
       assertNotCancelled(input.isCancelled);
@@ -142,7 +209,7 @@ export class WebGpuDiffusionRenderer {
         [
           { binding: 0, resource: cache.base.createView() },
           { binding: 1, resource: this.sampler },
-          ...cache.scales.map((texture, index) => ({
+          ...scatterScales.map((texture, index) => ({
             binding: index + 2,
             resource: texture.createView(),
           })),
@@ -221,13 +288,30 @@ export class WebGpuDiffusionRenderer {
     for (const texture of cache.pyramidTextures) this.texturePool.release(texture);
     cache.scales = [];
     cache.pyramidTextures = [];
+    cache.pyramidSignature = createPyramidSignature(input.recipe);
+    // 外部已经给了全局散射，本次渲染只需要本块的底图和散射源。
+    if (input.scatter) return;
+    const built = await this.buildPyramidTextures(input, cache.source);
+    cache.scales = built.scales;
+    cache.pyramidTextures = built.textures;
+  }
+
+  private async buildPyramidTextures(
+    input: {
+      width: number;
+      height: number;
+      recipe: DiffusionRecipe;
+      isCancelled?: () => boolean;
+    },
+    source: GpuTexture
+  ): Promise<{ scales: GpuTexture[]; textures: GpuTexture[] }> {
     if (input.recipe.mode === 'glow') {
       const bloom = await renderBloomPyramid({
         device: this.device,
         sampler: this.sampler,
         downsamplePipeline: this.pipelines.bloomDownsample,
         upsamplePipeline: this.pipelines.bloomUpsample,
-        source: cache.source,
+        source,
         width: input.width,
         height: input.height,
         levels: input.recipe.glow.levels,
@@ -235,18 +319,17 @@ export class WebGpuDiffusionRenderer {
         releaseTexture: (texture) => this.texturePool.release(texture),
         isCancelled: input.isCancelled,
       });
-      cache.scales = bloom.scales;
-      cache.pyramidTextures = bloom.textures;
-      cache.pyramidSignature = createPyramidSignature(input.recipe);
-      return;
+      return { scales: bloom.scales, textures: bloom.textures };
     }
+    const scales: GpuTexture[] = [];
+    const textures: GpuTexture[] = [];
     const scratch: GpuTexture[] = [];
     const uniforms: GpuBuffer[] = [];
     try {
       // 真正的逐级降采样金字塔：第 N 层从第 N-1 层的结果继续降 2 倍，而不是每层都回头
       // 采样全分辨率源图。后者在宽尺度上等于用 5 个样本去覆盖 32×32 区域，严重欠采样，
       // 点光源平移几个像素辉光总能量就会跳变（修复前实测波动 13.3%）。
-      let previous = cache.source;
+      let previous = source;
       let previousRadius = 0;
       for (let index = 0; index < input.recipe.scales.length; index += 1) {
         assertNotCancelled(input.isCancelled);
@@ -291,19 +374,17 @@ export class WebGpuDiffusionRenderer {
           ],
           vertical
         );
-        cache.scales.push(vertical);
-        cache.pyramidTextures.push(vertical);
+        scales.push(vertical);
+        textures.push(vertical);
         previous = vertical;
         previousRadius = input.recipe.scales[index].radius;
       }
       await this.device.queue.onSubmittedWorkDone();
       assertNotCancelled(input.isCancelled);
-      cache.pyramidSignature = createPyramidSignature(input.recipe);
+      return { scales, textures };
     } catch (error) {
       await this.device.queue.onSubmittedWorkDone().catch(() => undefined);
-      for (const texture of cache.pyramidTextures) this.texturePool.release(texture);
-      cache.scales = [];
-      cache.pyramidTextures = [];
+      for (const texture of textures) this.texturePool.release(texture);
       throw error;
     } finally {
       for (const buffer of uniforms) buffer.destroy();
@@ -393,8 +474,12 @@ function createBlurUniform(
   ]);
 }
 
-function createCompositeUniform(recipe: DiffusionRecipe): Float32Array {
+function createCompositeUniform(
+  recipe: DiffusionRecipe,
+  scatterRegion?: readonly [number, number, number, number]
+): Float32Array {
   const weights = recipe.scales.map((scale) => scale.weight);
+  const region = scatterRegion ?? [0, 0, 1, 1];
   return new Float32Array([
     1, 1, 0, 0,
     weights[0], weights[1], weights[2], weights[3],
@@ -416,7 +501,11 @@ function createCompositeUniform(recipe: DiffusionRecipe): Float32Array {
     recipe.glow.bleach,
     recipe.glow.coreWeight,
     recipe.glow.tintCoreWhite,
-    // 结构体尺寸要补到 16 字节的整数倍：前面到这里是 120 字节，补两个 f32 凑满 128。
+    // scatter_offset / scatter_scale：整图渲染是恒等变换，分块导出时指向本块在
+    // 全局散射里的那片子区域。
+    region[0], region[1],
+    region[2], region[3],
+    // 结构体尺寸要补到 16 字节的整数倍：前面到这里是 136 字节，补两个 f32 凑满 144。
     0, 0,
   ]);
 }

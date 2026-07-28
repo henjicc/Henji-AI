@@ -123,7 +123,9 @@ async function checkWorkspaceShell(page) {
   if (await page.locator('.react-flow').count() === 0) {
     tempProjectName = `Phase 4 Smoke ${Date.now()}`
     await page.getByRole('button', { name: /新建项目|New Project/ }).click()
-    const nameInput = page.getByRole('textbox')
+    // 必须限定到项目名输入框：页面上还有智能助手的提示词编辑器，它是
+    // contenteditable 且带 role="textbox"，不限定会命中两个元素直接报 strict 违规。
+    const nameInput = page.getByRole('textbox', { name: /项目名称|Project name/ })
     await nameInput.fill(tempProjectName)
     await nameInput.press('Enter')
   }
@@ -167,7 +169,9 @@ async function checkWorkspaceShell(page) {
 
     await page.getByRole('button', { name: /工具|Tools/ }).click()
     await page.waitForTimeout(300)
-    await page.getByRole('button', { name: /生成|对话|Generation/ }).click()
+    // 顶部工作区导航按钮，名字要精确匹配：模糊匹配会连生成工作区里的
+    // 「新建对话」一起命中，触发 strict 违规。
+    await page.getByRole('button', { name: /^(生成|Generation)$/ }).click()
     await page.waitForTimeout(300)
 
     return canvasMetrics

@@ -262,6 +262,15 @@ struct CompositeUniforms {
   glow_bleach: f32,
   glow_core_weight: f32,
   glow_tint_core_white: f32,
+  /**
+   * 散射纹理的独立 UV 映射。分块导出时散射只算一张全局的，每块用它取自己那片子区域；
+   * 底图和散射源仍按本块的 0..1 采样。整图渲染时是恒等变换 (0,0)+(1,1)。
+   *
+   * 散射必须和底图分开映射：块只看得见自己那点内容，用块内数据算出来的宽尺度散射
+   * 在块边界对不上，就是导出图上那圈矩形亮度台阶。
+   */
+  scatter_offset: vec2<f32>,
+  scatter_scale: vec2<f32>,
   padding_a: f32,
   padding_b: f32,
 };
@@ -349,18 +358,20 @@ fn compress_highlights(color: vec3<f32>, amount: f32) -> vec3<f32> {
 @fragment
 fn fragment_composite(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv = composite_params.offset + input.local_uv * composite_params.scale;
+  // 散射走自己的映射：分块时它指向全局散射里本块对应的那片子区域。
+  let scatter_uv = composite_params.scatter_offset + input.local_uv * composite_params.scatter_scale;
   let base = textureSampleLevel(composite_base, composite_sampler, uv, 0.0);
   if (base.a <= 0.00001) {
     return vec4<f32>(0.0);
   }
-  var scatter = sample_scatter(scatter_0, uv);
+  var scatter = sample_scatter(scatter_0, scatter_uv);
   if (composite_params.mode < 1.5) {
     scatter *= composite_params.weights_a.x;
-    scatter += sample_scatter(scatter_1, uv) * composite_params.weights_a.y;
-    scatter += sample_scatter(scatter_2, uv) * composite_params.weights_a.z;
-    scatter += sample_scatter(scatter_3, uv) * composite_params.weights_a.w;
-    scatter += sample_scatter(scatter_4, uv) * composite_params.weights_b.x;
-    scatter += sample_scatter(scatter_5, uv) * composite_params.weights_b.y;
+    scatter += sample_scatter(scatter_1, scatter_uv) * composite_params.weights_a.y;
+    scatter += sample_scatter(scatter_2, scatter_uv) * composite_params.weights_a.z;
+    scatter += sample_scatter(scatter_3, scatter_uv) * composite_params.weights_a.w;
+    scatter += sample_scatter(scatter_4, scatter_uv) * composite_params.weights_b.x;
+    scatter += sample_scatter(scatter_5, scatter_uv) * composite_params.weights_b.y;
   } else {
     // 辉光金字塔最紧一级在 1/2 分辨率，光源近处 2~3px 的过渡在那里够不到，光晕和
     // 光源核心之间会留一道断层。这里直接对全分辨率的亮通源做十字低通补上，

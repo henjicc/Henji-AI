@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderDiffusionExport, rebaseDiffusionRecipeForTile } from './exportRenderer';
+import {
+  renderDiffusionExport,
+  rebaseDiffusionRecipeForScale,
+  rebaseDiffusionRecipeForTile,
+} from './exportRenderer';
 import { compileDiffusionRecipe } from '../diffusionRecipe';
 import { createDefaultDiffusionOperationParams } from '../diffusionParams';
 import type { DiffusionMode } from '../types';
@@ -13,7 +17,10 @@ import type { DiffusionMode } from '../types';
 
 interface RenderCalls {
   global: { width: number; height: number }[];
+  scatter: { width: number; height: number }[];
+  scatterReleased: number;
   tiles: number;
+  regions: (readonly [number, number, number, number])[];
 }
 
 function createFakeBitmap(): ImageBitmap {
@@ -36,7 +43,9 @@ async function runExport(
   mode: DiffusionMode,
   size: { width: number; height: number }
 ): Promise<RenderCalls> {
-  const calls: RenderCalls = { global: [], tiles: 0 };
+  const calls: RenderCalls = {
+    global: [], scatter: [], scatterReleased: 0, tiles: 0, regions: [],
+  };
   const recipe = compileDiffusionRecipe(
     { ...createDefaultDiffusionOperationParams(), mode },
     { ...size, quality: 'high' }
@@ -52,8 +61,13 @@ async function runExport(
       calls.global.push({ width, height });
       return createFakeBitmap();
     },
-    renderTile: async () => {
+    buildGlobalScatter: async (width, height) => {
+      calls.scatter.push({ width, height });
+      return { release: () => { calls.scatterReleased += 1; } };
+    },
+    renderTile: async (tile) => {
       calls.tiles += 1;
+      calls.regions.push(tile.scatterRegion);
       return createFakeBitmap();
     },
   });
@@ -83,12 +97,35 @@ describe('柔光导出分块策略', () => {
     }
   });
 
-  it('超出单遍像素预算时退回分块', async () => {
+  /**
+   * 超大图仍要分块，但散射必须只算一次全局的、所有块共用——这正是块边界不再出现
+   * 亮度台阶的原因。块自己算各自的散射就会重现那圈矩形边框。
+   */
+  it('超出单遍像素预算时分块，但散射只算一次全局的供所有块共用', async () => {
     const calls = await runExport('glow', { width: 12000, height: 8000 });
 
     expect(calls.tiles).toBeGreaterThan(1);
-    // 分块路径下 renderGlobal 只用来铺低分辨率底，尺寸受 globalScatterMaxDimension 约束
-    expect(Math.max(calls.global[0].width, calls.global[0].height)).toBe(2048);
+    expect(calls.scatter).toHaveLength(1);
+    expect(Math.max(calls.scatter[0].width, calls.scatter[0].height)).toBe(2048);
+    expect(calls.scatterReleased).toBe(1);
+    // 分块路径不再需要整图合成来铺底，底图由各块的全分辨率结果直接拼出。
+    expect(calls.global).toHaveLength(0);
+  });
+
+  it('每块拿到自己在整图里的归一化散射区域', async () => {
+    const size = { width: 12000, height: 8000 };
+    const calls = await runExport('glow', size);
+
+    expect(calls.regions).toHaveLength(calls.tiles);
+    // 第一块贴在左上角，起点必须是 0；否则散射会整体错位。
+    expect(calls.regions[0][0]).toBe(0);
+    expect(calls.regions[0][1]).toBe(0);
+    for (const [offsetX, offsetY, scaleX, scaleY] of calls.regions) {
+      expect(offsetX + scaleX).toBeLessThanOrEqual(1 + 1e-9);
+      expect(offsetY + scaleY).toBeLessThanOrEqual(1 + 1e-9);
+      expect(scaleX).toBeGreaterThan(0);
+      expect(scaleY).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -109,5 +146,24 @@ describe('Tile 重基准', () => {
       .toBeCloseTo(recipe.scales[0].radius * recipe.image.referenceDimension, 10);
     expect(tileRecipe.glow.levels.map((level) => level.divisor))
       .toEqual(recipe.glow.levels.map((level) => level.divisor));
+  });
+
+  /**
+   * 缩图重基准的换算方向和裁剪重基准恰好相反：整图缩小时归一化量天然不变，
+   * 绝对像素量必须跟着缩。两个函数长得像，合并或抄错方向都会让全局散射的尺度错位。
+   */
+  it('缩图重基准把绝对像素的辉光层级按比例缩小，归一化尺度保持不变', () => {
+    const recipe = compileDiffusionRecipe(
+      { ...createDefaultDiffusionOperationParams(), mode: 'glow' },
+      { width: 6000, height: 4000, quality: 'high' }
+    );
+    const scaled = rebaseDiffusionRecipeForScale(recipe, 2048, 1365);
+
+    expect(scaled.image.referenceDimension).toBe(2048);
+    for (let i = 0; i < recipe.glow.levels.length; i += 1) {
+      const before = recipe.glow.levels[i].divisor / recipe.image.referenceDimension;
+      const after = scaled.glow.levels[i].divisor / scaled.image.referenceDimension;
+      expect(after).toBeCloseTo(before, 2);
+    }
   });
 });

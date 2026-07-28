@@ -28,12 +28,22 @@ export interface WebGpuDiffusionExportOptions {
   isCancelled: () => boolean;
   onProgress: (completedTiles: number, totalTiles: number) => void;
   renderGlobal: (width: number, height: number) => Promise<ImageBitmap>;
+  /**
+   * 按整图降采样算一张全局散射，返回释放句柄。分块路径下所有块共用它，
+   * 因此块边界不会出现亮度台阶。
+   */
+  buildGlobalScatter?: (
+    width: number,
+    height: number
+  ) => Promise<{ release: () => void }>;
   renderTile: (tile: {
     index: number;
     expandedX: number;
     expandedY: number;
     expandedWidth: number;
     expandedHeight: number;
+    /** 本块在整图里的归一化区域，用于从全局散射中取对应的一片。 */
+    scatterRegion: readonly [number, number, number, number];
   }) => Promise<ImageBitmap>;
   postProcess?: (canvas: OffscreenCanvas) => Promise<OffscreenCanvas | void>;
 }
@@ -99,44 +109,43 @@ export async function renderDiffusionExport(
     return await encodeOutput(output, options);
   }
 
-  const global = await options.renderGlobal(
+  // 散射按整图降采样只算一次，所有块共用；块只补自己那片的全分辨率底图。
+  // 散射是低频的，降采样算不掉什么；而让每块各算各的，块边界必然对不上。
+  const scatter = await options.buildGlobalScatter?.(
     plan.globalScatterWidth,
     plan.globalScatterHeight
   );
   try {
-    context.drawImage(global, 0, 0, options.width, options.height);
-  } finally {
-    global.close();
-  }
-
-  const localBlend = Math.min(
-    1,
-    options.recipe.scales
-      .slice(0, 3)
-      .reduce((sum, scale) => sum + scale.weight, 0)
-  );
-  for (const tile of plan.tiles) {
-    assertNotCancelled(options.isCancelled);
-    const bitmap = await options.renderTile(tile);
-    try {
-      context.save();
-      context.globalAlpha = localBlend;
-      context.drawImage(
-        bitmap,
-        tile.cropX,
-        tile.cropY,
-        tile.width,
-        tile.height,
-        tile.x,
-        tile.y,
-        tile.width,
-        tile.height
-      );
-      context.restore();
-    } finally {
-      bitmap.close();
+    for (const tile of plan.tiles) {
+      assertNotCancelled(options.isCancelled);
+      const bitmap = await options.renderTile({
+        ...tile,
+        scatterRegion: [
+          tile.expandedX / options.width,
+          tile.expandedY / options.height,
+          tile.expandedWidth / options.width,
+          tile.expandedHeight / options.height,
+        ],
+      });
+      try {
+        context.drawImage(
+          bitmap,
+          tile.cropX,
+          tile.cropY,
+          tile.width,
+          tile.height,
+          tile.x,
+          tile.y,
+          tile.width,
+          tile.height
+        );
+      } finally {
+        bitmap.close();
+      }
+      options.onProgress(tile.index + 1, plan.totalTiles);
     }
-    options.onProgress(tile.index + 1, plan.totalTiles);
+  } finally {
+    scatter?.release();
   }
 
   return await encodeOutput(output, options);
@@ -157,6 +166,39 @@ async function encodeOutput(
     bytes: new Uint8Array(await blob.arrayBuffer()),
     width: finalOutput.width,
     height: finalOutput.height,
+  };
+}
+
+/**
+ * 把配方换算到「整图降采样后」的分辨率上，供全局散射使用。
+ *
+ * 和 `rebaseDiffusionRecipeForTile` 的区别正是这次最容易搞错的地方：
+ * 块是**全分辨率裁剪**，绝对像素量（glow.levels.divisor）不变、归一化量（scales.radius）
+ * 要换算；而这里是**整图缩图**，归一化量天然不变、绝对像素量必须跟着缩。
+ * 两个函数长得像，但换算的方向恰好相反，不要合并。
+ */
+export function rebaseDiffusionRecipeForScale(
+  recipe: DiffusionRecipe,
+  width: number,
+  height: number
+): DiffusionRecipe {
+  const referenceDimension = Math.max(width, height);
+  const scale = referenceDimension / recipe.image.referenceDimension;
+  return {
+    ...recipe,
+    image: {
+      width,
+      height,
+      referenceDimension,
+      aspectCorrection: [referenceDimension / width, referenceDimension / height],
+    },
+    glow: {
+      ...recipe.glow,
+      levels: recipe.glow.levels.map((level) => ({
+        ...level,
+        divisor: Math.max(2, Math.round(level.divisor * scale)),
+      })),
+    },
   };
 }
 

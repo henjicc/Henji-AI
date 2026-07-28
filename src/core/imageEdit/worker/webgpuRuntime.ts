@@ -5,8 +5,13 @@ import {
   createShaderModuleChecked,
   ImageEditWebGpuDeviceManager,
 } from '../webgpu/deviceManager'
-import { WebGpuDiffusionRenderer } from '../webgpu/diffusionRenderer'
 import {
+  WebGpuDiffusionRenderer,
+  type DiffusionRenderInput,
+  type DiffusionScatterPyramid,
+} from '../webgpu/diffusionRenderer'
+import {
+  rebaseDiffusionRecipeForScale,
   rebaseDiffusionRecipeForTile,
   renderDiffusionExport,
 } from '../webgpu/exportRenderer'
@@ -181,6 +186,7 @@ export class WorkerWebGpuRuntime {
         const exportSourceKey = source.kind === 'url'
           ? `url:${source.url}`
           : `blob-export:${Date.now()}`
+        let globalScatter: DiffusionScatterPyramid | null = null
         return await renderDiffusionExport({
         width: composed.bitmap.width,
         height: composed.bitmap.height,
@@ -213,6 +219,29 @@ export class WorkerWebGpuRuntime {
             resized.close()
           }
         },
+        buildGlobalScatter: async (width, height) => {
+          const resized = await createImageBitmap(composed.bitmap, {
+            resizeWidth: width,
+            resizeHeight: height,
+            resizeQuality: 'high',
+          })
+          try {
+            // 散射尺度按比例定义，所以在降采样后的整图上重新编译一遍配方，
+            // 得到的是同一组归一化尺度。
+            const pyramid = await state.diffusionRenderer.buildScatterPyramid({
+              width,
+              height,
+              recipe: rebaseDiffusionRecipeForScale(recipe, width, height),
+              isCancelled: options.isCancelled,
+              createLinearBase: async () =>
+                await this.createIntermediate(state, resized, width, height),
+            })
+            globalScatter = pyramid
+            return { release: () => { globalScatter = null; pyramid.release() } }
+          } finally {
+            resized.close()
+          }
+        },
         renderTile: async (tile) => {
           const tileBitmap = await createImageBitmap(
             composed.bitmap,
@@ -233,7 +262,10 @@ export class WorkerWebGpuRuntime {
                 tile.expandedHeight
               ),
               `${exportSourceKey}:${orientationCacheKey(options.composition)}:tile:${tile.index}`,
-              options.isCancelled
+              options.isCancelled,
+              globalScatter
+                ? { pyramid: globalScatter, region: tile.scatterRegion }
+                : undefined
             )
           } finally {
             tileBitmap.close()
@@ -481,7 +513,8 @@ export class WorkerWebGpuRuntime {
     height: number,
     recipe: DiffusionRecipe,
     sourceKey: string,
-    isCancelled?: () => boolean
+    isCancelled?: () => boolean,
+    scatter?: DiffusionRenderInput['scatter']
   ): Promise<ImageBitmap> {
     const rendered = await state.diffusionRenderer.render({
       sourceKey,
@@ -489,6 +522,7 @@ export class WorkerWebGpuRuntime {
       height,
       recipe,
       isCancelled,
+      scatter,
       createLinearBase: async () => await this.createIntermediate(
         state,
         decoded,
