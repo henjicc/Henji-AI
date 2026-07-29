@@ -212,6 +212,16 @@ async function main() {
         pan: Math.round((panResult.frames / panResult.elapsedMs) * 1000),
         zoom: Math.round((zoomResult.frames / zoomResult.elapsedMs) * 1000),
       },
+      frameTiming: {
+        idle: baseline.frameTiming,
+        pan: panResult.frameTiming,
+        zoom: zoomResult.frameTiming,
+      },
+      longAnimationFrame: {
+        idle: baseline.longAnimationFrame,
+        pan: panResult.longAnimationFrame,
+        zoom: zoomResult.longAnimationFrame,
+      },
       jsHeapUsedMb: {
         before: memoryBeforeBytes ? Math.round(memoryBeforeBytes / 1024 / 1024) : null,
         after: memoryAfterBytes ? Math.round(memoryAfterBytes / 1024 / 1024) : null,

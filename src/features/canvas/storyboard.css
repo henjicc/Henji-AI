@@ -45,8 +45,9 @@
 
 /* 可见玻璃达到 64 个后才在手势期间临时取消 backdrop-filter。
    64 是 60 层仍满帧、100 层降到 43.5fps 之间的保守拐点；正常工程完全不触发，
-   避免为少量节点付出材质突变。计数只在手势开始执行一次，见
-   useCanvasGlassPerformance.ts。高密度场景实测取消滤镜可从 27.4fps 恢复到 60.4fps。 */
+   避免为少量节点付出材质突变。计数由 IntersectionObserver 在手势外异步维护，见
+   useCanvasGlassPerformance.ts；手势首帧不再触发同步布局。高密度场景实测取消滤镜
+   可从 27.4fps 恢复到 60.4fps。 */
 .canvas-glass-density-high.canvas-viewport-moving .react-flow__viewport .ui-glass {
   background-color: rgb(var(--panel-rgb) / 0.94);
   -webkit-backdrop-filter: none; /* ui-surface-allow：高密度手势期复用 ui-glass，仅临时取消滤镜 */
@@ -80,6 +81,14 @@
 .canvas-minimap .react-flow__minimap-mask,
 .canvas-minimap .react-flow__minimap-node {
   pointer-events: all;
+}
+
+.canvas-minimap .react-flow__minimap-svg {
+  touch-action: none;
+}
+
+.canvas-minimap .react-flow__minimap-node {
+  fill: rgb(var(--text-muted-rgb) / 0.92);
 }
 
 .canvas-minimap .react-flow__minimap-mask {

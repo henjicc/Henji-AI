@@ -9,7 +9,6 @@ import {
 import {
   ReactFlow,
   Background,
-  MiniMap,
   BackgroundVariant,
   SelectionMode,
   useReactFlow,
@@ -34,7 +33,7 @@ import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
 import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
 import { areStringListsEqual } from '@/features/canvas/application/graphMediaResolver';
-import { canNodeBeManualConnectionSource, CANVAS_MINIMAP_Z_INDEX, DEFAULT_VIEWPORT } from './canvasUtils';
+import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
@@ -47,6 +46,7 @@ import { SelectedNodeOverlay } from './ui/SelectedNodeOverlay';
 import { NodeToolDialog } from './ui/NodeToolDialog';
 import { CameraStageNodeDialog } from './nodes/cameraStage/CameraStageNodeDialog';
 import { CanvasOverlays } from './ui/CanvasOverlays';
+import { CanvasMiniMap } from './ui/CanvasMiniMap';
 import { useCanvasAssetDrop } from './hooks/useCanvasAssetDrop';
 import { useCanvasGlassPerformance } from './hooks/useCanvasGlassPerformance';
 
@@ -509,14 +509,7 @@ export function Canvas() {
         className="bg-canvas"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />
-        <MiniMap
-          className="canvas-minimap nopan nowheel !border-border-dark !bg-surface-dark"
-          style={{ pointerEvents: 'all', zIndex: CANVAS_MINIMAP_Z_INDEX }}
-          nodeColor="rgba(120, 120, 120, 0.92)"
-          maskColor="rgba(0, 0, 0, 0.62)"
-          pannable
-          zoomable
-        />
+        <CanvasMiniMap />
 
         <SelectedNodeOverlay />
       </ReactFlow>

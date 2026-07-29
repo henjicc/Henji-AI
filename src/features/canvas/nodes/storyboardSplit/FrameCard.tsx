@@ -1,9 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, type CSSProperties } from 'react';
-import { useViewport } from '@xyflow/react';
 import { ImagePlus, SquareArrowOutUpRight } from 'lucide-react';
 import type { StoryboardExportOptions, StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes';
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument';
-import { resolveImageDisplayUrl, shouldUseOriginalImageByZoom } from '@/features/canvas/application/imageData';
+import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { type PromptReferenceItem, UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -13,6 +12,7 @@ import {
   resolveStoryboardPromptDocument,
   storyboardPromptDocumentsEqual,
 } from '@/features/canvas/application/storyboardPromptDocument';
+import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
 
 interface FrameCardProps {
   nodeId: string;
@@ -54,7 +54,7 @@ export const FrameCard = memo(({
   onSelectNode,
 }: FrameCardProps): JSX.Element => {
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
-  const { zoom } = useViewport();
+  const preferOriginalImage = useOriginalImageLod();
   const noteHistoryGroup = createCanvasTextHistoryGroup(nodeId, `frames.${frame.id}.note`);
   const editHistory = useCanvasEditHistory(noteHistoryGroup);
   const resolvedNote = useMemo(() => resolveStoryboardPromptDocument({
@@ -91,12 +91,11 @@ export const FrameCard = memo(({
   }, [frame.id, frame.note, nodeId, noteHistoryGroup, referenceItems, updateStoryboardFrame]);
 
   const imageSource = useMemo(() => {
-    const preferOriginal = shouldUseOriginalImageByZoom(zoom);
-    const picked = preferOriginal
+    const picked = preferOriginalImage
       ? frame.imageUrl || frame.previewImageUrl
       : frame.previewImageUrl || frame.imageUrl;
     return picked ? resolveImageDisplayUrl(picked) : null;
-  }, [frame.imageUrl, frame.previewImageUrl, zoom]);
+  }, [frame.imageUrl, frame.previewImageUrl, preferOriginalImage]);
 
   const viewerSource = useMemo(() => {
     const picked = frame.imageUrl || frame.previewImageUrl;
