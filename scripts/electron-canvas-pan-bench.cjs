@@ -19,11 +19,19 @@
  *   BENCH_REPS     每个配置的采样轮数（默认 5）
  *   BENCH_SET      逗号分隔的配置名（默认 off,hidenodes）
  *   BENCH_OUT      结果输出目录（默认 .pan-bench）
+ *   BENCH_DIAGNOSTICS 是否采集 CDP/Long Task/ResizeObserver 指标（默认 1）
+ *   BENCH_LAYERS   是否额外采集合成层指标（默认 0，采集本身有额外开销）
+ *   BENCH_LISTENER_TREE 是否深扫画布子树的监听器（默认 0，仅用于泄漏诊断）
+ *   BENCH_SOAK_REPS 强制 GC 前后额外执行的往返次数（默认 0，用于保留内存诊断）
  */
 
 const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp, waitForApp } = require('./lib/electronLaunch.cjs')
+const {
+  createPanDiagnostics,
+  installPageDiagnostics,
+} = require('./lib/canvasPanDiagnostics.cjs')
 const {
   FIXTURE_PREFIX,
   createRealContentFixture,
@@ -45,6 +53,12 @@ const MULTIPLIER = Math.max(1, Number(process.env.BENCH_MULT || 1))
 const SWEEP_MS = Math.max(400, Number(process.env.BENCH_SWEEP_MS || 1200))
 const REPS = Math.max(1, Number(process.env.BENCH_REPS || 5))
 const OUT_DIR = path.join(ROOT, process.env.BENCH_OUT || '.pan-bench')
+const DIAGNOSTICS_ENABLED = process.env.BENCH_DIAGNOSTICS !== '0'
+const LAYER_DIAGNOSTICS_ENABLED = DIAGNOSTICS_ENABLED && process.env.BENCH_LAYERS === '1'
+const LISTENER_TREE_ENABLED = DIAGNOSTICS_ENABLED && process.env.BENCH_LISTENER_TREE === '1'
+const SOAK_REPS = DIAGNOSTICS_ENABLED
+  ? Math.max(0, Number(process.env.BENCH_SOAK_REPS || 0))
+  : 0
 
 // 扫掠速度：每 10ms 走 9 屏幕 px ≈ 900 px/s，接近真实用户的匀速拖动
 const SWEEP_STEP_PX = 9
@@ -57,12 +71,14 @@ const SWEEP_SCREEN_DISTANCE = (SWEEP_MS / SWEEP_INTERVAL_MS) * SWEEP_STEP_PX
  * - off        现状基线
  * - paintdisabled 关闭节点绘制隔离，仅用于同启动 A/B
  * - hidenodes  隐藏节点内容，作为「只画连线与背景」的渲染上限参照
+ * - hidewaveforms 隐藏音频节点的高密度 SVG 波形，诊断其独立绘制成本
  * - willchange 历史方案，已确认不可用（会钉死光栅倍率导致文字发虚），仅作对照
  */
 const CONFIGS = {
   off: '',
   paintdisabled: '.canvas-node-paint-frame{contain:none!important;}.react-flow__node{contain:none!important;overflow-clip-margin:0!important;}',
   hidenodes: '.react-flow__node{visibility:hidden !important;}',
+  hidewaveforms: '.react-flow__node-audioUploadNode .nodrag.nowheel>svg.block,.react-flow__node-audioGenNode .nodrag.nowheel>svg.block{display:none!important;}',
   willchange: '.react-flow__viewport{will-change:transform;}',
 }
 
@@ -104,16 +120,82 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
   await page.waitForTimeout(2500)
 }
 
+async function recoverFixtureViewport(page, fixture, viewport) {
+  await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+  await page.waitForTimeout(700)
+  await page.evaluate(async ({ projectId, nextViewport }) => {
+    await window.henjiNative.db.execute(
+      'UPDATE storyboard_projects SET viewport_json = ? WHERE id = ?',
+      [JSON.stringify(nextViewport), projectId]
+    )
+  }, {
+    projectId: fixture.projectId,
+    nextViewport: viewport,
+  })
+  await page.getByRole('heading', { name: fixture.projectName }).click()
+  await page.waitForSelector('.react-flow', { timeout: 30000 })
+  await page.waitForFunction(
+    (expected) => document.querySelectorAll('.react-flow__node').length >= expected,
+    fixture.nodeCount,
+    { timeout: 40000 }
+  )
+  await page.waitForTimeout(1000)
+}
+
 async function collectEnvironment(page, session) {
-  const dom = await page.evaluate(() => ({
-    innerWidth: window.innerWidth,
-    innerHeight: window.innerHeight,
-    devicePixelRatio: window.devicePixelRatio,
-    imageCount: document.querySelectorAll('.react-flow__node img').length,
-    videoCount: document.querySelectorAll('.react-flow__node video').length,
-    viewportElementCount: document.querySelectorAll('.react-flow__viewport *').length,
-    edgeCount: document.querySelectorAll('.react-flow__edge').length,
-  }))
+  const dom = await page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll('.react-flow__node'))
+    const byType = new Map()
+    for (const node of nodes) {
+      const typeClass = Array.from(node.classList).find((name) => (
+        name.startsWith('react-flow__node-') && name !== 'react-flow__node-selected'
+      ))
+      const type = typeClass?.slice('react-flow__node-'.length) || 'unknown'
+      const descendants = node.querySelectorAll('*').length
+      const interactive = node.querySelectorAll('button,input,select,textarea,[role="button"]').length
+      const svgElements = node.querySelectorAll('svg,svg *').length
+      const mediaElements = node.querySelectorAll('img,video,audio,canvas').length
+      const current = byType.get(type) || []
+      current.push({ descendants, interactive, svgElements, mediaElements })
+      byType.set(type, current)
+    }
+
+    const nodeDomByType = Array.from(byType, ([type, rows]) => {
+      const summarize = (key) => {
+        const values = rows.map((row) => row[key]).sort((left, right) => left - right)
+        const mid = Math.floor(values.length / 2)
+        const medianValue = values.length % 2
+          ? values[mid]
+          : (values[mid - 1] + values[mid]) / 2
+        return {
+          min: values[0] || 0,
+          median: medianValue || 0,
+          max: values.at(-1) || 0,
+        }
+      }
+      return {
+        type,
+        count: rows.length,
+        descendants: summarize('descendants'),
+        interactive: summarize('interactive'),
+        svgElements: summarize('svgElements'),
+        mediaElements: summarize('mediaElements'),
+      }
+    }).sort((left, right) => (
+      right.descendants.median - left.descendants.median || left.type.localeCompare(right.type)
+    ))
+
+    return {
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+      imageCount: document.querySelectorAll('.react-flow__node img').length,
+      videoCount: document.querySelectorAll('.react-flow__node video').length,
+      viewportElementCount: document.querySelectorAll('.react-flow__viewport *').length,
+      edgeCount: document.querySelectorAll('.react-flow__edge').length,
+      nodeDomByType,
+    }
+  })
   const state = await readCanvasState(page)
   let gpu = null
   try {
@@ -127,6 +209,42 @@ async function collectEnvironment(page, session) {
 
 function summarize(rounds) {
   const valid = rounds.filter((round) => round.valid)
+  const diagnosticMedian = (read) => Number(median(valid.map(read).filter(Number.isFinite)).toFixed(2))
+  const diagnostics = valid.some((round) => round.diagnostics)
+    ? {
+        cdp: {
+          styleRecalcCountMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.styleRecalcCount),
+          styleRecalcDurationMsMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.styleRecalcDurationMs),
+          layoutCountMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.layoutCount),
+          layoutDurationMsMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.layoutDurationMs),
+          taskDurationMsMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.taskDurationMs),
+          scriptDurationMsMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.scriptDurationMs),
+          heapDeltaBytesMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.heapDeltaBytes),
+          nodesDeltaMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.nodesDelta),
+          eventListenersDeltaMedian: diagnosticMedian((round) => round.diagnostics?.cdp?.eventListenersDelta),
+        },
+        resizeObserver: {
+          callbacksMedian: diagnosticMedian((round) => round.diagnostics?.resizeObserver?.callbacks),
+          entriesMedian: diagnosticMedian((round) => round.diagnostics?.resizeObserver?.entries),
+          nodeEntriesMedian: diagnosticMedian((round) => round.diagnostics?.resizeObserver?.nodeEntries),
+          movingCallbacksMedian: diagnosticMedian((round) => round.diagnostics?.resizeObserver?.movingCallbacks),
+          movingEntriesMedian: diagnosticMedian((round) => round.diagnostics?.resizeObserver?.movingEntries),
+        },
+        longTasks: {
+          countMedian: diagnosticMedian((round) => round.diagnostics?.longTasks?.count),
+          totalBlockingTimeMsMedian: diagnosticMedian((round) => round.diagnostics?.longTasks?.totalBlockingTimeMs),
+          maxDurationMsMedian: diagnosticMedian((round) => round.diagnostics?.longTasks?.maxDurationMs),
+        },
+        layers: valid.some((round) => round.diagnostics?.layers)
+          ? {
+              maxLayerCountMedian: diagnosticMedian((round) => round.diagnostics?.layers?.maxLayerCount),
+              maxDrawsContentCountMedian: diagnosticMedian((round) => round.diagnostics?.layers?.maxDrawsContentCount),
+              maxBackendNodeLayerCountMedian: diagnosticMedian((round) => round.diagnostics?.layers?.maxBackendNodeLayerCount),
+              paintedEventsMedian: diagnosticMedian((round) => round.diagnostics?.layers?.paintedEvents),
+            }
+          : null,
+      }
+    : null
   return {
     rounds: rounds.length,
     validRounds: valid.length,
@@ -139,6 +257,7 @@ function summarize(rounds) {
     maxMsMax: valid.length ? Math.max(...valid.map((round) => round.maxMs)) : 0,
     droppedOver25Median: Number(median(valid.map((round) => round.droppedOver25Ms)).toFixed(1)),
     droppedOver50Median: Number(median(valid.map((round) => round.droppedOver50Ms)).toFixed(1)),
+    diagnostics,
   }
 }
 
@@ -156,10 +275,18 @@ async function main() {
   const page = app.page
   let fixture = null
   let session = null
+  let diagnostics = null
 
   try {
     await waitForApp(page)
     session = await page.context().newCDPSession(page)
+    if (DIAGNOSTICS_ENABLED) {
+      await installPageDiagnostics(page)
+      diagnostics = await createPanDiagnostics(page, session, {
+        layers: LAYER_DIAGNOSTICS_ENABLED,
+        listenerTree: LISTENER_TREE_ENABLED,
+      })
+    }
 
     // 先清掉可能残留的历史 fixture，再生成本次的
     await removeFixtures(page, FIXTURE_PREFIX)
@@ -181,7 +308,11 @@ async function main() {
     if (!grab) throw new Error('找不到落在 .react-flow__pane 上的抓取点')
 
     // 每轮都从同一个视口出发，否则轮次之间起点会缓慢漂移，数据不可比
-    const startViewport = { x: fixture.viewport.x, y: fixture.viewport.y }
+    const startViewport = {
+      x: fixture.viewport.x,
+      y: fixture.viewport.y,
+      zoom: fixture.viewport.zoom,
+    }
     // 扫掠长度受真实内容长度限制：走出内容范围后测的就是空画布上的 60fps
     const effectiveSweepMs = Math.max(
       500,
@@ -204,19 +335,60 @@ async function main() {
     const results = {}
     for (const name of CONFIG_SET) results[name] = []
     const resetFailures = []
+    let diagnosticSoak = null
 
     // 同一次启动内交替采样：A/B/A/B…，避免「第一个配置永远最慢」的预热假象
     for (let rep = 0; rep < REPS; rep += 1) {
       for (const name of CONFIG_SET) {
         await applyConfig(page, name)
+        // 不能只相信上一轮的复位结果：起点偏离会让扫掠走进另一条内容密度带，
+        // 仍可能通过“至少 5 个可见节点”的弱自检并产出假的高帧率。
+        const ready = await resetViewport(page, session, startViewport)
+        let recoveredStart = false
+        if (!ready.ok) {
+          resetFailures.push({ rep: rep + 1, config: name, phase: 'before', reset: ready })
+          await recoverFixtureViewport(page, fixture, startViewport)
+          recoveredStart = true
+          const recovered = await resetViewport(page, session, startViewport)
+          if (!recovered.ok) {
+            throw new Error(`配置 ${name} 第 ${rep + 1} 轮无法恢复统一起点`)
+          }
+        }
+        const diagnosticStart = diagnostics ? await diagnostics.startRound() : null
         const forward = await sweep(page, session, { ...sweepOptions, measure: true })
-        results[name].push({ rep: rep + 1, ...forward })
+        const diagnosticResult = diagnostics ? await diagnostics.endRound(diagnosticStart) : null
+        const invalidReasons = recoveredStart
+          ? [...forward.invalidReasons, '起点通过重载恢复，本轮包含重新光栅开销']
+          : forward.invalidReasons
+        results[name].push({
+          rep: rep + 1,
+          ...forward,
+          valid: forward.valid && !recoveredStart,
+          invalidReasons,
+          diagnostics: diagnosticResult,
+        })
         const reset = await resetViewport(page, session, startViewport)
         if (!reset.ok) resetFailures.push({ rep: rep + 1, config: name, reset })
         await sleep(200)
       }
     }
     await applyConfig(page, 'off')
+
+    if (diagnostics && SOAK_REPS > 0) {
+      const before = await diagnostics.collectRetainedState()
+      const soakResetFailures = []
+      for (let rep = 0; rep < SOAK_REPS; rep += 1) {
+        await sweep(page, session, { ...sweepOptions, measure: false })
+        const reset = await resetViewport(page, session, startViewport)
+        if (!reset.ok) soakResetFailures.push({ rep: rep + 1, reset })
+      }
+      const after = await diagnostics.collectRetainedState()
+      diagnosticSoak = {
+        reps: SOAK_REPS,
+        resetFailures: soakResetFailures,
+        retained: diagnostics.diffRetainedState(before, after),
+      }
+    }
 
     const summary = {}
     for (const name of CONFIG_SET) summary[name] = summarize(results[name])
@@ -233,6 +405,10 @@ async function main() {
         sweepSpeedPxPerSec: SWEEP_SPEED_PX_PER_SEC,
         reps: REPS,
         configs: CONFIG_SET,
+        diagnostics: DIAGNOSTICS_ENABLED,
+        layerDiagnostics: LAYER_DIAGNOSTICS_ENABLED,
+        listenerTreeDiagnostics: LISTENER_TREE_ENABLED,
+        soakReps: SOAK_REPS,
       },
       fixture: {
         projectName: fixture.projectName,
@@ -246,6 +422,7 @@ async function main() {
       environment,
       grab,
       resetFailures,
+      diagnosticSoak,
       summary,
       rounds: results,
     }
@@ -263,6 +440,7 @@ async function main() {
       await sleep(800)
       await removeFixtures(page, FIXTURE_PREFIX).catch(() => undefined)
     }
+    await diagnostics?.dispose().catch(() => undefined)
     await session?.detach().catch(() => undefined)
     await app.close()
   }

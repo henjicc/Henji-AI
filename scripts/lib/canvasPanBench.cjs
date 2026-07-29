@@ -1,5 +1,7 @@
 'use strict'
 
+const { dispatch, findPanePoint, releasePointer } = require('./canvasPanInput.cjs')
+
 /**
  * 画布平移性能基准的公共能力：真实内容 fixture 生成、抓取点查找、连续扫掠驱动、每轮自检。
  *
@@ -213,42 +215,6 @@ async function removeFixtures(page, prefix = FIXTURE_PREFIX) {
   }, prefix)
 }
 
-/**
- * 找一个真正落在 `.react-flow__pane` 上的抓取点。
- * 落在节点上会变成「拖节点」，视口根本不动，整轮数据会全是 0。
- */
-async function findPanePoint(page, { preferRatioX = 0.86, preferRatioY = 0.5 } = {}) {
-  return page.evaluate((prefer) => {
-    const flow = document.querySelector('.react-flow')
-    if (!flow) return null
-    const rect = flow.getBoundingClientRect()
-    const margin = 40
-    const baseX = rect.left + rect.width * prefer.preferRatioX
-    const baseY = rect.top + rect.height * prefer.preferRatioY
-
-    const xOffsets = [0, -60, 60, -140, 140, -240, 240, -360, 360]
-    const yOffsets = [0, -80, 80, -180, 180, -280, 280, -400, 400, -520, 520]
-
-    for (const dy of yOffsets) {
-      for (const dx of xOffsets) {
-        const x = Math.round(baseX + dx)
-        const y = Math.round(baseY + dy)
-        if (x < rect.left + margin || x > rect.right - margin) continue
-        if (y < rect.top + margin || y > rect.bottom - margin) continue
-        const element = document.elementFromPoint(x, y)
-        if (!element) continue
-        if (element.closest('.react-flow__node')) continue
-        if (element.closest('.react-flow__minimap')) continue
-        if (element.closest('.react-flow__controls')) continue
-        if (element.closest('.react-flow__panel')) continue
-        if (!element.closest('.react-flow__pane')) continue
-        return { x, y }
-      }
-    }
-    return null
-  }, { preferRatioX, preferRatioY })
-}
-
 async function readCanvasState(page) {
   return page.evaluate(() => {
     const viewportEl = document.querySelector('.react-flow__viewport')
@@ -309,11 +275,6 @@ function startFrameSampler(page, durationMs) {
     }
     requestAnimationFrame(tick)
   }), durationMs)
-}
-
-function dispatch(session, params) {
-  // 不 await：await 每一次派发会把输入频率压到约 30Hz，真实差异会被掩盖
-  session.send('Input.dispatchMouseEvent', params).catch(() => undefined)
 }
 
 /**
@@ -379,7 +340,9 @@ async function sweep(page, session, {
     await sleep(intervalMs)
   }
 
-  dispatch(session, { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount: 1 })
+  // 最终松手必须 await：前面的 move 为了保持输入频率没有逐个等待，如果这里也不等，
+  // 下一次复位可能在 CDP 输入队列尚未结束时再次按下，d3-zoom 会停在拖动状态。
+  await releasePointer(session, { x, y })
   await sleep(30)
 
   if (!measure) {
@@ -432,6 +395,13 @@ async function sweep(page, session, {
  * 「松手 → buttons:0 移动 → 再按下」的顺序。
  */
 async function resetViewport(page, session, target, { tolerance = 4, maxPasses = 10 } = {}) {
+  // 先把上一段可能仍在 CDP 队列中的拖动态归零；mouseReleased 在未按下时是幂等的。
+  const neutral = await findPanePoint(page)
+  if (neutral) {
+    await releasePointer(session, neutral)
+    await sleep(30)
+  }
+
   for (let pass = 0; pass < maxPasses; pass += 1) {
     const state = await readCanvasState(page)
     if (!Number.isFinite(state.x) || !Number.isFinite(state.y)) {
