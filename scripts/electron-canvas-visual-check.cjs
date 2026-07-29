@@ -10,6 +10,7 @@
  *   - willchange：已知会导致文字发虚的负例；必须被像素检查抓到
  *
  * 环境变量：VISUAL_PROJECT、VISUAL_MULT、VISUAL_SET、VISUAL_OUT、
+ * VISUAL_FILL_ALL_TYPES=1（在临时 fixture 补齐缺失类型）、
  * VISUAL_REQUIRE_ALL_TYPES=1（源项目缺少注册类型时失败）。
  */
 
@@ -24,7 +25,10 @@ const {
   sleep,
 } = require('./lib/canvasPanBench.cjs')
 const { cropCompare, diffBuffers, worstBlock } = require('./lib/canvasVisualDiff.cjs')
-const { prepareModelSelectorFixture } = require('./lib/canvasVisualFixture.cjs')
+const {
+  prepareFullTypeFixture,
+  prepareModelSelectorFixture,
+} = require('./lib/canvasVisualFixture.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.cjs')
@@ -32,6 +36,7 @@ const OUT_DIR = path.join(ROOT, process.env.VISUAL_OUT || '.canvas-visual')
 const SOURCE_PROJECT = process.env.VISUAL_PROJECT || 'TEST'
 const MULTIPLIER = Math.max(1, Number(process.env.VISUAL_MULT || 1))
 const SELECTOR_STATE = process.env.VISUAL_SELECTOR_STATE || 'preserve'
+const FILL_ALL_TYPES = process.env.VISUAL_FILL_ALL_TYPES === '1'
 const STYLE_ID = '__canvas_visual_check_style__'
 const CAPTURE_SETTLE_MS = 250
 
@@ -48,7 +53,10 @@ const REGISTERED_NODE_TYPES = [
 const CONFIGS = {
   off: { css: '', expect: 'pass' },
   repeat: { css: '', expect: 'pass' },
-  paintdisabled: { css: '.canvas-node-paint-frame{contain:none!important;}', expect: 'pass' },
+  paintdisabled: {
+    css: '.canvas-node-paint-frame{contain:none!important;}.react-flow__node{contain:none!important;overflow-clip-margin:0!important;}',
+    expect: 'pass',
+  },
   willchange: { css: '.react-flow__viewport{will-change:transform!important;}', expect: 'fail' },
 }
 const CONFIG_SET = (process.env.VISUAL_SET || 'off,repeat,paintdisabled,willchange')
@@ -299,6 +307,7 @@ async function main() {
       viewportPlan: { ...windowSize, sweepScreenDistance: 500 },
     })
     fixture = await prepareModelSelectorFixture(page, fixture, SELECTOR_STATE)
+    fixture = await prepareFullTypeFixture(page, fixture, FILL_ALL_TYPES)
     await openFixtureProject(page, fixture.projectName, fixture.nodeCount)
 
     const startViewport = { x: fixture.viewport.x, y: fixture.viewport.y }
@@ -327,7 +336,13 @@ async function main() {
     const output = {
       ok,
       generatedAt: new Date().toISOString(),
-      params: { sourceProject: SOURCE_PROJECT, multiplier: MULTIPLIER, selectorState: SELECTOR_STATE, configs: CONFIG_SET },
+      params: {
+        sourceProject: SOURCE_PROJECT,
+        multiplier: MULTIPLIER,
+        selectorState: SELECTOR_STATE,
+        fillAllTypes: FILL_ALL_TYPES,
+        configs: CONFIG_SET,
+      },
       fixture: { ...fixture, sourceViewport: undefined },
       coverage: {
         registeredTypeCount: REGISTERED_NODE_TYPES.length,

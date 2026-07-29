@@ -55,11 +55,13 @@ const SWEEP_SCREEN_DISTANCE = (SWEEP_MS / SWEEP_INTERVAL_MS) * SWEEP_STEP_PX
 /**
  * 候选配置。全部以注入 <style> 的方式生效，互不残留。
  * - off        现状基线
+ * - paintdisabled 关闭节点绘制隔离，仅用于同启动 A/B
  * - hidenodes  隐藏节点内容，作为「只画连线与背景」的渲染上限参照
  * - willchange 历史方案，已确认不可用（会钉死光栅倍率导致文字发虚），仅作对照
  */
 const CONFIGS = {
   off: '',
+  paintdisabled: '.canvas-node-paint-frame{contain:none!important;}.react-flow__node{contain:none!important;overflow-clip-margin:0!important;}',
   hidenodes: '.react-flow__node{visibility:hidden !important;}',
   willchange: '.react-flow__viewport{will-change:transform;}',
 }

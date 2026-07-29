@@ -43,6 +43,51 @@
   border-radius: var(--ui-radius-lg);
 }
 
+/* 节点绘制隔离：透明 padding 扩展 paint containment 的裁剪框，等量负 margin
+   抵消布局占位，因此 React Flow 自己测量的 `.react-flow__node` 尺寸不变。
+   默认余量覆盖浮动标题、端口和 resize 手柄；少数正文确实出框的节点由注册点
+   通过 CSS 变量单独增大底部余量。
+
+   不能用 padding / margin 直接撑大 `.react-flow__node`：会污染 xyflow 的 ResizeObserver；
+   外层隔离改用不进入盒模型的 overflow-clip-margin 扩展裁剪范围。
+   不用 will-change: transform：它会在非 1 倍画布缩放下钉死光栅倍率，文字发虚。
+   不用 content-visibility: auto：深层节点进出视口时反复重建渲染子树，实测为负优化。 */
+.canvas-node-paint-frame {
+  --canvas-node-paint-top: 36px;
+  --canvas-node-paint-right: 24px;
+  --canvas-node-paint-bottom: 28px;
+  --canvas-node-paint-left: 24px;
+
+  box-sizing: content-box;
+  padding:
+    var(--canvas-node-paint-top)
+    var(--canvas-node-paint-right)
+    var(--canvas-node-paint-bottom)
+    var(--canvas-node-paint-left);
+  margin:
+    calc(-1 * var(--canvas-node-paint-top))
+    calc(-1 * var(--canvas-node-paint-right))
+    calc(-1 * var(--canvas-node-paint-bottom))
+    calc(-1 * var(--canvas-node-paint-left));
+  contain: paint;
+}
+
+/* 内层 frame 负责精确包住节点自己的溢出绘制；外层 React Flow 节点再建立一次
+   paint containment，才能让 Chromium 在视口层录制绘制指令时跳过整棵离屏节点子树。
+   overflow-clip-margin 只扩展绘制裁剪边界，不进入盒模型，因此不会污染节点测量。 */
+.react-flow__node {
+  contain: paint;
+  overflow-clip-margin: 36px;
+}
+
+.react-flow__node-imageNode {
+  overflow-clip-margin: 60px;
+}
+
+.react-flow__node-storyboardGenNode {
+  overflow-clip-margin: 84px;
+}
+
 /* 可见玻璃达到 64 个后才在手势期间临时取消 backdrop-filter。
    64 是 60 层仍满帧、100 层降到 43.5fps 之间的保守拐点；正常工程完全不触发，
    避免为少量节点付出材质突变。计数由 IntersectionObserver 在手势外异步维护，见
