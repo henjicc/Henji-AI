@@ -18,8 +18,8 @@ const CanvasWorkspace = (): JSX.Element => {
 
   return (
     <ReactFlowProvider>
-      <div className="h-full min-h-0 w-full bg-bg-dark text-text-dark">
-        {!isHydrated && <div className="h-full w-full bg-bg-dark" />}
+      <div className="h-full min-h-0 w-full bg-app text-text-dark">
+        {!isHydrated && <div className="h-full w-full bg-app" />}
 
         {isHydrated && !currentProjectId && <ProjectManager />}
 

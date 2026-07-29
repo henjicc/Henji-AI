@@ -48,7 +48,7 @@ const toolIconMap: Record<ToolIconKey, typeof Crop> = {
   split: Scissors,
 };
 
-const TOOLBAR_BUTTON_RADIUS_CLASS = 'rounded-full';
+const TOOLBAR_BUTTON_RADIUS_CLASS = 'rounded-lg';
 /*
  * 工具条外壳是毛玻璃（它浮在画布与图片节点之上），所以按钮的 hover 必须是白色半透明。
  * 这里原先是 `hover:!bg-layer`——不透明的 #404040，压在玻璃上会变成一块实心灰贴片，
@@ -229,7 +229,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
       className={NODE_TOOLBAR_CLASS}
     >
       {/* 工具条浮在画布/图片节点之上，背后是用户内容而非纯色 UI，走玻璃材质 */}
-      <UiPanel variant="glass" className="flex items-center gap-1 !rounded-full p-1">
+      <UiPanel variant="glass" className="flex items-center gap-1 p-1">
         {canTriggerGeneration && (
           <UiChipButton
             key="node-generate"

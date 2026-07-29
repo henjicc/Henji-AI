@@ -43,6 +43,7 @@ import {
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration';
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
 import { toModelPromptText } from '@/core/inputs/promptDocument';
+import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
 import { registry } from '@/core/ModelRegistry';
@@ -247,8 +248,16 @@ export const GenerationNodeShell = memo(({
   });
 
   const handleModelChange = useCallback((nextModelId: string) => {
-    updateNodeData(id, { modelId: nextModelId, params: {} });
-  }, [id, updateNodeData]);
+    const transferredParams = transferModelParamOverridesBetweenModels(
+      effectiveModelId,
+      nextModelId,
+      modelParamValues,
+    );
+    updateNodeData(id, {
+      modelId: nextModelId,
+      params: transferredParams,
+    });
+  }, [effectiveModelId, id, modelParamValues, updateNodeData]);
 
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(nodeType, data as CanvasNodeData),

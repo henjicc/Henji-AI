@@ -7,6 +7,7 @@ import {
     PRICE_SETTING_CHANGED_EVENT,
     readPriceEstimateDisplaySettings,
 } from '@/core/pricing/priceDisplay'
+import { UI_GLASS_ADAPTIVE_CONTROL_CLASS } from './styleTokens'
 
 interface PriceEstimateProps {
     providerId: string
@@ -72,7 +73,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
     }
 
     return (
-        <div className="flex items-center gap-1.5 text-xs text-text-muted bg-surface-dark/50 px-3 py-1.5 rounded-lg border border-border-dark/50">
+        <div className={`flex items-center gap-1.5 rounded-lg border border-border-dark/50 bg-surface-dark/50 px-3 py-1.5 text-xs text-text-muted ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`}>
             <CircleDollarSign className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="whitespace-nowrap">
                 {t('priceEstimate.label')}: <span className="text-text-dark/85">{priceDisplay}</span>

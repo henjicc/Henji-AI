@@ -92,8 +92,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     uiState.selectedProvider,
     uiState.selectedModel,
     uiState.setSelectedProvider,
-    uiState.setSelectedModel,
-    modelState.resetParams
+    uiState.setSelectedModel
   )
 
   // 4. 文件上传管理

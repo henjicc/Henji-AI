@@ -60,7 +60,6 @@ export function GeneratorConfigurationBar({
             onModelSelect={(providerId, modelId) => {
               uiState.setSelectedProvider(providerId)
               uiState.setSelectedModel(modelId)
-              modelState.resetParams()
             }}
             onFilterProviderChange={uiState.setModelFilterProvider}
             onFilterTypeChange={uiState.setModelFilterType}

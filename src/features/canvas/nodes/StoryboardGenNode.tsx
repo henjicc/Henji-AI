@@ -33,6 +33,7 @@ import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelTag } from '@/core/types'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
+import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { showAlertDialog } from '@/stores/alertDialogStore'
@@ -163,8 +164,16 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   })
 
   const handleModelChange = useCallback((nextModelId: string) => {
-    updateNodeData(id, { modelId: nextModelId, params: {} })
-  }, [id, updateNodeData])
+    const transferredParams = transferModelParamOverridesBetweenModels(
+      effectiveModelId,
+      nextModelId,
+      modelParamValues
+    )
+    updateNodeData(id, {
+      modelId: nextModelId,
+      params: transferredParams
+    })
+  }, [effectiveModelId, id, modelParamValues, updateNodeData])
 
   const ratioSpec = useMemo(
     () => analyzeRatioResolutionParams(modelParamSchema, effectiveImages),

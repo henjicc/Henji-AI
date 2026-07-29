@@ -174,7 +174,7 @@ export const viduQ2Params: ParamDef[] = [
     type: 'switch',
     order: 10,
     name: sharedFieldText('generateAudio'),
-    default: false,
+    default: true,
     apiField: 'audio'
   },
   {

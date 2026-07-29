@@ -106,7 +106,7 @@ export const viduQ1Model = defineModel({
       type: 'switch',
       order: 5,
       name: sharedFieldText('generateAudio'),
-      default: false,
+      default: true,
       apiField: 'bgm'
     }
   ],
@@ -184,7 +184,7 @@ export const viduQ1Model = defineModel({
       const images = resolvePpioImageSources(params)
       const prompt = params.prompt || ''
       const movementAmplitude = params.ppioViduQ1MovementAmplitude || params.movement_amplitude || 'auto'
-      const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm || false)
+      const bgm = params.ppioViduQ1Bgm !== undefined ? params.ppioViduQ1Bgm : (params.bgm !== undefined ? params.bgm : true)
 
       const requestData: DynamicValue = {
         prompt,

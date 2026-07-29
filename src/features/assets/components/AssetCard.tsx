@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { AlertTriangle, FileAudio, Film, Image as ImageIcon, MoreHorizontal, Play } from 'lucide-react'
-import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiInput, UiPanel } from '@/components/ui'
+import { UI_GLASS_ADAPTIVE_CONTROL_CLASS, UI_GLASS_ADAPTIVE_SURFACE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiInput, UiPanel } from '@/components/ui'
 import { clearCompactDragPreview, setCompactDragPreview, setCompactWaveformDragPreview } from '@/contexts/dragDataTransfer'
 import type { AssetRecord } from '@/platform/contracts/assetLibrary'
 import { assetRecordToDragPayload, writeAssetDragPayload } from '../drag/assetDragPayload'
@@ -50,6 +50,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
   }
   return (
     <UiPanel
+      variant="bare"
       draggable={asset.inspectionStatus !== 'missing'}
       onDragStart={(event) => {
         writeAssetDragPayload(event.dataTransfer, assetRecordToDragPayload(asset))
@@ -57,7 +58,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
         else setCompactDragPreview(event.dataTransfer, previewUrl)
       }}
       onDragEnd={clearCompactDragPreview}
-      className={`group relative min-w-0 cursor-pointer overflow-hidden border transition-colors ${selected ? 'border-accent' : 'border-border-dark hover:border-text-muted'}`}
+      className={`group relative min-w-0 cursor-pointer overflow-hidden border transition-colors ${UI_GLASS_ADAPTIVE_SURFACE_CLASS} ${selected ? 'border-accent' : 'border-border-dark hover:border-text-muted'}`}
       onClick={() => onSelect(asset)}
     >
       <div className="relative aspect-square bg-layer" onDoubleClick={(event) => { event.stopPropagation(); onPreview(asset) }}>
@@ -83,7 +84,7 @@ export const AssetCard: React.FC<AssetCardProps> = ({ asset, selected, eager = f
       <div className="min-w-0 px-2.5 py-2">
         {editing ? <UiInput autoFocus className="!h-7 !px-1.5 text-sm" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => void submitRename()} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(); if (event.key === 'Escape') { setDraft(asset.displayName); setEditing(false) } }} onClick={(event) => event.stopPropagation()} /> : <div className={`truncate ${UI_TEXT_BODY_CLASS}`} title="双击重命名" onDoubleClick={(event) => { event.stopPropagation(); setDraft(asset.displayName); setEditing(true) }}>{asset.displayName}</div>}
         <div className={`mt-1 flex items-center justify-between ${UI_TEXT_META_CLASS}`}>
-          <span className="flex min-w-0 items-center gap-1"><span className="rounded bg-layer px-1.5 py-0.5">{t(`assetLibrary.${asset.mediaType}`)}</span>{asset.tags[0] && <span className="max-w-20 truncate rounded bg-layer px-1.5 py-0.5">{asset.tags[0]}</span>}{asset.tags.length > 1 && <span>+{asset.tags.length - 1}</span>}</span><span>{asset.width && asset.height ? `${asset.width}×${asset.height}` : ''}</span>
+          <span className="flex min-w-0 items-center gap-1"><span className={`rounded bg-layer px-1.5 py-0.5 ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`}>{t(`assetLibrary.${asset.mediaType}`)}</span>{asset.tags[0] && <span className={`max-w-20 truncate rounded bg-layer px-1.5 py-0.5 ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`}>{asset.tags[0]}</span>}{asset.tags.length > 1 && <span>+{asset.tags.length - 1}</span>}</span><span>{asset.width && asset.height ? `${asset.width}×${asset.height}` : ''}</span>
         </div>
       </div>
     </UiPanel>

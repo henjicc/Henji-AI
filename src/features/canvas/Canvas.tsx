@@ -359,29 +359,9 @@ export function Canvas() {
     [connectNodes, edges, nodes, scheduleCanvasPersist, showConnectionToast, t]
   );
 
-  /**
-   * 合成层提升只给「平移」，不给「缩放」。
-   *
-   * 提升的本质是把整棵节点树按**手势开始那一刻的倍率**光栅化成一张位图，之后由合成器
-   * 搬运。平移是 translate，像素一一对应，画面依然清晰且能拿满 60fps；缩放是 scale，
-   * 会把这张位图拉伸，表现就是"缩放中全糊、松手才清晰"。
-   *
-   * 而缩放恰恰是最需要看清的时候（用户缩放就是为了看内容），平移才需要跟手。原先两种
-   * 手势共用一个 class，等于把优化用在了反方向。
-   *
-   * 判定方式刻意不看事件类型（wheel / 单指 / 双指在不同设备上并不可靠），而是比对
-   * 视口倍率：手势内只要 zoom 变过一次，就立刻撤掉提升并且本次手势不再恢复。
-   * 纯平移全程保留提升；滚轮缩放在第一个 onMove 就会撤掉，最多糊一帧。
-   */
-  const gestureStartZoomRef = useRef<number | null>(null);
-  const isPanPromotedRef = useRef(false);
-
   const clearViewportGestureClasses = useCallback(() => {
     wrapperRef.current?.classList.remove('canvas-viewport-moving');
-    wrapperRef.current?.classList.remove('canvas-viewport-panning');
     clearGlassGesture();
-    gestureStartZoomRef.current = null;
-    isPanPromotedRef.current = false;
   }, [clearGlassGesture]);
 
   // 视口状态只在 moveEnd 时同步进 store：平移/缩放过程中每帧 set() 会把
@@ -389,9 +369,6 @@ export function Canvas() {
   // 需要实时视口的调用方一律走 reactFlowInstance.getViewport()。
   const handleMoveEnd = useCallback(
     (_event: DynamicValue, viewport: Viewport) => {
-      // 手势结束撤掉合成层提升：常驻 will-change 会让缩放后的文字停留在旧倍率
-      // 光栅位图上（表现为放大后模糊、点击节点局部重绘才变清晰）；
-      // 撤掉后浏览器立刻按当前倍率重新光栅化，文字恢复清晰。
       clearViewportGestureClasses();
       setViewportState(viewport);
       const project = getCurrentProject();
@@ -404,32 +381,15 @@ export function Canvas() {
   );
 
   const handleMoveStart = useCallback(
-    (_event: DynamicValue, viewport: Viewport) => {
-      // 用 classList 直改 DOM，避免手势起点多一次 React 渲染。
-      // `moving` 覆盖整个手势（暂停连线动画等）；`panning` 只在确认是平移时保留。
+    () => {
+      // 手势状态只承担不会改变文字光栅化的性能降级：暂停装饰动画，并在
+      // 可见毛玻璃密度过高时临时取消滤镜。用 classList 避免多一次 React 渲染。
       prepareGlassGesture();
       wrapperRef.current?.classList.add('canvas-viewport-moving');
-      wrapperRef.current?.classList.add('canvas-viewport-panning');
-      gestureStartZoomRef.current = viewport.zoom;
-      isPanPromotedRef.current = true;
       cancelPendingViewportPersist();
     },
     [cancelPendingViewportPersist, prepareGlassGesture]
   );
-
-  // 每帧调用：只做一次数值比较和一次 classList 操作，不触发 React 渲染，
-  // 也不写 store（视口仍然只在 moveEnd 落库）。
-  const handleMove = useCallback((_event: DynamicValue, viewport: Viewport) => {
-    if (!isPanPromotedRef.current) {
-      return;
-    }
-    const startZoom = gestureStartZoomRef.current;
-    if (startZoom === null || viewport.zoom === startZoom) {
-      return;
-    }
-    wrapperRef.current?.classList.remove('canvas-viewport-panning');
-    isPanPromotedRef.current = false;
-  }, []);
 
   const rawSelectedNodeIds = useMemo(
     () => nodes.filter((node) => Boolean(node.selected)).map((node) => node.id),
@@ -509,9 +469,8 @@ export function Canvas() {
   // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
   const isContentLodLow = useCanvasContentLod();
 
-  // 有意不开 onlyRenderVisibleElements：视口层已合成化（storyboard.css 的 will-change），
-  // 视口外内容不参与光栅、裁剪收益基本消失；而裁剪带来的节点挂载/卸载抖动是
-  // 平移/缩放时数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。
+  // 有意不开 onlyRenderVisibleElements：裁剪带来的节点挂载/卸载抖动是平移/缩放时
+  // 数百毫秒长任务的主要来源（240 节点实测 zoom 长任务 550ms → 0）。
   return (
     <div
       ref={wrapperRef}
@@ -533,7 +492,6 @@ export function Canvas() {
         onNodeDragStop={handleNodeDragStop}
         onPaneClick={handlePaneClick}
         onMoveStart={handleMoveStart}
-        onMove={handleMove}
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -548,7 +506,7 @@ export function Canvas() {
         deleteKeyCode={null}
         zoomOnDoubleClick={false}
         proOptions={CANVAS_PRO_OPTIONS}
-        className="bg-bg-dark"
+        className="bg-canvas"
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />
         <MiniMap

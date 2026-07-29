@@ -86,7 +86,7 @@ export const pixverseV55Model = defineModel({
       order: 6,
       type: 'switch',
       name: sharedFieldText('generateAudio'),
-      default: false
+      default: true
     },
     {
       id: 'pixverseMultiClip',
@@ -137,9 +137,7 @@ export const pixverseV55Model = defineModel({
         requestData.thinking_type = params.pixverseThinkingType
       }
 
-      if (params.pixverseGenerateAudio !== undefined) {
-        requestData.generate_audio_switch = params.pixverseGenerateAudio
-      }
+      requestData.generate_audio_switch = params.pixverseGenerateAudio !== false
 
       if (params.pixverseMultiClip !== undefined) {
         requestData.generate_multi_clip_switch = params.pixverseMultiClip

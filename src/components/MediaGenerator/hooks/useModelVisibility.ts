@@ -10,8 +10,7 @@ export const useModelVisibility = (
   selectedProvider: string,
   selectedModel: string,
   setSelectedProvider: (p: string) => void,
-  setSelectedModel: (m: string) => void,
-  resetParams: () => void
+  setSelectedModel: (m: string) => void
 ) => {
   const [modelVisibilityVersion, setModelVisibilityVersion] = useState(0)
 
@@ -50,14 +49,13 @@ export const useModelVisibility = (
 
           setSelectedProvider(firstProvider.id)
           setSelectedModel(firstModel.id)
-          resetParams()
         }
       }
     }
 
     window.addEventListener('modelVisibilityChanged', handleVisibilityChange)
     return () => window.removeEventListener('modelVisibilityChanged', handleVisibilityChange)
-  }, [selectedProvider, selectedModel, setSelectedProvider, setSelectedModel, resetParams])
+  }, [selectedProvider, selectedModel, setSelectedProvider, setSelectedModel])
 
   return { modelVisibilityVersion }
 }

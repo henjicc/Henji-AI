@@ -302,7 +302,7 @@ export const viduQ2Model = defineModel({
         ? movementRaw
         : 'auto'
 
-      const audio = resolveBoolean(params.ppioViduQ2Audio, params.audio, false)
+      const audio = resolveBoolean(params.ppioViduQ2Audio, params.audio, true)
       const bgm = resolveBoolean(params.ppioViduQ2Bgm, params.bgm, false)
 
       const buildQ2ReferencePayload = (images: string[]) => {

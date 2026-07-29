@@ -184,7 +184,7 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
             display={t('ui:presets.label')}
             disabled={disabled}
             className="w-auto"
-            buttonClassName="px-4 py-2 bg-layer/50 hover:bg-layer/50 rounded-lg transition-colors duration-300 border border-border-dark/50 flex items-center text-sm"
+            buttonClassName="!h-9 px-4 text-sm"
             panelWidth={420}
             alignment="aboveCenter"
             stableHeight={true}
@@ -397,4 +397,3 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
     )
 }
 export default PresetPanel
-

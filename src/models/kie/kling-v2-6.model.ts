@@ -126,7 +126,7 @@ export const kieKlingV26Model = defineModel({
       type: 'switch',
       order: 5,
       name: sharedFieldText('generateAudio'),
-      default: false,
+      default: true,
       visible: {
         condition: 'kieKlingV26Mode !== "motion-control"'
       }
@@ -156,7 +156,7 @@ export const kieKlingV26Model = defineModel({
       const duration = params.kieKlingV26Duration || params.duration || '5'
       const aspectRatio = params.kieKlingV26AspectRatio || params.aspect_ratio || '16:9'
       const resolution = params.kieKlingV26Resolution || params.resolution || '720p'
-      const enableAudio = params.kieKlingV26EnableAudio ?? params.enable_audio ?? false
+      const enableAudio = params.kieKlingV26EnableAudio ?? params.enable_audio ?? true
       const characterOrientation = params.kieKlingV26CharacterOrientation || params.character_orientation || 'video'
       const videoUrl = resolveKiePrimaryVideoSource(params)
 

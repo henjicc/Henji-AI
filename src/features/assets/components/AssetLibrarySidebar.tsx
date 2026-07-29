@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Check, Clock3, FileAudio, Film, Folder, Image as ImageIcon, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { ICON_ASSET_LIBRARY } from '@/core/theme/icons'
-import { UI_TEXT_LABEL_CLASS, UiIconButton, UiInput, UiNavButton } from '@/components/ui'
+import { UI_GLASS_ADAPTIVE_DIVIDER_CLASS, UI_GLASS_ADAPTIVE_SURFACE_CLASS, UI_TEXT_LABEL_CLASS, UiIconButton, UiInput, UiNavButton } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType } from '@/platform/contracts/assetLibrary'
 
 interface SidebarLabels {
@@ -69,7 +69,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
   }
 
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-border-dark bg-panel">
+    <aside className={`flex w-52 shrink-0 flex-col border-r ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
       <nav className="space-y-1 p-2">
         <UiNavButton active={activeId === null && activeMediaType === null && activeSort === 'created'} onClick={onShowAll} className="!h-10 !rounded-lg !px-3">
           <ICON_ASSET_LIBRARY className="h-4 w-4" />{labels.all}

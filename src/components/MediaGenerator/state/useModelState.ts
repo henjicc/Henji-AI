@@ -37,11 +37,6 @@ export const useModelState = (modelId: string, uiState: UIState) => {
     setParam('uploadedVideoDuration', uiState.uploadedVideoDuration)
   }, [uiState.uploadedVideoDuration, setParam])
 
-  // 监听模型切换，重置参数
-  useEffect(() => {
-    resetParams()
-  }, [modelId, resetParams])
-
   return {
     // 参数状态
     params,

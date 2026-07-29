@@ -193,6 +193,15 @@ export const UI_GLASS_ITEM_HOVER_CLASS =
  */
 export const UI_GLASS_ADAPTIVE_CONTROL_CLASS = 'ui-glass-adaptive-control';
 
+/** 一块玻璃内部的连续区域 tint；不新增 backdrop-filter，关闭毛玻璃时恢复实底。 */
+export const UI_GLASS_ADAPTIVE_REGION_CLASS = 'ui-glass-adaptive-region';
+
+/** 一块玻璃内部的内容表面 tint；用于侧栏、内容卡等，不新增 backdrop-filter。 */
+export const UI_GLASS_ADAPTIVE_SURFACE_CLASS = 'ui-glass-adaptive-surface';
+
+/** 玻璃内部的材质分隔线；关闭毛玻璃时恢复为语义边框色。 */
+export const UI_GLASS_ADAPTIVE_DIVIDER_CLASS = 'ui-glass-adaptive-divider';
+
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
 

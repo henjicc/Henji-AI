@@ -5,13 +5,14 @@
  */
 
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
-import { registry } from '@/core'
+import { registry } from '@/core/ModelRegistry'
 import type { ParamDef } from '@/core/types'
 import { extractDefaults, validateParamValue, getParamDisplayName } from './utils/defaultExtractor'
 import { setNestedValue, getNestedValue, batchSetNestedValues } from './utils/paramUtils'
 import { LinkageEngine } from '@/core/linkage'
 import { ParamFlowTracker } from '@/core/debug/ParamFlowTracker'
 import type { ParamFlowRecord } from '@/core/debug/types'
+import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer'
 
 /**
  * Hook 返回值接口
@@ -150,10 +151,21 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
 
   // 6. 参数状态
   const [params, setParamsState] = useState<DynamicValueMap>(defaults)
+  const previousModelIdRef = useRef(modelId)
 
-  // 6. 模型切换时重置参数
+  // 6. 模型切换时保留用户改过且与目标 schema 兼容的通用参数
   useEffect(() => {
-    setParamsState(defaults)
+    const previousModelId = previousModelIdRef.current
+    setParamsState((previousParams) => {
+      if (previousModelId === modelId) return defaults
+      const transferred = transferModelParamOverridesBetweenModels(
+        previousModelId,
+        modelId,
+        previousParams
+      )
+      return { ...defaults, ...transferred }
+    })
+    previousModelIdRef.current = modelId
   }, [modelId, defaults])
 
   // 7. 设置单个参数（集成联动引擎和追踪）

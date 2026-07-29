@@ -98,7 +98,7 @@ export const veo31Model = defineModel({
       order: 5,
       type: 'switch',
       name: sharedFieldText('generateAudio'),
-      default: false
+      default: true
     },
     {
       id: 'falVeo31AutoFix',
@@ -155,7 +155,7 @@ export const veo31Model = defineModel({
       const aspectRatio = params.falVeo31AspectRatio
       const resolution = params.falVeo31Resolution || '720p'
       const enhancePrompt = params.falVeo31EnhancePrompt
-      const generateAudio = params.falVeo31GenerateAudio
+      const generateAudio = params.falVeo31GenerateAudio !== false
       const autoFix = params.falVeo31AutoFix
 
       const requestData: DynamicValue = {

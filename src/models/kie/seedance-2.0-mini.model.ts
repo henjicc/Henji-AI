@@ -91,7 +91,7 @@ export const kieSeedance20MiniModel = defineModel({
       type: 'switch',
       order: 5,
       name: sharedFieldText('generateAudio'),
-      default: false
+      default: true
     },
     {
       id: 'kieSeedance20MiniWebSearch',
@@ -119,7 +119,7 @@ export const kieSeedance20MiniModel = defineModel({
       const mode = params.kieSeedance20MiniMode === 'reference-to-video' ? 'reference-to-video' : 'text-image-to-video'
       const resolution = params.kieSeedance20MiniResolution || params.resolution || '720p'
       const duration = Number(params.kieSeedance20MiniDuration ?? params.duration ?? 5)
-      const generateAudio = params.kieSeedance20MiniGenerateAudio === true
+      const generateAudio = params.kieSeedance20MiniGenerateAudio !== false
       const webSearch = params.kieSeedance20MiniWebSearch === true
       const aspectRatio = params.kieSeedance20MiniAspectRatio || params.aspect_ratio || 'smart'
 

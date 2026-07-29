@@ -156,7 +156,7 @@ export const klingVideoV26ProModel = defineModel({
       order: 8,
       type: 'switch',
       name: sharedFieldText('generateAudio'),
-      default: false,
+      default: true,
       visible: {
         condition: 'falKlingV26ProMode !== "motion-control"'
       }
@@ -186,7 +186,7 @@ export const klingVideoV26ProModel = defineModel({
       const prompt = params.prompt || ''
       const duration = params.falKlingV26ProVideoDuration || 5
       const aspectRatio = params.falKlingV26ProAspectRatio || '16:9'
-      const generateAudio = params.falKlingV26ProGenerateAudio === true
+      const generateAudio = params.falKlingV26ProGenerateAudio !== false
       const cfgScale = params.falKlingV26ProCfgScale
       const characterOrientation = params.falKlingV26ProCharacterOrientation || 'video'
       const keepOriginalSound = params.falKlingV26ProKeepOriginalSound !== false

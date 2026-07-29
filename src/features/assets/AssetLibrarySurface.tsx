@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, Search, X } from 'lucide-react'
-import { Dropdown, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion, UiSharedGlassHost } from '@/components/ui'
+import { Dropdown, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
@@ -153,7 +153,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
   }
 
   return (
-    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden text-text-dark ${mode === 'floating' ? 'z-raised bg-transparent' : 'bg-app'}`}>
+    <div className={`relative flex h-full min-h-0 flex-col overflow-hidden text-text-dark ${mode === 'floating' ? `z-raised ${UI_GLASS_ADAPTIVE_REGION_CLASS}` : 'bg-app'}`}>
       {mode === 'workspace' ? (
         <div className="shrink-0 p-6 pb-4">
           <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto">

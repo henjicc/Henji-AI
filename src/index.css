@@ -70,6 +70,13 @@
   --ui-glass-control-tint: rgb(255 255 255 / 0.08);
   --ui-glass-control-border: var(--ui-glass-divider);
   --ui-glass-control-hover: var(--ui-glass-hover);
+  /*
+   * 单块玻璃内部的连续区域与内容表面。它们只叠 tint，不再创建 backdrop-filter：
+   * 外壳负责一次模糊，内层靠半透明建立层级，避免每张卡/每个侧栏各占一个合成层。
+   */
+  --ui-glass-region-tint: rgb(var(--app-rgb) / 0.18);
+  --ui-glass-surface-tint: rgb(var(--panel-rgb) / 0.58);
+  --ui-glass-surface-divider: var(--ui-glass-divider);
   /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
   --ui-scrim-blur: 10px;
   --ui-scrim-tint: rgb(0 0 0 / 0.42);
@@ -151,13 +158,17 @@
 /*
  * 关闭毛玻璃：整套材质一起退化成不透明底色。
  * 注意不能只把 blur 置 0——那样 66% 的黑底叠在清晰背景上仍会透出干扰，
- * 所以 tint 同时换成接近实心的面板色，噪点与提亮也一并关掉。
+ * 所以外壳及其内部的 region / surface / control tint 都必须切成 100% 实体色，
+ * 噪点与提亮也一并关掉。
  */
 :root[data-ui-blur='off'] {
   --ui-blur: 0px;
   --ui-glass-filter: none;
-  --ui-glass-tint: rgb(var(--panel-rgb) / 0.94);
+  --ui-glass-tint: rgb(var(--panel-rgb) / 1);
   --ui-glass-grain: 0;
+  --ui-glass-region-tint: rgb(var(--panel-rgb) / 1);
+  --ui-glass-surface-tint: rgb(var(--panel-rgb) / 1);
+  --ui-glass-surface-divider: rgb(var(--border-rgb) / 1);
   --ui-glass-control-tint: rgb(var(--surface-rgb) / 1);
   --ui-glass-control-border: rgb(var(--border-rgb) / 1);
   --ui-glass-control-hover: rgb(var(--layer-rgb) / 1);
@@ -283,6 +294,22 @@
 
   .ui-glass .ui-glass-adaptive-control:hover:not(:disabled) {
     background-color: var(--ui-glass-control-hover);
+  }
+
+  /*
+   * 一块玻璃内部的区域/内容表面：只改变 tint，不重复 blur。
+   * 关闭毛玻璃时，上面的变量会让它们与外壳一起恢复为完整实体色。
+   */
+  .ui-glass .ui-glass-adaptive-region {
+    background-color: var(--ui-glass-region-tint);
+  }
+
+  .ui-glass .ui-glass-adaptive-surface {
+    background-color: var(--ui-glass-surface-tint);
+  }
+
+  .ui-glass .ui-glass-adaptive-divider {
+    border-color: var(--ui-glass-surface-divider);
   }
 
   /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */

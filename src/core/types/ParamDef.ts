@@ -95,6 +95,14 @@ export interface BaseParamDef {
   apiMapping?: Record<string, { transform: ApiTransform }>
 
   /**
+   * 跨模型切换时的参数语义标识（可选）。
+   *
+   * 通用参数会根据 id、apiField 与选项自动识别；只有命名差异较大或需要明确
+   * 建立对应关系时才需要填写。相同 transferKey 的参数会在目标 schema 校验后迁移。
+   */
+  transferKey?: string
+
+  /**
    * 显示条件（可选）
    *
    * 控制参数是否显示

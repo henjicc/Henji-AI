@@ -1,4 +1,5 @@
 import React from 'react'
+import { UiPanel } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { ChevronUp } from 'lucide-react'
@@ -47,8 +48,9 @@ export function FloatingInputPanel({
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}
     >
-      <div
-        className="relative cursor-pointer overflow-hidden rounded-3xl border border-border-dark bg-app shadow-panel"
+      <UiPanel
+        variant="glass"
+        className="relative cursor-pointer overflow-hidden !rounded-3xl"
         style={{
           transition: uiTransition(['max-height'], UI_DURATION.slow),
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
@@ -98,8 +100,7 @@ export function FloatingInputPanel({
         >
           {children}
         </div>
-      </div>
+      </UiPanel>
     </div>
   )
 }
-
