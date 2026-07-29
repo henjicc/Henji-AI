@@ -89,6 +89,8 @@ async function driveZoomOscillation(page, durationMs) {
 }
 
 async function drivePan(page, durationMs) {
+  // 仅供功能/内存冒烟：中心 ±30px 往返会反复命中相同绘制瓦片，不能代表持续露出新内容的
+  // 平移性能。需要性能结论时使用 electron-canvas-pan-bench.cjs 的连续单向扫掠。
   const box = await page.locator('.react-flow').boundingBox()
   const center = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
   await page.mouse.move(center.x, center.y)

@@ -1,3 +1,9 @@
+/**
+ * 画布功能/内存冒烟脚本，不是平移性能基准。
+ * 这里使用 2×2 像素占位 fixture，drivePan 也只在中心 ±30px 往返，绘制瓦片会持续命中缓存；
+ * 即使真实内容连续扫掠存在顿挫也可能得到 60fps。需要性能结论时运行：
+ *   BENCH_MULT=4 npm run electron:pan-bench
+ */
 const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp: launchElectronAppBase, waitForApp, assert } = require('./lib/electronLaunch.cjs')

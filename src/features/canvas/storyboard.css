@@ -50,8 +50,11 @@
 
    不能用 padding / margin 直接撑大 `.react-flow__node`：会污染 xyflow 的 ResizeObserver；
    外层隔离改用不进入盒模型的 overflow-clip-margin 扩展裁剪范围。
-   不用 will-change: transform：它会在非 1 倍画布缩放下钉死光栅倍率，文字发虚。
-   不用 content-visibility: auto：深层节点进出视口时反复重建渲染子树，实测为负优化。 */
+   不用 will-change: transform：它会在非 1 倍画布缩放下钉死光栅倍率，文字发虚；
+   124 节点曾从 34.2 降到 20.8fps，整设备像素吸附后仍有 1.68% 像素差。
+   不用 content-visibility: auto：深层节点进出视口时反复重建渲染子树，
+   124 节点实测仅 8.4fps、p95 1197ms。最终两级隔离正式 A/B：
+   31 节点 53.9→59.1fps；124 节点 23.1→43.8fps，>50ms 长帧中位数 7→0。 */
 .canvas-node-paint-frame {
   --canvas-node-paint-top: 36px;
   --canvas-node-paint-right: 24px;

@@ -29,3 +29,11 @@ const progress = useXxxProgressStore((state) => state.progress[id])
 - 任务结束/删除时**清理条目**，别让 store 无限增长。
 - 瞬态状态**不进持久化、不进历史快照**。
 - 列表项用 `React.memo`，比较函数只比真正需要的引用。
+
+## 性能：画布平移先测绘制边界
+
+React Flow 画布在高节点量下卡顿时，先用真实内容连续单向扫掠的 `BENCH_MULT=4 npm run electron:pan-bench` 判断；不要用中心小幅往返的 `electron:canvas-stress` 下性能结论，后者会命中既有绘制瓦片。
+
+- 禁止给画布视口或节点加 `will-change: transform`：非 1 倍缩放下会钉死光栅倍率，使文字发虚。
+- 禁止给深层节点加 `content-visibility: auto`：本项目 124 节点实测降至 8.4fps。
+- 当前采用 `CanvasNodePaintFrame` + 节点根 `contain: paint` / `overflow-clip-margin` 的两级绘制隔离。修改节点 DOM 或出框装饰后，运行 `npm run check:canvas-visual` 检查像素、实际可绘制溢出与 React Flow 几何；不得用 padding / margin 改变 `.react-flow__node` 的测量盒。

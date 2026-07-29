@@ -173,6 +173,14 @@ npm run lint                   # 前端 lint
 - 画布 UI 叠层与展示优先抽离到 `src/features/canvas/ui/`
 - 通用计算与连接预览逻辑放在 `src/features/canvas/canvasUtils.ts`
 
+#### 画布平移渲染性能约定
+
+- 真实瓶颈是高节点量下可见节点内容的逐帧绘制记录，不是 JS、图片解码或连线动画。性能结论必须用真实内容连续单向扫掠、同启动交替采样的 `npm run electron:pan-bench`；`electron:canvas-stress` 的占位 fixture 与中心 ±30px 往返只承担功能/内存冒烟，不能作为平移性能依据。
+- **禁止**给画布视口或节点添加 `will-change: transform`。非 1 倍画布缩放下它会钉死合成层光栅倍率并使文字发虚；位移吸附到整设备像素后仍有 1.68% 像素差，已排除分数像素解释。
+- **禁止**给节点内容添加 `content-visibility: auto`。本项目节点 DOM 嵌套较深，124 节点实测降至 8.4fps、p95 1197ms，是明确负优化。
+- `translate: 0 0 0` 的计算值会折叠为 `0px`，是空操作，不能用于“提升合成层”；非零 3D translate 会改变层叠上下文，也不得作为替代方案。
+- 当前统一通过 `CanvasNodePaintFrame` 与 `.react-flow__node` 的 `contain: paint` + `overflow-clip-margin` 做两级绘制隔离。新增/改造节点 DOM、浮动标题、端口或 resize 装饰时，必须用 `npm run check:canvas-visual` 复核实际可绘制溢出、节点盒、minimap 与连线几何；禁止用 padding / margin 改变 `.react-flow__node` 的测量尺寸。
+
 ### 8. 主题与运行时样式落地约定
 
 - `settingsStore` 中的 `themeTonePreset` / `uiRadiusPreset` / `accentColor` 变更后，必须同步到 `document.documentElement`（`data-*` 或 CSS 变量）
@@ -460,6 +468,13 @@ npm run check:ui-visual                 # 六类界面 × 两档尺寸 × 十一
 ```
 
 两条命令均使用隔离 userData，不读取真实数据库和密钥；输出目录 `.ui-tour/`、`.ui-audit/` 已被 Git 忽略。`ui:tour` 支持 `--only`、`--size`、`--out`，截图差异不进入 CI；`check:ui-visual` 负责表面叠层、对比度、圆角、阴影、CSS 隐藏定位、助手插入量逃逸、横向溢出、嵌套滚动、文本硬裁、过小命中区和页面标题字号一致性。
+
+画布节点 DOM、绘制样式、LOD 或视口渲染相关改动，还要在完成 Electron 构建后运行：
+
+```bash
+BENCH_MULT=4 npm run electron:pan-bench  # 真实内容连续扫掠；同启动交替采样，作为性能结论
+npm run check:canvas-visual              # 像素、节点盒、minimap、连线与溢出几何回归
+```
 
 ```powershell
 # 原生控件检查（命中应仅在 primitives.tsx）
