@@ -24,12 +24,14 @@ const {
   sleep,
 } = require('./lib/canvasPanBench.cjs')
 const { cropCompare, diffBuffers, worstBlock } = require('./lib/canvasVisualDiff.cjs')
+const { prepareModelSelectorFixture } = require('./lib/canvasVisualFixture.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.cjs')
 const OUT_DIR = path.join(ROOT, process.env.VISUAL_OUT || '.canvas-visual')
 const SOURCE_PROJECT = process.env.VISUAL_PROJECT || 'TEST'
 const MULTIPLIER = Math.max(1, Number(process.env.VISUAL_MULT || 1))
+const SELECTOR_STATE = process.env.VISUAL_SELECTOR_STATE || 'preserve'
 const STYLE_ID = '__canvas_visual_check_style__'
 const CAPTURE_SETTLE_MS = 250
 
@@ -296,6 +298,7 @@ async function main() {
       tempName: `${FIXTURE_PREFIX}visual_${Date.now()}`,
       viewportPlan: { ...windowSize, sweepScreenDistance: 500 },
     })
+    fixture = await prepareModelSelectorFixture(page, fixture, SELECTOR_STATE)
     await openFixtureProject(page, fixture.projectName, fixture.nodeCount)
 
     const startViewport = { x: fixture.viewport.x, y: fixture.viewport.y }
@@ -324,7 +327,7 @@ async function main() {
     const output = {
       ok,
       generatedAt: new Date().toISOString(),
-      params: { sourceProject: SOURCE_PROJECT, multiplier: MULTIPLIER, configs: CONFIG_SET },
+      params: { sourceProject: SOURCE_PROJECT, multiplier: MULTIPLIER, selectorState: SELECTOR_STATE, configs: CONFIG_SET },
       fixture: { ...fixture, sourceViewport: undefined },
       coverage: {
         registeredTypeCount: REGISTERED_NODE_TYPES.length,
