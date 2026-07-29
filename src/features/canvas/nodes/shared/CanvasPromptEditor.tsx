@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import {
   PromptEditor,
@@ -34,6 +34,7 @@ export function CanvasPromptEditor({
   const [isEditing, setIsEditing] = useState(false)
   const pendingActivationRef = useRef<PendingActivation | null>(null)
   const editorRef = useRef<PromptEditorHandle | null>(null)
+  const savedScrollTopRef = useRef(0)
   const canActivate = !disabled && !readOnly
 
   useEffect(() => {
@@ -45,6 +46,7 @@ export function CanvasPromptEditor({
 
   const handleActivate = useCallback((point?: PromptEditorActivationPoint): void => {
     if (!canActivate) return
+    savedScrollTopRef.current = editorRef.current?.getScrollTop() ?? 0
     pendingActivationRef.current = point
       ? { kind: 'pointer', point }
       : { kind: 'keyboard' }
@@ -56,16 +58,22 @@ export function CanvasPromptEditor({
     const editor = editorRef.current
     const activation = pendingActivationRef.current
     if (!editor || !activation) return
+    editor.setScrollTop(savedScrollTopRef.current)
     if (activation.kind === 'pointer') editor.focusAtPoint(activation.point)
     else editor.focus()
     pendingActivationRef.current = null
   }, [])
 
   const handleEditEnd = useCallback((): void => {
+    savedScrollTopRef.current = editorRef.current?.getScrollTop() ?? 0
     pendingActivationRef.current = null
     setIsEditing(false)
     onEditEnd?.()
   }, [onEditEnd])
+
+  useLayoutEffect(() => {
+    editorRef.current?.setScrollTop(savedScrollTopRef.current)
+  }, [isEditing])
 
   return (
     <PromptEditor

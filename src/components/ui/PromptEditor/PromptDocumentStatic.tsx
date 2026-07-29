@@ -1,5 +1,6 @@
 import {
   Fragment,
+  forwardRef,
   memo,
   type KeyboardEvent,
   type MouseEvent,
@@ -85,57 +86,66 @@ function hasVisibleContent(document: PromptDocumentV1): boolean {
   return document.content.some((paragraph) => (paragraph.content?.length ?? 0) > 0)
 }
 
-export const PromptDocumentStatic = memo(function PromptDocumentStatic({
-  document,
-  ariaLabel,
-  placeholder = '',
-  disabled = false,
-  className = '',
-  onActivate,
-  references = [],
-  variables = [],
-  resolveReference,
-  resolveVariable,
-}: PromptDocumentStaticProps): JSX.Element {
-  const canActivate = Boolean(onActivate) && !disabled
-  const resolvers: StaticResolvers = {
-    resolveReference: resolveReference
-      ?? ((resourceId) => references.find((item) => item.resourceId === resourceId)),
-    resolveVariable: resolveVariable
-      ?? ((key) => variables.find((item) => item.key === key)),
-  }
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (!canActivate || (event.key !== 'Enter' && event.key !== ' ')) return
-    event.preventDefault()
-    onActivate?.()
-  }
-  const handleClick = (event: MouseEvent<HTMLDivElement>): void => {
-    if (!canActivate) return
-    onActivate?.({ clientX: event.clientX, clientY: event.clientY })
-  }
+const PromptDocumentStaticView = forwardRef<HTMLDivElement, PromptDocumentStaticProps>(
+  function PromptDocumentStatic({
+    document,
+    ariaLabel,
+    placeholder = '',
+    disabled = false,
+    className = '',
+    onActivate,
+    references = [],
+    variables = [],
+    resolveReference,
+    resolveVariable,
+  }: PromptDocumentStaticProps, ref): JSX.Element {
+    const canActivate = Boolean(onActivate) && !disabled
+    const resolvers: StaticResolvers = {
+      resolveReference: resolveReference
+        ?? ((resourceId) => references.find((item) => item.resourceId === resourceId)),
+      resolveVariable: resolveVariable
+        ?? ((key) => variables.find((item) => item.key === key)),
+    }
+    const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+      if (!canActivate || (event.key !== 'Enter' && event.key !== ' ')) return
+      event.preventDefault()
+      onActivate?.()
+    }
+    const handleClick = (event: MouseEvent<HTMLDivElement>): void => {
+      if (!canActivate) return
+      onActivate?.({ clientX: event.clientX, clientY: event.clientY })
+    }
 
-  return (
-    <div
-      role="textbox"
-      aria-label={ariaLabel}
-      aria-readonly="true"
-      aria-disabled={disabled}
-      tabIndex={canActivate ? 0 : -1}
-      className={`${PROMPT_EDITOR_CONTENT_CLASS} ${canActivate ? 'cursor-text' : ''} ${disabled ? 'cursor-not-allowed' : ''} ${className}`}
-      onClick={canActivate ? handleClick : undefined}
-      onKeyDown={handleKeyDown}
-    >
-      {hasVisibleContent(document) ? document.content.map((paragraph, paragraphIndex) => (
-        <div key={`paragraph-${paragraphIndex}`} className="min-h-[1.5em]">
-          {paragraph.content?.map((node, nodeIndex) => (
-            <Fragment key={`node-${paragraphIndex}-${nodeIndex}`}>
-              {renderInlineNode(node, `node-${paragraphIndex}-${nodeIndex}`, resolvers)}
-            </Fragment>
-          ))}
-        </div>
-      )) : (
-        <span className="text-text-muted">{placeholder}</span>
-      )}
-    </div>
-  )
-})
+    return (
+      <div
+        ref={ref}
+        role="textbox"
+        aria-label={ariaLabel}
+        aria-readonly="true"
+        aria-disabled={disabled}
+        tabIndex={canActivate ? 0 : -1}
+        className={`${PROMPT_EDITOR_CONTENT_CLASS} ${canActivate ? 'cursor-text' : ''} ${disabled ? 'cursor-not-allowed' : ''} ${className}`}
+        onClick={canActivate ? handleClick : undefined}
+        onKeyDown={handleKeyDown}
+      >
+        {hasVisibleContent(document) ? document.content.map((paragraph, paragraphIndex) => (
+          <div key={`paragraph-${paragraphIndex}`} className="min-h-[1.5em]">
+            {paragraph.content?.map((node, nodeIndex) => (
+              <Fragment key={`node-${paragraphIndex}-${nodeIndex}`}>
+                {renderInlineNode(node, `node-${paragraphIndex}-${nodeIndex}`, resolvers)}
+              </Fragment>
+            ))}
+          </div>
+        )) : (
+          <span className="text-text-muted">{placeholder}</span>
+        )}
+      </div>
+    )
+  },
+)
+
+PromptDocumentStaticView.displayName = 'PromptDocumentStaticView'
+
+export const PromptDocumentStatic = memo(PromptDocumentStaticView)
+
+PromptDocumentStatic.displayName = 'PromptDocumentStatic'

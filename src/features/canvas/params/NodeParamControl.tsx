@@ -315,8 +315,9 @@ function CompactTextControl({
         alignment="aboveCenter"
         gap={8}
         closeOnPanelClick={false}
+        panelClassName="overflow-hidden"
         renderPanel={() => (
-          <div className="p-3">
+          <div className="flex h-60 min-h-0 flex-col p-3">
             <PromptEditor
               value={promptDocument}
               onChange={(document) => textHistory.onValueChange(
@@ -324,6 +325,7 @@ function CompactTextControl({
               )}
               onEditEnd={textHistory.onEditEnd}
               preset={param.editor?.preset ?? 'plain'}
+              layout="fill-scroll"
               variables={promptVariables}
               ariaLabel={placeholder || '提示词参数'}
               placeholder={placeholder}
@@ -331,7 +333,7 @@ function CompactTextControl({
               autoFocus
               maxCharacters={param.maxLength}
               showCharacterCount={param.maxLength !== undefined}
-              editorClassName="min-h-[96px]"
+              editorClassName="ui-scrollbar"
             />
           </div>
         )}

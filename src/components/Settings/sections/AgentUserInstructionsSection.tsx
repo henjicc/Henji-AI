@@ -115,6 +115,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
         <PromptEditor
           mode="edit"
           preset="plain"
+          layout="fill-scroll"
           value={document}
           onChange={setDocument}
           ariaLabel="智能助手用户指令"
@@ -125,7 +126,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           error={warnings.length > 0}
           errorMessage={warnings.join('；')}
           editorShellClassName="bg-surface-dark"
-          editorClassName={`ui-scrollbar min-h-[220px] max-h-[360px] overflow-y-auto px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
+          editorClassName={`ui-scrollbar min-h-[220px] max-h-[360px] px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
         />
         <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>
           这里只保存你主动填写或明确要求助手修改的内容。密钥、令牌、授权头和密码会在进入模型前自动脱敏；其他正常内容会完整传递。助手不会自动把对话、推断、日志或文件写入这里。

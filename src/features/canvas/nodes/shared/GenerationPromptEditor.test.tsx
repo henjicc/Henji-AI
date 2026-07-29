@@ -9,6 +9,8 @@ import { GenerationPromptEditor } from './GenerationPromptEditor'
 const promptEditorMocks = vi.hoisted(() => ({
   focus: vi.fn(),
   focusAtPoint: vi.fn(),
+  getScrollTop: vi.fn(() => 0),
+  setScrollTop: vi.fn(),
 }))
 
 vi.mock('@xyflow/react', () => ({
@@ -27,6 +29,8 @@ vi.mock('@/components/ui', async () => {
       React.useImperativeHandle(ref, () => ({
         focus: promptEditorMocks.focus,
         focusAtPoint: promptEditorMocks.focusAtPoint,
+        getScrollTop: promptEditorMocks.getScrollTop,
+        setScrollTop: promptEditorMocks.setScrollTop,
         getDocument: () => props.value,
         replaceDocument: vi.fn(),
       }), [props.value])
@@ -42,6 +46,7 @@ vi.mock('@/components/ui', async () => {
         'aria-label': props.ariaLabel,
         'data-mode': props.mode,
         'data-auto-focus': String(props.autoFocus ?? false),
+        'data-layout': props.layout,
         'data-outer-class': String(props.className ?? ''),
         'data-editor-class': String(props.editorClassName ?? ''),
         onClick: (event: { clientX: number; clientY: number }) => {
@@ -68,6 +73,9 @@ describe('GenerationPromptEditor', () => {
   beforeEach(() => {
     promptEditorMocks.focus.mockReset()
     promptEditorMocks.focusAtPoint.mockReset()
+    promptEditorMocks.getScrollTop.mockReset()
+    promptEditorMocks.getScrollTop.mockReturnValue(0)
+    promptEditorMocks.setScrollTop.mockReset()
   })
 
   afterEach(() => {
@@ -98,6 +106,7 @@ describe('GenerationPromptEditor', () => {
     expect(onSelectNode).toHaveBeenCalledWith('node-1')
     expect(rendered.getByRole('textbox').getAttribute('data-mode')).toBe('edit')
     expect(rendered.getByRole('textbox').getAttribute('data-auto-focus')).toBe('false')
+    expect(rendered.getByRole('textbox').getAttribute('data-layout')).toBe('fill-scroll')
     expect(rendered.getByRole('textbox').getAttribute('data-outer-class')).toBe(staticOuterClass)
     expect(staticOuterClass).toContain('!p-0')
     expect(staticOuterClass).not.toContain('!px-1.5')
@@ -108,6 +117,29 @@ describe('GenerationPromptEditor', () => {
       clientY: 96,
     })
     expect(promptEditorMocks.focus).not.toHaveBeenCalled()
+  })
+
+  it('静态态切换到编辑态时保留提示词滚动位置', () => {
+    promptEditorMocks.getScrollTop.mockReturnValue(128)
+    const rendered = render(
+      <GenerationPromptEditor
+        nodeId="node-1"
+        selected
+        value={createPlainTextPromptDocument('长提示词')}
+        references={[]}
+        readOnly={false}
+        invalid={false}
+        placeholder="提示词"
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onEditEnd={vi.fn()}
+        onSelectNode={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(rendered.getByRole('textbox'), { clientX: 120, clientY: 80 })
+
+    expect(promptEditorMocks.setScrollTop).toHaveBeenLastCalledWith(128)
   })
 
   it('键盘激活在编辑器就绪后显式聚焦且不开启 Tiptap autoFocus', () => {

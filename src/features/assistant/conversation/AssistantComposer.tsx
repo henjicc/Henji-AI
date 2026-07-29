@@ -44,6 +44,7 @@ export function AssistantComposer({
       <PromptEditor
         mode="edit"
         preset="plain"
+        layout="fill-scroll"
         value={value}
         onChange={onChange}
         ariaLabel="向智能助手描述任务"
@@ -53,7 +54,7 @@ export function AssistantComposer({
         submitShortcut="enter"
         onSubmit={submit}
         editorShellClassName="!rounded-xl !border-border-dark bg-surface-dark"
-        editorClassName={`max-h-32 min-h-[72px] overflow-y-auto px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
+        editorClassName={`max-h-32 min-h-[72px] px-3 py-2.5 ${UI_TEXT_BODY_CLASS}`}
       />
       <div className="mt-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">

@@ -55,6 +55,7 @@ import {
   useGenerationPromptDocument,
   type GenerationNodeShellData,
 } from './useGenerationPromptDocument';
+import { useGenerationNodeMinimumHeight } from './useGenerationNodeMinimumHeight';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -263,20 +264,18 @@ export const GenerationNodeShell = memo(({
     () => resolveNodeDisplayName(nodeType, data as CanvasNodeData),
     [data, nodeType]
   );
-
-  // 未手动拖拽过尺寸时 width/height 为 undefined（react-flow 仅在手动 resize 后才写入），
-  // 此时按内容自适应宽度（CSS max-content），不再回退到一个固定像素默认值；
-  // 手动调整过后则严格使用用户拖拽出的尺寸（仍受 min/max 约束）。
+  const {
+    rootRef,
+    inputRowsRef,
+    minimumHeight: resolvedMinimumHeight,
+  } = useGenerationNodeMinimumHeight(minHeight);
+  // 未手动 resize 时按内容自适应宽度；手动调整后使用用户尺寸并受 min/max 约束。
   const hasManualWidth = typeof width === 'number' && Number.isFinite(width);
   const resolvedWidth = hasManualWidth ? Math.max(minWidth, Math.round(width)) : null;
-  // 高度同时用确定 height + min-height:fit-content 两条约束表达，缺一不可：
-  // - 确定 height 让纵向拖拽和横向一样 1:1 跟手（只给 min-height 的话，
-  //   拖拽在没超过内容自然高度前毫无反应，手感上像是被识别成了横向拖拽）
-  // - min-height:fit-content 在 CSS 中优先级高于 height，兜住"拖得比内容还矮"的情况，
-  //   节点自动撑回内容所需的最小高度，各行不会溢出到边框外
+  // 提示词正文长度不参与最低高度，否则长文本会反向锁死 NodeResizeControl。
   const resolvedHeight = typeof height === 'number' && Number.isFinite(height)
-    ? Math.max(minHeight, Math.round(height))
-    : minHeight;
+    ? Math.max(resolvedMinimumHeight, Math.round(height))
+    : resolvedMinimumHeight;
 
   useEffect(() => {
     if (data.modelId !== selectedModelId) {
@@ -404,8 +403,9 @@ export const GenerationNodeShell = memo(({
 
   return (
     <div
+      ref={rootRef}
       className={`
-        group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
+        canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
         ${selected
           ? NODE_SELECTED_BORDER_CLASS
           : NODE_IDLE_BORDER_CLASS}
@@ -415,7 +415,7 @@ export const GenerationNodeShell = memo(({
         minWidth: `${minWidth}px`,
         maxWidth: `${maxWidth}px`,
         height: `${resolvedHeight}px`,
-        minHeight: 'fit-content',
+        minHeight: `${resolvedMinimumHeight}px`,
       }}
       onClick={() => setSelectedNode(id)}
     >
@@ -437,10 +437,8 @@ export const GenerationNodeShell = memo(({
 
       <NodeLodPlaceholder title={resolvedTitle} icon={icon ?? <Sparkles className="h-6 w-6" />} />
 
-      {/* 这里绝对不能加 min-h-0：它会把本层对内容最小尺寸的贡献归零，
-          令根容器的 min-height:fit-content 算成 0，height 直接胜出，各行溢出到边框外。
-          实测：加 min-h-0 时根高被钉在 160px 且溢出 162px，去掉后自动撑到 323px。 */}
-      <div className="canvas-node-lod-detail relative flex flex-1 flex-col gap-1.5">
+      {/* 数值型下限由参数区实高计算；长提示词只占剩余空间并在内部滚动。 */}
+      <div className="canvas-node-lod-detail relative flex min-h-0 flex-1 flex-col gap-1.5">
         {/* 提示词区是唯一的伸缩项：节点拉高多出来的空间全部由它吸收，下方各行保持原高与行距 */}
         <GenerationPromptEditor
           nodeId={id}
@@ -459,29 +457,28 @@ export const GenerationNodeShell = memo(({
           onSelectNode={setSelectedNode}
         />
 
-        <NodeInputRows
-          className="shrink-0"
-          nodeId={id}
-          modelId={effectiveModelId}
-          mediaType={modelType}
-          acceptedMediaKinds={acceptedMediaKinds}
-          schema={schema}
-          values={modelParamValues}
-          setParam={setParam}
-          excludeParamIds={PROMPT_PARAM_IDS}
-          mediaInputs={mediaInputs}
-          onMediaInputChange={handleMediaInputChange}
-          overrideModelId={overrideModelId}
-          storedParams={data.params}
-          onModelChange={handleModelChange}
-          onParamsChange={handleParamsChange}
-          incomingImages={effectiveImages}
-          videoTrimRange={videoTrimRange}
-          onVideoTrimRangeChange={handleVideoTrimRangeChange}
-        />
+        <div ref={inputRowsRef} className="shrink-0">
+          <NodeInputRows
+            nodeId={id}
+            modelId={effectiveModelId}
+            mediaType={modelType}
+            acceptedMediaKinds={acceptedMediaKinds}
+            schema={schema}
+            values={modelParamValues}
+            setParam={setParam}
+            excludeParamIds={PROMPT_PARAM_IDS}
+            mediaInputs={mediaInputs}
+            onMediaInputChange={handleMediaInputChange}
+            overrideModelId={overrideModelId}
+            storedParams={data.params}
+            onModelChange={handleModelChange}
+            onParamsChange={handleParamsChange}
+            incomingImages={effectiveImages}
+            videoTrimRange={videoTrimRange}
+            onVideoTrimRangeChange={handleVideoTrimRangeChange}
+          />
+        </div>
       </div>
-
-
       <Handle
         type="source"
         id="source"
@@ -491,7 +488,7 @@ export const GenerationNodeShell = memo(({
       />
       <NodeResizeHandle
         minWidth={minWidth}
-        minHeight={minHeight}
+        minHeight={resolvedMinimumHeight}
         maxWidth={maxWidth}
         maxHeight={maxHeight}
       />

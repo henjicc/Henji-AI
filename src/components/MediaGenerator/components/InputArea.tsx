@@ -363,6 +363,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             value={promptDocument}
             onChange={onPromptDocumentChange}
             preset="media-references"
+            layout="fill-scroll"
             ariaLabel={t('inputArea.placeholder.default')}
             references={promptReferences}
             onPaste={onPaste}
@@ -384,7 +385,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             }
             className="relative isolate overflow-visible rounded-2xl"
             editorShellClassName="!rounded-2xl !border-border-dark/35 !bg-transparent transition-colors duration-200 focus-within:!border-veil-soft focus-within:!ring-0"
-            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 leading-6 ${promptMinHeightClass} max-h-[260px] overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words ${UI_TEXT_BODY_CLASS}`}
+            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 leading-6 ${promptMinHeightClass} max-h-[260px] whitespace-pre-wrap break-words ${UI_TEXT_BODY_CLASS}`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (
@@ -440,4 +441,3 @@ const InputArea: React.FC<InputAreaProps> = ({
   )
 }
 export default InputArea
-

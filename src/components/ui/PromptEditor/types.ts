@@ -6,6 +6,7 @@ export type PromptEditorPreset =
   | 'template-variables'
   | 'structured'
 export type PromptEditorMode = 'edit' | 'static'
+export type PromptEditorLayout = 'auto' | 'fill-scroll'
 export type PromptEditorSubmitShortcut = 'enter' | 'mod-enter' | 'none'
 
 export interface PromptReferenceItem {
@@ -52,6 +53,8 @@ export interface PromptEditorActivationPoint {
 export interface PromptEditorHandle {
   focus: () => void
   focusAtPoint: (point: PromptEditorActivationPoint) => void
+  getScrollTop: () => number
+  setScrollTop: (scrollTop: number) => void
   getDocument: () => PromptDocumentV1
   replaceDocument: (
     document: PromptDocumentV1,
@@ -71,6 +74,7 @@ export interface PromptEditorProps {
   getVariableSuggestions?: PromptVariableSuggestionProvider
   suggestionContainer?: string | HTMLElement
   mode?: PromptEditorMode
+  layout?: PromptEditorLayout
   ariaLabel: string
   placeholder?: string
   disabled?: boolean

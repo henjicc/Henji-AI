@@ -25,6 +25,7 @@ import {
   toTiptapContent,
 } from './promptEditorDocument'
 import {
+  getPromptEditorLayoutClasses,
   getPromptEditorShellStateClass,
   PROMPT_EDITOR_CONTENT_CLASS,
   PROMPT_EDITOR_SHELL_CLASS,
@@ -68,6 +69,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     submitShortcut = 'none',
     error = false,
     errorMessage,
+    layout = 'auto',
     className = '',
     editorShellClassName = '',
     editorClassName = '',
@@ -84,6 +86,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     onKeyDown,
     onError,
   }, ref): JSX.Element {
+    const layoutClasses = getPromptEditorLayoutClasses(layout)
     const callbacksRef = useRef({
       onChange,
       onSubmit,
@@ -164,7 +167,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         attributes: {
           'aria-label': ariaLabel,
           role: 'textbox',
-          class: `${PROMPT_EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
+          class: `${PROMPT_EDITOR_CONTENT_CLASS} ${layoutClasses.content} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
         },
         handleKeyDown: (view, event): boolean => {
           if (isPromptEditorHistoryShortcut(event)) event.stopPropagation()
@@ -285,11 +288,11 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
             'aria-disabled': String(disabled),
             'aria-readonly': String(readOnly),
             role: 'textbox',
-            class: `${PROMPT_EDITOR_CONTENT_CLASS} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
+            class: `${PROMPT_EDITOR_CONTENT_CLASS} ${layoutClasses.content} ${disabled ? 'cursor-not-allowed' : 'cursor-text'} ${editorClassName}`,
           },
         },
       })
-    }, [ariaLabel, disabled, editor, editorClassName, readOnly])
+    }, [ariaLabel, disabled, editor, editorClassName, layoutClasses.content, readOnly])
 
     useImperativeHandle(ref, () => ({
       focus: (): void => {
@@ -306,6 +309,10 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           return
         }
         editor.chain().focus().setTextSelection(position.pos).run()
+      },
+      getScrollTop: (): number => editor?.view.dom.scrollTop ?? 0,
+      setScrollTop: (scrollTop): void => {
+        if (editor) editor.view.dom.scrollTop = scrollTop
       },
       getDocument: () => editor ? fromTiptapContent(editor.getJSON()) : valueRef.current,
       replaceDocument: (document, options = {}): void => {
@@ -333,10 +340,10 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     const shellStateClass = getPromptEditorShellStateClass(error)
 
     return (
-      <div className={className}>
+      <div className={`${layoutClasses.outer} ${className}`}>
         <EditorContent
           editor={editor}
-          className={`${PROMPT_EDITOR_SHELL_CLASS} ${shellStateClass} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`${PROMPT_EDITOR_SHELL_CLASS} ${shellStateClass} ${layoutClasses.shell} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         />
         {(showCharacterCount || errorMessage) ? (
           <div className={`mt-1 flex items-start justify-between gap-2 ${UI_TEXT_META_CLASS}`}>

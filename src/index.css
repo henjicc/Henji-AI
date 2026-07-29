@@ -381,6 +381,31 @@ body,
   scrollbar-color: rgb(var(--text-muted-rgb) / 0.5) transparent;
 }
 
+/* PromptEditor 等跨工作区输入面使用的可交互滚动条，必须常驻全局样式；
+   放在画布懒加载样式里会导致用户打开画布前其他界面拿不到该样式。 */
+.ui-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--text-muted-rgb) / 0.56) transparent;
+}
+
+.ui-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.ui-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ui-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgb(var(--text-muted-rgb) / 0.5);
+}
+
+.ui-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgb(var(--text-muted-rgb) / 0.72);
+}
+
 /* 动画关键帧 */
 @keyframes scaleIn {
   from {

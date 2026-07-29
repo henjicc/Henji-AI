@@ -7,29 +7,6 @@
  * 这两个设置项完全不生效——已全部迁到 `src/index.css`。
  */
 
-.ui-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(var(--text-muted-rgb) / 0.56) transparent;
-}
-
-.ui-scrollbar::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
-}
-
-.ui-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.ui-scrollbar::-webkit-scrollbar-thumb {
-  border-radius: 9999px;
-  background: rgb(var(--text-muted-rgb) / 0.5);
-}
-
-.ui-scrollbar:hover::-webkit-scrollbar-thumb {
-  background: rgb(var(--text-muted-rgb) / 0.72);
-}
-
 .ui-panel {
   background: var(--ui-surface-panel);
   border-color: var(--ui-border-soft);
@@ -81,6 +58,13 @@
 .react-flow__node {
   contain: paint;
   overflow-clip-margin: 36px;
+}
+
+/* 生成节点的下限由固定参数区实高 + 提示词固定最小高度计算，并由节点根同步到
+   React Flow 外壳。禁止再用 fit-content：它会把长提示词的自然高度纳入下限，
+   造成编辑器已有滚动条、节点却仍无法缩小。 */
+.react-flow__node:has(> .canvas-node-paint-frame > .canvas-node-dynamic-min-height) {
+  min-height: var(--generation-node-min-height, 160px);
 }
 
 .react-flow__node-imageNode {

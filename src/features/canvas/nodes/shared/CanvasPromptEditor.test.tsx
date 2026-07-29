@@ -9,6 +9,8 @@ import { CanvasPromptEditor } from './CanvasPromptEditor'
 const editorMocks = vi.hoisted(() => ({
   focus: vi.fn(),
   focusAtPoint: vi.fn(),
+  getScrollTop: vi.fn(() => 0),
+  setScrollTop: vi.fn(),
 }))
 
 vi.mock('@/components/ui', async () => {
@@ -18,6 +20,8 @@ vi.mock('@/components/ui', async () => {
       React.useImperativeHandle(ref, () => ({
         focus: editorMocks.focus,
         focusAtPoint: editorMocks.focusAtPoint,
+        getScrollTop: editorMocks.getScrollTop,
+        setScrollTop: editorMocks.setScrollTop,
         getDocument: () => props.value,
         replaceDocument: vi.fn(),
       }), [props.value])
@@ -45,6 +49,9 @@ describe('CanvasPromptEditor', () => {
   beforeEach(() => {
     editorMocks.focus.mockReset()
     editorMocks.focusAtPoint.mockReset()
+    editorMocks.getScrollTop.mockReset()
+    editorMocks.getScrollTop.mockReturnValue(0)
+    editorMocks.setScrollTop.mockReset()
   })
   afterEach(cleanup)
 

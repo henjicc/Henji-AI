@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
 
 import {
@@ -15,6 +15,7 @@ import {
   NODE_ROW_CARD_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
 import { useCanvasContentLod } from './useCanvasContentLod'
+import { GENERATION_PROMPT_MIN_HEIGHT_PX } from './useGenerationNodeMinimumHeight'
 
 export interface GenerationPromptEditorProps {
   nodeId: string
@@ -51,6 +52,7 @@ export function GenerationPromptEditor({
   const [isEditing, setIsEditing] = useState(false)
   const pendingActivationRef = useRef<PendingPromptActivation | null>(null)
   const activeEditorRef = useRef<PromptEditorHandle | null>(null)
+  const savedScrollTopRef = useRef(0)
   const canActivate = !readOnly && !isContentLodLow
   const isEditorActive = isEditing && canActivate
 
@@ -63,6 +65,7 @@ export function GenerationPromptEditor({
 
   const handleActivate = useCallback((point?: PromptEditorActivationPoint): void => {
     if (readOnly || isContentLodLow) return
+    savedScrollTopRef.current = activeEditorRef.current?.getScrollTop() ?? 0
     pendingActivationRef.current = point
       ? { kind: 'pointer', point }
       : { kind: 'keyboard' }
@@ -79,6 +82,8 @@ export function GenerationPromptEditor({
     const activation = pendingActivationRef.current
     if (!editor || !activation) return
 
+    editor.setScrollTop(savedScrollTopRef.current)
+
     // 画布静态 renderer 的首次点击不会落到随后挂载的 contenteditable 上。
     // 等 Tiptap 真正完成 mount 后只执行这一处聚焦；画布路径禁用 autoFocus，
     // 避免 Tiptap 延迟 focus(true) 再把已经恢复的 selection 覆盖为文首。
@@ -91,13 +96,21 @@ export function GenerationPromptEditor({
   }, [])
 
   const handleEditEnd = useCallback((): void => {
+    savedScrollTopRef.current = activeEditorRef.current?.getScrollTop() ?? 0
     pendingActivationRef.current = null
     onEditEnd()
     setIsEditing(false)
   }, [onEditEnd])
 
+  useLayoutEffect(() => {
+    activeEditorRef.current?.setScrollTop(savedScrollTopRef.current)
+  }, [isEditorActive])
+
   return (
-    <div className="group/row relative flex min-h-[100px] flex-1 flex-col">
+    <div
+      className="group/row relative flex flex-1 flex-col"
+      style={{ minHeight: GENERATION_PROMPT_MIN_HEIGHT_PX }}
+    >
       <Handle
         type="target"
         id={promptPortId()}
@@ -120,6 +133,7 @@ export function GenerationPromptEditor({
           preset="media-references"
           references={references}
           mode={isEditorActive ? 'edit' : 'static'}
+          layout="fill-scroll"
           ariaLabel={placeholder}
           placeholder={placeholder}
           readOnly={readOnly}
@@ -129,9 +143,9 @@ export function GenerationPromptEditor({
           onReady={handleEditorReady}
           onEditEnd={handleEditEnd}
           onActivate={canActivate ? handleActivate : undefined}
-          className={`nodrag nowheel relative flex min-h-[86px] flex-1 cursor-text flex-col overflow-visible !rounded-md !border-0 !bg-transparent !p-0 !shadow-none ${invalid ? '[&>span]:!text-red-400/90' : ''}`}
-          editorShellClassName="relative flex min-h-[86px] flex-1 cursor-text flex-col overflow-visible !rounded-md !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
-          editorClassName={`ui-scrollbar nodrag nowheel min-h-[86px] flex-1 overflow-y-auto overflow-x-hidden !px-1.5 !py-1 !text-sm !leading-6 ${invalid ? '[&.is-editor-empty:first-child::before]:!text-red-400/90' : ''}`}
+          className={`nodrag nowheel relative cursor-text !rounded-md !border-0 !bg-transparent !p-0 !shadow-none ${invalid ? '[&>span]:!text-red-400/90' : ''}`}
+          editorShellClassName="relative cursor-text !rounded-md !border-0 !bg-transparent !shadow-none focus-within:!ring-0"
+          editorClassName={`ui-scrollbar nodrag nowheel !px-1.5 !py-1 !text-sm !leading-6 ${invalid ? '[&.is-editor-empty:first-child::before]:!text-red-400/90' : ''}`}
         />
       </div>
     </div>

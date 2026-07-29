@@ -129,6 +129,47 @@ describe('PromptEditor', () => {
     expect(shell?.classList.contains('content-box')).toBe(false)
   })
 
+  it('填充滚动布局在静态态建立单一内容滚动容器', () => {
+    const rendered = render(
+      <PublicPromptEditor
+        mode="static"
+        layout="fill-scroll"
+        value={createPlainTextPromptDocument('长提示词')}
+        onChange={vi.fn()}
+        ariaLabel="静态滚动布局"
+      />,
+    )
+
+    const content = rendered.getByRole('textbox')
+    const shell = content.parentElement
+    const outer = shell?.parentElement
+    expect(outer?.classList.contains('min-h-0')).toBe(true)
+    expect(shell?.classList.contains('overflow-hidden')).toBe(true)
+    expect(content.classList.contains('overflow-y-auto')).toBe(true)
+    expect(content.classList.contains('overscroll-contain')).toBe(true)
+    expect(content.classList.contains('min-h-[92px]')).toBe(false)
+  })
+
+  it('填充滚动布局在编辑态复用同一尺寸契约', async () => {
+    const rendered = render(
+      <PublicPromptEditor
+        mode="edit"
+        layout="fill-scroll"
+        value={createPlainTextPromptDocument('长提示词')}
+        onChange={vi.fn()}
+        ariaLabel="编辑滚动布局"
+      />,
+    )
+
+    const content = await rendered.findByRole('textbox')
+    const shell = content.parentElement
+    const outer = shell?.parentElement
+    expect(outer?.classList.contains('min-h-0')).toBe(true)
+    expect(shell?.classList.contains('overflow-hidden')).toBe(true)
+    expect(content.classList.contains('overflow-y-auto')).toBe(true)
+    expect(content.classList.contains('min-h-[92px]')).toBe(false)
+  })
+
   it('编辑器完成 Tiptap mount 后通知调用方就绪', async () => {
     const onReady = vi.fn()
     render(

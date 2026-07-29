@@ -60,13 +60,14 @@ export const TextInput: React.FC<TextInputProps> = ({
           value={promptDocument}
           onChange={(document) => onChange(serializeTextParamPromptDocument(document))}
           preset={param.editor.preset ?? 'plain'}
+          layout="fill-scroll"
           variables={promptVariables}
           ariaLabel={displayName}
           placeholder={placeholder}
           disabled={disabled}
           maxCharacters={param.maxLength}
           showCharacterCount={param.maxLength !== undefined}
-          editorClassName={param.rows && param.rows > 4 ? 'min-h-[120px]' : 'min-h-[80px]'}
+          editorClassName={`${param.rows && param.rows > 4 ? 'min-h-[120px]' : 'min-h-[92px]'} max-h-[360px]`}
         />
       </div>
     )

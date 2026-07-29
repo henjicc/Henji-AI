@@ -3,10 +3,12 @@ import {
   lazy,
   Suspense,
   useImperativeHandle,
+  useRef,
 } from 'react'
 
 import { PromptDocumentStatic } from './PromptDocumentStatic'
 import {
+  getPromptEditorLayoutClasses,
   getPromptEditorShellStateClass,
   PROMPT_EDITOR_SHELL_CLASS,
 } from './promptEditorStyles'
@@ -25,6 +27,7 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     placeholder,
     disabled = false,
     error = false,
+    layout = 'auto',
     className = '',
     editorShellClassName = '',
     editorClassName = '',
@@ -34,24 +37,32 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     resolveReference,
     resolveVariable,
   }, ref): JSX.Element {
+    const contentRef = useRef<HTMLDivElement | null>(null)
+    const layoutClasses = getPromptEditorLayoutClasses(layout)
+
     useImperativeHandle(ref, () => ({
       focus: (): void => onActivate?.(),
       focusAtPoint: (point): void => onActivate?.(point),
+      getScrollTop: (): number => contentRef.current?.scrollTop ?? 0,
+      setScrollTop: (scrollTop): void => {
+        if (contentRef.current) contentRef.current.scrollTop = scrollTop
+      },
       getDocument: () => value,
       replaceDocument: (document): void => onChange(document),
     }), [onActivate, onChange, value])
 
     return (
-      <div className={className}>
+      <div className={`${layoutClasses.outer} ${className}`}>
         <div
-          className={`${PROMPT_EDITOR_SHELL_CLASS} ${getPromptEditorShellStateClass(error)} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`${PROMPT_EDITOR_SHELL_CLASS} ${getPromptEditorShellStateClass(error)} ${layoutClasses.shell} ${editorShellClassName} ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
         >
           <PromptDocumentStatic
+            ref={contentRef}
             document={value}
             ariaLabel={ariaLabel}
             placeholder={placeholder}
             disabled={disabled}
-            className={editorClassName}
+            className={`${layoutClasses.content} ${editorClassName}`}
             onActivate={onActivate}
             references={references}
             variables={variables}
