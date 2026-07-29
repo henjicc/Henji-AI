@@ -25,7 +25,7 @@ import { registerSystemIpc } from './ipc/system'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerVideoIpc } from './ipc/video'
 import { registerWindowIpc } from './ipc/window'
-import { configureChromiumSessionData } from './chromium-session-data'
+import { configureChromiumDevelopmentCache } from './chromium-development-cache'
 import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runtime'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
 import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
@@ -40,12 +40,14 @@ import {
 import { runAssistantCli } from './assistant-cli/runner'
 
 registerMediaProtocolScheme()
-configureChromiumSessionData()
+if (!isAssistantCliMode()) {
+  configureChromiumDevelopmentCache()
+}
 configureWebGpuRuntime()
 registerWebGpuDiagnostics()
 
 if (isAssistantCliMode()) {
-  // safeStorage 依赖既有用户数据目录，不能改 sessionData；只隔离纯 Chromium 磁盘缓存。
+  // safeStorage 依赖既有的 userData/sessionData；助手 CLI 只隔离纯 Chromium 磁盘缓存。
   app.commandLine.appendSwitch('disk-cache-dir', path.join(app.getPath('temp'), 'henji-assistant-cli-cache'))
   app.commandLine.appendSwitch('disable-gpu')
   app.commandLine.appendSwitch('disable-gpu-shader-disk-cache')
