@@ -125,3 +125,5 @@ scratchpad_feed/
 nul
 .ui-audit/
 .ui-tour/
+.pan-bench/
+.canvas-visual/
