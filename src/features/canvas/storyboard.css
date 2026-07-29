@@ -91,6 +91,25 @@
   overflow-clip-margin: 84px;
 }
 
+/* 分镜格操作按钮在未悬停时 opacity 为 0，但 Chromium 仍会为每个 ui-glass 按钮
+   维护 backdrop-filter。9 格节点因此白付 18 份滤镜成本。闲置和平移时关掉滤镜，
+   真正悬停/键盘聚焦后恢复原材质；按钮结构、淡入和可访问性都不变。 */
+.storyboard-frame-actions .ui-glass {
+  -webkit-backdrop-filter: none; /* ui-surface-allow：只暂停既有 ui-glass 的闲置滤镜 */
+  backdrop-filter: none; /* ui-surface-allow：与上一行成对覆盖 Chromium 标准属性 */
+}
+
+.storyboard-frame-card:hover .storyboard-frame-actions .ui-glass,
+.storyboard-frame-card:focus-within .storyboard-frame-actions .ui-glass {
+  -webkit-backdrop-filter: var(--ui-glass-filter); /* ui-surface-allow：悬停时恢复既有材质 */
+  backdrop-filter: var(--ui-glass-filter); /* ui-surface-allow：与上一行成对恢复标准属性 */
+}
+
+.canvas-viewport-moving .storyboard-frame-actions .ui-glass {
+  -webkit-backdrop-filter: none; /* ui-surface-allow：高频平移期暂停既有 ui-glass 滤镜 */
+  backdrop-filter: none; /* ui-surface-allow：与上一行成对覆盖 Chromium 标准属性 */
+}
+
 /* 可见玻璃达到 64 个后才在手势期间临时取消 backdrop-filter。
    64 是 60 层仍满帧、100 层降到 43.5fps 之间的保守拐点；正常工程完全不触发，
    避免为少量节点付出材质突变。计数由 IntersectionObserver 在手势外异步维护，见

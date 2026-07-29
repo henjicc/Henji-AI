@@ -72,6 +72,8 @@ const SWEEP_SCREEN_DISTANCE = (SWEEP_MS / SWEEP_INTERVAL_MS) * SWEEP_STEP_PX
  * - paintdisabled 关闭节点绘制隔离，仅用于同启动 A/B
  * - hidenodes  隐藏节点内容，作为「只画连线与背景」的渲染上限参照
  * - hidewaveforms 隐藏音频节点的高密度 SVG 波形，诊断其独立绘制成本
+ * - hidetype:<nodeType> 隐藏指定类型的整类节点，定位可见节点的边际绘制成本
+ * - storyboardactionsfilterforced 强制恢复旧分镜按钮滤镜，用于产品优化反向 A/B
  * - willchange 历史方案，已确认不可用（会钉死光栅倍率导致文字发虚），仅作对照
  */
 const CONFIGS = {
@@ -79,6 +81,7 @@ const CONFIGS = {
   paintdisabled: '.canvas-node-paint-frame{contain:none!important;}.react-flow__node{contain:none!important;overflow-clip-margin:0!important;}',
   hidenodes: '.react-flow__node{visibility:hidden !important;}',
   hidewaveforms: '.react-flow__node-audioUploadNode .nodrag.nowheel>svg.block,.react-flow__node-audioGenNode .nodrag.nowheel>svg.block{display:none!important;}',
+  storyboardactionsfilterforced: '.storyboard-frame-actions .ui-glass{-webkit-backdrop-filter:var(--ui-glass-filter)!important;backdrop-filter:var(--ui-glass-filter)!important;}',
   willchange: '.react-flow__viewport{will-change:transform;}',
 }
 
@@ -87,9 +90,16 @@ const CONFIG_SET = (process.env.BENCH_SET || 'off,hidenodes')
   .map((name) => name.trim())
   .filter(Boolean)
 
+function resolveConfigCss(name) {
+  if (CONFIGS[name] !== undefined) return CONFIGS[name]
+  const typeMatch = /^hidetype:([A-Za-z][A-Za-z0-9_-]*)$/.exec(name)
+  if (typeMatch) return `.react-flow__node-${typeMatch[1]}{visibility:hidden!important;}`
+  return undefined
+}
+
 async function applyConfig(page, name) {
-  const css = CONFIGS[name]
-  if (css === undefined) throw new Error(`未知配置：${name}（可用：${Object.keys(CONFIGS).join(', ')}）`)
+  const css = resolveConfigCss(name)
+  if (css === undefined) throw new Error(`未知配置：${name}（可用：${Object.keys(CONFIGS).join(', ')}, hidetype:<nodeType>）`)
   await page.evaluate(({ styleId, styleText }) => {
     let element = document.getElementById(styleId)
     if (!element) {
@@ -155,8 +165,13 @@ async function collectEnvironment(page, session) {
       const interactive = node.querySelectorAll('button,input,select,textarea,[role="button"]').length
       const svgElements = node.querySelectorAll('svg,svg *').length
       const mediaElements = node.querySelectorAll('img,video,audio,canvas').length
+      const rect = node.getBoundingClientRect()
+      const visible = (
+        rect.right > 0 && rect.left < window.innerWidth
+        && rect.bottom > 0 && rect.top < window.innerHeight
+      )
       const current = byType.get(type) || []
-      current.push({ descendants, interactive, svgElements, mediaElements })
+      current.push({ descendants, interactive, svgElements, mediaElements, visible })
       byType.set(type, current)
     }
 
@@ -176,6 +191,7 @@ async function collectEnvironment(page, session) {
       return {
         type,
         count: rows.length,
+        visibleCount: rows.filter((row) => row.visible).length,
         descendants: summarize('descendants'),
         interactive: summarize('interactive'),
         svgElements: summarize('svgElements'),
@@ -266,8 +282,8 @@ async function main() {
     throw new Error('缺少 out/main/index.cjs，请先执行 `npm run electron:build`。')
   }
   for (const name of CONFIG_SET) {
-    if (CONFIGS[name] === undefined) {
-      throw new Error(`未知配置：${name}（可用：${Object.keys(CONFIGS).join(', ')}）`)
+    if (resolveConfigCss(name) === undefined) {
+      throw new Error(`未知配置：${name}（可用：${Object.keys(CONFIGS).join(', ')}, hidetype:<nodeType>）`)
     }
   }
 

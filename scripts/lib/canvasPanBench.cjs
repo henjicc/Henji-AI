@@ -1,6 +1,7 @@
 'use strict'
 
 const { dispatch, findPanePoint, releasePointer } = require('./canvasPanInput.cjs')
+const { planSweepViewport } = require('./canvasPanViewport.cjs')
 
 /**
  * 画布平移性能基准的公共能力：真实内容 fixture 生成、抓取点查找、连续扫掠驱动、每轮自检。
@@ -77,53 +78,6 @@ function duplicateGraph(nodesJson, edgesJson, multiplier) {
   }
 
   return { nodes, edges }
-}
-
-/**
- * 规划扫掠起始视口。
- *
- * 不能直接沿用源项目保存的视口：那是用户上次停留的位置，可能停在空白区域
- * （实测 TEST 的当前视口只有 4 个节点在屏幕内，跑出来是假的 60fps）。
- * 这里改为自动找「节点最密集的横向条带」，并把起点放在该条带内容的左端，
- * 让整段扫掠始终经过真实内容。
- */
-function planSweepViewport(nodes, { innerWidth, innerHeight, zoom, sweepScreenDistance }) {
-  const flowWidth = innerWidth / zoom
-  const flowHeight = innerHeight / zoom
-  const centers = nodes
-    .filter((node) => node.position && !node.parentId)
-    .map((node) => ({
-      x: node.position.x + (node.width ?? node.measured?.width ?? 320) / 2,
-      y: node.position.y + (node.height ?? node.measured?.height ?? 280) / 2,
-    }))
-  if (!centers.length) {
-    return { x: 0, y: 0, zoom }
-  }
-
-  const halfBand = (flowHeight / 2) * 0.9
-  let best = { centerY: centers[0].y, count: -1 }
-  for (const candidate of centers) {
-    const count = centers.filter((item) => Math.abs(item.y - candidate.y) <= halfBand).length
-    if (count > best.count) best = { centerY: candidate.y, count }
-  }
-
-  const band = centers.filter((item) => Math.abs(item.y - best.centerY) <= halfBand)
-  const bandMinX = Math.min(...band.map((item) => item.x))
-  const bandMaxX = Math.max(...band.map((item) => item.x))
-  const startFlowX = bandMinX - flowWidth * 0.12
-
-  // 扫掠终点不能越过条带内容的右端，否则后半段是在空白画布上测 60fps
-  const availableFlowDistance = Math.max(0, (bandMaxX + flowWidth * 0.12) - (startFlowX + flowWidth))
-
-  return {
-    x: -startFlowX * zoom,
-    y: innerHeight / 2 - best.centerY * zoom,
-    zoom,
-    bandNodeCount: best.count,
-    requestedSweepFlowDistance: sweepScreenDistance / zoom,
-    availableSweepFlowDistance: Number(availableFlowDistance.toFixed(1)),
-    availableSweepScreenDistance: Number((availableFlowDistance * zoom).toFixed(1)),
-  }
 }
 
 async function readProjectRowByName(page, name) {
@@ -430,6 +384,14 @@ async function resetViewport(page, session, target, { tolerance = 4, maxPasses =
 
     // 复位不参与测量，这里逐个 await，保证每一次派发都真正落到页面上
     const send = (params) => session.send('Input.dispatchMouseEvent', params)
+    // Space 是 ReactFlow 的平移激活键；复位路径上即使节点移动到指针下方，拖动也不会中断。
+    await session.send('Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: ' ',
+      code: 'Space',
+      windowsVirtualKeyCode: 32,
+      nativeVirtualKeyCode: 32,
+    })
     await send({ type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 })
     const segments = 12
     for (let i = 1; i <= segments; i += 1) {
@@ -445,6 +407,13 @@ async function resetViewport(page, session, target, { tolerance = 4, maxPasses =
     const endY = Math.round(from.y + stepY)
     await send({ type: 'mouseReleased', x: endX, y: endY, button: 'left', buttons: 0, clickCount: 1 })
     await send({ type: 'mouseMoved', x: endX, y: endY, button: 'none', buttons: 0 })
+    await session.send('Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key: ' ',
+      code: 'Space',
+      windowsVirtualKeyCode: 32,
+      nativeVirtualKeyCode: 32,
+    })
     await sleep(80)
   }
   const final = await readCanvasState(page)
