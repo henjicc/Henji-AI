@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 
 import {
   cancelAgentRun,
+  getAgentRunEvents,
   getAgentRunSnapshot,
   getAgentRunState,
   onAgentEvent,
@@ -21,6 +22,11 @@ import {
   type AgentRunViewState,
 } from '../conversation/agentRunReducer'
 import { useAssistantUiStore } from '../store/assistantUiStore'
+import {
+  collectContiguousAgentEvents,
+  deriveAgentSnapshotRecoveryBaseline,
+  mergeAgentEventReplay,
+} from './agentEventRecovery'
 
 const logger = createLogger('features.assistant.ui')
 
@@ -47,9 +53,19 @@ export function useAgentRun(): UseAgentRunResult {
   const threadId = useAssistantUiStore((state) => state.threadId)
   const approvalMode = useAssistantUiStore((state) => state.approvalMode)
   const activeRunIdRef = useRef(activeRunId)
+  const previousActiveRunIdRef = useRef(activeRunId)
+  const hydratedRunIdRef = useRef<string | null>(null)
   const bufferedEventsRef = useRef(new Map<string, AgentEvent[]>())
+  const coveredSequenceRef = useRef(new Map<string, number>())
+  const recoveryInFlightRef = useRef(new Set<string>())
+  const recoverAgentEventGapRef = useRef<(runId: string) => Promise<void>>(async () => undefined)
+  const refreshEpochRef = useRef(0)
   const pendingViewEventsRef = useRef<AgentEvent[]>([])
   const viewFrameRef = useRef<number | null>(null)
+  if (previousActiveRunIdRef.current !== activeRunId) {
+    previousActiveRunIdRef.current = activeRunId
+    hydratedRunIdRef.current = null
+  }
   activeRunIdRef.current = activeRunId
 
   const queueViewEvent = useCallback((event: AgentEvent): void => {
@@ -63,19 +79,124 @@ export function useAgentRun(): UseAgentRunResult {
     })
   }, [])
 
+  const bufferRunEvent = useCallback((runId: string, event: AgentEvent): void => {
+    const pending = bufferedEventsRef.current.get(runId) ?? []
+    pending.push(event)
+    bufferedEventsRef.current.set(runId, pending.slice(-2_000))
+    while (bufferedEventsRef.current.size > 3) {
+      const oldest = bufferedEventsRef.current.keys().next().value
+      if (typeof oldest === 'string') bufferedEventsRef.current.delete(oldest)
+    }
+  }, [])
+
+  const consumeBufferedEvents = useCallback((runId: string): boolean => {
+    const afterSequence = coveredSequenceRef.current.get(runId)
+    if (afterSequence === undefined) return false
+    const pending = bufferedEventsRef.current.get(runId) ?? []
+    const batch = collectContiguousAgentEvents(afterSequence, pending)
+    if (batch.events.length > 0 && activeRunIdRef.current === runId) {
+      for (const event of batch.events) queueViewEvent(event)
+    }
+    coveredSequenceRef.current.set(runId, batch.coveredThroughSequence)
+    const remaining = pending.filter((event) => event.sequence > batch.coveredThroughSequence)
+    if (remaining.length > 0) bufferedEventsRef.current.set(runId, remaining)
+    else bufferedEventsRef.current.delete(runId)
+    return batch.hasGap
+  }, [queueViewEvent])
+
+  const recoverAgentEventGap = useCallback(async (runId: string): Promise<void> => {
+    if (recoveryInFlightRef.current.has(runId)) return
+    recoveryInFlightRef.current.add(runId)
+    if (activeRunIdRef.current === runId) {
+      dispatch({ type: 'connection', connection: 'recovering' })
+    }
+    logger.warn('智能助手事件流检测到缺口，开始增量补拉', {
+      event: 'assistant_ui.run.events.recovery.start',
+      requestId: runId,
+      context: { afterSequence: coveredSequenceRef.current.get(runId) ?? 0 },
+    })
+    let recoveryCompleted = false
+    try {
+      let attempts = 0
+      while (activeRunIdRef.current === runId && attempts < 50) {
+        attempts += 1
+        const afterSequence = coveredSequenceRef.current.get(runId) ?? 0
+        const page = await getAgentRunEvents(runId, afterSequence, 2_000)
+        if (activeRunIdRef.current !== runId) return
+        if (page.hasGap) {
+          const snapshot = await getAgentRunSnapshot(runId)
+          if (activeRunIdRef.current !== runId) return
+          dispatch({ type: 'hydrate', snapshot })
+          hydratedRunIdRef.current = runId
+          coveredSequenceRef.current.set(
+            runId,
+            snapshot.state.sequence
+          )
+          consumeBufferedEvents(runId)
+          logger.warn('智能助手事件缺口无法增量补齐，已回退整份快照', {
+            event: 'assistant_ui.run.events.recovery.snapshot_fallback',
+            requestId: runId,
+            context: {
+              afterSequence,
+              oldestSequence: page.oldestSequence,
+              latestSequence: page.latestSequence,
+            },
+          })
+          break
+        }
+        const pending = bufferedEventsRef.current.get(runId) ?? []
+        bufferedEventsRef.current.set(runId, mergeAgentEventReplay(pending, page.events))
+        const stillHasGap = consumeBufferedEvents(runId)
+        if (!page.hasMore && !stillHasGap) break
+        if (page.coveredThroughSequence <= afterSequence && page.events.length === 0) {
+          throw new Error('增量事件补拉没有推进游标')
+        }
+      }
+      if (consumeBufferedEvents(runId)) {
+        throw new Error('增量事件补拉达到安全页数后仍存在缺口')
+      }
+      if (activeRunIdRef.current === runId) {
+        dispatch({ type: 'connection', connection: 'connected' })
+      }
+      logger.info('智能助手事件流增量补拉完成', {
+        event: 'assistant_ui.run.events.recovery.completed',
+        requestId: runId,
+        context: { coveredThroughSequence: coveredSequenceRef.current.get(runId) ?? 0 },
+      })
+      recoveryCompleted = true
+    } catch (error) {
+      if (activeRunIdRef.current === runId) {
+        dispatch({ type: 'connection', connection: 'disconnected' })
+        dispatch({ type: 'action_error', message: '事件流恢复失败，可点击重试重新连接。' })
+      }
+      logger.error('智能助手事件流增量补拉失败', error, {
+        event: 'assistant_ui.run.events.recovery.failed',
+        requestId: runId,
+      })
+    } finally {
+      recoveryInFlightRef.current.delete(runId)
+      if (
+        recoveryCompleted
+        && activeRunIdRef.current === runId
+        && hydratedRunIdRef.current === runId
+        && consumeBufferedEvents(runId)
+      ) {
+        window.setTimeout(() => {
+          void recoverAgentEventGapRef.current(runId)
+        }, 0)
+      }
+    }
+  }, [consumeBufferedEvents])
+  recoverAgentEventGapRef.current = recoverAgentEventGap
+
   useEffect(() => {
     const unsubscribe = onAgentEvent((payload) => {
       const currentRunId = activeRunIdRef.current
-      if (currentRunId === payload.runId) {
-        queueViewEvent(payload.event)
+      bufferRunEvent(payload.runId, payload.event)
+      if (currentRunId === payload.runId && hydratedRunIdRef.current === payload.runId) {
+        const hasGap = consumeBufferedEvents(payload.runId)
+        if (hasGap) void recoverAgentEventGap(payload.runId)
         return
-      }
-      const pending = bufferedEventsRef.current.get(payload.runId) ?? []
-      pending.push(payload.event)
-      bufferedEventsRef.current.set(payload.runId, pending.slice(-200))
-      while (bufferedEventsRef.current.size > 3) {
-        const oldest = bufferedEventsRef.current.keys().next().value
-        if (typeof oldest === 'string') bufferedEventsRef.current.delete(oldest)
       }
     })
     return () => {
@@ -84,28 +205,43 @@ export function useAgentRun(): UseAgentRunResult {
       viewFrameRef.current = null
       pendingViewEventsRef.current = []
     }
-  }, [queueViewEvent])
+  }, [bufferRunEvent, consumeBufferedEvents, recoverAgentEventGap])
 
   const refresh = useCallback(async (): Promise<void> => {
     const runId = activeRunIdRef.current
     if (!runId) return
+    const refreshEpoch = refreshEpochRef.current + 1
+    refreshEpochRef.current = refreshEpoch
+    hydratedRunIdRef.current = null
     dispatch({ type: 'connection', connection: 'recovering' })
     let lastError: unknown
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const snapshot = await getAgentRunSnapshot(runId)
+        if (
+          activeRunIdRef.current !== runId
+          || refreshEpochRef.current !== refreshEpoch
+        ) return
         dispatch({ type: 'hydrate', snapshot })
-        const buffered = bufferedEventsRef.current.get(runId) ?? []
-        bufferedEventsRef.current.delete(runId)
-        if (buffered.length > 0) dispatch({ type: 'events', events: buffered })
+        hydratedRunIdRef.current = runId
+        const baseline = deriveAgentSnapshotRecoveryBaseline(
+          snapshot.state.sequence,
+          snapshot.events
+        )
+        coveredSequenceRef.current.set(runId, baseline.coveredThroughSequence)
+        const hasGap = consumeBufferedEvents(runId)
+        if (hasGap || baseline.requiresCatchUp) {
+          void recoverAgentEventGap(runId)
+        } else {
+          dispatch({ type: 'connection', connection: 'connected' })
+        }
         return
       } catch (error) {
         lastError = error
         if (attempt < 2) await new Promise<void>((resolve) => window.setTimeout(resolve, 250))
       }
     }
-    useAssistantUiStore.getState().setActiveRun(null)
-    activeRunIdRef.current = null
+    if (activeRunIdRef.current !== runId || refreshEpochRef.current !== refreshEpoch) return
     dispatch({ type: 'connection', connection: 'disconnected' })
     dispatch({ type: 'action_error', message: '无法读取这条运行记录；它可能已被删除或数据库暂时不可用。' })
     logger.warn('智能助手运行恢复失败', {
@@ -113,7 +249,7 @@ export function useAgentRun(): UseAgentRunResult {
       requestId: runId,
       context: { errorCode: lastError instanceof Error ? lastError.name : 'UNKNOWN' },
     })
-  }, [])
+  }, [consumeBufferedEvents, recoverAgentEventGap])
 
   useEffect(() => {
     if (activeRunId) void refresh()
@@ -149,9 +285,12 @@ export function useAgentRun(): UseAgentRunResult {
       activeRunIdRef.current = result.runId
       useAssistantUiStore.getState().setActiveRun(result.runId, normalizedGoal)
       dispatch({ type: 'begin', state: result.state })
-      const buffered = bufferedEventsRef.current.get(result.runId) ?? []
-      bufferedEventsRef.current.delete(result.runId)
-      if (buffered.length > 0) dispatch({ type: 'events', events: buffered })
+      hydratedRunIdRef.current = result.runId
+      coveredSequenceRef.current.set(result.runId, 0)
+      const hasGap = consumeBufferedEvents(result.runId)
+      if (hasGap || (coveredSequenceRef.current.get(result.runId) ?? 0) < result.state.sequence) {
+        void recoverAgentEventGap(result.runId)
+      }
       logger.info('智能助手 UI 运行已启动', {
         event: 'assistant_ui.run.start.completed',
         requestId: result.runId,
@@ -169,7 +308,7 @@ export function useAgentRun(): UseAgentRunResult {
     } finally {
       setSubmitting(false)
     }
-  }, [approvalMode, submitting, threadId])
+  }, [approvalMode, consumeBufferedEvents, recoverAgentEventGap, submitting, threadId])
 
   const control = useCallback(async (
     action: 'cancel' | 'pause' | 'resume',

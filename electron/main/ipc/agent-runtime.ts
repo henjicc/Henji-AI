@@ -2,6 +2,7 @@ import {
   agentApprovalResponseSchema,
   agentCancelRunRequestSchema,
   agentRunControlRequestSchema,
+  agentRunEventsRequestSchema,
   agentStartRunRequestSchema,
 } from '../../../src/core/assistant/runtimeContracts'
 import {
@@ -44,6 +45,9 @@ export function registerAgentRuntimeIpc(): void {
   ), assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:agent:getRunSnapshot', input => agentRunControlRequestSchema.parse(input), (request, event) => (
     runtime.getRunSnapshot(event.sender, request.runId)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:getRunEvents', input => agentRunEventsRequestSchema.parse(input), (request, event) => (
+    runtime.getRunEvents(event.sender, request.runId, request.afterSequence, request.limit)
   ), assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:agent:listRuns', input => agentListRunsRequestSchema.parse(input), (request) => (
     runtime.listRuns(request.threadId, request.limit)

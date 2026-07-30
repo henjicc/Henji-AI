@@ -19,6 +19,7 @@ import type { AgentStartRunRequest } from '../../../../../src/core/assistant/run
 import type { AgentContextArtifact } from '../context/types'
 import { createMainLogger } from '../../logging'
 import { assessInterruptedWorkingSummary } from '../runner/working-summary'
+import { AgentEventStore, type AgentStoredEventPage } from './event-store'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
@@ -36,10 +37,6 @@ interface RunRow {
   parent_run_id: string | null
   created_at: number
   updated_at: number
-}
-
-interface EventRow {
-  event_json: string
 }
 
 function parseJson(text: string): unknown {
@@ -64,7 +61,11 @@ function checkpointJson(state: AgentRunState): string {
 }
 
 export class AgentPersistenceStore {
-  constructor(private readonly database: Database.Database) {}
+  private readonly eventStore: AgentEventStore
+
+  constructor(private readonly database: Database.Database) {
+    this.eventStore = new AgentEventStore(database)
+  }
 
   createRun(
     runId: string,
@@ -130,16 +131,7 @@ export class AgentPersistenceStore {
   }
 
   appendEvent(event: AgentEvent): void {
-    this.database.prepare(`
-      INSERT OR IGNORE INTO agent_events(run_id, sequence, event_id, event_json, occurred_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      event.runId,
-      event.sequence,
-      event.eventId,
-      JSON.stringify(event),
-      Date.parse(event.occurredAt)
-    )
+    this.eventStore.append(event)
   }
 
   appendTerminalMessage(state: AgentRunState): void {
@@ -210,10 +202,11 @@ export class AgentPersistenceStore {
   }
 
   loadEvents(runId: string): AgentEvent[] {
-    const rows = this.database.prepare(`
-      SELECT event_json FROM agent_events WHERE run_id = ? ORDER BY sequence ASC LIMIT 2000
-    `).all(runId) as EventRow[]
-    return rows.map((row) => agentEventSchema.parse(parseJson(row.event_json)))
+    return this.eventStore.loadTail(runId)
+  }
+
+  loadEventsAfter(runId: string, afterSequence: number, limit: number): AgentStoredEventPage {
+    return this.eventStore.loadAfter(runId, afterSequence, limit)
   }
 
   listRuns(threadId?: string, limit = 30): AgentRunSummary[] {

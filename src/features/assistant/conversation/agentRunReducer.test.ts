@@ -149,6 +149,17 @@ describe('agentRunViewReducer', () => {
     }
     const unchanged = agentRunViewReducer(state, { type: 'event', event: otherRun })
     expect(unchanged).toBe(state)
+
+    const hydratedEmptySnapshot = agentRunViewReducer({
+      runState: currentState,
+      events: [],
+      connection: 'recovering',
+      actionError: null,
+    }, {
+      type: 'hydrate',
+      snapshot: { state: currentState, events: [] },
+    })
+    expect(hydratedEmptySnapshot.connection).toBe('connected')
   })
 
   it('批量事件实时重建计划步骤并区分提交与验证状态', () => {

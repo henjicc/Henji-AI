@@ -105,6 +105,12 @@ export const agentRunControlRequestSchema = z.object({
 }).strict()
 export type AgentRunControlRequest = z.infer<typeof agentRunControlRequestSchema>
 
+export const agentRunEventsRequestSchema = agentRunControlRequestSchema.extend({
+  afterSequence: z.number().int().nonnegative(),
+  limit: z.number().int().min(1).max(2_000).default(500),
+}).strict()
+export type AgentRunEventsRequest = z.infer<typeof agentRunEventsRequestSchema>
+
 export const agentCancelRunRequestSchema = agentRunControlRequestSchema.extend({
   reason: z.string().min(1).max(500).default('用户取消'),
 }).strict()
@@ -133,3 +139,65 @@ export const agentRunSnapshotSchema = z.object({
   events: z.array(agentEventSchema).max(2_000),
 }).strict()
 export type AgentRunSnapshot = z.infer<typeof agentRunSnapshotSchema>
+
+export const agentRunEventsPageSchema = z.object({
+  runId: z.string().min(1),
+  afterSequence: z.number().int().nonnegative(),
+  events: z.array(agentEventSchema).max(2_000),
+  oldestSequence: z.number().int().positive().nullable(),
+  latestSequence: z.number().int().nonnegative(),
+  coveredThroughSequence: z.number().int().nonnegative(),
+  hasGap: z.boolean(),
+  hasMore: z.boolean(),
+  terminal: z.boolean(),
+}).strict().superRefine((page, context) => {
+  const eventIds = new Set<string>()
+  let previousSequence = page.afterSequence
+  for (const [index, event] of page.events.entries()) {
+    if (event.runId !== page.runId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['events', index, 'runId'],
+        message: '增量事件必须属于请求的 run',
+      })
+    }
+    if (event.sequence <= previousSequence || event.sequence > page.latestSequence) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['events', index, 'sequence'],
+        message: '增量事件必须严格递增且不超过 latestSequence',
+      })
+    }
+    if (!page.hasGap && event.sequence !== previousSequence + 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['events', index, 'sequence'],
+        message: '无缺口页面的 sequence 必须连续',
+      })
+    }
+    if (eventIds.has(event.eventId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['events', index, 'eventId'],
+        message: '增量事件不能包含重复 eventId',
+      })
+    }
+    eventIds.add(event.eventId)
+    previousSequence = event.sequence
+  }
+  if (!page.hasGap && page.events[0] && page.events[0].sequence !== page.afterSequence + 1) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['events', 0, 'sequence'],
+      message: '无缺口页面必须从 afterSequence 的下一条开始',
+    })
+  }
+  if (page.hasGap && page.hasMore) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['hasMore'],
+      message: '缺口页面不能同时声明可正常翻页',
+    })
+  }
+})
+export type AgentRunEventsPage = z.infer<typeof agentRunEventsPageSchema>

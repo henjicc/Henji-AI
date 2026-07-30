@@ -5,6 +5,7 @@ import { z } from 'zod'
 import {
   agentRunSnapshotSchema,
   agentRuntimeEventPayloadSchema,
+  type AgentRunEventsPage,
   type AgentRunSnapshot,
   type AgentStartRunRequest,
   type AgentStartRunResult,
@@ -35,13 +36,16 @@ import { getLlmProviderApiKey } from '../keystore'
 import { getAgentMemoryStore } from '../assistant/memory'
 import { AgentRuntimeManager } from '../agent-runtime-manager/manager'
 import {
+  createMainLogger,
   getAgentTraceCaptureMode,
   getAgentTraceStore,
 } from '../logging'
 import { createInitialAgentRunState } from './runner/initial-state'
 import { AgentPersistenceStore } from './persistence/store'
+import { buildAgentRunEventsPage } from './persistence/event-store'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
+const logger = createMainLogger('main.agent_runtime')
 
 interface AgentRunRecord {
   ownerWebContentsId: number
@@ -217,6 +221,35 @@ export class AgentRuntimeService {
       state,
       events: this.persistence.loadEvents(runId),
     })
+  }
+
+  getRunEvents(
+    owner: WebContents,
+    runId: string,
+    afterSequence: number,
+    limit: number
+  ): AgentRunEventsPage {
+    const live = this.runs.get(runId)
+    const state = live
+      ? this.requireRebindableRun(owner, runId).state
+      : this.persistence.loadState(runId)
+    if (!state) throw new Error('[run_not_found] 运行不存在')
+
+    const stored = this.persistence.loadEventsAfter(runId, afterSequence, limit)
+    const page = buildAgentRunEventsPage(runId, afterSequence, state, stored)
+    if (page.hasGap) {
+      logger.warn('Agent 事件增量补拉检测到缺口', {
+        event: 'agent_runtime.events.gap.detected',
+        requestId: runId,
+        context: {
+          afterSequence,
+          firstSequence: stored.events[0]?.sequence ?? null,
+          oldestSequence: page.oldestSequence,
+          latestSequence: page.latestSequence,
+        },
+      })
+    }
+    return page
   }
 
   subscribeRunEvents(owner: WebContents, runId: string, listener: AgentRunEventListener): () => void {

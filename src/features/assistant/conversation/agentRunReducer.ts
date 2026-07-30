@@ -165,12 +165,13 @@ export function agentRunViewReducer(
       const existingEvents = state.runState?.runId === action.snapshot.state.runId
         ? state.events
         : []
-      return applyIncomingEvents({
+      const hydrated = applyIncomingEvents({
         runState: action.snapshot.state,
         events: existingEvents,
         connection: state.connection,
         actionError: null,
       }, action.snapshot.events)
+      return { ...hydrated, connection: 'connected' }
     }
     case 'sync_state':
       return { ...state, runState: action.state, connection: 'connected', actionError: null }

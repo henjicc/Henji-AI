@@ -113,6 +113,7 @@ const assistantApi: HenjiAssistantApi = {
   respondApproval: (request) => nativeInvoke('assistant:agent:respondApproval', request),
   getRunState: (request) => nativeInvoke('assistant:agent:getRunState', request),
   getRunSnapshot: (request) => nativeInvoke('assistant:agent:getRunSnapshot', request),
+  getRunEvents: (request) => nativeInvoke('assistant:agent:getRunEvents', request),
   listRuns: (request) => nativeInvoke('assistant:agent:listRuns', request),
   retryRun: (request) => nativeInvoke('assistant:agent:retryRun', request),
   subscribeEvents: (handler) => {

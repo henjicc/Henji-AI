@@ -1,5 +1,4 @@
 import { createMainLogger } from '../../logging'
-import { agentRunStateSchema } from '../../../../../src/core/assistant/events'
 import type { AgentApprovalRequest, AgentEventInput, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
@@ -11,26 +10,26 @@ import { AgentIntentRouter } from '../context/router'
 import type { AgentRouteDecision } from '../context/types'
 import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentBudgetTracker } from './budget'
-import { AgentEventStream } from './event-stream'
 import { createInitialAgentRunState } from './initial-state'
 import { buildPrimaryModelTraceMetadata, runPrimaryAgentModelStep, runRouterModelClassification } from './model-execution'
 import { selectAgentRuntimeModels } from './models'
-import { errorCode, serializeError, toolMessage } from './runner-results'
+import { errorCode, toolMessage } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
 import { AgentToolCallScheduler } from './tool-call-scheduler'
 import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
 import type { AgentRunnerOptions } from './types'
 import { AgentApprovalWaiter } from './approval-waiter'
 import { AgentRecoveryWriteGuard } from './recovery-guard'
-import { markWorkingSummaryRecoveryVerified, reduceAgentWorkingSummary } from './working-summary'
+import { markWorkingSummaryRecoveryVerified } from './working-summary'
 import { AgentMemoryContextProvider } from './memory-context'
 import { emitAgentContextEvents } from './context-events'
+import { AgentRunnerLifecycle } from './lifecycle'
 
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
   private readonly budget: AgentBudgetTracker
-  private readonly events: AgentEventStream
+  private readonly lifecycle: AgentRunnerLifecycle
   private readonly models
   private readonly contextBuilder: AgentContextBuilder
   private readonly catalogPlanner
@@ -44,16 +43,23 @@ export class AgentRunner {
   private readonly recoveryGuard: AgentRecoveryWriteGuard
   private readonly memoryProvider: AgentMemoryContextProvider
   private currentModelRequestId: string | null = null
+  private asyncEventError: unknown | null = null
   private started = false
 
   constructor(private readonly options: AgentRunnerOptions) {
     this.models = selectAgentRuntimeModels(options.request)
     this.budget = new AgentBudgetTracker(options.request.budget)
-    this.events = new AgentEventStream(options.runId)
     this.contextBuilder = new AgentContextBuilder(options.dependencies.artifactStore ?? new AgentArtifactStore())
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
-    if (options.dependencies.onEvent) this.events.subscribe(options.dependencies.onEvent)
     this.state = createInitialAgentRunState(options.runId, options.request, options.recoveryContext)
+    this.lifecycle = new AgentRunnerLifecycle({
+      runId: options.runId,
+      state: this.state,
+      machine: this.machine,
+      budget: this.budget,
+      dependencies: options.dependencies,
+      onEventDispatchError: (error) => this.handleAsyncEventError(error),
+    })
     this.recoveryGuard = new AgentRecoveryWriteGuard(this.state.workingSummary, options.dependencies.registry)
     this.memoryProvider = new AgentMemoryContextProvider(options.runId, options.memoryContext ?? [], options.dependencies.retrieveMemory)
   }
@@ -81,12 +87,11 @@ export class AgentRunner {
   }
 
   getState(): AgentRunState {
-    this.refreshState()
-    return agentRunStateSchema.parse(this.state)
+    return this.lifecycle.getState()
   }
 
-  getEventHistory(): ReturnType<AgentEventStream['getHistory']> {
-    return this.events.getHistory()
+  getEventHistory(): ReturnType<AgentRunnerLifecycle['getEventHistory']> {
+    return this.lifecycle.getEventHistory()
   }
 
   pause(reason = '用户暂停'): AgentRunState {
@@ -120,7 +125,7 @@ export class AgentRunner {
     logger.info('Agent 运行已取消', {
       event: 'agent_runtime.run.cancelled', requestId: this.options.runId, context: { reason },
     })
-    this.finishTerminal()
+    this.lifecycle.finishTerminal()
     return this.getState()
   }
 
@@ -266,7 +271,7 @@ export class AgentRunner {
         this.complete(finalText)
       }
     } catch (error) {
-      if (this.machine.status !== 'cancelled') this.fail(error)
+      if (this.machine.status !== 'cancelled') this.fail(this.takeAsyncEventError() ?? error)
     }
   }
 
@@ -446,59 +451,48 @@ export class AgentRunner {
   }
 
   private throwIfCancelled(): void {
+    if (this.asyncEventError) throw this.asyncEventError
     if (this.abortController.signal.aborted || this.machine.status === 'cancelled') {
       throw new Error('[task_cancelled] Agent run cancelled')
     }
   }
 
-  private complete(finalText: string): void {
-    this.state.finalText = finalText
-    this.transition('completed')
-    this.emit({ type: 'RunCompleted', finalText, usage: this.budget.snapshot() })
-    logger.info('Agent 运行完成', {
-      event: 'agent_runtime.run.completed', requestId: this.options.runId,
-      context: { turns: this.budget.snapshot().turns, toolCalls: this.budget.snapshot().toolCalls },
+  private handleAsyncEventError(error: unknown): void {
+    if (this.asyncEventError || isTerminalAgentState(this.machine.status)) return
+    this.asyncEventError = error
+    logger.error('Agent 异步事件刷新失败，正在受控终止运行', {
+      event: 'agent_runtime.event_flush.failed',
+      requestId: this.options.runId,
+      context: { errorCode: errorCode(error) },
     })
-    this.finishTerminal()
+    if (this.currentModelRequestId) {
+      try {
+        this.options.dependencies.cancelModelStep(this.currentModelRequestId)
+      } catch {
+        // 后续 abort 与 Runner 终局仍会继续，取消回调不能阻断错误收口。
+      }
+    }
+    this.abortController.abort(error)
+    this.approvalWaiter.settle('reject')
+    const waiters = this.pauseWaiters
+    this.pauseWaiters = []
+    for (const resolve of waiters) resolve()
   }
 
-  private fail(error: unknown): void {
-    const serialized = serializeError(error)
-    this.state.error = serialized
-    this.transition('failed', serialized.code)
-    this.emit({ type: 'RunFailed', error: serialized, usage: this.budget.snapshot() })
-    logger.error('Agent 运行失败', {
-      event: 'agent_runtime.run.failed', requestId: this.options.runId,
-      context: { errorCode: serialized.code, turns: this.budget.snapshot().turns },
-    })
-    this.finishTerminal()
+  private takeAsyncEventError(): unknown | null {
+    const error = this.asyncEventError
+    this.asyncEventError = null
+    return error
   }
 
-  private finishTerminal(): void {
-    this.options.dependencies.onTerminal?.(this.getState())
-  }
-
+  private complete(finalText: string): void { this.throwIfCancelled(); this.lifecycle.complete(finalText) }
+  private fail(error: unknown): void { this.lifecycle.fail(error) }
   private transition(next: AgentRunStatus, reason?: string): void {
-    const previous = this.machine.transition(next)
-    this.state.status = next
-    if (previous !== next) this.emit({ type: 'RunStateChanged', previous, current: next, reason })
+    this.lifecycle.transition(next, reason)
+    if (!isTerminalAgentState(this.machine.status)) this.throwIfCancelled()
   }
-
   private emit(input: AgentEventInput): void {
-    const event = this.events.emit(input)
-    this.state.sequence = event.sequence
-    this.state.workingSummary = reduceAgentWorkingSummary(
-      this.state.workingSummary,
-      event,
-      this.state.lastScopeRevisions
-    )
-    this.refreshState()
-    this.options.dependencies.onCheckpoint?.(this.getState())
-  }
-
-  private refreshState(): void {
-    this.state.status = this.machine.status
-    this.state.usage = this.budget.snapshot()
-    this.state.updatedAt = new Date().toISOString()
+    this.lifecycle.emit(input)
+    if (!isTerminalAgentState(this.machine.status)) this.throwIfCancelled()
   }
 }

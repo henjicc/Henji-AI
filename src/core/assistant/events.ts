@@ -132,6 +132,7 @@ const modelDeltaEventSchema = z.object({
   ...eventBase,
   type: z.literal('ModelDelta'),
   stepId: z.string().min(1),
+  /** Provider 原始片段会在分配 sequence 前合并；这里始终是可持久、可重放的有界文本块。 */
   text: z.string().max(16 * 1024),
 }).strict()
 

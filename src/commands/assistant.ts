@@ -16,9 +16,11 @@ import {
   agentApprovalResponseSchema,
   agentCancelRunRequestSchema,
   agentRunControlRequestSchema,
+  agentRunEventsRequestSchema,
   agentStartRunRequestSchema,
   type AgentApprovalResponse,
   type AgentRuntimeEventPayload,
+  type AgentRunEventsPage,
   type AgentRunSnapshot,
   type AgentStartRunRequest,
   type AgentStartRunResult,
@@ -183,6 +185,20 @@ export async function getAgentRunState(runId: string): Promise<AgentRunState> {
 export async function getAgentRunSnapshot(runId: string): Promise<AgentRunSnapshot> {
   const request = agentRunControlRequestSchema.parse({ schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION, runId })
   return await getPlatform().assistant.getRunSnapshot(request)
+}
+
+export async function getAgentRunEvents(
+  runId: string,
+  afterSequence: number,
+  limit = 500
+): Promise<AgentRunEventsPage> {
+  const request = agentRunEventsRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    runId,
+    afterSequence,
+    limit,
+  })
+  return await getPlatform().assistant.getRunEvents(request)
 }
 
 export async function listAgentRuns(

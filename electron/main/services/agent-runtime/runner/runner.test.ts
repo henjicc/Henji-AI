@@ -1,10 +1,10 @@
 import { z } from 'zod'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
-import type { ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
 import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
@@ -125,6 +125,10 @@ function createRuntime(registry = new AgentToolRegistry()) {
 }
 
 describe('AgentRunner', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('模糊请求经过 router 后完成 final，事件序号严格递增', async () => {
     const { registry, gateway } = createRuntime()
     const events: AgentEvent[] = []
@@ -283,5 +287,106 @@ describe('AgentRunner', () => {
     const state = runner.cancel('测试取消')
     expect(state.status).toBe('cancelled')
     expect(cancelModelStep).toHaveBeenCalledWith(expect.stringContaining('run-cancel:router:'))
+  })
+
+  it('定时事件持久化失败时取消模型请求并以原始错误受控终止', async () => {
+    vi.useFakeTimers()
+    const { registry, gateway } = createRuntime()
+    let rejectPrimary: (error: Error) => void = () => undefined
+    let primaryStartedResolve: () => void = () => undefined
+    const primaryStarted = new Promise<void>((resolve) => { primaryStartedResolve = resolve })
+    const runModelStep = vi.fn((
+      input: ModelStepInput,
+      emit: (event: ModelStepEvent) => void
+    ): Promise<ModelStepResult> => {
+      if (input.stepId.startsWith('router:')) {
+        return Promise.resolve(result(input, {
+          text: '',
+          structuredOutput: {
+            intent: 'general', complexity: 'simple', path: 'primary',
+            toolDomains: ['catalog'], reason: '一般问答',
+          },
+          responseMessages: [{ role: 'assistant', content: '' }],
+        }))
+      }
+      emit({ type: 'TextDelta', text: '正在回答' })
+      primaryStartedResolve()
+      return new Promise<ModelStepResult>((_resolve, reject) => {
+        rejectPrimary = reject
+      })
+    })
+    const cancelModelStep = vi.fn(() => rejectPrimary(new Error('[model_cancelled] 已取消')))
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runner = new AgentRunner({
+      runId: 'run-event-failure',
+      request: runRequest('测试异步事件失败'),
+      dependencies: {
+        registry,
+        gateway,
+        getHostContext: hostContext,
+        runModelStep,
+        cancelModelStep,
+        onEvent: (event) => {
+          if (event.type === 'ModelDelta' || cancelModelStep.mock.calls.length > 0) {
+            throw new Error('[event_flush_failed] 事件持久化持续失败')
+          }
+        },
+        onTerminal: terminalResolve,
+      },
+    })
+
+    runner.start()
+    await primaryStarted
+    await vi.advanceTimersByTimeAsync(240)
+    const state = await terminal
+
+    expect(cancelModelStep).toHaveBeenCalledWith('run-event-failure:step-1')
+    expect(state).toMatchObject({
+      status: 'failed',
+      error: { code: 'event_flush_failed', message: '事件持久化持续失败' },
+    })
+  })
+
+  it('同步验证事件上报失败时不会误报为 completed', async () => {
+    const { registry, gateway } = createRuntime()
+    const runModelStep = vi.fn(async (input: ModelStepInput) => {
+      if (input.stepId.startsWith('router:')) {
+        return result(input, {
+          text: '',
+          structuredOutput: {
+            intent: 'general', complexity: 'simple', path: 'primary',
+            toolDomains: ['catalog'], reason: '一般问答',
+          },
+          responseMessages: [{ role: 'assistant', content: '' }],
+        })
+      }
+      return result(input)
+    })
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runner = new AgentRunner({
+      runId: 'run-sync-event-failure',
+      request: runRequest('测试同步事件失败'),
+      dependencies: {
+        registry,
+        gateway,
+        getHostContext: hostContext,
+        runModelStep,
+        cancelModelStep: vi.fn(),
+        onEvent: (event) => {
+          if (event.type === 'VerificationCompleted') {
+            throw new Error('[verification_event_failed] 验证事件持久化失败')
+          }
+        },
+        onTerminal: terminalResolve,
+      },
+    })
+
+    runner.start()
+    await expect(terminal).resolves.toMatchObject({
+      status: 'failed',
+      error: { code: 'verification_event_failed', message: '验证事件持久化失败' },
+    })
   })
 })

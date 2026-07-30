@@ -14,6 +14,8 @@ import type {
   AgentApprovalResponse,
   AgentCancelRunRequest,
   AgentRunControlRequest,
+  AgentRunEventsPage,
+  AgentRunEventsRequest,
   AgentRuntimeEventPayload,
   AgentRunSnapshot,
   AgentStartRunRequest,
@@ -57,6 +59,7 @@ export interface AssistantPlatform {
   respondApproval(request: AgentApprovalResponse): Promise<AgentRunState>
   getRunState(request: AgentRunControlRequest): Promise<AgentRunState>
   getRunSnapshot(request: AgentRunControlRequest): Promise<AgentRunSnapshot>
+  getRunEvents(request: AgentRunEventsRequest): Promise<AgentRunEventsPage>
   listRuns(request: AgentListRunsRequest): Promise<AgentRunSummary[]>
   retryRun(request: AgentRetryRunRequest): Promise<AgentStartRunResult>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void

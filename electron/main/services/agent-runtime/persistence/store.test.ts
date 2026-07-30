@@ -6,6 +6,7 @@ import {
   agentEventSchema,
   agentRunStateSchema,
   type AgentRunState,
+  type AgentEvent,
 } from '../../../../../src/core/assistant/events'
 import {
   AGENT_RUNTIME_SCHEMA_VERSION,
@@ -14,6 +15,7 @@ import {
 } from '../../../../../src/core/assistant/runtimeContracts'
 import { runAgentSchemaMigrations } from './migrations'
 import { AgentPersistenceStore } from './store'
+import { AgentEventStream } from '../runner/event-stream'
 import {
   agentWorkingSummarySchema,
   createAgentWorkingSummary,
@@ -109,6 +111,18 @@ function state(status: AgentRunState['status'] = 'running'): AgentRunState {
   })
 }
 
+function eventForSequence(sequence: number): AgentEvent {
+  return agentEventSchema.parse({
+    schemaVersion: AGENT_EVENT_SCHEMA_VERSION,
+    eventId: `event-${sequence}`,
+    sequence,
+    occurredAt: new Date(Date.UTC(2026, 6, 30) + sequence).toISOString(),
+    runId: 'run-1',
+    type: 'RunStarted',
+    threadId: 'thread-1',
+  })
+}
+
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
 
 describeWithElectronSqlite('AgentPersistenceStore', () => {
@@ -157,6 +171,64 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
       recoveryStatus: 'none',
       canRetry: false,
     }])
+  })
+
+  it('尾部恢复返回最新两千条，并支持从已确认 sequence 增量补拉', () => {
+    store.createRun('run-1', request(), state())
+    database.transaction(() => {
+      for (let sequence = 1; sequence <= 2_050; sequence += 1) {
+        store.appendEvent(eventForSequence(sequence))
+      }
+    })()
+
+    const tail = store.loadEvents('run-1')
+    expect(tail).toHaveLength(2_000)
+    expect(tail[0]?.sequence).toBe(51)
+    expect(tail.at(-1)?.sequence).toBe(2_050)
+    expect(tail.every((event, index) => index === 0 || event.sequence > tail[index - 1].sequence)).toBe(true)
+
+    const page = store.loadEventsAfter('run-1', 1_998, 10)
+    expect(page).toMatchObject({ oldestSequence: 1, latestSequence: 2_050 })
+    expect(page.events.map((event) => event.sequence)).toEqual([
+      1_999, 2_000, 2_001, 2_002, 2_003, 2_004, 2_005, 2_006, 2_007, 2_008,
+    ])
+  })
+
+  it('一万个原始模型增量合并后只写入有界数量的 SQLite 事件', () => {
+    store.createRun('run-1', request(), state())
+    const stream = new AgentEventStream('run-1')
+    stream.subscribe((event) => store.appendEvent(event))
+
+    for (let index = 0; index < 10_000; index += 1) {
+      stream.emit({ type: 'ModelDelta', stepId: 'step-1', text: '流' })
+    }
+    stream.emit({
+      type: 'ModelCompleted',
+      stepId: 'step-1',
+      finishReason: 'stop',
+      toolCallCount: 0,
+      usage: {
+        inputTokens: 1,
+        inputNoCacheTokens: 1,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        outputTokens: 10_000,
+        textTokens: 10_000,
+        reasoningTokens: 0,
+        totalTokens: 10_001,
+      },
+    })
+
+    const count = database.prepare(`
+      SELECT COUNT(*) AS count FROM agent_events WHERE run_id = 'run-1'
+    `).get() as { count: number }
+    const events = store.loadEvents('run-1')
+    expect(count.count).toBeLessThan(10)
+    expect(events.filter((event) => event.type === 'ModelDelta').map((event) => event.text).join(''))
+      .toBe('流'.repeat(10_000))
+    expect(events.map((event) => event.sequence)).toEqual(
+      events.map((_, index) => index + 1)
+    )
   })
 
   it('应用重启后把未完成运行转为需要人工重试，不自动重放', () => {

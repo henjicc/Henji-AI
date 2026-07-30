@@ -33,6 +33,7 @@ export function createElectronAssistant(): AssistantPlatform {
     respondApproval: (request) => getNativeAssistant().respondApproval(request),
     getRunState: (request) => getNativeAssistant().getRunState(request),
     getRunSnapshot: (request) => getNativeAssistant().getRunSnapshot(request),
+    getRunEvents: (request) => getNativeAssistant().getRunEvents(request),
     listRuns: (request) => getNativeAssistant().listRuns(request),
     retryRun: (request) => getNativeAssistant().retryRun(request),
     subscribeEvents: (handler) => getNativeAssistant().subscribeEvents(handler),
