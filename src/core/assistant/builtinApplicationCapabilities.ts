@@ -1,0 +1,500 @@
+import { z } from 'zod'
+
+import { imageEditOperationSchema } from './imageEditContracts'
+import {
+  applicationRefSchema,
+  ApplicationCapabilityRegistry,
+  type ApplicationCapabilityDefinition,
+} from './applicationCapabilities'
+import { APPLICATION_SURFACE_IDS } from './applicationSurfaces'
+
+function defineCapability<TInput, TOutput>(
+  definition: Omit<
+    ApplicationCapabilityDefinition<TInput, TOutput>,
+    'availability' | 'concurrencyKey'
+  > & {
+    availability?: string[]
+    concurrencyKey?: string
+  }
+): ApplicationCapabilityDefinition<TInput, TOutput> {
+  return {
+    ...definition,
+    availability: definition.availability
+      ?? definition.requiredScopes.map((scope) => `${scope} 作用域可用`),
+    concurrencyKey: definition.concurrencyKey ?? definition.domain,
+  }
+}
+
+const revisionOutputSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  scopeRevisions: z.record(z.string(), z.number().int().nonnegative()),
+}).passthrough()
+
+export const getCurrentApplicationContextCapability = defineCapability({
+  id: 'get_current_application_context',
+  version: 1,
+  title: '读取当前应用位置',
+  description: '读取用户当前所在页面、打开的工具或设置分区，以及当前焦点对象。',
+  domain: 'application',
+  aliases: ['当前页面', '这里', '当前工具', '当前位置', 'current page', 'surface'],
+  side: 'frontend',
+  readOnly: true,
+  risk: 'R0',
+  dataClasses: ['C0'],
+  permission: 'application:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 5_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['navigation'],
+  prerequisites: ['应用界面已就绪。'],
+  acceptsRefs: [],
+  producesRefs: ['application.surface', 'application.entity'],
+  successEvidence: ['返回当前 Surface、焦点引用和能力目录 revision。'],
+  failureRecovery: ['界面未就绪时等待宿主恢复后重试。'],
+  inputSchema: z.object({}).strict(),
+  outputSchema: z.object({
+    surface: z.object({
+      id: z.string(),
+      kind: z.string(),
+      focusedRef: z.string().nullable(),
+      selectedRefs: z.array(z.string()),
+    }),
+    catalogRevision: z.number().int().nonnegative(),
+    ready: z.boolean(),
+    revision: z.number().int().nonnegative(),
+  }).passthrough(),
+  aiInputSchema: { type: 'object', properties: {}, additionalProperties: false },
+})
+
+export const openApplicationSurfaceCapability = defineCapability({
+  id: 'open_application_surface',
+  version: 1,
+  title: '打开应用页面',
+  description: '打开明确指定的工作区、工具或设置分区。后台可完成的设置修改不应调用本能力。',
+  domain: 'navigation',
+  aliases: ['打开页面', '切换页面', '带我去', '打开设置', 'open page', 'navigate'],
+  side: 'frontend',
+  readOnly: false,
+  risk: 'R0',
+  dataClasses: ['C0'],
+  permission: 'navigation:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 5_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['navigation'],
+  prerequisites: ['目标 Surface ID 来自能力目录或当前上下文。'],
+  acceptsRefs: ['application.surface'],
+  producesRefs: ['application.surface'],
+  successEvidence: ['返回实际打开的 Surface ID 和最新 revision。'],
+  failureRecovery: ['目标不存在时搜索应用能力或请求用户澄清，不猜测页面名称。'],
+  inputSchema: z.object({
+    surfaceId: z.enum(APPLICATION_SURFACE_IDS),
+  }).strict(),
+  outputSchema: revisionOutputSchema,
+  aiInputSchema: {
+    type: 'object',
+    properties: { surfaceId: { type: 'string', enum: [...APPLICATION_SURFACE_IDS] } },
+    required: ['surfaceId'],
+    additionalProperties: false,
+  },
+})
+
+export const closeApplicationSurfaceCapability = defineCapability({
+  id: 'close_application_surface',
+  version: 1,
+  title: '关闭应用浮层',
+  description: '关闭明确的设置面板、素材浮层或工具子页，不关闭整个应用。',
+  domain: 'navigation',
+  aliases: ['关闭设置', '关闭浮层', '返回当前页', 'close panel'],
+  side: 'frontend',
+  readOnly: false,
+  risk: 'R0',
+  dataClasses: ['C0'],
+  permission: 'navigation:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 5_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['navigation'],
+  prerequisites: ['只能关闭注册过的非破坏性 Surface。'],
+  acceptsRefs: ['application.surface'],
+  producesRefs: ['application.surface'],
+  successEvidence: ['返回关闭后的当前 Surface。'],
+  failureRecovery: ['目标已经关闭时按幂等成功处理。'],
+  inputSchema: z.object({ surfaceId: z.string().min(1).max(120).optional() }).strict(),
+  outputSchema: revisionOutputSchema,
+  aiInputSchema: {
+    type: 'object',
+    properties: { surfaceId: { type: 'string' } },
+    additionalProperties: false,
+  },
+})
+
+export const focusApplicationEntityCapability = defineCapability({
+  id: 'focus_application_entity',
+  version: 1,
+  title: '定位应用对象',
+  description: '根据稳定引用定位生成记录、素材、画布节点或项目。',
+  domain: 'navigation',
+  aliases: ['定位', '打开这条记录', '查看这个项目', 'focus entity'],
+  side: 'frontend',
+  readOnly: false,
+  risk: 'R0',
+  dataClasses: ['C1'],
+  permission: 'navigation:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 8_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['navigation'],
+  prerequisites: ['必须提供由应用能力返回的稳定引用。'],
+  acceptsRefs: ['generation.record', 'generation.result', 'asset', 'canvas.project', 'canvas.node'],
+  producesRefs: ['application.entity'],
+  successEvidence: ['返回实际定位的引用与 Surface。'],
+  failureRecovery: ['引用失效时重新读取来源模块，不根据名称猜测对象。'],
+  inputSchema: z.object({ ref: applicationRefSchema }).strict(),
+  outputSchema: revisionOutputSchema,
+  aiInputSchema: {
+    type: 'object',
+    properties: {
+      ref: {
+        type: 'object',
+        properties: {
+          kind: { type: 'string' },
+          id: { type: 'string' },
+          revision: { type: 'integer', minimum: 0 },
+          label: { type: 'string' },
+        },
+        required: ['kind', 'id'],
+        additionalProperties: false,
+      },
+    },
+    required: ['ref'],
+    additionalProperties: false,
+  },
+})
+
+const settingChangeSchema = z.object({
+  id: z.string().min(1).max(120),
+  value: z.unknown(),
+}).strict()
+
+export const searchApplicationSettingsCapability = defineCapability({
+  id: 'search_application_settings',
+  version: 1,
+  title: '搜索应用设置',
+  description: '按用户语言搜索可读取或修改的应用设置，不返回密钥和原始本地路径。',
+  domain: 'settings',
+  aliases: ['设置', '偏好', '毛玻璃', '主题', '上传', '画布', 'settings'],
+  side: 'frontend',
+  readOnly: true,
+  risk: 'R0',
+  dataClasses: ['C0'],
+  permission: 'settings:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 5_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['settings'],
+  prerequisites: ['应用设置注册中心已就绪。'],
+  acceptsRefs: [],
+  producesRefs: ['application.setting'],
+  successEvidence: ['返回稳定设置 ID、用户化说明、约束和设置页位置。'],
+  failureRecovery: ['无结果时刷新设置目录或请求更具体的设置名称。'],
+  inputSchema: z.object({
+    query: z.string().max(500).default(''),
+    limit: z.number().int().min(1).max(30).default(12),
+  }).strict(),
+  outputSchema: z.object({ settings: z.array(z.record(z.string(), z.unknown())) }).strict(),
+  aiInputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string' },
+      limit: { type: 'integer', minimum: 1, maximum: 30 },
+    },
+    additionalProperties: false,
+  },
+})
+
+export const getApplicationSettingsCapability = defineCapability({
+  id: 'get_application_settings',
+  version: 1,
+  title: '读取应用设置',
+  description: '读取明确设置的当前值；密钥只返回是否已配置，路径只返回状态。',
+  domain: 'settings',
+  aliases: ['读取设置', '当前设置', '是否开启', 'get settings'],
+  side: 'frontend',
+  readOnly: true,
+  risk: 'R0',
+  dataClasses: ['C1'],
+  permission: 'settings:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 5_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['settings'],
+  prerequisites: ['设置 ID 必须来自设置搜索结果。'],
+  acceptsRefs: ['application.setting'],
+  producesRefs: ['application.setting'],
+  successEvidence: ['返回设置当前值或脱敏状态。'],
+  failureRecovery: ['设置 ID 不存在时重新搜索，不猜测 ID。'],
+  inputSchema: z.object({ ids: z.array(z.string().min(1)).min(1).max(30) }).strict(),
+  outputSchema: z.object({
+    revision: z.number().int().nonnegative(),
+    settings: z.array(z.record(z.string(), z.unknown())),
+  }).strict(),
+  aiInputSchema: {
+    type: 'object',
+    properties: { ids: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: 30 } },
+    required: ['ids'],
+    additionalProperties: false,
+  },
+})
+
+export const planApplicationSettingsChangeCapability = defineCapability({
+  id: 'plan_application_settings_change',
+  version: 1,
+  title: '规划设置修改',
+  description: '校验一组设置修改并返回变更前后差异、联动影响和刷新或重启要求，不写入。',
+  domain: 'settings',
+  aliases: ['修改设置', '设置计划', '批量设置', 'plan settings'],
+  side: 'frontend',
+  readOnly: true,
+  risk: 'R0',
+  dataClasses: ['C1'],
+  permission: 'settings:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 5_000,
+  supportsPreview: true,
+  supportsUndo: false,
+  requiredScopes: ['settings'],
+  prerequisites: ['设置 ID 和目标值已明确。'],
+  acceptsRefs: ['application.setting'],
+  producesRefs: ['settings.plan'],
+  successEvidence: ['所有值通过约束校验并返回绑定 revision 的计划引用。'],
+  failureRecovery: ['任一值非法时修正输入；不会写入部分设置。'],
+  inputSchema: z.object({ changes: z.array(settingChangeSchema).min(1).max(30) }).strict(),
+  outputSchema: z.object({
+    planRef: z.string(),
+    revision: z.number().int().nonnegative(),
+    changes: z.array(z.record(z.string(), z.unknown())),
+    requiresReload: z.boolean(),
+    requiresRestart: z.boolean(),
+  }).strict(),
+  aiInputSchema: {
+    type: 'object',
+    properties: {
+      changes: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 30,
+        items: {
+          type: 'object',
+          properties: { id: { type: 'string' }, value: {} },
+          required: ['id', 'value'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['changes'],
+    additionalProperties: false,
+  },
+})
+
+export const applyApplicationSettingsChangeCapability = defineCapability({
+  id: 'apply_application_settings_change',
+  version: 1,
+  title: '应用设置修改',
+  description: '原子应用已校验的设置计划；revision 冲突时不会写入。',
+  domain: 'settings',
+  aliases: ['应用设置', '确认修改', '关闭毛玻璃', 'apply settings'],
+  side: 'frontend',
+  readOnly: false,
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'settings:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 8_000,
+  supportsPreview: true,
+  supportsUndo: true,
+  requiredScopes: ['settings'],
+  prerequisites: ['先创建设置修改计划，并保持设置 revision 未变化。'],
+  acceptsRefs: ['settings.plan'],
+  producesRefs: ['application.setting'],
+  successEvidence: ['返回每项已生效的新值和新 revision。'],
+  failureRecovery: ['revision 冲突时重新读取设置并重新规划。'],
+  inputSchema: z.object({ planRef: z.string().min(1) }).strict(),
+  outputSchema: z.object({
+    applied: z.array(z.record(z.string(), z.unknown())),
+    revision: z.number().int().nonnegative(),
+    undoRef: z.string().min(1),
+    requiresReload: z.boolean(),
+    requiresRestart: z.boolean(),
+  }).strict(),
+  aiInputSchema: {
+    type: 'object',
+    properties: { planRef: { type: 'string' } },
+    required: ['planRef'],
+    additionalProperties: false,
+  },
+})
+
+export const listGenerationHistoryCapability = defineCapability({
+  id: 'list_generation_history',
+  version: 1,
+  title: '读取生成历史',
+  description: '读取生成工作区的历史记录；“当前页、最后一张”在生成页面优先使用本能力。',
+  domain: 'generation',
+  aliases: ['生成历史', '最后一张', '最近生成', '上一张图', 'generation history'],
+  side: 'frontend',
+  readOnly: true,
+  risk: 'R0',
+  dataClasses: ['C1'],
+  permission: 'generation:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 8_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['generation'],
+  prerequisites: ['生成历史数据库已就绪。'],
+  acceptsRefs: [],
+  producesRefs: ['generation.record', 'generation.result'],
+  successEvidence: ['返回按时间倒序排列的记录及稳定引用，不暴露本地路径。'],
+  failureRecovery: ['没有成功结果时明确返回空列表，不创建画布或其他项目。'],
+  inputSchema: z.object({
+    mediaType: z.enum(['image', 'video', 'audio']).optional(),
+    status: z.enum(['success', 'completed', 'error', 'failed']).optional(),
+    limit: z.number().int().min(1).max(30).default(10),
+  }).strict(),
+  outputSchema: z.object({ records: z.array(z.record(z.string(), z.unknown())) }).strict(),
+  aiInputSchema: {
+    type: 'object',
+    properties: {
+      mediaType: { type: 'string', enum: ['image', 'video', 'audio'] },
+      status: { type: 'string', enum: ['success', 'completed', 'error', 'failed'] },
+      limit: { type: 'integer', minimum: 1, maximum: 30 },
+    },
+    additionalProperties: false,
+  },
+})
+
+export const openImageEditorWithSourceCapability = defineCapability({
+  id: 'open_image_editor_with_source',
+  version: 1,
+  title: '在图片编辑中打开结果',
+  description: '把生成结果或素材引用直接传给图片编辑器，不经过画布，也不要求先写入素材库。',
+  domain: 'image_edit',
+  aliases: ['传到图片编辑', '打开图片编辑', '编辑最后一张', 'open image editor'],
+  side: 'frontend',
+  readOnly: false,
+  risk: 'R0',
+  dataClasses: ['C1'],
+  permission: 'image_edit:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 10_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['generation', 'toolbox', 'navigation'],
+  prerequisites: ['必须提供生成历史或素材能力返回的图片引用。'],
+  acceptsRefs: ['generation.result', 'asset'],
+  producesRefs: ['image_edit.session', 'application.surface'],
+  successEvidence: ['图片编辑器打开并返回对应会话引用。'],
+  failureRecovery: ['引用不存在或不是图片时停止并说明，不创建画布项目。'],
+  inputSchema: z.object({ sourceRef: applicationRefSchema }).strict(),
+  outputSchema: revisionOutputSchema,
+  aiInputSchema: {
+    type: 'object',
+    properties: {
+      sourceRef: {
+        type: 'object',
+        properties: { kind: { type: 'string' }, id: { type: 'string' }, label: { type: 'string' } },
+        required: ['kind', 'id'],
+        additionalProperties: false,
+      },
+    },
+    required: ['sourceRef'],
+    additionalProperties: false,
+  },
+})
+
+export const createImageEditPreviewFromRefCapability = defineCapability({
+  id: 'create_image_edit_preview_from_ref',
+  version: 1,
+  title: '创建图片编辑预览',
+  description: '对生成结果或素材引用创建裁剪、旋转、镜像或标注预览，并在图片编辑器中显示。',
+  domain: 'image_edit',
+  aliases: ['矩形标注', '文字标注', '图片编辑预览', 'annotate image'],
+  side: 'frontend',
+  readOnly: false,
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'image_edit:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 15_000,
+  supportsPreview: true,
+  supportsUndo: true,
+  requiredScopes: ['generation', 'toolbox', 'navigation'],
+  prerequisites: ['图片引用有效，标注坐标和文本已明确。'],
+  acceptsRefs: ['generation.result', 'asset'],
+  producesRefs: ['image_edit.preview', 'image_edit.session'],
+  successEvidence: ['返回预览引用、实际尺寸和操作数量，原图未被覆盖。'],
+  failureRecovery: ['输入非法时读取图片信息后修正参数；不得改用画布猜测节点。'],
+  inputSchema: z.object({
+    sourceRef: applicationRefSchema,
+    operations: z.array(imageEditOperationSchema).min(1).max(32),
+  }).strict(),
+  outputSchema: z.object({
+    previewRef: z.string(),
+    sourceRef: applicationRefSchema,
+    operationCount: z.number().int().nonnegative(),
+    hasEffect: z.boolean(),
+    width: z.number().positive(),
+    height: z.number().positive(),
+  }).and(revisionOutputSchema),
+  aiInputSchema: {
+    type: 'object',
+    properties: {
+      sourceRef: {
+        type: 'object',
+        properties: { kind: { type: 'string' }, id: { type: 'string' }, label: { type: 'string' } },
+        required: ['kind', 'id'],
+        additionalProperties: false,
+      },
+      operations: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 32,
+        items: { type: 'object', additionalProperties: true },
+      },
+    },
+    required: ['sourceRef', 'operations'],
+    additionalProperties: false,
+  },
+})
+
+export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  getCurrentApplicationContextCapability, openApplicationSurfaceCapability,
+  closeApplicationSurfaceCapability, focusApplicationEntityCapability,
+  searchApplicationSettingsCapability, getApplicationSettingsCapability,
+  planApplicationSettingsChangeCapability, applyApplicationSettingsChangeCapability,
+  listGenerationHistoryCapability, openImageEditorWithSourceCapability,
+  createImageEditPreviewFromRefCapability,
+] as ApplicationCapabilityDefinition[]
+
+export const BUILTIN_APPLICATION_CAPABILITY_REGISTRY = new ApplicationCapabilityRegistry()
+for (const capability of BUILTIN_APPLICATION_CAPABILITIES) {
+  BUILTIN_APPLICATION_CAPABILITY_REGISTRY.register(capability)
+}

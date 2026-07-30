@@ -34,6 +34,8 @@ const loadHostCommandRegistry = (): Promise<typeof import('./hostCommandRegistry
   import('./hostCommandRegistry')
 const loadHostQueryRegistry = (): Promise<typeof import('./hostQueryRegistry')> =>
   import('./hostQueryRegistry')
+const loadApplicationCapabilityRegistry = (): Promise<typeof import('../applicationCapabilities/registry')> =>
+  import('../applicationCapabilities/registry')
 
 const completedLimit = 300
 
@@ -158,9 +160,15 @@ export function useAssistantHostBridge(uiReady: boolean): void {
           if (request.operation.kind === 'command') {
             const { executeHostCommand } = await loadHostCommandRegistry()
             result = await executeHostCommand(request.operation.command, controller.signal)
-          } else {
+          } else if (request.operation.kind === 'query') {
             const { executeHostQueryResult } = await loadHostQueryRegistry()
             result = await executeHostQueryResult(request.operation.query)
+          } else {
+            const { executeApplicationCapabilityResult } = await loadApplicationCapabilityRegistry()
+            result = await executeApplicationCapabilityResult(
+              request.operation.capability,
+              controller.signal
+            )
           }
           await sendResult(request, result)
           logger.info('前端工具执行完成', {

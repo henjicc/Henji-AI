@@ -181,7 +181,7 @@ describe('AgentToolGateway', () => {
       { value: 'low-write' },
       undefined,
       'assistant_decides'
-    ))).toMatchObject({ status: 'approval_required' })
+    ))).toMatchObject({ status: 'completed' })
   })
 
   it('审批后 preview 或当前 revision 漂移均先返回 APPROVAL_INVALID', async () => {

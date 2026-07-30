@@ -70,7 +70,7 @@ describe('AgentToolCatalogPlanner', () => {
     const names = activation.activeToolNames
     expect(names.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
     expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
-    expect(names).not.toContain('search_application_capabilities')
+    expect(names).toContain('search_application_capabilities')
     expect(names).toContain('search_models')
     expect(names).toContain('get_model_schema')
     expect(names).toContain('create_visible_generation_task')

@@ -15,7 +15,7 @@ const placementSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('right_of_node'), anchorNodeId: z.string().min(1) }).strict(),
 ])
 
-function canvasExpectedRevision(context: { hostContext: { scopeRevisions: HostScopeRevisions } | null }): Partial<HostScopeRevisions> | undefined {
+function canvasExpectedRevision(context: { hostContext: { scopeRevisions: HostScopeRevisions } | null }): Record<string, number> | undefined {
   return expectedRevision(context.hostContext?.scopeRevisions, ['canvas'])
 }
 

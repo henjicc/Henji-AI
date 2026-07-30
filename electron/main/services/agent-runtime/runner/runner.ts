@@ -99,6 +99,15 @@ export class AgentRunner {
     })
     this.budget = new AgentRunMetrics(options.request.budget)
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
+    this.catalogPlanner.restoreDiscovered(this.conversation.flatMap((message) => {
+      if (message.role !== 'tool' || !Array.isArray(message.content)) return []
+      return message.content.flatMap((part) => {
+        const names = part.addedToolNames
+        return Array.isArray(names)
+          ? names.filter((name): name is string => typeof name === 'string')
+          : []
+      })
+    }))
     this.state = createInitialAgentRunState(options.runId, options.request, options.recoveryContext)
     this.lifecycle = new AgentRunnerLifecycle({
       runId: options.runId,

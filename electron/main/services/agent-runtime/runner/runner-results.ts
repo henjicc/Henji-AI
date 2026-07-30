@@ -55,6 +55,16 @@ export function toolMessage(
   const output = shouldOffloadObservation(observation.output, offloadThreshold)
     ? { summary: observation.summary, largeResultOmitted: true }
     : { summary: observation.summary, data: sanitizeObservationValue(observation.output) }
+  const rawAddedToolNames = observation.output
+    && typeof observation.output === 'object'
+    && !Array.isArray(observation.output)
+      ? (observation.output as Record<string, unknown>).addedToolNames
+      : undefined
+  const addedToolNames = Array.isArray(rawAddedToolNames)
+    ? rawAddedToolNames
+        .filter((name: unknown): name is string => typeof name === 'string')
+        .slice(0, 20)
+    : []
   return {
     role: 'tool',
     content: [{
@@ -62,6 +72,7 @@ export function toolMessage(
       toolCallId: call.toolCallId,
       toolName: call.toolName,
       output: { type: 'json', value: output },
+      ...(addedToolNames.length > 0 ? { addedToolNames } : {}),
     }],
   }
 }
@@ -93,6 +104,15 @@ export function extractResultReferences(output: unknown): Record<string, string>
     const nestedRecord = nestedTask as Record<string, unknown>
     const taskId = nestedRecord.taskId ?? nestedRecord.id
     if (typeof taskId === 'string' && taskId.trim()) references.taskId = taskId.slice(0, 500)
+  }
+  for (const key of ['ref', 'sourceRef', 'resultRef'] as const) {
+    const value = record[key]
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue
+    const ref = value as Record<string, unknown>
+    if (typeof ref.kind === 'string' && typeof ref.id === 'string') {
+      references[`${key}Kind`] = ref.kind.slice(0, 80)
+      references[`${key}Id`] = ref.id.slice(0, 500)
+    }
   }
   const bounded = Object.fromEntries(Object.entries(references).slice(0, 8))
   return Object.keys(bounded).length > 0 ? bounded : undefined

@@ -7,11 +7,13 @@ import {
   type HostScope,
   type HostScopeRevisions,
 } from '@/core/assistant/hostContracts'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilities'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
-import { getGenerationModelCatalogBootstrap } from '@/core/assistant/generationPreparation'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { useUiStore } from '@/stores/uiStore'
 import {
   isVisibleGenerationTaskHandlerReady,
   subscribeVisibleGenerationTaskChanges,
@@ -27,6 +29,8 @@ const scopeRevisions: HostScopeRevisions = {
   canvas: 0,
   toolbox: 0,
   assets: 0,
+  settings: 0,
+  surface: 0,
 }
 
 const listeners = new Set<() => void>()
@@ -61,6 +65,17 @@ function startTracking(): () => void {
     }),
     useAssetLibraryStore.subscribe((state, previous) => {
       if (state.view !== previous.view || state.selectedAsset?.id !== previous.selectedAsset?.id) bumpScope('assets')
+    }),
+    useSettingsStore.subscribe((state, previous) => {
+      if (state !== previous) bumpScope('settings')
+    }),
+    useUiStore.subscribe((state, previous) => {
+      if (
+        state.isSettingsOpen !== previous.isSettingsOpen
+        || state.settingsTarget !== previous.settingsTarget
+      ) {
+        bumpScope('surface')
+      }
     }),
     subscribeVisibleGenerationTaskChanges(() => bumpScope('generation')),
   ]
@@ -100,6 +115,7 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const canvas = useCanvasStore.getState()
   const assets = useAssetLibraryStore.getState()
   const generationReady = isVisibleGenerationTaskHandlerReady()
+  const ui = useUiStore.getState()
   const commands: HostCommandName[] = [
     'switch_workspace',
     'open_canvas_project',
@@ -176,11 +192,59 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   ]
   if (generationReady) queries.push('get_generation_task')
 
+  const selectedRefs = [
+    assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
+    project.currentProjectId && canvas.selectedNodeId
+      ? `canvas.node:${project.currentProjectId}:${canvas.selectedNodeId}`
+      : null,
+  ].filter((value): value is string => typeof value === 'string')
+  const settingsSurface = ui.settingsTarget
+    ? `settings.${ui.settingsTarget.tab}.${ui.settingsTarget.sectionId ?? 'root'}`
+    : 'settings.general'
+  const surface = ui.isSettingsOpen
+    ? {
+        id: settingsSurface,
+        kind: 'settings' as const,
+        focusedRef: null,
+        selectedRefs,
+      }
+    : navigation.activeWorkspace === 'tools' && navigation.activeToolId
+      ? {
+          id: navigation.activeToolId === 'imageMark' ? 'tool.image_edit' : 'tool.camera_stage',
+          kind: 'tool' as const,
+          focusedRef: null,
+          selectedRefs,
+        }
+      : assets.view === 'floating'
+        ? {
+            id: 'overlay.assets',
+            kind: 'overlay' as const,
+            focusedRef: assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
+            selectedRefs,
+          }
+        : {
+            id: navigation.activeWorkspace === 'nodes'
+              ? 'workspace.canvas'
+              : `workspace.${navigation.activeWorkspace}`,
+            kind: 'workspace' as const,
+            focusedRef: project.currentProjectId && canvas.selectedNodeId
+              ? `canvas.node:${project.currentProjectId}:${canvas.selectedNodeId}`
+              : assets.selectedAsset
+                ? `asset:${assets.selectedAsset.id}`
+                : null,
+            selectedRefs,
+          }
+  const applicationCapabilities = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
+  const catalogRevision = applicationCapabilities
+    .reduce((total, capability) => total + capability.version, applicationCapabilities.length)
+
   return hostContextSnapshotSchema.parse({
     schemaVersion: AGENT_CONTRACT_VERSION,
     rendererSessionId,
     revision,
     scopeRevisions: getHostScopeRevisions(),
+    catalogRevision,
+    surface,
     workspace: {
       id: navigation.activeWorkspace,
       activeToolId: navigation.activeToolId,
@@ -189,12 +253,13 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
       id: project.currentProjectId,
       selectedNodeId: canvas.selectedNodeId,
     },
-    generation: { commandReady: generationReady, modelCatalog: getGenerationModelCatalogBootstrap() },
+    generation: { commandReady: generationReady },
     assets: {
       view: assets.view,
       selectedAssetId: assets.selectedAsset?.id ?? null,
     },
     uiReady,
+    availableCapabilities: applicationCapabilities.map((capability) => capability.id),
     availableCommands: commands,
     availableQueries: queries,
     capturedAt: new Date().toISOString(),

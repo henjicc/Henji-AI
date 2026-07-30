@@ -6,6 +6,7 @@ import type { AgentRouteDecision } from './types'
 export const AGENT_ACTIVE_TOOL_LIMIT = 8
 export const AGENT_TOOL_SCHEMA_BUDGET_BYTES = 48 * 1024
 const CAPABILITY_SEARCH_TOOL = 'search_application_capabilities'
+const CURRENT_CONTEXT_TOOL = 'get_current_application_context'
 
 export interface AgentToolActivationInput {
   route: AgentRouteDecision
@@ -42,14 +43,14 @@ export function activateAgentTools(
   const directNames = directCategories.flatMap((category) => (
     available.filter((entry) => entry.category === category).map((entry) => entry.name)
   ))
-  const capabilitySearchNames = input.route.toolDomains.includes('catalog')
-    ? [CAPABILITY_SEARCH_TOOL]
-    : []
+  const capabilitySearchNames = input.route.toolDomains.length === 0
+    ? []
+    : [CURRENT_CONTEXT_TOOL, CAPABILITY_SEARCH_TOOL]
   const candidates = unique([
     ...capabilitySearchNames,
-    ...input.recentToolNames,
     ...input.discoveredToolNames,
     ...directNames,
+    ...input.recentToolNames,
   ])
   const unavailableNames = candidates.filter((name) => !availableNames.has(name))
   const availableCandidates = candidates.filter((name) => availableNames.has(name))
@@ -65,7 +66,7 @@ export function activateAgentTools(
       droppedForCount.push(registration.catalog.name)
       continue
     }
-    if (schemaBytes + bytes > AGENT_TOOL_SCHEMA_BUDGET_BYTES && active.length > 0) {
+    if (schemaBytes + bytes > AGENT_TOOL_SCHEMA_BUDGET_BYTES) {
       droppedForSchemaBudget.push(registration.catalog.name)
       continue
     }

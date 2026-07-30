@@ -24,6 +24,7 @@ import {
 import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSource';
 import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
 import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
+import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore';
 
 const logger = createLogger('features.imageMark');
 
@@ -53,11 +54,17 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const [source, setSource] = useState<ImageMarkSource | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const pendingHandoff = useImageEditorHandoffStore((state) => state.pending);
+  const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
   const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
   const sourceSequenceRef = useRef(0);
 
-  const acceptSource = useCallback(async (url: string, name: string) => {
-    documentRef.current = createEmptyImageEditDocument();
+  const acceptSource = useCallback(async (
+    url: string,
+    name: string,
+    document: ImageEditDocument = createEmptyImageEditDocument()
+  ) => {
+    documentRef.current = document;
     // 打开/拖入的本地图片可能在媒体协议默认白名单之外,先授权其所在目录,
     // 否则 henji-media:// 会 403,编辑器会一直卡在"图片加载中"
     if (isLikelyLocalImagePath(url)) {
@@ -73,6 +80,15 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     setSource({ url, name, sessionKey: sourceSequenceRef.current });
     logger.info('image_mark.standalone.open.completed', { name });
   }, []);
+
+  useEffect(() => {
+    if (!pendingHandoff) return;
+    void acceptSource(
+      pendingHandoff.sourceUrl,
+      pendingHandoff.sourceName,
+      pendingHandoff.document
+    ).then(() => consumeHandoff(pendingHandoff.sessionRef));
+  }, [acceptSource, consumeHandoff, pendingHandoff]);
 
   const acceptFile = useCallback(async (file: File) => {
     const nativePath = getPathForFile(file);

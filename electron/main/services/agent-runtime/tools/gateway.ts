@@ -116,6 +116,7 @@ export class AgentToolGateway {
         readOnly: definition.readOnly,
         destructive: definition.destructive,
         dataClasses: preview.dataClasses,
+        explicitUserIntent: request.explicitUserIntent,
       })
       const auditTemplate = buildPermissionAuditTemplate({
         runId: request.runId,

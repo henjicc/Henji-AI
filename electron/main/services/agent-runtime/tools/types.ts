@@ -12,6 +12,7 @@ import type {
 } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
+import type { ApplicationCapabilityDefinition } from '../../../../../src/core/assistant/applicationCapabilities'
 
 export interface AgentToolRetryPolicy {
   maxRetries: number
@@ -40,6 +41,8 @@ export interface AgentToolExecutionContext {
 export type AgentToolAuthorizationSource = 'direct' | 'approved_workflow'
 
 export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
+  /** 新能力的单源定义；未提供时由兼容适配器从旧字段生成。 */
+  capability?: ApplicationCapabilityDefinition<TInput, TOutput>
   name: string
   version: number
   title: string

@@ -3,6 +3,7 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import { assertAgentToolDefinition } from './define-tool'
 import type { AgentToolDefinition, AgentToolRegistration, AgentToolSemantics } from './types'
+import { createCompatibilityCapabilityDescriptor } from '../../../../../src/core/assistant/applicationCapabilities'
 
 const semanticSearchConcepts: ReadonlyArray<{ pattern: RegExp; concept: string }> = [
   { pattern: /(?:图片|图像|照片|相片|插画|海报|头像|壁纸|封面|图标|生图|image|picture|photo)/i, concept: 'media:image' },
@@ -37,7 +38,11 @@ function normalizeSearchValue(value: string): string {
   return value.normalize('NFKC').trim().toLowerCase()
 }
 
-function searchScore(entry: AgentToolCatalogEntry, query: string): number {
+function searchScore(
+  entry: AgentToolCatalogEntry,
+  query: string,
+  context: HostContextSnapshot | null
+): number {
   const normalized = normalizeSearchValue(query)
   if (!normalized) return 1
   const text = normalizeSearchValue([
@@ -45,6 +50,8 @@ function searchScore(entry: AgentToolCatalogEntry, query: string): number {
     entry.title,
     entry.description,
     entry.category,
+    entry.domain,
+    ...entry.aliases,
     ...entry.whenToUse,
     ...entry.avoidWhen,
     ...entry.prerequisites,
@@ -64,6 +71,18 @@ function searchScore(entry: AgentToolCatalogEntry, query: string): number {
   for (const concept of concepts) {
     if (supportedConcepts.includes(concept)) score += 20
   }
+  const surfaceId = context?.surface?.id ?? ''
+  if (
+    surfaceId.includes(entry.domain)
+    || surfaceId === 'workspace.generation' && entry.domain === 'generation'
+    || surfaceId === 'tool.image_edit' && entry.domain === 'image_edit'
+  ) {
+    score += 35
+  }
+  const selectedKinds = context?.surface?.selectedRefs
+    .map((ref) => ref.split(':', 1)[0])
+    ?? []
+  if (entry.acceptsRefs.some((kind) => selectedKinds.includes(kind))) score += 25
   return score
 }
 
@@ -154,7 +173,7 @@ export class AgentToolRegistry {
   search(query: string, category?: string, context: HostContextSnapshot | null = null, limit = 20): AgentToolCatalogEntry[] {
     const scored = this.list(context)
       .filter((entry) => !category || entry.category === category)
-      .map((entry) => ({ entry, score: searchScore(entry, query) }))
+      .map((entry) => ({ entry, score: searchScore(entry, query, context) }))
       .filter((item) => item.score > 0)
       .sort((left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name))
     return scored.slice(0, Math.min(Math.max(limit, 1), 100)).map((item) => item.entry)
@@ -189,24 +208,64 @@ export class AgentToolRegistry {
   private isAvailable(definition: AgentToolDefinition, context: HostContextSnapshot | null): boolean {
     if (definition.side === 'backend') return true
     if (!context?.uiReady) return false
+    if (context.availableCapabilities?.includes(definition.name)) return true
     return context.availableCommands.includes(definition.name)
       || context.availableQueries.includes(definition.name)
   }
 
   private toCatalogEntry(definition: AgentToolDefinition): AgentToolCatalogEntry {
     const semantics = resolveToolSemantics(definition)
+    const capability = definition.capability
+      ? {
+          id: definition.capability.id,
+          domain: definition.capability.domain,
+          aliases: definition.capability.aliases,
+          dataClasses: definition.capability.dataClasses,
+          acceptsRefs: definition.capability.acceptsRefs,
+          producesRefs: definition.capability.producesRefs,
+          availability: definition.capability.availability,
+          concurrencyKey: definition.capability.concurrencyKey,
+        }
+      : createCompatibilityCapabilityDescriptor({
+          id: definition.name,
+          version: definition.version,
+          title: definition.title,
+          description: definition.description,
+          domain: definition.category,
+          side: definition.side,
+          readOnly: definition.readOnly,
+          risk: definition.risk,
+          permission: definition.permission,
+          idempotent: definition.idempotent,
+          destructive: definition.destructive,
+          timeoutMs: definition.timeoutMs,
+          supportsPreview: definition.supportsPreview,
+          supportsUndo: definition.supportsUndo,
+          requiredScopes: definition.requiredContext,
+          prerequisites: semantics.prerequisites,
+          successEvidence: semantics.successEvidence,
+          failureRecovery: semantics.failureRecovery,
+        })
     return agentToolCatalogEntrySchema.parse({
       name: definition.name,
+      capabilityId: capability.id,
       version: definition.version,
       title: definition.title,
       description: definition.description,
       category: definition.category,
+      domain: capability.domain,
+      aliases: capability.aliases,
       side: definition.side,
       risk: definition.risk,
       permission: definition.permission,
       readOnly: definition.readOnly,
       supportsPreview: definition.supportsPreview,
       supportsUndo: definition.supportsUndo,
+      dataClasses: capability.dataClasses,
+      acceptsRefs: capability.acceptsRefs,
+      producesRefs: capability.producesRefs,
+      availability: capability.availability,
+      concurrencyKey: capability.concurrencyKey,
       ...semantics,
     })
   }

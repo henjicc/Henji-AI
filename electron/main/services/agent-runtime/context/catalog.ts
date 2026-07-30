@@ -59,6 +59,15 @@ export class AgentToolCatalogPlanner {
     ].slice(0, 4)
   }
 
+  restoreDiscovered(toolNames: string[]): void {
+    this.discoveredToolNames = [...new Set([
+      ...toolNames.filter((name) => (
+        name !== 'search_application_capabilities' && Boolean(this.registry.get(name))
+      )),
+      ...this.discoveredToolNames,
+    ])].slice(0, 100)
+  }
+
   private rotatedDiscoveredNames(): string[] {
     if (this.discoveredToolNames.length < 2 || this.discoveryCursor === 0) {
       return [...this.discoveredToolNames]

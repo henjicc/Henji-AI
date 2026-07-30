@@ -50,6 +50,7 @@ const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'path' | 'toolDo
   workflow: { path: 'workflow', toolDomains: ['workflows'] },
   user_instructions: { path: 'workflow', toolDomains: ['user_instructions'] },
   memory: { path: 'workflow', toolDomains: ['memory'] },
+  settings: { path: 'workflow', toolDomains: ['settings', 'navigation'] },
   general: { path: 'primary', toolDomains: ['catalog'] },
 }
 
@@ -124,7 +125,56 @@ const deterministicRules: DeterministicRule[] = [
   { intent: 'read_generation', matches: (goal) => taskIdPattern.test(goal) && readGenerationPattern.test(goal) },
 ]
 
-function deterministicRoute(goal: string): AgentRouteDecision | null {
+function deterministicRoute(
+  goal: string,
+  snapshot: HostContextSnapshot
+): AgentRouteDecision | null {
+  const normalized = goal.normalize('NFKC')
+  if (
+    snapshot.surface?.id === 'workspace.generation'
+    && /(?:最后|最近|上一)(?:一张|一个|条)|生成历史|历史记录/i.test(normalized)
+  ) {
+    return {
+      intent: 'read_generation',
+      candidateIntents: ['read_generation', 'image_edit'],
+      complexity: /(?:编辑|标注|裁剪|旋转|文字|矩形)/i.test(normalized) ? 'multi_step' : 'simple',
+      path: 'workflow',
+      toolDomains: ['generation', 'image_edit', 'catalog'],
+      source: 'deterministic',
+      reason: '当前生成页面中的相对指代锚定生成历史',
+      anchorSurfaceId: snapshot.surface.id,
+      taskFacets: ['current_surface', 'generation_history'],
+      suggestedCapabilityQueries: ['最近成功生成结果', '图片编辑'],
+    }
+  }
+  if (/(?:设置|偏好|毛玻璃|主题|圆角|启动页面|上传服务)/i.test(normalized)) {
+    return {
+      intent: 'settings',
+      candidateIntents: ['settings'],
+      complexity: /(?:并且|同时|批量|以及)/i.test(normalized) ? 'multi_step' : 'simple',
+      path: 'workflow',
+      toolDomains: ['settings', 'navigation', 'catalog'],
+      source: 'deterministic',
+      reason: '识别为应用设置查询或修改',
+      anchorSurfaceId: snapshot.surface?.id,
+      taskFacets: ['settings'],
+      suggestedCapabilityQueries: ['应用设置'],
+    }
+  }
+  if (/(?:图片编辑|矩形标注|文字标注|裁剪图片|旋转图片)/i.test(normalized)) {
+    return {
+      intent: 'image_edit',
+      candidateIntents: ['image_edit'],
+      complexity: 'multi_step',
+      path: 'workflow',
+      toolDomains: ['image_edit', 'generation', 'assets', 'catalog'],
+      source: 'deterministic',
+      reason: '识别为图片编辑任务',
+      anchorSurfaceId: snapshot.surface?.id,
+      taskFacets: ['image_edit'],
+      suggestedCapabilityQueries: ['图片编辑 来源引用'],
+    }
+  }
   const matches = deterministicRules.filter((rule) => rule.matches(goal))
   if (matches.length !== 1) return null
   const [match] = matches
@@ -136,6 +186,9 @@ function deterministicRoute(goal: string): AgentRouteDecision | null {
     toolDomains: match.toolDomains ?? routePolicy[match.intent].toolDomains,
     source: 'deterministic',
     reason: `命中确定性 ${match.intent} 规则`,
+    anchorSurfaceId: snapshot.surface?.id,
+    taskFacets: [match.intent],
+    suggestedCapabilityQueries: match.toolDomains ?? routePolicy[match.intent].toolDomains,
   }
 }
 
@@ -148,7 +201,7 @@ export class AgentIntentRouter {
     snapshot: HostContextSnapshot,
     signal: AbortSignal
   ): Promise<AgentRouteDecision> {
-    const deterministic = deterministicRoute(goal)
+    const deterministic = deterministicRoute(goal, snapshot)
     if (deterministic) {
       this.logDecision(runId, deterministic)
       return deterministic
@@ -173,6 +226,16 @@ export class AgentIntentRouter {
           ),
           source: 'router_model',
           reason: selectReason(classified.reason, classified.intent),
+          anchorSurfaceId: snapshot.surface?.id,
+          taskFacets: uniqueValues([
+            classified.intent,
+            ...candidateIntents,
+          ], 6),
+          suggestedCapabilityQueries: resolveCandidateDomains(
+            classified.intent,
+            candidateIntents,
+            requestedDomains
+          ),
         }
         this.logDecision(runId, decision)
         return decision
@@ -203,6 +266,9 @@ export class AgentIntentRouter {
       toolDomains: ['catalog'],
       source: 'fallback',
       reason: '确定性规则未命中，router 不可用或分类失败',
+      anchorSurfaceId: snapshot.surface?.id,
+      taskFacets: ['ambiguous'],
+      suggestedCapabilityQueries: ['当前页面相关能力'],
     }
     this.logDecision(runId, fallback)
     return fallback

@@ -83,6 +83,25 @@ describe('decideToolAuthorization', () => {
     expect(decide('assistant_decides', 'R2', true, true)).toBe('approval_required')
   })
 
+  it('助手判断模式只自动执行用户明确指定的可逆 R1 修改', () => {
+    expect(decideToolAuthorization({
+      mode: 'assistant_decides',
+      risk: 'R1',
+      readOnly: false,
+      destructive: false,
+      dataClasses: ['C1'],
+      explicitUserIntent: true,
+    })).toBe('auto_allowed')
+    expect(decideToolAuthorization({
+      mode: 'assistant_decides',
+      risk: 'R1',
+      readOnly: false,
+      destructive: false,
+      dataClasses: ['C1'],
+      explicitUserIntent: false,
+    })).toBe('approval_required')
+  })
+
   it.each(modes)('C2 始终逐次审批，C3 与 R4 始终拒绝（%s）', (mode) => {
     expect(decideToolAuthorization({
       mode,

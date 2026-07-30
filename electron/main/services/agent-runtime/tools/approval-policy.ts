@@ -9,6 +9,7 @@ export interface AgentToolAuthorizationInput {
   readOnly: boolean
   destructive: boolean
   dataClasses: AgentDataClass[]
+  explicitUserIntent?: boolean
 }
 
 /**
@@ -31,9 +32,14 @@ export function decideToolAuthorization(
 
   if (input.mode === 'assistant_decides') {
     if (input.risk === 'R3') return 'approval_required'
-    if (input.risk !== 'R0' && (!input.readOnly || input.destructive)) {
+    if (input.risk === 'R2' && (!input.readOnly || input.destructive)) {
       return 'approval_required'
     }
+    if (
+      input.risk === 'R1'
+      && (!input.readOnly || input.destructive)
+      && (!input.explicitUserIntent || input.destructive)
+    ) return 'approval_required'
     return 'auto_allowed'
   }
 

@@ -7,9 +7,11 @@ import type { AgentToolRegistry } from '../registry'
 import { createUserInstructionTools } from './user-instructions'
 import { createAgentMemoryTools } from './memory'
 import { createAgentArtifactTools, type AgentArtifactToolAccess } from './artifacts'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../../../src/core/assistant/applicationCapabilities'
 
 const applicationCapabilityCategorySchema = z.enum([
   'catalog',
+  'application',
   'navigation',
   'models',
   'generation',
@@ -24,6 +26,7 @@ const applicationCapabilityCategorySchema = z.enum([
   'assets',
   'workflows',
   'artifacts',
+  'settings',
 ])
 
 function eraseToolDefinition<TInput, TOutput>(
@@ -61,8 +64,9 @@ export function createBackendBuiltinTools(
       limit: z.number().int().min(1).max(20).default(10),
     }).strict(),
     outputSchema: z.object({
-      catalogVersion: z.literal('agent-tool-catalog/v1'),
+      catalogVersion: z.literal(APPLICATION_CAPABILITY_CATALOG_VERSION),
       capabilities: z.array(z.record(z.string(), z.unknown())),
+      addedToolNames: z.array(z.string().min(1)).max(20),
       nextCursor: z.number().int().nonnegative().nullable(),
     }).strict(),
     aiInputSchema: {
@@ -73,6 +77,7 @@ export function createBackendBuiltinTools(
           type: 'string',
           enum: [
             'catalog',
+            'application',
             'navigation',
             'models',
             'generation',
@@ -87,6 +92,7 @@ export function createBackendBuiltinTools(
             'assets',
             'workflows',
             'artifacts',
+            'settings',
           ],
         },
         cursor: { type: 'integer', minimum: 0 },
@@ -98,8 +104,11 @@ export function createBackendBuiltinTools(
       const all = registry.search(input.query, input.category, context.hostContext, 100)
       const capabilities = all.slice(input.cursor, input.cursor + input.limit)
       return Promise.resolve({
-        catalogVersion: 'agent-tool-catalog/v1' as const,
+        catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
         capabilities,
+        addedToolNames: capabilities
+          .map((capability) => capability.name)
+          .filter((name) => name !== 'search_application_capabilities'),
         nextCursor: input.cursor + capabilities.length < all.length ? input.cursor + capabilities.length : null,
       })
     },

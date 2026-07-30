@@ -20,6 +20,7 @@ export const AGENT_INTENTS = [
   'workflow',
   'user_instructions',
   'memory',
+  'settings',
   'general',
 ] as const
 export type AgentIntent = typeof AGENT_INTENTS[number]
@@ -40,6 +41,8 @@ export const AGENT_TOOL_DOMAINS = [
   'user_instructions',
   'memory',
   'artifacts',
+  'application',
+  'settings',
 ] as const
 export type AgentToolDomain = typeof AGENT_TOOL_DOMAINS[number]
 
@@ -83,6 +86,10 @@ export interface AgentRouteDecision {
   toolDomains: AgentToolDomain[]
   source: 'deterministic' | 'router_model' | 'fallback'
   reason: string
+  /** 软规划信息，只影响能力排序，不限制能力发现，也不授予权限。 */
+  anchorSurfaceId?: string
+  taskFacets?: string[]
+  suggestedCapabilityQueries?: string[]
 }
 
 export interface AgentContextArtifact {

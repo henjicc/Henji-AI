@@ -75,14 +75,14 @@ function summarizeCollection(value: unknown, fields: string[]): { count: number;
 }
 
 const imagePreviewRefs = new Map<string, {
-  assetId: string
+  sourceRef: string
   source: string
   document: ImageEditDocument
 }>()
 
 function storeImageEditPreview(
   previewRef: string,
-  preview: { assetId: string; source: string; document: ImageEditDocument }
+  preview: { sourceRef: string; source: string; document: ImageEditDocument }
 ): void {
   while (imagePreviewRefs.size >= MAX_IMAGE_EDIT_PREVIEWS) {
     const oldestRef = imagePreviewRefs.keys().next().value
@@ -312,7 +312,11 @@ export async function createImageEditPreviewFromAgent(
       existingDocument === undefined ? undefined : parseImageEditDocument(existingDocument)
     )
     const previewRef = `image-edit-preview:${createMarkId()}`
-    storeImageEditPreview(previewRef, { assetId, source: asset.filePath, document })
+    storeImageEditPreview(previewRef, {
+      sourceRef: `asset:${assetId}`,
+      source: asset.filePath,
+      document,
+    })
     logger.info('image_edit.preview.create.completed', {
       assetId,
       previewRef,
@@ -329,6 +333,45 @@ export async function createImageEditPreviewFromAgent(
   } catch (error) {
     logger.error('image_edit.preview.create.failed', {
       assetId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
+}
+
+export async function createImageEditPreviewFromApplicationRef(
+  sourceRef: string,
+  source: string,
+  operations: Record<string, unknown>[],
+  existingDocument?: unknown
+): Promise<Record<string, unknown>> {
+  logger.debug('image_edit.preview.create.start', { sourceRef, operationCount: operations.length })
+  try {
+    const info = await readImageInfo(source)
+    const document = buildImageEditDocumentFromAssistantOperations(
+      operations,
+      info,
+      existingDocument === undefined ? undefined : parseImageEditDocument(existingDocument)
+    )
+    const previewRef = `image-edit-preview:${createMarkId()}`
+    storeImageEditPreview(previewRef, { sourceRef, source, document })
+    logger.info('image_edit.preview.create.completed', {
+      sourceRef,
+      previewRef,
+      operationCount: operations.length,
+    })
+    return {
+      previewRef,
+      sourceRef,
+      operationCount: operations.length,
+      hasEffect: hasImageEditEffect(document),
+      width: info.width,
+      height: info.height,
+      document,
+    }
+  } catch (error) {
+    logger.error('image_edit.preview.create.failed', {
+      sourceRef,
       error: error instanceof Error ? error.message : String(error),
     })
     throw error

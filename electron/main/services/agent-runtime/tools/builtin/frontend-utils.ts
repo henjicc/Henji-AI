@@ -30,7 +30,10 @@ export function requireFrontendSuccess(result: HostCommandResult): Record<string
 export function expectedRevision(
   revisions: HostScopeRevisions | undefined,
   scopes: Array<keyof HostScopeRevisions>
-): Partial<HostScopeRevisions> | undefined {
+): Record<string, number> | undefined {
   if (!revisions) return undefined
-  return Object.fromEntries(scopes.map((scope) => [scope, revisions[scope]]))
+  return Object.fromEntries(scopes.flatMap((scope) => {
+    const value = revisions[scope]
+    return typeof value === 'number' ? [[String(scope), value]] : []
+  }))
 }
