@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { Send, Square } from 'lucide-react'
 
-import { Dropdown, PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
+import { Dropdown, PromptEditor, UI_TEXT_BODY_CLASS, UiButton } from '@/components/ui'
 import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
 import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
 import {
@@ -83,8 +83,7 @@ export function AssistantComposer({
               onSelect={onMessageModeChange}
               minWidthStrategy="options"
               panelWidthStrategy="options"
-              buttonClassName="!h-7 !rounded-md !px-2 text-2xs"
-              panelClassName="text-xs"
+              buttonClassName="!h-7 !rounded-lg !px-2 text-2xs"
             />
           ) : null}
           <Dropdown<AgentApprovalMode>
@@ -93,16 +92,8 @@ export function AssistantComposer({
             onSelect={onApprovalModeChange}
             minWidthStrategy="options"
             panelWidthStrategy="options"
-            buttonClassName="!h-7 !rounded-md !px-2 text-2xs"
-            panelClassName="text-xs"
+            buttonClassName="!h-7 !rounded-lg !px-2 text-2xs"
           />
-          <span className={`hidden truncate min-[440px]:inline ${UI_TEXT_META_CLASS}`}>
-            {approvalMode === 'ask'
-              ? '安全读取与轻量操作自动，其余需确认'
-              : approvalMode === 'assistant_decides'
-                ? 'R0 轻量与安全读取自动，R1+ 写入需确认'
-                : 'R0–R2 自动，R3/C2 确认，C3/R4 禁止'}
-          </span>
         </div>
         <UiButton
           type="button"

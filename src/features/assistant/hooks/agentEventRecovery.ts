@@ -15,7 +15,7 @@ export function deriveAgentSnapshotRecoveryBaseline(
   stateSequence: number,
   events: AgentEvent[]
 ): AgentSnapshotRecoveryBaseline {
-  const coveredThroughSequence = events.at(-1)?.sequence ?? 0
+  const coveredThroughSequence = events[events.length - 1]?.sequence ?? 0
   return {
     coveredThroughSequence,
     requiresCatchUp: coveredThroughSequence < stateSequence,

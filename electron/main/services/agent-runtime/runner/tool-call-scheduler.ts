@@ -9,6 +9,7 @@ import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import type { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentToolGatewayError, type AgentToolGateway } from '../tools/gateway'
 import type { AgentToolRegistry } from '../tools/registry'
+import { createMainLogger } from '../../logging'
 import { digestJson } from '../tools/security'
 import {
   extractResultReferences,
@@ -49,6 +50,7 @@ export interface AgentToolCallSchedulerOptions {
 }
 
 const MAX_TOOL_CALLS_PER_MODEL_STEP = 8
+const logger = createMainLogger('main.agent_runtime')
 
 function mergeRevisions(
   current: Partial<HostScopeRevisions>,
@@ -135,7 +137,20 @@ export class AgentToolCallScheduler {
       currentExpectedRevisions = mergeRevisions(currentExpectedRevisions, outcomes)
       this.options.setActiveToolCall(null)
     }
-    for (const call of calls.slice(MAX_TOOL_CALLS_PER_MODEL_STEP)) {
+    const omittedCalls = calls.slice(MAX_TOOL_CALLS_PER_MODEL_STEP)
+    if (omittedCalls.length > 0) {
+      logger.info('Agent 本轮超额工具调用已延后', {
+        event: 'agent_tool.schedule.deferred',
+        requestId: this.options.runId,
+        context: {
+          requestedCount: calls.length,
+          acceptedCount: accepted.length,
+          deferredCount: omittedCalls.length,
+          deferredToolNames: omittedCalls.map((call) => call.toolName),
+        },
+      })
+    }
+    for (const call of omittedCalls) {
       this.recordOmittedCall(call)
     }
   }
@@ -293,25 +308,6 @@ export class AgentToolCallScheduler {
       'user_action'
     ))
     const observation = failedObservation(call, error, '工具调用未执行：本轮调用数量超过安全上限。')
-    this.options.emit({
-      type: 'ToolRequested',
-      toolCallId: call.toolCallId,
-      toolName: call.toolName,
-      title: this.options.registry.executionMetadata(call.toolName, call.input)?.title,
-      inputDigest: digestJson(call.input),
-      category: this.options.registry.executionMetadata(call.toolName, call.input)?.category,
-      readOnly: this.options.registry.executionMetadata(call.toolName, call.input)?.readOnly,
-      idempotent: this.options.registry.executionMetadata(call.toolName, call.input)?.idempotent,
-    })
     this.options.onObservation(call, observation)
-    this.options.emit({
-      type: 'ToolFailed',
-      toolCallId: call.toolCallId,
-      toolName: call.toolName,
-      error,
-      category: this.options.registry.executionMetadata(call.toolName, call.input)?.category,
-      readOnly: this.options.registry.executionMetadata(call.toolName, call.input)?.readOnly,
-      idempotent: this.options.registry.executionMetadata(call.toolName, call.input)?.idempotent,
-    })
   }
 }

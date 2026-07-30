@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
+import { AlertCircle, Bot, BrainCircuit, ChevronDown, UserRound } from 'lucide-react'
 
-import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiPanel } from '@/components/ui'
+import { UI_INSET_SURFACE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiPanel } from '@/components/ui'
 import type { AgentEvent } from '@/core/assistant/events'
 import { agentQueuedMessagePayloadSchema, getAgentSessionMessageContent } from '@/core/assistant/session'
 import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
@@ -57,6 +57,7 @@ export function AssistantConversation(): JSX.Element {
   const [document, setDocument] = useState<PromptDocumentV1>(() => createEmptyPromptDocument())
   const [resultError, setResultError] = useState<string | null>(null)
   const [messageMode, setMessageMode] = useState<AgentQueuedMessagePayload['mode']>('current_task')
+  const [activityExpanded, setActivityExpanded] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const pendingHandledRef = useRef<string | null>(null)
   const toolActivitiesCacheRef = useRef<{
@@ -65,6 +66,7 @@ export function AssistantConversation(): JSX.Element {
     activities: ReturnType<typeof selectToolActivities>
   } | null>(null)
   const activeRunId = useAssistantUiStore((state) => state.activeRunId)
+  const activityRunIdRef = useRef(activeRunId)
   const threadId = useAssistantUiStore((state) => state.threadId)
   const currentGoal = useAssistantUiStore((state) => state.currentGoal)
   const pendingGoal = useAssistantUiStore((state) => state.pendingGoal)
@@ -155,6 +157,25 @@ export function AssistantConversation(): JSX.Element {
     )).join('')
   }, [latestModelStep, run.view.events])
   const deferredStreamedText = useDeferredValue(streamedText)
+  const modelResponseStreaming = Boolean(
+    deferredStreamedText
+    && latestModelStep
+    && runState?.currentStepId === latestModelStep.stepId
+  )
+  const finalResponseStarted = Boolean(runState?.finalText) || Boolean(
+    modelResponseStreaming
+    && tools.every((activity) => activity.status === 'completed' || activity.status === 'failed')
+  )
+  const hasActiveTool = tools.some((activity) => activity.status === 'requested' || activity.status === 'running')
+  useEffect(() => {
+    if (activityRunIdRef.current !== activeRunId) {
+      activityRunIdRef.current = activeRunId
+      setActivityExpanded(!finalResponseStarted)
+      return
+    }
+    if (finalResponseStarted) setActivityExpanded(false)
+    else if (hasActiveTool) setActivityExpanded(true)
+  }, [activeRunId, finalResponseStarted, hasActiveTool])
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const container = scrollRef.current
@@ -210,7 +231,7 @@ export function AssistantConversation(): JSX.Element {
             className="min-h-full px-8"
             icon={<BrainCircuit className="h-7 w-7" />}
             title="让助手操作工作台"
-            description="可以切换工作区、查模型、创建可见生成任务、编排画布节点，或基于脱敏日志诊断错误。所有动作都经过受控工具网关。"
+            description="可以查找模型、创建生成任务、编排画布，或帮你排查问题。"
           />
         ) : null}
 
@@ -229,7 +250,7 @@ export function AssistantConversation(): JSX.Element {
               ? '回答当前问题'
               : payload.data.mode === 'current_task' ? '补充当前任务' : '任务结束后继续'
             return (
-              <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
+              <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-auto max-w-[85%] p-3">
                 <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}>
                   <UserRound className="h-3.5 w-3.5" />你 · {modeLabel} · {statusLabel}
                 </div>
@@ -249,12 +270,12 @@ export function AssistantConversation(): JSX.Element {
             )
           }
           return entry.kind === 'user_message' ? (
-            <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
+            <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-auto max-w-[85%] p-3">
               <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
               <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
             </UiPanel>
           ) : (
-            <section key={entry.entryId} style={deferredBlockStyle} className="mr-7">
+            <section key={entry.entryId} style={deferredBlockStyle} className="w-full">
               <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />助手</div>
               <AssistantMarkdown>{content}</AssistantMarkdown>
             </section>
@@ -265,15 +286,53 @@ export function AssistantConversation(): JSX.Element {
           <UiError size="xs" message={transcript.error} onRetry={() => void transcript.refresh()} />
         ) : null}
 
-        {/* 用户消息短、需要边界感，用 inset（比侧栏底色更暗）；助手消息长，只留缩进不套容器 */}
+        {/* 用户消息使用右侧有限宽度气泡；助手消息使用整行正文。 */}
         {currentGoal ? (
-          <UiPanel variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
-            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你的目标</div>
+          <UiPanel variant="inset" style={deferredBlockStyle} className="ml-auto max-w-[85%] p-3">
+            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
             <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{currentGoal}</p>
           </UiPanel>
         ) : null}
 
-        {runState ? <ExecutionPlanCard presentation={execution} runStatus={runState.status} /> : null}
+        {runState ? (
+          <section className={`rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
+            <UiButton
+              type="button"
+              variant="plain"
+              onClick={() => setActivityExpanded((expanded) => !expanded)}
+              aria-expanded={activityExpanded}
+              className="!h-8 w-full justify-start gap-2 !rounded-lg !px-2 text-left"
+            >
+              <Bot className="h-3.5 w-3.5 shrink-0 text-accent" />
+              <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行过程</span>
+              <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>
+                {terminalStatuses.has(runState.status)
+                  ? `${runState.status === 'completed' ? '已完成' : runState.status === 'failed' ? '未完成' : '已取消'}${tools.length > 0 ? ` · ${tools.length} 项操作` : ''}`
+                  : execution.nextAction}
+              </span>
+              <ChevronDown className={`h-3 w-3 shrink-0 text-text-muted transition-transform duration-200 ${activityExpanded ? 'rotate-180' : ''}`} />
+            </UiButton>
+
+            {activityExpanded ? (
+              <div className="space-y-1 border-t border-border-dark/60 p-1.5">
+                <ExecutionPlanCard presentation={execution} runStatus={runState.status} />
+                {modelUpdates.map((update) => <ModelProgressMessage key={update.stepId} update={update} />)}
+                {toolGroups.length > 0 ? (
+                  <section aria-label="助手工具执行记录" className="space-y-1">
+                    {toolGroups.map((group) => (
+                      <ToolActivityGroup
+                        key={group.groupId}
+                        group={group}
+                        onOpenTask={openTask}
+                        onOpenNode={openNode}
+                      />
+                    ))}
+                  </section>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
 
         {runState?.status === 'waiting_external' && externalWait ? (
           <UiPanel variant="inset" className="p-3">
@@ -299,32 +358,17 @@ export function AssistantConversation(): JSX.Element {
           </UiPanel>
         ) : null}
 
-        {modelUpdates.map((update) => <ModelProgressMessage key={update.stepId} update={update} />)}
-
-        {toolGroups.length > 0 ? (
-          <section aria-label="助手工具执行记录" className="space-y-1">
-            {toolGroups.map((group) => (
-              <ToolActivityGroup
-                key={group.groupId}
-                group={group}
-                onOpenTask={openTask}
-                onOpenNode={openNode}
-              />
-            ))}
-          </section>
-        ) : null}
-
         {approval ? <ApprovalCard approval={approval} onDecision={(decision) => void run.respondApproval(approval.approvalId, decision)} /> : null}
 
-        {deferredStreamedText && runState && !terminalStatuses.has(runState.status) ? (
-          <section style={deferredBlockStyle} className="mr-7">
+        {modelResponseStreaming && runState && !terminalStatuses.has(runState.status) ? (
+          <section style={deferredBlockStyle} className="w-full">
             <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />回应生成中</div>
             <AssistantMarkdown>{deferredStreamedText}</AssistantMarkdown>
           </section>
         ) : null}
 
         {runState?.finalText ? (
-          <section style={deferredBlockStyle} className="mr-7">
+          <section style={deferredBlockStyle} className="w-full">
             <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />助手</div>
             <AssistantMarkdown>{runState.finalText}</AssistantMarkdown>
           </section>

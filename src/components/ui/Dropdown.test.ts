@@ -54,4 +54,27 @@ describe('Dropdown 键盘交互', () => {
 
     expect(onSelect).toHaveBeenCalledWith('white_mist')
   })
+
+  it('触发器下方空间不足时自动向上展开', () => {
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute('data-dropdown-button')) {
+        return new DOMRect(120, 760, 120, 32)
+      }
+      return new DOMRect(120, 0, 120, 120)
+    })
+
+    const rendered = render(React.createElement(Dropdown, {
+      ariaLabel: '展开方向',
+      value: 'auto',
+      options: [
+        { value: 'auto', label: '自动' },
+        { value: 'manual', label: '手动' },
+      ],
+    }))
+
+    fireEvent.keyDown(rendered.getByRole('button', { name: '展开方向' }), { key: 'ArrowDown' })
+
+    expect(document.querySelector('[data-dropdown-placement="above"]')).toBeTruthy()
+  })
 })

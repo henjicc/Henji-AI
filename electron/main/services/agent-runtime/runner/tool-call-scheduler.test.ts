@@ -161,7 +161,7 @@ describe('AgentToolCallScheduler', () => {
     ])
   })
 
-  it('超过单轮上限的每个调用都有失败观察而不是静默丢弃', async () => {
+  it('超过单轮上限的调用反馈给模型，但不伪装成用户可见的执行失败', async () => {
     let executions = 0
     const observations: AgentToolObservation[] = []
     const events: AgentEventInput[] = []
@@ -174,7 +174,8 @@ describe('AgentToolCallScheduler', () => {
 
     expect(executions).toBe(8)
     expect(observations).toHaveLength(10)
-    expect(events.filter((event) => event.type === 'ToolFailed')).toHaveLength(2)
+    expect(events.filter((event) => event.type === 'ToolRequested')).toHaveLength(8)
+    expect(events.filter((event) => event.type === 'ToolFailed')).toHaveLength(0)
     expect(observations.slice(-2).every((item) => item.summary.includes('安全上限'))).toBe(true)
   })
 

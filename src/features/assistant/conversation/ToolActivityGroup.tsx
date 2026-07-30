@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronDown, SearchCheck } from 'lucide-react'
 import { useState } from 'react'
 
-import { UI_INSET_SURFACE_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
+import { UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 
 import type { AgentToolActivity, AgentToolActivityGroup } from './agentRunReducer'
 import { ToolActivityCard } from './ToolActivityCard'
@@ -37,13 +37,13 @@ export function ToolActivityGroup({
   }
 
   return (
-    <section className={`rounded-md ${UI_INSET_SURFACE_CLASS} px-1 py-0.5`}>
+    <section className="px-1 py-0.5">
       <UiButton
         type="button"
         variant="ghost"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="!h-7 w-full justify-start gap-2 !rounded-md !px-1.5 text-left"
+        className="!h-7 w-full justify-start gap-2 !rounded-lg !px-1.5 text-left"
       >
         <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
           {expanded ? <CheckCircle2 className="h-3 w-3" /> : <SearchCheck className="h-3 w-3" />}

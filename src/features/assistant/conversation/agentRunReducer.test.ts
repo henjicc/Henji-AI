@@ -48,7 +48,7 @@ describe('agentRunViewReducer', () => {
       type: 'ApprovalRequired', sequence: 3, toolCallId: 'call-2', approval: {
         approvalId: 'approval-1', runId: 'run-1', toolCallId: 'call-2', toolName: 'cancel_generation_task',
         toolVersion: 1, risk: 'R2', title: '取消任务', summary: '取消 task-1', argsDigest: 'a', previewDigest: 'p',
-        targetIds: { taskId: 'task-1' }, expectedRevisions: {}, permission: 'generation:cancel', scope: 'task-1',
+        targetIds: { taskId: 'task-1' }, dataClasses: ['C0'], expectedRevisions: {}, permission: 'generation:cancel', scope: 'task-1',
         expiresAt: '2026-07-23T01:00:00.000Z', reversible: false,
       },
     })

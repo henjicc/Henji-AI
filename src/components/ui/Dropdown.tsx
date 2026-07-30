@@ -79,7 +79,12 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
   const panelRef = useRef<HTMLDivElement | null>(null)
   const dropdownId = useId().replace(/:/g, '')
   const panelId = `dropdown-panel-${dropdownId}`
-  const [fixedPos, setFixedPos] = useState<{ top: number; left: number; width: number } | null>(null)
+  const [fixedPos, setFixedPos] = useState<{
+    top: number
+    left: number
+    width: number
+    placement: 'above' | 'below'
+  } | null>(null)
   const [buttonMinWidthPx, setButtonMinWidthPx] = useState<number | null>(null)
   const [panelMinWidthPx, setPanelMinWidthPx] = useState<number | null>(null)
   const lastButtonMinWidthRef = useRef<number | null>(null)
@@ -241,15 +246,30 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     computeMinWidth()
   }, [buttonMinWidthPx, getOptionLabels, minWidthStrategy, options, panelMinWidthPx, panelWidthStrategy, resolvedDisplay])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updatePos = () => {
       if (!ref.current) return
       const el = ref.current.querySelector('[data-dropdown-button]') as HTMLElement | null
       const target = el || ref.current
       const rect = target.getBoundingClientRect()
-      setFixedPos({ top: rect.bottom + 4, left: rect.left, width: rect.width })
+      const panelHeight = panelRef.current?.getBoundingClientRect().height ?? 0
+      const panelWidth = panelWidthStrategy === 'options' && panelMinWidthPx
+        ? Math.max(rect.width, panelMinWidthPx)
+        : rect.width
+      const gap = 4
+      const viewportPadding = 8
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
+      const placement = panelHeight > spaceBelow ? 'above' : 'below'
+      const top = placement === 'above'
+        ? Math.max(viewportPadding, rect.top - panelHeight - gap)
+        : Math.min(rect.bottom + gap, window.innerHeight - viewportPadding)
+      const left = Math.min(
+        Math.max(viewportPadding, rect.left),
+        Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding)
+      )
+      setFixedPos({ top, left, width: rect.width, placement })
     }
-    if (open && portal) {
+    if (open) {
       updatePos()
       const onScrollOrResize = () => updatePos()
       window.addEventListener('scroll', onScrollOrResize, true)
@@ -259,7 +279,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         window.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, portal])
+  }, [open, panelMinWidthPx, panelWidthStrategy])
 
   const menuContent = renderPanel ? (
     <div id={panelId} className="max-h-60 overflow-y-auto">{renderPanel()}</div>
@@ -352,6 +372,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
                 zIndex
               }}
               data-dropdown-portal="true"
+              data-dropdown-placement={fixedPos.placement}
             >
               {menuContent}
             </div>,
@@ -360,9 +381,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ) : (
           <div
             ref={panelRef}
-            className={`absolute left-0 z-50 mt-1 ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            className={`absolute left-0 z-50 ${fixedPos?.placement === 'above' ? 'bottom-full mb-1' : 'top-full mt-1'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"
+            data-dropdown-placement={fixedPos?.placement ?? 'below'}
           >
             {menuContent}
           </div>
