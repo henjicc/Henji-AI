@@ -57,6 +57,7 @@ export const agentUtilityRpcRequestMessageSchema = z.object({
     'agent_trace.complete',
     'agent_trace.fail',
     'permission_audit.append',
+    'session.append_compaction',
   ]),
   payload: z.unknown(),
 }).strict()

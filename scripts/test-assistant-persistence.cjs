@@ -41,6 +41,15 @@ const testFiles = [
     'electron',
     'main',
     'services',
+    'agent-runtime',
+    'persistence',
+    'session-store.test.ts'
+  ),
+  path.join(
+    workspaceRoot,
+    'electron',
+    'main',
+    'services',
     'assistant',
     'memory-store.test.ts'
   ),

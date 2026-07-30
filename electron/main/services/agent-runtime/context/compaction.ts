@@ -41,8 +41,21 @@ function includeToolPairBoundary(
 }
 
 export function estimateModelMessagesTokens(messages: ModelStepMessage[], toolsJson = ''): number {
-  const characters = messages.reduce((total, message) => total + messageText(message).length + message.role.length, 0)
-  return Math.ceil((characters + toolsJson.length) / 4)
+  const text = messages.map((message) => `${message.role}:${messageText(message)}`).join('\n') + toolsJson
+  let cjk = 0
+  let asciiWord = 0
+  let structural = 0
+  for (const character of text) {
+    if (/\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(character)) {
+      cjk += 1
+    } else if (/[A-Za-z0-9_]/.test(character)) {
+      asciiWord += 1
+    } else if (!/\s/.test(character)) {
+      structural += 1
+    }
+  }
+  // 中文通常接近一字一 token；JSON 标点和英文按保守比例估算，避免统一 /4 低估。
+  return cjk + Math.ceil(asciiWord / 3) + Math.ceil(structural / 2)
 }
 
 export function compactConversationMessages(

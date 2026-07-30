@@ -2,20 +2,17 @@ import { createMainLogger } from '../../logging'
 import type { AgentApprovalRequest, AgentEventInput, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
-import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { AgentContextBuilder } from '../context/builder'
 import { AgentArtifactStore } from '../context/offload'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentIntentRouter } from '../context/router'
-import type { AgentRouteDecision } from '../context/types'
 import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentBudgetTracker } from './budget'
 import { createInitialAgentRunState } from './initial-state'
-import { buildPrimaryModelTraceMetadata, runPrimaryAgentModelStep, runRouterModelClassification } from './model-execution'
 import { selectAgentRuntimeModels } from './models'
 import { errorCode, toolMessage } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
-import { AgentToolCallScheduler } from './tool-call-scheduler'
 import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
 import type { AgentRunnerOptions } from './types'
 import { AgentApprovalWaiter } from './approval-waiter'
@@ -27,7 +24,10 @@ import { AgentRunnerLifecycle } from './lifecycle'
 import { AgentModelOutputGuard } from './model-output-guard'
 import { logApprovalExpired, logApprovalRequested, logApprovalResolved } from './approval-logging'
 import { AgentTerminalApprovalCleanup } from './terminal-approval-cleanup'
-
+import { isContextOverflowError } from '../context/semantic-compaction'
+import { AgentConversationCompactor } from './conversation-compactor'
+import { AgentModelTurnCoordinator } from './model-turn-coordinator'
+import { AgentToolExecutionCoordinator } from './tool-execution-coordinator'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -38,6 +38,9 @@ export class AgentRunner {
   private readonly catalogPlanner
   private readonly abortController = new AbortController()
   private readonly conversation: ModelStepMessage[]
+  private readonly conversationCompactor: AgentConversationCompactor
+  private readonly modelTurnCoordinator: AgentModelTurnCoordinator
+  private readonly toolExecutionCoordinator: AgentToolExecutionCoordinator
   private readonly observations: AgentToolObservation[] = []
   private state: AgentRunState
   private pausedFrom: Exclude<AgentRunStatus, 'paused'> = 'running'
@@ -50,7 +53,6 @@ export class AgentRunner {
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private started = false
-
   constructor(private readonly options: AgentRunnerOptions) {
     this.conversation = [...(options.conversationHistory ?? [])]
     this.models = selectAgentRuntimeModels(options.request)
@@ -79,6 +81,63 @@ export class AgentRunner {
     this.memoryProvider = new AgentMemoryContextProvider(options.runId, options.memoryContext ?? [], options.dependencies.retrieveMemory)
     this.terminalApprovalCleanup = new AgentTerminalApprovalCleanup(
       options.runId, () => options.dependencies.gateway.expireRunApprovals(options.runId))
+    this.modelTurnCoordinator = new AgentModelTurnCoordinator({
+      runId: options.runId,
+      models: this.models,
+      runModelStep: options.dependencies.runModelStep,
+      recordUsage: (usage) => this.budget.recordModelUsage(usage),
+      emit: (event) => this.emit(event),
+      setCurrentModelRequestId: (requestId) => { this.currentModelRequestId = requestId },
+      setCurrentStepId: (stepId) => { this.state.currentStepId = stepId },
+      throwIfCancelled: () => this.throwIfCancelled(),
+    })
+    this.conversationCompactor = new AgentConversationCompactor({
+      runId: options.runId,
+      threadId: options.request.threadId,
+      model: this.models.summarizer,
+      conversation: this.conversation,
+      sourceSequences: options.conversationHistorySequences ?? [],
+      runModelStep: options.dependencies.runModelStep,
+      signal: this.abortController.signal,
+      appendSessionCompaction: options.dependencies.appendSessionCompaction,
+      recordUsage: (usage) => this.budget.recordModelUsage(usage),
+      setCurrentModelRequestId: (requestId) => { this.currentModelRequestId = requestId },
+      throwIfCancelled: () => this.throwIfCancelled(),
+    })
+    this.toolExecutionCoordinator = new AgentToolExecutionCoordinator({
+      runId: options.runId,
+      threadId: options.request.threadId,
+      approvalMode: options.request.approvalMode,
+      supportsParallelTools: this.models.primary.capabilities.parallelTools,
+      gateway: options.dependencies.gateway,
+      registry: options.dependencies.registry,
+      catalogPlanner: this.catalogPlanner,
+      recoveryGuard: this.recoveryGuard,
+      signal: this.abortController.signal,
+      waitIfPaused: () => this.waitIfPaused(),
+      throwIfCancelled: () => this.throwIfCancelled(),
+      recordToolCall: (signature) => this.budget.recordToolCall(signature),
+      recordProgress: (signature) => this.budget.recordProgress(signature),
+      setActiveToolCall: (toolCallId) => this.setActiveToolCall(toolCallId),
+      requestApproval: (call, approval) => this.requestToolApproval(call, approval),
+      onObservation: (call, observation) => {
+        this.observations.push(observation)
+        this.conversation.push(toolMessage(call, observation))
+        this.recoveryGuard.observe(call, observation)
+        if (this.recoveryGuard.consumeVerification(call, observation) && this.state.workingSummary) {
+          this.state.workingSummary = markWorkingSummaryRecoveryVerified(this.state.workingSummary)
+        }
+      },
+      emit: (event) => this.emit(event),
+      onDiscoveredTools: (toolCallId, toolNames) => {
+        logger.info('Agent 能力目录发现新工具', {
+          event: 'agent_catalog.discovery.completed',
+          requestId: options.runId,
+          taskId: toolCallId,
+          context: { toolNames },
+        })
+      },
+    })
   }
   start(): AgentRunState {
     if (this.started) return this.getState()
@@ -101,7 +160,6 @@ export class AgentRunner {
     void this.execute()
     return this.getState()
   }
-
   getState(): AgentRunState { return this.lifecycle.getState() }
   getEventHistory(): ReturnType<AgentRunnerLifecycle['getEventHistory']> { return this.lifecycle.getEventHistory() }
   pause(reason = '用户暂停'): AgentRunState {
@@ -169,7 +227,9 @@ export class AgentRunner {
   private async execute(): Promise<void> {
     try {
       const snapshot = this.requireContext()
-      const router = new AgentIntentRouter((goal, host, signal) => this.classifyWithRouterModel(goal, host, signal))
+      const router = new AgentIntentRouter((goal, host, signal) => (
+        this.modelTurnCoordinator.classify(goal, host, signal)
+      ))
       const route = await router.route(this.options.runId, this.options.request.goal, snapshot, this.abortController.signal)
       this.emit({
         type: 'PlanUpdated',
@@ -206,14 +266,10 @@ export class AgentRunner {
           summary: this.state.workingSummary,
           signal: this.abortController.signal,
         })
-        const context = this.contextBuilder.build({
-          runId: this.options.runId,
-          goal: this.options.request.goal,
-          userInstructions: this.options.request.userInstructions,
-          memoryContext,
-          snapshot: currentSnapshot,
-          route,
-          conversation: this.conversation,
+        const buildContext = (): ReturnType<AgentContextBuilder['build']> => this.contextBuilder.build({
+          runId: this.options.runId, goal: this.options.request.goal,
+          userInstructions: this.options.request.userInstructions, memoryContext,
+          snapshot: currentSnapshot, route, conversation: this.conversation,
           observations: this.observations.slice(-20),
           modelTools: registrations.map((item) => item.modelTool),
           activeToolNames: registrations.map((item) => item.catalog.name),
@@ -221,21 +277,50 @@ export class AgentRunner {
           maxOutputTokens: this.models.primary.settings.maxOutputTokens,
           workingSummary: this.state.workingSummary,
         })
+        let context = buildContext()
+        if (context.compacted && await this.conversationCompactor.compact(turn, this.state.workingSummary)) {
+          context = buildContext()
+        }
         emitAgentContextEvents(
           turn,
           context,
           this.state.workingSummary?.version,
           (event) => this.emit(event)
         )
-        let result: ModelStepResult
+        let result: ModelStepResult | null = null
+        let modelError: unknown | null = null
         try {
-          result = await this.runPrimaryStep(turn, context)
+          result = await this.modelTurnCoordinator.runPrimary(turn, context)
         } catch (error) {
+          if (
+            isContextOverflowError(error)
+            && this.state.currentToolCallId === null
+            && this.state.workingSummary?.recovery.mode !== 'verify_before_write'
+            && this.conversationCompactor.beginOverflowRecovery()
+          ) {
+            const semanticCompacted = await this.conversationCompactor.compact(turn, this.state.workingSummary)
+            if (!semanticCompacted) {
+              this.conversationCompactor.compactDeterministically(this.state.workingSummary)
+            }
+            context = buildContext()
+            try {
+              result = await this.modelTurnCoordinator.runPrimary(turn, context, 'overflow-retry')
+            } catch (retryError) {
+              modelError = retryError
+            }
+          } else {
+            modelError = error
+          }
+        }
+        if (modelError || !result) {
           this.currentModelRequestId = null
           this.state.currentStepId = null
           this.throwIfCancelled()
+          if (isContextOverflowError(modelError)) {
+            throw new Error('[CONTEXT_OVERFLOW_AFTER_COMPACTION] 上下文压缩后仍超过模型限制，运行已停止')
+          }
           this.budget.recordFailure()
-          this.conversation.push({ role: 'user', content: `上一模型步骤失败，安全错误码：${errorCode(error)}。请重新规划。` })
+          this.conversation.push({ role: 'user', content: `上一模型步骤失败，安全错误码：${errorCode(modelError)}。请重新规划。` })
           continue
         }
         this.conversation.push(...result.responseMessages)
@@ -246,7 +331,7 @@ export class AgentRunner {
         this.budget.recordSuccess()
         if (result.toolCalls.length > 0) {
           const observationStart = this.observations.length
-          await this.executeToolCalls(
+          await this.toolExecutionCoordinator.execute(
             result.toolCalls,
             route,
             currentSnapshot.scopeRevisions,
@@ -314,112 +399,6 @@ export class AgentRunner {
       if (this.machine.status !== 'cancelled') await this.fail(this.takeAsyncEventError() ?? error)
     }
   }
-  private async classifyWithRouterModel(
-    goal: string,
-    snapshot: HostContextSnapshot,
-    signal: AbortSignal
-  ): Promise<unknown> {
-    this.throwIfCancelled()
-    const requestId = `${this.options.runId}:router:${snapshot.revision}`
-    this.currentModelRequestId = requestId
-    try {
-      const result = await runRouterModelClassification({
-        runId: this.options.runId,
-        goal,
-        snapshot,
-        model: this.models.router,
-        runModelStep: this.options.dependencies.runModelStep,
-        signal,
-      })
-      this.budget.recordModelUsage(result.usage)
-      return result.decision
-    } finally {
-      this.currentModelRequestId = null
-    }
-  }
-  private async runPrimaryStep(
-    turn: number,
-    context: ReturnType<AgentContextBuilder['build']>
-  ): Promise<ModelStepResult> {
-    const stepId = `step-${turn}`
-    const requestId = `${this.options.runId}:${stepId}`
-    this.currentModelRequestId = requestId
-    this.state.currentStepId = stepId
-    this.emit({
-      type: 'ModelStarted', stepId, turn,
-      providerId: this.models.primary.providerId, modelId: this.models.primary.modelId,
-    })
-    const result = await runPrimaryAgentModelStep({
-      runId: this.options.runId,
-      turn,
-      model: this.models.primary,
-      system: context.system,
-      messages: context.messages,
-      tools: context.tools,
-      trace: buildPrimaryModelTraceMetadata(turn, context, this.models.primary),
-      runModelStep: this.options.dependencies.runModelStep,
-      onTextDelta: (text) => this.emit({ type: 'ModelDelta', stepId, text }),
-    })
-    this.throwIfCancelled()
-    this.budget.recordModelUsage(result.usage)
-    const displayText = result.text.trim()
-    this.emit({
-      type: 'ModelCompleted', stepId, finishReason: result.finishReason,
-      toolCallCount: result.toolCalls.length,
-      ...(displayText ? { displayText: displayText.slice(0, 2_000) } : {}),
-      usage: result.usage,
-    })
-    this.currentModelRequestId = null
-    this.state.currentStepId = null
-    return result
-  }
-  private async executeToolCalls(
-    calls: ModelStepToolCall[],
-    route: AgentRouteDecision,
-    expectedRevisions: Partial<HostScopeRevisions>,
-    activeToolNames: ReadonlySet<string>
-  ): Promise<void> {
-    const scheduler = new AgentToolCallScheduler({
-      runId: this.options.runId,
-      threadId: this.options.request.threadId,
-      approvalMode: this.options.request.approvalMode,
-      supportsParallelTools: this.models.primary.capabilities.parallelTools,
-      gateway: this.options.dependencies.gateway,
-      registry: this.options.dependencies.registry,
-      catalogPlanner: this.catalogPlanner,
-      activeToolNames,
-      signal: this.abortController.signal,
-      waitIfPaused: () => this.waitIfPaused(),
-      throwIfCancelled: () => this.throwIfCancelled(),
-      recordToolCall: (signature) => this.budget.recordToolCall(signature),
-      recordProgress: (signature) => this.budget.recordProgress(signature),
-      setActiveToolCall: (toolCallId) => this.setActiveToolCall(toolCallId),
-      requestApproval: (call, approval) => this.requestToolApproval(call, approval),
-      onObservation: (call, observation) => {
-        this.observations.push(observation)
-        this.conversation.push(toolMessage(call, observation))
-        this.recoveryGuard.observe(call, observation)
-        if (this.recoveryGuard.consumeVerification(call, observation) && this.state.workingSummary) {
-          this.state.workingSummary = markWorkingSummaryRecoveryVerified(this.state.workingSummary)
-        }
-      },
-      emit: (event) => this.emit(event),
-      onDiscoveredTools: (toolCallId, toolNames) => {
-        logger.info('Agent 能力目录发现新工具', {
-          event: 'agent_catalog.discovery.completed',
-          requestId: this.options.runId,
-          taskId: toolCallId,
-          context: { toolNames },
-        })
-      },
-      executionGuard: (call) => this.recoveryGuard.validate(call),
-    })
-    try {
-      await scheduler.execute(calls, route.intent !== 'general', expectedRevisions)
-    } finally {
-      this.setActiveToolCall(null)
-    }
-  }
   private setActiveToolCall(toolCallId: string | null): void {
     this.state.currentToolCallId = toolCallId
     if (toolCallId) this.transition('waiting_tool')
@@ -473,14 +452,12 @@ export class AgentRunner {
     this.state.lastScopeRevisions = context.scopeRevisions
     return context
   }
-
   private throwIfCancelled(): void {
     if (this.asyncEventError) throw this.asyncEventError
     if (this.abortController.signal.aborted || this.machine.status === 'cancelled') {
       throw new Error('[task_cancelled] Agent run cancelled')
     }
   }
-
   private handleAsyncEventError(error: unknown): void {
     if (this.asyncEventError || isTerminalAgentState(this.machine.status)) return
     this.asyncEventError = error

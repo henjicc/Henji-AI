@@ -10,13 +10,10 @@ import {
   hostContextSnapshotSchema,
   type HostContextSnapshot,
 } from '../../src/core/assistant/hostContracts'
+import { agentMemoryRetrievalResultSchema } from '../../src/core/assistant/memory'
 import {
-  agentMemoryContextEntrySchema,
-  agentMemoryRetrievalResultSchema,
-} from '../../src/core/assistant/memory'
-import { agentWorkingSummarySchema } from '../../src/core/assistant/workingContext'
-import { agentStartRunRequestSchema } from '../../src/core/assistant/runtimeContracts'
-import { modelStepMessageSchema } from '../../src/core/llm/modelStep'
+  agentSessionCompactionAppendSchema,
+} from '../../src/core/assistant/session'
 import {
   agentArtifactDescribeRequestSchema,
   agentArtifactDescriptorSchema,
@@ -65,10 +62,8 @@ import {
   buildModelStepTraceDetail,
   createModelStepStreamTrace,
 } from './services/llm/sdk/trace'
-import {
-  cancelUtilityRun,
-  prepareUtilityShutdown,
-} from './agent-utility-cancellation'
+import { executeUtilityControlCommand } from './agent-utility-control'
+import { agentUtilityStartPayloadSchema } from './agent-utility-schemas'
 
 const parentPort = process.parentPort
 if (!parentPort) throw new Error('Agent utility process 缺少父进程通信端口')
@@ -397,14 +392,7 @@ function requireRunner(runId: string): AgentRunner {
 }
 
 async function handleStart(payload: unknown): Promise<AgentRunState> {
-  const parsed = z.object({
-    runId: z.string().min(1),
-    request: agentStartRunRequestSchema,
-    hostContext: hostContextSnapshotSchema,
-    memoryContext: z.array(agentMemoryContextEntrySchema).max(10).default([]),
-    conversationHistory: z.array(modelStepMessageSchema).max(1_000).default([]),
-    recoveryContext: agentWorkingSummarySchema.optional(),
-  }).strict().parse(payload)
+  const parsed = agentUtilityStartPayloadSchema.parse(payload)
   if (runners.has(parsed.runId)) throw new Error('[duplicate_run] 运行已存在')
   hostContexts.set(parsed.runId, parsed.hostContext)
   const runner = new AgentRunner({
@@ -412,6 +400,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
     request: parsed.request,
     memoryContext: parsed.memoryContext,
     conversationHistory: parsed.conversationHistory,
+    conversationHistorySequences: parsed.conversationHistorySequences,
     recoveryContext: parsed.recoveryContext,
     dependencies: {
       registry,
@@ -420,6 +409,10 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
       runModelStep: runUtilityModelStep,
       cancelModelStep: (requestId) => activeModelSteps.get(requestId)?.abort(),
       artifactStore,
+      appendSessionCompaction: async (input) => {
+        agentSessionCompactionAppendSchema.parse(input)
+        await rpc('session.append_compaction', input)
+      },
       retrieveMemory: async (query, signal) => agentMemoryRetrievalResultSchema.parse(
         await rpc('memory.retrieve', query, signal)
       ),
@@ -446,28 +439,12 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
 
 async function executeCommand(action: AgentUtilityCommandAction, payload: unknown): Promise<unknown> {
   if (action === 'run.start') return await handleStart(payload)
-  if (action === 'process.shutdown') {
-    await prepareUtilityShutdown(runners.values())
-    setTimeout(() => process.exit(0), 20).unref()
-    return { shuttingDown: true }
-  }
-  const base = z.object({ runId: z.string().min(1) }).passthrough().parse(payload)
-  const runner = requireRunner(base.runId)
-  if (action === 'run.pause') return runner.pause()
-  if (action === 'run.resume') return runner.resume()
-  if (action === 'run.cancel') {
-    const parsed = z.object({
-      runId: z.string().min(1),
-      reason: z.string().min(1).max(500),
-    }).strict().parse(payload)
-    return await cancelUtilityRun(runner, parsed.reason)
-  }
-  const approval = z.object({
-    runId: z.string().min(1),
-    approvalId: z.string().min(1),
-    decision: z.enum(['approve', 'reject']),
-  }).strict().parse(payload)
-  return runner.respondApproval(approval.approvalId, approval.decision)
+  return await executeUtilityControlCommand({
+    action,
+    payload,
+    requireRunner,
+    runners: runners.values(),
+  })
 }
 
 parentPort.on('message', (messageEvent) => {

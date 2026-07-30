@@ -12,6 +12,7 @@ import type {
 } from '../../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
 
 export type AgentModelStepExecutor = (
   input: ModelStepInput,
@@ -29,6 +30,7 @@ export interface AgentRunnerDependencies {
     signal: AbortSignal
   ) => Promise<AgentMemoryRetrievalResult>
   artifactStore?: AgentArtifactStore
+  appendSessionCompaction?: (input: AgentSessionCompactionAppend) => Promise<void>
   onEvent?: (event: AgentEvent) => void
   onCheckpoint?: (state: AgentRunState) => void
   onTerminal?: (state: AgentRunState) => void
@@ -39,6 +41,7 @@ export interface AgentRunnerOptions {
   request: AgentStartRunRequest
   memoryContext?: AgentMemoryContextEntry[]
   conversationHistory?: ModelStepMessage[]
+  conversationHistorySequences?: number[]
   recoveryContext?: AgentWorkingSummary
   dependencies: AgentRunnerDependencies
 }

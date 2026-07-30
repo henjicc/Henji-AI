@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import { compactConversationMessages } from './compaction'
+import { compactConversationMessages, estimateModelMessagesTokens } from './compaction'
 
 describe('compactConversationMessages', () => {
   it('使用结构化工作摘要且不会复制旧消息中的指令', () => {
@@ -49,5 +49,16 @@ describe('compactConversationMessages', () => {
     expect(serialized).toContain('tool-call')
     expect(serialized).toContain('tool-result')
     expect(serialized).toContain('call-pair')
+  })
+
+  it('中文与 JSON 使用保守估算，不再按所有字符统一除以四', () => {
+    const chinese = estimateModelMessagesTokens([{ role: 'user', content: '这是一个需要保留约束的中文长会话' }])
+    const json = estimateModelMessagesTokens([{
+      role: 'tool',
+      content: [{ type: 'tool-result', toolCallId: 'call-1', output: { nested: { ok: true } } }],
+    }])
+
+    expect(chinese).toBeGreaterThan(12)
+    expect(json).toBeGreaterThan(10)
   })
 })

@@ -4,12 +4,17 @@ import type Database from 'better-sqlite3'
 import { createMainLogger } from '../../logging'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import {
+  adaptAgentContextMessages,
+  createDefaultSessionProjectorRegistry,
+} from '../../../../../src/core/assistant/contextProjection'
+import {
   AGENT_SESSION_ENTRY_SCHEMA_VERSION,
+  agentSessionCompactionPayloadSchema,
   agentSessionEntrySchema,
   agentThreadSummarySchema,
   agentTranscriptPageSchema,
-  getAgentSessionMessageContent,
   type AgentSessionEntry,
+  type AgentSessionCompactionPayload,
   type AgentThreadSummary,
   type AgentTranscriptPage,
 } from '../../../../../src/core/assistant/session'
@@ -49,6 +54,20 @@ export interface AppendSessionMessageInput {
   createdAt?: number
 }
 
+export interface AppendSessionCompactionInput {
+  threadId: string
+  runId: string
+  turn: number
+  payload: AgentSessionCompactionPayload
+  idempotencyKey: string
+  createdAt?: number
+}
+
+export interface AgentConversationProjection {
+  messages: ModelStepMessage[]
+  sourceSequences: number[]
+}
+
 function toIso(timestamp: number): string {
   return new Date(timestamp).toISOString()
 }
@@ -70,6 +89,8 @@ function rowToEntry(row: SessionEntryRow): AgentSessionEntry {
 }
 
 export class AgentSessionStore {
+  private readonly projector = createDefaultSessionProjectorRegistry()
+
   constructor(private readonly database: Database.Database) {}
 
   appendMessage(input: AppendSessionMessageInput): AgentSessionEntry {
@@ -109,6 +130,49 @@ export class AgentSessionStore {
       event: 'agent_session.entry.appended',
       requestId: input.runId,
       context: { threadId: input.threadId, sequence: head + 1, kind },
+    })
+    return rowToEntry(inserted)
+  }
+
+  appendCompaction(input: AppendSessionCompactionInput): AgentSessionEntry {
+    const existing = this.database.prepare(`
+      SELECT * FROM agent_session_entries
+      WHERE thread_id = ? AND idempotency_key = ?
+    `).get(input.threadId, input.idempotencyKey) as SessionEntryRow | undefined
+    if (existing) return rowToEntry(existing)
+    const head = this.getHead(input.threadId)
+    const createdAt = input.createdAt ?? Date.now()
+    const entryId = randomUUID()
+    this.database.prepare(`
+      INSERT INTO agent_session_entries(
+        entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
+        payload_json, status, parent_entry_id, idempotency_key, created_at
+      ) VALUES (?, ?, ?, ?, ?, 'compaction', ?, ?, 'active', NULL, ?, ?)
+    `).run(
+      entryId,
+      input.threadId,
+      head + 1,
+      input.runId,
+      input.turn,
+      AGENT_SESSION_ENTRY_SCHEMA_VERSION,
+      JSON.stringify(input.payload),
+      input.idempotencyKey,
+      createdAt
+    )
+    this.database.prepare(`
+      UPDATE agent_threads SET updated_at = ? WHERE thread_id = ?
+    `).run(createdAt, input.threadId)
+    const inserted = this.database.prepare(`
+      SELECT * FROM agent_session_entries WHERE entry_id = ?
+    `).get(entryId) as SessionEntryRow
+    logger.info('Agent 会话语义压缩条目已追加', {
+      event: 'agent_session.compaction.appended',
+      requestId: input.runId,
+      context: {
+        threadId: input.threadId,
+        sequence: head + 1,
+        coveredThroughSequence: input.payload.coveredThroughSequence,
+      },
     })
     return rowToEntry(inserted)
   }
@@ -184,23 +248,33 @@ export class AgentSessionStore {
     return page
   }
 
-  projectConversation(threadId: string, excludeRunId?: string): ModelStepMessage[] {
+  projectConversation(threadId: string, excludeRunId?: string): AgentConversationProjection {
     const rows = this.database.prepare(`
       SELECT * FROM agent_session_entries
       WHERE thread_id = ?
         AND status = 'active'
-        AND kind IN ('user_message', 'assistant_message')
+        AND kind IN ('user_message', 'assistant_message', 'compaction')
         AND (? IS NULL OR run_id IS NULL OR run_id <> ?)
       ORDER BY sequence ASC
     `).all(threadId, excludeRunId ?? null, excludeRunId ?? null) as SessionEntryRow[]
-    return rows.flatMap((row): ModelStepMessage[] => {
-      const entry = rowToEntry(row)
-      const content = getAgentSessionMessageContent(entry)
-      if (!content) return []
-      return [{
-        role: entry.kind === 'user_message' ? 'user' : 'assistant',
-        content,
-      }]
-    })
+    const entries = rows.map(rowToEntry)
+    const latestCompaction = [...entries].reverse().find((entry) => (
+      entry.kind === 'compaction'
+      && agentSessionCompactionPayloadSchema.safeParse(entry.payload).success
+    ))
+    const coveredThroughSequence = latestCompaction
+      ? agentSessionCompactionPayloadSchema.parse(latestCompaction.payload).coveredThroughSequence
+      : 0
+    const projectable = [
+      ...(latestCompaction ? [latestCompaction] : []),
+      ...entries.filter((entry) => (
+        entry.kind !== 'compaction' && entry.sequence > coveredThroughSequence
+      )),
+    ]
+    const contextMessages = this.projector.project(projectable)
+    return {
+      messages: adaptAgentContextMessages(contextMessages),
+      sourceSequences: contextMessages.map((message) => message.sourceSequence),
+    }
   }
 }

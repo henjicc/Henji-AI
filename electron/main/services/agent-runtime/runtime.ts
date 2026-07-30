@@ -47,6 +47,7 @@ import { createInitialAgentRunState } from './runner/initial-state'
 import { AgentPersistenceStore } from './persistence/store'
 import { buildAgentRunEventsPage } from './persistence/event-store'
 import { AgentPermissionAuditStore } from './persistence/permission-audit-store'
+import { appendValidatedSessionCompaction } from './persistence/session-compaction-append'
 import type { AgentPermissionAuditRecord } from '../../../../src/core/assistant/permissionAudit'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
@@ -97,16 +98,16 @@ export class AgentRuntimeService {
       const record = this.permissionAudit.append(payload)
       return { auditId: record.auditId }
     },
+    appendSessionCompaction: (payload) => appendValidatedSessionCompaction(
+      payload,
+      (runId) => this.runs.get(runId),
+      this.persistence
+    ),
   })
-
-  constructor() {
-    this.persistence.markInterruptedRuns()
-  }
+  constructor() { this.persistence.markInterruptedRuns() }
 
   async startRun(owner: WebContents, request: AgentStartRunRequest): Promise<AgentStartRunResult> {
-    return await this.startRunWithParent(owner, request, null, undefined)
-  }
-
+    return this.startRunWithParent(owner, request, null, undefined) }
   private async startRunWithParent(
     owner: WebContents,
     request: AgentStartRunRequest,
@@ -142,7 +143,7 @@ export class AgentRuntimeService {
     this.activeByThread.set(request.threadId, runId)
     this.persistence.createRun(runId, request, initialState, parentRunId)
     try {
-      const conversationHistory = this.persistence.projectConversation(request.threadId, runId)
+      const conversationProjection = this.persistence.projectConversation(request.threadId, runId)
       const memoryContext = this.memory.retrieve(
         request.goal,
         hostContext.workspace.id,
@@ -153,7 +154,8 @@ export class AgentRuntimeService {
         request,
         hostContext,
         memoryContext,
-        conversationHistory,
+        conversationProjection.messages,
+        conversationProjection.sourceSequences,
         preparedRecoveryContext
       )
       this.updateState(runId, state)

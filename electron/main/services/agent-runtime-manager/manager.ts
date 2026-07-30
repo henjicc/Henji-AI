@@ -53,6 +53,7 @@ interface AgentRuntimeManagerOptions {
   completeAgentTrace: (payload: AgentTraceCompleteInput) => void
   failAgentTrace: (payload: AgentTraceFailInput) => void
   appendPermissionAudit: (payload: unknown) => unknown
+  appendSessionCompaction: (payload: unknown) => unknown
 }
 
 interface PendingCommand {
@@ -86,6 +87,7 @@ export class AgentRuntimeManager {
     hostContext: HostContextSnapshot,
     memoryContext: AgentMemoryContextEntry[],
     conversationHistory: ModelStepMessage[],
+    conversationHistorySequences: number[],
     recoveryContext?: AgentWorkingSummary
   ): Promise<AgentRunState> {
     this.activeRunIds.add(runId)
@@ -96,6 +98,7 @@ export class AgentRuntimeManager {
         hostContext,
         memoryContext,
         conversationHistory,
+        conversationHistorySequences,
         recoveryContext,
       }, 15_000)
       return agentRunStateSchema.parse(result)
@@ -348,6 +351,8 @@ export class AgentRuntimeManager {
         data = this.options.appendPermissionAudit(payload)
       } else if (operation === 'memory.retrieve') {
         data = this.options.retrieveMemory(payload)
+      } else if (operation === 'session.append_compaction') {
+        data = this.options.appendSessionCompaction(payload)
       } else {
         throw new Error(`不支持的 utility RPC 操作：${String(operation)}`)
       }

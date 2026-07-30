@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { AGENT_RUNTIME_SCHEMA_VERSION } from './runtimeContracts'
+import { modelStepUsageSchema } from '../llm/modelStep'
 
 export const AGENT_SESSION_ENTRY_SCHEMA_VERSION = 'agent-session-entry/v1' as const
 
@@ -25,6 +26,35 @@ const genericPayloadSchema = z.object({
   value: z.unknown(),
 }).strict()
 
+export const agentSemanticSummarySchema = z.object({
+  version: z.literal('agent-semantic-summary/v1'),
+  userIntent: z.string().min(1).max(2_000),
+  userConstraints: z.array(z.string().min(1).max(1_000)).max(20),
+  confirmedDecisions: z.array(z.string().min(1).max(1_000)).max(20),
+  openQuestions: z.array(z.string().min(1).max(1_000)).max(20),
+  contextNotes: z.array(z.string().min(1).max(1_000)).max(20),
+}).strict()
+export type AgentSemanticSummary = z.infer<typeof agentSemanticSummarySchema>
+
+export const agentSessionCompactionPayloadSchema = z.object({
+  summary: agentSemanticSummarySchema,
+  coveredFromSequence: z.number().int().positive(),
+  coveredThroughSequence: z.number().int().positive(),
+  providerId: z.string().min(1),
+  modelId: z.string().min(1),
+  usage: modelStepUsageSchema,
+  fallbackReason: z.string().max(500).nullable(),
+}).strict()
+export type AgentSessionCompactionPayload = z.infer<typeof agentSessionCompactionPayloadSchema>
+
+export const agentSessionCompactionAppendSchema = z.object({
+  runId: z.string().min(1),
+  threadId: z.string().min(1).max(200),
+  turn: z.number().int().positive(),
+  payload: agentSessionCompactionPayloadSchema,
+}).strict()
+export type AgentSessionCompactionAppend = z.infer<typeof agentSessionCompactionAppendSchema>
+
 export const agentSessionEntrySchema = z.object({
   schemaVersion: z.literal(AGENT_SESSION_ENTRY_SCHEMA_VERSION),
   entryId: z.string().min(1),
@@ -33,7 +63,7 @@ export const agentSessionEntrySchema = z.object({
   runId: z.string().min(1).nullable(),
   turn: z.number().int().positive().nullable(),
   kind: agentSessionEntryKindSchema,
-  payload: z.union([messagePayloadSchema, genericPayloadSchema]),
+  payload: z.union([messagePayloadSchema, agentSessionCompactionPayloadSchema, genericPayloadSchema]),
   status: agentSessionEntryStatusSchema,
   parentEntryId: z.string().min(1).nullable(),
   createdAt: z.string().datetime(),

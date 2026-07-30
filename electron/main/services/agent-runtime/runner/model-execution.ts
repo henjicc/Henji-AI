@@ -40,6 +40,7 @@ function compactRouterSnapshot(snapshot: HostContextSnapshot): Record<string, un
 interface PrimaryModelExecutionInput {
   runId: string
   turn: number
+  stepId?: string
   model: AgentRuntimeModel
   system: string
   messages: ModelStepMessage[]
@@ -169,7 +170,7 @@ export function runPrimaryAgentModelStep(
   if (input.messages.some((message) => message.role === 'system')) {
     throw new Error('[invalid_context] 普通 Agent messages 中禁止 system 消息')
   }
-  const stepId = `step-${input.turn}`
+  const stepId = input.stepId ?? `step-${input.turn}`
   return input.runModelStep({
     requestId: `${input.runId}:${stepId}`,
     runId: input.runId,

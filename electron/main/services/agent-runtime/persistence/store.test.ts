@@ -204,10 +204,13 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
       { sequence: 2, kind: 'assistant_message', runId: 'run-1' },
       { sequence: 3, kind: 'user_message', runId: 'run-2' },
     ])
-    expect(store.projectConversation('thread-1', 'run-2')).toEqual([
-      { role: 'user', content: '诊断生成失败' },
-      { role: 'assistant', content: '第一轮回答' },
-    ])
+    expect(store.projectConversation('thread-1', 'run-2')).toEqual({
+      messages: [
+        { role: 'user', content: '诊断生成失败' },
+        { role: 'assistant', content: '第一轮回答' },
+      ],
+      sourceSequences: [1, 2],
+    })
     expect(store.listThreads()).toMatchObject([{
       threadId: 'thread-1',
       headSequence: 3,
@@ -236,9 +239,10 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     expect(firstPage.entries.map((entry) => entry.entryId)).not.toEqual(
       nextPage.entries.map((entry) => entry.entryId)
     )
-    expect(store.projectConversation('thread-2')).toEqual([
-      { role: 'user', content: '独立会话' },
-    ])
+    expect(store.projectConversation('thread-2')).toEqual({
+      messages: [{ role: 'user', content: '独立会话' }],
+      sourceSequences: [1],
+    })
   })
 
   it('旧数据库消息在追加 migration 后以稳定顺序兼容读取', () => {

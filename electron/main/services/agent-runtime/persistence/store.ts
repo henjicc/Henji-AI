@@ -21,9 +21,9 @@ import { createMainLogger } from '../../logging'
 import { assessInterruptedWorkingSummary } from '../runner/working-summary'
 import { AgentEventStore, type AgentStoredEventPage } from './event-store'
 import { AgentArtifactPersistenceStore } from './artifact-store'
-import { AgentSessionStore } from './session-store'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import { AgentSessionStore, type AgentConversationProjection } from './session-store'
 import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../../src/core/assistant/session'
+import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
 import type {
   AgentArtifactDescribeRequest,
   AgentArtifactDescriptor,
@@ -186,8 +186,21 @@ export class AgentPersistenceStore {
     return this.sessionStore.loadTranscript(threadId, afterSequence, limit)
   }
 
-  projectConversation(threadId: string, excludeRunId?: string): ModelStepMessage[] {
+  projectConversation(threadId: string, excludeRunId?: string): AgentConversationProjection {
     return this.sessionStore.projectConversation(threadId, excludeRunId)
+  }
+
+  appendSessionCompaction(input: AgentSessionCompactionAppend): void {
+    this.database.transaction(() => {
+      this.sessionStore.appendCompaction({
+        ...input,
+        idempotencyKey: `compaction:${input.runId}:${input.payload.coveredThroughSequence}`,
+      })
+    })()
+  }
+
+  getSessionHead(threadId: string): number {
+    return this.sessionStore.getHead(threadId)
   }
 
   saveArtifact(runId: string, artifact: AgentContextArtifact): void {
