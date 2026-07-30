@@ -27,4 +27,14 @@ describe('AgentStateMachine', () => {
     machine.transition('cancelled')
     expect(() => machine.transition('running')).toThrow(InvalidAgentStateTransitionError)
   })
+
+  it('等待用户回答可暂停并恢复到原等待状态', () => {
+    const machine = new AgentStateMachine()
+    machine.transition('running')
+    machine.transition('waiting_user')
+    machine.transition('paused')
+    machine.transition('waiting_user')
+    machine.transition('running')
+    expect(machine.status).toBe('running')
+  })
 })

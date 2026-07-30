@@ -33,8 +33,13 @@ import {
 import {
   agentListThreadsRequestSchema,
   agentTranscriptRequestSchema,
+  agentEnqueueMessageRequestSchema,
+  agentCancelQueuedMessageRequestSchema,
   type AgentThreadSummary,
   type AgentTranscriptPage,
+  type AgentEnqueueMessageResult,
+  type AgentSessionEntry,
+  type AgentQueuedMessagePayload,
 } from '@/core/assistant/session'
 import {
   agentMemoryClearSchema,
@@ -241,6 +246,33 @@ export async function getAgentTranscript(
     limit,
   })
   return await getPlatform().assistant.getTranscript(request)
+}
+
+export async function enqueueAgentMessage(input: {
+  threadId: string
+  runId: string
+  clientMessageId: string
+  content: string
+  mode: AgentQueuedMessagePayload['mode']
+  waitId?: string
+}): Promise<AgentEnqueueMessageResult> {
+  const request = agentEnqueueMessageRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    ...input,
+  })
+  return getPlatform().assistant.enqueueMessage(request)
+}
+
+export async function cancelQueuedAgentMessage(input: {
+  threadId: string
+  runId: string
+  entryId: string
+}): Promise<AgentSessionEntry> {
+  const request = agentCancelQueuedMessageRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    ...input,
+  })
+  return getPlatform().assistant.cancelQueuedMessage(request)
 }
 
 export async function retryAgentRun(runId: string): Promise<AgentStartRunResult> {

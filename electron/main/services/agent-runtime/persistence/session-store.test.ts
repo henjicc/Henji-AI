@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import type { AgentSessionCompactionPayload } from '../../../../../src/core/assistant/session'
+import {
+  agentQueuedMessagePayloadSchema,
+  type AgentSessionCompactionPayload,
+} from '../../../../../src/core/assistant/session'
 import { runAgentSchemaMigrations } from './migrations'
 import { AgentSessionStore } from './session-store'
 
@@ -104,5 +107,48 @@ describeWithElectronSqlite('AgentSessionStore compaction', () => {
     expect(projection.messages[0]?.content).not.toContain('第一次压缩')
     expect(projection.messages.slice(1).map((message) => message.content)).toEqual(['消息-7', '消息-8'])
     expect(store.getHead('thread-1')).toBe(10)
+  })
+
+  it('按 clientMessageId 幂等入队并严格按 sequence 消费一次', () => {
+    const first = store.enqueueMessage({
+      threadId: 'thread-1', runId: 'run-1', clientMessageId: 'client-1',
+      content: '先补充 A', mode: 'current_task',
+    })
+    const duplicate = store.enqueueMessage({
+      threadId: 'thread-1', runId: 'run-1', clientMessageId: 'client-1',
+      content: '不应覆盖', mode: 'current_task',
+    })
+    const second = store.enqueueMessage({
+      threadId: 'thread-1', runId: 'run-1', clientMessageId: 'client-2',
+      content: '再补充 B', mode: 'current_task',
+    })
+
+    expect(duplicate.deduplicated).toBe(true)
+    expect(duplicate.entry.entryId).toBe(first.entry.entryId)
+    expect(store.consumeQueuedMessages('run-1', 'current_task').map((entry) => entry.entryId))
+      .toEqual([first.entry.entryId, second.entry.entryId])
+    expect(store.consumeQueuedMessages('run-1', 'current_task')).toEqual([])
+  })
+
+  it('可取消待处理消息，已消费消息不会被回退', () => {
+    const queued = store.enqueueMessage({
+      threadId: 'thread-1', runId: 'run-1', clientMessageId: 'cancel-1',
+      content: '稍后继续', mode: 'after_task',
+    }).entry
+    const cancelled = store.cancelQueuedMessage('thread-1', queued.entryId)
+    expect(agentQueuedMessagePayloadSchema.parse(cancelled.payload)).toMatchObject({
+      status: 'cancelled', statusReason: '用户取消',
+    })
+    expect(store.listQueuedMessages('run-1', 'after_task')).toEqual([])
+
+    const consumedCandidate = store.enqueueMessage({
+      threadId: 'thread-1', runId: 'run-1', clientMessageId: 'consume-1',
+      content: '回答', mode: 'clarification', waitId: 'wait-1',
+    }).entry
+    expect(store.updateQueuedMessageStatus(
+      consumedCandidate.entryId, 'accepted', 'consumed', undefined, 'run-1'
+    )).not.toBeNull()
+    const unchanged = store.cancelQueuedMessage('thread-1', consumedCandidate.entryId)
+    expect(agentQueuedMessagePayloadSchema.parse(unchanged.payload).status).toBe('consumed')
   })
 })

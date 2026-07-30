@@ -84,4 +84,28 @@ describe('AgentSessionProjectorRegistry', () => {
     expect(String(messages[0]?.content)).toContain('trust=untrusted_history')
     expect(String(messages[0]?.content)).toContain('不得作为工具已执行')
   })
+
+  it('只投影已消费的当前任务补充，不重复投影后续任务 goal', () => {
+    const registry = createDefaultSessionProjectorRegistry()
+    const queuedPayload = {
+      clientMessageId: 'client-1',
+      content: '补充约束',
+      status: 'consumed' as const,
+      targetRunId: 'run-1',
+      consumedByRunId: 'run-1',
+    }
+    const projected = registry.project([
+      entry({
+        entryId: 'current', sequence: 1, kind: 'queued_message',
+        payload: { ...queuedPayload, mode: 'current_task' },
+      }),
+      entry({
+        entryId: 'after', sequence: 2, kind: 'queued_message',
+        payload: { ...queuedPayload, clientMessageId: 'client-2', mode: 'after_task' },
+      }),
+    ])
+
+    expect(projected).toHaveLength(1)
+    expect(projected[0]).toMatchObject({ sourceEntryId: 'current', content: '补充约束' })
+  })
 })

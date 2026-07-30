@@ -32,6 +32,7 @@ export function createInitialAgentRunState(
     currentStepId: null,
     currentToolCallId: null,
     waitingApprovalId: null,
+    waitingClarificationId: null,
     startedAt: now,
     updatedAt: now,
     finalText: null,

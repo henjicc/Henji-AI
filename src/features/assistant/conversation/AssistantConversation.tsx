@@ -3,7 +3,8 @@ import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
 
 import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiPanel } from '@/components/ui'
 import type { AgentEvent } from '@/core/assistant/events'
-import { getAgentSessionMessageContent } from '@/core/assistant/session'
+import { agentQueuedMessagePayloadSchema, getAgentSessionMessageContent } from '@/core/assistant/session'
+import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
 import {
   createEmptyPromptDocument,
   createPlainTextPromptDocument,
@@ -55,6 +56,7 @@ export function AssistantConversation(): JSX.Element {
   const startRun = run.start
   const [document, setDocument] = useState<PromptDocumentV1>(() => createEmptyPromptDocument())
   const [resultError, setResultError] = useState<string | null>(null)
+  const [messageMode, setMessageMode] = useState<AgentQueuedMessagePayload['mode']>('current_task')
   const scrollRef = useRef<HTMLDivElement>(null)
   const pendingHandledRef = useRef<string | null>(null)
   const toolActivitiesCacheRef = useRef<{
@@ -71,17 +73,35 @@ export function AssistantConversation(): JSX.Element {
   const setApprovalMode = useAssistantUiStore((state) => state.setApprovalMode)
   const runState = run.view.runState
   const busy = Boolean(activeRunId && (!runState || !terminalStatuses.has(runState.status)))
+  const waitingForAnswer = runState?.status === 'waiting_user'
+  const clarificationWaitId = useMemo(() => {
+    if (!waitingForAnswer) return undefined
+    for (let index = run.view.events.length - 1; index >= 0; index -= 1) {
+      const event = run.view.events[index]
+      if (event.type === 'ClarificationRequired') return event.waitId
+    }
+    return runState.waitingClarificationId ?? undefined
+  }, [run.view.events, runState, waitingForAnswer])
   const transcript = useAgentTranscript(
     threadId,
-    `${activeRunId ?? 'none'}:${runState?.status ?? 'idle'}:${runState?.updatedAt ?? ''}`
+    `${activeRunId ?? 'none'}:${runState?.status ?? 'idle'}:${runState?.updatedAt ?? ''}:${run.queueRevision}`
   )
   const historicalMessages = useMemo(
-    () => transcript.entries.filter((entry) => (
-      entry.runId !== activeRunId
-      && (entry.kind === 'user_message' || entry.kind === 'assistant_message')
-    )),
+    () => transcript.entries.filter((entry) => {
+      if (entry.kind === 'queued_message') {
+        const payload = agentQueuedMessagePayloadSchema.safeParse(entry.payload)
+        return payload.success && !(payload.data.mode === 'after_task' && payload.data.status === 'consumed')
+      }
+      return entry.runId !== activeRunId
+        && (entry.kind === 'user_message' || entry.kind === 'assistant_message')
+    }),
     [activeRunId, transcript.entries]
   )
+
+  useEffect(() => {
+    if (waitingForAnswer) setMessageMode('clarification')
+    else if (messageMode === 'clarification') setMessageMode('current_task')
+  }, [messageMode, waitingForAnswer])
 
   useEffect(() => {
     if (!pendingGoal) {
@@ -137,10 +157,16 @@ export function AssistantConversation(): JSX.Element {
   }, [approval, deferredStreamedText, historicalMessages.length, runState?.status, tools.length])
 
   const submit = useCallback((goal: string): void => {
+    if (busy) {
+      void run.enqueue(goal, messageMode, clarificationWaitId).then((accepted) => {
+        if (accepted) setDocument(createEmptyPromptDocument())
+      })
+      return
+    }
     void startRun(goal).then((started) => {
       if (started) setDocument(createEmptyPromptDocument())
     })
-  }, [startRun])
+  }, [busy, clarificationWaitId, messageMode, run, startRun])
 
   const openTask = useCallback((taskId: string): void => {
     setResultError(null)
@@ -184,6 +210,37 @@ export function AssistantConversation(): JSX.Element {
         {historicalMessages.map((entry) => {
           const content = getAgentSessionMessageContent(entry)
           if (!content) return null
+          if (entry.kind === 'queued_message') {
+            const payload = agentQueuedMessagePayloadSchema.safeParse(entry.payload)
+            if (!payload.success) return null
+            const statusLabel = payload.data.status === 'accepted'
+              ? '待处理'
+              : payload.data.status === 'consumed'
+                ? '已处理'
+                : payload.data.status === 'cancelled' ? '已取消' : '处理失败'
+            const modeLabel = payload.data.mode === 'clarification'
+              ? '回答当前问题'
+              : payload.data.mode === 'current_task' ? '补充当前任务' : '任务结束后继续'
+            return (
+              <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
+                <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}>
+                  <UserRound className="h-3.5 w-3.5" />你 · {modeLabel} · {statusLabel}
+                </div>
+                <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
+                {payload.data.status === 'accepted' ? (
+                  <UiButton
+                    type="button"
+                    size="sm"
+                    variant="plain"
+                    className="mt-1.5 !h-7 px-2"
+                    onClick={() => void run.cancelQueued(entry.entryId)}
+                  >取消排队</UiButton>
+                ) : payload.data.statusReason ? (
+                  <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>{payload.data.statusReason}</p>
+                ) : null}
+              </UiPanel>
+            )
+          }
           return entry.kind === 'user_message' ? (
             <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
               <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
@@ -265,7 +322,11 @@ export function AssistantConversation(): JSX.Element {
         value={document}
         onChange={setDocument}
         onSubmit={submit}
-        disabled={busy}
+        disabled={false}
+        busy={busy}
+        waitingForAnswer={waitingForAnswer}
+        messageMode={messageMode}
+        onMessageModeChange={setMessageMode}
         submitting={run.submitting}
         approvalMode={approvalMode}
         onApprovalModeChange={setApprovalMode}

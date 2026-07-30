@@ -15,6 +15,62 @@ export const agentSessionEntryKindSchema = z.enum([
 ])
 export type AgentSessionEntryKind = z.infer<typeof agentSessionEntryKindSchema>
 
+export const agentQueuedMessageModeSchema = z.enum(['clarification', 'current_task', 'after_task'])
+export const agentQueuedMessageStatusSchema = z.enum(['accepted', 'consumed', 'cancelled', 'failed'])
+export const agentQueuedMessagePayloadSchema = z.object({
+  clientMessageId: z.string().min(1).max(200),
+  content: z.string().min(1).max(32 * 1024),
+  mode: agentQueuedMessageModeSchema,
+  status: agentQueuedMessageStatusSchema,
+  targetRunId: z.string().min(1),
+  waitId: z.string().min(1).max(200).optional(),
+  expiresAt: z.string().datetime().optional(),
+  consumedByRunId: z.string().min(1).nullable().optional(),
+  statusReason: z.string().max(500).nullable().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.mode === 'clarification' && !value.waitId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['waitId'],
+      message: '回答当前问题必须携带 waitId',
+    })
+  }
+  if (value.mode !== 'clarification' && value.waitId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['waitId'],
+      message: '只有澄清回答可以携带 waitId',
+    })
+  }
+})
+export type AgentQueuedMessagePayload = z.infer<typeof agentQueuedMessagePayloadSchema>
+
+export const agentEnqueueMessageRequestSchema = z.object({
+  schemaVersion: z.literal(AGENT_RUNTIME_SCHEMA_VERSION),
+  threadId: z.string().min(1),
+  runId: z.string().min(1),
+  clientMessageId: z.string().min(1).max(200),
+  content: z.string().trim().min(1).max(32 * 1024),
+  mode: agentQueuedMessageModeSchema,
+  waitId: z.string().min(1).max(200).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.mode === 'clarification' && !value.waitId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['waitId'], message: '回答当前问题必须携带 waitId' })
+  }
+  if (value.mode !== 'clarification' && value.waitId) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['waitId'], message: '只有澄清回答可以携带 waitId' })
+  }
+})
+export type AgentEnqueueMessageRequest = z.infer<typeof agentEnqueueMessageRequestSchema>
+
+export const agentCancelQueuedMessageRequestSchema = z.object({
+  schemaVersion: z.literal(AGENT_RUNTIME_SCHEMA_VERSION),
+  threadId: z.string().min(1),
+  runId: z.string().min(1),
+  entryId: z.string().min(1),
+}).strict()
+export type AgentCancelQueuedMessageRequest = z.infer<typeof agentCancelQueuedMessageRequestSchema>
+
 export const agentSessionEntryStatusSchema = z.enum(['active', 'superseded', 'tombstoned'])
 
 const messagePayloadSchema = z.object({
@@ -63,12 +119,23 @@ export const agentSessionEntrySchema = z.object({
   runId: z.string().min(1).nullable(),
   turn: z.number().int().positive().nullable(),
   kind: agentSessionEntryKindSchema,
-  payload: z.union([messagePayloadSchema, agentSessionCompactionPayloadSchema, genericPayloadSchema]),
+  payload: z.union([
+    messagePayloadSchema,
+    agentSessionCompactionPayloadSchema,
+    agentQueuedMessagePayloadSchema,
+    genericPayloadSchema,
+  ]),
   status: agentSessionEntryStatusSchema,
   parentEntryId: z.string().min(1).nullable(),
   createdAt: z.string().datetime(),
 }).strict()
 export type AgentSessionEntry = z.infer<typeof agentSessionEntrySchema>
+
+export const agentEnqueueMessageResultSchema = z.object({
+  entry: agentSessionEntrySchema,
+  deduplicated: z.boolean(),
+}).strict()
+export type AgentEnqueueMessageResult = z.infer<typeof agentEnqueueMessageResultSchema>
 
 export const agentThreadSummarySchema = z.object({
   threadId: z.string().min(1).max(200),
@@ -119,6 +186,10 @@ export const agentTranscriptPageSchema = z.object({
 export type AgentTranscriptPage = z.infer<typeof agentTranscriptPageSchema>
 
 export function getAgentSessionMessageContent(entry: AgentSessionEntry): string | null {
+  if (entry.kind === 'queued_message') {
+    const queued = agentQueuedMessagePayloadSchema.safeParse(entry.payload)
+    return queued.success ? queued.data.content : null
+  }
   if (entry.kind !== 'user_message' && entry.kind !== 'assistant_message') return null
   const parsed = messagePayloadSchema.safeParse(entry.payload)
   return parsed.success ? parsed.data.content : null

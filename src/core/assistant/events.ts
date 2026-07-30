@@ -11,6 +11,7 @@ export const agentRunStatusSchema = z.enum([
   'running',
   'waiting_tool',
   'waiting_approval',
+  'waiting_user',
   'paused',
   'completed',
   'failed',
@@ -66,6 +67,7 @@ export const agentRunStateSchema = z.object({
   currentStepId: z.string().min(1).nullable(),
   currentToolCallId: z.string().min(1).nullable(),
   waitingApprovalId: z.string().min(1).nullable(),
+  waitingClarificationId: z.string().min(1).nullable().optional(),
   startedAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
   finalText: z.string().nullable(),
@@ -117,6 +119,7 @@ const runStartedEventSchema = z.object({
   ...eventBase,
   type: z.literal('RunStarted'),
   threadId: z.string().min(1),
+  goal: z.string().min(1).max(32 * 1024).optional(),
 }).strict()
 
 const runStateChangedEventSchema = z.object({
@@ -264,6 +267,7 @@ const verificationCompletedEventSchema = z.object({
 const clarificationRequiredEventSchema = z.object({
   ...eventBase,
   type: z.literal('ClarificationRequired'),
+  waitId: z.string().min(1).max(200).optional(),
   question: z.string().min(1).max(2_000),
   reason: z.string().min(1).max(500),
 }).strict()

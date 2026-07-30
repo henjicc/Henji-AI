@@ -8,6 +8,7 @@ const statusLabels: Record<AgentRunState['status'], string> = {
   running: '执行中',
   waiting_tool: '等待工具',
   waiting_approval: '等待审批',
+  waiting_user: '等待你的回答',
   paused: '已在安全点暂停',
   completed: '已结束',
   failed: '失败',

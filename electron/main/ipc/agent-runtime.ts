@@ -12,6 +12,8 @@ import {
 import {
   agentListThreadsRequestSchema,
   agentTranscriptRequestSchema,
+  agentEnqueueMessageRequestSchema,
+  agentCancelQueuedMessageRequestSchema,
 } from '../../../src/core/assistant/session'
 import { getAgentRuntimeService } from '../services/agent-runtime/runtime'
 import { getAssistantUserInstructions } from '../services/assistant/user-instructions'
@@ -59,8 +61,14 @@ export function registerAgentRuntimeIpc(): void {
   registerIpcHandler('assistant:agent:listThreads', input => agentListThreadsRequestSchema.parse(input), (request) => (
     runtime.listThreads(request.limit)
   ), assertTrustedAssistantRenderer)
-  registerIpcHandler('assistant:agent:getTranscript', input => agentTranscriptRequestSchema.parse(input), (request) => (
-    runtime.getTranscript(request.threadId, request.afterSequence, request.limit)
+  registerIpcHandler('assistant:agent:getTranscript', input => agentTranscriptRequestSchema.parse(input), (request, event) => (
+    runtime.getTranscript(event.sender, request.threadId, request.afterSequence, request.limit)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:enqueueMessage', input => agentEnqueueMessageRequestSchema.parse(input), (request, event) => (
+    runtime.enqueueMessage(event.sender, request)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:cancelQueuedMessage', input => agentCancelQueuedMessageRequestSchema.parse(input), (request, event) => (
+    runtime.cancelQueuedMessage(event.sender, request)
   ), assertTrustedAssistantRenderer)
   registerIpcHandler(
     'assistant:agent:retryRun',

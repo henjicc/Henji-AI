@@ -61,6 +61,14 @@ export async function executeUtilityControlCommand(
     }).strict().parse(options.payload)
     return await cancelUtilityRun(runner, parsed.reason)
   }
+  if (options.action === 'run.clarification') {
+    const parsed = z.object({
+      runId: z.string().min(1),
+      waitId: z.string().min(1),
+      content: z.string().trim().min(1).max(32 * 1024),
+    }).strict().parse(options.payload)
+    return runner.respondClarification(parsed.waitId, parsed.content)
+  }
   const approval = z.object({
     runId: z.string().min(1),
     approvalId: z.string().min(1),

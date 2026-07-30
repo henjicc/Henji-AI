@@ -10,9 +10,12 @@ import {
   respondAgentApproval,
   resumeAgentRun,
   startAgentRun,
+  enqueueAgentMessage,
+  cancelQueuedAgentMessage,
 } from '@/commands/assistant'
 import type { AgentApprovalResponse } from '@/core/assistant/runtimeContracts'
 import type { AgentEvent } from '@/core/assistant/events'
+import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
 import { createLogger } from '@/core/logging'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
 
@@ -38,6 +41,13 @@ export interface UseAgentRunResult {
   view: AgentRunViewState
   submitting: boolean
   start: (goal: string) => Promise<boolean>
+  enqueue: (
+    content: string,
+    mode: AgentQueuedMessagePayload['mode'],
+    waitId?: string
+  ) => Promise<boolean>
+  cancelQueued: (entryId: string) => Promise<void>
+  queueRevision: number
   cancel: () => Promise<void>
   pause: () => Promise<void>
   resume: () => Promise<void>
@@ -49,10 +59,12 @@ export interface UseAgentRunResult {
 export function useAgentRun(): UseAgentRunResult {
   const [view, dispatch] = useReducer(agentRunViewReducer, undefined, createInitialAgentRunViewState)
   const [submitting, setSubmitting] = useState(false)
+  const [queueRevision, setQueueRevision] = useState(0)
   const activeRunId = useAssistantUiStore((state) => state.activeRunId)
   const threadId = useAssistantUiStore((state) => state.threadId)
   const approvalMode = useAssistantUiStore((state) => state.approvalMode)
   const activeRunIdRef = useRef(activeRunId)
+  const threadIdRef = useRef(threadId)
   const previousActiveRunIdRef = useRef(activeRunId)
   const hydratedRunIdRef = useRef<string | null>(null)
   const bufferedEventsRef = useRef(new Map<string, AgentEvent[]>())
@@ -67,6 +79,7 @@ export function useAgentRun(): UseAgentRunResult {
     hydratedRunIdRef.current = null
   }
   activeRunIdRef.current = activeRunId
+  threadIdRef.current = threadId
 
   const queueViewEvent = useCallback((event: AgentEvent): void => {
     pendingViewEventsRef.current.push(event)
@@ -191,6 +204,17 @@ export function useAgentRun(): UseAgentRunResult {
 
   useEffect(() => {
     const unsubscribe = onAgentEvent((payload) => {
+      if (
+        payload.event.type === 'RunStarted'
+        && payload.event.threadId === threadIdRef.current
+        && activeRunIdRef.current !== payload.runId
+      ) {
+        activeRunIdRef.current = payload.runId
+        useAssistantUiStore.getState().setActiveRun(
+          payload.runId,
+          payload.event.goal ?? '继续处理排队消息'
+        )
+      }
       const currentRunId = activeRunIdRef.current
       bufferRunEvent(payload.runId, payload.event)
       if (currentRunId === payload.runId && hydratedRunIdRef.current === payload.runId) {
@@ -310,6 +334,45 @@ export function useAgentRun(): UseAgentRunResult {
     }
   }, [approvalMode, consumeBufferedEvents, recoverAgentEventGap, submitting, threadId])
 
+  const enqueue = useCallback(async (
+    content: string,
+    mode: AgentQueuedMessagePayload['mode'],
+    waitId?: string
+  ): Promise<boolean> => {
+    const runId = activeRunIdRef.current
+    const normalized = content.trim()
+    if (!runId || !normalized || submitting) return false
+    setSubmitting(true)
+    try {
+      await enqueueAgentMessage({
+        threadId,
+        runId,
+        clientMessageId: crypto.randomUUID(),
+        content: normalized,
+        mode,
+        waitId,
+      })
+      setQueueRevision((revision) => revision + 1)
+      return true
+    } catch (error) {
+      dispatch({ type: 'action_error', message: safeErrorMessage(error) })
+      return false
+    } finally {
+      setSubmitting(false)
+    }
+  }, [submitting, threadId])
+
+  const cancelQueued = useCallback(async (entryId: string): Promise<void> => {
+    const runId = activeRunIdRef.current
+    if (!runId) return
+    try {
+      await cancelQueuedAgentMessage({ threadId, runId, entryId })
+      setQueueRevision((revision) => revision + 1)
+    } catch (error) {
+      dispatch({ type: 'action_error', message: safeErrorMessage(error) })
+    }
+  }, [threadId])
+
   const control = useCallback(async (
     action: 'cancel' | 'pause' | 'resume',
     invoke: (runId: string) => ReturnType<typeof getAgentRunState>
@@ -368,7 +431,10 @@ export function useAgentRun(): UseAgentRunResult {
   return {
     view,
     submitting,
+    queueRevision,
     start,
+    enqueue,
+    cancelQueued,
     cancel,
     pause,
     resume,

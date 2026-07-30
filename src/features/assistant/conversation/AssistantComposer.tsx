@@ -3,6 +3,7 @@ import { Send, Square } from 'lucide-react'
 
 import { Dropdown, PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 import type { AgentApprovalMode } from '@/core/assistant/runtimeContracts'
+import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
 import {
   toModelPromptText,
   type PromptDocumentV1,
@@ -13,6 +14,10 @@ interface AssistantComposerProps {
   onChange: (value: PromptDocumentV1) => void
   onSubmit: (goal: string) => void
   disabled: boolean
+  busy: boolean
+  waitingForAnswer: boolean
+  messageMode: AgentQueuedMessagePayload['mode']
+  onMessageModeChange: (mode: AgentQueuedMessagePayload['mode']) => void
   submitting: boolean
   approvalMode: AgentApprovalMode
   onApprovalModeChange: (mode: AgentApprovalMode) => void
@@ -29,6 +34,10 @@ export function AssistantComposer({
   onChange,
   onSubmit,
   disabled,
+  busy,
+  waitingForAnswer,
+  messageMode,
+  onMessageModeChange,
   submitting,
   approvalMode,
   onApprovalModeChange,
@@ -48,8 +57,10 @@ export function AssistantComposer({
         value={value}
         onChange={onChange}
         ariaLabel="向智能助手描述任务"
-        placeholder={disabled ? '当前任务结束后可继续提问' : '描述目标，或粘贴错误信息…'}
-        disabled={disabled || submitting}
+        placeholder={waitingForAnswer
+          ? '回答助手刚才的问题…'
+          : busy ? '可补充当前任务，或安排任务结束后继续…' : '描述目标，或粘贴错误信息…'}
+        disabled={submitting}
         maxCharacters={32 * 1024}
         submitShortcut="enter"
         onSubmit={submit}
@@ -58,6 +69,24 @@ export function AssistantComposer({
       />
       <div className="mt-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
+          {busy ? (
+            <Dropdown<AgentQueuedMessagePayload['mode']>
+              value={messageMode}
+              options={[
+                ...(waitingForAnswer
+                  ? [{ value: 'clarification' as const, label: '回答当前问题' }]
+                  : [
+                      { value: 'current_task' as const, label: '补充当前任务' },
+                      { value: 'after_task' as const, label: '任务结束后继续' },
+                    ]),
+              ]}
+              onSelect={onMessageModeChange}
+              minWidthStrategy="options"
+              panelWidthStrategy="options"
+              buttonClassName="!h-7 !rounded-md !px-2 text-2xs"
+              panelClassName="text-xs"
+            />
+          ) : null}
           <Dropdown<AgentApprovalMode>
             value={approvalMode}
             options={approvalModeOptions}
@@ -79,12 +108,12 @@ export function AssistantComposer({
           type="button"
           size="sm"
           variant="primary"
-          disabled={disabled || submitting || !toModelPromptText(value).trim()}
+          disabled={submitting || !toModelPromptText(value).trim()}
           onClick={submit}
           className="gap-1.5"
         >
           {submitting ? <Square className="h-3.5 w-3.5" /> : <Send className="h-3.5 w-3.5" />}
-          {submitting ? '启动中' : '发送'}
+          {submitting ? '提交中' : '发送'}
         </UiButton>
       </div>
     </div>

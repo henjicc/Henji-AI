@@ -55,6 +55,7 @@ interface AgentRuntimeManagerOptions {
   appendPermissionAudit: (payload: unknown) => unknown
   appendSessionCompaction: (payload: unknown) => unknown
   appendSavePoint: (payload: unknown) => unknown
+  consumeCurrentTaskMessages: (payload: unknown) => unknown
 }
 
 interface PendingCommand {
@@ -130,6 +131,14 @@ export class AgentRuntimeManager {
       runId,
       approvalId,
       decision,
+    }))
+  }
+
+  async respondClarification(runId: string, waitId: string, content: string): Promise<AgentRunState> {
+    return agentRunStateSchema.parse(await this.invoke('run.clarification', {
+      runId,
+      waitId,
+      content,
     }))
   }
 
@@ -363,6 +372,8 @@ export class AgentRuntimeManager {
         data = this.options.appendSessionCompaction(payload)
       } else if (operation === 'session.append_save_point') {
         data = this.options.appendSavePoint(payload)
+      } else if (operation === 'session.consume_current_messages') {
+        data = this.options.consumeCurrentTaskMessages(payload)
       } else {
         throw new Error(`不支持的 utility RPC 操作：${String(operation)}`)
       }

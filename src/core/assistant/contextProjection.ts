@@ -4,6 +4,7 @@ import { modelStepMessageSchema, type ModelStepMessage } from '../llm/modelStep'
 import {
   agentSemanticSummarySchema,
   agentSessionCompactionPayloadSchema,
+  agentQueuedMessagePayloadSchema,
   getAgentSessionMessageContent,
   type AgentSessionEntry,
   type AgentSessionEntryKind,
@@ -69,11 +70,29 @@ function projectCompaction(entry: AgentSessionEntry): AgentContextMessage | null
   }
 }
 
+function projectQueuedMessage(entry: AgentSessionEntry): AgentContextMessage | null {
+  const payload = agentQueuedMessagePayloadSchema.safeParse(entry.payload)
+  if (
+    !payload.success
+    || payload.data.status !== 'consumed'
+    || payload.data.mode === 'after_task'
+  ) return null
+  return {
+    version: AGENT_CONTEXT_MESSAGE_VERSION,
+    role: 'user',
+    content: payload.data.content,
+    trust: 'untrusted_user',
+    sourceEntryId: entry.entryId,
+    sourceSequence: entry.sequence,
+  }
+}
+
 export function createDefaultSessionProjectorRegistry(): AgentSessionProjectorRegistry {
   const registry = new AgentSessionProjectorRegistry()
   registry.register('user_message', projectMessage)
   registry.register('assistant_message', projectMessage)
   registry.register('compaction', projectCompaction)
+  registry.register('queued_message', projectQueuedMessage)
   return registry
 }
 

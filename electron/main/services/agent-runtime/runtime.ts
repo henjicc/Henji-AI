@@ -11,6 +11,12 @@ import {
 } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentRunSummary } from '../../../../src/core/assistant/persistence'
 import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../src/core/assistant/session'
+import {
+  type AgentEnqueueMessageRequest,
+  type AgentEnqueueMessageResult,
+  type AgentCancelQueuedMessageRequest,
+  type AgentSessionEntry,
+} from '../../../../src/core/assistant/session'
 import type { AgentEvent, AgentRunState } from '../../../../src/core/assistant/events'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
 import {
@@ -23,17 +29,7 @@ import {
   agentMemoryRetrievalQuerySchema,
   type AgentMemoryRetrievalResult,
 } from '../../../../src/core/assistant/memory'
-import type {
-  FrontendToolOperation,
-  HostCommandResult,
-  HostContextSnapshot,
-} from '../../../../src/core/assistant/hostContracts'
-import {
-  cancelAssistantFrontendTool,
-  createFrontendToolRequest,
-  getAssistantHostContext,
-  requestAssistantFrontendTool,
-} from '../assistant/frontend-tool-bridge'
+import { getAssistantHostContext } from '../assistant/frontend-tool-bridge'
 import { getDb } from '../db'
 import { getLlmProviderApiKey } from '../keystore'
 import { getAgentMemoryStore } from '../assistant/memory'
@@ -52,8 +48,13 @@ import { appendValidatedSavePoint } from './persistence/save-point-append'
 import type { AgentPermissionAuditRecord } from '../../../../src/core/assistant/permissionAudit'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
-import { artifactPayloadSchema, toolExecutionPayloadSchema } from './runtime-schemas'
+import { artifactPayloadSchema } from './runtime-schemas'
 import { settleRuntimeRun } from './runtime-settlement'
+import { AgentMessageQueueCoordinator } from './message-queue-coordinator'
+import {
+  executeAgentToolInMain,
+  invokeAgentFrontendTool,
+} from './host-bridge'
 const logger = createMainLogger('main.agent_runtime')
 
 interface AgentRunRecord {
@@ -75,7 +76,9 @@ export class AgentRuntimeService {
   private readonly agentTraceStore = getAgentTraceStore()
   private readonly memory = getAgentMemoryStore()
   private readonly registry = createBuiltinAgentToolRegistry(
-    (operation, context) => this.invokeFrontend(operation, context),
+    (operation, context) => invokeAgentFrontendTool(
+      operation, context, (runId) => this.runs.get(runId)
+    ),
     {
       describe: (request) => this.persistence.describeArtifact(request),
       read: (request) => this.persistence.readArtifact(request),
@@ -83,7 +86,9 @@ export class AgentRuntimeService {
   )
   private readonly manager = new AgentRuntimeManager({
     getModelApiKey: getLlmProviderApiKey,
-    executeTool: (payload, signal) => this.executeToolInMain(payload, signal),
+    executeTool: (payload, signal) => executeAgentToolInMain(
+      payload, signal, this.registry, (runId) => this.runs.get(runId)
+    ),
     saveArtifact: (payload) => this.saveArtifact(payload),
     describeArtifact: (payload) => this.describeArtifact(payload),
     readArtifact: (payload) => this.readArtifact(payload),
@@ -110,6 +115,22 @@ export class AgentRuntimeService {
       (runId) => this.runs.get(runId)?.threadId,
       this.persistence
     ),
+    consumeCurrentTaskMessages: (payload) => {
+      const runId = typeof payload === 'object' && payload ? Reflect.get(payload, 'runId') : null
+      if (typeof runId !== 'string' || !this.runs.has(runId)) {
+        throw new Error('[PERMISSION_DENIED] 队列消费不属于当前 run')
+      }
+      return this.persistence.consumeCurrentTaskMessages(runId)
+    },
+  })
+  private readonly messageQueue = new AgentMessageQueueCoordinator({
+    persistence: this.persistence,
+    manager: this.manager,
+    commitControlState: (runId, state) => this.commitControlState(runId, state),
+    startContinuation: (owner, request, parentRunId, recoveryContext) => (
+      this.startRunWithParent(owner, request, parentRunId, recoveryContext)
+    ),
+    hasActiveThread: (threadId) => this.activeByThread.has(threadId),
   })
   constructor() { this.persistence.markInterruptedRuns() }
 
@@ -176,6 +197,17 @@ export class AgentRuntimeService {
       if (failed) this.updateState(runId, failed)
       throw error
     }
+  }
+
+  async enqueueMessage(
+    owner: WebContents,
+    raw: AgentEnqueueMessageRequest
+  ): Promise<AgentEnqueueMessageResult> {
+    return this.messageQueue.enqueue(this.requireOwnedRun(owner, raw.runId), raw)
+  }
+
+  cancelQueuedMessage(owner: WebContents, raw: AgentCancelQueuedMessageRequest): AgentSessionEntry {
+    return this.messageQueue.cancel(this.requireOwnedRun(owner, raw.runId), raw)
   }
 
   async cancelRun(owner: WebContents, runId: string, reason: string): Promise<AgentRunState> {
@@ -281,7 +313,13 @@ export class AgentRuntimeService {
     return this.persistence.listThreads(limit)
   }
 
-  getTranscript(threadId: string, afterSequence = 0, limit = 100): AgentTranscriptPage {
+  getTranscript(
+    owner: WebContents,
+    threadId: string,
+    afterSequence = 0,
+    limit = 100
+  ): AgentTranscriptPage {
+    void this.messageQueue.resume(owner, threadId)
     return this.persistence.loadTranscript(threadId, afterSequence, limit)
   }
 
@@ -340,13 +378,23 @@ export class AgentRuntimeService {
   private onTerminal(runId: string, state: AgentRunState): void {
     const record = this.runs.get(runId)
     this.updateState(runId, state)
+    if (state.status === 'failed' || state.status === 'cancelled') {
+      this.persistence.cancelCurrentTaskMessages(runId, '原任务已终止，未消费的当前任务补充已取消')
+    }
     settleRuntimeRun({
       runId, state, record, persistence: this.persistence,
       activeByThread: this.activeByThread,
       eventListeners: this.eventListeners,
       runs: this.runs,
     })
+    if (record) {
+      const owner = webContents.fromId(record.ownerWebContentsId)
+      if (owner && !owner.isDestroyed()) {
+        void this.messageQueue.settle(owner, runId, state)
+      }
+    }
   }
+
 
   private onProcessFailure(runIds: string[], reason: string): void {
     this.agentTraceStore.markInterrupted(runIds)
@@ -389,29 +437,6 @@ export class AgentRuntimeService {
     }
   }
 
-  private async executeToolInMain(payload: unknown, signal: AbortSignal): Promise<unknown> {
-    const parsed = toolExecutionPayloadSchema.parse(payload)
-    const record = this.runs.get(parsed.runId)
-    if (!record || record.threadId !== parsed.threadId) {
-      throw new Error('[PERMISSION_DENIED] 工具调用不属于当前 run/thread')
-    }
-    const definition = this.registry.get(parsed.toolName)
-    if (!definition) throw new Error(`[unknown_tool] 未注册工具：${parsed.toolName}`)
-    const input = definition.inputSchema.parse(parsed.input)
-    const hostContext = this.getRunHostContext(parsed.runId)
-    const output = await definition.execute(input, {
-      runId: parsed.runId,
-      threadId: parsed.threadId,
-      toolCallId: parsed.toolCallId,
-      signal,
-      hostContext,
-    })
-    return {
-      output: definition.outputSchema.parse(output),
-      hostContext: this.getRunHostContext(parsed.runId),
-    }
-  }
-
   private saveArtifact(payload: unknown): void {
     const parsed = artifactPayloadSchema.parse(payload)
     this.persistence.saveArtifact(parsed.runId, parsed.artifact)
@@ -451,38 +476,6 @@ export class AgentRuntimeService {
       throw new Error('[run_not_owned] 运行不存在、渲染会话已变化或无权访问')
     }
     return record
-  }
-
-  private getRunHostContext(runId: string): HostContextSnapshot | null {
-    const record = this.runs.get(runId)
-    if (!record) return null
-    const context = getAssistantHostContext(record.ownerWebContentsId)
-    return context?.rendererSessionId === record.rendererSessionId ? context : null
-  }
-
-  private async invokeFrontend(
-    operation: FrontendToolOperation,
-    context: { runId: string; toolCallId: string; signal: AbortSignal }
-  ): Promise<HostCommandResult> {
-    const record = this.runs.get(context.runId)
-    if (!record) throw new Error('[run_not_found] Agent run not found')
-    const sender = webContents.fromId(record.ownerWebContentsId)
-    if (!sender || sender.isDestroyed()) throw new Error('[renderer_gone] Renderer is unavailable')
-    const callId = randomUUID()
-    const onAbort = (): void => { cancelAssistantFrontendTool(callId, 'Agent 工具调用已取消') }
-    context.signal.addEventListener('abort', onAbort, { once: true })
-    try {
-      return await requestAssistantFrontendTool(sender, createFrontendToolRequest({
-        runId: context.runId,
-        toolCallId: context.toolCallId,
-        callId,
-        idempotencyKey: `${context.runId}:${context.toolCallId}`,
-        deadline: Date.now() + 60_000,
-        operation,
-      }))
-    } finally {
-      context.signal.removeEventListener('abort', onAbort)
-    }
   }
 
   private sendEvent(record: AgentRunRecord, runId: string, event: AgentEvent): void {

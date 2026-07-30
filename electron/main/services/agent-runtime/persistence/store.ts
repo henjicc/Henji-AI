@@ -24,6 +24,12 @@ import { AgentArtifactPersistenceStore } from './artifact-store'
 import { AgentSessionStore, type AgentConversationProjection } from './session-store'
 import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../../src/core/assistant/session'
 import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
+import type {
+  AgentEnqueueMessageRequest,
+  AgentEnqueueMessageResult,
+  AgentCancelQueuedMessageRequest,
+  AgentSessionEntry,
+} from '../../../../../src/core/assistant/session'
 import {
   agentSavePointAppendSchema,
   type AgentSavePoint,
@@ -234,6 +240,60 @@ export class AgentPersistenceStore {
     return this.savePointStore.count(runId)
   }
 
+  enqueueMessage(input: AgentEnqueueMessageRequest): AgentEnqueueMessageResult {
+    return this.database.transaction(() => this.sessionStore.enqueueMessage({
+      threadId: input.threadId,
+      runId: input.runId,
+      clientMessageId: input.clientMessageId,
+      content: input.content,
+      mode: input.mode,
+      waitId: input.waitId,
+    }))()
+  }
+
+  consumeCurrentTaskMessages(runId: string): AgentSessionEntry[] {
+    return this.database.transaction(() => (
+      this.sessionStore.consumeQueuedMessages(runId, 'current_task')
+    ))()
+  }
+
+  consumeAfterTaskMessages(runId: string): AgentSessionEntry[] {
+    return this.database.transaction(() => (
+      this.sessionStore.consumeQueuedMessages(runId, 'after_task')
+    ))()
+  }
+
+  listAfterTaskMessages(runId: string): AgentSessionEntry[] {
+    return this.sessionStore.listQueuedMessages(runId, 'after_task')
+  }
+
+  findAcceptedAfterTaskRun(threadId: string): string | null {
+    return this.sessionStore.findAcceptedAfterTaskRun(threadId)
+  }
+
+  updateQueuedMessageStatus(
+    entryId: string,
+    expected: 'accepted' | 'consumed' | 'cancelled' | 'failed',
+    status: 'accepted' | 'consumed' | 'cancelled' | 'failed',
+    reason?: string,
+    consumedByRunId?: string
+  ): AgentSessionEntry | null {
+    return this.sessionStore.updateQueuedMessageStatus(
+      entryId, expected, status, reason, consumedByRunId
+    )
+  }
+
+  cancelQueuedMessage(input: AgentCancelQueuedMessageRequest): AgentSessionEntry {
+    return this.database.transaction(() => this.sessionStore.cancelQueuedMessage(
+      input.threadId,
+      input.entryId
+    ))()
+  }
+
+  cancelCurrentTaskMessages(runId: string, reason: string): number {
+    return this.sessionStore.cancelQueuedMessages(runId, reason)
+  }
+
   saveArtifact(runId: string, artifact: AgentContextArtifact): void {
     this.database.prepare(`
       INSERT OR REPLACE INTO agent_artifacts(
@@ -320,7 +380,7 @@ export class AgentPersistenceStore {
   markInterruptedRuns(): number {
     const rows = this.database.prepare(`
       SELECT * FROM agent_runs
-      WHERE status IN ('initializing', 'running', 'waiting_tool', 'waiting_approval', 'paused')
+      WHERE status IN ('initializing', 'running', 'waiting_tool', 'waiting_approval', 'waiting_user', 'paused')
     `).all() as RunRow[]
     for (const row of rows) {
       const mismatch = row.checkpoint_version !== AGENT_CHECKPOINT_VERSION
@@ -330,6 +390,10 @@ export class AgentPersistenceStore {
         mismatch
           ? '保存的任务检查点版本与当前应用不兼容；为避免错误重放，需要由用户确认后重新运行'
           : '应用在任务完成前退出；为避免重复执行未知副作用，需要由用户确认后重试'
+      )
+      this.sessionStore.cancelQueuedMessages(
+        row.run_id,
+        '应用退出前未到达消费点，当前任务补充已安全取消'
       )
       logger.warn('检测到未完成 Agent 运行，已转为安全恢复状态', {
         event: 'agent_persistence.run.recovery_required',

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
+import { AGENT_SESSION_ENTRY_SCHEMA_VERSION, agentSessionEntrySchema } from '../../../../../src/core/assistant/session'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
 import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
@@ -182,6 +183,133 @@ describe('AgentRunner', () => {
     expect(events.some((event) => event.type === 'PlanUpdated')).toBe(true)
     expect(events.some((event) => event.type === 'VerificationCompleted' && event.passed)).toBe(true)
     expect(runner.getEventHistory()).toEqual(events)
+  })
+
+  it('澄清问题使用稳定 waitId 恢复原运行且回答只消费一次', async () => {
+    const { registry, gateway } = createRuntime()
+    let primaryCalls = 0
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runModelStep = vi.fn(async (input: ModelStepInput) => {
+      if (input.stepId.startsWith('router:')) {
+        return result(input, {
+          text: '',
+          structuredOutput: {
+            intent: 'general', complexity: 'ambiguous', path: 'primary',
+            toolDomains: ['catalog'], reason: '需要澄清',
+          },
+          responseMessages: [{ role: 'assistant', content: '' }],
+        })
+      }
+      primaryCalls += 1
+      if (primaryCalls === 1) {
+        return result(input, {
+          text: '请确认使用横版还是竖版？',
+          responseMessages: [{ role: 'assistant', content: '请确认使用横版还是竖版？' }],
+        })
+      }
+      expect(input.messages).toEqual(expect.arrayContaining([
+        { role: 'user', content: '使用横版' },
+      ]))
+      return result(input, {
+        text: '已确认使用横版。',
+        responseMessages: [{ role: 'assistant', content: '已确认使用横版。' }],
+      })
+    })
+    const runnerRef: { current: AgentRunner | null } = { current: null }
+    let duplicateRejected = false
+    const runner = new AgentRunner({
+      runId: 'run-clarification',
+      request: runRequest('帮我选择一个版式'),
+      dependencies: {
+        registry,
+        gateway,
+        getHostContext: hostContext,
+        runModelStep,
+        cancelModelStep: vi.fn(),
+        onEvent: (event) => {
+          if (event.type !== 'ClarificationRequired') return
+          if (!event.waitId) throw new Error('expected clarification waitId')
+          runnerRef.current?.respondClarification(event.waitId, '使用横版')
+          try {
+            runnerRef.current?.respondClarification(event.waitId, '重复回答')
+          } catch {
+            duplicateRejected = true
+          }
+        },
+        onTerminal: terminalResolve,
+      },
+    })
+    runnerRef.current = runner
+    runner.start()
+    const state = await terminal
+    expect(state).toMatchObject({ status: 'completed', finalText: '已确认使用横版。' })
+    expect(duplicateRejected).toBe(true)
+    expect(primaryCalls).toBe(2)
+  })
+
+  it('最终回复前到达的当前任务补充会在 settled 边界触发下一轮', async () => {
+    const { registry, gateway } = createRuntime()
+    let consumeCalls = 0
+    let primaryCalls = 0
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runModelStep = vi.fn(async (input: ModelStepInput) => {
+      if (input.stepId.startsWith('router:')) {
+        return result(input, {
+          text: '',
+          structuredOutput: {
+            intent: 'general', complexity: 'simple', path: 'primary',
+            toolDomains: ['catalog'], reason: '一般问答',
+          },
+          responseMessages: [{ role: 'assistant', content: '' }],
+        })
+      }
+      primaryCalls += 1
+      if (primaryCalls === 2) {
+        expect(input.messages).toEqual(expect.arrayContaining([
+          { role: 'user', content: '再加一个约束' },
+        ]))
+      }
+      return result(input, {
+        text: primaryCalls === 1 ? '第一版回答' : '包含补充约束的回答',
+        responseMessages: [{
+          role: 'assistant',
+          content: primaryCalls === 1 ? '第一版回答' : '包含补充约束的回答',
+        }],
+      })
+    })
+    const runner = new AgentRunner({
+      runId: 'run-current-message',
+      request: runRequest('先给一个回答'),
+      dependencies: {
+        registry,
+        gateway,
+        getHostContext: hostContext,
+        runModelStep,
+        cancelModelStep: vi.fn(),
+        consumeCurrentTaskMessages: async () => {
+          consumeCalls += 1
+          if (consumeCalls !== 2) return []
+          return [agentSessionEntrySchema.parse({
+            schemaVersion: AGENT_SESSION_ENTRY_SCHEMA_VERSION,
+            entryId: 'queued-1', threadId: 'thread-1', sequence: 2,
+            runId: 'run-current-message', turn: null, kind: 'queued_message',
+            payload: {
+              clientMessageId: 'client-1', content: '再加一个约束', mode: 'current_task',
+              status: 'consumed', targetRunId: 'run-current-message',
+              consumedByRunId: 'run-current-message',
+            },
+            status: 'active', parentEntryId: null, createdAt: new Date().toISOString(),
+          })]
+        },
+        onTerminal: terminalResolve,
+      },
+    })
+    runner.start()
+    const state = await terminal
+    expect(state.finalText).toBe('包含补充约束的回答')
+    expect(primaryCalls).toBe(2)
   })
 
   it('R2 工具暂停审批，通过后回注 observation 并完成', async () => {

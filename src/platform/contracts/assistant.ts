@@ -31,6 +31,10 @@ import type {
   AgentThreadSummary,
   AgentTranscriptPage,
   AgentTranscriptRequest,
+  AgentEnqueueMessageRequest,
+  AgentEnqueueMessageResult,
+  AgentCancelQueuedMessageRequest,
+  AgentSessionEntry,
 } from '@/core/assistant/session'
 import type {
   AgentMemoryRecord,
@@ -69,6 +73,8 @@ export interface AssistantPlatform {
   listRuns(request: AgentListRunsRequest): Promise<AgentRunSummary[]>
   listThreads(request: AgentListThreadsRequest): Promise<AgentThreadSummary[]>
   getTranscript(request: AgentTranscriptRequest): Promise<AgentTranscriptPage>
+  enqueueMessage(request: AgentEnqueueMessageRequest): Promise<AgentEnqueueMessageResult>
+  cancelQueuedMessage(request: AgentCancelQueuedMessageRequest): Promise<AgentSessionEntry>
   retryRun(request: AgentRetryRunRequest): Promise<AgentStartRunResult>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }

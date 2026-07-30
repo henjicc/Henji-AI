@@ -15,6 +15,7 @@ import {
   agentSessionCompactionAppendSchema,
 } from '../../src/core/assistant/session'
 import { agentSavePointAppendSchema, agentSavePointSchema } from '../../src/core/assistant/turn'
+import { agentSessionEntrySchema } from '../../src/core/assistant/session'
 import {
   agentArtifactDescribeRequestSchema,
   agentArtifactDescriptorSchema,
@@ -418,6 +419,9 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
         agentSavePointAppendSchema.parse(input)
         return agentSavePointSchema.parse(await rpc('session.append_save_point', input))
       },
+      consumeCurrentTaskMessages: async (runId) => z.array(agentSessionEntrySchema).parse(
+        await rpc('session.consume_current_messages', { runId })
+      ),
       retrieveMemory: async (query, signal) => agentMemoryRetrievalResultSchema.parse(
         await rpc('memory.retrieve', query, signal)
       ),

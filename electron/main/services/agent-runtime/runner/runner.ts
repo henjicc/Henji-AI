@@ -1,7 +1,9 @@
 import { createMainLogger } from '../../logging'
-import type { AgentApprovalRequest, AgentEventInput, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
+import { randomUUID } from 'node:crypto'
+
+import type { AgentEventInput, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage, ModelStepResult } from '../../../../../src/core/llm/modelStep'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { AgentArtifactStore } from '../context/offload'
 import { AgentContextBuilder } from '../context/builder'
@@ -15,13 +17,11 @@ import { errorCode, toolMessage } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
 import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
 import type { AgentRunnerOptions } from './types'
-import { AgentApprovalWaiter } from './approval-waiter'
 import { AgentRecoveryWriteGuard } from './recovery-guard'
 import { markWorkingSummaryRecoveryVerified } from './working-summary'
 import { AgentMemoryContextProvider } from './memory-context'
 import { AgentRunnerLifecycle } from './lifecycle'
 import { AgentModelOutputGuard } from './model-output-guard'
-import { logApprovalExpired, logApprovalRequested, logApprovalResolved } from './approval-logging'
 import { AgentTerminalApprovalCleanup } from './terminal-approval-cleanup'
 import { isContextOverflowError } from '../context/semantic-compaction'
 import { AgentConversationCompactor } from './conversation-compactor'
@@ -30,6 +30,9 @@ import { AgentToolExecutionCoordinator } from './tool-execution-coordinator'
 import { AgentSavePointCoordinator } from './save-point-coordinator'
 import { AgentTurnContextCoordinator } from './turn-context-coordinator'
 import { logAgentToolActivation } from './activation-logging'
+import { AgentClarificationWaiter } from './clarification-waiter'
+import { AgentApprovalCoordinator } from './approval-coordinator'
+import { AgentCurrentMessageConsumer } from './current-message-consumer'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -48,7 +51,9 @@ export class AgentRunner {
   private state: AgentRunState
   private pausedFrom: Exclude<AgentRunStatus, 'paused'> = 'running'
   private pauseWaiters: Array<() => void> = []
-  private readonly approvalWaiter = new AgentApprovalWaiter()
+  private readonly approvalCoordinator: AgentApprovalCoordinator
+  private readonly currentMessageConsumer: AgentCurrentMessageConsumer
+  private readonly clarificationWaiter = new AgentClarificationWaiter()
   private readonly recoveryGuard: AgentRecoveryWriteGuard
   private readonly memoryProvider: AgentMemoryContextProvider
   private readonly modelOutputGuard: AgentModelOutputGuard
@@ -58,6 +63,11 @@ export class AgentRunner {
   private started = false
   constructor(private readonly options: AgentRunnerOptions) {
     this.conversation = [...(options.conversationHistory ?? [])]
+    this.currentMessageConsumer = new AgentCurrentMessageConsumer(
+      options.runId,
+      this.conversation,
+      options.dependencies.consumeCurrentTaskMessages
+    )
     this.models = selectAgentRuntimeModels(options.request)
     this.budget = new AgentBudgetTracker(options.request.budget)
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
@@ -83,6 +93,18 @@ export class AgentRunner {
     this.memoryProvider = new AgentMemoryContextProvider(options.runId, options.memoryContext ?? [], options.dependencies.retrieveMemory)
     this.terminalApprovalCleanup = new AgentTerminalApprovalCleanup(options.runId, () => (
       options.dependencies.gateway.expireRunApprovals(options.runId)))
+    this.approvalCoordinator = new AgentApprovalCoordinator({
+      runId: options.runId,
+      gateway: options.dependencies.gateway,
+      getStatus: () => this.machine.status,
+      getCurrentToolCallId: () => this.state.currentToolCallId,
+      setCurrentToolCallId: (toolCallId) => { this.state.currentToolCallId = toolCallId },
+      setWaitingApprovalId: (approvalId) => { this.state.waitingApprovalId = approvalId },
+      transition: (status, reason) => this.transition(status, reason),
+      setPausedFrom: (status) => { this.pausedFrom = status },
+      emit: (event) => this.emit(event),
+      onAsyncError: (error) => this.handleAsyncEventError(error),
+    })
     this.modelTurnCoordinator = new AgentModelTurnCoordinator({
       runId: options.runId,
       models: this.models,
@@ -121,7 +143,7 @@ export class AgentRunner {
       recordToolCall: (signature) => this.budget.recordToolCall(signature),
       recordProgress: (signature) => this.budget.recordProgress(signature),
       setActiveToolCall: (toolCallId) => this.setActiveToolCall(toolCallId),
-      requestApproval: (call, approval) => this.requestToolApproval(call, approval),
+      requestApproval: (call, approval) => this.approvalCoordinator.request(call, approval),
       onObservation: (call, observation) => {
         this.observations.push(observation)
         this.conversation.push(toolMessage(call, observation))
@@ -160,7 +182,11 @@ export class AgentRunner {
   start(): AgentRunState {
     if (this.started) return this.getState()
     this.started = true
-    this.emit({ type: 'RunStarted', threadId: this.options.request.threadId })
+    this.emit({
+      type: 'RunStarted',
+      threadId: this.options.request.threadId,
+      goal: this.options.request.goal,
+    })
     this.transition('running', this.models.fellBack ? '主模型不可用，已使用已验证备用模型' : undefined)
     logger.info('Agent 运行开始', {
       event: 'agent_runtime.run.started',
@@ -200,7 +226,8 @@ export class AgentRunner {
     this.abortController.abort(reason)
     if (this.currentModelRequestId) this.options.dependencies.cancelModelStep(this.currentModelRequestId)
     this.terminalApprovalCleanup.start()
-    this.approvalWaiter.settle('reject')
+    this.approvalCoordinator.cancel()
+    this.clarificationWaiter.cancel()
     const waiters = this.pauseWaiters
     this.pauseWaiters = []
     for (const resolve of waiters) resolve()
@@ -215,31 +242,18 @@ export class AgentRunner {
   async cancelAndWait(reason = '用户取消'): Promise<AgentRunState> {
     this.cancel(reason); await this.terminalApprovalCleanup.wait(); return this.getState() }
   async respondApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<AgentRunState> {
-    if (!this.approvalWaiter.matches(approvalId)) {
-      throw new Error('审批不属于当前等待中的工具调用')
+    await this.approvalCoordinator.respond(approvalId, decision)
+    return this.getState()
+  }
+  respondClarification(waitId: string, content: string): AgentRunState {
+    if (!content.trim()) throw new Error('[CLARIFICATION_EMPTY] 澄清回答不能为空')
+    if (!this.clarificationWaiter.settle(waitId, content.trim())) {
+      throw new Error('[CLARIFICATION_NOT_WAITING] 回答不属于当前等待中的问题')
     }
-    if (!this.approvalWaiter.claim(approvalId)) {
-      throw new Error('审批正在由另一个决策或过期流程处理')
-    }
-    try {
-      const resolved = await this.options.dependencies.gateway.resolveApproval(
-        approvalId,
-        this.options.runId,
-        decision
-      )
-      const toolCallId = this.state.currentToolCallId
-      if (!toolCallId) throw new Error('审批缺少关联工具调用')
-      this.emit({ type: 'ApprovalResolved', toolCallId, approvalId, decision: resolved })
-      logApprovalResolved(this.options.runId, toolCallId, approvalId, resolved)
-      this.state.waitingApprovalId = null
-      if (this.machine.status === 'waiting_approval') this.transition('waiting_tool')
-      else if (this.machine.status === 'paused') this.pausedFrom = 'waiting_tool'
-      this.approvalWaiter.settle(decision)
-      return this.getState()
-    } catch (error) {
-      this.approvalWaiter.release(approvalId)
-      throw error
-    }
+    this.state.waitingClarificationId = null
+    if (this.machine.status === 'waiting_user') this.transition('running', '用户已回答澄清问题')
+    else if (this.machine.status === 'paused') this.pausedFrom = 'running'
+    return this.getState()
   }
   private async execute(): Promise<void> {
     try {
@@ -257,6 +271,7 @@ export class AgentRunner {
       while (!isTerminalAgentState(this.machine.status)) {
         await this.waitIfPaused()
         this.throwIfCancelled()
+        await this.currentMessageConsumer.pull()
         const turn = this.budget.beginTurn()
         this.state.turn = turn
         const currentSnapshot = this.requireContext()
@@ -390,12 +405,24 @@ export class AgentRunner {
           continue
         }
         if (verification.clarificationRequired) {
+          const waitId = randomUUID()
+          const answerPromise = this.clarificationWaiter.wait(waitId)
+          this.state.waitingClarificationId = waitId
+          this.transition('waiting_user', verification.summary)
+          await this.savePointCoordinator.save('waiting_user', turnSnapshot)
           this.emit({
             type: 'ClarificationRequired',
+            waitId,
             question: finalText,
             reason: verification.summary,
           })
+          const answer = await answerPromise
+          this.throwIfCancelled()
+          if (!answer) throw new Error('[CLARIFICATION_CANCELLED] 澄清等待已取消')
+          this.conversation.push({ role: 'user', content: answer })
+          continue
         }
+        if (await this.currentMessageConsumer.pull() > 0) continue
         this.complete(finalText)
       }
     } catch (error) {
@@ -413,36 +440,6 @@ export class AgentRunner {
         this.pausedFrom = 'running'
       }
     }
-  }
-  private async requestToolApproval(
-    call: ModelStepToolCall,
-    approval: AgentApprovalRequest
-  ): Promise<'approve' | 'reject' | 'expired'> {
-    this.state.currentToolCallId = call.toolCallId
-    this.state.waitingApprovalId = approval.approvalId
-    this.transition('waiting_approval')
-    const decision = this.approvalWaiter.wait({
-      approvalId: approval.approvalId,
-      expiresAt: approval.expiresAt,
-      onExpired: () => this.handleApprovalExpired(approval.approvalId),
-    })
-    this.emit({ type: 'ApprovalRequired', toolCallId: call.toolCallId, approval })
-    logApprovalRequested(this.options.runId, call.toolCallId, call.toolName, approval)
-    return decision
-  }
-  private async handleApprovalExpired(approvalId: string): Promise<void> {
-    try {
-      await this.options.dependencies.gateway.expireApproval(approvalId, this.options.runId)
-    } catch (error) {
-      this.handleAsyncEventError(error)
-    }
-    if (!this.approvalWaiter.matches(approvalId)) return
-    const toolCallId = this.state.currentToolCallId
-    if (toolCallId) this.emit({ type: 'ApprovalResolved', toolCallId, approvalId, decision: 'expired' })
-    logApprovalExpired(this.options.runId, toolCallId, approvalId)
-    this.state.waitingApprovalId = null
-    if (this.machine.status === 'waiting_approval') this.transition('waiting_tool', '审批已过期')
-    else if (this.machine.status === 'paused') this.pausedFrom = 'waiting_tool'
   }
   private async waitIfPaused(): Promise<void> {
     while (this.machine.status === 'paused' && !this.abortController.signal.aborted) {
@@ -477,7 +474,7 @@ export class AgentRunner {
       }
     }
     this.abortController.abort(error)
-    this.approvalWaiter.settle('reject')
+    this.approvalCoordinator.cancel()
     const waiters = this.pauseWaiters
     this.pauseWaiters = []
     for (const resolve of waiters) resolve()
@@ -489,7 +486,7 @@ export class AgentRunner {
   }
   private complete(finalText: string): void { this.throwIfCancelled(); this.lifecycle.complete(finalText) }
   private async fail(error: unknown): Promise<void> {
-    this.approvalWaiter.settle('reject')
+    this.approvalCoordinator.cancel()
     await this.terminalApprovalCleanup.run()
     if (this.machine.status !== 'cancelled') this.lifecycle.fail(error)
   }
