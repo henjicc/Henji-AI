@@ -13,7 +13,6 @@ import {
   UiEmpty,
   UiError,
   UiIconButton,
-  UiLoading,
 } from '@/components/ui'
 import type { AgentThreadSummary } from '@/core/assistant/session'
 import { useContextMenu } from '@/hooks/useContextMenu'
@@ -21,10 +20,12 @@ import { useContextMenu } from '@/hooks/useContextMenu'
 import { useAssistantUiStore } from '../store/assistantUiStore'
 
 interface AssistantRunHistoryProps {
+  visible: boolean
   onOpenConversation: () => void
 }
 
 export function AssistantRunHistory({
+  visible,
   onOpenConversation,
 }: AssistantRunHistoryProps): JSX.Element {
   const setActiveRun = useAssistantUiStore((state) => state.setActiveRun)
@@ -38,7 +39,13 @@ export function AssistantRunHistory({
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set())
   const [pendingDelete, setPendingDelete] = useState<AgentThreadSummary[]>([])
-  const contextMenu = useContextMenu()
+  const {
+    menuVisible,
+    menuPosition,
+    menuItems,
+    showMenu,
+    hideMenu,
+  } = useContextMenu()
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -60,6 +67,12 @@ export function AssistantRunHistory({
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (visible) return
+    hideMenu()
+    setPendingDelete([])
+  }, [hideMenu, visible])
 
   const openThread = (thread: AgentThreadSummary): void => {
     setThreadId(thread.threadId)
@@ -105,7 +118,7 @@ export function AssistantRunHistory({
     event: MouseEvent<HTMLDivElement>,
     thread: AgentThreadSummary
   ): void => {
-    contextMenu.showMenu(event, [
+    showMenu(event, [
       {
         id: 'select',
         label: '多选',
@@ -216,10 +229,6 @@ export function AssistantRunHistory({
       </div>
 
       <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto [contain:layout_paint_style]">
-        {loading && threads.length === 0 ? (
-          <UiLoading size="sm" message="正在读取" />
-        ) : null}
-
         {!loading && threads.length === 0 ? (
           <UiEmpty size="sm" title="还没有对话记录" />
         ) : null}
@@ -268,10 +277,10 @@ export function AssistantRunHistory({
 
       {createPortal(
         <ContextMenu
-          items={contextMenu.menuItems}
-          position={contextMenu.menuPosition}
-          visible={contextMenu.menuVisible}
-          onClose={contextMenu.hideMenu}
+          items={menuItems}
+          position={menuPosition}
+          visible={menuVisible}
+          onClose={hideMenu}
         />,
         document.body
       )}

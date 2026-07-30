@@ -450,7 +450,6 @@ export function AssistantConversation(): JSX.Element {
           </section>
         ) : null}
 
-        {run.view.connection === 'recovering' ? <div className={`text-center ${UI_TEXT_META_CLASS}`}>正在恢复运行事件…</div> : null}
       </div>
 
       <AssistantComposer

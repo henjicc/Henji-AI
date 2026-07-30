@@ -34,6 +34,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
   const setFloatingPosition = useAssistantUiStore((state) => state.setFloatingPosition)
   const setSize = useAssistantUiStore((state) => state.setSize)
   const startNewConversation = useAssistantUiStore((state) => state.startNewConversation)
+  const threadId = useAssistantUiStore((state) => state.threadId)
   const { shouldRender, isVisible } = useDialogTransition(open, 180)
   const interaction = useAssistantPanelInteraction({
     enabled: open,
@@ -211,10 +212,21 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             </div>
           </div>
         </header>
-        {contentView === 'conversation' ? <AssistantConversation key={conversationVersion} /> : null}
-        {contentView === 'history'
-          ? <AssistantRunHistory onOpenConversation={() => setContentView('conversation')} />
-          : null}
+        <div
+          aria-hidden={contentView !== 'conversation'}
+          className={contentView === 'conversation' ? 'flex min-h-0 flex-1' : 'hidden'}
+        >
+          <AssistantConversation key={`${conversationVersion}:${threadId}`} />
+        </div>
+        <div
+          aria-hidden={contentView !== 'history'}
+          className={contentView === 'history' ? 'flex min-h-0 flex-1' : 'hidden'}
+        >
+          <AssistantRunHistory
+            visible={contentView === 'history'}
+            onOpenConversation={() => setContentView('conversation')}
+          />
+        </div>
         {contentView === 'memory' ? <AssistantMemoryPanel /> : null}
 
         {mode === 'left' || mode === 'right' ? (
