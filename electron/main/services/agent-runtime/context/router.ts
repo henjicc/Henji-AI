@@ -31,6 +31,7 @@ export type RouterModelClassifier = (
 interface DeterministicRule {
   intent: AgentIntent
   matches: (goal: string) => boolean
+  toolDomains?: AgentToolDomain[]
 }
 
 const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'path' | 'toolDomains'>> = {
@@ -94,12 +95,27 @@ const taskIdPattern = /\btask-[a-z0-9-]+\b/i
 const cancelGenerationPattern = /(?:取消|停止|终止|cancel|stop).{0,24}\btask-[a-z0-9-]+\b/i
 const readGenerationPattern = /(?:查看|查询|状态|进度|status|progress).{0,24}\btask-[a-z0-9-]+\b|\btask-[a-z0-9-]+\b.{0,24}(?:查看|查询|状态|进度|status|progress)/i
 
+function asksForAssistantCapabilityOverview(goal: string): boolean {
+  const normalized = goal.normalize('NFKC').trim().toLowerCase()
+  if (!normalized || normalized.length > 80) return false
+  const referencesAssistant = /(?:^|[\s，。！？,.!?])(?:你|智能助手|助手|痕迹\s*ai|这个应用|本应用|应用)(?:[\s，。！？,.!?]|$)/i.test(normalized)
+    || /^(?:你|智能助手|助手|痕迹\s*ai|这个应用|本应用|应用)/i.test(normalized)
+  const asksCapability = /(?:能|会|可以)(?:帮我)?(?:做什么|做啥|干什么|干啥|做哪些事)|(?:有什么|有哪些)(?:能力|功能)|支持(?:什么|哪些)(?:能力|功能|事情)?/i.test(normalized)
+    || /what can you do|what (?:can|does) (?:the )?(?:assistant|app) do|your capabilities/i.test(normalized)
+  return referencesAssistant && asksCapability
+}
+
 function regexMatcher(pattern: RegExp): (goal: string) => boolean {
   return (goal) => pattern.test(goal)
 }
 
 const deterministicRules: DeterministicRule[] = [
   { intent: 'cancel_generation', matches: regexMatcher(cancelGenerationPattern) },
+  {
+    intent: 'general',
+    matches: asksForAssistantCapabilityOverview,
+    toolDomains: [],
+  },
   {
     intent: 'user_instructions',
     matches: regexMatcher(/(?:用户指令|助手指令|user instructions?)/i),
@@ -116,7 +132,8 @@ function deterministicRoute(goal: string): AgentRouteDecision | null {
     intent: match.intent,
     candidateIntents: [match.intent],
     complexity: 'simple',
-    ...routePolicy[match.intent],
+    path: routePolicy[match.intent].path,
+    toolDomains: match.toolDomains ?? routePolicy[match.intent].toolDomains,
     source: 'deterministic',
     reason: `命中确定性 ${match.intent} 规则`,
   }

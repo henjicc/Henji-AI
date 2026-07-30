@@ -1,7 +1,7 @@
 import { BrainCircuit, GripHorizontal, History, MessageSquarePlus, PanelLeft, PanelRight, PictureInPicture2, Sparkles, X } from 'lucide-react'
 import { useState, type CSSProperties, type RefObject } from 'react'
 
-import { UI_PANEL_SURFACE_CLASS, UI_TEXT_META_CLASS, UI_TEXT_SECTION_CLASS, UiIconButton } from '@/components/ui'
+import { UI_PANEL_SURFACE_CLASS, UI_TEXT_SECTION_CLASS, UiIconButton } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
 
 import { AssistantConversation } from './conversation/AssistantConversation'
@@ -90,17 +90,14 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         } ${isVisible ? 'pointer-events-auto translate-x-0 translate-y-0 scale-100 opacity-100' : `pointer-events-none ${hiddenTransform}`}`}
       >
         <header
-          className={`flex h-12 shrink-0 touch-none select-none items-center gap-2 border-b border-border-dark bg-panel px-2.5 ${
+          className={`flex h-11 shrink-0 touch-none select-none items-center gap-2 border-b border-border-dark bg-panel px-2.5 ${
             mode === 'floating' ? interaction.dragging ? 'cursor-grabbing' : 'cursor-move' : ''
           }`}
           onPointerDown={interaction.onDragPointerDown}
         >
           <div className="flex min-w-0 flex-1 items-center gap-2 px-1">
             <div className="rounded-lg border border-accent/30 bg-accent/10 p-1.5 text-accent"><Sparkles className="h-3.5 w-3.5" /></div>
-            <div className="min-w-0">
-              <div className={`truncate ${UI_TEXT_SECTION_CLASS}`}>智能助手</div>
-              <div className={`truncate ${UI_TEXT_META_CLASS}`}>受控工具执行轨道</div>
-            </div>
+            <div className={`min-w-0 truncate ${UI_TEXT_SECTION_CLASS}`}>智能助手</div>
             {mode === 'floating' ? <GripHorizontal className={`ml-1 h-4 w-4 text-text-muted ${interaction.dragging ? 'text-accent' : ''}`} /> : null}
           </div>
           <div className="flex items-center gap-1" data-assistant-drag-ignore>

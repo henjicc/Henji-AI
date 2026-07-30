@@ -42,8 +42,11 @@ export function activateAgentTools(
   const directNames = directCategories.flatMap((category) => (
     available.filter((entry) => entry.category === category).map((entry) => entry.name)
   ))
+  const capabilitySearchNames = input.route.toolDomains.includes('catalog')
+    ? [CAPABILITY_SEARCH_TOOL]
+    : []
   const candidates = unique([
-    CAPABILITY_SEARCH_TOOL,
+    ...capabilitySearchNames,
     ...input.recentToolNames,
     ...input.discoveredToolNames,
     ...directNames,

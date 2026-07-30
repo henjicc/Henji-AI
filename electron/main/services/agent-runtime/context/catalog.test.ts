@@ -36,6 +36,23 @@ const primaryRoute: AgentRouteDecision = {
 }
 
 describe('AgentToolCatalogPlanner', () => {
+  it('能力概览直达路由不激活任何工具', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    const route: AgentRouteDecision = {
+      intent: 'general',
+      complexity: 'simple',
+      path: 'primary',
+      toolDomains: [],
+      source: 'deterministic',
+      reason: '能力概览直接回答',
+    }
+
+    expect(planner.select(route, contextSnapshot()).activeToolNames).toEqual([])
+  })
+
   it('明确生成请求直接获得模型、生成与工作区切换工具', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
@@ -53,7 +70,7 @@ describe('AgentToolCatalogPlanner', () => {
     const names = activation.activeToolNames
     expect(names.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
     expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
-    expect(names).toContain('search_application_capabilities')
+    expect(names).not.toContain('search_application_capabilities')
     expect(names).toContain('search_models')
     expect(names).toContain('get_model_schema')
     expect(names).toContain('create_visible_generation_task')

@@ -1,7 +1,25 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { AlertCircle, Bot, BrainCircuit, ChevronDown, UserRound } from 'lucide-react'
+import {
+  AlertCircle,
+  Bot,
+  BrainCircuit,
+  ChevronDown,
+  CirclePause,
+  CirclePlay,
+  Square,
+  UserRound,
+} from 'lucide-react'
 
-import { UI_INSET_SURFACE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiPanel } from '@/components/ui'
+import {
+  UI_INSET_SURFACE_CLASS,
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_META_CLASS,
+  UiButton,
+  UiEmpty,
+  UiError,
+  UiIconButton,
+  UiPanel,
+} from '@/components/ui'
 import type { AgentEvent } from '@/core/assistant/events'
 import { agentQueuedMessagePayloadSchema, getAgentSessionMessageContent } from '@/core/assistant/session'
 import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
@@ -22,7 +40,6 @@ import { ApprovalCard } from './ApprovalCard'
 import { AssistantMarkdown } from './AssistantMarkdown'
 import { AssistantComposer } from './AssistantComposer'
 import { ExecutionPlanCard } from './ExecutionPlanCard'
-import { RunStatusBar } from './RunStatusBar'
 import {
   groupToolActivitiesForDisplay,
   selectExecutionPresentation,
@@ -75,6 +92,11 @@ export function AssistantConversation(): JSX.Element {
   const setApprovalMode = useAssistantUiStore((state) => state.setApprovalMode)
   const runState = run.view.runState
   const busy = Boolean(activeRunId && (!runState || !terminalStatuses.has(runState.status)))
+  const runCanBeControlled = Boolean(
+    runState
+    && !terminalStatuses.has(runState.status)
+    && runState.status !== 'waiting_external'
+  )
   const waitingForAnswer = runState?.status === 'waiting_user'
   const clarificationWaitId = useMemo(() => {
     if (!waitingForAnswer) return undefined
@@ -212,20 +234,7 @@ export function AssistantConversation(): JSX.Element {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-app">
-      {runState ? (
-        <RunStatusBar
-          state={runState}
-          events={run.view.events}
-          currentAction={execution.nextAction}
-          verificationPassed={execution.verification?.passed ?? null}
-          onPause={() => void run.pause()}
-          onResume={() => void run.resume()}
-          onCancel={() => void run.cancel()}
-          onRefresh={() => void run.refresh()}
-        />
-      ) : null}
-
-      <div ref={scrollRef} className="ui-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
+      <div ref={scrollRef} className="ui-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
         {!runState && !currentGoal && historicalMessages.length === 0 && !transcript.loading ? (
           <UiEmpty
             className="min-h-full px-8"
@@ -250,7 +259,7 @@ export function AssistantConversation(): JSX.Element {
               ? '回答当前问题'
               : payload.data.mode === 'current_task' ? '补充当前任务' : '任务结束后继续'
             return (
-              <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-auto max-w-[85%] p-3">
+              <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
                 <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}>
                   <UserRound className="h-3.5 w-3.5" />你 · {modeLabel} · {statusLabel}
                 </div>
@@ -270,7 +279,7 @@ export function AssistantConversation(): JSX.Element {
             )
           }
           return entry.kind === 'user_message' ? (
-            <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-auto max-w-[85%] p-3">
+            <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
               <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
               <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
             </UiPanel>
@@ -288,7 +297,7 @@ export function AssistantConversation(): JSX.Element {
 
         {/* 用户消息使用右侧有限宽度气泡；助手消息使用整行正文。 */}
         {currentGoal ? (
-          <UiPanel variant="inset" style={deferredBlockStyle} className="ml-auto max-w-[85%] p-3">
+          <UiPanel variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
             <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
             <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{currentGoal}</p>
           </UiPanel>
@@ -296,22 +305,51 @@ export function AssistantConversation(): JSX.Element {
 
         {runState ? (
           <section className={`rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
-            <UiButton
-              type="button"
-              variant="plain"
-              onClick={() => setActivityExpanded((expanded) => !expanded)}
-              aria-expanded={activityExpanded}
-              className="!h-8 w-full justify-start gap-2 !rounded-lg !px-2 text-left"
-            >
-              <Bot className="h-3.5 w-3.5 shrink-0 text-accent" />
-              <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行过程</span>
-              <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>
-                {terminalStatuses.has(runState.status)
-                  ? `${runState.status === 'completed' ? '已完成' : runState.status === 'failed' ? '未完成' : '已取消'}${tools.length > 0 ? ` · ${tools.length} 项操作` : ''}`
-                  : execution.nextAction}
-              </span>
-              <ChevronDown className={`h-3 w-3 shrink-0 text-text-muted transition-transform duration-200 ${activityExpanded ? 'rotate-180' : ''}`} />
-            </UiButton>
+            <div className="flex items-center gap-1">
+              <UiButton
+                type="button"
+                variant="plain"
+                onClick={() => setActivityExpanded((expanded) => !expanded)}
+                aria-expanded={activityExpanded}
+                className="!h-8 min-w-0 flex-1 justify-start gap-2 !rounded-lg !px-2 text-left"
+              >
+                <Bot className="h-3.5 w-3.5 shrink-0 text-accent" />
+                <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行过程</span>
+                <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>
+                  {terminalStatuses.has(runState.status)
+                    ? runState.status === 'completed' ? '已完成' : runState.status === 'failed' ? '未完成' : '已取消'
+                    : execution.nextAction}
+                </span>
+                <ChevronDown className={`h-3 w-3 shrink-0 text-text-muted transition-transform duration-200 ${activityExpanded ? 'rotate-180' : ''}`} />
+              </UiButton>
+              {runCanBeControlled ? (
+                <>
+                  <UiIconButton
+                    type="button"
+                    showBorder={false}
+                    appearance="hover-only"
+                    title={runState.status === 'paused' ? '继续' : '暂停'}
+                    onClick={() => void (runState.status === 'paused' ? run.resume() : run.pause())}
+                    className="!h-7 !w-7 !rounded-lg"
+                  >
+                    {runState.status === 'paused'
+                      ? <CirclePlay className="h-3.5 w-3.5" />
+                      : <CirclePause className="h-3.5 w-3.5" />}
+                  </UiIconButton>
+                  <UiIconButton
+                    type="button"
+                    showBorder={false}
+                    appearance="hover-only"
+                    title="停止"
+                    hoverVariant="danger"
+                    onClick={() => void run.cancel()}
+                    className="!h-7 !w-7 !rounded-lg"
+                  >
+                    <Square className="h-3.5 w-3.5" />
+                  </UiIconButton>
+                </>
+              ) : null}
+            </div>
 
             {activityExpanded ? (
               <div className="space-y-1 border-t border-border-dark/60 p-1.5">

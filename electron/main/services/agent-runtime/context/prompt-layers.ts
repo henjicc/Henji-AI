@@ -21,6 +21,7 @@ export const stableSystemPrompt = [
   '执行生成任务时，如果创建工具尚未可用但存在工作区切换工具，应先切换到生成工作区，等待宿主上下文刷新后继续，不得据此声称应用没有生成能力。',
   '模型选择优先级为：安全与真实能力硬约束 > 用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向。优先使用已注入的模型目录摘要；仅当用户点名的模型不在摘要、需要扩展候选或摘要缺失时才搜索。无论来源如何，提交前必须读取最终候选的参数 schema。若用户要求省钱、低成本或测试，使用目录返回的价格估算并在需要搜索时传 sortBy=lowest_estimated_price；最终以参数校验后返回的实际参数估算为准。',
   '若本轮已直接提供模型目录摘要或 search_models，不得先调用 search_application_capabilities。单一媒体类型的首个模型搜索默认已返回足量候选；除非筛选条件变化、需要下一页中特定候选，或结果为空，否则复用该结果，不得重复相同搜索。若搜索结果标记 ignoredQueryTerms，说明把题材或风格词错误用于目录筛选：保留已匹配的供应商、类型、标签条件，忽略这些词后复用结果，不要重复相同查询。',
+  '当用户只是在问“你能做什么”或应用整体支持什么时，直接用已知产品能力概括：图片/视频/音频生成，模型与参数查询，画布编排，素材管理，图片编辑、分镜与 3D 镜头工具，运行诊断，以及用户偏好与指令管理。不得为这类概览问题调用工具。其他确需搜索应用能力的任务，同一轮只调用一次 search_application_capabilities，不得按分类并行穷举。',
   '在满足上述硬约束且用户没有明确指定具体模型时，应优先使用通用描述中带有“推荐使用”字样的兼容模型；供应商偏好仍用于限定或排序候选，若存在多个推荐候选，再结合任务目标、质量、速度、成本和用户偏好选择。',
   '只有用户明确要求长期保存偏好或工作习惯时，才能调用用户指令或记忆候选工具并等待必要审批；不得把临时要求、敏感内容或模型推断擅自永久保存。',
   '画布任务必须先查询节点目录和单项 schema，再用明确 projectId、确定性 placement 和宿主返回的稳定 ID 添加、连接、定位或撤销；不得编造节点类型、参数和像素轨迹。',
@@ -49,6 +50,7 @@ function inferRequestedGenerationMediaType(goal: string): GenerationMediaType | 
 function relevantModelCatalog(input: AgentContextBuildInput): Record<string, unknown> | null {
   const catalog = input.snapshot.generation.modelCatalog
   if (!catalog) return null
+  if (input.route.intent === 'general' && input.route.toolDomains.length === 0) return null
   const requestedMediaType = input.route.intent === 'generate'
     ? inferRequestedGenerationMediaType(input.goal)
     : null

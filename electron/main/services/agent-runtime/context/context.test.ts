@@ -52,6 +52,25 @@ describe('AgentIntentRouter', () => {
     expect(classifier).not.toHaveBeenCalled()
   })
 
+  it('询问助手整体能力时直接回答，不调用路由模型或能力搜索', async () => {
+    const classifier = vi.fn()
+    const router = new AgentIntentRouter(classifier)
+    const result = await router.route(
+      'run-capability-overview',
+      '你能做啥',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({
+      intent: 'general',
+      source: 'deterministic',
+      complexity: 'simple',
+      path: 'primary',
+      toolDomains: [],
+    })
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
   it('router 失败时保守进入 primary', async () => {
     const router = new AgentIntentRouter(async () => { throw new Error('offline') })
     const result = await router.route('run-1', '帮我处理一下这个需求', contextSnapshot(), new AbortController().signal)
@@ -281,6 +300,7 @@ describe('AgentContextBuilder', () => {
     expect(systemPrompt).toContain('用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向')
     expect(systemPrompt).toContain('优先使用通用描述中带有“推荐使用”字样的兼容模型')
     expect(systemPrompt).toContain('用户当前明确目标 > 用户持久化指令 > 已确认相关记忆')
+    expect(systemPrompt).toContain('不得为这类概览问题调用工具')
     const userInstructionsLayer = result.messages.find((message) => (
       String(message.content).includes('id=user_instructions')
     ))
@@ -288,6 +308,24 @@ describe('AgentContextBuilder', () => {
     expect(String(userInstructionsLayer?.content)).toContain('trust=untrusted_user')
     expect(String(result.messages[0].content)).toContain('id=model_catalog')
     expect(String(result.messages[0].content)).toContain('test-image')
+  })
+
+  it('能力概览不注入完整模型目录，避免简单问答浪费上下文', () => {
+    const result = new AgentContextBuilder().build({
+      runId: 'run-capability-overview',
+      goal: '你能做什么',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'general', complexity: 'simple', path: 'primary', toolDomains: [],
+        source: 'deterministic', reason: '能力概览',
+      },
+      conversation: [],
+      observations: [],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 8_000,
+    })
+    expect(result.messages.some((message) => String(message.content).includes('id=model_catalog'))).toBe(false)
   })
 
   it('明确图片目标时只注入图片模型目录，避免视频和音频目录占用上下文', () => {
