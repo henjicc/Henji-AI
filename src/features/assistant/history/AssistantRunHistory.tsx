@@ -1,10 +1,9 @@
-import { History, MessageSquareText, RefreshCw } from 'lucide-react'
+import { History, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { listAgentThreads } from '@/commands/assistant'
 import {
   UI_TEXT_BODY_CLASS,
-  UI_TEXT_META_CLASS,
   UI_TEXT_SECTION_CLASS,
   UiButton,
   UiEmpty,
@@ -18,15 +17,6 @@ import { useAssistantUiStore } from '../store/assistantUiStore'
 
 interface AssistantRunHistoryProps {
   onOpenConversation: () => void
-}
-
-function formatTime(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
 }
 
 export function AssistantRunHistory({
@@ -90,21 +80,18 @@ export function AssistantRunHistory({
         {threads.map((thread) => (
           <div
             key={thread.threadId}
-            className="group flex min-h-[56px] items-stretch border-b border-border-dark [content-visibility:auto] [contain-intrinsic-size:auto_56px] last:border-b-0"
+            className="group flex items-stretch border-b border-border-dark [content-visibility:auto] [contain-intrinsic-size:auto_32px] last:border-b-0"
           >
             <UiButton
               type="button"
               variant="ghost"
+              size="sm"
               onClick={() => openThread(thread)}
               title="打开此持续对话"
-              className="min-w-0 flex-1 justify-start !rounded-none !border-0 !bg-transparent !px-3 !py-2 text-left hover:!bg-surface-dark"
+              className="min-w-0 flex-1 justify-start !rounded-none !border-0 !bg-transparent !px-3 text-left hover:!bg-surface-dark"
             >
-              <MessageSquareText className="mr-2 h-3.5 w-3.5 shrink-0 text-text-muted" />
-              <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                <span className={`w-full truncate ${UI_TEXT_BODY_CLASS}`}>{thread.title || '未命名对话'}</span>
-                <span className={`w-full truncate font-normal ${UI_TEXT_META_CLASS}`}>
-                  {formatTime(thread.updatedAt)} · {thread.messageCount} 条记录
-                </span>
+              <span className={`w-full truncate ${UI_TEXT_BODY_CLASS}`}>
+                {thread.title || '未命名对话'}
               </span>
             </UiButton>
           </div>
