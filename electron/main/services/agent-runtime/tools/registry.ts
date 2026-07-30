@@ -30,6 +30,7 @@ const categorySearchConcepts: Readonly<Record<string, string[]>> = {
   image_edit: ['workspace:toolbox', 'media:image', 'action:edit'],
   assets: ['workspace:assets', 'media:image', 'media:video', 'media:audio'],
   workflows: ['action:generate', 'workspace:canvas', 'workspace:toolbox'],
+  artifacts: ['runtime:artifact'],
 }
 
 function normalizeSearchValue(value: string): string {
@@ -156,11 +157,11 @@ export class AgentToolRegistry {
       .map((entry) => ({ entry, score: searchScore(entry, query) }))
       .filter((item) => item.score > 0)
       .sort((left, right) => right.score - left.score || left.entry.name.localeCompare(right.entry.name))
-    return scored.slice(0, Math.min(Math.max(limit, 1), 20)).map((item) => item.entry)
+    return scored.slice(0, Math.min(Math.max(limit, 1), 100)).map((item) => item.entry)
   }
 
   registrations(names: string[], context: HostContextSnapshot | null): AgentToolRegistration[] {
-    const uniqueNames = [...new Set(names)].slice(0, 8)
+    const uniqueNames = [...new Set(names)].slice(0, 100)
     return uniqueNames.flatMap((name) => {
       const definition = this.definitions.get(name)
       if (!definition || !this.isAvailable(definition, context)) return []

@@ -44,7 +44,8 @@ function createScheduler(
   execute: (id: string) => Promise<{ id: string }>,
   observations: AgentToolObservation[],
   events: AgentEventInput[],
-  executionGuard?: (call: ModelStepToolCall) => string | null
+  executionGuard?: (call: ModelStepToolCall) => string | null,
+  activeToolNames: ReadonlySet<string> = new Set(['read_test_resource', 'write_test_resource'])
 ): AgentToolCallScheduler {
   const registry = new AgentToolRegistry()
   registry.register(defineAgentTool({
@@ -118,6 +119,7 @@ function createScheduler(
     gateway,
     registry,
     catalogPlanner: new AgentToolCatalogPlanner(registry),
+    activeToolNames,
     signal: new AbortController().signal,
     waitIfPaused: () => Promise.resolve(),
     throwIfCancelled: () => undefined,
@@ -203,5 +205,31 @@ describe('AgentToolCallScheduler', () => {
         type: 'ToolRequested', category: 'diagnostics', readOnly: false, idempotent: true,
       }),
     ]))
+  })
+
+  it('拒绝动态工具调用和未在本轮冻结集合中的工具', async () => {
+    let executions = 0
+    const observations: AgentToolObservation[] = []
+    const events: AgentEventInput[] = []
+    const scheduler = createScheduler(async (id) => {
+      executions += 1
+      return { id }
+    }, observations, events, undefined, new Set(['read_test_resource']))
+
+    await scheduler.execute([{
+      ...toolCall(1),
+      dynamic: true,
+    }, {
+      toolCallId: 'call-write',
+      toolName: 'write_test_resource',
+      input: { id: 'resource-write' },
+      dynamic: false,
+    }], true, {})
+
+    expect(executions).toBe(0)
+    expect(observations).toHaveLength(2)
+    expect(observations.every((item) => (
+      (item.output as { error?: { code?: string } }).error?.code === 'TOOL_NOT_ACTIVE'
+    ))).toBe(true)
   })
 })

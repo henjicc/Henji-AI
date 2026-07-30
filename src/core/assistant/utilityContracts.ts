@@ -49,6 +49,8 @@ export const agentUtilityRpcRequestMessageSchema = z.object({
     'model.api_key',
     'tool.execute',
     'artifact.save',
+    'artifact.describe',
+    'artifact.read',
     'memory.retrieve',
     'agent_trace.get_config',
     'agent_trace.start',

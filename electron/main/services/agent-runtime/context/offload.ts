@@ -22,7 +22,7 @@ export function shouldOffloadObservation(
 
 interface AgentArtifactPersistence {
   save: (runId: string, artifact: AgentContextArtifact) => void
-  load: (artifactRef: string) => AgentContextArtifact | null
+  load?: (artifactRef: string) => AgentContextArtifact | null
 }
 
 export class AgentArtifactStore {
@@ -45,7 +45,7 @@ export class AgentArtifactStore {
   }
 
   get(artifactRef: string): AgentContextArtifact | null {
-    return this.artifacts.get(artifactRef) ?? this.persistence?.load(artifactRef) ?? null
+    return this.artifacts.get(artifactRef) ?? this.persistence?.load?.(artifactRef) ?? null
   }
 
   deleteRunArtifacts(artifactRefs: string[]): void {

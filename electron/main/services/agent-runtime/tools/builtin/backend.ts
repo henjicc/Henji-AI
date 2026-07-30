@@ -6,6 +6,7 @@ import type { AgentToolDefinition } from '../types'
 import type { AgentToolRegistry } from '../registry'
 import { createUserInstructionTools } from './user-instructions'
 import { createAgentMemoryTools } from './memory'
+import { createAgentArtifactTools, type AgentArtifactToolAccess } from './artifacts'
 
 const applicationCapabilityCategorySchema = z.enum([
   'catalog',
@@ -22,6 +23,7 @@ const applicationCapabilityCategorySchema = z.enum([
   'image_edit',
   'assets',
   'workflows',
+  'artifacts',
 ])
 
 function eraseToolDefinition<TInput, TOutput>(
@@ -30,7 +32,10 @@ function eraseToolDefinition<TInput, TOutput>(
   return definition as unknown as AgentToolDefinition
 }
 
-export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToolDefinition[] {
+export function createBackendBuiltinTools(
+  registry: AgentToolRegistry,
+  artifactAccess: AgentArtifactToolAccess
+): AgentToolDefinition[] {
   const searchCapabilities = defineAgentTool({
     name: 'search_application_capabilities',
     version: 1,
@@ -81,6 +86,7 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
             'image_edit',
             'assets',
             'workflows',
+            'artifacts',
           ],
         },
         cursor: { type: 'integer', minimum: 0 },
@@ -89,7 +95,7 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
       additionalProperties: false,
     },
     execute: (input, context) => {
-      const all = registry.search(input.query, input.category, context.hostContext, 20)
+      const all = registry.search(input.query, input.category, context.hostContext, 100)
       const capabilities = all.slice(input.cursor, input.cursor + input.limit)
       return Promise.resolve({
         catalogVersion: 'agent-tool-catalog/v1' as const,
@@ -108,5 +114,6 @@ export function createBackendBuiltinTools(registry: AgentToolRegistry): AgentToo
     createQueryDiagnosticEventsTool(),
     ...createUserInstructionTools(),
     ...createAgentMemoryTools(),
+    ...createAgentArtifactTools(artifactAccess),
   ]
 }

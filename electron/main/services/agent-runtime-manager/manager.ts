@@ -40,6 +40,8 @@ interface AgentRuntimeManagerOptions {
   getModelApiKey: (providerId: string) => string | null
   executeTool: (payload: unknown, signal: AbortSignal) => Promise<unknown>
   saveArtifact: (payload: unknown) => void
+  describeArtifact: (payload: unknown) => unknown
+  readArtifact: (payload: unknown) => unknown
   retrieveMemory: (payload: unknown) => unknown
   onEvent: (runId: string, event: AgentEvent) => void
   onCheckpoint: (runId: string, state: AgentRunState) => void
@@ -324,6 +326,10 @@ export class AgentRuntimeManager {
       } else if (operation === 'artifact.save') {
         this.options.saveArtifact(payload)
         data = { saved: true }
+      } else if (operation === 'artifact.describe') {
+        data = this.options.describeArtifact(payload)
+      } else if (operation === 'artifact.read') {
+        data = this.options.readArtifact(payload)
       } else if (operation === 'agent_trace.get_config') {
         data = { mode: this.options.getAgentTraceCaptureMode() }
       } else if (operation === 'agent_trace.start') {

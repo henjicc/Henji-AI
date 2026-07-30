@@ -39,6 +39,7 @@ export const AGENT_TOOL_DOMAINS = [
   'workflows',
   'user_instructions',
   'memory',
+  'artifacts',
 ] as const
 export type AgentToolDomain = typeof AGENT_TOOL_DOMAINS[number]
 

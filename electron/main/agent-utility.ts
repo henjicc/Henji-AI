@@ -17,6 +17,12 @@ import {
 import { agentWorkingSummarySchema } from '../../src/core/assistant/workingContext'
 import { agentStartRunRequestSchema } from '../../src/core/assistant/runtimeContracts'
 import {
+  agentArtifactDescribeRequestSchema,
+  agentArtifactDescriptorSchema,
+  agentArtifactPageSchema,
+  agentArtifactReadRequestSchema,
+} from '../../src/core/assistant/artifacts'
+import {
   agentTraceCaptureModeSchema,
   type AgentTraceCaptureMode,
 } from '../../src/core/assistant/trace'
@@ -125,36 +131,51 @@ export async function appendPermissionAudit(
   )
 }
 
-function createProxyRegistry(): AgentToolRegistry {
-  const source = createBuiltinAgentToolRegistry(async () => {
-    throw new Error('utility proxy registry 不直接执行 frontend 工具')
-  })
+function createProxyRegistry(): {
+  registry: AgentToolRegistry
+  catalogRegistry: AgentToolRegistry
+} {
+  const source = createBuiltinAgentToolRegistry(
+    async () => { throw new Error('utility proxy registry 不直接执行 frontend 工具') },
+    {
+      describe: async (request) => agentArtifactDescriptorSchema.parse(
+        await rpc('artifact.describe', agentArtifactDescribeRequestSchema.parse(request))
+      ),
+      read: async (request) => agentArtifactPageSchema.parse(
+        await rpc('artifact.read', agentArtifactReadRequestSchema.parse(request))
+      ),
+    }
+  )
   const proxy = new AgentToolRegistry()
   for (const definition of source.allDefinitions()) {
     const proxied: AgentToolDefinition = {
       ...definition,
-      execute: async (input, context) => {
-        const response = await rpc('tool.execute', {
-          runId: context.runId,
-          threadId: context.threadId,
-          toolCallId: context.toolCallId,
-          toolName: definition.name,
-          input,
-        }, context.signal)
-        const parsed = z.object({
-          output: z.unknown(),
-          hostContext: hostContextSnapshotSchema.nullable(),
-        }).parse(response)
-        if (parsed.hostContext) hostContexts.set(context.runId, parsed.hostContext)
-        return parsed.output
-      },
+      execute: definition.name === 'read_agent_artifact'
+        || definition.name === 'search_application_capabilities'
+        ? definition.execute
+        : async (input, context) => {
+          const response = await rpc('tool.execute', {
+            runId: context.runId,
+            threadId: context.threadId,
+            toolCallId: context.toolCallId,
+            toolName: definition.name,
+            input,
+          }, context.signal)
+          const parsed = z.object({
+            output: z.unknown(),
+            hostContext: hostContextSnapshotSchema.nullable(),
+          }).parse(response)
+          if (parsed.hostContext) hostContexts.set(context.runId, parsed.hostContext)
+          return parsed.output
+        },
     }
     proxy.register(proxied)
   }
-  return proxy
+  return { registry: proxy, catalogRegistry: source }
 }
 
-const registry = createProxyRegistry()
+const proxyRegistries = createProxyRegistry()
+const registry = proxyRegistries.registry
 const gateway = new AgentToolGateway({
   registry,
   getHostContext: (runId) => hostContexts.get(runId) ?? null,
@@ -165,7 +186,10 @@ for (const workflowTool of createWorkflowTools({
   service: workflowService,
   gateway,
   getHostContext: (runId) => hostContexts.get(runId) ?? null,
-})) registry.register(workflowTool)
+})) {
+  registry.register(workflowTool)
+  proxyRegistries.catalogRegistry.register(workflowTool)
+}
 const artifactStore = new AgentArtifactStore({
   save: (runId, artifact) => {
     void rpc('artifact.save', { runId, artifact }).catch((error) => {
@@ -176,7 +200,6 @@ const artifactStore = new AgentArtifactStore({
       })
     })
   },
-  load: () => null,
 })
 
 async function runUtilityModelStep(

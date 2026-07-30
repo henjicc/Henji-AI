@@ -20,6 +20,13 @@ import type { AgentContextArtifact } from '../context/types'
 import { createMainLogger } from '../../logging'
 import { assessInterruptedWorkingSummary } from '../runner/working-summary'
 import { AgentEventStore, type AgentStoredEventPage } from './event-store'
+import { AgentArtifactPersistenceStore } from './artifact-store'
+import type {
+  AgentArtifactDescribeRequest,
+  AgentArtifactDescriptor,
+  AgentArtifactPage,
+  AgentArtifactReadRequest,
+} from '../../../../../src/core/assistant/artifacts'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
@@ -62,9 +69,11 @@ function checkpointJson(state: AgentRunState): string {
 
 export class AgentPersistenceStore {
   private readonly eventStore: AgentEventStore
+  private readonly artifactStore: AgentArtifactPersistenceStore
 
   constructor(private readonly database: Database.Database) {
     this.eventStore = new AgentEventStore(database)
+    this.artifactStore = new AgentArtifactPersistenceStore(database)
   }
 
   createRun(
@@ -161,26 +170,15 @@ export class AgentPersistenceStore {
   }
 
   loadArtifact(artifactRef: string): AgentContextArtifact | null {
-    const row = this.database.prepare(`
-      SELECT artifact_ref, source, data_classes_json, payload_json, original_bytes, created_at
-      FROM agent_artifacts WHERE artifact_ref = ?
-    `).get(artifactRef) as {
-      artifact_ref: string
-      source: string
-      data_classes_json: string
-      payload_json: string
-      original_bytes: number
-      created_at: number
-    } | undefined
-    if (!row) return null
-    return {
-      artifactRef: row.artifact_ref,
-      source: row.source,
-      dataClasses: parseJson(row.data_classes_json) as AgentContextArtifact['dataClasses'],
-      payload: parseJson(row.payload_json),
-      originalBytes: row.original_bytes,
-      createdAt: toIso(row.created_at),
-    }
+    return this.artifactStore.load(artifactRef)
+  }
+
+  describeArtifact(request: AgentArtifactDescribeRequest): AgentArtifactDescriptor {
+    return this.artifactStore.describe(request)
+  }
+
+  readArtifact(request: AgentArtifactReadRequest): AgentArtifactPage {
+    return this.artifactStore.read(request)
   }
 
   loadState(runId: string): AgentRunState | null {

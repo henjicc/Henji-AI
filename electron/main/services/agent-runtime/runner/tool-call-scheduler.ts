@@ -34,6 +34,7 @@ export interface AgentToolCallSchedulerOptions {
   gateway: AgentToolGateway
   registry: AgentToolRegistry
   catalogPlanner: AgentToolCatalogPlanner
+  activeToolNames: ReadonlySet<string>
   signal: AbortSignal
   waitIfPaused: () => Promise<void>
   throwIfCancelled: () => void
@@ -158,6 +159,22 @@ export class AgentToolCallScheduler {
     })
     this.options.emit({ type: 'ToolStarted', toolCallId: call.toolCallId, toolName: call.toolName })
     try {
+      if (call.dynamic) {
+        throw new AgentToolGatewayError(
+          'TOOL_NOT_ACTIVE',
+          '拒绝执行动态工具调用；模型只能调用本轮冻结 schema 中的静态工具',
+          false,
+          'user_action'
+        )
+      }
+      if (!this.options.activeToolNames.has(call.toolName)) {
+        throw new AgentToolGatewayError(
+          'TOOL_NOT_ACTIVE',
+          `工具 ${call.toolName} 未在本轮冻结的活动集合中披露，请先搜索能力并在下一轮调用`,
+          true,
+          'user_action'
+        )
+      }
       const guardReason = this.options.executionGuard?.(call)
       if (guardReason) {
         throw new AgentToolGatewayError(
@@ -231,6 +248,7 @@ export class AgentToolCallScheduler {
   private recordOutcome(outcome: ToolCallOutcome): void {
     const metadata = this.options.registry.executionMetadata(outcome.call.toolName, outcome.call.input)
     this.options.onObservation(outcome.call, outcome.observation)
+    this.options.catalogPlanner.rememberObservation(outcome.call.toolName)
     if (outcome.error) {
       this.options.emit({
         type: 'ToolFailed',

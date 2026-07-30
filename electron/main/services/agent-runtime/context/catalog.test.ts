@@ -6,6 +6,7 @@ import {
 } from '../../../../../src/core/assistant/hostContracts'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentToolCatalogPlanner } from './catalog'
+import { AGENT_ACTIVE_TOOL_LIMIT, AGENT_TOOL_SCHEMA_BUDGET_BYTES } from './tool-activation'
 import type { AgentRouteDecision } from './types'
 
 function contextSnapshot(): HostContextSnapshot {
@@ -48,8 +49,11 @@ describe('AgentToolCatalogPlanner', () => {
       source: 'deterministic',
       reason: '命中生成规则',
     }
-    const names = planner.select(route, contextSnapshot()).map((item) => item.catalog.name)
-    expect(names).not.toContain('search_application_capabilities')
+    const activation = planner.select(route, contextSnapshot())
+    const names = activation.activeToolNames
+    expect(names.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
+    expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
+    expect(names).toContain('search_application_capabilities')
     expect(names).toContain('search_models')
     expect(names).toContain('get_model_schema')
     expect(names).toContain('create_visible_generation_task')
@@ -87,16 +91,57 @@ describe('AgentToolCatalogPlanner', () => {
       throw new Error('测试不执行前端工具')
     })
     const planner = new AgentToolCatalogPlanner(registry)
-    expect(planner.select(primaryRoute, contextSnapshot()).map((item) => item.catalog.name))
+    expect(planner.select(primaryRoute, contextSnapshot()).activeToolNames)
       .toEqual(['search_application_capabilities'])
 
     const capabilities = registry.search('图片生成', undefined, contextSnapshot())
     const added = planner.rememberDiscovered('search_application_capabilities', { capabilities })
     expect(added).toContain('create_visible_generation_task')
 
-    const activeNames = planner.select(primaryRoute, contextSnapshot()).map((item) => item.catalog.name)
+    const activeNames = planner.select(primaryRoute, contextSnapshot()).activeToolNames
     expect(activeNames).toContain('search_application_capabilities')
     expect(activeNames).toContain('create_visible_generation_task')
     expect(activeNames).toContain('search_models')
+  })
+
+  it('领域工具超过单轮上限时仍可分页发现并在有限轮次内轮换激活', async () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const allFrontendNames = registry.allDefinitions()
+      .filter((definition) => definition.side === 'frontend')
+      .map((definition) => definition.name)
+    const fullContext = {
+      ...contextSnapshot(),
+      availableCommands: allFrontendNames,
+      availableQueries: allFrontendNames,
+    }
+    const planner = new AgentToolCatalogPlanner(registry)
+    const allCanvas = registry.search('', 'canvas', fullContext, 100)
+    expect(allCanvas.length).toBeGreaterThan(8)
+    const searchTool = registry.get('search_application_capabilities')
+    expect(searchTool).toBeDefined()
+    const secondPage = await searchTool?.execute({
+      query: '', category: 'canvas', cursor: 8, limit: 8,
+    }, {
+      runId: 'run-catalog',
+      threadId: 'thread-catalog',
+      toolCallId: 'call-catalog',
+      signal: new AbortController().signal,
+      hostContext: fullContext,
+    }) as { capabilities: Array<{ name?: string }> }
+    expect(secondPage.capabilities.map((entry) => entry.name)).toEqual(
+      allCanvas.slice(8, 16).map((entry) => entry.name)
+    )
+
+    const firstPage = allCanvas.slice(0, 20)
+    planner.rememberDiscovered('search_application_capabilities', { capabilities: firstPage })
+    const activated = new Set<string>()
+    for (let turn = 0; turn < 4; turn += 1) {
+      for (const name of planner.select(primaryRoute, fullContext).activeToolNames) activated.add(name)
+    }
+
+    expect([...activated]).toEqual(expect.arrayContaining(firstPage.map((entry) => entry.name)))
+    expect(activated).toContain('get_canvas_project')
   })
 })

@@ -182,7 +182,22 @@ export class AgentRunner {
         const turn = this.budget.beginTurn()
         this.state.turn = turn
         const currentSnapshot = this.requireContext()
-        const registrations = this.catalogPlanner.select(route, currentSnapshot)
+        const activation = this.catalogPlanner.select(route, currentSnapshot)
+        const registrations = activation.registrations
+        logger.info('Agent 本轮工具集合已冻结', {
+          event: 'agent_catalog.activation.completed',
+          requestId: this.options.runId,
+          context: {
+            turn,
+            snapshotRevision: currentSnapshot.revision,
+            activeToolNames: activation.activeToolNames,
+            schemaBytes: activation.schemaBytes,
+            candidateCount: activation.candidateCount,
+            droppedForCount: activation.droppedForCount,
+            droppedForSchemaBudget: activation.droppedForSchemaBudget,
+            unavailableNames: activation.unavailableNames,
+          },
+        })
         const memoryContext = await this.memoryProvider.retrieve({
           goal: this.options.request.goal,
           snapshot: currentSnapshot,
@@ -230,7 +245,12 @@ export class AgentRunner {
         this.budget.recordSuccess()
         if (result.toolCalls.length > 0) {
           const observationStart = this.observations.length
-          await this.executeToolCalls(result.toolCalls, route, currentSnapshot.scopeRevisions)
+          await this.executeToolCalls(
+            result.toolCalls,
+            route,
+            currentSnapshot.scopeRevisions,
+            new Set(context.activeToolNames)
+          )
           const recoveryGuidance = buildRecoveryGuidance(
             this.observations.slice(observationStart),
             this.options.dependencies.registry
@@ -355,7 +375,8 @@ export class AgentRunner {
   private async executeToolCalls(
     calls: ModelStepToolCall[],
     route: AgentRouteDecision,
-    expectedRevisions: Partial<HostScopeRevisions>
+    expectedRevisions: Partial<HostScopeRevisions>,
+    activeToolNames: ReadonlySet<string>
   ): Promise<void> {
     const scheduler = new AgentToolCallScheduler({
       runId: this.options.runId,
@@ -365,6 +386,7 @@ export class AgentRunner {
       gateway: this.options.dependencies.gateway,
       registry: this.options.dependencies.registry,
       catalogPlanner: this.catalogPlanner,
+      activeToolNames,
       signal: this.abortController.signal,
       waitIfPaused: () => this.waitIfPaused(),
       throwIfCancelled: () => this.throwIfCancelled(),

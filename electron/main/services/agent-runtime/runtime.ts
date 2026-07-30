@@ -17,6 +17,12 @@ import {
 import type { AgentEvent, AgentRunState } from '../../../../src/core/assistant/events'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
 import {
+  agentArtifactDescribeRequestSchema,
+  agentArtifactReadRequestSchema,
+  type AgentArtifactDescriptor,
+  type AgentArtifactPage,
+} from '../../../../src/core/assistant/artifacts'
+import {
   agentMemoryRetrievalQuerySchema,
   type AgentMemoryRetrievalResult,
 } from '../../../../src/core/assistant/memory'
@@ -87,13 +93,19 @@ export class AgentRuntimeService {
   private readonly permissionAudit = new AgentPermissionAuditStore(getDb())
   private readonly agentTraceStore = getAgentTraceStore()
   private readonly memory = getAgentMemoryStore()
-  private readonly registry = createBuiltinAgentToolRegistry((operation, context) => (
-    this.invokeFrontend(operation, context)
-  ))
+  private readonly registry = createBuiltinAgentToolRegistry(
+    (operation, context) => this.invokeFrontend(operation, context),
+    {
+      describe: (request) => this.persistence.describeArtifact(request),
+      read: (request) => this.persistence.readArtifact(request),
+    }
+  )
   private readonly manager = new AgentRuntimeManager({
     getModelApiKey: getLlmProviderApiKey,
     executeTool: (payload, signal) => this.executeToolInMain(payload, signal),
     saveArtifact: (payload) => this.saveArtifact(payload),
+    describeArtifact: (payload) => this.describeArtifact(payload),
+    readArtifact: (payload) => this.readArtifact(payload),
     retrieveMemory: (payload) => this.retrieveMemory(payload),
     onEvent: (runId, event) => this.onRunEvent(runId, event),
     onCheckpoint: (runId, state) => this.onCheckpoint(runId, state),
@@ -382,6 +394,10 @@ export class AgentRuntimeService {
 
   private async executeToolInMain(payload: unknown, signal: AbortSignal): Promise<unknown> {
     const parsed = toolExecutionPayloadSchema.parse(payload)
+    const record = this.runs.get(parsed.runId)
+    if (!record || record.threadId !== parsed.threadId) {
+      throw new Error('[PERMISSION_DENIED] 工具调用不属于当前 run/thread')
+    }
     const definition = this.registry.get(parsed.toolName)
     if (!definition) throw new Error(`[unknown_tool] 未注册工具：${parsed.toolName}`)
     const input = definition.inputSchema.parse(parsed.input)
@@ -402,6 +418,14 @@ export class AgentRuntimeService {
   private saveArtifact(payload: unknown): void {
     const parsed = artifactPayloadSchema.parse(payload)
     this.persistence.saveArtifact(parsed.runId, parsed.artifact)
+  }
+
+  private describeArtifact(payload: unknown): AgentArtifactDescriptor {
+    return this.persistence.describeArtifact(agentArtifactDescribeRequestSchema.parse(payload))
+  }
+
+  private readArtifact(payload: unknown): AgentArtifactPage {
+    return this.persistence.readArtifact(agentArtifactReadRequestSchema.parse(payload))
   }
 
   private retrieveMemory(payload: unknown): AgentMemoryRetrievalResult {

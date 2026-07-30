@@ -25,6 +25,15 @@ const testFiles = [
     'services',
     'agent-runtime',
     'persistence',
+    'artifact-store.test.ts'
+  ),
+  path.join(
+    workspaceRoot,
+    'electron',
+    'main',
+    'services',
+    'agent-runtime',
+    'persistence',
     'store.test.ts'
   ),
   path.join(

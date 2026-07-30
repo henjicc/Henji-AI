@@ -17,6 +17,7 @@ export type AgentToolSide = z.infer<typeof agentToolSideSchema>
 
 export const agentToolErrorCodeSchema = z.enum([
   'UNKNOWN_TOOL',
+  'TOOL_NOT_ACTIVE',
   'VERSION_MISMATCH',
   'INVALID_INPUT',
   'INVALID_OUTPUT',
