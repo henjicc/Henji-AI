@@ -27,6 +27,12 @@ import type {
   AgentRunSummary,
 } from '@/core/assistant/persistence'
 import type {
+  AgentListThreadsRequest,
+  AgentThreadSummary,
+  AgentTranscriptPage,
+  AgentTranscriptRequest,
+} from '@/core/assistant/session'
+import type {
   AgentMemoryRecord,
   AgentMemoryScope,
   AgentMemorySettings,
@@ -61,6 +67,8 @@ export interface AssistantPlatform {
   getRunSnapshot(request: AgentRunControlRequest): Promise<AgentRunSnapshot>
   getRunEvents(request: AgentRunEventsRequest): Promise<AgentRunEventsPage>
   listRuns(request: AgentListRunsRequest): Promise<AgentRunSummary[]>
+  listThreads(request: AgentListThreadsRequest): Promise<AgentThreadSummary[]>
+  getTranscript(request: AgentTranscriptRequest): Promise<AgentTranscriptPage>
   retryRun(request: AgentRetryRunRequest): Promise<AgentStartRunResult>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }

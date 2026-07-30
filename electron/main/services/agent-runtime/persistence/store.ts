@@ -21,6 +21,9 @@ import { createMainLogger } from '../../logging'
 import { assessInterruptedWorkingSummary } from '../runner/working-summary'
 import { AgentEventStore, type AgentStoredEventPage } from './event-store'
 import { AgentArtifactPersistenceStore } from './artifact-store'
+import { AgentSessionStore } from './session-store'
+import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../../src/core/assistant/session'
 import type {
   AgentArtifactDescribeRequest,
   AgentArtifactDescriptor,
@@ -70,10 +73,12 @@ function checkpointJson(state: AgentRunState): string {
 export class AgentPersistenceStore {
   private readonly eventStore: AgentEventStore
   private readonly artifactStore: AgentArtifactPersistenceStore
+  private readonly sessionStore: AgentSessionStore
 
   constructor(private readonly database: Database.Database) {
     this.eventStore = new AgentEventStore(database)
     this.artifactStore = new AgentArtifactPersistenceStore(database)
+    this.sessionStore = new AgentSessionStore(database)
   }
 
   createRun(
@@ -114,7 +119,16 @@ export class AgentPersistenceStore {
       this.database.prepare(`
         INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
         VALUES (?, ?, ?, 'user', ?, ?)
-      `).run(randomUUID(), request.threadId, runId, request.goal, now)
+        ON CONFLICT(message_id) DO NOTHING
+      `).run(`run:${runId}:user`, request.threadId, runId, request.goal, now)
+      this.sessionStore.appendMessage({
+        threadId: request.threadId,
+        runId,
+        role: 'user',
+        content: request.goal,
+        idempotencyKey: `run:${runId}:user`,
+        createdAt: now,
+      })
     })()
     logger.info('Agent 运行持久化已创建', {
       event: 'agent_persistence.run.created',
@@ -146,10 +160,34 @@ export class AgentPersistenceStore {
   appendTerminalMessage(state: AgentRunState): void {
     const content = state.finalText ?? state.error?.message
     if (!content) return
-    this.database.prepare(`
-      INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
-      VALUES (?, ?, ?, 'assistant', ?, ?)
-    `).run(randomUUID(), state.threadId, state.runId, content, Date.now())
+    const now = Date.now()
+    this.database.transaction(() => {
+      this.database.prepare(`
+        INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
+        VALUES (?, ?, ?, 'assistant', ?, ?)
+        ON CONFLICT(message_id) DO NOTHING
+      `).run(`run:${state.runId}:assistant`, state.threadId, state.runId, content, now)
+      this.sessionStore.appendMessage({
+        threadId: state.threadId,
+        runId: state.runId,
+        role: 'assistant',
+        content,
+        idempotencyKey: `run:${state.runId}:assistant`,
+        createdAt: now,
+      })
+    })()
+  }
+
+  listThreads(limit = 30): AgentThreadSummary[] {
+    return this.sessionStore.listThreads(limit)
+  }
+
+  loadTranscript(threadId: string, afterSequence = 0, limit = 100): AgentTranscriptPage {
+    return this.sessionStore.loadTranscript(threadId, afterSequence, limit)
+  }
+
+  projectConversation(threadId: string, excludeRunId?: string): ModelStepMessage[] {
+    return this.sessionStore.projectConversation(threadId, excludeRunId)
   }
 
   saveArtifact(runId: string, artifact: AgentContextArtifact): void {

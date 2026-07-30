@@ -12,6 +12,7 @@ import type { HostContextSnapshot } from '../../../../src/core/assistant/hostCon
 import type { AgentStartRunRequest } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentMemoryContextEntry } from '../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
+import type { ModelStepMessage } from '../../../../src/core/llm/modelStep'
 import type {
   AgentTraceCompleteInput,
   AgentTraceFailInput,
@@ -84,6 +85,7 @@ export class AgentRuntimeManager {
     request: AgentStartRunRequest,
     hostContext: HostContextSnapshot,
     memoryContext: AgentMemoryContextEntry[],
+    conversationHistory: ModelStepMessage[],
     recoveryContext?: AgentWorkingSummary
   ): Promise<AgentRunState> {
     this.activeRunIds.add(runId)
@@ -93,6 +95,7 @@ export class AgentRuntimeManager {
         request,
         hostContext,
         memoryContext,
+        conversationHistory,
         recoveryContext,
       }, 15_000)
       return agentRunStateSchema.parse(result)

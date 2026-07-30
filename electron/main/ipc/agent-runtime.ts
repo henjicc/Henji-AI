@@ -9,6 +9,10 @@ import {
   agentListRunsRequestSchema,
   agentRetryRunRequestSchema,
 } from '../../../src/core/assistant/persistence'
+import {
+  agentListThreadsRequestSchema,
+  agentTranscriptRequestSchema,
+} from '../../../src/core/assistant/session'
 import { getAgentRuntimeService } from '../services/agent-runtime/runtime'
 import { getAssistantUserInstructions } from '../services/assistant/user-instructions'
 import { assertTrustedAssistantRenderer } from './assistant'
@@ -51,6 +55,12 @@ export function registerAgentRuntimeIpc(): void {
   ), assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:agent:listRuns', input => agentListRunsRequestSchema.parse(input), (request) => (
     runtime.listRuns(request.threadId, request.limit)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:listThreads', input => agentListThreadsRequestSchema.parse(input), (request) => (
+    runtime.listThreads(request.limit)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:getTranscript', input => agentTranscriptRequestSchema.parse(input), (request) => (
+    runtime.getTranscript(request.threadId, request.afterSequence, request.limit)
   ), assertTrustedAssistantRenderer)
   registerIpcHandler(
     'assistant:agent:retryRun',

@@ -173,6 +173,104 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     }])
   })
 
+  it('按 thread sequence 幂等追加会话消息并投影多轮历史', () => {
+    const first = state('completed')
+    first.finalText = '第一轮回答'
+    store.createRun('run-1', request(), first)
+    store.appendTerminalMessage(first)
+    store.appendTerminalMessage(first)
+
+    const secondRequest = agentStartRunRequestSchema.parse({
+      ...request(),
+      goal: '继续，沿用第一轮约束',
+    })
+    const second = agentRunStateSchema.parse({
+      ...state(),
+      runId: 'run-2',
+    })
+    store.createRun('run-2', secondRequest, second)
+
+    expect(store.loadTranscript('thread-1')).toMatchObject({
+      headSequence: 3,
+      coveredThroughSequence: 3,
+      hasMore: false,
+    })
+    expect(store.loadTranscript('thread-1').entries.map((entry) => ({
+      sequence: entry.sequence,
+      kind: entry.kind,
+      runId: entry.runId,
+    }))).toEqual([
+      { sequence: 1, kind: 'user_message', runId: 'run-1' },
+      { sequence: 2, kind: 'assistant_message', runId: 'run-1' },
+      { sequence: 3, kind: 'user_message', runId: 'run-2' },
+    ])
+    expect(store.projectConversation('thread-1', 'run-2')).toEqual([
+      { role: 'user', content: '诊断生成失败' },
+      { role: 'assistant', content: '第一轮回答' },
+    ])
+    expect(store.listThreads()).toMatchObject([{
+      threadId: 'thread-1',
+      headSequence: 3,
+      lastRunId: 'run-2',
+      lastRunGoal: '继续，沿用第一轮约束',
+      lastMessagePreview: '继续，沿用第一轮约束',
+    }])
+  })
+
+  it('会话分页无重复且新 thread 不会混入旧历史', () => {
+    store.createRun('run-1', request(), state())
+    const otherRequest = agentStartRunRequestSchema.parse({
+      ...request(),
+      threadId: 'thread-2',
+      goal: '独立会话',
+    })
+    const otherState = agentRunStateSchema.parse({
+      ...state(),
+      runId: 'run-2',
+      threadId: 'thread-2',
+    })
+    store.createRun('run-2', otherRequest, otherState)
+
+    const firstPage = store.loadTranscript('thread-1', 0, 1)
+    const nextPage = store.loadTranscript('thread-1', firstPage.coveredThroughSequence, 1)
+    expect(firstPage.entries.map((entry) => entry.entryId)).not.toEqual(
+      nextPage.entries.map((entry) => entry.entryId)
+    )
+    expect(store.projectConversation('thread-2')).toEqual([
+      { role: 'user', content: '独立会话' },
+    ])
+  })
+
+  it('旧数据库消息在追加 migration 后以稳定顺序兼容读取', () => {
+    database.exec(`
+      DROP TABLE agent_session_entries;
+      DELETE FROM app_schema_migrations WHERE version = 6;
+    `)
+    database.prepare(`
+      INSERT INTO agent_threads(thread_id, title, created_at, updated_at, last_run_id)
+      VALUES ('legacy-thread', '旧对话', 1000, 1001, NULL)
+    `).run()
+    const insertLegacy = database.prepare(`
+      INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
+      VALUES (?, 'legacy-thread', NULL, ?, ?, ?)
+    `)
+    insertLegacy.run('message-b', 'assistant', '旧回答', 1001)
+    insertLegacy.run('message-a', 'user', '旧问题', 1000)
+
+    runAgentSchemaMigrations(database)
+    const migrated = new AgentPersistenceStore(database)
+    const entries = migrated.loadTranscript('legacy-thread').entries
+
+    expect(entries.map((entry) => ({
+      sequence: entry.sequence,
+      kind: entry.kind,
+      payload: entry.payload,
+    }))).toEqual([
+      { sequence: 1, kind: 'user_message', payload: { content: '旧问题', legacy: true } },
+      { sequence: 2, kind: 'assistant_message', payload: { content: '旧回答', legacy: true } },
+    ])
+  })
+
   it('尾部恢复返回最新两千条，并支持从已确认 sequence 增量补拉', () => {
     store.createRun('run-1', request(), state())
     database.transaction(() => {

@@ -16,6 +16,7 @@ import {
 } from '../../src/core/assistant/memory'
 import { agentWorkingSummarySchema } from '../../src/core/assistant/workingContext'
 import { agentStartRunRequestSchema } from '../../src/core/assistant/runtimeContracts'
+import { modelStepMessageSchema } from '../../src/core/llm/modelStep'
 import {
   agentArtifactDescribeRequestSchema,
   agentArtifactDescriptorSchema,
@@ -401,6 +402,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
     request: agentStartRunRequestSchema,
     hostContext: hostContextSnapshotSchema,
     memoryContext: z.array(agentMemoryContextEntrySchema).max(10).default([]),
+    conversationHistory: z.array(modelStepMessageSchema).max(1_000).default([]),
     recoveryContext: agentWorkingSummarySchema.optional(),
   }).strict().parse(payload)
   if (runners.has(parsed.runId)) throw new Error('[duplicate_run] 运行已存在')
@@ -409,6 +411,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
     runId: parsed.runId,
     request: parsed.request,
     memoryContext: parsed.memoryContext,
+    conversationHistory: parsed.conversationHistory,
     recoveryContext: parsed.recoveryContext,
     dependencies: {
       registry,

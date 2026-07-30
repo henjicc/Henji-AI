@@ -31,6 +31,12 @@ import {
   type AgentRunSummary,
 } from '@/core/assistant/persistence'
 import {
+  agentListThreadsRequestSchema,
+  agentTranscriptRequestSchema,
+  type AgentThreadSummary,
+  type AgentTranscriptPage,
+} from '@/core/assistant/session'
+import {
   agentMemoryClearSchema,
   agentMemoryCandidateIdSchema,
   agentMemoryIdSchema,
@@ -211,6 +217,30 @@ export async function listAgentRuns(
     limit,
   })
   return await getPlatform().assistant.listRuns(request)
+}
+
+export async function listAgentThreads(limit = 30): Promise<AgentThreadSummary[]> {
+  if (!isDesktopRuntime()) return []
+  const request = agentListThreadsRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    limit,
+  })
+  return await getPlatform().assistant.listThreads(request)
+}
+
+export async function getAgentTranscript(
+  threadId: string,
+  afterSequence = 0,
+  limit = 100
+): Promise<AgentTranscriptPage> {
+  if (!isDesktopRuntime()) throw new Error('智能助手会话记录仅在桌面应用中可用')
+  const request = agentTranscriptRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    threadId,
+    afterSequence,
+    limit,
+  })
+  return await getPlatform().assistant.getTranscript(request)
 }
 
 export async function retryAgentRun(runId: string): Promise<AgentStartRunResult> {

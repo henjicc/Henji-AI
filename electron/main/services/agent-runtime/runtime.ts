@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
 import { webContents, type WebContents } from 'electron'
-import { z } from 'zod'
 
 import {
   agentRunSnapshotSchema,
@@ -11,9 +10,7 @@ import {
   type AgentStartRunResult,
 } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentRunSummary } from '../../../../src/core/assistant/persistence'
-import {
-  agentDataClassSchema,
-} from '../../../../src/core/assistant/toolContracts'
+import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../src/core/assistant/session'
 import type { AgentEvent, AgentRunState } from '../../../../src/core/assistant/events'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
 import {
@@ -53,6 +50,7 @@ import { AgentPermissionAuditStore } from './persistence/permission-audit-store'
 import type { AgentPermissionAuditRecord } from '../../../../src/core/assistant/permissionAudit'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
+import { artifactPayloadSchema, toolExecutionPayloadSchema } from './runtime-schemas'
 const logger = createMainLogger('main.agent_runtime')
 
 interface AgentRunRecord {
@@ -64,26 +62,6 @@ interface AgentRunRecord {
 }
 
 export type AgentRunEventListener = (event: AgentEvent) => void
-
-const artifactPayloadSchema = z.object({
-  runId: z.string().min(1),
-  artifact: z.object({
-    artifactRef: z.string().min(1),
-    source: z.string().min(1),
-    dataClasses: z.array(agentDataClassSchema).max(4),
-    createdAt: z.string().datetime(),
-    originalBytes: z.number().int().nonnegative(),
-    payload: z.unknown(),
-  }).strict(),
-}).strict()
-
-const toolExecutionPayloadSchema = z.object({
-  runId: z.string().min(1),
-  threadId: z.string().min(1),
-  toolCallId: z.string().min(1),
-  toolName: z.string().min(1),
-  input: z.unknown(),
-}).strict()
 
 export class AgentRuntimeService {
   private readonly runs = new Map<string, AgentRunRecord>()
@@ -164,6 +142,7 @@ export class AgentRuntimeService {
     this.activeByThread.set(request.threadId, runId)
     this.persistence.createRun(runId, request, initialState, parentRunId)
     try {
+      const conversationHistory = this.persistence.projectConversation(request.threadId, runId)
       const memoryContext = this.memory.retrieve(
         request.goal,
         hostContext.workspace.id,
@@ -174,6 +153,7 @@ export class AgentRuntimeService {
         request,
         hostContext,
         memoryContext,
+        conversationHistory,
         preparedRecoveryContext
       )
       this.updateState(runId, state)
@@ -286,6 +266,14 @@ export class AgentRuntimeService {
 
   listRuns(threadId?: string, limit = 30): AgentRunSummary[] {
     return this.persistence.listRuns(threadId, limit)
+  }
+
+  listThreads(limit = 30): AgentThreadSummary[] {
+    return this.persistence.listThreads(limit)
+  }
+
+  getTranscript(threadId: string, afterSequence = 0, limit = 100): AgentTranscriptPage {
+    return this.persistence.loadTranscript(threadId, afterSequence, limit)
   }
 
   queryPermissionAudit(

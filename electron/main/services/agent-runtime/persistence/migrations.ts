@@ -209,6 +209,80 @@ const migrations: SchemaMigration[] = [
       `)
     },
   },
+  {
+    version: 6,
+    name: 'agent-session-entries',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS agent_session_entries (
+          entry_id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL REFERENCES agent_threads(thread_id) ON DELETE CASCADE,
+          sequence INTEGER NOT NULL,
+          run_id TEXT REFERENCES agent_runs(run_id) ON DELETE SET NULL,
+          turn INTEGER,
+          kind TEXT NOT NULL CHECK (kind IN (
+            'user_message', 'assistant_message', 'compaction',
+            'queued_message', 'external_wait', 'run_reference'
+          )),
+          schema_version TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active'
+            CHECK (status IN ('active', 'superseded', 'tombstoned')),
+          parent_entry_id TEXT REFERENCES agent_session_entries(entry_id),
+          idempotency_key TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(thread_id, sequence),
+          UNIQUE(thread_id, idempotency_key)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_session_entries_thread_sequence
+          ON agent_session_entries(thread_id, sequence ASC);
+        CREATE INDEX IF NOT EXISTS idx_agent_session_entries_run
+          ON agent_session_entries(run_id, sequence ASC);
+      `)
+
+      const threads = database.prepare(`
+        SELECT DISTINCT thread_id FROM agent_messages ORDER BY thread_id ASC
+      `).all() as Array<{ thread_id: string }>
+      const loadMessages = database.prepare(`
+        SELECT message_id, thread_id, run_id, role, content, created_at
+        FROM agent_messages
+        WHERE thread_id = ?
+        ORDER BY created_at ASC, message_id ASC
+      `)
+      const insertEntry = database.prepare(`
+        INSERT OR IGNORE INTO agent_session_entries(
+          entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
+          payload_json, status, parent_entry_id, idempotency_key, created_at
+        ) VALUES (?, ?, ?, ?, NULL, ?, 'agent-session-entry/v1', ?, 'active', NULL, ?, ?)
+      `)
+      for (const thread of threads) {
+        const messages = loadMessages.all(thread.thread_id) as Array<{
+          message_id: string
+          thread_id: string
+          run_id: string | null
+          role: 'user' | 'assistant' | 'system_event'
+          content: string
+          created_at: number
+        }>
+        let sequence = 0
+        for (const message of messages) {
+          if (message.role === 'system_event') continue
+          sequence += 1
+          insertEntry.run(
+            `legacy:${message.message_id}`,
+            message.thread_id,
+            sequence,
+            message.run_id,
+            message.role === 'user' ? 'user_message' : 'assistant_message',
+            JSON.stringify({ content: message.content, legacy: true }),
+            `legacy:${message.message_id}`,
+            message.created_at
+          )
+        }
+      }
+    },
+  },
 ]
 
 export function runAgentSchemaMigrations(database: Database.Database): void {

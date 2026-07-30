@@ -1,8 +1,9 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { AlertCircle, Bot, BrainCircuit, UserRound } from 'lucide-react'
 
-import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiPanel } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiPanel } from '@/components/ui'
 import type { AgentEvent } from '@/core/assistant/events'
+import { getAgentSessionMessageContent } from '@/core/assistant/session'
 import {
   createEmptyPromptDocument,
   createPlainTextPromptDocument,
@@ -10,6 +11,7 @@ import {
 } from '@/core/inputs/promptDocument'
 
 import { useAgentRun } from '../hooks/useAgentRun'
+import { useAgentTranscript } from '../hooks/useAgentTranscript'
 import {
   openAssistantCanvasResult,
   openAssistantGenerationResult,
@@ -61,6 +63,7 @@ export function AssistantConversation(): JSX.Element {
     activities: ReturnType<typeof selectToolActivities>
   } | null>(null)
   const activeRunId = useAssistantUiStore((state) => state.activeRunId)
+  const threadId = useAssistantUiStore((state) => state.threadId)
   const currentGoal = useAssistantUiStore((state) => state.currentGoal)
   const pendingGoal = useAssistantUiStore((state) => state.pendingGoal)
   const setPendingGoal = useAssistantUiStore((state) => state.setPendingGoal)
@@ -68,6 +71,17 @@ export function AssistantConversation(): JSX.Element {
   const setApprovalMode = useAssistantUiStore((state) => state.setApprovalMode)
   const runState = run.view.runState
   const busy = Boolean(activeRunId && (!runState || !terminalStatuses.has(runState.status)))
+  const transcript = useAgentTranscript(
+    threadId,
+    `${activeRunId ?? 'none'}:${runState?.status ?? 'idle'}:${runState?.updatedAt ?? ''}`
+  )
+  const historicalMessages = useMemo(
+    () => transcript.entries.filter((entry) => (
+      entry.runId !== activeRunId
+      && (entry.kind === 'user_message' || entry.kind === 'assistant_message')
+    )),
+    [activeRunId, transcript.entries]
+  )
 
   useEffect(() => {
     if (!pendingGoal) {
@@ -120,7 +134,7 @@ export function AssistantConversation(): JSX.Element {
       if (container) container.scrollTop = container.scrollHeight
     })
     return () => cancelAnimationFrame(frame)
-  }, [approval, deferredStreamedText, runState?.status, tools.length])
+  }, [approval, deferredStreamedText, historicalMessages.length, runState?.status, tools.length])
 
   const submit = useCallback((goal: string): void => {
     void startRun(goal).then((started) => {
@@ -158,13 +172,33 @@ export function AssistantConversation(): JSX.Element {
       ) : null}
 
       <div ref={scrollRef} className="ui-scrollbar min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
-        {!runState && !currentGoal ? (
+        {!runState && !currentGoal && historicalMessages.length === 0 && !transcript.loading ? (
           <UiEmpty
             className="min-h-full px-8"
             icon={<BrainCircuit className="h-7 w-7" />}
             title="让助手操作工作台"
             description="可以切换工作区、查模型、创建可见生成任务、编排画布节点，或基于脱敏日志诊断错误。所有动作都经过受控工具网关。"
           />
+        ) : null}
+
+        {historicalMessages.map((entry) => {
+          const content = getAgentSessionMessageContent(entry)
+          if (!content) return null
+          return entry.kind === 'user_message' ? (
+            <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="ml-7 p-3">
+              <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
+              <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
+            </UiPanel>
+          ) : (
+            <section key={entry.entryId} style={deferredBlockStyle} className="mr-7">
+              <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />助手</div>
+              <AssistantMarkdown>{content}</AssistantMarkdown>
+            </section>
+          )
+        })}
+
+        {transcript.error ? (
+          <UiError size="xs" message={transcript.error} onRetry={() => void transcript.refresh()} />
         ) : null}
 
         {/* 用户消息短、需要边界感，用 inset（比侧栏底色更暗）；助手消息长，只留缩进不套容器 */}

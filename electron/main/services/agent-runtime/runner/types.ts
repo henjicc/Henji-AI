@@ -11,6 +11,7 @@ import type {
   AgentMemoryRetrievalResult,
 } from '../../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
+import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 
 export type AgentModelStepExecutor = (
   input: ModelStepInput,
@@ -37,6 +38,7 @@ export interface AgentRunnerOptions {
   runId: string
   request: AgentStartRunRequest
   memoryContext?: AgentMemoryContextEntry[]
+  conversationHistory?: ModelStepMessage[]
   recoveryContext?: AgentWorkingSummary
   dependencies: AgentRunnerDependencies
 }

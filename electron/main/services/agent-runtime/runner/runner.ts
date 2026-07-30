@@ -37,7 +37,7 @@ export class AgentRunner {
   private readonly contextBuilder: AgentContextBuilder
   private readonly catalogPlanner
   private readonly abortController = new AbortController()
-  private readonly conversation: ModelStepMessage[] = []
+  private readonly conversation: ModelStepMessage[]
   private readonly observations: AgentToolObservation[] = []
   private state: AgentRunState
   private pausedFrom: Exclude<AgentRunStatus, 'paused'> = 'running'
@@ -52,6 +52,7 @@ export class AgentRunner {
   private started = false
 
   constructor(private readonly options: AgentRunnerOptions) {
+    this.conversation = [...(options.conversationHistory ?? [])]
     this.models = selectAgentRuntimeModels(options.request)
     this.budget = new AgentBudgetTracker(options.request.budget)
     this.contextBuilder = new AgentContextBuilder(options.dependencies.artifactStore ?? new AgentArtifactStore())

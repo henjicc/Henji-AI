@@ -115,6 +115,8 @@ const assistantApi: HenjiAssistantApi = {
   getRunSnapshot: (request) => nativeInvoke('assistant:agent:getRunSnapshot', request),
   getRunEvents: (request) => nativeInvoke('assistant:agent:getRunEvents', request),
   listRuns: (request) => nativeInvoke('assistant:agent:listRuns', request),
+  listThreads: (request) => nativeInvoke('assistant:agent:listThreads', request),
+  getTranscript: (request) => nativeInvoke('assistant:agent:getTranscript', request),
   retryRun: (request) => nativeInvoke('assistant:agent:retryRun', request),
   subscribeEvents: (handler) => {
     const listener = (_event: Electron.IpcRendererEvent, rawPayload: unknown): void => {

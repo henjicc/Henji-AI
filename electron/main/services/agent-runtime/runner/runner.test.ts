@@ -155,6 +155,10 @@ describe('AgentRunner', () => {
     const runner = new AgentRunner({
       runId: 'run-final',
       request: runRequest('请简短回答这个一般问题'),
+      conversationHistory: [
+        { role: 'user', content: '第一轮约束：回答必须简短' },
+        { role: 'assistant', content: '已记住这个约束' },
+      ],
       dependencies: {
         registry,
         gateway,
@@ -169,6 +173,11 @@ describe('AgentRunner', () => {
     const state = await terminal
     expect(state).toMatchObject({ status: 'completed', finalText: '已完成' })
     expect(runModelStep).toHaveBeenCalledTimes(2)
+    const primaryInput = runModelStep.mock.calls.find(([input]) => input.stepId === 'step-1')?.[0]
+    expect(primaryInput?.messages).toEqual(expect.arrayContaining([
+      { role: 'user', content: '第一轮约束：回答必须简短' },
+      { role: 'assistant', content: '已记住这个约束' },
+    ]))
     expect(events.map((event) => event.sequence)).toEqual(events.map((_, index) => index + 1))
     expect(events.some((event) => event.type === 'PlanUpdated')).toBe(true)
     expect(events.some((event) => event.type === 'VerificationCompleted' && event.passed)).toBe(true)

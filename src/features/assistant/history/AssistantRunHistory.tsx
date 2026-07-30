@@ -1,7 +1,7 @@
-import { History, LoaderCircle, MessageSquareText, RefreshCw, RotateCcw } from 'lucide-react'
+import { History, MessageSquareText, RefreshCw } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
-import { listAgentRuns, retryAgentRun } from '@/commands/assistant'
+import { listAgentThreads } from '@/commands/assistant'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
@@ -12,20 +12,9 @@ import {
   UiIconButton,
   UiLoading,
 } from '@/components/ui'
-import type { AgentRunSummary } from '@/core/assistant/persistence'
+import type { AgentThreadSummary } from '@/core/assistant/session'
 
 import { useAssistantUiStore } from '../store/assistantUiStore'
-
-const statusLabels: Record<AgentRunSummary['status'], string> = {
-  initializing: '准备中',
-  running: '运行中',
-  waiting_tool: '等待工具',
-  waiting_approval: '等待批准',
-  paused: '已暂停',
-  completed: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-}
 
 interface AssistantRunHistoryProps {
   onOpenConversation: () => void
@@ -45,16 +34,15 @@ export function AssistantRunHistory({
 }: AssistantRunHistoryProps): JSX.Element {
   const setActiveRun = useAssistantUiStore((state) => state.setActiveRun)
   const setThreadId = useAssistantUiStore((state) => state.setThreadId)
-  const [runs, setRuns] = useState<AgentRunSummary[]>([])
+  const [threads, setThreads] = useState<AgentThreadSummary[]>([])
   const [loading, setLoading] = useState(true)
-  const [retryingRunId, setRetryingRunId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)
     setError(null)
     try {
-      setRuns(await listAgentRuns(undefined, 50))
+      setThreads(await listAgentThreads(50))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取运行历史失败')
     } finally {
@@ -66,35 +54,20 @@ export function AssistantRunHistory({
     void refresh()
   }, [refresh])
 
-  const openRun = (run: AgentRunSummary): void => {
-    setThreadId(run.threadId)
-    setActiveRun(run.runId, run.goal)
+  const openThread = (thread: AgentThreadSummary): void => {
+    setThreadId(thread.threadId)
+    setActiveRun(thread.lastRunId, thread.lastRunGoal)
     onOpenConversation()
-  }
-
-  const retry = async (run: AgentRunSummary): Promise<void> => {
-    setRetryingRunId(run.runId)
-    setError(null)
-    try {
-      const result = await retryAgentRun(run.runId)
-      setThreadId(run.threadId)
-      setActiveRun(result.runId, run.goal)
-      onOpenConversation()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '重新运行失败')
-    } finally {
-      setRetryingRunId(null)
-    }
   }
 
   return (
     <section className="flex min-h-0 flex-1 flex-col bg-app">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark px-3">
         <History className="h-3.5 w-3.5 text-accent" />
-        <span className={`flex-1 ${UI_TEXT_SECTION_CLASS}`}>运行历史</span>
+        <span className={`flex-1 ${UI_TEXT_SECTION_CLASS}`}>对话历史</span>
         <UiIconButton
           type="button"
-          title="刷新运行历史"
+          title="刷新对话历史"
           onClick={() => void refresh()}
           className="!h-7 !w-7 !rounded-md"
           disabled={loading}
@@ -104,48 +77,35 @@ export function AssistantRunHistory({
       </div>
 
       <div className="ui-scrollbar min-h-0 flex-1 overflow-y-auto [contain:layout_paint_style]">
-        {loading && runs.length === 0 ? (
+        {loading && threads.length === 0 ? (
           <UiLoading size="sm" message="正在读取" />
         ) : null}
 
-        {!loading && runs.length === 0 ? (
-          <UiEmpty size="sm" title="还没有可恢复的运行记录" />
+        {!loading && threads.length === 0 ? (
+          <UiEmpty size="sm" title="还没有对话记录" />
         ) : null}
 
-        {runs.map((run) => (
+        {threads.map((thread) => (
           <div
-            key={run.runId}
+            key={thread.threadId}
             className="group flex min-h-[60px] items-stretch border-b border-border-dark [content-visibility:auto] [contain-intrinsic-size:auto_60px] last:border-b-0"
           >
             <UiButton
               type="button"
               variant="ghost"
-              onClick={() => openRun(run)}
-              title="打开此对话"
+              onClick={() => openThread(thread)}
+              title="打开此持续对话"
               className="min-w-0 flex-1 justify-start !rounded-none !border-0 !bg-transparent !px-3 !py-2 text-left hover:!bg-surface-dark"
             >
               <MessageSquareText className="mr-2 h-3.5 w-3.5 shrink-0 text-text-muted" />
               <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-                <span className={`w-full truncate ${UI_TEXT_BODY_CLASS}`}>{run.goal || '未命名任务'}</span>
+                <span className={`w-full truncate ${UI_TEXT_BODY_CLASS}`}>{thread.title || '未命名对话'}</span>
                 <span className={`w-full truncate font-normal ${UI_TEXT_META_CLASS}`}>
-                  {statusLabels[run.status]} · {formatTime(run.updatedAt)}
-                  {run.recoveryStatus === 'recovery_required' ? ' · 需要确认重试' : ''}
+                  {thread.headSequence} 条记录 · {formatTime(thread.updatedAt)}
                 </span>
+                {thread.lastMessagePreview ? <span className={`w-full truncate font-normal ${UI_TEXT_META_CLASS}`}>{thread.lastMessagePreview}</span> : null}
               </span>
             </UiButton>
-            {run.canRetry ? (
-              <UiIconButton
-                type="button"
-                title="重新运行"
-                onClick={() => void retry(run)}
-                className="my-auto mr-2 !h-7 !w-7 !rounded-md"
-                disabled={retryingRunId !== null}
-              >
-                {retryingRunId === run.runId
-                  ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
-                  : <RotateCcw className="h-3.5 w-3.5" />}
-              </UiIconButton>
-            ) : null}
           </div>
         ))}
 

@@ -23,6 +23,12 @@ import type {
   AgentRunSummary,
 } from '../../src/core/assistant/persistence'
 import type {
+  AgentListThreadsRequest,
+  AgentThreadSummary,
+  AgentTranscriptPage,
+  AgentTranscriptRequest,
+} from '../../src/core/assistant/session'
+import type {
   AssistantUserInstructions,
   AssistantUserInstructionsUpdate,
 } from '../../src/core/assistant/userInstructions'
@@ -76,6 +82,8 @@ export interface HenjiAssistantApi {
   getRunSnapshot(request: AgentRunControlRequest): Promise<AgentRunSnapshot>
   getRunEvents(request: AgentRunEventsRequest): Promise<AgentRunEventsPage>
   listRuns(request: AgentListRunsRequest): Promise<AgentRunSummary[]>
+  listThreads(request: AgentListThreadsRequest): Promise<AgentThreadSummary[]>
+  getTranscript(request: AgentTranscriptRequest): Promise<AgentTranscriptPage>
   retryRun(request: AgentRetryRunRequest): Promise<AgentStartRunResult>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }
