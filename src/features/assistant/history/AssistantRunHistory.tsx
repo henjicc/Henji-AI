@@ -77,25 +77,27 @@ export function AssistantRunHistory({
           <UiEmpty size="sm" title="还没有对话记录" />
         ) : null}
 
-        {threads.map((thread) => (
-          <div
-            key={thread.threadId}
-            className="group flex items-stretch border-b border-border-dark [content-visibility:auto] [contain-intrinsic-size:auto_32px] last:border-b-0"
-          >
-            <UiButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => openThread(thread)}
-              title="打开此持续对话"
-              className="min-w-0 flex-1 justify-start !rounded-none !border-0 !bg-transparent !px-3 text-left hover:!bg-surface-dark"
+        <div className="space-y-1 py-1">
+          {threads.map((thread) => (
+            <div
+              key={thread.threadId}
+              className="group flex items-stretch [content-visibility:auto] [contain-intrinsic-size:auto_32px]"
             >
-              <span className={`w-full truncate ${UI_TEXT_BODY_CLASS}`}>
-                {thread.title || '未命名对话'}
-              </span>
-            </UiButton>
-          </div>
-        ))}
+              <UiButton
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => openThread(thread)}
+                title="打开此持续对话"
+                className="min-w-0 flex-1 justify-start !rounded-none !border-0 !bg-transparent !px-3 text-left hover:!bg-surface-dark"
+              >
+                <span className={`w-full truncate ${UI_TEXT_BODY_CLASS}`}>
+                  {thread.title || '未命名对话'}
+                </span>
+              </UiButton>
+            </div>
+          ))}
+        </div>
 
         {error ? (
           <UiError size="xs" className="m-3" message={error} />
