@@ -40,7 +40,9 @@ import {
   agentTranscriptRequestSchema,
   agentEnqueueMessageRequestSchema,
   agentCancelQueuedMessageRequestSchema,
+  agentDeleteThreadsRequestSchema,
   type AgentThreadSummary,
+  type AgentDeleteThreadsResult,
   type AgentTranscriptPage,
   type AgentEnqueueMessageResult,
   type AgentSessionEntry,
@@ -236,6 +238,16 @@ export async function listAgentThreads(limit = 30): Promise<AgentThreadSummary[]
     limit,
   })
   return await getPlatform().assistant.listThreads(request)
+}
+
+export async function deleteAgentThreads(threadIds: string[]): Promise<AgentDeleteThreadsResult> {
+  if (!isDesktopRuntime()) throw new Error('智能助手会话记录仅在桌面应用中可用')
+  const request = agentDeleteThreadsRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    requestId: crypto.randomUUID(),
+    threadIds,
+  })
+  return await getPlatform().assistant.deleteThreads(request)
 }
 
 export async function getAgentTranscript(

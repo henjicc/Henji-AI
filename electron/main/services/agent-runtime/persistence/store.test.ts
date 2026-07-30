@@ -216,6 +216,35 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     )
   })
 
+  it('删除对话时级联清理运行与会话数据，并保留其他对话', () => {
+    store.createRun('run-1', request(), state('completed'))
+    store.saveArtifact('run-1', {
+      artifactRef: 'artifact:delete-test',
+      source: 'query:delete-test',
+      dataClasses: ['C1'],
+      createdAt: new Date().toISOString(),
+      originalBytes: 12,
+      payload: { ok: true },
+    })
+    const otherRequest = agentStartRunRequestSchema.parse({
+      ...request(),
+      threadId: 'thread-2',
+      goal: '需要保留的对话',
+    })
+    const otherState = agentRunStateSchema.parse({
+      ...state('completed'),
+      runId: 'run-2',
+      threadId: 'thread-2',
+    })
+    store.createRun('run-2', otherRequest, otherState)
+
+    expect(store.threadDeletion.delete(['thread-1'])).toEqual(['thread-1'])
+    expect(store.loadState('run-1')).toBeNull()
+    expect(store.loadArtifact('artifact:delete-test')).toBeNull()
+    expect(store.listThreads()).toMatchObject([{ threadId: 'thread-2' }])
+    expect(store.threadDeletion.delete(['thread-1'])).toEqual([])
+  })
+
   it('保存点与 session head/checkpoint 幂等对齐并在终局 settled', () => {
     const running = state()
     running.turn = 1

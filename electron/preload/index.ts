@@ -116,6 +116,7 @@ const assistantApi: HenjiAssistantApi = {
   getRunEvents: (request) => nativeInvoke('assistant:agent:getRunEvents', request),
   listRuns: (request) => nativeInvoke('assistant:agent:listRuns', request),
   listThreads: (request) => nativeInvoke('assistant:agent:listThreads', request),
+  deleteThreads: (request) => nativeInvoke('assistant:agent:deleteThreads', request),
   getTranscript: (request) => nativeInvoke('assistant:agent:getTranscript', request),
   enqueueMessage: (request) => nativeInvoke('assistant:agent:enqueueMessage', request),
   cancelQueuedMessage: (request) => nativeInvoke('assistant:agent:cancelQueuedMessage', request),

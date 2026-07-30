@@ -11,6 +11,7 @@ export interface AlertDialogAction {
   label: string
   onClick: () => void
   variant?: 'primary' | 'muted'
+  tone?: 'default' | 'danger'
 }
 
 interface AlertDialogProps {
@@ -25,6 +26,7 @@ interface AlertDialogProps {
    * 省略时只渲染一个关闭按钮，行为与升级前一致。
    */
   actions?: AlertDialogAction[]
+  closeLabel?: string
 }
 
 /**
@@ -39,6 +41,7 @@ export default function AlertDialog({
   type = 'warning',
   scope = 'viewport',
   actions,
+  closeLabel,
 }: AlertDialogProps): JSX.Element | null {
   const { t } = useI18n('common')
   const [opacity, setOpacity] = useState(0)
@@ -144,7 +147,11 @@ export default function AlertDialog({
               size="sm"
               variant={action.variant ?? 'muted'}
               onClick={action.onClick}
-              className="h-9 px-4"
+              className={`h-9 px-4 ${
+                action.tone === 'danger'
+                  ? 'hover:!border-red-500/40 hover:!bg-red-600/35 hover:!text-white'
+                  : ''
+              }`}
             >
               {action.label}
             </UiButton>
@@ -156,7 +163,7 @@ export default function AlertDialog({
             onClick={handleClose}
             className="h-9 px-4"
           >
-            {t('close')}
+            {closeLabel ?? t('close')}
           </UiButton>
         </div>
       </UiPanel>

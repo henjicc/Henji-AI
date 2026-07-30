@@ -203,6 +203,27 @@ export const agentListThreadsRequestSchema = z.object({
 }).strict()
 export type AgentListThreadsRequest = z.infer<typeof agentListThreadsRequestSchema>
 
+export const agentDeleteThreadsRequestSchema = z.object({
+  schemaVersion: z.literal(AGENT_RUNTIME_SCHEMA_VERSION),
+  requestId: z.string().min(1).max(200),
+  threadIds: z.array(z.string().min(1).max(200)).min(1).max(100),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.threadIds).size !== value.threadIds.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['threadIds'],
+      message: '待删除的对话不能重复',
+    })
+  }
+})
+export type AgentDeleteThreadsRequest = z.infer<typeof agentDeleteThreadsRequestSchema>
+
+export const agentDeleteThreadsResultSchema = z.object({
+  deletedThreadIds: z.array(z.string().min(1).max(200)).max(100),
+  activeThreadIds: z.array(z.string().min(1).max(200)).max(100),
+}).strict()
+export type AgentDeleteThreadsResult = z.infer<typeof agentDeleteThreadsResultSchema>
+
 export const agentTranscriptRequestSchema = z.object({
   schemaVersion: z.literal(AGENT_RUNTIME_SCHEMA_VERSION),
   threadId: z.string().min(1).max(200),

@@ -35,6 +35,8 @@ import type {
   AgentEnqueueMessageResult,
   AgentCancelQueuedMessageRequest,
   AgentSessionEntry,
+  AgentDeleteThreadsRequest,
+  AgentDeleteThreadsResult,
 } from '@/core/assistant/session'
 import type {
   AgentMemoryRecord,
@@ -76,6 +78,7 @@ export interface AssistantPlatform {
   getRunEvents(request: AgentRunEventsRequest): Promise<AgentRunEventsPage>
   listRuns(request: AgentListRunsRequest): Promise<AgentRunSummary[]>
   listThreads(request: AgentListThreadsRequest): Promise<AgentThreadSummary[]>
+  deleteThreads(request: AgentDeleteThreadsRequest): Promise<AgentDeleteThreadsResult>
   getTranscript(request: AgentTranscriptRequest): Promise<AgentTranscriptPage>
   enqueueMessage(request: AgentEnqueueMessageRequest): Promise<AgentEnqueueMessageResult>
   cancelQueuedMessage(request: AgentCancelQueuedMessageRequest): Promise<AgentSessionEntry>

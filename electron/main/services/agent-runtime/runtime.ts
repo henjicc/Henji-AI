@@ -9,7 +9,13 @@ import {
   type AgentStartRunResult,
 } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentRunSummary } from '../../../../src/core/assistant/persistence'
-import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../src/core/assistant/session'
+import {
+  agentDeleteThreadsResultSchema,
+  type AgentDeleteThreadsRequest,
+  type AgentDeleteThreadsResult,
+  type AgentThreadSummary,
+  type AgentTranscriptPage,
+} from '../../../../src/core/assistant/session'
 import {
   type AgentEnqueueMessageRequest,
   type AgentEnqueueMessageResult,
@@ -294,6 +300,47 @@ export class AgentRuntimeService {
 
   listThreads(limit = 30): AgentThreadSummary[] {
     return this.persistence.listThreads(limit)
+  }
+
+  deleteThreads(request: AgentDeleteThreadsRequest): AgentDeleteThreadsResult {
+    logger.info('开始删除 Agent 对话', {
+      event: 'agent_runtime.threads.delete.start',
+      requestId: request.requestId,
+      context: { requestedCount: request.threadIds.length },
+    })
+    try {
+      const activeThreadIds = request.threadIds.filter((threadId) => (
+        this.activeByThread.has(threadId)
+        || this.persistence.externalWait.hasPendingThread(threadId)
+      ))
+      const activeThreadIdSet = new Set(activeThreadIds)
+      const deletedThreadIds = this.persistence.threadDeletion.delete(
+        request.threadIds.filter((threadId) => !activeThreadIdSet.has(threadId))
+      )
+      const result = agentDeleteThreadsResultSchema.parse({
+        deletedThreadIds,
+        activeThreadIds,
+      })
+      logger.info('Agent 对话删除完成', {
+        event: 'agent_runtime.threads.delete.completed',
+        requestId: request.requestId,
+        context: {
+          deletedCount: result.deletedThreadIds.length,
+          activeCount: result.activeThreadIds.length,
+        },
+      })
+      return result
+    } catch (error) {
+      logger.error('Agent 对话删除失败', {
+        event: 'agent_runtime.threads.delete.failed',
+        requestId: request.requestId,
+        context: {
+          requestedCount: request.threadIds.length,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      })
+      throw error
+    }
   }
 
   getTranscript(

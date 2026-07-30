@@ -45,6 +45,7 @@ import type {
 import { AgentSavePointStore } from './save-point-store'
 import { AgentExternalWaitStore } from './external-wait-store'
 import { AgentThreadTitleStore } from './thread-title-store'
+import { AgentThreadDeletionStore } from './thread-deletion-store'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'waiting_external'])
@@ -101,6 +102,7 @@ export class AgentPersistenceStore {
   private readonly savePointStore: AgentSavePointStore
   readonly externalWait: AgentExternalWaitStore
   readonly threadTitles: AgentThreadTitleStore
+  readonly threadDeletion: AgentThreadDeletionStore
 
   constructor(private readonly database: Database.Database) {
     this.eventStore = new AgentEventStore(database)
@@ -109,6 +111,7 @@ export class AgentPersistenceStore {
     this.savePointStore = new AgentSavePointStore(database)
     this.externalWait = new AgentExternalWaitStore(database)
     this.threadTitles = new AgentThreadTitleStore(database)
+    this.threadDeletion = new AgentThreadDeletionStore(database)
   }
 
   createRun(

@@ -130,9 +130,11 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
                 appearance="hover-only"
                 active={contentView === 'history'}
                 aria-pressed={contentView === 'history'}
-                onClick={() => setContentView('history')}
-                title="对话历史"
-                aria-label="对话历史"
+                onClick={() => setContentView((view) => (
+                  view === 'history' ? 'conversation' : 'history'
+                ))}
+                title={contentView === 'history' ? '返回当前对话' : '对话历史'}
+                aria-label={contentView === 'history' ? '返回当前对话' : '对话历史'}
                 className={HEADER_ICON_BUTTON_CLASS}
               >
                 <History className="h-4 w-4" />

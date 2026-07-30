@@ -148,6 +148,15 @@ export class AgentExternalWaitStore {
     return rows.map(rowToRecord)
   }
 
+  hasPendingThread(threadId: string): boolean {
+    const row = this.database.prepare(`
+      SELECT 1 FROM agent_external_waits
+      WHERE thread_id = ? AND status IN ('active', 'claimed')
+      LIMIT 1
+    `).get(threadId)
+    return Boolean(row)
+  }
+
   consume(waitId: string, resumedRunId: string): AgentExternalWaitRecord | null {
     const result = this.database.prepare(`
       UPDATE agent_external_waits

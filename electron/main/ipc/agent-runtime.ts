@@ -14,6 +14,7 @@ import {
   agentTranscriptRequestSchema,
   agentEnqueueMessageRequestSchema,
   agentCancelQueuedMessageRequestSchema,
+  agentDeleteThreadsRequestSchema,
 } from '../../../src/core/assistant/session'
 import { getAgentRuntimeService } from '../services/agent-runtime/runtime'
 import {
@@ -64,6 +65,9 @@ export function registerAgentRuntimeIpc(): void {
   ), assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:agent:listThreads', input => agentListThreadsRequestSchema.parse(input), (request) => (
     runtime.listThreads(request.limit)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:deleteThreads', input => agentDeleteThreadsRequestSchema.parse(input), (request) => (
+    runtime.deleteThreads(request)
   ), assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:agent:getTranscript', input => agentTranscriptRequestSchema.parse(input), (request, event) => (
     runtime.getTranscript(event.sender, request.threadId, request.afterSequence, request.limit)

@@ -31,6 +31,8 @@ import type {
   AgentEnqueueMessageResult,
   AgentCancelQueuedMessageRequest,
   AgentSessionEntry,
+  AgentDeleteThreadsRequest,
+  AgentDeleteThreadsResult,
 } from '../../src/core/assistant/session'
 import type {
   AssistantUserInstructions,
@@ -91,6 +93,7 @@ export interface HenjiAssistantApi {
   getRunEvents(request: AgentRunEventsRequest): Promise<AgentRunEventsPage>
   listRuns(request: AgentListRunsRequest): Promise<AgentRunSummary[]>
   listThreads(request: AgentListThreadsRequest): Promise<AgentThreadSummary[]>
+  deleteThreads(request: AgentDeleteThreadsRequest): Promise<AgentDeleteThreadsResult>
   getTranscript(request: AgentTranscriptRequest): Promise<AgentTranscriptPage>
   enqueueMessage(request: AgentEnqueueMessageRequest): Promise<AgentEnqueueMessageResult>
   cancelQueuedMessage(request: AgentCancelQueuedMessageRequest): Promise<AgentSessionEntry>
