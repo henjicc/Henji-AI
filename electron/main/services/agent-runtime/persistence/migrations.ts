@@ -199,6 +199,16 @@ const migrations: SchemaMigration[] = [
       `)
     },
   },
+  {
+    version: 5,
+    name: 'agent-permission-audit-query-index',
+    up: (database) => {
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS idx_agent_permission_audit_tool_call
+          ON agent_permission_audit(run_id, tool_call_id, created_at ASC);
+      `)
+    },
+  },
 ]
 
 export function runAgentSchemaMigrations(database: Database.Database): void {

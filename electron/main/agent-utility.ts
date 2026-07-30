@@ -20,6 +20,11 @@ import {
   agentTraceCaptureModeSchema,
   type AgentTraceCaptureMode,
 } from '../../src/core/assistant/trace'
+import {
+  agentPermissionAuditAppendResultSchema,
+  agentPermissionAuditFactSchema,
+  type AgentPermissionAuditFact,
+} from '../../src/core/assistant/permissionAudit'
 import { sanitizeAgentTraceValue } from '../../src/core/assistant/traceSanitize'
 import {
   AGENT_UTILITY_PROTOCOL_VERSION,
@@ -53,6 +58,10 @@ import {
   buildModelStepTraceDetail,
   createModelStepStreamTrace,
 } from './services/llm/sdk/trace'
+import {
+  cancelUtilityRun,
+  prepareUtilityShutdown,
+} from './agent-utility-cancellation'
 
 const parentPort = process.parentPort
 if (!parentPort) throw new Error('Agent utility process 缺少父进程通信端口')
@@ -107,6 +116,15 @@ function rpc(
   })
 }
 
+export async function appendPermissionAudit(
+  rawFact: AgentPermissionAuditFact
+): Promise<void> {
+  const fact = agentPermissionAuditFactSchema.parse(rawFact)
+  agentPermissionAuditAppendResultSchema.parse(
+    await rpc('permission_audit.append', fact)
+  )
+}
+
 function createProxyRegistry(): AgentToolRegistry {
   const source = createBuiltinAgentToolRegistry(async () => {
     throw new Error('utility proxy registry 不直接执行 frontend 工具')
@@ -140,6 +158,7 @@ const registry = createProxyRegistry()
 const gateway = new AgentToolGateway({
   registry,
   getHostContext: (runId) => hostContexts.get(runId) ?? null,
+  appendPermissionAudit,
 })
 const workflowService = new DeterministicWorkflowService()
 for (const workflowTool of createWorkflowTools({
@@ -402,7 +421,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
 async function executeCommand(action: AgentUtilityCommandAction, payload: unknown): Promise<unknown> {
   if (action === 'run.start') return await handleStart(payload)
   if (action === 'process.shutdown') {
-    for (const runner of runners.values()) runner.cancel('应用正在退出')
+    await prepareUtilityShutdown(runners.values())
     setTimeout(() => process.exit(0), 20).unref()
     return { shuttingDown: true }
   }
@@ -415,7 +434,7 @@ async function executeCommand(action: AgentUtilityCommandAction, payload: unknow
       runId: z.string().min(1),
       reason: z.string().min(1).max(500),
     }).strict().parse(payload)
-    return runner.cancel(parsed.reason)
+    return await cancelUtilityRun(runner, parsed.reason)
   }
   const approval = z.object({
     runId: z.string().min(1),

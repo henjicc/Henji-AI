@@ -112,7 +112,11 @@ describe('AgentRunner canvas batch', () => {
         dataClasses: () => ['C1'], summarize: () => `${toolName} 完成`,
       }))
     }
-    const gateway = new AgentToolGateway({ registry, getHostContext: () => context })
+    const gateway = new AgentToolGateway({
+      registry,
+      getHostContext: () => context,
+      appendPermissionAudit: async () => {},
+    })
     const events: AgentEvent[] = []
     let resolveTerminal: (state: AgentRunState) => void = () => undefined
     const terminal = new Promise<AgentRunState>((resolve) => { resolveTerminal = resolve })

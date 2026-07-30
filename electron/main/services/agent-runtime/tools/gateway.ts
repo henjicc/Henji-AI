@@ -1,162 +1,81 @@
-import { z } from 'zod'
-
 import { createMainLogger } from '../../logging'
+import type { AgentPermissionAuditFact } from '../../../../../src/core/assistant/permissionAudit'
 import {
   agentToolGatewayResultSchema,
   agentToolObservationSchema,
-  type AgentToolErrorCode,
+  agentToolPreviewSchema,
   type AgentToolGatewayResult,
-  type AgentToolPreview,
 } from '../../../../../src/core/assistant/toolContracts'
-import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
-import { AgentApprovalError, AgentApprovalManager } from './approval'
-import { AgentIdempotencyConflictError, AgentIdempotencyLedger } from './idempotency'
+import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { AgentApprovalError, AgentApprovalManager, assertApprovalPreviewTargets } from './approval'
+import { AgentApprovalCoordinator } from './approval-coordinator'
+import { decideToolAuthorization } from './approval-policy'
+import { AgentIdempotencyLedger } from './idempotency'
+import { buildPermissionAuditTemplate } from './permission-audit'
 import { AgentToolRegistry } from './registry'
 import {
   TOOL_INPUT_LIMITS,
   TOOL_OUTPUT_LIMITS,
+  TOOL_PREVIEW_LIMITS,
   assertJsonWithinLimits,
   digestJson,
   summarizeSafeText,
 } from './security'
-import type { AgentToolDefinition, AgentToolExecuteRequest } from './types'
+import type { AgentToolExecuteRequest } from './types'
+import {
+  AgentToolGatewayError,
+  assertOutputDataClassesCovered,
+  assertPreviewDataBoundary,
+  createDefaultPreview,
+  createLinkedController,
+  currentRevisions,
+  executeToolWithRetry,
+  throwIfAborted,
+  toGatewayError,
+  validateAuthorizationSource,
+  validateContext,
+} from './gateway-support'
+
+export { AgentToolGatewayError } from './gateway-support'
 
 const logger = createMainLogger('main.agent_tool')
-
-export class AgentToolGatewayError extends Error {
-  constructor(
-    readonly code: AgentToolErrorCode,
-    message: string,
-    readonly retryable = false,
-    readonly recovery: 'refresh_context' | 'request_approval' | 'wait' | 'user_action' | 'none' = 'none'
-  ) {
-    super(message)
-    this.name = 'AgentToolGatewayError'
-  }
-}
 
 export interface AgentToolGatewayOptions {
   registry: AgentToolRegistry
   getHostContext: (runId: string) => HostContextSnapshot | null
   approvals?: AgentApprovalManager
   idempotency?: AgentIdempotencyLedger
-}
-
-function toGatewayError(error: unknown): AgentToolGatewayError {
-  if (error instanceof AgentToolGatewayError) return error
-  if (error instanceof AgentApprovalError) {
-    return new AgentToolGatewayError(error.code, error.message, false, 'request_approval')
-  }
-  if (error instanceof AgentIdempotencyConflictError) {
-    return new AgentToolGatewayError('CONFLICT', error.message, false, 'user_action')
-  }
-  if (error instanceof z.ZodError) {
-    return new AgentToolGatewayError('INVALID_INPUT', '工具参数或结果未通过 schema 校验')
-  }
-  const message = error instanceof Error ? error.message : String(error)
-  if (message === 'TIMEOUT') return new AgentToolGatewayError('TIMEOUT', '工具执行超时', true, 'wait')
-  if (message === 'CANCELLED') return new AgentToolGatewayError('CANCELLED', '工具调用已取消')
-  const hostErrorCode = /^\[([A-Z_]+)\]/.exec(message)?.[1]
-  if (hostErrorCode === 'STALE_CONTEXT') {
-    return new AgentToolGatewayError('STALE_CONTEXT', message, true, 'refresh_context')
-  }
-  if (hostErrorCode === 'ABORTED') return new AgentToolGatewayError('CANCELLED', message)
-  if (hostErrorCode === 'DEADLINE_EXCEEDED') {
-    return new AgentToolGatewayError('TIMEOUT', message, true, 'wait')
-  }
-  if (hostErrorCode === 'NOT_FOUND' || hostErrorCode?.endsWith('_NOT_FOUND')) {
-    return new AgentToolGatewayError('NOT_FOUND', message, false, 'user_action')
-  }
-  if (hostErrorCode === 'INVALID_INPUT') {
-    return new AgentToolGatewayError('INVALID_INPUT', message, true, 'user_action')
-  }
-  if (hostErrorCode === 'CONFLICT') {
-    return new AgentToolGatewayError('CONFLICT', message, true, 'refresh_context')
-  }
-  if (hostErrorCode === 'PERMISSION_DENIED') {
-    return new AgentToolGatewayError('PERMISSION_DENIED', message, false, 'user_action')
-  }
-  if (hostErrorCode === 'COMMAND_NOT_READY') {
-    return new AgentToolGatewayError('NOT_READY', message, true, 'wait')
-  }
-  return new AgentToolGatewayError('EXECUTION_FAILED', message || '工具执行失败')
-}
-
-function currentRevisions(context: HostContextSnapshot | null, scopes: HostScope[]): Record<string, number> {
-  if (!context) return {}
-  return Object.fromEntries(scopes.map((scope) => [scope, context.scopeRevisions[scope]]))
-}
-
-function validateContext(
-  definition: AgentToolDefinition,
-  context: HostContextSnapshot | null,
-  expected: Partial<HostScopeRevisions> | undefined
-): void {
-  if (definition.requiredContext.length > 0 && (!context || !context.uiReady)) {
-    throw new AgentToolGatewayError('NOT_READY', '宿主界面尚未就绪', true, 'wait')
-  }
-  if (!context || !expected) return
-  for (const scope of definition.requiredContext) {
-    const expectedValue = expected[scope]
-    if (expectedValue !== undefined && context.scopeRevisions[scope] !== expectedValue) {
-      throw new AgentToolGatewayError('STALE_CONTEXT', `宿主 ${scope} 上下文已变化`, true, 'refresh_context')
-    }
-  }
-}
-
-function requiresApproval(
-  definition: AgentToolDefinition,
-  explicitUserIntent: boolean,
-  mode: AgentToolExecuteRequest['approvalMode']
-): boolean {
-  if (mode === 'full_access') return definition.risk === 'R3'
-  if (mode === 'assistant_decides') {
-    if (definition.risk === 'R0' || definition.risk === 'R1') return false
-    if (definition.risk === 'R2' && definition.readOnly && !definition.destructive) return false
-    return true
-  }
-  if (definition.risk === 'R2' || definition.risk === 'R3') return true
-  return definition.risk === 'R1' && !explicitUserIntent
-}
-
-function createDefaultPreview(definition: AgentToolDefinition, input: unknown): AgentToolPreview {
-  return {
-    title: definition.title,
-    summary: `${definition.title} 将作用于 ${Object.keys(definition.targetIds(input)).length || 1} 个明确目标。`,
-    targetIds: definition.targetIds(input),
-    reversible: definition.supportsUndo,
-    dataClasses: definition.openWorld ? ['C1'] : ['C0'],
-  }
-}
-
-function createLinkedController(parent: AbortSignal, timeoutMs: number): { controller: AbortController; dispose: () => void } {
-  const controller = new AbortController()
-  const onAbort = (): void => controller.abort('CANCELLED')
-  parent.addEventListener('abort', onAbort, { once: true })
-  const timeout = setTimeout(() => controller.abort('TIMEOUT'), timeoutMs)
-  return {
-    controller,
-    dispose: () => {
-      clearTimeout(timeout)
-      parent.removeEventListener('abort', onAbort)
-    },
-  }
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (!signal.aborted) return
-  throw new Error(signal.reason === 'TIMEOUT' ? 'TIMEOUT' : 'CANCELLED')
+  appendPermissionAudit: (fact: AgentPermissionAuditFact) => Promise<void>
 }
 
 export class AgentToolGateway {
-  readonly approvals: AgentApprovalManager
   private readonly ledger: AgentIdempotencyLedger
+  private readonly approvalCoordinator: AgentApprovalCoordinator
   private readonly locks = new Set<string>()
   private readonly executionCounts = new Map<string, number>()
 
   constructor(private readonly options: AgentToolGatewayOptions) {
-    this.approvals = options.approvals ?? new AgentApprovalManager()
     this.ledger = options.idempotency ?? new AgentIdempotencyLedger()
+    this.approvalCoordinator = new AgentApprovalCoordinator(
+      options.appendPermissionAudit,
+      options.approvals
+    )
+  }
+
+  async resolveApproval(
+    approvalId: string,
+    runId: string,
+    decision: 'approve' | 'reject'
+  ): Promise<'approved' | 'rejected'> {
+    return this.approvalCoordinator.resolve(approvalId, runId, decision)
+  }
+
+  async expireApproval(approvalId: string, runId: string): Promise<'expired'> {
+    return this.approvalCoordinator.expire(approvalId, runId)
+  }
+
+  async expireRunApprovals(runId: string): Promise<void> {
+    await this.approvalCoordinator.expireRun(runId)
   }
 
   async execute(request: AgentToolExecuteRequest): Promise<AgentToolGatewayResult> {
@@ -166,10 +85,10 @@ export class AgentToolGateway {
     if (definition.risk === 'R4') throw new AgentToolGatewayError('PERMISSION_DENIED', 'R4 工具禁止执行')
 
     try {
+      throwIfAborted(request.signal)
       assertJsonWithinLimits(request.input, TOOL_INPUT_LIMITS)
-      const input = definition.inputSchema.parse(request.input)
+      const initialInput = definition.inputSchema.parse(request.input)
       const context = this.options.getHostContext(request.runId)
-      validateContext(definition, context, request.expectedRevisions)
       const executionContext = {
         runId: request.runId,
         threadId: request.threadId,
@@ -177,20 +96,90 @@ export class AgentToolGateway {
         signal: request.signal,
         hostContext: context,
       }
-      const preview = definition.preview
-        ? await definition.preview(input, executionContext)
-        : createDefaultPreview(definition, input)
+      const rawPreview = definition.preview
+        ? await definition.preview(initialInput, executionContext)
+        : createDefaultPreview(definition, initialInput)
+      throwIfAborted(request.signal)
+      assertJsonWithinLimits(rawPreview, TOOL_PREVIEW_LIMITS)
+      const preview = agentToolPreviewSchema.parse(rawPreview)
+      assertPreviewDataBoundary(preview)
+      assertJsonWithinLimits(initialInput, TOOL_INPUT_LIMITS)
+      const input = definition.inputSchema.parse(initialInput)
+      assertApprovalPreviewTargets(definition, input, preview)
+      validateAuthorizationSource(request)
       const expectedRevisions = currentRevisions(context, definition.requiredContext)
       const ledgerKey = `${request.runId}:${request.toolCallId}:${definition.version}`
       const inputDigest = digestJson(input)
+      const authorization = decideToolAuthorization({
+        mode: request.approvalMode,
+        risk: definition.risk,
+        readOnly: definition.readOnly,
+        destructive: definition.destructive,
+        dataClasses: preview.dataClasses,
+      })
+      const auditTemplate = buildPermissionAuditTemplate({
+        runId: request.runId,
+        toolCallId: request.toolCallId,
+        approvalMode: request.approvalMode,
+        authorizationSource: request.authorizationSource ?? 'direct',
+        parentToolCallId: request.parentToolCallId,
+        definition,
+        input,
+        preview,
+        expectedRevisions,
+      })
+      const authorizationDigest = digestJson(auditTemplate)
+      const consumeInput = request.approvalId
+        ? {
+          approvalId: request.approvalId,
+          runId: request.runId,
+          toolCallId: request.toolCallId,
+          definition,
+          input,
+          preview,
+          expectedRevisions,
+        }
+        : null
       const existing = this.ledger.lookup(ledgerKey, inputDigest)
-      if (existing?.status === 'cached') {
-        return agentToolGatewayResultSchema.parse({ status: 'completed', observation: existing.observation, cached: true })
+
+      if (consumeInput && (!existing || preview.dataClasses.includes('C2'))) {
+        await this.approvalCoordinator.assertConsumable(auditTemplate, consumeInput)
+      }
+      if (authorization === 'denied') {
+        await this.approvalCoordinator.recordDenied(auditTemplate, request.approvalId)
+        throw new AgentToolGatewayError('PERMISSION_DENIED', '工具请求触及禁止的数据或风险边界')
+      }
+      validateContext(definition, context, request.expectedRevisions)
+
+      if (existing?.status === 'cached' && !preview.dataClasses.includes('C2')) {
+        if (existing.authorizationDigest !== authorizationDigest) {
+          if (request.approvalId) {
+            await this.approvalCoordinator.record({
+              template: auditTemplate,
+              approvalId: request.approvalId,
+              event: 'binding_failed',
+              reasonCode: 'CACHED_AUTHORIZATION_MISMATCH',
+            })
+            throw new AgentApprovalError('APPROVAL_INVALID', '缓存结果的审批绑定与当前调用不一致')
+          }
+          throw new AgentToolGatewayError('CONFLICT', '缓存结果的授权摘要与当前调用不一致')
+        }
+        await this.approvalCoordinator.record({
+          template: auditTemplate,
+          event: 'execution_cached',
+          reasonCode: 'IDEMPOTENT_CACHE_HIT',
+          result: { dataClasses: existing.observation.dataClasses },
+        })
+        return agentToolGatewayResultSchema.parse({
+          status: 'completed',
+          observation: existing.observation,
+          cached: true,
+        })
       }
 
-      if (requiresApproval(definition, request.explicitUserIntent, request.approvalMode)) {
+      if (authorization === 'approval_required') {
         if (!request.approvalId) {
-          const approval = this.approvals.create({
+          const approval = await this.approvalCoordinator.request(auditTemplate, {
             runId: request.runId,
             toolCallId: request.toolCallId,
             definition,
@@ -200,15 +189,48 @@ export class AgentToolGateway {
           })
           return agentToolGatewayResultSchema.parse({ status: 'approval_required', approval })
         }
-        this.approvals.consume(
-          request.approvalId,
-          request.runId,
-          request.toolCallId,
-          definition,
-          input,
-          expectedRevisions
-        )
       }
+
+      if (consumeInput) {
+        await this.approvalCoordinator.consume(auditTemplate, consumeInput)
+      } else if (authorization === 'auto_allowed') {
+        await this.approvalCoordinator.record({
+          template: auditTemplate,
+          event: 'auto_allowed',
+          reasonCode: request.authorizationSource === 'approved_workflow'
+            ? 'APPROVED_WORKFLOW_DELEGATION'
+            : 'POLICY_AUTO_ALLOWED',
+        })
+      }
+      throwIfAborted(request.signal)
+      const latestContext = this.options.getHostContext(request.runId)
+      validateContext(definition, latestContext, expectedRevisions)
+
+      if (existing?.status === 'cached') {
+        if (existing.authorizationDigest !== authorizationDigest) {
+          throw new AgentApprovalError('APPROVAL_INVALID', '缓存结果的授权摘要与当前审批不一致')
+        }
+        await this.approvalCoordinator.record({
+          template: auditTemplate,
+          approvalId: request.approvalId,
+          event: 'execution_cached',
+          reasonCode: 'SENSITIVE_CACHE_HIT',
+          result: { dataClasses: existing.observation.dataClasses },
+        })
+        return agentToolGatewayResultSchema.parse({
+          status: 'completed',
+          observation: existing.observation,
+          cached: true,
+        })
+      }
+
+      assertJsonWithinLimits(input, TOOL_INPUT_LIMITS)
+      const executableInput = definition.inputSchema.parse(input)
+      if (digestJson(executableInput) !== inputDigest) {
+        throw new AgentToolGatewayError('INVALID_INPUT', '工具最终参数在校验过程中发生变化')
+      }
+      assertApprovalPreviewTargets(definition, executableInput, preview)
+      throwIfAborted(request.signal)
 
       const executionCountKey = `${request.runId}:${definition.name}`
       const executionCount = this.executionCounts.get(executionCountKey) ?? 0
@@ -222,12 +244,26 @@ export class AgentToolGateway {
         )
       }
 
-      const begun = this.ledger.begin(ledgerKey, inputDigest)
+      const begun = this.ledger.begin(ledgerKey, inputDigest, authorizationDigest)
       if (begun.status === 'cached') {
-        return agentToolGatewayResultSchema.parse({ status: 'completed', observation: begun.observation, cached: true })
+        if (begun.authorizationDigest !== authorizationDigest) {
+          throw new AgentToolGatewayError('CONFLICT', '并发缓存结果的授权摘要不一致')
+        }
+        await this.approvalCoordinator.record({
+          template: auditTemplate,
+          approvalId: request.approvalId,
+          event: 'execution_cached',
+          reasonCode: 'CONCURRENT_CACHE_HIT',
+          result: { dataClasses: begun.observation.dataClasses },
+        })
+        return agentToolGatewayResultSchema.parse({
+          status: 'completed',
+          observation: begun.observation,
+          cached: true,
+        })
       }
 
-      const concurrencyKey = definition.concurrencyKey(input)
+      const concurrencyKey = definition.concurrencyKey(executableInput)
       if (this.locks.has(concurrencyKey)) {
         this.ledger.fail(ledgerKey)
         throw new AgentToolGatewayError('CONFLICT', `工具并发键冲突：${concurrencyKey}`, true, 'wait')
@@ -244,8 +280,13 @@ export class AgentToolGateway {
       })
 
       const linked = createLinkedController(request.signal, definition.timeoutMs)
+      let executionCommitted = false
       try {
-        const output = await this.executeWithRetry(definition, input, { ...executionContext, signal: linked.controller.signal })
+        const output = await executeToolWithRetry(
+          definition,
+          executableInput,
+          { ...executionContext, signal: linked.controller.signal, hostContext: latestContext }
+        )
         throwIfAborted(linked.controller.signal)
         assertJsonWithinLimits(output, TOOL_OUTPUT_LIMITS)
         const parsedOutput = definition.outputSchema.parse(output)
@@ -253,6 +294,7 @@ export class AgentToolGateway {
         if (dataClasses.includes('C3')) {
           throw new AgentToolGatewayError('PERMISSION_DENIED', '工具结果包含 C3 秘密数据，禁止进入 Agent 上下文')
         }
+        assertOutputDataClassesCovered(preview, dataClasses)
         const observation = agentToolObservationSchema.parse({
           source: { toolName: definition.name, toolVersion: definition.version, toolCallId: request.toolCallId },
           trust: 'untrusted_observation',
@@ -262,6 +304,17 @@ export class AgentToolGateway {
           undo: definition.undo?.(parsedOutput),
         })
         this.ledger.succeed(ledgerKey, observation)
+        executionCommitted = true
+        await this.approvalCoordinator.record({
+          template: auditTemplate,
+          approvalId: request.approvalId,
+          event: 'execution_completed',
+          reasonCode: 'TOOL_EXECUTION_SUCCEEDED',
+          result: {
+            durationMs: Date.now() - startedAt,
+            dataClasses,
+          },
+        })
         logger.info('Agent 工具执行完成', {
           event: 'agent_tool.execute.completed',
           requestId: request.runId,
@@ -270,11 +323,24 @@ export class AgentToolGateway {
         })
         return agentToolGatewayResultSchema.parse({ status: 'completed', observation, cached: false })
       } catch (error) {
-        if (definition.maxCallsPerRun !== undefined) {
+        if (!executionCommitted && definition.maxCallsPerRun !== undefined) {
           this.executionCounts.set(executionCountKey, executionCount)
         }
-        if (!definition.readOnly && linked.controller.signal.aborted) this.ledger.markUnknown(ledgerKey)
-        else this.ledger.fail(ledgerKey)
+        if (!executionCommitted) {
+          if (!definition.readOnly && linked.controller.signal.aborted) this.ledger.markUnknown(ledgerKey)
+          else this.ledger.fail(ledgerKey)
+          const executionError = toGatewayError(error)
+          await this.approvalCoordinator.record({
+            template: auditTemplate,
+            approvalId: request.approvalId,
+            event: 'execution_failed',
+            reasonCode: 'TOOL_EXECUTION_FAILED',
+            result: {
+              errorCode: executionError.code,
+              durationMs: Date.now() - startedAt,
+            },
+          })
+        }
         throw error
       } finally {
         linked.dispose()
@@ -292,28 +358,4 @@ export class AgentToolGateway {
     }
   }
 
-  private async executeWithRetry(
-    definition: AgentToolDefinition,
-    input: unknown,
-    context: Parameters<AgentToolDefinition['execute']>[1]
-  ): Promise<unknown> {
-    const retries = definition.readOnly || definition.idempotent ? definition.retryPolicy.maxRetries : 0
-    for (let attempt = 0; attempt <= retries; attempt += 1) {
-      throwIfAborted(context.signal)
-      try {
-        return await definition.execute(input, context)
-      } catch (error) {
-        const gatewayError = toGatewayError(error)
-        if (!gatewayError.retryable || attempt >= retries) throw gatewayError
-        await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(resolve, definition.retryPolicy.baseDelayMs * (attempt + 1))
-          context.signal.addEventListener('abort', () => {
-            clearTimeout(timer)
-            reject(new Error('CANCELLED'))
-          }, { once: true })
-        })
-      }
-    }
-    throw new AgentToolGatewayError('EXECUTION_FAILED', '工具重试状态异常')
-  }
 }

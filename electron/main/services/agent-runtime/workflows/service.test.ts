@@ -25,13 +25,26 @@ function context(): HostContextSnapshot {
 
 function createGateway(
   current: HostContextSnapshot,
-  options?: { failTool?: string; mutateAfter?: string }
+  options?: { failTool?: string; mutateAfter?: string; requireApprovalTool?: string }
 ): { gateway: AgentToolGateway; calls: AgentToolExecuteRequest[] } {
   const calls: AgentToolExecuteRequest[] = []
   const gateway = {
     execute: async (request: AgentToolExecuteRequest): Promise<AgentToolGatewayResult> => {
       calls.push(request)
       if (options?.failTool === request.toolName) throw new Error('[EXECUTION_FAILED] 测试步骤失败')
+      if (options?.requireApprovalTool === request.toolName) {
+        return {
+          status: 'approval_required',
+          approval: {
+            approvalId: 'nested-approval', runId: request.runId,
+            toolCallId: request.toolCallId, toolName: request.toolName, toolVersion: 1,
+            risk: 'R3', title: '嵌套审批', summary: '工作流内部高风险步骤',
+            argsDigest: 'a', previewDigest: 'p', targetIds: {}, dataClasses: ['C1'],
+            expectedRevisions: {}, permission: 'test:high_risk', scope: 'test:high_risk:x',
+            expiresAt: new Date(Date.now() + 60_000).toISOString(), reversible: false,
+          },
+        }
+      }
       const revisions = { ...current.scopeRevisions }
       const scope = request.toolName.includes('canvas') || request.toolName === 'add_canvas_node' || request.toolName === 'add_asset_to_canvas' || request.toolName === 'open_canvas_project'
         ? 'canvas'
@@ -79,6 +92,10 @@ describe('DeterministicWorkflowService', () => {
       'switch_workspace', 'open_canvas_project', 'add_canvas_node',
     ])
     expect((result.compensations as Array<Record<string, unknown>>)[0]).toMatchObject({ stepId: 'add-generation-node' })
+    const workflowRunRef = String(result.workflowRunRef)
+    expect(calls.every((call) => call.authorizationSource === 'approved_workflow')).toBe(true)
+    expect(calls.every((call) => call.parentToolCallId === 'call-1')).toBe(true)
+    expect(calls.every((call) => call.toolCallId.startsWith(`workflow:${workflowRunRef}:step:`))).toBe(true)
   })
 
   it('用户在步骤间改变 revision 时暂停为失败，不覆盖新状态', async () => {
@@ -118,5 +135,27 @@ describe('DeterministicWorkflowService', () => {
       gateway, getHostContext: () => host,
     })
     expect(rollback.status).toBe('rolled_back')
+    const compensationCalls = calls.filter((call) => call.toolCallId.includes(':compensation:'))
+    expect(compensationCalls.every((call) => call.parentToolCallId === 'call-2')).toBe(true)
+    expect(compensationCalls.every((call) => call.authorizationSource === 'approved_workflow')).toBe(true)
+  })
+
+  it('内部 R3/C2 子步骤需要独立审批时不会被父工作流授权吞掉', async () => {
+    const service = new DeterministicWorkflowService()
+    const host = context()
+    const { gateway, calls } = createGateway(host, { requireApprovalTool: 'prepare_generation_task' })
+    const plan = service.plan('model_to_generation_canvas', {
+      projectId: 'project-1', modelId: 'model-1', mediaType: 'image', prompt: '猫',
+    }, host)
+    const result = await service.execute(String(plan.planRef), {
+      runId: 'run-1', threadId: 'thread-1', toolCallId: 'call-1',
+      signal: new AbortController().signal, gateway, getHostContext: () => host,
+    })
+
+    expect(result).toMatchObject({ status: 'failed' })
+    expect(calls.map((call) => call.toolName)).toEqual([
+      'switch_workspace',
+      'prepare_generation_task',
+    ])
   })
 })

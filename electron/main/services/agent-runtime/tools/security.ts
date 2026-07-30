@@ -23,6 +23,13 @@ export const TOOL_OUTPUT_LIMITS: JsonLimitOptions = {
   maxStringLength: 256 * 1024,
 }
 
+export const TOOL_PREVIEW_LIMITS: JsonLimitOptions = {
+  maxBytes: 32 * 1024,
+  maxDepth: 8,
+  maxKeys: 128,
+  maxStringLength: 2_000,
+}
+
 function inspectValue(value: unknown, options: JsonLimitOptions, depth: number, keyCount: { value: number }): void {
   if (depth > options.maxDepth) throw new Error('JSON_DEPTH_LIMIT')
   if (typeof value === 'string' && value.length > options.maxStringLength) throw new Error('JSON_STRING_LIMIT')

@@ -43,6 +43,8 @@ import {
 import { createInitialAgentRunState } from './runner/initial-state'
 import { AgentPersistenceStore } from './persistence/store'
 import { buildAgentRunEventsPage } from './persistence/event-store'
+import { AgentPermissionAuditStore } from './persistence/permission-audit-store'
+import type { AgentPermissionAuditRecord } from '../../../../src/core/assistant/permissionAudit'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
 const logger = createMainLogger('main.agent_runtime')
@@ -82,6 +84,7 @@ export class AgentRuntimeService {
   private readonly activeByThread = new Map<string, string>()
   private readonly eventListeners = new Map<string, Set<AgentRunEventListener>>()
   private readonly persistence = new AgentPersistenceStore(getDb())
+  private readonly permissionAudit = new AgentPermissionAuditStore(getDb())
   private readonly agentTraceStore = getAgentTraceStore()
   private readonly memory = getAgentMemoryStore()
   private readonly registry = createBuiltinAgentToolRegistry((operation, context) => (
@@ -100,6 +103,10 @@ export class AgentRuntimeService {
     startAgentTrace: (payload) => this.agentTraceStore.start(payload),
     completeAgentTrace: (payload) => this.agentTraceStore.complete(payload),
     failAgentTrace: (payload) => this.agentTraceStore.fail(payload),
+    appendPermissionAudit: (payload) => {
+      const record = this.permissionAudit.append(payload)
+      return { auditId: record.auditId }
+    },
   })
 
   constructor() {
@@ -267,6 +274,14 @@ export class AgentRuntimeService {
 
   listRuns(threadId?: string, limit = 30): AgentRunSummary[] {
     return this.persistence.listRuns(threadId, limit)
+  }
+
+  queryPermissionAudit(
+    runId: string,
+    toolCallId?: string,
+    limit = 500
+  ): AgentPermissionAuditRecord[] {
+    return this.permissionAudit.query({ runId, toolCallId, limit })
   }
 
   async retryRun(

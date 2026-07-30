@@ -77,6 +77,12 @@ export const agentRunStateSchema = z.object({
 }).strict()
 export type AgentRunState = z.infer<typeof agentRunStateSchema>
 
+export const agentApprovalTargetIdsSchema = z.record(
+  z.string().min(1).max(100),
+  z.string().max(500)
+).refine((targets) => Object.keys(targets).length <= 32, '审批目标最多 32 项')
+const agentApprovalDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
+
 export const agentApprovalRequestSchema = z.object({
   approvalId: z.string().min(1),
   runId: z.string().min(1),
@@ -88,7 +94,9 @@ export const agentApprovalRequestSchema = z.object({
   summary: z.string().min(1).max(2_000),
   argsDigest: z.string().min(1),
   previewDigest: z.string().min(1),
-  targetIds: z.record(z.string(), z.string()),
+  targetIds: agentApprovalTargetIdsSchema,
+  dataClasses: z.array(agentApprovalDataClassSchema).min(1).max(4).default(['C0']),
+  destination: z.string().max(500).optional(),
   expectedRevisions: hostScopeRevisionsSchema.partial(),
   permission: z.string().min(1),
   scope: z.string().min(1),

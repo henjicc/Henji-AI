@@ -49,6 +49,7 @@ interface AgentRuntimeManagerOptions {
   startAgentTrace: (payload: AgentTraceStartInput) => void
   completeAgentTrace: (payload: AgentTraceCompleteInput) => void
   failAgentTrace: (payload: AgentTraceFailInput) => void
+  appendPermissionAudit: (payload: unknown) => unknown
 }
 
 interface PendingCommand {
@@ -334,8 +335,12 @@ export class AgentRuntimeManager {
       } else if (operation === 'agent_trace.fail') {
         this.options.failAgentTrace(payload as AgentTraceFailInput)
         data = { saved: true }
-      } else {
+      } else if (operation === 'permission_audit.append') {
+        data = this.options.appendPermissionAudit(payload)
+      } else if (operation === 'memory.retrieve') {
         data = this.options.retrieveMemory(payload)
+      } else {
+        throw new Error(`不支持的 utility RPC 操作：${String(operation)}`)
       }
       this.postRpcResult(rpcId, true, data)
     } catch (error) {

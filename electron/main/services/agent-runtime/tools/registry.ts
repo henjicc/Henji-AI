@@ -1,6 +1,7 @@
 import { agentToolCatalogEntrySchema, type AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
+import { assertAgentToolDefinition } from './define-tool'
 import type { AgentToolDefinition, AgentToolRegistration, AgentToolSemantics } from './types'
 
 const semanticSearchConcepts: ReadonlyArray<{ pattern: RegExp; concept: string }> = [
@@ -126,6 +127,7 @@ export class AgentToolRegistry {
   private readonly definitions = new Map<string, AgentToolDefinition>()
 
   register<TInput, TOutput>(definition: AgentToolDefinition<TInput, TOutput>): void {
+    assertAgentToolDefinition(definition)
     const current = this.definitions.get(definition.name)
     if (current) {
       throw new Error(`工具已注册：${definition.name}@${current.version}`)

@@ -37,6 +37,8 @@ export interface AgentToolExecutionContext {
   hostContext: HostContextSnapshot | null
 }
 
+export type AgentToolAuthorizationSource = 'direct' | 'approved_workflow'
+
 export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   name: string
   version: number
@@ -79,6 +81,8 @@ export interface AgentToolExecuteRequest {
   approvalId?: string
   approvalMode: AgentApprovalMode
   explicitUserIntent: boolean
+  authorizationSource?: AgentToolAuthorizationSource
+  parentToolCallId?: string
   signal: AbortSignal
 }
 

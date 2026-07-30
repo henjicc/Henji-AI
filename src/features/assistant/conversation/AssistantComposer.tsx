@@ -19,7 +19,7 @@ interface AssistantComposerProps {
 }
 
 const approvalModeOptions: Array<{ value: AgentApprovalMode; label: string }> = [
-  { value: 'ask', label: '每次询问' },
+  { value: 'ask', label: '严格确认' },
   { value: 'assistant_decides', label: '助手判断' },
   { value: 'full_access', label: '充分访问' },
 ]
@@ -69,10 +69,10 @@ export function AssistantComposer({
           />
           <span className={`hidden truncate min-[440px]:inline ${UI_TEXT_META_CLASS}`}>
             {approvalMode === 'ask'
-              ? '风险操作逐次确认'
+              ? '安全读取与轻量操作自动，其余需确认'
               : approvalMode === 'assistant_decides'
-                ? '安全读取自动执行'
-                : '允许操作自动执行，高风险仍确认'}
+                ? 'R0 轻量与安全读取自动，R1+ 写入需确认'
+                : 'R0–R2 自动，R3/C2 确认，C3/R4 禁止'}
           </span>
         </div>
         <UiButton

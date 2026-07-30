@@ -282,12 +282,14 @@ export class DeterministicWorkflowService {
         const result = await context.gateway.execute({
           runId: context.runId,
           threadId: context.threadId,
-          toolCallId: `${context.toolCallId}:workflow:${run.workflowRunRef}:${run.nextStepIndex}`,
+          toolCallId: `workflow:${run.workflowRunRef}:step:${step.id}`,
           toolName: step.toolName,
           input,
           expectedRevisions: Object.fromEntries(step.scopes.map((scope) => [scope, run.scopeRevisions[scope]])),
           approvalMode: 'full_access',
           explicitUserIntent: true,
+          authorizationSource: 'approved_workflow',
+          parentToolCallId: context.toolCallId,
           signal: controller.signal,
         })
         if (result.status !== 'completed') throw new Error('[WORKFLOW_APPROVAL_REQUIRED] 工作流内部步骤未完成审批')
@@ -349,11 +351,13 @@ export class DeterministicWorkflowService {
         const result: AgentToolGatewayResult = await context.gateway.execute({
           runId: context.runId,
           threadId: context.threadId,
-          toolCallId: `${context.toolCallId}:workflow:${run.workflowRunRef}:compensate:${compensation.stepId}`,
+          toolCallId: `workflow:${run.workflowRunRef}:compensation:${compensation.stepId}`,
           toolName: compensation.toolName,
           input: compensation.input,
           approvalMode: 'full_access',
           explicitUserIntent: true,
+          authorizationSource: 'approved_workflow',
+          parentToolCallId: context.toolCallId,
           signal: context.signal,
         })
         compensation.status = result.status === 'completed' ? 'completed' : 'failed'

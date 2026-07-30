@@ -101,6 +101,20 @@ export const modelStepToolCallSchema = z.object({
 })
 export type ModelStepToolCall = z.infer<typeof modelStepToolCallSchema>
 
+/**
+ * 与 AI SDK 6 的统一结束原因保持一致。未知结束原因在模型步骤边界即拒绝，
+ * 避免新供应商值未经运行时安全裁决便进入工具执行链。
+ */
+export const modelStepFinishReasonSchema = z.enum([
+  'stop',
+  'length',
+  'content-filter',
+  'tool-calls',
+  'error',
+  'other',
+])
+export type ModelStepFinishReason = z.infer<typeof modelStepFinishReasonSchema>
+
 export const modelStepUsageSchema = z.object({
   inputTokens: z.number().int().nonnegative().nullable(),
   inputNoCacheTokens: z.number().int().nonnegative().nullable(),
@@ -124,7 +138,7 @@ export const modelStepResultSchema = z.object({
   structuredOutput: z.unknown().nullable(),
   toolCalls: z.array(modelStepToolCallSchema),
   responseMessages: z.array(modelStepMessageSchema),
-  finishReason: z.string().min(1),
+  finishReason: modelStepFinishReasonSchema,
   usage: modelStepUsageSchema,
   providerMetadataSummary: z.record(z.string(), z.array(z.string())),
   warnings: z.array(z.string()),

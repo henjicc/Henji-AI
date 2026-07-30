@@ -105,7 +105,11 @@ function createScheduler(
     dataClasses: () => ['C0'],
     summarize: (output) => `已写入 ${output.id}`,
   }))
-  const gateway = new AgentToolGateway({ registry, getHostContext: hostContext })
+  const gateway = new AgentToolGateway({
+    registry,
+    getHostContext: hostContext,
+    appendPermissionAudit: async () => {},
+  })
   return new AgentToolCallScheduler({
     runId: 'run-scheduler',
     threadId: 'thread-scheduler',

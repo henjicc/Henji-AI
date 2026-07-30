@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-import { agentApprovalRequestSchema, agentToolCompletionKindSchema } from './events'
+import {
+  agentApprovalRequestSchema,
+  agentApprovalTargetIdsSchema,
+  agentToolCompletionKindSchema,
+} from './events'
 
 export const agentToolRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])
 export type AgentToolRisk = z.infer<typeof agentToolRiskSchema>
@@ -30,6 +34,7 @@ export const agentToolErrorCodeSchema = z.enum([
   'RESULT_TOO_LARGE',
   'EXECUTION_FAILED',
   'RECOVERY_VERIFICATION_REQUIRED',
+  'PERMISSION_AUDIT_UNAVAILABLE',
 ])
 export type AgentToolErrorCode = z.infer<typeof agentToolErrorCodeSchema>
 
@@ -44,9 +49,9 @@ export type AgentToolError = z.infer<typeof agentToolErrorSchema>
 export const agentToolPreviewSchema = z.object({
   title: z.string().min(1).max(200),
   summary: z.string().min(1).max(2_000),
-  targetIds: z.record(z.string(), z.string()),
+  targetIds: agentApprovalTargetIdsSchema,
   reversible: z.boolean(),
-  dataClasses: z.array(agentDataClassSchema).max(4),
+  dataClasses: z.array(agentDataClassSchema).min(1).max(4),
   destination: z.string().max(500).optional(),
 }).strict()
 export type AgentToolPreview = z.infer<typeof agentToolPreviewSchema>
@@ -58,7 +63,7 @@ export const agentToolObservationSchema = z.object({
     toolCallId: z.string().min(1),
   }).strict(),
   trust: z.literal('untrusted_observation'),
-  dataClasses: z.array(agentDataClassSchema).max(4),
+  dataClasses: z.array(agentDataClassSchema).min(1).max(4),
   summary: z.string().max(2_000),
   output: z.unknown(),
   artifactRef: z.string().min(1).optional(),

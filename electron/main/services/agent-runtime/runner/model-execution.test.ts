@@ -126,6 +126,7 @@ describe('runRouterModelClassification', () => {
         complexity: 'simple', reason: '图片生成',
       },
       text: '',
+      finishReason: 'stop',
       usage: {
         inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
         outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
@@ -167,5 +168,42 @@ describe('runRouterModelClassification', () => {
     expect(serialized).toContain('modelCatalogAvailable')
     expect(serialized).toContain('modelCatalogGroupCount')
     expect(serialized).not.toContain('directory-content-must-not-reach-router')
+  })
+
+  it('路由模型非 stop 结束时拒绝采用可能不完整的分类结果', async () => {
+    const runModelStep = vi.fn().mockResolvedValue({
+      structuredOutput: {
+        intent: 'generate', candidateIntents: ['generate'], toolDomains: ['generation'],
+        complexity: 'simple', reason: '可能被截断的分类',
+      },
+      text: '',
+      finishReason: 'length',
+      usage: {
+        inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
+        outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
+      },
+    })
+
+    await expect(runRouterModelClassification({
+      runId: 'run-router-incomplete',
+      goal: '生成一张小猫图片',
+      model: testModel,
+      snapshot: {
+        schemaVersion: 'agent-contract/v1',
+        rendererSessionId: 'renderer-1',
+        revision: 1,
+        scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 },
+        workspace: { id: 'generation', activeToolId: null },
+        project: { id: null, selectedNodeId: null },
+        generation: { commandReady: true },
+        assets: { view: 'closed', selectedAssetId: null },
+        uiReady: true,
+        availableCommands: [],
+        availableQueries: [],
+        capturedAt: new Date().toISOString(),
+      },
+      runModelStep,
+      signal: new AbortController().signal,
+    })).rejects.toThrow('[MODEL_OUTPUT_INCOMPLETE]')
   })
 })

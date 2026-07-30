@@ -9,6 +9,7 @@ import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
 import { AgentRunner } from './runner'
+import * as approvalLogging from './approval-logging'
 
 function hostContext(): HostContextSnapshot {
   return {
@@ -120,13 +121,18 @@ function result(input: ModelStepInput, overrides: Partial<ModelStepResult> = {})
 }
 
 function createRuntime(registry = new AgentToolRegistry()) {
-  const gateway = new AgentToolGateway({ registry, getHostContext: hostContext })
+  const gateway = new AgentToolGateway({
+    registry,
+    getHostContext: hostContext,
+    appendPermissionAudit: async () => {},
+  })
   return { registry, gateway }
 }
 
 describe('AgentRunner', () => {
   afterEach(() => {
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   it('模糊请求经过 router 后完成 final，事件序号严格递增', async () => {
@@ -170,6 +176,7 @@ describe('AgentRunner', () => {
   })
 
   it('R2 工具暂停审批，通过后回注 observation 并完成', async () => {
+    vi.useFakeTimers({ now: new Date('2026-07-30T08:00:00.000Z') })
     const registry = new AgentToolRegistry()
     const executions: string[] = []
     registry.register(defineAgentTool({
@@ -203,7 +210,23 @@ describe('AgentRunner', () => {
       dataClasses: () => ['C1'],
       summarize: (output) => `已创建 ${output.taskId}`,
     }))
-    const { gateway } = createRuntime(registry)
+    let releaseApprovalAudit: () => void = () => undefined
+    let markApprovalAuditStarted: () => void = () => undefined
+    const approvalAuditStarted = new Promise<void>((resolve) => {
+      markApprovalAuditStarted = resolve
+    })
+    const approvalAuditGate = new Promise<void>((resolve) => {
+      releaseApprovalAudit = resolve
+    })
+    const gateway = new AgentToolGateway({
+      registry,
+      getHostContext: hostContext,
+      appendPermissionAudit: async (fact) => {
+        if (fact.event !== 'approved') return
+        markApprovalAuditStarted()
+        await approvalAuditGate
+      },
+    })
     let primaryCalls = 0
     const runModelStep = vi.fn(async (input: ModelStepInput) => {
       if (input.stepId.startsWith('router:')) {
@@ -244,6 +267,7 @@ describe('AgentRunner', () => {
       return result(input, { text: '任务已创建', responseMessages: [{ role: 'assistant', content: '任务已创建' }] })
     })
     const runnerRef: { current: AgentRunner | null } = { current: null }
+    let approvalResponse: Promise<AgentRunState> | undefined
     let terminalResolve: (state: AgentRunState) => void = () => undefined
     const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
     const runner = new AgentRunner({
@@ -256,13 +280,27 @@ describe('AgentRunner', () => {
         runModelStep,
         cancelModelStep: vi.fn(),
         onEvent: (event) => {
-          if (event.type === 'ApprovalRequired') runnerRef.current?.respondApproval(event.approval.approvalId, 'approve')
+          if (event.type === 'ApprovalRequired') {
+            approvalResponse = runnerRef.current?.respondApproval(
+              event.approval.approvalId,
+              'approve'
+            )
+          }
         },
         onTerminal: terminalResolve,
       },
     })
     runnerRef.current = runner
     runner.start()
+    await approvalAuditStarted
+    await vi.advanceTimersByTimeAsync(5 * 60_000 + 1)
+    expect(executions).toEqual([])
+    expect(runner.getState().status).toBe('waiting_approval')
+
+    releaseApprovalAudit()
+    const response = approvalResponse
+    if (!response) throw new Error('expected approval response')
+    await response
     const state = await terminal
     expect(state.status).toBe('completed')
     expect(executions).toEqual(['测试'])
@@ -287,6 +325,70 @@ describe('AgentRunner', () => {
     const state = runner.cancel('测试取消')
     expect(state.status).toBe('cancelled')
     expect(cancelModelStep).toHaveBeenCalledWith(expect.stringContaining('run-cancel:router:'))
+  })
+
+  it('cancelAndWait 立即进入取消状态，但会等待运行终止审计完成', async () => {
+    const { registry, gateway } = createRuntime()
+    let releaseAudit: () => void = () => undefined
+    let markAuditStarted: () => void = () => undefined
+    const auditStarted = new Promise<void>((resolve) => { markAuditStarted = resolve })
+    const auditGate = new Promise<void>((resolve) => { releaseAudit = resolve })
+    vi.spyOn(gateway, 'expireRunApprovals').mockImplementation(async () => {
+      markAuditStarted()
+      await auditGate
+    })
+    const runner = new AgentRunner({
+      runId: 'run-cancel-wait',
+      request: runRequest('等待取消审计'),
+      dependencies: {
+        registry,
+        gateway,
+        getHostContext: hostContext,
+        runModelStep: () => new Promise(() => undefined),
+        cancelModelStep: vi.fn(),
+      },
+    })
+
+    runner.start()
+    let settled = false
+    const cancellation = runner.cancelAndWait('测试等待审计').then((state) => {
+      settled = true
+      return state
+    })
+
+    expect(runner.getState().status).toBe('cancelled')
+    await auditStarted
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    releaseAudit()
+    await expect(cancellation).resolves.toMatchObject({ status: 'cancelled' })
+    expect(settled).toBe(true)
+  })
+
+  it('运行终止审计失败时仍安全取消并记录结构化失败事件', async () => {
+    const { registry, gateway } = createRuntime()
+    const auditError = new Error('permission audit unavailable')
+    vi.spyOn(gateway, 'expireRunApprovals').mockRejectedValue(auditError)
+    const logFailure = vi.spyOn(approvalLogging, 'logApprovalRunExpiryFailure')
+      .mockImplementation(() => undefined)
+    const runner = new AgentRunner({
+      runId: 'run-cancel-audit-failure',
+      request: runRequest('取消审计失败'),
+      dependencies: {
+        registry,
+        gateway,
+        getHostContext: hostContext,
+        runModelStep: () => new Promise(() => undefined),
+        cancelModelStep: vi.fn(),
+      },
+    })
+
+    runner.start()
+    await expect(runner.cancelAndWait('测试审计失败')).resolves.toMatchObject({
+      status: 'cancelled',
+    })
+    expect(logFailure).toHaveBeenCalledWith('run-cancel-audit-failure', auditError)
   })
 
   it('定时事件持久化失败时取消模型请求并以原始错误受控终止', async () => {

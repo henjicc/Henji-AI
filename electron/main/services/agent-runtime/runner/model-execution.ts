@@ -152,6 +152,11 @@ export async function runRouterModelClassification(
     },
   }, () => undefined)
   if (input.signal.aborted) throw new Error('[task_cancelled] router cancelled')
+  if (result.finishReason !== 'stop') {
+    throw new Error(
+      `[MODEL_OUTPUT_INCOMPLETE] 路由模型以 ${result.finishReason} 结束，拒绝使用可能不完整的分类结果`
+    )
+  }
   return {
     decision: result.structuredOutput ?? parseJsonObjectText(result.text),
     usage: result.usage,

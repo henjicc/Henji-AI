@@ -23,6 +23,20 @@ function workflowTool<TInput>(definition: AgentToolDefinition<TInput, Record<str
   return definition as unknown as AgentToolDefinition
 }
 
+function workflowPlanSummary(preview: Record<string, unknown>): string {
+  const steps = Array.isArray(preview.steps)
+    ? preview.steps.flatMap((step) => {
+      if (!step || typeof step !== 'object') return []
+      const value = step as Record<string, unknown>
+      const title = typeof value.title === 'string' ? value.title : '未命名步骤'
+      const toolName = typeof value.toolName === 'string' ? value.toolName : 'unknown_tool'
+      return [`${title}（${toolName}）`]
+    })
+    : []
+  const details = steps.length > 0 ? `：${steps.join(' → ')}` : '。'
+  return `将按固定顺序执行 ${String(preview.stepCount)} 个步骤${details}`.slice(0, 2_000)
+}
+
 export function createWorkflowTools(dependencies: WorkflowToolDependencies): AgentToolDefinition[] {
   const list = workflowTool({
     name: 'list_workflows', version: 1, title: '列出确定性工作流',
@@ -49,7 +63,7 @@ export function createWorkflowTools(dependencies: WorkflowToolDependencies): Age
     timeoutMs: 120_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: true, supportsUndo: true, requiredContext: [],
     inputSchema: z.object({ planRef: z.string().min(1) }).strict(), outputSchema: workflowResultSchema,
     aiInputSchema: { type: 'object', properties: { planRef: { type: 'string' } }, required: ['planRef'], additionalProperties: false },
-    preview: (input) => { const preview = dependencies.service.preview(input.planRef); return { title: '执行跨工作区工作流', summary: `将按固定顺序执行 ${String(preview.stepCount)} 个步骤。`, targetIds: { planRef: input.planRef }, reversible: Boolean(preview.reversible), dataClasses: ['C1'] } },
+    preview: (input) => { const preview = dependencies.service.preview(input.planRef); return { title: '执行跨工作区工作流', summary: workflowPlanSummary(preview), targetIds: { planRef: input.planRef }, reversible: Boolean(preview.reversible), dataClasses: ['C1'] } },
     execute: async (input, context) => dependencies.service.execute(input.planRef, { runId: context.runId, threadId: context.threadId, toolCallId: context.toolCallId, signal: context.signal, gateway: dependencies.gateway, getHostContext: dependencies.getHostContext }), concurrencyKey: (input) => `workflow_execute:${input.planRef}`, targetIds: (input) => ({ planRef: input.planRef }), dataClasses: () => ['C1'], summarize: (output) => `工作流 ${String(output.workflowId ?? '')} 当前状态：${String(output.status ?? 'unknown')}。`, undo: (output) => typeof output.workflowRunRef === 'string' ? { kind: 'workflow', token: output.workflowRunRef } : undefined,
   })
   const get = workflowTool({

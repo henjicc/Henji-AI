@@ -4,13 +4,14 @@ type LedgerStatus = 'executing' | 'succeeded' | 'failed' | 'unknown'
 
 interface LedgerEntry {
   inputDigest: string
+  authorizationDigest: string
   status: LedgerStatus
   observation?: AgentToolObservation
 }
 
 export type IdempotencyBeginResult =
   | { status: 'started' }
-  | { status: 'cached'; observation: AgentToolObservation }
+  | { status: 'cached'; observation: AgentToolObservation; authorizationDigest: string }
 
 export class AgentIdempotencyConflictError extends Error {
   constructor(message: string) {
@@ -29,7 +30,11 @@ export class AgentIdempotencyLedger {
       throw new AgentIdempotencyConflictError('相同工具调用 ID 的参数摘要不一致')
     }
     if (current.status === 'succeeded' && current.observation) {
-      return { status: 'cached', observation: current.observation }
+      return {
+        status: 'cached',
+        observation: current.observation,
+        authorizationDigest: current.authorizationDigest,
+      }
     }
     if (current.status === 'unknown') {
       throw new AgentIdempotencyConflictError('工具调用副作用状态未知，禁止自动重放')
@@ -37,10 +42,10 @@ export class AgentIdempotencyLedger {
     throw new AgentIdempotencyConflictError(`工具调用当前状态为 ${current.status}，禁止重复执行`)
   }
 
-  begin(key: string, inputDigest: string): IdempotencyBeginResult {
+  begin(key: string, inputDigest: string, authorizationDigest: string): IdempotencyBeginResult {
     const existing = this.lookup(key, inputDigest)
     if (existing) return existing
-    this.entries.set(key, { inputDigest, status: 'executing' })
+    this.entries.set(key, { inputDigest, authorizationDigest, status: 'executing' })
     return { status: 'started' }
   }
 
