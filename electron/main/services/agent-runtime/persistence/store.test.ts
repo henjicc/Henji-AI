@@ -407,6 +407,34 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     expect(events[events.length - 1]).toMatchObject({ type: 'RunFailed' })
   })
 
+  it('混合版本 checkpoint 仍以受校验 state_json 查看旧运行', () => {
+    store.createRun('run-1', request(), state('completed'))
+    database.prepare(`
+      UPDATE agent_runs SET checkpoint_version = 'agent-checkpoint/v0', checkpoint_json = '{}'
+      WHERE run_id = 'run-1'
+    `).run()
+    expect(new AgentPersistenceStore(database).loadState('run-1')).toMatchObject({
+      runId: 'run-1', status: 'completed',
+    })
+  })
+
+  it('v6 数据库增量迁移保存 waiting_external 运行且重启不误判为中断', () => {
+    store.createRun('run-1', request(), state('waiting_external'))
+    database.exec(`
+      DROP TABLE agent_external_waits;
+      DROP TABLE agent_generation_status_events;
+      DROP TABLE agent_save_points;
+      DELETE FROM app_schema_migrations WHERE version IN (7, 8);
+    `)
+    runAgentSchemaMigrations(database)
+    const migrated = new AgentPersistenceStore(database)
+    expect(migrated.markInterruptedRuns()).toBe(0)
+    expect(migrated.loadState('run-1')).toMatchObject({ status: 'waiting_external' })
+    expect(database.prepare(`
+      SELECT COUNT(*) AS count FROM app_schema_migrations WHERE version IN (7, 8)
+    `).get()).toEqual({ count: 2 })
+  })
+
   it('未来检查点版本不会导致崩溃，而是进入安全恢复状态', () => {
     store.createRun('run-1', request(), state('paused'))
     database.prepare(`

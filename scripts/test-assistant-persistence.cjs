@@ -127,6 +127,12 @@ async function main() {
     throw new Error(`Electron 持久化测试失败：\n${failures.join('\n\n')}`)
   }
   console.log(`Electron 持久化测试通过：${report.numPassedTests}/${report.numTotalTests}`)
+  const noteworthy = report.testResults
+    .flatMap((suite) => suite.assertionResults)
+    .filter((test) => /一万个原始模型增量|尾部恢复返回最新两千条|连续两次压缩|v6 数据库增量迁移|终态先于 wait commit/.test(test.fullName))
+  for (const test of noteworthy) {
+    console.log(`  ${test.title}：${test.duration ?? 0}ms`)
+  }
 }
 
 main()
