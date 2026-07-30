@@ -48,6 +48,7 @@ import { AgentThreadTitleStore } from './thread-title-store'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'waiting_external'])
+const FALLBACK_THREAD_TITLE_MAX_CHARS = 24
 
 interface RunRow {
   run_id: string
@@ -87,7 +88,10 @@ function checkpointJson(state: AgentRunState): string {
 
 function fallbackThreadTitle(goal: string): string {
   const normalized = goal.replace(/\s+/g, ' ').trim()
-  return Array.from(normalized || '新对话').slice(0, 80).join('')
+  if (!normalized) return '新对话'
+  const characters = Array.from(normalized)
+  if (characters.length <= FALLBACK_THREAD_TITLE_MAX_CHARS) return normalized
+  return `${characters.slice(0, FALLBACK_THREAD_TITLE_MAX_CHARS).join('')}…`
 }
 
 export class AgentPersistenceStore {

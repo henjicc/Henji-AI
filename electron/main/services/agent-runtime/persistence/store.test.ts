@@ -200,6 +200,22 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     }])
   })
 
+  it('创建会话时立即用首条用户消息生成带省略号的短标题', () => {
+    const goal = '优化智能助手历史记录的标题展示，并确保用户发送后立即可以看到历史记录'
+    const goalWithWhitespace = `  ${goal.slice(0, 12)}\n${goal.slice(12)}  `
+    const normalizedGoal = goalWithWhitespace.replace(/\s+/g, ' ').trim()
+    const longRequest = agentStartRunRequestSchema.parse({
+      ...request(),
+      goal: goalWithWhitespace,
+    })
+
+    store.createRun('run-1', longRequest, state())
+
+    expect(store.listThreads()[0]?.title).toBe(
+      `${Array.from(normalizedGoal).slice(0, 24).join('')}…`
+    )
+  })
+
   it('保存点与 session head/checkpoint 幂等对齐并在终局 settled', () => {
     const running = state()
     running.turn = 1
