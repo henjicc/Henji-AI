@@ -16,6 +16,8 @@ const modeLabels: Record<AssistantDockMode, string> = {
   floating: '悬浮模式',
 }
 
+const HEADER_ICON_BUTTON_CLASS = '!h-8 !w-8 shrink-0'
+
 interface AssistantSidebarProps {
   workspaceRef: RefObject<HTMLDivElement>
 }
@@ -100,25 +102,111 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
             <div className={`min-w-0 truncate ${UI_TEXT_SECTION_CLASS}`}>智能助手</div>
             {mode === 'floating' ? <GripHorizontal className={`ml-1 h-4 w-4 text-text-muted ${interaction.dragging ? 'text-accent' : ''}`} /> : null}
           </div>
-          <div className="flex items-center gap-1" data-assistant-drag-ignore>
-            <UiIconButton
-              type="button"
-              onClick={() => {
-                startNewConversation()
-                setConversationVersion((version) => version + 1)
-                setContentView('conversation')
-              }}
-              title="新建对话"
-              className="!h-7 !w-7 !rounded-md"
-            >
-              <MessageSquarePlus className="h-3.5 w-3.5" />
-            </UiIconButton>
-            <UiIconButton type="button" active={contentView === 'history'} onClick={() => setContentView('history')} title="运行历史" className="!h-7 !w-7 !rounded-md"><History className="h-3.5 w-3.5" /></UiIconButton>
-            <UiIconButton type="button" active={contentView === 'memory'} onClick={() => setContentView('memory')} title="助手记忆" className="!h-7 !w-7 !rounded-md"><BrainCircuit className="h-3.5 w-3.5" /></UiIconButton>
-            <UiIconButton type="button" active={mode === 'left'} onClick={() => setMode('left')} title={modeLabels.left} className="!h-7 !w-7 !rounded-md"><PanelLeft className="h-3.5 w-3.5" /></UiIconButton>
-            <UiIconButton type="button" active={mode === 'right'} onClick={() => setMode('right')} title={modeLabels.right} className="!h-7 !w-7 !rounded-md"><PanelRight className="h-3.5 w-3.5" /></UiIconButton>
-            <UiIconButton type="button" active={mode === 'floating'} onClick={() => setMode('floating')} title={modeLabels.floating} className="!h-7 !w-7 !rounded-md"><PictureInPicture2 className="h-3.5 w-3.5" /></UiIconButton>
-            <UiIconButton type="button" onClick={() => setOpen(false)} title="收起智能助手" hoverVariant="danger" className="!h-7 !w-7 !rounded-md"><X className="h-3.5 w-3.5" /></UiIconButton>
+          <div
+            role="toolbar"
+            aria-label="智能助手工具栏"
+            className="flex items-center"
+            data-assistant-drag-ignore
+          >
+            <div role="group" aria-label="对话操作" className="flex items-center gap-0.5">
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                onClick={() => {
+                  startNewConversation()
+                  setConversationVersion((version) => version + 1)
+                  setContentView('conversation')
+                }}
+                title="新建对话"
+                aria-label="新建对话"
+                className={HEADER_ICON_BUTTON_CLASS}
+              >
+                <MessageSquarePlus className="h-4 w-4" />
+              </UiIconButton>
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                active={contentView === 'history'}
+                aria-pressed={contentView === 'history'}
+                onClick={() => setContentView('history')}
+                title="对话历史"
+                aria-label="对话历史"
+                className={HEADER_ICON_BUTTON_CLASS}
+              >
+                <History className="h-4 w-4" />
+              </UiIconButton>
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                active={contentView === 'memory'}
+                aria-pressed={contentView === 'memory'}
+                onClick={() => setContentView('memory')}
+                title="助手记忆"
+                aria-label="助手记忆"
+                className={HEADER_ICON_BUTTON_CLASS}
+              >
+                <BrainCircuit className="h-4 w-4" />
+              </UiIconButton>
+            </div>
+
+            <div aria-hidden="true" className="mx-1.5 h-4 w-px bg-border-dark" />
+
+            <div role="group" aria-label="面板位置" className="flex items-center gap-0.5">
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                active={mode === 'left'}
+                aria-pressed={mode === 'left'}
+                onClick={() => setMode('left')}
+                title={modeLabels.left}
+                aria-label={modeLabels.left}
+                className={HEADER_ICON_BUTTON_CLASS}
+              >
+                <PanelLeft className="h-4 w-4" />
+              </UiIconButton>
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                active={mode === 'right'}
+                aria-pressed={mode === 'right'}
+                onClick={() => setMode('right')}
+                title={modeLabels.right}
+                aria-label={modeLabels.right}
+                className={HEADER_ICON_BUTTON_CLASS}
+              >
+                <PanelRight className="h-4 w-4" />
+              </UiIconButton>
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                active={mode === 'floating'}
+                aria-pressed={mode === 'floating'}
+                onClick={() => setMode('floating')}
+                title={modeLabels.floating}
+                aria-label={modeLabels.floating}
+                className={HEADER_ICON_BUTTON_CLASS}
+              >
+                <PictureInPicture2 className="h-4 w-4" />
+              </UiIconButton>
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                onClick={() => setOpen(false)}
+                title="收起智能助手"
+                aria-label="收起智能助手"
+                hoverVariant="danger"
+                className={`${HEADER_ICON_BUTTON_CLASS} ml-1`}
+              >
+                <X className="h-4 w-4" />
+              </UiIconButton>
+            </div>
           </div>
         </header>
         {contentView === 'conversation' ? <AssistantConversation key={conversationVersion} /> : null}
