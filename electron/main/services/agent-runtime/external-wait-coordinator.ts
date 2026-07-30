@@ -9,7 +9,6 @@ import {
   type GenerationStatusReportRequest,
 } from '../../../../src/core/assistant/externalWait'
 import { agentQueuedMessagePayloadSchema } from '../../../../src/core/assistant/session'
-import type { AgentRunState } from '../../../../src/core/assistant/events'
 import type {
   AgentStartRunRequest,
   AgentStartRunResult,
@@ -33,31 +32,6 @@ interface ExternalWaitCoordinatorOptions {
     owner: WebContents,
     wait: AgentExternalWaitRecord
   ) => Promise<void>
-}
-
-function remainingBudget(state: AgentRunState): AgentStartRunRequest['budget'] | null {
-  const remainingCost = state.budget.maxCostUsd === undefined
-    ? undefined
-    : state.budget.maxCostUsd - (state.usage.knownCostUsd ?? 0)
-  if (remainingCost !== undefined && remainingCost <= 0) return null
-  return {
-    maxTurns: 1,
-    maxToolCalls: Math.max(1, state.budget.maxToolCalls - state.usage.toolCalls),
-    maxDurationMs: Math.max(1_000, Math.min(
-      5 * 60 * 1_000,
-      state.budget.maxDurationMs - state.usage.elapsedMs
-    )),
-    maxInputTokens: state.budget.maxInputTokens === null
-      ? null
-      : Math.max(1, state.budget.maxInputTokens - state.usage.inputTokens),
-    maxOutputTokens: state.budget.maxOutputTokens === null
-      ? null
-      : Math.max(1, state.budget.maxOutputTokens - state.usage.outputTokens),
-    maxConsecutiveFailures: state.budget.maxConsecutiveFailures,
-    maxRepeatedToolCalls: state.budget.maxRepeatedToolCalls,
-    maxNoProgressTurns: state.budget.maxNoProgressTurns,
-    maxCostUsd: remainingCost,
-  }
 }
 
 export class AgentExternalWaitCoordinator {
@@ -140,24 +114,6 @@ export class AgentExternalWaitCoordinator {
       this.options.persistence.externalWait.release(wait.waitId, '源运行或终态事实暂不可用')
       return
     }
-    const budget = remainingBudget(sourceState)
-    if (!budget) {
-      const reason = '生成任务已结束，但源运行预算不足，未自动续接；请手动发送新消息继续。'
-      this.options.persistence.externalWait.fail(wait.waitId, reason)
-      this.options.persistence.appendAssistantFact(
-        wait.threadId,
-        wait.sourceRunId,
-        reason,
-        `external-wait:${wait.waitId}:budget-exhausted`
-      )
-      logger.warn('Agent 外部等待因预算不足停止自动续接', {
-        event: 'agent_external_wait.resume.budget_exhausted',
-        requestId: wait.sourceRunId,
-        taskId: wait.taskId,
-        context: { waitId: wait.waitId },
-      })
-      return
-    }
     this.resuming.add(wait.waitId)
     try {
       const supplements = this.options.persistence.listCurrentTaskMessages(wait.sourceRunId)
@@ -172,7 +128,9 @@ export class AgentExternalWaitCoordinator {
       const started = await this.options.startContinuation(owner, {
         ...sourceRequest,
         goal,
-        budget,
+        // 自动续接是新的自然 Agent 循环，不继承源运行的“剩余轮次”。
+        // 若调用方曾显式传入停止策略，则重新应用该策略，而不是折算剩余额度。
+        budget: sourceRequest.budget,
         externalContinuation: {
           waitId: wait.waitId,
           sourceRunId: wait.sourceRunId,

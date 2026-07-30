@@ -39,7 +39,17 @@ interface PrepareTurnContextInput {
 }
 
 export class AgentTurnContextCoordinator {
+  private lastModelUsage: {
+    inputTokens: number
+    conversationMessageCount: number
+  } | undefined
+
   constructor(private readonly options: TurnContextCoordinatorOptions) {}
+
+  recordModelInputUsage(inputTokens: number | null, conversationMessageCount: number): void {
+    if (inputTokens === null || inputTokens <= 0) return
+    this.lastModelUsage = { inputTokens, conversationMessageCount }
+  }
 
   async prepare(input: PrepareTurnContextInput): Promise<{
     context: ReturnType<AgentContextBuilder['build']>
@@ -60,9 +70,11 @@ export class AgentTurnContextCoordinator {
       contextWindowBudget: this.options.models.primary.limits.contextWindow,
       maxOutputTokens: this.options.models.primary.settings.maxOutputTokens,
       workingSummary: input.workingSummary,
+      lastModelUsage: this.lastModelUsage,
     })
     let context = build()
     if (context.compacted && await this.options.compactor.compact(input.turn, input.workingSummary)) {
+      this.lastModelUsage = undefined
       context = build()
     }
     emitAgentContextEvents(input.turn, context, input.workingSummary?.version, this.options.emit)

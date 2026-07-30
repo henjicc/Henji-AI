@@ -186,6 +186,96 @@ describe('AgentRunner', () => {
     expect(runner.getEventHistory()).toEqual(events)
   })
 
+  it('默认循环超过旧 12 轮和 24 次工具后仍由模型最终答复自然结束', async () => {
+    const registry = new AgentToolRegistry()
+    registry.register(defineAgentTool({
+      name: 'read_long_chain_fact',
+      version: 1,
+      title: '读取长链路事实',
+      description: '为长链路循环测试返回确定性事实。',
+      category: 'catalog',
+      side: 'backend',
+      risk: 'R0',
+      permission: 'test:read',
+      readOnly: true,
+      destructive: false,
+      openWorld: false,
+      idempotent: true,
+      timeoutMs: 1_000,
+      retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+      supportsPreview: false,
+      supportsUndo: false,
+      requiredContext: [],
+      inputSchema: z.object({ index: z.number().int() }).strict(),
+      outputSchema: z.object({ index: z.number().int() }).strict(),
+      aiInputSchema: {
+        type: 'object',
+        properties: { index: { type: 'number' } },
+        required: ['index'],
+        additionalProperties: false,
+      },
+      execute: async (input) => ({ index: input.index }),
+      concurrencyKey: (input) => `long-chain:${input.index}`,
+      targetIds: () => ({}),
+      dataClasses: () => ['C0'],
+      summarize: (output) => `已读取事实 ${output.index}`,
+    }))
+    const { gateway } = createRuntime(registry)
+    let primaryTurn = 0
+    const runModelStep = vi.fn(async (input: ModelStepInput) => {
+      if (input.stepId.startsWith('router:')) {
+        return result(input, {
+          text: '',
+          structuredOutput: {
+            intent: 'general',
+            complexity: 'multi_step',
+            path: 'primary',
+            toolDomains: ['catalog'],
+            reason: '长链路读取',
+          },
+          responseMessages: [{ role: 'assistant', content: '' }],
+        })
+      }
+      primaryTurn += 1
+      if (primaryTurn > 13) return result(input, { text: '长链路已完成' })
+      const toolCalls = [0, 1].map((offset) => ({
+        toolCallId: `call-${primaryTurn}-${offset}`,
+        toolName: 'read_long_chain_fact',
+        input: { index: primaryTurn * 10 + offset },
+        dynamic: false,
+      }))
+      return result(input, {
+        text: '',
+        toolCalls,
+        responseMessages: [{
+          role: 'assistant',
+          content: toolCalls.map((call) => ({ type: 'tool-call', ...call })),
+        }],
+        finishReason: 'tool-calls',
+      })
+    })
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    new AgentRunner({
+      runId: 'run-long-chain',
+      request: runRequest('完成一个长链路读取任务'),
+      dependencies: {
+        registry,
+        gateway,
+        getHostContext: hostContext,
+        runModelStep,
+        cancelModelStep: vi.fn(),
+        onTerminal: terminalResolve,
+      },
+    }).start()
+
+    await expect(terminal).resolves.toMatchObject({
+      status: 'completed',
+      finalText: '长链路已完成',
+      usage: { turns: 14, toolCalls: 26 },
+    })
+  })
+
   it('鉴权、计费等非瞬态 Provider 错误不进入 Agent 语义重试', async () => {
     const { registry, gateway } = createRuntime()
     const events: AgentEvent[] = []

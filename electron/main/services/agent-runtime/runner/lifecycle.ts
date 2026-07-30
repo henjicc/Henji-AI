@@ -7,7 +7,7 @@ import {
   type AgentRunStatus,
 } from '../../../../../src/core/assistant/events'
 import type { AgentRunnerDependencies } from './types'
-import type { AgentBudgetTracker } from './budget'
+import type { AgentRunMetrics } from './budget'
 import { AgentEventStream } from './event-stream'
 import { serializeError } from './runner-results'
 import type { AgentStateMachine } from './state-machine'
@@ -19,7 +19,7 @@ interface AgentRunnerLifecycleOptions {
   runId: string
   state: AgentRunState
   machine: AgentStateMachine
-  budget: AgentBudgetTracker
+  budget: AgentRunMetrics
   dependencies: Pick<AgentRunnerDependencies, 'onEvent' | 'onCheckpoint' | 'onTerminal'>
   onEventDispatchError: (error: unknown) => void
 }

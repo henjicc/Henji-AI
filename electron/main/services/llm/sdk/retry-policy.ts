@@ -30,8 +30,8 @@ function abortableSleep(delayMs: number, signal: AbortSignal): Promise<void> {
 
 function retryDelay(error: ProviderModelStepError, attempt: number, random: () => number): number {
   if (error.details.retryAfterMs !== null) return Math.min(60_000, error.details.retryAfterMs)
-  const base = Math.min(10_000, 300 * (2 ** (attempt - 1)))
-  return Math.round(base * (0.8 + random() * 0.4))
+  void random
+  return Math.min(8_000, 2_000 * (2 ** (attempt - 1)))
 }
 
 export async function executeModelStepWithRetry(

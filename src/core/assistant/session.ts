@@ -1,13 +1,19 @@
 import { z } from 'zod'
 
 import { AGENT_RUNTIME_SCHEMA_VERSION } from './runtimeContracts'
-import { modelStepUsageSchema } from '../llm/modelStep'
+import {
+  modelStepFinishReasonSchema,
+  modelStepMessageSchema,
+  modelStepUsageSchema,
+} from '../llm/modelStep'
 
 export const AGENT_SESSION_ENTRY_SCHEMA_VERSION = 'agent-session-entry/v1' as const
 
 export const agentSessionEntryKindSchema = z.enum([
   'user_message',
   'assistant_message',
+  'model_message',
+  'tool_result',
   'compaction',
   'queued_message',
   'external_wait',
@@ -73,16 +79,39 @@ export type AgentCancelQueuedMessageRequest = z.infer<typeof agentCancelQueuedMe
 
 export const agentSessionEntryStatusSchema = z.enum(['active', 'superseded', 'tombstoned'])
 
-const messagePayloadSchema = z.object({
+export const agentSessionMessagePayloadSchema = z.object({
   content: z.string().max(256 * 1024),
   legacy: z.boolean().default(false),
+  contextVisible: z.boolean().default(true),
 }).strict()
+
+export const agentSessionInternalMessagePayloadSchema = z.object({
+  message: modelStepMessageSchema,
+  providerId: z.string().min(1).optional(),
+  modelId: z.string().min(1).optional(),
+  stepId: z.string().min(1).optional(),
+  finishReason: modelStepFinishReasonSchema.optional(),
+  usage: modelStepUsageSchema.optional(),
+}).strict()
+export type AgentSessionInternalMessagePayload = z.infer<
+  typeof agentSessionInternalMessagePayloadSchema
+>
+
+export const agentSessionInternalAppendSchema = z.object({
+  runId: z.string().min(1),
+  threadId: z.string().min(1).max(200),
+  turn: z.number().int().positive(),
+  kind: z.enum(['model_message', 'tool_result']),
+  payload: agentSessionInternalMessagePayloadSchema,
+  idempotencyKey: z.string().min(1).max(500),
+}).strict()
+export type AgentSessionInternalAppend = z.infer<typeof agentSessionInternalAppendSchema>
 
 const genericPayloadSchema = z.object({
   value: z.unknown(),
 }).strict()
 
-export const agentSemanticSummarySchema = z.object({
+const agentSemanticSummaryV1Schema = z.object({
   version: z.literal('agent-semantic-summary/v1'),
   userIntent: z.string().min(1).max(2_000),
   userConstraints: z.array(z.string().min(1).max(1_000)).max(20),
@@ -90,7 +119,26 @@ export const agentSemanticSummarySchema = z.object({
   openQuestions: z.array(z.string().min(1).max(1_000)).max(20),
   contextNotes: z.array(z.string().min(1).max(1_000)).max(20),
 }).strict()
-export type AgentSemanticSummary = z.infer<typeof agentSemanticSummarySchema>
+
+export const agentSemanticSummaryV2Schema = z.object({
+  version: z.literal('agent-semantic-summary/v2'),
+  goal: z.string().min(1).max(2_000),
+  constraints: z.array(z.string().min(1).max(1_000)).max(30),
+  progress: z.object({
+    done: z.array(z.string().min(1).max(1_000)).max(30),
+    inProgress: z.array(z.string().min(1).max(1_000)).max(20),
+    blocked: z.array(z.string().min(1).max(1_000)).max(20),
+  }).strict(),
+  keyDecisions: z.array(z.string().min(1).max(1_000)).max(30),
+  nextSteps: z.array(z.string().min(1).max(1_000)).max(30),
+  criticalContext: z.array(z.string().min(1).max(1_000)).max(30),
+}).strict()
+
+export const agentSemanticSummarySchema = z.union([
+  agentSemanticSummaryV1Schema,
+  agentSemanticSummaryV2Schema,
+])
+export type AgentSemanticSummary = z.infer<typeof agentSemanticSummaryV2Schema>
 
 export const agentSessionCompactionPayloadSchema = z.object({
   summary: agentSemanticSummarySchema,
@@ -120,7 +168,8 @@ export const agentSessionEntrySchema = z.object({
   turn: z.number().int().positive().nullable(),
   kind: agentSessionEntryKindSchema,
   payload: z.union([
-    messagePayloadSchema,
+    agentSessionMessagePayloadSchema,
+    agentSessionInternalMessagePayloadSchema,
     agentSessionCompactionPayloadSchema,
     agentQueuedMessagePayloadSchema,
     genericPayloadSchema,
@@ -191,6 +240,6 @@ export function getAgentSessionMessageContent(entry: AgentSessionEntry): string 
     return queued.success ? queued.data.content : null
   }
   if (entry.kind !== 'user_message' && entry.kind !== 'assistant_message') return null
-  const parsed = messagePayloadSchema.safeParse(entry.payload)
+  const parsed = agentSessionMessagePayloadSchema.safeParse(entry.payload)
   return parsed.success ? parsed.data.content : null
 }

@@ -53,6 +53,7 @@ interface AgentRuntimeManagerOptions {
   completeAgentTrace: (payload: AgentTraceCompleteInput) => void
   failAgentTrace: (payload: AgentTraceFailInput) => void
   appendPermissionAudit: (payload: unknown) => unknown
+  appendSessionInternal: (payload: unknown) => unknown
   appendSessionCompaction: (payload: unknown) => unknown
   appendSavePoint: (payload: unknown) => unknown
   consumeCurrentTaskMessages: (payload: unknown) => unknown
@@ -369,6 +370,8 @@ export class AgentRuntimeManager {
         data = this.options.appendPermissionAudit(payload)
       } else if (operation === 'memory.retrieve') {
         data = this.options.retrieveMemory(payload)
+      } else if (operation === 'session.append_internal') {
+        data = this.options.appendSessionInternal(payload)
       } else if (operation === 'session.append_compaction') {
         data = this.options.appendSessionCompaction(payload)
       } else if (operation === 'session.append_save_point') {

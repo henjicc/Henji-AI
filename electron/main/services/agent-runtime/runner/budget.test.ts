@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { AgentBudgetExceededError, AgentBudgetTracker } from './budget'
+import { AgentBudgetExceededError, AgentBudgetTracker, AgentRunMetrics } from './budget'
 
 const emptyUsage = {
   inputTokens: 0,
@@ -70,5 +70,20 @@ describe('AgentBudgetTracker', () => {
       inputTokens: 101,
       totalTokens: 101,
     })).toThrowError(/输入 token 预算/)
+  })
+
+  it('桌面默认统计超过旧 12 轮和 24 次工具后仍不终止', () => {
+    const metrics = new AgentRunMetrics()
+    for (let turn = 0; turn < 30; turn += 1) {
+      expect(metrics.beginTurn()).toBe(turn + 1)
+      metrics.recordToolCall(`tool:${turn}:a`)
+      metrics.recordToolCall(`tool:${turn}:b`)
+    }
+    expect(metrics.snapshot()).toMatchObject({ turns: 30, toolCalls: 60 })
+    expect(metrics.config).toMatchObject({
+      maxTurns: null,
+      maxToolCalls: null,
+      maxDurationMs: null,
+    })
   })
 })

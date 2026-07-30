@@ -21,10 +21,13 @@ const input = {
 
 const result = { text: '完成' } as ModelStepResult
 
-function providerError(category: 'server' | 'authentication'): ProviderModelStepError {
+function providerError(
+  category: 'server' | 'authentication',
+  retryAfterMs = category === 'server' ? 500 : null
+): ProviderModelStepError {
   return new ProviderModelStepError({
     code: category.toUpperCase(), category, status: category === 'server' ? 503 : 401,
-    retryable: category === 'server', retryAfterMs: category === 'server' ? 500 : null,
+    retryable: category === 'server', retryAfterMs,
     providerId: 'provider-1', modelId: 'model-1', requestId: 'request-1', message: '安全错误',
   })
 }
@@ -56,6 +59,24 @@ describe('executeModelStepWithRetry', () => {
       sleep: vi.fn(),
     })).rejects.toMatchObject({ details: { category: 'authentication' } })
     expect(operation).toHaveBeenCalledTimes(1)
+  })
+
+  it('未提供 Retry-After 时按 Pi 的 2/4/8 秒最多重试三次', async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce(providerError('server', null))
+      .mockRejectedValueOnce(providerError('server', null))
+      .mockRejectedValueOnce(providerError('server', null))
+      .mockResolvedValueOnce(result)
+    const sleep = vi.fn().mockResolvedValue(undefined)
+    await expect(executeModelStepWithRetry({
+      input: { ...input, settings: { maxRetries: 3 } },
+      signal: new AbortController().signal,
+      emit: vi.fn(),
+      operation,
+      sleep,
+    })).resolves.toBe(result)
+    expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([2_000, 4_000, 8_000])
+    expect(operation).toHaveBeenCalledTimes(4)
   })
 
   it('流已产生文本后不自动重放请求', async () => {

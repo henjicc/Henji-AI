@@ -61,4 +61,17 @@ describe('compactConversationMessages', () => {
     expect(chinese).toBeGreaterThan(12)
     expect(json).toBeGreaterThan(10)
   })
+
+  it('单个超长用户任务采用 split-turn，保留原消息后缀', () => {
+    const ending = '必须保留的最终要求：只输出 JSON。'
+    const compacted = compactConversationMessages([{
+      role: 'user',
+      content: `${'早期上下文。'.repeat(1_000)}${ending}`,
+    }], 120, createAgentWorkingSummary('处理超长任务'))
+
+    expect(compacted).toHaveLength(2)
+    expect(String(compacted[0]?.content)).toContain('STRUCTURED_WORKING_SUMMARY')
+    expect(String(compacted[1]?.content)).toContain('SPLIT_TURN_SUFFIX')
+    expect(String(compacted[1]?.content)).toContain(ending)
+  })
 })

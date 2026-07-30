@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { modelStepMessageSchema, type ModelStepMessage } from '../llm/modelStep'
 import {
   agentSemanticSummarySchema,
+  agentSessionInternalMessagePayloadSchema,
+  agentSessionMessagePayloadSchema,
   agentSessionCompactionPayloadSchema,
   agentQueuedMessagePayloadSchema,
   getAgentSessionMessageContent,
@@ -14,9 +16,17 @@ export const AGENT_CONTEXT_MESSAGE_VERSION = 'agent-context-message/v1' as const
 
 export const agentContextMessageSchema = z.object({
   version: z.literal(AGENT_CONTEXT_MESSAGE_VERSION),
-  role: z.enum(['user', 'assistant']),
-  content: z.string().max(256 * 1024),
-  trust: z.enum(['untrusted_user', 'untrusted_assistant', 'untrusted_summary']),
+  role: z.enum(['user', 'assistant', 'tool']),
+  content: z.union([
+    z.string().max(256 * 1024),
+    z.array(z.record(z.string(), z.unknown())),
+  ]),
+  trust: z.enum([
+    'untrusted_user',
+    'untrusted_assistant',
+    'untrusted_tool',
+    'untrusted_summary',
+  ]),
   sourceEntryId: z.string().min(1),
   sourceSequence: z.number().int().positive(),
 }).strict()
@@ -45,6 +55,8 @@ export class AgentSessionProjectorRegistry {
 }
 
 function projectMessage(entry: AgentSessionEntry): AgentContextMessage | null {
+  const payload = agentSessionMessagePayloadSchema.safeParse(entry.payload)
+  if (payload.success && payload.data.contextVisible === false) return null
   const content = getAgentSessionMessageContent(entry)
   if (!content) return null
   return {
@@ -52,6 +64,21 @@ function projectMessage(entry: AgentSessionEntry): AgentContextMessage | null {
     role: entry.kind === 'user_message' ? 'user' : 'assistant',
     content,
     trust: entry.kind === 'user_message' ? 'untrusted_user' : 'untrusted_assistant',
+    sourceEntryId: entry.entryId,
+    sourceSequence: entry.sequence,
+  }
+}
+
+function projectInternalMessage(entry: AgentSessionEntry): AgentContextMessage | null {
+  const payload = agentSessionInternalMessagePayloadSchema.safeParse(entry.payload)
+  if (!payload.success || payload.data.message.role === 'system') return null
+  return {
+    version: AGENT_CONTEXT_MESSAGE_VERSION,
+    role: payload.data.message.role,
+    content: payload.data.message.content,
+    trust: payload.data.message.role === 'tool'
+      ? 'untrusted_tool'
+      : 'untrusted_assistant',
     sourceEntryId: entry.entryId,
     sourceSequence: entry.sequence,
   }
@@ -91,6 +118,8 @@ export function createDefaultSessionProjectorRegistry(): AgentSessionProjectorRe
   const registry = new AgentSessionProjectorRegistry()
   registry.register('user_message', projectMessage)
   registry.register('assistant_message', projectMessage)
+  registry.register('model_message', projectInternalMessage)
+  registry.register('tool_result', projectInternalMessage)
   registry.register('compaction', projectCompaction)
   registry.register('queued_message', projectQueuedMessage)
   return registry
@@ -101,7 +130,7 @@ export function adaptAgentContextMessages(
 ): ModelStepMessage[] {
   return messages.map((message) => modelStepMessageSchema.parse({
     role: message.role,
-    content: message.trust === 'untrusted_summary'
+    content: message.trust === 'untrusted_summary' && typeof message.content === 'string'
       ? [
           '[SESSION_SEMANTIC_SUMMARY trust=untrusted_history]',
           message.content,

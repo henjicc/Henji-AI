@@ -161,7 +161,7 @@ describe('AgentToolCallScheduler', () => {
     ])
   })
 
-  it('超过单轮上限的调用反馈给模型，但不伪装成用户可见的执行失败', async () => {
+  it('一次响应中的全部工具调用都会执行，不受旧单轮上限影响', async () => {
     let executions = 0
     const observations: AgentToolObservation[] = []
     const events: AgentEventInput[] = []
@@ -172,11 +172,10 @@ describe('AgentToolCallScheduler', () => {
 
     await scheduler.execute(Array.from({ length: 10 }, (_, index) => toolCall(index + 1)), true, {})
 
-    expect(executions).toBe(8)
+    expect(executions).toBe(10)
     expect(observations).toHaveLength(10)
-    expect(events.filter((event) => event.type === 'ToolRequested')).toHaveLength(8)
+    expect(events.filter((event) => event.type === 'ToolRequested')).toHaveLength(10)
     expect(events.filter((event) => event.type === 'ToolFailed')).toHaveLength(0)
-    expect(observations.slice(-2).every((item) => item.summary.includes('安全上限'))).toBe(true)
   })
 
   it('恢复守卫会阻止未知副作用确认前的写操作', async () => {

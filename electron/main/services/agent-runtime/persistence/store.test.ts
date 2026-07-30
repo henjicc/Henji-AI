@@ -235,6 +235,14 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     const first = state('completed')
     first.finalText = '第一轮回答'
     store.createRun('run-1', request(), first)
+    store.appendSessionInternal({
+      runId: 'run-1',
+      threadId: 'thread-1',
+      turn: 1,
+      kind: 'model_message',
+      payload: { message: { role: 'assistant', content: '第一轮回答' } },
+      idempotencyKey: 'run-1:model-final',
+    })
     store.appendTerminalMessage(first)
     store.appendTerminalMessage(first)
 
@@ -249,8 +257,8 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     store.createRun('run-2', secondRequest, second)
 
     expect(store.loadTranscript('thread-1')).toMatchObject({
-      headSequence: 3,
-      coveredThroughSequence: 3,
+      headSequence: 4,
+      coveredThroughSequence: 4,
       hasMore: false,
     })
     expect(store.loadTranscript('thread-1').entries.map((entry) => ({
@@ -259,8 +267,8 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
       runId: entry.runId,
     }))).toEqual([
       { sequence: 1, kind: 'user_message', runId: 'run-1' },
-      { sequence: 2, kind: 'assistant_message', runId: 'run-1' },
-      { sequence: 3, kind: 'user_message', runId: 'run-2' },
+      { sequence: 3, kind: 'assistant_message', runId: 'run-1' },
+      { sequence: 4, kind: 'user_message', runId: 'run-2' },
     ])
     expect(store.projectConversation('thread-1', 'run-2')).toEqual({
       messages: [
@@ -271,7 +279,7 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     })
     expect(store.listThreads()).toMatchObject([{
       threadId: 'thread-1',
-      headSequence: 3,
+      headSequence: 4,
       lastRunId: 'run-2',
       lastRunGoal: '继续，沿用第一轮约束',
       lastMessagePreview: '继续，沿用第一轮约束',
@@ -306,7 +314,7 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
   it('旧数据库消息在追加 migration 后以稳定顺序兼容读取', () => {
     database.exec(`
       DROP TABLE agent_session_entries;
-      DELETE FROM app_schema_migrations WHERE version = 6;
+      DELETE FROM app_schema_migrations WHERE version IN (6, 9);
     `)
     database.prepare(`
       INSERT INTO agent_threads(thread_id, title, created_at, updated_at, last_run_id)
@@ -328,8 +336,16 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
       kind: entry.kind,
       payload: entry.payload,
     }))).toEqual([
-      { sequence: 1, kind: 'user_message', payload: { content: '旧问题', legacy: true } },
-      { sequence: 2, kind: 'assistant_message', payload: { content: '旧回答', legacy: true } },
+      {
+        sequence: 1,
+        kind: 'user_message',
+        payload: { content: '旧问题', legacy: true, contextVisible: true },
+      },
+      {
+        sequence: 2,
+        kind: 'assistant_message',
+        payload: { content: '旧回答', legacy: true, contextVisible: true },
+      },
     ])
   })
 

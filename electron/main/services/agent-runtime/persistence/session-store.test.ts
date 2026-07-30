@@ -151,4 +151,68 @@ describeWithElectronSqlite('AgentSessionStore compaction', () => {
     const unchanged = store.cancelQueuedMessage('thread-1', consumedCandidate.entryId)
     expect(agentQueuedMessagePayloadSchema.parse(unchanged.payload).status).toBe('consumed')
   })
+
+  it('内部模型与工具条目参与上下文但不进入普通会话分页，并形成父链', () => {
+    const user = store.appendMessage({
+      threadId: 'thread-1',
+      runId: 'run-1',
+      role: 'user',
+      content: '读取真实状态',
+      idempotencyKey: 'chain-user',
+    })
+    const model = store.appendInternalMessage({
+      threadId: 'thread-1',
+      runId: 'run-1',
+      turn: 1,
+      kind: 'model_message',
+      payload: {
+        message: {
+          role: 'assistant',
+          content: [{
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'read_state',
+            input: {},
+          }],
+        },
+        stepId: 'step-1',
+        finishReason: 'tool-calls',
+      },
+      idempotencyKey: 'chain-model',
+    })
+    const tool = store.appendInternalMessage({
+      threadId: 'thread-1',
+      runId: 'run-1',
+      turn: 1,
+      kind: 'tool_result',
+      payload: {
+        message: {
+          role: 'tool',
+          content: [{
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'read_state',
+            output: { type: 'json', value: { ok: true } },
+          }],
+        },
+      },
+      idempotencyKey: 'chain-tool',
+    })
+    const display = store.appendMessage({
+      threadId: 'thread-1',
+      runId: 'run-1',
+      role: 'assistant',
+      content: '已读取',
+      contextVisible: false,
+      idempotencyKey: 'chain-display',
+    })
+
+    expect(model.parentEntryId).toBe(user.entryId)
+    expect(tool.parentEntryId).toBe(model.entryId)
+    expect(display.parentEntryId).toBe(tool.entryId)
+    expect(store.projectConversation('thread-1').messages.map((message) => message.role))
+      .toEqual(['user', 'assistant', 'tool'])
+    expect(store.loadTranscript('thread-1').entries.map((entry) => entry.kind))
+      .toEqual(['user_message', 'assistant_message'])
+  })
 })

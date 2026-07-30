@@ -1,7 +1,12 @@
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { ModelStepMessage, ModelStepResult } from '../../../../../src/core/llm/modelStep'
-import { compactConversationMessages } from '../context/compaction'
+import {
+  AGENT_KEEP_RECENT_TOKENS,
+  compactConversationMessages,
+  findRecentConversationStart,
+} from '../context/compaction'
 import { runSemanticCompaction, semanticSummaryMessage } from '../context/semantic-compaction'
+import type { AgentSemanticSummary } from '../../../../../src/core/assistant/session'
 import type { AgentRuntimeModel } from './models'
 import type { AgentModelStepExecutor, AgentRunnerDependencies } from './types'
 
@@ -20,12 +25,20 @@ interface AgentConversationCompactorOptions {
 }
 
 export class AgentConversationCompactor {
-  private persistentHistoryLength: number
-  private semanticCompactionAttempted = false
   private overflowRecoveryUsed = false
+  private previousSummary: AgentSemanticSummary | undefined
+  private readonly keepRecentTokens: number
 
   constructor(private readonly options: AgentConversationCompactorOptions) {
-    this.persistentHistoryLength = options.conversation.length
+    const contextWindow = options.model.limits.contextWindow
+    const reserve = contextWindow > 16_384 + 2_000
+      ? 16_384
+      : Math.floor(contextWindow * 0.2)
+    const threshold = Math.max(2_000, contextWindow - reserve)
+    this.keepRecentTokens = Math.min(
+      AGENT_KEEP_RECENT_TOKENS,
+      Math.max(1_000, Math.floor(threshold * 0.75))
+    )
   }
 
   beginOverflowRecovery(): boolean {
@@ -35,12 +48,28 @@ export class AgentConversationCompactor {
   }
 
   async compact(turn: number, workingSummary?: AgentWorkingSummary): Promise<boolean> {
-    const recentCount = Math.min(6, this.persistentHistoryLength)
-    const compactCount = this.persistentHistoryLength - recentCount
-    if (this.semanticCompactionAttempted || compactCount <= 0) return false
-    this.semanticCompactionAttempted = true
-    const coveredThroughSequence = this.options.sourceSequences[compactCount - 1]
-    if (!coveredThroughSequence) return false
+    let compactCount = findRecentConversationStart(
+      this.options.conversation,
+      this.keepRecentTokens
+    )
+    let splitRecent: ModelStepMessage[] = []
+    const recent = this.options.conversation.slice(compactCount)
+    const splitCandidate = compactConversationMessages(
+      recent,
+      this.keepRecentTokens,
+      workingSummary
+    )
+    if (recent.length === 1 && splitCandidate.length > 1) {
+      compactCount = this.options.conversation.length
+      splitRecent = splitCandidate.slice(1)
+    }
+    if (compactCount <= 0) return false
+    const coveredSequences = this.options.sourceSequences
+      .slice(0, compactCount)
+      .filter((sequence) => sequence > 0)
+    const coveredThroughSequence = coveredSequences.length > 0
+      ? Math.max(...coveredSequences)
+      : undefined
     const requestId = `${this.options.runId}:summarizer:${turn}`
     this.options.setCurrentModelRequestId(requestId)
     try {
@@ -50,27 +79,44 @@ export class AgentConversationCompactor {
         model: this.options.model,
         history: this.options.conversation.slice(0, compactCount),
         workingSummary,
+        previousSummary: this.previousSummary,
         runModelStep: this.options.runModelStep,
         signal: this.options.signal,
       })
       this.options.throwIfCancelled()
       this.options.recordUsage(compacted.usage)
-      this.options.conversation.splice(0, compactCount, semanticSummaryMessage(compacted.summary))
-      this.persistentHistoryLength = recentCount + 1
-      await this.options.appendSessionCompaction?.({
-        runId: this.options.runId,
-        threadId: this.options.threadId,
-        turn,
-        payload: {
-          summary: compacted.summary,
-          coveredFromSequence: 1,
-          coveredThroughSequence,
-          providerId: compacted.providerId,
-          modelId: compacted.modelId,
-          usage: compacted.usage,
-          fallbackReason: null,
-        },
-      })
+      this.options.conversation.splice(
+        0,
+        compactCount,
+        semanticSummaryMessage(compacted.summary),
+        ...splitRecent
+      )
+      this.options.sourceSequences.splice(
+        0,
+        compactCount,
+        coveredThroughSequence ?? 0,
+        ...splitRecent.map(() => 0)
+      )
+      this.previousSummary = compacted.summary
+      const compactionEntry = coveredThroughSequence
+        ? await this.options.appendSessionCompaction?.({
+            runId: this.options.runId,
+            threadId: this.options.threadId,
+            turn,
+            payload: {
+              summary: compacted.summary,
+              coveredFromSequence: Math.min(...coveredSequences),
+              coveredThroughSequence,
+              providerId: compacted.providerId,
+              modelId: compacted.modelId,
+              usage: compacted.usage,
+              fallbackReason: null,
+            },
+          })
+        : undefined
+      if (compactionEntry) {
+        this.options.sourceSequences[0] = compactionEntry.sequence
+      }
       return true
     } catch {
       return false
@@ -80,14 +126,21 @@ export class AgentConversationCompactor {
   }
 
   compactDeterministically(workingSummary?: AgentWorkingSummary): boolean {
-    if (this.persistentHistoryLength <= 4) return false
+    const historyLength = this.options.conversation.length
+    if (historyLength <= 1) return false
     const compacted = compactConversationMessages(
-      this.options.conversation.slice(0, this.persistentHistoryLength),
-      4,
+      this.options.conversation.slice(0, historyLength),
+      this.keepRecentTokens,
       workingSummary
     )
-    this.options.conversation.splice(0, this.persistentHistoryLength, ...compacted)
-    this.persistentHistoryLength = compacted.length
+    if (compacted.length >= historyLength) return false
+    this.options.conversation.splice(0, historyLength, ...compacted)
+    this.options.sourceSequences.splice(
+      0,
+      historyLength,
+      0,
+      ...Array.from({ length: Math.max(0, compacted.length - 1) }, () => 0)
+    )
     return true
   }
 }

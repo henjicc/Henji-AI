@@ -1,6 +1,11 @@
 import { createMainLogger } from '../../logging'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
-import { compactConversationMessages, estimateModelMessagesTokens } from './compaction'
+import {
+  AGENT_CONTEXT_RESERVE_TOKENS,
+  AGENT_KEEP_RECENT_TOKENS,
+  compactConversationMessages,
+  estimateModelMessagesTokens,
+} from './compaction'
 import { AgentArtifactStore } from './offload'
 import { selectContextLayers } from './layer-budget'
 import {
@@ -15,14 +20,14 @@ import type {
 } from './types'
 
 const logger = createMainLogger('main.agent_context')
-const MAX_CONTEXT_BUFFER_TOKENS = 13_000
-
 export function resolveContextCompactionThreshold(
   contextWindow: number,
-  maxOutputTokens = 0
+  _maxOutputTokens = 0
 ): number {
-  const contextBuffer = Math.min(MAX_CONTEXT_BUFFER_TOKENS, Math.floor(contextWindow * 0.2))
-  return Math.max(2_000, contextWindow - maxOutputTokens - contextBuffer)
+  const reserve = contextWindow > AGENT_CONTEXT_RESERVE_TOKENS + 2_000
+    ? AGENT_CONTEXT_RESERVE_TOKENS
+    : Math.floor(contextWindow * 0.2)
+  return Math.max(2_000, contextWindow - reserve)
 }
 
 function withoutSystemMessages(messages: ModelStepMessage[]): ModelStepMessage[] {
@@ -43,17 +48,29 @@ export class AgentContextBuilder {
     )
     const toolsJson = (): string => JSON.stringify(activeTools)
     const fullLayerMessages = selectContextLayers(layers, input.contextWindowBudget).messages
-    const beforeCompactionTokens = estimateModelMessagesTokens(
+    const fullyEstimatedTokens = estimateModelMessagesTokens(
       [{ role: 'system', content: stableSystemPrompt }, ...fullLayerMessages, ...baseConversation],
       toolsJson()
     )
+    const usageBaseline = input.lastModelUsage
+    const beforeCompactionTokens = usageBaseline
+      && usageBaseline.inputTokens > 0
+      && usageBaseline.conversationMessageCount <= baseConversation.length
+      ? usageBaseline.inputTokens + estimateModelMessagesTokens(
+          baseConversation.slice(usageBaseline.conversationMessageCount)
+        )
+      : fullyEstimatedTokens
     const threshold = resolveContextCompactionThreshold(
       input.contextWindowBudget,
       input.maxOutputTokens
     )
     const compacted = beforeCompactionTokens > threshold
+    const keepRecentTokens = Math.min(
+      AGENT_KEEP_RECENT_TOKENS,
+      Math.max(1_000, Math.floor(threshold * 0.75))
+    )
     const conversation = compacted
-      ? compactConversationMessages(baseConversation, 8, input.workingSummary)
+      ? compactConversationMessages(baseConversation, keepRecentTokens, input.workingSummary)
       : baseConversation
 
     const reservedTokens = estimateModelMessagesTokens(
@@ -89,23 +106,6 @@ export class AgentContextBuilder {
         toolsJson()
       )
     }
-    if (estimatedTokens > threshold && conversation.length > 4) {
-      const tighterConversation = compactConversationMessages(
-        baseConversation,
-        4,
-        input.workingSummary
-      )
-      const tighterReserved = estimateModelMessagesTokens(
-        [{ role: 'system', content: stableSystemPrompt }, ...tighterConversation],
-        toolsJson()
-      )
-      selection = selectContextLayers(effectiveLayers, Math.max(320, threshold - tighterReserved))
-      messages = [...selection.messages, ...tighterConversation]
-      estimatedTokens = estimateModelMessagesTokens(
-        [{ role: 'system', content: stableSystemPrompt }, ...messages],
-        toolsJson()
-      )
-    }
     const compactionReason = compacted
       ? `估算上下文 ${beforeCompactionTokens} tokens 超过阈值 ${threshold}`
       : null
@@ -118,6 +118,9 @@ export class AgentContextBuilder {
         activeToolCount: activeTools.length,
         estimatedTokens,
         beforeCompactionTokens,
+        contextTokenSource: beforeCompactionTokens === fullyEstimatedTokens
+          ? 'estimated'
+          : 'provider_usage_plus_trailing_estimate',
         contextWindow: input.contextWindowBudget,
         compactionThreshold: threshold,
         maxOutputTokens: input.maxOutputTokens ?? null,

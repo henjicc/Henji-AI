@@ -6,7 +6,7 @@ import { hostScopeRevisionsSchema } from './hostContracts'
 export const AGENT_TURN_SNAPSHOT_VERSION = 'agent-turn-snapshot/v1' as const
 export const AGENT_SAVE_POINT_VERSION = 'agent-save-point/v1' as const
 export const AGENT_PROJECTION_VERSION = 'agent-context-message/v1' as const
-export const AGENT_COMPACTION_VERSION = 'agent-semantic-summary/v1' as const
+export const AGENT_COMPACTION_VERSION = 'agent-semantic-summary/v2' as const
 
 const modelReferenceSchema = z.object({
   role: z.enum(['primary', 'router', 'summarizer']),
@@ -27,7 +27,7 @@ export const agentTurnSnapshotDraftSchema = z.object({
   threadId: z.string().min(1),
   turn: z.number().int().positive(),
   projectionVersion: z.literal(AGENT_PROJECTION_VERSION),
-  compactionVersion: z.literal(AGENT_COMPACTION_VERSION),
+  compactionVersion: z.enum(['agent-semantic-summary/v1', AGENT_COMPACTION_VERSION]),
   models: z.array(modelReferenceSchema).length(3),
   tools: z.array(toolReferenceSchema).max(12),
   scopeRevisions: hostScopeRevisionsSchema,

@@ -108,6 +108,10 @@ export interface AgentContextBuildInput {
   contextWindowBudget: number
   maxOutputTokens?: number
   workingSummary?: AgentWorkingSummary
+  lastModelUsage?: {
+    inputTokens: number
+    conversationMessageCount: number
+  }
 }
 
 export interface AgentContextBuildResult {

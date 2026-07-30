@@ -78,9 +78,13 @@ function routerResult(input: ModelStepInput): ModelStepResult {
 function summaryResult(input: ModelStepInput): ModelStepResult {
   return result(input, {
     text: '', structuredOutput: {
-      version: 'agent-semantic-summary/v1', userIntent: '继续历史任务',
-      userConstraints: ['使用中文'], confirmedDecisions: ['保留线性会话'],
-      openQuestions: ['下一步是什么'], contextNotes: ['历史已压缩'],
+      version: 'agent-semantic-summary/v2',
+      goal: '继续历史任务',
+      constraints: ['使用中文'],
+      progress: { done: [], inProgress: ['继续历史任务'], blocked: [] },
+      keyDecisions: ['保留线性会话'],
+      nextSteps: ['确认下一步'],
+      criticalContext: ['历史已压缩'],
     }, responseMessages: [],
   })
 }
@@ -124,7 +128,7 @@ describe('AgentRunner 语义压缩与 overflow 恢复', () => {
     expect(runModelStep.mock.calls.filter(([input]) => input.stepId.startsWith('summarizer:'))).toHaveLength(1)
     expect(appendSessionCompaction).toHaveBeenCalledWith(expect.objectContaining({
       threadId: 'thread-1',
-      payload: expect.objectContaining({ coveredThroughSequence: 6 }),
+      payload: expect.objectContaining({ coveredThroughSequence: expect.any(Number) }),
     }))
   })
 

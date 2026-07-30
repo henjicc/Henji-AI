@@ -24,6 +24,7 @@ import { AgentArtifactPersistenceStore } from './artifact-store'
 import { AgentSessionStore, type AgentConversationProjection } from './session-store'
 import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../../src/core/assistant/session'
 import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
+import type { AgentSessionInternalAppend } from '../../../../../src/core/assistant/session'
 import type {
   AgentEnqueueMessageRequest,
   AgentEnqueueMessageResult,
@@ -175,7 +176,9 @@ export class AgentPersistenceStore {
   }
 
   appendTerminalMessage(state: AgentRunState): void {
-    const content = state.finalText ?? state.error?.message
+    const content = state.finalText
+      ?? state.error?.message
+      ?? (state.status === 'cancelled' ? '任务已取消。' : null)
     if (!content) return
     const now = Date.now()
     this.database.transaction(() => {
@@ -191,6 +194,7 @@ export class AgentPersistenceStore {
         content,
         idempotencyKey: `run:${state.runId}:assistant`,
         createdAt: now,
+        contextVisible: false,
       })
     })()
   }
@@ -222,13 +226,17 @@ export class AgentPersistenceStore {
     return this.sessionStore.projectConversation(threadId, excludeRunId)
   }
 
-  appendSessionCompaction(input: AgentSessionCompactionAppend): void {
-    this.database.transaction(() => {
+  appendSessionCompaction(input: AgentSessionCompactionAppend): AgentSessionEntry {
+    return this.database.transaction(() => (
       this.sessionStore.appendCompaction({
         ...input,
         idempotencyKey: `compaction:${input.runId}:${input.payload.coveredThroughSequence}`,
       })
-    })()
+    ))()
+  }
+
+  appendSessionInternal(input: AgentSessionInternalAppend): AgentSessionEntry {
+    return this.database.transaction(() => this.sessionStore.appendInternalMessage(input))()
   }
 
   getSessionHead(threadId: string): number {

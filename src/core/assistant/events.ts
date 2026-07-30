@@ -33,15 +33,15 @@ export const agentToolCompletionKindSchema = z.enum(['observed', 'submitted', 'e
 export type AgentToolCompletionKind = z.infer<typeof agentToolCompletionKindSchema>
 
 export const agentBudgetConfigSchema = z.object({
-  maxTurns: z.number().int().min(1).max(100),
-  maxToolCalls: z.number().int().min(0).max(500),
-  maxDurationMs: z.number().int().min(1_000).max(24 * 60 * 60 * 1_000),
+  maxTurns: z.number().int().min(1).max(10_000).nullable(),
+  maxToolCalls: z.number().int().min(0).max(100_000).nullable(),
+  maxDurationMs: z.number().int().min(1_000).max(7 * 24 * 60 * 60 * 1_000).nullable(),
   maxInputTokens: z.number().int().min(1).max(10_000_000).nullable(),
   maxOutputTokens: z.number().int().min(1).max(10_000_000).nullable(),
-  maxConsecutiveFailures: z.number().int().min(1).max(20),
-  maxRepeatedToolCalls: z.number().int().min(1).max(20),
-  maxNoProgressTurns: z.number().int().min(1).max(20),
-  maxCostUsd: z.number().positive().optional(),
+  maxConsecutiveFailures: z.number().int().min(1).max(10_000).nullable(),
+  maxRepeatedToolCalls: z.number().int().min(1).max(10_000).nullable(),
+  maxNoProgressTurns: z.number().int().min(1).max(10_000).nullable(),
+  maxCostUsd: z.number().positive().nullable().optional(),
 }).strict()
 export type AgentBudgetConfig = z.infer<typeof agentBudgetConfigSchema>
 

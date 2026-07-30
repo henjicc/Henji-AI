@@ -185,9 +185,9 @@ describe('AgentIntentRouter', () => {
 })
 
 describe('resolveContextCompactionThreshold', () => {
-  it('按模型窗口与单次输出量保留响应空间', () => {
-    expect(resolveContextCompactionThreshold(1_000_000, 4_096)).toBe(982_904)
-    expect(resolveContextCompactionThreshold(64_000, 4_000)).toBe(47_200)
+  it('按 Pi 默认值固定预留 16,384 Token', () => {
+    expect(resolveContextCompactionThreshold(1_000_000, 4_096)).toBe(983_616)
+    expect(resolveContextCompactionThreshold(64_000, 4_000)).toBe(47_616)
   })
 })
 
@@ -249,6 +249,37 @@ describe('AgentContextBuilder', () => {
     expect(result.messages.some((message) => String(message.content).includes('STRUCTURED_WORKING_SUMMARY'))).toBe(true)
     expect(result.messages.some((message) => String(message.content).includes('保留这个明确目标'))).toBe(true)
     expect(result.messages.some((message) => String(message.content).includes('历史消息-19'))).toBe(true)
+  })
+
+  it('优先使用最近一次真实 usage，并只估算其后的新增消息', () => {
+    const result = new AgentContextBuilder().build({
+      runId: 'run-usage-baseline',
+      goal: '继续',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'general',
+        complexity: 'simple',
+        path: 'primary',
+        toolDomains: [],
+        source: 'fallback',
+        reason: 'usage 校准',
+      },
+      conversation: [
+        { role: 'user', content: '已进入上次请求' },
+        { role: 'assistant', content: '这是之后新增的消息' },
+      ],
+      observations: [],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 64_000,
+      lastModelUsage: {
+        inputTokens: 48_000,
+        conversationMessageCount: 1,
+      },
+    })
+
+    expect(result.beforeCompactionTokens).toBeGreaterThan(48_000)
+    expect(result.compacted).toBe(true)
   })
 
   it('不可信 observation 中的密钥形态在进入模型前被强制脱敏', () => {

@@ -358,6 +358,70 @@ const migrations: SchemaMigration[] = [
       `)
     },
   },
+  {
+    version: 9,
+    name: 'agent-session-append-only-model-chain',
+    up: (database) => {
+      database.exec(`
+        PRAGMA defer_foreign_keys = ON;
+
+        DROP INDEX IF EXISTS idx_agent_session_entries_thread_sequence;
+        DROP INDEX IF EXISTS idx_agent_session_entries_run;
+
+        ALTER TABLE agent_session_entries RENAME TO agent_session_entries_v8;
+
+        CREATE TABLE agent_session_entries (
+          entry_id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL REFERENCES agent_threads(thread_id) ON DELETE CASCADE,
+          sequence INTEGER NOT NULL,
+          run_id TEXT REFERENCES agent_runs(run_id) ON DELETE SET NULL,
+          turn INTEGER,
+          kind TEXT NOT NULL CHECK (kind IN (
+            'user_message', 'assistant_message', 'model_message', 'tool_result',
+            'compaction', 'queued_message', 'external_wait', 'run_reference'
+          )),
+          schema_version TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active'
+            CHECK (status IN ('active', 'superseded', 'tombstoned')),
+          parent_entry_id TEXT REFERENCES agent_session_entries(entry_id)
+            DEFERRABLE INITIALLY DEFERRED,
+          idempotency_key TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(thread_id, sequence),
+          UNIQUE(thread_id, idempotency_key)
+        );
+
+        INSERT INTO agent_session_entries(
+          entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
+          payload_json, status, parent_entry_id, idempotency_key, created_at
+        )
+        SELECT
+          entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
+          payload_json, status, parent_entry_id, idempotency_key, created_at
+        FROM agent_session_entries_v8
+        ORDER BY thread_id ASC, sequence ASC;
+
+        UPDATE agent_session_entries AS current
+        SET parent_entry_id = (
+          SELECT previous.entry_id
+          FROM agent_session_entries AS previous
+          WHERE previous.thread_id = current.thread_id
+            AND previous.sequence < current.sequence
+          ORDER BY previous.sequence DESC
+          LIMIT 1
+        )
+        WHERE current.parent_entry_id IS NULL;
+
+        DROP TABLE agent_session_entries_v8;
+
+        CREATE INDEX idx_agent_session_entries_thread_sequence
+          ON agent_session_entries(thread_id, sequence ASC);
+        CREATE INDEX idx_agent_session_entries_run
+          ON agent_session_entries(run_id, sequence ASC);
+      `)
+    },
+  },
 ]
 
 export function runAgentSchemaMigrations(database: Database.Database): void {

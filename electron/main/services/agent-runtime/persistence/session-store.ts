@@ -12,10 +12,13 @@ import {
   agentSessionCompactionPayloadSchema,
   agentQueuedMessagePayloadSchema,
   agentSessionEntrySchema,
+  agentSessionInternalMessagePayloadSchema,
+  agentSessionMessagePayloadSchema,
   agentThreadSummarySchema,
   agentTranscriptPageSchema,
   type AgentSessionEntry,
   type AgentSessionCompactionPayload,
+  type AgentSessionInternalMessagePayload,
   type AgentQueuedMessagePayload,
   type AgentThreadSummary,
   type AgentTranscriptPage,
@@ -57,6 +60,17 @@ export interface AppendSessionMessageInput {
   runId: string
   role: 'user' | 'assistant'
   content: string
+  idempotencyKey: string
+  createdAt?: number
+  contextVisible?: boolean
+}
+
+export interface AppendSessionInternalMessageInput {
+  threadId: string
+  runId: string
+  turn: number
+  kind: 'model_message' | 'tool_result'
+  payload: AgentSessionInternalMessagePayload
   idempotencyKey: string
   createdAt?: number
 }
@@ -117,7 +131,7 @@ export class AgentSessionStore {
     `).get(input.threadId, input.idempotencyKey) as SessionEntryRow | undefined
     if (existing) return rowToEntry(existing)
 
-    const head = this.getHead(input.threadId)
+    const head = this.getHeadEntry(input.threadId)
     const createdAt = input.createdAt ?? Date.now()
     const entryId = randomUUID()
     const kind = input.role === 'user' ? 'user_message' : 'assistant_message'
@@ -125,15 +139,20 @@ export class AgentSessionStore {
       INSERT INTO agent_session_entries(
         entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
         payload_json, status, parent_entry_id, idempotency_key, created_at
-      ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 'active', NULL, ?, ?)
+      ) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 'active', ?, ?, ?)
     `).run(
       entryId,
       input.threadId,
-      head + 1,
+      head.sequence + 1,
       input.runId,
       kind,
       AGENT_SESSION_ENTRY_SCHEMA_VERSION,
-      JSON.stringify({ content: input.content, legacy: false }),
+      JSON.stringify(agentSessionMessagePayloadSchema.parse({
+        content: input.content,
+        legacy: false,
+        contextVisible: input.contextVisible ?? true,
+      })),
+      head.entryId,
       input.idempotencyKey,
       createdAt
     )
@@ -146,7 +165,52 @@ export class AgentSessionStore {
     logger.info('Agent 会话条目已追加', {
       event: 'agent_session.entry.appended',
       requestId: input.runId,
-      context: { threadId: input.threadId, sequence: head + 1, kind },
+      context: { threadId: input.threadId, sequence: head.sequence + 1, kind },
+    })
+    return rowToEntry(inserted)
+  }
+
+  appendInternalMessage(input: AppendSessionInternalMessageInput): AgentSessionEntry {
+    const existing = this.database.prepare(`
+      SELECT * FROM agent_session_entries
+      WHERE thread_id = ? AND idempotency_key = ?
+    `).get(input.threadId, input.idempotencyKey) as SessionEntryRow | undefined
+    if (existing) return rowToEntry(existing)
+    const head = this.getHeadEntry(input.threadId)
+    const createdAt = input.createdAt ?? Date.now()
+    const entryId = randomUUID()
+    const payload = agentSessionInternalMessagePayloadSchema.parse(input.payload)
+    this.database.prepare(`
+      INSERT INTO agent_session_entries(
+        entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
+        payload_json, status, parent_entry_id, idempotency_key, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+    `).run(
+      entryId,
+      input.threadId,
+      head.sequence + 1,
+      input.runId,
+      input.turn,
+      input.kind,
+      AGENT_SESSION_ENTRY_SCHEMA_VERSION,
+      JSON.stringify(payload),
+      head.entryId,
+      input.idempotencyKey,
+      createdAt
+    )
+    this.database.prepare('UPDATE agent_threads SET updated_at = ? WHERE thread_id = ?')
+      .run(createdAt, input.threadId)
+    const inserted = this.database.prepare(
+      'SELECT * FROM agent_session_entries WHERE entry_id = ?'
+    ).get(entryId) as SessionEntryRow
+    logger.debug('Agent 内部会话条目已追加', {
+      event: 'agent_session.internal.appended',
+      requestId: input.runId,
+      context: {
+        threadId: input.threadId,
+        sequence: head.sequence + 1,
+        kind: input.kind,
+      },
     })
     return rowToEntry(inserted)
   }
@@ -157,22 +221,23 @@ export class AgentSessionStore {
       WHERE thread_id = ? AND idempotency_key = ?
     `).get(input.threadId, input.idempotencyKey) as SessionEntryRow | undefined
     if (existing) return rowToEntry(existing)
-    const head = this.getHead(input.threadId)
+    const head = this.getHeadEntry(input.threadId)
     const createdAt = input.createdAt ?? Date.now()
     const entryId = randomUUID()
     this.database.prepare(`
       INSERT INTO agent_session_entries(
         entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
         payload_json, status, parent_entry_id, idempotency_key, created_at
-      ) VALUES (?, ?, ?, ?, ?, 'compaction', ?, ?, 'active', NULL, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, 'compaction', ?, ?, 'active', ?, ?, ?)
     `).run(
       entryId,
       input.threadId,
-      head + 1,
+      head.sequence + 1,
       input.runId,
       input.turn,
       AGENT_SESSION_ENTRY_SCHEMA_VERSION,
       JSON.stringify(input.payload),
+      head.entryId,
       input.idempotencyKey,
       createdAt
     )
@@ -187,7 +252,7 @@ export class AgentSessionStore {
       requestId: input.runId,
       context: {
         threadId: input.threadId,
-        sequence: head + 1,
+        sequence: head.sequence + 1,
         coveredThroughSequence: input.payload.coveredThroughSequence,
       },
     })
@@ -219,14 +284,15 @@ export class AgentSessionStore {
       expiresAt: new Date(createdAt + QUEUE_TTL_MS[input.mode]).toISOString(),
     })
     const entryId = randomUUID()
+    const head = this.getHeadEntry(input.threadId)
     this.database.prepare(`
       INSERT INTO agent_session_entries(
         entry_id, thread_id, sequence, run_id, turn, kind, schema_version,
         payload_json, status, parent_entry_id, idempotency_key, created_at
-      ) VALUES (?, ?, ?, ?, NULL, 'queued_message', ?, ?, 'active', NULL, ?, ?)
+      ) VALUES (?, ?, ?, ?, NULL, 'queued_message', ?, ?, 'active', ?, ?, ?)
     `).run(
-      entryId, input.threadId, this.getHead(input.threadId) + 1, input.runId,
-      AGENT_SESSION_ENTRY_SCHEMA_VERSION, JSON.stringify(payload), key, createdAt
+      entryId, input.threadId, head.sequence + 1, input.runId,
+      AGENT_SESSION_ENTRY_SCHEMA_VERSION, JSON.stringify(payload), head.entryId, key, createdAt
     )
     this.database.prepare('UPDATE agent_threads SET updated_at = ? WHERE thread_id = ?')
       .run(createdAt, input.threadId)
@@ -386,10 +452,18 @@ export class AgentSessionStore {
   }
 
   getHead(threadId: string): number {
+    return this.getHeadEntry(threadId).sequence
+  }
+
+  private getHeadEntry(threadId: string): { sequence: number; entryId: string | null } {
     const row = this.database.prepare(`
-      SELECT COALESCE(MAX(sequence), 0) AS head FROM agent_session_entries WHERE thread_id = ?
-    `).get(threadId) as { head: number }
-    return Number(row.head)
+      SELECT sequence, entry_id
+      FROM agent_session_entries
+      WHERE thread_id = ?
+      ORDER BY sequence DESC
+      LIMIT 1
+    `).get(threadId) as { sequence: number; entry_id: string } | undefined
+    return { sequence: Number(row?.sequence ?? 0), entryId: row?.entry_id ?? null }
   }
 
   listThreads(limit = 30): AgentThreadSummary[] {
@@ -436,6 +510,7 @@ export class AgentSessionStore {
     const rows = this.database.prepare(`
       SELECT * FROM agent_session_entries
       WHERE thread_id = ? AND sequence > ? AND status = 'active'
+        AND kind IN ('user_message', 'assistant_message', 'queued_message')
       ORDER BY sequence ASC
       LIMIT ?
     `).all(threadId, afterSequence, safeLimit + 1) as SessionEntryRow[]
@@ -461,7 +536,10 @@ export class AgentSessionStore {
       SELECT * FROM agent_session_entries
       WHERE thread_id = ?
         AND status = 'active'
-        AND kind IN ('user_message', 'assistant_message', 'compaction')
+        AND kind IN (
+          'user_message', 'assistant_message', 'model_message',
+          'tool_result', 'compaction'
+        )
         AND (? IS NULL OR run_id IS NULL OR run_id <> ?)
       ORDER BY sequence ASC
     `).all(threadId, excludeRunId ?? null, excludeRunId ?? null) as SessionEntryRow[]

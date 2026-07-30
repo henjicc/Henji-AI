@@ -13,15 +13,19 @@ const model = {
   settings: { timeoutMs: 5_000, maxRetries: 0, maxOutputTokens: 1_000 },
 }
 
-function result(input: ModelStepInput, userIntent: string): ModelStepResult {
+function result(input: ModelStepInput, goal: string): ModelStepResult {
   return {
     requestId: input.requestId, runId: input.runId, stepId: input.stepId,
     providerId: input.providerId, modelId: input.modelId,
     text: '', reasoningText: '',
     structuredOutput: {
-      version: 'agent-semantic-summary/v1', userIntent,
-      userConstraints: ['始终使用中文'], confirmedDecisions: ['采用线性会话'],
-      openQuestions: ['是否继续'], contextNotes: ['用户讨论持续会话'],
+      version: 'agent-semantic-summary/v2',
+      goal,
+      constraints: ['始终使用中文'],
+      progress: { done: [], inProgress: ['持续会话'], blocked: [] },
+      keyDecisions: ['采用线性会话'],
+      nextSteps: ['确认是否继续'],
+      criticalContext: ['用户讨论持续会话'],
     },
     toolCalls: [], responseMessages: [], finishReason: 'stop',
     usage: {
@@ -41,7 +45,7 @@ describe('runSemanticCompaction', () => {
       runModelStep, signal: new AbortController().signal,
     })
 
-    expect(compacted.summary.userConstraints).toContain('始终使用中文')
+    expect(compacted.summary.constraints).toContain('始终使用中文')
     expect(compacted.usage.totalTokens).toBe(120)
     expect(runModelStep.mock.calls[0]?.[0].trace).toEqual({ kind: 'summarizer', turn: 2 })
   })

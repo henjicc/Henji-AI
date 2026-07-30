@@ -57,7 +57,7 @@ export function createDefaultAgentModelProfile(now = new Date().toISOString()): 
     primary: { providerId: DEFAULT_PPIO_PROVIDER_ID, modelId: DEFAULT_PPIO_MODEL_ID },
     settings: {
       timeoutMs: 60_000,
-      maxRetries: 1,
+      maxRetries: 3,
       maxOutputTokens: 4_096,
       contextWindowBudget: 64_000,
     },

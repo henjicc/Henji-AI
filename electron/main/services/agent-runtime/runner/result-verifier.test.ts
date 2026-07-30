@@ -6,6 +6,7 @@ import type { AgentRouteDecision } from '../context/types'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
 import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
+import { AgentCompletionCoordinator } from './completion-coordinator'
 
 const generateRoute: AgentRouteDecision = {
   intent: 'generate',
@@ -152,5 +153,26 @@ describe('Agent result verifier', () => {
       task: { taskId: 'task-next', status: 'generating' },
     })
     expect(buildRecoveryGuidance([generating], registry)).toContain('不得在同一 Agent 运行中立即重复读取')
+  })
+
+  it('最终事实冲突只允许一次结构化修正，第二次安全失败', () => {
+    const registry = registryWithTool({
+      name: 'create_visible_generation_task',
+      readOnly: false,
+    })
+    const observations = [observation('create_visible_generation_task', {
+      taskId: 'task-1',
+      status: 'submitted',
+    })]
+    const coordinator = new AgentCompletionCoordinator({
+      runId: 'run-verification',
+      registry,
+      emit: () => undefined,
+    })
+
+    expect(coordinator.evaluate(generateRoute, '图片生成成功。', observations))
+      .toMatchObject({ kind: 'repair' })
+    expect(() => coordinator.evaluate(generateRoute, '图片生成成功。', observations))
+      .toThrowError('VERIFICATION_REPAIR_FAILED')
   })
 })

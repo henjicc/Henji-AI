@@ -42,6 +42,7 @@ import { AgentPersistenceStore } from './persistence/store'
 import { buildAgentRunEventsPage } from './persistence/event-store'
 import { AgentPermissionAuditStore } from './persistence/permission-audit-store'
 import { appendValidatedSessionCompaction } from './persistence/session-compaction-append'
+import { appendValidatedSessionInternal } from './persistence/session-internal-append'
 import { appendValidatedSavePoint } from './persistence/save-point-append'
 import type { AgentPermissionAuditRecord } from '../../../../src/core/assistant/permissionAudit'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
@@ -97,6 +98,11 @@ export class AgentRuntimeService {
       const record = this.permissionAudit.append(payload)
       return { auditId: record.auditId }
     },
+    appendSessionInternal: (payload) => appendValidatedSessionInternal(
+      payload,
+      (runId) => this.runs.get(runId),
+      this.persistence
+    ),
     appendSessionCompaction: (payload) => appendValidatedSessionCompaction(
       payload,
       (runId) => this.runs.get(runId),

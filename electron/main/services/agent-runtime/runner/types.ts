@@ -12,7 +12,10 @@ import type {
 } from '../../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
-import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
+import type {
+  AgentSessionCompactionAppend,
+  AgentSessionInternalAppend,
+} from '../../../../../src/core/assistant/session'
 import type { AgentSessionEntry } from '../../../../../src/core/assistant/session'
 import type { AgentSavePoint, AgentSavePointAppend } from '../../../../../src/core/assistant/turn'
 import type {
@@ -36,7 +39,10 @@ export interface AgentRunnerDependencies {
     signal: AbortSignal
   ) => Promise<AgentMemoryRetrievalResult>
   artifactStore?: AgentArtifactStore
-  appendSessionCompaction?: (input: AgentSessionCompactionAppend) => Promise<void>
+  appendSessionCompaction?: (
+    input: AgentSessionCompactionAppend
+  ) => Promise<AgentSessionEntry | void>
+  appendSessionInternal?: (input: AgentSessionInternalAppend) => Promise<AgentSessionEntry>
   appendSavePoint?: (input: AgentSavePointAppend) => Promise<AgentSavePoint>
   consumeCurrentTaskMessages?: (runId: string) => Promise<AgentSessionEntry[]>
   registerExternalWait?: (input: AgentExternalWaitRegister) => Promise<AgentExternalWaitRecord>

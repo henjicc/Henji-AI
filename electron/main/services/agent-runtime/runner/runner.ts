@@ -9,12 +9,12 @@ import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentIntentRouter } from '../context/router'
 import { AgentToolGatewayError } from '../tools/gateway'
-import { AgentBudgetTracker } from './budget'
+import { AgentRunMetrics } from './budget'
 import { createInitialAgentRunState } from './initial-state'
 import { selectAgentRuntimeModels } from './models'
 import { errorCode, toolMessage } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
-import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
+import { buildRecoveryGuidance } from './result-verifier'
 import type { AgentRunnerOptions } from './types'
 import { AgentRecoveryWriteGuard } from './recovery-guard'
 import { markWorkingSummaryRecoveryVerified } from './working-summary'
@@ -36,16 +36,19 @@ import { AgentExternalWaitRegistration } from './external-wait-registration'
 import { AgentExternalContinuationCoordinator } from './external-continuation-coordinator'
 import { AgentPauseController } from './pause-controller'
 import { startAgentRun } from './run-start'
-import { prepareSemanticModelRetry } from './semantic-model-retry'
+import { AgentConversationJournal } from './conversation-journal'
+import { AgentCompletionCoordinator } from './completion-coordinator'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
-  private readonly budget: AgentBudgetTracker
+  private readonly budget: AgentRunMetrics
   private readonly lifecycle: AgentRunnerLifecycle
   private readonly models
   private readonly catalogPlanner
   private readonly abortController = new AbortController()
   private readonly conversation: ModelStepMessage[]
+  private readonly conversationSourceSequences: number[]
+  private readonly conversationJournal: AgentConversationJournal
   private readonly conversationCompactor: AgentConversationCompactor
   private readonly modelTurnCoordinator: AgentModelTurnCoordinator
   private readonly toolExecutionCoordinator: AgentToolExecutionCoordinator
@@ -63,17 +66,28 @@ export class AgentRunner {
   private readonly memoryProvider: AgentMemoryContextProvider
   private readonly modelOutputGuard: AgentModelOutputGuard
   private readonly terminalApprovalCleanup: AgentTerminalApprovalCleanup
+  private readonly completionCoordinator: AgentCompletionCoordinator
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private started = false; constructor(private readonly options: AgentRunnerOptions) {
-    this.conversation = [...(options.conversationHistory ?? [])]
+    this.conversationJournal = new AgentConversationJournal({
+      runId: options.runId,
+      threadId: options.request.threadId,
+      history: options.conversationHistory,
+      historySequences: options.conversationHistorySequences,
+      append: options.dependencies.appendSessionInternal,
+      getTurn: () => this.state?.turn ?? 0,
+    })
+    this.conversation = this.conversationJournal.messages
+    this.conversationSourceSequences = this.conversationJournal.sourceSequences
     this.currentMessageConsumer = new AgentCurrentMessageConsumer(
       options.runId,
       this.conversation,
+      this.conversationSourceSequences,
       options.dependencies.consumeCurrentTaskMessages
     )
     this.models = selectAgentRuntimeModels(options.request)
-    this.budget = new AgentBudgetTracker(options.request.budget)
+    this.budget = new AgentRunMetrics(options.request.budget)
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
     this.state = createInitialAgentRunState(options.runId, options.request, options.recoveryContext)
     this.lifecycle = new AgentRunnerLifecycle({
@@ -83,6 +97,11 @@ export class AgentRunner {
       budget: this.budget,
       dependencies: options.dependencies,
       onEventDispatchError: (error) => this.handleAsyncEventError(error),
+    })
+    this.completionCoordinator = new AgentCompletionCoordinator({
+      runId: options.runId,
+      registry: options.dependencies.registry,
+      emit: (event) => this.emit(event),
     })
     this.pauseController = new AgentPauseController({
       getStatus: () => this.machine.status,
@@ -95,9 +114,16 @@ export class AgentRunner {
       emit: (event) => this.emit(event),
       onObservation: (call, observation) => {
         this.observations.push(observation)
-        this.conversation.push(toolMessage(call, observation))
+        this.conversationJournal.appendInternal(
+          'tool_result',
+          toolMessage(call, observation),
+          `tool:${call.toolCallId}`
+        )
       },
-      onRecoveryMessage: (message) => this.conversation.push({ role: 'user', content: message }),
+      onRecoveryMessage: (message) => this.conversationJournal.appendEphemeral({
+        role: 'user',
+        content: message,
+      }),
     })
     this.recoveryGuard = new AgentRecoveryWriteGuard(this.state.workingSummary, options.dependencies.registry)
     this.memoryProvider = new AgentMemoryContextProvider(options.runId, options.memoryContext ?? [], options.dependencies.retrieveMemory)
@@ -130,7 +156,7 @@ export class AgentRunner {
       threadId: options.request.threadId,
       model: this.models.summarizer,
       conversation: this.conversation,
-      sourceSequences: options.conversationHistorySequences ?? [],
+      sourceSequences: this.conversationSourceSequences,
       runModelStep: options.dependencies.runModelStep,
       signal: this.abortController.signal,
       appendSessionCompaction: options.dependencies.appendSessionCompaction,
@@ -156,7 +182,11 @@ export class AgentRunner {
       requestApproval: (call, approval) => this.approvalCoordinator.request(call, approval),
       onObservation: (call, observation) => {
         this.observations.push(observation)
-        this.conversation.push(toolMessage(call, observation))
+        this.conversationJournal.appendInternal(
+          'tool_result',
+          toolMessage(call, observation),
+          `tool:${call.toolCallId}`
+        )
         this.recoveryGuard.observe(call, observation)
         if (this.recoveryGuard.consumeVerification(call, observation) && this.state.workingSummary) {
           this.state.workingSummary = markWorkingSummaryRecoveryVerified(this.state.workingSummary)
@@ -240,10 +270,29 @@ export class AgentRunner {
     logger.info('Agent 运行已取消', {
       event: 'agent_runtime.run.cancelled', requestId: this.options.runId, context: { reason },
     })
-    void this.terminalApprovalCleanup.wait().then(() => this.lifecycle.finishTerminal())
+    void Promise.all([
+      this.terminalApprovalCleanup.wait(),
+      this.conversationJournal.flush(),
+    ]).then(() => {
+      this.lifecycle.finishTerminal()
+    }).catch((error: unknown) => {
+      logger.error('取消运行时刷新会话消息失败', {
+        event: 'agent_runtime.session.cancel_flush.failed',
+        requestId: this.options.runId,
+        error,
+      })
+      this.lifecycle.finishTerminal()
+    })
     return this.getState()
   }
-  async cancelAndWait(reason = '用户取消'): Promise<AgentRunState> { this.cancel(reason); await this.terminalApprovalCleanup.wait(); return this.getState() }
+  async cancelAndWait(reason = '用户取消'): Promise<AgentRunState> {
+    this.cancel(reason)
+    await Promise.all([
+      this.terminalApprovalCleanup.wait(),
+      this.conversationJournal.flush(),
+    ])
+    return this.getState()
+  }
   async respondApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<AgentRunState> {
     await this.approvalCoordinator.respond(approvalId, decision)
     return this.getState()
@@ -347,13 +396,30 @@ export class AgentRunner {
           if (isContextOverflowError(modelError)) {
             throw new Error('[CONTEXT_OVERFLOW_AFTER_COMPACTION] 上下文压缩后仍超过模型限制，运行已停止')
           }
-          const retry = prepareSemanticModelRetry(modelError, this.budget, `step-${turn}`)
-          this.emit(retry.event); this.conversation.push({ role: 'user', content: `上一模型步骤失败，安全错误码：${retry.code}。请重新规划。` })
-          continue
+          throw modelError ?? new Error('[MODEL_STEP_EMPTY] 模型步骤未返回结果')
         }
-        this.conversation.push(...result.responseMessages)
+        this.turnContextCoordinator.recordModelInputUsage(
+          result.usage.inputTokens,
+          this.conversation.length
+        )
+        for (const [index, message] of result.responseMessages.entries()) {
+          this.conversationJournal.appendInternal(
+            'model_message',
+            message,
+            `model:${result.stepId}:${index}`,
+            {
+              providerId: result.providerId,
+              modelId: result.modelId,
+              stepId: result.stepId,
+              finishReason: result.finishReason,
+              usage: result.usage,
+            }
+          )
+        }
+        await this.conversationJournal.flush()
         if (!this.modelOutputGuard.accept(result)) {
           this.budget.recordFailure()
+          await this.conversationJournal.flush()
           continue
         }
         this.externalContinuation.assertNoResubmit(result.toolCalls)
@@ -369,11 +435,15 @@ export class AgentRunner {
             currentSnapshot.scopeRevisions,
             new Set(context.activeToolNames)
           )
+          await this.conversationJournal.flush()
           const recoveryGuidance = buildRecoveryGuidance(
             this.observations.slice(observationStart),
             this.options.dependencies.registry
           )
-          if (recoveryGuidance) this.conversation.push({ role: 'user', content: recoveryGuidance })
+          if (recoveryGuidance) this.conversationJournal.appendEphemeral({
+            role: 'user',
+            content: recoveryGuidance,
+          })
           await this.savePointCoordinator.save('after_tools', turnSnapshot)
           if (await this.externalWaitRegistration.registerIfSubmitted(
             this.observations.slice(observationStart),
@@ -388,67 +458,54 @@ export class AgentRunner {
         if (!finalText || (route.intent !== 'general' && this.observations.length === 0)) {
           this.budget.recordFailure()
           this.budget.recordProgress(`no-tool:${route.intent}:${result.finishReason}`)
-          this.conversation.push({
+          this.conversationJournal.appendEphemeral({
             role: 'user',
             content: '尚无网关工具结果证明任务完成。请调用合适工具，或明确说明无法执行的原因。',
           })
           continue
         }
-        const verification = verifyAgentCompletion({
+        const completion = this.completionCoordinator.evaluate(
           route,
           finalText,
-          observations: this.observations,
-          registry: this.options.dependencies.registry,
-        })
-        this.emit({
-          type: 'VerificationCompleted',
-          passed: verification.passed,
-          summary: verification.summary,
-          evidence: verification.evidence,
-        })
-        logger.info('Agent 结果验证完成', {
-          event: verification.passed
-            ? 'agent_verification.completed'
-            : 'agent_verification.failed',
-          requestId: this.options.runId,
-          context: {
-            intent: route.intent,
-            passed: verification.passed,
-            evidenceCount: verification.evidence.length,
-          },
-        })
-        if (!verification.passed) {
+          this.observations
+        )
+        if (completion.kind === 'repair') {
           this.budget.recordFailure()
-          this.budget.recordProgress(`verification:${verification.summary}`)
-          this.conversation.push({
-            role: 'user',
-            content: `结果验证未通过：${verification.summary} 请继续恢复、查询真实状态，或向用户提出一个明确问题。`,
-          })
+          this.budget.recordProgress(`verification:${completion.summary}`)
+          this.conversationJournal.appendEphemeral({ role: 'user', content: completion.message })
           continue
         }
-        if (verification.clarificationRequired) {
+        if (completion.clarificationRequired) {
           const waitId = randomUUID()
           const answerPromise = this.clarificationWaiter.wait(waitId)
           this.state.waitingClarificationId = waitId
-          this.transition('waiting_user', verification.summary)
+          this.transition('waiting_user', completion.summary)
           await this.savePointCoordinator.save('waiting_user', turnSnapshot)
           this.emit({
             type: 'ClarificationRequired',
             waitId,
             question: finalText,
-            reason: verification.summary,
+            reason: completion.summary,
           })
           const answer = await answerPromise
           this.throwIfCancelled()
           if (!answer) throw new Error('[CLARIFICATION_CANCELLED] 澄清等待已取消')
-          this.conversation.push({ role: 'user', content: answer })
+          this.conversationJournal.appendEphemeral({ role: 'user', content: answer })
           continue
         }
         if (await this.currentMessageConsumer.pull() > 0) continue
         this.complete(finalText)
       }
     } catch (error) {
-      if (this.machine.status !== 'cancelled') await this.fail(this.takeAsyncEventError() ?? error)
+      if (this.machine.status !== 'cancelled') {
+        try {
+          await this.conversationJournal.flush()
+        } catch (persistenceError) {
+          await this.fail(persistenceError)
+          return
+        }
+        await this.fail(this.takeAsyncEventError() ?? error)
+      }
     }
   }
   private requireContext(): HostContextSnapshot {

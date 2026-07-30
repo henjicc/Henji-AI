@@ -8,6 +8,8 @@ import type { AgentStartRunRequest, AgentRuntimeModelConfig } from '../../../../
 import type { ModelStepCapabilities } from '../../../../../src/core/llm/modelStep'
 import type { LlmApiProtocol } from '../../../../../src/core/llm/providerProtocol'
 
+const DEFAULT_AGENT_PROFILE_ID = 'default-agent'
+
 export interface AgentRuntimeModel {
   providerId: string
   modelId: string
@@ -64,7 +66,9 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
     },
     settings: {
       timeoutMs: request.profile.settings.timeoutMs,
-      maxRetries: request.profile.settings.maxRetries,
+      maxRetries: request.profile.id === DEFAULT_AGENT_PROFILE_ID
+        ? 3
+        : request.profile.settings.maxRetries,
       maxOutputTokens: Math.min(
         request.profile.settings.maxOutputTokens,
         model.capabilities.maxOutputTokens ?? request.profile.settings.maxOutputTokens

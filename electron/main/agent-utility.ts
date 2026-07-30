@@ -13,6 +13,7 @@ import {
 import { agentMemoryRetrievalResultSchema } from '../../src/core/assistant/memory'
 import {
   agentSessionCompactionAppendSchema,
+  agentSessionInternalAppendSchema,
 } from '../../src/core/assistant/session'
 import { agentSavePointAppendSchema, agentSavePointSchema } from '../../src/core/assistant/turn'
 import { agentSessionEntrySchema } from '../../src/core/assistant/session'
@@ -441,9 +442,13 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
       runModelStep: runUtilityModelStep,
       cancelModelStep: (requestId) => activeModelSteps.get(requestId)?.abort(),
       artifactStore,
+      appendSessionInternal: async (input) => {
+        agentSessionInternalAppendSchema.parse(input)
+        return agentSessionEntrySchema.parse(await rpc('session.append_internal', input))
+      },
       appendSessionCompaction: async (input) => {
         agentSessionCompactionAppendSchema.parse(input)
-        await rpc('session.append_compaction', input)
+        return agentSessionEntrySchema.parse(await rpc('session.append_compaction', input))
       },
       appendSavePoint: async (input) => {
         agentSavePointAppendSchema.parse(input)
