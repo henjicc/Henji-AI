@@ -15,6 +15,10 @@ import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
 import type { AgentSessionEntry } from '../../../../../src/core/assistant/session'
 import type { AgentSavePoint, AgentSavePointAppend } from '../../../../../src/core/assistant/turn'
+import type {
+  AgentExternalWaitRecord,
+  AgentExternalWaitRegister,
+} from '../../../../../src/core/assistant/externalWait'
 
 export type AgentModelStepExecutor = (
   input: ModelStepInput,
@@ -35,6 +39,7 @@ export interface AgentRunnerDependencies {
   appendSessionCompaction?: (input: AgentSessionCompactionAppend) => Promise<void>
   appendSavePoint?: (input: AgentSavePointAppend) => Promise<AgentSavePoint>
   consumeCurrentTaskMessages?: (runId: string) => Promise<AgentSessionEntry[]>
+  registerExternalWait?: (input: AgentExternalWaitRegister) => Promise<AgentExternalWaitRecord>
   onEvent?: (event: AgentEvent) => void
   onCheckpoint?: (state: AgentRunState) => void
   onTerminal?: (state: AgentRunState) => void

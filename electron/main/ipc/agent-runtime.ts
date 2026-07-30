@@ -16,6 +16,10 @@ import {
   agentCancelQueuedMessageRequestSchema,
 } from '../../../src/core/assistant/session'
 import { getAgentRuntimeService } from '../services/agent-runtime/runtime'
+import {
+  agentCancelExternalWaitRequestSchema,
+  generationStatusReportRequestSchema,
+} from '../../../src/core/assistant/externalWait'
 import { getAssistantUserInstructions } from '../services/assistant/user-instructions'
 import { assertTrustedAssistantRenderer } from './assistant'
 import { registerIpcHandler } from './registry'
@@ -69,6 +73,12 @@ export function registerAgentRuntimeIpc(): void {
   ), assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:agent:cancelQueuedMessage', input => agentCancelQueuedMessageRequestSchema.parse(input), (request, event) => (
     runtime.cancelQueuedMessage(event.sender, request)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:reportGenerationStatus', input => generationStatusReportRequestSchema.parse(input), (request, event) => (
+    runtime.reportGenerationStatus(event.sender, request)
+  ), assertTrustedAssistantRenderer)
+  registerIpcHandler('assistant:agent:cancelExternalWait', input => agentCancelExternalWaitRequestSchema.parse(input), (request, event) => (
+    runtime.cancelExternalWait(event.sender, request)
   ), assertTrustedAssistantRenderer)
   registerIpcHandler(
     'assistant:agent:retryRun',

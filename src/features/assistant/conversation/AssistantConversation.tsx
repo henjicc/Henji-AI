@@ -130,6 +130,13 @@ export function AssistantConversation(): JSX.Element {
   const toolGroups = useMemo(() => groupToolActivitiesForDisplay(tools), [tools])
   const modelUpdates = useMemo(() => selectModelPublicUpdates(run.view.events), [run.view.events])
   const approval = useMemo(() => selectPendingApproval(run.view.events), [run.view.events])
+  const externalWait = useMemo(() => {
+    for (let index = run.view.events.length - 1; index >= 0; index -= 1) {
+      const event = run.view.events[index]
+      if (event.type === 'ExternalWaitRegistered') return event
+    }
+    return null
+  }, [run.view.events])
   const execution = useMemo(
     () => selectExecutionPresentation(runState, run.view.events),
     [run.view.events, runState]
@@ -267,6 +274,30 @@ export function AssistantConversation(): JSX.Element {
         ) : null}
 
         {runState ? <ExecutionPlanCard presentation={execution} runStatus={runState.status} /> : null}
+
+        {runState?.status === 'waiting_external' && externalWait ? (
+          <UiPanel variant="inset" className="p-3">
+            <div className={UI_TEXT_BODY_CLASS}>正在等待生成任务 {externalWait.taskId} 的最终结果</div>
+            <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>
+              最晚等待到 {new Date(externalWait.expiresAt).toLocaleString()}；等待期间可以继续补充要求。
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <UiButton
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => void run.cancelExternalWait(externalWait.waitId, false)}
+              >仅停止等待</UiButton>
+              <UiButton
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-danger"
+                onClick={() => void run.cancelExternalWait(externalWait.waitId, true)}
+              >停止等待并取消生成</UiButton>
+            </div>
+          </UiPanel>
+        ) : null}
 
         {modelUpdates.map((update) => <ModelProgressMessage key={update.stepId} update={update} />)}
 

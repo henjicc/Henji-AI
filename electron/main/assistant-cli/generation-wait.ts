@@ -1,8 +1,9 @@
 import type { AgentRunState } from '../../../src/core/assistant/events'
 import type { HostCommandResult } from '../../../src/core/assistant/hostContracts'
-
-const successfulGenerationStatuses = new Set(['completed', 'succeeded', 'success'])
-const failedGenerationStatuses = new Set(['error', 'failed', 'cancelled', 'canceled'])
+import {
+  isGenerationTerminalStatus,
+  normalizeGenerationTaskStatus,
+} from '../../../src/core/assistant/externalWait'
 
 export interface CliGenerationTaskObservation {
   taskId: string
@@ -79,7 +80,7 @@ export function normalizeGenerationTaskObservation(
     progress: numberField(task, 'progress'),
     errorCode: stringField(task, 'errorCode'),
     errorMessage: stringField(task, 'errorMessage'),
-    terminal: successfulGenerationStatuses.has(status) || failedGenerationStatuses.has(status),
+    terminal: isGenerationTerminalStatus(status),
   }
 }
 
@@ -127,7 +128,9 @@ export async function waitForSubmittedGenerationTasks(
     )
     if (tasks.every((task) => task.terminal)) {
       return {
-        status: tasks.every((task) => successfulGenerationStatuses.has(task.status)) ? 'completed' : 'failed',
+        status: tasks.every((task) => normalizeGenerationTaskStatus(task.status) === 'success')
+          ? 'completed'
+          : 'failed',
         tasks,
       }
     }

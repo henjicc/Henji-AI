@@ -6,6 +6,7 @@ import {
   onFrontendToolCancel,
   onFrontendToolRequest,
   publishHostContext,
+  reportGenerationTaskStatus,
 } from '@/commands/assistant'
 import {
   AGENT_CONTRACT_VERSION,
@@ -17,6 +18,7 @@ import {
   type HostCommandResult,
 } from '@/core/assistant/hostContracts'
 import { createLogger } from '@/core/logging'
+import { registerVisibleGenerationStatusReporter } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
 import {
   createHostContextSnapshot,
@@ -36,6 +38,7 @@ const loadHostQueryRegistry = (): Promise<typeof import('./hostQueryRegistry')> 
 const completedLimit = 300
 
 export function useAssistantHostBridge(uiReady: boolean): void {
+  useEffect(() => registerVisibleGenerationStatusReporter(reportGenerationTaskStatus), [])
   useEffect(() => {
     const disposeTracking = retainHostContextTracking()
     let publishQueued = false

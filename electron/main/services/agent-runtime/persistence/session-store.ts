@@ -297,6 +297,16 @@ export class AgentSessionStore {
     return row?.run_id ?? null
   }
 
+  retargetAfterTaskMessages(sourceRunId: string, targetRunId: string): number {
+    return this.database.prepare(`
+      UPDATE agent_session_entries
+      SET run_id = ?, payload_json = json_set(payload_json, '$.targetRunId', ?)
+      WHERE run_id = ? AND kind = 'queued_message'
+        AND json_extract(payload_json, '$.mode') = 'after_task'
+        AND json_extract(payload_json, '$.status') = 'accepted'
+    `).run(targetRunId, targetRunId, sourceRunId).changes
+  }
+
   cancelQueuedMessages(runId: string, reason: string): number {
     const count = this.database.prepare(`
       UPDATE agent_session_entries

@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { webContents, type WebContents } from 'electron'
 
 import {
@@ -39,7 +38,6 @@ import {
   getAgentTraceCaptureMode,
   getAgentTraceStore,
 } from '../logging'
-import { createInitialAgentRunState } from './runner/initial-state'
 import { AgentPersistenceStore } from './persistence/store'
 import { buildAgentRunEventsPage } from './persistence/event-store'
 import { AgentPermissionAuditStore } from './persistence/permission-audit-store'
@@ -47,23 +45,17 @@ import { appendValidatedSessionCompaction } from './persistence/session-compacti
 import { appendValidatedSavePoint } from './persistence/save-point-append'
 import type { AgentPermissionAuditRecord } from '../../../../src/core/assistant/permissionAudit'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
-import { prepareWorkingSummaryForRetry } from './runner/working-summary'
 import { artifactPayloadSchema } from './runtime-schemas'
 import { settleRuntimeRun } from './runtime-settlement'
 import { AgentMessageQueueCoordinator } from './message-queue-coordinator'
-import {
-  executeAgentToolInMain,
-  invokeAgentFrontendTool,
-} from './host-bridge'
+import type {
+  AgentCancelExternalWaitRequest,
+  GenerationStatusReportRequest,
+} from '../../../../src/core/assistant/externalWait'
+import { executeAgentToolInMain, invokeAgentFrontendTool } from './host-bridge'
+import { AgentExternalWaitRuntime } from './external-wait-runtime'
+import { startRuntimeRun, type AgentRunRecord } from './runtime-run-starter'
 const logger = createMainLogger('main.agent_runtime')
-
-interface AgentRunRecord {
-  ownerWebContentsId: number
-  rendererSessionId: string
-  threadId: string
-  state: AgentRunState
-  events: AgentEvent[]
-}
 
 export type AgentRunEventListener = (event: AgentEvent) => void
 
@@ -122,6 +114,7 @@ export class AgentRuntimeService {
       }
       return this.persistence.consumeCurrentTaskMessages(runId)
     },
+    registerExternalWait: (payload) => this.externalWait.register(payload),
   })
   private readonly messageQueue = new AgentMessageQueueCoordinator({
     persistence: this.persistence,
@@ -131,6 +124,13 @@ export class AgentRuntimeService {
       this.startRunWithParent(owner, request, parentRunId, recoveryContext)
     ),
     hasActiveThread: (threadId) => this.activeByThread.has(threadId),
+  })
+  private readonly externalWait = new AgentExternalWaitRuntime({
+    persistence: this.persistence,
+    hasActiveThread: (threadId) => this.activeByThread.has(threadId),
+    startContinuation: (owner, request, parentRunId, recoveryContext) => (
+      this.startRunWithParent(owner, request, parentRunId, recoveryContext)
+    ),
   })
   constructor() { this.persistence.markInterruptedRuns() }
 
@@ -142,72 +142,39 @@ export class AgentRuntimeService {
     parentRunId: string | null,
     recoveryContext: AgentWorkingSummary | undefined
   ): Promise<AgentStartRunResult> {
-    const hostContext = getAssistantHostContext(owner.id)
-    if (!hostContext?.uiReady) throw new Error('[host_not_ready] 宿主界面尚未就绪')
-    const activeRunId = this.activeByThread.get(request.threadId)
-    if (activeRunId) {
-      const active = this.runs.get(activeRunId)?.state
-      if (active && !['completed', 'failed', 'cancelled'].includes(active.status)) {
-        throw new Error(`[thread_busy] thread ${request.threadId} 已有活动运行 ${activeRunId}`)
-      }
-    }
-
-    const preparedRecoveryContext = recoveryContext
-      ? prepareWorkingSummaryForRetry(
-          recoveryContext,
-          hostContext.scopeRevisions,
-          recoveryContext.artifactRefs.filter((ref) => Boolean(this.persistence.loadArtifact(ref)))
-        )
-      : undefined
-    const runId = randomUUID()
-    const initialState = createInitialAgentRunState(runId, request, preparedRecoveryContext)
-    this.runs.set(runId, {
-      ownerWebContentsId: owner.id,
-      rendererSessionId: hostContext.rendererSessionId,
-      threadId: request.threadId,
-      state: initialState,
-      events: [],
+    return startRuntimeRun({
+      owner, request, parentRunId, recoveryContext,
+      runs: this.runs,
+      activeByThread: this.activeByThread,
+      persistence: this.persistence,
+      memory: this.memory,
+      manager: this.manager,
     })
-    this.activeByThread.set(request.threadId, runId)
-    this.persistence.createRun(runId, request, initialState, parentRunId)
-    try {
-      const conversationProjection = this.persistence.projectConversation(request.threadId, runId)
-      const memoryContext = this.memory.retrieve(
-        request.goal,
-        hostContext.workspace.id,
-        hostContext.project.id
-      )
-      const state = await this.manager.startRun(
-        runId,
-        request,
-        hostContext,
-        memoryContext,
-        conversationProjection.messages,
-        conversationProjection.sourceSequences,
-        preparedRecoveryContext
-      )
-      this.updateState(runId, state)
-      return { runId, state }
-    } catch (error) {
-      this.activeByThread.delete(request.threadId)
-      const failed = this.persistence.markRunRecoveryRequired(
-        runId,
-        'Agent 独立运行进程未能确认启动；为避免重复副作用，需要由用户确认后重试'
-      )
-      if (failed) this.updateState(runId, failed)
-      throw error
-    }
   }
 
   async enqueueMessage(
     owner: WebContents,
     raw: AgentEnqueueMessageRequest
   ): Promise<AgentEnqueueMessageResult> {
-    return this.messageQueue.enqueue(this.requireOwnedRun(owner, raw.runId), raw)
+    return this.messageQueue.enqueue(this.resolveQueueRun(owner, raw.runId), raw)
   }
 
   cancelQueuedMessage(owner: WebContents, raw: AgentCancelQueuedMessageRequest): AgentSessionEntry {
-    return this.messageQueue.cancel(this.requireOwnedRun(owner, raw.runId), raw)
+    return this.messageQueue.cancel(this.resolveQueueRun(owner, raw.runId), raw)
+  }
+
+  async reportGenerationStatus(
+    owner: WebContents,
+    request: GenerationStatusReportRequest
+  ): Promise<void> {
+    await this.externalWait.report(owner, request)
+  }
+
+  async cancelExternalWait(
+    owner: WebContents,
+    request: AgentCancelExternalWaitRequest
+  ): Promise<AgentRunState> {
+    return this.externalWait.cancel(owner, request)
   }
 
   async cancelRun(owner: WebContents, runId: string, reason: string): Promise<AgentRunState> {
@@ -320,6 +287,7 @@ export class AgentRuntimeService {
     limit = 100
   ): AgentTranscriptPage {
     void this.messageQueue.resume(owner, threadId)
+    void this.externalWait.resumeThread(owner, threadId)
     return this.persistence.loadTranscript(threadId, afterSequence, limit)
   }
 
@@ -351,6 +319,7 @@ export class AgentRuntimeService {
   }
 
   async dispose(): Promise<void> {
+    this.externalWait.dispose()
     await this.manager.dispose()
   }
 
@@ -387,7 +356,10 @@ export class AgentRuntimeService {
       eventListeners: this.eventListeners,
       runs: this.runs,
     })
-    if (record) {
+    if (record && state.status === 'waiting_external') {
+      const owner = webContents.fromId(record.ownerWebContentsId)
+      if (owner && !owner.isDestroyed()) void this.externalWait.sourceSettled(owner, runId)
+    } else if (record) {
       const owner = webContents.fromId(record.ownerWebContentsId)
       if (owner && !owner.isDestroyed()) {
         void this.messageQueue.settle(owner, runId, state)
@@ -476,6 +448,23 @@ export class AgentRuntimeService {
       throw new Error('[run_not_owned] 运行不存在、渲染会话已变化或无权访问')
     }
     return record
+  }
+
+  private resolveQueueRun(owner: WebContents, runId: string): AgentRunRecord {
+    const live = this.runs.get(runId)
+    if (live) return this.requireOwnedRun(owner, runId)
+    const state = this.persistence.loadState(runId)
+    const context = getAssistantHostContext(owner.id)
+    if (!state || state.status !== 'waiting_external' || !context) {
+      throw new Error('[run_not_owned] 排队消息不属于可恢复的外部等待')
+    }
+    return {
+      ownerWebContentsId: owner.id,
+      rendererSessionId: context.rendererSessionId,
+      threadId: state.threadId,
+      state,
+      events: [],
+    }
   }
 
   private sendEvent(record: AgentRunRecord, runId: string, event: AgentEvent): void {

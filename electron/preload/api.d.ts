@@ -45,6 +45,10 @@ import type {
   AgentMemoryUpdate,
 } from '../../src/core/assistant/memory'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../src/core/llm/modelStep'
+import type {
+  AgentCancelExternalWaitRequest,
+  GenerationStatusReportRequest,
+} from '../../src/core/assistant/externalWait'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '../../src/core/llm/capabilitySmoke'
 import type {
   AgentTraceCaptureMode,
@@ -90,6 +94,8 @@ export interface HenjiAssistantApi {
   getTranscript(request: AgentTranscriptRequest): Promise<AgentTranscriptPage>
   enqueueMessage(request: AgentEnqueueMessageRequest): Promise<AgentEnqueueMessageResult>
   cancelQueuedMessage(request: AgentCancelQueuedMessageRequest): Promise<AgentSessionEntry>
+  reportGenerationStatus(request: GenerationStatusReportRequest): Promise<void>
+  cancelExternalWait(request: AgentCancelExternalWaitRequest): Promise<AgentRunState>
   retryRun(request: AgentRetryRunRequest): Promise<AgentStartRunResult>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }

@@ -37,4 +37,12 @@ describe('AgentStateMachine', () => {
     machine.transition('running')
     expect(machine.status).toBe('running')
   })
+
+  it('外部等待释放 Runner 且只能进入故障或取消终局', () => {
+    const machine = new AgentStateMachine()
+    machine.transition('running')
+    machine.transition('waiting_external')
+    expect(isTerminalAgentState(machine.status)).toBe(true)
+    expect(canTransitionAgentState('waiting_external', 'running')).toBe(false)
+  })
 })

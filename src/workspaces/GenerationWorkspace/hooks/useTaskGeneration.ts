@@ -23,6 +23,9 @@ import {
 import {
   createVisibleGenerationTask,
   registerVisibleGenerationTaskHandler,
+  publishVisibleGenerationTaskStatus,
+  getVisibleGenerationReportedStatus,
+  markVisibleGenerationTaskCancelled,
   type VisibleGenerationTaskInput,
 } from '../application/visibleGenerationTaskCommand'
 
@@ -352,10 +355,21 @@ export function useTaskGeneration({
       } else {
         await GenerationService.getInstance().cancelTask(task.serverTaskId ?? task.id)
       }
+      markVisibleGenerationTaskCancelled(taskId, reason)
       updateTask(taskId, { status: 'error', error: reason })
       return { taskId, status: 'cancelled' }
     },
   }), [runCreateVisibleTask, updateTask])
+
+  useEffect(() => {
+    for (const task of tasks) publishVisibleGenerationTaskStatus({
+      taskId: task.id,
+      status: getVisibleGenerationReportedStatus(task.id, task.status),
+      resultAvailable: Boolean(task.result),
+      errorCode: task.error ? 'GENERATION_FAILED' : null,
+      errorMessage: task.error?.slice(0, 1_000) ?? null,
+    })
+  }, [tasks])
 
   const handleGenerate = useCallback(async (
     input: string,

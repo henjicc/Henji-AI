@@ -1,13 +1,14 @@
 import type { AgentRunStatus } from '../../../../../src/core/assistant/events'
 
-const terminalStates = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled'])
+const terminalStates = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled', 'waiting_external'])
 
 const transitions: Readonly<Record<AgentRunStatus, ReadonlySet<AgentRunStatus>>> = {
   initializing: new Set(['running', 'failed', 'cancelled']),
-  running: new Set(['waiting_tool', 'waiting_user', 'paused', 'completed', 'failed', 'cancelled']),
+  running: new Set(['waiting_tool', 'waiting_user', 'waiting_external', 'paused', 'completed', 'failed', 'cancelled']),
   waiting_tool: new Set(['running', 'waiting_approval', 'paused', 'failed', 'cancelled']),
   waiting_approval: new Set(['waiting_tool', 'running', 'paused', 'failed', 'cancelled']),
   waiting_user: new Set(['running', 'paused', 'failed', 'cancelled']),
+  waiting_external: new Set(['failed', 'cancelled']),
   paused: new Set(['running', 'waiting_tool', 'waiting_approval', 'waiting_user', 'failed', 'cancelled']),
   completed: new Set(),
   failed: new Set(),

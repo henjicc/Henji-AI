@@ -17,6 +17,10 @@ import {
 import { agentSavePointAppendSchema, agentSavePointSchema } from '../../src/core/assistant/turn'
 import { agentSessionEntrySchema } from '../../src/core/assistant/session'
 import {
+  agentExternalWaitRecordSchema,
+  agentExternalWaitRegisterSchema,
+} from '../../src/core/assistant/externalWait'
+import {
   agentArtifactDescribeRequestSchema,
   agentArtifactDescriptorSchema,
   agentArtifactPageSchema,
@@ -422,6 +426,10 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
       consumeCurrentTaskMessages: async (runId) => z.array(agentSessionEntrySchema).parse(
         await rpc('session.consume_current_messages', { runId })
       ),
+      registerExternalWait: async (input) => {
+        agentExternalWaitRegisterSchema.parse(input)
+        return agentExternalWaitRecordSchema.parse(await rpc('external_wait.register', input))
+      },
       retrieveMemory: async (query, signal) => agentMemoryRetrievalResultSchema.parse(
         await rpc('memory.retrieve', query, signal)
       ),

@@ -56,6 +56,7 @@ interface AgentRuntimeManagerOptions {
   appendSessionCompaction: (payload: unknown) => unknown
   appendSavePoint: (payload: unknown) => unknown
   consumeCurrentTaskMessages: (payload: unknown) => unknown
+  registerExternalWait: (payload: unknown) => unknown
 }
 
 interface PendingCommand {
@@ -374,6 +375,8 @@ export class AgentRuntimeManager {
         data = this.options.appendSavePoint(payload)
       } else if (operation === 'session.consume_current_messages') {
         data = this.options.consumeCurrentTaskMessages(payload)
+      } else if (operation === 'external_wait.register') {
+        data = this.options.registerExternalWait(payload)
       } else {
         throw new Error(`不支持的 utility RPC 操作：${String(operation)}`)
       }

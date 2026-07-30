@@ -9,6 +9,7 @@ const statusLabels: Record<AgentRunState['status'], string> = {
   waiting_tool: '等待工具',
   waiting_approval: '等待审批',
   waiting_user: '等待你的回答',
+  waiting_external: '等待生成结果',
   paused: '已在安全点暂停',
   completed: '已结束',
   failed: '失败',
@@ -36,7 +37,7 @@ export function RunStatusBar({
   onCancel,
   onRefresh,
 }: RunStatusBarProps): JSX.Element {
-  const active = !['completed', 'failed', 'cancelled'].includes(state.status)
+  const active = !['completed', 'failed', 'cancelled', 'waiting_external'].includes(state.status)
   const usage = state.usage
   const modelUsage = events.reduce((total, event) => (
     event.type === 'ModelCompleted' ? total + (event.usage.totalTokens ?? 0) : total
@@ -44,6 +45,14 @@ export function RunStatusBar({
   const toolCalls = new Set(events.flatMap((event) => (
     event.type === 'ToolRequested' ? [event.toolCallId] : []
   ))).size
+  const continuation = events.find((event) => event.type === 'ExternalWaitResumed')
+  const cumulativeTokens = usage.totalTokens
+    + (continuation?.type === 'ExternalWaitResumed' ? continuation.sourceTotalTokens : 0)
+  const cumulativeCost = continuation?.type === 'ExternalWaitResumed'
+    ? continuation.sourceKnownCostUsd !== null && usage.knownCostUsd !== null
+      ? continuation.sourceKnownCostUsd + usage.knownCostUsd
+      : null
+    : usage.knownCostUsd
   const elapsedMs = active
     ? Math.max(usage.elapsedMs, Date.now() - Date.parse(state.startedAt))
     : usage.elapsedMs
@@ -67,9 +76,9 @@ export function RunStatusBar({
       <div className={`mt-1.5 flex flex-wrap gap-x-3 gap-y-1 ${UI_TEXT_META_CLASS}`}>
         <span>轮次 {Math.max(usage.turns, state.turn)}/{state.budget.maxTurns}</span>
         <span>工具 {Math.max(usage.toolCalls, toolCalls)}/{state.budget.maxToolCalls}</span>
-        <span>Token {Math.max(usage.totalTokens, modelUsage).toLocaleString()}</span>
+        <span>{continuation ? '累计 ' : ''}Token {Math.max(cumulativeTokens, modelUsage).toLocaleString()}</span>
         <span>{Math.round(elapsedMs / 1000)} 秒</span>
-        <span>费用 {usage.knownCostUsd === null ? '未知' : `$${usage.knownCostUsd.toFixed(4)}`}</span>
+        <span>{continuation ? '累计' : ''}费用 {cumulativeCost === null ? '未知' : `$${cumulativeCost.toFixed(4)}`}</span>
         {verificationPassed !== null ? <span>{verificationPassed ? '结果已验证' : '结果待验证'}</span> : null}
       </div>
     </div>

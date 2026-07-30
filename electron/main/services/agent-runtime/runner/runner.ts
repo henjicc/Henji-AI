@@ -1,6 +1,5 @@
 import { createMainLogger } from '../../logging'
 import { randomUUID } from 'node:crypto'
-
 import type { AgentEventInput, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult } from '../../../../../src/core/llm/modelStep'
@@ -33,6 +32,10 @@ import { logAgentToolActivation } from './activation-logging'
 import { AgentClarificationWaiter } from './clarification-waiter'
 import { AgentApprovalCoordinator } from './approval-coordinator'
 import { AgentCurrentMessageConsumer } from './current-message-consumer'
+import { AgentExternalWaitRegistration } from './external-wait-registration'
+import { AgentExternalContinuationCoordinator } from './external-continuation-coordinator'
+import { AgentPauseController } from './pause-controller'
+import { startAgentRun } from './run-start'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -49,10 +52,11 @@ export class AgentRunner {
   private readonly turnContextCoordinator: AgentTurnContextCoordinator
   private readonly observations: AgentToolObservation[] = []
   private state: AgentRunState
-  private pausedFrom: Exclude<AgentRunStatus, 'paused'> = 'running'
-  private pauseWaiters: Array<() => void> = []
+  private readonly pauseController: AgentPauseController
   private readonly approvalCoordinator: AgentApprovalCoordinator
   private readonly currentMessageConsumer: AgentCurrentMessageConsumer
+  private readonly externalWaitRegistration: AgentExternalWaitRegistration
+  private readonly externalContinuation: AgentExternalContinuationCoordinator
   private readonly clarificationWaiter = new AgentClarificationWaiter()
   private readonly recoveryGuard: AgentRecoveryWriteGuard
   private readonly memoryProvider: AgentMemoryContextProvider
@@ -80,6 +84,12 @@ export class AgentRunner {
       dependencies: options.dependencies,
       onEventDispatchError: (error) => this.handleAsyncEventError(error),
     })
+    this.pauseController = new AgentPauseController({
+      getStatus: () => this.machine.status,
+      transition: (status, reason) => this.transition(status, reason),
+      setCurrentToolCallId: (toolCallId) => { this.state.currentToolCallId = toolCallId },
+      clearWaitingApprovalId: () => { this.state.waitingApprovalId = null },
+    })
     this.modelOutputGuard = new AgentModelOutputGuard({
       registry: options.dependencies.registry,
       emit: (event) => this.emit(event),
@@ -101,7 +111,7 @@ export class AgentRunner {
       setCurrentToolCallId: (toolCallId) => { this.state.currentToolCallId = toolCallId },
       setWaitingApprovalId: (approvalId) => { this.state.waitingApprovalId = approvalId },
       transition: (status, reason) => this.transition(status, reason),
-      setPausedFrom: (status) => { this.pausedFrom = status },
+      setPausedFrom: (status) => this.pauseController.setPausedFrom(status),
       emit: (event) => this.emit(event),
       onAsyncError: (error) => this.handleAsyncEventError(error),
     })
@@ -138,11 +148,11 @@ export class AgentRunner {
       catalogPlanner: this.catalogPlanner,
       recoveryGuard: this.recoveryGuard,
       signal: this.abortController.signal,
-      waitIfPaused: () => this.waitIfPaused(),
+      waitIfPaused: () => this.pauseController.wait(),
       throwIfCancelled: () => this.throwIfCancelled(),
       recordToolCall: (signature) => this.budget.recordToolCall(signature),
       recordProgress: (signature) => this.budget.recordProgress(signature),
-      setActiveToolCall: (toolCallId) => this.setActiveToolCall(toolCallId),
+      setActiveToolCall: (toolCallId) => this.pauseController.setActiveToolCall(toolCallId),
       requestApproval: (call, approval) => this.approvalCoordinator.request(call, approval),
       onObservation: (call, observation) => {
         this.observations.push(observation)
@@ -178,47 +188,43 @@ export class AgentRunner {
       savePoints: this.savePointCoordinator,
       emit: (event) => this.emit(event),
     })
+    this.externalWaitRegistration = new AgentExternalWaitRegistration({
+      runId: options.runId,
+      threadId: options.request.threadId,
+      savePoints: this.savePointCoordinator,
+      register: options.dependencies.registerExternalWait,
+      transition: (status, reason) => this.transition(status, reason),
+      emit: (event) => this.emit(event),
+    })
+    this.externalContinuation = new AgentExternalContinuationCoordinator({
+      continuation: options.request.externalContinuation,
+      registry: options.dependencies.registry,
+      tools: this.toolExecutionCoordinator,
+      savePoints: this.savePointCoordinator,
+    })
   }
   start(): AgentRunState {
     if (this.started) return this.getState()
     this.started = true
-    this.emit({
-      type: 'RunStarted',
-      threadId: this.options.request.threadId,
-      goal: this.options.request.goal,
+    startAgentRun({
+      runId: this.options.runId,
+      request: this.options.request,
+      models: this.models,
+      emit: (event) => this.emit(event),
+      transition: (reason) => this.transition('running', reason),
     })
-    this.transition('running', this.models.fellBack ? '主模型不可用，已使用已验证备用模型' : undefined)
-    logger.info('Agent 运行开始', {
-      event: 'agent_runtime.run.started',
-      requestId: this.options.runId,
-      modelId: this.models.primary.modelId,
-      providerId: this.models.primary.providerId,
-      context: {
-        threadId: this.options.request.threadId,
-        fellBack: this.models.fellBack,
-        contextWindow: this.models.primary.limits.contextWindow,
-        contextWindowSource: this.models.primary.limits.contextWindowSource,
-        maxOutputTokens: this.models.primary.settings.maxOutputTokens,
-      },
-    })
+    this.externalContinuation.emitResumed((event) => this.emit(event))
     void this.execute()
     return this.getState()
   }
   getState(): AgentRunState { return this.lifecycle.getState() }
   getEventHistory(): ReturnType<AgentRunnerLifecycle['getEventHistory']> { return this.lifecycle.getEventHistory() }
   pause(reason = '用户暂停'): AgentRunState {
-    if (isTerminalAgentState(this.machine.status) || this.machine.status === 'paused') return this.getState()
-    if (this.machine.status === 'initializing') throw new Error('Agent 尚未进入可暂停状态')
-    this.pausedFrom = this.machine.status
-    this.transition('paused', reason)
+    this.pauseController.pause(reason)
     return this.getState()
   }
   resume(): AgentRunState {
-    if (this.machine.status !== 'paused') return this.getState()
-    this.transition(this.pausedFrom, '用户恢复')
-    const waiters = this.pauseWaiters
-    this.pauseWaiters = []
-    for (const resolve of waiters) resolve()
+    this.pauseController.resume()
     return this.getState()
   }
   cancel(reason = '用户取消'): AgentRunState {
@@ -228,9 +234,7 @@ export class AgentRunner {
     this.terminalApprovalCleanup.start()
     this.approvalCoordinator.cancel()
     this.clarificationWaiter.cancel()
-    const waiters = this.pauseWaiters
-    this.pauseWaiters = []
-    for (const resolve of waiters) resolve()
+    this.pauseController.wake()
     this.transition('cancelled', reason)
     this.emit({ type: 'RunCancelled', reason, usage: this.budget.snapshot() })
     logger.info('Agent 运行已取消', {
@@ -239,8 +243,7 @@ export class AgentRunner {
     void this.terminalApprovalCleanup.wait().then(() => this.lifecycle.finishTerminal())
     return this.getState()
   }
-  async cancelAndWait(reason = '用户取消'): Promise<AgentRunState> {
-    this.cancel(reason); await this.terminalApprovalCleanup.wait(); return this.getState() }
+  async cancelAndWait(reason = '用户取消'): Promise<AgentRunState> { this.cancel(reason); await this.terminalApprovalCleanup.wait(); return this.getState() }
   async respondApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<AgentRunState> {
     await this.approvalCoordinator.respond(approvalId, decision)
     return this.getState()
@@ -252,7 +255,7 @@ export class AgentRunner {
     }
     this.state.waitingClarificationId = null
     if (this.machine.status === 'waiting_user') this.transition('running', '用户已回答澄清问题')
-    else if (this.machine.status === 'paused') this.pausedFrom = 'running'
+    else if (this.machine.status === 'paused') this.pauseController.setPausedFrom('running')
     return this.getState()
   }
   private async execute(): Promise<void> {
@@ -269,13 +272,16 @@ export class AgentRunner {
         toolDomains: route.toolDomains,
       })
       while (!isTerminalAgentState(this.machine.status)) {
-        await this.waitIfPaused()
+        await this.pauseController.wait()
         this.throwIfCancelled()
         await this.currentMessageConsumer.pull()
         const turn = this.budget.beginTurn()
         this.state.turn = turn
         const currentSnapshot = this.requireContext()
-        const activation = this.catalogPlanner.select(route, currentSnapshot)
+        const activation = this.externalContinuation.extendActivation(
+          this.catalogPlanner.select(route, currentSnapshot),
+          currentSnapshot
+        )
         const registrations = activation.registrations
         logAgentToolActivation(this.options.runId, turn, currentSnapshot.revision, activation)
         const memoryContext = await this.memoryProvider.retrieve({
@@ -301,6 +307,14 @@ export class AgentRunner {
         })
         let { context } = preparedTurn
         const turnSnapshot = preparedTurn.snapshot
+        const authoritativeContext = await this.externalContinuation.queryAuthoritativeStatus({
+          snapshot: turnSnapshot,
+          route,
+          scopeRevisions: currentSnapshot.scopeRevisions,
+          activeToolNames: context.activeToolNames,
+          rebuild: preparedTurn.rebuild,
+        })
+        if (authoritativeContext) context = authoritativeContext
         let result: ModelStepResult | null = null
         let modelError: unknown | null = null
         try {
@@ -342,10 +356,11 @@ export class AgentRunner {
           this.budget.recordFailure()
           continue
         }
+        this.externalContinuation.assertNoResubmit(result.toolCalls)
         this.budget.recordSuccess()
         if (result.toolCalls.length > 0) {
           await this.savePointCoordinator.save('before_tools', turnSnapshot)
-          await this.waitIfPaused()
+          await this.pauseController.wait()
           this.throwIfCancelled()
           const observationStart = this.observations.length
           await this.toolExecutionCoordinator.execute(
@@ -360,6 +375,13 @@ export class AgentRunner {
           )
           if (recoveryGuidance) this.conversation.push({ role: 'user', content: recoveryGuidance })
           await this.savePointCoordinator.save('after_tools', turnSnapshot)
+          if (await this.externalWaitRegistration.registerIfSubmitted(
+            this.observations.slice(observationStart),
+            turnSnapshot
+          )) {
+            this.lifecycle.finishTerminal()
+            return
+          }
           continue
         }
         const finalText = result.text.trim() || (result.structuredOutput ? JSON.stringify(result.structuredOutput) : '')
@@ -429,23 +451,6 @@ export class AgentRunner {
       if (this.machine.status !== 'cancelled') await this.fail(this.takeAsyncEventError() ?? error)
     }
   }
-  private setActiveToolCall(toolCallId: string | null): void {
-    this.state.currentToolCallId = toolCallId
-    if (toolCallId) this.transition('waiting_tool')
-    else {
-      this.state.waitingApprovalId = null
-      if (this.machine.status === 'waiting_tool' || this.machine.status === 'waiting_approval') {
-        this.transition('running')
-      } else if (this.machine.status === 'paused') {
-        this.pausedFrom = 'running'
-      }
-    }
-  }
-  private async waitIfPaused(): Promise<void> {
-    while (this.machine.status === 'paused' && !this.abortController.signal.aborted) {
-      await new Promise<void>((resolve) => this.pauseWaiters.push(resolve))
-    }
-  }
   private requireContext(): HostContextSnapshot {
     const context = this.options.dependencies.getHostContext(this.options.runId)
     if (!context?.uiReady) throw new AgentToolGatewayError('NOT_READY', '宿主界面尚未就绪', true, 'wait')
@@ -475,26 +480,21 @@ export class AgentRunner {
     }
     this.abortController.abort(error)
     this.approvalCoordinator.cancel()
-    const waiters = this.pauseWaiters
-    this.pauseWaiters = []
-    for (const resolve of waiters) resolve()
+    this.pauseController.wake()
   }
   private takeAsyncEventError(): unknown | null {
     const error = this.asyncEventError
-    this.asyncEventError = null
-    return error
+    this.asyncEventError = null; return error
   }
   private complete(finalText: string): void { this.throwIfCancelled(); this.lifecycle.complete(finalText) }
   private async fail(error: unknown): Promise<void> {
-    this.approvalCoordinator.cancel()
-    await this.terminalApprovalCleanup.run()
+    this.approvalCoordinator.cancel(); await this.terminalApprovalCleanup.run()
     if (this.machine.status !== 'cancelled') this.lifecycle.fail(error)
   }
   private transition(next: AgentRunStatus, reason?: string): void {
     this.lifecycle.transition(next, reason); if (!isTerminalAgentState(this.machine.status)) this.throwIfCancelled()
   }
   private emit(input: AgentEventInput): void {
-    this.lifecycle.emit(input)
-    if (!isTerminalAgentState(this.machine.status)) this.throwIfCancelled()
+    this.lifecycle.emit(input); if (!isTerminalAgentState(this.machine.status)) this.throwIfCancelled()
   }
 }

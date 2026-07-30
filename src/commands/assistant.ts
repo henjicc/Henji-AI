@@ -7,6 +7,11 @@ import type {
 } from '@/core/assistant/hostContracts'
 import type { AgentRunState } from '@/core/assistant/events'
 import {
+  agentCancelExternalWaitRequestSchema,
+  generationStatusReportRequestSchema,
+  type GenerationStatusEvent,
+} from '@/core/assistant/externalWait'
+import {
   assistantUserInstructionsUpdateSchema,
   type AssistantUserInstructions,
   type AssistantUserInstructionsUpdate,
@@ -273,6 +278,26 @@ export async function cancelQueuedAgentMessage(input: {
     ...input,
   })
   return getPlatform().assistant.cancelQueuedMessage(request)
+}
+
+export async function reportGenerationTaskStatus(event: GenerationStatusEvent): Promise<void> {
+  const request = generationStatusReportRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    event,
+  })
+  return getPlatform().assistant.reportGenerationStatus(request)
+}
+
+export async function cancelAgentExternalWait(
+  waitId: string,
+  cancelGeneration: boolean
+): Promise<AgentRunState> {
+  const request = agentCancelExternalWaitRequestSchema.parse({
+    schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
+    waitId,
+    cancelGeneration,
+  })
+  return getPlatform().assistant.cancelExternalWait(request)
 }
 
 export async function retryAgentRun(runId: string): Promise<AgentStartRunResult> {

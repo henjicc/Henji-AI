@@ -39,6 +39,8 @@ export function createElectronAssistant(): AssistantPlatform {
     getTranscript: (request) => getNativeAssistant().getTranscript(request),
     enqueueMessage: (request) => getNativeAssistant().enqueueMessage(request),
     cancelQueuedMessage: (request) => getNativeAssistant().cancelQueuedMessage(request),
+    reportGenerationStatus: (request) => getNativeAssistant().reportGenerationStatus(request),
+    cancelExternalWait: (request) => getNativeAssistant().cancelExternalWait(request),
     retryRun: (request) => getNativeAssistant().retryRun(request),
     subscribeEvents: (handler) => getNativeAssistant().subscribeEvents(handler),
   }

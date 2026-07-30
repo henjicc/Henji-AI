@@ -44,6 +44,10 @@ import type {
   AgentMemoryState,
   AgentMemoryUpdate,
 } from '@/core/assistant/memory'
+import type {
+  AgentCancelExternalWaitRequest,
+  GenerationStatusReportRequest,
+} from '@/core/assistant/externalWait'
 
 export interface AssistantPlatform {
   getUserInstructions(): Promise<AssistantUserInstructions>
@@ -75,6 +79,8 @@ export interface AssistantPlatform {
   getTranscript(request: AgentTranscriptRequest): Promise<AgentTranscriptPage>
   enqueueMessage(request: AgentEnqueueMessageRequest): Promise<AgentEnqueueMessageResult>
   cancelQueuedMessage(request: AgentCancelQueuedMessageRequest): Promise<AgentSessionEntry>
+  reportGenerationStatus(request: GenerationStatusReportRequest): Promise<void>
+  cancelExternalWait(request: AgentCancelExternalWaitRequest): Promise<AgentRunState>
   retryRun(request: AgentRetryRunRequest): Promise<AgentStartRunResult>
   subscribeEvents(handler: (payload: AgentRuntimeEventPayload) => void): () => void
 }

@@ -12,6 +12,7 @@ export const agentRunStatusSchema = z.enum([
   'waiting_tool',
   'waiting_approval',
   'waiting_user',
+  'waiting_external',
   'paused',
   'completed',
   'failed',
@@ -272,6 +273,25 @@ const clarificationRequiredEventSchema = z.object({
   reason: z.string().min(1).max(500),
 }).strict()
 
+const externalWaitRegisteredEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('ExternalWaitRegistered'),
+  waitId: z.string().min(1),
+  taskId: z.string().min(1),
+  expiresAt: z.string().datetime(),
+}).strict()
+
+const externalWaitResumedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('ExternalWaitResumed'),
+  waitId: z.string().min(1),
+  taskId: z.string().min(1),
+  status: z.enum(['success', 'error', 'cancelled', 'timeout']),
+  sourceRunId: z.string().min(1),
+  sourceTotalTokens: z.number().int().nonnegative(),
+  sourceKnownCostUsd: z.number().nonnegative().nullable(),
+}).strict()
+
 const savePointCreatedEventSchema = z.object({
   ...eventBase,
   type: z.literal('SavePointCreated'),
@@ -323,6 +343,8 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   artifactOffloadedEventSchema,
   verificationCompletedEventSchema,
   clarificationRequiredEventSchema,
+  externalWaitRegisteredEventSchema,
+  externalWaitResumedEventSchema,
   savePointCreatedEventSchema,
   runCompletedEventSchema,
   runFailedEventSchema,

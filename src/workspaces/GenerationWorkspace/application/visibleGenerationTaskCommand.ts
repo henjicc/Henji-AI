@@ -14,6 +14,12 @@ import {
 } from '@/utils/save'
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { logRequestParams, shouldSkipRequest } from '@/utils/testMode'
+import {
+  GENERATION_STATUS_EVENT_VERSION,
+  generationStatusEventSchema,
+  type GenerationTaskStatus,
+  type GenerationStatusEvent,
+} from '@/core/assistant/externalWait'
 
 import type { GenerationTask, GeneratorOptions, MediaType, ToastNotification } from '../types'
 import { isRecord, isStringArray } from '../utils/typeGuards'
@@ -75,9 +81,65 @@ export interface VisibleGenerationTaskHandlers {
 
 let registeredHandlers: VisibleGenerationTaskHandlers | null = null
 const changeListeners = new Set<() => void>()
+let statusReporter: ((event: GenerationStatusEvent) => Promise<void>) | null = null
+const statusRevisions = new Map<string, number>()
+const lastStatusFingerprints = new Map<string, string>()
+const cancelledTaskReasons = new Map<string, string>()
 
 function emitVisibleGenerationTaskChange(): void {
   for (const listener of changeListeners) listener()
+}
+
+export function registerVisibleGenerationStatusReporter(
+  reporter: (event: GenerationStatusEvent) => Promise<void>
+): () => void {
+  statusReporter = reporter
+  return () => { if (statusReporter === reporter) statusReporter = null }
+}
+
+export function publishVisibleGenerationTaskStatus(input: {
+  taskId: string
+  status: GenerationTaskStatus
+  resultAvailable?: boolean
+  errorCode?: string | null
+  errorMessage?: string | null
+}): void {
+  const fingerprint = JSON.stringify(input)
+  if (lastStatusFingerprints.get(input.taskId) === fingerprint) return
+  lastStatusFingerprints.set(input.taskId, fingerprint)
+  const revision = (statusRevisions.get(input.taskId) ?? 0) + 1
+  statusRevisions.set(input.taskId, revision)
+  const event = generationStatusEventSchema.parse({
+    version: GENERATION_STATUS_EVENT_VERSION,
+    eventId: typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${input.taskId}:${Date.now()}:${revision}`,
+    taskId: input.taskId,
+    status: input.status,
+    revision,
+    occurredAt: new Date().toISOString(),
+    resultAvailable: input.resultAvailable ?? false,
+    errorCode: input.errorCode ?? null,
+    errorMessage: input.errorMessage ?? null,
+  })
+  emitVisibleGenerationTaskChange()
+  void statusReporter?.(event).catch((error) => logger.error(
+    '生成任务状态事件上报失败', error, {
+      event: 'visible_generation.status.report.failed',
+      taskId: input.taskId,
+    }
+  ))
+}
+
+export function markVisibleGenerationTaskCancelled(taskId: string, reason: string): void {
+  cancelledTaskReasons.set(taskId, reason)
+}
+
+export function getVisibleGenerationReportedStatus(
+  taskId: string,
+  status: GenerationTask['status']
+): GenerationTaskStatus {
+  return status === 'error' && cancelledTaskReasons.has(taskId) ? 'cancelled' : status
 }
 
 function createTaskId(): string {
@@ -317,7 +379,7 @@ export async function createVisibleGenerationTask(
     options,
   }
   dependencies.appendTask(task)
-  emitVisibleGenerationTaskChange()
+  publishVisibleGenerationTaskStatus({ taskId, status: 'pending' })
   logger.info('可见生成任务已创建', { event: 'visible_generation.task.created', taskId, modelId: model, providerId, mediaType: type })
 
   const started = taskQueueManager.enqueue({

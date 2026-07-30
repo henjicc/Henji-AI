@@ -2,6 +2,7 @@ import type React from 'react'
 import { useCallback, useState } from 'react'
 import type { GenerationTask, ResultImageDimensions } from '../types'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
+import { publishVisibleGenerationTaskStatus } from '../application/visibleGenerationTaskCommand'
 
 export interface UseTaskStateReturn {
   tasks: GenerationTask[]
@@ -20,6 +21,13 @@ export function useTaskState(): UseTaskStateReturn {
 
   const updateTask = useCallback((taskId: string, updates: Partial<GenerationTask>): void => {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)))
+    if (updates.status && !['success', 'error'].includes(updates.status)) publishVisibleGenerationTaskStatus({
+      taskId,
+      status: updates.status,
+      resultAvailable: Boolean(updates.result),
+      errorCode: updates.error ? 'GENERATION_FAILED' : null,
+      errorMessage: updates.error?.slice(0, 1_000) ?? null,
+    })
   }, [])
 
   // 进度是高频瞬态状态：写独立 store 而非 setTasks，避免每次进度回调都重建 tasks 数组、

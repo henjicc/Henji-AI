@@ -310,6 +310,54 @@ const migrations: SchemaMigration[] = [
       `)
     },
   },
+  {
+    version: 8,
+    name: 'agent-external-generation-waits',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS agent_generation_status_events (
+          event_id TEXT PRIMARY KEY,
+          task_id TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN (
+            'pending', 'queued', 'generating', 'success', 'error', 'cancelled', 'timeout'
+          )),
+          revision INTEGER NOT NULL,
+          occurred_at INTEGER NOT NULL,
+          payload_json TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_generation_status_task_time
+          ON agent_generation_status_events(task_id, occurred_at DESC, revision DESC);
+
+        CREATE TABLE IF NOT EXISTS agent_external_waits (
+          wait_id TEXT PRIMARY KEY,
+          thread_id TEXT NOT NULL REFERENCES agent_threads(thread_id) ON DELETE CASCADE,
+          source_run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+          task_id TEXT NOT NULL,
+          target_statuses_json TEXT NOT NULL,
+          status TEXT NOT NULL CHECK (status IN (
+            'active', 'claimed', 'consumed', 'cancelled', 'timed_out', 'failed'
+          )),
+          resume_policy TEXT NOT NULL,
+          save_point_sequence INTEGER NOT NULL,
+          created_at INTEGER NOT NULL,
+          expires_at INTEGER NOT NULL,
+          last_observed_status TEXT,
+          last_event_id TEXT,
+          claimed_at INTEGER,
+          consumed_at INTEGER,
+          resumed_run_id TEXT,
+          error TEXT,
+          UNIQUE(source_run_id, task_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_external_waits_active_task
+          ON agent_external_waits(status, task_id, expires_at);
+        CREATE INDEX IF NOT EXISTS idx_agent_external_waits_thread
+          ON agent_external_waits(thread_id, created_at DESC);
+      `)
+    },
+  },
 ]
 
 export function runAgentSchemaMigrations(database: Database.Database): void {

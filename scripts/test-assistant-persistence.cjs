@@ -50,6 +50,15 @@ const testFiles = [
     'electron',
     'main',
     'services',
+    'agent-runtime',
+    'persistence',
+    'external-wait-store.test.ts'
+  ),
+  path.join(
+    workspaceRoot,
+    'electron',
+    'main',
+    'services',
     'assistant',
     'memory-store.test.ts'
   ),
@@ -67,7 +76,7 @@ function cleanup() {
   fs.rmSync(reportDirectory, { recursive: true, force: true })
 }
 
-function waitForReport(timeoutMs = 15_000) {
+function waitForReport(timeoutMs = 60_000) {
   const startedAt = Date.now()
   return new Promise((resolve, reject) => {
     const poll = () => {
@@ -92,6 +101,8 @@ async function main() {
       vitestEntry,
       'run',
       ...testFiles,
+      '--pool=forks',
+      '--poolOptions.forks.singleFork=true',
       '--reporter=json',
       `--outputFile=${reportPath}`,
     ],

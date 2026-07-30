@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { agentBudgetConfigSchema, agentEventSchema, agentRunStateSchema } from './events'
 import { modelStepCapabilitiesSchema } from '../llm/modelStep'
+import { agentExternalContinuationSchema } from './externalWait'
 
 export const AGENT_RUNTIME_SCHEMA_VERSION = 'agent-runtime/v1' as const
 export const agentApprovalModeSchema = z.enum(['ask', 'assistant_decides', 'full_access'])
@@ -96,6 +97,7 @@ export const agentStartRunRequestSchema = z.object({
   models: z.array(agentRuntimeModelConfigSchema).min(1).max(200),
   approvalMode: agentApprovalModeSchema.default('assistant_decides'),
   budget: agentBudgetConfigSchema.partial().optional(),
+  externalContinuation: agentExternalContinuationSchema.optional(),
 }).strict()
 export type AgentStartRunRequest = z.infer<typeof agentStartRunRequestSchema>
 

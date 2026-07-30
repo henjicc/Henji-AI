@@ -119,6 +119,8 @@ const assistantApi: HenjiAssistantApi = {
   getTranscript: (request) => nativeInvoke('assistant:agent:getTranscript', request),
   enqueueMessage: (request) => nativeInvoke('assistant:agent:enqueueMessage', request),
   cancelQueuedMessage: (request) => nativeInvoke('assistant:agent:cancelQueuedMessage', request),
+  reportGenerationStatus: (request) => nativeInvoke('assistant:agent:reportGenerationStatus', request),
+  cancelExternalWait: (request) => nativeInvoke('assistant:agent:cancelExternalWait', request),
   retryRun: (request) => nativeInvoke('assistant:agent:retryRun', request),
   subscribeEvents: (handler) => {
     const listener = (_event: Electron.IpcRendererEvent, rawPayload: unknown): void => {

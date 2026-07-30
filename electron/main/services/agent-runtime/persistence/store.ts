@@ -42,9 +42,10 @@ import type {
   AgentArtifactReadRequest,
 } from '../../../../../src/core/assistant/artifacts'
 import { AgentSavePointStore } from './save-point-store'
+import { AgentExternalWaitStore } from './external-wait-store'
 
 const logger = createMainLogger('main.agent_persistence')
-const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
+const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'waiting_external'])
 
 interface RunRow {
   run_id: string
@@ -87,12 +88,14 @@ export class AgentPersistenceStore {
   private readonly artifactStore: AgentArtifactPersistenceStore
   private readonly sessionStore: AgentSessionStore
   private readonly savePointStore: AgentSavePointStore
+  readonly externalWait: AgentExternalWaitStore
 
   constructor(private readonly database: Database.Database) {
     this.eventStore = new AgentEventStore(database)
     this.artifactStore = new AgentArtifactPersistenceStore(database)
     this.sessionStore = new AgentSessionStore(database)
     this.savePointStore = new AgentSavePointStore(database)
+    this.externalWait = new AgentExternalWaitStore(database)
   }
 
   createRun(
@@ -192,6 +195,21 @@ export class AgentPersistenceStore {
     })()
   }
 
+  appendAssistantFact(
+    threadId: string,
+    runId: string,
+    content: string,
+    idempotencyKey: string
+  ): AgentSessionEntry {
+    return this.database.transaction(() => this.sessionStore.appendMessage({
+      threadId,
+      runId,
+      role: 'assistant',
+      content,
+      idempotencyKey,
+    }))()
+  }
+
   listThreads(limit = 30): AgentThreadSummary[] {
     return this.sessionStore.listThreads(limit)
   }
@@ -263,12 +281,20 @@ export class AgentPersistenceStore {
     ))()
   }
 
+  listCurrentTaskMessages(runId: string): AgentSessionEntry[] {
+    return this.sessionStore.listQueuedMessages(runId, 'current_task')
+  }
+
   listAfterTaskMessages(runId: string): AgentSessionEntry[] {
     return this.sessionStore.listQueuedMessages(runId, 'after_task')
   }
 
   findAcceptedAfterTaskRun(threadId: string): string | null {
     return this.sessionStore.findAcceptedAfterTaskRun(threadId)
+  }
+
+  retargetAfterTaskMessages(sourceRunId: string, targetRunId: string): number {
+    return this.sessionStore.retargetAfterTaskMessages(sourceRunId, targetRunId)
   }
 
   updateQueuedMessageStatus(

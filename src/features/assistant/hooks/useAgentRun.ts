@@ -12,6 +12,7 @@ import {
   startAgentRun,
   enqueueAgentMessage,
   cancelQueuedAgentMessage,
+  cancelAgentExternalWait,
 } from '@/commands/assistant'
 import type { AgentApprovalResponse } from '@/core/assistant/runtimeContracts'
 import type { AgentEvent } from '@/core/assistant/events'
@@ -47,6 +48,7 @@ export interface UseAgentRunResult {
     waitId?: string
   ) => Promise<boolean>
   cancelQueued: (entryId: string) => Promise<void>
+  cancelExternalWait: (waitId: string, cancelGeneration: boolean) => Promise<void>
   queueRevision: number
   cancel: () => Promise<void>
   pause: () => Promise<void>
@@ -373,6 +375,20 @@ export function useAgentRun(): UseAgentRunResult {
     }
   }, [threadId])
 
+  const cancelExternalWait = useCallback(async (
+    waitId: string,
+    cancelGeneration: boolean
+  ): Promise<void> => {
+    try {
+      dispatch({
+        type: 'sync_state',
+        state: await cancelAgentExternalWait(waitId, cancelGeneration),
+      })
+    } catch (error) {
+      dispatch({ type: 'action_error', message: safeErrorMessage(error) })
+    }
+  }, [])
+
   const control = useCallback(async (
     action: 'cancel' | 'pause' | 'resume',
     invoke: (runId: string) => ReturnType<typeof getAgentRunState>
@@ -435,6 +451,7 @@ export function useAgentRun(): UseAgentRunResult {
     start,
     enqueue,
     cancelQueued,
+    cancelExternalWait,
     cancel,
     pause,
     resume,

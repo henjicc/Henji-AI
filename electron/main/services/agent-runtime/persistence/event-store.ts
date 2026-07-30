@@ -56,7 +56,7 @@ export function buildAgentRunEventsPage(
     coveredThroughSequence,
     hasGap,
     hasMore: !hasGap && coveredThroughSequence < latestSequence,
-    terminal: ['completed', 'failed', 'cancelled'].includes(state.status),
+    terminal: ['completed', 'failed', 'cancelled', 'waiting_external'].includes(state.status),
   })
 }
 
