@@ -38,6 +38,7 @@ import { AgentPauseController } from './pause-controller'
 import { startAgentRun } from './run-start'
 import { AgentConversationJournal } from './conversation-journal'
 import { AgentCompletionCoordinator } from './completion-coordinator'
+import { AgentThreadTitleCoordinator } from './thread-title-coordinator'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -67,6 +68,7 @@ export class AgentRunner {
   private readonly modelOutputGuard: AgentModelOutputGuard
   private readonly terminalApprovalCleanup: AgentTerminalApprovalCleanup
   private readonly completionCoordinator: AgentCompletionCoordinator
+  private readonly threadTitleCoordinator: AgentThreadTitleCoordinator
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private started = false; constructor(private readonly options: AgentRunnerOptions) {
@@ -87,6 +89,14 @@ export class AgentRunner {
       options.dependencies.consumeCurrentTaskMessages
     )
     this.models = selectAgentRuntimeModels(options.request)
+    this.threadTitleCoordinator = new AgentThreadTitleCoordinator({
+      runId: options.runId,
+      threadId: options.request.threadId,
+      model: this.models.summarizer,
+      runModelStep: options.dependencies.runModelStep,
+      getContext: options.dependencies.getThreadTitleContext,
+      updateTitle: options.dependencies.updateThreadTitle,
+    })
     this.budget = new AgentRunMetrics(options.request.budget)
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
     this.state = createInitialAgentRunState(options.runId, options.request, options.recoveryContext)
@@ -243,6 +253,7 @@ export class AgentRunner {
       emit: (event) => this.emit(event),
       transition: (reason) => this.transition('running', reason),
     })
+    this.threadTitleCoordinator.start()
     this.externalContinuation.emitResumed((event) => this.emit(event))
     void this.execute()
     return this.getState()

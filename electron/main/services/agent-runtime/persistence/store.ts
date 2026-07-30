@@ -44,6 +44,7 @@ import type {
 } from '../../../../../src/core/assistant/artifacts'
 import { AgentSavePointStore } from './save-point-store'
 import { AgentExternalWaitStore } from './external-wait-store'
+import { AgentThreadTitleStore } from './thread-title-store'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'waiting_external'])
@@ -84,12 +85,18 @@ function checkpointJson(state: AgentRunState): string {
   })
 }
 
+function fallbackThreadTitle(goal: string): string {
+  const normalized = goal.replace(/\s+/g, ' ').trim()
+  return Array.from(normalized || '新对话').slice(0, 80).join('')
+}
+
 export class AgentPersistenceStore {
   private readonly eventStore: AgentEventStore
   private readonly artifactStore: AgentArtifactPersistenceStore
   private readonly sessionStore: AgentSessionStore
   private readonly savePointStore: AgentSavePointStore
   readonly externalWait: AgentExternalWaitStore
+  readonly threadTitles: AgentThreadTitleStore
 
   constructor(private readonly database: Database.Database) {
     this.eventStore = new AgentEventStore(database)
@@ -97,6 +104,7 @@ export class AgentPersistenceStore {
     this.sessionStore = new AgentSessionStore(database)
     this.savePointStore = new AgentSavePointStore(database)
     this.externalWait = new AgentExternalWaitStore(database)
+    this.threadTitles = new AgentThreadTitleStore(database)
   }
 
   createRun(
@@ -114,7 +122,7 @@ export class AgentPersistenceStore {
         ON CONFLICT(thread_id) DO UPDATE SET
           updated_at = excluded.updated_at,
           last_run_id = excluded.last_run_id
-      `).run(request.threadId, request.goal.slice(0, 80), now, now, runId)
+      `).run(request.threadId, fallbackThreadTitle(request.goal), now, now, runId)
       this.database.prepare(`
         INSERT INTO agent_runs(
           run_id, thread_id, goal, request_json, state_json, status,

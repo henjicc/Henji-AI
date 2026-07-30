@@ -63,6 +63,8 @@ export const agentUtilityRpcRequestMessageSchema = z.object({
     'session.append_compaction',
     'session.append_save_point',
     'session.consume_current_messages',
+    'session.get_title_context',
+    'session.update_title',
     'external_wait.register',
   ]),
   payload: z.unknown(),

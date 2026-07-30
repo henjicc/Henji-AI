@@ -279,11 +279,47 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     })
     expect(store.listThreads()).toMatchObject([{
       threadId: 'thread-1',
-      headSequence: 4,
+      messageCount: 3,
       lastRunId: 'run-2',
       lastRunGoal: '继续，沿用第一轮约束',
-      lastMessagePreview: '继续，沿用第一轮约束',
     }])
+  })
+
+  it('标题上下文只读取用户指令并通过阶段条件避免旧结果覆盖新标题', () => {
+    store.createRun('run-1', request(), state())
+    const firstContext = store.threadTitles.getContext({
+      runId: 'run-1',
+      threadId: 'thread-1',
+    })
+    expect(firstContext).toEqual({
+      threadId: 'thread-1',
+      currentTitle: '诊断生成失败',
+      generationStage: 0,
+      userMessageCount: 1,
+      userInstructions: ['诊断生成失败'],
+    })
+
+    expect(store.threadTitles.update({
+      runId: 'run-1',
+      threadId: 'thread-1',
+      title: '诊断生成失败',
+      expectedStage: 0,
+      nextStage: 1,
+    })).toMatchObject({
+      updated: true,
+      generationStage: 1,
+    })
+    expect(store.threadTitles.update({
+      runId: 'run-1',
+      threadId: 'thread-1',
+      title: '过期标题',
+      expectedStage: 0,
+      nextStage: 1,
+    })).toMatchObject({
+      updated: false,
+      title: '诊断生成失败',
+      generationStage: 1,
+    })
   })
 
   it('会话分页无重复且新 thread 不会混入旧历史', () => {

@@ -422,6 +422,24 @@ const migrations: SchemaMigration[] = [
       `)
     },
   },
+  {
+    version: 10,
+    name: 'agent-thread-generated-titles',
+    up: (database) => {
+      database.exec(`
+        ALTER TABLE agent_threads
+          ADD COLUMN title_generation_stage INTEGER NOT NULL DEFAULT 0
+          CHECK (title_generation_stage IN (0, 1, 2));
+        ALTER TABLE agent_threads
+          ADD COLUMN title_generated_at INTEGER;
+
+        UPDATE agent_threads
+        SET title = trim(replace(replace(title, char(13), ' '), char(10), ' '))
+        WHERE title LIKE '%' || char(13) || '%'
+           OR title LIKE '%' || char(10) || '%';
+      `)
+    },
+  },
 ]
 
 export function runAgentSchemaMigrations(database: Database.Database): void {

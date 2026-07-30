@@ -189,10 +189,9 @@ export type AgentEnqueueMessageResult = z.infer<typeof agentEnqueueMessageResult
 export const agentThreadSummarySchema = z.object({
   threadId: z.string().min(1).max(200),
   title: z.string(),
-  headSequence: z.number().int().nonnegative(),
+  messageCount: z.number().int().nonnegative(),
   lastRunId: z.string().min(1).nullable(),
   lastRunGoal: z.string(),
-  lastMessagePreview: z.string(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 }).strict()

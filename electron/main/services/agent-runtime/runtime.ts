@@ -56,6 +56,10 @@ import type {
 import { executeAgentToolInMain, invokeAgentFrontendTool } from './host-bridge'
 import { AgentExternalWaitRuntime } from './external-wait-runtime'
 import { startRuntimeRun, type AgentRunRecord } from './runtime-run-starter'
+import {
+  agentThreadTitleContextRequestSchema,
+  agentThreadTitleUpdateSchema,
+} from '../../../../src/core/assistant/threadTitle'
 const logger = createMainLogger('main.agent_runtime')
 
 export type AgentRunEventListener = (event: AgentEvent) => void
@@ -120,6 +124,12 @@ export class AgentRuntimeService {
       }
       return this.persistence.consumeCurrentTaskMessages(runId)
     },
+    getThreadTitleContext: (payload) => this.persistence.threadTitles.getContext(
+      agentThreadTitleContextRequestSchema.parse(payload)
+    ),
+    updateThreadTitle: (payload) => this.persistence.threadTitles.update(
+      agentThreadTitleUpdateSchema.parse(payload)
+    ),
     registerExternalWait: (payload) => this.externalWait.register(payload),
   })
   private readonly messageQueue = new AgentMessageQueueCoordinator({

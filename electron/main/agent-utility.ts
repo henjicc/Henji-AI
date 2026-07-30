@@ -18,6 +18,12 @@ import {
 import { agentSavePointAppendSchema, agentSavePointSchema } from '../../src/core/assistant/turn'
 import { agentSessionEntrySchema } from '../../src/core/assistant/session'
 import {
+  agentThreadTitleContextRequestSchema,
+  agentThreadTitleContextSchema,
+  agentThreadTitleUpdateResultSchema,
+  agentThreadTitleUpdateSchema,
+} from '../../src/core/assistant/threadTitle'
+import {
   agentExternalWaitRecordSchema,
   agentExternalWaitRegisterSchema,
 } from '../../src/core/assistant/externalWait'
@@ -457,6 +463,18 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
       consumeCurrentTaskMessages: async (runId) => z.array(agentSessionEntrySchema).parse(
         await rpc('session.consume_current_messages', { runId })
       ),
+      getThreadTitleContext: async (input) => {
+        const request = agentThreadTitleContextRequestSchema.parse(input)
+        return agentThreadTitleContextSchema.parse(
+          await rpc('session.get_title_context', request)
+        )
+      },
+      updateThreadTitle: async (input) => {
+        const update = agentThreadTitleUpdateSchema.parse(input)
+        return agentThreadTitleUpdateResultSchema.parse(
+          await rpc('session.update_title', update)
+        )
+      },
       registerExternalWait: async (input) => {
         agentExternalWaitRegisterSchema.parse(input)
         return agentExternalWaitRecordSchema.parse(await rpc('external_wait.register', input))

@@ -22,6 +22,12 @@ import type {
   AgentExternalWaitRecord,
   AgentExternalWaitRegister,
 } from '../../../../../src/core/assistant/externalWait'
+import type {
+  AgentThreadTitleContext,
+  AgentThreadTitleContextRequest,
+  AgentThreadTitleUpdate,
+  AgentThreadTitleUpdateResult,
+} from '../../../../../src/core/assistant/threadTitle'
 
 export type AgentModelStepExecutor = (
   input: ModelStepInput,
@@ -46,6 +52,12 @@ export interface AgentRunnerDependencies {
   appendSavePoint?: (input: AgentSavePointAppend) => Promise<AgentSavePoint>
   consumeCurrentTaskMessages?: (runId: string) => Promise<AgentSessionEntry[]>
   registerExternalWait?: (input: AgentExternalWaitRegister) => Promise<AgentExternalWaitRecord>
+  getThreadTitleContext?: (
+    input: AgentThreadTitleContextRequest
+  ) => Promise<AgentThreadTitleContext>
+  updateThreadTitle?: (
+    input: AgentThreadTitleUpdate
+  ) => Promise<AgentThreadTitleUpdateResult>
   onEvent?: (event: AgentEvent) => void
   onCheckpoint?: (state: AgentRunState) => void
   onTerminal?: (state: AgentRunState) => void

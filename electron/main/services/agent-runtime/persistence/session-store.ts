@@ -51,8 +51,7 @@ interface ThreadRow {
   updated_at: number
   last_run_id: string | null
   last_run_goal: string | null
-  head_sequence: number
-  last_message_preview: string | null
+  message_count: number
 }
 
 export interface AppendSessionMessageInput {
@@ -476,29 +475,23 @@ export class AgentSessionStore {
         t.updated_at,
         t.last_run_id,
         (SELECT goal FROM agent_runs r WHERE r.run_id = t.last_run_id) AS last_run_goal,
-        COALESCE(MAX(e.sequence), 0) AS head_sequence,
         (
-          SELECT json_extract(latest.payload_json, '$.content')
-          FROM agent_session_entries latest
-          WHERE latest.thread_id = t.thread_id
-            AND latest.status = 'active'
-            AND latest.kind IN ('user_message', 'assistant_message')
-          ORDER BY latest.sequence DESC
-          LIMIT 1
-        ) AS last_message_preview
+          SELECT COUNT(*)
+          FROM agent_session_entries visible
+          WHERE visible.thread_id = t.thread_id
+            AND visible.status = 'active'
+            AND visible.kind IN ('user_message', 'assistant_message')
+        ) AS message_count
       FROM agent_threads t
-      LEFT JOIN agent_session_entries e ON e.thread_id = t.thread_id
-      GROUP BY t.thread_id
       ORDER BY t.updated_at DESC, t.thread_id ASC
       LIMIT ?
     `).all(safeLimit) as ThreadRow[]
     return rows.map((row) => agentThreadSummarySchema.parse({
       threadId: row.thread_id,
       title: row.title,
-      headSequence: Number(row.head_sequence),
+      messageCount: Number(row.message_count),
       lastRunId: row.last_run_id,
       lastRunGoal: row.last_run_goal ?? row.title,
-      lastMessagePreview: row.last_message_preview ?? '',
       createdAt: toIso(row.created_at),
       updatedAt: toIso(row.updated_at),
     }))

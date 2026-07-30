@@ -57,6 +57,8 @@ interface AgentRuntimeManagerOptions {
   appendSessionCompaction: (payload: unknown) => unknown
   appendSavePoint: (payload: unknown) => unknown
   consumeCurrentTaskMessages: (payload: unknown) => unknown
+  getThreadTitleContext: (payload: unknown) => unknown
+  updateThreadTitle: (payload: unknown) => unknown
   registerExternalWait: (payload: unknown) => unknown
 }
 
@@ -378,6 +380,10 @@ export class AgentRuntimeManager {
         data = this.options.appendSavePoint(payload)
       } else if (operation === 'session.consume_current_messages') {
         data = this.options.consumeCurrentTaskMessages(payload)
+      } else if (operation === 'session.get_title_context') {
+        data = this.options.getThreadTitleContext(payload)
+      } else if (operation === 'session.update_title') {
+        data = this.options.updateThreadTitle(payload)
       } else if (operation === 'external_wait.register') {
         data = this.options.registerExternalWait(payload)
       } else {

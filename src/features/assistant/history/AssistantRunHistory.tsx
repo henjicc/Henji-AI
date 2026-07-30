@@ -69,7 +69,9 @@ export function AssistantRunHistory({
           type="button"
           title="刷新对话历史"
           onClick={() => void refresh()}
-          className="!h-7 !w-7 !rounded-md"
+          appearance="hover-only"
+          showBorder={false}
+          className="!h-8 !w-8"
           disabled={loading}
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -88,7 +90,7 @@ export function AssistantRunHistory({
         {threads.map((thread) => (
           <div
             key={thread.threadId}
-            className="group flex min-h-[60px] items-stretch border-b border-border-dark [content-visibility:auto] [contain-intrinsic-size:auto_60px] last:border-b-0"
+            className="group flex min-h-[56px] items-stretch border-b border-border-dark [content-visibility:auto] [contain-intrinsic-size:auto_56px] last:border-b-0"
           >
             <UiButton
               type="button"
@@ -101,9 +103,8 @@ export function AssistantRunHistory({
               <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
                 <span className={`w-full truncate ${UI_TEXT_BODY_CLASS}`}>{thread.title || '未命名对话'}</span>
                 <span className={`w-full truncate font-normal ${UI_TEXT_META_CLASS}`}>
-                  {thread.headSequence} 条记录 · {formatTime(thread.updatedAt)}
+                  {formatTime(thread.updatedAt)} · {thread.messageCount} 条记录
                 </span>
-                {thread.lastMessagePreview ? <span className={`w-full truncate font-normal ${UI_TEXT_META_CLASS}`}>{thread.lastMessagePreview}</span> : null}
               </span>
             </UiButton>
           </div>
