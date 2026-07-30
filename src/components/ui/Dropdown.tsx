@@ -13,6 +13,8 @@ import { UiButton, UiOptionButton } from './primitives'
 import { resolveDropdownDisplay } from './dropdownUtils'
 import { ChevronDown } from 'lucide-react'
 
+const DROPDOWN_PANEL_GAP_PX = 8
+
 export type DropdownOption<T extends string | number | boolean> = {
   label: string
   value: T
@@ -256,13 +258,12 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
       const panelWidth = panelWidthStrategy === 'options' && panelMinWidthPx
         ? Math.max(rect.width, panelMinWidthPx)
         : rect.width
-      const gap = 4
       const viewportPadding = 8
       const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
       const placement = panelHeight > spaceBelow ? 'above' : 'below'
       const top = placement === 'above'
-        ? Math.max(viewportPadding, rect.top - panelHeight - gap)
-        : Math.min(rect.bottom + gap, window.innerHeight - viewportPadding)
+        ? Math.max(viewportPadding, rect.top - panelHeight - DROPDOWN_PANEL_GAP_PX)
+        : Math.min(rect.bottom + DROPDOWN_PANEL_GAP_PX, window.innerHeight - viewportPadding)
       const left = Math.min(
         Math.max(viewportPadding, rect.left),
         Math.max(viewportPadding, window.innerWidth - panelWidth - viewportPadding)
@@ -381,7 +382,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ) : (
           <div
             ref={panelRef}
-            className={`absolute left-0 z-50 ${fixedPos?.placement === 'above' ? 'bottom-full mb-1' : 'top-full mt-1'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
+            className={`absolute left-0 z-50 ${fixedPos?.placement === 'above' ? 'bottom-full mb-2' : 'top-full mt-2'} ${panelWidthStrategy === 'options' ? 'w-auto' : 'w-full'} ${UI_TRIGGER_PANEL_CLASS} overflow-hidden ${closing ? 'animate-scale-out' : 'animate-scale-in'} ${panelClassName || ''}`}
             style={panelWidthStrategy === 'options' && panelMinWidthPx ? { minWidth: `${panelMinWidthPx}px` } : undefined}
             data-dropdown-portal="true"
             data-dropdown-placement={fixedPos?.placement ?? 'below'}

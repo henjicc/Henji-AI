@@ -260,8 +260,9 @@ export function AssistantConversation(): JSX.Element {
               : payload.data.mode === 'current_task' ? '补充当前任务' : '任务结束后继续'
             return (
               <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
-                <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}>
-                  <UserRound className="h-3.5 w-3.5" />你 · {modeLabel} · {statusLabel}
+                <div className={`mb-1.5 flex items-center justify-end gap-1.5 text-right font-medium ${UI_TEXT_META_CLASS}`}>
+                  <span>你 · {modeLabel} · {statusLabel}</span>
+                  <UserRound className="h-3.5 w-3.5 shrink-0" />
                 </div>
                 <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
                 {payload.data.status === 'accepted' ? (
@@ -280,7 +281,10 @@ export function AssistantConversation(): JSX.Element {
           }
           return entry.kind === 'user_message' ? (
             <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
-              <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
+              <div className={`mb-1.5 flex items-center justify-end gap-1.5 text-right font-medium ${UI_TEXT_META_CLASS}`}>
+                <span>你</span>
+                <UserRound className="h-3.5 w-3.5 shrink-0" />
+              </div>
               <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
             </UiPanel>
           ) : (
@@ -298,9 +302,19 @@ export function AssistantConversation(): JSX.Element {
         {/* 用户消息使用右侧有限宽度气泡；助手消息使用整行正文。 */}
         {currentGoal ? (
           <UiPanel variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
-            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><UserRound className="h-3.5 w-3.5" />你</div>
+            <div className={`mb-1.5 flex items-center justify-end gap-1.5 text-right font-medium ${UI_TEXT_META_CLASS}`}>
+              <span>你</span>
+              <UserRound className="h-3.5 w-3.5 shrink-0" />
+            </div>
             <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{currentGoal}</p>
           </UiPanel>
+        ) : null}
+
+        {runState ? (
+          <div className={`flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}>
+            <Bot className="h-3.5 w-3.5 shrink-0" />
+            <span>助手</span>
+          </div>
         ) : null}
 
         {runState ? (
@@ -313,7 +327,6 @@ export function AssistantConversation(): JSX.Element {
                 aria-expanded={activityExpanded}
                 className="!h-8 min-w-0 flex-1 justify-start gap-2 !rounded-lg !px-2 text-left"
               >
-                <Bot className="h-3.5 w-3.5 shrink-0 text-accent" />
                 <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行过程</span>
                 <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>
                   {terminalStatuses.has(runState.status)
@@ -351,24 +364,35 @@ export function AssistantConversation(): JSX.Element {
               ) : null}
             </div>
 
-            {activityExpanded ? (
-              <div className="space-y-1 border-t border-border-dark/60 p-1.5">
-                <ExecutionPlanCard presentation={execution} runStatus={runState.status} />
-                {modelUpdates.map((update) => <ModelProgressMessage key={update.stepId} update={update} />)}
-                {toolGroups.length > 0 ? (
-                  <section aria-label="助手工具执行记录" className="space-y-1">
-                    {toolGroups.map((group) => (
-                      <ToolActivityGroup
-                        key={group.groupId}
-                        group={group}
-                        onOpenTask={openTask}
-                        onOpenNode={openNode}
-                      />
-                    ))}
-                  </section>
-                ) : null}
+            <div
+              className={`grid transition-[grid-template-rows,opacity] duration-200 ${
+                activityExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+              }`}
+            >
+              <div
+                aria-hidden={!activityExpanded}
+                className={`min-h-0 overflow-hidden ${activityExpanded ? '' : 'pointer-events-none select-none'}`}
+              >
+                <div className={`space-y-1 border-t border-border-dark/60 p-1.5 transition-transform duration-200 ${
+                  activityExpanded ? 'translate-y-0' : '-translate-y-2'
+                }`}>
+                  <ExecutionPlanCard presentation={execution} runStatus={runState.status} />
+                  {modelUpdates.map((update) => <ModelProgressMessage key={update.stepId} update={update} />)}
+                  {toolGroups.length > 0 ? (
+                    <section aria-label="助手工具执行记录" className="space-y-1">
+                      {toolGroups.map((group) => (
+                        <ToolActivityGroup
+                          key={group.groupId}
+                          group={group}
+                          onOpenTask={openTask}
+                          onOpenNode={openNode}
+                        />
+                      ))}
+                    </section>
+                  ) : null}
+                </div>
               </div>
-            ) : null}
+            </div>
           </section>
         ) : null}
 
@@ -400,14 +424,12 @@ export function AssistantConversation(): JSX.Element {
 
         {modelResponseStreaming && runState && !terminalStatuses.has(runState.status) ? (
           <section style={deferredBlockStyle} className="w-full">
-            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />回应生成中</div>
             <AssistantMarkdown>{deferredStreamedText}</AssistantMarkdown>
           </section>
         ) : null}
 
         {runState?.finalText ? (
           <section style={deferredBlockStyle} className="w-full">
-            <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />助手</div>
             <AssistantMarkdown>{runState.finalText}</AssistantMarkdown>
           </section>
         ) : null}

@@ -1,4 +1,3 @@
-import { Bot } from 'lucide-react'
 import { memo, type CSSProperties } from 'react'
 
 import { UI_TEXT_META_CLASS } from '@/components/ui'
@@ -18,12 +17,9 @@ interface ModelProgressMessageProps {
 
 function ModelProgressMessageView({ update }: ModelProgressMessageProps): JSX.Element {
   return (
-    <section style={progressMessageStyle} className="flex items-start gap-2 px-1 py-1">
-      <Bot className="mt-1 h-3.5 w-3.5 shrink-0 text-accent" />
-      <div className="min-w-0 flex-1">
-        <div className={`font-medium ${UI_TEXT_META_CLASS}`}>助手进展</div>
-        <AssistantMarkdown compact>{update.text}</AssistantMarkdown>
-      </div>
+    <section style={progressMessageStyle} className="px-1 py-1">
+      <div className={`font-medium ${UI_TEXT_META_CLASS}`}>助手进展</div>
+      <AssistantMarkdown compact>{update.text}</AssistantMarkdown>
     </section>
   )
 }

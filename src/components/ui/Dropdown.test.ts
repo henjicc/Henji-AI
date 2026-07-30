@@ -75,6 +75,10 @@ describe('Dropdown 键盘交互', () => {
 
     fireEvent.keyDown(rendered.getByRole('button', { name: '展开方向' }), { key: 'ArrowDown' })
 
-    expect(document.querySelector('[data-dropdown-placement="above"]')).toBeTruthy()
+    const panel = document.querySelector<HTMLElement>('[data-dropdown-placement="above"]')
+    expect(panel).toBeTruthy()
+    if (!panel) throw new Error('下拉浮层未渲染')
+    expect(panel.style.top).toBe('632px')
+    expect(panel.classList.contains('ui-glass')).toBe(true)
   })
 })
