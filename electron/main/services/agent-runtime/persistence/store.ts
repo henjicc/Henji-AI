@@ -24,12 +24,18 @@ import { AgentArtifactPersistenceStore } from './artifact-store'
 import { AgentSessionStore, type AgentConversationProjection } from './session-store'
 import type { AgentThreadSummary, AgentTranscriptPage } from '../../../../../src/core/assistant/session'
 import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
+import {
+  agentSavePointAppendSchema,
+  type AgentSavePoint,
+  type AgentSavePointAppend,
+} from '../../../../../src/core/assistant/turn'
 import type {
   AgentArtifactDescribeRequest,
   AgentArtifactDescriptor,
   AgentArtifactPage,
   AgentArtifactReadRequest,
 } from '../../../../../src/core/assistant/artifacts'
+import { AgentSavePointStore } from './save-point-store'
 
 const logger = createMainLogger('main.agent_persistence')
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
@@ -74,11 +80,13 @@ export class AgentPersistenceStore {
   private readonly eventStore: AgentEventStore
   private readonly artifactStore: AgentArtifactPersistenceStore
   private readonly sessionStore: AgentSessionStore
+  private readonly savePointStore: AgentSavePointStore
 
   constructor(private readonly database: Database.Database) {
     this.eventStore = new AgentEventStore(database)
     this.artifactStore = new AgentArtifactPersistenceStore(database)
     this.sessionStore = new AgentSessionStore(database)
+    this.savePointStore = new AgentSavePointStore(database)
   }
 
   createRun(
@@ -201,6 +209,29 @@ export class AgentPersistenceStore {
 
   getSessionHead(threadId: string): number {
     return this.sessionStore.getHead(threadId)
+  }
+
+  appendSavePoint(raw: AgentSavePointAppend): AgentSavePoint {
+    const input = agentSavePointAppendSchema.parse(raw)
+    if (input.snapshot.runId !== input.state.runId || input.snapshot.threadId !== input.state.threadId) {
+      throw new Error('[SAVE_POINT_RUN_MISMATCH] 保存点与运行不匹配')
+    }
+    return this.database.transaction(() => {
+      this.saveState(input.state)
+      return this.savePointStore.append(input, this.sessionStore.getHead(input.state.threadId))
+    })()
+  }
+
+  appendSettledSavePoint(state: AgentRunState): AgentSavePoint | null {
+    return this.savePointStore.appendSettled(state, this.sessionStore.getHead(state.threadId))
+  }
+
+  loadLatestSavePoint(runId: string): AgentSavePoint | null {
+    return this.savePointStore.latest(runId)
+  }
+
+  countSavePoints(runId: string): number {
+    return this.savePointStore.count(runId)
   }
 
   saveArtifact(runId: string, artifact: AgentContextArtifact): void {

@@ -20,6 +20,13 @@ import {
   agentWorkingSummarySchema,
   createAgentWorkingSummary,
 } from '../../../../../src/core/assistant/workingContext'
+import {
+  AGENT_SAVE_POINT_VERSION,
+  AGENT_TURN_SNAPSHOT_VERSION,
+  AGENT_PROJECTION_VERSION,
+  AGENT_COMPACTION_VERSION,
+  type AgentTurnSnapshotDraft,
+} from '../../../../../src/core/assistant/turn'
 
 function request(): AgentStartRunRequest {
   const now = new Date().toISOString()
@@ -123,6 +130,26 @@ function eventForSequence(sequence: number): AgentEvent {
   })
 }
 
+function turnSnapshot(): AgentTurnSnapshotDraft {
+  return {
+    version: AGENT_TURN_SNAPSHOT_VERSION,
+    runId: 'run-1', threadId: 'thread-1', turn: 1,
+    projectionVersion: AGENT_PROJECTION_VERSION,
+    compactionVersion: AGENT_COMPACTION_VERSION,
+    models: ['primary', 'router', 'summarizer'].map((role) => ({
+      role: role as 'primary' | 'router' | 'summarizer',
+      providerId: 'provider', modelId: 'model', apiProtocol: 'openai-compatible',
+    })),
+    tools: [{ name: 'tool', version: 1, schemaDigest: 'a'.repeat(64) }],
+    scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 },
+    artifactRefs: [],
+    requestOptions: {
+      contextWindow: 32_000, maxOutputTokens: 1_000, timeoutMs: 5_000,
+      approvalMode: 'assistant_decides',
+    },
+  }
+}
+
 const describeWithElectronSqlite = process.versions.electron ? describe : describe.skip
 
 describeWithElectronSqlite('AgentPersistenceStore', () => {
@@ -171,6 +198,37 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
       recoveryStatus: 'none',
       canRetry: false,
     }])
+  })
+
+  it('保存点与 session head/checkpoint 幂等对齐并在终局 settled', () => {
+    const running = state()
+    running.turn = 1
+    store.createRun('run-1', request(), running)
+    const input = {
+      version: AGENT_SAVE_POINT_VERSION,
+      stage: 'before_model' as const,
+      snapshot: turnSnapshot(),
+      state: running,
+      idempotencyKey: 'before-model:run-1:1',
+    }
+    const first = store.appendSavePoint(input)
+    const duplicate = store.appendSavePoint(input)
+    expect(duplicate).toEqual(first)
+    expect(first.snapshot.sessionHeadSequence).toBe(1)
+    expect(first.stateSequence).toBe(running.sequence)
+    expect(store.countSavePoints('run-1')).toBe(1)
+
+    const completed = state('completed')
+    completed.turn = 1
+    completed.finalText = '完成'
+    store.saveState(completed)
+    store.appendTerminalMessage(completed)
+    store.appendSettledSavePoint(completed)
+    expect(store.loadLatestSavePoint('run-1')).toMatchObject({
+      stage: 'settled',
+      snapshot: { sessionHeadSequence: 2 },
+    })
+    expect(store.countSavePoints('run-1')).toBe(2)
   })
 
   it('按 thread sequence 幂等追加会话消息并投影多轮历史', () => {

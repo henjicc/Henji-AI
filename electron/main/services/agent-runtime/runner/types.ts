@@ -13,6 +13,7 @@ import type {
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import type { AgentSessionCompactionAppend } from '../../../../../src/core/assistant/session'
+import type { AgentSavePoint, AgentSavePointAppend } from '../../../../../src/core/assistant/turn'
 
 export type AgentModelStepExecutor = (
   input: ModelStepInput,
@@ -31,6 +32,7 @@ export interface AgentRunnerDependencies {
   ) => Promise<AgentMemoryRetrievalResult>
   artifactStore?: AgentArtifactStore
   appendSessionCompaction?: (input: AgentSessionCompactionAppend) => Promise<void>
+  appendSavePoint?: (input: AgentSavePointAppend) => Promise<AgentSavePoint>
   onEvent?: (event: AgentEvent) => void
   onCheckpoint?: (state: AgentRunState) => void
   onTerminal?: (state: AgentRunState) => void

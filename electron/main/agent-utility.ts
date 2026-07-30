@@ -14,6 +14,7 @@ import { agentMemoryRetrievalResultSchema } from '../../src/core/assistant/memor
 import {
   agentSessionCompactionAppendSchema,
 } from '../../src/core/assistant/session'
+import { agentSavePointAppendSchema, agentSavePointSchema } from '../../src/core/assistant/turn'
 import {
   agentArtifactDescribeRequestSchema,
   agentArtifactDescriptorSchema,
@@ -62,7 +63,7 @@ import {
   buildModelStepTraceDetail,
   createModelStepStreamTrace,
 } from './services/llm/sdk/trace'
-import { executeUtilityControlCommand } from './agent-utility-control'
+import { executeUtilityControlCommand, releaseUtilityRunPayload } from './agent-utility-control'
 import { agentUtilityStartPayloadSchema } from './agent-utility-schemas'
 
 const parentPort = process.parentPort
@@ -413,6 +414,10 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
         agentSessionCompactionAppendSchema.parse(input)
         await rpc('session.append_compaction', input)
       },
+      appendSavePoint: async (input) => {
+        agentSavePointAppendSchema.parse(input)
+        return agentSavePointSchema.parse(await rpc('session.append_save_point', input))
+      },
       retrieveMemory: async (query, signal) => agentMemoryRetrievalResultSchema.parse(
         await rpc('memory.retrieve', query, signal)
       ),
@@ -439,6 +444,8 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
 
 async function executeCommand(action: AgentUtilityCommandAction, payload: unknown): Promise<unknown> {
   if (action === 'run.start') return await handleStart(payload)
+  if (action === 'run.release') return releaseUtilityRunPayload(
+    payload, { runners, hostContexts, activeModelSteps })
   return await executeUtilityControlCommand({
     action,
     payload,

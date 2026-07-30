@@ -268,6 +268,18 @@ const clarificationRequiredEventSchema = z.object({
   reason: z.string().min(1).max(500),
 }).strict()
 
+const savePointCreatedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('SavePointCreated'),
+  turn: z.number().int().positive(),
+  stage: z.enum([
+    'before_model', 'before_tools', 'after_tools',
+    'waiting_user', 'waiting_external', 'settled',
+  ]),
+  sessionHeadSequence: z.number().int().nonnegative(),
+  snapshotVersion: z.string().min(1).max(100),
+}).strict()
+
 const runCompletedEventSchema = z.object({
   ...eventBase,
   type: z.literal('RunCompleted'),
@@ -307,6 +319,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   artifactOffloadedEventSchema,
   verificationCompletedEventSchema,
   clarificationRequiredEventSchema,
+  savePointCreatedEventSchema,
   runCompletedEventSchema,
   runFailedEventSchema,
   runCancelledEventSchema,

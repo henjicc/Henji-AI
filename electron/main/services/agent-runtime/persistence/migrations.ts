@@ -283,6 +283,33 @@ const migrations: SchemaMigration[] = [
       }
     },
   },
+  {
+    version: 7,
+    name: 'agent-turn-save-points',
+    up: (database) => {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS agent_save_points (
+          save_point_id INTEGER PRIMARY KEY AUTOINCREMENT,
+          run_id TEXT NOT NULL REFERENCES agent_runs(run_id) ON DELETE CASCADE,
+          thread_id TEXT NOT NULL REFERENCES agent_threads(thread_id) ON DELETE CASCADE,
+          turn INTEGER NOT NULL,
+          stage TEXT NOT NULL CHECK (stage IN (
+            'before_model', 'before_tools', 'after_tools',
+            'waiting_user', 'waiting_external', 'settled'
+          )),
+          version TEXT NOT NULL,
+          snapshot_json TEXT NOT NULL,
+          state_sequence INTEGER NOT NULL,
+          idempotency_key TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(run_id, idempotency_key)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_agent_save_points_run_turn
+          ON agent_save_points(run_id, turn ASC, save_point_id ASC);
+      `)
+    },
+  },
 ]
 
 export function runAgentSchemaMigrations(database: Database.Database): void {

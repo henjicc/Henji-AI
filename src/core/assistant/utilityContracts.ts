@@ -24,6 +24,7 @@ export const agentUtilityCommandMessageSchema = z.object({
     'run.resume',
     'run.cancel',
     'run.approval',
+    'run.release',
     'process.shutdown',
   ]),
   payload: z.unknown(),
@@ -58,6 +59,7 @@ export const agentUtilityRpcRequestMessageSchema = z.object({
     'agent_trace.fail',
     'permission_audit.append',
     'session.append_compaction',
+    'session.append_save_point',
   ]),
   payload: z.unknown(),
 }).strict()

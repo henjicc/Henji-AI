@@ -8,7 +8,7 @@ const statusLabels: Record<AgentRunState['status'], string> = {
   running: '执行中',
   waiting_tool: '等待工具',
   waiting_approval: '等待审批',
-  paused: '已暂停',
+  paused: '已在安全点暂停',
   completed: '已结束',
   failed: '失败',
   cancelled: '已取消',
@@ -55,7 +55,7 @@ export function RunStatusBar({
         {state.status === 'paused' ? (
           <UiButton type="button" size="sm" variant="ghost" title="继续" aria-label="继续" onClick={onResume} className="!h-7 !w-7 !p-0"><CirclePlay className="h-3.5 w-3.5" /></UiButton>
         ) : active ? (
-          <UiButton type="button" size="sm" variant="ghost" title="暂停" aria-label="暂停" onClick={onPause} className="!h-7 !w-7 !p-0"><CirclePause className="h-3.5 w-3.5" /></UiButton>
+          <UiButton type="button" size="sm" variant="ghost" title="当前模型或工具单元结束后安全暂停" aria-label="安全暂停" onClick={onPause} className="!h-7 !w-7 !p-0"><CirclePause className="h-3.5 w-3.5" /></UiButton>
         ) : (
           <UiButton type="button" size="sm" variant="ghost" title="刷新" aria-label="刷新" onClick={onRefresh} className="!h-7 !w-7 !p-0"><RotateCw className="h-3.5 w-3.5" /></UiButton>
         )}

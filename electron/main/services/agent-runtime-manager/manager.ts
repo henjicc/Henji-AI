@@ -54,6 +54,7 @@ interface AgentRuntimeManagerOptions {
   failAgentTrace: (payload: AgentTraceFailInput) => void
   appendPermissionAudit: (payload: unknown) => unknown
   appendSessionCompaction: (payload: unknown) => unknown
+  appendSavePoint: (payload: unknown) => unknown
 }
 
 interface PendingCommand {
@@ -280,6 +281,13 @@ export class AgentRuntimeManager {
       if (checkpoint.data.type === 'run.terminal') {
         this.activeRunIds.delete(checkpoint.data.runId)
         this.options.onTerminal(checkpoint.data.runId, state)
+        void this.invoke('run.release', { runId: checkpoint.data.runId }).catch((error) => {
+          logger.warn('Agent 终局资源释放确认失败', {
+            event: 'agent_runtime_process.run.release.failed',
+            requestId: checkpoint.data.runId,
+            error,
+          })
+        })
       } else {
         this.options.onCheckpoint(checkpoint.data.runId, state)
       }
@@ -353,6 +361,8 @@ export class AgentRuntimeManager {
         data = this.options.retrieveMemory(payload)
       } else if (operation === 'session.append_compaction') {
         data = this.options.appendSessionCompaction(payload)
+      } else if (operation === 'session.append_save_point') {
+        data = this.options.appendSavePoint(payload)
       } else {
         throw new Error(`不支持的 utility RPC 操作：${String(operation)}`)
       }

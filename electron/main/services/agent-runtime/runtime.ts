@@ -48,10 +48,12 @@ import { AgentPersistenceStore } from './persistence/store'
 import { buildAgentRunEventsPage } from './persistence/event-store'
 import { AgentPermissionAuditStore } from './persistence/permission-audit-store'
 import { appendValidatedSessionCompaction } from './persistence/session-compaction-append'
+import { appendValidatedSavePoint } from './persistence/save-point-append'
 import type { AgentPermissionAuditRecord } from '../../../../src/core/assistant/permissionAudit'
 import { createBuiltinAgentToolRegistry } from './tools/builtin'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
 import { artifactPayloadSchema, toolExecutionPayloadSchema } from './runtime-schemas'
+import { settleRuntimeRun } from './runtime-settlement'
 const logger = createMainLogger('main.agent_runtime')
 
 interface AgentRunRecord {
@@ -101,6 +103,11 @@ export class AgentRuntimeService {
     appendSessionCompaction: (payload) => appendValidatedSessionCompaction(
       payload,
       (runId) => this.runs.get(runId),
+      this.persistence
+    ),
+    appendSavePoint: (payload) => appendValidatedSavePoint(
+      payload,
+      (runId) => this.runs.get(runId)?.threadId,
       this.persistence
     ),
   })
@@ -333,12 +340,12 @@ export class AgentRuntimeService {
   private onTerminal(runId: string, state: AgentRunState): void {
     const record = this.runs.get(runId)
     this.updateState(runId, state)
-    this.persistence.saveState(state)
-    this.persistence.appendTerminalMessage(state)
-    if (record && this.activeByThread.get(record.threadId) === runId) {
-      this.activeByThread.delete(record.threadId)
-    }
-    this.eventListeners.delete(runId)
+    settleRuntimeRun({
+      runId, state, record, persistence: this.persistence,
+      activeByThread: this.activeByThread,
+      eventListeners: this.eventListeners,
+      runs: this.runs,
+    })
   }
 
   private onProcessFailure(runIds: string[], reason: string): void {

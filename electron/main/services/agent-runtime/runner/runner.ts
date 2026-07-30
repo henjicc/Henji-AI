@@ -3,8 +3,8 @@ import type { AgentApprovalRequest, AgentEventInput, AgentRunState, AgentRunStat
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepResult, ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import { AgentContextBuilder } from '../context/builder'
 import { AgentArtifactStore } from '../context/offload'
+import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentIntentRouter } from '../context/router'
 import { AgentToolGatewayError } from '../tools/gateway'
@@ -19,7 +19,6 @@ import { AgentApprovalWaiter } from './approval-waiter'
 import { AgentRecoveryWriteGuard } from './recovery-guard'
 import { markWorkingSummaryRecoveryVerified } from './working-summary'
 import { AgentMemoryContextProvider } from './memory-context'
-import { emitAgentContextEvents } from './context-events'
 import { AgentRunnerLifecycle } from './lifecycle'
 import { AgentModelOutputGuard } from './model-output-guard'
 import { logApprovalExpired, logApprovalRequested, logApprovalResolved } from './approval-logging'
@@ -28,19 +27,23 @@ import { isContextOverflowError } from '../context/semantic-compaction'
 import { AgentConversationCompactor } from './conversation-compactor'
 import { AgentModelTurnCoordinator } from './model-turn-coordinator'
 import { AgentToolExecutionCoordinator } from './tool-execution-coordinator'
+import { AgentSavePointCoordinator } from './save-point-coordinator'
+import { AgentTurnContextCoordinator } from './turn-context-coordinator'
+import { logAgentToolActivation } from './activation-logging'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
   private readonly budget: AgentBudgetTracker
   private readonly lifecycle: AgentRunnerLifecycle
   private readonly models
-  private readonly contextBuilder: AgentContextBuilder
   private readonly catalogPlanner
   private readonly abortController = new AbortController()
   private readonly conversation: ModelStepMessage[]
   private readonly conversationCompactor: AgentConversationCompactor
   private readonly modelTurnCoordinator: AgentModelTurnCoordinator
   private readonly toolExecutionCoordinator: AgentToolExecutionCoordinator
+  private readonly savePointCoordinator: AgentSavePointCoordinator
+  private readonly turnContextCoordinator: AgentTurnContextCoordinator
   private readonly observations: AgentToolObservation[] = []
   private state: AgentRunState
   private pausedFrom: Exclude<AgentRunStatus, 'paused'> = 'running'
@@ -57,7 +60,6 @@ export class AgentRunner {
     this.conversation = [...(options.conversationHistory ?? [])]
     this.models = selectAgentRuntimeModels(options.request)
     this.budget = new AgentBudgetTracker(options.request.budget)
-    this.contextBuilder = new AgentContextBuilder(options.dependencies.artifactStore ?? new AgentArtifactStore())
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
     this.state = createInitialAgentRunState(options.runId, options.request, options.recoveryContext)
     this.lifecycle = new AgentRunnerLifecycle({
@@ -79,8 +81,8 @@ export class AgentRunner {
     })
     this.recoveryGuard = new AgentRecoveryWriteGuard(this.state.workingSummary, options.dependencies.registry)
     this.memoryProvider = new AgentMemoryContextProvider(options.runId, options.memoryContext ?? [], options.dependencies.retrieveMemory)
-    this.terminalApprovalCleanup = new AgentTerminalApprovalCleanup(
-      options.runId, () => options.dependencies.gateway.expireRunApprovals(options.runId))
+    this.terminalApprovalCleanup = new AgentTerminalApprovalCleanup(options.runId, () => (
+      options.dependencies.gateway.expireRunApprovals(options.runId)))
     this.modelTurnCoordinator = new AgentModelTurnCoordinator({
       runId: options.runId,
       models: this.models,
@@ -137,6 +139,22 @@ export class AgentRunner {
           context: { toolNames },
         })
       },
+    })
+    this.savePointCoordinator = new AgentSavePointCoordinator({
+      append: options.dependencies.appendSavePoint,
+      getState: () => this.lifecycle.getState(),
+      emit: (event) => this.emit(event),
+    })
+    this.turnContextCoordinator = new AgentTurnContextCoordinator({
+      runId: options.runId,
+      threadId: options.request.threadId,
+      models: this.models,
+      contextBuilder: new AgentContextBuilder(
+        options.dependencies.artifactStore ?? new AgentArtifactStore()
+      ),
+      compactor: this.conversationCompactor,
+      savePoints: this.savePointCoordinator,
+      emit: (event) => this.emit(event),
     })
   }
   start(): AgentRunState {
@@ -195,8 +213,7 @@ export class AgentRunner {
     return this.getState()
   }
   async cancelAndWait(reason = '用户取消'): Promise<AgentRunState> {
-    this.cancel(reason); await this.terminalApprovalCleanup.wait(); return this.getState()
-  }
+    this.cancel(reason); await this.terminalApprovalCleanup.wait(); return this.getState() }
   async respondApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<AgentRunState> {
     if (!this.approvalWaiter.matches(approvalId)) {
       throw new Error('审批不属于当前等待中的工具调用')
@@ -245,20 +262,7 @@ export class AgentRunner {
         const currentSnapshot = this.requireContext()
         const activation = this.catalogPlanner.select(route, currentSnapshot)
         const registrations = activation.registrations
-        logger.info('Agent 本轮工具集合已冻结', {
-          event: 'agent_catalog.activation.completed',
-          requestId: this.options.runId,
-          context: {
-            turn,
-            snapshotRevision: currentSnapshot.revision,
-            activeToolNames: activation.activeToolNames,
-            schemaBytes: activation.schemaBytes,
-            candidateCount: activation.candidateCount,
-            droppedForCount: activation.droppedForCount,
-            droppedForSchemaBudget: activation.droppedForSchemaBudget,
-            unavailableNames: activation.unavailableNames,
-          },
-        })
+        logAgentToolActivation(this.options.runId, turn, currentSnapshot.revision, activation)
         const memoryContext = await this.memoryProvider.retrieve({
           goal: this.options.request.goal,
           snapshot: currentSnapshot,
@@ -266,27 +270,22 @@ export class AgentRunner {
           summary: this.state.workingSummary,
           signal: this.abortController.signal,
         })
-        const buildContext = (): ReturnType<AgentContextBuilder['build']> => this.contextBuilder.build({
-          runId: this.options.runId, goal: this.options.request.goal,
-          userInstructions: this.options.request.userInstructions, memoryContext,
-          snapshot: currentSnapshot, route, conversation: this.conversation,
-          observations: this.observations.slice(-20),
-          modelTools: registrations.map((item) => item.modelTool),
-          activeToolNames: registrations.map((item) => item.catalog.name),
-          contextWindowBudget: this.models.primary.limits.contextWindow,
-          maxOutputTokens: this.models.primary.settings.maxOutputTokens,
-          workingSummary: this.state.workingSummary,
-        })
-        let context = buildContext()
-        if (context.compacted && await this.conversationCompactor.compact(turn, this.state.workingSummary)) {
-          context = buildContext()
-        }
-        emitAgentContextEvents(
+        const preparedTurn = await this.turnContextCoordinator.prepare({
           turn,
-          context,
-          this.state.workingSummary?.version,
-          (event) => this.emit(event)
-        )
+          host: currentSnapshot,
+          goal: this.options.request.goal,
+          userInstructions: this.options.request.userInstructions,
+          memoryContext,
+          route,
+          conversation: this.conversation,
+          observations: this.observations,
+          registrations,
+          workingSummary: this.state.workingSummary,
+          artifactRefs: this.state.workingSummary?.artifactRefs ?? [],
+          approvalMode: this.options.request.approvalMode,
+        })
+        let { context } = preparedTurn
+        const turnSnapshot = preparedTurn.snapshot
         let result: ModelStepResult | null = null
         let modelError: unknown | null = null
         try {
@@ -302,7 +301,7 @@ export class AgentRunner {
             if (!semanticCompacted) {
               this.conversationCompactor.compactDeterministically(this.state.workingSummary)
             }
-            context = buildContext()
+            context = preparedTurn.rebuild()
             try {
               result = await this.modelTurnCoordinator.runPrimary(turn, context, 'overflow-retry')
             } catch (retryError) {
@@ -330,6 +329,9 @@ export class AgentRunner {
         }
         this.budget.recordSuccess()
         if (result.toolCalls.length > 0) {
+          await this.savePointCoordinator.save('before_tools', turnSnapshot)
+          await this.waitIfPaused()
+          this.throwIfCancelled()
           const observationStart = this.observations.length
           await this.toolExecutionCoordinator.execute(
             result.toolCalls,
@@ -342,6 +344,7 @@ export class AgentRunner {
             this.options.dependencies.registry
           )
           if (recoveryGuidance) this.conversation.push({ role: 'user', content: recoveryGuidance })
+          await this.savePointCoordinator.save('after_tools', turnSnapshot)
           continue
         }
         const finalText = result.text.trim() || (result.structuredOutput ? JSON.stringify(result.structuredOutput) : '')
