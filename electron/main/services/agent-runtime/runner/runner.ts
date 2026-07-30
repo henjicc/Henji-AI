@@ -36,6 +36,7 @@ import { AgentExternalWaitRegistration } from './external-wait-registration'
 import { AgentExternalContinuationCoordinator } from './external-continuation-coordinator'
 import { AgentPauseController } from './pause-controller'
 import { startAgentRun } from './run-start'
+import { prepareSemanticModelRetry } from './semantic-model-retry'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -64,8 +65,7 @@ export class AgentRunner {
   private readonly terminalApprovalCleanup: AgentTerminalApprovalCleanup
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
-  private started = false
-  constructor(private readonly options: AgentRunnerOptions) {
+  private started = false; constructor(private readonly options: AgentRunnerOptions) {
     this.conversation = [...(options.conversationHistory ?? [])]
     this.currentMessageConsumer = new AgentCurrentMessageConsumer(
       options.runId,
@@ -347,8 +347,8 @@ export class AgentRunner {
           if (isContextOverflowError(modelError)) {
             throw new Error('[CONTEXT_OVERFLOW_AFTER_COMPACTION] 上下文压缩后仍超过模型限制，运行已停止')
           }
-          this.budget.recordFailure()
-          this.conversation.push({ role: 'user', content: `上一模型步骤失败，安全错误码：${errorCode(modelError)}。请重新规划。` })
+          const retry = prepareSemanticModelRetry(modelError, this.budget, `step-${turn}`)
+          this.emit(retry.event); this.conversation.push({ role: 'user', content: `上一模型步骤失败，安全错误码：${retry.code}。请重新规划。` })
           continue
         }
         this.conversation.push(...result.responseMessages)

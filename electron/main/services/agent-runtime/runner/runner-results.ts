@@ -11,12 +11,15 @@ import type {
   ModelStepMessage,
   ModelStepToolCall,
 } from '../../../../../src/core/llm/modelStep'
+import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
 import { shouldOffloadObservation } from '../context/offload'
 import { sanitizeObservationValue } from '../context/sanitize'
 import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentBudgetExceededError } from './budget'
 
 export function errorCode(error: unknown): string {
+  const providerError = parseModelProviderError(error)
+  if (providerError) return providerError.code
   if (error instanceof AgentToolGatewayError || error instanceof AgentBudgetExceededError) return error.code
   if (error instanceof Error) return error.message.match(/^\[([^\]]+)\]/)?.[1] ?? error.name
   return 'INTERNAL_ERROR'
@@ -24,6 +27,15 @@ export function errorCode(error: unknown): string {
 
 export function serializeError(error: unknown): SerializedAgentError {
   const code = errorCode(error)
+  const providerError = parseModelProviderError(error)
+  if (providerError) {
+    return {
+      code,
+      message: providerError.message,
+      retryable: providerError.retryable,
+      recovery: providerError.retryable ? 'wait' : 'none',
+    }
+  }
   const message = error instanceof Error ? error.message.replace(/^\[[^\]]+\]\s*/, '') : 'Agent 运行失败'
   return {
     code,

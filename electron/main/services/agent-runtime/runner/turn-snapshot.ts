@@ -31,7 +31,7 @@ export function buildAgentTurnSnapshotDraft(input: BuildTurnSnapshotInput): Agen
     role,
     providerId: input.models[role].providerId,
     modelId: input.models[role].modelId,
-    apiProtocol: input.models[role].adapter,
+    apiProtocol: input.models[role].apiProtocol ?? 'openai-compatible',
   })
   return agentTurnSnapshotDraftSchema.parse({
     version: AGENT_TURN_SNAPSHOT_VERSION,

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { agentBudgetConfigSchema, agentEventSchema, agentRunStateSchema } from './events'
 import { modelStepCapabilitiesSchema } from '../llm/modelStep'
+import { llmApiProtocolSchema } from '../llm/providerProtocol'
 import { agentExternalContinuationSchema } from './externalWait'
 
 export const AGENT_RUNTIME_SCHEMA_VERSION = 'agent-runtime/v1' as const
@@ -80,8 +81,16 @@ export const agentRuntimeModelConfigSchema = z.object({
   modelId: z.string().min(1),
   displayName: z.string().min(1),
   adapter: z.string().min(1),
+  apiProtocol: llmApiProtocolSchema.optional(),
   baseUrl: z.string().optional(),
   capabilities: llmCapabilitiesSchema,
+  pricing: z.object({
+    currency: z.literal('USD'),
+    inputPerMillionTokens: z.number().nonnegative(),
+    outputPerMillionTokens: z.number().nonnegative(),
+    cacheReadPerMillionTokens: z.number().nonnegative().optional(),
+    cacheWritePerMillionTokens: z.number().nonnegative().optional(),
+  }).strict().optional(),
   /** 供应商级思考配置；由渲染层随选定模型传入，运行时不自行猜测。 */
   reasoning: agentRuntimeReasoningSchema.optional(),
   enabled: z.boolean(),

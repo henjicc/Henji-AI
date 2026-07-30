@@ -58,12 +58,21 @@ import type { AgentToolDefinition } from './services/agent-runtime/tools/types'
 import { DeterministicWorkflowService } from './services/agent-runtime/workflows/service'
 import { createWorkflowTools } from './services/agent-runtime/workflows/tools'
 import { createMainLogger } from './services/logging'
-import { executeModelStepWithModel } from './services/llm/sdk/model-step'
+import {
+  calculateModelStepKnownCostUsd,
+  executeModelStepWithModel,
+} from './services/llm/sdk/model-step'
 import {
   applyDeepSeekUsage,
   createModelStepLanguageModel,
   type ModelStepHttpTrace,
 } from './services/llm/sdk/provider'
+import {
+  createCancelledError,
+  createCredentialError,
+  normalizeProviderError,
+} from './services/llm/sdk/provider-error'
+import { executeModelStepWithRetry } from './services/llm/sdk/retry-policy'
 import {
   buildModelStepTraceDetail,
   createModelStepStreamTrace,
@@ -226,18 +235,38 @@ async function runUtilityModelStep(
     context: { traceId, captureMode },
   })
   try {
-    const keyResult = z.object({ apiKey: z.string().min(1) }).parse(
-      await rpc('model.api_key', { providerId: input.providerId })
-    )
-    const model = createModelStepLanguageModel(
+    let keyResult: { apiKey: string }
+    try {
+      keyResult = z.object({ apiKey: z.string().min(1) }).parse(
+        await rpc('model.api_key', { providerId: input.providerId })
+      )
+    } catch {
+      throw createCredentialError(input)
+    }
+    const rawResult = await executeModelStepWithRetry({
       input,
-      keyResult.apiKey,
-      httpTrace
-    )
-    const rawResult = await executeModelStepWithModel(input, model, emit, controller.signal, streamTrace)
+      signal: controller.signal,
+      emit,
+      operation: (attemptEmit) => executeModelStepWithModel(
+        input,
+        createModelStepLanguageModel(input, keyResult.apiKey, httpTrace),
+        attemptEmit,
+        controller.signal,
+        streamTrace
+      ),
+    })
     await httpTrace.usageCapture
     const result = httpTrace.deepSeekUsage
-      ? { ...rawResult, usage: applyDeepSeekUsage(rawResult.usage, httpTrace.deepSeekUsage) }
+      ? (() => {
+          const usage = applyDeepSeekUsage(rawResult.usage, httpTrace.deepSeekUsage)
+          return {
+            ...rawResult,
+            usage: {
+              ...usage,
+              knownCostUsd: calculateModelStepKnownCostUsd(usage, input.pricing),
+            },
+          }
+        })()
       : rawResult
     await finishAgentTrace(input, traceId, captureMode, startedAt, httpTrace, streamTrace, result)
     logger.info('utility 模型单步调用完成', {
@@ -250,12 +279,9 @@ async function runUtilityModelStep(
     })
     return result
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
     const classified = controller.signal.aborted
-      ? new Error(`[task_cancelled] LLM model step cancelled: ${input.requestId}`)
-      : error instanceof Error && error.message.startsWith('[')
-        ? error
-        : new Error(`[model_step_failed] ${message}`)
+      ? createCancelledError(input)
+      : normalizeProviderError(input, error)
     logger.error('utility 模型单步调用失败', {
       event: 'llm_model_step.run.failed',
       requestId: input.runId,

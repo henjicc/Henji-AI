@@ -1,5 +1,6 @@
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import type { ModelCapabilitySmokeResult } from './capabilitySmoke'
+import type { LlmApiProtocol } from './providerProtocol'
 
 export type { CapabilitySmokeCheck, CapabilitySmokeStatus } from './capabilitySmoke'
 
@@ -31,6 +32,7 @@ export interface LlmProviderConfig {
   providerId: string
   displayName: string
   adapter: string
+  apiProtocol?: LlmApiProtocol
   baseUrl?: string
   reasoning?: LlmReasoningConfig
   reasoningConfigurable?: boolean
@@ -42,8 +44,16 @@ export interface LlmModelConfig {
   modelId: string
   displayName: string
   adapter: string
+  apiProtocol?: LlmApiProtocol
   baseUrl?: string
   capabilities: LlmCapabilities
+  pricing?: {
+    currency: 'USD'
+    inputPerMillionTokens: number
+    outputPerMillionTokens: number
+    cacheReadPerMillionTokens?: number
+    cacheWritePerMillionTokens?: number
+  }
   enabled: boolean
 }
 

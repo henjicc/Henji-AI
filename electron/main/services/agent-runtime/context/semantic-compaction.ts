@@ -7,6 +7,7 @@ import type {
   ModelStepMessage,
   ModelStepResult,
 } from '../../../../../src/core/llm/modelStep'
+import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
 import { createMainLogger } from '../../logging'
 import type { AgentRuntimeModel } from '../runner/models'
 import type { AgentModelStepExecutor } from '../runner/types'
@@ -155,6 +156,7 @@ export function semanticSummaryMessage(summary: AgentSemanticSummary): ModelStep
 }
 
 export function isContextOverflowError(error: unknown): boolean {
+  if (parseModelProviderError(error)?.category === 'context_overflow') return true
   if (!error || typeof error !== 'object') return false
   const code = Reflect.get(error, 'code')
   const category = Reflect.get(error, 'category')

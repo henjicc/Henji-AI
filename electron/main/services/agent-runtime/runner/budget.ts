@@ -60,6 +60,9 @@ export class AgentBudgetTracker {
     this.outputTokens += tokenValue(usage.outputTokens)
     this.reasoningTokens += tokenValue(usage.reasoningTokens)
     this.totalTokens += tokenValue(usage.totalTokens)
+    if (usage.knownCostUsd !== null && usage.knownCostUsd !== undefined) {
+      this.recordKnownCost(usage.knownCostUsd)
+    }
     this.assertWithinLimits()
   }
 

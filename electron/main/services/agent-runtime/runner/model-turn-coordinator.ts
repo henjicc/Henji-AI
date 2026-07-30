@@ -72,6 +72,15 @@ export class AgentModelTurnCoordinator {
         trace: buildPrimaryModelTraceMetadata(turn, context, this.options.models.primary),
         runModelStep: this.options.runModelStep,
         onTextDelta: (text) => this.options.emit({ type: 'ModelDelta', stepId, text }),
+        onRetry: (event) => this.options.emit({
+          type: 'ModelRetrying',
+          stepId,
+          layer: event.layer,
+          attempt: event.attempt,
+          delayMs: event.delayMs,
+          category: event.category,
+          code: event.code,
+        }),
       })
       this.options.throwIfCancelled()
       this.options.recordUsage(result.usage)

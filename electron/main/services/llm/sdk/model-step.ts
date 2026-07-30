@@ -64,8 +64,29 @@ export function buildModelStepProviderOptions(input: ModelStepInput): ProviderOp
   return Object.keys(options).length > 0 ? options : undefined
 }
 
-function normalizeUsage(usage: Awaited<ReturnType<typeof streamText>['usage']>): ModelStepUsage {
-  return {
+export function calculateModelStepKnownCostUsd(
+  usage: Omit<ModelStepUsage, 'knownCostUsd'>,
+  pricing: ModelStepInput['pricing']
+): number | null {
+  if (!pricing || usage.inputTokens === null || usage.outputTokens === null) return null
+  const cacheRead = usage.cacheReadTokens ?? 0
+  const cacheWrite = usage.cacheWriteTokens ?? 0
+  const inputNoCache = usage.inputNoCacheTokens
+    ?? Math.max(0, usage.inputTokens - cacheRead - cacheWrite)
+  const cost = (
+    inputNoCache * pricing.inputPerMillionTokens
+    + cacheRead * (pricing.cacheReadPerMillionTokens ?? pricing.inputPerMillionTokens)
+    + cacheWrite * (pricing.cacheWritePerMillionTokens ?? pricing.inputPerMillionTokens)
+    + usage.outputTokens * pricing.outputPerMillionTokens
+  ) / 1_000_000
+  return Number(cost.toFixed(12))
+}
+
+function normalizeUsage(
+  usage: Awaited<ReturnType<typeof streamText>['usage']>,
+  pricing: ModelStepInput['pricing']
+): ModelStepUsage {
+  const normalized = {
     inputTokens: usage.inputTokens ?? null,
     inputNoCacheTokens: usage.inputTokenDetails.noCacheTokens ?? null,
     cacheReadTokens: usage.inputTokenDetails.cacheReadTokens ?? null,
@@ -75,6 +96,7 @@ function normalizeUsage(usage: Awaited<ReturnType<typeof streamText>['usage']>):
     reasoningTokens: usage.outputTokenDetails.reasoningTokens ?? null,
     totalTokens: usage.totalTokens ?? null,
   }
+  return { ...normalized, knownCostUsd: calculateModelStepKnownCostUsd(normalized, pricing) }
 }
 
 function normalizeToolCall(call: {
@@ -145,7 +167,8 @@ export async function executeModelStepWithModel(
     output: createOutput(input),
     abortSignal: signal,
     timeout: settings.timeoutMs,
-    maxRetries: settings.maxRetries,
+    // 请求重试统一由 runtime 的结构化策略负责，避免 SDK 与 Agent 双重重试。
+    maxRetries: 0,
     maxOutputTokens: settings.maxOutputTokens,
     // DeepSeek 思考模式不支持采样参数；明确省略以避免“看似生效但实际被忽略”。
     temperature: input.capabilities.sampling && !isDeepSeekThinkingEnabled(input) ? settings.temperature : undefined,
@@ -198,7 +221,7 @@ export async function executeModelStepWithModel(
     toolCalls: toolCalls.map(normalizeToolCall),
     responseMessages: toResponseMessages(response.messages),
     finishReason,
-    usage: normalizeUsage(usage),
+    usage: normalizeUsage(usage, input.pricing),
     providerMetadataSummary: summarizeProviderMetadata(providerMetadata),
     warnings: (warnings ?? []).map((warning) => JSON.stringify(warning)),
     elapsedMs: Date.now() - startedAt,

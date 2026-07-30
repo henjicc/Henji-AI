@@ -73,6 +73,33 @@ describe('executeModelStepWithModel', () => {
     expect(events).toEqual(['TextDelta', 'ReasoningDelta'])
   })
 
+  it('仅在价格目录存在时计算 knownCostUsd，未知价格保持 null', async () => {
+    const model = new MockLanguageModelV3({
+      doStream: { stream: simulateReadableStream({ chunks: [
+        { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
+      ] }) },
+    })
+    const priced = await executeModelStepWithModel(createInput({
+      pricing: {
+        currency: 'USD',
+        inputPerMillionTokens: 1,
+        outputPerMillionTokens: 2,
+        cacheReadPerMillionTokens: 0.5,
+      },
+    }), model, () => undefined, new AbortController().signal)
+    expect(priced.usage.knownCostUsd).toBe(0.000019)
+
+    const unpricedModel = new MockLanguageModelV3({
+      doStream: { stream: simulateReadableStream({ chunks: [
+        { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage },
+      ] }) },
+    })
+    const unknown = await executeModelStepWithModel(
+      createInput(), unpricedModel, () => undefined, new AbortController().signal
+    )
+    expect(unknown.usage.knownCostUsd).toBeNull()
+  })
+
   it('系统规则通过 SDK system 选项传递且不触发 system message 警告', async () => {
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     const model = new MockLanguageModelV3({

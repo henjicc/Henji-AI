@@ -1,5 +1,6 @@
 import type {
   ModelStepMessage,
+  ModelStepEvent,
   ModelStepResult,
   ModelStepTool,
   ModelStepTraceMetadata,
@@ -48,6 +49,7 @@ interface PrimaryModelExecutionInput {
   trace?: ModelStepTraceMetadata
   runModelStep: AgentModelStepExecutor
   onTextDelta: (text: string) => void
+  onRetry?: (event: Extract<ModelStepEvent, { type: 'Retrying' }>) => void
 }
 
 interface RouterModelClassificationResult {
@@ -101,6 +103,7 @@ export async function runRouterModelClassification(
     providerId: input.model.providerId,
     modelId: input.model.modelId,
     adapter: input.model.adapter,
+    apiProtocol: input.model.apiProtocol,
     baseUrl: input.model.baseUrl,
     system: [
       '只判断用户真正想完成的目标，不执行工具。',
@@ -145,6 +148,7 @@ export async function runRouterModelClassification(
     capabilities: input.model.capabilities,
     reasoning: input.model.reasoning,
     settings: input.model.settings,
+    pricing: input.model.pricing,
     trace: {
       kind: 'router',
       snapshotRevision: input.snapshot.revision,
@@ -178,6 +182,7 @@ export function runPrimaryAgentModelStep(
     providerId: input.model.providerId,
     modelId: input.model.modelId,
     adapter: input.model.adapter,
+    apiProtocol: input.model.apiProtocol,
     baseUrl: input.model.baseUrl,
     system: input.system,
     messages: input.messages,
@@ -186,8 +191,10 @@ export function runPrimaryAgentModelStep(
     capabilities: input.model.capabilities,
     reasoning: input.model.reasoning,
     settings: input.model.settings,
+    pricing: input.model.pricing,
     trace: input.trace,
   }, (event) => {
     if (event.type === 'TextDelta') input.onTextDelta(event.text)
+    else if (event.type === 'Retrying') input.onRetry?.(event)
   })
 }

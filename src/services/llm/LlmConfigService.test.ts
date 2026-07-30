@@ -33,6 +33,9 @@ describe('normalizeLlmConfig', () => {
       sampling: true,
       usage: true,
     })
+    expect(config.providers.find((item) => item.providerId === 'custom')?.apiProtocol)
+      .toBe('openai-compatible')
+    expect(model?.apiProtocol).toBe('openai-compatible')
   })
 
   it('无效的模型档案选择会回退到首个档案', () => {

@@ -11,6 +11,7 @@ import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
 import { AgentRunner } from './runner'
 import * as approvalLogging from './approval-logging'
+import { ProviderModelStepError } from '../../llm/sdk/provider-error'
 
 function hostContext(): HostContextSnapshot {
   return {
@@ -183,6 +184,42 @@ describe('AgentRunner', () => {
     expect(events.some((event) => event.type === 'PlanUpdated')).toBe(true)
     expect(events.some((event) => event.type === 'VerificationCompleted' && event.passed)).toBe(true)
     expect(runner.getEventHistory()).toEqual(events)
+  })
+
+  it('鉴权、计费等非瞬态 Provider 错误不进入 Agent 语义重试', async () => {
+    const { registry, gateway } = createRuntime()
+    const events: AgentEvent[] = []
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runModelStep = vi.fn(async (input: ModelStepInput) => {
+      if (input.stepId.startsWith('router:')) {
+        return result(input, {
+          structuredOutput: {
+            intent: 'general', complexity: 'simple', path: 'primary',
+            toolDomains: ['catalog'], reason: '一般问答',
+          },
+        })
+      }
+      throw new ProviderModelStepError({
+        code: 'UNAUTHORIZED', category: 'authentication', status: 401,
+        retryable: false, retryAfterMs: null,
+        providerId: input.providerId, modelId: input.modelId,
+        requestId: input.requestId, message: '模型供应商鉴权失败',
+      })
+    })
+    const runner = new AgentRunner({
+      runId: 'run-auth-failure',
+      request: runRequest('回答问题'),
+      dependencies: {
+        registry, gateway, getHostContext: hostContext, runModelStep,
+        cancelModelStep: vi.fn(), onEvent: (event) => events.push(event),
+        onTerminal: terminalResolve,
+      },
+    })
+    runner.start()
+    await expect(terminal).resolves.toMatchObject({ status: 'failed' })
+    expect(runModelStep).toHaveBeenCalledTimes(2)
+    expect(events.some((event) => event.type === 'ModelRetrying')).toBe(false)
   })
 
   it('澄清问题使用稳定 waitId 恢复原运行且回答只消费一次', async () => {

@@ -309,6 +309,7 @@ export interface AgentExecutionPresentation {
   verification: Extract<AgentEvent, { type: 'VerificationCompleted' }> | null
   clarification: Extract<AgentEvent, { type: 'ClarificationRequired' }> | null
   lastCompaction: Extract<AgentEvent, { type: 'ContextCompacted' }> | null
+  retrying: Extract<AgentEvent, { type: 'ModelRetrying' }> | null
   nextAction: string
 }
 
@@ -319,16 +320,23 @@ export function selectExecutionPresentation(
   let verification: AgentExecutionPresentation['verification'] = null
   let clarification: AgentExecutionPresentation['clarification'] = null
   let lastCompaction: AgentExecutionPresentation['lastCompaction'] = null
+  let retrying: AgentExecutionPresentation['retrying'] = null
+  let newerModelActivity = false
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (!verification && event.type === 'VerificationCompleted') verification = event
     if (!clarification && event.type === 'ClarificationRequired') clarification = event
     if (!lastCompaction && event.type === 'ContextCompacted') lastCompaction = event
-    if (verification && clarification && lastCompaction) break
+    if (!retrying && !newerModelActivity && event.type === 'ModelRetrying') retrying = event
+    if (event.type === 'ModelStarted' || event.type === 'ModelCompleted') newerModelActivity = true
+    if (verification && clarification && lastCompaction && retrying) break
   }
   const summary = state?.workingSummary ?? null
   let nextAction = '正在理解目标并准备下一步。'
   if (clarification) nextAction = clarification.question
+  else if (retrying) nextAction = retrying.delayMs > 0
+    ? `模型请求暂时失败，将在 ${Math.ceil(retrying.delayMs / 1000)} 秒后重试。`
+    : '模型步骤暂时失败，助手正在安全地重新规划。'
   else if (state?.status === 'waiting_approval') nextAction = '请查看审批内容，确认后助手才能继续执行。'
   else if (summary && summary.recovery.mode !== 'none') nextAction = summary.recovery.reason
   else if (summary?.activeStep) nextAction = `正在执行：${summary.activeStep.title}`
@@ -343,5 +351,5 @@ export function selectExecutionPresentation(
   } else if (summary?.completedSteps.length) {
     nextAction = '正在核对最新观察并决定下一步。'
   }
-  return { summary, verification, clarification, lastCompaction, nextAction }
+  return { summary, verification, clarification, lastCompaction, retrying, nextAction }
 }

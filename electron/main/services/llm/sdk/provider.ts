@@ -11,15 +11,12 @@ import {
 import type { AgentTraceHttpRequest, AgentTraceHttpResponse } from '../../../../../src/core/assistant/trace'
 import type { ModelStepInput, ModelStepUsage } from '../../../../../src/core/llm/modelStep'
 import { resolveOpenAiCompatibleEndpoint, resolvePpioChatEndpoint } from '../streaming'
-
-export interface ModelStepHttpTrace {
-  /** 详细追踪才保存请求、响应正文；缓存用量可在摘要模式下单独采集。 */
-  captureHttp?: boolean
-  request?: AgentTraceHttpRequest
-  response?: AgentTraceHttpResponse
-  deepSeekUsage?: DeepSeekUsage
-  usageCapture?: Promise<void>
-}
+import {
+  modelStepProviderAdapters,
+  type ModelStepHttpTrace,
+  type ModelStepProviderAdapter,
+} from './provider-adapter'
+export type { ModelStepHttpTrace } from './provider-adapter'
 
 interface DeepSeekUsage {
   prompt_cache_hit_tokens?: unknown
@@ -48,7 +45,7 @@ export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId'
   return stripChatCompletions(endpoint)
 }
 
-export function createModelStepLanguageModel(
+function createOpenAiCompatibleLanguageModel(
   input: ModelStepInput,
   apiKey: string,
   httpTrace?: ModelStepHttpTrace
@@ -72,6 +69,22 @@ export function createModelStepLanguageModel(
       : undefined,
   })
   return provider.chatModel(input.modelId)
+}
+
+const openAiCompatibleAdapter: ModelStepProviderAdapter = {
+  protocol: 'openai-compatible',
+  createLanguageModel: createOpenAiCompatibleLanguageModel,
+}
+modelStepProviderAdapters.register(openAiCompatibleAdapter)
+
+export function createModelStepLanguageModel(
+  input: ModelStepInput,
+  apiKey: string,
+  httpTrace?: ModelStepHttpTrace
+): LanguageModel {
+  return modelStepProviderAdapters
+    .resolve(input.apiProtocol ?? 'openai-compatible')
+    .createLanguageModel(input, apiKey, httpTrace)
 }
 
 function createTraceFetch(

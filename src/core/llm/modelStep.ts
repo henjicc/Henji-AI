@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { llmApiProtocolSchema, modelProviderErrorCategorySchema } from './providerProtocol'
+
 const jsonRecordSchema = z.record(z.string(), z.unknown())
 const modelContentPartsSchema = z.array(jsonRecordSchema)
 
@@ -62,6 +64,7 @@ export const modelStepInputSchema = z.object({
   stepId: z.string().min(1),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
+  apiProtocol: llmApiProtocolSchema.optional(),
   adapter: z.string().optional(),
   baseUrl: z.string().optional(),
   system: z.string().min(1).max(64 * 1024).optional(),
@@ -89,6 +92,13 @@ export const modelStepInputSchema = z.object({
     timeoutMs: z.number().int().positive().optional(),
   }).optional(),
   providerOptions: z.record(z.string(), jsonRecordSchema).optional(),
+  pricing: z.object({
+    currency: z.literal('USD'),
+    inputPerMillionTokens: z.number().nonnegative(),
+    outputPerMillionTokens: z.number().nonnegative(),
+    cacheReadPerMillionTokens: z.number().nonnegative().optional(),
+    cacheWritePerMillionTokens: z.number().nonnegative().optional(),
+  }).strict().optional(),
   trace: modelStepTraceMetadataSchema.optional(),
 })
 export type ModelStepInput = z.infer<typeof modelStepInputSchema>
@@ -124,6 +134,7 @@ export const modelStepUsageSchema = z.object({
   textTokens: z.number().int().nonnegative().nullable(),
   reasoningTokens: z.number().int().nonnegative().nullable(),
   totalTokens: z.number().int().nonnegative().nullable(),
+  knownCostUsd: z.number().nonnegative().nullable().optional(),
 })
 export type ModelStepUsage = z.infer<typeof modelStepUsageSchema>
 
@@ -150,5 +161,13 @@ export const modelStepEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('TextDelta'), text: z.string() }),
   z.object({ type: z.literal('ReasoningDelta'), text: z.string() }),
   z.object({ type: z.literal('ToolCall'), toolCall: modelStepToolCallSchema }),
+  z.object({
+    type: z.literal('Retrying'),
+    layer: z.literal('request'),
+    attempt: z.number().int().positive(),
+    delayMs: z.number().int().nonnegative(),
+    category: modelProviderErrorCategorySchema,
+    code: z.string().min(1),
+  }),
 ])
 export type ModelStepEvent = z.infer<typeof modelStepEventSchema>

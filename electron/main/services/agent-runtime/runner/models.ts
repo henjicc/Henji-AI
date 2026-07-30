@@ -6,13 +6,16 @@ import {
 } from '../../../../../src/core/llm/agentProfiles'
 import type { AgentStartRunRequest, AgentRuntimeModelConfig } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepCapabilities } from '../../../../../src/core/llm/modelStep'
+import type { LlmApiProtocol } from '../../../../../src/core/llm/providerProtocol'
 
 export interface AgentRuntimeModel {
   providerId: string
   modelId: string
   adapter: string
+  apiProtocol?: LlmApiProtocol
   baseUrl?: string
   capabilities: ModelStepCapabilities
+  pricing?: AgentRuntimeModelConfig['pricing']
   reasoning?: {
     enabled: boolean
     effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'
@@ -42,6 +45,7 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
     providerId: model.providerId,
     modelId: model.modelId,
     adapter: model.adapter,
+    apiProtocol: model.apiProtocol ?? 'openai-compatible',
     baseUrl: model.baseUrl,
     capabilities: {
       streaming: model.capabilities.streaming,
@@ -52,6 +56,7 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
       sampling: model.capabilities.sampling,
       usage: model.capabilities.usage,
     },
+    pricing: model.pricing,
     reasoning: model.reasoning,
     limits: {
       contextWindow: modelContextWindow ?? request.profile.settings.contextWindowBudget,

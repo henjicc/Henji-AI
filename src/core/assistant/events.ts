@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
 import { modelStepUsageSchema } from '../llm/modelStep'
+import { modelProviderErrorCategorySchema } from '../llm/providerProtocol'
 import { agentWorkingSummarySchema } from './workingContext'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v1' as const
@@ -146,6 +147,17 @@ const modelDeltaEventSchema = z.object({
   stepId: z.string().min(1),
   /** Provider 原始片段会在分配 sequence 前合并；这里始终是可持久、可重放的有界文本块。 */
   text: z.string().max(16 * 1024),
+}).strict()
+
+const modelRetryingEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('ModelRetrying'),
+  stepId: z.string().min(1),
+  layer: z.enum(['request', 'semantic']),
+  attempt: z.number().int().positive(),
+  delayMs: z.number().int().nonnegative(),
+  category: modelProviderErrorCategorySchema,
+  code: z.string().min(1).max(200),
 }).strict()
 
 const modelCompletedEventSchema = z.object({
@@ -330,6 +342,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   runStateChangedEventSchema,
   modelStartedEventSchema,
   modelDeltaEventSchema,
+  modelRetryingEventSchema,
   modelCompletedEventSchema,
   planUpdatedEventSchema,
   toolRequestedEventSchema,

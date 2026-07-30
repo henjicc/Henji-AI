@@ -14,6 +14,17 @@ const emptyUsage = {
 }
 
 describe('AgentBudgetTracker', () => {
+  it('已知费用随模型 usage 累计并执行 maxCostUsd，未知费用不估算为零', () => {
+    const budget = new AgentBudgetTracker({ maxCostUsd: 0.01 })
+    const usage = {
+      inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
+      outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
+    }
+    budget.recordModelUsage(usage)
+    expect(budget.snapshot().knownCostUsd).toBeNull()
+    expect(() => budget.recordModelUsage({ ...usage, knownCostUsd: 0.02 }))
+      .toThrow(AgentBudgetExceededError)
+  })
   it('累计模型和工具预算', () => {
     const budget = new AgentBudgetTracker({ maxTurns: 2, maxToolCalls: 1 })
     expect(budget.beginTurn()).toBe(1)
