@@ -7,7 +7,14 @@ import {
   resetAssistantUserInstructions,
   updateAssistantUserInstructions,
 } from '@/commands/assistant'
-import { PromptEditor, UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
+import {
+  PromptEditor,
+  UI_FORM_ROW_GAP_CLASS,
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_META_CLASS,
+  UiButton,
+  UiFormRow,
+} from '@/components/ui'
 import {
   ASSISTANT_USER_INSTRUCTIONS_MAX_CHARACTERS,
   getAssistantUserInstructionsWarnings,
@@ -18,8 +25,6 @@ import {
   type PromptDocumentV1,
 } from '@/core/inputs/promptDocument'
 import { createLogger } from '@/core/logging'
-
-import SectionCard from '../components/SectionCard'
 
 const logger = createLogger('components.Settings.AgentUserInstructionsSection')
 
@@ -107,10 +112,15 @@ export default function AgentUserInstructionsSection(): JSX.Element {
   }
 
   return (
-    <div className="space-y-5">
-      <SectionCard
-        title="用户指令"
-        description="直接用自然语言描述长期偏好和工作习惯。除安全、权限、审批、真实能力和当前明确要求等硬约束外，用户指令优先于产品默认与模型描述。"
+    <div className={UI_FORM_ROW_GAP_CLASS}>
+      {/*
+        分节标题已经由 SettingsSection 渲染成「助手用户指令」，这里不再重复一个「用户指令」标题。
+        剩下的两段文字：第一段是写之前必须知道的优先级规则（常驻），
+        第二段是"这里会保存什么、不会保存什么"的隐私边界（也常驻——不看可能误填密钥）。
+      */}
+      <UiFormRow
+        label="用户指令"
+        hint="直接用自然语言描述长期偏好和工作习惯。除安全、权限、审批、真实能力和当前明确要求等硬约束外，用户指令优先于产品默认与模型描述。"
       >
         <PromptEditor
           mode="edit"
@@ -131,7 +141,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
         <p className={`mt-3 leading-5 ${UI_TEXT_META_CLASS}`}>
           这里只保存你主动填写或明确要求助手修改的内容。密钥、令牌、授权头和密码会在进入模型前自动脱敏；其他正常内容会完整传递。助手不会自动把对话、推断、日志或文件写入这里。
         </p>
-      </SectionCard>
+      </UiFormRow>
 
       <div className="flex flex-wrap items-center gap-2">
         <UiButton type="button" size="sm" variant="primary" disabled={busy} onClick={() => void save()}>

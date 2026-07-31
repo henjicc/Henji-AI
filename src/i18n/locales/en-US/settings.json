@@ -2,6 +2,21 @@
   "title": "Settings",
   "language": "Language",
   "theme": "Theme",
+  "navSections": {
+    "general-basic": "Basics",
+    "general-storage": "Data & Downloads",
+    "general-behavior": "Behavior & Concurrency",
+    "general-maintenance": "Updates",
+    "api-keys": "Provider Keys",
+    "api-upload": "Upload Strategy",
+    "api-llm": "Language Models",
+    "api-agent-preferences": "Assistant Instructions",
+    "interface-layout": "Layout Behavior",
+    "interface-assets": "Asset Library",
+    "interface-canvas": "Canvas",
+    "interface-theme": "Theme & Appearance",
+    "models-visibility": "Visibility & Management"
+  },
   "apiKeys": {
     "title": "API Key Settings",
     "description": "Configure API keys for each provider. Keys are stored locally.",
@@ -220,6 +235,8 @@
         "never": "Never"
       },
       "currentVersionLabel": "Current version",
+      "clearIgnoredLabel": "Ignored versions",
+      "clearIgnoredAction": "Clear",
       "clearIgnoredHint": "Clearing will prompt all ignored versions again",
       "upToDate": "You are up to date ({{version}})",
       "hasUpdate": "New version {{version}} is available",

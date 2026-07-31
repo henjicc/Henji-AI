@@ -1,9 +1,8 @@
 import React from 'react'
-import { UI_TEXT_BODY_CLASS, UiButton, UiRegion } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiButton, UiGroup, UiRegion } from '@/components/ui'
 import { useApiKeys } from '../hooks/useApiKeys'
 import ApiKeyInput from '../components/ApiKeyInput'
 import { useI18n } from '@/hooks/useI18n'
-import SectionCard from '../components/SectionCard'
 import SettingsSection from '../components/SettingsSection'
 import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
 import UploadSection from '../sections/UploadSection'
@@ -60,13 +59,11 @@ const ApiKeysTab: React.FC = () => {
 
   return (
     <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
-      {showKeyMigrationHint ? (
-        <p className={`rounded-lg border border-border-dark bg-layer px-3 py-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>
-          {t('apiKeys.migrationHint')}
-        </p>
-      ) : null}
-
-      <SettingsSection id="api-keys">
+      {/*
+        迁移提示原来是页面顶部一个手写的 bg-layer 框——它比父级更亮，等于凭空多一层卡片，
+        而且悬在第一个分节标题之上、不属于任何分节。改成分节说明后归属明确，也不再画框。
+      */}
+      <SettingsSection id="api-keys" description={showKeyMigrationHint ? t('apiKeys.migrationHint') : undefined}>
         {API_KEY_PROVIDERS.map(provider => {
           const placeholder = t(`apiKeys.providers.${provider.id}.placeholder`)
           const title = t(`apiKeys.providers.${provider.id}.title`)
@@ -75,7 +72,9 @@ const ApiKeysTab: React.FC = () => {
             provider.links.map(link => [link.id, t(`apiKeys.providers.${provider.id}.links.${link.id}`)])
           )
           return (
-            <SectionCard key={provider.id} title={title}>
+            // 供应商是「≥2 组同构重复单元」，是唯一还保留小分类的场景；
+            // 它们之间靠标题和间距区分，不画线——线只出现在分节之间。
+            <UiGroup key={provider.id} title={title}>
               <ApiKeyInput
                 value={keys[provider.id]}
                 visible={visibility[provider.id]}
@@ -86,11 +85,11 @@ const ApiKeysTab: React.FC = () => {
                 hideLabel={t('apiKeys.visibility.hide')}
               />
               {provider.links.length > 0 ? (
-                <p className={`leading-6 ${UI_TEXT_BODY_CLASS}`}>
+                <p className={`leading-6 ${UI_TEXT_META_CLASS}`}>
                   {renderGuideParts(guide, provider.links, linkLabels, openExternal)}
                 </p>
               ) : null}
-            </SectionCard>
+            </UiGroup>
           )
         })}
       </SettingsSection>

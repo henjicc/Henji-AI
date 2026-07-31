@@ -103,7 +103,13 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   return (
     <div className={className}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
-      <div className={`relative inline-block ${widthClassName === 'w-full' ? 'w-full' : ''}`}>
+      {/*
+        宽度加在这个包裹层上，不能透传给内部的 <UiInput>：UiInput 的基础类里就有 `w-full`，
+        两个 `w-*` 抢同一个 CSS 属性时，胜负由 Tailwind 产物顺序决定（`w-full` 排在 `w-48` 之后），
+        所以 `widthClassName` 一直是静默失效的——除非正好传 `w-full`。
+        实测表现是设置面板里数字框比同排下拉窄一截，右边缘对不齐。
+      */}
+      <div className={`relative inline-block ${widthClassName}`}>
         <UiInput
           ref={inputRef}
           type="number"
@@ -117,7 +123,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
               e.currentTarget.blur()
             }
           }}
-          className={`${widthClassName} ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} appearance-none pr-8`}
+          className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} appearance-none pr-8`}
           min={min}
           max={max}
           step={step}

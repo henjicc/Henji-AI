@@ -18,6 +18,7 @@ import {
   UI_FIELD_SURFACE_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_NAV_CLASS,
+  UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_INSET_SURFACE_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
@@ -291,7 +292,9 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
       if (variant === 'menu') {
         return active
           ? UI_OPTION_ITEM_ACTIVE_CLASS
-          : 'border-transparent text-text-dark hover:bg-layer';
+          // hover 交给 UI_GLASS_ADAPTIVE_OPTION_CLASS：写成 `hover:bg-layer` 在玻璃里会赢，
+          // 把半透明选项盖成一块实心灰。静息态仍然不描边不铺底。
+          : `border-transparent text-text-dark ${UI_GLASS_ADAPTIVE_OPTION_CLASS}`;
       }
 
       if (variant === 'card') {
@@ -314,7 +317,8 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
     return (
       <button
         ref={ref}
-        className={`inline-flex items-center rounded-lg border px-2.5 py-2 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${active ? '' : UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${stateClass} ${className}`}
+        // menu 变体静息态本就不该有底与边，不能再叠 adaptive-control（它会画出底和边）
+        className={`inline-flex items-center rounded-lg border px-2.5 py-2 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${active || variant === 'menu' ? '' : UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${stateClass} ${className}`}
         {...props}
       />
     );

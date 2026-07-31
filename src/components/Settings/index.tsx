@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
@@ -25,31 +25,17 @@ interface SettingsModalProps {
 }
 
 type SettingsTab = SettingsTabId
-type SettingsSection = { id: string; label: string }
 
-// 静态导航结构，提到模块作用域后初始 state 可以直接查表定位到目标分节
-const SECTION_MAP: Record<SettingsTab, SettingsSection[]> = {
-  general: [
-    { id: 'general-basic', label: '基础设置' },
-    { id: 'general-storage', label: '数据与下载' },
-    { id: 'general-behavior', label: '行为与并发' },
-    { id: 'general-maintenance', label: '更新维护' }
-  ],
-  api: [
-    { id: 'api-keys', label: '平台密钥' },
-    { id: 'api-upload', label: '上传策略' },
-    { id: 'api-llm', label: '大语言模型' },
-    { id: 'api-agent-preferences', label: '助手用户指令' }
-  ],
-  interface: [
-    { id: 'interface-layout', label: '布局行为' },
-    { id: 'interface-assets', label: '资产库' },
-    { id: 'interface-canvas', label: '画布' },
-    { id: 'interface-theme', label: '主题外观' }
-  ],
-  models: [
-    { id: 'models-visibility', label: '显示与管理' }
-  ]
+/*
+ * 静态导航结构，提到模块作用域后初始 state 可以直接查表定位到目标分节。
+ * 只存 id：标题文案统一由 `navSections.<id>` 提供，目录和内容区标题共用同一个 key，
+ * 不会再出现两边对不上、或者内容区根本没有标题的情况。
+ */
+const SECTION_MAP: Record<SettingsTab, string[]> = {
+  general: ['general-basic', 'general-storage', 'general-behavior', 'general-maintenance'],
+  api: ['api-keys', 'api-upload', 'api-llm', 'api-agent-preferences'],
+  interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],
+  models: ['models-visibility']
 }
 
 /** 切换大类后，异步加载的分区（密钥状态、LLM 配置）会改变上方高度，需要补一次定位 */
@@ -60,7 +46,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const initialTab: SettingsTab = target?.tab ?? 'general'
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab)
   const [activeSectionId, setActiveSectionId] = useState<string>(
-    target?.sectionId ?? SECTION_MAP[initialTab][0]?.id ?? ''
+    target?.sectionId ?? SECTION_MAP[initialTab][0] ?? ''
   )
   const [closing, setClosing] = useState(false)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -86,12 +72,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   ]
 
   const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component
-  const activeSections = SECTION_MAP[activeTab]
-  const activeSectionIds = useMemo(() => activeSections.map(section => section.id), [activeSections])
 
   const { scrollToSection, tailSpacerHeight } = useSettingsScrollSpy({
     containerRef: contentRef,
-    sectionIds: activeSectionIds,
+    sectionIds: SECTION_MAP[activeTab],
     onActiveSectionChange: setActiveSectionId,
   })
 
@@ -183,7 +167,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
                 const isCurrentTab = activeTab === tab.id
                 // 只有一个分节的大类，大类本身就是叶子：再画一条只有一项的子列表是纯噪音
                 const isLeafGroup = sections.length <= 1
-                const firstSectionId = sections[0]?.id ?? ''
+                const firstSectionId = sections[0] ?? ''
                 return (
                   <div key={tab.id}>
                     <UiNavButton
@@ -196,14 +180,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
                     </UiNavButton>
                     {isLeafGroup ? null : (
                       <div className="space-y-1 py-1">
-                        {sections.map(section => (
+                        {sections.map(sectionId => (
                           <UiNavButton
-                            key={section.id}
-                            active={isCurrentTab && activeSectionId === section.id}
-                            onClick={() => handleSectionSelect(tab.id, section.id)}
+                            key={sectionId}
+                            active={isCurrentTab && activeSectionId === sectionId}
+                            onClick={() => handleSectionSelect(tab.id, sectionId)}
                             className="!h-9 !rounded-lg !pl-11 !pr-3 text-sm"
                           >
-                            {section.label}
+                            {t(`navSections.${sectionId}`)}
                           </UiNavButton>
                         ))}
                       </div>

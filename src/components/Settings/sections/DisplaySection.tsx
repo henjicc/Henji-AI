@@ -1,11 +1,10 @@
 import React from 'react'
 import Dropdown from '@/components/ui/Dropdown'
 import NumberInput from '@/components/ui/NumberInput'
-import Toggle from '@/components/ui/Toggle'
-import SectionCard from '../components/SectionCard'
+import { UiFormRow, UiSwitch } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
 import type { PriceEstimateCurrencyMode } from '@/core/pricing/priceDisplay'
-import { UI_TEXT_META_CLASS } from '@/components/ui'
 
 interface DisplaySectionProps {
   showPriceEstimate: boolean
@@ -29,65 +28,57 @@ const DisplaySection: React.FC<DisplaySectionProps> = ({
   onToggleAutoFocus
 }) => {
   const { t } = useI18n('settings')
-  const onText = t('actions.toggleOn')
-  const offText = t('actions.toggleOff')
   const currencyModeOptions: Array<{ value: PriceEstimateCurrencyMode; label: string }> = [
     { value: 'auto', label: t('sections.display.currencyOptions.auto') },
     { value: 'cny', label: t('sections.display.currencyOptions.cny') },
     { value: 'usd', label: t('sections.display.currencyOptions.usd') },
   ]
+  const priceDependentClass = showPriceEstimate ? '' : 'opacity-50'
+
   return (
-    <SectionCard title={t('sections.display.title')}>
-      <Toggle
-        label={t('sections.display.priceLabel')}
-        checked={showPriceEstimate}
-        onChange={onToggleShowPrice}
-        className="w-full"
-        onText={onText}
-        offText={offText}
-      />
-      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.display.priceHint')}</p>
+    <>
+      <UiFormRow label={t('sections.display.priceLabel')} info={t('sections.display.priceHint')} inline>
+        <UiSwitch checked={showPriceEstimate} onCheckedChange={onToggleShowPrice} />
+      </UiFormRow>
 
-      <div className="mt-4 border-t border-border-dark pt-4">
-        <div className={`space-y-3 ${showPriceEstimate ? '' : 'opacity-60'}`}>
-          <Dropdown
-            label={t('sections.display.currencyModeLabel')}
-            value={priceEstimateCurrencyMode}
-            options={currencyModeOptions}
-            display={currencyModeOptions.find((option) => option.value === priceEstimateCurrencyMode)?.label}
-            onSelect={(value) => onChangePriceEstimateCurrencyMode(value as PriceEstimateCurrencyMode)}
-            className="w-full"
-            disabled={!showPriceEstimate}
-          />
-          <p className={UI_TEXT_META_CLASS}>{t('sections.display.currencyModeHint')}</p>
+      <UiFormRow
+        label={t('sections.display.currencyModeLabel')}
+        info={t('sections.display.currencyModeHint')}
+        inline
+        className={priceDependentClass}
+      >
+        <Dropdown
+          value={priceEstimateCurrencyMode}
+          options={currencyModeOptions}
+          display={currencyModeOptions.find((option) => option.value === priceEstimateCurrencyMode)?.label}
+          onSelect={(value) => onChangePriceEstimateCurrencyMode(value as PriceEstimateCurrencyMode)}
+          className={SETTINGS_INLINE_CONTROL_CLASS}
+          disabled={!showPriceEstimate}
+        />
+      </UiFormRow>
 
-          <NumberInput
-            label={t('sections.display.exchangeRateLabel')}
-            value={usdToCnyRate}
-            onChange={onChangeUsdToCnyRate}
-            min={0.01}
-            max={999.9999}
-            step={0.01}
-            precision={4}
-            widthClassName="w-full"
-            disabled={!showPriceEstimate}
-          />
-          <p className={UI_TEXT_META_CLASS}>{t('sections.display.exchangeRateHint')}</p>
-        </div>
+      <UiFormRow
+        label={t('sections.display.exchangeRateLabel')}
+        info={t('sections.display.exchangeRateHint')}
+        inline
+        className={priceDependentClass}
+      >
+        <NumberInput
+          value={usdToCnyRate}
+          onChange={onChangeUsdToCnyRate}
+          min={0.01}
+          max={999.9999}
+          step={0.01}
+          precision={4}
+          widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
+          disabled={!showPriceEstimate}
+        />
+      </UiFormRow>
 
-        <div className="mt-4 border-t border-border-dark pt-4">
-          <Toggle
-            label={t('sections.display.autoFocusLabel')}
-            checked={enableAutoFocusModelSearch}
-            onChange={onToggleAutoFocus}
-            className="w-full"
-            onText={onText}
-            offText={offText}
-          />
-          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.display.autoFocusHint')}</p>
-        </div>
-      </div>
-    </SectionCard>
+      <UiFormRow label={t('sections.display.autoFocusLabel')} info={t('sections.display.autoFocusHint')} inline>
+        <UiSwitch checked={enableAutoFocusModelSearch} onCheckedChange={onToggleAutoFocus} />
+      </UiFormRow>
+    </>
   )
 }
 

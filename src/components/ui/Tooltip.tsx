@@ -50,6 +50,23 @@ export default function Tooltip({ children, content, delay = 500, className }: T
         }
     }
 
+    /*
+     * 键盘路径：Tab 停到触发元素上立刻显示，不走 hover 的延迟。
+     *
+     * 没有这段时，只靠 hover 的说明对键盘用户完全不可达——设置面板把一部分选项说明
+     * 收进 ⓘ 之后，这就不是锦上添花而是必需品。React 的 onFocus/onBlur 会冒泡，
+     * 所以挂在包裹元素上就能接住内部按钮的聚焦。
+     */
+    const handleFocus = () => {
+        if (timerRef.current) {
+            window.clearTimeout(timerRef.current)
+            timerRef.current = null
+        }
+        updatePosition()
+        setVisible(true)
+        setClosing(false)
+    }
+
     useEffect(() => {
         const handleScrollOrResize = () => {
             if (visible && !closing) {
@@ -93,6 +110,8 @@ export default function Tooltip({ children, content, delay = 500, className }: T
                 className={`relative ${shouldFlex ? 'flex' : 'inline-block'} ${shouldFlex ? childClassName.match(/flex-\d+|flex-grow/)?.[0] || '' : ''}`}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
+                onFocus={handleFocus}
+                onBlur={handleMouseLeave}
             >
                 {children}
             </span>

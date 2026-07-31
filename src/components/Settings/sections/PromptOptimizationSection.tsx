@@ -1,9 +1,9 @@
 import React from 'react'
 import Dropdown from '@/components/ui/Dropdown'
-import SectionCard from '../components/SectionCard'
+import { UiFormRow } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
 import type { PromptOptimizationButtonBehavior } from '@/core/llm/promptOptimizationBehavior'
-import { UI_TEXT_META_CLASS } from '@/components/ui'
 
 interface PromptOptimizationSectionProps {
   behavior: PromptOptimizationButtonBehavior
@@ -21,17 +21,19 @@ const PromptOptimizationSection: React.FC<PromptOptimizationSectionProps> = ({
   ]
 
   return (
-    <SectionCard title={t('sections.promptOptimization.title')}>
+    <UiFormRow
+      label={t('sections.promptOptimization.title')}
+      info={t('sections.promptOptimization.hint')}
+      inline
+    >
       <Dropdown
-        label={t('sections.promptOptimization.label')}
         value={behavior}
         options={options}
         display={options.find((option) => option.value === behavior)?.label}
         onSelect={(value) => onChangeBehavior(value as PromptOptimizationButtonBehavior)}
-        className="w-full"
+        className={SETTINGS_INLINE_CONTROL_CLASS}
       />
-      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.promptOptimization.hint')}</p>
-    </SectionCard>
+    </UiFormRow>
   )
 }
 

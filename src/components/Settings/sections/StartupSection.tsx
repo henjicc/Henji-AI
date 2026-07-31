@@ -1,10 +1,10 @@
 import React from 'react'
 import Dropdown from '@/components/ui/Dropdown'
-import { UI_TEXT_META_CLASS } from '@/components/ui'
+import { UiFormRow } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
 import { STARTUP_WORKSPACE_IDS, type StartupWorkspaceId } from '@/core/types/workspace'
 import { useSettingsStore } from '@/stores/settingsStore'
-import SectionCard from '../components/SectionCard'
 
 const StartupSection: React.FC = () => {
   const { t } = useI18n('settings')
@@ -17,17 +17,19 @@ const StartupSection: React.FC = () => {
   }))
 
   return (
-    <SectionCard title={t('sections.interface.startupTitle')}>
+    <UiFormRow
+      label={t('sections.interface.startupWorkspaceLabel')}
+      info={t('sections.interface.startupWorkspaceHint')}
+      inline
+    >
       <Dropdown
-        label={t('sections.interface.startupWorkspaceLabel')}
         value={startupWorkspace}
         options={options}
         display={options.find((option) => option.value === startupWorkspace)?.label}
         onSelect={(value) => setStartupWorkspace(value as StartupWorkspaceId)}
-        className="w-full"
+        className={SETTINGS_INLINE_CONTROL_CLASS}
       />
-      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.interface.startupWorkspaceHint')}</p>
-    </SectionCard>
+    </UiFormRow>
   )
 }
 

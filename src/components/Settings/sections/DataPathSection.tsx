@@ -1,6 +1,5 @@
 import React from 'react'
-import { UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput } from '@/components/ui'
-import SectionCard from '../components/SectionCard'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UiButton, UiFormRow, UiInput } from '@/components/ui'
 import SettingsDialog from '../components/SettingsDialog'
 import SettingsProgressDialog from '../components/SettingsProgressDialog'
 import { useDataPath } from '../hooks/useDataPath'
@@ -33,22 +32,20 @@ const DataPathSection: React.FC = () => {
 
   return (
     <>
-      <SectionCard title={t('sections.dataPath.title')}>
-        <label className={`${UI_FIELD_LABEL_CLASS} mb-2`}>
-          {t('sections.dataPath.pathLabel')}
-        </label>
+      {/* 常驻说明：改了会自动迁移全部数据，属于「不看就可能误操作」那一档 */}
+      <UiFormRow label={t('sections.dataPath.pathLabel')} hint={t('sections.dataPath.pathHint')}>
         <div className="flex items-stretch gap-2">
           <UiInput
             value={currentPath}
             readOnly
-            className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} flex-1 font-mono`}
+            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} flex-1 font-mono`}
           />
           <UiButton
             onClick={selectDirectory}
             disabled={isMigrating}
             variant="primary"
-            size="field"
-            className="shrink-0 whitespace-nowrap"
+            size="sm"
+            className="shrink-0 whitespace-nowrap px-4"
           >
             {t('actions.select')}
           </UiButton>
@@ -56,14 +53,13 @@ const DataPathSection: React.FC = () => {
             onClick={openResetConfirm}
             disabled={isMigrating}
             variant="muted"
-            size="field"
-            className="shrink-0 whitespace-nowrap"
+            size="sm"
+            className="shrink-0 whitespace-nowrap px-4"
           >
             {t('actions.resetDefault')}
           </UiButton>
         </div>
-        <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.dataPath.pathHint')}</p>
-      </SectionCard>
+      </UiFormRow>
 
       <SettingsDialog
         open={alert.open}

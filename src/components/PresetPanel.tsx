@@ -346,6 +346,8 @@ const PresetPanel: React.FC<PresetPanelProps> = ({
                                                 onClick={(e) => e.stopPropagation()}
                                                 onMouseDown={(e) => e.stopPropagation()}
                                             >
+                                                {/* 这块经 createPortal 挂到 body，视觉上不在预设列表项里，
+                                                    和上面那张列表卡不构成嵌套；静态检查看不出 portal 的落点。ui-surface-allow */}
                                                 <UiPanel className="delete-confirm-dialog w-[200px] p-3">
                                                     <div className="text-sm text-white mb-3">
                                                         {t('ui:presets.confirmDelete')}

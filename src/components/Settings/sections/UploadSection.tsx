@@ -1,17 +1,14 @@
 import React from 'react'
 import Dropdown from '@/components/ui/Dropdown'
-import Toggle from '@/components/ui/Toggle'
-import SectionCard from '../components/SectionCard'
+import { UiFormRow, UiSwitch } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useUploadSettings } from '../hooks/useUploadSettings'
 import { UPLOAD_PROVIDERS, type UploadProvider } from '@/core/config/providers'
 import { useI18n } from '@/hooks/useI18n'
-import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 
 const UploadSection: React.FC = () => {
   const { t } = useI18n('settings')
   const { provider, fallbackEnabled, setProvider, setFallbackEnabled } = useUploadSettings()
-  const onText = t('actions.toggleOn')
-  const offText = t('actions.toggleOff')
 
   const options = UPLOAD_PROVIDERS.map(item => ({
     value: item.id,
@@ -19,38 +16,26 @@ const UploadSection: React.FC = () => {
   }))
 
   return (
-    <SectionCard
-      title={t('sections.upload.title')}
-      description={t('sections.upload.description')}
-    >
-      <div className="space-y-4">
-        <div className="flex items-center justify-between gap-4">
-          <label className={UI_TEXT_LABEL_CLASS}>
-            {t('sections.upload.providerLabel')}
-          </label>
-          <Dropdown
-            value={provider}
-            display={options.find(option => option.value === provider)?.label}
-            options={options}
-            onSelect={(value) => setProvider(value as UploadProvider)}
-            className="w-40"
-            buttonClassName="h-[34px] w-full bg-surface-dark border-border-dark"
-          />
-        </div>
+    <>
+      {/* 常驻说明：不看不知道这个提供商是给 ModelScope/PPIO 这类模型托管文件用的 */}
+      <UiFormRow
+        label={t('sections.upload.providerLabel')}
+        hint={t('sections.upload.description')}
+        inline
+      >
+        <Dropdown
+          value={provider}
+          display={options.find(option => option.value === provider)?.label}
+          options={options}
+          onSelect={(value) => setProvider(value as UploadProvider)}
+          className={SETTINGS_INLINE_CONTROL_CLASS}
+        />
+      </UiFormRow>
 
-        <div className="border-t border-border-dark pt-4">
-          <Toggle
-            label={t('sections.upload.fallbackLabel')}
-            checked={fallbackEnabled}
-            onChange={setFallbackEnabled}
-            className="w-full"
-            onText={onText}
-            offText={offText}
-          />
-          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.upload.fallbackHint')}</p>
-        </div>
-      </div>
-    </SectionCard>
+      <UiFormRow label={t('sections.upload.fallbackLabel')} info={t('sections.upload.fallbackHint')} inline>
+        <UiSwitch checked={fallbackEnabled} onCheckedChange={setFallbackEnabled} />
+      </UiFormRow>
+    </>
   )
 }
 

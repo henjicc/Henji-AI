@@ -1,18 +1,15 @@
 import React from 'react'
-import Toggle from '@/components/ui/Toggle'
 import Dropdown from '@/components/ui/Dropdown'
-import SectionCard from '../components/SectionCard'
+import { UiFormRow, UiSwitch } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
 import { useSettingsStore, type CanvasLodLevel } from '@/stores/settingsStore'
-import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 
 const LOD_LEVEL_OPTIONS: CanvasLodLevel[] = ['off', 'detail', 'balanced', 'performance']
 
 /** 画布行为设置：缩放简化等级、查看器信息面板、节点标题、分镜生成选项 */
 const CanvasSection: React.FC = () => {
   const { t } = useI18n('settings')
-  const onText = t('actions.toggleOn')
-  const offText = t('actions.toggleOff')
 
   const enableImageViewerInfoPanel = useSettingsStore((state) => state.enableImageViewerInfoPanel)
   const setEnableImageViewerInfoPanel = useSettingsStore((state) => state.setEnableImageViewerInfoPanel)
@@ -35,89 +32,50 @@ const CanvasSection: React.FC = () => {
   }))
 
   return (
-    <SectionCard title={t('sections.canvas.title')}>
-      <div className="flex items-center justify-between gap-4">
-        <label className={UI_TEXT_LABEL_CLASS}>
-          {t('sections.canvas.lodLabel')}
-        </label>
+    <>
+      {/* 各档具体怎么降级属于工作原理，收进 ⓘ；档位名本身已经说明了取舍方向 */}
+      <UiFormRow label={t('sections.canvas.lodLabel')} info={t('sections.canvas.lodHint')} inline>
         <Dropdown
           value={canvasLodLevel}
           display={lodOptions.find((option) => option.value === canvasLodLevel)?.label}
           options={lodOptions}
           onSelect={(value) => setCanvasLodLevel(value as CanvasLodLevel)}
-          className="w-44"
-          buttonClassName="h-[34px] w-full bg-surface-dark border-border-dark"
+          className={SETTINGS_INLINE_CONTROL_CLASS}
         />
-      </div>
-      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.canvas.lodHint')}</p>
+      </UiFormRow>
 
-      <div className="mt-4 border-t border-border-dark pt-4">
-        <Toggle
-          label={t('sections.canvas.imageViewerInfoLabel')}
-          checked={enableImageViewerInfoPanel}
-          onChange={setEnableImageViewerInfoPanel}
-          className="w-full"
-          onText={onText}
-          offText={offText}
-        />
-        <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.canvas.imageViewerInfoHint')}</p>
-      </div>
+      <UiFormRow
+        label={t('sections.canvas.imageViewerInfoLabel')}
+        info={t('sections.canvas.imageViewerInfoHint')}
+        inline
+      >
+        <UiSwitch checked={enableImageViewerInfoPanel} onCheckedChange={setEnableImageViewerInfoPanel} />
+      </UiFormRow>
 
-      <div className="mt-4 border-t border-border-dark pt-4">
-        <Toggle
-          label={t('sections.canvas.uploadFilenameTitleLabel')}
-          checked={useUploadFilenameAsNodeTitle}
-          onChange={setUseUploadFilenameAsNodeTitle}
-          className="w-full"
-          onText={onText}
-          offText={offText}
-        />
-      </div>
+      <UiFormRow label={t('sections.canvas.uploadFilenameTitleLabel')} inline>
+        <UiSwitch checked={useUploadFilenameAsNodeTitle} onCheckedChange={setUseUploadFilenameAsNodeTitle} />
+      </UiFormRow>
 
-      <div className="mt-4 border-t border-border-dark pt-4">
-        <Toggle
-          label={t('sections.canvas.storyboardKeepStyleLabel')}
-          checked={keepStyleConsistent}
-          onChange={setKeepStyleConsistent}
-          className="w-full"
-          onText={onText}
-          offText={offText}
-        />
-        <div className="mt-3">
-          <Toggle
-            label={t('sections.canvas.storyboardNoTextLabel')}
-            checked={disableTextInImage}
-            onChange={setDisableTextInImage}
-            className="w-full"
-            onText={onText}
-            offText={offText}
-          />
-        </div>
-        <div className="mt-3">
-          <Toggle
-            label={t('sections.canvas.storyboardAutoInferEmptyFrameLabel')}
-            checked={autoInferEmptyFrame}
-            onChange={setAutoInferEmptyFrame}
-            className="w-full"
-            onText={onText}
-            offText={offText}
-          />
-          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>
-            {t('sections.canvas.storyboardAutoInferEmptyFrameHint')}
-          </p>
-        </div>
-        <div className="mt-3">
-          <Toggle
-            label={t('sections.canvas.ignoreAtTagLabel')}
-            checked={ignoreAtTag}
-            onChange={setIgnoreAtTag}
-            className="w-full"
-            onText={onText}
-            offText={offText}
-          />
-        </div>
-      </div>
-    </SectionCard>
+      <UiFormRow label={t('sections.canvas.storyboardKeepStyleLabel')} inline>
+        <UiSwitch checked={keepStyleConsistent} onCheckedChange={setKeepStyleConsistent} />
+      </UiFormRow>
+
+      <UiFormRow label={t('sections.canvas.storyboardNoTextLabel')} inline>
+        <UiSwitch checked={disableTextInImage} onCheckedChange={setDisableTextInImage} />
+      </UiFormRow>
+
+      <UiFormRow
+        label={t('sections.canvas.storyboardAutoInferEmptyFrameLabel')}
+        info={t('sections.canvas.storyboardAutoInferEmptyFrameHint')}
+        inline
+      >
+        <UiSwitch checked={autoInferEmptyFrame} onCheckedChange={setAutoInferEmptyFrame} />
+      </UiFormRow>
+
+      <UiFormRow label={t('sections.canvas.ignoreAtTagLabel')} inline>
+        <UiSwitch checked={ignoreAtTag} onCheckedChange={setIgnoreAtTag} />
+      </UiFormRow>
+    </>
   )
 }
 

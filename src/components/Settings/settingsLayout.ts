@@ -8,7 +8,21 @@
 export const SETTINGS_CONTENT_MAX_WIDTH_CLASS = 'max-w-3xl'
 
 /**
- * 分节之间的间距。分节内部是 `UI_SECTION_STACK_CLASS`（space-y-8），
- * 分节之间必须更宽，否则连排后读不出「这里换了一节」。
+ * 内容区外框。
+ *
+ * 分节之间的距离与分隔线由 `SettingsSection` 自己负责（`border-t` + `pt-10`），
+ * 这里不再给 `space-y-*`——两处都管间距时，改一处永远对不齐。
  */
-export const SETTINGS_CONTENT_CLASS = 'p-4 space-y-12'
+export const SETTINGS_CONTENT_CLASS = 'px-4 pb-4 pt-5'
+
+/**
+ * 横向行（`UiFormRow inline`）右侧控件的宽度。
+ *
+ * 收敛成一个常量的理由：改造前下拉宽度有 `w-40` / `w-44` / `w-48` / `w-full` 四种，
+ * 同一页里右边缘对不齐。控件本身的高度走 `UI_FIELD_CONTROL_HEIGHT_SM_CLASS`（38px），
+ * 不要再在调用点写 `h-[34px]` 这类没登记的数字。
+ *
+ * 带 `!` 是必需的：`UiInput` / `UiRangeInput` 的基础类里都有 `w-full`，
+ * 两个 `w-*` 抢同一个属性时胜负由 Tailwind 产物顺序决定，不加 `!` 会静默失效。
+ */
+export const SETTINGS_INLINE_CONTROL_CLASS = '!w-48'

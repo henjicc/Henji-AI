@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react'
 import {
   Dropdown,
+  UI_STACK_GAP_CLASS,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
   UiButton,
   UiEmpty,
+  UiGroup,
   UiIconButton,
   UiInput,
   UiLoading,
@@ -263,20 +264,21 @@ const LlmSettingsSection: React.FC = () => {
   const activeProviderDraft = providerDraft ?? defaultProviderDraft
 
   return (
-    <div className="mx-auto max-w-[1152px] space-y-3 p-4">
+    // 外层宽度与内边距由 SettingsSection / 内容区统一给，这里不再自己套一层 max-w + p-4
+    <div className={UI_STACK_GAP_CLASS}>
       <AgentModelProfilesSection config={config} saveConfig={saveConfig} />
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className={UI_TEXT_SECTION_CLASS}>供应商配置</div>
-          <div className={UI_TEXT_META_CLASS}>一行一个供应商，点击可展开详细设置</div>
-        </div>
-        <UiButton type="button" variant="muted" onClick={() => openProviderManager()}>
-          <Settings2 size={14} className="mr-1.5" />
-          管理供应商
-        </UiButton>
-      </div>
 
-      <div className="space-y-3">
+      <UiGroup
+        title="供应商配置"
+        description="一行一个供应商，点击可展开详细设置"
+        actions={
+          <UiButton type="button" size="sm" variant="muted" className="px-4" onClick={() => openProviderManager()}>
+            <Settings2 size={14} className="mr-1.5" />
+            管理供应商
+          </UiButton>
+        }
+      >
+        <div className="space-y-3">
         {providers.length === 0 ? (
           <UiEmpty size="sm" title="还没有供应商" description="先添加一个供应商，然后就能配置模型了。" />
         ) : providers.map(provider => {
@@ -460,7 +462,8 @@ const LlmSettingsSection: React.FC = () => {
             </UiPanel>
           )
         })}
-      </div>
+        </div>
+      </UiGroup>
 
       <UiModal
         isOpen={showProviderManager}

@@ -1,7 +1,5 @@
 import React, { useState } from 'react'
-import Toggle from '@/components/ui/Toggle'
-import { UI_FIELD_LABEL_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton } from '@/components/ui'
-import SectionCard from '../components/SectionCard'
+import { UI_TEXT_META_CLASS, UiButton, UiChipButton, UiFormRow, UiSwitch } from '@/components/ui'
 import SettingsDialog from '../components/SettingsDialog'
 import { useUpdateConfig } from '../hooks/useUpdateConfig'
 import { useExternalLink } from '../hooks/useExternalLink'
@@ -25,8 +23,6 @@ const UpdateSection: React.FC = () => {
   const [lastError, setLastError] = useState<string | null>(null)
   const [showResult, setShowResult] = useState(false)
 
-  const onText = t('actions.toggleOn')
-  const offText = t('actions.toggleOff')
   const frequencies: Array<typeof config.frequency> = ['startup', 'daily', 'weekly', 'never']
 
   const handleCheck = async () => {
@@ -77,72 +73,56 @@ const UpdateSection: React.FC = () => {
 
   return (
     <>
-      <SectionCard title={t('sections.updates.title')}>
-        <div className="space-y-5">
-          <div>
-            <Toggle
-              label={t('sections.updates.enableLabel')}
-              checked={config.enabled}
-              onChange={updateEnabled}
-              className="w-full"
-              onText={onText}
-              offText={offText}
-            />
-            <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.updates.enableHint')}</p>
-          </div>
+      <UiFormRow label={t('sections.updates.enableLabel')} info={t('sections.updates.enableHint')} inline>
+        <UiSwitch checked={config.enabled} onCheckedChange={updateEnabled} />
+      </UiFormRow>
 
-          <div className={`transition-colors duration-300 ${!config.enabled ? 'pointer-events-none' : ''}`}>
-            <label className={`${UI_FIELD_LABEL_CLASS} mb-2`}>
-              {t('sections.updates.frequencyLabel')}
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {frequencies.map((freq) => (
-                <UiChipButton
-                  key={freq}
-                  onClick={() => updateFrequency(freq)}
-                  disabled={!config.enabled}
-                  active={config.frequency === freq}
-                  className={`justify-center px-4 text-sm font-medium ${config.frequency === freq ? '' : 'text-text-muted hover:text-text-dark'}`}
-                >
-                  {t(`sections.updates.frequency.${freq}`)}
-                </UiChipButton>
-              ))}
-            </div>
-            <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.updates.frequencyHint')}</p>
-          </div>
-
-          <div className="space-y-3 border-t border-border-dark pt-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className={UI_TEXT_LABEL_CLASS}>{t('sections.updates.currentVersionLabel')}</p>
-                <p className={`mt-1 font-mono ${UI_TEXT_META_CLASS}`}>{currentVersion}</p>
-              </div>
-              <UiButton
-                onClick={handleCheck}
-                disabled={isChecking}
-                variant="primary"
-                size="sm"
-                className="gap-2 px-4"
-              >
-                {isChecking ? t('actions.checking') : t('actions.checkUpdate')}
-              </UiButton>
-            </div>
-            <UiButton
-              onClick={clearIgnored}
-              variant="muted"
-              size="sm"
-              className="w-full px-4 text-text-soft"
+      <UiFormRow
+        label={t('sections.updates.frequencyLabel')}
+        info={t('sections.updates.frequencyHint')}
+        className={config.enabled ? '' : 'opacity-50'}
+      >
+        <div className="grid grid-cols-4 gap-2">
+          {frequencies.map((freq) => (
+            <UiChipButton
+              key={freq}
+              onClick={() => updateFrequency(freq)}
+              disabled={!config.enabled}
+              active={config.frequency === freq}
+              className="justify-center px-4 text-sm font-medium"
             >
-              {t('actions.clearIgnored')}
-            </UiButton>
-            <p className={UI_TEXT_META_CLASS}>{t('sections.updates.clearIgnoredHint')}</p>
-          </div>
+              {t(`sections.updates.frequency.${freq}`)}
+            </UiChipButton>
+          ))}
         </div>
-      </SectionCard>
+      </UiFormRow>
+
+      <UiFormRow label={t('sections.updates.currentVersionLabel')} inline>
+        <span className={`font-mono ${UI_TEXT_META_CLASS}`}>{currentVersion}</span>
+        <UiButton
+          onClick={handleCheck}
+          disabled={isChecking}
+          variant="primary"
+          size="sm"
+          className="px-4"
+        >
+          {isChecking ? t('actions.checking') : t('actions.checkUpdate')}
+        </UiButton>
+      </UiFormRow>
+
+      <UiFormRow
+        label={t('sections.updates.clearIgnoredLabel')}
+        info={t('sections.updates.clearIgnoredHint')}
+        inline
+      >
+        <UiButton onClick={clearIgnored} variant="muted" size="sm" className="px-4">
+          {t('sections.updates.clearIgnoredAction')}
+        </UiButton>
+      </UiFormRow>
 
       <SettingsDialog
         open={showResult}
-        title={t('sections.updates.title')}
+        title={t('navSections.general-maintenance')}
         description={resultMessage}
         actions={resultActions()}
         onClose={closeResult}

@@ -4,13 +4,17 @@ import { useMemo, useState } from 'react'
 import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
 import {
   Dropdown,
+  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
+  UI_FORM_ROW_GAP_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
-  UI_TEXT_SECTION_CLASS,
   UiButton,
+  UiFormRow,
+  UiGroup,
   UiInput,
   UiPanel,
 } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { findAgentModelVerification } from '@/core/llm/agentProfiles'
 import { applyCapabilitySmokeToCapabilities } from '@/core/llm/capabilitySmokeCapabilities'
 import { createLogger } from '@/core/logging'
@@ -43,6 +47,26 @@ const roleLabels: Record<AgentModelRole, string> = {
   summarizer: '摘要模型',
   fallback: '备用模型',
 }
+
+interface RuntimeSettingField {
+  key: keyof AgentModelProfile['settings']
+  label: string
+  info: string
+  min: number
+  max?: number
+}
+
+const RUNTIME_SETTING_FIELDS: RuntimeSettingField[] = [
+  { key: 'timeoutMs', label: '超时', info: '单次请求的最长等待时间，单位毫秒。', min: 1000 },
+  { key: 'maxRetries', label: '重试次数', info: '请求失败后自动重试的次数。', min: 0, max: 5 },
+  { key: 'maxOutputTokens', label: '期望输出 Token', info: '单次期望输出的 Token 数。已配置模型优先使用各自的能力上限。', min: 1 },
+  {
+    key: 'contextWindowBudget',
+    label: '上下文回退 Token',
+    info: '模型没有登记上下文窗口时使用的回退值。已配置模型优先使用各自的能力上限。',
+    min: 1,
+  },
+]
 
 function modelKey(reference: AgentModelReference): string {
   return `${reference.providerId}\u0000${reference.modelId}`
@@ -179,12 +203,16 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
   }
 
   return (
-    <UiPanel className="space-y-4 p-4">
-      <div>
-        <div className={UI_TEXT_SECTION_CLASS}>智能助手模型</div>
-        <div className={UI_TEXT_META_CLASS}>复用下方供应商与密钥；动态验证会发起最小真实请求，价格无可靠来源时保持未知。</div>
-      </div>
-
+    /*
+     * 这里原来是 `<UiPanel>`（卡片）里再套四张 `border + bg-layer` 的卡片，
+     * 而且内层的 layer 比外层更亮——正好踩中"内层背景只能比外层更暗"那条。
+     * 现在外层降成零装饰分组，四个角色块用 inset（更暗、无边框、无阴影）。
+     */
+    <UiGroup
+      title="智能助手模型"
+      description="复用下方供应商与密钥；动态验证会发起最小真实请求，价格无可靠来源时保持未知。"
+      gap="stack"
+    >
       <div className="grid gap-3 sm:grid-cols-2">
         {(Object.keys(roleLabels) as AgentModelRole[]).map(role => {
           const options = createOptions(models, role)
@@ -196,7 +224,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           const display = options.find(item => item.value === value)?.label ?? '请选择模型'
           const key = effectiveReference ? modelKey(effectiveReference) : ''
           return (
-            <div key={role} className="space-y-2 rounded-lg border border-border-dark bg-layer p-3">
+            <UiPanel key={role} variant="inset" className="space-y-2 p-3">
               <div className={UI_TEXT_LABEL_CLASS}>{roleLabels[role]}</div>
               <Dropdown<string>
                 value={value}
@@ -220,19 +248,30 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   {verifyingKey === key ? '验证中' : '验证此模型'}
                 </UiButton>
               ) : null}
-            </div>
+            </UiPanel>
           )
         })}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <UiInput type="number" min={1000} value={profile.settings.timeoutMs} onChange={event => void updateSetting('timeoutMs', Number(event.target.value))} aria-label="超时毫秒" />
-        <UiInput type="number" min={0} max={5} value={profile.settings.maxRetries} onChange={event => void updateSetting('maxRetries', Number(event.target.value))} aria-label="重试次数" />
-        <UiInput type="number" min={1} value={profile.settings.maxOutputTokens} onChange={event => void updateSetting('maxOutputTokens', Number(event.target.value))} aria-label="最大输出 Token" />
-        <UiInput type="number" min={1} value={profile.settings.contextWindowBudget} onChange={event => void updateSetting('contextWindowBudget', Number(event.target.value))} aria-label="未知模型上下文回退 Token" />
+      {/*
+        这四个数字框原来只有 aria-label，界面上一个标签都没有，靠底下一句
+        「依次为：超时毫秒、重试次数、…」让用户数位置。改成有标签的行。
+      */}
+      <div className={UI_FORM_ROW_GAP_CLASS}>
+        {RUNTIME_SETTING_FIELDS.map(field => (
+          <UiFormRow key={field.key} label={field.label} info={field.info} inline>
+            <UiInput
+              type="number"
+              min={field.min}
+              max={field.max}
+              value={profile.settings[field.key]}
+              onChange={event => void updateSetting(field.key, Number(event.target.value))}
+              className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${SETTINGS_INLINE_CONTROL_CLASS}`}
+            />
+          </UiFormRow>
+        ))}
       </div>
-      <div className={UI_TEXT_META_CLASS}>依次为：超时毫秒、重试次数、单次期望输出 Token、未知模型上下文回退 Token。已配置模型优先使用各自能力上限。</div>
-    </UiPanel>
+    </UiGroup>
   )
 }
 

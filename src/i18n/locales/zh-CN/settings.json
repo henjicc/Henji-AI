@@ -2,6 +2,21 @@
   "title": "设置",
   "language": "语言",
   "theme": "主题",
+  "navSections": {
+    "general-basic": "基础设置",
+    "general-storage": "数据与下载",
+    "general-behavior": "行为与并发",
+    "general-maintenance": "更新维护",
+    "api-keys": "平台密钥",
+    "api-upload": "上传策略",
+    "api-llm": "大语言模型",
+    "api-agent-preferences": "助手用户指令",
+    "interface-layout": "布局行为",
+    "interface-assets": "资产库",
+    "interface-canvas": "画布",
+    "interface-theme": "主题外观",
+    "models-visibility": "显示与管理"
+  },
   "apiKeys": {
     "title": "API 密钥设置",
     "description": "配置各个服务提供商的 API 密钥。密钥将安全地存储在本地。",
@@ -220,6 +235,8 @@
         "never": "从不"
       },
       "currentVersionLabel": "当前版本",
+      "clearIgnoredLabel": "已忽略的版本",
+      "clearIgnoredAction": "清除",
       "clearIgnoredHint": "清除后将重新提示所有被忽略的版本更新",
       "upToDate": "当前已是最新版本 {{version}}",
       "hasUpdate": "发现新版本 {{version}}，请前往下载",

@@ -277,6 +277,27 @@ for (const file of files) {
     if (isPanelSurface) panelSurfaces.push(entry);
   }
 
+  /*
+   * `<UiPanel>` 的默认 variant 就是一张完整卡片，混着手写卡片用时要一起计入套娃计数。
+   *
+   * 漏掉这条踩过一次：AgentModelProfilesSection 是 `<UiPanel>` 外壳里再套一张手写卡片，
+   * 手写的只有 1 处、正好卡在上限里，规则 B 全绿放行——界面上却是明显的卡片套卡片。
+   *
+   * 为什么要"文件里已经有手写卡片"这个前提：只用 `<UiPanel>` 的文件里，多张卡片
+   * 绝大多数是并列的列表项或互斥的浮层（实测 3 个文件全是），无条件计数只会制造噪音。
+   * 而"组件卡片 + 手写卡片"混用，几乎一定是外壳套内层的那种嵌套。
+   * `variant=` 带值的（inset / bare / glass）不是卡片，不计。
+   */
+  if (cardSurfaces.length > 0) {
+    for (const match of raw.matchAll(/<UiPanel(\s[^>]*)?>/g)) {
+      const attrs = match[1] ?? '';
+      if (/\bvariant\s*=/.test(attrs)) continue;
+      const lineNo = lineNumberAt(raw, match.index ?? 0);
+      if (hasLineAllowMarker(lines, lineNo)) continue;
+      cardSurfaces.push({ lineNo, snippet: (lines[lineNo - 1] ?? '').trim().slice(0, 140) });
+    }
+  }
+
   const nested = cardSurfaces.length > MAX_CARD_SURFACES_PER_FILE;
   if (panelSurfaces.length === 0 && !nested) continue;
 

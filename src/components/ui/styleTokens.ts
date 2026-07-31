@@ -85,6 +85,16 @@ export const UI_STACK_GAP_CLASS = 'space-y-6';
 /** 分区内部行之间的纵向间距 */
 export const UI_ROW_GAP_CLASS = 'space-y-3';
 
+/**
+ * 表单行之间的纵向间距。
+ *
+ * 单独一档的理由：`UI_ROW_GAP_CLASS`（12px）是给纯控件行用的，一旦行带上说明小字，
+ * 12px 会让"上一行的说明"和"下一行的标签"粘在一起，读不出行的边界；
+ * 而 `UI_STACK_GAP_CLASS`（24px）是分区级的距离，用在行之间会把一个分区拆散。
+ * 设置面板的行全部用这一档，不要在调用点各写各的 `space-y-4/5/6`。
+ */
+export const UI_FORM_ROW_GAP_CLASS = 'space-y-5';
+
 /** 唯一允许的分隔线写法：一条线，不是一个框 */
 export const UI_DIVIDER_CLASS = 'border-t border-border-dark/60';
 
@@ -206,7 +216,17 @@ export const UI_GLASS_ADAPTIVE_DIVIDER_CLASS = 'ui-glass-adaptive-divider';
  * 纵向导航项静息态的 hover 底。由 `UiNavButton` 统一消费，调用点不需要自己判断
  * 当前导航在不在玻璃里——普通面板中是 surface 实底，玻璃里自动换成白纱。
  */
-export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav';
+export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav'
+
+/**
+ * 静息态不描边的选项（`UiOptionButton variant="menu"`）的 hover 底。
+ *
+ * 为什么不能沿用 `UI_GLASS_ADAPTIVE_CONTROL_CLASS`：那个类会给元素一个**静息态的底与边**，
+ * 而且 `.ui-glass .ui-glass-adaptive-control`（两个类）的特异性高于工具类 `.border-transparent`
+ * （一个类），于是 menu 变体在玻璃里被强行描回了边——「选项集合静息态不描边」这条规则
+ * 在玻璃弹窗内会静默失效（实测主题色板就是这么被巡检判为表面叠三层的）。
+ */
+export const UI_GLASS_ADAPTIVE_OPTION_CLASS = 'ui-glass-adaptive-option';
 
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;

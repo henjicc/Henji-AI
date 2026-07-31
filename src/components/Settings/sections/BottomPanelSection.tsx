@@ -1,9 +1,8 @@
 import React from 'react'
-import Toggle from '@/components/ui/Toggle'
 import NumberInput from '@/components/ui/NumberInput'
-import SectionCard from '../components/SectionCard'
+import { UiFormRow, UiSwitch } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
-import { UI_TEXT_META_CLASS } from '@/components/ui'
 
 interface BottomPanelSectionProps {
   enableAutoCollapse: boolean
@@ -23,51 +22,48 @@ const BottomPanelSection: React.FC<BottomPanelSectionProps> = ({
   onToggleScrollOnly
 }) => {
   const { t } = useI18n('settings')
-  const onText = t('actions.toggleOn')
-  const offText = t('actions.toggleOff')
+  const dependentClass = enableAutoCollapse ? '' : 'opacity-50'
+
   return (
-    <SectionCard title={t('sections.interface.bottomPanelTitle')}>
-      <div className="space-y-5">
-        <div>
-          <Toggle
-            label={t('sections.interface.autoCollapseLabel')}
-            checked={enableAutoCollapse}
-            onChange={onToggleAutoCollapse}
-            className="w-full"
-            onText={onText}
-            offText={offText}
-          />
-          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.interface.autoCollapseHint')}</p>
-        </div>
+    <>
+      <UiFormRow
+        label={t('sections.interface.autoCollapseLabel')}
+        info={t('sections.interface.autoCollapseHint')}
+        inline
+      >
+        <UiSwitch checked={enableAutoCollapse} onCheckedChange={onToggleAutoCollapse} />
+      </UiFormRow>
 
-        <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
-          <NumberInput
-            label={t('sections.interface.collapseDelayLabel')}
-            value={collapseDelay}
-            onChange={onChangeDelay}
-            min={100}
-            max={3000}
-            step={100}
-            widthClassName="w-full"
-            disabled={!enableAutoCollapse}
-          />
-          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.interface.collapseDelayHint')}</p>
-        </div>
+      <UiFormRow
+        label={t('sections.interface.collapseDelayLabel')}
+        info={t('sections.interface.collapseDelayHint')}
+        inline
+        className={dependentClass}
+      >
+        <NumberInput
+          value={collapseDelay}
+          onChange={onChangeDelay}
+          min={100}
+          max={3000}
+          step={100}
+          widthClassName={SETTINGS_INLINE_CONTROL_CLASS}
+          disabled={!enableAutoCollapse}
+        />
+      </UiFormRow>
 
-        <div className={`transition-colors duration-300 ${!enableAutoCollapse ? 'pointer-events-none' : ''}`}>
-          <Toggle
-            label={t('sections.interface.collapseOnScrollLabel')}
-            checked={collapseOnScrollOnly}
-            onChange={onToggleScrollOnly}
-            className="w-full"
-            disabled={!enableAutoCollapse}
-            onText={onText}
-            offText={offText}
-          />
-          <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.interface.collapseOnScrollHint')}</p>
-        </div>
-      </div>
-    </SectionCard>
+      <UiFormRow
+        label={t('sections.interface.collapseOnScrollLabel')}
+        info={t('sections.interface.collapseOnScrollHint')}
+        inline
+        className={dependentClass}
+      >
+        <UiSwitch
+          checked={collapseOnScrollOnly}
+          onCheckedChange={onToggleScrollOnly}
+          disabled={!enableAutoCollapse}
+        />
+      </UiFormRow>
+    </>
   )
 }
 

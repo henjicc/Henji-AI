@@ -319,6 +319,15 @@
     background-color: var(--ui-glass-surface-tint);
   }
 
+  /*
+   * 自适应分隔线。**调用点只写 `border-t` / `border-r`，不要再补 `border-border-dark/60`**——
+   * 那是 utilities 层的类，会稳定盖掉这里的 components 层规则，玻璃上的线就永远是深色的
+   * （实测设置面板分节之间那条线因此完全看不见）。基础值在这里给，玻璃里换成白纱。
+   */
+  .ui-glass-adaptive-divider {
+    border-color: rgb(var(--border-rgb) / 0.6);
+  }
+
   .ui-glass .ui-glass-adaptive-divider {
     border-color: var(--ui-glass-surface-divider);
   }
@@ -337,6 +346,20 @@
 
   .ui-glass .ui-glass-adaptive-nav:hover:not(:disabled) {
     background-color: var(--ui-glass-control-hover);
+  }
+
+  /*
+   * 静息不描边的选项（菜单项、色板格子）的 hover 底。同理：玻璃上必须加白，不能盖实心灰。
+   * 只管 hover，不给静息态任何底与边——这正是它和 `ui-glass-adaptive-control` 的分界。
+   * 调用点因此**不要**再写 `hover:bg-layer`：那是工具类，和这里同特异性但排在后面会赢，
+   * 玻璃上就又变回一块实心灰贴片。
+   */
+  .ui-glass-adaptive-option:hover:not(:disabled) {
+    background-color: rgb(var(--layer-rgb));
+  }
+
+  .ui-glass .ui-glass-adaptive-option:hover:not(:disabled) {
+    background-color: var(--ui-glass-hover);
   }
 
   /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */

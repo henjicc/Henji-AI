@@ -1,10 +1,10 @@
 import React from 'react'
 
 import Dropdown from '@/components/ui/Dropdown'
-import SectionCard from '../components/SectionCard'
+import { UiFormRow } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
 import { useSettingsStore, type LargeUploadStrategy } from '@/stores/settingsStore'
-import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS } from '@/components/ui'
 
 const STRATEGY_OPTIONS: LargeUploadStrategy[] = ['ask', 'copy', 'reference']
 
@@ -20,25 +20,21 @@ const LargeUploadSection: React.FC = () => {
   }))
 
   return (
-    <SectionCard
-      title={t('sections.largeUpload.title')}
-      description={t('sections.largeUpload.description')}
+    // 常驻说明：100MB 这个阈值决定了这个设置什么时候才生效，不看会以为它管所有上传
+    <UiFormRow
+      label={t('sections.largeUpload.strategyLabel')}
+      hint={t('sections.largeUpload.description')}
+      info={t('sections.largeUpload.hint')}
+      inline
     >
-      <div className="flex items-center justify-between gap-4">
-        <label className={UI_TEXT_LABEL_CLASS}>
-          {t('sections.largeUpload.strategyLabel')}
-        </label>
-        <Dropdown
-          value={strategy}
-          display={options.find((option) => option.value === strategy)?.label}
-          options={options}
-          onSelect={(value) => setStrategy(value as LargeUploadStrategy)}
-          className="w-44"
-          buttonClassName="h-[34px] w-full bg-surface-dark border-border-dark"
-        />
-      </div>
-      <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('sections.largeUpload.hint')}</p>
-    </SectionCard>
+      <Dropdown
+        value={strategy}
+        display={options.find((option) => option.value === strategy)?.label}
+        options={options}
+        onSelect={(value) => setStrategy(value as LargeUploadStrategy)}
+        className={SETTINGS_INLINE_CONTROL_CLASS}
+      />
+    </UiFormRow>
   )
 }
 
