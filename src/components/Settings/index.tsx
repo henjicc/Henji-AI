@@ -1,11 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { UI_TEXT_TITLE_CLASS, UiIconButton, UiModal, UiNavButton } from '@/components/ui'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
+  UI_GLASS_ADAPTIVE_REGION_CLASS,
+  UI_GLASS_ADAPTIVE_SURFACE_CLASS,
+  UI_TEXT_TITLE_CLASS,
+  UiIconButton,
+  UiModal,
+  UiNavButton,
+} from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
 import ApiKeysTab from './tabs/ApiKeysTab'
 import InterfaceTab from './tabs/InterfaceTab'
 import ModelsTab from './tabs/ModelsTab'
+import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
 import { useI18n } from '@/hooks/useI18n'
 import type { SettingsNavigationTarget, SettingsTabId } from '@/core/types/settingsNavigation'
 
@@ -43,6 +52,9 @@ const SECTION_MAP: Record<SettingsTab, SettingsSection[]> = {
   ]
 }
 
+/** 切换大类后，异步加载的分区（密钥状态、LLM 配置）会改变上方高度，需要补一次定位 */
+const DEEP_LINK_RESCROLL_MS = 320
+
 const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   const { t } = useI18n('settings')
   const initialTab: SettingsTab = target?.tab ?? 'general'
@@ -52,6 +64,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   )
   const [closing, setClosing] = useState(false)
   const contentRef = useRef<HTMLDivElement | null>(null)
+  // 切大类时要跳到的分节。跨大类点击目录时目标分节还没挂载，只能等这一帧渲染完再滚。
+  const pendingScrollRef = useRef<string | null>(target?.sectionId ?? null)
+  // 每次目录导航自增。延迟补位的定位只有在"期间没有更新的导航"时才允许生效，
+  // 否则用户刚点的目标会被上一次跳转的补位动作拽回去。
+  const navTokenRef = useRef(0)
 
   // 关闭分两步：先让 UiModal 播完淡出，再由 App 卸载本组件。
   // 等待时长必须跟着 UiModal 的过渡走，此前写死 300ms 比实际过渡长 120ms，
@@ -68,26 +85,54 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
     { id: 'models' as const, label: t('tabs.models.label'), icon: SlidersHorizontal, component: ModelsTab }
   ]
 
-  const ActiveTabComponent = tabs.find(t => t.id === activeTab)?.component
+  const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component
   const activeSections = SECTION_MAP[activeTab]
+  const activeSectionIds = useMemo(() => activeSections.map(section => section.id), [activeSections])
 
+  const { scrollToSection, tailSpacerHeight } = useSettingsScrollSpy({
+    containerRef: contentRef,
+    sectionIds: activeSectionIds,
+    onActiveSectionChange: setActiveSectionId,
+  })
+
+  // 切换大类后归位：有跨大类跳转目标就滚到目标，否则回到顶部。
+  //
+  // 这里刻意**不用 requestAnimationFrame 推迟**：新大类的 DOM 在本 effect 运行时已经提交，
+  // 同步就能量到位置。推迟一帧会和「用户紧接着点了同大类的另一个分节」撞车——
+  // 那次点击已经开始平滑滚动，随后补上的 scrollTop = 0 会把它拽回顶部（实测复现过）。
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      if (contentRef.current) {
-        contentRef.current.scrollTop = 0
+    const token = (navTokenRef.current += 1)
+    const pending = pendingScrollRef.current
+    pendingScrollRef.current = null
+    const container = contentRef.current
+    if (!container) return
+    if (!pending) {
+      container.scrollTop = 0
+      return
+    }
+    scrollToSection(pending, 'auto')
+    // 密钥状态、LLM 配置这类分区是异步加载的，落位后上方高度会变，补一次定位
+    const timer = window.setTimeout(() => {
+      if (navTokenRef.current === token) {
+        scrollToSection(pending, 'auto')
       }
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [activeTab, activeSectionId])
+    }, DEEP_LINK_RESCROLL_MS)
+    return () => window.clearTimeout(timer)
+  }, [activeTab, scrollToSection])
 
-  const handleTabSelect = (tabId: SettingsTab): void => {
-    setActiveTab(tabId)
-    setActiveSectionId(SECTION_MAP[tabId][0]?.id ?? '')
-  }
-
-  const handleSectionSelect = (sectionId: string): void => {
-    setActiveSectionId(sectionId)
-  }
+  const handleSectionSelect = useCallback(
+    (tabId: SettingsTab, sectionId: string): void => {
+      navTokenRef.current += 1
+      setActiveSectionId(sectionId)
+      if (tabId === activeTab) {
+        scrollToSection(sectionId)
+        return
+      }
+      pendingScrollRef.current = sectionId
+      setActiveTab(tabId)
+    },
+    [activeTab, scrollToSection]
+  )
 
   return (
     <UiModal
@@ -95,6 +140,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       title={t('title')}
       onClose={handleClose}
       hideHeader
+      // 设置弹窗铺满 90vw，背后压着的是画布/生成结果这类用户内容而不是纯色 UI，
+      // 所以整块走玻璃；内部区域、目录与中性控件由 UI_GLASS_ADAPTIVE_* 跟随开关退化。
+      surface="glass"
       // 只给内边距，不要在这里再铺一层底色：UiModal 内部已经有一层会做淡入淡出的
       // 遮罩，外层再叠 bg-black/70 会（1）把背景压到近 86% 黑，(2) 因为外层没有过渡，
       // 打开时先闪一帧纯黑、关闭时黑幕又突然消失。
@@ -102,11 +150,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       widthClassName="flex w-[min(90vw,1200px)] overflow-hidden"
       contentClassName="flex min-h-0 flex-1"
     >
+      {/* relative：让内容压在 .ui-glass::after 的噪点层同一层，避免文字被颗粒扰动 */}
       <div
-        className="flex w-full flex-col bg-app"
+        className={`relative flex w-full flex-col ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}
         style={{ height: 'calc(76vh - 72px)', minHeight: '440px', maxHeight: '868px' }}
       >
-        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border-dark px-4">
+        <div className={`flex h-14 shrink-0 items-center justify-between border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
           <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>
           <UiIconButton
             onClick={handleClose}
@@ -120,37 +169,45 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
         </div>
 
         <div className="flex min-h-0 flex-1">
+          {/*
+            常驻目录：所有大类的分节一直展开，不再「先点大类才看得到子项」。
+            它只负责定位，不再决定右侧渲染什么——右侧是当前大类的一整页内容。
+          */}
           <nav
             aria-label={t('title')}
-            className="ui-scrollbar w-52 shrink-0 overflow-y-auto border-r border-border-dark p-2"
+            className={`ui-scrollbar w-52 shrink-0 overflow-y-auto border-r p-2 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}
           >
             <div className="space-y-1">
               {tabs.map(tab => {
-                const expanded = activeTab === tab.id
+                const sections = SECTION_MAP[tab.id]
+                const isCurrentTab = activeTab === tab.id
+                // 只有一个分节的大类，大类本身就是叶子：再画一条只有一项的子列表是纯噪音
+                const isLeafGroup = sections.length <= 1
+                const firstSectionId = sections[0]?.id ?? ''
                 return (
                   <div key={tab.id}>
                     <UiNavButton
-                      aria-expanded={expanded}
-                      onClick={() => handleTabSelect(tab.id)}
-                      className={`!h-10 !rounded-lg !px-3 ${expanded ? '!text-text-dark' : ''}`}
+                      active={isLeafGroup && isCurrentTab}
+                      onClick={() => handleSectionSelect(tab.id, firstSectionId)}
+                      className={`!h-10 !rounded-lg !px-3 ${!isLeafGroup && isCurrentTab ? '!text-text-dark' : ''}`}
                     >
                       <tab.icon className="h-[18px] w-[18px] shrink-0" />
                       <span className="ml-2 text-left text-sm font-medium leading-none">{tab.label}</span>
                     </UiNavButton>
-                    {expanded ? (
+                    {isLeafGroup ? null : (
                       <div className="space-y-1 py-1">
-                        {activeSections.map(section => (
+                        {sections.map(section => (
                           <UiNavButton
                             key={section.id}
-                            active={activeSectionId === section.id}
-                            onClick={() => handleSectionSelect(section.id)}
+                            active={isCurrentTab && activeSectionId === section.id}
+                            onClick={() => handleSectionSelect(tab.id, section.id)}
                             className="!h-9 !rounded-lg !pl-11 !pr-3 text-sm"
                           >
                             {section.label}
                           </UiNavButton>
                         ))}
                       </div>
-                    ) : null}
+                    )}
                   </div>
                 )
               })}
@@ -158,7 +215,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
           </nav>
 
           <div ref={contentRef} className="settings-scroll-body min-w-0 flex-1 overflow-y-auto">
-            {ActiveTabComponent && <ActiveTabComponent sectionId={activeSectionId} />}
+            {ActiveTabComponent && <ActiveTabComponent />}
+            {/* 没有这段占位，最后一个分节永远滚不到顶，点目录最后一项会像「没反应」 */}
+            <div aria-hidden style={{ height: tailSpacerHeight }} />
           </div>
         </div>
       </div>

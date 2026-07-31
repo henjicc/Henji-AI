@@ -1,6 +1,8 @@
 import { createLogger } from '@/core/logging'
-import { UI_SECTION_STACK_CLASS } from '@/components/ui'
+import { UiRegion } from '@/components/ui'
 import React from 'react'
+import SettingsSection from '../components/SettingsSection'
+import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
 import { useSettings } from '../hooks/useSettings'
 import BottomPanelSection from '../sections/BottomPanelSection'
 import CanvasSection from '../sections/CanvasSection'
@@ -17,13 +19,8 @@ import {
 
 const logger = createLogger('components.Settings.tabs.InterfaceTab')
 
-interface InterfaceTabProps {
-  sectionId?: string
-}
-
-const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
+const InterfaceTab: React.FC = () => {
   const { settings, updateSetting } = useSettings()
-  const currentSectionId = sectionId ?? 'interface-layout'
   const themeTonePreset = useSettingsStore((state) => state.themeTonePreset)
   const uiRadiusPreset = useSettingsStore((state) => state.uiRadiusPreset)
   const accentColor = useSettingsStore((state) => state.accentColor)
@@ -80,49 +77,46 @@ const InterfaceTab: React.FC<InterfaceTabProps> = ({ sectionId }) => {
   }
 
   return (
-    <div className="p-4 space-y-5">
-      {currentSectionId === 'interface-layout' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <StartupSection />
-          <BottomPanelSection
-            enableAutoCollapse={settings.enableAutoCollapse}
-            collapseDelay={settings.collapseDelay}
-            collapseOnScrollOnly={settings.collapseOnScrollOnly}
-            onToggleAutoCollapse={(value) => updateSetting('enableAutoCollapse', value)}
-            onChangeDelay={(value) => updateSetting('collapseDelay', value)}
-            onToggleScrollOnly={(value) => updateSetting('collapseOnScrollOnly', value)}
-          />
-        </section>
-      )}
+    <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
+      <SettingsSection id="interface-layout">
+        <StartupSection />
+        <BottomPanelSection
+          enableAutoCollapse={settings.enableAutoCollapse}
+          collapseDelay={settings.collapseDelay}
+          collapseOnScrollOnly={settings.collapseOnScrollOnly}
+          onToggleAutoCollapse={(value) => updateSetting('enableAutoCollapse', value)}
+          onChangeDelay={(value) => updateSetting('collapseDelay', value)}
+          onToggleScrollOnly={(value) => updateSetting('collapseOnScrollOnly', value)}
+        />
+      </SettingsSection>
 
-      {currentSectionId === 'interface-canvas' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <CanvasSection />
-        </section>
-      )}
+      <SettingsSection id="interface-assets">
+        <AssetLibrarySection />
+      </SettingsSection>
 
-      {currentSectionId === 'interface-theme' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <ThemeSection
-            themeTonePreset={themeTonePreset}
-            uiRadiusPreset={uiRadiusPreset}
-            uiBlurEnabled={uiBlurEnabled}
-            accentColor={accentColor}
-            colors={themeColors}
-            onChangeThemeTone={setThemeTonePreset}
-            onChangeUiRadius={setUiRadiusPreset}
-            onChangeUiBlurEnabled={setUiBlurEnabled}
-            onChangeAccentColor={setAccentColor}
-            onChangeThemeColor={setThemeColor}
-            onApplyPalette={setThemeColors}
-            onResetThemeColors={resetThemeColors}
-            onExportTheme={handleExportTheme}
-            onImportTheme={handleImportTheme}
-          />
-        </section>
-      )}
-      {currentSectionId === 'interface-assets' && <section><AssetLibrarySection /></section>}
-    </div>
+      <SettingsSection id="interface-canvas">
+        <CanvasSection />
+      </SettingsSection>
+
+      <SettingsSection id="interface-theme">
+        <ThemeSection
+          themeTonePreset={themeTonePreset}
+          uiRadiusPreset={uiRadiusPreset}
+          uiBlurEnabled={uiBlurEnabled}
+          accentColor={accentColor}
+          colors={themeColors}
+          onChangeThemeTone={setThemeTonePreset}
+          onChangeUiRadius={setUiRadiusPreset}
+          onChangeUiBlurEnabled={setUiBlurEnabled}
+          onChangeAccentColor={setAccentColor}
+          onChangeThemeColor={setThemeColor}
+          onApplyPalette={setThemeColors}
+          onResetThemeColors={resetThemeColors}
+          onExportTheme={handleExportTheme}
+          onImportTheme={handleImportTheme}
+        />
+      </SettingsSection>
+    </UiRegion>
   )
 }
 

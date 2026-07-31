@@ -19,6 +19,18 @@ interface UiModalProps {
   contentClassName?: string;
   hideHeader?: boolean;
   overlayClassName?: string;
+  /**
+   * 弹窗自身的表面材质。
+   *
+   * `panel`（默认）：不透明面板。压在应用自身纯色 UI 上的弹窗都用这档——
+   * 背后只有一片纯色，模糊它没有任何视觉收益，只多一个合成层。
+   *
+   * `glass`：整块弹窗一层玻璃。只有**铺得够大、背后压着画布/图片/视频等
+   * 不可预测内容**的弹窗才有资格用；内部的区域、侧栏、中性控件请配合
+   * `UI_GLASS_ADAPTIVE_*` 系列类，这样毛玻璃开关关掉时会整体退回实底。
+   * 选这档会同时把遮罩换成 soft 档，否则遮罩与玻璃 tint 相乘会把背景压死。
+   */
+  surface?: 'panel' | 'glass';
 }
 
 export function UiModal({
@@ -32,7 +44,9 @@ export function UiModal({
   contentClassName = 'px-4 py-4',
   hideHeader = false,
   overlayClassName = '',
+  surface = 'panel',
 }: UiModalProps): JSX.Element | null {
+  const isGlass = surface === 'glass';
   const { shouldRender, isVisible } = useDialogTransition(isOpen, UI_DIALOG_TRANSITION_MS);
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -64,10 +78,11 @@ export function UiModal({
       className={`fixed ${UI_CONTENT_OVERLAY_INSET_CLASS} z-modal flex items-center justify-center outline-none ${overlayClassName}`}
     >
       <div
-        className={`ui-glass-scrim absolute inset-0 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
+        className={`ui-glass-scrim ${isGlass ? 'ui-glass-scrim-soft' : ''} absolute inset-0 transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'}`}
         onClick={onClose}
       />
       <UiPanel
+        variant={isGlass ? 'glass' : 'panel'}
         className={`relative transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${widthClassName}`}
       >
         {!hideHeader && (

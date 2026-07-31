@@ -1,5 +1,7 @@
 import React from 'react'
-import { UI_SECTION_STACK_CLASS } from '@/components/ui'
+import { UiRegion } from '@/components/ui'
+import SettingsSection from '../components/SettingsSection'
+import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
 import { useSettings } from '../hooks/useSettings'
 import LanguageSection from '../sections/LanguageSection'
 import HistorySection from '../sections/HistorySection'
@@ -11,72 +13,59 @@ import DownloadSection from '../sections/DownloadSection'
 import PromptOptimizationSection from '../sections/PromptOptimizationSection'
 import UpdateSection from '../sections/UpdateSection'
 
-interface GeneralTabProps {
-  sectionId?: string
-}
-
-const GeneralTab: React.FC<GeneralTabProps> = ({ sectionId }) => {
+const GeneralTab: React.FC = () => {
   const { settings, updateSetting } = useSettings()
-  const currentSectionId = sectionId ?? 'general-basic'
 
   return (
-    <div className="p-4 space-y-5">
-      {currentSectionId === 'general-basic' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <LanguageSection />
-          <HistorySection
-            maxHistoryCount={settings.maxHistoryCount}
-            onChange={(value) => updateSetting('maxHistoryCount', value)}
-          />
-        </section>
-      )}
+    <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
+      <SettingsSection id="general-basic">
+        <LanguageSection />
+        <HistorySection
+          maxHistoryCount={settings.maxHistoryCount}
+          onChange={(value) => updateSetting('maxHistoryCount', value)}
+        />
+      </SettingsSection>
 
-      {currentSectionId === 'general-storage' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <DataPathSection />
-          <LargeUploadSection />
-          <DownloadSection
-            enableQuickDownload={settings.enableQuickDownload}
-            quickDownloadButtonOnly={settings.quickDownloadButtonOnly}
-            quickDownloadPath={settings.quickDownloadPath}
-            onToggleQuickDownload={(value) => updateSetting('enableQuickDownload', value)}
-            onToggleButtonOnly={(value) => updateSetting('quickDownloadButtonOnly', value)}
-            onChangePath={(value) => updateSetting('quickDownloadPath', value)}
-          />
-        </section>
-      )}
+      <SettingsSection id="general-storage">
+        <DataPathSection />
+        <LargeUploadSection />
+        <DownloadSection
+          enableQuickDownload={settings.enableQuickDownload}
+          quickDownloadButtonOnly={settings.quickDownloadButtonOnly}
+          quickDownloadPath={settings.quickDownloadPath}
+          onToggleQuickDownload={(value) => updateSetting('enableQuickDownload', value)}
+          onToggleButtonOnly={(value) => updateSetting('quickDownloadButtonOnly', value)}
+          onChangePath={(value) => updateSetting('quickDownloadPath', value)}
+        />
+      </SettingsSection>
 
-      {currentSectionId === 'general-behavior' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <ConcurrencySection
-            maxConcurrentTasks={settings.maxConcurrentTasks}
-            onChange={(value) => updateSetting('maxConcurrentTasks', value)}
-          />
-          <DisplaySection
-            showPriceEstimate={settings.showPriceEstimate}
-            priceEstimateCurrencyMode={settings.priceEstimateCurrencyMode}
-            usdToCnyRate={settings.usdToCnyRate}
-            enableAutoFocusModelSearch={settings.enableAutoFocusModelSearch}
-            onToggleShowPrice={(value) => updateSetting('showPriceEstimate', value)}
-            onChangePriceEstimateCurrencyMode={(value) =>
-              updateSetting('priceEstimateCurrencyMode', value)
-            }
-            onChangeUsdToCnyRate={(value) => updateSetting('usdToCnyRate', value)}
-            onToggleAutoFocus={(value) => updateSetting('enableAutoFocusModelSearch', value)}
-          />
-          <PromptOptimizationSection
-            behavior={settings.promptOptimizationButtonBehavior}
-            onChangeBehavior={(value) => updateSetting('promptOptimizationButtonBehavior', value)}
-          />
-        </section>
-      )}
+      <SettingsSection id="general-behavior">
+        <ConcurrencySection
+          maxConcurrentTasks={settings.maxConcurrentTasks}
+          onChange={(value) => updateSetting('maxConcurrentTasks', value)}
+        />
+        <DisplaySection
+          showPriceEstimate={settings.showPriceEstimate}
+          priceEstimateCurrencyMode={settings.priceEstimateCurrencyMode}
+          usdToCnyRate={settings.usdToCnyRate}
+          enableAutoFocusModelSearch={settings.enableAutoFocusModelSearch}
+          onToggleShowPrice={(value) => updateSetting('showPriceEstimate', value)}
+          onChangePriceEstimateCurrencyMode={(value) =>
+            updateSetting('priceEstimateCurrencyMode', value)
+          }
+          onChangeUsdToCnyRate={(value) => updateSetting('usdToCnyRate', value)}
+          onToggleAutoFocus={(value) => updateSetting('enableAutoFocusModelSearch', value)}
+        />
+        <PromptOptimizationSection
+          behavior={settings.promptOptimizationButtonBehavior}
+          onChangeBehavior={(value) => updateSetting('promptOptimizationButtonBehavior', value)}
+        />
+      </SettingsSection>
 
-      {currentSectionId === 'general-maintenance' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <UpdateSection />
-        </section>
-      )}
-    </div>
+      <SettingsSection id="general-maintenance">
+        <UpdateSection />
+      </SettingsSection>
+    </UiRegion>
   )
 }
 

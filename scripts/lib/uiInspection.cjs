@@ -2,6 +2,8 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp, waitForApp } = require('./electronLaunch.cjs')
 
+const WINDOW_SIZE_TOLERANCE_PX = 2
+
 const DEFAULT_WINDOW_SIZES = Object.freeze([
   Object.freeze({ width: 1440, height: 900 }),
   Object.freeze({ width: 960, height: 640 }),
@@ -254,8 +256,8 @@ const UI_INSPECTION_SCENES = Object.freeze([
     name: '设置-模型显示管理',
     setup: async (page) => {
       await setupSettings(page)
+      // 模型大类只有一个分节，目录里不再单独画「显示与管理」子项，点大类本身即可
       await clickNamedButton(page, /^(模型|Models)$/i)
-      await clickNamedButton(page, /^显示与管理$/)
       await settlePage(page)
     },
   },
@@ -346,7 +348,14 @@ async function setInspectionWindowSize(app, size) {
     windowHandle.center()
   }, size)
   const actualSize = await browserWindow.evaluate((windowHandle) => windowHandle.getSize())
-  if (actualSize[0] !== size.width || actualSize[1] !== size.height) {
+  // 允许 ±2px：Windows 上无边框但保留 thickFrame 的窗口会带一圈不可见的缩放边，
+  // 分数 DPI 缩放（125% / 150%）下 setSize 之后 getSize 稳定回 +1~+2。
+  // 这是操作系统调整的结果，不是设置失败；严格相等会让整套巡检在这类机器上完全跑不起来。
+  // 容差不能再放大：真正的"尺寸没设上"（比如漏了 unmaximize）差值是几百像素级别。
+  if (
+    Math.abs(actualSize[0] - size.width) > WINDOW_SIZE_TOLERANCE_PX ||
+    Math.abs(actualSize[1] - size.height) > WINDOW_SIZE_TOLERANCE_PX
+  ) {
     throw new Error(`窗口尺寸设置失败：期望 ${formatWindowSize(size)}，实际 ${actualSize.join('x')}`)
   }
   await settlePage(app.page, 450)

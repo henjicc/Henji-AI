@@ -80,6 +80,15 @@
   /* 弹窗遮罩用更浅的一档：它覆盖整个视口，半径给太大既糊又贵 */
   --ui-scrim-blur: 10px;
   --ui-scrim-tint: rgb(0 0 0 / 0.42);
+  /*
+   * 弹窗**自身**是玻璃时用的遮罩档位。
+   *
+   * 遮罩与玻璃 tint 是相乘的：0.42 的遮罩叠 0.66 的玻璃，背后内容只剩
+   * (1-0.42)×(1-0.66) ≈ 20% 透光率——玻璃看起来只会更脏，不会更通透。
+   * 所以走 `surface="glass"` 的弹窗必须换用这一档，两件事不能分开做。
+   * 关闭毛玻璃后弹窗恢复实底，遮罩也就没有让路的必要，回到常规强度。
+   */
+  --ui-scrim-tint-soft: rgb(0 0 0 / 0.2);
   --accent-rgb: 59 130 246;
   --app-rgb: 10 10 10;
   --canvas-rgb: 10 10 10;
@@ -174,6 +183,8 @@
   --ui-glass-control-hover: rgb(var(--layer-rgb) / 1);
   --ui-scrim-blur: 0px;
   --ui-scrim-tint: rgb(0 0 0 / 0.55);
+  /* 弹窗已经退化成实底，遮罩不需要再为透光让路 */
+  --ui-scrim-tint-soft: rgb(0 0 0 / 0.55);
 }
 
 /*
@@ -312,11 +323,32 @@
     border-color: var(--ui-glass-surface-divider);
   }
 
+  /*
+   * 纵向导航项的静息 hover。
+   *
+   * 之所以不能在调用点写 `hover:bg-surface-dark`：surface 是不透明的 rgb(23 23 23)，
+   * 压在玻璃上会变成一块实心灰贴片，把底下的内容整块糊掉（和 UI_GLASS_ITEM_HOVER_CLASS
+   * 注释里记的是同一个坑）。玻璃上的层次只能靠加白。
+   * 这里把两种语境合成一个类，由 UiNavButton 统一消费，调用点不用判断自己在不在玻璃里。
+   */
+  .ui-glass-adaptive-nav:hover:not(:disabled) {
+    background-color: rgb(var(--surface-rgb));
+  }
+
+  .ui-glass .ui-glass-adaptive-nav:hover:not(:disabled) {
+    background-color: var(--ui-glass-control-hover);
+  }
+
   /* 弹窗遮罩：整屏覆盖，用更浅的模糊档位 */
   .ui-glass-scrim {
     background-color: var(--ui-scrim-tint);
     -webkit-backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
     backdrop-filter: blur(var(--ui-scrim-blur)) saturate(130%);
+  }
+
+  /* 弹窗自身是玻璃时的遮罩档位，见 --ui-scrim-tint-soft 处的说明 */
+  .ui-glass-scrim.ui-glass-scrim-soft {
+    background-color: var(--ui-scrim-tint-soft);
   }
 
   /*
@@ -542,6 +574,12 @@ body,
 .settings-scroll-body {
   padding: 0;
   scrollbar-gutter: stable both-edges;
+  /*
+   * 左侧目录点击后用锚点滚动定位，分节标题要停在内容区顶部而不是贴着边。
+   * 这个值必须和 useSettingsScrollSpy 的 SECTION_ANCHOR_OFFSET 保持一致，
+   * 否则「点击停下的位置」和「滚动时判定的当前分节」会差一截，高亮跟着抖。
+   */
+  scroll-padding-top: 16px;
 }
 
 /* 脉动缩放动画 - 用于强调按钮 */

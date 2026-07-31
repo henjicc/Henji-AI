@@ -17,6 +17,7 @@ import {
   UI_FIELD_FOCUS_CLASS,
   UI_FIELD_SURFACE_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
+  UI_GLASS_ADAPTIVE_NAV_CLASS,
   UI_INSET_SURFACE_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
@@ -172,7 +173,7 @@ export const UiNavButton = forwardRef<HTMLButtonElement, UiNavButtonProps>(
       className={`relative inline-flex h-14 w-full items-center gap-1.5 rounded-none border-0 px-4 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${
         active
           ? `${UI_NAV_ITEM_ACTIVE_CLASS} ${UI_NAV_INDICATOR_END_CLASS}`
-          : 'text-text-muted hover:bg-surface-dark hover:text-text-dark'
+          : `${UI_GLASS_ADAPTIVE_NAV_CLASS} text-text-muted hover:text-text-dark`
       } ${className}`}
       {...props}
     />

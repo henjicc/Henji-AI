@@ -202,6 +202,12 @@ export const UI_GLASS_ADAPTIVE_SURFACE_CLASS = 'ui-glass-adaptive-surface';
 /** 玻璃内部的材质分隔线；关闭毛玻璃时恢复为语义边框色。 */
 export const UI_GLASS_ADAPTIVE_DIVIDER_CLASS = 'ui-glass-adaptive-divider';
 
+/**
+ * 纵向导航项静息态的 hover 底。由 `UiNavButton` 统一消费，调用点不需要自己判断
+ * 当前导航在不在玻璃里——普通面板中是 surface 实底，玻璃里自动换成白纱。
+ */
+export const UI_GLASS_ADAPTIVE_NAV_CLASS = 'ui-glass-adaptive-nav';
+
 export const UI_OPTION_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_SOFT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS} text-white`;
 

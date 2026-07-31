@@ -1,9 +1,11 @@
 import React from 'react'
-import { UI_SECTION_STACK_CLASS, UI_TEXT_BODY_CLASS, UiButton } from '@/components/ui'
+import { UI_TEXT_BODY_CLASS, UiButton, UiRegion } from '@/components/ui'
 import { useApiKeys } from '../hooks/useApiKeys'
 import ApiKeyInput from '../components/ApiKeyInput'
 import { useI18n } from '@/hooks/useI18n'
 import SectionCard from '../components/SectionCard'
+import SettingsSection from '../components/SettingsSection'
+import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
 import UploadSection from '../sections/UploadSection'
 import LlmSettingsSection from '../sections/LlmSettingsSection'
 import AgentUserInstructionsSection from '../sections/AgentUserInstructionsSection'
@@ -12,10 +14,6 @@ import { useExternalLink } from '../hooks/useExternalLink'
 import { ExternalLink } from 'lucide-react'
 import type { ProviderLink } from '@/core/config/providers'
 import { detectShell } from '@/platform/runtime'
-
-interface ApiKeysTabProps {
-  sectionId?: string
-}
 
 const GUIDE_PLACEHOLDER_PATTERN = /(\{\{[a-z0-9_-]+\}\})/gi
 
@@ -54,73 +52,61 @@ function renderGuideParts(
   })
 }
 
-const ApiKeysTab: React.FC<ApiKeysTabProps> = ({ sectionId }) => {
+const ApiKeysTab: React.FC = () => {
   const { t } = useI18n('settings')
   const { openExternal } = useExternalLink()
   const { keys, visibility, updateKey, toggleVisibility } = useApiKeys()
-  const currentSectionId = sectionId ?? 'api-keys'
   const showKeyMigrationHint = detectShell() === 'electron'
 
   return (
-    <div className="p-4 space-y-5">
+    <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
       {showKeyMigrationHint ? (
         <p className={`rounded-lg border border-border-dark bg-layer px-3 py-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>
           {t('apiKeys.migrationHint')}
         </p>
       ) : null}
 
-      {currentSectionId === 'api-keys' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          {API_KEY_PROVIDERS.map(provider => {
-            const placeholder = t(`apiKeys.providers.${provider.id}.placeholder`)
-            const title = t(`apiKeys.providers.${provider.id}.title`)
-            const guide = t(`apiKeys.providers.${provider.id}.guide`)
-            const linkLabels = Object.fromEntries(
-              provider.links.map(link => [link.id, t(`apiKeys.providers.${provider.id}.links.${link.id}`)])
-            )
-            return (
-              <SectionCard
-                key={provider.id}
-                title={title}
-              >
-                <ApiKeyInput
-                  value={keys[provider.id]}
-                  visible={visibility[provider.id]}
-                  onChange={(value) => updateKey(provider.id, value)}
-                  onToggleVisibility={() => toggleVisibility(provider.id)}
-                  placeholder={placeholder}
-                  showLabel={t('apiKeys.visibility.show')}
-                  hideLabel={t('apiKeys.visibility.hide')}
-                />
-                {provider.links.length > 0 ? (
-                  <p className={`leading-6 ${UI_TEXT_BODY_CLASS}`}>
-                    {renderGuideParts(guide, provider.links, linkLabels, openExternal)}
-                  </p>
-                ) : null}
-              </SectionCard>
-            )
-          })}
-        </section>
-      )}
+      <SettingsSection id="api-keys">
+        {API_KEY_PROVIDERS.map(provider => {
+          const placeholder = t(`apiKeys.providers.${provider.id}.placeholder`)
+          const title = t(`apiKeys.providers.${provider.id}.title`)
+          const guide = t(`apiKeys.providers.${provider.id}.guide`)
+          const linkLabels = Object.fromEntries(
+            provider.links.map(link => [link.id, t(`apiKeys.providers.${provider.id}.links.${link.id}`)])
+          )
+          return (
+            <SectionCard key={provider.id} title={title}>
+              <ApiKeyInput
+                value={keys[provider.id]}
+                visible={visibility[provider.id]}
+                onChange={(value) => updateKey(provider.id, value)}
+                onToggleVisibility={() => toggleVisibility(provider.id)}
+                placeholder={placeholder}
+                showLabel={t('apiKeys.visibility.show')}
+                hideLabel={t('apiKeys.visibility.hide')}
+              />
+              {provider.links.length > 0 ? (
+                <p className={`leading-6 ${UI_TEXT_BODY_CLASS}`}>
+                  {renderGuideParts(guide, provider.links, linkLabels, openExternal)}
+                </p>
+              ) : null}
+            </SectionCard>
+          )
+        })}
+      </SettingsSection>
 
-      {currentSectionId === 'api-upload' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <UploadSection />
-        </section>
-      )}
+      <SettingsSection id="api-upload">
+        <UploadSection />
+      </SettingsSection>
 
-      {currentSectionId === 'api-llm' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <LlmSettingsSection />
-        </section>
-      )}
+      <SettingsSection id="api-llm">
+        <LlmSettingsSection />
+      </SettingsSection>
 
-      {currentSectionId === 'api-agent-preferences' && (
-        <section className={UI_SECTION_STACK_CLASS}>
-          <AgentUserInstructionsSection />
-        </section>
-      )}
-    </div>
+      <SettingsSection id="api-agent-preferences">
+        <AgentUserInstructionsSection />
+      </SettingsSection>
+    </UiRegion>
   )
 }
 
