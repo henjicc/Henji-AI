@@ -1,0 +1,130 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const mocks = vi.hoisted(() => ({
+  openCanvasProjectWithSummaryFromAgent: vi.fn(),
+  createCanvasProjectFromAgent: vi.fn(),
+  focusCanvasNodeFromAgent: vi.fn(),
+  openApplicationSurface: vi.fn(),
+}))
+
+vi.mock('@/features/canvas/domain/agentCanvasCatalog', () => ({
+  AGENT_CANVAS_CATALOG_VERSION: 'test-catalog',
+  getAgentCanvasNodeSchema: vi.fn(),
+  searchAgentCanvasNodeTypes: vi.fn(() => []),
+}))
+vi.mock('@/features/canvas/application/agentCanvasActions', () => ({
+  addCanvasNodeFromAgent: vi.fn(),
+  connectCanvasNodesFromAgent: vi.fn(),
+  focusCanvasNodeFromAgent: mocks.focusCanvasNodeFromAgent,
+  undoCanvasChangeFromAgent: vi.fn(),
+}))
+vi.mock('@/features/canvas/application/agentCanvasBatch', () => ({
+  commitCanvasBatchFromAgent: vi.fn(),
+  planCanvasBatchFromAgent: vi.fn(),
+  previewCanvasBatchFromAgent: vi.fn(),
+}))
+vi.mock('@/features/canvas/application/agentCanvasProjects', () => ({
+  closeCanvasProjectFromAgent: vi.fn(),
+  createCanvasProjectFromAgent: mocks.createCanvasProjectFromAgent,
+  deleteCanvasProjectFromAgent: vi.fn(),
+  openCanvasProjectWithSummaryFromAgent: mocks.openCanvasProjectWithSummaryFromAgent,
+  renameCanvasProjectFromAgent: vi.fn(),
+}))
+vi.mock('@/features/canvas/application/agentCanvasMutations', () => ({
+  deleteCanvasNodesFromAgent: vi.fn(),
+  disconnectCanvasEdgeFromAgent: vi.fn(),
+  duplicateCanvasNodeFromAgent: vi.fn(),
+  groupCanvasNodesFromAgent: vi.fn(),
+  selectCanvasNodeFromAgent: vi.fn(),
+  updateCanvasNodeFromAgent: vi.fn(),
+}))
+vi.mock('@/features/canvas/application/agentCanvasQueries', () => ({
+  getCanvasNodeFromAgent: vi.fn(),
+  getCanvasProjectFromAgent: vi.fn(),
+  listCanvasProjectSummariesFromAgent: vi.fn(),
+}))
+vi.mock('@/features/assistant/hostActions', () => ({ addAssetToCanvasFromAgent: vi.fn() }))
+vi.mock('../hostContext/hostContext', () => ({
+  createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),
+}))
+vi.mock('./surfaceRegistry', () => ({ openApplicationSurface: mocks.openApplicationSurface }))
+
+import type { CapabilityHandler } from './handlerTypes'
+import { registerCanvasCapabilityHandlers } from './registerCanvasCapabilityHandlers'
+
+const context = { signal: new AbortController().signal }
+
+function registeredHandlers(): Map<string, CapabilityHandler> {
+  const handlers = new Map<string, CapabilityHandler>()
+  registerCanvasCapabilityHandlers({
+    registerHandler: (id, handler) => handlers.set(id, handler),
+  })
+  return handlers
+}
+
+describe('canvas capability handlers', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.openApplicationSurface.mockImplementation((surfaceId: string) => ({ surfaceId }))
+  })
+
+  it('打开画布项目成功后才进入画布 Surface', async () => {
+    mocks.openCanvasProjectWithSummaryFromAgent.mockResolvedValue({
+      projectId: 'project-1',
+      name: '项目一',
+      nodeCount: 2,
+    })
+    const handler = registeredHandlers().get('open_canvas_project')
+
+    const result = await handler?.({ projectId: 'project-1' }, context)
+
+    expect(result).toMatchObject({ projectId: 'project-1', surfaceId: 'workspace.canvas' })
+    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas', context)
+    expect(
+      mocks.openCanvasProjectWithSummaryFromAgent.mock.invocationCallOrder[0]
+    ).toBeLessThan(mocks.openApplicationSurface.mock.invocationCallOrder[0])
+  })
+
+  it('创建画布项目不切换当前界面', async () => {
+    mocks.createCanvasProjectFromAgent.mockResolvedValue({
+      projectId: 'project-created',
+      name: '后台画布',
+    })
+    const handler = registeredHandlers().get('create_canvas_project')
+
+    const result = await handler?.({ name: '后台画布' }, context)
+
+    expect(result).toMatchObject({ projectId: 'project-created' })
+    expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
+  })
+
+  it('定位节点时自动载入目标项目、打开画布后再聚焦', async () => {
+    mocks.openCanvasProjectWithSummaryFromAgent.mockResolvedValue({
+      projectId: 'project-2',
+      name: '项目二',
+      nodeCount: 1,
+    })
+    mocks.focusCanvasNodeFromAgent.mockResolvedValue({
+      projectId: 'project-2',
+      nodeId: 'node-1',
+      focused: true,
+    })
+    const handler = registeredHandlers().get('focus_canvas_node')
+
+    const result = await handler?.({ projectId: 'project-2', nodeId: 'node-1' }, context)
+
+    expect(result).toMatchObject({
+      projectId: 'project-2',
+      nodeId: 'node-1',
+      focused: true,
+      surfaceId: 'workspace.canvas',
+    })
+    expect(mocks.openApplicationSurface).toHaveBeenCalledWith('workspace.canvas', context)
+    expect(
+      mocks.openCanvasProjectWithSummaryFromAgent.mock.invocationCallOrder[0]
+    ).toBeLessThan(mocks.focusCanvasNodeFromAgent.mock.invocationCallOrder[0])
+    expect(
+      mocks.openApplicationSurface.mock.invocationCallOrder[0]
+    ).toBeLessThan(mocks.focusCanvasNodeFromAgent.mock.invocationCallOrder[0])
+  })
+})

@@ -24,6 +24,8 @@ interface AgentToolExecutionCoordinatorOptions {
   throwIfCancelled: () => void
   recordToolCall: (signature: string) => void
   recordProgress: (signature: string) => void
+  recordFailure: () => void
+  recordSuccess: () => void
   setActiveToolCall: (toolCallId: string | null) => void
   requestApproval: (
     call: ModelStepToolCall,
@@ -57,6 +59,8 @@ export class AgentToolExecutionCoordinator {
       throwIfCancelled: this.options.throwIfCancelled,
       recordToolCall: this.options.recordToolCall,
       recordProgress: this.options.recordProgress,
+      recordFailure: this.options.recordFailure,
+      recordSuccess: this.options.recordSuccess,
       setActiveToolCall: this.options.setActiveToolCall,
       requestApproval: this.options.requestApproval,
       onObservation: this.options.onObservation,

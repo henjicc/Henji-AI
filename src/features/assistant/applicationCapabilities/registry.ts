@@ -124,9 +124,9 @@ function registerBuiltins(): void {
       revision: snapshot.revision,
     }
   })
-  registry.registerHandler(openApplicationSurfaceCapability.id, (input) => {
+  registry.registerHandler(openApplicationSurfaceCapability.id, (input, context) => {
     const parsed = openApplicationSurfaceCapability.inputSchema.parse(input)
-    return openApplicationSurface(parsed.surfaceId)
+    return openApplicationSurface(parsed.surfaceId, context)
   })
   registry.registerHandler(closeApplicationSurfaceCapability.id, (input) => {
     const parsed = closeApplicationSurfaceCapability.inputSchema.parse(input)
@@ -134,7 +134,7 @@ function registerBuiltins(): void {
   })
   registry.registerHandler(focusApplicationEntityCapability.id, async (input, context) => {
     const parsed = focusApplicationEntityCapability.inputSchema.parse(input)
-    return await focusApplicationEntity(parsed.ref, context.signal)
+    return await focusApplicationEntity(parsed.ref, context.signal, context)
   })
   registry.registerHandler(searchApplicationSettingsCapability.id, (input) => {
     const parsed = searchApplicationSettingsCapability.inputSchema.parse(input)
@@ -161,13 +161,13 @@ function registerBuiltins(): void {
     const parsed = listGenerationHistoryCapability.inputSchema.parse(input)
     return await listGenerationHistory(parsed)
   })
-  registry.registerHandler(openImageEditorWithSourceCapability.id, async (input) => {
+  registry.registerHandler(openImageEditorWithSourceCapability.id, async (input, context) => {
     const parsed = openImageEditorWithSourceCapability.inputSchema.parse(input)
-    return await openImageEditorWithSource(parsed.sourceRef)
+    return await openImageEditorWithSource(parsed.sourceRef, context)
   })
-  registry.registerHandler(createImageEditPreviewFromRefCapability.id, async (input) => {
+  registry.registerHandler(createImageEditPreviewFromRefCapability.id, async (input, context) => {
     const parsed = createImageEditPreviewFromRefCapability.inputSchema.parse(input)
-    return await createImageEditPreviewFromRef(parsed)
+    return await createImageEditPreviewFromRef(parsed, context)
   })
 }
 
@@ -246,17 +246,21 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
 
 export async function executeApplicationCapabilityResult(
   invocation: ApplicationCapabilityInvocation,
-  signal: AbortSignal
+  context: CapabilityExecutionContext
 ): Promise<ApplicationCapabilityResult> {
   logger.info('capability.execute.start', {
     event: 'assistant.capability.execute.start',
+    requestId: context.requestId,
+    taskId: context.taskId,
     capabilityId: invocation.id,
   })
   try {
-    const data = await registry.execute(invocation, { signal })
+    const data = await registry.execute(invocation, context)
     const snapshot = createHostContextSnapshot()
     logger.info('capability.execute.completed', {
       event: 'assistant.capability.execute.completed',
+      requestId: context.requestId,
+      taskId: context.taskId,
       capabilityId: invocation.id,
       surface: snapshot.surface?.id,
     })
@@ -269,6 +273,8 @@ export async function executeApplicationCapabilityResult(
   } catch (error) {
     logger.error('capability.execute.failed', error, {
       event: 'assistant.capability.execute.failed',
+      requestId: context.requestId,
+      taskId: context.taskId,
       capabilityId: invocation.id,
     })
     return toFailure(error)

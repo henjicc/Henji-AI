@@ -37,11 +37,14 @@ export function serializeError(error: unknown): SerializedAgentError {
     }
   }
   const message = error instanceof Error ? error.message.replace(/^\[[^\]]+\]\s*/, '') : 'Agent 运行失败'
+  const stoppedByPolicy = error instanceof AgentBudgetExceededError
   return {
     code,
     message: message.slice(0, 1_000) || 'Agent 运行失败',
     retryable: error instanceof AgentToolGatewayError ? error.retryable : false,
-    recovery: error instanceof AgentToolGatewayError ? error.recovery : 'none',
+    recovery: error instanceof AgentToolGatewayError
+      ? error.recovery
+      : stoppedByPolicy ? 'user_action' : 'none',
   }
 }
 
@@ -92,7 +95,7 @@ export function extractResultReferences(output: unknown): Record<string, string>
   const record = output as Record<string, unknown>
   const references: Record<string, string> = {}
   const referenceKeys = [
-    'taskId', 'projectId', 'nodeId', 'edgeId', 'undoRef', 'workspace', 'workspaceId', 'modelId',
+    'taskId', 'projectId', 'nodeId', 'edgeId', 'undoRef', 'workspace', 'workspaceId', 'surfaceId', 'modelId',
     'assetId', 'libraryId', 'previewRef', 'objectId', 'shotId', 'workflowId', 'workflowRunId',
   ] as const
   for (const key of referenceKeys) {

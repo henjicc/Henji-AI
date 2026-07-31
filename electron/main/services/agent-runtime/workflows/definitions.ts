@@ -99,13 +99,6 @@ function modelToCanvasSteps(raw: Record<string, unknown>): WorkflowStep[] {
       scopes: ['generation'],
     },
     {
-      id: 'switch-canvas',
-      title: '进入画布工作区',
-      toolName: 'switch_workspace',
-      input: { workspaceId: 'nodes' },
-      scopes: ['navigation'],
-    },
-    {
       id: 'open-canvas',
       title: '打开目标画布项目',
       toolName: 'open_canvas_project',
@@ -141,13 +134,6 @@ function assetEditToCanvasSteps(raw: Record<string, unknown>): WorkflowStep[] {
       scopes: ['assets'],
     },
     {
-      id: 'open-image-editor',
-      title: '打开图片编辑工具',
-      toolName: 'select_toolbox_tool',
-      input: { toolId: 'imageMark' },
-      scopes: ['toolbox'],
-    },
-    {
       id: 'create-edit-preview',
       title: '生成非破坏编辑预览',
       toolName: 'create_image_edit_preview',
@@ -160,13 +146,6 @@ function assetEditToCanvasSteps(raw: Record<string, unknown>): WorkflowStep[] {
       toolName: 'commit_image_edit',
       input: { previewRef: '__from_previous:create-edit-preview', displayName: params.displayName },
       scopes: ['toolbox', 'assets'],
-    },
-    {
-      id: 'switch-canvas',
-      title: '进入画布工作区',
-      toolName: 'switch_workspace',
-      input: { workspaceId: 'nodes' },
-      scopes: ['navigation'],
     },
     {
       id: 'open-canvas',
@@ -199,7 +178,7 @@ function cameraShotToCanvasSteps(raw: Record<string, unknown>): WorkflowStep[] {
       title: '打开 3D 运镜工程',
       toolName: 'open_camera_stage_project',
       input: { projectId: params.cameraStageProjectId },
-      scopes: ['toolbox'],
+      scopes: ['navigation', 'toolbox'],
     },
     {
       id: 'add-shot',
@@ -209,13 +188,6 @@ function cameraShotToCanvasSteps(raw: Record<string, unknown>): WorkflowStep[] {
       scopes: ['toolbox'],
     },
     ...generationSteps,
-    {
-      id: 'switch-canvas',
-      title: '进入画布工作区',
-      toolName: 'switch_workspace',
-      input: { workspaceId: 'nodes' },
-      scopes: ['navigation'],
-    },
     {
       id: 'open-canvas',
       title: '打开目标画布项目',

@@ -40,6 +40,8 @@ export interface AgentToolCallSchedulerOptions {
   throwIfCancelled: () => void
   recordToolCall: (signature: string) => void
   recordProgress: (signature: string) => void
+  recordFailure?: () => void
+  recordSuccess?: () => void
   setActiveToolCall: (toolCallId: string | null) => void
   requestApproval: (call: ModelStepToolCall, approval: AgentApprovalRequest) => Promise<ApprovalDecision>
   onObservation: (call: ModelStepToolCall, observation: AgentToolObservation) => void
@@ -253,6 +255,7 @@ export class AgentToolCallScheduler {
         readOnly: metadata?.readOnly,
         idempotent: metadata?.idempotent,
       })
+      this.options.recordFailure?.()
       return
     }
     const discovered = this.options.catalogPlanner.rememberDiscovered(
@@ -277,5 +280,6 @@ export class AgentToolCallScheduler {
       artifactRef: outcome.observation.artifactRef,
       resultReferences: extractResultReferences(outcome.observation.output),
     })
+    this.options.recordSuccess?.()
   }
 }

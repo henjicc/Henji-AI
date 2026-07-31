@@ -1,5 +1,7 @@
 export interface CapabilityExecutionContext {
   signal: AbortSignal
+  requestId?: string
+  taskId?: string
 }
 
 export type CapabilityHandler = (

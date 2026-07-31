@@ -3,8 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   database,
   offerImageEditorHandoff,
-  switchWorkspace,
-  selectToolboxTool,
+  openApplicationSurface,
   readImageInfo,
   getDataRoot,
   convertPathString,
@@ -16,8 +15,7 @@ const {
     getHistoryById: vi.fn(),
   },
   offerImageEditorHandoff: vi.fn(),
-  switchWorkspace: vi.fn(),
-  selectToolboxTool: vi.fn(),
+  openApplicationSurface: vi.fn(),
   readImageInfo: vi.fn(),
   getDataRoot: vi.fn(),
   convertPathString: vi.fn(),
@@ -30,11 +28,11 @@ vi.mock('@/utils/dataPath', () => ({ getDataRoot, convertPathString }))
 vi.mock('@/features/imageEdit/store/imageEditorHandoffStore', () => ({
   offerImageEditorHandoff,
 }))
-vi.mock('@/stores/navigationStore', () => ({ switchWorkspace, selectToolboxTool }))
 vi.mock('@/commands/assetLibrary', () => ({ inspectAsset: vi.fn() }))
 vi.mock('../hostActions', () => ({
   createImageEditPreviewFromApplicationRef,
 }))
+vi.mock('./surfaceRegistry', () => ({ openApplicationSurface }))
 
 import {
   createImageEditPreviewFromRef,
@@ -76,6 +74,7 @@ describe('generation application capabilities', () => {
       createdAt: null,
       modifiedAt: null,
     })
+    openApplicationSurface.mockImplementation((surfaceId: string) => ({ surfaceId }))
   })
 
   it('生成历史只返回稳定引用，不返回本地路径', async () => {
@@ -99,13 +98,11 @@ describe('generation application capabilities', () => {
       false
     )
     expect(readImageInfo).toHaveBeenCalledWith('C:/Henji-AI/Media/generated.png')
-    expect(switchWorkspace).toHaveBeenCalledWith('tools')
-    expect(selectToolboxTool).toHaveBeenCalledWith('imageMark')
+    expect(openApplicationSurface).toHaveBeenCalledWith('tool.image_edit', {})
     expect(offerImageEditorHandoff).toHaveBeenCalledWith(expect.objectContaining({
       sourceUrl: 'C:/Henji-AI/Media/generated.png',
     }))
     expect(result).toMatchObject({ surfaceId: 'tool.image_edit' })
-    expect(switchWorkspace).not.toHaveBeenCalledWith('nodes')
   })
 
   it('本地副本不可读时使用历史记录保留的远程结果', async () => {
@@ -144,8 +141,7 @@ describe('generation application capabilities', () => {
     })).rejects.toThrow('NOT_FOUND')
 
     expect(offerImageEditorHandoff).not.toHaveBeenCalled()
-    expect(switchWorkspace).not.toHaveBeenCalled()
-    expect(selectToolboxTool).not.toHaveBeenCalled()
+    expect(openApplicationSurface).not.toHaveBeenCalled()
   })
 
   it('创建标注预览时使用已还原的绝对路径', async () => {

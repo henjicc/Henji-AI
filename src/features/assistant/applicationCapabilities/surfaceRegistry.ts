@@ -1,6 +1,8 @@
 import type { ApplicationRef } from '@/core/assistant/applicationCapabilities'
+import { createLogger } from '@/core/logging'
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 import type { WorkspaceId } from '@/core/types/workspace'
+import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { closeAssetLibrary, openAssetLibrary, selectToolboxTool, switchWorkspace } from '@/stores/navigationStore'
 import { openSettingsPanel, useUiStore } from '@/stores/uiStore'
 
@@ -10,6 +12,7 @@ import {
 } from '@/features/canvas/application/agentCanvasActions'
 import { selectAssetFromAgent } from '../hostActions'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
+import type { CapabilityExecutionContext } from './handlerTypes'
 
 interface ApplicationSurfaceDefinition {
   id: string
@@ -45,23 +48,77 @@ const surfaces: ApplicationSurfaceDefinition[] = [
 ]
 
 const surfaceMap = new Map(surfaces.map((surface) => [surface.id, surface]))
+const logger = createLogger('features.assistant.surfaces')
+
+function settingsTargetMatches(
+  current: SettingsNavigationTarget | null,
+  expected: SettingsNavigationTarget
+): boolean {
+  return current?.tab === expected.tab
+    && (current.sectionId ?? null) === (expected.sectionId ?? null)
+}
+
+function isSurfaceActive(surface: ApplicationSurfaceDefinition): boolean {
+  if (surface.settingsTarget) {
+    const ui = useUiStore.getState()
+    return ui.isSettingsOpen && settingsTargetMatches(ui.settingsTarget, surface.settingsTarget)
+  }
+  if (surface.id === 'overlay.assets') {
+    return useAssetLibraryStore.getState().view === 'floating'
+  }
+  return createHostContextSnapshot().surface?.id === surface.id
+}
 
 export function listApplicationSurfaces(): ReadonlyArray<ApplicationSurfaceDefinition> {
   return surfaces
 }
 
-export function openApplicationSurface(surfaceId: string): Record<string, unknown> {
+type SurfaceLogContext = Pick<CapabilityExecutionContext, 'requestId' | 'taskId'>
+
+function getSurfaceLogContext(correlation: SurfaceLogContext): SurfaceLogContext {
+  return {
+    requestId: correlation.requestId,
+    taskId: correlation.taskId,
+  }
+}
+
+export function openApplicationSurface(
+  surfaceId: string,
+  correlation: SurfaceLogContext = {}
+): Record<string, unknown> {
   const surface = surfaceMap.get(surfaceId)
   if (!surface) throw new Error('NOT_FOUND')
-  if (surface.settingsTarget) {
-    openSettingsPanel(surface.settingsTarget)
-  } else if (surface.id === 'overlay.assets') {
-    openAssetLibrary('floating')
-  } else {
-    if (surface.workspace) switchWorkspace(surface.workspace)
-    if (surface.toolId) selectToolboxTool(surface.toolId)
+  logger.info('应用 Surface 打开开始', {
+    event: 'assistant.surface.open.start',
+    ...getSurfaceLogContext(correlation),
+    surfaceId,
+  })
+  try {
+    if (surface.settingsTarget) {
+      openSettingsPanel(surface.settingsTarget)
+    } else if (surface.id === 'overlay.assets') {
+      openAssetLibrary('floating')
+    } else {
+      if (surface.workspace) switchWorkspace(surface.workspace)
+      if (surface.toolId) selectToolboxTool(surface.toolId)
+    }
+    if (!isSurfaceActive(surface)) throw new Error('SURFACE_NOT_OPEN')
+    logger.info('应用 Surface 打开完成', {
+      event: 'assistant.surface.open.completed',
+      ...getSurfaceLogContext(correlation),
+      surfaceId,
+      actualSurfaceId: createHostContextSnapshot().surface?.id,
+    })
+    return { surfaceId }
+  } catch (error) {
+    logger.error('应用 Surface 打开失败', error, {
+      event: 'assistant.surface.open.failed',
+      ...getSurfaceLogContext(correlation),
+      surfaceId,
+      actualSurfaceId: createHostContextSnapshot().surface?.id,
+    })
+    throw error
   }
-  return { surfaceId }
 }
 
 export function closeApplicationSurface(surfaceId?: string): Record<string, unknown> {
@@ -79,28 +136,30 @@ export function closeApplicationSurface(surfaceId?: string): Record<string, unkn
 
 export async function focusApplicationEntity(
   ref: ApplicationRef,
-  signal: AbortSignal
+  signal: AbortSignal,
+  correlation: SurfaceLogContext = {}
 ): Promise<Record<string, unknown>> {
   if (ref.kind === 'generation.record' || ref.kind === 'generation.result') {
-    switchWorkspace('generation')
-    return { ref, surfaceId: 'workspace.generation' }
+    return { ref, ...openApplicationSurface('workspace.generation', correlation) }
   }
   if (ref.kind === 'asset') {
-    openAssetLibrary('workspace')
     await selectAssetFromAgent(ref.id)
-    return { ref, surfaceId: 'workspace.assets' }
+    const surface = openApplicationSurface('workspace.assets', correlation)
+    return { ref, ...surface }
   }
   if (ref.kind === 'canvas.project') {
     await openCanvasProjectFromAgent(ref.id, signal)
-    return { ref, surfaceId: 'workspace.canvas' }
+    return { ref, ...openApplicationSurface('workspace.canvas', correlation) }
   }
   if (ref.kind === 'canvas.node') {
     const separator = ref.id.indexOf(':')
     if (separator < 1) throw new Error('INVALID_INPUT')
     const projectId = ref.id.slice(0, separator)
     const nodeId = ref.id.slice(separator + 1)
+    await openCanvasProjectFromAgent(projectId, signal)
+    const surface = openApplicationSurface('workspace.canvas', correlation)
     await focusCanvasNodeFromAgent(projectId, nodeId, signal)
-    return { ref, surfaceId: 'workspace.canvas' }
+    return { ref, ...surface }
   }
   throw new Error('INVALID_INPUT')
 }

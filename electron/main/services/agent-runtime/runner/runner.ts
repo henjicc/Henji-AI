@@ -194,6 +194,8 @@ export class AgentRunner {
       throwIfCancelled: () => this.throwIfCancelled(),
       recordToolCall: (signature) => this.budget.recordToolCall(signature),
       recordProgress: (signature) => this.budget.recordProgress(signature),
+      recordFailure: () => this.budget.recordFailure(),
+      recordSuccess: () => this.budget.recordSuccess(),
       setActiveToolCall: (toolCallId) => this.pauseController.setActiveToolCall(toolCallId),
       requestApproval: (call, approval) => this.approvalCoordinator.request(call, approval),
       onObservation: (call, observation) => {
@@ -440,7 +442,6 @@ export class AgentRunner {
         }
         await this.conversationJournal.flush()
         this.externalContinuation.assertNoResubmit(result.toolCalls)
-        this.budget.recordSuccess()
         if (result.toolCalls.length > 0) {
           await this.savePointCoordinator.save('before_tools', turnSnapshot)
           await this.pauseController.wait()

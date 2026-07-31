@@ -57,6 +57,16 @@ export interface AgentModelPublicUpdate {
   text: string
 }
 
+export function selectLatestToolEventSequence(events: AgentEvent[]): number {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event.type === 'ToolRequested' || event.type === 'ToolStarted' || event.type === 'ToolCompleted' || event.type === 'ToolFailed') {
+      return event.sequence
+    }
+  }
+  return 0
+}
+
 export function createInitialAgentRunViewState(): AgentRunViewState {
   return { runState: null, events: [], connection: 'idle', actionError: null }
 }

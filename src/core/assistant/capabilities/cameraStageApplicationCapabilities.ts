@@ -67,7 +67,7 @@ const getProject = defineApplicationCapability({
 
 const openProject = defineApplicationCapability({
   id: 'open_camera_stage_project',
-  version: 1,
+  version: 2,
   title: '打开 3D 运镜工程',
   description: '打开明确 3D 工程并进入工具箱编辑器。',
   domain: 'camera_stage',
@@ -81,15 +81,18 @@ const openProject = defineApplicationCapability({
   timeoutMs: 15_000,
   supportsPreview: false,
   supportsUndo: false,
-  requiredScopes: ['toolbox'],
+  requiredScopes: ['navigation', 'toolbox'],
   acceptsRefs: ['camera_stage.project'],
   producesRefs: ['camera_stage.project', 'application.surface'],
+  successEvidence: ['工程已载入，返回 surfaceId=tool.camera_stage，且宿主当前 Surface 已验证为 3D 镜头编辑器。'],
+  failureRecovery: ['工程不存在时重新读取工程目录；Surface 无法打开时停止并说明，不得声称已进入编辑器。'],
   inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
   outputSchema: capabilityOutputSchema({
     projectId: z.string(),
     name: z.string().optional(),
     objectCount: z.number(),
     shotCount: z.number(),
+    surfaceId: z.literal('tool.camera_stage'),
   }),
   concurrencyKey: 'camera_stage_open',
   resolveTargetIds: (input) => cameraTarget(input.projectId),
@@ -98,9 +101,9 @@ const openProject = defineApplicationCapability({
 
 const createProject = defineApplicationCapability({
   id: 'create_camera_stage_project',
-  version: 1,
+  version: 2,
   title: '新建 3D 运镜工程',
-  description: '创建 3D 运镜工程并进入编辑器。',
+  description: '创建并载入 3D 运镜工程数据，但不切换当前界面；用户要求进入或查看时，再调用打开 3D 工程能力。',
   domain: 'camera_stage',
   aliases: ['创建 3D 工程', 'new camera stage project'],
   readOnly: false,
@@ -113,7 +116,9 @@ const createProject = defineApplicationCapability({
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: ['toolbox'],
-  producesRefs: ['camera_stage.project', 'application.surface'],
+  producesRefs: ['camera_stage.project'],
+  successEvidence: ['工程已创建并返回稳定 projectId；本能力不以切换界面作为成功条件。'],
+  failureRecovery: ['创建失败时修正名称或模式后最多重试一次；仍失败则停止并说明，不得改建其它类型项目。'],
   inputSchema: z.object({
     name: z.string().trim().min(1).max(120),
     mode: z.enum(['simple', 'pro']).default('simple'),

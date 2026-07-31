@@ -157,7 +157,11 @@ export function useAssistantHostBridge(uiReady: boolean): void {
           const { executeApplicationCapabilityResult } = await loadApplicationCapabilityRegistry()
           const result = await executeApplicationCapabilityResult(
             request.operation.capability,
-            controller.signal
+            {
+              signal: controller.signal,
+              requestId: request.runId,
+              taskId: request.toolCallId,
+            }
           )
           await sendResult(request, result)
           logger.info('前端工具执行完成', {

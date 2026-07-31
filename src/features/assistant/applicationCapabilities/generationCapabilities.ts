@@ -5,10 +5,11 @@ import { inspectAsset } from '@/commands/assetLibrary'
 import { readImageInfo } from '@/commands/image'
 import { offerImageEditorHandoff } from '@/features/imageEdit/store/imageEditorHandoffStore'
 import { databaseService } from '@/services/database'
-import { selectToolboxTool, switchWorkspace } from '@/stores/navigationStore'
 import { convertPathString, getDataRoot } from '@/utils/dataPath'
 
 import { createImageEditPreviewFromApplicationRef } from '../hostActions'
+import type { CapabilityExecutionContext } from './handlerTypes'
+import { openApplicationSurface } from './surfaceRegistry'
 
 const logger = createLogger('features.assistant.generation_capabilities')
 
@@ -177,13 +178,12 @@ function openImageEditor(source: ResolvedImageSource, document?: ReturnType<type
     sourceName: source.name,
     document,
   })
-  switchWorkspace('tools')
-  selectToolboxTool('imageMark')
   return sessionRef
 }
 
 export async function openImageEditorWithSource(
-  sourceRef: ApplicationRef
+  sourceRef: ApplicationRef,
+  correlation: Pick<CapabilityExecutionContext, 'requestId' | 'taskId'> = {}
 ): Promise<Record<string, unknown>> {
   logger.debug('image_editor.open.start', {
     event: 'assistant.image_editor.open.start',
@@ -192,6 +192,7 @@ export async function openImageEditorWithSource(
   })
   const source = await resolveImageSource(sourceRef)
   const sessionRef = openImageEditor(source)
+  const surface = openApplicationSurface('tool.image_edit', correlation)
   logger.info('image_editor.open.completed', {
     event: 'assistant.image_editor.open.completed',
     sourceKind: sourceRef.kind,
@@ -201,14 +202,17 @@ export async function openImageEditorWithSource(
   return {
     sourceRef,
     sessionRef,
-    surfaceId: 'tool.image_edit',
+    ...surface,
   }
 }
 
-export async function createImageEditPreviewFromRef(input: {
-  sourceRef: ApplicationRef
-  operations: Record<string, unknown>[]
-}): Promise<Record<string, unknown>> {
+export async function createImageEditPreviewFromRef(
+  input: {
+    sourceRef: ApplicationRef
+    operations: Record<string, unknown>[]
+  },
+  correlation: Pick<CapabilityExecutionContext, 'requestId' | 'taskId'> = {}
+): Promise<Record<string, unknown>> {
   logger.debug('image_editor.preview.start', {
     event: 'assistant.image_editor.preview.start',
     sourceKind: input.sourceRef.kind,
@@ -223,6 +227,7 @@ export async function createImageEditPreviewFromRef(input: {
   )
   const document = parseImageEditDocument(preview.document)
   const sessionRef = openImageEditor(source, document)
+  const surface = openApplicationSurface('tool.image_edit', correlation)
   logger.info('image_editor.preview.completed', {
     event: 'assistant.image_editor.preview.completed',
     sourceKind: input.sourceRef.kind,
@@ -237,6 +242,6 @@ export async function createImageEditPreviewFromRef(input: {
     hasEffect: preview.hasEffect,
     width: preview.width,
     height: preview.height,
-    surfaceId: 'tool.image_edit',
+    ...surface,
   }
 }

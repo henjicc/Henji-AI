@@ -139,7 +139,7 @@ const connectCanvasNodes = defineApplicationCapability({
 
 const focusCanvasNode = defineApplicationCapability({
   id: 'focus_canvas_node',
-  version: 1,
+  version: 2,
   title: '定位画布节点',
   description: '进入画布工作区，选中并把明确节点定位到可视区域。',
   domain: 'canvas',
@@ -150,12 +150,14 @@ const focusCanvasNode = defineApplicationCapability({
   permission: 'canvas:focus',
   idempotent: true,
   destructive: false,
-  timeoutMs: 5_000,
+  timeoutMs: 12_000,
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: ['navigation', 'canvas'],
   acceptsRefs: ['canvas.project', 'canvas.node'],
-  producesRefs: ['application.entity'],
+  producesRefs: ['application.entity', 'application.surface'],
+  successEvidence: ['目标项目已载入，返回并验证 Surface ID workspace.canvas，且节点已在画布可视区域中获得焦点。'],
+  failureRecovery: ['项目或节点不存在时重新读取明确引用；画布无法定位时停止并说明，不猜测其它节点。'],
   inputSchema: z.object({
     projectId: z.string().min(1),
     nodeId: z.string().min(1),
@@ -164,6 +166,7 @@ const focusCanvasNode = defineApplicationCapability({
     projectId: z.string(),
     nodeId: z.string(),
     focused: z.boolean(),
+    surfaceId: z.literal('workspace.canvas'),
   }),
   concurrencyKey: 'canvas_focus',
   resolveTargetIds: (input) => target(input.projectId, { nodeId: input.nodeId }),

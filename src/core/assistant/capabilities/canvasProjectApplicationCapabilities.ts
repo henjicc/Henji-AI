@@ -38,7 +38,7 @@ const listCanvasProjects = defineApplicationCapability({
 
 const openCanvasProject = defineApplicationCapability({
   id: 'open_canvas_project',
-  version: 1,
+  version: 2,
   title: '打开画布项目',
   description: '按明确项目引用打开画布项目并进入画布工作区。',
   domain: 'canvas',
@@ -55,8 +55,15 @@ const openCanvasProject = defineApplicationCapability({
   requiredScopes: ['navigation', 'canvas'],
   acceptsRefs: ['canvas.project'],
   producesRefs: ['canvas.project', 'application.surface'],
+  successEvidence: ['工程已载入，返回 surfaceId=workspace.canvas，且宿主当前 Surface 已验证为画布工作区。'],
+  failureRecovery: ['工程不存在时重新读取工程目录；Surface 无法打开时停止并说明，不得声称已进入画布。'],
   inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
-  outputSchema: capabilityOutputSchema({ projectId: z.string().min(1) }),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string().min(1),
+    name: z.string().nullable(),
+    nodeCount: z.number().int().nonnegative(),
+    surfaceId: z.literal('workspace.canvas'),
+  }),
   concurrencyKey: 'canvas_project',
   resolveTargetIds: (input) => projectTarget(input.projectId),
   summarize: (output) => `已打开画布项目 ${output.projectId}。`,
@@ -125,9 +132,9 @@ const getCanvasNodeSchema = defineApplicationCapability({
 
 const createCanvasProject = defineApplicationCapability({
   id: 'create_canvas_project',
-  version: 1,
+  version: 2,
   title: '新建画布项目',
-  description: '创建空画布项目并进入画布工作区。',
+  description: '创建并载入空画布项目数据，但不切换当前界面；用户要求进入或查看时，再调用打开画布项目能力。',
   domain: 'canvas',
   aliases: ['创建画布', 'new canvas project'],
   readOnly: false,
@@ -140,7 +147,9 @@ const createCanvasProject = defineApplicationCapability({
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: ['canvas'],
-  producesRefs: ['canvas.project', 'application.surface'],
+  producesRefs: ['canvas.project'],
+  successEvidence: ['项目已创建并返回稳定 projectId；本能力不以切换界面作为成功条件。'],
+  failureRecovery: ['创建失败时修正项目名称后最多重试一次；仍失败则停止并说明。'],
   inputSchema: z.object({ name: z.string().trim().min(1).max(120) }).strict(),
   outputSchema: capabilityOutputSchema({
     projectId: z.string().min(1),

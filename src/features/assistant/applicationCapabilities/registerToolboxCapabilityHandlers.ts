@@ -23,6 +23,7 @@ import { selectToolboxTool } from '@/stores/navigationStore'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { createImageEditPreviewFromRef } from './generationCapabilities'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
+import { openApplicationSurface } from './surfaceRegistry'
 
 interface ProjectInput {
   projectId: string
@@ -48,8 +49,13 @@ export function registerToolboxCapabilityHandlers(
     const parsed = parseCapabilityInput<{
       toolId: 'cameraStage' | 'imageMark' | null
     }>('select_toolbox_tool', input)
-    selectToolboxTool(parsed.toolId)
-    return { toolId: parsed.toolId }
+    if (parsed.toolId) {
+      const surfaceId = parsed.toolId === 'cameraStage' ? 'tool.camera_stage' : 'tool.image_edit'
+      return { toolId: parsed.toolId, ...openApplicationSurface(surfaceId, context) }
+    }
+    // 关闭工具只回工具箱首页，不抢占用户当前所在工作区。
+    selectToolboxTool(null)
+    return { toolId: parsed.toolId, surfaceId: null }
   })
 
   registrar.registerHandler('list_camera_stage_projects', async () => ({
@@ -64,8 +70,8 @@ export function registerToolboxCapabilityHandlers(
   registrar.registerHandler('open_camera_stage_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput>('open_camera_stage_project', input)
-    selectToolboxTool('cameraStage')
-    return await openCameraStageProjectFromAgent(parsed.projectId)
+    const project = await openCameraStageProjectFromAgent(parsed.projectId)
+    return { ...project, ...openApplicationSurface('tool.camera_stage', context) }
   })
 
   registrar.registerHandler('create_camera_stage_project', async (input, context) => {
@@ -157,7 +163,7 @@ export function registerToolboxCapabilityHandlers(
     const preview = await createImageEditPreviewFromRef({
       sourceRef: { kind: 'asset', id: parsed.assetId },
       operations: parsed.operations,
-    })
+    }, context)
     return {
       previewRef: preview.previewRef,
       assetId: parsed.assetId,

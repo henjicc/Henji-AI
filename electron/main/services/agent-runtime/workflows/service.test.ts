@@ -85,10 +85,10 @@ describe('DeterministicWorkflowService', () => {
       runId: 'run-1', threadId: 'thread-1', toolCallId: 'call-1', signal: new AbortController().signal,
       gateway, getHostContext: () => host,
     })
-    expect(result).toMatchObject({ status: 'completed', totalSteps: 6 })
+    expect(result).toMatchObject({ status: 'completed', totalSteps: 5 })
     expect(calls.map((call) => call.toolName)).toEqual([
       'switch_workspace', 'prepare_generation_task', 'create_visible_generation_task',
-      'switch_workspace', 'open_canvas_project', 'add_canvas_node',
+      'open_canvas_project', 'add_canvas_node',
     ])
     expect((result.compensations as Array<Record<string, unknown>>)[0]).toMatchObject({ stepId: 'add-generation-node' })
     const workflowRunRef = String(result.workflowRunRef)
@@ -124,6 +124,8 @@ describe('DeterministicWorkflowService', () => {
       gateway, getHostContext: () => host,
     })
     expect(result.status).toBe('completed')
+    expect(calls.some((call) => call.toolName === 'select_toolbox_tool')).toBe(false)
+    expect(calls.filter((call) => call.toolName === 'open_canvas_project')).toHaveLength(1)
     const commit = calls.find((call) => call.toolName === 'commit_image_edit')
     expect(commit?.input).toMatchObject({ previewRef: 'preview-1' })
     const addAsset = calls.find((call) => call.toolName === 'add_asset_to_canvas')

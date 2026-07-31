@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import { extractResultReferences, toolMessage } from './runner-results'
+import { AgentStopPolicyExceededError } from './budget'
+import { extractResultReferences, serializeError, toolMessage } from './runner-results'
 
 function observation(output: unknown): AgentToolObservation {
   return {
@@ -18,6 +19,7 @@ describe('Agent 结果引用', () => {
     expect(extractResultReferences({
       taskId: 'task-1',
       nodeId: 'node-1',
+      surfaceId: 'workspace.canvas',
       assetId: 'asset-1',
       previewRef: 'preview-1',
       workflowRunId: 'workflow-run-1',
@@ -25,6 +27,7 @@ describe('Agent 结果引用', () => {
     })).toEqual({
       taskId: 'task-1',
       nodeId: 'node-1',
+      surfaceId: 'workspace.canvas',
       assetId: 'asset-1',
       previewRef: 'preview-1',
       workflowRunId: 'workflow-run-1',
@@ -41,6 +44,17 @@ describe('Agent 结果引用', () => {
       taskId: '1', projectId: '2', nodeId: '3', edgeId: '4', undoRef: '5',
       workspace: '6', workspaceId: '7', modelId: '8', assetId: '9',
     }) ?? {})).toHaveLength(8)
+  })
+
+  it('运行停止策略向界面返回可执行的用户恢复动作', () => {
+    expect(serializeError(new AgentStopPolicyExceededError(
+      'CONSECUTIVE_FAILURES',
+      '工具连续失败，已停止继续尝试'
+    ))).toMatchObject({
+      code: 'CONSECUTIVE_FAILURES',
+      retryable: false,
+      recovery: 'user_action',
+    })
   })
 
   it('将紧凑模型目录留在工具消息中，避免模型看不到候选后重复搜索', () => {

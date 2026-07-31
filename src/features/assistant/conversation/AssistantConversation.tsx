@@ -20,7 +20,6 @@ import {
   UiIconButton,
   UiPanel,
 } from '@/components/ui'
-import type { AgentEvent } from '@/core/assistant/events'
 import { agentQueuedMessagePayloadSchema, getAgentSessionMessageContent } from '@/core/assistant/session'
 import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
 import {
@@ -42,6 +41,7 @@ import { AssistantComposer } from './AssistantComposer'
 import { ExecutionPlanCard } from './ExecutionPlanCard'
 import {
   groupToolActivitiesForDisplay,
+  selectLatestToolEventSequence,
   selectExecutionPresentation,
   selectModelPublicUpdates,
   selectPendingApproval,
@@ -50,22 +50,13 @@ import {
 import { describeErrorRecovery } from './errorPresentation'
 import { ModelProgressMessage } from './ModelProgressMessage'
 import { ToolActivityGroup } from './ToolActivityGroup'
+import { useConversationAutoScroll } from './useConversationAutoScroll'
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
 const deferredBlockStyle: CSSProperties = {
   contentVisibility: 'auto',
   containIntrinsicSize: 'auto 96px',
   contain: 'layout paint style',
-}
-
-function latestToolEventSequence(events: AgentEvent[]): number {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (event.type === 'ToolRequested' || event.type === 'ToolStarted' || event.type === 'ToolCompleted' || event.type === 'ToolFailed') {
-      return event.sequence
-    }
-  }
-  return 0
 }
 
 export function AssistantConversation(): JSX.Element {
@@ -75,7 +66,6 @@ export function AssistantConversation(): JSX.Element {
   const [resultError, setResultError] = useState<string | null>(null)
   const [messageMode, setMessageMode] = useState<AgentQueuedMessagePayload['mode']>('current_task')
   const [activityExpanded, setActivityExpanded] = useState(true)
-  const scrollRef = useRef<HTMLDivElement>(null)
   const pendingHandledRef = useRef<string | null>(null)
   const toolActivitiesCacheRef = useRef<{
     runId: string | null
@@ -83,6 +73,7 @@ export function AssistantConversation(): JSX.Element {
     activities: ReturnType<typeof selectToolActivities>
   } | null>(null)
   const activeRunId = useAssistantUiStore((state) => state.activeRunId)
+  const conversationScroll = useConversationAutoScroll(activeRunId)
   const activityRunIdRef = useRef(activeRunId)
   const threadId = useAssistantUiStore((state) => state.threadId)
   const currentGoal = useAssistantUiStore((state) => state.currentGoal)
@@ -143,7 +134,7 @@ export function AssistantConversation(): JSX.Element {
     }
   }, [busy, pendingGoal, setPendingGoal, startRun])
 
-  const toolEventSequence = latestToolEventSequence(run.view.events)
+  const toolEventSequence = selectLatestToolEventSequence(run.view.events)
   const cachedToolActivities = toolActivitiesCacheRef.current
   const tools = cachedToolActivities?.runId === activeRunId && cachedToolActivities.eventSequence === toolEventSequence
     ? cachedToolActivities.activities
@@ -230,14 +221,6 @@ export function AssistantConversation(): JSX.Element {
     }
     if (finalResponseStarted) setActivityExpanded(false)
   }, [activeRunId, finalResponseStarted])
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      const container = scrollRef.current
-      if (container) container.scrollTop = container.scrollHeight
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [approval, deferredStreamedText, historicalMessages.length, runState?.status, tools.length])
-
   const submit = useCallback((goal: string): void => {
     if (busy) {
       void run.enqueue(goal, messageMode, clarificationWaitId).then((accepted) => {
@@ -267,7 +250,13 @@ export function AssistantConversation(): JSX.Element {
   return (
     // 不自带底色：面板表面由 AssistantSidebar 统一提供，正文与顶栏、输入区同为一块连续表面
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div ref={scrollRef} className="ui-scrollbar flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
+      <div
+        ref={conversationScroll.viewportRef}
+        onScroll={conversationScroll.onScroll}
+        onWheel={conversationScroll.onWheel}
+        className="ui-scrollbar min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-4 [contain:layout_paint_style]"
+      >
+        <div ref={conversationScroll.contentRef} className="flex min-h-full min-w-0 flex-col gap-2">
         {!runState && !currentGoal && historicalMessages.length === 0 && !transcript.loading ? (
           <UiEmpty
             className="min-h-full px-8"
@@ -490,6 +479,7 @@ export function AssistantConversation(): JSX.Element {
           </section>
         ) : null}
 
+        </div>
       </div>
 
       <AssistantComposer

@@ -24,7 +24,6 @@ const listToolboxTools = defineApplicationCapability({
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: [],
-  producesRefs: ['application.surface'],
   inputSchema: z.object({}).strict(),
   outputSchema: capabilityOutputSchema({
     tools: z.array(z.record(z.string(), z.unknown())),
@@ -60,7 +59,7 @@ const getToolboxState = defineApplicationCapability({
 
 const selectToolboxTool = defineApplicationCapability({
   id: 'select_toolbox_tool',
-  version: 1,
+  version: 2,
   title: '切换工具箱工具',
   description: '按稳定工具 ID 打开或关闭工具箱子工具。',
   domain: 'toolbox',
@@ -74,13 +73,16 @@ const selectToolboxTool = defineApplicationCapability({
   timeoutMs: 5_000,
   supportsPreview: false,
   supportsUndo: false,
-  requiredScopes: ['toolbox'],
+  requiredScopes: ['navigation', 'toolbox'],
   producesRefs: ['application.surface'],
+  successEvidence: ['打开工具时返回实际 Surface ID，关闭工具时返回 surfaceId=null，且宿主工具选择与请求一致。'],
+  failureRecovery: ['工具 Surface 无法打开时停止并说明，不得声称已切换；关闭失败时重新读取工具箱状态。'],
   inputSchema: z.object({
     toolId: z.enum(['cameraStage', 'imageMark']).nullable(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     toolId: z.enum(['cameraStage', 'imageMark']).nullable(),
+    surfaceId: z.enum(['tool.camera_stage', 'tool.image_edit']).nullable(),
   }),
   concurrencyKey: 'toolbox_selection',
   resolveTargetIds: (input) => ({ toolId: input.toolId ?? '' }),

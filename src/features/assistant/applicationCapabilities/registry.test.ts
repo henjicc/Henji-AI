@@ -44,4 +44,31 @@ describe('application capability handler coverage', () => {
       expect(definition.failureRecovery.length).toBeGreaterThan(0)
     }
   })
+
+  it('创建能力保持后台原子性，打开能力声明可验证 Surface', () => {
+    const createCamera = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_camera_stage_project')
+    expect(createCamera?.requiredScopes).not.toContain('navigation')
+    expect(createCamera?.producesRefs).not.toContain('application.surface')
+    expect(createCamera?.description).toContain('不切换当前界面')
+
+    for (const id of ['open_camera_stage_project', 'open_canvas_project', 'focus_canvas_node']) {
+      const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)
+      expect(definition?.requiredScopes).toContain('navigation')
+      expect(definition?.producesRefs).toContain('application.surface')
+      expect(definition?.successEvidence.join(' ')).toMatch(/tool\.camera_stage|workspace\.canvas/)
+    }
+  })
+
+  it('所有声明产生应用 Surface 的能力都绑定导航作用域和界面成功证据', () => {
+    const surfaceCapabilities = BUILTIN_APPLICATION_CAPABILITY_REGISTRY
+      .list()
+      .filter((definition) => definition.producesRefs.includes('application.surface'))
+
+    for (const definition of surfaceCapabilities) {
+      expect(definition.requiredScopes, definition.id).toContain('navigation')
+      expect(definition.successEvidence.join(' '), definition.id).toMatch(
+        /Surface|页面|工作区|编辑器|定位/
+      )
+    }
+  })
 })

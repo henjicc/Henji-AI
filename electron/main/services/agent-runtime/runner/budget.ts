@@ -11,9 +11,9 @@ export const DEFAULT_AGENT_BUDGET: AgentBudgetConfig = {
   maxDurationMs: null,
   maxInputTokens: null,
   maxOutputTokens: null,
-  maxConsecutiveFailures: null,
-  maxRepeatedToolCalls: null,
-  maxNoProgressTurns: null,
+  maxConsecutiveFailures: 3,
+  maxRepeatedToolCalls: 2,
+  maxNoProgressTurns: 4,
   maxCostUsd: null,
 }
 
@@ -36,7 +36,8 @@ function tokenValue(value: number | null): number {
 export class AgentRunMetrics {
   readonly config: AgentBudgetConfig
   private readonly startedAt = Date.now()
-  private readonly toolSignatures = new Map<string, number>()
+  private lastToolSignature: string | null = null
+  private repeatedToolCalls = 0
   private turns = 0
   private toolCalls = 0
   private inputTokens = 0
@@ -55,7 +56,7 @@ export class AgentRunMetrics {
   beginTurn(): number {
     this.assertWithinLimits()
     if (this.config.maxTurns !== null && this.turns >= this.config.maxTurns) {
-      throw new AgentStopPolicyExceededError('MAX_TURNS', '已达到显式设置的 Agent 最大轮次')
+      throw new AgentStopPolicyExceededError('MAX_TURNS', '已达到智能助手最大轮次，已停止继续尝试')
     }
     this.turns += 1
     return this.turns
@@ -74,16 +75,19 @@ export class AgentRunMetrics {
 
   recordToolCall(signature: string): void {
     if (this.config.maxToolCalls !== null && this.toolCalls >= this.config.maxToolCalls) {
-      throw new AgentStopPolicyExceededError('MAX_TOOL_CALLS', '已达到显式设置的 Agent 最大工具调用次数')
+      throw new AgentStopPolicyExceededError('MAX_TOOL_CALLS', '已达到智能助手最大工具调用次数，已停止继续尝试')
     }
     this.toolCalls += 1
-    const repeats = (this.toolSignatures.get(signature) ?? 0) + 1
-    this.toolSignatures.set(signature, repeats)
+    if (signature === this.lastToolSignature) this.repeatedToolCalls += 1
+    else {
+      this.lastToolSignature = signature
+      this.repeatedToolCalls = 1
+    }
     if (
       this.config.maxRepeatedToolCalls !== null
-      && repeats > this.config.maxRepeatedToolCalls
+      && this.repeatedToolCalls > this.config.maxRepeatedToolCalls
     ) {
-      throw new AgentStopPolicyExceededError('REPEATED_TOOL_CALL', '已达到显式设置的重复工具调用次数')
+      throw new AgentStopPolicyExceededError('REPEATED_TOOL_CALL', '重复工具调用使用相同参数仍无新进展，已停止继续尝试')
     }
   }
 
@@ -93,7 +97,7 @@ export class AgentRunMetrics {
       this.config.maxConsecutiveFailures !== null
       && this.consecutiveFailures >= this.config.maxConsecutiveFailures
     ) {
-      throw new AgentStopPolicyExceededError('CONSECUTIVE_FAILURES', '已达到显式设置的连续失败次数')
+      throw new AgentStopPolicyExceededError('CONSECUTIVE_FAILURES', '工具或模型连续失败，已停止继续尝试以避免重复操作')
     }
   }
 
@@ -103,13 +107,17 @@ export class AgentRunMetrics {
 
   recordProgress(marker: string): void {
     if (marker === this.lastProgressMarker) this.noProgressTurns += 1
-    else this.noProgressTurns = 0
+    else {
+      this.noProgressTurns = 0
+      this.lastToolSignature = null
+      this.repeatedToolCalls = 0
+    }
     this.lastProgressMarker = marker
     if (
       this.config.maxNoProgressTurns !== null
       && this.noProgressTurns >= this.config.maxNoProgressTurns
     ) {
-      throw new AgentStopPolicyExceededError('NO_PROGRESS', '已达到显式设置的没有产生新进展轮数')
+      throw new AgentStopPolicyExceededError('NO_PROGRESS', '多轮执行没有产生新进展，已停止继续尝试')
     }
   }
 
@@ -124,13 +132,13 @@ export class AgentRunMetrics {
       this.config.maxDurationMs !== null
       && Date.now() - this.startedAt > this.config.maxDurationMs
     ) {
-      throw new AgentStopPolicyExceededError('MAX_DURATION', '已达到显式设置的 Agent 最大运行时长')
+      throw new AgentStopPolicyExceededError('MAX_DURATION', '已达到智能助手最大运行时长，已停止继续尝试')
     }
     if (this.config.maxInputTokens !== null && this.inputTokens > this.config.maxInputTokens) {
-      throw new AgentStopPolicyExceededError('MAX_INPUT_TOKENS', '已达到显式设置的 Agent 输入 token 预算')
+      throw new AgentStopPolicyExceededError('MAX_INPUT_TOKENS', '已达到智能助手输入 token 预算，已停止继续尝试')
     }
     if (this.config.maxOutputTokens !== null && this.outputTokens > this.config.maxOutputTokens) {
-      throw new AgentStopPolicyExceededError('MAX_OUTPUT_TOKENS', '已达到显式设置的 Agent 输出 token 预算')
+      throw new AgentStopPolicyExceededError('MAX_OUTPUT_TOKENS', '已达到智能助手输出 token 预算，已停止继续尝试')
     }
     if (
       this.config.maxCostUsd !== undefined
@@ -138,7 +146,7 @@ export class AgentRunMetrics {
       && this.knownCostUsd !== null
       && this.knownCostUsd > this.config.maxCostUsd
     ) {
-      throw new AgentStopPolicyExceededError('MAX_COST', '已达到显式设置的 Agent 已知费用')
+      throw new AgentStopPolicyExceededError('MAX_COST', '已达到智能助手已知费用上限，已停止继续尝试')
     }
   }
 

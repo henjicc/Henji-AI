@@ -84,6 +84,35 @@ describe('AgentBudgetTracker', () => {
       maxTurns: null,
       maxToolCalls: null,
       maxDurationMs: null,
+      maxConsecutiveFailures: 3,
+      maxRepeatedToolCalls: 2,
+      maxNoProgressTurns: 4,
     })
+  })
+
+  it('桌面默认在连续失败和相同工具重复调用时主动停止', () => {
+    const failures = new AgentRunMetrics()
+    failures.recordFailure()
+    failures.recordFailure()
+    expect(() => failures.recordFailure()).toThrowError(/连续失败/)
+
+    const repeats = new AgentRunMetrics()
+    repeats.recordToolCall('same')
+    repeats.recordToolCall('same')
+    expect(() => repeats.recordToolCall('same')).toThrowError(/重复工具调用/)
+  })
+
+  it('只阻止连续且无新进展的重复调用，不误伤分阶段复用和轮询', () => {
+    const staged = new AgentRunMetrics({ maxRepeatedToolCalls: 1 })
+    staged.recordToolCall('query:same')
+    staged.recordToolCall('update:other')
+    expect(() => staged.recordToolCall('query:same')).not.toThrow()
+
+    const polling = new AgentRunMetrics({ maxRepeatedToolCalls: 1 })
+    polling.recordToolCall('query:status')
+    polling.recordProgress('query:status:pending')
+    polling.recordToolCall('query:status')
+    polling.recordProgress('query:status:completed')
+    expect(() => polling.recordToolCall('query:status')).not.toThrow()
   })
 })

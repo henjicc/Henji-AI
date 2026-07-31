@@ -41,11 +41,10 @@ import {
   listCanvasProjectSummariesFromAgent,
 } from '@/features/canvas/application/agentCanvasQueries'
 import { addAssetToCanvasFromAgent } from '@/features/assistant/hostActions'
-import { switchWorkspace } from '@/stores/navigationStore'
-
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
+import { openApplicationSurface } from './surfaceRegistry'
 
 interface ProjectInput {
   projectId: string
@@ -71,8 +70,7 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('open_canvas_project', async (input, context) => {
     const parsed = parseCapabilityInput<ProjectInput>('open_canvas_project', input)
     const result = await openCanvasProjectWithSummaryFromAgent(parsed.projectId, context.signal)
-    switchWorkspace('nodes')
-    return result
+    return { ...result, ...openApplicationSurface('workspace.canvas', context) }
   })
 
   registrar.registerHandler('search_canvas_node_types', (input) => {
@@ -102,9 +100,7 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('create_canvas_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ name: string }>('create_canvas_project', input)
-    const result = await createCanvasProjectFromAgent(parsed.name)
-    switchWorkspace('nodes')
-    return result
+    return await createCanvasProjectFromAgent(parsed.name)
   })
 
   registrar.registerHandler('close_canvas_project', async (input, context) => {
@@ -164,8 +160,10 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('focus_canvas_node', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<NodeInput>('focus_canvas_node', input)
-    switchWorkspace('nodes')
-    return await focusCanvasNodeFromAgent(parsed.projectId, parsed.nodeId, context.signal)
+    await openCanvasProjectWithSummaryFromAgent(parsed.projectId, context.signal)
+    const surface = openApplicationSurface('workspace.canvas', context)
+    const focused = await focusCanvasNodeFromAgent(parsed.projectId, parsed.nodeId, context.signal)
+    return { ...focused, ...surface }
   })
 
   registrar.registerHandler('undo_canvas_change', (input, context) => {

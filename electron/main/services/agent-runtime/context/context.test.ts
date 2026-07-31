@@ -336,6 +336,8 @@ describe('AgentContextBuilder', () => {
     expect(systemPrompt).toContain('优先使用通用描述中带有“推荐使用”字样的兼容模型')
     expect(systemPrompt).toContain('用户当前明确目标 > 用户持久化指令 > 已确认相关记忆')
     expect(systemPrompt).toContain('不得为这类概览问题调用工具')
+    expect(systemPrompt).toContain('没有返回并验证 surfaceId 时，不得声称界面已经切换')
+    expect(systemPrompt).toContain('连续失败或没有新进展时，停止尝试并明确告诉用户')
     const userInstructionsLayer = result.messages.find((message) => (
       String(message.content).includes('id=user_instructions')
     ))
