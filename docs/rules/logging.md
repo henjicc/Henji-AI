@@ -40,4 +40,4 @@ npm run logs:query -- --chain <runId>
 
 ## 改动后
 
-至少执行相应静态检查；涉及真实窗口、文件落盘或主进程事件可见性时，写清用户手动验证步骤（见 [testing.md](testing.md)）。
+至少执行相应静态检查；涉及真实窗口、文件落盘或主进程事件可见性时，写清用户手动验证步骤（见 [docs/rules/testing.md](../../docs/rules/testing.md)）。

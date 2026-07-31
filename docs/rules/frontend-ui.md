@@ -73,4 +73,4 @@
 
 ## 界面改动后的检查
 
-见 [testing.md](testing.md#界面改动)。改颜色令牌的派生比例后必须复跑 `npm run check:ui-visual`。
+见 [docs/rules/testing.md](../../docs/rules/testing.md) 的「界面改动」一节。改颜色令牌的派生比例后必须复跑 `npm run check:ui-visual`。

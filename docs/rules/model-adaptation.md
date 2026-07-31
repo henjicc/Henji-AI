@@ -2,7 +2,7 @@
 
 > 读取时机：新增供应商、新增模型、改模型参数 schema、改请求构建或轮询、模型没显示出来。
 >
-> 完整工作流（含确认清单与实施顺序）见 skill `henji-model-adaptation`；把模型接到画布节点见 [canvas.md](canvas.md) 与 skill `canvas-node-builder`。
+> 完整工作流（含确认清单与实施顺序）见 skill `henji-model-adaptation`；把模型接到画布节点见 [docs/rules/canvas.md](../../docs/rules/canvas.md) 与 skill `canvas-node-builder`。
 
 ## 配置驱动（最重要）
 

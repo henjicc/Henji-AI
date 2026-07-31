@@ -99,7 +99,7 @@ Get-ChildItem -Path src,electron -Recurse -Include *.ts,*.tsx |
 2. 有失败的，如实报告失败输出，不隐瞒、不淡化
 3. 需要用户手动验证的部分，已写出可照做的操作步骤和验证点
 4. 已明确告知用户本次改动**是否需要重启 `npm run electron:dev`**，格式：`✔️无需重启` / `⚠️ 需要重启`
-5. 新增/改造的关键业务链路已按 [logging.md](logging.md) 补齐结构化日志
+5. 新增/改造的关键业务链路已按 [docs/rules/logging.md](../../docs/rules/logging.md) 补齐结构化日志
 
 ## CI 实际执行内容
 
