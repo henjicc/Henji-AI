@@ -3,7 +3,6 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import { assertAgentToolDefinition } from './define-tool'
 import type { AgentToolDefinition, AgentToolRegistration, AgentToolSemantics } from './types'
-import { createCompatibilityCapabilityDescriptor } from '../../../../../src/core/assistant/applicationCapabilities'
 
 const semanticSearchConcepts: ReadonlyArray<{ pattern: RegExp; concept: string }> = [
   { pattern: /(?:图片|图像|照片|相片|插画|海报|头像|壁纸|封面|图标|生图|image|picture|photo)/i, concept: 'media:image' },
@@ -208,9 +207,10 @@ export class AgentToolRegistry {
   private isAvailable(definition: AgentToolDefinition, context: HostContextSnapshot | null): boolean {
     if (definition.side === 'backend') return true
     if (!context?.uiReady) return false
-    if (context.availableCapabilities?.includes(definition.name)) return true
-    return context.availableCommands.includes(definition.name)
-      || context.availableQueries.includes(definition.name)
+    if (context.availableCapabilities) {
+      return context.availableCapabilities.includes(definition.name)
+    }
+    return false
   }
 
   private toCatalogEntry(definition: AgentToolDefinition): AgentToolCatalogEntry {
@@ -226,26 +226,16 @@ export class AgentToolRegistry {
           availability: definition.capability.availability,
           concurrencyKey: definition.capability.concurrencyKey,
         }
-      : createCompatibilityCapabilityDescriptor({
+      : {
           id: definition.name,
-          version: definition.version,
-          title: definition.title,
-          description: definition.description,
           domain: definition.category,
-          side: definition.side,
-          readOnly: definition.readOnly,
-          risk: definition.risk,
-          permission: definition.permission,
-          idempotent: definition.idempotent,
-          destructive: definition.destructive,
-          timeoutMs: definition.timeoutMs,
-          supportsPreview: definition.supportsPreview,
-          supportsUndo: definition.supportsUndo,
-          requiredScopes: definition.requiredContext,
-          prerequisites: semantics.prerequisites,
-          successEvidence: semantics.successEvidence,
-          failureRecovery: semantics.failureRecovery,
-        })
+          aliases: [],
+          dataClasses: ['C0'] as const,
+          acceptsRefs: [],
+          producesRefs: [],
+          availability: definition.requiredContext.map((scope) => `${scope} 作用域可用`),
+          concurrencyKey: definition.category,
+        }
     return agentToolCatalogEntrySchema.parse({
       name: definition.name,
       capabilityId: capability.id,

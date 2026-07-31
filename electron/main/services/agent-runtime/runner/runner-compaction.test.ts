@@ -10,12 +10,12 @@ import { AgentRunner } from './runner'
 
 function hostContext(): HostContextSnapshot {
   return {
-    schemaVersion: 'agent-contract/v1', rendererSessionId: 'renderer-1', revision: 1,
+    schemaVersion: 'agent-contract/v2', rendererSessionId: 'renderer-1', revision: 1,
     scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 },
     workspace: { id: 'generation', activeToolId: null },
     project: { id: null, selectedNodeId: null }, generation: { commandReady: true },
     assets: { view: 'closed', selectedAssetId: null }, uiReady: true,
-    availableCommands: [], availableQueries: [], capturedAt: new Date().toISOString(),
+    availableCapabilities: [], capturedAt: new Date().toISOString(),
   }
 }
 

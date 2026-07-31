@@ -1,7 +1,7 @@
 import { CheckCircle2, ChevronDown, ExternalLink, LoaderCircle, SearchCheck, Send, Wrench, XCircle } from 'lucide-react'
 import { memo, useState, type CSSProperties } from 'react'
 
-import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiIconButton } from '@/components/ui'
 
 import type { AgentToolActivity } from './agentRunReducer'
 import { describeErrorRecovery } from './errorPresentation'
@@ -35,7 +35,7 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
   const taskId = activity.resultReferences?.taskId
   const projectId = activity.resultReferences?.projectId
   const nodeId = activity.resultReferences?.nodeId
-  const hasDetails = Boolean(activity.inputDigest || activity.summary || activity.error || activity.artifactRef || activity.resultReferences)
+  const hasDetails = Boolean(activity.summary || activity.error)
   const statusLabel = activity.status === 'completed'
     ? completionLabels[activity.completionKind ?? (activity.readOnly ? 'observed' : 'executed')]
     : activeStatusLabels[activity.status]
@@ -52,8 +52,8 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
         : <Wrench className="h-4 w-4 text-text-muted" />
 
   return (
-    <section style={deferredCardStyle} className="px-1 py-0.5">
-      <div className="flex min-h-6 items-center gap-2">
+    <section style={deferredCardStyle} className="min-w-0 max-w-full overflow-hidden px-1 py-0.5">
+      <div className="flex min-h-6 min-w-0 items-center gap-2">
         {icon}
         <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <span className={`min-w-0 max-w-[45%] truncate ${UI_TEXT_LABEL_CLASS}`}>{activity.title}</span>
@@ -71,39 +71,42 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
           </UiButton>
         ) : null}
         {hasDetails ? (
-          <UiButton
+          <UiIconButton
             type="button"
-            size="sm"
-            variant="ghost"
+            showBorder={false}
+            appearance="hover-only"
             title={expanded ? '收起详情' : '展开详情'}
             onClick={() => setExpanded((value) => !value)}
-            className="!h-6 !w-6 !p-0"
+            aria-expanded={expanded}
+            className="!h-6 !w-6 !rounded-lg"
           >
-            <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? 'rotate-180' : ''}`} />
-          </UiButton>
+            <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+          </UiIconButton>
         ) : null}
       </div>
-      {expanded ? (
-        <div className="border-t border-border-dark/70 pb-1 pt-1.5">
-          {activity.summary ? <p className={`leading-4 ${UI_TEXT_META_CLASS}`}>{activity.summary}</p> : null}
-          {activity.error ? (
-            <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-2xs leading-4 text-danger">
-              <div>{activity.error.message}</div>
-              <div className="mt-1 text-text-muted">下一步：{describeErrorRecovery(activity.error)}</div>
-              <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>错误代码：{activity.error.code}</div>
-            </div>
-          ) : null}
-          {activity.resultReferences ? (
-            <dl className={`mt-1 grid gap-0.5 ${UI_TEXT_META_CLASS}`}>
-              {Object.entries(activity.resultReferences).map(([key, value]) => (
-                <div key={key} className="flex min-w-0 gap-2">
-                  <dt className="shrink-0">{key}</dt>
-                  <dd className="min-w-0 break-all text-text-dark">{value}</dd>
+      {hasDetails ? (
+        <div
+          className={`grid transition-[grid-template-rows,opacity] duration-200 ${
+            expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+          }`}
+        >
+          <div
+            aria-hidden={!expanded}
+            className={`min-h-0 overflow-hidden ${expanded ? '' : 'pointer-events-none select-none'}`}
+          >
+            <div className={`min-w-0 pb-1 pl-6 pt-1 [overflow-wrap:anywhere] transition-transform duration-200 ${
+              expanded ? 'translate-y-0' : '-translate-y-1'
+            }`}>
+              {activity.summary ? <p className={`break-words leading-4 ${UI_TEXT_META_CLASS}`}>{activity.summary}</p> : null}
+              {activity.error ? (
+                <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-2xs leading-4 text-danger">
+                  <div className="break-words [overflow-wrap:anywhere]">{activity.error.message}</div>
+                  <div className="mt-1 text-text-muted">下一步：{describeErrorRecovery(activity.error)}</div>
+                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>错误代码：{activity.error.code}</div>
                 </div>
-              ))}
-            </dl>
-          ) : null}
-          {activity.artifactRef ? <div className={`mt-1 truncate ${UI_TEXT_META_CLASS}`}>内部结果引用：{activity.artifactRef}</div> : null}
+              ) : null}
+            </div>
+          </div>
         </div>
       ) : null}
     </section>

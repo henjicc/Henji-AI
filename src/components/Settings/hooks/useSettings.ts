@@ -21,6 +21,7 @@ import {
   QUICK_DOWNLOAD_SETTING_SPECS,
   readLocalStorageSettings,
 } from '@/hooks/useLocalStorageSetting'
+import { APPLICATION_SETTINGS_CHANGED_EVENT } from '@/core/settings/events'
 
 interface Settings {
   maxHistoryCount: number
@@ -96,6 +97,8 @@ export function useSettings(): UseSettingsResult {
       setSettings(loaded)
     }
     loadSettings()
+    window.addEventListener(APPLICATION_SETTINGS_CHANGED_EVENT, loadSettings)
+    return () => window.removeEventListener(APPLICATION_SETTINGS_CHANGED_EVENT, loadSettings)
   }, [])
 
   // 更新单个设置
@@ -121,6 +124,7 @@ export function useSettings(): UseSettingsResult {
           ? USD_TO_CNY_RATE_STORAGE_KEY
           : key.replace(/([A-Z])/g, '_$1').toLowerCase()
     localStorage.setItem(storageKey, String(nextValue))
+    window.dispatchEvent(new Event(APPLICATION_SETTINGS_CHANGED_EVENT))
     if (COLLAPSE_SETTING_KEYS.includes(key)) {
       window.dispatchEvent(new Event('collapseSettingChanged'))
     }

@@ -7,7 +7,6 @@ import {
 } from '@/core/imageEdit'
 import {
   addAssetToLibrary,
-  createAsset,
   deleteAsset,
   inspectAsset,
   listAssetLibraries,
@@ -197,7 +196,7 @@ export async function addCameraStageObjectFromAgent(input: { projectId: string; 
   else store.addCamera()
   const objects = useCameraStageStore.getState().objects
   const object = objects[objects.length - 1]
-  if (!object) throw new Error('COMMAND_REJECTED')
+  if (!object) throw new Error('CAPABILITY_REJECTED')
   await saveCameraProject()
   touchToolboxScope()
   return { projectId: input.projectId, objectId: object.id, objectType: object.type }
@@ -208,7 +207,7 @@ export async function duplicateCameraStageObjectFromAgent(input: { projectId: st
   useCameraStageStore.getState().duplicateObject(input.objectId)
   const objects = useCameraStageStore.getState().objects
   const object = objects[objects.length - 1]
-  if (!object) throw new Error('COMMAND_REJECTED')
+  if (!object) throw new Error('CAPABILITY_REJECTED')
   await saveCameraProject()
   touchToolboxScope()
   return { projectId: input.projectId, objectId: object.id, duplicatedFromObjectId: input.objectId }
@@ -254,7 +253,7 @@ export async function addCameraStageShotFromAgent(input: { projectId: string; na
   store.addShot()
   const state = useCameraStageStore.getState()
   const shotId = state.selectedShotId
-  if (!shotId) throw new Error('COMMAND_REJECTED')
+  if (!shotId) throw new Error('CAPABILITY_REJECTED')
   state.updateShotName(shotId, input.name.trim())
   state.updateShotCamera(shotId, input.cameraId)
   await saveCameraProject()
@@ -394,7 +393,7 @@ export async function commitImageEditFromAgent(previewRef: string, displayName?:
     imagePreviewRefs.delete(previewRef)
     touchAssetScope()
     logger.info('image_edit.preview.commit.completed', { previewRef, assetId: asset.id })
-    return { previewRef, assetId: asset.id, filePath: asset.filePath, status: 'committed' }
+    return { previewRef, assetId: asset.id, status: 'committed' }
   } catch (error) {
     logger.error('image_edit.preview.commit.failed', {
       previewRef,
@@ -453,12 +452,6 @@ export async function deleteAssetFromAgent(assetId: string): Promise<Record<stri
   if (useAssetLibraryStore.getState().selectedAsset?.id === assetId) useAssetLibraryStore.getState().setSelectedAsset(null)
   touchAssetScope()
   return { assetId, status: 'deleted' }
-}
-
-export async function createAssetFromAgent(input: { filePath: string; mediaType: 'image' | 'video' | 'audio'; displayName?: string }): Promise<Record<string, unknown>> {
-  const asset = await createAsset({ ...input, source: 'imported' })
-  touchAssetScope()
-  return { assetId: asset.id, mediaType: asset.mediaType }
 }
 
 export async function addAssetToCanvasFromAgent(input: { projectId: string; assetId: string; placement: { mode: 'viewport_center' } | { mode: 'right_of_node'; anchorNodeId: string } }): Promise<Record<string, unknown>> {

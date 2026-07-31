@@ -27,8 +27,12 @@ function contextSnapshot(): HostContextSnapshot {
     },
     assets: { view: 'closed', selectedAssetId: null },
     uiReady: true,
-    availableCommands: ['switch_workspace', 'create_visible_generation_task'],
-    availableQueries: ['get_host_context', 'search_models'],
+    availableCapabilities: [
+      'switch_workspace',
+      'create_visible_generation_task',
+      'get_host_context',
+      'search_models',
+    ],
     capturedAt: new Date().toISOString(),
   }
 }

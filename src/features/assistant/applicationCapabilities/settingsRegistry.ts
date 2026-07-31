@@ -3,25 +3,26 @@ import { z } from 'zod'
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 import { createLogger } from '@/core/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { ADDITIONAL_APPLICATION_SETTING_DEFINITIONS } from './settingsRegistryAdditional'
 
 const logger = createLogger('features.assistant.settings_registry')
 const MAX_SETTING_PLANS = 64
 
-type SettingValue = string | number | boolean
+export type SettingValue = string | number | boolean
 
-interface ApplicationSettingDefinition<TValue extends SettingValue = SettingValue> {
+export interface ApplicationSettingDefinition {
   id: string
   title: string
   description: string
   aliases: string[]
-  schema: z.ZodType<TValue>
-  defaultValue: TValue
+  schema: z.ZodType<SettingValue>
+  defaultValue: SettingValue
   target: SettingsNavigationTarget
   requiresReload: boolean
   requiresRestart: boolean
   sensitive: boolean
-  read: () => TValue
-  write: (value: TValue) => void
+  read: () => SettingValue
+  write: (value: SettingValue) => void
 }
 
 interface SettingChangePlan {
@@ -238,6 +239,7 @@ const definitions: ApplicationSettingDefinition[] = [
     read: () => useSettingsStore.getState().enableImageViewerInfoPanel,
     write: (value) => useSettingsStore.getState().setEnableImageViewerInfoPanel(z.boolean().parse(value)),
   },
+  ...ADDITIONAL_APPLICATION_SETTING_DEFINITIONS,
 ]
 
 const definitionMap = new Map(definitions.map((definition) => [definition.id, definition]))
@@ -258,6 +260,51 @@ const protectedDefinitions: Record<string, Record<string, unknown>> = {
     aliases: ['下载路径', '保存目录', '本地路径'],
     target: { tab: 'general', sectionId: 'general-storage' },
     sensitive: true,
+    writable: false,
+  },
+  'storage.data_path': {
+    id: 'storage.data_path',
+    title: '应用数据目录',
+    description: '可以定位到数据目录设置；迁移目录必须通过系统确认完成。',
+    aliases: ['数据目录', '迁移数据', '存储位置'],
+    target: { tab: 'general', sectionId: 'general-storage' },
+    sensitive: true,
+    writable: false,
+  },
+  'downloads.quick_path': {
+    id: 'downloads.quick_path',
+    title: '快速下载目录',
+    description: '可以定位到下载目录设置；具体路径只能通过系统选择器确认。',
+    aliases: ['快速下载路径', '下载文件夹'],
+    target: { tab: 'general', sectionId: 'general-storage' },
+    sensitive: true,
+    writable: false,
+  },
+  'models.visibility': {
+    id: 'models.visibility',
+    title: '模型显示范围',
+    description: '可以定位到模型管理；具体模型选择由用户在列表中确认。',
+    aliases: ['隐藏模型', '显示模型', '模型管理'],
+    target: { tab: 'models', sectionId: 'models-visibility' },
+    sensitive: false,
+    writable: false,
+  },
+  'llm.configuration': {
+    id: 'llm.configuration',
+    title: '助手模型配置',
+    description: '可以定位到助手模型配置；密钥值不会提供给助手。',
+    aliases: ['大语言模型', '助手模型', 'LLM 配置'],
+    target: { tab: 'api', sectionId: 'api-llm' },
+    sensitive: true,
+    writable: false,
+  },
+  'updates.configuration': {
+    id: 'updates.configuration',
+    title: '软件更新',
+    description: '可以定位到软件更新与维护设置。',
+    aliases: ['检查更新', '自动更新', '维护'],
+    target: { tab: 'general', sectionId: 'general-maintenance' },
+    sensitive: false,
     writable: false,
   },
 }
@@ -297,55 +344,20 @@ function publicDefinition(definition: ApplicationSettingDefinition): Record<stri
 }
 
 function applySettingChangesAtomically(changes: SettingChangePlan['changes']): void {
-  useSettingsStore.setState((state) => {
-    let next = { ...state }
+  const completed: SettingChangePlan['changes'] = []
+  try {
     for (const change of changes) {
-      switch (change.id) {
-        case 'interface.blur_enabled':
-          next = { ...next, uiBlurEnabled: z.boolean().parse(change.after) }
-          break
-        case 'interface.radius':
-          next = { ...next, uiRadiusPreset: z.enum(['compact', 'default', 'large']).parse(change.after) }
-          break
-        case 'interface.theme_tone':
-          next = { ...next, themeTonePreset: z.enum(['neutral', 'warm', 'cool']).parse(change.after) }
-          break
-        case 'general.startup_workspace':
-          next = { ...next, startupWorkspace: z.enum(['generation', 'nodes', 'tools']).parse(change.after) }
-          break
-        case 'generation.upload_provider':
-          next = { ...next, uploadProvider: z.enum(['fal', 'kie', 'bizyair']).parse(change.after) }
-          break
-        case 'generation.upload_fallback':
-          next = { ...next, uploadFallbackEnabled: z.boolean().parse(change.after) }
-          break
-        case 'generation.large_upload_strategy':
-          next = { ...next, largeUploadStrategy: z.enum(['ask', 'copy', 'reference']).parse(change.after) }
-          break
-        case 'canvas.detail_level':
-          next = { ...next, canvasLodLevel: z.enum(['off', 'detail', 'balanced', 'performance']).parse(change.after) }
-          break
-        case 'assets.open_mode':
-          next = { ...next, assetTabAction: z.enum(['floating', 'workspace']).parse(change.after) }
-          break
-        case 'assets.panel_position':
-          next = { ...next, assetPanelPosition: z.enum(['top', 'left', 'right']).parse(change.after) }
-          break
-        case 'assets.edge_trigger':
-          next = { ...next, assetEdgeTriggerEnabled: z.boolean().parse(change.after) }
-          break
-        case 'assets.thumbnail_fit':
-          next = { ...next, assetThumbnailFit: z.enum(['cover', 'contain']).parse(change.after) }
-          break
-        case 'generation.viewer_info':
-          next = { ...next, enableImageViewerInfoPanel: z.boolean().parse(change.after) }
-          break
-        default:
-          throw new Error('NOT_FOUND')
-      }
+      const definition = definitionMap.get(change.id)
+      if (!definition) throw new Error('NOT_FOUND')
+      definition.write(change.after)
+      completed.push(change)
     }
-    return next
-  })
+  } catch (error) {
+    for (const change of completed.reverse()) {
+      definitionMap.get(change.id)?.write(change.before)
+    }
+    throw error
+  }
 }
 
 export function searchApplicationSettings(query: string, limit: number): Record<string, unknown>[] {
@@ -395,6 +407,8 @@ export function getApplicationSettings(ids: string[]): {
         configuredCount: useSettingsStore.getState().downloadPresetPaths.length,
       }
     }
+    const protectedDefinition = protectedDefinitions[id]
+    if (protectedDefinition) return protectedDefinition
     const definition = definitionMap.get(id)
     if (!definition) throw new Error('NOT_FOUND')
     return {
@@ -451,6 +465,7 @@ export function applyApplicationSettingsChange(planRef: string): {
     settingIds: plan.changes.map((change) => change.id),
   })
   applySettingChangesAtomically(plan.changes)
+  if (plan.revision === revision) revision += 1
   plans.delete(planRef)
   const undoPlan: SettingChangePlan = {
     planRef: createPlanRef(),

@@ -1,5 +1,5 @@
 import type { AgentRunState } from '../../../src/core/assistant/events'
-import type { HostCommandResult } from '../../../src/core/assistant/hostContracts'
+import type { ApplicationCapabilityResult } from '../../../src/core/assistant/hostContracts'
 import {
   isGenerationTerminalStatus,
   normalizeGenerationTaskStatus,
@@ -22,7 +22,7 @@ export interface CliGenerationWaitResult {
 interface GenerationWaitInput {
   state: AgentRunState
   timeoutMs: number
-  observe: (taskId: string, attempt: number) => Promise<HostCommandResult>
+  observe: (taskId: string, attempt: number) => Promise<ApplicationCapabilityResult>
   onObservation: (observation: CliGenerationTaskObservation) => void
   pollIntervalMs?: number
   sleep?: (delayMs: number) => Promise<void>
@@ -60,7 +60,7 @@ export function extractSubmittedGenerationTaskIds(state: AgentRunState): string[
 
 export function normalizeGenerationTaskObservation(
   taskId: string,
-  result: HostCommandResult
+  result: ApplicationCapabilityResult
 ): CliGenerationTaskObservation {
   if (!result.ok) {
     return {

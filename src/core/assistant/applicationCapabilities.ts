@@ -1,6 +1,10 @@
 import { z } from 'zod'
 
-import type { AgentDataClass, AgentToolRisk } from './toolContracts'
+import type {
+  AgentDataClass,
+  AgentToolObservation,
+  AgentToolPreview,
+} from './toolContracts'
 
 const applicationCapabilityRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])
 const applicationCapabilityDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
@@ -40,6 +44,12 @@ export const applicationCapabilityDescriptorSchema = z.object({
   producesRefs: z.array(z.string().min(1).max(80)).max(12),
   successEvidence: z.array(z.string().min(1).max(500)).min(1).max(12),
   failureRecovery: z.array(z.string().min(1).max(500)).min(1).max(12),
+  openWorld: z.boolean().optional(),
+  retryPolicy: z.object({
+    maxRetries: z.number().int().min(0).max(3),
+    baseDelayMs: z.number().int().nonnegative().max(30_000),
+  }).strict().optional(),
+  maxCallsPerRun: z.number().int().positive().optional(),
   available: z.boolean().default(true),
 }).strict()
 export type ApplicationCapabilityDescriptor = z.infer<typeof applicationCapabilityDescriptorSchema>
@@ -49,6 +59,14 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   inputSchema: z.ZodType<TInput>
   outputSchema: z.ZodType<TOutput>
   aiInputSchema: Record<string, unknown>
+  completionKind?: 'executed' | 'submitted' | 'observed'
+  parallelSafe?: boolean
+  resolveConcurrencyKey?(input: TInput): string
+  resolveTargetIds?(input: TInput): Record<string, string>
+  resolveDataClasses?(output: TOutput): AgentDataClass[]
+  summarize?(output: TOutput): string
+  preview?(input: TInput): AgentToolPreview
+  createUndo?(output: TOutput): AgentToolObservation['undo']
 }
 
 export class ApplicationCapabilityRegistry {
@@ -61,6 +79,14 @@ export class ApplicationCapabilityRegistry {
       inputSchema,
       outputSchema,
       aiInputSchema,
+      completionKind: _completionKind,
+      parallelSafe: _parallelSafe,
+      resolveConcurrencyKey: _resolveConcurrencyKey,
+      resolveTargetIds: _resolveTargetIds,
+      resolveDataClasses: _resolveDataClasses,
+      summarize: _summarize,
+      preview: _preview,
+      createUndo: _createUndo,
       ...descriptor
     } = definition
     applicationCapabilityDescriptorSchema.parse({ ...descriptor, available: true })
@@ -97,6 +123,14 @@ export class ApplicationCapabilityRegistry {
         inputSchema: _inputSchema,
         outputSchema: _outputSchema,
         aiInputSchema: _aiInputSchema,
+        completionKind: _completionKind,
+        parallelSafe: _parallelSafe,
+        resolveConcurrencyKey: _resolveConcurrencyKey,
+        resolveTargetIds: _resolveTargetIds,
+        resolveDataClasses: _resolveDataClasses,
+        summarize: _summarize,
+        preview: _preview,
+        createUndo: _createUndo,
         ...descriptor
       } = definition
       return applicationCapabilityDescriptorSchema.parse({
@@ -121,46 +155,3 @@ export const applicationCapabilitySearchResultSchema = z.object({
   addedToolNames: z.array(z.string().min(1)).max(20),
   nextCursor: z.number().int().nonnegative().nullable(),
 }).strict()
-
-export interface ApplicationCapabilityCompatibilityInput {
-  id: string
-  version: number
-  title: string
-  description: string
-  domain: string
-  side: 'frontend' | 'backend'
-  readOnly: boolean
-  risk: AgentToolRisk
-  permission: string
-  idempotent: boolean
-  destructive: boolean
-  timeoutMs: number
-  supportsPreview: boolean
-  supportsUndo: boolean
-  requiredScopes: string[]
-  availability?: string[]
-  concurrencyKey?: string
-  prerequisites: string[]
-  successEvidence: string[]
-  failureRecovery: string[]
-  dataClasses?: AgentDataClass[]
-  aliases?: string[]
-  acceptsRefs?: string[]
-  producesRefs?: string[]
-}
-
-/** 迁移期把旧 Agent 工具转换成统一能力描述；新能力应直接提供完整定义。 */
-export function createCompatibilityCapabilityDescriptor(
-  input: ApplicationCapabilityCompatibilityInput
-): ApplicationCapabilityDescriptor {
-  return applicationCapabilityDescriptorSchema.parse({
-    ...input,
-    aliases: input.aliases ?? [],
-    dataClasses: input.dataClasses ?? ['C0'],
-    acceptsRefs: input.acceptsRefs ?? [],
-    producesRefs: input.producesRefs ?? [],
-    availability: input.availability ?? input.requiredScopes.map((scope) => `${scope} 作用域可用`),
-    concurrencyKey: input.concurrencyKey ?? input.domain,
-    available: true,
-  })
-}

@@ -1,6 +1,6 @@
 import {
   BUILTIN_APPLICATION_CAPABILITY_REGISTRY,
-} from '../../../../../../src/core/assistant/builtinApplicationCapabilities'
+} from '../../../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
 import type {
   ApplicationCapabilityDefinition,
   ApplicationRef,
@@ -33,6 +33,7 @@ function targetIds(input: unknown): Record<string, string> {
 }
 
 function concurrencyKey(definition: ApplicationCapabilityDefinition, input: unknown): string {
+  if (definition.resolveConcurrencyKey) return definition.resolveConcurrencyKey(input)
   const targets = targetIds(input)
   const suffix = Object.values(targets).join(':')
   if (definition.domain === 'settings') return definition.concurrencyKey
@@ -44,6 +45,7 @@ function summarize(
   definition: ApplicationCapabilityDefinition,
   output: Record<string, unknown>
 ): string {
+  if (definition.summarize) return definition.summarize(output)
   if (definition.id === 'search_application_settings') {
     const settings = output.settings
     return `已找到 ${Array.isArray(settings) ? settings.length : 0} 项相关设置。`
@@ -75,10 +77,11 @@ function adaptCapability(
     permission: definition.permission,
     readOnly: definition.readOnly,
     destructive: definition.destructive,
-    openWorld: false,
+    openWorld: definition.openWorld ?? false,
     idempotent: definition.idempotent,
     timeoutMs: definition.timeoutMs,
-    retryPolicy: {
+    maxCallsPerRun: definition.maxCallsPerRun,
+    retryPolicy: definition.retryPolicy ?? {
       maxRetries: definition.readOnly ? 1 : 0,
       baseDelayMs: definition.readOnly ? 100 : 0,
     },
@@ -96,7 +99,9 @@ function adaptCapability(
         : ['返回经过校验的应用状态。'],
       successEvidence: definition.successEvidence,
       failureRecovery: definition.failureRecovery,
-      parallelSafe: definition.readOnly,
+      completionKind: definition.completionKind
+        ?? (definition.readOnly ? 'observed' : 'executed'),
+      parallelSafe: definition.parallelSafe ?? definition.readOnly,
     },
     execute: async (input, context) => {
       const expectedRevisions = context.hostContext
@@ -115,9 +120,12 @@ function adaptCapability(
         },
       }, context))
     },
+    preview: definition.preview
+      ? (input) => definition.preview?.(input) as ReturnType<NonNullable<typeof definition.preview>>
+      : undefined,
     concurrencyKey: (input) => concurrencyKey(definition, input),
-    targetIds,
-    dataClasses: () => definition.dataClasses,
+    targetIds: (input) => definition.resolveTargetIds?.(input) ?? targetIds(input),
+    dataClasses: (output) => definition.resolveDataClasses?.(output) ?? definition.dataClasses,
     summarize: (output) => summarize(
       definition,
       output && typeof output === 'object' && !Array.isArray(output)
@@ -126,6 +134,8 @@ function adaptCapability(
     ),
     undo: definition.supportsUndo
       ? (output) => {
+          const declared = definition.createUndo?.(output)
+          if (declared) return declared
           const record = output && typeof output === 'object' && !Array.isArray(output)
             ? output as Record<string, unknown>
             : {}
@@ -143,5 +153,6 @@ export function createFrontendApplicationCapabilityTools(
 ): AgentToolDefinition[] {
   return BUILTIN_APPLICATION_CAPABILITY_REGISTRY
     .list()
+    .filter((definition) => definition.side === 'frontend')
     .map((definition) => adaptCapability(definition, invoke))
 }

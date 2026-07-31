@@ -24,8 +24,7 @@ function hostContext(): HostContextSnapshot {
     generation: { commandReady: true },
     assets: { view: 'closed', selectedAssetId: null },
     uiReady: true,
-    availableCommands: ['create_visible_generation_task'],
-    availableQueries: ['get_host_context'],
+    availableCapabilities: ['create_visible_generation_task', 'get_host_context'],
     capturedAt: new Date().toISOString(),
   }
 }

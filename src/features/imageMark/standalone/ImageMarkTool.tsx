@@ -35,6 +35,8 @@ interface ImageMarkSource {
   /** 用于另存为默认文件名 */
   name: string;
   sessionKey: number;
+  /** 本次打开会话的初始编辑文档；助手创建的预览必须随图片一起交给编辑器。 */
+  initialDocument: ImageEditDocument;
 }
 
 export interface ImageMarkToolProps {
@@ -58,6 +60,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
   const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
   const sourceSequenceRef = useRef(0);
+  const acceptingHandoffRef = useRef<string | null>(null);
 
   const acceptSource = useCallback(async (
     url: string,
@@ -77,17 +80,35 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
       }
     }
     sourceSequenceRef.current += 1;
-    setSource({ url, name, sessionKey: sourceSequenceRef.current });
+    setSource({
+      url,
+      name,
+      sessionKey: sourceSequenceRef.current,
+      initialDocument: document,
+    });
     logger.info('image_mark.standalone.open.completed', { name });
   }, []);
 
   useEffect(() => {
-    if (!pendingHandoff) return;
+    if (!pendingHandoff || acceptingHandoffRef.current === pendingHandoff.sessionRef) return;
+    acceptingHandoffRef.current = pendingHandoff.sessionRef;
     void acceptSource(
       pendingHandoff.sourceUrl,
       pendingHandoff.sourceName,
       pendingHandoff.document
-    ).then(() => consumeHandoff(pendingHandoff.sessionRef));
+    )
+      .then(() => consumeHandoff(pendingHandoff.sessionRef))
+      .catch((error) => {
+        logger.error('image_mark.standalone.handoff.failed', {
+          sessionRef: pendingHandoff.sessionRef,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })
+      .finally(() => {
+        if (acceptingHandoffRef.current === pendingHandoff.sessionRef) {
+          acceptingHandoffRef.current = null;
+        }
+      });
   }, [acceptSource, consumeHandoff, pendingHandoff]);
 
   const acceptFile = useCallback(async (file: File) => {
@@ -281,6 +302,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
       <ImageEditor
         key={source.sessionKey}
         sourceImageUrl={source.url}
+        initialDocument={source.initialDocument}
         onDocumentChange={(document) => {
           documentRef.current = document;
         }}

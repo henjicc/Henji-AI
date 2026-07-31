@@ -3,7 +3,7 @@ import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import {
   frontendToolAcknowledgementSchema,
   frontendToolResultSchema,
-  hostContextSnapshotSchema,
+  parseHostContextSnapshot,
 } from '../../../src/core/assistant/hostContracts'
 import { assistantUserInstructionsUpdateSchema } from '../../../src/core/assistant/userInstructions'
 import {
@@ -115,7 +115,7 @@ export function registerAssistantIpc(): void {
     ({ scope }) => clearAgentMemories(scope),
     assertTrustedAssistantRenderer
   )
-  registerIpcHandler('assistant:publishHostContext', (input) => hostContextSnapshotSchema.parse(input), (snapshot, event) => {
+  registerIpcHandler('assistant:publishHostContext', (input) => parseHostContextSnapshot(input), (snapshot, event) => {
     publishAssistantHostContext(event.sender.id, snapshot)
   }, assertTrustedAssistantRenderer)
   registerIpcHandler('assistant:frontendTool:ack', (input) => frontendToolAcknowledgementSchema.parse(input), (acknowledgement, event) => {

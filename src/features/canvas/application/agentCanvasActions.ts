@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 
-import type { CanvasNodePlacement, HostErrorCode } from '@/core/assistant/hostContracts'
+import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
+import type { HostErrorCode } from '@/core/assistant/hostContracts'
 import {
   DEFAULT_NODE_WIDTH,
   type CanvasEdge,
@@ -282,7 +283,7 @@ export function connectCanvasNodesFromAgent(input: {
     handles.sourceHandle,
     handles.targetHandle
   ))
-  if (!edge) throw new AgentCanvasActionError('COMMAND_REJECTED', '画布连接未能创建')
+  if (!edge) throw new AgentCanvasActionError('CAPABILITY_REJECTED', '画布连接未能创建')
   const undoRef = rememberAgentCanvasUndo(input.projectId, 'connect_nodes')
   persistAgentCanvasState()
   return {
@@ -344,7 +345,7 @@ async function waitForFocusHandler(signal: AbortSignal): Promise<CanvasNodeFocus
     }
     const timer = setTimeout(() => {
       cleanup()
-      reject(new AgentCanvasActionError('COMMAND_NOT_READY', '画布界面尚未准备好定位节点'))
+      reject(new AgentCanvasActionError('CAPABILITY_NOT_READY', '画布界面尚未准备好定位节点'))
     }, FOCUS_HANDLER_WAIT_MS)
     signal.addEventListener('abort', onAbort, { once: true })
     focusHandlerListeners.add(onReady)

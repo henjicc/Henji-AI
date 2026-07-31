@@ -35,9 +35,76 @@ export interface ModelStepStreamTrace {
   reasoningCharacters: number
 }
 
+function contentParts(message: ModelStepMessage): Array<Record<string, unknown>> {
+  return Array.isArray(message.content) ? message.content : []
+}
+
+function toolCallIds(message: ModelStepMessage): string[] {
+  if (message.role !== 'assistant') return []
+  return contentParts(message).flatMap((part) => (
+    part.type === 'tool-call' && typeof part.toolCallId === 'string'
+      ? [part.toolCallId]
+      : []
+  ))
+}
+
+function toolResultIds(messages: ModelStepMessage[]): string[] {
+  return messages.flatMap((message) => (
+    message.role !== 'tool'
+      ? []
+      : contentParts(message).flatMap((part) => (
+          part.type === 'tool-result' && typeof part.toolCallId === 'string'
+            ? [part.toolCallId]
+            : []
+        ))
+  ))
+}
+
+function withoutToolCalls(message: ModelStepMessage): ModelStepMessage | null {
+  if (message.role !== 'assistant' || !Array.isArray(message.content)) return message
+  const content = message.content.filter((part) => part.type !== 'tool-call')
+  return content.length > 0 ? { ...message, content } : null
+}
+
+/**
+ * 修复旧会话或异常截断留下的不完整工具消息组。
+ * 供应商要求 assistant tool-calls 与紧随其后的全部 tool-result 成组出现；
+ * 不能补齐时宁可移除未验证片段，也不能把孤立 role=tool 发给模型。
+ */
+export function normalizeModelToolMessagePairs(messages: ModelStepMessage[]): ModelStepMessage[] {
+  const normalized: ModelStepMessage[] = []
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = modelStepMessageSchema.parse(messages[index])
+    if (message.role === 'tool') continue
+    const callIds = toolCallIds(message)
+    if (callIds.length === 0) {
+      normalized.push(message)
+      continue
+    }
+    const followingTools: ModelStepMessage[] = []
+    let cursor = index + 1
+    while (cursor < messages.length && messages[cursor]?.role === 'tool') {
+      followingTools.push(modelStepMessageSchema.parse(messages[cursor]))
+      cursor += 1
+    }
+    const expected = new Set(callIds)
+    const results = toolResultIds(followingTools)
+    const complete = expected.size === callIds.length
+      && results.length === expected.size
+      && results.every((id) => expected.has(id))
+    if (complete) {
+      normalized.push(message, ...followingTools)
+    } else {
+      const retained = withoutToolCalls(message)
+      if (retained) normalized.push(retained)
+    }
+    index = cursor - 1
+  }
+  return normalized
+}
+
 function toAiMessages(messages: ModelStepMessage[]): ModelMessage[] {
-  const validated = messages.map((message) => modelStepMessageSchema.parse(message))
-  return validated as unknown as ModelMessage[]
+  return normalizeModelToolMessagePairs(messages) as unknown as ModelMessage[]
 }
 
 function buildTools(input: ModelStepInput): ToolSet | undefined {

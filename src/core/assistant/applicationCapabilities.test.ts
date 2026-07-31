@@ -8,7 +8,7 @@ import {
 } from './applicationCapabilities'
 import {
   BUILTIN_APPLICATION_CAPABILITY_REGISTRY,
-} from './builtinApplicationCapabilities'
+} from './builtinApplicationCapabilityRegistry'
 
 function capability(
   id: string,

@@ -6,11 +6,11 @@ import {
   frontendToolRequestSchema,
   frontendToolResultSchema,
   getFrontendToolOperationName,
-  hostContextSnapshotSchema,
+  parseHostContextSnapshot,
   type FrontendToolAcknowledgement,
   type FrontendToolRequest,
   type FrontendToolResult,
-  type HostCommandResult,
+  type ApplicationCapabilityResult,
   type HostContextSnapshot,
   type HostErrorCode,
 } from '../../../../src/core/assistant/hostContracts'
@@ -23,21 +23,28 @@ interface PendingFrontendCall {
   request: FrontendToolRequest
   webContentsId: number
   acknowledged: boolean
-  promise: Promise<HostCommandResult>
-  resolve: (result: HostCommandResult) => void
+  promise: Promise<ApplicationCapabilityResult>
+  resolve: (result: ApplicationCapabilityResult) => void
   timeout: NodeJS.Timeout
 }
 
 const contexts = new Map<number, HostContextSnapshot>()
 const pendingCalls = new Map<string, PendingFrontendCall>()
-const completedCalls = new Map<string, HostCommandResult>()
-const completedIdempotencyKeys = new Map<string, HostCommandResult>()
+const completedCalls = new Map<string, ApplicationCapabilityResult>()
+const completedIdempotencyKeys = new Map<string, ApplicationCapabilityResult>()
 
-function failure(code: HostErrorCode, message: string, recoverable = true): HostCommandResult {
+function failure(
+  code: HostErrorCode,
+  message: string,
+  recoverable = true
+): ApplicationCapabilityResult {
   return { ok: false, error: { code, message, recoverable } }
 }
 
-function rememberCompleted(request: FrontendToolRequest, result: HostCommandResult): void {
+function rememberCompleted(
+  request: FrontendToolRequest,
+  result: ApplicationCapabilityResult
+): void {
   completedCalls.set(request.callId, result)
   completedIdempotencyKeys.set(request.idempotencyKey, result)
   while (completedCalls.size > completedLimit) {
@@ -50,7 +57,7 @@ function rememberCompleted(request: FrontendToolRequest, result: HostCommandResu
   }
 }
 
-function finishPending(callId: string, result: HostCommandResult): void {
+function finishPending(callId: string, result: ApplicationCapabilityResult): void {
   const pending = pendingCalls.get(callId)
   if (!pending) return
   clearTimeout(pending.timeout)
@@ -66,7 +73,7 @@ function failCallsForRenderer(webContentsId: number, code: HostErrorCode, messag
 }
 
 export function publishAssistantHostContext(webContentsId: number, rawSnapshot: unknown): void {
-  const snapshot = hostContextSnapshotSchema.parse(rawSnapshot)
+  const snapshot = parseHostContextSnapshot(rawSnapshot)
   const previous = contexts.get(webContentsId)
   if (previous && previous.rendererSessionId !== snapshot.rendererSessionId) {
     failCallsForRenderer(webContentsId, 'RENDERER_RELOADED', '渲染进程已重载，前端工具调用状态未知')
@@ -121,7 +128,10 @@ export function getReadyAssistantRenderer(): WebContents | null {
   return selectedId === undefined ? null : webContents.fromId(selectedId) ?? null
 }
 
-export function requestAssistantFrontendTool(sender: WebContents, rawRequest: unknown): Promise<HostCommandResult> {
+export function requestAssistantFrontendTool(
+  sender: WebContents,
+  rawRequest: unknown
+): Promise<ApplicationCapabilityResult> {
   const request = frontendToolRequestSchema.parse(rawRequest)
   const completedByCall = completedCalls.get(request.callId)
   if (completedByCall) return Promise.resolve(completedByCall)
@@ -132,14 +142,14 @@ export function requestAssistantFrontendTool(sender: WebContents, rawRequest: un
 
   const context = contexts.get(sender.id)
   if (!context?.uiReady || sender.isDestroyed()) {
-    return Promise.resolve(failure('COMMAND_NOT_READY', '宿主界面尚未就绪'))
+    return Promise.resolve(failure('CAPABILITY_NOT_READY', '宿主界面尚未就绪'))
   }
   if (request.deadline <= Date.now()) {
     return Promise.resolve(failure('DEADLINE_EXCEEDED', '前端工具调用已超过截止时间'))
   }
 
-  let resolveCall: (result: HostCommandResult) => void = () => undefined
-  const promise = new Promise<HostCommandResult>((resolve) => { resolveCall = resolve })
+  let resolveCall: (result: ApplicationCapabilityResult) => void = () => undefined
+  const promise = new Promise<ApplicationCapabilityResult>((resolve) => { resolveCall = resolve })
   const timeout = setTimeout(() => {
     const current = pendingCalls.get(request.callId)
     if (!current) return

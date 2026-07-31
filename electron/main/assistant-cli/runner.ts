@@ -13,7 +13,7 @@ import {
 } from '../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../src/core/assistant/events'
 import type { AgentTraceRunSummary } from '../../../src/core/assistant/trace'
-import type { HostCommandResult } from '../../../src/core/assistant/hostContracts'
+import type { ApplicationCapabilityResult } from '../../../src/core/assistant/hostContracts'
 import {
   createFrontendToolRequest,
   getAssistantHostContext,
@@ -145,7 +145,7 @@ async function observeGenerationTask(
   runId: string,
   taskId: string,
   attempt: number
-): Promise<HostCommandResult> {
+): Promise<ApplicationCapabilityResult> {
   const callId = randomUUID()
   return await requestAssistantFrontendTool(owner, createFrontendToolRequest({
     runId,
@@ -153,7 +153,14 @@ async function observeGenerationTask(
     callId,
     idempotencyKey: `${runId}:cli-await-generation:${taskId}:${attempt}:${callId}`,
     deadline: Date.now() + 15_000,
-    operation: { kind: 'query', query: { name: 'get_generation_task', input: { taskId } } },
+    operation: {
+      kind: 'capability',
+      capability: {
+        id: 'get_generation_task',
+        version: 1,
+        input: { taskId },
+      },
+    },
   }))
 }
 

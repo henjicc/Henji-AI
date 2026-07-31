@@ -14,6 +14,7 @@ export type SettingsSectionId =
   | 'api-keys'
   | 'api-upload'
   | 'api-llm'
+  | 'api-agent-preferences'
   | 'interface-layout'
   | 'interface-assets'
   | 'interface-canvas'

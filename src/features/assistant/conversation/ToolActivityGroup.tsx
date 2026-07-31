@@ -37,34 +37,45 @@ export function ToolActivityGroup({
   }
 
   return (
-    <section className="px-1 py-0.5">
+    <section className="min-w-0 max-w-full overflow-hidden px-1 py-0.5">
       <UiButton
         type="button"
-        variant="ghost"
+        variant="plain"
         onClick={() => setExpanded((value) => !value)}
         aria-expanded={expanded}
-        className="!h-7 w-full justify-start gap-2 !rounded-lg !px-1.5 text-left"
+        className="!h-7 min-w-0 w-full justify-start gap-2 !rounded-lg !px-1.5 text-left"
       >
-        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center text-success">
           {expanded ? <CheckCircle2 className="h-3 w-3" /> : <SearchCheck className="h-3 w-3" />}
         </span>
         <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>已查询 {group.activities.length} 项</span>
         <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>{summarizeTitles(group.activities)}</span>
-        <ChevronDown className={`h-3 w-3 shrink-0 text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-3 w-3 shrink-0 text-text-muted transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
       </UiButton>
 
-      {expanded ? (
-        <div className="space-y-1 border-t border-border-dark/60 px-1 pb-1 pt-1">
-          {group.activities.map((activity) => (
-            <ToolActivityCard
-              key={activity.toolCallId}
-              activity={activity}
-              onOpenTask={onOpenTask}
-              onOpenNode={onOpenNode}
-            />
-          ))}
+      <div
+        className={`grid transition-[grid-template-rows,opacity] duration-200 ${
+          expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div
+          aria-hidden={!expanded}
+          className={`min-h-0 overflow-hidden ${expanded ? '' : 'pointer-events-none select-none'}`}
+        >
+          <div className={`space-y-1 px-1 pb-1 pt-1 transition-transform duration-200 ${
+            expanded ? 'translate-y-0' : '-translate-y-1'
+          }`}>
+            {group.activities.map((activity) => (
+              <ToolActivityCard
+                key={activity.toolCallId}
+                activity={activity}
+                onOpenTask={onOpenTask}
+                onOpenNode={onOpenNode}
+              />
+            ))}
+          </div>
         </div>
-      ) : null}
+      </div>
     </section>
   )
 }

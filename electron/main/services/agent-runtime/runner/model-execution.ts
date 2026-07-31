@@ -33,8 +33,7 @@ function compactRouterSnapshot(snapshot: HostContextSnapshot): Record<string, un
     },
     assets: snapshot.assets,
     uiReady: snapshot.uiReady,
-    availableCommands: snapshot.availableCommands,
-    availableQueries: snapshot.availableQueries,
+    availableCapabilities: snapshot.availableCapabilities ?? [],
   }
 }
 

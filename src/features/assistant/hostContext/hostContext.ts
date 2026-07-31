@@ -1,13 +1,11 @@
 import {
   AGENT_CONTRACT_VERSION,
   hostContextSnapshotSchema,
-  type HostCommandName,
   type HostContextSnapshot,
-  type HostQueryName,
   type HostScope,
   type HostScopeRevisions,
 } from '@/core/assistant/hostContracts'
-import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilities'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -116,82 +114,6 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
   const assets = useAssetLibraryStore.getState()
   const generationReady = isVisibleGenerationTaskHandlerReady()
   const ui = useUiStore.getState()
-  const commands: HostCommandName[] = [
-    'switch_workspace',
-    'open_canvas_project',
-    'create_canvas_project',
-  ]
-  if (project.currentProjectId) {
-    commands.push(
-      'close_canvas_project',
-      'rename_canvas_project',
-      'delete_canvas_project',
-      'add_canvas_node',
-      'duplicate_canvas_node',
-      'update_canvas_node',
-      'delete_canvas_nodes',
-      'add_asset_to_canvas',
-      'select_canvas_node',
-      'group_canvas_nodes',
-      'connect_canvas_nodes',
-      'disconnect_canvas_edge',
-      'focus_canvas_node',
-      'undo_canvas_change'
-    )
-    commands.push('commit_canvas_batch')
-  }
-  commands.push('select_toolbox_tool')
-  if (navigation.activeToolId === 'cameraStage') {
-    commands.push(
-      'create_camera_stage_project',
-      'open_camera_stage_project',
-      'rename_camera_stage_project',
-      'delete_camera_stage_project',
-      'add_camera_stage_object',
-      'duplicate_camera_stage_object',
-      'delete_camera_stage_object',
-      'update_camera_stage_object',
-      'add_camera_stage_shot',
-      'update_camera_stage_shot',
-    )
-  }
-  if (navigation.activeToolId === 'imageMark') {
-    commands.push('create_image_edit_preview', 'commit_image_edit')
-  }
-  commands.push(
-    'select_asset',
-    'set_asset_tags',
-    'add_asset_to_library',
-    'remove_asset_from_library',
-    'delete_asset',
-  )
-  if (generationReady) commands.push('create_visible_generation_task')
-  if (generationReady) commands.push('cancel_generation_task')
-  const queries: HostQueryName[] = [
-    'get_host_context',
-    'list_canvas_projects',
-    'get_canvas_project',
-    'get_canvas_node',
-    'plan_canvas_batch',
-    'preview_canvas_batch',
-    'search_canvas_node_types',
-    'get_canvas_node_schema',
-    'list_toolbox_tools',
-    'get_toolbox_state',
-    'list_camera_stage_projects',
-    'get_camera_stage_project',
-    'list_storyboard_projects',
-    'get_storyboard_project',
-    'query_assets',
-    'get_asset',
-    'list_asset_libraries',
-    'list_asset_tags',
-    'search_models',
-    'get_model_schema',
-    'prepare_generation_task',
-  ]
-  if (generationReady) queries.push('get_generation_task')
-
   const selectedRefs = [
     assets.selectedAsset ? `asset:${assets.selectedAsset.id}` : null,
     project.currentProjectId && canvas.selectedNodeId
@@ -260,8 +182,6 @@ export function createHostContextSnapshot(uiReady = true): HostContextSnapshot {
     },
     uiReady,
     availableCapabilities: applicationCapabilities.map((capability) => capability.id),
-    availableCommands: commands,
-    availableQueries: queries,
     capturedAt: new Date().toISOString(),
   })
 }

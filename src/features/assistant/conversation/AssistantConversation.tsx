@@ -151,8 +151,45 @@ export function AssistantConversation(): JSX.Element {
   if (tools !== cachedToolActivities?.activities) {
     toolActivitiesCacheRef.current = { runId: activeRunId, eventSequence: toolEventSequence, activities: tools }
   }
-  const toolGroups = useMemo(() => groupToolActivitiesForDisplay(tools), [tools])
   const modelUpdates = useMemo(() => selectModelPublicUpdates(run.view.events), [run.view.events])
+  const executionTimeline = useMemo(() => {
+    const ordered = [
+      ...tools.map((activity) => ({
+        kind: 'tool' as const,
+        sequence: activity.sequence,
+        activity,
+      })),
+      ...modelUpdates.map((update) => ({
+        kind: 'model' as const,
+        sequence: update.sequence,
+        update,
+      })),
+    ].sort((left, right) => left.sequence - right.sequence)
+    const timeline: Array<
+      | { kind: 'model'; sequence: number; update: (typeof modelUpdates)[number] }
+      | { kind: 'tools'; sequence: number; groups: ReturnType<typeof groupToolActivitiesForDisplay> }
+    > = []
+    let pendingTools: typeof tools = []
+    const flushTools = (): void => {
+      if (pendingTools.length === 0) return
+      timeline.push({
+        kind: 'tools',
+        sequence: pendingTools[0].sequence,
+        groups: groupToolActivitiesForDisplay(pendingTools),
+      })
+      pendingTools = []
+    }
+    for (const item of ordered) {
+      if (item.kind === 'tool') {
+        pendingTools.push(item.activity)
+      } else {
+        flushTools()
+        timeline.push(item)
+      }
+    }
+    flushTools()
+    return timeline
+  }, [modelUpdates, tools])
   const approval = useMemo(() => selectPendingApproval(run.view.events), [run.view.events])
   const externalWait = useMemo(() => {
     for (let index = run.view.events.length - 1; index >= 0; index -= 1) {
@@ -184,20 +221,15 @@ export function AssistantConversation(): JSX.Element {
     && latestModelStep
     && runState?.currentStepId === latestModelStep.stepId
   )
-  const finalResponseStarted = Boolean(runState?.finalText) || Boolean(
-    modelResponseStreaming
-    && tools.every((activity) => activity.status === 'completed' || activity.status === 'failed')
-  )
-  const hasActiveTool = tools.some((activity) => activity.status === 'requested' || activity.status === 'running')
+  const finalResponseStarted = Boolean(runState?.finalText)
   useEffect(() => {
     if (activityRunIdRef.current !== activeRunId) {
       activityRunIdRef.current = activeRunId
-      setActivityExpanded(!finalResponseStarted)
+      setActivityExpanded(true)
       return
     }
     if (finalResponseStarted) setActivityExpanded(false)
-    else if (hasActiveTool) setActivityExpanded(true)
-  }, [activeRunId, finalResponseStarted, hasActiveTool])
+  }, [activeRunId, finalResponseStarted])
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       const container = scrollRef.current
@@ -233,8 +265,8 @@ export function AssistantConversation(): JSX.Element {
   }, [])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-app">
-      <div ref={scrollRef} className="ui-scrollbar flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-app">
+      <div ref={scrollRef} className="ui-scrollbar flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
         {!runState && !currentGoal && historicalMessages.length === 0 && !transcript.loading ? (
           <UiEmpty
             className="min-h-full px-8"
@@ -259,7 +291,7 @@ export function AssistantConversation(): JSX.Element {
               ? '回答当前问题'
               : payload.data.mode === 'current_task' ? '补充当前任务' : '任务结束后继续'
             return (
-              <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
+              <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="min-w-0 w-fit max-w-[80%] self-end p-3">
                 <div className={`mb-1.5 flex items-center justify-end gap-1.5 text-right font-medium ${UI_TEXT_META_CLASS}`}>
                   <span>你 · {modeLabel} · {statusLabel}</span>
                   <UserRound className="h-3.5 w-3.5 shrink-0" />
@@ -280,7 +312,7 @@ export function AssistantConversation(): JSX.Element {
             )
           }
           return entry.kind === 'user_message' ? (
-            <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
+            <UiPanel key={entry.entryId} variant="inset" style={deferredBlockStyle} className="min-w-0 w-fit max-w-[80%] self-end p-3">
               <div className={`mb-1.5 flex items-center justify-end gap-1.5 text-right font-medium ${UI_TEXT_META_CLASS}`}>
                 <span>你</span>
                 <UserRound className="h-3.5 w-3.5 shrink-0" />
@@ -288,7 +320,7 @@ export function AssistantConversation(): JSX.Element {
               <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
             </UiPanel>
           ) : (
-            <section key={entry.entryId} style={deferredBlockStyle} className="w-full">
+            <section key={entry.entryId} style={deferredBlockStyle} className="min-w-0 w-full max-w-full overflow-hidden">
               <div className={`mb-1.5 flex items-center gap-1.5 font-medium ${UI_TEXT_META_CLASS}`}><Bot className="h-3.5 w-3.5" />助手</div>
               <AssistantMarkdown>{content}</AssistantMarkdown>
             </section>
@@ -301,7 +333,7 @@ export function AssistantConversation(): JSX.Element {
 
         {/* 用户消息使用右侧有限宽度气泡；助手消息使用整行正文。 */}
         {currentGoal ? (
-          <UiPanel variant="inset" style={deferredBlockStyle} className="w-fit max-w-[80%] self-end p-3">
+          <UiPanel variant="inset" style={deferredBlockStyle} className="min-w-0 w-fit max-w-[80%] self-end p-3">
             <div className={`mb-1.5 flex items-center justify-end gap-1.5 text-right font-medium ${UI_TEXT_META_CLASS}`}>
               <span>你</span>
               <UserRound className="h-3.5 w-3.5 shrink-0" />
@@ -318,7 +350,7 @@ export function AssistantConversation(): JSX.Element {
         ) : null}
 
         {runState ? (
-          <section className={`rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
+          <section className={`min-w-0 max-w-full overflow-hidden rounded-lg ${UI_INSET_SURFACE_CLASS}`}>
             <div className="flex items-center gap-1">
               <UiButton
                 type="button"
@@ -373,23 +405,30 @@ export function AssistantConversation(): JSX.Element {
                 aria-hidden={!activityExpanded}
                 className={`min-h-0 overflow-hidden ${activityExpanded ? '' : 'pointer-events-none select-none'}`}
               >
-                <div className={`space-y-1 border-t border-border-dark/60 p-1.5 transition-transform duration-200 ${
+                <div className={`min-w-0 space-y-1 border-t border-border-dark/60 p-1.5 transition-transform duration-200 ${
                   activityExpanded ? 'translate-y-0' : '-translate-y-2'
                 }`}>
                   <ExecutionPlanCard presentation={execution} runStatus={runState.status} />
-                  {modelUpdates.map((update) => <ModelProgressMessage key={update.stepId} update={update} />)}
-                  {toolGroups.length > 0 ? (
-                    <section aria-label="助手工具执行记录" className="space-y-1">
-                      {toolGroups.map((group) => (
-                        <ToolActivityGroup
-                          key={group.groupId}
-                          group={group}
-                          onOpenTask={openTask}
-                          onOpenNode={openNode}
-                        />
-                      ))}
-                    </section>
-                  ) : null}
+                  {executionTimeline.map((item) => (
+                    item.kind === 'model'
+                      ? <ModelProgressMessage key={`model:${item.update.stepId}`} update={item.update} />
+                      : (
+                          <section
+                            key={`tools:${item.sequence}`}
+                            aria-label="助手工具执行记录"
+                            className="space-y-1"
+                          >
+                            {item.groups.map((group) => (
+                              <ToolActivityGroup
+                                key={group.groupId}
+                                group={group}
+                                onOpenTask={openTask}
+                                onOpenNode={openNode}
+                              />
+                            ))}
+                          </section>
+                        )
+                  ))}
                 </div>
               </div>
             </div>

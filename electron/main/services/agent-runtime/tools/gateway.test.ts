@@ -20,8 +20,7 @@ function createContext(): HostContextSnapshot {
     generation: { commandReady: true },
     assets: { view: 'closed', selectedAssetId: null },
     uiReady: true,
-    availableCommands: ['switch_workspace', 'create_visible_generation_task'],
-    availableQueries: ['get_host_context'],
+    availableCapabilities: ['switch_workspace', 'create_visible_generation_task', 'get_host_context'],
     capturedAt: new Date().toISOString(),
   }
 }

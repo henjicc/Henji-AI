@@ -20,8 +20,13 @@ function contextSnapshot(): HostContextSnapshot {
     generation: { commandReady: true },
     assets: { view: 'closed', selectedAssetId: null },
     uiReady: true,
-    availableCommands: ['switch_workspace', 'create_visible_generation_task'],
-    availableQueries: ['search_models', 'get_model_schema', 'get_generation_task'],
+    availableCapabilities: [
+      'switch_workspace',
+      'create_visible_generation_task',
+      'search_models',
+      'get_model_schema',
+      'get_generation_task',
+    ],
     capturedAt: new Date().toISOString(),
   }
 }
@@ -130,8 +135,7 @@ describe('AgentToolCatalogPlanner', () => {
       .map((definition) => definition.name)
     const fullContext = {
       ...contextSnapshot(),
-      availableCommands: allFrontendNames,
-      availableQueries: allFrontendNames,
+      availableCapabilities: allFrontendNames,
     }
     const planner = new AgentToolCatalogPlanner(registry)
     const allCanvas = registry.search('', 'canvas', fullContext, 100)

@@ -87,9 +87,10 @@ export class AgentExternalWaitRuntime {
     const host = getAssistantHostContext(owner.id)
     if (!host) throw new Error('[host_not_ready] 宿主界面尚未就绪')
     const result = await invokeAgentFrontendTool({
-      kind: 'command',
-      command: {
-        name: 'cancel_generation_task',
+      kind: 'capability',
+      capability: {
+        id: 'cancel_generation_task',
+        version: 1,
         input: { taskId: wait.taskId, reason: '用户取消外部等待并同时取消生成' },
         expectedRevisions: { generation: host.scopeRevisions.generation },
       },

@@ -9,6 +9,9 @@ export function assertAgentToolDefinition<TInput, TOutput>(
   if (definition.risk === 'R4') {
     throw new Error(`禁止注册 R4 工具：${definition.name}`)
   }
+  if (definition.side === 'frontend' && !definition.capability) {
+    throw new Error(`前端工具必须来自原生应用能力定义：${definition.name}`)
+  }
   if (definition.risk === 'R0' && definition.destructive) {
     throw new Error(`R0 工具不能声明为破坏性操作：${definition.name}`)
   }

@@ -43,8 +43,7 @@ function hostContext(): HostContextSnapshot {
     generation: { commandReady: true },
     assets: { view: 'closed', selectedAssetId: null },
     uiReady: true,
-    availableCommands: [],
-    availableQueries: ['get_host_context'],
+    availableCapabilities: ['get_host_context'],
     capturedAt: new Date().toISOString(),
   }
 }
@@ -294,8 +293,8 @@ describe('AgentRunner 模型输出完整性', () => {
     expect(result.events.some((event) => (
       event.type === 'ToolStarted' || event.type === 'ApprovalRequired'
     ))).toBe(false)
-    expect(JSON.stringify(result.nextTurnMessages)).toContain('MODEL_OUTPUT_INCOMPLETE')
     expect(JSON.stringify(result.nextTurnMessages)).toContain('[模型输出完整性恢复要求]')
+    expect(result.nextTurnMessages.some((message) => message.role === 'tool')).toBe(false)
   })
 
   it('并行模型返回多个截断工具调用时全部 fail-closed', async () => {

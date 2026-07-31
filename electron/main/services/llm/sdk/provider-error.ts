@@ -30,6 +30,15 @@ function nestedRecord(value: unknown): ErrorRecord {
   return value && typeof value === 'object' ? value as ErrorRecord : {}
 }
 
+function jsonRecord(value: unknown): ErrorRecord {
+  if (typeof value !== 'string') return nestedRecord(value)
+  try {
+    return nestedRecord(JSON.parse(value) as unknown)
+  } catch {
+    return {}
+  }
+}
+
 function stringValue(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
@@ -41,12 +50,30 @@ function statusValue(record: ErrorRecord): number | null {
 
 function providerCode(record: ErrorRecord): string {
   const data = nestedRecord(record.data)
-  const responseBody = nestedRecord(record.responseBody)
+  const dataError = nestedRecord(data.error)
+  const responseBody = jsonRecord(record.responseBody)
   const responseError = nestedRecord(responseBody.error)
   return stringValue(record.code)
     ?? stringValue(data.code)
+    ?? stringValue(dataError.code)
     ?? stringValue(responseError.code)
     ?? 'PROVIDER_ERROR'
+}
+
+function providerMessage(record: ErrorRecord): string | null {
+  const data = nestedRecord(record.data)
+  const dataError = nestedRecord(data.error)
+  const responseBody = jsonRecord(record.responseBody)
+  const responseError = nestedRecord(responseBody.error)
+  const raw = stringValue(dataError.message)
+    ?? stringValue(responseError.message)
+    ?? stringValue(data.message)
+    ?? stringValue(responseBody.message)
+  if (!raw) return null
+  return raw
+    .replace(/(?:sk-|key-|token-)[a-z0-9_-]{8,}/gi, '[已隐藏]')
+    .replace(/\s+/g, ' ')
+    .slice(0, 500)
 }
 
 function categoryFor(status: number | null, code: string, error: unknown): ModelProviderErrorCategory {
@@ -82,7 +109,10 @@ function retryAfterMs(record: ErrorRecord): number | null {
   return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : null
 }
 
-function safeMessage(category: ModelProviderErrorCategory): string {
+function safeMessage(
+  category: ModelProviderErrorCategory,
+  detail: string | null = null
+): string {
   const messages: Record<ModelProviderErrorCategory, string> = {
     network: '模型供应商网络请求失败',
     rate_limit: '模型供应商请求频率受限',
@@ -95,7 +125,8 @@ function safeMessage(category: ModelProviderErrorCategory): string {
     cancelled: '模型请求已取消',
     unknown: '模型供应商请求失败',
   }
-  return messages[category]
+  const summary = messages[category]
+  return category === 'invalid_request' && detail ? `${summary}：${detail}` : summary
 }
 
 export function normalizeProviderError(input: ModelStepInput, error: unknown): ProviderModelStepError {
@@ -113,7 +144,7 @@ export function normalizeProviderError(input: ModelStepInput, error: unknown): P
     providerId: input.providerId,
     modelId: input.modelId,
     requestId: input.requestId,
-    message: safeMessage(category),
+    message: safeMessage(category, providerMessage(record)),
   }, { cause: error })
 }
 

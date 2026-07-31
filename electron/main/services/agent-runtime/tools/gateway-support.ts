@@ -59,7 +59,7 @@ export function toGatewayError(error: unknown): AgentToolGatewayError {
   if (hostErrorCode === 'PERMISSION_DENIED') {
     return new AgentToolGatewayError('PERMISSION_DENIED', message, false, 'user_action')
   }
-  if (hostErrorCode === 'COMMAND_NOT_READY') {
+  if (hostErrorCode === 'CAPABILITY_NOT_READY') {
     return new AgentToolGatewayError('NOT_READY', message, true, 'wait')
   }
   return new AgentToolGatewayError('EXECUTION_FAILED', message || '工具执行失败')

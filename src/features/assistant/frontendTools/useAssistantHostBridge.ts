@@ -15,7 +15,7 @@ import {
   getFrontendToolOperationName,
   type FrontendToolRequest,
   type FrontendToolResult,
-  type HostCommandResult,
+  type ApplicationCapabilityResult,
 } from '@/core/assistant/hostContracts'
 import { createLogger } from '@/core/logging'
 import { registerVisibleGenerationStatusReporter } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
@@ -28,12 +28,7 @@ import {
 } from '../hostContext/hostContext'
 const logger = createLogger('features.assistant.frontend_tools')
 
-// 两张宿主执行表静态依赖画布/3D 镜头/资产库的动作实现，是启动同步图里最重的一段，
-// 但只有智能助手真的下发前端工具时才会用到，因此推迟到首次执行时再加载。
-const loadHostCommandRegistry = (): Promise<typeof import('./hostCommandRegistry')> =>
-  import('./hostCommandRegistry')
-const loadHostQueryRegistry = (): Promise<typeof import('./hostQueryRegistry')> =>
-  import('./hostQueryRegistry')
+// 应用能力处理器依赖画布、3D 镜头和素材服务，仅在首次执行时加载。
 const loadApplicationCapabilityRegistry = (): Promise<typeof import('../applicationCapabilities/registry')> =>
   import('../applicationCapabilities/registry')
 
@@ -70,7 +65,7 @@ export function useAssistantHostBridge(uiReady: boolean): void {
   useEffect(() => {
     const active = new Map<string, AbortController>()
     const completedByCall = new Map<string, FrontendToolResult>()
-    const completedByKey = new Map<string, HostCommandResult>()
+    const completedByKey = new Map<string, ApplicationCapabilityResult>()
 
     const trimCompleted = (): void => {
       while (completedByCall.size > completedLimit) {
@@ -83,7 +78,10 @@ export function useAssistantHostBridge(uiReady: boolean): void {
       }
     }
 
-    const sendResult = async (request: FrontendToolRequest, result: HostCommandResult): Promise<void> => {
+    const sendResult = async (
+      request: FrontendToolRequest,
+      result: ApplicationCapabilityResult
+    ): Promise<void> => {
       const payload = frontendToolResultSchema.parse({
         schemaVersion: AGENT_CONTRACT_VERSION,
         runId: request.runId,
@@ -156,20 +154,11 @@ export function useAssistantHostBridge(uiReady: boolean): void {
           command: operationName,
         })
         try {
-          let result: HostCommandResult
-          if (request.operation.kind === 'command') {
-            const { executeHostCommand } = await loadHostCommandRegistry()
-            result = await executeHostCommand(request.operation.command, controller.signal)
-          } else if (request.operation.kind === 'query') {
-            const { executeHostQueryResult } = await loadHostQueryRegistry()
-            result = await executeHostQueryResult(request.operation.query)
-          } else {
-            const { executeApplicationCapabilityResult } = await loadApplicationCapabilityRegistry()
-            result = await executeApplicationCapabilityResult(
-              request.operation.capability,
-              controller.signal
-            )
-          }
+          const { executeApplicationCapabilityResult } = await loadApplicationCapabilityRegistry()
+          const result = await executeApplicationCapabilityResult(
+            request.operation.capability,
+            controller.signal
+          )
           await sendResult(request, result)
           logger.info('前端工具执行完成', {
             event: result.ok ? 'assistant.frontend_tool.completed' : 'assistant.frontend_tool.failed',

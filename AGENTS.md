@@ -41,6 +41,7 @@ npm run gen:model-manifest     # 生成模型清单到 resources/model-manifest.
 npm run gen:progress-seeds     # 生成进度 seeds 到 resources/progress-seeds.json
 npm run check:colors           # 颜色规范检查
 npm run check:model-i18n       # 模型 i18n key 校验
+npm run check:assistant-capabilities # 智能助手原生能力覆盖与旧通道残留检查
 npm run lint                   # 前端 lint
 ```
 
@@ -66,6 +67,17 @@ npm run lint                   # 前端 lint
 ## 核心架构原则
 
 **关键：解耦是本项目架构的基础，始终优先考虑关注点分离。迁移只替换桌面外壳与后端能力实现，不改变业务分层。**
+
+### 0. 智能助手应用能力覆盖（新增功能必检）
+
+- 新增或修改工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、稳定引用、权限、宿主上下文或能力搜索时，必须先读取并遵循 `.codex/skills/henji-application-capability/SKILL.md`
+- 所有向助手开放的功能必须以 `ApplicationCapabilityDefinition` 作为 schema、权限、风险、数据等级、引用、可用条件、并发规则、成功证据和失败恢复的唯一元数据源
+- 每个用户可见工作区、工具、设置项和数据模块都必须注册对应能力，或在覆盖清单中明确声明“不向助手开放”及原因；不得因为暂时没有助手需求而跳过覆盖判断
+- 禁止新增旧式 `HostCommand`、`HostQuery`、`kind: 'command'`、`kind: 'query'`、固定前端命令/查询执行表或依赖兼容描述生成器的 Agent 工具
+- 能力处理器必须调用正式业务服务，不得复制业务逻辑；后台可完成的操作不得为了复用页面组件而强制切换页面
+- 跨模块传递实体必须使用 `ApplicationRef` 或 artifact 引用，不得向模型暴露原始密钥、本地路径或不受控的大对象
+- 新能力必须接入现有权限审批、revision、幂等、撤销、并发、脱敏、结构化日志和成功证据验证；不得以“助手已判断”为理由绕过安全边界
+- 改动完成后必须运行能力覆盖检查及相关 Agent、TypeScript、Lint 测试；迁移旧能力时，同一模块完成后立即删除对应旧实现，禁止长期双轨
 
 ### 1. 配置驱动架构（最重要）
 
@@ -423,6 +435,7 @@ window.henjiNative             // Electron 安全桥，包含 db/ai/image/media/
 npm run gen:model-manifest
 npm run check:colors
 npm run check:model-i18n
+npm run check:assistant-capabilities
 npm run lint
 npx tsc -p tsconfig.electron.json --noEmit
 npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0

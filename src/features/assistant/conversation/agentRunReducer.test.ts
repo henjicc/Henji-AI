@@ -62,19 +62,19 @@ describe('agentRunViewReducer', () => {
     const activities = [
       {
         toolCallId: 'read-1', toolName: 'search_models', title: '搜索生成模型',
-        status: 'completed' as const, readOnly: true,
+        status: 'completed' as const, readOnly: true, sequence: 1,
       },
       {
         toolCallId: 'read-2', toolName: 'get_model_schema', title: '读取模型参数结构',
-        status: 'completed' as const, readOnly: true,
+        status: 'completed' as const, readOnly: true, sequence: 2,
       },
       {
         toolCallId: 'write-1', toolName: 'create_visible_generation_task', title: '创建可见生成任务',
-        status: 'completed' as const, readOnly: false,
+        status: 'completed' as const, readOnly: false, sequence: 3,
       },
       {
         toolCallId: 'read-failed', toolName: 'get_generation_task', title: '读取生成任务',
-        status: 'failed' as const, readOnly: true,
+        status: 'failed' as const, readOnly: true, sequence: 4,
       },
     ]
 

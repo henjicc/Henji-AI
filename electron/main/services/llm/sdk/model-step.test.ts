@@ -3,7 +3,11 @@ import { simulateReadableStream } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
 
 import type { ModelStepInput } from '../../../../../src/core/llm/modelStep'
-import { buildModelStepProviderOptions, executeModelStepWithModel } from './model-step'
+import {
+  buildModelStepProviderOptions,
+  executeModelStepWithModel,
+  normalizeModelToolMessagePairs,
+} from './model-step'
 import {
   applyDeepSeekUsage,
   applyModelStepProviderNativeOptions,
@@ -190,6 +194,47 @@ describe('executeModelStepWithModel', () => {
     expect(call.temperature).toBeUndefined()
     expect(call.topP).toBeUndefined()
     expect(call.responseFormat?.type).toBe('text')
+  })
+})
+
+describe('normalizeModelToolMessagePairs', () => {
+  it('移除没有 assistant tool-call 前置消息的孤立工具结果', () => {
+    expect(normalizeModelToolMessagePairs([
+      { role: 'user', content: '继续' },
+      {
+        role: 'tool',
+        content: [{
+          type: 'tool-result',
+          toolCallId: 'orphan-call',
+          toolName: 'read_state',
+          output: { type: 'json', value: { ok: false } },
+        }],
+      },
+    ])).toEqual([{ role: 'user', content: '继续' }])
+  })
+
+  it('完整保留配对的工具调用与结果', () => {
+    const messages = [
+      {
+        role: 'assistant' as const,
+        content: [{
+          type: 'tool-call',
+          toolCallId: 'call-1',
+          toolName: 'read_state',
+          input: {},
+        }],
+      },
+      {
+        role: 'tool' as const,
+        content: [{
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          toolName: 'read_state',
+          output: { type: 'json', value: { ok: true } },
+        }],
+      },
+    ]
+    expect(normalizeModelToolMessagePairs(messages)).toEqual(messages)
   })
 })
 

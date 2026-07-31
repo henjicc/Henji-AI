@@ -115,7 +115,16 @@ export function createBackendBuiltinTools(
     concurrencyKey: () => 'catalog',
     targetIds: () => ({}),
     dataClasses: () => ['C0'],
-    summarize: (output) => `应用能力目录返回 ${output.capabilities.length} 项。`,
+    summarize: (output) => {
+      const titles = output.capabilities.flatMap((capability) => {
+        const title = capability.title
+        return typeof title === 'string' && title.trim() ? [title.trim()] : []
+      })
+      if (titles.length === 0) return '没有找到符合当前任务的应用能力。'
+      const visible = titles.slice(0, 5)
+      const remaining = titles.length - visible.length
+      return `找到 ${titles.length} 项能力：${visible.join('、')}${remaining > 0 ? `等 ${titles.length} 项` : ''}。`
+    },
   })
 
   return [

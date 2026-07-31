@@ -1,6 +1,6 @@
 import { useCanvasStore } from '@/stores/canvasStore'
 
-import type { CanvasNodePlacement } from '@/core/assistant/hostContracts'
+import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import type { CanvasNodeData } from '../domain/canvasNodes'
 import { extractAgentCanvasNodeData } from '../domain/agentCanvasCatalog'
 import {

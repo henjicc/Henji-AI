@@ -82,7 +82,7 @@ describe('AgentRunner canvas batch', () => {
       workspace: { id: 'nodes', activeToolId: null },
       project: { id: 'project-1', selectedNodeId: null },
       generation: { commandReady: true }, assets: { view: 'closed', selectedAssetId: null }, uiReady: true,
-      availableCommands: ['add_canvas_node', 'connect_canvas_nodes'], availableQueries: [],
+      availableCapabilities: ['add_canvas_node', 'connect_canvas_nodes'],
       capturedAt: new Date().toISOString(),
     }
     const registry = new AgentToolRegistry()

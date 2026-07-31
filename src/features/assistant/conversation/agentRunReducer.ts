@@ -29,6 +29,7 @@ export type AgentRunViewAction =
 
 export interface AgentToolActivity {
   toolCallId: string
+  sequence: number
   toolName: string
   title: string
   status: 'requested' | 'running' | 'completed' | 'failed'
@@ -205,6 +206,7 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
     if (event.type === 'ToolRequested') {
       activities.set(event.toolCallId, {
         toolCallId: event.toolCallId,
+        sequence: event.sequence,
         toolName: event.toolName,
         title: event.title ?? event.toolName,
         status: 'requested',
@@ -216,6 +218,7 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
       activities.set(event.toolCallId, {
         ...current,
         toolCallId: event.toolCallId,
+        sequence: current?.sequence ?? event.sequence,
         toolName: event.toolName,
         title: current?.title ?? event.toolName,
         status: 'running',
@@ -225,6 +228,7 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
       activities.set(event.toolCallId, {
         ...current,
         toolCallId: event.toolCallId,
+        sequence: current?.sequence ?? event.sequence,
         toolName: event.toolName,
         title: current?.title ?? event.toolName,
         status: 'completed',
@@ -240,6 +244,7 @@ export function selectToolActivities(events: AgentEvent[]): AgentToolActivity[] 
       activities.set(event.toolCallId, {
         ...current,
         toolCallId: event.toolCallId,
+        sequence: current?.sequence ?? event.sequence,
         toolName: event.toolName,
         title: current?.title ?? event.toolName,
         status: 'failed',
@@ -270,9 +275,10 @@ export function groupToolActivitiesForDisplay(
   const flushReadOnly = (): void => {
     if (pendingReadOnly.length === 0) return
     const first = pendingReadOnly[0]
-    const last = pendingReadOnly[pendingReadOnly.length - 1]
     groups.push({
-      groupId: `read:${first.toolCallId}:${last.toolCallId}`,
+      // 只用首个调用生成稳定 key。后续只读结果加入同一组时不能让组件重挂载，
+      // 否则用户手动选择的展开状态会被默认折叠覆盖。
+      groupId: `read:${first.toolCallId}`,
       activities: pendingReadOnly,
       collapsedByDefault: pendingReadOnly.length > 1,
     })

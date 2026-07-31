@@ -8,7 +8,7 @@ import { DeterministicWorkflowService } from './service'
 
 function context(): HostContextSnapshot {
   return {
-    schemaVersion: 'agent-contract/v1',
+    schemaVersion: 'agent-contract/v2',
     rendererSessionId: 'session-1',
     revision: 0,
     scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 },
@@ -17,8 +17,7 @@ function context(): HostContextSnapshot {
     generation: { commandReady: true },
     assets: { view: 'closed', selectedAssetId: null },
     uiReady: true,
-    availableCommands: [],
-    availableQueries: [],
+    availableCapabilities: [],
     capturedAt: new Date().toISOString(),
   }
 }

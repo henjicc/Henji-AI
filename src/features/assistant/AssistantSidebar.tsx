@@ -214,13 +214,13 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
         </header>
         <div
           aria-hidden={contentView !== 'conversation'}
-          className={contentView === 'conversation' ? 'flex min-h-0 flex-1' : 'hidden'}
+          className={contentView === 'conversation' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}
         >
           <AssistantConversation key={`${conversationVersion}:${threadId}`} />
         </div>
         <div
           aria-hidden={contentView !== 'history'}
-          className={contentView === 'history' ? 'flex min-h-0 flex-1' : 'hidden'}
+          className={contentView === 'history' ? 'flex min-h-0 min-w-0 flex-1 overflow-hidden' : 'hidden'}
         >
           <AssistantRunHistory
             visible={contentView === 'history'}

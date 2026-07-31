@@ -19,10 +19,10 @@ const markdownComponents: Components = {
 function AssistantMarkdownView({ children, compact = false }: AssistantMarkdownProps): JSX.Element {
   return (
     <div className={[
-      `min-w-0 break-words leading-6 ${UI_TEXT_BODY_CLASS}`,
-      '[&_a]:text-accent [&_a]:underline-offset-2 hover:[&_a]:underline',
+      `min-w-0 max-w-full overflow-hidden break-words [overflow-wrap:anywhere] leading-6 ${UI_TEXT_BODY_CLASS}`,
+      '[&_a]:break-words [&_a]:text-accent [&_a]:underline-offset-2 hover:[&_a]:underline',
       '[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border-dark [&_blockquote]:pl-3 [&_blockquote]:text-text-muted',
-      '[&_code]:break-words [&_code]:rounded [&_code]:bg-layer [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.9em]',
+      '[&_code]:break-all [&_code]:rounded [&_code]:bg-layer [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-[0.9em]',
       '[&_h1]:mb-2 [&_h1]:mt-3 [&_h1]:text-base [&_h1]:font-semibold',
       '[&_h2]:mb-1.5 [&_h2]:mt-3 [&_h2]:text-sm [&_h2]:font-semibold',
       '[&_h3]:mb-1 [&_h3]:mt-2.5 [&_h3]:text-sm [&_h3]:font-medium',

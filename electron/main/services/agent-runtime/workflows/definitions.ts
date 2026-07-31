@@ -1,6 +1,9 @@
 import { z } from 'zod'
 
 import type { HostScope } from '../../../../../src/core/assistant/hostContracts'
+import {
+  workflowIdSchema,
+} from '../../../../../src/core/assistant/capabilities/workflowApplicationCapabilities'
 
 const placementSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('viewport_center') }).strict(),
@@ -35,11 +38,6 @@ const cameraShotToCanvasSchema = modelGenerationParams.extend({
   placement: placementSchema.default({ mode: 'viewport_center' }),
 }).strict()
 
-export const workflowIdSchema = z.enum([
-  'model_to_generation_canvas',
-  'asset_edit_to_canvas',
-  'camera_shot_to_generation_canvas',
-])
 export type WorkflowId = z.infer<typeof workflowIdSchema>
 
 export interface WorkflowStep {

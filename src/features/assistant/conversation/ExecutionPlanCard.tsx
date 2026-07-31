@@ -58,8 +58,8 @@ export function ExecutionPlanCard({
   )
 
   return (
-    <details style={deferredBlockStyle} className="group px-1 py-0.5">
-      <summary className="flex min-h-7 cursor-pointer list-none items-center gap-2">
+    <details style={deferredBlockStyle} className="group min-w-0 max-w-full overflow-hidden px-1 py-0.5">
+      <summary className="flex min-h-7 min-w-0 cursor-pointer list-none items-center gap-2">
         <ListChecks className="h-3.5 w-3.5 shrink-0 text-accent" />
         <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行计划</span>
         <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>{nextAction}</span>
@@ -70,7 +70,7 @@ export function ExecutionPlanCard({
       </summary>
 
       {hasDetails ? (
-        <div className={`border-t border-border-dark/70 pb-1 pl-5 pr-1 pt-2 leading-4 ${UI_TEXT_META_CLASS}`}>
+        <div className={`min-w-0 border-t border-border-dark/70 pb-1 pl-5 pr-1 pt-2 [overflow-wrap:anywhere] leading-4 ${UI_TEXT_META_CLASS}`}>
           {summary?.route ? (
             <div>
               <span className="font-medium text-text-dark">目标判断：</span>

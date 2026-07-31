@@ -1,8 +1,8 @@
 import { AgentToolRegistry } from '../registry'
 import { createBackendBuiltinTools } from './backend'
 import type { AgentArtifactToolAccess } from './artifacts'
-import { createFrontendBuiltinTools, type FrontendToolInvoker } from './frontend'
 import { createFrontendApplicationCapabilityTools } from './frontend-capabilities'
+import type { FrontendToolInvoker } from './frontend-utils'
 
 export function createBuiltinAgentToolRegistry(
   invokeFrontend: FrontendToolInvoker,
@@ -12,10 +12,9 @@ export function createBuiltinAgentToolRegistry(
   }
 ): AgentToolRegistry {
   const registry = new AgentToolRegistry()
-  for (const tool of createFrontendBuiltinTools(invokeFrontend)) registry.register(tool)
   for (const tool of createFrontendApplicationCapabilityTools(invokeFrontend)) registry.register(tool)
   for (const tool of createBackendBuiltinTools(registry, artifactAccess)) registry.register(tool)
   return registry
 }
 
-export type { FrontendToolInvoker } from './frontend'
+export type { FrontendToolInvoker } from './frontend-utils'

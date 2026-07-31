@@ -40,4 +40,19 @@ describe('AssistantMarkdown', () => {
     expect(container?.contains(table)).toBe(true)
     expect(container?.className).toContain('overflow-x-auto')
   })
+
+  it('长路径和能力名不会撑宽助手面板', () => {
+    const rendered = render(
+      <AssistantMarkdown>
+        {'`create_image_edit_preview_from_ref` D:\\VibeCode\\Henji-AI\\Media\\very-long-file-name.png'}
+      </AssistantMarkdown>
+    )
+
+    const root = rendered.container.firstElementChild
+    expect(root?.className).toContain('max-w-full')
+    expect(root?.className).toContain('overflow-hidden')
+    expect(root?.className).toContain('[overflow-wrap:anywhere]')
+    expect(root?.className).toContain('[&_code]:break-all')
+    expect(screen.getByText('create_image_edit_preview_from_ref').tagName).toBe('CODE')
+  })
 })

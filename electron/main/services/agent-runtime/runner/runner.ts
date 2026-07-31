@@ -131,13 +131,10 @@ export class AgentRunner {
     this.modelOutputGuard = new AgentModelOutputGuard({
       registry: options.dependencies.registry,
       emit: (event) => this.emit(event),
-      onObservation: (call, observation) => {
+      onObservation: (_call, observation) => {
+        // 未通过完整性校验的模型工具调用从未执行，不能追加 role=tool 消息。
+        // 否则当响应里缺少完整 assistant tool-call 信封时，会形成供应商拒绝的孤立工具结果。
         this.observations.push(observation)
-        this.conversationJournal.appendInternal(
-          'tool_result',
-          toolMessage(call, observation),
-          `tool:${call.toolCallId}`
-        )
       },
       onRecoveryMessage: (message) => this.conversationJournal.appendEphemeral({
         role: 'user',
@@ -422,6 +419,11 @@ export class AgentRunner {
           result.usage.inputTokens,
           this.conversation.length
         )
+        if (!this.modelOutputGuard.accept(result)) {
+          this.budget.recordFailure()
+          await this.conversationJournal.flush()
+          continue
+        }
         for (const [index, message] of result.responseMessages.entries()) {
           this.conversationJournal.appendInternal(
             'model_message',
@@ -437,11 +439,6 @@ export class AgentRunner {
           )
         }
         await this.conversationJournal.flush()
-        if (!this.modelOutputGuard.accept(result)) {
-          this.budget.recordFailure()
-          await this.conversationJournal.flush()
-          continue
-        }
         this.externalContinuation.assertNoResubmit(result.toolCalls)
         this.budget.recordSuccess()
         if (result.toolCalls.length > 0) {

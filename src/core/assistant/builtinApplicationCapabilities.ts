@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { imageEditOperationSchema } from './imageEditContracts'
 import {
   applicationRefSchema,
-  ApplicationCapabilityRegistry,
   type ApplicationCapabilityDefinition,
 } from './applicationCapabilities'
 import { APPLICATION_SURFACE_IDS } from './applicationSurfaces'
@@ -484,17 +483,3 @@ export const createImageEditPreviewFromRefCapability = defineCapability({
     additionalProperties: false,
   },
 })
-
-export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  getCurrentApplicationContextCapability, openApplicationSurfaceCapability,
-  closeApplicationSurfaceCapability, focusApplicationEntityCapability,
-  searchApplicationSettingsCapability, getApplicationSettingsCapability,
-  planApplicationSettingsChangeCapability, applyApplicationSettingsChangeCapability,
-  listGenerationHistoryCapability, openImageEditorWithSourceCapability,
-  createImageEditPreviewFromRefCapability,
-] as ApplicationCapabilityDefinition[]
-
-export const BUILTIN_APPLICATION_CAPABILITY_REGISTRY = new ApplicationCapabilityRegistry()
-for (const capability of BUILTIN_APPLICATION_CAPABILITIES) {
-  BUILTIN_APPLICATION_CAPABILITY_REGISTRY.register(capability)
-}

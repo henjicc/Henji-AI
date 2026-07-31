@@ -3,7 +3,7 @@ import { webContents } from 'electron'
 
 import type {
   FrontendToolOperation,
-  HostCommandResult,
+  ApplicationCapabilityResult,
   HostContextSnapshot,
 } from '../../../../src/core/assistant/hostContracts'
 import {
@@ -64,7 +64,7 @@ export async function invokeAgentFrontendTool(
   operation: FrontendToolOperation,
   context: { runId: string; toolCallId: string; signal: AbortSignal },
   resolveRun: ResolveRun
-): Promise<HostCommandResult> {
+): Promise<ApplicationCapabilityResult> {
   const record = resolveRun(context.runId)
   if (!record) throw new Error('[run_not_found] Agent run not found')
   const sender = webContents.fromId(record.ownerWebContentsId)

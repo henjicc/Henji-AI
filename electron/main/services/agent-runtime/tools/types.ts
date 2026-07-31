@@ -41,7 +41,7 @@ export interface AgentToolExecutionContext {
 export type AgentToolAuthorizationSource = 'direct' | 'approved_workflow'
 
 export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
-  /** 新能力的单源定义；未提供时由兼容适配器从旧字段生成。 */
+  /** 应用宿主能力必须提供；运行时内部工具可以直接使用 Agent 工具契约。 */
   capability?: ApplicationCapabilityDefinition<TInput, TOutput>
   name: string
   version: number

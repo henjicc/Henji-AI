@@ -1,59 +1,24 @@
 import { z } from 'zod'
 
+import {
+  diagnosticQueryInputSchema,
+  diagnosticQueryOutputSchema,
+  queryDiagnosticEventsCapability,
+} from '../../../../../src/core/assistant/capabilities/assistantRuntimeApplicationCapabilities'
 import { listLogDates, queryLogEvents, type LogQueryResult } from '../../logging/query'
 import { createMainLogger } from '../../logging'
 import type { MainLogEvent } from '../../logging/types'
-import { defineAgentTool } from '../tools/define-tool'
+import { createBackendCapabilityTool } from '../tools/backend-capability-tool'
 import { summarizeSafeText } from '../tools/security'
 import type { AgentToolDefinition } from '../tools/types'
 
 const logger = createMainLogger('main.agent_diagnostics')
-const MAX_WINDOW_MS = 30 * 60 * 1_000
 const QUERY_PAGE_SIZE = 200
 const MAX_PAGES_PER_DATE = 3
-const MAX_EVIDENCE = 16
 const SAFE_DETAIL_KEYS = new Set(['code', 'errorCode', 'status', 'httpStatus', 'retryable', 'reason', 'stage'])
 
-export const diagnosticQueryInputSchema = z.object({
-  subjectRequestId: z.string().min(1).max(500).optional(),
-  domain: z.string().min(1).max(300).optional(),
-  keyword: z.string().min(1).max(200).optional(),
-  from: z.string().datetime(),
-  to: z.string().datetime(),
-  levels: z.array(z.enum(['trace', 'debug', 'info', 'warn', 'error'])).max(5).optional(),
-  limit: z.number().int().min(1).max(MAX_EVIDENCE).default(20),
-}).strict().superRefine((input, context) => {
-  const duration = Date.parse(input.to) - Date.parse(input.from)
-  if (duration < 0 || duration > MAX_WINDOW_MS) {
-    context.addIssue({ code: 'custom', message: '诊断时间窗必须在 0～30 分钟内' })
-  }
-})
 export type DiagnosticQueryInput = z.infer<typeof diagnosticQueryInputSchema>
 
-const diagnosticEvidenceSchema = z.object({
-  evidenceId: z.string(),
-  timestamp: z.string().datetime(),
-  level: z.enum(['trace', 'debug', 'info', 'warn', 'error']),
-  domain: z.string(),
-  event: z.string(),
-  requestId: z.string().optional(),
-  taskId: z.string().optional(),
-  modelId: z.string().optional(),
-  providerId: z.string().optional(),
-  summary: z.string().max(500),
-  details: z.record(z.string(), z.string().max(300)).optional(),
-}).strict()
-
-export const diagnosticQueryOutputSchema = z.object({
-  evidence: z.array(diagnosticEvidenceSchema).max(MAX_EVIDENCE),
-  truncated: z.boolean(),
-  excludedCurrentRun: z.literal(true),
-  correlation: z.object({
-    strategy: z.enum(['request_id', 'domain_time', 'time_only']),
-    confidence: z.enum(['high', 'medium', 'low']),
-    scannedPages: z.number().int().nonnegative(),
-  }).strict(),
-}).strict()
 export type DiagnosticQueryOutput = z.infer<typeof diagnosticQueryOutputSchema>
 
 export interface DiagnosticQueryDependencies {
@@ -89,7 +54,10 @@ function extractSafeDetails(value: unknown): Record<string, string> {
   return details
 }
 
-function toEvidence(event: MainLogEvent, index: number): z.infer<typeof diagnosticEvidenceSchema> {
+function toEvidence(
+  event: MainLogEvent,
+  index: number
+): DiagnosticQueryOutput['evidence'][number] {
   const details = { ...extractSafeDetails(event.context), ...extractSafeDetails(event.error) }
   return {
     evidenceId: `E${String(index + 1).padStart(3, '0')}`,
@@ -176,51 +144,13 @@ export async function queryDiagnosticEvidence(
 }
 
 export function createQueryDiagnosticEventsTool(): AgentToolDefinition {
-  const definition = defineAgentTool({
-    name: 'query_diagnostic_events',
-    version: 1,
-    title: '查询诊断事件',
-    description: '在最多 30 分钟时间窗内一次性查询脱敏日志证据；requestId 优先。通常请求 5～10 条，已有结果足以形成结论时不得重复查询。',
-    category: 'diagnostics',
-    side: 'backend',
-    risk: 'R2',
-    permission: 'diagnostics:read',
-    readOnly: true,
-    destructive: false,
-    openWorld: true,
-    idempotent: true,
-    timeoutMs: 10_000,
-    maxCallsPerRun: 1,
-    retryPolicy: { maxRetries: 1, baseDelayMs: 100 },
-    supportsPreview: true,
-    supportsUndo: false,
-    requiredContext: [],
-    inputSchema: diagnosticQueryInputSchema,
-    outputSchema: diagnosticQueryOutputSchema,
-    aiInputSchema: {
-      type: 'object',
-      properties: {
-        subjectRequestId: { type: 'string' },
-        domain: { type: 'string' },
-        keyword: { type: 'string' },
-        from: { type: 'string', format: 'date-time' },
-        to: { type: 'string', format: 'date-time' },
-        levels: { type: 'array', items: { type: 'string', enum: ['trace', 'debug', 'info', 'warn', 'error'] } },
-        limit: { type: 'integer', minimum: 1, maximum: MAX_EVIDENCE },
-      },
-      required: ['from', 'to'],
-      additionalProperties: false,
-    },
+  return createBackendCapabilityTool(queryDiagnosticEventsCapability, {
     preview: (input) => {
       const targetIds: Record<string, string> = {}
       if (input.subjectRequestId) targetIds.requestId = input.subjectRequestId
       return {
-        title: '读取并发送脱敏诊断证据',
-        summary: [
-          `将在 ${input.from} 至 ${input.to} 的受限时间窗读取日志证据。`,
-          '仅发送证据编号、时间、级别、domain、event、关联 ID、短摘要和白名单错误字段。',
-          '日志正文被视为不可信数据，不能触发额外工具或扩大授权。',
-        ].join(' '),
+        title: '读取脱敏诊断证据',
+        summary: `读取 ${input.from} 至 ${input.to} 的故障相关证据。`,
         targetIds,
         reversible: false,
         dataClasses: ['C2'] as const,
@@ -250,14 +180,5 @@ export function createQueryDiagnosticEventsTool(): AgentToolDefinition {
       })
       return output
     },
-    concurrencyKey: () => 'diagnostics',
-    targetIds: (input) => {
-      const targets: Record<string, string> = {}
-      if (input.subjectRequestId) targets.requestId = input.subjectRequestId
-      return targets
-    },
-    dataClasses: () => ['C2'],
-    summarize: (output) => `诊断查询返回 ${output.evidence.length} 条脱敏证据，关联置信度为 ${output.correlation.confidence}${output.truncated ? '，结果已裁剪' : ''}。`,
-  })
-  return definition as unknown as AgentToolDefinition
+  }) as unknown as AgentToolDefinition
 }
