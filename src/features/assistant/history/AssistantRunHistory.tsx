@@ -166,7 +166,7 @@ export function AssistantRunHistory({
     : '删除这个对话？'
 
   return (
-    <section className="relative flex min-h-0 flex-1 flex-col bg-app">
+    <section className="relative flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark px-3">
         {selectionMode ? (
           <>

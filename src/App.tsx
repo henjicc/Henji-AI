@@ -197,11 +197,18 @@ const App: React.FC = () => {
           insetLeft={assistantOpen && assistantMode === 'left' ? assistantSize.width : 0}
           insetRight={assistantOpen && assistantMode === 'right' ? assistantSize.width : 0}
         />
+        {/* 三个懒加载浮层必须各有各的 Suspense 边界。共用一个时，任意一个 chunk 首次挂起
+            都会让整个边界回落到 fallback，React 会把边界内**已经挂载**的兄弟一起写成
+            display:none 再恢复——表现就是"第一次打开设置，助手闪一下"。 */}
         <Suspense fallback={null}>
           {assetPanelMounted && (
             <AssetLibraryFloatingPanel open={assetView === 'floating'} position={assetPanelPosition} onClose={closeAssets} onOpenWorkspace={openAssetWorkspace} />
           )}
+        </Suspense>
+        <Suspense fallback={null}>
           {assistantMounted && <AssistantSidebar workspaceRef={assistantWorkspaceRef} />}
+        </Suspense>
+        <Suspense fallback={null}>
           {isSettingsOpen && <SettingsModal onClose={closeSettings} target={settingsTarget} />}
         </Suspense>
         <LargeUploadChoiceDialog />

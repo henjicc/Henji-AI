@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clampAssistantFloatingPosition,
   clampAssistantPanelSize,
+  dockEdgeForLayout,
   getAssistantWorkspaceInsets,
   resizeAssistantPanelLayout,
 } from './useAssistantPanelInteraction'
@@ -54,6 +55,25 @@ describe('assistant panel interaction geometry', () => {
       { width: 420, height: 680 },
       { width: 360, height: 500 }
     )).toEqual({ x: 12, y: 48 })
+  })
+
+  it('按面板边沿而不是指针位置判定吸附', () => {
+    const viewport = { width: 1280, height: 900 }
+    const size = { width: 420, height: 680 }
+
+    // 推到右边缘：右沿只剩 12px 间隙就该吸附，哪怕指针还停在屏幕中间
+    expect(dockEdgeForLayout({ position: { x: 848, y: 60 }, size }, viewport)).toBe('right')
+    expect(dockEdgeForLayout({ position: { x: 12, y: 60 }, size }, viewport)).toBe('left')
+    // 两侧都远离边缘时保持悬浮
+    expect(dockEdgeForLayout({ position: { x: 400, y: 60 }, size }, viewport)).toBeNull()
+    // 阈值是 48：恰好 48 触发，49 不触发
+    expect(dockEdgeForLayout({ position: { x: 48, y: 60 }, size }, viewport)).toBe('left')
+    expect(dockEdgeForLayout({ position: { x: 49, y: 60 }, size }, viewport)).toBeNull()
+    // 宽面板两侧都够得着时取更近的一边
+    expect(dockEdgeForLayout(
+      { position: { x: 20, y: 60 }, size: { width: 1_220, height: 680 } },
+      viewport
+    )).toBe('left')
   })
 
   it('停靠态只更新对应工作区内边距', () => {

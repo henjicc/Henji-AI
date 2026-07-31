@@ -265,7 +265,8 @@ export function AssistantConversation(): JSX.Element {
   }, [])
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-app">
+    // 不自带底色：面板表面由 AssistantSidebar 统一提供，正文与顶栏、输入区同为一块连续表面
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div ref={scrollRef} className="ui-scrollbar flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto px-3 py-4 [contain:layout_paint_style]">
         {!runState && !currentGoal && historicalMessages.length === 0 && !transcript.loading ? (
           <UiEmpty

@@ -91,13 +91,15 @@ export function AssistantMemoryPanel(): JSX.Element {
   }
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col bg-app">
+    <section className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark px-3">
         <BrainCircuit className="h-3.5 w-3.5 text-accent" />
         <span className={`flex-1 ${UI_TEXT_SECTION_CLASS}`}>助手记忆</span>
         <UiIconButton
           type="button"
           title="刷新助手记忆"
+          showBorder={false}
+          appearance="hover-only"
           onClick={() => void refresh()}
           className="!h-7 !w-7 !rounded-md"
           disabled={loading}

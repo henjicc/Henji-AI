@@ -131,11 +131,12 @@ async function closeTransientUi(page) {
     await page.waitForTimeout(240)
   }
 
+  // 助手停靠态不再自带关闭按钮（会和窗口关闭撞在同一条竖线上），统一走标题栏的开关
   const assistant = page.locator('aside[aria-label="智能助手"]:visible')
   if (await assistant.count()) {
-    const closeAssistant = assistant.locator('[title="收起智能助手"]')
-    if (await closeAssistant.count()) {
-      await closeAssistant.click()
+    const toggleAssistant = page.locator('[title="智能助手"]').first()
+    if (await toggleAssistant.count()) {
+      await toggleAssistant.click()
       await page.waitForTimeout(240)
     }
   }
