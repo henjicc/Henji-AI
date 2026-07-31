@@ -1,14 +1,16 @@
-import { RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
 import {
   Dropdown,
+  UI_BUTTON_RESET_CLASS,
   UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_FORM_ROW_GAP_CLASS,
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
+  UiDisclosurePanel,
   UiFormRow,
   UiGroup,
   UiInput,
@@ -117,6 +119,8 @@ function capabilitySummary(model: LlmModelConfig | undefined): string {
 const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSectionProps): JSX.Element | null => {
   const profile = config.agentProfiles.find(item => item.id === config.selectedAgentProfileId) ?? config.agentProfiles[0]
   const [verifyingKey, setVerifyingKey] = useState<string | null>(null)
+  const [expandedRoles, setExpandedRoles] = useState<Set<AgentModelRole>>(new Set())
+  const [advancedOpen, setAdvancedOpen] = useState(false)
   const enabledProviderIds = useMemo(
     () => new Set(config.providers.filter(provider => provider.enabled).map(provider => provider.providerId)),
     [config.providers]
@@ -202,6 +206,15 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
     })
   }
 
+  const toggleRoleDetails = (role: AgentModelRole): void => {
+    setExpandedRoles(prev => {
+      const next = new Set(prev)
+      if (next.has(role)) next.delete(role)
+      else next.add(role)
+      return next
+    })
+  }
+
   return (
     /*
      * 这里原来是 `<UiPanel>`（卡片）里再套四张 `border + bg-layer` 的卡片，
@@ -210,7 +223,7 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
      */
     <UiGroup
       title="智能助手模型"
-      description="复用下方供应商与密钥；动态验证会发起最小真实请求，价格无可靠来源时保持未知。"
+      info="复用下方供应商与密钥；动态验证会发起最小真实请求，价格无可靠来源时保持未知。"
       gap="stack"
     >
       <div className="grid gap-3 sm:grid-cols-2">
@@ -223,9 +236,21 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
           const value = getRoleValue(profile, role)
           const display = options.find(item => item.value === value)?.label ?? '请选择模型'
           const key = effectiveReference ? modelKey(effectiveReference) : ''
+          const detailsOpen = expandedRoles.has(role)
           return (
             <UiPanel key={role} variant="inset" className="space-y-2 p-3">
-              <div className={UI_TEXT_LABEL_CLASS}>{roleLabels[role]}</div>
+              <div className="flex items-center justify-between gap-2">
+                <div className={UI_TEXT_LABEL_CLASS}>{roleLabels[role]}</div>
+                {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
+                <button
+                  type="button"
+                  onClick={() => toggleRoleDetails(role)}
+                  className={`${UI_BUTTON_RESET_CLASS} inline-flex shrink-0 items-center gap-0.5 text-xs text-text-muted transition-colors hover:text-text-dark`}
+                >
+                  详情
+                  {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+              </div>
               <Dropdown<string>
                 value={value}
                 display={display}
@@ -234,42 +259,55 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                 buttonClassName="w-full"
                 onSelect={selected => void updateRole(role, selected)}
               />
-              <div className={UI_TEXT_META_CLASS}>{capabilitySummary(model)}</div>
-              {verification ? (
-                <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
-                  <div>验证于 {new Date(verification.verifiedAt).toLocaleString()} · {verification.totalLatencyMs} ms · 费用{verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : '未知'}</div>
-                  <div>{verification.checks.map(check => `${check.id}:${check.status === 'passed' ? '通过' : '失败'}`).join(' · ')}</div>
-                  <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
+              <UiDisclosurePanel open={detailsOpen}>
+                <div className="space-y-2 pt-2">
+                  <div className={UI_TEXT_META_CLASS}>{capabilitySummary(model)}</div>
+                  {verification ? (
+                    <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
+                      <div>验证于 {new Date(verification.verifiedAt).toLocaleString()} · {verification.totalLatencyMs} ms · 费用{verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : '未知'}</div>
+                      <div>{verification.checks.map(check => `${check.id}:${check.status === 'passed' ? '通过' : '失败'}`).join(' · ')}</div>
+                      <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
+                    </div>
+                  ) : <div className="text-xs text-danger">尚未进行动态能力验证</div>}
+                  {effectiveReference ? (
+                    <UiButton type="button" size="sm" variant="muted" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
+                      <RefreshCw size={14} className={`mr-1.5 ${verifyingKey === key ? 'animate-spin' : ''}`} />
+                      {verifyingKey === key ? '验证中' : '验证此模型'}
+                    </UiButton>
+                  ) : null}
                 </div>
-              ) : <div className="text-xs text-danger">尚未进行动态能力验证</div>}
-              {effectiveReference ? (
-                <UiButton type="button" size="sm" variant="muted" disabled={verifyingKey !== null} onClick={() => void verify(effectiveReference)}>
-                  <RefreshCw size={14} className={`mr-1.5 ${verifyingKey === key ? 'animate-spin' : ''}`} />
-                  {verifyingKey === key ? '验证中' : '验证此模型'}
-                </UiButton>
-              ) : null}
+              </UiDisclosurePanel>
             </UiPanel>
           )
         })}
       </div>
 
-      {/*
-        这四个数字框原来只有 aria-label，界面上一个标签都没有，靠底下一句
-        「依次为：超时毫秒、重试次数、…」让用户数位置。改成有标签的行。
-      */}
-      <div className={UI_FORM_ROW_GAP_CLASS}>
-        {RUNTIME_SETTING_FIELDS.map(field => (
-          <UiFormRow key={field.key} label={field.label} info={field.info} inline>
-            <UiInput
-              type="number"
-              min={field.min}
-              max={field.max}
-              value={profile.settings[field.key]}
-              onChange={event => void updateSetting(field.key, Number(event.target.value))}
-              className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${SETTINGS_INLINE_CONTROL_CLASS}`}
-            />
-          </UiFormRow>
-        ))}
+      {/* 超时/重试/Token 上限对普通用户没有决策价值，收进高级设置，默认折叠 */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen(prev => !prev)}
+          className={`${UI_BUTTON_RESET_CLASS} inline-flex items-center gap-1 text-xs text-text-muted transition-colors hover:text-text-dark`}
+        >
+          高级设置
+          {advancedOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </button>
+        <UiDisclosurePanel open={advancedOpen}>
+          <div className={`pt-4 ${UI_FORM_ROW_GAP_CLASS}`}>
+            {RUNTIME_SETTING_FIELDS.map(field => (
+              <UiFormRow key={field.key} label={field.label} info={field.info} inline>
+                <UiInput
+                  type="number"
+                  min={field.min}
+                  max={field.max}
+                  value={profile.settings[field.key]}
+                  onChange={event => void updateSetting(field.key, Number(event.target.value))}
+                  className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${SETTINGS_INLINE_CONTROL_CLASS}`}
+                />
+              </UiFormRow>
+            ))}
+          </div>
+        </UiDisclosurePanel>
       </div>
     </UiGroup>
   )

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Pencil, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react'
 import {
   Dropdown,
@@ -7,7 +7,9 @@ import {
   UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
+  UiDisclosurePanel,
   UiEmpty,
+  UiFormRow,
   UiGroup,
   UiIconButton,
   UiInput,
@@ -17,6 +19,7 @@ import {
   UiPanel,
   UiSwitch,
 } from '@/components/ui'
+import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import ApiKeyInput from '../components/ApiKeyInput'
 import type { LlmModelConfig, LlmProviderConfig, LlmReasoningConfig, LlmReasoningEffort } from '@/core/llm/types'
@@ -151,12 +154,6 @@ const LlmSettingsSection: React.FC = () => {
     setShowModelDialog(true)
   }
 
-  useEffect(() => {
-    if (!expandedProviderId && providers[0]) {
-      setExpandedProviderId(providers[0].providerId)
-    }
-  }, [expandedProviderId, providers])
-
   const persistConfig = async (nextConfig: typeof config): Promise<void> => {
     await saveConfig(nextConfig)
   }
@@ -270,7 +267,6 @@ const LlmSettingsSection: React.FC = () => {
 
       <UiGroup
         title="供应商配置"
-        description="一行一个供应商，点击可展开详细设置"
         actions={
           <UiButton type="button" size="sm" variant="muted" className="px-4" onClick={() => openProviderManager()}>
             <Settings2 size={14} className="mr-1.5" />
@@ -318,14 +314,9 @@ const LlmSettingsSection: React.FC = () => {
                 </div>
               </div>
 
-              <div
-                className={`grid border-t border-border-dark transition-[grid-template-rows,opacity] duration-200 ease-out ${
-                  expanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                }`}
-              >
-                <div className="min-h-0 overflow-hidden">
-                  <div className={`px-4 py-4 transition-transform duration-200 ease-out ${expanded ? 'translate-y-0' : '-translate-y-2'}`}>
-                    <div className="space-y-4">
+              <div className="border-t border-border-dark">
+                <UiDisclosurePanel open={expanded} className="px-4 py-4">
+                  <div className="space-y-4">
                       <div className={`flex items-center gap-2 ${UI_TEXT_LABEL_CLASS}`}>
                         <Settings2 size={15} />
                         <span>基础配置</span>
@@ -355,16 +346,16 @@ const LlmSettingsSection: React.FC = () => {
                       </div>
 
                       {provider.reasoningConfigurable !== false ? (
-                        <div className="grid gap-3 border-b border-border-dark pb-4 sm:grid-cols-[minmax(0,1fr)_330px]">
-                          <div className="min-w-0">
-                            <div className={UI_TEXT_LABEL_CLASS}>思考模式</div>
-                            <div className={UI_TEXT_META_CLASS}>关闭表示不请求思考过程；选择档位后会在优化时流式展示思考内容。</div>
-                          </div>
+                        <UiFormRow
+                          label="思考模式"
+                          info="关闭表示不请求思考过程；选择档位后会在优化时流式展示思考内容。"
+                          inline
+                        >
                           <Dropdown<ReasoningModeValue>
                             value={resolveReasoningMode(provider)}
                             display={getReasoningModeLabel(resolveReasoningMode(provider))}
                             options={reasoningModeOptions}
-                            className="w-full"
+                            className={SETTINGS_INLINE_CONTROL_CLASS}
                             buttonClassName="w-full"
                             onSelect={async (mode) => {
                               await updateProviderField(provider.providerId, {
@@ -374,15 +365,12 @@ const LlmSettingsSection: React.FC = () => {
                               })
                             }}
                           />
-                        </div>
+                        </UiFormRow>
                       ) : null}
 
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <div className={UI_TEXT_LABEL_CLASS}>模型</div>
-                            <div className={UI_TEXT_META_CLASS}>支持自动获取或手动添加</div>
-                          </div>
+                          <div className={UI_TEXT_LABEL_CLASS}>模型</div>
                           <div className="flex flex-wrap items-center gap-2">
                             <UiButton
                               type="button"
@@ -456,8 +444,7 @@ const LlmSettingsSection: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                </UiDisclosurePanel>
               </div>
             </UiPanel>
           )

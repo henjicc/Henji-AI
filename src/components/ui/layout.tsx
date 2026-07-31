@@ -34,8 +34,13 @@ interface UiRegionProps extends HTMLAttributes<HTMLDivElement> {
 interface UiGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   /** 分区标题；不传则是纯间距分组 */
   title?: ReactNode;
-  /** 标题下方的辅助说明 */
+  /**
+   * 标题下方的常驻说明。**判据同 `UiFormRow.hint`：不看会不会用错整组？**
+   * 多数分组解释"是什么/怎么用"应该走 `info`，这里只留给真正常驻必要的那一句。
+   */
   description?: ReactNode;
+  /** 背景知识型说明，收进标题后的 ⓘ，悬停/聚焦显示。设置类分组的默认选择。 */
+  info?: ReactNode;
   /** 标题行右侧操作区 */
   actions?: ReactNode;
   /** 在本组上方加一条分隔线（唯一允许的"画线分隔"写法） */
@@ -111,6 +116,7 @@ export function UiGroup({
   className = '',
   title,
   description,
+  info,
   actions,
   divided = false,
   gap = 'row',
@@ -131,7 +137,22 @@ export function UiGroup({
       {hasHeader && (
         <div className="mb-3 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            {title ? <div className={titleClass}>{title}</div> : null}
+            {title ? (
+              <div className={`flex items-center gap-1 ${titleClass}`}>
+                <span>{title}</span>
+                {info ? (
+                  <Tooltip content={info} delay={200}>
+                    <button
+                      type="button"
+                      aria-label="查看说明"
+                      className={`${UI_BUTTON_RESET_CLASS} inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:text-text-dark`}
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </Tooltip>
+                ) : null}
+              </div>
+            ) : null}
             {description ? (
               <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>{description}</p>
             ) : null}
@@ -217,6 +238,33 @@ export function UiFormRow({
       <div className={UI_TEXT_SECTION_CLASS}>{labelNode}</div>
       {hint ? <p className={`mt-0.5 mb-1.5 ${UI_TEXT_META_CLASS}`}>{hint}</p> : <div className="h-1.5" />}
       {children}
+    </div>
+  );
+}
+
+interface UiDisclosurePanelProps {
+  open: boolean;
+  children: ReactNode;
+  className?: string;
+}
+
+/**
+ * 折叠内容的展开动画外壳：grid-rows 撑高 + 轻微位移，折叠态不 unmount 只是收到 0 高。
+ * 用于"默认收起、点了才看"的次要/进阶内容（如高级参数、技术性验证详情），
+ * 不要在每个调用点各写一遍这段 grid-rows 过渡。
+ */
+export function UiDisclosurePanel({ open, children, className = '' }: UiDisclosurePanelProps): JSX.Element {
+  return (
+    <div
+      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out ${
+        open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+      }`}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <div className={`transition-transform duration-200 ease-out ${open ? 'translate-y-0' : '-translate-y-2'} ${className}`}>
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
