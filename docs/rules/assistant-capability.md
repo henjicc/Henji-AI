@@ -1,0 +1,51 @@
+# 智能助手应用能力覆盖
+
+> 读取时机：新增或修改工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、稳定引用、权限、宿主上下文或能力搜索。
+>
+> **这些场景必须同时读 skill `henji-application-capability`**（含 schema 字段、注册模式、迁移步骤与示例代码）。本文件只是硬约束清单。
+
+## 唯一元数据源
+
+所有向助手开放的功能必须以 `ApplicationCapabilityDefinition` 作为 schema、权限、风险、数据等级、引用、可用条件、并发规则、成功证据和失败恢复的唯一元数据源。
+
+## 覆盖判断不可跳过
+
+每个用户可见的工作区、工具、设置项和数据模块，都必须：
+
+- 注册对应能力，**或**
+- 在覆盖清单中明确声明"不向助手开放"及原因
+
+不得因为暂时没有助手需求就跳过覆盖判断。
+
+## 禁止事项
+
+- **禁止**新增旧式 `HostCommand`、`HostQuery`、`kind: 'command'`、`kind: 'query'`、固定前端命令/查询执行表，或依赖兼容描述生成器的 Agent 工具
+- 能力处理器**必须调用正式业务服务**，不得复制业务逻辑
+- 后台可完成的操作，不得为了复用页面组件而强制切换页面
+- 跨模块传递实体必须用 `ApplicationRef` 或 artifact 引用，**不得**向模型暴露原始密钥、本地路径或不受控的大对象
+- **不得**以"助手已判断"为理由绕过安全边界
+
+## 必须接入的现有机制
+
+新能力必须接入：权限审批、revision、幂等、撤销、并发、脱敏、结构化日志、成功证据验证。
+
+## 迁移纪律
+
+迁移旧能力时，同一模块完成后**立即删除**对应旧实现，禁止长期双轨。
+
+## 验证
+
+```bash
+npm run check:assistant-capabilities
+npm run test:assistant-production
+```
+
+`check:assistant-capabilities` 已接入 `build` 与 `electron:build` 链路，覆盖不全或残留旧通道会直接构建失败。
+
+无窗口执行真实助手做端到端验证：
+
+```bash
+npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generation
+```
+
+复用正式助手与工具链，结束时输出 `runId`（可用 `npm run logs:query -- --chain <runId>` 查整条链路）。`--await-generation` 保持同一隐藏宿主并读取本次生成任务的最终状态。`--print-trace` 输出本机已脱敏的详细追踪。**涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。**

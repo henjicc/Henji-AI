@@ -461,7 +461,7 @@ npm run check:ui-visual
 
 ## 相关规范
 
-- 组件复用与原生标签落点、颜色令牌三处入口：见 [CLAUDE.md](../../../CLAUDE.md) 的「UI Primitive 单点落地」与「关键约束」
+- 组件复用与原生标签落点、颜色令牌三处入口：见 [docs/rules/frontend-ui.md](../../../docs/rules/frontend-ui.md) 与 [docs/rules/architecture.md](../../../docs/rules/architecture.md)
 - 画布节点的行组件拼装：见 skill `canvas-node-builder`
 - 提示词编辑器、文件上传控件：必须复用 `PromptEditor` / `FileUploader`，不要重写
 

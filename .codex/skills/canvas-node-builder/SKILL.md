@@ -7,7 +7,7 @@ description: Henji-AI 画布（ReactFlow）新增/改造节点时使用。指导
 
 ## 这套体系是什么
 
-Henji-AI 画布节点不是各写各的 UI，而是从一组标准化"参数行组件"拼装出来，结构和分层细节见 [CLAUDE.md](../../../CLAUDE.md) 的「核心架构原则 9」与「关键约束 13」。本 skill 提供落地这两条规则的具体步骤、字段取值依据和真实代码片段。
+Henji-AI 画布节点不是各写各的 UI，而是从一组标准化"参数行组件"拼装出来，结构和分层细节见 [docs/rules/canvas.md](../../../docs/rules/canvas.md)。本 skill 提供落地这两条规则的具体步骤、字段取值依据和真实代码片段。
 
 核心组件（`src/features/canvas/params/`）：
 
