@@ -28,3 +28,4 @@
 - 产出：`application-control/v1` 契约、`application-control-coverage/v1` 清单和 CI 覆盖门禁。
 - 下一任务：2.1 建立实体与属性反射注册表。
 - 自动化遗留：2 项阶段前 Agent Runtime 基线测试失败，未混入第一阶段修复。
+- 相关提交：`9545a6f`、`218a0d6`。

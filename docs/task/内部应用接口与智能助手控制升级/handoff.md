@@ -14,3 +14,4 @@
 - 以 `createApplicationControlCoverageManifest` 的领域计划和迁移矩阵为实现基线。
 - Surface 观察状态目前均为 `planned`，不得在 6.5 前当成已实现能力。
 - 全量测试的两个 Agent Runtime 基线失败见 `test-report.md`。
+- 第一阶段提交：`9545a6f`、`218a0d6`。
