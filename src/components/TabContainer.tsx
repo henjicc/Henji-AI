@@ -59,28 +59,28 @@ const TabContainer: React.FC<TabContainerProps> = ({ containerRef, activeTab, in
             }}
         >
             {visitedTabs.has('generation') && (
-                <div className={activeTab === 'generation' ? 'h-full' : 'hidden'}>
+                <div data-application-surface-id="workspace.generation" className={activeTab === 'generation' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
                         <GenerationWorkspace />
                     </Suspense>
                 </div>
             )}
             {visitedTabs.has('nodes') && (
-                <div className={activeTab === 'nodes' ? 'h-full' : 'hidden'}>
+                <div data-application-surface-id="workspace.canvas" className={activeTab === 'nodes' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
                         <CanvasWorkspace />
                     </Suspense>
                 </div>
             )}
             {visitedTabs.has('tools') && (
-                <div className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
+                <div data-application-surface-id="workspace.tools" className={activeTab === 'tools' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
                         <ToolboxWorkspace />
                     </Suspense>
                 </div>
             )}
             {visitedTabs.has('assets') && (
-                <div className={activeTab === 'assets' ? 'h-full' : 'hidden'}>
+                <div data-application-surface-id="workspace.assets" className={activeTab === 'assets' ? 'h-full' : 'hidden'}>
                     <Suspense fallback={<LoadingPlaceholder />}>
                         <AssetLibraryWorkspace />
                     </Suspense>

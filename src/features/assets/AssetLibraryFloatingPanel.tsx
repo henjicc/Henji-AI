@@ -26,5 +26,5 @@ export const AssetLibraryFloatingPanel: React.FC<Props> = ({ open, position, onC
     : position === 'left'
       ? isVisible ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0'
       : isVisible ? 'translate-x-0 opacity-100' : 'translate-x-2 opacity-0'
-  return <UiPanel ref={panelRef} variant="glass" aria-hidden={!open} className={`fixed z-panel overflow-hidden transition-[opacity,transform] duration-200 ease-out ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${shouldRender ? 'visible' : 'invisible'} ${positionClass} ${motionClass}`} data-asset-floating-panel><AssetLibrarySurface mode="floating" active={open} onClose={onClose} onOpenWorkspace={onOpenWorkspace} /></UiPanel>
+  return <UiPanel ref={panelRef} variant="glass" aria-hidden={!open} className={`fixed z-panel overflow-hidden transition-[opacity,transform] duration-200 ease-out ${isVisible ? 'pointer-events-auto' : 'pointer-events-none'} ${shouldRender ? 'visible' : 'invisible'} ${positionClass} ${motionClass}`} data-asset-floating-panel data-application-surface-id="overlay.assets"><AssetLibrarySurface mode="floating" active={open} onClose={onClose} onOpenWorkspace={onOpenWorkspace} /></UiPanel>
 }

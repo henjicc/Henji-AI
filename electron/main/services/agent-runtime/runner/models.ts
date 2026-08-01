@@ -90,6 +90,12 @@ export interface AgentRuntimeModelSet {
   fellBack: boolean
 }
 
+export function canObserveApplicationSurface(models: AgentRuntimeModelSet): boolean {
+  return (['image', 'video', 'audio'] as const).some((modality) => (
+    models.primary.capabilities[modality] || models.observer?.capabilities[modality] === true
+  ))
+}
+
 function selectObserver(request: AgentStartRunRequest): AgentRuntimeModel | undefined {
   const reference = resolveAgentRoleReference(request.profile, 'observer')
   if (!reference) return undefined

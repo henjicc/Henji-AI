@@ -29,7 +29,7 @@ const StageViewportWorkspace: React.FC<StageViewportWorkspaceProps> = ({ capture
   const visibleIds = maximizedViewportId ? [maximizedViewportId] : STAGE_VIEWPORT_IDS
 
   return (
-    <div className="relative h-full w-full">
+    <div data-application-observation-region="camera_stage.viewport_observer" className="relative h-full w-full">
       <div className={maximizedViewportId ? 'grid h-full grid-cols-1' : 'grid h-full grid-cols-2 grid-rows-2'}>
         {visibleIds.map((id, index) => (
           <StageViewportPane

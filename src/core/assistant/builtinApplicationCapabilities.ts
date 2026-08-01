@@ -6,6 +6,7 @@ import {
   type ApplicationCapabilityDefinition,
 } from './applicationCapabilities'
 import { APPLICATION_SURFACE_IDS } from './applicationSurfaces'
+import { agentAttachmentSchema } from './attachments'
 
 function defineCapability<TInput, TOutput>(
   definition: Omit<
@@ -65,6 +66,57 @@ export const getCurrentApplicationContextCapability = defineCapability({
     revision: z.number().int().nonnegative(),
   }).passthrough(),
   aiInputSchema: { type: 'object', properties: {}, additionalProperties: false },
+})
+
+export const observeApplicationSurfaceCapability = defineCapability({
+  id: 'observe_application_surface',
+  version: 1,
+  title: '观察应用表面',
+  description: '仅在结构化数据不足时，读取当前 Henji-AI 窗口内已注册表面的脱敏视觉证据。需要先打开目标表面；已有稳定媒体引用时优先读取原生媒体。',
+  domain: 'application',
+  aliases: ['观察当前页面', '查看界面', '读取预览', '视觉验证', 'observe surface'],
+  side: 'frontend',
+  readOnly: true,
+  risk: 'R0',
+  dataClasses: ['C1', 'C2'],
+  permission: 'application:read',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 15_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['navigation'],
+  prerequisites: ['目标 Surface 已注册且当前可见。', '主模型或观察模型支持目标媒体模态。'],
+  availability: ['只在至少一种媒体输入模态可用时开放，并按实际结果二次门禁。', '截图范围仅限当前 Henji-AI 应用窗口。'],
+  acceptsRefs: ['application.surface', 'asset'],
+  producesRefs: ['asset'],
+  successEvidence: ['返回稳定 asset 引用、观察提供者、遮罩数量；视觉内容经模型读取后才能标记为已验证。'],
+  failureRecovery: ['目标不可见时先调用 open_application_surface。', '模型不支持图片时回退结构化能力并明确未验证。'],
+  inputSchema: z.object({
+    surfaceId: z.enum(APPLICATION_SURFACE_IDS),
+    purpose: z.string().min(1).max(500),
+    mediaRef: z.string().regex(/^asset:[^\s]+$/).optional(),
+  }).strict(),
+  outputSchema: z.object({
+    surfaceId: z.enum(APPLICATION_SURFACE_IDS),
+    providerId: z.string().min(1),
+    sourceKind: z.enum(['native_media', 'viewport_3d', 'canvas_preview', 'surface_region']),
+    verificationKind: z.literal('visual_pending_model'),
+    attachment: agentAttachmentSchema,
+    maskedRegionCount: z.number().int().nonnegative(),
+    capturedAt: z.string().datetime(),
+  }).strict(),
+  aiInputSchema: {
+    type: 'object',
+    properties: {
+      surfaceId: { type: 'string', enum: [...APPLICATION_SURFACE_IDS] },
+      purpose: { type: 'string' },
+      mediaRef: { type: 'string', pattern: '^asset:' },
+    },
+    required: ['surfaceId', 'purpose'],
+    additionalProperties: false,
+  },
+  completionKind: 'observed',
 })
 
 export const openApplicationSurfaceCapability = defineCapability({

@@ -1,5 +1,6 @@
 import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
 import type { WorkspaceId } from '@/core/types/workspace'
+import type { ApplicationSurfaceId } from '@/core/assistant/applicationSurfaces'
 
 export type SurfaceOpenPolicy = 'immediate' | 'after_target_resolved' | 'background_preferred'
 export type SurfacePresentationDecision =
@@ -10,16 +11,25 @@ export type SurfacePresentationDecision =
   | 'unavailable'
 
 export interface ApplicationSurfaceDefinition {
-  id: string
+  id: ApplicationSurfaceId
   kind: 'workspace' | 'tool' | 'settings' | 'overlay'
   workspace?: WorkspaceId
   toolId?: 'cameraStage' | 'imageMark'
   settingsTarget?: SettingsNavigationTarget
-  acceptedRefKinds: string[]
+  acceptedRefKinds: readonly string[]
   openPolicy: SurfaceOpenPolicy
-  availability: string[]
-  observationCapabilityId?: string
-  observationProviderId?: string
+  availability: readonly string[]
+  observationCapabilityId: 'observe_application_surface'
+  observationProviderId: string
+  observationPolicy: {
+    strategy: 'native_media_preferred' | 'specialized_region' | 'registered_region'
+    captureScope: 'native_media_or_surface' | 'registered_surface' | 'specialized_region'
+    dataClass: 'C1' | 'C2'
+    maskPolicyId: 'surface.mask_declared_fields' | 'surface.mask_sensitive_fields'
+    supportedModalities: readonly ('image' | 'video' | 'audio')[]
+    maxEdge: number
+    invalidWhen: readonly string[]
+  }
 }
 
 const immediate = {
@@ -28,7 +38,31 @@ const immediate = {
   availability: ['应用界面已就绪。'],
 }
 
-export const APPLICATION_SURFACE_DEFINITIONS: readonly ApplicationSurfaceDefinition[] = [
+function observationProviderId(surfaceId: string): string {
+  if (surfaceId === 'tool.camera_stage') return 'camera_stage.viewport_observer'
+  if (surfaceId === 'tool.image_edit') return 'image_edit.canvas_observer'
+  if (surfaceId === 'workspace.canvas') return 'canvas.viewport_observer'
+  if (surfaceId === 'workspace.generation') return 'generation.result_observer'
+  if (surfaceId === 'workspace.assets' || surfaceId === 'overlay.assets') return 'assets.media_observer'
+  return 'surface.region_observer'
+}
+
+function observationPolicy(surfaceId: ApplicationSurfaceId): ApplicationSurfaceDefinition['observationPolicy'] {
+  const nativeMedia = ['workspace.generation', 'workspace.assets', 'overlay.assets'].includes(surfaceId)
+  const specialized = ['tool.camera_stage', 'tool.image_edit', 'workspace.canvas'].includes(surfaceId)
+  const sensitive = surfaceId === 'settings.api_keys' || surfaceId === 'settings.storage'
+  return {
+    strategy: nativeMedia ? 'native_media_preferred' : specialized ? 'specialized_region' : 'registered_region',
+    captureScope: nativeMedia ? 'native_media_or_surface' : specialized ? 'specialized_region' : 'registered_surface',
+    dataClass: sensitive ? 'C2' : 'C1',
+    maskPolicyId: sensitive ? 'surface.mask_sensitive_fields' : 'surface.mask_declared_fields',
+    supportedModalities: nativeMedia ? ['image', 'video', 'audio'] : ['image'],
+    maxEdge: 1_600,
+    invalidWhen: ['目标 Surface 不可见。', '稳定媒体引用失效。', '用户取消观察。'],
+  }
+}
+
+const surfaceDefinitions = [
   { id: 'workspace.generation', kind: 'workspace', workspace: 'generation', ...immediate },
   {
     id: 'workspace.canvas', kind: 'workspace', workspace: 'nodes', ...immediate,
@@ -52,8 +86,6 @@ export const APPLICATION_SURFACE_DEFINITIONS: readonly ApplicationSurfaceDefinit
       'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe',
     ],
     openPolicy: 'after_target_resolved',
-    observationCapabilityId: 'observe_camera_stage_viewport',
-    observationProviderId: 'camera_stage.viewport_observer',
   },
   { id: 'settings.general', kind: 'settings', settingsTarget: { tab: 'general' }, ...immediate },
   { id: 'settings.general.basic', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-basic' }, ...immediate },
@@ -75,9 +107,20 @@ export const APPLICATION_SURFACE_DEFINITIONS: readonly ApplicationSurfaceDefinit
     acceptedRefKinds: ['asset'],
     openPolicy: 'background_preferred',
   },
-]
+] as const
 
-const surfaceMap = new Map(APPLICATION_SURFACE_DEFINITIONS.map((surface) => [surface.id, surface]))
+export const APPLICATION_SURFACE_DEFINITIONS: readonly ApplicationSurfaceDefinition[] = surfaceDefinitions.map(
+  (surface) => ({
+    ...surface,
+    observationCapabilityId: 'observe_application_surface',
+    observationProviderId: observationProviderId(surface.id),
+    observationPolicy: observationPolicy(surface.id),
+  })
+)
+
+const surfaceMap = new Map<string, ApplicationSurfaceDefinition>(
+  APPLICATION_SURFACE_DEFINITIONS.map((surface) => [surface.id, surface])
+)
 if (surfaceMap.size !== APPLICATION_SURFACE_DEFINITIONS.length) throw new Error('应用 Surface ID 重复')
 
 export function listApplicationSurfaces(): readonly ApplicationSurfaceDefinition[] {

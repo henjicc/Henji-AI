@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
-import { selectAgentObservationRuntimeModel, selectAgentRuntimeModels } from './models'
+import { canObserveApplicationSurface, selectAgentObservationRuntimeModel, selectAgentRuntimeModels } from './models'
 
 function request(contextWindow: number | null): AgentStartRunRequest {
   const now = new Date().toISOString()
@@ -97,5 +97,22 @@ describe('selectAgentRuntimeModels', () => {
     expect(models.observer?.modelId).toBe('observer')
     expect(selectAgentObservationRuntimeModel(models, 'image')).toMatchObject({ role: 'observer' })
     expect(() => selectAgentObservationRuntimeModel(models, 'video')).toThrow('[agent_input_modality_unavailable]')
+  })
+})
+
+describe('canObserveApplicationSurface', () => {
+  it('主模型或观察模型支持图片时开放视觉观察', () => {
+    const primary = selectAgentRuntimeModels(request(1_000_000))
+    expect(canObserveApplicationSurface(primary)).toBe(primary.primary.capabilities.image)
+    expect(canObserveApplicationSurface({
+      ...primary,
+      primary: { ...primary.primary, capabilities: { ...primary.primary.capabilities, image: false } },
+      observer: { ...primary.primary, capabilities: { ...primary.primary.capabilities, image: true } },
+    })).toBe(true)
+    expect(canObserveApplicationSurface({
+      ...primary,
+      primary: { ...primary.primary, capabilities: { ...primary.primary.capabilities, image: false } },
+      observer: undefined,
+    })).toBe(false)
   })
 })

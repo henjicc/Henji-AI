@@ -72,6 +72,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   ]
 
   const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component
+  const activeSurfaceId = (() => {
+    const bySection: Record<string, string> = {
+      'general-basic': 'settings.general.basic',
+      'general-storage': 'settings.storage',
+      'general-behavior': 'settings.general.behavior',
+      'general-maintenance': 'settings.general.maintenance',
+      'api-keys': 'settings.api_keys',
+      'api-upload': 'settings.upload',
+      'api-llm': 'settings.llm',
+      'api-agent-preferences': 'settings.assistant_preferences',
+      'models-visibility': 'settings.models',
+      'interface-layout': 'settings.interface.layout',
+      'interface-theme': 'settings.interface.theme',
+      'interface-assets': 'settings.interface.assets',
+      'interface-canvas': 'settings.interface.canvas',
+    }
+    return bySection[activeSectionId]
+      ?? (activeTab === 'interface' ? 'settings.interface' : 'settings.general')
+  })()
 
   const { scrollToSection, tailSpacerHeight } = useSettingsScrollSpy({
     containerRef: contentRef,
@@ -136,6 +155,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
     >
       {/* relative：让内容压在 .ui-glass::after 的噪点层同一层，避免文字被颗粒扰动 */}
       <div
+        data-application-surface-id={activeSurfaceId}
         className={`relative flex w-full flex-col ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}
         style={{ height: 'calc(76vh - 72px)', minHeight: '440px', maxHeight: '868px' }}
       >

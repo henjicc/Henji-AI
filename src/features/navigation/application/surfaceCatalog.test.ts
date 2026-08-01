@@ -1,8 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
-import { decideSurfacePresentation, getApplicationSurface } from './surfaceCatalog'
+import { APPLICATION_SURFACE_IDS } from '@/core/assistant/applicationSurfaces'
+import { decideSurfacePresentation, getApplicationSurface, listApplicationSurfaces } from './surfaceCatalog'
 
 describe('surface presentation policy', () => {
+  it('全部注册 Surface 都声明通用观察能力和领域提供者', () => {
+    const surfaces = listApplicationSurfaces()
+    expect(surfaces.map((surface) => surface.id).sort()).toEqual([...APPLICATION_SURFACE_IDS].sort())
+    expect(surfaces.every((surface) => surface.observationCapabilityId === 'observe_application_surface')).toBe(true)
+    expect(surfaces.every((surface) => surface.observationProviderId.length > 0)).toBe(true)
+    expect(surfaces.every((surface) => surface.observationPolicy.maxEdge === 1_600)).toBe(true)
+    expect(surfaces.every((surface) => surface.observationPolicy.invalidWhen.length > 0)).toBe(true)
+    expect(getApplicationSurface('settings.api_keys')?.observationPolicy).toMatchObject({
+      dataClass: 'C2', maskPolicyId: 'surface.mask_sensitive_fields',
+    })
+    expect(getApplicationSurface('tool.camera_stage')?.observationProviderId).toBe('camera_stage.viewport_observer')
+    expect(getApplicationSurface('workspace.generation')?.observationProviderId).toBe('generation.result_observer')
+  })
+
   it('立即展示普通工作区和设置 Surface', () => {
     expect(decideSurfacePresentation({
       surfaceId: 'workspace.generation', hasStableTarget: false, alreadyActive: false, userTookOver: false,

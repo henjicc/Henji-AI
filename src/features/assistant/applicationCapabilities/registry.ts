@@ -8,6 +8,7 @@ import {
   listGenerationHistoryCapability,
   openApplicationSurfaceCapability,
   openImageEditorWithSourceCapability,
+  observeApplicationSurfaceCapability,
   planApplicationSettingsChangeCapability,
   searchApplicationSettingsCapability,
 } from '@/core/assistant/builtinApplicationCapabilities'
@@ -54,6 +55,7 @@ import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandle
 import { registerCanvasCapabilityHandlers } from './registerCanvasCapabilityHandlers'
 import { registerGenerationCapabilityHandlers } from './registerGenerationCapabilityHandlers'
 import { registerToolboxCapabilityHandlers } from './registerToolboxCapabilityHandlers'
+import { observeApplicationSurface } from './surfaceObservation'
 
 const logger = createLogger('features.assistant.application_capabilities')
 
@@ -123,6 +125,10 @@ function registerBuiltins(): void {
       ready: snapshot.uiReady,
       revision: snapshot.revision,
     }
+  })
+  registry.registerHandler(observeApplicationSurfaceCapability.id, async (input, context) => {
+    const parsed = observeApplicationSurfaceCapability.inputSchema.parse(input)
+    return await observeApplicationSurface(parsed, context.signal)
   })
   registry.registerHandler(openApplicationSurfaceCapability.id, (input, context) => {
     const parsed = openApplicationSurfaceCapability.inputSchema.parse(input)

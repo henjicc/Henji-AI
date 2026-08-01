@@ -740,6 +740,8 @@ export interface HenjiMediaApi {
   /** 解析 resources/ 下随应用分发的内置只读资源（如3D 镜头参考角色 GLB）的绝对路径，
    *  并把所在根目录注册进 henji-media:// 白名单；文件不存在或越界时返回 null。 */
   getBundledResourcePath(relativePath: string): Promise<string | null>
+  /** 只截取当前 Henji-AI 窗口内、由渲染层注册的应用表面区域，并在主进程覆盖敏感字段。 */
+  captureApplicationSurface(request: import('../../src/core/assistant/surfaceObservation').SurfaceCaptureRequest): Promise<import('../../src/core/assistant/surfaceObservation').SurfaceCaptureResult>
 }
 
 export interface HenjiClipboardFileEntry {

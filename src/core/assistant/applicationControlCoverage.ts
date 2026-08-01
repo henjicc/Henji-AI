@@ -88,9 +88,7 @@ function domainPlan(
     propertySources,
     operationSource,
     querySource: operationSource,
-    observationSource: domain === 'camera_stage'
-      ? 'camera_stage.viewport_observer 与 observe_camera_stage_scene；其他 Surface 在任务 6.5 推广'
-      : '任务 6.5 的受控观察提供者；结构化状态由正式服务读取',
+    observationSource: 'observe_application_surface 受控观察提供者；结构化状态仍由正式服务读取',
     verificationSource: 'ApplicationCapabilityDefinition.successEvidence 与后续事务证据',
     surfaceIds: surfacesForDomain(domain),
     source: operationSource,
@@ -170,7 +168,7 @@ function surfaceObservation(surfaceId: string): ApplicationSurfaceObservationCov
   return {
     surfaceId,
     providerId: surfaceProvider(surfaceId),
-    implementationStatus: surfaceId === 'tool.camera_stage' ? 'available' : 'planned',
+    implementationStatus: 'available',
     resultModalities: surfaceId === 'workspace.generation'
       ? ['image', 'video', 'audio']
       : ['image'],
@@ -178,7 +176,7 @@ function surfaceObservation(surfaceId: string): ApplicationSurfaceObservationCov
     captureScope: `仅限 Henji-AI 应用窗口内注册的 ${surfaceId} 区域。`,
     maskPolicyId: sensitive ? 'surface.mask_sensitive_fields' : 'surface.mask_declared_fields',
     verification: '提供者返回与请求 Surface ID 一致的稳定观察结果，并记录实际遮罩。',
-    migrationTask: surfaceId === 'tool.camera_stage' ? '4.4' : '6.5',
+    migrationTask: '6.5',
   }
 }
 

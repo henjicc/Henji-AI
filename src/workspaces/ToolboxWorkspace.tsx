@@ -66,7 +66,10 @@ const ToolboxWorkspace: React.FC = () => {
 
   if (activeTool) {
     return (
-      <div className="flex h-full flex-col bg-app">
+      <div
+        data-application-surface-id={activeTool.id === 'cameraStage' ? 'tool.camera_stage' : 'tool.image_edit'}
+        className="flex h-full flex-col bg-app"
+      >
         {showToolHeader && (
           <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
             <UiIconButton

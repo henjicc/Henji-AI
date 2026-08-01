@@ -12,6 +12,7 @@ import {
   listGenerationHistoryCapability,
   openApplicationSurfaceCapability,
   openImageEditorWithSourceCapability,
+  observeApplicationSurfaceCapability,
   planApplicationSettingsChangeCapability,
   searchApplicationSettingsCapability,
 } from './builtinApplicationCapabilities'
@@ -30,6 +31,7 @@ import { WORKFLOW_APPLICATION_CAPABILITIES } from './capabilities/workflowApplic
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   getCurrentApplicationContextCapability,
+  observeApplicationSurfaceCapability,
   openApplicationSurfaceCapability,
   closeApplicationSurfaceCapability,
   focusApplicationEntityCapability,

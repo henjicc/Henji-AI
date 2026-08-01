@@ -1,5 +1,20 @@
 # 测试报告
 
+## 任务 6.5 完成与第六阶段收尾
+
+- 验证级别：L3；涉及共享 Surface 契约、renderer/preload/IPC/主进程、媒体文件 I/O、Runner 模型回注、权限与敏感遮罩。
+- 专项：Surface 契约、目录覆盖、能力注册、渲染捕获、Electron 遮罩和模型门禁共 7 个文件、23 项测试通过。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- `npx tsc -p tsconfig.electron.json --noEmit`：通过。
+- 渲染层与 Electron 变更文件定向 ESLint：通过，0 警告。
+- `npm run check:assistant-capabilities`、`npm run check:application-control-coverage`：通过。
+- `npm run check:colors`、`npm run check:surface`、`npm run check:icons`：通过。
+- 真实 22 Surface 截图、多模态 provider 和鼠标操作未自动执行，统一留到最终人工清单。
+
+## 任务 6.5 开始
+
+- 预定验证级别：L3；涉及 Surface 注册、渲染边界、Electron 捕获、安全遮罩、Agent 工具、媒体与模型调用。
+
 ## 任务 6.4 开始
 
 - 预定验证级别：L3；附件跨越渲染交互、媒体解析、共享契约、主进程运行与持久化恢复。

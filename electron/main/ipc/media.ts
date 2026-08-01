@@ -1,5 +1,11 @@
 import { allowMediaRoot, isPathWithinAllowedMediaRoots } from '../protocol'
 import { resolveBundledResourcePath } from '../services/media/bundledResources'
+import { captureApplicationSurface } from '../services/media/surfaceCapture'
+import {
+  surfaceCaptureRequestSchema,
+  type SurfaceCaptureRequest,
+  type SurfaceCaptureResult,
+} from '../../../src/core/assistant/surfaceObservation'
 import { parseRecord, registerIpcHandler } from './registry'
 
 interface AllowRootPayload {
@@ -56,5 +62,11 @@ export function registerMediaIpc(): void {
     ({ relativePath }) => {
       return resolveBundledResourcePath(relativePath)
     },
+  )
+
+  registerIpcHandler<SurfaceCaptureRequest, SurfaceCaptureResult>(
+    'media:captureApplicationSurface',
+    (input) => surfaceCaptureRequestSchema.parse(input),
+    (input, event) => captureApplicationSurface(event.sender, input),
   )
 }

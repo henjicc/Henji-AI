@@ -474,6 +474,7 @@ export function Canvas() {
   return (
     <div
       ref={wrapperRef}
+      data-application-observation-region="canvas.viewport_observer"
       className={`relative h-full w-full ${isContentLodLow ? 'canvas-lod-low' : ''}`}
       onDragOver={assetDrop.onDragOver}
       onDrop={assetDrop.onDrop}

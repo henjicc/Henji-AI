@@ -66,8 +66,7 @@ describe('application control coverage', () => {
     expect(new Set(observed).size).toBe(observed.length)
     expect(manifest.surfaceObservations.every((item) => item.captureScope.includes(item.surfaceId))).toBe(true)
     expect(manifest.surfaceObservations.every((item) => item.maskPolicyId.length > 0)).toBe(true)
-    expect(manifest.surfaceObservations.find((item) => item.surfaceId === 'tool.camera_stage')?.implementationStatus).toBe('available')
-    expect(manifest.surfaceObservations.filter((item) => item.surfaceId !== 'tool.camera_stage').every((item) => item.implementationStatus === 'planned')).toBe(true)
+    expect(manifest.surfaceObservations.every((item) => item.implementationStatus === 'available')).toBe(true)
   })
 
   it('清单整体通过严格 schema 且数量从真实注册表计算', () => {

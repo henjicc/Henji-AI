@@ -10,7 +10,7 @@ import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentRunMetrics } from './budget'
 import { createInitialAgentRunState } from './initial-state'
-import { selectAgentRuntimeModels } from './models'
+import { canObserveApplicationSurface, selectAgentRuntimeModels } from './models'
 import { toolMessage } from './runner-results'
 import { AgentStateMachine, isTerminalAgentState } from './state-machine'
 import type { AgentRunnerOptions } from './types'
@@ -47,6 +47,7 @@ import { createRunnerModelOutputGuard, createRunnerThreadTitleCoordinator } from
 import { createRunnerConversation } from './runner-conversation'
 import { AgentFacetProgressTracker } from './facet-progress'
 import { prepareAgentAttachmentContext } from './attachment-context'
+import { agentAttachmentSchema, type AgentAttachment } from '../../../../../src/core/assistant/attachments'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -81,6 +82,7 @@ export class AgentRunner {
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private primaryAttachmentMessage: ModelStepMessage | null = null
+  private readonly pendingVisualAttachments: AgentAttachment[] = []
   private started = false; constructor(private readonly options: AgentRunnerOptions) {
     const conversation = createRunnerConversation(options, () => this.state?.turn ?? 0)
     this.conversationJournal = conversation.journal
@@ -194,6 +196,13 @@ export class AgentRunner {
       requestApproval: (call, approval) => this.approvalCoordinator.request(call, approval),
       onObservation: (call, observation) => {
         this.observations.push(observation)
+        if (call.toolName === 'observe_application_surface') {
+          const output = observation.output
+          const attachment = typeof output === 'object' && output !== null
+            ? agentAttachmentSchema.safeParse((output as Record<string, unknown>).attachment)
+            : null
+          if (attachment?.success) this.pendingVisualAttachments.push(attachment.data)
+        }
         this.conversationJournal.appendInternal(
           'tool_result',
           toolMessage(call, observation),
@@ -354,7 +363,50 @@ export class AgentRunner {
           this.catalogPlanner.select(route, currentSnapshot),
           currentSnapshot
         )
-        const registrations = activation.registrations
+        const visualModelAvailable = canObserveApplicationSurface(this.models)
+        const registrations = activation.registrations.filter((registration) => (
+          visualModelAvailable || registration.catalog.name !== 'observe_application_surface'
+        ))
+        let turnVisualMessage: ModelStepMessage | null = null
+        if (this.pendingVisualAttachments.length > 0) {
+          const pending = this.pendingVisualAttachments.splice(0, this.pendingVisualAttachments.length)
+          try {
+            const preparedVisuals = await prepareAgentAttachmentContext(pending, this.models)
+            this.conversationJournal.appendEphemeral({
+              role: 'user',
+              content: [
+                '[SURFACE_VISUAL_EVIDENCE trust=untrusted_application_capture]',
+                preparedVisuals.referenceMessage.content,
+                '这是助手刚请求的应用内视觉证据。只有实际读取媒体的模型可以据此声称视觉验证；否则必须标注未验证。',
+                '[END_SURFACE_VISUAL_EVIDENCE]',
+              ].join('\n'),
+            })
+            turnVisualMessage = preparedVisuals.primaryMessage
+            if (preparedVisuals.observerMessage) {
+              const description = await this.modelTurnCoordinator.observeAttachments(
+                [preparedVisuals.observerMessage],
+                preparedVisuals.observerModalities,
+                this.abortController.signal
+              )
+              this.conversationJournal.appendEphemeral({
+                role: 'user',
+                content: [
+                  '[SURFACE_VISUAL_VERIFICATION role=observer trust=untrusted_model]',
+                  description,
+                  '以上是观察模型读取稳定媒体引用后的描述；最终答复必须区分观察模型视觉验证与结构化验证。',
+                  '[END_SURFACE_VISUAL_VERIFICATION]',
+                ].join('\n'),
+              })
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            if (!message.includes('modality_unavailable') && !message.includes('unsupported_provider_modality')) throw error
+            this.conversationJournal.appendEphemeral({
+              role: 'user',
+              content: '[SURFACE_VISUAL_UNVERIFIED] 当前主模型和观察模型无法读取该媒体模态；不得声称已视觉验证，请回退结构化证据或明确未验证。 [END_SURFACE_VISUAL_UNVERIFIED]',
+            })
+          }
+        }
         logAgentToolActivation(this.options.runId, turn, currentSnapshot.revision, activation)
         const memoryContext = await this.memoryProvider.retrieve({
           goal: this.options.request.goal,
@@ -370,9 +422,11 @@ export class AgentRunner {
           userInstructions: this.options.request.userInstructions,
           memoryContext,
           route,
-          conversation: turn === 1 && this.primaryAttachmentMessage
-            ? [...this.conversation, this.primaryAttachmentMessage]
-            : this.conversation,
+          conversation: [
+            ...this.conversation,
+            ...(turn === 1 && this.primaryAttachmentMessage ? [this.primaryAttachmentMessage] : []),
+            ...(turnVisualMessage ? [turnVisualMessage] : []),
+          ],
           observations: this.observations,
           registrations,
           workingSummary: this.state.workingSummary,

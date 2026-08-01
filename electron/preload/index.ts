@@ -320,6 +320,7 @@ const mediaApi: HenjiMediaApi = {
   isPathAllowed: (targetPath) => nativeInvoke('media:isPathAllowed', { targetPath }),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   getBundledResourcePath: (relativePath) => nativeInvoke('media:getBundledResourcePath', { relativePath }),
+  captureApplicationSurface: (request) => nativeInvoke('media:captureApplicationSurface', request),
 }
 
 const clipboardApi: HenjiClipboardApi = {

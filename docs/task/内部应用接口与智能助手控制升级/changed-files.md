@@ -1,5 +1,18 @@
 # 变更文件记录
 
+## 任务 6.5
+
+- Surface 契约与覆盖：`src/core/assistant/surfaceObservation.ts`、`applicationControlCoverage.ts` 及测试、`src/features/navigation/application/surfaceCatalog.ts` 及测试。
+- 能力与运行时：内建能力注册、渲染能力 `surfaceObservation.ts` 及测试、Runner `models.ts`/`runner.ts` 及测试。
+- Electron/PAL：媒体 IPC、`electron/main/services/media/surfaceCapture.ts` 及测试、preload API、媒体平台契约与 Electron 适配器。
+- Surface 边界：工作区、设置、工具箱、素材浮层和画布/图片编辑/三维专用视口根节点。
+- 规则：`.codex`/`.claude` 的 `henji-application-capability` 技能、`docs/rules/assistant-capability.md`。
+- 第六阶段任务记录、总览、重要记录与人工测试暂存清单。
+
+## 任务 6.5 开始
+
+- 已更新任务状态与阶段记录；代码文件将在实现完成后按真实范围补充。
+
 ## 任务 6.4
 
 - `src/core/assistant/attachments.ts` 及运行、事件、会话、投影、工作摘要契约：稳定附件引用和恢复。
