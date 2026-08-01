@@ -2,6 +2,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -125,6 +126,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     const submitShortcutRef = useRef(submitShortcut)
     submitShortcutRef.current = submitShortcut
     const editSessionActiveRef = useRef(false)
+    const readyEditorRef = useRef<object | null>(null)
     const [resourceRegistry] = useState(() => new PromptEditorResourceRegistry({
       references,
       variables,
@@ -200,10 +202,6 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
             return event.defaultPrevented
           },
         },
-      },
-      onCreate: ({ editor: currentEditor }): void => {
-        setCharacterCount(currentEditor.storage.characterCount.characters())
-        callbacksRef.current.onReady?.()
       },
       onUpdate: ({ editor: currentEditor }): void => {
         const document = fromTiptapContent(currentEditor.getJSON())
@@ -310,6 +308,28 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         }
         editor.chain().focus().setTextSelection(position.pos).run()
       },
+      selectRangeAtPoints: (
+        anchor: PromptEditorActivationPoint,
+        head: PromptEditorActivationPoint,
+      ): void => {
+        if (!editor) return
+        const anchorPosition = editor.view.posAtCoords({
+          left: anchor.clientX,
+          top: anchor.clientY,
+        })
+        const headPosition = editor.view.posAtCoords({
+          left: head.clientX,
+          top: head.clientY,
+        })
+        if (!anchorPosition || !headPosition) {
+          editor.commands.focus()
+          return
+        }
+        editor.chain().focus().setTextSelection({
+          from: Math.min(anchorPosition.pos, headPosition.pos),
+          to: Math.max(anchorPosition.pos, headPosition.pos),
+        }).run()
+      },
       getScrollTop: (): number => editor?.view.dom.scrollTop ?? 0,
       setScrollTop: (scrollTop): void => {
         if (editor) editor.view.dom.scrollTop = scrollTop
@@ -335,6 +355,15 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
         }
       },
     }), [editor])
+
+    // 画布静态态切换为真实编辑器时，调用方会在 onReady 中恢复光标或拖拽选区。
+    // 必须在浏览器绘制前完成，否则静态选区消失与 Tiptap 选区出现之间会闪一帧。
+    useLayoutEffect(() => {
+      if (!editor || readyEditorRef.current === editor) return
+      readyEditorRef.current = editor
+      setCharacterCount(editor.storage.characterCount.characters())
+      callbacksRef.current.onReady?.()
+    }, [editor])
 
     const reachedLimit = maxCharacters !== undefined && characterCount >= maxCharacters
     const shellStateClass = getPromptEditorShellStateClass(error)

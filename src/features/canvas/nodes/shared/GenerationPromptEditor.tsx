@@ -3,7 +3,7 @@ import { Handle, Position } from '@xyflow/react'
 
 import {
   PromptEditor,
-  type PromptEditorActivationPoint,
+  type PromptEditorActivation,
   type PromptEditorHandle,
   type PromptReferenceItem,
 } from '@/components/ui'
@@ -32,7 +32,7 @@ export interface GenerationPromptEditorProps {
 }
 
 type PendingPromptActivation =
-  | { kind: 'pointer'; point: PromptEditorActivationPoint }
+  | { kind: 'pointer'; activation: PromptEditorActivation }
   | { kind: 'keyboard' }
 
 export function GenerationPromptEditor({
@@ -63,11 +63,11 @@ export function GenerationPromptEditor({
     }
   }, [canActivate, selected])
 
-  const handleActivate = useCallback((point?: PromptEditorActivationPoint): void => {
+  const handleActivate = useCallback((activation?: PromptEditorActivation): void => {
     if (readOnly || isContentLodLow) return
     savedScrollTopRef.current = activeEditorRef.current?.getScrollTop() ?? 0
-    pendingActivationRef.current = point
-      ? { kind: 'pointer', point }
+    pendingActivationRef.current = activation
+      ? { kind: 'pointer', activation }
       : { kind: 'keyboard' }
     onSelectNode(nodeId)
     setIsEditing(true)
@@ -84,13 +84,18 @@ export function GenerationPromptEditor({
 
     editor.setScrollTop(savedScrollTopRef.current)
 
-    // 画布静态 renderer 的首次点击不会落到随后挂载的 contenteditable 上。
-    // 等 Tiptap 真正完成 mount 后只执行这一处聚焦；画布路径禁用 autoFocus，
+    // 画布静态 renderer 的首次手势不会落到随后挂载的 contenteditable 上。
+    // 等 Tiptap 真正完成 mount 后恢复点击光标或拖拽选区；画布路径禁用 autoFocus，
     // 避免 Tiptap 延迟 focus(true) 再把已经恢复的 selection 覆盖为文首。
-    if (activation.kind === 'pointer') {
-      editor.focusAtPoint(activation.point)
-    } else {
+    if (activation.kind === 'keyboard') {
       editor.focus()
+    } else {
+      const pointerActivation = activation.activation
+      if ('clientX' in pointerActivation) {
+        editor.focusAtPoint(pointerActivation)
+      } else {
+        editor.selectRangeAtPoints(pointerActivation.anchor, pointerActivation.head)
+      }
     }
     pendingActivationRef.current = null
   }, [])

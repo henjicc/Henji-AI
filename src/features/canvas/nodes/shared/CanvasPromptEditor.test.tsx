@@ -9,6 +9,7 @@ import { CanvasPromptEditor } from './CanvasPromptEditor'
 const editorMocks = vi.hoisted(() => ({
   focus: vi.fn(),
   focusAtPoint: vi.fn(),
+  selectRangeAtPoints: vi.fn(),
   getScrollTop: vi.fn(() => 0),
   setScrollTop: vi.fn(),
 }))
@@ -17,9 +18,11 @@ vi.mock('@/components/ui', async () => {
   const React = await import('react')
   const PromptEditor = React.forwardRef<unknown, Record<string, unknown>>(
     function MockPromptEditor(props, ref) {
+      const pointerStartRef = React.useRef<{ clientX: number; clientY: number } | null>(null)
       React.useImperativeHandle(ref, () => ({
         focus: editorMocks.focus,
         focusAtPoint: editorMocks.focusAtPoint,
+        selectRangeAtPoints: editorMocks.selectRangeAtPoints,
         getScrollTop: editorMocks.getScrollTop,
         setScrollTop: editorMocks.setScrollTop,
         getDocument: () => props.value,
@@ -31,12 +34,16 @@ vi.mock('@/components/ui', async () => {
       return React.createElement('div', {
         role: 'textbox',
         'data-mode': props.mode,
-        onClick: (event: { clientX: number; clientY: number }) => {
-          const onActivate = props.onActivate as ((point: {
-            clientX: number
-            clientY: number
-          }) => void) | undefined
-          onActivate?.({ clientX: event.clientX, clientY: event.clientY })
+        onMouseDown: (event: { clientX: number; clientY: number }) => {
+          pointerStartRef.current = { clientX: event.clientX, clientY: event.clientY }
+        },
+        onMouseUp: (event: { clientX: number; clientY: number }) => {
+          const onActivate = props.onActivate as ((activation: unknown) => void) | undefined
+          const anchor = pointerStartRef.current
+          const head = { clientX: event.clientX, clientY: event.clientY }
+          onActivate?.(anchor && (anchor.clientX !== head.clientX || anchor.clientY !== head.clientY)
+            ? { anchor, head }
+            : head)
         },
       })
     },
@@ -49,6 +56,7 @@ describe('CanvasPromptEditor', () => {
   beforeEach(() => {
     editorMocks.focus.mockReset()
     editorMocks.focusAtPoint.mockReset()
+    editorMocks.selectRangeAtPoints.mockReset()
     editorMocks.getScrollTop.mockReset()
     editorMocks.getScrollTop.mockReturnValue(0)
     editorMocks.setScrollTop.mockReset()
@@ -67,10 +75,31 @@ describe('CanvasPromptEditor', () => {
       />,
     )
 
-    fireEvent.click(rendered.getByRole('textbox'), { clientX: 120, clientY: 80 })
+    fireEvent.mouseDown(rendered.getByRole('textbox'), { clientX: 120, clientY: 80 })
+    fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 120, clientY: 80 })
 
     expect(rendered.getByRole('textbox').getAttribute('data-mode')).toBe('edit')
     expect(onSelectNode).toHaveBeenCalledTimes(1)
     expect(editorMocks.focusAtPoint).toHaveBeenCalledWith({ clientX: 120, clientY: 80 })
+  })
+
+  it('静态项第一次拖动会把起止坐标恢复为编辑器选区', () => {
+    const rendered = render(
+      <CanvasPromptEditor
+        selected={false}
+        onSelectNode={vi.fn()}
+        value={createPlainTextPromptDocument('分镜描述')}
+        onChange={vi.fn()}
+        ariaLabel="分镜描述"
+      />,
+    )
+
+    fireEvent.mouseDown(rendered.getByRole('textbox'), { clientX: 60, clientY: 80 })
+    fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 150, clientY: 80 })
+
+    expect(editorMocks.selectRangeAtPoints).toHaveBeenCalledWith(
+      { clientX: 60, clientY: 80 },
+      { clientX: 150, clientY: 80 },
+    )
   })
 })

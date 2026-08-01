@@ -43,6 +43,7 @@ const StaticPromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
     useImperativeHandle(ref, () => ({
       focus: (): void => onActivate?.(),
       focusAtPoint: (point): void => onActivate?.(point),
+      selectRangeAtPoints: (anchor, head): void => onActivate?.({ anchor, head }),
       getScrollTop: (): number => contentRef.current?.scrollTop ?? 0,
       setScrollTop: (scrollTop): void => {
         if (contentRef.current) contentRef.current.scrollTop = scrollTop

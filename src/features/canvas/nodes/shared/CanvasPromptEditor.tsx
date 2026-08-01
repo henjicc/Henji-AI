@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 
 import {
   PromptEditor,
-  type PromptEditorActivationPoint,
+  type PromptEditorActivation,
   type PromptEditorHandle,
   type PromptEditorProps,
 } from '@/components/ui'
@@ -16,12 +16,12 @@ export interface CanvasPromptEditorProps extends Omit<
 }
 
 type PendingActivation =
-  | { kind: 'pointer'; point: PromptEditorActivationPoint }
+  | { kind: 'pointer'; activation: PromptEditorActivation }
   | { kind: 'keyboard' }
 
 /**
  * 画布专用的静态/编辑态切换壳。
- * 非激活项只渲染轻量文档；首次点击等 Tiptap 真正挂载后再恢复点击位置。
+ * 非激活项只渲染轻量文档；首次手势等 Tiptap 真正挂载后再恢复光标或拖拽选区。
  */
 export function CanvasPromptEditor({
   selected,
@@ -44,11 +44,11 @@ export function CanvasPromptEditor({
     }
   }, [canActivate, selected])
 
-  const handleActivate = useCallback((point?: PromptEditorActivationPoint): void => {
+  const handleActivate = useCallback((activation?: PromptEditorActivation): void => {
     if (!canActivate) return
     savedScrollTopRef.current = editorRef.current?.getScrollTop() ?? 0
-    pendingActivationRef.current = point
-      ? { kind: 'pointer', point }
+    pendingActivationRef.current = activation
+      ? { kind: 'pointer', activation }
       : { kind: 'keyboard' }
     onSelectNode()
     setIsEditing(true)
@@ -59,8 +59,16 @@ export function CanvasPromptEditor({
     const activation = pendingActivationRef.current
     if (!editor || !activation) return
     editor.setScrollTop(savedScrollTopRef.current)
-    if (activation.kind === 'pointer') editor.focusAtPoint(activation.point)
-    else editor.focus()
+    if (activation.kind === 'keyboard') {
+      editor.focus()
+    } else if ('clientX' in activation.activation) {
+      editor.focusAtPoint(activation.activation)
+    } else {
+      editor.selectRangeAtPoints(
+        activation.activation.anchor,
+        activation.activation.head,
+      )
+    }
     pendingActivationRef.current = null
   }, [])
 

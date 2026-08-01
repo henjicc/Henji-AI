@@ -1,12 +1,15 @@
 import {
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import { useInternalNode, useNodeId, ViewportPortal } from '@xyflow/react';
 import { UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UiButton, UiInput } from '@/components/ui';
 
 type HeaderAdjust = {
@@ -86,6 +89,11 @@ function sanitizeTitle(value: string | undefined): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function findNodeElement(ownerDocument: Document, nodeId: string): HTMLElement | null {
+  const nodeElements = ownerDocument.querySelectorAll<HTMLElement>('.react-flow__node[data-id]');
+  return Array.from(nodeElements).find((element) => element.dataset.id === nodeId) ?? null;
+}
+
 export function NodeHeader({
   icon,
   titleText,
@@ -108,6 +116,8 @@ export function NodeHeader({
   editable = false,
   onTitleChange,
 }: NodeHeaderProps) {
+  const nodeId = useNodeId();
+  const internalNode = useInternalNode(nodeId ?? '');
   const tone = toneClassName ?? NODE_HEADER_TONE_CLASS;
   const canEditTitle = editable && typeof titleText === 'string' && typeof onTitleChange === 'function';
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -128,6 +138,22 @@ export function NodeHeader({
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [isEditingTitle]);
+
+  // 标题编辑时仅临时解除当前节点的外层 paint containment。这样溢出节点盒的输入框
+  // 可以正常接收鼠标事件，而画布上其余节点仍保持绘制隔离。
+  useLayoutEffect(() => {
+    if (!nodeId || !isEditingTitle) {
+      return;
+    }
+
+    const nodeElement = findNodeElement(document, nodeId);
+    if (!nodeElement) {
+      return;
+    }
+
+    nodeElement.classList.add('canvas-node-header-editing');
+    return () => nodeElement.classList.remove('canvas-node-header-editing');
+  }, [isEditingTitle, nodeId]);
 
   const commitTitle = useCallback(() => {
     if (!canEditTitle || !onTitleChange) {
@@ -243,34 +269,110 @@ export function NodeHeader({
     ? <span className={joinClasses(NODE_HEADER_META_CLASS, metaClassName)}>{metaText}</span>
     : meta;
 
-  return (
-    <div className={joinClasses('flex w-full max-w-full items-start justify-between gap-2', className)}>
-      <div className="min-w-0 flex-1" style={composeTransformStyle(headerAdjust)}>
-        <div className={joinClasses('flex w-full items-center gap-1', titleRowClassName)}>
-          {icon ? (
-            <span
-              className={joinClasses('inline-flex shrink-0 items-center justify-center', tone, iconClassName)}
-              style={composeTransformStyle(iconAdjust)}
-            >
-              {icon}
-            </span>
-          ) : null}
-          <div className="flex min-w-0 flex-1 items-baseline gap-2" style={composeTransformStyle(titleAdjust)}>
-            {resolvedTitle}
-            {resolvedMeta}
+  const handleDragSurfaceMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!nodeId || event.button !== 0 || isEditingTitle) {
+      return;
+    }
+
+    // 可见标题位于节点测量盒之外。外层 paint containment 会保留绘制，却不会把这片
+    // 溢出区域纳入命中测试，因此在 viewport portal 中用透明命中层接住按下事件，
+    // 再把同一按下事件交给 React Flow 的真实节点外壳启动原生节点拖拽。
+    event.stopPropagation();
+    const ownerDocument = event.currentTarget.ownerDocument;
+    const ownerWindow = ownerDocument.defaultView;
+    const nodeElement = findNodeElement(ownerDocument, nodeId);
+    if (!ownerWindow || !nodeElement) {
+      return;
+    }
+
+    const forwardedMouseDown = new ownerWindow.MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+      button: event.button,
+      buttons: event.buttons || 1,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      screenX: event.screenX,
+      screenY: event.screenY,
+      ctrlKey: event.ctrlKey,
+      shiftKey: event.shiftKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+    });
+    // d3-drag 通过 MouseEvent.view 找到需要监听 mousemove/mouseup 的 Window；
+    // Chromium 创建合成事件时默认是 null，因此在事件实例上补齐，而不是依赖构造器差异。
+    Object.defineProperty(forwardedMouseDown, 'view', { value: ownerWindow });
+    nodeElement.dispatchEvent(forwardedMouseDown);
+  }, [isEditingTitle, nodeId]);
+
+  const handleDragSurfaceDoubleClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!canEditTitle) {
+      return;
+    }
+
+    event.stopPropagation();
+    setIsEditingTitle(true);
+  }, [canEditTitle]);
+
+  const nodeWidth = internalNode?.measured.width ?? internalNode?.internals.userNode.width ?? 0;
+  const floatingDragSurface = nodeId && internalNode && nodeWidth > 0
+    ? (
+        <ViewportPortal>
+          <div
+            className="pointer-events-none absolute left-0 top-0"
+            style={{
+              width: nodeWidth,
+              transform: `translate(${internalNode.internals.positionAbsolute.x}px, ${internalNode.internals.positionAbsolute.y}px)`,
+              zIndex: internalNode.internals.z,
+            }}
+          >
+            <div
+              aria-hidden="true"
+              data-node-header-drag-surface={nodeId}
+              className={joinClasses(
+                'nopan h-8 cursor-grab select-none active:cursor-grabbing',
+                isEditingTitle ? 'pointer-events-none' : 'pointer-events-auto',
+                className
+              )}
+              onMouseDown={handleDragSurfaceMouseDown}
+              onDoubleClick={handleDragSurfaceDoubleClick}
+            />
           </div>
+        </ViewportPortal>
+      )
+    : null;
+
+  return (
+    <>
+      <div className={joinClasses('flex w-full max-w-full items-start justify-between gap-2', className)}>
+        <div className="min-w-0 flex-1" style={composeTransformStyle(headerAdjust)}>
+          <div className={joinClasses('flex w-full items-center gap-1', titleRowClassName)}>
+            {icon ? (
+              <span
+                className={joinClasses('inline-flex shrink-0 items-center justify-center', tone, iconClassName)}
+                style={composeTransformStyle(iconAdjust)}
+              >
+                {icon}
+              </span>
+            ) : null}
+            <div className="flex min-w-0 flex-1 items-baseline gap-2" style={composeTransformStyle(titleAdjust)}>
+              {resolvedTitle}
+              {resolvedMeta}
+            </div>
+          </div>
+          {subtitle ? (
+            <div className={joinClasses('text-2xs text-text-muted/80', subtitleClassName)}>
+              {subtitle}
+            </div>
+          ) : null}
         </div>
-        {subtitle ? (
-          <div className={joinClasses('text-2xs text-text-muted/80', subtitleClassName)}>
-            {subtitle}
+        {rightSlot ? (
+          <div className="shrink-0" style={composeTransformStyle(rightSlotAdjust)}>
+            {rightSlot}
           </div>
         ) : null}
       </div>
-      {rightSlot ? (
-        <div className="shrink-0" style={composeTransformStyle(rightSlotAdjust)}>
-          {rightSlot}
-        </div>
-      ) : null}
-    </div>
+      {floatingDragSurface}
+    </>
   );
 }

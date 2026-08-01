@@ -50,9 +50,22 @@ export interface PromptEditorActivationPoint {
   clientY: number
 }
 
+export interface PromptEditorActivationRange {
+  anchor: PromptEditorActivationPoint
+  head: PromptEditorActivationPoint
+}
+
+export type PromptEditorActivation =
+  | PromptEditorActivationPoint
+  | PromptEditorActivationRange
+
 export interface PromptEditorHandle {
   focus: () => void
   focusAtPoint: (point: PromptEditorActivationPoint) => void
+  selectRangeAtPoints: (
+    anchor: PromptEditorActivationPoint,
+    head: PromptEditorActivationPoint,
+  ) => void
   getScrollTop: () => number
   setScrollTop: (scrollTop: number) => void
   getDocument: () => PromptDocumentV1
@@ -92,7 +105,7 @@ export interface PromptEditorProps {
   onReady?: () => void
   onEditStart?: () => void
   onEditEnd?: () => void
-  onActivate?: (point?: PromptEditorActivationPoint) => void
+  onActivate?: (activation?: PromptEditorActivation) => void
   onFocus?: () => void
   onBlur?: () => void
   onPaste?: (event: ClipboardEvent) => void

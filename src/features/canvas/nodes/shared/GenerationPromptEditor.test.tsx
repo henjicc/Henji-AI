@@ -9,6 +9,7 @@ import { GenerationPromptEditor } from './GenerationPromptEditor'
 const promptEditorMocks = vi.hoisted(() => ({
   focus: vi.fn(),
   focusAtPoint: vi.fn(),
+  selectRangeAtPoints: vi.fn(),
   getScrollTop: vi.fn(() => 0),
   setScrollTop: vi.fn(),
 }))
@@ -26,9 +27,11 @@ vi.mock('@/components/ui', async () => {
   const React = await import('react')
   const PromptEditor = React.forwardRef<unknown, Record<string, unknown>>(
     function MockPromptEditor(props, ref) {
+      const pointerStartRef = React.useRef<{ clientX: number; clientY: number } | null>(null)
       React.useImperativeHandle(ref, () => ({
         focus: promptEditorMocks.focus,
         focusAtPoint: promptEditorMocks.focusAtPoint,
+        selectRangeAtPoints: promptEditorMocks.selectRangeAtPoints,
         getScrollTop: promptEditorMocks.getScrollTop,
         setScrollTop: promptEditorMocks.setScrollTop,
         getDocument: () => props.value,
@@ -49,12 +52,19 @@ vi.mock('@/components/ui', async () => {
         'data-layout': props.layout,
         'data-outer-class': String(props.className ?? ''),
         'data-editor-class': String(props.editorClassName ?? ''),
-        onClick: (event: { clientX: number; clientY: number }) => {
+        onMouseDown: (event: { clientX: number; clientY: number }) => {
+          pointerStartRef.current = { clientX: event.clientX, clientY: event.clientY }
+        },
+        onMouseUp: (event: { clientX: number; clientY: number }) => {
           const onActivate = props.onActivate as ((point: {
             clientX: number
             clientY: number
-          }) => void) | undefined
-          onActivate?.({ clientX: event.clientX, clientY: event.clientY })
+          } | { anchor: { clientX: number; clientY: number }; head: { clientX: number; clientY: number } }) => void) | undefined
+          const anchor = pointerStartRef.current
+          const head = { clientX: event.clientX, clientY: event.clientY }
+          onActivate?.(anchor && (anchor.clientX !== head.clientX || anchor.clientY !== head.clientY)
+            ? { anchor, head }
+            : head)
         },
         onKeyDown: (event: { key: string; preventDefault: () => void }) => {
           if (event.key !== 'Enter' && event.key !== ' ') return
@@ -73,6 +83,7 @@ describe('GenerationPromptEditor', () => {
   beforeEach(() => {
     promptEditorMocks.focus.mockReset()
     promptEditorMocks.focusAtPoint.mockReset()
+    promptEditorMocks.selectRangeAtPoints.mockReset()
     promptEditorMocks.getScrollTop.mockReset()
     promptEditorMocks.getScrollTop.mockReturnValue(0)
     promptEditorMocks.setScrollTop.mockReset()
@@ -101,7 +112,8 @@ describe('GenerationPromptEditor', () => {
     )
 
     const staticOuterClass = rendered.getByRole('textbox').getAttribute('data-outer-class')
-    fireEvent.click(rendered.getByRole('textbox'), { clientX: 180, clientY: 96 })
+    fireEvent.mouseDown(rendered.getByRole('textbox'), { clientX: 180, clientY: 96 })
+    fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 180, clientY: 96 })
 
     expect(onSelectNode).toHaveBeenCalledWith('node-1')
     expect(rendered.getByRole('textbox').getAttribute('data-mode')).toBe('edit')
@@ -117,6 +129,33 @@ describe('GenerationPromptEditor', () => {
       clientY: 96,
     })
     expect(promptEditorMocks.focus).not.toHaveBeenCalled()
+  })
+
+  it('第一次拖动会在编辑器挂载后恢复完整文本选区', () => {
+    const rendered = render(
+      <GenerationPromptEditor
+        nodeId="node-1"
+        selected={false}
+        value={createPlainTextPromptDocument('直接拖动选择')}
+        references={[]}
+        readOnly={false}
+        invalid={false}
+        placeholder="提示词"
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onEditEnd={vi.fn()}
+        onSelectNode={vi.fn()}
+      />,
+    )
+
+    fireEvent.mouseDown(rendered.getByRole('textbox'), { clientX: 80, clientY: 96 })
+    fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 180, clientY: 96 })
+
+    expect(promptEditorMocks.selectRangeAtPoints).toHaveBeenCalledWith(
+      { clientX: 80, clientY: 96 },
+      { clientX: 180, clientY: 96 },
+    )
+    expect(promptEditorMocks.focusAtPoint).not.toHaveBeenCalled()
   })
 
   it('静态态切换到编辑态时保留提示词滚动位置', () => {
@@ -137,7 +176,8 @@ describe('GenerationPromptEditor', () => {
       />,
     )
 
-    fireEvent.click(rendered.getByRole('textbox'), { clientX: 120, clientY: 80 })
+    fireEvent.mouseDown(rendered.getByRole('textbox'), { clientX: 120, clientY: 80 })
+    fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 120, clientY: 80 })
 
     expect(promptEditorMocks.setScrollTop).toHaveBeenLastCalledWith(128)
   })

@@ -170,7 +170,7 @@ describe('PromptEditor', () => {
     expect(content.classList.contains('min-h-[92px]')).toBe(false)
   })
 
-  it('编辑器完成 Tiptap mount 后通知调用方就绪', async () => {
+  it('编辑器在浏览器绘制前通知调用方恢复选区', () => {
     const onReady = vi.fn()
     render(
       <PromptEditor
@@ -181,7 +181,7 @@ describe('PromptEditor', () => {
       />,
     )
 
-    await waitFor(() => expect(onReady).toHaveBeenCalledTimes(1))
+    expect(onReady).toHaveBeenCalledTimes(1)
   })
 
   it('静态激活把鼠标点击坐标交给按需挂载的编辑器', () => {
@@ -196,10 +196,162 @@ describe('PromptEditor', () => {
       />,
     )
 
-    fireEvent.click(rendered.getByRole('textbox'), { clientX: 126, clientY: 88 })
+    fireEvent.mouseDown(rendered.getByRole('textbox'), { clientX: 126, clientY: 88 })
+    fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 126, clientY: 88 })
 
     expect(onActivate).toHaveBeenCalledWith({ clientX: 126, clientY: 88 })
     expect(rendered.getByRole('textbox').classList.contains('cursor-text')).toBe(true)
+    expect(rendered.getByRole('textbox').classList.contains('select-text')).toBe(true)
+  })
+
+  it('静态激活把首次拖动的起止坐标交给按需挂载的编辑器', () => {
+    const onActivate = vi.fn()
+    const rendered = render(
+      <PublicPromptEditor
+        mode="static"
+        value={createPlainTextPromptDocument('直接拖动选择')}
+        onChange={vi.fn()}
+        onActivate={onActivate}
+        ariaLabel="拖动选择"
+      />,
+    )
+
+    fireEvent.mouseDown(rendered.getByRole('textbox'), { clientX: 80, clientY: 88 })
+    fireEvent.mouseUp(rendered.getByRole('textbox'), { clientX: 160, clientY: 88 })
+
+    expect(onActivate).toHaveBeenCalledWith({
+      anchor: { clientX: 80, clientY: 88 },
+      head: { clientX: 160, clientY: 88 },
+    })
+  })
+
+  it('首次拖动超出提示词框时把选区终点限制在当前框内', () => {
+    const onActivate = vi.fn()
+    const rendered = render(
+      <PublicPromptEditor
+        mode="static"
+        value={createPlainTextPromptDocument('只选择当前提示词')}
+        onChange={vi.fn()}
+        onActivate={onActivate}
+        ariaLabel="限制选区"
+      />,
+    )
+    const textbox = rendered.getByRole('textbox')
+    vi.spyOn(textbox, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      right: 300,
+      top: 40,
+      bottom: 140,
+      width: 200,
+      height: 100,
+      x: 100,
+      y: 40,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.mouseDown(textbox, { clientX: 220, clientY: 80 })
+    fireEvent.mouseUp(window, { clientX: 20, clientY: 180 })
+
+    expect(onActivate).toHaveBeenCalledWith({
+      anchor: { clientX: 220, clientY: 80 },
+      head: { clientX: 101, clientY: 139 },
+    })
+  })
+
+  it('拖动途中把实时选区限制在起始提示词的 DOM 内', () => {
+    const rendered = render(
+      <PublicPromptEditor
+        mode="static"
+        value={createPlainTextPromptDocument('当前节点文本')}
+        onChange={vi.fn()}
+        onActivate={vi.fn()}
+        ariaLabel="实时限制选区"
+      />,
+    )
+    const textbox = rendered.getByRole('textbox')
+    const textNode = textbox.querySelector('div')?.firstChild
+    expect(textNode).not.toBeNull()
+    vi.spyOn(textbox, 'getBoundingClientRect').mockReturnValue({
+      left: 100,
+      right: 300,
+      top: 40,
+      bottom: 140,
+      width: 200,
+      height: 100,
+      x: 100,
+      y: 40,
+      toJSON: () => ({}),
+    })
+    const caretPositionFromPoint = vi.fn((x: number) => ({
+      offsetNode: textNode as Node,
+      offset: x > 150 ? 6 : 0,
+    }))
+    const originalCaretDescriptor = Object.getOwnPropertyDescriptor(
+      document,
+      'caretPositionFromPoint',
+    )
+    Object.defineProperty(document, 'caretPositionFromPoint', {
+      configurable: true,
+      value: caretPositionFromPoint,
+    })
+    const setBaseAndExtent = vi.fn()
+    const getSelectionSpy = vi.spyOn(window, 'getSelection').mockReturnValue({
+      setBaseAndExtent,
+    } as unknown as Selection)
+
+    try {
+      fireEvent.mouseDown(textbox, { clientX: 220, clientY: 80 })
+      fireEvent.mouseMove(window, { buttons: 1, clientX: 20, clientY: 180 })
+
+      expect(caretPositionFromPoint).toHaveBeenLastCalledWith(101, 139)
+      expect(setBaseAndExtent).toHaveBeenCalledWith(
+        textNode,
+        6,
+        textNode,
+        0,
+      )
+    } finally {
+      fireEvent.mouseUp(window, { clientX: 20, clientY: 180 })
+      getSelectionSpy.mockRestore()
+      if (originalCaretDescriptor) {
+        Object.defineProperty(document, 'caretPositionFromPoint', originalCaretDescriptor)
+      } else {
+        Reflect.deleteProperty(document, 'caretPositionFromPoint')
+      }
+    }
+  })
+
+  it('拖动期间禁止同一画布内其他文本框参与选区并在松手后恢复', () => {
+    const rendered = render(
+      <div className="react-flow">
+        <PublicPromptEditor
+          mode="static"
+          value={createPlainTextPromptDocument('起始文本框')}
+          onChange={vi.fn()}
+          onActivate={vi.fn()}
+          ariaLabel="起始文本框"
+        />
+        <PublicPromptEditor
+          mode="static"
+          value={createPlainTextPromptDocument('其他文本框')}
+          onChange={vi.fn()}
+          onActivate={vi.fn()}
+          ariaLabel="其他文本框"
+        />
+      </div>,
+    )
+    const origin = rendered.getByRole('textbox', { name: '起始文本框' })
+    const other = rendered.getByRole('textbox', { name: '其他文本框' })
+
+    fireEvent.mouseDown(origin, { clientX: 120, clientY: 80 })
+
+    expect(other.style.getPropertyValue('user-select')).toBe('none')
+    expect(other.style.getPropertyPriority('user-select')).toBe('important')
+
+    fireEvent.mouseUp(window, { clientX: 180, clientY: 80 })
+
+    expect(other.style.getPropertyValue('user-select')).toBe('')
+    expect(other.style.getPropertyValue('-webkit-user-select')).toBe('')
   })
 
   it('受控外部回写更新内容但不重复触发 onChange', () => {
