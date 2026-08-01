@@ -40,7 +40,7 @@ npm install                    # 安装依赖
 npm run electron:dev           # Electron 开发模式（桌面调试用这个）
 npm run dev                    # 裸 Vite 渲染层（不含主进程能力，不能作桌面验收依据）
 npm run lint                   # 渲染层 lint
-npm run test                   # 单元测试（vitest run）
+npm run test                   # 全量单元测试（仅 L3 / CI；日常改动按 testing.md 跑精确或相关测试）
 npm run electron:build         # 完整构建：manifest/seeds + 全部静态检查 + tsc + electron-vite
 npm run electron:dist          # 生成安装包
 npm run electron:smoke         # 构建产物冒烟验收

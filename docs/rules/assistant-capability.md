@@ -37,12 +37,13 @@
 
 ```bash
 npm run check:assistant-capabilities
-npm run test:assistant-production
 ```
 
 `check:assistant-capabilities` 已接入 `build` 与 `electron:build` 链路，覆盖不全或残留旧通道会直接构建失败。
 
-无窗口执行真实助手做端到端验证：
+再按 [testing.md](testing.md) 运行本次能力登记、处理器或正式业务服务的精确/相关测试。`npm run test:assistant-production` 只用于同时影响 runner、状态机、调度、审批、持久化或模型适配等多个助手运行时模块的改动，以及生产验收/发布前检查；不要因普通能力登记或界面适配运行整套助手测试。
+
+只有改动跨越“模型决策 → 工具调用 → 业务落地 → 成功证据”完整链路，且精确测试不足以证明行为时，才无窗口执行真实助手端到端验证：
 
 ```bash
 npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generation
