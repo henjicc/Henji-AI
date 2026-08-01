@@ -20,6 +20,12 @@
 - 现有设置通过 `settingsReflection.ts` 非破坏性接入；原设置能力行为未改变。
 - 2.2 可直接复用注册表的批量描述、实体列表、实体读取与 schemaRef 解析入口。
 
+## 任务 2.2 接力
+
+- 统一结构化观察位于 `src/core/application-control/query/`，输入和输出保持调用方中立。
+- Artifact 通过 `ApplicationObservationArtifactSink` 注入，不新增存储或 IPC；助手适配器继续复用既有 `read_agent_artifact`。
+- 截断、分页、权限过滤和 revision 冲突均有显式结果或稳定错误，不静默省略。
+
 ## 第一阶段接力要点
 
 - 以 `src/core/application-control/` 为后续核心类型唯一入口。

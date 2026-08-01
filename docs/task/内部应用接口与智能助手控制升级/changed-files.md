@@ -14,6 +14,12 @@
 - `src/features/assistant/applicationCapabilities/applicationControlRegistry.ts`
 - 第二阶段任务记录文件
 
+### 任务 2.2
+
+- `src/core/application-control/query/`
+- `src/core/application-control/index.ts`
+- 第二阶段任务记录文件
+
 ## 第一阶段
 
 ### 任务 1.1
