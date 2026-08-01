@@ -1,6 +1,6 @@
 # 变更文件记录
 
-## 第三阶段（进行中）
+## 第三阶段（已完成）
 
 ### 任务 3.1
 
@@ -40,6 +40,28 @@
 - `electron/main/services/agent-runtime/context/tool-activation.ts`
 - `electron/main/services/agent-runtime/context/prompt-layers.ts`
 - `electron/main/services/agent-runtime/tools/builtin/backend.ts`
+- 第三阶段任务记录文件
+
+### 任务 3.3
+
+- `src/core/assistant/progress.ts`
+- `src/core/assistant/events.ts`
+- `src/core/assistant/workingSummaryReducer.ts`
+- `electron/main/services/agent-runtime/runner/facet-progress.ts`
+- `electron/main/services/agent-runtime/runner/facet-progress.test.ts`
+- `electron/main/services/agent-runtime/runner/tool-call-scheduler.ts`
+- `electron/main/services/agent-runtime/runner/tool-call-scheduler.test.ts`
+- `electron/main/services/agent-runtime/runner/tool-execution-coordinator.ts`
+- `electron/main/services/agent-runtime/runner/tool-turn.ts`
+- `electron/main/services/agent-runtime/runner/runner.ts`
+- `electron/main/services/agent-runtime/runner/runner.test.ts`
+- `electron/main/services/agent-runtime/runner/completion-coordinator.ts`
+- `electron/main/services/agent-runtime/runner/result-verifier.ts`
+- `electron/main/services/agent-runtime/runner/result-verifier.test.ts`
+- `electron/main/services/agent-runtime/runner/working-summary.test.ts`
+- `electron/main/services/agent-runtime/runner/external-continuation-coordinator.test.ts`
+- `electron/main/services/agent-runtime/evaluation/regression-cases.ts`
+- `electron/main/services/agent-runtime/evaluation/regression-cases.test.ts`
 - 第三阶段任务记录文件
 
 ## 第二阶段（已完成）

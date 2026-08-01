@@ -48,3 +48,11 @@
 - 默认目录入口为 `discover_application_capabilities`，一次消费全部已知 Facet；旧单关键词搜索只保留历史兼容。
 - 完整操作输入结构不放入目录摘要，通过带目录版本、能力版本和 digest 的 operation schemaRef 调用 `read_application_schemas` 读取。
 - 发现缓存键包含运行 ID、规范化请求、目录 revision 与当前可用能力；缓存命中必须显式返回 `reused: true`，供进展判定识别。
+
+## 2026-08-01 · 第三阶段结构化进展
+
+- 只有 revision 或稳定引用变化、获得新 schema、验证证据改善、Facet 完成或进入有效外部等待才计为进展；工具返回成功本身不计进展。
+- 重复写入指纹由工具名、规范化输入与 base revision 共同决定；成功写入后禁止相同指纹再次执行，冲突后也必须先取得新 revision。
+- 批量发现的 `fingerprint`、`reused`、`missing` 和 schema digest 是发现进展的权威依据，不从自然语言摘要推测。
+- Facet 结算复用现有 Agent 事件、工作摘要、`waiting_user`、审批与外部等待；不新增暂停状态机或独立持久化通道。
+- 独立 Facet 可以在其他 Facet 受阻后继续；结算必须区分 completed、partial、blocked 与 waiting_user，并要求最终答复列出证据、阻塞和最小下一步。

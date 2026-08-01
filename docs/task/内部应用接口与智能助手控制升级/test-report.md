@@ -1,6 +1,6 @@
 # 测试报告
 
-## 第三阶段（进行中）
+## 第三阶段（已完成）
 
 ### 任务 3.1
 
@@ -20,6 +20,21 @@
 - `npx tsc -p tsconfig.electron.json --noEmit`：通过。
 - 批量发现、目录激活、路由上下文、原生能力与覆盖清单共 5 个文件、40 项测试通过。
 - `npm run check:assistant-capabilities`：通过；覆盖门禁 4 项测试通过。
+
+### 任务 3.3 与第三阶段收尾
+
+- Facet 进展、调度守卫、最终验证、工作摘要和回归数据共 5 个专项文件、28 项测试通过。
+- Runner 长链路和外部续接夹具已对齐当前工具激活快照；2 个文件、13 项回归通过。
+- `npm run lint`：通过。
+- `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`：通过。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- `npx tsc -p tsconfig.electron.json --noEmit`：通过。
+- `npm run check:assistant-capabilities`：通过；覆盖门禁 4 项测试通过。
+- `npm run test:assistant-production`：通过；模型兼容、评测、结算和持久化 4 组检查全部通过。
+- `npm run test`：164 个测试文件、774 项测试通过；8 个文件、36 项按环境跳过，无失败。
+- `npm run electron:build`：通过；包含 seeds/manifest、颜色/Surface/图标/模型 i18n、能力门禁、主进程 TypeScript 与三端 Vite 构建。
+- 设置测试中的 Zustand 持久化不可用提示为无浏览器存储测试环境的既有警告，不影响断言。
+- 手动验收：统一记录在 `manual-test.md`，按用户要求在全部任务完成后执行。
 
 ## 第二阶段（已完成）
 

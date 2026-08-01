@@ -2,10 +2,10 @@
 
 ## 当前接力状态
 
-- 阶段：第三阶段 · 助手规划与能力发现
-- 当前任务：3.3（待开始）
-- 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3；第三阶段 3.1、3.2。
-- 待完成：进展判定与循环终止。
+- 阶段：第四阶段 · 三维运镜端到端样板
+- 当前任务：4.1（待开始）
+- 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3；第三阶段 3.1、3.2、3.3。
+- 待完成：从 4.1 开始提取三维正式应用服务与完整控制描述。
 - 阻塞：无。
 
 ## 第二阶段开始状态
@@ -48,10 +48,18 @@
 - 默认激活 `discover_application_capabilities`；发现后下一轮增量激活操作工具与 `read_application_schemas`。
 - `fingerprint`、`reused` 和 `missing` 是 3.3 进展判定的权威输入，不再从自然语言摘要猜测。
 
+## 第三阶段完成接力
+
+- Facet 进展契约位于 `src/core/assistant/progress.ts`，运行时唯一跟踪入口位于 `runner/facet-progress.ts`。
+- `FacetProgressed` 已进入现有事件流和工作摘要；后续界面可直接消费，不要另建进度存储或 IPC。
+- 相同参数与 base revision 的重复写入、缓存发现、冲突重试、连续失败、权限不足和能力缺失均由执行前/结果后结构化守卫收敛。
+- 外部长任务继续使用现有 `waiting_external`；缺少用户输入继续使用现有 `waiting_user`，不得新增暂停状态。
+- 第三阶段提交：`3d80475`、`9ce1900`、`7c8df84`。
+
 ## 第一阶段接力要点
 
 - 以 `src/core/application-control/` 为后续核心类型唯一入口。
 - 以 `createApplicationControlCoverageManifest` 的领域计划和迁移矩阵为实现基线。
 - Surface 观察状态目前均为 `planned`，不得在 6.5 前当成已实现能力。
-- 全量测试的两个 Agent Runtime 基线失败见 `test-report.md`。
+- 第一阶段记录的两个 Agent Runtime 旧夹具失配已在 3.3 收尾时对齐当前激活快照；全量测试现已无失败。
 - 第一阶段提交：`9545a6f`、`218a0d6`。
