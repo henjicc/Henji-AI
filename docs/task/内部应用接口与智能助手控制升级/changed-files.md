@@ -1,5 +1,20 @@
 # 变更文件记录
 
+## 第五阶段（进行中）
+
+### 任务 5.1
+
+- `src/features/settings/application-control/`
+- `src/features/navigation/application/`
+- `src/features/assistant/applicationCapabilities/settingsRegistry.ts`
+- `src/features/assistant/applicationCapabilities/settingsReflection.ts`
+- `src/features/assistant/applicationCapabilities/settingsMutationExecutor.ts`
+- `src/features/assistant/applicationCapabilities/surfaceRegistry.ts`
+- `src/features/assistant/applicationCapabilities/applicationControlRegistry.ts`
+- `src/core/assistant/applicationControlCoverage.ts`
+- `scripts/check-assistant-capabilities.cjs`
+- `docs/task/内部应用接口与智能助手控制升级/` 任务记录
+
 ## 第四阶段（已完成）
 
 ### 任务 4.1

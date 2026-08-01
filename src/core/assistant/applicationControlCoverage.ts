@@ -32,8 +32,8 @@ interface DomainPlan extends ApplicationDomainCoverage {
 
 const domainPlans: Readonly<Record<string, DomainPlan>> = {
   application: domainPlan('application', '2.2', 'src/core/application-control/', ['application.context'], ['src/core/application-control/reflection.ts'], 'src/core/assistant/builtinApplicationCapabilities.ts', 'application.observe', ['application.observe'], 'query'),
-  navigation: domainPlan('navigation', '5.1', 'src/stores/navigationStore.ts 与 src/stores/uiStore.ts', ['application.surface'], ['workspace.*', 'tool.*', 'settings.*', 'overlay.assets'], 'src/core/assistant/builtinApplicationCapabilities.ts 与 generationApplicationCapabilities.ts', 'surface.observe', ['surface.open', 'surface.close', 'surface.focus'], 'operation'),
-  settings: domainPlan('settings', '5.1', 'src/features/assistant/applicationCapabilities/settingsRegistry.ts', ['settings.entry'], ['settingsRegistry.ts', 'settingsRegistryAdditional.ts'], 'src/core/assistant/builtinApplicationCapabilities.ts', 'application.observe', ['application.plan', 'application.commit'], 'property'),
+  navigation: domainPlan('navigation', '5.1', 'src/features/navigation/application/', ['application.surface'], ['surfaceCatalog.ts'], 'src/core/assistant/builtinApplicationCapabilities.ts', 'surface.observe', ['surface.open', 'surface.close', 'surface.focus'], 'operation'),
+  settings: domainPlan('settings', '5.1', 'src/features/settings/application-control/', ['settings.entry'], ['generalSettingDefinitions.ts', 'interfaceSettingDefinitions.ts'], 'src/core/assistant/builtinApplicationCapabilities.ts', 'application.observe', ['application.plan', 'application.commit'], 'property'),
   generation: domainPlan('generation', '5.4', 'src/core/services/GenerationService.ts', ['generation.task', 'generation.result'], ['src/models/**.model.ts'], 'generationApplicationCapabilities.ts 与 builtinApplicationCapabilities.ts', 'application.observe', ['generation.prepare', 'generation.submit', 'generation.cancel'], 'operation'),
   models: domainPlan('models', '5.4', 'src/core/ModelRegistry.ts', ['model.definition'], ['src/models/**.model.ts'], 'generationApplicationCapabilities.ts', 'application.describe', ['model.select'], 'query'),
   image_edit: domainPlan('image_edit', '5.3', 'src/core/imageEdit 与 src/features/imageEdit/application/', ['image_edit.document', 'image_edit.operation'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts 与 builtinApplicationCapabilities.ts', 'application.observe', ['image_edit.preview', 'image_edit.commit'], 'operation'),
@@ -182,8 +182,8 @@ function surfaceObservation(surfaceId: string): ApplicationSurfaceObservationCov
 }
 
 const publicSource = {
-  setting: ['src/features/assistant/applicationCapabilities/settingsRegistry.ts', 'settings.entry', '5.1'],
-  surface: ['src/features/assistant/applicationCapabilities/surfaceRegistry.ts', 'application.surface', '5.1'],
+  setting: ['src/features/settings/application-control/', 'settings.entry', '5.1'],
+  surface: ['src/features/navigation/application/surfaceCatalog.ts', 'application.surface', '5.1'],
   model: ['src/models/**.model.ts', 'model.definition', '5.4'],
   image_edit_tool: ['src/features/imageEdit/tools/registry.ts', 'image_edit.operation', '5.3'],
   camera_stage_property: ['src/features/cameraStage/domain/animatableProps.ts', 'camera_stage.object', '4.1'],

@@ -1,159 +1,39 @@
 import type { ApplicationRef } from '@/core/assistant/applicationCapabilities'
-import { createLogger } from '@/core/logging'
-import type { SettingsNavigationTarget } from '@/core/types/settingsNavigation'
-import type { WorkspaceId } from '@/core/types/workspace'
-import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
-import { closeAssetLibrary, openAssetLibrary, selectToolboxTool, switchWorkspace } from '@/stores/navigationStore'
-import { openSettingsPanel, useUiStore } from '@/stores/uiStore'
 import { cameraStageApplicationService } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
-
 import {
   focusCanvasNodeFromAgent,
   openCanvasProjectFromAgent,
 } from '@/features/canvas/application/agentCanvasActions'
+import {
+  closeApplicationSurface as closeSurface,
+  listApplicationSurfaces,
+  openApplicationSurface as openSurface,
+} from '@/features/navigation/application'
+
 import { selectAssetFromAgent } from '../hostActions'
-import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { CapabilityExecutionContext } from './handlerTypes'
 
-export interface ApplicationSurfaceDefinition {
-  id: string
-  kind: 'workspace' | 'tool' | 'settings' | 'overlay'
-  workspace?: WorkspaceId
-  toolId?: 'cameraStage' | 'imageMark'
-  settingsTarget?: SettingsNavigationTarget
-  acceptedRefKinds?: string[]
-  observationCapabilityId?: string
-  observationProviderId?: string
-}
-
-const surfaces: ApplicationSurfaceDefinition[] = [
-  { id: 'workspace.generation', kind: 'workspace', workspace: 'generation' },
-  { id: 'workspace.canvas', kind: 'workspace', workspace: 'nodes' },
-  { id: 'workspace.tools', kind: 'workspace', workspace: 'tools' },
-  { id: 'workspace.assets', kind: 'workspace', workspace: 'assets' },
-  { id: 'tool.image_edit', kind: 'tool', workspace: 'tools', toolId: 'imageMark' },
-  {
-    id: 'tool.camera_stage',
-    kind: 'tool',
-    workspace: 'tools',
-    toolId: 'cameraStage',
-    acceptedRefKinds: [
-      'camera_stage.project',
-      'camera_stage.scene',
-      'camera_stage.object',
-      'camera_stage.camera',
-      'camera_stage.shot',
-      'camera_stage.trajectory',
-      'camera_stage.keyframe',
-    ],
-    observationCapabilityId: 'observe_camera_stage_viewport',
-    observationProviderId: 'camera_stage.viewport_observer',
-  },
-  { id: 'settings.general', kind: 'settings', settingsTarget: { tab: 'general' } },
-  { id: 'settings.general.basic', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-basic' } },
-  { id: 'settings.storage', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-storage' } },
-  { id: 'settings.general.behavior', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-behavior' } },
-  { id: 'settings.general.maintenance', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-maintenance' } },
-  { id: 'settings.api_keys', kind: 'settings', settingsTarget: { tab: 'api', sectionId: 'api-keys' } },
-  { id: 'settings.upload', kind: 'settings', settingsTarget: { tab: 'api', sectionId: 'api-upload' } },
-  { id: 'settings.llm', kind: 'settings', settingsTarget: { tab: 'api', sectionId: 'api-llm' } },
-  { id: 'settings.assistant_preferences', kind: 'settings', settingsTarget: { tab: 'api', sectionId: 'api-agent-preferences' } },
-  { id: 'settings.models', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-visibility' } },
-  { id: 'settings.interface', kind: 'settings', settingsTarget: { tab: 'interface' } },
-  { id: 'settings.interface.layout', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-layout' } },
-  { id: 'settings.interface.theme', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-theme' } },
-  { id: 'settings.interface.assets', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-assets' } },
-  { id: 'settings.interface.canvas', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-canvas' } },
-  { id: 'overlay.assets', kind: 'overlay' },
-]
-
-const surfaceMap = new Map(surfaces.map((surface) => [surface.id, surface]))
-const logger = createLogger('features.assistant.surfaces')
-
-function settingsTargetMatches(
-  current: SettingsNavigationTarget | null,
-  expected: SettingsNavigationTarget
-): boolean {
-  return current?.tab === expected.tab
-    && (current.sectionId ?? null) === (expected.sectionId ?? null)
-}
-
-function isSurfaceActive(surface: ApplicationSurfaceDefinition): boolean {
-  if (surface.settingsTarget) {
-    const ui = useUiStore.getState()
-    return ui.isSettingsOpen && settingsTargetMatches(ui.settingsTarget, surface.settingsTarget)
-  }
-  if (surface.id === 'overlay.assets') {
-    return useAssetLibraryStore.getState().view === 'floating'
-  }
-  return createHostContextSnapshot().surface?.id === surface.id
-}
-
-export function listApplicationSurfaces(): ReadonlyArray<ApplicationSurfaceDefinition> {
-  return surfaces
-}
+export type { ApplicationSurfaceDefinition } from '@/features/navigation/application'
+export { listApplicationSurfaces }
 
 type SurfaceLogContext = Pick<CapabilityExecutionContext, 'requestId' | 'taskId'>
-
-function getSurfaceLogContext(correlation: SurfaceLogContext): SurfaceLogContext {
-  return {
-    requestId: correlation.requestId,
-    taskId: correlation.taskId,
-  }
-}
 
 export function openApplicationSurface(
   surfaceId: string,
   correlation: SurfaceLogContext = {}
 ): Record<string, unknown> {
-  const surface = surfaceMap.get(surfaceId)
-  if (!surface) throw new Error('NOT_FOUND')
-  logger.info('应用 Surface 打开开始', {
-    event: 'assistant.surface.open.start',
-    ...getSurfaceLogContext(correlation),
-    surfaceId,
-  })
-  try {
-    if (surface.settingsTarget) {
-      openSettingsPanel(surface.settingsTarget)
-    } else if (surface.id === 'overlay.assets') {
-      openAssetLibrary('floating')
-    } else {
-      if (surface.workspace) switchWorkspace(surface.workspace)
-      if (surface.toolId) selectToolboxTool(surface.toolId)
-    }
-    if (!isSurfaceActive(surface)) throw new Error('SURFACE_NOT_OPEN')
-    logger.info('应用 Surface 打开完成', {
-      event: 'assistant.surface.open.completed',
-      ...getSurfaceLogContext(correlation),
-      surfaceId,
-      actualSurfaceId: createHostContextSnapshot().surface?.id,
-    })
-    return { surfaceId }
-  } catch (error) {
-    logger.error('应用 Surface 打开失败', error, {
-      event: 'assistant.surface.open.failed',
-      ...getSurfaceLogContext(correlation),
-      surfaceId,
-      actualSurfaceId: createHostContextSnapshot().surface?.id,
-    })
-    throw error
-  }
+  openSurface(surfaceId, correlation)
+  return { surfaceId }
 }
 
-export function closeApplicationSurface(surfaceId?: string): Record<string, unknown> {
-  const current = createHostContextSnapshot()
-  const targetId = surfaceId ?? current.surface?.id
-  if (targetId?.startsWith('settings.')) {
-    useUiStore.getState().closeSettings()
-  } else if (targetId === 'overlay.assets' || targetId === 'workspace.assets') {
-    closeAssetLibrary()
-  } else if (targetId?.startsWith('tool.')) {
-    selectToolboxTool(null)
-  }
-  return { closedSurfaceId: targetId ?? null }
+export function closeApplicationSurface(
+  surfaceId?: string,
+  correlation: SurfaceLogContext = {}
+): Record<string, unknown> {
+  const result = closeSurface(surfaceId, correlation)
+  return { ...result, closedSurfaceId: result.surfaceId === 'none' ? null : result.surfaceId }
 }
 
 export async function focusApplicationEntity(
@@ -166,8 +46,7 @@ export async function focusApplicationEntity(
   }
   if (ref.kind === 'asset') {
     await selectAssetFromAgent(ref.id)
-    const surface = openApplicationSurface('workspace.assets', correlation)
-    return { ref, ...surface }
+    return { ref, ...openApplicationSurface('workspace.assets', correlation) }
   }
   if (ref.kind === 'canvas.project') {
     await openCanvasProjectFromAgent(ref.id, signal)
@@ -200,9 +79,7 @@ export async function focusApplicationEntity(
     if (childId && (ref.kind === 'camera_stage.object' || ref.kind === 'camera_stage.camera')) {
       useCameraStageStore.getState().setSelected(childId)
     }
-    if (childId && ref.kind === 'camera_stage.shot') {
-      useCameraStageStore.getState().selectShot(childId)
-    }
+    if (childId && ref.kind === 'camera_stage.shot') useCameraStageStore.getState().selectShot(childId)
     return { ref, ...openApplicationSurface('tool.camera_stage', correlation) }
   }
   throw new Error('INVALID_INPUT')

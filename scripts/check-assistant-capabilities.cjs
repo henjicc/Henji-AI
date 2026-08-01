@@ -100,7 +100,7 @@ const settingsNavigationSource = fs.readFileSync(
   'utf8'
 )
 const surfaceRegistrySource = fs.readFileSync(
-  path.join(root, 'src', 'features', 'assistant', 'applicationCapabilities', 'surfaceRegistry.ts'),
+  path.join(root, 'src', 'features', 'navigation', 'application', 'surfaceCatalog.ts'),
   'utf8'
 )
 const settingsSectionBlock = settingsNavigationSource

@@ -4,8 +4,10 @@ import {
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
-import { createSettingsReflectionRegistration } from './settingsReflection'
-import { SettingsMutationExecutor } from './settingsMutationExecutor'
+import {
+  createSettingsReflectionRegistration,
+  SettingsMutationExecutor,
+} from '@/features/settings/application-control'
 import { createCameraStageReflectionRegistrations } from '@/features/cameraStage/application/cameraStageReflection'
 import {
   CAMERA_STAGE_MUTATION_ENTITY_TYPES,
