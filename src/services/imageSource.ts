@@ -98,7 +98,8 @@ export async function loadImageElement(source: string): Promise<HTMLImageElement
   if (
     displaySource.startsWith('http://') ||
     displaySource.startsWith('https://') ||
-    displaySource.startsWith('asset:')
+    displaySource.startsWith('asset:') ||
+    displaySource.startsWith('henji-media:')
   ) {
     image.crossOrigin = 'anonymous';
   }
