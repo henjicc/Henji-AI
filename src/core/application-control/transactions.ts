@@ -48,16 +48,15 @@ export const applicationOperationProgressSchema = z.object({
 }).strict()
 export type ApplicationOperationProgress = z.infer<typeof applicationOperationProgressSchema>
 
-const applicationPropertyMutationSchema = z.object({
+export const applicationPropertyMutationSchema = z.object({
   propertyId: applicationPropertyIdSchema,
   operation: z.enum(['set', 'clear', 'append', 'remove']),
   value: jsonValueSchema.optional(),
 }).strict().refine(
-  (mutation) => mutation.operation === 'clear' || mutation.operation === 'remove'
-    ? true
-    : mutation.value !== undefined,
-  { message: 'set/append 修改必须提供值' }
+  (mutation) => mutation.operation === 'clear' || mutation.value !== undefined,
+  { message: 'set/append/remove 修改必须提供值' }
 )
+export type ApplicationPropertyMutation = z.infer<typeof applicationPropertyMutationSchema>
 
 export const applicationMutationPlanSchema = z.object({
   kind: z.literal('mutation'),
@@ -81,6 +80,36 @@ export const applicationPlannedStepSchema = z.discriminatedUnion('kind', [
 ])
 export type ApplicationPlannedStep = z.infer<typeof applicationPlannedStepSchema>
 
+export const applicationVerificationConditionSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('entity_exists'),
+    target: applicationRefSchema,
+  }).strict(),
+  z.object({
+    kind: z.literal('property_equals'),
+    target: applicationRefSchema,
+    propertyId: applicationPropertyIdSchema,
+    expected: jsonValueSchema,
+  }).strict(),
+  z.object({
+    kind: z.literal('evidence_fact'),
+    fact: z.string().min(1).max(1_000),
+  }).strict(),
+  z.object({
+    kind: z.literal('custom'),
+    verifierId: z.string().regex(/^[a-z][a-z0-9_.-]{1,127}$/),
+    input: jsonValueSchema,
+  }).strict(),
+])
+export type ApplicationVerificationCondition = z.infer<typeof applicationVerificationConditionSchema>
+
+export const applicationTransactionModeSchema = z.enum([
+  'atomic',
+  'compensatable',
+  'non_reversible',
+])
+export type ApplicationTransactionMode = z.infer<typeof applicationTransactionModeSchema>
+
 export const applicationChangePlanSchema = z.object({
   contractVersion: z.literal('application-control/v1'),
   planRef: applicationOpaqueRefSchema,
@@ -88,10 +117,15 @@ export const applicationChangePlanSchema = z.object({
   risk: z.enum(['R0', 'R1', 'R2', 'R3', 'R4']),
   requiresApproval: z.boolean(),
   atomic: z.boolean(),
+  transactionMode: applicationTransactionModeSchema,
   steps: z.array(applicationPlannedStepSchema).min(1).max(256),
+  verificationConditions: z.array(applicationVerificationConditionSchema).max(256),
   createdAt: z.string().datetime(),
   expiresAt: z.string().datetime(),
-}).strict()
+}).strict().refine(
+  (plan) => plan.atomic === (plan.transactionMode === 'atomic'),
+  { message: 'atomic 字段必须与 transactionMode 一致' }
+)
 export type ApplicationChangePlan = z.infer<typeof applicationChangePlanSchema>
 
 export const applicationCommitRequestSchema = z.object({
@@ -111,6 +145,14 @@ export const applicationEvidenceSchema = z.object({
 }).strict()
 export type ApplicationEvidence = z.infer<typeof applicationEvidenceSchema>
 
+export const applicationVerificationResultSchema = z.object({
+  verified: z.boolean(),
+  evidence: z.array(applicationEvidenceSchema).max(256),
+  unmetConditions: z.array(z.string().min(1).max(1_000)).max(64),
+  checkedAt: z.string().datetime(),
+}).strict()
+export type ApplicationVerificationResult = z.infer<typeof applicationVerificationResultSchema>
+
 export const applicationTransactionResultSchema = z.discriminatedUnion('status', [
   z.object({
     status: z.literal('completed'),
@@ -118,6 +160,7 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
     resultingRevisions: applicationRevisionSetSchema,
     producedRefs: z.array(applicationRefSchema).max(256),
     evidence: z.array(applicationEvidenceSchema).min(1).max(256),
+    verification: applicationVerificationResultSchema,
     undoRef: applicationOpaqueRefSchema.optional(),
     completedAt: z.string().datetime(),
   }).strict(),
@@ -141,6 +184,13 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
     message: z.string().min(1).max(2_000),
     recoverable: z.boolean(),
     currentRevisions: applicationRevisionSetSchema.optional(),
+    undoRef: applicationOpaqueRefSchema.optional(),
+    partial: z.object({
+      completedStepIndexes: z.array(z.number().int().nonnegative()).max(256),
+      compensatedStepIndexes: z.array(z.number().int().nonnegative()).max(256),
+      uncompensatedStepIndexes: z.array(z.number().int().nonnegative()).max(256),
+    }).strict().optional(),
+    verification: applicationVerificationResultSchema.optional(),
   }).strict(),
 ])
 export type ApplicationTransactionResult = z.infer<typeof applicationTransactionResultSchema>
@@ -151,11 +201,3 @@ export const applicationUndoRequestSchema = z.object({
   idempotencyKey: z.string().min(16).max(256),
 }).strict()
 export type ApplicationUndoRequest = z.infer<typeof applicationUndoRequestSchema>
-
-export const applicationVerificationResultSchema = z.object({
-  verified: z.boolean(),
-  evidence: z.array(applicationEvidenceSchema).max(256),
-  unmetConditions: z.array(z.string().min(1).max(1_000)).max(64),
-  checkedAt: z.string().datetime(),
-}).strict()
-export type ApplicationVerificationResult = z.infer<typeof applicationVerificationResultSchema>

@@ -102,7 +102,13 @@ export class ApplicationReflectionRegistry {
       })),
       ...(registration.schemaDocuments ?? []),
     ]
-    for (const document of documents) this.assertSchemaDocumentAvailable(document)
+    const documentKeys = new Set<string>()
+    for (const document of documents) {
+      this.assertSchemaDocumentAvailable(document)
+      const key = schemaKey(document.ref)
+      if (documentKeys.has(key)) throw new Error(`SCHEMA_REF_DUPLICATE:${document.ref.id}`)
+      documentKeys.add(key)
+    }
 
     this.entities.set(entity.id, entity)
     const entityProperties = new Map<string, ApplicationPropertyDescriptor>()

@@ -1,4 +1,5 @@
 export * from './coverage'
+export * from './execution'
 export * from './identifiers'
 export * from './observation'
 export * from './query'

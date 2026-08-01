@@ -95,10 +95,10 @@ class SettingsReflectionProvider implements ApplicationEntityProvider {
     capturedAt: string
   }> {
     if (ref.kind !== SETTINGS_ENTITY_TYPE || ref.id !== SETTINGS_REF.id) throw new Error('NOT_FOUND')
-    const requested = new Set(request.propertyIds ?? [])
+    const requested = request.propertyIds ? new Set(request.propertyIds) : undefined
     const definitions = listApplicationSettingDefinitions()
       .filter((definition) => !definition.sensitive)
-      .filter((definition) => requested.size === 0 || requested.has(definition.id))
+      .filter((definition) => !requested || requested.has(definition.id))
     return {
       ref: SETTINGS_REF,
       entityType: SETTINGS_ENTITY_TYPE,

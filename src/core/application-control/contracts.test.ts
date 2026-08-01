@@ -90,12 +90,19 @@ describe('application-control contracts', () => {
       risk: 'R1',
       requiresApproval: false,
       atomic: true,
+      transactionMode: 'atomic',
       steps: [{
         kind: 'mutation',
         target: { kind: 'camera_stage.object', id: 'camera-1', revision: 3 },
         entityType: 'camera_stage.object',
         expectedRevisions: { 'camera_stage.scene': 3 },
         mutations: [{ propertyId: 'transform.position', operation: 'set', value: { x: 1, y: 2, z: 3 } }],
+      }],
+      verificationConditions: [{
+        kind: 'property_equals',
+        target: { kind: 'camera_stage.object', id: 'camera-1' },
+        propertyId: 'transform.position',
+        expected: { x: 1, y: 2, z: 3 },
       }],
       createdAt: '2026-08-01T00:00:00.000Z',
       expiresAt: '2026-08-01T00:10:00.000Z',
@@ -107,6 +114,7 @@ describe('application-control contracts', () => {
       resultingRevisions: { 'camera_stage.scene': 4 },
       producedRefs: [],
       evidence: [{ kind: 'property_value', fact: '位置已更新。', data: { x: 1 }, capturedAt: '2026-08-01T00:00:01.000Z' }],
+      verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: '2026-08-01T00:00:01.000Z' },
       undoRef: `undo:${'c'.repeat(20)}`,
       completedAt: '2026-08-01T00:00:01.000Z',
     }).status).toBe('completed')
