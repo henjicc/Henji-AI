@@ -78,7 +78,12 @@ export function reduceAgentWorkingSummary(
   if (event.type === 'PlanUpdated') {
     next = {
       ...next,
-      route: { intent: event.intent, summary: event.summary, toolDomains: event.toolDomains },
+      route: {
+        intent: event.intent,
+        summary: event.summary,
+        toolDomains: event.toolDomains,
+        ...(event.taskGraph ? { taskGraph: event.taskGraph } : {}),
+      },
       planVersion: next.planVersion + 1,
     }
   } else if (event.type === 'ToolRequested') {

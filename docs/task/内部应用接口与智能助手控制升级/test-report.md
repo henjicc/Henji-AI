@@ -1,5 +1,17 @@
 # 测试报告
 
+## 第三阶段（进行中）
+
+### 任务 3.1
+
+- `npm run lint`：通过。
+- `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`：通过。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- `npx tsc -p tsconfig.electron.json --noEmit`：通过。
+- 路由、任务图与运行时契约共 3 个文件、26 项测试通过。
+- 联动 Runner 回归共 6 个文件、45 项通过、1 项失败；失败仍为阶段前已记录的长循环基线，实际在 2 轮/3 次调用后终止。
+- 为遵守文件体积规则，将 `runner.ts` 从 575 行拆至 499 行；拆分后主进程 TypeScript 与 Electron lint 通过。
+
 ## 第二阶段（已完成）
 
 - 任务 2.1：`npx tsc -p tsconfig.json --noEmit` 通过。

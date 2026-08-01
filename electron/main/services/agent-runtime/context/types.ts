@@ -3,6 +3,7 @@ import type { AgentToolObservation } from '../../../../../src/core/assistant/too
 import type { ModelStepMessage, ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
+import type { AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 
 export const AGENT_INTENTS = [
   'navigate',
@@ -79,6 +80,7 @@ export interface AgentContextLayerReport {
 }
 
 export interface AgentRouteDecision {
+  routeVersion?: 'agent-route/v2'
   intent: AgentIntent
   candidateIntents?: AgentIntent[]
   complexity: 'simple' | 'multi_step' | 'ambiguous'
@@ -90,6 +92,8 @@ export interface AgentRouteDecision {
   anchorSurfaceId?: string
   taskFacets?: string[]
   suggestedCapabilityQueries?: string[]
+  /** 可持久化的多领域任务图；旧保存点读取时允许缺失。 */
+  taskGraph?: AgentTaskGraph
 }
 
 export interface AgentContextArtifact {

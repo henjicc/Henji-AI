@@ -1,5 +1,31 @@
 # 变更文件记录
 
+## 第三阶段（进行中）
+
+### 任务 3.1
+
+- `src/core/assistant/taskGraph.ts`
+- `src/core/assistant/taskGraph.test.ts`
+- `src/core/assistant/events.ts`
+- `src/core/assistant/workingContext.ts`
+- `src/core/assistant/workingSummaryReducer.ts`
+- `electron/main/services/agent-runtime/context/types.ts`
+- `electron/main/services/agent-runtime/context/task-facets.ts`
+- `electron/main/services/agent-runtime/context/router.ts`
+- `electron/main/services/agent-runtime/context/context.test.ts`
+- `electron/main/services/agent-runtime/runner/model-execution.ts`
+- `electron/main/services/agent-runtime/runner/runner.ts`
+- `electron/main/services/agent-runtime/runner/final-response.ts`
+- `electron/main/services/agent-runtime/runner/model-response-journal.ts`
+- `electron/main/services/agent-runtime/runner/model-step-recovery.ts`
+- `electron/main/services/agent-runtime/runner/route-goal.ts`
+- `electron/main/services/agent-runtime/runner/runner-cancellation.ts`
+- `electron/main/services/agent-runtime/runner/runner-components.ts`
+- `electron/main/services/agent-runtime/runner/runner-conversation.ts`
+- `electron/main/services/agent-runtime/runner/runner-failure.ts`
+- `electron/main/services/agent-runtime/runner/tool-turn.ts`
+- 第三阶段任务记录文件
+
 ## 第二阶段（已完成）
 
 ### 任务 2.1

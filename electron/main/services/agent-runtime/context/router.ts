@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { createMainLogger } from '../../logging'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
+import { createSingleFacetTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 import {
   AGENT_INTENTS,
   AGENT_TOOL_DOMAINS,
@@ -9,6 +10,7 @@ import {
   type AgentRouteDecision,
   type AgentToolDomain,
 } from './types'
+import { createDeterministicTaskGraph, createModelTaskGraph } from './task-facets'
 
 const logger = createMainLogger('main.agent_router')
 
@@ -20,6 +22,7 @@ const routerModelDecisionSchema = z.object({
   toolDomains: z.unknown().optional(),
   complexity: z.unknown().optional(),
   reason: z.unknown().optional(),
+  taskFacets: z.unknown().optional(),
 }).passthrough()
 
 export type RouterModelClassifier = (
@@ -130,11 +133,37 @@ function deterministicRoute(
   snapshot: HostContextSnapshot
 ): AgentRouteDecision | null {
   const normalized = goal.normalize('NFKC')
+  const composite = createDeterministicTaskGraph(goal, snapshot)
+  if (composite) {
+    const intent = composite.intents.includes('camera_stage')
+      ? 'camera_stage'
+      : composite.intents.includes('canvas') ? 'canvas' : composite.intents[0] ?? 'general'
+    const toolDomains = uniqueValues([
+      ...composite.intents.flatMap((candidate) => routePolicy[candidate].toolDomains),
+      ...composite.domains,
+      'catalog',
+    ], 8)
+    return {
+      routeVersion: 'agent-route/v2',
+      intent,
+      candidateIntents: composite.intents,
+      complexity: 'multi_step',
+      path: 'workflow',
+      toolDomains,
+      source: 'deterministic',
+      reason: `识别为 ${composite.graph.facets.length} 个有依赖的跨领域任务 Facet`,
+      anchorSurfaceId: snapshot.surface?.id,
+      taskFacets: composite.graph.facets.map((facet) => facet.facetId),
+      suggestedCapabilityQueries: composite.graph.facets.map((facet) => facet.domain),
+      taskGraph: composite.graph,
+    }
+  }
   if (
     snapshot.surface?.id === 'workspace.generation'
     && /(?:最后|最近|上一)(?:一张|一个|条)|生成历史|历史记录/i.test(normalized)
   ) {
     return {
+      routeVersion: 'agent-route/v2',
       intent: 'read_generation',
       candidateIntents: ['read_generation', 'image_edit'],
       complexity: /(?:编辑|标注|裁剪|旋转|文字|矩形)/i.test(normalized) ? 'multi_step' : 'simple',
@@ -145,10 +174,19 @@ function deterministicRoute(
       anchorSurfaceId: snapshot.surface.id,
       taskFacets: ['current_surface', 'generation_history'],
       suggestedCapabilityQueries: ['最近成功生成结果', '图片编辑'],
+      taskGraph: createSingleFacetTaskGraph({
+        goal,
+        facetId: 'generation_history',
+        domain: 'generation',
+        targetSurfaceId: snapshot.surface.id,
+        capabilityKinds: ['observe', 'query'],
+        completionCondition: '返回目标生成记录或明确说明没有符合条件的记录。',
+      }),
     }
   }
   if (/(?:设置|偏好|毛玻璃|主题|圆角|启动页面|上传服务)/i.test(normalized)) {
     return {
+      routeVersion: 'agent-route/v2',
       intent: 'settings',
       candidateIntents: ['settings'],
       complexity: /(?:并且|同时|批量|以及)/i.test(normalized) ? 'multi_step' : 'simple',
@@ -159,10 +197,19 @@ function deterministicRoute(
       anchorSurfaceId: snapshot.surface?.id,
       taskFacets: ['settings'],
       suggestedCapabilityQueries: ['应用设置'],
+      taskGraph: createSingleFacetTaskGraph({
+        goal,
+        facetId: 'settings',
+        domain: 'settings',
+        targetSurfaceId: snapshot.surface?.id,
+        capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
+        completionCondition: '设置读取或变更结果包含稳定设置 ID 与 revision。',
+      }),
     }
   }
   if (/(?:图片编辑|矩形标注|文字标注|裁剪图片|旋转图片)/i.test(normalized)) {
     return {
+      routeVersion: 'agent-route/v2',
       intent: 'image_edit',
       candidateIntents: ['image_edit'],
       complexity: 'multi_step',
@@ -173,12 +220,21 @@ function deterministicRoute(
       anchorSurfaceId: snapshot.surface?.id,
       taskFacets: ['image_edit'],
       suggestedCapabilityQueries: ['图片编辑 来源引用'],
+      taskGraph: createSingleFacetTaskGraph({
+        goal,
+        facetId: 'image_edit',
+        domain: 'image_edit',
+        targetSurfaceId: 'tool.image_edit',
+        capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
+        completionCondition: '返回图片编辑会话或预览稳定引用及 revision。',
+      }),
     }
   }
   const matches = deterministicRules.filter((rule) => rule.matches(goal))
   if (matches.length !== 1) return null
   const [match] = matches
   return {
+    routeVersion: 'agent-route/v2',
     intent: match.intent,
     candidateIntents: [match.intent],
     complexity: 'simple',
@@ -189,6 +245,16 @@ function deterministicRoute(
     anchorSurfaceId: snapshot.surface?.id,
     taskFacets: [match.intent],
     suggestedCapabilityQueries: match.toolDomains ?? routePolicy[match.intent].toolDomains,
+    taskGraph: createSingleFacetTaskGraph({
+      goal,
+      facetId: match.intent,
+      domain: (match.toolDomains ?? routePolicy[match.intent].toolDomains)[0] ?? 'catalog',
+      targetSurfaceId: snapshot.surface?.id,
+      capabilityKinds: match.intent === 'navigate' ? ['observe', 'navigate'] : ['query', 'execute'],
+      completionCondition: match.intent === 'general'
+        ? '直接回答用户问题且不声称执行未发生的动作。'
+        : '目标动作具有结构化结果或明确的受阻说明。',
+    }),
   }
 }
 
@@ -212,6 +278,7 @@ export class AgentIntentRouter {
         const candidateIntents = selectEnumValues(classified.candidateIntents, AGENT_INTENTS, 4)
         const requestedDomains = selectEnumValues(classified.toolDomains, AGENT_TOOL_DOMAINS, 6)
         const decision: AgentRouteDecision = {
+          routeVersion: 'agent-route/v2',
           intent: classified.intent,
           candidateIntents: uniqueValues([
             classified.intent,
@@ -237,6 +304,14 @@ export class AgentIntentRouter {
             requestedDomains
           ),
         }
+        decision.taskGraph = createModelTaskGraph({
+          goal,
+          rawFacets: classified.taskFacets,
+          primaryIntent: classified.intent,
+          candidateDomains: decision.toolDomains,
+          snapshot,
+        })
+        decision.taskFacets = decision.taskGraph.facets.map((facet) => facet.facetId)
         this.logDecision(runId, decision)
         return decision
       } catch (error) {
@@ -259,6 +334,7 @@ export class AgentIntentRouter {
       }
     }
     const fallback: AgentRouteDecision = {
+      routeVersion: 'agent-route/v2',
       intent: 'general',
       candidateIntents: ['general'],
       complexity: 'ambiguous',
@@ -269,6 +345,15 @@ export class AgentIntentRouter {
       anchorSurfaceId: snapshot.surface?.id,
       taskFacets: ['ambiguous'],
       suggestedCapabilityQueries: ['当前页面相关能力'],
+      taskGraph: createSingleFacetTaskGraph({
+        goal,
+        facetId: 'clarify_goal',
+        domain: 'catalog',
+        targetSurfaceId: snapshot.surface?.id,
+        capabilityKinds: ['query'],
+        completionCondition: '向用户提出一个最小澄清问题，或明确说明不支持的边界。',
+        uncertainty: '确定性规则和路由模型均未形成可信任务分解。',
+      }),
     }
     this.logDecision(runId, fallback)
     return fallback
@@ -284,6 +369,7 @@ export class AgentIntentRouter {
         path: decision.path,
         source: decision.source,
         toolDomains: decision.toolDomains,
+        taskFacetIds: decision.taskGraph?.facets.map((facet) => facet.facetId) ?? [],
       },
     })
   }

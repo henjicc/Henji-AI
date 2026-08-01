@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
+import { agentTaskGraphSchema } from './taskGraph'
 
 export const AGENT_WORKING_SUMMARY_VERSION = 'agent-working-summary/v1' as const
 
@@ -49,6 +50,7 @@ export const agentWorkingSummarySchema = z.object({
     intent: z.string().min(1).max(100),
     summary: z.string().min(1).max(500),
     toolDomains: z.array(z.string().min(1).max(100)).max(8),
+    taskGraph: agentTaskGraphSchema.optional(),
   }).strict().nullable(),
   planVersion: z.number().int().nonnegative(),
   activeStep: agentWorkingStepSchema.nullable(),

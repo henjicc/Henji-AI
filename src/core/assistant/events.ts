@@ -4,6 +4,7 @@ import { hostScopeRevisionsSchema } from './hostContracts'
 import { modelStepUsageSchema } from '../llm/modelStep'
 import { modelProviderErrorCategorySchema } from '../llm/providerProtocol'
 import { agentWorkingSummarySchema } from './workingContext'
+import { agentTaskGraphSchema } from './taskGraph'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v1' as const
 
@@ -177,6 +178,7 @@ const planUpdatedEventSchema = z.object({
   intent: z.string().min(1).max(100),
   summary: z.string().min(1).max(500),
   toolDomains: z.array(z.string().min(1).max(100)).max(8),
+  taskGraph: agentTaskGraphSchema.optional(),
 }).strict()
 
 const toolRequestedEventSchema = z.object({

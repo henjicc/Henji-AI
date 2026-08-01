@@ -81,7 +81,7 @@ describe('AgentIntentRouter', () => {
     expect(result).toMatchObject({ intent: 'general', source: 'fallback', path: 'primary' })
   })
 
-  it('自然语言画布编排请求由模型理解语义，本地策略决定工具域', async () => {
+  it('明显的画布与定位组合请求由确定性规则拆成多 Facet', async () => {
     const classifier = vi.fn().mockResolvedValue({
       intent: 'canvas',
       complexity: 'multi_step',
@@ -94,8 +94,91 @@ describe('AgentIntentRouter', () => {
       contextSnapshot(),
       new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'canvas', source: 'router_model', toolDomains: ['canvas'] })
-    expect(classifier).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({
+      routeVersion: 'agent-route/v2',
+      intent: 'canvas',
+      source: 'deterministic',
+      toolDomains: ['canvas', 'navigation', 'catalog'],
+    })
+    expect(result.taskGraph?.facets.map((facet) => facet.facetId))
+      .toEqual(['canvas_structure', 'show_target_surface'])
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
+  it('三维工程、场景、运镜和展示请求一次拆出有依赖的完整任务图', async () => {
+    const classifier = vi.fn()
+    const result = await new AgentIntentRouter(classifier).route(
+      'run-camera-composite',
+      '创建一个三维工程，摆放立方体和棱锥，再做环绕运镜并打开三维工具让我看到',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({
+      intent: 'camera_stage',
+      complexity: 'multi_step',
+      source: 'deterministic',
+    })
+    expect(result.toolDomains).toEqual(expect.arrayContaining(['toolbox', 'camera_stage', 'navigation', 'catalog']))
+    expect(result.taskGraph?.facets.map((facet) => facet.facetId)).toEqual([
+      'camera_project', 'camera_scene', 'camera_motion', 'show_target_surface',
+    ])
+    expect(result.taskGraph?.dependencies).toEqual(expect.arrayContaining([
+      { fromFacetId: 'camera_project', toFacetId: 'camera_scene' },
+      { fromFacetId: 'camera_scene', toFacetId: 'camera_motion' },
+    ]))
+    expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'show_target_surface'))
+      .toMatchObject({ targetSurfaceId: 'tool.camera_stage', parallelizable: true })
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
+  it('模型路由 Facet 经过本地领域白名单校验后形成可持久任务图', async () => {
+    const router = new AgentIntentRouter(async () => ({
+      intent: 'workflow',
+      candidateIntents: ['assets'],
+      toolDomains: ['workflows', 'assets'],
+      complexity: 'multi_step',
+      reason: '先选择素材，再运行工作流',
+      taskFacets: [{
+        facetId: 'select_asset',
+        domain: 'assets',
+        goal: '读取并选择目标素材',
+        targetEntityTypes: ['asset'],
+        observationKinds: ['entity_state', 'entity_schema'],
+        capabilityKinds: ['observe', 'query'],
+        targetSurfaceId: 'workspace.assets',
+        dependsOn: [],
+        parallelizable: false,
+        completionConditions: ['取得素材稳定引用'],
+        uncertainties: [],
+        confidence: 0.9,
+      }, {
+        facetId: 'run_workflow',
+        domain: 'workflows',
+        goal: '使用素材引用运行工作流',
+        targetEntityTypes: ['workflow.run'],
+        observationKinds: ['operation_schema'],
+        capabilityKinds: ['plan', 'execute'],
+        targetSurfaceId: null,
+        dependsOn: ['select_asset'],
+        parallelizable: false,
+        completionConditions: ['工作流进入已提交或完成状态'],
+        uncertainties: [],
+        confidence: 0.85,
+      }],
+    }))
+    const result = await router.route(
+      'run-model-facets',
+      '把合适素材用于已有流程',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result.taskGraph).toMatchObject({
+      version: 'agent-task-graph/v1',
+      facets: [
+        expect.objectContaining({ facetId: 'select_asset', domain: 'assets' }),
+        expect.objectContaining({ facetId: 'run_workflow', dependsOn: ['select_asset'] }),
+      ],
+    })
   })
 
   it('自然语言长期偏好请求由模型理解语义，本地策略决定工具域', async () => {
