@@ -15,6 +15,13 @@
 - 内容与视口 `ResizeObserver` 共用一帧调度；用户离底时仅内容尺寸变化标记“有新内容”，窗口缩放不会产生假提示。
 - 6.2 扩展计划/证据 UI 时不得新增嵌套滚动容器；工具卡和 Artifact 展开高度会由现有内容观察自动处理。
 
+## 任务 6.2 接力
+
+- 状态：已完成；当前任务切换为 6.3。
+- `selectExecutionPresentation` 是 Facet、验证、Artifact、终态和下一步的唯一 UI 投影；恢复快照继续通过现有 reducer 重放同一事件得到一致结果。
+- `describeStructuredError` 将稳定错误码映射为用户标题，并继续以序列化错误的 `recovery` 给出下一步；不要从日志消息补推状态。
+- 6.5 接入观察事件时可沿现有 Facet evidence 与 Artifact 引用展示，无需新建观察进度面板。
+
 ## 第六阶段开始接力
 
 - 已完整读取 6.1 至 6.5 任务说明、阶段记录、架构/UI/媒体/模型/日志/Electron/画布/测试规则，以及 `henji-application-capability`、`henji-ui-surface`、`henji-model-adaptation` 技能。

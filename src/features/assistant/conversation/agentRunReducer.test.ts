@@ -9,8 +9,9 @@ import {
   selectPendingApproval,
   selectToolActivities,
 } from './agentRunReducer'
-import type { AgentEvent } from '@/core/assistant/events'
+import type { AgentEvent, AgentRunState } from '@/core/assistant/events'
 import { createAgentWorkingSummary } from '@/core/assistant/workingContext'
+import { describeStructuredError } from './errorPresentation'
 
 function event<TEvent extends AgentEvent>(value: Omit<TEvent, 'schemaVersion' | 'eventId' | 'occurredAt' | 'runId'>): TEvent {
   return {
@@ -20,6 +21,26 @@ function event<TEvent extends AgentEvent>(value: Omit<TEvent, 'schemaVersion' | 
     occurredAt: `2026-07-23T00:00:0${value.sequence}.000Z`,
     runId: 'run-1',
   } as TEvent
+}
+
+function runState(workingSummary = createAgentWorkingSummary('处理复杂任务')): AgentRunState {
+  return {
+    schemaVersion: 'agent-event/v1',
+    runId: 'run-1', threadId: 'thread-1', status: 'running', sequence: 0, turn: 0,
+    currentStepId: null, currentToolCallId: null, waitingApprovalId: null,
+    startedAt: '2026-07-23T00:00:00.000Z', updatedAt: '2026-07-23T00:00:00.000Z',
+    finalText: null, error: null,
+    budget: {
+      maxTurns: 12, maxToolCalls: 24, maxDurationMs: 600_000, maxInputTokens: 120_000,
+      maxOutputTokens: 32_000, maxConsecutiveFailures: 3, maxRepeatedToolCalls: 2, maxNoProgressTurns: 3,
+    },
+    usage: {
+      turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
+      totalTokens: 0, knownCostUsd: null, consecutiveFailures: 0, noProgressTurns: 0, elapsedMs: 0,
+    },
+    lastScopeRevisions: null,
+    workingSummary,
+  }
 }
 
 describe('agentRunViewReducer', () => {
@@ -223,5 +244,70 @@ describe('agentRunViewReducer', () => {
     const presentation = selectExecutionPresentation(null, [clarification])
     expect(presentation.nextAction).toBe('请提供需要处理的项目名称。')
     expect(presentation.clarification?.reason).toBe('目标项目不明确')
+  })
+
+  it('投影 Facet 完成、受阻、依赖跳过和大型证据，恢复后保持一致', () => {
+    const initialState = runState()
+    const events: AgentEvent[] = [
+      event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
+        type: 'PlanUpdated', sequence: 1, intent: 'camera_stage', summary: '布置场景并验证', toolDomains: ['camera_stage'],
+        taskGraph: {
+          version: 'agent-task-graph/v1', goal: '布置场景并验证',
+          facets: [
+            {
+              facetId: 'scene', domain: 'camera_stage', goal: '布置场景', targetEntityTypes: ['camera_stage.object'],
+              requiredObservations: [], capabilityKinds: ['mutate'], targetSurfaceId: 'camera_stage', dependsOn: [],
+              parallelizable: false, completionConditions: ['对象已放置'], uncertainties: [], confidence: 1,
+              status: 'pending', statusReason: '', evidence: [],
+            },
+            {
+              facetId: 'verify', domain: 'camera_stage', goal: '验证构图', targetEntityTypes: [],
+              requiredObservations: [], capabilityKinds: ['observe'], targetSurfaceId: 'camera_stage', dependsOn: ['scene'],
+              parallelizable: false, completionConditions: ['构图已验证'], uncertainties: [], confidence: 1,
+              status: 'pending', statusReason: '', evidence: [],
+            },
+          ],
+          dependencies: [{ fromFacetId: 'scene', toFacetId: 'verify' }],
+          stopConditions: ['受阻时停止并说明'],
+        },
+      }),
+      event<Extract<AgentEvent, { type: 'FacetProgressed' }>>({
+        type: 'FacetProgressed', sequence: 2, facetId: 'scene', status: 'blocked',
+        progressKind: 'revision_conflict', summary: '工程已被修改', evidence: ['revision:2'], blocker: '请刷新工程状态',
+      }),
+      event<Extract<AgentEvent, { type: 'FacetProgressed' }>>({
+        type: 'FacetProgressed', sequence: 3, facetId: 'verify', status: 'blocked',
+        progressKind: 'no_change', summary: '前置步骤未完成', evidence: ['dependency:scene'], blocker: '依赖场景布置',
+      }),
+      event<Extract<AgentEvent, { type: 'ArtifactOffloaded' }>>({
+        type: 'ArtifactOffloaded', sequence: 4, artifactRef: 'artifact:scene-report', source: 'observe_scene', originalBytes: 50_000,
+      }),
+    ]
+    const hydrated = agentRunViewReducer(createInitialAgentRunViewState(), {
+      type: 'hydrate', snapshot: { state: initialState, events },
+    })
+    const presentation = selectExecutionPresentation(hydrated.runState, hydrated.events)
+
+    expect(presentation.facets).toEqual([
+      expect.objectContaining({ facetId: 'scene', status: 'blocked', reason: '请刷新工程状态' }),
+      expect.objectContaining({ facetId: 'verify', status: 'skipped', evidence: ['dependency:scene'] }),
+    ])
+    expect(presentation.artifactRefs).toEqual(['artifact:scene-report'])
+  })
+
+  it('只在等待用户时展示澄清，并用结构化错误代码生成可读反馈', () => {
+    const clarification = event<Extract<AgentEvent, { type: 'ClarificationRequired' }>>({
+      type: 'ClarificationRequired', sequence: 1,
+      question: '请选择目标项目。', reason: '目标不唯一',
+    })
+    expect(selectExecutionPresentation(runState(), [clarification]).clarification).toBeNull()
+    expect(selectExecutionPresentation({ ...runState(), status: 'waiting_user' }, [clarification]).clarification)
+      .toMatchObject({ question: '请选择目标项目。' })
+    expect(describeStructuredError({
+      code: 'REVISION_CONFLICT', message: '目标版本已变化', retryable: true, recovery: 'refresh_context',
+    })).toEqual({
+      title: '目标状态已经变化',
+      nextAction: '刷新当前上下文后重新规划。',
+    })
   })
 })

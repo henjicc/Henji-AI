@@ -12,6 +12,15 @@
 - `src/features/assistant/conversation/AssistantConversation.tsx`
 - 第六阶段任务记录与统一手动测试清单
 
+## 任务 6.2
+
+- `src/features/assistant/conversation/agentRunReducer.ts` 与测试
+- `src/features/assistant/conversation/ExecutionPlanCard.tsx` 与新增组件行为测试
+- `src/features/assistant/conversation/ToolActivityCard.tsx`
+- `src/features/assistant/conversation/errorPresentation.ts`
+- `src/features/assistant/conversation/AssistantConversation.tsx`
+- 第六阶段任务记录与统一手动测试清单
+
 ## 任务 5.4 与第五阶段完成
 
 - `src/features/generation/application/`：生成准备、模型 schemaRef、任务服务/状态镜像、恢复、反射与测试

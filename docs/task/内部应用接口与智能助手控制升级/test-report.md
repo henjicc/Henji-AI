@@ -15,6 +15,15 @@
 - `npm run check:surface`、`npm run check:colors`、`npm run check:icons`：通过。
 - 首轮新增用例暴露测试文件未清理 React 树导致重复测试节点，已补 `cleanup()` 后复跑通过；不是产品行为失败。
 
+### 任务 6.2
+
+- 验证级别：L2；修改共享运行状态投影、历史恢复展示和助手计划 UI，但未修改主进程事件契约。
+- `agentRunReducer.test.ts` 与 `ExecutionPlanCard.test.tsx`：2 个文件、10 项通过，覆盖 Facet 状态、依赖跳过、Artifact、澄清事件顺序、结构化错误与等待外部结果展示。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- 六个改动文件及新增测试定向 ESLint：通过。
+- `npm run check:surface`、`npm run check:colors`、`npm run check:icons`：通过。
+- 首轮测试发现澄清事件可能早于运行状态快照；已保留无状态时的实时问题展示，仅在明确离开 `waiting_user` 后隐藏旧澄清，复跑通过。
+
 ## 第五阶段（已完成）
 
 ### 任务 5.4 与阶段收尾

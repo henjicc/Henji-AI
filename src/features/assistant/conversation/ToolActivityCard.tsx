@@ -4,7 +4,7 @@ import { memo, useState, type CSSProperties } from 'react'
 import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiIconButton } from '@/components/ui'
 
 import type { AgentToolActivity } from './agentRunReducer'
-import { describeErrorRecovery } from './errorPresentation'
+import { describeStructuredError } from './errorPresentation'
 
 const activeStatusLabels: Record<Exclude<AgentToolActivity['status'], 'completed'>, string> = {
   requested: '已请求',
@@ -35,7 +35,13 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
   const taskId = activity.resultReferences?.taskId
   const projectId = activity.resultReferences?.projectId
   const nodeId = activity.resultReferences?.nodeId
-  const hasDetails = Boolean(activity.summary || activity.error)
+  const hasDetails = Boolean(
+    activity.summary
+    || activity.error
+    || activity.artifactRef
+    || Object.keys(activity.resultReferences ?? {}).length > 0
+  )
+  const errorPresentation = activity.error ? describeStructuredError(activity.error) : null
   const statusLabel = activity.status === 'completed'
     ? completionLabels[activity.completionKind ?? (activity.readOnly ? 'observed' : 'executed')]
     : activeStatusLabels[activity.status]
@@ -98,11 +104,21 @@ function ToolActivityCardView({ activity, onOpenTask, onOpenNode }: ToolActivity
               expanded ? 'translate-y-0' : '-translate-y-1'
             }`}>
               {activity.summary ? <p className={`break-words leading-4 ${UI_TEXT_META_CLASS}`}>{activity.summary}</p> : null}
-              {activity.error ? (
+              {errorPresentation ? (
                 <div className="mt-1 rounded-md bg-danger/10 p-1.5 text-2xs leading-4 text-danger">
-                  <div className="break-words [overflow-wrap:anywhere]">{activity.error.message}</div>
-                  <div className="mt-1 text-text-muted">下一步：{describeErrorRecovery(activity.error)}</div>
-                  <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>错误代码：{activity.error.code}</div>
+                  <div className="font-medium">{errorPresentation.title}</div>
+                  <div className="mt-1 break-words text-text-muted [overflow-wrap:anywhere]">{activity.error?.message}</div>
+                  <div className="mt-1 text-text-muted">下一步：{errorPresentation.nextAction}</div>
+                </div>
+              ) : null}
+              {Object.keys(activity.resultReferences ?? {}).length > 0 ? (
+                <div className={`mt-1 break-words ${UI_TEXT_META_CLASS}`}>
+                  关联结果：{Object.values(activity.resultReferences ?? {}).join('、')}
+                </div>
+              ) : null}
+              {activity.artifactRef ? (
+                <div className={`mt-1 break-words ${UI_TEXT_META_CLASS}`}>
+                  大型结果：{activity.artifactRef}
                 </div>
               ) : null}
             </div>

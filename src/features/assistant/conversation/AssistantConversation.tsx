@@ -48,7 +48,7 @@ import {
   selectPendingApproval,
   selectToolActivities,
 } from './agentRunReducer'
-import { describeErrorRecovery } from './errorPresentation'
+import { describeStructuredError } from './errorPresentation'
 import { ModelProgressMessage } from './ModelProgressMessage'
 import { ToolActivityGroup } from './ToolActivityGroup'
 import { useConversationAutoScroll } from './useConversationAutoScroll'
@@ -214,6 +214,7 @@ export function AssistantConversation(): JSX.Element {
     && runState?.currentStepId === latestModelStep.stepId
   )
   const finalResponseStarted = Boolean(runState?.finalText)
+  const runErrorPresentation = runState?.error ? describeStructuredError(runState.error) : null
   useEffect(() => {
     if (activityRunIdRef.current !== activeRunId) {
       activityRunIdRef.current = activeRunId
@@ -471,9 +472,9 @@ export function AssistantConversation(): JSX.Element {
         {/* 错误块靠语义色底提示，不再加边框——它已在侧栏卡片内部，加框就是第二层卡片 */}
         {runState?.error ? (
           <section style={deferredBlockStyle} className="rounded-lg bg-danger/10 p-3 text-xs text-danger">
-            <div className="flex items-center gap-1.5 font-medium"><AlertCircle className="h-4 w-4" />{runState.error.code}</div>
-            <p className="mt-1.5 leading-5">{runState.error.message}</p>
-            <p className="mt-1.5 leading-5 text-text-muted">下一步：{describeErrorRecovery(runState.error)}</p>
+            <div className="flex items-center gap-1.5 font-medium"><AlertCircle className="h-4 w-4" />{runErrorPresentation?.title}</div>
+            <p className="mt-1.5 leading-5 text-text-muted">{runState.error.message}</p>
+            <p className="mt-1.5 leading-5 text-text-muted">下一步：{runErrorPresentation?.nextAction}</p>
           </section>
         ) : null}
 
