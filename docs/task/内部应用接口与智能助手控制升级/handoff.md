@@ -3,7 +3,7 @@
 ## 当前接力状态
 
 - 阶段：第六阶段 · 助手体验与可观测性
-- 当前任务：6.4（待开始）
+- 当前任务：6.5（待开始）
 - 已完成：第一至第五阶段全部任务（1.1 至 5.4）。
 - 待完成：6.4、6.5；随后完成第七阶段规则收口与整体验收。
 - 阻塞：无。
@@ -28,6 +28,13 @@
 - 三种模态能力已进入 `ModelStepCapabilities`；媒体发送前先校验模型声明，再校验 provider protocol，错误码分别为 `unsupported_input_modality` 与 `unsupported_provider_modality`。
 - `AgentModelProfile.observer` 可选且兼容旧配置；运行时按“执行主模型优先、观察模型回退、否则阻断”选择消费者。
 - 6.4 构造 AI SDK 内容片段时应使用 `image`/`file` 原生结构；openai-compatible 暂不支持视频文件，不得转换成提示词 URL。
+
+## 任务 6.4 接力
+
+- 状态：已完成；当前任务切换为 6.5。
+- `AgentAttachment` 只保存 `asset:` 稳定引用与安全元数据，素材库负责生命周期；运行启动前完成源、限制、模型与协议预检。
+- `prepareAgentAttachmentContext` 是主进程字节读取和 primary/observer 分流入口；原始字节不持久化、不记录日志，且只在第一轮进入目标模型。
+- 6.5 应复用观察模型步骤与稳定引用，但 Surface 截图仍必须走批准区域和遮罩契约，不能把附件入口扩展成任意路径读取。
 
 ## 第六阶段开始接力
 

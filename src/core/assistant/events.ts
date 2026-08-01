@@ -124,6 +124,7 @@ const runStartedEventSchema = z.object({
   type: z.literal('RunStarted'),
   threadId: z.string().min(1),
   goal: z.string().min(1).max(32 * 1024).optional(),
+  attachmentRefs: z.array(z.string().regex(/^asset:[^\s]+$/)).max(8).optional(),
 }).strict()
 
 const runStateChangedEventSchema = z.object({

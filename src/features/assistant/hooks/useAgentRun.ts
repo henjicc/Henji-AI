@@ -15,6 +15,7 @@ import {
   cancelAgentExternalWait,
 } from '@/commands/assistant'
 import type { AgentApprovalResponse } from '@/core/assistant/runtimeContracts'
+import type { AgentAttachment } from '@/core/assistant/attachments'
 import type { AgentEvent } from '@/core/assistant/events'
 import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
 import { createLogger } from '@/core/logging'
@@ -41,7 +42,7 @@ function safeErrorMessage(error: unknown): string {
 export interface UseAgentRunResult {
   view: AgentRunViewState
   submitting: boolean
-  start: (goal: string) => Promise<boolean>
+  start: (goal: string, attachments?: AgentAttachment[]) => Promise<boolean>
   enqueue: (
     content: string,
     mode: AgentQueuedMessagePayload['mode'],
@@ -281,7 +282,7 @@ export function useAgentRun(): UseAgentRunResult {
     if (activeRunId) void refresh()
   }, [activeRunId, refresh])
 
-  const start = useCallback(async (goal: string): Promise<boolean> => {
+  const start = useCallback(async (goal: string, attachments: AgentAttachment[] = []): Promise<boolean> => {
     const normalizedGoal = goal.trim()
     if (!normalizedGoal || submitting) return false
     setSubmitting(true)
@@ -299,7 +300,7 @@ export function useAgentRun(): UseAgentRunResult {
       }))
       logger.info('智能助手 UI 发起运行', {
         event: 'assistant_ui.run.start',
-        context: { threadId, goalLength: normalizedGoal.length, profileId: profile.id },
+        context: { threadId, goalLength: normalizedGoal.length, attachmentCount: attachments.length, profileId: profile.id },
       })
       const result = await startAgentRun({
         threadId,
@@ -307,6 +308,7 @@ export function useAgentRun(): UseAgentRunResult {
         profile,
         models,
         approvalMode,
+        attachments: attachments.length > 0 ? attachments : undefined,
       })
       activeRunIdRef.current = result.runId
       useAssistantUiStore.getState().setActiveRun(result.runId, normalizedGoal)

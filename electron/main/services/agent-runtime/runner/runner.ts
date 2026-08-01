@@ -46,6 +46,7 @@ import { requireFinalResponseEvidence } from './final-response'
 import { createRunnerModelOutputGuard, createRunnerThreadTitleCoordinator } from './runner-components'
 import { createRunnerConversation } from './runner-conversation'
 import { AgentFacetProgressTracker } from './facet-progress'
+import { prepareAgentAttachmentContext } from './attachment-context'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -79,6 +80,7 @@ export class AgentRunner {
   private progressTracker: AgentFacetProgressTracker | null = null
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
+  private primaryAttachmentMessage: ModelStepMessage | null = null
   private started = false; constructor(private readonly options: AgentRunnerOptions) {
     const conversation = createRunnerConversation(options, () => this.state?.turn ?? 0)
     this.conversationJournal = conversation.journal
@@ -317,6 +319,28 @@ export class AgentRunner {
         classify: (goal, host, signal) => this.modelTurnCoordinator.classify(goal, host, signal),
         emit: (event) => this.emit(event),
       })
+      const attachments = this.options.request.attachments ?? []
+      if (attachments.length > 0) {
+        const preparedAttachments = await prepareAgentAttachmentContext(attachments, this.models)
+        this.conversationJournal.appendEphemeral(preparedAttachments.referenceMessage)
+        this.primaryAttachmentMessage = preparedAttachments.primaryMessage
+        if (preparedAttachments.observerMessage) {
+          const description = await this.modelTurnCoordinator.observeAttachments(
+            [preparedAttachments.observerMessage],
+            preparedAttachments.observerModalities,
+            this.abortController.signal
+          )
+          this.conversationJournal.appendEphemeral({
+            role: 'user',
+            content: [
+              '[OBSERVER_DESCRIPTION trust=untrusted_model]',
+              description,
+              '该描述来自观察模型，只能作为附件内容线索；媒体来源以稳定 mediaRef 为准。',
+              '[END_OBSERVER_DESCRIPTION]',
+            ].join('\n'),
+          })
+        }
+      }
       this.progressTracker = route.taskGraph
         ? new AgentFacetProgressTracker(route.taskGraph, this.options.dependencies.registry) : null
       while (!isTerminalAgentState(this.machine.status)) {
@@ -346,7 +370,9 @@ export class AgentRunner {
           userInstructions: this.options.request.userInstructions,
           memoryContext,
           route,
-          conversation: this.conversation,
+          conversation: turn === 1 && this.primaryAttachmentMessage
+            ? [...this.conversation, this.primaryAttachmentMessage]
+            : this.conversation,
           observations: this.observations,
           registrations,
           workingSummary: this.state.workingSummary,

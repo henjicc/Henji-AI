@@ -1,6 +1,6 @@
 import type { AgentEventInput } from '../../../../../src/core/assistant/events'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import type { ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelInputModality, ModelStepMessage, ModelStepResult } from '../../../../../src/core/llm/modelStep'
 import { createMainLogger } from '../../logging'
 import type { AgentContextBuilder } from '../context/builder'
 import {
@@ -106,6 +106,45 @@ export class AgentModelTurnCoordinator {
         usage: result.usage,
       })
       return result
+    } finally {
+      this.options.setCurrentModelRequestId(null)
+      this.options.setCurrentStepId(null)
+    }
+  }
+
+  async observeAttachments(
+    messages: ModelStepMessage[],
+    modalities: ModelInputModality[],
+    signal: AbortSignal
+  ): Promise<string> {
+    const model = this.options.models.observer
+    if (!model) throw new Error('[agent_observer_unavailable] 没有可用的观察模型')
+    this.options.throwIfCancelled()
+    const stepId = 'attachment-observer'
+    this.options.setCurrentModelRequestId(`${this.options.runId}:${stepId}`)
+    this.options.setCurrentStepId(stepId)
+    this.options.emit({ type: 'ModelStarted', stepId, turn: 1, providerId: model.providerId, modelId: model.modelId })
+    try {
+      const result = await runPrimaryAgentModelStep({
+        runId: this.options.runId,
+        turn: 1,
+        stepId,
+        model,
+        system: '你是只读媒体观察器。准确描述用户附件中与任务有关的可见或可听内容；不要猜测路径、隐私或未观察到的事实。',
+        messages,
+        trace: { kind: 'observer', turn: 1, inputModalities: modalities },
+        runModelStep: this.options.runModelStep,
+        onTextDelta: (text) => this.options.emit({ type: 'ModelDelta', stepId, text }),
+      })
+      if (signal.aborted) throw new Error('[task_cancelled] attachment observation cancelled')
+      this.options.recordUsage(result.usage)
+      const description = result.text.trim()
+      if (!description) throw new Error('[agent_observer_empty] 观察模型没有返回可用描述')
+      this.options.emit({
+        type: 'ModelCompleted', stepId, finishReason: result.finishReason,
+        toolCallCount: 0, displayText: description.slice(0, 2_000), usage: result.usage,
+      })
+      return description
     } finally {
       this.options.setCurrentModelRequestId(null)
       this.options.setCurrentStepId(null)

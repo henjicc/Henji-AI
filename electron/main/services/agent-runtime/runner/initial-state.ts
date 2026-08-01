@@ -57,8 +57,12 @@ export function createInitialAgentRunState(
           goal: request.goal,
           activeStep: null,
           pendingApprovals: [],
+          attachmentRefs: request.attachments?.map(attachment => attachment.mediaRef) ?? previousWorkingSummary.attachmentRefs,
           updatedAt: now,
         })
-      : createAgentWorkingSummary(request.goal),
+      : {
+          ...createAgentWorkingSummary(request.goal),
+          attachmentRefs: request.attachments?.map(attachment => attachment.mediaRef) ?? [],
+        },
   })
 }

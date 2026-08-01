@@ -1,5 +1,18 @@
 # 测试报告
 
+## 任务 6.4 开始
+
+- 预定验证级别：L3；附件跨越渲染交互、媒体解析、共享契约、主进程运行与持久化恢复。
+
+## 任务 6.4 完成
+
+- 6 个专项测试文件、32 项通过，覆盖草稿 reducer、安全序列化、会话投影、运行契约、主/观察模型路由与 Agent runner。
+- `npm run test:assistant-model-compat`：10 个文件、60 项通过。
+- `npm run test:assistant-persistence`：35/35 通过。
+- 双端 TypeScript 与双端定向 ESLint：通过。
+- `npm run check:surface`、`npm run check:colors`、`npm run check:icons`：通过。
+- SQLite Vitest 在当前 Node 环境按既有条件跳过；专用 Electron 持久化脚本已覆盖并通过。
+
 ## 第六阶段开始
 
 - 预定验证级别：L3；本阶段将跨越助手 UI、共享运行契约、持久化、媒体、模型适配、Electron IPC/preload 与受限捕获安全边界。

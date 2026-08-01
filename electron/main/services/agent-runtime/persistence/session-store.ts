@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3'
 
 import { createMainLogger } from '../../logging'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { AgentAttachment } from '../../../../../src/core/assistant/attachments'
 import {
   adaptAgentContextMessages,
   createDefaultSessionProjectorRegistry,
@@ -62,6 +63,7 @@ export interface AppendSessionMessageInput {
   idempotencyKey: string
   createdAt?: number
   contextVisible?: boolean
+  attachments?: AgentAttachment[]
 }
 
 export interface AppendSessionInternalMessageInput {
@@ -150,6 +152,7 @@ export class AgentSessionStore {
         content: input.content,
         legacy: false,
         contextVisible: input.contextVisible ?? true,
+        attachments: input.attachments,
       })),
       head.entryId,
       input.idempotencyKey,

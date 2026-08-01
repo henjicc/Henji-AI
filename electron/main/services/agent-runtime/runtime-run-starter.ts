@@ -13,6 +13,7 @@ import type { AgentMemoryStore } from '../assistant/memory-store'
 import type { AgentPersistenceStore } from './persistence/store'
 import { createInitialAgentRunState } from './runner/initial-state'
 import { prepareWorkingSummaryForRetry } from './runner/working-summary'
+import { validateAgentRunAttachments } from './runner/attachment-context'
 
 export interface AgentRunRecord {
   ownerWebContentsId: number
@@ -39,6 +40,7 @@ export async function startRuntimeRun(
 ): Promise<AgentStartRunResult> {
   const hostContext = getAssistantHostContext(options.owner.id)
   if (!hostContext?.uiReady) throw new Error('[host_not_ready] 宿主界面尚未就绪')
+  await validateAgentRunAttachments(options.request)
   const activeRunId = options.activeByThread.get(options.request.threadId)
   if (activeRunId) {
     const active = options.runs.get(activeRunId)?.state

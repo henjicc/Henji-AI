@@ -85,7 +85,7 @@ export async function saveUploadImage(
     }
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
-    logger.info('[save] upload image persisted', full)
+    logger.info('上传图片已持久化', { event: 'media_upload.image.persisted' })
     return { fullPath: full, displaySrc, dataUrl }
   }
 
@@ -112,7 +112,7 @@ export async function saveUploadVideo(
     const action = await resolveLargeUploadAction(file, directPath ?? null)
     if (action === 'reference' && directPath) {
       await grantMediaAccessForReference(directPath)
-      logger.info('[save] upload video referenced source path (no copy)', directPath)
+      logger.info('上传视频已引用原文件', { event: 'media_upload.video.referenced' })
       return { fullPath: directPath, displaySrc: toDisplaySrc(directPath), dataUrl: '' }
     }
   }
@@ -143,7 +143,7 @@ export async function saveUploadVideo(
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
 
-    logger.info('[save] upload video persisted', full)
+    logger.info('上传视频已持久化', { event: 'media_upload.video.persisted' })
     return { fullPath: full, displaySrc, dataUrl }
   }
 
@@ -188,7 +188,7 @@ export async function saveUploadAudio(
     const action = await resolveLargeUploadAction(file, directPath ?? null)
     if (action === 'reference' && directPath) {
       await grantMediaAccessForReference(directPath)
-      logger.info('[save] upload audio referenced source path (no copy)', directPath)
+      logger.info('上传音频已引用原文件', { event: 'media_upload.audio.referenced' })
       return { fullPath: directPath, displaySrc: toDisplaySrc(directPath), dataUrl: '' }
     }
   }
@@ -219,7 +219,7 @@ export async function saveUploadAudio(
     const displaySrc = await fileToBlobSrc(full, mime)
     const dataUrl = await fileToDataUrl(full, mime)
 
-    logger.info('[save] upload audio persisted', full)
+    logger.info('上传音频已持久化', { event: 'media_upload.audio.persisted' })
     return { fullPath: full, displaySrc, dataUrl }
   }
 

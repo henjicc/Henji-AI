@@ -159,6 +159,7 @@ export class AgentPersistenceStore {
         runId,
         role: 'user',
         content: request.goal,
+        attachments: request.attachments,
         idempotencyKey: `run:${runId}:user`,
         createdAt: now,
       })

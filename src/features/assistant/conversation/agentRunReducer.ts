@@ -314,7 +314,9 @@ export function groupToolActivitiesForDisplay(
 /** 仅取携带工具调用的模型公开说明；最终无工具回答由最终消息卡单独显示，避免重复。 */
 export function selectModelPublicUpdates(events: AgentEvent[]): AgentModelPublicUpdate[] {
   return events.flatMap((event) => (
-    event.type === 'ModelCompleted' && event.toolCallCount > 0 && event.displayText
+    event.type === 'ModelCompleted'
+      && (event.toolCallCount > 0 || event.stepId === 'attachment-observer')
+      && event.displayText
       ? [{ stepId: event.stepId, sequence: event.sequence, text: event.displayText }]
       : []
   ))

@@ -61,6 +61,7 @@ export const agentWorkingSummarySchema = z.object({
   unresolvedItems: z.array(z.string().min(1).max(1_000)).max(10),
   scopeRevisions: hostScopeRevisionsSchema.nullable(),
   artifactRefs: z.array(z.string().min(1).max(500)).max(12),
+  attachmentRefs: z.array(z.string().regex(/^asset:[^\s]+$/)).max(8).default([]),
   recovery: agentWorkingRecoverySchema,
   updatedAt: z.string().datetime(),
 }).strict()
@@ -80,6 +81,7 @@ export function createAgentWorkingSummary(goal: string): AgentWorkingSummary {
     unresolvedItems: [],
     scopeRevisions: null,
     artifactRefs: [],
+    attachmentRefs: [],
     recovery: {
       mode: 'none',
       reason: '',

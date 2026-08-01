@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { attachmentReferenceMessage } from './attachments'
 
 import { modelStepMessageSchema, type ModelStepMessage } from '../llm/modelStep'
 import {
@@ -62,7 +63,9 @@ function projectMessage(entry: AgentSessionEntry): AgentContextMessage | null {
   return {
     version: AGENT_CONTEXT_MESSAGE_VERSION,
     role: entry.kind === 'user_message' ? 'user' : 'assistant',
-    content,
+    content: payload.success && payload.data.attachments?.length
+      ? `${content}\n\n${String(attachmentReferenceMessage(payload.data.attachments).content)}`
+      : content,
     trust: entry.kind === 'user_message' ? 'untrusted_user' : 'untrusted_assistant',
     sourceEntryId: entry.entryId,
     sourceSequence: entry.sequence,

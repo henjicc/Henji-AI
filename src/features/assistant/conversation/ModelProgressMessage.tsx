@@ -18,7 +18,9 @@ interface ModelProgressMessageProps {
 function ModelProgressMessageView({ update }: ModelProgressMessageProps): JSX.Element {
   return (
     <section style={progressMessageStyle} className="min-w-0 max-w-full overflow-hidden px-1 py-1">
-      <div className={`font-medium ${UI_TEXT_META_CLASS}`}>助手进展</div>
+      <div className={`font-medium ${UI_TEXT_META_CLASS}`}>
+        {update.stepId === 'attachment-observer' ? '观察模型已读取附件' : '助手进展'}
+      </div>
       <AssistantMarkdown compact>{update.text}</AssistantMarkdown>
     </section>
   )

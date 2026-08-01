@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { AGENT_RUNTIME_SCHEMA_VERSION } from './runtimeContracts'
+import { agentAttachmentsSchema } from './attachments'
 import {
   modelStepFinishReasonSchema,
   modelStepMessageSchema,
@@ -81,6 +82,7 @@ export const agentSessionEntryStatusSchema = z.enum(['active', 'superseded', 'to
 
 export const agentSessionMessagePayloadSchema = z.object({
   content: z.string().max(256 * 1024),
+  attachments: agentAttachmentsSchema.optional(),
   legacy: z.boolean().default(false),
   contextVisible: z.boolean().default(true),
 }).strict()
@@ -262,4 +264,10 @@ export function getAgentSessionMessageContent(entry: AgentSessionEntry): string 
   if (entry.kind !== 'user_message' && entry.kind !== 'assistant_message') return null
   const parsed = agentSessionMessagePayloadSchema.safeParse(entry.payload)
   return parsed.success ? parsed.data.content : null
+}
+
+export function getAgentSessionMessageAttachments(entry: AgentSessionEntry) {
+  if (entry.kind !== 'user_message' && entry.kind !== 'assistant_message') return []
+  const parsed = agentSessionMessagePayloadSchema.safeParse(entry.payload)
+  return parsed.success ? (parsed.data.attachments ?? []) : []
 }

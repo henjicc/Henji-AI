@@ -108,4 +108,20 @@ describe('AgentSessionProjectorRegistry', () => {
     expect(projected).toHaveLength(1)
     expect(projected[0]).toMatchObject({ sourceEntryId: 'current', content: '补充约束' })
   })
+
+  it('历史附件只投影稳定引用和安全元数据', () => {
+    const registry = createDefaultSessionProjectorRegistry()
+    const projected = registry.project([entry({
+      payload: {
+        content: '分析图片', legacy: false, contextVisible: true,
+        attachments: [{
+          schemaVersion: 'agent-attachment/v1', mediaRef: 'asset:a1', modality: 'image',
+          mimeType: 'image/png', sizeBytes: 10, displayName: 'a.png', dataClass: 'C1',
+          lifecycle: 'asset_library', sourceStatus: 'ready',
+        }],
+      },
+    })])
+    expect(String(projected[0].content)).toContain('asset:a1')
+    expect(String(projected[0].content)).toContain('不得把引用猜测为文件路径')
+  })
 })

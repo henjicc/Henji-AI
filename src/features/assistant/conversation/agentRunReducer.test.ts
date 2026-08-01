@@ -127,10 +127,19 @@ describe('agentRunViewReducer', () => {
           outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
         },
       }),
+      event<Extract<AgentEvent, { type: 'ModelCompleted' }>>({
+        type: 'ModelCompleted', sequence: 3, stepId: 'attachment-observer', finishReason: 'stop',
+        toolCallCount: 0, displayText: '附件是一张产品照片。',
+        usage: {
+          inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
+          outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
+        },
+      }),
     ]
 
     expect(selectModelPublicUpdates(events)).toEqual([
       { stepId: 'step-1', sequence: 1, text: '我先根据你的偏好筛选兼容模型。' },
+      { stepId: 'attachment-observer', sequence: 3, text: '附件是一张产品照片。' },
     ])
   })
 

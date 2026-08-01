@@ -1,5 +1,14 @@
 # 变更文件记录
 
+## 任务 6.4
+
+- `src/core/assistant/attachments.ts` 及运行、事件、会话、投影、工作摘要契约：稳定附件引用和恢复。
+- `src/features/assistant/conversation/`：附件草稿 reducer、导入服务、Composer 交互、消息恢复预览与测试。
+- `src/utils/save/uploads.ts`：移除上传日志中的裸路径。
+- `electron/main/services/agent-runtime/runner/attachment-context.ts`、模型协调与 runner：预检、字节解析、主/观察模型路由与测试。
+- Agent persistence/session store 与相关回归测试。
+- 第六阶段任务记录。
+
 ## 任务 6.3
 
 - `src/core/llm/`、`src/core/assistant/`：多模态模型步骤、观察模型、冒烟、追踪与快照契约。

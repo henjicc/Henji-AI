@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
 import {
   AlertCircle,
   ArrowDown,
@@ -21,8 +21,13 @@ import {
   UiIconButton,
   UiPanel,
 } from '@/components/ui'
-import { agentQueuedMessagePayloadSchema, getAgentSessionMessageContent } from '@/core/assistant/session'
+import {
+  agentQueuedMessagePayloadSchema,
+  getAgentSessionMessageAttachments,
+  getAgentSessionMessageContent,
+} from '@/core/assistant/session'
 import type { AgentQueuedMessagePayload } from '@/core/assistant/session'
+import type { AgentAttachment } from '@/core/assistant/attachments'
 import {
   createEmptyPromptDocument,
   createPlainTextPromptDocument,
@@ -52,6 +57,10 @@ import { describeStructuredError } from './errorPresentation'
 import { ModelProgressMessage } from './ModelProgressMessage'
 import { ToolActivityGroup } from './ToolActivityGroup'
 import { useConversationAutoScroll } from './useConversationAutoScroll'
+import {
+  refreshAssistantAttachments,
+  assistantAttachmentDraftReducer,
+} from './assistantAttachments'
 
 const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
 const deferredBlockStyle: CSSProperties = {
@@ -60,10 +69,43 @@ const deferredBlockStyle: CSSProperties = {
   contain: 'layout paint style',
 }
 
+function AssistantMessageAttachments({ attachments }: { attachments: AgentAttachment[] }): JSX.Element | null {
+  const [resolved, setResolved] = useState<Awaited<ReturnType<typeof refreshAssistantAttachments>>>([])
+  useEffect(() => {
+    let active = true
+    void refreshAssistantAttachments(attachments).then(items => { if (active) setResolved(items) })
+    return () => { active = false }
+  }, [attachments])
+  if (attachments.length === 0) return null
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-2">
+      {attachments.map((attachment, index) => {
+        const asset = resolved[index]?.asset
+        const unavailable = !asset || asset.inspectionStatus !== 'ready'
+        return (
+          <div key={attachment.mediaRef} className="min-w-0 overflow-hidden rounded-lg border border-border-dark bg-surface-dark">
+            {!unavailable && attachment.modality === 'image' ? (
+              <img src={asset.displayUrl} alt={attachment.displayName} className="h-24 w-full object-cover" />
+            ) : !unavailable && attachment.modality === 'video' ? (
+              <video src={asset.displayUrl} aria-label={attachment.displayName} className="h-24 w-full object-cover" controls />
+            ) : !unavailable ? (
+              <audio src={asset.displayUrl} aria-label={attachment.displayName} className="h-16 w-full px-1" controls />
+            ) : (
+              <div className={`flex h-16 items-center justify-center px-2 text-center ${UI_TEXT_META_CLASS}`}>附件源已失效</div>
+            )}
+            <div className={`truncate px-2 py-1.5 ${UI_TEXT_META_CLASS}`}>{attachment.displayName}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function AssistantConversation(): JSX.Element {
   const run = useAgentRun()
   const startRun = run.start
   const [document, setDocument] = useState<PromptDocumentV1>(() => createEmptyPromptDocument())
+  const [attachments, dispatchAttachments] = useReducer(assistantAttachmentDraftReducer, [])
   const [resultError, setResultError] = useState<string | null>(null)
   const [messageMode, setMessageMode] = useState<AgentQueuedMessagePayload['mode']>('current_task')
   const [activityExpanded, setActivityExpanded] = useState(true)
@@ -108,11 +150,14 @@ export function AssistantConversation(): JSX.Element {
         const payload = agentQueuedMessagePayloadSchema.safeParse(entry.payload)
         return payload.success && !(payload.data.mode === 'after_task' && payload.data.status === 'consumed')
       }
-      return entry.runId !== activeRunId
-        && (entry.kind === 'user_message' || entry.kind === 'assistant_message')
+      if (entry.kind !== 'user_message' && entry.kind !== 'assistant_message') return false
+      return entry.runId !== activeRunId || entry.kind === 'user_message'
     }),
     [activeRunId, transcript.entries]
   )
+  const hasCurrentRunUserMessage = historicalMessages.some(entry => (
+    entry.runId === activeRunId && entry.kind === 'user_message'
+  ))
 
   useEffect(() => {
     if (waitingForAnswer) setMessageMode('clarification')
@@ -223,15 +268,18 @@ export function AssistantConversation(): JSX.Element {
     }
     if (finalResponseStarted) setActivityExpanded(false)
   }, [activeRunId, finalResponseStarted])
-  const submit = useCallback((goal: string): void => {
+  const submit = useCallback((goal: string, submittedAttachments: AgentAttachment[]): void => {
     if (busy) {
       void run.enqueue(goal, messageMode, clarificationWaitId).then((accepted) => {
         if (accepted) setDocument(createEmptyPromptDocument())
       })
       return
     }
-    void startRun(goal).then((started) => {
-      if (started) setDocument(createEmptyPromptDocument())
+    void startRun(goal, submittedAttachments).then((started) => {
+      if (started) {
+        setDocument(createEmptyPromptDocument())
+        dispatchAttachments({ type: 'clear' })
+      }
     })
   }, [busy, clarificationWaitId, messageMode, run, startRun])
 
@@ -314,6 +362,7 @@ export function AssistantConversation(): JSX.Element {
                 <UserRound className="h-3.5 w-3.5 shrink-0" />
               </div>
               <p className={`whitespace-pre-wrap break-words leading-6 ${UI_TEXT_BODY_CLASS}`}>{content}</p>
+              <AssistantMessageAttachments attachments={getAgentSessionMessageAttachments(entry)} />
             </UiPanel>
           ) : (
             <section key={entry.entryId} style={deferredBlockStyle} className="min-w-0 w-full max-w-full overflow-hidden">
@@ -328,7 +377,7 @@ export function AssistantConversation(): JSX.Element {
         ) : null}
 
         {/* 用户消息使用右侧有限宽度气泡；助手消息使用整行正文。 */}
-        {currentGoal ? (
+        {currentGoal && !hasCurrentRunUserMessage ? (
           <UiPanel variant="inset" style={deferredBlockStyle} className="min-w-0 w-fit max-w-[80%] self-end p-3">
             <div className={`mb-1.5 flex items-center justify-end gap-1.5 text-right font-medium ${UI_TEXT_META_CLASS}`}>
               <span>你</span>
@@ -507,6 +556,9 @@ export function AssistantConversation(): JSX.Element {
         value={document}
         onChange={setDocument}
         onSubmit={submit}
+        attachments={attachments}
+        onAttachmentsChange={next => dispatchAttachments({ type: 'replace', attachments: next })}
+        attachmentsDisabled={busy}
         disabled={false}
         busy={busy}
         waitingForAnswer={waitingForAnswer}
