@@ -424,12 +424,55 @@ export const LOOP_TERMINATION_EVALUATION_CASES: MinimalEvaluationCase[] = [
   },
 ]
 
+export const FINAL_ACCEPTANCE_EVALUATION_CASES: MinimalEvaluationCase[] = [
+  {
+    id: 'acceptance-camera-stage-composition',
+    category: 'golden',
+    goal: '在指定的既有 3D 工程中复用默认摄像机和已有主体，补充一个陪体并避免重叠，提前打开工程，执行一次环绕运镜，观察构图后验证并停止。',
+    expectedIntent: 'camera_stage',
+    expectedTerminalStatuses: ['completed'],
+    expectedTools: [
+      { toolName: 'discover_application_capabilities', minCalls: 1, maxCalls: 1 },
+      { toolName: 'get_camera_stage_project', minCalls: 1, maxCalls: 2 },
+      { toolName: 'observe_camera_stage_scene', minCalls: 1, maxCalls: 1 },
+      { toolName: 'open_camera_stage_project', minCalls: 1, maxCalls: 1 },
+      { toolName: 'place_camera_stage_object', minCalls: 1, maxCalls: 1 },
+      { toolName: 'apply_camera_stage_camera_move', minCalls: 1, maxCalls: 1 },
+      { toolName: 'observe_application_surface', minCalls: 1, maxCalls: 1 },
+      { toolName: 'verify_camera_stage_scene', minCalls: 1, maxCalls: 1 },
+    ],
+    forbiddenTools: ['create_camera_stage_project', 'duplicate_camera_stage_object'],
+    acceptableToolSequences: [[
+      'discover_application_capabilities', 'get_camera_stage_project', 'observe_camera_stage_scene',
+      'open_camera_stage_project', 'place_camera_stage_object', 'apply_camera_stage_camera_move',
+      'observe_application_surface', 'verify_camera_stage_scene',
+    ]],
+    expectedToolDomains: ['camera_stage', 'navigation', 'application'],
+    evidenceRequirements: [
+      { kind: 'working_summary' },
+      { kind: 'tool_reference', toolName: 'place_camera_stage_object', referenceKeys: ['objectId'] },
+      { kind: 'verification_passed' },
+    ],
+    requireVerification: true,
+    forbidUnknownWriteReplay: true,
+    successEvidence: ['一次多领域 Facet 计划', '复用既有工程与默认摄像机', '无冲突空间布置', '语义运镜结果', '视觉或结构化验证'],
+    forbiddenBehaviors: ['重复关键词发现', '创建重复默认摄像机', '相同执行指纹无证据重试', '超过阈值后继续循环'],
+    maxLatencyMs: 10 * 60_000,
+    maxInputTokens: 250_000,
+    maxOutputTokens: 32_000,
+    maxTurns: 12,
+    maxToolCalls: 12,
+    maxIdenticalToolCalls: 2,
+  },
+]
+
 export const ASSISTANT_REGRESSION_CASES: MinimalEvaluationCase[] = [
   ...GOLDEN_ASSISTANT_EVALUATION_CASES,
   ...HISTORICAL_ASSISTANT_EVALUATION_CASES,
   ...ADVERSARIAL_ASSISTANT_EVALUATION_CASES,
   ...INTELLIGENCE_BASELINE_EVALUATION_CASES,
   ...LOOP_TERMINATION_EVALUATION_CASES,
+  ...FINAL_ACCEPTANCE_EVALUATION_CASES,
   ...DOMAIN_COVERAGE_EVALUATION_CASES,
   ...SECURITY_GATE_EVALUATION_CASES,
 ]

@@ -103,10 +103,11 @@ describe('AgentRunner 语义压缩与 overflow 恢复', () => {
   it('上下文超预算时真实调用 summarizer、保存 compaction 并继续主模型', async () => {
     const { registry, gateway } = runtime()
     const appendSessionCompaction = vi.fn(async () => undefined)
+    let primaryMessages = ''
     const runModelStep = vi.fn(async (input: ModelStepInput) => {
       if (input.stepId.startsWith('router:')) return routerResult(input)
       if (input.stepId.startsWith('summarizer:')) return summaryResult(input)
-      expect(JSON.stringify(input.messages)).toContain('SESSION_SEMANTIC_SUMMARY')
+      primaryMessages = JSON.stringify(input.messages)
       return result(input)
     })
     let terminalResolve: (state: AgentRunState) => void = () => undefined
@@ -125,6 +126,7 @@ describe('AgentRunner 语义压缩与 overflow 恢复', () => {
     }).start()
 
     await expect(terminal).resolves.toMatchObject({ status: 'completed' })
+    expect(primaryMessages).toContain('SESSION_SEMANTIC_SUMMARY')
     expect(runModelStep.mock.calls.filter(([input]) => input.stepId.startsWith('summarizer:'))).toHaveLength(1)
     expect(appendSessionCompaction).toHaveBeenCalledWith(expect.objectContaining({
       threadId: 'thread-1',

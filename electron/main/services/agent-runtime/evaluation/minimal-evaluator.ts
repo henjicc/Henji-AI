@@ -40,10 +40,32 @@ export interface MinimalEvaluationCase {
   maxLatencyMs: number
   maxInputTokens: number
   maxOutputTokens: number
+  maxTurns?: number
+  maxToolCalls?: number
+  maxIdenticalToolCalls?: number
   maxFirstFeedbackMs?: number
   maxPeakMemoryMb?: number
   maxAverageCpuPercent?: number
   sensitiveProbes?: string[]
+}
+
+function canonicalFingerprintValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalFingerprintValue)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, canonicalFingerprintValue(item)])
+  )
+}
+
+function maxIdenticalToolCallCount(calls: MinimalEvaluationToolCall[]): number {
+  const counts = new Map<string, number>()
+  for (const call of calls) {
+    const fingerprint = JSON.stringify([call.toolName, canonicalFingerprintValue(call.input)])
+    counts.set(fingerprint, (counts.get(fingerprint) ?? 0) + 1)
+  }
+  return Math.max(0, ...counts.values())
 }
 
 export interface MinimalEvaluationToolCall {
@@ -366,6 +388,19 @@ export function evaluateMinimalCapture(
     check('latency', capture.latencyMs <= testCase.maxLatencyMs, `耗时 ${capture.latencyMs}ms`),
     check('input_tokens', capture.state.usage.inputTokens <= testCase.maxInputTokens, `输入 token ${capture.state.usage.inputTokens}`),
     check('output_tokens', capture.state.usage.outputTokens <= testCase.maxOutputTokens, `输出 token ${capture.state.usage.outputTokens}`),
+    ...(testCase.maxTurns === undefined
+      ? []
+      : [check('budget:turns', capture.state.usage.turns <= testCase.maxTurns, `模型步骤 ${capture.state.usage.turns}/${testCase.maxTurns}`)]),
+    ...(testCase.maxToolCalls === undefined
+      ? []
+      : [check('budget:tool_calls', capture.toolCalls.length <= testCase.maxToolCalls, `工具调用 ${capture.toolCalls.length}/${testCase.maxToolCalls}`)]),
+    ...(testCase.maxIdenticalToolCalls === undefined
+      ? []
+      : [check(
+          'budget:identical_tool_calls',
+          maxIdenticalToolCallCount(capture.toolCalls) <= testCase.maxIdenticalToolCalls,
+          `相同执行指纹最多 ${testCase.maxIdenticalToolCalls} 次`
+        )]),
     ...(testCase.maxFirstFeedbackMs === undefined
       ? []
       : [check(

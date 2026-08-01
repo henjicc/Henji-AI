@@ -1,5 +1,18 @@
 # 变更文件记录
 
+## 第七阶段 7.2 与最终收尾
+
+- `electron/main/services/agent-runtime/evaluation/minimal-evaluator.ts` 及测试：增加模型轮次、工具调用、累计输入 Token 和相同工具指纹阈值。
+- `electron/main/services/agent-runtime/evaluation/regression-cases.ts` 及测试：增加使用真实注册工具的最终三维组合验收用例。
+- `electron/main/services/agent-runtime/context/compaction.ts` 及测试：二次裁剪保留已有会话语义摘要。
+- `electron/main/services/agent-runtime/runner/runner.ts`、`turn-context-coordinator.ts`、`runner-compaction.test.ts`：压缩后从实时会话重建上下文并改善失败诊断。
+- `docs/task/内部应用接口与智能助手控制升级/manual-test.md`：从逐阶段清单精简为最终必要实机项目。
+- 本计划六份记录、7.2 任务文件，以及“智能助手智能化升级”“智能助手持续会话与运行时演进”的交叉验收记录。
+
+## 任务 7.2 开始
+
+- 当前仅更新 7.2 与五类必需记录；评测、兼容断言和最终人工清单文件待实现后追加。
+
 ## 任务 7.1 完成
 
 - 门禁/CI：`scripts/check-assistant-capabilities.cjs`、`.github/workflows/build.yml`。

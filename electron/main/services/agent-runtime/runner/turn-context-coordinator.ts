@@ -30,7 +30,7 @@ interface PrepareTurnContextInput {
   memoryContext: AgentMemoryContextEntry[]
   host: HostContextSnapshot
   route: AgentRouteDecision
-  conversation: ModelStepMessage[]
+  getConversation: () => ModelStepMessage[]
   observations: AgentToolObservation[]
   registrations: AgentToolRegistration[]
   workingSummary?: AgentWorkingSummary
@@ -63,7 +63,7 @@ export class AgentTurnContextCoordinator {
       memoryContext: input.memoryContext,
       snapshot: input.host,
       route: input.route,
-      conversation: input.conversation,
+      conversation: input.getConversation(),
       observations: input.observations.slice(-20),
       modelTools: input.registrations.map((item) => item.modelTool),
       activeToolNames: input.registrations.map((item) => item.catalog.name),

@@ -13,6 +13,15 @@ function messageText(message: ModelStepMessage): string {
   }
 }
 
+function existingSemanticSummary(messages: ModelStepMessage[]): ModelStepMessage | undefined {
+  return messages.find((message) => (
+    message.role === 'user'
+    && typeof message.content === 'string'
+    && message.content.includes('[SESSION_SEMANTIC_SUMMARY trust=untrusted_history]')
+    && message.content.includes('[END_SESSION_SEMANTIC_SUMMARY]')
+  ))
+}
+
 function toolCallIds(value: unknown, ids = new Set<string>()): Set<string> {
   if (Array.isArray(value)) {
     for (const item of value) toolCallIds(item, ids)
@@ -143,7 +152,7 @@ export function compactConversationMessages(
   }
   const older = safeConversation.slice(0, recentStart)
   const recent = safeConversation.slice(recentStart)
-  const summary: ModelStepMessage = {
+  const summary: ModelStepMessage = existingSemanticSummary(older) ?? {
     role: 'user',
     content: [
       '[STRUCTURED_WORKING_SUMMARY trust=untrusted_history]',

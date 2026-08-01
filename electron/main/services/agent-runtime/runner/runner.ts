@@ -422,7 +422,7 @@ export class AgentRunner {
           userInstructions: this.options.request.userInstructions,
           memoryContext,
           route,
-          conversation: [
+          getConversation: () => [
             ...this.conversation,
             ...(turn === 1 && this.primaryAttachmentMessage ? [this.primaryAttachmentMessage] : []),
             ...(turnVisualMessage ? [turnVisualMessage] : []),

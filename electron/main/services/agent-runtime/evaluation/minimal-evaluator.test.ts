@@ -247,4 +247,40 @@ describe('minimal assistant evaluator', () => {
       id: 'recovery:unknown_write_replay', passed: false,
     }))
   })
+
+  it('按固定阈值阻止超额模型步骤、工具调用和相同执行指纹重试', () => {
+    const testCase: MinimalEvaluationCase = {
+      id: 'fixed-efficiency-budget', category: 'recovery', goal: '有限步骤完成',
+      expectedIntent: 'canvas', expectedTerminalStatuses: ['completed'],
+      expectedTools: [], forbiddenTools: [],
+      maxLatencyMs: 1_000, maxInputTokens: 250_000, maxOutputTokens: 10_000,
+      maxTurns: 12, maxToolCalls: 12, maxIdenticalToolCalls: 2,
+    }
+    const capture = passingCapture(testCase)
+    capture.state.usage.turns = 13
+    capture.state.usage.inputTokens = 250_001
+    capture.toolCalls = Array.from({ length: 13 }, (_, index) => ({
+      toolCallId: `duplicate-${index}`,
+      toolName: 'get_canvas_node',
+      input: index % 2 === 0
+        ? { nodeId: 'same-node', includeMetadata: true }
+        : { includeMetadata: true, nodeId: 'same-node' },
+    }))
+    capture.logs = [
+      { event: 'agent_runtime.run.started', requestId: capture.runId },
+      ...capture.toolCalls.flatMap((call) => [
+        { event: 'agent_tool.execute.started', requestId: capture.runId, taskId: call.toolCallId },
+        { event: 'agent_tool.execute.completed', requestId: capture.runId, taskId: call.toolCallId },
+      ]),
+      { event: 'agent_runtime.run.completed', requestId: capture.runId },
+    ]
+
+    const result = evaluateMinimalCapture(testCase, capture, 1)
+    expect(result.checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'input_tokens', passed: false }),
+      expect.objectContaining({ id: 'budget:turns', passed: false }),
+      expect.objectContaining({ id: 'budget:tool_calls', passed: false }),
+      expect.objectContaining({ id: 'budget:identical_tool_calls', passed: false }),
+    ]))
+  })
 })

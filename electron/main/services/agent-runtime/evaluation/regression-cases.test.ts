@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '../../../../../src/core/assistant/builtinApplicationCapabilityRegistry'
 
 import {
   ASSISTANT_REGRESSION_CASES,
   DOMAIN_COVERAGE_EVALUATION_CASES,
+  FINAL_ACCEPTANCE_EVALUATION_CASES,
   LOOP_TERMINATION_EVALUATION_CASES,
   SECURITY_GATE_EVALUATION_CASES,
 } from './regression-cases'
@@ -72,5 +74,27 @@ describe('assistant regression datasets', () => {
       (item.successEvidence?.length ?? 0) > 0
       && (item.forbiddenBehaviors?.length ?? 0) > 0
     ))).toBe(true)
+  })
+
+  it('最终 3D 组合验收固定发现、轮次、工具、Token 与恢复阈值', () => {
+    expect(FINAL_ACCEPTANCE_EVALUATION_CASES).toHaveLength(1)
+    const testCase = FINAL_ACCEPTANCE_EVALUATION_CASES[0]
+    expect(testCase).toMatchObject({
+      expectedIntent: 'camera_stage',
+      maxTurns: 12,
+      maxToolCalls: 12,
+      maxInputTokens: 250_000,
+      maxIdenticalToolCalls: 2,
+    })
+    expect(testCase.expectedTools.find((tool) => tool.toolName === 'discover_application_capabilities')?.maxCalls).toBe(1)
+    expect(testCase.forbiddenTools).toEqual(expect.arrayContaining([
+      'create_camera_stage_project', 'duplicate_camera_stage_object',
+    ]))
+    expect(testCase.successEvidence).toEqual(expect.arrayContaining([
+      '复用既有工程与默认摄像机', '无冲突空间布置', '语义运镜结果',
+    ]))
+    for (const tool of testCase.expectedTools) {
+      expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(tool.toolName), tool.toolName).toBeDefined()
+    }
   })
 })

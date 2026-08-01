@@ -1,5 +1,21 @@
 # 测试报告
 
+## 2026-08-02 · 7.2 最终自动验收
+
+- 精确评测与压缩回归：2 个评测文件 12 项、2 个压缩文件 9 项通过。
+- `npm run test:assistant-production`：模型兼容 60/60、核心评测 250/250、结算 2/2、Electron SQLite 持久化 35/35。
+- `npx vitest run`：186 个文件、846 项通过；8 个文件、36 项按既有 Electron SQLite/环境条件跳过，无失败。
+- `npm run lint`、Electron ESLint、渲染层与主进程 TypeScript：全部通过。
+- `check:assistant-capabilities`、颜色、Surface、图标、模型 i18n：全部通过；Application API 覆盖 4/4。
+- `npm run electron:build`：通过，生成 65 个模型清单，主进程/preload/renderer 构建成功；仅有既有分块与动态导入提示。
+- `npm run electron:smoke`：通过；CDP 启动，5 个供应商状态，画布 2560×1399、61 帧，页面错误和控制台错误均为 0。
+- 验收发现并修复：语义压缩成功后 rebuild 仍使用进入本轮时的会话副本，导致真实摘要未进入主模型；现在改为实时取会话，二次裁剪也优先保留语义摘要。
+- 人工验收：没有代替用户执行真实 API、鼠标、三维视觉和长时间稳定性；最终必要项目已集中在 `manual-test.md`，完成前计划保持待验证。
+
+## 任务 7.2 开始
+
+- 验证级别：L3；计划执行最终评测专项、能力门禁、双端 lint/TypeScript、全量 Vitest、助手生产评测、Electron build 和 smoke。
+
 ## 任务 7.1 完成
 
 - 验证级别：L3；规则、核心注册契约、覆盖清单、静态脚本与 CI 共同变化。
