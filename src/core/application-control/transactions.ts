@@ -1,0 +1,161 @@
+import { z } from 'zod'
+
+import {
+  applicationEntityTypeIdSchema,
+  applicationOpaqueRefSchema,
+  applicationPropertyIdSchema,
+  applicationRefSchema,
+  applicationRevisionSetSchema,
+  applicationScopeIdSchema,
+  jsonValueSchema,
+} from './identifiers'
+
+export const applicationOperationImpactSchema = z.object({
+  effect: z.enum(['observe', 'create', 'update', 'delete', 'navigate', 'execute']),
+  entityTypes: z.array(applicationEntityTypeIdSchema).max(32),
+  propertyIds: z.array(applicationPropertyIdSchema).max(128),
+  revisionScopes: z.array(applicationScopeIdSchema).max(16),
+  verificationRequired: z.boolean(),
+}).strict()
+export type ApplicationOperationImpact = z.infer<typeof applicationOperationImpactSchema>
+
+export const applicationOperationExecutionSchema = z.object({
+  mode: z.enum(['immediate', 'long_running', 'confirmation_required', 'user_interaction']),
+  cancelable: z.boolean(),
+  resultState: z.enum(['completed', 'submitted', 'observed']),
+}).strict()
+export type ApplicationOperationExecution = z.infer<typeof applicationOperationExecutionSchema>
+
+export const applicationOperationStateSchema = z.enum([
+  'planned',
+  'running',
+  'waiting_approval',
+  'waiting_user',
+  'waiting_external',
+  'completed',
+  'failed',
+  'cancelled',
+])
+export type ApplicationOperationState = z.infer<typeof applicationOperationStateSchema>
+
+export const applicationOperationProgressSchema = z.object({
+  transactionRef: applicationOpaqueRefSchema.optional(),
+  state: applicationOperationStateSchema,
+  progress: z.number().min(0).max(1).optional(),
+  message: z.string().min(1).max(1_000),
+  cancelable: z.boolean(),
+  updatedAt: z.string().datetime(),
+}).strict()
+export type ApplicationOperationProgress = z.infer<typeof applicationOperationProgressSchema>
+
+const applicationPropertyMutationSchema = z.object({
+  propertyId: applicationPropertyIdSchema,
+  operation: z.enum(['set', 'clear', 'append', 'remove']),
+  value: jsonValueSchema.optional(),
+}).strict().refine(
+  (mutation) => mutation.operation === 'clear' || mutation.operation === 'remove'
+    ? true
+    : mutation.value !== undefined,
+  { message: 'set/append 修改必须提供值' }
+)
+
+export const applicationMutationPlanSchema = z.object({
+  kind: z.literal('mutation'),
+  target: applicationRefSchema,
+  entityType: applicationEntityTypeIdSchema,
+  expectedRevisions: applicationRevisionSetSchema,
+  mutations: z.array(applicationPropertyMutationSchema).min(1).max(256),
+}).strict()
+
+export const applicationSemanticOperationPlanSchema = z.object({
+  kind: z.literal('operation'),
+  capabilityId: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
+  capabilityVersion: z.number().int().positive(),
+  input: jsonValueSchema,
+  expectedRevisions: applicationRevisionSetSchema,
+}).strict()
+
+export const applicationPlannedStepSchema = z.discriminatedUnion('kind', [
+  applicationMutationPlanSchema,
+  applicationSemanticOperationPlanSchema,
+])
+export type ApplicationPlannedStep = z.infer<typeof applicationPlannedStepSchema>
+
+export const applicationChangePlanSchema = z.object({
+  contractVersion: z.literal('application-control/v1'),
+  planRef: applicationOpaqueRefSchema,
+  summary: z.string().min(1).max(2_000),
+  risk: z.enum(['R0', 'R1', 'R2', 'R3', 'R4']),
+  requiresApproval: z.boolean(),
+  atomic: z.boolean(),
+  steps: z.array(applicationPlannedStepSchema).min(1).max(256),
+  createdAt: z.string().datetime(),
+  expiresAt: z.string().datetime(),
+}).strict()
+export type ApplicationChangePlan = z.infer<typeof applicationChangePlanSchema>
+
+export const applicationCommitRequestSchema = z.object({
+  planRef: applicationOpaqueRefSchema,
+  expectedRevisions: applicationRevisionSetSchema,
+  idempotencyKey: z.string().min(16).max(256),
+  approvedRisk: z.enum(['R0', 'R1', 'R2', 'R3']).optional(),
+}).strict()
+export type ApplicationCommitRequest = z.infer<typeof applicationCommitRequestSchema>
+
+export const applicationEvidenceSchema = z.object({
+  kind: z.enum(['entity_state', 'property_value', 'operation_result', 'task_state', 'observation']),
+  target: applicationRefSchema.optional(),
+  fact: z.string().min(1).max(1_000),
+  data: jsonValueSchema.optional(),
+  capturedAt: z.string().datetime(),
+}).strict()
+export type ApplicationEvidence = z.infer<typeof applicationEvidenceSchema>
+
+export const applicationTransactionResultSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('completed'),
+    transactionRef: applicationOpaqueRefSchema,
+    resultingRevisions: applicationRevisionSetSchema,
+    producedRefs: z.array(applicationRefSchema).max(256),
+    evidence: z.array(applicationEvidenceSchema).min(1).max(256),
+    undoRef: applicationOpaqueRefSchema.optional(),
+    completedAt: z.string().datetime(),
+  }).strict(),
+  z.object({
+    status: z.literal('submitted'),
+    transactionRef: applicationOpaqueRefSchema,
+    taskRef: applicationRefSchema,
+    resultingRevisions: applicationRevisionSetSchema,
+    submittedAt: z.string().datetime(),
+  }).strict(),
+  z.object({
+    status: z.literal('waiting_user'),
+    transactionRef: applicationOpaqueRefSchema,
+    reason: z.string().min(1).max(1_000),
+    resumeRef: applicationOpaqueRefSchema,
+  }).strict(),
+  z.object({
+    status: z.literal('failed'),
+    transactionRef: applicationOpaqueRefSchema.optional(),
+    code: z.enum(['INVALID_PLAN', 'CONFLICT', 'NOT_FOUND', 'NOT_AVAILABLE', 'PERMISSION_DENIED', 'CANCELLED', 'EXECUTION_FAILED', 'VERIFICATION_FAILED']),
+    message: z.string().min(1).max(2_000),
+    recoverable: z.boolean(),
+    currentRevisions: applicationRevisionSetSchema.optional(),
+  }).strict(),
+])
+export type ApplicationTransactionResult = z.infer<typeof applicationTransactionResultSchema>
+
+export const applicationUndoRequestSchema = z.object({
+  undoRef: applicationOpaqueRefSchema,
+  expectedRevisions: applicationRevisionSetSchema,
+  idempotencyKey: z.string().min(16).max(256),
+}).strict()
+export type ApplicationUndoRequest = z.infer<typeof applicationUndoRequestSchema>
+
+export const applicationVerificationResultSchema = z.object({
+  verified: z.boolean(),
+  evidence: z.array(applicationEvidenceSchema).max(256),
+  unmetConditions: z.array(z.string().min(1).max(1_000)).max(64),
+  checkedAt: z.string().datetime(),
+}).strict()
+export type ApplicationVerificationResult = z.infer<typeof applicationVerificationResultSchema>

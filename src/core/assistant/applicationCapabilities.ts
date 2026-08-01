@@ -1,5 +1,14 @@
 import { z } from 'zod'
 
+import {
+  applicationOperationExecutionSchema,
+  applicationOperationImpactSchema,
+  applicationRefSchema,
+  type ApplicationOperationExecution,
+  type ApplicationOperationImpact,
+  type ApplicationRef,
+} from '../application-control'
+
 import type {
   AgentDataClass,
   AgentToolObservation,
@@ -9,15 +18,9 @@ import type {
 const applicationCapabilityRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])
 const applicationCapabilityDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
 
-export const APPLICATION_CAPABILITY_CATALOG_VERSION = 'application-capabilities/v1' as const
-
-export const applicationRefSchema = z.object({
-  kind: z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/),
-  id: z.string().min(1).max(500),
-  revision: z.number().int().nonnegative().optional(),
-  label: z.string().min(1).max(200).optional(),
-}).strict()
-export type ApplicationRef = z.infer<typeof applicationRefSchema>
+export const APPLICATION_CAPABILITY_CATALOG_VERSION = 'application-capabilities/v2' as const
+export { applicationRefSchema }
+export type { ApplicationRef }
 
 export const applicationCapabilityDescriptorSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
@@ -51,6 +54,10 @@ export const applicationCapabilityDescriptorSchema = z.object({
   }).strict().optional(),
   maxCallsPerRun: z.number().int().positive().optional(),
   available: z.boolean().default(true),
+  control: z.object({
+    execution: applicationOperationExecutionSchema,
+    impacts: z.array(applicationOperationImpactSchema).min(1).max(32),
+  }).strict().optional(),
 }).strict()
 export type ApplicationCapabilityDescriptor = z.infer<typeof applicationCapabilityDescriptorSchema>
 
@@ -67,6 +74,10 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   summarize?(output: TOutput): string
   preview?(input: TInput): AgentToolPreview
   createUndo?(output: TOutput): AgentToolObservation['undo']
+  control?: {
+    execution: ApplicationOperationExecution
+    impacts: ApplicationOperationImpact[]
+  }
 }
 
 export class ApplicationCapabilityRegistry {
