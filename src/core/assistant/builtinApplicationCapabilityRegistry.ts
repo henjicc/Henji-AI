@@ -18,6 +18,7 @@ import {
 import { ASSET_APPLICATION_CAPABILITIES } from './capabilities/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from './capabilities/cameraStageApplicationCapabilities'
 import { CANVAS_BATCH_APPLICATION_CAPABILITIES } from './capabilities/canvasBatchApplicationCapabilities'
+import { CANVAS_EXPORT_APPLICATION_CAPABILITIES } from './capabilities/canvasExportApplicationCapabilities'
 import { CANVAS_MUTATION_APPLICATION_CAPABILITIES } from './capabilities/canvasMutationApplicationCapabilities'
 import { CANVAS_PROJECT_APPLICATION_CAPABILITIES } from './capabilities/canvasProjectApplicationCapabilities'
 import { GENERATION_APPLICATION_CAPABILITIES } from './capabilities/generationApplicationCapabilities'
@@ -44,6 +45,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...CANVAS_PROJECT_APPLICATION_CAPABILITIES,
   ...CANVAS_MUTATION_APPLICATION_CAPABILITIES,
   ...CANVAS_BATCH_APPLICATION_CAPABILITIES,
+  ...CANVAS_EXPORT_APPLICATION_CAPABILITIES,
   ...CAMERA_STAGE_APPLICATION_CAPABILITIES,
   ...TOOLBOX_APPLICATION_CAPABILITIES,
   ...ASSISTANT_RUNTIME_APPLICATION_CAPABILITIES,

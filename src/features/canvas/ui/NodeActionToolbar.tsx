@@ -29,7 +29,11 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { sanitizeStoryboardText } from '@/features/canvas/application/storyboardText';
 import {
   NODE_TOOLBAR_ALIGN,
+  NODE_TOOLBAR_ACCENT_BUTTON_CLASS,
+  NODE_TOOLBAR_BUTTON_RADIUS_CLASS,
   NODE_TOOLBAR_CLASS,
+  NODE_TOOLBAR_DANGER_BUTTON_CLASS,
+  NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS,
   NODE_TOOLBAR_OFFSET,
   NODE_TOOLBAR_POSITION,
 } from './nodeToolbarConfig';
@@ -47,19 +51,6 @@ const toolIconMap: Record<ToolIconKey, typeof Crop> = {
   edit: PenLine,
   split: Scissors,
 };
-
-const TOOLBAR_BUTTON_RADIUS_CLASS = 'rounded-lg';
-/*
- * 工具条外壳是毛玻璃（它浮在画布与图片节点之上），所以按钮的 hover 必须是白色半透明。
- * 这里原先是 `hover:!bg-layer`——不透明的 #404040，压在玻璃上会变成一块实心灰贴片，
- * 把底下的画布内容整块糊掉。玻璃上的层次只能靠加白。
- */
-const TOOLBAR_NEUTRAL_BUTTON_CLASS =
-  '!border-transparent !bg-transparent text-text-dark hover:!border-veil-subtle hover:!bg-veil-soft hover:!text-text-dark';
-const TOOLBAR_ACCENT_BUTTON_CLASS =
-  '!border-transparent !bg-transparent text-accent hover:!border-accent/45 hover:!bg-accent/15';
-const TOOLBAR_DANGER_BUTTON_CLASS =
-  '!border-transparent !bg-transparent text-red-400 hover:!border-red-500/80 hover:!bg-red-500 hover:!text-white';
 
 export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const { t } = useTranslation();
@@ -233,7 +224,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {canTriggerGeneration && (
           <UiChipButton
             key="node-generate"
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_ACCENT_BUTTON_CLASS}`}
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
             onClick={(event) => {
               event.stopPropagation();
               canvasEventBus.publish('generation/run', { nodeId: node.id });
@@ -245,7 +236,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         )}
         {isCameraStage && (node.data.outputKind ?? 'image') === 'image' && (
             <UiChipButton
-              className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_ACCENT_BUTTON_CLASS}`}
+              className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
               disabled={!node.data.imageUrl}
               onClick={(event) => {
                 event.stopPropagation();
@@ -258,7 +249,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         )}
         {isCameraStage && node.data.outputKind === 'video' && (
             <UiChipButton
-              className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_ACCENT_BUTTON_CLASS}`}
+              className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
               disabled={Boolean(node.data.videoExporting)}
               onClick={(event) => {
                 event.stopPropagation();
@@ -275,7 +266,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           return (
             <UiChipButton
               key={tool.type}
-              className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
+              className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
               onClick={() =>
                 canvasEventBus.publish('tool-dialog/open', {
                   nodeId: node.id,
@@ -291,7 +282,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && canReupload && (
           <UiChipButton
             key="upload-reupload"
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
             onClick={() =>
               canvasEventBus.publish('upload-node/reupload', {
                 nodeId: node.id,
@@ -305,7 +296,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && canHandleImage && (
           <UiChipButton
             key="image-copy"
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
               isCopySuccess
                 ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
                 : ''
@@ -322,7 +313,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
           <UiChipButton
             key="asset-collect"
             disabled={collecting}
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS} ${assetCollected ? '!text-emerald-400' : ''}`}
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${assetCollected ? '!text-emerald-400' : ''}`}
             onClick={(event) => {
               event.stopPropagation();
               void handleCollectAsset();
@@ -335,7 +326,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && canCopyStoryboardText && (
           <UiChipButton
             key="storyboard-text-copy"
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} ${
               isCopyTextSuccess
                 ? '!border-emerald-400/70 !bg-emerald-500/20 !text-emerald-200 hover:!bg-emerald-500/30'
                 : ''
@@ -351,7 +342,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {canDownload && (
           <UiChipButton
             key="media-download"
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS}`}
             onClick={handleDownloadClick}
           >
             <Download className="h-3.5 w-3.5" />
@@ -361,7 +352,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {!isImageEdit && isGroupNode(node) && (
           <UiChipButton
             key="group-ungroup"
-            className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_NEUTRAL_BUTTON_CLASS} hover:!border-amber-400/60 hover:!bg-amber-500/20 hover:!text-amber-200`}
+            className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} hover:!border-amber-400/60 hover:!bg-amber-500/20 hover:!text-amber-200`}
             onClick={(event) => {
               event.stopPropagation();
               closeDownloadMenu();
@@ -374,7 +365,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         )}
         <UiChipButton
           key="node-delete"
-          className={`h-8 ${TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${TOOLBAR_DANGER_BUTTON_CLASS}`}
+          className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_DANGER_BUTTON_CLASS}`}
           onClick={(event) => {
             event.stopPropagation();
             closeDownloadMenu();

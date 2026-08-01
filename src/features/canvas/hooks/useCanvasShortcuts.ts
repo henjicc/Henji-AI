@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import type { ReactFlowInstance } from '@xyflow/react'
 import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import {
-  CANVAS_NODE_TYPES,
   type CanvasEdge,
   type CanvasNode,
   type CanvasNodeData,
@@ -11,15 +10,9 @@ import {
 import {
   isTypingTarget,
   resolveClipboardMediaFile,
-  type ClipboardMediaKind,
   type ClipboardSnapshot,
 } from '@/features/canvas/canvasUtils'
-
-const CLIPBOARD_MEDIA_NODE_TYPE: Record<ClipboardMediaKind, CanvasNodeType> = {
-  image: CANVAS_NODE_TYPES.upload,
-  video: CANVAS_NODE_TYPES.videoUpload,
-  audio: CANVAS_NODE_TYPES.audioUpload,
-}
+import { assetSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
 
 interface UseCanvasShortcutsParams {
   wrapperRef: React.RefObject<HTMLDivElement>
@@ -118,12 +111,12 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       event.preventDefault()
       pasteImageHandledRef.current = true
 
-      const nodeType = CLIPBOARD_MEDIA_NODE_TYPE[media.kind]
+      const nodeType = assetSourceNodeType(media.kind)
       const flowPosition = reactFlowInstance.screenToFlowPosition(pointerPosition)
       const newNodeId = addNode(nodeType, flowPosition)
       setSelectedNode(newNodeId)
       window.setTimeout(() => {
-        canvasEventBus.publish('canvas/paste-media', { nodeId: newNodeId, file: media.file })
+        canvasEventBus.publish('canvas/import-media', { nodeId: newNodeId, file: media.file })
       }, 0)
       scheduleCanvasPersist(0)
     }

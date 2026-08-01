@@ -11,6 +11,7 @@ import {
   type CanvasNodeType,
   type VideoMediaNodeData,
 } from '@/features/canvas/domain/canvasNodes';
+import { resolveMediaFileKind } from '@/features/canvas/canvasUtils';
 import {
   resolveMinEdgeFittedSize,
   resolveResizeMinConstraintsByAspect,
@@ -151,7 +152,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
 
   const handleFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !file.type.startsWith('video/')) {
+    if (!file || resolveMediaFileKind(file) !== 'video') {
       return;
     }
     await processFile(file);
@@ -161,7 +162,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
-    if (!file || !file.type.startsWith('video/')) {
+    if (!file || resolveMediaFileKind(file) !== 'video') {
       return;
     }
     await processFile(file);
@@ -175,8 +176,8 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
   }, [data.videoUrl, id, isUploadVariant, setSelectedNode]);
 
   useEffect(() => {
-    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
-      if (nodeId !== id || !file.type.startsWith('video/')) {
+    return canvasEventBus.subscribe('canvas/import-media', ({ nodeId, file }) => {
+      if (nodeId !== id || resolveMediaFileKind(file) !== 'video') {
         return;
       }
       void processFile(file);

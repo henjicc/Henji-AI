@@ -4,6 +4,7 @@ import type {
 import type {
   CanvasNodePlacement,
 } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
+import type { CanvasDownloadDestination } from '@/core/assistant/capabilities/canvasExportApplicationCapabilities'
 import {
   AGENT_CANVAS_CATALOG_VERSION,
   getAgentCanvasNodeSchema,
@@ -41,6 +42,7 @@ import {
   listCanvasProjectSummariesFromAgent,
 } from '@/features/canvas/application/agentCanvasQueries'
 import { addAssetToCanvasFromAgent } from '@/features/assistant/hostActions'
+import { downloadCanvasMediaFromAgent } from '@/features/canvas/application/agentCanvasDownloads'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
@@ -227,6 +229,15 @@ export function registerCanvasCapabilityHandlers(
       input
     )
     return disconnectCanvasEdgeFromAgent(parsed.projectId, parsed.edgeId)
+  })
+
+  registrar.registerHandler('download_canvas_media', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput & {
+      nodeIds: string[]
+      destination: CanvasDownloadDestination
+    }>('download_canvas_media', input)
+    return await downloadCanvasMediaFromAgent(parsed)
   })
 
   registrar.registerHandler('plan_canvas_batch', (input) => {

@@ -115,7 +115,8 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return tagName === 'input' || tagName === 'textarea' || element.isContentEditable
 }
 
-export type ClipboardMediaKind = 'image' | 'video' | 'audio'
+export type CanvasMediaKind = 'image' | 'video' | 'audio'
+export type ClipboardMediaKind = CanvasMediaKind
 
 export interface ClipboardMediaFile {
   kind: ClipboardMediaKind
@@ -128,8 +129,50 @@ const CLIPBOARD_MEDIA_KIND_BY_PREFIX: Array<{ kind: ClipboardMediaKind; prefix: 
   { kind: 'audio', prefix: 'audio/', extFallback: 'mp3' },
 ]
 
+const MEDIA_KIND_BY_EXTENSION: Readonly<Record<string, CanvasMediaKind>> = {
+  png: 'image',
+  jpg: 'image',
+  jpeg: 'image',
+  webp: 'image',
+  gif: 'image',
+  bmp: 'image',
+  avif: 'image',
+  svg: 'image',
+  mp4: 'video',
+  webm: 'video',
+  mov: 'video',
+  avi: 'video',
+  mkv: 'video',
+  m4v: 'video',
+  mp3: 'audio',
+  wav: 'audio',
+  flac: 'audio',
+  aac: 'audio',
+  ogg: 'audio',
+  m4a: 'audio',
+  opus: 'audio',
+  pcm: 'audio',
+}
+
 function matchClipboardMediaKind(mimeType: string): ClipboardMediaKind | null {
   return CLIPBOARD_MEDIA_KIND_BY_PREFIX.find((entry) => mimeType.startsWith(entry.prefix))?.kind ?? null
+}
+
+export function resolveMediaFileKind(file: Pick<File, 'name' | 'type'>): CanvasMediaKind | null {
+  const mimeKind = matchClipboardMediaKind(file.type.toLowerCase())
+  if (mimeKind) {
+    return mimeKind
+  }
+
+  const extension = file.name.split(/[?#]/, 1)[0].match(/\.([a-zA-Z0-9]+)$/)?.[1]?.toLowerCase()
+  return extension ? MEDIA_KIND_BY_EXTENSION[extension] ?? null : null
+}
+
+export function resolveMediaFiles(files: FileList | readonly File[]): ClipboardMediaFile[] {
+  return Array.from(files).flatMap((file) => {
+    const kind = resolveMediaFileKind(file)
+    return kind ? [{ kind, file }] : []
+  })
 }
 
 /**
@@ -144,12 +187,8 @@ export function resolveClipboardMediaFile(event: ClipboardEvent): ClipboardMedia
 
   const files = clipboardData.files
   if (files && files.length > 0) {
-    for (const file of Array.from(files)) {
-      const kind = matchClipboardMediaKind(file.type)
-      if (kind) {
-        return { kind, file }
-      }
-    }
+    const [media] = resolveMediaFiles(files)
+    if (media) return media
   }
 
   const clipboardItems = clipboardData.items

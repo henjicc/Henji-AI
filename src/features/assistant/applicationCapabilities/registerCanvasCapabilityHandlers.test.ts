@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   openCanvasProjectWithSummaryFromAgent: vi.fn(),
   createCanvasProjectFromAgent: vi.fn(),
   focusCanvasNodeFromAgent: vi.fn(),
+  downloadCanvasMediaFromAgent: vi.fn(),
   openApplicationSurface: vi.fn(),
 }))
 
@@ -44,6 +45,9 @@ vi.mock('@/features/canvas/application/agentCanvasQueries', () => ({
   listCanvasProjectSummariesFromAgent: vi.fn(),
 }))
 vi.mock('@/features/assistant/hostActions', () => ({ addAssetToCanvasFromAgent: vi.fn() }))
+vi.mock('@/features/canvas/application/agentCanvasDownloads', () => ({
+  downloadCanvasMediaFromAgent: mocks.downloadCanvasMediaFromAgent,
+}))
 vi.mock('../hostContext/hostContext', () => ({
   createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),
 }))
@@ -126,5 +130,26 @@ describe('canvas capability handlers', () => {
     expect(
       mocks.openApplicationSurface.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.focusCanvasNodeFromAgent.mock.invocationCallOrder[0])
+  })
+
+  it('批量下载只把稳定节点 ID 和已配置目标模式交给正式服务', async () => {
+    mocks.downloadCanvasMediaFromAgent.mockResolvedValue({
+      projectId: 'project-3',
+      requestedCount: 2,
+      savedNodeIds: ['node-1', 'node-2'],
+      failedNodeIds: [],
+      destinationMode: 'quick',
+    })
+    const handler = registeredHandlers().get('download_canvas_media')
+    const input = {
+      projectId: 'project-3',
+      nodeIds: ['node-1', 'node-2'],
+      destination: { mode: 'quick' as const },
+    }
+
+    const result = await handler?.(input, context)
+
+    expect(mocks.downloadCanvasMediaFromAgent).toHaveBeenCalledWith(input)
+    expect(result).toMatchObject({ savedNodeIds: ['node-1', 'node-2'] })
   })
 })

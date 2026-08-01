@@ -32,6 +32,12 @@
     "generate": "生成",
     "emptyHintTitle": "双击鼠标添加节点",
     "emptyHintSubtitle": "Double-click to add a node",
+    "mediaDrop": {
+      "imported": "已导入 {{count}} 个媒体文件",
+      "importedWithSkipped": "已导入 {{count}} 个媒体文件，跳过 {{skipped}} 个不支持的文件",
+      "unsupported": "仅支持拖入图片、视频或音频文件",
+      "failed": "媒体文件导入失败"
+    },
     "connection": {
       "typeMismatch": "连接类型不对，请连接到匹配的输入行",
       "mediaLimitExceeded": "{{media}}最多只能连接 {{max}} 个",
@@ -62,6 +68,11 @@
     "copy": "复制",
     "copyText": "复制文本",
     "download": "下载",
+    "batchDownload": "下载 {{count}} 项",
+    "chooseDownloadFolder": "选择保存文件夹...",
+    "batchDownloadCompleted": "已下载 {{count}} 个媒体文件",
+    "batchDownloadPartial": "已下载 {{saved}} 个，{{failed}} 个失败",
+    "batchDownloadFailed": "下载失败",
     "outputImage": "输出图片",
     "outputVideo": "输出视频",
     "ungroup": "解散",

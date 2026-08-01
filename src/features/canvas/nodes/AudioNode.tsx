@@ -8,6 +8,7 @@ import {
   type AudioMediaNodeData,
   type CanvasNodeType,
 } from '@/features/canvas/domain/canvasNodes';
+import { resolveMediaFileKind } from '@/features/canvas/canvasUtils';
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
@@ -183,7 +184,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
 
   const handleFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !file.type.startsWith('audio/')) {
+    if (!file || resolveMediaFileKind(file) !== 'audio') {
       return;
     }
     await processFile(file);
@@ -193,7 +194,7 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
   const handleDrop = useCallback(async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
-    if (!file || !file.type.startsWith('audio/')) {
+    if (!file || resolveMediaFileKind(file) !== 'audio') {
       return;
     }
     await processFile(file);
@@ -207,8 +208,8 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
   }, [data.audioUrl, id, isUploadVariant, setSelectedNode]);
 
   useEffect(() => {
-    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
-      if (nodeId !== id || !file.type.startsWith('audio/')) {
+    return canvasEventBus.subscribe('canvas/import-media', ({ nodeId, file }) => {
+      if (nodeId !== id || resolveMediaFileKind(file) !== 'audio') {
         return;
       }
       void processFile(file);

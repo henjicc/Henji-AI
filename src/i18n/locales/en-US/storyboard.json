@@ -32,6 +32,12 @@
     "generate": "Generate",
     "emptyHintTitle": "Double-click to add a node",
     "emptyHintSubtitle": "Double-click to add a node",
+    "mediaDrop": {
+      "imported": "Imported {{count}} media file(s)",
+      "importedWithSkipped": "Imported {{count}} media file(s); skipped {{skipped}} unsupported file(s)",
+      "unsupported": "Only image, video, and audio files can be dropped here",
+      "failed": "Failed to import media files"
+    },
     "connection": {
       "typeMismatch": "Connection type mismatch. Use the matching input row.",
       "mediaLimitExceeded": "{{media}} accepts up to {{max}} connection(s).",
@@ -62,6 +68,11 @@
     "copy": "Copy",
     "copyText": "Copy Text",
     "download": "Download",
+    "batchDownload": "Download {{count}} items",
+    "chooseDownloadFolder": "Choose destination folder...",
+    "batchDownloadCompleted": "Downloaded {{count}} media file(s)",
+    "batchDownloadPartial": "Downloaded {{saved}}; {{failed}} failed",
+    "batchDownloadFailed": "Download failed",
     "outputImage": "Output Image",
     "outputVideo": "Output Video",
     "ungroup": "Ungroup",

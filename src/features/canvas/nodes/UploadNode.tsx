@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { resolveMediaFileKind } from '@/features/canvas/canvasUtils'
 import {
   memo,
   useCallback,
@@ -248,7 +249,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     async (event: DragEvent<HTMLElement>) => {
       event.preventDefault();
       const file = event.dataTransfer.files?.[0];
-      if (!file || !file.type.startsWith('image/')) {
+      if (!file || resolveMediaFileKind(file) !== 'image') {
         return;
       }
 
@@ -260,7 +261,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      if (!file || !file.type.startsWith('image/')) {
+      if (!file || resolveMediaFileKind(file) !== 'image') {
         return;
       }
 
@@ -281,7 +282,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
 
   useEffect(() => {
     return canvasEventBus.subscribe('upload-node/paste-image', ({ nodeId, file }) => {
-      if (nodeId !== id || !file.type.startsWith('image/')) {
+      if (nodeId !== id || resolveMediaFileKind(file) !== 'image') {
         return;
       }
       void processFile(file);
@@ -289,8 +290,8 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
   }, [id, processFile]);
 
   useEffect(() => {
-    return canvasEventBus.subscribe('canvas/paste-media', ({ nodeId, file }) => {
-      if (nodeId !== id || !file.type.startsWith('image/')) {
+    return canvasEventBus.subscribe('canvas/import-media', ({ nodeId, file }) => {
+      if (nodeId !== id || resolveMediaFileKind(file) !== 'image') {
         return;
       }
       void processFile(file);

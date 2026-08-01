@@ -1,46 +1,30 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type RefObject } from 'react';
-import { saveDialog } from '@/platform/desktopApi';
-import { createLogger } from '@/core/logging';
+import { useTranslation } from 'react-i18next';
+import { openDialog } from '@/platform/desktopApi';
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes';
-import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
-import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
-import { saveImageSourceToDirectory, saveImageSourceToPath } from '@/commands/image';
 import {
-  downloadMediaFile,
-  quickDownloadMediaFile,
-  saveAudioFromUrl,
-  saveVideoFromUrl,
-} from '@/utils/save';
+  downloadCanvasMediaTargetsToDirectory,
+  resolveNodeDownloadTargets,
+  saveCanvasMediaTargetAs,
+  type CanvasMediaDownloadSummary,
+} from '@/features/canvas/application/canvasMediaDownload';
+import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import {
   QUICK_DOWNLOAD_SETTING_SPECS,
   readLocalStorageSettings,
 } from '@/hooks/useLocalStorageSetting';
 import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion';
 
-const logger = createLogger('features.canvas.hooks.useNodeDownload');
-
 interface DownloadMenuPosition {
   x: number;
   y: number;
 }
 
-interface ImageDownloadTarget {
-  mediaType: 'image';
-  source: string;
-  suggestedFileName: string;
-}
-
-interface FileDownloadTarget {
-  mediaType: 'video' | 'audio';
-  source: string;
-  suggestedFileName: string;
-}
-
-type NodeDownloadTarget = ImageDownloadTarget | FileDownloadTarget;
 type DownloadDirectoryMode = 'quick' | 'preset';
 
 export interface UseNodeDownloadResult {
   canDownload: boolean;
+  downloadCount: number;
   downloadMenu: DownloadMenuPosition | null;
   isDownloadMenuVisible: boolean;
   downloadMenuRef: RefObject<HTMLDivElement>;
@@ -50,76 +34,15 @@ export interface UseNodeDownloadResult {
   handleDownloadToPreset: (targetDir: string) => Promise<void>;
 }
 
-function getFileExtension(sourcePath: string): string {
-  const cleanPath = sourcePath.split(/[?#]/, 1)[0];
-  const match = cleanPath.match(/\.([a-zA-Z0-9]+)$/);
-  return match?.[1]?.toLowerCase() ?? '';
-}
-
-function resolveNodeDownloadTarget(node: CanvasNode): NodeDownloadTarget | null {
-  const definition = getNodeDefinition(node.type);
-  if (!definition.capabilities.toolbarDownload) {
-    return null;
-  }
-
-  const output = definition.getOutputs?.(node.data)[0];
-  if (definition.media?.kind === 'image') {
-    const previewSource = typeof node.data.previewImageUrl === 'string'
-      ? node.data.previewImageUrl
-      : null;
-    const source = output?.kind === 'image' ? output.url : previewSource;
-    if (!source) {
-      return null;
-    }
-    return {
-      mediaType: 'image',
-      source,
-      suggestedFileName: `node-${node.id}.png`,
-    };
-  }
-
-  if (!output?.url) {
-    return null;
-  }
-
-  if (output.kind !== 'video' && output.kind !== 'audio') {
-    return null;
-  }
-
-  const source = resolveLocalAssetPath(output.url)
-    ?? (/^https?:\/\//i.test(output.url) ? output.url : null);
-  if (!source) {
-    return null;
-  }
-
-  const fallbackExtension = output.kind === 'video' ? 'mp4' : 'mp3';
-  const extension = getFileExtension(source) || fallbackExtension;
-  return {
-    mediaType: output.kind,
-    source,
-    suggestedFileName: `node-${node.id}.${extension}`,
-  };
-}
-
-function isCancelledError(error: unknown): boolean {
-  return error instanceof Error && error.message === 'cancelled';
-}
-
-async function resolveMediaFileSource(target: FileDownloadTarget): Promise<string> {
-  if (!/^https?:\/\//i.test(target.source)) {
-    return target.source;
-  }
-  const saved = target.mediaType === 'video'
-    ? await saveVideoFromUrl(target.source)
-    : await saveAudioFromUrl(target.source);
-  return saved.fullPath;
-}
-
 export function useNodeDownload(
-  node: CanvasNode,
+  nodeOrNodes: CanvasNode | readonly CanvasNode[],
   downloadPresetPaths: string[]
 ): UseNodeDownloadResult {
-  const downloadTarget = useMemo(() => resolveNodeDownloadTarget(node), [node]);
+  const { t } = useTranslation();
+  const downloadTargets = useMemo(
+    () => resolveNodeDownloadTargets(Array.isArray(nodeOrNodes) ? nodeOrNodes : [nodeOrNodes]),
+    [nodeOrNodes]
+  );
   const [downloadMenu, setDownloadMenu] = useState<DownloadMenuPosition | null>(null);
   const [isDownloadMenuVisible, setIsDownloadMenuVisible] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
@@ -166,89 +89,66 @@ export function useNodeDownload(
     }
   }, []);
 
-  const handleDownloadSaveAs = useCallback(async (): Promise<void> => {
-    if (!downloadTarget) {
+  const showBatchResult = useCallback((summary: CanvasMediaDownloadSummary): void => {
+    if (summary.requestedCount <= 1) {
       return;
     }
+    const failedCount = summary.failedNodeIds.length;
+    canvasEventBus.publish('canvas/toast', {
+      message: failedCount > 0
+        ? t('nodeToolbar.batchDownloadPartial', {
+            saved: summary.savedNodeIds.length,
+            failed: failedCount,
+          })
+        : t('nodeToolbar.batchDownloadCompleted', { count: summary.savedNodeIds.length }),
+      type: failedCount > 0 ? 'error' : 'success',
+    });
+  }, [t]);
+
+  const showDownloadFailed = useCallback((): void => {
+    canvasEventBus.publish('canvas/toast', {
+      message: t('nodeToolbar.batchDownloadFailed'),
+      type: 'error',
+    });
+  }, [t]);
+
+  const handleDownloadSaveAs = useCallback(async (): Promise<void> => {
+    if (downloadTargets.length === 0) return;
 
     try {
-      logger.info('画布媒体另存为开始', {
-        event: 'canvas.media_download.start',
-        nodeId: node.id,
-        mediaType: downloadTarget.mediaType,
-        mode: 'save_as',
-      });
-      let savedPath: string;
-      if (downloadTarget.mediaType === 'image') {
-        const selectedPath = await saveDialog({ defaultPath: downloadTarget.suggestedFileName });
-        if (!selectedPath || Array.isArray(selectedPath)) {
-          return;
-        }
-        savedPath = await saveImageSourceToPath(downloadTarget.source, selectedPath);
+      if (downloadTargets.length === 1) {
+        const savedPath = await saveCanvasMediaTargetAs(downloadTargets[0]);
+        if (savedPath) closeDownloadMenu();
       } else {
-        const sourcePath = await resolveMediaFileSource(downloadTarget);
-        savedPath = await downloadMediaFile(sourcePath, downloadTarget.suggestedFileName);
+        const selectedDir = await openDialog({ directory: true });
+        if (!selectedDir || Array.isArray(selectedDir)) return;
+        const summary = await downloadCanvasMediaTargetsToDirectory(
+          downloadTargets,
+          selectedDir,
+          'folder'
+        );
+        showBatchResult(summary);
+        closeDownloadMenu();
       }
-      logger.info('画布媒体另存为完成', {
-        event: 'canvas.media_download.completed',
-        nodeId: node.id,
-        mediaType: downloadTarget.mediaType,
-        mode: 'save_as',
-        savedPath,
-      });
-      closeDownloadMenu();
-    } catch (error) {
-      if (isCancelledError(error)) {
-        return;
-      }
-      logger.error('画布媒体另存为失败', error, {
-        event: 'canvas.media_download.failed',
-        context: { nodeId: node.id, mediaType: downloadTarget.mediaType, mode: 'save_as' },
-      });
+    } catch {
+      showDownloadFailed();
     }
-  }, [closeDownloadMenu, downloadTarget, node.id]);
+  }, [closeDownloadMenu, downloadTargets, showBatchResult, showDownloadFailed]);
 
   const handleDownloadToDirectory = useCallback(async (
     targetDir: string,
     mode: DownloadDirectoryMode
   ): Promise<void> => {
-    if (!downloadTarget) {
-      return;
-    }
+    if (downloadTargets.length === 0) return;
 
     try {
-      logger.info('画布媒体下载到目录开始', {
-        event: 'canvas.media_download.start',
-        nodeId: node.id,
-        mediaType: downloadTarget.mediaType,
-        mode,
-      });
-      const savedPath = downloadTarget.mediaType === 'image'
-        ? await saveImageSourceToDirectory(
-          downloadTarget.source,
-          targetDir,
-          downloadTarget.suggestedFileName.replace(/\.png$/i, '')
-        )
-        : await quickDownloadMediaFile(
-          await resolveMediaFileSource(downloadTarget),
-          targetDir,
-          downloadTarget.suggestedFileName
-        );
-      logger.info('画布媒体下载到目录完成', {
-        event: 'canvas.media_download.completed',
-        nodeId: node.id,
-        mediaType: downloadTarget.mediaType,
-        mode,
-        savedPath,
-      });
+      const summary = await downloadCanvasMediaTargetsToDirectory(downloadTargets, targetDir, mode);
+      showBatchResult(summary);
       closeDownloadMenu();
-    } catch (error) {
-      logger.error('画布媒体下载到目录失败', error, {
-        event: 'canvas.media_download.failed',
-        context: { nodeId: node.id, mediaType: downloadTarget.mediaType, mode },
-      });
+    } catch {
+      showDownloadFailed();
     }
-  }, [closeDownloadMenu, downloadTarget, node.id]);
+  }, [closeDownloadMenu, downloadTargets, showBatchResult, showDownloadFailed]);
 
   const handleDownloadToPreset = useCallback(async (targetDir: string): Promise<void> => {
     await handleDownloadToDirectory(targetDir, 'preset');
@@ -256,7 +156,7 @@ export function useNodeDownload(
 
   const handleDownloadClick = useCallback((event: MouseEvent<HTMLElement>): void => {
     event.stopPropagation();
-    if (!downloadTarget) {
+    if (downloadTargets.length === 0) {
       return;
     }
     const quickDownloadSettings = readLocalStorageSettings(QUICK_DOWNLOAD_SETTING_SPECS);
@@ -273,13 +173,14 @@ export function useNodeDownload(
     setIsDownloadMenuVisible(false);
   }, [
     downloadPresetPaths.length,
-    downloadTarget,
+    downloadTargets,
     handleDownloadSaveAs,
     handleDownloadToDirectory,
   ]);
 
   return {
-    canDownload: Boolean(downloadTarget),
+    canDownload: downloadTargets.length > 0,
+    downloadCount: downloadTargets.length,
     downloadMenu,
     isDownloadMenuVisible,
     downloadMenuRef,
