@@ -36,7 +36,7 @@ describe('application capability handler coverage', () => {
       ...CAMERA_STAGE_APPLICATION_CAPABILITIES,
       ...TOOLBOX_APPLICATION_CAPABILITIES,
     ]
-    expect(migrated).toHaveLength(59)
+    expect(new Set(migrated.map((definition) => definition.id)).size).toBe(migrated.length)
     for (const definition of migrated) {
       expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(definition.id)).toBe(definition)
       expect(definition.permission).not.toBe('')

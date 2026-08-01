@@ -12,7 +12,9 @@ import type {
   CameraStageProjectPlatformSummary,
 } from '@/platform/contracts/cameraStageProjects'
 import { deserializeScene, serializeScene } from '../domain/sceneSerialization'
-import type { StageEditorMode } from '../domain/shotTypes'
+import type { StageSceneAnimation } from '../domain/animationTypes'
+import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
+import type { StageEditorMode, StageShot } from '../domain/shotTypes'
 import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import {
   CAMERA_STAGE_DEFAULT_PROJECT_NAME,
@@ -51,6 +53,19 @@ export interface CameraStageProjectDraft {
   name: string
   record: CameraStageProjectPlatformRecord
   fingerprint: string
+}
+
+export interface CameraStageProjectSnapshot {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  objects: StageObject[]
+  activeCameraId: string | null
+  animation: StageSceneAnimation
+  sceneSettings: StageSceneSettings
+  editorMode: StageEditorMode
+  shots: StageShot[]
 }
 
 function createDraftFingerprint(projectId: string, name: string, sceneJson: string): string {
@@ -224,6 +239,25 @@ export async function loadProjectIntoScene(
 
 export async function listProjects(): Promise<CameraStageProjectPlatformSummary[]> {
   return await listCameraStageProjectSummaries()
+}
+
+/** 读取持久化工程的完整领域快照；调用方不得解析 sceneJson 或复制兼容逻辑。 */
+export async function readProjectSnapshot(projectId: string): Promise<CameraStageProjectSnapshot | null> {
+  const record = await getCameraStageProjectRecord(projectId)
+  if (!record) return null
+  const snapshot = deserializeScene(record.sceneJson)
+  return {
+    id: record.id,
+    name: record.name,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    objects: snapshot.objects,
+    activeCameraId: snapshot.activeCameraId,
+    animation: snapshot.animation,
+    sceneSettings: snapshot.sceneSettings,
+    editorMode: snapshot.editorMode,
+    shots: snapshot.shots,
+  }
 }
 
 export async function renameProject(projectId: string, name: string): Promise<void> {

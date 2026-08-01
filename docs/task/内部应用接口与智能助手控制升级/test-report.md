@@ -1,5 +1,23 @@
 # 测试报告
 
+## 第四阶段（已完成）
+
+- 验证级别：L3。原因是本阶段跨越三维领域服务、持久状态、公共控制契约、助手能力、运行时导航和结构化验证。
+- 三维服务、反射、场景分析、运镜与视口观察首轮专项：5 个文件、33 项测试通过。
+- 控制注册、能力覆盖与 Surface 联动专项：3 个文件、12 项测试通过；严格反射注册 4 项、Surface 注册 5 项、设置控制回归均通过。
+- `npm run lint`：通过。
+- `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`：通过。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- `npx tsc -p tsconfig.electron.json --noEmit`：通过。
+- `npm run check:assistant-capabilities`：通过；覆盖门禁 4 项测试通过。
+- `npm run check:surface`：通过。
+- `npm run test:assistant-production`：通过；模型兼容 10 个文件/57 项、评测 43 个文件/243 项、结算 2 个文件/2 项、持久化 35 项全部通过。
+- `npm run test`：最终 173 个测试文件、801 项测试通过；8 个文件、36 项按环境跳过，无失败。
+- 全量测试曾暴露两项真实集成问题：控制注册表静态导入宿主存储、反射属性 ID 使用驼峰；均已修复并由最终全量测试覆盖。
+- 补充执行 `npx vitest related --run CameraStageApp.tsx CameraStageProjectList.tsx` 时，Vitest/Rollup 对 TSX 依赖给出 `const declarations must be initialized` 并在关闭时超时；该辅助扫描不作为产品失败，随后渲染 lint、TypeScript、Surface 门禁、生产评测和最终全量测试均通过。
+- 未执行 `npm run electron:build`：本阶段未修改 Electron IPC、preload、打包配置或原生依赖，L3 所需双端静态检查、生产评测与全量测试已覆盖本次风险。
+- 人工验收：全部集中到 `manual-test.md`，按用户要求在所有任务完成后执行。
+
 ## 第三阶段（已完成）
 
 ### 任务 3.1

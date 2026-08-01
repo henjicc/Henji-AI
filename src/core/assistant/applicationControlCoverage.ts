@@ -39,7 +39,7 @@ const domainPlans: Readonly<Record<string, DomainPlan>> = {
   image_edit: domainPlan('image_edit', '5.3', 'src/core/imageEdit 与 src/features/imageEdit/application/', ['image_edit.document', 'image_edit.operation'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts 与 builtinApplicationCapabilities.ts', 'application.observe', ['image_edit.preview', 'image_edit.commit'], 'operation'),
   assets: domainPlan('assets', '5.3', 'src/features/assets/store/assetLibraryStore.ts 待提取正式服务', ['asset', 'asset.library', 'asset.tag'], ['src/features/assets/'], 'assetApplicationCapabilities.ts', 'application.observe', ['asset.update', 'asset.delete'], 'operation'),
   canvas: domainPlan('canvas', '5.2', 'src/features/canvas/application/', ['canvas.project', 'canvas.node', 'canvas.edge'], ['src/features/canvas/domain/nodeRegistry.ts'], 'canvas*ApplicationCapabilities.ts', 'application.observe', ['application.plan', 'application.commit'], 'property'),
-  camera_stage: domainPlan('camera_stage', '4.1', 'src/features/cameraStage/projects 与待提取场景应用服务', ['camera_stage.project', 'camera_stage.object', 'camera_stage.shot'], ['src/features/cameraStage/domain/animatableProps.ts', 'src/features/cameraStage/domain/sceneTypes.ts'], 'cameraStageApplicationCapabilities.ts', 'application.observe', ['application.plan', 'camera_stage.operate'], 'operation'),
+  camera_stage: domainPlan('camera_stage', '4.1', 'src/features/cameraStage/application/ 与 projects/cameraStageProjectService.ts', ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe'], ['src/features/cameraStage/application/cameraStageReflection.ts', 'src/features/cameraStage/domain/animatableProps.ts'], 'cameraStage*ApplicationCapabilities.ts', 'observe_camera_stage_scene', ['application.plan', 'application.commit', 'place_camera_stage_object', 'apply_camera_stage_camera_move'], 'operation'),
   toolbox: domainPlan('toolbox', '5.3', 'src/stores/navigationStore.ts 与工具注册表', ['toolbox.tool'], ['src/features/imageEdit/tools/registry.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['toolbox.select'], 'operation'),
   storyboard: domainPlan('storyboard', '5.3', 'src/features/storyboard/ 与画布分镜应用层', ['storyboard.project', 'storyboard.frame'], ['src/features/canvas/domain/nodeRegistry.ts'], 'toolboxApplicationCapabilities.ts', 'application.observe', ['storyboard.update'], 'operation'),
   workflows: domainPlan('workflows', '5.4', 'electron/main/services/agent-runtime/workflows/', ['workflow.definition', 'workflow.run'], ['electron/main/services/agent-runtime/workflows/'], 'workflowApplicationCapabilities.ts', 'application.observe', ['workflow.plan', 'workflow.execute'], 'operation'),
@@ -59,10 +59,10 @@ const mergeTargets: Readonly<Record<string, readonly string[]>> = {
   plan_canvas_batch: ['application.plan'],
   preview_canvas_batch: ['application.plan'],
   commit_canvas_batch: ['application.commit'],
+  update_camera_stage_object: ['application.plan', 'application.commit'],
 }
 
 const deleteTargets: Readonly<Record<string, readonly string[]>> = {
-  update_camera_stage_object: ['application.plan', 'application.commit'],
   update_canvas_node: ['application.plan', 'application.commit'],
 }
 
@@ -87,7 +87,9 @@ function domainPlan(
     propertySources,
     operationSource,
     querySource: operationSource,
-    observationSource: '任务 6.5 的受控观察提供者；结构化状态由正式服务读取',
+    observationSource: domain === 'camera_stage'
+      ? 'camera_stage.viewport_observer 与 observe_camera_stage_scene；其他 Surface 在任务 6.5 推广'
+      : '任务 6.5 的受控观察提供者；结构化状态由正式服务读取',
     verificationSource: 'ApplicationCapabilityDefinition.successEvidence 与后续事务证据',
     surfaceIds: surfacesForDomain(domain),
     source: operationSource,
@@ -167,7 +169,7 @@ function surfaceObservation(surfaceId: string): ApplicationSurfaceObservationCov
   return {
     surfaceId,
     providerId: surfaceProvider(surfaceId),
-    implementationStatus: 'planned',
+    implementationStatus: surfaceId === 'tool.camera_stage' ? 'available' : 'planned',
     resultModalities: surfaceId === 'workspace.generation'
       ? ['image', 'video', 'audio']
       : ['image'],
@@ -175,7 +177,7 @@ function surfaceObservation(surfaceId: string): ApplicationSurfaceObservationCov
     captureScope: `仅限 Henji-AI 应用窗口内注册的 ${surfaceId} 区域。`,
     maskPolicyId: sensitive ? 'surface.mask_sensitive_fields' : 'surface.mask_declared_fields',
     verification: '提供者返回与请求 Surface ID 一致的稳定观察结果，并记录实际遮罩。',
-    migrationTask: '6.5',
+    migrationTask: surfaceId === 'tool.camera_stage' ? '4.4' : '6.5',
   }
 }
 

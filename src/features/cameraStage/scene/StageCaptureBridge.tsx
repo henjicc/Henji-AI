@@ -9,6 +9,7 @@ import {
 } from 'three'
 import type { Camera, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import { resolveCenteredCaptureView } from './captureFraming'
+import { registerCameraStageViewportCaptureProvider } from '../application/viewportObservation'
 
 /**
  * 截图桥：Canvas 内部注册两类捕获能力。
@@ -74,7 +75,12 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
 
     captureFrame.disposeOffscreen = disposeOffscreen
     captureRef.current = captureFrame
+    const unregisterObserver = registerCameraStageViewportCaptureProvider({
+      capture: () => captureFrame(),
+      dimensions: () => ({ width: gl.domElement.width, height: gl.domElement.height }),
+    })
     return () => {
+      unregisterObserver()
       captureRef.current = null
       disposeOffscreen()
     }

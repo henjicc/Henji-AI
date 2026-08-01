@@ -5,6 +5,9 @@ import type { WorkspaceId } from '@/core/types/workspace'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { closeAssetLibrary, openAssetLibrary, selectToolboxTool, switchWorkspace } from '@/stores/navigationStore'
 import { openSettingsPanel, useUiStore } from '@/stores/uiStore'
+import { cameraStageApplicationService } from '@/features/cameraStage/application/cameraStageApplicationService'
+import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
+import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 
 import {
   focusCanvasNodeFromAgent,
@@ -14,12 +17,15 @@ import { selectAssetFromAgent } from '../hostActions'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { CapabilityExecutionContext } from './handlerTypes'
 
-interface ApplicationSurfaceDefinition {
+export interface ApplicationSurfaceDefinition {
   id: string
   kind: 'workspace' | 'tool' | 'settings' | 'overlay'
   workspace?: WorkspaceId
   toolId?: 'cameraStage' | 'imageMark'
   settingsTarget?: SettingsNavigationTarget
+  acceptedRefKinds?: string[]
+  observationCapabilityId?: string
+  observationProviderId?: string
 }
 
 const surfaces: ApplicationSurfaceDefinition[] = [
@@ -28,7 +34,23 @@ const surfaces: ApplicationSurfaceDefinition[] = [
   { id: 'workspace.tools', kind: 'workspace', workspace: 'tools' },
   { id: 'workspace.assets', kind: 'workspace', workspace: 'assets' },
   { id: 'tool.image_edit', kind: 'tool', workspace: 'tools', toolId: 'imageMark' },
-  { id: 'tool.camera_stage', kind: 'tool', workspace: 'tools', toolId: 'cameraStage' },
+  {
+    id: 'tool.camera_stage',
+    kind: 'tool',
+    workspace: 'tools',
+    toolId: 'cameraStage',
+    acceptedRefKinds: [
+      'camera_stage.project',
+      'camera_stage.scene',
+      'camera_stage.object',
+      'camera_stage.camera',
+      'camera_stage.shot',
+      'camera_stage.trajectory',
+      'camera_stage.keyframe',
+    ],
+    observationCapabilityId: 'observe_camera_stage_viewport',
+    observationProviderId: 'camera_stage.viewport_observer',
+  },
   { id: 'settings.general', kind: 'settings', settingsTarget: { tab: 'general' } },
   { id: 'settings.general.basic', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-basic' } },
   { id: 'settings.storage', kind: 'settings', settingsTarget: { tab: 'general', sectionId: 'general-storage' } },
@@ -160,6 +182,28 @@ export async function focusApplicationEntity(
     const surface = openApplicationSurface('workspace.canvas', correlation)
     await focusCanvasNodeFromAgent(projectId, nodeId, signal)
     return { ref, ...surface }
+  }
+  if (ref.kind.startsWith('camera_stage.')) {
+    const separator = ref.id.indexOf(':')
+    if (ref.kind !== 'camera_stage.project' && ref.kind !== 'camera_stage.scene' && separator < 1) {
+      throw new Error('INVALID_INPUT')
+    }
+    const projectId = ref.kind === 'camera_stage.project' || ref.kind === 'camera_stage.scene'
+      ? ref.id
+      : ref.id.slice(0, separator)
+    if (!projectId) throw new Error('INVALID_INPUT')
+    await cameraStageApplicationService.openProject(projectId)
+    useCameraStageSessionStore.getState().setAppView('editor')
+    const childId = ref.kind === 'camera_stage.project' || ref.kind === 'camera_stage.scene'
+      ? null
+      : ref.id.slice(separator + 1)
+    if (childId && (ref.kind === 'camera_stage.object' || ref.kind === 'camera_stage.camera')) {
+      useCameraStageStore.getState().setSelected(childId)
+    }
+    if (childId && ref.kind === 'camera_stage.shot') {
+      useCameraStageStore.getState().selectShot(childId)
+    }
+    return { ref, ...openApplicationSurface('tool.camera_stage', correlation) }
   }
   throw new Error('INVALID_INPUT')
 }

@@ -2,15 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
 import { UiButton, UiEmpty, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton } from '@/components/ui'
 import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cameraStageProjects'
+import { cameraStageApplicationService } from '../application/cameraStageApplicationService'
 import type { StageEditorMode } from '../domain/shotTypes'
 import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
-import {
-  createNewProject,
-  deleteProject,
-  listProjects,
-  loadProjectIntoScene,
-  renameProject,
-} from './cameraStageProjectService'
 
 /**
  * 3D 镜头参考工程列表页：新建 / 打开 / 重命名 / 删除工程。
@@ -45,7 +39,7 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const refresh = useCallback(async (): Promise<void> => {
     setLoading(true)
     try {
-      setProjects(await listProjects())
+      setProjects(await cameraStageApplicationService.listProjects())
     } finally {
       setLoading(false)
     }
@@ -58,7 +52,10 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const handleCreate = useCallback(async (): Promise<void> => {
     setBusy(true)
     try {
-      await createNewProject(createName.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME, createMode)
+      await cameraStageApplicationService.createProject(
+        createName.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME,
+        createMode,
+      )
       setCreateDialogOpen(false)
       onEnterEditor()
     } finally {
@@ -70,10 +67,11 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
     async (projectId: string): Promise<void> => {
       setBusy(true)
       try {
-        const ok = await loadProjectIntoScene(projectId)
-        if (ok) {
+        try {
+          await cameraStageApplicationService.openProject(projectId)
           onEnterEditor()
-        } else {
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== 'NOT_FOUND') throw error
           await refresh()
         }
       } finally {
@@ -85,14 +83,14 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
 
   const submitRename = useCallback(async (): Promise<void> => {
     if (!renameTarget) return
-    await renameProject(renameTarget.id, renameValue)
+    await cameraStageApplicationService.renameProject(renameTarget.id, renameValue)
     setRenameTarget(null)
     await refresh()
   }, [renameTarget, renameValue, refresh])
 
   const submitDelete = useCallback(async (): Promise<void> => {
     if (!deleteTarget) return
-    await deleteProject(deleteTarget.id)
+    await cameraStageApplicationService.deleteProject(deleteTarget.id)
     setDeleteTarget(null)
     await refresh()
   }, [deleteTarget, refresh])

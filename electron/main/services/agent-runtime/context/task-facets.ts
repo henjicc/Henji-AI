@@ -132,6 +132,38 @@ function graph(goal: string, facets: AgentTaskFacet[]): AgentTaskGraph {
   })
 }
 
+function ensureEarlyCameraSurface(facets: AgentTaskFacet[]): AgentTaskFacet[] {
+  const cameraWrites = facets.filter((facet) => facet.domain === 'camera_stage'
+    && facet.capabilityKinds.some((kind) => kind === 'mutate' || kind === 'execute'))
+  if (cameraWrites.length === 0) return facets
+  const existingNavigation = facets.find((facet) => facet.targetSurfaceId === 'tool.camera_stage'
+    && facet.capabilityKinds.includes('navigate'))
+  const anchor = facets.find((facet) => facet.domain === 'camera_stage'
+    && facet.capabilityKinds.some((kind) => kind === 'query' || kind === 'plan'))
+  const navigation = existingNavigation ?? buildFacet({
+    facetId: 'show_camera_surface',
+    domain: 'navigation',
+    goal: '取得稳定三维工程引用后立即打开目标编辑器，让用户看到后续执行。',
+    observationKinds: ['current_surface'],
+    capabilityKinds: ['observe', 'navigate'],
+    targetSurfaceId: 'tool.camera_stage',
+    dependsOn: anchor ? [anchor.facetId] : [],
+    parallelizable: false,
+    completionConditions: ['宿主返回 surfaceId=tool.camera_stage，且工程引用与当前编辑器一致。'],
+  })
+  const navigationId = navigation.facetId
+  const normalized = facets.map((facet) => {
+    if (facet.facetId === navigationId) return {
+      ...facet,
+      dependsOn: anchor && facet.facetId !== anchor.facetId ? unique([...facet.dependsOn, anchor.facetId]) : facet.dependsOn,
+      parallelizable: false,
+    }
+    if (!cameraWrites.some((candidate) => candidate.facetId === facet.facetId) || facet.facetId === anchor?.facetId) return facet
+    return { ...facet, dependsOn: unique([...facet.dependsOn, navigationId]), parallelizable: false }
+  })
+  return existingNavigation ? normalized : [...normalized, navigation]
+}
+
 function inferNavigationSurface(goal: string, snapshot: HostContextSnapshot): string | null {
   if (/(?:3d|三维|镜头|运镜|摄像机)/i.test(goal)) return 'tool.camera_stage'
   if (/(?:画布|节点|连线)/i.test(goal)) return 'workspace.canvas'
@@ -183,6 +215,21 @@ export function createDeterministicTaskGraph(
       capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
       completionConditions: ['取得可用三维工程、摄像机和镜头的稳定引用与 revision。'],
     }))
+    const needsEarlySurface = hasSceneMutation || hasMotion || hasNavigation
+    if (needsEarlySurface) {
+      facets.push(buildFacet({
+        facetId: 'show_target_surface',
+        domain: 'navigation',
+        goal: '取得稳定工程引用后立即打开 3D 编辑器，让用户看到后续场景执行。',
+        observationKinds: ['current_surface'],
+        capabilityKinds: ['observe', 'navigate'],
+        targetSurfaceId: 'tool.camera_stage',
+        dependsOn: [projectFacetId],
+        parallelizable: false,
+        completionConditions: ['宿主返回实际打开的 tool.camera_stage Surface ID。'],
+      }))
+    }
+    const visualDependency = needsEarlySurface ? 'show_target_surface' : projectFacetId
     if (hasSceneMutation) {
       facets.push(buildFacet({
         facetId: 'camera_scene',
@@ -190,7 +237,7 @@ export function createDeterministicTaskGraph(
         goal: '按明确空间参数布置三维场景对象，避免对象重叠。',
         observationKinds: ['entity_state', 'entity_schema', 'operation_schema'],
         capabilityKinds: ['observe', 'plan', 'mutate'],
-        dependsOn: [projectFacetId],
+        dependsOn: [visualDependency],
         completionConditions: ['目标对象存在、空间参数可验证且没有无意重叠。'],
       }))
     }
@@ -201,12 +248,12 @@ export function createDeterministicTaskGraph(
         goal: '使用已注册的摄像机运镜或轨迹语义完成镜头运动。',
         observationKinds: ['entity_state', 'operation_schema'],
         capabilityKinds: ['observe', 'plan', 'execute'],
-        dependsOn: [hasSceneMutation ? 'camera_scene' : projectFacetId],
+        dependsOn: [hasSceneMutation ? 'camera_scene' : visualDependency],
         completionConditions: ['镜头轨迹或运镜参数已提交并可由场景状态验证。'],
       }))
     }
   }
-  if (hasNavigation) {
+  if (hasNavigation && !hasCamera) {
     facets.push(buildFacet({
       facetId: 'show_target_surface',
       domain: 'navigation',
@@ -250,7 +297,7 @@ export function createModelTaskGraph(input: {
       observationKinds: item.observationKinds,
       targetSurfaceId: item.targetSurfaceId ?? surfaceByDomain[item.domain] ?? null,
     }))
-  if (facets.length > 0) return graph(input.goal, facets)
+  if (facets.length > 0) return graph(input.goal, ensureEarlyCameraSurface(facets))
 
   const fallbackDomain = input.candidateDomains.find((domain) => domain !== 'catalog') ?? 'catalog'
   return graph(input.goal, [buildFacet({

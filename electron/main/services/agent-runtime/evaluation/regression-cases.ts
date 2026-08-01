@@ -361,7 +361,7 @@ export const LOOP_TERMINATION_EVALUATION_CASES: MinimalEvaluationCase[] = [
     goal: '在指定三维项目中只添加一个立方体；成功后不得用相同参数和 base revision 再创建。',
     expectedIntent: 'camera_stage',
     expectedTerminalStatuses: ['completed', 'failed'],
-    expectedTools: [{ toolName: 'add_camera_stage_object', minCalls: 1, maxCalls: 1 }],
+    expectedTools: [{ toolName: 'place_camera_stage_object', minCalls: 1, maxCalls: 1 }],
     forbiddenTools: ['duplicate_camera_stage_object'],
     successEvidence: ['objectId', 'resulting revision'],
     forbiddenBehaviors: ['相同写入重复执行', '把重复拦截描述成第二次成功'],

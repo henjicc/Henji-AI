@@ -120,14 +120,15 @@ describe('AgentIntentRouter', () => {
     })
     expect(result.toolDomains).toEqual(expect.arrayContaining(['toolbox', 'camera_stage', 'navigation', 'catalog']))
     expect(result.taskGraph?.facets.map((facet) => facet.facetId)).toEqual([
-      'camera_project', 'camera_scene', 'camera_motion', 'show_target_surface',
+      'camera_project', 'show_target_surface', 'camera_scene', 'camera_motion',
     ])
     expect(result.taskGraph?.dependencies).toEqual(expect.arrayContaining([
-      { fromFacetId: 'camera_project', toFacetId: 'camera_scene' },
+      { fromFacetId: 'camera_project', toFacetId: 'show_target_surface' },
+      { fromFacetId: 'show_target_surface', toFacetId: 'camera_scene' },
       { fromFacetId: 'camera_scene', toFacetId: 'camera_motion' },
     ]))
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'show_target_surface'))
-      .toMatchObject({ targetSurfaceId: 'tool.camera_stage', parallelizable: true })
+      .toMatchObject({ targetSurfaceId: 'tool.camera_stage', parallelizable: false })
     expect(classifier).not.toHaveBeenCalled()
   })
 

@@ -1,5 +1,57 @@
 # 变更文件记录
 
+## 第四阶段（已完成）
+
+### 任务 4.1
+
+- `src/features/cameraStage/application/cameraStageApplicationService.ts`
+- `src/features/cameraStage/application/cameraStageUndo.ts`
+- `src/features/cameraStage/application/cameraStageReflection.ts`
+- `src/features/cameraStage/application/cameraStageReflection.test.ts`
+- `src/features/assistant/applicationCapabilities/cameraStageCapabilityAdapter.ts`
+- `src/features/assistant/applicationCapabilities/applicationControlRegistry.ts`
+- `src/features/assistant/hostActions.ts`
+- `src/features/assistant/hostContext/hostContext.ts`
+- `src/features/cameraStage/CameraStageApp.tsx`
+- `src/features/cameraStage/projects/CameraStageProjectList.tsx`
+- `src/features/cameraStage/projects/cameraStageProjectService.ts`
+
+### 任务 4.2
+
+- `src/features/cameraStage/application/sceneAnalysis.ts`
+- `src/features/cameraStage/application/sceneAnalysis.test.ts`
+- `src/features/cameraStage/application/cameraStagePlacementExecutor.ts`
+- `src/core/assistant/capabilities/cameraStageCapabilitySchemas.ts`
+- `src/core/assistant/capabilities/cameraStageProjectApplicationCapabilities.ts`
+- `src/core/assistant/capabilities/cameraStageSceneApplicationCapabilities.ts`
+- `src/core/assistant/capabilities/cameraStageApplicationCapabilities.ts`
+
+### 任务 4.3
+
+- `src/features/cameraStage/application/cameraMotionService.ts`
+- `src/features/cameraStage/application/cameraMotionService.test.ts`
+- `src/features/cameraStage/application/cameraStageControlExecutors.ts`
+- `src/core/assistant/capabilities/cameraStageMotionApplicationCapabilities.ts`
+- `src/features/assistant/applicationCapabilities/registerToolboxCapabilityHandlers.ts`
+- `src/features/assistant/applicationCapabilities/registerToolboxCapabilityHandlers.test.ts`
+- `src/core/assistant/applicationControlCoverage.ts`
+- `src/core/assistant/applicationControlCoverage.test.ts`
+- `src/features/assistant/applicationCapabilities/registry.test.ts`
+
+### 任务 4.4
+
+- `src/features/cameraStage/application/viewportObservation.ts`
+- `src/features/cameraStage/application/viewportObservation.test.ts`
+- `src/features/cameraStage/application/cameraStageVerification.ts`
+- `src/features/cameraStage/scene/StageCaptureBridge.tsx`
+- `src/features/assistant/applicationCapabilities/surfaceRegistry.ts`
+- `src/features/assistant/applicationCapabilities/surfaceRegistry.test.ts`
+- `electron/main/services/agent-runtime/context/task-facets.ts`
+- `electron/main/services/agent-runtime/context/prompt-layers.ts`
+- `electron/main/services/agent-runtime/context/context.test.ts`
+- `electron/main/services/agent-runtime/evaluation/regression-cases.ts`
+- 第四阶段任务记录文件
+
 ## 第三阶段（已完成）
 
 ### 任务 3.1

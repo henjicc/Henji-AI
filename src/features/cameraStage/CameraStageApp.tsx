@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { cameraStageApplicationService } from './application/cameraStageApplicationService'
 import CameraStageEditor from './CameraStageEditor'
 import CameraStageErrorBoundary from './CameraStageErrorBoundary'
-import { loadProjectIntoScene } from './projects/cameraStageProjectService'
 import CameraStageProjectList from './projects/CameraStageProjectList'
 import { persistDirectorView } from './scene/directorViewState'
 import { useCameraStageSessionStore } from './store/cameraStageSessionStore'
@@ -44,7 +44,15 @@ const CameraStageAppInner: React.FC = () => {
 
       const currentProjectId = useCameraStageStore.getState().currentProjectId
       const shouldLoadProject = currentProjectId !== lastProjectId
-      const ok = shouldLoadProject ? await loadProjectIntoScene(lastProjectId) : true
+      let ok = true
+      if (shouldLoadProject) {
+        try {
+          await cameraStageApplicationService.openProject(lastProjectId)
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== 'NOT_FOUND') throw error
+          ok = false
+        }
+      }
       if (!ok) {
         setAppView('list')
         setLastProjectId(null)

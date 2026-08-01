@@ -12,6 +12,7 @@ import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
+import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import {
   isVisibleGenerationTaskHandlerReady,
   subscribeVisibleGenerationTaskChanges,
@@ -66,6 +67,20 @@ function startTracking(): () => void {
     }),
     useSettingsStore.subscribe((state, previous) => {
       if (state !== previous) bumpScope('settings')
+    }),
+    useCameraStageStore.subscribe((state, previous) => {
+      if (
+        state.currentProjectId !== previous.currentProjectId
+        || state.currentProjectName !== previous.currentProjectName
+        || state.objects !== previous.objects
+        || state.activeCameraId !== previous.activeCameraId
+        || state.animation !== previous.animation
+        || state.sceneSettings !== previous.sceneSettings
+        || state.editorMode !== previous.editorMode
+        || state.shots !== previous.shots
+      ) {
+        bumpScope('toolbox')
+      }
     }),
     useUiStore.subscribe((state, previous) => {
       if (

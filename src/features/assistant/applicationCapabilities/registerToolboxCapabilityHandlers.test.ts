@@ -2,23 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   hostActions: {
-    addCameraStageObjectFromAgent: vi.fn(),
-    addCameraStageShotFromAgent: vi.fn(),
     commitImageEditFromAgent: vi.fn(),
-    createCameraStageProjectFromAgent: vi.fn(),
-    deleteCameraStageObjectFromAgent: vi.fn(),
-    deleteCameraStageProjectFromAgent: vi.fn(),
-    duplicateCameraStageObjectFromAgent: vi.fn(),
-    getCameraStageProjectFromAgent: vi.fn(),
     getStoryboardProjectFromAgent: vi.fn(),
     getToolboxStateFromAgent: vi.fn(),
-    listCameraStageProjectsFromAgent: vi.fn(),
     listStoryboardProjectsFromAgent: vi.fn(),
     listToolboxToolsFromAgent: vi.fn(),
-    openCameraStageProjectFromAgent: vi.fn(),
-    renameCameraStageProjectFromAgent: vi.fn(),
-    updateCameraStageObjectFromAgent: vi.fn(),
-    updateCameraStageShotFromAgent: vi.fn(),
+  },
+  cameraAdapter: {
+    addCameraStageShot: vi.fn(),
+    applyCameraStageCameraMove: vi.fn(),
+    createCameraStageProject: vi.fn(),
+    deleteCameraStageObject: vi.fn(),
+    deleteCameraStageProject: vi.fn(),
+    duplicateCameraStageObject: vi.fn(),
+    getCameraStageProject: vi.fn(),
+    listCameraStageProjects: vi.fn(),
+    observeCameraStagePreview: vi.fn(),
+    observeCameraStageScene: vi.fn(),
+    openCameraStageProject: vi.fn(),
+    placeCameraStageObject: vi.fn(),
+    renameCameraStageProject: vi.fn(),
+    updateCameraStageObject: vi.fn(),
+    updateCameraStageShot: vi.fn(),
+    verifyCameraStage: vi.fn(),
   },
   selectToolboxTool: vi.fn(),
   openApplicationSurface: vi.fn(),
@@ -26,6 +32,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/features/assistant/hostActions', () => mocks.hostActions)
+vi.mock('./cameraStageCapabilityAdapter', () => mocks.cameraAdapter)
 vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectToolboxTool }))
 vi.mock('./surfaceRegistry', () => ({ openApplicationSurface: mocks.openApplicationSurface }))
 vi.mock('./generationCapabilities', () => ({
@@ -52,7 +59,7 @@ describe('toolbox capability handlers', () => {
   })
 
   it('打开 3D 工程成功后才进入已注册的 3D Surface', async () => {
-    mocks.hostActions.openCameraStageProjectFromAgent.mockResolvedValue({
+    mocks.cameraAdapter.openCameraStageProject.mockResolvedValue({
       projectId: 'project-1',
       name: '镜头工程',
       objectCount: 2,
@@ -62,16 +69,16 @@ describe('toolbox capability handlers', () => {
 
     const result = await handler?.({ projectId: 'project-1' }, context)
 
-    expect(mocks.hostActions.openCameraStageProjectFromAgent).toHaveBeenCalledWith('project-1')
+    expect(mocks.cameraAdapter.openCameraStageProject).toHaveBeenCalledWith('project-1')
     expect(mocks.openApplicationSurface).toHaveBeenCalledWith('tool.camera_stage', context)
     expect(result).toMatchObject({ projectId: 'project-1', surfaceId: 'tool.camera_stage' })
     expect(
-      mocks.hostActions.openCameraStageProjectFromAgent.mock.invocationCallOrder[0]
+      mocks.cameraAdapter.openCameraStageProject.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.openApplicationSurface.mock.invocationCallOrder[0])
   })
 
   it('3D 工程加载失败时不提前切换界面', async () => {
-    mocks.hostActions.openCameraStageProjectFromAgent.mockRejectedValue(new Error('NOT_FOUND'))
+    mocks.cameraAdapter.openCameraStageProject.mockRejectedValue(new Error('NOT_FOUND'))
     const handler = registeredHandlers().get('open_camera_stage_project')
 
     await expect(handler?.({ projectId: 'missing' }, context)).rejects.toThrow('NOT_FOUND')
@@ -79,7 +86,7 @@ describe('toolbox capability handlers', () => {
   })
 
   it('创建 3D 工程只返回稳定工程结果，不抢占当前界面', async () => {
-    mocks.hostActions.createCameraStageProjectFromAgent.mockResolvedValue({
+    mocks.cameraAdapter.createCameraStageProject.mockResolvedValue({
       projectId: 'project-created',
       name: '后台工程',
       mode: 'simple',
