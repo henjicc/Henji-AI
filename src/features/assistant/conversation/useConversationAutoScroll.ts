@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, type RefObject, type WheelEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+  type WheelEvent,
+} from 'react'
 
 const STICKY_BOTTOM_THRESHOLD = 32
 const REATTACH_BOTTOM_THRESHOLD = 4
@@ -16,15 +24,29 @@ export function distanceFromScrollBottom(metrics: ScrollMetrics): number {
 interface ConversationAutoScroll {
   viewportRef: RefObject<HTMLDivElement>
   contentRef: RefObject<HTMLDivElement>
+  isFollowing: boolean
+  hasNewContent: boolean
   onScroll: () => void
   onWheel: (event: WheelEvent<HTMLDivElement>) => void
+  onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void
+  scrollToBottom: () => void
 }
+
+const DETACH_KEYS = new Set(['ArrowUp', 'PageUp', 'Home'])
 
 export function useConversationAutoScroll(resetKey: string | null): ConversationAutoScroll {
   const viewportRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
   const frameRef = useRef<number | null>(null)
+  const [isFollowing, setIsFollowing] = useState(true)
+  const [hasNewContent, setHasNewContent] = useState(false)
+
+  const updateFollowing = useCallback((following: boolean): void => {
+    stickToBottomRef.current = following
+    setIsFollowing((current) => current === following ? current : following)
+    if (following) setHasNewContent(false)
+  }, [])
 
   const cancelScheduledScroll = useCallback((): void => {
     if (frameRef.current === null) return
@@ -42,22 +64,40 @@ export function useConversationAutoScroll(resetKey: string | null): Conversation
     })
   }, [])
 
+  const handleObservedResize = useCallback((entries: ResizeObserverEntry[]): void => {
+    if (stickToBottomRef.current) {
+      scheduleScrollToBottom()
+      return
+    }
+    if (entries.some((entry) => entry.target === contentRef.current)) setHasNewContent(true)
+  }, [scheduleScrollToBottom])
+
+  const scrollToBottom = useCallback((): void => {
+    updateFollowing(true)
+    cancelScheduledScroll()
+    const viewport = viewportRef.current
+    if (!viewport) return
+    viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+  }, [cancelScheduledScroll, updateFollowing])
+
   useEffect(() => {
-    stickToBottomRef.current = true
+    updateFollowing(true)
     scheduleScrollToBottom()
-  }, [resetKey, scheduleScrollToBottom])
+  }, [resetKey, scheduleScrollToBottom, updateFollowing])
 
   useEffect(() => {
     const content = contentRef.current
-    if (!content) return
-    const observer = new ResizeObserver(scheduleScrollToBottom)
+    const viewport = viewportRef.current
+    if (!content || !viewport) return
+    const observer = new ResizeObserver(handleObservedResize)
     observer.observe(content)
+    observer.observe(viewport)
     scheduleScrollToBottom()
     return () => {
       observer.disconnect()
       cancelScheduledScroll()
     }
-  }, [cancelScheduledScroll, scheduleScrollToBottom])
+  }, [cancelScheduledScroll, handleObservedResize, scheduleScrollToBottom])
 
   const onScroll = useCallback((): void => {
     const viewport = viewportRef.current
@@ -65,12 +105,25 @@ export function useConversationAutoScroll(resetKey: string | null): Conversation
     const threshold = stickToBottomRef.current
       ? STICKY_BOTTOM_THRESHOLD
       : REATTACH_BOTTOM_THRESHOLD
-    stickToBottomRef.current = distanceFromScrollBottom(viewport) <= threshold
-  }, [])
+    updateFollowing(distanceFromScrollBottom(viewport) <= threshold)
+  }, [updateFollowing])
 
   const onWheel = useCallback((event: WheelEvent<HTMLDivElement>): void => {
-    if (event.deltaY < 0) stickToBottomRef.current = false
-  }, [])
+    if (event.deltaY < 0) updateFollowing(false)
+  }, [updateFollowing])
 
-  return { viewportRef, contentRef, onScroll, onWheel }
+  const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>): void => {
+    if (DETACH_KEYS.has(event.key)) updateFollowing(false)
+  }, [updateFollowing])
+
+  return {
+    viewportRef,
+    contentRef,
+    isFollowing,
+    hasNewContent,
+    onScroll,
+    onWheel,
+    onKeyDown,
+    scrollToBottom,
+  }
 }

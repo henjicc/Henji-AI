@@ -1,5 +1,17 @@
 # 变更文件记录
 
+## 第六阶段开始
+
+- 任务记录：`00-任务总览.md`、`progress.md`、`decisions.md`、`handoff.md`、`changed-files.md`、`test-report.md`
+- 代码改动尚未开始；后续按 6.1 至 6.5 分任务追加真实文件范围。
+
+## 任务 6.1
+
+- `src/features/assistant/conversation/useConversationAutoScroll.ts`
+- `src/features/assistant/conversation/useConversationAutoScroll.test.tsx`
+- `src/features/assistant/conversation/AssistantConversation.tsx`
+- 第六阶段任务记录与统一手动测试清单
+
 ## 任务 5.4 与第五阶段完成
 
 - `src/features/generation/application/`：生成准备、模型 schemaRef、任务服务/状态镜像、恢复、反射与测试

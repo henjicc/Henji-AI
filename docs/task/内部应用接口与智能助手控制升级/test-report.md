@@ -1,5 +1,20 @@
 # 测试报告
 
+## 第六阶段开始
+
+- 预定验证级别：L3；本阶段将跨越助手 UI、共享运行契约、持久化、媒体、模型适配、Electron IPC/preload 与受限捕获安全边界。
+- 执行顺序：每个任务先跑精确测试和对应专项检查，阶段收尾再运行双端类型、双方 lint、模型/能力/UI 门禁、助手生产评测与全量 Vitest；真实鼠标和真实 API 不纳入自动测试。
+- 当前尚未执行代码验证。
+
+### 任务 6.1
+
+- 验证级别：L2；修改共享助手滚动/溢出机制与可访问性交互，但未跨越 Electron 边界。
+- `useConversationAutoScroll.test.tsx`：1 个文件、3 项通过，覆盖贴底、用户接管、异步内容增长、显式回底、键盘接管与新 run 重置。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- 三个改动文件定向 ESLint：通过。
+- `npm run check:surface`、`npm run check:colors`、`npm run check:icons`：通过。
+- 首轮新增用例暴露测试文件未清理 React 树导致重复测试节点，已补 `cleanup()` 后复跑通过；不是产品行为失败。
+
 ## 第五阶段（已完成）
 
 ### 任务 5.4 与阶段收尾

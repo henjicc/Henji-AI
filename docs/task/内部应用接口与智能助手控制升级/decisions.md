@@ -100,3 +100,16 @@
 - 确定性工作流业务服务迁出 Agent Runtime 到 `electron/main/services/application-control/workflows/`；Agent 工具保留为薄适配器，工作流输出统一提供 revision、等待/取消/恢复/重试能力和证据。
 - 助手 run 与 Artifact 反射只观察既有持久化状态和稳定引用；Artifact 内容继续由 `read_agent_artifact` 唯一分页入口读取，诊断继续使用既有日志查询能力。
 - 真实图片、视频和音频结果不得在自动测试中调用；通过 `generation.result`/Artifact 稳定引用交给 6.3 至 6.5 的多模态门禁与观察层。
+
+## 2026-08-02 · 第六阶段开始时继承的决定
+
+- 继续复用现有助手滚动 Hook、计划投影、事件流、运行持久化、Artifact 与媒体服务，不建立并行状态源或附件数据库。
+- `LlmCapabilities.image/video/audio` 是输入模态的唯一配置来源；primary、observer、router、summarizer 与 fallback 独立校验，媒体不得以字符串 URL 形式绕过门禁。
+- Surface 观察按“结构化状态 → 原生媒体/领域预览 → 受限区域截图”选择；捕获范围或遮罩失败时拒绝观察，不回退到全窗口或操作系统截图。
+- 第六阶段不新增供应商、生成模型、价格或模型参数 schema；模型适配工作只触及 Agent 角色能力和 provider 内容协议真实性校验。
+
+## 2026-08-02 · 助手滚动接管
+
+- 对话只有一个主要滚动节点；跟随状态继续由 `useConversationAutoScroll` 独占，不新增 Store 或第二个滚动 Hook。
+- 自动滚动只在贴近底部或新 run/新会话时生效；滚轮上翻、键盘上翻以及任何离底 scroll 都视为用户接管，异步内容增长只点亮新内容入口。
+- 自动跟随采用动画帧合并后的即时贴底，避免 token 流叠加平滑滚动队列造成抖动；用户通过显式入口恢复跟随。

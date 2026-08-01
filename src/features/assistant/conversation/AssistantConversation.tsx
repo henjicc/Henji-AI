@@ -1,6 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   AlertCircle,
+  ArrowDown,
   Bot,
   BrainCircuit,
   ChevronDown,
@@ -250,13 +251,17 @@ export function AssistantConversation(): JSX.Element {
   return (
     // 不自带底色：面板表面由 AssistantSidebar 统一提供，正文与顶栏、输入区同为一块连续表面
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div
-        ref={conversationScroll.viewportRef}
-        onScroll={conversationScroll.onScroll}
-        onWheel={conversationScroll.onWheel}
-        className="ui-scrollbar min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-4 [contain:layout_paint_style]"
-      >
-        <div ref={conversationScroll.contentRef} className="flex min-h-full min-w-0 flex-col gap-2">
+      <div className="relative flex min-h-0 min-w-0 w-full flex-1 overflow-hidden">
+        <div
+          ref={conversationScroll.viewportRef}
+          tabIndex={0}
+          aria-label="助手对话记录"
+          onScroll={conversationScroll.onScroll}
+          onWheel={conversationScroll.onWheel}
+          onKeyDown={conversationScroll.onKeyDown}
+          className="ui-scrollbar min-h-0 min-w-0 w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-4 outline-none focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-accent [contain:layout_paint_style]"
+        >
+          <div ref={conversationScroll.contentRef} className="flex min-h-full min-w-0 flex-col gap-2">
         {!runState && !currentGoal && historicalMessages.length === 0 && !transcript.loading ? (
           <UiEmpty
             className="min-h-full px-8"
@@ -479,7 +484,22 @@ export function AssistantConversation(): JSX.Element {
           </section>
         ) : null}
 
+          </div>
         </div>
+
+        {!conversationScroll.isFollowing ? (
+          <UiButton
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="absolute bottom-3 left-1/2 z-raised -translate-x-1/2 gap-1.5 shadow-panel"
+            onClick={conversationScroll.scrollToBottom}
+            aria-live="polite"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            {conversationScroll.hasNewContent ? '有新内容' : '回到底部'}
+          </UiButton>
+        ) : null}
       </div>
 
       <AssistantComposer

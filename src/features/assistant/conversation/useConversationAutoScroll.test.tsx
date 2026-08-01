@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -36,8 +36,14 @@ function ScrollHarness({ resetKey = 'run-1' }: { resetKey?: string }): JSX.Eleme
       data-testid="viewport"
       onScroll={scroll.onScroll}
       onWheel={scroll.onWheel}
+      onKeyDown={scroll.onKeyDown}
     >
       <div ref={scroll.contentRef} data-testid="content" />
+      {!scroll.isFollowing ? (
+        <button type="button" onClick={scroll.scrollToBottom}>
+          {scroll.hasNewContent ? '有新内容' : '回到底部'}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -70,6 +76,7 @@ describe('useConversationAutoScroll', () => {
   })
 
   afterEach(() => {
+    cleanup()
     vi.unstubAllGlobals()
   })
 
@@ -91,18 +98,38 @@ describe('useConversationAutoScroll', () => {
     fireEvent.scroll(viewport)
     Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 720 })
     act(() => {
-      resizeCallback([], {} as ResizeObserver)
+      resizeCallback([
+        { target: screen.getByTestId('content') } as unknown as ResizeObserverEntry,
+      ], {} as ResizeObserver)
       flushAnimationFrames()
     })
     expect(viewport.scrollTop).toBe(180)
+    expect(screen.getByRole('button', { name: '有新内容' })).toBeTruthy()
 
-    viewport.scrollTop = 520
-    fireEvent.scroll(viewport)
+    fireEvent.click(screen.getByRole('button', { name: '有新内容' }))
+    expect(viewport.scrollTop).toBe(520)
+    expect(screen.queryByRole('button')).toBeNull()
+
     Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 800 })
     act(() => {
       resizeCallback([], {} as ResizeObserver)
       flushAnimationFrames()
     })
     expect(viewport.scrollTop).toBe(600)
+  })
+
+  it('键盘上翻会接管，新运行恢复自动跟随', () => {
+    const view = render(<ScrollHarness />)
+    const viewport = screen.getByTestId('viewport')
+    setScrollMetrics(viewport, { scrollHeight: 600, clientHeight: 200, scrollTop: 400 })
+    act(() => flushAnimationFrames())
+
+    fireEvent.keyDown(viewport, { key: 'PageUp' })
+    expect(screen.getByRole('button', { name: '回到底部' })).toBeTruthy()
+
+    view.rerender(<ScrollHarness resetKey="run-2" />)
+    act(() => flushAnimationFrames())
+    expect(screen.queryByRole('button')).toBeNull()
+    expect(viewport.scrollTop).toBe(400)
   })
 })
