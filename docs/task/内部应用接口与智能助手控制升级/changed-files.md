@@ -1,5 +1,23 @@
 # 变更文件记录
 
+## 任务 5.3
+
+- `src/features/assets/application/` 正式素材服务、素材入画布组合服务、反射与测试
+- `src/features/imageEdit/application/` 控制 schema、文档构建、预览会话、提交、反射与测试
+- `src/features/imageEdit/tools/controlCatalog.ts`
+- `src/features/imageEdit/tools/registry.ts`、`types.ts`
+- `src/features/toolbox/application/` 正式工具箱服务与反射
+- `src/features/canvas/application/storyboardProjectService.ts`
+- `src/features/canvas/application/storyboardReflection.ts` 与测试
+- `src/features/assistant/applicationCapabilities/` 中素材、画布、工具箱、生成、Surface 适配与注册表
+- `src/core/assistant/applicationControlCoverage.ts`
+- `src/core/assistant/builtinApplicationCapabilities.ts`
+- `src/core/assistant/capabilities/toolboxApplicationCapabilities.ts`
+- 删除 `src/features/assistant/hostActions.ts`
+- 删除 `src/features/assistant/imageEditAdapter.ts` 与旧测试
+- 删除 `src/core/assistant/imageEditContracts.ts`
+- 第五阶段任务记录文件
+
 ## 任务 5.2
 
 - `src/features/canvas/application/canvasApplicationService.ts` 与测试

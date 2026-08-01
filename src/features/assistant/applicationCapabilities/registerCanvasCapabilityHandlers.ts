@@ -41,7 +41,7 @@ import {
   getCanvasProject,
   listCanvasProjectSummaries,
 } from '@/features/canvas/application/canvasQueryService'
-import { addAssetToCanvasFromAgent } from '@/features/assistant/hostActions'
+import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
 import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloadService'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
@@ -147,7 +147,7 @@ export function registerCanvasCapabilityHandlers(
       assetId: string
       placement: CanvasNodePlacement
     }>('add_asset_to_canvas', input)
-    return await addAssetToCanvasFromAgent(parsed)
+    return await addAssetToCanvas(parsed)
   })
 
   registrar.registerHandler('connect_canvas_nodes', (input, context) => {

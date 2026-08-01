@@ -1,8 +1,8 @@
 import {
   imageEditMarkItemSchema,
   imageEditOperationSchema,
-  type ImageEditOperation as AssistantImageEditOperation,
-} from '@/core/assistant/imageEditContracts';
+  type ImageEditControlOperation,
+} from './imageEditControlCatalog';
 import {
   createEmptyMarkDoc,
   createImageEditDocumentFromMarkDoc,
@@ -23,7 +23,7 @@ export interface AssistantImageEditSourceSize {
 }
 
 const ORIENTATION_OPERATIONS: Record<
-  Extract<AssistantImageEditOperation['kind'], 'rotate_cw' | 'rotate_ccw' | 'flip_h' | 'flip_v'>,
+  Extract<ImageEditControlOperation['kind'], 'rotate_cw' | 'rotate_ccw' | 'flip_h' | 'flip_v'>,
   OrientationOp
 > = {
   rotate_cw: 'rotate-cw',
@@ -33,9 +33,9 @@ const ORIENTATION_OPERATIONS: Record<
 };
 
 function isOrientationOperation(
-  operation: AssistantImageEditOperation
+  operation: ImageEditControlOperation
 ): operation is Extract<
-  AssistantImageEditOperation,
+  ImageEditControlOperation,
   { kind: 'rotate_cw' | 'rotate_ccw' | 'flip_h' | 'flip_v' }
 > {
   return operation.kind === 'rotate_cw'
@@ -44,7 +44,7 @@ function isOrientationOperation(
     || operation.kind === 'flip_v';
 }
 
-export function buildImageEditDocumentFromAssistantOperations(
+export function buildImageEditDocumentFromControlOperations(
   values: readonly unknown[],
   sourceSize: AssistantImageEditSourceSize,
   existingDocument?: ImageEditDocument

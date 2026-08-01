@@ -3,9 +3,9 @@
 ## 当前接力状态
 
 - 阶段：第五阶段 · 全领域能力迁移
-- 当前任务：5.3（待开始）
+- 当前任务：5.4（待开始）
 - 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3；第三阶段 3.1、3.2、3.3；第四阶段 4.1、4.2、4.3、4.4。
-- 待完成：依次完成 5.3、5.4 的全领域迁移。
+- 待完成：5.4 收口生成、模型、工作流与运行时操作。
 - 阻塞：无。
 
 ## 任务 5.1 接力
@@ -23,6 +23,15 @@
 - 项目、节点和边反射位于 `canvasReflection.ts`；节点标题与位置的原子写入、冲突和撤销由 `CanvasNodeMutationExecutor` 负责。
 - 节点控制 schema 唯一入口为 `src/features/canvas/domain/nodeControlRegistry.ts`，继续复用 `nodeRegistry` 的默认数据、端口和连接规则。
 - 所有 `agentCanvas*` 业务文件已移除；5.3 的素材入画布应直接调用 `addCanvasNode`。
+
+## 任务 5.3 接力
+
+- 状态：已完成；当前任务切换为 5.4。
+- 素材入口位于 `src/features/assets/application/`，公开响应移除本地路径；素材入画布在单独的领域组合服务中复用正式画布入口。
+- 图片编辑控制 schema、文档构建、预览会话、提交和反射位于 `src/features/imageEdit/application/`；提交失败保留预览，成功才删除。
+- 工具控制目录位于 `src/features/imageEdit/tools/controlCatalog.ts`，UI 工具注册表和控制面共同引用；工具箱正式服务/反射位于 `src/features/toolbox/application/`。
+- 分镜项目与卡片通过 `storyboardProjectService.ts` 和 `storyboardReflection.ts` 暴露；写入继续走画布分镜节点事务。
+- 助手 `hostActions.ts`、`imageEditAdapter.ts` 和核心助手 `imageEditContracts.ts` 已删除。
 
 ## 第四阶段开始状态
 

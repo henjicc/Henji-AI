@@ -33,4 +33,4 @@ export const imageEditOperationSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('mark'), item: imageEditMarkItemSchema }).strict(),
 ])
 
-export type ImageEditOperation = z.infer<typeof imageEditOperationSchema>
+export type ImageEditControlOperation = z.infer<typeof imageEditOperationSchema>

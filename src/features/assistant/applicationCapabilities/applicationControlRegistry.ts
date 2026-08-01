@@ -18,6 +18,10 @@ import {
 import { CameraStagePlacementOperationExecutor } from '@/features/cameraStage/application/cameraStagePlacementExecutor'
 import { createCanvasReflectionRegistrations } from '@/features/canvas/application/canvasReflection'
 import { CanvasNodeMutationExecutor } from '@/features/canvas/application/canvasMutationExecutor'
+import { createAssetReflectionRegistrations } from '@/features/assets/application/assetReflection'
+import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
+import { createStoryboardReflectionRegistrations } from '@/features/canvas/application/storyboardReflection'
+import { createToolboxReflectionRegistration } from '@/features/toolbox/application/toolboxReflection'
 
 let registry: ApplicationReflectionRegistry | undefined
 let executionEngine: ApplicationControlExecutionEngine | undefined
@@ -36,7 +40,11 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   if (!registry) {
     registry = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
     registry.register(createSettingsReflectionRegistration())
+    for (const registration of createAssetReflectionRegistrations()) registry.register(registration)
     for (const registration of createCanvasReflectionRegistrations()) registry.register(registration)
+    for (const registration of createStoryboardReflectionRegistrations()) registry.register(registration)
+    for (const registration of createImageEditReflectionRegistrations()) registry.register(registration)
+    registry.register(createToolboxReflectionRegistration())
     for (const registration of createCameraStageReflectionRegistrations(
       () => cameraStageDependencies.readRevision()
     )) {

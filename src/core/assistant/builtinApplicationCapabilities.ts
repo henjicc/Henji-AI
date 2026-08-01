@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { imageEditOperationSchema } from './imageEditContracts'
+import { imageEditOperationSchema } from '@/features/imageEdit/application/imageEditControlCatalog'
 import {
   applicationRefSchema,
   type ApplicationCapabilityDefinition,

@@ -44,7 +44,9 @@ vi.mock('@/features/canvas/application/canvasQueryService', () => ({
   getCanvasProject: vi.fn(),
   listCanvasProjectSummaries: vi.fn(),
 }))
-vi.mock('@/features/assistant/hostActions', () => ({ addAssetToCanvasFromAgent: vi.fn() }))
+vi.mock('@/features/assets/application/assetCanvasApplicationService', () => ({
+  addAssetToCanvas: vi.fn(),
+}))
 vi.mock('@/features/canvas/application/canvasDownloadService', () => ({
   downloadCanvasMedia: mocks.downloadCanvasMediaFromAgent,
 }))

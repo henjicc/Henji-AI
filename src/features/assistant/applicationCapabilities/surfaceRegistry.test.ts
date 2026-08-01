@@ -13,7 +13,9 @@ vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
   focusCanvasNode: mocks.focusCanvasNodeFromAgent,
   openCanvasProject: mocks.openCanvasProjectFromAgent,
 }))
-vi.mock('../hostActions', () => ({ selectAssetFromAgent: mocks.selectAssetFromAgent }))
+vi.mock('@/features/assets/application/assetApplicationService', () => ({
+  assetApplicationService: { select: mocks.selectAssetFromAgent },
+}))
 vi.mock('@/features/cameraStage/application/cameraStageApplicationService', () => ({
   cameraStageApplicationService: { openProject: mocks.openCameraStageProject },
 }))

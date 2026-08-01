@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ANNOTATION_DEFAULT_STROKE_HEX, ANNOTATION_DEFAULT_TEXT_HEX } from '@/core/theme/colorTokens';
 import { createEmptyImageEditDocument, createImageEditOperation, imageEditDocumentToMarkDoc, IMAGE_EDIT_OPERATION_IDS, upsertImageEditOperation } from '@/core/imageEdit';
-import { buildImageEditDocumentFromAssistantOperations } from './imageEditAdapter';
+import { buildImageEditDocumentFromControlOperations } from './imageEditDocumentBuilder';
 
 describe('智能助手图片编辑适配', () => {
   it('按操作顺序重映射标注、朝向和旋转后的裁剪空间', () => {
-    const document = buildImageEditDocumentFromAssistantOperations([
+    const document = buildImageEditDocumentFromControlOperations([
       {
         kind: 'mark',
         item: {
@@ -39,7 +39,7 @@ describe('智能助手图片编辑适配', () => {
       { type: 'number', x: 1, y: 2, color: ANNOTATION_DEFAULT_STROKE_HEX, fontSize: 12 },
       { type: 'mosaic', x: 1, y: 2, width: 3, height: 4, strengthPercent: 20, mode: 'blur' },
     ];
-    const document = buildImageEditDocumentFromAssistantOperations(
+    const document = buildImageEditDocumentFromControlOperations(
       items.map((item) => ({ kind: 'mark', item })),
       { width: 100, height: 100 }
     );
@@ -58,12 +58,12 @@ describe('智能助手图片编辑适配', () => {
   });
 
   it('拒绝旋转后越界裁剪和非 90 度倍数旋转', () => {
-    expect(() => buildImageEditDocumentFromAssistantOperations([
+    expect(() => buildImageEditDocumentFromControlOperations([
       { kind: 'rotate_cw', degrees: 90 },
       { kind: 'crop', crop: { x: 150, y: 0, width: 100, height: 100 } },
     ], { width: 400, height: 200 })).toThrow('INVALID_INPUT');
 
-    expect(() => buildImageEditDocumentFromAssistantOperations([
+    expect(() => buildImageEditDocumentFromControlOperations([
       { kind: 'rotate_cw', degrees: 45 },
     ], { width: 400, height: 200 })).toThrow();
   });
@@ -82,7 +82,7 @@ describe('智能助手图片编辑适配', () => {
       })
     );
     existing.operations.splice(2, 0, { id: 'future', operationId: 'image.future', enabled: true, params: { amount: 1 } });
-    const updated = buildImageEditDocumentFromAssistantOperations([
+    const updated = buildImageEditDocumentFromControlOperations([
       { kind: 'mark', item: { type: 'text', x: 2, y: 3, text: '保留', color: ANNOTATION_DEFAULT_TEXT_HEX, fontSize: 12 } },
     ], { width: 100, height: 100 }, existing);
 

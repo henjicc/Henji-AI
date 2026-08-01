@@ -12,7 +12,7 @@ import {
   openApplicationSurface as openSurface,
 } from '@/features/navigation/application'
 
-import { selectAssetFromAgent } from '../hostActions'
+import { assetApplicationService } from '@/features/assets/application/assetApplicationService'
 import type { CapabilityExecutionContext } from './handlerTypes'
 
 export type { ApplicationSurfaceDefinition } from '@/features/navigation/application'
@@ -45,7 +45,7 @@ export async function focusApplicationEntity(
     return { ref, ...openApplicationSurface('workspace.generation', correlation) }
   }
   if (ref.kind === 'asset') {
-    await selectAssetFromAgent(ref.id)
+    await assetApplicationService.select(ref.id)
     return { ref, ...openApplicationSurface('workspace.assets', correlation) }
   }
   if (ref.kind === 'canvas.project') {

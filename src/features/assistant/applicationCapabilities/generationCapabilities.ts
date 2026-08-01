@@ -7,7 +7,7 @@ import { offerImageEditorHandoff } from '@/features/imageEdit/store/imageEditorH
 import { databaseService } from '@/services/database'
 import { convertPathString, getDataRoot } from '@/utils/dataPath'
 
-import { createImageEditPreviewFromApplicationRef } from '../hostActions'
+import { createImageEditPreview } from '@/features/imageEdit/application/imageEditApplicationService'
 import type { CapabilityExecutionContext } from './handlerTypes'
 import { openApplicationSurface } from './surfaceRegistry'
 
@@ -220,11 +220,11 @@ export async function createImageEditPreviewFromRef(
     operationCount: input.operations.length,
   })
   const source = await resolveImageSource(input.sourceRef)
-  const preview = await createImageEditPreviewFromApplicationRef(
-    `${input.sourceRef.kind}:${input.sourceRef.id}`,
-    source.source,
-    input.operations
-  )
+  const preview = await createImageEditPreview({
+    sourceRef: `${input.sourceRef.kind}:${input.sourceRef.id}`,
+    source: source.source,
+    operations: input.operations,
+  })
   const document = parseImageEditDocument(preview.document)
   const sessionRef = openImageEditor(source, document)
   const surface = openApplicationSurface('tool.image_edit', correlation)

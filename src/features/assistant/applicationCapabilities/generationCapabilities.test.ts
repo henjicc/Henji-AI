@@ -7,7 +7,7 @@ const {
   readImageInfo,
   getDataRoot,
   convertPathString,
-  createImageEditPreviewFromApplicationRef,
+  createImageEditPreview,
 } = vi.hoisted(() => ({
   database: {
     init: vi.fn(async () => undefined),
@@ -19,7 +19,7 @@ const {
   readImageInfo: vi.fn(),
   getDataRoot: vi.fn(),
   convertPathString: vi.fn(),
-  createImageEditPreviewFromApplicationRef: vi.fn(),
+  createImageEditPreview: vi.fn(),
 }))
 
 vi.mock('@/services/database', () => ({ databaseService: database }))
@@ -29,8 +29,8 @@ vi.mock('@/features/imageEdit/store/imageEditorHandoffStore', () => ({
   offerImageEditorHandoff,
 }))
 vi.mock('@/commands/assetLibrary', () => ({ inspectAsset: vi.fn() }))
-vi.mock('../hostActions', () => ({
-  createImageEditPreviewFromApplicationRef,
+vi.mock('@/features/imageEdit/application/imageEditApplicationService', () => ({
+  createImageEditPreview,
 }))
 vi.mock('./surfaceRegistry', () => ({ openApplicationSurface }))
 
@@ -145,7 +145,7 @@ describe('generation application capabilities', () => {
   })
 
   it('创建标注预览时使用已还原的绝对路径', async () => {
-    createImageEditPreviewFromApplicationRef.mockResolvedValue({
+    createImageEditPreview.mockResolvedValue({
       previewRef: 'image-edit-preview:1',
       document: {
         version: 2,
@@ -162,10 +162,10 @@ describe('generation application capabilities', () => {
       operations: [{ type: 'rectangle' }],
     })
 
-    expect(createImageEditPreviewFromApplicationRef).toHaveBeenCalledWith(
-      'generation.result:history-1',
-      'C:/Henji-AI/Media/generated.png',
-      [{ type: 'rectangle' }]
-    )
+    expect(createImageEditPreview).toHaveBeenCalledWith({
+      sourceRef: 'generation.result:history-1',
+      source: 'C:/Henji-AI/Media/generated.png',
+      operations: [{ type: 'rectangle' }],
+    })
   })
 })

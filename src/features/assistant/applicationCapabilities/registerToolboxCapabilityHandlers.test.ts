@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  hostActions: {
-    commitImageEditFromAgent: vi.fn(),
-    getStoryboardProjectFromAgent: vi.fn(),
-    getToolboxStateFromAgent: vi.fn(),
-    listStoryboardProjectsFromAgent: vi.fn(),
-    listToolboxToolsFromAgent: vi.fn(),
-  },
+  commitImageEdit: vi.fn(),
+  getStoryboardProject: vi.fn(),
+  getToolboxState: vi.fn(),
+  listStoryboardProjects: vi.fn(),
+  listToolboxTools: vi.fn(),
   cameraAdapter: {
     addCameraStageShot: vi.fn(),
     applyCameraStageCameraMove: vi.fn(),
@@ -31,7 +29,17 @@ const mocks = vi.hoisted(() => ({
   createImageEditPreviewFromRef: vi.fn(),
 }))
 
-vi.mock('@/features/assistant/hostActions', () => mocks.hostActions)
+vi.mock('@/features/imageEdit/application/imageEditApplicationService', () => ({
+  commitImageEdit: mocks.commitImageEdit,
+}))
+vi.mock('@/features/canvas/application/storyboardProjectService', () => ({
+  getStoryboardProject: mocks.getStoryboardProject,
+  listStoryboardProjects: mocks.listStoryboardProjects,
+}))
+vi.mock('@/features/toolbox/application/toolboxApplicationService', () => ({
+  getToolboxState: mocks.getToolboxState,
+  listToolboxTools: mocks.listToolboxTools,
+}))
 vi.mock('./cameraStageCapabilityAdapter', () => mocks.cameraAdapter)
 vi.mock('@/stores/navigationStore', () => ({ selectToolboxTool: mocks.selectToolboxTool }))
 vi.mock('./surfaceRegistry', () => ({ openApplicationSurface: mocks.openApplicationSurface }))

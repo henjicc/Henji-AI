@@ -1,10 +1,6 @@
-import {
-  commitImageEditFromAgent,
-  getStoryboardProjectFromAgent,
-  getToolboxStateFromAgent,
-  listStoryboardProjectsFromAgent,
-  listToolboxToolsFromAgent,
-} from '@/features/assistant/hostActions'
+import { getStoryboardProject, listStoryboardProjects } from '@/features/canvas/application/storyboardProjectService'
+import { commitImageEdit } from '@/features/imageEdit/application/imageEditApplicationService'
+import { getToolboxState, listToolboxTools } from '@/features/toolbox/application/toolboxApplicationService'
 import { selectToolboxTool } from '@/stores/navigationStore'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
@@ -42,11 +38,11 @@ export function registerToolboxCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
   registrar.registerHandler('list_toolbox_tools', () => ({
-    tools: listToolboxToolsFromAgent(),
+    tools: listToolboxTools(),
   }))
 
   registrar.registerHandler('get_toolbox_state', () => ({
-    state: getToolboxStateFromAgent(),
+    state: getToolboxState(),
   }))
 
   registrar.registerHandler('select_toolbox_tool', (input, context) => {
@@ -206,15 +202,15 @@ export function registerToolboxCapabilityHandlers(
       previewRef: string
       displayName?: string
     }>('commit_image_edit', input)
-    return await commitImageEditFromAgent(parsed.previewRef, parsed.displayName)
+    return await commitImageEdit(parsed.previewRef, parsed.displayName)
   })
 
   registrar.registerHandler('list_storyboard_projects', async () => ({
-    projects: await listStoryboardProjectsFromAgent(),
+    projects: await listStoryboardProjects(),
   }))
 
   registrar.registerHandler('get_storyboard_project', async (input) => {
     const parsed = parseCapabilityInput<ProjectInput>('get_storyboard_project', input)
-    return { project: await getStoryboardProjectFromAgent(parsed.projectId) }
+    return { project: await getStoryboardProject(parsed.projectId) }
   })
 }

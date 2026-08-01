@@ -1,8 +1,8 @@
 import { ScanLine, Sparkles } from 'lucide-react';
-import { IMAGE_EDIT_OPERATION_IDS } from '@/core/imageEdit';
 import { GeometryInspector } from './geometry/GeometryInspector';
 import { DiffusionInspector } from './diffusion/DiffusionInspector';
 import type { ImageEditorToolDefinition } from './types';
+import { IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS } from './controlCatalog';
 
 export class ImageEditorToolRegistrationError extends Error {}
 
@@ -26,17 +26,18 @@ export class ImageEditorToolRegistry {
 }
 
 export const imageEditorToolRegistry = new ImageEditorToolRegistry();
+const geometry = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'geometry')!;
+const diffusion = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'diffusion')!;
+
 imageEditorToolRegistry.register({
-  id: 'geometry',
-  label: '几何',
-  operationId: IMAGE_EDIT_OPERATION_IDS.orientation,
+  ...geometry,
+  control: geometry,
   icon: ScanLine,
   inspector: GeometryInspector,
 });
 imageEditorToolRegistry.register({
-  id: 'diffusion',
-  label: '发光',
-  operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+  ...diffusion,
+  control: diffusion,
   icon: Sparkles,
   inspector: DiffusionInspector,
 });
