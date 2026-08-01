@@ -61,6 +61,9 @@ jobs:
       - name: ESLint（渲染层）
         run: npm run lint
 
+      - name: 智能助手应用能力门禁
+        run: npm run check:assistant-capabilities
+
       - name: ESLint（主进程）
         run: npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
 

@@ -1,5 +1,18 @@
 # 决策记录
 
+## 2026-08-02 · 最终能力目录与门禁
+
+- 迁移矩阵中的当前 ID 均是原生 `ApplicationCapabilityDefinition`，不再把它们误标为待合并/删除；真正的 HostCommand/HostQuery 文件和执行表已不存在。
+- 历史 `availableCommands/availableQueries` 仅允许在 `hostContracts.ts` 集中只读适配旧快照，输出立即归一为 `availableCapabilities`，禁止恢复旧调用。
+- 能力注册运行时强制 AI schema 封闭并拒绝任意 Patch/脚本字段；静态门禁覆盖旧符号、Store Patch、eval/Function/脚本、核心跨层导入、Surface 策略、技能同步和 CI 接入。
+- 覆盖清单继续从能力/设置/Surface/模型/工具/属性/节点真实注册表聚合，不新增 manifest 或 seeds 副本。
+
+## 2026-08-02 · 第七阶段清理原则
+
+- 只删除迁移矩阵已满足删除条件且确认无生产消费者的旧入口；历史日志/会话只读展示保留，但旧调用不能恢复执行。
+- 静态门禁从“没有旧 operation”扩展为注册表唯一性、反射/影响/验证、Surface 观察策略、模型模态链路和禁止绕过边界；不另建重复 manifest 真相源。
+- 两份项目技能保持字节级同步；详细 schema 示例继续放 reference，主技能只保留开发流程与硬门禁。
+
 ## 2026-08-02 · 全域视觉观察收口
 
 - 所有 Surface 在统一目录中声明观察提供者、策略、捕获范围、数据等级、遮罩、模态、尺寸预算与失效条件；覆盖清单中的 22 项均为 `available`。

@@ -1,5 +1,16 @@
 # 变更文件记录
 
+## 任务 7.1 完成
+
+- 门禁/CI：`scripts/check-assistant-capabilities.cjs`、`.github/workflows/build.yml`。
+- 核心契约/覆盖：`applicationCapabilities.ts` 及测试、`applicationControlCoverage.ts` 及测试、前端能力错误命名。
+- 规则/技能：`docs/rules/architecture.md`、`assistant-capability.md`，Codex/Claude 应用能力技能及 `capability-patterns.md`。
+- 7.1、总览、重要记录及五类阶段记录。
+
+## 任务 7.1 开始
+
+- 当前仅更新第七阶段、7.1 与五类必需记录；代码和删除清单待迁移矩阵/消费者审计后追加。
+
 ## 任务 6.5
 
 - Surface 契约与覆盖：`src/core/assistant/surfaceObservation.ts`、`applicationControlCoverage.ts` 及测试、`src/features/navigation/application/surfaceCatalog.ts` 及测试。

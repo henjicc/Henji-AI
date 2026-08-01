@@ -10,6 +10,8 @@ const forbidden = [
   { pattern: /createCompatibilityCapabilityDescriptor/, label: '能力兼容描述生成器' },
   { pattern: /hostCommandRegistry|hostQueryRegistry/, label: '固定宿主执行表' },
   { pattern: /HostCommandResult|hostCommandResultSchema/, label: '旧命令结果契约' },
+  { pattern: /RetryableHostCommandError|HostCommandError/, label: '旧命令错误命名' },
+  { pattern: /\bagentCanvas[A-Za-z0-9_]*/, label: '助手专用画布业务入口' },
   {
     pattern: /COMMAND_NOT_READY|COMMAND_REJECTED|UNKNOWN_COMMAND/,
     label: '旧命令错误码',
@@ -19,6 +21,18 @@ const forbidden = [
     label: 'v2 快照中的旧工具目录',
     allow: ['src/core/assistant/hostContracts.ts'],
   },
+]
+const protectedExecutionRoots = [
+  'src/core/application-control',
+  'src/core/assistant',
+  'src/features/assistant/applicationCapabilities',
+  'electron/main/services/agent-runtime',
+]
+const protectedExecutionForbidden = [
+  { pattern: /\beval\s*\(/, label: '任意 eval 执行' },
+  { pattern: /\bnew\s+Function\s*\(/, label: '任意 Function 执行' },
+  { pattern: /\bexecuteScript\s*:/, label: '任意脚本能力' },
+  { pattern: /\b(?:use[A-Za-z0-9]+Store|store)\.setState\s*\(/, label: '能力层直接 Store Patch' },
 ]
 const obsoleteFiles = [
   'src/features/assistant/frontendTools/hostCommandRegistry.ts',
@@ -58,6 +72,15 @@ function walk(directory) {
   })
 }
 
+function relativeFiles(directory, prefix = '') {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const relative = path.posix.join(prefix, entry.name)
+    const absolute = path.join(directory, entry.name)
+    if (entry.isDirectory()) return relativeFiles(absolute, relative)
+    return [relative]
+  })
+}
+
 const failures = []
 for (const relative of obsoleteFiles) {
   if (fs.existsSync(path.join(root, relative))) failures.push(`旧文件仍存在：${relative}`)
@@ -74,6 +97,43 @@ for (const sourceRoot of sourceRoots) {
         failures.push(`${rule.label}：${relative}`)
       }
     }
+  }
+}
+
+for (const protectedRoot of protectedExecutionRoots) {
+  for (const file of walk(path.join(root, protectedRoot))) {
+    if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue
+    const source = fs.readFileSync(file, 'utf8')
+    const relative = path.relative(root, file).replaceAll('\\', '/')
+    for (const rule of protectedExecutionForbidden) {
+      if (rule.pattern.test(source)) failures.push(`${rule.label}：${relative}`)
+    }
+  }
+}
+
+for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) {
+  if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue
+  const source = fs.readFileSync(file, 'utf8')
+  const relative = path.relative(root, file).replaceAll('\\', '/')
+  if (/from\s+['"]@\/(?:components|stores|features\/assistant)\//.test(source)) {
+    failures.push(`Application API 核心跨层导入：${relative}`)
+  }
+}
+
+const skillRoots = [
+  path.join(root, '.codex', 'skills', 'henji-application-capability'),
+  path.join(root, '.claude', 'skills', 'henji-application-capability'),
+]
+const skillFiles = skillRoots.map((directory) => relativeFiles(directory)
+  .filter((file) => file === 'SKILL.md' || file.startsWith('references/'))
+  .sort())
+if (JSON.stringify(skillFiles[0]) !== JSON.stringify(skillFiles[1])) {
+  failures.push('Codex/Claude 应用能力技能文件列表不同步')
+} else {
+  for (const relative of skillFiles[0]) {
+    const codex = fs.readFileSync(path.join(skillRoots[0], relative))
+    const claude = fs.readFileSync(path.join(skillRoots[1], relative))
+    if (!codex.equals(claude)) failures.push(`Codex/Claude 应用能力技能内容不同步：${relative}`)
   }
 }
 
@@ -103,6 +163,12 @@ const surfaceRegistrySource = fs.readFileSync(
   path.join(root, 'src', 'features', 'navigation', 'application', 'surfaceCatalog.ts'),
   'utf8'
 )
+for (const field of [
+  'observationCapabilityId', 'observationProviderId', 'observationPolicy', 'captureScope',
+  'dataClass', 'maskPolicyId', 'supportedModalities', 'maxEdge', 'invalidWhen',
+]) {
+  if (!surfaceRegistrySource.includes(field)) failures.push(`Surface 观察契约缺少字段：${field}`)
+}
 const settingsSectionBlock = settingsNavigationSource
   .split('export type SettingsSectionId =')[1]
   ?.split('/**')[0] ?? ''
@@ -114,10 +180,21 @@ for (const sectionId of settingsSectionIds) {
   }
 }
 
+const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+for (const scriptName of ['build', 'electron:build']) {
+  if (!packageJson.scripts?.[scriptName]?.includes('check:assistant-capabilities')) {
+    failures.push(`${scriptName} 未接入智能助手能力门禁`)
+  }
+}
+const ciSource = fs.readFileSync(path.join(root, '.github', 'workflows', 'build.yml'), 'utf8')
+if (!ciSource.includes('npm run check:assistant-capabilities')) {
+  failures.push('CI 未显式运行智能助手能力门禁')
+}
+
 if (failures.length > 0) {
   console.error('智能助手应用能力覆盖检查失败：')
   for (const failure of failures) console.error(`- ${failure}`)
   process.exit(1)
 }
 
-console.log('智能助手应用能力覆盖检查通过：生产代码仅使用原生 capability operation。')
+console.log('智能助手应用能力覆盖检查通过：原生能力、Application API 边界、Surface 观察与双端技能同步。')

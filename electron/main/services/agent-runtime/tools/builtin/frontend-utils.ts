@@ -21,7 +21,7 @@ export function requireFrontendSuccess(result: ApplicationCapabilityResult): Rec
   // 这里再次统一追加会让 list_generation_history 这类严格只读输出在网关校验时失败。
   if (result.ok) return result.data
   const error = new Error(`[${result.error.code}] ${result.error.message}`)
-  error.name = result.error.recoverable ? 'RetryableHostCommandError' : 'HostCommandError'
+  error.name = result.error.recoverable ? 'RetryableFrontendCapabilityError' : 'FrontendCapabilityError'
   throw error
 }
 

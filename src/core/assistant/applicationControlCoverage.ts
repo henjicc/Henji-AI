@@ -51,24 +51,6 @@ const domainPlans: Readonly<Record<string, DomainPlan>> = {
   catalog: runtimeDomainPlan('catalog', 'discover_application_capabilities'),
 }
 
-const mergeTargets: Readonly<Record<string, readonly string[]>> = {
-  get_current_application_context: ['application.observe'],
-  search_application_settings: ['application.describe'],
-  get_application_settings: ['application.observe'],
-  plan_application_settings_change: ['application.plan'],
-  apply_application_settings_change: ['application.commit'],
-  plan_canvas_batch: ['application.plan'],
-  preview_canvas_batch: ['application.plan'],
-  commit_canvas_batch: ['application.commit'],
-  update_camera_stage_object: ['application.plan', 'application.commit'],
-}
-
-const deleteTargets: Readonly<Record<string, readonly string[]>> = {
-  update_canvas_node: ['application.plan', 'application.commit'],
-}
-
-const retainedDomains = new Set(['artifacts', 'diagnostics', 'memory', 'user_instructions', 'catalog'])
-
 function domainPlan(
   domain: string,
   migrationTask: string,
@@ -132,24 +114,15 @@ function capabilityMigration(
 ): ApplicationCapabilityMigration {
   const plan = domainPlans[capability.domain]
   if (!plan) throw new Error(`应用控制覆盖缺少领域计划：${capability.domain}`)
-  const retained = retainedDomains.has(capability.domain)
-  const merge = mergeTargets[capability.id]
-  const remove = deleteTargets[capability.id]
-  const disposition = retained ? 'retain' : remove ? 'delete' : merge ? 'merge' : 'migrate'
-  const targetIds = retained
-    ? [capability.id]
-    : [...(remove ?? merge ?? (capability.readOnly ? [plan.readTargetId] : plan.writeTargetIds))]
   return {
     capabilityId: capability.id,
     domain: capability.domain,
     source: plan.source,
-    disposition,
-    targetIds,
-    targetKind: retained ? 'runtime' : plan.targetKind,
+    disposition: 'retain',
+    targetIds: [capability.id],
+    targetKind: plan.targetKind,
     migrationTask: plan.migrationTask,
-    deleteWhen: retained
-      ? '运行时基础能力保持唯一实现；7.1 仅复核元数据与门禁。'
-      : `任务 ${plan.migrationTask} 完成正式服务、目标入口和回归验证后删除旧能力 ID。`,
+    deleteWhen: '当前 ID 已是原生 ApplicationCapabilityDefinition，正式领域服务为唯一业务实现；旧 HostCommand/HostQuery 执行入口已删除。',
     verification: [...capability.successEvidence],
   }
 }

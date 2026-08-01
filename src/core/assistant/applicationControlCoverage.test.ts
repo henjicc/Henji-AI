@@ -73,6 +73,16 @@ describe('application control coverage', () => {
     const manifest = createManifest()
     expect(applicationControlCoverageManifestSchema.safeParse(manifest).success).toBe(true)
     expect(manifest.capabilityMigrations).toHaveLength(BUILTIN_APPLICATION_CAPABILITIES.length)
+    expect(manifest.capabilityMigrations.every((item) => item.disposition === 'retain')).toBe(true)
+    expect(manifest.capabilityMigrations.every((item) => item.targetIds.length === 1 && item.targetIds[0] === item.capabilityId)).toBe(true)
+    expect(new Set(manifest.domains.map((item) => item.domain)).size).toBe(manifest.domains.length)
+    expect(manifest.domains.every((item) => (
+      item.entityTypes.length > 0
+      && item.propertySources.length > 0
+      && item.operationSource.length > 0
+      && item.observationSource.length > 0
+      && item.verificationSource.length > 0
+    ))).toBe(true)
     expect(manifest.publicControls.filter((item) => item.kind === 'setting'))
       .toHaveLength(listApplicationSettingIds().length)
     expect(manifest.publicControls.filter((item) => item.kind === 'model'))

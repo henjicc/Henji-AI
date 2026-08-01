@@ -8,6 +8,8 @@
 
 所有向助手开放的功能必须以 `ApplicationCapabilityDefinition` 作为 schema、权限、风险、数据等级、引用、可用条件、并发规则、成功证据和失败恢复的唯一元数据源。
 
+AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patch`、`storePatch`、`executeScript`、`script`、`code` 等任意 Store Patch 或脚本执行字段；需要新增参数时先扩展正式领域 schema/注册表。
+
 ## 覆盖判断不可跳过
 
 每个用户可见的工作区、工具、设置项和数据模块，都必须：
@@ -24,6 +26,8 @@
 - 后台可完成的操作，不得为了复用页面组件而强制切换页面
 - 跨模块传递实体必须用 `ApplicationRef` 或 artifact 引用，**不得**向模型暴露原始密钥、本地路径或不受控的大对象
 - **不得**以"助手已判断"为理由绕过安全边界
+- **禁止**从能力处理器直接调用 Store `setState` 做任意 Patch；仅允许正式领域服务内部对已声明字段执行确定性状态提交
+- **禁止**在 Application API、能力定义或 Agent Runtime 增加 `eval`、`new Function` 或任意脚本执行入口
 
 ## 必须接入的现有机制
 
@@ -40,6 +44,8 @@ npm run check:assistant-capabilities
 ```
 
 `check:assistant-capabilities` 已接入 `build` 与 `electron:build` 链路，覆盖不全或残留旧通道会直接构建失败。
+
+CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执行入口、Application API 跨层导入、Surface 观察策略以及任意 Patch/脚本禁令。
 
 再按 [testing.md](testing.md) 运行本次能力登记、处理器或正式业务服务的精确/相关测试。`npm run test:assistant-production` 只用于同时影响 runner、状态机、调度、审批、持久化或模型适配等多个助手运行时模块的改动，以及生产验收/发布前检查；不要因普通能力登记或界面适配运行整套助手测试。
 

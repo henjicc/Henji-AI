@@ -109,6 +109,15 @@ export class ApplicationCapabilityRegistry {
     ) {
       throw new Error(`应用能力 schema 无效：${definition.id}`)
     }
+    if (aiInputSchema.additionalProperties !== false) {
+      throw new Error(`应用能力 AI schema 必须拒绝未声明字段：${definition.id}`)
+    }
+    const properties = aiInputSchema.properties
+    if (properties && typeof properties === 'object') {
+      const forbiddenInputs = ['patch', 'storePatch', 'executeScript', 'script', 'code']
+      const forbidden = forbiddenInputs.find((key) => key in properties)
+      if (forbidden) throw new Error(`应用能力禁止任意 Patch 或脚本输入：${definition.id}.${forbidden}`)
+    }
     const current = this.definitions.get(definition.id)
     if (current) {
       const reason = current.version === definition.version ? '重复 ID' : '版本冲突'

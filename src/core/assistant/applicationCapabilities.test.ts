@@ -60,6 +60,22 @@ describe('ApplicationCapabilityRegistry', () => {
     expect(() => new ApplicationCapabilityRegistry().register(missingEvidence)).toThrow()
   })
 
+  it('拒绝开放额外字段、任意 Store Patch 和脚本执行输入', () => {
+    const registry = new ApplicationCapabilityRegistry()
+    expect(() => registry.register({
+      ...capability('open_input'),
+      aiInputSchema: { type: 'object', properties: {} },
+    })).toThrow('拒绝未声明字段')
+    for (const field of ['patch', 'storePatch', 'executeScript', 'script', 'code']) {
+      expect(() => registry.register({
+        ...capability(`unsafe_${field.toLowerCase()}`),
+        aiInputSchema: {
+          type: 'object', properties: { [field]: { type: 'string' } }, additionalProperties: false,
+        },
+      })).toThrow('禁止任意 Patch 或脚本输入')
+    }
+  })
+
   it('内建能力都有合法描述且 ID 唯一', () => {
     const descriptors = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.descriptors()
     expect(descriptors.length).toBeGreaterThanOrEqual(10)
@@ -67,6 +83,8 @@ describe('ApplicationCapabilityRegistry', () => {
     for (const descriptor of descriptors) {
       expect(applicationCapabilityDescriptorSchema.safeParse(descriptor).success).toBe(true)
       expect(descriptor.successEvidence.length).toBeGreaterThan(0)
+      expect(descriptor.permission).not.toBe('')
+      expect(descriptor.failureRecovery.length).toBeGreaterThan(0)
     }
   })
 

@@ -3,10 +3,23 @@
 ## 当前接力状态
 
 - 阶段：第七阶段 · 规则收口与整体验收
-- 当前任务：7.1（待开始）
+- 当前任务：7.2（待开始）
 - 已完成：第一至第五阶段全部任务（1.1 至 5.4）。
 - 待完成：7.1、7.2；第六阶段全部完成。
 - 阻塞：无。
+
+## 任务 7.1 完成接力
+
+- `scripts/check-assistant-capabilities.cjs` 已成为最终静态门禁，检查原生能力、旧入口、Application API 边界、Surface 观察、双端技能同步和 build/CI 接入。
+- `ApplicationCapabilityRegistry` 会拒绝开放 `additionalProperties` 以及 `patch/storePatch/executeScript/script/code` 输入。
+- 迁移矩阵对当前原生能力全部标记 `retain`，旧 v1 快照只读适配仍由 `hostContracts.test.ts` 保护。
+- 7.2 不再修改能力架构，重点是既有评测资产、固定效率阈值、全量检查、兼容验收和最终人工清单。
+
+## 任务 7.1 开始接力
+
+- 先运行迁移矩阵与源码审计，再决定删除清单；不得把历史只读契约误删为执行兼容。
+- 扩展现有 `check-assistant-capabilities`/应用控制覆盖门禁，不创建第三套能力 manifest。
+- Codex/Claude 两份 `henji-application-capability` 技能及 references 必须同步。
 
 ## 第六阶段完成接力
 

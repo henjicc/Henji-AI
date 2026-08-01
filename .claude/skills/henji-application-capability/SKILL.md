@@ -21,6 +21,7 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 - 在 `src/core/assistant/` 的领域能力模块中声明 `ApplicationCapabilityDefinition`，并注册到统一目录。
 - 使用稳定、小写的能力 ID；版本从 1 开始，破坏性契约变化才升级版本。
 - 完整声明输入/输出 schema、AI 输入 schema、领域、别名、读写属性、风险、数据等级、权限、超时、幂等、撤销、预览、作用域、可用条件、前置能力、并发键、引用类型、成功证据和失败恢复。
+- AI 输入 schema 顶层必须 `additionalProperties: false`，禁止开放 `patch`、`storePatch`、`executeScript`、`script`、`code` 等任意 Store Patch 或脚本入口。
 - 用户化描述只说明用途和影响，不写协议名、schema、revision、风险编号或开发解释。
 - 输入和输出优先传 `ApplicationRef`；禁止传原始密钥、本地路径或不受控的大对象。
 - 写能力必须绑定相关 scope revision；未知副作用的写操作禁止自动重放。
@@ -52,6 +53,7 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 - 设置项及其读取、计划、提交能力。
 - 生成记录、素材、项目、节点等用户可查询数据。
 - 可在模块间传递的实体引用。
+- 公开实体、属性、语义操作、验证方式和 Surface 观察策略；漏登记必须由 `check:assistant-capabilities` 或覆盖测试阻断。
 
 不得因为“暂时没有助手需求”而省略覆盖判断。
 
@@ -80,4 +82,5 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 - 正式业务服务是唯一业务执行源。
 - 普通界面不显示开发性解释。
 - 新代码没有旧 command/query 兼容路径。
+- 新代码没有任意 Store Patch、任意脚本执行或 Application API 核心跨层导入。
 - 权限、revision、日志、引用和成功证据均有自动化验证。

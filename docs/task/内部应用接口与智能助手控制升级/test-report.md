@@ -1,5 +1,20 @@
 # 测试报告
 
+## 任务 7.1 完成
+
+- 验证级别：L3；规则、核心注册契约、覆盖清单、静态脚本与 CI 共同变化。
+- `npm run check:assistant-capabilities`：通过，含应用控制覆盖 4 项。
+- `applicationCapabilities.test.ts`、`applicationControlCoverage.test.ts`、`hostContracts.test.ts`：13 项通过。
+- `npm run lint`：通过。
+- `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`：通过。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- `npx tsc -p tsconfig.electron.json --noEmit`：通过。
+- 7.2 将执行全量 Vitest、助手生产评测、构建与必要 smoke，不在 7.1 重复。
+
+## 任务 7.1 开始
+
+- 计划验证级别：L3；先执行静态审计和门禁专项，再跑 lint、双端 TypeScript、能力检查、相关 Vitest 与 CI 等价检查。
+
 ## 任务 6.5 完成与第六阶段收尾
 
 - 验证级别：L3；涉及共享 Surface 契约、renderer/preload/IPC/主进程、媒体文件 I/O、Runner 模型回注、权限与敏感遮罩。

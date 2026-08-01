@@ -32,6 +32,27 @@
 | `successEvidence` | 写明可由输出或宿主状态确定性验证的事实 |
 | `failureRecovery` | 写明刷新、重读 schema、重新获取引用或请求澄清；禁止猜名称 |
 
+AI 输入 schema 还必须满足：
+
+- 顶层 `additionalProperties: false`，所有可执行参数均显式列出。
+- 不得出现 `patch`、`storePatch`、`executeScript`、`script`、`code` 等开放式控制字段。
+- 不得接受 Store 对象、组件状态、原始文件路径或任意键值对象来间接修改业务数据。
+- 需要扩展公开参数时，先扩展领域 schema/注册表，再由能力引用同一真相源。
+
+## 公共控制面覆盖
+
+新增用户可见功能时按真实注册源补齐：
+
+| 对象 | 必须覆盖 |
+|---|---|
+| 实体/属性 | 稳定 ID、schemaRef、权限、revision、正式反射提供者 |
+| 语义操作 | 输入/输出 schema、影响声明、风险、撤销/补偿、成功证据 |
+| Surface | 打开策略、稳定目标、观察提供者、捕获范围、数据等级、遮罩、模态与失效条件 |
+| 模型/媒体 | 唯一模态声明、provider 可表达性、primary/observer 路由、大小/时长/编码限制 |
+| 长任务 | 正式服务、等待/取消/恢复状态、Artifact 与结构化日志 |
+
+`ApplicationCapabilityDefinition`、反射注册表、领域注册表和 Surface 目录是唯一真相源；覆盖清单只聚合并验证，不复制第二份业务 schema。
+
 ## 查询、计划与提交
 
 复杂或批量写入使用三段式能力：
