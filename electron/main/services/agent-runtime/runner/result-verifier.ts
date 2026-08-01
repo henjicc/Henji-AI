@@ -119,6 +119,11 @@ export function buildRecoveryGuidance(
     if (['TIMEOUT', 'NOT_READY'].includes(failure.code)) {
       return `${observation.source.toolName} 返回 ${failure.code}：只读或幂等操作可有限重试；仍失败时说明等待条件。`
     }
+    if (failure.code === 'TOOL_NOT_ACTIVE') {
+      return failure.retryable && failure.recovery === 'refresh_context'
+        ? `${observation.source.toolName} 本轮未披露但已安排下一轮恢复：只在下一轮 schema 中出现后重试一次；若仍未出现则重新搜索能力或说明阻塞。`
+        : `${observation.source.toolName} 未在活动工具集合中：重新搜索能力并等待下一轮披露，禁止继续动态调用。`
+    }
     if (['NOT_FOUND', 'INVALID_INPUT'].includes(failure.code)) {
       return `${observation.source.toolName} 返回 ${failure.code}：重新读取目录/schema 并修正稳定 ID 或参数；目标仍不唯一时向用户提出一个具体问题。`
     }

@@ -24,6 +24,7 @@ interface ToolCallOutcome {
   observation: AgentToolObservation
   error: ReturnType<typeof serializeError> | null
   resultingRevisions: HostScopeRevisions | null
+  activationRecoveryQueued: boolean
 }
 
 export interface AgentToolCallSchedulerOptions {
@@ -141,6 +142,7 @@ export class AgentToolCallScheduler {
     explicitUserIntent: boolean,
     expectedRevisions: Partial<HostScopeRevisions>
   ): Promise<ToolCallOutcome> {
+    let activationRecoveryQueued = false
     this.options.recordToolCall(`${call.toolName}:${digestJson(call.input)}`)
     const metadata = this.options.registry.executionMetadata(call.toolName, call.input)
     this.options.emit({
@@ -156,19 +158,25 @@ export class AgentToolCallScheduler {
     this.options.emit({ type: 'ToolStarted', toolCallId: call.toolCallId, toolName: call.toolName })
     try {
       if (call.dynamic) {
+        activationRecoveryQueued = this.options.catalogPlanner.queueKnownToolForActivation(call.toolName)
         throw new AgentToolGatewayError(
           'TOOL_NOT_ACTIVE',
-          '拒绝执行动态工具调用；模型只能调用本轮冻结 schema 中的静态工具',
-          false,
-          'user_action'
+          activationRecoveryQueued
+            ? `工具 ${call.toolName} 本轮未披露，已安排下一轮重新披露；请仅在看到静态 schema 后重试一次`
+            : '拒绝执行动态工具调用；模型只能调用本轮冻结 schema 中的静态工具',
+          activationRecoveryQueued,
+          activationRecoveryQueued ? 'refresh_context' : 'user_action'
         )
       }
       if (!this.options.activeToolNames.has(call.toolName)) {
+        activationRecoveryQueued = this.options.catalogPlanner.queueKnownToolForActivation(call.toolName)
         throw new AgentToolGatewayError(
           'TOOL_NOT_ACTIVE',
-          `工具 ${call.toolName} 未在本轮冻结的活动集合中披露，请先搜索能力并在下一轮调用`,
+          activationRecoveryQueued
+            ? `工具 ${call.toolName} 未在本轮冻结集合中，已安排下一轮重新披露；请在下一轮重试一次`
+            : `工具 ${call.toolName} 未在本轮冻结的活动集合中披露，请先搜索能力并在下一轮调用`,
           true,
-          'user_action'
+          activationRecoveryQueued ? 'refresh_context' : 'user_action'
         )
       }
       const guardReason = this.options.executionGuard?.(call)
@@ -207,6 +215,7 @@ export class AgentToolCallScheduler {
               : rejectedObservation(call),
             error,
             resultingRevisions: null,
+            activationRecoveryQueued: false,
           }
         }
         result = await this.options.gateway.execute({
@@ -228,6 +237,7 @@ export class AgentToolCallScheduler {
         observation: result.observation,
         error: null,
         resultingRevisions: extractResultScopeRevisions(result.observation.output),
+        activationRecoveryQueued: false,
       }
     } catch (error) {
       this.options.throwIfCancelled()
@@ -237,6 +247,7 @@ export class AgentToolCallScheduler {
         observation: failedObservation(call, serialized),
         error: serialized,
         resultingRevisions: null,
+        activationRecoveryQueued,
       }
     }
   }
@@ -244,7 +255,12 @@ export class AgentToolCallScheduler {
   private recordOutcome(outcome: ToolCallOutcome): void {
     const metadata = this.options.registry.executionMetadata(outcome.call.toolName, outcome.call.input)
     this.options.onObservation(outcome.call, outcome.observation)
-    this.options.catalogPlanner.rememberObservation(outcome.call.toolName)
+    if (outcome.error?.code !== 'TOOL_NOT_ACTIVE' || outcome.activationRecoveryQueued) {
+      this.options.catalogPlanner.rememberObservation(
+        outcome.call.toolName,
+        outcome.error ? undefined : outcome.observation.output
+      )
+    }
     if (outcome.error) {
       this.options.emit({
         type: 'ToolFailed',
@@ -255,7 +271,7 @@ export class AgentToolCallScheduler {
         readOnly: metadata?.readOnly,
         idempotent: metadata?.idempotent,
       })
-      this.options.recordFailure?.()
+      if (!outcome.activationRecoveryQueued) this.options.recordFailure?.()
       return
     }
     const discovered = this.options.catalogPlanner.rememberDiscovered(

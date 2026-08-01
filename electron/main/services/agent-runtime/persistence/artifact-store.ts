@@ -67,10 +67,14 @@ function selectPayload(payload: unknown, fields: string[] | undefined): {
     throw new Error('[INVALID_INPUT] fields 只允许筛选 Artifact 顶层对象字段')
   }
   const record = payload as Record<string, unknown>
+  const availableFields = Object.keys(record).filter(Boolean).slice(0, 32)
   const selectedFields = [...new Set(fields)].sort((left, right) => left.localeCompare(right))
   for (const field of selectedFields) {
     if (!Object.prototype.hasOwnProperty.call(record, field)) {
-      throw new Error(`[INVALID_INPUT] Artifact 不包含顶层字段：${field}`)
+      const available = availableFields.length > 0
+        ? `。可用顶层字段：${availableFields.join('、')}`
+        : '。该 Artifact 没有可筛选的顶层字段，请省略 fields'
+      throw new Error(`[INVALID_INPUT] Artifact 不包含顶层字段：${field}${available}`)
     }
   }
   return {

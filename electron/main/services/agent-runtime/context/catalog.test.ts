@@ -165,4 +165,57 @@ describe('AgentToolCatalogPlanner', () => {
     expect([...activated]).toEqual(expect.arrayContaining(firstPage.map((entry) => entry.name)))
     expect(activated).toContain('get_canvas_project')
   })
+
+  it('分页未结束时固定读取工具，最后一页后释放固定状态', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    const readArtifact = registry.list(contextSnapshot())
+      .find((entry) => entry.name === 'read_agent_artifact')
+    expect(readArtifact).toBeDefined()
+    const discovered = [
+      ...(readArtifact ? [readArtifact] : []),
+      ...registry.list(contextSnapshot())
+        .filter((entry) => ![
+          'search_application_capabilities',
+          'read_agent_artifact',
+        ].includes(entry.name)),
+    ].slice(0, 20)
+    expect(discovered.length).toBeGreaterThan(AGENT_ACTIVE_TOOL_LIMIT)
+    expect(discovered.some((entry) => entry.name === 'read_agent_artifact')).toBe(true)
+    planner.restoreDiscovered(discovered.map((entry) => entry.name))
+
+    planner.rememberObservation('read_agent_artifact', {
+      hasMore: true,
+      nextCursor: 'v1:4096:0123456789abcdef',
+    })
+    for (let turn = 0; turn < 3; turn += 1) {
+      const activation = planner.select(primaryRoute, contextSnapshot())
+      expect(activation.activeToolNames).toContain('read_agent_artifact')
+      expect(activation.pinnedToolNames).toContain('read_agent_artifact')
+      expect(activation.droppedPinnedToolNames).not.toContain('read_agent_artifact')
+    }
+
+    planner.rememberObservation('read_agent_artifact', {
+      hasMore: false,
+      nextCursor: null,
+    })
+    expect(planner.select(primaryRoute, contextSnapshot()).pinnedToolNames)
+      .not.toContain('read_agent_artifact')
+  })
+
+  it('已发现但被挤出的工具可以排入下一轮优先恢复，未知工具不能借此激活', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    planner.restoreDiscovered(['read_agent_artifact'])
+
+    expect(planner.queueKnownToolForActivation('read_agent_artifact')).toBe(true)
+    expect(planner.queueKnownToolForActivation('create_visible_generation_task')).toBe(false)
+    const activation = planner.select(primaryRoute, contextSnapshot())
+    expect(activation.activeToolNames[0]).toBe('read_agent_artifact')
+    expect(activation.pinnedToolNames).toContain('read_agent_artifact')
+  })
 })

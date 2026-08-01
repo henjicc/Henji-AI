@@ -62,7 +62,7 @@ export const readAgentArtifactCapability = defineApplicationCapability({
   id: 'read_agent_artifact',
   version: 1,
   title: '读取助手产物',
-  description: '分页读取当前任务中已脱敏的大型结果。',
+  description: '分页读取当前任务中已脱敏的大型结果；有 nextCursor 时继续读取，不确定顶层字段时省略 fields。',
   domain: 'artifacts',
   aliases: ['读取大型结果', '继续读取产物', 'artifact'],
   side: 'backend',
@@ -81,12 +81,15 @@ export const readAgentArtifactCapability = defineApplicationCapability({
     cursor: z.string().min(1).max(200).optional(),
     limitBytes: z.number().int().min(256).max(AGENT_ARTIFACT_PAGE_MAX_BYTES)
       .default(AGENT_ARTIFACT_PAGE_MAX_BYTES),
-    fields: z.array(z.string().min(1).max(500)).min(1).max(32).optional(),
+    fields: z.array(z.string().min(1).max(500)).min(1).max(32).optional()
+      .describe('仅允许 Artifact 顶层对象字段；不确定可用字段时省略此参数读取默认内容。'),
   }).strict(),
   outputSchema: agentArtifactPageSchema,
   concurrencyKey: 'artifact:read',
   successEvidence: ['产物引用与当前任务匹配，返回内容已通过脱敏和分页校验。'],
-  failureRecovery: ['确认引用来自当前任务；引用失效时重新执行产生该引用的查询。'],
+  failureRecovery: [
+    '字段无效时只使用错误中列出的可用顶层字段，或省略 fields；引用失效时重新执行产生该引用的查询。',
+  ],
   resolveConcurrencyKey: (input) => `artifact:${input.artifactRef}`,
   resolveTargetIds: (input) => ({ artifactRef: input.artifactRef }),
   resolveDataClasses: (output) => output.dataClasses,

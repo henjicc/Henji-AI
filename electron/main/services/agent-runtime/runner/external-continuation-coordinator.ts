@@ -52,10 +52,19 @@ export class AgentExternalContinuationCoordinator {
     const registrations = query && !retained.some((item) => item.catalog.name === QUERY_TOOL)
       ? [...retained, query]
       : retained
+    const activeToolNames = registrations.map((item) => item.catalog.name)
+    const activeNameSet = new Set(activeToolNames)
+    const pinnedToolNames = activation.pinnedToolNames
+      .filter((name) => activeNameSet.has(name))
     return {
       ...activation,
       registrations,
-      activeToolNames: registrations.map((item) => item.catalog.name),
+      activeToolNames,
+      pinnedToolNames,
+      droppedPinnedToolNames: [...new Set([
+        ...activation.droppedPinnedToolNames,
+        ...activation.pinnedToolNames.filter((name) => !activeNameSet.has(name)),
+      ])],
     }
   }
 

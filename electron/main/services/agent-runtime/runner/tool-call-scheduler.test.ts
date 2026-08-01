@@ -44,7 +44,9 @@ function createScheduler(
   observations: AgentToolObservation[],
   events: AgentEventInput[],
   executionGuard?: (call: ModelStepToolCall) => string | null,
-  activeToolNames: ReadonlySet<string> = new Set(['read_test_resource', 'write_test_resource'])
+  activeToolNames: ReadonlySet<string> = new Set(['read_test_resource', 'write_test_resource']),
+  configurePlanner?: (planner: AgentToolCatalogPlanner) => void,
+  recordFailure?: () => void
 ): AgentToolCallScheduler {
   const registry = new AgentToolRegistry()
   registry.register(defineAgentTool({
@@ -110,6 +112,8 @@ function createScheduler(
     getHostContext: hostContext,
     appendPermissionAudit: async () => {},
   })
+  const catalogPlanner = new AgentToolCatalogPlanner(registry)
+  configurePlanner?.(catalogPlanner)
   return new AgentToolCallScheduler({
     runId: 'run-scheduler',
     threadId: 'thread-scheduler',
@@ -117,13 +121,14 @@ function createScheduler(
     supportsParallelTools: true,
     gateway,
     registry,
-    catalogPlanner: new AgentToolCatalogPlanner(registry),
+    catalogPlanner,
     activeToolNames,
     signal: new AbortController().signal,
     waitIfPaused: () => Promise.resolve(),
     throwIfCancelled: () => undefined,
     recordToolCall: () => undefined,
     recordProgress: () => undefined,
+    recordFailure,
     setActiveToolCall: () => undefined,
     requestApproval: () => Promise.reject(new Error('只读工具不应请求审批')),
     onObservation: (_call, observation) => observations.push(observation),
@@ -230,5 +235,29 @@ describe('AgentToolCallScheduler', () => {
     expect(observations.every((item) => (
       (item.output as { error?: { code?: string } }).error?.code === 'TOOL_NOT_ACTIVE'
     ))).toBe(true)
+  })
+
+  it('已发现工具被挤出时安排下一轮恢复，不计入连续执行失败', async () => {
+    let executions = 0
+    let failures = 0
+    const observations: AgentToolObservation[] = []
+    const events: AgentEventInput[] = []
+    const scheduler = createScheduler(async (id) => {
+      executions += 1
+      return { id }
+    }, observations, events, undefined, new Set(), (planner) => {
+      planner.restoreDiscovered(['read_test_resource'])
+    }, () => { failures += 1 })
+
+    await scheduler.execute([{ ...toolCall(1), dynamic: true }], true, {})
+
+    expect(executions).toBe(0)
+    expect(failures).toBe(0)
+    expect(observations[0]).toMatchObject({
+      output: {
+        ok: false,
+        error: { code: 'TOOL_NOT_ACTIVE', retryable: true, recovery: 'refresh_context' },
+      },
+    })
   })
 })

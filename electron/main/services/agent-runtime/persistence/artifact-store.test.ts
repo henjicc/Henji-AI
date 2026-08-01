@@ -100,7 +100,7 @@ describeWithElectronSqlite('AgentArtifactPersistenceStore', () => {
     expect(() => store.read(agentArtifactReadRequestSchema.parse({
       runId: 'run-1', threadId: 'thread-1', artifactRef: 'artifact:fields',
       fields: ['missing'],
-    }))).toThrow(/不包含顶层字段/)
+    }))).toThrow(/不包含顶层字段：missing。可用顶层字段：visible、omitted/)
   })
 
   it('拒绝跨 run、跨 thread、不存在引用与 C3 内容', () => {

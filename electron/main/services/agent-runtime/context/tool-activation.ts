@@ -11,6 +11,7 @@ const CURRENT_CONTEXT_TOOL = 'get_current_application_context'
 export interface AgentToolActivationInput {
   route: AgentRouteDecision
   context: HostContextSnapshot | null
+  pinnedToolNames: string[]
   discoveredToolNames: string[]
   recentToolNames: string[]
 }
@@ -20,6 +21,8 @@ export interface AgentToolActivationSnapshot {
   activeToolNames: string[]
   schemaBytes: number
   candidateCount: number
+  pinnedToolNames: string[]
+  droppedPinnedToolNames: string[]
   droppedForCount: string[]
   droppedForSchemaBudget: string[]
   unavailableNames: string[]
@@ -47,6 +50,7 @@ export function activateAgentTools(
     ? []
     : [CURRENT_CONTEXT_TOOL, CAPABILITY_SEARCH_TOOL]
   const candidates = unique([
+    ...input.pinnedToolNames,
     ...capabilitySearchNames,
     ...input.discoveredToolNames,
     ...directNames,
@@ -74,11 +78,18 @@ export function activateAgentTools(
     schemaBytes += bytes
   }
 
+  const activeToolNames = active.map((registration) => registration.catalog.name)
+  const activeNameSet = new Set(activeToolNames)
+  const availablePinnedToolNames = unique(input.pinnedToolNames)
+    .filter((name) => availableNames.has(name))
+
   return {
     registrations: active,
-    activeToolNames: active.map((registration) => registration.catalog.name),
+    activeToolNames,
     schemaBytes,
     candidateCount: availableCandidates.length,
+    pinnedToolNames: availablePinnedToolNames.filter((name) => activeNameSet.has(name)),
+    droppedPinnedToolNames: availablePinnedToolNames.filter((name) => !activeNameSet.has(name)),
     droppedForCount,
     droppedForSchemaBudget,
     unavailableNames,

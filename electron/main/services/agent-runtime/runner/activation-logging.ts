@@ -16,6 +16,8 @@ export function logAgentToolActivation(
       turn,
       snapshotRevision,
       activeToolNames: activation.activeToolNames,
+      pinnedToolNames: activation.pinnedToolNames,
+      droppedPinnedToolNames: activation.droppedPinnedToolNames,
       schemaBytes: activation.schemaBytes,
       candidateCount: activation.candidateCount,
       droppedForCount: activation.droppedForCount,
