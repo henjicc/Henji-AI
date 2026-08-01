@@ -10,6 +10,8 @@ import {
 } from 'ai'
 
 import {
+  assertModelStepInputCapabilities,
+  detectModelStepInputModalities,
   modelStepInputSchema,
   modelStepMessageSchema,
   modelStepResultSchema,
@@ -223,6 +225,8 @@ export async function executeModelStepWithModel(
   streamTrace?: ModelStepStreamTrace
 ): Promise<ModelStepResult> {
   const input = modelStepInputSchema.parse(rawInput)
+  assertModelStepInputCapabilities(input)
+  if (input.trace) input.trace.inputModalities = detectModelStepInputModalities(input.messages)
   const startedAt = Date.now()
   const settings = input.settings ?? {}
   const result = streamText({

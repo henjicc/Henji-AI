@@ -2,7 +2,11 @@ import type { LanguageModel } from 'ai'
 
 import type { AgentTraceHttpRequest, AgentTraceHttpResponse } from '../../../../../src/core/assistant/trace'
 import type { LlmApiProtocol } from '../../../../../src/core/llm/providerProtocol'
-import type { ModelStepInput } from '../../../../../src/core/llm/modelStep'
+import {
+  detectModelStepInputModalities,
+  type ModelInputModality,
+  type ModelStepInput,
+} from '../../../../../src/core/llm/modelStep'
 
 export interface ModelStepHttpTrace {
   captureHttp?: boolean
@@ -18,6 +22,7 @@ export interface ModelStepHttpTrace {
 
 export interface ModelStepProviderAdapter {
   protocol: LlmApiProtocol
+  supportedInputModalities: readonly ModelInputModality[]
   createLanguageModel: (
     input: ModelStepInput,
     apiKey: string,
@@ -39,6 +44,16 @@ export class ModelStepProviderAdapterRegistry {
     const adapter = this.adapters.get(protocol)
     if (!adapter) throw new Error(`[MODEL_PROTOCOL_UNSUPPORTED] 不支持的模型协议：${protocol}`)
     return adapter
+  }
+
+  assertInputModalities(protocol: LlmApiProtocol, input: Pick<ModelStepInput, 'messages'>): void {
+    const adapter = this.resolve(protocol)
+    const supported = new Set(adapter.supportedInputModalities)
+    for (const modality of detectModelStepInputModalities(input.messages)) {
+      if (!supported.has(modality)) {
+        throw new Error(`[unsupported_provider_modality] ${protocol} 协议当前无法安全表达 ${modality} 输入`)
+      }
+    }
   }
 }
 

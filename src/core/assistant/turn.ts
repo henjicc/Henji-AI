@@ -9,7 +9,7 @@ export const AGENT_PROJECTION_VERSION = 'agent-context-message/v1' as const
 export const AGENT_COMPACTION_VERSION = 'agent-semantic-summary/v2' as const
 
 const modelReferenceSchema = z.object({
-  role: z.enum(['primary', 'router', 'summarizer']),
+  role: z.enum(['primary', 'router', 'summarizer', 'observer']),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
   apiProtocol: z.string().min(1),
@@ -28,7 +28,7 @@ export const agentTurnSnapshotDraftSchema = z.object({
   turn: z.number().int().positive(),
   projectionVersion: z.literal(AGENT_PROJECTION_VERSION),
   compactionVersion: z.enum(['agent-semantic-summary/v1', AGENT_COMPACTION_VERSION]),
-  models: z.array(modelReferenceSchema).length(3),
+  models: z.array(modelReferenceSchema).min(3).max(4),
   tools: z.array(toolReferenceSchema).max(12),
   scopeRevisions: hostScopeRevisionsSchema,
   artifactRefs: z.array(z.string().min(1)).max(100),

@@ -57,7 +57,7 @@ export interface LlmModelConfig {
   enabled: boolean
 }
 
-export type AgentModelRole = 'primary' | 'router' | 'summarizer' | 'fallback'
+export type AgentModelRole = 'primary' | 'router' | 'summarizer' | 'fallback' | 'observer'
 
 export interface AgentModelReference {
   providerId: string
@@ -73,6 +73,7 @@ export interface AgentModelProfile {
   router?: AgentModelReference
   summarizer?: AgentModelReference
   fallback?: AgentModelReference
+  observer?: AgentModelReference
   settings: {
     timeoutMs: number
     maxRetries: number

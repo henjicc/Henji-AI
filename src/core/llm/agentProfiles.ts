@@ -12,6 +12,7 @@ export interface AgentModelProfileLike {
   router?: AgentModelReferenceLike
   summarizer?: AgentModelReferenceLike
   fallback?: AgentModelReferenceLike
+  observer?: AgentModelReferenceLike
   verifications: AgentModelVerificationLike[]
 }
 
@@ -23,10 +24,14 @@ export interface AgentModelConfigLike extends AgentModelReferenceLike {
     toolCall: boolean
     structuredOutputMode: 'none' | 'json' | 'schema'
     usage: boolean
+    image: boolean
+    video: boolean
+    audio: boolean
   }
 }
 
-export type AgentModelRoleLike = 'primary' | 'router' | 'summarizer' | 'fallback'
+export type AgentModelRoleLike = 'primary' | 'router' | 'summarizer' | 'fallback' | 'observer'
+export type AgentInputModality = 'image' | 'video' | 'audio'
 
 const REQUIRED_PRIMARY_CHECKS = ['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel'] as const
 
@@ -38,7 +43,31 @@ export function resolveAgentRoleReference(profile: AgentModelProfileLike, role: 
   if (role === 'primary') return profile.primary
   if (role === 'router') return profile.router ?? profile.primary
   if (role === 'summarizer') return profile.summarizer ?? profile.primary
-  return profile.fallback
+  if (role === 'fallback') return profile.fallback
+  return profile.observer
+}
+
+export interface AgentObservationModelSelectionResult {
+  reference: AgentModelReferenceLike
+  role: 'primary' | 'observer'
+  modality: AgentInputModality
+}
+
+export function selectAgentObservationModel(
+  profile: AgentModelProfileLike,
+  models: AgentModelConfigLike[],
+  modality: AgentInputModality
+): AgentObservationModelSelectionResult {
+  const execution = selectAgentExecutionModel(profile, models)
+  const primary = findModel(models, execution.reference)
+  if (primary?.capabilities[modality]) {
+    return { reference: execution.reference, role: 'primary', modality }
+  }
+  const observer = profile.observer ? findModel(models, profile.observer) : undefined
+  if (observer?.enabled && observer.capabilities[modality]) {
+    return { reference: profile.observer!, role: 'observer', modality }
+  }
+  throw new Error(`[agent_input_modality_unavailable] 当前执行模型不支持 ${modality}，且没有配置支持该模态的观察模型`)
 }
 
 export function findAgentModelVerification<TProfile extends AgentModelProfileLike>(

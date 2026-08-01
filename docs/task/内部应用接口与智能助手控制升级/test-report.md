@@ -24,6 +24,14 @@
 - `npm run check:surface`、`npm run check:colors`、`npm run check:icons`：通过。
 - 首轮测试发现澄清事件可能早于运行状态快照；已保留无状态时的实时问题展示，仅在明确离开 `waiting_user` 后隐藏旧澄清，复跑通过。
 
+### 任务 6.3
+
+- 验证级别：L3；修改共享模型契约、配置、Agent runner、供应商协议边界与设置界面。
+- 8 个专项测试文件、33 项通过，覆盖旧配置、观察模型、三模态选择、模型能力阻断、协议视频阻断、能力冒烟与 turn snapshot。
+- `npx tsc --noEmit --pretty false` 与 Electron TypeScript：通过。
+- 改动渲染文件定向 ESLint：通过。
+- `npm run check:surface`、`npm run check:colors`、`npm run check:icons`：通过。
+
 ## 第五阶段（已完成）
 
 ### 任务 5.4 与阶段收尾

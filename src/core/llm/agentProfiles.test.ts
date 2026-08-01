@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createDefaultAgentModelProfile, DEFAULT_LLM_CAPABILITIES } from './defaults'
-import { resolveAgentRoleReference, selectAgentExecutionModel } from './agentProfiles'
+import { resolveAgentRoleReference, selectAgentExecutionModel, selectAgentObservationModel } from './agentProfiles'
 import type { AgentModelCapabilityVerification, LlmModelConfig } from './types'
 
 function createVerification(providerId: string, modelId: string): AgentModelCapabilityVerification {
@@ -63,5 +63,32 @@ describe('Agent model profile', () => {
     const profile = createDefaultAgentModelProfile()
     expect(() => selectAgentExecutionModel(profile, [createModel(profile.primary.providerId, profile.primary.modelId, false)]))
       .toThrow('[agent_model_unavailable]')
+  })
+
+  it('主模型支持目标模态时直接观察，否则选择独立 observer', () => {
+    const primary = createModel('provider', 'primary')
+    const observer = {
+      ...createModel('provider', 'observer'),
+      capabilities: { ...createModel('provider', 'observer').capabilities, image: true },
+    }
+    const profile = {
+      ...createDefaultAgentModelProfile(),
+      primary: { providerId: 'provider', modelId: 'primary' },
+      observer: { providerId: 'provider', modelId: 'observer' },
+      verifications: [createVerification('provider', 'primary')],
+    }
+    expect(selectAgentObservationModel(profile, [primary, observer], 'image')).toMatchObject({
+      role: 'observer',
+      reference: profile.observer,
+    })
+    const visualPrimary = { ...primary, capabilities: { ...primary.capabilities, image: true } }
+    expect(selectAgentObservationModel(profile, [visualPrimary, observer], 'image').role).toBe('primary')
+  })
+
+  it('没有模型支持目标模态时主动阻断', () => {
+    const base = createDefaultAgentModelProfile()
+    const profile = { ...base, verifications: [createVerification(base.primary.providerId, base.primary.modelId)] }
+    expect(() => selectAgentObservationModel(profile, [createModel(base.primary.providerId, base.primary.modelId)], 'audio'))
+      .toThrow('[agent_input_modality_unavailable]')
   })
 })

@@ -110,6 +110,7 @@ function normalizeAgentProfile(profile: AgentModelProfile, fallback: AgentModelP
     router: normalizeAgentModelReference(profile.router),
     summarizer: normalizeAgentModelReference(profile.summarizer),
     fallback: normalizeAgentModelReference(profile.fallback),
+    observer: normalizeAgentModelReference(profile.observer),
     settings: {
       timeoutMs: Math.max(1_000, profile.settings?.timeoutMs ?? fallback.settings.timeoutMs),
       maxRetries: Math.min(5, Math.max(0, profile.settings?.maxRetries ?? fallback.settings.maxRetries)),

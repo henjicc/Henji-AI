@@ -65,8 +65,9 @@ describe('verifyModelCapabilities', () => {
     })
 
     expect(runModelStep).toHaveBeenCalledTimes(4)
-    expect(result.checks).toHaveLength(6)
-    expect(result.checks.every(check => check.status === 'passed')).toBe(true)
+    expect(result.checks).toHaveLength(9)
+    expect(result.checks.filter(check => !['image', 'video', 'audio'].includes(check.id)).every(check => check.status === 'passed')).toBe(true)
+    expect(result.checks.filter(check => ['image', 'video', 'audio'].includes(check.id)).every(check => check.status === 'skipped')).toBe(true)
     expect(result.usage).toMatchObject({ inputTokens: 6, outputTokens: 3, totalTokens: 9 })
     expect(result.cost).toEqual({ status: 'unknown' })
     expect(vi.mocked(runModelStep).mock.calls[2][0].capabilities.structuredOutputMode).toBe('json')

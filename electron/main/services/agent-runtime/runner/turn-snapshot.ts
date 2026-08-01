@@ -33,6 +33,14 @@ export function buildAgentTurnSnapshotDraft(input: BuildTurnSnapshotInput): Agen
     modelId: input.models[role].modelId,
     apiProtocol: input.models[role].apiProtocol ?? 'openai-compatible',
   })
+  const observer = input.models.observer
+    ? [{
+        role: 'observer' as const,
+        providerId: input.models.observer.providerId,
+        modelId: input.models.observer.modelId,
+        apiProtocol: input.models.observer.apiProtocol ?? 'openai-compatible',
+      }]
+    : []
   return agentTurnSnapshotDraftSchema.parse({
     version: AGENT_TURN_SNAPSHOT_VERSION,
     runId: input.runId,
@@ -40,7 +48,7 @@ export function buildAgentTurnSnapshotDraft(input: BuildTurnSnapshotInput): Agen
     turn: input.turn,
     projectionVersion: AGENT_PROJECTION_VERSION,
     compactionVersion: AGENT_COMPACTION_VERSION,
-    models: [model('primary'), model('router'), model('summarizer')],
+    models: [model('primary'), model('router'), model('summarizer'), ...observer],
     tools: input.registrations.map((registration) => ({
       name: registration.catalog.name,
       version: registration.catalog.version,

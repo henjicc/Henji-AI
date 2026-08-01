@@ -7,6 +7,9 @@ const testModel = {
   modelId: 'model',
   adapter: 'openai-compatible',
   capabilities: {
+    image: false,
+    video: false,
+    audio: false,
     streaming: true,
     toolCall: true,
     parallelTools: false,
@@ -37,6 +40,7 @@ describe('runPrimaryAgentModelStep', () => {
         modelId: 'model',
         adapter: 'openai-compatible',
         capabilities: {
+          image: false, video: false, audio: false,
           streaming: true,
           toolCall: true,
           parallelTools: false,
@@ -92,6 +96,7 @@ describe('runPrimaryAgentModelStep', () => {
         modelId: 'model',
         adapter: 'openai-compatible',
         capabilities: {
+          image: false, video: false, audio: false,
           streaming: true, toolCall: true, parallelTools: false,
           structuredOutputMode: 'json', reasoning: false, sampling: true, usage: true,
         },

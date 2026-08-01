@@ -13,6 +13,7 @@ const input = {
   messages: [{ role: 'user', content: '测试' }],
   output: { mode: 'text' },
   capabilities: {
+    image: false, video: false, audio: false,
     streaming: true, toolCall: true, parallelTools: false,
     structuredOutputMode: 'json', reasoning: false, sampling: true, usage: true,
   },

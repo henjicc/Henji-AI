@@ -10,6 +10,7 @@ function createInput(): ModelStepInput {
     messages: [{ role: 'user', content: '测试' }],
     output: { mode: 'text' },
     capabilities: {
+      image: false, video: false, audio: false,
       streaming: true, toolCall: true, parallelTools: true,
       structuredOutputMode: 'json', reasoning: true, sampling: true, usage: true,
     },

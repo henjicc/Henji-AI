@@ -1,13 +1,18 @@
 import { z } from 'zod'
 
-import { modelStepMessageSchema, modelStepToolCallSchema, modelStepUsageSchema } from '../llm/modelStep'
+import {
+  modelInputModalitySchema,
+  modelStepMessageSchema,
+  modelStepToolCallSchema,
+  modelStepUsageSchema,
+} from '../llm/modelStep'
 
 export const AGENT_TRACE_SCHEMA_VERSION = 'agent-trace/v1' as const
 
 export const agentTraceCaptureModeSchema = z.enum(['summary', 'detailed'])
 export type AgentTraceCaptureMode = z.infer<typeof agentTraceCaptureModeSchema>
 
-export const agentTraceStepKindSchema = z.enum(['router', 'primary', 'summarizer', 'fallback', 'other'])
+export const agentTraceStepKindSchema = z.enum(['router', 'primary', 'summarizer', 'fallback', 'observer', 'other'])
 export type AgentTraceStepKind = z.infer<typeof agentTraceStepKindSchema>
 
 export const agentTraceStatusSchema = z.enum(['running', 'completed', 'failed', 'cancelled', 'interrupted'])
@@ -35,6 +40,7 @@ export const agentTraceContextMetadataSchema = z.object({
   droppedLayers: z.array(z.string().min(1).max(100)).max(32).optional(),
   layerReports: z.array(agentTraceLayerReportSchema).max(32).optional(),
   activeToolNames: z.array(z.string().min(1).max(200)).max(64).optional(),
+  inputModalities: z.array(modelInputModalitySchema).max(3).optional(),
 }).strict()
 export type AgentTraceContextMetadata = z.infer<typeof agentTraceContextMetadataSchema>
 

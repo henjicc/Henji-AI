@@ -14,6 +14,9 @@ export const modelStepMessageSchema = z.discriminatedUnion('role', [
 export type ModelStepMessage = z.infer<typeof modelStepMessageSchema>
 
 export const modelStepCapabilitiesSchema = z.object({
+  image: z.boolean(),
+  video: z.boolean(),
+  audio: z.boolean(),
   streaming: z.boolean(),
   toolCall: z.boolean(),
   parallelTools: z.boolean(),
@@ -23,6 +26,41 @@ export const modelStepCapabilitiesSchema = z.object({
   usage: z.boolean(),
 })
 export type ModelStepCapabilities = z.infer<typeof modelStepCapabilitiesSchema>
+
+export const modelInputModalitySchema = z.enum(['image', 'video', 'audio'])
+export type ModelInputModality = z.infer<typeof modelInputModalitySchema>
+
+function detectPartModality(part: Record<string, unknown>): ModelInputModality | null {
+  if (part.type === 'image' || part.type === 'image_url') return 'image'
+  if (part.type === 'video' || part.type === 'video_url') return 'video'
+  if (part.type === 'input_audio') return 'audio'
+  const mediaType = typeof part.mediaType === 'string' ? part.mediaType : ''
+  if (part.type === 'file' && mediaType.startsWith('image/')) return 'image'
+  if (part.type === 'file' && mediaType.startsWith('video/')) return 'video'
+  if (part.type === 'file' && mediaType.startsWith('audio/')) return 'audio'
+  return null
+}
+
+/** 只记录输入包含的模态，不读取或复制媒体内容。 */
+export function detectModelStepInputModalities(messages: ModelStepMessage[]): ModelInputModality[] {
+  const modalities = new Set<ModelInputModality>()
+  for (const message of messages) {
+    if (!Array.isArray(message.content)) continue
+    for (const part of message.content) {
+      const modality = detectPartModality(part)
+      if (modality) modalities.add(modality)
+    }
+  }
+  return [...modalities]
+}
+
+export function assertModelStepInputCapabilities(input: Pick<ModelStepInput, 'messages' | 'capabilities'>): void {
+  for (const modality of detectModelStepInputModalities(input.messages)) {
+    if (!input.capabilities[modality]) {
+      throw new Error(`[unsupported_input_modality] 当前模型未声明支持 ${modality} 输入`)
+    }
+  }
+}
 
 export const modelStepToolSchema = z.object({
   name: z.string().min(1),
@@ -37,7 +75,8 @@ export type ModelStepTool = z.infer<typeof modelStepToolSchema>
  * 普通 LLM 调用可以省略该字段。
  */
 export const modelStepTraceMetadataSchema = z.object({
-  kind: z.enum(['router', 'primary', 'summarizer', 'fallback', 'other']),
+  kind: z.enum(['router', 'primary', 'summarizer', 'fallback', 'observer', 'other']),
+  inputModalities: z.array(modelInputModalitySchema).max(3).optional(),
   turn: z.number().int().positive().optional(),
   snapshotRevision: z.number().int().nonnegative().optional(),
   contextWindowBudget: z.number().int().positive().optional(),

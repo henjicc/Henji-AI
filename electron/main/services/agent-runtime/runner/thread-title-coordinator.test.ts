@@ -16,6 +16,9 @@ const model: AgentRuntimeModel = {
   modelId: 'summarizer',
   adapter: 'openai-compatible',
   capabilities: {
+    image: false,
+    video: false,
+    audio: false,
     streaming: true,
     toolCall: true,
     parallelTools: false,

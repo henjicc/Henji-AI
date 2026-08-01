@@ -31,6 +31,9 @@ function createInput(patch: Partial<ModelStepInput> = {}): ModelStepInput {
     messages: [{ role: 'user', content: '测试' }],
     output: { mode: 'text' },
     capabilities: {
+      image: false,
+      video: false,
+      audio: false,
       streaming: true,
       toolCall: true,
       parallelTools: false,
@@ -178,6 +181,9 @@ describe('executeModelStepWithModel', () => {
     })
     await executeModelStepWithModel(createInput({
       capabilities: {
+        image: false,
+        video: false,
+        audio: false,
         streaming: true,
         toolCall: false,
         parallelTools: false,
@@ -194,6 +200,16 @@ describe('executeModelStepWithModel', () => {
     expect(call.temperature).toBeUndefined()
     expect(call.topP).toBeUndefined()
     expect(call.responseFormat?.type).toBe('text')
+  })
+
+  it('模型未声明图片能力时在发起请求前阻断', async () => {
+    const model = new MockLanguageModelV3({
+      doStream: { stream: simulateReadableStream({ chunks: [] }) },
+    })
+    await expect(executeModelStepWithModel(createInput({
+      messages: [{ role: 'user', content: [{ type: 'image', image: 'https://example.com/a.png' }] }],
+    }), model, () => undefined, new AbortController().signal)).rejects.toThrow('[unsupported_input_modality]')
+    expect(model.doStreamCalls).toHaveLength(0)
   })
 })
 

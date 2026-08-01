@@ -6,6 +6,7 @@ import {
 } from '../../../../../src/core/llm/agentProfiles'
 import type { AgentStartRunRequest, AgentRuntimeModelConfig } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepCapabilities } from '../../../../../src/core/llm/modelStep'
+import type { AgentInputModality } from '../../../../../src/core/llm/agentProfiles'
 import type { LlmApiProtocol } from '../../../../../src/core/llm/providerProtocol'
 
 const DEFAULT_AGENT_PROFILE_ID = 'default-agent'
@@ -50,6 +51,9 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
     apiProtocol: model.apiProtocol ?? 'openai-compatible',
     baseUrl: model.baseUrl,
     capabilities: {
+      image: model.capabilities.image,
+      video: model.capabilities.video,
+      audio: model.capabilities.audio,
       streaming: model.capabilities.streaming,
       toolCall: model.capabilities.toolCall,
       parallelTools: model.capabilities.parallelTools,
@@ -82,7 +86,24 @@ export interface AgentRuntimeModelSet {
   primary: AgentRuntimeModel
   router: AgentRuntimeModel
   summarizer: AgentRuntimeModel
+  observer?: AgentRuntimeModel
   fellBack: boolean
+}
+
+function selectObserver(request: AgentStartRunRequest): AgentRuntimeModel | undefined {
+  const reference = resolveAgentRoleReference(request.profile, 'observer')
+  if (!reference) return undefined
+  const model = findModel(request.models, reference)
+  return model?.enabled ? toRuntimeModel(request, model) : undefined
+}
+
+export function selectAgentObservationRuntimeModel(
+  models: AgentRuntimeModelSet,
+  modality: AgentInputModality
+): { model: AgentRuntimeModel; role: 'primary' | 'observer' } {
+  if (models.primary.capabilities[modality]) return { model: models.primary, role: 'primary' }
+  if (models.observer?.capabilities[modality]) return { model: models.observer, role: 'observer' }
+  throw new Error(`[agent_input_modality_unavailable] 当前执行模型不支持 ${modality}，且没有配置支持该模态的观察模型`)
 }
 
 function selectOptionalRole(
@@ -106,6 +127,7 @@ export function selectAgentRuntimeModels(request: AgentStartRunRequest): AgentRu
     primary,
     router: selectOptionalRole(request, 'router', primary),
     summarizer: selectOptionalRole(request, 'summarizer', primary),
+    observer: selectObserver(request),
     fellBack: selected.fellBack,
   }
 }

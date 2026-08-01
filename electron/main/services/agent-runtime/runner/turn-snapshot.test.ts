@@ -8,7 +8,7 @@ describe('turn snapshot', () => {
   it('冻结模型、工具与 revision 且不含凭据', () => {
     const model = {
       providerId: 'provider', modelId: 'model', adapter: 'openai-compatible',
-      capabilities: { streaming: true, toolCall: true, parallelTools: false, structuredOutputMode: 'json', reasoning: false, sampling: true, usage: true },
+    capabilities: { image: false, video: false, audio: false, streaming: true, toolCall: true, parallelTools: false, structuredOutputMode: 'json', reasoning: false, sampling: true, usage: true },
       limits: { contextWindow: 32_000, contextWindowSource: 'model' },
       settings: { timeoutMs: 5_000, maxRetries: 0, maxOutputTokens: 1_000 },
     } as const

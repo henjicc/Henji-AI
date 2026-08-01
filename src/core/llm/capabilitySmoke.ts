@@ -1,21 +1,28 @@
 import { z } from 'zod'
+import { llmApiProtocolSchema } from './providerProtocol'
 
 export const modelCapabilitySmokeRequestSchema = z.object({
   requestId: z.string().min(1),
   providerId: z.string().min(1),
   modelId: z.string().min(1),
   adapter: z.string().optional(),
+  apiProtocol: llmApiProtocolSchema.optional(),
   baseUrl: z.string().optional(),
   structuredOutputMode: z.enum(['json', 'schema']),
   reasoning: z.object({
     enabled: z.boolean(),
     effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']),
   }).optional(),
+  declaredInputModalities: z.object({
+    image: z.boolean(),
+    video: z.boolean(),
+    audio: z.boolean(),
+  }).strict().optional(),
 })
 
 export type ModelCapabilitySmokeRequest = z.infer<typeof modelCapabilitySmokeRequestSchema>
 
-export const capabilitySmokeCheckIdSchema = z.enum(['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel'])
+export const capabilitySmokeCheckIdSchema = z.enum(['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel', 'image', 'video', 'audio'])
 export type CapabilitySmokeCheckId = z.infer<typeof capabilitySmokeCheckIdSchema>
 export type CapabilitySmokeStatus = 'passed' | 'failed' | 'skipped'
 

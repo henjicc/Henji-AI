@@ -1,5 +1,11 @@
 # 决策记录
 
+## 2026-08-02 · 多模态模型门禁
+
+- `LlmCapabilities.image/video/audio` 继续是唯一人工声明源；能力冒烟只标注协议可表达性和“尚未真实媒体验证”，不覆盖用户勾选。
+- 观察模型是可选独立角色，不继承主模型能力或验证；主模型优先消费支持的模态，否则交给观察模型，两者都不支持时主动阻断。
+- 当前 AI SDK `openai-compatible` 边界只接受图片和内联 WAV/MP3；视频在请求创建前返回 `unsupported_provider_modality`，禁止退化为文本 URL。
+
 ## 第一阶段开始时继承的决定
 
 - 内部 Application API 与 React、Electron IPC、Agent 工具协议和网络传输解耦。

@@ -73,6 +73,8 @@ function createOpenAiCompatibleLanguageModel(
 
 const openAiCompatibleAdapter: ModelStepProviderAdapter = {
   protocol: 'openai-compatible',
+  // 当前 AI SDK 转换器支持图片与内联 wav/mp3，不支持视频文件。
+  supportedInputModalities: ['image', 'audio'],
   createLanguageModel: createOpenAiCompatibleLanguageModel,
 }
 modelStepProviderAdapters.register(openAiCompatibleAdapter)
@@ -82,9 +84,9 @@ export function createModelStepLanguageModel(
   apiKey: string,
   httpTrace?: ModelStepHttpTrace
 ): LanguageModel {
-  return modelStepProviderAdapters
-    .resolve(input.apiProtocol ?? 'openai-compatible')
-    .createLanguageModel(input, apiKey, httpTrace)
+  const protocol = input.apiProtocol ?? 'openai-compatible'
+  modelStepProviderAdapters.assertInputModalities(protocol, input)
+  return modelStepProviderAdapters.resolve(protocol).createLanguageModel(input, apiKey, httpTrace)
 }
 
 function createTraceFetch(

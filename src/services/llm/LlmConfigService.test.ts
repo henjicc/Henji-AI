@@ -44,6 +44,19 @@ describe('normalizeLlmConfig', () => {
     expect(config.selectedAgentProfileId).toBe(config.agentProfiles[0].id)
   })
 
+  it('保留独立观察模型并兼容没有 observer 的旧档案', () => {
+    const defaults = normalizeLlmConfig(null)
+    const base = defaults.agentProfiles[0]
+    const observer = { providerId: defaults.models[0].providerId, modelId: defaults.models[0].modelId }
+    const configured = normalizeLlmConfig({
+      ...defaults,
+      agentProfiles: [{ ...base, observer }],
+    })
+    expect(configured.agentProfiles[0].observer).toEqual(observer)
+    const legacy = normalizeLlmConfig({ ...defaults, agentProfiles: [{ ...base, observer: undefined }] })
+    expect(legacy.agentProfiles[0].observer).toBeUndefined()
+  })
+
   it('为存量 DeepSeek V4 配置迁移模型固有上下文能力', () => {
     const defaults = normalizeLlmConfig(null)
     const config = normalizeLlmConfig({

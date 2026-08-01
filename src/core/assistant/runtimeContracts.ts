@@ -15,7 +15,7 @@ const agentModelReferenceSchema = z.object({
 }).strict()
 
 const capabilityCheckSchema = z.object({
-  id: z.enum(['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel']),
+  id: z.enum(['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel', 'image', 'video', 'audio']),
   status: z.enum(['passed', 'failed', 'skipped']),
   latencyMs: z.number().int().nonnegative(),
   errorCode: z.string().optional(),
@@ -49,6 +49,7 @@ export const agentRuntimeProfileSchema = z.object({
   router: agentModelReferenceSchema.optional(),
   summarizer: agentModelReferenceSchema.optional(),
   fallback: agentModelReferenceSchema.optional(),
+  observer: agentModelReferenceSchema.optional(),
   settings: z.object({
     timeoutMs: z.number().int().positive(),
     maxRetries: z.number().int().min(0).max(5),

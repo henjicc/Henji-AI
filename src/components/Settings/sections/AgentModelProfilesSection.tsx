@@ -31,6 +31,7 @@ import type {
 const logger = createLogger('components.Settings.AgentModelProfilesSection')
 const REUSE_PRIMARY = '__reuse_primary__'
 const NO_FALLBACK = '__no_fallback__'
+const NO_OBSERVER = '__no_observer__'
 
 interface AgentModelProfilesSectionProps {
   config: LlmConfigState
@@ -48,6 +49,7 @@ const roleLabels: Record<AgentModelRole, string> = {
   router: '路由模型',
   summarizer: '摘要模型',
   fallback: '备用模型',
+  observer: '观察模型',
 }
 
 interface RuntimeSettingField {
@@ -86,7 +88,9 @@ function getRoleReference(profile: AgentModelProfile, role: AgentModelRole): Age
 function getRoleValue(profile: AgentModelProfile, role: AgentModelRole): string {
   const reference = getRoleReference(profile, role)
   if (reference) return modelKey(reference)
-  return role === 'fallback' ? NO_FALLBACK : REUSE_PRIMARY
+  if (role === 'fallback') return NO_FALLBACK
+  if (role === 'observer') return NO_OBSERVER
+  return REUSE_PRIMARY
 }
 
 function createOptions(models: LlmModelConfig[], role: AgentModelRole): ModelOption[] {
@@ -101,6 +105,9 @@ function createOptions(models: LlmModelConfig[], role: AgentModelRole): ModelOpt
   if (role === 'fallback') {
     return [{ value: NO_FALLBACK, label: '不配置备用模型' }, ...choices]
   }
+  if (role === 'observer') {
+    return [{ value: NO_OBSERVER, label: '不配置观察模型' }, ...choices]
+  }
   return choices
 }
 
@@ -111,6 +118,7 @@ function capabilitySummary(model: LlmModelConfig | undefined): string {
     `工具 ${capabilities.toolCall ? '是' : '否'}`,
     `并行 ${capabilities.parallelTools ? '是' : '否'}`,
     `结构化 ${capabilities.structuredOutputMode}`,
+    `输入 图${capabilities.image ? '✓' : '—'} / 视频${capabilities.video ? '✓' : '—'} / 音频${capabilities.audio ? '✓' : '—'}`,
     `上下文 ${capabilities.contextWindow ?? '未知'}`,
     `输出 ${capabilities.maxOutputTokens ?? '未知'}`,
   ].join(' · ')
@@ -165,9 +173,15 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
         providerId: model.providerId,
         modelId: model.modelId,
         adapter: model.adapter,
+        apiProtocol: model.apiProtocol ?? provider.apiProtocol,
         baseUrl: model.baseUrl ?? provider.baseUrl,
         structuredOutputMode,
         reasoning: provider.reasoning,
+        declaredInputModalities: {
+          image: model.capabilities.image,
+          video: model.capabilities.video,
+          audio: model.capabilities.audio,
+        },
       })
       const nextProfile = {
         ...profile,
@@ -265,7 +279,8 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                   {verification ? (
                     <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
                       <div>验证于 {new Date(verification.verifiedAt).toLocaleString()} · {verification.totalLatencyMs} ms · 费用{verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : '未知'}</div>
-                      <div>{verification.checks.map(check => `${check.id}:${check.status === 'passed' ? '通过' : '失败'}`).join(' · ')}</div>
+                      <div>{verification.checks.map(check => `${check.id}:${check.status === 'passed' ? '通过' : check.status === 'skipped' ? (check.errorCode === 'manual_declaration_only' ? '仅声明' : '未声明') : '失败'}`).join(' · ')}</div>
+                      <div>图片、视频与音频由配置声明；“仅声明”表示协议可表达但尚未用真实媒体验证。</div>
                       <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
                     </div>
                   ) : <div className="text-xs text-danger">尚未进行动态能力验证</div>}

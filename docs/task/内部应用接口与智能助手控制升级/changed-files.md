@@ -1,5 +1,13 @@
 # 变更文件记录
 
+## 任务 6.3
+
+- `src/core/llm/`、`src/core/assistant/`：多模态模型步骤、观察模型、冒烟、追踪与快照契约。
+- `src/services/llm/LlmConfigService.ts`、设置模型档案界面及测试：旧配置归一化、观察模型选择和声明/验证说明。
+- `electron/main/services/agent-runtime/runner/`：各角色独立运行时能力与观察模型选择。
+- `electron/main/services/llm/sdk/`：模型能力门禁、协议支持矩阵、冒烟与覆盖测试。
+- 第六阶段任务记录。
+
 ## 第六阶段开始
 
 - 任务记录：`00-任务总览.md`、`progress.md`、`decisions.md`、`handoff.md`、`changed-files.md`、`test-report.md`

@@ -9,6 +9,8 @@ import {
 import type { ModelStepInput, ModelStepResult, ModelStepUsage } from '../../../../../src/core/llm/modelStep'
 import { cancelLlmTask } from '../task-registry'
 import { runModelStep } from './runtime'
+import { modelStepProviderAdapters } from './provider-adapter'
+import './provider'
 
 export const MODEL_STEP_ADAPTER_VERSION = 'ai@6.0.234/openai-compatible@2.0.62'
 const logger = createMainLogger('main.llm_capability_smoke')
@@ -59,11 +61,15 @@ function createStepInput(
     providerId: request.providerId,
     modelId: request.modelId,
     adapter: request.adapter,
+    apiProtocol: request.apiProtocol,
     baseUrl: request.baseUrl,
     messages: patch.messages,
     tools: patch.tools,
     output: patch.output,
     capabilities: {
+      image: false,
+      video: false,
+      audio: false,
       streaming: true,
       toolCall: true,
       parallelTools: true,
@@ -100,6 +106,22 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
   const startedAt = Date.now()
   let aggregateUsage = emptyUsage
   const checks: CapabilitySmokeCheck[] = []
+
+  const protocol = request.apiProtocol ?? 'openai-compatible'
+  const protocolModalities = new Set(modelStepProviderAdapters.resolve(protocol).supportedInputModalities)
+  for (const modality of ['image', 'video', 'audio'] as const) {
+    const declared = request.declaredInputModalities?.[modality] === true
+    checks.push({
+      id: modality,
+      status: declared && !protocolModalities.has(modality) ? 'failed' : 'skipped',
+      latencyMs: 0,
+      errorCode: !declared
+        ? 'not_declared'
+        : protocolModalities.has(modality)
+          ? 'manual_declaration_only'
+          : 'unsupported_provider_modality',
+    })
+  }
 
   logger.info('模型能力验证开始', {
     event: 'llm_capability_smoke.run.start',

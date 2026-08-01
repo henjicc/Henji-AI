@@ -33,6 +33,9 @@ describe('model step trace detail', () => {
       tools: [{ name: 'query_logs', inputSchema: { type: 'object' } }],
       output: { mode: 'text' },
       capabilities: {
+        image: false,
+        video: false,
+        audio: false,
         streaming: true,
         toolCall: true,
         parallelTools: false,
@@ -110,6 +113,9 @@ describe('model step trace detail', () => {
       modelId: 'model',
       messages: [{ role: 'user', content: '检查超大请求' }],
       capabilities: {
+        image: false,
+        video: false,
+        audio: false,
         streaming: true,
         toolCall: false,
         parallelTools: false,

@@ -6,6 +6,7 @@ import { isContextOverflowError, runSemanticCompaction } from './semantic-compac
 const model = {
   providerId: 'provider', modelId: 'summarizer', adapter: 'openai-compatible',
   capabilities: {
+    image: false, video: false, audio: false,
     streaming: true, toolCall: true, parallelTools: false,
     structuredOutputMode: 'json' as const, reasoning: false, sampling: true, usage: true,
   },

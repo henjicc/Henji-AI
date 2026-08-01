@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
-import { selectAgentRuntimeModels } from './models'
+import { selectAgentObservationRuntimeModel, selectAgentRuntimeModels } from './models'
 
 function request(contextWindow: number | null): AgentStartRunRequest {
   const now = new Date().toISOString()
@@ -82,5 +82,20 @@ describe('selectAgentRuntimeModels', () => {
       contextWindow: 64_000,
       contextWindowSource: 'profile_fallback',
     })
+  })
+
+  it('观察模型可独立声明图片能力且不继承主模型验证要求', () => {
+    const input = request(null)
+    const observer = {
+      ...input.models[0],
+      modelId: 'observer',
+      capabilities: { ...input.models[0].capabilities, image: true },
+    }
+    input.profile.observer = { providerId: observer.providerId, modelId: observer.modelId }
+    input.models.push(observer)
+    const models = selectAgentRuntimeModels(input)
+    expect(models.observer?.modelId).toBe('observer')
+    expect(selectAgentObservationRuntimeModel(models, 'image')).toMatchObject({ role: 'observer' })
+    expect(() => selectAgentObservationRuntimeModel(models, 'video')).toThrow('[agent_input_modality_unavailable]')
   })
 })

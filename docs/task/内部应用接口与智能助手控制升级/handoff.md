@@ -3,9 +3,9 @@
 ## 当前接力状态
 
 - 阶段：第六阶段 · 助手体验与可观测性
-- 当前任务：6.1（进行中）
+- 当前任务：6.4（待开始）
 - 已完成：第一至第五阶段全部任务（1.1 至 5.4）。
-- 待完成：6.1 至 6.5；随后完成第七阶段规则收口与整体验收。
+- 待完成：6.4、6.5；随后完成第七阶段规则收口与整体验收。
 - 阻塞：无。
 
 ## 任务 6.1 接力
@@ -21,6 +21,13 @@
 - `selectExecutionPresentation` 是 Facet、验证、Artifact、终态和下一步的唯一 UI 投影；恢复快照继续通过现有 reducer 重放同一事件得到一致结果。
 - `describeStructuredError` 将稳定错误码映射为用户标题，并继续以序列化错误的 `recovery` 给出下一步；不要从日志消息补推状态。
 - 6.5 接入观察事件时可沿现有 Facet evidence 与 Artifact 引用展示，无需新建观察进度面板。
+
+## 任务 6.3 接力
+
+- 状态：已完成；当前任务切换为 6.4。
+- 三种模态能力已进入 `ModelStepCapabilities`；媒体发送前先校验模型声明，再校验 provider protocol，错误码分别为 `unsupported_input_modality` 与 `unsupported_provider_modality`。
+- `AgentModelProfile.observer` 可选且兼容旧配置；运行时按“执行主模型优先、观察模型回退、否则阻断”选择消费者。
+- 6.4 构造 AI SDK 内容片段时应使用 `image`/`file` 原生结构；openai-compatible 暂不支持视频文件，不得转换成提示词 URL。
 
 ## 第六阶段开始接力
 
