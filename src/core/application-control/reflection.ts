@@ -12,7 +12,7 @@ import {
   jsonValueSchema,
 } from './identifiers'
 
-const applicationNumberRangeSchema = z.object({
+export const applicationNumberRangeSchema = z.object({
   min: z.number().optional(),
   max: z.number().optional(),
   step: z.number().positive().optional(),
@@ -21,7 +21,7 @@ const applicationNumberRangeSchema = z.object({
   { message: '数值范围的最小值不能大于最大值' }
 )
 
-const applicationPropertyValueSchema = z.discriminatedUnion('kind', [
+export const applicationPropertyValueSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('boolean') }).strict(),
   z.object({ kind: z.literal('string'), minLength: z.number().int().nonnegative().optional(), maxLength: z.number().int().positive().optional() }).strict(),
   z.object({ kind: z.literal('number'), hardRange: applicationNumberRangeSchema.optional(), softRange: applicationNumberRangeSchema.optional() }).strict(),
@@ -38,6 +38,7 @@ export type ApplicationPropertyValue = z.infer<typeof applicationPropertyValueSc
 
 export const applicationEntityTypeDescriptorSchema = z.object({
   id: applicationEntityTypeIdSchema,
+  domain: applicationEntityTypeIdSchema,
   version: z.number().int().positive(),
   title: z.string().min(1).max(120),
   description: z.string().min(1).max(1_000),
@@ -63,7 +64,12 @@ export const applicationPropertyDescriptorSchema = z.object({
   defaultValue: jsonValueSchema.optional(),
   dataClass: applicationDataClassSchema,
   exposures: z.array(applicationExposureSchema).min(1).max(3),
+  requiredPermissions: z.object({
+    read: z.array(z.string().min(1).max(120)).max(12),
+    write: z.array(z.string().min(1).max(120)).max(12),
+  }).strict(),
   revisionScopes: z.array(applicationScopeIdSchema).min(1).max(16),
+  schemaRef: applicationSchemaRefSchema,
   readOnlyReason: z.string().min(1).max(500).optional(),
   relation: z.object({
     targetEntityTypes: z.array(applicationEntityTypeIdSchema).min(1).max(32),
@@ -98,4 +104,3 @@ export const applicationSchemaQuerySchema = z.object({
   catalogVersion: z.string().regex(/^application-capabilities\/v[1-9][0-9]*$/),
 }).strict()
 export type ApplicationSchemaQuery = z.infer<typeof applicationSchemaQuerySchema>
-

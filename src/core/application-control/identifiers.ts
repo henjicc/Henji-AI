@@ -17,6 +17,9 @@ export const applicationCapabilityCatalogVersionSchema = z.string()
 export const applicationDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
 export const applicationExposureSchema = z.enum(['ui', 'assistant', 'local_adapter'])
 export const applicationMediaModalitySchema = z.enum(['image', 'video', 'audio'])
+export type ApplicationDataClass = z.infer<typeof applicationDataClassSchema>
+export type ApplicationExposure = z.infer<typeof applicationExposureSchema>
+export type ApplicationMediaModality = z.infer<typeof applicationMediaModalitySchema>
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | {
   [key: string]: JsonValue
@@ -71,4 +74,3 @@ export function createKnownApplicationPropertyIdSchema<const TId extends string>
     { message: '属性未在应用控制注册表中声明' }
   ) as z.ZodType<TId>
 }
-

@@ -27,6 +27,7 @@ describe('application-control contracts', () => {
   it('核心实体和属性描述可严格序列化', () => {
     expect(applicationEntityTypeDescriptorSchema.parse({
       id: 'camera_stage.object',
+      domain: 'camera_stage',
       version: 1,
       title: '三维对象',
       description: '场景中的可控对象。',
@@ -50,7 +51,9 @@ describe('application-control contracts', () => {
       defaultValue: { x: 0, y: 0, z: 0 },
       dataClass: 'C1',
       exposures: ['ui', 'assistant'],
+      requiredPermissions: { read: ['camera_stage:read'], write: ['camera_stage:write'] },
       revisionScopes: ['camera_stage.scene'],
+      schemaRef: { ...schemaRef, kind: 'property', id: 'transform.position' },
     })).toBeTruthy()
     expect(applicationPropertyDescriptorSchema.safeParse({
       id: 'transform.position',
@@ -62,7 +65,9 @@ describe('application-control contracts', () => {
       nullable: false,
       dataClass: 'C1',
       exposures: ['assistant'],
+      requiredPermissions: { read: [], write: [] },
       revisionScopes: ['camera_stage.scene'],
+      schemaRef: { ...schemaRef, kind: 'property', id: 'transform.position' },
       executeScript: 'dangerous()',
     }).success).toBe(false)
   })

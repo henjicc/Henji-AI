@@ -504,3 +504,7 @@ export function getSettingsRegistryRevision(): number {
 export function listApplicationSettingIds(): string[] {
   return [...definitions.map((definition) => definition.id), ...Object.keys(protectedDefinitions)]
 }
+
+export function listApplicationSettingDefinitions(): ApplicationSettingDefinition[] {
+  return [...definitions]
+}
