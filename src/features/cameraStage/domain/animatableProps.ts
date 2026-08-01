@@ -177,3 +177,8 @@ export function getAnimatableGroupByPath(groupPath: string): AnimatableGroup | u
 export function listAnimatableGroups(object: StageObject): AnimatableGroup[] {
   return ALL_GROUPS.filter((group) => group.isAvailable(object))
 }
+
+/** 供应用控制覆盖检查读取稳定属性目录，不暴露取值或写值实现。 */
+export function listAnimatablePropertyPaths(): string[] {
+  return [...DESCRIPTOR_BY_PATH.keys()]
+}
