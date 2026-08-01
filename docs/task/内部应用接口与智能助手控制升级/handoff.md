@@ -2,10 +2,10 @@
 
 ## 当前接力状态
 
-- 阶段：第二阶段 · 内部应用接口内核
-- 当前任务：2.1（待开始）
-- 已完成：第一阶段任务 1.1、1.2；契约、覆盖矩阵和门禁均已落地。
-- 待完成：实体/属性注册表、统一观察查询、事务执行内核。
+- 阶段：第三阶段 · 助手规划与能力发现
+- 当前任务：3.1（待开始）
+- 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3。
+- 待完成：多领域路由、批量能力/控制结构发现、进展判定与循环终止。
 - 阻塞：无。
 
 ## 第二阶段开始状态
@@ -25,6 +25,16 @@
 - 统一结构化观察位于 `src/core/application-control/query/`，输入和输出保持调用方中立。
 - Artifact 通过 `ApplicationObservationArtifactSink` 注入，不新增存储或 IPC；助手适配器继续复用既有 `read_agent_artifact`。
 - 截断、分页、权限过滤和 revision 冲突均有显式结果或稳定错误，不静默省略。
+
+## 第二阶段完成接力
+
+- 反射唯一入口：`src/core/application-control/registry/`。
+- 批量观察唯一入口：`src/core/application-control/query/`。
+- 计划、提交、撤销和验证唯一入口：`src/core/application-control/execution/`。
+- `applicationControlRegistry.ts` 已组合设置反射与事务 executor；第三阶段可在助手适配层包装这些入口，不要让核心层反向依赖 Agent Runtime。
+- 多步骤事务必须保留 `atomic`、`compensatable`、`non_reversible` 的真实语义；不要为简化工具输出而合并。
+- 现有 Artifact Store 无需扩展；3.2 只需提供 `ApplicationObservationArtifactSink` 的正式适配。
+- 第二阶段提交：`47a07dd`、`77e9040`、`46ba838`。
 
 ## 第一阶段接力要点
 

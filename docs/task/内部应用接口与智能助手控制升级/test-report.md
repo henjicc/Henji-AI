@@ -1,13 +1,23 @@
 # 测试报告
 
-## 第二阶段（进行中）
+## 第二阶段（已完成）
 
 - 任务 2.1：`npx tsc -p tsconfig.json --noEmit` 通过。
 - 任务 2.1：核心契约、反射注册表与设置回归共 3 个文件、12 项测试通过。
-- 设置测试中的 Zustand 持久化不可用提示为无浏览器存储测试环境的既有警告，不影响断言。
 - 任务 2.2：`npx tsc -p tsconfig.json --noEmit` 通过。
 - 任务 2.2：核心契约、反射注册表与观察查询共 3 个文件、13 项测试通过。
-- 手动验收：继续统一记录在 `manual-test.md`，本阶段不分散登记。
+- 任务 2.3 与阶段专项：6 个测试文件、23 项测试通过，覆盖契约、注册、观察、冲突、权限变化、幂等、补偿、撤销、风险审批、验证失败和设置适配。
+- `npm run lint`：通过。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- `npm run check:assistant-capabilities`：通过；覆盖门禁 4 项测试通过。
+- `npm run electron:build`：通过；包含 seeds/manifest、颜色/Surface/图标/模型 i18n、能力门禁、主进程 TypeScript 与三端 Vite 构建。
+- `npm run test:assistant-production`：失败；56 项通过、1 项失败后停止。失败仍为 `runner.test.ts` 已记录的长循环基线，预期 14 轮/26 次调用完成，实际 2 轮/3 次调用失败。
+- `npm run test`：158 个测试文件、750 项测试通过；2 项失败，另有 8 个文件/36 项测试跳过。
+- 全量失败 1：`external-continuation-coordinator.test.ts` 的旧夹具缺少 `pinnedToolNames`，对 `undefined.filter` 抛错。
+- 全量失败 2：`runner.test.ts` 的长循环用例仍在 2 轮/3 次调用后失败。
+- 两项失败均与第一阶段记录一致，位于第二阶段未修改的 `electron/main/services/agent-runtime/`；第二阶段新增与联动专项均通过。
+- 设置测试中的 Zustand 持久化不可用提示为无浏览器存储测试环境的既有警告，不影响断言。
+- 手动验收：统一记录在 `manual-test.md`；本阶段无需手动测试。
 
 ## 第一阶段
 

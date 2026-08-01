@@ -27,3 +27,12 @@
 - 观察查询复用现有 Artifact 读取能力；核心内核只定义调用方中立的分页卸载接口，不新建存储或 IPC。
 - 多步执行必须如实区分原子、可补偿和不可回退，不把跨领域操作伪装成全局事务。
 - 第二阶段优先建立通用内核与设置适配样板，其他领域在第四、第五阶段接入。
+
+## 2026-08-01 · 第二阶段内核实现
+
+- 实体描述增加显式 domain；属性描述增加读写权限与属性 schemaRef，作为 1.1 冻结契约在实现阶段发现并补齐的必要维度。
+- schemaRef、分页游标、planRef、transactionRef 和 undoRef 只承载稳定引用，不暴露 Store 路径、处理器或领域对象。
+- 观察大结果通过 `ApplicationObservationArtifactSink` 注入既有 Artifact 链路；核心层不依赖 Agent Runtime。
+- 单步骤可由正式领域服务保证原子性；多步骤只有同一执行器提供 `applyAtomic` 时才能声明原子，否则必须选择可补偿或不可回退。
+- 语义操作风险与权限由注册执行器适配正式 `ApplicationCapabilityDefinition`，调用方不能在计划请求中自行降低风险。
+- 设置旧能力保持不变；新内核通过反射提供者和设置 mutation executor 非破坏性接入，完整能力迁移仍留在 5.1。

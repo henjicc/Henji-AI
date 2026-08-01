@@ -1,6 +1,6 @@
 # 变更文件记录
 
-## 第二阶段（进行中）
+## 第二阶段（已完成）
 
 ### 任务 2.1
 
@@ -18,6 +18,21 @@
 
 - `src/core/application-control/query/`
 - `src/core/application-control/index.ts`
+- 第二阶段任务记录文件
+
+### 任务 2.3
+
+- `src/core/application-control/transactions.ts`
+- `src/core/application-control/execution/`
+- `src/core/application-control/index.ts`
+- `src/core/application-control/contracts.test.ts`
+- `src/core/application-control/registry/registry.ts`
+- `src/features/assistant/applicationCapabilities/applicationControlRegistry.ts`
+- `src/features/assistant/applicationCapabilities/settingsReflection.ts`
+- `src/features/assistant/applicationCapabilities/settingsMutationExecutor.ts`
+- `src/features/assistant/applicationCapabilities/settingsApplicationControl.test.ts`
+- `src/features/assistant/applicationCapabilities/settingsProtectedDefinitions.ts`
+- `src/features/assistant/applicationCapabilities/settingsRegistry.ts`
 - 第二阶段任务记录文件
 
 ## 第一阶段
