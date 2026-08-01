@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   ASSISTANT_REGRESSION_CASES,
   DOMAIN_COVERAGE_EVALUATION_CASES,
+  LOOP_TERMINATION_EVALUATION_CASES,
   SECURITY_GATE_EVALUATION_CASES,
 } from './regression-cases'
 
@@ -55,5 +56,21 @@ describe('assistant regression datasets', () => {
     expect(SECURITY_GATE_EVALUATION_CASES.some((item) => item.sensitiveProbes?.length)).toBe(true)
     expect(SECURITY_GATE_EVALUATION_CASES.some((item) => item.forbidUnknownWriteReplay)).toBe(true)
     expect(SECURITY_GATE_EVALUATION_CASES.some((item) => item.expectedApprovalRisks?.includes('R3'))).toBe(true)
+  })
+
+  it('循环终止数据覆盖重复发现、重复写入、无效参数、缺能力、用户输入和 revision 冲突', () => {
+    expect(LOOP_TERMINATION_EVALUATION_CASES).toHaveLength(6)
+    expect(LOOP_TERMINATION_EVALUATION_CASES.map((item) => item.id)).toEqual([
+      'loop-repeated-capability-discovery',
+      'loop-repeated-object-create',
+      'loop-invalid-patch-stops',
+      'loop-missing-capability-partial-report',
+      'loop-user-input-waiting',
+      'loop-revision-conflict-refresh-first',
+    ])
+    expect(LOOP_TERMINATION_EVALUATION_CASES.every((item) => (
+      (item.successEvidence?.length ?? 0) > 0
+      && (item.forbiddenBehaviors?.length ?? 0) > 0
+    ))).toBe(true)
   })
 })

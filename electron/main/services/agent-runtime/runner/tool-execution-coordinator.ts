@@ -9,6 +9,8 @@ import type { AgentToolGateway } from '../tools/gateway'
 import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentRecoveryWriteGuard } from './recovery-guard'
 import { AgentToolCallScheduler } from './tool-call-scheduler'
+import type { AgentFacetProgress } from '../../../../../src/core/assistant/progress'
+import type { AgentFacetProgressTracker } from './facet-progress'
 
 interface AgentToolExecutionCoordinatorOptions {
   runId: string
@@ -34,6 +36,20 @@ interface AgentToolExecutionCoordinatorOptions {
   onObservation: (call: ModelStepToolCall, observation: AgentToolObservation) => void
   emit: (event: AgentEventInput) => void
   onDiscoveredTools: (toolCallId: string, toolNames: string[]) => void
+  getProgressTracker: () => AgentFacetProgressTracker | null
+}
+
+export function toAgentFacetProgressEvent(progress: AgentFacetProgress): AgentEventInput {
+  return {
+    type: 'FacetProgressed',
+    facetId: progress.facetId,
+    status: progress.status,
+    progressKind: progress.kind,
+    summary: progress.summary,
+    evidence: progress.evidence,
+    executionFingerprint: progress.executionFingerprint,
+    blocker: progress.blocker,
+  }
 }
 
 export class AgentToolExecutionCoordinator {
@@ -66,7 +82,24 @@ export class AgentToolExecutionCoordinator {
       onObservation: this.options.onObservation,
       emit: this.options.emit,
       onDiscoveredTools: this.options.onDiscoveredTools,
-      executionGuard: (call) => this.options.recoveryGuard.validate(call),
+      executionGuard: (call, revisions) => {
+        const recoveryReason = this.options.recoveryGuard.validate(call)
+        if (recoveryReason) return recoveryReason
+        const tracker = this.options.getProgressTracker()
+        const decision = tracker?.validate(call, revisions)
+        for (const event of [...(decision?.events ?? []), ...(tracker?.drainPendingEvents() ?? [])]) {
+          this.options.emit(toAgentFacetProgressEvent(event))
+        }
+        return decision?.reason ?? null
+      },
+      onOutcome: (call, observation, revisions) => {
+        const tracker = this.options.getProgressTracker()
+        if (!tracker) return
+        const events = tracker.observe({ call, observation, expectedRevisions: revisions })
+        for (const event of [...events, ...tracker.drainPendingEvents()]) {
+          this.options.emit(toAgentFacetProgressEvent(event))
+        }
+      },
     })
     try {
       await scheduler.execute(calls, route.intent !== 'general', expectedRevisions)

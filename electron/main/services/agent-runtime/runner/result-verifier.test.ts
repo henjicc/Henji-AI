@@ -175,4 +175,46 @@ describe('Agent result verifier', () => {
     expect(() => coordinator.evaluate(generateRoute, '图片生成成功。', observations))
       .toThrowError('VERIFICATION_REPAIR_FAILED')
   })
+
+  it('部分完成必须主动说明阻塞，等待用户时转入现有澄清流程', () => {
+    const observations = [observation('read_camera', { revision: 5 })]
+    const settlement = {
+      status: 'partial' as const,
+      completedFacetIds: ['scene'],
+      blockedFacets: [{ facetId: 'motion', reason: '缺少动作能力' }],
+      waitingFacetIds: [],
+      remainingFacetIds: [],
+      evidence: ['scene@5'],
+      summary: '完成 1，受阻 1。',
+      suggestedNextStep: '安装动作能力。',
+    }
+    expect(verifyAgentCompletion({
+      route: generateRoute,
+      finalText: '场景已完成，但动作部分受阻：当前缺少动作能力。',
+      observations,
+      registry: new AgentToolRegistry(),
+      progressSettlement: settlement,
+    })).toMatchObject({ passed: true, clarificationRequired: false })
+    expect(verifyAgentCompletion({
+      route: generateRoute,
+      finalText: '已经全部完成。',
+      observations,
+      registry: new AgentToolRegistry(),
+      progressSettlement: settlement,
+    }).passed).toBe(false)
+
+    expect(verifyAgentCompletion({
+      route: generateRoute,
+      finalText: '需要你确认要修改哪个对象，请提供对象 ID？',
+      observations,
+      registry: new AgentToolRegistry(),
+      progressSettlement: {
+        ...settlement,
+        status: 'waiting_user',
+        completedFacetIds: [],
+        blockedFacets: [],
+        waitingFacetIds: ['scene'],
+      },
+    })).toMatchObject({ passed: true, clarificationRequired: true })
+  })
 })

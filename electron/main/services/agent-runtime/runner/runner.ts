@@ -21,7 +21,7 @@ import { AgentRunnerLifecycle } from './lifecycle'
 import { AgentTerminalApprovalCleanup } from './terminal-approval-cleanup'
 import { AgentConversationCompactor } from './conversation-compactor'
 import { AgentModelTurnCoordinator } from './model-turn-coordinator'
-import { AgentToolExecutionCoordinator } from './tool-execution-coordinator'
+import { AgentToolExecutionCoordinator, toAgentFacetProgressEvent } from './tool-execution-coordinator'
 import { AgentSavePointCoordinator } from './save-point-coordinator'
 import { AgentTurnContextCoordinator } from './turn-context-coordinator'
 import { logAgentToolActivation } from './activation-logging'
@@ -45,6 +45,7 @@ import { routeAgentGoal } from './route-goal'
 import { requireFinalResponseEvidence } from './final-response'
 import { createRunnerModelOutputGuard, createRunnerThreadTitleCoordinator } from './runner-components'
 import { createRunnerConversation } from './runner-conversation'
+import { AgentFacetProgressTracker } from './facet-progress'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -75,6 +76,7 @@ export class AgentRunner {
   private readonly terminalApprovalCleanup: AgentTerminalApprovalCleanup
   private readonly completionCoordinator: AgentCompletionCoordinator
   private readonly threadTitleCoordinator: AgentThreadTitleCoordinator
+  private progressTracker: AgentFacetProgressTracker | null = null
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private started = false; constructor(private readonly options: AgentRunnerOptions) {
@@ -209,6 +211,7 @@ export class AgentRunner {
           context: { toolNames },
         })
       },
+      getProgressTracker: () => this.progressTracker,
     })
     this.savePointCoordinator = new AgentSavePointCoordinator({
       append: options.dependencies.appendSavePoint,
@@ -287,10 +290,7 @@ export class AgentRunner {
   }
   async cancelAndWait(reason = '用户取消'): Promise<AgentRunState> {
     this.cancel(reason)
-    await Promise.all([
-      this.terminalApprovalCleanup.wait(),
-      this.conversationJournal.flush(),
-    ])
+    await Promise.all([this.terminalApprovalCleanup.wait(), this.conversationJournal.flush()])
     return this.getState()
   }
   async respondApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<AgentRunState> {
@@ -317,6 +317,8 @@ export class AgentRunner {
         classify: (goal, host, signal) => this.modelTurnCoordinator.classify(goal, host, signal),
         emit: (event) => this.emit(event),
       })
+      this.progressTracker = route.taskGraph
+        ? new AgentFacetProgressTracker(route.taskGraph, this.options.dependencies.registry) : null
       while (!isTerminalAgentState(this.machine.status)) {
         await this.pauseController.wait()
         this.throwIfCancelled()
@@ -403,6 +405,7 @@ export class AgentRunner {
             appendGuidance: (content) => this.conversationJournal.appendEphemeral({ role: 'user', content }),
             saveAfter: () => this.savePointCoordinator.save('after_tools', turnSnapshot),
             registerExternalWait: (items) => this.externalWaitRegistration.registerIfSubmitted(items, turnSnapshot),
+            progressGuidance: () => this.progressTracker?.settlementGuidance() ?? null,
           })) {
             this.lifecycle.finishTerminal()
             return
@@ -415,10 +418,7 @@ export class AgentRunner {
         })
         if (!finalText) continue
         const completion = this.completionCoordinator.evaluate(
-          route,
-          finalText,
-          this.observations
-        )
+          route, finalText, this.observations, this.progressTracker?.settlement())
         if (completion.kind === 'repair') {
           this.budget.recordFailure()
           this.budget.recordProgress(`verification:${completion.summary}`)
@@ -440,6 +440,7 @@ export class AgentRunner {
           const answer = await answerPromise
           this.throwIfCancelled()
           if (!answer) throw new Error('[CLARIFICATION_CANCELLED] 澄清等待已取消')
+          this.progressTracker?.resumeWaitingFacets(answer).forEach((progress) => this.emit(toAgentFacetProgressEvent(progress)))
           this.conversationJournal.appendEphemeral({ role: 'user', content: answer })
           continue
         }

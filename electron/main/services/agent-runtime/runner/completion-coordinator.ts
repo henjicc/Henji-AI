@@ -4,6 +4,7 @@ import type { AgentRouteDecision } from '../context/types'
 import { createMainLogger } from '../../logging'
 import type { AgentToolRegistry } from '../tools/registry'
 import { verifyAgentCompletion } from './result-verifier'
+import type { AgentProgressSettlement } from '../../../../../src/core/assistant/progress'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -33,13 +34,15 @@ export class AgentCompletionCoordinator {
   evaluate(
     route: AgentRouteDecision,
     finalText: string,
-    observations: AgentToolObservation[]
+    observations: AgentToolObservation[],
+    progressSettlement?: AgentProgressSettlement
   ): CompletionDecision {
     const verification = verifyAgentCompletion({
       route,
       finalText,
       observations,
       registry: this.options.registry,
+      progressSettlement,
     })
     this.options.emit({
       type: 'VerificationCompleted',

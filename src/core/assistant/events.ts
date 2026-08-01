@@ -4,7 +4,8 @@ import { hostScopeRevisionsSchema } from './hostContracts'
 import { modelStepUsageSchema } from '../llm/modelStep'
 import { modelProviderErrorCategorySchema } from '../llm/providerProtocol'
 import { agentWorkingSummarySchema } from './workingContext'
-import { agentTaskGraphSchema } from './taskGraph'
+import { agentTaskFacetStatusSchema, agentTaskGraphSchema } from './taskGraph'
+import { agentFacetProgressKindSchema } from './progress'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v1' as const
 
@@ -228,6 +229,18 @@ const toolFailedEventSchema = z.object({
   idempotent: z.boolean().optional(),
 }).strict()
 
+const facetProgressedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('FacetProgressed'),
+  facetId: z.string().min(1).max(64),
+  status: agentTaskFacetStatusSchema,
+  progressKind: agentFacetProgressKindSchema,
+  summary: z.string().min(1).max(1_000),
+  evidence: z.array(z.string().min(1).max(500)).max(12),
+  executionFingerprint: z.string().min(1).max(200).optional(),
+  blocker: z.string().min(1).max(1_000).optional(),
+}).strict()
+
 const approvalRequiredEventSchema = z.object({
   ...eventBase,
   type: z.literal('ApprovalRequired'),
@@ -351,6 +364,7 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   toolStartedEventSchema,
   toolCompletedEventSchema,
   toolFailedEventSchema,
+  facetProgressedEventSchema,
   approvalRequiredEventSchema,
   approvalResolvedEventSchema,
   contextUpdatedEventSchema,

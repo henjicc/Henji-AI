@@ -118,6 +118,31 @@ export function reduceAgentWorkingSummary(
         toolCategory: step.toolCategory,
       } : next.recovery,
     }
+  } else if (event.type === 'FacetProgressed') {
+    next = {
+      ...next,
+      route: next.route?.taskGraph ? {
+        ...next.route,
+        taskGraph: {
+          ...next.route.taskGraph,
+          facets: next.route.taskGraph.facets.map((facet) => facet.facetId === event.facetId
+            ? {
+                ...facet,
+                status: event.status,
+                statusReason: event.blocker ?? event.summary,
+                evidence: appendBounded(
+                  facet.evidence,
+                  event.evidence[event.evidence.length - 1] ?? event.summary,
+                  12
+                ),
+              }
+            : facet),
+        },
+      } : next.route,
+      unresolvedItems: event.status === 'blocked'
+        ? appendBounded(next.unresolvedItems, `${event.facetId}：${event.blocker ?? event.summary}`, 10)
+        : next.unresolvedItems,
+    }
   } else if (event.type === 'ApprovalRequired') {
     next = {
       ...next,

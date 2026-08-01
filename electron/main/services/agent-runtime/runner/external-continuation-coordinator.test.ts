@@ -62,9 +62,13 @@ describe('AgentExternalContinuationCoordinator', () => {
         { catalog: { name: 'list_visible_generation_tasks' } },
       ],
       activeToolNames: ['create_visible_generation_task', 'list_visible_generation_tasks'],
-      catalogSummary: '',
-      catalogNames: [],
-      truncated: false,
+      schemaBytes: 0,
+      candidateCount: 2,
+      pinnedToolNames: [],
+      droppedPinnedToolNames: [],
+      droppedForCount: [],
+      droppedForSchemaBudget: [],
+      unavailableNames: [],
     } as never, {} as never)
     expect(activation.activeToolNames).toEqual([
       'list_visible_generation_tasks',

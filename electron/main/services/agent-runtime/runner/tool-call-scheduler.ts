@@ -25,6 +25,7 @@ interface ToolCallOutcome {
   error: ReturnType<typeof serializeError> | null
   resultingRevisions: HostScopeRevisions | null
   activationRecoveryQueued: boolean
+  expectedRevisions: Partial<HostScopeRevisions>
 }
 
 export interface AgentToolCallSchedulerOptions {
@@ -48,7 +49,15 @@ export interface AgentToolCallSchedulerOptions {
   onObservation: (call: ModelStepToolCall, observation: AgentToolObservation) => void
   emit: (event: AgentEventInput) => void
   onDiscoveredTools: (toolCallId: string, toolNames: string[]) => void
-  executionGuard?: (call: ModelStepToolCall) => string | null
+  executionGuard?: (
+    call: ModelStepToolCall,
+    expectedRevisions: Partial<HostScopeRevisions>
+  ) => string | null
+  onOutcome?: (
+    call: ModelStepToolCall,
+    observation: AgentToolObservation,
+    expectedRevisions: Partial<HostScopeRevisions>
+  ) => void
 }
 
 function mergeRevisions(
@@ -143,7 +152,6 @@ export class AgentToolCallScheduler {
     expectedRevisions: Partial<HostScopeRevisions>
   ): Promise<ToolCallOutcome> {
     let activationRecoveryQueued = false
-    this.options.recordToolCall(`${call.toolName}:${digestJson(call.input)}`)
     const metadata = this.options.registry.executionMetadata(call.toolName, call.input)
     this.options.emit({
       type: 'ToolRequested',
@@ -179,7 +187,7 @@ export class AgentToolCallScheduler {
           activationRecoveryQueued ? 'refresh_context' : 'user_action'
         )
       }
-      const guardReason = this.options.executionGuard?.(call)
+      const guardReason = this.options.executionGuard?.(call, expectedRevisions)
       if (guardReason) {
         throw new AgentToolGatewayError(
           'RECOVERY_VERIFICATION_REQUIRED',
@@ -188,6 +196,7 @@ export class AgentToolCallScheduler {
           'user_action'
         )
       }
+      this.options.recordToolCall(`${call.toolName}:${digestJson(call.input)}`)
       let result = await this.options.gateway.execute({
         runId: this.options.runId,
         threadId: this.options.threadId,
@@ -216,6 +225,7 @@ export class AgentToolCallScheduler {
             error,
             resultingRevisions: null,
             activationRecoveryQueued: false,
+            expectedRevisions,
           }
         }
         result = await this.options.gateway.execute({
@@ -238,6 +248,7 @@ export class AgentToolCallScheduler {
         error: null,
         resultingRevisions: extractResultScopeRevisions(result.observation.output),
         activationRecoveryQueued: false,
+        expectedRevisions,
       }
     } catch (error) {
       this.options.throwIfCancelled()
@@ -248,6 +259,7 @@ export class AgentToolCallScheduler {
         error: serialized,
         resultingRevisions: null,
         activationRecoveryQueued,
+        expectedRevisions,
       }
     }
   }
@@ -272,6 +284,7 @@ export class AgentToolCallScheduler {
         idempotent: metadata?.idempotent,
       })
       if (!outcome.activationRecoveryQueued) this.options.recordFailure?.()
+      this.options.onOutcome?.(outcome.call, outcome.observation, outcome.expectedRevisions)
       return
     }
     const discovered = this.options.catalogPlanner.rememberDiscovered(
@@ -297,5 +310,6 @@ export class AgentToolCallScheduler {
       resultReferences: extractResultReferences(outcome.observation.output),
     })
     this.options.recordSuccess?.()
+    this.options.onOutcome?.(outcome.call, outcome.observation, outcome.expectedRevisions)
   }
 }

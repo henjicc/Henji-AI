@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import type { AgentEventInput } from '../../../../../src/core/assistant/events'
 import {
   AGENT_CONTRACT_VERSION,
+  type HostScopeRevisions,
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
@@ -43,10 +44,18 @@ function createScheduler(
   execute: (id: string) => Promise<{ id: string }>,
   observations: AgentToolObservation[],
   events: AgentEventInput[],
-  executionGuard?: (call: ModelStepToolCall) => string | null,
+  executionGuard?: (
+    call: ModelStepToolCall,
+    expectedRevisions: Partial<HostScopeRevisions>
+  ) => string | null,
   activeToolNames: ReadonlySet<string> = new Set(['read_test_resource', 'write_test_resource']),
   configurePlanner?: (planner: AgentToolCatalogPlanner) => void,
-  recordFailure?: () => void
+  recordFailure?: () => void,
+  onOutcome?: (
+    call: ModelStepToolCall,
+    observation: AgentToolObservation,
+    expectedRevisions: Partial<HostScopeRevisions>
+  ) => void
 ): AgentToolCallScheduler {
   const registry = new AgentToolRegistry()
   registry.register(defineAgentTool({
@@ -135,6 +144,7 @@ function createScheduler(
     emit: (event) => events.push(event),
     onDiscoveredTools: () => undefined,
     executionGuard,
+    onOutcome,
   })
 }
 
@@ -259,5 +269,30 @@ describe('AgentToolCallScheduler', () => {
         error: { code: 'TOOL_NOT_ACTIVE', retryable: true, recovery: 'refresh_context' },
       },
     })
+  })
+
+  it('执行前守卫和结果回调接收同一组 base revision', async () => {
+    const observations: AgentToolObservation[] = []
+    const events: AgentEventInput[] = []
+    const guarded: Array<Partial<HostScopeRevisions>> = []
+    const completed: Array<Partial<HostScopeRevisions>> = []
+    const scheduler = createScheduler(
+      async (id) => ({ id }),
+      observations,
+      events,
+      (_call, revisions) => {
+        guarded.push(revisions)
+        return null
+      },
+      undefined,
+      undefined,
+      undefined,
+      (_call, _observation, revisions) => completed.push(revisions)
+    )
+
+    await scheduler.execute([toolCall(1)], true, { canvas: 7 })
+
+    expect(guarded).toEqual([{ canvas: 7 }])
+    expect(completed).toEqual([{ canvas: 7 }])
   })
 })

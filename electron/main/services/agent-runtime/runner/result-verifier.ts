@@ -2,6 +2,7 @@ import type { AgentToolObservation } from '../../../../../src/core/assistant/too
 import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentRouteDecision } from '../context/types'
 import { extractResultReferences } from './runner-results'
+import type { AgentProgressSettlement } from '../../../../../src/core/assistant/progress'
 
 interface ObservationFailure {
   code: string
@@ -140,6 +141,7 @@ export function verifyAgentCompletion(input: {
   finalText: string
   observations: AgentToolObservation[]
   registry: AgentToolRegistry
+  progressSettlement?: AgentProgressSettlement
 }): AgentCompletionVerification {
   if (input.route.intent === 'general' && input.observations.length === 0) {
     const clarificationRequired = input.route.complexity === 'ambiguous'
@@ -155,6 +157,21 @@ export function verifyAgentCompletion(input: {
   }
   if (input.observations.length === 0) {
     return { passed: false, summary: '缺少任何工具观察，无法证明任务完成。', evidence: [], clarificationRequired: false }
+  }
+
+  const settlement = input.progressSettlement
+  if (settlement && ['partial', 'blocked', 'waiting_user'].includes(settlement.status)) {
+    const explainsBlocker = /无法|未完成|受阻|缺少|权限|需要|请提供|请确认|请选择|不存在/.test(input.finalText)
+    const clarificationRequired = settlement.status === 'waiting_user'
+      && /请提供|请确认|请选择|需要你|[?？]/.test(input.finalText)
+    return {
+      passed: explainsBlocker,
+      summary: explainsBlocker
+        ? `最终答复如实反映任务图 ${settlement.status} 结算。`
+        : `任务图已结算为 ${settlement.status}，但最终答复没有说明阻塞或未完成部分。`,
+      evidence: settlement.evidence.slice(-8),
+      clarificationRequired,
+    }
   }
 
   let lastFailure: { index: number; failure: ObservationFailure } | null = null

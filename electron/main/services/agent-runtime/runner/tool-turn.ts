@@ -25,6 +25,7 @@ export async function executeAgentToolTurn(input: {
   appendGuidance: (message: string) => void
   saveAfter: () => Promise<unknown>
   registerExternalWait: (observations: AgentToolObservation[]) => Promise<boolean>
+  progressGuidance: () => string | null
 }): Promise<boolean> {
   await input.saveBefore()
   await input.waitIfPaused()
@@ -40,6 +41,8 @@ export async function executeAgentToolTurn(input: {
   const turnObservations = input.observations.slice(observationStart)
   const guidance = buildRecoveryGuidance(turnObservations, input.registry)
   if (guidance) input.appendGuidance(guidance)
+  const progressGuidance = input.progressGuidance()
+  if (progressGuidance) input.appendGuidance(progressGuidance)
   await input.saveAfter()
   return input.registerExternalWait(turnObservations)
 }
