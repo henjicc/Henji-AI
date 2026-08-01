@@ -23,7 +23,7 @@ import {
 import type { ApplicationCapabilityResult } from '@/core/assistant/hostContracts'
 import { GenerationPreparationError } from '@/core/assistant/generationPreparation'
 import { createLogger } from '@/core/logging'
-import { AgentCanvasActionError } from '@/features/canvas/application/agentCanvasActions'
+import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
 import { ZodError } from 'zod'
 
 import { createHostContextSnapshot } from '../hostContext/hostContext'
@@ -194,7 +194,7 @@ if (listApplicationSettingIds().length === 0) {
 
 function toFailure(error: unknown): ApplicationCapabilityResult {
   const message = error instanceof Error ? error.message : String(error)
-  if (error instanceof AgentCanvasActionError) {
+  if (error instanceof CanvasApplicationError) {
     return {
       ok: false,
       error: {

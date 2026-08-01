@@ -13,7 +13,7 @@ import {
   type CanvasNodeDefinition,
 } from './nodeRegistry'
 
-export const AGENT_CANVAS_CATALOG_VERSION = 'canvas-agent-node-catalog/v1' as const
+export const CANVAS_NODE_CONTROL_CATALOG_VERSION = 'canvas-node-control/v1' as const
 
 const nodeDataBaseSchema = z.object({
   displayName: z.string().trim().min(1).max(120).optional(),
@@ -27,7 +27,7 @@ const imageGenerationNodeDataSchema = nodeDataBaseSchema.extend({
   params: z.record(z.string(), z.unknown()).optional(),
 }).strict()
 
-interface AgentCanvasNodeConfig {
+interface CanvasNodeControlConfig {
   nodeType: CanvasNodeType
   title: string
   description: string
@@ -92,7 +92,7 @@ const stringSourceNodeDataSchema = nodeDataBaseSchema.extend({ value: z.string()
 const booleanSourceNodeDataSchema = nodeDataBaseSchema.extend({ value: z.boolean().optional() }).strict()
 const modelSelectorNodeDataSchema = nodeDataBaseSchema.extend({ modelId: z.string().min(1).optional() }).strict()
 
-const agentNodeConfigs: AgentCanvasNodeConfig[] = [
+const nodeControlConfigs: CanvasNodeControlConfig[] = [
   {
     nodeType: CANVAS_NODE_TYPES.upload,
     title: '上传图片节点',
@@ -243,9 +243,9 @@ const agentNodeConfigs: AgentCanvasNodeConfig[] = [
   },
 ]
 
-const configByType = new Map(agentNodeConfigs.map((config) => [config.nodeType, config]))
+const configByType = new Map(nodeControlConfigs.map((config) => [config.nodeType, config]))
 
-export interface AgentCanvasNodeCatalogEntry {
+export interface CanvasNodeControlCatalogEntry {
   nodeType: CanvasNodeType
   title: string
   description: string
@@ -256,8 +256,8 @@ export interface AgentCanvasNodeCatalogEntry {
   requiresModelSchema: boolean
 }
 
-export interface AgentCanvasNodeSchema {
-  schemaVersion: typeof AGENT_CANVAS_CATALOG_VERSION
+export interface CanvasNodeControlSchema {
+  schemaVersion: typeof CANVAS_NODE_CONTROL_CATALOG_VERSION
   nodeType: CanvasNodeType
   title: string
   description: string
@@ -269,7 +269,7 @@ export interface AgentCanvasNodeSchema {
   requiresModelSchema: boolean
 }
 
-function toCatalogEntry(config: AgentCanvasNodeConfig): AgentCanvasNodeCatalogEntry {
+function toCatalogEntry(config: CanvasNodeControlConfig): CanvasNodeControlCatalogEntry {
   const definition = getCanvasNodeDefinition(config.nodeType)
   if (!definition) throw new Error(`画布节点定义不存在：${config.nodeType}`)
   return {
@@ -284,20 +284,20 @@ function toCatalogEntry(config: AgentCanvasNodeConfig): AgentCanvasNodeCatalogEn
   }
 }
 
-export function searchAgentCanvasNodeTypes(query: string): AgentCanvasNodeCatalogEntry[] {
+export function searchCanvasNodeTypes(query: string): CanvasNodeControlCatalogEntry[] {
   const normalized = query.trim().toLowerCase()
-  return agentNodeConfigs
+  return nodeControlConfigs
     .filter((config) => !normalized || `${config.nodeType} ${config.title} ${config.description}`.toLowerCase().includes(normalized))
     .map(toCatalogEntry)
 }
 
-export function getAgentCanvasNodeSchema(nodeType: string): AgentCanvasNodeSchema | null {
+export function getCanvasNodeSchema(nodeType: string): CanvasNodeControlSchema | null {
   const config = configByType.get(nodeType as CanvasNodeType)
   if (!config) return null
   const definition = getCanvasNodeDefinition(config.nodeType)
   if (!definition) return null
   return {
-    schemaVersion: AGENT_CANVAS_CATALOG_VERSION,
+    schemaVersion: CANVAS_NODE_CONTROL_CATALOG_VERSION,
     nodeType: config.nodeType,
     title: config.title,
     description: config.description,
@@ -310,7 +310,7 @@ export function getAgentCanvasNodeSchema(nodeType: string): AgentCanvasNodeSchem
   }
 }
 
-export function parseAgentCanvasNodeData(
+export function parseCanvasNodeData(
   nodeType: string,
   input: Record<string, unknown> | undefined
 ): { nodeType: CanvasNodeType; data: Partial<CanvasNodeData> } {
@@ -321,7 +321,7 @@ export function parseAgentCanvasNodeData(
   return { nodeType: config.nodeType, data: data as Partial<CanvasNodeData> }
 }
 
-export function extractAgentCanvasNodeData(
+export function extractCanvasNodeData(
   nodeType: string,
   data: Record<string, unknown>
 ): Partial<CanvasNodeData> {

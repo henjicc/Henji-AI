@@ -2,7 +2,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { decodeProjectRecord, useProjectStore, type Project, type ProjectSummary } from '@/stores/projectStore'
 import { getProjectRecord } from '@/commands/projectState'
 
-import { extractAgentCanvasNodeData } from '../domain/agentCanvasCatalog'
+import { extractCanvasNodeData } from '../domain/nodeControlRegistry'
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
 
 function projectSummary(project: ProjectSummary): Record<string, unknown> {
@@ -18,7 +18,7 @@ function projectSummary(project: ProjectSummary): Record<string, unknown> {
 function safeNodeData(node: CanvasNode): Record<string, unknown> {
   let parsed: Record<string, unknown> = {}
   try {
-    parsed = extractAgentCanvasNodeData(node.type, node.data as Record<string, unknown>) as Record<string, unknown>
+    parsed = extractCanvasNodeData(node.type, node.data as Record<string, unknown>) as Record<string, unknown>
   } catch {
     parsed = {}
   }
@@ -56,23 +56,33 @@ function edgeSummary(edge: CanvasEdge): Record<string, unknown> {
   }
 }
 
-export async function listCanvasProjectSummariesFromAgent(): Promise<Record<string, unknown>[]> {
+export async function listCanvasProjectSummaries(): Promise<Record<string, unknown>[]> {
   const store = useProjectStore.getState()
   if (!store.isHydrated) await store.hydrate()
   return store.projects.map(projectSummary)
 }
 
-async function loadProjectForAgent(projectId: string): Promise<Project> {
+export async function readCanvasProjectSnapshot(projectId: string): Promise<Project> {
   const projectStore = useProjectStore.getState()
   if (!projectStore.isHydrated) await projectStore.hydrate()
-  if (projectStore.currentProject?.id === projectId) return projectStore.currentProject
+  if (projectStore.currentProject?.id === projectId) {
+    const canvas = useCanvasStore.getState()
+    return {
+      ...projectStore.currentProject,
+      nodes: canvas.nodes,
+      edges: canvas.edges,
+      viewport: canvas.currentViewport,
+      history: canvas.history,
+      nodeCount: canvas.nodes.length,
+    }
+  }
   const record = await getProjectRecord(projectId)
   if (!record) throw new Error('PROJECT_NOT_FOUND')
   return decodeProjectRecord(record)
 }
 
-export async function getCanvasProjectFromAgent(projectId: string): Promise<Record<string, unknown>> {
-  const project = await loadProjectForAgent(projectId)
+export async function getCanvasProject(projectId: string): Promise<Record<string, unknown>> {
+  const project = await readCanvasProjectSnapshot(projectId)
   const isCurrent = useProjectStore.getState().currentProject?.id === projectId
   const canvas = isCurrent ? useCanvasStore.getState() : null
   const nodes = canvas?.nodes ?? project.nodes
@@ -95,8 +105,8 @@ export async function getCanvasProjectFromAgent(projectId: string): Promise<Reco
   }
 }
 
-export async function getCanvasNodeFromAgent(projectId: string, nodeId: string): Promise<Record<string, unknown>> {
-  const project = await loadProjectForAgent(projectId)
+export async function getCanvasNode(projectId: string, nodeId: string): Promise<Record<string, unknown>> {
+  const project = await readCanvasProjectSnapshot(projectId)
   const isCurrent = useProjectStore.getState().currentProject?.id === projectId
   const canvas = isCurrent ? useCanvasStore.getState() : null
   const nodes = canvas?.nodes ?? project.nodes

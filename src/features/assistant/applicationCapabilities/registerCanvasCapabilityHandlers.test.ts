@@ -8,45 +8,45 @@ const mocks = vi.hoisted(() => ({
   openApplicationSurface: vi.fn(),
 }))
 
-vi.mock('@/features/canvas/domain/agentCanvasCatalog', () => ({
-  AGENT_CANVAS_CATALOG_VERSION: 'test-catalog',
-  getAgentCanvasNodeSchema: vi.fn(),
-  searchAgentCanvasNodeTypes: vi.fn(() => []),
+vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
+  CANVAS_NODE_CONTROL_CATALOG_VERSION: 'test-catalog',
+  getCanvasNodeSchema: vi.fn(),
+  searchCanvasNodeTypes: vi.fn(() => []),
 }))
-vi.mock('@/features/canvas/application/agentCanvasActions', () => ({
-  addCanvasNodeFromAgent: vi.fn(),
-  connectCanvasNodesFromAgent: vi.fn(),
-  focusCanvasNodeFromAgent: mocks.focusCanvasNodeFromAgent,
-  undoCanvasChangeFromAgent: vi.fn(),
+vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
+  addCanvasNode: vi.fn(),
+  connectCanvasNodes: vi.fn(),
+  focusCanvasNode: mocks.focusCanvasNodeFromAgent,
+  undoCanvasChange: vi.fn(),
 }))
-vi.mock('@/features/canvas/application/agentCanvasBatch', () => ({
-  commitCanvasBatchFromAgent: vi.fn(),
-  planCanvasBatchFromAgent: vi.fn(),
-  previewCanvasBatchFromAgent: vi.fn(),
+vi.mock('@/features/canvas/application/canvasBatchService', () => ({
+  commitCanvasBatch: vi.fn(),
+  planCanvasBatch: vi.fn(),
+  previewCanvasBatch: vi.fn(),
 }))
-vi.mock('@/features/canvas/application/agentCanvasProjects', () => ({
-  closeCanvasProjectFromAgent: vi.fn(),
-  createCanvasProjectFromAgent: mocks.createCanvasProjectFromAgent,
-  deleteCanvasProjectFromAgent: vi.fn(),
-  openCanvasProjectWithSummaryFromAgent: mocks.openCanvasProjectWithSummaryFromAgent,
-  renameCanvasProjectFromAgent: vi.fn(),
+vi.mock('@/features/canvas/application/canvasProjectService', () => ({
+  closeCanvasProject: vi.fn(),
+  createCanvasProject: mocks.createCanvasProjectFromAgent,
+  deleteCanvasProject: vi.fn(),
+  openCanvasProjectWithSummary: mocks.openCanvasProjectWithSummaryFromAgent,
+  renameCanvasProject: vi.fn(),
 }))
-vi.mock('@/features/canvas/application/agentCanvasMutations', () => ({
-  deleteCanvasNodesFromAgent: vi.fn(),
-  disconnectCanvasEdgeFromAgent: vi.fn(),
-  duplicateCanvasNodeFromAgent: vi.fn(),
-  groupCanvasNodesFromAgent: vi.fn(),
-  selectCanvasNodeFromAgent: vi.fn(),
-  updateCanvasNodeFromAgent: vi.fn(),
+vi.mock('@/features/canvas/application/canvasMutationService', () => ({
+  deleteCanvasNodes: vi.fn(),
+  disconnectCanvasEdge: vi.fn(),
+  duplicateCanvasNode: vi.fn(),
+  groupCanvasNodes: vi.fn(),
+  selectCanvasNode: vi.fn(),
+  updateCanvasNode: vi.fn(),
 }))
-vi.mock('@/features/canvas/application/agentCanvasQueries', () => ({
-  getCanvasNodeFromAgent: vi.fn(),
-  getCanvasProjectFromAgent: vi.fn(),
-  listCanvasProjectSummariesFromAgent: vi.fn(),
+vi.mock('@/features/canvas/application/canvasQueryService', () => ({
+  getCanvasNode: vi.fn(),
+  getCanvasProject: vi.fn(),
+  listCanvasProjectSummaries: vi.fn(),
 }))
 vi.mock('@/features/assistant/hostActions', () => ({ addAssetToCanvasFromAgent: vi.fn() }))
-vi.mock('@/features/canvas/application/agentCanvasDownloads', () => ({
-  downloadCanvasMediaFromAgent: mocks.downloadCanvasMediaFromAgent,
+vi.mock('@/features/canvas/application/canvasDownloadService', () => ({
+  downloadCanvasMedia: mocks.downloadCanvasMediaFromAgent,
 }))
 vi.mock('../hostContext/hostContext', () => ({
   createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),

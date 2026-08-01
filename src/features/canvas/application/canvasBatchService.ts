@@ -1,24 +1,25 @@
 import { v4 as uuidv4 } from 'uuid'
 
 import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
+import { createLogger } from '@/core/logging'
 import { useCanvasStore, type CanvasHistoryState, type CanvasNode, type CanvasEdge } from '@/stores/canvasStore'
 
 import {
-  addCanvasNodeFromAgent,
-  AgentCanvasActionError,
-  connectCanvasNodesFromAgent,
-  persistAgentCanvasState,
+  addCanvasNode,
+  CanvasApplicationError,
+  connectCanvasNodes,
+  persistCanvasState,
   requireCurrentCanvasProject,
-} from './agentCanvasActions'
+} from './canvasApplicationService'
 import {
-  deleteCanvasNodesFromAgent,
-  disconnectCanvasEdgeFromAgent,
-  duplicateCanvasNodeFromAgent,
-  groupCanvasNodesFromAgent,
-  selectCanvasNodeFromAgent,
-  updateCanvasNodeFromAgent,
-} from './agentCanvasMutations'
-import { parseAgentCanvasNodeData } from '../domain/agentCanvasCatalog'
+  deleteCanvasNodes,
+  disconnectCanvasEdge,
+  duplicateCanvasNode,
+  groupCanvasNodes,
+  selectCanvasNode,
+  updateCanvasNode,
+} from './canvasMutationService'
+import { parseCanvasNodeData } from '../domain/nodeControlRegistry'
 
 interface CanvasBatchPlan {
   planRef: string
@@ -42,6 +43,7 @@ interface CanvasBatchUndo {
 const plans = new Map<string, CanvasBatchPlan>()
 const undos = new Map<string, CanvasBatchUndo>()
 const PLAN_TTL_MS = 15 * 60_000
+const logger = createLogger('features.canvas.batch')
 
 function cleanupExpiredPlans(): void {
   const threshold = Date.now() - PLAN_TTL_MS
@@ -57,13 +59,13 @@ function fingerprint(nodes: CanvasNode[], edges: CanvasEdge[]): string {
 
 function requireNode(nodeId: string): CanvasNode {
   const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
-  if (!node) throw new AgentCanvasActionError('NOT_FOUND', `画布节点不存在：${nodeId}`, true, { nodeId })
+  if (!node) throw new CanvasApplicationError('NOT_FOUND', `画布节点不存在：${nodeId}`, true, { nodeId })
   return node
 }
 
 function validateOperation(operation: CanvasBatchOperation): void {
   if (operation.kind === 'add_node') {
-    parseAgentCanvasNodeData(operation.nodeType, operation.data)
+    parseCanvasNodeData(operation.nodeType, operation.data)
     if (operation.placement.mode === 'right_of_node') requireNode(operation.placement.anchorNodeId)
     return
   }
@@ -74,7 +76,7 @@ function validateOperation(operation: CanvasBatchOperation): void {
   }
   if (operation.kind === 'update_node') {
     const node = requireNode(operation.nodeId)
-    parseAgentCanvasNodeData(node.type, operation.data)
+    parseCanvasNodeData(node.type, operation.data)
     return
   }
   if (operation.kind === 'delete_nodes' || operation.kind === 'group_nodes') {
@@ -88,7 +90,7 @@ function validateOperation(operation: CanvasBatchOperation): void {
   }
   if (operation.kind === 'disconnect_edge') {
     if (!useCanvasStore.getState().edges.some((edge) => edge.id === operation.edgeId)) {
-      throw new AgentCanvasActionError('NOT_FOUND', `画布连接不存在：${operation.edgeId}`, true, { edgeId: operation.edgeId })
+      throw new CanvasApplicationError('NOT_FOUND', `画布连接不存在：${operation.edgeId}`, true, { edgeId: operation.edgeId })
     }
     return
   }
@@ -103,7 +105,7 @@ function operationSummary(operation: CanvasBatchOperation, index: number): Recor
   }
 }
 
-export function planCanvasBatchFromAgent(
+export function planCanvasBatch(
   projectId: string,
   operations: CanvasBatchOperation[],
   canvasRevision: number,
@@ -131,10 +133,10 @@ export function planCanvasBatchFromAgent(
   }
 }
 
-export function previewCanvasBatchFromAgent(planRef: string): Record<string, unknown> {
+export function previewCanvasBatch(planRef: string): Record<string, unknown> {
   cleanupExpiredPlans()
   const plan = plans.get(planRef)
-  if (!plan) throw new AgentCanvasActionError('NOT_FOUND', '画布批量计划不存在或已过期')
+  if (!plan) throw new CanvasApplicationError('NOT_FOUND', '画布批量计划不存在或已过期')
   requireCurrentCanvasProject(plan.projectId)
   return {
     planRef: plan.planRef,
@@ -148,26 +150,26 @@ export function previewCanvasBatchFromAgent(planRef: string): Record<string, unk
 
 async function executeOperation(projectId: string, operation: CanvasBatchOperation): Promise<Record<string, unknown>> {
   switch (operation.kind) {
-    case 'add_node': return addCanvasNodeFromAgent({ projectId, nodeType: operation.nodeType, placement: operation.placement, data: operation.data })
-    case 'duplicate_node': return duplicateCanvasNodeFromAgent({ projectId, nodeId: operation.nodeId, placement: operation.placement })
-    case 'update_node': return updateCanvasNodeFromAgent({ projectId, nodeId: operation.nodeId, data: operation.data })
-    case 'delete_nodes': return deleteCanvasNodesFromAgent(projectId, operation.nodeIds)
-    case 'connect_nodes': return connectCanvasNodesFromAgent({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId })
-    case 'disconnect_edge': return disconnectCanvasEdgeFromAgent(projectId, operation.edgeId)
-    case 'group_nodes': return groupCanvasNodesFromAgent(projectId, operation.nodeIds)
-    case 'select_node': return selectCanvasNodeFromAgent(projectId, operation.nodeId)
+    case 'add_node': return addCanvasNode({ projectId, nodeType: operation.nodeType, placement: operation.placement, data: operation.data })
+    case 'duplicate_node': return duplicateCanvasNode({ projectId, nodeId: operation.nodeId, placement: operation.placement })
+    case 'update_node': return updateCanvasNode({ projectId, nodeId: operation.nodeId, data: operation.data })
+    case 'delete_nodes': return deleteCanvasNodes(projectId, operation.nodeIds)
+    case 'connect_nodes': return connectCanvasNodes({ projectId, sourceNodeId: operation.sourceNodeId, targetNodeId: operation.targetNodeId })
+    case 'disconnect_edge': return disconnectCanvasEdge(projectId, operation.edgeId)
+    case 'group_nodes': return groupCanvasNodes(projectId, operation.nodeIds)
+    case 'select_node': return selectCanvasNode(projectId, operation.nodeId)
   }
 }
 
-export async function commitCanvasBatchFromAgent(planRef: string): Promise<Record<string, unknown>> {
+export async function commitCanvasBatch(planRef: string): Promise<Record<string, unknown>> {
   cleanupExpiredPlans()
   const plan = plans.get(planRef)
-  if (!plan) throw new AgentCanvasActionError('NOT_FOUND', '画布批量计划不存在或已过期')
-  if (plan.committed) throw new AgentCanvasActionError('CONFLICT', '画布批量计划已经提交')
+  if (!plan) throw new CanvasApplicationError('NOT_FOUND', '画布批量计划不存在或已过期')
+  if (plan.committed) throw new CanvasApplicationError('CONFLICT', '画布批量计划已经提交')
   requireCurrentCanvasProject(plan.projectId)
   const canvas = useCanvasStore.getState()
   if (fingerprint(canvas.nodes, canvas.edges) !== plan.createdFingerprint) {
-    throw new AgentCanvasActionError('STALE_CONTEXT', '画布批量计划创建后项目已发生变化，请重新规划', true, {
+    throw new CanvasApplicationError('STALE_CONTEXT', '画布批量计划创建后项目已发生变化，请重新规划', true, {
       planRef,
       projectId: plan.projectId,
     })
@@ -176,11 +178,18 @@ export async function commitCanvasBatchFromAgent(planRef: string): Promise<Recor
   const beforeEdges = structuredClone(canvas.edges)
   const beforeHistory = structuredClone(canvas.history)
   const results: Record<string, unknown>[] = []
+  logger.info('画布批量提交开始', {
+    event: 'canvas.batch.commit.start', planRef, projectId: plan.projectId,
+    operationCount: plan.operations.length,
+  })
   try {
     for (const operation of plan.operations) results.push(await executeOperation(plan.projectId, operation))
   } catch (error) {
     useCanvasStore.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
-    persistAgentCanvasState()
+    persistCanvasState()
+    logger.error('画布批量提交失败', error, {
+      event: 'canvas.batch.commit.failed', planRef, projectId: plan.projectId,
+    })
     throw error
   }
   const after = useCanvasStore.getState()
@@ -199,8 +208,12 @@ export async function commitCanvasBatchFromAgent(planRef: string): Promise<Recor
     future: [],
   }
   useCanvasStore.getState().setCanvasData(after.nodes, after.edges, groupedHistory)
-  persistAgentCanvasState()
+  persistCanvasState()
   plan.committed = true
+  logger.info('画布批量提交完成', {
+    event: 'canvas.batch.commit.completed', planRef, projectId: plan.projectId,
+    operationCount: results.length, undoRef,
+  })
   return {
     planRef,
     projectId: plan.projectId,
@@ -211,21 +224,21 @@ export async function commitCanvasBatchFromAgent(planRef: string): Promise<Recor
   }
 }
 
-export function undoCanvasBatchFromAgent(projectId: string, undoRef: string): Record<string, unknown> | null {
+export function undoCanvasBatch(projectId: string, undoRef: string): Record<string, unknown> | null {
   const record = undos.get(undoRef)
   if (!record) return null
   requireCurrentCanvasProject(projectId)
   const canvas = useCanvasStore.getState()
   if (record.projectId !== projectId || fingerprint(canvas.nodes, canvas.edges) !== record.afterFingerprint) {
-    throw new AgentCanvasActionError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
+    throw new CanvasApplicationError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
   }
   canvas.setCanvasData(record.beforeNodes, record.beforeEdges, record.beforeHistory)
-  persistAgentCanvasState()
+  persistCanvasState()
   undos.delete(undoRef)
   return { projectId, undoRef, operation: 'batch', status: 'undone' }
 }
 
-export function resetAgentCanvasBatchStateForTests(): void {
+export function resetCanvasBatchStateForTests(): void {
   plans.clear()
   undos.clear()
 }

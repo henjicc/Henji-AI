@@ -22,7 +22,7 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
 import { assetSourceNodeData, assetSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
-import { addCanvasNodeFromAgent } from '@/features/canvas/application/agentCanvasActions'
+import { addCanvasNode } from '@/features/canvas/application/canvasApplicationService'
 import type { AssetDragPayload } from '@/features/assets/drag/assetDragPayload'
 import { notifyHostScopeChanged } from './hostContext/hostContext'
 import { listStoryboardProjectSummaries, getStoryboardProjectRecord } from '@/commands/storyboardProjects'
@@ -301,7 +301,7 @@ export async function addAssetToCanvasFromAgent(input: { projectId: string; asse
     durationSeconds: asset.durationSeconds,
     displayName: asset.displayName,
   }
-  const result = addCanvasNodeFromAgent({
+  const result = addCanvasNode({
     projectId: input.projectId,
     nodeType: assetSourceNodeType(asset.mediaType),
     placement: input.placement,

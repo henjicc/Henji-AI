@@ -1,7 +1,7 @@
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type ProjectSummary } from '@/stores/projectStore'
 
-import { AgentCanvasActionError, openCanvasProjectFromAgent } from './agentCanvasActions'
+import { CanvasApplicationError, openCanvasProject } from './canvasApplicationService'
 
 const EMPTY_VIEWPORT = { x: 0, y: 0, zoom: 1 }
 
@@ -12,19 +12,19 @@ async function ensureProjectsHydrated(): Promise<void> {
 
 function requireProjectSummary(projectId: string): ProjectSummary {
   const project = useProjectStore.getState().projects.find((item) => item.id === projectId)
-  if (!project) throw new AgentCanvasActionError('PROJECT_NOT_FOUND', '画布项目不存在', true, { projectId })
+  if (!project) throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目不存在', true, { projectId })
   return project
 }
 
-export async function listCanvasProjectsFromAgent(): Promise<ProjectSummary[]> {
+export async function listCanvasProjects(): Promise<ProjectSummary[]> {
   await ensureProjectsHydrated()
   return useProjectStore.getState().projects.map((project) => ({ ...project }))
 }
 
-export async function createCanvasProjectFromAgent(name: string): Promise<Record<string, unknown>> {
+export async function createCanvasProject(name: string): Promise<Record<string, unknown>> {
   await ensureProjectsHydrated()
   const normalized = name.trim()
-  if (!normalized) throw new AgentCanvasActionError('INVALID_INPUT', '画布项目名称不能为空', true)
+  if (!normalized) throw new CanvasApplicationError('INVALID_INPUT', '画布项目名称不能为空', true)
   const projectId = useProjectStore.getState().createProject(normalized)
   const project = useProjectStore.getState().currentProject
   useCanvasStore.getState().setCanvasData(project?.nodes ?? [], project?.edges ?? [], project?.history)
@@ -32,11 +32,11 @@ export async function createCanvasProjectFromAgent(name: string): Promise<Record
   return { projectId, name: normalized }
 }
 
-export async function closeCanvasProjectFromAgent(projectId: string): Promise<Record<string, unknown>> {
+export async function closeCanvasProject(projectId: string): Promise<Record<string, unknown>> {
   await ensureProjectsHydrated()
   const store = useProjectStore.getState()
   if (store.currentProjectId !== projectId) {
-    throw new AgentCanvasActionError('STALE_CONTEXT', '只能关闭当前打开的画布项目', true, {
+    throw new CanvasApplicationError('STALE_CONTEXT', '只能关闭当前打开的画布项目', true, {
       expectedProjectId: projectId,
       currentProjectId: store.currentProjectId,
     })
@@ -47,16 +47,16 @@ export async function closeCanvasProjectFromAgent(projectId: string): Promise<Re
   return { projectId, status: 'closed' }
 }
 
-export async function renameCanvasProjectFromAgent(projectId: string, name: string): Promise<Record<string, unknown>> {
+export async function renameCanvasProject(projectId: string, name: string): Promise<Record<string, unknown>> {
   await ensureProjectsHydrated()
   requireProjectSummary(projectId)
   const normalized = name.trim()
-  if (!normalized) throw new AgentCanvasActionError('INVALID_INPUT', '画布项目名称不能为空', true)
+  if (!normalized) throw new CanvasApplicationError('INVALID_INPUT', '画布项目名称不能为空', true)
   useProjectStore.getState().renameProject(projectId, normalized)
   return { projectId, name: normalized }
 }
 
-export async function deleteCanvasProjectFromAgent(projectId: string): Promise<Record<string, unknown>> {
+export async function deleteCanvasProject(projectId: string): Promise<Record<string, unknown>> {
   await ensureProjectsHydrated()
   requireProjectSummary(projectId)
   const store = useProjectStore.getState()
@@ -70,11 +70,11 @@ export async function deleteCanvasProjectFromAgent(projectId: string): Promise<R
   return { projectId, status: 'deleted', wasCurrent }
 }
 
-export async function openCanvasProjectWithSummaryFromAgent(
+export async function openCanvasProjectWithSummary(
   projectId: string,
   signal: AbortSignal
 ): Promise<Record<string, unknown>> {
-  const result = await openCanvasProjectFromAgent(projectId, signal)
+  const result = await openCanvasProject(projectId, signal)
   const project = useProjectStore.getState().currentProject
   return {
     ...result,

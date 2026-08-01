@@ -3,9 +3,9 @@ import { cameraStageApplicationService } from '@/features/cameraStage/applicatio
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import {
-  focusCanvasNodeFromAgent,
-  openCanvasProjectFromAgent,
-} from '@/features/canvas/application/agentCanvasActions'
+  focusCanvasNode,
+  openCanvasProject,
+} from '@/features/canvas/application/canvasApplicationService'
 import {
   closeApplicationSurface as closeSurface,
   listApplicationSurfaces,
@@ -49,7 +49,7 @@ export async function focusApplicationEntity(
     return { ref, ...openApplicationSurface('workspace.assets', correlation) }
   }
   if (ref.kind === 'canvas.project') {
-    await openCanvasProjectFromAgent(ref.id, signal)
+    await openCanvasProject(ref.id, signal)
     return { ref, ...openApplicationSurface('workspace.canvas', correlation) }
   }
   if (ref.kind === 'canvas.node') {
@@ -57,9 +57,9 @@ export async function focusApplicationEntity(
     if (separator < 1) throw new Error('INVALID_INPUT')
     const projectId = ref.id.slice(0, separator)
     const nodeId = ref.id.slice(separator + 1)
-    await openCanvasProjectFromAgent(projectId, signal)
+    await openCanvasProject(projectId, signal)
     const surface = openApplicationSurface('workspace.canvas', correlation)
-    await focusCanvasNodeFromAgent(projectId, nodeId, signal)
+    await focusCanvasNode(projectId, nodeId, signal)
     return { ref, ...surface }
   }
   if (ref.kind.startsWith('camera_stage.')) {

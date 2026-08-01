@@ -6,43 +6,43 @@ import type {
 } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import type { CanvasDownloadDestination } from '@/core/assistant/capabilities/canvasExportApplicationCapabilities'
 import {
-  AGENT_CANVAS_CATALOG_VERSION,
-  getAgentCanvasNodeSchema,
-  searchAgentCanvasNodeTypes,
-} from '@/features/canvas/domain/agentCanvasCatalog'
+  CANVAS_NODE_CONTROL_CATALOG_VERSION,
+  getCanvasNodeSchema,
+  searchCanvasNodeTypes,
+} from '@/features/canvas/domain/nodeControlRegistry'
 import {
-  addCanvasNodeFromAgent,
-  connectCanvasNodesFromAgent,
-  focusCanvasNodeFromAgent,
-  undoCanvasChangeFromAgent,
-} from '@/features/canvas/application/agentCanvasActions'
+  addCanvasNode,
+  connectCanvasNodes,
+  focusCanvasNode,
+  undoCanvasChange,
+} from '@/features/canvas/application/canvasApplicationService'
 import {
-  commitCanvasBatchFromAgent,
-  planCanvasBatchFromAgent,
-  previewCanvasBatchFromAgent,
-} from '@/features/canvas/application/agentCanvasBatch'
+  commitCanvasBatch,
+  planCanvasBatch,
+  previewCanvasBatch,
+} from '@/features/canvas/application/canvasBatchService'
 import {
-  closeCanvasProjectFromAgent,
-  createCanvasProjectFromAgent,
-  deleteCanvasProjectFromAgent,
-  openCanvasProjectWithSummaryFromAgent,
-  renameCanvasProjectFromAgent,
-} from '@/features/canvas/application/agentCanvasProjects'
+  closeCanvasProject,
+  createCanvasProject,
+  deleteCanvasProject,
+  openCanvasProjectWithSummary,
+  renameCanvasProject,
+} from '@/features/canvas/application/canvasProjectService'
 import {
-  deleteCanvasNodesFromAgent,
-  disconnectCanvasEdgeFromAgent,
-  duplicateCanvasNodeFromAgent,
-  groupCanvasNodesFromAgent,
-  selectCanvasNodeFromAgent,
-  updateCanvasNodeFromAgent,
-} from '@/features/canvas/application/agentCanvasMutations'
+  deleteCanvasNodes,
+  disconnectCanvasEdge,
+  duplicateCanvasNode,
+  groupCanvasNodes,
+  selectCanvasNode,
+  updateCanvasNode,
+} from '@/features/canvas/application/canvasMutationService'
 import {
-  getCanvasNodeFromAgent,
-  getCanvasProjectFromAgent,
-  listCanvasProjectSummariesFromAgent,
-} from '@/features/canvas/application/agentCanvasQueries'
+  getCanvasNode,
+  getCanvasProject,
+  listCanvasProjectSummaries,
+} from '@/features/canvas/application/canvasQueryService'
 import { addAssetToCanvasFromAgent } from '@/features/assistant/hostActions'
-import { downloadCanvasMediaFromAgent } from '@/features/canvas/application/agentCanvasDownloads'
+import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloadService'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
@@ -66,12 +66,12 @@ export function registerCanvasCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
   registrar.registerHandler('list_canvas_projects', async () => ({
-    projects: await listCanvasProjectSummariesFromAgent(),
+    projects: await listCanvasProjectSummaries(),
   }))
 
   registrar.registerHandler('open_canvas_project', async (input, context) => {
     const parsed = parseCapabilityInput<ProjectInput>('open_canvas_project', input)
-    const result = await openCanvasProjectWithSummaryFromAgent(parsed.projectId, context.signal)
+    const result = await openCanvasProjectWithSummary(parsed.projectId, context.signal)
     return { ...result, ...openApplicationSurface('workspace.canvas', context) }
   })
 
@@ -81,10 +81,10 @@ export function registerCanvasCapabilityHandlers(
       cursor: number
       limit: number
     }>('search_canvas_node_types', input)
-    const all = searchAgentCanvasNodeTypes(parsed.query)
+    const all = searchCanvasNodeTypes(parsed.query)
     const nodeTypes = all.slice(parsed.cursor, parsed.cursor + parsed.limit)
     return {
-      catalogVersion: AGENT_CANVAS_CATALOG_VERSION,
+      catalogVersion: CANVAS_NODE_CONTROL_CATALOG_VERSION,
       nodeTypes,
       nextCursor: parsed.cursor + nodeTypes.length < all.length
         ? parsed.cursor + nodeTypes.length
@@ -94,7 +94,7 @@ export function registerCanvasCapabilityHandlers(
 
   registrar.registerHandler('get_canvas_node_schema', (input) => {
     const parsed = parseCapabilityInput<{ nodeType: string }>('get_canvas_node_schema', input)
-    const schema = getAgentCanvasNodeSchema(parsed.nodeType)
+    const schema = getCanvasNodeSchema(parsed.nodeType)
     if (!schema) throw new Error('CANVAS_NODE_TYPE_NOT_FOUND')
     return { schema }
   })
@@ -102,13 +102,13 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('create_canvas_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ name: string }>('create_canvas_project', input)
-    return await createCanvasProjectFromAgent(parsed.name)
+    return await createCanvasProject(parsed.name)
   })
 
   registrar.registerHandler('close_canvas_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput>('close_canvas_project', input)
-    return await closeCanvasProjectFromAgent(parsed.projectId)
+    return await closeCanvasProject(parsed.projectId)
   })
 
   registrar.registerHandler('rename_canvas_project', async (input, context) => {
@@ -117,28 +117,28 @@ export function registerCanvasCapabilityHandlers(
       'rename_canvas_project',
       input
     )
-    return await renameCanvasProjectFromAgent(parsed.projectId, parsed.name)
+    return await renameCanvasProject(parsed.projectId, parsed.name)
   })
 
   registrar.registerHandler('delete_canvas_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput>('delete_canvas_project', input)
-    return await deleteCanvasProjectFromAgent(parsed.projectId)
+    return await deleteCanvasProject(parsed.projectId)
   })
 
   registrar.registerHandler('get_canvas_project', (input) => {
     const parsed = parseCapabilityInput<ProjectInput>('get_canvas_project', input)
-    return getCanvasProjectFromAgent(parsed.projectId)
+    return getCanvasProject(parsed.projectId)
   })
 
   registrar.registerHandler('get_canvas_node', (input) => {
     const parsed = parseCapabilityInput<NodeInput>('get_canvas_node', input)
-    return getCanvasNodeFromAgent(parsed.projectId, parsed.nodeId)
+    return getCanvasNode(parsed.projectId, parsed.nodeId)
   })
 
   registrar.registerHandler('add_canvas_node', (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    return addCanvasNodeFromAgent(parseCapabilityInput<AddNodeInput>('add_canvas_node', input))
+    return addCanvasNode(parseCapabilityInput<AddNodeInput>('add_canvas_node', input))
   })
 
   registrar.registerHandler('add_asset_to_canvas', async (input, context) => {
@@ -156,15 +156,15 @@ export function registerCanvasCapabilityHandlers(
       sourceNodeId: string
       targetNodeId: string
     }>('connect_canvas_nodes', input)
-    return connectCanvasNodesFromAgent(parsed)
+    return connectCanvasNodes(parsed)
   })
 
   registrar.registerHandler('focus_canvas_node', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<NodeInput>('focus_canvas_node', input)
-    await openCanvasProjectWithSummaryFromAgent(parsed.projectId, context.signal)
+    await openCanvasProjectWithSummary(parsed.projectId, context.signal)
     const surface = openApplicationSurface('workspace.canvas', context)
-    const focused = await focusCanvasNodeFromAgent(parsed.projectId, parsed.nodeId, context.signal)
+    const focused = await focusCanvasNode(parsed.projectId, parsed.nodeId, context.signal)
     return { ...focused, ...surface }
   })
 
@@ -174,7 +174,7 @@ export function registerCanvasCapabilityHandlers(
       'undo_canvas_change',
       input
     )
-    return undoCanvasChangeFromAgent(parsed.projectId, parsed.undoRef)
+    return undoCanvasChange(parsed.projectId, parsed.undoRef)
   })
 
   registrar.registerHandler('duplicate_canvas_node', (input, context) => {
@@ -183,7 +183,7 @@ export function registerCanvasCapabilityHandlers(
       'duplicate_canvas_node',
       input
     )
-    return duplicateCanvasNodeFromAgent(parsed)
+    return duplicateCanvasNode(parsed)
   })
 
   registrar.registerHandler('update_canvas_node', (input, context) => {
@@ -192,7 +192,7 @@ export function registerCanvasCapabilityHandlers(
       'update_canvas_node',
       input
     )
-    return updateCanvasNodeFromAgent(parsed)
+    return updateCanvasNode(parsed)
   })
 
   registrar.registerHandler('delete_canvas_nodes', (input, context) => {
@@ -201,7 +201,7 @@ export function registerCanvasCapabilityHandlers(
       'delete_canvas_nodes',
       input
     )
-    return deleteCanvasNodesFromAgent(parsed.projectId, parsed.nodeIds)
+    return deleteCanvasNodes(parsed.projectId, parsed.nodeIds)
   })
 
   registrar.registerHandler('select_canvas_node', (input, context) => {
@@ -210,7 +210,7 @@ export function registerCanvasCapabilityHandlers(
       'select_canvas_node',
       input
     )
-    return selectCanvasNodeFromAgent(parsed.projectId, parsed.nodeId)
+    return selectCanvasNode(parsed.projectId, parsed.nodeId)
   })
 
   registrar.registerHandler('group_canvas_nodes', (input, context) => {
@@ -219,7 +219,7 @@ export function registerCanvasCapabilityHandlers(
       'group_canvas_nodes',
       input
     )
-    return groupCanvasNodesFromAgent(parsed.projectId, parsed.nodeIds)
+    return groupCanvasNodes(parsed.projectId, parsed.nodeIds)
   })
 
   registrar.registerHandler('disconnect_canvas_edge', (input, context) => {
@@ -228,7 +228,7 @@ export function registerCanvasCapabilityHandlers(
       'disconnect_canvas_edge',
       input
     )
-    return disconnectCanvasEdgeFromAgent(parsed.projectId, parsed.edgeId)
+    return disconnectCanvasEdge(parsed.projectId, parsed.edgeId)
   })
 
   registrar.registerHandler('download_canvas_media', async (input, context) => {
@@ -237,14 +237,14 @@ export function registerCanvasCapabilityHandlers(
       nodeIds: string[]
       destination: CanvasDownloadDestination
     }>('download_canvas_media', input)
-    return await downloadCanvasMediaFromAgent(parsed)
+    return await downloadCanvasMedia(parsed)
   })
 
   registrar.registerHandler('plan_canvas_batch', (input) => {
     const parsed = parseCapabilityInput<ProjectInput & {
       operations: CanvasBatchOperation[]
     }>('plan_canvas_batch', input)
-    return planCanvasBatchFromAgent(
+    return planCanvasBatch(
       parsed.projectId,
       parsed.operations,
       createHostContextSnapshot().scopeRevisions.canvas
@@ -253,12 +253,12 @@ export function registerCanvasCapabilityHandlers(
 
   registrar.registerHandler('preview_canvas_batch', (input) => {
     const parsed = parseCapabilityInput<{ planRef: string }>('preview_canvas_batch', input)
-    return previewCanvasBatchFromAgent(parsed.planRef)
+    return previewCanvasBatch(parsed.planRef)
   })
 
   registrar.registerHandler('commit_canvas_batch', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ planRef: string }>('commit_canvas_batch', input)
-    return await commitCanvasBatchFromAgent(parsed.planRef)
+    return await commitCanvasBatch(parsed.planRef)
   })
 }

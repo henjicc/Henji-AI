@@ -16,6 +16,8 @@ import {
   CameraStageMutationExecutor,
 } from '@/features/cameraStage/application/cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from '@/features/cameraStage/application/cameraStagePlacementExecutor'
+import { createCanvasReflectionRegistrations } from '@/features/canvas/application/canvasReflection'
+import { CanvasNodeMutationExecutor } from '@/features/canvas/application/canvasMutationExecutor'
 
 let registry: ApplicationReflectionRegistry | undefined
 let executionEngine: ApplicationControlExecutionEngine | undefined
@@ -34,6 +36,7 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   if (!registry) {
     registry = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
     registry.register(createSettingsReflectionRegistration())
+    for (const registration of createCanvasReflectionRegistrations()) registry.register(registration)
     for (const registration of createCameraStageReflectionRegistrations(
       () => cameraStageDependencies.readRevision()
     )) {
@@ -47,6 +50,7 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   if (!executionEngine) {
     executionEngine = new ApplicationControlExecutionEngine(getApplicationReflectionRegistry())
     executionEngine.registerMutationExecutor(new SettingsMutationExecutor())
+    executionEngine.registerMutationExecutor(new CanvasNodeMutationExecutor())
     const dependencies: CameraStageControlExecutorDependencies = {
       readRevision: () => cameraStageDependencies.readRevision(),
       bumpRevision: () => cameraStageDependencies.bumpRevision(),

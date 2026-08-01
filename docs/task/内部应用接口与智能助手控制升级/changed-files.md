@@ -1,5 +1,27 @@
 # 变更文件记录
 
+## 任务 5.2
+
+- `src/features/canvas/application/canvasApplicationService.ts` 与测试
+- `src/features/canvas/application/canvasMutationService.ts`
+- `src/features/canvas/application/canvasBatchService.ts` 与测试
+- `src/features/canvas/application/canvasProjectService.ts`
+- `src/features/canvas/application/canvasQueryService.ts`
+- `src/features/canvas/application/canvasDownloadService.ts`
+- `src/features/canvas/application/canvasReflection.ts` 与测试
+- `src/features/canvas/application/canvasMutationExecutor.ts`
+- `src/features/canvas/domain/nodeControlRegistry.ts`
+- `src/features/canvas/Canvas.tsx`
+- `src/features/assistant/applicationCapabilities/applicationControlRegistry.ts`
+- `src/features/assistant/applicationCapabilities/registerCanvasCapabilityHandlers.ts` 与测试
+- `src/features/assistant/applicationCapabilities/registry.ts`
+- `src/features/assistant/applicationCapabilities/surfaceRegistry.ts` 与测试
+- `src/features/assistant/hostActions.ts`
+- `src/features/assistant/results/openAssistantResult.ts`
+- 删除 `src/features/canvas/application/agentCanvas*.ts` 与旧测试
+- 删除 `src/features/canvas/domain/agentCanvasCatalog.ts`
+- 第五阶段任务记录文件
+
 ## 第五阶段（进行中）
 
 ### 任务 5.1

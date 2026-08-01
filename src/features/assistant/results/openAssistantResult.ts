@@ -1,8 +1,8 @@
 import { createLogger } from '@/core/logging'
 import {
-  focusCanvasNodeFromAgent,
-  openCanvasProjectFromAgent,
-} from '@/features/canvas/application/agentCanvasActions'
+  focusCanvasNode,
+  openCanvasProject,
+} from '@/features/canvas/application/canvasApplicationService'
 import { switchWorkspace } from '@/stores/navigationStore'
 import { getVisibleGenerationTask } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
@@ -50,9 +50,9 @@ export async function openAssistantGenerationResult(taskId: string): Promise<boo
 export async function openAssistantCanvasResult(projectId: string, nodeId: string): Promise<boolean> {
   const controller = new AbortController()
   try {
-    await openCanvasProjectFromAgent(projectId, controller.signal)
+    await openCanvasProject(projectId, controller.signal)
     switchWorkspace('nodes')
-    await focusCanvasNodeFromAgent(projectId, nodeId, controller.signal)
+    await focusCanvasNode(projectId, nodeId, controller.signal)
     logger.info('智能助手画布结果已定位', {
       event: 'assistant_ui.canvas_result.open.completed',
       context: { projectId, nodeId },

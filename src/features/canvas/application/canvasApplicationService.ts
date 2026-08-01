@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { createLogger } from '@/core/logging'
 
 import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import type { HostErrorCode } from '@/core/assistant/hostContracts'
@@ -10,7 +11,7 @@ import {
   type CanvasEdge,
   type CanvasNode,
 } from '../domain/canvasNodes'
-import { parseAgentCanvasNodeData } from '../domain/agentCanvasCatalog'
+import { parseCanvasNodeData } from '../domain/nodeControlRegistry'
 import {
   getCanvasNodeDefinition,
   isConnectionCompatible,
@@ -22,10 +23,11 @@ import {
   type RowMediaKind,
 } from '../domain/socketTypes'
 import { validateParamConnection } from './graphValueResolver'
-import { undoCanvasBatchFromAgent } from './agentCanvasBatch'
+import { undoCanvasBatch } from './canvasBatchService'
 
 const MAX_UNDO_RECORDS = 100
 const FOCUS_HANDLER_WAIT_MS = 2_000
+const logger = createLogger('features.canvas.application')
 
 interface UndoRecord {
   token: string
@@ -34,7 +36,7 @@ interface UndoRecord {
   historyDepth: number
 }
 
-export class AgentCanvasActionError extends Error {
+export class CanvasApplicationError extends Error {
   constructor(
     readonly code: HostErrorCode,
     message: string,
@@ -42,7 +44,7 @@ export class AgentCanvasActionError extends Error {
     readonly details?: Record<string, unknown>
   ) {
     super(message)
-    this.name = 'AgentCanvasActionError'
+    this.name = 'CanvasApplicationError'
   }
 }
 
@@ -55,7 +57,7 @@ let focusHandler: CanvasNodeFocusHandler | null = null
 export function requireCurrentCanvasProject(projectId: string): void {
   const project = useProjectStore.getState()
   if (project.currentProjectId !== projectId || project.currentProject?.id !== projectId) {
-    throw new AgentCanvasActionError('STALE_CONTEXT', '当前画布项目与命令目标不一致', true, {
+    throw new CanvasApplicationError('STALE_CONTEXT', '当前画布项目与命令目标不一致', true, {
       expectedProjectId: projectId,
       currentProjectId: project.currentProjectId,
     })
@@ -63,18 +65,19 @@ export function requireCurrentCanvasProject(projectId: string): void {
 }
 
 function throwIfAborted(signal: AbortSignal): void {
-  if (signal.aborted) throw new AgentCanvasActionError('ABORTED', '画布操作已取消')
+  if (signal.aborted) throw new CanvasApplicationError('ABORTED', '画布操作已取消')
 }
 
-export async function openCanvasProjectFromAgent(
+export async function openCanvasProject(
   projectId: string,
   signal: AbortSignal
 ): Promise<Record<string, unknown>> {
+  logger.info('画布项目打开开始', { event: 'canvas.project.open.start', projectId })
   const projectStore = useProjectStore.getState()
   if (!projectStore.isHydrated) await projectStore.hydrate()
   throwIfAborted(signal)
   if (!useProjectStore.getState().projects.some((project) => project.id === projectId)) {
-    throw new AgentCanvasActionError('PROJECT_NOT_FOUND', '画布项目不存在', true, { projectId })
+    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目不存在', true, { projectId })
   }
   if (useProjectStore.getState().currentProjectId !== projectId) {
     await new Promise<void>((resolve, reject) => {
@@ -88,16 +91,16 @@ export async function openCanvasProjectFromAgent(
         callback()
       }
       const onAbort = (): void => settle(() => reject(
-        new AgentCanvasActionError('ABORTED', '打开画布项目已取消')
+        new CanvasApplicationError('ABORTED', '打开画布项目已取消')
       ))
       const unsubscribe = useProjectStore.subscribe((state) => {
         if (state.currentProjectId === projectId) settle(resolve)
         else if (!state.isOpeningProject) settle(() => reject(
-          new AgentCanvasActionError('PROJECT_NOT_FOUND', '画布项目无法打开', true, { projectId })
+          new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目无法打开', true, { projectId })
         ))
       })
       const timer = setTimeout(() => settle(() => reject(
-        new AgentCanvasActionError('DEADLINE_EXCEEDED', '打开画布项目超时', true, { projectId })
+        new CanvasApplicationError('DEADLINE_EXCEEDED', '打开画布项目超时', true, { projectId })
       )), 10_000)
       signal.addEventListener('abort', onAbort, { once: true })
       useProjectStore.getState().openProject(projectId)
@@ -105,15 +108,16 @@ export async function openCanvasProjectFromAgent(
   }
   const project = useProjectStore.getState().currentProject
   if (!project || project.id !== projectId) {
-    throw new AgentCanvasActionError('PROJECT_NOT_FOUND', '画布项目无法打开', true, { projectId })
+    throw new CanvasApplicationError('PROJECT_NOT_FOUND', '画布项目无法打开', true, { projectId })
   }
   const canvas = useCanvasStore.getState()
   canvas.setCanvasData(project.nodes, project.edges, project.history)
   canvas.setViewportState(project.viewport)
+  logger.info('画布项目打开完成', { event: 'canvas.project.open.completed', projectId })
   return { projectId }
 }
 
-export function persistAgentCanvasState(): void {
+export function persistCanvasState(): void {
   const canvas = useCanvasStore.getState()
   useProjectStore.getState().saveCurrentProject(
     canvas.nodes,
@@ -123,7 +127,7 @@ export function persistAgentCanvasState(): void {
   )
 }
 
-export function rememberAgentCanvasUndo(projectId: string, operation: string): string {
+export function rememberCanvasUndo(projectId: string, operation: string): string {
   const token = `canvas-undo:${uuidv4()}`
   undoRecords.set(token, {
     token,
@@ -142,7 +146,7 @@ function resolveNodePosition(placement: CanvasNodePlacement): { x: number; y: nu
   const canvas = useCanvasStore.getState()
   if (placement.mode === 'right_of_node') {
     if (!canvas.nodes.some((node) => node.id === placement.anchorNodeId)) {
-      throw new AgentCanvasActionError('NOT_FOUND', '布局锚点节点不存在', true, {
+      throw new CanvasApplicationError('NOT_FOUND', '布局锚点节点不存在', true, {
         anchorNodeId: placement.anchorNodeId,
       })
     }
@@ -202,41 +206,41 @@ function isMatchingEdge(
     && (edge.targetHandle ?? 'target') === targetHandle
 }
 
-export function addCanvasNodeFromAgent(input: {
+export function addCanvasNode(input: {
   projectId: string
   nodeType: string
   placement: CanvasNodePlacement
   data?: Record<string, unknown>
 }): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
-  const parsed = parseAgentCanvasNodeData(input.nodeType, input.data)
+  const parsed = parseCanvasNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement)
   const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
-  const undoRef = rememberAgentCanvasUndo(input.projectId, 'add_node')
-  persistAgentCanvasState()
+  const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
+  persistCanvasState()
   return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
 }
 
-export function connectCanvasNodesFromAgent(input: {
+export function connectCanvasNodes(input: {
   projectId: string
   sourceNodeId: string
   targetNodeId: string
 }): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
   if (input.sourceNodeId === input.targetNodeId) {
-    throw new AgentCanvasActionError('INVALID_INPUT', '画布节点不能连接到自身')
+    throw new CanvasApplicationError('INVALID_INPUT', '画布节点不能连接到自身')
   }
   const canvas = useCanvasStore.getState()
   const sourceNode = canvas.nodes.find((node) => node.id === input.sourceNodeId)
   const targetNode = canvas.nodes.find((node) => node.id === input.targetNodeId)
   if (!sourceNode || !targetNode) {
-    throw new AgentCanvasActionError('NOT_FOUND', '连接所需的画布节点不存在', true, {
+    throw new CanvasApplicationError('NOT_FOUND', '连接所需的画布节点不存在', true, {
       sourceNodeId: input.sourceNodeId,
       targetNodeId: input.targetNodeId,
     })
   }
   if (createsCycle(input.sourceNodeId, input.targetNodeId, canvas.edges)) {
-    throw new AgentCanvasActionError('CONFLICT', '该连接会形成画布循环依赖')
+    throw new CanvasApplicationError('CONFLICT', '该连接会形成画布循环依赖')
   }
   const handles = resolveConnectionHandles(sourceNode, targetNode)
   const paramValidation = isParamPortId(handles.targetHandle)
@@ -253,7 +257,7 @@ export function connectCanvasNodesFromAgent(input: {
     ? paramValidation.compatible
     : isConnectionCompatible(sourceNode.type, targetNode.type, handles.sourceHandle)
   if (!compatible) {
-    throw new AgentCanvasActionError('INVALID_INPUT', '节点端口类型不兼容', true, {
+    throw new CanvasApplicationError('INVALID_INPUT', '节点端口类型不兼容', true, {
       sourceType: sourceNode.type,
       targetType: targetNode.type,
       reason: paramValidation?.reason ?? 'type-mismatch',
@@ -267,7 +271,7 @@ export function connectCanvasNodesFromAgent(input: {
     handles.targetHandle
   ))
   if (existing) {
-    throw new AgentCanvasActionError('CONFLICT', '节点连接已存在', true, { edgeId: existing.id })
+    throw new CanvasApplicationError('CONFLICT', '节点连接已存在', true, { edgeId: existing.id })
   }
 
   canvas.onConnect({
@@ -283,9 +287,9 @@ export function connectCanvasNodesFromAgent(input: {
     handles.sourceHandle,
     handles.targetHandle
   ))
-  if (!edge) throw new AgentCanvasActionError('CAPABILITY_REJECTED', '画布连接未能创建')
-  const undoRef = rememberAgentCanvasUndo(input.projectId, 'connect_nodes')
-  persistAgentCanvasState()
+  if (!edge) throw new CanvasApplicationError('CAPABILITY_REJECTED', '画布连接未能创建')
+  const undoRef = rememberCanvasUndo(input.projectId, 'connect_nodes')
+  persistCanvasState()
   return {
     projectId: input.projectId,
     edgeId: edge.id,
@@ -296,23 +300,23 @@ export function connectCanvasNodesFromAgent(input: {
   }
 }
 
-export function undoCanvasChangeFromAgent(projectId: string, undoRef: string): Record<string, unknown> {
+export function undoCanvasChange(projectId: string, undoRef: string): Record<string, unknown> {
   if (undoRef.startsWith('canvas-batch-undo:')) {
-    const result = undoCanvasBatchFromAgent(projectId, undoRef)
+    const result = undoCanvasBatch(projectId, undoRef)
     if (result) return result
   }
   requireCurrentCanvasProject(projectId)
   const record = undoRecords.get(undoRef)
   if (!record || record.projectId !== projectId) {
-    throw new AgentCanvasActionError('NOT_FOUND', '画布撤销引用不存在或不属于当前项目')
+    throw new CanvasApplicationError('NOT_FOUND', '画布撤销引用不存在或不属于当前项目')
   }
   const canvas = useCanvasStore.getState()
   if (canvas.history.past.length !== record.historyDepth) {
-    throw new AgentCanvasActionError('STALE_CONTEXT', '画布在该操作后已发生其它变化，旧撤销引用失效')
+    throw new CanvasApplicationError('STALE_CONTEXT', '画布在该操作后已发生其它变化，旧撤销引用失效')
   }
-  if (!canvas.undo()) throw new AgentCanvasActionError('CONFLICT', '当前画布没有可撤销操作')
+  if (!canvas.undo()) throw new CanvasApplicationError('CONFLICT', '当前画布没有可撤销操作')
   undoRecords.delete(undoRef)
-  persistAgentCanvasState()
+  persistCanvasState()
   return { projectId, undoRef, operation: record.operation, status: 'undone' }
 }
 
@@ -341,32 +345,32 @@ async function waitForFocusHandler(signal: AbortSignal): Promise<CanvasNodeFocus
     }
     const onAbort = (): void => {
       cleanup()
-      reject(new AgentCanvasActionError('ABORTED', '定位画布节点已取消'))
+      reject(new CanvasApplicationError('ABORTED', '定位画布节点已取消'))
     }
     const timer = setTimeout(() => {
       cleanup()
-      reject(new AgentCanvasActionError('CAPABILITY_NOT_READY', '画布界面尚未准备好定位节点'))
+      reject(new CanvasApplicationError('CAPABILITY_NOT_READY', '画布界面尚未准备好定位节点'))
     }, FOCUS_HANDLER_WAIT_MS)
     signal.addEventListener('abort', onAbort, { once: true })
     focusHandlerListeners.add(onReady)
   })
 }
 
-export async function focusCanvasNodeFromAgent(
+export async function focusCanvasNode(
   projectId: string,
   nodeId: string,
   signal: AbortSignal
 ): Promise<Record<string, unknown>> {
   requireCurrentCanvasProject(projectId)
   if (!useCanvasStore.getState().nodes.some((node) => node.id === nodeId)) {
-    throw new AgentCanvasActionError('NOT_FOUND', '需要定位的画布节点不存在', true, { nodeId })
+    throw new CanvasApplicationError('NOT_FOUND', '需要定位的画布节点不存在', true, { nodeId })
   }
   const handler = await waitForFocusHandler(signal)
   await handler(nodeId)
   return { projectId, nodeId, focused: true }
 }
 
-export function resetAgentCanvasActionStateForTests(): void {
+export function resetCanvasApplicationStateForTests(): void {
   undoRecords.clear()
   focusHandler = null
   focusHandlerListeners.clear()

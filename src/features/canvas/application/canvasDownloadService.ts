@@ -38,7 +38,7 @@ function resolveConfiguredDestination(destination: CanvasDownloadDestination): s
   return targetDir
 }
 
-export async function downloadCanvasMediaFromAgent(input: {
+export async function downloadCanvasMedia(input: {
   projectId: string
   nodeIds: string[]
   destination: CanvasDownloadDestination

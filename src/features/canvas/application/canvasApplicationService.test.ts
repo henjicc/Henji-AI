@@ -7,13 +7,13 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 
 import {
-  addCanvasNodeFromAgent,
-  connectCanvasNodesFromAgent,
-  focusCanvasNodeFromAgent,
+  addCanvasNode,
+  connectCanvasNodes,
+  focusCanvasNode,
   registerCanvasNodeFocusHandler,
-  resetAgentCanvasActionStateForTests,
-  undoCanvasChangeFromAgent,
-} from './agentCanvasActions'
+  resetCanvasApplicationStateForTests,
+  undoCanvasChange,
+} from './canvasApplicationService'
 
 const projectId = 'project-stage5'
 
@@ -31,9 +31,9 @@ function emptyProject(): Project {
   }
 }
 
-describe('agent canvas actions', () => {
+describe('canvas application service', () => {
   beforeEach(() => {
-    resetAgentCanvasActionStateForTests()
+    resetCanvasApplicationStateForTests()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     useCanvasStore.setState({
       currentViewport: { x: 0, y: 0, zoom: 1 },
@@ -51,21 +51,21 @@ describe('agent canvas actions', () => {
   })
 
   it('按目录 schema 添加、确定性布局、合法连接并逐步撤销', () => {
-    const upload = addCanvasNodeFromAgent({
+    const upload = addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
       data: { displayName: '输入图' },
     })
     const uploadId = String(upload.nodeId)
-    const generation = addCanvasNodeFromAgent({
+    const generation = addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.imageEdit,
       placement: { mode: 'right_of_node', anchorNodeId: uploadId },
       data: { prompt: '一只纸雕风格的猫' },
     })
     const generationId = String(generation.nodeId)
-    const connection = connectCanvasNodesFromAgent({
+    const connection = connectCanvasNodes({
       projectId,
       sourceNodeId: uploadId,
       targetNodeId: generationId,
@@ -85,27 +85,27 @@ describe('agent canvas actions', () => {
       useCanvasStore.getState().nodes[0].position.x
     )
 
-    expect(undoCanvasChangeFromAgent(projectId, String(connection.undoRef))).toMatchObject({ status: 'undone' })
+    expect(undoCanvasChange(projectId, String(connection.undoRef))).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().edges).toHaveLength(0)
-    undoCanvasChangeFromAgent(projectId, String(generation.undoRef))
+    undoCanvasChange(projectId, String(generation.undoRef))
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
-    undoCanvasChangeFromAgent(projectId, String(upload.undoRef))
+    undoCanvasChange(projectId, String(upload.undoRef))
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
   })
 
   it('拒绝目录外节点、任意媒体路径和非当前项目', () => {
-    expect(() => addCanvasNodeFromAgent({
+    expect(() => addCanvasNode({
       projectId,
       nodeType: 'unknownNode',
       placement: { mode: 'viewport_center' },
     })).toThrow(/不支持节点类型/)
-    expect(() => addCanvasNodeFromAgent({
+    expect(() => addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
       data: { imageUrl: 'C:\\secret\\probe.png' },
     })).toThrow()
-    expect(() => addCanvasNodeFromAgent({
+    expect(() => addCanvasNode({
       projectId: 'other-project',
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
@@ -113,7 +113,7 @@ describe('agent canvas actions', () => {
   })
 
   it('通过画布注册的窄处理器定位节点', async () => {
-    const created = addCanvasNodeFromAgent({
+    const created = addCanvasNode({
       projectId,
       nodeType: CANVAS_NODE_TYPES.upload,
       placement: { mode: 'viewport_center' },
@@ -121,7 +121,7 @@ describe('agent canvas actions', () => {
     const focused: string[] = []
     const dispose = registerCanvasNodeFocusHandler((nodeId) => { focused.push(nodeId) })
 
-    await expect(focusCanvasNodeFromAgent(
+    await expect(focusCanvasNode(
       projectId,
       String(created.nodeId),
       new AbortController().signal

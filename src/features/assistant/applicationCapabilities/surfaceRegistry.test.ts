@@ -9,9 +9,9 @@ const mocks = vi.hoisted(() => ({
   openCameraStageProject: vi.fn(),
 }))
 
-vi.mock('@/features/canvas/application/agentCanvasActions', () => ({
-  focusCanvasNodeFromAgent: mocks.focusCanvasNodeFromAgent,
-  openCanvasProjectFromAgent: mocks.openCanvasProjectFromAgent,
+vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
+  focusCanvasNode: mocks.focusCanvasNodeFromAgent,
+  openCanvasProject: mocks.openCanvasProjectFromAgent,
 }))
 vi.mock('../hostActions', () => ({ selectAssetFromAgent: mocks.selectAssetFromAgent }))
 vi.mock('@/features/cameraStage/application/cameraStageApplicationService', () => ({

@@ -23,7 +23,7 @@ import '@xyflow/react/dist/style.css';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
-import { registerCanvasNodeFocusHandler } from '@/features/canvas/application/agentCanvasActions';
+import { registerCanvasNodeFocusHandler } from '@/features/canvas/application/canvasApplicationService';
 import {
   type CanvasEdge,
   type CanvasNode,

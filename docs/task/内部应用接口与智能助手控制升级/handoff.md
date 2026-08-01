@@ -3,9 +3,9 @@
 ## 当前接力状态
 
 - 阶段：第五阶段 · 全领域能力迁移
-- 当前任务：5.2（待开始）
+- 当前任务：5.3（待开始）
 - 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3；第三阶段 3.1、3.2、3.3；第四阶段 4.1、4.2、4.3、4.4。
-- 待完成：依次完成 5.2 至 5.4 的全领域迁移。
+- 待完成：依次完成 5.3、5.4 的全领域迁移。
 - 阻塞：无。
 
 ## 任务 5.1 接力
@@ -15,6 +15,14 @@
 - 正式 Surface 目录与导航入口为 `src/features/navigation/application/`；助手目录下的 `settingsRegistry.ts`、`settingsReflection.ts`、`settingsMutationExecutor.ts` 和 `surfaceRegistry.ts` 只保留薄适配。
 - Surface 的 `openPolicy` 是提前展示、先解析稳定目标、无需切换和用户接管判断的唯一策略源；其他 Surface 的真实截图观察仍留在 6.5。
 - 5.2 应将当前 `agentCanvas*` 业务实现改为正式画布服务，再让导航定位与助手处理器引用新入口。
+
+## 任务 5.2 接力
+
+- 状态：已完成；当前任务切换为 5.3。
+- 正式画布入口位于 `src/features/canvas/application/` 的 `canvasApplicationService`、`canvasMutationService`、`canvasBatchService`、`canvasProjectService`、`canvasQueryService` 与 `canvasDownloadService`。
+- 项目、节点和边反射位于 `canvasReflection.ts`；节点标题与位置的原子写入、冲突和撤销由 `CanvasNodeMutationExecutor` 负责。
+- 节点控制 schema 唯一入口为 `src/features/canvas/domain/nodeControlRegistry.ts`，继续复用 `nodeRegistry` 的默认数据、端口和连接规则。
+- 所有 `agentCanvas*` 业务文件已移除；5.3 的素材入画布应直接调用 `addCanvasNode`。
 
 ## 第四阶段开始状态
 
