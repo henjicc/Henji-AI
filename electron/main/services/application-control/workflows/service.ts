@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
 import type { HostContextSnapshot, HostScope, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
-import type { AgentToolGateway } from '../tools/gateway'
 import type { AgentToolGatewayResult } from '../../../../../src/core/assistant/toolContracts'
 import { createMainLogger } from '../../logging'
 import {
@@ -12,7 +11,7 @@ import {
   type WorkflowStep,
 } from './definitions'
 
-const logger = createMainLogger('main.agent_workflow')
+const logger = createMainLogger('main.application_control.workflow')
 const PLAN_TTL_MS = 30 * 60_000
 
 interface WorkflowPlan {
@@ -62,8 +61,24 @@ export interface WorkflowExecutionContext {
   threadId: string
   toolCallId: string
   signal: AbortSignal
-  gateway: AgentToolGateway
+  gateway: WorkflowGateway
   getHostContext: (runId: string) => HostContextSnapshot | null
+}
+
+export interface WorkflowGateway {
+  execute(request: {
+    runId: string
+    threadId: string
+    toolCallId: string
+    toolName: string
+    input: Record<string, unknown>
+    expectedRevisions?: Record<string, number>
+    approvalMode: 'full_access'
+    explicitUserIntent: true
+    authorizationSource: 'approved_workflow'
+    parentToolCallId: string
+    signal: AbortSignal
+  }): Promise<AgentToolGatewayResult>
 }
 
 function cleanupExpiredPlans(plans: Map<string, WorkflowPlan>): void {
@@ -128,7 +143,12 @@ export class DeterministicWorkflowService {
   private readonly runs = new Map<string, WorkflowRun>()
 
   list(): Array<Record<string, unknown>> {
-    return listWorkflowDefinitions().map((definition) => ({ ...definition, supportsPause: true, supportsCompensation: true }))
+    return listWorkflowDefinitions().map((definition) => ({
+      ...definition,
+      schemaRef: `workflow.definition.${definition.id}.params/v1`,
+      supportsPause: true,
+      supportsCompensation: true,
+    }))
   }
 
   plan(workflowId: string, rawParams: Record<string, unknown>, context: HostContextSnapshot | null): Record<string, unknown> {
@@ -391,6 +411,18 @@ export class DeterministicWorkflowService {
       compensations: run.compensations.map(({ stepId, toolName, status }) => ({ stepId, toolName, status })),
       error: run.error ?? null,
       scopeRevisions: run.scopeRevisions,
+      revision: run.updatedAt,
+      waitingExternal: false,
+      cancellable: run.status === 'running' || run.status === 'paused',
+      resumable: run.status === 'paused' || run.status === 'failed',
+      retryable: run.status === 'failed',
+      resultRefs: run.stepResults.flatMap((step) => Object.values(step.references)),
+      evidence: {
+        workflowRunRef: run.workflowRunRef,
+        completedSteps: run.stepResults.length,
+        scopeRevisions: run.scopeRevisions,
+        updatedAt: new Date(run.updatedAt).toISOString(),
+      },
     }
   }
 }

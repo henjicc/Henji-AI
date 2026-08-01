@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { applicationSchemaRefSchema } from '../../application-control'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
@@ -91,6 +92,7 @@ const getModelSchema = defineApplicationCapability({
   inputSchema: z.object({ modelId: z.string().min(1) }).strict(),
   outputSchema: capabilityOutputSchema({
     schemaVersion: z.string(),
+    schemaRef: applicationSchemaRefSchema,
     meta: z.record(z.string(), z.unknown()),
     params: z.array(z.record(z.string(), z.unknown())),
   }),

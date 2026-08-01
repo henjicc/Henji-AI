@@ -2,10 +2,10 @@
 
 ## 当前接力状态
 
-- 阶段：第五阶段 · 全领域能力迁移
-- 当前任务：5.4（待开始）
-- 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3；第三阶段 3.1、3.2、3.3；第四阶段 4.1、4.2、4.3、4.4。
-- 待完成：5.4 收口生成、模型、工作流与运行时操作。
+- 阶段：第六阶段 · 助手体验与可观测性
+- 当前任务：6.1（待开始）
+- 已完成：第一至第五阶段全部任务（1.1 至 5.4）。
+- 待完成：6.1 完善执行过程滚动跟随与用户接管。
 - 阻塞：无。
 
 ## 任务 5.1 接力
@@ -32,6 +32,16 @@
 - 工具控制目录位于 `src/features/imageEdit/tools/controlCatalog.ts`，UI 工具注册表和控制面共同引用；工具箱正式服务/反射位于 `src/features/toolbox/application/`。
 - 分镜项目与卡片通过 `storyboardProjectService.ts` 和 `storyboardReflection.ts` 暴露；写入继续走画布分镜节点事务。
 - 助手 `hostActions.ts`、`imageEditAdapter.ts` 和核心助手 `imageEditContracts.ts` 已删除。
+
+## 任务 5.4 与第五阶段完成接力
+
+- 状态：5.4 与第五阶段已完成；当前任务切换为 6.1。
+- 生成正式入口位于 `src/features/generation/application/`；模型 schema 直接从模型定义生成稳定 `schemaRef`，可见任务继续复用 `GenerationService` 固定链路。
+- `generation.model`、`generation.task`、`generation.result` 已注册反射；任务状态来自生成工作区轻量镜像，不新增队列或轮询器。
+- 工作流正式入口位于 `electron/main/services/application-control/workflows/`；`agent-runtime/workflows/tools.ts` 只保留工具协议适配。
+- 助手运行时正式入口和 `assistant.run`、`assistant.artifact` 反射位于 `src/features/assistant/application/`；Artifact 内容分页、运行持久恢复和诊断均继续使用既有唯一实现。
+- 生产评测脚本已从删除的 `agentCanvasActions.test.ts` 切换到 `canvasApplicationService.test.ts`。
+- 第五阶段真实鼠标交互和真实 API 生成验收已集中到 `manual-test.md`；6.3 至 6.5 可直接使用稳定结果/产物引用。
 
 ## 第四阶段开始状态
 

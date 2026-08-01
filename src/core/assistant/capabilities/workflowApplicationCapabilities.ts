@@ -14,6 +14,18 @@ export const workflowResultSchema = z.object({
   planRef: z.string().optional(),
   workflowId: z.string().optional(),
   status: z.string().optional(),
+  revision: z.number().int().nonnegative().optional(),
+  waitingExternal: z.boolean().optional(),
+  cancellable: z.boolean().optional(),
+  resumable: z.boolean().optional(),
+  retryable: z.boolean().optional(),
+  resultRefs: z.array(z.string()).optional(),
+  evidence: z.object({
+    workflowRunRef: z.string(),
+    completedSteps: z.number().int().nonnegative(),
+    scopeRevisions: z.record(z.string(), z.number().int().nonnegative()),
+    updatedAt: z.string().datetime(),
+  }).strict().optional(),
 }).passthrough()
 
 export const listWorkflowsCapability = defineApplicationCapability({

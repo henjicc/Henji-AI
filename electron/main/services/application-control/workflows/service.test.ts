@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AgentToolExecuteRequest } from '../tools/types'
-import type { AgentToolGateway } from '../tools/gateway'
+import type { AgentToolExecuteRequest } from '../../agent-runtime/tools/types'
+import type { WorkflowGateway } from './service'
 import type { AgentToolGatewayResult } from '../../../../../src/core/assistant/toolContracts'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { DeterministicWorkflowService } from './service'
@@ -25,7 +25,7 @@ function context(): HostContextSnapshot {
 function createGateway(
   current: HostContextSnapshot,
   options?: { failTool?: string; mutateAfter?: string; requireApprovalTool?: string }
-): { gateway: AgentToolGateway; calls: AgentToolExecuteRequest[] } {
+): { gateway: WorkflowGateway; calls: AgentToolExecuteRequest[] } {
   const calls: AgentToolExecuteRequest[] = []
   const gateway = {
     execute: async (request: AgentToolExecuteRequest): Promise<AgentToolGatewayResult> => {
@@ -69,7 +69,7 @@ function createGateway(
         trust: 'untrusted_observation', dataClasses: ['C1'], summary: 'ok', output,
       }, cached: false }
     },
-  } as unknown as AgentToolGateway
+  } as unknown as WorkflowGateway
   return { gateway, calls }
 }
 
@@ -85,7 +85,15 @@ describe('DeterministicWorkflowService', () => {
       runId: 'run-1', threadId: 'thread-1', toolCallId: 'call-1', signal: new AbortController().signal,
       gateway, getHostContext: () => host,
     })
-    expect(result).toMatchObject({ status: 'completed', totalSteps: 5 })
+    expect(result).toMatchObject({
+      status: 'completed',
+      totalSteps: 5,
+      waitingExternal: false,
+      cancellable: false,
+      resumable: false,
+      retryable: false,
+      evidence: { workflowRunRef: result.workflowRunRef, completedSteps: 5 },
+    })
     expect(calls.map((call) => call.toolName)).toEqual([
       'switch_workspace', 'prepare_generation_task', 'create_visible_generation_task',
       'open_canvas_project', 'add_canvas_node',

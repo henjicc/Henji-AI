@@ -22,6 +22,8 @@ import { createAssetReflectionRegistrations } from '@/features/assets/applicatio
 import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
 import { createStoryboardReflectionRegistrations } from '@/features/canvas/application/storyboardReflection'
 import { createToolboxReflectionRegistration } from '@/features/toolbox/application/toolboxReflection'
+import { createGenerationReflectionRegistrations } from '@/features/generation/application/generationReflection'
+import { createAssistantRuntimeReflectionRegistrations } from '@/features/assistant/application/assistantRuntimeReflection'
 
 let registry: ApplicationReflectionRegistry | undefined
 let executionEngine: ApplicationControlExecutionEngine | undefined
@@ -45,6 +47,8 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
     for (const registration of createStoryboardReflectionRegistrations()) registry.register(registration)
     for (const registration of createImageEditReflectionRegistrations()) registry.register(registration)
     registry.register(createToolboxReflectionRegistration())
+    for (const registration of createGenerationReflectionRegistrations()) registry.register(registration)
+    for (const registration of createAssistantRuntimeReflectionRegistrations()) registry.register(registration)
     for (const registration of createCameraStageReflectionRegistrations(
       () => cameraStageDependencies.readRevision()
     )) {

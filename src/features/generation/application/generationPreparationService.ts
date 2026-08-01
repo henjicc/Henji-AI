@@ -8,6 +8,7 @@ import {
 } from '@/core/pricing/priceDisplay'
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
 import { getI18nText, type ModelDefinition, type ParamDef } from '@/core/types'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 export type GenerationMediaType = 'image' | 'video' | 'audio'
 export type GenerationModelSearchSort = 'registry' | 'recommended' | 'lowest_estimated_price'
@@ -244,6 +245,24 @@ function toCatalogModel(model: ModelDefinition): Record<string, unknown> {
   }
 }
 
+function schemaDigest(modelId: string, params: ParamDef[]): string {
+  const seed = JSON.stringify({ modelId, params: params.map((param) => serializeParam(param)) })
+  const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
+  return `sha256:${value.padEnd(64, value).slice(0, 64)}`
+}
+
+export function getGenerationModelSchemaRef(modelId: string) {
+  const model = registry.getModel(modelId)
+  if (!model) throw new GenerationPreparationError('MODEL_NOT_FOUND', '生成模型不存在', { modelId })
+  return {
+    catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
+    kind: 'operation' as const,
+    id: `generation.model.${model.meta.id}.params`,
+    version: 1,
+    digest: schemaDigest(model.meta.id, model.params),
+  }
+}
+
 /**
  * 提供给 Agent 的紧凑模型目录。它只用于首轮选择，最终提交前仍必须读取单模型 schema。
  */
@@ -333,6 +352,7 @@ export function getGenerationModelSchema(modelId: string): Record<string, unknow
   if (!model) throw new GenerationPreparationError('MODEL_NOT_FOUND', '生成模型不存在', { modelId })
   return {
     schemaVersion: 'generation-model-schema/v2',
+    schemaRef: getGenerationModelSchemaRef(model.meta.id),
     meta: {
       id: model.meta.id,
       canonicalModelId: model.meta.canonicalModelId,

@@ -92,3 +92,11 @@
 - 图片编辑控制 schema、文档构建器和预览会话注册表归属图片编辑领域；能力定义和 UI 工具注册表引用同一轻量控制目录，不维护助手专用参数副本。
 - 图片编辑预览是有 revision 的短期事务：提交失败保留预览以便重试，成功生成新素材后关闭预览，不覆盖源文件。
 - 独立分镜项目目前只提供读取语义；持久写入继续通过画布分镜节点与画布事务完成，避免为同一分镜数据建立重复写路径。
+
+## 2026-08-01 · 第五阶段生成与运行时收口
+
+- 模型参数结构继续以 `src/models/**.model.ts` 为唯一来源；正式生成服务只序列化并发布带 digest 的稳定 `schemaRef`，模型搜索摘要不重复携带完整引用，避免挤占目录预算。
+- 生成操作通过 `generationApplicationService` 复用可见任务命令与 `GenerationService` 固定链路；任务注册表只保存界面已有任务的轻量状态快照，不成为第二套任务队列。
+- 确定性工作流业务服务迁出 Agent Runtime 到 `electron/main/services/application-control/workflows/`；Agent 工具保留为薄适配器，工作流输出统一提供 revision、等待/取消/恢复/重试能力和证据。
+- 助手 run 与 Artifact 反射只观察既有持久化状态和稳定引用；Artifact 内容继续由 `read_agent_artifact` 唯一分页入口读取，诊断继续使用既有日志查询能力。
+- 真实图片、视频和音频结果不得在自动测试中调用；通过 `generation.result`/Artifact 稳定引用交给 6.3 至 6.5 的多模态门禁与观察层。

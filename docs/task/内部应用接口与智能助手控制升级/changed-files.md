@@ -1,5 +1,27 @@
 # 变更文件记录
 
+## 任务 5.4 与第五阶段完成
+
+- `src/features/generation/application/`：生成准备、模型 schemaRef、任务服务/状态镜像、恢复、反射与测试
+- `src/features/assistant/application/`：助手 run/Artifact 正式服务、反射与状态映射测试
+- `electron/main/services/application-control/workflows/`：确定性工作流定义、正式服务与测试
+- `electron/main/services/agent-runtime/workflows/tools.ts`：仅保留运行时薄适配
+- `electron/main/agent-utility.ts`
+- `src/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand.ts`
+- `src/workspaces/GenerationWorkspace/hooks/useTaskGeneration.ts`
+- `src/features/assistant/applicationCapabilities/applicationControlRegistry.ts`
+- `src/features/assistant/applicationCapabilities/registerGenerationCapabilityHandlers.ts`
+- `src/features/assistant/applicationCapabilities/registry.ts`
+- `src/core/assistant/applicationControlCoverage.ts`
+- `src/core/assistant/builtinApplicationCapabilities.ts`
+- `src/core/assistant/capabilities/generationApplicationCapabilities.ts`
+- `src/core/assistant/capabilities/toolboxApplicationCapabilities.ts`
+- `src/core/assistant/capabilities/workflowApplicationCapabilities.ts`
+- `package.json`：助手生产评测引用正式画布测试
+- 删除 `src/core/assistant/generationPreparation*` 与 `generationTaskRecovery*` 助手专用业务文件
+- 删除 `electron/main/services/agent-runtime/workflows/definitions.ts`、`service.ts` 与旧位置测试
+- 第五阶段任务记录文件
+
 ## 任务 5.3
 
 - `src/features/assets/application/` 正式素材服务、素材入画布组合服务、反射与测试
@@ -40,7 +62,7 @@
 - 删除 `src/features/canvas/domain/agentCanvasCatalog.ts`
 - 第五阶段任务记录文件
 
-## 第五阶段（进行中）
+## 第五阶段（已完成）
 
 ### 任务 5.1
 

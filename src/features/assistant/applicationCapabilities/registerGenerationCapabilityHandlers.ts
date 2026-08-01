@@ -1,16 +1,5 @@
-import {
-  GenerationPreparationError,
-  getGenerationModelSchema,
-  prepareGenerationTask,
-  searchGenerationModelCatalog,
-} from '@/core/assistant/generationPreparation'
-import { createGenerationTaskRecoveryAdvice } from '@/core/assistant/generationTaskRecovery'
+import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { switchWorkspace } from '@/stores/navigationStore'
-import {
-  cancelVisibleGenerationTask,
-  getVisibleGenerationTask,
-  runVisibleGenerationTaskCommand,
-} from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
@@ -46,7 +35,7 @@ export function registerGenerationCapabilityHandlers(
 
   registrar.registerHandler('search_models', (input) => {
     const parsed = parseCapabilityInput<SearchModelsInput>('search_models', input)
-    const search = searchGenerationModelCatalog(parsed)
+    const search = generationApplicationService.searchModels(parsed)
     const start = parsed.cursor
     const models = search.models.slice(start, start + parsed.limit)
     return {
@@ -70,13 +59,13 @@ export function registerGenerationCapabilityHandlers(
 
   registrar.registerHandler('get_model_schema', (input) => {
     const parsed = parseCapabilityInput<{ modelId: string }>('get_model_schema', input)
-    return getGenerationModelSchema(parsed.modelId)
+    return generationApplicationService.getModelSchema(parsed.modelId)
   })
 
   registrar.registerHandler('prepare_generation_task', (input) => {
     const parsed = parseCapabilityInput<GenerationInput>('prepare_generation_task', input)
     return {
-      preparation: prepareGenerationTask({
+      preparation: generationApplicationService.prepare({
         modelId: parsed.modelId,
         prompt: parsed.prompt,
         mediaType: parsed.mediaType,
@@ -88,37 +77,17 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('create_visible_generation_task', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<GenerationInput>('create_visible_generation_task', input)
-    const preparation = prepareGenerationTask({
+    return await generationApplicationService.submit({
       modelId: parsed.modelId,
       prompt: parsed.prompt,
       mediaType: parsed.mediaType,
       options: parsed.params,
     })
-    const taskId = await runVisibleGenerationTaskCommand({
-      input: parsed.prompt,
-      model: parsed.modelId,
-      type: parsed.mediaType,
-      options: preparation.options as DynamicValue,
-    })
-    if (!taskId) {
-      throw new GenerationPreparationError(
-        'INVALID_INPUT',
-        '生成任务未创建，请检查输入和当前模式'
-      )
-    }
-    return { taskId, status: 'submitted' }
   })
 
   registrar.registerHandler('get_generation_task', (input) => {
     const parsed = parseCapabilityInput<{ taskId: string }>('get_generation_task', input)
-    const task = getVisibleGenerationTask(parsed.taskId)
-    if (!task) throw new Error('TASK_NOT_FOUND')
-    return {
-      task: {
-        ...task,
-        recovery: createGenerationTaskRecoveryAdvice(task),
-      },
-    }
+    return { task: generationApplicationService.getTask(parsed.taskId) }
   })
 
   registrar.registerHandler('cancel_generation_task', async (input, context) => {
@@ -127,6 +96,6 @@ export function registerGenerationCapabilityHandlers(
       taskId: string
       reason: string
     }>('cancel_generation_task', input)
-    return await cancelVisibleGenerationTask(parsed.taskId, parsed.reason)
+    return await generationApplicationService.cancelTask(parsed.taskId, parsed.reason)
   })
 }

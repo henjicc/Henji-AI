@@ -1,3 +1,4 @@
+/** 生成任务失败后的调用方中立恢复约束。 */
 export interface GenerationTaskRecoveryInput {
   taskId: string
   modelId: string

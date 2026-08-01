@@ -21,7 +21,7 @@ import {
   type ApplicationCapabilityInvocation,
 } from '@/core/assistant/applicationCapabilities'
 import type { ApplicationCapabilityResult } from '@/core/assistant/hostContracts'
-import { GenerationPreparationError } from '@/core/assistant/generationPreparation'
+import { GenerationPreparationError } from '@/features/generation/application/generationPreparationService'
 import { createLogger } from '@/core/logging'
 import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
 import { ZodError } from 'zod'

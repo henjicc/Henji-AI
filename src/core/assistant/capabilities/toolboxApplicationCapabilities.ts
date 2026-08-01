@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { imageEditOperationSchema } from '@/features/imageEdit/application/imageEditControlCatalog'
+import { imageEditOperationSchema } from '../../../features/imageEdit/application/imageEditControlCatalog'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
   capabilityOutputSchema,

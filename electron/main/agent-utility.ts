@@ -62,7 +62,7 @@ import { createBuiltinAgentToolRegistry } from './services/agent-runtime/tools/b
 import { AgentToolGateway } from './services/agent-runtime/tools/gateway'
 import { AgentToolRegistry } from './services/agent-runtime/tools/registry'
 import type { AgentToolDefinition } from './services/agent-runtime/tools/types'
-import { DeterministicWorkflowService } from './services/agent-runtime/workflows/service'
+import { DeterministicWorkflowService } from './services/application-control/workflows/service'
 import { createWorkflowTools } from './services/agent-runtime/workflows/tools'
 import { createMainLogger } from './services/logging'
 import {

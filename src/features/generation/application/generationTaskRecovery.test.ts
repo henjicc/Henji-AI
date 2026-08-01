@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createGenerationTaskRecoveryAdvice } from './generationTaskRecovery'
 
-describe('createGenerationTaskRecoveryAdvice', () => {
+describe('generation task recovery policy', () => {
   it('将供应商比例校验错误归类为同模型参数修正', () => {
     expect(createGenerationTaskRecoveryAdvice({
       taskId: 'task-z-image',

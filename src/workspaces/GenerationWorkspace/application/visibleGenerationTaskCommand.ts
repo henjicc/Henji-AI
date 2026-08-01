@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import type { GenerationTaskStatusSnapshot } from '@/features/generation/application/generationTaskStatusRegistry'
 import { registry } from '@/core/ModelRegistry'
 import type { ImageEditSession } from '@/core/imageEdit'
 import { taskQueueManager } from '@/services/taskQueue'
@@ -62,20 +63,12 @@ export interface VisibleGenerationTaskDependencies {
 
 export type VisibleGenerationTaskHandler = (input: VisibleGenerationTaskInput) => Promise<string | null>
 
-export interface VisibleGenerationTaskSummary {
-  taskId: string
-  status: GenerationTask['status']
-  progress: number
-  modelId: string
-  mediaType: MediaType
-  resultAvailable: boolean
-  errorCode: string | null
-  errorMessage: string | null
-}
+export type VisibleGenerationTaskSummary = GenerationTaskStatusSnapshot
 
 export interface VisibleGenerationTaskHandlers {
   create: VisibleGenerationTaskHandler
   get: (taskId: string) => VisibleGenerationTaskSummary | null
+  list: () => VisibleGenerationTaskSummary[]
   cancel: (taskId: string, reason: string) => Promise<Record<string, unknown>>
 }
 
@@ -174,6 +167,11 @@ export async function runVisibleGenerationTaskCommand(input: VisibleGenerationTa
 export function getVisibleGenerationTask(taskId: string): VisibleGenerationTaskSummary | null {
   if (!registeredHandlers) throw new Error('可见生成任务命令尚未就绪')
   return registeredHandlers.get(taskId)
+}
+
+export function listVisibleGenerationTasks(): VisibleGenerationTaskSummary[] {
+  if (!registeredHandlers) return []
+  return registeredHandlers.list()
 }
 
 export async function cancelVisibleGenerationTask(taskId: string, reason: string): Promise<Record<string, unknown>> {

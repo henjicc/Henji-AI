@@ -1,6 +1,21 @@
 # 测试报告
 
-## 第五阶段（进行中）
+## 第五阶段（已完成）
+
+### 任务 5.4 与阶段收尾
+
+- 验证级别：L3；生成/模型、工作流主进程服务、助手持久运行时与生产评测脚本发生跨层迁移。
+- 精确测试：生成 schema/恢复、助手运行状态、工作流、能力处理器、注册表和覆盖清单共 8 个文件、29 项通过。
+- `npm run gen:model-manifest`：通过，生成 65 个模型；产物无差异。
+- `npm run check:model-i18n`：通过。
+- `npm run check:assistant-capabilities`：通过；覆盖门禁 4 项测试通过。
+- `npm run lint` 与 Electron 全量 ESLint：通过。
+- `npx tsc -p tsconfig.json --noEmit`：通过。
+- `npx tsc -p tsconfig.electron.json --noEmit`：通过。
+- `npm run test:assistant-production`：通过；模型兼容 10 个文件/57 项、评测 43 个文件/243 项、结算 2 个文件/2 项、持久化 35 项全部通过。
+- `npx vitest run`：180 个测试文件、818 项通过；8 个文件、36 项按环境条件跳过，无失败。
+- 精确测试曾发现模型搜索卡片携带 `schemaRef` 后超过 24 KiB 预算；已改为只在模型 schema 读取结果中返回引用，复跑和全量测试均通过。
+- 未执行真实 API 生成；相关图片/视频/音频、取消和结果观察步骤集中在 `manual-test.md`。
 
 ### 任务 5.1
 

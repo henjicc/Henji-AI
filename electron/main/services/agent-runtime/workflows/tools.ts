@@ -12,7 +12,7 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import { createBackendCapabilityTool } from '../tools/backend-capability-tool'
 import type { AgentToolGateway } from '../tools/gateway'
 import type { AgentToolDefinition } from '../tools/types'
-import { DeterministicWorkflowService } from './service'
+import { DeterministicWorkflowService } from '../../application-control/workflows/service'
 
 export interface WorkflowToolDependencies {
   service: DeterministicWorkflowService

@@ -11,7 +11,7 @@ import {
   prepareGenerationTask,
   searchGenerationModelCatalog,
   searchGenerationModels,
-} from './generationPreparation'
+} from './generationPreparationService'
 
 const testModel: ModelDefinition = {
   meta: {
@@ -79,6 +79,7 @@ describe('generationPreparation', () => {
     })
     const schema = getGenerationModelSchema(testModel.meta.id)
     expect(schema.schemaVersion).toBe('generation-model-schema/v2')
+    expect(schema.schemaRef).toMatchObject({ id: `generation.model.${testModel.meta.id}.params` })
     expect(schema.params).toHaveLength(2)
     expect(schema.priceEstimate).toMatchObject({ amount: 0.5, currency: '$' })
   })

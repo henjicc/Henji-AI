@@ -14,6 +14,7 @@ import { continuePollingTask } from './continuePollingTask'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 import { taskQueueManager } from '@/services/taskQueue'
+import { replaceGenerationTaskStatusSnapshots } from '@/features/generation/application/generationTaskStatusRegistry'
 import {
   asMutableRecord,
   isMinimaxVoiceCloneMode,
@@ -331,6 +332,16 @@ export function useTaskGeneration({
 
   useEffect(() => registerVisibleGenerationTaskHandler({
     create: runCreateVisibleTask,
+    list: () => tasksRef.current.map((task) => ({
+      taskId: task.id,
+      status: task.status,
+      progress: useGenerationTaskProgressStore.getState().progress[task.id] ?? task.progress ?? 0,
+      modelId: task.model,
+      mediaType: task.type,
+      resultAvailable: Boolean(task.result),
+      errorCode: task.error ? 'GENERATION_FAILED' : null,
+      errorMessage: task.error?.slice(0, 1_000) ?? null,
+    })),
     get: (taskId) => {
       const task = tasksRef.current.find((item) => item.id === taskId)
       if (!task) return null
@@ -362,6 +373,16 @@ export function useTaskGeneration({
   }), [runCreateVisibleTask, updateTask])
 
   useEffect(() => {
+    replaceGenerationTaskStatusSnapshots(tasks.map((task) => ({
+      taskId: task.id,
+      status: task.status,
+      progress: useGenerationTaskProgressStore.getState().progress[task.id] ?? task.progress ?? 0,
+      modelId: task.model,
+      mediaType: task.type,
+      resultAvailable: Boolean(task.result),
+      errorCode: task.error ? 'GENERATION_FAILED' : null,
+      errorMessage: task.error?.slice(0, 1_000) ?? null,
+    })))
     for (const task of tasks) publishVisibleGenerationTaskStatus({
       taskId: task.id,
       status: getVisibleGenerationReportedStatus(task.id, task.status),
