@@ -17,6 +17,9 @@ import {
 } from '../userInstructions'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { defineApplicationCapability } from './defineApplicationCapability'
+import {
+  CAPABILITY_DISCOVERY_APPLICATION_CAPABILITIES,
+} from './capabilityDiscoveryApplicationCapabilities'
 
 export const diagnosticQueryInputSchema = z.object({
   subjectRequestId: z.string().min(1).max(500).optional(),
@@ -305,6 +308,7 @@ export const rejectAgentMemoryCapability = defineApplicationCapability({
 })
 
 export const ASSISTANT_RUNTIME_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
+  ...CAPABILITY_DISCOVERY_APPLICATION_CAPABILITIES,
   readAgentArtifactCapability,
   queryDiagnosticEventsCapability,
   getUserInstructionsCapability,

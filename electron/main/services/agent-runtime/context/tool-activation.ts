@@ -5,7 +5,7 @@ import type { AgentRouteDecision } from './types'
 
 export const AGENT_ACTIVE_TOOL_LIMIT = 8
 export const AGENT_TOOL_SCHEMA_BUDGET_BYTES = 48 * 1024
-const CAPABILITY_SEARCH_TOOL = 'search_application_capabilities'
+const CAPABILITY_DISCOVERY_TOOL = 'discover_application_capabilities'
 const CURRENT_CONTEXT_TOOL = 'get_current_application_context'
 
 export interface AgentToolActivationInput {
@@ -48,7 +48,7 @@ export function activateAgentTools(
   ))
   const capabilitySearchNames = input.route.toolDomains.length === 0
     ? []
-    : [CURRENT_CONTEXT_TOOL, CAPABILITY_SEARCH_TOOL]
+    : [CURRENT_CONTEXT_TOOL, CAPABILITY_DISCOVERY_TOOL]
   const candidates = unique([
     ...input.pinnedToolNames,
     ...capabilitySearchNames,

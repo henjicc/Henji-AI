@@ -26,6 +26,22 @@
 - `electron/main/services/agent-runtime/runner/tool-turn.ts`
 - 第三阶段任务记录文件
 
+### 任务 3.2
+
+- `src/core/assistant/capabilityDiscovery.ts`
+- `src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities.ts`
+- `src/core/assistant/capabilities/assistantRuntimeApplicationCapabilities.ts`
+- `src/core/assistant/applicationControlCoverage.ts`
+- `src/core/assistant/taskGraph.test.ts`
+- `electron/main/services/agent-runtime/context/capability-discovery.ts`
+- `electron/main/services/agent-runtime/context/capability-discovery.test.ts`
+- `electron/main/services/agent-runtime/context/catalog.ts`
+- `electron/main/services/agent-runtime/context/catalog.test.ts`
+- `electron/main/services/agent-runtime/context/tool-activation.ts`
+- `electron/main/services/agent-runtime/context/prompt-layers.ts`
+- `electron/main/services/agent-runtime/tools/builtin/backend.ts`
+- 第三阶段任务记录文件
+
 ## 第二阶段（已完成）
 
 ### 任务 2.1

@@ -44,17 +44,27 @@ export class AgentToolCatalogPlanner {
   }
 
   rememberDiscovered(toolName: string, output: unknown): string[] {
-    if (toolName !== 'search_application_capabilities' || !output || typeof output !== 'object') return []
-    const capabilities = (output as Record<string, unknown>).capabilities
-    if (!Array.isArray(capabilities)) return []
+    if (!['discover_application_capabilities', 'search_application_capabilities'].includes(toolName)
+      || !output || typeof output !== 'object') return []
+    const outputRecord = output as Record<string, unknown>
+    const capabilities = outputRecord.capabilities
+    const explicitlyAdded = Array.isArray(outputRecord.addedToolNames)
+      ? outputRecord.addedToolNames.filter((name): name is string => typeof name === 'string')
+      : []
+    if (!Array.isArray(capabilities) && explicitlyAdded.length === 0) return []
     const previous = new Set(this.discoveredToolNames)
     const candidates: string[] = []
-    for (const capability of capabilities) {
+    for (const capability of Array.isArray(capabilities) ? capabilities : []) {
       if (!capability || typeof capability !== 'object' || Array.isArray(capability)) continue
       const name = (capability as Record<string, unknown>).name
-      if (typeof name !== 'string' || name === 'search_application_capabilities') continue
+      if (typeof name !== 'string'
+        || ['discover_application_capabilities', 'search_application_capabilities'].includes(name)) continue
       if (!this.registry.get(name) || candidates.includes(name)) continue
       candidates.push(name)
+    }
+    for (const name of explicitlyAdded) {
+      if (['discover_application_capabilities', 'search_application_capabilities'].includes(name)) continue
+      if (this.registry.get(name) && !candidates.includes(name)) candidates.push(name)
     }
     this.discoveredToolNames = [...new Set([...candidates, ...this.discoveredToolNames])].slice(0, 100)
     if (candidates.length > 0) this.discoveryCursor = 0
@@ -62,7 +72,8 @@ export class AgentToolCatalogPlanner {
   }
 
   rememberObservation(toolName: string, output?: unknown): void {
-    if (toolName === 'search_application_capabilities' || !this.registry.get(toolName)) return
+    if (['discover_application_capabilities', 'search_application_capabilities'].includes(toolName)
+      || !this.registry.get(toolName)) return
     this.recentToolNames = [
       toolName,
       ...this.recentToolNames.filter((name) => name !== toolName),
@@ -86,7 +97,8 @@ export class AgentToolCatalogPlanner {
   restoreDiscovered(toolNames: string[]): void {
     this.discoveredToolNames = [...new Set([
       ...toolNames.filter((name) => (
-        name !== 'search_application_capabilities' && Boolean(this.registry.get(name))
+        !['discover_application_capabilities', 'search_application_capabilities'].includes(name)
+        && Boolean(this.registry.get(name))
       )),
       ...this.discoveredToolNames,
     ])].slice(0, 100)

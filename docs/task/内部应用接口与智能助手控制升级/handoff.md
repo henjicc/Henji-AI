@@ -3,9 +3,9 @@
 ## 当前接力状态
 
 - 阶段：第三阶段 · 助手规划与能力发现
-- 当前任务：3.2（待开始）
-- 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3；第三阶段 3.1。
-- 待完成：批量能力/控制结构发现、进展判定与循环终止。
+- 当前任务：3.3（待开始）
+- 已完成：第一阶段 1.1、1.2；第二阶段 2.1、2.2、2.3；第三阶段 3.1、3.2。
+- 待完成：进展判定与循环终止。
 - 阻塞：无。
 
 ## 第二阶段开始状态
@@ -41,6 +41,12 @@
 - 多 Facet 共享契约位于 `src/core/assistant/taskGraph.ts`，路由构建位于 `context/task-facets.ts`。
 - `AgentRouteDecision.taskGraph` 是正式任务图；旧 route 字段继续用于兼容现有调用方。
 - `PlanUpdated.taskGraph` 已进入工作摘要和保存点，3.2、3.3 不需另建持久化通道。
+
+## 任务 3.2 接力
+
+- 批量发现契约位于 `src/core/assistant/capabilityDiscovery.ts`，主进程目录索引位于 `context/capability-discovery.ts`。
+- 默认激活 `discover_application_capabilities`；发现后下一轮增量激活操作工具与 `read_application_schemas`。
+- `fingerprint`、`reused` 和 `missing` 是 3.3 进展判定的权威输入，不再从自然语言摘要猜测。
 
 ## 第一阶段接力要点
 

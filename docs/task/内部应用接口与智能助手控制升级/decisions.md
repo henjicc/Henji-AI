@@ -42,3 +42,9 @@
 - 正式任务分解使用 `agent-task-graph/v1`；旧 `intent` 与 `toolDomains` 仅作为兼容摘要和现有激活入口。
 - 确定性规则与模型分类器必须输出同一任务图结构，模型只能在本地允许的领域白名单内补充 Facet。
 - Router 提供任务图和搜索建议，不授予权限，也不以分类结果限制目录中的合法能力。
+
+## 2026-08-01 · 第三阶段批量发现
+
+- 默认目录入口为 `discover_application_capabilities`，一次消费全部已知 Facet；旧单关键词搜索只保留历史兼容。
+- 完整操作输入结构不放入目录摘要，通过带目录版本、能力版本和 digest 的 operation schemaRef 调用 `read_application_schemas` 读取。
+- 发现缓存键包含运行 ID、规范化请求、目录 revision 与当前可用能力；缓存命中必须显式返回 `reused: true`，供进展判定识别。

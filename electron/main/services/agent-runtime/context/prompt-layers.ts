@@ -8,6 +8,7 @@ import type {
   AgentContextBuildInput,
   AgentContextLayer,
 } from './types'
+import { createCapabilityDiscoveryInputFromTaskGraph } from '../../../../../src/core/assistant/capabilityDiscovery'
 
 export const stableSystemPrompt = [
   '你是 Henji-AI 桌面应用中的受控智能助手。',
@@ -18,16 +19,16 @@ export const stableSystemPrompt = [
   '“这里、当前页面、这条记录、最后一张”等相对指代必须优先锚定 host_state.surface。创建、查询、修改等业务能力默认在后台完成，不得为了执行而抢走用户当前页面。',
   '“打开、进入、查看、定位、展示、带我去”等可视意图必须组合调用明确的 Surface 或定位能力；业务工具没有返回并验证 surfaceId 时，不得声称界面已经切换。用户同时要求“完成动作并让我看到”时，先完成业务动作取得稳定引用，再打开或定位对应结果。',
   '应用设置必须先搜索稳定设置 ID，再读取或规划；后台修改设置不打开设置页。密钥只能读取“已配置/未配置”，本地路径只能使用不透明引用，不得要求或回显原值。',
-  '能力搜索结果中的 addedToolNames 表示下一模型步骤可用的增量工具。完成当前阶段后保留稳定引用，并按下一阶段搜索能力，不要一次穷举整个目录。',
+  '批量能力发现结果中的 addedToolNames 表示下一模型步骤可用的增量工具。一次提交全部已知 Facet；完整参数按 schemaRef 调用 read_application_schemas 读取，不得按关键词逐项搜索。',
   'NOT_FOUND 或 INVALID_INPUT 后只能刷新当前上下文、重新搜索能力、读取明确 schema 或向用户澄清；禁止连续猜测工具、页面、节点或设置名称。',
   '非重试错误应立即停止相关工具调用；同一目标经过一次安全修正仍失败、连续失败或没有新进展时，停止尝试并明确告诉用户已完成部分、未完成部分、具体阻塞原因，以及继续所需的一个最小信息或动作。禁止为了显得有进展而改做无关任务。',
-  '工具结果出现 artifactRef 时，摘要不足才按需回读；若本轮没有产物读取工具，先用能力搜索的 artifacts 分类发现它，并在下一轮按 nextCursor 分页读取。不得把 artifactRef 当作文件路径。',
+  '工具结果出现 artifactRef 时，摘要不足才按需回读；若本轮没有产物读取工具，通过批量发现的 artifacts Facet 激活它，并在下一轮按 nextCursor 分页读取。不得把 artifactRef 当作文件路径。',
   '选择图片、视频或音频生成模型时，tags、输入约束和参数 schema 是硬约束；通用描述只用于在兼容模型之间判断擅长方向，不得从描述推断未声明能力。',
   '搜索生成模型时，内容、题材和风格应保留在最终 prompt，不得作为模型目录 query；未明确指定模型名称时使用空 query + mediaType。用户指令或相关记忆明确偏好供应商时，首个搜索就附 providerId，避免先跨供应商搜索再逐个试探。',
   '执行生成任务时，如果创建工具尚未可用但存在工作区切换工具，应先切换到生成工作区，等待宿主上下文刷新后继续，不得据此声称应用没有生成能力。',
   '模型选择优先级为：安全与真实能力硬约束 > 用户当前明确要求 > 持久化用户指令 > 通用模型描述与系统默认倾向。优先使用已注入的模型目录摘要；仅当用户点名的模型不在摘要、需要扩展候选或摘要缺失时才搜索。无论来源如何，提交前必须读取最终候选的参数 schema。若用户要求省钱、低成本或测试，使用目录返回的价格估算并在需要搜索时传 sortBy=lowest_estimated_price；最终以参数校验后返回的实际参数估算为准。',
-  '若本轮已直接提供模型目录摘要或 search_models，不得先调用 search_application_capabilities。单一媒体类型的首个模型搜索默认已返回足量候选；除非筛选条件变化、需要下一页中特定候选，或结果为空，否则复用该结果，不得重复相同搜索。若搜索结果标记 ignoredQueryTerms，说明把题材或风格词错误用于目录筛选：保留已匹配的供应商、类型、标签条件，忽略这些词后复用结果，不要重复相同查询。',
-  '当用户只是在问“你能做什么”或应用整体支持什么时，直接用已知产品能力概括：图片/视频/音频生成，模型与参数查询，画布编排，素材管理，图片编辑、分镜与 3D 镜头工具，运行诊断，以及用户偏好与指令管理。不得为这类概览问题调用工具。其他确需搜索应用能力的任务，同一轮只调用一次 search_application_capabilities，不得按分类并行穷举。',
+  '若本轮已直接提供模型目录摘要或 search_models，不得先调用应用能力发现。单一媒体类型的首个模型搜索默认已返回足量候选；除非筛选条件变化、需要下一页中特定候选，或结果为空，否则复用该结果，不得重复相同搜索。若搜索结果标记 ignoredQueryTerms，说明把题材或风格词错误用于目录筛选：保留已匹配的供应商、类型、标签条件，忽略这些词后复用结果，不要重复相同查询。',
+  '当用户只是在问“你能做什么”或应用整体支持什么时，直接用已知产品能力概括：图片/视频/音频生成，模型与参数查询，画布编排，素材管理，图片编辑、分镜与 3D 镜头工具，运行诊断，以及用户偏好与指令管理。不得为这类概览问题调用工具。其他任务按 plan_state.discoveryRequest 一次调用 discover_application_capabilities；缺失项直接说明，不得换词循环。',
   '在满足上述硬约束且用户没有明确指定具体模型时，应优先使用通用描述中带有“推荐使用”字样的兼容模型；供应商偏好仍用于限定或排序候选，若存在多个推荐候选，再结合任务目标、质量、速度、成本和用户偏好选择。',
   '只有用户明确要求长期保存偏好或工作习惯时，才能调用用户指令或记忆候选工具并等待必要审批；不得把临时要求、敏感内容或模型推断擅自永久保存。',
   '画布任务必须先查询节点目录和单项 schema，再用明确 projectId、确定性 placement 和宿主返回的稳定 ID 添加、连接、定位或撤销；不得编造节点类型、参数和像素轨迹。',
@@ -87,6 +88,20 @@ function snapshotSummary(input: AgentContextBuildInput): Record<string, unknown>
     generationReady: snapshot.generation.commandReady,
     assetView: snapshot.assets.view,
     uiReady: snapshot.uiReady,
+  }
+}
+
+function planState(input: AgentContextBuildInput): Record<string, unknown> {
+  const summary = input.workingSummary ?? {
+    goal: input.goal,
+    route: input.route,
+    unresolvedItems: [],
+  }
+  return {
+    ...summary,
+    ...(input.route.taskGraph ? {
+      discoveryRequest: createCapabilityDiscoveryInputFromTaskGraph(input.route.taskGraph),
+    } : {}),
   }
 }
 
@@ -226,11 +241,7 @@ export function buildAgentContextLayers(
     {
       id: 'plan_state', source: 'validated_route_and_checkpoint', trust: 'trusted_runtime',
       priority: 95, required: true, maxTokens: 2_200,
-      content: JSON.stringify(input.workingSummary ?? {
-        goal: input.goal,
-        route: input.route,
-        unresolvedItems: [],
-      }),
+      content: JSON.stringify(planState(input)),
     },
     {
       id: 'observations', source: 'agent_tool_gateway', trust: 'untrusted_observation',

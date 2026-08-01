@@ -47,6 +47,7 @@ const domainPlans: Readonly<Record<string, DomainPlan>> = {
   diagnostics: runtimeDomainPlan('diagnostics', 'query_diagnostic_events'),
   memory: runtimeDomainPlan('memory', 'list_agent_memories'),
   user_instructions: runtimeDomainPlan('user_instructions', 'get_user_instructions'),
+  catalog: runtimeDomainPlan('catalog', 'discover_application_capabilities'),
 }
 
 const mergeTargets: Readonly<Record<string, readonly string[]>> = {
@@ -65,7 +66,7 @@ const deleteTargets: Readonly<Record<string, readonly string[]>> = {
   update_canvas_node: ['application.plan', 'application.commit'],
 }
 
-const retainedDomains = new Set(['artifacts', 'diagnostics', 'memory', 'user_instructions'])
+const retainedDomains = new Set(['artifacts', 'diagnostics', 'memory', 'user_instructions', 'catalog'])
 
 function domainPlan(
   domain: string,

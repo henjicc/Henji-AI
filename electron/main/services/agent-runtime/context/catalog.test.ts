@@ -75,7 +75,7 @@ describe('AgentToolCatalogPlanner', () => {
     const names = activation.activeToolNames
     expect(names.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
     expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
-    expect(names).toContain('search_application_capabilities')
+    expect(names).toContain('discover_application_capabilities')
     expect(names).toContain('search_models')
     expect(names).toContain('get_model_schema')
     expect(names).toContain('create_visible_generation_task')
@@ -114,14 +114,18 @@ describe('AgentToolCatalogPlanner', () => {
     })
     const planner = new AgentToolCatalogPlanner(registry)
     expect(planner.select(primaryRoute, contextSnapshot()).activeToolNames)
-      .toEqual(['search_application_capabilities'])
+      .toEqual(['discover_application_capabilities'])
 
     const capabilities = registry.search('图片生成', undefined, contextSnapshot())
-    const added = planner.rememberDiscovered('search_application_capabilities', { capabilities })
+    const added = planner.rememberDiscovered('discover_application_capabilities', {
+      capabilities,
+      addedToolNames: ['read_application_schemas'],
+    })
     expect(added).toContain('create_visible_generation_task')
+    expect(added).toContain('read_application_schemas')
 
     const activeNames = planner.select(primaryRoute, contextSnapshot()).activeToolNames
-    expect(activeNames).toContain('search_application_capabilities')
+    expect(activeNames).toContain('discover_application_capabilities')
     expect(activeNames).toContain('create_visible_generation_task')
     expect(activeNames).toContain('search_models')
   })
@@ -178,6 +182,7 @@ describe('AgentToolCatalogPlanner', () => {
       ...(readArtifact ? [readArtifact] : []),
       ...registry.list(contextSnapshot())
         .filter((entry) => ![
+          'discover_application_capabilities',
           'search_application_capabilities',
           'read_agent_artifact',
         ].includes(entry.name)),

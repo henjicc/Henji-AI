@@ -8,6 +8,12 @@ import { createUserInstructionTools } from './user-instructions'
 import { createAgentMemoryTools } from './memory'
 import { createAgentArtifactTools, type AgentArtifactToolAccess } from './artifacts'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../../../src/core/assistant/applicationCapabilities'
+import {
+  discoverApplicationCapabilitiesCapability,
+  readApplicationSchemasCapability,
+} from '../../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
+import { AgentCapabilityDiscoveryCatalog } from '../../context/capability-discovery'
+import { createBackendCapabilityTool } from '../backend-capability-tool'
 
 const applicationCapabilityCategorySchema = z.enum([
   'catalog',
@@ -39,6 +45,20 @@ export function createBackendBuiltinTools(
   registry: AgentToolRegistry,
   artifactAccess: AgentArtifactToolAccess
 ): AgentToolDefinition[] {
+  const discoveryCatalog = new AgentCapabilityDiscoveryCatalog(registry)
+  const discoverCapabilities = createBackendCapabilityTool(
+    discoverApplicationCapabilitiesCapability,
+    {
+      execute: (input, context) => Promise.resolve(discoveryCatalog.discover(
+        context.runId,
+        input,
+        context.hostContext
+      )),
+    }
+  )
+  const readSchemas = createBackendCapabilityTool(readApplicationSchemasCapability, {
+    execute: (input) => Promise.resolve(discoveryCatalog.readSchemas(input)),
+  })
   const searchCapabilities = defineAgentTool({
     name: 'search_application_capabilities',
     version: 1,
@@ -128,6 +148,8 @@ export function createBackendBuiltinTools(
   })
 
   return [
+    eraseToolDefinition(discoverCapabilities),
+    eraseToolDefinition(readSchemas),
     eraseToolDefinition(searchCapabilities),
     createQueryDiagnosticEventsTool(),
     ...createUserInstructionTools(),
