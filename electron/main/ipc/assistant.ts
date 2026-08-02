@@ -32,6 +32,7 @@ import {
 } from '../../../src/core/assistant/skills'
 import {
   installAssistantSkill,
+  openAssistantSkillsDirectory,
   uninstallAssistantSkill,
 } from '../services/assistant/skills/install'
 import {
@@ -110,6 +111,12 @@ export function registerAssistantIpc(): void {
     'assistant:skills:uninstall',
     (input) => assistantSkillNameRequestSchema.parse(input),
     ({ name }) => uninstallAssistantSkill(name),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:skills:openDir',
+    parseVoid,
+    () => openAssistantSkillsDirectory(),
     assertTrustedAssistantRenderer
   )
   registerIpcHandler(

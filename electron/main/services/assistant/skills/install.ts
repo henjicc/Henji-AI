@@ -1,3 +1,4 @@
+import { shell } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
@@ -403,4 +404,17 @@ export async function installAssistantSkill(
 
 export async function uninstallAssistantSkill(name: string): Promise<void> {
   return uninstallAssistantSkillFrom(resolveInstallTarget(), name)
+}
+
+/**
+ * 在系统文件管理器里打开用户技能目录。本期不做技能编辑器，用户改技能正文要靠外部编辑器，
+ * 所以至少得能找到目录。目录不存在时先创建，否则首次使用会直接失败。
+ */
+export async function openAssistantSkillsDirectory(): Promise<string> {
+  const userDir = getUserSkillsDir()
+  await fs.mkdir(userDir, { recursive: true })
+  const message = await shell.openPath(userDir)
+  if (message) throw new Error(`无法打开技能目录：${message}`)
+  logger.info('打开技能目录完成', { event: 'assistant_skill.open_dir.completed' })
+  return userDir
 }

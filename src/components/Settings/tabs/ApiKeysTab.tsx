@@ -7,6 +7,7 @@ import SettingsSection from '../components/SettingsSection'
 import { SETTINGS_CONTENT_CLASS, SETTINGS_CONTENT_MAX_WIDTH_CLASS } from '../settingsLayout'
 import UploadSection from '../sections/UploadSection'
 import LlmSettingsSection from '../sections/LlmSettingsSection'
+import AgentSkillsSection from '../sections/AgentSkillsSection'
 import AgentUserInstructionsSection from '../sections/AgentUserInstructionsSection'
 import { API_KEY_PROVIDERS } from '@/core/config/providers'
 import { useExternalLink } from '../hooks/useExternalLink'
@@ -104,6 +105,10 @@ const ApiKeysTab: React.FC = () => {
 
       <SettingsSection id="api-agent-preferences">
         <AgentUserInstructionsSection />
+      </SettingsSection>
+
+      <SettingsSection id="api-agent-skills">
+        <AgentSkillsSection />
       </SettingsSection>
     </UiRegion>
   )

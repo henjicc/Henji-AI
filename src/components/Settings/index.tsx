@@ -34,7 +34,7 @@ type SettingsTab = SettingsTabId
  */
 const SECTION_MAP: Record<SettingsTab, string[]> = {
   general: ['general-basic', 'general-storage', 'general-behavior', 'general-maintenance'],
-  api: ['api-keys', 'api-upload', 'api-llm', 'api-agent-preferences'],
+  api: ['api-keys', 'api-upload', 'api-llm', 'api-agent-preferences', 'api-agent-skills'],
   interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],
   models: ['models-visibility']
 }

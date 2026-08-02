@@ -69,6 +69,7 @@ export interface AssistantPlatform {
   installSkill(request: AssistantSkillInstallRequest): Promise<AssistantSkillInstallResult>
   uninstallSkill(name: string): Promise<void>
   setSkillEnabled(update: AssistantSkillEnabledUpdate): Promise<AssistantSkillManifest>
+  openSkillsDirectory(): Promise<string>
   getMemoryState(): Promise<AgentMemoryState>
   updateMemorySettings(update: AgentMemorySettingsUpdate): Promise<AgentMemorySettings>
   updateMemory(update: AgentMemoryUpdate): Promise<AgentMemoryRecord>

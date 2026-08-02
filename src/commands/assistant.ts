@@ -131,6 +131,11 @@ export async function setAssistantSkillEnabled(
   return await getPlatform().assistant.setSkillEnabled(assistantSkillEnabledUpdateSchema.parse(update))
 }
 
+export async function openAssistantSkillsDirectory(): Promise<string> {
+  if (!isDesktopRuntime()) throw new Error(SKILLS_DESKTOP_ONLY)
+  return await getPlatform().assistant.openSkillsDirectory()
+}
+
 export async function getAgentMemoryState(): Promise<AgentMemoryState> {
   if (!isDesktopRuntime()) throw new Error('智能助手记忆仅在桌面应用中可用')
   return await getPlatform().assistant.getMemoryState()

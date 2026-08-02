@@ -11,6 +11,7 @@
     "api-upload": "上传策略",
     "api-llm": "大语言模型",
     "api-agent-preferences": "助手用户指令",
+    "api-agent-skills": "助手技能",
     "interface-layout": "布局行为",
     "interface-assets": "资产库",
     "interface-canvas": "画布",

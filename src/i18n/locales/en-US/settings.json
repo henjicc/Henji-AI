@@ -11,6 +11,7 @@
     "api-upload": "Upload Strategy",
     "api-llm": "Language Models",
     "api-agent-preferences": "Assistant Instructions",
+    "api-agent-skills": "Assistant Skills",
     "interface-layout": "Layout Behavior",
     "interface-assets": "Asset Library",
     "interface-canvas": "Canvas",

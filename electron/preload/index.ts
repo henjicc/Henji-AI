@@ -91,6 +91,7 @@ const assistantApi: HenjiAssistantApi = {
   installSkill: (request) => nativeInvoke('assistant:skills:install', request),
   uninstallSkill: (name) => nativeInvoke('assistant:skills:uninstall', { name }),
   setSkillEnabled: (update) => nativeInvoke('assistant:skills:setEnabled', update),
+  openSkillsDirectory: () => nativeInvoke('assistant:skills:openDir'),
   getMemoryState: () => nativeInvoke('assistant:memory:getState'),
   updateMemorySettings: (update) => nativeInvoke('assistant:memory:updateSettings', update),
   updateMemory: (update) => nativeInvoke('assistant:memory:update', update),

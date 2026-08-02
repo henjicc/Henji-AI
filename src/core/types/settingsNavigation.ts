@@ -19,6 +19,7 @@ export const SETTINGS_SECTION_IDS = [
   'api-upload',
   'api-llm',
   'api-agent-preferences',
+  'api-agent-skills',
   'interface-layout',
   'interface-assets',
   'interface-canvas',
