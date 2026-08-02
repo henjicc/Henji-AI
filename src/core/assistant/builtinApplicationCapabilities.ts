@@ -5,7 +5,11 @@ import {
   applicationRefSchema,
   type ApplicationCapabilityDefinition,
 } from './applicationCapabilities'
-import { APPLICATION_SURFACE_IDS } from './applicationSurfaces'
+import {
+  APPLICATION_OBSERVATION_TARGETS,
+  APPLICATION_SURFACE_IDS,
+  APPLICATION_WINDOW_OBSERVATION_TARGET,
+} from './applicationSurfaces'
 import { agentAttachmentSchema } from './attachments'
 
 function defineCapability<TInput, TOutput>(
@@ -70,9 +74,10 @@ export const getCurrentApplicationContextCapability = defineCapability({
 
 export const observeApplicationSurfaceCapability = defineCapability({
   id: 'observe_application_surface',
-  version: 1,
-  title: '观察应用表面',
-  description: '仅在结构化数据不足时，读取当前 Henji-AI 窗口内已注册表面的脱敏视觉证据。需要先打开目标表面；已有稳定媒体引用时优先读取原生媒体。',
+  // v2：target 取代 surfaceId，新增 window 整窗观察。
+  version: 2,
+  title: '观察应用界面',
+  description: '读取当前 Henji-AI 窗口的视觉证据。默认用 target="window" 取完整界面，任何时候都可用；只在需要排除干扰、聚焦某一块时才指定具体页面。已有稳定媒体引用时优先读取原生媒体。',
   domain: 'application',
   aliases: ['观察当前页面', '查看界面', '读取预览', '视觉验证', 'observe surface'],
   side: 'frontend',
@@ -86,21 +91,21 @@ export const observeApplicationSurfaceCapability = defineCapability({
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: ['navigation'],
-  prerequisites: ['目标 Surface 已注册且当前可见。', '主模型或观察模型支持目标媒体模态。'],
-  availability: ['只在至少一种媒体输入模态可用时开放，并按实际结果二次门禁。', '截图范围仅限当前 Henji-AI 应用窗口。'],
+  prerequisites: ['target="window" 无前置条件；指定具体页面时该页面必须当前可见。', '主模型或观察模型支持目标媒体模态。'],
+  availability: ['只在至少一种媒体输入模态可用时开放，并按实际结果二次门禁。', '截图范围仅限当前 Henji-AI 应用窗口，不涉及桌面或其他应用。'],
   acceptsRefs: ['application.surface', 'asset'],
   producesRefs: ['asset'],
-  successEvidence: ['返回稳定 asset 引用、观察提供者、遮罩数量；视觉内容经模型读取后才能标记为已验证。'],
-  failureRecovery: ['目标不可见时先调用 open_application_surface。', '模型不支持图片时回退结构化能力并明确未验证。'],
+  successEvidence: ['返回稳定 asset 引用、观察目标、观察提供者、遮罩数量；视觉内容经模型读取后才能标记为已验证。'],
+  failureRecovery: ['指定页面不可见时改用 target="window"，或先调用 open_application_surface。', '模型不支持图片时回退结构化能力并明确未验证。'],
   inputSchema: z.object({
-    surfaceId: z.enum(APPLICATION_SURFACE_IDS),
+    target: z.enum(APPLICATION_OBSERVATION_TARGETS).default(APPLICATION_WINDOW_OBSERVATION_TARGET),
     purpose: z.string().min(1).max(500),
     mediaRef: z.string().regex(/^asset:[^\s]+$/).optional(),
   }).strict(),
   outputSchema: z.object({
-    surfaceId: z.enum(APPLICATION_SURFACE_IDS),
+    target: z.enum(APPLICATION_OBSERVATION_TARGETS),
     providerId: z.string().min(1),
-    sourceKind: z.enum(['native_media', 'viewport_3d', 'canvas_preview', 'surface_region']),
+    sourceKind: z.enum(['native_media', 'viewport_3d', 'canvas_preview', 'surface_region', 'application_window']),
     verificationKind: z.literal('visual_pending_model'),
     attachment: agentAttachmentSchema,
     maskedRegionCount: z.number().int().nonnegative(),
@@ -109,11 +114,15 @@ export const observeApplicationSurfaceCapability = defineCapability({
   aiInputSchema: {
     type: 'object',
     properties: {
-      surfaceId: { type: 'string', enum: [...APPLICATION_SURFACE_IDS] },
+      target: {
+        type: 'string',
+        enum: [...APPLICATION_OBSERVATION_TARGETS],
+        description: '默认 window：截取整个应用窗口，任何时候都可用。只在需要聚焦某一块时才填具体页面 ID。',
+      },
       purpose: { type: 'string' },
       mediaRef: { type: 'string', pattern: '^asset:' },
     },
-    required: ['surfaceId', 'purpose'],
+    required: ['target', 'purpose'],
     additionalProperties: false,
   },
   completionKind: 'observed',

@@ -64,7 +64,9 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
         className={enableQuickDownload ? '' : 'opacity-50'}
       >
         <div className="flex items-stretch gap-2">
+          {/* 明文本地路径，观察截图时需要遮罩；密钥类输入自带 password 掩码，无需标注。 */}
           <UiInput
+            data-observation-sensitive
             value={quickDownloadPath}
             onChange={(e) => onChangePath(e.target.value)}
             placeholder={t('sections.download.pathPlaceholder')}

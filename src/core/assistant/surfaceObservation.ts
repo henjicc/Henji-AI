@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { APPLICATION_SURFACE_IDS } from './applicationSurfaces'
+import { APPLICATION_OBSERVATION_TARGETS } from './applicationSurfaces'
 
 export const SURFACE_OBSERVATION_SCHEMA_VERSION = 'surface-observation/v1' as const
 
@@ -14,7 +14,8 @@ export type SurfaceCaptureRect = z.infer<typeof surfaceCaptureRectSchema>
 
 export const surfaceCaptureRequestSchema = z.object({
   schemaVersion: z.literal(SURFACE_OBSERVATION_SCHEMA_VERSION),
-  surfaceId: z.enum(APPLICATION_SURFACE_IDS),
+  // 'window' 表示整个应用窗口；其余为具体 Surface。两者都只截当前 webContents。
+  target: z.enum(APPLICATION_OBSERVATION_TARGETS),
   rect: surfaceCaptureRectSchema,
   masks: z.array(surfaceCaptureRectSchema).max(128),
   maskPolicyId: z.enum(['surface.mask_declared_fields', 'surface.mask_sensitive_fields']),

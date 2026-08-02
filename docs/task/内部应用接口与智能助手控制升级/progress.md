@@ -10,6 +10,18 @@
 - 附带：`SettingsSectionId` 改由运行时清单 `SETTINGS_SECTION_IDS` 派生，门禁不再靠解析类型联合；补齐 `assistant-capability.md` 的标题断行与两条硬约束。
 - 验证：全量 848 项测试通过（新增 2 项），双端 TypeScript、lint 与全部静态门禁通过；已反向验证技能同步门禁能真实拦截漂移。
 
+## 2026-08-02 · 第四轮：整窗观察与遮罩策略调整
+
+- 状态：已完成
+- 起因：确认助手截图能力是否"随时可用、可指定范围"。原实现只能截 22 个已登记 Surface 之一，且目标必须当前可见，无法整窗。
+- 改动 1：`observe_application_surface` 升为 v2，输入 `surfaceId` 改为 `target`，新增 `window` 整窗目标并作为默认推荐。整窗永远可用，不需要先切页面；具体 surfaceId 仍用于聚焦并保留可见性校验。
+- 改动 2（用户决定）：遮罩由"所有输入控件 + contenteditable + 显式标记"收窄为**只认 `data-observation-sensitive`**。依据是密钥输入框本身为 `type="password"`，界面与截图都显示圆点，无需重复遮罩；而涂黑提示词、参数、搜索框会让整窗观察失去意义。
+- 配套：存储路径、快捷下载路径两处明文本地路径补标 `data-observation-sensitive`（它们不像密钥框自带掩码）。
+- 边界不变：仍只调用当前 Henji-AI `webContents.capturePage`；契约层显式拒绝 desktop/screen/display/other window 目标，并有测试覆盖。
+- 提示词：新增"默认用 target=window"、"整窗会含助手自己的侧栏，那是你自己的输出不是应用状态证据"、"纯色块是隐私遮罩，不要猜原值"。
+- 已知取舍：助手偏好页的用户指令编辑器不再被自动遮罩。若用户在其中写入凭据，截图会带入模型（文本链路仍有脱敏）。这是用户明确选择的策略。
+- 验证：全量 850 项通过，双端 TypeScript、lint、全部静态门禁通过。
+
 ## 2026-08-02 · 第三轮：执行后自我验证与观察入口收口
 
 - 状态：已完成

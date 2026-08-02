@@ -62,10 +62,11 @@ npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generati
 - 每个注册 Surface 都必须声明统一观察能力、领域提供者、捕获范围、数据等级、遮罩策略、支持模态、最大尺寸和失效条件，并通过覆盖清单门禁。
 - 提供者、数据等级、遮罩策略和支持模态的唯一判断入口是 `resolveSurfaceObservationProfile`（`src/core/assistant/applicationSurfaces.ts`）；`surfaceCatalog.ts` 与覆盖清单都从它派生，**禁止**在任何一侧另写一份判断。
 - 界面标注 `data-application-surface-id` 时必须从目录反查（设置用 `resolveSettingsSurfaceId`），**禁止**在组件里复制分区到 Surface 的映射表；新增设置分区只改 `SETTINGS_SECTION_IDS` 与 `surfaceCatalog.ts`。
-- 观察顺序固定为：领域结构化状态 → 稳定原生媒体/预览 → 专用视口 → 注册 Surface 区域截图。生成结果、素材、视频和音频不得退化为页面缩略图。
-- 通用截图只能由渲染层提交当前 Surface 可见边界和敏感矩形，主进程只调用当前 Henji-AI `webContents.capturePage` 并再次校验范围；禁止 OS 全屏、其他窗口和越界回退。
-- API Key、本地路径、输入框和显式 `data-observation-sensitive` 区域必须在主进程输出媒体前完成覆盖遮罩，日志不得记录截图内容、密钥或原始路径。
-- 默认遮罩覆盖 `input/textarea/select` 与 `contenteditable`（提示词编辑器是富文本，不是 `<input>`）。**非输入控件呈现的敏感内容不会被自动遮罩**：凡是把本地绝对路径、密钥、令牌渲染成普通文本的节点，必须自己标 `data-observation-sensitive`，否则会被原样截给模型。
+- `observe_application_surface` 的 `target` 默认是 `window`：截取整个应用窗口，任何时候都可用，不需要先切页面。只有需要排除干扰、聚焦某一块时才传具体 surfaceId，且该 Surface 必须当前可见。
+- 生成结果、素材、视频和音频有稳定媒体引用时优先返回原件，不得退化为页面缩略图。
+- 通用截图只能由渲染层提交当前窗口内的可见边界和敏感矩形，主进程只调用当前 Henji-AI `webContents.capturePage` 并再次校验范围；**禁止 OS 桌面截图、其他应用窗口和越界回退**。整窗指的是本应用窗口，与桌面截图是两回事。
+- **遮罩只认显式标记 `data-observation-sensitive`**。不要再对所有输入控件一律涂黑：密钥输入框本身是 `type="password"`，界面上就显示圆点，截图同样是圆点；把提示词、参数、搜索框涂黑只会让整窗观察失去意义。
+- 因此：凡是把**明文**本地绝对路径、密钥、令牌渲染出来的节点（无论是不是输入框），必须自己标 `data-observation-sensitive`，否则会被原样截给模型。日志同样不得记录截图内容、密钥或原始路径。
 - `observe_application_surface` 是否开放由运行时 primary/observer 的真实媒体模态与权限共同决定；实际媒体仍要经过 provider 协议、大小、时长、编码和取消门禁。它是**唯一**会把像素送进模型的观察入口，本轮是否可用由 `tool_contracts.visualObservationAvailable` 显式告知模型。
 - **禁止**新增只返回媒体引用、预览 URL 或“已截图”标记的观察能力：模型看不到像素却会以为自己看过了。观察结果必须返回 `verificationKind: 'visual_pending_model'` 加合法附件（见 `readPendingVisualObservation`），否则不要声称产生了视觉证据。
 - 三维、画布这类空间写入完成后必须调用所属领域的结构化验证能力；视觉证据只是加成，不可替代结构化验证，且未真实读取媒体时必须标注“未做视觉验证”。

@@ -10,6 +10,24 @@ export const APPLICATION_SURFACE_IDS = [
 
 export type ApplicationSurfaceId = (typeof APPLICATION_SURFACE_IDS)[number]
 
+/**
+ * 整窗观察目标。
+ *
+ * 它不是一个 Surface，而是"当前 Henji-AI 窗口里看得见的全部内容"，因此永远可用，
+ * 不需要先切到某个页面。这是推荐的默认观察方式：一次拿到完整界面，最接近用户
+ * 此刻看到的画面。需要排除干扰、只看某一块时才指定具体 surfaceId。
+ *
+ * 边界不变：仍然只截当前应用窗口自己，不涉及操作系统桌面和其他应用窗口。
+ */
+export const APPLICATION_WINDOW_OBSERVATION_TARGET = 'window' as const
+
+export const APPLICATION_OBSERVATION_TARGETS = [
+  APPLICATION_WINDOW_OBSERVATION_TARGET,
+  ...APPLICATION_SURFACE_IDS,
+] as const
+
+export type ApplicationObservationTarget = (typeof APPLICATION_OBSERVATION_TARGETS)[number]
+
 export type SurfaceObservationStrategy =
   | 'native_media_preferred'
   | 'specialized_region'

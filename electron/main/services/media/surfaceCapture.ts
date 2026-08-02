@@ -33,7 +33,7 @@ export async function captureApplicationSurface(
   logger.info('应用表面观察截图开始', {
     event: 'surface_observation.capture.start',
     context: {
-      surfaceId: request.surfaceId,
+      target: request.target,
       width: request.rect.width,
       height: request.rect.height,
       maskPolicyId: request.maskPolicyId,
@@ -74,7 +74,7 @@ export async function captureApplicationSurface(
   logger.info('应用表面观察截图完成', {
     event: 'surface_observation.capture.completed',
     context: {
-      surfaceId: request.surfaceId,
+      target: request.target,
       width: result.width,
       height: result.height,
       byteLength: bytes.byteLength,

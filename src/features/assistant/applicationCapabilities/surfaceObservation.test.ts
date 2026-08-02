@@ -36,70 +36,84 @@ describe('observeApplicationSurface', () => {
     })
   })
 
-  it('只截取注册表面并提交表面内的敏感字段遮罩', async () => {
-    const surface = document.createElement('div')
-    surface.dataset.applicationSurfaceId = 'settings.api_keys'
-    Object.defineProperty(surface, 'getBoundingClientRect', {
-      value: () => new DOMRect(20, 40, 800, 600),
-    })
-    const input = document.createElement('input')
-    Object.defineProperty(input, 'getBoundingClientRect', {
-      value: () => new DOMRect(80, 100, 240, 36),
-    })
-    surface.append(input)
-    document.body.append(surface)
+
+  it('默认整窗观察：不依赖任何页面可见，捕获整个视口', async () => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { value: 1280, configurable: true })
+    Object.defineProperty(document.documentElement, 'clientHeight', { value: 800, configurable: true })
 
     const result = await observeApplicationSurface(
-      { surfaceId: 'settings.api_keys', purpose: '确认密钥配置状态' },
+      { target: 'window', purpose: '看看当前界面什么状态' },
       new AbortController().signal
     )
 
     expect(mocks.capture).toHaveBeenCalledWith(expect.objectContaining({
-      surfaceId: 'settings.api_keys',
-      rect: { x: 20, y: 40, width: 800, height: 600 },
-      masks: [{ x: 60, y: 60, width: 240, height: 36 }],
-      maskPolicyId: 'surface.mask_sensitive_fields',
+      target: 'window',
+      rect: { x: 0, y: 0, width: 1280, height: 800 },
+      masks: [],
+      maskPolicyId: 'surface.mask_declared_fields',
     }))
     expect(result).toMatchObject({
-      providerId: 'surface.region_observer',
+      target: 'window',
+      providerId: 'application.window_observer',
+      sourceKind: 'application_window',
       verificationKind: 'visual_pending_model',
       attachment: { mediaRef: 'asset:observed-asset' },
     })
   })
 
-  it('富文本编辑器和显式敏感区域同样进入遮罩清单', async () => {
-    const surface = document.createElement('div')
-    surface.dataset.applicationSurfaceId = 'settings.assistant_preferences'
-    Object.defineProperty(surface, 'getBoundingClientRect', {
-      value: () => new DOMRect(0, 0, 800, 600),
-    })
-    // ProseMirror 提示词编辑器：运行时才有 contenteditable，不是 <input>。
+  it('普通输入框和富文本编辑器不再被涂黑，只遮显式标记区域', async () => {
+    Object.defineProperty(document.documentElement, 'clientWidth', { value: 1000, configurable: true })
+    Object.defineProperty(document.documentElement, 'clientHeight', { value: 700, configurable: true })
+    // 密钥框本身是 password，界面上就显示圆点，截图同样是圆点，不需要额外遮罩。
+    const password = document.createElement('input')
+    password.type = 'password'
+    Object.defineProperty(password, 'getBoundingClientRect', { value: () => new DOMRect(10, 10, 300, 32) })
+    // 提示词编辑器：涂黑它只会让整窗观察失去意义。
     const editor = document.createElement('div')
     editor.setAttribute('contenteditable', 'true')
-    Object.defineProperty(editor, 'getBoundingClientRect', {
-      value: () => new DOMRect(10, 20, 400, 200),
-    })
-    // 展示本地绝对路径的状态行：纯文本，只能靠显式标注。
+    Object.defineProperty(editor, 'getBoundingClientRect', { value: () => new DOMRect(10, 60, 400, 200) })
+    // 明文本地路径：唯一需要遮的那类，靠显式标记。
     const status = document.createElement('p')
     status.setAttribute('data-observation-sensitive', '')
-    Object.defineProperty(status, 'getBoundingClientRect', {
-      value: () => new DOMRect(10, 300, 500, 20),
-    })
-    surface.append(editor, status)
-    document.body.append(surface)
+    Object.defineProperty(status, 'getBoundingClientRect', { value: () => new DOMRect(10, 300, 500, 20) })
+    document.body.append(password, editor, status)
 
     await observeApplicationSurface(
-      { surfaceId: 'settings.assistant_preferences', purpose: '确认助手偏好' },
+      { target: 'window', purpose: '确认界面状态' },
       new AbortController().signal
     )
 
     expect(mocks.capture).toHaveBeenCalledWith(expect.objectContaining({
-      masks: [
-        { x: 10, y: 20, width: 400, height: 200 },
-        { x: 10, y: 300, width: 500, height: 20 },
-      ],
+      masks: [{ x: 10, y: 300, width: 500, height: 20 }],
+    }))
+  })
+
+  it('指定页面时只截该页面，并保留敏感遮罩策略', async () => {
+    const surface = document.createElement('div')
+    surface.dataset.applicationSurfaceId = 'settings.api_keys'
+    Object.defineProperty(surface, 'getBoundingClientRect', {
+      value: () => new DOMRect(20, 40, 800, 600),
+    })
+    const status = document.createElement('p')
+    status.setAttribute('data-observation-sensitive', '')
+    Object.defineProperty(status, 'getBoundingClientRect', {
+      value: () => new DOMRect(80, 100, 240, 36),
+    })
+    surface.append(status)
+    document.body.append(surface)
+
+    const result = await observeApplicationSurface(
+      { target: 'settings.api_keys', purpose: '确认密钥配置状态' },
+      new AbortController().signal
+    )
+
+    expect(mocks.capture).toHaveBeenCalledWith(expect.objectContaining({
+      target: 'settings.api_keys',
+      rect: { x: 20, y: 40, width: 800, height: 600 },
+      masks: [{ x: 60, y: 60, width: 240, height: 36 }],
       maskPolicyId: 'surface.mask_sensitive_fields',
     }))
+    expect(result).toMatchObject({ target: 'settings.api_keys', sourceKind: 'surface_region' })
   })
 
   it('滚动到捕获区域之外的敏感元素不产生贴边黑条', async () => {
@@ -108,13 +122,13 @@ describe('observeApplicationSurface', () => {
     Object.defineProperty(surface, 'getBoundingClientRect', {
       value: () => new DOMRect(0, 200, 800, 400),
     })
-    // 已滚出内容区、位于捕获区域上方的输入框：完全不相交，应该整条丢弃。
-    const scrolledAway = document.createElement('input')
+    const scrolledAway = document.createElement('p')
+    scrolledAway.setAttribute('data-observation-sensitive', '')
     Object.defineProperty(scrolledAway, 'getBoundingClientRect', {
       value: () => new DOMRect(0, 40, 600, 36),
     })
-    // 半进半出的输入框：只遮住落在捕获区域内的那部分。
-    const partial = document.createElement('input')
+    const partial = document.createElement('p')
+    partial.setAttribute('data-observation-sensitive', '')
     Object.defineProperty(partial, 'getBoundingClientRect', {
       value: () => new DOMRect(0, 180, 600, 60),
     })
@@ -122,7 +136,7 @@ describe('observeApplicationSurface', () => {
     document.body.append(surface)
 
     await observeApplicationSurface(
-      { surfaceId: 'settings.storage', purpose: '确认存储路径' },
+      { target: 'settings.storage', purpose: '确认存储路径' },
       new AbortController().signal
     )
 
@@ -131,9 +145,9 @@ describe('observeApplicationSurface', () => {
     }))
   })
 
-  it('Surface 不可见时拒绝降级为整窗或桌面截图', async () => {
+  it('指定的页面不可见时明确拒绝，不回退整窗或桌面', async () => {
     await expect(observeApplicationSurface(
-      { surfaceId: 'workspace.canvas', purpose: '检查画布' },
+      { target: 'workspace.canvas', purpose: '检查画布' },
       new AbortController().signal
     )).rejects.toThrow('SURFACE_NOT_VISIBLE')
     expect(mocks.capture).not.toHaveBeenCalled()
