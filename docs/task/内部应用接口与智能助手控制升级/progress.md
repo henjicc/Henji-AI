@@ -10,6 +10,16 @@
 - 附带：`SettingsSectionId` 改由运行时清单 `SETTINGS_SECTION_IDS` 派生，门禁不再靠解析类型联合；补齐 `assistant-capability.md` 的标题断行与两条硬约束。
 - 验证：全量 848 项测试通过（新增 2 项），双端 TypeScript、lint 与全部静态门禁通过；已反向验证技能同步门禁能真实拦截漂移。
 
+## 2026-08-02 · 第二轮排查：观察截图隐私漏点
+
+- 状态：已完成
+- 发现 4（已修，隐私）：截图遮罩选择器只有 `input/textarea/select/[data-observation-sensitive]`，而项目里的提示词/指令编辑器是 ProseMirror `contenteditable`，完全漏过遮罩——文本链路的密钥脱敏对截图不生效。已把 `contenteditable` 纳入默认遮罩。
+- 发现 5（已修，隐私）：`data-observation-sensitive` 契约存在但全项目零使用；助手偏好分区的"打开指令文件"状态行会把本地绝对路径渲染成普通文本，观察时会原样截给模型。已标注该状态行，并把 `settings.assistant_preferences` 与密钥、存储路径同列为敏感 Surface（C2 + mask_sensitive_fields）。
+- 发现 6（已修，正确性）：`maskRects` 只做 `max(0, …)` 而不是与捕获区域求交集，被滚出捕获范围的敏感元素会被折叠成贴边黑条，遮住无关内容。已改为真实交集并丢弃不相交项。
+- 复核未发现问题：能力→处理器覆盖、协议模态在 `createModelStepLanguageModel` 处二次拦截、观察失败的结构化回退、主进程截图越界校验与 mask 缩放边界、22 个 Surface 的 DOM 注册与嵌套匹配。
+- 手测清单：从 13 项压缩为 3 个串联场景（三维组合+滚动接管 / 真实模型附件生成 / 隐私遮罩+重启恢复+旧工程），并显式记录去掉的 20～30 分钟稳定性观察。
+- 验证：全量 850 项通过，双端 TypeScript、lint 与全部静态门禁通过。
+
 ## 2026-08-02 · 任务 7.2 开始
 
 - 状态：进行中

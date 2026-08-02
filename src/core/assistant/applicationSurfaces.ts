@@ -36,7 +36,11 @@ const NATIVE_MEDIA_SURFACES: readonly string[] = [
 const SPECIALIZED_REGION_SURFACES: readonly string[] = [
   'tool.camera_stage', 'tool.image_edit', 'workspace.canvas',
 ]
-const SENSITIVE_SURFACES: readonly string[] = ['settings.api_keys', 'settings.storage']
+// 助手偏好分区含用户指令编辑器和会带出本地路径的状态行，用户可能在其中写入凭据；
+// 文本链路的脱敏管不到截图，因此与密钥、存储路径同等对待。
+const SENSITIVE_SURFACES: readonly string[] = [
+  'settings.api_keys', 'settings.storage', 'settings.assistant_preferences',
+]
 
 const SPECIALIZED_PROVIDER_IDS: Readonly<Record<string, string>> = {
   'tool.camera_stage': 'camera_stage.viewport_observer',

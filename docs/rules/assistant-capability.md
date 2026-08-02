@@ -65,5 +65,6 @@ npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generati
 - 观察顺序固定为：领域结构化状态 → 稳定原生媒体/预览 → 专用视口 → 注册 Surface 区域截图。生成结果、素材、视频和音频不得退化为页面缩略图。
 - 通用截图只能由渲染层提交当前 Surface 可见边界和敏感矩形，主进程只调用当前 Henji-AI `webContents.capturePage` 并再次校验范围；禁止 OS 全屏、其他窗口和越界回退。
 - API Key、本地路径、输入框和显式 `data-observation-sensitive` 区域必须在主进程输出媒体前完成覆盖遮罩，日志不得记录截图内容、密钥或原始路径。
+- 默认遮罩覆盖 `input/textarea/select` 与 `contenteditable`（提示词编辑器是富文本，不是 `<input>`）。**非输入控件呈现的敏感内容不会被自动遮罩**：凡是把本地绝对路径、密钥、令牌渲染成普通文本的节点，必须自己标 `data-observation-sensitive`，否则会被原样截给模型。
 - `observe_application_surface` 是否开放由运行时 primary/observer 的真实媒体模态与权限共同决定；实际媒体仍要经过 provider 协议、大小、时长、编码和取消门禁。
 - 最终答复必须区分结构化验证、主模型视觉验证、观察模型视觉验证和未验证；稳定媒体引用本身不是视觉验证证据。

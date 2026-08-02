@@ -67,6 +67,70 @@ describe('observeApplicationSurface', () => {
     })
   })
 
+  it('富文本编辑器和显式敏感区域同样进入遮罩清单', async () => {
+    const surface = document.createElement('div')
+    surface.dataset.applicationSurfaceId = 'settings.assistant_preferences'
+    Object.defineProperty(surface, 'getBoundingClientRect', {
+      value: () => new DOMRect(0, 0, 800, 600),
+    })
+    // ProseMirror 提示词编辑器：运行时才有 contenteditable，不是 <input>。
+    const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true')
+    Object.defineProperty(editor, 'getBoundingClientRect', {
+      value: () => new DOMRect(10, 20, 400, 200),
+    })
+    // 展示本地绝对路径的状态行：纯文本，只能靠显式标注。
+    const status = document.createElement('p')
+    status.setAttribute('data-observation-sensitive', '')
+    Object.defineProperty(status, 'getBoundingClientRect', {
+      value: () => new DOMRect(10, 300, 500, 20),
+    })
+    surface.append(editor, status)
+    document.body.append(surface)
+
+    await observeApplicationSurface(
+      { surfaceId: 'settings.assistant_preferences', purpose: '确认助手偏好' },
+      new AbortController().signal
+    )
+
+    expect(mocks.capture).toHaveBeenCalledWith(expect.objectContaining({
+      masks: [
+        { x: 10, y: 20, width: 400, height: 200 },
+        { x: 10, y: 300, width: 500, height: 20 },
+      ],
+      maskPolicyId: 'surface.mask_sensitive_fields',
+    }))
+  })
+
+  it('滚动到捕获区域之外的敏感元素不产生贴边黑条', async () => {
+    const surface = document.createElement('div')
+    surface.dataset.applicationSurfaceId = 'settings.storage'
+    Object.defineProperty(surface, 'getBoundingClientRect', {
+      value: () => new DOMRect(0, 200, 800, 400),
+    })
+    // 已滚出内容区、位于捕获区域上方的输入框：完全不相交，应该整条丢弃。
+    const scrolledAway = document.createElement('input')
+    Object.defineProperty(scrolledAway, 'getBoundingClientRect', {
+      value: () => new DOMRect(0, 40, 600, 36),
+    })
+    // 半进半出的输入框：只遮住落在捕获区域内的那部分。
+    const partial = document.createElement('input')
+    Object.defineProperty(partial, 'getBoundingClientRect', {
+      value: () => new DOMRect(0, 180, 600, 60),
+    })
+    surface.append(scrolledAway, partial)
+    document.body.append(surface)
+
+    await observeApplicationSurface(
+      { surfaceId: 'settings.storage', purpose: '确认存储路径' },
+      new AbortController().signal
+    )
+
+    expect(mocks.capture).toHaveBeenCalledWith(expect.objectContaining({
+      masks: [{ x: 0, y: 0, width: 600, height: 40 }],
+    }))
+  })
+
   it('Surface 不可见时拒绝降级为整窗或桌面截图', async () => {
     await expect(observeApplicationSurface(
       { surfaceId: 'workspace.canvas', purpose: '检查画布' },

@@ -161,7 +161,9 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           清空指令
         </UiButton>
       </div>
-      <p className={`break-all leading-5 ${UI_TEXT_META_CLASS}`}>{status}</p>
+      {/* 「打开指令文件」的状态行会带出本地绝对路径，它不是输入控件，必须显式声明为
+          观察敏感区域，否则会被 Surface 截图原样带给模型。 */}
+      <p data-observation-sensitive className={`break-all leading-5 ${UI_TEXT_META_CLASS}`}>{status}</p>
     </div>
   )
 }

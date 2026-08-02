@@ -15,7 +15,19 @@ import { saveBase64ToUploads } from '@/utils/save/uploads'
 import { assetToAgentAttachment } from '../conversation/assistantAttachments'
 
 const logger = createLogger('features.assistant.surface_observation')
-const SENSITIVE_SELECTOR = 'input, textarea, select, [data-observation-sensitive]'
+/**
+ * 观察截图必须遮罩的区域。
+ *
+ * `contenteditable` 一并纳入：项目里的提示词/指令编辑器是 ProseMirror 富文本，
+ * 不是 `<input>`，此前完全漏过遮罩——而文本链路的密钥脱敏对截图不起作用。
+ * 非输入控件呈现的敏感内容（例如展示本地绝对路径的状态行）用
+ * `data-observation-sensitive` 显式标注。
+ */
+const SENSITIVE_SELECTOR = [
+  'input', 'textarea', 'select',
+  '[contenteditable="true"]', '[contenteditable=""]', '[contenteditable="plaintext-only"]',
+  '[data-observation-sensitive]',
+].join(', ')
 
 function clippedRect(element: Element): DOMRect {
   const source = element.getBoundingClientRect()
@@ -54,11 +66,15 @@ function maskRects(root: Element, capture: SurfaceCaptureRect): SurfaceCaptureRe
   return [...root.querySelectorAll(SENSITIVE_SELECTOR)].flatMap((element) => {
     const rect = clippedRect(element)
     if (rect.width < 1 || rect.height < 1) return []
-    const x = Math.max(0, Math.floor(rect.x) - capture.x)
-    const y = Math.max(0, Math.floor(rect.y) - capture.y)
-    const width = Math.min(capture.width - x, Math.ceil(rect.width))
-    const height = Math.min(capture.height - y, Math.ceil(rect.height))
-    return width > 0 && height > 0 ? [{ x, y, width, height }] : []
+    // 与捕获区域求真实交集：敏感元素可能被滚动到捕获区域之外（设置页内容区可滚动），
+    // 此前只做 max(0, …) 会把区域外的元素折叠成贴边的黑条，遮住无关内容。
+    const left = Math.max(0, Math.floor(rect.left) - capture.x)
+    const top = Math.max(0, Math.floor(rect.top) - capture.y)
+    const right = Math.min(capture.width, Math.ceil(rect.right) - capture.x)
+    const bottom = Math.min(capture.height, Math.ceil(rect.bottom) - capture.y)
+    const width = right - left
+    const height = bottom - top
+    return width > 0 && height > 0 ? [{ x: left, y: top, width, height }] : []
   }).slice(0, 128)
 }
 
