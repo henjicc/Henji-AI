@@ -4,7 +4,10 @@ import {
   SURFACE_OBSERVATION_SCHEMA_VERSION,
   type SurfaceCaptureRect,
 } from '@/core/assistant/surfaceObservation'
-import type { ApplicationSurfaceId } from '@/core/assistant/applicationSurfaces'
+import {
+  prefersNativeMediaObservation,
+  type ApplicationSurfaceId,
+} from '@/core/assistant/applicationSurfaces'
 import { getApplicationSurface } from '@/features/navigation/application/surfaceCatalog'
 import { addMediaReferenceToLibrary } from '@/features/assets/services/assetCollectionService'
 import { getPlatform } from '@/platform'
@@ -82,10 +85,7 @@ export async function observeApplicationSurface(input: {
   if (signal.aborted) throw new DOMException('操作已取消', 'AbortError')
   const surface = getApplicationSurface(input.surfaceId)
   if (!surface) throw new Error('NOT_FOUND')
-  if (
-    input.mediaRef
-    && ['workspace.generation', 'workspace.assets', 'overlay.assets'].includes(surface.id)
-  ) {
+  if (input.mediaRef && prefersNativeMediaObservation(surface.id)) {
     return await nativeAssetObservation(surface.id, input.mediaRef)
   }
   const surfaceElement = findVisibleSurface(surface.id)

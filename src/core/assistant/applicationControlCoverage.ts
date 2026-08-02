@@ -7,7 +7,7 @@ import {
   type ApplicationPublicControlCoverage,
   type ApplicationSurfaceObservationCoverage,
 } from '../application-control'
-import { APPLICATION_SURFACE_IDS } from './applicationSurfaces'
+import { APPLICATION_SURFACE_IDS, resolveSurfaceObservationProfile } from './applicationSurfaces'
 import {
   APPLICATION_CAPABILITY_CATALOG_VERSION,
   type ApplicationCapabilityDefinition,
@@ -127,27 +127,20 @@ function capabilityMigration(
   }
 }
 
-function surfaceProvider(surfaceId: string): string {
-  if (surfaceId === 'tool.camera_stage') return 'camera_stage.viewport_observer'
-  if (surfaceId === 'tool.image_edit') return 'image_edit.canvas_observer'
-  if (surfaceId === 'workspace.canvas') return 'canvas.viewport_observer'
-  if (surfaceId === 'workspace.generation') return 'generation.result_observer'
-  if (surfaceId === 'workspace.assets' || surfaceId === 'overlay.assets') return 'assets.media_observer'
-  return 'surface.region_observer'
-}
-
 function surfaceObservation(surfaceId: string): ApplicationSurfaceObservationCoverage {
-  const sensitive = surfaceId === 'settings.api_keys' || surfaceId === 'settings.storage'
+  // 提供者、敏感度和模态全部来自 resolveSurfaceObservationProfile，
+  // 与运行时 surfaceCatalog 共用同一份判断，避免清单和实际捕获策略各说各话。
+  const profile = resolveSurfaceObservationProfile(surfaceId)
   return {
     surfaceId,
-    providerId: surfaceProvider(surfaceId),
+    providerId: profile.providerId,
     implementationStatus: 'available',
-    resultModalities: surfaceId === 'workspace.generation'
-      ? ['image', 'video', 'audio']
-      : ['image'],
-    dataClass: sensitive ? 'C2' : 'C1',
-    captureScope: `仅限 Henji-AI 应用窗口内注册的 ${surfaceId} 区域。`,
-    maskPolicyId: sensitive ? 'surface.mask_sensitive_fields' : 'surface.mask_declared_fields',
+    resultModalities: [...profile.modalities],
+    dataClass: profile.dataClass,
+    captureScope: profile.strategy === 'native_media_preferred'
+      ? `优先返回 ${surfaceId} 的稳定媒体原件，回退时仅限该 Surface 注册区域。`
+      : `仅限 Henji-AI 应用窗口内注册的 ${surfaceId} 区域。`,
+    maskPolicyId: profile.maskPolicyId,
     verification: '提供者返回与请求 Surface ID 一致的稳定观察结果，并记录实际遮罩。',
     migrationTask: '6.5',
   }

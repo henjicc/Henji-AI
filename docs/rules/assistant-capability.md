@@ -56,9 +56,12 @@ npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generati
 ```
 
 复用正式助手与工具链，结束时输出 `runId`（可用 `npm run logs:query -- --chain <runId>` 查整条链路）。`--await-generation` 保持同一隐藏宿主并读取本次生成任务的最终状态。`--print-trace` 输出本机已脱敏的详细追踪。**涉及付费或写入操作时，必须由调用者显式确认 `--approval full_access`。**
+
 ## Surface 视觉观察
 
 - 每个注册 Surface 都必须声明统一观察能力、领域提供者、捕获范围、数据等级、遮罩策略、支持模态、最大尺寸和失效条件，并通过覆盖清单门禁。
+- 提供者、数据等级、遮罩策略和支持模态的唯一判断入口是 `resolveSurfaceObservationProfile`（`src/core/assistant/applicationSurfaces.ts`）；`surfaceCatalog.ts` 与覆盖清单都从它派生，**禁止**在任何一侧另写一份判断。
+- 界面标注 `data-application-surface-id` 时必须从目录反查（设置用 `resolveSettingsSurfaceId`），**禁止**在组件里复制分区到 Surface 的映射表；新增设置分区只改 `SETTINGS_SECTION_IDS` 与 `surfaceCatalog.ts`。
 - 观察顺序固定为：领域结构化状态 → 稳定原生媒体/预览 → 专用视口 → 注册 Surface 区域截图。生成结果、素材、视频和音频不得退化为页面缩略图。
 - 通用截图只能由渲染层提交当前 Surface 可见边界和敏感矩形，主进程只调用当前 Henji-AI `webContents.capturePage` 并再次校验范围；禁止 OS 全屏、其他窗口和越界回退。
 - API Key、本地路径、输入框和显式 `data-observation-sensitive` 区域必须在主进程输出媒体前完成覆盖遮罩，日志不得记录截图内容、密钥或原始路径。

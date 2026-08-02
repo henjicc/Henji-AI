@@ -6,20 +6,27 @@
 
 export type SettingsTabId = 'general' | 'api' | 'interface' | 'models'
 
-export type SettingsSectionId =
-  | 'general-basic'
-  | 'general-storage'
-  | 'general-behavior'
-  | 'general-maintenance'
-  | 'api-keys'
-  | 'api-upload'
-  | 'api-llm'
-  | 'api-agent-preferences'
-  | 'interface-layout'
-  | 'interface-assets'
-  | 'interface-canvas'
-  | 'interface-theme'
-  | 'models-visibility'
+/**
+ * 设置分区的唯一清单。运行时可枚举，测试和能力门禁据此校验每个分区都有对应
+ * Surface，不再靠解析类型联合或在别处复制一份分区列表。
+ */
+export const SETTINGS_SECTION_IDS = [
+  'general-basic',
+  'general-storage',
+  'general-behavior',
+  'general-maintenance',
+  'api-keys',
+  'api-upload',
+  'api-llm',
+  'api-agent-preferences',
+  'interface-layout',
+  'interface-assets',
+  'interface-canvas',
+  'interface-theme',
+  'models-visibility',
+] as const
+
+export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
 
 /** 打开设置面板时的定位目标；省略则回到默认分节 */
 export interface SettingsNavigationTarget {

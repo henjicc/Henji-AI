@@ -1,5 +1,15 @@
 # 进度记录
 
+## 2026-08-02 · 验收后疏漏排查与收口
+
+- 状态：已完成（不改变 7.2 待用户实机验证的整体状态）
+- 排查方式：重跑全部自动门禁（全量测试、双端 TypeScript、lint、颜色/Surface/图标/模型 i18n、能力覆盖），确认原报告结果属实，再按"同一判断是否只有一份实现"审计新增架构。
+- 发现 1（已修）：Surface 观察提供者、数据等级、遮罩策略和支持模态在 `surfaceCatalog.ts` 与 `applicationControlCoverage.ts` 各写了一份，且已经漂移——`workspace.assets` / `overlay.assets` 在目录里开放 image/video/audio，在覆盖清单里只有 image。现统一收口到 `resolveSurfaceObservationProfile`，两侧派生，并加断言锁死一致性。
+- 发现 2（已修）：设置分区到 Surface 的映射在 `src/components/Settings/index.tsx` 另有一份硬编码表，能力门禁只校验目录侧。新增设置分区会通过门禁却把观察标成 `settings.general`。现改为 `resolveSettingsSurfaceId` 从目录反查，api/models 大类退回本大类首个分区而不是 settings.general。
+- 发现 3（已修）：7.1 的双端技能同步门禁只覆盖 `henji-application-capability`，`henji-ui-surface/references/performance.md` 自 `5e9205d` 起只更新了 Codex 侧。现已同步内容，并把门禁扩展为比较全部共享 skill（忽略行尾差异，`agents/` 属 Codex 专属不参与）。
+- 附带：`SettingsSectionId` 改由运行时清单 `SETTINGS_SECTION_IDS` 派生，门禁不再靠解析类型联合；补齐 `assistant-capability.md` 的标题断行与两条硬约束。
+- 验证：全量 848 项测试通过（新增 2 项），双端 TypeScript、lint 与全部静态门禁通过；已反向验证技能同步门禁能真实拦截漂移。
+
 ## 2026-08-02 · 任务 7.2 开始
 
 - 状态：进行中

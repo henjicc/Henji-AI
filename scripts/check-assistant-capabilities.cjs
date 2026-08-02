@@ -120,20 +120,35 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
   }
 }
 
-const skillRoots = [
-  path.join(root, '.codex', 'skills', 'henji-application-capability'),
-  path.join(root, '.claude', 'skills', 'henji-application-capability'),
-]
-const skillFiles = skillRoots.map((directory) => relativeFiles(directory)
-  .filter((file) => file === 'SKILL.md' || file.startsWith('references/'))
-  .sort())
-if (JSON.stringify(skillFiles[0]) !== JSON.stringify(skillFiles[1])) {
-  failures.push('Codex/Claude 应用能力技能文件列表不同步')
-} else {
+// 双端 skill 同步：AGENTS.md 要求 .codex 与 .claude 两份内容一致，
+// 因此这里检查全部共享 skill，而不只是应用能力那一份（历史上 henji-ui-surface
+// 就出现过只更新 Codex 侧的漂移）。`agents/` 是 Codex 专属配置，不参与比较；
+// 行尾差异不算内容不同步。
+const codexSkillRoot = path.join(root, '.codex', 'skills')
+const claudeSkillRoot = path.join(root, '.claude', 'skills')
+const codexSkillNames = fs.readdirSync(codexSkillRoot, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()
+const claudeSkillNames = fs.readdirSync(claudeSkillRoot, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()
+if (JSON.stringify(codexSkillNames) !== JSON.stringify(claudeSkillNames)) {
+  failures.push('Codex/Claude 技能目录不同步')
+}
+function normalizedSkillText(file) {
+  return fs.readFileSync(file, 'utf8').replaceAll('\r\n', '\n')
+}
+for (const skillName of codexSkillNames.filter((name) => claudeSkillNames.includes(name))) {
+  const skillRoots = [path.join(codexSkillRoot, skillName), path.join(claudeSkillRoot, skillName)]
+  const skillFiles = skillRoots.map((directory) => relativeFiles(directory)
+    .filter((file) => file === 'SKILL.md' || file.startsWith('references/'))
+    .sort())
+  if (JSON.stringify(skillFiles[0]) !== JSON.stringify(skillFiles[1])) {
+    failures.push(`Codex/Claude 技能文件列表不同步：${skillName}`)
+    continue
+  }
   for (const relative of skillFiles[0]) {
-    const codex = fs.readFileSync(path.join(skillRoots[0], relative))
-    const claude = fs.readFileSync(path.join(skillRoots[1], relative))
-    if (!codex.equals(claude)) failures.push(`Codex/Claude 应用能力技能内容不同步：${relative}`)
+    if (normalizedSkillText(path.join(skillRoots[0], relative)) !== normalizedSkillText(path.join(skillRoots[1], relative))) {
+      failures.push(`Codex/Claude 技能内容不同步：${skillName}/${relative}`)
+    }
   }
 }
 
@@ -170,10 +185,10 @@ for (const field of [
   if (!surfaceRegistrySource.includes(field)) failures.push(`Surface 观察契约缺少字段：${field}`)
 }
 const settingsSectionBlock = settingsNavigationSource
-  .split('export type SettingsSectionId =')[1]
-  ?.split('/**')[0] ?? ''
-const settingsSectionIds = [...settingsSectionBlock.matchAll(/\|\s*'([^']+)'/g)]
-  .map((match) => match[1])
+  .split('export const SETTINGS_SECTION_IDS = [')[1]
+  ?.split(']')[0] ?? ''
+const settingsSectionIds = [...settingsSectionBlock.matchAll(/'([^']+)'/g)].map((match) => match[1])
+if (settingsSectionIds.length === 0) failures.push('未能解析设置分区清单 SETTINGS_SECTION_IDS')
 for (const sectionId of settingsSectionIds) {
   if (!surfaceRegistrySource.includes(`sectionId: '${sectionId}'`)) {
     failures.push(`设置分区缺少 Surface：${sectionId}`)

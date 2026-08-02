@@ -16,6 +16,7 @@ import InterfaceTab from './tabs/InterfaceTab'
 import ModelsTab from './tabs/ModelsTab'
 import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
 import { useI18n } from '@/hooks/useI18n'
+import { resolveSettingsSurfaceId } from '@/features/navigation/application/surfaceCatalog'
 import type { SettingsNavigationTarget, SettingsTabId } from '@/core/types/settingsNavigation'
 
 interface SettingsModalProps {
@@ -72,25 +73,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   ]
 
   const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component
-  const activeSurfaceId = (() => {
-    const bySection: Record<string, string> = {
-      'general-basic': 'settings.general.basic',
-      'general-storage': 'settings.storage',
-      'general-behavior': 'settings.general.behavior',
-      'general-maintenance': 'settings.general.maintenance',
-      'api-keys': 'settings.api_keys',
-      'api-upload': 'settings.upload',
-      'api-llm': 'settings.llm',
-      'api-agent-preferences': 'settings.assistant_preferences',
-      'models-visibility': 'settings.models',
-      'interface-layout': 'settings.interface.layout',
-      'interface-theme': 'settings.interface.theme',
-      'interface-assets': 'settings.interface.assets',
-      'interface-canvas': 'settings.interface.canvas',
-    }
-    return bySection[activeSectionId]
-      ?? (activeTab === 'interface' ? 'settings.interface' : 'settings.general')
-  })()
+  // 分区与 Surface 的对应关系只在 surfaceCatalog 维护，这里不再复制一份映射表，
+  // 否则新增设置分区会通过能力门禁却观察到错误的 Surface。
+  const activeSurfaceId = resolveSettingsSurfaceId(activeTab, activeSectionId) ?? undefined
 
   const { scrollToSection, tailSpacerHeight } = useSettingsScrollSpy({
     containerRef: contentRef,
