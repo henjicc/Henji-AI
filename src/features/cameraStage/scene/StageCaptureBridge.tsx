@@ -9,7 +9,6 @@ import {
 } from 'three'
 import type { Camera, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import { resolveCenteredCaptureView } from './captureFraming'
-import { registerCameraStageViewportCaptureProvider } from '../application/viewportObservation'
 
 /**
  * 截图桥：Canvas 内部注册两类捕获能力。
@@ -75,12 +74,9 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
 
     captureFrame.disposeOffscreen = disposeOffscreen
     captureRef.current = captureFrame
-    const unregisterObserver = registerCameraStageViewportCaptureProvider({
-      capture: () => captureFrame(),
-      dimensions: () => ({ width: gl.domElement.width, height: gl.domElement.height }),
-    })
+    // 这里只服务导出；助手的视口观察统一走 observe_application_surface 截取
+    // StageViewportWorkspace 上标注的 camera_stage.viewport_observer 区域。
     return () => {
-      unregisterObserver()
       captureRef.current = null
       disposeOffscreen()
     }

@@ -120,13 +120,17 @@ describe('AgentIntentRouter', () => {
     })
     expect(result.toolDomains).toEqual(expect.arrayContaining(['toolbox', 'camera_stage', 'navigation', 'catalog']))
     expect(result.taskGraph?.facets.map((facet) => facet.facetId)).toEqual([
-      'camera_project', 'show_target_surface', 'camera_scene', 'camera_motion',
+      'camera_project', 'show_target_surface', 'camera_scene', 'camera_motion', 'camera_verify',
     ])
     expect(result.taskGraph?.dependencies).toEqual(expect.arrayContaining([
       { fromFacetId: 'camera_project', toFacetId: 'show_target_surface' },
       { fromFacetId: 'show_target_surface', toFacetId: 'camera_scene' },
       { fromFacetId: 'camera_scene', toFacetId: 'camera_motion' },
+      { fromFacetId: 'camera_motion', toFacetId: 'camera_verify' },
     ]))
+    // 空间写入之后必须独立结算一次验证，模型不能放完就宣称完成。
+    expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'camera_verify'))
+      .toMatchObject({ capabilityKinds: ['observe'], targetSurfaceId: 'tool.camera_stage' })
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'show_target_surface'))
       .toMatchObject({ targetSurfaceId: 'tool.camera_stage', parallelizable: false })
     expect(classifier).not.toHaveBeenCalled()

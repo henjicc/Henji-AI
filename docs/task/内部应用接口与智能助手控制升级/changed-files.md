@@ -1,5 +1,22 @@
 # 变更文件记录
 
+## 验收后收口（观察一致性、隐私遮罩、自我验证）
+
+- `src/core/assistant/applicationSurfaces.ts`：新增 `resolveSurfaceObservationProfile` 作为观察提供者/数据等级/遮罩/模态的唯一来源。
+- `src/features/navigation/application/surfaceCatalog.ts` 及测试：观察画像改为派生；新增 `resolveSettingsSurfaceId`。
+- `src/core/assistant/applicationControlCoverage.ts`：覆盖清单同源派生，修正素材 Surface 模态漂移。
+- `src/components/Settings/index.tsx`、`src/core/types/settingsNavigation.ts`：删除组件内分区映射表，分区清单改为运行时 `SETTINGS_SECTION_IDS`。
+- `src/features/assistant/applicationCapabilities/surfaceObservation.ts` 及测试：`contenteditable` 纳入遮罩；遮罩与捕获区域求真实交集。
+- `src/components/Settings/sections/AgentUserInstructionsSection.tsx`：路径状态行标记 `data-observation-sensitive`。
+- `scripts/check-assistant-capabilities.cjs`：双端技能同步门禁扩展到全部共享 skill。
+- `src/core/assistant/capabilities/cameraStageMotionApplicationCapabilities.ts`：删除 `observe_camera_stage_viewport`，`verify_camera_stage_scene` 升为 v2 并移除 `requireVisualPreview`。
+- 删除 `src/features/cameraStage/application/viewportObservation.ts` 及其测试；`StageCaptureBridge.tsx` 只保留导出用途。
+- `src/core/assistant/surfaceObservation.ts`、`electron/main/services/agent-runtime/runner/runner.ts`：视觉附件按观察契约识别，不再绑定工具名。
+- `electron/main/services/agent-runtime/context/prompt-layers.ts`：新增空间写入自我验证与视觉证据分级规则。
+- `electron/main/services/agent-runtime/context/task-facets.ts` 及 `context.test.ts`：三维任务图新增 `camera_verify` Facet。
+- `docs/rules/assistant-capability.md`、两端 `henji-application-capability` skill、`henji-ui-surface` 性能规则同步。
+- `docs/task/内部应用接口与智能助手控制升级/manual-test.md`：压缩为 3 个串联手测场景。
+
 ## 第七阶段 7.2 与最终收尾
 
 - `electron/main/services/agent-runtime/evaluation/minimal-evaluator.ts` 及测试：增加模型轮次、工具调用、累计输入 Token 和相同工具指纹阈值。
@@ -192,8 +209,8 @@
 
 ### 任务 4.4
 
-- `src/features/cameraStage/application/viewportObservation.ts`
-- `src/features/cameraStage/application/viewportObservation.test.ts`
+- ~~`src/features/cameraStage/application/viewportObservation.ts`~~（已于验收后删除，见下方"验收后收口"）
+- ~~`src/features/cameraStage/application/viewportObservation.test.ts`~~（同上）
 - `src/features/cameraStage/application/cameraStageVerification.ts`
 - `src/features/cameraStage/scene/StageCaptureBridge.tsx`
 - `src/features/assistant/applicationCapabilities/surfaceRegistry.ts`

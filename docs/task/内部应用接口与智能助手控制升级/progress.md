@@ -10,6 +10,17 @@
 - 附带：`SettingsSectionId` 改由运行时清单 `SETTINGS_SECTION_IDS` 派生，门禁不再靠解析类型联合；补齐 `assistant-capability.md` 的标题断行与两条硬约束。
 - 验证：全量 848 项测试通过（新增 2 项），双端 TypeScript、lint 与全部静态门禁通过；已反向验证技能同步门禁能真实拦截漂移。
 
+## 2026-08-02 · 第三轮：执行后自我验证与观察入口收口
+
+- 状态：已完成
+- 起因：确认"放完场景后能否自动判断放没放对"。结论是能力齐全但无人驱动，且发现观察入口有重复实现。
+- 发现 7（已修，正确性）：三维有两个观察能力，只有 `observe_application_surface` 会把像素送进模型。`observe_camera_stage_viewport` 与 `verify_camera_stage_scene(requireVisualPreview)` 只返回媒体引用，模型拿到"已捕获"字样却看不到画面，极易谎称已看过构图。已删除该能力与 `viewportObservation.ts`，`verify_camera_stage_scene` 升为 v2 并移除 `requireVisualPreview` 与 `visual` 输出；`StageCaptureBridge` 只保留导出用途。
+- 发现 8（已修，健壮性）：Runner 按工具名硬编码识别视觉附件，新增观察能力会静默拿不到像素。改为按 `readPendingVisualObservation` 契约识别（`verificationKind: 'visual_pending_model'` + 合法附件）。
+- 行为改进 1：系统提示词新增两条——空间写入后必须先做结构化验证并最多修正一次；`visualObservationAvailable` 为真时再截图结合参数判断，为假时只做参数验证并如实标注未看画面。
+- 行为改进 2：`tool_contracts` 层显式输出 `visualObservationAvailable`，模型不再需要从工具列表推断自己能否读图。
+- 行为改进 3：三维任务图在 `camera_scene`/`camera_motion` 之后新增 `camera_verify` Facet，写完必须独立结算一次验证。已知限制：Facet 完成判定沿用现有"同领域只读调用产生新证据即完成"的通用规则，不与具体能力 ID 绑定（架构上刻意不让 Facet 猜工具名），因此这是结构性压力而非硬互锁，真正指向验证能力的是提示词。
+- 验证：全量 848 项通过（删除的视口观察测试 -2），`test:assistant-production` 60+250+2+35 全通过，双端 TypeScript、lint、全部静态门禁通过。
+
 ## 2026-08-02 · 第二轮排查：观察截图隐私漏点
 
 - 状态：已完成

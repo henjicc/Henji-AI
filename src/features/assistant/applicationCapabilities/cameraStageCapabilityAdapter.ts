@@ -1,7 +1,6 @@
 import type { ApplicationTransactionResult, JsonValue } from '@/core/application-control'
 import { cameraStageApplicationService, type CameraStageObjectUpdate, type CameraStageShotUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
-import { observeCameraStageViewport } from '@/features/cameraStage/application/viewportObservation'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 
@@ -233,25 +232,7 @@ export async function applyCameraStageCameraMove(input: Record<string, unknown> 
 }
 
 export async function verifyCameraStage(
-  input: CameraStageVerificationRequest & { requireVisualPreview: boolean },
+  input: CameraStageVerificationRequest,
 ): Promise<Record<string, unknown>> {
-  const structured = await verifyCameraStageScene(input)
-  if (!input.requireVisualPreview) return { ...structured, visual: { status: 'not_requested' }, baseRevision: baseRevision() }
-  try {
-    const preview = await observeCameraStageViewport(input.projectId)
-    return { ...structured, visual: { status: 'captured', preview, verifiedByModel: false }, baseRevision: baseRevision() }
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    return {
-      ...structured,
-      verified: false,
-      unmetConditions: [...structured.unmetConditions, `视口预览不可用：${reason}`],
-      visual: { status: 'unavailable', reason },
-      baseRevision: baseRevision(),
-    }
-  }
-}
-
-export async function observeCameraStagePreview(projectId: string): Promise<Record<string, unknown>> {
-  return { preview: await observeCameraStageViewport(projectId), baseRevision: baseRevision() }
+  return { ...await verifyCameraStageScene(input), baseRevision: baseRevision() }
 }

@@ -16,7 +16,6 @@ import {
   duplicateCameraStageObject,
   getCameraStageProject,
   listCameraStageProjects,
-  observeCameraStagePreview,
   observeCameraStageScene,
   openCameraStageProject,
   placeCameraStageObject,
@@ -168,12 +167,6 @@ export function registerToolboxCapabilityHandlers(
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<Parameters<typeof verifyCameraStage>[0]>('verify_camera_stage_scene', input)
     return await verifyCameraStage(parsed)
-  })
-
-  registrar.registerHandler('observe_camera_stage_viewport', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { reason: string }>('observe_camera_stage_viewport', input)
-    return await observeCameraStagePreview(parsed.projectId)
   })
 
   registrar.registerHandler('create_image_edit_preview', async (input, context) => {

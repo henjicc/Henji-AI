@@ -252,6 +252,25 @@ export function createDeterministicTaskGraph(
         completionConditions: ['镜头轨迹或运镜参数已提交并可由场景状态验证。'],
       }))
     }
+    // 写入之后必须独立结算一次验证：没有这个 Facet，模型放完对象就会直接宣称完成。
+    // 视觉证据是可选加成——本轮没有观察工具（模型读不了图）时只做参数验证也算完成，
+    // 但答复必须说明未看画面，这条由系统提示词约束。
+    if (hasSceneMutation || hasMotion) {
+      facets.push(buildFacet({
+        facetId: 'camera_verify',
+        domain: 'camera_stage',
+        goal: '用结构化验证确认对象位置、尺寸、无重叠与运镜结果；界面观察工具可用时再结合截图判断构图。',
+        observationKinds: ['entity_state', 'current_surface'],
+        capabilityKinds: ['observe'],
+        targetSurfaceId: 'tool.camera_stage',
+        dependsOn: [hasMotion ? 'camera_motion' : 'camera_scene'],
+        parallelizable: false,
+        completionConditions: [
+          '结构化验证返回 verified 或已如实列出未满足项。',
+          '视觉证据要么来自实际读取的界面截图，要么明确标注为未做视觉验证。',
+        ],
+      }))
+    }
   }
   if (hasNavigation && !hasCamera) {
     facets.push(buildFacet({

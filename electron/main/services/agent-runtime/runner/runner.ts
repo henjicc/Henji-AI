@@ -48,6 +48,7 @@ import { createRunnerConversation } from './runner-conversation'
 import { AgentFacetProgressTracker } from './facet-progress'
 import { prepareAgentAttachmentContext } from './attachment-context'
 import { agentAttachmentSchema, type AgentAttachment } from '../../../../../src/core/assistant/attachments'
+import { readPendingVisualObservation } from '../../../../../src/core/assistant/surfaceObservation'
 const logger = createMainLogger('main.agent_runtime')
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
@@ -196,13 +197,11 @@ export class AgentRunner {
       requestApproval: (call, approval) => this.approvalCoordinator.request(call, approval),
       onObservation: (call, observation) => {
         this.observations.push(observation)
-        if (call.toolName === 'observe_application_surface') {
-          const output = observation.output
-          const attachment = typeof output === 'object' && output !== null
-            ? agentAttachmentSchema.safeParse((output as Record<string, unknown>).attachment)
-            : null
-          if (attachment?.success) this.pendingVisualAttachments.push(attachment.data)
-        }
+        // 按观察契约而不是工具名识别：任何返回 visual_pending_model 且带合法附件的
+        // 观察结果都会真正进入模型视野。绑死工具名会让新增观察能力静默拿不到像素，
+        // 模型却以为自己“看过了”。
+        const visual = agentAttachmentSchema.safeParse(readPendingVisualObservation(observation.output))
+        if (visual.success) this.pendingVisualAttachments.push(visual.data)
         this.conversationJournal.appendInternal(
           'tool_result',
           toolMessage(call, observation),

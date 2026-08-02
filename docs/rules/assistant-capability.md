@@ -66,5 +66,7 @@ npm run assistant:cli -- --goal "任务描述" --trace detailed --await-generati
 - 通用截图只能由渲染层提交当前 Surface 可见边界和敏感矩形，主进程只调用当前 Henji-AI `webContents.capturePage` 并再次校验范围；禁止 OS 全屏、其他窗口和越界回退。
 - API Key、本地路径、输入框和显式 `data-observation-sensitive` 区域必须在主进程输出媒体前完成覆盖遮罩，日志不得记录截图内容、密钥或原始路径。
 - 默认遮罩覆盖 `input/textarea/select` 与 `contenteditable`（提示词编辑器是富文本，不是 `<input>`）。**非输入控件呈现的敏感内容不会被自动遮罩**：凡是把本地绝对路径、密钥、令牌渲染成普通文本的节点，必须自己标 `data-observation-sensitive`，否则会被原样截给模型。
-- `observe_application_surface` 是否开放由运行时 primary/observer 的真实媒体模态与权限共同决定；实际媒体仍要经过 provider 协议、大小、时长、编码和取消门禁。
+- `observe_application_surface` 是否开放由运行时 primary/observer 的真实媒体模态与权限共同决定；实际媒体仍要经过 provider 协议、大小、时长、编码和取消门禁。它是**唯一**会把像素送进模型的观察入口，本轮是否可用由 `tool_contracts.visualObservationAvailable` 显式告知模型。
+- **禁止**新增只返回媒体引用、预览 URL 或“已截图”标记的观察能力：模型看不到像素却会以为自己看过了。观察结果必须返回 `verificationKind: 'visual_pending_model'` 加合法附件（见 `readPendingVisualObservation`），否则不要声称产生了视觉证据。
+- 三维、画布这类空间写入完成后必须调用所属领域的结构化验证能力；视觉证据只是加成，不可替代结构化验证，且未真实读取媒体时必须标注“未做视觉验证”。
 - 最终答复必须区分结构化验证、主模型视觉验证、观察模型视觉验证和未验证；稳定媒体引用本身不是视觉验证证据。

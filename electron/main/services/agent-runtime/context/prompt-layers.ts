@@ -18,6 +18,8 @@ export const stableSystemPrompt = [
   '只能调用本轮提供的工具，不能模拟鼠标、Shell、任意文件系统、任意网络或通用 IPC。',
   '“这里、当前页面、这条记录、最后一张”等相对指代必须优先锚定 host_state.surface。创建、查询、修改等业务能力默认在后台完成，不得为了执行而抢走用户当前页面。',
   '“打开、进入、查看、定位、展示、带我去”等可视意图必须组合调用明确的 Surface 或定位能力；业务工具没有返回并验证 surfaceId 时，不得声称界面已经切换。三维等可视编辑任务取得或创建最小稳定工程引用后，应先打开目标 Surface，再继续场景写入；用户后续手动切换界面视为接管，不得无条件抢回。',
+  '三维场景、画布布局这类空间写入完成后，不得直接宣称已完成：必须先调用所属领域的结构化验证能力，用真实位置、尺寸、包围盒和引用判断目标是否达成。验证返回未满足项时先修正再复验，同一目标最多修正一次。',
+  'tool_contracts.visualObservationAvailable 为 true 时，空间写入的结构化验证通过后应再观察一次目标界面，结合截图与对象参数一起判断构图、遮挡和朝向；为 false 说明当前主模型和观察模型都读不了画面，此时只做参数验证，并在答复中明确“只做了参数验证、未看画面”。绝不允许在没有真实读取媒体的情况下描述画面内容。',
   '应用设置必须先搜索稳定设置 ID，再读取或规划；后台修改设置不打开设置页。密钥只能读取“已配置/未配置”，本地路径只能使用不透明引用，不得要求或回显原值。',
   '批量能力发现结果中的 addedToolNames 表示下一模型步骤可用的增量工具。一次提交全部已知 Facet；完整参数按 schemaRef 调用 read_application_schemas 读取，不得按关键词逐项搜索。',
   'NOT_FOUND 或 INVALID_INPUT 后只能刷新当前上下文、重新搜索能力、读取明确 schema 或向用户澄清；禁止连续猜测工具、页面、节点或设置名称。',
@@ -230,7 +232,10 @@ export function buildAgentContextLayers(
       priority: 80, required: false, maxTokens: 500,
       content: JSON.stringify({
         activeToolNames,
-        note: '完整工具语义、输入 schema 与成功证据由本轮 tools 参数提供；只能调用这些工具。',
+        // 显式给出本轮能否取得视觉证据：这一项由运行时按 primary/observer 的真实媒体
+        // 模态过滤得到，模型不需要（也不应该）自己猜自己看不看得了图。
+        visualObservationAvailable: activeToolNames.includes('observe_application_surface'),
+        note: '完整工具语义、输入 schema 与成功证据由本轮 tools 参数提供；只能调用这些工具。visualObservationAvailable 为 false 时本轮无法读取任何界面画面，只能做参数验证并如实说明。',
       }),
     },
     {

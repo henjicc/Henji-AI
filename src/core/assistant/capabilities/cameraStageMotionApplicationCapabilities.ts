@@ -41,24 +41,22 @@ const applyCameraMove = defineApplicationCapability({
 })
 
 const verifyScene = defineApplicationCapability({
-  id: 'verify_camera_stage_scene', version: 1, title: '验证 3D 场景结果',
-  description: '结构化验证对象复用、边界盒布局、活动摄像机、轨迹和关键帧；构图类条件可按需请求受限视口预览。',
+  // v2：移除 requireVisualPreview 与 visual 输出。预览引用不会进入模型视野，
+  // 保留它只会诱导模型误以为“已经看过画面”。构图类判断改为再调一次
+  // observe_application_surface 取真实截图。
+  id: 'verify_camera_stage_scene', version: 2, title: '验证 3D 场景结果',
+  description: '结构化验证对象复用、边界盒布局、活动摄像机、轨迹和关键帧；构图是否好看需另行观察界面截图判断。',
   domain: 'camera_stage', aliases: ['验证三维场景', '检查运镜结果', '检查构图', 'verify 3D scene'], readOnly: true, risk: 'R0', dataClasses: ['C1'],
   permission: 'camera_stage:read', idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: true, supportsUndo: false,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory'],
-  producesRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'media.image'],
+  producesRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory'],
   inputSchema: z.object({
     projectId: z.string().min(1), expectedObjectIds: z.array(z.string().min(1)).max(128).default([]),
     expectedCameraId: z.string().min(1).optional(), expectedMoveKind: z.enum(['orbit', 'dollyIn', 'dollyOut', 'truck', 'crane']).optional(),
-    requireNoCollisions: z.boolean().default(true), requireVisualPreview: z.boolean().default(false),
+    requireNoCollisions: z.boolean().default(true),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     verified: z.boolean(), evidence: z.array(z.record(z.string(), z.unknown())), unmetConditions: z.array(z.string()), checkedAt: z.string(),
-    visual: z.discriminatedUnion('status', [
-      z.object({ status: z.literal('captured'), preview: z.record(z.string(), z.unknown()), verifiedByModel: z.literal(false) }).strict(),
-      z.object({ status: z.literal('not_requested') }).strict(),
-      z.object({ status: z.literal('unavailable'), reason: z.string() }).strict(),
-    ]),
     baseRevision: cameraStageBaseRevisionSchema,
   }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:verify`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
@@ -66,21 +64,9 @@ const verifyScene = defineApplicationCapability({
   summarize: (output) => output.verified ? '3D 场景结构化验证已通过。' : `3D 场景仍有 ${output.unmetConditions.length} 项未满足。`,
 })
 
-const observeViewport = defineApplicationCapability({
-  id: 'observe_camera_stage_viewport', version: 1, title: '观察 3D 视口预览',
-  description: '捕获已打开 3D 编辑器的当前应用内视口，并返回受限媒体引用和生命周期信息。', domain: 'camera_stage',
-  aliases: ['查看三维构图', '视口截图', '3D preview', 'observe viewport'], readOnly: true, risk: 'R0', dataClasses: ['C1'],
-  permission: 'camera_stage:read', idempotent: false, destructive: false, timeoutMs: 15_000, supportsPreview: true, supportsUndo: false,
-  requiredScopes: ['toolbox', 'surface'], prerequisites: ['目标工程已加载，且 tool.camera_stage Surface 当前可见。'],
-  acceptsRefs: ['camera_stage.project'], producesRefs: ['media.image'],
-  successEvidence: ['返回来源 Surface、视口来源、尺寸、数据等级、遮罩策略、生命周期和应用内媒体引用；不返回本地路径。'],
-  inputSchema: z.object({ projectId: z.string().min(1), reason: z.string().trim().min(1).max(500) }).strict(),
-  outputSchema: capabilityOutputSchema({ preview: z.record(z.string(), z.unknown()), baseRevision: cameraStageBaseRevisionSchema }),
-  resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:viewport`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
-  control: cameraStageControl('observe', ['camera_stage.scene'], [], ['toolbox', 'surface']),
-  summarize: () => '已取得受限 3D 视口预览；视觉含义仍需具备图像能力的模型判断。',
-})
-
+// 三维视口截图统一走 observe_application_surface：它会自动定位 camera_stage 的专用
+// 观察区域，并把结果转成模型真正能读的媒体附件。此前的 observe_camera_stage_viewport
+// 只返回媒体引用、像素永远进不了模型，已随第六阶段全域观察一并废除。
 export const CAMERA_STAGE_MOTION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  applyCameraMove, verifyScene, observeViewport,
+  applyCameraMove, verifyScene,
 ]
