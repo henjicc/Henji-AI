@@ -21,8 +21,21 @@ export const ASSISTANT_SKILL_MAX_REFERENCE_COUNT = 64
 /** `references/` 递归索引的最大深度。 */
 export const ASSISTANT_SKILL_MAX_REFERENCE_DEPTH = 8
 
+/** 单个技能允许落盘的文件数量上限。 */
+export const ASSISTANT_SKILL_MAX_FILE_COUNT = 32
+/** 单个技能允许落盘的总字节上限。 */
+export const ASSISTANT_SKILL_MAX_TOTAL_BYTES = 1_048_576
+/** 单个压缩包允许处理的条目数量上限，防止条目爆炸。 */
+export const ASSISTANT_SKILL_MAX_ARCHIVE_ENTRIES = 512
+
 /** 允许落盘与读取的纯文本扩展名，其余一律不安装、不索引、不读取。 */
 export const ASSISTANT_SKILL_TEXT_EXTENSIONS = ['.md', '.txt'] as const
+/** 允许作为安装来源的文件扩展名。 */
+export const ASSISTANT_SKILL_SOURCE_EXTENSIONS = ['.md', '.zip'] as const
+/** 压缩包内出现这些扩展名一律整包拒绝——嵌套归档等于绕过本层的所有校验。 */
+export const ASSISTANT_SKILL_ARCHIVE_EXTENSIONS = [
+  '.zip', '.gz', '.tar', '.tgz', '.rar', '.7z', '.bz2', '.xz',
+] as const
 export const ASSISTANT_SKILL_REFERENCE_DIR = 'references'
 export const ASSISTANT_SKILL_ENTRY_FILE = 'SKILL.md'
 /** 停用技能名单在 SQLite `settings` 表中的键名，值为 JSON 字符串数组。 */
@@ -75,7 +88,43 @@ export const assistantSkillManifestSchema = z.object({
   invalid: z.array(assistantSkillInvalidEntrySchema),
 }).strict()
 
+export const assistantSkillInstallRequestSchema = z.object({
+  sourcePath: z.string().min(1).max(4_096),
+  /** 同名用户技能已存在时是否整体替换；缺省为 false，服务层返回 SKILL_ALREADY_EXISTS。 */
+  overwrite: z.boolean().default(false),
+}).strict()
+
+export const assistantSkillSkippedFileSchema = z.object({
+  path: z.string().min(1),
+  reason: z.string().min(1),
+}).strict()
+
+export const assistantSkillInstallResultSchema = z.object({
+  installed: z.array(assistantSkillNameSchema),
+  replaced: z.array(assistantSkillNameSchema),
+  skippedFiles: z.array(assistantSkillSkippedFileSchema),
+}).strict()
+
+export const assistantSkillNameRequestSchema = z.object({
+  name: assistantSkillNameSchema,
+}).strict()
+
+export const assistantSkillReadRequestSchema = z.object({
+  name: assistantSkillNameSchema,
+  path: assistantSkillReferencePathSchema.optional(),
+}).strict()
+
+export const assistantSkillEnabledUpdateSchema = z.object({
+  name: assistantSkillNameSchema,
+  enabled: z.boolean(),
+}).strict()
+
 export type AssistantSkillSource = z.infer<typeof assistantSkillSourceSchema>
+export type AssistantSkillInstallRequest = z.infer<typeof assistantSkillInstallRequestSchema>
+export type AssistantSkillSkippedFile = z.infer<typeof assistantSkillSkippedFileSchema>
+export type AssistantSkillInstallResult = z.infer<typeof assistantSkillInstallResultSchema>
+export type AssistantSkillReadRequest = z.infer<typeof assistantSkillReadRequestSchema>
+export type AssistantSkillEnabledUpdate = z.infer<typeof assistantSkillEnabledUpdateSchema>
 export type AssistantSkillMetadata = z.infer<typeof assistantSkillMetadataSchema>
 export type AssistantSkillDetail = z.infer<typeof assistantSkillDetailSchema>
 export type AssistantSkillInvalidEntry = z.infer<typeof assistantSkillInvalidEntrySchema>
@@ -87,6 +136,11 @@ export const ASSISTANT_SKILL_ERROR_CODES = [
   'SKILL_DISABLED',
   'SKILL_PATH_REJECTED',
   'SKILL_FRONTMATTER_INVALID',
+  'SKILL_ALREADY_EXISTS',
+  'SKILL_BUILTIN_READONLY',
+  'UNSUPPORTED_SKILL_SOURCE',
+  'SKILL_ARCHIVE_REJECTED',
+  'SKILL_LIMIT_EXCEEDED',
 ] as const
 
 export type AssistantSkillErrorCode = (typeof ASSISTANT_SKILL_ERROR_CODES)[number]

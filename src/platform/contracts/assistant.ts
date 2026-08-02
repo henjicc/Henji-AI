@@ -11,6 +11,14 @@ import type {
   AssistantUserInstructionsUpdate,
 } from '@/core/assistant/userInstructions'
 import type {
+  AssistantSkillDetail,
+  AssistantSkillEnabledUpdate,
+  AssistantSkillInstallRequest,
+  AssistantSkillInstallResult,
+  AssistantSkillManifest,
+  AssistantSkillReadRequest,
+} from '@/core/assistant/skills'
+import type {
   AgentApprovalResponse,
   AgentCancelRunRequest,
   AgentRunControlRequest,
@@ -56,6 +64,11 @@ export interface AssistantPlatform {
   updateUserInstructions(update: AssistantUserInstructionsUpdate): Promise<AssistantUserInstructions>
   resetUserInstructions(): Promise<AssistantUserInstructions>
   openUserInstructionsFile(): Promise<string>
+  listSkills(): Promise<AssistantSkillManifest>
+  readSkill(request: AssistantSkillReadRequest): Promise<AssistantSkillDetail>
+  installSkill(request: AssistantSkillInstallRequest): Promise<AssistantSkillInstallResult>
+  uninstallSkill(name: string): Promise<void>
+  setSkillEnabled(update: AssistantSkillEnabledUpdate): Promise<AssistantSkillManifest>
   getMemoryState(): Promise<AgentMemoryState>
   updateMemorySettings(update: AgentMemorySettingsUpdate): Promise<AgentMemorySettings>
   updateMemory(update: AgentMemoryUpdate): Promise<AgentMemoryRecord>

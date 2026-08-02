@@ -1,4 +1,7 @@
-import { ASSISTANT_SKILL_DISABLED_SETTING_KEY } from '../../../../../src/core/assistant/skills'
+import {
+  ASSISTANT_SKILL_DISABLED_SETTING_KEY,
+  assistantSkillNameSchema,
+} from '../../../../../src/core/assistant/skills'
 import { getDb } from '../../db'
 import { createMainLogger } from '../../logging'
 
@@ -40,4 +43,33 @@ export function readDisabledSkillNames(): string[] {
     })
     return []
   }
+}
+
+/**
+ * 写入技能启停状态。
+ *
+ * **内置与用户技能在这里一视同仁，不做来源限制。** 停用内置技能时的二次确认是界面层的事，
+ * 不能当作权限校验放在这里——否则以后从别的入口调这个函数会被莫名其妙地拒绝。
+ */
+export function setAssistantSkillEnabled(name: string, enabled: boolean): string[] {
+  const skillName = assistantSkillNameSchema.parse(name)
+  const current = new Set(readDisabledSkillNames())
+  if (enabled) {
+    current.delete(skillName)
+  } else {
+    current.add(skillName)
+  }
+  const next = Array.from(current).sort((left, right) => left.localeCompare(right))
+  getDb()
+    .prepare(`
+      INSERT INTO settings(key, value, type, updated_at)
+      VALUES (?, ?, 'json', CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+    `)
+    .run(ASSISTANT_SKILL_DISABLED_SETTING_KEY, JSON.stringify(next))
+  logger.info('更新技能启停状态完成', {
+    event: 'assistant_skill.set_enabled.completed',
+    context: { skill: skillName, enabled, disabledCount: next.length },
+  })
+  return next
 }

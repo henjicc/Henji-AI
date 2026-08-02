@@ -25,6 +25,21 @@ import {
   updateAssistantUserInstructions,
 } from '../services/assistant/user-instructions'
 import {
+  assistantSkillEnabledUpdateSchema,
+  assistantSkillInstallRequestSchema,
+  assistantSkillNameRequestSchema,
+  assistantSkillReadRequestSchema,
+} from '../../../src/core/assistant/skills'
+import {
+  installAssistantSkill,
+  uninstallAssistantSkill,
+} from '../services/assistant/skills/install'
+import {
+  listAssistantSkills,
+  readAssistantSkill,
+} from '../services/assistant/skills/registry'
+import { setAssistantSkillEnabled } from '../services/assistant/skills/state'
+import {
   clearAgentMemories,
   getAgentMemoryStore,
   updateAgentMemory,
@@ -71,6 +86,39 @@ export function registerAssistantIpc(): void {
     'assistant:userInstructions:openFile',
     parseVoid,
     () => openAssistantUserInstructionsFile(),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:skills:list',
+    parseVoid,
+    () => listAssistantSkills(),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:skills:read',
+    (input) => assistantSkillReadRequestSchema.parse(input),
+    ({ name, path }) => readAssistantSkill(name, path),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:skills:install',
+    (input) => assistantSkillInstallRequestSchema.parse(input),
+    (request) => installAssistantSkill(request),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:skills:uninstall',
+    (input) => assistantSkillNameRequestSchema.parse(input),
+    ({ name }) => uninstallAssistantSkill(name),
+    assertTrustedAssistantRenderer
+  )
+  registerIpcHandler(
+    'assistant:skills:setEnabled',
+    (input) => assistantSkillEnabledUpdateSchema.parse(input),
+    ({ name, enabled }) => {
+      setAssistantSkillEnabled(name, enabled)
+      return listAssistantSkills()
+    },
     assertTrustedAssistantRenderer
   )
   registerIpcHandler(

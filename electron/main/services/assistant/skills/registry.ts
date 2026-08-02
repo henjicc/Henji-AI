@@ -160,6 +160,8 @@ async function scanDirectory(
   for (const entry of await readDirEntries(dir)) {
     // withFileTypes 采用 lstat 语义：指向目录的符号链接 isDirectory() 为 false，天然被排除。
     if (!entry.isDirectory()) continue
+    // 点开头的目录是安装过程的临时目录等内部产物，技能名 schema 也不允许，直接跳过。
+    if (entry.name.startsWith('.')) continue
     const result = await scanSkillFolder(dir, entry.name, source)
     if ('metadata' in result) {
       skills.set(result.metadata.name, result)
