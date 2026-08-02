@@ -54,6 +54,7 @@ const migratedBackendCapabilityIds = [
   'reject_agent_memory',
   'get_user_instructions',
   'update_user_instructions',
+  'load_assistant_skill',
   'list_workflows',
   'plan_workflow',
   'execute_workflow',

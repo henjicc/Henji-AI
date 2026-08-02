@@ -27,6 +27,9 @@ import { TOOLBOX_APPLICATION_CAPABILITIES } from './capabilities/toolboxApplicat
 import {
   ASSISTANT_RUNTIME_APPLICATION_CAPABILITIES,
 } from './capabilities/assistantRuntimeApplicationCapabilities'
+import {
+  ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
+} from './capabilities/assistantSkillApplicationCapabilities'
 import { WORKFLOW_APPLICATION_CAPABILITIES } from './capabilities/workflowApplicationCapabilities'
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
@@ -51,6 +54,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...CAMERA_STAGE_APPLICATION_CAPABILITIES,
   ...TOOLBOX_APPLICATION_CAPABILITIES,
   ...ASSISTANT_RUNTIME_APPLICATION_CAPABILITIES,
+  ...ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
   ...WORKFLOW_APPLICATION_CAPABILITIES,
 ]
 

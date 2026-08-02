@@ -2,6 +2,7 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage, ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
+import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 
@@ -57,6 +58,7 @@ export const AGENT_CONTEXT_LAYER_IDS = [
   'user_instructions',
   'confirmed_memory',
   'tool_contracts',
+  'skills_index',
   'observations',
 ] as const
 export type AgentContextLayerId = typeof AGENT_CONTEXT_LAYER_IDS[number]
@@ -110,6 +112,8 @@ export interface AgentContextBuildInput {
   goal: string
   userInstructions?: string
   memoryContext?: AgentMemoryContextEntry[]
+  /** 本次运行开始时扫描到的已启用技能，只用于构建 skills_index 层，正文按需加载。 */
+  skills?: AssistantSkillMetadata[]
   snapshot: HostContextSnapshot
   route: AgentRouteDecision
   conversation: ModelStepMessage[]

@@ -4,6 +4,7 @@ import { createQueryDiagnosticEventsTool } from '../../diagnostics/query-diagnos
 import { defineAgentTool } from '../define-tool'
 import type { AgentToolDefinition } from '../types'
 import type { AgentToolRegistry } from '../registry'
+import { createAssistantSkillTools } from './assistant-skills'
 import { createUserInstructionTools } from './user-instructions'
 import { createAgentMemoryTools } from './memory'
 import { createAgentArtifactTools, type AgentArtifactToolAccess } from './artifacts'
@@ -152,6 +153,7 @@ export function createBackendBuiltinTools(
     eraseToolDefinition(readSchemas),
     eraseToolDefinition(searchCapabilities),
     createQueryDiagnosticEventsTool(),
+    ...createAssistantSkillTools(),
     ...createUserInstructionTools(),
     ...createAgentMemoryTools(),
     ...createAgentArtifactTools(artifactAccess),

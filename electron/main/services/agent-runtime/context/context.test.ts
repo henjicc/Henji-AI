@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
+import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import { AgentContextBuilder, resolveContextCompactionThreshold } from './builder'
 import { AgentIntentRouter } from './router'
+import type { AgentContextBuildInput } from './types'
 
 function contextSnapshot(): HostContextSnapshot {
   return {
@@ -34,6 +36,37 @@ function contextSnapshot(): HostContextSnapshot {
       'search_models',
     ],
     capturedAt: new Date().toISOString(),
+  }
+}
+
+function skillMetadata(name: string, description: string, enabled = true): AssistantSkillMetadata {
+  return {
+    name,
+    description,
+    source: 'builtin',
+    overridesBuiltin: false,
+    enabled,
+    bodyBytes: 128,
+    referencePaths: [],
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function skillBuildInput(skills: AssistantSkillMetadata[] | undefined): AgentContextBuildInput {
+  return {
+    runId: 'run-skills-index',
+    goal: '生成一张图片',
+    skills,
+    snapshot: contextSnapshot(),
+    route: {
+      intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['generation'],
+      source: 'deterministic', reason: '技能索引测试',
+    },
+    conversation: [],
+    observations: [],
+    modelTools: [],
+    activeToolNames: [],
+    contextWindowBudget: 16_000,
   }
 }
 
@@ -573,5 +606,52 @@ describe('AgentContextBuilder', () => {
       expect.objectContaining({ id: 'user_instructions' }),
     ]))
     expect(result.compactionReason).toContain('超过阈值')
+  })
+
+  it('没有已启用技能时完全不注入 skills_index 层', () => {
+    for (const skills of [undefined, [], [skillMetadata('disabled-skill', '停用的技能', false)]]) {
+      const result = new AgentContextBuilder().build(skillBuildInput(skills))
+      expect(result.retainedLayers).not.toContain('skills_index')
+      expect(JSON.stringify(result.messages)).not.toContain('id=skills_index')
+    }
+  })
+
+  it('技能索引层只有名称与描述，不含正文', () => {
+    const result = new AgentContextBuilder().build(skillBuildInput([
+      skillMetadata('image-generation', '生成图片时使用'),
+      skillMetadata('canvas-editing', '编排画布时使用'),
+    ]))
+    const layer = String(result.messages.find((message) => (
+      String(message.content).includes('id=skills_index')
+    ))?.content ?? '')
+    expect(layer).toContain('trust=trusted_runtime')
+    expect(layer).toContain('image-generation')
+    expect(layer).toContain('生成图片时使用')
+    expect(layer).toContain('load_assistant_skill')
+    expect(layer).toContain('"omittedCount":0')
+    // 正文永远不进索引层。
+    expect(layer).not.toContain('SKILL.md')
+  })
+
+  it('技能超出层预算时按整条丢弃，不出现被截断的半条描述', () => {
+    const skills = Array.from({ length: 60 }, (_, index) => skillMetadata(
+      `skill-${String(index).padStart(3, '0')}`,
+      `第 ${index} 个技能的用途说明${'描'.repeat(60)}`
+    ))
+    const result = new AgentContextBuilder().build(skillBuildInput(skills))
+    const layer = String(result.messages.find((message) => (
+      String(message.content).includes('id=skills_index')
+    ))?.content ?? '')
+    expect(layer).not.toContain('[本层内容已按预算截断]')
+    const payload = JSON.parse(
+      layer.split('\n').slice(1, -1).join('\n')
+    ) as { skills: { name: string; description: string }[]; omittedCount: number }
+    expect(payload.skills.length).toBeGreaterThan(0)
+    expect(payload.skills.length + payload.omittedCount).toBe(skills.length)
+    // 每一条都是完整的技能名与完整描述，没有半条。
+    for (const entry of payload.skills) {
+      const source = skills.find((skill) => skill.name === entry.name)
+      expect(source?.description).toBe(entry.description)
+    }
   })
 })

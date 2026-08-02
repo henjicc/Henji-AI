@@ -4,6 +4,8 @@ import type { AgentToolObservation } from '../../../../../src/core/assistant/too
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import type { AgentTurnSnapshotDraft } from '../../../../../src/core/assistant/turn'
+import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
+import { listEnabledAssistantSkills } from '../../assistant/skills/registry'
 import { AgentContextBuilder } from '../context/builder'
 import type { AgentRouteDecision } from '../context/types'
 import type { AgentToolRegistration } from '../tools/types'
@@ -44,7 +46,15 @@ export class AgentTurnContextCoordinator {
     conversationMessageCount: number
   } | undefined
 
+  /** 每次运行只扫一次技能目录，之后各轮复用；本运行期间新装的技能下次运行才生效。 */
+  private skills: AssistantSkillMetadata[] | null = null
+
   constructor(private readonly options: TurnContextCoordinatorOptions) {}
+
+  private async ensureSkills(): Promise<AssistantSkillMetadata[]> {
+    if (this.skills === null) this.skills = await listEnabledAssistantSkills()
+    return this.skills
+  }
 
   recordModelInputUsage(inputTokens: number | null, conversationMessageCount: number): void {
     if (inputTokens === null || inputTokens <= 0) return
@@ -56,11 +66,13 @@ export class AgentTurnContextCoordinator {
     snapshot: AgentTurnSnapshotDraft
     rebuild: () => ReturnType<AgentContextBuilder['build']>
   }> {
+    const skills = await this.ensureSkills()
     const build = (): ReturnType<AgentContextBuilder['build']> => this.options.contextBuilder.build({
       runId: this.options.runId,
       goal: input.goal,
       userInstructions: input.userInstructions,
       memoryContext: input.memoryContext,
+      skills,
       snapshot: input.host,
       route: input.route,
       conversation: input.getConversation(),

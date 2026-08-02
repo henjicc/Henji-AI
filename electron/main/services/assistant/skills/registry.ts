@@ -232,12 +232,17 @@ async function locateSkillDir(
   throw new AssistantSkillError('SKILL_NOT_FOUND', `技能不存在：${name}`)
 }
 
+/** 技能内容加上该技能的引用清单，供模型决定是否继续做二级加载。 */
+export interface AssistantSkillLoadResult extends AssistantSkillDetail {
+  referencePaths: string[]
+}
+
 /** 读取技能正文或其引用文件。`relativePath` 为空时返回不含 frontmatter 的 `SKILL.md` 正文。 */
-export async function readAssistantSkillFrom(
+export async function loadAssistantSkillFrom(
   dirs: SkillDirectorySet,
   name: string,
   relativePath?: string
-): Promise<AssistantSkillDetail> {
+): Promise<AssistantSkillLoadResult> {
   // 技能名来自模型输入，必须先过 schema 再参与路径拼接。
   if (!assistantSkillNameSchema.safeParse(name).success) {
     throw new AssistantSkillError('SKILL_NOT_FOUND', `技能不存在：${name}`)
@@ -248,6 +253,8 @@ export async function readAssistantSkillFrom(
     throw new AssistantSkillError('SKILL_DISABLED', `技能已被停用：${name}`)
   }
 
+  const referencePaths = await indexReferencePaths(located.dir)
+
   if (!relativePath) {
     const raw = await fs.readFile(path.join(located.dir, ASSISTANT_SKILL_ENTRY_FILE), 'utf8')
     const parsed = parseSkillFrontmatter(raw)
@@ -257,6 +264,7 @@ export async function readAssistantSkillFrom(
       path: null,
       content: parsed.body,
       bytes: Buffer.byteLength(parsed.body, 'utf8'),
+      referencePaths,
     }
   }
 
@@ -269,6 +277,7 @@ export async function readAssistantSkillFrom(
       path: relativePath.split(/[\\/]/).join('/'),
       content,
       bytes: Buffer.byteLength(content, 'utf8'),
+      referencePaths,
     }
   } catch (error) {
     if (errorCode(error) === 'ENOENT' || errorCode(error) === 'ENOTDIR') {
@@ -279,6 +288,19 @@ export async function readAssistantSkillFrom(
     }
     throw error
   }
+}
+
+export async function readAssistantSkillFrom(
+  dirs: SkillDirectorySet,
+  name: string,
+  relativePath?: string
+): Promise<AssistantSkillDetail> {
+  const { referencePaths: _referencePaths, ...detail } = await loadAssistantSkillFrom(
+    dirs,
+    name,
+    relativePath
+  )
+  return detail
 }
 
 export function resolveSkillDirectories(): SkillDirectorySet {
@@ -298,4 +320,28 @@ export async function readAssistantSkill(
   relativePath?: string
 ): Promise<AssistantSkillDetail> {
   return readAssistantSkillFrom(resolveSkillDirectories(), name, relativePath)
+}
+
+export async function loadAssistantSkill(
+  name: string,
+  relativePath?: string
+): Promise<AssistantSkillLoadResult> {
+  return loadAssistantSkillFrom(resolveSkillDirectories(), name, relativePath)
+}
+
+/**
+ * 供助手运行时构建 `skills_index` 层用：只返回已启用技能，且扫描失败不抛出。
+ * 技能是可选的领域知识，读不出来应当退化成"本轮没有技能"，而不是让整轮运行失败。
+ */
+export async function listEnabledAssistantSkills(): Promise<AssistantSkillMetadata[]> {
+  try {
+    const manifest = await listAssistantSkills()
+    return manifest.skills.filter((skill) => skill.enabled)
+  } catch (error) {
+    logger.warn('读取技能清单失败，本轮不注入技能索引', {
+      event: 'assistant_skill.index.read_failed',
+      error,
+    })
+    return []
+  }
 }
