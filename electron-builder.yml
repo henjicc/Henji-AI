@@ -13,6 +13,8 @@ extraResources:
     to: resources/progress-seeds.json
   - from: resources/camera-stage
     to: resources/camera-stage
+  - from: resources/assistant-skills
+    to: resources/assistant-skills
 asarUnpack:
   - node_modules/better-sqlite3/**
   - node_modules/sharp/**
