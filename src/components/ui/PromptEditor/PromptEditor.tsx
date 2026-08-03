@@ -15,6 +15,8 @@ import { CharacterCount } from '@tiptap/extensions/character-count'
 import { Placeholder } from '@tiptap/extensions/placeholder'
 import { UndoRedo } from '@tiptap/extensions/undo-redo'
 import { EditorContent, useEditor } from '@tiptap/react'
+import type { Editor } from '@tiptap/react'
+import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { UI_TEXT_META_CLASS } from '../styleTokens'
 
 import { MediaReferenceExtension } from './extensions/mediaReference'
@@ -47,6 +49,22 @@ import type {
 
 const EMPTY_REFERENCES: readonly PromptReferenceItem[] = []
 const EMPTY_VARIABLES: readonly PromptVariableItem[] = []
+
+/**
+ * 读取实时字数；编辑器不可用时退回按文档纯计算。
+ *
+ * **`editor` 非空不代表它还活着。** 懒加载浮层挂在 Suspense/Offscreen 里，隐藏时 Tiptap 会
+ * 销毁实例，而 `destroy()` 把 `extensionStorage` 整个置空；React 重新显示该子树时会补跑
+ * layout effect（reappearLayoutEffects），拿到的仍然是那个已销毁的实例。此时直接读
+ * `editor.storage.characterCount.characters()` 抛 TypeError——effect 里抛出的异常没有错误
+ * 边界接住，整棵渲染树被卸载，用户看到的就是启动动画走完后整个应用黑屏。
+ */
+function readCharacterCount(editor: Editor | null, fallback: PromptDocumentV1): number {
+  if (!editor || editor.isDestroyed) return countPromptDocumentCharacters(fallback)
+  const storage = editor.storage.characterCount as { characters?: () => number } | undefined
+  if (typeof storage?.characters !== 'function') return countPromptDocumentCharacters(fallback)
+  return storage.characters()
+}
 
 const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
   function EditablePromptEditor({
@@ -205,7 +223,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
       },
       onUpdate: ({ editor: currentEditor }): void => {
         const document = fromTiptapContent(currentEditor.getJSON())
-        setCharacterCount(currentEditor.storage.characterCount.characters())
+        setCharacterCount(readCharacterCount(currentEditor, document))
         if (promptDocumentsEqual(valueRef.current, document)) return
         valueRef.current = document
         callbacksRef.current.onChange(document)
@@ -263,7 +281,7 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
           })
           .run()
         valueRef.current = value
-        setCharacterCount(editor.storage.characterCount.characters())
+        setCharacterCount(readCharacterCount(editor, value))
       } catch (caught) {
         callbacksRef.current.onError?.(
           caught instanceof Error ? caught : new Error(String(caught)),
@@ -358,10 +376,12 @@ const EditablePromptEditor = forwardRef<PromptEditorHandle, PromptEditorProps>(
 
     // 画布静态态切换为真实编辑器时，调用方会在 onReady 中恢复光标或拖拽选区。
     // 必须在浏览器绘制前完成，否则静态选区消失与 Tiptap 选区出现之间会闪一帧。
+    // 已销毁的实例不算就绪：onReady 的调用方会去恢复光标或拖拽选区，对着死实例做这些
+    // 只会再抛一次。等新的实例到位后 [editor] 变化会重新触发本 effect。
     useLayoutEffect(() => {
-      if (!editor || readyEditorRef.current === editor) return
+      if (!editor || editor.isDestroyed || readyEditorRef.current === editor) return
       readyEditorRef.current = editor
-      setCharacterCount(editor.storage.characterCount.characters())
+      setCharacterCount(readCharacterCount(editor, valueRef.current))
       callbacksRef.current.onReady?.()
     }, [editor])
 

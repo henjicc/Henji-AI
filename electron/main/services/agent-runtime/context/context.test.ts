@@ -486,6 +486,55 @@ describe('AgentContextBuilder', () => {
     expect(result.messages.some((message) => String(message.content).includes('id=model_catalog'))).toBe(false)
   })
 
+  it('与生成无关的任务完全不注入模型目录', () => {
+    // 实测 65 个模型序列化后 20,613 字符：摆一个立方体的提示词里塞六千多 token 的模型目录，
+    // 而且这一层优先级 88，排在技能索引和用户指令前面。目录改成白名单注入后这类任务为零。
+    for (const route of [
+      { intent: 'camera_stage', toolDomains: ['toolbox', 'camera_stage'] },
+      { intent: 'canvas', toolDomains: ['canvas'] },
+      { intent: 'settings', toolDomains: ['settings', 'navigation'] },
+      { intent: 'assets', toolDomains: ['assets'] },
+    ] satisfies Array<Pick<AgentContextBuildInput['route'], 'intent' | 'toolDomains'>>) {
+      const result = new AgentContextBuilder().build({
+        runId: `run-no-catalog-${route.intent}`,
+        goal: '在场景里放一个立方体',
+        snapshot: contextSnapshot(),
+        route: {
+          ...route, complexity: 'simple', path: 'workflow',
+          source: 'deterministic', reason: '与生成无关',
+        },
+        conversation: [],
+        observations: [],
+        modelTools: [],
+        activeToolNames: [],
+        contextWindowBudget: 8_000,
+      })
+      expect(
+        result.messages.some((message) => String(message.content).includes('id=model_catalog')),
+        route.intent
+      ).toBe(false)
+    }
+  })
+
+  it('查询模型的任务仍然注入目录', () => {
+    const result = new AgentContextBuilder().build({
+      runId: 'run-inspect-model',
+      goal: '看看有哪些图片模型',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'inspect_model', complexity: 'simple', path: 'workflow', toolDomains: ['models'],
+        source: 'deterministic', reason: '查询模型',
+      },
+      conversation: [],
+      observations: [],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 8_000,
+    })
+    expect(result.messages.some((message) => String(message.content).includes('id=model_catalog')))
+      .toBe(true)
+  })
+
   it('明确图片目标时只注入图片模型目录，避免视频和音频目录占用上下文', () => {
     const snapshot = contextSnapshot()
     snapshot.generation.modelCatalog?.modelGroups.push({

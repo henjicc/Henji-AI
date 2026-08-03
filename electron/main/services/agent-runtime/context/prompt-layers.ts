@@ -61,10 +61,24 @@ function inferRequestedGenerationMediaType(goal: string): GenerationMediaType | 
   return null
 }
 
+/**
+ * 模型目录是**白名单注入**，不是排除法。
+ *
+ * 它只服务一件事：挑模型。但排除法（只在 general 且无工具域时跳过）会让三维、画布、设置
+ * 这些跟生成无关的任务也拿到全量目录——实测 65 个模型序列化后 20,613 字符，摆一个立方体
+ * 的提示词里先塞进六千多 token，而且这一层优先级 88，排在技能索引（75）和用户指令（70）
+ * 前面，挤掉的都是更该看的东西。
+ *
+ * 没注入不等于拿不到：`search_models` 能按需查目录，`get_model_schema` 能读单模型 schema。
+ */
+function needsModelCatalog(route: AgentContextBuildInput['route']): boolean {
+  return route.intent === 'generate' || route.toolDomains.includes('models')
+}
+
 function relevantModelCatalog(input: AgentContextBuildInput): Record<string, unknown> | null {
   const catalog = input.snapshot.generation.modelCatalog
   if (!catalog) return null
-  if (input.route.intent === 'general' && input.route.toolDomains.length === 0) return null
+  if (!needsModelCatalog(input.route)) return null
   const requestedMediaType = input.route.intent === 'generate'
     ? inferRequestedGenerationMediaType(input.goal)
     : null
