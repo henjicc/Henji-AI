@@ -49,6 +49,9 @@ export const cameraStageMoveSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('crane'), height: z.number().min(-10_000).max(10_000) }).strict(),
 ])
 
+/** 乐观并发冲突的统一恢复指引：所有收 baseRevision 的三维写入都必须给出这一条。 */
+export const CONFLICT_RECOVERY = 'CONFLICT 表示场景在读取之后被改动过：直接使用上一次写入或读取返回的 baseRevision 重试一次，不要用同一个过期值反复重试；仍冲突再重新观察场景。'
+
 export const cameraStageTransactionResultShape = {
   status: z.literal('completed'),
   transactionRef: z.string().min(1),

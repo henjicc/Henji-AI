@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
-import { cameraStageControl, cameraStageTarget, cameraStageTransactionResultShape } from './cameraStageCapabilitySchemas'
+import {
+  CONFLICT_RECOVERY, cameraStageControl, cameraStageTarget, cameraStageTransactionResultShape } from './cameraStageCapabilitySchemas'
 
 const listProjects = defineApplicationCapability({
   id: 'list_camera_stage_projects', version: 2, title: '列出 3D 运镜工程',
@@ -66,6 +67,7 @@ const renameProjectCapability = defineApplicationCapability({
   domain: 'camera_stage', aliases: ['修改 3D 工程名称', 'rename camera project'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project'], producesRefs: ['camera_stage.project'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({ projectId: z.string().min(1), name: z.string().trim().min(1).max(120), baseRevision: z.number().int().nonnegative() }).strict(),
   outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
   resolveConcurrencyKey: (input) => `camera_stage_project:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
@@ -78,6 +80,7 @@ const deleteProjectCapability = defineApplicationCapability({
   domain: 'camera_stage', aliases: ['永久删除 3D 工程', 'delete camera project'], readOnly: false, risk: 'R3', dataClasses: ['C1'],
   permission: 'camera_stage:delete', idempotent: true, destructive: true, timeoutMs: 15_000, supportsPreview: true, supportsUndo: false,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({ projectId: z.string().min(1), baseRevision: z.number().int().nonnegative() }).strict(),
   outputSchema: capabilityOutputSchema({ projectId: z.string(), status: z.literal('deleted'), baseRevision: z.number().int().nonnegative() }),
   resolveConcurrencyKey: (input) => `camera_stage_project:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),

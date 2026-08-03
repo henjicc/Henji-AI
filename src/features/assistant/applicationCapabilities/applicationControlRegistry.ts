@@ -86,20 +86,21 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   return registry
 }
 
+/** 与注册表同理：全部执行器注册成功才赋给模块单例，避免半成品被后续调用静默复用。 */
 export function getApplicationControlExecutionEngine(): ApplicationControlExecutionEngine {
-  if (!executionEngine) {
-    executionEngine = new ApplicationControlExecutionEngine(getApplicationReflectionRegistry())
-    executionEngine.registerMutationExecutor(new SettingsMutationExecutor())
-    executionEngine.registerMutationExecutor(new CanvasNodeMutationExecutor())
-    const dependencies: CameraStageControlExecutorDependencies = {
-      readRevision: () => cameraStageDependencies.readRevision(),
-      bumpRevision: () => cameraStageDependencies.bumpRevision(),
-    }
-    for (const entityType of CAMERA_STAGE_MUTATION_ENTITY_TYPES) {
-      executionEngine.registerMutationExecutor(new CameraStageMutationExecutor(entityType, dependencies))
-    }
-    executionEngine.registerOperationExecutor(new CameraStageMotionOperationExecutor(dependencies))
-    executionEngine.registerOperationExecutor(new CameraStagePlacementOperationExecutor(dependencies))
+  if (executionEngine) return executionEngine
+  const next = new ApplicationControlExecutionEngine(getApplicationReflectionRegistry())
+  next.registerMutationExecutor(new SettingsMutationExecutor())
+  next.registerMutationExecutor(new CanvasNodeMutationExecutor())
+  const dependencies: CameraStageControlExecutorDependencies = {
+    readRevision: () => cameraStageDependencies.readRevision(),
+    bumpRevision: () => cameraStageDependencies.bumpRevision(),
   }
+  for (const entityType of CAMERA_STAGE_MUTATION_ENTITY_TYPES) {
+    next.registerMutationExecutor(new CameraStageMutationExecutor(entityType, dependencies))
+  }
+  next.registerOperationExecutor(new CameraStageMotionOperationExecutor(dependencies))
+  next.registerOperationExecutor(new CameraStagePlacementOperationExecutor(dependencies))
+  executionEngine = next
   return executionEngine
 }

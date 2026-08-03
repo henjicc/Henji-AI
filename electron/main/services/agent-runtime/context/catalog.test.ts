@@ -232,18 +232,25 @@ describe('AgentToolCatalogPlanner', () => {
       throw new Error('测试不执行前端工具')
     })
     const planner = new AgentToolCatalogPlanner(registry)
-    const readArtifact = registry.list(contextSnapshot())
+    // 需要一个大于单轮上限的候选池，才能真的验证"分页工具不会被挤掉"。
+    const fullContext = {
+      ...contextSnapshot(),
+      availableCapabilities: registry.allDefinitions()
+        .filter((definition) => definition.side === 'frontend')
+        .map((definition) => definition.name),
+    }
+    const readArtifact = registry.list(fullContext)
       .find((entry) => entry.name === 'read_agent_artifact')
     expect(readArtifact).toBeDefined()
     const discovered = [
       ...(readArtifact ? [readArtifact] : []),
-      ...registry.list(contextSnapshot())
+      ...registry.list(fullContext)
         .filter((entry) => ![
           'discover_application_capabilities',
           'search_application_capabilities',
           'read_agent_artifact',
         ].includes(entry.name)),
-    ].slice(0, 20)
+    ].slice(0, AGENT_ACTIVE_TOOL_LIMIT + 8)
     expect(discovered.length).toBeGreaterThan(AGENT_ACTIVE_TOOL_LIMIT)
     expect(discovered.some((entry) => entry.name === 'read_agent_artifact')).toBe(true)
     planner.restoreDiscovered(discovered.map((entry) => entry.name))
@@ -253,7 +260,7 @@ describe('AgentToolCatalogPlanner', () => {
       nextCursor: 'v1:4096:0123456789abcdef',
     })
     for (let turn = 0; turn < 3; turn += 1) {
-      const activation = planner.select(primaryRoute, contextSnapshot())
+      const activation = planner.select(primaryRoute, fullContext)
       expect(activation.activeToolNames).toContain('read_agent_artifact')
       expect(activation.pinnedToolNames).toContain('read_agent_artifact')
       expect(activation.droppedPinnedToolNames).not.toContain('read_agent_artifact')

@@ -80,12 +80,16 @@ function startTracking(): () => void {
       if (state.currentProjectId !== previous.currentProjectId) bumpScope('canvas')
     }),
     useCanvasStore.subscribe((state, previous) => {
-      if (state.nodes !== previous.nodes || state.edges !== previous.edges || state.selectedNodeId !== previous.selectedNodeId) {
-        bumpScope('canvas')
-      }
+      if (state.nodes !== previous.nodes || state.edges !== previous.edges) bumpScope('canvas')
+      // 选中项是界面状态，不是画布数据：它不能推进 canvas 基线，否则将来任何一个用
+      // scopeRevisions.canvas 做乐观并发的写入，都会被"定位一下节点"这种纯导航动作弄失效。
+      if (state.selectedNodeId !== previous.selectedNodeId) bumpScope('surface')
     }),
     useAssetLibraryStore.subscribe((state, previous) => {
-      if (state.view !== previous.view || state.selectedAsset?.id !== previous.selectedAsset?.id) bumpScope('assets')
+      // 素材库的浮层开合与选中同理，都属于呈现层。
+      if (state.view !== previous.view || state.selectedAsset?.id !== previous.selectedAsset?.id) {
+        bumpScope('surface')
+      }
     }),
     useSettingsStore.subscribe((state, previous) => {
       if (state !== previous) bumpScope('settings')

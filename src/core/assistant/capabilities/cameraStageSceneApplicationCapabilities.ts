@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
 import {
+  CONFLICT_RECOVERY,
   cameraStageBaseRevisionSchema,
   cameraStageControl,
   cameraStageObjectUpdateSchema,
@@ -33,7 +34,7 @@ const placeObject = defineApplicationCapability({
   timeoutMs: 15_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['toolbox'],
   acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'], producesRefs: ['camera_stage.object', 'camera_stage.camera'],
   successEvidence: ['事务证据包含 reused 或 created 决策、最终位置、边界盒、冲突列表和稳定对象引用。'],
-  failureRecovery: ['CONFLICT 表示场景在读取之后被改动过：直接使用上一次写入或读取返回的 baseRevision 重试一次，不要用同一个过期值反复重试；仍冲突再重新观察场景。'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({
     projectId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
     objectId: z.string().min(1).optional(), objectType: z.enum(['primitive', 'character', 'camera']),
@@ -59,6 +60,7 @@ const duplicateObject = defineApplicationCapability({
   domain: 'camera_stage', aliases: ['复制 3D 物体', 'duplicate camera object'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'], producesRefs: ['camera_stage.object', 'camera_stage.camera'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({ projectId: z.string().min(1), objectId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema }).strict(),
   outputSchema: capabilityOutputSchema({ projectId: z.string(), objectId: z.string(), duplicatedFromObjectId: z.string(), undoRef: z.string().optional(), baseRevision: cameraStageBaseRevisionSchema }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { objectId: input.objectId }),
@@ -71,6 +73,7 @@ const deleteObject = defineApplicationCapability({
   domain: 'camera_stage', aliases: ['删除 3D 物体', 'delete camera object'], readOnly: false, risk: 'R3', dataClasses: ['C1'],
   permission: 'camera_stage:delete', idempotent: true, destructive: true, timeoutMs: 10_000, supportsPreview: true, supportsUndo: false,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({ projectId: z.string().min(1), objectId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema }).strict(),
   outputSchema: capabilityOutputSchema({ projectId: z.string(), objectId: z.string(), status: z.literal('deleted'), baseRevision: cameraStageBaseRevisionSchema }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:${input.objectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { objectId: input.objectId }),
@@ -85,6 +88,7 @@ const updateObject = defineApplicationCapability({
   aliases: ['修改 3D 物体', '调整摄像机参数', 'update camera object'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'], producesRefs: ['camera_stage.object', 'camera_stage.camera'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({ projectId: z.string().min(1), objectId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema, changes: cameraStageObjectUpdateSchema }).strict(),
   outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:${input.objectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { objectId: input.objectId }),
@@ -103,6 +107,7 @@ const addShot = defineApplicationCapability({
   domain: 'camera_stage', aliases: ['添加镜头卡', 'add camera shot'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.camera'], producesRefs: ['camera_stage.shot'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({ projectId: z.string().min(1), name: z.string().trim().min(1).max(120), cameraId: z.string().min(1).nullable().default(null), baseRevision: cameraStageBaseRevisionSchema }).strict(),
   outputSchema: capabilityOutputSchema({ projectId: z.string(), shotId: z.string(), name: z.string(), undoRef: z.string().optional(), baseRevision: cameraStageBaseRevisionSchema }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:shots`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { name: input.name }),
@@ -114,6 +119,7 @@ const updateShot = defineApplicationCapability({
   domain: 'camera_stage', aliases: ['修改镜头卡', 'update camera shot'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.shot', 'camera_stage.camera'], producesRefs: ['camera_stage.shot'],
+  failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({
     projectId: z.string().min(1), shotId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
     changes: z.object({ name: z.string().trim().min(1).max(120).optional(), hold: z.number().min(0).max(3600).optional(), transitionDuration: z.number().min(0).max(3600).optional(), continuity: z.enum(['stop', 'smooth']).optional(), cameraId: z.string().min(1).nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0),

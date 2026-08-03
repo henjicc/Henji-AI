@@ -7,6 +7,7 @@ import {
   cameraStageControl,
   cameraStageMoveSchema,
   cameraStageTarget,
+  CONFLICT_RECOVERY,
   cameraStageTransactionResultShape,
   cameraStageVec3Schema,
 } from './cameraStageCapabilitySchemas'
@@ -21,7 +22,7 @@ const applyCameraMove = defineApplicationCapability({
   producesRefs: ['camera_stage.camera', 'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe'],
   successEvidence: ['事务返回路径起终点、采样数、受影响镜头和关键帧数量，并提供可撤销引用。'],
   failureRecovery: [
-    'CONFLICT 表示场景在读取之后被改动过：直接使用上一次写入或读取返回的 baseRevision 重试一次，不要用同一个过期值反复重试；仍冲突再重新观察场景。',
+    CONFLICT_RECOVERY,
     '缺少目标、摄像机或有效时间范围时停止，重新观察场景后使用稳定引用；不得猜测名称。',
   ],
   inputSchema: z.object({

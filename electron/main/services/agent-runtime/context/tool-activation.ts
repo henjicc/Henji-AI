@@ -3,7 +3,17 @@ import type { AgentToolRegistration } from '../tools/types'
 import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentRouteDecision } from './types'
 
-export const AGENT_ACTIVE_TOOL_LIMIT = 8
+/**
+ * 单轮活动工具数量上限。
+ *
+ * 真正的约束是下面那个字节预算，这个计数只是兜底。原值 8 定得过紧：实测一个三维任务
+ * 有 26 个候选，8 个位里 3 个被常驻工具占掉，每轮要丢掉 18 个，而 schema 实际只用掉
+ * 7~12KB——距离 48KB 还有约四倍余量。计数在字节预算远未触顶时就先卡死，模型于是把轮次
+ * 都花在等工具轮回来上。
+ *
+ * 提到 16 之后，字节预算重新成为先生效的那一个，这也是它本该扮演的角色。
+ */
+export const AGENT_ACTIVE_TOOL_LIMIT = 16
 export const AGENT_TOOL_SCHEMA_BUDGET_BYTES = 48 * 1024
 const CAPABILITY_DISCOVERY_TOOL = 'discover_application_capabilities'
 const CURRENT_CONTEXT_TOOL = 'get_current_application_context'

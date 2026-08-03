@@ -3,6 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
+import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 
 import { getHostScopeRevisions, retainHostContextTracking } from './hostContext'
@@ -42,6 +44,24 @@ describe('宿主作用域 revision', () => {
     useNavigationStore.setState({ activeToolId: null })
 
     expect(getHostScopeRevisions().toolbox).toBe(before.toolbox)
+  })
+
+  it('画布选中与素材库开合不推进各自的数据作用域', () => {
+    const before = getHostScopeRevisions()
+    useCanvasStore.setState({ selectedNodeId: 'node-1' })
+    useAssetLibraryStore.setState({ view: 'floating' })
+    const after = getHostScopeRevisions()
+
+    expect(after.canvas).toBe(before.canvas)
+    expect(after.assets).toBe(before.assets)
+    expect(after.surface).toBeGreaterThan(before.surface)
+  })
+
+  it('画布节点数据变化仍然推进 canvas', () => {
+    const before = getHostScopeRevisions()
+    useCanvasStore.setState({ nodes: [] })
+
+    expect(getHostScopeRevisions().canvas).toBeGreaterThan(before.canvas)
   })
 
   it('三维场景数据变化仍然推进 toolbox', () => {
