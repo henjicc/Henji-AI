@@ -249,6 +249,31 @@ export function createCanvasReflectionRegistrations(): ApplicationEntityRegistra
       revisionScopes: [REVISION_SCOPE],
       queryCapabilityIds: META[entityType].queryIds,
       schemaRef: schemaRef('entity', entityType),
+      /**
+       * 节点与连线可增删。声明之后助手用通用动词就能建画布，不必为每种「加一个 X」写专用能力。
+       *
+       * `node_type` 与 `source_ref` / `target_ref` 都是只读属性——「只读」指创建后不可修改，
+       * 不妨碍它们作为创建时的必填项。属性可写性与创建必填项在契约上是两件事，引擎分别判定。
+       */
+      ...(entityType === CANVAS_ENTITY_TYPES.node ? {
+        collectionWrite: {
+          creatable: true,
+          removable: true,
+          requiredPropertyIds: [`${CANVAS_ENTITY_TYPES.node}.node_type`],
+          maxItemsPerChange: 50,
+        },
+      } : {}),
+      ...(entityType === CANVAS_ENTITY_TYPES.edge ? {
+        collectionWrite: {
+          creatable: true,
+          removable: true,
+          requiredPropertyIds: [
+            `${CANVAS_ENTITY_TYPES.edge}.source_ref`,
+            `${CANVAS_ENTITY_TYPES.edge}.target_ref`,
+          ],
+          maxItemsPerChange: 50,
+        },
+      } : {}),
     },
     properties: propertiesByEntity[entityType],
     provider: new CanvasReflectionProvider(entityType),

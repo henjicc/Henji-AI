@@ -17,7 +17,11 @@ import {
 } from '@/features/cameraStage/application/cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from '@/features/cameraStage/application/cameraStagePlacementExecutor'
 import { CameraStageKeyframeCollectionExecutor } from '@/features/cameraStage/application/cameraStageKeyframeCollectionExecutor'
-import { createCanvasReflectionRegistrations } from '@/features/canvas/application/canvasReflection'
+import { createCanvasReflectionRegistrations, CANVAS_ENTITY_TYPES } from '@/features/canvas/application/canvasReflection'
+import {
+  CanvasCollectionExecutor,
+  type CanvasCollectionDependencies,
+} from '@/features/canvas/application/canvasCollectionExecutor'
 import { CanvasNodeMutationExecutor } from '@/features/canvas/application/canvasMutationExecutor'
 import { createAssetReflectionRegistrations } from '@/features/assets/application/assetReflection'
 import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
@@ -31,6 +35,17 @@ let executionEngine: ApplicationControlExecutionEngine | undefined
 let cameraStageDependencies: CameraStageControlExecutorDependencies = {
   readRevision: () => 0,
   bumpRevision: () => undefined,
+}
+
+let canvasCollectionDependencies: CanvasCollectionDependencies = {
+  readRevision: () => 0,
+  bumpRevision: () => undefined,
+}
+
+export function configureCanvasCollectionDependencies(
+  dependencies: CanvasCollectionDependencies,
+): void {
+  canvasCollectionDependencies = dependencies
 }
 
 export function configureCameraStageControlDependencies(
@@ -105,6 +120,15 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   // 集合写入：关键帧从"只能读改"变成"可以创建"，助手据此就能表达任意对象动画，
   // 不再需要为上下漂浮、自转这类需求各写一个专用能力。
   next.registerCollectionExecutor(new CameraStageKeyframeCollectionExecutor(dependencies))
+  // 画布节点与连线：写入全部委托 applyCanvasOperationsAtomically，与批量能力共用同一内核。
+  // revision 依赖由适配器注入，注册表不直接 import hostContext——那条 import 会把 taskQueue
+  // 一起拉进模块图，而它在初始化时读 localStorage，Node 环境的用例会直接崩。
+  const canvasDependencies: CanvasCollectionDependencies = {
+    readRevision: () => canvasCollectionDependencies.readRevision(),
+    bumpRevision: () => canvasCollectionDependencies.bumpRevision(),
+  }
+  next.registerCollectionExecutor(new CanvasCollectionExecutor(CANVAS_ENTITY_TYPES.node, canvasDependencies))
+  next.registerCollectionExecutor(new CanvasCollectionExecutor(CANVAS_ENTITY_TYPES.edge, canvasDependencies))
   executionEngine = next
   return executionEngine
 }

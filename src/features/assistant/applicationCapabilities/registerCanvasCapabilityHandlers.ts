@@ -21,6 +21,15 @@ import {
   planCanvasBatch,
   previewCanvasBatch,
 } from '@/features/canvas/application/canvasBatchService'
+import { getHostScopeRevisions, notifyHostScopeChanged } from '../hostContext/hostContext'
+import { configureCanvasCollectionDependencies } from './applicationControlRegistry'
+
+// 画布集合写入的 revision 依赖由适配器注入，与三维的 configureCameraStageControlDependencies 同理：
+// 注册表本身不 import hostContext，避免把 taskQueue 等浏览器依赖拉进模块图。
+configureCanvasCollectionDependencies({
+  readRevision: () => getHostScopeRevisions().canvas,
+  bumpRevision: () => notifyHostScopeChanged('canvas'),
+})
 import {
   closeCanvasProject,
   createCanvasProject,
