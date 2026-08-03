@@ -114,12 +114,42 @@ function buildFacet(input: {
   }
 }
 
+/**
+ * 打断依赖环。
+ *
+ * schema 只拦自环和悬空边，**多节点环是放行的**。一旦成环，环上的 Facet 永远没有一个"依赖
+ * 全部完成"的可运行项，任务图无法自行推进；而结算侧看到的是"没有受阻、没有等待用户"，
+ * 于是把整张图判成完成并下发停止指令——实测就是这样丢掉了圆柱体、环绕运镜和漂浮动画。
+ *
+ * 这里按声明顺序做一次深度优先，只丢掉指回祖先的那条边：任务图是运行时按启发式拼出来的，
+ * 为一条多余的依赖边把整次运行否掉，代价远大于少一条排序约束。
+ */
+function breakDependencyCycles(facets: AgentTaskFacet[]): AgentTaskFacet[] {
+  const byId = new Map(facets.map((facet) => [facet.facetId, facet]))
+  const kept = new Map(facets.map((facet) => [facet.facetId, [...facet.dependsOn]]))
+  const state = new Map<string, 'visiting' | 'done'>()
+  const visit = (facetId: string): void => {
+    if (state.get(facetId) === 'done') return
+    state.set(facetId, 'visiting')
+    const dependencies = kept.get(facetId) ?? []
+    kept.set(facetId, dependencies.filter((dependency) => {
+      if (!byId.has(dependency)) return false
+      if (state.get(dependency) === 'visiting') return false
+      visit(dependency)
+      return true
+    }))
+    state.set(facetId, 'done')
+  }
+  for (const facet of facets) visit(facet.facetId)
+  return facets.map((facet) => ({ ...facet, dependsOn: kept.get(facet.facetId) ?? [] }))
+}
+
 function graph(goal: string, facets: AgentTaskFacet[]): AgentTaskGraph {
   const facetIds = new Set(facets.map((facet) => facet.facetId))
-  const normalized = facets.map((facet) => ({
+  const normalized = breakDependencyCycles(facets.map((facet) => ({
     ...facet,
     dependsOn: facet.dependsOn.filter((dependency) => facetIds.has(dependency)),
-  }))
+  })))
   return agentTaskGraphSchema.parse({
     version: AGENT_TASK_GRAPH_VERSION,
     goal,

@@ -12,8 +12,12 @@ import {
 import type { AgentTaskFacet, AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import { AGENT_TASK_FACET_LIMIT } from '../../../../../src/core/assistant/taskGraph'
+import { createMainLogger } from '../../logging'
 import type { AgentToolRegistry } from '../tools/registry'
 import { digestJson } from '../tools/security'
+
+const logger = createMainLogger('main.agent_runtime')
 import { extractResultReferences, extractResultScopeRevisions } from './runner-results'
 
 interface CallRecord {
@@ -161,6 +165,16 @@ export class AgentFacetProgressTracker {
     return this.recordSuccess(input.call, input.observation, signature, record)
   }
 
+  /** 列出这个 Facet 卡住的依赖，缺失的依赖单独标注——那通常意味着任务图本身建错了。 */
+  private unsatisfiedDependencies(facet: AgentTaskFacet): string[] {
+    return facet.dependsOn.flatMap((dependency) => {
+      const target = this.facets.get(dependency)
+      if (!target) return [`${dependency}（该 Facet 不存在）`]
+      if (target.status === 'completed') return []
+      return [`${dependency}（${target.status}）`]
+    })
+  }
+
   settlement(): AgentProgressSettlement {
     const facets = [...this.facets.values()]
     const completed = facets.filter((facet) => facet.status === 'completed')
@@ -170,39 +184,80 @@ export class AgentFacetProgressTracker {
     const hasRunnableFacet = remaining.some((facet) => facet.dependsOn.every(
       (dependency) => this.facets.get(dependency)?.status === 'completed'
     ))
+    /**
+     * `completed` **必须**要求 remaining 为空。
+     *
+     * 这一档原本只看 blocked 和 waiting：只要没有受阻、没有等待用户，哪怕任务图里还剩一半
+     * Facet 没做，也会被判成 completed，然后 settlementGuidance 下发"停止调用工具"。实测就是
+     * 这样——立方体放完之后，圆柱体、环绕运镜、上下漂浮三件事都还挂着，运行时却宣布完成。
+     *
+     * 触发条件是"还有 Facet，但一个都不可运行"：三维写入 Facet 全都依赖导航 Facet，导航又依赖
+     * 查询锚点，锚点一旦没被记成 completed，整条链就永远没有可运行项，而它们又都不是 blocked
+     * 也不是 waiting_user，于是精准命中这一档。
+     */
+    const deadlocked = remaining.length > 0 && !hasRunnableFacet && waiting.length === 0
     const status: AgentProgressSettlement['status'] = remaining.length > 0 && hasRunnableFacet
       ? 'active'
       : remaining.length > 0 && waiting.length > 0
         ? 'waiting_user'
-      : blocked.length === 0 && waiting.length === 0
+      : remaining.length === 0 && blocked.length === 0 && waiting.length === 0
         ? 'completed'
         : completed.length > 0
           ? 'partial'
           : waiting.length > 0 && blocked.length === 0 ? 'waiting_user' : 'blocked'
+    // 死锁的 Facet 必须自己变成受阻项并说明卡在哪个依赖上，否则最终答复里它们既不在"已完成"
+    // 也不在"受阻"，只剩一句没有出处的"未完成"。
+    const deadlockedBlocks = deadlocked
+      ? remaining.map((facet) => ({
+          facetId: facet.facetId,
+          reason: `依赖未完成，无法开始：${this.unsatisfiedDependencies(facet).join('、') || '未知依赖'}。`,
+        }))
+      : []
     return agentProgressSettlementSchema.parse({
       status,
       completedFacetIds: completed.map((facet) => facet.facetId),
-      blockedFacets: blocked.map((facet) => ({
-        facetId: facet.facetId,
-        reason: facet.statusReason || '没有满足完成条件。',
-      })),
+      blockedFacets: [
+        ...blocked.map((facet) => ({
+          facetId: facet.facetId,
+          reason: facet.statusReason || '没有满足完成条件。',
+        })),
+        ...deadlockedBlocks,
+      ].slice(0, AGENT_TASK_FACET_LIMIT),
       waitingFacetIds: waiting.map((facet) => facet.facetId),
       remainingFacetIds: remaining.map((facet) => facet.facetId),
       evidence: facets.flatMap((facet) => facet.evidence).slice(-AGENT_SETTLEMENT_EVIDENCE_LIMIT),
+      // 摘要必须带上剩余数：结算为非 active 时不提 remaining，读的人无从知道还欠多少。
       summary: status === 'active'
         ? `任务图仍有 ${remaining.length} 个 Facet 未结算。`
-        : `任务图结算为 ${status}：完成 ${completed.length}，受阻 ${blocked.length}，等待用户 ${waiting.length}。`,
+        : `任务图结算为 ${status}：完成 ${completed.length}，受阻 ${blocked.length}，等待用户 ${waiting.length}，未开始 ${remaining.length}。`
+          + (deadlocked ? '未开始的 Facet 全部卡在未完成的依赖上，任务图无法自行推进。' : ''),
       suggestedNextStep: waiting.length > 0
         ? '向用户提出一个最小且具体的问题，然后进入现有 waiting_user。'
-        : blocked.length > 0
-          ? '如实说明已完成部分、阻塞原因和继续所需的最小条件。'
-          : null,
+        : deadlocked
+          ? '如实说明哪些 Facet 因依赖未完成而没有开始，并给出继续所需的最小动作，不要声称任务已完成。'
+          : blocked.length > 0
+            ? '如实说明已完成部分、阻塞原因和继续所需的最小条件。'
+            : null,
     })
   }
 
   settlementGuidance(): string | null {
     const settlement = this.settlement()
     if (settlement.status === 'active') return null
+    // 「停止调用工具」是本运行时最重的一个决策，此前它一条日志都不留：出问题时只能看到
+    // 助手忽然收手，无从判断是模型自己停的还是运行时下的令。
+    logger.info('任务图结算并下发停止指令', {
+      event: 'agent_task_graph.settlement.stop',
+      context: {
+        status: settlement.status,
+        completedCount: settlement.completedFacetIds.length,
+        blockedCount: settlement.blockedFacets.length,
+        waitingCount: settlement.waitingFacetIds.length,
+        remainingCount: settlement.remainingFacetIds.length,
+        remainingFacetIds: settlement.remainingFacetIds,
+        blockedReasons: settlement.blockedFacets.map((facet) => `${facet.facetId}:${facet.reason}`),
+      },
+    })
     return [
       '[任务图结构化结算]',
       JSON.stringify(settlement),

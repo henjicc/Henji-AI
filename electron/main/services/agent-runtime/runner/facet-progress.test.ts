@@ -242,3 +242,45 @@ describe('AgentFacetProgressTracker', () => {
     })
   })
 })
+
+/**
+ * 实测事故：立方体放完之后，圆柱体、环绕运镜、上下漂浮三个 Facet 都还挂着，运行时却把任务图
+ * 结算为 completed 并下发"停止调用工具"，助手于是收手汇报"已完成"。
+ *
+ * 原因是判定阶梯的第三档只看 blocked 和 waiting，**完全不看 remaining**：只要没有受阻、没有
+ * 等待用户，哪怕任务图里还剩一半没做也判 completed。触发条件是"还有 Facet 但一个都不可运行"
+ * ——三维写入 Facet 全都依赖导航 Facet，导航又依赖查询锚点，锚点没被记成 completed 时整条链
+ * 永远没有可运行项，而它们既不是 blocked 也不是 waiting_user，精准命中这一档。
+ */
+describe('任务图结算不得谎报完成', () => {
+  it('还有 Facet 没做时，任何情况下都不能结算为 completed', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'anchor', domain: 'camera_stage', capabilityKinds: ['query'] }),
+      facet({ facetId: 'place_cylinder', domain: 'camera_stage', dependsOn: ['anchor'] }),
+      facet({ facetId: 'orbit_camera', domain: 'camera_stage', dependsOn: ['anchor'] }),
+    ]), registry())
+    const settlement = tracker.settlement()
+    expect(settlement.status).not.toBe('completed')
+    expect(settlement.remainingFacetIds.length).toBeGreaterThan(0)
+  })
+
+  it('依赖死锁时把剩余 Facet 标成受阻并指出卡在哪个依赖上', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'anchor', domain: 'camera_stage', dependsOn: ['place_cylinder'] }),
+      facet({ facetId: 'place_cylinder', domain: 'camera_stage', dependsOn: ['anchor'] }),
+    ]), registry())
+    const settlement = tracker.settlement()
+    expect(settlement.status).not.toBe('completed')
+    const reasons = settlement.blockedFacets.map((item) => `${item.facetId}:${item.reason}`).join('|')
+    expect(reasons).toContain('place_cylinder')
+    expect(reasons).toContain('anchor')
+    expect(settlement.suggestedNextStep ?? '').toContain('不要声称任务已完成')
+  })
+
+  it('全部 Facet 完成时仍然结算为 completed', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'only', domain: 'camera_stage', status: 'completed' }),
+    ]), registry())
+    expect(tracker.settlement().status).toBe('completed')
+  })
+})
