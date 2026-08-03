@@ -14,3 +14,4 @@ export * from './TaskHistoryFilterBar';
 export { default as AlertDialog } from './AlertDialog';
 export type { AlertDialogAction } from './AlertDialog';
 export * from './GlobalAlertDialog';
+export * from './UiErrorBoundary';

@@ -6,6 +6,7 @@ import {
   type ApplicationCommitRequest,
   type ApplicationEvidence,
   type ApplicationPlannedStep,
+  type ApplicationTransactionMode,
   type ApplicationTransactionResult,
   type ApplicationUndoRequest,
 } from '../transactions'
@@ -47,6 +48,19 @@ function failure(
   extra: Partial<Omit<Extract<ApplicationTransactionResult, { status: 'failed' }>, 'status' | 'code' | 'message' | 'recoverable'>> = {}
 ): ApplicationTransactionResult {
   return applicationTransactionResultSchema.parse({ status: 'failed', code, message, recoverable, ...extra })
+}
+
+/**
+ * 从 `PARTIAL_FAILURE:<n>:<原始错误>` / `COMPENSATED_FAILURE:<下标>:<原始错误>` 里取回原因。
+ *
+ * 这些包装串以前只用来判分支，原始错误连一个字都没进最终结果——调用方拿到的永远是
+ * "事务执行失败"这六个字。实测排查三维布置时，模型收到的就是这句，它既不知道是
+ * targetObjectId 填错了，也不可能自我修正。
+ */
+function failureCause(message: string): string {
+  const cause = /^(?:PARTIAL_FAILURE|COMPENSATED_FAILURE):[^:]*:([\s\S]+)$/.exec(message)
+  const detail = cause?.[1]?.trim()
+  return detail ? `原因：${detail}` : ''
 }
 
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
@@ -154,7 +168,7 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       assertExpectedRevisions(expected, request.expectedRevisions)
       const current = await this.readCurrentRevisions(stored.plan.steps, context)
       assertExpectedRevisions(expected, current)
-      await this.preflightPlan(stored.plan.steps, context)
+      await this.preflightPlan(stored.plan.steps, context, stored.plan.transactionMode)
       const execution = await this.executePlan(stored.plan, context)
       if (execution.deferred) {
         this.store.markCommitted(stored.plan.planRef)
@@ -293,22 +307,63 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       }
       return { completed }
     } catch (error) {
-      if (plan.transactionMode === 'compensatable') {
-        const compensated: number[] = []
-        for (let index = completed.length - 1; index >= 0; index -= 1) {
+      const original = error instanceof Error ? error.message : String(error)
+      // `atomic` 也必须补偿。此前只有 `compensatable` 走补偿，于是声明 atomic 的计划失败后
+      // 把已完成的步骤原样留在应用里，却对调用方自称"事务"——三维布置就是这么留下一个
+      // 压在立方体上的圆柱体的。只有 `non_reversible` 才允许不补偿，那是它的字面语义。
+      if (plan.transactionMode === 'non_reversible') {
+        throw new Error(`PARTIAL_FAILURE:${completed.length}:${original}`)
+      }
+      const compensated: number[] = []
+      for (let index = completed.length - 1; index >= 0; index -= 1) {
+        try {
           await this.compensateStep(plan.steps[index], completed[index], context)
           compensated.push(index)
+        } catch (compensationError) {
+          // 补偿失败不能顶掉原始错误：原始错误才是调用方需要据以决策的那条。这里如实降级
+          // 成"部分未补偿"，并把两条信息都带出去。
+          const detail = compensationError instanceof Error
+            ? compensationError.message
+            : String(compensationError)
+          throw new Error(
+            `PARTIAL_FAILURE:${completed.length}:${original}（补偿在第 ${index} 步失败：${detail}）`
+          )
         }
-        throw new Error(`COMPENSATED_FAILURE:${compensated.join(',')}:${error instanceof Error ? error.message : String(error)}`)
       }
-      throw new Error(`PARTIAL_FAILURE:${completed.length}:${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`COMPENSATED_FAILURE:${compensated.join(',')}:${original}`)
+    }
+  }
+
+  /**
+   * 声明了可回退语义的**多步**计划，必须每一步都真的能补偿——在执行任何一步之前验明。
+   *
+   * 否则会出现"计划自称 atomic、执行器却没有补偿能力"的组合：中途失败时应用被改了一半，
+   * 而调用方（包括模型）是按 atomic 的承诺来决策的。让这种组合在预检就失败，比在改坏之后
+   * 才发现要好得多。
+   *
+   * 只查多步计划：单步计划失败时 `completed` 是空的，补偿循环一次都不会执行，这时要求执行器
+   * 实现 compensate 是纯粹的死要求。**单步内部的部分写入引擎补偿不了**（失败的那步不在
+   * `completed` 里），那必须由执行器自己回滚——三维布置就是这么修的。
+   */
+  private assertCompensable(steps: ApplicationPlannedStep[], mode: ApplicationTransactionMode): void {
+    if (mode === 'non_reversible' || steps.length < 2) return
+    for (const step of steps) {
+      const executor = step.kind === 'mutation'
+        ? this.mutationExecutors.get(step.entityType)
+        : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
+      if (executor && !executor.compensate) {
+        const label = step.kind === 'mutation' ? step.entityType : step.capabilityId
+        throw new Error(`COMPENSATION_NOT_SUPPORTED:${label} 无法补偿，不能用于 ${mode} 事务`)
+      }
     }
   }
 
   private async preflightPlan(
     steps: ApplicationPlannedStep[],
-    context: ApplicationExecutionContext
+    context: ApplicationExecutionContext,
+    mode: ApplicationTransactionMode
   ): Promise<void> {
+    this.assertCompensable(steps, mode)
     for (const step of steps) {
       if (step.kind === 'mutation') {
         const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
@@ -421,7 +476,7 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     const compensated = /^COMPENSATED_FAILURE:([^:]*):/.exec(message)
     if (compensated) {
       const indexes = compensated[1] ? compensated[1].split(',').map(Number) : []
-      return failure('EXECUTION_FAILED', '事务执行失败，已完成步骤均已补偿。', true, {
+      return failure('EXECUTION_FAILED', `事务执行失败，已完成步骤均已补偿，应用状态未改变。${failureCause(message)}`, true, {
         transactionRef,
         partial: { completedStepIndexes: indexes, compensatedStepIndexes: indexes, uncompensatedStepIndexes: [] },
       })
@@ -430,7 +485,16 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     if (partial) {
       const count = Number(partial[1])
       const indexes = Array.from({ length: count }, (_, index) => index)
-      return failure('EXECUTION_FAILED', '事务执行失败，部分步骤已完成且未补偿。', false, {
+      // 零步完成时**不能**说"部分步骤已完成且未补偿、不可重试"。这句话曾经无视 count 硬写
+      // 出来：单步事务失败时一步都没写，调用方却被告知应用已被改动且不可重试。实测中模型
+      // 就是读到这句之后按规则停止了所有后续写入——它的行为是对的，是这条报告在骗它。
+      if (count === 0) {
+        return failure('EXECUTION_FAILED', `事务执行失败，没有任何步骤被提交，应用状态未改变。${failureCause(message)}`, true, {
+          transactionRef,
+          partial: { completedStepIndexes: [], compensatedStepIndexes: [], uncompensatedStepIndexes: [] },
+        })
+      }
+      return failure('EXECUTION_FAILED', `事务执行失败，前 ${count} 步已完成且未补偿，应用处于中间状态。${failureCause(message)}`, false, {
         transactionRef,
         partial: { completedStepIndexes: indexes, compensatedStepIndexes: [], uncompensatedStepIndexes: indexes },
       })
@@ -450,9 +514,11 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     if (message.includes('PERMISSION_DENIED') || message.includes('PROPERTY_NOT_WRITABLE')) {
       return failure('PERMISSION_DENIED', '提交时权限或属性可写状态已变化。', true, { transactionRef })
     }
-    if (message.includes('NOT_FOUND')) return failure('NOT_FOUND', '计划引用的对象不存在。', true, { transactionRef })
+    if (message.includes('NOT_FOUND')) return failure('NOT_FOUND', `计划引用的对象不存在。原因：${message}`, true, { transactionRef })
     if (message === 'CANCELLED') return failure('CANCELLED', '操作已取消。', false, { transactionRef })
-    return failure('EXECUTION_FAILED', '应用事务执行失败。', false, { transactionRef })
+    // 兜底分支同样要带上原始错误：否则任何未归类的失败对调用方都只是"应用事务执行失败"，
+    // 既无法自我修正，也无法据以判断该不该重试。
+    return failure('EXECUTION_FAILED', `应用事务执行失败。原因：${message}`, false, { transactionRef })
   }
 
   private requireOperationExecutor(

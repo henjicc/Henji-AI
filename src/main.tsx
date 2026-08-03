@@ -7,6 +7,7 @@ import { DragDropProvider } from './contexts/DragDropContext'
 import GlobalContextMenuProvider from './contexts/GlobalContextMenuProvider'
 import './i18n'  // 初始化 i18n
 import { createLogger, initLoggerConfig } from '@/core/logging'
+import { UiErrorBoundary } from '@/components/ui'
 
 initLoggerConfig()
 
@@ -54,11 +55,19 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <LogsShell />
                 </React.Suspense>
             ) : (
-                <GlobalContextMenuProvider>
-                    <DragDropProvider>
-                        <App />
-                    </DragDropProvider>
-                </GlobalContextMenuProvider>
+                // 根级错误边界：没有它时，任意组件在渲染或 layout effect 里抛出的异常
+                // 都会把整棵树卸载成一个纯黑窗口，用户既看不到原因也无处可点。
+                <UiErrorBoundary
+                    loggerDomain="app.root"
+                    event="app.ui.crashed"
+                    title="界面出现异常"
+                >
+                    <GlobalContextMenuProvider>
+                        <DragDropProvider>
+                            <App />
+                        </DragDropProvider>
+                    </GlobalContextMenuProvider>
+                </UiErrorBoundary>
             )}
         </React.StrictMode>
     ),
