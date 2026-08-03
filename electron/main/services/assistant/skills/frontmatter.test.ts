@@ -90,11 +90,25 @@ describe('parseSkillFrontmatter', () => {
     expect(missingDescription.line).toBe(3)
   })
 
-  it('name 重复、格式非法、超长都带行号报错', () => {
+  it('name 重复、超长带行号报错', () => {
     expect(expectFrontmatterError('---\nname: a\nname: b\ndescription: 说明\n---\n').line).toBe(3)
-    expect(expectFrontmatterError('---\nname: Demo_Skill\ndescription: 说明\n---\n').message).toContain('小写字母')
     const longName = `${'a'.repeat(65)}`
     expect(expectFrontmatterError(`---\nname: ${longName}\ndescription: 说明\n---\n`).message).toContain('超过 64')
+  })
+
+  it('中文、大写、下划线的技能名都合法', () => {
+    for (const name of ['图片生成', '三维镜头构图', 'Demo_Skill', 'skill-2', '技能A']) {
+      const parsed = parseSkillFrontmatter(`---\nname: ${name}\ndescription: 说明\n---\n正文`)
+      expect(parsed.name).toBe(name)
+    }
+  })
+
+  it('会破坏文件夹名的技能名被拒绝', () => {
+    const rejected = ['a/b', 'a\\b', '.hidden', 'trailing.', 'has space', '..', 'con', 'a:b', 'a*b']
+    for (const name of rejected) {
+      expect(expectFrontmatterError(`---\nname: ${name}\ndescription: 说明\n---\n`).code)
+        .toBe('SKILL_FRONTMATTER_INVALID')
+    }
   })
 
   it('description 超长与为空都报错', () => {

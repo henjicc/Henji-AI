@@ -14,6 +14,7 @@ import {
   assistantSkillReferencePathSchema,
   isAssistantSkillError,
   isAssistantSkillTextFile,
+  normalizeAssistantSkillName,
   type AssistantSkillDetail,
   type AssistantSkillInvalidEntry,
   type AssistantSkillManifest,
@@ -120,7 +121,8 @@ async function scanSkillFolder(
     }
   }
 
-  if (parsed.name !== folderName) {
+  // 两侧都归一化到 NFC 再比：macOS 的目录名是 NFD，直接比会把合法的中文技能判成不一致。
+  if (parsed.name !== normalizeAssistantSkillName(folderName)) {
     return {
       path: skillDir,
       reason: `frontmatter 的 name（${parsed.name}）与文件夹名（${folderName}）不一致`,
@@ -245,14 +247,16 @@ export async function loadAssistantSkillFrom(
   name: string,
   relativePath?: string
 ): Promise<AssistantSkillLoadResult> {
-  // 技能名来自模型输入，必须先过 schema 再参与路径拼接。
-  if (!assistantSkillNameSchema.safeParse(name).success) {
+  // 技能名来自模型输入，必须先过 schema 再参与路径拼接；schema 顺带归一化到 NFC。
+  const parsedName = assistantSkillNameSchema.safeParse(name)
+  if (!parsedName.success) {
     throw new AssistantSkillError('SKILL_NOT_FOUND', `技能不存在：${name}`)
   }
+  const skillName = parsedName.data
 
-  const located = await locateSkillDir(dirs, name)
-  if (dirs.disabledNames.includes(name)) {
-    throw new AssistantSkillError('SKILL_DISABLED', `技能已被停用：${name}`)
+  const located = await locateSkillDir(dirs, skillName)
+  if (dirs.disabledNames.some((disabled) => normalizeAssistantSkillName(disabled) === skillName)) {
+    throw new AssistantSkillError('SKILL_DISABLED', `技能已被停用：${skillName}`)
   }
 
   const referencePaths = await indexReferencePaths(located.dir)
@@ -261,7 +265,7 @@ export async function loadAssistantSkillFrom(
     const raw = await fs.readFile(path.join(located.dir, ASSISTANT_SKILL_ENTRY_FILE), 'utf8')
     const parsed = parseSkillFrontmatter(raw)
     return {
-      name,
+      name: skillName,
       source: located.source,
       path: null,
       content: parsed.body,
@@ -274,7 +278,7 @@ export async function loadAssistantSkillFrom(
   try {
     const content = await fs.readFile(absolutePath, 'utf8')
     return {
-      name,
+      name: skillName,
       source: located.source,
       path: relativePath.split(/[\\/]/).join('/'),
       content,

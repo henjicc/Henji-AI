@@ -41,19 +41,70 @@ export const ASSISTANT_SKILL_ENTRY_FILE = 'SKILL.md'
 /** 停用技能名单在 SQLite `settings` 表中的键名，值为 JSON 字符串数组。 */
 export const ASSISTANT_SKILL_DISABLED_SETTING_KEY = 'assistant_disabled_skills'
 
+/**
+ * 技能名的字符规则。
+ *
+ * 刻意**不**沿用标准 Skills 的小写连字符格式：技能名同时是文件夹名、模型调用参数和界面上
+ * 显示的标题，中文技能写中文名才是自然的。这里只是把允许集从 ASCII 扩到任意可打印字符，
+ * 外部标准技能的 ASCII 名仍然合法，兼容性没有损失。
+ *
+ * 真正要拦的是"能改变路径含义"和"落不了盘"的字符，所以用显式黑名单。
+ */
+
+/**
+ * 文件名非法字符：`< > : " /  | ? *` 加全部控制字符。
+ * 用码点集合而不是正则字面量，是因为这些字符在正则里要么需要转义、要么根本不可打印，
+ * 写成字面量既难读又容易在编辑中被改坏。
+ */
+const SKILL_NAME_FORBIDDEN_CODES = new Set([
+  0x3c, 0x3e, 0x3a, 0x22, 0x2f, 0x5c, 0x7c, 0x3f, 0x2a,
+])
+
+function hasForbiddenSkillChar(segment: string): boolean {
+  for (const character of segment) {
+    const code = character.codePointAt(0) ?? 0
+    if (code < 0x20 || code === 0x7f) return true
+    // 空白会让模型传参出现歧义，中文名也用不上；trim 为空即是各类空白字符。
+    if (character.trim() === '') return true
+    if (SKILL_NAME_FORBIDDEN_CODES.has(code)) return true
+  }
+  return false
+}
+
+/** Windows 保留设备名，建同名文件夹会直接失败。 */
+const WINDOWS_RESERVED_NAME_PATTERN = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
+
+/** 统一到 NFC：macOS 的文件名是 NFD，不归一化会让"同一个中文名"比不相等。 */
+export function normalizeAssistantSkillName(name: string): string {
+  return name.normalize('NFC')
+}
+
+function isSafeSkillSegment(segment: string): boolean {
+  if (!segment || segment === '.' || segment === '..') return false
+  if (segment.startsWith('.') || segment.endsWith('.')) return false
+  if (hasForbiddenSkillChar(segment)) return false
+  return !WINDOWS_RESERVED_NAME_PATTERN.test(segment.replace(/\.[^.]*$/, ''))
+}
+
 export const assistantSkillNameSchema = z.string()
   .min(1)
   .max(ASSISTANT_SKILL_MAX_NAME_LENGTH)
-  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, '技能名只能包含小写字母、数字和单个连字符')
+  .transform(normalizeAssistantSkillName)
+  .refine(
+    isSafeSkillSegment,
+    '技能名不能包含空白、路径分隔符、控制字符或 < > : " | ? *，也不能以点开头或结尾'
+  )
 
 export const assistantSkillReferencePathSchema = z.string()
   .min(1)
   .max(256)
-  .regex(
-    /^references\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*\.(md|txt)$/,
-    '引用路径必须位于 references/ 下且以 .md 或 .txt 结尾'
-  )
-  .refine((value) => !value.split('/').includes('..'), '引用路径不能包含上级目录')
+  .transform(normalizeAssistantSkillName)
+  .refine((value) => {
+    const segments = value.split('/')
+    if (segments.length < 2 || segments[0] !== ASSISTANT_SKILL_REFERENCE_DIR) return false
+    if (!segments.every(isSafeSkillSegment)) return false
+    return /\.(?:md|txt)$/i.test(segments[segments.length - 1] ?? '')
+  }, '引用路径必须位于 references/ 下、以 .md 或 .txt 结尾，且不含上级目录或非法字符')
 
 export const assistantSkillSourceSchema = z.enum(['builtin', 'user'])
 

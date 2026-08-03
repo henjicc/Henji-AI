@@ -192,6 +192,28 @@ describe('scanAssistantSkills', () => {
     ])
   })
 
+  it('中文技能名可以扫描、覆盖、读取正文与引用文件', async () => {
+    const builtinSkill = await writeSkill(builtinDir, '图片生成', skillFile('图片生成', '内置版', '内置正文'))
+    await writeReference(builtinSkill, 'references/参数对照.md', '内置引用')
+    const userSkill = await writeSkill(userDir, '图片生成', skillFile('图片生成', '用户版', '用户正文'))
+    await writeReference(userSkill, 'references/参数对照.md', '用户引用')
+
+    const manifest = await scanAssistantSkills(dirs())
+    expect(manifest.skills).toHaveLength(1)
+    expect(manifest.skills[0]).toMatchObject({
+      name: '图片生成',
+      description: '用户版',
+      source: 'user',
+      overridesBuiltin: true,
+      referencePaths: ['references/参数对照.md'],
+    })
+
+    const detail = await readAssistantSkillFrom(dirs(), '图片生成')
+    expect(detail.content).toBe('用户正文')
+    const reference = await readAssistantSkillFrom(dirs(), '图片生成', 'references/参数对照.md')
+    expect(reference.content).toBe('用户引用')
+  })
+
   it('停用的技能仍在清单里但 enabled 为 false', async () => {
     await writeSkill(builtinDir, 'demo-skill', skillFile('demo-skill', '说明'))
     const manifest = await scanAssistantSkills(dirs(['demo-skill']))
@@ -205,11 +227,9 @@ describe('scanAssistantSkills', () => {
       disabledNames: [],
     })
     expect(manifest.invalid).toEqual([])
-    expect(manifest.skills.map((skill) => skill.name).sort()).toEqual([
-      '3d-shot-composition',
-      'generation-troubleshooting',
-      'image-generation',
-    ])
+    // 不断言顺序：中文名的排序结果依赖 localeCompare 的实现，跨环境不稳定。
+    expect(new Set(manifest.skills.map((skill) => skill.name)))
+      .toEqual(new Set(['三维镜头构图', '生成排障', '图片生成']))
     expect(manifest.skills.every((skill) => skill.source === 'builtin' && skill.enabled)).toBe(true)
     expect(manifest.skills.every((skill) => skill.description.length > 0)).toBe(true)
   })

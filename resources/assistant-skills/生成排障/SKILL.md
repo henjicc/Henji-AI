@@ -1,5 +1,5 @@
 ---
-name: generation-troubleshooting
+name: 生成排障
 description: 用户说生成失败了、卡住了、报错了、图没出来、任务一直在转，或者问"刚才那次为什么失败"时使用。用运行日志定位原因并给出可执行的下一步。
 ---
 

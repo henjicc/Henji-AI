@@ -61,10 +61,16 @@ function validateName(name: string, line: number): string {
   if (name.length > ASSISTANT_SKILL_MAX_NAME_LENGTH) {
     throw invalid(line, `name 超过 ${ASSISTANT_SKILL_MAX_NAME_LENGTH} 个字符（当前 ${name.length}）`)
   }
-  if (!assistantSkillNameSchema.safeParse(name).success) {
-    throw invalid(line, 'name 只能包含小写字母、数字和单个连字符，例如 image-generation')
+  const parsed = assistantSkillNameSchema.safeParse(name)
+  if (!parsed.success) {
+    throw invalid(
+      line,
+      'name 会直接作为技能文件夹名，不能包含空白、路径分隔符或 < > : " | ? *，也不能以点开头或结尾。中文名可以直接写，例如 图片生成'
+    )
   }
-  return name
+  // schema 顺带做了 NFC 归一化，这里取归一化后的值，保证与文件夹名比较时不会因为
+  // macOS 的 NFD 形式而"看起来一样却不相等"。
+  return parsed.data
 }
 
 function validateDescription(description: string, line: number): string {
