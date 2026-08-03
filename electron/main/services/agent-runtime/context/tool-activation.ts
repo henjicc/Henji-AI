@@ -61,13 +61,25 @@ export function activateAgentTools(
     : [CURRENT_CONTEXT_TOOL, CAPABILITY_DISCOVERY_TOOL]
   // 技能加载排在能力发现之前：领域知识决定后面怎么发现和调用能力，顺序反了没有意义。
   const skillNames = input.route.toolDomains.length === 0 ? [] : [SKILL_LOAD_TOOL]
+  /*
+   * 顺序即优先级，超出 AGENT_ACTIVE_TOOL_LIMIT 的部分会被直接丢掉。
+   *
+   * `recentToolNames` 必须排在 `discoveredToolNames` **前面**。此前是反的，后果在实测里
+   * 很清楚：一个三维任务发现了 26 个能力，每轮只有 8 个槽位，其中 3 个被常驻工具占掉，
+   * 剩下 5 个全被轮换的 discovered 列表吃满，于是模型刚用过、下一步还要接着用的工具
+   * （place_camera_stage_object）在下一轮就消失了，隔两三轮才轮回来一次。18 轮里它一直在
+   * 等工具，而不是在干活。
+   *
+   * 轮换的意义是"让没见过的能力有机会露面"，不是"把正在用的工作集挤掉"。所以最近用过的
+   * 优先留下，轮换只填剩余槽位。
+   */
   const candidates = unique([
     ...input.pinnedToolNames,
     ...skillNames,
     ...capabilitySearchNames,
+    ...input.recentToolNames,
     ...input.discoveredToolNames,
     ...directNames,
-    ...input.recentToolNames,
   ])
   const unavailableNames = candidates.filter((name) => !availableNames.has(name))
   const availableCandidates = candidates.filter((name) => availableNames.has(name))

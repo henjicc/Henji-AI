@@ -149,6 +149,32 @@ describe('AgentToolCatalogPlanner', () => {
     }
   })
 
+  it('刚用过的工具不会被轮换的发现列表挤掉', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const fullContext = {
+      ...contextSnapshot(),
+      availableCapabilities: registry.allDefinitions()
+        .filter((definition) => definition.side === 'frontend')
+        .map((definition) => definition.name),
+    }
+    const planner = new AgentToolCatalogPlanner(registry)
+    // 模拟一次典型的三维任务：发现一大批能力，远超单轮 8 个工具位。
+    planner.rememberDiscovered('discover_application_capabilities', {
+      capabilities: registry.search('', 'camera_stage', fullContext, 100),
+    })
+    const route = { ...primaryRoute, toolDomains: ['camera_stage' as const] }
+    expect(planner.select(route, fullContext).candidateCount).toBeGreaterThan(8)
+
+    // 用掉一个工具后，接下来的几轮它都必须还在——模型正处在使用它的序列中间。
+    planner.rememberObservation('place_camera_stage_object', {})
+    for (let turn = 0; turn < 4; turn += 1) {
+      expect(planner.select(route, fullContext).activeToolNames)
+        .toContain('place_camera_stage_object')
+    }
+  })
+
   it('纯闲聊（无工具域）不占用技能加载的工具位', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')

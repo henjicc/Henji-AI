@@ -304,7 +304,16 @@ export class ApplicationReflectionRegistry {
   }
 
   private assertSchemaDocumentAvailable(document: ApplicationSchemaDocument): void {
-    const ref = applicationSchemaRefSchema.parse(document.ref)
+    // schema ref 的校验失败要带上实际的 kind 与 id 再抛。裸 ZodError 只说"某个 id 不匹配
+    // 正则"，在有上百条注册项的情况下等于没有信息——实测排查时就卡在这里。
+    const parsedRef = applicationSchemaRefSchema.safeParse(document.ref)
+    if (!parsedRef.success) {
+      const raw = document.ref as { kind?: unknown; id?: unknown } | null
+      throw new Error(
+        `SCHEMA_REF_INVALID:kind=${String(raw?.kind)},id=${String(raw?.id)} —— ${parsedRef.error.message}`
+      )
+    }
+    const ref = parsedRef.data
     jsonValueSchema.parse(document.value)
     if (ref.catalogVersion !== this.catalogVersion) throw new Error('SCHEMA_VERSION_MISMATCH')
     if (this.schemaDocuments.has(schemaKey(ref))) throw new Error(`SCHEMA_REF_DUPLICATE:${ref.id}`)
