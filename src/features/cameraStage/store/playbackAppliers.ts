@@ -12,6 +12,7 @@
 import type { StageKeyframeValue, StageTrack } from '../domain/animationTypes'
 import { listAnimatableGroups } from '../domain/animatableProps'
 import { sampleTrack } from '../domain/keyframeEngine'
+import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
 import type { StageObject, StageVec3 } from '../domain/sceneTypes'
 
 export type PlaybackApplyFn = (value: StageKeyframeValue, time: number) => void
@@ -55,6 +56,76 @@ export function runPlaybackAppliers(
   for (const fn of set) fn(value, time)
 }
 
+/** 按当前时间采样得到的位置；没有位置轨道的对象退回自身静态位置。 */
+function sampledPositions(
+  objects: StageObject[],
+  trackByKey: Map<string, StageTrack>,
+  time: number,
+): Map<string, StageVec3> {
+  const positions = new Map<string, StageVec3>()
+  for (const object of objects) {
+    const position = { ...object.transform.position }
+    for (const axis of ['x', 'y', 'z'] as const) {
+      const track = trackByKey.get(`${object.id}::transform.position.${axis}`)
+      if (!track) continue
+      const sampled = sampleTrack(track, time, 'scalar')
+      if (typeof sampled === 'number') position[axis] = sampled
+    }
+    positions.set(object.id, position)
+  }
+  return positions
+}
+
+/**
+ * 播放期重算摄像机朝向。
+ *
+ * 摄像机的朝向不是动画轨道，而是由 `lookAt` 在渲染时解算的——scrub 时 store 一变，组件重算
+ * `staticRotation` 并同步进采样引用，所以拖时间指针看到的朝向是对的。但**播放时按性能约束
+ * 不写 store**，那个 layout effect 一次都不会跑，朝向就冻结在按下空格那一帧：环绕运镜只写了
+ * 三条 `transform.position` 轨道，没有旋转轨道，于是摄像机绕着飞、镜头始终朝前。
+ *
+ * 这里按采样后的位置重算朝向，走已有的 `transform.rotation` applier 通道，不新增第二条路径。
+ * 注视目标本身也用采样位置，所以目标物体在动（比如上下漂浮）时镜头会跟着它。
+ */
+function applyCameraLookAtRotation(
+  objects: StageObject[],
+  trackByKey: Map<string, StageTrack>,
+  positions: Map<string, StageVec3>,
+  time: number,
+): void {
+  for (const object of objects) {
+    if (object.type !== 'camera') continue
+    // 作者显式打了旋转关键帧时以作者为准，不要用 lookAt 覆盖
+    const hasAuthoredRotation = (['x', 'y', 'z'] as const)
+      .some((axis) => trackByKey.has(`${object.id}::transform.rotation.${axis}`))
+    if (hasAuthoredRotation) continue
+
+    const cameraPosition = positions.get(object.id) ?? object.transform.position
+    const lookAt = object.lookAt
+    let target: StageVec3
+    if (lookAt.mode === 'manual') {
+      target = lookAt.target
+    } else {
+      const targetObject = objects.find((candidate) => candidate.id === lookAt.objectId)
+      const targetPosition = positions.get(lookAt.objectId)
+      if (!targetObject || !targetPosition) {
+        target = lookAt.fallbackTarget
+      } else {
+        // 与 getObjectLookAtPoint 同一套规则：角色看胸口，其余看自身原点
+        target = targetObject.type === 'character'
+          ? { ...targetPosition, y: targetPosition.y + targetObject.transform.scale.y }
+          : targetPosition
+      }
+    }
+    runPlaybackAppliers(
+      object.id,
+      'transform.rotation',
+      rotationFromPositionAndTarget(cameraPosition, target, object.transform.rotation.z),
+      time,
+    )
+  }
+}
+
 /**
  * 按指定时间采样动画轨道并同步推送到 Three.js 命令式对象。
  * 播放预览与离屏导出共用同一条采样路径，导出因此无需等待隐藏窗口约 1fps 的 RAF。
@@ -96,4 +167,7 @@ export function applyAnimationToPlaybackAppliers(
       if (sampled !== undefined) runPlaybackAppliers(object.id, group.groupPath, sampled, time)
     }
   }
+
+  // 位置全部推送完之后再定朝向：注视目标可能自己也在动，必须用它这一帧的采样位置
+  applyCameraLookAtRotation(objects, trackByKey, sampledPositions(objects, trackByKey, time), time)
 }
