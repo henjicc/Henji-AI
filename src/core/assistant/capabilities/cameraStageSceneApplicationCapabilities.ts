@@ -33,6 +33,7 @@ const placeObject = defineApplicationCapability({
   timeoutMs: 15_000, supportsPreview: false, supportsUndo: true, requiredScopes: ['toolbox'],
   acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'], producesRefs: ['camera_stage.object', 'camera_stage.camera'],
   successEvidence: ['事务证据包含 reused 或 created 决策、最终位置、边界盒、冲突列表和稳定对象引用。'],
+  failureRecovery: ['CONFLICT 表示场景在读取之后被改动过：直接使用上一次写入或读取返回的 baseRevision 重试一次，不要用同一个过期值反复重试；仍冲突再重新观察场景。'],
   inputSchema: z.object({
     projectId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
     objectId: z.string().min(1).optional(), objectType: z.enum(['primitive', 'character', 'camera']),

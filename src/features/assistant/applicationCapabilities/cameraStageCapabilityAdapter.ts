@@ -40,6 +40,19 @@ function idempotencyKey(capabilityId: string, revision: number, context: Capabil
   return `${capabilityId}:${context.requestId ?? context.taskId ?? 'renderer'}:${revision}`.padEnd(16, '0').slice(0, 256)
 }
 
+/**
+ * 所有三维写入都必须回带写入后的 `baseRevision`。
+ *
+ * 走事务引擎的能力（摆放、运镜、改名、改属性）此前只返回 `resultingRevisions` 这个映射，
+ * 而不走事务的能力（新建、复制、删除、打开）返回的是扁平的 `baseRevision`——同一个领域里
+ * 同一个概念两种形状。结果是模型每摆一个物体就得再读一次工程才能拿到下一次写入要用的
+ * revision，本来一步的事变成两步。叠加单轮 8 个工具位的轮换，读的那个工具下一轮往往就
+ * 不在了，任务就卡死在这里。
+ */
+function withBaseRevision(result: Record<string, unknown>): Record<string, unknown> {
+  return { ...result, baseRevision: baseRevision() }
+}
+
 function completedTransaction(result: ApplicationTransactionResult): Extract<ApplicationTransactionResult, { status: 'completed' }> {
   if (result.status === 'completed') return result
   if (result.status === 'failed') throw new Error(result.code === 'CONFLICT' ? 'CONFLICT' : result.message)
@@ -62,11 +75,12 @@ async function executeOperation(
     steps: [{ kind: 'operation', capabilityId, capabilityVersion: 1, input, expectedRevisions: { toolbox: revision } }],
     verificationConditions: [{ kind: 'evidence_fact', fact: evidenceFact }],
   }, appContext)
-  return completedTransaction(await engine.commit({
+  const result = completedTransaction(await engine.commit({
     planRef: plan.planRef,
     expectedRevisions: { toolbox: revision },
     idempotencyKey: idempotencyKey(capabilityId, revision, context),
   }, appContext)) as unknown as Record<string, unknown>
+  return withBaseRevision(result)
 }
 
 async function executeMutation(
@@ -93,11 +107,12 @@ async function executeMutation(
       mutations: input.mutations,
     }],
   }, appContext)
-  return completedTransaction(await engine.commit({
+  const result = completedTransaction(await engine.commit({
     planRef: plan.planRef,
     expectedRevisions: { toolbox: input.revision },
     idempotencyKey: idempotencyKey(input.entityType, input.revision, context),
   }, appContext)) as unknown as Record<string, unknown>
+  return withBaseRevision(result)
 }
 
 function mutation(propertyId: string, value: JsonValue) {

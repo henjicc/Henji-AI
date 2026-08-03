@@ -52,6 +52,11 @@ export const cameraStageMoveSchema = z.discriminatedUnion('kind', [
 export const cameraStageTransactionResultShape = {
   status: z.literal('completed'),
   transactionRef: z.string().min(1),
+  /**
+   * 写入后的并发基线，直接用于下一次写入，不必再读一遍工程。
+   * 与不走事务的三维能力（新建、复制、删除、打开）返回同名同形状的字段。
+   */
+  baseRevision: cameraStageBaseRevisionSchema,
   resultingRevisions: z.record(z.string(), z.number().int().nonnegative()),
   producedRefs: z.array(z.object({
     kind: z.string(),
