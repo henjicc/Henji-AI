@@ -49,6 +49,19 @@ export const applicationEntityTypeDescriptorSchema = z.object({
   revisionScopes: z.array(applicationScopeIdSchema).min(1).max(16),
   queryCapabilityIds: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).min(1).max(16),
   schemaRef: applicationSchemaRefSchema,
+  /**
+   * 这个实体类型能否在父实体下被新建/删除，以及新建时至少要给哪些属性。
+   *
+   * 不声明就等于"只能改不能建"。声明之后，助手不需要任何专门能力就能创建实例——这正是
+   * 关键帧那个洞的修法：实体和属性早就注册齐了，缺的只是这一句。
+   */
+  collectionWrite: z.object({
+    creatable: z.boolean(),
+    removable: z.boolean(),
+    requiredPropertyIds: z.array(applicationPropertyIdSchema).max(32).default([]),
+    /** 一次事务里最多创建多少个，防止模型一口气写爆场景 */
+    maxItemsPerChange: z.number().int().positive().max(256).default(64),
+  }).strict().optional(),
 }).strict()
 export type ApplicationEntityTypeDescriptor = z.infer<typeof applicationEntityTypeDescriptorSchema>
 

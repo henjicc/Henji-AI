@@ -15,6 +15,7 @@ import { ApplicationExecutionPlanStore } from './planStore'
 import { ApplicationPlanBuilder } from './planner'
 import { ApplicationTransactionVerifier } from './verifier'
 import type {
+  ApplicationCollectionExecutor,
   ApplicationCompletedStepResult,
   ApplicationControlExecutionApi,
   ApplicationControlExecutionDependencies,
@@ -90,6 +91,7 @@ function assertExpectedRevisions(
 
 export class ApplicationControlExecutionEngine implements ApplicationControlExecutionApi {
   private readonly mutationExecutors = new Map<string, ApplicationMutationExecutor>()
+  private readonly collectionExecutors = new Map<string, ApplicationCollectionExecutor>()
   private readonly operationExecutors = new Map<string, ApplicationSemanticOperationExecutor>()
   private readonly undoRecords = new Map<string, UndoRecord>()
   private readonly now: () => Date
@@ -123,6 +125,13 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       throw new Error(`MUTATION_EXECUTOR_DUPLICATE:${executor.entityType}`)
     }
     this.mutationExecutors.set(executor.entityType, executor)
+  }
+
+  registerCollectionExecutor(executor: ApplicationCollectionExecutor): void {
+    if (this.collectionExecutors.has(executor.entityType)) {
+      throw new Error(`COLLECTION_EXECUTOR_DUPLICATE:${executor.entityType}`)
+    }
+    this.collectionExecutors.set(executor.entityType, executor)
   }
 
   registerOperationExecutor(executor: ApplicationSemanticOperationExecutor): void {
@@ -350,11 +359,49 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     for (const step of steps) {
       const executor = step.kind === 'mutation'
         ? this.mutationExecutors.get(step.entityType)
-        : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
+        : step.kind === 'collection'
+          ? this.collectionExecutors.get(step.entityType)
+          : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
       if (executor && !executor.compensate) {
-        const label = step.kind === 'mutation' ? step.entityType : step.capabilityId
+        const label = step.kind === 'operation' ? step.capabilityId : step.entityType
         throw new Error(`COMPENSATION_NOT_SUPPORTED:${label} 无法补偿，不能用于 ${mode} 事务`)
       }
+    }
+  }
+
+  /**
+   * 集合写入的预检：类型必须声明 creatable/removable，创建时必须给齐必填属性，数量不得超上限。
+   *
+   * 全部在执行之前做完——这是三维布置那次事故的教训：任何能靠输入判断的错误都不该等到写了
+   * 一半才抛。
+   */
+  private assertCollectionAllowed(
+    step: Extract<ApplicationPlannedStep, { kind: 'collection' }>,
+    context: ApplicationExecutionContext
+  ): void {
+    const descriptor = this.registry.describe({ entityTypes: [step.entityType] }, context).entities[0]
+    if (!descriptor) throw new Error(`ENTITY_TYPE_NOT_FOUND:${step.entityType}`)
+    const rule = descriptor.collectionWrite
+    if (!rule) throw new Error(`COLLECTION_WRITE_NOT_DECLARED:${step.entityType} 未声明可增删`)
+    if (step.operation.kind === 'create') {
+      if (!rule.creatable) throw new Error(`COLLECTION_CREATE_NOT_ALLOWED:${step.entityType}`)
+      if (step.operation.items.length > rule.maxItemsPerChange) {
+        throw new Error(
+          `COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多创建 ${rule.maxItemsPerChange} 个，`
+          + `本次 ${step.operation.items.length} 个`
+        )
+      }
+      for (const [index, item] of step.operation.items.entries()) {
+        const missing = rule.requiredPropertyIds.filter((propertyId) => !(propertyId in item.properties))
+        if (missing.length > 0) {
+          throw new Error(`COLLECTION_REQUIRED_PROPERTY_MISSING:第 ${index} 项缺少 ${missing.join('、')}`)
+        }
+      }
+      return
+    }
+    if (!rule.removable) throw new Error(`COLLECTION_REMOVE_NOT_ALLOWED:${step.entityType}`)
+    if (step.operation.targets.length > rule.maxItemsPerChange) {
+      throw new Error(`COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多删除 ${rule.maxItemsPerChange} 个`)
     }
   }
 
@@ -369,6 +416,13 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
         const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
         const availability = await this.registry.getPropertyAvailability(step.target, propertyIds, context)
         if (availability.some((item) => !item.writable)) throw new Error('PROPERTY_NOT_WRITABLE')
+        continue
+      }
+      if (step.kind === 'collection') {
+        this.assertCollectionAllowed(step, context)
+        if (!this.collectionExecutors.has(step.entityType)) {
+          throw new Error(`COLLECTION_EXECUTOR_NOT_FOUND:${step.entityType}`)
+        }
         continue
       }
       const executor = this.requireOperationExecutor(step)
@@ -388,6 +442,12 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       if (!executor) throw new Error(`MUTATION_EXECUTOR_NOT_FOUND:${step.entityType}`)
       return await executor.apply(step, context)
     }
+    if (step.kind === 'collection') {
+      this.assertCollectionAllowed(step, context)
+      const executor = this.collectionExecutors.get(step.entityType)
+      if (!executor) throw new Error(`COLLECTION_EXECUTOR_NOT_FOUND:${step.entityType}`)
+      return await executor.apply(step, context)
+    }
     const executor = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
     if (!executor) throw new Error(`OPERATION_EXECUTOR_NOT_FOUND:${step.capabilityId}`)
     if (!executor.requiredPermissions.every((permission) => context.permissions.has(permission))) {
@@ -404,7 +464,9 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     for (const step of steps) {
       const current = step.kind === 'mutation'
         ? (await this.registry.readEntity(step.target, [], context)).revisions
-        : await this.requireOperationExecutor(step).getCurrentRevisions(step.input)
+        : step.kind === 'collection'
+          ? (await this.registry.readEntity(step.parent, [], context)).revisions
+          : await this.requireOperationExecutor(step).getCurrentRevisions(step.input)
       mergeRevisions(revisions, current)
     }
     return revisions
@@ -431,7 +493,9 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       const step = steps[index]
       return step.kind === 'mutation'
         ? Boolean(this.mutationExecutors.get(step.entityType)?.undo)
-        : Boolean(this.getOperationExecutor(step.capabilityId, step.capabilityVersion)?.undo)
+        : step.kind === 'collection'
+          ? Boolean(this.collectionExecutors.get(step.entityType)?.undo)
+          : Boolean(this.getOperationExecutor(step.capabilityId, step.capabilityVersion)?.undo)
     })
     if (!supported) return undefined
     const undoRef = this.createOpaqueRef('undo')
@@ -446,7 +510,9 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
   ): Promise<ApplicationCompletedStepResult> {
     const executor = step.kind === 'mutation'
       ? this.mutationExecutors.get(step.entityType)
-      : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
+      : step.kind === 'collection'
+        ? this.collectionExecutors.get(step.entityType)
+        : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
     if (!executor?.undo) throw new Error('UNDO_NOT_SUPPORTED')
     return await executor.undo(undoToken, context)
   }
@@ -458,6 +524,11 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
   ): Promise<ApplicationEvidence[]> {
     if (step.kind === 'mutation') {
       const executor = this.mutationExecutors.get(step.entityType)
+      if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
+      return await executor.compensate(step, result, context)
+    }
+    if (step.kind === 'collection') {
+      const executor = this.collectionExecutors.get(step.entityType)
       if (!executor?.compensate) throw new Error('COMPENSATION_NOT_SUPPORTED')
       return await executor.compensate(step, result, context)
     }

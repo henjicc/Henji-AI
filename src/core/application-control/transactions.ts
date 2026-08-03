@@ -74,9 +74,41 @@ export const applicationSemanticOperationPlanSchema = z.object({
   expectedRevisions: applicationRevisionSetSchema,
 }).strict()
 
+/**
+ * 集合写入：在父实体下**新建或删除子实体**。
+ *
+ * 这是反射层缺的第三个动词。此前只有"读任意属性"和"改任意已有实体的属性"是通用的，
+ * 创建一律要手写专门能力——于是每一个「新建 X」都得单独适配一遍，漏掉一个就彻底不可用。
+ * 实测后果：`camera_stage.keyframe` 实体、属性、provider 全都注册齐了，助手能读能改，
+ * 却因为没有创建路径而做不了任何动画。
+ *
+ * 与 mutation 共用同一套事务语义：expectedRevisions 乐观并发、失败补偿、撤销、结构化验证。
+ */
+export const applicationCollectionPlanSchema = z.object({
+  kind: z.literal('collection'),
+  /** 子实体挂在哪个父实体下 */
+  parent: applicationRefSchema,
+  /** 要新建或删除的子实体类型 */
+  entityType: applicationEntityTypeIdSchema,
+  expectedRevisions: applicationRevisionSetSchema,
+  operation: z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('create'),
+      items: z.array(z.object({
+        properties: z.record(applicationPropertyIdSchema, jsonValueSchema),
+      }).strict()).min(1).max(256),
+    }).strict(),
+    z.object({
+      kind: z.literal('remove'),
+      targets: z.array(applicationRefSchema).min(1).max(256),
+    }).strict(),
+  ]),
+}).strict()
+
 export const applicationPlannedStepSchema = z.discriminatedUnion('kind', [
   applicationMutationPlanSchema,
   applicationSemanticOperationPlanSchema,
+  applicationCollectionPlanSchema,
 ])
 export type ApplicationPlannedStep = z.infer<typeof applicationPlannedStepSchema>
 

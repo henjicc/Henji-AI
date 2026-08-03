@@ -27,6 +27,9 @@ import { createLogger } from '@/core/logging'
 import { CanvasApplicationError } from '@/features/canvas/application/canvasApplicationService'
 import { ZodError } from 'zod'
 
+import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
+
+import { applicationReflectionHandlers } from './applicationReflectionAdapter'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import {
   createImageEditPreviewFromRef,
@@ -142,6 +145,16 @@ function registerBuiltins(): void {
     const parsed = focusApplicationEntityCapability.inputSchema.parse(input)
     return await focusApplicationEntity(parsed.ref, context.signal, context)
   })
+  // 通用反射能力：领域注册了实体和属性，助手就能读改增删，不必再为每个动作写专用能力
+  for (const capability of APPLICATION_REFLECTION_APPLICATION_CAPABILITIES) {
+    registry.registerHandler(capability.id, async (input, context) => {
+      const parsed = capability.inputSchema.parse(input) as never
+      if (capability.id === 'describe_application_entities') return await applicationReflectionHandlers.describeEntities(parsed, context)
+      if (capability.id === 'list_application_entities') return await applicationReflectionHandlers.listEntities(parsed, context)
+      if (capability.id === 'read_application_entity') return await applicationReflectionHandlers.readEntity(parsed, context)
+      return await applicationReflectionHandlers.changeEntities(parsed, context)
+    })
+  }
   registry.registerHandler(searchApplicationSettingsCapability.id, (input) => {
     const parsed = searchApplicationSettingsCapability.inputSchema.parse(input)
     return { settings: searchApplicationSettings(parsed.query, parsed.limit) }

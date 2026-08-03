@@ -16,6 +16,7 @@ import {
   CameraStageMutationExecutor,
 } from '@/features/cameraStage/application/cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from '@/features/cameraStage/application/cameraStagePlacementExecutor'
+import { CameraStageKeyframeCollectionExecutor } from '@/features/cameraStage/application/cameraStageKeyframeCollectionExecutor'
 import { createCanvasReflectionRegistrations } from '@/features/canvas/application/canvasReflection'
 import { CanvasNodeMutationExecutor } from '@/features/canvas/application/canvasMutationExecutor'
 import { createAssetReflectionRegistrations } from '@/features/assets/application/assetReflection'
@@ -101,6 +102,9 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   }
   next.registerOperationExecutor(new CameraStageMotionOperationExecutor(dependencies))
   next.registerOperationExecutor(new CameraStagePlacementOperationExecutor(dependencies))
+  // 集合写入：关键帧从"只能读改"变成"可以创建"，助手据此就能表达任意对象动画，
+  // 不再需要为上下漂浮、自转这类需求各写一个专用能力。
+  next.registerCollectionExecutor(new CameraStageKeyframeCollectionExecutor(dependencies))
   executionEngine = next
   return executionEngine
 }

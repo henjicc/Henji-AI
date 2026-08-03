@@ -223,7 +223,11 @@ export function createDeterministicTaskGraph(
   const hasNavigation = /(?:打开|进入|切换|展示|查看|定位|让我看到|open|show|navigate)/i.test(normalized)
   const hasProject = /(?:新建|创建|建立|复用|项目|工程|project)/i.test(normalized)
   const hasSceneMutation = /(?:添加|放置|摆放|创建).{0,20}(?:物体|对象|立方体|棱锥|摄像机|相机)|(?:位置|坐标|旋转|缩放)/i.test(normalized)
-  const hasMotion = /(?:运镜|轨迹|环绕|推拉|横移|升降|orbit|dolly|truck|crane)/i.test(normalized)
+  // 词表必须覆盖自然说法。实测目标写的是"摄像机围绕着它旋转"，一个关键词都没命中，于是
+  // 运镜 Facet 根本没进任务图——任务图漏掉的部分，助手永远不会做，还会宣布"完成"。
+  const hasMotion = /(?:运镜|轨迹|环绕|围绕|绕着|旋转|转圈|推拉|推近|拉远|横移|升降|orbit|dolly|truck|crane)/i.test(normalized)
+  // 对象动画和摄像机运镜是两件事：前者写对象自己的关键帧，后者算镜头轨迹。
+  const hasObjectAnimation = /(?:动画|关键帧|漂浮|浮动|上下移动|起伏|摆动|自转|缩放动画|animate|keyframe|float)/i.test(normalized)
   const isComposite = [hasCamera, hasCanvas, hasNavigation, hasProject, hasSceneMutation, hasMotion]
     .filter(Boolean).length >= 2
   if (!isComposite || (!hasCamera && !hasCanvas)) return null
@@ -286,10 +290,21 @@ export function createDeterministicTaskGraph(
         completionConditions: ['镜头轨迹或运镜参数已提交并可由场景状态验证。'],
       }))
     }
+    if (hasObjectAnimation) {
+      facets.push(buildFacet({
+        facetId: 'camera_object_animation',
+        domain: 'camera_stage',
+        goal: '给场景对象写入属性关键帧，表达漂浮、旋转、缩放等自身动画。',
+        observationKinds: ['entity_state', 'entity_schema'],
+        capabilityKinds: ['observe', 'plan', 'mutate'],
+        dependsOn: [hasSceneMutation ? 'camera_scene' : visualDependency],
+        completionConditions: ['目标对象在相应属性路径上已存在覆盖所需时长的关键帧。'],
+      }))
+    }
     // 写入之后必须独立结算一次验证：没有这个 Facet，模型放完对象就会直接宣称完成。
     // 视觉证据是可选加成——本轮没有观察工具（模型读不了图）时只做参数验证也算完成，
     // 但答复必须说明未看画面，这条由系统提示词约束。
-    if (hasSceneMutation || hasMotion) {
+    if (hasSceneMutation || hasMotion || hasObjectAnimation) {
       facets.push(buildFacet({
         facetId: 'camera_verify',
         domain: 'camera_stage',
@@ -297,7 +312,7 @@ export function createDeterministicTaskGraph(
         observationKinds: ['entity_state', 'current_surface'],
         capabilityKinds: ['observe'],
         targetSurfaceId: 'tool.camera_stage',
-        dependsOn: [hasMotion ? 'camera_motion' : 'camera_scene'],
+        dependsOn: [hasObjectAnimation ? 'camera_object_animation' : hasMotion ? 'camera_motion' : 'camera_scene'],
         parallelizable: false,
         completionConditions: [
           '结构化验证返回 verified 或已如实列出未满足项。',

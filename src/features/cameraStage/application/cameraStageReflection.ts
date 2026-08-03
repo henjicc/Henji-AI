@@ -421,6 +421,24 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         revisionScopes: [REVISION_SCOPE],
         queryCapabilityIds: meta.queryIds,
         schemaRef: schemaRef('entity', entityType),
+        ...(entityType === ENTITY_TYPES.keyframe ? {
+          /**
+           * 关键帧可增删。这一句就是"助手能不能做动画"的开关：实体、属性、provider 早就注册
+           * 齐了，助手能读能改，却因为没有创建路径而做不了任何对象动画——上下漂浮、自转、
+           * 位移全都做不了，只能回一句"没有专用能力"。
+           */
+          collectionWrite: {
+            creatable: true,
+            removable: true,
+            requiredPropertyIds: [
+              `${ENTITY_TYPES.keyframe}.object_ref`,
+              `${ENTITY_TYPES.keyframe}.property_path`,
+              `${ENTITY_TYPES.keyframe}.time`,
+              `${ENTITY_TYPES.keyframe}.value`,
+            ],
+            maxItemsPerChange: 128,
+          },
+        } : {}),
       },
       properties: propertiesByEntity[entityType],
       provider: new CameraStageReflectionProvider(entityType, readRevision),

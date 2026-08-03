@@ -74,6 +74,29 @@ export interface ApplicationMutationExecutor {
   ): Promise<ApplicationCompletedStepResult>
 }
 
+/**
+ * 集合写入执行器：负责在父实体下新建或删除子实体。
+ *
+ * 与 `ApplicationMutationExecutor` 平行——一个管"改已有的"，一个管"增删成员"。领域只要实现
+ * 它，助手就能在不写任何专门能力的前提下创建实例。
+ */
+export interface ApplicationCollectionExecutor {
+  readonly entityType: string
+  apply(
+    step: Extract<ApplicationPlannedStep, { kind: 'collection' }>,
+    context: ApplicationExecutionContext
+  ): Promise<ApplicationCompletedStepResult>
+  compensate?(
+    step: Extract<ApplicationPlannedStep, { kind: 'collection' }>,
+    result: ApplicationCompletedStepResult,
+    context: ApplicationExecutionContext
+  ): Promise<ApplicationEvidence[]>
+  undo?(
+    undoToken: string,
+    context: ApplicationExecutionContext
+  ): Promise<ApplicationCompletedStepResult>
+}
+
 export interface ApplicationSemanticOperationExecutor {
   readonly capabilityId: string
   readonly capabilityVersion: number

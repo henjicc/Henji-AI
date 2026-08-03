@@ -80,6 +80,13 @@ export class ApplicationPlanBuilder {
         normalizedSteps.push(prepared.step)
         verificationConditions.push(...prepared.conditions)
         risk = highestRisk(risk, 'R1')
+      } else if (step.kind === 'collection') {
+        // 集合写入的可行性（是否允许增删、必填属性、数量上限）由引擎预检统一判定，
+        // 这里只负责并发基线复核，避免两处各写一份判定规则。
+        const revisions = (await this.dependencies.registry.readEntity(step.parent, [], context)).revisions
+        assertRevisions(step.expectedRevisions, revisions, Object.keys(revisions))
+        normalizedSteps.push(step)
+        risk = highestRisk(risk, 'R1')
       } else {
         const executor = this.dependencies.getOperationExecutor(step.capabilityId, step.capabilityVersion)
         if (!executor) throw new Error(`OPERATION_EXECUTOR_NOT_FOUND:${step.capabilityId}`)
@@ -177,6 +184,9 @@ export class ApplicationPlanBuilder {
     }
     if (mode === 'compensatable') {
       for (const step of steps) {
+        // collection 步骤的补偿能力由引擎的 assertCompensable 统一判定：它拿得到集合执行器
+        // 注册表，计划器拿不到，不要在这里再造一份判定。
+        if (step.kind === 'collection') continue
         const executor = step.kind === 'mutation'
           ? this.dependencies.getMutationExecutor(step.entityType)
           : this.dependencies.getOperationExecutor(step.capabilityId, step.capabilityVersion)

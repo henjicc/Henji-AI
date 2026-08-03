@@ -9,6 +9,23 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 
 ## 执行流程
 
+### 0. 先判断该不该写专用能力
+
+**默认不写。** 反射层已经提供三个通用动词，领域只要注册实体和属性，助手就能用：
+
+| 需求 | 做法 |
+|---|---|
+| 读某个状态 | 注册实体和属性即可，`list_application_entities` / `read_application_entity` 自动可用 |
+| 改某个已有对象的属性 | 注册属性并实现 `ApplicationMutationExecutor`，`change_application_entities` 自动可用 |
+| 新增或删除集合成员 | 实体描述里声明 `collectionWrite`，实现 `ApplicationCollectionExecutor` |
+| **带算法的语义操作** | 才写专用 `ApplicationCapabilityDefinition` |
+
+只有当动作**无法用属性写入表达**时才写专用能力——例如"环绕运镜"要按角度采样算轨迹，"复用或布置对象"要做碰撞检测和复用判定。凡是"设置某某值""加一条记录"这类，一律走通用动词。
+
+历史教训：`camera_stage.keyframe` 的实体、属性、provider 早就注册齐了，助手能读能改，却因为没有创建路径而做不了任何对象动画，只能回一句"没有专用能力"。缺的不是能力，是那一行 `collectionWrite` 声明。
+
+声明了 `collectionWrite` 就必须注册对应执行器，两侧由覆盖测试强制一致。
+
 ### 1. 判断能力边界
 
 - 先定位正式业务服务，禁止让能力处理器复制业务逻辑。
@@ -45,6 +62,8 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 - Router 只提供页面锚点和搜索建议，不得以分类结果限制能力可用性或授权。
 
 ### 5. 覆盖新功能
+
+优先用通用动词覆盖（见第 0 节）；只有算法型语义操作才注册专用能力。
 
 新增或修改下列对象时，注册能力或加入带原因的显式排除清单：
 
@@ -83,6 +102,8 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 
 ## 完成标准
 
+- 能做的事优先通过通用动词暴露；专用能力只用于无法用属性写入表达的算法型操作。
+- 声明 `collectionWrite` 的实体类型都注册了 `ApplicationCollectionExecutor`，由覆盖测试拦截。
 - 能力定义是唯一元数据源。
 - 正式业务服务是唯一业务执行源。
 - 普通界面不显示开发性解释。
