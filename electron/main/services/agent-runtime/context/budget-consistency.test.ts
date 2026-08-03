@@ -16,6 +16,9 @@ import {
   AGENT_ACTIVE_TOOL_LIMIT,
   AGENT_DISCOVERY_ADDED_TOOL_LIMIT,
 } from '../../../../../src/core/assistant/toolBudget'
+import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
+import { estimateModelMessagesTokens } from './compaction'
+import { selectContextLayers } from './layer-budget'
 
 /**
  * 「一个不变量，多处各写一份」是本项目已经犯过两次的错：
@@ -92,6 +95,34 @@ describe('预算常量与契约一致', () => {
       summary: '满载结算',
       suggestedNextStep: null,
     }).success).toBe(true)
+  })
+
+  it('分层预算与压缩链路必须用同一套 token 估算', () => {
+    // 曾经是两份：压缩按字符类别加权，分层却是 length/4。两者在同一个 AgentContextBuilder
+    // 里被同时调用——分层按 /4 把层塞满，构建器用加权口径一量发现超了，就掉头砍活动工具。
+    // 中文越多砍得越狠，而现象是"工具位莫名其妙不够用"，看不出跟中文有关。
+    const chinese = '在场景里放一个立方体并让摄像机围绕它旋转'
+    expect(estimateModelMessagesTokens([{ role: 'user', content: chinese }]))
+      .toBe(estimateAgentTextTokens(`user:${chinese}`))
+  })
+
+  it('分层截断不会放行超出该层预算的内容', () => {
+    const layer = {
+      id: 'observations' as const,
+      source: 'agent_tool_gateway',
+      trust: 'untrusted_observation' as const,
+      priority: 90,
+      required: true,
+      maxTokens: 120,
+      content: '这是一段很长的中文观察内容。'.repeat(80),
+    }
+    const selected = selectContextLayers([layer], 100_000)
+    const report = selected.reports.find((item) => item.id === 'observations')
+    expect(report?.truncated).toBe(true)
+    // 报告的 token 数含层信封（CONTEXT_LAYER 标记行）与截断提示，约几十 token 的固定开销。
+    // 真正的门禁是它必须远小于旧口径：旧实现按 maxTokens * 4 换算字符数，中文下会放进
+    // 480 字 ≈ 480 token，是预算的四倍。
+    expect(report?.estimatedTokens ?? 0).toBeLessThan(layer.maxTokens * 2)
   })
 
   it('预算常量互相之间的约束成立', () => {

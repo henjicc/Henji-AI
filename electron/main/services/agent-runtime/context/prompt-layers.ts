@@ -1,5 +1,6 @@
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
+import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
 import { AgentArtifactStore, shouldOffloadObservation } from './offload'
 import { sanitizeObservationValue } from './sanitize'
 import { redactAgentText } from '../tools/security'
@@ -111,7 +112,9 @@ function skillsIndexContent(input: AgentContextBuildInput): string {
     .map((skill) => ({ name: skill.name, description: skill.description }))
   if (entries.length === 0) return ''
 
-  const maxCharacters = SKILLS_INDEX_MAX_TOKENS * 4
+  // 必须与 selectContextLayers 用同一套 token 估算。曾经这里按 `预算 × 4` 换算字符数，
+  // 而分层那边另有算法：中文技能描述在这里"没超"，到了分层就超了，于是触发通用字符截断，
+  // 切出半个技能名——正是上面注释说绝不能发生的事。
   let omittedCount = 0
   const serialize = (): string => JSON.stringify({
     skills: entries,
@@ -119,7 +122,7 @@ function skillsIndexContent(input: AgentContextBuildInput): string {
     note: SKILLS_INDEX_NOTE,
   })
   let content = serialize()
-  while (content.length > maxCharacters && entries.length > 0) {
+  while (estimateAgentTextTokens(content) > SKILLS_INDEX_MAX_TOKENS && entries.length > 0) {
     entries.pop()
     omittedCount += 1
     content = serialize()

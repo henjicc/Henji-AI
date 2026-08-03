@@ -1,5 +1,6 @@
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
+import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
 
 export const AGENT_CONTEXT_RESERVE_TOKENS = 16_384
 export const AGENT_KEEP_RECENT_TOKENS = 20_000
@@ -111,20 +112,7 @@ function retainOversizedMessageSuffix(
 
 export function estimateModelMessagesTokens(messages: ModelStepMessage[], toolsJson = ''): number {
   const text = messages.map((message) => `${message.role}:${messageText(message)}`).join('\n') + toolsJson
-  let cjk = 0
-  let asciiWord = 0
-  let structural = 0
-  for (const character of text) {
-    if (/\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(character)) {
-      cjk += 1
-    } else if (/[A-Za-z0-9_]/.test(character)) {
-      asciiWord += 1
-    } else if (!/\s/.test(character)) {
-      structural += 1
-    }
-  }
-  // 中文通常接近一字一 token；JSON 标点和英文按保守比例估算，避免统一 /4 低估。
-  return cjk + Math.ceil(asciiWord / 3) + Math.ceil(structural / 2)
+  return estimateAgentTextTokens(text)
 }
 
 export function compactConversationMessages(

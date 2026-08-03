@@ -1,4 +1,8 @@
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import {
+  estimateAgentTextTokens,
+  truncateToAgentTokenBudget,
+} from '../../../../../src/core/assistant/tokenEstimate'
 import type {
   AgentContextLayer,
   AgentContextLayerId,
@@ -12,17 +16,15 @@ interface LayerSelectionResult {
   droppedLayers: AgentContextLayerId[]
 }
 
-function estimateTextTokens(value: string): number {
-  return Math.max(1, Math.ceil(value.length / 4))
-}
+const TRUNCATION_NOTICE = '\n[本层内容已按预算截断]'
 
 function truncateLayerContent(content: string, maxTokens: number): { content: string; truncated: boolean } {
-  const maxCharacters = Math.max(160, maxTokens * 4)
-  if (content.length <= maxCharacters) return { content, truncated: false }
-  return {
-    content: `${content.slice(0, maxCharacters - 32)}\n[本层内容已按预算截断]`,
-    truncated: true,
-  }
+  // 按 maxTokens 原值裁，不预扣提示语的开销：预扣会让"生产方已按 maxTokens 裁好"的层
+  // （技能索引就是这么做的）在这里仍被判超，白白触发一次通用截断。提示语十来个 token 的
+  // 溢出只在真正截断时才出现，可以接受。
+  const result = truncateToAgentTokenBudget(content, maxTokens)
+  if (!result.truncated) return { content, truncated: false }
+  return { content: `${result.text}${TRUNCATION_NOTICE}`, truncated: true }
 }
 
 function layerMessage(layer: AgentContextLayer, content: string): ModelStepMessage {
@@ -49,7 +51,7 @@ export function selectContextLayers(
   ))
 
   for (const layer of ranked) {
-    const desiredTokens = Math.min(layer.maxTokens, estimateTextTokens(layer.content))
+    const desiredTokens = Math.min(layer.maxTokens, estimateAgentTextTokens(layer.content))
     const minimumTokens = layer.required ? Math.min(desiredTokens, 80) : 40
     if (!layer.required && remaining < minimumTokens) {
       reports.set(layer.id, {
@@ -66,7 +68,7 @@ export function selectContextLayers(
       : Math.min(desiredTokens, remaining)
     const truncated = truncateLayerContent(layer.content, allocated)
     const message = layerMessage(layer, truncated.content)
-    const estimatedTokens = estimateTextTokens(String(message.content))
+    const estimatedTokens = estimateAgentTextTokens(String(message.content))
     selected.set(layer.id, message)
     remaining = Math.max(0, remaining - estimatedTokens)
     reports.set(layer.id, {
