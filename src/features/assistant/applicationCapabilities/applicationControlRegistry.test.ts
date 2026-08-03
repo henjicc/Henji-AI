@@ -1,4 +1,8 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+import { beforeAll, describe, expect, it } from 'vitest'
+
+import { registry as modelRegistry } from '@/core/ModelRegistry'
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
 import {
   getApplicationControlExecutionEngine,
@@ -11,9 +15,21 @@ import {
  * 而且炸在用户的任务中途——实测就是这样：三维摆放一直失败，错误是注册表构建时的
  * ZodError，跟模型传的参数毫无关系。
  *
- * 这个用例把"能不能建起来"提前到单元测试，让注册项的问题在合并前就暴露。
+ * **必须先装真实模型再建注册表。** 这个用例原本不装，于是 `generation.model` 的
+ * per-model schema 文档全是空的，注册表"能建起来"是假的：真实运行时里 ModelScope 的
+ * `black-forest-labs/FLUX.1-Krea-dev` 带斜杠和大写，拼出来的 schema id 过不了稳定 id 正则，
+ * 注册表整个建不起来。测试的洞正好是 bug 的形状。
  */
 describe('应用反射注册表', () => {
+  beforeAll(async () => {
+    await loadRealModelsIntoRegistry()
+  })
+
+  it('测试装的是真实模型，不是空注册表', () => {
+    // 守住上面那句「必须先装真实模型」——注册表一旦退化成空的，下面两条会重新变成假绿。
+    expect(modelRegistry.listAllModels().length).toBeGreaterThan(10)
+  })
+
   it('全部领域注册项都能注册成功', () => {
     expect(() => getApplicationReflectionRegistry()).not.toThrow()
   })

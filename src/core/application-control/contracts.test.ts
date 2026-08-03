@@ -10,9 +10,11 @@ import {
   applicationObservationResultSchema,
   applicationOperationProgressSchema,
   applicationPropertyDescriptorSchema,
+  applicationStableIdSchema,
   applicationTransactionResultSchema,
   createKnownApplicationPropertyIdSchema,
   jsonValueSchema,
+  toApplicationStableIdSegment,
 } from './index'
 
 const schemaRef = {
@@ -169,5 +171,41 @@ describe('application-control contracts', () => {
       capturedAt: '2026-08-01T00:00:00.000Z',
       localPath: 'C:\\private',
     }).success).toBe(false)
+  })
+})
+
+describe('稳定 id 片段规范化', () => {
+  const hostile = [
+    'black-forest-labs/FLUX.1-Krea-dev',
+    'MusePublic/14_ckpt_SD_XL',
+    'Qwen/Qwen-Image-Edit-2509',
+    'Tongyi-MAI/Z-Image-Turbo',
+    '带中文的模型名',
+    '///',
+    '',
+    'x'.repeat(400),
+  ]
+
+  it('任意外部字符串都能规范化成合法稳定 id', () => {
+    for (const raw of hostile) {
+      const segment = toApplicationStableIdSegment(raw)
+      expect(applicationStableIdSchema.safeParse(segment).success, raw).toBe(true)
+      // 片段还要能安全地拼进带前后缀的完整 id，长度不能把 128 撑爆。
+      expect(applicationStableIdSchema.safeParse(`generation.model.${segment}.params`).success, raw)
+        .toBe(true)
+    }
+  })
+
+  it('规范化会折叠字符，所以必须靠摘要后缀保持唯一', () => {
+    // 这两个原文不同、折叠后的可读部分完全相同，只有后缀能区分。撞了就会在注册表里
+    // 变成 SCHEMA_REF_DUPLICATE。
+    expect(toApplicationStableIdSegment('a/b')).not.toBe(toApplicationStableIdSegment('a_b'))
+    expect(toApplicationStableIdSegment('Qwen/Qwen-Image'))
+      .not.toBe(toApplicationStableIdSegment('qwen/qwen-image'))
+  })
+
+  it('同一个原文始终得到同一个片段', () => {
+    expect(toApplicationStableIdSegment('black-forest-labs/FLUX.1-Krea-dev'))
+      .toBe(toApplicationStableIdSegment('black-forest-labs/FLUX.1-Krea-dev'))
   })
 })

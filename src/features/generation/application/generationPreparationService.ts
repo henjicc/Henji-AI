@@ -1,3 +1,4 @@
+import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
@@ -257,7 +258,9 @@ export function getGenerationModelSchemaRef(modelId: string) {
   return {
     catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
     kind: 'operation' as const,
-    id: `generation.model.${model.meta.id}.params`,
+    // 模型 id 来自供应商，不受稳定 id 正则约束（ModelScope 的 id 带斜杠和大写），
+    // 必须规范化后再拼，否则整个反射注册表建不起来。
+    id: `generation.model.${toApplicationStableIdSegment(model.meta.id)}.params`,
     version: 1,
     digest: schemaDigest(model.meta.id, model.params),
   }

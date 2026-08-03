@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
+import {
+  applicationSchemaRefSchema,
+  toApplicationStableIdSegment,
+} from '@/core/application-control'
 import { registry } from '@/core/ModelRegistry'
 import type { ModelDefinition } from '@/core/types'
 
@@ -79,7 +83,10 @@ describe('generationPreparation', () => {
     })
     const schema = getGenerationModelSchema(testModel.meta.id)
     expect(schema.schemaVersion).toBe('generation-model-schema/v2')
-    expect(schema.schemaRef).toMatchObject({ id: `generation.model.${testModel.meta.id}.params` })
+    // 模型 id 来自供应商，必须先过稳定 id 规范化再拼，不能直接嵌进去。parse 同时守住
+    // 「这个 ref 本身合法」——注册表就是拿它去建 schema 文档的。
+    expect(applicationSchemaRefSchema.parse(schema.schemaRef).id)
+      .toBe(`generation.model.${toApplicationStableIdSegment(testModel.meta.id)}.params`)
     expect(schema.params).toHaveLength(2)
     expect(schema.priceEstimate).toMatchObject({ amount: 0.5, currency: '$' })
   })

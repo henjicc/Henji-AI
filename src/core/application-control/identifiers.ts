@@ -65,6 +65,51 @@ export type ApplicationRevisionSet = z.infer<typeof applicationRevisionSetSchema
 export const applicationOpaqueRefSchema = z.string()
   .regex(/^[a-z][a-z0-9_-]{1,31}:[A-Za-z0-9_-]{16,256}$/)
 
+const STABLE_ID_SEGMENT_ALLOWED = new Set('abcdefghijklmnopqrstuvwxyz0123456789_.-')
+const STABLE_ID_SEGMENT_MAX_SLUG_LENGTH = 64
+
+function stableIdSegmentDigest(raw: string): string {
+  let hash = 5381
+  for (const character of raw) hash = (hash * 33 + (character.codePointAt(0) ?? 0)) >>> 0
+  return hash.toString(16).padStart(8, '0')
+}
+
+function trimSeparators(value: string): string {
+  let result = value
+  while (result.length > 0 && (result.startsWith('-') || result.startsWith('.'))) result = result.slice(1)
+  while (result.length > 0 && (result.endsWith('-') || result.endsWith('.'))) result = result.slice(0, -1)
+  return result
+}
+
+/**
+ * 把**外部来源的自由文本**（供应商模型 id、文件名、用户输入……）转成可以安全嵌进稳定 id
+ * 的片段。凡是要把不受本项目控制的字符串拼进 `applicationStableIdSchema` 的地方，都必须
+ * 经过这里。
+ *
+ * 稳定 id 受 `^[a-z][a-z0-9_.-]{1,127}$` 约束，外部 id 不受任何约束——ModelScope 的
+ * `black-forest-labs/FLUX.1-Krea-dev` 同时带斜杠和大写。直接拼进去的后果实测过：反射注册表
+ * 整个建不起来，而它又是惰性构建的，于是错误落在用户任务执行到一半的时候，信息里只有一句
+ * 正则不匹配，跟当时正在做的事毫无关系。
+ *
+ * 规范化必然丢信息（大小写折叠、非法字符统一变成 `-`），所以结尾一定要带上按**原文**算出的
+ * 摘要，否则 `a/b` 与 `a_b` 会折叠成同一个 id，在注册表里撞成 `SCHEMA_REF_DUPLICATE`。
+ */
+export function toApplicationStableIdSegment(raw: string): string {
+  let slug = ''
+  for (const character of raw.normalize('NFC').toLowerCase()) {
+    const mapped = STABLE_ID_SEGMENT_ALLOWED.has(character) ? character : '-'
+    if (mapped === '-' && slug.endsWith('-')) continue
+    slug += mapped
+  }
+  slug = trimSeparators(slug)
+  if (slug.length > STABLE_ID_SEGMENT_MAX_SLUG_LENGTH) {
+    slug = trimSeparators(slug.slice(0, STABLE_ID_SEGMENT_MAX_SLUG_LENGTH))
+  }
+  const head = slug.charCodeAt(0)
+  if (!(head >= 97 && head <= 122)) slug = slug ? `x-${slug}` : 'x'
+  return `${slug}-${stableIdSegmentDigest(raw)}`
+}
+
 export function createKnownApplicationPropertyIdSchema<const TId extends string>(
   knownPropertyIds: readonly TId[]
 ): z.ZodType<TId> {
