@@ -23,7 +23,7 @@ import {
   type CameraStagePlacementIntent,
   type StageObjectBounds,
 } from './sceneAnalysis'
-import { captureCameraStageUndo } from './cameraStageUndo'
+import { captureCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 
 const logger = createLogger('features.cameraStage.application')
 
@@ -167,6 +167,41 @@ async function ensureProjectLoaded(projectId: string): Promise<void> {
   if (!await loadProjectIntoScene(projectId)) throw new Error('NOT_FOUND')
 }
 
+/**
+ * 写入失败后把场景恢复到快照。回滚本身再失败也不能盖掉原始错误——原始错误才是模型需要
+ * 看到的那条，回滚失败单独记日志。
+ */
+async function rollbackFailedPlacement(projectId: string, undoToken: string): Promise<void> {
+  try {
+    await restoreCameraStageUndo(undoToken)
+  } catch (rollbackError) {
+    logger.error('三维场景布置回滚失败', rollbackError, {
+      event: 'camera_stage.object.place.rollback_failed',
+      projectId,
+    })
+  }
+}
+
+/**
+ * 校验 targetObjectId 指向真实存在的对象，**并在报错时给出可用值**。
+ *
+ * 原来这个校验藏在 `resolveScenePlacement` 里，抛的是裸 `NOT_FOUND`：模型既不知道自己填错
+ * 了哪个字段，也不知道该填什么，只能猜——实测就是连续几轮都卡在这。schema 那边
+ * `targetObjectId` 是裸 `z.string()`，帮不上任何忙，所以错误信息必须自己把候选列出来。
+ */
+function requirePlacementTarget(objects: StageObject[], targetObjectId?: string): void {
+  if (!targetObjectId) return
+  if (objects.some((object) => object.id === targetObjectId)) return
+  const available = objects
+    .filter((object) => object.type !== 'camera')
+    .map((object) => `${object.id}（${object.name}）`)
+  throw new Error(
+    `TARGET_OBJECT_NOT_FOUND：targetObjectId «${targetObjectId}» 不是本场景中的对象 id。`
+    + `targetObjectId 必须取自观察结果里 objects[].id 的原值。`
+    + (available.length > 0 ? `当前可用：${available.join('、')}。` : '当前场景没有可作为参照的对象。')
+  )
+}
+
 function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageSceneObservation {
   return {
     project: { id: snapshot.id, name: snapshot.name, editorMode: snapshot.editorMode },
@@ -275,6 +310,10 @@ export const cameraStageApplicationService = {
     try {
       await ensureProjectLoaded(input.projectId)
     const before = useCameraStageStore.getState()
+    // 纯输入校验必须在任何写入之前做完。`resolveScenePlacement` 内部对不存在的
+    // targetObjectId 抛裸 NOT_FOUND，而它在对象创建之后才被调用——结果是对象已经建出来、
+    // 停在默认位置，事务却报失败，调用方拿到一个"失败但场景被改了"的状态。
+    requirePlacementTarget(before.objects, input.placement.targetObjectId)
     const reuse = matchReusableSceneObject(before.objects, input.spec, before.activeCameraId)
     const noPlacementChange = reuse.object && !input.placement.position && !input.placement.rotation
       && !input.placement.scale && !input.placement.dimensions && !input.placement.targetObjectId
@@ -300,55 +339,67 @@ export const cameraStageApplicationService = {
       }
     }
     const undoToken = captureCameraStageUndo(input.projectId)
-    let object = reuse.object
-    if (!object) {
-      if (input.spec.objectType === 'primitive') before.addPrimitive(input.spec.primitiveKind ?? 'box')
-      else if (input.spec.objectType === 'character') before.addCharacter()
-      else before.addCamera()
-      const createdId = useCameraStageStore.getState().selectedId
-      object = useCameraStageStore.getState().objects.find((candidate) => candidate.id === createdId) ?? null
-      if (!object) throw new Error('CAPABILITY_REJECTED')
-    }
-    const state = useCameraStageStore.getState()
-    const layout = resolveScenePlacement(object, state.objects, input.placement)
-    const scale = input.placement.dimensions
-      ? dimensionsToScale(object, input.placement.dimensions)
-      : input.placement.scale ?? object.transform.scale
-    const transform: StageTransform = {
-      position: layout.position,
-      rotation: input.placement.rotation ?? object.transform.rotation,
-      scale,
-    }
-    const name = input.spec.name
-      ? uniqueObjectName(state.objects, input.spec.name, object.id)
-      : object.name
-    state.updateObject(object.id, { name, transform })
-    await saveCurrentProject()
-    const saved = requireObject(input.projectId, object.id)
-    logger.info('三维场景对象布置完成', {
-      event: 'camera_stage.object.place.completed',
-      projectId: input.projectId,
-      objectId: saved.id,
-      decision: reuse.object ? 'reused' : 'created',
-      conflictCount: layout.conflicts.length,
-    })
-      return {
-      projectId: input.projectId,
-      objectId: saved.id,
-      objectType: saved.type,
-      decision: reuse.object ? 'reused' : 'created',
-      reason: `${reuse.reason} ${layout.reason}`,
-      position: saved.transform.position,
-      bounds: calculateStageObjectBounds(saved),
-      conflicts: layout.conflicts,
-      undoToken,
+    // 从这里开始有写入，任何失败都必须把场景恢复到 undoToken 的状态。快照早就在抓了，
+    // 但失败路径从来没用过它——于是"事务失败"和"场景已被改动"可以同时成立，模型据此
+    // 判断该重试还是该补救时必然判错。
+    try {
+      let object = reuse.object
+      if (!object) {
+        if (input.spec.objectType === 'primitive') before.addPrimitive(input.spec.primitiveKind ?? 'box')
+        else if (input.spec.objectType === 'character') before.addCharacter()
+        else before.addCamera()
+        const createdId = useCameraStageStore.getState().selectedId
+        object = useCameraStageStore.getState().objects.find((candidate) => candidate.id === createdId) ?? null
+        if (!object) throw new Error('CAPABILITY_REJECTED')
       }
+      const state = useCameraStageStore.getState()
+      const layout = resolveScenePlacement(object, state.objects, input.placement)
+      const scale = input.placement.dimensions
+        ? dimensionsToScale(object, input.placement.dimensions)
+        : input.placement.scale ?? object.transform.scale
+      const transform: StageTransform = {
+        position: layout.position,
+        rotation: input.placement.rotation ?? object.transform.rotation,
+        scale,
+      }
+      const name = input.spec.name
+        ? uniqueObjectName(state.objects, input.spec.name, object.id)
+        : object.name
+      state.updateObject(object.id, { name, transform })
+      await saveCurrentProject()
+      const saved = requireObject(input.projectId, object.id)
+      logger.info('三维场景对象布置完成', {
+        event: 'camera_stage.object.place.completed',
+        projectId: input.projectId,
+        objectId: saved.id,
+        decision: reuse.object ? 'reused' : 'created',
+        conflictCount: layout.conflicts.length,
+      })
+      return {
+        projectId: input.projectId,
+        objectId: saved.id,
+        objectType: saved.type,
+        decision: reuse.object ? 'reused' : 'created',
+        reason: `${reuse.reason} ${layout.reason}`,
+        position: saved.transform.position,
+        bounds: calculateStageObjectBounds(saved),
+        conflicts: layout.conflicts,
+        undoToken,
+      }
+    } catch (error) {
+      await rollbackFailedPlacement(input.projectId, undoToken)
+      throw error
+    }
     } catch (error) {
       logger.error('三维场景对象布置失败', error, {
         event: 'camera_stage.object.place.failed',
         projectId: input.projectId,
         objectType: input.spec.objectType,
         reusePolicy: input.spec.reusePolicy,
+        // 入参必须进日志：这次排查卡在"无法确定模型到底填了什么 targetObjectId"上
+        placementMode: input.placement.mode,
+        targetObjectId: input.placement.targetObjectId ?? null,
+        hasExplicitPosition: Boolean(input.placement.position),
       })
       throw error
     }

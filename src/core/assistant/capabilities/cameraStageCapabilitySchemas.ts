@@ -37,7 +37,12 @@ export const cameraStagePlacementSchema = z.object({
   rotation: cameraStageVec3Schema.optional(),
   scale: cameraStageVec3Schema.optional(),
   dimensions: cameraStageVec3Schema.optional(),
-  targetObjectId: z.string().min(1).optional(),
+  /**
+   * 参照对象的 id，必须是观察结果里 `objects[].id` 的原值，不是对象名称、也不是带工程前缀
+   * 的稳定引用。填错时会在任何写入之前被拒绝，错误信息里会列出当前可用的 id。
+   */
+  targetObjectId: z.string().min(1).optional()
+    .describe('参照对象 id：取自 observe_camera_stage_scene 返回的 objects[].id 原值，不要填名称或带工程前缀的引用'),
   spacing: z.number().min(0).max(1_000).default(0.35),
   allowOverlap: z.boolean().default(false),
 }).strict()
