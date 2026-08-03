@@ -198,7 +198,14 @@ interface UseAssistantPanelInteractionInput {
 }
 
 interface UseAssistantPanelInteractionResult {
-  panelRef: RefObject<HTMLDivElement>
+  /**
+   * 回调 ref，不是 RefObject：面板 DOM 会随开合反复销毁重建，而本 hook 实例常驻
+   * （App 的装载闩挂上就不再卸载）。定位样式若只写在 layout effect 里，重开时
+   * mode/position/size 一个都没变，effect 不重跑，新建的节点就一条定位样式都拿不到，
+   * `position: fixed` 退化成静态位置——面板落到左上角且顶栏被挤出可视区。
+   * 改由节点挂载这一事实触发写入后，重建与首挂共用同一条路径。
+   */
+  panelRef: (node: HTMLDivElement | null) => void
   dragging: boolean
   resizing: AssistantResizeAxis | null
   /** 拖拽中指针停在哪条边缘；非 null 时组件渲染吸附预览 */
@@ -226,7 +233,7 @@ export function useAssistantPanelInteraction({
   onCommitSize,
   onCommitMode,
 }: UseAssistantPanelInteractionInput): UseAssistantPanelInteractionResult {
-  const panelRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const layoutRef = useRef<AssistantPanelLayout>({ position, size })
   const disposeRef = useRef<(() => void) | null>(null)
   const transitionRestoreFrameRef = useRef<number | null>(null)
@@ -241,6 +248,15 @@ export function useAssistantPanelInteraction({
     const panel = panelRef.current
     if (!panel) return
     applyPanelFrame(panel, mode, layout)
+  }, [mode])
+
+  /** 节点一挂上就按当前布局落一次定位样式，不依赖 React 的依赖比较 */
+  const attachPanel = useCallback((node: HTMLDivElement | null): void => {
+    panelRef.current = node
+    if (!node) return
+    const next = normalizeLayout(mode, layoutRef.current, currentViewport())
+    layoutRef.current = next
+    applyPanelFrame(node, mode, next)
   }, [mode])
 
   const applyDragPreview = useCallback((layout: AssistantPanelLayout): void => {
@@ -480,7 +496,7 @@ export function useAssistantPanelInteraction({
   }, [applyCommittedLayout, commitLayout, mode])
 
   return {
-    panelRef,
+    panelRef: attachPanel,
     dragging,
     resizing,
     dockPreview,
