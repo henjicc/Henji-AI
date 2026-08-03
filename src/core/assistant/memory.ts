@@ -1,5 +1,8 @@
 import { z } from 'zod'
 
+/** 一次读取最多返回多少条记忆与候选。处理器截断与能力输出 schema 必须共用这一份。 */
+export const AGENT_MEMORY_LIST_LIMIT = 20
+
 export const AGENT_MEMORY_SCHEMA_VERSION = 'agent-memory/v1' as const
 
 export const agentMemoryScopeSchema = z.object({

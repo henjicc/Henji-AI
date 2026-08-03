@@ -1,3 +1,7 @@
+import {
+  AGENT_FACET_EVIDENCE_LIMIT,
+  AGENT_SETTLEMENT_EVIDENCE_LIMIT,
+} from '../../../../../src/core/assistant/progress'
 import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import {
   agentFacetProgressSchema,
@@ -61,7 +65,7 @@ function stableEvidence(observation: AgentToolObservation): string[] {
     ...Object.entries(revisions).map(([scope, revision]) => `${scope}@${revision}`),
     ...directRevision,
     ...status,
-  ].slice(0, 12)
+  ].slice(0, AGENT_FACET_EVIDENCE_LIMIT)
 }
 
 function callSignature(
@@ -184,7 +188,7 @@ export class AgentFacetProgressTracker {
       })),
       waitingFacetIds: waiting.map((facet) => facet.facetId),
       remainingFacetIds: remaining.map((facet) => facet.facetId),
-      evidence: facets.flatMap((facet) => facet.evidence).slice(-24),
+      evidence: facets.flatMap((facet) => facet.evidence).slice(-AGENT_SETTLEMENT_EVIDENCE_LIMIT),
       summary: status === 'active'
         ? `任务图仍有 ${remaining.length} 个 Facet 未结算。`
         : `任务图结算为 ${status}：完成 ${completed.length}，受阻 ${blocked.length}，等待用户 ${waiting.length}。`,

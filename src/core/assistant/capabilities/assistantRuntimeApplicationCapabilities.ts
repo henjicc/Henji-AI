@@ -5,6 +5,7 @@ import {
   agentArtifactPageSchema,
 } from '../artifacts'
 import {
+  AGENT_MEMORY_LIST_LIMIT,
   AGENT_MEMORY_SCHEMA_VERSION,
   agentMemoryCandidateSchema,
   agentMemoryProposalSchema,
@@ -212,8 +213,8 @@ export const listAgentMemoriesCapability = defineApplicationCapability({
   inputSchema: z.object({}).strict(),
   outputSchema: z.object({
     enabled: z.boolean(),
-    memories: z.array(agentMemoryRecordSchema).max(20),
-    candidates: z.array(agentMemoryCandidateSchema).max(20),
+    memories: z.array(agentMemoryRecordSchema).max(AGENT_MEMORY_LIST_LIMIT),
+    candidates: z.array(agentMemoryCandidateSchema).max(AGENT_MEMORY_LIST_LIMIT),
   }).strict(),
   concurrencyKey: 'memory:read',
   summarize: (output) => `长期记忆 ${output.memories.length} 条，待确认 ${output.candidates.length} 条。`,

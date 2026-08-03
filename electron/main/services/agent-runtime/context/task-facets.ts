@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+import {
+  AGENT_FACET_ENTITY_TYPE_LIMIT,
+  AGENT_TASK_FACET_LIMIT,
+} from '../../../../../src/core/assistant/taskGraph'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import {
   AGENT_TASK_GRAPH_VERSION,
@@ -18,7 +22,7 @@ const modelFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
   domain: z.enum(AGENT_TOOL_DOMAINS),
   goal: z.string().min(1).max(1_000),
-  targetEntityTypes: z.array(z.string().min(1).max(128)).max(16).default([]),
+  targetEntityTypes: z.array(z.string().min(1).max(128)).max(AGENT_FACET_ENTITY_TYPE_LIMIT).default([]),
   observationKinds: z.array(z.enum([
     'current_surface', 'entity_state', 'entity_schema', 'operation_schema',
   ])).max(4).default([]),
@@ -302,7 +306,7 @@ export function createModelTaskGraph(input: {
   candidateDomains: AgentToolDomain[]
   snapshot: HostContextSnapshot
 }): AgentTaskGraph {
-  const rawItems = Array.isArray(input.rawFacets) ? input.rawFacets.slice(0, 16) : []
+  const rawItems = Array.isArray(input.rawFacets) ? input.rawFacets.slice(0, AGENT_TASK_FACET_LIMIT) : []
   const parsed = rawItems.flatMap((item) => {
     const result = modelFacetSchema.safeParse(item)
     return result.success ? [result.data] : []

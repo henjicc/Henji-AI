@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 
+import { AGENT_DISCOVERY_ADDED_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
 import {
@@ -194,7 +195,7 @@ export class AgentCapabilityDiscoveryCatalog {
         ...capabilities.map((capability) => capability.name),
       ]).filter((name) => ![
         'discover_application_capabilities', 'search_application_capabilities',
-      ].includes(name)).slice(0, 20),
+      ].includes(name)).slice(0, AGENT_DISCOVERY_ADDED_TOOL_LIMIT),
       page: {
         returnedItems: capabilities.length,
         nextCursor,

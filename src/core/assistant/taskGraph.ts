@@ -2,6 +2,11 @@ import { z } from 'zod'
 
 export const AGENT_TASK_GRAPH_VERSION = 'agent-task-graph/v1' as const
 
+/** 一张任务图最多多少个 Facet。路由裁剪、进度结算与事件契约共用这一份。 */
+export const AGENT_TASK_FACET_LIMIT = 16
+/** 单个 Facet 声明的实体类型数量上限。 */
+export const AGENT_FACET_ENTITY_TYPE_LIMIT = 16
+
 export const agentTaskFacetStatusSchema = z.enum([
   'pending',
   'active',
@@ -23,7 +28,7 @@ export type AgentTaskCapabilityKind = z.infer<typeof agentTaskCapabilityKindSche
 
 export const agentTaskObservationNeedSchema = z.object({
   kind: z.enum(['current_surface', 'entity_state', 'entity_schema', 'operation_schema']),
-  entityTypes: z.array(z.string().min(1).max(128)).max(16),
+  entityTypes: z.array(z.string().min(1).max(128)).max(AGENT_FACET_ENTITY_TYPE_LIMIT),
   reason: z.string().min(1).max(500),
 }).strict()
 export type AgentTaskObservationNeed = z.infer<typeof agentTaskObservationNeedSchema>
@@ -32,7 +37,7 @@ export const agentTaskFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
   domain: z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/),
   goal: z.string().min(1).max(1_000),
-  targetEntityTypes: z.array(z.string().min(1).max(128)).max(16),
+  targetEntityTypes: z.array(z.string().min(1).max(128)).max(AGENT_FACET_ENTITY_TYPE_LIMIT),
   requiredObservations: z.array(agentTaskObservationNeedSchema).max(12),
   capabilityKinds: z.array(agentTaskCapabilityKindSchema).min(1).max(6),
   targetSurfaceId: z.string().min(1).max(128).nullable(),
@@ -55,7 +60,7 @@ export const agentTaskDependencySchema = z.object({
 export const agentTaskGraphSchema = z.object({
   version: z.literal(AGENT_TASK_GRAPH_VERSION),
   goal: z.string().min(1).max(32 * 1024),
-  facets: z.array(agentTaskFacetSchema).min(1).max(16),
+  facets: z.array(agentTaskFacetSchema).min(1).max(AGENT_TASK_FACET_LIMIT),
   dependencies: z.array(agentTaskDependencySchema).max(64),
   stopConditions: z.array(z.string().min(1).max(500)).min(1).max(12),
 }).strict().superRefine((graph, context) => {

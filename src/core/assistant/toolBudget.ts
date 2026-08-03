@@ -10,3 +10,9 @@
  */
 export const AGENT_ACTIVE_TOOL_LIMIT = 16
 export const AGENT_TOOL_SCHEMA_BUDGET_BYTES = 48 * 1024
+
+/**
+ * 一次能力发现最多回带多少个待激活工具名。
+ * 发现结果的裁剪与 addedToolNames 的 schema 上限必须是同一个数。
+ */
+export const AGENT_DISCOVERY_ADDED_TOOL_LIMIT = 20

@@ -6,6 +6,7 @@ import {
   compactConversationMessages,
   estimateModelMessagesTokens,
 } from './compaction'
+import { AGENT_ACTIVE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { AgentArtifactStore } from './offload'
 import { selectContextLayers } from './layer-budget'
 import {
@@ -38,8 +39,10 @@ export class AgentContextBuilder {
   constructor(private readonly artifactStore = new AgentArtifactStore()) {}
 
   build(input: AgentContextBuildInput): AgentContextBuildResult {
-    let activeTools = input.modelTools.slice(0, 8)
-    let activeToolNames = input.activeToolNames.slice(0, 8)
+    // 上限只有 toolBudget 一个来源。此前这里写死 8，与激活逻辑各算各的：
+    // 激活挑够 16 个存进保存点，构建器又砍回 8 个发给模型，两边对不上还谁都不报错。
+    let activeTools = input.modelTools.slice(0, AGENT_ACTIVE_TOOL_LIMIT)
+    let activeToolNames = input.activeToolNames.slice(0, AGENT_ACTIVE_TOOL_LIMIT)
     const baseConversation = withoutSystemMessages(input.conversation)
     const { layers, offloaded } = buildAgentContextLayers(
       input,
@@ -93,7 +96,7 @@ export class AgentContextBuilder {
         toolsJson()
       )
     }
-    if (activeToolNames.length !== Math.min(input.activeToolNames.length, 8)) {
+    if (activeToolNames.length !== Math.min(input.activeToolNames.length, AGENT_ACTIVE_TOOL_LIMIT)) {
       effectiveLayers = updateToolContractLayer(layers, activeToolNames)
       const finalReserved = estimateModelMessagesTokens(
         [{ role: 'system', content: stableSystemPrompt }, ...conversation],

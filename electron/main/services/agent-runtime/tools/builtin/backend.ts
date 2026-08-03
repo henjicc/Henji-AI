@@ -13,6 +13,7 @@ import {
   discoverApplicationCapabilitiesCapability,
   readApplicationSchemasCapability,
 } from '../../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
+import { AGENT_DISCOVERY_ADDED_TOOL_LIMIT } from '../../../../../../src/core/assistant/toolBudget'
 import { AgentCapabilityDiscoveryCatalog } from '../../context/capability-discovery'
 import { createBackendCapabilityTool } from '../backend-capability-tool'
 
@@ -87,7 +88,7 @@ export function createBackendBuiltinTools(
     outputSchema: z.object({
       catalogVersion: z.literal(APPLICATION_CAPABILITY_CATALOG_VERSION),
       capabilities: z.array(z.record(z.string(), z.unknown())),
-      addedToolNames: z.array(z.string().min(1)).max(20),
+      addedToolNames: z.array(z.string().min(1)).max(AGENT_DISCOVERY_ADDED_TOOL_LIMIT),
       nextCursor: z.number().int().nonnegative().nullable(),
     }).strict(),
     aiInputSchema: {

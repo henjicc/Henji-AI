@@ -1,4 +1,5 @@
 import {
+  AGENT_MEMORY_LIST_LIMIT,
   AGENT_MEMORY_SCHEMA_VERSION,
 } from '../../../../../../src/core/assistant/memory'
 import {
@@ -18,8 +19,8 @@ export function createAgentMemoryTools(): AgentToolDefinition[] {
         const state = getAgentMemoryStore().getState()
         return {
           enabled: state.settings.enabled,
-          memories: state.memories.slice(0, 20),
-          candidates: state.candidates.slice(0, 20),
+          memories: state.memories.slice(0, AGENT_MEMORY_LIST_LIMIT),
+          candidates: state.candidates.slice(0, AGENT_MEMORY_LIST_LIMIT),
         }
       },
     }),
