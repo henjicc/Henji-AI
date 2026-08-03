@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
+import { AGENT_ACTIVE_TOOL_LIMIT } from './toolBudget'
 import { modelStepUsageSchema } from '../llm/modelStep'
 import { modelProviderErrorCategorySchema } from '../llm/providerProtocol'
 import { agentWorkingSummarySchema } from './workingContext'
@@ -262,7 +263,7 @@ const contextUpdatedEventSchema = z.object({
   type: z.literal('ContextUpdated'),
   turn: z.number().int().positive(),
   snapshotRevision: z.number().int().nonnegative(),
-  activeToolNames: z.array(z.string().min(1)).max(12),
+  activeToolNames: z.array(z.string().min(1)).max(AGENT_ACTIVE_TOOL_LIMIT),
   estimatedTokens: z.number().int().nonnegative(),
 }).strict()
 

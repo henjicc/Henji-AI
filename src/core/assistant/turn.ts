@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { agentRunStateSchema } from './events'
+import { AGENT_ACTIVE_TOOL_LIMIT } from './toolBudget'
 import { hostScopeRevisionsSchema } from './hostContracts'
 
 export const AGENT_TURN_SNAPSHOT_VERSION = 'agent-turn-snapshot/v1' as const
@@ -29,7 +30,7 @@ export const agentTurnSnapshotDraftSchema = z.object({
   projectionVersion: z.literal(AGENT_PROJECTION_VERSION),
   compactionVersion: z.enum(['agent-semantic-summary/v1', AGENT_COMPACTION_VERSION]),
   models: z.array(modelReferenceSchema).min(3).max(4),
-  tools: z.array(toolReferenceSchema).max(12),
+  tools: z.array(toolReferenceSchema).max(AGENT_ACTIVE_TOOL_LIMIT),
   scopeRevisions: hostScopeRevisionsSchema,
   artifactRefs: z.array(z.string().min(1)).max(100),
   requestOptions: z.object({
