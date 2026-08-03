@@ -113,8 +113,10 @@ describe('AgentToolCatalogPlanner', () => {
       throw new Error('测试不执行前端工具')
     })
     const planner = new AgentToolCatalogPlanner(registry)
+    // load_assistant_skill 与能力发现同为常驻工具：skills_index 层要求模型先加载技能，
+    // 它必须真的在本轮工具里，否则模型看得见清单却调不动。
     expect(planner.select(primaryRoute, contextSnapshot()).activeToolNames)
-      .toEqual(['discover_application_capabilities'])
+      .toEqual(['load_assistant_skill', 'discover_application_capabilities'])
 
     const capabilities = registry.search('图片生成', undefined, contextSnapshot())
     const added = planner.rememberDiscovered('discover_application_capabilities', {
@@ -128,6 +130,35 @@ describe('AgentToolCatalogPlanner', () => {
     expect(activeNames).toContain('discover_application_capabilities')
     expect(activeNames).toContain('create_visible_generation_task')
     expect(activeNames).toContain('search_models')
+    expect(activeNames).toContain('load_assistant_skill')
+  })
+
+  it('任何有工具域的路由都常驻技能加载工具，且排在能力发现之前', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    for (const toolDomains of [['camera_stage'], ['canvas'], ['generation', 'models'], ['settings']] as const) {
+      const active = planner.select(
+        { ...primaryRoute, toolDomains: [...toolDomains] },
+        contextSnapshot()
+      ).activeToolNames
+      expect(active).toContain('load_assistant_skill')
+      // 领域知识决定后面怎么发现和调用能力，顺序反了没有意义。
+      expect(active.indexOf('load_assistant_skill')).toBe(0)
+    }
+  })
+
+  it('纯闲聊（无工具域）不占用技能加载的工具位', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    const active = planner.select(
+      { ...primaryRoute, toolDomains: [] },
+      contextSnapshot()
+    ).activeToolNames
+    expect(active).not.toContain('load_assistant_skill')
   })
 
   it('领域工具超过单轮上限时仍可分页发现并在有限轮次内轮换激活', async () => {

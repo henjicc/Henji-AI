@@ -258,6 +258,11 @@ export function AssistantConversation(): JSX.Element {
     && latestModelStep
     && runState?.currentStepId === latestModelStep.stepId
   )
+  // 流式进展只在执行过程卡片内部渲染；最终答复走下方 finalText 的大块，两者不同时出现。
+  const streamingProgress = modelResponseStreaming
+    && runState
+    && !terminalStatuses.has(runState.status)
+    && !runState.finalText
   const finalResponseStarted = Boolean(runState?.finalText)
   const runErrorPresentation = runState?.error ? describeStructuredError(runState.error) : null
   useEffect(() => {
@@ -474,6 +479,21 @@ export function AssistantConversation(): JSX.Element {
                           </section>
                         )
                   ))}
+                  {/*
+                    正在流式输出的这一段也是"助手进展"，必须和已落定的那些长一样、待在同一个
+                    容器里。此前它被渲染在执行过程卡片外面、还用的是最终答复的字号，于是同一段
+                    文字先以最终答复的样子出现在框外，一秒后又跳进框里变成小字——用户看到的
+                    "前面的文本没有被包裹起来"就是这个。
+                  */}
+                  {streamingProgress ? (
+                    <ModelProgressMessage
+                      update={{
+                        stepId: latestModelStep?.stepId ?? 'streaming',
+                        text: deferredStreamedText,
+                        sequence: Number.MAX_SAFE_INTEGER,
+                      }}
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -506,11 +526,6 @@ export function AssistantConversation(): JSX.Element {
 
         {approval ? <ApprovalCard approval={approval} onDecision={(decision) => void run.respondApproval(approval.approvalId, decision)} /> : null}
 
-        {modelResponseStreaming && runState && !terminalStatuses.has(runState.status) ? (
-          <section style={deferredBlockStyle} className="w-full">
-            <AssistantMarkdown>{deferredStreamedText}</AssistantMarkdown>
-          </section>
-        ) : null}
 
         {runState?.finalText ? (
           <section style={deferredBlockStyle} className="w-full">

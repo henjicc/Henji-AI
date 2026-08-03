@@ -7,6 +7,16 @@ export const AGENT_ACTIVE_TOOL_LIMIT = 8
 export const AGENT_TOOL_SCHEMA_BUDGET_BYTES = 48 * 1024
 const CAPABILITY_DISCOVERY_TOOL = 'discover_application_capabilities'
 const CURRENT_CONTEXT_TOOL = 'get_current_application_context'
+/**
+ * 技能加载必须和能力发现一样常驻。
+ *
+ * 它的 domain 是 `application`，如果只靠 `route.toolDomains` 命中，那么一个三维任务
+ * （toolDomains = camera_stage / navigation）根本拿不到这个工具——而 `skills_index` 层
+ * 又在告诉模型"先用 load_assistant_skill 加载对应技能"，系统提示词同时规定"只能调用本轮
+ * 提供的工具"。两条一起生效的结果就是：模型看得见技能清单，却永远调不动，整套技能系统
+ * 等于死代码。实测就是这么坏的。
+ */
+const SKILL_LOAD_TOOL = 'load_assistant_skill'
 
 export interface AgentToolActivationInput {
   route: AgentRouteDecision
@@ -49,8 +59,11 @@ export function activateAgentTools(
   const capabilitySearchNames = input.route.toolDomains.length === 0
     ? []
     : [CURRENT_CONTEXT_TOOL, CAPABILITY_DISCOVERY_TOOL]
+  // 技能加载排在能力发现之前：领域知识决定后面怎么发现和调用能力，顺序反了没有意义。
+  const skillNames = input.route.toolDomains.length === 0 ? [] : [SKILL_LOAD_TOOL]
   const candidates = unique([
     ...input.pinnedToolNames,
+    ...skillNames,
     ...capabilitySearchNames,
     ...input.discoveredToolNames,
     ...directNames,
