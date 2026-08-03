@@ -81,6 +81,17 @@ export class AgentToolCatalogPlanner {
     this.rememberContinuation(toolName, output)
   }
 
+  /**
+   * 还有工具在等下一轮重新披露。
+   *
+   * 这一位存在的唯一理由：`TOOL_NOT_ACTIVE` 的恢复承诺是"下一轮再给你"，但任务图结算不知道
+   * 这件事，往往当轮就判终态并下发"停止调用工具"——承诺的下一轮永远不会来。实测里模型明明
+   * 已经知道该调 update_camera_stage_object，却只能汇报"按规则需等下一轮披露"然后收工。
+   */
+  hasPendingActivationRecovery(): boolean {
+    return this.recoveryToolNames.length > 0
+  }
+
   queueKnownToolForActivation(toolName: string): boolean {
     if (!this.registry.get(toolName)) return false
     const known = this.discoveredToolNames.includes(toolName)

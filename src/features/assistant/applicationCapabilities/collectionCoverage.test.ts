@@ -21,7 +21,7 @@ import {
 const accessContext = {
   exposure: 'assistant' as const,
   permissions: new Set<string>(),
-  acceptedDataClasses: new Set(['C0', 'C1', 'C2', 'C3']),
+  acceptedDataClasses: new Set(['C0', 'C1', 'C2', 'C3'] as const),
 }
 
 describe('集合写入覆盖一致', () => {

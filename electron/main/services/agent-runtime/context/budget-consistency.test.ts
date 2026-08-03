@@ -17,6 +17,10 @@ import {
   AGENT_DISCOVERY_ADDED_TOOL_LIMIT,
 } from '../../../../../src/core/assistant/toolBudget'
 import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
+import { createBackendBuiltinTools } from '../tools/builtin/backend'
+import { createFrontendApplicationCapabilityTools } from '../tools/builtin/frontend-capabilities'
+import { AgentToolRegistry } from '../tools/registry'
+import { activateAgentTools } from './tool-activation'
 import { estimateModelMessagesTokens } from './compaction'
 import { selectContextLayers } from './layer-budget'
 
@@ -132,5 +136,54 @@ describe('预算常量与契约一致', () => {
     expect(AGENT_SETTLEMENT_EVIDENCE_LIMIT).toBeGreaterThanOrEqual(AGENT_FACET_EVIDENCE_LIMIT)
     // 记忆读取上限只是一个正整数约束，放这里是为了让它和其他预算一起被看见。
     expect(AGENT_MEMORY_LIST_LIMIT).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * 三维任务反复"莫名其妙停下来"的三个直接原因，各守一条。
+ *
+ * 共同点是：能力其实都在，模型也知道该调什么，但工具没进本轮活动集，而"下一轮再给你"这个
+ * 承诺又被任务图结算掐断。用户看到的就是助手汇报"当前工具集没有 XX 能力"然后收工。
+ */
+describe('工具激活不得让通用动词落选', () => {
+  function activate(toolDomains: string[]) {
+    const registry = new AgentToolRegistry()
+    const definitions = [
+      ...createBackendBuiltinTools(registry, {
+        listArtifacts: () => [], readArtifact: () => null,
+      } as never),
+      // 通用反射动词是 frontend 侧能力，必须一起注册，否则这条门禁只是在测后端内置工具
+      ...createFrontendApplicationCapabilityTools((async () => ({})) as never),
+    ]
+    for (const definition of definitions) registry.register(definition)
+    // 前端能力只有出现在宿主快照的 availableCapabilities 里才算可用，传 null 会把它们全过滤掉
+    const context = {
+      uiReady: true,
+      availableCapabilities: definitions.map((definition) => definition.name),
+    } as never
+    return activateAgentTools(registry, {
+      route: {
+        routeVersion: 'agent-route/v2', intent: 'camera_stage', candidateIntents: ['camera_stage'],
+        complexity: 'multi_step', path: 'workflow', toolDomains, source: 'deterministic', reason: '三维任务',
+      } as never,
+      context,
+      pinnedToolNames: [],
+      discoveredToolNames: [],
+      recentToolNames: [],
+    })
+  }
+
+  it('三维任务也拿得到通用反射动词', () => {
+    // 这些能力的 domain 是 application，而三维任务的 toolDomains 是 camera_stage/toolbox。
+    // 只靠 directNames 命中的话它们永远进不来——实测就是这么丢的。
+    const active = new Set(activate(['toolbox', 'camera_stage', 'catalog']).activeToolNames)
+    expect(active.has('change_application_entities')).toBe(true)
+    expect(active.has('describe_application_entities')).toBe(true)
+  })
+
+  it('技能加载与能力发现同样常驻', () => {
+    const active = new Set(activate(['toolbox', 'camera_stage', 'catalog']).activeToolNames)
+    expect(active.has('load_assistant_skill')).toBe(true)
+    expect(active.has('discover_application_capabilities')).toBe(true)
   })
 })

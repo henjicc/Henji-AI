@@ -24,6 +24,23 @@ const CURRENT_CONTEXT_TOOL = 'get_current_application_context'
  */
 const SKILL_LOAD_TOOL = 'load_assistant_skill'
 
+/**
+ * 反射层的通用动词同样必须常驻，理由和 `load_assistant_skill` 一模一样。
+ *
+ * 它们的 domain 是 `application`，而 `directNames` 只取 `route.toolDomains` 里的类别——三维
+ * 任务的 toolDomains 是 camera_stage / toolbox，永远不含 application。于是这些"任何领域都要用
+ * 的基础动词"只能靠能力发现轮换露面，实测的结果是模型报"当前工具集没有对象关键帧写入能力"，
+ * 而那个能力其实已经注册好了。
+ *
+ * 通用动词是地板，不是候选：没有它们，助手连"这个东西能不能改"都问不出来。
+ */
+const REFLECTION_TOOLS = [
+  'describe_application_entities',
+  'change_application_entities',
+  'list_application_entities',
+  'read_application_entity',
+]
+
 export interface AgentToolActivationInput {
   route: AgentRouteDecision
   context: HostContextSnapshot | null
@@ -67,6 +84,7 @@ export function activateAgentTools(
     : [CURRENT_CONTEXT_TOOL, CAPABILITY_DISCOVERY_TOOL]
   // 技能加载排在能力发现之前：领域知识决定后面怎么发现和调用能力，顺序反了没有意义。
   const skillNames = input.route.toolDomains.length === 0 ? [] : [SKILL_LOAD_TOOL]
+  const reflectionNames = input.route.toolDomains.length === 0 ? [] : REFLECTION_TOOLS
   /*
    * 顺序即优先级，超出 AGENT_ACTIVE_TOOL_LIMIT 的部分会被直接丢掉。
    *
@@ -83,6 +101,8 @@ export function activateAgentTools(
     ...input.pinnedToolNames,
     ...skillNames,
     ...capabilitySearchNames,
+    // 通用动词排在 recent/discovered 之前：它们是地板，不参与轮换
+    ...reflectionNames,
     ...input.recentToolNames,
     ...input.discoveredToolNames,
     ...directNames,

@@ -5,6 +5,8 @@ import {
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
+import { createBackendBuiltinTools } from '../tools/builtin/backend'
+import { AgentToolRegistry } from '../tools/registry'
 import { AgentToolCatalogPlanner } from './catalog'
 import { AGENT_ACTIVE_TOOL_LIMIT, AGENT_TOOL_SCHEMA_BUDGET_BYTES } from './tool-activation'
 import type { AgentRouteDecision } from './types'
@@ -286,5 +288,43 @@ describe('AgentToolCatalogPlanner', () => {
     const activation = planner.select(primaryRoute, contextSnapshot())
     expect(activation.activeToolNames[0]).toBe('read_agent_artifact')
     expect(activation.pinnedToolNames).toContain('read_agent_artifact')
+  })
+})
+
+/**
+ * `TOOL_NOT_ACTIVE` 的恢复承诺是"下一轮重新披露"，但任务图结算不知道这件事，往往当轮就判
+ * 终态并下发"停止调用工具"——承诺的下一轮永远不会来。实测里模型已经知道该调
+ * update_camera_stage_object，却只能汇报"按规则需等下一轮披露"然后收工。
+ */
+describe('激活恢复挂起时不得结算停止', () => {
+  it('排队等待重新披露的工具会把恢复标志置起，并在真正激活后清掉', () => {
+    const registry = new AgentToolRegistry()
+    for (const definition of createBackendBuiltinTools(registry, {
+      listArtifacts: () => [], readArtifact: () => null,
+    } as never)) {
+      registry.register(definition)
+    }
+    const planner = new AgentToolCatalogPlanner(registry)
+    expect(planner.hasPendingActivationRecovery()).toBe(false)
+
+    // 只有"已知"的工具才排队：没见过的工具排队没有意义，模型该走能力发现
+    planner.restoreDiscovered(['query_diagnostic_events'])
+    expect(planner.queueKnownToolForActivation('query_diagnostic_events')).toBe(true)
+    expect(planner.hasPendingActivationRecovery()).toBe(true)
+
+    planner.select({
+      routeVersion: 'agent-route/v2', intent: 'diagnose', candidateIntents: ['diagnose'],
+      complexity: 'simple', path: 'workflow', toolDomains: ['diagnostics'],
+      source: 'deterministic', reason: '诊断',
+    } as never, null)
+    // 已经披露出去了，恢复标志必须清掉，否则任务永远结算不了
+    expect(planner.hasPendingActivationRecovery()).toBe(false)
+  })
+
+  it('未知工具不排队，避免把恢复标志永久挂住', () => {
+    const registry = new AgentToolRegistry()
+    const planner = new AgentToolCatalogPlanner(registry)
+    expect(planner.queueKnownToolForActivation('不存在的工具')).toBe(false)
+    expect(planner.hasPendingActivationRecovery()).toBe(false)
   })
 })

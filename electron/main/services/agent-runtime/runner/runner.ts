@@ -484,7 +484,13 @@ export class AgentRunner {
             appendGuidance: (content) => this.conversationJournal.appendEphemeral({ role: 'user', content }),
             saveAfter: () => this.savePointCoordinator.save('after_tools', turnSnapshot),
             registerExternalWait: (items) => this.externalWaitRegistration.registerIfSubmitted(items, turnSnapshot),
-            progressGuidance: () => this.progressTracker?.settlementGuidance() ?? null,
+            // 有工具在等下一轮重新披露时不下发停止指令：否则"下一轮再给你"这个承诺永远兑现
+            // 不了，模型只能带着一句"按规则需等下一轮披露"收工，而它其实已经知道该调什么了。
+            progressGuidance: () => (
+              this.catalogPlanner.hasPendingActivationRecovery()
+                ? null
+                : this.progressTracker?.settlementGuidance() ?? null
+            ),
           })) {
             this.lifecycle.finishTerminal()
             return
