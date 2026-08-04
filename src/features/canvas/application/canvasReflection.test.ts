@@ -9,6 +9,9 @@ import { useProjectStore, type Project } from '@/stores/projectStore'
 
 import { CanvasNodeMutationExecutor } from './canvasMutationExecutor'
 import { CANVAS_ENTITY_TYPES, createCanvasReflectionRegistrations } from './canvasReflection'
+import * as canvasMutationService from './canvasMutationService'
+
+// 双路径清单 DP-08：通用节点属性写入必须委托画布领域服务。
 
 const projectId = 'canvas-reflection-project'
 const nodeId = 'node-1'
@@ -44,6 +47,7 @@ function project(canvasNode: CanvasNode): Project {
 
 describe('canvas reflection and mutation', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     const canvasNode = node()
     const currentProject = project(canvasNode)
     useCanvasStore.getState().setCanvasData([canvasNode], [], { past: [], future: [] })
@@ -84,6 +88,7 @@ describe('canvas reflection and mutation', () => {
   })
 
   it('原子更新节点标题与位置并可整体撤销', async () => {
+    const serviceSpy = vi.spyOn(canvasMutationService, 'applyCanvasNodePropertyPatches')
     const executor = new CanvasNodeMutationExecutor()
     const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = {
       kind: 'mutation',
@@ -96,6 +101,11 @@ describe('canvas reflection and mutation', () => {
       ],
     }
     const [result] = await executor.applyAtomic([step], context)
+    expect(serviceSpy).toHaveBeenCalledWith(projectId, [{
+      nodeId,
+      displayName: '新标题',
+      position: { x: 320, y: 480 },
+    }])
     expect(useCanvasStore.getState().nodes[0]).toMatchObject({
       position: { x: 320, y: 480 },
       data: { displayName: '新标题' },

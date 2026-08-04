@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
 import {
+  CAMERA_STAGE_NAME_MAX_LENGTH,
   CONFLICT_RECOVERY,
   cameraStageBaseRevisionSchema,
   cameraStageControl,
@@ -39,7 +40,7 @@ const placeObject = defineApplicationCapability({
     projectId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
     objectId: z.string().min(1).optional(), objectType: z.enum(['primitive', 'character', 'camera']),
     primitiveKind: z.enum(['box', 'sphere', 'cylinder', 'cone', 'pyramid', 'torus']).optional(),
-    name: z.string().trim().min(1).max(120).optional(), role: z.enum(['subject', 'prop', 'character', 'camera', 'environment']).optional(),
+    name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(), role: z.enum(['subject', 'prop', 'character', 'camera', 'environment']).optional(),
     reusePolicy: z.enum(['prefer_existing', 'require_new']).default('prefer_existing'),
     placement: cameraStagePlacementSchema.default({ mode: 'auto', spacing: 0.35, allowOverlap: false }),
   }).strict().superRefine((input, context) => {
@@ -108,7 +109,7 @@ const addShot = defineApplicationCapability({
   permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.camera'], producesRefs: ['camera_stage.shot'],
   failureRecovery: [CONFLICT_RECOVERY],
-  inputSchema: z.object({ projectId: z.string().min(1), name: z.string().trim().min(1).max(120), cameraId: z.string().min(1).nullable().default(null), baseRevision: cameraStageBaseRevisionSchema }).strict(),
+  inputSchema: z.object({ projectId: z.string().min(1), name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH), cameraId: z.string().min(1).nullable().default(null), baseRevision: cameraStageBaseRevisionSchema }).strict(),
   outputSchema: capabilityOutputSchema({ projectId: z.string(), shotId: z.string(), name: z.string(), undoRef: z.string().optional(), baseRevision: cameraStageBaseRevisionSchema }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:shots`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { name: input.name }),
   control: cameraStageControl('create', ['camera_stage.shot']), summarize: (output) => `已添加镜头卡 ${output.shotId}。`,
@@ -122,7 +123,7 @@ const updateShot = defineApplicationCapability({
   failureRecovery: [CONFLICT_RECOVERY],
   inputSchema: z.object({
     projectId: z.string().min(1), shotId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
-    changes: z.object({ name: z.string().trim().min(1).max(120).optional(), hold: z.number().min(0).max(3600).optional(), transitionDuration: z.number().min(0).max(3600).optional(), continuity: z.enum(['stop', 'smooth']).optional(), cameraId: z.string().min(1).nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0),
+    changes: z.object({ name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(), hold: z.number().min(0).max(3600).optional(), transitionDuration: z.number().min(0).max(3600).optional(), continuity: z.enum(['stop', 'smooth']).optional(), cameraId: z.string().min(1).nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0),
   }).strict(),
   outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:shot:${input.shotId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { shotId: input.shotId }),

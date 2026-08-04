@@ -4,7 +4,6 @@ import type {
   ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
-  JsonValue,
 } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 import { useCanvasStore, type CanvasEdge, type CanvasHistoryState, type CanvasNode } from '@/stores/canvasStore'
@@ -16,6 +15,7 @@ import {
   persistCanvasState,
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
+import { applyCanvasNodePropertyPatches, type CanvasNodePropertyPatch } from './canvasMutationService'
 import { CANVAS_ENTITY_TYPES } from './canvasReflection'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
@@ -36,7 +36,7 @@ function splitNodeRef(id: string): { projectId: string; nodeId: string } {
   return { projectId: id.slice(0, separator), nodeId: id.slice(separator + 1) }
 }
 
-function vector2(value: JsonValue): { x: number; y: number } {
+function vector2(value: MutationStep['mutations'][number]['value']): { x: number; y: number } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('INVALID_INPUT')
   const x = value.x
   const y = value.y
@@ -92,23 +92,26 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
       projectId, nodeIds: targets.map((target) => target.nodeId),
     })
     try {
+      const patches: CanvasNodePropertyPatch[] = []
       for (const target of targets) {
         const node = useCanvasStore.getState().nodes.find((item) => item.id === target.nodeId)
         if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId: target.nodeId })
+        const patch: CanvasNodePropertyPatch = { nodeId: target.nodeId }
         for (const mutation of target.step.mutations) {
           if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
           if (mutation.propertyId === `${CANVAS_ENTITY_TYPES.node}.display_name`) {
             if (typeof mutation.value !== 'string' || !mutation.value.trim()) throw new Error('INVALID_INPUT')
-            useCanvasStore.getState().updateNodeData(target.nodeId, { displayName: mutation.value.trim() })
+            patch.displayName = mutation.value
           } else if (mutation.propertyId === `${CANVAS_ENTITY_TYPES.node}.position`) {
             if (mutation.value === undefined) throw new Error('INVALID_INPUT')
-            useCanvasStore.getState().updateNodePosition(target.nodeId, vector2(mutation.value))
+            patch.position = vector2(mutation.value)
           } else {
             throw new Error(`PROPERTY_NOT_FOUND:${mutation.propertyId}`)
           }
         }
+        patches.push(patch)
       }
-      persistCanvasState()
+      applyCanvasNodePropertyPatches(projectId, patches)
     } catch (error) {
       useCanvasStore.getState().setCanvasData(before.nodes, before.edges, before.history)
       persistCanvasState()

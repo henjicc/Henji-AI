@@ -16,6 +16,8 @@ import {
   AGENT_ACTIVE_TOOL_LIMIT,
   AGENT_DISCOVERY_ADDED_TOOL_LIMIT,
 } from '../../../../../src/core/assistant/toolBudget'
+import { applicationCapabilitySearchResultSchema } from '../../../../../src/core/assistant/applicationCapabilities'
+import { applicationCapabilityDiscoveryOutputSchema } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
 import { createBackendBuiltinTools } from '../tools/builtin/backend'
 import { createFrontendApplicationCapabilityTools } from '../tools/builtin/frontend-capabilities'
@@ -23,6 +25,8 @@ import { AgentToolRegistry } from '../tools/registry'
 import { activateAgentTools } from './tool-activation'
 import { estimateModelMessagesTokens } from './compaction'
 import { selectContextLayers } from './layer-budget'
+
+// 双路径清单 DP-01、DP-02、DP-06：预算、估算与输出契约只允许具名常量来源。
 
 /**
  * 「一个不变量，多处各写一份」是本项目已经犯过两次的错：
@@ -136,6 +140,17 @@ describe('预算常量与契约一致', () => {
     expect(AGENT_SETTLEMENT_EVIDENCE_LIMIT).toBeGreaterThanOrEqual(AGENT_FACET_EVIDENCE_LIMIT)
     // 记忆读取上限只是一个正整数约束，放这里是为了让它和其他预算一起被看见。
     expect(AGENT_MEMORY_LIST_LIMIT).toBeGreaterThan(0)
+  })
+
+  it('能力发现的两份输出契约都容纳完整增量工具预算', () => {
+    const toolNames = Array.from(
+      { length: AGENT_DISCOVERY_ADDED_TOOL_LIMIT },
+      (_, index) => `tool_${index}`,
+    )
+    expect(applicationCapabilityDiscoveryOutputSchema.shape.addedToolNames.safeParse(toolNames).success)
+      .toBe(true)
+    expect(applicationCapabilitySearchResultSchema.shape.addedToolNames.safeParse(toolNames).success)
+      .toBe(true)
   })
 })
 

@@ -14,6 +14,7 @@ import type {
   AgentToolObservation,
   AgentToolPreview,
 } from './toolContracts'
+import { AGENT_DISCOVERY_ADDED_TOOL_LIMIT } from './toolBudget'
 
 const applicationCapabilityRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])
 const applicationCapabilityDataClassSchema = z.enum(['C0', 'C1', 'C2', 'C3'])
@@ -172,6 +173,6 @@ export type ApplicationCapabilityInvocation = z.infer<typeof applicationCapabili
 export const applicationCapabilitySearchResultSchema = z.object({
   catalogVersion: z.literal(APPLICATION_CAPABILITY_CATALOG_VERSION),
   capabilities: z.array(applicationCapabilityDescriptorSchema),
-  addedToolNames: z.array(z.string().min(1)).max(20),
+  addedToolNames: z.array(z.string().min(1)).max(AGENT_DISCOVERY_ADDED_TOOL_LIMIT),
   nextCursor: z.number().int().nonnegative().nullable(),
 }).strict()

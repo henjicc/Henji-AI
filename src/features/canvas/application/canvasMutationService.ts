@@ -11,11 +11,57 @@ import {
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
 
+interface CanvasNodePatch {
+  nodeId: string
+  data?: Partial<CanvasNodeData>
+  position?: { x: number; y: number }
+}
+
+export interface CanvasNodePropertyPatch {
+  nodeId: string
+  displayName?: string
+  position?: { x: number; y: number }
+}
+
 function requireNode(projectId: string, nodeId: string): { id: string; type: string; data: CanvasNodeData } {
   requireCurrentCanvasProject(projectId)
   const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
   if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId })
   return { id: node.id, type: node.type, data: node.data }
+}
+
+/** 画布节点数据/位置写入的共享内核；专用能力与通用属性动词都必须委托这里。 */
+function applyCanvasNodePatches(projectId: string, patches: CanvasNodePatch[]): void {
+  requireCurrentCanvasProject(projectId)
+  for (const patch of patches) requireNode(projectId, patch.nodeId)
+  const canvas = useCanvasStore.getState()
+  for (const patch of patches) {
+    if (patch.data && Object.keys(patch.data).length > 0) canvas.updateNodeData(patch.nodeId, patch.data)
+    if (patch.position) canvas.updateNodePosition(patch.nodeId, patch.position)
+  }
+  persistCanvasState()
+}
+
+export function applyCanvasNodePropertyPatches(
+  projectId: string,
+  patches: CanvasNodePropertyPatch[],
+): void {
+  const normalized = patches.map((patch) => {
+    if (patch.displayName !== undefined && !patch.displayName.trim()) {
+      throw new CanvasApplicationError('INVALID_INPUT', '画布节点标题不能为空')
+    }
+    if (patch.position && ![patch.position.x, patch.position.y].every(Number.isFinite)) {
+      throw new CanvasApplicationError('INVALID_INPUT', '画布节点位置必须是有限数值')
+    }
+    return {
+      nodeId: patch.nodeId,
+      ...(patch.displayName !== undefined
+        ? { data: { displayName: patch.displayName.trim() } }
+        : {}),
+      ...(patch.position ? { position: patch.position } : {}),
+    }
+  })
+  applyCanvasNodePatches(projectId, normalized)
 }
 
 export function duplicateCanvasNode(input: {
@@ -43,12 +89,11 @@ export function updateCanvasNode(input: {
   const safeData = extractCanvasNodeData(node.type, input.data)
   const canvas = useCanvasStore.getState()
   const beforeDepth = canvas.history.past.length
-  canvas.updateNodeData(node.id, safeData)
+  applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }])
   if (useCanvasStore.getState().history.past.length === beforeDepth) {
     throw new CanvasApplicationError('INVALID_INPUT', '节点数据未发生可保存的变化', true, { nodeId: node.id })
   }
   const undoRef = rememberCanvasUndo(input.projectId, 'update_node')
-  persistCanvasState()
   return { projectId: input.projectId, nodeId: node.id, updatedKeys: Object.keys(safeData), undoRef }
 }
 

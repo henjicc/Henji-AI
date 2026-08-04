@@ -4,6 +4,7 @@ import { applicationSchemaRefSchema } from '../application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from './applicationCapabilities'
 import { agentTaskCapabilityKindSchema } from './taskGraph'
 import type { AgentTaskGraph } from './taskGraph'
+import { AGENT_DISCOVERY_ADDED_TOOL_LIMIT } from './toolBudget'
 
 export const APPLICATION_CAPABILITY_DISCOVERY_VERSION = 'application-capability-discovery/v1' as const
 
@@ -71,7 +72,7 @@ export const applicationCapabilityDiscoveryOutputSchema = z.object({
   capabilities: z.array(applicationCapabilityDiscoveryMatchSchema).max(20),
   facets: z.array(facetDiscoveryResultSchema).max(16),
   missing: z.array(missingFacetSchema).max(16),
-  addedToolNames: z.array(z.string().min(1).max(128)).max(20),
+  addedToolNames: z.array(z.string().min(1).max(128)).max(AGENT_DISCOVERY_ADDED_TOOL_LIMIT),
   page: z.object({
     returnedItems: z.number().int().nonnegative(),
     nextCursor: z.number().int().nonnegative().nullable(),

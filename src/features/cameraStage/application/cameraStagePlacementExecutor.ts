@@ -7,6 +7,7 @@ import type {
   ApplicationSemanticOperationExecutor,
   JsonValue,
 } from '@/core/application-control'
+import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import type { CameraStageControlExecutorDependencies } from './cameraStageControlExecutors'
@@ -20,7 +21,7 @@ export const cameraStagePlacementInputSchema = z.object({
   objectId: z.string().min(1).optional(),
   objectType: z.enum(['primitive', 'character', 'camera']),
   primitiveKind: z.enum(['box', 'sphere', 'cylinder', 'cone', 'pyramid', 'torus']).optional(),
-  name: z.string().trim().min(1).max(120).optional(),
+  name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(),
   role: z.enum(['subject', 'prop', 'character', 'camera', 'environment']).optional(),
   reusePolicy: z.enum(['prefer_existing', 'require_new']).default('prefer_existing'),
   placement: z.object({

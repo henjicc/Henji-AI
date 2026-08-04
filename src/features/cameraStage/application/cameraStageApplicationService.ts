@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
 import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageTransform, StageVec3 } from '../domain/sceneTypes'
 import type { StageCameraEffector, StageEditorMode, StageShot } from '../domain/shotTypes'
@@ -89,13 +90,18 @@ function assertFiniteVec3(value: StageVec3, label: string): void {
   if (![value.x, value.y, value.z].every(Number.isFinite)) throw new Error(`INVALID_${label}`)
 }
 
-function uniqueObjectName(objects: StageObject[], requested: string, excludedId?: string): string {
-  const base = requested.trim().slice(0, 120)
+export function resolveUniqueCameraStageObjectName(
+  objects: StageObject[],
+  requested: string,
+  excludedId?: string,
+): string {
+  const base = requested.trim().slice(0, CAMERA_STAGE_NAME_MAX_LENGTH)
   if (!base) throw new Error('INVALID_INPUT')
   const occupied = new Set(objects.filter((object) => object.id !== excludedId).map((object) => object.name))
   if (!occupied.has(base)) return base
   for (let index = 2; index < 10_000; index += 1) {
-    const candidate = `${base} ${index}`
+    const suffix = ` ${index}`
+    const candidate = `${base.slice(0, CAMERA_STAGE_NAME_MAX_LENGTH - suffix.length)}${suffix}`
     if (!occupied.has(candidate)) return candidate
   }
   throw new Error('NAME_CONFLICT')
@@ -112,7 +118,7 @@ function requireObject(projectId: string, objectId: string): StageObject {
 function validateObjectUpdate(object: StageObject, objects: StageObject[], update: CameraStageObjectUpdate): StageObjectPatch {
   const patch: StageObjectPatch = {}
   if (update.name !== undefined) {
-    const unique = uniqueObjectName(objects, update.name, object.id)
+    const unique = resolveUniqueCameraStageObjectName(objects, update.name, object.id)
     if (unique !== update.name.trim()) throw new Error('NAME_CONFLICT')
     patch.name = unique
   }
@@ -363,7 +369,7 @@ export const cameraStageApplicationService = {
         scale,
       }
       const name = input.spec.name
-        ? uniqueObjectName(state.objects, input.spec.name, object.id)
+        ? resolveUniqueCameraStageObjectName(state.objects, input.spec.name, object.id)
         : object.name
       state.updateObject(object.id, { name, transform })
       await saveCurrentProject()

@@ -7,6 +7,7 @@ import {
   type JsonValue,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
 import type { StageObject } from '../domain/sceneTypes'
 import { getAnimatablePropByPath, listAnimatablePropertyPaths } from '../domain/animatableProps'
@@ -114,7 +115,7 @@ function animatableProperties(entityType: typeof ENTITY_TYPES.object | typeof EN
 
 const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = {
   [ENTITY_TYPES.project]: [
-    property(ENTITY_TYPES.project, 'name', '工程名称', { kind: 'string', minLength: 1, maxLength: 120 }),
+    property(ENTITY_TYPES.project, 'name', '工程名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
     property(ENTITY_TYPES.project, 'editor_mode', '编辑模式', { kind: 'enum', values: [{ value: 'simple', label: '简易' }, { value: 'pro', label: '专业' }] }, { readOnly: '编辑模式只能通过正式烘焙操作切换。' }),
     property(ENTITY_TYPES.project, 'object_count', '对象数量', INTEGER, { readOnly: '对象数量由场景内容计算。' }),
     property(ENTITY_TYPES.project, 'shot_count', '镜头数量', INTEGER, { readOnly: '镜头数量由镜头列表计算。' }),
@@ -128,7 +129,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.scene, 'fps', '帧率', { kind: 'integer', hardRange: { min: 1, max: 240 } }, { unit: 'fps' }),
   ],
   [ENTITY_TYPES.object]: [
-    property(ENTITY_TYPES.object, 'name', '对象名称', { kind: 'string', minLength: 1, maxLength: 120 }),
+    property(ENTITY_TYPES.object, 'name', '对象名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
     property(ENTITY_TYPES.object, 'type', '对象类型', { kind: 'enum', values: [{ value: 'primitive', label: '基础几何体' }, { value: 'character', label: '角色' }] }, { readOnly: '对象类型创建后不可变更。' }),
     property(ENTITY_TYPES.object, 'visible', '可见性', BOOLEAN),
     property(ENTITY_TYPES.object, 'color', '材质颜色', COLOR),
@@ -142,7 +143,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     ...animatableProperties(ENTITY_TYPES.object),
   ],
   [ENTITY_TYPES.camera]: [
-    property(ENTITY_TYPES.camera, 'name', '摄像机名称', { kind: 'string', minLength: 1, maxLength: 120 }),
+    property(ENTITY_TYPES.camera, 'name', '摄像机名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
     property(ENTITY_TYPES.camera, 'visible', '可见性', BOOLEAN),
     property(ENTITY_TYPES.camera, 'transform.position', '位置', VECTOR3),
     property(ENTITY_TYPES.camera, 'transform.rotation', '旋转', { kind: 'vector3', unit: 'degree' }),
@@ -156,7 +157,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     ...animatableProperties(ENTITY_TYPES.camera),
   ],
   [ENTITY_TYPES.shot]: [
-    property(ENTITY_TYPES.shot, 'name', '镜头名称', { kind: 'string', minLength: 1, maxLength: 120 }),
+    property(ENTITY_TYPES.shot, 'name', '镜头名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
     property(ENTITY_TYPES.shot, 'time', '时间点', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),
     property(ENTITY_TYPES.shot, 'hold', '停留时长', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),
     property(ENTITY_TYPES.shot, 'transition_duration', '过渡时长', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),

@@ -7,6 +7,8 @@ import type { StageTrack } from '../domain/animationTypes'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
 import { applyAnimationToPlaybackAppliers, registerPlaybackApplier } from './playbackAppliers'
 
+// 双路径清单 DP-04：命令式播放不能遗漏响应式渲染会解算的摄像机注视朝向。
+
 /**
  * 实测缺陷：环绕运镜做完之后，拖时间指针看到的朝向是对的，按空格播放却始终朝前。
  *

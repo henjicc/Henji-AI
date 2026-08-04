@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
 import {
+  CAMERA_STAGE_NAME_MAX_LENGTH,
   CONFLICT_RECOVERY, cameraStageControl, cameraStageTarget, cameraStageTransactionResultShape } from './cameraStageCapabilitySchemas'
 
 const listProjects = defineApplicationCapability({
@@ -55,7 +56,7 @@ const createProject = defineApplicationCapability({
   aliases: ['创建 3D 工程', 'new camera stage project'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 15_000,
   supportsPreview: false, supportsUndo: false, requiredScopes: ['toolbox'], producesRefs: ['camera_stage.project', 'camera_stage.camera', 'camera_stage.shot'],
-  inputSchema: z.object({ name: z.string().trim().min(1).max(120), mode: z.enum(['simple', 'pro']).default('simple') }).strict(),
+  inputSchema: z.object({ name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH), mode: z.enum(['simple', 'pro']).default('simple') }).strict(),
   outputSchema: capabilityOutputSchema({ projectId: z.string(), name: z.string(), mode: z.enum(['simple', 'pro']), defaultCameraId: z.string(), defaultShotId: z.string(), baseRevision: z.number().int().nonnegative() }),
   concurrencyKey: 'camera_stage_project', resolveTargetIds: (input) => ({ name: input.name }),
   control: cameraStageControl('create', ['camera_stage.project', 'camera_stage.camera', 'camera_stage.shot']),
@@ -68,7 +69,7 @@ const renameProjectCapability = defineApplicationCapability({
   permission: 'camera_stage:write', idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project'], producesRefs: ['camera_stage.project'],
   failureRecovery: [CONFLICT_RECOVERY],
-  inputSchema: z.object({ projectId: z.string().min(1), name: z.string().trim().min(1).max(120), baseRevision: z.number().int().nonnegative() }).strict(),
+  inputSchema: z.object({ projectId: z.string().min(1), name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH), baseRevision: z.number().int().nonnegative() }).strict(),
   outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
   resolveConcurrencyKey: (input) => `camera_stage_project:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
   control: cameraStageControl('update', ['camera_stage.project'], ['camera_stage.project.name']),

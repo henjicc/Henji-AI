@@ -2,6 +2,9 @@ import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 
+/** 三维工程、对象与镜头名称的契约上限，schema 与领域服务共用。 */
+export const CAMERA_STAGE_NAME_MAX_LENGTH = 120
+
 export const cameraStageVec3Schema = z.object({
   x: z.number(),
   y: z.number(),
@@ -11,7 +14,7 @@ export const cameraStageVec3Schema = z.object({
 export const cameraStageBaseRevisionSchema = z.number().int().nonnegative()
 
 export const cameraStageObjectUpdateSchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
+  name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(),
   visible: z.boolean().optional(),
   color: z.string().regex(/^#[0-9a-f]{6}$/i).optional(),
   transform: z.object({

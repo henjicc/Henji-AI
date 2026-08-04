@@ -11,9 +11,9 @@
 
 import type { StageKeyframeValue, StageTrack } from '../domain/animationTypes'
 import { listAnimatableGroups } from '../domain/animatableProps'
-import { sampleTrack } from '../domain/keyframeEngine'
-import { rotationFromPositionAndTarget } from '../domain/cameraUtils'
-import type { StageObject, StageVec3 } from '../domain/sceneTypes'
+import { resolveCameraRotation } from '../domain/cameraUtils'
+import type { StageObject } from '../domain/sceneTypes'
+import { sampleAnimationFrame } from './playbackSampling'
 
 export type PlaybackApplyFn = (value: StageKeyframeValue, time: number) => void
 
@@ -56,26 +56,6 @@ export function runPlaybackAppliers(
   for (const fn of set) fn(value, time)
 }
 
-/** 按当前时间采样得到的位置；没有位置轨道的对象退回自身静态位置。 */
-function sampledPositions(
-  objects: StageObject[],
-  trackByKey: Map<string, StageTrack>,
-  time: number,
-): Map<string, StageVec3> {
-  const positions = new Map<string, StageVec3>()
-  for (const object of objects) {
-    const position = { ...object.transform.position }
-    for (const axis of ['x', 'y', 'z'] as const) {
-      const track = trackByKey.get(`${object.id}::transform.position.${axis}`)
-      if (!track) continue
-      const sampled = sampleTrack(track, time, 'scalar')
-      if (typeof sampled === 'number') position[axis] = sampled
-    }
-    positions.set(object.id, position)
-  }
-  return positions
-}
-
 /**
  * 播放期重算摄像机朝向。
  *
@@ -89,38 +69,19 @@ function sampledPositions(
  */
 function applyCameraLookAtRotation(
   objects: StageObject[],
-  trackByKey: Map<string, StageTrack>,
-  positions: Map<string, StageVec3>,
+  trackKeys: ReadonlySet<string>,
   time: number,
 ): void {
   for (const object of objects) {
     if (object.type !== 'camera') continue
     // 作者显式打了旋转关键帧时以作者为准，不要用 lookAt 覆盖
     const hasAuthoredRotation = (['x', 'y', 'z'] as const)
-      .some((axis) => trackByKey.has(`${object.id}::transform.rotation.${axis}`))
+      .some((axis) => trackKeys.has(`${object.id}::transform.rotation.${axis}`))
     if (hasAuthoredRotation) continue
-
-    const cameraPosition = positions.get(object.id) ?? object.transform.position
-    const lookAt = object.lookAt
-    let target: StageVec3
-    if (lookAt.mode === 'manual') {
-      target = lookAt.target
-    } else {
-      const targetObject = objects.find((candidate) => candidate.id === lookAt.objectId)
-      const targetPosition = positions.get(lookAt.objectId)
-      if (!targetObject || !targetPosition) {
-        target = lookAt.fallbackTarget
-      } else {
-        // 与 getObjectLookAtPoint 同一套规则：角色看胸口，其余看自身原点
-        target = targetObject.type === 'character'
-          ? { ...targetPosition, y: targetPosition.y + targetObject.transform.scale.y }
-          : targetPosition
-      }
-    }
     runPlaybackAppliers(
       object.id,
       'transform.rotation',
-      rotationFromPositionAndTarget(cameraPosition, target, object.transform.rotation.z),
+      resolveCameraRotation(object, objects),
       time,
     )
   }
@@ -135,39 +96,22 @@ export function applyAnimationToPlaybackAppliers(
   tracks: StageTrack[],
   time: number,
 ): void {
-  const trackByKey = new Map<string, StageTrack>()
-  for (const track of tracks) trackByKey.set(`${track.objectId}::${track.propertyPath}`, track)
+  const frame = sampleAnimationFrame(objects, tracks, time)
 
-  for (const object of objects) {
+  for (const object of frame.objects) {
     for (const group of listAnimatableGroups(object)) {
-      if (group.valueType === 'vec3') {
-        const output: StageVec3 = { ...(group.getBaseValue(object) as StageVec3) }
-        let sampledTrack = false
-        for (const child of group.children) {
-          const track = trackByKey.get(`${object.id}::${child.path}`)
-          if (!track || !child.axis) continue
-          const sampled = sampleTrack(track, time, 'scalar')
-          if (sampled === undefined) continue
-          output[child.axis] = sampled as number
-          sampledTrack = true
-        }
-        const drivesCameraEffectors = object.type === 'camera'
-          && group.groupPath === 'transform.position'
-          && object.effectors.some((effector) => effector.enabled)
-        if (sampledTrack || drivesCameraEffectors) {
-          runPlaybackAppliers(object.id, group.groupPath, output, time)
-        }
-        continue
+      const sampledTrack = group.children.some((child) => (
+        frame.trackKeys.has(`${object.id}::${child.path}`)
+      ))
+      const drivesCameraEffectors = object.type === 'camera'
+        && group.groupPath === 'transform.position'
+        && object.effectors.some((effector) => effector.enabled)
+      if (sampledTrack || drivesCameraEffectors) {
+        runPlaybackAppliers(object.id, group.groupPath, group.getBaseValue(object), time)
       }
-
-      const child = group.children[0]
-      const track = trackByKey.get(`${object.id}::${child.path}`)
-      if (!track) continue
-      const sampled = sampleTrack(track, time, group.valueType)
-      if (sampled !== undefined) runPlaybackAppliers(object.id, group.groupPath, sampled, time)
     }
   }
 
   // 位置全部推送完之后再定朝向：注视目标可能自己也在动，必须用它这一帧的采样位置
-  applyCameraLookAtRotation(objects, trackByKey, sampledPositions(objects, trackByKey, time), time)
+  applyCameraLookAtRotation(frame.objects, frame.trackKeys, time)
 }
