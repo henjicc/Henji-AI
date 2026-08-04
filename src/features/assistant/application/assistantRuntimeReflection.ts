@@ -169,6 +169,9 @@ export function createAssistantRuntimeReflectionRegistrations(): ApplicationEnti
       revisionScopes: ['assistant_runtime'],
       queryCapabilityIds: [entityType === ASSISTANT_RUNTIME_ENTITY_TYPES.run ? 'get_current_application_context' : 'read_agent_artifact'],
       schemaRef: schemaRef('entity', entityType),
+      writeExclusion: {
+        reason: '助手运行与产物由 Agent 运行时自身维护，让助手改写自己的运行状态会破坏结算与证据链。',
+      },
     },
     properties: properties[entityType],
     provider: new AssistantRuntimeReflectionProvider(entityType),

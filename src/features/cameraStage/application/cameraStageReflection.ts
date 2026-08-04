@@ -421,6 +421,11 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         revisionScopes: [REVISION_SCOPE],
         queryCapabilityIds: meta.queryIds,
         schemaRef: schemaRef('entity', entityType),
+        ...(entityType === ENTITY_TYPES.trajectory ? {
+          writeExclusion: {
+            reason: '轨迹由 apply_camera_stage_camera_move 的轨迹采样算法产生，属算法型操作的产物。',
+          },
+        } : {}),
         ...(entityType === ENTITY_TYPES.keyframe ? {
           /**
            * 关键帧可增删。这一句就是"助手能不能做动画"的开关：实体、属性、provider 早就注册

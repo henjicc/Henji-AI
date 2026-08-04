@@ -63,7 +63,9 @@ const properties: Record<AssetEntityType, ApplicationPropertyDescriptor[]> = {
     property(ASSET_ENTITY_TYPES.asset, 'display_name', '显示名称', { kind: 'string', minLength: 1, maxLength: 200 }, READ_ONLY),
     property(ASSET_ENTITY_TYPES.asset, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }, READ_ONLY),
     property(ASSET_ENTITY_TYPES.asset, 'tags', '标签', { kind: 'json', schemaRef: ASSET_TAGS_VALUE_SCHEMA_REF }),
-    property(ASSET_ENTITY_TYPES.asset, 'library_refs', '所属集合', { kind: 'ref_list', refKinds: [ASSET_ENTITY_TYPES.library] }, READ_ONLY),
+    // 集合归属用 append / remove 两个属性修改操作表达，对应服务的 addToLibrary / removeFromLibrary。
+    // 这类「成员关系」不需要独立的集合执行器：ref_list 属性本身就支持增删语义。
+    property(ASSET_ENTITY_TYPES.asset, 'library_refs', '所属集合', { kind: 'ref_list', refKinds: [ASSET_ENTITY_TYPES.library] }),
     property(ASSET_ENTITY_TYPES.asset, 'inspection_status', '检查状态', { kind: 'string', maxLength: 40 }, READ_ONLY),
     property(ASSET_ENTITY_TYPES.asset, 'media_ref', '媒体引用', { kind: 'string', maxLength: 4096 }, READ_ONLY),
   ],
@@ -178,6 +180,12 @@ export function createAssetReflectionRegistrations(): ApplicationEntityRegistrat
       revisionScopes: ['assets'],
       queryCapabilityIds: [entityType === ASSET_ENTITY_TYPES.asset ? 'get_asset' : 'list_asset_libraries'],
       schemaRef: schemaRef('entity', entityType),
+      // asset 本身有可写属性（tags / library_refs），只有集合实体整体只读
+      ...(entityType === ASSET_ENTITY_TYPES.library ? {
+        writeExclusion: {
+          reason: '素材集合的创建与命名由素材库界面维护；素材与集合的归属关系改写 asset.library_refs。',
+        },
+      } : {}),
     },
     properties: properties[entityType],
     provider: new AssetReflectionProvider(entityType),

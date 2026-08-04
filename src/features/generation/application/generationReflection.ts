@@ -192,6 +192,11 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       revisionScopes: [entityType === GENERATION_ENTITY_TYPES.model ? 'models' : 'generation'],
       queryCapabilityIds: [entityType === GENERATION_ENTITY_TYPES.model ? 'get_model_schema' : 'get_generation_task'],
       schemaRef: schemaRef('entity', entityType),
+      writeExclusion: {
+        reason: entityType === GENERATION_ENTITY_TYPES.model
+          ? '模型目录由 src/models/** 的静态定义生成，不是用户数据。'
+          : '生成任务与结果由生成链路创建和维护；发起任务属算法型操作，用 create_visible_generation_task。',
+      },
     },
     properties: properties[entityType],
     provider: new GenerationReflectionProvider(entityType),

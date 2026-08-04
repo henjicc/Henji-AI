@@ -48,6 +48,41 @@ describe('集合写入覆盖一致', () => {
     expect(missing, `以下实体声明了可增删但没有集合执行器：${missing.join('、')}`).toEqual([])
   })
 
+  /**
+   * 覆盖率门禁：**每个实体要么能写，要么写明为什么不能写**。
+   *
+   * 没有这条时，「某个领域忘了接执行器」和「这个实体有意只读」在机器看来完全一样，只能靠人
+   * 记住——本项目已经因此吃过多次亏：能力其实存在、模型也知道该调什么，但没人把它接上，
+   * 直到用户实测才发现。
+   */
+  it('每个实体要么有写入执行器，要么写明排除原因', () => {
+    const registry = getApplicationReflectionRegistry()
+    const engine = getApplicationControlExecutionEngine() as unknown as {
+      mutationExecutors: Map<string, unknown>
+      collectionExecutors: Map<string, unknown>
+    }
+    const uncovered = registry.describe({}, accessContext).entities.filter((entity) => (
+      !engine.mutationExecutors.has(entity.id)
+      && !engine.collectionExecutors.has(entity.id)
+      && !entity.writeExclusion
+    ))
+    expect(
+      uncovered.map((entity) => `${entity.domain}/${entity.id}`),
+      '以下实体既没有写入执行器，也没有 writeExclusion.reason：要么补执行器，要么写明该状态由谁维护',
+    ).toEqual([])
+  })
+
+  it('排除原因必须说明由谁维护，不接受敷衍表述', () => {
+    const excluded = getApplicationReflectionRegistry().describe({}, accessContext).entities
+      .filter((entity) => entity.writeExclusion)
+    expect(excluded.length).toBeGreaterThan(0)
+    for (const entity of excluded) {
+      const reason = entity.writeExclusion?.reason ?? ''
+      expect(reason.length, entity.id).toBeGreaterThan(10)
+      expect(reason, entity.id).not.toMatch(/暂时|暂不|以后再|待定/)
+    }
+  })
+
   it('三维关键帧已经是可增删的实体', () => {
     const keyframe = getApplicationReflectionRegistry()
       .describe({ entityTypes: ['camera_stage.keyframe'] }, accessContext).entities[0]

@@ -25,7 +25,20 @@ function schemaRef(kind: 'entity' | 'property', id: string) {
   return { catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION, kind, id, version: 1, digest: digest(`${kind}:${id}`) } as const
 }
 
-function property(entityType: StoryboardEntityType, suffix: string, title: string, value: ApplicationPropertyDescriptor['value']): ApplicationPropertyDescriptor {
+/**
+ * `readOnlyReason` 是**可选参数**，不传即为可写。
+ *
+ * 此前它被写死在函数体里，签名根本不接受这个参数——于是分镜领域内没有任何属性有可能被声明
+ * 为可写，与属性本身的语义无关。判定被结构固化，没人做过真正的决策。写法对齐
+ * `assetReflection.ts`：不传理由即可写，`requiredPermissions.write` 随之变化。
+ */
+function property(
+  entityType: StoryboardEntityType,
+  suffix: string,
+  title: string,
+  value: ApplicationPropertyDescriptor['value'],
+  readOnlyReason?: string,
+): ApplicationPropertyDescriptor {
   const id = `${entityType}.${suffix}`
   return {
     id,
@@ -37,22 +50,34 @@ function property(entityType: StoryboardEntityType, suffix: string, title: strin
     nullable: false,
     dataClass: 'C1',
     exposures: ['ui', 'assistant', 'local_adapter'],
-    requiredPermissions: { read: ['storyboard:read'], write: [] },
+    requiredPermissions: { read: ['storyboard:read'], write: readOnlyReason ? [] : ['storyboard:write'] },
     revisionScopes: ['storyboard'],
     schemaRef: schemaRef('property', id),
-    readOnlyReason: '当前分镜对象通过画布分镜编辑器与正式画布事务维护。',
+    ...(readOnlyReason ? { readOnlyReason } : {}),
   }
 }
 
+/**
+ * 分镜全部属性只读，理由逐条给出。
+ *
+ * 分镜不是独立数据，而是**画布工程的只读摘要投影**：`storyboardProjectService.getStoryboardProject`
+ * 读的是同一份画布工程记录（`nodesJson` / `edgesJson`），做截断摘要后返回，整个服务只有读取
+ * 函数。卡片引用用的也是 `nodeId`。要改分镜内容，走 `canvas.*` 的通用动词。
+ */
 const properties: Record<StoryboardEntityType, ApplicationPropertyDescriptor[]> = {
   [STORYBOARD_ENTITY_TYPES.project]: [
-    property(STORYBOARD_ENTITY_TYPES.project, 'name', '项目名称', { kind: 'string', maxLength: 200 }),
-    property(STORYBOARD_ENTITY_TYPES.project, 'card_refs', '分镜卡引用', { kind: 'ref_list', refKinds: [STORYBOARD_ENTITY_TYPES.card], maxItems: 1000 }),
-    property(STORYBOARD_ENTITY_TYPES.project, 'edge_count', '关系数量', { kind: 'integer', hardRange: { min: 0 } }),
+    property(STORYBOARD_ENTITY_TYPES.project, 'name', '项目名称', { kind: 'string', maxLength: 200 },
+      '分镜工程名即画布工程名，改名请写 canvas.project.name。'),
+    property(STORYBOARD_ENTITY_TYPES.project, 'card_refs', '分镜卡引用', { kind: 'ref_list', refKinds: [STORYBOARD_ENTITY_TYPES.card], maxItems: 1000 },
+      '卡片集合由画布节点派生，增删请用 canvas.node 的集合写入。'),
+    property(STORYBOARD_ENTITY_TYPES.project, 'edge_count', '关系数量', { kind: 'integer', hardRange: { min: 0 } },
+      '由画布连线数量统计得出。'),
   ],
   [STORYBOARD_ENTITY_TYPES.card]: [
-    property(STORYBOARD_ENTITY_TYPES.card, 'project_ref', '所属项目', { kind: 'ref', refKinds: [STORYBOARD_ENTITY_TYPES.project] }),
-    property(STORYBOARD_ENTITY_TYPES.card, 'node_type', '节点类型', { kind: 'string', maxLength: 120 }),
+    property(STORYBOARD_ENTITY_TYPES.card, 'project_ref', '所属项目', { kind: 'ref', refKinds: [STORYBOARD_ENTITY_TYPES.project] },
+      '卡片所属工程不可变更。'),
+    property(STORYBOARD_ENTITY_TYPES.card, 'node_type', '节点类型', { kind: 'string', maxLength: 120 },
+      '卡片即画布节点，节点类型创建后不可变更。'),
   ],
 }
 
@@ -159,6 +184,7 @@ export function createStoryboardReflectionRegistrations(): ApplicationEntityRegi
       revisionScopes: ['storyboard'],
       queryCapabilityIds: [entityType === STORYBOARD_ENTITY_TYPES.project ? 'get_storyboard_project' : 'get_storyboard_project'],
       schemaRef: schemaRef('entity', entityType),
+      writeExclusion: { reason: '分镜是画布工程的只读摘要投影，写入请用 canvas.* 的通用动词。' },
     },
     properties: properties[entityType],
     provider: new StoryboardReflectionProvider(entityType),

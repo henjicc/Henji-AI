@@ -62,6 +62,18 @@ export const applicationEntityTypeDescriptorSchema = z.object({
     /** 一次事务里最多创建多少个，防止模型一口气写爆场景 */
     maxItemsPerChange: z.number().int().positive().max(256).default(64),
   }).strict().optional(),
+  /**
+   * 这个实体类型**有意**不开放写入，以及由谁维护它的状态。
+   *
+   * 它存在的唯一理由是让门禁能区分「有意只读」和「忘了实现」。没有这个字段时，
+   * `toolbox.tool` 缺执行器和某个领域漏了实现在机器看来完全一样，只能靠人记住——
+   * 而这正是本项目已经吃过多次亏的模式。
+   *
+   * 理由必须说明该状态由哪个模块或链路维护，不接受「暂时不需要」这类无法验证的表述。
+   */
+  writeExclusion: z.object({
+    reason: z.string().min(1).max(500),
+  }).strict().optional(),
 }).strict()
 export type ApplicationEntityTypeDescriptor = z.infer<typeof applicationEntityTypeDescriptorSchema>
 

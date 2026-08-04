@@ -2,7 +2,8 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
-import { notifyHostScopeChanged } from '../hostContext/hostContext'
+import { getHostScopeRevisions, notifyHostScopeChanged } from '../hostContext/hostContext'
+import { configureAssetMutationDependencies } from './applicationControlRegistry'
 
 interface AssetQueryInput {
   mediaType?: 'image' | 'video' | 'audio'
@@ -55,6 +56,10 @@ export function registerAssetCapabilityHandlers(
     return await runWrite(() => assetApplicationService.replaceTags(parsed.assetId, parsed.tags))
   })
 
+  configureAssetMutationDependencies({
+    readRevision: () => getHostScopeRevisions().assets,
+    bumpRevision: () => notifyHostScopeChanged('assets'),
+  })
   registrar.registerHandler('add_asset_to_library', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{

@@ -23,6 +23,11 @@ import {
   type CanvasCollectionDependencies,
 } from '@/features/canvas/application/canvasCollectionExecutor'
 import { CanvasNodeMutationExecutor } from '@/features/canvas/application/canvasMutationExecutor'
+import { CanvasProjectMutationExecutor } from '@/features/canvas/application/canvasProjectMutationExecutor'
+import {
+  AssetMutationExecutor,
+  type AssetMutationDependencies,
+} from '@/features/assets/application/assetMutationExecutor'
 import { createAssetReflectionRegistrations } from '@/features/assets/application/assetReflection'
 import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
 import { createStoryboardReflectionRegistrations } from '@/features/canvas/application/storyboardReflection'
@@ -40,6 +45,15 @@ let cameraStageDependencies: CameraStageControlExecutorDependencies = {
 let canvasCollectionDependencies: CanvasCollectionDependencies = {
   readRevision: () => 0,
   bumpRevision: () => undefined,
+}
+
+let assetMutationDependencies: AssetMutationDependencies = {
+  readRevision: () => 0,
+  bumpRevision: () => undefined,
+}
+
+export function configureAssetMutationDependencies(dependencies: AssetMutationDependencies): void {
+  assetMutationDependencies = dependencies
 }
 
 export function configureCanvasCollectionDependencies(
@@ -108,6 +122,12 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   const next = new ApplicationControlExecutionEngine(getApplicationReflectionRegistry())
   next.registerMutationExecutor(new SettingsMutationExecutor())
   next.registerMutationExecutor(new CanvasNodeMutationExecutor())
+  next.registerMutationExecutor(new CanvasProjectMutationExecutor())
+  // 素材：闭合 asset.tags 与 asset.library_refs 的悬空可写声明
+  next.registerMutationExecutor(new AssetMutationExecutor({
+    readRevision: () => assetMutationDependencies.readRevision(),
+    bumpRevision: () => assetMutationDependencies.bumpRevision(),
+  }))
   const dependencies: CameraStageControlExecutorDependencies = {
     readRevision: () => cameraStageDependencies.readRevision(),
     bumpRevision: () => cameraStageDependencies.bumpRevision(),

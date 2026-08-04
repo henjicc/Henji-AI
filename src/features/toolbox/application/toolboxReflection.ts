@@ -112,6 +112,7 @@ export function createToolboxReflectionRegistration(): ApplicationEntityRegistra
       revisionScopes: ['toolbox'],
       queryCapabilityIds: ['list_toolbox_tools'],
       schemaRef: schemaRef('entity', TOOLBOX_TOOL_ENTITY_TYPE),
+      writeExclusion: { reason: '工具由工具箱注册表定义，属于应用结构而非用户数据。' },
     },
     properties,
     provider: new ToolboxReflectionProvider(),
