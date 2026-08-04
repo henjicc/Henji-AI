@@ -55,6 +55,9 @@ const addCanvasNode = defineApplicationCapability({
   resolveTargetIds: (input) => target(input.projectId, { nodeType: input.nodeType }),
   summarize: (output) => `已在项目 ${output.projectId} 添加节点 ${output.nodeId}。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
 })
 
 const addAssetToCanvas = defineApplicationCapability({
@@ -135,6 +138,9 @@ const connectCanvasNodes = defineApplicationCapability({
   }),
   summarize: (output) => `已创建画布连接 ${output.edgeId}。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
 })
 
 const focusCanvasNode = defineApplicationCapability({
@@ -243,6 +249,9 @@ const duplicateCanvasNode = defineApplicationCapability({
   resolveTargetIds: (input) => target(input.projectId, { nodeId: input.nodeId }),
   summarize: (output) => `已复制画布节点 ${output.duplicatedFromNodeId} 为 ${output.nodeId}。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
 })
 
 const updateCanvasNode = defineApplicationCapability({
@@ -280,6 +289,15 @@ const updateCanvasNode = defineApplicationCapability({
   resolveTargetIds: (input) => target(input.projectId, { nodeId: input.nodeId }),
   summarize: (output) => `已更新画布节点 ${output.nodeId}。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'update', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
+  resolveObservedEffects: (input, output) => [{
+    effect: 'update', entityTypes: ['canvas.node'],
+    propertyIds: Object.keys(input.data).map((key) => `canvas.node.${key}`),
+    targetRefs: [{ kind: 'canvas.node', id: input.nodeId }], count: 1, verified: false,
+    evidence: [`node:${output.nodeId}`],
+  }],
 })
 
 const deleteCanvasNodes = defineApplicationCapability({
@@ -322,6 +340,14 @@ const deleteCanvasNodes = defineApplicationCapability({
   }),
   summarize: (output) => `已删除 ${output.deletedNodeIds.length} 个画布节点。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'confirmation_required', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'delete', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
+  resolveObservedEffects: (input, output) => [{
+    effect: 'delete', entityTypes: ['canvas.node'], propertyIds: [],
+    targetRefs: input.nodeIds.map((id) => ({ kind: 'canvas.node', id })), count: input.nodeIds.length,
+    verified: false, evidence: [`undo:${output.undoRef}`],
+  }],
 })
 
 const selectCanvasNode = defineApplicationCapability({
@@ -355,6 +381,9 @@ const selectCanvasNode = defineApplicationCapability({
   resolveConcurrencyKey: (input) => `canvas:${input.projectId}:selection`,
   resolveTargetIds: (input) => target(input.projectId, { nodeId: input.nodeId ?? '' }),
   summarize: (output) => `当前选中节点：${output.selectedNodeId ?? '无'}。`,
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'update', entityTypes: ['canvas.project'], propertyIds: ['canvas.project.selected_node'], revisionScopes: ['canvas'], verificationRequired: false,
+  }] },
 })
 
 const groupCanvasNodes = defineApplicationCapability({
@@ -390,6 +419,9 @@ const groupCanvasNodes = defineApplicationCapability({
   resolveTargetIds: (input) => target(input.projectId, { nodeIds: input.nodeIds.join(',') }),
   summarize: (output) => `已创建节点组 ${output.groupNodeId}。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
 })
 
 const disconnectCanvasEdge = defineApplicationCapability({
@@ -425,6 +457,9 @@ const disconnectCanvasEdge = defineApplicationCapability({
   resolveTargetIds: (input) => target(input.projectId, { edgeId: input.edgeId }),
   summarize: (output) => `已断开画布连接 ${output.edgeId}。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'delete', entityTypes: ['canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
 })
 
 export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [

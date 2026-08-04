@@ -2,7 +2,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
+import {
+  CANVAS_BATCH_APPLICATION_CAPABILITIES,
+  type CanvasBatchOperation,
+} from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
@@ -69,6 +72,10 @@ describe('canvas batch service', () => {
       content: '批量内容',
     })
     expect(committed).toMatchObject({ operationCount: 2, status: 'committed' })
+    expect(committed.appliedOperations).toEqual([
+      expect.objectContaining({ index: 0, kind: 'update_node', nodeId }),
+      expect.objectContaining({ index: 1, kind: 'update_node', nodeId }),
+    ])
     expect(useCanvasStore.getState().history.past).toHaveLength(1)
 
     expect(undoCanvasBatch(projectId, String(committed.undoRef))).toMatchObject({
@@ -79,6 +86,31 @@ describe('canvas batch service', () => {
       displayName: '原节点',
       content: '原内容',
     })
+  })
+
+  it('批次 Effect 解析器按真实步骤数量结算，而不是把整批保守计为一次', () => {
+    const capability = CANVAS_BATCH_APPLICATION_CAPABILITIES.find((item) => item.id === 'commit_canvas_batch')
+    const effects = capability?.resolveObservedEffects?.({ planRef: 'canvas-plan:test' }, {
+      planRef: 'canvas-plan:test',
+      projectId,
+      appliedOperations: [
+        { index: 0, kind: 'add_node', nodeId: 'node-a' },
+        { index: 1, kind: 'add_node', nodeId: 'node-b' },
+      ],
+      operationCount: 2,
+      undoRef: 'canvas-batch-undo:test',
+      status: 'committed',
+    }) ?? []
+
+    expect(effects).toHaveLength(2)
+    expect(effects).toEqual([
+      expect.objectContaining({ effect: 'create', entityTypes: ['canvas.node'], count: 1 }),
+      expect.objectContaining({ effect: 'create', entityTypes: ['canvas.node'], count: 1 }),
+    ])
+    expect(effects.flatMap((effect) => effect.targetRefs)).toEqual([
+      { kind: 'canvas.node', id: 'node-a' },
+      { kind: 'canvas.node', id: 'node-b' },
+    ])
   })
 
   it('计划创建后画布变化会触发 revision 指纹冲突', async () => {

@@ -160,6 +160,14 @@ export function verifyAgentCompletion(input: {
   }
 
   const settlement = input.progressSettlement
+  if (settlement?.status === 'active') {
+    return {
+      passed: false,
+      summary: `任务图仍有 ${settlement.remainingFacetIds.length} 个 Facet 未结算，不能提前结束。`,
+      evidence: settlement.evidence.slice(-8),
+      clarificationRequired: false,
+    }
+  }
   if (settlement && ['partial', 'blocked', 'waiting_user'].includes(settlement.status)) {
     const explainsBlocker = /无法|未完成|受阻|缺少|权限|需要|请提供|请确认|请选择|不存在/.test(input.finalText)
     const clarificationRequired = settlement.status === 'waiting_user'

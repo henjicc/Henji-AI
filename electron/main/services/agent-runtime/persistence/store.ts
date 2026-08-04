@@ -48,7 +48,7 @@ import { AgentThreadTitleStore } from './thread-title-store'
 import { AgentThreadDeletionStore } from './thread-deletion-store'
 
 const logger = createMainLogger('main.agent_persistence')
-const terminalStatuses = new Set(['completed', 'failed', 'cancelled', 'waiting_external'])
+const terminalStatuses = new Set(['completed', 'budget_exhausted', 'failed', 'cancelled', 'waiting_external'])
 const FALLBACK_THREAD_TITLE_MAX_CHARS = 24
 
 interface RunRow {
@@ -118,7 +118,8 @@ export class AgentPersistenceStore {
     runId: string,
     request: AgentStartRunRequest,
     state: AgentRunState,
-    parentRunId: string | null = null
+    parentRunId: string | null = null,
+    options: { appendUserMessage?: boolean } = {}
   ): void {
     const now = Date.now()
     const requestForStorage = storedRequest(request)
@@ -149,20 +150,22 @@ export class AgentPersistenceStore {
         now,
         now
       )
-      this.database.prepare(`
-        INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
-        VALUES (?, ?, ?, 'user', ?, ?)
-        ON CONFLICT(message_id) DO NOTHING
-      `).run(`run:${runId}:user`, request.threadId, runId, request.goal, now)
-      this.sessionStore.appendMessage({
-        threadId: request.threadId,
-        runId,
-        role: 'user',
-        content: request.goal,
-        attachments: request.attachments,
-        idempotencyKey: `run:${runId}:user`,
-        createdAt: now,
-      })
+      if (options.appendUserMessage !== false) {
+        this.database.prepare(`
+          INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
+          VALUES (?, ?, ?, 'user', ?, ?)
+          ON CONFLICT(message_id) DO NOTHING
+        `).run(`run:${runId}:user`, request.threadId, runId, request.goal, now)
+        this.sessionStore.appendMessage({
+          threadId: request.threadId,
+          runId,
+          role: 'user',
+          content: request.goal,
+          attachments: request.attachments,
+          idempotencyKey: `run:${runId}:user`,
+          createdAt: now,
+        })
+      }
     })()
     logger.info('Agent 运行持久化已创建', {
       event: 'agent_persistence.run.created',

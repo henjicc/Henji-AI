@@ -13,6 +13,7 @@ import type { AgentConversationCompactor } from './conversation-compactor'
 import { emitAgentContextEvents } from './context-events'
 import type { AgentRuntimeModelSet } from './models'
 import type { AgentSavePointCoordinator } from './save-point-coordinator'
+import { AgentStopPolicyExceededError } from './budget'
 import { buildAgentTurnSnapshotDraft } from './turn-snapshot'
 
 interface TurnContextCoordinatorOptions {
@@ -35,6 +36,7 @@ interface PrepareTurnContextInput {
   getConversation: () => ModelStepMessage[]
   observations: AgentToolObservation[]
   registrations: AgentToolRegistration[]
+  protectedToolNames?: string[]
   workingSummary?: AgentWorkingSummary
   artifactRefs: string[]
   approvalMode: 'ask' | 'assistant_decides' | 'full_access'
@@ -79,13 +81,16 @@ export class AgentTurnContextCoordinator {
       observations: input.observations.slice(-20),
       modelTools: input.registrations.map((item) => item.modelTool),
       activeToolNames: input.registrations.map((item) => item.catalog.name),
+      protectedToolNames: input.protectedToolNames,
       contextWindowBudget: this.options.models.primary.limits.contextWindow,
       maxOutputTokens: this.options.models.primary.settings.maxOutputTokens,
       workingSummary: input.workingSummary,
       lastModelUsage: this.lastModelUsage,
     })
     let context = build()
-    if (context.compacted && await this.options.compactor.compact(input.turn, input.workingSummary)) {
+    if (context.compacted) {
+      const semantic = await this.options.compactor.compact(input.turn, input.workingSummary)
+      if (!semantic) this.options.compactor.compactDeterministically(input.workingSummary)
       this.lastModelUsage = undefined
       context = build()
     }
@@ -101,6 +106,12 @@ export class AgentTurnContextCoordinator {
       approvalMode: input.approvalMode,
     })
     await this.options.savePoints.save('before_model', snapshot)
+    if (context.contextPressure === 'hard') {
+      throw new AgentStopPolicyExceededError(
+        'MAX_CONTEXT_WINDOW',
+        '上下文在强制语义压缩后仍高于 80% 安全线，已保存检查点并转入下一段执行'
+      )
+    }
     return { context, snapshot, rebuild: build }
   }
 }

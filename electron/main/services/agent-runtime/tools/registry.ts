@@ -120,15 +120,32 @@ function resolveToolSemantics(definition: AgentToolDefinition): Required<AgentTo
 }
 
 function modelToolDescription(definition: AgentToolDefinition): string {
-  const semantics = resolveToolSemantics(definition)
-  return [
+  const semantics = definition.semantics
+  const specific = [
     definition.description,
-    `适用：${semantics.whenToUse.join('；')}`,
-    `前置：${semantics.prerequisites.join('；')}`,
-    `成功证据：${semantics.successEvidence.join('；')}`,
-    `失败恢复：${semantics.failureRecovery.join('；')}`,
-    `并行：${semantics.parallelSafe ? '只读且并发键不冲突时可并行' : '必须串行'}`,
-  ].join('\n')
+    `影响：${definition.readOnly ? '只读' : '写入'}，风险 ${definition.risk}${definition.supportsUndo ? '，支持撤销' : ''}。`,
+  ]
+  if (semantics?.whenToUse?.length) specific.push(`适用：${semantics.whenToUse.join('；')}`)
+  if (semantics?.prerequisites?.length) specific.push(`特有前置：${semantics.prerequisites.join('；')}`)
+  if (semantics?.successEvidence?.length) specific.push(`特有成功证据：${semantics.successEvidence.join('；')}`)
+  if (semantics?.failureRecovery?.length) specific.push(`特有恢复：${semantics.failureRecovery.join('；')}`)
+  return specific.join('\n')
+}
+
+function modelInputSchema(definition: AgentToolDefinition): Record<string, unknown> {
+  const schema = structuredClone(definition.aiInputSchema)
+  if (!definition.capability) return schema
+  const properties = schema.properties
+  if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+    delete (properties as Record<string, unknown>).baseRevision
+    delete (properties as Record<string, unknown>).expectedRevisions
+  }
+  if (Array.isArray(schema.required)) {
+    schema.required = schema.required.filter((name) => (
+      name !== 'baseRevision' && name !== 'expectedRevisions'
+    ))
+  }
+  return schema
 }
 
 export interface AgentToolExecutionMetadata {
@@ -264,7 +281,7 @@ export class AgentToolRegistry {
     return {
       name: definition.name,
       description: modelToolDescription(definition),
-      inputSchema: definition.aiInputSchema,
+      inputSchema: modelInputSchema(definition),
       strict: true,
     }
   }

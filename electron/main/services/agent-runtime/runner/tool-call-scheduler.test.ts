@@ -13,6 +13,8 @@ import { AgentToolCatalogPlanner } from '../context/catalog'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolGateway } from '../tools/gateway'
 import { AgentToolRegistry } from '../tools/registry'
+import { createBuiltinAgentToolRegistry } from '../tools/builtin'
+import { AgentStopPolicyExceededError } from './budget'
 import { AgentToolCallScheduler } from './tool-call-scheduler'
 
 function hostContext(): HostContextSnapshot {
@@ -55,7 +57,8 @@ function createScheduler(
     call: ModelStepToolCall,
     observation: AgentToolObservation,
     expectedRevisions: Partial<HostScopeRevisions>
-  ) => void
+  ) => void,
+  recordToolCall: (signature: string, write: boolean) => void = () => undefined
 ): AgentToolCallScheduler {
   const registry = new AgentToolRegistry()
   registry.register(defineAgentTool({
@@ -135,7 +138,7 @@ function createScheduler(
     signal: new AbortController().signal,
     waitIfPaused: () => Promise.resolve(),
     throwIfCancelled: () => undefined,
-    recordToolCall: () => undefined,
+    recordToolCall,
     recordProgress: () => undefined,
     recordFailure,
     setActiveToolCall: () => undefined,
@@ -294,5 +297,108 @@ describe('AgentToolCallScheduler', () => {
 
     expect(guarded).toEqual([{ canvas: 7 }])
     expect(completed).toEqual([{ canvas: 7 }])
+  })
+
+  it('Harness 硬上限立即逃逸，不包装成可重试的工具失败', async () => {
+    const stop = new AgentStopPolicyExceededError('MAX_TOOL_CALLS', '测试硬上限')
+    const scheduler = createScheduler(
+      async (id) => ({ id }),
+      [],
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => { throw stop }
+    )
+
+    await expect(scheduler.execute([toolCall(1)], true, {})).rejects.toBe(stop)
+  })
+
+  it('宿主画布编译不占模型租约槽，并以一次提交审批完成原生批次', async () => {
+    const invoked: string[] = []
+    const events: AgentEventInput[] = []
+    const observations: AgentToolObservation[] = []
+    const revisions = {
+      navigation: 0, generation: 0, canvas: 1, toolbox: 0, assets: 0,
+    }
+    const registry = createBuiltinAgentToolRegistry(async (operation) => {
+      const id = operation.capability.id
+      invoked.push(id)
+      const input = operation.capability.input as {
+        projectId?: string
+        operations?: Array<Record<string, unknown>>
+        planRef?: string
+      }
+      const data = id === 'plan_canvas_batch'
+        ? {
+            planRef: 'plan-1', projectId: input.projectId ?? 'project-1',
+            operationCount: input.operations?.length ?? 0,
+            operations: input.operations ?? [], reversible: true,
+            revision: 0, scopeRevisions: { ...revisions, canvas: 0 },
+          }
+        : {
+            planRef: input.planRef ?? 'plan-1', projectId: 'project-1',
+            appliedOperations: [
+              { index: 0, kind: 'add_node', nodeId: 'node-1' },
+              { index: 1, kind: 'add_node', nodeId: 'node-2' },
+            ],
+            operationCount: 2, undoRef: 'undo-batch-1', status: 'committed',
+            revision: 1, scopeRevisions: revisions,
+          }
+      return {
+        ok: true,
+        data,
+        resultingRevision: id === 'plan_canvas_batch' ? 0 : 1,
+        resultingScopeRevisions: id === 'plan_canvas_batch'
+          ? { ...revisions, canvas: 0 }
+          : revisions,
+      }
+    })
+    const gateway = new AgentToolGateway({
+      registry,
+      getHostContext: () => hostContext(),
+      appendPermissionAudit: async () => undefined,
+    })
+    let approvals = 0
+    const scheduler = new AgentToolCallScheduler({
+      runId: 'run-canvas-batch', threadId: 'thread-canvas-batch', approvalMode: 'ask',
+      supportsParallelTools: true, gateway, registry,
+      catalogPlanner: new AgentToolCatalogPlanner(registry),
+      // 批次 plan/commit 没有披露给模型；只有模型实际请求的成员能力在活动集。
+      activeToolNames: new Set(['add_canvas_node']),
+      signal: new AbortController().signal,
+      waitIfPaused: async () => undefined,
+      throwIfCancelled: () => undefined,
+      recordToolCall: () => undefined,
+      recordProgress: () => undefined,
+      setActiveToolCall: () => undefined,
+      requestApproval: async (_call, approval) => {
+        approvals += 1
+        await gateway.resolveApproval(approval.approvalId, 'run-canvas-batch', 'approve')
+        return 'approve'
+      },
+      onObservation: (_call, observation) => observations.push(observation),
+      emit: (event) => events.push(event),
+      onDiscoveredTools: () => undefined,
+    })
+    const placement = { mode: 'viewport_center' as const }
+    await scheduler.execute([{
+      toolCallId: 'add-1', toolName: 'add_canvas_node', dynamic: false,
+      input: { projectId: 'project-1', nodeType: 'text', placement },
+    }, {
+      toolCallId: 'add-2', toolName: 'add_canvas_node', dynamic: false,
+      input: { projectId: 'project-1', nodeType: 'image', placement },
+    }], true, { canvas: 0 })
+
+    expect(events.filter((event) => event.type === 'ToolFailed')).toEqual([])
+    expect(invoked).toEqual(['plan_canvas_batch', 'commit_canvas_batch'])
+    expect(approvals).toBe(1)
+    expect(observations).toHaveLength(2)
+    expect(events.filter((event) => event.type === 'ToolRequested').map((event) => (
+      event.type === 'ToolRequested' ? event.toolName : ''
+    ))).toEqual(['plan_canvas_batch', 'commit_canvas_batch'])
+    expect(events.filter((event) => event.type === 'ToolCompleted')).toHaveLength(2)
   })
 })

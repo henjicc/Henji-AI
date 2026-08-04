@@ -14,7 +14,11 @@ import {
 } from '../../../../../src/core/assistant/taskGraph'
 import {
   AGENT_ACTIVE_TOOL_LIMIT,
-  AGENT_DISCOVERY_ADDED_TOOL_LIMIT,
+  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
+  AGENT_FACET_LEASE_TOOL_LIMIT,
+  AGENT_LEASE_FRONTIER_FACET_LIMIT,
+  AGENT_TOOL_DESCRIPTION_BUDGET_BYTES,
+  AGENT_TOOL_SCHEMA_BUDGET_BYTES,
 } from '../../../../../src/core/assistant/toolBudget'
 import { applicationCapabilitySearchResultSchema } from '../../../../../src/core/assistant/applicationCapabilities'
 import { applicationCapabilityDiscoveryOutputSchema } from '../../../../../src/core/assistant/capabilityDiscovery'
@@ -134,8 +138,10 @@ describe('预算常量与契约一致', () => {
   })
 
   it('预算常量互相之间的约束成立', () => {
-    // 发现一次最多回带的工具数不应少于单轮能激活的数量，否则永远填不满工具位。
-    expect(AGENT_DISCOVERY_ADDED_TOOL_LIMIT).toBeGreaterThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
+    // 租约只覆盖依赖前沿，不承担填满整个活动工具集的职责。
+    expect(AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
+      .toBe(AGENT_FACET_LEASE_TOOL_LIMIT * AGENT_LEASE_FRONTIER_FACET_LIMIT)
+    expect(AGENT_DISCOVERY_LEASE_TOOL_LIMIT).toBeLessThan(AGENT_ACTIVE_TOOL_LIMIT)
     // 结算证据是各 Facet 证据的汇总，不能比单个 Facet 的上限还小。
     expect(AGENT_SETTLEMENT_EVIDENCE_LIMIT).toBeGreaterThanOrEqual(AGENT_FACET_EVIDENCE_LIMIT)
     // 记忆读取上限只是一个正整数约束，放这里是为了让它和其他预算一起被看见。
@@ -144,12 +150,12 @@ describe('预算常量与契约一致', () => {
 
   it('能力发现的两份输出契约都容纳完整增量工具预算', () => {
     const toolNames = Array.from(
-      { length: AGENT_DISCOVERY_ADDED_TOOL_LIMIT },
+      { length: AGENT_DISCOVERY_LEASE_TOOL_LIMIT },
       (_, index) => `tool_${index}`,
     )
-    expect(applicationCapabilityDiscoveryOutputSchema.shape.addedToolNames.safeParse(toolNames).success)
+    expect(applicationCapabilityDiscoveryOutputSchema.shape.leasedToolNames.safeParse(toolNames).success)
       .toBe(true)
-    expect(applicationCapabilitySearchResultSchema.shape.addedToolNames.safeParse(toolNames).success)
+    expect(applicationCapabilitySearchResultSchema.shape.leasedToolNames.safeParse(toolNames).success)
       .toBe(true)
   })
 })
@@ -183,7 +189,7 @@ describe('工具激活不得让通用动词落选', () => {
       } as never,
       context,
       pinnedToolNames: [],
-      discoveredToolNames: [],
+      leasedToolNames: [],
       recentToolNames: [],
     })
   }
@@ -200,5 +206,21 @@ describe('工具激活不得让通用动词落选', () => {
     const active = new Set(activate(['toolbox', 'camera_stage', 'catalog']).activeToolNames)
     expect(active.has('load_assistant_skill')).toBe(true)
     expect(active.has('discover_application_capabilities')).toBe(true)
+  })
+
+  it('活动工具数量、完整 schema 与业务描述字节都有构建门禁', () => {
+    const snapshot = activate(['toolbox', 'camera_stage', 'catalog'])
+    expect(snapshot.activeToolNames.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
+    expect(snapshot.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
+    expect(snapshot.descriptionBytes).toBeLessThanOrEqual(AGENT_TOOL_DESCRIPTION_BUDGET_BYTES)
+  })
+
+  it('AI 可见 schema 不再暴露第二条 revision 输入路径', () => {
+    for (const registration of activate(['toolbox', 'camera_stage', 'catalog']).registrations) {
+      const properties = registration.modelTool.inputSchema.properties
+      if (!properties || typeof properties !== 'object' || Array.isArray(properties)) continue
+      expect(properties).not.toHaveProperty('baseRevision')
+      expect(properties).not.toHaveProperty('expectedRevisions')
+    }
   })
 })

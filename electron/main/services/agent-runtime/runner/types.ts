@@ -1,5 +1,8 @@
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
-import type { AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
+import type {
+  AgentBudgetContinuation,
+  AgentStartRunRequest,
+} from '../../../../../src/core/assistant/runtimeContracts'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
 import type { AgentToolGateway } from '../tools/gateway'
@@ -70,5 +73,6 @@ export interface AgentRunnerOptions {
   conversationHistory?: ModelStepMessage[]
   conversationHistorySequences?: number[]
   recoveryContext?: AgentWorkingSummary
+  budgetContinuation?: AgentBudgetContinuation
   dependencies: AgentRunnerDependencies
 }

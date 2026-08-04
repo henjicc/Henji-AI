@@ -1,22 +1,17 @@
 import { z } from 'zod'
 
+import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import {
   AGENT_FACET_ENTITY_TYPE_LIMIT,
   AGENT_TASK_FACET_LIMIT,
-} from '../../../../../src/core/assistant/taskGraph'
-import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import {
   AGENT_TASK_GRAPH_VERSION,
   agentTaskGraphSchema,
   type AgentTaskCapabilityKind,
   type AgentTaskFacet,
   type AgentTaskGraph,
+  type AgentTaskRequiredEffect,
 } from '../../../../../src/core/assistant/taskGraph'
-import {
-  AGENT_TOOL_DOMAINS,
-  type AgentIntent,
-  type AgentToolDomain,
-} from './types'
+import { AGENT_TOOL_DOMAINS, type AgentIntent, type AgentToolDomain } from './types'
 
 const modelFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
@@ -33,6 +28,16 @@ const modelFacetSchema = z.object({
   dependsOn: z.array(z.string().min(1).max(64)).max(12).default([]),
   parallelizable: z.boolean().default(false),
   completionConditions: z.array(z.string().min(1).max(500)).min(1).max(12),
+  requiredEffects: z.array(z.object({
+    effectId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
+    effect: z.enum(['observe', 'create', 'update', 'delete', 'navigate', 'execute']),
+    entityTypes: z.array(z.string().min(1).max(128)).max(16).default([]),
+    propertyIds: z.array(z.string().min(1).max(128)).max(128).default([]),
+    minimumCount: z.number().int().min(1).max(256).default(1),
+    targetRefs: z.array(z.object({ kind: z.string().min(1), id: z.string().min(1) }).strict()).max(128).default([]),
+    verificationRequired: z.boolean().default(false),
+    actionGroupId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
+  }).strict()).min(1).max(32),
   uncertainties: z.array(z.string().min(1).max(500)).max(8).default([]),
   confidence: z.number().min(0).max(1).default(0.5),
 }).strict()
@@ -87,10 +92,26 @@ function buildFacet(input: {
   dependsOn?: string[]
   parallelizable?: boolean
   completionConditions: string[]
+  requiredEffects?: AgentTaskRequiredEffect[]
   uncertainties?: string[]
   confidence?: number
 }): AgentTaskFacet {
   const entityTypes = unique(input.entityTypes ?? entityTypesByDomain[input.domain] ?? [])
+  const defaultEffect: AgentTaskRequiredEffect['effect'] = input.capabilityKinds.includes('navigate')
+    ? 'navigate'
+    : input.capabilityKinds.includes('execute')
+      ? 'execute'
+      : input.capabilityKinds.includes('mutate') ? 'update' : 'observe'
+  const requiredEffects = input.requiredEffects ?? [{
+    effectId: `${input.facetId}_effect`,
+    effect: defaultEffect,
+    entityTypes,
+    propertyIds: [],
+    minimumCount: 1,
+    targetRefs: [],
+    verificationRequired: defaultEffect !== 'observe' && defaultEffect !== 'navigate',
+    actionGroupId: `${input.facetId}_actions`,
+  }]
   return {
     facetId: input.facetId,
     domain: input.domain,
@@ -106,6 +127,7 @@ function buildFacet(input: {
     dependsOn: unique(input.dependsOn ?? []),
     parallelizable: input.parallelizable ?? false,
     completionConditions: unique(input.completionConditions),
+    requiredEffects,
     uncertainties: unique(input.uncertainties ?? []),
     confidence: input.confidence ?? 1,
     status: 'pending',
@@ -150,10 +172,41 @@ function graph(goal: string, facets: AgentTaskFacet[]): AgentTaskGraph {
     ...facet,
     dependsOn: facet.dependsOn.filter((dependency) => facetIds.has(dependency)),
   })))
+  const actionGroups = normalized.flatMap((facet) => {
+    const groups = new Map<string, AgentTaskRequiredEffect[]>()
+    for (const effect of facet.requiredEffects) {
+      groups.set(effect.actionGroupId, [...(groups.get(effect.actionGroupId) ?? []), effect])
+    }
+    return [...groups.entries()].map(([actionGroupId, effects]) => ({
+      actionGroupId,
+      facetId: facet.facetId,
+      mode: effects.every((effect) => effect.effect === 'observe' || effect.effect === 'navigate')
+        ? 'parallel_read' as const
+        : effects.length > 1 ? 'atomic_batch' as const : 'ordered_write' as const,
+      effectIds: effects.map((effect) => effect.effectId),
+      dependsOn: [] as string[],
+    }))
+  })
+  const groupIdsByFacet = new Map(normalized.map((facet) => [
+    facet.facetId,
+    actionGroups.filter((group) => group.facetId === facet.facetId).map((group) => group.actionGroupId),
+  ]))
+  const linkedActionGroups = actionGroups.map((group) => {
+    const facet = normalized.find((candidate) => candidate.facetId === group.facetId)
+    const dependsOn = unique((facet?.dependsOn ?? []).flatMap(
+      (dependency) => groupIdsByFacet.get(dependency) ?? []
+    ))
+    return {
+      ...group,
+      mode: dependsOn.length > 0 ? 'dependent' as const : group.mode,
+      dependsOn,
+    }
+  })
   return agentTaskGraphSchema.parse({
     version: AGENT_TASK_GRAPH_VERSION,
     goal,
     facets: normalized,
+    actionGroups: linkedActionGroups,
     dependencies: normalized.flatMap((facet) => facet.dependsOn.map((dependency) => ({
       fromFacetId: dependency,
       toFacetId: facet.facetId,
@@ -207,6 +260,17 @@ function inferNavigationSurface(goal: string, snapshot: HostContextSnapshot): st
   return snapshot.surface?.id ?? null
 }
 
+function inferRequestedCount(goal: string): number {
+  const numeric = [...goal.matchAll(/(?:创建|添加|放置|摆放|新建|设置|修改)?\s*(\d{1,3})\s*(?:个|项|条|组|枚|座)/gi)]
+    .flatMap((match) => match[1] ? [Number(match[1])] : [])
+  const values: Readonly<Record<string, number>> = {
+    一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+  }
+  const chinese = [...goal.matchAll(/(?:创建|添加|放置|摆放|新建|设置|修改)?\s*([一二两三四五六七八九十])\s*(?:个|项|条|组|枚|座)/g)]
+    .flatMap((match) => match[1] ? [values[match[1]] ?? 1] : [])
+  return Math.min(256, Math.max(1, ...numeric, ...chinese))
+}
+
 export interface DeterministicTaskGraphMatch {
   graph: AgentTaskGraph
   intents: AgentIntent[]
@@ -222,7 +286,7 @@ export function createDeterministicTaskGraph(
   const hasCanvas = /(?:画布|节点|连线|流程图|canvas)/i.test(normalized)
   const hasNavigation = /(?:打开|进入|切换|展示|查看|定位|让我看到|open|show|navigate)/i.test(normalized)
   const hasProject = /(?:新建|创建|建立|复用|项目|工程|project)/i.test(normalized)
-  const hasSceneMutation = /(?:添加|放置|摆放|创建).{0,20}(?:物体|对象|立方体|棱锥|摄像机|相机)|(?:位置|坐标|旋转|缩放)/i.test(normalized)
+  const hasSceneMutation = /(?:添加|放|放置|摆放|创建).{0,20}(?:物体|对象|立方体|圆柱体|棱锥|摄像机|相机)|(?:位置|坐标|旋转|缩放)/i.test(normalized)
   // 词表必须覆盖自然说法。实测目标写的是"摄像机围绕着它旋转"，一个关键词都没命中，于是
   // 运镜 Facet 根本没进任务图——任务图漏掉的部分，助手永远不会做，还会宣布"完成"。
   const hasMotion = /(?:运镜|轨迹|环绕|围绕|绕着|旋转|转圈|推拉|推近|拉远|横移|升降|orbit|dolly|truck|crane)/i.test(normalized)
@@ -234,6 +298,7 @@ export function createDeterministicTaskGraph(
 
   const facets: AgentTaskFacet[] = []
   if (hasCanvas) {
+    const createsNodes = /(?:创建|添加|放置|摆放|新建).{0,16}(?:节点|node)/i.test(normalized)
     facets.push(buildFacet({
       facetId: 'canvas_structure',
       domain: 'canvas',
@@ -241,6 +306,12 @@ export function createDeterministicTaskGraph(
       observationKinds: ['entity_state', 'entity_schema', 'operation_schema'],
       capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
       completionConditions: ['目标画布项目与节点结构存在，并返回项目或节点稳定引用及 revision。'],
+      requiredEffects: [{
+        effectId: 'canvas_structure_effect', effect: createsNodes ? 'create' : 'update',
+        entityTypes: [createsNodes ? 'canvas.node' : 'canvas.project'], propertyIds: [],
+        minimumCount: createsNodes ? inferRequestedCount(normalized) : 1,
+        targetRefs: [], verificationRequired: true, actionGroupId: 'canvas_structure_actions',
+      }],
     }))
   }
   if (hasCamera) {
@@ -252,6 +323,11 @@ export function createDeterministicTaskGraph(
       observationKinds: ['entity_state', 'entity_schema', 'operation_schema'],
       capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
       completionConditions: ['取得可用三维工程、摄像机和镜头的稳定引用与 revision。'],
+      requiredEffects: [{
+        effectId: 'camera_project_effect', effect: 'observe',
+        entityTypes: ['camera_stage.project', 'camera_stage.camera'], propertyIds: [], minimumCount: 1,
+        targetRefs: [], verificationRequired: false, actionGroupId: 'camera_project_actions',
+      }],
     }))
     const needsEarlySurface = hasSceneMutation || hasMotion || hasNavigation
     if (needsEarlySurface) {
@@ -277,6 +353,11 @@ export function createDeterministicTaskGraph(
         capabilityKinds: ['observe', 'plan', 'mutate'],
         dependsOn: [visualDependency],
         completionConditions: ['目标对象存在、空间参数可验证且没有无意重叠。'],
+        requiredEffects: [{
+          effectId: 'camera_scene_effect', effect: 'create', entityTypes: ['camera_stage.object'],
+          propertyIds: [], minimumCount: inferRequestedCount(normalized), targetRefs: [], verificationRequired: true,
+          actionGroupId: 'camera_scene_actions',
+        }],
       }))
     }
     if (hasMotion) {
@@ -288,6 +369,11 @@ export function createDeterministicTaskGraph(
         capabilityKinds: ['observe', 'plan', 'execute'],
         dependsOn: [hasSceneMutation ? 'camera_scene' : visualDependency],
         completionConditions: ['镜头轨迹或运镜参数已提交并可由场景状态验证。'],
+        requiredEffects: [{
+          effectId: 'camera_motion_effect', effect: 'execute', entityTypes: ['camera_stage.trajectory'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+          actionGroupId: 'camera_motion_actions',
+        }],
       }))
     }
     if (hasObjectAnimation) {
@@ -299,6 +385,11 @@ export function createDeterministicTaskGraph(
         capabilityKinds: ['observe', 'plan', 'mutate'],
         dependsOn: [hasSceneMutation ? 'camera_scene' : visualDependency],
         completionConditions: ['目标对象在相应属性路径上已存在覆盖所需时长的关键帧。'],
+        requiredEffects: [{
+          effectId: 'camera_animation_effect', effect: 'create', entityTypes: ['camera_stage.keyframe'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+          actionGroupId: 'camera_animation_actions',
+        }],
       }))
     }
     // 写入之后必须独立结算一次验证：没有这个 Facet，模型放完对象就会直接宣称完成。
@@ -318,6 +409,12 @@ export function createDeterministicTaskGraph(
           '结构化验证返回 verified 或已如实列出未满足项。',
           '视觉证据要么来自实际读取的界面截图，要么明确标注为未做视觉验证。',
         ],
+        requiredEffects: [{
+          effectId: 'camera_verify_effect', effect: 'observe',
+          entityTypes: ['camera_stage.scene', 'camera_stage.object', 'camera_stage.trajectory'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+          actionGroupId: 'camera_verify_actions',
+        }],
       }))
     }
   }
@@ -351,6 +448,39 @@ export function createModelTaskGraph(input: {
   candidateDomains: AgentToolDomain[]
   snapshot: HostContextSnapshot
 }): AgentTaskGraph {
+  const planned = tryCreateModelTaskGraph(input)
+  if (planned) return planned
+
+  const fallbackDomain = input.candidateDomains.find((domain) => domain !== 'catalog') ?? 'catalog'
+  return graph(input.goal, [buildFacet({
+    facetId: input.primaryIntent === 'general' ? 'clarify_goal' : input.primaryIntent,
+    domain: fallbackDomain,
+    goal: input.goal,
+    observationKinds: fallbackDomain === 'catalog' ? [] : ['current_surface'],
+    capabilityKinds: input.primaryIntent === 'general'
+      ? ['query']
+      : input.primaryIntent === 'navigate'
+        ? ['observe', 'navigate']
+        : ['query', 'execute'],
+    targetSurfaceId: input.snapshot.surface?.id ?? surfaceByDomain[fallbackDomain] ?? null,
+    completionConditions: [
+      input.primaryIntent === 'general'
+        ? '给出无需工具的一般回答，或向用户提出一个最小澄清问题。'
+        : '目标动作有结构化结果或明确的受阻说明。',
+    ],
+    uncertainties: input.primaryIntent === 'general' ? ['结构化 Planner 没有返回可用 Effect。'] : [],
+    confidence: input.primaryIntent === 'general' ? 0.25 : 0.5,
+  })])
+}
+
+/** 只接受完整的结构化 Planner 输出；调用方可在失败时保留确定性任务图。 */
+export function tryCreateModelTaskGraph(input: {
+  goal: string
+  rawFacets: unknown
+  primaryIntent: AgentIntent
+  candidateDomains: AgentToolDomain[]
+  snapshot: HostContextSnapshot
+}): AgentTaskGraph | null {
   const rawItems = Array.isArray(input.rawFacets) ? input.rawFacets.slice(0, AGENT_TASK_FACET_LIMIT) : []
   const parsed = rawItems.flatMap((item) => {
     const result = modelFacetSchema.safeParse(item)
@@ -364,23 +494,7 @@ export function createModelTaskGraph(input: {
       entityTypes: item.targetEntityTypes,
       observationKinds: item.observationKinds,
       targetSurfaceId: item.targetSurfaceId ?? surfaceByDomain[item.domain] ?? null,
+      requiredEffects: item.requiredEffects,
     }))
-  if (facets.length > 0) return graph(input.goal, ensureEarlyCameraSurface(facets))
-
-  const fallbackDomain = input.candidateDomains.find((domain) => domain !== 'catalog') ?? 'catalog'
-  return graph(input.goal, [buildFacet({
-    facetId: input.primaryIntent === 'general' ? 'clarify_goal' : input.primaryIntent,
-    domain: fallbackDomain,
-    goal: input.goal,
-    observationKinds: fallbackDomain === 'catalog' ? [] : ['current_surface'],
-    capabilityKinds: fallbackDomain === 'catalog' ? ['query'] : ['observe', 'query'],
-    targetSurfaceId: input.snapshot.surface?.id ?? surfaceByDomain[fallbackDomain] ?? null,
-    completionConditions: [
-      input.primaryIntent === 'general'
-        ? '给出无需工具的一般回答，或向用户提出一个最小澄清问题。'
-        : '目标动作有结构化结果或明确的受阻说明。',
-    ],
-    uncertainties: input.primaryIntent === 'general' ? ['路由模型没有返回可用 Facet。'] : [],
-    confidence: input.primaryIntent === 'general' ? 0.25 : 0.5,
-  })])
+  return facets.length > 0 ? graph(input.goal, ensureEarlyCameraSurface(facets)) : null
 }

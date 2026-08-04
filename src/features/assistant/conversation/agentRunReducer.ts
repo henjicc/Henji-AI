@@ -97,6 +97,10 @@ function applyEventToRunState(state: AgentRunState, event: AgentEvent): AgentRun
     case 'ContextUpdated':
       next.turn = event.turn
       break
+    case 'BudgetSoftLimitReached':
+    case 'BudgetHardLimitReached':
+      next.usage = event.usage
+      break
     case 'ToolRequested':
     case 'ToolStarted':
       next.currentToolCallId = event.toolCallId
@@ -311,15 +315,10 @@ export function groupToolActivitiesForDisplay(
   return groups
 }
 
-/** 仅取携带工具调用的模型公开说明；最终无工具回答由最终消息卡单独显示，避免重复。 */
+/** 模型轮次文本只保留在诊断事件；公开进展统一由稳定阶段面板承载。 */
 export function selectModelPublicUpdates(events: AgentEvent[]): AgentModelPublicUpdate[] {
-  return events.flatMap((event) => (
-    event.type === 'ModelCompleted'
-      && (event.toolCallCount > 0 || event.stepId === 'attachment-observer')
-      && event.displayText
-      ? [{ stepId: event.stepId, sequence: event.sequence, text: event.displayText }]
-      : []
-  ))
+  void events
+  return []
 }
 
 export interface AgentExecutionPresentation {
@@ -370,12 +369,14 @@ export function selectExecutionPresentation(
   let lastCompaction: AgentExecutionPresentation['lastCompaction'] = null
   let retrying: AgentExecutionPresentation['retrying'] = null
   let newerModelActivity = false
+  let phase: Extract<AgentEvent, { type: 'RunPhaseChanged' }> | null = null
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (!verification && event.type === 'VerificationCompleted') verification = event
     if (!clarification && event.type === 'ClarificationRequired') clarification = event
     if (!lastCompaction && event.type === 'ContextCompacted') lastCompaction = event
     if (!retrying && !newerModelActivity && event.type === 'ModelRetrying') retrying = event
+    if (!phase && event.type === 'RunPhaseChanged') phase = event
     if (event.type === 'ModelStarted' || event.type === 'ModelCompleted') newerModelActivity = true
     if (verification && clarification && lastCompaction && retrying) break
   }
@@ -384,6 +385,12 @@ export function selectExecutionPresentation(
   const facets = selectFacetPresentations(summary)
   let nextAction = '正在理解目标并准备下一步。'
   if (clarification) nextAction = clarification.question
+  else if (phase?.phase === 'continuing') nextAction = phase.detail ?? '正在保存检查点并进入下一段执行。'
+  else if (phase?.phase === 'planning') nextAction = '正在规划可结算的任务效果与依赖。'
+  else if (phase?.phase === 'discovering') nextAction = '正在为当前依赖前沿发现并租约所需能力。'
+  else if (phase?.phase === 'preparing') nextAction = '正在准备当前阶段的上下文与执行计划。'
+  else if (phase?.phase === 'executing') nextAction = '正在执行已声明的操作组。'
+  else if (phase?.phase === 'verifying') nextAction = '正在核对结构化效果与目标证据。'
   else if (retrying) nextAction = retrying.delayMs > 0
     ? `模型请求暂时失败，将在 ${Math.ceil(retrying.delayMs / 1000)} 秒后重试。`
     : '模型步骤暂时失败，助手正在安全地重新规划。'
@@ -391,6 +398,7 @@ export function selectExecutionPresentation(
   else if (state?.status === 'waiting_external') nextAction = '已提交外部任务，正在等待最终结果。'
   else if (state?.status === 'paused') nextAction = '执行已暂停，可以继续或停止当前任务。'
   else if (state?.status === 'cancelled') nextAction = '任务已取消，已完成的步骤和证据仍会保留。'
+  else if (state?.status === 'budget_exhausted') nextAction = '当前执行段预算已耗尽，正在判断能否自动续跑。'
   else if (state?.status === 'waiting_user') nextAction = '需要你补充必要信息后才能继续。'
   else if (summary && summary.recovery.mode !== 'none') nextAction = summary.recovery.reason
   else if (summary?.activeStep) nextAction = `正在执行：${summary.activeStep.title}`

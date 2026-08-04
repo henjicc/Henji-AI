@@ -1,7 +1,6 @@
 import { createMainLogger } from '../../logging'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import {
-  AGENT_CONTEXT_RESERVE_TOKENS,
   AGENT_KEEP_RECENT_TOKENS,
   compactConversationMessages,
   estimateModelMessagesTokens,
@@ -25,10 +24,11 @@ export function resolveContextCompactionThreshold(
   contextWindow: number,
   _maxOutputTokens = 0
 ): number {
-  const reserve = contextWindow > AGENT_CONTEXT_RESERVE_TOKENS + 2_000
-    ? AGENT_CONTEXT_RESERVE_TOKENS
-    : Math.floor(contextWindow * 0.2)
-  return Math.max(2_000, contextWindow - reserve)
+  return Math.max(1_000, Math.floor(contextWindow * 0.7))
+}
+
+export function resolveContextHardThreshold(contextWindow: number): number {
+  return Math.max(1_200, Math.floor(contextWindow * 0.8))
 }
 
 function withoutSystemMessages(messages: ModelStepMessage[]): ModelStepMessage[] {
@@ -41,8 +41,9 @@ export class AgentContextBuilder {
   build(input: AgentContextBuildInput): AgentContextBuildResult {
     // 上限只有 toolBudget 一个来源。此前这里写死 8，与激活逻辑各算各的：
     // 激活挑够 16 个存进保存点，构建器又砍回 8 个发给模型，两边对不上还谁都不报错。
-    let activeTools = input.modelTools.slice(0, AGENT_ACTIVE_TOOL_LIMIT)
-    let activeToolNames = input.activeToolNames.slice(0, AGENT_ACTIVE_TOOL_LIMIT)
+    const activeTools = input.modelTools.slice(0, AGENT_ACTIVE_TOOL_LIMIT)
+    const activeToolNames = input.activeToolNames.slice(0, AGENT_ACTIVE_TOOL_LIMIT)
+    const protectedToolNames = new Set(input.protectedToolNames ?? [])
     const baseConversation = withoutSystemMessages(input.conversation)
     const { layers, offloaded } = buildAgentContextLayers(
       input,
@@ -68,9 +69,12 @@ export class AgentContextBuilder {
       input.maxOutputTokens
     )
     const compacted = beforeCompactionTokens > threshold
+    const contextPressure = beforeCompactionTokens >= resolveContextHardThreshold(input.contextWindowBudget)
+      ? 'hard'
+      : compacted ? 'soft' : 'normal'
     const keepRecentTokens = Math.min(
       AGENT_KEEP_RECENT_TOKENS,
-      Math.max(1_000, Math.floor(threshold * 0.75))
+      Math.max(1_000, Math.floor(threshold * 0.5))
     )
     const conversation = compacted
       ? compactConversationMessages(baseConversation, keepRecentTokens, input.workingSummary)
@@ -89,8 +93,16 @@ export class AgentContextBuilder {
       toolsJson()
     )
     while (estimatedTokens > threshold && activeTools.length > 1) {
-      activeTools = activeTools.slice(0, -1)
-      activeToolNames = activeToolNames.slice(0, activeTools.length)
+      let removalIndex = -1
+      for (let index = activeToolNames.length - 1; index >= 0; index -= 1) {
+        if (!protectedToolNames.has(activeToolNames[index] as string)) {
+          removalIndex = index
+          break
+        }
+      }
+      if (removalIndex < 0) break
+      activeTools.splice(removalIndex, 1)
+      activeToolNames.splice(removalIndex, 1)
       estimatedTokens = estimateModelMessagesTokens(
         [{ role: 'system', content: stableSystemPrompt }, ...messages],
         toolsJson()
@@ -126,6 +138,8 @@ export class AgentContextBuilder {
           : 'provider_usage_plus_trailing_estimate',
         contextWindow: input.contextWindowBudget,
         compactionThreshold: threshold,
+        hardCompactionThreshold: resolveContextHardThreshold(input.contextWindowBudget),
+        contextPressure,
         maxOutputTokens: input.maxOutputTokens ?? null,
         compacted,
         compactionReason,
@@ -150,6 +164,7 @@ export class AgentContextBuilder {
       retainedLayers: selection.retainedLayers,
       droppedLayers: selection.droppedLayers,
       compactionReason,
+      contextPressure,
     }
   }
 

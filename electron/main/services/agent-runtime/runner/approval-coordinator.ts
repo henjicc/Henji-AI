@@ -20,6 +20,7 @@ interface AgentApprovalCoordinatorOptions {
   setPausedFrom: (status: Exclude<AgentRunStatus, 'paused'>) => void
   emit: (event: AgentEventInput) => void
   onAsyncError: (error: unknown) => void
+  onPhase?: (phase: 'awaiting_approval' | 'executing') => void
 }
 
 export class AgentApprovalCoordinator {
@@ -31,6 +32,7 @@ export class AgentApprovalCoordinator {
     this.options.setCurrentToolCallId(call.toolCallId)
     this.options.setWaitingApprovalId(approval.approvalId)
     this.options.transition('waiting_approval')
+    this.options.onPhase?.('awaiting_approval')
     const decision = this.waiter.wait({
       approvalId: approval.approvalId,
       expiresAt: approval.expiresAt,
@@ -59,6 +61,7 @@ export class AgentApprovalCoordinator {
       if (this.options.getStatus() === 'waiting_approval') this.options.transition('waiting_tool')
       else if (this.options.getStatus() === 'paused') this.options.setPausedFrom('waiting_tool')
       this.waiter.settle(decision)
+      this.options.onPhase?.('executing')
       return null
     } catch (error) {
       this.waiter.release(approvalId)
@@ -88,5 +91,6 @@ export class AgentApprovalCoordinator {
     } else if (this.options.getStatus() === 'paused') {
       this.options.setPausedFrom('waiting_tool')
     }
+    this.options.onPhase?.('executing')
   }
 }

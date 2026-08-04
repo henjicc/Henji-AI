@@ -7,11 +7,13 @@ import {
 import type { AgentRouteDecision } from './types'
 
 export class AgentToolCatalogPlanner {
-  private discoveredToolNames: string[] = []
+  private readonly leasesByFacet = new Map<string, string[]>()
+  private leaseOrder: string[] = []
   private recentToolNames: string[] = []
   private continuationToolNames: string[] = []
   private recoveryToolNames: string[] = []
-  private discoveryCursor = 0
+  private catalogRevision: string | number | null | undefined
+  private closeoutMode = false
 
   constructor(private readonly registry: AgentToolRegistry) {}
 
@@ -19,26 +21,35 @@ export class AgentToolCatalogPlanner {
     route: AgentRouteDecision,
     context: HostContextSnapshot | null
   ): AgentToolActivationSnapshot {
-    const discovered = this.rotatedDiscoveredNames()
+    if (this.catalogRevision !== undefined && this.catalogRevision !== context?.catalogRevision) {
+      this.leasesByFacet.clear()
+      this.leaseOrder = []
+    }
+    this.catalogRevision = context?.catalogRevision
+    const leasedToolNames = this.currentLeasedToolNames()
     const pinnedToolNames = [...new Set([
       ...this.continuationToolNames,
       ...this.recoveryToolNames,
-    ])]
+    ])].slice(0, 4)
     const snapshot = activateAgentTools(this.registry, {
       route,
       context,
       pinnedToolNames,
-      discoveredToolNames: discovered,
+      leasedToolNames,
       recentToolNames: this.recentToolNames,
+      closeoutMode: this.closeoutMode,
     })
     const activeNameSet = new Set(snapshot.activeToolNames)
     this.recoveryToolNames = this.recoveryToolNames
       .filter((name) => !activeNameSet.has(name))
-    const selectedDiscoveredCount = snapshot.activeToolNames
-      .filter((name) => this.discoveredToolNames.includes(name)).length
-    if (this.discoveredToolNames.length > 0 && selectedDiscoveredCount > 0) {
-      this.discoveryCursor = (this.discoveryCursor + selectedDiscoveredCount)
-        % this.discoveredToolNames.length
+    if (snapshot.unavailableNames.length > 0) {
+      const unavailable = new Set(snapshot.unavailableNames)
+      for (const [facetId, toolNames] of this.leasesByFacet.entries()) {
+        const retained = toolNames.filter((name) => !unavailable.has(name))
+        if (retained.length > 0) this.leasesByFacet.set(facetId, retained)
+        else this.leasesByFacet.delete(facetId)
+      }
+      this.leaseOrder = this.leaseOrder.filter((name) => !unavailable.has(name))
     }
     return snapshot
   }
@@ -47,28 +58,42 @@ export class AgentToolCatalogPlanner {
     if (!['discover_application_capabilities', 'search_application_capabilities'].includes(toolName)
       || !output || typeof output !== 'object') return []
     const outputRecord = output as Record<string, unknown>
-    const capabilities = outputRecord.capabilities
-    const explicitlyAdded = Array.isArray(outputRecord.addedToolNames)
-      ? outputRecord.addedToolNames.filter((name): name is string => typeof name === 'string')
+    const explicitlyLeased = Array.isArray(outputRecord.leasedToolNames)
+      ? outputRecord.leasedToolNames.filter((name): name is string => typeof name === 'string')
       : []
-    if (!Array.isArray(capabilities) && explicitlyAdded.length === 0) return []
-    const previous = new Set(this.discoveredToolNames)
-    const candidates: string[] = []
-    for (const capability of Array.isArray(capabilities) ? capabilities : []) {
-      if (!capability || typeof capability !== 'object' || Array.isArray(capability)) continue
-      const name = (capability as Record<string, unknown>).name
-      if (typeof name !== 'string'
-        || ['discover_application_capabilities', 'search_application_capabilities'].includes(name)) continue
-      if (!this.registry.get(name) || candidates.includes(name)) continue
-      candidates.push(name)
+    if (explicitlyLeased.length === 0) return []
+    const previous = new Set(this.currentLeasedToolNames())
+    const leased = explicitlyLeased.flatMap((name) => {
+      if (['discover_application_capabilities', 'search_application_capabilities'].includes(name)) return []
+      return this.registry.get(name) ? [name] : []
+    })
+    const leaseSet = new Set(leased)
+    const facets = Array.isArray(outputRecord.facets) ? outputRecord.facets : []
+    let associated = false
+    for (const rawFacet of facets) {
+      if (!rawFacet || typeof rawFacet !== 'object' || Array.isArray(rawFacet)) continue
+      const facet = rawFacet as Record<string, unknown>
+      if (typeof facet.facetId !== 'string' || !Array.isArray(facet.capabilityNames)) continue
+      const names = facet.capabilityNames.filter((name): name is string => (
+        typeof name === 'string' && leaseSet.has(name)
+      ))
+      if (names.length === 0) continue
+      this.leasesByFacet.set(facet.facetId, [...new Set(names)].slice(0, 5))
+      associated = true
     }
-    for (const name of explicitlyAdded) {
-      if (['discover_application_capabilities', 'search_application_capabilities'].includes(name)) continue
-      if (this.registry.get(name) && !candidates.includes(name)) candidates.push(name)
+    if (!associated) this.leasesByFacet.set('catalog', leased.slice(0, 15))
+    this.leaseOrder = [...new Set([...leased, ...this.leaseOrder])].slice(0, 15)
+    return leased.filter((name) => !previous.has(name))
+  }
+
+  /** Facet 进入终态后立即释放对应租约；当前依赖前沿以外的活动 Facet 仍保留。 */
+  syncActiveFacets(activeFacetIds: string[]): void {
+    const active = new Set(activeFacetIds)
+    for (const facetId of this.leasesByFacet.keys()) {
+      if (facetId !== 'catalog' && !active.has(facetId)) this.leasesByFacet.delete(facetId)
     }
-    this.discoveredToolNames = [...new Set([...candidates, ...this.discoveredToolNames])].slice(0, 100)
-    if (candidates.length > 0) this.discoveryCursor = 0
-    return candidates.filter((name) => !previous.has(name))
+    const retained = new Set([...this.leasesByFacet.values()].flat())
+    this.leaseOrder = this.leaseOrder.filter((name) => retained.has(name))
   }
 
   rememberObservation(toolName: string, output?: unknown): void {
@@ -94,7 +119,7 @@ export class AgentToolCatalogPlanner {
 
   queueKnownToolForActivation(toolName: string): boolean {
     if (!this.registry.get(toolName)) return false
-    const known = this.discoveredToolNames.includes(toolName)
+    const known = this.currentLeasedToolNames().includes(toolName)
       || this.recentToolNames.includes(toolName)
       || this.continuationToolNames.includes(toolName)
     if (!known) return false
@@ -106,23 +131,44 @@ export class AgentToolCatalogPlanner {
   }
 
   restoreDiscovered(toolNames: string[]): void {
-    this.discoveredToolNames = [...new Set([
-      ...toolNames.filter((name) => (
-        !['discover_application_capabilities', 'search_application_capabilities'].includes(name)
-        && Boolean(this.registry.get(name))
-      )),
-      ...this.discoveredToolNames,
-    ])].slice(0, 100)
+    this.restoreLeases([{ facetId: 'catalog', toolNames }])
   }
 
-  private rotatedDiscoveredNames(): string[] {
-    if (this.discoveredToolNames.length < 2 || this.discoveryCursor === 0) {
-      return [...this.discoveredToolNames]
+  restoreLeases(
+    leases: Array<{ facetId: string; toolNames: string[] }>,
+    catalogRevision?: string | number | null
+  ): void {
+    if (catalogRevision !== undefined && catalogRevision !== null) {
+      this.catalogRevision = catalogRevision
     }
-    return [
-      ...this.discoveredToolNames.slice(this.discoveryCursor),
-      ...this.discoveredToolNames.slice(0, this.discoveryCursor),
-    ]
+    for (const lease of leases) {
+      const names = lease.toolNames.filter((name) => (
+        !['discover_application_capabilities', 'search_application_capabilities'].includes(name)
+        && Boolean(this.registry.get(name))
+      )).slice(0, 5)
+      if (names.length > 0) this.leasesByFacet.set(lease.facetId, names)
+    }
+    this.leaseOrder = [...new Set([
+      ...leases.flatMap((lease) => lease.toolNames),
+      ...this.leaseOrder,
+    ])].filter((name) => Boolean(this.registry.get(name))).slice(0, 15)
+  }
+
+  currentLeaseSnapshot(): Array<{ facetId: string; toolNames: string[] }> {
+    return [...this.leasesByFacet.entries()].map(([facetId, toolNames]) => ({ facetId, toolNames: [...toolNames] }))
+  }
+
+  currentCatalogRevision(): string | number | null {
+    return this.catalogRevision ?? null
+  }
+
+  enterCloseoutMode(): void {
+    this.closeoutMode = true
+  }
+
+  private currentLeasedToolNames(): string[] {
+    const retained = new Set([...this.leasesByFacet.values()].flat())
+    return this.leaseOrder.filter((name) => retained.has(name)).slice(0, 15)
   }
 
   private rememberContinuation(toolName: string, output: unknown): void {

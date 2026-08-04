@@ -99,6 +99,12 @@ export const agentRuntimeModelConfigSchema = z.object({
 }).strict()
 export type AgentRuntimeModelConfig = z.infer<typeof agentRuntimeModelConfigSchema>
 
+export const agentBudgetContinuationSchema = z.object({
+  sourceRunId: z.string().min(1),
+  segment: z.number().int().min(2).max(3),
+}).strict()
+export type AgentBudgetContinuation = z.infer<typeof agentBudgetContinuationSchema>
+
 export const agentStartRunRequestSchema = z.object({
   schemaVersion: z.literal(AGENT_RUNTIME_SCHEMA_VERSION),
   threadId: z.string().min(1).max(200),

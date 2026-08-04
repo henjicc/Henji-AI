@@ -22,7 +22,9 @@ export function settleRuntimeRun<TRecord extends RuntimeSettlementRecord, TListe
   input: SettleRuntimeRunInput<TRecord, TListeners>
 ): void {
   input.persistence.saveState(input.state)
-  input.persistence.appendTerminalMessage(input.state)
+  if (input.state.status !== 'budget_exhausted' || input.state.error) {
+    input.persistence.appendTerminalMessage(input.state)
+  }
   input.persistence.appendSettledSavePoint(input.state)
   if (input.record && input.activeByThread.get(input.record.threadId) === input.runId) {
     input.activeByThread.delete(input.record.threadId)

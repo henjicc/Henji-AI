@@ -53,7 +53,7 @@ type PropertyMutationInput = {
 
 type ChangeInput = {
   summary: string
-  expectedRevisions: Record<string, number>
+  expectedRevisions?: Record<string, number>
   changes: Array<
     | { kind: 'set_properties'; target: { kind: string; id: string }; entityType: string; properties: Record<string, unknown> }
     | { kind: 'mutate_properties'; target: { kind: string; id: string }; entityType: string; mutations: PropertyMutationInput[] }
@@ -163,7 +163,7 @@ export const applicationReflectionHandlers = {
   async changeEntities(input: ChangeInput, context: CapabilityExecutionContext) {
     const engine = getApplicationControlExecutionEngine()
     const appContext = executionContext(context)
-    const expected = input.expectedRevisions
+    const expected = context.expectedRevisions ?? {}
     const plan = await engine.plan({
       summary: input.summary,
       // compensatable：多步时任一步失败都逐步回滚。atomic 只对同实体类型的属性组写入有意义，

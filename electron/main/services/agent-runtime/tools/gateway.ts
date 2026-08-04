@@ -22,6 +22,7 @@ import {
   summarizeSafeText,
 } from './security'
 import type { AgentToolExecuteRequest } from './types'
+import type { AgentToolDefinition } from './types'
 import {
   AgentToolGatewayError,
   assertOutputDataClassesCovered,
@@ -46,6 +47,36 @@ export interface AgentToolGatewayOptions {
   approvals?: AgentApprovalManager
   idempotency?: AgentIdempotencyLedger
   appendPermissionAudit: (fact: AgentPermissionAuditFact) => Promise<void>
+}
+
+function inputWithAuthoritativeRevision(
+  definition: AgentToolDefinition,
+  rawInput: unknown,
+  expectedRevisions: AgentToolExecuteRequest['expectedRevisions']
+): unknown {
+  if (!definition.capability || !rawInput || typeof rawInput !== 'object' || Array.isArray(rawInput)) {
+    return rawInput
+  }
+  const input = rawInput as Record<string, unknown>
+  const authoritative = expectedRevisions?.toolbox
+  const candidateRevision = authoritative ?? 0
+  const candidate = definition.inputSchema.safeParse({
+    ...input,
+    baseRevision: candidateRevision,
+  })
+  const acceptsLegacyBaseRevision = candidate.success
+    && candidate.data !== null
+    && typeof candidate.data === 'object'
+    && !Array.isArray(candidate.data)
+    && Object.hasOwn(candidate.data, 'baseRevision')
+  if (!acceptsLegacyBaseRevision) return rawInput
+  if (authoritative === undefined) {
+    throw new AgentToolGatewayError('STALE_CONTEXT', '缺少 Gateway expected revision 信封中的 toolbox revision')
+  }
+  if (input.baseRevision !== undefined && input.baseRevision !== authoritative) {
+    throw new AgentToolGatewayError('CONFLICT', '兼容 baseRevision 与 Gateway expected revision 不一致')
+  }
+  return candidate.data
 }
 
 export class AgentToolGateway {
@@ -86,9 +117,14 @@ export class AgentToolGateway {
 
     try {
       throwIfAborted(request.signal)
-      assertJsonWithinLimits(request.input, TOOL_INPUT_LIMITS)
-      const initialInput = definition.inputSchema.parse(request.input)
       const context = this.options.getHostContext(request.runId)
+      const normalizedInput = inputWithAuthoritativeRevision(
+        definition,
+        request.input,
+        request.expectedRevisions
+      )
+      assertJsonWithinLimits(normalizedInput, TOOL_INPUT_LIMITS)
+      const initialInput = definition.inputSchema.parse(normalizedInput)
       const executionContext = {
         runId: request.runId,
         threadId: request.threadId,

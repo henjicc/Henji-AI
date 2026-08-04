@@ -15,10 +15,13 @@
  */
 export const AGENT_ACTIVE_TOOL_LIMIT = 32
 export const AGENT_TOOL_SCHEMA_BUDGET_BYTES = 96 * 1024
+/** 活动工具业务描述的独立构建门禁；通用网关语义只在公共契约层出现一次。 */
+export const AGENT_TOOL_DESCRIPTION_BUDGET_BYTES = 32 * 1024
 
-/**
- * 一次能力发现最多回带多少个待激活工具名。
- * 发现结果的裁剪与 addedToolNames 的 schema 上限必须是同一个数。
- * 必须 >= AGENT_ACTIVE_TOOL_LIMIT，否则永远填不满工具位（budget-consistency 用例守这条）。
- */
-export const AGENT_DISCOVERY_ADDED_TOOL_LIMIT = 40
+/** 一个依赖前沿 Facet 最多持有的稳定工具租约。 */
+export const AGENT_FACET_LEASE_TOOL_LIMIT = 5
+/** 一轮发现最多覆盖三个当前可运行的 Facet。 */
+export const AGENT_LEASE_FRONTIER_FACET_LIMIT = 3
+/** 7 个核心工具之外，发现结果最多承诺 15 个下一轮真实可用的租约工具。 */
+export const AGENT_DISCOVERY_LEASE_TOOL_LIMIT =
+  AGENT_FACET_LEASE_TOOL_LIMIT * AGENT_LEASE_FRONTIER_FACET_LIMIT

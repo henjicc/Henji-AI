@@ -8,6 +8,7 @@ import { defineAgentTool } from './define-tool'
 import { AgentToolGateway, AgentToolGatewayError } from './gateway'
 import { AgentToolRegistry } from './registry'
 import type { AgentToolDefinition } from './types'
+import { createFrontendApplicationCapabilityTools } from './builtin/frontend-capabilities'
 
 function createContext(): HostContextSnapshot {
   return {
@@ -108,6 +109,73 @@ function request(
 }
 
 describe('AgentToolGateway', () => {
+  it('AI schema 隐藏 baseRevision 后仍从 Gateway 信封注入旧处理器', async () => {
+    const calls: unknown[] = []
+    const tools = createFrontendApplicationCapabilityTools(async (operation) => {
+      calls.push(operation)
+      return {
+        ok: true,
+        resultingRevision: 8,
+        resultingScopeRevisions: {
+          navigation: 1,
+          generation: 2,
+          canvas: 0,
+          toolbox: 8,
+          assets: 0,
+        },
+        data: {
+          status: 'completed',
+          transactionRef: 'transaction-1',
+          baseRevision: 8,
+          resultingRevisions: { toolbox: 8 },
+          producedRefs: [],
+          evidence: [],
+          verification: {
+            verified: true,
+            evidence: [],
+            unmetConditions: [],
+            checkedAt: new Date().toISOString(),
+          },
+          undoRef: 'undo-1',
+          revision: 8,
+          scopeRevisions: { toolbox: 8 },
+        },
+      }
+    })
+    const definition = tools.find((tool) => tool.name === 'rename_camera_stage_project')
+    if (!definition) throw new Error('missing rename_camera_stage_project')
+    definition.aiInputSchema = {
+      ...definition.aiInputSchema,
+      properties: {
+        projectId: { type: 'string' },
+        name: { type: 'string' },
+      },
+      required: ['projectId', 'name'],
+    }
+    const registry = new AgentToolRegistry()
+    registry.register(definition)
+    const gateway = new AgentToolGateway({
+      registry,
+      getHostContext: () => ({
+        ...createContext(),
+        scopeRevisions: { ...createContext().scopeRevisions, toolbox: 7 },
+      }),
+      appendPermissionAudit: async () => undefined,
+    })
+
+    await expect(gateway.execute({
+      ...request({ projectId: 'project-1', name: '新名称' }, undefined, 'full_access'),
+      toolName: definition.name,
+      expectedRevisions: { toolbox: 7 },
+    })).resolves.toMatchObject({ status: 'completed' })
+    expect(calls).toMatchObject([{
+      capability: {
+        input: { projectId: 'project-1', name: '新名称', baseRevision: 7 },
+        expectedRevisions: { toolbox: 7 },
+      },
+    }])
+  })
+
   it('双向校验并缓存幂等成功结果', async () => {
     const { gateway, calls } = createGateway()
     const first = await gateway.execute(request({ value: 'ok' }))

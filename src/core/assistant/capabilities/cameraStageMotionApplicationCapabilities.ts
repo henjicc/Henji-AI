@@ -65,6 +65,50 @@ const verifyScene = defineApplicationCapability({
   }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:verify`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
   control: cameraStageControl('observe', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.trajectory', 'camera_stage.keyframe']),
+  resolveObservedEffects: (input, output) => {
+    const evidence = [
+      `checkedAt:${output.checkedAt}`,
+      ...output.unmetConditions.slice(0, 8).map((condition) => `unmet:${condition}`),
+    ]
+    return [
+      {
+        effect: 'observe' as const,
+        entityTypes: ['camera_stage.project', 'camera_stage.scene'],
+        propertyIds: [],
+        targetRefs: [{ kind: 'camera_stage.project', id: input.projectId }],
+        count: 1,
+        verified: output.verified,
+        evidence,
+      },
+      ...(input.expectedObjectIds.length > 0 ? [{
+        effect: 'observe' as const,
+        entityTypes: ['camera_stage.object'],
+        propertyIds: [],
+        targetRefs: input.expectedObjectIds.map((id) => ({ kind: 'camera_stage.object', id })),
+        count: input.expectedObjectIds.length,
+        verified: output.verified,
+        evidence,
+      }] : []),
+      ...(input.expectedCameraId ? [{
+        effect: 'observe' as const,
+        entityTypes: ['camera_stage.camera'],
+        propertyIds: [],
+        targetRefs: [{ kind: 'camera_stage.camera', id: input.expectedCameraId }],
+        count: 1,
+        verified: output.verified,
+        evidence,
+      }] : []),
+      ...(input.expectedMoveKind ? [{
+        effect: 'observe' as const,
+        entityTypes: ['camera_stage.trajectory', 'camera_stage.keyframe'],
+        propertyIds: [],
+        targetRefs: [],
+        count: 1,
+        verified: output.verified,
+        evidence,
+      }] : []),
+    ]
+  },
   summarize: (output) => output.verified ? '3D 场景结构化验证已通过。' : `3D 场景仍有 ${output.unmetConditions.length} 项未满足。`,
 })
 

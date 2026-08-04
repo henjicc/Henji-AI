@@ -31,13 +31,10 @@ export class AgentConversationCompactor {
 
   constructor(private readonly options: AgentConversationCompactorOptions) {
     const contextWindow = options.model.limits.contextWindow
-    const reserve = contextWindow > 16_384 + 2_000
-      ? 16_384
-      : Math.floor(contextWindow * 0.2)
-    const threshold = Math.max(2_000, contextWindow - reserve)
+    const threshold = Math.max(1_000, Math.floor(contextWindow * 0.7))
     this.keepRecentTokens = Math.min(
       AGENT_KEEP_RECENT_TOKENS,
-      Math.max(1_000, Math.floor(threshold * 0.75))
+      Math.max(1_000, Math.floor(threshold * 0.5))
     )
   }
 

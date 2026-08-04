@@ -105,6 +105,19 @@ function createRegistry(execute: () => Promise<{ taskId: string }>): AgentToolRe
     version: 1,
     title: '创建生成任务',
     description: '创建一个测试生成任务。',
+    capability: {
+      id: 'create_visible_generation_task', domain: 'generation', aliases: [], dataClasses: ['C1'],
+      acceptsRefs: [], producesRefs: ['generation.task'], availability: [], concurrencyKey: 'generation',
+      control: { impacts: [{
+        effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
+        revisionScopes: ['generation'], verificationRequired: true,
+      }] },
+      resolveObservedEffects: (_input: { prompt: string }, output: { taskId: string }) => [{
+        effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
+        targetRefs: [{ kind: 'generation.task', id: output.taskId }], count: 1,
+        verified: true, evidence: [`task:${output.taskId}`],
+      }],
+    } as never,
     category: 'generation',
     side: 'backend',
     risk: 'R2',

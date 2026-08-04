@@ -63,6 +63,7 @@ describe('AgentExternalContinuationCoordinator', () => {
       ],
       activeToolNames: ['create_visible_generation_task', 'list_visible_generation_tasks'],
       schemaBytes: 0,
+      descriptionBytes: 0,
       candidateCount: 2,
       pinnedToolNames: [],
       droppedPinnedToolNames: [],

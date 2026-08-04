@@ -120,6 +120,8 @@ export interface AgentContextBuildInput {
   observations: AgentToolObservation[]
   modelTools: ModelStepTool[]
   activeToolNames: string[]
+  /** 核心地板和活动 Facet 租约；最终上下文裁剪不得静默删除。 */
+  protectedToolNames?: string[]
   contextWindowBudget: number
   maxOutputTokens?: number
   workingSummary?: AgentWorkingSummary
@@ -143,4 +145,5 @@ export interface AgentContextBuildResult {
   retainedLayers: AgentContextLayerId[]
   droppedLayers: AgentContextLayerId[]
   compactionReason: string | null
+  contextPressure: 'normal' | 'soft' | 'hard'
 }

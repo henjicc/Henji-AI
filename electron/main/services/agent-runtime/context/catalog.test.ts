@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 
 import {
   AGENT_CONTRACT_VERSION,
@@ -7,6 +8,7 @@ import {
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { createBackendBuiltinTools } from '../tools/builtin/backend'
 import { AgentToolRegistry } from '../tools/registry'
+import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolCatalogPlanner } from './catalog'
 import { AGENT_ACTIVE_TOOL_LIMIT, AGENT_TOOL_SCHEMA_BUDGET_BYTES } from './tool-activation'
 import type { AgentRouteDecision } from './types'
@@ -118,15 +120,16 @@ describe('AgentToolCatalogPlanner', () => {
     // load_assistant_skill 与能力发现同为常驻工具：skills_index 层要求模型先加载技能，
     // 它必须真的在本轮工具里，否则模型看得见清单却调不动。
     expect(planner.select(primaryRoute, contextSnapshot()).activeToolNames)
-      .toEqual(['load_assistant_skill', 'discover_application_capabilities'])
+      .toEqual(['load_assistant_skill', 'discover_application_capabilities', 'declare_action_plan'])
 
     const capabilities = registry.search('图片生成', undefined, contextSnapshot())
+    const leasedToolNames = capabilities.map((capability) => capability.name).slice(0, 5)
     const added = planner.rememberDiscovered('discover_application_capabilities', {
       capabilities,
-      addedToolNames: ['read_application_schemas'],
+      leasedToolNames,
+      facets: [{ facetId: 'generate', capabilityNames: leasedToolNames }],
     })
     expect(added).toContain('create_visible_generation_task')
-    expect(added).toContain('read_application_schemas')
 
     const activeNames = planner.select(primaryRoute, contextSnapshot()).activeToolNames
     expect(activeNames).toContain('discover_application_capabilities')
@@ -164,7 +167,8 @@ describe('AgentToolCatalogPlanner', () => {
     const planner = new AgentToolCatalogPlanner(registry)
     // 模拟一次典型的三维任务：发现一大批能力，远超单轮 8 个工具位。
     planner.rememberDiscovered('discover_application_capabilities', {
-      capabilities: registry.search('', 'camera_stage', fullContext, 100),
+      leasedToolNames: ['place_camera_stage_object'],
+      facets: [{ facetId: 'camera_scene', capabilityNames: ['place_camera_stage_object'] }],
     })
     const route = { ...primaryRoute, toolDomains: ['camera_stage' as const] }
     expect(planner.select(route, fullContext).candidateCount).toBeGreaterThan(8)
@@ -175,6 +179,137 @@ describe('AgentToolCatalogPlanner', () => {
       expect(planner.select(route, fullContext).activeToolNames)
         .toContain('place_camera_stage_object')
     }
+  })
+
+  it('三个前沿 Facet 的 15 个租约跨轮稳定，终态后释放且不突破 32/96KB', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const fullContext = {
+      ...contextSnapshot(),
+      catalogRevision: 1,
+      availableCapabilities: registry.allDefinitions()
+        .filter((definition) => definition.side === 'frontend')
+        .map((definition) => definition.name),
+    }
+    const candidates = registry.list(fullContext)
+      .filter((entry) => !['catalog', 'application'].includes(entry.category))
+      .slice(0, 15)
+      .map((entry) => entry.name)
+    expect(candidates).toHaveLength(15)
+    const planner = new AgentToolCatalogPlanner(registry)
+    planner.rememberDiscovered('discover_application_capabilities', {
+      leasedToolNames: candidates,
+      facets: [0, 1, 2].map((index) => ({
+        facetId: `facet_${index}`,
+        capabilityNames: candidates.slice(index * 5, index * 5 + 5),
+      })),
+    })
+    planner.syncActiveFacets(['facet_0', 'facet_1', 'facet_2'])
+
+    for (let turn = 0; turn < 3; turn += 1) {
+      const activation = planner.select(primaryRoute, fullContext)
+      expect(activation.activeToolNames.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
+      expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
+      expect(activation.leasedToolNames).toEqual(expect.arrayContaining(candidates))
+      expect(activation.droppedLeasedToolNames).toEqual([])
+    }
+
+    planner.syncActiveFacets(['facet_1', 'facet_2'])
+    const released = planner.select(primaryRoute, fullContext)
+    for (const name of candidates.slice(0, 5)) expect(released.leasedToolNames).not.toContain(name)
+  })
+
+  it('100 个目录能力下仍只激活真实租约且不突破 32/96KB', () => {
+    const registry = new AgentToolRegistry()
+    for (let index = 0; index < 100; index += 1) {
+      const name = `catalog_pressure_${index}`
+      registry.register(defineAgentTool({
+        name,
+        version: 1,
+        title: `压力能力 ${index}`,
+        description: '只用于验证大型目录下的活动工具预算。',
+        side: 'backend',
+        category: 'diagnostics',
+        risk: 'R0',
+        permission: 'diagnostics:read',
+        readOnly: true,
+        destructive: false,
+        openWorld: false,
+        idempotent: true,
+        timeoutMs: 1_000,
+        retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+        supportsPreview: false,
+        supportsUndo: false,
+        requiredContext: [],
+        inputSchema: z.object({ id: z.string() }).strict(),
+        outputSchema: z.object({ ok: z.literal(true) }).strict(),
+        aiInputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+          additionalProperties: false,
+        },
+        execute: async () => ({ ok: true as const }),
+        concurrencyKey: (input) => `${name}:${input.id}`,
+        targetIds: (input) => ({ id: input.id }),
+        dataClasses: () => ['C0'],
+        summarize: () => '压力能力读取完成。',
+      }))
+    }
+    const leased = Array.from({ length: 15 }, (_, index) => `catalog_pressure_${index}`)
+    const planner = new AgentToolCatalogPlanner(registry)
+    planner.restoreLeases(Array.from({ length: 3 }, (_, facetIndex) => ({
+      facetId: `facet_${facetIndex}`,
+      toolNames: leased.slice(facetIndex * 5, facetIndex * 5 + 5),
+    })))
+
+    expect(registry.list(null)).toHaveLength(100)
+    const activation = planner.select(primaryRoute, null)
+    expect(activation.leasedToolNames).toEqual(leased)
+    expect(activation.activeToolNames.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
+    expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
+    expect(activation.droppedLeasedToolNames).toEqual([])
+  })
+
+  it('目录 revision 改变时旧租约立即失效', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    const firstContext = { ...contextSnapshot(), catalogRevision: 1 } as HostContextSnapshot
+    planner.select(primaryRoute, firstContext)
+    planner.restoreLeases([{ facetId: 'facet', toolNames: ['read_agent_artifact'] }])
+    expect(planner.select(primaryRoute, firstContext).leasedToolNames).toContain('read_agent_artifact')
+    const nextContext = { ...firstContext, catalogRevision: 2 } as HostContextSnapshot
+    expect(planner.select(primaryRoute, nextContext).leasedToolNames).not.toContain('read_agent_artifact')
+  })
+
+  it('工具 availability 失效后释放租约，不在后续轮次幽灵恢复', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    planner.restoreLeases([{
+      facetId: 'camera_scene',
+      toolNames: ['place_camera_stage_object'],
+    }])
+
+    planner.select({ ...primaryRoute, toolDomains: ['camera_stage'] }, contextSnapshot())
+    expect(planner.currentLeaseSnapshot()).toEqual([])
+  })
+
+  it('从检查点恢复的租约携带目录 revision，首轮即可识别失效', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const restored = new AgentToolCatalogPlanner(registry)
+    restored.restoreLeases([
+      { facetId: 'facet', toolNames: ['read_agent_artifact'] },
+    ], 1)
+    const changedContext = { ...contextSnapshot(), catalogRevision: 2 } as HostContextSnapshot
+    expect(restored.select(primaryRoute, changedContext).leasedToolNames)
+      .not.toContain('read_agent_artifact')
   })
 
   it('纯闲聊（无工具域）不占用技能加载的工具位', () => {
@@ -189,7 +324,7 @@ describe('AgentToolCatalogPlanner', () => {
     expect(active).not.toContain('load_assistant_skill')
   })
 
-  it('领域工具超过单轮上限时仍可分页发现并在有限轮次内轮换激活', async () => {
+  it('领域工具超过单轮上限时分页候选会延迟，活动租约不轮换', async () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })
@@ -219,14 +354,15 @@ describe('AgentToolCatalogPlanner', () => {
     )
 
     const firstPage = allCanvas.slice(0, 20)
-    planner.rememberDiscovered('search_application_capabilities', { capabilities: firstPage })
+    const leasedToolNames = firstPage.slice(0, 5).map((entry) => entry.name)
+    planner.rememberDiscovered('search_application_capabilities', { leasedToolNames })
     const activated = new Set<string>()
     for (let turn = 0; turn < 4; turn += 1) {
       for (const name of planner.select(primaryRoute, fullContext).activeToolNames) activated.add(name)
     }
 
-    expect([...activated]).toEqual(expect.arrayContaining(firstPage.map((entry) => entry.name)))
-    expect(activated).toContain('get_canvas_project')
+    expect([...activated]).toEqual(expect.arrayContaining(leasedToolNames))
+    expect([...activated].filter((name) => leasedToolNames.includes(name))).toHaveLength(leasedToolNames.length)
   })
 
   it('分页未结束时固定读取工具，最后一页后释放固定状态', () => {
@@ -286,8 +422,9 @@ describe('AgentToolCatalogPlanner', () => {
     expect(planner.queueKnownToolForActivation('read_agent_artifact')).toBe(true)
     expect(planner.queueKnownToolForActivation('create_visible_generation_task')).toBe(false)
     const activation = planner.select(primaryRoute, contextSnapshot())
-    expect(activation.activeToolNames[0]).toBe('read_agent_artifact')
+    expect(activation.activeToolNames).toContain('read_agent_artifact')
     expect(activation.pinnedToolNames).toContain('read_agent_artifact')
+    expect(activation.droppedPinnedToolNames).not.toContain('read_agent_artifact')
   })
 })
 

@@ -137,6 +137,11 @@ describe('minimal assistant evaluator', () => {
       planAccuracyRate: 1,
       evidencePassRate: 1,
       recoveryPassRate: 1,
+      withinSoftTurnBudgetRate: 1,
+      ordinaryEfficiencyPassRate: 1,
+      averageBatchRate: 1,
+      totalToolNotActiveCount: 0,
+      averageEffectSatisfactionRate: 1,
       failures: [],
     })
     expect(summary.results.every((result) => result.passed)).toBe(true)

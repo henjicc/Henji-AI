@@ -43,6 +43,9 @@ const describeEntities = defineApplicationCapability({
   resolveConcurrencyKey: () => 'application:describe',
   resolveTargetIds: () => ({}),
   summarize: (output) => `返回 ${output.entities.length} 个实体类型、${output.properties.length} 条属性。`,
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'observed' }, impacts: [{
+    effect: 'observe', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: false,
+  }] },
 })
 
 const listEntities = defineApplicationCapability({
@@ -66,6 +69,13 @@ const listEntities = defineApplicationCapability({
   resolveConcurrencyKey: (input) => `application:list:${input.entityType}`,
   resolveTargetIds: () => ({}),
   summarize: (output) => `返回 ${output.refs.length} 个实例。`,
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'observed' }, impacts: [{
+    effect: 'observe', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: false,
+  }] },
+  resolveObservedEffects: (input, output) => [{
+    effect: 'observe', entityTypes: [input.entityType], propertyIds: [], targetRefs: output.refs,
+    count: Math.max(1, output.refs.length), verified: true, evidence: [],
+  }],
 })
 
 const readEntity = defineApplicationCapability({
@@ -90,7 +100,54 @@ const readEntity = defineApplicationCapability({
   resolveConcurrencyKey: (input) => `application:read:${input.ref.kind}`,
   resolveTargetIds: (input) => ({ entityId: input.ref.id }),
   summarize: () => '实体属性已读取。',
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'observed' }, impacts: [{
+    effect: 'observe', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: false,
+  }] },
+  resolveObservedEffects: (input, output) => [{
+    effect: 'observe', entityTypes: [output.entityType], propertyIds: Object.keys(output.properties),
+    targetRefs: [{ kind: input.ref.kind, id: input.ref.id }], count: 1, verified: true,
+    evidence: [`capturedAt:${output.capturedAt}`],
+  }],
 })
+
+const changeEntitiesInputSchema = z.object({
+  summary: z.string().min(1).max(200),
+  // v1 会话兼容：新模型 schema 不再展示它，执行时只信任 Gateway 信封。
+  expectedRevisions: z.record(z.string(), z.number().int().nonnegative()).optional(),
+  changes: z.array(z.discriminatedUnion('kind', [
+    z.object({
+      kind: z.literal('set_properties'),
+      target: refSchema,
+      entityType: z.string().min(1),
+      properties: z.record(z.string(), z.unknown()),
+    }).strict(),
+    z.object({
+      kind: z.literal('mutate_properties'),
+      target: refSchema,
+      entityType: z.string().min(1),
+      mutations: z.array(z.object({
+        propertyId: z.string().min(1),
+        operation: z.enum(['set', 'clear', 'append', 'remove']),
+        value: z.unknown().optional(),
+      }).strict().refine(
+        (mutation) => mutation.operation === 'clear' || mutation.value !== undefined,
+        { message: 'set/append/remove 修改必须提供 value' },
+      )).min(1).max(256),
+    }).strict(),
+    z.object({
+      kind: z.literal('create_items'),
+      parent: refSchema,
+      entityType: z.string().min(1),
+      items: z.array(z.object({ properties: z.record(z.string(), z.unknown()) }).strict()).min(1).max(128),
+    }).strict(),
+    z.object({
+      kind: z.literal('remove_items'),
+      parent: refSchema,
+      entityType: z.string().min(1),
+      targets: z.array(refSchema).min(1).max(128),
+    }).strict(),
+  ])).min(1).max(32),
+}).strict()
 
 const changeEntities = defineApplicationCapability({
   id: 'change_application_entities', version: 1, title: '修改应用状态',
@@ -105,46 +162,10 @@ const changeEntities = defineApplicationCapability({
     'CONFLICT 表示状态在读取之后被改动过：重新读取实体拿到新的 revisions 后重试一次。',
     '属性不可写或集合不允许增删时不要重试，改用 describe_application_entities 确认可写范围。',
   ],
-  inputSchema: z.object({
-    summary: z.string().min(1).max(200),
-    expectedRevisions: z.record(z.string(), z.number().int().nonnegative()).refine(
-      (revisions) => Object.keys(revisions).length > 0,
-      { message: '至少提供一个从 read_application_entity 获得的 revision' },
-    ),
-    changes: z.array(z.discriminatedUnion('kind', [
-      z.object({
-        kind: z.literal('set_properties'),
-        target: refSchema,
-        entityType: z.string().min(1),
-        properties: z.record(z.string(), z.unknown()),
-      }).strict(),
-      z.object({
-        kind: z.literal('mutate_properties'),
-        target: refSchema,
-        entityType: z.string().min(1),
-        mutations: z.array(z.object({
-          propertyId: z.string().min(1),
-          operation: z.enum(['set', 'clear', 'append', 'remove']),
-          value: z.unknown().optional(),
-        }).strict().refine(
-          (mutation) => mutation.operation === 'clear' || mutation.value !== undefined,
-          { message: 'set/append/remove 修改必须提供 value' },
-        )).min(1).max(256),
-      }).strict(),
-      z.object({
-        kind: z.literal('create_items'),
-        parent: refSchema,
-        entityType: z.string().min(1),
-        items: z.array(z.object({ properties: z.record(z.string(), z.unknown()) }).strict()).min(1).max(128),
-      }).strict(),
-      z.object({
-        kind: z.literal('remove_items'),
-        parent: refSchema,
-        entityType: z.string().min(1),
-        targets: z.array(refSchema).min(1).max(128),
-      }).strict(),
-    ])).min(1).max(32),
-  }).strict(),
+  inputSchema: changeEntitiesInputSchema,
+  aiInputSchema: z.toJSONSchema(changeEntitiesInputSchema.omit({ expectedRevisions: true }), {
+    target: 'draft-7', io: 'input',
+  }) as Record<string, unknown>,
   outputSchema: capabilityOutputSchema({
     status: z.literal('completed'),
     transactionRef: z.string(),
@@ -153,8 +174,40 @@ const changeEntities = defineApplicationCapability({
     evidence: z.array(z.record(z.string(), z.unknown())),
   }),
   resolveConcurrencyKey: (input) => `application:change:${input.changes[0]?.entityType ?? 'unknown'}`,
-  resolveTargetIds: () => ({}),
+  resolveTargetIds: (input) => Object.fromEntries(input.changes.flatMap((change, changeIndex) => {
+    const refs = change.kind === 'remove_items'
+      ? change.targets
+      : [change.kind === 'create_items' ? change.parent : change.target]
+    return refs.map((ref, refIndex) => [
+      `target_${changeIndex}_${refIndex}`,
+      `${ref.kind}:${ref.id}`,
+    ])
+  }).slice(0, 32)),
   summarize: (output) => `应用状态修改事务 ${output.transactionRef} 已完成。`,
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [
+    { effect: 'create', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: true },
+    { effect: 'update', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: true },
+    { effect: 'delete', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: true },
+  ] },
+  resolveObservedEffects: (input, output) => input.changes.map((change) => {
+    const target = change.kind === 'remove_items'
+      ? change.targets
+      : change.kind === 'create_items' ? [change.parent] : [change.target]
+    const propertyIds = change.kind === 'set_properties'
+      ? Object.keys(change.properties)
+      : change.kind === 'mutate_properties' ? change.mutations.map((mutation) => mutation.propertyId) : []
+    return {
+      effect: change.kind === 'create_items' ? 'create' as const
+        : change.kind === 'remove_items' ? 'delete' as const : 'update' as const,
+      entityTypes: [change.entityType],
+      propertyIds,
+      targetRefs: target.map((ref) => ({ kind: ref.kind, id: ref.id })),
+      count: change.kind === 'create_items' ? change.items.length
+        : change.kind === 'remove_items' ? change.targets.length : 1,
+      verified: false,
+      evidence: [`transaction:${output.transactionRef}`],
+    }
+  }),
 })
 
 export const APPLICATION_REFLECTION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [

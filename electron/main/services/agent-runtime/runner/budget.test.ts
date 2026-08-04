@@ -72,22 +72,45 @@ describe('AgentBudgetTracker', () => {
     })).toThrowError(/输入 token 预算/)
   })
 
-  it('桌面默认统计超过旧 12 轮和 24 次工具后仍不终止', () => {
+  it('桌面默认在第 20 轮进入收口，并在 32 轮后阻止第 33 轮', () => {
     const metrics = new AgentRunMetrics()
-    for (let turn = 0; turn < 30; turn += 1) {
+    for (let turn = 0; turn < 32; turn += 1) {
       expect(metrics.beginTurn()).toBe(turn + 1)
-      metrics.recordToolCall(`tool:${turn}:a`)
-      metrics.recordToolCall(`tool:${turn}:b`)
+      if (turn === 19) expect(metrics.consumeNewSoftLimits()).toContain('SOFT_MAX_TURNS')
     }
-    expect(metrics.snapshot()).toMatchObject({ turns: 30, toolCalls: 60 })
+    expect(() => metrics.beginTurn()).toThrowError(/最大轮次/)
+    expect(metrics.snapshot()).toMatchObject({ turns: 32, toolCalls: 0, writeToolCalls: 0 })
     expect(metrics.config).toMatchObject({
-      maxTurns: null,
-      maxToolCalls: null,
-      maxDurationMs: null,
+      softMaxTurns: 20,
+      maxTurns: 32,
+      softMaxToolCalls: 50,
+      maxToolCalls: 100,
+      softMaxWriteToolCalls: 12,
+      maxWriteToolCalls: 24,
+      maxDurationMs: 30 * 60 * 1_000,
       maxConsecutiveFailures: 3,
       maxRepeatedToolCalls: 2,
-      maxNoProgressTurns: 4,
+      maxNoProgressTurns: 3,
     })
+  })
+
+  it('分别统计工具与写入工具，并且软上限事件只消费一次', () => {
+    const metrics = new AgentRunMetrics({
+      softMaxToolCalls: 2,
+      maxToolCalls: 3,
+      softMaxWriteToolCalls: 1,
+      maxWriteToolCalls: 2,
+    })
+    metrics.recordToolCall('read:a', false)
+    metrics.recordToolCall('write:a', true)
+    expect(metrics.consumeNewSoftLimits()).toEqual([
+      'SOFT_MAX_TOOL_CALLS',
+      'SOFT_MAX_WRITE_TOOL_CALLS',
+    ])
+    expect(metrics.consumeNewSoftLimits()).toEqual([])
+    metrics.recordToolCall('write:b', true)
+    expect(metrics.snapshot()).toMatchObject({ toolCalls: 3, writeToolCalls: 2 })
+    expect(() => metrics.recordToolCall('write:c', true)).toThrowError(/最大工具调用次数/)
   })
 
   it('桌面默认在连续失败和相同工具重复调用时主动停止', () => {

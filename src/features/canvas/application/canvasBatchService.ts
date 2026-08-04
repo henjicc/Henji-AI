@@ -188,7 +188,13 @@ export async function applyCanvasOperationsAtomically(
     event: 'canvas.batch.apply.start', projectId, operationCount: operations.length, ...logContext,
   })
   try {
-    for (const operation of operations) results.push(await executeOperation(projectId, operation))
+    for (const [index, operation] of operations.entries()) {
+      results.push({
+        index,
+        kind: operation.kind,
+        ...await executeOperation(projectId, operation),
+      })
+    }
   } catch (error) {
     useCanvasStore.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
     persistCanvasState()

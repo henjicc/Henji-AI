@@ -1,14 +1,20 @@
 import { createMainLogger } from '../../logging'
 import { randomUUID } from 'node:crypto'
-import type { AgentEventInput, AgentRunState, AgentRunStatus } from '../../../../../src/core/assistant/events'
+import type {
+  AgentEventInput,
+  AgentRunPhase,
+  AgentRunState,
+  AgentRunStatus,
+} from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { AgentArtifactStore } from '../context/offload'
 import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
+import { AGENT_CORE_TOOL_NAMES } from '../context/tool-activation'
 import { AgentToolGatewayError } from '../tools/gateway'
-import { AgentRunMetrics } from './budget'
+import { AgentRunMetrics, AgentStopPolicyExceededError } from './budget'
 import { createInitialAgentRunState } from './initial-state'
 import { canObserveApplicationSurface, selectAgentRuntimeModels } from './models'
 import { toolMessage } from './runner-results'
@@ -49,7 +55,41 @@ import { AgentFacetProgressTracker } from './facet-progress'
 import { prepareAgentAttachmentContext } from './attachment-context'
 import { agentAttachmentSchema, type AgentAttachment } from '../../../../../src/core/assistant/attachments'
 import { readPendingVisualObservation } from '../../../../../src/core/assistant/surfaceObservation'
+import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
+import {
+  AGENT_INTENTS,
+  AGENT_TOOL_DOMAINS,
+  type AgentIntent,
+  type AgentRouteDecision,
+  type AgentToolDomain,
+} from '../context/types'
 const logger = createMainLogger('main.agent_runtime')
+
+function isAgentIntent(value: string): value is AgentIntent {
+  return (AGENT_INTENTS as readonly string[]).includes(value)
+}
+
+function isAgentToolDomain(value: string): value is AgentToolDomain {
+  return (AGENT_TOOL_DOMAINS as readonly string[]).includes(value)
+}
+
+function restoreAgentRoute(
+  recovered: NonNullable<AgentWorkingSummary['route']>
+): AgentRouteDecision {
+  const toolDomains = recovered.toolDomains.filter(isAgentToolDomain)
+  return {
+    routeVersion: 'agent-route/v2',
+    intent: isAgentIntent(recovered.intent) ? recovered.intent : 'general',
+    complexity: recovered.taskGraph ? 'multi_step' : 'simple',
+    path: toolDomains.length > 0 ? 'workflow' : 'primary',
+    toolDomains,
+    source: 'fallback',
+    reason: recovered.summary,
+    taskFacets: recovered.taskGraph?.facets.map((facet) => facet.facetId),
+    taskGraph: recovered.taskGraph,
+  }
+}
+
 export class AgentRunner {
   private readonly machine = new AgentStateMachine()
   private readonly budget: AgentRunMetrics
@@ -83,6 +123,7 @@ export class AgentRunner {
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private primaryAttachmentMessage: ModelStepMessage | null = null
+  private currentPhase: AgentRunPhase | null = null
   private readonly pendingVisualAttachments: AgentAttachment[] = []
   private started = false; constructor(private readonly options: AgentRunnerOptions) {
     const conversation = createRunnerConversation(options, () => this.state?.turn ?? 0)
@@ -101,15 +142,25 @@ export class AgentRunner {
     })
     this.budget = new AgentRunMetrics(options.request.budget)
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
-    this.catalogPlanner.restoreDiscovered(this.conversation.flatMap((message) => {
+    this.catalogPlanner.restoreLeases(this.conversation.flatMap((message) => {
       if (message.role !== 'tool' || !Array.isArray(message.content)) return []
       return message.content.flatMap((part) => {
-        const names = part.addedToolNames
-        return Array.isArray(names)
-          ? names.filter((name): name is string => typeof name === 'string')
-          : []
+        if (!Array.isArray(part.toolLeases)) return []
+        return part.toolLeases.flatMap((rawLease) => {
+          if (!rawLease || typeof rawLease !== 'object' || Array.isArray(rawLease)) return []
+          const lease = rawLease as Record<string, unknown>
+          if (typeof lease.facetId !== 'string' || !Array.isArray(lease.toolNames)) return []
+          return [{
+            facetId: lease.facetId,
+            toolNames: lease.toolNames.filter((name): name is string => typeof name === 'string'),
+          }]
+        })
       })
     }))
+    this.catalogPlanner.restoreLeases(
+      options.recoveryContext?.toolLeases ?? [],
+      options.recoveryContext?.toolLeaseCatalogRevision
+    )
     this.state = createInitialAgentRunState(options.runId, options.request, options.recoveryContext)
     this.lifecycle = new AgentRunnerLifecycle({
       runId: options.runId,
@@ -153,6 +204,7 @@ export class AgentRunner {
       setPausedFrom: (status) => this.pauseController.setPausedFrom(status),
       emit: (event) => this.emit(event),
       onAsyncError: (error) => this.handleAsyncEventError(error),
+      onPhase: (phase) => this.setPhase(phase),
     })
     this.modelTurnCoordinator = new AgentModelTurnCoordinator({
       runId: options.runId,
@@ -189,7 +241,7 @@ export class AgentRunner {
       signal: this.abortController.signal,
       waitIfPaused: () => this.pauseController.wait(),
       throwIfCancelled: () => this.throwIfCancelled(),
-      recordToolCall: (signature) => this.budget.recordToolCall(signature),
+      recordToolCall: (signature, write) => this.budget.recordToolCall(signature, write),
       recordProgress: (signature) => this.budget.recordProgress(signature),
       recordFailure: () => this.budget.recordFailure(),
       recordSuccess: () => this.budget.recordSuccess(),
@@ -220,8 +272,10 @@ export class AgentRunner {
           taskId: toolCallId,
           context: { toolNames },
         })
+        this.syncLeaseCheckpoint()
       },
       getProgressTracker: () => this.progressTracker,
+      onProgressUpdated: () => this.syncLeaseCheckpoint(),
     })
     this.savePointCoordinator = new AgentSavePointCoordinator({
       append: options.dependencies.appendSavePoint,
@@ -246,6 +300,7 @@ export class AgentRunner {
       register: options.dependencies.registerExternalWait,
       transition: (status, reason) => this.transition(status, reason),
       emit: (event) => this.emit(event),
+      onWaiting: () => this.setPhase('waiting_external'),
     })
     this.externalContinuation = new AgentExternalContinuationCoordinator({
       continuation: options.request.externalContinuation,
@@ -264,6 +319,15 @@ export class AgentRunner {
       emit: (event) => this.emit(event),
       transition: (reason) => this.transition('running', reason),
     })
+    if (this.options.budgetContinuation) {
+      this.setPhase('continuing', `进入第 ${this.options.budgetContinuation.segment}/3 段执行`)
+      this.emit({
+        type: 'RunContinuationStarted',
+        sourceRunId: this.options.budgetContinuation.sourceRunId,
+        segment: this.options.budgetContinuation.segment,
+        maxSegments: 3,
+      })
+    } else this.setPhase('planning')
     this.threadTitleCoordinator.start()
     this.externalContinuation.emitResumed((event) => this.emit(event))
     void this.execute()
@@ -321,12 +385,26 @@ export class AgentRunner {
   private async execute(): Promise<void> {
     try {
       const snapshot = this.requireContext()
-      const route = await routeAgentGoal({
-        runId: this.options.runId, goal: this.options.request.goal, snapshot,
-        signal: this.abortController.signal,
-        classify: (goal, host, signal) => this.modelTurnCoordinator.classify(goal, host, signal),
-        emit: (event) => this.emit(event),
-      })
+      this.setPhase('planning')
+      const recoveredRoute = this.options.recoveryContext?.route
+      const route = recoveredRoute
+        ? restoreAgentRoute(structuredClone(recoveredRoute))
+        : await routeAgentGoal({
+            runId: this.options.runId, goal: this.options.request.goal, snapshot,
+            signal: this.abortController.signal,
+            classify: (goal, host, signal) => this.modelTurnCoordinator.classify(goal, host, signal),
+            emit: (event) => this.emit(event),
+          })
+      if (recoveredRoute?.taskGraph) {
+        route.reason = `${route.reason}；已恢复上一执行段的 Task Graph 与 Effect Ledger`
+        this.emit({
+          type: 'PlanUpdated',
+          intent: route.intent,
+          summary: route.reason,
+          toolDomains: route.toolDomains,
+          taskGraph: route.taskGraph,
+        })
+      }
       const attachments = this.options.request.attachments ?? []
       if (attachments.length > 0) {
         const preparedAttachments = await prepareAgentAttachmentContext(attachments, this.models)
@@ -350,14 +428,44 @@ export class AgentRunner {
         }
       }
       this.progressTracker = route.taskGraph
-        ? new AgentFacetProgressTracker(route.taskGraph, this.options.dependencies.registry) : null
+        ? new AgentFacetProgressTracker(
+            route.taskGraph,
+            this.options.dependencies.registry,
+            route.complexity === 'multi_step',
+            this.options.recoveryContext?.effectLedger,
+            this.options.recoveryContext?.toolLeases.map((lease) => lease.facetId)
+          ) : null
+      this.setPhase('preparing')
       while (!isTerminalAgentState(this.machine.status)) {
         await this.pauseController.wait()
         this.throwIfCancelled()
         await this.currentMessageConsumer.pull()
         const turn = this.budget.beginTurn()
         this.state.turn = turn
+        const softLimits = this.budget.consumeNewSoftLimits()
+        if (softLimits.length > 0) {
+          this.catalogPlanner.enterCloseoutMode()
+          for (const code of softLimits) {
+            this.emit({ type: 'BudgetSoftLimitReached', code, usage: this.budget.snapshot() })
+          }
+          this.conversationJournal.appendEphemeral({
+            role: 'user',
+            content: [
+              '[HARNESS_CLOSEOUT_MODE]',
+              '已达到软预算：禁止扩展新 Facet、无目标浏览和非必要能力发现。',
+              '只执行已声明 action plan、结构化验证、补偿与最终收口；若现有计划不足，请立即保存检查点并说明阻塞，不得重复搜索。',
+              '[END_HARNESS_CLOSEOUT_MODE]',
+            ].join('\n'),
+          })
+        }
         const currentSnapshot = this.requireContext()
+        this.setPhase('preparing')
+        this.catalogPlanner.syncActiveFacets(this.progressTracker?.activeFacetIds() ?? [])
+        this.syncLeaseCheckpoint()
+        if (this.progressTracker && route.taskGraph) {
+          route.taskGraph = this.progressTracker.taskGraphSnapshot()
+          route.taskFacets = route.taskGraph.facets.map((facet) => facet.facetId)
+        }
         const activation = this.externalContinuation.extendActivation(
           this.catalogPlanner.select(route, currentSnapshot),
           currentSnapshot
@@ -428,6 +536,10 @@ export class AgentRunner {
           ],
           observations: this.observations,
           registrations,
+          protectedToolNames: activation.activeToolNames.filter((name) => (
+            activation.leasedToolNames.includes(name)
+            || (AGENT_CORE_TOOL_NAMES as readonly string[]).includes(name)
+          )),
           workingSummary: this.state.workingSummary,
           artifactRefs: this.state.workingSummary?.artifactRefs ?? [],
           approvalMode: this.options.request.approvalMode,
@@ -468,6 +580,9 @@ export class AgentRunner {
         })) continue
         this.externalContinuation.assertNoResubmit(result.toolCalls)
         if (result.toolCalls.length > 0) {
+          this.setPhase(result.toolCalls.some((call) => (
+            ['discover_application_capabilities', 'search_application_capabilities'].includes(call.toolName)
+          )) ? 'discovering' : 'executing')
           if (await executeAgentToolTurn({
             toolCalls: result.toolCalls, route,
             scopeRevisions: currentSnapshot.scopeRevisions,
@@ -482,7 +597,10 @@ export class AgentRunner {
             ),
             flushConversation: () => this.conversationJournal.flush(),
             appendGuidance: (content) => this.conversationJournal.appendEphemeral({ role: 'user', content }),
-            saveAfter: () => this.savePointCoordinator.save('after_tools', turnSnapshot),
+            saveAfter: () => {
+              this.syncLeaseCheckpoint()
+              return this.savePointCoordinator.save('after_tools', turnSnapshot)
+            },
             registerExternalWait: (items) => this.externalWaitRegistration.registerIfSubmitted(items, turnSnapshot),
             // 有工具在等下一轮重新披露时不下发停止指令：否则"下一轮再给你"这个承诺永远兑现
             // 不了，模型只能带着一句"按规则需等下一轮披露"收工，而它其实已经知道该调什么了。
@@ -502,6 +620,7 @@ export class AgentRunner {
           appendGuidance: (content) => this.conversationJournal.appendEphemeral({ role: 'user', content }),
         })
         if (!finalText) continue
+        this.setPhase('verifying')
         const completion = this.completionCoordinator.evaluate(
           route, finalText, this.observations, this.progressTracker?.settlement())
         if (completion.kind === 'repair') {
@@ -511,6 +630,7 @@ export class AgentRunner {
           continue
         }
         if (completion.clarificationRequired) {
+          this.setPhase('blocked', completion.summary)
           const waitId = randomUUID()
           const answerPromise = this.clarificationWaiter.wait(waitId)
           this.state.waitingClarificationId = waitId
@@ -540,7 +660,13 @@ export class AgentRunner {
           await this.fail(persistenceError)
           return
         }
-        await this.fail(this.takeAsyncEventError() ?? error)
+        const terminalError = this.takeAsyncEventError() ?? error
+        if (terminalError instanceof AgentStopPolicyExceededError
+          && terminalError.code.startsWith('MAX_')) {
+          await this.exhaustBudget(terminalError)
+          return
+        }
+        await this.fail(terminalError)
       }
     }
   }
@@ -571,10 +697,51 @@ export class AgentRunner {
     const error = this.asyncEventError
     this.asyncEventError = null; return error
   }
-  private complete(finalText: string): void { this.throwIfCancelled(); this.lifecycle.complete(finalText) }
+  private complete(finalText: string): void {
+    this.throwIfCancelled()
+    this.setPhase('completed')
+    this.lifecycle.complete(finalText)
+  }
   private async fail(error: unknown): Promise<void> {
     this.approvalCoordinator.cancel(); await this.terminalApprovalCleanup.run()
-    if (this.machine.status !== 'cancelled') this.lifecycle.fail(error)
+    if (this.machine.status !== 'cancelled') {
+      this.setTerminalPhase('blocked')
+      this.lifecycle.fail(error)
+    }
+  }
+  private async exhaustBudget(error: AgentStopPolicyExceededError): Promise<void> {
+    this.approvalCoordinator.cancel(); await this.terminalApprovalCleanup.run()
+    if (this.machine.status !== 'cancelled') {
+      this.setTerminalPhase('continuing', '当前执行段预算耗尽，正在保存并判断是否自动续跑')
+      this.lifecycle.exhaustBudget(error.code, error)
+    }
+  }
+  private setPhase(phase: AgentRunPhase, detail?: string): void {
+    if (this.currentPhase === phase) return
+    const previous = this.currentPhase
+    this.currentPhase = phase
+    this.emit({ type: 'RunPhaseChanged', phase, previous, detail })
+  }
+  /**
+   * 终止路径必须保留触发终止的原始错误。阶段事件仍会进入事件流，但即使事件接收端
+   * 已经故障，也不能让二次分发错误阻断 lifecycle 的终态落盘与 onTerminal 通知。
+   */
+  private setTerminalPhase(phase: AgentRunPhase, detail?: string): void {
+    if (this.currentPhase === phase) return
+    const previous = this.currentPhase
+    this.currentPhase = phase
+    this.lifecycle.emit({ type: 'RunPhaseChanged', phase, previous, detail })
+  }
+  private syncLeaseCheckpoint(): void {
+    if (!this.state.workingSummary) return
+    this.state.workingSummary = {
+      ...this.state.workingSummary,
+      toolLeases: this.catalogPlanner.currentLeaseSnapshot(),
+      toolLeaseCatalogRevision: this.catalogPlanner.currentCatalogRevision(),
+      effectLedger: this.progressTracker?.effectLedgerSnapshot()
+        ?? this.state.workingSummary.effectLedger,
+      updatedAt: new Date().toISOString(),
+    }
   }
   private transition(next: AgentRunStatus, reason?: string): void {
     this.lifecycle.transition(next, reason); if (!isTerminalAgentState(this.machine.status)) this.throwIfCancelled()

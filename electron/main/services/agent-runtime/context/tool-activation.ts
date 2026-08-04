@@ -6,6 +6,7 @@ import type { AgentRouteDecision } from './types'
 // 预算的唯一来源在 core，事件契约与保存点契约共用同一份，改一处即可。
 import {
   AGENT_ACTIVE_TOOL_LIMIT,
+  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
   AGENT_TOOL_SCHEMA_BUDGET_BYTES,
 } from '../../../../../src/core/assistant/toolBudget'
 
@@ -35,27 +36,40 @@ const SKILL_LOAD_TOOL = 'load_assistant_skill'
  * 通用动词是地板，不是候选：没有它们，助手连"这个东西能不能改"都问不出来。
  */
 const REFLECTION_TOOLS = [
+  'declare_action_plan',
   'describe_application_entities',
   'change_application_entities',
   'list_application_entities',
   'read_application_entity',
 ]
 
+/** 只要任务启用了应用工具域，这些能力就是固定地板，不参与目录轮换。 */
+export const AGENT_CORE_TOOL_NAMES = [
+  SKILL_LOAD_TOOL,
+  CURRENT_CONTEXT_TOOL,
+  CAPABILITY_DISCOVERY_TOOL,
+  ...REFLECTION_TOOLS,
+] as const
+
 export interface AgentToolActivationInput {
   route: AgentRouteDecision
   context: HostContextSnapshot | null
   pinnedToolNames: string[]
-  discoveredToolNames: string[]
+  leasedToolNames: string[]
   recentToolNames: string[]
+  closeoutMode?: boolean
 }
 
 export interface AgentToolActivationSnapshot {
   registrations: AgentToolRegistration[]
   activeToolNames: string[]
   schemaBytes: number
+  descriptionBytes: number
   candidateCount: number
   pinnedToolNames: string[]
   droppedPinnedToolNames: string[]
+  leasedToolNames: string[]
+  droppedLeasedToolNames: string[]
   droppedForCount: string[]
   droppedForSchemaBudget: string[]
   unavailableNames: string[]
@@ -69,6 +83,41 @@ function unique(values: string[]): string[] {
   return [...new Set(values)]
 }
 
+/**
+ * 发现工具在输出 `leasedToolNames` 前先按下一轮的硬预算预筛。核心地板先占位，
+ * 因而这里承诺的名字不会随后因为 32/96KB 门禁被静默驱逐；其余候选明确进入 deferred。
+ */
+export function selectLeaseableToolNames(
+  registry: AgentToolRegistry,
+  context: HostContextSnapshot | null,
+  candidates: string[]
+): { leasedToolNames: string[]; deferredToolNames: string[] } {
+  const core = registry.registrations([...AGENT_CORE_TOOL_NAMES], context)
+  let count = core.length
+  let bytes = core.reduce((total, registration) => total + registrationBytes(registration), 0)
+  const coreNames = new Set(core.map((registration) => registration.catalog.name))
+  const leasedToolNames: string[] = []
+  const deferredToolNames: string[] = []
+  for (const name of unique(candidates)) {
+    if (coreNames.has(name)) continue
+    const registration = registry.registrations([name], context)[0]
+    if (!registration) continue
+    const nextBytes = bytes + registrationBytes(registration)
+    if (
+      leasedToolNames.length >= AGENT_DISCOVERY_LEASE_TOOL_LIMIT
+      || count + 1 > AGENT_ACTIVE_TOOL_LIMIT
+      || nextBytes > AGENT_TOOL_SCHEMA_BUDGET_BYTES
+    ) {
+      deferredToolNames.push(name)
+      continue
+    }
+    leasedToolNames.push(name)
+    count += 1
+    bytes = nextBytes
+  }
+  return { leasedToolNames, deferredToolNames }
+}
+
 export function activateAgentTools(
   registry: AgentToolRegistry,
   input: AgentToolActivationInput
@@ -76,36 +125,45 @@ export function activateAgentTools(
   const available = registry.list(input.context)
   const availableNames = new Set(available.map((entry) => entry.name))
   const directCategories = input.route.toolDomains.filter((domain) => domain !== 'catalog')
-  const directNames = directCategories.flatMap((category) => (
-    available.filter((entry) => entry.category === category).map((entry) => entry.name)
-  ))
+  const preferredAnchorByCategory: Readonly<Record<string, string>> = {
+    models: 'search_models',
+    generation: 'create_visible_generation_task',
+    navigation: 'switch_workspace',
+  }
+  const namesByCategory = directCategories.map((category) => available
+    .filter((entry) => entry.category === category)
+    .map((entry) => entry.name))
+  const directNames = unique([
+    ...directCategories.flatMap((category, index) => {
+      const names = namesByCategory[index] ?? []
+      const preferred = preferredAnchorByCategory[category]
+      return preferred && names.includes(preferred) ? [preferred] : names.slice(0, 1)
+    }),
+    ...namesByCategory.flat(),
+  ]).slice(0, 4)
   const capabilitySearchNames = input.route.toolDomains.length === 0
     ? []
-    : [CURRENT_CONTEXT_TOOL, CAPABILITY_DISCOVERY_TOOL]
+    : input.closeoutMode
+      ? [CURRENT_CONTEXT_TOOL]
+      : [CURRENT_CONTEXT_TOOL, CAPABILITY_DISCOVERY_TOOL]
   // 技能加载排在能力发现之前：领域知识决定后面怎么发现和调用能力，顺序反了没有意义。
   const skillNames = input.route.toolDomains.length === 0 ? [] : [SKILL_LOAD_TOOL]
   const reflectionNames = input.route.toolDomains.length === 0 ? [] : REFLECTION_TOOLS
   /*
    * 顺序即优先级，超出 AGENT_ACTIVE_TOOL_LIMIT 的部分会被直接丢掉。
    *
-   * `recentToolNames` 必须排在 `discoveredToolNames` **前面**。此前是反的，后果在实测里
-   * 很清楚：一个三维任务发现了 26 个能力，每轮只有 8 个槽位，其中 3 个被常驻工具占掉，
-   * 剩下 5 个全被轮换的 discovered 列表吃满，于是模型刚用过、下一步还要接着用的工具
-   * （place_camera_stage_object）在下一轮就消失了，隔两三轮才轮回来一次。18 轮里它一直在
-   * 等工具，而不是在干活。
-   *
-   * 轮换的意义是"让没见过的能力有机会露面"，不是"把正在用的工作集挤掉"。所以最近用过的
-   * 优先留下，轮换只填剩余槽位。
+   * 核心工具固定约 8 个；恢复工具最多 4 个；活动 Facet 租约最多 15 个；路由锚点最多 4 个。
+   * 租约排在路由锚点和最近工具之前，目录扩张时只延迟新候选，不能静默驱逐执行中的工作集。
    */
   const candidates = unique([
-    ...input.pinnedToolNames,
     ...skillNames,
     ...capabilitySearchNames,
     // 通用动词排在 recent/discovered 之前：它们是地板，不参与轮换
     ...reflectionNames,
-    ...input.recentToolNames,
-    ...input.discoveredToolNames,
+    ...input.leasedToolNames,
+    ...input.pinnedToolNames,
     ...directNames,
+    ...input.recentToolNames,
   ])
   const unavailableNames = candidates.filter((name) => !availableNames.has(name))
   const availableCandidates = candidates.filter((name) => availableNames.has(name))
@@ -130,17 +188,25 @@ export function activateAgentTools(
   }
 
   const activeToolNames = active.map((registration) => registration.catalog.name)
+  const descriptionBytes = active.reduce((total, registration) => (
+    total + Buffer.byteLength(registration.modelTool.description ?? '', 'utf8')
+  ), 0)
   const activeNameSet = new Set(activeToolNames)
   const availablePinnedToolNames = unique(input.pinnedToolNames)
+    .filter((name) => availableNames.has(name))
+  const availableLeasedToolNames = unique(input.leasedToolNames)
     .filter((name) => availableNames.has(name))
 
   return {
     registrations: active,
     activeToolNames,
     schemaBytes,
+    descriptionBytes,
     candidateCount: availableCandidates.length,
     pinnedToolNames: availablePinnedToolNames.filter((name) => activeNameSet.has(name)),
     droppedPinnedToolNames: availablePinnedToolNames.filter((name) => !activeNameSet.has(name)),
+    leasedToolNames: availableLeasedToolNames.filter((name) => activeNameSet.has(name)),
+    droppedLeasedToolNames: availableLeasedToolNames.filter((name) => !activeNameSet.has(name)),
     droppedForCount,
     droppedForSchemaBudget,
     unavailableNames,

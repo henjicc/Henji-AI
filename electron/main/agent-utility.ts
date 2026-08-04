@@ -441,6 +441,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
     conversationHistory: parsed.conversationHistory,
     conversationHistorySequences: parsed.conversationHistorySequences,
     recoveryContext: parsed.recoveryContext,
+    budgetContinuation: parsed.budgetContinuation,
     dependencies: {
       registry,
       gateway,

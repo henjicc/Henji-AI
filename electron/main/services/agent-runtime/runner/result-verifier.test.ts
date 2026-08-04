@@ -217,4 +217,27 @@ describe('Agent result verifier', () => {
       },
     })).toMatchObject({ passed: true, clarificationRequired: true })
   })
+
+  it('第一次写入后 Effect Ledger 仍 active 时拒绝提前最终答复', () => {
+    const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
+    expect(verifyAgentCompletion({
+      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
+      finalText: '两个节点都已经创建完成。',
+      observations: [observation('write_test_resource', { nodeId: 'node-1', revision: 1 })],
+      registry,
+      progressSettlement: {
+        status: 'active',
+        completedFacetIds: [],
+        blockedFacets: [],
+        waitingFacetIds: [],
+        remainingFacetIds: ['create_two_nodes'],
+        evidence: ['canvas.node:node-1'],
+        summary: '任务图仍有 1 个 Facet 未结算。',
+        suggestedNextStep: null,
+      },
+    })).toMatchObject({
+      passed: false,
+      summary: '任务图仍有 1 个 Facet 未结算，不能提前结束。',
+    })
+  })
 })

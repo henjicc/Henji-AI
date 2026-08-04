@@ -99,7 +99,20 @@ class RendererApplicationCapabilityRegistry implements ApplicationCapabilityHand
       if (before.scopeRevisions[scope] !== expected) throw new Error('CONFLICT')
     }
     const input = definition.inputSchema.parse(invocation.input)
-    const result = await handler(input, context)
+    const inputRecord = input && typeof input === 'object' && !Array.isArray(input)
+      ? input as Record<string, unknown>
+      : null
+    const compatibilityRevisions = inputRecord?.expectedRevisions
+    if (compatibilityRevisions && typeof compatibilityRevisions === 'object' && !Array.isArray(compatibilityRevisions)) {
+      const authoritative = invocation.expectedRevisions ?? {}
+      if (JSON.stringify(compatibilityRevisions) !== JSON.stringify(authoritative)) {
+        throw new Error('REVISION_ENVELOPE_MISMATCH')
+      }
+    }
+    const result = await handler(input, {
+      ...context,
+      expectedRevisions: invocation.expectedRevisions ?? {},
+    })
     const snapshot = createHostContextSnapshot()
     const enriched = {
       ...result,

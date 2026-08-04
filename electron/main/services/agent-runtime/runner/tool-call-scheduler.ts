@@ -2,6 +2,7 @@ import type { AgentApprovalRequest, AgentEventInput } from '../../../../../src/c
 import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import {
   agentToolObservationSchema,
+  type AgentToolErrorCode,
   type AgentToolObservation,
 } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
@@ -16,6 +17,8 @@ import {
   rejectedObservation,
   serializeError,
 } from './runner-results'
+import { compileActionGroups, type CompiledActionGroup } from './action-plan-compiler'
+import { AgentStopPolicyExceededError } from './budget'
 
 type ApprovalDecision = 'approve' | 'reject' | 'expired'
 
@@ -40,7 +43,7 @@ export interface AgentToolCallSchedulerOptions {
   signal: AbortSignal
   waitIfPaused: () => Promise<void>
   throwIfCancelled: () => void
-  recordToolCall: (signature: string) => void
+  recordToolCall: (signature: string, write: boolean) => void
   recordProgress: (signature: string) => void
   recordFailure?: () => void
   recordSuccess?: () => void
@@ -49,10 +52,15 @@ export interface AgentToolCallSchedulerOptions {
   onObservation: (call: ModelStepToolCall, observation: AgentToolObservation) => void
   emit: (event: AgentEventInput) => void
   onDiscoveredTools: (toolCallId: string, toolNames: string[]) => void
+  resolveActionGroup?: (call: ModelStepToolCall) => {
+    actionGroupId: string
+    mode: CompiledActionGroup['mode']
+  } | null
   executionGuard?: (
     call: ModelStepToolCall,
-    expectedRevisions: Partial<HostScopeRevisions>
-  ) => string | null
+    expectedRevisions: Partial<HostScopeRevisions>,
+    allowSettledActionGroupSibling: boolean
+  ) => string | { code: AgentToolErrorCode; reason: string } | null
   onOutcome?: (
     call: ModelStepToolCall,
     observation: AgentToolObservation,
@@ -127,29 +135,120 @@ export class AgentToolCallScheduler {
     expectedRevisions: Partial<HostScopeRevisions>
   ): Promise<void> {
     let currentExpectedRevisions = { ...expectedRevisions }
-    for (const batch of createBatches(
+    const groups = compileActionGroups(
       calls,
-      this.options.supportsParallelTools,
-      this.options.registry
-    )) {
+      expectedRevisions,
+      this.options.registry,
+      this.options.resolveActionGroup
+    )
+    for (const group of groups) {
+      if (group.canvasBatch) {
+        const outcome = await this.executeCanvasBatch(
+          group,
+          explicitUserIntent,
+          currentExpectedRevisions
+        )
+        this.recordCompiledOutcome(group, outcome)
+        currentExpectedRevisions = mergeRevisions(currentExpectedRevisions, [outcome])
+        this.options.setActiveToolCall(null)
+        continue
+      }
+      const collapsed = group.executableCalls.length === 1 && group.memberCalls.length > 1
+      const batches = collapsed
+        ? [[group.executableCalls[0] as ModelStepToolCall]]
+        : createBatches(
+            [...group.executableCalls],
+            this.options.supportsParallelTools,
+            this.options.registry
+          )
+      let completedSiblingCount = 0
+      for (const batch of batches) {
       await this.options.waitIfPaused()
       this.options.throwIfCancelled()
       this.options.setActiveToolCall(batch[0]?.toolCallId ?? null)
       const outcomes = await Promise.all(batch.map((call) => this.executeOne(
         call,
         explicitUserIntent,
-        currentExpectedRevisions
+        currentExpectedRevisions,
+        collapsed ? 'approved_action_group' : 'direct',
+        completedSiblingCount > 0
       )))
-      for (const outcome of outcomes) this.recordOutcome(outcome)
+      for (const outcome of outcomes) {
+        if (collapsed) this.recordCompiledOutcome(group, outcome)
+        else this.recordOutcome(outcome)
+      }
       currentExpectedRevisions = mergeRevisions(currentExpectedRevisions, outcomes)
+      completedSiblingCount += outcomes.filter((outcome) => !outcome.error).length
       this.options.setActiveToolCall(null)
+      }
     }
+  }
+
+  private async executeCanvasBatch(
+    group: CompiledActionGroup,
+    explicitUserIntent: boolean,
+    expectedRevisions: Partial<HostScopeRevisions>
+  ): Promise<ToolCallOutcome> {
+    const batch = group.canvasBatch
+    const first = group.memberCalls[0]
+    if (!batch || !first) throw new Error('INVALID_COMPILED_CANVAS_BATCH')
+    const planCall: ModelStepToolCall = {
+      toolCallId: `${first.toolCallId}-plan`,
+      toolName: 'plan_canvas_batch',
+      input: { projectId: batch.projectId, operations: [...batch.operations] },
+      dynamic: false,
+    }
+    this.options.setActiveToolCall(planCall.toolCallId)
+    const planned = await this.executeOne(
+      planCall, explicitUserIntent, expectedRevisions, 'direct', false, true
+    )
+    if (planned.error) return planned
+    this.recordOutcome(planned)
+    const output = planned.observation.output && typeof planned.observation.output === 'object'
+      && !Array.isArray(planned.observation.output)
+      ? planned.observation.output as Record<string, unknown>
+      : null
+    if (typeof output?.planRef !== 'string') return {
+      ...planned,
+      error: { code: 'INVALID_TOOL_OUTPUT', message: '画布批次计划没有返回 planRef', retryable: false, recovery: 'none' },
+    }
+    const commitCall: ModelStepToolCall = {
+      toolCallId: `${first.toolCallId}-commit`,
+      toolName: 'commit_canvas_batch',
+      input: {
+        planRef: output.planRef,
+        compiledApprovalContext: {
+          actionGroupDigest: group.digest,
+          operationCount: batch.operations.length,
+          targetIds: Object.fromEntries(group.memberCalls.flatMap((member, memberIndex) => {
+            const definition = this.options.registry.get(member.toolName)
+            if (!definition) return []
+            return Object.entries(definition.targetIds(member.input)).map(([key, value]) => [
+              `step_${memberIndex}_${key}`,
+              value,
+            ])
+          }).slice(0, 31)),
+          permissions: [...new Set(group.memberCalls.flatMap((member) => {
+            const permission = this.options.registry.get(member.toolName)?.permission
+            return permission ? [permission] : []
+          }))],
+        },
+      },
+      dynamic: false,
+    }
+    this.options.setActiveToolCall(commitCall.toolCallId)
+    return await this.executeOne(
+      commitCall, explicitUserIntent, expectedRevisions, 'approved_action_group', false, true
+    )
   }
 
   private async executeOne(
     call: ModelStepToolCall,
     explicitUserIntent: boolean,
-    expectedRevisions: Partial<HostScopeRevisions>
+    expectedRevisions: Partial<HostScopeRevisions>,
+    authorizationSource: 'direct' | 'approved_action_group',
+    allowSettledActionGroupSibling = false,
+    hostCompiled = false
   ): Promise<ToolCallOutcome> {
     let activationRecoveryQueued = false
     const metadata = this.options.registry.executionMetadata(call.toolName, call.input)
@@ -176,7 +275,7 @@ export class AgentToolCallScheduler {
           activationRecoveryQueued ? 'refresh_context' : 'user_action'
         )
       }
-      if (!this.options.activeToolNames.has(call.toolName)) {
+      if (!hostCompiled && !this.options.activeToolNames.has(call.toolName)) {
         activationRecoveryQueued = this.options.catalogPlanner.queueKnownToolForActivation(call.toolName)
         throw new AgentToolGatewayError(
           'TOOL_NOT_ACTIVE',
@@ -187,16 +286,26 @@ export class AgentToolCallScheduler {
           activationRecoveryQueued ? 'refresh_context' : 'user_action'
         )
       }
-      const guardReason = this.options.executionGuard?.(call, expectedRevisions)
+      const guardReason = this.options.executionGuard?.(
+        call,
+        expectedRevisions,
+        allowSettledActionGroupSibling
+      )
       if (guardReason) {
+        const structured: { code: AgentToolErrorCode; reason: string } = typeof guardReason === 'string'
+          ? { code: 'RECOVERY_VERIFICATION_REQUIRED', reason: guardReason }
+          : guardReason
         throw new AgentToolGatewayError(
-          'RECOVERY_VERIFICATION_REQUIRED',
-          guardReason,
+          structured.code,
+          structured.reason,
           false,
           'user_action'
         )
       }
-      this.options.recordToolCall(`${call.toolName}:${digestJson(call.input)}`)
+      this.options.recordToolCall(
+        `${call.toolName}:${digestJson(call.input)}`,
+        this.options.registry.get(call.toolName)?.readOnly === false
+      )
       let result = await this.options.gateway.execute({
         runId: this.options.runId,
         threadId: this.options.threadId,
@@ -206,6 +315,7 @@ export class AgentToolCallScheduler {
         expectedRevisions,
         approvalMode: this.options.approvalMode,
         explicitUserIntent,
+        authorizationSource,
         signal: this.options.signal,
       })
       if (result.status === 'approval_required') {
@@ -238,6 +348,7 @@ export class AgentToolCallScheduler {
           approvalId: result.approval.approvalId,
           approvalMode: this.options.approvalMode,
           explicitUserIntent,
+          authorizationSource,
           signal: this.options.signal,
         })
       }
@@ -251,6 +362,9 @@ export class AgentToolCallScheduler {
         expectedRevisions,
       }
     } catch (error) {
+      // Harness 熔断不是业务工具失败，不能包装成一次可重试 observation，否则模型还能继续
+      // 消耗调用并借后续轮次绕过硬预算。
+      if (error instanceof AgentStopPolicyExceededError) throw error
       this.options.throwIfCancelled()
       const serialized = serializeError(error)
       return {
@@ -262,6 +376,25 @@ export class AgentToolCallScheduler {
         expectedRevisions,
       }
     }
+  }
+
+  private recordCompiledOutcome(group: CompiledActionGroup, outcome: ToolCallOutcome): void {
+    const output = outcome.observation.output
+    const decoratedOutput = output && typeof output === 'object' && !Array.isArray(output)
+      ? { ...output as Record<string, unknown>, compiledActionGroup: {
+          actionGroupId: group.actionGroupId,
+          digest: group.digest,
+          memberCount: group.memberCalls.length,
+        } }
+      : output
+    this.recordOutcome({
+      ...outcome,
+      // 编译后的事务/领域批次本身就能解析所有 Effect；只结算一次，避免复制同一输出。
+      observation: agentToolObservationSchema.parse({
+        ...outcome.observation,
+        output: decoratedOutput,
+      }),
+    })
   }
 
   private recordOutcome(outcome: ToolCallOutcome): void {

@@ -3,7 +3,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
-import { AgentContextBuilder, resolveContextCompactionThreshold } from './builder'
+import {
+  AgentContextBuilder,
+  resolveContextCompactionThreshold,
+  resolveContextHardThreshold,
+} from './builder'
 import { AgentIntentRouter } from './router'
 import type { AgentContextBuildInput } from './types'
 
@@ -117,8 +121,29 @@ describe('AgentIntentRouter', () => {
   it('明显的画布与定位组合请求由确定性规则拆成多 Facet', async () => {
     const classifier = vi.fn().mockResolvedValue({
       intent: 'canvas',
+      candidateIntents: ['canvas', 'navigate'],
+      toolDomains: ['canvas', 'navigation'],
       complexity: 'multi_step',
       reason: '用户要求编排多个画布节点',
+      taskFacets: [{
+        facetId: 'canvas_structure', domain: 'canvas', goal: '创建两个画布节点并连接',
+        targetEntityTypes: ['canvas.node', 'canvas.edge'], observationKinds: ['entity_state'],
+        capabilityKinds: ['observe', 'mutate'], targetSurfaceId: 'workspace.canvas', dependsOn: [],
+        parallelizable: false, completionConditions: ['两个节点都存在且结构已验证'],
+        requiredEffects: [{
+          effectId: 'create_two_nodes', effect: 'create', entityTypes: ['canvas.node'],
+          propertyIds: [], minimumCount: 2, targetRefs: [], verificationRequired: true,
+          actionGroupId: 'canvas_structure_actions',
+        }], uncertainties: [], confidence: 0.98,
+      }, {
+        facetId: 'show_target_surface', domain: 'navigation', goal: '打开画布',
+        targetEntityTypes: [], observationKinds: ['current_surface'], capabilityKinds: ['navigate'],
+        targetSurfaceId: 'workspace.canvas', dependsOn: ['canvas_structure'], parallelizable: false,
+        completionConditions: ['画布界面已打开'], requiredEffects: [{
+          effectId: 'show_canvas', effect: 'navigate', entityTypes: [], propertyIds: [], minimumCount: 1,
+          targetRefs: [], verificationRequired: false, actionGroupId: 'show_canvas_actions',
+        }], uncertainties: [], confidence: 0.95,
+      }],
     })
     const router = new AgentIntentRouter(classifier)
     const result = await router.route(
@@ -130,12 +155,15 @@ describe('AgentIntentRouter', () => {
     expect(result).toMatchObject({
       routeVersion: 'agent-route/v2',
       intent: 'canvas',
-      source: 'deterministic',
+      source: 'router_model',
       toolDomains: ['canvas', 'navigation', 'catalog'],
     })
     expect(result.taskGraph?.facets.map((facet) => facet.facetId))
       .toEqual(['canvas_structure', 'show_target_surface'])
-    expect(classifier).not.toHaveBeenCalled()
+    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
+      effectId: 'create_two_nodes', minimumCount: 2, verificationRequired: true,
+    })
+    expect(classifier).toHaveBeenCalledOnce()
   })
 
   it('三维工程、场景、运镜和展示请求一次拆出有依赖的完整任务图', async () => {
@@ -166,7 +194,7 @@ describe('AgentIntentRouter', () => {
       .toMatchObject({ capabilityKinds: ['observe'], targetSurfaceId: 'tool.camera_stage' })
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'show_target_surface'))
       .toMatchObject({ targetSurfaceId: 'tool.camera_stage', parallelizable: false })
-    expect(classifier).not.toHaveBeenCalled()
+    expect(classifier).toHaveBeenCalledOnce()
   })
 
   it('模型路由 Facet 经过本地领域白名单校验后形成可持久任务图', async () => {
@@ -187,6 +215,11 @@ describe('AgentIntentRouter', () => {
         dependsOn: [],
         parallelizable: false,
         completionConditions: ['取得素材稳定引用'],
+        requiredEffects: [{
+          effectId: 'select_asset_effect', effect: 'observe', entityTypes: ['asset'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+          actionGroupId: 'select_asset_actions',
+        }],
         uncertainties: [],
         confidence: 0.9,
       }, {
@@ -200,6 +233,11 @@ describe('AgentIntentRouter', () => {
         dependsOn: ['select_asset'],
         parallelizable: false,
         completionConditions: ['工作流进入已提交或完成状态'],
+        requiredEffects: [{
+          effectId: 'run_workflow_effect', effect: 'execute', entityTypes: ['workflow.run'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+          actionGroupId: 'run_workflow_actions',
+        }],
         uncertainties: [],
         confidence: 0.85,
       }],
@@ -211,7 +249,7 @@ describe('AgentIntentRouter', () => {
       new AbortController().signal
     )
     expect(result.taskGraph).toMatchObject({
-      version: 'agent-task-graph/v1',
+      version: 'agent-task-graph/v2',
       facets: [
         expect.objectContaining({ facetId: 'select_asset', domain: 'assets' }),
         expect.objectContaining({ facetId: 'run_workflow', dependsOn: ['select_asset'] }),
@@ -237,7 +275,24 @@ describe('AgentIntentRouter', () => {
       source: 'router_model',
       toolDomains: ['user_instructions'],
     })
+    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
+      effect: 'execute', minimumCount: 1,
+    })
     expect(classifier).toHaveBeenCalledOnce()
+  })
+
+  it('简单一般回答没有伪造的工具 Effect，不会被空 Task Graph 阻止收口', async () => {
+    const router = new AgentIntentRouter(async () => ({
+      intent: 'general', complexity: 'simple', reason: '无需调用工具即可回答',
+    }))
+    const result = await router.route(
+      'run-simple-general',
+      '解释一下什么是景深',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({ intent: 'general', complexity: 'simple' })
+    expect(result.taskGraph).toBeUndefined()
   })
 
   it('包含照片等自然表达的媒体生成请求由模型理解后进入生成工具链', async () => {
@@ -310,9 +365,10 @@ describe('AgentIntentRouter', () => {
 })
 
 describe('resolveContextCompactionThreshold', () => {
-  it('按 Pi 默认值固定预留 16,384 Token', () => {
-    expect(resolveContextCompactionThreshold(1_000_000, 4_096)).toBe(983_616)
-    expect(resolveContextCompactionThreshold(64_000, 4_000)).toBe(47_616)
+  it('在 70% 触发软压缩并始终为输出与修复预留至少 20%', () => {
+    expect(resolveContextCompactionThreshold(1_000_000, 4_096)).toBe(700_000)
+    expect(resolveContextCompactionThreshold(64_000, 4_000)).toBe(44_800)
+    expect(resolveContextHardThreshold(64_000)).toBe(51_200)
   })
 })
 
@@ -376,6 +432,30 @@ describe('AgentContextBuilder', () => {
     expect(result.messages.some((message) => String(message.content).includes('历史消息-19'))).toBe(true)
   })
 
+  it('最终上下文裁剪不能静默删除核心或租约工具', () => {
+    const builder = new AgentContextBuilder()
+    const modelTools = ['core_tool', 'leased_tool', 'optional_tool'].map((name) => ({
+      name,
+      description: `${name}:${'x'.repeat(3_000)}`,
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    }))
+    const result = builder.build({
+      runId: 'run-protected-tools',
+      goal: '使用租约工具完成当前 Facet',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'canvas', complexity: 'multi_step', path: 'workflow',
+        toolDomains: ['canvas'], source: 'deterministic', reason: '测试租约保护',
+      },
+      conversation: [], observations: [], modelTools,
+      activeToolNames: modelTools.map((tool) => tool.name),
+      protectedToolNames: ['core_tool', 'leased_tool'],
+      contextWindowBudget: 2_000,
+    })
+    expect(result.activeToolNames).toEqual(expect.arrayContaining(['core_tool', 'leased_tool']))
+    expect(result.activeToolNames).not.toContain('optional_tool')
+  })
+
   it('优先使用最近一次真实 usage，并只估算其后的新增消息', () => {
     const result = new AgentContextBuilder().build({
       runId: 'run-usage-baseline',
@@ -405,6 +485,23 @@ describe('AgentContextBuilder', () => {
 
     expect(result.beforeCompactionTokens).toBeGreaterThan(48_000)
     expect(result.compacted).toBe(true)
+    expect(result.contextPressure).toBe('soft')
+
+    const hard = new AgentContextBuilder().build({
+      runId: 'run-hard-usage-baseline',
+      goal: '继续',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'general', complexity: 'simple', path: 'primary', toolDomains: [],
+        source: 'fallback', reason: '强制压缩阈值校准',
+      },
+      conversation: [{ role: 'user', content: '已进入上次请求' }],
+      observations: [], modelTools: [], activeToolNames: [],
+      contextWindowBudget: 64_000,
+      lastModelUsage: { inputTokens: 52_000, conversationMessageCount: 1 },
+    })
+    expect(hard.contextPressure).toBe('hard')
+    expect(hard.compacted).toBe(true)
   })
 
   it('不可信 observation 中的密钥形态在进入模型前被强制脱敏', () => {

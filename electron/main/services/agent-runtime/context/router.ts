@@ -10,7 +10,11 @@ import {
   type AgentRouteDecision,
   type AgentToolDomain,
 } from './types'
-import { createDeterministicTaskGraph, createModelTaskGraph } from './task-facets'
+import {
+  createDeterministicTaskGraph,
+  createModelTaskGraph,
+  tryCreateModelTaskGraph,
+} from './task-facets'
 
 const logger = createMainLogger('main.agent_router')
 
@@ -268,7 +272,7 @@ export class AgentIntentRouter {
     signal: AbortSignal
   ): Promise<AgentRouteDecision> {
     const deterministic = deterministicRoute(goal, snapshot)
-    if (deterministic) {
+    if (deterministic && (deterministic.complexity !== 'multi_step' || !this.classifyWithModel)) {
       this.logDecision(runId, deterministic)
       return deterministic
     }
@@ -277,6 +281,26 @@ export class AgentIntentRouter {
         const classified = routerModelDecisionSchema.parse(await this.classifyWithModel(goal, snapshot, signal))
         const candidateIntents = selectEnumValues(classified.candidateIntents, AGENT_INTENTS, 4)
         const requestedDomains = selectEnumValues(classified.toolDomains, AGENT_TOOL_DOMAINS, 6)
+        if (deterministic) {
+          const planned = tryCreateModelTaskGraph({
+            goal,
+            rawFacets: classified.taskFacets,
+            primaryIntent: deterministic.intent,
+            candidateDomains: deterministic.toolDomains,
+            snapshot,
+          })
+          const decision: AgentRouteDecision = planned
+            ? {
+                ...deterministic,
+                source: 'router_model',
+                reason: `${deterministic.reason}；结构化 Planner 已声明 Effect 与依赖`,
+                taskGraph: planned,
+                taskFacets: planned.facets.map((facet) => facet.facetId),
+              }
+            : deterministic
+          this.logDecision(runId, decision)
+          return decision
+        }
         const decision: AgentRouteDecision = {
           routeVersion: 'agent-route/v2',
           intent: classified.intent,
@@ -304,14 +328,23 @@ export class AgentIntentRouter {
             requestedDomains
           ),
         }
-        decision.taskGraph = createModelTaskGraph({
+        const planned = tryCreateModelTaskGraph({
           goal,
           rawFacets: classified.taskFacets,
           primaryIntent: classified.intent,
           candidateDomains: decision.toolDomains,
           snapshot,
         })
-        decision.taskFacets = decision.taskGraph.facets.map((facet) => facet.facetId)
+        if (planned || classified.intent !== 'general') {
+          decision.taskGraph = planned ?? createModelTaskGraph({
+            goal,
+            rawFacets: classified.taskFacets,
+            primaryIntent: classified.intent,
+            candidateDomains: decision.toolDomains,
+            snapshot,
+          })
+          decision.taskFacets = decision.taskGraph.facets.map((facet) => facet.facetId)
+        }
         this.logDecision(runId, decision)
         return decision
       } catch (error) {
@@ -332,6 +365,10 @@ export class AgentIntentRouter {
           },
         })
       }
+    }
+    if (deterministic) {
+      this.logDecision(runId, deterministic)
+      return deterministic
     }
     const fallback: AgentRouteDecision = {
       routeVersion: 'agent-route/v2',

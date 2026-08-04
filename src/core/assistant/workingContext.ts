@@ -62,6 +62,22 @@ export const agentWorkingSummarySchema = z.object({
   scopeRevisions: hostScopeRevisionsSchema.nullable(),
   artifactRefs: z.array(z.string().min(1).max(500)).max(12),
   attachmentRefs: z.array(z.string().regex(/^asset:[^\s]+$/)).max(8).default([]),
+  toolLeases: z.array(z.object({
+    facetId: z.string().min(1).max(64),
+    toolNames: z.array(z.string().min(1).max(200)).max(5),
+  }).strict()).max(16).default([]),
+  toolLeaseCatalogRevision: z.union([
+    z.string().min(1).max(200),
+    z.number().int().nonnegative(),
+  ]).nullable().default(null),
+  effectLedger: z.array(z.object({
+    effectId: z.string().min(1).max(64),
+    count: z.number().int().nonnegative().max(256),
+    verificationCount: z.number().int().nonnegative().max(256).default(0),
+    verified: z.boolean(),
+    evidenceDigests: z.array(z.string().min(1).max(128)).max(256),
+    evidence: z.array(z.string().min(1).max(500)).max(12),
+  }).strict()).max(32).default([]),
   recovery: agentWorkingRecoverySchema,
   updatedAt: z.string().datetime(),
 }).strict()
@@ -82,6 +98,9 @@ export function createAgentWorkingSummary(goal: string): AgentWorkingSummary {
     scopeRevisions: null,
     artifactRefs: [],
     attachmentRefs: [],
+    toolLeases: [],
+    toolLeaseCatalogRevision: null,
+    effectLedger: [],
     recovery: {
       mode: 'none',
       reason: '',

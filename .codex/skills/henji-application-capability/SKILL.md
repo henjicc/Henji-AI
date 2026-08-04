@@ -58,9 +58,12 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 
 - 为能力提供用户可能使用的中文、英文和领域别名。
 - 声明 `acceptsRefs`、`producesRefs` 和前置依赖，让跨模块任务通过稳定引用衔接。
-- 不把全部能力注入模型；保持每轮最多 32 个、合计不超过 96KB 的活动 schema。一次发现最多回带 40 个待激活工具名；这些数值只引用 `toolBudget.ts`，不得在契约或运行时另写一份。
-- 搜索能力返回 `addedToolNames`，由下一模型步骤增量激活。
+- 不把全部能力注入模型；保持每轮最多 32 个、合计不超过 96KB 的活动 schema。发现只覆盖最多 3 个依赖前沿 Facet，每个 Facet 最多租约 5 个工具；这些数值只引用 `toolBudget.ts`，不得在契约或运行时另写一份。
+- 发现能力返回 `leasedToolNames` 与 `deferredToolNames/deferredCount`。租约工具必须在下一模型步骤真实可用并持续到对应 Facet 终态；活动工具已带完整输入 schema，不得在发现后自动调用 `read_application_schemas`。
 - Router 只提供页面锚点和搜索建议，不得以分类结果限制能力可用性或授权。
+- 写能力必须通过 `control.impacts` 声明 Effect、实体和属性；一次输出可能影响多个目标时实现 `resolveObservedEffects(input, output)`，从真实结果解析数量、稳定引用和验证证据。没有解析器的能力一次最多贡献一个 Effect。
+- 多项常规实体改动优先合并到 `change_application_entities`，画布多操作优先走 `plan_canvas_batch → commit_canvas_batch`；后一步依赖前一步新引用时才保留分轮执行。
+- AI 可见输入 schema 不暴露 `baseRevision` / `expectedRevisions`。并发基线只由 Gateway expected-revision 信封传入，兼容字段只能校验一致性，不能形成第二条 revision 路径。
 
 ### 5. 覆盖新功能
 

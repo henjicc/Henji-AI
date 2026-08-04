@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto'
 
-import { AGENT_DISCOVERY_ADDED_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
+import {
+  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
+  AGENT_FACET_LEASE_TOOL_LIMIT,
+} from '../../../../../src/core/assistant/toolBudget'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
 import {
@@ -21,6 +24,7 @@ import {
 } from '../../../../../src/core/assistant/applicationCapabilities'
 import type { ApplicationSchemaRef } from '../../../../../src/core/application-control'
 import type { AgentToolRegistry } from '../tools/registry'
+import { selectLeaseableToolNames } from './tool-activation'
 
 const surfaceIdsByDomain: Readonly<Record<string, string[]>> = {
   application: [],
@@ -172,6 +176,16 @@ export class AgentCapabilityDiscoveryCatalog {
     const nextCursor = input.cursor + capabilities.length < allMatches.length
       ? input.cursor + capabilities.length
       : null
+    const leaseCandidates = unique(facetResults.flatMap(
+      (item) => item.names.slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
+    )).slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
+    const leaseSelection = selectLeaseableToolNames(this.registry, context, leaseCandidates)
+    const leasedToolNames = leaseSelection.leasedToolNames
+    const leasedNameSet = new Set(leasedToolNames)
+    const deferredToolNames = unique([
+      ...leaseSelection.deferredToolNames,
+      ...capabilityNames.filter((name) => !leasedNameSet.has(name)),
+    ])
     const output = applicationCapabilityDiscoveryOutputSchema.parse({
       discoveryVersion: APPLICATION_CAPABILITY_DISCOVERY_VERSION,
       catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
@@ -180,8 +194,10 @@ export class AgentCapabilityDiscoveryCatalog {
       capabilities,
       facets: facetResults.map((item) => ({
         facetId: item.facet.facetId,
-        capabilityNames: item.names,
-        schemaRefs: item.schemaRefs,
+        capabilityNames: item.names.filter((name) => leasedNameSet.has(name)),
+        schemaRefs: item.names.flatMap((name, index) => (
+          leasedNameSet.has(name) ? [item.schemaRefs[index]] : []
+        )).filter((ref): ref is ApplicationSchemaRef => Boolean(ref)),
         observationSuggestions: observationSuggestions(item.facet),
       })),
       missing: facetResults.flatMap((item) => item.names.length > 0 ? [] : [{
@@ -190,12 +206,11 @@ export class AgentCapabilityDiscoveryCatalog {
         requestedDomains: item.facet.domains,
         requestedEntityTypes: item.facet.entityTypes,
       }]),
-      addedToolNames: unique([
-        'read_application_schemas',
-        ...capabilities.map((capability) => capability.name),
-      ]).filter((name) => ![
+      leasedToolNames: leasedToolNames.filter((name) => ![
         'discover_application_capabilities', 'search_application_capabilities',
-      ].includes(name)).slice(0, AGENT_DISCOVERY_ADDED_TOOL_LIMIT),
+      ].includes(name)),
+      deferredToolNames: deferredToolNames.slice(0, 100),
+      deferredCount: deferredToolNames.length,
       page: {
         returnedItems: capabilities.length,
         nextCursor,

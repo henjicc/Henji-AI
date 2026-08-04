@@ -94,7 +94,9 @@ function request(
   value: string,
   mode: AgentApprovalMode,
   approvalId?: string,
-  authorization?: { source: 'approved_workflow'; parentToolCallId: string }
+  authorization?:
+    | { source: 'approved_workflow'; parentToolCallId: string }
+    | { source: 'approved_action_group'; parentToolCallId?: never }
 ) {
   return {
     runId: 'run-1', threadId: 'thread-1', toolCallId: 'call-1',
@@ -381,5 +383,20 @@ describe('AgentToolGateway permission audit', () => {
       parentToolCallId: 'workflow-parent',
     })
     expect(JSON.stringify(current.facts)).not.toContain('workflow-secret-input')
+  })
+
+  it('组审批来源可独立审计且不伪造父工作流调用', async () => {
+    const current = fixture({ risk: 'R0', readOnly: true })
+    await current.gateway.execute(request(
+      'compiled-group-input',
+      'full_access',
+      undefined,
+      { source: 'approved_action_group' }
+    ))
+
+    expect(current.facts[0]?.authorization).toMatchObject({
+      source: 'approved_action_group',
+    })
+    expect(current.facts[0]?.authorization.parentToolCallId).toBeUndefined()
   })
 })

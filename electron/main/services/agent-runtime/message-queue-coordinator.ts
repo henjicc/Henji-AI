@@ -20,7 +20,7 @@ import type { AgentRuntimeManager } from '../agent-runtime-manager/manager'
 import type { AgentPersistenceStore } from './persistence/store'
 
 const logger = createMainLogger('main.agent_message_queue')
-const terminalStatuses = new Set<AgentRunState['status']>(['completed', 'failed', 'cancelled'])
+const terminalStatuses = new Set<AgentRunState['status']>(['completed', 'budget_exhausted', 'failed', 'cancelled'])
 
 interface QueueRunRecord {
   threadId: string

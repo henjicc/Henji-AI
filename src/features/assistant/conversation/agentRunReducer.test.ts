@@ -31,11 +31,14 @@ function runState(workingSummary = createAgentWorkingSummary('处理复杂任务
     startedAt: '2026-07-23T00:00:00.000Z', updatedAt: '2026-07-23T00:00:00.000Z',
     finalText: null, error: null,
     budget: {
-      maxTurns: 12, maxToolCalls: 24, maxDurationMs: 600_000, maxInputTokens: 120_000,
+      softMaxTurns: 10, maxTurns: 12, softMaxToolCalls: 20, maxToolCalls: 24,
+      softMaxWriteToolCalls: 10, maxWriteToolCalls: 12,
+      maxDurationMs: 600_000, maxInputTokens: 120_000,
       maxOutputTokens: 32_000, maxConsecutiveFailures: 3, maxRepeatedToolCalls: 2, maxNoProgressTurns: 3,
+      softMaxCostUsd: 3,
     },
     usage: {
-      turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
+      turns: 0, toolCalls: 0, writeToolCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
       totalTokens: 0, knownCostUsd: null, consecutiveFailures: 0, noProgressTurns: 0, elapsedMs: 0,
     },
     lastScopeRevisions: null,
@@ -109,7 +112,7 @@ describe('agentRunViewReducer', () => {
     ])
   })
 
-  it('保留携带工具调用的公开模型说明，不把最终回答重复放入进展流', () => {
+  it('多个 ModelCompleted 只保留为诊断事件，不生成逐轮进展卡', () => {
     const events: AgentEvent[] = [
       event<Extract<AgentEvent, { type: 'ModelCompleted' }>>({
         type: 'ModelCompleted', sequence: 1, stepId: 'step-1', finishReason: 'tool-calls',
@@ -137,28 +140,13 @@ describe('agentRunViewReducer', () => {
       }),
     ]
 
-    expect(selectModelPublicUpdates(events)).toEqual([
-      { stepId: 'step-1', sequence: 1, text: '我先根据你的偏好筛选兼容模型。' },
-      { stepId: 'attachment-observer', sequence: 3, text: '附件是一张产品照片。' },
-    ])
+    expect(selectModelPublicUpdates(events)).toEqual([])
   })
 
   it('重复或较旧事件只补齐历史，不回退当前运行状态', () => {
     const currentState = {
-      schemaVersion: 'agent-event/v1' as const,
-      runId: 'run-1', threadId: 'thread-1', status: 'running' as const, sequence: 5, turn: 1,
-      currentStepId: null, currentToolCallId: null, waitingApprovalId: null,
-      startedAt: '2026-07-23T00:00:00.000Z', updatedAt: '2026-07-23T00:00:05.000Z',
-      finalText: null, error: null,
-      budget: {
-        maxTurns: 12, maxToolCalls: 24, maxDurationMs: 600_000, maxInputTokens: 120_000,
-        maxOutputTokens: 32_000, maxConsecutiveFailures: 3, maxRepeatedToolCalls: 2, maxNoProgressTurns: 3,
-      },
-      usage: {
-        turns: 1, toolCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
-        totalTokens: 0, knownCostUsd: null, consecutiveFailures: 0, noProgressTurns: 0, elapsedMs: 5_000,
-      },
-      lastScopeRevisions: null,
+      ...runState(), sequence: 5, turn: 1, updatedAt: '2026-07-23T00:00:05.000Z',
+      usage: { ...runState().usage, turns: 1, elapsedMs: 5_000 },
     }
     const older = event<Extract<AgentEvent, { type: 'RunStateChanged' }>>({
       type: 'RunStateChanged', sequence: 4, previous: 'running', current: 'waiting_approval',
@@ -193,23 +181,7 @@ describe('agentRunViewReducer', () => {
   })
 
   it('批量事件实时重建计划步骤并区分提交与验证状态', () => {
-    const initialState = {
-      schemaVersion: 'agent-event/v1' as const,
-      runId: 'run-1', threadId: 'thread-1', status: 'running' as const, sequence: 0, turn: 0,
-      currentStepId: null, currentToolCallId: null, waitingApprovalId: null,
-      startedAt: '2026-07-23T00:00:00.000Z', updatedAt: '2026-07-23T00:00:00.000Z',
-      finalText: null, error: null,
-      budget: {
-        maxTurns: 12, maxToolCalls: 24, maxDurationMs: 600_000, maxInputTokens: 120_000,
-        maxOutputTokens: 32_000, maxConsecutiveFailures: 3, maxRepeatedToolCalls: 2, maxNoProgressTurns: 3,
-      },
-      usage: {
-        turns: 0, toolCalls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0,
-        totalTokens: 0, knownCostUsd: null, consecutiveFailures: 0, noProgressTurns: 0, elapsedMs: 0,
-      },
-      lastScopeRevisions: null,
-      workingSummary: createAgentWorkingSummary('生成一张海报'),
-    }
+    const initialState = runState(createAgentWorkingSummary('生成一张海报'))
     const events: AgentEvent[] = [
       event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
         type: 'PlanUpdated', sequence: 1, intent: 'generate', summary: '选择模型后提交任务', toolDomains: ['models', 'generation'],
@@ -255,28 +227,51 @@ describe('agentRunViewReducer', () => {
     expect(presentation.clarification?.reason).toBe('目标项目不明确')
   })
 
+  it('阶段与自动续跑只更新同一个进展面板文案', () => {
+    const continuing = event<Extract<AgentEvent, { type: 'RunPhaseChanged' }>>({
+      type: 'RunPhaseChanged', sequence: 1, previous: 'executing', phase: 'continuing',
+      detail: '进入第 2/3 段执行',
+    })
+    expect(selectExecutionPresentation(
+      { ...runState(), status: 'budget_exhausted' },
+      [continuing]
+    ).nextAction).toBe('进入第 2/3 段执行')
+  })
+
   it('投影 Facet 完成、受阻、依赖跳过和大型证据，恢复后保持一致', () => {
     const initialState = runState()
     const events: AgentEvent[] = [
       event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
         type: 'PlanUpdated', sequence: 1, intent: 'camera_stage', summary: '布置场景并验证', toolDomains: ['camera_stage'],
         taskGraph: {
-          version: 'agent-task-graph/v1', goal: '布置场景并验证',
+          version: 'agent-task-graph/v2', goal: '布置场景并验证',
           facets: [
             {
               facetId: 'scene', domain: 'camera_stage', goal: '布置场景', targetEntityTypes: ['camera_stage.object'],
               requiredObservations: [], capabilityKinds: ['mutate'], targetSurfaceId: 'camera_stage', dependsOn: [],
               parallelizable: false, completionConditions: ['对象已放置'], uncertainties: [], confidence: 1,
+              requiredEffects: [{
+                effectId: 'scene-effect', effect: 'create', entityTypes: ['camera_stage.object'],
+                propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false, actionGroupId: 'scene-group',
+              }],
               status: 'pending', statusReason: '', evidence: [],
             },
             {
               facetId: 'verify', domain: 'camera_stage', goal: '验证构图', targetEntityTypes: [],
               requiredObservations: [], capabilityKinds: ['observe'], targetSurfaceId: 'camera_stage', dependsOn: ['scene'],
               parallelizable: false, completionConditions: ['构图已验证'], uncertainties: [], confidence: 1,
+              requiredEffects: [{
+                effectId: 'verify-effect', effect: 'observe', entityTypes: ['camera_stage.object'],
+                propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false, actionGroupId: 'verify-group',
+              }],
               status: 'pending', statusReason: '', evidence: [],
             },
           ],
           dependencies: [{ fromFacetId: 'scene', toFacetId: 'verify' }],
+          actionGroups: [
+            { actionGroupId: 'scene-group', facetId: 'scene', mode: 'ordered_write', effectIds: ['scene-effect'], dependsOn: [] },
+            { actionGroupId: 'verify-group', facetId: 'verify', mode: 'dependent', effectIds: ['verify-effect'], dependsOn: ['scene-group'] },
+          ],
           stopConditions: ['受阻时停止并说明'],
         },
       }),

@@ -90,6 +90,20 @@ describe('AgentRunner canvas batch', () => {
     for (const toolName of ['add_canvas_node', 'connect_canvas_nodes'] as const) {
       registry.register(defineAgentTool({
         name: toolName, version: 1, title: toolName, description: `测试 ${toolName} revision 串联。`,
+        capability: {
+          id: toolName, domain: 'canvas', aliases: [], dataClasses: ['C1'], acceptsRefs: [], producesRefs: [],
+          availability: [], concurrencyKey: 'canvas',
+          control: { impacts: [{
+            effect: 'create',
+            entityTypes: [toolName === 'add_canvas_node' ? 'canvas.node' : 'canvas.edge'],
+            propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+          }] },
+          resolveObservedEffects: () => [{
+            effect: 'create',
+            entityTypes: [toolName === 'add_canvas_node' ? 'canvas.node' : 'canvas.edge'],
+            propertyIds: [], targetRefs: [], count: 1, verified: true, evidence: [`${toolName}:completed`],
+          }],
+        } as never,
         category: 'canvas', side: 'backend', risk: 'R0', permission: 'canvas:write',
         readOnly: false, destructive: false, openWorld: false, idempotent: true,
         timeoutMs: 1_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
@@ -137,6 +151,19 @@ describe('AgentRunner canvas batch', () => {
                 intent: 'canvas',
                 complexity: 'multi_step',
                 reason: '用户要求编排画布节点',
+                taskFacets: [{
+                  facetId: 'canvas_write', domain: 'canvas', goal: '新增节点并连接',
+                  capabilityKinds: ['mutate'], completionConditions: ['节点与连线都有结构化证据。'],
+                  requiredEffects: [{
+                    effectId: 'canvas_node_effect', effect: 'create', entityTypes: ['canvas.node'],
+                    propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+                    actionGroupId: 'canvas_node_group',
+                  }, {
+                    effectId: 'canvas_edge_effect', effect: 'create', entityTypes: ['canvas.edge'],
+                    propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+                    actionGroupId: 'canvas_edge_group',
+                  }],
+                }],
               },
               responseMessages: [{ role: 'assistant' as const, content: '' }],
             }
@@ -152,7 +179,6 @@ describe('AgentRunner canvas batch', () => {
 
     runner.start()
     const state = await terminal
-
     expect(state.status).toBe('completed')
     expect(executions).toEqual(['add_canvas_node', 'connect_canvas_nodes'])
     expect(events.filter((event) => event.type === 'ToolCompleted')).toHaveLength(2)

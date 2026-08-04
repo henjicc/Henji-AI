@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
+import type { AgentObservedEffect } from '../taskGraph'
 import {
   capabilityOutputSchema,
   defineApplicationCapability,
@@ -48,6 +49,88 @@ export const canvasBatchOperationSchema = z.discriminatedUnion('kind', [
 ])
 export type CanvasBatchOperation = z.infer<typeof canvasBatchOperationSchema>
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function resolveCanvasBatchEffects(output: {
+  projectId: string
+  appliedOperations: Array<Record<string, unknown>>
+  undoRef: string
+}): AgentObservedEffect[] {
+  const effects: AgentObservedEffect[] = []
+  for (const [index, operation] of output.appliedOperations.entries()) {
+    const record = asRecord(operation)
+    if (!record || typeof record.kind !== 'string') continue
+    const evidence = [`canvas_batch:${output.undoRef}:${index}`]
+    const nodeRef = typeof record.nodeId === 'string'
+      ? [{ kind: 'canvas.node', id: record.nodeId }]
+      : typeof record.groupNodeId === 'string'
+        ? [{ kind: 'canvas.node', id: record.groupNodeId }]
+        : []
+    if (record.kind === 'add_node' || record.kind === 'duplicate_node' || record.kind === 'group_nodes') {
+      effects.push({
+        effect: 'create' as const,
+        entityTypes: ['canvas.node'], propertyIds: [], targetRefs: nodeRef,
+        count: 1, verified: false, evidence,
+      })
+      continue
+    }
+    if (record.kind === 'update_node') {
+      effects.push({
+        effect: 'update' as const,
+        entityTypes: ['canvas.node'],
+        propertyIds: stringArray(record.updatedKeys).map((key) => `canvas.node.${key}`),
+        targetRefs: nodeRef, count: 1, verified: false, evidence,
+      })
+      continue
+    }
+    if (record.kind === 'delete_nodes') {
+      const nodeIds = stringArray(record.deletedNodeIds)
+      effects.push({
+        effect: 'delete' as const,
+        entityTypes: ['canvas.node'], propertyIds: [],
+        targetRefs: nodeIds.map((id) => ({ kind: 'canvas.node', id })),
+        count: Math.max(1, nodeIds.length), verified: false, evidence,
+      })
+      continue
+    }
+    if (record.kind === 'connect_nodes' && typeof record.edgeId === 'string') {
+      effects.push({
+        effect: 'create' as const,
+        entityTypes: ['canvas.edge'], propertyIds: [],
+        targetRefs: [{ kind: 'canvas.edge', id: record.edgeId }],
+        count: 1, verified: false, evidence,
+      })
+      continue
+    }
+    if (record.kind === 'disconnect_edge' && typeof record.edgeId === 'string') {
+      effects.push({
+        effect: 'delete' as const,
+        entityTypes: ['canvas.edge'], propertyIds: [],
+        targetRefs: [{ kind: 'canvas.edge', id: record.edgeId }],
+        count: 1, verified: false, evidence,
+      })
+      continue
+    }
+    if (record.kind === 'select_node') {
+      effects.push({
+        effect: 'update' as const,
+        entityTypes: ['canvas.project'], propertyIds: ['canvas.project.selected_node'],
+        targetRefs: [{ kind: 'canvas.project', id: output.projectId }],
+        count: 1, verified: false, evidence,
+      })
+    }
+  }
+  return effects
+}
+
 const planCanvasBatch = defineApplicationCapability({
   id: 'plan_canvas_batch',
   version: 1,
@@ -82,6 +165,10 @@ const planCanvasBatch = defineApplicationCapability({
   resolveConcurrencyKey: (input) => `canvas_plan:${input.projectId}`,
   resolveTargetIds: (input) => ({ projectId: input.projectId }),
   summarize: (output) => `已生成包含 ${output.operationCount} 个步骤的画布批量计划。`,
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'observed' }, impacts: [{
+    effect: 'observe', entityTypes: ['canvas.project', 'canvas.node', 'canvas.edge'], propertyIds: [],
+    revisionScopes: ['canvas'], verificationRequired: false,
+  }] },
 })
 
 const previewCanvasBatch = defineApplicationCapability({
@@ -117,6 +204,20 @@ const previewCanvasBatch = defineApplicationCapability({
   summarize: (output) => output.summary,
 })
 
+const compiledApprovalContextSchema = z.object({
+  actionGroupDigest: z.string().min(1).max(200),
+  operationCount: z.number().int().min(1).max(20),
+  targetIds: z.record(z.string().min(1).max(100), z.string().max(500))
+    .refine((targets) => Object.keys(targets).length <= 32, '批次审批目标最多 32 项'),
+  permissions: z.array(z.string().min(1).max(200)).min(1).max(20),
+}).strict()
+
+const commitCanvasBatchInputSchema = z.object({
+  planRef: z.string().min(1),
+  /** 仅由宿主编译器注入；模型可见 schema 不暴露此信封。 */
+  compiledApprovalContext: compiledApprovalContextSchema.optional(),
+}).strict()
+
 const commitCanvasBatch = defineApplicationCapability({
   id: 'commit_canvas_batch',
   version: 1,
@@ -136,7 +237,13 @@ const commitCanvasBatch = defineApplicationCapability({
   requiredScopes: ['canvas'],
   acceptsRefs: ['canvas.batch_plan'],
   producesRefs: ['canvas.project', 'canvas.undo'],
-  inputSchema: z.object({ planRef: z.string().min(1) }).strict(),
+  inputSchema: commitCanvasBatchInputSchema,
+  aiInputSchema: {
+    type: 'object',
+    properties: { planRef: { type: 'string', minLength: 1 } },
+    required: ['planRef'],
+    additionalProperties: false,
+  },
   outputSchema: capabilityOutputSchema({
     planRef: z.string(),
     projectId: z.string(),
@@ -147,16 +254,30 @@ const commitCanvasBatch = defineApplicationCapability({
   }),
   concurrencyKey: 'canvas_batch',
   resolveConcurrencyKey: (input) => `canvas_batch:${input.planRef}`,
-  resolveTargetIds: (input) => ({ planRef: input.planRef }),
+  resolveTargetIds: (input) => ({
+    planRef: input.planRef,
+    ...(input.compiledApprovalContext?.targetIds ?? {}),
+  }),
   preview: (input) => ({
     title: '提交画布批量操作',
-    summary: `提交画布批量计划 ${input.planRef}，成功后提供单次撤销。`,
-    targetIds: { planRef: input.planRef },
+    summary: input.compiledApprovalContext
+      ? `提交 ${input.compiledApprovalContext.operationCount} 项画布操作；涉及权限 ${input.compiledApprovalContext.permissions.join('、')}，成功后提供单次撤销。`
+      : `提交画布批量计划 ${input.planRef}，成功后提供单次撤销。`,
+    targetIds: {
+      planRef: input.planRef,
+      ...(input.compiledApprovalContext?.targetIds ?? {}),
+    },
     reversible: true,
     dataClasses: ['C1'],
   }),
   summarize: (output) => `画布批量计划已提交，${output.operationCount} 个步骤完成。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  resolveObservedEffects: (_input, output) => resolveCanvasBatchEffects(output),
+  control: { execution: { mode: 'confirmation_required', cancelable: false, resultState: 'completed' }, impacts: [
+    { effect: 'create', entityTypes: ['canvas.node', 'canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
+    { effect: 'update', entityTypes: ['canvas.node', 'canvas.project'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
+    { effect: 'delete', entityTypes: ['canvas.node', 'canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
+  ] },
 })
 
 export const CANVAS_BATCH_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [

@@ -4,6 +4,17 @@ import type {
   AgentRunStatus,
   AgentToolCompletionKind,
 } from '../../../../../src/core/assistant/events'
+import { collectHarnessRunMetrics, summarizeHarnessMetrics } from './harness-metrics'
+import type {
+  MinimalEvaluationCaseResult,
+  MinimalEvaluationCheck,
+  MinimalEvaluationSummary,
+} from './minimal-evaluation-results'
+export type {
+  MinimalEvaluationCaseResult,
+  MinimalEvaluationCheck,
+  MinimalEvaluationSummary,
+} from './minimal-evaluation-results'
 
 export interface MinimalEvaluationEvidenceExpectation {
   kind: 'verification_passed' | 'tool_reference' | 'working_summary' | 'clarification' | 'context_compacted' | 'recovery_required'
@@ -92,59 +103,6 @@ export interface MinimalEvaluationCapture {
   peakMemoryMb?: number
   averageCpuPercent?: number
   outputText: string
-}
-
-export interface MinimalEvaluationCheck {
-  id: string
-  passed: boolean
-  detail: string
-}
-
-export interface MinimalEvaluationCaseResult {
-  caseId: string
-  repetition: number
-  passed: boolean
-  checks: MinimalEvaluationCheck[]
-  metrics: {
-    latencyMs: number
-    firstFeedbackMs: number | null
-    peakMemoryMb: number | null
-    averageCpuPercent: number | null
-    inputTokens: number
-    outputTokens: number
-    toolCalls: number
-    knownCostUsd: number | null
-  }
-}
-
-export interface MinimalEvaluationSummary {
-  caseCount: number
-  runCount: number
-  passedRuns: number
-  successRate: number
-  averageLatencyMs: number
-  p95LatencyMs: number
-  averageFirstFeedbackMs: number | null
-  p95FirstFeedbackMs: number | null
-  peakMemoryMb: number | null
-  peakAverageCpuPercent: number | null
-  totalInputTokens: number
-  totalOutputTokens: number
-  knownCostUsd: number
-  unknownCostRuns: number
-  toolAccuracyRate: number
-  parameterAccuracyRate: number
-  planAccuracyRate: number
-  evidencePassRate: number
-  recoveryPassRate: number
-  securityPassRate: number
-  logCompletenessRate: number
-  failures: Array<{
-    caseId: string
-    repetition: number
-    failedChecks: string[]
-  }>
-  results: MinimalEvaluationCaseResult[]
 }
 
 export type MinimalEvaluationExecutor = (
@@ -332,7 +290,12 @@ function checkLogPairs(testCase: MinimalEvaluationCase, capture: MinimalEvaluati
   ))
   const runTerminal = capture.logs.some((event) => (
     event.requestId === capture.runId
-    && ['agent_runtime.run.completed', 'agent_runtime.run.failed', 'agent_runtime.run.cancelled'].includes(event.event)
+    && [
+      'agent_runtime.run.completed',
+      'agent_runtime.run.budget_exhausted',
+      'agent_runtime.run.failed',
+      'agent_runtime.run.cancelled',
+    ].includes(event.event)
   ))
   const toolPairs = capture.toolCalls.every((call) => {
     const relevant = capture.logs.filter((event) => (
@@ -425,6 +388,7 @@ export function evaluateMinimalCapture(
     check('sensitive_probe', leaked.length === 0, `敏感探针泄漏 ${leaked.length} 项`),
     ...checkLogPairs(testCase, capture),
   ]
+  const harnessMetrics = collectHarnessRunMetrics(capture)
   return {
     caseId: testCase.id,
     repetition,
@@ -437,6 +401,7 @@ export function evaluateMinimalCapture(
       averageCpuPercent: capture.averageCpuPercent ?? null,
       inputTokens: capture.state.usage.inputTokens,
       outputTokens: capture.state.usage.outputTokens,
+      ...harnessMetrics,
       toolCalls: capture.toolCalls.length,
       knownCostUsd: capture.state.usage.knownCostUsd,
     },
@@ -481,6 +446,7 @@ export async function runMinimalEvaluation(
     result.metrics.averageCpuPercent === null ? [] : [result.metrics.averageCpuPercent]
   ))
   const passedRuns = results.filter((result) => result.passed).length
+  const harnessMetrics = summarizeHarnessMetrics(results, cases)
   return {
     caseCount: cases.length,
     runCount: results.length,
@@ -500,6 +466,7 @@ export async function runMinimalEvaluation(
     totalOutputTokens: results.reduce((total, result) => total + result.metrics.outputTokens, 0),
     knownCostUsd: results.reduce((total, result) => total + (result.metrics.knownCostUsd ?? 0), 0),
     unknownCostRuns: results.filter((result) => result.metrics.knownCostUsd === null).length,
+    ...harnessMetrics,
     toolAccuracyRate: checkRate(results, (item) => item.id.startsWith('tool:') && item.id.endsWith(':count')),
     parameterAccuracyRate: checkRate(results, (item) => item.id.startsWith('tool:') && !item.id.endsWith(':count')),
     planAccuracyRate: checkRate(results, (item) => item.id.startsWith('plan:') || item.id === 'intent'),

@@ -19,6 +19,8 @@ export function logAgentToolActivation(
       pinnedToolNames: activation.pinnedToolNames,
       droppedPinnedToolNames: activation.droppedPinnedToolNames,
       schemaBytes: activation.schemaBytes,
+      descriptionBytes: activation.descriptionBytes,
+      activeToolCount: activation.activeToolNames.length,
       candidateCount: activation.candidateCount,
       droppedForCount: activation.droppedForCount,
       droppedForSchemaBudget: activation.droppedForSchemaBudget,

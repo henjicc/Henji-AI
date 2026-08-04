@@ -73,6 +73,7 @@ export function buildPermissionAuditTemplate(
     || input.preview.dataClasses.includes('C2')
     || input.preview.dataClasses.includes('C3')
     || input.authorizationSource === 'approved_workflow'
+    || input.authorizationSource === 'approved_action_group'
   return {
     runId: input.runId,
     toolCallId: input.toolCallId,

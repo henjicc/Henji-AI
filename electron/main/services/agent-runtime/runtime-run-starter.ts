@@ -3,6 +3,7 @@ import type { WebContents } from 'electron'
 
 import type { AgentEvent, AgentRunState } from '../../../../src/core/assistant/events'
 import type {
+  AgentBudgetContinuation,
   AgentStartRunRequest,
   AgentStartRunResult,
 } from '../../../../src/core/assistant/runtimeContracts'
@@ -28,6 +29,7 @@ interface RuntimeRunStarterOptions {
   request: AgentStartRunRequest
   parentRunId: string | null
   recoveryContext: AgentWorkingSummary | undefined
+  budgetContinuation?: AgentBudgetContinuation
   runs: Map<string, AgentRunRecord>
   activeByThread: Map<string, string>
   persistence: AgentPersistenceStore
@@ -44,7 +46,7 @@ export async function startRuntimeRun(
   const activeRunId = options.activeByThread.get(options.request.threadId)
   if (activeRunId) {
     const active = options.runs.get(activeRunId)?.state
-    if (active && !['completed', 'failed', 'cancelled'].includes(active.status)) {
+    if (active && !['completed', 'budget_exhausted', 'failed', 'cancelled'].includes(active.status)) {
       throw new Error(`[thread_busy] thread ${options.request.threadId} 已有活动运行 ${activeRunId}`)
     }
   }
@@ -68,7 +70,13 @@ export async function startRuntimeRun(
     events: [],
   })
   options.activeByThread.set(options.request.threadId, runId)
-  options.persistence.createRun(runId, options.request, initialState, options.parentRunId)
+  options.persistence.createRun(
+    runId,
+    options.request,
+    initialState,
+    options.parentRunId,
+    { appendUserMessage: !options.budgetContinuation }
+  )
   try {
     const projection = options.persistence.projectConversation(options.request.threadId, runId)
     const memoryContext = options.memory.retrieve(
@@ -83,7 +91,8 @@ export async function startRuntimeRun(
       memoryContext,
       projection.messages,
       projection.sourceSequences,
-      preparedRecoveryContext
+      preparedRecoveryContext,
+      options.budgetContinuation
     )
     const record = options.runs.get(runId)
     if (record) record.state = state

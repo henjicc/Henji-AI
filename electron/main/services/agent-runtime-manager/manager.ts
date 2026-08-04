@@ -9,7 +9,10 @@ import {
   type AgentRunState,
 } from '../../../../src/core/assistant/events'
 import type { HostContextSnapshot } from '../../../../src/core/assistant/hostContracts'
-import type { AgentStartRunRequest } from '../../../../src/core/assistant/runtimeContracts'
+import type {
+  AgentBudgetContinuation,
+  AgentStartRunRequest,
+} from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentMemoryContextEntry } from '../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
 import type { ModelStepMessage } from '../../../../src/core/llm/modelStep'
@@ -94,7 +97,8 @@ export class AgentRuntimeManager {
     memoryContext: AgentMemoryContextEntry[],
     conversationHistory: ModelStepMessage[],
     conversationHistorySequences: number[],
-    recoveryContext?: AgentWorkingSummary
+    recoveryContext?: AgentWorkingSummary,
+    budgetContinuation?: AgentBudgetContinuation
   ): Promise<AgentRunState> {
     this.activeRunIds.add(runId)
     try {
@@ -106,6 +110,7 @@ export class AgentRuntimeManager {
         conversationHistory,
         conversationHistorySequences,
         recoveryContext,
+        budgetContinuation,
       }, 15_000)
       return agentRunStateSchema.parse(result)
     } catch (error) {

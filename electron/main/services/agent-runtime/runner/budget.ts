@@ -6,16 +6,30 @@ import {
 } from '../../../../../src/core/assistant/events'
 
 export const DEFAULT_AGENT_BUDGET: AgentBudgetConfig = {
-  maxTurns: null,
-  maxToolCalls: null,
-  maxDurationMs: null,
+  softMaxTurns: 20,
+  maxTurns: 32,
+  softMaxToolCalls: 50,
+  maxToolCalls: 100,
+  softMaxWriteToolCalls: 12,
+  maxWriteToolCalls: 24,
+  maxDurationMs: 30 * 60 * 1_000,
   maxInputTokens: null,
   maxOutputTokens: null,
   maxConsecutiveFailures: 3,
   maxRepeatedToolCalls: 2,
-  maxNoProgressTurns: 4,
-  maxCostUsd: null,
+  maxNoProgressTurns: 3,
+  softMaxCostUsd: 3,
+  maxCostUsd: 10,
 }
+
+export type AgentBudgetSoftLimitCode =
+  | 'SOFT_MAX_TURNS'
+  | 'SOFT_MAX_TOOL_CALLS'
+  | 'SOFT_MAX_WRITE_TOOL_CALLS'
+  | 'SOFT_MAX_COST'
+  | 'SOFT_CONSECUTIVE_FAILURES'
+  | 'SOFT_REPEATED_TOOL_CALLS'
+  | 'SOFT_NO_PROGRESS_TURNS'
 
 export type AgentStopPolicy = Partial<AgentBudgetConfig>
 
@@ -40,6 +54,7 @@ export class AgentRunMetrics {
   private repeatedToolCalls = 0
   private turns = 0
   private toolCalls = 0
+  private writeToolCalls = 0
   private inputTokens = 0
   private outputTokens = 0
   private reasoningTokens = 0
@@ -48,6 +63,7 @@ export class AgentRunMetrics {
   private consecutiveFailures = 0
   private noProgressTurns = 0
   private lastProgressMarker: string | null = null
+  private readonly reportedSoftLimits = new Set<AgentBudgetSoftLimitCode>()
 
   constructor(config: AgentStopPolicy = {}) {
     this.config = agentBudgetConfigSchema.parse({ ...DEFAULT_AGENT_BUDGET, ...config })
@@ -73,11 +89,16 @@ export class AgentRunMetrics {
     this.assertWithinLimits()
   }
 
-  recordToolCall(signature: string): void {
+  recordToolCall(signature: string, write = false): void {
+    this.assertWithinLimits()
     if (this.config.maxToolCalls !== null && this.toolCalls >= this.config.maxToolCalls) {
       throw new AgentStopPolicyExceededError('MAX_TOOL_CALLS', '已达到智能助手最大工具调用次数，已停止继续尝试')
     }
+    if (write && this.config.maxWriteToolCalls !== null && this.writeToolCalls >= this.config.maxWriteToolCalls) {
+      throw new AgentStopPolicyExceededError('MAX_WRITE_TOOL_CALLS', '已达到智能助手最大写入调用次数，已停止继续尝试')
+    }
     this.toolCalls += 1
+    if (write) this.writeToolCalls += 1
     if (signature === this.lastToolSignature) this.repeatedToolCalls += 1
     else {
       this.lastToolSignature = signature
@@ -150,10 +171,43 @@ export class AgentRunMetrics {
     }
   }
 
+  consumeNewSoftLimits(): AgentBudgetSoftLimitCode[] {
+    const reached: AgentBudgetSoftLimitCode[] = []
+    const add = (code: AgentBudgetSoftLimitCode, condition: boolean): void => {
+      if (!condition || this.reportedSoftLimits.has(code)) return
+      this.reportedSoftLimits.add(code)
+      reached.push(code)
+    }
+    add('SOFT_MAX_TURNS', this.config.softMaxTurns !== null && this.turns >= this.config.softMaxTurns)
+    add(
+      'SOFT_MAX_TOOL_CALLS',
+      this.config.softMaxToolCalls !== null && this.toolCalls >= this.config.softMaxToolCalls
+    )
+    add(
+      'SOFT_MAX_WRITE_TOOL_CALLS',
+      this.config.softMaxWriteToolCalls !== null && this.writeToolCalls >= this.config.softMaxWriteToolCalls
+    )
+    add(
+      'SOFT_MAX_COST',
+      this.config.softMaxCostUsd !== null
+        && this.knownCostUsd !== null
+        && this.knownCostUsd >= this.config.softMaxCostUsd
+    )
+    add('SOFT_CONSECUTIVE_FAILURES', this.consecutiveFailures >= 2)
+    add('SOFT_REPEATED_TOOL_CALLS', this.repeatedToolCalls >= 2)
+    add('SOFT_NO_PROGRESS_TURNS', this.noProgressTurns >= 2)
+    return reached
+  }
+
+  isCloseoutMode(): boolean {
+    return this.reportedSoftLimits.size > 0
+  }
+
   snapshot(): AgentBudgetUsage {
     return {
       turns: this.turns,
       toolCalls: this.toolCalls,
+      writeToolCalls: this.writeToolCalls,
       inputTokens: this.inputTokens,
       outputTokens: this.outputTokens,
       reasoningTokens: this.reasoningTokens,

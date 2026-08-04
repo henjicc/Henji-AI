@@ -1,126 +1,182 @@
-import {
-  AGENT_FACET_EVIDENCE_LIMIT,
-  AGENT_SETTLEMENT_EVIDENCE_LIMIT,
-} from '../../../../../src/core/assistant/progress'
 import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import {
+  AGENT_FACET_EVIDENCE_LIMIT,
   agentFacetProgressSchema,
-  agentProgressSettlementSchema,
   type AgentFacetProgress,
   type AgentProgressSettlement,
 } from '../../../../../src/core/assistant/progress'
-import type { AgentTaskFacet, AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
-import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
+import type { AgentObservedEffect, AgentTaskActionGroup, AgentTaskFacet, AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
+import type { AgentToolErrorCode, AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
-import { AGENT_TASK_FACET_LIMIT } from '../../../../../src/core/assistant/taskGraph'
-import { createMainLogger } from '../../logging'
 import type { AgentToolRegistry } from '../tools/registry'
 import { digestJson } from '../tools/security'
-
-const logger = createMainLogger('main.agent_runtime')
-import { extractResultReferences, extractResultScopeRevisions } from './runner-results'
-
-interface CallRecord {
-  attempts: number
-  failureCount: number
-  noChangeCount: number
-  lastErrorCode: string | null
-  succeededWrite: boolean
-  discoveryReused: boolean
-}
+import {
+  AgentEffectLedger,
+  asRecord,
+  callSignature,
+  effectMatches,
+  isTerminal,
+  observationFailure,
+  overlapsForVerification,
+  potentialEffectMatches,
+  resolveObservedEffects,
+  stableEvidence,
+  type CallRecord,
+  type ObservationFailure,
+  type EffectLedgerSnapshotEntry,
+  type RestoredEffectLedgerEntry,
+} from './facet-effect-ledger'
+import {
+  hasSufficientActionPlan as checkSufficientActionPlan,
+  parseDeclaredActionPlan,
+  resolveActionGroupForCall,
+} from './facet-action-plan'
+import { buildAgentProgressSettlement, buildSettlementGuidance } from './facet-settlement'
+import { buildUserResumeProgress, listActiveFacetIds, listDependencyFrontierFacetIds } from './facet-progress-state'
 
 export interface AgentProgressGuardDecision {
+  code?: AgentToolErrorCode
   reason: string
   events: AgentFacetProgress[]
 }
 
-interface ObservationFailure {
-  code: string
-  message: string
-  recovery: string
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null
-}
-
-function observationFailure(observation: AgentToolObservation): ObservationFailure | null {
-  const output = asRecord(observation.output)
-  if (output?.ok !== false) return null
-  const error = asRecord(output.error)
-  if (!error || typeof error.code !== 'string') return null
-  return {
-    code: error.code,
-    message: typeof error.message === 'string' ? error.message : observation.summary,
-    recovery: typeof error.recovery === 'string' ? error.recovery : 'none',
-  }
-}
-
-function stableEvidence(observation: AgentToolObservation): string[] {
-  const references = extractResultReferences(observation.output) ?? {}
-  const revisions = extractResultScopeRevisions(observation.output) ?? {}
-  const output = asRecord(observation.output)
-  const directRevision = typeof output?.revision === 'number' ? [`revision:${output.revision}`] : []
-  const status = typeof output?.status === 'string' ? [`status:${output.status}`] : []
-  return [
-    ...Object.entries(references).map(([key, value]) => `${key}:${value}`),
-    ...Object.entries(revisions).map(([scope, revision]) => `${scope}@${revision}`),
-    ...directRevision,
-    ...status,
-  ].slice(0, AGENT_FACET_EVIDENCE_LIMIT)
-}
-
-function callSignature(
-  call: ModelStepToolCall,
-  expectedRevisions: Partial<HostScopeRevisions>
-): string {
-  return `${call.toolName}:${digestJson({ input: call.input, expectedRevisions })}`
-}
-
-function isTerminal(status: AgentTaskFacet['status']): boolean {
-  return status === 'completed' || status === 'blocked' || status === 'waiting_user'
-}
-
 export class AgentFacetProgressTracker {
+  private taskGraph: AgentTaskGraph
+  private requiresExplicitActionPlan: boolean
   private readonly facets = new Map<string, AgentTaskFacet>()
   private readonly callRecords = new Map<string, CallRecord>()
   private readonly observationDigests = new Map<string, Set<string>>()
+  private readonly effectLedger: AgentEffectLedger
   private readonly discoveredSchemas = new Set<string>()
+  private readonly discoveredFacetIds = new Set<string>()
   private readonly schemaFacetIds = new Map<string, Set<string>>()
   private readonly pendingEvents: AgentFacetProgress[] = []
 
   constructor(
-    taskGraph: AgentTaskGraph,
-    private readonly registry: AgentToolRegistry
+    initialTaskGraph: AgentTaskGraph,
+    private readonly registry: AgentToolRegistry,
+    requiresExplicitActionPlan = false,
+    restoredLedger: RestoredEffectLedgerEntry[] = [],
+    restoredLeaseFacetIds: string[] = []
   ) {
-    for (const facet of taskGraph.facets) this.facets.set(facet.facetId, { ...facet })
+    this.taskGraph = initialTaskGraph
+    this.requiresExplicitActionPlan = requiresExplicitActionPlan
+    for (const facetId of restoredLeaseFacetIds) {
+      if (facetId !== 'catalog') this.discoveredFacetIds.add(facetId)
+    }
+    this.effectLedger = new AgentEffectLedger(initialTaskGraph, restoredLedger)
+    for (const facet of initialTaskGraph.facets) {
+      this.facets.set(facet.facetId, { ...facet })
+    }
+  }
+
+  taskGraphSnapshot(): AgentTaskGraph {
+    return {
+      ...this.taskGraph,
+      facets: this.taskGraph.facets.map((facet) => this.facets.get(facet.facetId) ?? facet),
+    }
+  }
+
+  actionGroupForCall(
+    call: ModelStepToolCall
+  ): Pick<AgentTaskActionGroup, 'actionGroupId' | 'mode'> | null {
+    return resolveActionGroupForCall({
+      call,
+      taskGraph: this.taskGraph,
+      matchingFacets: this.facetsForCall(call),
+      registry: this.registry,
+    })
+  }
+
+  effectLedgerSnapshot(): EffectLedgerSnapshotEntry[] {
+    return this.effectLedger.snapshot()
+  }
+
+  hasSufficientActionPlan(writeCallCount: number): boolean {
+    return checkSufficientActionPlan(
+      [...this.facets.values()],
+      this.requiresExplicitActionPlan,
+      writeCallCount
+    )
+  }
+
+  applyDeclaredActionPlan(output: unknown): boolean {
+    const parsed = parseDeclaredActionPlan({ output, taskGraph: this.taskGraph, facets: this.facets })
+    if (!parsed) return false
+    this.taskGraph = parsed.taskGraph
+    this.requiresExplicitActionPlan = false
+    this.facets.clear()
+    for (const facet of parsed.taskGraph.facets) {
+      this.facets.set(facet.facetId, { ...facet })
+      if (parsed.declaredFacetIds.has(facet.facetId)) this.observationDigests.delete(facet.facetId)
+    }
+    this.effectLedger.rebuild(parsed.taskGraph, parsed.declaredFacetIds)
+    return true
+  }
+
+  activeFacetIds(): string[] {
+    return listActiveFacetIds([...this.facets.values()])
+  }
+
+  dependencyFrontierFacetIds(limit = 3): string[] {
+    return listDependencyFrontierFacetIds([...this.facets.values()], limit)
   }
 
   validate(
     call: ModelStepToolCall,
-    expectedRevisions: Partial<HostScopeRevisions>
+    expectedRevisions: Partial<HostScopeRevisions>,
+    allowSettledActionGroupSibling = false
   ): AgentProgressGuardDecision | null {
     const settlement = this.settlement()
-    if (settlement.status !== 'active') {
+    if (settlement.status !== 'active' && !allowSettledActionGroupSibling) {
       return {
         reason: `任务图已结算为 ${settlement.status}，禁止继续调用工具；请输出结构化完成或受阻说明。`,
+        events: [],
+      }
+    }
+    if (call.toolName === 'discover_application_capabilities') {
+      const input = asRecord(call.input)
+      const requestedFacetIds = Array.isArray(input?.facets)
+        ? input.facets.flatMap((rawFacet) => {
+            const facet = asRecord(rawFacet)
+            return typeof facet?.facetId === 'string' ? [facet.facetId] : []
+          })
+        : []
+      const frontier = new Set(this.dependencyFrontierFacetIds())
+      const outsideFrontier = requestedFacetIds.filter((facetId) => !frontier.has(facetId))
+      if (outsideFrontier.length > 0) {
+        return {
+          reason: `能力发现只能覆盖当前依赖前沿；以下 Facet 尚不可执行：${outsideFrontier.join('、')}`,
+          events: [],
+        }
+      }
+      const repeatedFacetIds = requestedFacetIds.filter((facetId) => (
+        this.discoveredFacetIds.has(facetId)
+      ))
+      if (repeatedFacetIds.length > 0) {
+        return {
+          reason: `以下 Facet 已有活动工具租约，禁止重复发现：${repeatedFacetIds.join('、')}。请直接使用已披露 schema。`,
+          events: [],
+        }
+      }
+    }
+    const definition = this.registry.get(call.toolName)
+    if (definition && !definition.readOnly && call.toolName !== 'declare_action_plan'
+      && this.facetsForCall(call, undefined, allowSettledActionGroupSibling).length === 0) {
+      return {
+        code: 'ACTION_PLAN_REQUIRED',
+        reason: `${call.toolName} 的 effect、实体或属性不匹配当前依赖前沿中已声明的 action plan。`,
         events: [],
       }
     }
     const signature = callSignature(call, expectedRevisions)
     const record = this.callRecords.get(signature)
     if (!record) return null
-    const definition = this.registry.get(call.toolName)
     let kind: AgentFacetProgress['kind'] | null = null
     let reason = ''
     if (record.succeededWrite && definition && !definition.readOnly) {
       kind = 'repeated_write'
       reason = `${call.toolName} 已在相同 base revision 和参数下成功，拒绝重复写入。`
-    } else if (record.discoveryReused) {
-      kind = 'repeated_discovery'
-      reason = '相同批量发现已命中缓存且没有新 schema，拒绝继续搜索。'
     } else if (record.lastErrorCode && ['CONFLICT', 'STALE_CONTEXT'].includes(record.lastErrorCode)) {
       kind = 'revision_conflict'
       reason = `${call.toolName} 的 revision 冲突后尚未观察新状态，拒绝使用相同 base revision 重试。`
@@ -150,7 +206,6 @@ export class AgentFacetProgressTracker {
       noChangeCount: 0,
       lastErrorCode: null,
       succeededWrite: false,
-      discoveryReused: false,
     }
     record.attempts += 1
     this.callRecords.set(signature, record)
@@ -162,129 +217,25 @@ export class AgentFacetProgressTracker {
     if (input.call.toolName === 'read_application_schemas') {
       return this.recordSchemas(input.call, input.observation, signature, record)
     }
+    if (input.call.toolName === 'declare_action_plan') {
+      this.applyDeclaredActionPlan(input.observation.output)
+      return []
+    }
     return this.recordSuccess(input.call, input.observation, signature, record)
   }
 
-  /** 列出这个 Facet 卡住的依赖，缺失的依赖单独标注——那通常意味着任务图本身建错了。 */
-  private unsatisfiedDependencies(facet: AgentTaskFacet): string[] {
-    return facet.dependsOn.flatMap((dependency) => {
-      const target = this.facets.get(dependency)
-      if (!target) return [`${dependency}（该 Facet 不存在）`]
-      if (target.status === 'completed') return []
-      return [`${dependency}（${target.status}）`]
-    })
-  }
-
   settlement(): AgentProgressSettlement {
-    const facets = [...this.facets.values()]
-    const completed = facets.filter((facet) => facet.status === 'completed')
-    const blocked = facets.filter((facet) => facet.status === 'blocked')
-    const waiting = facets.filter((facet) => facet.status === 'waiting_user')
-    const remaining = facets.filter((facet) => !isTerminal(facet.status))
-    const hasRunnableFacet = remaining.some((facet) => facet.dependsOn.every(
-      (dependency) => this.facets.get(dependency)?.status === 'completed'
-    ))
-    /**
-     * `completed` **必须**要求 remaining 为空。
-     *
-     * 这一档原本只看 blocked 和 waiting：只要没有受阻、没有等待用户，哪怕任务图里还剩一半
-     * Facet 没做，也会被判成 completed，然后 settlementGuidance 下发"停止调用工具"。实测就是
-     * 这样——立方体放完之后，圆柱体、环绕运镜、上下漂浮三件事都还挂着，运行时却宣布完成。
-     *
-     * 触发条件是"还有 Facet，但一个都不可运行"：三维写入 Facet 全都依赖导航 Facet，导航又依赖
-     * 查询锚点，锚点一旦没被记成 completed，整条链就永远没有可运行项，而它们又都不是 blocked
-     * 也不是 waiting_user，于是精准命中这一档。
-     */
-    const deadlocked = remaining.length > 0 && !hasRunnableFacet && waiting.length === 0
-    const status: AgentProgressSettlement['status'] = remaining.length > 0 && hasRunnableFacet
-      ? 'active'
-      : remaining.length > 0 && waiting.length > 0
-        ? 'waiting_user'
-      : remaining.length === 0 && blocked.length === 0 && waiting.length === 0
-        ? 'completed'
-        : completed.length > 0
-          ? 'partial'
-          : waiting.length > 0 && blocked.length === 0 ? 'waiting_user' : 'blocked'
-    // 死锁的 Facet 必须自己变成受阻项并说明卡在哪个依赖上，否则最终答复里它们既不在"已完成"
-    // 也不在"受阻"，只剩一句没有出处的"未完成"。
-    const deadlockedBlocks = deadlocked
-      ? remaining.map((facet) => ({
-          facetId: facet.facetId,
-          reason: `依赖未完成，无法开始：${this.unsatisfiedDependencies(facet).join('、') || '未知依赖'}。`,
-        }))
-      : []
-    return agentProgressSettlementSchema.parse({
-      status,
-      completedFacetIds: completed.map((facet) => facet.facetId),
-      blockedFacets: [
-        ...blocked.map((facet) => ({
-          facetId: facet.facetId,
-          reason: facet.statusReason || '没有满足完成条件。',
-        })),
-        ...deadlockedBlocks,
-      ].slice(0, AGENT_TASK_FACET_LIMIT),
-      waitingFacetIds: waiting.map((facet) => facet.facetId),
-      remainingFacetIds: remaining.map((facet) => facet.facetId),
-      evidence: facets.flatMap((facet) => facet.evidence).slice(-AGENT_SETTLEMENT_EVIDENCE_LIMIT),
-      // 摘要必须带上剩余数：结算为非 active 时不提 remaining，读的人无从知道还欠多少。
-      summary: status === 'active'
-        ? `任务图仍有 ${remaining.length} 个 Facet 未结算。`
-        : `任务图结算为 ${status}：完成 ${completed.length}，受阻 ${blocked.length}，等待用户 ${waiting.length}，未开始 ${remaining.length}。`
-          + (deadlocked ? '未开始的 Facet 全部卡在未完成的依赖上，任务图无法自行推进。' : ''),
-      suggestedNextStep: waiting.length > 0
-        ? '向用户提出一个最小且具体的问题，然后进入现有 waiting_user。'
-        : deadlocked
-          ? '如实说明哪些 Facet 因依赖未完成而没有开始，并给出继续所需的最小动作，不要声称任务已完成。'
-          : blocked.length > 0
-            ? '如实说明已完成部分、阻塞原因和继续所需的最小条件。'
-            : null,
-    })
+    return buildAgentProgressSettlement([...this.facets.values()])
   }
 
   settlementGuidance(): string | null {
-    const settlement = this.settlement()
-    if (settlement.status === 'active') return null
-    // 「停止调用工具」是本运行时最重的一个决策，此前它一条日志都不留：出问题时只能看到
-    // 助手忽然收手，无从判断是模型自己停的还是运行时下的令。
-    logger.info('任务图结算并下发停止指令', {
-      event: 'agent_task_graph.settlement.stop',
-      context: {
-        status: settlement.status,
-        completedCount: settlement.completedFacetIds.length,
-        blockedCount: settlement.blockedFacets.length,
-        waitingCount: settlement.waitingFacetIds.length,
-        remainingCount: settlement.remainingFacetIds.length,
-        remainingFacetIds: settlement.remainingFacetIds,
-        blockedReasons: settlement.blockedFacets.map((facet) => `${facet.facetId}:${facet.reason}`),
-      },
-    })
-    return [
-      '[任务图结构化结算]',
-      JSON.stringify(settlement),
-      settlement.status === 'waiting_user'
-        ? '停止调用工具，只向用户提出一个最小具体问题。'
-        : '停止调用工具；最终答复必须列出已完成部分、未完成部分、证据、阻塞原因和继续所需的最小动作。',
-    ].join('\n')
+    return buildSettlementGuidance(this.settlement())
   }
 
   resumeWaitingFacets(answer: string): AgentFacetProgress[] {
-    for (const record of this.callRecords.values()) {
-      if (record.succeededWrite || record.discoveryReused) continue
-      record.failureCount = 0
-      record.noChangeCount = 0
-      record.lastErrorCode = null
-    }
-    const answerDigest = digestJson({ answer })
-    return [...this.facets.values()].flatMap((facet) => facet.status === 'waiting_user'
-      ? [this.progressFacet({
-          facetId: facet.facetId,
-          status: 'active',
-          kind: 'user_input_received',
-          summary: '已收到用户补充信息，继续原 Facet。',
-          evidence: [`user_input:${answerDigest}`],
-          executionFingerprint: answerDigest,
-        })]
-      : [])
+    return buildUserResumeProgress({
+      facets: [...this.facets.values()], callRecords: this.callRecords.values(), answer,
+    }).map((progress) => this.progressFacet(progress))
   }
 
   drainPendingEvents(): AgentFacetProgress[] {
@@ -346,7 +297,6 @@ export class AgentFacetProgressTracker {
   ): AgentFacetProgress[] {
     const output = asRecord(observation.output)
     const fingerprint = typeof output?.fingerprint === 'string' ? output.fingerprint : signature
-    record.discoveryReused = false
     const missing = Array.isArray(output?.missing) ? output.missing : []
     const results = Array.isArray(output?.facets) ? output.facets : []
     const events: AgentFacetProgress[] = []
@@ -365,6 +315,7 @@ export class AgentFacetProgressTracker {
       const value = asRecord(item)
       if (typeof value?.facetId !== 'string' || missing.some((entry) => asRecord(entry)?.facetId === value.facetId)) continue
       const facetId = value.facetId
+      this.discoveredFacetIds.add(facetId)
       const schemaRefs = Array.isArray(value.schemaRefs) ? value.schemaRefs : []
       const newDigests = schemaRefs.flatMap((ref) => {
         const digest = asRecord(ref)?.digest
@@ -377,22 +328,18 @@ export class AgentFacetProgressTracker {
         return [digest]
       })
       discoveredNewSchema ||= newDigests.length > 0
-      if (output?.reused === true && newDigests.length === 0) {
-        events.push(this.blockFacet(
-          facetId, 'repeated_discovery', '相同发现指纹只返回缓存，没有新 schema。', fingerprint
-        ))
-      } else {
-        events.push(this.progressFacet({
-          facetId,
-          status: 'active',
-          kind: 'schema_discovered',
-          summary: '已一次取得该 Facet 的能力摘要和稳定 schemaRef。',
-          evidence: [`discovery:${fingerprint}`, ...newDigests.slice(0, 4)],
-          executionFingerprint: fingerprint,
-        }))
-      }
+      events.push(this.progressFacet({
+        facetId,
+        status: 'active',
+        kind: newDigests.length > 0 ? 'schema_discovered' : 'repeated_discovery',
+        summary: newDigests.length > 0
+          ? '已一次取得该 Facet 的能力摘要和稳定 schemaRef。'
+          : '已恢复该 Facet 的既有能力租约，不再重复发现。',
+        evidence: [`discovery:${fingerprint}`, ...newDigests.slice(0, 4)],
+        executionFingerprint: fingerprint,
+      }))
     }
-    record.discoveryReused = output?.reused === true && !discoveredNewSchema
+    if (!discoveredNewSchema) record.noChangeCount += 1
     return events
   }
 
@@ -439,12 +386,14 @@ export class AgentFacetProgressTracker {
     const definition = this.registry.get(call.toolName)
     const evidence = stableEvidence(observation)
     const outputDigest = digestJson(observation.output)
-    return this.facetsForCall(call).map((facet) => {
+    const observedEffects = resolveObservedEffects(this.registry, call, observation, evidence)
+    if (definition && !definition.readOnly) record.succeededWrite = true
+    return this.facetsForCall(call, observedEffects).map((facet) => {
       const seen = this.observationDigests.get(facet.facetId) ?? new Set<string>()
       const changed = !seen.has(outputDigest)
       seen.add(outputDigest)
       this.observationDigests.set(facet.facetId, seen)
-      if (!changed || evidence.length === 0) {
+      if (!changed || observedEffects.length === 0) {
         record.noChangeCount += 1
         return this.progressFacet({
           facetId: facet.facetId, status: 'active', kind: 'no_change',
@@ -452,12 +401,10 @@ export class AgentFacetProgressTracker {
           evidence: [], executionFingerprint: signature,
         })
       }
-      const readFacet = facet.capabilityKinds.every((kind) => ['observe', 'query'].includes(kind))
-      const navigation = definition?.category === 'navigation'
       const submitted = definition?.semantics?.completionKind === 'submitted'
         || asRecord(observation.output)?.status === 'submitted'
-      const completed = navigation || readFacet || (definition && !definition.readOnly && !submitted)
-      if (definition && !definition.readOnly) record.succeededWrite = true
+      if (!submitted) this.effectLedger.record(facet, observedEffects, outputDigest)
+      const completed = !submitted && this.effectLedger.satisfied(facet)
       return this.progressFacet({
         facetId: facet.facetId,
         status: completed ? 'completed' : 'active',
@@ -465,28 +412,46 @@ export class AgentFacetProgressTracker {
         summary: submitted
           ? `${call.toolName} 已进入有效外部等待或长任务状态。`
           : completed ? `${call.toolName} 已提供满足该 Facet 的结构化证据。` : '观察结果更接近完成条件。',
-        evidence,
+        evidence: [...evidence, ...observedEffects.flatMap((effect) => effect.evidence)]
+          .slice(0, AGENT_FACET_EVIDENCE_LIMIT),
         executionFingerprint: signature,
       })
     })
   }
 
-  private facetsForCall(call: ModelStepToolCall): AgentTaskFacet[] {
+  private facetsForCall(
+    call: ModelStepToolCall,
+    resolvedEffects?: AgentObservedEffect[],
+    includeTerminal = false
+  ): AgentTaskFacet[] {
     const definition = this.registry.get(call.toolName)
-    const domains = new Set([definition?.category, definition?.capability?.domain].filter(Boolean))
+    const effects = resolvedEffects ?? (definition?.capability?.control?.impacts ?? []).map((impact) => ({
+      effect: impact.effect,
+      entityTypes: impact.entityTypes,
+      propertyIds: impact.propertyIds,
+      targetRefs: [],
+      count: 1,
+      verified: false,
+      evidence: [],
+    }))
+    const matches = resolvedEffects ? effectMatches : potentialEffectMatches
     const candidates = [...this.facets.values()].filter((facet) => (
-      !isTerminal(facet.status)
-      && domains.has(facet.domain)
+      (includeTerminal || !isTerminal(facet.status))
       && facet.dependsOn.every((dependency) => this.facets.get(dependency)?.status === 'completed')
+      && facet.requiredEffects.some((required) => effects.some((effect) => (
+        matches(required, effect)
+        || (
+          required.verificationRequired
+          && this.effectLedger.count(required.effectId) >= required.minimumCount
+          && overlapsForVerification(required, effect)
+        )
+      )))
     ))
     if (candidates.length > 0) {
       const parallel = candidates.filter((facet) => facet.parallelizable)
       return parallel.length === candidates.length ? parallel : [candidates[0]]
     }
-    return [...this.facets.values()].filter((facet) => (
-      !isTerminal(facet.status)
-      && facet.dependsOn.every((dependency) => this.facets.get(dependency)?.status === 'completed')
-    )).slice(0, 1)
+    return []
   }
 
   private progressFacet(progress: AgentFacetProgress): AgentFacetProgress {

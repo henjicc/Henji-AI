@@ -13,9 +13,14 @@ import {
   discoverApplicationCapabilitiesCapability,
   readApplicationSchemasCapability,
 } from '../../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
-import { AGENT_DISCOVERY_ADDED_TOOL_LIMIT } from '../../../../../../src/core/assistant/toolBudget'
+import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../../src/core/assistant/toolBudget'
 import { AgentCapabilityDiscoveryCatalog } from '../../context/capability-discovery'
+import { selectLeaseableToolNames } from '../../context/tool-activation'
 import { createBackendCapabilityTool } from '../backend-capability-tool'
+import {
+  agentTaskActionGroupSchema,
+  agentTaskRequiredEffectSchema,
+} from '../../../../../../src/core/assistant/taskGraph'
 
 const applicationCapabilityCategorySchema = z.enum([
   'catalog',
@@ -88,7 +93,8 @@ export function createBackendBuiltinTools(
     outputSchema: z.object({
       catalogVersion: z.literal(APPLICATION_CAPABILITY_CATALOG_VERSION),
       capabilities: z.array(z.record(z.string(), z.unknown())),
-      addedToolNames: z.array(z.string().min(1)).max(AGENT_DISCOVERY_ADDED_TOOL_LIMIT),
+      leasedToolNames: z.array(z.string().min(1)).max(AGENT_DISCOVERY_LEASE_TOOL_LIMIT),
+      deferredCount: z.number().int().nonnegative(),
       nextCursor: z.number().int().nonnegative().nullable(),
     }).strict(),
     aiInputSchema: {
@@ -125,12 +131,18 @@ export function createBackendBuiltinTools(
     execute: (input, context) => {
       const all = registry.search(input.query, input.category, context.hostContext, 100)
       const capabilities = all.slice(input.cursor, input.cursor + input.limit)
+      const leaseSelection = selectLeaseableToolNames(
+        registry,
+        context.hostContext,
+        capabilities.map((capability) => capability.name)
+          .filter((name) => name !== 'search_application_capabilities')
+      )
       return Promise.resolve({
         catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
         capabilities,
-        addedToolNames: capabilities
-          .map((capability) => capability.name)
-          .filter((name) => name !== 'search_application_capabilities'),
+        leasedToolNames: leaseSelection.leasedToolNames,
+        deferredCount: leaseSelection.deferredToolNames.length
+          + Math.max(0, all.length - input.cursor - capabilities.length),
         nextCursor: input.cursor + capabilities.length < all.length ? input.cursor + capabilities.length : null,
       })
     },
@@ -149,10 +161,95 @@ export function createBackendBuiltinTools(
     },
   })
 
+  const declareActionPlan = defineAgentTool({
+    name: 'declare_action_plan',
+    version: 1,
+    title: '声明多项操作计划',
+    description: '在结构化规划不可用时，于首次多项写入前声明可结算的 Effect 与 action group；只登记计划，不执行业务写入。',
+    category: 'application',
+    side: 'backend',
+    risk: 'R0',
+    permission: 'application:read',
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    idempotent: true,
+    timeoutMs: 5_000,
+    retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+    supportsPreview: false,
+    supportsUndo: false,
+    requiredContext: [],
+    inputSchema: z.object({
+      facets: z.array(z.object({
+        facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
+        requiredEffects: z.array(agentTaskRequiredEffectSchema).min(1).max(32),
+      }).strict()).min(1).max(16),
+      actionGroups: z.array(agentTaskActionGroupSchema).min(1).max(32),
+    }).strict(),
+    outputSchema: z.object({
+      accepted: z.literal(true),
+      facets: z.array(z.object({
+        facetId: z.string().min(1),
+        requiredEffects: z.array(agentTaskRequiredEffectSchema),
+      }).strict()),
+      actionGroups: z.array(agentTaskActionGroupSchema),
+    }).strict(),
+    aiInputSchema: {
+      type: 'object',
+      properties: {
+        facets: {
+          type: 'array', minItems: 1, maxItems: 16,
+          items: {
+            type: 'object',
+            properties: {
+              facetId: { type: 'string' },
+              requiredEffects: {
+                type: 'array', minItems: 1, maxItems: 32,
+                items: {
+                  type: 'object',
+                  properties: {
+                    effectId: { type: 'string' },
+                    effect: { type: 'string', enum: ['observe', 'create', 'update', 'delete', 'navigate', 'execute'] },
+                    entityTypes: { type: 'array', items: { type: 'string' } },
+                    propertyIds: { type: 'array', items: { type: 'string' } },
+                    minimumCount: { type: 'integer', minimum: 1, maximum: 256 },
+                    targetRefs: { type: 'array', items: { type: 'object', properties: {
+                      kind: { type: 'string' }, id: { type: 'string' },
+                    }, required: ['kind', 'id'], additionalProperties: false } },
+                    verificationRequired: { type: 'boolean' },
+                    actionGroupId: { type: 'string' },
+                  },
+                  required: ['effectId', 'effect', 'entityTypes', 'propertyIds', 'minimumCount', 'targetRefs', 'verificationRequired', 'actionGroupId'],
+                  additionalProperties: false,
+                },
+              },
+            },
+            required: ['facetId', 'requiredEffects'], additionalProperties: false,
+          },
+        },
+        actionGroups: { type: 'array', minItems: 1, maxItems: 32, items: {
+          type: 'object', properties: {
+            actionGroupId: { type: 'string' }, facetId: { type: 'string' },
+            mode: { type: 'string', enum: ['parallel_read', 'atomic_batch', 'ordered_write', 'dependent'] },
+            effectIds: { type: 'array', items: { type: 'string' } },
+            dependsOn: { type: 'array', items: { type: 'string' } },
+          }, required: ['actionGroupId', 'facetId', 'mode', 'effectIds', 'dependsOn'], additionalProperties: false,
+        } },
+      },
+      required: ['facets', 'actionGroups'], additionalProperties: false,
+    },
+    execute: (input) => Promise.resolve({ accepted: true as const, ...input }),
+    concurrencyKey: () => 'action-plan',
+    targetIds: () => ({}),
+    dataClasses: () => ['C0'],
+    summarize: (output) => `已声明 ${output.actionGroups.length} 个操作组。`,
+  })
+
   return [
     eraseToolDefinition(discoverCapabilities),
     eraseToolDefinition(readSchemas),
     eraseToolDefinition(searchCapabilities),
+    eraseToolDefinition(declareActionPlan),
     createQueryDiagnosticEventsTool(),
     ...createAssistantSkillTools(),
     ...createUserInstructionTools(),

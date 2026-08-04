@@ -58,16 +58,29 @@ export function toolMessage(
   const output = shouldOffloadObservation(observation.output, offloadThreshold)
     ? { summary: observation.summary, largeResultOmitted: true }
     : { summary: observation.summary, data: sanitizeObservationValue(observation.output) }
-  const rawAddedToolNames = observation.output
+  const outputRecord = observation.output
     && typeof observation.output === 'object'
     && !Array.isArray(observation.output)
-      ? (observation.output as Record<string, unknown>).addedToolNames
-      : undefined
-  const addedToolNames = Array.isArray(rawAddedToolNames)
-    ? rawAddedToolNames
+      ? observation.output as Record<string, unknown>
+      : null
+  const rawLeasedToolNames = outputRecord?.leasedToolNames
+  const leasedToolNames = Array.isArray(rawLeasedToolNames)
+    ? rawLeasedToolNames
         .filter((name: unknown): name is string => typeof name === 'string')
-        .slice(0, 20)
+        .slice(0, 15)
     : []
+  const leasedSet = new Set(leasedToolNames)
+  const rawFacets = Array.isArray(outputRecord?.facets) ? outputRecord.facets : []
+  const toolLeases = rawFacets.flatMap((rawFacet) => {
+    const facet = rawFacet && typeof rawFacet === 'object' && !Array.isArray(rawFacet)
+      ? rawFacet as Record<string, unknown>
+      : null
+    if (typeof facet?.facetId !== 'string' || !Array.isArray(facet.capabilityNames)) return []
+    const toolNames = facet.capabilityNames.filter((name): name is string => (
+      typeof name === 'string' && leasedSet.has(name)
+    )).slice(0, 5)
+    return toolNames.length > 0 ? [{ facetId: facet.facetId, toolNames }] : []
+  })
   return {
     role: 'tool',
     content: [{
@@ -75,7 +88,8 @@ export function toolMessage(
       toolCallId: call.toolCallId,
       toolName: call.toolName,
       output: { type: 'json', value: output },
-      ...(addedToolNames.length > 0 ? { addedToolNames } : {}),
+      ...(leasedToolNames.length > 0 ? { leasedToolNames } : {}),
+      ...(toolLeases.length > 0 ? { toolLeases } : {}),
     }],
   }
 }

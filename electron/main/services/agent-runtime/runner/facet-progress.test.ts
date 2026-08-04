@@ -2,7 +2,12 @@ import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 
 import { agentToolObservationSchema, type AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import { agentTaskGraphSchema, type AgentTaskFacet } from '../../../../../src/core/assistant/taskGraph'
+import {
+  AGENT_TASK_GRAPH_VERSION,
+  agentTaskGraphSchema,
+  type AgentObservedEffect,
+  type AgentTaskFacet,
+} from '../../../../../src/core/assistant/taskGraph'
 import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
@@ -11,17 +16,31 @@ import { AgentFacetProgressTracker } from './facet-progress'
 const schemaDigest = `sha256:${'a'.repeat(64)}`
 
 function facet(input: Partial<AgentTaskFacet> & Pick<AgentTaskFacet, 'facetId' | 'domain'>): AgentTaskFacet {
+  const capabilityKinds = input.capabilityKinds ?? ['mutate']
+  const effect = capabilityKinds.includes('query') || capabilityKinds.includes('observe')
+    ? 'observe' as const
+    : 'create' as const
   return {
     facetId: input.facetId,
     domain: input.domain,
     goal: input.goal ?? `完成 ${input.facetId}`,
     targetEntityTypes: input.targetEntityTypes ?? [],
     requiredObservations: input.requiredObservations ?? [],
-    capabilityKinds: input.capabilityKinds ?? ['mutate'],
+    capabilityKinds,
     targetSurfaceId: input.targetSurfaceId ?? null,
     dependsOn: input.dependsOn ?? [],
     parallelizable: input.parallelizable ?? false,
     completionConditions: input.completionConditions ?? ['返回稳定 revision 或引用'],
+    requiredEffects: input.requiredEffects ?? [{
+      effectId: `${input.facetId}_effect`,
+      effect,
+      entityTypes: input.targetEntityTypes ?? ['camera_stage.object'],
+      propertyIds: [],
+      minimumCount: 1,
+      targetRefs: [],
+      verificationRequired: false,
+      actionGroupId: `${input.facetId}_actions`,
+    }],
     uncertainties: input.uncertainties ?? [],
     confidence: input.confidence ?? 1,
     status: input.status ?? 'pending',
@@ -32,9 +51,16 @@ function facet(input: Partial<AgentTaskFacet> & Pick<AgentTaskFacet, 'facetId' |
 
 function graph(facets: AgentTaskFacet[]) {
   return agentTaskGraphSchema.parse({
-    version: 'agent-task-graph/v1',
+    version: AGENT_TASK_GRAPH_VERSION,
     goal: '测试结构化进展',
     facets,
+    actionGroups: facets.flatMap((item) => item.requiredEffects.map((effect) => ({
+      actionGroupId: effect.actionGroupId,
+      facetId: item.facetId,
+      mode: effect.effect === 'observe' ? 'parallel_read' : 'ordered_write',
+      effectIds: [effect.effectId],
+      dependsOn: [],
+    }))),
     dependencies: facets.flatMap((item) => item.dependsOn.map((dependency) => ({
       fromFacetId: dependency,
       toFacetId: item.facetId,
@@ -64,14 +90,42 @@ function failure(toolName: string, code: string, recovery = 'none'): AgentToolOb
   })
 }
 
-function registry(): AgentToolRegistry {
+function registry(input?: {
+  writeEffect?: AgentObservedEffect['effect']
+  writeEntityTypes?: string[]
+  writePropertyIds?: string[]
+  writeResolver?: (toolInput: unknown, output: unknown) => AgentObservedEffect[]
+}): AgentToolRegistry {
   const result = new AgentToolRegistry()
   for (const definition of [
-    { name: 'write_camera', category: 'camera_stage', readOnly: false },
-    { name: 'read_camera', category: 'camera_stage', readOnly: true },
+    {
+      name: 'write_camera', category: 'camera_stage', readOnly: false,
+      effect: input?.writeEffect ?? 'create',
+      entityTypes: input?.writeEntityTypes ?? ['camera_stage.object'],
+      propertyIds: input?.writePropertyIds ?? [],
+      resolver: input?.writeResolver,
+    },
+    {
+      name: 'read_camera', category: 'camera_stage', readOnly: true,
+      effect: 'observe' as const,
+      entityTypes: input?.writeEntityTypes ?? ['camera_stage.object'],
+      propertyIds: input?.writePropertyIds ?? [],
+      resolver: undefined,
+    },
   ]) {
     result.register(defineAgentTool({
       ...definition,
+      capability: {
+        domain: definition.category,
+        control: { impacts: [{
+          effect: definition.effect,
+          entityTypes: definition.entityTypes,
+          propertyIds: definition.propertyIds,
+          revisionScopes: ['toolbox'],
+          verificationRequired: !definition.readOnly,
+        }] },
+        resolveObservedEffects: definition.resolver,
+      } as never,
       version: 1,
       title: definition.name,
       description: '测试进展判定。',
@@ -102,6 +156,185 @@ function registry(): AgentToolRegistry {
 }
 
 describe('AgentFacetProgressTracker', () => {
+  it('多写入计划不足时要求声明，声明后以新的 Effect 数量结算', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'settings', domain: 'settings' }),
+    ]), registry(), true)
+    expect(tracker.hasSufficientActionPlan(1)).toBe(false)
+    expect(tracker.hasSufficientActionPlan(2)).toBe(false)
+    expect(tracker.applyDeclaredActionPlan({
+      accepted: true,
+      facets: [{ facetId: 'settings', requiredEffects: [
+        {
+          effectId: 'setting_a', effect: 'update', entityTypes: ['settings.item'], propertyIds: ['a'],
+          minimumCount: 1, targetRefs: [], verificationRequired: true, actionGroupId: 'settings_batch',
+        },
+        {
+          effectId: 'setting_b', effect: 'update', entityTypes: ['settings.item'], propertyIds: ['b'],
+          minimumCount: 1, targetRefs: [], verificationRequired: true, actionGroupId: 'settings_batch',
+        },
+      ] }],
+      actionGroups: [{
+        actionGroupId: 'settings_batch', facetId: 'settings', mode: 'atomic_batch',
+        effectIds: ['setting_a', 'setting_b'], dependsOn: [],
+      }],
+    })).toBe(true)
+    expect(tracker.hasSufficientActionPlan(2)).toBe(true)
+    expect(tracker.taskGraphSnapshot().actionGroups[0]).toMatchObject({ mode: 'atomic_batch' })
+  })
+
+  it('补充一个 Facet 的 action plan 不会清空其他 Facet 已保存的 Effect Ledger', () => {
+    const taskGraph = graph([
+      facet({ facetId: 'observed', domain: 'camera_stage', capabilityKinds: ['observe'] }),
+      facet({ facetId: 'settings', domain: 'settings' }),
+    ])
+    const tracker = new AgentFacetProgressTracker(taskGraph, registry(), true, [{
+      effectId: 'observed_effect',
+      count: 1,
+      verified: true,
+      evidenceDigests: ['observed-digest'],
+      evidence: ['camera_stage.project:project-1'],
+    }])
+    expect(tracker.applyDeclaredActionPlan({
+      accepted: true,
+      facets: [{ facetId: 'settings', requiredEffects: [{
+        effectId: 'setting_a', effect: 'update', entityTypes: ['settings.item'], propertyIds: ['a'],
+        minimumCount: 1, targetRefs: [], verificationRequired: true, actionGroupId: 'settings_batch',
+      }] }],
+      actionGroups: [{
+        actionGroupId: 'settings_batch', facetId: 'settings', mode: 'atomic_batch',
+        effectIds: ['setting_a'], dependsOn: [],
+      }],
+    })).toBe(true)
+    expect(tracker.effectLedgerSnapshot()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        effectId: 'observed_effect', count: 1, verified: true,
+        evidenceDigests: ['observed-digest'],
+      }),
+    ]))
+  })
+  it('要求创建两个对象时第一次写入不能提前完成，第二次后仍须独立验证', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({
+        facetId: 'two_objects',
+        domain: 'camera_stage',
+        targetEntityTypes: ['camera_stage.object'],
+        requiredEffects: [{
+          effectId: 'two_objects_effect', effect: 'create',
+          entityTypes: ['camera_stage.object'], propertyIds: [], minimumCount: 2,
+          targetRefs: [], verificationRequired: true, actionGroupId: 'two_objects_actions',
+        }],
+      }),
+    ]), registry())
+
+    const first = tracker.observe({
+      call: call('write_camera', { id: 'first' }), expectedRevisions: {},
+      observation: observation('write_camera', { objectId: 'object-1', revision: 1 }),
+    })
+    expect(first[0]).toMatchObject({ facetId: 'two_objects', status: 'active' })
+    expect(tracker.settlement()).toMatchObject({ status: 'active', completedFacetIds: [] })
+
+    const restored = new AgentFacetProgressTracker(
+      tracker.taskGraphSnapshot(), registry(), false, tracker.effectLedgerSnapshot()
+    )
+
+    const second = restored.observe({
+      call: call('write_camera', { id: 'second' }), expectedRevisions: {},
+      observation: observation('write_camera', { objectId: 'object-2', revision: 2 }),
+    })
+    expect(second[0]).toMatchObject({ facetId: 'two_objects', status: 'active' })
+
+    const firstVerification = restored.observe({
+      call: call('read_camera', { id: 'verify' }), expectedRevisions: {},
+      observation: observation('read_camera', { verified: true, objectId: 'object-1', revision: 2 }),
+    })
+    expect(firstVerification[0]).toMatchObject({ facetId: 'two_objects', status: 'active' })
+    const secondVerification = restored.observe({
+      call: call('read_camera', { id: 'verify-second' }), expectedRevisions: {},
+      observation: observation('read_camera', { verified: true, objectId: 'object-2', revision: 2 }),
+    })
+    expect(secondVerification[0]).toMatchObject({ facetId: 'two_objects', status: 'completed' })
+    expect(restored.settlement().status).toBe('completed')
+  })
+
+  it('同一 action group 已开始后不会因第一项结算而拦截兄弟调用', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'group_write', domain: 'camera_stage' }),
+    ]), registry())
+    const first = call('write_camera', { id: 'first' })
+    tracker.observe({
+      call: first,
+      expectedRevisions: {},
+      observation: observation('write_camera', { objectId: 'object-1', revision: 1 }),
+    })
+    expect(tracker.settlement().status).toBe('completed')
+    const sibling = call('write_camera', { id: 'second' })
+    expect(tracker.validate(sibling, {})).toMatchObject({
+      reason: expect.stringContaining('任务图已结算'),
+    })
+    expect(tracker.validate(sibling, {}, true)).toBeNull()
+  })
+
+  it('同领域但错误实体或错误属性不能贡献 Effect', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({
+        facetId: 'position', domain: 'camera_stage',
+        requiredEffects: [{
+          effectId: 'position_effect', effect: 'update', entityTypes: ['camera_stage.object'],
+          propertyIds: ['camera_stage.object.position'], minimumCount: 1, targetRefs: [],
+          verificationRequired: false, actionGroupId: 'position_actions',
+        }],
+      }),
+    ]), registry({
+      writeEffect: 'update',
+      writeEntityTypes: ['camera_stage.camera'],
+      writePropertyIds: ['camera_stage.camera.fov'],
+    }))
+
+    expect(tracker.observe({
+      call: call('write_camera'), expectedRevisions: {},
+      observation: observation('write_camera', { revision: 1 }),
+    })).toEqual([])
+    expect(tracker.settlement().status).toBe('active')
+  })
+
+  it('图外写入在执行前返回 ACTION_PLAN_REQUIRED', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({
+        facetId: 'position', domain: 'camera_stage',
+        requiredEffects: [{
+          effectId: 'position_effect', effect: 'update', entityTypes: ['camera_stage.object'],
+          propertyIds: ['camera_stage.object.transform.position'], minimumCount: 1,
+          targetRefs: [], verificationRequired: true, actionGroupId: 'position_actions',
+        }],
+      }),
+    ]), registry({ writeEffect: 'create', writeEntityTypes: ['camera_stage.camera'] }))
+    expect(tracker.validate(call('write_camera'), {})).toMatchObject({
+      code: 'ACTION_PLAN_REQUIRED',
+      reason: expect.stringContaining('不匹配'),
+    })
+  })
+
+  it('相同输出不会重复计数，且无解析器的能力一次最多贡献一个 Effect', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({
+        facetId: 'two_objects', domain: 'camera_stage',
+        requiredEffects: [{
+          effectId: 'two_objects_effect', effect: 'create', entityTypes: ['camera_stage.object'],
+          propertyIds: [], minimumCount: 2, targetRefs: [], verificationRequired: false,
+          actionGroupId: 'two_objects_actions',
+        }],
+      }),
+    ]), registry())
+    const firstCall = call('write_camera', { id: 'first' })
+    const sameOutput = observation('write_camera', { objectId: 'same', revision: 1 })
+    tracker.observe({ call: firstCall, expectedRevisions: {}, observation: sameOutput })
+    tracker.observe({
+      call: call('write_camera', { id: 'second' }), expectedRevisions: {}, observation: sameOutput,
+    })
+    expect(tracker.settlement()).toMatchObject({ status: 'active', completedFacetIds: [] })
+  })
+
   it('能力缺失会阻塞目标 Facet 及其依赖项并立即结算', () => {
     const tracker = new AgentFacetProgressTracker(graph([
       facet({ facetId: 'camera', domain: 'camera_stage' }),
@@ -132,11 +365,27 @@ describe('AgentFacetProgressTracker', () => {
     })
   })
 
-  it('新 schema 算进展，缓存发现不产生新 schema 时停止重复搜索', () => {
+  it('能力发现只能请求当前依赖前沿，不能提前发现整张任务图', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'anchor', domain: 'camera_stage', capabilityKinds: ['query'] }),
+      facet({ facetId: 'write', domain: 'camera_stage', dependsOn: ['anchor'] }),
+    ]), registry())
+    expect(tracker.dependencyFrontierFacetIds()).toEqual(['anchor'])
+    expect(tracker.validate(call('discover_application_capabilities', {
+      facets: [{ facetId: 'write' }],
+    }), {})).toMatchObject({
+      reason: expect.stringContaining('当前依赖前沿'),
+      events: [],
+    })
+  })
+
+  it('新 schema 算进展，同一 Facet 的第二次发现会在调用前被拒绝且不阻塞任务', () => {
     const tracker = new AgentFacetProgressTracker(graph([
       facet({ facetId: 'camera', domain: 'camera_stage' }),
     ]), registry())
-    const discoveryCall = call('discover_application_capabilities', { facets: ['camera'] })
+    const discoveryCall = call('discover_application_capabilities', {
+      facets: [{ facetId: 'camera' }],
+    })
     const discoveryOutput = {
       fingerprint: schemaDigest,
       reused: false,
@@ -154,12 +403,23 @@ describe('AgentFacetProgressTracker', () => {
       observation: observation(discoveryCall.toolName, discoveryOutput),
     })[0]).toMatchObject({ kind: 'schema_discovered', status: 'active' })
 
-    const stopped = tracker.observe({
-      call: discoveryCall, expectedRevisions: {},
-      observation: observation(discoveryCall.toolName, { ...discoveryOutput, reused: true }),
+    expect(tracker.validate(discoveryCall, {})).toMatchObject({
+      reason: expect.stringContaining('禁止重复发现'),
+      events: [],
     })
-    expect(stopped[0]).toMatchObject({ kind: 'repeated_discovery', status: 'blocked' })
-    expect(tracker.settlement().status).toBe('blocked')
+    expect(tracker.settlement().status).toBe('active')
+  })
+
+  it('自动续跑从 Facet 工具租约恢复已发现状态', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'camera', domain: 'camera_stage' }),
+    ]), registry(), false, [], ['camera'])
+    expect(tracker.validate(call('discover_application_capabilities', {
+      facets: [{ facetId: 'camera' }],
+    }), {})).toMatchObject({
+      reason: expect.stringContaining('已有活动工具租约'),
+      events: [],
+    })
   })
 
   it('成功写入后阻止相同参数和 base revision 的重复创建并保留部分完成', () => {

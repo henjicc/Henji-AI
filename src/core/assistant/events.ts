@@ -19,10 +19,25 @@ export const agentRunStatusSchema = z.enum([
   'waiting_external',
   'paused',
   'completed',
+  'budget_exhausted',
   'failed',
   'cancelled',
 ])
 export type AgentRunStatus = z.infer<typeof agentRunStatusSchema>
+
+export const agentRunPhaseSchema = z.enum([
+  'planning',
+  'discovering',
+  'preparing',
+  'awaiting_approval',
+  'executing',
+  'verifying',
+  'waiting_external',
+  'continuing',
+  'completed',
+  'blocked',
+])
+export type AgentRunPhase = z.infer<typeof agentRunPhaseSchema>
 
 export const serializedAgentErrorSchema = z.object({
   code: z.string().min(1),
@@ -36,14 +51,19 @@ export const agentToolCompletionKindSchema = z.enum(['observed', 'submitted', 'e
 export type AgentToolCompletionKind = z.infer<typeof agentToolCompletionKindSchema>
 
 export const agentBudgetConfigSchema = z.object({
+  softMaxTurns: z.number().int().min(1).max(10_000).nullable().default(null),
   maxTurns: z.number().int().min(1).max(10_000).nullable(),
+  softMaxToolCalls: z.number().int().min(0).max(100_000).nullable().default(null),
   maxToolCalls: z.number().int().min(0).max(100_000).nullable(),
+  softMaxWriteToolCalls: z.number().int().min(0).max(100_000).nullable().default(null),
+  maxWriteToolCalls: z.number().int().min(0).max(100_000).nullable().default(null),
   maxDurationMs: z.number().int().min(1_000).max(7 * 24 * 60 * 60 * 1_000).nullable(),
   maxInputTokens: z.number().int().min(1).max(10_000_000).nullable(),
   maxOutputTokens: z.number().int().min(1).max(10_000_000).nullable(),
   maxConsecutiveFailures: z.number().int().min(1).max(10_000).nullable(),
   maxRepeatedToolCalls: z.number().int().min(1).max(10_000).nullable(),
   maxNoProgressTurns: z.number().int().min(1).max(10_000).nullable(),
+  softMaxCostUsd: z.number().positive().nullable().default(null),
   maxCostUsd: z.number().positive().nullable().optional(),
 }).strict()
 export type AgentBudgetConfig = z.infer<typeof agentBudgetConfigSchema>
@@ -51,6 +71,7 @@ export type AgentBudgetConfig = z.infer<typeof agentBudgetConfigSchema>
 export const agentBudgetUsageSchema = z.object({
   turns: z.number().int().nonnegative(),
   toolCalls: z.number().int().nonnegative(),
+  writeToolCalls: z.number().int().nonnegative().default(0),
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   reasoningTokens: z.number().int().nonnegative(),
@@ -134,6 +155,14 @@ const runStateChangedEventSchema = z.object({
   previous: agentRunStatusSchema,
   current: agentRunStatusSchema,
   reason: z.string().max(500).optional(),
+}).strict()
+
+const runPhaseChangedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('RunPhaseChanged'),
+  phase: agentRunPhaseSchema,
+  previous: agentRunPhaseSchema.nullable(),
+  detail: z.string().min(1).max(500).optional(),
 }).strict()
 
 const modelStartedEventSchema = z.object({
@@ -278,6 +307,31 @@ const contextCompactedEventSchema = z.object({
   summaryVersion: z.string().min(1).max(100).optional(),
 }).strict()
 
+const budgetSoftLimitReachedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('BudgetSoftLimitReached'),
+  code: z.enum([
+    'SOFT_MAX_TURNS', 'SOFT_MAX_TOOL_CALLS', 'SOFT_MAX_WRITE_TOOL_CALLS', 'SOFT_MAX_COST',
+    'SOFT_CONSECUTIVE_FAILURES', 'SOFT_REPEATED_TOOL_CALLS', 'SOFT_NO_PROGRESS_TURNS',
+  ]),
+  usage: agentBudgetUsageSchema,
+}).strict()
+
+const budgetHardLimitReachedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('BudgetHardLimitReached'),
+  code: z.string().min(1).max(100),
+  usage: agentBudgetUsageSchema,
+}).strict()
+
+const runContinuationStartedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('RunContinuationStarted'),
+  sourceRunId: z.string().min(1),
+  segment: z.number().int().min(2).max(3),
+  maxSegments: z.literal(3),
+}).strict()
+
 const artifactOffloadedEventSchema = z.object({
   ...eventBase,
   type: z.literal('ArtifactOffloaded'),
@@ -357,6 +411,7 @@ const runCancelledEventSchema = z.object({
 export const agentEventSchema = z.discriminatedUnion('type', [
   runStartedEventSchema,
   runStateChangedEventSchema,
+  runPhaseChangedEventSchema,
   modelStartedEventSchema,
   modelDeltaEventSchema,
   modelRetryingEventSchema,
@@ -371,6 +426,9 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   approvalResolvedEventSchema,
   contextUpdatedEventSchema,
   contextCompactedEventSchema,
+  budgetSoftLimitReachedEventSchema,
+  budgetHardLimitReachedEventSchema,
+  runContinuationStartedEventSchema,
   artifactOffloadedEventSchema,
   verificationCompletedEventSchema,
   clarificationRequiredEventSchema,

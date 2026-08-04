@@ -29,4 +29,30 @@ describe('runtime settled cleanup', () => {
     expect(eventListeners.size).toBe(0)
     expect(persistence.appendSettledSavePoint).toHaveBeenCalledTimes(100)
   })
+
+  it('可自动续跑的预算终态不写助手终止消息，Job 真正停止时才写', () => {
+    const persistence = {
+      saveState: vi.fn(), appendTerminalMessage: vi.fn(), appendSettledSavePoint: vi.fn(),
+    } as unknown as AgentPersistenceStore
+    const settle = (state: AgentRunState): void => settleRuntimeRun({
+      runId: state.runId,
+      state,
+      record: undefined,
+      persistence,
+      activeByThread: new Map(),
+      eventListeners: new Map(),
+      runs: new Map(),
+    })
+    settle({ runId: 'continuing', status: 'budget_exhausted', error: null } as AgentRunState)
+    settle({
+      runId: 'stopped',
+      status: 'budget_exhausted',
+      error: { code: 'JOB_BUDGET_EXHAUSTED' },
+    } as AgentRunState)
+
+    expect(persistence.appendTerminalMessage).toHaveBeenCalledTimes(1)
+    expect(persistence.appendTerminalMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'stopped' })
+    )
+  })
 })

@@ -86,6 +86,24 @@ export class AgentRunnerLifecycle {
     this.finishTerminal()
   }
 
+  exhaustBudget(code: string, error: unknown): void {
+    const serialized = serializeError(error)
+    this.options.state.error = serialized
+    this.emit({ type: 'BudgetHardLimitReached', code, usage: this.options.budget.snapshot() })
+    this.transition('budget_exhausted', code)
+    logger.warn('Agent 单段运行预算耗尽', {
+      event: 'agent_runtime.run.budget_exhausted',
+      requestId: this.options.runId,
+      context: {
+        code,
+        turns: this.options.budget.snapshot().turns,
+        toolCalls: this.options.budget.snapshot().toolCalls,
+        writeToolCalls: this.options.budget.snapshot().writeToolCalls,
+      },
+    })
+    this.finishTerminal()
+  }
+
   finishTerminal(): void {
     this.options.dependencies.onTerminal?.(this.getState())
   }

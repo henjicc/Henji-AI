@@ -192,6 +192,18 @@ describe('AgentRunner', () => {
       version: 1,
       title: '读取长链路事实',
       description: '为长链路循环测试返回确定性事实。',
+      capability: {
+        id: 'read_long_chain_fact', domain: 'diagnostics', aliases: [], dataClasses: ['C0'],
+        acceptsRefs: [], producesRefs: [], availability: [], concurrencyKey: 'diagnostics',
+        control: { impacts: [{
+          effect: 'observe', entityTypes: ['diagnostics.fact'], propertyIds: [],
+          revisionScopes: [], verificationRequired: false,
+        }] },
+        resolveObservedEffects: (input: { index: number }) => [{
+          effect: 'observe', entityTypes: ['diagnostics.fact'], propertyIds: [], targetRefs: [],
+          count: 1, verified: true, evidence: [`fact:${input.index}`],
+        }],
+      } as never,
       category: 'diagnostics',
       side: 'backend',
       risk: 'R0',
@@ -231,6 +243,18 @@ describe('AgentRunner', () => {
             path: 'primary',
             toolDomains: ['diagnostics'],
             reason: '长链路读取',
+            taskFacets: [{
+              facetId: 'long_chain', domain: 'diagnostics', goal: '读取 26 个独立事实',
+              targetEntityTypes: ['diagnostics.fact'], observationKinds: [],
+              capabilityKinds: ['observe'], targetSurfaceId: null, dependsOn: [], parallelizable: false,
+              completionConditions: ['26 个事实均有结构化读取证据。'],
+              requiredEffects: [{
+                effectId: 'long_chain_effect', effect: 'observe', entityTypes: ['diagnostics.fact'],
+                propertyIds: [], minimumCount: 26, targetRefs: [], verificationRequired: false,
+                actionGroupId: 'long_chain_actions',
+              }],
+              uncertainties: [], confidence: 1,
+            }],
           },
           responseMessages: [{ role: 'assistant', content: '' }],
         })
@@ -447,6 +471,19 @@ describe('AgentRunner', () => {
       version: 1,
       title: '创建生成任务',
       description: '测试生成任务工具。',
+      capability: {
+        id: 'create_visible_generation_task', domain: 'generation', aliases: [], dataClasses: ['C1'],
+        acceptsRefs: [], producesRefs: ['generation.task'], availability: [], concurrencyKey: 'generation',
+        control: { impacts: [{
+          effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
+          revisionScopes: ['generation'], verificationRequired: true,
+        }] },
+        resolveObservedEffects: (_input: { prompt: string }, output: { taskId: string }) => [{
+          effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
+          targetRefs: [{ kind: 'generation.task', id: output.taskId }], count: 1,
+          verified: true, evidence: [`task:${output.taskId}`],
+        }],
+      } as never,
       category: 'generation',
       side: 'backend',
       risk: 'R2',

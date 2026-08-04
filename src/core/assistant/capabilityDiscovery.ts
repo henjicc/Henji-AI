@@ -4,9 +4,12 @@ import { applicationSchemaRefSchema } from '../application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from './applicationCapabilities'
 import { agentTaskCapabilityKindSchema } from './taskGraph'
 import type { AgentTaskGraph } from './taskGraph'
-import { AGENT_DISCOVERY_ADDED_TOOL_LIMIT } from './toolBudget'
+import {
+  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
+  AGENT_LEASE_FRONTIER_FACET_LIMIT,
+} from './toolBudget'
 
-export const APPLICATION_CAPABILITY_DISCOVERY_VERSION = 'application-capability-discovery/v1' as const
+export const APPLICATION_CAPABILITY_DISCOVERY_VERSION = 'application-capability-discovery/v2' as const
 
 export const applicationCapabilityDiscoveryFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
@@ -23,7 +26,7 @@ export type ApplicationCapabilityDiscoveryFacet = z.infer<
 export const applicationCapabilityDiscoveryInputSchema = z.object({
   discoveryVersion: z.literal(APPLICATION_CAPABILITY_DISCOVERY_VERSION)
     .default(APPLICATION_CAPABILITY_DISCOVERY_VERSION),
-  facets: z.array(applicationCapabilityDiscoveryFacetSchema).min(1).max(16),
+  facets: z.array(applicationCapabilityDiscoveryFacetSchema).min(1).max(AGENT_LEASE_FRONTIER_FACET_LIMIT),
   cursor: z.number().int().nonnegative().default(0),
   limit: z.number().int().min(1).max(20).default(20),
 }).strict()
@@ -72,7 +75,9 @@ export const applicationCapabilityDiscoveryOutputSchema = z.object({
   capabilities: z.array(applicationCapabilityDiscoveryMatchSchema).max(20),
   facets: z.array(facetDiscoveryResultSchema).max(16),
   missing: z.array(missingFacetSchema).max(16),
-  addedToolNames: z.array(z.string().min(1).max(128)).max(AGENT_DISCOVERY_ADDED_TOOL_LIMIT),
+  leasedToolNames: z.array(z.string().min(1).max(128)).max(AGENT_DISCOVERY_LEASE_TOOL_LIMIT),
+  deferredToolNames: z.array(z.string().min(1).max(128)).max(100),
+  deferredCount: z.number().int().nonnegative(),
   page: z.object({
     returnedItems: z.number().int().nonnegative(),
     nextCursor: z.number().int().nonnegative().nullable(),
@@ -100,10 +105,18 @@ export type ApplicationSchemaReadOutput = z.infer<typeof applicationSchemaReadOu
 
 export function createCapabilityDiscoveryInputFromTaskGraph(
   taskGraph: AgentTaskGraph
-): ApplicationCapabilityDiscoveryInput {
+): ApplicationCapabilityDiscoveryInput | null {
+  const completed = new Set(taskGraph.facets
+    .filter((facet) => facet.status === 'completed')
+    .map((facet) => facet.facetId))
+  const frontier = taskGraph.facets.filter((facet) => (
+    !['completed', 'blocked', 'waiting_user'].includes(facet.status)
+    && facet.dependsOn.every((dependency) => completed.has(dependency))
+  )).slice(0, AGENT_LEASE_FRONTIER_FACET_LIMIT)
+  if (frontier.length === 0) return null
   return applicationCapabilityDiscoveryInputSchema.parse({
     discoveryVersion: APPLICATION_CAPABILITY_DISCOVERY_VERSION,
-    facets: taskGraph.facets.map((facet) => ({
+    facets: frontier.map((facet) => ({
       facetId: facet.facetId,
       queries: [facet.goal],
       domains: [facet.domain],
@@ -112,6 +125,6 @@ export function createCapabilityDiscoveryInputFromTaskGraph(
       targetSurfaceIds: facet.targetSurfaceId ? [facet.targetSurfaceId] : [],
     })),
     cursor: 0,
-    limit: 20,
+    limit: AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
   })
 }

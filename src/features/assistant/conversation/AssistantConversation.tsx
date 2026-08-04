@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties } from 'react'
 import {
   AlertCircle,
   ArrowDown,
@@ -54,7 +54,6 @@ import {
   selectToolActivities,
 } from './agentRunReducer'
 import { describeStructuredError } from './errorPresentation'
-import { ModelProgressMessage } from './ModelProgressMessage'
 import { ToolActivityGroup } from './ToolActivityGroup'
 import { useConversationAutoScroll } from './useConversationAutoScroll'
 import {
@@ -62,7 +61,7 @@ import {
   assistantAttachmentDraftReducer,
 } from './assistantAttachments'
 
-const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
+const terminalStatuses = new Set(['completed', 'budget_exhausted', 'failed', 'cancelled'])
 const deferredBlockStyle: CSSProperties = {
   contentVisibility: 'auto',
   containIntrinsicSize: 'auto 96px',
@@ -239,30 +238,6 @@ export function AssistantConversation(): JSX.Element {
     () => selectExecutionPresentation(runState, run.view.events),
     [run.view.events, runState]
   )
-  const latestModelStep = useMemo(() => {
-    for (let index = run.view.events.length - 1; index >= 0; index -= 1) {
-      const event = run.view.events[index]
-      if (event.type === 'ModelStarted') return event
-    }
-    return null
-  }, [run.view.events])
-  const streamedText = useMemo(() => {
-    if (!latestModelStep) return ''
-    return run.view.events.flatMap((event) => (
-      event.type === 'ModelDelta' && event.stepId === latestModelStep.stepId ? [event.text] : []
-    )).join('')
-  }, [latestModelStep, run.view.events])
-  const deferredStreamedText = useDeferredValue(streamedText)
-  const modelResponseStreaming = Boolean(
-    deferredStreamedText
-    && latestModelStep
-    && runState?.currentStepId === latestModelStep.stepId
-  )
-  // 流式进展只在执行过程卡片内部渲染；最终答复走下方 finalText 的大块，两者不同时出现。
-  const streamingProgress = modelResponseStreaming
-    && runState
-    && !terminalStatuses.has(runState.status)
-    && !runState.finalText
   const finalResponseStarted = Boolean(runState?.finalText)
   const runErrorPresentation = runState?.error ? describeStructuredError(runState.error) : null
   useEffect(() => {
@@ -412,7 +387,11 @@ export function AssistantConversation(): JSX.Element {
                 <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行过程</span>
                 <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>
                   {terminalStatuses.has(runState.status)
-                    ? runState.status === 'completed' ? '已完成' : runState.status === 'failed' ? '未完成' : '已取消'
+                    ? runState.status === 'completed'
+                      ? '已完成'
+                      : runState.status === 'budget_exhausted'
+                        ? runState.error ? '已达任务预算，需要确认后继续' : '准备续跑'
+                        : runState.status === 'failed' ? '未完成' : '已取消'
                     : execution.nextAction}
                 </span>
                 <ChevronDown className={`h-3 w-3 shrink-0 text-text-muted transition-transform duration-200 ${activityExpanded ? 'rotate-180' : ''}`} />
@@ -461,7 +440,7 @@ export function AssistantConversation(): JSX.Element {
                   <ExecutionPlanCard presentation={execution} runStatus={runState.status} />
                   {executionTimeline.map((item) => (
                     item.kind === 'model'
-                      ? <ModelProgressMessage key={`model:${item.update.stepId}`} update={item.update} />
+                      ? null
                       : (
                           <section
                             key={`tools:${item.sequence}`}
@@ -479,21 +458,6 @@ export function AssistantConversation(): JSX.Element {
                           </section>
                         )
                   ))}
-                  {/*
-                    正在流式输出的这一段也是"助手进展"，必须和已落定的那些长一样、待在同一个
-                    容器里。此前它被渲染在执行过程卡片外面、还用的是最终答复的字号，于是同一段
-                    文字先以最终答复的样子出现在框外，一秒后又跳进框里变成小字——用户看到的
-                    "前面的文本没有被包裹起来"就是这个。
-                  */}
-                  {streamingProgress ? (
-                    <ModelProgressMessage
-                      update={{
-                        stepId: latestModelStep?.stepId ?? 'streaming',
-                        text: deferredStreamedText,
-                        sequence: Number.MAX_SAFE_INTEGER,
-                      }}
-                    />
-                  ) : null}
                 </div>
               </div>
             </div>

@@ -38,7 +38,7 @@ export interface AgentToolExecutionContext {
   hostContext: HostContextSnapshot | null
 }
 
-export type AgentToolAuthorizationSource = 'direct' | 'approved_workflow'
+export type AgentToolAuthorizationSource = 'direct' | 'approved_workflow' | 'approved_action_group'
 
 export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   /** 应用宿主能力必须提供；运行时内部工具可以直接使用 Agent 工具契约。 */

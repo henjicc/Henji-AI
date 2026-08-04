@@ -40,7 +40,7 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     const catalog = new AgentCapabilityDiscoveryCatalog(registry)
     const context = fullContext(registry)
     const result = catalog.discover('run-batch', {
-      discoveryVersion: 'application-capability-discovery/v1',
+      discoveryVersion: 'application-capability-discovery/v2',
       facets: [{
         facetId: 'camera_scene',
         queries: ['添加三维物体并设置位置'],
@@ -75,7 +75,9 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
       facetId: 'unsupported', reason: 'unsupported_domain',
     }))
     expect(result.capabilities.every((capability) => capability.schemaRef.kind === 'operation')).toBe(true)
-    expect(result.addedToolNames).toContain('read_application_schemas')
+    expect(result.leasedToolNames).toContain('open_application_surface')
+    expect(result.leasedToolNames).not.toContain('read_application_schemas')
+    expect(result.leasedToolNames.length).toBeLessThanOrEqual(15)
     expect(result.fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
   })
 
@@ -86,7 +88,7 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     const catalog = new AgentCapabilityDiscoveryCatalog(registry)
     const context = fullContext(registry)
     const input = {
-      discoveryVersion: 'application-capability-discovery/v1' as const,
+      discoveryVersion: 'application-capability-discovery/v2' as const,
       facets: [{
         facetId: 'canvas',
         queries: ['读取画布项目'],
@@ -128,7 +130,7 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
       }],
       cursor: 0,
       limit: 20,
-      discoveryVersion: 'application-capability-discovery/v1',
+      discoveryVersion: 'application-capability-discovery/v2',
     }, {
       runId: 'run-tool', threadId: 'thread-tool', toolCallId: 'call-tool',
       signal: new AbortController().signal,

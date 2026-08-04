@@ -7,6 +7,7 @@ import {
   type AgentRunSnapshot,
   type AgentStartRunRequest,
   type AgentStartRunResult,
+  type AgentBudgetContinuation,
 } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentRunSummary } from '../../../../src/core/assistant/persistence'
 import {
@@ -62,6 +63,7 @@ import type {
 import { executeAgentToolInMain, invokeAgentFrontendTool } from './host-bridge'
 import { AgentExternalWaitRuntime } from './external-wait-runtime'
 import { startRuntimeRun, type AgentRunRecord } from './runtime-run-starter'
+import { decideAgentBudgetContinuation } from './runner/job-budget'
 import {
   agentThreadTitleContextRequestSchema,
   agentThreadTitleUpdateSchema,
@@ -162,10 +164,11 @@ export class AgentRuntimeService {
     owner: WebContents,
     request: AgentStartRunRequest,
     parentRunId: string | null,
-    recoveryContext: AgentWorkingSummary | undefined
+    recoveryContext: AgentWorkingSummary | undefined,
+    budgetContinuation?: AgentBudgetContinuation
   ): Promise<AgentStartRunResult> {
     return startRuntimeRun({
-      owner, request, parentRunId, recoveryContext,
+      owner, request, parentRunId, recoveryContext, budgetContinuation,
       runs: this.runs,
       activeByThread: this.activeByThread,
       persistence: this.persistence,
@@ -370,7 +373,7 @@ export class AgentRuntimeService {
     const request = this.persistence.loadRequest(runId)
     const previous = this.persistence.loadState(runId)
     if (!request || !previous) throw new Error('[run_not_found] 运行不存在')
-    if (!['completed', 'failed', 'cancelled'].includes(previous.status)) {
+    if (!['completed', 'budget_exhausted', 'failed', 'cancelled'].includes(previous.status)) {
       throw new Error('[run_not_retryable] 活动任务不能重复启动')
     }
     const result = await this.startRunWithParent(owner, {
@@ -409,24 +412,142 @@ export class AgentRuntimeService {
 
   private onTerminal(runId: string, state: AgentRunState): void {
     const record = this.runs.get(runId)
-    this.updateState(runId, state)
-    if (state.status === 'failed' || state.status === 'cancelled') {
+    const terminalOwner = record ? webContents.fromId(record.ownerWebContentsId) : null
+    const terminalRequest = state.status === 'budget_exhausted'
+      ? this.persistence.loadRequest(runId)
+      : null
+    const continuation = state.status === 'budget_exhausted'
+      && record
+      && terminalRequest
+      && terminalOwner
+      && !terminalOwner.isDestroyed()
+      ? this.resolveBudgetContinuation(runId, state, terminalRequest)
+      : null
+    const terminalState = state.status !== 'budget_exhausted'
+      ? state
+      : continuation?.decision.allowed
+        ? { ...state, error: null, updatedAt: new Date().toISOString() }
+        : this.withStoppedContinuationError(
+            state,
+            continuation?.decision.reason ?? '运行宿主已不可用，无法安全创建下一段执行'
+          )
+    this.updateState(runId, terminalState)
+    if (terminalState.status === 'failed' || terminalState.status === 'cancelled') {
       this.persistence.cancelCurrentTaskMessages(runId, '原任务已终止，未消费的当前任务补充已取消')
     }
     settleRuntimeRun({
-      runId, state, record, persistence: this.persistence,
+      runId, state: terminalState, record, persistence: this.persistence,
       activeByThread: this.activeByThread,
       eventListeners: this.eventListeners,
       runs: this.runs,
     })
-    if (record && state.status === 'waiting_external') {
+    if (continuation?.decision.allowed && continuation.decision.budget
+      && terminalOwner && terminalRequest) {
+      void this.continueBudgetExhaustedRun(
+        terminalOwner,
+        runId,
+        terminalRequest,
+        state,
+        continuation.nextSegment,
+        continuation.decision.budget
+      )
+      return
+    }
+    if (record && terminalState.status === 'waiting_external') {
       const owner = webContents.fromId(record.ownerWebContentsId)
       if (owner && !owner.isDestroyed()) void this.externalWait.sourceSettled(owner, runId)
     } else if (record) {
       const owner = webContents.fromId(record.ownerWebContentsId)
       if (owner && !owner.isDestroyed()) {
-        void this.messageQueue.settle(owner, runId, state)
+        void this.messageQueue.settle(owner, runId, terminalState)
       }
+    }
+  }
+
+  private resolveBudgetContinuation(
+    sourceRunId: string,
+    sourceState: AgentRunState,
+    request: AgentStartRunRequest
+  ) {
+    const states: AgentRunState[] = [sourceState]
+    let cursorRunId = sourceRunId
+    let currentSegment = 1
+    const visited = new Set([sourceRunId])
+    for (;;) {
+      const continuation = [...this.persistence.loadEvents(cursorRunId)]
+        .reverse()
+        .find((event) => event.type === 'RunContinuationStarted')
+      if (!continuation || continuation.type !== 'RunContinuationStarted') break
+      currentSegment = Math.max(currentSegment, continuation.segment)
+      if (visited.has(continuation.sourceRunId)) break
+      visited.add(continuation.sourceRunId)
+      const parentState = this.persistence.loadState(continuation.sourceRunId)
+      if (!parentState) break
+      states.unshift(parentState)
+      cursorRunId = continuation.sourceRunId
+    }
+    const nextSegment = currentSegment + 1
+    const decision = decideAgentBudgetContinuation(states, nextSegment, request.budget)
+    if (!decision.allowed) {
+      logger.warn('Agent Job 自动续跑已停止', {
+        event: 'agent_runtime.job.continuation.blocked',
+        requestId: sourceRunId,
+        context: { segment: currentSegment, reason: decision.reason ?? '预算不足' },
+      })
+    }
+    return { decision, nextSegment }
+  }
+
+  private withStoppedContinuationError(
+    sourceState: AgentRunState,
+    reason: string
+  ): AgentRunState {
+    return {
+      ...sourceState,
+      error: {
+        code: 'JOB_BUDGET_EXHAUSTED',
+        message: `本次任务已停止自动续跑：${reason}。如需继续，请明确发起新的任务。`,
+        retryable: false,
+        recovery: 'user_action',
+      },
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private async continueBudgetExhaustedRun(
+    owner: WebContents,
+    sourceRunId: string,
+    request: AgentStartRunRequest,
+    sourceState: AgentRunState,
+    nextSegment: number,
+    budget: NonNullable<ReturnType<typeof decideAgentBudgetContinuation>['budget']>
+  ): Promise<void> {
+    try {
+      await this.startRunWithParent(
+        owner,
+        { ...request, budget },
+        sourceRunId,
+        sourceState.workingSummary,
+        { sourceRunId, segment: nextSegment }
+      )
+    } catch (error) {
+      const stoppedState: AgentRunState = {
+        ...sourceState,
+        error: {
+          code: 'RUN_CONTINUATION_FAILED',
+          message: '自动续跑启动失败；Effect Ledger 和工具租约已经保存在检查点，请明确重试该任务。',
+          retryable: true,
+          recovery: 'user_action',
+        },
+        updatedAt: new Date().toISOString(),
+      }
+      this.persistence.saveState(stoppedState)
+      this.persistence.appendTerminalMessage(stoppedState)
+      logger.error('Agent Job 自动续跑启动失败', {
+        event: 'agent_runtime.job.continuation.failed',
+        requestId: sourceRunId,
+        context: { error: error instanceof Error ? error.message : String(error) },
+      })
     }
   }
 

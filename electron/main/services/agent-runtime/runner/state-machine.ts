@@ -1,16 +1,19 @@
 import type { AgentRunStatus } from '../../../../../src/core/assistant/events'
 
-const terminalStates = new Set<AgentRunStatus>(['completed', 'failed', 'cancelled', 'waiting_external'])
+const terminalStates = new Set<AgentRunStatus>([
+  'completed', 'budget_exhausted', 'failed', 'cancelled', 'waiting_external',
+])
 
 const transitions: Readonly<Record<AgentRunStatus, ReadonlySet<AgentRunStatus>>> = {
-  initializing: new Set(['running', 'failed', 'cancelled']),
-  running: new Set(['waiting_tool', 'waiting_user', 'waiting_external', 'paused', 'completed', 'failed', 'cancelled']),
-  waiting_tool: new Set(['running', 'waiting_approval', 'paused', 'failed', 'cancelled']),
-  waiting_approval: new Set(['waiting_tool', 'running', 'paused', 'failed', 'cancelled']),
-  waiting_user: new Set(['running', 'paused', 'failed', 'cancelled']),
+  initializing: new Set(['running', 'budget_exhausted', 'failed', 'cancelled']),
+  running: new Set(['waiting_tool', 'waiting_user', 'waiting_external', 'paused', 'completed', 'budget_exhausted', 'failed', 'cancelled']),
+  waiting_tool: new Set(['running', 'waiting_approval', 'paused', 'budget_exhausted', 'failed', 'cancelled']),
+  waiting_approval: new Set(['waiting_tool', 'running', 'paused', 'budget_exhausted', 'failed', 'cancelled']),
+  waiting_user: new Set(['running', 'paused', 'budget_exhausted', 'failed', 'cancelled']),
   waiting_external: new Set(['failed', 'cancelled']),
-  paused: new Set(['running', 'waiting_tool', 'waiting_approval', 'waiting_user', 'failed', 'cancelled']),
+  paused: new Set(['running', 'waiting_tool', 'waiting_approval', 'waiting_user', 'budget_exhausted', 'failed', 'cancelled']),
   completed: new Set(),
+  budget_exhausted: new Set(),
   failed: new Set(),
   cancelled: new Set(),
 }

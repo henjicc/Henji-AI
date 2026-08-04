@@ -330,6 +330,23 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     }])
   })
 
+  it('预算自动续跑创建子 Run 时不重复写入同一用户消息', () => {
+    const exhausted = state('budget_exhausted')
+    store.createRun('run-1', request(), exhausted)
+    const continuation = agentRunStateSchema.parse({ ...state(), runId: 'run-2' })
+    store.createRun('run-2', request(), continuation, 'run-1', { appendUserMessage: false })
+
+    expect(store.loadTranscript('thread-1').entries.map((entry) => ({
+      kind: entry.kind,
+      runId: entry.runId,
+    }))).toEqual([
+      { kind: 'user_message', runId: 'run-1' },
+    ])
+    expect(store.projectConversation('thread-1', 'run-2').messages).toEqual([
+      { role: 'user', content: '诊断生成失败' },
+    ])
+  })
+
   it('标题上下文只读取用户指令并通过阶段条件避免旧结果覆盖新标题', () => {
     store.createRun('run-1', request(), state())
     const firstContext = store.threadTitles.getContext({

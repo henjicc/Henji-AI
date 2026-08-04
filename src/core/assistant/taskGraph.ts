@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
-export const AGENT_TASK_GRAPH_VERSION = 'agent-task-graph/v1' as const
+export const AGENT_TASK_GRAPH_VERSION = 'agent-task-graph/v2' as const
+export const LEGACY_AGENT_TASK_GRAPH_VERSION = 'agent-task-graph/v1' as const
 
 /** 一张任务图最多多少个 Facet。路由裁剪、进度结算与事件契约共用这一份。 */
 export const AGENT_TASK_FACET_LIMIT = 16
@@ -33,6 +34,53 @@ export const agentTaskObservationNeedSchema = z.object({
 }).strict()
 export type AgentTaskObservationNeed = z.infer<typeof agentTaskObservationNeedSchema>
 
+export const agentTaskEffectKindSchema = z.enum([
+  'observe',
+  'create',
+  'update',
+  'delete',
+  'navigate',
+  'execute',
+])
+export type AgentTaskEffectKind = z.infer<typeof agentTaskEffectKindSchema>
+
+export const agentTaskEffectTargetSchema = z.object({
+  kind: z.string().min(1).max(128),
+  id: z.string().min(1).max(500),
+}).strict()
+
+export const agentTaskRequiredEffectSchema = z.object({
+  effectId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
+  effect: agentTaskEffectKindSchema,
+  entityTypes: z.array(z.string().min(1).max(128)).max(AGENT_FACET_ENTITY_TYPE_LIMIT),
+  propertyIds: z.array(z.string().min(1).max(128)).max(128),
+  minimumCount: z.number().int().min(1).max(256),
+  targetRefs: z.array(agentTaskEffectTargetSchema).max(128),
+  verificationRequired: z.boolean(),
+  actionGroupId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
+}).strict()
+export type AgentTaskRequiredEffect = z.infer<typeof agentTaskRequiredEffectSchema>
+
+export const agentObservedEffectSchema = z.object({
+  effect: agentTaskEffectKindSchema,
+  entityTypes: z.array(z.string().min(1).max(128)).max(AGENT_FACET_ENTITY_TYPE_LIMIT),
+  propertyIds: z.array(z.string().min(1).max(128)).max(128),
+  targetRefs: z.array(agentTaskEffectTargetSchema).max(128),
+  count: z.number().int().min(1).max(256),
+  verified: z.boolean(),
+  evidence: z.array(z.string().min(1).max(500)).max(12),
+}).strict()
+export type AgentObservedEffect = z.infer<typeof agentObservedEffectSchema>
+
+export const agentTaskActionGroupSchema = z.object({
+  actionGroupId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
+  facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
+  mode: z.enum(['parallel_read', 'atomic_batch', 'ordered_write', 'dependent']),
+  effectIds: z.array(z.string().min(1).max(64)).min(1).max(32),
+  dependsOn: z.array(z.string().min(1).max(64)).max(12),
+}).strict()
+export type AgentTaskActionGroup = z.infer<typeof agentTaskActionGroupSchema>
+
 export const agentTaskFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
   domain: z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/),
@@ -44,6 +92,7 @@ export const agentTaskFacetSchema = z.object({
   dependsOn: z.array(z.string().min(1).max(64)).max(12),
   parallelizable: z.boolean(),
   completionConditions: z.array(z.string().min(1).max(500)).min(1).max(12),
+  requiredEffects: z.array(agentTaskRequiredEffectSchema).max(32).default([]),
   uncertainties: z.array(z.string().min(1).max(500)).max(8),
   confidence: z.number().min(0).max(1),
   status: agentTaskFacetStatusSchema,
@@ -57,10 +106,11 @@ export const agentTaskDependencySchema = z.object({
   toFacetId: z.string().min(1).max(64),
 }).strict()
 
-export const agentTaskGraphSchema = z.object({
+const agentTaskGraphV2Schema = z.object({
   version: z.literal(AGENT_TASK_GRAPH_VERSION),
   goal: z.string().min(1).max(32 * 1024),
   facets: z.array(agentTaskFacetSchema).min(1).max(AGENT_TASK_FACET_LIMIT),
+  actionGroups: z.array(agentTaskActionGroupSchema).max(32).default([]),
   dependencies: z.array(agentTaskDependencySchema).max(64),
   stopConditions: z.array(z.string().min(1).max(500)).min(1).max(12),
 }).strict().superRefine((graph, context) => {
@@ -102,7 +152,113 @@ export const agentTaskGraphSchema = z.object({
       }
     }
   }
+  const effectOwners = new Map(graph.facets.flatMap((facet) => (
+    facet.requiredEffects.map((effect) => [effect.effectId, facet.facetId] as const)
+  )))
+  const effectIds = new Set(effectOwners.keys())
+  const groupIds = new Set(graph.actionGroups.map((group) => group.actionGroupId))
+  if (effectIds.size !== graph.facets.reduce((count, facet) => count + facet.requiredEffects.length, 0)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['facets'], message: 'Effect ID 不能重复' })
+  }
+  if (groupIds.size !== graph.actionGroups.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['actionGroups'], message: 'Action Group ID 不能重复' })
+  }
+  for (const [index, group] of graph.actionGroups.entries()) {
+    if (!ids.has(group.facetId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['actionGroups', index, 'facetId'], message: 'Action Group 必须引用已声明 Facet' })
+    }
+    if (group.effectIds.some((effectId) => !effectIds.has(effectId))) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['actionGroups', index, 'effectIds'], message: 'Action Group 必须引用已声明 Effect' })
+    }
+    if (group.effectIds.some((effectId) => effectOwners.get(effectId) !== group.facetId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['actionGroups', index, 'effectIds'], message: 'Action Group 只能包含所属 Facet 的 Effect' })
+    }
+    if (group.dependsOn.some((groupId) => !groupIds.has(groupId) || groupId === group.actionGroupId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['actionGroups', index, 'dependsOn'], message: 'Action Group 依赖必须引用其他已声明组' })
+    }
+  }
+  for (const [facetIndex, facet] of graph.facets.entries()) {
+    for (const [effectIndex, effect] of facet.requiredEffects.entries()) {
+      if (!groupIds.has(effect.actionGroupId)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['facets', facetIndex, 'requiredEffects', effectIndex, 'actionGroupId'], message: 'Effect 必须引用已声明 Action Group' })
+        continue
+      }
+      const group = graph.actionGroups.find((candidate) => candidate.actionGroupId === effect.actionGroupId)
+      if (group?.facetId !== facet.facetId || !group.effectIds.includes(effect.effectId)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['facets', facetIndex, 'requiredEffects', effectIndex, 'actionGroupId'], message: 'Effect 必须被所属 Facet 的 Action Group 完整收录' })
+      }
+    }
+  }
 })
+
+function derivedId(facetId: string, suffix: string): string {
+  return `${facetId.slice(0, Math.max(2, 64 - suffix.length))}${suffix}`
+}
+
+function implicitEffectForFacet(facet: Record<string, unknown>): AgentTaskRequiredEffect {
+  const capabilityKinds = Array.isArray(facet.capabilityKinds) ? facet.capabilityKinds : []
+  const effect: AgentTaskRequiredEffect['effect'] = capabilityKinds.includes('navigate')
+    ? 'navigate'
+    : capabilityKinds.includes('execute')
+      ? 'execute'
+      : capabilityKinds.includes('mutate') ? 'update' : 'observe'
+  const facetId = typeof facet.facetId === 'string' ? facet.facetId : 'legacy_facet'
+  return {
+    effectId: derivedId(facetId, '_effect'),
+    effect,
+    entityTypes: Array.isArray(facet.targetEntityTypes)
+      ? facet.targetEntityTypes.filter((value): value is string => typeof value === 'string')
+      : [],
+    propertyIds: [],
+    minimumCount: 1,
+    targetRefs: [],
+    verificationRequired: false,
+    actionGroupId: derivedId(facetId, '_actions'),
+  }
+}
+
+function upgradeLegacyTaskGraph(value: unknown): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value
+  const graph = value as Record<string, unknown>
+  if (graph.version !== LEGACY_AGENT_TASK_GRAPH_VERSION) return value
+  const facets = Array.isArray(graph.facets)
+    ? graph.facets.map((facet) => facet && typeof facet === 'object' && !Array.isArray(facet)
+      ? {
+          ...(facet as Record<string, unknown>),
+          requiredEffects: [implicitEffectForFacet(facet as Record<string, unknown>)],
+        }
+      : facet)
+    : graph.facets
+  const actionGroups = Array.isArray(facets)
+    ? facets.flatMap((facet) => {
+        if (!facet || typeof facet !== 'object' || Array.isArray(facet)) return []
+        const record = facet as Record<string, unknown>
+        const effect = Array.isArray(record.requiredEffects) ? record.requiredEffects[0] : null
+        if (!effect || typeof effect !== 'object' || Array.isArray(effect)) return []
+        const required = effect as AgentTaskRequiredEffect
+        const dependsOn = Array.isArray(record.dependsOn)
+          ? record.dependsOn.flatMap((value) => (
+              typeof value === 'string' ? [derivedId(value, '_actions')] : []
+            ))
+          : []
+        return [{
+          actionGroupId: required.actionGroupId,
+          facetId: String(record.facetId),
+          mode: dependsOn.length > 0
+            ? 'dependent'
+            : required.effect === 'observe' || required.effect === 'navigate'
+              ? 'parallel_read'
+              : 'ordered_write',
+          effectIds: [required.effectId],
+          dependsOn,
+        }]
+      })
+    : []
+  return { ...graph, version: AGENT_TASK_GRAPH_VERSION, facets, actionGroups }
+}
+
+/** 旧任务图只允许在这里升级；运行时和新保存点始终只处理 v2。 */
+export const agentTaskGraphSchema = z.preprocess(upgradeLegacyTaskGraph, agentTaskGraphV2Schema)
 export type AgentTaskGraph = z.infer<typeof agentTaskGraphSchema>
 
 export function createSingleFacetTaskGraph(input: {
@@ -114,6 +270,14 @@ export function createSingleFacetTaskGraph(input: {
   completionCondition: string
   uncertainty?: string
 }): AgentTaskGraph {
+  const capabilityKinds = input.capabilityKinds ?? ['query']
+  const effect: AgentTaskRequiredEffect['effect'] = capabilityKinds.includes('navigate')
+    ? 'navigate'
+    : capabilityKinds.includes('execute')
+      ? 'execute'
+      : capabilityKinds.includes('mutate') ? 'update' : 'observe'
+  const effectId = derivedId(input.facetId, '_effect')
+  const actionGroupId = derivedId(input.facetId, '_actions')
   return agentTaskGraphSchema.parse({
     version: AGENT_TASK_GRAPH_VERSION,
     goal: input.goal,
@@ -123,16 +287,33 @@ export function createSingleFacetTaskGraph(input: {
       goal: input.goal,
       targetEntityTypes: [],
       requiredObservations: [],
-      capabilityKinds: input.capabilityKinds ?? ['query'],
+      capabilityKinds,
       targetSurfaceId: input.targetSurfaceId ?? null,
       dependsOn: [],
       parallelizable: false,
       completionConditions: [input.completionCondition],
+      requiredEffects: [{
+        effectId,
+        effect,
+        entityTypes: [],
+        propertyIds: [],
+        minimumCount: 1,
+        targetRefs: [],
+        verificationRequired: false,
+        actionGroupId,
+      }],
       uncertainties: input.uncertainty ? [input.uncertainty] : [],
       confidence: input.uncertainty ? 0.35 : 1,
       status: 'pending',
       statusReason: '',
       evidence: [],
+    }],
+    actionGroups: [{
+      actionGroupId,
+      facetId: input.facetId,
+      mode: effect === 'observe' || effect === 'navigate' ? 'parallel_read' : 'ordered_write',
+      effectIds: [effectId],
+      dependsOn: [],
     }],
     dependencies: [],
     stopConditions: [

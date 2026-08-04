@@ -35,6 +35,7 @@ interface AgentExternalWaitRegistrationOptions {
   register?: (input: AgentExternalWaitRegister) => Promise<AgentExternalWaitRecord>
   transition: (status: AgentRunStatus, reason?: string) => void
   emit: (event: AgentEventInput) => void
+  onWaiting?: () => void
 }
 
 export class AgentExternalWaitRegistration {
@@ -48,6 +49,7 @@ export class AgentExternalWaitRegistration {
     if (!submitted || !this.options.register) return false
     const waitId = randomUUID()
     this.options.transition('waiting_external', '生成任务已提交，等待权威终态')
+    this.options.onWaiting?.()
     const savePoint = await this.options.savePoints.save('waiting_external', snapshot)
     const record = await this.options.register({
       version: AGENT_EXTERNAL_WAIT_VERSION,
