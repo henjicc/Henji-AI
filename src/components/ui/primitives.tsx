@@ -192,16 +192,19 @@ export function UiIconButton({
   ...props
 }: UiIconButtonProps) {
   const hoverOnly = appearance === 'hover-only';
+  // hover-only 的语义就是静息态无框无底；不能再让遗漏 showBorder={false}
+  // 的调用点静默退回成有背景的默认按钮。
+  const bordered = hoverOnly ? false : showBorder;
   const adaptiveSurfaceClass = !active && appearance === 'default' ? UI_GLASS_ADAPTIVE_CONTROL_CLASS : '';
   const stateClass = appearance === 'glass'
     // 玻璃档没有走 UI_FIELD_SURFACE_CLASS，禁用态要自己补，否则查看器的上/下一张
     // 到头时按钮看起来仍可点
     ? `ui-glass ui-glass-interactive text-white ${UI_FIELD_DISABLED_CLASS}${active ? ' !text-brand-300' : ''}`
     : active
-    ? (showBorder
+    ? (bordered
       ? UI_MULTISELECT_ITEM_ACTIVE_CLASS
       : `border-transparent ${UI_NAV_ITEM_ACTIVE_CLASS}`)
-    : (showBorder
+    : (bordered
       ? hoverVariant === 'danger'
         ? `${UI_FIELD_SURFACE_CLASS} text-text-muted hover:border-red-500/40 hover:bg-red-600/35`
         : `${UI_FIELD_SURFACE_CLASS} text-text-muted hover:bg-layer`
@@ -313,12 +316,18 @@ export const UiOptionButton = forwardRef<HTMLButtonElement, UiOptionButtonProps>
         ? UI_OPTION_ITEM_ACTIVE_CLASS
         : `${UI_OPTION_ITEM_CLASS} ${UI_OPTION_ITEM_HOVER_CLASS}`;
     })();
+    const adaptiveSurfaceClass = active
+      ? ''
+      : variant === 'menu' || variant === 'default'
+        ? UI_GLASS_ADAPTIVE_OPTION_CLASS
+        : UI_GLASS_ADAPTIVE_CONTROL_CLASS;
 
     return (
       <button
         ref={ref}
-        // menu 变体静息态本就不该有底与边，不能再叠 adaptive-control（它会画出底和边）
-        className={`inline-flex items-center rounded-lg border px-2.5 py-2 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${active || variant === 'menu' ? '' : UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${stateClass} ${className}`}
+        // menu 与默认描边选项的静息态都不铺底，不能叠 adaptive-control（它会画出实底）。
+        // 二者只在 hover 时通过 adaptive-option 出底；card / flat 仍保留控件表面。
+        className={`inline-flex items-center rounded-lg border px-2.5 py-2 text-left transition-colors ${UI_BUTTON_RESET_CLASS} ${adaptiveSurfaceClass} ${stateClass} ${className}`}
         {...props}
       />
     );
@@ -404,7 +413,7 @@ export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
     <input
       ref={ref}
       type="range"
-      className={`h-5 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
+      className={`h-6 w-full cursor-pointer appearance-none bg-transparent focus-visible:outline-none
       [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
       [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-0 [&::-webkit-slider-thumb]:bg-accent
       [&::-moz-range-track]:h-1.5 [&::-moz-range-track]:rounded-full
@@ -438,7 +447,7 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
       type="button"
       role="checkbox"
       aria-checked={checked}
-      className={`inline-flex h-5 w-5 items-center justify-center rounded border transition-colors ${
+      className={`inline-flex h-6 w-6 items-center justify-center rounded border transition-colors ${
         checked
           ? `${UI_BOOLEAN_CONTROL_ACTIVE_CLASS} text-white`
           : 'border-border-dark bg-bg-dark text-transparent hover:border-text-muted'

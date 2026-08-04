@@ -50,7 +50,8 @@ export const CanvasToolbar = memo(({ isLocked, onToggleLock }: CanvasToolbarProp
       <UiIconButton
         onClick={() => zoomIn()}
         disabled={isLocked}
-        className="h-8 w-8 border-transparent bg-transparent p-1.5"
+        appearance="hover-only"
+        className="h-8 w-8 p-1.5"
         title={t('canvas.toolbar.zoomIn')}
       >
         <ZoomIn className="h-4 w-4 text-text-muted" />
@@ -59,7 +60,8 @@ export const CanvasToolbar = memo(({ isLocked, onToggleLock }: CanvasToolbarProp
       <UiIconButton
         onClick={() => zoomOut()}
         disabled={isLocked}
-        className="h-8 w-8 border-transparent bg-transparent p-1.5"
+        appearance="hover-only"
+        className="h-8 w-8 p-1.5"
         title={t('canvas.toolbar.zoomOut')}
       >
         <ZoomOut className="h-4 w-4 text-text-muted" />
@@ -67,17 +69,18 @@ export const CanvasToolbar = memo(({ isLocked, onToggleLock }: CanvasToolbarProp
 
       <UiIconButton
         onClick={() => fitView({ padding: 0.2 })}
-        className="h-8 w-8 border-transparent bg-transparent p-1.5"
+        appearance="hover-only"
+        className="h-8 w-8 p-1.5"
         title={t('canvas.toolbar.fitView')}
       >
         <Maximize2 className="h-4 w-4 text-text-muted" />
       </UiIconButton>
 
-      <div className="h-6 w-px bg-border-dark" />
-
       <UiIconButton
         onClick={onToggleLock}
-        className="h-8 w-8 border-transparent bg-transparent p-1.5"
+        appearance="hover-only"
+        active={isLocked}
+        className="ml-1 h-8 w-8 p-1.5"
         title={isLocked ? t('canvas.toolbar.unlock') : t('canvas.toolbar.lock')}
       >
         {isLocked ? <Lock className="h-4 w-4 text-accent" /> : <Unlock className="h-4 w-4 text-text-muted" />}
@@ -86,7 +89,9 @@ export const CanvasToolbar = memo(({ isLocked, onToggleLock }: CanvasToolbarProp
       <UiIconButton
         onClick={clearCanvas}
         disabled={isLocked}
-        className="h-8 w-8 border-transparent bg-transparent p-1.5 hover:!bg-red-500/10"
+        appearance="hover-only"
+        hoverVariant="danger"
+        className="h-8 w-8 p-1.5"
         title={t('common.delete')}
       >
         <Trash2 className="h-4 w-4 text-red-500" />

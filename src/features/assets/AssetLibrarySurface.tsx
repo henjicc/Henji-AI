@@ -194,8 +194,8 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
           <Dropdown<'all' | AssetMediaType> value={mediaType ?? 'all'} options={[{ value: 'all', label: t('assetLibrary.allTypes') }, { value: 'image', label: t('assetLibrary.image') }, { value: 'video', label: t('assetLibrary.video') }, { value: 'audio', label: t('assetLibrary.audio') }]} onSelect={(value) => setMediaType(value === 'all' ? null : value)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
           <Dropdown<'created' | 'recent'> value={sort} options={[{ value: 'created', label: t('assetLibrary.newest') }, { value: 'recent', label: t('assetLibrary.recent') }]} onSelect={setSort} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
           <Dropdown<string> value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
-          {mode === 'floating' && <UiButton className="!h-10 shrink-0 px-4" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
-          {onClose && <UiIconButton className="!h-10 !w-10 shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
+          {mode === 'floating' && <UiButton variant="primary" className="!h-10 shrink-0 px-4" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
+          {onClose && <UiIconButton appearance="hover-only" className="!h-10 !w-10 shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
         </header>
         <UiSharedGlassHost ref={scrollRef} minTargets={4} className="min-h-0 flex-1 overflow-y-auto p-3 [scrollbar-gutter:stable]">
           {loading && page.items.length === 0 ? (

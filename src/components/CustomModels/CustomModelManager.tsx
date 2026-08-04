@@ -115,6 +115,7 @@ export function CustomModelManager(): JSX.Element {
           {models.map(model => (
             <UiPanel
               key={model.id}
+              variant="inset"
               className="flex items-center justify-between p-4"
             >
               <div className="flex-1">

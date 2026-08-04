@@ -381,10 +381,10 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                       />
                     </span>
                   </div>
-                  <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${MODEL_CARD_META_TEXT_CLASS}`}>
+                  <span className={`col-start-1 row-start-2 block min-w-0 self-end truncate text-left ${isSelected ? 'text-xs leading-4 text-white/80' : MODEL_CARD_META_TEXT_CLASS}`}>
                     {t(`providers.${p.id}`, p.name)}
                   </span>
-                  <span className={`col-start-2 row-start-2 justify-self-end self-end text-right ${MODEL_CARD_META_TEXT_CLASS}`}>
+                  <span className={`col-start-2 row-start-2 justify-self-end self-end text-right ${isSelected ? 'text-xs leading-4 text-white/80' : MODEL_CARD_META_TEXT_CLASS}`}>
                     {m.type === 'image' ? t('types.image') : m.type === 'video' ? t('types.video') : t('types.audio')}
                   </span>
                 </div>

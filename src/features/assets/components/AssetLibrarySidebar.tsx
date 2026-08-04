@@ -90,7 +90,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
 
       <div className={`flex items-center justify-between px-3 pb-1 pt-2 ${UI_TEXT_LABEL_CLASS}`}>
         <span>{labels.categories}</span>
-        <UiIconButton className="!h-7 !w-7" onClick={() => setCreating(true)} title={labels.create}><Plus className="h-3.5 w-3.5" /></UiIconButton>
+        <UiIconButton appearance="hover-only" className="!h-7 !w-7" onClick={() => setCreating(true)} title={labels.create}><Plus className="h-3.5 w-3.5" /></UiIconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-gutter:stable]">
         {creating && (
@@ -119,8 +119,8 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
                     </>
                   ) : (
                     <>
-                      <UiIconButton className="!h-7 !w-7" onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil className="h-3 w-3" /></UiIconButton>
-                      <UiIconButton className="!h-7 !w-7" hoverVariant="danger" onClick={() => setDeletingId(library.id)}><Trash2 className="h-3 w-3" /></UiIconButton>
+                      <UiIconButton appearance="hover-only" className="!h-7 !w-7" onClick={() => { setEditingId(library.id); setEditingName(library.name) }}><Pencil className="h-3 w-3" /></UiIconButton>
+                      <UiIconButton appearance="hover-only" className="!h-7 !w-7" hoverVariant="danger" onClick={() => setDeletingId(library.id)}><Trash2 className="h-3 w-3" /></UiIconButton>
                     </>
                   )}
                 </div>

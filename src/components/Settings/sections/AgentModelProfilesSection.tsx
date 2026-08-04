@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react'
 import { llmVerifyModelCapabilities } from '@/commands/llmRuntime'
 import {
   Dropdown,
-  UI_BUTTON_RESET_CLASS,
   UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_FORM_ROW_GAP_CLASS,
   UI_TEXT_LABEL_CLASS,
@@ -256,14 +255,16 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
               <div className="flex items-center justify-between gap-2">
                 <div className={UI_TEXT_LABEL_CLASS}>{roleLabels[role]}</div>
                 {/* 能力/验证详情过于专业，普通用户选好模型就够了，折叠掉默认不显示 */}
-                <button
+                <UiButton
                   type="button"
+                  size="sm"
+                  variant="plain"
                   onClick={() => toggleRoleDetails(role)}
-                  className={`${UI_BUTTON_RESET_CLASS} inline-flex shrink-0 items-center gap-0.5 text-xs text-text-muted transition-colors hover:text-text-dark`}
+                  className="shrink-0 gap-0.5 px-1.5"
                 >
                   详情
                   {detailsOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                </button>
+                </UiButton>
               </div>
               <Dropdown<string>
                 value={value}
@@ -299,14 +300,16 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
 
       {/* 超时/重试/Token 上限对普通用户没有决策价值，收进高级设置，默认折叠 */}
       <div>
-        <button
+        <UiButton
           type="button"
+          size="sm"
+          variant="plain"
           onClick={() => setAdvancedOpen(prev => !prev)}
-          className={`${UI_BUTTON_RESET_CLASS} inline-flex items-center gap-1 text-xs text-text-muted transition-colors hover:text-text-dark`}
+          className="gap-1 px-1.5"
         >
           高级设置
           {advancedOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        </button>
+        </UiButton>
         <UiDisclosurePanel open={advancedOpen}>
           <div className={`pt-4 ${UI_FORM_ROW_GAP_CLASS}`}>
             {RUNTIME_SETTING_FIELDS.map(field => (

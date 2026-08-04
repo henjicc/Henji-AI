@@ -8,11 +8,7 @@ import TestModePanel from '@/components/TestModePanel'
 import { UiSharedGlassHost, UiTaskHistoryFilterBar } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
-import { getModelDisplayName, getModelInfo, getProviderDisplayName } from '@/utils/modelHelpers'
-import {
-  useGenerationHistoryFilterStore,
-  type GenerationHistoryMediaType,
-} from '@/stores/generationHistoryFilterStore.ts'
+import { getModelDisplayName } from '@/utils/modelHelpers'
 import type { ImageEditSession } from '@/core/imageEdit'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
 import { NotificationToast } from './GenerationWorkspace/components/NotificationToast'
@@ -34,8 +30,8 @@ import { useAutoResumePolling } from './GenerationWorkspace/hooks/useAutoResumeP
 import { useTestModeShortcuts } from './GenerationWorkspace/hooks/useTestModeShortcuts'
 import { useToast } from './GenerationWorkspace/hooks/useToast'
 import { useUpdateCheck } from './GenerationWorkspace/hooks/useUpdateCheck'
-import { useAutoScrollOnResize } from './GenerationWorkspace/hooks/useAutoScrollOnResize'
-import { useTaskFilters } from './GenerationWorkspace/hooks/useTaskFilters'
+import { useGenerationHistoryFiltering } from './GenerationWorkspace/hooks/useGenerationHistoryFiltering'
+import { useGenerationAutoScroll } from './GenerationWorkspace/hooks/useGenerationAutoScroll'
 import { splitMulti } from './GenerationWorkspace/utils/multiFile'
 import { Copy, Download } from 'lucide-react'
 
@@ -60,125 +56,28 @@ const GenerationWorkspace: React.FC = () => {
   useLoadTaskHistory({ setTasks, setIsTasksLoaded, isInitialLoadRef })
   useSaveTaskHistory({ tasks, isTasksLoaded, isInitialLoadRef })
   const {
-    keyword: filterKeyword,
-    providerId: filterProviderId,
-    modelId: filterModelId,
-    mediaType: filterMediaType,
-    timePreset: filterTimePreset,
-    startDate: filterStartDate,
-    endDate: filterEndDate,
-    setKeyword: setFilterKeyword,
-    setProviderId: setFilterProviderId,
-    setModelId: setFilterModelId,
-    setMediaType: setFilterMediaType,
-    setTimePreset: setFilterTimePreset,
-    setStartDate: setFilterStartDate,
-    setEndDate: setFilterEndDate,
-    resetFilters: resetHistoryFilters,
-  } = useGenerationHistoryFilterStore()
-  const { filteredTasks, matchedCount, hasActiveFilters } = useTaskFilters(tasks, {
-    keyword: filterKeyword,
-    providerId: filterProviderId,
-    modelId: filterModelId,
-    mediaType: filterMediaType,
-    timePreset: filterTimePreset,
-    startDate: filterStartDate,
-    endDate: filterEndDate,
-  })
-  const historyProviderOptions = useMemo(() => {
-    const providers = new Map<string, string>()
-    tasks.forEach((task) => {
-      if (!task.provider || providers.has(task.provider)) return
-      providers.set(task.provider, getProviderDisplayName(task.provider))
-    })
-    return Array.from(providers.entries())
-      .sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: 'base', numeric: true }))
-      .map(([value, label]) => ({ value, label }))
-  }, [tasks])
-  const historyModelOptions = useMemo(() => {
-    const models = new Map<string, { label: string; providerId: string }>()
-    tasks.forEach((task) => {
-      if (!task.provider || models.has(task.model)) return
-      models.set(task.model, {
-        label: getModelInfo(task.model)?.name ?? task.model,
-        providerId: task.provider,
-      })
-    })
-    return Array.from(models.entries())
-      .sort((a, b) => a[1].label.localeCompare(b[1].label, undefined, { sensitivity: 'base', numeric: true }))
-      .map(([value, payload]) => ({
-        value,
-        label: payload.label,
-        providerId: payload.providerId,
-      }))
-  }, [tasks])
-  const historyMediaTypeOptions = useMemo<GenerationHistoryMediaType[]>(() => {
-    const order: GenerationHistoryMediaType[] = ['image', 'video', 'audio']
-    const available = new Set<GenerationHistoryMediaType>()
-    tasks.forEach((task) => {
-      if (task.type === 'image' || task.type === 'video' || task.type === 'audio') {
-        available.add(task.type)
-      }
-    })
-    return order.filter((type) => available.has(type))
-  }, [tasks])
-  const mediaFilterOptions = useMemo<Array<{ label: string; value: GenerationHistoryMediaType }>>(() => {
-    const labelByType: Record<Exclude<GenerationHistoryMediaType, 'all'>, string> = {
-      image: t('ui:workspaceToolbar.filter.image'),
-      video: t('ui:workspaceToolbar.filter.video'),
-      audio: t('ui:workspaceToolbar.filter.audio'),
-    }
-    return [
-      { value: 'all', label: t('ui:workspaceToolbar.filter.all') },
-      ...historyMediaTypeOptions.map((value) => ({
-      value,
-      label: labelByType[value as Exclude<GenerationHistoryMediaType, 'all'>],
-      })),
-    ]
-  }, [historyMediaTypeOptions, t])
-  const providerFilterOptions = useMemo(() => [
-    { value: 'all', label: t('ui:workspaceFilters.provider.all') },
-    ...historyProviderOptions,
-  ], [historyProviderOptions, t])
-  const modelFilterOptions = useMemo(() => (
-    [
-      { value: 'all', label: t('ui:workspaceFilters.model.all') },
-      ...(filterProviderId === 'all'
-      ? historyModelOptions.map((option) => ({ value: option.value, label: option.label }))
-      : historyModelOptions
-        .filter((option) => option.providerId === filterProviderId)
-        .map((option) => ({ value: option.value, label: option.label }))),
-    ]
-  ), [filterProviderId, historyModelOptions, t])
-  const handleProviderFilterChange = useCallback((providerId: string): void => {
-    setFilterProviderId(providerId)
-    if (filterModelId === 'all') return
-    if (providerId === 'all') return
-    const modelVisible = historyModelOptions.some((option) => option.value === filterModelId && option.providerId === providerId)
-    if (!modelVisible) {
-      setFilterModelId('all')
-    }
-  }, [filterModelId, historyModelOptions, setFilterModelId, setFilterProviderId])
-  useEffect(() => {
-    if (filterProviderId !== 'all' && !historyProviderOptions.some((option) => option.value === filterProviderId)) {
-      setFilterProviderId('all')
-    }
-  }, [filterProviderId, historyProviderOptions, setFilterProviderId])
-  useEffect(() => {
-    if (filterModelId === 'all') return
-    const modelVisible = historyModelOptions.some((option) => (
-      option.value === filterModelId &&
-      (filterProviderId === 'all' || option.providerId === filterProviderId)
-    ))
-    if (!modelVisible) {
-      setFilterModelId('all')
-    }
-  }, [filterModelId, filterProviderId, historyModelOptions, setFilterModelId])
-  useEffect(() => {
-    if (filterMediaType !== 'all' && !historyMediaTypeOptions.includes(filterMediaType)) {
-      setFilterMediaType('all')
-    }
-  }, [filterMediaType, historyMediaTypeOptions, setFilterMediaType])
+    filterKeyword,
+    filterProviderId,
+    filterModelId,
+    filterMediaType,
+    filterTimePreset,
+    filterStartDate,
+    filterEndDate,
+    setFilterKeyword,
+    setFilterModelId,
+    setFilterMediaType,
+    setFilterTimePreset,
+    setFilterStartDate,
+    setFilterEndDate,
+    resetHistoryFilters,
+    filteredTasks,
+    matchedCount,
+    hasActiveFilters,
+    providerFilterOptions,
+    modelFilterOptions,
+    mediaFilterOptions,
+    handleProviderFilterChange,
+  } = useGenerationHistoryFiltering(tasks)
   const { notification, visible: notificationVisible, show: notify } = useToast()
   const mediaActionMessages = useMemo(() => {
     return {
@@ -235,8 +134,7 @@ const GenerationWorkspace: React.FC = () => {
   const [isTestPanelOpen, setIsTestPanelOpen] = useState(false)
   useTestModeShortcuts({ togglePanel: () => setIsTestPanelOpen((v) => !v) })
   const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu()
-  const listContainerRef = useRef<HTMLDivElement>(null)
-  const [isUserAtBottom, setIsUserAtBottom] = useState(true)
+  const { listContainerRef, contentRef } = useGenerationAutoScroll(isTasksLoaded, tasks.length)
   const {
     inputContainerRef,
     inputPadding,
@@ -249,38 +147,11 @@ const GenerationWorkspace: React.FC = () => {
   } = useBottomPanel({ listContainerRef })
   const [panelModelId, setPanelModelId] = useState('')
   const [panelPrompt, setPanelPrompt] = useState('')
-  const scrollToBottom = useCallback((): void => {
-    const el = listContainerRef.current
-    if (!el) return
-    el.scrollTop = el.scrollHeight
-  }, [])
   const handleUsePrompt = useCallback((prompt: string): void => {
     if (!prompt.trim()) return
     window.dispatchEvent(new CustomEvent('reedit-content', { detail: { prompt } }))
     expandPanelSmooth()
   }, [expandPanelSmooth])
-  const contentRef = useAutoScrollOnResize(isUserAtBottom, scrollToBottom)
-  useEffect(() => {
-    const el = listContainerRef.current
-    if (!el) return
-    const update = () => {
-      const threshold = 8
-      const atBottom = el.scrollHeight - el.clientHeight - el.scrollTop <= threshold
-      setIsUserAtBottom(atBottom)
-    }
-    update()
-    el.addEventListener('scroll', update)
-    return () => el.removeEventListener('scroll', update)
-  }, [])
-  useEffect(() => {
-    if (!isTasksLoaded) return
-    scrollToBottom()
-  }, [isTasksLoaded, scrollToBottom])
-  useEffect(() => {
-    if (!isTasksLoaded) return
-    if (!isUserAtBottom) return
-    scrollToBottom()
-  }, [isTasksLoaded, isUserAtBottom, scrollToBottom, tasks.length])
   const [isImageViewerOpen, setIsImageViewerOpen] = useState(false)
   const [currentImage, setCurrentImage] = useState('')
   const [currentImageList, setCurrentImageList] = useState<string[]>([])
@@ -482,9 +353,9 @@ const GenerationWorkspace: React.FC = () => {
     <div className="h-full flex-1 bg-app text-white flex flex-col relative overflow-hidden">
       <NotificationToast notification={notification} visible={notificationVisible} />
       <main className="relative z-10 flex min-h-0 flex-1 flex-col">
-        <div className="pointer-events-none absolute left-1/2 top-1 z-30 -translate-x-1/2">
+        <div className="pointer-events-none absolute inset-x-0 top-1 z-30 flex justify-center px-2">
           <div
-            className="relative flex flex-col items-center pointer-events-auto"
+            className="pointer-events-auto relative flex w-full max-w-[980px] flex-col items-center"
             onPointerEnter={() => {
               setIsTopFilterHovered(true)
               showTopFilterBar()
@@ -500,7 +371,7 @@ const GenerationWorkspace: React.FC = () => {
               requestHideTopFilterBar()
             }}
           >
-            <div className="pointer-events-auto absolute -top-6 h-16 w-[980px] max-w-[98vw]" />
+            <div className="pointer-events-auto absolute inset-x-0 -top-6 h-16" />
             <div className={`pointer-events-none transition-[opacity,transform] duration-200 ${
               (isTopFilterVisible || hasActiveFilters)
                 ? 'pointer-events-auto translate-y-0 opacity-100'

@@ -19,7 +19,7 @@ export function ParamFlowViewer({ record, onExport }: ParamFlowViewerProps) {
   const { t } = useI18n('ui')
 
   return (
-    <UiPanel className="p-4 mt-4">
+    <UiPanel variant="inset" className="mt-4 p-4">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-semibold text-white">{t('debug.paramFlow.title')}</h3>
         <div className="flex gap-2 items-center">

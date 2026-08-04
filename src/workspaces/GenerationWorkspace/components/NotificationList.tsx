@@ -72,6 +72,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
       <span className="notification-icon">{icon}</span>
       <span className="notification-message">{notification.message}</span>
       <UiIconButton
+        appearance="hover-only"
         className="notification-close"
         onClick={() => onRemove(notification.id)}
       >

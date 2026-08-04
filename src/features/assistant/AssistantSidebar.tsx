@@ -3,6 +3,7 @@ import { useState, type CSSProperties, type KeyboardEvent, type RefObject } from
 
 import { UI_COLOR_ACCENT_TEXT_CLASS, UI_PANEL_SURFACE_CLASS, UI_TEXT_LABEL_CLASS, UiIconButton } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
+import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 
 import { AssistantConversation } from './conversation/AssistantConversation'
 import { AssistantRunHistory } from './history/AssistantRunHistory'
@@ -52,7 +53,7 @@ export function AssistantSidebar({ workspaceRef }: AssistantSidebarProps): JSX.E
   const setSize = useAssistantUiStore((state) => state.setSize)
   const startNewConversation = useAssistantUiStore((state) => state.startNewConversation)
   const threadId = useAssistantUiStore((state) => state.threadId)
-  const { shouldRender, isVisible } = useDialogTransition(open, 180)
+  const { shouldRender, isVisible } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS)
   const interaction = useAssistantPanelInteraction({
     enabled: open,
     mode,

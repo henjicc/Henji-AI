@@ -179,7 +179,7 @@ export const UI_TRIGGER_PANEL_CLASS =
   'ui-glass ui-glass-elevated rounded-lg text-text-dark';
 
 export const UI_OPTION_ITEM_CLASS =
-  'rounded-lg border border-border-dark bg-surface-dark text-text-dark transition-colors';
+  'rounded-lg border border-border-dark text-text-dark transition-colors';
 
 export const UI_OPTION_ITEM_HOVER_CLASS =
   'hover:bg-layer hover:border-text-muted/50';

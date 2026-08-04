@@ -1,12 +1,13 @@
 import React, { useEffect, useRef } from 'react'
 import { UiPanel } from '@/components/ui'
 import { useDialogTransition } from '@/components/ui/useDialogTransition'
+import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
 import { AssetLibrarySurface } from './AssetLibrarySurface'
 
 interface Props { open: boolean; position: 'top' | 'left' | 'right'; onClose: () => void; onOpenWorkspace: () => void }
 
 export const AssetLibraryFloatingPanel: React.FC<Props> = ({ open, position, onClose, onOpenWorkspace }) => {
-  const { shouldRender, isVisible } = useDialogTransition(open, 180)
+  const { shouldRender, isVisible } = useDialogTransition(open, UI_DIALOG_TRANSITION_MS)
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {

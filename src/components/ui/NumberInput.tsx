@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { Minus, Plus } from 'lucide-react'
 import { UiIconButton, UiInput } from './primitives'
 import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS } from './styleTokens'
 
@@ -123,27 +124,33 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
               e.currentTarget.blur()
             }
           }}
-          className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} appearance-none pr-8`}
+          className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} appearance-none pr-14`}
           min={min}
           max={max}
           step={step}
           disabled={disabled}
         />
-        <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+        <div className="absolute inset-y-1 right-1 flex items-stretch">
           <UiIconButton
             type="button"
             showBorder={false}
+            appearance="hover-only"
             onClick={() => stepBy(1)}
-            className="h-4 w-6 border-0 bg-transparent p-0 text-3xs leading-none text-text-soft hover:text-text-dark"
+            className="h-full w-6 rounded-r-none border-0 p-0 text-text-soft hover:text-text-dark"
+            title="增加"
+            aria-label="增加"
             disabled={disabled}
-          >▲</UiIconButton>
+          ><Plus className="h-3 w-3" /></UiIconButton>
           <UiIconButton
             type="button"
             showBorder={false}
+            appearance="hover-only"
             onClick={() => stepBy(-1)}
-            className="h-4 w-6 border-0 bg-transparent p-0 text-3xs leading-none text-text-soft hover:text-text-dark"
+            className="h-full w-6 rounded-l-none border-0 p-0 text-text-soft hover:text-text-dark"
+            title="减少"
+            aria-label="减少"
             disabled={disabled}
-          >▼</UiIconButton>
+          ><Minus className="h-3 w-3" /></UiIconButton>
         </div>
       </div>
     </div>

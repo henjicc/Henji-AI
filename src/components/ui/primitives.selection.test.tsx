@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
+  UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
   UI_NAV_INDICATOR_END_CLASS,
@@ -19,6 +20,7 @@ import {
   UiIconButton,
   UiNavButton,
   UiOptionButton,
+  UiRangeInput,
   UiSwitch,
 } from './primitives';
 
@@ -78,10 +80,14 @@ describe('Ui primitives 选中态词汇表', () => {
         <UiButton variant="primary">主动作</UiButton>
         <UiIconButton aria-label="中性图标动作" />
         <UiIconButton active aria-label="选中图标动作" />
+        <UiIconButton appearance="hover-only" aria-label="静息工具栏动作" />
       </>,
     );
 
-    expect(view.getByRole('button', { name: '静息选项' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
+    const idleOption = view.getByRole('button', { name: '静息选项' });
+    expect(idleOption.classList.contains(UI_GLASS_ADAPTIVE_OPTION_CLASS)).toBe(true);
+    expect(idleOption.classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
+    expect(idleOption.classList.contains('bg-surface-dark')).toBe(false);
     expect(view.getByRole('button', { name: '选中选项' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
     expect(view.getByRole('button', { name: '静息标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
     expect(view.getByRole('button', { name: '选中标签' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
@@ -89,6 +95,7 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(view.getByRole('button', { name: '主动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
     expect(view.getByRole('button', { name: '中性图标动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
     expect(view.getByRole('button', { name: '选中图标动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
+    expect(view.getByRole('button', { name: '静息工具栏动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
   });
 
   it('布尔态只强调开关与复选框控件本体', () => {
@@ -101,5 +108,17 @@ describe('Ui primitives 选中态词汇表', () => {
 
     expectClasses(view.getByRole('switch', { name: '已开启' }), UI_BOOLEAN_CONTROL_ACTIVE_CLASS);
     expectClasses(view.getByRole('checkbox', { name: '已勾选' }), UI_BOOLEAN_CONTROL_ACTIVE_CLASS);
+  });
+
+  it('精细控件保留至少 24 像素的命中高度', () => {
+    const view = render(
+      <>
+        <UiCheckbox checked={false} aria-label="未勾选" />
+        <UiRangeInput aria-label="范围" />
+      </>,
+    );
+
+    expect(view.getByRole('checkbox', { name: '未勾选' }).classList.contains('h-6')).toBe(true);
+    expect(view.getByRole('slider', { name: '范围' }).classList.contains('h-6')).toBe(true);
   });
 });

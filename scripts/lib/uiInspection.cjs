@@ -185,6 +185,11 @@ async function setupCanvas(page) {
 
 async function setupToolbox(page) {
   await openWorkspace(page, 'toolbox')
+  const backToToolbox = page.locator('[title="返回工具箱"]:visible').first()
+  if (await backToToolbox.count()) {
+    await backToToolbox.click()
+    await settlePage(page)
+  }
   await waitForPageHeader(page)
 }
 
@@ -261,6 +266,39 @@ const UI_INSPECTION_SCENES = Object.freeze([
       await settlePage(page)
     },
   },
+  {
+    id: 'settings-llm',
+    surface: '设置',
+    name: '设置-大语言模型',
+    setup: async (page) => {
+      await setupSettings(page)
+      await clickNamedButton(page, /^(密钥|API Keys)$/i)
+      await clickNamedButton(page, /^(大语言模型|Language Models)$/i)
+      await settlePage(page, 700)
+    },
+  },
+  {
+    id: 'settings-agent-skills',
+    surface: '设置',
+    name: '设置-助手技能',
+    setup: async (page) => {
+      await setupSettings(page)
+      await clickNamedButton(page, /^(密钥|API Keys)$/i)
+      await clickNamedButton(page, /^(助手技能|Assistant Skills)$/i)
+      await settlePage(page, 700)
+    },
+  },
+  {
+    id: 'settings-interface-layout',
+    surface: '设置',
+    name: '设置-界面布局',
+    setup: async (page) => {
+      await setupSettings(page)
+      await clickNamedButton(page, /^(界面|Interface)$/i)
+      await clickNamedButton(page, /^(布局行为|Layout Behavior)$/i)
+      await settlePage(page)
+    },
+  },
   { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
   { id: 'toolbox-home', surface: '工具箱', name: '工具箱-首页', setup: setupToolbox },
   {
@@ -271,6 +309,29 @@ const UI_INSPECTION_SCENES = Object.freeze([
       await setupToolbox(page)
       await page.locator('[data-ui-page-header] + div button').first().hover()
       await settlePage(page)
+    },
+  },
+  {
+    id: 'toolbox-image-edit',
+    surface: '工具箱',
+    name: '工具箱-图片编辑空态',
+    setup: async (page) => {
+      await setupToolbox(page)
+      await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
+      await page.locator('[data-application-surface-id="tool.image_edit"]:visible').waitFor({ state: 'visible', timeout: 12000 })
+      await page.getByRole('button', { name: /^(从文件打开|Open from file)$/i }).waitFor({ state: 'visible', timeout: 12000 })
+      await settlePage(page, 700)
+    },
+  },
+  {
+    id: 'toolbox-camera-stage',
+    surface: '工具箱',
+    name: '工具箱-3D 镜头工程',
+    setup: async (page) => {
+      await setupToolbox(page)
+      await clickNamedButton(page, /^(3D 镜头参考|3D Camera Reference)/i)
+      await page.getByRole('button', { name: /^(新建工程|New Project)$/i }).waitFor({ state: 'visible', timeout: 12000 })
+      await settlePage(page, 700)
     },
   },
   { id: 'assets-home', surface: '资产库', name: '资产库-首页', setup: setupAssets },
@@ -301,7 +362,7 @@ const UI_INSPECTION_SCENES = Object.freeze([
     name: '助手-运行历史',
     setup: async (page) => {
       await setupAssistant(page)
-      await page.locator('[title="运行历史"]').click()
+      await page.locator('[aria-label="对话历史"]').click()
       await settlePage(page)
     },
   },
@@ -312,6 +373,16 @@ const UI_INSPECTION_SCENES = Object.freeze([
     setup: async (page) => {
       await setupAssistant(page)
       await page.locator('[aria-label="向智能助手描述任务"]').focus()
+      await settlePage(page)
+    },
+  },
+  {
+    id: 'assistant-memory',
+    surface: '助手',
+    name: '助手-记忆',
+    setup: async (page) => {
+      await setupAssistant(page)
+      await page.locator('[aria-label="助手记忆"]').click()
       await settlePage(page)
     },
   },

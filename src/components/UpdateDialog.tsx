@@ -162,6 +162,7 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
             </div>
             <UiIconButton
               onClick={handleClose}
+              appearance="hover-only"
               className="rounded-full text-text-muted hover:text-white"
             >
               <X className="h-5 w-5" />
@@ -227,4 +228,3 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
 }
 
 export default UpdateDialog
-

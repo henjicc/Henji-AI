@@ -107,12 +107,12 @@ const ToolboxWorkspace: React.FC = () => {
               <UiOptionButton
                 key={tool.id}
                 variant="card"
-                className="h-auto flex-col !items-start gap-2 p-4 text-left"
+                className="group h-auto flex-col !items-start gap-2 p-4 text-left"
                 onClick={() => selectToolboxTool(tool.id)}
               >
                 <tool.icon size={22} className="text-text-muted" />
                 <span className={UI_TEXT_LABEL_CLASS}>{tool.name}</span>
-                <span className={`break-words leading-relaxed [text-wrap:pretty] ${UI_TEXT_META_CLASS}`}>{tool.description}</span>
+                <span className={`break-words leading-relaxed [text-wrap:pretty] group-hover:text-text-soft ${UI_TEXT_META_CLASS}`}>{tool.description}</span>
               </UiOptionButton>
             ))}
           </div>

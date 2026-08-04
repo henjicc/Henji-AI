@@ -172,7 +172,7 @@ function renderInlineNode(
     return (
       <span
         key={key}
-        className={`${PROMPT_MEDIA_ATOM_CLASS} ${reference ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
+        className={`${PROMPT_MEDIA_ATOM_CLASS} ${reference ? 'border-transparent bg-veil-faint text-text-soft' : 'border-red-500/50 text-red-300'}`}
         data-prompt-media-reference=""
         data-reference-id={node.attrs.resourceId}
         data-reference-state={reference ? 'resolved' : 'missing'}
@@ -190,7 +190,7 @@ function renderInlineNode(
   return (
     <span
       key={key}
-      className={`${PROMPT_ATOM_CLASS} ${variable ? 'border-border-dark bg-layer text-text-dark' : 'border-red-500/50 text-red-300'}`}
+      className={`${PROMPT_ATOM_CLASS} ${variable ? 'border-transparent bg-veil-faint text-text-soft' : 'border-red-500/50 text-red-300'}`}
       data-prompt-template-variable=""
       data-variable-key={node.attrs.key}
       data-variable-state={variable ? 'resolved' : 'missing'}

@@ -71,7 +71,7 @@ export function MediaReferenceNodeView({
         selected
           ? UI_OPTION_ITEM_ACTIVE_CLASS
           : reference
-            ? 'border-border-dark bg-layer text-text-dark'
+            ? 'border-transparent bg-veil-faint text-text-soft'
             : 'border-red-500/50 bg-surface-dark text-red-300'
       }`}
       data-prompt-media-reference=""
@@ -115,7 +115,7 @@ export function TemplateVariableNodeView({
         selected
           ? UI_OPTION_ITEM_ACTIVE_CLASS
           : variable
-            ? 'border-border-dark bg-layer text-text-dark'
+            ? 'border-transparent bg-veil-faint text-text-soft'
             : 'border-red-500/50 bg-surface-dark text-red-300'
       }`}
       data-prompt-template-variable=""

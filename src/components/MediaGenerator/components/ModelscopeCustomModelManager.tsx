@@ -137,7 +137,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   }
   return (
     <div className="flex flex-col h-full">
-      <UiPanel className="mb-3 p-2.5 bg-blue-900/20 border-blue-800/60">
+      <UiPanel variant="inset" className="mb-3 p-2.5">
         <div className="text-xs text-blue-300">
           {t('modelscopeCustomModel.tip.prefix')}
           <UiButton
@@ -163,7 +163,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
           {t('modelscopeCustomModel.addNew')}
         </UiButton>
       ) : (
-        <UiPanel className="mb-3 p-3 border-border-dark/60 bg-layer/25">
+        <UiPanel variant="inset" className="mb-3 p-3">
           <div className="flex items-center justify-between mb-2">
             <div className={UI_TEXT_LABEL_CLASS}>{t('modelscopeCustomModel.addNew')}</div>
             <UiIconButton
@@ -250,7 +250,8 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
             {models.map(model => (
               <UiPanel
                 key={model.id}
-                className="p-3 border-border-dark/60 bg-layer/25 hover:border-border-dark/70"
+                variant="inset"
+                className="p-3"
               >
                 {editingId === model.id ? (
                   <div className="flex flex-col gap-2">
@@ -361,4 +362,3 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   )
 }
 export default ModelscopeCustomModelManager
-

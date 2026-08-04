@@ -144,6 +144,7 @@ export function ProjectManager(): JSX.Element {
                   </h3>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <UiIconButton
+                      appearance="hover-only"
                       onClick={(e) => {
                         void handleExportClick(project.id, e);
                       }}
@@ -154,6 +155,7 @@ export function ProjectManager(): JSX.Element {
                       <PackageCheck className="w-4 h-4 text-text-muted hover:text-text-dark" />
                     </UiIconButton>
                     <UiIconButton
+                      appearance="hover-only"
                       onClick={(e) => handleRenameClick(project.id, project.name, e)}
                       className="!h-7 !w-7"
                       title={t('project.rename')}
@@ -161,6 +163,8 @@ export function ProjectManager(): JSX.Element {
                       <Pencil className="w-4 h-4 text-text-muted hover:text-text-dark" />
                     </UiIconButton>
                     <UiIconButton
+                      appearance="hover-only"
+                      hoverVariant="danger"
                       onClick={(e) => handleDeleteClick(project.id, e)}
                       className="!h-7 !w-7"
                       title={t('project.delete')}

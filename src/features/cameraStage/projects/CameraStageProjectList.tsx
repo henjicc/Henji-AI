@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
-import { UiButton, UiEmpty, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton } from '@/components/ui'
+import { UiButton, UiEmpty, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cameraStageProjects'
 import { cameraStageApplicationService } from '../application/cameraStageApplicationService'
 import type { StageEditorMode } from '../domain/shotTypes'
@@ -97,21 +97,22 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
 
   return (
     <div className="h-full overflow-y-auto bg-app">
-      <div className="mx-auto max-w-4xl px-6 py-8">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <div className="text-lg font-medium text-text-dark">3D 镜头参考</div>
-            <div className="mt-1 text-sm text-text-muted">搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图</div>
-          </div>
-          <UiButton onClick={() => {
-            setCreateMode('simple')
-            setCreateName(CAMERA_STAGE_DEFAULT_PROJECT_NAME)
-            setCreateDialogOpen(true)
-          }} disabled={busy}>
-            <Plus size={15} className="mr-1" />
-            新建工程
-          </UiButton>
-        </div>
+      <UiRegion maxWidthClassName="max-w-4xl" className="mx-auto px-6 py-8">
+        <UiPageHeader
+          className="mb-6"
+          title="3D 镜头参考"
+          description="搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图"
+          actions={(
+            <UiButton variant="primary" onClick={() => {
+              setCreateMode('simple')
+              setCreateName(CAMERA_STAGE_DEFAULT_PROJECT_NAME)
+              setCreateDialogOpen(true)
+            }} disabled={busy}>
+              <Plus size={15} className="mr-1" />
+              新建工程
+            </UiButton>
+          )}
+        />
 
         {loading ? (
           <UiLoading size="sm" message="加载中…" />
@@ -161,7 +162,7 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
             ))}
           </div>
         )}
-      </div>
+      </UiRegion>
 
       <UiModal
         isOpen={createDialogOpen}
@@ -170,7 +171,7 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
         footer={
           <>
             <UiButton variant="ghost" onClick={() => setCreateDialogOpen(false)}>取消</UiButton>
-            <UiButton onClick={() => void handleCreate()} disabled={busy}>创建工程</UiButton>
+            <UiButton variant="primary" onClick={() => void handleCreate()} disabled={busy}>创建工程</UiButton>
           </>
         }
       >
@@ -220,7 +221,7 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
             <UiButton variant="ghost" onClick={() => setRenameTarget(null)}>
               取消
             </UiButton>
-            <UiButton onClick={() => void submitRename()}>确定</UiButton>
+            <UiButton variant="primary" onClick={() => void submitRename()}>确定</UiButton>
           </>
         }
       >

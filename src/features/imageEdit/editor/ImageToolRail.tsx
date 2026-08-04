@@ -16,6 +16,8 @@ export function ImageToolRail(): JSX.Element {
             key={tool.id}
             type="button"
             active={activeToolId === tool.id}
+            appearance="hover-only"
+            showBorder={false}
             title={tool.label}
             aria-label={tool.label}
             onClick={() => setActiveToolId(tool.id)}

@@ -203,6 +203,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                       <UiIconButton
                         type="button"
                         title="保存修改"
+                        appearance="hover-only"
                         className="!h-7 !w-7 !rounded-md"
                         onClick={() => void act(memory.memoryId, async () => {
                           await updateAgentMemoryRecord({ memoryId: memory.memoryId, content: draft })
@@ -216,6 +217,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                       <UiIconButton
                         type="button"
                         title="编辑记忆"
+                        appearance="hover-only"
                         className="!h-7 !w-7 !rounded-md"
                         onClick={() => beginEdit(memory)}
                       >
@@ -225,6 +227,7 @@ export function AssistantMemoryPanel(): JSX.Element {
                     <UiIconButton
                       type="button"
                       title="删除记忆"
+                      appearance="hover-only"
                       hoverVariant="danger"
                       className="!h-7 !w-7 !rounded-md"
                       onClick={() => void act(memory.memoryId, async () => {

@@ -98,7 +98,8 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
           <UiIconButton
             type="button"
             onClick={handleClose}
-            className="h-8 w-8 border-0 bg-transparent text-text-muted hover:text-white hover:bg-white/10"
+            appearance="hover-only"
+            className="h-8 w-8 text-text-muted hover:text-white hover:bg-white/10"
           >
             <X className="h-5 w-5" />
           </UiIconButton>

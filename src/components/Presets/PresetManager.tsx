@@ -29,7 +29,7 @@ function PresetItem({ preset, currentModelId, onApply, onToggleFavorite, onDelet
   const isCompatible = isGlobal || preset.modelId === currentModelId
 
   return (
-    <UiPanel className="preset-item mb-3 border p-4 hover:bg-layer/35">
+    <UiPanel variant="inset" className="preset-item mb-3 p-4 hover:bg-layer/35">
       <div className="flex justify-between items-start">
         <div className="preset-info flex-1">
           <div className="flex items-center gap-2 mb-1">
