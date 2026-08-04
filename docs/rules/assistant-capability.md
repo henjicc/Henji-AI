@@ -19,6 +19,13 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 
 不得因为暂时没有助手需求就跳过覆盖判断。
 
+### 实体写入覆盖
+
+- 「读取属性」「修改已有属性」「增删集合成员」必须分别走反射层通用动词；只有无法用属性或集合写入表达的算法型操作才新增专用能力。
+- 声明可写属性必须注册 `ApplicationMutationExecutor`；声明 `collectionWrite` 必须注册 `ApplicationCollectionExecutor`，并在 `requiredPropertyIds` 中列出创建时必填字段。只读属性可以是创建必填项。
+- 每个实体必须满足二选一：至少有一种正式写入执行器，或填写机器可读的 `writeExclusion.reason`。排除原因必须说明该状态为何只读、由哪个正式模块或操作维护，不接受“暂时不支持”“以后再做”。
+- 新增实体后必须同时检查属性可写性、集合写入、执行器注册、排除原因、权限、revision、撤销/补偿与结构化验证；运行 `npm run check:assistant-capabilities` 让覆盖门禁复核。
+
 ## 禁止事项
 
 - **禁止**新增旧式 `HostCommand`、`HostQuery`、`kind: 'command'`、`kind: 'query'`、固定前端命令/查询执行表，或依赖兼容描述生成器的 Agent 工具
@@ -37,13 +44,15 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 
 迁移旧能力时，同一模块完成后**立即删除**对应旧实现，禁止长期双轨。
 
+专用能力与通用动词因契约需要共存时，两条路径必须委托同一正式领域服务；不得各自维护校验、状态变换或 Store 写入。
+
 ## 验证
 
 ```bash
 npm run check:assistant-capabilities
 ```
 
-`check:assistant-capabilities` 已接入 `build` 与 `electron:build` 链路，覆盖不全或残留旧通道会直接构建失败。
+`check:assistant-capabilities` 已接入 `build` 与 `electron:build` 链路，覆盖不全、写入声明悬空、双路径不变量失守或残留旧通道会直接构建失败。
 
 CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执行入口、Application API 跨层导入、Surface 观察策略以及任意 Patch/脚本禁令。
 

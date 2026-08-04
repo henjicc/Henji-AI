@@ -163,9 +163,12 @@ npm run check:model-i18n
 ### 智能助手能力
 
 - 只改能力登记、surface/schema：`npm run check:assistant-capabilities` + 对应精确/相关测试
+- `check:assistant-capabilities` 同时执行全域写入覆盖与双路径一致性门禁；失败时按输出补齐 mutation/collection 执行器、`writeExclusion.reason`，或恢复清单指定的共享入口
 - 改 runner、状态机、调度、审批、持久化、模型适配：运行对应测试文件或最小专项脚本
 - `npm run test:assistant-production` 仅用于助手运行时的跨模块重构、生产验收或发布前检查，不是任意助手改动的默认命令
 - 多个助手专项脚本可能包含相同测试文件；一次任务中避免无理由串行叠加
+
+新增或扩展门禁时必须做一次断牙验证：临时撤掉它要保护的修复，确认目标命令稳定变红且错误能定位，再恢复代码并确认转绿。把失败断言摘要记入对应任务执行记录；未证明能变红的门禁不算完成。
 
 ### Electron 主进程能力
 
