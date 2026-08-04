@@ -6,7 +6,7 @@ import { getDb } from '../db'
 import { createMainLogger } from '../logging'
 import { inspectMedia, normalizeAssetPath } from './mediaInspection'
 import { ensureAssetThumbnail } from './thumbnailService'
-import type { AssetDto, AssetLibraryDto, AssetPageDto, AssetQuery, CreateAssetRequest, UpdateAssetRequest } from './types'
+import type { AssetDto, AssetLibraryDto, AssetLibrarySnapshotDto, AssetPageDto, AssetQuery, CreateAssetRequest, UpdateAssetRequest } from './types'
 
 const logger = createMainLogger('main.asset-library')
 type AssetRow = { id: string; media_type: AssetDto['mediaType']; display_name: string; file_path: string; source: AssetDto['source']; mime_type: string | null; size_bytes: number | null; width: number | null; height: number | null; duration_seconds: number | null; thumbnail_path: string | null; inspection_status: AssetDto['inspectionStatus']; inspection_error: string | null; file_modified_at: number | null; last_used_at: number | null; created_at: number; updated_at: number }
@@ -77,8 +77,41 @@ export function checkAssetPaths(filePaths: string[]): boolean[] {
 
 export function createLibrary(name: string): AssetLibraryDto { const now = Date.now(); const id = crypto.randomUUID(); getDb().prepare('INSERT INTO asset_libraries (id,name,created_at,updated_at) VALUES (?,?,?,?)').run(id, name.trim(), now, now); return { id, name: name.trim(), createdAt: now, updatedAt: now } }
 export function listLibraries(): AssetLibraryDto[] { return (getDb().prepare('SELECT * FROM asset_libraries ORDER BY name COLLATE NOCASE').all() as LibraryRow[]).map((row) => ({ id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at })) }
+export function inspectLibrary(id: string): AssetLibrarySnapshotDto {
+  const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=?').get(id) as LibraryRow | undefined
+  if (!row) throw new Error('资产库不存在')
+  const assetIds = (getDb().prepare(
+    'SELECT asset_id FROM asset_library_items WHERE library_id=? ORDER BY added_at, asset_id'
+  ).all(id) as Array<{ asset_id: string }>).map((item) => item.asset_id)
+  return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at, assetIds }
+}
 export function renameLibrary(id: string, name: string): AssetLibraryDto { getDb().prepare('UPDATE asset_libraries SET name=?, updated_at=? WHERE id=?').run(name.trim(), Date.now(), id); const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=?').get(id) as LibraryRow | undefined; if (!row) throw new Error('资产库不存在'); return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at } }
 export function deleteLibrary(id: string): void { getDb().prepare('DELETE FROM asset_libraries WHERE id=?').run(id) }
+export function restoreLibrary(snapshot: AssetLibrarySnapshotDto): AssetLibraryDto {
+  logger.info('开始恢复素材集合', {
+    event: 'asset.library.restore.start', context: { libraryId: snapshot.id, assetCount: snapshot.assetIds.length },
+  })
+  try {
+    getDb().transaction(() => {
+      getDb().prepare(
+        'INSERT INTO asset_libraries (id,name,created_at,updated_at) VALUES (?,?,?,?)'
+      ).run(snapshot.id, snapshot.name.trim(), snapshot.createdAt, snapshot.updatedAt)
+      const insertItem = getDb().prepare(
+        'INSERT INTO asset_library_items (library_id,asset_id,added_at) VALUES (?,?,?)'
+      )
+      for (const assetId of snapshot.assetIds) insertItem.run(snapshot.id, assetId, snapshot.updatedAt)
+    })()
+    logger.info('素材集合恢复完成', {
+      event: 'asset.library.restore.completed', context: { libraryId: snapshot.id },
+    })
+    return { id: snapshot.id, name: snapshot.name.trim(), createdAt: snapshot.createdAt, updatedAt: snapshot.updatedAt }
+  } catch (error) {
+    logger.error('素材集合恢复失败', {
+      event: 'asset.library.restore.failed', error, context: { libraryId: snapshot.id },
+    })
+    throw error
+  }
+}
 export function addAssetToLibrary(libraryId: string, assetId: string): void { getDb().prepare('INSERT OR IGNORE INTO asset_library_items (library_id,asset_id,added_at) VALUES (?,?,?)').run(libraryId, assetId, Date.now()) }
 export function removeAssetFromLibrary(libraryId: string, assetId: string): void { getDb().prepare('DELETE FROM asset_library_items WHERE library_id=? AND asset_id=?').run(libraryId, assetId) }
 export function listTags(): string[] { return (getDb().prepare('SELECT name FROM asset_tags ORDER BY name COLLATE NOCASE').all() as Array<{ name: string }>).map((row) => row.name) }

@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from 'uuid'
+
 import type {
   ApplicationCompletedStepResult,
   ApplicationEvidence,
@@ -7,7 +9,10 @@ import type {
 } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 
-import { assetApplicationService } from './assetApplicationService'
+import {
+  assetApplicationService,
+  type AssetMutationSnapshot,
+} from './assetApplicationService'
 import { ASSET_ENTITY_TYPES } from './assetReflection'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
@@ -19,8 +24,17 @@ export interface AssetMutationDependencies {
   bumpRevision: () => void
 }
 
+const DISPLAY_NAME_PROPERTY = `${ASSET_ENTITY_TYPES.asset}.display_name`
 const TAGS_PROPERTY = `${ASSET_ENTITY_TYPES.asset}.tags`
 const LIBRARY_REFS_PROPERTY = `${ASSET_ENTITY_TYPES.asset}.library_refs`
+
+interface AssetUndoRecord {
+  assetId: string
+  snapshot: AssetMutationSnapshot
+  propertyIds: string[]
+}
+
+const undoRecords = new Map<string, AssetUndoRecord>()
 
 function libraryId(value: JsonValue | undefined): string {
   const raw = typeof value === 'string'
@@ -35,9 +49,7 @@ function libraryId(value: JsonValue | undefined): string {
 }
 
 function tagList(value: JsonValue | undefined): string[] {
-  if (!Array.isArray(value)) {
-    throw new Error('ASSET_TAGS_INVALID：tags 必须是字符串数组。')
-  }
+  if (!Array.isArray(value)) throw new Error('ASSET_TAGS_INVALID：tags 必须是字符串数组。')
   return value.map((item, index) => {
     if (typeof item !== 'string' || item.trim() === '') {
       throw new Error(`ASSET_TAGS_INVALID：第 ${index} 个标签必须是非空字符串。`)
@@ -46,21 +58,46 @@ function tagList(value: JsonValue | undefined): string[] {
   })
 }
 
-/**
- * 素材属性写入执行器。
- *
- * 覆盖两类可写属性，写入全部委托 `assetApplicationService`，执行器本身不碰任何存储：
- *
- * - `tags`：`set` 操作 → `replaceTags`
- * - `library_refs`：`append` / `remove` 操作 → `addToLibrary` / `removeFromLibrary`
- *
- * `library_refs` 是 `ref_list`，集合归属用属性的增删语义表达就够了，不需要独立的集合执行器——
- * 素材本身由导入链路创建，助手无法凭属性创建一个素材。
- *
- * 补这个执行器同时闭合了一个既有缺陷：`asset.tags` 早就声明为可写，但素材领域一个 mutation
- * 执行器都没有，`describe_application_entities` 会告诉模型这个属性能改，实际写入必然命中
- * `MUTATION_EXECUTOR_NOT_FOUND`。
- */
+function displayName(value: JsonValue | undefined): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('ASSET_DISPLAY_NAME_INVALID：素材名称必须是非空字符串。')
+  }
+  return value
+}
+
+async function restoreSnapshot(
+  assetId: string,
+  snapshot: AssetMutationSnapshot,
+  propertyIds: ReadonlySet<string>,
+): Promise<void> {
+  const failures: unknown[] = []
+  if (propertyIds.has(DISPLAY_NAME_PROPERTY)) {
+    try { await assetApplicationService.rename(assetId, snapshot.displayName) } catch (error) { failures.push(error) }
+  }
+  if (propertyIds.has(TAGS_PROPERTY)) {
+    try { await assetApplicationService.replaceTags(assetId, snapshot.tags) } catch (error) { failures.push(error) }
+  }
+  if (propertyIds.has(LIBRARY_REFS_PROPERTY)) {
+    try {
+      const current = await assetApplicationService.readMutationSnapshot(assetId)
+      const beforeIds = new Set(snapshot.libraryIds)
+      const currentIds = new Set(current.libraryIds)
+      for (const id of currentIds) {
+        if (!beforeIds.has(id)) await assetApplicationService.removeFromLibrary(id, assetId)
+      }
+      for (const id of beforeIds) {
+        if (!currentIds.has(id)) await assetApplicationService.addToLibrary(id, assetId)
+      }
+    } catch (error) {
+      failures.push(error)
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`ASSET_ROLLBACK_FAILED：${failures.map(String).join('；')}`)
+  }
+}
+
+/** 素材通用属性写入；全部状态变换委托素材领域服务，并保存可真实恢复的领域快照。 */
 export class AssetMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = ASSET_ENTITY_TYPES.asset
 
@@ -68,24 +105,25 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
 
   async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     const assetId = step.target.id
-    const before = await assetApplicationService.read(assetId)
+    const before = await assetApplicationService.readMutationSnapshot(assetId)
     logger.info('素材属性写入开始', {
-      event: 'asset.mutation.apply.start',
-      assetId,
+      event: 'asset.mutation.apply.start', assetId,
       propertyIds: step.mutations.map((mutation) => mutation.propertyId),
     })
-    const applied: string[] = []
+    const applied = new Set<string>()
     try {
       for (const mutation of step.mutations) {
-        if (mutation.propertyId === TAGS_PROPERTY) {
+        if (mutation.propertyId === DISPLAY_NAME_PROPERTY) {
+          if (mutation.operation !== 'set') {
+            throw new Error(`ASSET_DISPLAY_NAME_OPERATION_INVALID：素材名称只支持 set 操作，收到 ${mutation.operation}。`)
+          }
+          await assetApplicationService.rename(assetId, displayName(mutation.value))
+        } else if (mutation.propertyId === TAGS_PROPERTY) {
           if (mutation.operation !== 'set') {
             throw new Error(`ASSET_TAGS_OPERATION_INVALID：标签只支持 set 操作，收到 ${mutation.operation}。`)
           }
           await assetApplicationService.replaceTags(assetId, tagList(mutation.value))
-          applied.push(mutation.propertyId)
-          continue
-        }
-        if (mutation.propertyId === LIBRARY_REFS_PROPERTY) {
+        } else if (mutation.propertyId === LIBRARY_REFS_PROPERTY) {
           if (mutation.operation === 'append') {
             await assetApplicationService.addToLibrary(libraryId(mutation.value), assetId)
           } else if (mutation.operation === 'remove') {
@@ -96,25 +134,35 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
               + '整体替换所属集合请分别 remove 旧集合、append 新集合。'
             )
           }
-          applied.push(mutation.propertyId)
-          continue
+        } else {
+          throw new Error(
+            `ASSET_PROPERTY_NOT_WRITABLE：${mutation.propertyId} 不可写。`
+            + `素材可写属性只有 ${DISPLAY_NAME_PROPERTY}、${TAGS_PROPERTY} 与 ${LIBRARY_REFS_PROPERTY}。`
+          )
         }
-        throw new Error(
-          `ASSET_PROPERTY_NOT_WRITABLE：${mutation.propertyId} 不可写。`
-          + `素材可写属性只有 ${TAGS_PROPERTY} 与 ${LIBRARY_REFS_PROPERTY}，其余由导入与检查链路维护。`
-        )
+        applied.add(mutation.propertyId)
       }
     } catch (error) {
-      await this.restore(assetId, before, applied)
+      try {
+        await restoreSnapshot(assetId, before, applied)
+      } catch (rollbackError) {
+        logger.error('素材属性回滚失败', rollbackError, {
+          event: 'asset.mutation.rollback.failed', assetId, appliedCount: applied.size,
+        })
+        throw new Error(`ASSET_MUTATION_AND_ROLLBACK_FAILED：${String(error)}；${String(rollbackError)}`)
+      }
       logger.error('素材属性写入失败', error, {
-        event: 'asset.mutation.apply.failed', assetId, appliedCount: applied.length,
+        event: 'asset.mutation.apply.failed', assetId, appliedCount: applied.size,
       })
       throw error
     }
+
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
+    const undoToken = `asset-undo:${uuidv4()}`
+    undoRecords.set(undoToken, { assetId, snapshot: before, propertyIds: [...applied] })
     logger.info('素材属性写入完成', {
-      event: 'asset.mutation.apply.completed', assetId, propertyIds: applied,
+      event: 'asset.mutation.apply.completed', assetId, propertyIds: [...applied],
     })
     return {
       status: 'completed',
@@ -127,52 +175,39 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
         data: mutation.value ?? null,
         capturedAt: new Date().toISOString(),
       })),
-      undoToken: `asset-undo:${assetId}:${JSON.stringify(before[TAGS_PROPERTY] ?? null)}`,
+      undoToken,
     }
   }
 
-  async compensate(step: MutationStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
+  async compensate(_step: MutationStep, result: ApplicationCompletedStepResult): Promise<ApplicationEvidence[]> {
     if (!result.undoToken) return []
     return (await this.undo(result.undoToken)).evidence
   }
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
-    const separator = undoToken.indexOf(':', 'asset-undo:'.length)
-    const assetId = undoToken.slice('asset-undo:'.length, separator)
-    const tags = JSON.parse(undoToken.slice(separator + 1)) as unknown
-    if (Array.isArray(tags)) await assetApplicationService.replaceTags(assetId, tags.map(String))
+    const record = undoRecords.get(undoToken)
+    if (!record) throw new Error('ASSET_UNDO_NOT_FOUND：素材撤销引用不存在或已使用。')
+    await restoreSnapshot(record.assetId, record.snapshot, new Set(record.propertyIds))
+    undoRecords.delete(undoToken)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
+    logger.info('素材属性写入已撤销', {
+      event: 'asset.mutation.undo.completed', assetId: record.assetId,
+    })
     return {
       status: 'completed',
       resultingRevisions: { assets: revision },
-      producedRefs: [{ kind: this.entityType, id: assetId, revision }],
+      producedRefs: [{ kind: this.entityType, id: record.assetId, revision }],
       evidence: [{
         kind: 'entity_state',
-        target: { kind: this.entityType, id: assetId, revision },
+        target: { kind: this.entityType, id: record.assetId, revision },
         fact: '素材属性写入已撤销。',
         capturedAt: new Date().toISOString(),
       }],
     }
   }
+}
 
-  /** 部分写入后的回滚：把已经改过的属性恢复到写入前的值。回滚自身失败不覆盖原始错误。 */
-  private async restore(assetId: string, before: Record<string, unknown>, applied: string[]): Promise<void> {
-    if (applied.length === 0) return
-    try {
-      if (applied.includes(TAGS_PROPERTY)) {
-        const original = before[TAGS_PROPERTY]
-        if (Array.isArray(original)) await assetApplicationService.replaceTags(assetId, original.map(String))
-      }
-      if (applied.includes(LIBRARY_REFS_PROPERTY)) {
-        logger.warn('素材集合归属无法自动回滚，需要人工核对', {
-          event: 'asset.mutation.rollback.partial', assetId,
-        })
-      }
-    } catch (rollbackError) {
-      logger.error('素材属性回滚失败', rollbackError, {
-        event: 'asset.mutation.rollback.failed', assetId,
-      })
-    }
-  }
+export function resetAssetMutationUndoStateForTests(): void {
+  undoRecords.clear()
 }

@@ -1,5 +1,5 @@
 import { getPlatform } from '@/platform'
-import type { AssetLibraryRecord, AssetPage, AssetQueryInput, AssetRecord, CreateAssetInput } from '@/platform/contracts/assetLibrary'
+import type { AssetLibraryRecord, AssetLibrarySnapshot, AssetPage, AssetQueryInput, AssetRecord, CreateAssetInput } from '@/platform/contracts/assetLibrary'
 export function createAsset(input: CreateAssetInput): Promise<AssetRecord> { return getPlatform().assetLibrary.createAsset(input) }
 export function updateAsset(id: string, name: string): Promise<AssetRecord> { return getPlatform().assetLibrary.updateAsset(id, name) }
 export function deleteAsset(id: string): Promise<void> { return getPlatform().assetLibrary.deleteAsset(id) }
@@ -10,9 +10,11 @@ export function inspectAsset(id: string): Promise<AssetRecord> { return getPlatf
 export function inspectAssets(ids: string[]): Promise<AssetRecord[]> { return getPlatform().assetLibrary.inspectAssets(ids) }
 export function relocateAsset(id: string, filePath: string): Promise<AssetRecord> { return getPlatform().assetLibrary.relocateAsset(id, filePath) }
 export function listAssetLibraries(): Promise<AssetLibraryRecord[]> { return getPlatform().assetLibrary.listLibraries() }
+export function inspectAssetLibrary(id: string): Promise<AssetLibrarySnapshot> { return getPlatform().assetLibrary.inspectLibrary(id) }
 export function createAssetLibrary(name: string): Promise<AssetLibraryRecord> { return getPlatform().assetLibrary.createLibrary(name) }
 export function renameAssetLibrary(id: string, name: string): Promise<AssetLibraryRecord> { return getPlatform().assetLibrary.renameLibrary(id, name) }
 export function deleteAssetLibrary(id: string): Promise<void> { return getPlatform().assetLibrary.deleteLibrary(id) }
+export function restoreAssetLibrary(snapshot: AssetLibrarySnapshot): Promise<AssetLibraryRecord> { return getPlatform().assetLibrary.restoreLibrary(snapshot) }
 export function addAssetToLibrary(libraryId: string, assetId: string): Promise<void> { return getPlatform().assetLibrary.addToLibrary(libraryId, assetId) }
 export function removeAssetFromLibrary(libraryId: string, assetId: string): Promise<void> { return getPlatform().assetLibrary.removeFromLibrary(libraryId, assetId) }
 export function listAssetTags(): Promise<string[]> { return getPlatform().assetLibrary.listTags() }

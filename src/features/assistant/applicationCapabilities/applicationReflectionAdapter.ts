@@ -4,7 +4,6 @@ import type {
   JsonValue,
 } from '@/core/application-control'
 
-import { getHostScopeRevisions } from '../hostContext/hostContext'
 import {
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
@@ -19,17 +18,15 @@ import type { CapabilityExecutionContext } from './handlerTypes'
  * 一个专用能力——这正是"每个功能都要手写适配"的解法。
  */
 
-const permissions = new Set([
-  'application:read', 'application:write',
-  'camera_stage:read', 'camera_stage:write',
-  'canvas:read', 'canvas:write',
-  'settings:read', 'settings:write',
-])
-
 function executionContext(context: CapabilityExecutionContext) {
+  const registry = getApplicationReflectionRegistry()
   return {
     exposure: 'assistant' as const,
-    permissions,
+    permissions: new Set([
+      'application:read',
+      'application:write',
+      ...registry.listDeclaredPropertyPermissions(),
+    ]),
     acceptedDataClasses: new Set(['C0', 'C1'] as const),
     requestId: context.requestId ?? `application-reflection-${Date.now()}`,
     signal: context.signal,
@@ -48,11 +45,18 @@ function toMutations(properties: Record<string, unknown>): Array<{
   }))
 }
 
+type PropertyMutationInput = {
+  propertyId: string
+  operation: 'set' | 'clear' | 'append' | 'remove'
+  value?: unknown
+}
+
 type ChangeInput = {
   summary: string
   expectedRevisions: Record<string, number>
   changes: Array<
     | { kind: 'set_properties'; target: { kind: string; id: string }; entityType: string; properties: Record<string, unknown> }
+    | { kind: 'mutate_properties'; target: { kind: string; id: string }; entityType: string; mutations: PropertyMutationInput[] }
     | { kind: 'create_items'; parent: { kind: string; id: string }; entityType: string; items: Array<{ properties: Record<string, unknown> }> }
     | { kind: 'remove_items'; parent: { kind: string; id: string }; entityType: string; targets: Array<{ kind: string; id: string }> }
   >
@@ -69,6 +73,19 @@ function toPlannedStep(
       entityType: change.entityType,
       expectedRevisions,
       mutations: toMutations(change.properties),
+    }
+  }
+  if (change.kind === 'mutate_properties') {
+    return {
+      kind: 'mutation',
+      target: change.target,
+      entityType: change.entityType,
+      expectedRevisions,
+      mutations: change.mutations.map((mutation) => ({
+        propertyId: mutation.propertyId,
+        operation: mutation.operation,
+        ...(mutation.value !== undefined ? { value: mutation.value as JsonValue } : {}),
+      })),
     }
   }
   if (change.kind === 'create_items') {
@@ -146,9 +163,7 @@ export const applicationReflectionHandlers = {
   async changeEntities(input: ChangeInput, context: CapabilityExecutionContext) {
     const engine = getApplicationControlExecutionEngine()
     const appContext = executionContext(context)
-    const expected = Object.keys(input.expectedRevisions).length > 0
-      ? input.expectedRevisions
-      : { toolbox: getHostScopeRevisions().toolbox }
+    const expected = input.expectedRevisions
     const plan = await engine.plan({
       summary: input.summary,
       // compensatable：多步时任一步失败都逐步回滚。atomic 只对同实体类型的属性组写入有意义，

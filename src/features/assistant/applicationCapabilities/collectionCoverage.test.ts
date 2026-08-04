@@ -15,7 +15,7 @@ import {
  * 实体描述里声明 `collectionWrite`，执行器那边注册对应实现。少哪一半，助手都会在运行时撞墙——
  * 而运行时撞墙的代价你已经付过好几次了：错误信息看不出跟能力覆盖有关，只能靠一次次实机跑。
  *
- * 反过来的方向不查：注册了执行器却没声明 `collectionWrite`，只是能力没开放，不会让任务失败。
+ * 两个方向都检查：声明与执行器任一侧单独存在，都会形成不可达能力或死代码。
  */
 
 const accessContext = {
@@ -46,6 +46,55 @@ describe('集合写入覆盖一致', () => {
       return !engineWithInternals.collectionExecutors.has(entityType)
     })
     expect(missing, `以下实体声明了可增删但没有集合执行器：${missing.join('、')}`).toEqual([])
+  })
+
+  it('属性可写声明与 mutation 执行器双向一致', () => {
+    const registry = getApplicationReflectionRegistry()
+    const engine = getApplicationControlExecutionEngine() as unknown as {
+      mutationExecutors: Map<string, unknown>
+    }
+    const entities = registry.describe({}, accessContext).entities
+    const declaredWritable = entities.filter((entity) => registry.listProperties(entity.id).some((property) => (
+      !property.readOnlyReason && property.requiredPermissions.write.length > 0
+    ))).map((entity) => entity.id)
+    const missingExecutors = declaredWritable.filter((entityType) => !engine.mutationExecutors.has(entityType))
+    const deadExecutors = [...engine.mutationExecutors.keys()].filter((entityType) => !declaredWritable.includes(entityType))
+
+    expect(
+      missingExecutors,
+      `以下实体声明了可写属性但没有 mutation 执行器：${missingExecutors.join('、')}`,
+    ).toEqual([])
+    expect(
+      deadExecutors,
+      `以下实体注册了 mutation 执行器但没有任何可写属性：${deadExecutors.join('、')}`,
+    ).toEqual([])
+  })
+
+  it('集合写入声明与 collection 执行器双向一致', () => {
+    const registry = getApplicationReflectionRegistry()
+    const engine = getApplicationControlExecutionEngine() as unknown as {
+      collectionExecutors: Map<string, unknown>
+    }
+    const declared = registry.describe({}, accessContext).entities
+      .filter((entity) => entity.collectionWrite)
+      .map((entity) => entity.id)
+    const deadExecutors = [...engine.collectionExecutors.keys()].filter((entityType) => !declared.includes(entityType))
+    expect(
+      deadExecutors,
+      `以下实体注册了 collection 执行器但没有 collectionWrite 声明：${deadExecutors.join('、')}`,
+    ).toEqual([])
+  })
+
+  it('通用适配器所需领域权限完全来自反射属性声明', () => {
+    const registry = getApplicationReflectionRegistry()
+    const declared = registry.describe({}, {
+      ...accessContext,
+      permissions: new Set(registry.listDeclaredPropertyPermissions()),
+    }).properties.flatMap((property) => [
+      ...property.requiredPermissions.read,
+      ...property.requiredPermissions.write,
+    ])
+    expect(registry.listDeclaredPropertyPermissions()).toEqual([...new Set(declared)].sort())
   })
 
   /**

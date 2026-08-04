@@ -956,6 +956,7 @@ export type HenjiAssetMediaType = 'image' | 'video' | 'audio'
 export type HenjiAssetSource = 'generated' | 'canvas' | 'camera-stage' | 'imported' | 'external'
 export interface HenjiAssetRecord { id: string; wasExisting?: boolean; mediaType: HenjiAssetMediaType; displayName: string; filePath: string; displayUrl: string; source: HenjiAssetSource; mimeType: string | null; sizeBytes: number | null; width: number | null; height: number | null; durationSeconds: number | null; thumbnailPath: string | null; thumbnailUrl: string | null; inspectionStatus: 'pending' | 'ready' | 'missing' | 'failed'; inspectionError: string | null; fileModifiedAt: number | null; lastUsedAt: number | null; createdAt: number; updatedAt: number; tags: string[]; libraryIds: string[] }
 export interface HenjiAssetLibraryRecord { id: string; name: string; createdAt: number; updatedAt: number }
+export interface HenjiAssetLibrarySnapshot extends HenjiAssetLibraryRecord { assetIds: string[] }
 export interface HenjiCreateAssetInput { filePath: string; mediaType: HenjiAssetMediaType; displayName?: string; source: HenjiAssetSource; libraryIds?: string[] }
 export interface HenjiAssetQueryInput { mediaType?: HenjiAssetMediaType; libraryId?: string; tag?: string; keyword?: string; page?: number; pageSize?: number; sort?: 'created' | 'recent' }
 export interface HenjiAssetPage { items: HenjiAssetRecord[]; total: number; page: number; pageSize: number }
@@ -970,9 +971,11 @@ export interface HenjiAssetLibraryApi {
   inspectAssets(ids: string[]): Promise<HenjiAssetRecord[]>
   relocateAsset(id: string, filePath: string): Promise<HenjiAssetRecord>
   listLibraries(): Promise<HenjiAssetLibraryRecord[]>
+  inspectLibrary(id: string): Promise<HenjiAssetLibrarySnapshot>
   createLibrary(name: string): Promise<HenjiAssetLibraryRecord>
   renameLibrary(id: string, name: string): Promise<HenjiAssetLibraryRecord>
   deleteLibrary(id: string): Promise<void>
+  restoreLibrary(snapshot: HenjiAssetLibrarySnapshot): Promise<HenjiAssetLibraryRecord>
   addToLibrary(libraryId: string, assetId: string): Promise<void>
   removeFromLibrary(libraryId: string, assetId: string): Promise<void>
   listTags(): Promise<string[]>

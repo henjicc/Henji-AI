@@ -94,12 +94,12 @@ const readEntity = defineApplicationCapability({
 
 const changeEntities = defineApplicationCapability({
   id: 'change_application_entities', version: 1, title: '修改应用状态',
-  description: '在一次事务里修改实体属性、或在集合中新增/删除成员。用它做那些没有专用能力的改动，例如给物体加关键帧做上下浮动或旋转动画。失败会整体回滚。',
+  description: '在一次事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。用它做那些没有专用能力的常规改动。失败会整体回滚。',
   domain: 'application',
-  aliases: ['改属性', '加关键帧', '做动画', '上下漂浮', '新增成员', '删除成员', 'change entities', 'set property'],
+  aliases: ['改属性', '增删属性值', '加关键帧', '做动画', '上下漂浮', '新增成员', '删除成员', 'change entities', 'set property'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'application:write',
   idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: true,
-  requiredScopes: ['toolbox', 'canvas', 'settings'], acceptsRefs: [], producesRefs: [],
+  requiredScopes: [], acceptsRefs: [], producesRefs: [],
   successEvidence: ['事务返回受影响引用、写入后的并发基线和结构化证据。'],
   failureRecovery: [
     'CONFLICT 表示状态在读取之后被改动过：重新读取实体拿到新的 revisions 后重试一次。',
@@ -107,13 +107,29 @@ const changeEntities = defineApplicationCapability({
   ],
   inputSchema: z.object({
     summary: z.string().min(1).max(200),
-    expectedRevisions: z.record(z.string(), z.number().int().nonnegative()),
+    expectedRevisions: z.record(z.string(), z.number().int().nonnegative()).refine(
+      (revisions) => Object.keys(revisions).length > 0,
+      { message: '至少提供一个从 read_application_entity 获得的 revision' },
+    ),
     changes: z.array(z.discriminatedUnion('kind', [
       z.object({
         kind: z.literal('set_properties'),
         target: refSchema,
         entityType: z.string().min(1),
         properties: z.record(z.string(), z.unknown()),
+      }).strict(),
+      z.object({
+        kind: z.literal('mutate_properties'),
+        target: refSchema,
+        entityType: z.string().min(1),
+        mutations: z.array(z.object({
+          propertyId: z.string().min(1),
+          operation: z.enum(['set', 'clear', 'append', 'remove']),
+          value: z.unknown().optional(),
+        }).strict().refine(
+          (mutation) => mutation.operation === 'clear' || mutation.value !== undefined,
+          { message: 'set/append/remove 修改必须提供 value' },
+        )).min(1).max(256),
       }).strict(),
       z.object({
         kind: z.literal('create_items'),

@@ -68,9 +68,7 @@ function property(
 
 const propertiesByEntity: Record<CanvasEntityType, ApplicationPropertyDescriptor[]> = {
   [CANVAS_ENTITY_TYPES.project]: [
-    property(CANVAS_ENTITY_TYPES.project, 'name', '项目名称', { kind: 'string', minLength: 1, maxLength: 120 }, {
-      readOnly: '项目名称通过正式重命名操作修改。',
-    }),
+    property(CANVAS_ENTITY_TYPES.project, 'name', '项目名称', { kind: 'string', minLength: 1, maxLength: 120 }),
     property(CANVAS_ENTITY_TYPES.project, 'node_count', '节点数量', { kind: 'integer', hardRange: { min: 0 } }, {
       readOnly: '节点数量由项目内容计算。',
     }),

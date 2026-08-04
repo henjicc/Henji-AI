@@ -12,6 +12,7 @@ import { applyCanvasOperationsAtomically, undoCanvasBatch } from './canvasBatchS
 import { CANVAS_ENTITY_TYPES } from './canvasReflection'
 
 type CollectionStep = Extract<ApplicationPlannedStep, { kind: 'collection' }>
+const UNDO_PREFIX = 'canvas-collection-undo:'
 
 export interface CanvasCollectionDependencies {
   readRevision: () => number
@@ -81,7 +82,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
         data: { operationCount: appliedOperations.length, entityType: this.entityType },
         capturedAt: new Date().toISOString(),
       }],
-      undoToken: undoRef,
+      undoToken: `${UNDO_PREFIX}${JSON.stringify({ projectId, undoRef })}`,
     }
   }
 
@@ -91,10 +92,13 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
   }
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
-    // undoCanvasBatch 需要 projectId 做归属与指纹校验，从撤销记录本身取不到，
-    // 因此用当前工程；集合写入始终发生在当前打开的工程上，这一点由 requireCurrentCanvasProject 保证。
-    const projectId = String(undoToken.split(':')[1] ?? '')
-    const restored = undoCanvasBatch(projectId, undoToken)
+    if (!undoToken.startsWith(UNDO_PREFIX)) throw new Error('CANVAS_COLLECTION_UNDO_INVALID')
+    const parsed = JSON.parse(undoToken.slice(UNDO_PREFIX.length)) as Record<string, unknown>
+    const projectId = typeof parsed.projectId === 'string' ? parsed.projectId : ''
+    const undoRef = typeof parsed.undoRef === 'string' ? parsed.undoRef : ''
+    if (!projectId || !undoRef) throw new Error('CANVAS_COLLECTION_UNDO_INVALID')
+    const restored = undoCanvasBatch(projectId, undoRef)
+    if (!restored) throw new Error('CANVAS_COLLECTION_UNDO_NOT_FOUND')
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
     return {
@@ -149,4 +153,3 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     }]
   }
 }
-

@@ -10,6 +10,7 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applica
 import { assetApplicationService } from './assetApplicationService'
 
 export const ASSET_ENTITY_TYPES = {
+  catalog: 'asset.catalog',
   asset: 'asset',
   library: 'asset.library',
 } as const
@@ -59,8 +60,11 @@ function property(entityType: AssetEntityType, suffix: string, title: string, va
 const READ_ONLY = '该属性由素材文件检查或正式语义操作维护。'
 const ASSET_TAGS_VALUE_SCHEMA_REF = schemaRef('property', 'asset.tags.value')
 const properties: Record<AssetEntityType, ApplicationPropertyDescriptor[]> = {
+  [ASSET_ENTITY_TYPES.catalog]: [
+    property(ASSET_ENTITY_TYPES.catalog, 'library_count', '集合数量', { kind: 'integer', hardRange: { min: 0 } }, READ_ONLY),
+  ],
   [ASSET_ENTITY_TYPES.asset]: [
-    property(ASSET_ENTITY_TYPES.asset, 'display_name', '显示名称', { kind: 'string', minLength: 1, maxLength: 200 }, READ_ONLY),
+    property(ASSET_ENTITY_TYPES.asset, 'display_name', '显示名称', { kind: 'string', minLength: 1, maxLength: 200 }),
     property(ASSET_ENTITY_TYPES.asset, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }, READ_ONLY),
     property(ASSET_ENTITY_TYPES.asset, 'tags', '标签', { kind: 'json', schemaRef: ASSET_TAGS_VALUE_SCHEMA_REF }),
     // 集合归属用 append / remove 两个属性修改操作表达，对应服务的 addToLibrary / removeFromLibrary。
@@ -70,7 +74,7 @@ const properties: Record<AssetEntityType, ApplicationPropertyDescriptor[]> = {
     property(ASSET_ENTITY_TYPES.asset, 'media_ref', '媒体引用', { kind: 'string', maxLength: 4096 }, READ_ONLY),
   ],
   [ASSET_ENTITY_TYPES.library]: [
-    property(ASSET_ENTITY_TYPES.library, 'name', '集合名称', { kind: 'string', minLength: 1, maxLength: 200 }, READ_ONLY),
+    property(ASSET_ENTITY_TYPES.library, 'name', '集合名称', { kind: 'string', minLength: 1, maxLength: 200 }),
   ],
 }
 
@@ -83,6 +87,16 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
 
   async listEntities(request: { cursor?: string; limit: number }) {
     const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
+    if (this.entityType === ASSET_ENTITY_TYPES.catalog) {
+      const libraries = await assetApplicationService.listLibraries()
+      return {
+        refs: offset === 0 && request.limit > 0
+          ? [{ kind: this.entityType, id: 'default', label: '素材库' }]
+          : [],
+        nextCursor: null,
+        revisions: { assets: Math.max(0, ...libraries.map((item) => Number(item.updatedAt) || 0)) },
+      }
+    }
     if (this.entityType === ASSET_ENTITY_TYPES.library) {
       const libraries = await assetApplicationService.listLibraries()
       const page = libraries.slice(offset, offset + request.limit)
@@ -110,7 +124,9 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
     if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
     const values = this.entityType === ASSET_ENTITY_TYPES.asset
       ? await this.readAsset(ref.id)
-      : await this.readLibrary(ref.id)
+      : this.entityType === ASSET_ENTITY_TYPES.library
+        ? await this.readLibrary(ref.id)
+        : await this.readCatalog(ref.id)
     const revisionKey = `${this.entityType}.updated_at`
     const visible = Object.fromEntries(Object.entries(values).filter(([id]) => id !== revisionKey))
     const selected = request.propertyIds
@@ -163,6 +179,15 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
       'asset.library.updated_at': Number(library.updatedAt) || 0,
     }
   }
+
+  private async readCatalog(catalogId: string): Promise<Record<string, JsonValue>> {
+    if (catalogId !== 'default') throw new Error('NOT_FOUND')
+    const libraries = await assetApplicationService.listLibraries()
+    return {
+      'asset.catalog.library_count': libraries.length,
+      'asset.catalog.updated_at': Math.max(0, ...libraries.map((item) => Number(item.updatedAt) || 0)),
+    }
+  }
 }
 
 export function createAssetReflectionRegistrations(): ApplicationEntityRegistration[] {
@@ -171,19 +196,28 @@ export function createAssetReflectionRegistrations(): ApplicationEntityRegistrat
       id: entityType,
       version: 1,
       domain: 'assets',
-      title: entityType === ASSET_ENTITY_TYPES.asset ? '素材' : '素材集合',
+      title: entityType === ASSET_ENTITY_TYPES.asset
+        ? '素材'
+        : entityType === ASSET_ENTITY_TYPES.library ? '素材集合' : '素材库根目录',
       description: '素材库中的稳定实体引用。',
       refKind: entityType,
       dataClass: 'C1',
       exposures: ['ui', 'assistant', 'local_adapter'],
-      parentTypes: [],
+      parentTypes: entityType === ASSET_ENTITY_TYPES.library ? [ASSET_ENTITY_TYPES.catalog] : [],
       revisionScopes: ['assets'],
       queryCapabilityIds: [entityType === ASSET_ENTITY_TYPES.asset ? 'get_asset' : 'list_asset_libraries'],
       schemaRef: schemaRef('entity', entityType),
-      // asset 本身有可写属性（tags / library_refs），只有集合实体整体只读
       ...(entityType === ASSET_ENTITY_TYPES.library ? {
+        collectionWrite: {
+          creatable: true,
+          removable: true,
+          requiredPropertyIds: ['asset.library.name'],
+          maxItemsPerChange: 32,
+        },
+      } : {}),
+      ...(entityType === ASSET_ENTITY_TYPES.catalog ? {
         writeExclusion: {
-          reason: '素材集合的创建与命名由素材库界面维护；素材与集合的归属关系改写 asset.library_refs。',
+          reason: '素材库根目录是固定容器；其子集合由 asset.library 集合写入执行器创建、删除和恢复。',
         },
       } : {}),
     },

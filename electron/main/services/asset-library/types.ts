@@ -28,6 +28,7 @@ export interface AssetDto {
 }
 
 export interface AssetLibraryDto { id: string; name: string; createdAt: number; updatedAt: number }
+export interface AssetLibrarySnapshotDto extends AssetLibraryDto { assetIds: string[] }
 export interface AssetPageDto { items: AssetDto[]; total: number; page: number; pageSize: number }
 export interface CreateAssetRequest { filePath: string; mediaType: AssetMediaType; displayName?: string; source: AssetSource; libraryIds?: string[] }
 export interface UpdateAssetRequest { id: string; displayName: string }

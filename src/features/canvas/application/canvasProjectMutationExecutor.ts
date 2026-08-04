@@ -15,6 +15,7 @@ type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 const logger = createLogger('features.canvas.project_mutation')
 
 const NAME_PROPERTY = `${CANVAS_ENTITY_TYPES.project}.name`
+const UNDO_PREFIX = 'canvas-project-undo:'
 
 /**
  * 画布工程属性写入执行器。
@@ -61,7 +62,7 @@ export class CanvasProjectMutationExecutor implements ApplicationMutationExecuto
         data: mutation.value ?? null,
         capturedAt: new Date().toISOString(),
       })),
-      undoToken: `canvas-project-undo:${projectId}:${previousName}`,
+      undoToken: `${UNDO_PREFIX}${JSON.stringify({ projectId, previousName })}`,
     }
   }
 
@@ -71,11 +72,12 @@ export class CanvasProjectMutationExecutor implements ApplicationMutationExecuto
   }
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
-    const rest = undoToken.slice('canvas-project-undo:'.length)
-    const separator = rest.indexOf(':')
-    const projectId = rest.slice(0, separator)
-    const previousName = rest.slice(separator + 1)
-    if (previousName) await renameCanvasProject(projectId, previousName)
+    if (!undoToken.startsWith(UNDO_PREFIX)) throw new Error('CANVAS_PROJECT_UNDO_INVALID')
+    const parsed = JSON.parse(undoToken.slice(UNDO_PREFIX.length)) as Record<string, unknown>
+    const projectId = typeof parsed.projectId === 'string' ? parsed.projectId : ''
+    const previousName = typeof parsed.previousName === 'string' ? parsed.previousName : ''
+    if (!projectId || !previousName) throw new Error('CANVAS_PROJECT_UNDO_INVALID')
+    await renameCanvasProject(projectId, previousName)
     const revision = this.revision()
     return {
       status: 'completed',

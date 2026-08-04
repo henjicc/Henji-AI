@@ -161,6 +161,21 @@ export class ApplicationReflectionRegistry {
     return [...(this.propertiesByEntity.get(entityType)?.values() ?? [])]
   }
 
+  /**
+   * 返回反射注册源声明的全部属性权限，供通用适配器建立内部访问上下文。
+   *
+   * 通用能力自身由 `application:read/write` 做外层授权；进入反射层后仍要满足领域属性权限。
+   * 这些权限必须从属性描述派生，不能在适配器里再维护一份会随新增领域漂移的白名单。
+   */
+  listDeclaredPropertyPermissions(): string[] {
+    const permissions = new Set<string>()
+    for (const property of this.properties.values()) {
+      for (const permission of property.requiredPermissions.read) permissions.add(permission)
+      for (const permission of property.requiredPermissions.write) permissions.add(permission)
+    }
+    return [...permissions].sort()
+  }
+
   getProvider(entityType: string): ApplicationEntityProvider | undefined {
     return this.providers.get(entityType)
   }

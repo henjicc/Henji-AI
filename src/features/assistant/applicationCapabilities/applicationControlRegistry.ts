@@ -29,6 +29,8 @@ import {
   type AssetMutationDependencies,
 } from '@/features/assets/application/assetMutationExecutor'
 import { createAssetReflectionRegistrations } from '@/features/assets/application/assetReflection'
+import { AssetLibraryMutationExecutor } from '@/features/assets/application/assetLibraryMutationExecutor'
+import { AssetLibraryCollectionExecutor } from '@/features/assets/application/assetLibraryCollectionExecutor'
 import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
 import { createStoryboardReflectionRegistrations } from '@/features/canvas/application/storyboardReflection'
 import { createToolboxReflectionRegistration } from '@/features/toolbox/application/toolboxReflection'
@@ -125,6 +127,14 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   next.registerMutationExecutor(new CanvasProjectMutationExecutor())
   // 素材：闭合 asset.tags 与 asset.library_refs 的悬空可写声明
   next.registerMutationExecutor(new AssetMutationExecutor({
+    readRevision: () => assetMutationDependencies.readRevision(),
+    bumpRevision: () => assetMutationDependencies.bumpRevision(),
+  }))
+  next.registerMutationExecutor(new AssetLibraryMutationExecutor({
+    readRevision: () => assetMutationDependencies.readRevision(),
+    bumpRevision: () => assetMutationDependencies.bumpRevision(),
+  }))
+  next.registerCollectionExecutor(new AssetLibraryCollectionExecutor({
     readRevision: () => assetMutationDependencies.readRevision(),
     bumpRevision: () => assetMutationDependencies.bumpRevision(),
   }))

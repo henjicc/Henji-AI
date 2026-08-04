@@ -1,6 +1,6 @@
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
-import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssets, listLibraries, listTags, queryAssets, rebaseAssetDataRoot, relocateAsset, removeAssetFromLibrary, renameLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
-import type { AssetMediaType, AssetQuery, AssetSource, CreateAssetRequest } from '../services/asset-library/types'
+import { addAssetToLibrary, checkAssetPaths, createAsset, createLibrary, deleteAsset, deleteLibrary, inspectAsset, inspectAssets, inspectLibrary, listLibraries, listTags, queryAssets, rebaseAssetDataRoot, relocateAsset, removeAssetFromLibrary, renameLibrary, restoreLibrary, setAssetTags, touchAsset, updateAsset } from '../services/asset-library'
+import type { AssetLibrarySnapshotDto, AssetMediaType, AssetQuery, AssetSource, CreateAssetRequest } from '../services/asset-library/types'
 import { createMainLogger } from '../services/logging'
 
 const logger = createMainLogger('main.asset_library')
@@ -15,6 +15,24 @@ function parsePair(input: unknown): { libraryId: string; assetId: string } { con
 function parseName(input: unknown): { id: string; name: string } { const record = parseRecord(input); return { id: requiredString(record, 'id'), name: requiredString(record, 'name') } }
 function parseQuery(input: unknown): AssetQuery { const record = parseRecord(input); const mediaType = typeof record.mediaType === 'string' && MEDIA_TYPES.has(record.mediaType as AssetMediaType) ? record.mediaType as AssetMediaType : undefined; return { mediaType, libraryId: typeof record.libraryId === 'string' ? record.libraryId : undefined, tag: typeof record.tag === 'string' ? record.tag : undefined, keyword: typeof record.keyword === 'string' ? record.keyword : undefined, page: Math.max(1, Number(record.page) || 1), pageSize: Math.min(200, Math.max(1, Number(record.pageSize) || 50)), sort: record.sort === 'recent' ? 'recent' : 'created' } }
 function parseAssetTags(input: unknown): { assetId: string; tags: string[] } { const record = parseRecord(input); if (!Array.isArray(record.tags) || !record.tags.every((tag) => typeof tag === 'string')) throw new Error('tags must be a string array'); return { assetId: requiredString(record, 'assetId'), tags: record.tags } }
+function parseLibrarySnapshot(input: unknown): AssetLibrarySnapshotDto {
+  const record = parseRecord(input)
+  if (!Array.isArray(record.assetIds) || !record.assetIds.every((id) => typeof id === 'string' && id.trim())) {
+    throw new Error('assetIds must contain non-empty strings')
+  }
+  const createdAt = Number(record.createdAt)
+  const updatedAt = Number(record.updatedAt)
+  if (!Number.isFinite(createdAt) || createdAt < 0 || !Number.isFinite(updatedAt) || updatedAt < 0) {
+    throw new Error('createdAt and updatedAt must be non-negative numbers')
+  }
+  return {
+    id: requiredString(record, 'id'),
+    name: requiredString(record, 'name'),
+    createdAt,
+    updatedAt,
+    assetIds: record.assetIds,
+  }
+}
 
 export function registerAssetLibraryIpc(): void {
   logger.info('开始注册资产库 IPC', { event: 'asset_library.ipc.register.start' })
@@ -28,9 +46,11 @@ export function registerAssetLibraryIpc(): void {
   registerIpcHandler('assetLibrary:inspectAssets', parseIds, inspectAssets)
   registerIpcHandler('assetLibrary:relocateAsset', (input) => { const record = parseRecord(input); return { id: requiredString(record, 'id'), filePath: requiredString(record, 'filePath') } }, ({ id, filePath }) => relocateAsset(id, filePath))
   registerIpcHandler('assetLibrary:listLibraries', parseVoid, listLibraries)
+  registerIpcHandler('assetLibrary:inspectLibrary', (input) => parseStringField(input, 'id'), inspectLibrary)
   registerIpcHandler('assetLibrary:createLibrary', (input) => parseStringField(input, 'name'), createLibrary)
   registerIpcHandler('assetLibrary:renameLibrary', parseName, ({ id, name }) => renameLibrary(id, name))
   registerIpcHandler('assetLibrary:deleteLibrary', (input) => parseStringField(input, 'id'), deleteLibrary)
+  registerIpcHandler('assetLibrary:restoreLibrary', parseLibrarySnapshot, restoreLibrary)
   registerIpcHandler('assetLibrary:addToLibrary', parsePair, ({ libraryId, assetId }) => addAssetToLibrary(libraryId, assetId))
   registerIpcHandler('assetLibrary:removeFromLibrary', parsePair, ({ libraryId, assetId }) => removeAssetFromLibrary(libraryId, assetId))
   registerIpcHandler('assetLibrary:listTags', parseVoid, listTags)
@@ -38,6 +58,6 @@ export function registerAssetLibraryIpc(): void {
   registerIpcHandler('assetLibrary:rebaseDataRoot', (input) => { const record = parseRecord(input); return { oldRoot: requiredString(record, 'oldRoot'), newRoot: requiredString(record, 'newRoot') } }, ({ oldRoot, newRoot }) => rebaseAssetDataRoot(oldRoot, newRoot))
   logger.info('资产库 IPC 注册完成', {
     event: 'asset_library.ipc.register.completed',
-    context: { handlerCount: 18 },
+    context: { handlerCount: 20 },
   })
 }

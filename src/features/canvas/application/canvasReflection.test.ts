@@ -8,6 +8,7 @@ import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 
 import { CanvasNodeMutationExecutor } from './canvasMutationExecutor'
+import { CanvasProjectMutationExecutor } from './canvasProjectMutationExecutor'
 import { CANVAS_ENTITY_TYPES, createCanvasReflectionRegistrations } from './canvasReflection'
 import * as canvasMutationService from './canvasMutationService'
 
@@ -85,6 +86,37 @@ describe('canvas reflection and mutation', () => {
       'canvas.node.display_name',
       'canvas.node.position',
     ])
+    const projectRegistration = registrations.find((item) => item.entity.id === CANVAS_ENTITY_TYPES.project)
+    expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')).toMatchObject({
+      requiredPermissions: { write: ['canvas:write'] },
+    })
+    expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')?.readOnlyReason)
+      .toBeUndefined()
+  })
+
+  it('通过通用工程属性执行器改名并撤销包含冒号的旧名称', async () => {
+    const oldProject = project(node())
+    oldProject.name = '旧:项目名'
+    useProjectStore.setState({
+      projects: [oldProject],
+      currentProject: oldProject,
+      renameProject: (id, name) => useProjectStore.setState((state) => ({
+        projects: state.projects.map((item) => item.id === id ? { ...item, name } : item),
+        currentProject: state.currentProject?.id === id ? { ...state.currentProject, name } : state.currentProject,
+      })),
+    })
+    const executor = new CanvasProjectMutationExecutor()
+    const result = await executor.apply({
+      kind: 'mutation',
+      target: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
+      entityType: CANVAS_ENTITY_TYPES.project,
+      expectedRevisions: { canvas: 2 },
+      mutations: [{ propertyId: 'canvas.project.name', operation: 'set', value: '新项目名' }],
+    })
+    expect(useProjectStore.getState().projects.find((item) => item.id === projectId)?.name).toBe('新项目名')
+
+    await executor.undo(String(result.undoToken))
+    expect(useProjectStore.getState().projects.find((item) => item.id === projectId)?.name).toBe('旧:项目名')
   })
 
   it('原子更新节点标题与位置并可整体撤销', async () => {
