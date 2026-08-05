@@ -72,6 +72,11 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   targetIds: (input: TInput) => Record<string, string>
   dataClasses: (output: TOutput) => AgentDataClass[]
   summarize: (output: TOutput) => string
+  /**
+   * 结果写入对话历史时的投影；见 ApplicationCapabilityDefinition.projectForHistory。
+   * 未声明时结果按原样内联。只影响 tool 消息，不影响 observation 本体与结算证据。
+   */
+  projectForHistory?: (output: TOutput) => unknown
   undo?: (output: TOutput) => AgentToolObservation['undo']
 }
 

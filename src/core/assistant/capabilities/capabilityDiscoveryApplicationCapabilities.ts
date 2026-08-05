@@ -7,6 +7,10 @@ import {
 } from '../capabilityDiscovery'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { capabilityControl, defineApplicationCapability } from './defineApplicationCapability'
+import {
+  CAPABILITY_DISCOVERY_HISTORY_OMITTED_KEYS,
+  omitRecordKeys,
+} from './historyProjection'
 
 const schemaRefAiSchema = {
   type: 'object',
@@ -85,6 +89,28 @@ export const discoverApplicationCapabilitiesCapability = defineApplicationCapabi
     `批量发现 ${output.facets.length} 个 Facet，返回 ${output.capabilities.length} 项能力`
     + `${output.missing.length > 0 ? `，${output.missing.length} 个 Facet 缺失` : ''}${output.reused ? '（复用缓存）' : ''}。`
   ),
+  /*
+   * 发现结果是整次运行里最大的一条工具结果（实测单条 29.9KB = 那次运行对话历史的 38%），
+   * 而它体积的大头恰好是**同一轮 `tools` 参数已经发过一遍**的输入 schema：
+   * `capabilities[].schemaRef` 3.7KB + `facets[].schemaRefs` 11.2KB，其中未被租约覆盖、
+   * 也就是真正只能靠 `read_application_schemas` 取回的部分只有 12 字节。
+   *
+   * 所以 schemaRefs 按租约过滤而不是一刀切：已租约的工具模型这轮就拿着完整 schema，
+   * 未租约（deferred）的才留下引用，读取路径不受影响。
+   */
+  projectForHistory: (output) => {
+    const leased = new Set(output.leasedToolNames)
+    return {
+      ...output,
+      capabilities: omitRecordKeys(output.capabilities, CAPABILITY_DISCOVERY_HISTORY_OMITTED_KEYS),
+      facets: output.facets.map((facet) => ({
+        ...facet,
+        schemaRefs: facet.schemaRefs.filter((ref) => !leased.has(ref.id)),
+      })),
+      note: '已租约能力的输入 schema 由本轮 tools 参数提供，本记录不再重复；'
+        + 'schemaRefs 只保留尚未租约的候选，需要时用 read_application_schemas 读取。',
+    }
+  },
 })
 
 export const readApplicationSchemasCapability = defineApplicationCapability({

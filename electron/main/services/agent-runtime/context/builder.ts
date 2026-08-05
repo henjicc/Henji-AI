@@ -35,6 +35,26 @@ function withoutSystemMessages(messages: ModelStepMessage[]): ModelStepMessage[]
   return messages.filter((message) => message.role !== 'system')
 }
 
+/**
+ * 上一轮的前缀缓存表现，只进日志不参与任何判定。
+ *
+ * 供应商没报告缓存字段时整组省略，避免把「未报告」记成 0 而被误读成「一次都没命中」。
+ */
+function cacheUsageContext(
+  usage: AgentContextBuildInput['lastModelUsage']
+): Record<string, number | null> {
+  if (!usage || usage.cacheReadTokens === undefined || usage.cacheReadTokens === null) return {}
+  return {
+    lastInputTokens: usage.inputTokens,
+    lastCacheReadTokens: usage.cacheReadTokens,
+    lastCacheWriteTokens: usage.cacheWriteTokens ?? null,
+    lastInputNoCacheTokens: usage.inputNoCacheTokens ?? null,
+    lastCacheHitRatio: usage.inputTokens > 0
+      ? Math.round((usage.cacheReadTokens / usage.inputTokens) * 1_000) / 1_000
+      : 0,
+  }
+}
+
 export class AgentContextBuilder {
   constructor(private readonly artifactStore = new AgentArtifactStore()) {}
 
@@ -158,6 +178,9 @@ export class AgentContextBuilder {
         compactionThreshold: threshold,
         hardCompactionThreshold: resolveContextHardThreshold(input.contextWindowBudget),
         contextPressure,
+        // 上一轮供应商真实报告的前缀缓存表现。没有它，"稳定层 → 对话历史 → 易变层"这次
+        // 排序改动有没有生效就只能靠猜——排查时先看 cacheHitRatio 再谈别的。
+        ...cacheUsageContext(usageBaseline),
         maxOutputTokens: input.maxOutputTokens ?? null,
         compacted,
         compactionReason,

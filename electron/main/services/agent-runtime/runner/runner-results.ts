@@ -52,10 +52,62 @@ export function serializeError(error: unknown): SerializedAgentError {
   }
 }
 
+/**
+ * 工具失败信封 `{ ok: false, error: { code } }`。
+ *
+ * 定义放在这里而不是 facet-effect-ledger，是因为后者已经 import 本模块，反向引用会成环。
+ */
+export function failureEnvelope(output: unknown): { code: string; message?: string; recovery?: string } | null {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return null
+  const record = output as Record<string, unknown>
+  if (record.ok !== false) return null
+  const error = record.error
+  if (!error || typeof error !== 'object' || Array.isArray(error)) return null
+  const value = error as Record<string, unknown>
+  if (typeof value.code !== 'string') return null
+  return {
+    code: value.code,
+    ...(typeof value.message === 'string' ? { message: value.message } : {}),
+    ...(typeof value.recovery === 'string' ? { recovery: value.recovery } : {}),
+  }
+}
+
+/**
+ * 结果进入历史前先做一次投影，投影失败就退回原样。
+ *
+ * 投影函数由领域侧声明（见 ApplicationCapabilityDefinition.projectForHistory），签名按能力自己的
+ * output schema 写。但网关在工具失败时返回的是 `{ ok: false, error }` 信封，形状与 schema 完全
+ * 不同——实测库里就有两条能力发现失败结果会让投影函数直接抛 TypeError。失败信封本来也没有可裁的
+ * 体积，先判掉比让 catch 静默吞掉更诚实。
+ *
+ * catch 仍然保留作最后一道：一个字段裁剪出错不该掀翻整次运行，退回完整结果只是上下文变大。
+ */
+function projectHistoryOutput(
+  call: ModelStepToolCall,
+  observation: AgentToolObservation,
+  resolveProjection?: AgentHistoryProjectionResolver
+): unknown {
+  if (failureEnvelope(observation.output)) return observation.output
+  const project = resolveProjection?.(call.toolName)
+  if (!project) return observation.output
+  try {
+    const projected = project(observation.output)
+    return projected === undefined ? observation.output : projected
+  } catch {
+    return observation.output
+  }
+}
+
+/** 按工具名解析历史投影函数；由 runner 从工具注册表注入，避免结果层反向依赖 registry。 */
+export type AgentHistoryProjectionResolver = (
+  toolName: string
+) => ((output: unknown) => unknown) | undefined
+
 export function toolMessage(
   call: ModelStepToolCall,
   observation: AgentToolObservation,
-  contextWindow?: number | null
+  contextWindow?: number | null,
+  resolveProjection?: AgentHistoryProjectionResolver
 ): ModelStepMessage {
   // 门槛按本轮真实上下文窗口算：窗口大就直接内联，避免“结果过早卸载 → 模型看不到内容
   // → 逐页读回来”的循环。模型目录另有 24 KiB 下限，保证候选一次到位。
@@ -63,9 +115,12 @@ export function toolMessage(
   const offloadThreshold = call.toolName === 'search_models'
     ? Math.max(24 * 1024, resolved)
     : resolved
-  const output = shouldOffloadObservation(observation.output, offloadThreshold)
+  // 卸载判定量的必须是**投影后**的体积：先裁再判，一份裁完只剩 7KB 的目录就不该被推去分页。
+  const projected = projectHistoryOutput(call, observation, resolveProjection)
+  const output = shouldOffloadObservation(projected, offloadThreshold)
     ? { summary: observation.summary, largeResultOmitted: true }
-    : { summary: observation.summary, data: sanitizeObservationValue(observation.output) }
+    : { summary: observation.summary, data: sanitizeObservationValue(projected) }
+  // 租约一律从**完整** output 提取：投影只决定模型看到什么，不能影响跨运行的租约恢复。
   const outputRecord = observation.output
     && typeof observation.output === 'object'
     && !Array.isArray(observation.output)

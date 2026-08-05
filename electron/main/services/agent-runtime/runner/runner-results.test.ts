@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
+import {
+  discoverApplicationCapabilitiesCapability,
+} from '../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
+import { createBackendCapabilityTool } from '../tools/backend-capability-tool'
+import {
+  createFrontendApplicationCapabilityTools,
+} from '../tools/builtin/frontend-capabilities'
 import { AgentStopPolicyExceededError } from './budget'
 import { extractResultReferences, serializeError, toolMessage } from './runner-results'
 
@@ -95,5 +102,101 @@ describe('Agent 结果引用', () => {
     }, observation({ evidence: 'x'.repeat(9_000) }))
 
     expect(JSON.stringify(message)).toContain('largeResultOmitted')
+  })
+})
+
+/*
+ * 历史投影：结果写进对话历史前先裁掉模型用不上的字段。
+ *
+ * 起因是实测里两条参考文档型结果（能力发现 29.9KB + 实体结构 15.5KB）吃掉了整次运行对话
+ * 历史的 58%。事后清理要作废缓存前缀且实测回不了本，所以只能在写入前裁。裁的是 tool 消息，
+ * observation 本体必须完好——结算、Effect Ledger、租约恢复全靠它。
+ */
+describe('工具结果的历史投影接线', () => {
+  it('能力上声明的投影确实到达工具定义（前端与后端两条转换路径）', () => {
+    // 只在能力上声明、忘了在 capability → AgentToolDefinition 的转换里透传，是纯静默失效：
+    // 测试全绿、类型全过，只有上下文继续变大。这条把两条转换路径都钉住。
+    const frontend = createFrontendApplicationCapabilityTools(async () => ({ ok: true } as never))
+      .find((tool) => tool.name === 'describe_application_entities')
+    expect(frontend?.projectForHistory).toBeTypeOf('function')
+
+    const backend = createBackendCapabilityTool(discoverApplicationCapabilitiesCapability, {
+      execute: async () => { throw new Error('本用例不执行') },
+    })
+    expect(backend.projectForHistory).toBeTypeOf('function')
+  })
+
+  const call = { toolCallId: 'call-p', toolName: 'describe_application_entities', input: {}, dynamic: false }
+  const bulky = observation({ ok: true, keep: 'value', drop: 'x'.repeat(200) })
+  const dropField = (): ((output: unknown) => unknown) => (output) => {
+    const { drop: _drop, ...rest } = output as Record<string, unknown>
+    return rest
+  }
+
+  it('声明了投影的工具只把投影结果写进历史', () => {
+    const serialized = JSON.stringify(toolMessage(call, bulky, 1_000_000, dropField))
+    expect(serialized).toContain('"keep":"value"')
+    expect(serialized).not.toContain('"drop"')
+    // observation 本体不能被改动：结算与 artifact 卸载都读它。
+    expect((bulky.output as Record<string, unknown>).drop).toHaveLength(200)
+  })
+
+  it('未声明投影的工具行为与声明前一致', () => {
+    const withoutResolver = JSON.stringify(toolMessage(call, bulky, 1_000_000))
+    const withEmptyResolver = JSON.stringify(toolMessage(call, bulky, 1_000_000, () => undefined))
+    expect(withEmptyResolver).toBe(withoutResolver)
+    expect(withoutResolver).toContain('"drop"')
+  })
+
+  it('卸载判定量的是投影后的体积，投影完不超门槛就不再推去分页', () => {
+    const large = observation({ ok: true, blob: 'x'.repeat(20 * 1024) })
+    const stripBlob: (output: unknown) => unknown = (output) => {
+      const { blob: _blob, ...rest } = output as Record<string, unknown>
+      return rest
+    }
+    expect(JSON.stringify(toolMessage(call, large, 8_000))).toContain('largeResultOmitted')
+    expect(JSON.stringify(toolMessage(call, large, 8_000, () => stripBlob)))
+      .not.toContain('largeResultOmitted')
+  })
+
+  it('工具失败信封不进投影：形状与能力 output schema 完全不同', () => {
+    // 实测库里就有两条能力发现失败结果，喂给按 output schema 写的投影函数会直接抛 TypeError。
+    // 失败信封本来也没有可裁的体积，先判掉比让 catch 静默吞掉更诚实。
+    const failed = observation({
+      ok: false,
+      error: { code: 'INVALID_INPUT', message: '能力发现必须原样使用当前依赖前沿', recovery: 'user_action' },
+    })
+    const serialized = JSON.stringify(toolMessage(call, failed, 1_000_000, () => () => {
+      throw new Error('投影函数按成功结果的形状写，不该被调到')
+    }))
+    expect(serialized).toContain('INVALID_INPUT')
+    expect(serialized).toContain('能力发现必须原样使用当前依赖前沿')
+  })
+
+  it('投影抛错时退回完整结果，不掀翻本轮工具调用', () => {
+    const serialized = JSON.stringify(toolMessage(call, bulky, 1_000_000, () => () => {
+      throw new Error('投影实现有 bug')
+    }))
+    expect(serialized).toContain('"drop"')
+  })
+
+  it('租约与 Facet 租约仍从完整结果提取，不受投影影响', () => {
+    const leaseObservation = observation({
+      leasedToolNames: ['place_camera_stage_object'],
+      facets: [{ facetId: 'camera_scene', capabilityNames: ['place_camera_stage_object'] }],
+      drop: 'x'.repeat(200),
+    })
+    const message = toolMessage(
+      { ...call, toolName: 'discover_application_capabilities' },
+      leaseObservation,
+      1_000_000,
+      dropField
+    )
+    const part = message.content[0] as Record<string, unknown>
+    expect(part.leasedToolNames).toEqual(['place_camera_stage_object'])
+    expect(part.toolLeases).toEqual([
+      { facetId: 'camera_scene', toolNames: ['place_camera_stage_object'] },
+    ])
+    expect(JSON.stringify(message)).not.toContain('"drop"')
   })
 })

@@ -261,7 +261,12 @@ export class AgentRunner {
         if (visual.success) this.pendingVisualAttachments.push(visual.data)
         this.conversationJournal.appendInternal(
           'tool_result',
-          toolMessage(call, observation, this.models.primary.limits.contextWindow),
+          toolMessage(
+            call,
+            observation,
+            this.models.primary.limits.contextWindow,
+            (toolName) => options.dependencies.registry.get(toolName)?.projectForHistory
+          ),
           `tool:${call.toolCallId}`
         )
         this.recoveryGuard.observe(call, observation)
@@ -593,10 +598,7 @@ export class AgentRunner {
         })
         context = primary.context
         const result = primary.result
-        this.turnContextCoordinator.recordModelInputUsage(
-          result.usage.inputTokens,
-          this.conversation.length
-        )
+        this.turnContextCoordinator.recordModelInputUsage(result.usage, this.conversation.length)
         if (!await persistValidatedModelResponse({
           result,
           guard: this.modelOutputGuard,

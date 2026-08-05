@@ -3,6 +3,10 @@ import { z } from 'zod'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import type { HostScope } from '../hostContracts'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
+import {
+  APPLICATION_REFLECTION_HISTORY_OMITTED_KEYS,
+  omitRecordKeys,
+} from './historyProjection'
 
 /**
  * 反射层的通用能力。**这是"不用逐个适配"的落点。**
@@ -44,6 +48,19 @@ const describeEntities = defineApplicationCapability({
   resolveConcurrencyKey: () => 'application:describe',
   resolveTargetIds: () => ({}),
   summarize: (output) => `返回 ${output.entities.length} 个实体类型、${output.properties.length} 条属性。`,
+  /*
+   * 实体结构文档是运行里第二大的工具结果（实测单条 76KB / 110 条属性）。按字段归因，
+   * `schemaRef` 23.2KB、`requiredPermissions` 5.1KB、`exposures` 3.7KB、`revisionScopes` 1.2KB、
+   * `dataClass` 0.4KB —— 合计 65% 全是模型无法行动的内容：权限与并发由网关强制执行，
+   * 属性 digest 没有任何模型侧用法，而 schemaRef 的 id/version 只是把属性自身抄了一遍。
+   *
+   * 写属性真正需要的是 id、entityType、title、description 和值约束，这些一条不动。
+   */
+  projectForHistory: (output) => ({
+    ...output,
+    entities: omitRecordKeys(output.entities, APPLICATION_REFLECTION_HISTORY_OMITTED_KEYS),
+    properties: omitRecordKeys(output.properties, APPLICATION_REFLECTION_HISTORY_OMITTED_KEYS),
+  }),
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'observed' }, impacts: [{
     effect: 'observe', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: false,
   }] },

@@ -81,6 +81,19 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   resolveTargetIds?(input: TInput): Record<string, string>
   resolveDataClasses?(output: TOutput): AgentDataClass[]
   summarize?(output: TOutput): string
+  /**
+   * 结果写入对话历史时的投影。
+   *
+   * 只影响那条 `role:'tool'` 消息。observation 本体、Effect Ledger、Facet 结算、卸载判定读的
+   * 都是完整 output，不受影响；未声明本钩子的能力按原样内联，行为与声明前逐字节一致。
+   *
+   * 存在的理由：实测一次三维任务里，`discover_application_capabilities` 一条 29.9KB、
+   * `describe_application_entities` 一条 15.5KB，两条就吃掉整次运行对话历史的 58%，而里面
+   * 占大头的是每轮 `tools` 参数已经带过的输入 schema，以及权限、暴露面、数据分级这些由网关
+   * 强制执行、模型压根无法行动的字段。事后再去历史里清理要作废缓存前缀（实测回本需 ~6 轮，
+   * 而一次运行只有 ~13 轮），所以只能在写入前就不放进去。
+   */
+  projectForHistory?(output: TOutput): unknown
   preview?(input: TInput): AgentToolPreview
   createUndo?(output: TOutput): AgentToolObservation['undo']
   resolveObservedEffects?(input: TInput, output: TOutput): AgentObservedEffect[]
@@ -107,6 +120,7 @@ export class ApplicationCapabilityRegistry {
       resolveTargetIds: _resolveTargetIds,
       resolveDataClasses: _resolveDataClasses,
       summarize: _summarize,
+      projectForHistory: _projectForHistory,
       preview: _preview,
       createUndo: _createUndo,
       resolveObservedEffects: _resolveObservedEffects,
@@ -162,6 +176,7 @@ export class ApplicationCapabilityRegistry {
         resolveTargetIds: _resolveTargetIds,
         resolveDataClasses: _resolveDataClasses,
         summarize: _summarize,
+        projectForHistory: _projectForHistory,
         preview: _preview,
       createUndo: _createUndo,
       resolveObservedEffects: _resolveObservedEffects,

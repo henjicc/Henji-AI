@@ -12,7 +12,11 @@ import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import { createMainLogger } from '../../logging'
 import type { AgentToolRegistry } from '../tools/registry'
 import { digestJson } from '../tools/security'
-import { extractResultReferences, extractResultScopeRevisions } from './runner-results'
+import {
+  extractResultReferences,
+  extractResultScopeRevisions,
+  failureEnvelope,
+} from './runner-results'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -60,14 +64,12 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
 export function observationFailure(
   observation: AgentToolObservation
 ): ObservationFailure | null {
-  const output = asRecord(observation.output)
-  if (output?.ok !== false) return null
-  const error = asRecord(output.error)
-  if (!error || typeof error.code !== 'string') return null
+  const failure = failureEnvelope(observation.output)
+  if (!failure) return null
   return {
-    code: error.code,
-    message: typeof error.message === 'string' ? error.message : observation.summary,
-    recovery: typeof error.recovery === 'string' ? error.recovery : 'none',
+    code: failure.code,
+    message: failure.message ?? observation.summary,
+    recovery: failure.recovery ?? 'none',
   }
 }
 

@@ -142,6 +142,16 @@ export interface AgentContextBuildInput {
   lastModelUsage?: {
     inputTokens: number
     conversationMessageCount: number
+    /**
+     * 上一轮供应商实际报告的前缀缓存命中/写入量。
+     *
+     * 只用于日志，不参与任何阈值计算。补它是因为「稳定层 → 对话历史 → 易变层」这个顺序
+     * 到底有没有让缓存命中率涨起来，在生产日志里查不到任何证据——`ModelStepUsage` 早就有
+     * 这几个字段，只是从来没有往结构化日志里写过。
+     */
+    cacheReadTokens?: number | null
+    cacheWriteTokens?: number | null
+    inputNoCacheTokens?: number | null
   }
 }
 

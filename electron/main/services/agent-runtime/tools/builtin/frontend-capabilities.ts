@@ -134,6 +134,9 @@ function adaptCapability(
         ? output as Record<string, unknown>
         : {}
     ),
+    projectForHistory: definition.projectForHistory
+      ? (output) => definition.projectForHistory?.(output)
+      : undefined,
     undo: definition.supportsUndo
       ? (output) => {
           const declared = definition.createUndo?.(output)

@@ -67,6 +67,9 @@ export function createBackendCapabilityTool<TInput, TOutput>(
       ?? capability.dataClasses,
     summarize: (output) => capability.summarize?.(output)
       ?? `${capability.title}已完成。`,
+    projectForHistory: capability.projectForHistory
+      ? (output) => capability.projectForHistory?.(output)
+      : undefined,
     undo: capability.supportsUndo
       ? (output) => capability.createUndo?.(output)
       : undefined,

@@ -2,7 +2,7 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage, ModelStepUsage } from '../../../../../src/core/llm/modelStep'
 import type { AgentTurnSnapshotDraft } from '../../../../../src/core/assistant/turn'
 import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import { listEnabledAssistantSkills } from '../../assistant/skills/registry'
@@ -46,6 +46,9 @@ export class AgentTurnContextCoordinator {
   private lastModelUsage: {
     inputTokens: number
     conversationMessageCount: number
+    cacheReadTokens?: number | null
+    cacheWriteTokens?: number | null
+    inputNoCacheTokens?: number | null
   } | undefined
 
   /** 每次运行只扫一次技能目录，之后各轮复用；本运行期间新装的技能下次运行才生效。 */
@@ -58,9 +61,15 @@ export class AgentTurnContextCoordinator {
     return this.skills
   }
 
-  recordModelInputUsage(inputTokens: number | null, conversationMessageCount: number): void {
-    if (inputTokens === null || inputTokens <= 0) return
-    this.lastModelUsage = { inputTokens, conversationMessageCount }
+  recordModelInputUsage(usage: ModelStepUsage, conversationMessageCount: number): void {
+    if (usage.inputTokens === null || usage.inputTokens <= 0) return
+    this.lastModelUsage = {
+      inputTokens: usage.inputTokens,
+      conversationMessageCount,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      inputNoCacheTokens: usage.inputNoCacheTokens,
+    }
   }
 
   async prepare(input: PrepareTurnContextInput): Promise<{
