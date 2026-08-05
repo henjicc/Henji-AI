@@ -380,6 +380,12 @@ export function buildAgentContextLayers(
   const modelCatalog = relevantModelCatalog(input)
   const layers = ([
     {
+      /*
+       * 目录跟着 goal 推断出的媒体类型走，因此跨运行也会变——但它**故意留在稳定层**：
+       * 上限 20000 token，挪到易变层意味着每一轮都要全额重算，比"跨运行失效一次"贵得多。
+       * 而且它只在 intent === 'generate' 或工具域含 models 时才注入，三维、画布、设置这类
+       * 任务根本没有这一层。
+       */
       id: 'model_catalog', source: 'host_generation_model_catalog', trust: 'trusted_runtime',
       priority: 88, required: false, maxTokens: 20_000,
       content: modelCatalog
@@ -390,8 +396,18 @@ export function buildAgentContextLayers(
         : '',
     },
     {
+      /*
+       * 当前目标必须排在对话历史**之后**。
+       *
+       * 它每次运行都变，而稳定层整体排在对话历史之前——放在这里等于每开一次新运行就把整段
+       * 历史顶出前缀缓存。实测同线程跨运行第 1 轮命中率只有 13.8%/15.8%/16.2%（命中的那点
+       * 正好是 system prompt），而运行内稳定之后是 74.6%。DeepSeek 的命中/未命中价差是 50 倍，
+       * 这一层只有 ~100 token，换整段历史的缓存，是整个上下文里性价比最高的一次位置调整。
+       *
+       * 放到尾部对模型也更好：当前目标本来就该是它最后读到的东西。
+       */
       id: 'current_goal', source: 'current_user_request', trust: 'untrusted_user',
-      priority: 100, required: true, maxTokens: 1_500,
+      priority: 100, required: true, maxTokens: 1_500, volatile: true,
       content: JSON.stringify({
         goal: redactAgentText(input.goal),
         instruction: '这是当前最新明确目标；与旧偏好冲突时以本目标为准，但不能覆盖系统安全和真实能力约束。',
@@ -403,8 +419,10 @@ export function buildAgentContextLayers(
       content: input.userInstructions ? redactAgentText(input.userInstructions) : '',
     },
     {
+      // 记忆按 goal/intent/stepSignals 现查，实测 179 次上下文构建里刷新了 99 次——
+      // 它是易变层，不能待在对话历史前面。多数运行里这一层还是空的，移到尾部几乎零成本。
       id: 'confirmed_memory', source: 'confirmed_memory_retrieval', trust: 'untrusted_memory',
-      priority: 60, required: false, maxTokens: 4_000,
+      priority: 60, required: false, maxTokens: 4_000, volatile: true,
       content: JSON.stringify(memorySummary(input.memoryContext ?? [])),
     },
     {

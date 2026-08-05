@@ -475,14 +475,26 @@ describe('AgentContextBuilder', () => {
     const serialized = result.messages.map((message) => String(message.content))
     const lastHistoryIndex = serialized.findIndex((text) => text.includes('历史消息-5'))
     expect(lastHistoryIndex).toBeGreaterThanOrEqual(0)
-    for (const volatileLayerId of ['plan_state', 'host_state', 'observations', 'tool_contracts']) {
+    /*
+     * current_goal 与 confirmed_memory 也必须排在历史之后。
+     *
+     * 这条断言原本是反的（要求 current_goal 在历史之前，"一起进入可缓存前缀"）——但 current_goal
+     * 每开一次新运行就变，放在历史前面等于每次运行都把整段历史顶出缓存。补上缓存遥测之后实测：
+     * 同线程跨运行第 1 轮命中率只有 13.8%/15.8%/16.2%（命中的正好是 system prompt 那一段），
+     * 运行内稳定后 74.6%。confirmed_memory 同理，179 次上下文构建里刷新了 99 次。
+     */
+    for (const volatileLayerId of [
+      'plan_state', 'host_state', 'observations', 'tool_contracts',
+      'current_goal', 'confirmed_memory',
+    ]) {
       const index = serialized.findIndex((text) => text.includes(`id=${volatileLayerId}`))
       expect(index, `${volatileLayerId} 必须排在对话历史之后`).toBeGreaterThan(lastHistoryIndex)
     }
-    // 稳定层仍然排在历史之前，一起进入可缓存前缀。
-    const goalIndex = serialized.findIndex((text) => text.includes('id=current_goal'))
-    expect(goalIndex).toBeGreaterThanOrEqual(0)
-    expect(goalIndex).toBeLessThan(lastHistoryIndex)
+    // 真正不变的层仍然排在历史之前，一起进入可缓存前缀。
+    for (const stableLayerId of ['skills_index', 'user_instructions']) {
+      const index = serialized.findIndex((text) => text.includes(`id=${stableLayerId}`))
+      if (index >= 0) expect(index, `${stableLayerId} 必须排在对话历史之前`).toBeLessThan(lastHistoryIndex)
+    }
   })
 
   it('没有已启用技能时完全不注入 skills_index 层', () => {

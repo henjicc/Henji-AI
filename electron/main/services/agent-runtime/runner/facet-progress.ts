@@ -9,6 +9,8 @@ import type { AgentObservedEffect, AgentTaskActionGroup, AgentTaskFacet, AgentTa
 import type { AgentToolErrorCode, AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import type { AgentToolRegistry } from '../tools/registry'
+import { createMainLogger } from '../../logging'
+import { AGENT_LEASE_FRONTIER_FACET_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { digestJson } from '../tools/security'
 import {
   AgentEffectLedger,
@@ -39,6 +41,8 @@ import {
   listDiscoverableFacets,
 } from '../../../../../src/core/assistant/capabilityDiscovery'
 
+const logger = createMainLogger('main.agent_runtime')
+
 export interface AgentProgressGuardDecision {
   code?: AgentToolErrorCode
   reason: string
@@ -61,6 +65,9 @@ export class AgentFacetProgressTracker {
   /** 允许在 Facet 自身 domain 之外额外搜索的领域（会话延续证据 + 模型自报需求的并集）。 */
   private readonly extraDiscoveryDomains = new Set<string>()
 
+  /** 路由判定的领域，只用于遥测：补建的 Facet 落在这之外就说明路由判错了。 */
+  private readonly routeDomains: readonly string[]
+
   constructor(
     initialTaskGraph: AgentTaskGraph,
     private readonly registry: AgentToolRegistry,
@@ -70,6 +77,10 @@ export class AgentFacetProgressTracker {
     continuationDomains: readonly string[] = []
   ) {
     for (const domain of continuationDomains) this.extraDiscoveryDomains.add(domain)
+    this.routeDomains = [...new Set([
+      ...continuationDomains,
+      ...initialTaskGraph.facets.map((facet) => facet.domain),
+    ])]
     this.taskGraph = initialTaskGraph
     this.requiresExplicitActionPlan = requiresExplicitActionPlan
     for (const facetId of restoredLeaseFacetIds) {
@@ -121,10 +132,13 @@ export class AgentFacetProgressTracker {
         definition.category,
         definition.capability?.domain ?? definition.category,
       ])),
+      // 有过观察摘要就说明这个 Facet 已经动过手，不允许被一句话作废。
+      touchedFacetIds: new Set(this.observationDigests.keys()),
     })
   }
 
   commitDeclaredActionPlan(prepared: Extract<PreparedDeclaredActionPlan, { ok: true }>): void {
+    const before = new Map([...this.facets].map(([id, facet]) => [id, facet.status]))
     this.taskGraph = prepared.taskGraph
     this.requiresExplicitActionPlan = false
     this.facets.clear()
@@ -133,6 +147,87 @@ export class AgentFacetProgressTracker {
       if (prepared.declaredFacetIds.has(facet.facetId)) this.observationDigests.delete(facet.facetId)
     }
     this.effectLedger.rebuild(prepared.taskGraph, prepared.declaredFacetIds)
+    /*
+     * 记录"路由结论被推翻"这件事本身。
+     *
+     * "要不要保留独立的意图路由模型"目前无法回答，因为没有任何数据说明它多久错一次——上一轮
+     * 那个 3/3 全错是人工翻日志得到的。补建与作废是路由判错的唯一可观测信号，从这里开始计量。
+     */
+    for (const facet of prepared.taskGraph.facets) {
+      const previousStatus = before.get(facet.facetId)
+      if (previousStatus === undefined) {
+        logger.info('Agent 任务图补建 Facet', {
+          event: 'agent_task_graph.facet.declared',
+          context: {
+            facetId: facet.facetId,
+            domain: facet.domain,
+            routeDomains: this.routeDomains,
+            inRouteDomains: this.routeDomains.includes(facet.domain),
+          },
+        })
+      } else if (facet.status === 'superseded' && previousStatus !== 'superseded') {
+        logger.info('Agent 任务图作废 Facet', {
+          event: 'agent_task_graph.facet.superseded',
+          context: { facetId: facet.facetId, domain: facet.domain, routeDomains: this.routeDomains },
+        })
+      }
+    }
+  }
+
+  /**
+   * 把模型申报、但不在任务图前沿里的 Facet 并进发现请求。
+   *
+   * 这是"谁来选工具"的分水岭。Anthropic 的 Tool Search 由**主模型**驱动检索（实测工具选择
+   * 准确率 79.5% → 88.1%）；本项目的等价物是能力发现 + 租约，但旧实现把模型的请求整个改写成
+   * 运行时前沿——模型写的 facetId / entityTypes / capabilityKinds 除 queries 和 domains 外全部
+   * 丢弃。于是主模型（唯一拿得到完整会话历史的那个）连"我要的东西在另一个领域"都表达不了。
+   *
+   * 并入的门槛与补建 Facet 一致：entityTypes 必须指向真实注册领域。发现本身是只读的，
+   * 权限仍由 registry.list(context) 与审批把关，放宽发现范围不越权。
+   */
+  private mergeDeclaredFacets(targets: AgentTaskFacet[], rawInput: unknown): AgentTaskFacet[] {
+    const input = asRecord(rawInput)
+    if (!Array.isArray(input?.facets)) return targets
+    const known = new Set(targets.map((facet) => facet.facetId))
+    const knownDomains = new Set(this.registry.allDefinitions().flatMap((definition) => [
+      definition.category,
+      definition.capability?.domain ?? definition.category,
+    ]))
+    const merged = [...targets]
+    for (const rawFacet of input.facets) {
+      const declared = asRecord(rawFacet)
+      if (typeof declared?.facetId !== 'string' || known.has(declared.facetId)) continue
+      if (merged.length >= AGENT_LEASE_FRONTIER_FACET_LIMIT) break
+      const entityTypes = Array.isArray(declared.entityTypes)
+        ? declared.entityTypes.filter((value): value is string => typeof value === 'string')
+        : []
+      const domain = entityTypes
+        .map((entityType) => (entityType.includes('.')
+          ? entityType.slice(0, entityType.indexOf('.'))
+          : entityType))
+        .find((candidate) => knownDomains.has(candidate))
+      if (!domain) continue
+      known.add(declared.facetId)
+      merged.push({
+        facetId: declared.facetId,
+        domain,
+        goal: typeof declared.goal === 'string' && declared.goal ? declared.goal : this.taskGraph.goal,
+        targetEntityTypes: entityTypes,
+        requiredObservations: [],
+        capabilityKinds: ['observe', 'mutate', 'execute'],
+        targetSurfaceId: null,
+        dependsOn: [],
+        parallelizable: false,
+        completionConditions: ['目标动作具有结构化结果或明确的受阻说明。'],
+        requiredEffects: [],
+        uncertainties: [],
+        confidence: 0.5,
+        status: 'active',
+        statusReason: '模型在发现请求里申报的领域，运行时并入本轮检索范围。',
+        evidence: [],
+      })
+    }
+    return merged
   }
 
   activeFacetIds(): string[] {
@@ -151,14 +246,18 @@ export class AgentFacetProgressTracker {
    * 租约时旧实现返回"允许：无"，于是任何后续发现都必然失败——而让前沿推进所需要的只读观察
    * 能力恰好又没被租到，整次运行就此死锁（实测的三维建场景任务就是这样断在第 11 轮）。
    *
-   * 现在：请求一律规范化为当前前沿；重复发现交给 no_change 计数做软刹车，不再硬失败。
+   * 现在：前沿一律并入请求（模型漏掉依赖也不会卡住），但**模型自己申报的 Facet 同样并入**，
+   * 而不是被覆盖掉——见下面 mergeDeclaredFacets 的说明。重复发现交给 no_change 计数做软刹车。
    */
   normalizeCallInput(call: ModelStepToolCall): unknown | null {
     if (call.toolName !== 'discover_application_capabilities') return null
     const scope = listDiscoverableFacets([...this.facets.values()])
     if (scope.length === 0) return null
     const undiscovered = scope.filter((facet) => !this.discoveredFacetIds.has(facet.facetId))
-    const targets = undiscovered.length > 0 ? undiscovered : scope
+    const targets = this.mergeDeclaredFacets(
+      undiscovered.length > 0 ? undiscovered : scope,
+      call.input
+    )
     const input = asRecord(call.input)
     const extraQueries: Record<string, string[]> = {}
     if (Array.isArray(input?.facets)) {

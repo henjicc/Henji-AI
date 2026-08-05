@@ -54,6 +54,8 @@ const FACET_STATUS_LABELS: Record<AgentExecutionFacetPresentation['status'], str
   blocked: '受阻',
   waiting_user: '待补充',
   skipped: '已跳过',
+  // 路由把领域判错、助手换了正确的步骤来做。对用户不是失败，只是"这一条不作数了"。
+  superseded: '已替换',
 }
 
 function FacetStatusIcon({ status }: { status: AgentExecutionFacetPresentation['status'] }): JSX.Element {
@@ -61,7 +63,9 @@ function FacetStatusIcon({ status }: { status: AgentExecutionFacetPresentation['
   if (status === 'active') return <LoaderCircle className="mt-0.5 h-3 w-3 shrink-0 animate-spin text-accent" />
   if (status === 'waiting_user') return <CircleHelp className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
   if (status === 'blocked') return <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-danger" />
-  if (status === 'skipped') return <Ban className="mt-0.5 h-3 w-3 shrink-0 text-text-muted" />
+  if (status === 'skipped' || status === 'superseded') {
+    return <Ban className="mt-0.5 h-3 w-3 shrink-0 text-text-muted" />
+  }
   return <CircleDot className="mt-0.5 h-3 w-3 shrink-0 text-text-muted" />
 }
 

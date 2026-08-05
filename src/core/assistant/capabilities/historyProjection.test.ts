@@ -158,12 +158,27 @@ describe('工具结果的历史投影', () => {
     expect((result.facets as { schemaRefs: unknown[] }[])[0].schemaRefs).toEqual([])
   })
 
-  it('投影函数不会泄漏进严格的能力描述符', () => {
+  /*
+   * 示例调用：JSON Schema 表达不了嵌套结构长什么样、可选字段何时该填、参数之间怎么配合——
+   * 而这些正是模型最容易写错的地方。Anthropic 实测补上示例后复杂参数场景准确率 72% → 90%。
+   */
+  it('声明的示例调用渲染进模型看到的工具描述', () => {
+    const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('change_application_entities')
+    expect(definition?.inputExamples?.length).toBeGreaterThan(0)
+    // 示例必须能通过该能力自己的输入 schema——写错的示例比没有示例更糟，模型会照抄。
+    for (const example of definition?.inputExamples ?? []) {
+      const parsed = definition?.inputSchema.safeParse(example)
+      expect(parsed?.success, JSON.stringify(example)).toBe(true)
+    }
+  })
+
+  it('投影函数与示例都不会泄漏进严格的能力描述符', () => {
     // descriptor schema 是 strict 的：漏掉解构会在注册时就抛错，这条守住那个解构。
     const registry = new ApplicationCapabilityRegistry()
     registry.register(discoverApplicationCapabilitiesCapability)
     for (const descriptor of registry.descriptors()) {
       expect(descriptor).not.toHaveProperty('projectForHistory')
+      expect(descriptor).not.toHaveProperty('inputExamples')
       expect(applicationCapabilityDescriptorSchema.safeParse(descriptor).success).toBe(true)
     }
   })

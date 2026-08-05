@@ -218,6 +218,29 @@ export function createBackendBuiltinTools(
     targetIds: () => ({}),
     dataClasses: () => ['C0'],
     summarize: (output) => `已声明 ${output.actionGroups.length} 个操作组。`,
+    // 两条示例覆盖两种真实用法：给已有 Facet 补 Effect，以及路由判错时补建新 Facet 并作废旧的。
+    // 后者是本工具最容易被忽略的能力——模型不知道能这么用，就只能停下来说自己被阻塞。
+    inputExamples: [
+      {
+        facets: [{
+          facetId: 'camera_scene',
+          requiredEffects: [
+            { effect: 'execute', entityTypes: ['camera_stage.object'], minimumCount: 2 },
+            { effect: 'update', entityTypes: ['camera_stage.object'], minimumCount: 2 },
+          ],
+        }],
+        actionGroups: [],
+        supersededFacetIds: [],
+      },
+      {
+        facets: [{
+          facetId: 'camera_scene',
+          requiredEffects: [{ effect: 'execute', entityTypes: ['camera_stage.object'], minimumCount: 1 }],
+        }],
+        actionGroups: [],
+        supersededFacetIds: ['canvas'],
+      },
+    ],
   })
 
   return [

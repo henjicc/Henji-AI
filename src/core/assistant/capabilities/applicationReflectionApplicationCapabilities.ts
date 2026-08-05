@@ -237,6 +237,35 @@ const changeEntities = defineApplicationCapability({
     ])
   }).slice(0, 32)),
   summarize: (output) => `应用状态修改事务 ${output.transactionRef} 已完成。`,
+  /*
+   * 这是全项目参数最容易写错的能力：changes 是个多态数组，三种 kind 各有各的形状，属性键还支持
+   * 省略 entityType 前缀。schema 表达不了"什么时候用哪一种"，示例可以。
+   */
+  inputExamples: [
+    {
+      summary: '把球体改成白色',
+      changes: [{
+        kind: 'set_properties',
+        entityType: 'camera_stage.object',
+        target: { kind: 'camera_stage.object', id: 'obj-1' },
+        // 属性键可以省略 entityType 前缀，两种写法等价。
+        properties: { color: '#ffffff', 'camera_stage.object.name': '白色球体' },
+      }],
+    },
+    {
+      summary: '给球体加两个上下漂浮关键帧',
+      changes: [{
+        kind: 'create_items',
+        entityType: 'camera_stage.keyframe',
+        parent: { kind: 'camera_stage.object', id: 'obj-1' },
+        // create_items 的每个成员都要包一层 properties。
+        items: [
+          { properties: { frame: 0, position_y: 0 } },
+          { properties: { frame: 30, position_y: 1.5 } },
+        ],
+      }],
+    },
+  ],
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [
     { effect: 'create', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: true },
     { effect: 'update', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: true },

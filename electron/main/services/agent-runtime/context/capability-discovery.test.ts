@@ -254,6 +254,37 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     expect(result.deferredToolNames).not.toContain('place_camera_stage_object')
   })
 
+  /*
+   * capabilityKinds 是 structuralMatch 里最后一处硬过滤，同样需要保底。
+   *
+   * 它本身有意义（要写入的 Facet 不该只租到只读工具），但和 entityTypes、targetSurfaceIds 一样，
+   * 领域一放宽就会误伤——实测 diagnose Facet 的 kinds 是 ['observe','query']，把并进来的
+   * camera_stage 写入能力全挡在外面。放宽比返回 0 项能力有用，但必须如实告诉模型。
+   */
+  it('能力类型一个都匹配不上时放宽过滤，并如实说明', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-kind-relax', {
+      discoveryVersion: 'application-capability-discovery/v2',
+      facets: [{
+        facetId: 'diagnose',
+        queries: [],
+        domains: ['diagnostics'],
+        entityTypes: [],
+        // diagnostics 域里没有任何写入能力，严格匹配必然为空。
+        capabilityKinds: ['mutate'],
+        targetSurfaceIds: [],
+      }],
+      cursor: 0,
+      limit: 20,
+    }, fullContext(registry))
+
+    const facet = result.facets.find((item) => item.facetId === 'diagnose')
+    expect(facet?.capabilityNames.length).toBeGreaterThan(0)
+    expect(facet?.observationSuggestions.join('')).toContain('已放宽能力类型过滤')
+  })
+
   it('缺失原因不把"没匹配上"误报成权限过滤', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')

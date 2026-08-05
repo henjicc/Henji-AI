@@ -27,13 +27,15 @@ import type { AgentToolRegistry } from '../tools/registry'
 import { selectLeaseableToolNames } from './tool-activation'
 
 /**
- * Facet 点名了实体时，未命中该实体的能力最多补几个租约。
+ * Facet 点名了实体时，被放宽进来的域最多补几个租约。
  *
  * 存在的意义是给"被放宽进来的域"留一条活路：域放宽（延续证据、路由域、模型自报）之后，新域的
- * 能力通常命不中原 Facet 的实体，但它们恰恰是这次放宽想要的东西。补位名额刻意小，避免同域里
- * 不相干的能力挤掉别的 Facet。
+ * 能力通常命不中原 Facet 的实体，但它们恰恰是这次放宽想要的东西。
+ *
+ * 名额由 Facet 租约上限推导而不是拍一个数：一个新域至少要凑齐「观察 → 写入 → 验证」这个最小
+ * 闭包才有用，三分之一的名额正好覆盖它，同时不至于挤掉别的 Facet。
  */
-const LEASE_TAIL_LIMIT = 4
+const LEASE_TAIL_LIMIT = Math.max(3, Math.floor(AGENT_FACET_LEASE_TOOL_LIMIT / 3))
 
 const surfaceIdsByDomain: Readonly<Record<string, string[]>> = {
   application: [],
@@ -130,7 +132,8 @@ function capabilityKindMatches(
 
 function structuralMatch(
   facet: ApplicationCapabilityDiscoveryFacet,
-  indexed: IndexedCapability
+  indexed: IndexedCapability,
+  ignoreCapabilityKinds = false
 ): boolean {
   /*
    * targetSurfaceIds 只有在「去某个页面」本身就是目的时才有语义。
@@ -157,7 +160,8 @@ function structuralMatch(
     || facet.domains.includes(indexed.entry.domain)
     || facet.domains.includes(indexed.entry.category)
     || (surfaceIsTheGoal && surfaceMatches)
-  if (!domainMatches || !capabilityKindMatches(facet, indexed)) return false
+  if (!domainMatches) return false
+  if (!ignoreCapabilityKinds && !capabilityKindMatches(facet, indexed)) return false
   /*
    * entityTypes 只排序，不硬拒——和依赖顺序一样的教训（见 facet-progress.facetsForCall）。
    *
@@ -317,7 +321,13 @@ export class AgentCapabilityDiscoveryCatalog {
         schemaRefs: item.names.flatMap((name, index) => (
           leasedNameSet.has(name) ? [item.schemaRefs[index]] : []
         )).filter((ref): ref is ApplicationSchemaRef => Boolean(ref)),
-        observationSuggestions: observationSuggestions(item.facet),
+        observationSuggestions: [
+          ...observationSuggestions(item.facet),
+          ...(item.kindsRelaxed
+            ? [`按 ${item.facet.capabilityKinds.join('、')} 没有匹配到任何能力，已放宽能力类型过滤；`
+              + '返回的能力可能不是该 Facet 最贴切的类型，提交写入前请确认它的 effect 与目标一致。']
+            : []),
+        ].slice(0, 16),
       })),
       missing: facetResults.flatMap((item) => item.names.length > 0 ? [] : [{
         facetId: item.facet.facetId,
@@ -415,6 +425,8 @@ export class AgentCapabilityDiscoveryCatalog {
      * 首项恒为 Facet 自身领域；其余都是延续证据、路由域或模型自报带进来的。
      */
     widenedDomainNames: Set<string>
+    /** 按 capabilityKinds 一个都匹配不上、已放宽该过滤。要如实告诉模型。 */
+    kindsRelaxed: boolean
     schemaRefs: ApplicationSchemaRef[]
     missingReason: 'no_matching_capability' | 'permission_filtered' | 'unsupported_domain'
   } {
@@ -425,10 +437,22 @@ export class AgentCapabilityDiscoveryCatalog {
       || facet.entityTypes.length > 0
       || facet.capabilityKinds.length > 0
       || facet.targetSurfaceIds.length > 0
-    const matches = indexed.filter((item) => (
-      structuralMatch(facet, item)
+    const passes = (item: IndexedCapability, ignoreKinds: boolean): boolean => (
+      structuralMatch(facet, item, ignoreKinds)
       && (facet.queries.length === 0 || hasStructuralFilter || semanticNames.has(item.entry.name))
-    )).sort((left, right) => (
+    )
+    /*
+     * capabilityKinds 是 structuralMatch 里最后一处硬过滤，同样需要保底。
+     *
+     * 它本身是有意义的（要写入的 Facet 不该租只读工具），但和 entityTypes、targetSurfaceIds 一样，
+     * 一旦领域被放宽就会误伤：实测 diagnose Facet 的 kinds 是 ['observe','query']，把并进来的
+     * camera_stage 写入能力全挡在外面。所以先按 kind 匹配，**整个 Facet 一个都匹配不上时**才放宽，
+     * 并在建议里如实说明——放宽比返回 0 项能力有用，但不能悄悄放宽。
+     */
+    const strict = indexed.filter((item) => passes(item, false))
+    const kindsRelaxed = strict.length === 0 && facet.capabilityKinds.length > 0
+    const matches = (kindsRelaxed ? indexed.filter((item) => passes(item, true)) : strict)
+      .sort((left, right) => (
       requiredEffectScore(facet, right) - requiredEffectScore(facet, left)
       // entityTypes 从硬过滤降级成排序信号后，命中实体的能力必须仍然排在最前，否则租约名额
       // 会被同域里不相干的能力占掉。
@@ -454,9 +478,10 @@ export class AgentCapabilityDiscoveryCatalog {
      * 正确判定只有一种：忽略宿主可用性重新匹配一遍，能匹配上就说明确实是被过滤掉了。
      */
     const permissionFiltered = matches.length === 0
-      && this.indexAll().some((candidate) => structuralMatch(facet, candidate))
+      && this.indexAll().some((candidate) => structuralMatch(facet, candidate, true))
     return {
       facet,
+      kindsRelaxed,
       names: matches.map((item) => item.entry.name),
       entityMatchedNames: new Set(matches
         .filter((item) => entityTypeScore(facet, item))

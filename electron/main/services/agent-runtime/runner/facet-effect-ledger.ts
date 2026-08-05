@@ -95,7 +95,8 @@ export function callSignature(
 }
 
 export function isTerminal(status: AgentTaskFacet['status']): boolean {
-  return status === 'completed' || status === 'blocked' || status === 'waiting_user'
+  return status === 'completed' || status === 'blocked'
+    || status === 'waiting_user' || status === 'superseded'
 }
 
 function referencesFromResult(output: unknown): Array<{ kind: string; id: string }> {

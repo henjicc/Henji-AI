@@ -361,7 +361,8 @@ export interface AgentExecutionPresentation {
   nextAction: string
 }
 
-export type AgentExecutionFacetStatus = 'pending' | 'active' | 'completed' | 'blocked' | 'waiting_user' | 'skipped'
+export type AgentExecutionFacetStatus =
+  'pending' | 'active' | 'completed' | 'blocked' | 'waiting_user' | 'skipped' | 'superseded'
 
 export interface AgentExecutionFacetPresentation {
   facetId: string

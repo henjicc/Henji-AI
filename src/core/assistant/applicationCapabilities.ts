@@ -94,6 +94,20 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
    * 而一次运行只有 ~13 轮），所以只能在写入前就不放进去。
    */
   projectForHistory?(output: TOutput): unknown
+  /**
+   * 示例调用，渲染进模型看到的工具描述。
+   *
+   * JSON Schema 表达不了"什么时候该填这个可选字段""嵌套结构长什么样""几个参数之间怎么配合"，
+   * 而这些恰恰是模型最容易写错的地方。Anthropic 实测：给工具补上示例调用后，复杂参数场景的
+   * 准确率从 72% 升到 90%。
+   *
+   * 只写**真实可用**的调用：它会被模型当成范本照抄。
+   *
+   * 类型是 `unknown[]` 而不是 `TInput[]`：示例是给模型看的文档，写的是**模型该发什么**，
+   * 而 TInput 是 schema 解析**之后**的类型（默认值全部填好）。用 TInput 会逼着每个示例把
+   * propertyIds、targetRefs 这类有默认值的字段全写一遍，示例反而比真实调用还啰嗦。
+   */
+  inputExamples?: unknown[]
   preview?(input: TInput): AgentToolPreview
   createUndo?(output: TOutput): AgentToolObservation['undo']
   resolveObservedEffects?(input: TInput, output: TOutput): AgentObservedEffect[]
@@ -103,30 +117,50 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   }
 }
 
+/**
+ * 定义里**不属于描述符**的键，唯一来源。
+ *
+ * `applicationCapabilityDescriptorSchema` 是 strict 的，任何没被剥掉的键都会让注册当场抛错。
+ * 此前 `register()` 和 `descriptors()` 各写一份解构，新增 `projectForHistory` 和 `inputExamples`
+ * 时都只改到了其中一处——同一个坑连踩两次。收成一张表，两处共用，就不会再漂移。
+ */
+const NON_DESCRIPTOR_KEYS = [
+  'inputSchema',
+  'outputSchema',
+  'aiInputSchema',
+  'completionKind',
+  'parallelSafe',
+  'resolveRequiredScopes',
+  'resolveConcurrencyKey',
+  'resolveTargetIds',
+  'resolveDataClasses',
+  'summarize',
+  'projectForHistory',
+  'inputExamples',
+  'preview',
+  'createUndo',
+  'resolveObservedEffects',
+] as const satisfies readonly (keyof ApplicationCapabilityDefinition)[]
+
+function toDescriptorInput(definition: ApplicationCapabilityDefinition): Record<string, unknown> {
+  const removed = new Set<string>(NON_DESCRIPTOR_KEYS)
+  return Object.fromEntries(
+    Object.entries(definition as unknown as Record<string, unknown>)
+      .filter(([key]) => !removed.has(key))
+  )
+}
+
 export class ApplicationCapabilityRegistry {
   private readonly definitions = new Map<string, ApplicationCapabilityDefinition>()
 
   register<TInput, TOutput>(
     definition: ApplicationCapabilityDefinition<TInput, TOutput>
   ): void {
-    const {
-      inputSchema,
-      outputSchema,
-      aiInputSchema,
-      completionKind: _completionKind,
-      parallelSafe: _parallelSafe,
-      resolveRequiredScopes: _resolveRequiredScopes,
-      resolveConcurrencyKey: _resolveConcurrencyKey,
-      resolveTargetIds: _resolveTargetIds,
-      resolveDataClasses: _resolveDataClasses,
-      summarize: _summarize,
-      projectForHistory: _projectForHistory,
-      preview: _preview,
-      createUndo: _createUndo,
-      resolveObservedEffects: _resolveObservedEffects,
-      ...descriptor
-    } = definition
-    applicationCapabilityDescriptorSchema.parse({ ...descriptor, available: true })
+    const { inputSchema, outputSchema, aiInputSchema } = definition
+    applicationCapabilityDescriptorSchema.parse({
+      ...toDescriptorInput(definition as unknown as ApplicationCapabilityDefinition),
+      available: true,
+    })
     if (
       typeof inputSchema?.safeParse !== 'function'
       || typeof outputSchema?.safeParse !== 'function'
@@ -165,25 +199,8 @@ export class ApplicationCapabilityRegistry {
 
   descriptors(): ApplicationCapabilityDescriptor[] {
     return this.list().map((definition) => {
-      const {
-        inputSchema: _inputSchema,
-        outputSchema: _outputSchema,
-        aiInputSchema: _aiInputSchema,
-        completionKind: _completionKind,
-        parallelSafe: _parallelSafe,
-        resolveRequiredScopes: _resolveRequiredScopes,
-        resolveConcurrencyKey: _resolveConcurrencyKey,
-        resolveTargetIds: _resolveTargetIds,
-        resolveDataClasses: _resolveDataClasses,
-        summarize: _summarize,
-        projectForHistory: _projectForHistory,
-        preview: _preview,
-      createUndo: _createUndo,
-      resolveObservedEffects: _resolveObservedEffects,
-      ...descriptor
-      } = definition
       return applicationCapabilityDescriptorSchema.parse({
-        ...descriptor,
+        ...toDescriptorInput(definition),
         available: true,
       })
     })

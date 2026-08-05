@@ -30,6 +30,13 @@ export function buildAgentProgressSettlement(
   const completed = facetValues.filter((facet) => facet.status === 'completed')
   const blocked = facetValues.filter((facet) => facet.status === 'blocked')
   const waiting = facetValues.filter((facet) => facet.status === 'waiting_user')
+  /*
+   * 被作废的 Facet 既不算完成也不算失败，直接退出结算。
+   *
+   * 它代表"路由判错、模型已用正确的 Facet 取而代之"，把它算进 blocked 会让一次成功的运行
+   * 结算成 partial；算进 completed 又等于凭空承认了没做过的事。唯一正确的处理是当它不存在。
+   */
+  const superseded = facetValues.filter((facet) => facet.status === 'superseded')
   const remaining = facetValues.filter((facet) => !isTerminal(facet.status))
   const hasRunnableFacet = remaining.some((facet) => facet.dependsOn.every(
     (dependency) => facetsById.get(dependency)?.status === 'completed'
@@ -67,6 +74,7 @@ export function buildAgentProgressSettlement(
     summary: status === 'active'
       ? `任务图仍有 ${remaining.length} 个 Facet 未结算。`
       : `任务图结算为 ${status}：完成 ${completed.length}，受阻 ${blocked.length}，等待用户 ${waiting.length}，未开始 ${remaining.length}。`
+        + (superseded.length > 0 ? `另有 ${superseded.length} 个 Facet 因路由领域判错已作废。` : '')
         + (deadlocked ? '未开始的 Facet 全部卡在未完成的依赖上，任务图无法自行推进。' : ''),
     suggestedNextStep: waiting.length > 0
       ? '向用户提出一个最小且具体的问题，然后进入现有 waiting_user。'

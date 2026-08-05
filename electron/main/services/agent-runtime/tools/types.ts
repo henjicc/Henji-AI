@@ -77,6 +77,8 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
    * 未声明时结果按原样内联。只影响 tool 消息，不影响 observation 本体与结算证据。
    */
   projectForHistory?: (output: TOutput) => unknown
+  /** 示例调用；见 ApplicationCapabilityDefinition.inputExamples。渲染进模型看到的工具描述。 */
+  inputExamples?: unknown[]
   undo?: (output: TOutput) => AgentToolObservation['undo']
 }
 

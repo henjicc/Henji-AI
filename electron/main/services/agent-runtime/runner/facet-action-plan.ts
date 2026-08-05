@@ -179,6 +179,8 @@ export function prepareDeclaredActionPlan(input: {
   facets: Map<string, AgentTaskFacet>
   /** 注册表里真实存在的领域；模型只能在这些领域里补建 Facet。 */
   knownDomains?: ReadonlySet<string>
+  /** 已经有过执行痕迹的 facetId；这些不允许作废。 */
+  touchedFacetIds?: ReadonlySet<string>
 }): PreparedDeclaredActionPlan {
   const available = declarableFacetIds(input.facets)
   const parsedDeclaration = agentActionPlanDeclarationInputSchema.safeParse(input.declaration)
@@ -247,6 +249,33 @@ export function prepareDeclaredActionPlan(input: {
       ),
     })
   }
+  /*
+   * 作废旧 Facet：两道守卫，缺一不可。
+   *
+   * 1. 必须同时补建了新 Facet——作废本身不是目的，"换一个正确的来做"才是。
+   * 2. 目标 Facet 必须零证据、零执行痕迹——已经动过手的东西不能一句话抹掉。
+   *
+   * 少了任何一道，这个字段就变成"没做完也能收工"的后门。
+   */
+  const touched = input.touchedFacetIds ?? new Set<string>()
+  const supersededFacetIds = new Set<string>()
+  for (const [index, facetId] of declaration.supersededFacetIds.entries()) {
+    const target = input.facets.get(facetId)
+    const reason = !target
+      ? `Facet ${facetId} 不存在`
+      : added.length === 0
+        ? '作废旧 Facet 时必须同时用新 facetId 补声明替代它的 Facet'
+        : isTerminal(target.status)
+          ? `Facet ${facetId} 已进入终态 ${target.status}`
+          : target.evidence.length > 0 || touched.has(facetId)
+            ? `Facet ${facetId} 已经产生过执行痕迹或证据，不能作废；请把它做完或如实说明受阻`
+            : null
+    if (reason) {
+      issues.push({ code: 'UNKNOWN_FACET', path: `supersededFacetIds.${index}`, message: reason })
+      continue
+    }
+    supersededFacetIds.add(facetId)
+  }
   if (issues.length > 0) return { ok: false, issues }
   const declaredFacetIds = new Set(replacements.keys())
   /*
@@ -261,9 +290,16 @@ export function prepareDeclaredActionPlan(input: {
    * 整次运行因此报"任务图仍有 1 个 Facet 未结算"。
    */
   const mergedFacets = [
-    ...input.taskGraph.facets.map((facet) => (
-      replacements.get(facet.facetId) ?? input.facets.get(facet.facetId) ?? facet
-    )),
+    ...input.taskGraph.facets.map((facet) => {
+      const current = replacements.get(facet.facetId) ?? input.facets.get(facet.facetId) ?? facet
+      return supersededFacetIds.has(facet.facetId)
+        ? {
+            ...current,
+            status: 'superseded' as const,
+            statusReason: '路由领域判错，已由模型补声明的 Facet 取代。',
+          }
+        : current
+    }),
     ...added,
   ]
   const candidate = agentTaskGraphSchema.safeParse({

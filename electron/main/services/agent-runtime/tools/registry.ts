@@ -129,6 +129,18 @@ function modelToolDescription(definition: AgentToolDefinition): string {
   if (semantics?.prerequisites?.length) specific.push(`特有前置：${semantics.prerequisites.join('；')}`)
   if (semantics?.successEvidence?.length) specific.push(`特有成功证据：${semantics.successEvidence.join('；')}`)
   if (semantics?.failureRecovery?.length) specific.push(`特有恢复：${semantics.failureRecovery.join('；')}`)
+  /*
+   * 示例调用放在描述末尾。
+   *
+   * JSON Schema 表达不了嵌套结构长什么样、可选字段什么时候该填、几个参数怎么配合——而这些正是
+   * 模型最容易写错的地方。Anthropic 实测补上示例后复杂参数场景准确率 72% → 90%。
+   * 单条截断到 400 字节、每工具最多 2 条：描述预算 128KB，实测只用了 12.9KB，但没必要浪费。
+   */
+  for (const example of (definition.inputExamples ?? []).slice(0, 2)) {
+    const serialized = JSON.stringify(example)
+    if (!serialized) continue
+    specific.push(`示例调用：${serialized.length > 400 ? `${serialized.slice(0, 400)}…` : serialized}`)
+  }
   return specific.join('\n')
 }
 

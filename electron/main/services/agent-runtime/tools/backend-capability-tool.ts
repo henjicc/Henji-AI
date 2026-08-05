@@ -70,6 +70,7 @@ export function createBackendCapabilityTool<TInput, TOutput>(
     projectForHistory: capability.projectForHistory
       ? (output) => capability.projectForHistory?.(output)
       : undefined,
+    inputExamples: capability.inputExamples,
     undo: capability.supportsUndo
       ? (output) => capability.createUndo?.(output)
       : undefined,

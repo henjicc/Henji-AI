@@ -204,6 +204,138 @@ describe('Action Plan 声明协议', () => {
     )).toBeNull()
   })
 
+  /*
+   * 根源回归的另一半：补建正确 Facet 之后，路由生成的错误 Facet 必须能作废。
+   *
+   * 没有这一半，第三次实测失败还是会重演：模型已经补建 camera_scene 把活干完，那个永远拿不到
+   * 证据的 canvas Facet 仍然让整次运行报 VERIFICATION_REPAIR_FAILED。
+   */
+  it('补建新 Facet 时可作废零证据的错误 Facet，结算不再算失败', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
+      registry,
+      true
+    )
+    const prepared = tracker.prepareDeclaredActionPlan({
+      facets: [{
+        facetId: 'camera_scene',
+        requiredEffects: [{
+          effect: 'execute', entityTypes: ['camera_stage.object'], minimumCount: 1,
+        }],
+      }],
+      actionGroups: [],
+      supersededFacetIds: ['canvas'],
+    })
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+    tracker.commitDeclaredActionPlan(prepared)
+
+    expect(tracker.taskGraphSnapshot().facets.find((item) => item.facetId === 'canvas')?.status)
+      .toBe('superseded')
+    // 被作废的 Facet 既不算完成也不算失败，直接退出结算——不能再拖住整次运行。
+    const settlement = tracker.settlement()
+    expect(settlement.remainingFacetIds).not.toContain('canvas')
+    expect(settlement.blockedFacets.map((item) => item.facetId)).not.toContain('canvas')
+  })
+
+  it('作废是有守卫的：不能用来逃避没做完的工作', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
+      registry,
+      true
+    )
+    // 只作废、不补建 → 拒绝。作废本身不是目的，"换一个正确的来做"才是。
+    expect(tracker.prepareDeclaredActionPlan({
+      facets: [{
+        facetId: 'canvas',
+        requiredEffects: [{ effect: 'update', entityTypes: ['canvas.node'], minimumCount: 1 }],
+      }],
+      actionGroups: [],
+      supersededFacetIds: ['canvas'],
+    })).toMatchObject({ ok: false, issues: [{ code: 'UNKNOWN_FACET' }] })
+
+    // 已经产生过证据的 Facet 不能被一句话抹掉。
+    const touchedTracker = new AgentFacetProgressTracker(
+      graph([{ ...facet({ facetId: 'canvas', domain: 'canvas' }), evidence: ['canvas.project:p-1'] }]),
+      registry,
+      true
+    )
+    expect(touchedTracker.prepareDeclaredActionPlan({
+      facets: [{
+        facetId: 'camera_scene',
+        requiredEffects: [{ effect: 'execute', entityTypes: ['camera_stage.object'], minimumCount: 1 }],
+      }],
+      actionGroups: [],
+      supersededFacetIds: ['canvas'],
+    })).toMatchObject({
+      ok: false,
+      issues: [{ message: expect.stringContaining('执行痕迹') }],
+    })
+  })
+
+  /*
+   * 谁来选工具：模型申报的 Facet 必须并进发现请求，而不是被运行时前沿整个覆盖。
+   *
+   * Anthropic 的 Tool Search 由主模型驱动检索（工具选择准确率 79.5% → 88.1%）；本项目的等价物
+   * 是能力发现 + 租约，但旧实现把模型的请求改写成运行时前沿，模型写的 facetId / entityTypes
+   * 全部丢弃——主模型（唯一拿得到完整会话历史的那个）连"我要的东西在另一个领域"都说不出来。
+   */
+  it('模型在发现请求里申报的领域会被并入，而不是被前沿覆盖', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
+      registry,
+      true
+    )
+    const normalized = tracker.normalizeCallInput({
+      toolCallId: 'c1',
+      toolName: 'discover_application_capabilities',
+      input: {
+        facets: [{
+          facetId: 'camera_scene',
+          queries: ['放置三维对象'],
+          entityTypes: ['camera_stage.object'],
+        }],
+      },
+      dynamic: false,
+    }) as { facets: Array<{ facetId: string; domains: string[]; entityTypes: string[] }> }
+
+    const declared = normalized.facets.find((item) => item.facetId === 'camera_scene')
+    expect(declared, '模型申报的 Facet 必须出现在规范化后的请求里').toBeDefined()
+    expect(declared?.domains).toContain('camera_stage')
+    expect(declared?.entityTypes).toContain('camera_stage.object')
+    // 运行时前沿仍然在，模型漏掉依赖也不会把自己锁死。
+    expect(normalized.facets.map((item) => item.facetId)).toContain('canvas')
+  })
+
+  it('申报的领域必须真实存在，编造的域不会被并入', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
+      registry,
+      true
+    )
+    const normalized = tracker.normalizeCallInput({
+      toolCallId: 'c2',
+      toolName: 'discover_application_capabilities',
+      input: {
+        facets: [{ facetId: 'made_up', entityTypes: ['not_a_domain.thing'] }],
+      },
+      dynamic: false,
+    }) as { facets: Array<{ facetId: string }> }
+    expect(normalized.facets.map((item) => item.facetId)).not.toContain('made_up')
+  })
+
   it('补建 Facet 的领域必须真实存在，且有数量上限', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')

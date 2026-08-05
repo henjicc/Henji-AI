@@ -14,6 +14,17 @@ export const agentTaskFacetStatusSchema = z.enum([
   'completed',
   'blocked',
   'waiting_user',
+  /**
+   * 路由判错、模型已用正确的 Facet 取而代之。
+   *
+   * 终态，但**既不算完成也不算失败**。没有这个状态时，路由生成的错误 Facet 无路可走：
+   * 它拿不到证据所以永远 completed 不了，标成 blocked 又让整次运行结算成 partial/blocked。
+   * 实测里模型明明已经补建正确 Facet 把活干完，仍然报 VERIFICATION_REPAIR_FAILED——
+   * 「模型可以推翻路由」这件事只有配上作废能力才算成立。
+   *
+   * 只允许作废尚未产生任何证据、也没有执行痕迹的 Facet，见 facet-action-plan。
+   */
+  'superseded',
 ])
 export type AgentTaskFacetStatus = z.infer<typeof agentTaskFacetStatusSchema>
 
@@ -120,6 +131,13 @@ export const agentActionPlanDeclarationInputSchema = z.object({
     facetId: z.string().min(1).max(64),
     requiredEffects: z.array(declaredRequiredEffectInputSchema).min(1).max(32),
   })).min(1).max(16),
+  /**
+   * 路由领域判错时要作废的旧 Facet。
+   *
+   * 只能作废尚未产生任何证据、也没有任何执行痕迹的 Facet，且本次声明必须同时补建了新 Facet——
+   * 否则它就成了"没做完也能收工"的后门。运行时会校验这两条，不满足时返回明确 issue。
+   */
+  supersededFacetIds: z.array(z.string().min(1).max(64)).max(8).default([]),
   // 只为兼容旧调用保留；分组一律由运行时推导，模型写错也不会导致整次声明失败。
   actionGroups: z.array(z.object({
     actionGroupId: z.string().min(1).max(64),
