@@ -500,7 +500,10 @@ export class AgentRunner {
         }
         const currentSnapshot = this.requireContext()
         this.setPhase('preparing')
-        this.catalogPlanner.syncActiveFacets(this.progressTracker?.activeFacetIds() ?? [])
+        this.catalogPlanner.syncActiveFacets(
+          this.progressTracker?.activeFacetIds() ?? [],
+          this.progressTracker?.allFacetIds() ?? []
+        )
         this.syncLeaseCheckpoint()
         if (this.progressTracker && route.taskGraph) {
           route.taskGraph = this.progressTracker.taskGraphSnapshot()

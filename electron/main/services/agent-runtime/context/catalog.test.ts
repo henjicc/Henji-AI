@@ -277,7 +277,8 @@ describe('AgentToolCatalogPlanner', () => {
         capabilityNames: candidates.slice(index * 5, index * 5 + 5),
       })),
     })
-    planner.syncActiveFacets(['facet_0', 'facet_1', 'facet_2'])
+    const taskGraphFacetIds = ['facet_0', 'facet_1', 'facet_2']
+    planner.syncActiveFacets(taskGraphFacetIds, taskGraphFacetIds)
 
     for (let turn = 0; turn < 3; turn += 1) {
       const activation = planner.select(primaryRoute, fullContext)
@@ -287,9 +288,31 @@ describe('AgentToolCatalogPlanner', () => {
       expect(activation.droppedLeasedToolNames).toEqual([])
     }
 
-    planner.syncActiveFacets(['facet_1', 'facet_2'])
+    planner.syncActiveFacets(['facet_1', 'facet_2'], taskGraphFacetIds)
     const released = planner.select(primaryRoute, fullContext)
     for (const name of candidates.slice(0, 5)) expect(released.leasedToolNames).not.toContain(name)
+
+    /*
+     * 回归：发现层承诺的租约被激活层反悔。
+     *
+     * 实测「你继续」那次，模型在发现请求里申报了 camera_project / camera_scene_add_sphere /
+     * camera_verify 三个 Facet，发现层正确租约了 14 个工具（含 place_camera_stage_object），
+     * 紧接着 syncActiveFacets 按任务图（只有一个 clarify_goal）把这三个 Facet 的租约全删了。
+     * 模型手里只剩 5 个只读工具，最后只能回答"放置对象工具没有在本轮可用列表里，请你再发一次
+     * 指令"——用户看到的就是"明明有上下文，它为什么不做"。
+     *
+     * 租约是发现层对模型的承诺，回收权只能覆盖任务图自己发出去的那些。
+     */
+    planner.rememberDiscovered('discover_application_capabilities', {
+      leasedToolNames: candidates,
+      facets: [{ facetId: 'model_declared_facet', capabilityNames: candidates.slice(0, 5) }],
+    })
+    planner.syncActiveFacets(['facet_1', 'facet_2'], taskGraphFacetIds)
+    const kept = planner.select(primaryRoute, fullContext)
+    for (const name of candidates.slice(0, 5)) {
+      expect(kept.leasedToolNames, `${name} 属于模型自报的 Facet，不该被任务图结算回收`)
+        .toContain(name)
+    }
   })
 
   it('100 个目录能力下仍只激活真实租约且不突破 32/96KB', () => {

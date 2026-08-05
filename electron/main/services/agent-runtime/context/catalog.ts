@@ -97,11 +97,25 @@ export class AgentToolCatalogPlanner {
     return leased.filter((name) => !previous.has(name))
   }
 
-  /** Facet 进入终态后立即释放对应租约；当前依赖前沿以外的活动 Facet 仍保留。 */
-  syncActiveFacets(activeFacetIds: string[]): void {
+  /**
+   * Facet 进入终态后释放对应租约；**只回收任务图自己发出去的那些**。
+   *
+   * 旧实现是"不在活动列表里就删"，于是模型自己申报的 Facet 一律被当成终态清掉。实测：用户说
+   * 「你继续」，模型在发现请求里申报了 camera_project / camera_scene_add_sphere / camera_verify
+   * 三个 Facet，发现层正确租约了 14 个工具（含 place_camera_stage_object），紧接着这里按任务图
+   * （只有一个 clarify_goal）把另外三个 Facet 的租约全删了——模型手里只剩 5 个只读工具，最后
+   * 只能回答"放置对象工具没有在本轮可用列表里，请你再发一次指令"。
+   *
+   * 租约是发现层对模型的承诺，回收权只能覆盖自己承诺过的范围：任务图里压根没有的 facetId
+   * 说明它来自模型自报，其生命周期与 `catalog` 一致——由目录版本变化和 schema 预算兜底，
+   * 不由任务图结算决定。
+   */
+  syncActiveFacets(activeFacetIds: string[], taskGraphFacetIds: string[] = []): void {
     const active = new Set(activeFacetIds)
+    const owned = new Set(taskGraphFacetIds)
     for (const facetId of this.leasesByFacet.keys()) {
-      if (facetId !== 'catalog' && !active.has(facetId)) this.leasesByFacet.delete(facetId)
+      if (facetId === 'catalog' || !owned.has(facetId)) continue
+      if (!active.has(facetId)) this.leasesByFacet.delete(facetId)
     }
     const retained = new Set([...this.leasesByFacet.values()].flat())
     this.leaseOrder = this.leaseOrder.filter((name) => retained.has(name))

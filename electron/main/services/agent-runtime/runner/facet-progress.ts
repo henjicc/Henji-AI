@@ -234,6 +234,11 @@ export class AgentFacetProgressTracker {
     return listActiveFacetIds([...this.facets.values()])
   }
 
+  /** 任务图当前持有的全部 facetId（任何状态）。租约回收只能覆盖这个范围，见 catalog.syncActiveFacets。 */
+  allFacetIds(): string[] {
+    return [...this.facets.keys()]
+  }
+
   dependencyFrontierFacetIds(limit?: number): string[] {
     return listDependencyFrontierFacetIds([...this.facets.values()], limit)
   }
