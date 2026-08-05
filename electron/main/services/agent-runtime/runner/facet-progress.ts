@@ -58,13 +58,18 @@ export class AgentFacetProgressTracker {
   private readonly schemaFacetIds = new Map<string, Set<string>>()
   private readonly pendingEvents: AgentFacetProgress[] = []
 
+  /** 允许在 Facet 自身 domain 之外额外搜索的领域（会话延续证据 + 模型自报需求的并集）。 */
+  private readonly extraDiscoveryDomains = new Set<string>()
+
   constructor(
     initialTaskGraph: AgentTaskGraph,
     private readonly registry: AgentToolRegistry,
     requiresExplicitActionPlan = false,
     restoredLedger: RestoredEffectLedgerEntry[] = [],
-    restoredLeaseFacetIds: string[] = []
+    restoredLeaseFacetIds: string[] = [],
+    continuationDomains: readonly string[] = []
   ) {
+    for (const domain of continuationDomains) this.extraDiscoveryDomains.add(domain)
     this.taskGraph = initialTaskGraph
     this.requiresExplicitActionPlan = requiresExplicitActionPlan
     for (const facetId of restoredLeaseFacetIds) {
@@ -150,13 +155,34 @@ export class AgentFacetProgressTracker {
     if (Array.isArray(input?.facets)) {
       for (const rawFacet of input.facets) {
         const facet = asRecord(rawFacet)
-        if (typeof facet?.facetId !== 'string' || !Array.isArray(facet.queries)) continue
-        extraQueries[facet.facetId] = facet.queries.filter(
-          (query): query is string => typeof query === 'string' && query.length > 0
-        )
+        if (typeof facet?.facetId !== 'string') continue
+        if (Array.isArray(facet.queries)) {
+          extraQueries[facet.facetId] = facet.queries.filter(
+            (query): query is string => typeof query === 'string' && query.length > 0
+          )
+        }
+        /*
+         * 模型自己申报的领域必须收下。
+         *
+         * 这是它唯一能说出"我要的能力不在这个域里"的地方。旧实现把 domains 整个覆盖成
+         * [facet.domain]，模型即使准确诊断出"当前上下文未持有 camera_stage 租约"也无处申诉，
+         * 只能把工具可用性当成意图证据，反过来推翻自己原本正确的判断——实测就是这么坏的。
+         * 领域只放宽不收窄，权限仍由 registry.list(context) 与审批把关，放宽本身不越权。
+         */
+        if (Array.isArray(facet.domains)) {
+          for (const domain of facet.domains) {
+            if (typeof domain === 'string' && domain.length > 0 && domain.length <= 128) {
+              this.extraDiscoveryDomains.add(domain)
+            }
+          }
+        }
       }
     }
-    return buildCapabilityDiscoveryInputForFacets(targets, extraQueries)
+    return buildCapabilityDiscoveryInputForFacets(
+      targets,
+      extraQueries,
+      [...this.extraDiscoveryDomains]
+    )
   }
 
   validate(

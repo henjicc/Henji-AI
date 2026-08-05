@@ -17,6 +17,13 @@ import {
   tryCreateModelTaskGraph,
 } from './task-facets'
 import { inferIntentTaskSemantics } from './task-intent-semantics'
+import {
+  continuationDomains,
+  continuationIntents,
+  describeContinuationForRouter,
+  isContinuationGoal,
+  type AgentThreadContinuation,
+} from './thread-continuation'
 
 const logger = createMainLogger('main.agent_router')
 
@@ -34,8 +41,40 @@ const routerModelDecisionSchema = z.object({
 export type RouterModelClassifier = (
   goal: string,
   snapshot: HostContextSnapshot,
-  signal: AbortSignal
+  signal: AbortSignal,
+  continuation?: string | null
 ) => Promise<unknown>
+
+/**
+ * 把上一轮的领域并入本轮决策。
+ *
+ * 只做**放宽**：新增候选意图与工具域，绝不改写主意图，也不删除任何已有域。理由是路由的主意图
+ * 还影响模型目录注入、任务图形状等一串下游行为，而"多给几个候选工具"的代价只是能力发现多排
+ * 几个候选——两边风险完全不对称。真正卡死的是"camera_stage 根本不在池子里"，把它放进去就够了。
+ */
+function widenWithContinuation(
+  decision: AgentRouteDecision,
+  goal: string,
+  continuation: AgentThreadContinuation | null
+): AgentRouteDecision {
+  if (!continuation || !isContinuationGoal(goal)) return decision
+  const extraDomains = continuationDomains(continuation)
+    .filter((domain) => !decision.toolDomains.includes(domain))
+  if (extraDomains.length === 0) return decision
+  const extraIntents = continuationIntents(continuation)
+    .filter((intent) => intent !== decision.intent)
+  return {
+    ...decision,
+    candidateIntents: uniqueValues([...(decision.candidateIntents ?? [decision.intent]), ...extraIntents], 6),
+    toolDomains: uniqueValues([...decision.toolDomains, ...extraDomains], 10),
+    suggestedCapabilityQueries: uniqueValues([
+      ...(decision.suggestedCapabilityQueries ?? []),
+      ...extraDomains,
+    ], 10),
+    continuationDomains: extraDomains,
+    reason: `${decision.reason}；检测到承接上一轮任务，已并入领域 ${extraDomains.join('、')}`,
+  }
+}
 
 interface DeterministicRule {
   intent: AgentIntent
@@ -305,16 +344,26 @@ export class AgentIntentRouter {
     runId: string,
     goal: string,
     snapshot: HostContextSnapshot,
-    signal: AbortSignal
+    signal: AbortSignal,
+    continuation: AgentThreadContinuation | null = null
   ): Promise<AgentRouteDecision> {
+    const widen = (decision: AgentRouteDecision): AgentRouteDecision => (
+      widenWithContinuation(decision, goal, continuation)
+    )
     const deterministic = deterministicRoute(goal, snapshot)
     if (deterministic && (deterministic.complexity !== 'multi_step' || !this.classifyWithModel)) {
-      this.logDecision(runId, deterministic)
-      return deterministic
+      const decision = widen(deterministic)
+      this.logDecision(runId, decision)
+      return decision
     }
     if (this.classifyWithModel) {
       try {
-        const classified = routerModelDecisionSchema.parse(await this.classifyWithModel(goal, snapshot, signal))
+        const classified = routerModelDecisionSchema.parse(await this.classifyWithModel(
+          goal,
+          snapshot,
+          signal,
+          describeContinuationForRouter(continuation)
+        ))
         const candidateIntents = selectEnumValues(classified.candidateIntents, AGENT_INTENTS, 4)
         const requestedDomains = selectEnumValues(classified.toolDomains, AGENT_TOOL_DOMAINS, 6)
         if (deterministic) {
@@ -329,7 +378,7 @@ export class AgentIntentRouter {
             && taskGraphCoversBaseline(candidatePlan, deterministic.taskGraph)
             ? candidatePlan
             : null
-          const decision: AgentRouteDecision = planned
+          const decision = widen(planned
             ? {
                 ...deterministic,
                 source: 'router_model',
@@ -337,7 +386,7 @@ export class AgentIntentRouter {
                 taskGraph: planned,
                 taskFacets: planned.facets.map((facet) => facet.facetId),
               }
-            : deterministic
+            : deterministic)
           this.logDecision(runId, decision)
           return decision
         }
@@ -385,8 +434,9 @@ export class AgentIntentRouter {
           })
           decision.taskFacets = decision.taskGraph.facets.map((facet) => facet.facetId)
         }
-        this.logDecision(runId, decision)
-        return decision
+        const widened = widen(decision)
+        this.logDecision(runId, widened)
+        return widened
       } catch (error) {
         if (
           signal.aborted
@@ -407,8 +457,9 @@ export class AgentIntentRouter {
       }
     }
     if (deterministic) {
-      this.logDecision(runId, deterministic)
-      return deterministic
+      const decision = widen(deterministic)
+      this.logDecision(runId, decision)
+      return decision
     }
     const fallback: AgentRouteDecision = {
       routeVersion: 'agent-route/v2',
@@ -432,8 +483,9 @@ export class AgentIntentRouter {
         uncertainty: '确定性规则和路由模型均未形成可信任务分解。',
       }),
     }
-    this.logDecision(runId, fallback)
-    return fallback
+    const widenedFallback = widen(fallback)
+    this.logDecision(runId, widenedFallback)
+    return widenedFallback
   }
 
   private logDecision(runId: string, decision: AgentRouteDecision): void {
@@ -446,6 +498,7 @@ export class AgentIntentRouter {
         path: decision.path,
         source: decision.source,
         toolDomains: decision.toolDomains,
+        continuationDomains: decision.continuationDomains ?? [],
         taskFacetIds: decision.taskGraph?.facets.map((facet) => facet.facetId) ?? [],
       },
     })

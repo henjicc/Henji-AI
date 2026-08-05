@@ -195,6 +195,17 @@ function planState(input: AgentContextBuildInput): Record<string, unknown> {
     ...(discoveryRequest ? { discoveryRequest } : {}),
     ...(taskGraph ? { facets: planFacetSummaries(taskGraph) } : {}),
     goal: summary?.goal ?? input.goal,
+    /*
+     * route 是初判，不是判决。
+     *
+     * 这一层整体标着 trust: 'trusted_runtime'，模型按设计会把里面的 intent 当权威事实。可
+     * intent 是路由模型只看着"本轮这一句话 + 当前页面"算出来的，看不到会话历史；而主模型看得到。
+     * 实测里就出现过：用户接着上一轮三维任务说"再帮我添加一个白色的球体"，主模型两次判断正确，
+     * 最后被这里的 intent=generate 说服，转头去生成了一张球体图片。所以必须显式降级——
+     * 与会话历史冲突时以历史为准，缺能力就去要，而不是回头怀疑自己读错了用户。
+     */
+    routeNote: '以下 route 是按"当前这句话 + 当前页面"做的初判，不含会话历史；与历史冲突时以历史为准。'
+      + '若判断本轮需要其它领域的能力，直接在 discover_application_capabilities 的 facets[].domains 里写出来，运行时会并入。',
     route: summary?.route
       ? {
           intent: summary.route.intent,

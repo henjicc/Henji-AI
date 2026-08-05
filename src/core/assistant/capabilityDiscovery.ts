@@ -128,10 +128,16 @@ export function listDependencyFrontierFacets(
  * 模型手写的发现请求带不上它，结果租约名额退化成按名字排序，实测把 observe/verify 这类
  * 只读能力全挤进 deferred，Facet 因此永远拿不到验证证据、永远无法完成——依赖前沿卡死。
  * 所以运行时侧的规范化必须始终用这个函数生成请求，不能沿用模型自拟的字段。
+ *
+ * 但"不沿用"不等于"全部丢弃"：`extraQueries` 与 `extraDomains` 是模型（以及会话延续证据）
+ * 唯一能表达"我要的东西不在这个域里"的通道。旧实现把模型自拟的 domains 整个覆盖掉，于是
+ * 模型明明说了"当前上下文未持有 camera_stage 租约"，却没有任何办法把这个域要回来——只能
+ * 反过来认为自己判断错了。运行时保留对 Facet 集合与 requiredEffects 的裁定权，领域则做并集。
  */
 export function buildCapabilityDiscoveryInputForFacets(
   facets: AgentTaskFacet[],
-  extraQueriesByFacetId: Readonly<Record<string, string[]>> = {}
+  extraQueriesByFacetId: Readonly<Record<string, string[]>> = {},
+  extraDomains: readonly string[] = []
 ): ApplicationCapabilityDiscoveryInput | null {
   if (facets.length === 0) return null
   return applicationCapabilityDiscoveryInputSchema.parse({
@@ -142,7 +148,7 @@ export function buildCapabilityDiscoveryInputForFacets(
         facet.goal,
         ...(extraQueriesByFacetId[facet.facetId] ?? []),
       ])].slice(0, 8),
-      domains: [facet.domain],
+      domains: [...new Set([facet.domain, ...extraDomains])].slice(0, 8),
       entityTypes: [...new Set([
         ...facet.targetEntityTypes,
         ...facet.requiredEffects.flatMap((effect) => effect.entityTypes),

@@ -101,6 +101,13 @@ export interface AgentRouteDecision {
   anchorSurfaceId?: string
   taskFacets?: string[]
   suggestedCapabilityQueries?: string[]
+  /**
+   * 因承接上一轮任务而额外放宽的工具域。
+   *
+   * 与 toolDomains 分开记录：能力发现要用它给每个 Facet 补充可搜索领域，而 Facet 自身的
+   * domain 只描述"这一步本来属于哪儿"，不该被延续证据改写。
+   */
+  continuationDomains?: AgentToolDomain[]
   /** 可持久化的多领域任务图；旧保存点读取时允许缺失。 */
   taskGraph?: AgentTaskGraph
 }

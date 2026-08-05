@@ -27,7 +27,12 @@ interface AgentModelTurnCoordinatorOptions {
 export class AgentModelTurnCoordinator {
   constructor(private readonly options: AgentModelTurnCoordinatorOptions) {}
 
-  async classify(goal: string, snapshot: HostContextSnapshot, signal: AbortSignal): Promise<unknown> {
+  async classify(
+    goal: string,
+    snapshot: HostContextSnapshot,
+    signal: AbortSignal,
+    continuation?: string | null
+  ): Promise<unknown> {
     this.options.throwIfCancelled()
     const requestId = `${this.options.runId}:router:${snapshot.revision}`
     this.options.setCurrentModelRequestId(requestId)
@@ -36,6 +41,7 @@ export class AgentModelTurnCoordinator {
         runId: this.options.runId,
         goal,
         snapshot,
+        continuation,
         model: this.options.models.router,
         runModelStep: this.options.runModelStep,
         signal,

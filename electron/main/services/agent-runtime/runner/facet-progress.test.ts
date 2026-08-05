@@ -252,6 +252,38 @@ describe('AgentFacetProgressTracker', () => {
   })
 
   /*
+   * 模型自报的领域是它唯一的申诉渠道。
+   *
+   * 旧实现把 domains 整个覆盖成 [facet.domain]，模型即使准确说出"当前上下文未持有
+   * camera_stage 租约"也要不回来，只能把工具可用性当意图证据、推翻自己原本正确的判断。
+   */
+  it('模型自报的领域并入发现请求，而不是被覆盖掉', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'picture', domain: 'generation', targetEntityTypes: ['generation.task'] }),
+    ]), registry())
+    const normalized = tracker.normalizeCallInput(call('discover_application_capabilities', {
+      facets: [{ facetId: 'picture', domains: ['camera_stage'] }],
+    })) as { facets: { domains: string[] }[] }
+    expect(normalized.facets[0].domains).toContain('generation')
+    expect(normalized.facets[0].domains).toContain('camera_stage')
+  })
+
+  it('会话延续领域在第一次发现时就生效', () => {
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'picture', domain: 'generation', targetEntityTypes: ['generation.task'] })]),
+      registry(),
+      false,
+      [],
+      [],
+      ['camera_stage']
+    )
+    const normalized = tracker.normalizeCallInput(
+      call('discover_application_capabilities', {})
+    ) as { facets: { domains: string[] }[] }
+    expect(normalized.facets[0].domains).toContain('camera_stage')
+  })
+
+  /*
    * 写入本身不构成验证，但一次覆盖到位的结构化观察就够了。
    *
    * 旧实现按实例数累加验证次数：写 2 个对象要再读 2 次、写 6 个关键帧要再读 6 次。可 observe

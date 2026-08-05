@@ -174,6 +174,50 @@ describe('runRouterModelClassification', () => {
     expect(serialized).not.toContain('directory-content-must-not-reach-router')
   })
 
+  /*
+   * surface 与延续证据是路由判对跨页面任务的两个必要输入。
+   *
+   * 缺 surface：workspace 的粒度只到"生成/画布/工具"，看不出用户开着三维编辑器还是图片编辑器，
+   * 而确定性分支一直在用 snapshot.surface——同一份快照两条路径看到的信息不一样。
+   * 缺延续证据：同一线程里的"再帮我加一个…"必然被判成当前页面的新任务。
+   */
+  it('路由输入包含 surface 与会话延续证据', async () => {
+    const runModelStep = vi.fn().mockResolvedValue({
+      structuredOutput: { intent: 'camera_stage', reason: '承接上一轮三维任务' },
+      text: '',
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
+        outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
+      },
+    })
+    await runRouterModelClassification({
+      runId: 'run-router-continuation',
+      goal: '再帮我添加一个白色的球体',
+      continuation: '同一会话的延续证据：上一轮已操作的领域：camera_stage',
+      model: testModel,
+      snapshot: {
+        schemaVersion: 'agent-contract/v2',
+        rendererSessionId: 'renderer-1',
+        revision: 1,
+        scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0 },
+        workspace: { id: 'generation', activeToolId: null },
+        surface: { id: 'workspace.generation', kind: 'workspace' },
+        project: { id: null, selectedNodeId: null },
+        generation: { commandReady: true },
+        assets: { view: 'closed', selectedAssetId: null },
+        uiReady: true,
+        availableCapabilities: [],
+        capturedAt: new Date().toISOString(),
+      } as unknown as Parameters<typeof runRouterModelClassification>[0]['snapshot'],
+      runModelStep,
+      signal: new AbortController().signal,
+    })
+    const serialized = String(runModelStep.mock.calls[0][0].messages[0].content)
+    expect(serialized).toContain('workspace.generation')
+    expect(serialized).toContain('camera_stage')
+  })
+
   it('路由模型非 stop 结束时拒绝采用可能不完整的分类结果', async () => {
     const runModelStep = vi.fn().mockResolvedValue({
       structuredOutput: {

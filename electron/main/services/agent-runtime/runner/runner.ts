@@ -67,6 +67,7 @@ import {
   type AgentRouteDecision,
   type AgentToolDomain,
 } from '../context/types'
+import { deriveThreadContinuation } from '../context/thread-continuation'
 const logger = createMainLogger('main.agent_runtime')
 
 function isAgentIntent(value: string): value is AgentIntent {
@@ -396,7 +397,12 @@ export class AgentRunner {
         : await routeAgentGoal({
             runId: this.options.runId, goal: this.options.request.goal, snapshot,
             signal: this.abortController.signal,
-            classify: (goal, host, signal) => this.modelTurnCoordinator.classify(goal, host, signal),
+            // 路由此前只看得到本轮那一句话和当前页面，同一线程里的"再帮我加一个…"必然被判成
+            // 当前工作区的新任务。历史就在 options 里，没有理由不给路由用。
+            continuation: deriveThreadContinuation(this.options.conversationHistory),
+            classify: (goal, host, signal, continuation) => (
+              this.modelTurnCoordinator.classify(goal, host, signal, continuation)
+            ),
             emit: (event) => this.emit(event),
           })
       if (recoveredRoute?.taskGraph) {
@@ -437,7 +443,8 @@ export class AgentRunner {
             this.options.dependencies.registry,
             route.complexity === 'multi_step',
             this.options.recoveryContext?.effectLedger,
-            this.options.recoveryContext?.toolLeases.map((lease) => lease.facetId)
+            this.options.recoveryContext?.toolLeases.map((lease) => lease.facetId),
+            route.continuationDomains
           ) : null
       this.setPhase('preparing')
       while (!isTerminalAgentState(this.machine.status)) {

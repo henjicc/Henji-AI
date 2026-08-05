@@ -18,12 +18,22 @@ interface RouterModelExecutionInput {
   model: AgentRuntimeModel
   runModelStep: AgentModelStepExecutor
   signal: AbortSignal
+  /** 同一会话的延续证据；缺省表示这是线程里的第一轮。 */
+  continuation?: string | null
 }
 
 function compactRouterSnapshot(snapshot: HostContextSnapshot): Record<string, unknown> {
   return {
     revision: snapshot.revision,
     scopeRevisions: snapshot.scopeRevisions,
+    /*
+     * surface 必须带上。
+     *
+     * 这份摘要原来只给 workspace，而 workspace 的粒度是"生成/画布/工具"，看不出用户正开着
+     * 三维编辑器还是图片编辑器。确定性路由分支一直在用 snapshot.surface?.id，唯独路由模型
+     * 被蒙着眼——同一个快照，两条路径看到的信息不一样。
+     */
+    surface: snapshot.surface ?? null,
     workspace: snapshot.workspace,
     project: snapshot.project,
     generation: {
@@ -113,6 +123,8 @@ export async function runRouterModelClassification(
       '把 multi_step、多个目标或多个写入效果的需求拆成 taskFacets。每个 Facet 只表达一个可验证目标，并声明 requiredEffects；不要猜工具名或业务参数。',
       'requiredEffects 必须忠实保留数量词和稳定目标：例如“创建两个节点”使用 minimumCount=2。effect 只能是 observe/create/update/delete/navigate/execute。',
       '同一批可一起提交的 Effect 使用相同 actionGroupId；依赖前一步输出引用的步骤必须拆成有 dependsOn 的 Facet。verificationRequired 表示写入后必须有独立结构化读取证据。',
+      // 当前页面只是弱证据：用户常在 A 页面下达针对 B 页面的指令，尤其是承接上一轮任务时。
+      '宿主快照说明用户此刻在哪，不代表任务属于那里。若延续证据显示上一轮在别的领域，优先按上一轮的领域分类，并把需要的领域写进 toolDomains。',
       '输出必须符合给定 JSON 结构。',
     ].join('\n'),
     messages: [
@@ -120,6 +132,7 @@ export async function runRouterModelClassification(
         role: 'user',
         content: [
           `用户目标：${input.goal}`,
+          ...(input.continuation ? [input.continuation] : []),
           '当前宿主快照（仅用于判断当前工作区、项目、可用命令和 revision）：',
           JSON.stringify(compactRouterSnapshot(input.snapshot)),
         ].join('\n'),
