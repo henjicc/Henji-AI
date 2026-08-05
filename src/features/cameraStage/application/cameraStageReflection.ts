@@ -9,7 +9,7 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
-import type { StageObject } from '../domain/sceneTypes'
+import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
 import { getAnimatablePropByPath, listAnimatablePropertyPaths } from '../domain/animatableProps'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
@@ -127,6 +127,46 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.scene, 'shot_refs', '镜头卡', { kind: 'ref_list', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '镜头集合通过正式镜头操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'many' } }),
     property(ENTITY_TYPES.scene, 'duration', '动画时长', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),
     property(ENTITY_TYPES.scene, 'fps', '帧率', { kind: 'integer', hardRange: { min: 1, max: 240 } }, { unit: 'fps' }),
+    /*
+     * 场景外观：界面上有的每一项这里都要有。
+     *
+     * 这一组此前一项都没注册，于是"把天空改成深蓝""地面换成网格""把太阳调到黄昏"这类
+     * 请求助手全都做不了——不是被权限挡住，是通用动词**根本看不见**这些字段。按项目规则
+     * （注册实体属性后走通用动词，不为设值手写专用能力），补注册就是唯一正确的修法：
+     * 24 个属性换来 24 项能力，一个新工具都不用加。
+     */
+    property(ENTITY_TYPES.scene, 'sky_color', '天空颜色', COLOR),
+    property(ENTITY_TYPES.scene, 'ground_color', '地面颜色', COLOR),
+    property(ENTITY_TYPES.scene, 'ground_pattern', '地面图案', {
+      kind: 'enum',
+      values: [
+        { value: 'none', label: '纯色' },
+        { value: 'grid', label: '网格' },
+        { value: 'checker', label: '棋盘' },
+      ],
+    }),
+    property(ENTITY_TYPES.scene, 'ground_density', '地面图案密度', { kind: 'number', hardRange: { min: 0, max: 1000 } }),
+    property(ENTITY_TYPES.scene, 'ground_grid_line_color', '网格线颜色', COLOR),
+    property(ENTITY_TYPES.scene, 'ground_grid_line_thickness', '网格线粗细', { kind: 'number', hardRange: { min: 0, max: 100 } }),
+    property(ENTITY_TYPES.scene, 'ground_checker_light_color', '棋盘浅色', COLOR),
+    property(ENTITY_TYPES.scene, 'ground_checker_dark_color', '棋盘深色', COLOR),
+    property(ENTITY_TYPES.scene, 'sunlight_enabled', '阳光开启', BOOLEAN),
+    property(ENTITY_TYPES.scene, 'sunlight_intensity', '阳光强度', { kind: 'number', hardRange: { min: 0, max: 100 } }),
+    property(ENTITY_TYPES.scene, 'sunlight_time_of_day', '一天中的时间', { kind: 'number', hardRange: { min: 0, max: 24 } }, { unit: 'hour' }),
+    property(ENTITY_TYPES.scene, 'fog_enabled', '雾开启', BOOLEAN),
+    property(ENTITY_TYPES.scene, 'fog_distance', '雾距离', { kind: 'number', hardRange: { min: 0, max: 10_000 } }, { unit: 'scene_unit' }),
+    property(ENTITY_TYPES.scene, 'show_name_labels', '显示名称标签', BOOLEAN),
+    property(ENTITY_TYPES.scene, 'name_label_scale', '名称标签缩放', { kind: 'number', hardRange: { min: 0, max: 100 } }),
+    property(ENTITY_TYPES.scene, 'name_label_offset', '名称标签偏移', VECTOR3),
+    property(ENTITY_TYPES.scene, 'name_label_text_color', '名称标签文字颜色', COLOR),
+    property(ENTITY_TYPES.scene, 'name_label_follow_object_color', '名称标签跟随对象颜色', BOOLEAN),
+    property(ENTITY_TYPES.scene, 'name_label_background_color', '名称标签背景色', COLOR),
+    property(ENTITY_TYPES.scene, 'name_label_background_opacity', '名称标签背景不透明度', { kind: 'number', hardRange: { min: 0, max: 1 } }),
+    property(ENTITY_TYPES.scene, 'name_label_shadow_color', '名称标签阴影颜色', COLOR),
+    property(ENTITY_TYPES.scene, 'name_label_shadow_opacity', '名称标签阴影不透明度', { kind: 'number', hardRange: { min: 0, max: 1 } }),
+    property(ENTITY_TYPES.scene, 'name_label_shadow_blur', '名称标签阴影模糊', { kind: 'number', hardRange: { min: 0, max: 100 } }),
+    property(ENTITY_TYPES.scene, 'name_label_shadow_distance', '名称标签阴影距离', { kind: 'number', hardRange: { min: 0, max: 100 } }),
+    property(ENTITY_TYPES.scene, 'name_label_shadow_angle', '名称标签阴影角度', { kind: 'number', hardRange: { min: -360, max: 360 } }, { unit: 'degree' }),
   ],
   [ENTITY_TYPES.object]: [
     property(ENTITY_TYPES.object, 'name', '对象名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
@@ -177,6 +217,42 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.keyframe, 'value', '值摘要', STRING),
     property(ENTITY_TYPES.keyframe, 'easing', '缓动', STRING),
   ],
+}
+
+/**
+ * 场景外观属性的读取侧，与 SCENE_APPEARANCE_WRITERS 一一对应。
+ *
+ * 写得进去读不回来等于没写：结算要靠读回的值当证据，助手也要靠它确认改对没有。
+ */
+export function sceneAppearanceProperties(settings: StageSceneSettings): Record<string, JsonValue> {
+  const label = settings.display.nameLabel
+  return {
+    [`${ENTITY_TYPES.scene}.sky_color`]: settings.sky.color,
+    [`${ENTITY_TYPES.scene}.ground_color`]: settings.ground.color,
+    [`${ENTITY_TYPES.scene}.ground_pattern`]: settings.ground.pattern,
+    [`${ENTITY_TYPES.scene}.ground_density`]: settings.ground.density,
+    [`${ENTITY_TYPES.scene}.ground_grid_line_color`]: settings.ground.gridLineColor,
+    [`${ENTITY_TYPES.scene}.ground_grid_line_thickness`]: settings.ground.gridLineThickness,
+    [`${ENTITY_TYPES.scene}.ground_checker_light_color`]: settings.ground.checkerLightColor,
+    [`${ENTITY_TYPES.scene}.ground_checker_dark_color`]: settings.ground.checkerDarkColor,
+    [`${ENTITY_TYPES.scene}.sunlight_enabled`]: settings.sunlight.enabled,
+    [`${ENTITY_TYPES.scene}.sunlight_intensity`]: settings.sunlight.intensity,
+    [`${ENTITY_TYPES.scene}.sunlight_time_of_day`]: settings.sunlight.timeOfDay,
+    [`${ENTITY_TYPES.scene}.fog_enabled`]: settings.fog.enabled,
+    [`${ENTITY_TYPES.scene}.fog_distance`]: settings.fog.distance,
+    [`${ENTITY_TYPES.scene}.show_name_labels`]: settings.display.showNameLabels,
+    [`${ENTITY_TYPES.scene}.name_label_scale`]: label.scale,
+    [`${ENTITY_TYPES.scene}.name_label_offset`]: vec3Value(label.offset),
+    [`${ENTITY_TYPES.scene}.name_label_text_color`]: label.textColor,
+    [`${ENTITY_TYPES.scene}.name_label_follow_object_color`]: label.followObjectColor,
+    [`${ENTITY_TYPES.scene}.name_label_background_color`]: label.backgroundColor,
+    [`${ENTITY_TYPES.scene}.name_label_background_opacity`]: label.backgroundOpacity,
+    [`${ENTITY_TYPES.scene}.name_label_shadow_color`]: label.shadowColor,
+    [`${ENTITY_TYPES.scene}.name_label_shadow_opacity`]: label.shadowOpacity,
+    [`${ENTITY_TYPES.scene}.name_label_shadow_blur`]: label.shadowBlur,
+    [`${ENTITY_TYPES.scene}.name_label_shadow_distance`]: label.shadowDistance,
+    [`${ENTITY_TYPES.scene}.name_label_shadow_angle`]: label.shadowAngle,
+  }
 }
 
 function childRef(kind: EntityType, projectId: string, id: string, label?: string): ApplicationRef {
@@ -300,6 +376,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       [`${ENTITY_TYPES.scene}.shot_refs`]: snapshot.shots.map((shot) => childRef(ENTITY_TYPES.shot, snapshot.id, shot.id, shot.name)),
       [`${ENTITY_TYPES.scene}.duration`]: snapshot.animation.duration,
       [`${ENTITY_TYPES.scene}.fps`]: snapshot.animation.fps,
+      ...sceneAppearanceProperties(snapshot.sceneSettings),
     }
   }
 

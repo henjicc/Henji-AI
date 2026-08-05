@@ -56,6 +56,45 @@ function refId(value: JsonValue | undefined): string | null {
   return z.object({ kind: z.string(), id: z.string() }).passthrough().parse(value).id.split(':').pop() ?? null
 }
 
+type CameraStageState = ReturnType<typeof useCameraStageStore.getState>
+
+/**
+ * 场景外观属性 → store 动作的一张表。
+ *
+ * 界面上有的每一项这里都要有：此前这一组一项都没接，助手做不了"把天空改成深蓝""地面换成
+ * 网格""把太阳调到黄昏"。用表而不是 24 个 if 分支——漏一项就是漏一项能力，表能一眼数完，
+ * 也能被测试逐项比对（见 sceneAppearanceCoverage 测试）。
+ */
+const SCENE_APPEARANCE_WRITERS: Record<string, (state: CameraStageState, value: JsonValue | undefined) => void> = {
+  sky_color: (state, value) => state.setSceneSkyColor(stringValue(value)),
+  ground_color: (state, value) => state.setSceneGroundColor(stringValue(value)),
+  ground_pattern: (state, value) => state.setSceneGroundPattern(
+    z.enum(['none', 'grid', 'checker']).parse(value)
+  ),
+  ground_density: (state, value) => state.setSceneGroundDensity(numberValue(value)),
+  ground_grid_line_color: (state, value) => state.setSceneGroundGridLineColor(stringValue(value)),
+  ground_grid_line_thickness: (state, value) => state.setSceneGroundGridLineThickness(numberValue(value)),
+  ground_checker_light_color: (state, value) => state.setSceneGroundCheckerLightColor(stringValue(value)),
+  ground_checker_dark_color: (state, value) => state.setSceneGroundCheckerDarkColor(stringValue(value)),
+  sunlight_enabled: (state, value) => state.setSceneSunlightEnabled(booleanValue(value)),
+  sunlight_intensity: (state, value) => state.setSceneSunlightIntensity(numberValue(value)),
+  sunlight_time_of_day: (state, value) => state.setSceneSunlightTimeOfDay(numberValue(value)),
+  fog_enabled: (state, value) => state.setSceneFogEnabled(booleanValue(value)),
+  fog_distance: (state, value) => state.setSceneFogDistance(numberValue(value)),
+  show_name_labels: (state, value) => state.setSceneShowNameLabels(booleanValue(value)),
+  name_label_scale: (state, value) => state.setSceneNameLabelScale(numberValue(value)),
+  name_label_offset: (state, value) => state.setSceneNameLabelOffset(vec3(value)),
+  name_label_text_color: (state, value) => state.setSceneNameLabelTextColor(stringValue(value)),
+  name_label_follow_object_color: (state, value) => state.setSceneNameLabelFollowObjectColor(booleanValue(value)),
+  name_label_background_color: (state, value) => state.setSceneNameLabelBackgroundColor(stringValue(value)),
+  name_label_background_opacity: (state, value) => state.setSceneNameLabelBackgroundOpacity(numberValue(value)),
+  name_label_shadow_color: (state, value) => state.setSceneNameLabelShadowColor(stringValue(value)),
+  name_label_shadow_opacity: (state, value) => state.setSceneNameLabelShadowOpacity(numberValue(value)),
+  name_label_shadow_blur: (state, value) => state.setSceneNameLabelShadowBlur(numberValue(value)),
+  name_label_shadow_distance: (state, value) => state.setSceneNameLabelShadowDistance(numberValue(value)),
+  name_label_shadow_angle: (state, value) => state.setSceneNameLabelShadowAngle(numberValue(value)),
+}
+
 function mutationEvidence(step: MutationStep, revision: number): ApplicationEvidence[] {
   return step.mutations.map((mutation) => ({
     kind: 'property_value',
@@ -137,10 +176,15 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const state = useCameraStageStore.getState()
     for (const mutation of step.mutations) {
       if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
+      const suffix = mutation.propertyId.startsWith(`${CAMERA_STAGE_ENTITY_TYPES.scene}.`)
+        ? mutation.propertyId.slice(CAMERA_STAGE_ENTITY_TYPES.scene.length + 1)
+        : ''
       if (mutation.propertyId === `${CAMERA_STAGE_ENTITY_TYPES.scene}.active_camera_ref`) state.setActiveCameraId(refId(mutation.value))
       else if (mutation.propertyId === `${CAMERA_STAGE_ENTITY_TYPES.scene}.duration`) state.setDuration(numberValue(mutation.value))
       else if (mutation.propertyId === `${CAMERA_STAGE_ENTITY_TYPES.scene}.fps`) state.setFps(numberValue(mutation.value))
-      else throw new Error('PROPERTY_NOT_WRITABLE')
+      else if (suffix in SCENE_APPEARANCE_WRITERS) {
+        SCENE_APPEARANCE_WRITERS[suffix](state, mutation.value)
+      } else throw new Error('PROPERTY_NOT_WRITABLE')
     }
     await saveCurrentProject()
     return undoToken
