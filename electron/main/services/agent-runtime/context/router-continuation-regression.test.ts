@@ -161,6 +161,67 @@ describe('路由承接上一轮任务', () => {
     expect(decision.continuationDomains).toContain('camera_stage')
   })
 
+  /*
+   * 复现第三次实测失败：用户只说了「你继续」。
+   *
+   * 路由模型把它判成 canvas（画布），任务图于是只生成一个 canvas Facet，上一轮真正在做的
+   * camera_stage 只能靠补位名额挤进来——而补位按字母序选，恰好没选中 place_camera_stage_object，
+   * 运行卡在"任务图仍有 1 个 Facet 未结算"。
+   *
+   * 一句「你继续」的信息量是零，让模型去分类它得到的任何 intent 都是噪声。
+   */
+  it('纯承接语句不进分类，直接沿用上一轮领域', async () => {
+    let classifierCalls = 0
+    const router = new AgentIntentRouter(async () => {
+      classifierCalls += 1
+      return { intent: 'canvas', toolDomains: ['canvas'], reason: '判断为画布任务' }
+    })
+    for (const goal of ['你继续', '继续吧', '你这不对吧', '没成功啊']) {
+      const decision = await router.route(
+        `run-${goal}`,
+        goal,
+        generationSnapshot(),
+        new AbortController().signal,
+        deriveThreadContinuation(cameraStageHistory())
+      )
+      expect(decision.intent, goal).toBe('camera_stage')
+      expect(decision.toolDomains, goal).toContain('camera_stage')
+      expect(decision.taskGraph?.facets.every((facet) => facet.domain === 'camera_stage'), goal)
+        .toBe(true)
+    }
+    // 分类一句没有信息量的话既浪费一次模型调用（实测 18 秒），结果又只会是噪声。
+    expect(classifierCalls).toBe(0)
+  })
+
+  it('任务图的目标文本取上一轮的用户诉求，不是那句「你继续」', async () => {
+    const decision = await new AgentIntentRouter(async () => ({ intent: 'canvas', reason: 'x' })).route(
+      'run-goal-text',
+      '你继续',
+      generationSnapshot(),
+      new AbortController().signal,
+      deriveThreadContinuation(cameraStageHistory())
+    )
+    // 任务图里只留一句"你继续"的话，模型和结算都读不出这一步要做什么。
+    expect(JSON.stringify(decision.taskGraph)).toContain('三维镜头')
+  })
+
+  it('没有历史领域证据时不接管路由', async () => {
+    let called = false
+    const router = new AgentIntentRouter(async () => {
+      called = true
+      return { intent: 'general', reason: '无法判断' }
+    })
+    const decision = await router.route(
+      'run-no-history',
+      '你继续',
+      generationSnapshot(),
+      new AbortController().signal,
+      null
+    )
+    expect(called).toBe(true)
+    expect(decision.intent).toBe('general')
+  })
+
   it('不是延续语句时保持原样，不平白扩域', async () => {
     const router = new AgentIntentRouter(async () => ({
       intent: 'generate',

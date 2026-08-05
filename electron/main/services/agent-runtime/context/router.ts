@@ -22,6 +22,7 @@ import {
   continuationIntents,
   describeContinuationForRouter,
   isContinuationGoal,
+  isPureContinuationGoal,
   type AgentThreadContinuation,
 } from './thread-continuation'
 
@@ -74,6 +75,54 @@ function widenWithContinuation(
     continuationDomains: extraDomains,
     reason: `${decision.reason}；检测到承接上一轮任务，已并入领域 ${extraDomains.join('、')}`,
   }
+}
+
+/**
+ * 纯承接语句直接沿用上一轮的领域，不进分类。
+ *
+ * 「你继续」「你这不对吧」的信息量是零，让路由模型分类它得到的任何 intent 都是噪声：实测
+ * 「你这不对吧」判成 diagnose、「你继续」判成 canvas，而上一轮两次都在 camera_stage。主意图
+ * 决定任务图形状，形状一错，真正需要的能力（place_camera_stage_object）就只能靠补位名额碰运气。
+ *
+ * 与 {@link widenWithContinuation} 的分工：那里处理"带着新诉求的承接"（再帮我加一个球体），
+ * 只放宽领域、不碰主意图；这里处理"什么都没带的承接"，此时没有需要保留的主意图。
+ * 领域仍然只来自历史证据，权限照旧由 registry.list(context) 与审批把关。
+ */
+function pureContinuationRoute(
+  goal: string,
+  snapshot: HostContextSnapshot,
+  continuation: AgentThreadContinuation | null
+): AgentRouteDecision | null {
+  if (!continuation || !isPureContinuationGoal(goal)) return null
+  const domains = continuationDomains(continuation)
+  const intents = continuationIntents(continuation)
+  const intent = intents[0]
+  if (domains.length === 0 || !intent) return null
+  // Facet 的目标文本用上一轮的用户诉求，否则任务图里只会留下一句"你继续"，
+  // 模型和结算都读不出这一步到底要做什么。
+  const previousGoal = continuation.previousUserGoals.find((item) => item.trim() !== goal.trim())
+  const decision: AgentRouteDecision = {
+    routeVersion: 'agent-route/v2',
+    intent,
+    candidateIntents: uniqueValues(intents, 4),
+    complexity: 'ambiguous',
+    path: routePolicy[intent].path,
+    toolDomains: uniqueValues([...domains, ...routePolicy[intent].toolDomains], 10),
+    source: 'fallback',
+    reason: `本轮目标只是承接上一轮，未携带新诉求；沿用上一轮领域 ${domains.join('、')}`,
+    anchorSurfaceId: continuation.surfaceIds[0] ?? snapshot.surface?.id,
+    continuationDomains: domains,
+    suggestedCapabilityQueries: uniqueValues(domains, 10),
+  }
+  decision.taskGraph = createModelTaskGraph({
+    goal: previousGoal ?? goal,
+    rawFacets: undefined,
+    primaryIntent: intent,
+    candidateDomains: decision.toolDomains,
+    snapshot,
+  })
+  decision.taskFacets = decision.taskGraph.facets.map((facet) => facet.facetId)
+  return decision
 }
 
 interface DeterministicRule {
@@ -351,6 +400,14 @@ export class AgentIntentRouter {
       widenWithContinuation(decision, goal, continuation)
     )
     const deterministic = deterministicRoute(goal, snapshot)
+    // 纯承接语句没有可分类的内容，直接沿用上一轮；确定性规则命中说明目标其实带了内容，让它优先。
+    if (!deterministic) {
+      const continued = pureContinuationRoute(goal, snapshot, continuation)
+      if (continued) {
+        this.logDecision(runId, continued)
+        return continued
+      }
+    }
     if (deterministic && (deterministic.complexity !== 'multi_step' || !this.classifyWithModel)) {
       const decision = widen(deterministic)
       this.logDecision(runId, decision)

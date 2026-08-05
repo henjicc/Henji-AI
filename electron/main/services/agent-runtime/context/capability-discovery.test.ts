@@ -223,6 +223,37 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     expect(result.missing).toEqual([])
   })
 
+  /*
+   * 回归：用户说「你继续」，任务图判成 canvas，place_camera_stage_object 被延迟发放。
+   *
+   * 上一条修复让 camera_stage 的能力进得来了，但进来的是靠补位名额、按字母序选的四个
+   * （apply/get/list/observe）——恰好不含任务真正需要的 place_camera_stage_object，模型只能
+   * 绕道通用实体工具，最后卡在"任务图仍有 1 个 Facet 未结算"。
+   *
+   * 路由接管后 Facet 的 domain 就是 camera_stage、entityTypes 是 camera_stage.object，
+   * 放置能力属于实体命中，直接进租约而不是补位。
+   */
+  it('承接上一轮的三维任务时，放置对象能力直接进租约', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const context = fullContext(registry)
+    const taskGraph = createModelTaskGraph({
+      goal: '在三维镜头里新建工程，放一个紫色立方体和红色圆柱',
+      rawFacets: undefined,
+      primaryIntent: 'camera_stage',
+      candidateDomains: ['camera_stage'],
+      snapshot: context,
+    })
+    const request = buildCapabilityDiscoveryInputForFacets(taskGraph.facets)
+    if (!request) return
+    const result = new AgentCapabilityDiscoveryCatalog(registry)
+      .discover('run-continue', request, context)
+
+    expect(result.leasedToolNames).toContain('place_camera_stage_object')
+    expect(result.deferredToolNames).not.toContain('place_camera_stage_object')
+  })
+
   it('缺失原因不把"没匹配上"误报成权限过滤', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
