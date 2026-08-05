@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z, ZodError } from 'zod'
 
 import type { HostScope } from '../../../../../src/core/assistant/hostContracts'
 import {
@@ -247,6 +247,17 @@ export function getWorkflowDefinition(id: string): WorkflowDefinition | null {
 
 export function parseWorkflowParams(id: string, params: Record<string, unknown>): { definition: WorkflowDefinition; params: Record<string, unknown> } {
   const definition = getWorkflowDefinition(id)
-  if (!definition) throw new Error('[INVALID_INPUT] 未知工作流')
-  return { definition, params: definition.schema.parse(params) }
+  // 合法取值就在手边，不列出来等于让调用方去猜。
+  if (!definition) {
+    throw new Error(`[INVALID_INPUT] 未知工作流 ${id}；可用工作流：${definitions.map((item) => item.id).join('、')}`)
+  }
+  try {
+    return { definition, params: definition.schema.parse(params) }
+  } catch (error) {
+    if (!(error instanceof ZodError)) throw error
+    const issues = error.issues.slice(0, 6)
+      .map((issue) => `${issue.path.map(String).join('.') || 'params'}: ${issue.message}`)
+      .join('；')
+    throw new Error(`[INVALID_INPUT] 工作流 ${id} 参数无效——${issues}`.slice(0, 600))
+  }
 }

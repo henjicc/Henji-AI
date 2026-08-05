@@ -174,6 +174,13 @@ npm run check:model-i18n
 
 按风险一一对应，不得全部追加：
 
+- **只要往 `electron/main/**` 或 `electron/preload/**` 新增了跨 `src/` 的 import**：必跑
+
+  ```bash
+  npm run check:main-imports
+  ```
+
+  `@/` 别名只配在 `electron.vite.config.ts` 的 `renderer` 块，main/preload 解析不了。引到依赖链上带 `@/` 的 `src` 模块时，`tsc`（两个工程都配了 paths）和 `npm test`（走 vite alias）**都会通过**，只有实际构建才报 `Failed to resolve import`。这条检查是同一判断的静态版本，一秒出结果，已接入 `electron:build`。
 - IPC / preload / 启动 / 数据库 / 打包链路：构建后考虑 `npm run electron:smoke`
 - 窗口尺寸、缩放、DPI：`npm run electron:dpi-check`
 - 自动更新：`npm run electron:updater-e2e`

@@ -35,12 +35,26 @@ function recordCount(value: unknown): number {
   return Object.keys(value).length
 }
 
+/**
+ * 条数门槛必须和字节门槛同步放大。
+ *
+ * 字节门槛改成跟上下文窗口走之后，这里的 400 条被落下了：一份 401 条、总共十几 KB 的清单，
+ * 在 100 万窗口下照样被推去分页——字节判定说"随便放"，条数判定说"太大了"，两把尺子打架，
+ * 而分页那条路径已经被实测证明是最贵的。放大倍数与字节门槛同比例，下限仍是 400。
+ */
+export function resolveOffloadRecordThreshold(byteThreshold: number): number {
+  return Math.max(
+    OFFLOAD_RECORD_THRESHOLD,
+    Math.floor(OFFLOAD_RECORD_THRESHOLD * (byteThreshold / OFFLOAD_BYTE_THRESHOLD))
+  )
+}
+
 export function shouldOffloadObservation(
   output: unknown,
   byteThreshold = OFFLOAD_BYTE_THRESHOLD
 ): boolean {
   return Buffer.byteLength(JSON.stringify(output), 'utf8') > byteThreshold
-    || recordCount(output) > OFFLOAD_RECORD_THRESHOLD
+    || recordCount(output) > resolveOffloadRecordThreshold(byteThreshold)
 }
 
 interface AgentArtifactPersistence {

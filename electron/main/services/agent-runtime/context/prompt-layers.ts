@@ -1,7 +1,7 @@
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
-import { AgentArtifactStore, shouldOffloadObservation } from './offload'
+import { AgentArtifactStore, resolveOffloadByteThreshold, shouldOffloadObservation } from './offload'
 import { sanitizeObservationValue } from './sanitize'
 import { redactAgentText } from '../tools/security'
 import type {
@@ -286,13 +286,17 @@ function observationPreview(value: unknown): string {
 function formatObservation(
   runId: string,
   observation: AgentToolObservation,
-  artifactStore: AgentArtifactStore
+  artifactStore: AgentArtifactStore,
+  contextWindow: number | null | undefined
 ): { text: string; artifact: AgentContextArtifact | null } {
   const output = observation.source.toolName === 'query_diagnostic_events'
     ? compactDiagnosticOutput(observation.output)
     : observation.output
   const sanitized = sanitizeObservationValue(output)
-  if (shouldOffloadObservation(sanitized)) {
+  // 卸载门槛必须和 runner-results.toolMessage 用同一把尺子。此前这里漏传 contextWindow，
+  // 退回固定 8KB：同一份结果在 tool 消息里被内联、在观察层却被卸载成 artifact，
+  // 白白多存一份、还让模型以为得去分页读回来。
+  if (shouldOffloadObservation(sanitized, resolveOffloadByteThreshold(contextWindow))) {
     const artifact = artifactStore.offload(runId, observation, sanitized)
     return {
       text: JSON.stringify({
@@ -321,7 +325,7 @@ export function buildAgentContextLayers(
   artifactStore: AgentArtifactStore
 ): { layers: AgentContextLayer[]; offloaded: AgentContextArtifact[] } {
   const observations = input.observations.slice(-12).map((observation) => (
-    formatObservation(input.runId, observation, artifactStore)
+    formatObservation(input.runId, observation, artifactStore, input.contextWindowBudget)
   ))
   const offloaded = observations.flatMap((item) => item.artifact ? [item.artifact] : [])
   const modelCatalog = relevantModelCatalog(input)
