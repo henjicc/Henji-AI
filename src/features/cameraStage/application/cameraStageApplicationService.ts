@@ -417,7 +417,18 @@ export const cameraStageApplicationService = {
     const state = useCameraStageStore.getState()
     const patch = validateObjectUpdate(object, state.objects, update)
     const undoToken = captureCameraStageUndo(projectId)
-    state.updateObject(objectId, patch)
+    /*
+     * 助手的写入是**建模**，不是动画编辑，必须同步到所有关键帧卡。
+     *
+     * 简易模式下 store.updateObject 会把改动只捕获进当前选中的那一张卡（captureObjectsIntoShot
+     * 对其他卡直接原样返回），而新对象在创建时是以默认状态写进**所有**卡的。两者一叠加：
+     * 助手"放一个白色球体"之后，球体在 1 张卡上是新位置+白色、在其余 146 张卡上是默认位置+
+     * 默认颜色——播放时插值，球体一边移动一边变色，实测截图里它是淡黄色而不是白色。
+     *
+     * 人手动拖物体时希望自动打点（那确实是在编辑动画），所以 store.updateObject 的行为不动；
+     * 走能力层的写入改用建模语义。
+     */
+    state.updateObjectAcrossShots(objectId, patch)
     await saveCurrentProject()
     return { projectId, objectId, updatedKeys: Object.keys(patch), undoToken }
   },

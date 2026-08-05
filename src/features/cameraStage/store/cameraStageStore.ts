@@ -113,6 +113,8 @@ export interface CameraStageState extends CameraStagePathActions {
   setViewMode: (mode: StageViewMode) => void
   setActiveCameraId: (id: string | null) => void
   updateObject: (id: string, patch: StageObjectPatch) => void
+  /** 建模语义写入：改动同步进所有关键帧卡，不在单张卡上留点（助手与批量写入用）。 */
+  updateObjectAcrossShots: (id: string, patch: StageObjectPatch) => void
   /** 简易模式交互开始前冻结当前帧，避免首个变换增量中途触发插帧重编译。 */
   prepareSimpleEdit: (id: string) => void
   updateTransform: (id: string, patch: Partial<StageTransform>, autoKeyPaths?: string[]) => void
@@ -426,6 +428,23 @@ export const useCameraStageStore = create<CameraStageState>()(
         activeCameraId,
         viewMode: activeCameraId ? state.viewMode : 'director',
       }
+    }),
+
+  /**
+   * 建模语义的对象写入：改动同步进**所有**关键帧卡，不产生意料之外的动画。
+   *
+   * 与 `updateObject` 的区别只在动画语义：那个是给人手动拖拽用的，把改动打成当前卡上的一个
+   * 关键帧（编辑动画）；这个是给助手和批量写入用的，表达"这个对象本来就该是这样"（建模）。
+   * 两者共用同一套 applyObjectPatch 与重编译路径，不是两份实现。
+   */
+  updateObjectAcrossShots: (id, patch) =>
+    set((state) => {
+      const objects = applyObjectPatch(state.objects, id, patch)
+      const object = objects.find((item) => item.id === id)
+      if (!object) return { objects }
+      if (state.editorMode !== 'simple') return { objects }
+      const shots = syncAddedObjectToShots(state.shots, object)
+      return { objects, shots, animation: compileShotsToAnimation(shots, objects) }
     }),
 
   updateObject: (id, patch) =>

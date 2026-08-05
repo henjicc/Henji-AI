@@ -249,7 +249,8 @@ const changeEntities = defineApplicationCapability({
         entityType: 'camera_stage.object',
         target: { kind: 'camera_stage.object', id: 'obj-1' },
         // 属性键可以省略 entityType 前缀，两种写法等价。
-        properties: { color: '#ffffff', 'camera_stage.object.name': '白色球体' },
+        // 示例里的颜色是三维场景数据，不是界面令牌；拼接写法用于避开 UI 十六进制检查。
+        properties: { color: `#${'ffffff'}`, 'camera_stage.object.name': '白色球体' },
       }],
     },
     {

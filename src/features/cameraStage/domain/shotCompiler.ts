@@ -15,6 +15,7 @@
  */
 
 import { listAnimatableGroups } from './animatableProps'
+import { getObjectLookAtPoint } from './cameraUtils'
 import {
   CAMERA_STAGE_DEFAULT_FPS,
   type StageAnimatableValueType,
@@ -104,12 +105,36 @@ export function buildShotTimeline(shots: StageShot[]): ShotTimelineSegment[] {
   })
 }
 
+/** object 模式的注视点：优先取目标物体的实时位置，目标不存在时才退回快照坐标。 */
+function resolveLiveLookAtTarget(
+  lookAt: StageShotObjectState['lookAt'],
+  objects: StageObject[],
+): StageVec3 {
+  if (!lookAt || lookAt.mode === 'manual') return { x: 0, y: 0, z: 0 }
+  const target = objects.find((item) => item.id === lookAt.objectId)
+  return target ? getObjectLookAtPoint(target) : { ...lookAt.fallbackTarget }
+}
+
 /** 把镜头卡快照的可动画字段合并进当前场景对象，复用 animatableProps 的取值逻辑而不重写一份 */
-function mergeStateIntoObject(object: StageObject, state: StageShotObjectState): StageObject {
+function mergeStateIntoObject(
+  object: StageObject,
+  state: StageShotObjectState,
+  objects: StageObject[] = [],
+): StageObject {
   if (object.type === 'camera') {
+    /*
+     * object 模式必须盯**物体的实时位置**，不是 fallbackTarget。
+     *
+     * fallbackTarget 是做运镜那一刻的坐标快照，只在目标对象已被删除时才该用。旧实现无条件
+     * 取它，于是目标物体一旦移动（或者场景里新增了对象把视觉中心挪开），编译出来的每一帧
+     * 都还盯着旧坐标——实测环绕运镜跑到一半，镜头明显偏出物体之外。
+     *
+     * cameraUtils.resolveCameraRotation 早就是按实时目标解朝向的；编译器这条是同一件事漏掉
+     * 的另一半，两处必须一致，否则视口里看着对、播放出来是歪的。
+     */
     const lookAtTarget = state.lookAt?.mode === 'manual'
       ? state.lookAt.target
-      : state.lookAt?.fallbackTarget ?? { x: 0, y: 0, z: 0 }
+      : resolveLiveLookAtTarget(state.lookAt, objects)
     return {
       ...object,
       transform: {
@@ -155,8 +180,8 @@ export function diffShotObjects(fromShot: StageShot, toShot: StageShot, objects:
     const fromState = fromShot.objectStates[object.id]
     const toState = toShot.objectStates[object.id]
     if (!fromState || !toState) continue
-    const fromObject = mergeStateIntoObject(object, fromState)
-    const toObject = mergeStateIntoObject(object, toState)
+    const fromObject = mergeStateIntoObject(object, fromState, objects)
+    const toObject = mergeStateIntoObject(object, toState, objects)
     const changed = listAnimatableGroups(object).some((group) => group.children.some((descriptor) => (
       hasPropertyChanged(descriptor.valueType, descriptor.getValue(fromObject), descriptor.getValue(toObject))
     )))
@@ -248,9 +273,11 @@ function compileObjectTransition(
   motionSchedule?: StageCharacterMotionScheduleEntry[],
   motionOverride?: import('./characterMotion').StageCharacterMotion,
   spatialPath?: StageSpatialPath,
+  /** 场景全部对象，用于把 object 模式的注视点解析成目标物体的实时位置。 */
+  sceneObjects: StageObject[] = [],
 ): void {
-  const fromObject = mergeStateIntoObject(object, fromState)
-  const toObject = mergeStateIntoObject(object, toState)
+  const fromObject = mergeStateIntoObject(object, fromState, sceneObjects)
+  const toObject = mergeStateIntoObject(object, toState, sceneObjects)
   const characterInference = object.type === 'character'
     ? inferCharacterTransition(fromState, toState, segEnd - segStart, motionOverride)
     : null
@@ -379,6 +406,7 @@ export function compileShotsToAnimation(shots: StageShot[], objects: StageObject
         motionSchedule,
         detail?.motionOverride,
         detail?.spatialPath,
+        objects,
       )
     }
   }
