@@ -1,5 +1,6 @@
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
+import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
 import { AgentArtifactStore, resolveOffloadByteThreshold, shouldOffloadObservation } from './offload'
 import { sanitizeObservationValue } from './sanitize'
@@ -11,6 +12,9 @@ import type {
 } from './types'
 import { createCapabilityDiscoveryInputFromTaskGraph } from '../../../../../src/core/assistant/capabilityDiscovery'
 import type { AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
+
+/** observations 索引最多登记多少条最近观察。 */
+const OBSERVATION_INDEX_LIMIT = 12
 
 export const stableSystemPrompt = [
   '你是 Henji-AI 桌面应用中的受控智能助手。',
@@ -324,10 +328,32 @@ function formatObservation(
       source: observation.source,
       summary: observation.summary,
       outputPreview: observationPreview(sanitized),
-      note: '完整结构化工具结果保留在对应的 tool 消息中；不要因本索引重复调用相同查询。',
     }),
     artifact: null,
   }
+}
+
+/**
+ * 对话历史里已经内联了完整结果的工具调用。
+ *
+ * 每条观察在 runner 里都会同时写进 `this.observations` 和一条 tool 消息，所以未被卸载的结果
+ * 在上下文中天然存在两份：tool 消息里的完整数据，和本层里一段 320 字符预览。预览对模型没有
+ * 任何增量信息，实测却要占 ~3900 tokens/轮（1M 窗口下约为整包的 10%）。
+ *
+ * 按 toolCallId 现查而不是记标记：压缩把旧 tool 消息换成摘要之后，这里会自动判定"对话里没有了"
+ * 并把预览留下——不需要额外的失效逻辑，也不会在压缩后丢证据。
+ */
+function inlinedToolCallIds(conversation: ModelStepMessage[]): Set<string> {
+  const ids = new Set<string>()
+  for (const message of conversation) {
+    if (message.role !== 'tool' || !Array.isArray(message.content)) continue
+    for (const part of message.content) {
+      if (part && typeof part === 'object' && 'toolCallId' in part && typeof part.toolCallId === 'string') {
+        ids.add(part.toolCallId)
+      }
+    }
+  }
+  return ids
 }
 
 export function buildAgentContextLayers(
@@ -335,9 +361,21 @@ export function buildAgentContextLayers(
   activeToolNames: string[],
   artifactStore: AgentArtifactStore
 ): { layers: AgentContextLayer[]; offloaded: AgentContextArtifact[] } {
-  const observations = input.observations.slice(-12).map((observation) => (
-    formatObservation(input.runId, observation, artifactStore, input.contextWindowBudget)
-  ))
+  /*
+   * 本层只登记"对话历史里拿不到的观察"。
+   *
+   * 三类必须留：被卸载的结果（tool 消息里只剩 largeResultOmitted，artifactRef 唯一存在于这里）、
+   * 守卫合成的观察（压根没有配对的 tool 消息）、压缩后原 tool 消息已被摘要替换的旧结果。
+   * 其余的完整数据就在对话里，再发一段预览只是把同一份东西说两遍。
+   */
+  const inlined = inlinedToolCallIds(input.conversation)
+  const observations = input.observations
+    .slice(-OBSERVATION_INDEX_LIMIT)
+    .map((observation) => ({
+      toolCallId: observation.source.toolCallId,
+      ...formatObservation(input.runId, observation, artifactStore, input.contextWindowBudget),
+    }))
+    .filter((item) => item.artifact !== null || !inlined.has(item.toolCallId))
   const offloaded = observations.flatMap((item) => item.artifact ? [item.artifact] : [])
   const modelCatalog = relevantModelCatalog(input)
   const layers = ([
@@ -400,8 +438,21 @@ export function buildAgentContextLayers(
     },
     {
       id: 'observations', source: 'agent_tool_gateway', trust: 'untrusted_observation', volatile: true,
-      priority: 90, required: observations.length > 0, maxTokens: 16_000,
-      content: observations.map((item) => item.text).join('\n'),
+      /*
+       * 去重之后这层装的全是唯一来源（artifactRef、守卫观察、压缩后消失的证据），所以非空即必需——
+       * 被预算丢掉就等于模型再也找不回那份正文。上限同步收到 8000：12 条全带预览也才 ~3.7k tokens，
+       * 原来的 16000 是按"每条都登记"配的，留着只会在极端情况下重新变成大户。
+       */
+      priority: 90, required: observations.length > 0, maxTokens: 8_000,
+      // 说明只发一次，不再逐条重复：12 条各带一句同样的话，光这一项每轮就白烧一千多字节。
+      content: observations.length === 0 ? '' : [
+        JSON.stringify({
+          note: '以下是对话历史里取不到完整内容的工具结果。'
+            + '带 artifactRef 的结果体积过大已被卸载，需要正文时用 read_agent_artifact 分页读取；'
+            + '其余结果的完整数据就在对应的 tool 消息里，不要因本索引重复调用相同查询。',
+        }),
+        ...observations.map((item) => item.text),
+      ].join('\n'),
     },
   ] satisfies AgentContextLayer[]).filter((layer) => layer.required || layer.content.length > 0)
   return { layers, offloaded }
