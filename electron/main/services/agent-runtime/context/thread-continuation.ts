@@ -79,8 +79,35 @@ const INTENT_BY_DOMAIN: Readonly<Partial<Record<AgentToolDomain, AgentIntent>>> 
  */
 const CONTINUATION_PATTERN = /^\s*(?:那|那么)?\s*(?:再|还|继续|接着|顺便|另外|然后)(?![见会)])|^\s*(?:帮我|给我|麻烦)?\s*(?:再|还|继续|接着|顺便)|\b(?:also|another|continue|keep going)\b/i
 
+/**
+ * 真实用户表达困惑时不会带延续词。
+ *
+ * 实测：上一轮「再帮我添加一个白色的球体」被判成 generate、跑去生成图片，用户取消后说了句
+ * 「你这不对吧」。这句话命不中任何延续词，于是延续加宽整个被跳过，路由判成 diagnose，任务图
+ * 只剩一个 diagnose Facet，能力发现返回 0 项能力——助手最后只能停下来解释自己被阻塞了。
+ *
+ * 词表方向本身就是错的：「不对」「没成功」「怎么回事」「重来」这类话**没有携带任何新任务信息**，
+ * 它们唯一可能指向的就是上一轮。越是这种表达越该承接，而不是越该新开一件事。所以这里判的是
+ * 「这句话里有没有新任务」，不是「有没有出现某个延续词」。
+ *
+ * 仍然保守：只认短句。长句通常自带完整的新诉求（"这个图太糊了，帮我用另一个模型重画"），
+ * 那种句子本来就能被路由正确识别，不需要靠承接兜底。
+ */
+const REACTION_PATTERN = /(?:不对|不太对|没对|不行|不成|没成功|没有成功|失败|错了|搞错|弄错|有问题|怎么回事|怎么搞的|为什么|为啥|咋回事|重来|再试|试一下|没反应|没动静|没变化|没执行|没做)|[?？]{1,}\s*$|\b(?:wrong|not right|failed|didn'?t work|retry|try again|huh)\b/i
+
+/** 反馈式追问的长度上限（字符）。超过这个长度的句子通常自带完整新诉求。 */
+const REACTION_LENGTH_LIMIT = 30
+
+/**
+ * 本轮目标是否在承接同一会话的上一轮任务。
+ *
+ * 两条来源：显式延续词，或不携带新任务信息的反馈式追问。命中只用于**放宽**可发现领域，
+ * 不改主意图、不授予任何权限。
+ */
 export function isContinuationGoal(goal: string): boolean {
-  return CONTINUATION_PATTERN.test(goal.normalize('NFKC').trim())
+  const normalized = goal.normalize('NFKC').trim()
+  if (CONTINUATION_PATTERN.test(normalized)) return true
+  return normalized.length <= REACTION_LENGTH_LIMIT && REACTION_PATTERN.test(normalized)
 }
 
 function messageText(message: ModelStepMessage): string {

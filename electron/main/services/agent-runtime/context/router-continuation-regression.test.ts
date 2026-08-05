@@ -63,6 +63,32 @@ describe('会话延续证据', () => {
     expect(isContinuationGoal('打开素材库')).toBe(false)
   })
 
+  /*
+   * 复现第二次实测失败：用户取消了那次跑偏的生成之后，只说了一句「你这不对吧」。
+   *
+   * 这句话命不中任何延续词，延续加宽整个被跳过；路由判成 diagnose，任务图只生成一个 diagnose
+   * Facet，能力发现返回 0 项能力 0 个租约，助手最后只能停下来解释自己被阻塞。可这句话里
+   * **没有任何新任务信息**——它唯一可能指向的就是上一轮。
+   */
+  it('不带延续词的反馈式追问同样算承接', () => {
+    for (const goal of [
+      '你这不对吧', '不对啊', '没成功啊', '怎么回事', '为什么没做',
+      '失败了？', '重来', '你搞错了', '？？？',
+    ]) {
+      expect(isContinuationGoal(goal), goal).toBe(true)
+    }
+  })
+
+  it('自带完整新诉求的长句不靠承接兜底', () => {
+    // 这类句子路由本来就能判对，不需要把上一轮的域拖进来。
+    for (const goal of [
+      '这个图太糊了，帮我换一个模型重新生成一张更清晰的猫的图片',
+      '为什么我的素材库里有这么多重复文件，帮我整理一下素材库并删除重复项',
+    ]) {
+      expect(isContinuationGoal(goal), goal).toBe(false)
+    }
+  })
+
   it('给路由模型的历史行包含上一轮领域', () => {
     const line = describeContinuationForRouter(deriveThreadContinuation(cameraStageHistory()))
     expect(line).toContain('camera_stage')
@@ -114,6 +140,25 @@ describe('路由承接上一轮任务', () => {
       deriveThreadContinuation(cameraStageHistory())
     )
     expect(received).toContain('camera_stage')
+  })
+
+  it('用户说「你这不对吧」时也把上一轮的域并进来', async () => {
+    // 分类器返回实测里那个结论：intent=diagnose，域里已经有 camera_stage（模型读了历史行）。
+    const router = new AgentIntentRouter(async () => ({
+      intent: 'diagnose',
+      toolDomains: ['diagnostics'],
+      complexity: 'ambiguous',
+      reason: '用户在质疑上一轮结果，判断为诊断',
+    }))
+    const decision = await router.route(
+      'run-not-right',
+      '你这不对吧',
+      generationSnapshot(),
+      new AbortController().signal,
+      deriveThreadContinuation(cameraStageHistory())
+    )
+    expect(decision.toolDomains).toContain('camera_stage')
+    expect(decision.continuationDomains).toContain('camera_stage')
   })
 
   it('不是延续语句时保持原样，不平白扩域', async () => {

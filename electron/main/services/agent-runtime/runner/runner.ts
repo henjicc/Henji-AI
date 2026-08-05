@@ -449,7 +449,17 @@ export class AgentRunner {
             route.complexity === 'multi_step',
             this.options.recoveryContext?.effectLedger,
             this.options.recoveryContext?.toolLeases.map((lease) => lease.facetId),
-            route.continuationDomains
+            /*
+             * 路由判出来的域必须整个交给执行层，不能只给延续域。
+             *
+             * 能力发现被 normalizeCallInput 强制改写成任务图的依赖前沿，所以「域在 route.toolDomains
+             * 里、却没有任何 Facet 覆盖」等于那个域永远不可达。实测：用户说「你这不对吧」，路由模型
+             * 读了历史、把 camera_stage 正确放进了 toolDomains，但主意图是 diagnose、任务图只生成了
+             * 一个 diagnose Facet——发现请求于是只带 diagnostics.event，camera_stage 的能力一个都租
+             * 不到，助手只能报「被阻塞」。route.toolDomains 是路由对本轮范围的完整判断，执行层没有
+             * 理由只看其中一半。放宽域不越权：权限仍由 registry.list(context) 与审批把关。
+             */
+            [...route.toolDomains, ...(route.continuationDomains ?? [])]
           ) : null
       this.setPhase('preparing')
       while (!isTerminalAgentState(this.machine.status)) {

@@ -5,10 +5,13 @@ import {
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
 import type { ApplicationCapabilityDiscoveryOutput } from '../../../../../src/core/assistant/capabilityDiscovery'
-import { createCapabilityDiscoveryInputFromTaskGraph } from '../../../../../src/core/assistant/capabilityDiscovery'
+import {
+  buildCapabilityDiscoveryInputForFacets,
+  createCapabilityDiscoveryInputFromTaskGraph,
+} from '../../../../../src/core/assistant/capabilityDiscovery'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
-import { createDeterministicTaskGraph } from './task-facets'
+import { createDeterministicTaskGraph, createModelTaskGraph } from './task-facets'
 
 function fullContext(registry: ReturnType<typeof createBuiltinAgentToolRegistry>): HostContextSnapshot {
   return {
@@ -169,6 +172,78 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     expect(result.leasedToolNames).not.toContain('read_application_schemas')
     expect(result.leasedToolNames.length).toBeLessThanOrEqual(15)
     expect(result.fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
+  })
+
+  /*
+   * 回归：用户说「你这不对吧」，整次运行卡死在 0 项能力。
+   *
+   * 路由把主意图判成 diagnose，但读了历史后正确地把 camera_stage 放进了 toolDomains。任务图
+   * 只有一个 diagnose Facet，于是发现请求带的是 domains=['diagnostics','camera_stage'] 加
+   * entityTypes=['diagnostics.event']——entityTypes 当时是跨域的硬 AND 过滤，camera_stage 的能力
+   * 一个都匹配不上，返回 0 项能力、0 个租约。更糟的是缺失原因被报成 permission_filtered，
+   * 助手照着这个标签给用户编出了"需要先授权 3D 对象写入能力"这个根本不存在的原因。
+   */
+  it('域被放宽后，entityTypes 不再把新域的能力全筛掉', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    // 走生产链路：intent=diagnose 的任务图 → 发现请求 → 把 camera_stage 作为额外域并入。
+    // 快照刻意停在生成工作区——实测时应用重启后就在这里，而上一轮的活是在三维编辑器里干的。
+    const base = fullContext(registry)
+    const context: HostContextSnapshot = {
+      ...base,
+      surface: {
+        id: 'workspace.generation',
+        kind: 'workspace',
+        focusedRef: null,
+        selectedRefs: [],
+      },
+    }
+    const taskGraph = createModelTaskGraph({
+      goal: '你这不对吧',
+      rawFacets: undefined,
+      primaryIntent: 'diagnose',
+      candidateDomains: ['diagnostics', 'camera_stage'],
+      snapshot: context,
+    })
+    expect(taskGraph.facets.map((facet) => facet.facetId)).toEqual(['diagnose'])
+    const request = buildCapabilityDiscoveryInputForFacets(taskGraph.facets, {}, ['camera_stage'])
+    expect(request?.facets[0]).toEqual(expect.objectContaining({
+      domains: expect.arrayContaining(['diagnostics', 'camera_stage']),
+      entityTypes: ['diagnostics.event'],
+      targetSurfaceIds: ['workspace.generation'],
+    }))
+    if (!request) return
+    const result = new AgentCapabilityDiscoveryCatalog(registry)
+      .discover("run-not-right", request, context)
+
+    // 关键断言：camera_stage 的能力必须真的进得来，而不是被 diagnostics.event 这个
+    // 跨域 entityTypes 过滤全部筛掉。
+    expect(result.leasedToolNames.some((name) => name.includes('camera_stage'))).toBe(true)
+    expect(result.missing).toEqual([])
+  })
+
+  it('缺失原因不把"没匹配上"误报成权限过滤', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    // 域已知、宿主也没有屏蔽任何能力，只是这个 kind 组合无人满足——这不是权限问题。
+    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-reason', {
+      discoveryVersion: 'application-capability-discovery/v2',
+      facets: [{
+        facetId: 'impossible',
+        queries: [],
+        domains: ['camera_stage'],
+        entityTypes: [],
+        capabilityKinds: [],
+        targetSurfaceIds: ['workspace.assets'],
+      }],
+      cursor: 0,
+      limit: 20,
+    }, fullContext(registry))
+
+    const missing = result.missing.find((item) => item.facetId === 'impossible')
+    if (missing) expect(missing.reason).toBe('no_matching_capability')
   })
 
   it('相同发现指纹复用缓存，schemaRef 可稳定读取完整输入结构', () => {
