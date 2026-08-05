@@ -167,7 +167,12 @@ export function createBackendBuiltinTools(
     name: 'declare_action_plan',
     version: 1,
     title: '声明多项操作计划',
-    description: '在结构化规划不可用时，于首次多项写入前声明可结算的 Effect 与 action group；只登记计划，不执行业务写入。',
+    description: '声明或修正本次任务的可结算 Effect；只登记计划，不执行业务写入。'
+      + '三种用法：①首次多项写入前声明 Effect；'
+      + '②任务图里没有合适的 facetId 时，直接用一个新的 facetId 声明——只要 entityTypes 指向真实实体类型，'
+      + '运行时会按该实体所属领域补建 Facet 并发放对应能力；'
+      + '③路由把领域判错时，用 supersededFacetIds 作废那个错误的 Facet（仅限尚未产生任何证据的 Facet，'
+      + '且必须同时补建替代它的新 Facet），否则它会一直卡着让整次运行无法结算。',
     category: 'application',
     side: 'backend',
     risk: 'R0',
