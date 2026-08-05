@@ -73,16 +73,23 @@ export function currentRevisions(
   return Object.fromEntries(scopes.map((scope) => [scope, context.scopeRevisions[scope]]))
 }
 
-export function validateContext(
+export function requiredContextForInput(
   definition: AgentToolDefinition,
+  input: unknown
+): HostScope[] {
+  return [...new Set(definition.resolveRequiredContext?.(input) ?? definition.requiredContext)]
+}
+
+export function validateContext(
+  requiredContext: HostScope[],
   context: HostContextSnapshot | null,
   expected: Partial<HostScopeRevisions> | undefined
 ): void {
-  if (definition.requiredContext.length > 0 && (!context || !context.uiReady)) {
+  if (requiredContext.length > 0 && (!context || !context.uiReady)) {
     throw new AgentToolGatewayError('NOT_READY', '宿主界面尚未就绪', true, 'wait')
   }
   if (!context || !expected) return
-  for (const scope of definition.requiredContext) {
+  for (const scope of requiredContext) {
     const expectedValue = expected[scope]
     if (expectedValue !== undefined && context.scopeRevisions[scope] !== expectedValue) {
       throw new AgentToolGatewayError('STALE_CONTEXT', `宿主 ${scope} 上下文已变化`, true, 'refresh_context')

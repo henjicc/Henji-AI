@@ -17,7 +17,7 @@ import {
   assistantUserInstructionsUpdateSchema,
 } from '../userInstructions'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import { defineApplicationCapability } from './defineApplicationCapability'
+import { capabilityControl, defineApplicationCapability } from './defineApplicationCapability'
 import {
   CAPABILITY_DISCOVERY_APPLICATION_CAPABILITIES,
 } from './capabilityDiscoveryApplicationCapabilities'
@@ -71,6 +71,7 @@ export const readAgentArtifactCapability = defineApplicationCapability({
   aliases: ['读取大型结果', '继续读取产物', 'artifact'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['assistant.artifact']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'artifact:read',
@@ -109,6 +110,7 @@ export const queryDiagnosticEventsCapability = defineApplicationCapability({
   aliases: ['查询日志', '排查失败', '错误原因', 'diagnostics'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['diagnostics.event']),
   risk: 'R2',
   dataClasses: ['C2'],
   permission: 'diagnostics:read',
@@ -137,6 +139,7 @@ export const getUserInstructionsCapability = defineApplicationCapability({
   aliases: ['我的偏好', '用户指令', '工作习惯'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['assistant.user_instructions']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'assistant_user_instructions:read',
@@ -161,6 +164,7 @@ export const updateUserInstructionsCapability = defineApplicationCapability({
   aliases: ['记住我的偏好', '更新用户指令', '长期习惯'],
   side: 'backend',
   readOnly: false,
+  control: capabilityControl('update', ['assistant.user_instructions']),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'assistant_user_instructions:write',
@@ -201,6 +205,7 @@ export const listAgentMemoriesCapability = defineApplicationCapability({
   aliases: ['查看记忆', '长期记忆', '待确认记忆'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['assistant.memory']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'memory:read',
@@ -229,6 +234,7 @@ export const proposeAgentMemoryCapability = defineApplicationCapability({
   aliases: ['记住这件事', '保存偏好候选', '长期记忆候选'],
   side: 'backend',
   readOnly: false,
+  control: capabilityControl('create', ['assistant.memory_candidate']),
   risk: 'R1',
   dataClasses: ['C1'],
   permission: 'memory:propose',
@@ -257,6 +263,7 @@ export const confirmAgentMemoryCapability = defineApplicationCapability({
   aliases: ['确认记忆', '保存长期记忆'],
   side: 'backend',
   readOnly: false,
+  control: capabilityControl('create', ['assistant.memory']),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'memory:confirm',
@@ -289,6 +296,7 @@ export const rejectAgentMemoryCapability = defineApplicationCapability({
   aliases: ['不要记住', '拒绝记忆'],
   side: 'backend',
   readOnly: false,
+  control: capabilityControl('delete', ['assistant.memory_candidate']),
   risk: 'R1',
   dataClasses: ['C0'],
   permission: 'memory:reject',

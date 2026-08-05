@@ -111,6 +111,24 @@ function referencesFromResult(output: unknown): Array<{ kind: string; id: string
       structured.push({ kind: ref.kind, id: ref.id })
     }
   }
+  /*
+   * 导航能力实际到达的 Surface 必须成为可比对的稳定引用。
+   *
+   * 否则 effectMatches 对 navigate 只看 effect 名，`switch_workspace` 切到工具工作区就会
+   * 满足"打开 tool.camera_stage"的 Facet——实测里用户看到的正是这个：工作区切了，
+   * 三维工程页面没打开，而任务图却认为导航已完成、把 open_camera_stage_project 永远跳过。
+   */
+  const surfaceId = record?.surfaceId
+  if (typeof surfaceId === 'string' && surfaceId.trim()) {
+    structured.push({ kind: 'application.surface', id: surfaceId })
+  }
+  const workspace = record?.workspace ?? record?.workspaceId
+  if (typeof workspace === 'string' && workspace.trim()) {
+    structured.push({
+      kind: 'application.surface',
+      id: workspace.includes('.') ? workspace : `workspace.${workspace}`,
+    })
+  }
   return structured
 }
 
@@ -182,13 +200,16 @@ export function resolveObservedEffects(
   }
   const impacts = definition.capability?.control?.impacts ?? []
   const targetRefs = referencesFromResult(observation.output)
+  const output = asRecord(observation.output)
+  const verification = asRecord(output?.verification)
+  const verified = definition.readOnly || output?.verified === true || verification?.verified === true
   return impacts.map((impact) => agentObservedEffectSchema.parse({
     effect: impact.effect,
     entityTypes: impact.entityTypes,
     propertyIds: impact.propertyIds,
     targetRefs,
     count: 1,
-    verified: asRecord(observation.output)?.verified === true,
+    verified,
     evidence,
   }))
 }
@@ -292,15 +313,25 @@ export class AgentEffectLedger {
     ledger: EffectLedgerEntry,
     observed: AgentObservedEffect,
     outputDigest: string,
-    includeEvidence = false
+    structuredVerification = false
   ): void {
     const digest = digestJson({ kind: 'verification', outputDigest, effect: observed })
     if (ledger.evidenceDigests.has(digest)) return
     ledger.evidenceDigests.add(digest)
-    ledger.verificationCount = Math.min(
-      required.minimumCount,
-      ledger.verificationCount + observed.count
-    )
-    if (includeEvidence) ledger.evidence.push(...observed.evidence)
+    /*
+     * 一次覆盖到位的结构化观察就verify了整条 Effect，不是"验证一个实例算一次"。
+     *
+     * 旧实现按 observed.count 累加、要求攒够 minimumCount，于是"写 6 个关键帧"必须再读 6 次
+     * 场景才算验证通过——而 observe_camera_stage_scene 一次就返回了全部关键帧，再读只会拿到
+     * 同一份数据并被去重挡掉。实测 camera_object_animation 因此永远停在 active，整次运行明明
+     * 已经把活干完，却报"任务图仍有 Facet 未结算"。
+     *
+     * 能走到这一步说明 overlapsForVerification 已经确认这次观察覆盖了所需实体与属性，
+     * 且写入计数已经达标，直接判定为已验证。
+     */
+    ledger.verificationCount = structuredVerification
+      ? required.minimumCount
+      : Math.min(required.minimumCount, ledger.verificationCount + observed.count)
+    if (structuredVerification) ledger.evidence.push(...observed.evidence)
   }
 }

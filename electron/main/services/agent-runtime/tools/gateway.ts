@@ -31,6 +31,7 @@ import {
   createLinkedController,
   currentRevisions,
   executeToolWithRetry,
+  requiredContextForInput,
   throwIfAborted,
   toGatewayError,
   validateAuthorizationSource,
@@ -141,9 +142,10 @@ export class AgentToolGateway {
       assertPreviewDataBoundary(preview)
       assertJsonWithinLimits(initialInput, TOOL_INPUT_LIMITS)
       const input = definition.inputSchema.parse(initialInput)
+      const requiredContext = requiredContextForInput(definition, input)
       assertApprovalPreviewTargets(definition, input, preview)
       validateAuthorizationSource(request)
-      const expectedRevisions = currentRevisions(context, definition.requiredContext)
+      const expectedRevisions = currentRevisions(context, requiredContext)
       const ledgerKey = `${request.runId}:${request.toolCallId}:${definition.version}`
       const inputDigest = digestJson(input)
       const authorization = decideToolAuthorization({
@@ -186,7 +188,7 @@ export class AgentToolGateway {
         await this.approvalCoordinator.recordDenied(auditTemplate, request.approvalId)
         throw new AgentToolGatewayError('PERMISSION_DENIED', '工具请求触及禁止的数据或风险边界')
       }
-      validateContext(definition, context, request.expectedRevisions)
+      validateContext(requiredContext, context, request.expectedRevisions)
 
       if (existing?.status === 'cached' && !preview.dataClasses.includes('C2')) {
         if (existing.authorizationDigest !== authorizationDigest) {
@@ -241,7 +243,7 @@ export class AgentToolGateway {
       }
       throwIfAborted(request.signal)
       const latestContext = this.options.getHostContext(request.runId)
-      validateContext(definition, latestContext, expectedRevisions)
+      validateContext(requiredContext, latestContext, expectedRevisions)
 
       if (existing?.status === 'cached') {
         if (existing.authorizationDigest !== authorizationDigest) {
@@ -384,7 +386,7 @@ export class AgentToolGateway {
         this.locks.delete(concurrencyKey)
       }
     } catch (error) {
-      const gatewayError = toGatewayError(error)
+      const gatewayError = this.withCapabilityHint(toGatewayError(error))
       logger.error('Agent 工具执行失败', {
         event: 'agent_tool.execute.failed',
         requestId: request.runId,
@@ -395,4 +397,33 @@ export class AgentToolGateway {
     }
   }
 
+  /**
+   * 「这个集合不能用通用动词增删」必须同时告诉模型该用哪个专用能力。
+   *
+   * 按项目规则，带算法语义的创建（三维对象的碰撞检测与复用判定就是典型）只留在专用能力里，
+   * 通用动词有意不开放。但引擎只会抛一句 COLLECTION_WRITE_NOT_DECLARED:<实体类型>，模型无从
+   * 得知替代路径——实测它在这里直接放弃，整张任务图剩四个 Facet 未结算。
+   * 能力注册表就在手边，把候选算出来附上即可，对所有实体类型通用。
+   */
+  private withCapabilityHint(error: AgentToolGatewayError): AgentToolGatewayError {
+    const entityType = /^COLLECTION_(?:WRITE_NOT_DECLARED|CREATE_NOT_ALLOWED|REMOVE_NOT_ALLOWED):(\S+)/
+      .exec(error.message)?.[1]
+    if (!entityType) return error
+    const candidates = this.options.registry.allDefinitions().flatMap((definition) => (
+      definition.readOnly === false
+      && (definition.capability?.control?.impacts ?? []).some((impact) => (
+        impact.entityTypes.includes(entityType)
+        && ['create', 'execute', 'delete'].includes(impact.effect)
+      ))
+        ? [definition.name]
+        : []
+    )).slice(0, 6)
+    if (candidates.length === 0) return error
+    return new AgentToolGatewayError(
+      error.code,
+      `${error.message}。${entityType} 的增删由专用能力负责，请改用：${candidates.join('、')}`,
+      error.retryable,
+      error.recovery
+    )
+  }
 }

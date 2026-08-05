@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import { defineApplicationCapability } from './defineApplicationCapability'
+import { capabilityControl, defineApplicationCapability } from './defineApplicationCapability'
 
 export const workflowIdSchema = z.enum([
   'model_to_generation_canvas',
@@ -37,6 +37,7 @@ export const listWorkflowsCapability = defineApplicationCapability({
   aliases: ['有哪些工作流', '跨工作区流程', 'workflow'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['workflow']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'workflow:read',
@@ -63,6 +64,7 @@ export const planWorkflowCapability = defineApplicationCapability({
   aliases: ['规划工作流', '创建执行计划'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['workflow.plan']),
   risk: 'R1',
   dataClasses: ['C1'],
   permission: 'workflow:plan',
@@ -105,6 +107,7 @@ function controlCapability(
     aliases: [title, '工作流状态', 'workflow'],
     side: 'backend',
     readOnly: options.readOnly,
+    control: capabilityControl(options.readOnly ? 'observe' : 'execute', ['workflow.run']),
     risk: options.risk,
     dataClasses: ['C1'],
     permission: options.permission,
@@ -141,6 +144,7 @@ export const executeWorkflowCapability = defineApplicationCapability({
   aliases: ['执行工作流', '运行计划'],
   side: 'backend',
   readOnly: false,
+  control: capabilityControl('execute', ['workflow.run'], { mode: 'long_running', cancelable: true }),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'workflow:execute',
@@ -171,6 +175,7 @@ export const resumeWorkflowCapability = defineApplicationCapability({
   aliases: ['继续工作流', '恢复流程'],
   side: 'backend',
   readOnly: false,
+  control: capabilityControl('execute', ['workflow.run'], { mode: 'long_running', cancelable: true }),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'workflow:execute',

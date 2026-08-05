@@ -1,5 +1,6 @@
 import type { AgentFacetProgress } from '../../../../../src/core/assistant/progress'
 import type { AgentTaskFacet } from '../../../../../src/core/assistant/taskGraph'
+import { listDependencyFrontierFacets } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { digestJson } from '../tools/security'
 import { isTerminal, type CallRecord } from './facet-effect-ledger'
 
@@ -9,12 +10,9 @@ export function listActiveFacetIds(facets: AgentTaskFacet[]): string[] {
 
 export function listDependencyFrontierFacetIds(
   facets: AgentTaskFacet[],
-  limit: number
+  limit?: number
 ): string[] {
-  const facetsById = new Map(facets.map((facet) => [facet.facetId, facet]))
-  return facets.filter((facet) => !isTerminal(facet.status) && facet.dependsOn.every(
-    (dependency) => facetsById.get(dependency)?.status === 'completed'
-  )).slice(0, limit).map((facet) => facet.facetId)
+  return listDependencyFrontierFacets(facets, limit).map((facet) => facet.facetId)
 }
 
 export function buildUserResumeProgress(input: {

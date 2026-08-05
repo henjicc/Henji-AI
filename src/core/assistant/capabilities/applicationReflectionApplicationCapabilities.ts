@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
+import type { HostScope } from '../hostContracts'
 import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
 
 /**
@@ -149,14 +150,49 @@ const changeEntitiesInputSchema = z.object({
   ])).min(1).max(32),
 }).strict()
 
+const GENERIC_MUTATION_SCOPES = ['assets', 'canvas', 'settings', 'toolbox'] as const satisfies readonly HostScope[]
+
+function mutationScope(identifier: string): HostScope | null {
+  if (identifier === 'asset' || identifier.startsWith('asset.')) return 'assets'
+  if (identifier.startsWith('canvas.')) return 'canvas'
+  if (identifier === 'application.setting' || identifier.startsWith('application.setting.')) return 'settings'
+  if (identifier.startsWith('camera_stage.') || identifier.startsWith('toolbox.')) return 'toolbox'
+  return null
+}
+
+function requiredMutationScopes(input: z.infer<typeof changeEntitiesInputSchema>): HostScope[] {
+  const scopes = new Set<HostScope>()
+  let hasUnknownWritableNamespace = false
+  for (const change of input.changes) {
+    const identifiers = [
+      change.entityType,
+      ...(change.kind === 'set_properties' ? Object.keys(change.properties) : []),
+      ...(change.kind === 'mutate_properties'
+        ? change.mutations.map((mutation) => mutation.propertyId)
+        : []),
+    ]
+    for (const identifier of identifiers) {
+      const scope = mutationScope(identifier)
+      if (scope) scopes.add(scope)
+      else hasUnknownWritableNamespace = true
+    }
+  }
+  // 未知命名空间不能退化成“无需并发基线”。用全部已注册的可写反射领域兜底，
+  // 让后续属性/集合校验给出真实错误，同时仍保持 Gateway 的乐观并发边界。
+  return hasUnknownWritableNamespace || scopes.size === 0
+    ? [...GENERIC_MUTATION_SCOPES]
+    : [...scopes]
+}
+
 const changeEntities = defineApplicationCapability({
   id: 'change_application_entities', version: 1, title: '修改应用状态',
-  description: '在一次事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。用它做那些没有专用能力的常规改动。失败会整体回滚。',
+  description: '在一次事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。用它做那些没有专用能力的常规改动。失败会整体回滚。属性键用 describe_application_entities 返回的完整属性 ID，也可以只写 entityType 之后的那一段（例如实体为 camera_stage.keyframe 时，object_ref 等价于 camera_stage.keyframe.object_ref）。',
   domain: 'application',
   aliases: ['改属性', '增删属性值', '加关键帧', '做动画', '上下漂浮', '新增成员', '删除成员', 'change entities', 'set property'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'application:write',
   idempotent: false, destructive: false, timeoutMs: 30_000, supportsPreview: false, supportsUndo: true,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
+  resolveRequiredScopes: requiredMutationScopes,
   successEvidence: ['事务返回受影响引用、写入后的并发基线和结构化证据。'],
   failureRecovery: [
     'CONFLICT 表示状态在读取之后被改动过：重新读取实体拿到新的 revisions 后重试一次。',

@@ -42,6 +42,12 @@ describe('application control coverage', () => {
     expect(new Set(migrationIds).size).toBe(migrationIds.length)
     expect(manifest.capabilityMigrations.every((item) => item.targetIds.length > 0)).toBe(true)
     expect(manifest.capabilityMigrations.every((item) => item.verification.length > 0)).toBe(true)
+    expect(BUILTIN_APPLICATION_CAPABILITIES.every((capability) => (
+      capability.control.impacts.length > 0
+      && capability.control.impacts.every((impact) => (
+        capability.readOnly ? impact.effect === 'observe' : impact.effect !== 'observe'
+      ))
+    ))).toBe(true)
   })
 
   it('设置、Surface、模型、图片编辑、三维和画布公开控制项全部归类', () => {

@@ -5,19 +5,26 @@ import {
   type AgentBudgetUsage,
 } from '../../../../../src/core/assistant/events'
 
+/**
+ * 预算按"完成任务"标定，而不是按"省钱"标定。
+ *
+ * 一个多 Facet 任务（建工程 → 打开页面 → 布景 → 运镜 → 关键帧 → 验证）光协议往返就要十几轮；
+ * 旧的 20/32 轮意味着模型刚开始干正事就撞软预算。写入上限 12 更是直接卡死"放 N 个物体 +
+ * 逐个改属性 + 写关键帧"这类完全正常的批量任务。
+ */
 export const DEFAULT_AGENT_BUDGET: AgentBudgetConfig = {
-  softMaxTurns: 20,
-  maxTurns: 32,
-  softMaxToolCalls: 50,
-  maxToolCalls: 100,
-  softMaxWriteToolCalls: 12,
-  maxWriteToolCalls: 24,
+  softMaxTurns: 45,
+  maxTurns: 70,
+  softMaxToolCalls: 140,
+  maxToolCalls: 220,
+  softMaxWriteToolCalls: 45,
+  maxWriteToolCalls: 90,
   maxDurationMs: 30 * 60 * 1_000,
   maxInputTokens: null,
   maxOutputTokens: null,
-  maxConsecutiveFailures: 3,
+  maxConsecutiveFailures: 5,
   maxRepeatedToolCalls: 2,
-  maxNoProgressTurns: 3,
+  maxNoProgressTurns: 4,
   softMaxCostUsd: 3,
   maxCostUsd: 10,
 }
@@ -30,6 +37,25 @@ export type AgentBudgetSoftLimitCode =
   | 'SOFT_CONSECUTIVE_FAILURES'
   | 'SOFT_REPEATED_TOOL_CALLS'
   | 'SOFT_NO_PROGRESS_TURNS'
+
+/**
+ * 只有这几项代表"资源真的快用完了"，才该进入收尾模式。
+ *
+ * 其余三项（连续失败、重复调用、无新进展）是**质量信号**：它们描述的是模型这几步走得不好，
+ * 而不是任务做不完了。旧实现把它们一并塞进 closeout，而 closeout 会永久摘掉
+ * discover_application_capabilities——于是任意两次抖动就让助手在整次运行里再也学不到新能力，
+ * 多 Facet 任务必然半途而废。实测第一次运行就是在第 14 轮被这条掐进收尾模式的。
+ */
+const BUDGET_EXHAUSTION_CODES = new Set<AgentBudgetSoftLimitCode>([
+  'SOFT_MAX_TURNS',
+  'SOFT_MAX_TOOL_CALLS',
+  'SOFT_MAX_WRITE_TOOL_CALLS',
+  'SOFT_MAX_COST',
+])
+
+export function isBudgetExhaustionSoftLimit(code: AgentBudgetSoftLimitCode): boolean {
+  return BUDGET_EXHAUSTION_CODES.has(code)
+}
 
 export type AgentStopPolicy = Partial<AgentBudgetConfig>
 
@@ -124,6 +150,9 @@ export class AgentRunMetrics {
 
   recordSuccess(): void {
     this.consecutiveFailures = 0
+    // 真有进展就把质量类告警解除武装，后面再卡住时才能重新提醒；
+    // 否则一次抖动会让告警永久留在已上报集合里，既不再提醒也污染收尾判定。
+    this.reportedSoftLimits.delete('SOFT_CONSECUTIVE_FAILURES')
   }
 
   recordProgress(marker: string): void {
@@ -132,6 +161,8 @@ export class AgentRunMetrics {
       this.noProgressTurns = 0
       this.lastToolSignature = null
       this.repeatedToolCalls = 0
+      this.reportedSoftLimits.delete('SOFT_NO_PROGRESS_TURNS')
+      this.reportedSoftLimits.delete('SOFT_REPEATED_TOOL_CALLS')
     }
     this.lastProgressMarker = marker
     if (
@@ -200,7 +231,7 @@ export class AgentRunMetrics {
   }
 
   isCloseoutMode(): boolean {
-    return this.reportedSoftLimits.size > 0
+    return [...this.reportedSoftLimits].some(isBudgetExhaustionSoftLimit)
   }
 
   snapshot(): AgentBudgetUsage {

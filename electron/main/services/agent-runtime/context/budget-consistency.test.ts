@@ -138,10 +138,13 @@ describe('预算常量与契约一致', () => {
   })
 
   it('预算常量互相之间的约束成立', () => {
-    // 租约只覆盖依赖前沿，不承担填满整个活动工具集的职责。
+    // 一次发现要能覆盖整条链路，所以租约上限不再等于"每 Facet 名额 × Facet 数"——
+    // 那个乘积只是理论峰值，真正的闸门是活动工具数与 schema 字节预算。
     expect(AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
-      .toBe(AGENT_FACET_LEASE_TOOL_LIMIT * AGENT_LEASE_FRONTIER_FACET_LIMIT)
+      .toBeLessThanOrEqual(AGENT_FACET_LEASE_TOOL_LIMIT * AGENT_LEASE_FRONTIER_FACET_LIMIT)
     expect(AGENT_DISCOVERY_LEASE_TOOL_LIMIT).toBeLessThan(AGENT_ACTIVE_TOOL_LIMIT)
+    // 单个 Facet 的名额不能反过来超过一轮发现的总承诺。
+    expect(AGENT_FACET_LEASE_TOOL_LIMIT).toBeLessThanOrEqual(AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
     // 结算证据是各 Facet 证据的汇总，不能比单个 Facet 的上限还小。
     expect(AGENT_SETTLEMENT_EVIDENCE_LIMIT).toBeGreaterThanOrEqual(AGENT_FACET_EVIDENCE_LIMIT)
     // 记忆读取上限只是一个正整数约束，放这里是为了让它和其他预算一起被看见。
@@ -206,6 +209,7 @@ describe('工具激活不得让通用动词落选', () => {
     const active = new Set(activate(['toolbox', 'camera_stage', 'catalog']).activeToolNames)
     expect(active.has('load_assistant_skill')).toBe(true)
     expect(active.has('discover_application_capabilities')).toBe(true)
+    expect(active.has('read_agent_artifact')).toBe(true)
   })
 
   it('活动工具数量、完整 schema 与业务描述字节都有构建门禁', () => {

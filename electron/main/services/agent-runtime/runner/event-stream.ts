@@ -11,6 +11,8 @@ export type AgentEventListener = (event: AgentEvent) => void
 
 interface PendingModelDelta {
   stepId: string
+  /** 正文与思维链必须各自成块；合并后就再也分不开了。 */
+  channel: 'text' | 'reasoning'
   text: string
   fragmentCount: number
   startedAt: number
@@ -96,6 +98,7 @@ export class AgentEventStream {
       type: 'ModelDelta',
       stepId: pending.stepId,
       text: pending.text,
+      channel: pending.channel,
     })
   }
 
@@ -104,7 +107,9 @@ export class AgentEventStream {
   ): AgentEvent | null {
     if (!input.text) return null
     let lastEmitted: AgentEvent | null = null
-    if (this.pendingDelta && this.pendingDelta.stepId !== input.stepId) {
+    const channel = input.channel ?? 'text'
+    if (this.pendingDelta
+      && (this.pendingDelta.stepId !== input.stepId || this.pendingDelta.channel !== channel)) {
       lastEmitted = this.flushPendingDelta()
     }
 
@@ -112,6 +117,7 @@ export class AgentEventStream {
     while (remaining.length > 0) {
       this.pendingDelta ??= {
         stepId: input.stepId,
+        channel,
         text: '',
         fragmentCount: 0,
         startedAt: this.now(),

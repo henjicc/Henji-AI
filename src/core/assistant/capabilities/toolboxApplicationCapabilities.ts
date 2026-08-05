@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { imageEditOperationSchema } from '../../../features/imageEdit/application/imageEditControlCatalog'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
+  capabilityControl,
   capabilityOutputSchema,
   defineApplicationCapability,
 } from './defineApplicationCapability'
@@ -15,6 +16,7 @@ const listToolboxTools = defineApplicationCapability({
   domain: 'toolbox',
   aliases: ['工具箱有什么', 'toolbox tools'],
   readOnly: true,
+  control: capabilityControl('observe', ['toolbox.tool']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'toolbox:read',
@@ -40,6 +42,7 @@ const getToolboxState = defineApplicationCapability({
   domain: 'toolbox',
   aliases: ['当前工具状态', 'toolbox state'],
   readOnly: true,
+  control: capabilityControl('observe', ['toolbox.state']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'toolbox:read',
@@ -65,6 +68,7 @@ const selectToolboxTool = defineApplicationCapability({
   domain: 'toolbox',
   aliases: ['打开 3D 运镜', '打开图片编辑', 'select toolbox tool'],
   readOnly: false,
+  control: capabilityControl('navigate', ['application.surface']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'toolbox:write',
@@ -97,6 +101,7 @@ const createImageEditPreview = defineApplicationCapability({
   domain: 'image_edit',
   aliases: ['编辑素材图片', '图片标注预览', 'create image edit preview'],
   readOnly: false,
+  control: capabilityControl('execute', ['image_edit.preview'], { revisionScopes: ['assets'] }),
   risk: 'R1',
   dataClasses: ['C1'],
   permission: 'image_edit:preview',
@@ -141,6 +146,7 @@ const commitImageEdit = defineApplicationCapability({
   domain: 'image_edit',
   aliases: ['保存编辑图片', 'commit image edit'],
   readOnly: false,
+  control: capabilityControl('create', ['asset'], { revisionScopes: ['assets'] }),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'image_edit:commit',
@@ -182,6 +188,7 @@ const listStoryboardProjects = defineApplicationCapability({
   domain: 'storyboard',
   aliases: ['分镜项目', 'list storyboards'],
   readOnly: true,
+  control: capabilityControl('observe', ['storyboard.project']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'storyboard:read',
@@ -208,6 +215,7 @@ const getStoryboardProject = defineApplicationCapability({
   domain: 'storyboard',
   aliases: ['分镜项目详情', 'get storyboard'],
   readOnly: true,
+  control: capabilityControl('observe', ['storyboard.project']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'storyboard:read',

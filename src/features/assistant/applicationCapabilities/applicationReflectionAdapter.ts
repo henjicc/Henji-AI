@@ -33,16 +33,46 @@ function executionContext(context: CapabilityExecutionContext) {
   }
 }
 
-function toMutations(properties: Record<string, unknown>): Array<{
+/**
+ * 属性键补全为完整属性 ID。
+ *
+ * 每个 change 都已经声明了 entityType，再要求把它当前缀重写进每一个属性键纯属冗余——而这份
+ * 冗余既没写在工具 schema（那里是 `record(string, unknown)`，什么键都收）也没写在描述里，
+ * 只在内部计划层用 applicationPropertyIdSchema 拦截。实测助手按 describe 给的字段名写
+ * `object_ref` / `time` / `value`，提交后收到一整屏 "Invalid key in record"，两个物体的漂浮
+ * 关键帧全军覆没。
+ *
+ * 这里以注册表声明的属性 ID 为准做解析：原样命中就用原样，补上 entityType 前缀能命中就补，
+ * 都不命中则保持原样交给注册表报"未知属性"，不做任何猜测。
+ */
+function resolvePropertyId(entityType: string, key: string): string {
+  const declared = new Set(
+    getApplicationReflectionRegistry().listProperties(entityType).map((property) => property.id)
+  )
+  if (declared.has(key)) return key
+  const qualified = `${entityType}.${key}`
+  return declared.has(qualified) ? qualified : key
+}
+
+function toMutations(entityType: string, properties: Record<string, unknown>): Array<{
   propertyId: string
   operation: 'set'
   value: JsonValue
 }> {
   return Object.entries(properties).map(([propertyId, value]) => ({
-    propertyId,
+    propertyId: resolvePropertyId(entityType, propertyId),
     operation: 'set' as const,
     value: value as JsonValue,
   }))
+}
+
+function resolveItemProperties(
+  entityType: string,
+  properties: Record<string, unknown>
+): Record<string, JsonValue> {
+  return Object.fromEntries(Object.entries(properties).map(([key, value]) => (
+    [resolvePropertyId(entityType, key), value as JsonValue]
+  )))
 }
 
 type PropertyMutationInput = {
@@ -72,7 +102,7 @@ function toPlannedStep(
       target: change.target,
       entityType: change.entityType,
       expectedRevisions,
-      mutations: toMutations(change.properties),
+      mutations: toMutations(change.entityType, change.properties),
     }
   }
   if (change.kind === 'mutate_properties') {
@@ -82,7 +112,7 @@ function toPlannedStep(
       entityType: change.entityType,
       expectedRevisions,
       mutations: change.mutations.map((mutation) => ({
-        propertyId: mutation.propertyId,
+        propertyId: resolvePropertyId(change.entityType, mutation.propertyId),
         operation: mutation.operation,
         ...(mutation.value !== undefined ? { value: mutation.value as JsonValue } : {}),
       })),
@@ -96,7 +126,9 @@ function toPlannedStep(
       expectedRevisions,
       operation: {
         kind: 'create',
-        items: change.items.map((item) => ({ properties: item.properties as Record<string, JsonValue> })),
+        items: change.items.map((item) => ({
+          properties: resolveItemProperties(change.entityType, item.properties),
+        })),
       },
     }
   }
@@ -118,6 +150,50 @@ function completedTransaction(
   throw new Error('CAPABILITY_REJECTED')
 }
 
+/*
+ * 结构描述只投影模型真正要用的字段。
+ *
+ * 注册表的完整描述服务于门禁、UI 与本地适配器，里面大半对模型毫无意义：每条属性都带一个
+ * 64 字符的 sha256 digest、一份权限名清单、exposures 与 revisionScopes——这些既不影响它怎么
+ * 写参数，也不构成它能做的判断（权限由网关强制、revision 由信封填、digest 只用于版本比对）。
+ * 实测一次 4 实体 81 属性的描述回了 62KB（≈3.1 万 token），占整轮输入的近一半。
+ *
+ * 保留原则只有一条：**模型据此决定"能不能写、写什么、值怎么填"的字段才留**。
+ */
+function describedEntity(entity: Record<string, unknown>): Record<string, unknown> {
+  const id = entity.id as string
+  return {
+    id,
+    title: entity.title,
+    description: entity.description,
+    // 建集合成员时要用父实体引用，必须留。
+    parentTypes: entity.parentTypes,
+    // refKind 绝大多数等于 id，只有不同才有信息量。
+    ...(entity.refKind !== id ? { refKind: entity.refKind } : {}),
+    ...(entity.queryCapabilityIds ? { queryCapabilityIds: entity.queryCapabilityIds } : {}),
+    // 能不能增删、建的时候至少要给哪些属性、一次最多几个——写入前的关键约束。
+    ...(entity.collectionWrite ? { collectionWrite: entity.collectionWrite } : {}),
+    // 有意只读时把原因给模型，让它知道该改用哪条路径而不是反复试。
+    ...(entity.writeExclusion
+      ? { readOnlyReason: (entity.writeExclusion as { reason: string }).reason }
+      : {}),
+  }
+}
+
+function describedProperty(property: Record<string, unknown>): Record<string, unknown> {
+  const permissions = property.requiredPermissions as { write?: string[] } | undefined
+  return {
+    id: property.id,
+    title: property.title,
+    description: property.description,
+    // 取值类型与范围是模型填参数的唯一依据。
+    value: property.value,
+    ...(property.nullable === true ? { nullable: true } : {}),
+    // 权限名对模型没有用，它只需要知道这一条能不能写；能不能通过由网关判定。
+    writable: (permissions?.write?.length ?? 0) > 0,
+  }
+}
+
 export const applicationReflectionHandlers = {
   async describeEntities(input: { domains: string[]; entityTypes: string[] }, context: CapabilityExecutionContext) {
     const description = getApplicationReflectionRegistry().describe({
@@ -125,8 +201,8 @@ export const applicationReflectionHandlers = {
       ...(input.entityTypes.length > 0 ? { entityTypes: input.entityTypes } : {}),
     }, executionContext(context))
     return {
-      entities: description.entities as unknown as Array<Record<string, unknown>>,
-      properties: description.properties as unknown as Array<Record<string, unknown>>,
+      entities: (description.entities as unknown as Array<Record<string, unknown>>).map(describedEntity),
+      properties: (description.properties as unknown as Array<Record<string, unknown>>).map(describedProperty),
     }
   },
 

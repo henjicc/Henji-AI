@@ -54,7 +54,10 @@ export interface AgentToolActivityGroup {
 export interface AgentModelPublicUpdate {
   stepId: string
   sequence: number
+  /** 模型对用户说的话。 */
   text: string
+  /** 模型的思考过程；供应商不返回时为空串。 */
+  reasoning: string
 }
 
 export function selectLatestToolEventSequence(events: AgentEvent[]): number {
@@ -315,10 +318,36 @@ export function groupToolActivitiesForDisplay(
   return groups
 }
 
-/** 模型轮次文本只保留在诊断事件；公开进展统一由稳定阶段面板承载。 */
+/**
+ * 把流式增量折叠成每个模型步骤一条可展示的进展。
+ *
+ * 这里曾经被改成只返回空数组，理由是"公开进展统一由稳定阶段面板承载"。但那个面板只有一行
+ * 截断文案，模型说什么、想什么全都看不见——助手因此变成黑盒：实测它在最后一步提出了一个
+ * 澄清问题并进入 waiting_user，界面一个字没显示，用户只看到转圈，以为死机了。
+ *
+ * 正文和思维链分开折叠：思维链是过程，正文是结论，界面按不同权重展示。
+ */
 export function selectModelPublicUpdates(events: AgentEvent[]): AgentModelPublicUpdate[] {
-  void events
-  return []
+  const byStep = new Map<string, AgentModelPublicUpdate>()
+  for (const event of events) {
+    if (event.type === 'ModelDelta') {
+      const current = byStep.get(event.stepId)
+        ?? { stepId: event.stepId, sequence: event.sequence, text: '', reasoning: '' }
+      if (event.channel === 'reasoning') current.reasoning += event.text
+      else current.text += event.text
+      byStep.set(event.stepId, current)
+      continue
+    }
+    // 无工具调用的最终答复由最终消息卡单独渲染，这里不重复；带工具调用的说明要留下。
+    if (event.type === 'ModelCompleted' && event.toolCallCount === 0
+      && event.stepId !== 'attachment-observer') {
+      const current = byStep.get(event.stepId)
+      if (current) byStep.set(event.stepId, { ...current, text: '' })
+    }
+  }
+  return [...byStep.values()]
+    .filter((update) => update.text.trim() || update.reasoning.trim())
+    .sort((left, right) => left.sequence - right.sequence)
 }
 
 export interface AgentExecutionPresentation {

@@ -12,7 +12,11 @@ import type {
   ModelStepToolCall,
 } from '../../../../../src/core/llm/modelStep'
 import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
-import { shouldOffloadObservation } from '../context/offload'
+import { resolveOffloadByteThreshold, shouldOffloadObservation } from '../context/offload'
+import {
+  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
+  AGENT_FACET_LEASE_TOOL_LIMIT,
+} from '../../../../../src/core/assistant/toolBudget'
 import { sanitizeObservationValue } from '../context/sanitize'
 import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentBudgetExceededError } from './budget'
@@ -50,11 +54,15 @@ export function serializeError(error: unknown): SerializedAgentError {
 
 export function toolMessage(
   call: ModelStepToolCall,
-  observation: AgentToolObservation
+  observation: AgentToolObservation,
+  contextWindow?: number | null
 ): ModelStepMessage {
-  // 模型目录是一次性筛选候选的核心证据；允许其在 24 KiB 内直接进入工具消息，
-  // 避免“结果过早卸载 → 模型看不到候选 → 再次搜索”的循环。
-  const offloadThreshold = call.toolName === 'search_models' ? 24 * 1024 : undefined
+  // 门槛按本轮真实上下文窗口算：窗口大就直接内联，避免“结果过早卸载 → 模型看不到内容
+  // → 逐页读回来”的循环。模型目录另有 24 KiB 下限，保证候选一次到位。
+  const resolved = resolveOffloadByteThreshold(contextWindow)
+  const offloadThreshold = call.toolName === 'search_models'
+    ? Math.max(24 * 1024, resolved)
+    : resolved
   const output = shouldOffloadObservation(observation.output, offloadThreshold)
     ? { summary: observation.summary, largeResultOmitted: true }
     : { summary: observation.summary, data: sanitizeObservationValue(observation.output) }
@@ -67,7 +75,7 @@ export function toolMessage(
   const leasedToolNames = Array.isArray(rawLeasedToolNames)
     ? rawLeasedToolNames
         .filter((name: unknown): name is string => typeof name === 'string')
-        .slice(0, 15)
+        .slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
     : []
   const leasedSet = new Set(leasedToolNames)
   const rawFacets = Array.isArray(outputRecord?.facets) ? outputRecord.facets : []
@@ -78,7 +86,7 @@ export function toolMessage(
     if (typeof facet?.facetId !== 'string' || !Array.isArray(facet.capabilityNames)) return []
     const toolNames = facet.capabilityNames.filter((name): name is string => (
       typeof name === 'string' && leasedSet.has(name)
-    )).slice(0, 5)
+    )).slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
     return toolNames.length > 0 ? [{ facetId: facet.facetId, toolNames }] : []
   })
   return {

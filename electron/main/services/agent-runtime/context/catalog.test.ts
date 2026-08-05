@@ -11,6 +11,7 @@ import { AgentToolRegistry } from '../tools/registry'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolCatalogPlanner } from './catalog'
 import { AGENT_ACTIVE_TOOL_LIMIT, AGENT_TOOL_SCHEMA_BUDGET_BYTES } from './tool-activation'
+import { AGENT_FACET_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import type { AgentRouteDecision } from './types'
 
 function contextSnapshot(): HostContextSnapshot {
@@ -45,6 +46,72 @@ const primaryRoute: AgentRouteDecision = {
 }
 
 describe('AgentToolCatalogPlanner', () => {
+  /*
+   * 回归：工具数组顺序每轮重排，把缓存前缀打断在最开头。
+   *
+   * 工具 schema 也在供应商的缓存前缀里。候选顺序里混着 recentToolNames，模型每用一个工具就
+   * 把它顶到前面——集合没变、顺序变了，缓存照样从头作废。活动工具必须是只增不改的排列。
+   */
+  it('活动工具排列只追加不重排，保证工具 schema 落在可缓存前缀里', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const context = contextSnapshot()
+    const planner = new AgentToolCatalogPlanner(registry)
+    const route = { ...primaryRoute, intent: 'navigate' as const, toolDomains: ['navigation' as const, 'catalog' as const] }
+
+    const first = planner.select(route, context).activeToolNames
+    // 模拟模型用过其中一个工具：recentToolNames 会因此变化。
+    planner.rememberObservation(first[first.length - 1] as string, {})
+    const second = planner.select(route, context).activeToolNames
+
+    // 已出现过的工具保持原有相对次序，新工具只能追加在末尾。
+    const retained = second.filter((name) => first.includes(name))
+    expect(retained).toEqual(first.filter((name) => second.includes(name)))
+    expect(second.slice(0, retained.length)).toEqual(retained)
+  })
+
+  /*
+   * 回归：租约发放了却在下游被字面量截断。
+   *
+   * toolBudget 把每 Facet 名额提到 12、一轮总量提到 48 之后，catalog 里仍留着 slice(0, 5) 和
+   * slice(0, 15)。实测 place_camera_stage_object 排在租约第 18 位被切掉，模型手里只剩通用
+   * 动词，写入直接报 COLLECTION_WRITE_NOT_DECLARED，整张任务图剩四个 Facet 未结算。
+   */
+  it('整条链路的租约不被下游字面量截断，全部进入活动工具集', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const context = {
+      ...contextSnapshot(),
+      workspace: { id: 'tools' as const, activeToolId: 'cameraStage' as const },
+      availableCapabilities: registry.allDefinitions()
+        .filter((definition) => definition.side === 'frontend')
+        .map((definition) => definition.name),
+    }
+    const cameraNames = registry.allDefinitions()
+      .filter((definition) => definition.capability?.domain === 'camera_stage')
+      .map((definition) => definition.name)
+    const navigationNames = ['switch_workspace', 'open_application_surface']
+    // 旧的 slice(0, 5) / slice(0, 15) 在这个规模下必然截断。
+    expect(cameraNames.length).toBeGreaterThan(AGENT_FACET_LEASE_TOOL_LIMIT)
+
+    const planner = new AgentToolCatalogPlanner(registry)
+    const leasedPerFacet = cameraNames.slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
+    planner.rememberDiscovered('discover_application_capabilities', {
+      leasedToolNames: [...leasedPerFacet, ...navigationNames],
+      facets: [
+        { facetId: 'camera_scene', capabilityNames: leasedPerFacet },
+        { facetId: 'show_target_surface', capabilityNames: navigationNames },
+      ],
+    })
+    const activeNames = planner.select({
+      ...primaryRoute, intent: 'camera_stage', toolDomains: ['camera_stage', 'catalog'],
+    }, context).activeToolNames
+    // 每个 Facet 的全部名额都要落地，跨 Facet 的租约总量也不能被 15 这个旧上限吃掉。
+    for (const name of [...leasedPerFacet, ...navigationNames]) expect(activeNames).toContain(name)
+  })
+
   it('能力概览直达路由不激活任何工具', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
@@ -120,7 +187,12 @@ describe('AgentToolCatalogPlanner', () => {
     // load_assistant_skill 与能力发现同为常驻工具：skills_index 层要求模型先加载技能，
     // 它必须真的在本轮工具里，否则模型看得见清单却调不动。
     expect(planner.select(primaryRoute, contextSnapshot()).activeToolNames)
-      .toEqual(['load_assistant_skill', 'discover_application_capabilities', 'declare_action_plan'])
+      .toEqual([
+        'load_assistant_skill',
+        'discover_application_capabilities',
+        'read_agent_artifact',
+        'declare_action_plan',
+      ])
 
     const capabilities = registry.search('图片生成', undefined, contextSnapshot())
     const leasedToolNames = capabilities.map((capability) => capability.name).slice(0, 5)

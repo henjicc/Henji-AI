@@ -3,19 +3,16 @@ import {
   type ApplicationCapabilityDefinition,
 } from './applicationCapabilities'
 import {
-  applyApplicationSettingsChangeCapability,
   closeApplicationSurfaceCapability,
   createImageEditPreviewFromRefCapability,
   focusApplicationEntityCapability,
-  getApplicationSettingsCapability,
   getCurrentApplicationContextCapability,
   listGenerationHistoryCapability,
   openApplicationSurfaceCapability,
   openImageEditorWithSourceCapability,
   observeApplicationSurfaceCapability,
-  planApplicationSettingsChangeCapability,
-  searchApplicationSettingsCapability,
 } from './builtinApplicationCapabilities'
+import { SETTINGS_APPLICATION_CAPABILITIES } from './capabilities/settingsApplicationCapabilities'
 import { ASSET_APPLICATION_CAPABILITIES } from './capabilities/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from './capabilities/cameraStageApplicationCapabilities'
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from './capabilities/applicationReflectionApplicationCapabilities'
@@ -39,10 +36,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   openApplicationSurfaceCapability,
   closeApplicationSurfaceCapability,
   focusApplicationEntityCapability,
-  searchApplicationSettingsCapability,
-  getApplicationSettingsCapability,
-  planApplicationSettingsChangeCapability,
-  applyApplicationSettingsChangeCapability,
+  ...SETTINGS_APPLICATION_CAPABILITIES,
   listGenerationHistoryCapability,
   openImageEditorWithSourceCapability,
   createImageEditPreviewFromRefCapability,

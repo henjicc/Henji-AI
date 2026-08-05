@@ -13,8 +13,10 @@ import {
 import {
   createDeterministicTaskGraph,
   createModelTaskGraph,
+  taskGraphCoversBaseline,
   tryCreateModelTaskGraph,
 } from './task-facets'
+import { inferIntentTaskSemantics } from './task-intent-semantics'
 
 const logger = createMainLogger('main.agent_router')
 
@@ -117,8 +119,30 @@ function regexMatcher(pattern: RegExp): (goal: string) => boolean {
   return (goal) => pattern.test(goal)
 }
 
+function asksToGenerateMedia(goal: string): boolean {
+  return /(?:生成|制作|创作|画|create|generate).{0,24}(?:图片|图像|照片|视频|音频|音乐|语音|image|video|audio)/i.test(goal)
+    && !/(?:历史|记录|状态|进度|取消|停止)/i.test(goal)
+}
+
+function asksToInspectModel(goal: string): boolean {
+  return /(?:查找|搜索|查看|查询|比较|推荐).{0,20}(?:模型|model)|(?:模型|model).{0,20}(?:参数|价格|能力|支持)/i.test(goal)
+}
+
+function asksForCanvasAction(goal: string): boolean {
+  return /(?:画布|canvas).{0,24}(?:节点|连线|项目|布局)|(?:节点|连线).{0,24}(?:画布|canvas)/i.test(goal)
+    && !/(?:画布工作区|canvas workspace)/i.test(goal)
+}
+
 const deterministicRules: DeterministicRule[] = [
   { intent: 'cancel_generation', matches: regexMatcher(cancelGenerationPattern) },
+  { intent: 'generate', matches: asksToGenerateMedia },
+  { intent: 'inspect_model', matches: asksToInspectModel },
+  { intent: 'canvas', matches: asksForCanvasAction },
+  { intent: 'assets', matches: regexMatcher(/(?:素材库|asset library).{0,24}(?:查询|查看|标签|集合|选择|删除|移除)|(?:查询|查看|选择|删除|移除).{0,24}(?:素材库|asset library)/i) },
+  { intent: 'workflow', matches: regexMatcher(/(?:工作流|workflow)/i) },
+  { intent: 'memory', matches: regexMatcher(/(?:助手记忆|长期记忆|记住这|忘记这|agent memory)/i) },
+  { intent: 'toolbox', matches: regexMatcher(/(?:工具箱|toolbox).{0,16}(?:有什么|状态|工具)/i) },
+  { intent: 'storyboard', matches: regexMatcher(/(?:分镜项目|storyboard)/i) },
   {
     intent: 'general',
     matches: asksForAssistantCapabilityOverview,
@@ -184,11 +208,14 @@ function deterministicRoute(
         domain: 'generation',
         targetSurfaceId: snapshot.surface.id,
         capabilityKinds: ['observe', 'query'],
+        effect: 'observe',
+        entityTypes: ['generation.record', 'generation.result'],
         completionCondition: '返回目标生成记录或明确说明没有符合条件的记录。',
       }),
     }
   }
   if (/(?:设置|偏好|毛玻璃|主题|圆角|启动页面|上传服务)/i.test(normalized)) {
+    const taskSemantics = inferIntentTaskSemantics('settings', goal)
     return {
       routeVersion: 'agent-route/v2',
       intent: 'settings',
@@ -206,12 +233,15 @@ function deterministicRoute(
         facetId: 'settings',
         domain: 'settings',
         targetSurfaceId: snapshot.surface?.id,
-        capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
+        capabilityKinds: taskSemantics.capabilityKinds,
+        effect: taskSemantics.effect,
+        entityTypes: taskSemantics.entityTypes,
         completionCondition: '设置读取或变更结果包含稳定设置 ID 与 revision。',
       }),
     }
   }
   if (/(?:图片编辑|矩形标注|文字标注|裁剪图片|旋转图片)/i.test(normalized)) {
+    const taskSemantics = inferIntentTaskSemantics('image_edit', goal)
     return {
       routeVersion: 'agent-route/v2',
       intent: 'image_edit',
@@ -229,14 +259,17 @@ function deterministicRoute(
         facetId: 'image_edit',
         domain: 'image_edit',
         targetSurfaceId: 'tool.image_edit',
-        capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
+        capabilityKinds: taskSemantics.capabilityKinds,
+        effect: taskSemantics.effect,
+        entityTypes: taskSemantics.entityTypes,
         completionCondition: '返回图片编辑会话或预览稳定引用及 revision。',
       }),
     }
   }
   const matches = deterministicRules.filter((rule) => rule.matches(goal))
   if (matches.length !== 1) return null
-  const [match] = matches
+    const [match] = matches
+  const taskSemantics = inferIntentTaskSemantics(match.intent, goal)
   return {
     routeVersion: 'agent-route/v2',
     intent: match.intent,
@@ -254,7 +287,10 @@ function deterministicRoute(
       facetId: match.intent,
       domain: (match.toolDomains ?? routePolicy[match.intent].toolDomains)[0] ?? 'catalog',
       targetSurfaceId: snapshot.surface?.id,
-      capabilityKinds: match.intent === 'navigate' ? ['observe', 'navigate'] : ['query', 'execute'],
+      capabilityKinds: taskSemantics.capabilityKinds,
+      effect: taskSemantics.effect,
+      entityTypes: taskSemantics.entityTypes,
+      verificationRequired: match.intent === 'generate',
       completionCondition: match.intent === 'general'
         ? '直接回答用户问题且不声称执行未发生的动作。'
         : '目标动作具有结构化结果或明确的受阻说明。',
@@ -282,13 +318,17 @@ export class AgentIntentRouter {
         const candidateIntents = selectEnumValues(classified.candidateIntents, AGENT_INTENTS, 4)
         const requestedDomains = selectEnumValues(classified.toolDomains, AGENT_TOOL_DOMAINS, 6)
         if (deterministic) {
-          const planned = tryCreateModelTaskGraph({
+          const candidatePlan = tryCreateModelTaskGraph({
             goal,
             rawFacets: classified.taskFacets,
             primaryIntent: deterministic.intent,
             candidateDomains: deterministic.toolDomains,
             snapshot,
           })
+          const planned = candidatePlan && deterministic.taskGraph
+            && taskGraphCoversBaseline(candidatePlan, deterministic.taskGraph)
+            ? candidatePlan
+            : null
           const decision: AgentRouteDecision = planned
             ? {
                 ...deterministic,

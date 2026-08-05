@@ -1,4 +1,5 @@
 import {
+  AGENT_MIN_OUTPUT_TOKENS,
   isAgentModelStaticallyCapable,
   isAgentModelVerified,
   resolveAgentRoleReference,
@@ -73,9 +74,16 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
       maxRetries: request.profile.id === DEFAULT_AGENT_PROFILE_ID
         ? 3
         : request.profile.settings.maxRetries,
+      /*
+       * 输出预算取"档案设定与工作下限的较大值"，再被模型真实上限夹住。
+       *
+       * 4096 是推理模型普及前的老默认值，会随档案一直存下去。而思考模式下思维链本身就计入
+       * 输出：实测同一次运行里两轮直接 finishReason=length 被截断，各白烧 30 秒以上，工具参数
+       * 写到一半作废。模型明明支持 384k，卡在 4096 纯属历史包袱，不是用户的选择。
+       */
       maxOutputTokens: Math.min(
-        request.profile.settings.maxOutputTokens,
-        model.capabilities.maxOutputTokens ?? request.profile.settings.maxOutputTokens
+        model.capabilities.maxOutputTokens ?? Number.MAX_SAFE_INTEGER,
+        Math.max(request.profile.settings.maxOutputTokens, AGENT_MIN_OUTPUT_TOKENS)
       ),
       temperature: request.profile.settings.temperature,
     },

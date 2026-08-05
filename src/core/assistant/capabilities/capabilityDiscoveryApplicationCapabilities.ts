@@ -6,7 +6,7 @@ import {
   applicationSchemaReadOutputSchema,
 } from '../capabilityDiscovery'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import { defineApplicationCapability } from './defineApplicationCapability'
+import { capabilityControl, defineApplicationCapability } from './defineApplicationCapability'
 
 const schemaRefAiSchema = {
   type: 'object',
@@ -30,6 +30,7 @@ export const discoverApplicationCapabilitiesCapability = defineApplicationCapabi
   aliases: ['批量能力发现', '应用控制结构', '发现操作', 'discover capabilities'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['application.capability', 'application.schema']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'catalog:read',
@@ -95,6 +96,7 @@ export const readApplicationSchemasCapability = defineApplicationCapability({
   aliases: ['读取能力参数', '读取输入结构', 'schemaRef', 'read schemas'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['application.schema']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'catalog:read',

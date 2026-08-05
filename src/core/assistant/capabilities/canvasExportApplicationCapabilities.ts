@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import { capabilityOutputSchema, defineApplicationCapability } from './defineApplicationCapability'
+import {
+  capabilityControl,
+  capabilityOutputSchema,
+  defineApplicationCapability,
+} from './defineApplicationCapability'
 
 export const canvasDownloadDestinationSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('quick') }).strict(),
@@ -16,6 +20,7 @@ const downloadCanvasMedia = defineApplicationCapability({
   domain: 'canvas',
   aliases: ['批量下载画布节点', '下载节点媒体', 'download canvas media'],
   readOnly: false,
+  control: capabilityControl('execute', ['canvas.node'], { verificationRequired: false }),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'canvas:export',

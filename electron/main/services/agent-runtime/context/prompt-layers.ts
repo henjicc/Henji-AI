@@ -10,6 +10,7 @@ import type {
   AgentContextLayer,
 } from './types'
 import { createCapabilityDiscoveryInputFromTaskGraph } from '../../../../../src/core/assistant/capabilityDiscovery'
+import type { AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 
 export const stableSystemPrompt = [
   '你是 Henji-AI 桌面应用中的受控智能助手。',
@@ -27,10 +28,12 @@ export const stableSystemPrompt = [
   '需要看界面时默认使用 observe_application_surface 的 target="window" 取整窗画面，它任何时候都可用，不需要先切换页面；只有要排除干扰、聚焦某一块时才填具体页面 ID，且该页面必须当前可见。截图范围永远只有当前应用窗口，不涉及操作系统桌面和其他应用。',
   '整窗截图会包含助手自己的侧栏或浮层：那是你本轮的对话与工具记录，属于你自己的输出，不是应用状态证据，不要据此推断用户数据或重复叙述。判断界面状态时以主内容区为准。截图中被纯色块覆盖的区域是按隐私策略遮罩的敏感内容，不要猜测其原值，也不要要求用户读出来。',
   '应用设置必须先搜索稳定设置 ID，再读取或规划；后台修改设置不打开设置页。密钥只能读取“已配置/未配置”，本地路径只能使用不透明引用，不得要求或回显原值。',
-  '批量能力发现只提交当前依赖前沿。leasedToolNames 保证下一模型步骤真实可用并持续到 Facet 终态；deferredToolNames 表示因预算延迟的候选。活动工具已经携带完整输入 schema，不要在发现后自动调用 read_application_schemas，也不要对同一 Facet 重复发现。',
+  '批量能力发现直接提交 plan_state.discoveryRequest。运行时会把请求规范化成本次任务真正需要的 Facet 集合并一次性发放租约，所以**正常情况下整次运行只需要发现一次**：不要边做边一个 Facet 一个 Facet 地重新发现，也不必担心少写字段。leasedToolNames 保证下一模型步骤真实可用并持续到 Facet 终态；deferredToolNames 表示因预算延迟的候选。活动工具已经携带完整输入 schema，不要在发现后自动调用 read_application_schemas。',
+  '拿到租约后就开始执行，不要为了"再确认一下"反复读取同一份目录、schema 或产物。已经出现在上文的内容不要重复取回；同一份 artifact 只按 nextCursor 顺序读一遍。',
+  '同一个 Facet 内相互独立的写入应该在同一轮里一次性全部发出（例如一次放置多个对象、批量改属性、批量写关键帧），由运行时按 action group 统一编排；不要一轮只做一件事然后等下一轮。',
   'NOT_FOUND 或 INVALID_INPUT 后只能刷新当前上下文、重新搜索能力、读取明确 schema 或向用户澄清；禁止连续猜测工具、页面、节点或设置名称。',
   '非重试错误应立即停止相关工具调用；同一目标经过一次安全修正仍失败、连续失败或没有新进展时，停止尝试并明确告诉用户已完成部分、未完成部分、具体阻塞原因，以及继续所需的一个最小信息或动作。禁止为了显得有进展而改做无关任务。',
-  '工具结果出现 artifactRef 时，摘要不足才按需回读；若本轮没有产物读取工具，通过批量发现的 artifacts Facet 激活它，并在下一轮按 nextCursor 分页读取。不得把 artifactRef 当作文件路径。',
+  '工具结果出现 artifactRef 时，摘要不足才用常驻的 read_agent_artifact 按 nextCursor 分页回读；不得为此新增或虚构 artifacts Facet，不得改写 plan_state.discoveryRequest，也不得把 artifactRef 当作文件路径。',
   '选择图片、视频或音频生成模型时，tags、输入约束和参数 schema 是硬约束；通用描述只用于在兼容模型之间判断擅长方向，不得从描述推断未声明能力。',
   '搜索生成模型时，内容、题材和风格应保留在最终 prompt，不得作为模型目录 query；未明确指定模型名称时使用空 query + mediaType。用户指令或相关记忆明确偏好供应商时，首个搜索就附 providerId，避免先跨供应商搜索再逐个试探。',
   '执行生成任务时，如果创建工具尚未可用但存在工作区切换工具，应先切换到生成工作区，等待宿主上下文刷新后继续，不得据此声称应用没有生成能力。',
@@ -147,25 +150,87 @@ function snapshotSummary(input: AgentContextBuildInput): Record<string, unknown>
   }
 }
 
+/**
+ * Task Graph 在提示词里只保留模型真正要用的字段。
+ *
+ * 完整任务图（含 requiredObservations 的整段 reason、completionConditions、evidence）动辄上万
+ * 字节，而 plan_state 只有 2200 token 预算，超出部分从**尾部**截断——discoveryRequest 恰好排在
+ * 尾部。实测里模型因此看不到真实 facetId，只能自己编（编出了不存在的 camera_animation），
+ * 随后 declare_action_plan 报 UNKNOWN_FACET，整次运行被连续失败预算掐死。
+ */
+function planFacetSummaries(taskGraph: AgentTaskGraph): Record<string, unknown>[] {
+  return taskGraph.facets.map((facet) => ({
+    facetId: facet.facetId,
+    status: facet.status,
+    dependsOn: facet.dependsOn,
+    goal: facet.goal.slice(0, 120),
+    requiredEffects: facet.requiredEffects.map((effect) => ({
+      effect: effect.effect,
+      entityTypes: effect.entityTypes,
+      minimumCount: effect.minimumCount,
+      verificationRequired: effect.verificationRequired,
+    })),
+  }))
+}
+
 function planState(input: AgentContextBuildInput): Record<string, unknown> {
-  const summary = input.workingSummary ?? {
-    goal: input.goal,
-    route: input.route,
-    unresolvedItems: [],
-  }
-  const rawDiscoveryRequest = input.route.taskGraph
-    ? createCapabilityDiscoveryInputFromTaskGraph(input.route.taskGraph)
+  const summary = input.workingSummary
+  const taskGraph = input.route.taskGraph
+  const rawDiscoveryRequest = taskGraph
+    ? createCapabilityDiscoveryInputFromTaskGraph(taskGraph)
     : null
-  const leasedFacetIds = new Set(input.workingSummary?.toolLeases.map((lease) => lease.facetId) ?? [])
+  const leasedFacetIds = new Set(summary?.toolLeases.map((lease) => lease.facetId) ?? [])
   const discoveryFacets = rawDiscoveryRequest?.facets.filter((facet) => (
     !leasedFacetIds.has(facet.facetId)
   )) ?? []
   const discoveryRequest = rawDiscoveryRequest && discoveryFacets.length > 0
     ? { ...rawDiscoveryRequest, facets: discoveryFacets }
     : null
+  /*
+   * 键序即抗截断优先级：本层从尾部裁剪，模型必须能看到的东西排在最前。
+   * discoveryRequest 和 facets 是"下一步怎么做"的唯一依据，绝不能被 evidence / completedSteps
+   * 这类回顾性字段挤掉。
+   */
   return {
-    ...summary,
     ...(discoveryRequest ? { discoveryRequest } : {}),
+    ...(taskGraph ? { facets: planFacetSummaries(taskGraph) } : {}),
+    goal: summary?.goal ?? input.goal,
+    route: summary?.route
+      ? {
+          intent: summary.route.intent,
+          summary: summary.route.summary,
+          toolDomains: summary.route.toolDomains,
+        }
+      : {
+          intent: input.route.intent,
+          summary: input.route.reason,
+          toolDomains: input.route.toolDomains,
+        },
+    unresolvedItems: summary?.unresolvedItems ?? [],
+    recovery: summary?.recovery,
+    planVersion: summary?.planVersion,
+    activeStep: summary?.activeStep,
+    pendingApprovals: summary?.pendingApprovals,
+    scopeRevisions: summary?.scopeRevisions,
+    toolLeases: summary?.toolLeases,
+    artifactRefs: summary?.artifactRefs,
+    attachmentRefs: summary?.attachmentRefs,
+    // 结算账本的 evidenceDigests 纯属运行时内部对账数据，进提示词只会挤掉真正有用的层。
+    effectLedger: summary?.effectLedger.map((entry) => ({
+      effectId: entry.effectId,
+      count: entry.count,
+      verified: entry.verified,
+    })),
+    completedSteps: summary?.completedSteps.map((step) => ({
+      toolName: step.toolName,
+      status: step.status,
+      summary: step.summary.slice(0, 160),
+    })),
+    failedSteps: summary?.failedSteps.map((step) => ({
+      toolName: step.toolName,
+      summary: step.summary.slice(0, 160),
+    })),
+    evidence: summary?.evidence,
   }
 }
 
@@ -263,7 +328,7 @@ export function buildAgentContextLayers(
   const layers = ([
     {
       id: 'model_catalog', source: 'host_generation_model_catalog', trust: 'trusted_runtime',
-      priority: 88, required: false, maxTokens: 7_000,
+      priority: 88, required: false, maxTokens: 20_000,
       content: modelCatalog
         ? JSON.stringify({
             ...modelCatalog,
@@ -281,17 +346,17 @@ export function buildAgentContextLayers(
     },
     {
       id: 'user_instructions', source: 'user_instructions_file', trust: 'untrusted_user',
-      priority: 70, required: false, maxTokens: 1_000,
+      priority: 70, required: false, maxTokens: 4_000,
       content: input.userInstructions ? redactAgentText(input.userInstructions) : '',
     },
     {
       id: 'confirmed_memory', source: 'confirmed_memory_retrieval', trust: 'untrusted_memory',
-      priority: 60, required: false, maxTokens: 1_500,
+      priority: 60, required: false, maxTokens: 4_000,
       content: JSON.stringify(memorySummary(input.memoryContext ?? [])),
     },
     {
       id: 'tool_contracts', source: 'agent_tool_registry', trust: 'trusted_runtime',
-      priority: 80, required: false, maxTokens: 500,
+      priority: 80, required: false, maxTokens: 2_000, volatile: true,
       content: JSON.stringify({
         activeToolNames,
         // 显式给出本轮能否取得视觉证据：这一项由运行时按 primary/observer 的真实媒体
@@ -309,17 +374,18 @@ export function buildAgentContextLayers(
     },
     {
       id: 'host_state', source: 'host_context_snapshot', trust: 'trusted_runtime',
-      priority: 85, required: true, maxTokens: 1_200,
+      priority: 85, required: true, maxTokens: 4_000, volatile: true,
       content: JSON.stringify(snapshotSummary(input)),
     },
     {
-      id: 'plan_state', source: 'validated_route_and_checkpoint', trust: 'trusted_runtime',
-      priority: 95, required: true, maxTokens: 2_200,
+      id: 'plan_state', source: 'validated_route_and_checkpoint', trust: 'trusted_runtime', volatile: true,
+      // 计划状态是"下一步做什么"的唯一依据，宁可多占上下文也不能被截断。
+      priority: 95, required: true, maxTokens: 8_000,
       content: JSON.stringify(planState(input)),
     },
     {
-      id: 'observations', source: 'agent_tool_gateway', trust: 'untrusted_observation',
-      priority: 90, required: observations.length > 0, maxTokens: 3_500,
+      id: 'observations', source: 'agent_tool_gateway', trust: 'untrusted_observation', volatile: true,
+      priority: 90, required: observations.length > 0, maxTokens: 16_000,
       content: observations.map((item) => item.text).join('\n'),
     },
   ] satisfies AgentContextLayer[]).filter((layer) => layer.required || layer.content.length > 0)

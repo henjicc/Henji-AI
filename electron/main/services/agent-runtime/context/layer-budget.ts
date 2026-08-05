@@ -11,6 +11,10 @@ import type {
 
 interface LayerSelectionResult {
   messages: ModelStepMessage[]
+  /** 只增不改的层，排在对话历史之前，进入可缓存前缀。 */
+  stableMessages: ModelStepMessage[]
+  /** 每轮都变的层，排在对话历史之后，只让最尾部失效。 */
+  volatileMessages: ModelStepMessage[]
   reports: AgentContextLayerReport[]
   retainedLayers: AgentContextLayerId[]
   droppedLayers: AgentContextLayerId[]
@@ -81,11 +85,18 @@ export function selectContextLayers(
   }
 
   const orderedReports = layers.map((layer) => reports.get(layer.id) as AgentContextLayerReport)
+  const messagesFor = (volatileLayer: boolean): ModelStepMessage[] => layers.flatMap((layer) => {
+    if (Boolean(layer.volatile) !== volatileLayer) return []
+    const message = selected.get(layer.id)
+    return message ? [message] : []
+  })
   return {
     messages: layers.flatMap((layer) => {
       const message = selected.get(layer.id)
       return message ? [message] : []
     }),
+    stableMessages: messagesFor(false),
+    volatileMessages: messagesFor(true),
     reports: orderedReports,
     retainedLayers: orderedReports.filter((report) => report.included).map((report) => report.id),
     droppedLayers: orderedReports.filter((report) => !report.included).map((report) => report.id),

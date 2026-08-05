@@ -45,6 +45,7 @@ import { ApprovalCard } from './ApprovalCard'
 import { AssistantMarkdown } from './AssistantMarkdown'
 import { AssistantComposer } from './AssistantComposer'
 import { ExecutionPlanCard } from './ExecutionPlanCard'
+import { ModelProgressMessage } from './ModelProgressMessage'
 import {
   groupToolActivitiesForDisplay,
   selectLatestToolEventSequence,
@@ -380,7 +381,11 @@ export function AssistantConversation(): JSX.Element {
               <UiButton
                 type="button"
                 variant="plain"
-                onClick={() => setActivityExpanded((expanded) => !expanded)}
+                onClick={() => {
+                  // 手动展开/收起要保持点击位置不动；自动展开（第 247/250 行）不走这里。
+                  conversationScroll.suspendFollowing()
+                  setActivityExpanded((expanded) => !expanded)
+                }}
                 aria-expanded={activityExpanded}
                 className="!h-8 min-w-0 flex-1 justify-start gap-2 !rounded-lg !px-2 text-left"
               >
@@ -440,7 +445,12 @@ export function AssistantConversation(): JSX.Element {
                   <ExecutionPlanCard presentation={execution} runStatus={runState.status} />
                   {executionTimeline.map((item) => (
                     item.kind === 'model'
-                      ? null
+                      ? (
+                          <ModelProgressMessage
+                            key={`model:${item.update.stepId}:${item.sequence}`}
+                            update={item.update}
+                          />
+                        )
                       : (
                           <section
                             key={`tools:${item.sequence}`}
@@ -462,6 +472,21 @@ export function AssistantConversation(): JSX.Element {
               </div>
             </div>
           </section>
+        ) : null}
+
+        {/*
+          助手在等回答时必须把问题完整摆出来。
+          之前它只作为执行计划折叠行里的一句 truncate 文案，实测模型问完"这个方案可以吗"就进入
+          waiting_user，界面什么都没显示，用户以为卡死并手动终止了整次任务。
+        */}
+        {runState?.status === 'waiting_user' && execution.clarification ? (
+          <UiPanel variant="inset" className="p-3">
+            <div className={`font-medium ${UI_TEXT_META_CLASS}`}>助手需要你确认</div>
+            <div className="mt-1 min-w-0">
+              <AssistantMarkdown>{execution.clarification.question}</AssistantMarkdown>
+            </div>
+            <p className={`mt-2 ${UI_TEXT_META_CLASS}`}>在下方直接回复即可继续执行。</p>
+          </UiPanel>
         ) : null}
 
         {runState?.status === 'waiting_external' && externalWait ? (

@@ -180,6 +180,11 @@ const modelDeltaEventSchema = z.object({
   stepId: z.string().min(1),
   /** Provider 原始片段会在分配 sequence 前合并；这里始终是可持久、可重放的有界文本块。 */
   text: z.string().max(16 * 1024),
+  /**
+   * 正文还是思维链。历史事件没有这个字段，默认按正文重放。
+   * 两条流必须分开落库：合并后无法再拆开，界面也就没法把"在想什么"和"在说什么"分区展示。
+   */
+  channel: z.enum(['text', 'reasoning']).optional(),
 }).strict()
 
 const modelRetryingEventSchema = z.object({

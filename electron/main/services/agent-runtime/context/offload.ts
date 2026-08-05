@@ -4,7 +4,30 @@ import type { AgentToolObservation } from '../../../../../src/core/assistant/too
 import type { AgentContextArtifact } from './types'
 
 const OFFLOAD_BYTE_THRESHOLD = 8 * 1024
-const OFFLOAD_RECORD_THRESHOLD = 100
+const OFFLOAD_RECORD_THRESHOLD = 400
+/** 卸载门槛的绝对上限：再大的单条结果也该分页，否则一次压缩就把整段历史冲掉。 */
+const OFFLOAD_BYTE_CEILING = 512 * 1024
+/** 单条工具结果最多占用上下文窗口的比例。 */
+const OFFLOAD_CONTEXT_SHARE = 0.15
+/** 估算用：CJK 为主的结构化 JSON，1 token 约 2 字节。 */
+const BYTES_PER_TOKEN = 2
+
+/**
+ * 卸载门槛必须跟随本轮真实上下文预算。
+ *
+ * 固定 8KB 是在小窗口模型时代定的。实测一次三维任务用的是 100 万窗口、峰值只占 3%，却把
+ * 80KB 的实体结构文档推去做 4KB 分页——模型花了 20 轮把自己刚拿到的数据一页页读回来，
+ * 期间还两次从头重读。上下文空着 97%，这纯粹是自伤。
+ */
+export function resolveOffloadByteThreshold(contextWindow: number | null | undefined): number {
+  if (!contextWindow || !Number.isFinite(contextWindow) || contextWindow <= 0) {
+    return OFFLOAD_BYTE_THRESHOLD
+  }
+  return Math.min(
+    OFFLOAD_BYTE_CEILING,
+    Math.max(OFFLOAD_BYTE_THRESHOLD, Math.floor(contextWindow * OFFLOAD_CONTEXT_SHARE * BYTES_PER_TOKEN))
+  )
+}
 
 function recordCount(value: unknown): number {
   if (Array.isArray(value)) return value.length

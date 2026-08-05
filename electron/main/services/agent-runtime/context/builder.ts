@@ -87,7 +87,21 @@ export class AgentContextBuilder {
     const layerBudget = Math.max(320, threshold - reservedTokens)
     let effectiveLayers = layers
     let selection = selectContextLayers(effectiveLayers, layerBudget)
-    let messages = [...selection.messages, ...conversation]
+    /*
+     * 顺序即缓存命中率。
+     *
+     * 供应商按**前缀完整匹配**计费上下文缓存，前缀一出现差异后面全部落空。旧顺序是
+     * 「全部上下文层 → 对话历史」，而 host_state / plan_state / observations 每轮都变，
+     * 于是那份只增不改、本该 100% 命中的对话历史每轮都被顶出缓存重新计费：实测输入涨到
+     * 68k 时命中仍钉在 1 万左右，整轮 50 万输入只命中 23.7%。
+     *
+     * 改成「稳定层 → 对话历史 → 易变层」后，可缓存前缀随对话一起增长，易变部分只影响尾部。
+     */
+    let messages = [
+      ...selection.stableMessages,
+      ...conversation,
+      ...selection.volatileMessages,
+    ]
     let estimatedTokens = estimateModelMessagesTokens(
       [{ role: 'system', content: stableSystemPrompt }, ...messages],
       toolsJson()
@@ -115,7 +129,11 @@ export class AgentContextBuilder {
         toolsJson()
       )
       selection = selectContextLayers(effectiveLayers, Math.max(320, threshold - finalReserved))
-      messages = [...selection.messages, ...conversation]
+      messages = [
+        ...selection.stableMessages,
+        ...conversation,
+        ...selection.volatileMessages,
+      ]
       estimatedTokens = estimateModelMessagesTokens(
         [{ role: 'system', content: stableSystemPrompt }, ...messages],
         toolsJson()

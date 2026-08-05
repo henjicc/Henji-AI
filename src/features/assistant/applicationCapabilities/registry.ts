@@ -1,17 +1,19 @@
 import {
-  applyApplicationSettingsChangeCapability,
   closeApplicationSurfaceCapability,
   createImageEditPreviewFromRefCapability,
   focusApplicationEntityCapability,
-  getApplicationSettingsCapability,
   getCurrentApplicationContextCapability,
   listGenerationHistoryCapability,
   openApplicationSurfaceCapability,
   openImageEditorWithSourceCapability,
   observeApplicationSurfaceCapability,
+} from '@/core/assistant/builtinApplicationCapabilities'
+import {
+  applyApplicationSettingsChangeCapability,
+  getApplicationSettingsCapability,
   planApplicationSettingsChangeCapability,
   searchApplicationSettingsCapability,
-} from '@/core/assistant/builtinApplicationCapabilities'
+} from '@/core/assistant/capabilities/settingsApplicationCapabilities'
 import {
   BUILTIN_APPLICATION_CAPABILITY_REGISTRY,
 } from '@/core/assistant/builtinApplicationCapabilityRegistry'
@@ -224,6 +226,21 @@ if (listApplicationSettingIds().length === 0) {
   throw new Error('应用设置注册中心为空')
 }
 
+/**
+ * 把 Zod 校验失败翻译成调用方能据此自纠的一句话。
+ *
+ * 只输出字段路径与规则说明（都是 schema 层面的信息），不回显业务值；条数与长度都有界，
+ * 避免一个大批量写入把整段错误灌进上下文。
+ */
+function describeSchemaIssues(error: ZodError): string {
+  const issues = error.issues.slice(0, 6).map((issue) => {
+    const path = issue.path.map(String).join('.') || '(根)'
+    return `${path}: ${issue.message}`
+  })
+  const omitted = error.issues.length - issues.length
+  return `${issues.join('；')}${omitted > 0 ? `；另有 ${omitted} 处` : ''}`.slice(0, 600)
+}
+
 function toFailure(error: unknown): ApplicationCapabilityResult {
   const message = error instanceof Error ? error.message : String(error)
   if (error instanceof CanvasApplicationError) {
@@ -253,7 +270,10 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
       ok: false,
       error: {
         code: 'INVALID_INPUT',
-        message: '应用能力参数无效',
+        // 只回"参数无效"等于让调用方猜。实测助手按 describe 的 requiredPropertyIds 逐字段
+        // 填好了关键帧写入，仍被这一句挡下，它无从判断是 ref 格式、值类型还是多余字段错了，
+        // 只能回头问用户——一次本可自纠的失败就此变成任务中断。
+        message: `应用能力参数无效：${describeSchemaIssues(error)}`,
         recoverable: true,
       },
     }

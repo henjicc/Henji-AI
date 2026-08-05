@@ -14,6 +14,7 @@ import type {
   AgentToolObservation,
   AgentToolPreview,
 } from './toolContracts'
+import type { HostScope } from './hostContracts'
 import type { AgentObservedEffect } from './taskGraph'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from './toolBudget'
 
@@ -59,17 +60,23 @@ export const applicationCapabilityDescriptorSchema = z.object({
   control: z.object({
     execution: applicationOperationExecutionSchema,
     impacts: z.array(applicationOperationImpactSchema).min(1).max(32),
-  }).strict().optional(),
+  }).strict(),
 }).strict()
 export type ApplicationCapabilityDescriptor = z.infer<typeof applicationCapabilityDescriptorSchema>
 
 export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unknown>
-  extends Omit<ApplicationCapabilityDescriptor, 'available'> {
+  extends Omit<ApplicationCapabilityDescriptor, 'available' | 'control'> {
   inputSchema: z.ZodType<TInput>
   outputSchema: z.ZodType<TOutput>
   aiInputSchema: Record<string, unknown>
   completionKind?: 'executed' | 'submitted' | 'observed'
   parallelSafe?: boolean
+  /**
+   * 输入决定实际写入领域时，按已通过 schema 的输入解析乐观并发作用域。
+   * 典型场景是通用实体动词：它本身属于 application，但一次调用只会修改
+   * toolbox、canvas、assets 或 settings 中的一个或几个领域。
+   */
+  resolveRequiredScopes?(input: TInput): HostScope[]
   resolveConcurrencyKey?(input: TInput): string
   resolveTargetIds?(input: TInput): Record<string, string>
   resolveDataClasses?(output: TOutput): AgentDataClass[]
@@ -77,7 +84,7 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
   preview?(input: TInput): AgentToolPreview
   createUndo?(output: TOutput): AgentToolObservation['undo']
   resolveObservedEffects?(input: TInput, output: TOutput): AgentObservedEffect[]
-  control?: {
+  control: {
     execution: ApplicationOperationExecution
     impacts: ApplicationOperationImpact[]
   }
@@ -95,6 +102,7 @@ export class ApplicationCapabilityRegistry {
       aiInputSchema,
       completionKind: _completionKind,
       parallelSafe: _parallelSafe,
+      resolveRequiredScopes: _resolveRequiredScopes,
       resolveConcurrencyKey: _resolveConcurrencyKey,
       resolveTargetIds: _resolveTargetIds,
       resolveDataClasses: _resolveDataClasses,
@@ -149,6 +157,7 @@ export class ApplicationCapabilityRegistry {
         aiInputSchema: _aiInputSchema,
         completionKind: _completionKind,
         parallelSafe: _parallelSafe,
+        resolveRequiredScopes: _resolveRequiredScopes,
         resolveConcurrencyKey: _resolveConcurrencyKey,
         resolveTargetIds: _resolveTargetIds,
         resolveDataClasses: _resolveDataClasses,

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
+  capabilityControl,
   capabilityOutputSchema,
   defineApplicationCapability,
 } from './defineApplicationCapability'
@@ -68,6 +69,7 @@ const addAssetToCanvas = defineApplicationCapability({
   domain: 'canvas',
   aliases: ['素材添加到画布', 'add asset to canvas'],
   readOnly: false,
+  control: capabilityControl('create', ['canvas.node'], { revisionScopes: ['canvas'] }),
   risk: 'R1',
   dataClasses: ['C1'],
   permission: 'canvas:write',
@@ -151,6 +153,7 @@ const focusCanvasNode = defineApplicationCapability({
   domain: 'canvas',
   aliases: ['查看画布节点', 'focus canvas node'],
   readOnly: false,
+  control: capabilityControl('navigate', ['canvas.node', 'application.surface']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'canvas:focus',
@@ -187,6 +190,7 @@ const undoCanvasChange = defineApplicationCapability({
   domain: 'canvas',
   aliases: ['撤销节点操作', 'undo canvas change'],
   readOnly: false,
+  control: capabilityControl('execute', ['canvas.project'], { revisionScopes: ['canvas'] }),
   risk: 'R1',
   dataClasses: ['C1'],
   permission: 'canvas:undo',

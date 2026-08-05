@@ -18,8 +18,10 @@ import { AgentCapabilityDiscoveryCatalog } from '../../context/capability-discov
 import { selectLeaseableToolNames } from '../../context/tool-activation'
 import { createBackendCapabilityTool } from '../backend-capability-tool'
 import {
-  agentTaskActionGroupSchema,
-  agentTaskRequiredEffectSchema,
+  agentAcceptedActionPlanDeclarationSchema,
+  agentActionPlanDeclarationInputSchema,
+  deriveActionGroups,
+  normalizeDeclaredRequiredEffects,
 } from '../../../../../../src/core/assistant/taskGraph'
 
 const applicationCapabilityCategorySchema = z.enum([
@@ -179,66 +181,39 @@ export function createBackendBuiltinTools(
     supportsPreview: false,
     supportsUndo: false,
     requiredContext: [],
-    inputSchema: z.object({
-      facets: z.array(z.object({
-        facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
-        requiredEffects: z.array(agentTaskRequiredEffectSchema).min(1).max(32),
-      }).strict()).min(1).max(16),
-      actionGroups: z.array(agentTaskActionGroupSchema).min(1).max(32),
-    }).strict(),
-    outputSchema: z.object({
-      accepted: z.literal(true),
-      facets: z.array(z.object({
-        facetId: z.string().min(1),
-        requiredEffects: z.array(agentTaskRequiredEffectSchema),
-      }).strict()),
-      actionGroups: z.array(agentTaskActionGroupSchema),
-    }).strict(),
-    aiInputSchema: {
-      type: 'object',
-      properties: {
-        facets: {
-          type: 'array', minItems: 1, maxItems: 16,
-          items: {
-            type: 'object',
-            properties: {
-              facetId: { type: 'string' },
-              requiredEffects: {
-                type: 'array', minItems: 1, maxItems: 32,
-                items: {
-                  type: 'object',
-                  properties: {
-                    effectId: { type: 'string' },
-                    effect: { type: 'string', enum: ['observe', 'create', 'update', 'delete', 'navigate', 'execute'] },
-                    entityTypes: { type: 'array', items: { type: 'string' } },
-                    propertyIds: { type: 'array', items: { type: 'string' } },
-                    minimumCount: { type: 'integer', minimum: 1, maximum: 256 },
-                    targetRefs: { type: 'array', items: { type: 'object', properties: {
-                      kind: { type: 'string' }, id: { type: 'string' },
-                    }, required: ['kind', 'id'], additionalProperties: false } },
-                    verificationRequired: { type: 'boolean' },
-                    actionGroupId: { type: 'string' },
-                  },
-                  required: ['effectId', 'effect', 'entityTypes', 'propertyIds', 'minimumCount', 'targetRefs', 'verificationRequired', 'actionGroupId'],
-                  additionalProperties: false,
-                },
-              },
-            },
-            required: ['facetId', 'requiredEffects'], additionalProperties: false,
-          },
-        },
-        actionGroups: { type: 'array', minItems: 1, maxItems: 32, items: {
-          type: 'object', properties: {
-            actionGroupId: { type: 'string' }, facetId: { type: 'string' },
-            mode: { type: 'string', enum: ['parallel_read', 'atomic_batch', 'ordered_write', 'dependent'] },
-            effectIds: { type: 'array', items: { type: 'string' } },
-            dependsOn: { type: 'array', items: { type: 'string' } },
-          }, required: ['actionGroupId', 'facetId', 'mode', 'effectIds', 'dependsOn'], additionalProperties: false,
-        } },
-      },
-      required: ['facets', 'actionGroups'], additionalProperties: false,
-    },
-    execute: (input) => Promise.resolve({ accepted: true as const, ...input }),
+    // 输入用宽松版：effectId / actionGroupId / actionGroups 全部由运行时按 Facet 推导。
+    // 让模型手写这些交叉引用只会换来一句 "Invalid input"，而它无从自纠。
+    inputSchema: agentActionPlanDeclarationInputSchema,
+    outputSchema: agentAcceptedActionPlanDeclarationSchema,
+    aiInputSchema: z.toJSONSchema(agentActionPlanDeclarationInputSchema, {
+      target: 'draft-7', io: 'input',
+    }) as Record<string, unknown>,
+    // 真正的规范化与提交由执行守卫完成，这里只回显被接受的声明。
+    execute: (input) => Promise.resolve({
+      accepted: true as const,
+      facets: input.facets.map((facet) => ({
+        facetId: facet.facetId,
+        requiredEffects: normalizeDeclaredRequiredEffects(facet.facetId, facet.requiredEffects),
+      })),
+      actionGroups: deriveActionGroups(input.facets.map((facet) => ({
+        facetId: facet.facetId,
+        domain: 'application',
+        goal: facet.facetId,
+        targetEntityTypes: [],
+        requiredObservations: [],
+        capabilityKinds: ['plan' as const],
+        targetSurfaceId: null,
+        dependsOn: [],
+        parallelizable: false,
+        completionConditions: [facet.facetId],
+        requiredEffects: normalizeDeclaredRequiredEffects(facet.facetId, facet.requiredEffects),
+        uncertainties: [],
+        confidence: 1,
+        status: 'pending' as const,
+        statusReason: '',
+        evidence: [],
+      }))),
+    }),
     concurrencyKey: () => 'action-plan',
     targetIds: () => ({}),
     dataClasses: () => ['C0'],

@@ -48,6 +48,7 @@ interface PrimaryModelExecutionInput {
   trace?: ModelStepTraceMetadata
   runModelStep: AgentModelStepExecutor
   onTextDelta: (text: string) => void
+  onReasoningDelta?: (text: string) => void
   onRetry?: (event: Extract<ModelStepEvent, { type: 'Retrying' }>) => void
 }
 
@@ -260,6 +261,7 @@ export function runPrimaryAgentModelStep(
     trace: input.trace,
   }, (event) => {
     if (event.type === 'TextDelta') input.onTextDelta(event.text)
+    else if (event.type === 'ReasoningDelta') input.onReasoningDelta?.(event.text)
     else if (event.type === 'Retrying') input.onRetry?.(event)
   })
 }

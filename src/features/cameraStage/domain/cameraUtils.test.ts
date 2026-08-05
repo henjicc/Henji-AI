@@ -99,9 +99,37 @@ describe('applyObjectPatch（重要记录 007：摄像机画幅一致性）', ()
 })
 
 describe('摄像机旋转与注视点换算', () => {
-  it('手动注视模式直接使用完整 XYZ 旋转，Z 轴不会被 lookAt 覆盖', () => {
-    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+  /*
+   * 朝向的唯一数据源是 lookAt，manual 模式也不例外。
+   *
+   * 旧实现在 manual 模式直接返回存量 rotation，于是"只写目标点不写角度"的入口（面板手填注视点、
+   * 通用动词写 look_at_target、运镜按 targetPoint 环绕）写进去的目标全部失效——实测"摄像机围绕
+   * 两个物体旋转"轨迹绕上了，镜头却一直朝正前方。roll 不在 lookAt 里，仍必须原样保留。
+   */
+  it('手动注视模式也从注视点反解朝向，且保留 roll', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0), {
+      position: { x: 0, y: 0, z: 5 },
+      target: { x: 5, y: 0, z: 5 },
+    })
     camera.transform.rotation = { x: 12, y: -34, z: 27 }
+    camera.lookAt = { mode: 'manual', target: { x: 5, y: 0, z: 5 } }
+    const resolved = resolveCameraRotation(camera, [camera])
+    expect(resolved).toEqual(rotationFromPositionAndTarget(
+      camera.transform.position,
+      { x: 5, y: 0, z: 5 },
+      27,
+    ))
+    expect(resolved.z).toBe(27)
+    expect(resolved.y).not.toBe(-34)
+  })
+
+  it('注视点与机位重合时保持当前角度，不弹回正前方', () => {
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0), {
+      position: { x: 1, y: 2, z: 3 },
+      target: { x: 1, y: 2, z: 3 },
+    })
+    camera.transform.rotation = { x: 12, y: -34, z: 27 }
+    camera.lookAt = { mode: 'manual', target: { x: 1, y: 2, z: 3 } }
     expect(resolveCameraRotation(camera, [camera])).toEqual({ x: 12, y: -34, z: 27 })
   })
 

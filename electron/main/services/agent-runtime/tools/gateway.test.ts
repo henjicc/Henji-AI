@@ -109,6 +109,58 @@ function request(
 }
 
 describe('AgentToolGateway', () => {
+  /*
+   * 回归：集合写入被拒后模型无路可走。
+   *
+   * 带算法语义的创建（三维对象的碰撞检测与复用判定）有意只留在专用能力里，通用动词不开放。
+   * 但引擎只抛一句 COLLECTION_WRITE_NOT_DECLARED:<实体类型>，模型无从得知替代路径——实测它
+   * 在这里直接放弃，任务图剩四个 Facet 未结算。错误必须自带可执行的下一步。
+   */
+  it('集合写入被拒时错误里附上负责增删的专用能力', async () => {
+    const registry = new AgentToolRegistry()
+    const shared = {
+      version: 1, category: 'camera_stage' as const, side: 'backend' as const,
+      permission: 'camera_stage:write', destructive: false, openWorld: false, idempotent: false,
+      timeoutMs: 1_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+      supportsPreview: false, supportsUndo: false, requiredContext: [],
+      inputSchema: z.object({ value: z.string() }).strict(),
+      outputSchema: z.object({ ok: z.boolean() }).strict(),
+      aiInputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+      concurrencyKey: () => 'camera',
+      targetIds: () => ({}),
+      dataClasses: () => ['C1' as const],
+      summarize: () => '完成',
+    }
+    registry.register(defineAgentTool({
+      ...shared, name: 'change_application_entities', title: '修改应用状态',
+      description: '通用写入动词。', risk: 'R1', readOnly: false,
+      execute: async () => { throw new Error('COLLECTION_WRITE_NOT_DECLARED:camera_stage.object 未声明可增删') },
+    }))
+    registry.register(defineAgentTool({
+      ...shared, name: 'place_camera_stage_object', title: '布置 3D 对象',
+      description: '算法型对象布置。', risk: 'R1', readOnly: false,
+      capability: {
+        domain: 'camera_stage',
+        control: { impacts: [{
+          effect: 'execute', entityTypes: ['camera_stage.object'], propertyIds: [],
+          revisionScopes: ['toolbox'], verificationRequired: true,
+        }] },
+      } as never,
+      execute: async () => ({ ok: true }),
+    }))
+    const gateway = new AgentToolGateway({
+      registry,
+      getHostContext: createContext,
+      appendPermissionAudit: async () => {},
+    })
+    await expect(gateway.execute({
+      runId: 'run-1', threadId: 'thread-1', toolCallId: 'call-1',
+      toolName: 'change_application_entities', input: { value: 'x' },
+      expectedRevisions: { generation: 2 }, approvalMode: 'full_access',
+      explicitUserIntent: true, signal: new AbortController().signal,
+    })).rejects.toThrowError(/place_camera_stage_object/)
+  })
+
   it('AI schema 隐藏 baseRevision 后仍从 Gateway 信封注入旧处理器', async () => {
     const calls: unknown[] = []
     const tools = createFrontendApplicationCapabilityTools(async (operation) => {
@@ -171,6 +223,57 @@ describe('AgentToolGateway', () => {
     expect(calls).toMatchObject([{
       capability: {
         input: { projectId: 'project-1', name: '新名称', baseRevision: 7 },
+        expectedRevisions: { toolbox: 7 },
+      },
+    }])
+  })
+
+  it('通用实体写入按实际输入解析 revision 作用域并传入前端事务', async () => {
+    const calls: unknown[] = []
+    const definition = createFrontendApplicationCapabilityTools(async (operation) => {
+      calls.push(operation)
+      return {
+        ok: true,
+        resultingRevision: 9,
+        resultingScopeRevisions: {
+          navigation: 1, generation: 2, canvas: 0, toolbox: 9, assets: 4,
+        },
+        data: {
+          status: 'completed', transactionRef: 'transaction-generic',
+          resultingRevisions: { toolbox: 9 }, producedRefs: [], evidence: [],
+          revision: 9, scopeRevisions: { toolbox: 9 },
+        },
+      }
+    }).find((tool) => tool.name === 'change_application_entities')
+    if (!definition) throw new Error('missing change_application_entities')
+    const registry = new AgentToolRegistry()
+    registry.register(definition)
+    const gateway = new AgentToolGateway({
+      registry,
+      getHostContext: () => ({
+        ...createContext(),
+        scopeRevisions: { ...createContext().scopeRevisions, toolbox: 7, assets: 4 },
+      }),
+      appendPermissionAudit: async () => undefined,
+    })
+    const input = {
+      summary: '给对象添加位置关键帧',
+      changes: [{
+        kind: 'create_items' as const,
+        parent: { kind: 'camera_stage.object', id: 'object-1' },
+        entityType: 'camera_stage.keyframe',
+        items: [{ properties: { 'camera_stage.keyframe.frame': 0 } }],
+      }],
+    }
+
+    await expect(gateway.execute({
+      ...request(input, undefined, 'full_access'),
+      toolName: definition.name,
+      expectedRevisions: { toolbox: 7, assets: 0 },
+    })).resolves.toMatchObject({ status: 'completed' })
+    expect(calls).toMatchObject([{
+      capability: {
+        input,
         expectedRevisions: { toolbox: 7 },
       },
     }])

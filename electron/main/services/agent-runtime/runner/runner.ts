@@ -14,7 +14,11 @@ import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AGENT_CORE_TOOL_NAMES } from '../context/tool-activation'
 import { AgentToolGatewayError } from '../tools/gateway'
-import { AgentRunMetrics, AgentStopPolicyExceededError } from './budget'
+import {
+  AgentRunMetrics,
+  AgentStopPolicyExceededError,
+  isBudgetExhaustionSoftLimit,
+} from './budget'
 import { createInitialAgentRunState } from './initial-state'
 import { canObserveApplicationSurface, selectAgentRuntimeModels } from './models'
 import { toolMessage } from './runner-results'
@@ -256,7 +260,7 @@ export class AgentRunner {
         if (visual.success) this.pendingVisualAttachments.push(visual.data)
         this.conversationJournal.appendInternal(
           'tool_result',
-          toolMessage(call, observation),
+          toolMessage(call, observation, this.models.primary.limits.contextWindow),
           `tool:${call.toolCallId}`
         )
         this.recoveryGuard.observe(call, observation)
@@ -444,19 +448,33 @@ export class AgentRunner {
         this.state.turn = turn
         const softLimits = this.budget.consumeNewSoftLimits()
         if (softLimits.length > 0) {
-          this.catalogPlanner.enterCloseoutMode()
           for (const code of softLimits) {
             this.emit({ type: 'BudgetSoftLimitReached', code, usage: this.budget.snapshot() })
           }
-          this.conversationJournal.appendEphemeral({
-            role: 'user',
-            content: [
-              '[HARNESS_CLOSEOUT_MODE]',
-              '已达到软预算：禁止扩展新 Facet、无目标浏览和非必要能力发现。',
-              '只执行已声明 action plan、结构化验证、补偿与最终收口；若现有计划不足，请立即保存检查点并说明阻塞，不得重复搜索。',
-              '[END_HARNESS_CLOSEOUT_MODE]',
-            ].join('\n'),
-          })
+          const exhausted = softLimits.filter(isBudgetExhaustionSoftLimit)
+          if (exhausted.length > 0) {
+            this.catalogPlanner.enterCloseoutMode()
+            this.conversationJournal.appendEphemeral({
+              role: 'user',
+              content: [
+                '[HARNESS_CLOSEOUT_MODE]',
+                '已达到软预算：禁止扩展新 Facet、无目标浏览和非必要能力发现。',
+                '只执行已声明 action plan、结构化验证、补偿与最终收口；若现有计划不足，请立即保存检查点并说明阻塞，不得重复搜索。',
+                '[END_HARNESS_CLOSEOUT_MODE]',
+              ].join('\n'),
+            })
+          } else {
+            // 质量信号只提醒换方法，不摘掉能力发现——任务还没做完，工具不能先被收走。
+            this.conversationJournal.appendEphemeral({
+              role: 'user',
+              content: [
+                '[HARNESS_PROGRESS_WARNING]',
+                `最近几步没有产生新进展（${softLimits.join('、')}）。请换一种做法：读取真实状态、改用更匹配的能力，或向用户确认一个最小信息。`,
+                '任务预算仍然充足，不要提前收尾，也不要重复刚才失败的调用。',
+                '[END_HARNESS_PROGRESS_WARNING]',
+              ].join('\n'),
+            })
+          }
         }
         const currentSnapshot = this.requireContext()
         this.setPhase('preparing')

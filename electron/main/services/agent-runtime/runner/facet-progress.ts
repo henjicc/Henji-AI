@@ -28,16 +28,22 @@ import {
 } from './facet-effect-ledger'
 import {
   hasSufficientActionPlan as checkSufficientActionPlan,
-  parseDeclaredActionPlan,
+  prepareDeclaredActionPlan,
   resolveActionGroupForCall,
+  type PreparedDeclaredActionPlan,
 } from './facet-action-plan'
 import { buildAgentProgressSettlement, buildSettlementGuidance } from './facet-settlement'
 import { buildUserResumeProgress, listActiveFacetIds, listDependencyFrontierFacetIds } from './facet-progress-state'
+import {
+  buildCapabilityDiscoveryInputForFacets,
+  listDiscoverableFacets,
+} from '../../../../../src/core/assistant/capabilityDiscovery'
 
 export interface AgentProgressGuardDecision {
   code?: AgentToolErrorCode
   reason: string
   events: AgentFacetProgress[]
+  issueCodes?: string[]
 }
 
 export class AgentFacetProgressTracker {
@@ -100,26 +106,57 @@ export class AgentFacetProgressTracker {
     )
   }
 
-  applyDeclaredActionPlan(output: unknown): boolean {
-    const parsed = parseDeclaredActionPlan({ output, taskGraph: this.taskGraph, facets: this.facets })
-    if (!parsed) return false
-    this.taskGraph = parsed.taskGraph
+  prepareDeclaredActionPlan(declaration: unknown): PreparedDeclaredActionPlan {
+    return prepareDeclaredActionPlan({ declaration, taskGraph: this.taskGraph, facets: this.facets })
+  }
+
+  commitDeclaredActionPlan(prepared: Extract<PreparedDeclaredActionPlan, { ok: true }>): void {
+    this.taskGraph = prepared.taskGraph
     this.requiresExplicitActionPlan = false
     this.facets.clear()
-    for (const facet of parsed.taskGraph.facets) {
+    for (const facet of prepared.taskGraph.facets) {
       this.facets.set(facet.facetId, { ...facet })
-      if (parsed.declaredFacetIds.has(facet.facetId)) this.observationDigests.delete(facet.facetId)
+      if (prepared.declaredFacetIds.has(facet.facetId)) this.observationDigests.delete(facet.facetId)
     }
-    this.effectLedger.rebuild(parsed.taskGraph, parsed.declaredFacetIds)
-    return true
+    this.effectLedger.rebuild(prepared.taskGraph, prepared.declaredFacetIds)
   }
 
   activeFacetIds(): string[] {
     return listActiveFacetIds([...this.facets.values()])
   }
 
-  dependencyFrontierFacetIds(limit = 3): string[] {
+  dependencyFrontierFacetIds(limit?: number): string[] {
     return listDependencyFrontierFacetIds([...this.facets.values()], limit)
+  }
+
+  /**
+   * 把能力发现请求改写成运行时唯一正确的那一份，而不是拒绝模型。
+   *
+   * 依赖前沿和它的 requiredEffects 全都是运行时可以直接算出来的；让模型去复述这份集合，猜错
+   * 就判 INVALID_INPUT，只会白白烧掉一轮并计进连续失败预算。更糟的是当前沿 Facet 已全部持有
+   * 租约时旧实现返回"允许：无"，于是任何后续发现都必然失败——而让前沿推进所需要的只读观察
+   * 能力恰好又没被租到，整次运行就此死锁（实测的三维建场景任务就是这样断在第 11 轮）。
+   *
+   * 现在：请求一律规范化为当前前沿；重复发现交给 no_change 计数做软刹车，不再硬失败。
+   */
+  normalizeCallInput(call: ModelStepToolCall): unknown | null {
+    if (call.toolName !== 'discover_application_capabilities') return null
+    const scope = listDiscoverableFacets([...this.facets.values()])
+    if (scope.length === 0) return null
+    const undiscovered = scope.filter((facet) => !this.discoveredFacetIds.has(facet.facetId))
+    const targets = undiscovered.length > 0 ? undiscovered : scope
+    const input = asRecord(call.input)
+    const extraQueries: Record<string, string[]> = {}
+    if (Array.isArray(input?.facets)) {
+      for (const rawFacet of input.facets) {
+        const facet = asRecord(rawFacet)
+        if (typeof facet?.facetId !== 'string' || !Array.isArray(facet.queries)) continue
+        extraQueries[facet.facetId] = facet.queries.filter(
+          (query): query is string => typeof query === 'string' && query.length > 0
+        )
+      }
+    }
+    return buildCapabilityDiscoveryInputForFacets(targets, extraQueries)
   }
 
   validate(
@@ -134,39 +171,21 @@ export class AgentFacetProgressTracker {
         events: [],
       }
     }
-    if (call.toolName === 'discover_application_capabilities') {
-      const input = asRecord(call.input)
-      const requestedFacetIds = Array.isArray(input?.facets)
-        ? input.facets.flatMap((rawFacet) => {
-            const facet = asRecord(rawFacet)
-            return typeof facet?.facetId === 'string' ? [facet.facetId] : []
-          })
-        : []
-      const frontier = new Set(this.dependencyFrontierFacetIds())
-      const outsideFrontier = requestedFacetIds.filter((facetId) => !frontier.has(facetId))
-      if (outsideFrontier.length > 0) {
-        return {
-          reason: `能力发现只能覆盖当前依赖前沿；以下 Facet 尚不可执行：${outsideFrontier.join('、')}`,
-          events: [],
-        }
-      }
-      const repeatedFacetIds = requestedFacetIds.filter((facetId) => (
-        this.discoveredFacetIds.has(facetId)
-      ))
-      if (repeatedFacetIds.length > 0) {
-        return {
-          reason: `以下 Facet 已有活动工具租约，禁止重复发现：${repeatedFacetIds.join('、')}。请直接使用已披露 schema。`,
-          events: [],
-        }
-      }
-    }
     const definition = this.registry.get(call.toolName)
     if (definition && !definition.readOnly && call.toolName !== 'declare_action_plan'
       && this.facetsForCall(call, undefined, allowSettledActionGroupSibling).length === 0) {
+      const expected = [...this.facets.values()]
+        .filter((facet) => !isTerminal(facet.status))
+        .flatMap((facet) => facet.requiredEffects.map((required) => (
+          `${facet.facetId}:${required.effect}${required.entityTypes.length > 0 ? `(${required.entityTypes.join('/')})` : ''}`
+        )))
+        .slice(0, 12)
       return {
         code: 'ACTION_PLAN_REQUIRED',
-        reason: `${call.toolName} 的 effect、实体或属性不匹配当前依赖前沿中已声明的 action plan。`,
+        reason: `${call.toolName} 的 effect、实体或属性不在当前任务图里。任务图待办 Effect：${expected.join('、') || '无'}；`
+          + '如果这个写入确实是任务的一部分，用 declare_action_plan 为对应 facetId 补声明该 Effect（只需 effect/entityTypes/minimumCount），否则改用匹配的能力。',
         events: [],
+        issueCodes: ['ACTION_EFFECT_MISMATCH'],
       }
     }
     const signature = callSignature(call, expectedRevisions)
@@ -218,7 +237,6 @@ export class AgentFacetProgressTracker {
       return this.recordSchemas(input.call, input.observation, signature, record)
     }
     if (input.call.toolName === 'declare_action_plan') {
-      this.applyDeclaredActionPlan(input.observation.output)
       return []
     }
     return this.recordSuccess(input.call, input.observation, signature, record)
@@ -403,7 +421,7 @@ export class AgentFacetProgressTracker {
       }
       const submitted = definition?.semantics?.completionKind === 'submitted'
         || asRecord(observation.output)?.status === 'submitted'
-      if (!submitted) this.effectLedger.record(facet, observedEffects, outputDigest)
+      this.effectLedger.record(facet, observedEffects, outputDigest)
       const completed = !submitted && this.effectLedger.satisfied(facet)
       return this.progressFacet({
         facetId: facet.facetId,
@@ -435,23 +453,44 @@ export class AgentFacetProgressTracker {
       evidence: [],
     }))
     const matches = resolvedEffects ? effectMatches : potentialEffectMatches
-    const candidates = [...this.facets.values()].filter((facet) => (
+    const matching = [...this.facets.values()].filter((facet) => (
       (includeTerminal || !isTerminal(facet.status))
-      && facet.dependsOn.every((dependency) => this.facets.get(dependency)?.status === 'completed')
       && facet.requiredEffects.some((required) => effects.some((effect) => (
         matches(required, effect)
         || (
-          required.verificationRequired
-          && this.effectLedger.count(required.effectId) >= required.minimumCount
-          && overlapsForVerification(required, effect)
+           required.verificationRequired
+           && this.effectLedger.count(required.effectId) >= required.minimumCount
+           && (!resolvedEffects || effect.verified)
+           && overlapsForVerification(required, effect)
         )
       )))
     ))
-    if (candidates.length > 0) {
-      const parallel = candidates.filter((facet) => facet.parallelizable)
-      return parallel.length === candidates.length ? parallel : [candidates[0]]
+    /*
+     * 依赖只用来排优先级，不用来硬拒工具。
+     *
+     * 旧实现把"依赖全部 completed"当成过滤条件，于是一个带 verificationRequired 的前置 Facet
+     * 只要还差一次验证观察，它下游的导航/写入就全部报 ACTION_PLAN_REQUIRED——而错误文案还把
+     * 模型引向 declare_action_plan，白白多烧两轮。真正该拦的是"effect 压根匹配不上任何 Facet"，
+     * 依赖顺序交给 settlement 与前沿提示去引导。
+     */
+    const ready = matching.filter((facet) => facet.dependsOn.every(
+      (dependency) => this.facets.get(dependency)?.status === 'completed'
+    ))
+    const candidates = ready.length > 0 ? ready : matching
+    if (candidates.length === 0) return []
+    /*
+     * 纯观察可以同时验证多个 Facet，写入不行。
+     *
+     * "只取第一个候选"是为了防止一次写入被多个 Facet 重复计数——但观察不是写入。一次
+     * observe_camera_stage_scene 返回的是整个场景（对象、轨迹、关键帧全在里面），它本来就同时
+     * 构成多个 Facet 的验证证据。实测那次观察只记给了 camera_scene，camera_object_animation
+     * 拿不到验证证据，明明关键帧已经落库却永远停在 active。
+     */
+    if (effects.length > 0 && effects.every((effect) => effect.effect === 'observe')) {
+      return candidates
     }
-    return []
+    const parallel = candidates.filter((facet) => facet.parallelizable)
+    return parallel.length === candidates.length ? parallel : [candidates[0]]
   }
 
   private progressFacet(progress: AgentFacetProgress): AgentFacetProgress {

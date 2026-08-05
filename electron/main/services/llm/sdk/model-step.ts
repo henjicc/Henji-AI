@@ -23,6 +23,7 @@ import {
   type ModelStepToolCall,
   type ModelStepUsage,
 } from '../../../../../src/core/llm/modelStep'
+import { normalizeProviderToolSchema } from './tool-schema'
 
 export type ModelStepEmitter = (event: ModelStepEvent) => void
 
@@ -112,14 +113,18 @@ function toAiMessages(messages: ModelStepMessage[]): ModelMessage[] {
 function buildTools(input: ModelStepInput): ToolSet | undefined {
   if (!input.tools?.length) return undefined
   if (!input.capabilities.toolCall) throw new Error('[unsupported_capability] Model does not support tool calling')
-  return Object.fromEntries(input.tools.map((definition) => [
-    definition.name,
-    tool({
-      description: definition.description,
-      inputSchema: jsonSchema(definition.inputSchema as Parameters<typeof jsonSchema>[0]),
-      strict: definition.strict,
-    }),
-  ]))
+  return Object.fromEntries(input.tools.map((definition) => {
+    // strict 只能如实声明：schema 不满足 strict 子集时降级，不为了凑格式篡改语义。
+    const normalized = normalizeProviderToolSchema(definition.inputSchema, definition.strict)
+    return [
+      definition.name,
+      tool({
+        description: definition.description,
+        inputSchema: jsonSchema(normalized.schema as Parameters<typeof jsonSchema>[0]),
+        strict: normalized.strict,
+      }),
+    ]
+  }))
 }
 
 export function buildModelStepProviderOptions(input: ModelStepInput): ProviderOptions | undefined {

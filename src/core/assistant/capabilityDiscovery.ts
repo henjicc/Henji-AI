@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { applicationSchemaRefSchema } from '../application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from './applicationCapabilities'
 import { agentTaskCapabilityKindSchema } from './taskGraph'
-import type { AgentTaskGraph } from './taskGraph'
+import type { AgentTaskFacet, AgentTaskGraph } from './taskGraph'
 import {
   AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
   AGENT_LEASE_FRONTIER_FACET_LIMIT,
@@ -18,6 +18,11 @@ export const applicationCapabilityDiscoveryFacetSchema = z.object({
   entityTypes: z.array(z.string().min(1).max(128)).max(16).default([]),
   capabilityKinds: z.array(agentTaskCapabilityKindSchema).max(6).default([]),
   targetSurfaceIds: z.array(z.string().min(1).max(128)).max(8).default([]),
+  requiredEffects: z.array(z.object({
+    effect: z.enum(['observe', 'create', 'update', 'delete', 'navigate', 'execute']),
+    entityTypes: z.array(z.string().min(1).max(128)).max(16).default([]),
+    propertyIds: z.array(z.string().min(1).max(128)).max(128).default([]),
+  }).strict()).max(32).optional(),
 }).strict()
 export type ApplicationCapabilityDiscoveryFacet = z.infer<
   typeof applicationCapabilityDiscoveryFacetSchema
@@ -28,7 +33,7 @@ export const applicationCapabilityDiscoveryInputSchema = z.object({
     .default(APPLICATION_CAPABILITY_DISCOVERY_VERSION),
   facets: z.array(applicationCapabilityDiscoveryFacetSchema).min(1).max(AGENT_LEASE_FRONTIER_FACET_LIMIT),
   cursor: z.number().int().nonnegative().default(0),
-  limit: z.number().int().min(1).max(20).default(20),
+  limit: z.number().int().min(1).max(AGENT_DISCOVERY_LEASE_TOOL_LIMIT).default(AGENT_DISCOVERY_LEASE_TOOL_LIMIT),
 }).strict()
 export type ApplicationCapabilityDiscoveryInput = z.infer<
   typeof applicationCapabilityDiscoveryInputSchema
@@ -72,7 +77,7 @@ export const applicationCapabilityDiscoveryOutputSchema = z.object({
   catalogVersion: z.literal(APPLICATION_CAPABILITY_CATALOG_VERSION),
   fingerprint: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   reused: z.boolean(),
-  capabilities: z.array(applicationCapabilityDiscoveryMatchSchema).max(20),
+  capabilities: z.array(applicationCapabilityDiscoveryMatchSchema).max(AGENT_DISCOVERY_LEASE_TOOL_LIMIT),
   facets: z.array(facetDiscoveryResultSchema).max(16),
   missing: z.array(missingFacetSchema).max(16),
   leasedToolNames: z.array(z.string().min(1).max(128)).max(AGENT_DISCOVERY_LEASE_TOOL_LIMIT),
@@ -103,28 +108,81 @@ export const applicationSchemaReadOutputSchema = z.object({
 }).strict()
 export type ApplicationSchemaReadOutput = z.infer<typeof applicationSchemaReadOutputSchema>
 
-export function createCapabilityDiscoveryInputFromTaskGraph(
-  taskGraph: AgentTaskGraph
-): ApplicationCapabilityDiscoveryInput | null {
-  const completed = new Set(taskGraph.facets
+export function listDependencyFrontierFacets(
+  facets: AgentTaskFacet[],
+  limit = AGENT_LEASE_FRONTIER_FACET_LIMIT,
+): AgentTaskFacet[] {
+  const completed = new Set(facets
     .filter((facet) => facet.status === 'completed')
     .map((facet) => facet.facetId))
-  const frontier = taskGraph.facets.filter((facet) => (
+  return facets.filter((facet) => (
     !['completed', 'blocked', 'waiting_user'].includes(facet.status)
     && facet.dependsOn.every((dependency) => completed.has(dependency))
-  )).slice(0, AGENT_LEASE_FRONTIER_FACET_LIMIT)
-  if (frontier.length === 0) return null
+  )).slice(0, limit)
+}
+
+/**
+ * 由运行时 Facet 直接构造发现请求。
+ *
+ * `requiredEffects` 是租约排序的唯一依据（见 capability-discovery 的 requiredEffectScore）。
+ * 模型手写的发现请求带不上它，结果租约名额退化成按名字排序，实测把 observe/verify 这类
+ * 只读能力全挤进 deferred，Facet 因此永远拿不到验证证据、永远无法完成——依赖前沿卡死。
+ * 所以运行时侧的规范化必须始终用这个函数生成请求，不能沿用模型自拟的字段。
+ */
+export function buildCapabilityDiscoveryInputForFacets(
+  facets: AgentTaskFacet[],
+  extraQueriesByFacetId: Readonly<Record<string, string[]>> = {}
+): ApplicationCapabilityDiscoveryInput | null {
+  if (facets.length === 0) return null
   return applicationCapabilityDiscoveryInputSchema.parse({
     discoveryVersion: APPLICATION_CAPABILITY_DISCOVERY_VERSION,
-    facets: frontier.map((facet) => ({
+    facets: facets.map((facet) => ({
       facetId: facet.facetId,
-      queries: [facet.goal],
+      queries: [...new Set([
+        facet.goal,
+        ...(extraQueriesByFacetId[facet.facetId] ?? []),
+      ])].slice(0, 8),
       domains: [facet.domain],
-      entityTypes: facet.targetEntityTypes,
+      entityTypes: [...new Set([
+        ...facet.targetEntityTypes,
+        ...facet.requiredEffects.flatMap((effect) => effect.entityTypes),
+      ])],
       capabilityKinds: facet.capabilityKinds,
       targetSurfaceIds: facet.targetSurfaceId ? [facet.targetSurfaceId] : [],
+      requiredEffects: facet.requiredEffects.map((effect) => ({
+        effect: effect.effect,
+        entityTypes: effect.entityTypes,
+        propertyIds: effect.propertyIds,
+      })),
     })),
     cursor: 0,
     limit: AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
   })
+}
+
+/**
+ * 一次发现就把整条链路要用的能力全租下来。
+ *
+ * 只发现"当前可运行"的 Facet 看着很克制，实际代价是每推进一步就要再来一次完整往返：发现 →
+ * 结果卸载 → 分页读回 → 才轮到干活。一个 6 Facet 的三维任务因此在协议上就要烧掉二十多轮。
+ * 下游 Facet 的工具提前拿在手里没有副作用——真正约束执行顺序的是 Task Graph 的依赖与结算，
+ * 不是"看不看得见工具"。
+ */
+export function listDiscoverableFacets(
+  facets: AgentTaskFacet[],
+  limit = AGENT_LEASE_FRONTIER_FACET_LIMIT,
+): AgentTaskFacet[] {
+  const runnable = listDependencyFrontierFacets(facets, limit)
+  const runnableIds = new Set(runnable.map((facet) => facet.facetId))
+  const downstream = facets.filter((facet) => (
+    !runnableIds.has(facet.facetId)
+    && !['completed', 'blocked', 'waiting_user'].includes(facet.status)
+  ))
+  return [...runnable, ...downstream].slice(0, limit)
+}
+
+export function createCapabilityDiscoveryInputFromTaskGraph(
+  taskGraph: AgentTaskGraph
+): ApplicationCapabilityDiscoveryInput | null {
+  return buildCapabilityDiscoveryInputForFacets(listDiscoverableFacets(taskGraph.facets))
 }

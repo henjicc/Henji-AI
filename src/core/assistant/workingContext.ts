@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
 import { agentTaskGraphSchema } from './taskGraph'
+import { AGENT_FACET_LEASE_TOOL_LIMIT, AGENT_LEASE_FRONTIER_FACET_LIMIT } from './toolBudget'
 
 export const AGENT_WORKING_SUMMARY_VERSION = 'agent-working-summary/v1' as const
 
@@ -64,8 +65,8 @@ export const agentWorkingSummarySchema = z.object({
   attachmentRefs: z.array(z.string().regex(/^asset:[^\s]+$/)).max(8).default([]),
   toolLeases: z.array(z.object({
     facetId: z.string().min(1).max(64),
-    toolNames: z.array(z.string().min(1).max(200)).max(5),
-  }).strict()).max(16).default([]),
+    toolNames: z.array(z.string().min(1).max(200)).max(AGENT_FACET_LEASE_TOOL_LIMIT),
+  }).strict()).max(AGENT_LEASE_FRONTIER_FACET_LIMIT).default([]),
   toolLeaseCatalogRevision: z.union([
     z.string().min(1).max(200),
     z.number().int().nonnegative(),

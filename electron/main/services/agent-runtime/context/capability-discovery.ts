@@ -101,16 +101,21 @@ function capabilityKindMatches(
 ): boolean {
   if (facet.capabilityKinds.length === 0) return true
   return facet.capabilityKinds.some((kind) => {
-    if (kind === 'observe' || kind === 'query') return indexed.entry.readOnly
-    if (kind === 'navigate') return indexed.entry.category === 'navigation'
+    const impacts = indexed.definition.capability?.control?.impacts ?? []
+    if (kind === 'observe' || kind === 'query') {
+      return indexed.entry.readOnly && impacts.some((impact) => impact.effect === 'observe')
+    }
+    if (kind === 'navigate') return impacts.some((impact) => impact.effect === 'navigate')
     if (kind === 'plan') {
       return indexed.entry.readOnly && (
         indexed.entry.supportsPreview
         || /^(?:plan|prepare|search|get|list)_/.test(indexed.entry.name)
       )
     }
-    if (kind === 'mutate') return !indexed.entry.readOnly
-    return !indexed.entry.readOnly || indexed.entry.completionKind === 'submitted'
+    if (kind === 'mutate') return impacts.some((impact) => (
+      ['create', 'update', 'delete'].includes(impact.effect)
+    ))
+    return impacts.some((impact) => impact.effect === 'execute')
   })
 }
 
@@ -118,9 +123,19 @@ function structuralMatch(
   facet: ApplicationCapabilityDiscoveryFacet,
   indexed: IndexedCapability
 ): boolean {
+  const surfaceMatches = facet.targetSurfaceIds.length > 0
+    && facet.targetSurfaceIds.some((surfaceId) => indexed.match.surfaceIds.includes(surfaceId))
+  /*
+   * 目标 Surface 命中时不再要求同域。
+   *
+   * "打开三维编辑器"这个 Facet 的 domain 是 navigation，而真正能打开它的
+   * open_camera_stage_project 的 domain 是 camera_stage——域不匹配就被筛掉，永远租不到。
+   * 实测结果：模型只剩通用的 switch_workspace，切到工具工作区就停了，三维工程页面没打开。
+   */
   const domainMatches = facet.domains.length === 0
     || facet.domains.includes(indexed.entry.domain)
     || facet.domains.includes(indexed.entry.category)
+    || surfaceMatches
   if (!domainMatches || !capabilityKindMatches(facet, indexed)) return false
   if (
     facet.entityTypes.length > 0
@@ -128,10 +143,54 @@ function structuralMatch(
   ) return false
   if (
     facet.targetSurfaceIds.length > 0
-    && !facet.targetSurfaceIds.some((surfaceId) => indexed.match.surfaceIds.includes(surfaceId))
+    && !surfaceMatches
     && indexed.entry.category !== 'navigation'
   ) return false
   return true
+}
+
+/**
+ * 租约名额（每个 Facet 只有 AGENT_FACET_LEASE_TOOL_LIMIT 个）按这个分数发放。
+ *
+ * 除了"能直接产生所需 effect"的写入能力，**能观察同一实体的只读能力同样必须进租约**：带
+ * verificationRequired 的 Effect 只有拿到观察证据才算完成，Facet 完成才轮到下游前沿。实测里
+ * 只读的 observe/verify 因为 0 分被字母序挤进 deferred，于是 camera_project 永远停在 active、
+ * 依赖前沿再也不推进，整次运行卡死在"允许：无"。
+ */
+function requiredEffectScore(
+  facet: ApplicationCapabilityDiscoveryFacet,
+  indexed: IndexedCapability
+): number {
+  const requiredEffects = facet.requiredEffects ?? []
+  if (requiredEffects.length === 0) return 0
+  return requiredEffects.reduce((total, required) => {
+    const quality = (indexed.definition.capability?.control?.impacts ?? []).reduce((best, impact) => {
+      const entityMatch = required.entityTypes.length === 0
+        || impact.entityTypes.length === 0
+        || required.entityTypes.some((entityType) => impact.entityTypes.includes(entityType))
+      if (!entityMatch) return best
+      if (impact.effect === 'observe' && required.effect !== 'observe') {
+        // 验证观察能力：排在直接写入能力之后、无关能力之前。
+        return Math.max(best, indexed.entry.readOnly ? 2 : 0)
+      }
+      if (impact.effect !== required.effect) return best
+      const propertyMatch = required.propertyIds.length === 0
+        || impact.propertyIds.length === 0
+        || required.propertyIds.some((propertyId) => impact.propertyIds.includes(propertyId))
+      if (!propertyMatch) return best
+      // 明确声明实体/属性的正式能力优先于开放世界通用动词；后者仍可作为兜底。
+      return Math.max(best, impact.entityTypes.length > 0 ? 3 : 1)
+    }, 0)
+    return total + quality
+  }, 0)
+}
+
+function targetSurfaceScore(
+  facet: ApplicationCapabilityDiscoveryFacet,
+  indexed: IndexedCapability
+): boolean {
+  return facet.targetSurfaceIds.length > 0
+    && facet.targetSurfaceIds.some((surfaceId) => indexed.match.surfaceIds.includes(surfaceId))
 }
 
 function observationSuggestions(facet: ApplicationCapabilityDiscoveryFacet): string[] {
@@ -296,7 +355,10 @@ export class AgentCapabilityDiscoveryCatalog {
       structuralMatch(facet, item)
       && (facet.queries.length === 0 || hasStructuralFilter || semanticNames.has(item.entry.name))
     )).sort((left, right) => (
-      Number(semanticNames.has(right.entry.name)) - Number(semanticNames.has(left.entry.name))
+      requiredEffectScore(facet, right) - requiredEffectScore(facet, left)
+      // 能真正到达目标 Surface 的能力优先于通用导航，否则"打开三维编辑器"会退化成切工作区。
+      || Number(targetSurfaceScore(facet, right)) - Number(targetSurfaceScore(facet, left))
+      || Number(semanticNames.has(right.entry.name)) - Number(semanticNames.has(left.entry.name))
       || left.entry.name.localeCompare(right.entry.name)
     ))
     const knownDomains = new Set(this.registry.allDefinitions().flatMap((definition) => [

@@ -4,6 +4,34 @@ import type {
   ApplicationCapabilityDefinition,
 } from '../applicationCapabilities'
 
+export function capabilityControl(
+  effect: ApplicationCapabilityDefinition['control']['impacts'][number]['effect'],
+  entityTypes: string[],
+  options: {
+    propertyIds?: string[]
+    revisionScopes?: string[]
+    verificationRequired?: boolean
+    mode?: ApplicationCapabilityDefinition['control']['execution']['mode']
+    cancelable?: boolean
+    resultState?: ApplicationCapabilityDefinition['control']['execution']['resultState']
+  } = {}
+): ApplicationCapabilityDefinition['control'] {
+  return {
+    execution: {
+      mode: options.mode ?? 'immediate',
+      cancelable: options.cancelable ?? false,
+      resultState: options.resultState ?? (effect === 'observe' ? 'observed' : 'completed'),
+    },
+    impacts: [{
+      effect,
+      entityTypes,
+      propertyIds: options.propertyIds ?? [],
+      revisionScopes: options.revisionScopes ?? [],
+      verificationRequired: options.verificationRequired ?? !['observe', 'navigate'].includes(effect),
+    }],
+  }
+}
+
 type CapabilityDefaults = 'side'
   | 'availability'
   | 'concurrencyKey'

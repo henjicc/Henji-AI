@@ -43,11 +43,16 @@ const REFLECTION_TOOLS = [
   'read_application_entity',
 ]
 
+// 工具结果被上下文预算卸载后，artifactRef 只能由这个工具回读。把它作为核心地板，
+// 避免模型为了读取系统刚产生的产物而虚构一个不在 Task Graph 前沿里的 artifacts Facet。
+const ARTIFACT_READ_TOOL = 'read_agent_artifact'
+
 /** 只要任务启用了应用工具域，这些能力就是固定地板，不参与目录轮换。 */
 export const AGENT_CORE_TOOL_NAMES = [
   SKILL_LOAD_TOOL,
   CURRENT_CONTEXT_TOOL,
   CAPABILITY_DISCOVERY_TOOL,
+  ARTIFACT_READ_TOOL,
   ...REFLECTION_TOOLS,
 ] as const
 
@@ -58,6 +63,14 @@ export interface AgentToolActivationInput {
   leasedToolNames: string[]
   recentToolNames: string[]
   closeoutMode?: boolean
+  /**
+   * 已经用过的排列顺序。工具 schema 也在供应商的缓存前缀里，顺序一变整段前缀作废。
+   *
+   * 候选顺序里混着 `recentToolNames`，模型每用一个工具就把它顶到前面，于是活动工具数组
+   * 每轮都在重排——集合没变，顺序变了，缓存照样全丢。这里让已出现过的工具保持原位，
+   * 新工具一律追加到末尾，数组因此是只增不改的。
+   */
+  stableOrder?: string[]
 }
 
 export interface AgentToolActivationSnapshot {
@@ -149,6 +162,7 @@ export function activateAgentTools(
   // 技能加载排在能力发现之前：领域知识决定后面怎么发现和调用能力，顺序反了没有意义。
   const skillNames = input.route.toolDomains.length === 0 ? [] : [SKILL_LOAD_TOOL]
   const reflectionNames = input.route.toolDomains.length === 0 ? [] : REFLECTION_TOOLS
+  const artifactNames = input.route.toolDomains.length === 0 ? [] : [ARTIFACT_READ_TOOL]
   /*
    * 顺序即优先级，超出 AGENT_ACTIVE_TOOL_LIMIT 的部分会被直接丢掉。
    *
@@ -158,6 +172,7 @@ export function activateAgentTools(
   const candidates = unique([
     ...skillNames,
     ...capabilitySearchNames,
+    ...artifactNames,
     // 通用动词排在 recent/discovered 之前：它们是地板，不参与轮换
     ...reflectionNames,
     ...input.leasedToolNames,
@@ -187,6 +202,12 @@ export function activateAgentTools(
     schemaBytes += bytes
   }
 
+  const active_ = active
+  const orderIndex = new Map((input.stableOrder ?? []).map((name, index) => [name, index]))
+  active_.sort((left, right) => (
+    (orderIndex.get(left.catalog.name) ?? Number.MAX_SAFE_INTEGER)
+    - (orderIndex.get(right.catalog.name) ?? Number.MAX_SAFE_INTEGER)
+  ))
   const activeToolNames = active.map((registration) => registration.catalog.name)
   const descriptionBytes = active.reduce((total, registration) => (
     total + Buffer.byteLength(registration.modelTool.description ?? '', 'utf8')

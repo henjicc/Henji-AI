@@ -3,6 +3,7 @@ import { applicationSchemaRefSchema } from '../../application-control'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
+  capabilityControl,
   capabilityOutputSchema,
   defineApplicationCapability,
 } from './defineApplicationCapability'
@@ -15,6 +16,7 @@ const switchWorkspace = defineApplicationCapability({
   domain: 'navigation',
   aliases: ['切换页面', '打开工作区', 'switch workspace'],
   readOnly: false,
+  control: capabilityControl('navigate', ['application.surface']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'navigation:write',
@@ -42,6 +44,7 @@ const searchModels = defineApplicationCapability({
   domain: 'models',
   aliases: ['查找模型', '便宜的模型', '图片模型', 'search models'],
   readOnly: true,
+  control: capabilityControl('observe', ['generation.model']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'model_catalog:read',
@@ -78,6 +81,7 @@ const getModelSchema = defineApplicationCapability({
   domain: 'models',
   aliases: ['模型参数', '模型支持什么', 'get model schema'],
   readOnly: true,
+  control: capabilityControl('observe', ['generation.model']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'model_catalog:read',
@@ -110,6 +114,7 @@ const prepareGenerationTask = defineApplicationCapability({
   domain: 'generation',
   aliases: ['检查生成参数', '准备生成', 'prepare generation'],
   readOnly: true,
+  control: capabilityControl('observe', ['generation.preparation']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'generation:prepare',
@@ -150,6 +155,9 @@ const createVisibleGenerationTask = defineApplicationCapability({
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
+  control: capabilityControl('execute', ['generation.task'], {
+    revisionScopes: ['generation'], verificationRequired: false, resultState: 'submitted',
+  }),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'generation:create',
@@ -198,6 +206,7 @@ const getGenerationTask = defineApplicationCapability({
   domain: 'generation',
   aliases: ['生成进度', '任务状态', 'get generation task'],
   readOnly: true,
+  control: capabilityControl('observe', ['generation.task', 'generation.result']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'generation:read',
@@ -216,6 +225,20 @@ const getGenerationTask = defineApplicationCapability({
   concurrencyKey: 'generation',
   resolveConcurrencyKey: (input) => `generation:${input.taskId}`,
   resolveTargetIds: (input) => ({ taskId: input.taskId }),
+  resolveObservedEffects: (input, output) => {
+    const status = typeof output.task.status === 'string' ? output.task.status : 'unknown'
+    const terminal = ['success', 'completed', 'error', 'failed', 'cancelled', 'canceled'].includes(status)
+    return [{
+      effect: 'observe',
+      entityTypes: ['generation.task', ...(status === 'success' || status === 'completed'
+        ? ['generation.result'] : [])],
+      propertyIds: [],
+      targetRefs: [{ kind: 'generation.task', id: input.taskId }],
+      count: 1,
+      verified: terminal,
+      evidence: [],
+    }]
+  },
   summarize: (output) => `生成任务状态：${String(output.task.status ?? 'unknown')}。`,
 })
 
@@ -227,6 +250,7 @@ const cancelGenerationTask = defineApplicationCapability({
   domain: 'generation',
   aliases: ['停止生成', '取消任务', 'cancel generation'],
   readOnly: false,
+  control: capabilityControl('execute', ['generation.task'], { revisionScopes: ['generation'] }),
   risk: 'R2',
   dataClasses: ['C1'],
   permission: 'generation:cancel',

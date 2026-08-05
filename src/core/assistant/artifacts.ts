@@ -3,7 +3,12 @@ import { z } from 'zod'
 import { agentDataClassSchema } from './toolContracts'
 
 export const AGENT_ARTIFACT_SCHEMA_VERSION = 'agent-artifact/v1' as const
-export const AGENT_ARTIFACT_PAGE_MAX_BYTES = 4 * 1024
+/**
+ * 单页 4KB 在实测里是灾难：一份 80KB 的实体结构文档要读 20 轮，而整次运行的轮次预算才 32。
+ * 模型读到一半就理性放弃，于是"想改关键帧但拿不到属性结构"变成必然。
+ * 32KB 一页把同一份文档压到 3 轮，仍然远小于任何现代模型的单条消息上限。
+ */
+export const AGENT_ARTIFACT_PAGE_MAX_BYTES = 32 * 1024
 
 export const agentArtifactDescriptorSchema = z.object({
   schemaVersion: z.literal(AGENT_ARTIFACT_SCHEMA_VERSION),

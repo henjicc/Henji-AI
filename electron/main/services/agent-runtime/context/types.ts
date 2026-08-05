@@ -71,6 +71,13 @@ export interface AgentContextLayer {
   required: boolean
   maxTokens: number
   content: string
+  /**
+   * 每轮都会变的层（宿主 revision、任务图进展、观察索引、活动工具集）。
+   *
+   * 供应商的上下文缓存按**前缀完整匹配**计费：前缀一旦出现差异，后面全部落空。所以这些层
+   * 必须排在只增不改的对话历史之后，否则每轮都会把整段历史挤出缓存。
+   */
+  volatile?: boolean
 }
 
 export interface AgentContextLayerReport {

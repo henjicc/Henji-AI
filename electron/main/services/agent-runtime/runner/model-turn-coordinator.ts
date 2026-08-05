@@ -71,7 +71,10 @@ export class AgentModelTurnCoordinator {
         tools: context.tools,
         trace: buildPrimaryModelTraceMetadata(turn, context, this.options.models.primary),
         runModelStep: this.options.runModelStep,
-        onTextDelta: (text) => this.options.emit({ type: 'ModelDelta', stepId, text }),
+        onTextDelta: (text) => this.options.emit({ type: 'ModelDelta', stepId, text, channel: 'text' }),
+        onReasoningDelta: (text) => this.options.emit({
+          type: 'ModelDelta', stepId, text, channel: 'reasoning',
+        }),
         onRetry: (event) => this.options.emit({
           type: 'ModelRetrying',
           stepId,

@@ -19,7 +19,7 @@ function request(): AgentStartRunRequest {
   return {
     schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
     threadId: 'thread-canvas',
-    goal: '在画布添加两个节点并连接定位',
+    goal: '在画布添加两个节点并连接',
     approvalMode: 'ask',
     profile: {
       id: 'profile-canvas', name: '画布评测',
@@ -52,19 +52,25 @@ function request(): AgentStartRunRequest {
 function stepResult(input: ModelStepInput, call: number): ModelStepResult {
   const toolCalls = call === 1
     ? [
-        { toolCallId: 'call-add', toolName: 'add_canvas_node', input: { projectId: 'project-1' }, dynamic: false },
+        { toolCallId: 'call-add-1', toolName: 'add_canvas_node', input: { projectId: 'project-1' }, dynamic: false },
+        { toolCallId: 'call-add-2', toolName: 'add_canvas_node', input: { projectId: 'project-1' }, dynamic: false },
         { toolCallId: 'call-connect', toolName: 'connect_canvas_nodes', input: { projectId: 'project-1' }, dynamic: false },
       ]
-    : []
+    : call === 2
+      ? [{
+          toolCallId: 'call-verify', toolName: 'get_canvas_project',
+          input: { projectId: 'project-1' }, dynamic: false,
+        }]
+      : []
   return {
     requestId: input.requestId, runId: input.runId, stepId: input.stepId,
     providerId: input.providerId, modelId: input.modelId,
-    text: call === 1 ? '' : '画布操作完成', reasoningText: '', structuredOutput: null,
+    text: call <= 2 ? '' : '画布操作完成', reasoningText: '', structuredOutput: null,
     toolCalls,
-    responseMessages: call === 1
+    responseMessages: call <= 2
       ? [{ role: 'assistant', content: toolCalls.map((toolCall) => ({ type: 'tool-call' as const, ...toolCall })) }]
       : [{ role: 'assistant', content: '画布操作完成' }],
-    finishReason: call === 1 ? 'tool-calls' : 'stop',
+    finishReason: call <= 2 ? 'tool-calls' : 'stop',
     usage: {
       inputTokens: 10, inputNoCacheTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0,
       outputTokens: 2, textTokens: 2, reasoningTokens: 0, totalTokens: 12,
@@ -82,7 +88,7 @@ describe('AgentRunner canvas batch', () => {
       workspace: { id: 'nodes', activeToolId: null },
       project: { id: 'project-1', selectedNodeId: null },
       generation: { commandReady: true }, assets: { view: 'closed', selectedAssetId: null }, uiReady: true,
-      availableCapabilities: ['add_canvas_node', 'connect_canvas_nodes'],
+      availableCapabilities: ['add_canvas_node', 'connect_canvas_nodes', 'get_canvas_project'],
       capturedAt: new Date().toISOString(),
     }
     const registry = new AgentToolRegistry()
@@ -126,6 +132,35 @@ describe('AgentRunner canvas batch', () => {
         dataClasses: () => ['C1'], summarize: () => `${toolName} 完成`,
       }))
     }
+    registry.register(defineAgentTool({
+      name: 'get_canvas_project', version: 1, title: 'get_canvas_project',
+      description: '读取并验证当前画布结构。',
+      capability: {
+        id: 'get_canvas_project', domain: 'canvas', aliases: [], dataClasses: ['C1'],
+        acceptsRefs: [], producesRefs: [], availability: [], concurrencyKey: 'canvas',
+        control: { impacts: [{
+          effect: 'observe', entityTypes: ['canvas.project', 'canvas.node', 'canvas.edge'],
+          propertyIds: [], revisionScopes: ['canvas'], verificationRequired: false,
+        }] },
+        resolveObservedEffects: () => [{
+          effect: 'observe', entityTypes: ['canvas.project', 'canvas.node', 'canvas.edge'],
+          propertyIds: [], targetRefs: [], count: 1, verified: true,
+          evidence: ['get_canvas_project:verified'],
+        }],
+      } as never,
+      category: 'canvas', side: 'backend', risk: 'R0', permission: 'canvas:read',
+      readOnly: true, destructive: false, openWorld: false, idempotent: true,
+      timeoutMs: 1_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+      supportsPreview: false, supportsUndo: false, requiredContext: ['canvas'],
+      inputSchema: z.object({ projectId: z.string() }).strict(),
+      outputSchema: z.object({ projectId: z.string() }).strict(),
+      aiInputSchema: {
+        type: 'object', properties: { projectId: { type: 'string' } }, required: ['projectId'],
+      },
+      execute: async (input) => ({ projectId: input.projectId }),
+      concurrencyKey: () => 'canvas', targetIds: (input) => ({ projectId: input.projectId }),
+      dataClasses: () => ['C1'], summarize: () => '画布结构已验证',
+    }))
     const gateway = new AgentToolGateway({
       registry,
       getHostContext: () => context,
@@ -145,7 +180,7 @@ describe('AgentRunner canvas batch', () => {
         runModelStep: vi.fn(async (input: ModelStepInput) => {
           if (input.stepId.startsWith('router:')) {
             return {
-              ...stepResult(input, 2),
+              ...stepResult(input, 3),
               text: '',
               structuredOutput: {
                 intent: 'canvas',
@@ -156,12 +191,22 @@ describe('AgentRunner canvas batch', () => {
                   capabilityKinds: ['mutate'], completionConditions: ['节点与连线都有结构化证据。'],
                   requiredEffects: [{
                     effectId: 'canvas_node_effect', effect: 'create', entityTypes: ['canvas.node'],
-                    propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+                    propertyIds: [], minimumCount: 2, targetRefs: [], verificationRequired: true,
                     actionGroupId: 'canvas_node_group',
                   }, {
                     effectId: 'canvas_edge_effect', effect: 'create', entityTypes: ['canvas.edge'],
-                    propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+                    propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
                     actionGroupId: 'canvas_edge_group',
+                  }],
+                }, {
+                  facetId: 'canvas_verify', domain: 'canvas', goal: '读取画布验证节点与连线',
+                  capabilityKinds: ['observe', 'query'], dependsOn: ['canvas_write'],
+                  completionConditions: ['结构化读取确认目标节点与连线存在。'],
+                  requiredEffects: [{
+                    effectId: 'canvas_verify_effect', effect: 'observe',
+                    entityTypes: ['canvas.project', 'canvas.node', 'canvas.edge'],
+                    propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+                    actionGroupId: 'canvas_verify_group',
                   }],
                 }],
               },
@@ -180,8 +225,8 @@ describe('AgentRunner canvas batch', () => {
     runner.start()
     const state = await terminal
     expect(state.status).toBe('completed')
-    expect(executions).toEqual(['add_canvas_node', 'connect_canvas_nodes'])
-    expect(events.filter((event) => event.type === 'ToolCompleted')).toHaveLength(2)
+    expect(executions).toEqual(['add_canvas_node', 'add_canvas_node', 'connect_canvas_nodes'])
+    expect(events.filter((event) => event.type === 'ToolCompleted')).toHaveLength(4)
     expect(events.some((event) => event.type === 'ToolFailed')).toBe(false)
   })
 })

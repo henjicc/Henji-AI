@@ -25,11 +25,24 @@ export function resolveCameraLookAtTarget(
   return target ? getObjectLookAtPoint(target) : { ...lookAt.fallbackTarget }
 }
 
-/** 由摄像机位置与注视点换算为面板可读的俯仰角 X / 水平角 Y（角度制）。 */
+/**
+ * 由摄像机位置与注视点换算为面板可读的俯仰角 X / 水平角 Y（角度制）。
+ *
+ * manual 模式过去在这里直接返回存量 rotation，等于把"注视点"降级成一个只存不用的字段：
+ * 任何只写目标点、不写角度的入口——面板里手填注视点、通用动词写 look_at_target、
+ * 以及运镜按 targetPoint（而非单个对象）环绕——写进去的目标都不会转成朝向，摄像机始终保持
+ * 原来的角度。实测"摄像机围绕两个物体旋转"就是这样：轨迹绕上了，镜头却一直朝正前方。
+ *
+ * 朝向的唯一数据源是 lookAt，两种模式都从目标点反解；roll 不含在 lookAt 里，显式保留。
+ * 面板与 gizmo 改角度时会同步写回目标点（cameraTargetFromRotation），所以往返是自洽的。
+ */
 export function resolveCameraRotation(camera: StageCameraObject, objects: StageObject[]): StageVec3 {
-  if (camera.lookAt.mode === 'manual') return { ...camera.transform.rotation }
   const target = resolveCameraLookAtTarget(camera, objects)
-  return rotationFromPositionAndTarget(camera.transform.position, target, camera.transform.rotation.z)
+  const { position, rotation } = camera.transform
+  // 目标点与机位重合时方向无定义，保持当前角度，避免镜头突然弹回正前方。
+  return Math.hypot(target.x - position.x, target.y - position.y, target.z - position.z) < 1e-6
+    ? { ...rotation }
+    : rotationFromPositionAndTarget(position, target, rotation.z)
 }
 
 /** 由位置与目标点计算 three.js 摄像机欧拉角；roll 没有包含在 lookAt 中，由调用方显式保留。 */

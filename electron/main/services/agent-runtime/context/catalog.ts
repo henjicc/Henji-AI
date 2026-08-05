@@ -5,6 +5,13 @@ import {
   type AgentToolActivationSnapshot,
 } from './tool-activation'
 import type { AgentRouteDecision } from './types'
+// 租约名额的唯一来源。此前这里散着 5 和 15 两个字面量，把 toolBudget 的上限提上去之后
+// 它们仍然在下游把租约截断——实测 place_camera_stage_object 明明已经发放，却排在第 18 位
+// 被 slice(0, 15) 切掉，模型只剩通用动词，写入直接报 COLLECTION_WRITE_NOT_DECLARED。
+import {
+  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
+  AGENT_FACET_LEASE_TOOL_LIMIT,
+} from '../../../../../src/core/assistant/toolBudget'
 
 export class AgentToolCatalogPlanner {
   private readonly leasesByFacet = new Map<string, string[]>()
@@ -13,6 +20,8 @@ export class AgentToolCatalogPlanner {
   private continuationToolNames: string[] = []
   private recoveryToolNames: string[] = []
   private catalogRevision: string | number | null | undefined
+  /** 活动工具的稳定排列；只追加不重排，保证工具 schema 落在可缓存前缀里。 */
+  private toolOrder: string[] = []
   private closeoutMode = false
 
   constructor(private readonly registry: AgentToolRegistry) {}
@@ -38,7 +47,9 @@ export class AgentToolCatalogPlanner {
       leasedToolNames,
       recentToolNames: this.recentToolNames,
       closeoutMode: this.closeoutMode,
+      stableOrder: this.toolOrder,
     })
+    this.toolOrder = [...new Set([...this.toolOrder, ...snapshot.activeToolNames])]
     const activeNameSet = new Set(snapshot.activeToolNames)
     this.recoveryToolNames = this.recoveryToolNames
       .filter((name) => !activeNameSet.has(name))
@@ -78,11 +89,11 @@ export class AgentToolCatalogPlanner {
         typeof name === 'string' && leaseSet.has(name)
       ))
       if (names.length === 0) continue
-      this.leasesByFacet.set(facet.facetId, [...new Set(names)].slice(0, 5))
+      this.leasesByFacet.set(facet.facetId, [...new Set(names)].slice(0, AGENT_FACET_LEASE_TOOL_LIMIT))
       associated = true
     }
-    if (!associated) this.leasesByFacet.set('catalog', leased.slice(0, 15))
-    this.leaseOrder = [...new Set([...leased, ...this.leaseOrder])].slice(0, 15)
+    if (!associated) this.leasesByFacet.set('catalog', leased.slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT))
+    this.leaseOrder = [...new Set([...leased, ...this.leaseOrder])].slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
     return leased.filter((name) => !previous.has(name))
   }
 
@@ -145,13 +156,13 @@ export class AgentToolCatalogPlanner {
       const names = lease.toolNames.filter((name) => (
         !['discover_application_capabilities', 'search_application_capabilities'].includes(name)
         && Boolean(this.registry.get(name))
-      )).slice(0, 5)
+      )).slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
       if (names.length > 0) this.leasesByFacet.set(lease.facetId, names)
     }
     this.leaseOrder = [...new Set([
       ...leases.flatMap((lease) => lease.toolNames),
       ...this.leaseOrder,
-    ])].filter((name) => Boolean(this.registry.get(name))).slice(0, 15)
+    ])].filter((name) => Boolean(this.registry.get(name))).slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
   }
 
   currentLeaseSnapshot(): Array<{ facetId: string; toolNames: string[] }> {
@@ -168,7 +179,7 @@ export class AgentToolCatalogPlanner {
 
   private currentLeasedToolNames(): string[] {
     const retained = new Set([...this.leasesByFacet.values()].flat())
-    return this.leaseOrder.filter((name) => retained.has(name)).slice(0, 15)
+    return this.leaseOrder.filter((name) => retained.has(name)).slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
   }
 
   private rememberContinuation(toolName: string, output: unknown): void {

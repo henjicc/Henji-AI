@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
+  capabilityControl,
   capabilityOutputSchema,
   defineApplicationCapability,
 } from './defineApplicationCapability'
@@ -14,6 +15,7 @@ const queryAssets = defineApplicationCapability({
   domain: 'assets',
   aliases: ['查找素材', '素材库', '搜索图片', 'search assets'],
   readOnly: true,
+  control: capabilityControl('observe', ['asset']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'assets:read',
@@ -55,6 +57,7 @@ const getAsset = defineApplicationCapability({
   domain: 'assets',
   aliases: ['素材详情', '这张素材', '读取图片素材', 'get asset'],
   readOnly: true,
+  control: capabilityControl('observe', ['asset']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'assets:read',
@@ -84,6 +87,7 @@ const listAssetLibraries = defineApplicationCapability({
   domain: 'assets',
   aliases: ['素材集合', '素材分类', 'asset libraries'],
   readOnly: true,
+  control: capabilityControl('observe', ['asset.library']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'assets:read',
@@ -110,6 +114,7 @@ const listAssetTags = defineApplicationCapability({
   domain: 'assets',
   aliases: ['素材标签', '标签列表', 'asset tags'],
   readOnly: true,
+  control: capabilityControl('observe', ['asset']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'assets:read',
@@ -133,6 +138,7 @@ const selectAsset = defineApplicationCapability({
   domain: 'assets',
   aliases: ['选中素材', '定位素材', 'select asset'],
   readOnly: false,
+  control: capabilityControl('update', ['asset'], { revisionScopes: ['assets'] }),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'assets:selection',
@@ -159,6 +165,9 @@ const setAssetTags = defineApplicationCapability({
   domain: 'assets',
   aliases: ['修改素材标签', '标记素材', 'set asset tags'],
   readOnly: false,
+  control: capabilityControl('update', ['asset'], {
+    propertyIds: ['asset.tags'], revisionScopes: ['assets'],
+  }),
   risk: 'R1',
   dataClasses: ['C1'],
   permission: 'assets:write',
@@ -199,6 +208,7 @@ function defineAssetLibraryMembershipCapability(
     domain: 'assets',
     aliases: adding ? ['加入素材集合', 'add asset to library'] : ['移出素材集合', 'remove asset from library'],
     readOnly: false,
+    control: capabilityControl('update', ['asset', 'asset.library'], { revisionScopes: ['assets'] }),
     risk: 'R1',
     dataClasses: ['C1'],
     permission: 'assets:write',
@@ -239,6 +249,7 @@ const deleteAsset = defineApplicationCapability({
   domain: 'assets',
   aliases: ['永久删除素材', 'delete asset'],
   readOnly: false,
+  control: capabilityControl('delete', ['asset'], { revisionScopes: ['assets'] }),
   risk: 'R3',
   dataClasses: ['C1'],
   permission: 'assets:delete',

@@ -7,7 +7,7 @@ import {
   assistantSkillReferencePathSchema,
 } from '../skills'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import { defineApplicationCapability } from './defineApplicationCapability'
+import { capabilityControl, defineApplicationCapability } from './defineApplicationCapability'
 
 export const loadAssistantSkillInputSchema = z.object({
   name: assistantSkillNameSchema,
@@ -35,6 +35,7 @@ export const loadAssistantSkillCapability = defineApplicationCapability({
   aliases: ['加载技能', '读取技能', '技能说明', 'load skill', 'skill'],
   side: 'backend',
   readOnly: true,
+  control: capabilityControl('observe', ['assistant.skill']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'application:read',

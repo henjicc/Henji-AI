@@ -112,6 +112,59 @@ describe('agentRunViewReducer', () => {
     ])
   })
 
+  /*
+   * 回归：助手变成黑盒。
+   *
+   * 这个选择器曾被改成恒返回空数组（"公开进展统一由稳定阶段面板承载"），而那个面板只有一行
+   * 截断文案。实测模型在最后一步提出澄清问题并进入 waiting_user，界面一个字没显示，用户只
+   * 看到转圈、以为死机，手动终止了整次任务。
+   */
+  it('流式增量按步骤折叠成可展示进展，正文与思维链分开', () => {
+    const events: AgentEvent[] = [
+      event<Extract<AgentEvent, { type: 'ModelDelta' }>>({
+        type: 'ModelDelta', sequence: 1, stepId: 'step-1', text: '先看看', channel: 'reasoning',
+      }),
+      event<Extract<AgentEvent, { type: 'ModelDelta' }>>({
+        type: 'ModelDelta', sequence: 2, stepId: 'step-1', text: '现有场景。', channel: 'reasoning',
+      }),
+      event<Extract<AgentEvent, { type: 'ModelDelta' }>>({
+        type: 'ModelDelta', sequence: 3, stepId: 'step-1', text: '我先读取场景状态。', channel: 'text',
+      }),
+      // 历史事件没有 channel 字段，必须按正文重放。
+      event<Extract<AgentEvent, { type: 'ModelDelta' }>>({
+        type: 'ModelDelta', sequence: 4, stepId: 'step-2', text: '旧事件文本。',
+      }),
+    ]
+
+    expect(selectModelPublicUpdates(events)).toEqual([
+      { stepId: 'step-1', sequence: 1, text: '我先读取场景状态。', reasoning: '先看看现有场景。' },
+      { stepId: 'step-2', sequence: 4, text: '旧事件文本。', reasoning: '' },
+    ])
+  })
+
+  it('无工具调用的最终答复不重复成进展卡，但思考过程仍然保留', () => {
+    const events: AgentEvent[] = [
+      event<Extract<AgentEvent, { type: 'ModelDelta' }>>({
+        type: 'ModelDelta', sequence: 1, stepId: 'step-9', text: '权衡两种写法。', channel: 'reasoning',
+      }),
+      event<Extract<AgentEvent, { type: 'ModelDelta' }>>({
+        type: 'ModelDelta', sequence: 2, stepId: 'step-9', text: '任务已经提交。', channel: 'text',
+      }),
+      event<Extract<AgentEvent, { type: 'ModelCompleted' }>>({
+        type: 'ModelCompleted', sequence: 3, stepId: 'step-9', finishReason: 'stop',
+        toolCallCount: 0, displayText: '任务已经提交。',
+        usage: {
+          inputTokens: 1, inputNoCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0,
+          outputTokens: 1, textTokens: 1, reasoningTokens: 0, totalTokens: 2,
+        },
+      }),
+    ]
+
+    expect(selectModelPublicUpdates(events)).toEqual([
+      { stepId: 'step-9', sequence: 1, text: '', reasoning: '权衡两种写法。' },
+    ])
+  })
+
   it('多个 ModelCompleted 只保留为诊断事件，不生成逐轮进展卡', () => {
     const events: AgentEvent[] = [
       event<Extract<AgentEvent, { type: 'ModelCompleted' }>>({
@@ -140,6 +193,7 @@ describe('agentRunViewReducer', () => {
       }),
     ]
 
+    // 只有 ModelCompleted 没有流式增量时不生成进展卡（增量才是展示来源）。
     expect(selectModelPublicUpdates(events)).toEqual([])
   })
 

@@ -72,26 +72,50 @@ describe('AgentBudgetTracker', () => {
     })).toThrowError(/输入 token 预算/)
   })
 
-  it('桌面默认在第 20 轮进入收口，并在 32 轮后阻止第 33 轮', () => {
+  it('桌面默认在第 45 轮进入收口，并在 70 轮后阻止第 71 轮', () => {
     const metrics = new AgentRunMetrics()
-    for (let turn = 0; turn < 32; turn += 1) {
+    for (let turn = 0; turn < 70; turn += 1) {
       expect(metrics.beginTurn()).toBe(turn + 1)
-      if (turn === 19) expect(metrics.consumeNewSoftLimits()).toContain('SOFT_MAX_TURNS')
+      if (turn === 44) expect(metrics.consumeNewSoftLimits()).toContain('SOFT_MAX_TURNS')
     }
     expect(() => metrics.beginTurn()).toThrowError(/最大轮次/)
-    expect(metrics.snapshot()).toMatchObject({ turns: 32, toolCalls: 0, writeToolCalls: 0 })
+    expect(metrics.snapshot()).toMatchObject({ turns: 70, toolCalls: 0, writeToolCalls: 0 })
     expect(metrics.config).toMatchObject({
-      softMaxTurns: 20,
-      maxTurns: 32,
-      softMaxToolCalls: 50,
-      maxToolCalls: 100,
-      softMaxWriteToolCalls: 12,
-      maxWriteToolCalls: 24,
+      softMaxTurns: 45,
+      maxTurns: 70,
+      softMaxToolCalls: 140,
+      maxToolCalls: 220,
+      softMaxWriteToolCalls: 45,
+      maxWriteToolCalls: 90,
       maxDurationMs: 30 * 60 * 1_000,
-      maxConsecutiveFailures: 3,
+      maxConsecutiveFailures: 5,
       maxRepeatedToolCalls: 2,
-      maxNoProgressTurns: 3,
+      maxNoProgressTurns: 4,
     })
+  })
+
+  /*
+   * 收尾模式只能由"资源真的用完了"触发。
+   *
+   * 质量类软限（连续失败、重复调用、无新进展）一旦也算进去，就会永久摘掉能力发现——
+   * 实测两次抖动就让助手在整次运行里再学不到任何新能力，多 Facet 任务必然半途而废。
+   */
+  it('质量类软限不进入收尾模式，且在取得进展后重新武装', () => {
+    const metrics = new AgentRunMetrics()
+    metrics.recordFailure()
+    metrics.recordFailure()
+    expect(metrics.consumeNewSoftLimits()).toContain('SOFT_CONSECUTIVE_FAILURES')
+    expect(metrics.isCloseoutMode()).toBe(false)
+
+    metrics.recordSuccess()
+    metrics.recordFailure()
+    metrics.recordFailure()
+    expect(metrics.consumeNewSoftLimits()).toContain('SOFT_CONSECUTIVE_FAILURES')
+
+    const exhausted = new AgentRunMetrics({ softMaxTurns: 1, maxTurns: 4 })
+    exhausted.beginTurn()
+    expect(exhausted.consumeNewSoftLimits()).toContain('SOFT_MAX_TURNS')
+    expect(exhausted.isCloseoutMode()).toBe(true)
   })
 
   it('分别统计工具与写入工具，并且软上限事件只消费一次', () => {
@@ -115,8 +139,7 @@ describe('AgentBudgetTracker', () => {
 
   it('桌面默认在连续失败和相同工具重复调用时主动停止', () => {
     const failures = new AgentRunMetrics()
-    failures.recordFailure()
-    failures.recordFailure()
+    for (let attempt = 0; attempt < 4; attempt += 1) failures.recordFailure()
     expect(() => failures.recordFailure()).toThrowError(/连续失败/)
 
     const repeats = new AgentRunMetrics()

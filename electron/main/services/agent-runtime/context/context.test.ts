@@ -1,368 +1,18 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import {
   AgentContextBuilder,
   resolveContextCompactionThreshold,
   resolveContextHardThreshold,
 } from './builder'
-import { AgentIntentRouter } from './router'
+import {
+  contextSnapshot,
+  observation,
+  skillBuildInput,
+  skillMetadata,
+} from './context-test-fixtures'
 import type { AgentContextBuildInput } from './types'
-
-function contextSnapshot(): HostContextSnapshot {
-  return {
-    schemaVersion: AGENT_CONTRACT_VERSION,
-    rendererSessionId: 'renderer-1',
-    revision: 4,
-    scopeRevisions: { navigation: 1, generation: 2, canvas: 1, toolbox: 0, assets: 0 },
-    workspace: { id: 'generation', activeToolId: null },
-    project: { id: 'project-1', selectedNodeId: null },
-    generation: {
-      commandReady: true,
-      modelCatalog: {
-        catalogVersion: 'model-registry/v1',
-        modelGroups: [{
-          canonicalModelId: 'test-image', mediaType: 'image',
-          name: '测试图片模型', description: '推荐使用！', tags: ['text-to-image'],
-          recommendedByDescription: true,
-          providers: [{ providerId: 'test', modelId: 'test-image', priceEstimate: { amount: 0.01, currency: 'CNY' } }],
-        }],
-      },
-    },
-    assets: { view: 'closed', selectedAssetId: null },
-    uiReady: true,
-    availableCapabilities: [
-      'switch_workspace',
-      'create_visible_generation_task',
-      'get_host_context',
-      'search_models',
-    ],
-    capturedAt: new Date().toISOString(),
-  }
-}
-
-function skillMetadata(name: string, description: string, enabled = true): AssistantSkillMetadata {
-  return {
-    name,
-    description,
-    source: 'builtin',
-    overridesBuiltin: false,
-    enabled,
-    bodyBytes: 128,
-    referencePaths: [],
-    updatedAt: new Date().toISOString(),
-  }
-}
-
-function skillBuildInput(skills: AssistantSkillMetadata[] | undefined): AgentContextBuildInput {
-  return {
-    runId: 'run-skills-index',
-    goal: '生成一张图片',
-    skills,
-    snapshot: contextSnapshot(),
-    route: {
-      intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['generation'],
-      source: 'deterministic', reason: '技能索引测试',
-    },
-    conversation: [],
-    observations: [],
-    modelTools: [],
-    activeToolNames: [],
-    contextWindowBudget: 16_000,
-  }
-}
-
-function observation(output: unknown): AgentToolObservation {
-  return {
-    source: { toolName: 'query_diagnostic_events', toolVersion: 1, toolCallId: 'tool-1' },
-    trust: 'untrusted_observation',
-    dataClasses: ['C2'],
-    summary: '发现一条错误证据',
-    output,
-  }
-}
-
-describe('AgentIntentRouter', () => {
-  it('明确导航请求不调用 router 模型', async () => {
-    const classifier = vi.fn()
-    const router = new AgentIntentRouter(classifier)
-    const result = await router.route('run-1', '切换到素材库工作区', contextSnapshot(), new AbortController().signal)
-    expect(result).toMatchObject({ intent: 'navigate', source: 'deterministic', path: 'workflow' })
-    expect(classifier).not.toHaveBeenCalled()
-  })
-
-  it('询问助手整体能力时直接回答，不调用路由模型或能力搜索', async () => {
-    const classifier = vi.fn()
-    const router = new AgentIntentRouter(classifier)
-    const result = await router.route(
-      'run-capability-overview',
-      '你能做啥',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({
-      intent: 'general',
-      source: 'deterministic',
-      complexity: 'simple',
-      path: 'primary',
-      toolDomains: [],
-    })
-    expect(classifier).not.toHaveBeenCalled()
-  })
-
-  it('router 失败时保守进入 primary', async () => {
-    const router = new AgentIntentRouter(async () => { throw new Error('offline') })
-    const result = await router.route('run-1', '帮我处理一下这个需求', contextSnapshot(), new AbortController().signal)
-    expect(result).toMatchObject({ intent: 'general', source: 'fallback', path: 'primary' })
-  })
-
-  it('明显的画布与定位组合请求由确定性规则拆成多 Facet', async () => {
-    const classifier = vi.fn().mockResolvedValue({
-      intent: 'canvas',
-      candidateIntents: ['canvas', 'navigate'],
-      toolDomains: ['canvas', 'navigation'],
-      complexity: 'multi_step',
-      reason: '用户要求编排多个画布节点',
-      taskFacets: [{
-        facetId: 'canvas_structure', domain: 'canvas', goal: '创建两个画布节点并连接',
-        targetEntityTypes: ['canvas.node', 'canvas.edge'], observationKinds: ['entity_state'],
-        capabilityKinds: ['observe', 'mutate'], targetSurfaceId: 'workspace.canvas', dependsOn: [],
-        parallelizable: false, completionConditions: ['两个节点都存在且结构已验证'],
-        requiredEffects: [{
-          effectId: 'create_two_nodes', effect: 'create', entityTypes: ['canvas.node'],
-          propertyIds: [], minimumCount: 2, targetRefs: [], verificationRequired: true,
-          actionGroupId: 'canvas_structure_actions',
-        }], uncertainties: [], confidence: 0.98,
-      }, {
-        facetId: 'show_target_surface', domain: 'navigation', goal: '打开画布',
-        targetEntityTypes: [], observationKinds: ['current_surface'], capabilityKinds: ['navigate'],
-        targetSurfaceId: 'workspace.canvas', dependsOn: ['canvas_structure'], parallelizable: false,
-        completionConditions: ['画布界面已打开'], requiredEffects: [{
-          effectId: 'show_canvas', effect: 'navigate', entityTypes: [], propertyIds: [], minimumCount: 1,
-          targetRefs: [], verificationRequired: false, actionGroupId: 'show_canvas_actions',
-        }], uncertainties: [], confidence: 0.95,
-      }],
-    })
-    const router = new AgentIntentRouter(classifier)
-    const result = await router.route(
-      'run-canvas',
-      '在画布添加两个节点，连接并定位生成节点',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({
-      routeVersion: 'agent-route/v2',
-      intent: 'canvas',
-      source: 'router_model',
-      toolDomains: ['canvas', 'navigation', 'catalog'],
-    })
-    expect(result.taskGraph?.facets.map((facet) => facet.facetId))
-      .toEqual(['canvas_structure', 'show_target_surface'])
-    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
-      effectId: 'create_two_nodes', minimumCount: 2, verificationRequired: true,
-    })
-    expect(classifier).toHaveBeenCalledOnce()
-  })
-
-  it('三维工程、场景、运镜和展示请求一次拆出有依赖的完整任务图', async () => {
-    const classifier = vi.fn()
-    const result = await new AgentIntentRouter(classifier).route(
-      'run-camera-composite',
-      '创建一个三维工程，摆放立方体和棱锥，再做环绕运镜并打开三维工具让我看到',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({
-      intent: 'camera_stage',
-      complexity: 'multi_step',
-      source: 'deterministic',
-    })
-    expect(result.toolDomains).toEqual(expect.arrayContaining(['toolbox', 'camera_stage', 'navigation', 'catalog']))
-    expect(result.taskGraph?.facets.map((facet) => facet.facetId)).toEqual([
-      'camera_project', 'show_target_surface', 'camera_scene', 'camera_motion', 'camera_verify',
-    ])
-    expect(result.taskGraph?.dependencies).toEqual(expect.arrayContaining([
-      { fromFacetId: 'camera_project', toFacetId: 'show_target_surface' },
-      { fromFacetId: 'show_target_surface', toFacetId: 'camera_scene' },
-      { fromFacetId: 'camera_scene', toFacetId: 'camera_motion' },
-      { fromFacetId: 'camera_motion', toFacetId: 'camera_verify' },
-    ]))
-    // 空间写入之后必须独立结算一次验证，模型不能放完就宣称完成。
-    expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'camera_verify'))
-      .toMatchObject({ capabilityKinds: ['observe'], targetSurfaceId: 'tool.camera_stage' })
-    expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'show_target_surface'))
-      .toMatchObject({ targetSurfaceId: 'tool.camera_stage', parallelizable: false })
-    expect(classifier).toHaveBeenCalledOnce()
-  })
-
-  it('模型路由 Facet 经过本地领域白名单校验后形成可持久任务图', async () => {
-    const router = new AgentIntentRouter(async () => ({
-      intent: 'workflow',
-      candidateIntents: ['assets'],
-      toolDomains: ['workflows', 'assets'],
-      complexity: 'multi_step',
-      reason: '先选择素材，再运行工作流',
-      taskFacets: [{
-        facetId: 'select_asset',
-        domain: 'assets',
-        goal: '读取并选择目标素材',
-        targetEntityTypes: ['asset'],
-        observationKinds: ['entity_state', 'entity_schema'],
-        capabilityKinds: ['observe', 'query'],
-        targetSurfaceId: 'workspace.assets',
-        dependsOn: [],
-        parallelizable: false,
-        completionConditions: ['取得素材稳定引用'],
-        requiredEffects: [{
-          effectId: 'select_asset_effect', effect: 'observe', entityTypes: ['asset'],
-          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
-          actionGroupId: 'select_asset_actions',
-        }],
-        uncertainties: [],
-        confidence: 0.9,
-      }, {
-        facetId: 'run_workflow',
-        domain: 'workflows',
-        goal: '使用素材引用运行工作流',
-        targetEntityTypes: ['workflow.run'],
-        observationKinds: ['operation_schema'],
-        capabilityKinds: ['plan', 'execute'],
-        targetSurfaceId: null,
-        dependsOn: ['select_asset'],
-        parallelizable: false,
-        completionConditions: ['工作流进入已提交或完成状态'],
-        requiredEffects: [{
-          effectId: 'run_workflow_effect', effect: 'execute', entityTypes: ['workflow.run'],
-          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
-          actionGroupId: 'run_workflow_actions',
-        }],
-        uncertainties: [],
-        confidence: 0.85,
-      }],
-    }))
-    const result = await router.route(
-      'run-model-facets',
-      '把合适素材用于已有流程',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result.taskGraph).toMatchObject({
-      version: 'agent-task-graph/v2',
-      facets: [
-        expect.objectContaining({ facetId: 'select_asset', domain: 'assets' }),
-        expect.objectContaining({ facetId: 'run_workflow', dependsOn: ['select_asset'] }),
-      ],
-    })
-  })
-
-  it('自然语言长期偏好请求由模型理解语义，本地策略决定工具域', async () => {
-    const classifier = vi.fn().mockResolvedValue({
-      intent: 'user_instructions',
-      complexity: 'simple',
-      reason: '用户要求长期保存供应商偏好',
-    })
-    const router = new AgentIntentRouter(classifier)
-    const result = await router.route(
-      'run-preferences',
-      '记住我优先使用 PPIO 供应商的模型',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({
-      intent: 'user_instructions',
-      source: 'router_model',
-      toolDomains: ['user_instructions'],
-    })
-    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
-      effect: 'execute', minimumCount: 1,
-    })
-    expect(classifier).toHaveBeenCalledOnce()
-  })
-
-  it('简单一般回答没有伪造的工具 Effect，不会被空 Task Graph 阻止收口', async () => {
-    const router = new AgentIntentRouter(async () => ({
-      intent: 'general', complexity: 'simple', reason: '无需调用工具即可回答',
-    }))
-    const result = await router.route(
-      'run-simple-general',
-      '解释一下什么是景深',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({ intent: 'general', complexity: 'simple' })
-    expect(result.taskGraph).toBeUndefined()
-  })
-
-  it('包含照片等自然表达的媒体生成请求由模型理解后进入生成工具链', async () => {
-    const classifier = vi.fn().mockResolvedValue({
-      intent: 'generate',
-      complexity: 'simple',
-      reason: '用户希望生成一张视觉图片',
-    })
-    const router = new AgentIntentRouter(classifier)
-    const result = await router.route(
-      'run-photo',
-      '生成一张剪纸风格的猫咪的那种照片',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({
-      intent: 'generate',
-      source: 'router_model',
-      path: 'workflow',
-      toolDomains: ['models', 'generation', 'navigation'],
-    })
-    expect(classifier).toHaveBeenCalledOnce()
-  })
-
-  it('路由模型附属字段变形时保留已校验的主意图并回退本地工具域策略', async () => {
-    const router = new AgentIntentRouter(async () => ({
-      intent: 'generate',
-      candidateIntents: [],
-      toolDomains: { workspace: 'generation', mediaType: 'image' },
-      complexity: 'simple',
-      reason: '用户请求创建图片生成任务',
-    }))
-    const result = await router.route(
-      'run-malformed-router-output',
-      '创建一张图片',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({
-      intent: 'generate',
-      source: 'router_model',
-      complexity: 'simple',
-      toolDomains: ['models', 'generation', 'navigation'],
-    })
-  })
-
-  it('router 候选只能扩展本地允许的工具域且不能改写执行路径', async () => {
-    const router = new AgentIntentRouter(async () => ({
-      intent: 'generate',
-      candidateIntents: ['assets'],
-      complexity: 'simple',
-      path: 'primary',
-      toolDomains: ['catalog', 'assets'],
-      reason: '用户希望生成照片',
-    }))
-    const result = await router.route(
-      'run-router-policy',
-      '帮我完成这个视觉需求',
-      contextSnapshot(),
-      new AbortController().signal
-    )
-    expect(result).toMatchObject({
-      intent: 'generate',
-      source: 'router_model',
-      path: 'workflow',
-      candidateIntents: ['generate', 'assets'],
-      toolDomains: ['models', 'generation', 'navigation', 'assets', 'catalog'],
-    })
-  })
-})
+import { createDeterministicTaskGraph } from './task-facets'
 
 describe('resolveContextCompactionThreshold', () => {
   it('在 70% 触发软压缩并始终为输出与修复预留至少 20%', () => {
@@ -371,7 +21,6 @@ describe('resolveContextCompactionThreshold', () => {
     expect(resolveContextHardThreshold(64_000)).toBe(51_200)
   })
 })
-
 describe('AgentContextBuilder', () => {
   it('把不可信 observation 放在数据区并卸载大结果', () => {
     const builder = new AgentContextBuilder()
@@ -752,6 +401,88 @@ describe('AgentContextBuilder', () => {
       expect.objectContaining({ id: 'user_instructions' }),
     ]))
     expect(result.compactionReason).toContain('超过阈值')
+  })
+
+  /*
+   * 回归：plan_state 的 discoveryRequest 被自己的 taskGraph 挤出预算。
+   *
+   * workingSummary 里带着完整 route.taskGraph（含每条 requiredObservations 的整段 reason、
+   * completionConditions、evidence），plan_state 只有 2200 token；旧实现把 discoveryRequest
+   * 拼在最后，于是模型永远看不到真实 facetId 和依赖前沿，只能自己编——实测编出了不存在的
+   * camera_animation，declare_action_plan 随即报 UNKNOWN_FACET。
+   */
+  it('plan_state 在完整任务图下仍完整保留 discoveryRequest 与 facet 摘要', () => {
+    const taskGraph = createDeterministicTaskGraph(
+      '在 3D 镜头参考里新建一个叫 测试 的项目，放一个紫色立方体和一个红色圆柱体，做 60 帧动画，摄像机围绕旋转，两个物体上下漂浮',
+      contextSnapshot()
+    )?.graph
+    expect(taskGraph?.facets.length).toBeGreaterThanOrEqual(5)
+    const result = new AgentContextBuilder().build({
+      runId: 'run-plan-state',
+      goal: '在 3D 镜头参考里新建工程并布置场景',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'camera_stage', complexity: 'multi_step', path: 'workflow',
+        toolDomains: ['camera_stage', 'navigation', 'catalog'],
+        source: 'deterministic', reason: '确定性三维任务', taskGraph,
+      },
+      conversation: [],
+      observations: [],
+      modelTools: [],
+      activeToolNames: [],
+      contextWindowBudget: 128_000,
+    })
+    const planLayer = String(result.messages.find(
+      (message) => String(message.content).includes('id=plan_state')
+    )?.content ?? '')
+    expect(result.layerReports).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'plan_state', included: true, truncated: false }),
+    ]))
+    expect(planLayer).toContain('discoveryRequest')
+    for (const facetId of taskGraph?.facets.map((facet) => facet.facetId) ?? []) {
+      expect(planLayer).toContain(facetId)
+    }
+  })
+
+  /*
+   * 回归：上下文缓存命中率被消息顺序毁掉。
+   *
+   * 供应商按前缀完整匹配计费缓存，前缀一出现差异后面全部落空。旧顺序把每轮都变的
+   * host_state / plan_state / observations 放在只增不改的对话历史**之前**，于是那份本该
+   * 100% 命中的历史每轮都被顶出缓存：实测输入涨到 68k 时命中仍钉在 1 万左右，整轮 50 万
+   * 输入只命中 23.7%。
+   */
+  it('每轮都变的上下文层排在对话历史之后，保住可缓存前缀', () => {
+    const conversation = Array.from({ length: 6 }, (_, index) => ({
+      role: 'assistant' as const,
+      content: `历史消息-${index}`,
+    }))
+    const result = new AgentContextBuilder().build({
+      runId: 'run-cache-prefix',
+      goal: '在三维工程里布置场景',
+      snapshot: contextSnapshot(),
+      route: {
+        intent: 'camera_stage', complexity: 'multi_step', path: 'workflow',
+        toolDomains: ['camera_stage', 'catalog'],
+        source: 'deterministic', reason: '确定性三维任务',
+      },
+      conversation,
+      observations: [observation({ scene: '已观察场景' })],
+      modelTools: [],
+      activeToolNames: ['observe_camera_stage_scene'],
+      contextWindowBudget: 128_000,
+    })
+    const serialized = result.messages.map((message) => String(message.content))
+    const lastHistoryIndex = serialized.findIndex((text) => text.includes('历史消息-5'))
+    expect(lastHistoryIndex).toBeGreaterThanOrEqual(0)
+    for (const volatileLayerId of ['plan_state', 'host_state', 'observations', 'tool_contracts']) {
+      const index = serialized.findIndex((text) => text.includes(`id=${volatileLayerId}`))
+      expect(index, `${volatileLayerId} 必须排在对话历史之后`).toBeGreaterThan(lastHistoryIndex)
+    }
+    // 稳定层仍然排在历史之前，一起进入可缓存前缀。
+    const goalIndex = serialized.findIndex((text) => text.includes('id=current_goal'))
+    expect(goalIndex).toBeGreaterThanOrEqual(0)
+    expect(goalIndex).toBeLessThan(lastHistoryIndex)
   })
 
   it('没有已启用技能时完全不注入 skills_index 层', () => {

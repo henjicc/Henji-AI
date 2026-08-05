@@ -62,6 +62,7 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   supportsPreview: boolean
   supportsUndo: boolean
   requiredContext: HostScope[]
+  resolveRequiredContext?: (input: TInput) => HostScope[]
   inputSchema: z.ZodType<TInput>
   outputSchema: z.ZodType<TOutput>
   aiInputSchema: Record<string, unknown>

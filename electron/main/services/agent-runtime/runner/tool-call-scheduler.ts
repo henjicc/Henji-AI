@@ -28,7 +28,16 @@ interface ToolCallOutcome {
   error: ReturnType<typeof serializeError> | null
   resultingRevisions: HostScopeRevisions | null
   activationRecoveryQueued: boolean
+  /** 首次触发的执行守卫纠正：模型能据此自纠，不应计入连续失败预算。 */
+  contractCorrection: boolean
   expectedRevisions: Partial<HostScopeRevisions>
+}
+
+export interface AgentExecutionGuardRejection {
+  code: AgentToolErrorCode
+  reason: string
+  /** true 表示这是首次出现的契约纠正；重复出现同一问题时由调用方置为 false。 */
+  contractCorrection?: boolean
 }
 
 export interface AgentToolCallSchedulerOptions {
@@ -56,12 +65,22 @@ export interface AgentToolCallSchedulerOptions {
     actionGroupId: string
     mode: CompiledActionGroup['mode']
   } | null
+  /**
+   * 在守卫与执行之前把调用参数改写成运行时唯一正确的那一份；返回 null 表示保持原样。
+   * 用于"运行时自己就知道答案"的参数（例如能力发现的依赖前沿），避免让模型去猜再判失败。
+   */
+  normalizeInput?: (call: ModelStepToolCall) => unknown | null
   executionGuard?: (
     call: ModelStepToolCall,
     expectedRevisions: Partial<HostScopeRevisions>,
     allowSettledActionGroupSibling: boolean
-  ) => string | { code: AgentToolErrorCode; reason: string } | null
+  ) => string | AgentExecutionGuardRejection | null
   onOutcome?: (
+    call: ModelStepToolCall,
+    observation: AgentToolObservation,
+    expectedRevisions: Partial<HostScopeRevisions>
+  ) => void
+  finalizeSuccessfulOutcome?: (
     call: ModelStepToolCall,
     observation: AgentToolObservation,
     expectedRevisions: Partial<HostScopeRevisions>
@@ -243,7 +262,7 @@ export class AgentToolCallScheduler {
   }
 
   private async executeOne(
-    call: ModelStepToolCall,
+    requestedCall: ModelStepToolCall,
     explicitUserIntent: boolean,
     expectedRevisions: Partial<HostScopeRevisions>,
     authorizationSource: 'direct' | 'approved_action_group',
@@ -251,6 +270,11 @@ export class AgentToolCallScheduler {
     hostCompiled = false
   ): Promise<ToolCallOutcome> {
     let activationRecoveryQueued = false
+    let contractCorrection = false
+    const normalizedInput = hostCompiled ? null : this.options.normalizeInput?.(requestedCall)
+    const call: ModelStepToolCall = normalizedInput === null || normalizedInput === undefined
+      ? requestedCall
+      : { ...requestedCall, input: normalizedInput }
     const metadata = this.options.registry.executionMetadata(call.toolName, call.input)
     this.options.emit({
       type: 'ToolRequested',
@@ -292,9 +316,10 @@ export class AgentToolCallScheduler {
         allowSettledActionGroupSibling
       )
       if (guardReason) {
-        const structured: { code: AgentToolErrorCode; reason: string } = typeof guardReason === 'string'
+        const structured: AgentExecutionGuardRejection = typeof guardReason === 'string'
           ? { code: 'RECOVERY_VERIFICATION_REQUIRED', reason: guardReason }
           : guardReason
+        contractCorrection = structured.contractCorrection === true
         throw new AgentToolGatewayError(
           structured.code,
           structured.reason,
@@ -335,6 +360,7 @@ export class AgentToolCallScheduler {
             error,
             resultingRevisions: null,
             activationRecoveryQueued: false,
+            contractCorrection: false,
             expectedRevisions,
           }
         }
@@ -353,12 +379,14 @@ export class AgentToolCallScheduler {
         })
       }
       if (result.status !== 'completed') throw new Error('工具审批状态未收敛')
+      this.options.finalizeSuccessfulOutcome?.(call, result.observation, expectedRevisions)
       return {
         call,
         observation: result.observation,
         error: null,
         resultingRevisions: extractResultScopeRevisions(result.observation.output),
         activationRecoveryQueued: false,
+        contractCorrection: false,
         expectedRevisions,
       }
     } catch (error) {
@@ -373,6 +401,7 @@ export class AgentToolCallScheduler {
         error: serialized,
         resultingRevisions: null,
         activationRecoveryQueued,
+        contractCorrection,
         expectedRevisions,
       }
     }
@@ -416,7 +445,11 @@ export class AgentToolCallScheduler {
         readOnly: metadata?.readOnly,
         idempotent: metadata?.idempotent,
       })
-      if (!outcome.activationRecoveryQueued) this.options.recordFailure?.()
+      // 首次守卫纠正和工具重新披露一样，是"运行时告诉模型正确用法"，不是业务失败。
+      // 都计进连续失败预算的话，模型每被纠正一次就离被掐死更近一步。
+      if (!outcome.activationRecoveryQueued && !outcome.contractCorrection) {
+        this.options.recordFailure?.()
+      }
       this.options.onOutcome?.(outcome.call, outcome.observation, outcome.expectedRevisions)
       return
     }

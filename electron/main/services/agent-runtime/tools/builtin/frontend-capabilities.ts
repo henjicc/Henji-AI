@@ -88,6 +88,7 @@ function adaptCapability(
     supportsPreview: definition.supportsPreview,
     supportsUndo: definition.supportsUndo,
     requiredContext: definition.requiredScopes,
+    resolveRequiredContext: definition.resolveRequiredScopes,
     inputSchema: definition.inputSchema,
     outputSchema: definition.outputSchema,
     aiInputSchema: definition.aiInputSchema,
@@ -104,8 +105,9 @@ function adaptCapability(
       parallelSafe: definition.parallelSafe ?? definition.readOnly,
     },
     execute: async (input, context) => {
+      const requiredScopes = definition.resolveRequiredScopes?.(input) ?? definition.requiredScopes
       const expectedRevisions = context.hostContext
-        ? Object.fromEntries(definition.requiredScopes.flatMap((scope) => {
+        ? Object.fromEntries(requiredScopes.flatMap((scope) => {
             const value = context.hostContext?.scopeRevisions[scope]
             return value === undefined ? [] : [[scope, value]]
           }))

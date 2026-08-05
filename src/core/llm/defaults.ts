@@ -1,3 +1,4 @@
+import { AGENT_MIN_OUTPUT_TOKENS } from './agentProfiles'
 import type {
   LlmCapabilities,
   AgentModelProfile,
@@ -58,7 +59,7 @@ export function createDefaultAgentModelProfile(now = new Date().toISOString()): 
     settings: {
       timeoutMs: 60_000,
       maxRetries: 3,
-      maxOutputTokens: 4_096,
+      maxOutputTokens: AGENT_MIN_OUTPUT_TOKENS,
       contextWindowBudget: 64_000,
     },
     verifications: [],

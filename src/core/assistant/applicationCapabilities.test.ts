@@ -23,6 +23,13 @@ function capability(
     aliases: [],
     side: 'backend',
     readOnly: true,
+    control: {
+      execution: { mode: 'immediate', cancelable: false, resultState: 'observed' },
+      impacts: [{
+        effect: 'observe', entityTypes: ['test.entity'], propertyIds: [],
+        revisionScopes: [], verificationRequired: false,
+      }],
+    },
     risk: 'R0',
     dataClasses: ['C0'],
     permission: 'test:read',
@@ -85,6 +92,7 @@ describe('ApplicationCapabilityRegistry', () => {
       expect(descriptor.successEvidence.length).toBeGreaterThan(0)
       expect(descriptor.permission).not.toBe('')
       expect(descriptor.failureRecovery.length).toBeGreaterThan(0)
+      expect(descriptor.control?.impacts.length).toBeGreaterThan(0)
     }
   })
 

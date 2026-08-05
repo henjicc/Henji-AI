@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import type { AgentObservedEffect } from '../taskGraph'
 import {
+  capabilityControl,
   capabilityOutputSchema,
   defineApplicationCapability,
 } from './defineApplicationCapability'
@@ -179,6 +180,7 @@ const previewCanvasBatch = defineApplicationCapability({
   domain: 'canvas',
   aliases: ['查看画布批量计划', 'preview canvas batch'],
   readOnly: true,
+  control: capabilityControl('observe', ['canvas.batch_plan']),
   risk: 'R0',
   dataClasses: ['C0'],
   permission: 'canvas:preview',

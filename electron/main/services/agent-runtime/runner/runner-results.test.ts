@@ -15,6 +15,28 @@ function observation(output: unknown): AgentToolObservation {
 }
 
 describe('Agent 结果引用', () => {
+  /*
+   * 回归：卸载门槛与真实上下文预算脱钩。
+   *
+   * 固定 8KB 门槛让 80KB 的实体结构文档被推去做 4KB 分页，模型花 20 轮把刚拿到的数据一页页
+   * 读回来——而当时用的是 100 万上下文窗口，峰值只占 3%。
+   */
+  it('卸载门槛跟随上下文窗口，大窗口下工具结果直接内联', () => {
+    const call = { toolCallId: 'call-1', toolName: 'describe_application_entities', input: {}, dynamic: false }
+    const large = observation({ ok: true, properties: Array.from({ length: 40 }, (_, index) => ({
+      propertyId: `camera_stage.object.property_${index}`,
+      writable: true,
+      description: '属'.repeat(200),
+    })) })
+    const inlined = String(JSON.stringify(toolMessage(call, large, 1_000_000)))
+    const offloaded = String(JSON.stringify(toolMessage(call, large, 8_000)))
+    expect(inlined).toContain('camera_stage.object.property_39')
+    expect(offloaded).toContain('largeResultOmitted')
+    // 无论窗口多大都保留绝对上限，避免单条结果吃掉整段历史。
+    const huge = observation({ ok: true, blob: 'x'.repeat(700 * 1024) })
+    expect(String(JSON.stringify(toolMessage(call, huge, 1_000_000)))).toContain('largeResultOmitted')
+  })
+
   it('提取生成、画布、素材、图片编辑和工作流稳定引用', () => {
     expect(extractResultReferences({
       taskId: 'task-1',

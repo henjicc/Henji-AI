@@ -60,7 +60,11 @@ describe('播放与离屏导出共用轨道采样结果', () => {
     }
   })
 
-  it('手动注视模式沿用采样对象旋转，不从注视点另算第二份结果', () => {
+  /*
+   * 播放时的朝向同样从注视点反解，否则"环绕运镜"只有位置在动、镜头始终朝正前方。
+   * 作者显式打了旋转关键帧的情况另有分支（hasAuthoredRotation）不受影响。
+   */
+  it('手动注视模式在播放时也从注视点反解朝向，并保留 roll', () => {
     const camera = createCameraObject('摄像机', pickDefaultColor(0)) as StageCameraObject
     camera.transform.rotation = { x: 12, y: 34, z: 5 }
     camera.lookAt = { mode: 'manual', target: { x: 999, y: -999, z: 1 } }
@@ -76,6 +80,10 @@ describe('播放与离屏导出共用轨道采样结果', () => {
     )
     dispose()
 
-    expect(rotations).toEqual([camera.transform.rotation])
+    expect(rotations).toHaveLength(1)
+    expect(rotations[0]).not.toEqual(camera.transform.rotation)
+    expect(rotations[0].z).toBe(5)
+    // 目标在右下方很远处：应当明显向右下俯视。
+    expect(rotations[0].x).toBeLessThan(0)
   })
 })

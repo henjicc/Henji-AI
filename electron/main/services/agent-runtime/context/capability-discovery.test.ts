@@ -5,8 +5,10 @@ import {
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
 import type { ApplicationCapabilityDiscoveryOutput } from '../../../../../src/core/assistant/capabilityDiscovery'
+import { createCapabilityDiscoveryInputFromTaskGraph } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
+import { createDeterministicTaskGraph } from './task-facets'
 
 function fullContext(registry: ReturnType<typeof createBuiltinAgentToolRegistry>): HostContextSnapshot {
   return {
@@ -33,6 +35,88 @@ function fullContext(registry: ReturnType<typeof createBuiltinAgentToolRegistry>
 }
 
 describe('AgentCapabilityDiscoveryCatalog', () => {
+  /*
+   * 回归：切了工作区但没打开三维工程页面。
+   *
+   * show_target_surface 的 domain 是 navigation，而真正能打开 tool.camera_stage 的
+   * open_camera_stage_project domain 是 camera_stage——旧的同域过滤直接把它筛掉，模型只剩
+   * 通用 switch_workspace，切到工具工作区就停了。
+   */
+  it('导航 Facet 能发现真正到达目标 Surface 的能力，并排在通用切换之前', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const context = fullContext(registry)
+    const match = createDeterministicTaskGraph(
+      '在 3D 镜头参考里边新建一个项目，放一个立方体，打开页面看看',
+      context,
+    )
+    expect(match).not.toBeNull()
+    if (!match) return
+    const navigationGraph = {
+      ...match.graph,
+      facets: match.graph.facets.map((facet) => ({
+        ...facet,
+        status: facet.facetId === 'camera_project' ? 'completed' as const : facet.status,
+      })),
+    }
+    const request = createCapabilityDiscoveryInputFromTaskGraph(navigationGraph)
+    const navigationFacet = request?.facets.find((facet) => facet.facetId === 'show_target_surface')
+    expect(navigationFacet).toBeDefined()
+    if (!navigationFacet) return
+    const output = new AgentCapabilityDiscoveryCatalog(registry).discover(
+      'run-navigation-surface',
+      { ...request!, facets: [navigationFacet] },
+      context,
+    )
+    const names = output.facets[0]?.capabilityNames ?? []
+    expect(names).toContain('open_camera_stage_project')
+    expect(names.indexOf('open_camera_stage_project')).toBeLessThan(
+      names.includes('switch_workspace') ? names.indexOf('switch_workspace') : names.length
+    )
+  })
+
+  it('用户原话推进到场景前沿时优先租约摆放与更新对象能力', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const context = fullContext(registry)
+    const match = createDeterministicTaskGraph(
+      '在 3D 镜头参考里边，新建一个叫测试9527的项目，然后放一个紫色立方体和一个红色圆柱体，做 60 帧环绕运镜，两个物体上下漂浮',
+      context,
+    )
+    expect(match).not.toBeNull()
+    if (!match) return
+    const sceneGraph = {
+      ...match.graph,
+      facets: match.graph.facets.map((facet) => ({
+        ...facet,
+        status: ['camera_project', 'show_target_surface'].includes(facet.facetId)
+          ? 'completed' as const
+          : facet.status,
+      })),
+    }
+    const request = createCapabilityDiscoveryInputFromTaskGraph(sceneGraph)
+    // 当前可运行的 Facet 排在最前，下游 Facet 一并带上，整条链路一次租完。
+    expect(request?.facets[0]).toEqual(expect.objectContaining({
+      facetId: 'camera_scene',
+      entityTypes: expect.arrayContaining(['camera_stage.object']),
+      requiredEffects: expect.arrayContaining([
+        expect.objectContaining({ effect: 'execute', entityTypes: ['camera_stage.object'] }),
+        expect.objectContaining({ effect: 'update', entityTypes: ['camera_stage.object'] }),
+      ]),
+    }))
+    expect(request?.facets.map((facet) => facet.facetId)).toEqual(
+      expect.arrayContaining(['camera_scene', 'camera_motion', 'camera_verify'])
+    )
+    if (!request) return
+    const discovered = new AgentCapabilityDiscoveryCatalog(registry)
+      .discover('run-reported-camera-scene', request, context)
+    expect(discovered.facets[0]?.capabilityNames).toEqual(expect.arrayContaining([
+      'place_camera_stage_object', 'update_camera_stage_object',
+    ]))
+  })
+
   it('一次解析跨领域 Facet、schemaRef、缺失项和建议激活集合', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
@@ -46,8 +130,12 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
         queries: ['添加三维物体并设置位置'],
         domains: ['camera_stage'],
         entityTypes: ['camera_stage.object'],
-        capabilityKinds: ['observe', 'mutate'],
+        capabilityKinds: ['observe', 'mutate', 'execute'],
         targetSurfaceIds: ['tool.camera_stage'],
+        requiredEffects: [
+          { effect: 'execute', entityTypes: ['camera_stage.object'], propertyIds: [] },
+          { effect: 'update', entityTypes: ['camera_stage.object'], propertyIds: [] },
+        ],
       }, {
         facetId: 'show_surface',
         queries: ['打开三维工具'],
@@ -69,6 +157,8 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
 
     expect(result.facets.find((facet) => facet.facetId === 'camera_scene')?.capabilityNames.length)
       .toBeGreaterThan(0)
+    expect(result.facets.find((facet) => facet.facetId === 'camera_scene')?.capabilityNames)
+      .toEqual(expect.arrayContaining(['place_camera_stage_object', 'update_camera_stage_object']))
     expect(result.facets.find((facet) => facet.facetId === 'show_surface')?.capabilityNames)
       .toContain('open_application_surface')
     expect(result.missing).toContainEqual(expect.objectContaining({
@@ -138,5 +228,33 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     }) as ApplicationCapabilityDiscoveryOutput
     expect(output.catalogVersion).toBe('application-capabilities/v2')
     expect(output.facets[0]?.capabilityNames.length).toBeGreaterThan(0)
+  })
+
+  it('能力种类按正式 impacts 匹配，不再用目录名猜 navigate/execute/mutate', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-impact-kind', {
+      discoveryVersion: 'application-capability-discovery/v2',
+      facets: [{
+        facetId: 'open_canvas', queries: ['打开画布项目'], domains: ['canvas'],
+        entityTypes: ['canvas.project'], capabilityKinds: ['navigate'], targetSurfaceIds: ['workspace.canvas'],
+      }, {
+        facetId: 'edit_image', queries: ['创建图片编辑预览'], domains: ['image_edit'],
+        entityTypes: ['image_edit.preview'], capabilityKinds: ['execute'], targetSurfaceIds: ['tool.image_edit'],
+      }, {
+        facetId: 'change_settings', queries: ['修改设置'], domains: ['settings'],
+        entityTypes: ['application.setting'], capabilityKinds: ['mutate'], targetSurfaceIds: [],
+      }],
+      cursor: 0,
+      limit: 20,
+    }, fullContext(registry))
+
+    expect(result.facets.find((facet) => facet.facetId === 'open_canvas')?.capabilityNames)
+      .toContain('open_canvas_project')
+    expect(result.facets.find((facet) => facet.facetId === 'edit_image')?.capabilityNames)
+      .toContain('create_image_edit_preview')
+    expect(result.facets.find((facet) => facet.facetId === 'change_settings')?.capabilityNames)
+      .toContain('apply_application_settings_change')
   })
 })

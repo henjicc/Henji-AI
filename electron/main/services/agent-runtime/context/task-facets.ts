@@ -6,12 +6,18 @@ import {
   AGENT_TASK_FACET_LIMIT,
   AGENT_TASK_GRAPH_VERSION,
   agentTaskGraphSchema,
-  type AgentTaskCapabilityKind,
+  deriveActionGroups,
   type AgentTaskFacet,
   type AgentTaskGraph,
   type AgentTaskRequiredEffect,
 } from '../../../../../src/core/assistant/taskGraph'
 import { AGENT_TOOL_DOMAINS, type AgentIntent, type AgentToolDomain } from './types'
+import {
+  buildDeterministicCameraFacets,
+  cameraTaskGraphCoversGoal,
+  type DeterministicFacetInput,
+} from './deterministic-camera-task'
+import { explicitlyCreatesProject, inferIntentTaskSemantics } from './task-intent-semantics'
 
 const modelFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
@@ -81,37 +87,38 @@ function observationNeeds(
   }))
 }
 
-function buildFacet(input: {
-  facetId: string
-  domain: AgentToolDomain
-  goal: string
-  entityTypes?: string[]
-  observationKinds?: Array<'current_surface' | 'entity_state' | 'entity_schema' | 'operation_schema'>
-  capabilityKinds: AgentTaskCapabilityKind[]
-  targetSurfaceId?: string | null
-  dependsOn?: string[]
-  parallelizable?: boolean
-  completionConditions: string[]
-  requiredEffects?: AgentTaskRequiredEffect[]
-  uncertainties?: string[]
-  confidence?: number
-}): AgentTaskFacet {
-  const entityTypes = unique(input.entityTypes ?? entityTypesByDomain[input.domain] ?? [])
+function buildFacet(input: DeterministicFacetInput): AgentTaskFacet {
+  const declaredEntityTypes = unique(input.entityTypes ?? entityTypesByDomain[input.domain] ?? [])
   const defaultEffect: AgentTaskRequiredEffect['effect'] = input.capabilityKinds.includes('navigate')
     ? 'navigate'
     : input.capabilityKinds.includes('execute')
       ? 'execute'
       : input.capabilityKinds.includes('mutate') ? 'update' : 'observe'
-  const requiredEffects = input.requiredEffects ?? [{
+  const targetSurfaceId = input.targetSurfaceId ?? surfaceByDomain[input.domain] ?? null
+  const requiredEffects = (input.requiredEffects ?? [{
     effectId: `${input.facetId}_effect`,
     effect: defaultEffect,
-    entityTypes,
+    entityTypes: declaredEntityTypes,
     propertyIds: [],
     minimumCount: 1,
     targetRefs: [],
     verificationRequired: defaultEffect !== 'observe' && defaultEffect !== 'navigate',
     actionGroupId: `${input.facetId}_actions`,
-  }]
+  }]).map((effect) => (
+    /*
+     * "打开 X 页面"的完成条件必须绑定到 X 本身。
+     *
+     * 不绑的话 effectMatches 对 navigate 只比 effect 名，切到任意工作区都算数——实测里
+     * switch_workspace 切到工具工作区就把"打开三维编辑器"标成完成，三维工程页面始终没打开。
+     */
+    effect.effect === 'navigate' && targetSurfaceId && effect.targetRefs.length === 0
+      ? { ...effect, targetRefs: [{ kind: 'application.surface', id: targetSurfaceId }] }
+      : effect
+  ))
+  const entityTypes = unique([
+    ...declaredEntityTypes,
+    ...requiredEffects.flatMap((effect) => effect.entityTypes),
+  ]).slice(0, AGENT_FACET_ENTITY_TYPE_LIMIT)
   return {
     facetId: input.facetId,
     domain: input.domain,
@@ -123,7 +130,7 @@ function buildFacet(input: {
       input.goal
     ),
     capabilityKinds: unique(input.capabilityKinds),
-    targetSurfaceId: input.targetSurfaceId ?? surfaceByDomain[input.domain] ?? null,
+    targetSurfaceId,
     dependsOn: unique(input.dependsOn ?? []),
     parallelizable: input.parallelizable ?? false,
     completionConditions: unique(input.completionConditions),
@@ -172,41 +179,11 @@ function graph(goal: string, facets: AgentTaskFacet[]): AgentTaskGraph {
     ...facet,
     dependsOn: facet.dependsOn.filter((dependency) => facetIds.has(dependency)),
   })))
-  const actionGroups = normalized.flatMap((facet) => {
-    const groups = new Map<string, AgentTaskRequiredEffect[]>()
-    for (const effect of facet.requiredEffects) {
-      groups.set(effect.actionGroupId, [...(groups.get(effect.actionGroupId) ?? []), effect])
-    }
-    return [...groups.entries()].map(([actionGroupId, effects]) => ({
-      actionGroupId,
-      facetId: facet.facetId,
-      mode: effects.every((effect) => effect.effect === 'observe' || effect.effect === 'navigate')
-        ? 'parallel_read' as const
-        : effects.length > 1 ? 'atomic_batch' as const : 'ordered_write' as const,
-      effectIds: effects.map((effect) => effect.effectId),
-      dependsOn: [] as string[],
-    }))
-  })
-  const groupIdsByFacet = new Map(normalized.map((facet) => [
-    facet.facetId,
-    actionGroups.filter((group) => group.facetId === facet.facetId).map((group) => group.actionGroupId),
-  ]))
-  const linkedActionGroups = actionGroups.map((group) => {
-    const facet = normalized.find((candidate) => candidate.facetId === group.facetId)
-    const dependsOn = unique((facet?.dependsOn ?? []).flatMap(
-      (dependency) => groupIdsByFacet.get(dependency) ?? []
-    ))
-    return {
-      ...group,
-      mode: dependsOn.length > 0 ? 'dependent' as const : group.mode,
-      dependsOn,
-    }
-  })
   return agentTaskGraphSchema.parse({
     version: AGENT_TASK_GRAPH_VERSION,
     goal,
     facets: normalized,
-    actionGroups: linkedActionGroups,
+    actionGroups: deriveActionGroups(normalized),
     dependencies: normalized.flatMap((facet) => facet.dependsOn.map((dependency) => ({
       fromFacetId: dependency,
       toFacetId: facet.facetId,
@@ -284,141 +261,75 @@ export function createDeterministicTaskGraph(
   const normalized = goal.normalize('NFKC')
   const hasCamera = /(?:3d|三维|镜头|运镜|摄像机|相机|轨迹|场景|立方体|棱锥)/i.test(normalized)
   const hasCanvas = /(?:画布|节点|连线|流程图|canvas)/i.test(normalized)
+  const hasCanvasTask = hasCanvas
+    && /(?:节点|连线|流程图|画布项目|画布里|画布中|canvas\s*(?:node|edge|project)|布局)/i.test(normalized)
   const hasNavigation = /(?:打开|进入|切换|展示|查看|定位|让我看到|open|show|navigate)/i.test(normalized)
-  const hasProject = /(?:新建|创建|建立|复用|项目|工程|project)/i.test(normalized)
-  const hasSceneMutation = /(?:添加|放|放置|摆放|创建).{0,20}(?:物体|对象|立方体|圆柱体|棱锥|摄像机|相机)|(?:位置|坐标|旋转|缩放)/i.test(normalized)
-  // 词表必须覆盖自然说法。实测目标写的是"摄像机围绕着它旋转"，一个关键词都没命中，于是
-  // 运镜 Facet 根本没进任务图——任务图漏掉的部分，助手永远不会做，还会宣布"完成"。
-  const hasMotion = /(?:运镜|轨迹|环绕|围绕|绕着|旋转|转圈|推拉|推近|拉远|横移|升降|orbit|dolly|truck|crane)/i.test(normalized)
-  // 对象动画和摄像机运镜是两件事：前者写对象自己的关键帧，后者算镜头轨迹。
-  const hasObjectAnimation = /(?:动画|关键帧|漂浮|浮动|上下移动|起伏|摆动|自转|缩放动画|animate|keyframe|float)/i.test(normalized)
-  const isComposite = [hasCamera, hasCanvas, hasNavigation, hasProject, hasSceneMutation, hasMotion]
-    .filter(Boolean).length >= 2
-  if (!isComposite || (!hasCamera && !hasCanvas)) return null
+  if (!hasCamera && !hasCanvasTask) return null
 
   const facets: AgentTaskFacet[] = []
-  if (hasCanvas) {
-    const createsNodes = /(?:创建|添加|放置|摆放|新建).{0,16}(?:节点|node)/i.test(normalized)
-    facets.push(buildFacet({
-      facetId: 'canvas_structure',
-      domain: 'canvas',
-      goal: hasProject ? '观察并复用或创建目标画布项目，再完成节点结构要求。' : '完成目标画布结构要求。',
+  const canvasSemantics = hasCanvasTask ? inferIntentTaskSemantics('canvas', normalized) : null
+  let canvasNeedsVerification = false
+  if (hasCanvasTask) {
+    const createsCanvasProject = explicitlyCreatesProject(normalized)
+    const targetsNode = /(?:节点|连线|node|edge)/i.test(normalized)
+    const connectsNodes = /(?:连接|连线|接入|connect|edge)/i.test(normalized)
+    if (createsCanvasProject) facets.push(buildFacet({
+      facetId: 'canvas_project', domain: 'canvas',
+      goal: '创建用户明确要求的新画布项目，并取得项目稳定引用。',
       observationKinds: ['entity_state', 'entity_schema', 'operation_schema'],
       capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
-      completionConditions: ['目标画布项目与节点结构存在，并返回项目或节点稳定引用及 revision。'],
+      completionConditions: ['新画布项目已创建并通过结构化读取确认。'],
       requiredEffects: [{
-        effectId: 'canvas_structure_effect', effect: createsNodes ? 'create' : 'update',
-        entityTypes: [createsNodes ? 'canvas.node' : 'canvas.project'], propertyIds: [],
-        minimumCount: createsNodes ? inferRequestedCount(normalized) : 1,
-        targetRefs: [], verificationRequired: true, actionGroupId: 'canvas_structure_actions',
+        effectId: 'canvas_project_effect', effect: 'create', entityTypes: ['canvas.project'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+        actionGroupId: 'canvas_project_actions',
       }],
     }))
-  }
-  if (hasCamera) {
-    const projectFacetId = 'camera_project'
-    facets.push(buildFacet({
-      facetId: projectFacetId,
-      domain: 'camera_stage',
-      goal: '先观察现有三维工程、默认摄像机和镜头，优先复用满足要求的对象。',
-      observationKinds: ['entity_state', 'entity_schema', 'operation_schema'],
-      capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
-      completionConditions: ['取得可用三维工程、摄像机和镜头的稳定引用与 revision。'],
-      requiredEffects: [{
-        effectId: 'camera_project_effect', effect: 'observe',
-        entityTypes: ['camera_stage.project', 'camera_stage.camera'], propertyIds: [], minimumCount: 1,
-        targetRefs: [], verificationRequired: false, actionGroupId: 'camera_project_actions',
-      }],
-    }))
-    const needsEarlySurface = hasSceneMutation || hasMotion || hasNavigation
-    if (needsEarlySurface) {
+    if (!createsCanvasProject || targetsNode) {
+      const semantics = canvasSemantics as ReturnType<typeof inferIntentTaskSemantics>
+      const facetId = targetsNode ? 'canvas_structure' : 'canvas_project'
       facets.push(buildFacet({
-        facetId: 'show_target_surface',
-        domain: 'navigation',
-        goal: '取得稳定工程引用后立即打开 3D 编辑器，让用户看到后续场景执行。',
-        observationKinds: ['current_surface'],
-        capabilityKinds: ['observe', 'navigate'],
-        targetSurfaceId: 'tool.camera_stage',
-        dependsOn: [projectFacetId],
-        parallelizable: false,
-        completionConditions: ['宿主返回实际打开的 tool.camera_stage Surface ID。'],
-      }))
-    }
-    const visualDependency = needsEarlySurface ? 'show_target_surface' : projectFacetId
-    if (hasSceneMutation) {
-      facets.push(buildFacet({
-        facetId: 'camera_scene',
-        domain: 'camera_stage',
-        goal: '按明确空间参数布置三维场景对象，避免对象重叠。',
+        facetId, domain: 'canvas',
+        goal: targetsNode ? '完成用户要求的画布节点和连线结构。' : '完成用户要求的画布项目操作。',
+        entityTypes: connectsNodes
+          ? unique([...semantics.entityTypes, 'canvas.edge'])
+          : semantics.entityTypes,
         observationKinds: ['entity_state', 'entity_schema', 'operation_schema'],
-        capabilityKinds: ['observe', 'plan', 'mutate'],
-        dependsOn: [visualDependency],
-        completionConditions: ['目标对象存在、空间参数可验证且没有无意重叠。'],
+        capabilityKinds: semantics.capabilityKinds,
+        dependsOn: createsCanvasProject ? ['canvas_project'] : [],
+        completionConditions: ['目标画布项目或节点结构具有稳定引用、revision 和结构化结果。'],
         requiredEffects: [{
-          effectId: 'camera_scene_effect', effect: 'create', entityTypes: ['camera_stage.object'],
-          propertyIds: [], minimumCount: inferRequestedCount(normalized), targetRefs: [], verificationRequired: true,
-          actionGroupId: 'camera_scene_actions',
-        }],
+          effectId: `${facetId}_effect`, effect: semantics.effect,
+          entityTypes: semantics.entityTypes, propertyIds: [],
+          minimumCount: targetsNode && semantics.effect === 'create' ? inferRequestedCount(normalized) : 1,
+          targetRefs: [], verificationRequired: !['observe', 'navigate'].includes(semantics.effect),
+          actionGroupId: `${facetId}_actions`,
+        }, ...(connectsNodes && semantics.effect === 'create' ? [{
+          effectId: `${facetId}_edge_effect` as const,
+          effect: 'create' as const,
+          entityTypes: ['canvas.edge'], propertyIds: [], minimumCount: 1,
+          targetRefs: [], verificationRequired: true,
+          actionGroupId: `${facetId}_actions`,
+        }] : [])],
       }))
-    }
-    if (hasMotion) {
-      facets.push(buildFacet({
-        facetId: 'camera_motion',
-        domain: 'camera_stage',
-        goal: '使用已注册的摄像机运镜或轨迹语义完成镜头运动。',
-        observationKinds: ['entity_state', 'operation_schema'],
-        capabilityKinds: ['observe', 'plan', 'execute'],
-        dependsOn: [hasSceneMutation ? 'camera_scene' : visualDependency],
-        completionConditions: ['镜头轨迹或运镜参数已提交并可由场景状态验证。'],
-        requiredEffects: [{
-          effectId: 'camera_motion_effect', effect: 'execute', entityTypes: ['camera_stage.trajectory'],
-          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
-          actionGroupId: 'camera_motion_actions',
-        }],
-      }))
-    }
-    if (hasObjectAnimation) {
-      facets.push(buildFacet({
-        facetId: 'camera_object_animation',
-        domain: 'camera_stage',
-        goal: '给场景对象写入属性关键帧，表达漂浮、旋转、缩放等自身动画。',
-        observationKinds: ['entity_state', 'entity_schema'],
-        capabilityKinds: ['observe', 'plan', 'mutate'],
-        dependsOn: [hasSceneMutation ? 'camera_scene' : visualDependency],
-        completionConditions: ['目标对象在相应属性路径上已存在覆盖所需时长的关键帧。'],
-        requiredEffects: [{
-          effectId: 'camera_animation_effect', effect: 'create', entityTypes: ['camera_stage.keyframe'],
-          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
-          actionGroupId: 'camera_animation_actions',
-        }],
-      }))
-    }
-    // 写入之后必须独立结算一次验证：没有这个 Facet，模型放完对象就会直接宣称完成。
-    // 视觉证据是可选加成——本轮没有观察工具（模型读不了图）时只做参数验证也算完成，
-    // 但答复必须说明未看画面，这条由系统提示词约束。
-    if (hasSceneMutation || hasMotion || hasObjectAnimation) {
-      facets.push(buildFacet({
-        facetId: 'camera_verify',
-        domain: 'camera_stage',
-        goal: '用结构化验证确认对象位置、尺寸、无重叠与运镜结果；界面观察工具可用时再结合截图判断构图。',
-        observationKinds: ['entity_state', 'current_surface'],
-        capabilityKinds: ['observe'],
-        targetSurfaceId: 'tool.camera_stage',
-        dependsOn: [hasObjectAnimation ? 'camera_object_animation' : hasMotion ? 'camera_motion' : 'camera_scene'],
-        parallelizable: false,
-        completionConditions: [
-          '结构化验证返回 verified 或已如实列出未满足项。',
-          '视觉证据要么来自实际读取的界面截图，要么明确标注为未做视觉验证。',
-        ],
-        requiredEffects: [{
-          effectId: 'camera_verify_effect', effect: 'observe',
-          entityTypes: ['camera_stage.scene', 'camera_stage.object', 'camera_stage.trajectory'],
-          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
-          actionGroupId: 'camera_verify_actions',
-        }],
-      }))
+      canvasNeedsVerification = targetsNode && !['observe', 'navigate'].includes(semantics.effect)
     }
   }
-  if (hasNavigation && !hasCamera) {
+  if (canvasNeedsVerification) facets.push(buildFacet({
+    facetId: 'canvas_verify', domain: 'canvas',
+    goal: '用结构化画布状态验证节点、连线和布局结果。',
+    observationKinds: ['entity_state'], capabilityKinds: ['observe', 'query'],
+    dependsOn: ['canvas_structure'], parallelizable: false,
+    completionConditions: ['结构化读取确认目标节点、连线和布局满足要求。'],
+    requiredEffects: [{
+      effectId: 'canvas_verify_effect', effect: 'observe',
+      entityTypes: ['canvas.project', 'canvas.node', 'canvas.edge'], propertyIds: [],
+      minimumCount: 1, targetRefs: [], verificationRequired: false,
+      actionGroupId: 'canvas_verify_actions',
+    }],
+  }))
+  if (hasCamera) facets.push(...buildDeterministicCameraFacets(normalized, buildFacet, hasNavigation))
+  if (hasNavigation && !hasCamera && (!canvasSemantics || canvasSemantics.effect !== 'navigate')) {
     facets.push(buildFacet({
       facetId: 'show_target_surface',
       domain: 'navigation',
@@ -434,7 +345,7 @@ export function createDeterministicTaskGraph(
     graph: graph(goal, facets),
     intents: unique([
       ...(hasCamera ? ['camera_stage' as const] : []),
-      ...(hasCanvas ? ['canvas' as const] : []),
+      ...(hasCanvasTask ? ['canvas' as const] : []),
       ...(hasNavigation ? ['navigate' as const] : []),
     ]),
     domains: unique(facets.map((facet) => facet.domain as AgentToolDomain)),
@@ -452,16 +363,14 @@ export function createModelTaskGraph(input: {
   if (planned) return planned
 
   const fallbackDomain = input.candidateDomains.find((domain) => domain !== 'catalog') ?? 'catalog'
+  const fallbackSemantics = inferIntentTaskSemantics(input.primaryIntent, input.goal)
   return graph(input.goal, [buildFacet({
     facetId: input.primaryIntent === 'general' ? 'clarify_goal' : input.primaryIntent,
     domain: fallbackDomain,
     goal: input.goal,
     observationKinds: fallbackDomain === 'catalog' ? [] : ['current_surface'],
-    capabilityKinds: input.primaryIntent === 'general'
-      ? ['query']
-      : input.primaryIntent === 'navigate'
-        ? ['observe', 'navigate']
-        : ['query', 'execute'],
+    entityTypes: fallbackSemantics.entityTypes,
+    capabilityKinds: fallbackSemantics.capabilityKinds,
     targetSurfaceId: input.snapshot.surface?.id ?? surfaceByDomain[fallbackDomain] ?? null,
     completionConditions: [
       input.primaryIntent === 'general'
@@ -470,7 +379,56 @@ export function createModelTaskGraph(input: {
     ],
     uncertainties: input.primaryIntent === 'general' ? ['结构化 Planner 没有返回可用 Effect。'] : [],
     confidence: input.primaryIntent === 'general' ? 0.25 : 0.5,
+    requiredEffects: [{
+      effectId: `${input.primaryIntent}_effect`,
+      effect: fallbackSemantics.effect,
+      entityTypes: fallbackSemantics.entityTypes,
+      propertyIds: [],
+      minimumCount: 1,
+      targetRefs: [],
+      verificationRequired: input.primaryIntent === 'generate',
+      actionGroupId: `${input.primaryIntent}_actions`,
+    }],
   })])
+}
+
+export function taskGraphCoversBaseline(
+  candidate: AgentTaskGraph,
+  baseline: AgentTaskGraph,
+): boolean {
+  const candidateEffects = candidate.facets.flatMap((facet) => facet.requiredEffects)
+  const coversEffects = baseline.facets.every((facet) => facet.requiredEffects.every((required) => {
+    const matching = candidateEffects.filter((effect) => (
+      effect.effect === required.effect
+      && (required.entityTypes.length === 0 || effect.entityTypes.length === 0
+        || required.entityTypes.some((entityType) => effect.entityTypes.includes(entityType)))
+      && (required.propertyIds.length === 0 || effect.propertyIds.length === 0
+        || required.propertyIds.every((propertyId) => effect.propertyIds.includes(propertyId)))
+    ))
+    return matching.reduce((count, effect) => count + effect.minimumCount, 0) >= required.minimumCount
+  }))
+  if (!coversEffects) return false
+  const baselineRequiresConvergence = baseline.facets.some((facet) => (
+    facet.dependsOn.length > 0
+    && facet.requiredEffects.some((effect) => effect.effect === 'observe')
+  ))
+  if (!baselineRequiresConvergence) return true
+  const writeFacetIds = candidate.facets.flatMap((facet) => (
+    facet.requiredEffects.some((effect) => !['observe', 'navigate'].includes(effect.effect))
+      ? [facet.facetId] : []
+  ))
+  const byId = new Map(candidate.facets.map((facet) => [facet.facetId, facet]))
+  const dependsOn = (facetId: string, dependencyId: string, seen = new Set<string>()): boolean => {
+    const facet = byId.get(facetId)
+    if (!facet || seen.has(facetId)) return false
+    if (facet.dependsOn.includes(dependencyId)) return true
+    seen.add(facetId)
+    return facet.dependsOn.some((id) => dependsOn(id, dependencyId, seen))
+  }
+  return candidate.facets.some((facet) => (
+    facet.requiredEffects.some((effect) => effect.effect === 'observe')
+    && writeFacetIds.every((id) => dependsOn(facet.facetId, id))
+  ))
 }
 
 /** 只接受完整的结构化 Planner 输出；调用方可在失败时保留确定性任务图。 */
@@ -496,5 +454,10 @@ export function tryCreateModelTaskGraph(input: {
       targetSurfaceId: item.targetSurfaceId ?? surfaceByDomain[item.domain] ?? null,
       requiredEffects: item.requiredEffects,
     }))
-  return facets.length > 0 ? graph(input.goal, ensureEarlyCameraSurface(facets)) : null
+  if (facets.length === 0) return null
+  const planned = graph(input.goal, ensureEarlyCameraSurface(facets))
+  return input.candidateDomains.includes('camera_stage')
+    && !cameraTaskGraphCoversGoal(input.goal, planned.facets)
+    ? null
+    : planned
 }
