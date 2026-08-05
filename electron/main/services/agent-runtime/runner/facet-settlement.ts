@@ -102,11 +102,27 @@ export function buildSettlementGuidance(
       blockedReasons: settlement.blockedFacets.map((facet) => `${facet.facetId}:${facet.reason}`),
     },
   })
+  /*
+   * 结算完成不是停止令，是检查点。
+   *
+   * 任务图只是对用户目标的近似；「声明的 Effect 都满足了」和「用户要的东西做出来了」是两回事。
+   * 旧文案在 completed 时也下"停止调用工具"，于是用户要的"白色球体"在 place 成功那一刻就被判
+   * 结束——模型自己知道颜色还没设，却只能回一句"需要我确认时回复一声"。
+   *
+   * 只有真正做不下去的两种终态才下停止令：在等用户，或者全盘受阻且一件都没完成。
+   */
+  const stopped = settlement.status === 'waiting_user'
+    || (settlement.status === 'blocked' && settlement.completedFacetIds.length === 0)
   return [
     '[任务图结构化结算]',
     JSON.stringify(settlement),
     settlement.status === 'waiting_user'
       ? '停止调用工具，只向用户提出一个最小具体问题。'
-      : '停止调用工具；最终答复必须列出已完成部分、未完成部分、证据、阻塞原因和继续所需的最小动作。',
+      : stopped
+        ? '停止调用工具；最终答复必须列出已完成部分、未完成部分、证据、阻塞原因和继续所需的最小动作。'
+        : '任务图声明的 Effect 已满足，但任务图只是对用户目标的近似：请对照用户原话确认真正要的东西'
+          + '是否已经做出来（例如颜色、命名、数量、朝向这些没被声明成 Effect 的细节）。'
+          + '已经达成就直接收尾；还差步骤就继续执行，需要时用 declare_action_plan 补声明缺的 Effect。'
+          + '不要为此向用户要一次额外确认——你手里的工具和证据足以自己判断。',
   ].join('\n')
 }

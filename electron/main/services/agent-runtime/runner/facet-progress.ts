@@ -68,6 +68,9 @@ export class AgentFacetProgressTracker {
   /** 路由判定的领域，只用于遥测：补建的 Facet 落在这之外就说明路由判错了。 */
   private readonly routeDomains: readonly string[]
 
+  /** 已经向模型下发过的结算状态；状态不变就不重复下发。 */
+  private announcedSettlementStatus: AgentProgressSettlement['status'] | null = null
+
   constructor(
     initialTaskGraph: AgentTaskGraph,
     private readonly registry: AgentToolRegistry,
@@ -304,7 +307,21 @@ export class AgentFacetProgressTracker {
     allowSettledActionGroupSibling = false
   ): AgentProgressGuardDecision | null {
     const settlement = this.settlement()
-    if (settlement.status !== 'active' && !allowSettledActionGroupSibling) {
+    /*
+     * 「任务图声明的 Effect 已满足」不等于「用户的目标达成」，因此不构成停止的理由。
+     *
+     * 任务图是路由或兜底规则对用户目标的**粗糙近似**。实测：用户要"白色球体"，兜底任务图只生成
+     * 了一条 effect，place 一成功就结算 completed，这道闸门当场拒绝一切后续工具——模型自己清楚
+     * 球体还不是白的（答复里写着"未完成/待确认：球体的材质颜色"），却连 update_camera_stage_object
+     * 都调不动，只能回一句"需要我确认球体为纯白色时，回复一声即可"。用户看到的就是"每一步都要
+     * 我跟他说一声"。
+     *
+     * 真正该拦的是**没有新进展**，那由下面的 repeated_write / repeated_failure / no_change 和运行
+     * 预算负责，它们判的是事实而不是近似。这里只保留两种确实做不下去的终态：等用户、以及全盘受阻。
+     */
+    const mustStop = settlement.status === 'waiting_user'
+      || (settlement.status === 'blocked' && settlement.completedFacetIds.length === 0)
+    if (mustStop && !allowSettledActionGroupSibling) {
       return {
         reason: `任务图已结算为 ${settlement.status}，禁止继续调用工具；请输出结构化完成或受阻说明。`,
         events: [],
@@ -389,7 +406,12 @@ export class AgentFacetProgressTracker {
   }
 
   settlementGuidance(): string | null {
-    return buildSettlementGuidance(this.settlement())
+    const settlement = this.settlement()
+    // 结算状态没变就不重复下发：completed 不再是停止令之后，模型可能继续干好几轮，
+    // 每轮都贴一遍同样的检查点纯属噪音，还会把它推向"反正说过了，收尾吧"。
+    if (settlement.status === this.announcedSettlementStatus) return null
+    this.announcedSettlementStatus = settlement.status
+    return buildSettlementGuidance(settlement)
   }
 
   resumeWaitingFacets(answer: string): AgentFacetProgress[] {

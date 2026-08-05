@@ -417,9 +417,9 @@ describe('AgentFacetProgressTracker', () => {
     })
     expect(tracker.settlement().status).toBe('completed')
     const sibling = call('write_camera', { id: 'second' })
-    expect(tracker.validate(sibling, {})).toMatchObject({
-      reason: expect.stringContaining('任务图已结算'),
-    })
+    // 结算完成不再是"禁止继续"的死路，而是可自纠的 ACTION_PLAN_REQUIRED：
+    // 这次写入的 Effect 确实不在计划里，补声明就能继续（见 facet-progress.validate 的说明）。
+    expect(tracker.validate(sibling, {})).toMatchObject({ code: 'ACTION_PLAN_REQUIRED' })
     expect(tracker.validate(sibling, {}, true)).toBeNull()
   })
 

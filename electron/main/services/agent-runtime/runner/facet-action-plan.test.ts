@@ -336,6 +336,65 @@ describe('Action Plan 声明协议', () => {
     expect(normalized.facets.map((item) => item.facetId)).not.toContain('made_up')
   })
 
+  /*
+   * 根源回归：「任务图声明的 Effect 已满足」不等于「用户的目标达成」。
+   *
+   * 实测：用户要"白色球体"，兜底任务图只生成了一条 effect，place_camera_stage_object 一成功
+   * 就结算 completed；validate 当场拒绝一切后续工具、settlementGuidance 下发"停止调用工具"。
+   * 模型自己清楚球体还不是白的（答复里写着"未完成/待确认：球体的材质颜色"），却连
+   * update_camera_stage_object 都调不动，只能回一句"需要我确认球体为纯白色时，回复一声即可"。
+   * 用户看到的就是"每一步操作都要我跟他说一声"。
+   *
+   * 任务图是对用户目标的近似，清单做完不构成停止的理由；真正该拦的"没有新进展"由
+   * repeated_write / repeated_failure / no_change 和运行预算负责，它们判的是事实。
+   */
+  it('任务图结算完成后不再硬拦工具调用，也不下停止令', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'camera_stage', domain: 'camera_stage', status: 'completed' })]),
+      registry
+    )
+    expect(tracker.settlement().status).toBe('completed')
+
+    /*
+     * 还差"把它改成白色"这一步。拦截理由必须从"任务图已结算，禁止继续"变成可自纠的
+     * ACTION_PLAN_REQUIRED——"白色"这个 Effect 确实从来没进过计划，补声明再写才是对的，
+     * 而这条错误会告诉模型怎么补。区别在于：前者是死路，后者是一步之遥。
+     */
+    const decision = tracker.validate(
+      { toolCallId: 'c1', toolName: 'update_camera_stage_object', input: {}, dynamic: false },
+      {}
+    )
+    expect(decision?.reason).not.toContain('任务图已结算')
+    expect(decision?.code).toBe('ACTION_PLAN_REQUIRED')
+    expect(decision?.reason).toContain('declare_action_plan')
+
+    const guidance = tracker.settlementGuidance() ?? ''
+    expect(guidance).not.toContain('停止调用工具')
+    expect(guidance).toContain('对照用户原话')
+    // 检查点只下发一次，状态没变就不再重复贴。
+    expect(tracker.settlementGuidance()).toBeNull()
+  })
+
+  it('真正做不下去的两种终态仍然硬停', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    for (const status of ['blocked', 'waiting_user'] as const) {
+      const tracker = new AgentFacetProgressTracker(
+        graph([facet({ facetId: 'camera_stage', domain: 'camera_stage', status })]),
+        registry
+      )
+      expect(tracker.validate(
+        { toolCallId: 'c1', toolName: 'update_camera_stage_object', input: {}, dynamic: false },
+        {}
+      ), status).not.toBeNull()
+      expect(tracker.settlementGuidance(), status).toContain('停止调用工具')
+    }
+  })
+
   it('补建 Facet 的领域必须真实存在，且有数量上限', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
