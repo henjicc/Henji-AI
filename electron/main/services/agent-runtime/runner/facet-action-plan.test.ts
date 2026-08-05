@@ -6,6 +6,7 @@ import {
   type AgentTaskFacet,
 } from '../../../../../src/core/assistant/taskGraph'
 import { AgentToolRegistry } from '../tools/registry'
+import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentFacetProgressTracker } from './facet-progress'
 
 function facet(input: Partial<AgentTaskFacet> & Pick<AgentTaskFacet, 'facetId' | 'domain'>): AgentTaskFacet {
@@ -151,5 +152,83 @@ describe('Action Plan 声明协议', () => {
     expect(tracker.prepareDeclaredActionPlan(declaration('missing', [declared])))
       .toMatchObject({ issues: [{ message: expect.stringContaining('active') }] })
     expect(tracker.taskGraphSnapshot()).toEqual(before)
+  })
+
+  /*
+   * 根源回归：路由判错时，主模型必须有出路。
+   *
+   * 路由用一个小模型、只看当前这一句话定 intent，intent 决定任务图的 Facet 集合，Facet 集合
+   * 又决定哪些能力发现得到——判错一次整次运行就没有出口。实测连着三次：「再帮我添加一个白色的
+   * 球体」判成 generate、「你这不对吧」判成 diagnose、「你继续」判成 canvas，而上一轮三次都在
+   * camera_stage。三次里主模型都读懂了用户（它拿得到完整会话历史，路由拿不到），却只能停下来
+   * 解释自己被阻塞。
+   *
+   * 补建之后代价从"卡死"降到"多烧一轮"。
+   */
+  it('路由漏掉的领域可由模型现场补建 Facet', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    // 任务图只有一个 canvas Facet——正是「你继续」被判成 canvas 时的形状。
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
+      registry,
+      true
+    )
+    const prepared = tracker.prepareDeclaredActionPlan({
+      facets: [{
+        facetId: 'camera_scene',
+        requiredEffects: [{
+          effect: 'execute',
+          entityTypes: ['camera_stage.object'],
+          minimumCount: 1,
+        }],
+      }],
+      actionGroups: [],
+    })
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) return
+    tracker.commitDeclaredActionPlan(prepared)
+
+    const created = tracker.taskGraphSnapshot().facets.find((item) => item.facetId === 'camera_scene')
+    // 领域由 entityTypes 反推，模型不需要（也不能）自己指定。
+    expect(created?.domain).toBe('camera_stage')
+    expect(created?.capabilityKinds).toContain('execute')
+    // 原有 Facet 不受影响。
+    expect(tracker.taskGraphSnapshot().facets.map((item) => item.facetId))
+      .toEqual(['canvas', 'camera_scene'])
+    // 补建之后放置对象的调用不再被判成"不在任务图里"。
+    expect(tracker.validate(
+      { toolCallId: 'c1', toolName: 'place_camera_stage_object', input: {}, dynamic: false },
+      {}
+    )).toBeNull()
+  })
+
+  it('补建 Facet 的领域必须真实存在，且有数量上限', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const tracker = new AgentFacetProgressTracker(
+      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
+      registry,
+      true
+    )
+    // 实体类型指向不存在的领域时仍然拒绝——模型可以纠正路由，但编不出新领域。
+    expect(tracker.prepareDeclaredActionPlan({
+      facets: [{
+        facetId: 'made_up',
+        requiredEffects: [{ effect: 'execute', entityTypes: ['not_a_domain.thing'], minimumCount: 1 }],
+      }],
+      actionGroups: [],
+    })).toMatchObject({ ok: false, issues: [{ code: 'UNKNOWN_FACET' }] })
+
+    // 一次声明里补建超过上限时拒绝，避免模型把任务图撑爆。
+    expect(tracker.prepareDeclaredActionPlan({
+      facets: Array.from({ length: 5 }, (_, index) => ({
+        facetId: `extra_${index}`,
+        requiredEffects: [{ effect: 'execute', entityTypes: ['camera_stage.object'], minimumCount: 1 }],
+      })),
+      actionGroups: [],
+    })).toMatchObject({ ok: false, issues: [{ code: 'UNKNOWN_FACET' }] })
   })
 })

@@ -112,7 +112,16 @@ export class AgentFacetProgressTracker {
   }
 
   prepareDeclaredActionPlan(declaration: unknown): PreparedDeclaredActionPlan {
-    return prepareDeclaredActionPlan({ declaration, taskGraph: this.taskGraph, facets: this.facets })
+    return prepareDeclaredActionPlan({
+      declaration,
+      taskGraph: this.taskGraph,
+      facets: this.facets,
+      // 补建 Facet 的领域必须来自真实注册表：模型可以纠正路由，但编不出不存在的领域。
+      knownDomains: new Set(this.registry.allDefinitions().flatMap((definition) => [
+        definition.category,
+        definition.capability?.domain ?? definition.category,
+      ])),
+    })
   }
 
   commitDeclaredActionPlan(prepared: Extract<PreparedDeclaredActionPlan, { ok: true }>): void {
@@ -209,7 +218,10 @@ export class AgentFacetProgressTracker {
       return {
         code: 'ACTION_PLAN_REQUIRED',
         reason: `${call.toolName} 的 effect、实体或属性不在当前任务图里。任务图待办 Effect：${expected.join('、') || '无'}；`
-          + '如果这个写入确实是任务的一部分，用 declare_action_plan 为对应 facetId 补声明该 Effect（只需 effect/entityTypes/minimumCount），否则改用匹配的能力。',
+          + '如果这个写入确实是任务的一部分，用 declare_action_plan 补声明该 Effect（只需 effect/entityTypes/minimumCount）。'
+          // 路由只看得到当前这一句话，判错领域是常态；模型拿得到完整会话历史，必须有权纠正它。
+          + '任务图里没有合适的 facetId 时，直接用一个新的 facetId 声明：只要 entityTypes 指向真实实体类型'
+          + '（形如 camera_stage.object），运行时会按该实体所属领域补建 Facet 并发放对应能力。',
         events: [],
         issueCodes: ['ACTION_EFFECT_MISMATCH'],
       }

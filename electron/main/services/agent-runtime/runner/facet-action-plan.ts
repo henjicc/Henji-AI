@@ -95,10 +95,90 @@ function declarableFacetIds(facets: Map<string, AgentTaskFacet>): string[] {
     .map((facet) => facet.facetId)
 }
 
+/** 一次运行里模型最多补建几个 Facet。防跑飞，不是防误用。 */
+const DECLARABLE_NEW_FACET_LIMIT = 4
+
+/**
+ * 从声明的 Effect 实体类型反推领域：`camera_stage.object` → `camera_stage`。
+ *
+ * 领域必须来自真实注册表，模型编不出新领域；权限仍由网关与审批把关，这里只决定
+ * "这个 Facet 属于哪一块"。
+ */
+function inferDeclaredDomain(
+  effects: AgentTaskFacet['requiredEffects'],
+  knownDomains: ReadonlySet<string>
+): string | null {
+  for (const effect of effects) {
+    for (const entityType of effect.entityTypes) {
+      const domain = entityType.includes('.') ? entityType.slice(0, entityType.indexOf('.')) : entityType
+      if (knownDomains.has(domain)) return domain
+    }
+  }
+  return null
+}
+
+function declaredCapabilityKinds(
+  effects: AgentTaskFacet['requiredEffects']
+): AgentTaskFacet['capabilityKinds'] {
+  const kinds = new Set<AgentTaskFacet['capabilityKinds'][number]>()
+  for (const effect of effects) {
+    if (effect.effect === 'navigate') kinds.add('navigate')
+    else if (effect.effect === 'execute') kinds.add('execute')
+    else if (effect.effect === 'observe') kinds.add('observe')
+    else kinds.add('mutate')
+  }
+  if (kinds.size === 0) kinds.add('observe')
+  return [...kinds]
+}
+
+/**
+ * 为路由漏掉的领域补建一个 Facet。
+ *
+ * **这是路由结论可被推翻的唯一入口，也是本模块存在的理由。**
+ *
+ * 路由用一个小模型、只看当前这句话和一份被裁过的宿主快照来定 intent，而 intent 决定任务图的
+ * Facet 集合，Facet 集合又决定哪些能力发现得到——于是路由判错一次，整次运行就没有出口。实测
+ * 连着三次都是这样：用户说「再帮我添加一个白色的球体」判成 generate、「你这不对吧」判成
+ * diagnose、「你继续」判成 canvas，而上一轮三次都在 camera_stage。三次里主模型都读懂了用户
+ * （它拿得到完整会话历史，路由拿不到），却没有任何入口去纠正那个判决，只能停下来解释自己
+ * 被阻塞。
+ *
+ * 补建之后，路由判错的代价从"整次运行卡死"降到"多烧一轮"。
+ */
+function buildDeclaredFacet(
+  facetId: string,
+  effects: AgentTaskFacet['requiredEffects'],
+  domain: string,
+  goal: string
+): AgentTaskFacet {
+  const entityTypes = [...new Set(effects.flatMap((effect) => effect.entityTypes))]
+  return {
+    facetId,
+    domain,
+    goal: goal.slice(0, 1_000),
+    targetEntityTypes: entityTypes,
+    requiredObservations: [],
+    capabilityKinds: declaredCapabilityKinds(effects),
+    targetSurfaceId: null,
+    dependsOn: [],
+    parallelizable: false,
+    completionConditions: ['目标动作具有结构化结果或明确的受阻说明。'],
+    requiredEffects: effects,
+    uncertainties: [],
+    // 模型现场补声明的置信度低于路由与确定性规则给出的 Facet，排序时让位。
+    confidence: 0.5,
+    status: 'active',
+    statusReason: '模型在执行中补声明的 Facet：路由未覆盖该领域。',
+    evidence: [],
+  }
+}
+
 export function prepareDeclaredActionPlan(input: {
   declaration: unknown
   taskGraph: AgentTaskGraph
   facets: Map<string, AgentTaskFacet>
+  /** 注册表里真实存在的领域；模型只能在这些领域里补建 Facet。 */
+  knownDomains?: ReadonlySet<string>
 }): PreparedDeclaredActionPlan {
   const available = declarableFacetIds(input.facets)
   const parsedDeclaration = agentActionPlanDeclarationInputSchema.safeParse(input.declaration)
@@ -114,6 +194,8 @@ export function prepareDeclaredActionPlan(input: {
   const declaration = parsedDeclaration.data
   const issues: DeclaredActionPlanIssue[] = []
   const replacements = new Map<string, AgentTaskFacet>()
+  /** 本次声明里补建出来的新 Facet；它们不在原任务图里，合并时要追加。 */
+  const added: AgentTaskFacet[] = []
   for (const [index, facetDeclaration] of declaration.facets.entries()) {
     if (replacements.has(facetDeclaration.facetId)) {
       issues.push({
@@ -124,10 +206,30 @@ export function prepareDeclaredActionPlan(input: {
     }
     const current = input.facets.get(facetDeclaration.facetId)
     if (!current) {
-      issues.push({
-        code: 'UNKNOWN_FACET', path: `facets.${index}.facetId`,
-        message: `Facet ${facetDeclaration.facetId} 不存在；当前可声明：${available.join('、') || '无'}`,
-      })
+      // 路由漏掉的领域在这里补建，而不是把模型顶回去——见 buildDeclaredFacet 的说明。
+      const effects = normalizeDeclaredRequiredEffects(
+        facetDeclaration.facetId,
+        facetDeclaration.requiredEffects
+      )
+      const domain = inferDeclaredDomain(effects, input.knownDomains ?? new Set())
+      if (!domain || added.length >= DECLARABLE_NEW_FACET_LIMIT) {
+        issues.push({
+          code: 'UNKNOWN_FACET', path: `facets.${index}.facetId`,
+          message: domain
+            ? `本次运行补声明的 Facet 已达上限 ${DECLARABLE_NEW_FACET_LIMIT} 个；当前可声明：${available.join('、') || '无'}`
+            : `Facet ${facetDeclaration.facetId} 不存在，且 requiredEffects 的 entityTypes 未指向任何已注册领域；`
+              + `补声明新 Facet 时请填写真实实体类型（形如 camera_stage.object），或改用当前可声明的：${available.join('、') || '无'}`,
+        })
+        continue
+      }
+      const created = buildDeclaredFacet(
+        facetDeclaration.facetId,
+        effects,
+        domain,
+        input.taskGraph.goal
+      )
+      added.push(created)
+      replacements.set(facetDeclaration.facetId, created)
       continue
     }
     if (isTerminal(current.status)) {
@@ -158,9 +260,12 @@ export function prepareDeclaredActionPlan(input: {
    * 重新完成，唯独 show_target_surface 早已导航完毕、不会再被触发，永远停在 pending，
    * 整次运行因此报"任务图仍有 1 个 Facet 未结算"。
    */
-  const mergedFacets = input.taskGraph.facets.map((facet) => (
-    replacements.get(facet.facetId) ?? input.facets.get(facet.facetId) ?? facet
-  ))
+  const mergedFacets = [
+    ...input.taskGraph.facets.map((facet) => (
+      replacements.get(facet.facetId) ?? input.facets.get(facet.facetId) ?? facet
+    )),
+    ...added,
+  ]
   const candidate = agentTaskGraphSchema.safeParse({
     ...input.taskGraph,
     facets: mergedFacets,
