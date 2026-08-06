@@ -106,20 +106,13 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     setDuration: sceneProperty('duration'),
     setFps: sceneProperty('fps'),
     setActiveCameraId: sceneProperty('active_camera_ref'),
-    play: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '播放控制完全没注册。助手做完动画后无法预览验证，只能让用户自己去点播放。'
-        + '计划注册成 camera_stage.playback 单例实体的属性，不新增工具。',
-    },
-    pause: { kind: 'gap', plannedPhase: '期 2', reason: '同 play，属于未注册的播放控制这一组。' },
-    stop: { kind: 'gap', plannedPhase: '期 2', reason: '同 play，属于未注册的播放控制这一组。' },
-    seek: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '跳转播放头是用户可达入口，也是助手按时间点检查画面的前提，目前完全没有对应属性。',
-    },
-    toggleLoop: { kind: 'gap', plannedPhase: '期 2', reason: '循环播放开关未注册，属于播放控制这一组。' },
+    // 播放控制注册成 camera_stage.playback 单例实体的三条属性，零新增工具。
+    // 助手做完动画能自己预览验证，而不是让用户去点播放。
+    play: { kind: 'property', propertyIds: [`${ENTITY.playback}.playing`] },
+    pause: { kind: 'property', propertyIds: [`${ENTITY.playback}.playing`] },
+    stop: { kind: 'property', propertyIds: [`${ENTITY.playback}.playing`, `${ENTITY.playback}.current_time`] },
+    seek: { kind: 'property', propertyIds: [`${ENTITY.playback}.current_time`] },
+    toggleLoop: { kind: 'property', propertyIds: [`${ENTITY.playback}.loop`] },
     setPlaybackTime: {
       kind: 'excluded',
       category: 'derived',

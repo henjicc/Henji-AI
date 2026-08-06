@@ -197,6 +197,24 @@ export const CAMERA_STAGE_SHOT_WRITERS: ApplicationPropertyWriterTable<CameraSta
   [`${ENTITY.shot}.camera_ref`]: { write: (draft, m) => { draft.cameraId = refId(m.value) } },
 }
 
+/* ── 播放控制 ─────────────────────────────────────────────────────────── */
+
+/**
+ * 三项累积成一次提交：先定位播放头、再设循环、最后决定播不播。
+ * 逐项立即执行会出现"先 play 再 seek"把刚播的位置又拽回去这类顺序事故。
+ */
+export interface CameraStagePlaybackDraft {
+  playing?: boolean
+  currentTime?: number
+  loop?: boolean
+}
+
+export const CAMERA_STAGE_PLAYBACK_WRITERS: ApplicationPropertyWriterTable<CameraStagePlaybackDraft> = {
+  [`${ENTITY.playback}.playing`]: { write: (draft, m) => { draft.playing = booleanValue(m.value) } },
+  [`${ENTITY.playback}.current_time`]: { write: (draft, m) => { draft.currentTime = numberValue(m.value) } },
+  [`${ENTITY.playback}.loop`]: { write: (draft, m) => { draft.loop = booleanValue(m.value) } },
+}
+
 /* ── 关键帧 ───────────────────────────────────────────────────────────── */
 
 /**

@@ -25,6 +25,7 @@ const ENTITY_TYPES = {
   shot: 'camera_stage.shot',
   trajectory: 'camera_stage.trajectory',
   keyframe: 'camera_stage.keyframe',
+  playback: 'camera_stage.playback',
 } as const
 
 type EntityType = typeof ENTITY_TYPES[keyof typeof ENTITY_TYPES]
@@ -204,6 +205,16 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.shot, 'continuity', '连续性', { kind: 'enum', values: [{ value: 'stop', label: '停靠' }, { value: 'smooth', label: '连续' }] }),
     property(ENTITY_TYPES.shot, 'camera_ref', '拍摄机位', { kind: 'ref', refKinds: [ENTITY_TYPES.camera] }, { nullable: true, relation: { targetEntityTypes: [ENTITY_TYPES.camera], cardinality: 'optional' } }),
   ],
+  [ENTITY_TYPES.playback]: [
+    property(ENTITY_TYPES.playback, 'playing', '正在播放', BOOLEAN, {
+      description: '时间轴是否正在播放。助手做完动画后靠它自己预览验证，而不是让用户去点播放。',
+    }),
+    property(ENTITY_TYPES.playback, 'current_time', '播放头位置', { kind: 'number', hardRange: { min: 0, max: 3600 } }, {
+      unit: 'second',
+      description: '播放头当前所在时间。写入等价于界面上拖动时间指针。',
+    }),
+    property(ENTITY_TYPES.playback, 'loop', '循环播放', BOOLEAN),
+  ],
   [ENTITY_TYPES.trajectory]: [
     property(ENTITY_TYPES.trajectory, 'shot_ref', '起始镜头', { kind: 'ref', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '轨迹所属镜头不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'one' } }),
     property(ENTITY_TYPES.trajectory, 'object_ref', '运动对象', { kind: 'ref', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '轨迹对象不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'one' } }),
@@ -328,6 +339,12 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     return snapshots.flatMap((snapshot) => {
       if (this.entityType === ENTITY_TYPES.project) return [{ kind: this.entityType, id: snapshot.id, label: snapshot.name }]
       if (this.entityType === ENTITY_TYPES.scene) return [{ kind: this.entityType, id: snapshot.id, label: `${snapshot.name} 场景` }]
+      // 播放是会话态：只有当前打开的那个工程才有播放头，没打开的工程列出来也读不到值。
+      if (this.entityType === ENTITY_TYPES.playback) {
+        return cameraStageApplicationService.readPlayback(snapshot.id)
+          ? [{ kind: this.entityType, id: snapshot.id, label: `${snapshot.name} 播放` }]
+          : []
+      }
       if (this.entityType === ENTITY_TYPES.object) return snapshot.objects.filter((object) => object.type !== 'camera').map((object) => childRef(this.entityType, snapshot.id, object.id, object.name))
       if (this.entityType === ENTITY_TYPES.camera) return snapshot.objects.filter((object) => object.type === 'camera').map((object) => childRef(this.entityType, snapshot.id, object.id, object.name))
       if (this.entityType === ENTITY_TYPES.shot) return snapshot.shots.map((shot) => childRef(this.entityType, snapshot.id, shot.id, shot.name))
@@ -337,6 +354,16 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   }
 
   private async readProperties(ref: ApplicationRef): Promise<Record<string, JsonValue>> {
+    if (this.entityType === ENTITY_TYPES.playback) {
+      if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
+      const playback = cameraStageApplicationService.readPlayback(ref.id)
+      if (!playback) throw new Error('NOT_FOUND')
+      return {
+        [`${ENTITY_TYPES.playback}.playing`]: playback.playing,
+        [`${ENTITY_TYPES.playback}.current_time`]: playback.currentTime,
+        [`${ENTITY_TYPES.playback}.loop`]: playback.loop,
+      }
+    }
     if (this.entityType === ENTITY_TYPES.project || this.entityType === ENTITY_TYPES.scene) {
       if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
       const snapshot = await cameraStageApplicationService.readSnapshot(ref.id)
@@ -480,6 +507,7 @@ const ENTITY_META: Record<EntityType, { title: string; description: string; pare
   [ENTITY_TYPES.shot]: { title: '三维镜头', description: '场景状态关键点和过渡定义。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.trajectory]: { title: '三维轨迹', description: '对象或摄像机在相邻镜头间的空间路径。', parents: [ENTITY_TYPES.shot], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.keyframe]: { title: '三维关键帧', description: '动画轨道上的时间和值控制点。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.playback]: { title: '三维播放控制', description: '时间轴的播放、播放头位置与循环开关。只对当前打开的工程有意义。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
 }
 
 export function createCameraStageReflectionRegistrations(readRevision: RevisionReader): ApplicationEntityRegistration[] {

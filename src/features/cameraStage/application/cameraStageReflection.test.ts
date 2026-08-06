@@ -70,7 +70,8 @@ describe('三维应用反射注册', () => {
       exposure: 'assistant',
       permissions: new Set(['camera_stage:read', 'camera_stage:write']),
       acceptedDataClasses: new Set(['C1']),
-    }).entities).toHaveLength(7)
+      // 8 类：project / scene / object / camera / shot / trajectory / keyframe / playback
+    }).entities).toHaveLength(8)
   })
 
   it('提供稳定引用、属性快照和工具箱 revision', async () => {

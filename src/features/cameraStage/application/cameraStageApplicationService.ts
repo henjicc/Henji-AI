@@ -3,6 +3,7 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/came
 
 import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageTransform, StageVec3 } from '../domain/sceneTypes'
 import type { StageCameraEffector, StageEditorMode, StageShot } from '../domain/shotTypes'
+import type { StagePlaybackState } from '../domain/animationTypes'
 import {
   createNewProject,
   deleteProject as deleteStoredProject,
@@ -274,6 +275,50 @@ export const cameraStageApplicationService = {
 
   async readSnapshot(projectId: string): Promise<CameraStageProjectSnapshot> {
     return await readDomainSnapshot(projectId)
+  },
+
+  /**
+   * 播放状态只对**当前打开的**工程有意义：它是会话态，不进工程文件。
+   * 未打开该工程时返回 null，反射层据此不列出这个实体。
+   */
+  readPlayback(projectId: string): StagePlaybackState | null {
+    const state = useCameraStageStore.getState()
+    return state.currentProjectId === projectId ? { ...state.playback } : null
+  },
+
+  /** 播放控制。助手做完动画要能自己预览验证，而不是让用户去点播放。 */
+  async updatePlayback(
+    projectId: string,
+    update: { playing?: boolean; currentTime?: number; loop?: boolean },
+  ): Promise<{ projectId: string; playback: StagePlaybackState }> {
+    await ensureProjectLoaded(projectId)
+    const state = useCameraStageStore.getState()
+    if (update.currentTime !== undefined) {
+      if (!Number.isFinite(update.currentTime) || update.currentTime < 0) throw new Error('INVALID_TIME_RANGE')
+      state.seek(update.currentTime)
+    }
+    if (update.loop !== undefined && update.loop !== state.playback.loop) state.toggleLoop()
+    // 播放开关放最后：先定位、先设好循环，再决定播不播。
+    if (update.playing !== undefined) {
+      if (update.playing) state.play()
+      else state.pause()
+    }
+    const playback = { ...useCameraStageStore.getState().playback }
+    /*
+     * store 的 play() 在时间轴为空时直接返回不做事。对人来说这没问题——按钮是灰的，
+     * 他看得见；对助手来说这是一次静默失败：它以为播上了，回头拿到的证据却是 playing:false，
+     * 而错误信息一个字都没有。把这条说清楚，模型才知道该先去建镜头卡或关键帧。
+     */
+    if (update.playing === true && !playback.playing) {
+      const current = useCameraStageStore.getState()
+      throw new Error(
+        'PLAYBACK_NOT_READY：时间轴上没有可播放的内容。'
+        + (current.editorMode === 'simple'
+          ? `简易模式需要至少一张镜头卡且时长大于 0（当前 ${current.shots.length} 张，时长 ${current.animation.duration}）。`
+          : `专业模式需要至少一条动画轨道（当前 ${current.animation.tracks.length} 条）。`)
+      )
+    }
+    return { projectId, playback }
   },
 
   async createProject(name: string, mode: StageEditorMode): Promise<{ projectId: string; name: string; mode: StageEditorMode }> {

@@ -23,11 +23,13 @@ import {
   CAMERA_STAGE_CAMERA_WRITERS,
   CAMERA_STAGE_KEYFRAME_WRITERS,
   CAMERA_STAGE_OBJECT_WRITERS,
+  CAMERA_STAGE_PLAYBACK_WRITERS,
   CAMERA_STAGE_PROJECT_WRITERS,
   CAMERA_STAGE_SCENE_WRITERS,
   CAMERA_STAGE_SHOT_WRITERS,
   type CameraStageKeyframeDraft,
   type CameraStageObjectDraft,
+  type CameraStagePlaybackDraft,
   type CameraStageProjectDraft,
   type CameraStageShotDraft,
 } from './cameraStageWriterTables'
@@ -54,6 +56,7 @@ const WRITER_TABLES = {
   [CAMERA_STAGE_ENTITY_TYPES.camera]: CAMERA_STAGE_CAMERA_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.shot]: CAMERA_STAGE_SHOT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.keyframe]: CAMERA_STAGE_KEYFRAME_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.playback]: CAMERA_STAGE_PLAYBACK_WRITERS,
 } as const satisfies Record<MutationEntityType, ApplicationPropertyWriterTable<never>>
 
 function mutationEvidence(step: MutationStep, revision: number): ApplicationEvidence[] {
@@ -122,6 +125,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.scene) return await this.applyScene(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.object || this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera) return await this.applyObject(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.shot) return await this.applyShot(step)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.playback) return await this.applyPlayback(step)
     return await this.applyKeyframe(step)
   }
 
@@ -168,6 +172,17 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const draft: CameraStageShotDraft = {}
     await applyWriterTable(CAMERA_STAGE_SHOT_WRITERS, draft, step.mutations)
     return (await cameraStageApplicationService.updateShot(projectId, shotId, draft)).undoToken
+  }
+
+  private async applyPlayback(step: MutationStep): Promise<string> {
+    const projectId = step.target.id
+    await cameraStageApplicationService.openProject(projectId)
+    const undoToken = captureCameraStageUndo(projectId)
+    const draft: CameraStagePlaybackDraft = {}
+    await applyWriterTable(CAMERA_STAGE_PLAYBACK_WRITERS, draft, step.mutations)
+    await cameraStageApplicationService.updatePlayback(projectId, draft)
+    // 播放态不进工程文件，所以这里不落盘。
+    return undoToken
   }
 
   private async applyKeyframe(step: MutationStep): Promise<string> {
@@ -279,4 +294,5 @@ export const CAMERA_STAGE_MUTATION_ENTITY_TYPES: MutationEntityType[] = [
   CAMERA_STAGE_ENTITY_TYPES.camera,
   CAMERA_STAGE_ENTITY_TYPES.shot,
   CAMERA_STAGE_ENTITY_TYPES.keyframe,
+  CAMERA_STAGE_ENTITY_TYPES.playback,
 ]
