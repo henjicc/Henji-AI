@@ -122,6 +122,48 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
 }
 
 /*
+ * 领域级清点：**每个 feature 要么对助手可见，要么在这张表里写明原因。**
+ *
+ * 没有这条时，「imageMark 全域没接助手」和「imageMark 有意不接」在机器看来完全一样，只能靠人
+ * 记住——而这正是本项目已经吃过的亏：三维场景外观 24 项界面能改、助手一项看不到，
+ * 靠用户实测才发现。
+ *
+ * 这张表是一份**会缩短的清单**，不是一张会被遗忘的豁免表。清空它就是"助手能做的事等于人
+ * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
+ */
+const ASSISTANT_BLIND_FEATURES = {
+  imageMark: '期 5：标注编辑器的文档态全在 React hook 局部态里（useMarkController / useMarkHistory），'
+    + '要先提升成 store 才谈得上注册实体，与生成页是同一类重构。',
+  imageEdit: '期 5：图片编辑会话是不可变快照，已有 image_edit.* 三实体的 writeExclusion 说明；'
+    + '编辑器 UI 态随 imageMark 一起处理。',
+  generation: '期 3：生成页输入态不在 store 里，是 useUIState / useModelState 的 18 个 useState，'
+    + '要先提升成可寻址领域态（G0→G1）才能注册 generation.draft 实体。',
+  logs: '日志面板是独立窗口里的内存环形缓冲，只有暂停与清空两个动作，且不进任何持久化状态；'
+    + '助手读日志走 query_diagnostic_events 直接查持久化事件，比读面板更全也更准。',
+  navigation: 'Surface 目录本身就是助手的导航契约，通过 open/close_application_surface 与 '
+    + 'get_current_application_context 覆盖，不再另建实体。',
+  project: '工程管理界面操作的数据由 canvas.project 与 camera_stage.project 两个领域各自注册，'
+    + '这一层只是它们的共用 UI 外壳。',
+  assistant: '助手自身的运行时状态由 assistant.run / assistant.artifact 注册并写明 writeExclusion；'
+    + '让助手改写自己的运行状态会破坏结算与证据链。',
+  settings: '设置项的实体与属性注册在 application-control 子目录下，由 settingsReflection 覆盖；'
+    + '这一层没有独立 store。',
+  toolbox: '工具目录由工具箱注册表定义，属于应用结构而非用户数据，已有 toolbox.tool 的 writeExclusion。',
+}
+for (const feature of fs.readdirSync(path.join(root, 'src', 'features'), { withFileTypes: true })) {
+  if (!feature.isDirectory()) continue
+  const featureRoot = path.join(root, 'src', 'features', feature.name)
+  const files = walk(featureRoot).map((file) => path.basename(file))
+  const hasReflection = files.some((name) => name.endsWith('Reflection.ts') && !name.endsWith('.test.ts'))
+  const hasLedger = files.some((name) => name.endsWith('StoreLedger.ts'))
+  if (hasReflection && hasLedger) continue
+  const excuse = ASSISTANT_BLIND_FEATURES[feature.name]
+  if (excuse && excuse.length > 20) continue
+  const missing = [!hasReflection && 'Reflection', !hasLedger && 'StoreLedger'].filter(Boolean).join(' 与 ')
+  failures.push(`领域对助手不可见且未登记原因：src/features/${feature.name}（缺 ${missing}）`)
+}
+
+/*
  * 属性写入执行器必须表驱动，不许回到手写 if-else 属性链。
  *
  * 手写链条对覆盖门禁是不透明的——它无法枚举「这个执行器到底能写哪些属性」，于是

@@ -10,7 +10,7 @@ vi.mock('../projects/cameraStageProjectService', () => ({
   loadProjectIntoScene: mocks.loadProjectIntoScene,
 }))
 
-import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
+import type { ApplicationPlannedStep } from '@/core/application-control'
 
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
@@ -34,8 +34,6 @@ const executor = new CameraStageMutationExecutor(CAMERA_STAGE_ENTITY_TYPES.shot,
   readRevision: () => revision,
   bumpRevision: () => { revision += 1 },
 })
-
-const context = { requestId: 'test' } as unknown as ApplicationExecutionContext
 
 function shotStep(shotId: string, mutations: Array<{ propertyId: string; value: unknown }>): Extract<ApplicationPlannedStep, { kind: 'mutation' }> {
   return {
@@ -78,7 +76,7 @@ describe('三维镜头卡属性写入', () => {
 
     await executor.apply(shotStep(second.id, [
       { propertyId: `${CAMERA_STAGE_ENTITY_TYPES.shot}.time`, value: 1.5 },
-    ]), context)
+    ]))
 
     const moved = useCameraStageStore.getState().shots.find((shot) => shot.id === second.id)
     expect(moved?.time).toBeCloseTo(1.5, 2)
@@ -89,7 +87,7 @@ describe('三维镜头卡属性写入', () => {
     await executor.apply(shotStep(second.id, [
       { propertyId: `${CAMERA_STAGE_ENTITY_TYPES.shot}.name`, value: '收尾镜头' },
       { propertyId: `${CAMERA_STAGE_ENTITY_TYPES.shot}.time`, value: 1.2 },
-    ]), context)
+    ]))
 
     const updated = useCameraStageStore.getState().shots.find((shot) => shot.id === second.id)
     expect(updated?.name).toBe('收尾镜头')
@@ -102,6 +100,6 @@ describe('三维镜头卡属性写入', () => {
     const second = useCameraStageStore.getState().shots[1]
     await expect(executor.apply(shotStep(second.id, [
       { propertyId: `${CAMERA_STAGE_ENTITY_TYPES.shot}.not_a_property`, value: 1 },
-    ]), context)).rejects.toThrow('PROPERTY_NOT_WRITABLE:camera_stage.shot.not_a_property')
+    ]))).rejects.toThrow('PROPERTY_NOT_WRITABLE:camera_stage.shot.not_a_property')
   })
 })

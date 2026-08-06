@@ -25,6 +25,16 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - 声明可写属性必须注册 `ApplicationMutationExecutor`；声明 `collectionWrite` 必须注册 `ApplicationCollectionExecutor`，并在 `requiredPropertyIds` 中列出创建时必填字段。只读属性可以是创建必填项。
 - 每个实体必须满足二选一：至少有一种正式写入执行器，或填写机器可读的 `writeExclusion.reason`。排除原因必须说明该状态为何只读、由哪个正式模块或操作维护，不接受“暂时不支持”“以后再做”。
 - 新增实体后必须同时检查属性可写性、集合写入、执行器注册、排除原因、权限、revision、撤销/补偿与结构化验证；运行 `npm run check:assistant-capabilities` 让覆盖门禁复核。
+- **声明可写的每一条属性，都必须出现在执行器的 `writableProperties` 里**，且该集合必须由 `ApplicationPropertyWriterTable` 派生（`writableProperties(TABLE)`），不许手写字面量。属性写入执行器**禁止**用手写 if-else 属性链——链条无法被枚举，覆盖门禁就看不见"声明可写但执行器没有对应分支"这类缺口（`camera_stage.shot.time` 就是这么漏掉的，实体级门禁一直全绿）。
+- 属性接受的 operation 由写入表的 `operations` 声明，不写默认只接受 `set`。集合类属性（如 `asset.library_refs` 只吃 `append`/`remove`）必须显式声明，否则模型只能靠试错。
+
+### 界面动作覆盖
+
+- **每个带 store 的 feature 必须有 `<feature>StoreLedger.ts`**，store 的每一个函数键都要归类：绑定到属性 / 集合 / 能力，或标为 `excluded`（有意不开放，写明由谁维护），或标为 `gap`（人能做、助手还不能做，写明缺什么与归到哪一期）。
+- 账本用 `Record<ActionName, …>` 而不是 `Partial`：界面新增动作却没建账，`tsc` 阶段就会点名缺哪个 key。
+- `excluded` 表达的是**不可写**，不是**不可见**。视图态助手仍然要读得到——它得知道用户现在在看什么。
+- `gap` 总数是人机差集的燃尽基线，在 `storeActionCoverage.test.ts` 里钉住，只许降不许升。
+- feature 整体没接助手（既无 Reflection 也无账本）必须登记进 `check-assistant-capabilities.cjs` 的 `ASSISTANT_BLIND_FEATURES` 并写明原因——那是一张**会缩短的清单**，不是豁免表。
 
 ## 禁止事项
 
@@ -55,6 +65,22 @@ npm run check:assistant-capabilities
 `check:assistant-capabilities` 已接入 `build` 与 `electron:build` 链路，覆盖不全、写入声明悬空、双路径不变量失守或残留旧通道会直接构建失败。
 
 CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执行入口、Application API 跨层导入、Surface 观察策略以及任意 Patch/脚本禁令。
+
+### 覆盖门禁的断牙验证
+
+新增或修改覆盖门禁时，**必须实跑一遍红→恢复→绿**，否则等于没有门禁。已验证过的九个场景：
+
+| 破坏 | 预期报错 |
+|---|---|
+| 删掉写入表里某条属性 | 该属性在反射层声明为可写，执行器却写不了 |
+| 往写入表加一条反射层没声明的属性 | 该属性执行器能写、反射层没声明，是死代码 |
+| 把 `asset.library_refs` 的 `operations` 改成 `['set']` | 声明的 operation 与执行器实际接受的不一致 |
+| 删掉执行器里落地的那次调用（如 `moveShotTime`） | 功能测试红：值没有真的改变 |
+| 账本删掉一条动作 | `tsc` → `TS2741: Property 'xxx' is missing` |
+| store 新增动作但没建账 | 该动作界面能做、账上没有 |
+| 账本绑到一条执行器写不了的属性 | 账目指向的属性没有任何执行器能写，账是假的 |
+| 账本留一条 store 里已删除的动作 | 账目对应的 store 动作已不存在，账没销 |
+| feature 无 Reflection 也无账本且未登记 | 领域对助手不可见且未登记原因 |
 
 再按 [testing.md](testing.md) 运行本次能力登记、处理器或正式业务服务的精确/相关测试。`npm run test:assistant-production` 只用于同时影响 runner、状态机、调度、审批、持久化或模型适配等多个助手运行时模块的改动，以及生产验收/发布前检查；不要因普通能力登记或界面适配运行整套助手测试。
 
