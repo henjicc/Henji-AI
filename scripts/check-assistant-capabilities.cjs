@@ -121,6 +121,24 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
   }
 }
 
+/*
+ * 属性写入执行器必须表驱动，不许回到手写 if-else 属性链。
+ *
+ * 手写链条对覆盖门禁是不透明的——它无法枚举「这个执行器到底能写哪些属性」，于是
+ * `camera_stage.shot.time` 声明可写、链条里没有对应分支这件事，实体级门禁全绿了不知道多久。
+ * 表驱动之后 propertyCoverage 门禁能直接读出 key 集合与反射层声明双向比对，这条静态规则
+ * 防的就是有人把某个执行器改回链式写法，把那道门禁重新变瞎。
+ */
+for (const file of walk(path.join(root, 'src', 'features'))) {
+  const relative = path.relative(root, file).replaceAll('\\', '/')
+  if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue
+  if (!/\/application(?:-control)?\/.*(?:MutationExecutor|ControlExecutors)\.ts$/.test(relative)) continue
+  const source = fs.readFileSync(file, 'utf8')
+  if (/else\s+if\s*\(\s*(?:suffix|mutation\.propertyId)\s*===/.test(source)) {
+    failures.push(`属性写入执行器手写 if-else 属性链（应改用 ApplicationPropertyWriterTable）：${relative}`)
+  }
+}
+
 // 双端 skill 同步：AGENTS.md 要求 .codex 与 .claude 两份内容一致，
 // 因此这里检查全部共享 skill，而不只是应用能力那一份（历史上 henji-ui-surface
 // 就出现过只更新 Codex 侧的漂移）。`agents/` 是 Codex 专属配置，不参与比较；

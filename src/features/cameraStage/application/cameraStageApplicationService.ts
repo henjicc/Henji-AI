@@ -42,6 +42,8 @@ export interface CameraStageObjectUpdate {
 
 export interface CameraStageShotUpdate {
   name?: string
+  /** 镜头卡在时间轴上的位置。落到 store 的 moveShotTime，那里负责对帧量化并保持镜头卡有序。 */
+  time?: number
   hold?: number
   transitionDuration?: number
   continuity?: StageShot['continuity']
@@ -476,8 +478,11 @@ export const cameraStageApplicationService = {
     if (update.cameraId && !state.objects.some((object) => object.id === update.cameraId && object.type === 'camera')) throw new Error('INVALID_REFERENCE')
     if (update.hold !== undefined && (!Number.isFinite(update.hold) || update.hold < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.transitionDuration !== undefined && (!Number.isFinite(update.transitionDuration) || update.transitionDuration < 0)) throw new Error('INVALID_TIME_RANGE')
+    if (update.time !== undefined && (!Number.isFinite(update.time) || update.time < 0)) throw new Error('INVALID_TIME_RANGE')
     const undoToken = captureCameraStageUndo(projectId)
     if (update.name !== undefined) state.updateShotName(shotId, update.name)
+    // 时间点先落，后续的 hold / 过渡时长都是相对这个位置计算的。
+    if (update.time !== undefined) state.moveShotTime(shotId, update.time)
     if (update.hold !== undefined || update.transitionDuration !== undefined) state.updateShotTiming(shotId, update)
     if (update.continuity !== undefined) state.updateShotContinuity(shotId, update.continuity)
     if (update.cameraId !== undefined) state.updateShotCamera(shotId, update.cameraId)

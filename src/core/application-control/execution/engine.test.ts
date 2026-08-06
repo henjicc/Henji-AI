@@ -96,6 +96,8 @@ function createFixture(): Fixture {
 
 class FixtureMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = 'sample.item'
+  readonly writableProperties = new Set(['sample.item.value'])
+  readonly propertyOperations = new Map([['sample.item.value', new Set(['set' as const])]])
   readonly undoValues = new Map<string, { id: string; value: number }>()
   failOnId?: string
   applyCount = 0

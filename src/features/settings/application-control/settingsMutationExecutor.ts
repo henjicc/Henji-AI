@@ -3,6 +3,7 @@ import type {
   ApplicationEvidence,
   ApplicationExecutionContext,
   ApplicationMutationExecutor,
+  ApplicationMutationOperation,
   ApplicationPlannedStep,
 } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
@@ -26,6 +27,23 @@ function createUndoToken(): string {
 export class SettingsMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = SETTINGS_ENTITY_TYPE
   private readonly undoEntries = new Map<string, SettingsUndoEntry>()
+
+  /*
+   * 设置项这一支天然就是表驱动的（definitions 就是那张表），所以这里不需要 writerTable，
+   * 只要把「表的 key 集合」暴露出来给门禁。用 getter 而不是构造期快照：设置定义是运行期
+   * 从注册表算的，模型目录加载前后条数会变。
+   *
+   * 可写 = 非敏感。敏感项在反射层同样被标成不可读不可写，两侧口径必须是同一个判断。
+   */
+  get writableProperties(): ReadonlySet<string> {
+    return new Set(listApplicationSettingDefinitions()
+      .filter((definition) => !definition.sensitive)
+      .map((definition) => definition.id))
+  }
+
+  get propertyOperations(): ReadonlyMap<string, ReadonlySet<ApplicationMutationOperation>> {
+    return new Map([...this.writableProperties].map((id) => [id, new Set<ApplicationMutationOperation>(['set'])]))
+  }
 
   async apply(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
     return (await this.applyAtomic([step], context))[0]

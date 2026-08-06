@@ -163,7 +163,8 @@ describe('canvas reflection and mutation', () => {
         { propertyId: 'canvas.node.internal_data', operation: 'set', value: 'forbidden' },
       ],
     }
-    await expect(executor.applyAtomic([step], context)).rejects.toThrow('PROPERTY_NOT_FOUND')
+    // 统一错误码带出属性 id 与可写清单，模型据此能自己改对，而不是只知道"失败了"。
+    await expect(executor.applyAtomic([step], context)).rejects.toThrow('PROPERTY_NOT_WRITABLE:canvas.node.internal_data')
     expect(useCanvasStore.getState().nodes[0].data.displayName).toBe('原节点')
   })
 })

@@ -12,6 +12,7 @@ import type {
 } from '../transactions'
 import type { ApplicationControlAccessContext } from '../registry'
 import type { ApplicationRef, JsonValue } from '../identifiers'
+import type { ApplicationMutationOperation } from './writerTable'
 
 export type ApplicationRisk = 'R0' | 'R1' | 'R2' | 'R3' | 'R4'
 
@@ -55,6 +56,23 @@ export type ApplicationStepExecutionResult =
 
 export interface ApplicationMutationExecutor {
   readonly entityType: string
+  /**
+   * 这个执行器**真的能写**的属性 id 全集。必须由写入表派生（`writableProperties(TABLE)`），
+   * 不许手写字面量——手写就等于又开了一条会漂移的路。
+   *
+   * 门禁拿它与反射层「无 readOnlyReason 且有写权限」的属性集做双向比对：
+   * 少了 → 声明可写却写不了（`camera_stage.shot.time` 就是这么漏掉的，实体级门禁看不见）；
+   * 多了 → 执行器能写但模型看不见，是死代码。
+   *
+   * 设计成**必填字段**而非可选方法：可选就是复刻同一个盲区，没声明的照旧静默；
+   * 字段而非方法，是因为门禁要在不执行任何事务的前提下读到它。
+   * 允许用 getter 实现——设置项的可写集合是运行期从注册表算出来的。
+   */
+  readonly writableProperties: ReadonlySet<string>
+  /**
+   * 每条可写属性接受的 operation。反射层据此告诉模型该用 set 还是 append/remove，不必试错。
+   */
+  readonly propertyOperations: ReadonlyMap<string, ReadonlySet<ApplicationMutationOperation>>
   apply(
     step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>,
     context: ApplicationExecutionContext

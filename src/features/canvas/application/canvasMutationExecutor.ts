@@ -4,7 +4,9 @@ import type {
   ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
+  ApplicationPropertyWriterTable,
 } from '@/core/application-control'
+import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 import { useCanvasStore, type CanvasEdge, type CanvasHistoryState, type CanvasNode } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -60,8 +62,26 @@ function revision(): number {
   return Math.max(0, Math.trunc(useProjectStore.getState().currentProject?.updatedAt ?? 0))
 }
 
+/** 写入目标是节点补丁本身——两条属性合成一个 patch 再整体提交，逐条提交会产生两次历史记录。 */
+const WRITERS: ApplicationPropertyWriterTable<CanvasNodePropertyPatch> = {
+  [`${CANVAS_ENTITY_TYPES.node}.display_name`]: {
+    write(patch, mutation) {
+      if (typeof mutation.value !== 'string' || !mutation.value.trim()) throw new Error('INVALID_INPUT')
+      patch.displayName = mutation.value
+    },
+  },
+  [`${CANVAS_ENTITY_TYPES.node}.position`]: {
+    write(patch, mutation) {
+      if (mutation.value === undefined) throw new Error('INVALID_INPUT')
+      patch.position = vector2(mutation.value)
+    },
+  },
+}
+
 export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = CANVAS_ENTITY_TYPES.node
+  readonly writableProperties = writableProperties(WRITERS)
+  readonly propertyOperations = propertyOperations(WRITERS)
   private readonly undoEntries = new Map<string, CanvasUndoEntry>()
 
   async apply(step: MutationStep, context: ApplicationExecutionContext): Promise<ApplicationCompletedStepResult> {
@@ -97,18 +117,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
         const node = useCanvasStore.getState().nodes.find((item) => item.id === target.nodeId)
         if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId: target.nodeId })
         const patch: CanvasNodePropertyPatch = { nodeId: target.nodeId }
-        for (const mutation of target.step.mutations) {
-          if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
-          if (mutation.propertyId === `${CANVAS_ENTITY_TYPES.node}.display_name`) {
-            if (typeof mutation.value !== 'string' || !mutation.value.trim()) throw new Error('INVALID_INPUT')
-            patch.displayName = mutation.value
-          } else if (mutation.propertyId === `${CANVAS_ENTITY_TYPES.node}.position`) {
-            if (mutation.value === undefined) throw new Error('INVALID_INPUT')
-            patch.position = vector2(mutation.value)
-          } else {
-            throw new Error(`PROPERTY_NOT_FOUND:${mutation.propertyId}`)
-          }
-        }
+        await applyWriterTable(WRITERS, patch, target.step.mutations)
         patches.push(patch)
       }
       applyCanvasNodePropertyPatches(projectId, patches)

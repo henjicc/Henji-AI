@@ -102,7 +102,9 @@ describe('素材属性写入执行器', () => {
       { propertyId: 'asset.tags', operation: 'set', value: ['新'] },
       { propertyId: 'asset.library_refs', operation: 'append', value: 'lib-new' },
       { propertyId: 'asset.media_ref', operation: 'set', value: 'x' },
-    ]))).rejects.toThrow('ASSET_PROPERTY_NOT_WRITABLE')
+      // 不可写属性的错误码全项目统一成 PROPERTY_NOT_WRITABLE:<propertyId>，
+      // 不再每个领域一个前缀——引擎按这一个码归类，模型也只需认一个。
+    ]))).rejects.toThrow('PROPERTY_NOT_WRITABLE:asset.media_ref')
 
     expect(mocks.state).toEqual({
       displayName: '旧名称',

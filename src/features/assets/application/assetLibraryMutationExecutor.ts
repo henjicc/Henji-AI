@@ -5,7 +5,9 @@ import type {
   ApplicationEvidence,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
+  ApplicationPropertyWriterTable,
 } from '@/core/application-control'
+import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 
 import { assetApplicationService } from './assetApplicationService'
@@ -24,9 +26,19 @@ function requireName(value: unknown): string {
   return value
 }
 
+const WRITERS: ApplicationPropertyWriterTable<string> = {
+  [NAME_PROPERTY]: {
+    async write(libraryId, mutation) {
+      await assetApplicationService.renameLibrary(libraryId, requireName(mutation.value))
+    },
+  },
+}
+
 /** 素材集合改名的通用属性执行器；界面与助手共用同一个平台领域入口。 */
 export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = ASSET_ENTITY_TYPES.library
+  readonly writableProperties = writableProperties(WRITERS)
+  readonly propertyOperations = propertyOperations(WRITERS)
 
   constructor(private readonly dependencies: {
     readRevision: () => number
@@ -42,15 +54,7 @@ export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor
       event: 'asset.library_mutation.apply.start', libraryId,
     })
     try {
-      for (const mutation of step.mutations) {
-        if (mutation.propertyId !== NAME_PROPERTY) {
-          throw new Error(`ASSET_LIBRARY_PROPERTY_NOT_WRITABLE：${mutation.propertyId} 不可写。`)
-        }
-        if (mutation.operation !== 'set') {
-          throw new Error(`ASSET_LIBRARY_NAME_OPERATION_INVALID：集合名称只支持 set 操作，收到 ${mutation.operation}。`)
-        }
-        await assetApplicationService.renameLibrary(libraryId, requireName(mutation.value))
-      }
+      await applyWriterTable(WRITERS, libraryId, step.mutations)
     } catch (error) {
       await assetApplicationService.renameLibrary(libraryId, previousName)
       logger.error('素材集合属性写入失败', error, {

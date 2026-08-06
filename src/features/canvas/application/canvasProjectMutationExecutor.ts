@@ -3,7 +3,9 @@ import type {
   ApplicationEvidence,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
+  ApplicationPropertyWriterTable,
 } from '@/core/application-control'
+import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 import { useProjectStore } from '@/stores/projectStore'
 
@@ -26,27 +28,27 @@ const UNDO_PREFIX = 'canvas-project-undo:'
  * `canvas.node` 的 mutation 执行器，工程改名走通用动词会命中 `MUTATION_EXECUTOR_NOT_FOUND`。
  * 与 `asset.tags` 是同一类悬空声明。
  */
+/** 写入目标只有工程 id —— 改名直接落到领域服务，没有需要累积的中间态。 */
+const WRITERS: ApplicationPropertyWriterTable<string> = {
+  [NAME_PROPERTY]: {
+    async write(projectId, mutation) {
+      if (typeof mutation.value !== 'string' || mutation.value.trim() === '') {
+        throw new Error('CANVAS_PROJECT_NAME_INVALID：工程名必须是非空字符串。')
+      }
+      await renameCanvasProject(projectId, mutation.value)
+    },
+  },
+}
+
 export class CanvasProjectMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = CANVAS_ENTITY_TYPES.project
+  readonly writableProperties = writableProperties(WRITERS)
+  readonly propertyOperations = propertyOperations(WRITERS)
 
   async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     const projectId = step.target.id
     const previousName = useProjectStore.getState().projects.find((project) => project.id === projectId)?.name ?? ''
-    for (const mutation of step.mutations) {
-      if (mutation.propertyId !== NAME_PROPERTY) {
-        throw new Error(
-          `CANVAS_PROJECT_PROPERTY_NOT_WRITABLE：${mutation.propertyId} 不可写。`
-          + `画布工程可写属性只有 ${NAME_PROPERTY}，节点与连线数量是统计值。`
-        )
-      }
-      if (mutation.operation !== 'set') {
-        throw new Error(`CANVAS_PROJECT_OPERATION_INVALID：工程名只支持 set 操作，收到 ${mutation.operation}。`)
-      }
-      if (typeof mutation.value !== 'string') {
-        throw new Error('CANVAS_PROJECT_NAME_INVALID：工程名必须是非空字符串。')
-      }
-      await renameCanvasProject(projectId, mutation.value)
-    }
+    await applyWriterTable(WRITERS, projectId, step.mutations)
     const revision = this.revision()
     logger.info('画布工程属性写入完成', {
       event: 'canvas.project_mutation.apply.completed', projectId,

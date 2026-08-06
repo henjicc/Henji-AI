@@ -415,7 +415,13 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       if (step.kind === 'mutation') {
         const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
         const availability = await this.registry.getPropertyAvailability(step.target, propertyIds, context)
-        if (availability.some((item) => !item.writable)) throw new Error('PROPERTY_NOT_WRITABLE')
+        const blocked = availability.filter((item) => !item.writable)
+        if (blocked.length > 0) {
+          // 带上是哪几条、为什么：只说"不可写"会让一个本可自纠的失败变成任务中断。
+          throw new Error(`PROPERTY_NOT_WRITABLE:${blocked
+            .map((item) => `${item.propertyId}（${item.reasons.join('；') || '无写权限'}）`)
+            .join('、')}`)
+        }
         continue
       }
       if (step.kind === 'collection') {
@@ -582,7 +588,12 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     if (message.includes('REVISION_CONFLICT')) {
       return failure('CONFLICT', '应用状态已变化，请重新观察并规划。', true, { transactionRef, currentRevisions })
     }
-    if (message.includes('PERMISSION_DENIED') || message.includes('PROPERTY_NOT_WRITABLE')) {
+    // 属性写不了要报出是哪条、以及这个实体上有哪些能写——原始错误里已经带了这些，
+    // 归类时丢掉它们，模型看到的就只剩"权限或可写状态已变化"，无从自纠。
+    if (message.includes('PROPERTY_NOT_WRITABLE') || message.includes('PROPERTY_OPERATION_NOT_SUPPORTED')) {
+      return failure('PERMISSION_DENIED', `属性写入被拒绝。原因：${message}`, true, { transactionRef })
+    }
+    if (message.includes('PERMISSION_DENIED')) {
       return failure('PERMISSION_DENIED', '提交时权限或属性可写状态已变化。', true, { transactionRef })
     }
     if (message.includes('NOT_FOUND')) return failure('NOT_FOUND', `计划引用的对象不存在。原因：${message}`, true, { transactionRef })

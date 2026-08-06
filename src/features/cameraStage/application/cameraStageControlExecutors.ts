@@ -5,20 +5,32 @@ import type {
   ApplicationEvidence,
   ApplicationExecutionContext,
   ApplicationMutationExecutor,
+  ApplicationMutationOperation,
   ApplicationPlannedStep,
+  ApplicationPropertyWriterTable,
   ApplicationSemanticOperationExecutor,
   JsonValue,
 } from '@/core/application-control'
+import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 
-import type { StageVec3 } from '../domain/sceneTypes'
-import type { StageEasingPreset, StageKeyframeValue } from '../domain/animationTypes'
 import { saveCurrentProject } from '../projects/cameraStageProjectService'
-import { setTrackKeyframeValue } from '../store/animationActions'
 import { useCameraStageStore } from '../store/cameraStageStore'
-import { cameraStageApplicationService, type CameraStageObjectUpdate, type CameraStageShotUpdate } from './cameraStageApplicationService'
+import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion } from './cameraMotionService'
 import { restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
+import {
+  CAMERA_STAGE_CAMERA_WRITERS,
+  CAMERA_STAGE_KEYFRAME_WRITERS,
+  CAMERA_STAGE_OBJECT_WRITERS,
+  CAMERA_STAGE_PROJECT_WRITERS,
+  CAMERA_STAGE_SCENE_WRITERS,
+  CAMERA_STAGE_SHOT_WRITERS,
+  type CameraStageKeyframeDraft,
+  type CameraStageObjectDraft,
+  type CameraStageProjectDraft,
+  type CameraStageShotDraft,
+} from './cameraStageWriterTables'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 type MutationEntityType = Exclude<typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES], 'camera_stage.trajectory'>
@@ -34,66 +46,15 @@ function childTarget(id: string): { projectId: string; childId: string } {
   return { projectId: id.slice(0, separator), childId: id.slice(separator + 1) }
 }
 
-function vec3(value: JsonValue | undefined): StageVec3 {
-  const parsed = z.object({ x: z.number(), y: z.number(), z: z.number() }).strict().parse(value)
-  return parsed
-}
-
-function stringValue(value: JsonValue | undefined): string {
-  return z.string().parse(value)
-}
-
-function numberValue(value: JsonValue | undefined): number {
-  return z.number().parse(value)
-}
-
-function booleanValue(value: JsonValue | undefined): boolean {
-  return z.boolean().parse(value)
-}
-
-function refId(value: JsonValue | undefined): string | null {
-  if (value === null) return null
-  return z.object({ kind: z.string(), id: z.string() }).passthrough().parse(value).id.split(':').pop() ?? null
-}
-
-type CameraStageState = ReturnType<typeof useCameraStageStore.getState>
-
-/**
- * 场景外观属性 → store 动作的一张表。
- *
- * 界面上有的每一项这里都要有：此前这一组一项都没接，助手做不了"把天空改成深蓝""地面换成
- * 网格""把太阳调到黄昏"。用表而不是 24 个 if 分支——漏一项就是漏一项能力，表能一眼数完，
- * 也能被测试逐项比对（见 sceneAppearanceCoverage 测试）。
- */
-const SCENE_APPEARANCE_WRITERS: Record<string, (state: CameraStageState, value: JsonValue | undefined) => void> = {
-  sky_color: (state, value) => state.setSceneSkyColor(stringValue(value)),
-  ground_color: (state, value) => state.setSceneGroundColor(stringValue(value)),
-  ground_pattern: (state, value) => state.setSceneGroundPattern(
-    z.enum(['none', 'grid', 'checker']).parse(value)
-  ),
-  ground_density: (state, value) => state.setSceneGroundDensity(numberValue(value)),
-  ground_grid_line_color: (state, value) => state.setSceneGroundGridLineColor(stringValue(value)),
-  ground_grid_line_thickness: (state, value) => state.setSceneGroundGridLineThickness(numberValue(value)),
-  ground_checker_light_color: (state, value) => state.setSceneGroundCheckerLightColor(stringValue(value)),
-  ground_checker_dark_color: (state, value) => state.setSceneGroundCheckerDarkColor(stringValue(value)),
-  sunlight_enabled: (state, value) => state.setSceneSunlightEnabled(booleanValue(value)),
-  sunlight_intensity: (state, value) => state.setSceneSunlightIntensity(numberValue(value)),
-  sunlight_time_of_day: (state, value) => state.setSceneSunlightTimeOfDay(numberValue(value)),
-  fog_enabled: (state, value) => state.setSceneFogEnabled(booleanValue(value)),
-  fog_distance: (state, value) => state.setSceneFogDistance(numberValue(value)),
-  show_name_labels: (state, value) => state.setSceneShowNameLabels(booleanValue(value)),
-  name_label_scale: (state, value) => state.setSceneNameLabelScale(numberValue(value)),
-  name_label_offset: (state, value) => state.setSceneNameLabelOffset(vec3(value)),
-  name_label_text_color: (state, value) => state.setSceneNameLabelTextColor(stringValue(value)),
-  name_label_follow_object_color: (state, value) => state.setSceneNameLabelFollowObjectColor(booleanValue(value)),
-  name_label_background_color: (state, value) => state.setSceneNameLabelBackgroundColor(stringValue(value)),
-  name_label_background_opacity: (state, value) => state.setSceneNameLabelBackgroundOpacity(numberValue(value)),
-  name_label_shadow_color: (state, value) => state.setSceneNameLabelShadowColor(stringValue(value)),
-  name_label_shadow_opacity: (state, value) => state.setSceneNameLabelShadowOpacity(numberValue(value)),
-  name_label_shadow_blur: (state, value) => state.setSceneNameLabelShadowBlur(numberValue(value)),
-  name_label_shadow_distance: (state, value) => state.setSceneNameLabelShadowDistance(numberValue(value)),
-  name_label_shadow_angle: (state, value) => state.setSceneNameLabelShadowAngle(numberValue(value)),
-}
+/** 六类实体各一张写入表；`writableProperties` 由它派生，门禁据此与反射层声明做双向比对。 */
+const WRITER_TABLES = {
+  [CAMERA_STAGE_ENTITY_TYPES.project]: CAMERA_STAGE_PROJECT_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.scene]: CAMERA_STAGE_SCENE_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.object]: CAMERA_STAGE_OBJECT_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.camera]: CAMERA_STAGE_CAMERA_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.shot]: CAMERA_STAGE_SHOT_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.keyframe]: CAMERA_STAGE_KEYFRAME_WRITERS,
+} as const satisfies Record<MutationEntityType, ApplicationPropertyWriterTable<never>>
 
 function mutationEvidence(step: MutationStep, revision: number): ApplicationEvidence[] {
   return step.mutations.map((mutation) => ({
@@ -106,10 +67,16 @@ function mutationEvidence(step: MutationStep, revision: number): ApplicationEvid
 }
 
 export class CameraStageMutationExecutor implements ApplicationMutationExecutor {
+  readonly writableProperties: ReadonlySet<string>
+  readonly propertyOperations: ReadonlyMap<string, ReadonlySet<ApplicationMutationOperation>>
+
   constructor(
     readonly entityType: MutationEntityType,
     private readonly dependencies: CameraStageControlExecutorDependencies,
-  ) {}
+  ) {
+    this.writableProperties = writableProperties(WRITER_TABLES[entityType])
+    this.propertyOperations = propertyOperations(WRITER_TABLES[entityType])
+  }
 
   async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     if (step.entityType !== this.entityType || step.target.kind !== this.entityType) throw new Error('NOT_FOUND')
@@ -162,10 +129,9 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const projectId = step.target.id
     await cameraStageApplicationService.openProject(projectId)
     const undoToken = captureCameraStageUndo(projectId)
-    for (const mutation of step.mutations) {
-      if (mutation.propertyId !== `${CAMERA_STAGE_ENTITY_TYPES.project}.name` || mutation.operation !== 'set') throw new Error('PROPERTY_NOT_WRITABLE')
-      await cameraStageApplicationService.renameProject(projectId, stringValue(mutation.value))
-    }
+    const draft: CameraStageProjectDraft = { projectId }
+    await applyWriterTable(CAMERA_STAGE_PROJECT_WRITERS, draft, step.mutations)
+    if (draft.rename !== undefined) await cameraStageApplicationService.renameProject(projectId, draft.rename)
     return undoToken
   }
 
@@ -173,19 +139,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const projectId = step.target.id
     await cameraStageApplicationService.openProject(projectId)
     const undoToken = captureCameraStageUndo(projectId)
-    const state = useCameraStageStore.getState()
-    for (const mutation of step.mutations) {
-      if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
-      const suffix = mutation.propertyId.startsWith(`${CAMERA_STAGE_ENTITY_TYPES.scene}.`)
-        ? mutation.propertyId.slice(CAMERA_STAGE_ENTITY_TYPES.scene.length + 1)
-        : ''
-      if (mutation.propertyId === `${CAMERA_STAGE_ENTITY_TYPES.scene}.active_camera_ref`) state.setActiveCameraId(refId(mutation.value))
-      else if (mutation.propertyId === `${CAMERA_STAGE_ENTITY_TYPES.scene}.duration`) state.setDuration(numberValue(mutation.value))
-      else if (mutation.propertyId === `${CAMERA_STAGE_ENTITY_TYPES.scene}.fps`) state.setFps(numberValue(mutation.value))
-      else if (suffix in SCENE_APPEARANCE_WRITERS) {
-        SCENE_APPEARANCE_WRITERS[suffix](state, mutation.value)
-      } else throw new Error('PROPERTY_NOT_WRITABLE')
-    }
+    await applyWriterTable(CAMERA_STAGE_SCENE_WRITERS, useCameraStageStore.getState(), step.mutations)
     await saveCurrentProject()
     return undoToken
   }
@@ -195,52 +149,25 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const snapshot = await cameraStageApplicationService.readSnapshot(projectId)
     const current = snapshot.objects.find((object) => object.id === objectId)
     if (!current) throw new Error('NOT_FOUND')
-    const update: CameraStageObjectUpdate = {}
-    const transform = { ...current.transform }
-    for (const mutation of step.mutations) {
-      if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
-      const suffix = mutation.propertyId.slice(this.entityType.length + 1)
-      if (suffix === 'name') update.name = stringValue(mutation.value)
-      else if (suffix === 'visible') update.visible = booleanValue(mutation.value)
-      else if (suffix === 'color') update.color = stringValue(mutation.value)
-      else if (suffix === 'transform.position') transform.position = vec3(mutation.value)
-      else if (suffix === 'transform.rotation') transform.rotation = vec3(mutation.value)
-      else if (suffix === 'transform.scale') transform.scale = vec3(mutation.value)
-      else if (suffix === 'character_variant') update.variant = z.enum(['standard', 'strong', 'slim', 'child']).parse(mutation.value)
-      else if (suffix === 'fov') update.fov = numberValue(mutation.value)
-      else if (suffix === 'look_at_target') update.lookAt = { mode: 'manual', target: vec3(mutation.value) }
-      else if (suffix === 'look_at_object_ref') {
-        const id = refId(mutation.value)
-        if (!id || current.type !== 'camera') throw new Error('INVALID_REFERENCE')
-        update.lookAt = { mode: 'object', objectId: id, fallbackTarget: current.lookAt.mode === 'manual' ? current.lookAt.target : current.lookAt.fallbackTarget }
-      } else if (suffix === 'aspect_ratio_preset' || suffix === 'aspect_ratio') {
-        if (current.type !== 'camera') throw new Error('OBJECT_TYPE_MISMATCH')
-        update.aspectRatio = {
-          preset: suffix === 'aspect_ratio_preset'
-            ? z.enum(['16:9', '4:3', '1:1', '9:16', 'custom']).parse(mutation.value)
-            : current.aspectRatio.preset,
-          ratio: suffix === 'aspect_ratio' ? numberValue(mutation.value) : current.aspectRatio.ratio,
-        }
-      } else throw new Error('PROPERTY_NOT_WRITABLE')
+    const draft: CameraStageObjectDraft = {
+      current,
+      update: {},
+      transform: { ...current.transform },
+      transformTouched: false,
     }
-    if (step.mutations.some((mutation) => mutation.propertyId.includes('.transform.'))) update.transform = transform
-    return (await cameraStageApplicationService.updateObject(projectId, objectId, update)).undoToken
+    const table = this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera
+      ? CAMERA_STAGE_CAMERA_WRITERS
+      : CAMERA_STAGE_OBJECT_WRITERS
+    await applyWriterTable(table, draft, step.mutations)
+    if (draft.transformTouched) draft.update.transform = draft.transform
+    return (await cameraStageApplicationService.updateObject(projectId, objectId, draft.update)).undoToken
   }
 
   private async applyShot(step: MutationStep): Promise<string> {
     const { projectId, childId: shotId } = childTarget(step.target.id)
-    const update: CameraStageShotUpdate = {}
-    for (const mutation of step.mutations) {
-      if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
-      const suffix = mutation.propertyId.slice(this.entityType.length + 1)
-      if (suffix === 'name') update.name = stringValue(mutation.value)
-      else if (suffix === 'hold') update.hold = numberValue(mutation.value)
-      else if (suffix === 'transition_duration') update.transitionDuration = numberValue(mutation.value)
-      else if (suffix === 'continuity') update.continuity = z.enum(['stop', 'smooth']).parse(mutation.value)
-      else if (suffix === 'camera_ref') update.cameraId = refId(mutation.value)
-      else throw new Error('PROPERTY_NOT_WRITABLE')
-    }
-    return (await cameraStageApplicationService.updateShot(projectId, shotId, update)).undoToken
+    const draft: CameraStageShotDraft = {}
+    await applyWriterTable(CAMERA_STAGE_SHOT_WRITERS, draft, step.mutations)
+    return (await cameraStageApplicationService.updateShot(projectId, shotId, draft)).undoToken
   }
 
   private async applyKeyframe(step: MutationStep): Promise<string> {
@@ -252,28 +179,8 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const path = parts.join(':')
     if (!objectId || !path || !Number.isFinite(originalTime)) throw new Error('NOT_FOUND')
     const undoToken = captureCameraStageUndo(projectId)
-    const state = useCameraStageStore.getState()
-    let currentTime = originalTime
-    for (const mutation of step.mutations) {
-      if (mutation.operation !== 'set') throw new Error('INVALID_MUTATION_OPERATION')
-      const suffix = mutation.propertyId.slice(this.entityType.length + 1)
-      if (suffix === 'time') {
-        const nextTime = numberValue(mutation.value)
-        state.moveKeyframe(objectId, path, currentTime, nextTime)
-        currentTime = nextTime
-      } else if (suffix === 'value') {
-        const track = useCameraStageStore.getState().animation.tracks.find((candidate) => candidate.objectId === objectId && candidate.propertyPath === path)
-        const keyframe = track?.keyframes.find((candidate) => candidate.time === currentTime)
-        if (!keyframe) throw new Error('NOT_FOUND')
-        const raw = stringValue(mutation.value)
-        const value: StageKeyframeValue = typeof keyframe.value === 'number' ? Number(raw) : raw
-        if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('INVALID_INPUT')
-        useCameraStageStore.setState((current) => ({ animation: setTrackKeyframeValue(current.animation, objectId, path, currentTime, value) }))
-      } else if (suffix === 'easing') {
-        const easing = z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut', 'hold']).parse(mutation.value) as StageEasingPreset
-        state.setKeyframesEasing([{ objectId, path, time: currentTime }], easing)
-      } else throw new Error('PROPERTY_NOT_WRITABLE')
-    }
+    const draft: CameraStageKeyframeDraft = { objectId, path, currentTime: originalTime }
+    await applyWriterTable(CAMERA_STAGE_KEYFRAME_WRITERS, draft, step.mutations)
     await saveCurrentProject()
     return undoToken
   }

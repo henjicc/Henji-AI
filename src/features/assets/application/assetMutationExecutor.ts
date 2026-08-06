@@ -5,8 +5,10 @@ import type {
   ApplicationEvidence,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
+  ApplicationPropertyWriterTable,
   JsonValue,
 } from '@/core/application-control'
+import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 
 import {
@@ -97,9 +99,46 @@ async function restoreSnapshot(
   }
 }
 
+/**
+ * 写入目标带一个 `applied` 集合：失败时要按「已经写成功的那几条」精确回滚，
+ * 不能整体恢复快照（会把本次之外的并发改动一起冲掉）。
+ */
+interface AssetWriteDraft {
+  readonly assetId: string
+  readonly applied: Set<string>
+}
+
+const WRITERS: ApplicationPropertyWriterTable<AssetWriteDraft> = {
+  [DISPLAY_NAME_PROPERTY]: {
+    async write(draft, mutation) {
+      await assetApplicationService.rename(draft.assetId, displayName(mutation.value))
+      draft.applied.add(mutation.propertyId)
+    },
+  },
+  [TAGS_PROPERTY]: {
+    async write(draft, mutation) {
+      await assetApplicationService.replaceTags(draft.assetId, tagList(mutation.value))
+      draft.applied.add(mutation.propertyId)
+    },
+  },
+  [LIBRARY_REFS_PROPERTY]: {
+    // 集合归属是全项目唯一不走 set 的属性：整体替换要分别 remove 旧集合、append 新集合。
+    // 声明出来之后模型从工具描述里就能看到，不必靠运行时报错才知道。
+    operations: ['append', 'remove'],
+    async write(draft, mutation) {
+      const id = libraryId(mutation.value)
+      if (mutation.operation === 'append') await assetApplicationService.addToLibrary(id, draft.assetId)
+      else await assetApplicationService.removeFromLibrary(id, draft.assetId)
+      draft.applied.add(mutation.propertyId)
+    },
+  },
+}
+
 /** 素材通用属性写入；全部状态变换委托素材领域服务，并保存可真实恢复的领域快照。 */
 export class AssetMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = ASSET_ENTITY_TYPES.asset
+  readonly writableProperties = writableProperties(WRITERS)
+  readonly propertyOperations = propertyOperations(WRITERS)
 
   constructor(private readonly dependencies: AssetMutationDependencies) {}
 
@@ -112,36 +151,7 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
     })
     const applied = new Set<string>()
     try {
-      for (const mutation of step.mutations) {
-        if (mutation.propertyId === DISPLAY_NAME_PROPERTY) {
-          if (mutation.operation !== 'set') {
-            throw new Error(`ASSET_DISPLAY_NAME_OPERATION_INVALID：素材名称只支持 set 操作，收到 ${mutation.operation}。`)
-          }
-          await assetApplicationService.rename(assetId, displayName(mutation.value))
-        } else if (mutation.propertyId === TAGS_PROPERTY) {
-          if (mutation.operation !== 'set') {
-            throw new Error(`ASSET_TAGS_OPERATION_INVALID：标签只支持 set 操作，收到 ${mutation.operation}。`)
-          }
-          await assetApplicationService.replaceTags(assetId, tagList(mutation.value))
-        } else if (mutation.propertyId === LIBRARY_REFS_PROPERTY) {
-          if (mutation.operation === 'append') {
-            await assetApplicationService.addToLibrary(libraryId(mutation.value), assetId)
-          } else if (mutation.operation === 'remove') {
-            await assetApplicationService.removeFromLibrary(libraryId(mutation.value), assetId)
-          } else {
-            throw new Error(
-              `ASSET_LIBRARY_OPERATION_INVALID：集合归属只支持 append / remove 操作，收到 ${mutation.operation}。`
-              + '整体替换所属集合请分别 remove 旧集合、append 新集合。'
-            )
-          }
-        } else {
-          throw new Error(
-            `ASSET_PROPERTY_NOT_WRITABLE：${mutation.propertyId} 不可写。`
-            + `素材可写属性只有 ${DISPLAY_NAME_PROPERTY}、${TAGS_PROPERTY} 与 ${LIBRARY_REFS_PROPERTY}。`
-          )
-        }
-        applied.add(mutation.propertyId)
-      }
+      await applyWriterTable(WRITERS, { assetId, applied }, step.mutations)
     } catch (error) {
       try {
         await restoreSnapshot(assetId, before, applied)
