@@ -1,9 +1,10 @@
 import { z } from 'zod'
 
-import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef } from '@/core/application-control'
+import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
 import type { StageEasingPreset, StageKeyframeValue } from '../domain/animationTypes'
+import type { StageObject } from '../domain/sceneTypes'
 import type { StageShot } from '../domain/shotTypes'
 import { setTrackKeyframeValue } from '../store/animationActions'
 import { useCameraStageStore } from '../store/cameraStageStore'
@@ -27,6 +28,7 @@ const SHOT_ENTITY_TYPE = 'camera_stage.shot' as const
 const KEYFRAME_ENTITY_TYPE = 'camera_stage.keyframe' as const
 const PLAYBACK_ENTITY_TYPE = 'camera_stage.playback' as const
 const CAMERA_ENTITY_TYPE = 'camera_stage.camera' as const
+const OBJECT_ENTITY_TYPE = 'camera_stage.object' as const
 
 /* ── 工程 ─────────────────────────────────────────────────────────────── */
 
@@ -55,6 +57,20 @@ export type CameraStageShotDraft = CameraStageShotUpdate
 interface ShotFieldSource {
   readonly projectId: string
   readonly shot: StageShot
+  /** 只有 `capture_object_refs` 读取需要——判断某个对象 id 是普通对象还是摄像机。 */
+  readonly objects: readonly StageObject[]
+}
+
+/** 引用可能是 `projectId:objectId` 形式的稳定引用，也可能是裸 id 字符串，两者都接受。 */
+function parseCaptureObjectRefs(raw: JsonValue | undefined): string[] {
+  const list = z.array(z.union([
+    z.string(),
+    z.object({ id: z.string() }).passthrough(),
+  ])).min(1, 'capture_object_refs 不能是空列表。').parse(raw)
+  return list.map((item) => {
+    const id = typeof item === 'string' ? item : item.id
+    return id.includes(':') ? id.slice(id.indexOf(':') + 1) : id
+  })
 }
 
 function shotField<T, TAction extends string>(
@@ -112,6 +128,30 @@ export const SHOT_FIELDS = [
       },
     },
     storeActions: ['updateShotCamera'] as const,
+  },
+  /*
+   * 简易模式的核心动作：把列出的对象/摄像机当前在场景中的实时状态记录进这一张卡（2.2）。
+   * 只覆盖列出的对象、只落在这一张卡上——不触碰这张卡的其余对象、也不触碰其他镜头卡，
+   * 不会重新打开"新对象在其余卡上停留默认状态、播放时插值"那个已修问题（重要记录 004）。
+   * 读取返回这张卡当前跟踪状态的全部对象；写入是否生效可在这张卡的时间点观察对象属性验证。
+   */
+  {
+    propertyId: `${SHOT_ENTITY_TYPE}.capture_object_refs`,
+    descriptor: stageDescriptor(SHOT_ENTITY_TYPE, 'capture_object_refs', '捕获对象状态', { kind: 'ref_list', refKinds: [OBJECT_ENTITY_TYPE, CAMERA_ENTITY_TYPE] }, {
+      relation: { targetEntityTypes: [OBJECT_ENTITY_TYPE, CAMERA_ENTITY_TYPE], cardinality: 'many' },
+      description: '写入会把列出的对象/摄像机当前在场景中的实时状态（位置、旋转、缩放、颜色等）记录进这张镜头卡，'
+        + '只影响列出的对象和这一张卡。读取返回这张卡当前跟踪状态的全部对象。',
+    }),
+    read: ({ projectId, shot, objects }: ShotFieldSource): JsonValue => Object.keys(shot.objectStates).map((id) => ({
+      kind: objects.find((object) => object.id === id)?.type === 'camera' ? CAMERA_ENTITY_TYPE : OBJECT_ENTITY_TYPE,
+      id: `${projectId}:${id}`,
+    } satisfies ApplicationRef)),
+    writer: {
+      write: (draft: CameraStageShotDraft, mutation: ApplicationPropertyMutation) => {
+        draft.captureObjectIds = parseCaptureObjectRefs(mutation.value)
+      },
+    },
+    storeActions: ['captureIntoSelectedShot'] as const,
   },
 ]
 

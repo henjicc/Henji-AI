@@ -14,7 +14,9 @@ import {
   saveCurrentProject,
   type CameraStageProjectSnapshot,
 } from '../projects/cameraStageProjectService'
+import { compileShotsToAnimation } from '../domain/shotCompiler'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { captureObjectsIntoShot } from '../store/shotSlice'
 import {
   calculateStageObjectBounds,
   dimensionsToScale,
@@ -49,6 +51,12 @@ export interface CameraStageShotUpdate {
   transitionDuration?: number
   continuity?: StageShot['continuity']
   cameraId?: string | null
+  /**
+   * 把列出的对象/摄像机当前在场景中的实时状态记录进这张镜头卡（2.2 状态捕获入口）。
+   * 只覆盖列出的对象，不触碰这张卡上其余对象、也不触碰其他镜头卡——不会重新打开
+   * "新对象在其余卡上停留默认状态、播放时插值"那个已修问题（modelingWrite.test.ts）。
+   */
+  captureObjectIds?: string[]
 }
 
 export interface CameraStageSceneObservation {
@@ -507,6 +515,15 @@ export const cameraStageApplicationService = {
     if (update.hold !== undefined && (!Number.isFinite(update.hold) || update.hold < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.transitionDuration !== undefined && (!Number.isFinite(update.transitionDuration) || update.transitionDuration < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.time !== undefined && (!Number.isFinite(update.time) || update.time < 0)) throw new Error('INVALID_TIME_RANGE')
+    if (update.captureObjectIds !== undefined) {
+      const missing = update.captureObjectIds.filter((id) => !state.objects.some((object) => object.id === id))
+      if (missing.length > 0) {
+        throw new Error(
+          `SHOT_CAPTURE_OBJECT_NOT_FOUND：${missing.join('、')} 不是本场景中的对象 id，`
+          + `capture_object_refs 里的引用必须取自观察结果里 objects[].id 的原值。`
+        )
+      }
+    }
     const undoToken = captureCameraStageUndo(projectId)
     if (update.name !== undefined) state.updateShotName(shotId, update.name)
     // 时间点先落，后续的 hold / 过渡时长都是相对这个位置计算的。
@@ -514,6 +531,12 @@ export const cameraStageApplicationService = {
     if (update.hold !== undefined || update.transitionDuration !== undefined) state.updateShotTiming(shotId, update)
     if (update.continuity !== undefined) state.updateShotContinuity(shotId, update.continuity)
     if (update.cameraId !== undefined) state.updateShotCamera(shotId, update.cameraId)
+    if (update.captureObjectIds !== undefined) {
+      // 只覆盖列出的对象在这一张卡上的快照，不触碰这张卡的其余对象、也不触碰其他镜头卡。
+      const current = useCameraStageStore.getState()
+      const shots = captureObjectsIntoShot(current.shots, shotId, current.objects, update.captureObjectIds)
+      useCameraStageStore.setState({ shots, animation: compileShotsToAnimation(shots, current.objects) })
+    }
     await saveCurrentProject()
     return { projectId, shotId, status: 'updated', undoToken }
   },

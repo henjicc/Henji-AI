@@ -50,10 +50,11 @@ const LEDGERS: LedgerCase[] = [
  *
  * 建账当天 21 项。播放控制 5 项已补齐（注册成 camera_stage.playback 单例实体，零新增工具），
  * 2.1 又烧掉镜头卡增删排序 3 项（removeShot/removeShots 接到集合写入，reorderShot 绑到已可写
- * 的 time 属性，专用能力 add_camera_stage_shot 一并下线）。现存 13 项：三维 8（姿态 2、轨迹 2、
- * 编辑模式 2、清空轨道 1、镜头卡状态捕获 1），画布 5（清空、解散分组、重做、分镜格子改与排序）。
+ * 的 time 属性，专用能力 add_camera_stage_shot 一并下线）。2.2 烧掉镜头卡状态捕获 1 项
+ * （captureIntoSelectedShot 绑到新增的 capture_object_refs 属性，不依赖选中态）。现存 12 项：
+ * 三维 7（姿态 2、轨迹 2、编辑模式 2、清空轨道 1），画布 5（清空、解散分组、重做、分镜格子改与排序）。
  */
-const GAP_BASELINE = 13
+const GAP_BASELINE = 12
 
 function actionNames(state: object): string[] {
   return Object.entries(state)

@@ -85,11 +85,11 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
      * 不新增 collection reorder 操作，直接绑到已经可写的 time 属性。
      */
     reorderShot: { kind: 'property', propertyIds: [`${ENTITY.shot}.time`] },
-    captureIntoSelectedShot: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '把当前对象状态记录进选中的镜头卡，是简易模式的核心动作，助手没有对应入口。',
-    },
+    /*
+     * 助手版不依赖"选中态"（选中是鼠标操作中间产物，助手用稳定引用直接寻址目标），
+     * 而是显式指定目标镜头卡，写 capture_object_refs 属性即可（2.2，见重要记录 004 最终结论）。
+     */
+    captureIntoSelectedShot: { kind: 'property', propertyIds: [`${ENTITY.shot}.capture_object_refs`] },
 
     /* ── 关键帧 ─────────────────────────────────────────────── */
     keyframeAtCurrentTime: { kind: 'collection', entityType: ENTITY.keyframe, operation: 'create' },

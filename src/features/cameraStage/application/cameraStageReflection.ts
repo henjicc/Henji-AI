@@ -287,7 +287,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     if (this.entityType === ENTITY_TYPES.shot) {
       const shot = snapshot.shots.find((candidate) => candidate.id === childId)
       if (!shot) throw new Error('NOT_FOUND')
-      return this.shotProperties(projectId, shot)
+      return this.shotProperties(projectId, shot, snapshot.objects)
     }
     if (this.entityType === ENTITY_TYPES.trajectory) return this.trajectoryProperties(projectId, snapshot, childId)
     return this.keyframeProperties(projectId, snapshot, childId)
@@ -347,8 +347,8 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     }))
   }
 
-  private shotProperties(projectId: string, shot: CameraStageProjectSnapshot['shots'][number]): Record<string, JsonValue> {
-    return fieldReadValues(SHOT_FIELDS, { projectId, shot })
+  private shotProperties(projectId: string, shot: CameraStageProjectSnapshot['shots'][number], objects: StageObject[]): Record<string, JsonValue> {
+    return fieldReadValues(SHOT_FIELDS, { projectId, shot, objects })
   }
 
   private trajectoryProperties(projectId: string, snapshot: CameraStageProjectSnapshot, id: string): Record<string, JsonValue> {
