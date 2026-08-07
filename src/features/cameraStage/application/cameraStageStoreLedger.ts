@@ -73,21 +73,18 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     },
 
     /* ── 镜头卡 ─────────────────────────────────────────────── */
-    addShot: { kind: 'capability', capabilityId: 'add_camera_stage_shot' },
+    // 增删接到集合写入（2.1）：专用能力 add_camera_stage_shot 已删除，避免同功能两条路。
+    addShot: { kind: 'collection', entityType: ENTITY.shot, operation: 'create' },
+    removeShot: { kind: 'collection', entityType: ENTITY.shot, operation: 'remove' },
+    removeShots: { kind: 'collection', entityType: ENTITY.shot, operation: 'remove' },
     // 定义收敛在 cameraStageTimelineFields.ts；time 被 moveShotTime 与 updateShotTiming 共用。
     ...fieldLedgerEntries(SHOT_FIELDS),
-    removeShot: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '镜头卡没有声明 collectionWrite，助手能加不能删。计划补 collectionWrite 与集合执行器，'
-        + '同时删掉专用能力 add_camera_stage_shot，避免同功能两条路。',
-    },
-    removeShots: { kind: 'gap', plannedPhase: '期 2', reason: '批量删除镜头卡，与 removeShot 同一个缺口。' },
-    reorderShot: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '重排镜头卡顺序没有对应入口；补 collectionWrite 时一并处理。',
-    },
+    /*
+     * 重排顺序完全由 time 决定：reorderShot 内部把移动后各位置重新赋以排序后的 time 值，
+     * 结果与"直接把目标卡的 time 改成目标位置对应的值"完全等价（验证见 2.1 执行记录）。
+     * 不新增 collection reorder 操作，直接绑到已经可写的 time 属性。
+     */
+    reorderShot: { kind: 'property', propertyIds: [`${ENTITY.shot}.time`] },
     captureIntoSelectedShot: {
       kind: 'gap',
       plannedPhase: '期 2',

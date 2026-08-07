@@ -499,23 +499,6 @@ export const cameraStageApplicationService = {
     return { projectId, objectId, status: 'deleted' }
   },
 
-  async addShot(projectId: string, name: string, cameraId: string | null): Promise<{ projectId: string; shotId: string; name: string; undoToken: string }> {
-    await ensureProjectLoaded(projectId)
-    const state = useCameraStageStore.getState()
-    if (cameraId && !state.objects.some((object) => object.id === cameraId && object.type === 'camera')) throw new Error('INVALID_REFERENCE')
-    const undoToken = captureCameraStageUndo(projectId)
-    state.addShot()
-    const next = useCameraStageStore.getState()
-    if (!next.selectedShotId) throw new Error('CAPABILITY_REJECTED')
-    const uniqueName = new Set(next.shots.filter((shot) => shot.id !== next.selectedShotId).map((shot) => shot.name)).has(name.trim())
-      ? `${name.trim()} ${next.shots.length}`
-      : name.trim()
-    next.updateShotName(next.selectedShotId, uniqueName)
-    next.updateShotCamera(next.selectedShotId, cameraId)
-    await saveCurrentProject()
-    return { projectId, shotId: next.selectedShotId, name: uniqueName, undoToken }
-  },
-
   async updateShot(projectId: string, shotId: string, update: CameraStageShotUpdate): Promise<{ projectId: string; shotId: string; status: 'updated'; undoToken: string }> {
     await ensureProjectLoaded(projectId)
     const state = useCameraStageStore.getState()

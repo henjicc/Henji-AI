@@ -1,5 +1,5 @@
 import type { ApplicationTransactionResult, JsonValue } from '@/core/application-control'
-import { cameraStageApplicationService, type CameraStageObjectUpdate, type CameraStageShotUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
+import { cameraStageApplicationService, type CameraStageObjectUpdate } from '@/features/cameraStage/application/cameraStageApplicationService'
 import { verifyCameraStageScene, type CameraStageVerificationRequest } from '@/features/cameraStage/application/cameraStageVerification'
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
@@ -216,29 +216,6 @@ export async function updateCameraStageObject(
   ]
   if (mutations.length === 0 || changes.effectors) throw new Error('INVALID_INPUT')
   return await executeMutation({ summary: '更新三维对象属性', entityType, targetId: `${input.projectId}:${input.objectId}`, mutations, revision: input.baseRevision }, context)
-}
-
-export async function addCameraStageShot(input: { projectId: string; name: string; cameraId: string | null; baseRevision: number }): Promise<Record<string, unknown>> {
-  assertBaseRevision(input.baseRevision)
-  const result = await cameraStageApplicationService.addShot(input.projectId, input.name, input.cameraId)
-  notifyHostScopeChanged('toolbox')
-  return { projectId: result.projectId, shotId: result.shotId, name: result.name, undoRef: result.undoToken, baseRevision: baseRevision() }
-}
-
-export async function updateCameraStageShot(
-  input: { projectId: string; shotId: string; baseRevision: number; changes: CameraStageShotUpdate },
-  context: CapabilityExecutionContext,
-): Promise<Record<string, unknown>> {
-  const prefix = 'camera_stage.shot'
-  const changes = input.changes
-  const mutations = [
-    ...(changes.name !== undefined ? [mutation(`${prefix}.name`, changes.name)] : []),
-    ...(changes.hold !== undefined ? [mutation(`${prefix}.hold`, changes.hold)] : []),
-    ...(changes.transitionDuration !== undefined ? [mutation(`${prefix}.transition_duration`, changes.transitionDuration)] : []),
-    ...(changes.continuity !== undefined ? [mutation(`${prefix}.continuity`, changes.continuity)] : []),
-    ...(changes.cameraId !== undefined ? [mutation(`${prefix}.camera_ref`, changes.cameraId ? { kind: 'camera_stage.camera', id: `${input.projectId}:${changes.cameraId}` } : null)] : []),
-  ]
-  return await executeMutation({ summary: '更新三维镜头属性', entityType: prefix, targetId: `${input.projectId}:${input.shotId}`, mutations, revision: input.baseRevision }, context)
 }
 
 export async function applyCameraStageCameraMove(input: Record<string, unknown> & { baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {

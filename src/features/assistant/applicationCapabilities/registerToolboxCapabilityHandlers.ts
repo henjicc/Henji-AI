@@ -8,7 +8,6 @@ import { createImageEditPreviewFromRef } from './generationCapabilities'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
 import { openApplicationSurface } from './surfaceRegistry'
 import {
-  addCameraStageShot,
   applyCameraStageCameraMove,
   createCameraStageProject,
   deleteCameraStageObject,
@@ -21,7 +20,6 @@ import {
   placeCameraStageObject,
   renameCameraStageProject,
   updateCameraStageObject,
-  updateCameraStageShot,
   verifyCameraStage,
 } from './cameraStageCapabilityAdapter'
 
@@ -129,32 +127,6 @@ export function registerToolboxCapabilityHandlers(
       changes: Parameters<typeof updateCameraStageObject>[0]['changes']
     }>('update_camera_stage_object', input)
     return await updateCameraStageObject(parsed, context)
-  })
-
-  registrar.registerHandler('add_camera_stage_shot', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & {
-      name: string
-      cameraId: string | null
-      baseRevision: number
-    }>('add_camera_stage_shot', input)
-    return await addCameraStageShot(parsed)
-  })
-
-  registrar.registerHandler('update_camera_stage_shot', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & {
-      shotId: string
-      baseRevision: number
-      changes: {
-        name?: string
-        hold?: number
-        transitionDuration?: number
-        continuity?: 'stop' | 'smooth'
-        cameraId?: string | null
-      }
-    }>('update_camera_stage_shot', input)
-    return await updateCameraStageShot(parsed, context)
   })
 
   registrar.registerHandler('apply_camera_stage_camera_move', async (input, context) => {

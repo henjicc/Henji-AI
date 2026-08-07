@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   listStoryboardProjects: vi.fn(),
   listToolboxTools: vi.fn(),
   cameraAdapter: {
-    addCameraStageShot: vi.fn(),
     applyCameraStageCameraMove: vi.fn(),
     createCameraStageProject: vi.fn(),
     deleteCameraStageObject: vi.fn(),
@@ -21,7 +20,6 @@ const mocks = vi.hoisted(() => ({
     placeCameraStageObject: vi.fn(),
     renameCameraStageProject: vi.fn(),
     updateCameraStageObject: vi.fn(),
-    updateCameraStageShot: vi.fn(),
     verifyCameraStage: vi.fn(),
   },
   selectToolboxTool: vi.fn(),

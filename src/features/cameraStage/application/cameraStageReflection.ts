@@ -127,7 +127,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
   [ENTITY_TYPES.scene]: [
     property(ENTITY_TYPES.scene, 'project_ref', '所属工程', { kind: 'ref', refKinds: [ENTITY_TYPES.project] }, { readOnly: '所属工程不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.project], cardinality: 'one' } }),
     property(ENTITY_TYPES.scene, 'object_refs', '场景对象', { kind: 'ref_list', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '对象集合通过正式创建和删除操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'many' } }),
-    property(ENTITY_TYPES.scene, 'shot_refs', '镜头卡', { kind: 'ref_list', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '镜头集合通过正式镜头操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'many' } }),
+    property(ENTITY_TYPES.scene, 'shot_refs', '镜头卡', { kind: 'ref_list', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '镜头卡的增删排序通过 camera_stage.shot 的集合写入维护，这里只读列出当前集合。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'many' } }),
     /*
      * 场景外观 25 项 + 时间轴 3 项：界面上有的每一项这里都要有。
      *
@@ -430,6 +430,18 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
               `${ENTITY_TYPES.keyframe}.value`,
             ],
             maxItemsPerChange: 128,
+          },
+        } : {}),
+        ...(entityType === ENTITY_TYPES.shot ? {
+          /**
+           * 镜头卡可增删（2.1）。此前只能靠专用能力 add_camera_stage_shot 新建，删不掉也排不了
+           * 序——store 侧的 removeShot/removeShots 早就是完整实现，缺的只是这一句声明。
+           */
+          collectionWrite: {
+            creatable: true,
+            removable: true,
+            requiredPropertyIds: [`${ENTITY_TYPES.shot}.time`],
+            maxItemsPerChange: 64,
           },
         } : {}),
       },

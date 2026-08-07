@@ -103,34 +103,12 @@ const updateObject = defineApplicationCapability({
   summarize: (output) => `3D 对象更新事务 ${output.transactionRef} 已完成。`,
 })
 
-const addShot = defineApplicationCapability({
-  id: 'add_camera_stage_shot', version: 2, title: '添加 3D 镜头卡', description: '在工程中捕获一张具有唯一名称和明确机位的镜头卡。',
-  domain: 'camera_stage', aliases: ['添加镜头卡', 'add camera shot'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
-  permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
-  requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.camera'], producesRefs: ['camera_stage.shot'],
-  failureRecovery: [CONFLICT_RECOVERY],
-  inputSchema: z.object({ projectId: z.string().min(1), name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH), cameraId: z.string().min(1).nullable().default(null), baseRevision: cameraStageBaseRevisionSchema }).strict(),
-  outputSchema: capabilityOutputSchema({ projectId: z.string(), shotId: z.string(), name: z.string(), undoRef: z.string().optional(), baseRevision: cameraStageBaseRevisionSchema }),
-  resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:shots`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { name: input.name }),
-  control: cameraStageControl('create', ['camera_stage.shot']), summarize: (output) => `已添加镜头卡 ${output.shotId}。`,
-})
-
-const updateShot = defineApplicationCapability({
-  id: 'update_camera_stage_shot', version: 2, title: '更新 3D 镜头卡', description: '修改明确镜头的名称、时间、连续性和机位。',
-  domain: 'camera_stage', aliases: ['修改镜头卡', 'update camera shot'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
-  permission: 'camera_stage:write', idempotent: true, destructive: false, timeoutMs: 10_000, supportsPreview: false, supportsUndo: true,
-  requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.shot', 'camera_stage.camera'], producesRefs: ['camera_stage.shot'],
-  failureRecovery: [CONFLICT_RECOVERY],
-  inputSchema: z.object({
-    projectId: z.string().min(1), shotId: z.string().min(1), baseRevision: cameraStageBaseRevisionSchema,
-    changes: z.object({ name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH).optional(), hold: z.number().min(0).max(3600).optional(), transitionDuration: z.number().min(0).max(3600).optional(), continuity: z.enum(['stop', 'smooth']).optional(), cameraId: z.string().min(1).nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0),
-  }).strict(),
-  outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
-  resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:shot:${input.shotId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId, { shotId: input.shotId }),
-  control: cameraStageControl('update', ['camera_stage.shot'], ['camera_stage.shot.name', 'camera_stage.shot.hold', 'camera_stage.shot.transition_duration', 'camera_stage.shot.continuity', 'camera_stage.shot.camera_ref']),
-  summarize: (output) => `3D 镜头更新事务 ${output.transactionRef} 已完成。`,
-})
+/*
+ * add_camera_stage_shot / update_camera_stage_shot 已下线（2.1）：镜头卡的创建、删除、
+ * 排序、改名/时间/机位等全部属性都已被 camera_stage.shot 的集合写入与统一字段定义覆盖，
+ * 两条专用能力是纯粹的重复实现，按项目规则删除而不是并存。
+ */
 
 export const CAMERA_STAGE_SCENE_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  observeScene, placeObject, duplicateObject, deleteObject, updateObject, addShot, updateShot,
+  observeScene, placeObject, duplicateObject, deleteObject, updateObject,
 ]
