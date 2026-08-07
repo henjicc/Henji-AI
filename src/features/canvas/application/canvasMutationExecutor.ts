@@ -4,7 +4,6 @@ import type {
   ApplicationExecutionContext,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
-  ApplicationPropertyWriterTable,
 } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
@@ -17,6 +16,7 @@ import {
   persistCanvasState,
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
+import { CANVAS_NODE_WRITERS as WRITERS } from './canvasFields'
 import { applyCanvasNodePropertyPatches, type CanvasNodePropertyPatch } from './canvasMutationService'
 import { CANVAS_ENTITY_TYPES } from './canvasReflection'
 
@@ -38,16 +38,6 @@ function splitNodeRef(id: string): { projectId: string; nodeId: string } {
   return { projectId: id.slice(0, separator), nodeId: id.slice(separator + 1) }
 }
 
-function vector2(value: MutationStep['mutations'][number]['value']): { x: number; y: number } {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('INVALID_INPUT')
-  const x = value.x
-  const y = value.y
-  if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y)) {
-    throw new Error('INVALID_INPUT')
-  }
-  return { x, y }
-}
-
 function fingerprint(nodes: CanvasNode[], edges: CanvasEdge[]): string {
   return JSON.stringify({
     nodes: nodes.map((node) => ({ id: node.id, position: node.position, data: node.data })),
@@ -60,22 +50,6 @@ function fingerprint(nodes: CanvasNode[], edges: CanvasEdge[]): string {
 
 function revision(): number {
   return Math.max(0, Math.trunc(useProjectStore.getState().currentProject?.updatedAt ?? 0))
-}
-
-/** 写入目标是节点补丁本身——两条属性合成一个 patch 再整体提交，逐条提交会产生两次历史记录。 */
-const WRITERS: ApplicationPropertyWriterTable<CanvasNodePropertyPatch> = {
-  [`${CANVAS_ENTITY_TYPES.node}.display_name`]: {
-    write(patch, mutation) {
-      if (typeof mutation.value !== 'string' || !mutation.value.trim()) throw new Error('INVALID_INPUT')
-      patch.displayName = mutation.value
-    },
-  },
-  [`${CANVAS_ENTITY_TYPES.node}.position`]: {
-    write(patch, mutation) {
-      if (mutation.value === undefined) throw new Error('INVALID_INPUT')
-      patch.position = vector2(mutation.value)
-    },
-  },
 }
 
 export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {

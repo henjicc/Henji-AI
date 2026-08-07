@@ -18,21 +18,19 @@ import { useCameraStageStore } from '../store/cameraStageStore'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion } from './cameraMotionService'
 import { restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
+import { CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
+import { CAMERA_STAGE_SCENE_WRITERS } from './cameraStageSceneFields'
 import {
-  CAMERA_STAGE_CAMERA_WRITERS,
   CAMERA_STAGE_KEYFRAME_WRITERS,
-  CAMERA_STAGE_OBJECT_WRITERS,
   CAMERA_STAGE_PLAYBACK_WRITERS,
   CAMERA_STAGE_PROJECT_WRITERS,
-  CAMERA_STAGE_SCENE_WRITERS,
   CAMERA_STAGE_SHOT_WRITERS,
   type CameraStageKeyframeDraft,
-  type CameraStageObjectDraft,
   type CameraStagePlaybackDraft,
   type CameraStageProjectDraft,
   type CameraStageShotDraft,
-} from './cameraStageWriterTables'
+} from './cameraStageTimelineFields'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 type MutationEntityType = Exclude<typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES], 'camera_stage.trajectory'>

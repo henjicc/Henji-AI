@@ -27,6 +27,7 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - 新增实体后必须同时检查属性可写性、集合写入、执行器注册、排除原因、权限、revision、撤销/补偿与结构化验证；运行 `npm run check:assistant-capabilities` 让覆盖门禁复核。
 - **声明可写的每一条属性，都必须出现在执行器的 `writableProperties` 里**，且该集合必须由 `ApplicationPropertyWriterTable` 派生（`writableProperties(TABLE)`），不许手写字面量。属性写入执行器**禁止**用手写 if-else 属性链——链条无法被枚举，覆盖门禁就看不见"声明可写但执行器没有对应分支"这类缺口（`camera_stage.shot.time` 就是这么漏掉的，实体级门禁一直全绿）。
 - 属性接受的 operation 由写入表的 `operations` 声明，不写默认只接受 `set`。集合类属性（如 `asset.library_refs` 只吃 `append`/`remove`）必须显式声明，否则模型只能靠试错。
+- **新增可写属性必须用统一字段定义（`ApplicationFieldDefinition` + `fieldDescriptors`/`fieldReadValues`/`fieldWriterTable`/`fieldLedgerEntries`，定义于 `src/core/application-control/fieldDefinition.ts`），禁止再分别手写属性描述符、读取映射、写入表项、账本条目四处登记。** 一条属性只在对应领域的 `*Fields.ts`（如 `cameraStageSceneFields.ts`、`canvasFields.ts`、`assetFields.ts`）里声明一次，四个消费方从这一条声明派生。这是缺口再生的根因修法：四处分别登记时，漏其中一两处不会报错，助手安静地少一块能力，只有用户实机撞上才发现（三维场景外观 24 项就是这样漏的）；统一定义之后漏一条是整条从四处一起消失，会被 `storeActionCoverage` 门禁当场抓到。同一个 store 动作被多个字段共用时（如 `updateObject` 一次改 name/visible/color/character_variant 四个属性），`fieldLedgerEntries()` 按声明顺序把它们累进同一条绑定，不需要手写聚合。
 
 ### 界面动作覆盖
 

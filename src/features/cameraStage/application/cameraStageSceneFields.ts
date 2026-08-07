@@ -1,19 +1,14 @@
 import { z } from 'zod'
 
-import {
-  fieldWriterTable,
-  type ApplicationFieldDefinition,
-  type ApplicationPropertyDescriptor,
-  type ApplicationPropertyMutation,
-  type ApplicationPropertyValue,
-  type ApplicationRef,
-  type JsonValue,
-} from '@/core/application-control'
-import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef, type JsonValue } from '@/core/application-control'
 
-import type { StageSceneSettings, StageVec3 } from '../domain/sceneTypes'
+import type { StageSceneSettings } from '../domain/sceneTypes'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
 import type { useCameraStageStore } from '../store/cameraStageStore'
+import {
+  booleanCodec, colorCodec, enumCodec, integerCodec, numberCodec, stageDescriptor, stageField, vector3Codec,
+  type ValueCodec,
+} from './cameraStageFieldShared'
 
 /*
  * 三维场景 28 条属性（外观 25 + 时间轴 3）的统一定义——1.1 统一字段定义机制的首个试点。
@@ -22,122 +17,18 @@ import type { useCameraStageStore } from '../store/cameraStageStore'
  * 当初就是这样只漏了描述符和读取两处、界面能改助手却完全看不见。现在每条只在这里出现一次，
  * 四个消费方（cameraStageReflection.ts / cameraStageWriterTables.ts / cameraStageStoreLedger.ts）
  * 从这张表派生，漏一条就是整条从三处一起消失，会被 storeActionCoverage 门禁当场抓到。
+ *
+ * 通用的描述符/编解码/字段构造器收在 cameraStageFieldShared.ts，供本文件与其余实体的
+ * Fields 文件（1.3 迁移的 object/camera/project/shot/keyframe/playback）共用。
  */
 
 type CameraStageState = ReturnType<typeof useCameraStageStore.getState>
 
 const SCENE_ENTITY_TYPE = 'camera_stage.scene' as const
 const CAMERA_ENTITY_TYPE = 'camera_stage.camera' as const
-const SCENE_REVISION_SCOPE = 'toolbox' as const
-
-function digest(seed: string): string {
-  const value = [...seed].reduce((total, char) => (total * 33 + char.charCodeAt(0)) >>> 0, 5381).toString(16)
-  return `sha256:${value.padEnd(64, value).slice(0, 64)}`
-}
-
-function sceneDescriptor(
-  suffix: string,
-  title: string,
-  value: ApplicationPropertyValue,
-  options: {
-    unit?: string
-    nullable?: boolean
-    relation?: ApplicationPropertyDescriptor['relation']
-  } = {},
-): ApplicationPropertyDescriptor {
-  const id = `${SCENE_ENTITY_TYPE}.${suffix}`
-  return {
-    id,
-    entityType: SCENE_ENTITY_TYPE,
-    version: 1,
-    title,
-    description: `三维${title}的稳定控制属性。`,
-    value,
-    ...(options.unit ? { unit: options.unit } : {}),
-    nullable: options.nullable ?? false,
-    dataClass: 'C1',
-    exposures: ['ui', 'assistant', 'local_adapter'],
-    requiredPermissions: { read: ['camera_stage:read'], write: ['camera_stage:write'] },
-    revisionScopes: [SCENE_REVISION_SCOPE],
-    schemaRef: {
-      catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
-      kind: 'property',
-      id,
-      version: 1,
-      digest: digest(`property:${id}`),
-    },
-    ...(options.relation ? { relation: options.relation } : {}),
-  }
-}
-
-/** 一条属性的值编解码：怎么从 JSON 解析出领域值、怎么把领域值编回 JSON。 */
-interface ValueCodec<T> {
-  readonly value: ApplicationPropertyValue
-  parse(raw: JsonValue | undefined): T
-  encode(value: T): JsonValue
-}
-
-const colorCodec: ValueCodec<string> = {
-  value: { kind: 'color', format: 'hex' },
-  parse: (raw) => z.string().parse(raw),
-  encode: (value) => value,
-}
-const booleanCodec: ValueCodec<boolean> = {
-  value: { kind: 'boolean' },
-  parse: (raw) => z.boolean().parse(raw),
-  encode: (value) => value,
-}
-function numberCodec(hardRange?: { min?: number; max?: number }): ValueCodec<number> {
-  return { value: { kind: 'number', hardRange }, parse: (raw) => z.number().parse(raw), encode: (value) => value }
-}
-function integerCodec(hardRange?: { min?: number; max?: number }): ValueCodec<number> {
-  return { value: { kind: 'integer', hardRange }, parse: (raw) => z.number().parse(raw), encode: (value) => value }
-}
-function enumCodec<T extends string>(values: readonly T[], labels: Record<T, string>): ValueCodec<T> {
-  return {
-    value: { kind: 'enum', values: values.map((value) => ({ value, label: labels[value] })) },
-    parse: (raw) => z.enum(values as [T, ...T[]]).parse(raw),
-    encode: (value) => value,
-  }
-}
-function vector3Codec(unit?: string): ValueCodec<StageVec3> {
-  return {
-    value: unit ? { kind: 'vector3', unit } : { kind: 'vector3' },
-    parse: (raw) => z.object({ x: z.number(), y: z.number(), z: z.number() }).strict().parse(raw),
-    encode: (value) => ({ x: value.x, y: value.y, z: value.z }),
-  }
-}
 
 /**
- * 每条声明只写一次：标题、值类型、从哪读、怎么写、对应哪个界面动作。
- *
- * `TAction` 特意不标注、靠 TS 从 `storeAction` 的字符串字面量参数推导——这样账本侧
- * `fieldLedgerEntries()` 才能拿到字面量 key 联合，保住 `Record<ActionName, …>` 的
- * 编译期完整性检查。调用处一旦给 `storeAction` 显式标注成 `string` 就会破坏这一点。
- */
-function sceneField<TSource, T, TAction extends string>(
-  suffix: string,
-  title: string,
-  codec: ValueCodec<T>,
-  options: {
-    read: (source: TSource) => T
-    write: (store: CameraStageState, value: T) => void
-    storeAction: TAction
-    unit?: string
-    nullable?: boolean
-  },
-): ApplicationFieldDefinition<TSource, CameraStageState, TAction> {
-  return {
-    propertyId: `${SCENE_ENTITY_TYPE}.${suffix}`,
-    descriptor: sceneDescriptor(suffix, title, codec.value, { unit: options.unit, nullable: options.nullable }),
-    read: (source) => codec.encode(options.read(source)),
-    writer: { write: (draft, mutation) => { options.write(draft, codec.parse(mutation.value)) } },
-    storeActions: [options.storeAction],
-  }
-}
-
-/**
- * 固定 `TSource = StageSceneSettings` 的薄封装：不这样固定的话，`sceneField()` 里
+ * 固定 `TSource = StageSceneSettings` 的薄封装：不这样固定的话，`stageField()` 里
  * 未标注类型的 `read: (s) => …` 会因为没有外部上下文可推导 TSource 而退化成 `unknown`。
  */
 function appearanceField<T, TAction extends string>(
@@ -151,8 +42,11 @@ function appearanceField<T, TAction extends string>(
     unit?: string
     nullable?: boolean
   },
-): ApplicationFieldDefinition<StageSceneSettings, CameraStageState, TAction> {
-  return sceneField<StageSceneSettings, T, TAction>(suffix, title, codec, options)
+) {
+  const { storeAction, ...rest } = options
+  return stageField<StageSceneSettings, CameraStageState, T, TAction>(
+    SCENE_ENTITY_TYPE, suffix, title, codec, { ...rest, storeActions: [storeAction] },
+  )
 }
 
 /** 固定 `TSource = CameraStageProjectSnapshot` 的薄封装，原因同上。 */
@@ -167,15 +61,18 @@ function timelineField<T, TAction extends string>(
     unit?: string
     nullable?: boolean
   },
-): ApplicationFieldDefinition<CameraStageProjectSnapshot, CameraStageState, TAction> {
-  return sceneField<CameraStageProjectSnapshot, T, TAction>(suffix, title, codec, options)
+) {
+  const { storeAction, ...rest } = options
+  return stageField<CameraStageProjectSnapshot, CameraStageState, T, TAction>(
+    SCENE_ENTITY_TYPE, suffix, title, codec, { ...rest, storeActions: [storeAction] },
+  )
 }
 
 /*
  * 场景外观 25 项：读取源是 `StageSceneSettings`，与 `sceneAppearanceProperties()` 的入参一致。
  * 特意不给数组标注宽泛的 `ApplicationFieldDefinition<...>[]` 类型——那会把每个字段的
  * `TAction` 字面量提前拍扁成 `string`，账本侧的编译期完整性检查就没了意义。让 TS 直接
- * 从下面这些 `sceneField()` 调用推出联合类型。
+ * 从下面这些 `appearanceField()` 调用推出联合类型。
  */
 export const SCENE_APPEARANCE_FIELDS = [
   appearanceField('sky_color', '天空颜色', colorCodec, {
@@ -257,13 +154,13 @@ export const SCENE_APPEARANCE_FIELDS = [
 
 /*
  * 时间轴 3 项：读取源是整份工程快照（duration/fps 在 animation 下，active_camera_ref 要拼装 ref）。
- * 同样不标注数组类型，理由见上——`active_camera_ref` 那条不走 sceneField()（encode 需要
+ * 同样不标注数组类型，理由见上——`active_camera_ref` 那条不走 timelineField()（encode 需要
  * snapshot.id 拼 ref，与其余字段的 codec 形状不同），`storeActions` 用 `as const` 保住字面量。
  */
 export const SCENE_TIMELINE_FIELDS = [
   {
     propertyId: `${SCENE_ENTITY_TYPE}.active_camera_ref`,
-    descriptor: sceneDescriptor('active_camera_ref', '活动摄像机', { kind: 'ref', refKinds: [CAMERA_ENTITY_TYPE] }, {
+    descriptor: stageDescriptor(SCENE_ENTITY_TYPE, 'active_camera_ref', '活动摄像机', { kind: 'ref', refKinds: [CAMERA_ENTITY_TYPE] }, {
       nullable: true,
       relation: { targetEntityTypes: [CAMERA_ENTITY_TYPE], cardinality: 'optional' },
     }),

@@ -181,6 +181,25 @@ for (const file of walk(path.join(root, 'src', 'features'))) {
   }
 }
 
+/*
+ * 新增可写属性必须走统一字段定义（1.3），不许绕回「四处分别登记」的旧路。
+ *
+ * 这条钉住其中一处——写入表。字面量 `ApplicationPropertyWriterTable<...> = { 'a.b': {...} }`
+ * 只应该出现在 `<领域>Fields.ts` 里，由 `fieldWriterTable()` 派生后导出给执行器消费；
+ * 出现在别的文件里说明有人绕开统一定义，手写了一张新的登记表——四处登记的老问题会原样重演。
+ * 真正的聚合点（如 cameraStageControlExecutors.ts 把多个 Fields 的写入表汇总成一张
+ * entityType→table 的路由表）用的是已导入的常量，不含新的属性 id 字符串字面量，不会被这条误伤。
+ */
+for (const file of walk(path.join(root, 'src', 'features'))) {
+  const relative = path.relative(root, file).replaceAll('\\', '/')
+  if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue
+  if (path.basename(file).endsWith('Fields.ts')) continue
+  const source = fs.readFileSync(file, 'utf8')
+  if (/ApplicationPropertyWriterTable<[^>]*>\s*=\s*\{/.test(source)) {
+    failures.push(`可写属性写入表脱离统一字段定义，手写在了 *Fields.ts 之外（应改用 ApplicationFieldDefinition + fieldWriterTable）：${relative}`)
+  }
+}
+
 // 双端 skill 同步：AGENTS.md 要求 .codex 与 .claude 两份内容一致，
 // 因此这里检查全部共享 skill，而不只是应用能力那一份（历史上 henji-ui-surface
 // 就出现过只更新 Codex 侧的漂移）。`agents/` 是 Codex 专属配置，不参与比较；

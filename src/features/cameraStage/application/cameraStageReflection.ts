@@ -9,13 +9,14 @@ import {
   type JsonValue,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
-import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
 import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
 import { getAnimatablePropByPath, listAnimatablePropertyPaths } from '../domain/animatableProps'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
+import { CAMERA_FIELDS, OBJECT_FIELDS } from './cameraStageObjectFields'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
+import { KEYFRAME_FIELDS, PLAYBACK_FIELDS, PROJECT_FIELDS, SHOT_FIELDS } from './cameraStageTimelineFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
 
 const DOMAIN = 'camera_stage'
@@ -93,7 +94,6 @@ const STRING = { kind: 'string', maxLength: 500 } as const
 const NUMBER = { kind: 'number' } as const
 const INTEGER = { kind: 'integer', hardRange: { min: 0 } } as const
 const VECTOR3 = { kind: 'vector3', unit: 'scene_unit' } as const
-const BOOLEAN = { kind: 'boolean' } as const
 const COLOR = { kind: 'color', format: 'hex' } as const
 
 function propertyPathId(path: string): string {
@@ -119,7 +119,7 @@ function animatableProperties(entityType: typeof ENTITY_TYPES.object | typeof EN
 
 const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = {
   [ENTITY_TYPES.project]: [
-    property(ENTITY_TYPES.project, 'name', '工程名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
+    ...fieldDescriptors(PROJECT_FIELDS),
     property(ENTITY_TYPES.project, 'editor_mode', '编辑模式', { kind: 'enum', values: [{ value: 'simple', label: '简易' }, { value: 'pro', label: '专业' }] }, { readOnly: '编辑模式只能通过正式烘焙操作切换。' }),
     property(ENTITY_TYPES.project, 'object_count', '对象数量', INTEGER, { readOnly: '对象数量由场景内容计算。' }),
     property(ENTITY_TYPES.project, 'shot_count', '镜头数量', INTEGER, { readOnly: '镜头数量由镜头列表计算。' }),
@@ -140,50 +140,24 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     ...fieldDescriptors(SCENE_TIMELINE_FIELDS),
   ],
   [ENTITY_TYPES.object]: [
-    property(ENTITY_TYPES.object, 'name', '对象名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
+    ...fieldDescriptors(OBJECT_FIELDS),
     property(ENTITY_TYPES.object, 'type', '对象类型', { kind: 'enum', values: [{ value: 'primitive', label: '基础几何体' }, { value: 'character', label: '角色' }] }, { readOnly: '对象类型创建后不可变更。' }),
-    property(ENTITY_TYPES.object, 'visible', '可见性', BOOLEAN),
-    property(ENTITY_TYPES.object, 'color', '材质颜色', COLOR),
     property(ENTITY_TYPES.object, 'primitive_kind', '几何体类型', { kind: 'enum', values: ['box', 'sphere', 'cylinder', 'cone', 'pyramid', 'torus'].map((value) => ({ value, label: value })) }, { nullable: true, readOnly: '几何体类型创建后不可变更。' }),
-    property(ENTITY_TYPES.object, 'character_variant', '角色体型', { kind: 'enum', values: ['standard', 'strong', 'slim', 'child'].map((value) => ({ value, label: value })) }, { nullable: true }),
-    property(ENTITY_TYPES.object, 'transform.position', '位置', VECTOR3),
-    property(ENTITY_TYPES.object, 'transform.rotation', '旋转', { kind: 'vector3', unit: 'degree' }),
-    property(ENTITY_TYPES.object, 'transform.scale', '缩放', VECTOR3),
     property(ENTITY_TYPES.object, 'bounds.min', '边界盒最小点', VECTOR3, { readOnly: '边界盒由对象尺寸和变换计算。' }),
     property(ENTITY_TYPES.object, 'bounds.max', '边界盒最大点', VECTOR3, { readOnly: '边界盒由对象尺寸和变换计算。' }),
     ...animatableProperties(ENTITY_TYPES.object),
   ],
   [ENTITY_TYPES.camera]: [
-    property(ENTITY_TYPES.camera, 'name', '摄像机名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
-    property(ENTITY_TYPES.camera, 'visible', '可见性', BOOLEAN),
-    property(ENTITY_TYPES.camera, 'transform.position', '位置', VECTOR3),
-    property(ENTITY_TYPES.camera, 'transform.rotation', '旋转', { kind: 'vector3', unit: 'degree' }),
-    property(ENTITY_TYPES.camera, 'fov', '视野角', { kind: 'number', hardRange: { min: 1, max: 179 }, softRange: { min: 15, max: 100 } }, { unit: 'degree' }),
+    ...fieldDescriptors(CAMERA_FIELDS),
     property(ENTITY_TYPES.camera, 'look_at_mode', '注视模式', { kind: 'enum', values: [{ value: 'manual', label: '坐标' }, { value: 'object', label: '对象' }] }, { readOnly: '注视模式由注视点或注视对象修改推导。' }),
-    property(ENTITY_TYPES.camera, 'look_at_target', '注视点', VECTOR3),
-    property(ENTITY_TYPES.camera, 'look_at_object_ref', '注视对象', { kind: 'ref', refKinds: [ENTITY_TYPES.object] }, { nullable: true, relation: { targetEntityTypes: [ENTITY_TYPES.object], cardinality: 'optional' } }),
-    property(ENTITY_TYPES.camera, 'aspect_ratio_preset', '画幅预设', { kind: 'enum', values: ['16:9', '4:3', '1:1', '9:16', 'custom'].map((value) => ({ value, label: value })) }),
-    property(ENTITY_TYPES.camera, 'aspect_ratio', '画幅比例', { kind: 'number', hardRange: { min: 0.1, max: 10 } }),
     property(ENTITY_TYPES.camera, 'effector_count', '效果器数量', INTEGER, { readOnly: '效果器数量由效果器列表计算。' }),
     ...animatableProperties(ENTITY_TYPES.camera),
   ],
   [ENTITY_TYPES.shot]: [
-    property(ENTITY_TYPES.shot, 'name', '镜头名称', { kind: 'string', minLength: 1, maxLength: CAMERA_STAGE_NAME_MAX_LENGTH }),
-    property(ENTITY_TYPES.shot, 'time', '时间点', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),
-    property(ENTITY_TYPES.shot, 'hold', '停留时长', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),
-    property(ENTITY_TYPES.shot, 'transition_duration', '过渡时长', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),
-    property(ENTITY_TYPES.shot, 'continuity', '连续性', { kind: 'enum', values: [{ value: 'stop', label: '停靠' }, { value: 'smooth', label: '连续' }] }),
-    property(ENTITY_TYPES.shot, 'camera_ref', '拍摄机位', { kind: 'ref', refKinds: [ENTITY_TYPES.camera] }, { nullable: true, relation: { targetEntityTypes: [ENTITY_TYPES.camera], cardinality: 'optional' } }),
+    ...fieldDescriptors(SHOT_FIELDS),
   ],
   [ENTITY_TYPES.playback]: [
-    property(ENTITY_TYPES.playback, 'playing', '正在播放', BOOLEAN, {
-      description: '时间轴是否正在播放。助手做完动画后靠它自己预览验证，而不是让用户去点播放。',
-    }),
-    property(ENTITY_TYPES.playback, 'current_time', '播放头位置', { kind: 'number', hardRange: { min: 0, max: 3600 } }, {
-      unit: 'second',
-      description: '播放头当前所在时间。写入等价于界面上拖动时间指针。',
-    }),
-    property(ENTITY_TYPES.playback, 'loop', '循环播放', BOOLEAN),
+    ...fieldDescriptors(PLAYBACK_FIELDS),
   ],
   [ENTITY_TYPES.trajectory]: [
     property(ENTITY_TYPES.trajectory, 'shot_ref', '起始镜头', { kind: 'ref', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '轨迹所属镜头不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'one' } }),
@@ -194,9 +168,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
   [ENTITY_TYPES.keyframe]: [
     property(ENTITY_TYPES.keyframe, 'object_ref', '关键帧对象', { kind: 'ref', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '关键帧对象不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'one' } }),
     property(ENTITY_TYPES.keyframe, 'property_path', '属性路径', STRING, { readOnly: '属性路径由轨道定义。' }),
-    property(ENTITY_TYPES.keyframe, 'time', '时间', { kind: 'number', hardRange: { min: 0, max: 3600 } }, { unit: 'second' }),
-    property(ENTITY_TYPES.keyframe, 'value', '值摘要', STRING),
-    property(ENTITY_TYPES.keyframe, 'easing', '缓动', STRING),
+    ...fieldDescriptors(KEYFRAME_FIELDS),
   ],
 }
 
@@ -218,10 +190,6 @@ function splitChildRef(ref: ApplicationRef, expected: EntityType): { projectId: 
   const separator = ref.id.indexOf(':')
   if (separator < 1) throw new Error('NOT_FOUND')
   return { projectId: ref.id.slice(0, separator), childId: ref.id.slice(separator + 1) }
-}
-
-function valueSummary(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value)
 }
 
 function filterProperties(properties: Record<string, JsonValue>, requested?: string[]): Record<string, JsonValue> {
@@ -301,11 +269,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
       const playback = cameraStageApplicationService.readPlayback(ref.id)
       if (!playback) throw new Error('NOT_FOUND')
-      return {
-        [`${ENTITY_TYPES.playback}.playing`]: playback.playing,
-        [`${ENTITY_TYPES.playback}.current_time`]: playback.currentTime,
-        [`${ENTITY_TYPES.playback}.loop`]: playback.loop,
-      }
+      return fieldReadValues(PLAYBACK_FIELDS, playback)
     }
     if (this.entityType === ENTITY_TYPES.project || this.entityType === ENTITY_TYPES.scene) {
       if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
@@ -331,7 +295,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 
   private projectProperties(snapshot: CameraStageProjectSnapshot): Record<string, JsonValue> {
     return {
-      [`${ENTITY_TYPES.project}.name`]: snapshot.name,
+      ...fieldReadValues(PROJECT_FIELDS, snapshot),
       [`${ENTITY_TYPES.project}.editor_mode`]: snapshot.editorMode,
       [`${ENTITY_TYPES.project}.object_count`]: snapshot.objects.length,
       [`${ENTITY_TYPES.project}.shot_count`]: snapshot.shots.length,
@@ -351,15 +315,9 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   private objectProperties(object: Exclude<StageObject, { type: 'camera' }>): Record<string, JsonValue> {
     const bounds = calculateStageObjectBounds(object)
     return {
-      [`${ENTITY_TYPES.object}.name`]: object.name,
+      ...fieldReadValues(OBJECT_FIELDS, object),
       [`${ENTITY_TYPES.object}.type`]: object.type,
-      [`${ENTITY_TYPES.object}.visible`]: object.visible,
-      [`${ENTITY_TYPES.object}.color`]: object.color,
       [`${ENTITY_TYPES.object}.primitive_kind`]: object.type === 'primitive' ? object.kind : null,
-      [`${ENTITY_TYPES.object}.character_variant`]: object.type === 'character' ? object.variant : null,
-      [`${ENTITY_TYPES.object}.transform.position`]: vec3Value(object.transform.position),
-      [`${ENTITY_TYPES.object}.transform.rotation`]: vec3Value(object.transform.rotation),
-      [`${ENTITY_TYPES.object}.transform.scale`]: vec3Value(object.transform.scale),
       [`${ENTITY_TYPES.object}.bounds.min`]: vec3Value(bounds.min),
       [`${ENTITY_TYPES.object}.bounds.max`]: vec3Value(bounds.max),
       ...this.animatableValues(ENTITY_TYPES.object, object),
@@ -368,16 +326,8 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 
   private cameraProperties(projectId: string, camera: Extract<StageObject, { type: 'camera' }>): Record<string, JsonValue> {
     return {
-      [`${ENTITY_TYPES.camera}.name`]: camera.name,
-      [`${ENTITY_TYPES.camera}.visible`]: camera.visible,
-      [`${ENTITY_TYPES.camera}.transform.position`]: vec3Value(camera.transform.position),
-      [`${ENTITY_TYPES.camera}.transform.rotation`]: vec3Value(camera.transform.rotation),
-      [`${ENTITY_TYPES.camera}.fov`]: camera.fov,
+      ...fieldReadValues(CAMERA_FIELDS, { projectId, camera }),
       [`${ENTITY_TYPES.camera}.look_at_mode`]: camera.lookAt.mode,
-      [`${ENTITY_TYPES.camera}.look_at_target`]: vec3Value(camera.lookAt.mode === 'manual' ? camera.lookAt.target : camera.lookAt.fallbackTarget),
-      [`${ENTITY_TYPES.camera}.look_at_object_ref`]: camera.lookAt.mode === 'object' ? childRef(ENTITY_TYPES.object, projectId, camera.lookAt.objectId) : null,
-      [`${ENTITY_TYPES.camera}.aspect_ratio_preset`]: camera.aspectRatio.preset,
-      [`${ENTITY_TYPES.camera}.aspect_ratio`]: camera.aspectRatio.ratio,
       [`${ENTITY_TYPES.camera}.effector_count`]: camera.effectors.length,
       ...this.animatableValues(ENTITY_TYPES.camera, camera),
     }
@@ -398,14 +348,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   }
 
   private shotProperties(projectId: string, shot: CameraStageProjectSnapshot['shots'][number]): Record<string, JsonValue> {
-    return {
-      [`${ENTITY_TYPES.shot}.name`]: shot.name,
-      [`${ENTITY_TYPES.shot}.time`]: shot.time,
-      [`${ENTITY_TYPES.shot}.hold`]: shot.hold,
-      [`${ENTITY_TYPES.shot}.transition_duration`]: shot.transitionDuration,
-      [`${ENTITY_TYPES.shot}.continuity`]: shot.continuity,
-      [`${ENTITY_TYPES.shot}.camera_ref`]: shot.cameraId ? childRef(ENTITY_TYPES.camera, projectId, shot.cameraId) : null,
-    }
+    return fieldReadValues(SHOT_FIELDS, { projectId, shot })
   }
 
   private trajectoryProperties(projectId: string, snapshot: CameraStageProjectSnapshot, id: string): Record<string, JsonValue> {
@@ -433,9 +376,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     return {
       [`${ENTITY_TYPES.keyframe}.object_ref`]: childRef(object?.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, projectId, objectId),
       [`${ENTITY_TYPES.keyframe}.property_path`]: propertyPath,
-      [`${ENTITY_TYPES.keyframe}.time`]: keyframe.time,
-      [`${ENTITY_TYPES.keyframe}.value`]: valueSummary(keyframe.value),
-      [`${ENTITY_TYPES.keyframe}.easing`]: valueSummary(keyframe.easing),
+      ...fieldReadValues(KEYFRAME_FIELDS, keyframe),
     }
   }
 }

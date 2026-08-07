@@ -1,4 +1,6 @@
 import {
+  fieldDescriptors,
+  fieldReadValues,
   type ApplicationEntityProvider,
   type ApplicationEntityRegistration,
   type ApplicationPropertyDescriptor,
@@ -8,6 +10,7 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 import { assetApplicationService } from './assetApplicationService'
+import { ASSET_FIELDS, LIBRARY_FIELDS } from './assetFields'
 
 export const ASSET_ENTITY_TYPES = {
   catalog: 'asset.catalog',
@@ -64,22 +67,14 @@ const properties: Record<AssetEntityType, ApplicationPropertyDescriptor[]> = {
     property(ASSET_ENTITY_TYPES.catalog, 'library_count', '集合数量', { kind: 'integer', hardRange: { min: 0 } }, READ_ONLY),
   ],
   [ASSET_ENTITY_TYPES.asset]: [
-    property(ASSET_ENTITY_TYPES.asset, 'display_name', '显示名称', { kind: 'string', minLength: 1, maxLength: 200 }),
+    ...fieldDescriptors(ASSET_FIELDS),
     property(ASSET_ENTITY_TYPES.asset, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }, READ_ONLY),
-    property(ASSET_ENTITY_TYPES.asset, 'tags', '标签', { kind: 'json', schemaRef: ASSET_TAGS_VALUE_SCHEMA_REF }),
-    // 集合归属用 append / remove 两个属性修改操作表达，对应服务的 addToLibrary / removeFromLibrary。
-    // 这类「成员关系」不需要独立的集合执行器：ref_list 属性本身就支持增删语义。
-    property(ASSET_ENTITY_TYPES.asset, 'library_refs', '所属集合', { kind: 'ref_list', refKinds: [ASSET_ENTITY_TYPES.library] }),
     property(ASSET_ENTITY_TYPES.asset, 'inspection_status', '检查状态', { kind: 'string', maxLength: 40 }, READ_ONLY),
     property(ASSET_ENTITY_TYPES.asset, 'media_ref', '媒体引用', { kind: 'string', maxLength: 4096 }, READ_ONLY),
   ],
   [ASSET_ENTITY_TYPES.library]: [
-    property(ASSET_ENTITY_TYPES.library, 'name', '集合名称', { kind: 'string', minLength: 1, maxLength: 200 }),
+    ...fieldDescriptors(LIBRARY_FIELDS),
   ],
-}
-
-function asJson(value: unknown): JsonValue {
-  return JSON.parse(JSON.stringify(value)) as JsonValue
 }
 
 class AssetReflectionProvider implements ApplicationEntityProvider {
@@ -161,10 +156,8 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
   private async readAsset(assetId: string): Promise<Record<string, JsonValue>> {
     const asset = await assetApplicationService.read(assetId)
     return {
-      'asset.display_name': String(asset.displayName),
+      ...fieldReadValues(ASSET_FIELDS, asset),
       'asset.media_type': String(asset.mediaType),
-      'asset.tags': asJson(asset.tags ?? []),
-      'asset.library_refs': asJson((Array.isArray(asset.libraryIds) ? asset.libraryIds : []).map((id) => ({ kind: ASSET_ENTITY_TYPES.library, id }))),
       'asset.inspection_status': String(asset.inspectionStatus),
       'asset.media_ref': String(asset.displayUrl ?? ''),
       'asset.updated_at': Number(asset.updatedAt) || 0,
@@ -175,7 +168,7 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
     const library = (await assetApplicationService.listLibraries()).find((item) => item.id === libraryId)
     if (!library) throw new Error('NOT_FOUND')
     return {
-      'asset.library.name': String(library.name),
+      ...fieldReadValues(LIBRARY_FIELDS, library),
       'asset.library.updated_at': Number(library.updatedAt) || 0,
     }
   }

@@ -93,4 +93,24 @@ describe('fieldDefinition', () => {
     ])
     expect(draft.label).toBe('new')
   })
+
+  it('多个字段共用同一个 store 动作时，账本条目按声明顺序累积 propertyIds 而不是互相覆盖', () => {
+    const firstField: ApplicationFieldDefinition<FakeSource, FakeDraft> = {
+      propertyId: 'fake.entity.first',
+      descriptor: makeDescriptor('fake.entity.first'),
+      read: (source) => source.label,
+      writer: { write: (draft, mutation) => { draft.label = String(mutation.value) } },
+      storeActions: ['updateBoth'],
+    }
+    const secondField: ApplicationFieldDefinition<FakeSource, FakeDraft> = {
+      propertyId: 'fake.entity.second',
+      descriptor: makeDescriptor('fake.entity.second'),
+      read: (source) => source.label,
+      writer: { write: (draft, mutation) => { draft.label = String(mutation.value) } },
+      storeActions: ['updateBoth'],
+    }
+    expect(fieldLedgerEntries([firstField, secondField])).toEqual({
+      updateBoth: { kind: 'property', propertyIds: ['fake.entity.first', 'fake.entity.second'] },
+    })
+  })
 })

@@ -1,6 +1,7 @@
-import type { ApplicationStoreActionBinding, ApplicationStoreActionLedger } from '@/core/application-control'
+import { fieldLedgerEntries, type ApplicationStoreActionBinding, type ApplicationStoreActionLedger } from '@/core/application-control'
 
 import type { useCanvasStore } from '@/stores/canvasStore'
+import { NODE_FIELDS } from './canvasFields'
 import { CANVAS_ENTITY_TYPES as ENTITY } from './canvasReflection'
 
 /*
@@ -36,7 +37,8 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     addEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'create' },
     deleteEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'remove' },
     updateNodeData: { kind: 'capability', capabilityId: 'update_canvas_node' },
-    updateNodePosition: { kind: 'property', propertyIds: [`${ENTITY.node}.position`] },
+    // 定义收敛在 canvasFields.ts；display_name 走 updateNodeData 能力，不在这里重复声明。
+    ...fieldLedgerEntries(NODE_FIELDS),
     groupNodes: { kind: 'capability', capabilityId: 'group_canvas_nodes' },
     clearCanvas: {
       kind: 'gap',

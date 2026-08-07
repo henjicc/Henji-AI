@@ -5,36 +5,20 @@ import type {
   ApplicationEvidence,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
-  ApplicationPropertyWriterTable,
 } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
 
 import { assetApplicationService } from './assetApplicationService'
+import { ASSET_LIBRARY_WRITERS as WRITERS } from './assetFields'
 import { ASSET_ENTITY_TYPES } from './assetReflection'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
 
-const NAME_PROPERTY = `${ASSET_ENTITY_TYPES.library}.name`
 const logger = createLogger('features.assets.library_mutation')
 const undoRecords = new Map<string, { libraryId: string; name: string }>()
 
-function requireName(value: unknown): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error('ASSET_LIBRARY_NAME_INVALID：素材集合名称必须是非空字符串。')
-  }
-  return value
-}
-
-const WRITERS: ApplicationPropertyWriterTable<string> = {
-  [NAME_PROPERTY]: {
-    async write(libraryId, mutation) {
-      await assetApplicationService.renameLibrary(libraryId, requireName(mutation.value))
-    },
-  },
-}
-
-/** 素材集合改名的通用属性执行器；界面与助手共用同一个平台领域入口。 */
+/** 素材集合改名的通用属性执行器；界面与助手共用同一个平台领域入口。写入表定义收敛在 assetFields.ts。 */
 export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = ASSET_ENTITY_TYPES.library
   readonly writableProperties = writableProperties(WRITERS)

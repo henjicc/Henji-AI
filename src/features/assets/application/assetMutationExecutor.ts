@@ -5,8 +5,6 @@ import type {
   ApplicationEvidence,
   ApplicationMutationExecutor,
   ApplicationPlannedStep,
-  ApplicationPropertyWriterTable,
-  JsonValue,
 } from '@/core/application-control'
 import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
 import { createLogger } from '@/core/logging'
@@ -15,6 +13,7 @@ import {
   assetApplicationService,
   type AssetMutationSnapshot,
 } from './assetApplicationService'
+import { ASSET_WRITERS as WRITERS } from './assetFields'
 import { ASSET_ENTITY_TYPES } from './assetReflection'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
@@ -37,35 +36,6 @@ interface AssetUndoRecord {
 }
 
 const undoRecords = new Map<string, AssetUndoRecord>()
-
-function libraryId(value: JsonValue | undefined): string {
-  const raw = typeof value === 'string'
-    ? value
-    : value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, JsonValue>).id
-      : undefined
-  if (typeof raw !== 'string' || raw.trim() === '') {
-    throw new Error('ASSET_LIBRARY_REF_INVALID：集合引用必须是集合对象引用或集合 id 字符串。')
-  }
-  return raw
-}
-
-function tagList(value: JsonValue | undefined): string[] {
-  if (!Array.isArray(value)) throw new Error('ASSET_TAGS_INVALID：tags 必须是字符串数组。')
-  return value.map((item, index) => {
-    if (typeof item !== 'string' || item.trim() === '') {
-      throw new Error(`ASSET_TAGS_INVALID：第 ${index} 个标签必须是非空字符串。`)
-    }
-    return item
-  })
-}
-
-function displayName(value: JsonValue | undefined): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Error('ASSET_DISPLAY_NAME_INVALID：素材名称必须是非空字符串。')
-  }
-  return value
-}
 
 async function restoreSnapshot(
   assetId: string,
@@ -99,42 +69,7 @@ async function restoreSnapshot(
   }
 }
 
-/**
- * 写入目标带一个 `applied` 集合：失败时要按「已经写成功的那几条」精确回滚，
- * 不能整体恢复快照（会把本次之外的并发改动一起冲掉）。
- */
-interface AssetWriteDraft {
-  readonly assetId: string
-  readonly applied: Set<string>
-}
-
-const WRITERS: ApplicationPropertyWriterTable<AssetWriteDraft> = {
-  [DISPLAY_NAME_PROPERTY]: {
-    async write(draft, mutation) {
-      await assetApplicationService.rename(draft.assetId, displayName(mutation.value))
-      draft.applied.add(mutation.propertyId)
-    },
-  },
-  [TAGS_PROPERTY]: {
-    async write(draft, mutation) {
-      await assetApplicationService.replaceTags(draft.assetId, tagList(mutation.value))
-      draft.applied.add(mutation.propertyId)
-    },
-  },
-  [LIBRARY_REFS_PROPERTY]: {
-    // 集合归属是全项目唯一不走 set 的属性：整体替换要分别 remove 旧集合、append 新集合。
-    // 声明出来之后模型从工具描述里就能看到，不必靠运行时报错才知道。
-    operations: ['append', 'remove'],
-    async write(draft, mutation) {
-      const id = libraryId(mutation.value)
-      if (mutation.operation === 'append') await assetApplicationService.addToLibrary(id, draft.assetId)
-      else await assetApplicationService.removeFromLibrary(id, draft.assetId)
-      draft.applied.add(mutation.propertyId)
-    },
-  },
-}
-
-/** 素材通用属性写入；全部状态变换委托素材领域服务，并保存可真实恢复的领域快照。 */
+/** 素材通用属性写入；全部状态变换委托素材领域服务，并保存可真实恢复的领域快照。写入表定义收敛在 assetFields.ts。 */
 export class AssetMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = ASSET_ENTITY_TYPES.asset
   readonly writableProperties = writableProperties(WRITERS)

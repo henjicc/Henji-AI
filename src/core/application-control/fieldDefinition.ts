@@ -73,15 +73,26 @@ export function fieldWriterTable<TSource, TDraft>(
  * 返回类型是 `Record<TAction, …>` 而不是 `Record<string, …>`：字面量 `TAction` 联合
  * 一路从各字段的 `storeAction` 参数推导上来，展开进账本 `entries` 字面量后，账本原有的
  * 编译期完整性检查（`Record<ActionName, …>` 漏一条 tsc 报错）才不会被 `...spread` 破坏掉。
+ *
+ * **同一个 store 动作可以被多个字段共用**（例如 `updateObject` 一次性改 name/visible/
+ * color/character_variant 四个属性），这里按声明顺序把它们的 `propertyId` 累进同一条
+ * 绑定，而不是让后声明的字段覆盖先声明的——按单个 propertyId 覆盖是三维 object/camera
+ * 迁移时踩出来的坑：场景字段全是「一个 store 方法对一个属性」，掩盖了这条路径。
  */
 export function fieldLedgerEntries<TSource, TDraft, TAction extends string>(
   fields: readonly ApplicationFieldDefinition<TSource, TDraft, TAction>[],
 ): Record<TAction, ApplicationStoreActionBinding> {
-  const entries: Partial<Record<TAction, ApplicationStoreActionBinding>> = {}
+  const propertyIdsByAction = new Map<TAction, string[]>()
   for (const field of fields) {
     for (const action of field.storeActions) {
-      entries[action] = { kind: 'property', propertyIds: [field.propertyId] }
+      const propertyIds = propertyIdsByAction.get(action) ?? []
+      propertyIds.push(field.propertyId)
+      propertyIdsByAction.set(action, propertyIds)
     }
+  }
+  const entries: Partial<Record<TAction, ApplicationStoreActionBinding>> = {}
+  for (const [action, propertyIds] of propertyIdsByAction) {
+    entries[action] = { kind: 'property', propertyIds: propertyIds as [string, ...string[]] }
   }
   return entries as Record<TAction, ApplicationStoreActionBinding>
 }

@@ -26,6 +26,18 @@ description: 为 Henji-AI 新增、修改或迁移应用能力，并完成智能
 
 声明了可写属性就必须注册 `ApplicationMutationExecutor`，声明了 `collectionWrite` 就必须注册 `ApplicationCollectionExecutor`。每个实体必须至少拥有一种写入执行器，或填写 `writeExclusion.reason`，明确说明为何只读以及状态由哪个正式模块或操作维护；不得用“暂时不支持”代替判断。三者由覆盖测试强制一致。
 
+**新增可写属性只在一处声明。** 一个属性此前要碰 4 个位置（属性描述符、读取映射、写入表项、界面动作账本），缺任何一处都是静默失效——不报错，助手安静地少一块能力，只有用户实机撞上才发现（三维场景外观 24 项当初就是这样漏掉描述符和读取两处）。现在统一走 `src/core/application-control/fieldDefinition.ts` 的 `ApplicationFieldDefinition`：
+
+```ts
+sceneField('sky_color', '天空颜色', COLOR, {
+  read: (settings) => settings.sky.color,
+  write: (store, value) => store.setSceneSkyColor(value),
+  storeAction: 'setSceneSkyColor',
+})
+```
+
+一条声明用 `fieldDescriptors()` / `fieldReadValues()` / `fieldWriterTable()` / `fieldLedgerEntries()` 派生出描述符、读取映射、写入表项、账本条目四样东西，四个消费方各取所需。字段定义按领域收在 `<领域>Fields.ts`（如 `cameraStageSceneFields.ts`、`canvasFields.ts`、`assetFields.ts`），领域内部再包一层 `<领域>Field()` 薄封装填好该领域固定的 entityType、权限、revision scope。同一个 store 动作被多个字段共用时（如 `updateObject` 一次改 name/visible/color/character_variant 四个属性），`fieldLedgerEntries()` 按声明顺序把它们累进同一条账本绑定。禁止再分别手写这四处——统一定义之后漏一条是整条从四处一起消失，会被 `storeActionCoverage` 门禁当场抓到，而不是像以前那样只漏两处却全绿。
+
 ### 1. 判断能力边界
 
 - 先定位正式业务服务，禁止让能力处理器复制业务逻辑。

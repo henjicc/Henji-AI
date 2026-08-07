@@ -1,8 +1,10 @@
-import { fieldLedgerEntries, type ApplicationStoreActionBinding, type ApplicationStoreActionLedger } from '@/core/application-control'
+import { fieldLedgerEntries, type ApplicationStoreActionLedger } from '@/core/application-control'
 
 import type { useCameraStageStore } from '../store/cameraStageStore'
+import { CAMERA_FIELDS, OBJECT_FIELDS } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES as ENTITY } from './cameraStageReflection'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
+import { KEYFRAME_FIELDS, PLAYBACK_FIELDS, SHOT_FIELDS } from './cameraStageTimelineFields'
 
 /*
  * 三维运镜的界面动作账本。
@@ -19,19 +21,6 @@ type ActionName = {
   [K in keyof State]-?: State[K] extends (...args: never[]) => unknown ? K : never
 }[keyof State]
 
-function shotProperty(...suffixes: [string, ...string[]]): ApplicationStoreActionBinding {
-  return {
-    kind: 'property',
-    propertyIds: suffixes.map((suffix) => `${ENTITY.shot}.${suffix}`) as [string, ...string[]],
-  }
-}
-
-const OBJECT_TRANSFORM = [
-  `${ENTITY.object}.transform.position`,
-  `${ENTITY.object}.transform.rotation`,
-  `${ENTITY.object}.transform.scale`,
-] as [string, string, string]
-
 const SELECTION_REASON = '选中态是鼠标操作的中间产物；助手用稳定引用直接寻址目标，不需要先选中，'
   + '而且改写选中态会与用户当前正在进行的操作打架。'
 
@@ -45,19 +34,12 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     addCamera: { kind: 'capability', capabilityId: 'place_camera_stage_object' },
     duplicateObject: { kind: 'capability', capabilityId: 'duplicate_camera_stage_object' },
     removeObject: { kind: 'capability', capabilityId: 'delete_camera_stage_object' },
-    updateObject: {
-      kind: 'property',
-      propertyIds: [`${ENTITY.object}.name`, `${ENTITY.object}.visible`, `${ENTITY.object}.color`, `${ENTITY.object}.character_variant`],
-    },
-    updateObjectAcrossShots: {
-      kind: 'property',
-      propertyIds: [`${ENTITY.object}.name`, `${ENTITY.object}.visible`, `${ENTITY.object}.color`, `${ENTITY.object}.character_variant`],
-    },
-    updateTransform: { kind: 'property', propertyIds: OBJECT_TRANSFORM },
-    updateCameraView: {
-      kind: 'property',
-      propertyIds: [`${ENTITY.camera}.transform.position`, `${ENTITY.camera}.transform.rotation`, `${ENTITY.camera}.look_at_target`],
-    },
+    /*
+     * updateObject/updateObjectAcrossShots/updateTransform（object 域）与 updateCameraView
+     * （camera 域）定义收敛在 cameraStageObjectFields.ts，账本条目从 storeActions 派生。
+     */
+    ...fieldLedgerEntries(OBJECT_FIELDS),
+    ...fieldLedgerEntries(CAMERA_FIELDS),
 
     /* ── 角色姿态 ───────────────────────────────────────────── */
     updatePoseJoint: {
@@ -81,12 +63,8 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
 
     /* ── 播放 ───────────────────────────────────────────────── */
     // 播放控制注册成 camera_stage.playback 单例实体的三条属性，零新增工具。
-    // 助手做完动画能自己预览验证，而不是让用户去点播放。
-    play: { kind: 'property', propertyIds: [`${ENTITY.playback}.playing`] },
-    pause: { kind: 'property', propertyIds: [`${ENTITY.playback}.playing`] },
-    stop: { kind: 'property', propertyIds: [`${ENTITY.playback}.playing`, `${ENTITY.playback}.current_time`] },
-    seek: { kind: 'property', propertyIds: [`${ENTITY.playback}.current_time`] },
-    toggleLoop: { kind: 'property', propertyIds: [`${ENTITY.playback}.loop`] },
+    // 助手做完动画能自己预览验证，而不是让用户去点播放。定义收敛在 cameraStageTimelineFields.ts。
+    ...fieldLedgerEntries(PLAYBACK_FIELDS),
     setPlaybackTime: {
       kind: 'excluded',
       category: 'derived',
@@ -96,12 +74,8 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
 
     /* ── 镜头卡 ─────────────────────────────────────────────── */
     addShot: { kind: 'capability', capabilityId: 'add_camera_stage_shot' },
-    updateShotName: shotProperty('name'),
-    moveShotTime: shotProperty('time'),
-    updateShotTiming: shotProperty('time', 'hold'),
-    updateShotTransition: shotProperty('transition_duration'),
-    updateShotContinuity: shotProperty('continuity'),
-    updateShotCamera: shotProperty('camera_ref'),
+    // 定义收敛在 cameraStageTimelineFields.ts；time 被 moveShotTime 与 updateShotTiming 共用。
+    ...fieldLedgerEntries(SHOT_FIELDS),
     removeShot: {
       kind: 'gap',
       plannedPhase: '期 2',
@@ -125,9 +99,8 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     toggleKeyframe: { kind: 'collection', entityType: ENTITY.keyframe, operation: 'create' },
     toggleKeyframeGroup: { kind: 'collection', entityType: ENTITY.keyframe, operation: 'create' },
     removeKeyframe: { kind: 'collection', entityType: ENTITY.keyframe, operation: 'remove' },
-    moveKeyframe: { kind: 'property', propertyIds: [`${ENTITY.keyframe}.time`] },
-    setKeyframeValue: { kind: 'property', propertyIds: [`${ENTITY.keyframe}.value`] },
-    setKeyframesEasing: { kind: 'property', propertyIds: [`${ENTITY.keyframe}.easing`] },
+    // 定义收敛在 cameraStageTimelineFields.ts。
+    ...fieldLedgerEntries(KEYFRAME_FIELDS),
     clearTrack: {
       kind: 'gap',
       plannedPhase: '期 2',

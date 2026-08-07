@@ -1,14 +1,17 @@
-import type {
-  ApplicationEntityProvider,
-  ApplicationEntityRegistration,
-  ApplicationPropertyDescriptor,
-  ApplicationPropertyValue,
-  ApplicationRef,
-  JsonValue,
+import {
+  fieldDescriptors,
+  fieldReadValues,
+  type ApplicationEntityProvider,
+  type ApplicationEntityRegistration,
+  type ApplicationPropertyDescriptor,
+  type ApplicationPropertyValue,
+  type ApplicationRef,
+  type JsonValue,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
+import { NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
 import { listCanvasProjects } from './canvasProjectService'
 import { readCanvasProjectSnapshot } from './canvasQueryService'
 
@@ -68,7 +71,7 @@ function property(
 
 const propertiesByEntity: Record<CanvasEntityType, ApplicationPropertyDescriptor[]> = {
   [CANVAS_ENTITY_TYPES.project]: [
-    property(CANVAS_ENTITY_TYPES.project, 'name', '项目名称', { kind: 'string', minLength: 1, maxLength: 120 }),
+    ...fieldDescriptors(PROJECT_FIELDS),
     property(CANVAS_ENTITY_TYPES.project, 'node_count', '节点数量', { kind: 'integer', hardRange: { min: 0 } }, {
       readOnly: '节点数量由项目内容计算。',
     }),
@@ -84,8 +87,7 @@ const propertiesByEntity: Record<CanvasEntityType, ApplicationPropertyDescriptor
     property(CANVAS_ENTITY_TYPES.node, 'node_type', '节点类型', { kind: 'string', maxLength: 120 }, {
       readOnly: '节点类型创建后不可变更。',
     }),
-    property(CANVAS_ENTITY_TYPES.node, 'display_name', '节点标题', { kind: 'string', minLength: 1, maxLength: 120 }),
-    property(CANVAS_ENTITY_TYPES.node, 'position', '节点位置', { kind: 'vector2', unit: 'canvas_pixel' }),
+    ...fieldDescriptors(NODE_FIELDS),
   ],
   [CANVAS_ENTITY_TYPES.edge]: [
     property(CANVAS_ENTITY_TYPES.edge, 'project_ref', '所属项目', { kind: 'ref', refKinds: [CANVAS_ENTITY_TYPES.project] }, {
@@ -189,7 +191,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
       if (ref.kind !== this.entityType) throw new Error('NOT_FOUND')
       const project = await readCanvasProjectSnapshot(ref.id)
       return {
-        [`${this.entityType}.name`]: project.name,
+        ...fieldReadValues(PROJECT_FIELDS, project),
         [`${this.entityType}.node_count`]: project.nodes.length,
         [`${this.entityType}.edge_count`]: project.edges.length,
       }
@@ -210,8 +212,7 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
     return {
       [`${CANVAS_ENTITY_TYPES.node}.project_ref`]: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
       [`${CANVAS_ENTITY_TYPES.node}.node_type`]: node.type,
-      [`${CANVAS_ENTITY_TYPES.node}.display_name`]: node.data.displayName ?? node.type,
-      [`${CANVAS_ENTITY_TYPES.node}.position`]: { x: node.position.x, y: node.position.y },
+      ...fieldReadValues(NODE_FIELDS, node),
     }
   }
 
