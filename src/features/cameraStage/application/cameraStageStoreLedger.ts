@@ -1,7 +1,8 @@
-import type { ApplicationStoreActionBinding, ApplicationStoreActionLedger } from '@/core/application-control'
+import { fieldLedgerEntries, type ApplicationStoreActionBinding, type ApplicationStoreActionLedger } from '@/core/application-control'
 
 import type { useCameraStageStore } from '../store/cameraStageStore'
 import { CAMERA_STAGE_ENTITY_TYPES as ENTITY } from './cameraStageReflection'
+import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
 
 /*
  * 三维运镜的界面动作账本。
@@ -17,10 +18,6 @@ type State = ReturnType<typeof useCameraStageStore.getState>
 type ActionName = {
   [K in keyof State]-?: State[K] extends (...args: never[]) => unknown ? K : never
 }[keyof State]
-
-function sceneProperty(suffix: string): ApplicationStoreActionBinding {
-  return { kind: 'property', propertyIds: [`${ENTITY.scene}.${suffix}`] }
-}
 
 function shotProperty(...suffixes: [string, ...string[]]): ApplicationStoreActionBinding {
   return {
@@ -75,37 +72,14 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
       reason: '一键预设姿势整体替换姿态，与 updatePoseJoint 同属姿态写入，缺同一个入口。',
     },
 
-    /* ── 场景外观（界面 25 项，逐项对上）─────────────────────── */
-    setSceneSkyColor: sceneProperty('sky_color'),
-    setSceneGroundColor: sceneProperty('ground_color'),
-    setSceneGroundPattern: sceneProperty('ground_pattern'),
-    setSceneGroundDensity: sceneProperty('ground_density'),
-    setSceneGroundGridLineColor: sceneProperty('ground_grid_line_color'),
-    setSceneGroundGridLineThickness: sceneProperty('ground_grid_line_thickness'),
-    setSceneGroundCheckerLightColor: sceneProperty('ground_checker_light_color'),
-    setSceneGroundCheckerDarkColor: sceneProperty('ground_checker_dark_color'),
-    setSceneSunlightEnabled: sceneProperty('sunlight_enabled'),
-    setSceneSunlightIntensity: sceneProperty('sunlight_intensity'),
-    setSceneSunlightTimeOfDay: sceneProperty('sunlight_time_of_day'),
-    setSceneFogEnabled: sceneProperty('fog_enabled'),
-    setSceneFogDistance: sceneProperty('fog_distance'),
-    setSceneShowNameLabels: sceneProperty('show_name_labels'),
-    setSceneNameLabelScale: sceneProperty('name_label_scale'),
-    setSceneNameLabelOffset: sceneProperty('name_label_offset'),
-    setSceneNameLabelTextColor: sceneProperty('name_label_text_color'),
-    setSceneNameLabelFollowObjectColor: sceneProperty('name_label_follow_object_color'),
-    setSceneNameLabelBackgroundColor: sceneProperty('name_label_background_color'),
-    setSceneNameLabelBackgroundOpacity: sceneProperty('name_label_background_opacity'),
-    setSceneNameLabelShadowColor: sceneProperty('name_label_shadow_color'),
-    setSceneNameLabelShadowOpacity: sceneProperty('name_label_shadow_opacity'),
-    setSceneNameLabelShadowBlur: sceneProperty('name_label_shadow_blur'),
-    setSceneNameLabelShadowDistance: sceneProperty('name_label_shadow_distance'),
-    setSceneNameLabelShadowAngle: sceneProperty('name_label_shadow_angle'),
+    /*
+     * ── 场景外观（25 项）与时间轴（3 项）─────────────────────
+     * 定义收敛在 cameraStageSceneFields.ts，账本条目从 storeActions 派生，不再逐条手写。
+     */
+    ...fieldLedgerEntries(SCENE_APPEARANCE_FIELDS),
+    ...fieldLedgerEntries(SCENE_TIMELINE_FIELDS),
 
-    /* ── 时间轴与播放 ───────────────────────────────────────── */
-    setDuration: sceneProperty('duration'),
-    setFps: sceneProperty('fps'),
-    setActiveCameraId: sceneProperty('active_camera_ref'),
+    /* ── 播放 ───────────────────────────────────────────────── */
     // 播放控制注册成 camera_stage.playback 单例实体的三条属性，零新增工具。
     // 助手做完动画能自己预览验证，而不是让用户去点播放。
     play: { kind: 'property', propertyIds: [`${ENTITY.playback}.playing`] },

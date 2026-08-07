@@ -19,13 +19,18 @@ import type { JsonValue } from './identifiers'
  *
  * `storeActions` 放在字段定义里，是「让四处写在一起」的最后一块：store 动作名
  * 与属性 id 是两条不同的轴，无法自动对上，但可以要求写在同一处声明里。
+ *
+ * `TAction` 缺省是 `string`，调用方不关心账本的编译期完整性检查时可以忽略它。
+ * 想保住账本 `Record<ActionName, …>` 的编译期完整性（漏一条 tsc 报错），
+ * 调用方需要让 `storeAction` 以字面量类型传入（省略显式类型标注，让 TS 从字符串
+ * 字面量参数推出来），`fieldLedgerEntries` 才能把它累进返回类型的 key 联合。
  */
-export interface ApplicationFieldDefinition<TSource, TDraft> {
+export interface ApplicationFieldDefinition<TSource, TDraft, TAction extends string = string> {
   readonly propertyId: string
   readonly descriptor: ApplicationPropertyDescriptor
   readonly read: (source: TSource) => JsonValue
   readonly writer?: ApplicationPropertyWriter<TDraft>
-  readonly storeActions: readonly string[]
+  readonly storeActions: readonly TAction[]
 }
 
 /** 供属性反射层使用：这一批字段的描述符列表。 */
@@ -64,15 +69,19 @@ export function fieldWriterTable<TSource, TDraft>(
 /**
  * 供界面动作账本使用：把每个字段挂到的 store 动作名映射成 `property` 绑定。
  * `storeActions` 为空的字段（没有对应的界面动作，例如纯派生只读值）不产生账本条目。
+ *
+ * 返回类型是 `Record<TAction, …>` 而不是 `Record<string, …>`：字面量 `TAction` 联合
+ * 一路从各字段的 `storeAction` 参数推导上来，展开进账本 `entries` 字面量后，账本原有的
+ * 编译期完整性检查（`Record<ActionName, …>` 漏一条 tsc 报错）才不会被 `...spread` 破坏掉。
  */
-export function fieldLedgerEntries<TSource, TDraft>(
-  fields: readonly ApplicationFieldDefinition<TSource, TDraft>[],
-): Record<string, ApplicationStoreActionBinding> {
-  const entries: Record<string, ApplicationStoreActionBinding> = {}
+export function fieldLedgerEntries<TSource, TDraft, TAction extends string>(
+  fields: readonly ApplicationFieldDefinition<TSource, TDraft, TAction>[],
+): Record<TAction, ApplicationStoreActionBinding> {
+  const entries: Partial<Record<TAction, ApplicationStoreActionBinding>> = {}
   for (const field of fields) {
     for (const action of field.storeActions) {
       entries[action] = { kind: 'property', propertyIds: [field.propertyId] }
     }
   }
-  return entries
+  return entries as Record<TAction, ApplicationStoreActionBinding>
 }

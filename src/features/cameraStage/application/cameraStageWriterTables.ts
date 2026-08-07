@@ -21,8 +21,6 @@ import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
  * 压根没声明这些属性），color / transform.scale 对 camera 同理。
  */
 
-type CameraStageState = ReturnType<typeof useCameraStageStore.getState>
-
 const ENTITY = CAMERA_STAGE_ENTITY_TYPES
 
 function vec3(value: JsonValue | undefined): StageVec3 {
@@ -62,42 +60,11 @@ export const CAMERA_STAGE_PROJECT_WRITERS: ApplicationPropertyWriterTable<Camera
 /* ── 场景 ─────────────────────────────────────────────────────────────── */
 
 /**
- * 场景外观 25 项 + 时间轴 3 项。界面上有的每一项这里都要有：此前这一组一项都没接，
- * 助手做不了"把天空改成深蓝""地面换成网格""把太阳调到黄昏"。
+ * 场景外观 25 项 + 时间轴 3 项，定义收敛在 cameraStageSceneFields.ts（1.1 统一字段定义机制的
+ * 首个试点）。界面上有的每一项那边都要有：此前这一组一项都没接，助手做不了"把天空改成深蓝"
+ * "地面换成网格""把太阳调到黄昏"。
  */
-export const CAMERA_STAGE_SCENE_WRITERS: ApplicationPropertyWriterTable<CameraStageState> = {
-  [`${ENTITY.scene}.active_camera_ref`]: { write: (state, m) => state.setActiveCameraId(refId(m.value)) },
-  [`${ENTITY.scene}.duration`]: { write: (state, m) => state.setDuration(numberValue(m.value)) },
-  [`${ENTITY.scene}.fps`]: { write: (state, m) => state.setFps(numberValue(m.value)) },
-
-  [`${ENTITY.scene}.sky_color`]: { write: (state, m) => state.setSceneSkyColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.ground_color`]: { write: (state, m) => state.setSceneGroundColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.ground_pattern`]: {
-    write: (state, m) => state.setSceneGroundPattern(z.enum(['none', 'grid', 'checker']).parse(m.value)),
-  },
-  [`${ENTITY.scene}.ground_density`]: { write: (state, m) => state.setSceneGroundDensity(numberValue(m.value)) },
-  [`${ENTITY.scene}.ground_grid_line_color`]: { write: (state, m) => state.setSceneGroundGridLineColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.ground_grid_line_thickness`]: { write: (state, m) => state.setSceneGroundGridLineThickness(numberValue(m.value)) },
-  [`${ENTITY.scene}.ground_checker_light_color`]: { write: (state, m) => state.setSceneGroundCheckerLightColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.ground_checker_dark_color`]: { write: (state, m) => state.setSceneGroundCheckerDarkColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.sunlight_enabled`]: { write: (state, m) => state.setSceneSunlightEnabled(booleanValue(m.value)) },
-  [`${ENTITY.scene}.sunlight_intensity`]: { write: (state, m) => state.setSceneSunlightIntensity(numberValue(m.value)) },
-  [`${ENTITY.scene}.sunlight_time_of_day`]: { write: (state, m) => state.setSceneSunlightTimeOfDay(numberValue(m.value)) },
-  [`${ENTITY.scene}.fog_enabled`]: { write: (state, m) => state.setSceneFogEnabled(booleanValue(m.value)) },
-  [`${ENTITY.scene}.fog_distance`]: { write: (state, m) => state.setSceneFogDistance(numberValue(m.value)) },
-  [`${ENTITY.scene}.show_name_labels`]: { write: (state, m) => state.setSceneShowNameLabels(booleanValue(m.value)) },
-  [`${ENTITY.scene}.name_label_scale`]: { write: (state, m) => state.setSceneNameLabelScale(numberValue(m.value)) },
-  [`${ENTITY.scene}.name_label_offset`]: { write: (state, m) => state.setSceneNameLabelOffset(vec3(m.value)) },
-  [`${ENTITY.scene}.name_label_text_color`]: { write: (state, m) => state.setSceneNameLabelTextColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.name_label_follow_object_color`]: { write: (state, m) => state.setSceneNameLabelFollowObjectColor(booleanValue(m.value)) },
-  [`${ENTITY.scene}.name_label_background_color`]: { write: (state, m) => state.setSceneNameLabelBackgroundColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.name_label_background_opacity`]: { write: (state, m) => state.setSceneNameLabelBackgroundOpacity(numberValue(m.value)) },
-  [`${ENTITY.scene}.name_label_shadow_color`]: { write: (state, m) => state.setSceneNameLabelShadowColor(stringValue(m.value)) },
-  [`${ENTITY.scene}.name_label_shadow_opacity`]: { write: (state, m) => state.setSceneNameLabelShadowOpacity(numberValue(m.value)) },
-  [`${ENTITY.scene}.name_label_shadow_blur`]: { write: (state, m) => state.setSceneNameLabelShadowBlur(numberValue(m.value)) },
-  [`${ENTITY.scene}.name_label_shadow_distance`]: { write: (state, m) => state.setSceneNameLabelShadowDistance(numberValue(m.value)) },
-  [`${ENTITY.scene}.name_label_shadow_angle`]: { write: (state, m) => state.setSceneNameLabelShadowAngle(numberValue(m.value)) },
-}
+export { CAMERA_STAGE_SCENE_WRITERS } from './cameraStageSceneFields'
 
 /* ── 对象与摄像机 ─────────────────────────────────────────────────────── */
 
