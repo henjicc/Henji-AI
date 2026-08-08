@@ -146,6 +146,11 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     return undoToken
   }
 
+  /**
+   * 建模属性（name/color/transform 等）与动画属性（animatable.* / pose_preset）落地到两个
+   * 语义完全不同的 store 路径（见 cameraStageObjectFields.ts 顶部注释），一批写入里混用
+   * 会让其中一种语义悄悄失效，所以在提交前拒绝，而不是二选一静默丢弃另一半。
+   */
   private async applyObject(step: MutationStep): Promise<string> {
     const { projectId, childId: objectId } = childTarget(step.target.id)
     const snapshot = await cameraStageApplicationService.readSnapshot(projectId)
@@ -156,12 +161,28 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
       update: {},
       transform: { ...current.transform },
       transformTouched: false,
+      animatable: {},
     }
     const table = this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera
       ? CAMERA_STAGE_CAMERA_WRITERS
       : CAMERA_STAGE_OBJECT_WRITERS
     await applyWriterTable(table, draft, step.mutations)
     if (draft.transformTouched) draft.update.transform = draft.transform
+    const hasRegular = Object.keys(draft.update).length > 0
+    const hasAnimatable = Object.keys(draft.animatable).length > 0
+    const hasPosePreset = draft.posePresetId !== undefined
+    if ([hasRegular, hasAnimatable, hasPosePreset].filter(Boolean).length > 1) {
+      throw new Error(
+        'MIXED_MUTATION_NOT_SUPPORTED：一次写入不能同时包含建模属性（name/color/transform 等）、'
+        + '逐分量动画属性（animatable.*）与姿态预设（pose_preset），请分开调用。'
+      )
+    }
+    if (hasAnimatable) {
+      return (await cameraStageApplicationService.updateAnimatableProperties(projectId, objectId, draft.animatable)).undoToken
+    }
+    if (hasPosePreset) {
+      return (await cameraStageApplicationService.applyObjectPosePreset(projectId, objectId, draft.posePresetId!)).undoToken
+    }
     return (await cameraStageApplicationService.updateObject(projectId, objectId, draft.update)).undoToken
   }
 

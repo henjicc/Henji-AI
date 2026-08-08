@@ -11,10 +11,15 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
-import { getAnimatablePropByPath, listAnimatablePropertyPaths } from '../domain/animatableProps'
+import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
-import { CAMERA_FIELDS, OBJECT_FIELDS } from './cameraStageObjectFields'
+import {
+  CAMERA_ANIMATABLE_PATH_BY_PROPERTY_ID,
+  CAMERA_FIELDS,
+  OBJECT_ANIMATABLE_PATH_BY_PROPERTY_ID,
+  OBJECT_FIELDS,
+} from './cameraStageObjectFields'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
 import { KEYFRAME_FIELDS, PLAYBACK_FIELDS, PROJECT_FIELDS, SHOT_FIELDS } from './cameraStageTimelineFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
@@ -54,6 +59,24 @@ function vec3Value(value: { x: number; y: number; z: number }): JsonValue {
   return { x: value.x, y: value.y, z: value.z }
 }
 
+/**
+ * 动画属性的描述符是按实体类型注册的（同一类型下每个实例的可写属性集合一样），但具体某个
+ * 实例是否真的具备某条属性（姿态关节只有角色才有）是实例级判断。`fieldReadValues()` 对
+ * 每条字段无条件求值，这里按 `isAvailable()` 把不适用于这个实例的键从结果里摘掉，
+ * 维持"读到的属性就是这个对象真的具备的属性"这条既有约定。
+ */
+function omitUnavailableAnimatableValues(
+  values: Record<string, JsonValue>,
+  pathByPropertyId: ReadonlyMap<string, string>,
+  object: StageObject,
+): Record<string, JsonValue> {
+  const filtered = { ...values }
+  for (const [propertyId, path] of pathByPropertyId) {
+    if (!getAnimatablePropByPath(path)?.isAvailable(object)) delete filtered[propertyId]
+  }
+  return filtered
+}
+
 function property(
   entityType: EntityType,
   suffix: string,
@@ -91,31 +114,8 @@ function property(
 }
 
 const STRING = { kind: 'string', maxLength: 500 } as const
-const NUMBER = { kind: 'number' } as const
 const INTEGER = { kind: 'integer', hardRange: { min: 0 } } as const
 const VECTOR3 = { kind: 'vector3', unit: 'scene_unit' } as const
-const COLOR = { kind: 'color', format: 'hex' } as const
-
-function propertyPathId(path: string): string {
-  return path.replace(/[A-Z]/g, (character) => `_${character.toLocaleLowerCase()}`)
-}
-
-function animatableProperties(entityType: typeof ENTITY_TYPES.object | typeof ENTITY_TYPES.camera): ApplicationPropertyDescriptor[] {
-  return listAnimatablePropertyPaths().flatMap((path) => {
-    const cameraCompatible = path.startsWith('transform.position.')
-      || path.startsWith('transform.rotation.') || path === 'color' || path === 'fov'
-    const objectCompatible = path !== 'fov'
-    if ((entityType === ENTITY_TYPES.camera && !cameraCompatible) || (entityType === ENTITY_TYPES.object && !objectCompatible)) return []
-    const id = `${entityType}.animatable.${propertyPathId(path)}`
-    return [{
-      ...property(entityType, `animatable.${propertyPathId(path)}`, `可动画属性 ${path}`, path === 'color' ? COLOR : NUMBER, {
-        readOnly: '逐分量动画值通过关键帧实体或领域语义操作修改。',
-      }),
-      id,
-      schemaRef: schemaRef('property', id),
-    }]
-  })
-}
 
 const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = {
   [ENTITY_TYPES.project]: [
@@ -148,13 +148,11 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.object, 'primitive_kind', '几何体类型', { kind: 'enum', values: ['box', 'sphere', 'cylinder', 'cone', 'pyramid', 'torus'].map((value) => ({ value, label: value })) }, { nullable: true, readOnly: '几何体类型创建后不可变更。' }),
     property(ENTITY_TYPES.object, 'bounds.min', '边界盒最小点', VECTOR3, { readOnly: '边界盒由对象尺寸和变换计算。' }),
     property(ENTITY_TYPES.object, 'bounds.max', '边界盒最大点', VECTOR3, { readOnly: '边界盒由对象尺寸和变换计算。' }),
-    ...animatableProperties(ENTITY_TYPES.object),
   ],
   [ENTITY_TYPES.camera]: [
     ...fieldDescriptors(CAMERA_FIELDS),
     property(ENTITY_TYPES.camera, 'look_at_mode', '注视模式', { kind: 'enum', values: [{ value: 'manual', label: '坐标' }, { value: 'object', label: '对象' }] }, { readOnly: '注视模式由注视点或注视对象修改推导。' }),
     property(ENTITY_TYPES.camera, 'effector_count', '效果器数量', INTEGER, { readOnly: '效果器数量由效果器列表计算。' }),
-    ...animatableProperties(ENTITY_TYPES.camera),
   ],
   [ENTITY_TYPES.shot]: [
     ...fieldDescriptors(SHOT_FIELDS),
@@ -318,36 +316,20 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   private objectProperties(object: Exclude<StageObject, { type: 'camera' }>): Record<string, JsonValue> {
     const bounds = calculateStageObjectBounds(object)
     return {
-      ...fieldReadValues(OBJECT_FIELDS, object),
+      ...omitUnavailableAnimatableValues(fieldReadValues(OBJECT_FIELDS, object), OBJECT_ANIMATABLE_PATH_BY_PROPERTY_ID, object),
       [`${ENTITY_TYPES.object}.type`]: object.type,
       [`${ENTITY_TYPES.object}.primitive_kind`]: object.type === 'primitive' ? object.kind : null,
       [`${ENTITY_TYPES.object}.bounds.min`]: vec3Value(bounds.min),
       [`${ENTITY_TYPES.object}.bounds.max`]: vec3Value(bounds.max),
-      ...this.animatableValues(ENTITY_TYPES.object, object),
     }
   }
 
   private cameraProperties(projectId: string, camera: Extract<StageObject, { type: 'camera' }>): Record<string, JsonValue> {
     return {
-      ...fieldReadValues(CAMERA_FIELDS, { projectId, camera }),
+      ...omitUnavailableAnimatableValues(fieldReadValues(CAMERA_FIELDS, { projectId, camera }), CAMERA_ANIMATABLE_PATH_BY_PROPERTY_ID, camera),
       [`${ENTITY_TYPES.camera}.look_at_mode`]: camera.lookAt.mode,
       [`${ENTITY_TYPES.camera}.effector_count`]: camera.effectors.length,
-      ...this.animatableValues(ENTITY_TYPES.camera, camera),
     }
-  }
-
-  private animatableValues(
-    entityType: typeof ENTITY_TYPES.object | typeof ENTITY_TYPES.camera,
-    object: StageObject,
-  ): Record<string, JsonValue> {
-    return Object.fromEntries(listAnimatablePropertyPaths().flatMap((path) => {
-      const descriptor = getAnimatablePropByPath(path)
-      if (!descriptor?.isAvailable(object)) return []
-      const value = descriptor.getValue(object)
-      return typeof value === 'number' || typeof value === 'string'
-        ? [[`${entityType}.animatable.${propertyPathId(path)}`, value]]
-        : []
-    }))
   }
 
   private shotProperties(projectId: string, shot: CameraStageProjectSnapshot['shots'][number], objects: StageObject[]): Record<string, JsonValue> {

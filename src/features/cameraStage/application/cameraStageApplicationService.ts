@@ -1,9 +1,11 @@
 import { createLogger } from '@/core/logging'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
+import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageTransform, StageVec3 } from '../domain/sceneTypes'
 import type { StageCameraEffector, StageEditorMode, StageShot } from '../domain/shotTypes'
-import type { StagePlaybackState } from '../domain/animationTypes'
+import type { StageKeyframeValue, StagePlaybackState } from '../domain/animationTypes'
+import { POSE_PRESETS } from '../domain/posePresets.gen'
 import {
   bakeCurrentProjectToPro,
   createNewProject,
@@ -516,6 +518,91 @@ export const cameraStageApplicationService = {
     state.updateObjectAcrossShots(objectId, patch)
     await saveCurrentProject()
     return { projectId, objectId, updatedKeys: Object.keys(patch), undoToken }
+  },
+
+  /**
+   * 逐分量动画属性直接写入（2.4，方案 C）：轨道无关键帧则写静态值，轨道有关键帧则等价于
+   * 在当前播放时间点写/建一个关键帧——调用的是 store 里已经这样实现的 `updateTransform` /
+   * `updatePoseJoint` / `updateObject`（三者的 `autoKeyPaths` 分支本就是这个语义，未重写）。
+   *
+   * 这条路径与 `updateObject()`（上面那个）故意分开：那个是"建模"语义，一律同步全部镜头卡、
+   * 从不自动打点；这个是"动画编辑"语义，只在有轨道时才打点。两条路径混用同一个 store 动作
+   * 会重新打开重要记录 002 描述的陷阱——静态值刚写完，播放头一动就被插值结果覆盖回去。
+   *
+   * 只在专业模式下可写：简易模式没有独立的关键帧轨道（由镜头卡编译而来），"轨道有没有关键帧"
+   * 这个判断条件本身不成立。
+   */
+  async updateAnimatableProperties(
+    projectId: string,
+    objectId: string,
+    values: Record<string, StageKeyframeValue>,
+  ): Promise<{ projectId: string; objectId: string; updatedPaths: string[]; undoToken: string }> {
+    await ensureProjectLoaded(projectId)
+    const object = requireObject(projectId, objectId)
+    const state = useCameraStageStore.getState()
+    if (state.editorMode !== 'pro') {
+      throw new Error(
+        'ANIMATABLE_WRITE_REQUIRES_PRO_MODE：逐分量动画属性直接写入只在专业模式下支持——简易模式'
+        + '没有独立的关键帧轨道。请改用 camera_stage.shot.capture_object_refs 记录到某张镜头卡，'
+        + '或先用 bake_camera_stage_to_pro 把工程转为专业模式。'
+      )
+    }
+    const paths = Object.keys(values)
+    if (paths.length === 0) throw new Error('INVALID_INPUT')
+    for (const path of paths) {
+      const descriptor = getAnimatablePropByPath(path)
+      if (!descriptor || !descriptor.isAvailable(object)) {
+        throw new Error(`ANIMATABLE_PATH_INVALID：属性路径 «${path}» 对该对象不可用。`)
+      }
+    }
+    const undoToken = captureCameraStageUndo(projectId)
+    const actions = useCameraStageStore.getState()
+    for (const path of paths) {
+      const current = requireObject(projectId, objectId)
+      const descriptor = getAnimatablePropByPath(path)!
+      const next = descriptor.applyToObject(current, values[path])
+      if (path.startsWith('transform.position')) actions.updateTransform(objectId, { position: next.transform.position }, [path])
+      else if (path.startsWith('transform.rotation')) actions.updateTransform(objectId, { rotation: next.transform.rotation }, [path])
+      else if (path.startsWith('transform.scale')) actions.updateTransform(objectId, { scale: next.transform.scale }, [path])
+      else if (path === 'color') actions.updateObject(objectId, { color: next.color })
+      else if (path === 'fov' && next.type === 'camera') actions.updateObject(objectId, { fov: next.fov })
+      else if (path.startsWith('pose.joints.') && next.type === 'character') {
+        const jointId = path.split('.')[2] as keyof typeof next.pose.joints
+        actions.updatePoseJoint(objectId, jointId, next.pose.joints[jointId] ?? { x: 0, y: 0, z: 0 }, [path])
+      }
+    }
+    await saveCurrentProject()
+    return { projectId, objectId, updatedPaths: paths, undoToken }
+  },
+
+  /**
+   * 一键套用预设姿势（2.4）：整体替换角色姿态，对已有轨道的关节自动打点——委托给
+   * `store.applyPosePreset`，与界面姿态面板的预设按钮同一份实现，未重写。
+   * 语义上与逐分量写入同属"动画编辑"，同样只在专业模式下可写。
+   */
+  async applyObjectPosePreset(
+    projectId: string,
+    objectId: string,
+    presetId: string,
+  ): Promise<{ projectId: string; objectId: string; presetId: string; undoToken: string }> {
+    await ensureProjectLoaded(projectId)
+    const object = requireObject(projectId, objectId)
+    if (object.type !== 'character') throw new Error('OBJECT_TYPE_MISMATCH：pose_preset 只对角色对象有效。')
+    const state = useCameraStageStore.getState()
+    if (state.editorMode !== 'pro') {
+      throw new Error(
+        'ANIMATABLE_WRITE_REQUIRES_PRO_MODE：姿态预设只在专业模式下可写——简易模式没有独立的关键帧'
+        + '轨道。请先用 bake_camera_stage_to_pro 把工程转为专业模式。'
+      )
+    }
+    const preset = POSE_PRESETS.find((candidate) => candidate.id === presetId)
+    if (!preset) {
+      throw new Error(`POSE_PRESET_NOT_FOUND：«${presetId}» 不是已知预设。可用预设：${POSE_PRESETS.map((item) => item.id).join('、')}。`)
+    }
+    const undoToken = captureCameraStageUndo(projectId)
+    state.applyPosePreset(objectId, preset)
+    await saveCurrentProject()
+    return { projectId, objectId, presetId, undoToken }
   },
 
   async duplicateObject(projectId: string, objectId: string): Promise<{ projectId: string; objectId: string; duplicatedFromObjectId: string; undoToken: string }> {

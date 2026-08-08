@@ -54,10 +54,12 @@ const LEDGERS: LedgerCase[] = [
  * （captureIntoSelectedShot 绑到新增的 capture_object_refs 属性，不依赖选中态）。2.3 烧掉编辑
  * 模式切换与烘焙 2 项——读代码发现"专业→简易无约束"的假设不成立（store 直接拒绝这个方向），
  * setEditorMode 只是新建工程的内部步骤、已被 create_camera_stage_project 覆盖，改绑 excluded；
- * bakeToProMode 注册为带审批的语义能力 bake_camera_stage_to_pro。现存 10 项：三维 5（姿态 2、
- * 轨迹 2、清空轨道 1），画布 5（清空、解散分组、重做、分镜格子改与排序）。
+ * bakeToProMode 注册为带审批的语义能力 bake_camera_stage_to_pro。2.4 烧掉姿态直接写入 2 项——
+ * updatePoseJoint 并入 63 条 animatable.* 逐分量属性（方案 C：轨道无关键帧写静态值，有关键帧
+ * 等价于当前时间点打点，只在专业模式下可写），applyPosePreset 绑到新增的 pose_preset 枚举属性。
+ * 现存 8 项：三维 3（轨迹 2、清空轨道 1），画布 5（清空、解散分组、重做、分镜格子改与排序）。
  */
-const GAP_BASELINE = 10
+const GAP_BASELINE = 8
 
 function actionNames(state: object): string[] {
   return Object.entries(state)

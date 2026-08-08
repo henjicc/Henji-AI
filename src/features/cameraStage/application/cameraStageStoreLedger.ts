@@ -37,22 +37,11 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     /*
      * updateObject/updateObjectAcrossShots/updateTransform（object 域）与 updateCameraView
      * （camera 域）定义收敛在 cameraStageObjectFields.ts，账本条目从 storeActions 派生。
+     * 2.4 又把 updatePoseJoint（63 条 animatable.* 里的姿态关节部分）与 applyPosePreset
+     * （pose_preset 属性）并入同一批字段，账本条目同样从这里自动派生，不再手写。
      */
     ...fieldLedgerEntries(OBJECT_FIELDS),
     ...fieldLedgerEntries(CAMERA_FIELDS),
-
-    /* ── 角色姿态 ───────────────────────────────────────────── */
-    updatePoseJoint: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '角色 15 个关节的欧拉偏移在反射层是 animatable.* 只读属性，助手只能建关键帧、'
-        + '不能直接摆姿势。放开前要先定"直接写值遇上已有关键帧"的语义，否则播放头一动值就被插值覆盖。',
-    },
-    applyPosePreset: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '一键预设姿势整体替换姿态，与 updatePoseJoint 同属姿态写入，缺同一个入口。',
-    },
 
     /*
      * ── 场景外观（25 项）与时间轴（3 项）─────────────────────
