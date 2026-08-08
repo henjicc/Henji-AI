@@ -14,11 +14,13 @@ import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageSto
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
 import { NAVIGATION_STORE_LEDGER } from '@/features/navigation/application/navigationStoreLedger'
+import { SETTINGS_STORE_LEDGER } from '@/features/settings/application-control/settingsStoreLedger'
 import { THEME_STORE_LEDGER } from '@/features/settings/application-control/themeStoreLedger'
 import { UI_STORE_LEDGER } from '@/features/settings/application-control/uiStoreLedger'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { useUiStore } from '@/stores/uiStore'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
@@ -51,6 +53,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: NAVIGATION_STORE_LEDGER, state: () => useNavigationStore.getState() },
   { ledger: UI_STORE_LEDGER, state: () => useUiStore.getState() },
   { ledger: THEME_STORE_LEDGER, state: () => useThemeStore.getState() },
+  { ledger: SETTINGS_STORE_LEDGER, state: () => useSettingsStore.getState() },
 ]
 
 /**
@@ -79,8 +82,19 @@ const LEDGERS: LedgerCase[] = [
  * 属性（分镜格子没有独立于画布节点的身份，内容与排序都是按 id 定点写 note/order 字段）。
  * **画布 5 项缺口全部归零，本任务范围内 GAP_BASELINE 降到 0**——助手能做的事等于人在
  * 界面上能做的事。往后每新增一个界面动作，先在这里加一条账目，只能降不能升。
+ *
+ * 第四阶段开始给 `src/stores/*` 一类未建账的 store 补账，这里预期会盘出新缺口——4.1 只是把
+ * 门禁的清点范围扩大到全部 store，不代表这些 store 之前就有对应能力。4.2 建 projectStore（10
+ * 动作，零新增 gap）/ navigationStore（2 动作，零新增 gap）/ uiStore（2 动作，零新增 gap）/
+ * themeStore（2 动作，零新增 gap——顺带发现这个 store 是死代码，全仓库没有调用方）/
+ * settingsStore（31 动作，新增 2 个 gap）。这 2 个 gap 都对应 protected 设置：
+ * `setProviderApiKey`（security.provider_keys）与 `setDownloadPresetPaths`
+ * （storage.download_paths）——反射层还没把 7 项 protected 设置注册成正规属性，4.4 负责
+ * 松绑其中 2 项、改写其余 5 项的只读理由，到时候回来把这两条 gap 改绑定。（这两个 store 方法
+ * 本身在全仓库里也找不到除自身定义外的调用方，是死代码，但归类交给 4.4 统一判断，不在这里
+ * 自行排除。）**GAP_BASELINE 0 → 2**。
  */
-const GAP_BASELINE = 0
+const GAP_BASELINE = 2
 
 function actionNames(state: object): string[] {
   return Object.entries(state)
