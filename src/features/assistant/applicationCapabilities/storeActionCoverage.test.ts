@@ -62,10 +62,13 @@ const LEDGERS: LedgerCase[] = [
  * （knots 等三条整条路径替换，start_position/end_position 挪相邻镜头卡快照）。**三维 11 项
  * 缺口全部归零**。3.1 烧掉画布 3 项——clearCanvas/ungroupNode/redo 均注册为专用能力
  * （clear_canvas/ungroup_canvas_node/redo_canvas_change），与 undo_canvas_change/
- * group_canvas_nodes 同属工程级整体状态操作，不勉强表达成集合写入。现存 2 项，
- * 全部是分镜格子（3.2：格子内容改写、拖拽排序）。
+ * group_canvas_nodes 同属工程级整体状态操作，不勉强表达成集合写入。3.2 烧掉最后 2 项——
+ * updateStoryboardFrame/reorderStoryboardFrame 都绑到新增的 canvas.node.storyboard_frames
+ * 属性（分镜格子没有独立于画布节点的身份，内容与排序都是按 id 定点写 note/order 字段）。
+ * **画布 5 项缺口全部归零，本任务范围内 GAP_BASELINE 降到 0**——助手能做的事等于人在
+ * 界面上能做的事。往后每新增一个界面动作，先在这里加一条账目，只能降不能升。
  */
-const GAP_BASELINE = 2
+const GAP_BASELINE = 0
 
 function actionNames(state: object): string[] {
   return Object.entries(state)

@@ -1,7 +1,7 @@
 import { useCanvasStore } from '@/stores/canvasStore'
 
 import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
-import type { CanvasNodeData } from '../domain/canvasNodes'
+import { isStoryboardSplitNode, type CanvasNodeData, type StoryboardFrameItem } from '../domain/canvasNodes'
 import { extractCanvasNodeData } from '../domain/nodeControlRegistry'
 import {
   addCanvasNode,
@@ -17,10 +17,17 @@ interface CanvasNodePatch {
   position?: { x: number; y: number }
 }
 
+export interface CanvasStoryboardFramePatch {
+  id: string
+  note?: string
+  order?: number
+}
+
 export interface CanvasNodePropertyPatch {
   nodeId: string
   displayName?: string
   position?: { x: number; y: number }
+  storyboardFrames?: CanvasStoryboardFramePatch[]
 }
 
 function requireNode(projectId: string, nodeId: string): { id: string; type: string; data: CanvasNodeData } {
@@ -62,6 +69,42 @@ export function applyCanvasNodePropertyPatches(
     }
   })
   applyCanvasNodePatches(projectId, normalized)
+}
+
+/**
+ * 分镜格子内容与顺序（3.2）：格子（`StoryboardFrameItem[]`）整段存在 `storyboardSplit` 节点的
+ * `data.frames` 里，没有独立于画布节点的身份——不是 `canvas.node.data` 的通用合并能覆盖的
+ * （合并会用传入的 `frames` 整体替换掉其余格子），需要按 id 定点更新，所以走专门的路径而不是
+ * `applyCanvasNodePatches` 的 `data` 合并。
+ *
+ * 排序不单独调 `store.reorderStoryboardFrame`（那是一次拖拽换两个位置的手势 API，输入形状与
+ * 这里的"整批格子各自要什么 order"对不上）：`reorderStoryboardFrame` 内部本质也是把移动后每张
+ * 格子的 `order` 重新赋值为数组下标，直接对每张格子写 `order` 字段是同一件事，还更直接。
+ */
+export function applyStoryboardFramePatches(
+  projectId: string,
+  nodeId: string,
+  frames: CanvasStoryboardFramePatch[],
+): void {
+  requireCurrentCanvasProject(projectId)
+  const node = useCanvasStore.getState().nodes.find((item) => item.id === nodeId)
+  if (!node) throw new CanvasApplicationError('NOT_FOUND', '画布节点不存在', true, { nodeId })
+  if (!isStoryboardSplitNode(node)) {
+    throw new CanvasApplicationError('INVALID_INPUT', '目标节点不是分镜格子节点，没有 frames 数据', true, { nodeId })
+  }
+  const existingIds = new Set(node.data.frames.map((frame) => frame.id))
+  const missing = frames.filter((frame) => !existingIds.has(frame.id)).map((frame) => frame.id)
+  if (missing.length > 0) {
+    throw new CanvasApplicationError('NOT_FOUND', `以下分镜格子 id 不存在：${missing.join('、')}`, true, { nodeId, missing })
+  }
+  const canvas = useCanvasStore.getState()
+  for (const frame of frames) {
+    const patch: Partial<StoryboardFrameItem> = {}
+    if (frame.note !== undefined) patch.note = frame.note
+    if (frame.order !== undefined) patch.order = frame.order
+    if (Object.keys(patch).length > 0) canvas.updateStoryboardFrame(nodeId, frame.id, patch)
+  }
+  persistCanvasState()
 }
 
 export function duplicateCanvasNode(input: {

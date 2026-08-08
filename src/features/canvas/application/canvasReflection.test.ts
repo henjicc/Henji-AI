@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ApplicationExecutionContext, ApplicationPlannedStep } from '@/core/application-control'
-import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
+import { CANVAS_NODE_TYPES, type StoryboardFrameItem } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 
@@ -85,6 +85,7 @@ describe('canvas reflection and mutation', () => {
       'canvas.node.node_type',
       'canvas.node.display_name',
       'canvas.node.position',
+      'canvas.node.storyboard_frames',
     ])
     const projectRegistration = registrations.find((item) => item.entity.id === CANVAS_ENTITY_TYPES.project)
     expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')).toMatchObject({
@@ -149,6 +150,89 @@ describe('canvas reflection and mutation', () => {
       position: { x: 100, y: 200 },
       data: { displayName: '原节点' },
     })
+  })
+
+  it('分镜格子按 id 定点更新 note 与 order，并可整体撤销', async () => {
+    const storyboardNodeId = 'node-storyboard'
+    const frames: StoryboardFrameItem[] = [
+      { id: 'frame-1', imageUrl: null, note: '第一格', order: 0 },
+      { id: 'frame-2', imageUrl: null, note: '第二格', order: 1 },
+    ]
+    const storyboardNode: CanvasNode = {
+      id: storyboardNodeId,
+      type: CANVAS_NODE_TYPES.storyboardSplit,
+      position: { x: 0, y: 0 },
+      data: { displayName: '分镜', aspectRatio: '16:9', gridRows: 1, gridCols: 2, frames },
+    }
+    // 走 setCanvasData（而不是裸 setState）：undo 落回的也是 setCanvasData，两边的归一化要一致，
+    // 否则"撤销后与原值相等"这条断言会被归一化补的默认字段（如 aspectRatio）误判成不相等。
+    const before = useCanvasStore.getState()
+    before.setCanvasData([...before.nodes, storyboardNode], before.edges, before.history)
+    const baselineFrames = useCanvasStore.getState().nodes.find((item) => item.id === storyboardNodeId)?.data.frames
+    const executor = new CanvasNodeMutationExecutor()
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = {
+      kind: 'mutation',
+      target: { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${storyboardNodeId}` },
+      entityType: CANVAS_ENTITY_TYPES.node,
+      expectedRevisions: { canvas: 2 },
+      mutations: [{
+        propertyId: 'canvas.node.storyboard_frames',
+        operation: 'set',
+        value: [
+          { id: 'frame-1', note: '改过的第一格' },
+          { id: 'frame-2', order: 0 },
+        ],
+      }],
+    }
+
+    const [result] = await executor.applyAtomic([step], context)
+
+    const updatedNode = useCanvasStore.getState().nodes.find((item) => item.id === storyboardNodeId)
+    expect(updatedNode?.data.frames).toMatchObject([
+      { id: 'frame-1', note: '改过的第一格', order: 0 },
+      { id: 'frame-2', note: '第二格', order: 0 },
+    ])
+
+    await executor.undo(String(result.undoToken), context)
+    const restoredNode = useCanvasStore.getState().nodes.find((item) => item.id === storyboardNodeId)
+    expect(restoredNode?.data.frames).toEqual(baselineFrames)
+  })
+
+  it('分镜格子 id 不存在时整批拒绝，不改动任何格子', async () => {
+    const storyboardNodeId = 'node-storyboard-2'
+    const frames: StoryboardFrameItem[] = [{ id: 'frame-1', imageUrl: null, note: '唯一的格子', order: 0 }]
+    const storyboardNode: CanvasNode = {
+      id: storyboardNodeId,
+      type: CANVAS_NODE_TYPES.storyboardSplit,
+      position: { x: 0, y: 0 },
+      data: { displayName: '分镜', aspectRatio: '16:9', gridRows: 1, gridCols: 1, frames },
+    }
+    useCanvasStore.setState((state) => ({ nodes: [...state.nodes, storyboardNode] }))
+    const executor = new CanvasNodeMutationExecutor()
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = {
+      kind: 'mutation',
+      target: { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${storyboardNodeId}` },
+      entityType: CANVAS_ENTITY_TYPES.node,
+      expectedRevisions: { canvas: 2 },
+      mutations: [{ propertyId: 'canvas.node.storyboard_frames', operation: 'set', value: [{ id: '不存在的格子', note: '改不到' }] }],
+    }
+
+    await expect(executor.applyAtomic([step], context)).rejects.toThrow('以下分镜格子 id 不存在')
+    const untouchedNode = useCanvasStore.getState().nodes.find((item) => item.id === storyboardNodeId)
+    expect(untouchedNode?.data.frames).toMatchObject(frames)
+  })
+
+  it('对非分镜节点写 storyboard_frames 被拒绝', async () => {
+    const executor = new CanvasNodeMutationExecutor()
+    const step: Extract<ApplicationPlannedStep, { kind: 'mutation' }> = {
+      kind: 'mutation',
+      target: { kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${nodeId}` },
+      entityType: CANVAS_ENTITY_TYPES.node,
+      expectedRevisions: { canvas: 2 },
+      mutations: [{ propertyId: 'canvas.node.storyboard_frames', operation: 'set', value: [{ id: 'frame-1' }] }],
+    }
+
+    await expect(executor.applyAtomic([step], context)).rejects.toThrow('目标节点不是分镜格子节点')
   })
 
   it('非法属性使整组变更回滚', async () => {

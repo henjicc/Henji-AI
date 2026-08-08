@@ -184,7 +184,10 @@ export function createStoryboardReflectionRegistrations(): ApplicationEntityRegi
       revisionScopes: ['storyboard'],
       queryCapabilityIds: [entityType === STORYBOARD_ENTITY_TYPES.project ? 'get_storyboard_project' : 'get_storyboard_project'],
       schemaRef: schemaRef('entity', entityType),
-      writeExclusion: { reason: '分镜是画布工程的只读摘要投影，写入请用 canvas.* 的通用动词。' },
+      writeExclusion: {
+        reason: '分镜是画布工程的只读摘要投影。改格子内容与顺序请写 canvas.node.storyboard_frames'
+          + '（3.2）；增删卡片请用 canvas.node 的集合写入；改工程名请写 canvas.project.name。',
+      },
     },
     properties: properties[entityType],
     provider: new StoryboardReflectionProvider(entityType),

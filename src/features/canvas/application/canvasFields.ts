@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 import {
   fieldWriterTable,
   type ApplicationFieldDefinition,
@@ -8,13 +10,14 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 import type { CanvasNode } from '@/stores/canvasStore'
 
-import type { CanvasNodePropertyPatch } from './canvasMutationService'
+import { isStoryboardSplitNode } from '../domain/canvasNodes'
+import type { CanvasNodePropertyPatch, CanvasStoryboardFramePatch } from './canvasMutationService'
 import { renameCanvasProject } from './canvasProjectService'
 
 /*
- * 画布工程与节点的 3 条可写属性（project.name 1 + node.display_name/position 2）的统一
- * 定义——1.3 迁移。不单独抽公共 shared 模块（像三维那样）：画布这边只有 3 条，样板重复
- * 换不来收益。
+ * 画布工程与节点的可写属性统一定义——1.3 迁移（project.name 1 + node.display_name/position 2），
+ * 3.2 又加了 node.storyboard_frames 1 条。不单独抽公共 shared 模块（像三维那样）：画布这边
+ * 字段不多，样板重复换不来收益。
  */
 
 const PROJECT_ENTITY_TYPE = 'canvas.project' as const
@@ -26,14 +29,20 @@ function digest(seed: string): string {
   return `sha256:${value.padEnd(64, value).slice(0, 64)}`
 }
 
-function canvasDescriptor(entityType: string, suffix: string, title: string, value: ApplicationPropertyValue): ApplicationPropertyDescriptor {
+function canvasDescriptor(
+  entityType: string,
+  suffix: string,
+  title: string,
+  value: ApplicationPropertyValue,
+  description?: string,
+): ApplicationPropertyDescriptor {
   const id = `${entityType}.${suffix}`
   return {
     id,
     entityType,
     version: 1,
     title,
-    description: `画布${title}的稳定控制属性。`,
+    description: description ?? `画布${title}的稳定控制属性。`,
     value,
     nullable: false,
     dataClass: 'C1',
@@ -78,8 +87,31 @@ function vector2(value: JsonValue | undefined): { x: number; y: number } {
   return { x, y }
 }
 
+const STORYBOARD_FRAMES_VALUE: ApplicationPropertyValue = {
+  kind: 'json',
+  schemaRef: {
+    catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
+    kind: 'property',
+    id: `${NODE_ENTITY_TYPE}.storyboard_frames.value`,
+    version: 1,
+    digest: digest(`property:${NODE_ENTITY_TYPE}.storyboard_frames.value`),
+  },
+}
+
+const storyboardFramePatchSchema = z.object({
+  id: z.string().min(1),
+  note: z.string().max(4_000).optional(),
+  order: z.number().int().min(0).optional(),
+}).strict()
+
+function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboardFramePatch[] {
+  return z.array(storyboardFramePatchSchema).min(1).max(200).parse(raw)
+}
+
 /** 写入目标是节点补丁本身——两条属性合成一个 patch 再整体提交，逐条提交会产生两次历史记录。 */
-export const NODE_FIELDS: ApplicationFieldDefinition<CanvasNode, CanvasNodePropertyPatch, 'updateNodePosition'>[] = [
+export const NODE_FIELDS: ApplicationFieldDefinition<
+  CanvasNode, CanvasNodePropertyPatch, 'updateNodePosition' | 'updateStoryboardFrame' | 'reorderStoryboardFrame'
+>[] = [
   {
     propertyId: `${NODE_ENTITY_TYPE}.display_name`,
     descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'display_name', '节点标题', { kind: 'string', minLength: 1, maxLength: 120 }),
@@ -104,6 +136,29 @@ export const NODE_FIELDS: ApplicationFieldDefinition<CanvasNode, CanvasNodePrope
       },
     },
     storeActions: ['updateNodePosition'],
+  },
+  /*
+   * 只对 storyboardSplit 类型节点有意义（3.2）：读取对其他节点类型返回空数组，而不是省略这条
+   * 属性——canvas.node 是所有节点类型共享的同一份属性描述符列表，没有按实例类型过滤声明的机制
+   * （不像三维 animatable.* 那样已经建了这一层）。写入按 id 定点更新 note/order；order 直接写入
+   * 即完成排序（reorderStoryboardFrame 内部也是把移动后每张卡的 order 重新赋值为数组下标，
+   * 直接写 order 是同一件事）。
+   */
+  {
+    propertyId: `${NODE_ENTITY_TYPE}.storyboard_frames`,
+    descriptor: canvasDescriptor(NODE_ENTITY_TYPE, 'storyboard_frames', '分镜格子', STORYBOARD_FRAMES_VALUE,
+      '只对分镜格子节点（storyboardSplit）有意义，其他节点类型读到空数组。数组元素 {id, note, order}：'
+      + 'note 是格子说明文字，order 决定排列顺序（越小越靠前）。写入按 id 定点更新，只需要传要改的字段；'
+      + 'id 必须取自读取结果里的原值，不支持增删格子。'),
+    read: (node) => (isStoryboardSplitNode(node)
+      ? node.data.frames.map((frame) => ({ id: frame.id, note: frame.note, order: frame.order }))
+      : []) as JsonValue,
+    writer: {
+      write(patch, mutation) {
+        patch.storyboardFrames = parseStoryboardFramePatches(mutation.value)
+      },
+    },
+    storeActions: ['updateStoryboardFrame', 'reorderStoryboardFrame'],
   },
 ]
 

@@ -17,7 +17,7 @@ import {
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
 import { CANVAS_NODE_WRITERS as WRITERS } from './canvasFields'
-import { applyCanvasNodePropertyPatches, type CanvasNodePropertyPatch } from './canvasMutationService'
+import { applyCanvasNodePropertyPatches, applyStoryboardFramePatches, type CanvasNodePropertyPatch } from './canvasMutationService'
 import { CANVAS_ENTITY_TYPES } from './canvasReflection'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
@@ -95,6 +95,11 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
         patches.push(patch)
       }
       applyCanvasNodePropertyPatches(projectId, patches)
+      // storyboard_frames 按 id 定点更新，不是 canvas.node.data 的通用合并能表达的，走独立提交
+      // （见 canvasMutationService.ts 的 applyStoryboardFramePatches 注释）。
+      for (const patch of patches) {
+        if (patch.storyboardFrames) applyStoryboardFramePatches(projectId, patch.nodeId, patch.storyboardFrames)
+      }
     } catch (error) {
       useCanvasStore.getState().setCanvasData(before.nodes, before.edges, before.history)
       persistCanvasState()

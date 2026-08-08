@@ -37,7 +37,12 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     addEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'create' },
     deleteEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'remove' },
     updateNodeData: { kind: 'capability', capabilityId: 'update_canvas_node' },
-    // 定义收敛在 canvasFields.ts；display_name 走 updateNodeData 能力，不在这里重复声明。
+    /*
+     * 定义收敛在 canvasFields.ts；display_name 走 updateNodeData 能力，不在这里重复声明。
+     * 3.2 又把分镜格子的 updateStoryboardFrame/reorderStoryboardFrame 并进同一批字段——
+     * 两个 store 动作共用同一条 canvas.node.storyboard_frames 属性（内容与排序都是按 id
+     * 定点写 note/order 字段），账本条目同样从这里自动派生。
+     */
     ...fieldLedgerEntries(NODE_FIELDS),
     groupNodes: { kind: 'capability', capabilityId: 'group_canvas_nodes' },
     // 工程级整体状态操作，与 undo/group 同属专用能力（3.1，见执行记录：走集合删除要么绕两步、
@@ -46,19 +51,6 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     // 集合删除对节点早就是级联删除子节点的语义，解散分组要求子节点保留，两者冲突，
     // 不能共用 remove_items（3.1）。
     ungroupNode: { kind: 'capability', capabilityId: 'ungroup_canvas_node' },
-
-    /* ── 分镜格子 ───────────────────────────────────────────── */
-    updateStoryboardFrame: {
-      kind: 'gap',
-      plannedPhase: '期 4',
-      reason: '分镜格子的内容改写落在节点内部数据里，storyboard.card 是画布的只读投影，'
-        + '两边都没有可写入口，助手改不了单个格子。',
-    },
-    reorderStoryboardFrame: {
-      kind: 'gap',
-      plannedPhase: '期 4',
-      reason: '拖拽调整分镜格子顺序，与 updateStoryboardFrame 同属分镜内部结构这一块缺口。',
-    },
 
     /* ── 撤销重做 ───────────────────────────────────────────── */
     undo: { kind: 'capability', capabilityId: 'undo_canvas_change' },
