@@ -108,6 +108,27 @@ export function deleteCanvasNodes(projectId: string, nodeIds: string[]): Record<
   return { projectId, deletedNodeIds: unique, undoRef }
 }
 
+/**
+ * 清空画布（3.1）：整个工程一次性重置，不是"逐个删除很多节点"。走 `remove_items` 意味着助手
+ * 要先枚举全部节点/连线引用、再分批提交（`canvas.node`/`canvas.edge` 的 collectionWrite
+ * 限了 `maxItemsPerChange: 50`，节点稍多就要拆好几批）——为一个界面上单按钮触发的原子动作
+ * 多绕两步，不如照 `undo_canvas_change`/`group_canvas_nodes` 的先例：工程级整体状态操作
+ * 走专用能力，不勉强表达成集合写入。
+ */
+export function clearCanvasProject(projectId: string): Record<string, unknown> {
+  requireCurrentCanvasProject(projectId)
+  const before = useCanvasStore.getState()
+  const clearedNodeCount = before.nodes.length
+  const clearedEdgeCount = before.edges.length
+  if (clearedNodeCount === 0 && clearedEdgeCount === 0) {
+    throw new CanvasApplicationError('INVALID_INPUT', '画布已经是空的，没有可清空的内容', true)
+  }
+  useCanvasStore.getState().clearCanvas()
+  const undoRef = rememberCanvasUndo(projectId, 'clear_canvas')
+  persistCanvasState()
+  return { projectId, clearedNodeCount, clearedEdgeCount, undoRef }
+}
+
 export function selectCanvasNode(projectId: string, nodeId: string | null): Record<string, unknown> {
   requireCurrentCanvasProject(projectId)
   if (nodeId) requireNode(projectId, nodeId)
@@ -120,6 +141,22 @@ export function groupCanvasNodes(projectId: string, nodeIds: string[]): Record<s
   const groupNodeId = useCanvasStore.getState().groupNodes(nodeIds)
   if (!groupNodeId) throw new CanvasApplicationError('INVALID_INPUT', '至少需要两个存在且不相互嵌套的节点才能分组', true)
   const undoRef = rememberCanvasUndo(projectId, 'group_nodes')
+  persistCanvasState()
+  return { projectId, groupNodeId, undoRef }
+}
+
+/**
+ * 解散分组（3.1）：不能表达成 `remove_items` 删 group 节点——集合删除对节点的语义早就是
+ * "级联删除子节点"（`store.deleteNodes` 用 `collectNodeIdsWithDescendants` 收集要删的整棵
+ * 子树），而解散分组要求子节点**保留**、只把 group 包装节点去掉。两种语义用同一个入口表达
+ * 会产生歧义，所以解散走独立的 `store.ungroupNode`，未重写它的释放/绝对坐标换算逻辑。
+ */
+export function ungroupCanvasNode(projectId: string, groupNodeId: string): Record<string, unknown> {
+  requireCurrentCanvasProject(projectId)
+  if (!useCanvasStore.getState().ungroupNode(groupNodeId)) {
+    throw new CanvasApplicationError('NOT_FOUND', '目标不是可解散的分组节点，或分组内没有子节点', true, { groupNodeId })
+  }
+  const undoRef = rememberCanvasUndo(projectId, 'ungroup_node')
   persistCanvasState()
   return { projectId, groupNodeId, undoRef }
 }

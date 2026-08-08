@@ -14,6 +14,7 @@ import {
   addCanvasNode,
   connectCanvasNodes,
   focusCanvasNode,
+  redoCanvasChange,
   undoCanvasChange,
 } from '@/features/canvas/application/canvasApplicationService'
 import {
@@ -38,11 +39,13 @@ import {
   renameCanvasProject,
 } from '@/features/canvas/application/canvasProjectService'
 import {
+  clearCanvasProject,
   deleteCanvasNodes,
   disconnectCanvasEdge,
   duplicateCanvasNode,
   groupCanvasNodes,
   selectCanvasNode,
+  ungroupCanvasNode,
   updateCanvasNode,
 } from '@/features/canvas/application/canvasMutationService'
 import {
@@ -186,6 +189,12 @@ export function registerCanvasCapabilityHandlers(
     return undoCanvasChange(parsed.projectId, parsed.undoRef)
   })
 
+  registrar.registerHandler('redo_canvas_change', (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput>('redo_canvas_change', input)
+    return redoCanvasChange(parsed.projectId)
+  })
+
   registrar.registerHandler('duplicate_canvas_node', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<NodeInput & { placement: CanvasNodePlacement }>(
@@ -229,6 +238,21 @@ export function registerCanvasCapabilityHandlers(
       input
     )
     return groupCanvasNodes(parsed.projectId, parsed.nodeIds)
+  })
+
+  registrar.registerHandler('ungroup_canvas_node', (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput & { groupNodeId: string }>(
+      'ungroup_canvas_node',
+      input
+    )
+    return ungroupCanvasNode(parsed.projectId, parsed.groupNodeId)
+  })
+
+  registrar.registerHandler('clear_canvas', (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput>('clear_canvas', input)
+    return clearCanvasProject(parsed.projectId)
   })
 
   registrar.registerHandler('disconnect_canvas_edge', (input, context) => {

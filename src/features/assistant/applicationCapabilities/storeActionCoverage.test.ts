@@ -60,9 +60,12 @@ const LEDGERS: LedgerCase[] = [
  * 2.5 烧掉三维最后 3 项——clearTrack 接到集合删除的轨道级引用（工程:对象:属性路径，不带时间）；
  * setShotSpatialPath/setShotPathAnchor 绑到 camera_stage.trajectory 新增的 5 条可写属性
  * （knots 等三条整条路径替换，start_position/end_position 挪相邻镜头卡快照）。**三维 11 项
- * 缺口全部归零**。现存 5 项，全部是画布（清空、解散分组、重做、分镜格子改与排序）。
+ * 缺口全部归零**。3.1 烧掉画布 3 项——clearCanvas/ungroupNode/redo 均注册为专用能力
+ * （clear_canvas/ungroup_canvas_node/redo_canvas_change），与 undo_canvas_change/
+ * group_canvas_nodes 同属工程级整体状态操作，不勉强表达成集合写入。现存 2 项，
+ * 全部是分镜格子（3.2：格子内容改写、拖拽排序）。
  */
-const GAP_BASELINE = 5
+const GAP_BASELINE = 2
 
 function actionNames(state: object): string[] {
   return Object.entries(state)

@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   focusCanvasNodeFromAgent: vi.fn(),
   downloadCanvasMediaFromAgent: vi.fn(),
   openApplicationSurface: vi.fn(),
+  redoCanvasChangeFromAgent: vi.fn(),
+  ungroupCanvasNodeFromAgent: vi.fn(),
+  clearCanvasProjectFromAgent: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
@@ -18,6 +21,7 @@ vi.mock('@/features/canvas/application/canvasApplicationService', () => ({
   connectCanvasNodes: vi.fn(),
   focusCanvasNode: mocks.focusCanvasNodeFromAgent,
   undoCanvasChange: vi.fn(),
+  redoCanvasChange: mocks.redoCanvasChangeFromAgent,
 }))
 vi.mock('@/features/canvas/application/canvasBatchService', () => ({
   commitCanvasBatch: vi.fn(),
@@ -36,6 +40,8 @@ vi.mock('@/features/canvas/application/canvasMutationService', () => ({
   disconnectCanvasEdge: vi.fn(),
   duplicateCanvasNode: vi.fn(),
   groupCanvasNodes: vi.fn(),
+  ungroupCanvasNode: mocks.ungroupCanvasNodeFromAgent,
+  clearCanvasProject: mocks.clearCanvasProjectFromAgent,
   selectCanvasNode: vi.fn(),
   updateCanvasNode: vi.fn(),
 }))
@@ -153,5 +159,37 @@ describe('canvas capability handlers', () => {
 
     expect(mocks.downloadCanvasMediaFromAgent).toHaveBeenCalledWith(input)
     expect(result).toMatchObject({ savedNodeIds: ['node-1', 'node-2'] })
+  })
+
+  it('重做只需要 projectId，转发给正式服务', async () => {
+    mocks.redoCanvasChangeFromAgent.mockReturnValue({ projectId: 'project-1', status: 'redone' })
+    const handler = registeredHandlers().get('redo_canvas_change')
+
+    const result = await handler?.({ projectId: 'project-1' }, context)
+
+    expect(mocks.redoCanvasChangeFromAgent).toHaveBeenCalledWith('project-1')
+    expect(result).toMatchObject({ status: 'redone' })
+  })
+
+  it('解散分组把 projectId 和 groupNodeId 转发给正式服务', async () => {
+    mocks.ungroupCanvasNodeFromAgent.mockReturnValue({ projectId: 'project-1', groupNodeId: 'group-1', undoRef: 'canvas-undo:1' })
+    const handler = registeredHandlers().get('ungroup_canvas_node')
+
+    const result = await handler?.({ projectId: 'project-1', groupNodeId: 'group-1' }, context)
+
+    expect(mocks.ungroupCanvasNodeFromAgent).toHaveBeenCalledWith('project-1', 'group-1')
+    expect(result).toMatchObject({ groupNodeId: 'group-1' })
+  })
+
+  it('清空画布只需要 projectId，转发给正式服务', async () => {
+    mocks.clearCanvasProjectFromAgent.mockReturnValue({
+      projectId: 'project-1', clearedNodeCount: 3, clearedEdgeCount: 1, undoRef: 'canvas-undo:2',
+    })
+    const handler = registeredHandlers().get('clear_canvas')
+
+    const result = await handler?.({ projectId: 'project-1' }, context)
+
+    expect(mocks.clearCanvasProjectFromAgent).toHaveBeenCalledWith('project-1')
+    expect(result).toMatchObject({ clearedNodeCount: 3, clearedEdgeCount: 1 })
   })
 })

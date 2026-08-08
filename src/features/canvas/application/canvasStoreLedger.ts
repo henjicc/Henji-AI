@@ -40,17 +40,12 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     // 定义收敛在 canvasFields.ts；display_name 走 updateNodeData 能力，不在这里重复声明。
     ...fieldLedgerEntries(NODE_FIELDS),
     groupNodes: { kind: 'capability', capabilityId: 'group_canvas_nodes' },
-    clearCanvas: {
-      kind: 'gap',
-      plannedPhase: '期 4',
-      reason: '清空整张画布界面上是一个按钮，助手只能逐个引用删除；需要一条能按父实体整体清空的'
-        + '集合删除路径，不新增专用能力。',
-    },
-    ungroupNode: {
-      kind: 'gap',
-      plannedPhase: '期 4',
-      reason: '解散分组与 group_canvas_nodes 成对，界面上有、助手侧只注册了成组那一半。',
-    },
+    // 工程级整体状态操作，与 undo/group 同属专用能力（3.1，见执行记录：走集合删除要么绕两步、
+    // 要么撞 maxItemsPerChange，不如照 undo_canvas_change 的先例）。
+    clearCanvas: { kind: 'capability', capabilityId: 'clear_canvas' },
+    // 集合删除对节点早就是级联删除子节点的语义，解散分组要求子节点保留，两者冲突，
+    // 不能共用 remove_items（3.1）。
+    ungroupNode: { kind: 'capability', capabilityId: 'ungroup_canvas_node' },
 
     /* ── 分镜格子 ───────────────────────────────────────────── */
     updateStoryboardFrame: {
@@ -67,11 +62,7 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
 
     /* ── 撤销重做 ───────────────────────────────────────────── */
     undo: { kind: 'capability', capabilityId: 'undo_canvas_change' },
-    redo: {
-      kind: 'gap',
-      plannedPhase: '期 4',
-      reason: '只注册了撤销没注册重做；助手撤销过头之后无法回退自己的撤销。',
-    },
+    redo: { kind: 'capability', capabilityId: 'redo_canvas_change' },
     endHistoryGroup: {
       kind: 'excluded',
       category: 'internal',

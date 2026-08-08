@@ -218,6 +218,39 @@ const undoCanvasChange = defineApplicationCapability({
   summarize: (output) => `已撤销画布操作 ${output.operation}。`,
 })
 
+const redoCanvasChange = defineApplicationCapability({
+  id: 'redo_canvas_change',
+  version: 1,
+  title: '重做画布操作',
+  description: '重做最近一次被撤销的画布写操作。',
+  domain: 'canvas',
+  aliases: ['重做节点操作', 'redo canvas change'],
+  readOnly: false,
+  control: capabilityControl('execute', ['canvas.project'], { revisionScopes: ['canvas'] }),
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'canvas:undo',
+  idempotent: true,
+  destructive: true,
+  timeoutMs: 8_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: ['canvas'],
+  acceptsRefs: ['canvas.project'],
+  producesRefs: ['canvas.project'],
+  inputSchema: z.object({
+    projectId: z.string().min(1),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string(),
+    status: z.literal('redone'),
+  }),
+  concurrencyKey: 'canvas',
+  resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
+  resolveTargetIds: (input) => target(input.projectId),
+  summarize: (output) => `已重做项目 ${output.projectId} 的画布操作。`,
+})
+
 const duplicateCanvasNode = defineApplicationCapability({
   id: 'duplicate_canvas_node',
   version: 1,
@@ -428,6 +461,89 @@ const groupCanvasNodes = defineApplicationCapability({
   }] },
 })
 
+const ungroupCanvasNode = defineApplicationCapability({
+  id: 'ungroup_canvas_node',
+  version: 1,
+  title: '解散画布节点分组',
+  description: '解散明确的组节点，子节点保留在画布上并释放出来。',
+  domain: 'canvas',
+  aliases: ['取消节点分组', 'ungroup canvas node'],
+  readOnly: false,
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'canvas:write',
+  idempotent: false,
+  destructive: false,
+  timeoutMs: 8_000,
+  supportsPreview: false,
+  supportsUndo: true,
+  requiredScopes: ['canvas'],
+  acceptsRefs: ['canvas.project', 'canvas.node'],
+  producesRefs: ['canvas.undo'],
+  inputSchema: z.object({
+    projectId: z.string().min(1),
+    groupNodeId: z.string().min(1),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string(),
+    groupNodeId: z.string(),
+    undoRef: z.string(),
+  }),
+  concurrencyKey: 'canvas',
+  resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
+  resolveTargetIds: (input) => target(input.projectId, { groupNodeId: input.groupNodeId }),
+  summarize: (output) => `已解散节点组 ${output.groupNodeId}。`,
+  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'delete', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
+})
+
+const clearCanvas = defineApplicationCapability({
+  id: 'clear_canvas',
+  version: 1,
+  title: '清空画布',
+  description: '删除明确项目中的全部节点与连线，返回可撤销引用。',
+  domain: 'canvas',
+  aliases: ['清空画布节点', 'clear canvas'],
+  readOnly: false,
+  risk: 'R2',
+  dataClasses: ['C1'],
+  permission: 'canvas:write',
+  idempotent: true,
+  destructive: true,
+  timeoutMs: 8_000,
+  supportsPreview: true,
+  supportsUndo: true,
+  requiredScopes: ['canvas'],
+  acceptsRefs: ['canvas.project'],
+  producesRefs: ['canvas.undo'],
+  inputSchema: z.object({
+    projectId: z.string().min(1),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string(),
+    clearedNodeCount: z.number().int().nonnegative(),
+    clearedEdgeCount: z.number().int().nonnegative(),
+    undoRef: z.string(),
+  }),
+  concurrencyKey: 'canvas',
+  resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
+  resolveTargetIds: (input) => target(input.projectId),
+  preview: (input) => ({
+    title: '清空画布',
+    summary: '删除该项目中的全部节点与连线。',
+    targetIds: target(input.projectId),
+    reversible: true,
+    dataClasses: ['C1'],
+  }),
+  summarize: (output) => `已清空画布，删除 ${output.clearedNodeCount} 个节点、${output.clearedEdgeCount} 条连线。`,
+  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: { execution: { mode: 'confirmation_required', cancelable: false, resultState: 'completed' }, impacts: [{
+    effect: 'delete', entityTypes: ['canvas.node', 'canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }] },
+})
+
 const disconnectCanvasEdge = defineApplicationCapability({
   id: 'disconnect_canvas_edge',
   version: 1,
@@ -472,10 +588,13 @@ export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefi
   connectCanvasNodes,
   focusCanvasNode,
   undoCanvasChange,
+  redoCanvasChange,
   duplicateCanvasNode,
   updateCanvasNode,
   deleteCanvasNodes,
   selectCanvasNode,
   groupCanvasNodes,
+  ungroupCanvasNode,
+  clearCanvas,
   disconnectCanvasEdge,
 ]

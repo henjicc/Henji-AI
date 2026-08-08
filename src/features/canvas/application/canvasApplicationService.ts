@@ -320,6 +320,21 @@ export function undoCanvasChange(projectId: string, undoRef: string): Record<str
   return { projectId, undoRef, operation: record.operation, status: 'undone' }
 }
 
+/**
+ * 重做（3.1）：不需要 `undo_canvas_change` 那套 undoRef/historyDepth 安全校验——`history.future`
+ * 只在 `undo()` 之后才非空，且**任何**后续正向编辑（新增/改属性/删除等）都会把它清空
+ * （`canvasStore.ts` 里每个正向动作都显式 `future: []`）。所以 `history.future` 非空这件事本身
+ * 就等价于"确实存在一个刚被撤销、还没被别的改动覆盖的操作"，不需要额外的引用比对。
+ */
+export function redoCanvasChange(projectId: string): Record<string, unknown> {
+  requireCurrentCanvasProject(projectId)
+  if (!useCanvasStore.getState().redo()) {
+    throw new CanvasApplicationError('CONFLICT', '当前画布没有可重做操作')
+  }
+  persistCanvasState()
+  return { projectId, status: 'redone' }
+}
+
 
 export function registerCanvasNodeFocusHandler(handler: CanvasNodeFocusHandler): () => void {
   focusHandler = handler

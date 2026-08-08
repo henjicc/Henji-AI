@@ -10,6 +10,7 @@ import {
   addCanvasNode,
   connectCanvasNodes,
   focusCanvasNode,
+  redoCanvasChange,
   registerCanvasNodeFocusHandler,
   resetCanvasApplicationStateForTests,
   undoCanvasChange,
@@ -91,6 +92,40 @@ describe('canvas application service', () => {
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
     undoCanvasChange(projectId, String(upload.undoRef))
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
+  })
+
+  it('撤销之后能重做，重做之后没有可重做操作时拒绝', () => {
+    const upload = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.upload,
+      placement: { mode: 'viewport_center' },
+      data: { displayName: '输入图' },
+    })
+    expect(useCanvasStore.getState().nodes).toHaveLength(1)
+
+    undoCanvasChange(projectId, String(upload.undoRef))
+    expect(useCanvasStore.getState().nodes).toHaveLength(0)
+
+    expect(redoCanvasChange(projectId)).toMatchObject({ projectId, status: 'redone' })
+    expect(useCanvasStore.getState().nodes).toHaveLength(1)
+
+    expect(() => redoCanvasChange(projectId)).toThrow('当前画布没有可重做操作')
+  })
+
+  it('撤销之后新的编辑会清空重做栈', () => {
+    const upload = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.upload,
+      placement: { mode: 'viewport_center' },
+    })
+    undoCanvasChange(projectId, String(upload.undoRef))
+    addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.upload,
+      placement: { mode: 'viewport_center' },
+    })
+
+    expect(() => redoCanvasChange(projectId)).toThrow('当前画布没有可重做操作')
   })
 
   it('拒绝目录外节点、任意媒体路径和非当前项目', () => {
