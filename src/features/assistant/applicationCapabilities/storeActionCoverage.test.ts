@@ -12,7 +12,9 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { CAMERA_STAGE_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageStoreLedger'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
+import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useProjectStore } from '@/stores/projectStore'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
 import {
@@ -39,6 +41,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: CAMERA_STAGE_STORE_LEDGER, state: () => useCameraStageStore.getState() },
   { ledger: CANVAS_STORE_LEDGER, state: () => useCanvasStore.getState() },
   { ledger: ASSET_STORE_LEDGER, state: () => useAssetLibraryStore.getState() },
+  { ledger: PROJECT_STORE_LEDGER, state: () => useProjectStore.getState() },
 ]
 
 /**

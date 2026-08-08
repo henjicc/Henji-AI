@@ -179,7 +179,6 @@ function isZustandStoreFile(source) {
   return /from\s+['"]zustand['"]/.test(source) && /=\s*create[<(]/.test(source)
 }
 const ASSISTANT_BLIND_STORES = {
-  'src/stores/projectStore.ts': '4.2：全局与项目类 store 建账，20 个动作逐条归类。',
   'src/stores/settingsStore.ts': '4.2：全局与项目类 store 建账，31 个动作逐条归类；'
     + 'protected 7 项对应动作登记为 gap，理由指向 4.4。',
   'src/stores/navigationStore.ts': '4.2：全局与项目类 store 建账，4 个动作大概率已被 '
