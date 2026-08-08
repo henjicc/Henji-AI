@@ -169,6 +169,13 @@ export async function deleteCameraStageProject(input: { projectId: string; baseR
   return { ...result, baseRevision: baseRevision() }
 }
 
+export async function bakeCameraStageToPro(input: { projectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
+  assertBaseRevision(input.baseRevision)
+  const result = await cameraStageApplicationService.bakeToProMode(input.projectId)
+  notifyHostScopeChanged('toolbox')
+  return { ...result, baseRevision: baseRevision() }
+}
+
 export async function placeCameraStageObject(input: Record<string, unknown> & { baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
   const { baseRevision: revision, ...operationInput } = input
   return await executeOperation('place_camera_stage_object', operationInput as JsonValue, revision, context, '三维场景对象已按复用与空间约束处理。')

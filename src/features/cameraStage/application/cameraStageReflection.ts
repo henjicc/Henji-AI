@@ -120,7 +120,10 @@ function animatableProperties(entityType: typeof ENTITY_TYPES.object | typeof EN
 const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = {
   [ENTITY_TYPES.project]: [
     ...fieldDescriptors(PROJECT_FIELDS),
-    property(ENTITY_TYPES.project, 'editor_mode', '编辑模式', { kind: 'enum', values: [{ value: 'simple', label: '简易' }, { value: 'pro', label: '专业' }] }, { readOnly: '编辑模式只能通过正式烘焙操作切换。' }),
+    property(ENTITY_TYPES.project, 'editor_mode', '编辑模式', { kind: 'enum', values: [{ value: 'simple', label: '简易' }, { value: 'pro', label: '专业' }] }, {
+      readOnly: '编辑模式只能在新建工程时选定（create_camera_stage_project 的 mode 参数），或通过 '
+        + 'bake_camera_stage_to_pro 从简易单向烘焙为专业；应用本身不支持把已有内容的工程从专业改回简易。',
+    }),
     property(ENTITY_TYPES.project, 'object_count', '对象数量', INTEGER, { readOnly: '对象数量由场景内容计算。' }),
     property(ENTITY_TYPES.project, 'shot_count', '镜头数量', INTEGER, { readOnly: '镜头数量由镜头列表计算。' }),
   ],

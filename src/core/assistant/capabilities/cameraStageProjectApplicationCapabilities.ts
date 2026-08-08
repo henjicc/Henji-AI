@@ -76,6 +76,38 @@ const renameProjectCapability = defineApplicationCapability({
   summarize: (output) => `3D 工程重命名事务 ${output.transactionRef} 已完成。`,
 })
 
+const bakeToProCapability = defineApplicationCapability({
+  id: 'bake_camera_stage_to_pro', version: 1, title: '烘焙 3D 简易工程为专业工程',
+  description: '把简易模式的镜头卡单向固化为专业模式的关键帧时间轴，固化后不能再以镜头卡方式编辑。',
+  domain: 'camera_stage', aliases: ['转为专业工程', '烘焙镜头卡', 'bake camera stage to pro'],
+  readOnly: false, risk: 'R2', dataClasses: ['C1'],
+  permission: 'camera_stage:write', idempotent: true, destructive: true, timeoutMs: 15_000,
+  supportsPreview: true, supportsUndo: false, requiredScopes: ['toolbox'],
+  acceptsRefs: ['camera_stage.project'], producesRefs: ['camera_stage.project', 'camera_stage.keyframe'],
+  successEvidence: ['输出的 status 为 baked 或 already_pro；baked 时附带烘焙前的镜头卡数量与烘焙后的关键帧轨道数量。'],
+  failureRecovery: [CONFLICT_RECOVERY],
+  inputSchema: z.object({ projectId: z.string().min(1), baseRevision: z.number().int().nonnegative() }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string(),
+    status: z.enum(['baked', 'already_pro']),
+    shotCount: z.number().int().nonnegative(),
+    trackCount: z.number().int().nonnegative(),
+    baseRevision: z.number().int().nonnegative(),
+  }),
+  resolveConcurrencyKey: (input) => `camera_stage_project:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
+  preview: (input) => ({
+    title: '烘焙为专业工程',
+    summary: `把工程 ${input.projectId} 的镜头卡单向固化为专业关键帧时间轴；固化后不能再以镜头卡方式编辑，且会清空撤销历史。`,
+    targetIds: cameraStageTarget(input.projectId),
+    reversible: false,
+    dataClasses: ['C1'],
+  }),
+  control: cameraStageControl('delete', ['camera_stage.project', 'camera_stage.shot', 'camera_stage.keyframe'], ['camera_stage.project.editor_mode']),
+  summarize: (output) => output.status === 'baked'
+    ? `3D 工程 ${output.projectId} 已烘焙为专业工程，${output.shotCount} 张镜头卡固化成 ${output.trackCount} 条关键帧轨道。`
+    : `3D 工程 ${output.projectId} 已经是专业模式，无需烘焙。`,
+})
+
 const deleteProjectCapability = defineApplicationCapability({
   id: 'delete_camera_stage_project', version: 2, title: '删除 3D 运镜工程', description: '永久删除明确的 3D 运镜工程及其场景数据。',
   domain: 'camera_stage', aliases: ['永久删除 3D 工程', 'delete camera project'], readOnly: false, risk: 'R3', dataClasses: ['C1'],
@@ -91,5 +123,5 @@ const deleteProjectCapability = defineApplicationCapability({
 })
 
 export const CAMERA_STAGE_PROJECT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  listProjects, getProject, openProject, createProject, renameProjectCapability, deleteProjectCapability,
+  listProjects, getProject, openProject, createProject, renameProjectCapability, bakeToProCapability, deleteProjectCapability,
 ]

@@ -123,18 +123,21 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
 
     /* ── 工程与编辑模式 ─────────────────────────────────────── */
     newScene: { kind: 'capability', capabilityId: 'create_camera_stage_project' },
+    /*
+     * 2.3 读代码推翻了建账当天的假设："专业→简易与同模式内切换没有约束"不成立——
+     * setEditorMode 本身第一行就 `if (state.editorMode === 'pro' && editorMode === 'simple') return {}`，
+     * 专业转简易被 store 直接挡死，应用从未支持这个方向。这个 store 动作唯一的真实调用点是
+     * createNewProject 对着一个刚清空的新场景设初始模式，已被 create_camera_stage_project 覆盖；
+     * 直接开放成通用属性写入反而会绕开烘焙的编译与清理步骤，在"专业"模式下留下过期 shots 数据。
+     */
     setEditorMode: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: 'project.editor_mode 标着只读，理由「只能通过正式烘焙操作切换」只对简易→专业成立'
-        + '（烘焙不可逆）；专业→简易与同模式内切换没有这个约束，助手却一并被挡住了。',
+      kind: 'excluded',
+      category: 'internal',
+      reason: '只在新建工程时对着刚清空的空场景调用，已被 create_camera_stage_project 覆盖；'
+        + '应用本身不支持对已有内容的模式切换（专业→简易被 store 直接拒绝，简易→专业的唯一'
+        + '受支持路径是烘焙）。',
     },
-    bakeToProMode: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '烘焙成专业模式是不可逆操作，需要作为带审批的语义能力注册；界面上做得了的完整关键帧'
-        + '编辑要先进专业模式，所以这一条挡住了助手做精细动画。',
-    },
+    bakeToProMode: { kind: 'capability', capabilityId: 'bake_camera_stage_to_pro' },
     bindProject: {
       kind: 'excluded',
       category: 'internal',

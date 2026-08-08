@@ -5,6 +5,7 @@ import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjec
 import type { StageCameraEffector, StageEditorMode, StageShot } from '../domain/shotTypes'
 import type { StagePlaybackState } from '../domain/animationTypes'
 import {
+  bakeCurrentProjectToPro,
   createNewProject,
   deleteProject as deleteStoredProject,
   listProjects,
@@ -338,6 +339,35 @@ export const cameraStageApplicationService = {
     if (!await loadProjectIntoScene(projectId)) throw new Error('NOT_FOUND')
     const state = useCameraStageStore.getState()
     return { projectId, name: state.currentProjectName, objectCount: state.objects.length, shotCount: state.shots.length }
+  },
+
+  /**
+   * 把简易模式的镜头卡单向烘焙为专业模式的关键帧时间轴（2.3）。
+   *
+   * 不可逆：委托给 `bakeCurrentProjectToPro()`，与界面上 `EditorModeBadge` 的"转为专业工程"
+   * 按钮走同一份业务逻辑——烘焙后原镜头卡结构不再保留、撤销历史被清空。已经是专业模式时
+   * 是安全的空操作（不抛错，`status` 里如实反映）。
+   *
+   * `setEditorMode` 这个 store 动作本身**不**在这里暴露：它只在新建工程时对一个空场景调用
+   * （见 `createNewProject`），已被 `create_camera_stage_project` 覆盖；直接把它开放成通用
+   * 属性写入会绕开烘焙的编译与清理步骤，在"专业"模式下留下过期的 `shots` 数据。
+   */
+  async bakeToProMode(projectId: string): Promise<{
+    projectId: string
+    status: 'baked' | 'already_pro'
+    shotCount: number
+    trackCount: number
+  }> {
+    await ensureProjectLoaded(projectId)
+    const before = useCameraStageStore.getState()
+    if (before.editorMode !== 'simple') {
+      return { projectId, status: 'already_pro', shotCount: 0, trackCount: before.animation.tracks.length }
+    }
+    const shotCount = before.shots.length
+    const saved = await bakeCurrentProjectToPro()
+    if (!saved) throw new Error('CAPABILITY_REJECTED')
+    const baked = useCameraStageStore.getState()
+    return { projectId, status: 'baked', shotCount, trackCount: baked.animation.tracks.length }
   },
 
   async renameProject(projectId: string, name: string): Promise<{ projectId: string; name: string }> {
