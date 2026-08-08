@@ -13,8 +13,14 @@ import { CAMERA_STAGE_STORE_LEDGER } from '@/features/cameraStage/application/ca
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
+import { NAVIGATION_STORE_LEDGER } from '@/features/navigation/application/navigationStoreLedger'
+import { THEME_STORE_LEDGER } from '@/features/settings/application-control/themeStoreLedger'
+import { UI_STORE_LEDGER } from '@/features/settings/application-control/uiStoreLedger'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
+import { useThemeStore } from '@/stores/themeStore'
+import { useUiStore } from '@/stores/uiStore'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
 import {
@@ -42,6 +48,9 @@ const LEDGERS: LedgerCase[] = [
   { ledger: CANVAS_STORE_LEDGER, state: () => useCanvasStore.getState() },
   { ledger: ASSET_STORE_LEDGER, state: () => useAssetLibraryStore.getState() },
   { ledger: PROJECT_STORE_LEDGER, state: () => useProjectStore.getState() },
+  { ledger: NAVIGATION_STORE_LEDGER, state: () => useNavigationStore.getState() },
+  { ledger: UI_STORE_LEDGER, state: () => useUiStore.getState() },
+  { ledger: THEME_STORE_LEDGER, state: () => useThemeStore.getState() },
 ]
 
 /**

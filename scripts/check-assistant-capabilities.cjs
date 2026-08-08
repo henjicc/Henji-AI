@@ -181,12 +181,6 @@ function isZustandStoreFile(source) {
 const ASSISTANT_BLIND_STORES = {
   'src/stores/settingsStore.ts': '4.2：全局与项目类 store 建账，31 个动作逐条归类；'
     + 'protected 7 项对应动作登记为 gap，理由指向 4.4。',
-  'src/stores/navigationStore.ts': '4.2：全局与项目类 store 建账，4 个动作大概率已被 '
-    + 'switch_workspace / open/close_application_surface 覆盖，执行时确认后绑定。',
-  'src/stores/uiStore.ts': '4.2：全局与项目类 store 建账，4 个动作大概率已被 '
-    + 'open_application_surface 覆盖，执行时确认后绑定。',
-  'src/stores/themeStore.ts': '4.2：全局与项目类 store 建账，2 个动作对照 settings.registry 的 '
-    + 'interface.theme_* 属性是否已覆盖。',
   'src/features/cameraStage/store/cameraStageToolStore.ts': '4.3：三维视图态 store 建账，'
     + '手柄/工具模式，预期归类为视图态排除。',
   'src/features/cameraStage/store/cameraStageViewportStore.ts': '4.3：三维视图态 store 建账，'
