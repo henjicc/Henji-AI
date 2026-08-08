@@ -31,11 +31,12 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 
 ### 界面动作覆盖
 
-- **每个带 store 的 feature 必须有 `<feature>StoreLedger.ts`**，store 的每一个函数键都要归类：绑定到属性 / 集合 / 能力，或标为 `excluded`（有意不开放，写明由谁维护），或标为 `gap`（人能做、助手还不能做，写明缺什么与归到哪一期）。
+- **每个 zustand store 必须有账本**，store 的每一个函数键都要归类：绑定到属性 / 集合 / 能力，或标为 `excluded`（有意不开放，写明由谁维护），或标为 `gap`（人能做、助手还不能做，写明缺什么与归到哪一期）。账本的 `storeId` 必须等于 store 文件的 basename（去掉扩展名），门禁按这个约定比对。
 - 账本用 `Record<ActionName, …>` 而不是 `Partial`：界面新增动作却没建账，`tsc` 阶段就会点名缺哪个 key。
 - `excluded` 表达的是**不可写**，不是**不可见**。视图态助手仍然要读得到——它得知道用户现在在看什么。
 - `gap` 总数是人机差集的燃尽基线，在 `storeActionCoverage.test.ts` 里钉住，只许降不许升。
-- feature 整体没接助手（既无 Reflection 也无账本）必须登记进 `check-assistant-capabilities.cjs` 的 `ASSISTANT_BLIND_FEATURES` 并写明原因——那是一张**会缩短的清单**，不是豁免表。
+- feature 整体没接助手（既无 Reflection 也无账本）必须登记进 `check-assistant-capabilities.cjs` 的 `ASSISTANT_BLIND_FEATURES` 并写明原因——那是一张**会缩短的清单**，不是豁免表。这是 feature 级的检查，与下面 store 级的检查并存、互不替代。
+- **store 级清点按内容识别，不按目录约定**：任何文件只要导入 `zustand` 且调用 `create<...>(`，就算一个 store，不论它放在 `src/stores/`、`src/features/*/store/`，还是别的目录（例如 `src/services/largeUploadPolicy.ts` 里就藏着一个 store）。没有账本覆盖的 store 必须登记进 `ASSISTANT_BLIND_STORES` 并写明归属任务编号，同一张**会缩短的清单**。
 
 ## 禁止事项
 
@@ -82,6 +83,7 @@ CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执�
 | 账本绑到一条执行器写不了的属性 | 账目指向的属性没有任何执行器能写，账是假的 |
 | 账本留一条 store 里已删除的动作 | 账目对应的 store 动作已不存在，账没销 |
 | feature 无 Reflection 也无账本且未登记 | 领域对助手不可见且未登记原因 |
+| store 无账本（storeId 对不上）且未登记进 `ASSISTANT_BLIND_STORES` | store 未建账且未登记原因 |
 
 再按 [testing.md](testing.md) 运行本次能力登记、处理器或正式业务服务的精确/相关测试。`npm run test:assistant-production` 只用于同时影响 runner、状态机、调度、审批、持久化或模型适配等多个助手运行时模块的改动，以及生产验收/发布前检查；不要因普通能力登记或界面适配运行整套助手测试。
 

@@ -22,7 +22,7 @@ const PANEL_REASON = '素材库以浮层还是整页打开、从哪个工作区�
   + '助手要打开素材库用 open_application_surface，要读素材用 query_assets。'
 
 export const ASSET_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
-  storeId: 'assets',
+  storeId: 'assetLibraryStore',
   title: '素材库',
   entries: {
     setSelectedAsset: { kind: 'capability', capabilityId: 'select_asset' },

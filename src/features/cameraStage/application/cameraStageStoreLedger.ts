@@ -26,7 +26,7 @@ const SELECTION_REASON = '选中态是鼠标操作的中间产物；助手用稳
   + '而且改写选中态会与用户当前正在进行的操作打架。'
 
 export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
-  storeId: 'cameraStage',
+  storeId: 'cameraStageStore',
   title: '三维运镜',
   entries: {
     /* ── 对象增删改 ─────────────────────────────────────────── */

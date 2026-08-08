@@ -24,7 +24,7 @@ const REACTFLOW_BRIDGE = 'ReactFlow 把拖拽、框选、连线手势翻译成�
   + '助手的增删改走 canvas.node / canvas.edge 的集合写入与属性写入，不经过手势。'
 
 export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
-  storeId: 'canvas',
+  storeId: 'canvasStore',
   title: '画布',
   entries: {
     /* ── 节点与连线 ─────────────────────────────────────────── */

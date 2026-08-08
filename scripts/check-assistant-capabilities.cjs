@@ -164,6 +164,71 @@ for (const feature of fs.readdirSync(path.join(root, 'src', 'features'), { withF
 }
 
 /*
+ * store 级清点：**每个 zustand store 要么有账本，要么在这张表里写明原因。**
+ *
+ * 上面的领域级检查只按 src/features 下的一级子目录遍历，画布账本能被发现纯属侥幸——
+ * `canvasStoreLedger.ts` 恰好也放在 `src/features/canvas/` 下，与 `canvasStore.ts`
+ * 实际放在 `src/stores/` 无关。这道检查按**内容**识别 store 文件（导入 zustand 且调用
+ * `create<...>(`），不按目录约定——目录约定本身就是上一次盲区的成因：4.1 复核时发现
+ * `src/services/largeUploadPolicy.ts` 里也藏着一个 store（`useLargeUploadPromptStore`），
+ * 既不在 src/stores 下也不在任何 feature 的 store 子目录下，任何基于目录 glob 的扫描都会漏掉它。
+ *
+ * store ↔ 账本的对应关系：账本 `storeId` 必须等于 store 文件的 basename（去掉扩展名）。
+ */
+function isZustandStoreFile(source) {
+  return /from\s+['"]zustand['"]/.test(source) && /=\s*create[<(]/.test(source)
+}
+const ASSISTANT_BLIND_STORES = {
+  'src/stores/projectStore.ts': '4.2：全局与项目类 store 建账，20 个动作逐条归类。',
+  'src/stores/settingsStore.ts': '4.2：全局与项目类 store 建账，31 个动作逐条归类；'
+    + 'protected 7 项对应动作登记为 gap，理由指向 4.4。',
+  'src/stores/navigationStore.ts': '4.2：全局与项目类 store 建账，4 个动作大概率已被 '
+    + 'switch_workspace / open/close_application_surface 覆盖，执行时确认后绑定。',
+  'src/stores/uiStore.ts': '4.2：全局与项目类 store 建账，4 个动作大概率已被 '
+    + 'open_application_surface 覆盖，执行时确认后绑定。',
+  'src/stores/themeStore.ts': '4.2：全局与项目类 store 建账，2 个动作对照 settings.registry 的 '
+    + 'interface.theme_* 属性是否已覆盖。',
+  'src/features/cameraStage/store/cameraStageToolStore.ts': '4.3：三维视图态 store 建账，'
+    + '手柄/工具模式，预期归类为视图态排除。',
+  'src/features/cameraStage/store/cameraStageViewportStore.ts': '4.3：三维视图态 store 建账，'
+    + '单窗/四窗布局，预期归类为视图态排除。',
+  'src/features/cameraStage/store/cameraStageSessionStore.ts': '4.3：三维视图态 store 建账，'
+    + '预期视图态与 internal 混合，逐条判断。',
+  'src/features/imageEdit/store/imageEditorUiStore.ts': '4.3：面板宽度/折叠等视图态，'
+    + '与三维视图态一起建账，不随 imageMark 拖到期六。',
+  'src/features/imageEdit/store/imageEditorHandoffStore.ts': '4.3：图片交接的内部中转态，'
+    + '预期归类为 internal。',
+  'src/features/assistant/store/assistantUiStore.ts': '4.3：助手自身面板状态，'
+    + 'setApprovalMode 必须归为 excluded(user_only)——审批模式是用户对助手的授权开关，'
+    + '助手改它等于自我提权，其余动作按视图态判断。',
+  'src/stores/alertDialogStore.ts': '4.3：全局弹窗队列，预期归类为 internal。',
+  'src/stores/canvasGenerationProgressStore.ts': '4.3：生成进度投影，预期归类为 derived。',
+  'src/stores/generationTaskProgressStore.ts': '4.3：生成进度投影，预期归类为 derived。',
+  'src/stores/generationHistoryFilterStore.ts': '4.3：生成筛选 store 建账，16 个筛选动作要先核对 '
+    + 'list_generation_history 的输入 schema 是否覆盖全部维度，覆盖不全的登记为 gap 而非视图态。',
+  'src/services/largeUploadPolicy.ts': '4.3：大文件处理询问弹窗队列（useLargeUploadPromptStore，'
+    + 'enqueue/settleCurrent 两个动作），与 alertDialogStore 同属全局弹窗队列，预期归类为 internal。'
+    + '注意此文件不在 src/stores 或 */store 目录下，storeId 需显式对齐 basename 之外的约定。',
+}
+const ledgerStoreIds = new Set()
+for (const file of walk(path.join(root, 'src'))) {
+  if (!path.basename(file).endsWith('StoreLedger.ts')) continue
+  const match = fs.readFileSync(file, 'utf8').match(/storeId:\s*'([^']+)'/)
+  if (match) ledgerStoreIds.add(match[1])
+}
+for (const file of walk(path.join(root, 'src'))) {
+  if (file.endsWith('.test.ts') || file.endsWith('.test.tsx')) continue
+  const source = fs.readFileSync(file, 'utf8')
+  if (!isZustandStoreFile(source)) continue
+  const relative = path.relative(root, file).replaceAll('\\', '/')
+  const storeId = path.basename(file, path.extname(file))
+  if (ledgerStoreIds.has(storeId)) continue
+  const excuse = ASSISTANT_BLIND_STORES[relative]
+  if (excuse && excuse.length > 20) continue
+  failures.push(`store 未建账且未登记原因：${relative}`)
+}
+
+/*
  * 属性写入执行器必须表驱动，不许回到手写 if-else 属性链。
  *
  * 手写链条对覆盖门禁是不透明的——它无法枚举「这个执行器到底能写哪些属性」，于是
