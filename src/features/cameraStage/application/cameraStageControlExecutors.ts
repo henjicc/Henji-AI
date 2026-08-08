@@ -31,9 +31,10 @@ import {
   type CameraStageProjectDraft,
   type CameraStageShotDraft,
 } from './cameraStageTimelineFields'
+import { CAMERA_STAGE_TRAJECTORY_WRITERS, type CameraStageTrajectoryDraft } from './cameraStageTrajectoryFields'
 
 type MutationStep = Extract<ApplicationPlannedStep, { kind: 'mutation' }>
-type MutationEntityType = Exclude<typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES], 'camera_stage.trajectory'>
+type MutationEntityType = typeof CAMERA_STAGE_ENTITY_TYPES[keyof typeof CAMERA_STAGE_ENTITY_TYPES]
 
 export interface CameraStageControlExecutorDependencies {
   readRevision: () => number
@@ -55,6 +56,7 @@ const WRITER_TABLES = {
   [CAMERA_STAGE_ENTITY_TYPES.shot]: CAMERA_STAGE_SHOT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.keyframe]: CAMERA_STAGE_KEYFRAME_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.playback]: CAMERA_STAGE_PLAYBACK_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.trajectory]: CAMERA_STAGE_TRAJECTORY_WRITERS,
 } as const satisfies Record<MutationEntityType, ApplicationPropertyWriterTable<never>>
 
 function mutationEvidence(step: MutationStep, revision: number): ApplicationEvidence[] {
@@ -124,6 +126,7 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.object || this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera) return await this.applyObject(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.shot) return await this.applyShot(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.playback) return await this.applyPlayback(step)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.trajectory) return await this.applyTrajectory(step)
     return await this.applyKeyframe(step)
   }
 
@@ -217,6 +220,28 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     await applyWriterTable(CAMERA_STAGE_KEYFRAME_WRITERS, draft, step.mutations)
     await saveCurrentProject()
     return undoToken
+  }
+
+  /** 轨迹稳定引用形如 `projectId:shotId:objectId`（`allRefs()` 里 `childRef` 拼的 `${shotId}:${objectId}`）。 */
+  private async applyTrajectory(step: MutationStep): Promise<string> {
+    const { projectId, childId } = childTarget(step.target.id)
+    const separator = childId.indexOf(':')
+    if (separator < 1) throw new Error('NOT_FOUND')
+    const shotId = childId.slice(0, separator)
+    const objectId = childId.slice(separator + 1)
+    const snapshot = await cameraStageApplicationService.readSnapshot(projectId)
+    const index = snapshot.shots.findIndex((shot) => shot.id === shotId)
+    const shot = snapshot.shots[index]
+    const nextShot = snapshot.shots[index + 1]
+    const path = shot?.transition.perObject[objectId]?.spatialPath
+    if (!shot || !nextShot || !path) throw new Error('NOT_FOUND')
+    const draft: CameraStageTrajectoryDraft = { path: structuredClone(path), pathTouched: false }
+    await applyWriterTable(CAMERA_STAGE_TRAJECTORY_WRITERS, draft, step.mutations)
+    return (await cameraStageApplicationService.updateTrajectory(projectId, shotId, objectId, {
+      path: draft.pathTouched ? draft.path : undefined,
+      startPosition: draft.startPosition,
+      endPosition: draft.endPosition,
+    })).undoToken
   }
 }
 
@@ -314,4 +339,5 @@ export const CAMERA_STAGE_MUTATION_ENTITY_TYPES: MutationEntityType[] = [
   CAMERA_STAGE_ENTITY_TYPES.shot,
   CAMERA_STAGE_ENTITY_TYPES.keyframe,
   CAMERA_STAGE_ENTITY_TYPES.playback,
+  CAMERA_STAGE_ENTITY_TYPES.trajectory,
 ]

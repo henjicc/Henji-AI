@@ -79,7 +79,26 @@ export class CameraStageKeyframeCollectionExecutor implements ApplicationCollect
         objectId: keyframe.objectId, propertyPath: keyframe.propertyPath, time: keyframe.time,
       })), `已写入 ${result.createdCount} 个关键帧，时间轴长度 ${result.duration} 秒。`)
     }
-    const targets = step.operation.targets.map((target) => parseKeyframeRef(target))
+    /*
+     * 删除目标支持两种粒度的引用：`工程:对象:属性路径:时间`（单个关键帧）与
+     * `工程:对象:属性路径`（整条轨道，2.5）。后者是"清空动画轨道"的正式入口——
+     * 逐条列举关键帧再删会撞上 maxItemsPerChange 上限，而且啰嗦。两种粒度不在同一批
+     * 混用，混用没有清晰的原子性语义（该整批算轨道清空还是单点删除？）。
+     */
+    const trackTargets = step.operation.targets.filter((target) => target.id.split(':').length === 3)
+    const keyframeTargets = step.operation.targets.filter((target) => target.id.split(':').length !== 3)
+    if (trackTargets.length > 0 && keyframeTargets.length > 0) {
+      throw new Error(
+        'MIXED_REMOVE_TARGETS_NOT_SUPPORTED：不能在同一批删除里混用整条轨道引用'
+        + '（工程:对象:属性路径）和单个关键帧引用（工程:对象:属性路径:时间），请分开调用。'
+      )
+    }
+    if (trackTargets.length > 0) {
+      const tracks = trackTargets.map((target) => parseTrackRef(target))
+      const result = await cameraStageKeyframeService.clearTracks(projectId, tracks)
+      return this.completedTracks(projectId, result.undoToken, tracks, `已清空 ${result.clearedCount} 条动画轨道。`)
+    }
+    const targets = keyframeTargets.map((target) => parseKeyframeRef(target))
     const result = await cameraStageKeyframeService.removeKeyframes(projectId, targets)
     return this.completed(projectId, result.undoToken, targets, `已删除 ${result.removedCount} 个关键帧。`)
   }
@@ -112,26 +131,53 @@ export class CameraStageKeyframeCollectionExecutor implements ApplicationCollect
     keyframes: Array<{ objectId: string; propertyPath: string; time: number }>,
     fact: string
   ): ApplicationCompletedStepResult {
-    this.dependencies.bumpRevision()
-    const revision = this.dependencies.readRevision()
     const refs: ApplicationRef[] = keyframes.map((keyframe) => ({
       kind: CAMERA_STAGE_ENTITY_TYPES.keyframe,
       id: `${projectId}:${keyframe.objectId}:${keyframe.propertyPath}:${keyframe.time}`,
-      revision,
     }))
+    return this.finish(projectId, undoToken, refs, fact, {
+      keyframeCount: keyframes.length,
+      objectIds: [...new Set(keyframes.map((keyframe) => keyframe.objectId))],
+      propertyPaths: [...new Set(keyframes.map((keyframe) => keyframe.propertyPath))],
+    })
+  }
+
+  /** 轨道级引用没有时间分量，产出的稳定引用形如 `工程:对象:属性路径`，不是关键帧实体。 */
+  private completedTracks(
+    projectId: string,
+    undoToken: string,
+    tracks: Array<{ objectId: string; propertyPath: string }>,
+    fact: string
+  ): ApplicationCompletedStepResult {
+    const refs: ApplicationRef[] = tracks.map((track) => ({
+      kind: CAMERA_STAGE_ENTITY_TYPES.keyframe,
+      id: `${projectId}:${track.objectId}:${track.propertyPath}`,
+    }))
+    return this.finish(projectId, undoToken, refs, fact, {
+      trackCount: tracks.length,
+      objectIds: [...new Set(tracks.map((track) => track.objectId))],
+      propertyPaths: [...new Set(tracks.map((track) => track.propertyPath))],
+    })
+  }
+
+  private finish(
+    projectId: string,
+    undoToken: string,
+    refs: Array<Omit<ApplicationRef, 'revision'>>,
+    fact: string,
+    data: Record<string, JsonValue>,
+  ): ApplicationCompletedStepResult {
+    this.dependencies.bumpRevision()
+    const revision = this.dependencies.readRevision()
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },
-      producedRefs: refs.slice(0, 64),
+      producedRefs: refs.slice(0, 64).map((ref) => ({ ...ref, revision })),
       evidence: [{
         kind: 'operation_result',
         target: { kind: CAMERA_STAGE_ENTITY_TYPES.project, id: projectId, revision },
         fact,
-        data: {
-          keyframeCount: keyframes.length,
-          objectIds: [...new Set(keyframes.map((keyframe) => keyframe.objectId))],
-          propertyPaths: [...new Set(keyframes.map((keyframe) => keyframe.propertyPath))],
-        },
+        data,
         capturedAt: new Date().toISOString(),
       }],
       undoToken,
@@ -148,4 +194,13 @@ function parseKeyframeRef(ref: ApplicationRef): { objectId: string; propertyPath
   const time = Number(parts[parts.length - 1])
   if (!Number.isFinite(time)) throw new Error(`KEYFRAME_REF_INVALID：«${ref.id}» 的时间段不是数字。`)
   return { objectId: parts[1], propertyPath: parts.slice(2, -1).join(':'), time }
+}
+
+/** 轨道级引用形如 `projectId:objectId:propertyPath`，没有时间分量。 */
+function parseTrackRef(ref: ApplicationRef): { objectId: string; propertyPath: string } {
+  const parts = ref.id.split(':')
+  if (parts.length !== 3) {
+    throw new Error(`KEYFRAME_TRACK_REF_INVALID：«${ref.id}» 不是合法轨道引用，应为 工程:对象:属性路径。`)
+  }
+  return { objectId: parts[1], propertyPath: parts[2] }
 }

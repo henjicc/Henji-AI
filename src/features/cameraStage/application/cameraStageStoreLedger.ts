@@ -5,6 +5,7 @@ import { CAMERA_FIELDS, OBJECT_FIELDS } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES as ENTITY } from './cameraStageReflection'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
 import { KEYFRAME_FIELDS, PLAYBACK_FIELDS, SHOT_FIELDS } from './cameraStageTimelineFields'
+import { TRAJECTORY_FIELDS } from './cameraStageTrajectoryFields'
 
 /*
  * 三维运镜的界面动作账本。
@@ -87,24 +88,13 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     removeKeyframe: { kind: 'collection', entityType: ENTITY.keyframe, operation: 'remove' },
     // 定义收敛在 cameraStageTimelineFields.ts。
     ...fieldLedgerEntries(KEYFRAME_FIELDS),
-    clearTrack: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '清空整条动画轨道要能一次删掉该轨道上的全部关键帧，目前集合删除只支持逐条指定引用。',
-    },
+    // 整条清空走集合删除的轨道级引用（工程:对象:属性路径，不带时间），2.5。
+    clearTrack: { kind: 'collection', entityType: ENTITY.keyframe, operation: 'remove' },
 
     /* ── 轨迹 ───────────────────────────────────────────────── */
-    setShotSpatialPath: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '空间轨迹整条曲线的写入。camera_stage.trajectory 目前整实体 writeExclusion，'
-        + '要开放需要把控制点建成 trajectory.knot 子实体。',
-    },
-    setShotPathAnchor: {
-      kind: 'gap',
-      plannedPhase: '期 2',
-      reason: '拖动轨迹端点控制点，与 setShotSpatialPath 同属轨迹编辑这一块缺口。',
-    },
+    // 定义收敛在 cameraStageTrajectoryFields.ts；knots/start_out_tangent/end_in_tangent
+    // 共用 setShotSpatialPath（整条路径替换），start_position/end_position 走 setShotPathAnchor。
+    ...fieldLedgerEntries(TRAJECTORY_FIELDS),
     applyCameraPathPreset: {
       kind: 'capability',
       capabilityId: 'apply_camera_stage_camera_move',

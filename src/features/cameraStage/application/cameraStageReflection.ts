@@ -22,6 +22,7 @@ import {
 } from './cameraStageObjectFields'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
 import { KEYFRAME_FIELDS, PLAYBACK_FIELDS, PROJECT_FIELDS, SHOT_FIELDS } from './cameraStageTimelineFields'
+import { TRAJECTORY_FIELDS } from './cameraStageTrajectoryFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
 
 const DOMAIN = 'camera_stage'
@@ -163,8 +164,9 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
   [ENTITY_TYPES.trajectory]: [
     property(ENTITY_TYPES.trajectory, 'shot_ref', '起始镜头', { kind: 'ref', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '轨迹所属镜头不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'one' } }),
     property(ENTITY_TYPES.trajectory, 'object_ref', '运动对象', { kind: 'ref', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '轨迹对象不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'one' } }),
-    property(ENTITY_TYPES.trajectory, 'source', '轨迹来源', STRING, { readOnly: '轨迹来源由语义操作或手动编辑产生。' }),
-    property(ENTITY_TYPES.trajectory, 'knot_count', '控制点数量', INTEGER, { readOnly: '控制点数量由轨迹计算。' }),
+    property(ENTITY_TYPES.trajectory, 'source', '轨迹来源', STRING, { readOnly: '轨迹来源由语义操作或手动编辑产生；手动编辑后由写入自动标记为 custom，见 knots 等可写属性。' }),
+    property(ENTITY_TYPES.trajectory, 'knot_count', '控制点数量', INTEGER, { readOnly: '控制点数量由 knots 属性的数组长度计算，写 knots 即可增减控制点。' }),
+    ...fieldDescriptors(TRAJECTORY_FIELDS),
   ],
   [ENTITY_TYPES.keyframe]: [
     property(ENTITY_TYPES.keyframe, 'object_ref', '关键帧对象', { kind: 'ref', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '关键帧对象不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'one' } }),
@@ -338,14 +340,20 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
 
   private trajectoryProperties(projectId: string, snapshot: CameraStageProjectSnapshot, id: string): Record<string, JsonValue> {
     const [shotId, objectId] = id.split(':')
-    const path = snapshot.shots.find((shot) => shot.id === shotId)?.transition.perObject[objectId]?.spatialPath
-    if (!path) throw new Error('NOT_FOUND')
+    const index = snapshot.shots.findIndex((shot) => shot.id === shotId)
+    const shot = snapshot.shots[index]
+    const nextShot = snapshot.shots[index + 1]
+    const path = shot?.transition.perObject[objectId]?.spatialPath
+    const startPosition = shot?.objectStates[objectId]?.transform.position
+    const endPosition = nextShot?.objectStates[objectId]?.transform.position
+    if (!path || !startPosition || !endPosition) throw new Error('NOT_FOUND')
     const object = snapshot.objects.find((candidate) => candidate.id === objectId)
     return {
       [`${ENTITY_TYPES.trajectory}.shot_ref`]: childRef(ENTITY_TYPES.shot, projectId, shotId),
       [`${ENTITY_TYPES.trajectory}.object_ref`]: childRef(object?.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, projectId, objectId),
       [`${ENTITY_TYPES.trajectory}.source`]: path.source.kind === 'preset' ? path.source.preset.kind : 'custom',
       [`${ENTITY_TYPES.trajectory}.knot_count`]: path.knots.length,
+      ...fieldReadValues(TRAJECTORY_FIELDS, { path, startPosition, endPosition }),
     }
   }
 
@@ -394,11 +402,6 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         revisionScopes: [REVISION_SCOPE],
         queryCapabilityIds: meta.queryIds,
         schemaRef: schemaRef('entity', entityType),
-        ...(entityType === ENTITY_TYPES.trajectory ? {
-          writeExclusion: {
-            reason: '轨迹由 apply_camera_stage_camera_move 的轨迹采样算法产生，属算法型操作的产物。',
-          },
-        } : {}),
         ...(entityType === ENTITY_TYPES.keyframe ? {
           /**
            * 关键帧可增删。这一句就是"助手能不能做动画"的开关：实体、属性、provider 早就注册

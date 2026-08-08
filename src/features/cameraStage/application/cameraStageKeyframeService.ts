@@ -6,6 +6,11 @@ import type { StageEasing } from '../domain/animationTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { captureCameraStageUndo, restoreCameraStageUndo } from './cameraStageUndo'
 
+export interface CameraStageTrackRef {
+  objectId: string
+  propertyPath: string
+}
+
 const logger = createLogger('features.cameraStage.application')
 
 /**
@@ -69,6 +74,24 @@ function assertKeyframesValid(
     }
     if (!Number.isFinite(keyframe.time) || keyframe.time < 0 || keyframe.time > 3_600) {
       throw new Error(`KEYFRAME_TIME_INVALID：第 ${index} 项的 time 必须是 0~3600 秒之间的有限数。`)
+    }
+  }
+}
+
+/** 与 `assertKeyframesValid` 同一把尺子，只是不校验 time（清空轨道不带时间点）。 */
+function assertTracksValid(targets: CameraStageTrackRef[], objectIds: Set<string>): void {
+  for (const [index, target] of targets.entries()) {
+    if (!objectIds.has(target.objectId)) {
+      throw new Error(
+        `KEYFRAME_OBJECT_NOT_FOUND：第 ${index} 项的 objectId «${target.objectId}» 不在本场景中。`
+        + `objectId 必须取自观察结果里 objects[].id 的原值。当前可用：${[...objectIds].join('、') || '无'}。`
+      )
+    }
+    if (!WRITABLE_PROPERTY_PATHS.has(target.propertyPath)) {
+      throw new Error(
+        `KEYFRAME_PROPERTY_PATH_INVALID：第 ${index} 项的 propertyPath «${target.propertyPath}» 不可写。`
+        + `可写路径：${[...WRITABLE_PROPERTY_PATHS].join('、')}。`
+      )
     }
   }
 }
@@ -152,6 +175,42 @@ export const cameraStageKeyframeService = {
         event: 'camera_stage.keyframe.remove.failed',
         projectId,
         keyframeCount: targets.length,
+      })
+      throw error
+    }
+  },
+
+  /**
+   * 整条清空动画轨道（2.5）。逐条指定关键帧引用删除条数多时会撞上集合写入的
+   * `maxItemsPerChange` 上限，而且啰嗦——清空一条轨道本来就是一件事，不该表达成
+   * "先列举全部关键帧再逐条删"。领域层的 `clearTrack`（`keyframeSlice.ts`）早就是完整实现，
+   * 缺的只是这一条正式入口。
+   */
+  async clearTracks(projectId: string, targets: CameraStageTrackRef[]): Promise<{
+    projectId: string
+    clearedCount: number
+    undoToken: string
+  }> {
+    await ensureProjectLoaded(projectId)
+    const before = useCameraStageStore.getState()
+    assertTracksValid(targets, new Set(before.objects.map((object) => object.id)))
+    const missing = targets.filter((target) => !getTrack(before.animation, target.objectId, target.propertyPath))
+    if (missing.length > 0) {
+      throw new Error(`KEYFRAME_TRACK_NOT_FOUND：${missing.length} 个目标所在的轨道不存在，先观察场景再清空。`)
+    }
+    const undoToken = captureCameraStageUndo(projectId)
+    try {
+      for (const target of targets) {
+        useCameraStageStore.getState().clearTrack(target.objectId, target.propertyPath)
+      }
+      await saveCurrentProject()
+      return { projectId, clearedCount: targets.length, undoToken }
+    } catch (error) {
+      await rollback(projectId, undoToken)
+      logger.error('三维动画轨道清空失败', error, {
+        event: 'camera_stage.track.clear.failed',
+        projectId,
+        trackCount: targets.length,
       })
       throw error
     }

@@ -3,9 +3,10 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/came
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageTransform, StageVec3 } from '../domain/sceneTypes'
-import type { StageCameraEffector, StageEditorMode, StageShot } from '../domain/shotTypes'
+import type { StageCameraEffector, StageEditorMode, StageShot, StageSpatialPath } from '../domain/shotTypes'
 import type { StageKeyframeValue, StagePlaybackState } from '../domain/animationTypes'
 import { POSE_PRESETS } from '../domain/posePresets.gen'
+import { markSpatialPathCustom } from '../domain/spatialPath'
 import {
   bakeCurrentProjectToPro,
   createNewProject,
@@ -603,6 +604,33 @@ export const cameraStageApplicationService = {
     state.applyPosePreset(objectId, preset)
     await saveCurrentProject()
     return { projectId, objectId, presetId, undoToken }
+  },
+
+  /**
+   * 手工编辑三维轨迹（2.5）：`path` 走 `store.setShotSpatialPath`（整条路径替换，与界面拖控制点
+   * /切线手柄同一份实现），`startPosition`/`endPosition` 走 `store.setShotPathAnchor`（挪相邻
+   * 镜头卡里该对象的位置快照）。两者是独立的 store 动作，可以同一次提交里都出现。
+   *
+   * 与 `apply_camera_stage_camera_move`（`cameraMotionService.ts`）不冲突：那条路径产生初始
+   * 轨迹（算法采样），这条路径编辑已产生的轨迹（人工调整），两者落地到同一个字段
+   * （`shot.transition.perObject[objectId].spatialPath`），互不知道对方存在也不需要知道——
+   * 后写的值就是最终值，与界面上"先套预设、再手动微调控制点"完全一致的行为。
+   */
+  async updateTrajectory(
+    projectId: string,
+    shotId: string,
+    objectId: string,
+    update: { path?: StageSpatialPath; startPosition?: StageVec3; endPosition?: StageVec3 },
+  ): Promise<{ projectId: string; shotId: string; objectId: string; undoToken: string }> {
+    await ensureProjectLoaded(projectId)
+    const state = useCameraStageStore.getState()
+    if (!state.shots.some((shot) => shot.id === shotId)) throw new Error('NOT_FOUND')
+    const undoToken = captureCameraStageUndo(projectId)
+    if (update.path !== undefined) state.setShotSpatialPath(shotId, objectId, markSpatialPathCustom(update.path))
+    if (update.startPosition !== undefined) state.setShotPathAnchor(shotId, objectId, 'start', update.startPosition)
+    if (update.endPosition !== undefined) state.setShotPathAnchor(shotId, objectId, 'end', update.endPosition)
+    await saveCurrentProject()
+    return { projectId, shotId, objectId, undoToken }
   },
 
   async duplicateObject(projectId: string, objectId: string): Promise<{ projectId: string; objectId: string; duplicatedFromObjectId: string; undoToken: string }> {

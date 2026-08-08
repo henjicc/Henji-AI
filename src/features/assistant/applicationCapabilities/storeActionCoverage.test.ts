@@ -57,9 +57,12 @@ const LEDGERS: LedgerCase[] = [
  * bakeToProMode 注册为带审批的语义能力 bake_camera_stage_to_pro。2.4 烧掉姿态直接写入 2 项——
  * updatePoseJoint 并入 63 条 animatable.* 逐分量属性（方案 C：轨道无关键帧写静态值，有关键帧
  * 等价于当前时间点打点，只在专业模式下可写），applyPosePreset 绑到新增的 pose_preset 枚举属性。
- * 现存 8 项：三维 3（轨迹 2、清空轨道 1），画布 5（清空、解散分组、重做、分镜格子改与排序）。
+ * 2.5 烧掉三维最后 3 项——clearTrack 接到集合删除的轨道级引用（工程:对象:属性路径，不带时间）；
+ * setShotSpatialPath/setShotPathAnchor 绑到 camera_stage.trajectory 新增的 5 条可写属性
+ * （knots 等三条整条路径替换，start_position/end_position 挪相邻镜头卡快照）。**三维 11 项
+ * 缺口全部归零**。现存 5 项，全部是画布（清空、解散分组、重做、分镜格子改与排序）。
  */
-const GAP_BASELINE = 8
+const GAP_BASELINE = 5
 
 function actionNames(state: object): string[] {
   return Object.entries(state)

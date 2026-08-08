@@ -10,10 +10,14 @@ vi.mock('../projects/cameraStageProjectService', () => ({
   loadProjectIntoScene: mocks.loadProjectIntoScene,
 }))
 
+import type { ApplicationPlannedStep } from '@/core/application-control'
+
 import { createDefaultAnimation } from '../domain/animationTypes'
 import { createCameraObject, createDefaultSceneSettings, createPrimitiveObject, pickDefaultColor } from '../domain/sceneDefaults'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import { CameraStageKeyframeCollectionExecutor } from './cameraStageKeyframeCollectionExecutor'
 import { cameraStageKeyframeService } from './cameraStageKeyframeService'
+import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 
 /**
  * 「两个物体上下漂浮」这类需求以前无解：`camera_stage.keyframe` 的实体、属性、provider 全都
@@ -94,5 +98,132 @@ describe('三维关键帧集合写入', () => {
     const track = useCameraStageStore.getState().animation.tracks
       .find((item) => item.objectId === objectId && item.propertyPath === 'transform.position.y')
     expect(track?.keyframes).toHaveLength(1)
+  })
+})
+
+/**
+ * 2.5：整条清空动画轨道。以前只能逐条列举关键帧再删——条数多时撞 `maxItemsPerChange` 上限，
+ * 而且啰嗦。`clearTracks` 是正式入口，委托给领域层早就完整的 `store.clearTrack`（未重写）。
+ */
+describe('三维动画轨道整条清空', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+    const cube = createPrimitiveObject('box', '立方体', pickDefaultColor(1))
+    useCameraStageStore.getState().loadSnapshot({
+      objects: [camera, cube],
+      activeCameraId: camera.id,
+      animation: createDefaultAnimation(),
+      sceneSettings: createDefaultSceneSettings(),
+      editorMode: 'simple',
+      shots: [],
+    }, { id: 'project-1', name: '轨道清空测试' })
+  })
+
+  function cubeId(): string {
+    return useCameraStageStore.getState().objects.find((object) => object.type === 'primitive')!.id
+  }
+
+  it('能一次清空一条轨道，不影响同对象的其他轨道', async () => {
+    const objectId = cubeId()
+    await cameraStageKeyframeService.createKeyframes('project-1', [
+      { objectId, propertyPath: 'transform.position.y', time: 0, value: 0.5 },
+      { objectId, propertyPath: 'transform.position.y', time: 1, value: 1.1 },
+      { objectId, propertyPath: 'transform.position.x', time: 0, value: 0 },
+      { objectId, propertyPath: 'transform.position.x', time: 1, value: 2 },
+    ])
+
+    const result = await cameraStageKeyframeService.clearTracks('project-1', [
+      { objectId, propertyPath: 'transform.position.y' },
+    ])
+
+    expect(result.clearedCount).toBe(1)
+    const tracks = useCameraStageStore.getState().animation.tracks
+    expect(tracks.find((track) => track.objectId === objectId && track.propertyPath === 'transform.position.y')).toBeUndefined()
+    expect(tracks.find((track) => track.objectId === objectId && track.propertyPath === 'transform.position.x')?.keyframes).toHaveLength(2)
+  })
+
+  it('轨道不存在时拒绝，不改动场景', async () => {
+    const objectId = cubeId()
+    await expect(cameraStageKeyframeService.clearTracks('project-1', [
+      { objectId, propertyPath: 'transform.position.y' },
+    ])).rejects.toThrow('KEYFRAME_TRACK_NOT_FOUND')
+    expect(mocks.saveCurrentProject).not.toHaveBeenCalled()
+  })
+
+  it('不可写属性路径被拒绝', async () => {
+    await expect(cameraStageKeyframeService.clearTracks('project-1', [
+      { objectId: cubeId(), propertyPath: 'name' },
+    ])).rejects.toThrow('KEYFRAME_PROPERTY_PATH_INVALID')
+  })
+})
+
+/** 集合执行器按引用的段数区分"删单个关键帧"与"清空整条轨道"，两种粒度不能在同一批混用。 */
+describe('三维关键帧集合执行器：轨道级引用与关键帧级引用', () => {
+  let revision = 1
+  const executor = new CameraStageKeyframeCollectionExecutor({
+    readRevision: () => revision,
+    bumpRevision: () => { revision += 1 },
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const camera = createCameraObject('摄像机01', pickDefaultColor(0))
+    const cube = createPrimitiveObject('box', '立方体', pickDefaultColor(1))
+    useCameraStageStore.getState().loadSnapshot({
+      objects: [camera, cube],
+      activeCameraId: camera.id,
+      animation: createDefaultAnimation(),
+      sceneSettings: createDefaultSceneSettings(),
+      editorMode: 'simple',
+      shots: [],
+    }, { id: 'project-1', name: '轨道级引用测试' })
+  })
+
+  function cubeId(): string {
+    return useCameraStageStore.getState().objects.find((object) => object.type === 'primitive')!.id
+  }
+
+  function removeStep(targets: Array<{ id: string }>): Extract<ApplicationPlannedStep, { kind: 'collection' }> {
+    return {
+      kind: 'collection',
+      entityType: CAMERA_STAGE_ENTITY_TYPES.keyframe,
+      parent: { kind: CAMERA_STAGE_ENTITY_TYPES.project, id: 'project-1' },
+      operation: { kind: 'remove', targets: targets.map((target) => ({ kind: CAMERA_STAGE_ENTITY_TYPES.keyframe, id: target.id })) },
+    } as Extract<ApplicationPlannedStep, { kind: 'collection' }>
+  }
+
+  it('三段引用（工程:对象:属性路径）清空整条轨道', async () => {
+    const objectId = cubeId()
+    await cameraStageKeyframeService.createKeyframes('project-1', [
+      { objectId, propertyPath: 'transform.position.y', time: 0, value: 0.5 },
+      { objectId, propertyPath: 'transform.position.y', time: 1, value: 1.1 },
+    ])
+
+    const result = await executor.apply(removeStep([{ id: `project-1:${objectId}:transform.position.y` }]))
+
+    expect(result.evidence[0]?.fact).toContain('已清空 1 条动画轨道')
+    expect(useCameraStageStore.getState().animation.tracks).toHaveLength(0)
+  })
+
+  it('四段引用（带时间）仍然按单个关键帧删除', async () => {
+    const objectId = cubeId()
+    await cameraStageKeyframeService.createKeyframes('project-1', [
+      { objectId, propertyPath: 'transform.position.y', time: 0, value: 0.5 },
+      { objectId, propertyPath: 'transform.position.y', time: 1, value: 1.1 },
+    ])
+
+    const result = await executor.apply(removeStep([{ id: `project-1:${objectId}:transform.position.y:1` }]))
+
+    expect(result.evidence[0]?.fact).toContain('已删除 1 个关键帧')
+    expect(useCameraStageStore.getState().animation.tracks[0]?.keyframes).toHaveLength(1)
+  })
+
+  it('同一批混用轨道级与关键帧级引用被拒绝', async () => {
+    const objectId = cubeId()
+    await expect(executor.apply(removeStep([
+      { id: `project-1:${objectId}:transform.position.y` },
+      { id: `project-1:${objectId}:transform.position.x:0` },
+    ]))).rejects.toThrow('MIXED_REMOVE_TARGETS_NOT_SUPPORTED')
   })
 })
