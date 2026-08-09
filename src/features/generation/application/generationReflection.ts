@@ -1,4 +1,6 @@
 import {
+  fieldDescriptors,
+  fieldReadValues,
   type ApplicationEntityProvider,
   type ApplicationEntityRegistration,
   type ApplicationPropertyDescriptor,
@@ -9,6 +11,7 @@ import {
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
+import { GENERATION_MODEL_FIELDS, getGenerationModelsRevision, type GenerationModelFieldSource } from './generationModelFields'
 import {
   getGenerationModelSchema,
   getGenerationModelSchemaRef,
@@ -56,16 +59,13 @@ function property(entityType: GenerationEntityType, suffix: string, title: strin
   }
 }
 
-const MODEL_SCHEMA_REF_VALUE = schemaRef('property', 'generation.model.parameter_schema_ref.value')
-const MODEL_TAGS_VALUE = schemaRef('property', 'generation.model.tags.value')
+/*
+ * model 一支已经迁移到统一字段定义（4.4，见 generationModelFields.ts）——hidden 是这次任务
+ * 新增的唯一可写属性，其余四条随迁移一起改成逐属性 readOnlyReason，不再共用整实体
+ * writeExclusion。task/result 两支保持原样，仍然全部只读，理由见下方 writeExclusion。
+ */
 const properties: Record<GenerationEntityType, ApplicationPropertyDescriptor[]> = {
-  [GENERATION_ENTITY_TYPES.model]: [
-    property(GENERATION_ENTITY_TYPES.model, 'provider_id', '供应商', { kind: 'string', maxLength: 120 }),
-    property(GENERATION_ENTITY_TYPES.model, 'media_type', '媒体类型', { kind: 'enum', values: ['image', 'video', 'audio'].map((value) => ({ value, label: value })) }),
-    property(GENERATION_ENTITY_TYPES.model, 'name', '模型名称', { kind: 'string', maxLength: 200 }),
-    property(GENERATION_ENTITY_TYPES.model, 'tags', '能力标签', { kind: 'json', schemaRef: MODEL_TAGS_VALUE }),
-    property(GENERATION_ENTITY_TYPES.model, 'parameter_schema_ref', '参数结构引用', { kind: 'json', schemaRef: MODEL_SCHEMA_REF_VALUE }),
-  ],
+  [GENERATION_ENTITY_TYPES.model]: fieldDescriptors(GENERATION_MODEL_FIELDS),
   [GENERATION_ENTITY_TYPES.task]: [
     property(GENERATION_ENTITY_TYPES.task, 'model_ref', '模型引用', { kind: 'ref', refKinds: [GENERATION_ENTITY_TYPES.model] }),
     property(GENERATION_ENTITY_TYPES.task, 'status', '任务状态', { kind: 'string', maxLength: 40 }),
@@ -111,7 +111,7 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
     return {
       refs: page,
       nextCursor: offset + page.length < refs.length ? String(offset + page.length) : null,
-      revisions: { [this.entityType === GENERATION_ENTITY_TYPES.model ? 'models' : 'generation']: refs.length },
+      revisions: { [this.entityType === GENERATION_ENTITY_TYPES.model ? 'models' : 'generation']: this.entityType === GENERATION_ENTITY_TYPES.model ? getGenerationModelsRevision() : refs.length },
     }
   }
 
@@ -131,10 +131,19 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
 
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
     const snapshot = await this.readEntity(ref, {})
-    const known = new Set(properties[this.entityType].map((item) => item.id))
+    const descriptorMap = new Map(properties[this.entityType].map((item) => [item.id, item]))
     return propertyIds.map((propertyId) => {
-      if (!known.has(propertyId)) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
-      return { propertyId, readable: true, writable: false, reasons: ['只读状态'], requiredPermissions: properties[this.entityType][0].requiredPermissions.read, revisions: snapshot.revisions }
+      const descriptor = descriptorMap.get(propertyId)
+      if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+      const writable = !descriptor.readOnlyReason
+      return {
+        propertyId,
+        readable: true,
+        writable,
+        reasons: writable ? [] : [descriptor.readOnlyReason ?? '只读状态'],
+        requiredPermissions: writable ? descriptor.requiredPermissions.write : descriptor.requiredPermissions.read,
+        revisions: snapshot.revisions,
+      }
     })
   }
 
@@ -150,14 +159,8 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
   private readValues(id: string): { values: Record<string, JsonValue>; revision: number } {
     if (this.entityType === GENERATION_ENTITY_TYPES.model) {
       const schema = getGenerationModelSchema(id)
-      const meta = schema.meta as Record<string, unknown>
-      return { values: {
-        'generation.model.provider_id': String(meta.provider),
-        'generation.model.media_type': String(meta.type),
-        'generation.model.name': typeof meta.name === 'string' ? meta.name : JSON.stringify(meta.name),
-        'generation.model.tags': JSON.parse(JSON.stringify(meta.tags ?? [])) as JsonValue,
-        'generation.model.parameter_schema_ref': JSON.parse(JSON.stringify(schema.schemaRef)) as JsonValue,
-      }, revision: 1 }
+      const source: GenerationModelFieldSource = { modelId: id, meta: schema.meta as Record<string, unknown>, schemaRef: schema.schemaRef }
+      return { values: fieldReadValues(GENERATION_MODEL_FIELDS, source), revision: getGenerationModelsRevision() }
     }
     const task = readGenerationTaskStatusSnapshot(id)
     if (!task || (this.entityType === GENERATION_ENTITY_TYPES.result && !task.resultAvailable)) throw new Error('NOT_FOUND')
@@ -192,17 +195,23 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       revisionScopes: [entityType === GENERATION_ENTITY_TYPES.model ? 'models' : 'generation'],
       queryCapabilityIds: [entityType === GENERATION_ENTITY_TYPES.model ? 'get_model_schema' : 'get_generation_task'],
       schemaRef: schemaRef('entity', entityType),
-      writeExclusion: {
-        reason: entityType === GENERATION_ENTITY_TYPES.model
-          ? '模型目录由 src/models/** 的静态定义生成，不是用户数据。'
-          : '生成任务与结果由生成链路创建和维护；发起任务属算法型操作，用 create_visible_generation_task。',
-      },
+      /*
+       * model 一支不再整体 writeExclusion（4.4）：hidden 已经可写，provider_id/media_type/
+       * name/tags/parameter_schema_ref 各自的 readOnlyReason 由 generationModelFields.ts 的
+       * modelDescriptor() 逐条声明。task/result 两支维持整体只读——生成任务与结果由生成链路
+       * 创建和维护，发起任务属算法型操作，用 create_visible_generation_task。
+       */
+      ...(entityType === GENERATION_ENTITY_TYPES.model ? {} : {
+        writeExclusion: {
+          reason: '生成任务与结果由生成链路创建和维护；发起任务属算法型操作，用 create_visible_generation_task。',
+        },
+      }),
     },
     properties: properties[entityType],
     provider: new GenerationReflectionProvider(entityType),
     schemaDocuments: entityType === GENERATION_ENTITY_TYPES.model ? [
-      { ref: MODEL_TAGS_VALUE, value: { type: 'array', items: { type: 'string' } } as JsonValue },
-      { ref: MODEL_SCHEMA_REF_VALUE, value: { type: 'object', description: 'ApplicationSchemaRef' } as JsonValue },
+      { ref: schemaRef('property', 'generation.model.tags.value'), value: { type: 'array', items: { type: 'string' } } as JsonValue },
+      { ref: schemaRef('property', 'generation.model.parameter_schema_ref.value'), value: { type: 'object', description: 'ApplicationSchemaRef' } as JsonValue },
       ...modelSchemaDocuments(),
     ] : [],
   }))

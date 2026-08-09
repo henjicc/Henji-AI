@@ -36,6 +36,7 @@ import { createImageEditReflectionRegistrations } from '@/features/imageEdit/app
 import { createStoryboardReflectionRegistrations } from '@/features/canvas/application/storyboardReflection'
 import { createToolboxReflectionRegistration } from '@/features/toolbox/application/toolboxReflection'
 import { createGenerationReflectionRegistrations } from '@/features/generation/application/generationReflection'
+import { GenerationModelMutationExecutor } from '@/features/generation/application/generationModelMutationExecutor'
 import { createAssistantRuntimeReflectionRegistrations } from '@/features/assistant/application/assistantRuntimeReflection'
 
 let registry: ApplicationReflectionRegistry | undefined
@@ -126,6 +127,8 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   next.registerMutationExecutor(new SettingsMutationExecutor())
   next.registerMutationExecutor(new CanvasNodeMutationExecutor())
   next.registerMutationExecutor(new CanvasProjectMutationExecutor())
+  // 生成模型：闭合 4.4 松绑 models.visibility 后新增的 generation.model.hidden 悬空可写声明。
+  next.registerMutationExecutor(new GenerationModelMutationExecutor())
   // 素材：闭合 asset.tags 与 asset.library_refs 的悬空可写声明
   next.registerMutationExecutor(new AssetMutationExecutor({
     readRevision: () => assetMutationDependencies.readRevision(),

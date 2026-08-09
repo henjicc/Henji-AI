@@ -11,6 +11,7 @@ import {
 import { QUICK_DOWNLOAD_SETTING_SPECS } from '@/hooks/useLocalStorageSetting'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { changeLanguage, getCurrentLanguage } from '@/utils/language'
+import { getUpdateConfig, setUpdateEnabled, setUpdateFrequency } from '@/utils/updateConfig'
 import { z } from 'zod'
 
 import { storageSetting, storeSetting } from './definitionFactories'
@@ -39,6 +40,25 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
     target: { tab: 'general', sectionId: 'general-maintenance' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().logCaptureMode,
   (value) => useSettingsStore.getState().setLogCaptureMode(value)),
+  /*
+   * 原本注册在 protectedSettingDefinitions.ts 的 updates.configuration 占位符（4.4 松绑）。
+   * 拆成两条标量设置而不是保留一个组合 id：本注册表里每条设置都是单一标量值
+   * （SettingValue = string | number | boolean），没有先例注册组合对象；enabled/frequency
+   * 是用户与助手真正会独立调整的两个维度，lastCheckTime/ignoredVersions 是自动写回的派生态
+   * 或增长中的列表，本来就不是「配置」，不在这次松绑范围内。
+   */
+  storeSetting({
+    id: 'updates.enabled', title: '启用更新检测', description: '控制应用是否在启动或后台检查新版本。',
+    aliases: ['自动更新', '检查更新', 'auto update'], schema: z.boolean(), defaultValue: true,
+    target: { tab: 'general', sectionId: 'general-maintenance' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => getUpdateConfig().enabled,
+  (value) => setUpdateEnabled(value)),
+  storeSetting({
+    id: 'updates.check_frequency', title: '更新检查频率', description: '设置多久检查一次新版本。',
+    aliases: ['更新频率', '检查频率', 'update frequency'], schema: z.enum(['startup', 'daily', 'weekly', 'never']), defaultValue: 'startup',
+    target: { tab: 'general', sectionId: 'general-maintenance' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => getUpdateConfig().frequency,
+  (value) => setUpdateFrequency(value)),
   storeSetting({
     id: 'generation.upload_provider', title: '默认上传服务', description: '设置生成任务优先使用的媒体上传服务。',
     aliases: ['上传服务', '上传供应商', 'upload provider'], schema: z.enum(['fal', 'kie', 'bizyair']), defaultValue: 'bizyair',
