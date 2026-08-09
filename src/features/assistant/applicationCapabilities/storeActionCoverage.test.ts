@@ -9,8 +9,14 @@ import { auditStoreActionLedger } from '@/core/application-control'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 import { ASSET_STORE_LEDGER } from '@/features/assets/application/assetStoreLedger'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { CAMERA_STAGE_SESSION_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageSessionStoreLedger'
 import { CAMERA_STAGE_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageStoreLedger'
+import { CAMERA_STAGE_TOOL_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageToolStoreLedger'
+import { CAMERA_STAGE_VIEWPORT_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageViewportStoreLedger'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
+import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
+import { useCameraStageToolStore } from '@/features/cameraStage/store/cameraStageToolStore'
+import { useCameraStageViewportStore } from '@/features/cameraStage/store/cameraStageViewportStore'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
 import { NAVIGATION_STORE_LEDGER } from '@/features/navigation/application/navigationStoreLedger'
@@ -47,6 +53,9 @@ interface LedgerCase {
 
 const LEDGERS: LedgerCase[] = [
   { ledger: CAMERA_STAGE_STORE_LEDGER, state: () => useCameraStageStore.getState() },
+  { ledger: CAMERA_STAGE_TOOL_STORE_LEDGER, state: () => useCameraStageToolStore.getState() },
+  { ledger: CAMERA_STAGE_VIEWPORT_STORE_LEDGER, state: () => useCameraStageViewportStore.getState() },
+  { ledger: CAMERA_STAGE_SESSION_STORE_LEDGER, state: () => useCameraStageSessionStore.getState() },
   { ledger: CANVAS_STORE_LEDGER, state: () => useCanvasStore.getState() },
   { ledger: ASSET_STORE_LEDGER, state: () => useAssetLibraryStore.getState() },
   { ledger: PROJECT_STORE_LEDGER, state: () => useProjectStore.getState() },

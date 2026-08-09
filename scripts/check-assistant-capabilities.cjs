@@ -179,12 +179,6 @@ function isZustandStoreFile(source) {
   return /from\s+['"]zustand['"]/.test(source) && /=\s*create[<(]/.test(source)
 }
 const ASSISTANT_BLIND_STORES = {
-  'src/features/cameraStage/store/cameraStageToolStore.ts': '4.3：三维视图态 store 建账，'
-    + '手柄/工具模式，预期归类为视图态排除。',
-  'src/features/cameraStage/store/cameraStageViewportStore.ts': '4.3：三维视图态 store 建账，'
-    + '单窗/四窗布局，预期归类为视图态排除。',
-  'src/features/cameraStage/store/cameraStageSessionStore.ts': '4.3：三维视图态 store 建账，'
-    + '预期视图态与 internal 混合，逐条判断。',
   'src/features/imageEdit/store/imageEditorUiStore.ts': '4.3：面板宽度/折叠等视图态，'
     + '与三维视图态一起建账，不随 imageMark 拖到期六。',
   'src/features/imageEdit/store/imageEditorHandoffStore.ts': '4.3：图片交接的内部中转态，'
