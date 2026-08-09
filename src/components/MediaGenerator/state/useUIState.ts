@@ -1,131 +1,98 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import { getAvailableProviders } from '@/utils/modelHelpers'
 import { showAlertDialog } from '@/stores/alertDialogStore'
-import {
-  compactPromptMediaReferenceSpacing,
-  parseLegacyPromptString,
-  toLegacyPromptString,
-  type PromptMediaBinding,
-} from '@/core/inputs/promptDocument'
+import { toLegacyPromptString, type PromptMediaBinding } from '@/core/inputs/promptDocument'
 import {
   createMediaGeneratorPromptBindings,
   createMediaGeneratorPromptReferences,
-  reconcileMediaGeneratorPromptImages,
-  resolveMediaGeneratorPromptCarrier,
   type MediaGeneratorPromptCarrier,
 } from '../promptState'
-import {
-  applyGenerationDraftPatch,
-  createEmptyGenerationDraft,
-  type GenerationDraft,
-} from '@/features/generation/domain/generationDraft'
+import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
+import type { GenerationDraft } from '@/features/generation/domain/generationDraft'
 
 /**
  * 纯 UI 状态管理（不包含模型参数）
  * 职责：管理界面交互状态
  *
- * 内部只有一个 GenerationDraft（5.1 抽出的纯领域层），18 个字段合并成一次 patch。
- * 对外导出的每一组 xxx/setXxx 签名与迁移前逐字一致——这是本次重构唯一的验收标准，
- * 4 个消费方（index.tsx / GeneratorConfigurationBar.tsx / useReeditContent.ts /
- * useModelState.ts）零改动。
+ * 5.3 起这里只是 generationDraftStore 的薄适配层——草稿本身已经搬进全局 zustand store
+ * （全仓库只有这一处 useUIState() 调用，没有多实例串状态的风险，见 5.3 执行记录）。
+ * 对外导出的每一组 xxx/setXxx 签名与 store 化前逐字一致，4 个消费方零改动。
  */
 
-/**
- * 把 draft 上的一个字段包成独立的 Dispatch<SetStateAction<T>>，行为与原来那个字段
- * 单独一个 useState 时完全一致：既接受新值也接受 `(prev) => next` 更新函数，新值与
- * 旧值引用相等时不产生新的 draft（对应 React 对 useState 更新函数返回同值时跳过重渲染）。
- */
-function usePatchedDraftField<K extends keyof GenerationDraft>(
-  setDraft: Dispatch<SetStateAction<GenerationDraft>>,
+/** 把 store 的 patchField 包成某个字段独立的 Dispatch<SetStateAction<T>>，签名与用法都不变。 */
+function usePatchedField<K extends keyof GenerationDraft>(
   key: K,
 ): Dispatch<SetStateAction<GenerationDraft[K]>> {
-  return useCallback((action) => {
-    setDraft((current) => {
-      const nextValue = typeof action === 'function'
-        ? (action as (prev: GenerationDraft[K]) => GenerationDraft[K])(current[key])
-        : action
-      if (nextValue === current[key]) return current
-      return applyGenerationDraftPatch(current, { [key]: nextValue } as Partial<GenerationDraft>)
-    })
-  }, [setDraft, key])
+  const patchField = useGenerationDraftStore((state) => state.patchField)
+  return useCallback((action) => patchField(key, action), [patchField, key])
 }
 
 function useUIStateValue() {
   const providersSnapshot = getAvailableProviders()
   const providersSignature = providersSnapshot.map(p => `${p.id}:${p.models.map(m => m.id).join(',')}`).join('|')
 
-  const [draft, setDraft] = useState<GenerationDraft>(createEmptyGenerationDraft)
+  // 选择器精确到字段：任何一个字段变化只触发订阅了那个字段的组件重渲染，不是整个 draft。
+  const promptDocument = useGenerationDraftStore((state) => state.draft.promptDocument)
+  const selectedProvider = useGenerationDraftStore((state) => state.draft.selectedProvider)
+  const selectedModel = useGenerationDraftStore((state) => state.draft.selectedModel)
+  const uploadedPromptImages = useGenerationDraftStore((state) => state.draft.uploadedPromptImages)
+  const uploadedFilePaths = useGenerationDraftStore((state) => state.draft.uploadedFilePaths)
+  const uploadedVideos = useGenerationDraftStore((state) => state.draft.uploadedVideos)
+  const uploadedVideoFiles = useGenerationDraftStore((state) => state.draft.uploadedVideoFiles)
+  const uploadedVideoFilePaths = useGenerationDraftStore((state) => state.draft.uploadedVideoFilePaths)
+  const uploadedAudios = useGenerationDraftStore((state) => state.draft.uploadedAudios)
+  const uploadedAudioFilePaths = useGenerationDraftStore((state) => state.draft.uploadedAudioFilePaths)
+  const fileOrder = useGenerationDraftStore((state) => state.draft.fileOrder)
+  const uploadedVideoDuration = useGenerationDraftStore((state) => state.draft.uploadedVideoDuration)
+  const uploadedVideoTrimStart = useGenerationDraftStore((state) => state.draft.uploadedVideoTrimStart)
+  const uploadedVideoTrimEnd = useGenerationDraftStore((state) => state.draft.uploadedVideoTrimEnd)
+  const modelFilterProvider = useGenerationDraftStore((state) => state.draft.modelFilterProvider)
+  const modelFilterType = useGenerationDraftStore((state) => state.draft.modelFilterType)
+  const modelFilterFunction = useGenerationDraftStore((state) => state.draft.modelFilterFunction)
+  const favoriteModels = useGenerationDraftStore((state) => state.draft.favoriteModels)
 
-  const setPromptDocument = usePatchedDraftField(setDraft, 'promptDocument')
-  const setSelectedProvider = usePatchedDraftField(setDraft, 'selectedProvider')
-  const setSelectedModel = usePatchedDraftField(setDraft, 'selectedModel')
-  const setUploadedFilePaths = usePatchedDraftField(setDraft, 'uploadedFilePaths')
-  const setUploadedVideos = usePatchedDraftField(setDraft, 'uploadedVideos')
-  const setUploadedVideoFiles = usePatchedDraftField(setDraft, 'uploadedVideoFiles')
-  const setUploadedVideoFilePaths = usePatchedDraftField(setDraft, 'uploadedVideoFilePaths')
-  const setUploadedAudios = usePatchedDraftField(setDraft, 'uploadedAudios')
-  const setUploadedAudioFilePaths = usePatchedDraftField(setDraft, 'uploadedAudioFilePaths')
-  const setFileOrder = usePatchedDraftField(setDraft, 'fileOrder')
-  const setUploadedVideoDuration = usePatchedDraftField(setDraft, 'uploadedVideoDuration')
-  const setUploadedVideoTrimStart = usePatchedDraftField(setDraft, 'uploadedVideoTrimStart')
-  const setUploadedVideoTrimEnd = usePatchedDraftField(setDraft, 'uploadedVideoTrimEnd')
-  const setModelFilterProvider = usePatchedDraftField(setDraft, 'modelFilterProvider')
-  const setModelFilterType = usePatchedDraftField(setDraft, 'modelFilterType')
-  const setModelFilterFunction = usePatchedDraftField(setDraft, 'modelFilterFunction')
-  const setFavoriteModels = usePatchedDraftField(setDraft, 'favoriteModels')
+  const setPromptDocument = usePatchedField('promptDocument')
+  const setSelectedProvider = usePatchedField('selectedProvider')
+  const setSelectedModel = usePatchedField('selectedModel')
+  const setUploadedFilePaths = usePatchedField('uploadedFilePaths')
+  const setUploadedVideos = usePatchedField('uploadedVideos')
+  const setUploadedVideoFiles = usePatchedField('uploadedVideoFiles')
+  const setUploadedVideoFilePaths = usePatchedField('uploadedVideoFilePaths')
+  const setUploadedAudios = usePatchedField('uploadedAudios')
+  const setUploadedAudioFilePaths = usePatchedField('uploadedAudioFilePaths')
+  const setFileOrder = usePatchedField('fileOrder')
+  const setUploadedVideoDuration = usePatchedField('uploadedVideoDuration')
+  const setUploadedVideoTrimStart = usePatchedField('uploadedVideoTrimStart')
+  const setUploadedVideoTrimEnd = usePatchedField('uploadedVideoTrimEnd')
+  const setModelFilterProvider = usePatchedField('modelFilterProvider')
+  const setModelFilterType = usePatchedField('modelFilterType')
+  const setModelFilterFunction = usePatchedField('modelFilterFunction')
+  const setFavoriteModels = usePatchedField('favoriteModels')
 
   const uploadedImages = useMemo(
-    () => draft.uploadedPromptImages.map((image) => image.url),
-    [draft.uploadedPromptImages],
+    () => uploadedPromptImages.map((image) => image.url),
+    [uploadedPromptImages],
   )
   const promptReferences = useMemo(
-    () => createMediaGeneratorPromptReferences(draft.uploadedPromptImages),
-    [draft.uploadedPromptImages],
+    () => createMediaGeneratorPromptReferences(uploadedPromptImages),
+    [uploadedPromptImages],
   )
   const input = useMemo(
-    () => toLegacyPromptString(draft.promptDocument, { references: promptReferences }),
-    [draft.promptDocument, promptReferences],
+    () => toLegacyPromptString(promptDocument, { references: promptReferences }),
+    [promptDocument, promptReferences],
   )
   const promptMediaBindings = useMemo<PromptMediaBinding[]>(() => (
-    createMediaGeneratorPromptBindings(draft.uploadedPromptImages, draft.uploadedFilePaths)
-  ), [draft.uploadedFilePaths, draft.uploadedPromptImages])
+    createMediaGeneratorPromptBindings(uploadedPromptImages, uploadedFilePaths)
+  ), [uploadedFilePaths, uploadedPromptImages])
 
-  /*
-   * 三个特殊 setter：内部要同时读写多个 draft 字段，不能用 usePatchedDraftField 的
-   * 单字段模型。都改成在 setDraft 的更新函数里直接读 current，取代原来闭包捕获
-   * 单独 state 变量的写法——这样不再需要把 promptReferences 放进依赖数组，
-   * setInput 也能保持像 setUploadedImages 一样稳定的引用。
-   */
-  const setUploadedImages: Dispatch<SetStateAction<string[]>> = useCallback((action) => {
-    setDraft((current) => {
-      const currentUrls = current.uploadedPromptImages.map((image) => image.url)
-      const nextUrls = typeof action === 'function'
-        ? (action as (prev: string[]) => string[])(currentUrls)
-        : action
-      const nextImages = reconcileMediaGeneratorPromptImages(current.uploadedPromptImages, nextUrls)
-      if (nextImages === current.uploadedPromptImages) return current
-      return applyGenerationDraftPatch(current, { uploadedPromptImages: nextImages })
-    })
-  }, [])
-
-  const setInput = useCallback((legacyText: string): void => {
-    setDraft((current) => {
-      const references = createMediaGeneratorPromptReferences(current.uploadedPromptImages)
-      const nextDocument = compactPromptMediaReferenceSpacing(
-        parseLegacyPromptString(legacyText, { references }),
-      )
-      return applyGenerationDraftPatch(current, { promptDocument: nextDocument })
-    })
-  }, [])
-
-  const loadPromptCarrier = useCallback((carrier: MediaGeneratorPromptCarrier): void => {
-    const resolved = resolveMediaGeneratorPromptCarrier(carrier)
-    setDraft((current) => applyGenerationDraftPatch(current, {
-      uploadedPromptImages: resolved.images,
-      promptDocument: resolved.document,
-    }))
-  }, [])
+  const setUploadedImages: Dispatch<SetStateAction<string[]>> = useGenerationDraftStore(
+    (state) => state.patchUploadedImages,
+  )
+  const setInput = useGenerationDraftStore((state) => state.setLegacyInput)
+  const loadPromptCarrier: (carrier: MediaGeneratorPromptCarrier) => void = useGenerationDraftStore(
+    (state) => state.loadPromptCarrier,
+  )
 
   // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') =>
@@ -136,8 +103,8 @@ function useUIStateValue() {
 
     const isValidSelection = currentProviders.some(
       provider =>
-        provider.id === draft.selectedProvider &&
-        provider.models.some(model => model.id === draft.selectedModel)
+        provider.id === selectedProvider &&
+        provider.models.some(model => model.id === selectedModel)
     )
 
     if (!isValidSelection) {
@@ -148,51 +115,51 @@ function useUIStateValue() {
         setSelectedModel(firstModel.id)
       }
     }
-  }, [providersSignature, draft.selectedProvider, draft.selectedModel, setSelectedProvider, setSelectedModel])
+  }, [providersSignature, selectedProvider, selectedModel, setSelectedProvider, setSelectedModel])
 
   return {
     input,
     setInput,
-    promptDocument: draft.promptDocument,
+    promptDocument,
     setPromptDocument,
     promptReferences,
     promptMediaBindings,
     loadPromptCarrier,
-    selectedProvider: draft.selectedProvider,
+    selectedProvider,
     setSelectedProvider,
-    selectedModel: draft.selectedModel,
+    selectedModel,
     setSelectedModel,
 
     uploadedImages,
     setUploadedImages,
-    uploadedFilePaths: draft.uploadedFilePaths,
+    uploadedFilePaths,
     setUploadedFilePaths,
-    uploadedVideos: draft.uploadedVideos,
+    uploadedVideos,
     setUploadedVideos,
-    uploadedVideoFiles: draft.uploadedVideoFiles,
+    uploadedVideoFiles,
     setUploadedVideoFiles,
-    uploadedVideoFilePaths: draft.uploadedVideoFilePaths,
+    uploadedVideoFilePaths,
     setUploadedVideoFilePaths,
-    uploadedAudios: draft.uploadedAudios,
+    uploadedAudios,
     setUploadedAudios,
-    uploadedAudioFilePaths: draft.uploadedAudioFilePaths,
+    uploadedAudioFilePaths,
     setUploadedAudioFilePaths,
-    fileOrder: draft.fileOrder,
+    fileOrder,
     setFileOrder,
-    uploadedVideoDuration: draft.uploadedVideoDuration,
+    uploadedVideoDuration,
     setUploadedVideoDuration,
-    uploadedVideoTrimStart: draft.uploadedVideoTrimStart,
+    uploadedVideoTrimStart,
     setUploadedVideoTrimStart,
-    uploadedVideoTrimEnd: draft.uploadedVideoTrimEnd,
+    uploadedVideoTrimEnd,
     setUploadedVideoTrimEnd,
 
-    modelFilterProvider: draft.modelFilterProvider,
+    modelFilterProvider,
     setModelFilterProvider,
-    modelFilterType: draft.modelFilterType,
+    modelFilterType,
     setModelFilterType,
-    modelFilterFunction: draft.modelFilterFunction,
+    modelFilterFunction,
     setModelFilterFunction,
-    favoriteModels: draft.favoriteModels,
+    favoriteModels,
     setFavoriteModels,
 
     showAlert
