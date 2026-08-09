@@ -9,10 +9,13 @@ import { registry } from '@/core/ModelRegistry'
 import type { ParamDef } from '@/core/types'
 import { extractDefaults, validateParamValue, getParamDisplayName } from './utils/defaultExtractor'
 import { setNestedValue, getNestedValue, batchSetNestedValues } from './utils/paramUtils'
-import { LinkageEngine } from '@/core/linkage'
 import { ParamFlowTracker } from '@/core/debug/ParamFlowTracker'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer'
+import {
+  reconcileGenerationParams,
+  resolveGenerationParamOptions,
+} from '@/features/generation/domain/generationParams'
 
 /**
  * Hook 返回值接口
@@ -135,13 +138,8 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
     return extractDefaults(schema)
   }, [schema])
 
-  // 4. 创建联动引擎
-  const linkageEngine = useMemo(() => {
-    if (!model || !model.linkages) {
-      return null
-    }
-    return new LinkageEngine(model.linkages)
-  }, [model])
+  // 4. 联动规则（5.2 起联动本身是纯函数，见 src/features/generation/domain/generationParams.ts）
+  const linkages = useMemo(() => model?.linkages ?? [], [model])
 
   // 5. 创建追踪器（仅在启用追踪时）
   const trackerRef = useRef<ParamFlowTracker | null>(null)
@@ -190,9 +188,9 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
       }
 
       // 执行联动
-      if (linkageEngine) {
+      if (linkages.length > 0) {
         const beforeLinkage = { ...newParams }
-        newParams = linkageEngine.execute(key, newParams, schema)
+        newParams = reconcileGenerationParams(schema, newParams, linkages, [key])
 
         // 记录联动变化
         if (enableTracking && trackerRef.current) {
@@ -220,7 +218,7 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
 
       return newParams
     })
-  }, [linkageEngine, schema, enableTracking, modelId])
+  }, [linkages, schema, enableTracking, modelId])
 
   // 6. 批量设置参数
   const setParams = useCallback((values: DynamicValueMap) => {
@@ -259,33 +257,16 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
     [defaults, setParam]
   )
 
-  // 9. 获取过滤后的选项（集成联动引擎）
+  // 9. 获取过滤后的选项（每次 params/schema/linkages 变化时算一次全部 dropdown/radio 参数
+  //    的选项表；LinkageEngine 在没有匹配的 filterOptions 联动时本来就原样返回 schema 里的
+  //    options，不需要再手写一个"没有联动引擎"的 fallback 分支）
+  const paramOptions = useMemo(
+    () => resolveGenerationParamOptions(schema, params, linkages),
+    [schema, params, linkages]
+  )
   const getFilteredOptions = useCallback(
-    (paramId: string) => {
-      // 如果有联动引擎，使用联动引擎过滤
-      if (linkageEngine) {
-        return linkageEngine.getFilteredOptions(paramId, params, schema)
-      }
-
-      // 没有联动引擎，返回原始选项
-      const paramDef = schema.find((p) => p.id === paramId)
-
-      if (!paramDef) {
-        return []
-      }
-
-      // 只有 dropdown 和 radio 有 options
-      if (paramDef.type !== 'dropdown' && paramDef.type !== 'radio') {
-        return []
-      }
-
-      if (!('options' in paramDef) || !paramDef.options) {
-        return []
-      }
-
-      return paramDef.options
-    },
-    [linkageEngine, params, schema]
+    (paramId: string) => paramOptions[paramId] ?? [],
+    [paramOptions]
   )
 
   // 10. 获取参数定义
