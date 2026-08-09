@@ -179,21 +179,10 @@ function isZustandStoreFile(source) {
   return /from\s+['"]zustand['"]/.test(source) && /=\s*create[<(]/.test(source)
 }
 const ASSISTANT_BLIND_STORES = {
-  'src/features/imageEdit/store/imageEditorUiStore.ts': '4.3：面板宽度/折叠等视图态，'
-    + '与三维视图态一起建账，不随 imageMark 拖到期六。',
-  'src/features/imageEdit/store/imageEditorHandoffStore.ts': '4.3：图片交接的内部中转态，'
-    + '预期归类为 internal。',
-  'src/features/assistant/store/assistantUiStore.ts': '4.3：助手自身面板状态，'
-    + 'setApprovalMode 必须归为 excluded(user_only)——审批模式是用户对助手的授权开关，'
-    + '助手改它等于自我提权，其余动作按视图态判断。',
-  'src/stores/alertDialogStore.ts': '4.3：全局弹窗队列，预期归类为 internal。',
   'src/stores/canvasGenerationProgressStore.ts': '4.3：生成进度投影，预期归类为 derived。',
   'src/stores/generationTaskProgressStore.ts': '4.3：生成进度投影，预期归类为 derived。',
   'src/stores/generationHistoryFilterStore.ts': '4.3：生成筛选 store 建账，16 个筛选动作要先核对 '
     + 'list_generation_history 的输入 schema 是否覆盖全部维度，覆盖不全的登记为 gap 而非视图态。',
-  'src/services/largeUploadPolicy.ts': '4.3：大文件处理询问弹窗队列（useLargeUploadPromptStore，'
-    + 'enqueue/settleCurrent 两个动作），与 alertDialogStore 同属全局弹窗队列，预期归类为 internal。'
-    + '注意此文件不在 src/stores 或 */store 目录下，storeId 需显式对齐 basename 之外的约定。',
 }
 const ledgerStoreIds = new Set()
 for (const file of walk(path.join(root, 'src'))) {

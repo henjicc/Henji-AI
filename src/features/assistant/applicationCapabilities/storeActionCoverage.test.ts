@@ -9,6 +9,8 @@ import { auditStoreActionLedger } from '@/core/application-control'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 import { ASSET_STORE_LEDGER } from '@/features/assets/application/assetStoreLedger'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
+import { ASSISTANT_UI_STORE_LEDGER } from '@/features/assistant/applicationCapabilities/assistantUiStoreLedger'
+import { useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import { CAMERA_STAGE_SESSION_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageSessionStoreLedger'
 import { CAMERA_STAGE_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageStoreLedger'
 import { CAMERA_STAGE_TOOL_STORE_LEDGER } from '@/features/cameraStage/application/cameraStageToolStoreLedger'
@@ -20,9 +22,17 @@ import { useCameraStageViewportStore } from '@/features/cameraStage/store/camera
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
 import { NAVIGATION_STORE_LEDGER } from '@/features/navigation/application/navigationStoreLedger'
+import { IMAGE_EDITOR_HANDOFF_STORE_LEDGER } from '@/features/imageEdit/application/imageEditorHandoffStoreLedger'
+import { IMAGE_EDITOR_UI_STORE_LEDGER } from '@/features/imageEdit/application/imageEditorUiStoreLedger'
+import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore'
+import { useImageEditorUiStore } from '@/features/imageEdit/store/imageEditorUiStore'
+import { ALERT_DIALOG_STORE_LEDGER } from '@/features/settings/application-control/alertDialogStoreLedger'
+import { LARGE_UPLOAD_POLICY_STORE_LEDGER } from '@/features/settings/application-control/largeUploadPolicyStoreLedger'
 import { SETTINGS_STORE_LEDGER } from '@/features/settings/application-control/settingsStoreLedger'
 import { THEME_STORE_LEDGER } from '@/features/settings/application-control/themeStoreLedger'
 import { UI_STORE_LEDGER } from '@/features/settings/application-control/uiStoreLedger'
+import { useLargeUploadPromptStore } from '@/services/largeUploadPolicy'
+import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
@@ -63,6 +73,11 @@ const LEDGERS: LedgerCase[] = [
   { ledger: UI_STORE_LEDGER, state: () => useUiStore.getState() },
   { ledger: THEME_STORE_LEDGER, state: () => useThemeStore.getState() },
   { ledger: SETTINGS_STORE_LEDGER, state: () => useSettingsStore.getState() },
+  { ledger: IMAGE_EDITOR_UI_STORE_LEDGER, state: () => useImageEditorUiStore.getState() },
+  { ledger: IMAGE_EDITOR_HANDOFF_STORE_LEDGER, state: () => useImageEditorHandoffStore.getState() },
+  { ledger: ASSISTANT_UI_STORE_LEDGER, state: () => useAssistantUiStore.getState() },
+  { ledger: ALERT_DIALOG_STORE_LEDGER, state: () => useAlertDialogStore.getState() },
+  { ledger: LARGE_UPLOAD_POLICY_STORE_LEDGER, state: () => useLargeUploadPromptStore.getState() },
 ]
 
 /**
