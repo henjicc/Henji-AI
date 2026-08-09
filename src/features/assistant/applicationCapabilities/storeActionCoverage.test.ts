@@ -19,8 +19,11 @@ import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageSto
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import { useCameraStageToolStore } from '@/features/cameraStage/store/cameraStageToolStore'
 import { useCameraStageViewportStore } from '@/features/cameraStage/store/cameraStageViewportStore'
+import { CANVAS_GENERATION_PROGRESS_STORE_LEDGER } from '@/features/canvas/application/canvasGenerationProgressStoreLedger'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
+import { GENERATION_HISTORY_FILTER_STORE_LEDGER } from '@/features/generation/application/generationHistoryFilterStoreLedger'
+import { GENERATION_TASK_PROGRESS_STORE_LEDGER } from '@/features/generation/application/generationTaskProgressStoreLedger'
 import { NAVIGATION_STORE_LEDGER } from '@/features/navigation/application/navigationStoreLedger'
 import { IMAGE_EDITOR_HANDOFF_STORE_LEDGER } from '@/features/imageEdit/application/imageEditorHandoffStoreLedger'
 import { IMAGE_EDITOR_UI_STORE_LEDGER } from '@/features/imageEdit/application/imageEditorUiStoreLedger'
@@ -33,7 +36,10 @@ import { THEME_STORE_LEDGER } from '@/features/settings/application-control/them
 import { UI_STORE_LEDGER } from '@/features/settings/application-control/uiStoreLedger'
 import { useLargeUploadPromptStore } from '@/services/largeUploadPolicy'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
+import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useGenerationHistoryFilterStore } from '@/stores/generationHistoryFilterStore'
+import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -78,6 +84,9 @@ const LEDGERS: LedgerCase[] = [
   { ledger: ASSISTANT_UI_STORE_LEDGER, state: () => useAssistantUiStore.getState() },
   { ledger: ALERT_DIALOG_STORE_LEDGER, state: () => useAlertDialogStore.getState() },
   { ledger: LARGE_UPLOAD_POLICY_STORE_LEDGER, state: () => useLargeUploadPromptStore.getState() },
+  { ledger: CANVAS_GENERATION_PROGRESS_STORE_LEDGER, state: () => useCanvasGenerationProgressStore.getState() },
+  { ledger: GENERATION_TASK_PROGRESS_STORE_LEDGER, state: () => useGenerationTaskProgressStore.getState() },
+  { ledger: GENERATION_HISTORY_FILTER_STORE_LEDGER, state: () => useGenerationHistoryFilterStore.getState() },
 ]
 
 /**
@@ -117,8 +126,20 @@ const LEDGERS: LedgerCase[] = [
  * 松绑其中 2 项、改写其余 5 项的只读理由，到时候回来把这两条 gap 改绑定。（这两个 store 方法
  * 本身在全仓库里也找不到除自身定义外的调用方，是死代码，但归类交给 4.4 统一判断，不在这里
  * 自行排除。）**GAP_BASELINE 0 → 2**。
+ *
+ * 4.3 给剩下 11 个 store 建账（4.1 复核后的准确总数，19/19 全覆盖）：三维三个视图态 store
+ * （tool/viewport/session）与画布/生成两个进度投影 store 全部零新增 gap。图片编辑面板、图片
+ * 交接中转态、助手自身面板、两个全局弹窗队列（alertDialogStore/largeUploadPolicy）同样零新增
+ * gap——assistantUiStore.setApprovalMode 按任务文档要求单独归为 user_only（审批模式是用户对
+ * 助手的授权开关，改它等于自我提权）。唯一有实质缺口的是 generationHistoryFilterStore（8 个
+ * 动作，非最初估的 16）：核对 list_generation_history 的 inputSchema 后发现它只覆盖
+ * mediaType（还有 status/limit，界面上没有对应筛选项），界面上另外 6 个筛选维度——keyword
+ * （关键词）、providerId（供应商）、modelId（模型）、timePreset/startDate/endDate（时间范围）
+ * ——助手完全没有对应查询入口，不是视图态，如实登记为 6 个新 gap；resetFilters 只清空这些
+ * 筛选框的本地状态，没有对应"重置查询"的语义，归为 view_state。**GAP_BASELINE 2 → 8**，
+ * 4.1 白名单里的 store 条目全部清空，19/19 全覆盖达成。
  */
-const GAP_BASELINE = 2
+const GAP_BASELINE = 8
 
 function actionNames(state: object): string[] {
   return Object.entries(state)

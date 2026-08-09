@@ -178,12 +178,7 @@ for (const feature of fs.readdirSync(path.join(root, 'src', 'features'), { withF
 function isZustandStoreFile(source) {
   return /from\s+['"]zustand['"]/.test(source) && /=\s*create[<(]/.test(source)
 }
-const ASSISTANT_BLIND_STORES = {
-  'src/stores/canvasGenerationProgressStore.ts': '4.3：生成进度投影，预期归类为 derived。',
-  'src/stores/generationTaskProgressStore.ts': '4.3：生成进度投影，预期归类为 derived。',
-  'src/stores/generationHistoryFilterStore.ts': '4.3：生成筛选 store 建账，16 个筛选动作要先核对 '
-    + 'list_generation_history 的输入 schema 是否覆盖全部维度，覆盖不全的登记为 gap 而非视图态。',
-}
+const ASSISTANT_BLIND_STORES = {}
 const ledgerStoreIds = new Set()
 for (const file of walk(path.join(root, 'src'))) {
   if (!path.basename(file).endsWith('StoreLedger.ts')) continue
