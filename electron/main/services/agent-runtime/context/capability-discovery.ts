@@ -130,70 +130,52 @@ function capabilityKindMatches(
   })
 }
 
+/**
+ * 准入只有一条：域。其余全部是排序信号。
+ *
+ * 这条规则是四次同类事故换来的，每一次的形状完全一样——**某个软信号被当成硬过滤，于是一个
+ * 明明注册好的能力对模型彻底隐身**，模型如实回答"应用没有这个能力"，用户看到的却是凭空的
+ * 能力否认。逐条记在这里，因为下一个想加过滤条件的人需要先读完它们：
+ *
+ * 1. `targetSurfaceIds` 硬过滤 → 模型兜底 Facet 把它填成**当前页面**（用户此刻站在哪儿，
+ *    不是任务要求）。实测 targetSurfaceIds=['workspace.generation'] 时 camera_stage 的能力
+ *    被全部筛掉，用户问三维，租到的全是生成任务查询。
+ * 2. `entityTypes` 硬过滤 → 域会被放宽（延续证据、路由域、模型自报），实体清单却不会跟着变。
+ *    实测 domains 正确放宽成 ['diagnostics','camera_stage']、entityTypes 还是
+ *    ['diagnostics.event']，camera_stage 能力一个都匹配不上，发现返回 0 项，整次运行卡死。
+ * 3. `capabilityKinds` 硬过滤 → 模型声明的 kinds 是 observe/query/plan/mutate，而唯一能在场景
+ *    里创建对象的 place_camera_stage_object 声明的 effect 是 execute。用词对不上，能力消失：
+ *    camera_stage 的 13 个能力进来 11 个，恰好少了能干活的那一个。
+ * 4. 「导航 Facet 时按 Surface 硬过滤」→ 上面第 1 条打的补丁本身又是同一个坑。模型完全可能
+ *    声明一个 kinds=['navigate','mutate']、targetSurfaceId=当前页面的混合 Facet，那一刻
+ *    第 1 条的场景原样复现。
+ *
+ * 每次修完都只堵住了当次那一条，因为**过滤这个动作本身**才是错的：这些字段全部来自模型对
+ * 任务的猜测，猜错的代价不该是能力消失。域是唯一由注册表定义、模型只是转述的字段，所以它
+ * 留下；其余交给 requiredEffectScore / entityTypeScore / capabilityKindMatches / targetSurfaceScore
+ * 排序——排错顺序只是慢一点，过滤错了是直接没有。
+ *
+ * 见 capability-reachability.test.ts：那条门禁会枚举全部能力 × 全部 kind 组合，任何一处
+ * 重新变成硬过滤都会当场变红。
+ */
 function structuralMatch(
   facet: ApplicationCapabilityDiscoveryFacet,
   indexed: IndexedCapability
 ): boolean {
   /*
-   * targetSurfaceIds 只有在「去某个页面」本身就是目的时才有语义。
+   * 目标 Surface 命中时放宽域要求（仅限导航 Facet）——这是放宽，不是过滤。
    *
-   * 模型任务图的兜底 Facet 把它填成**快照里的当前页面**——那只是用户此刻站在哪儿，不是任务
-   * 要求。旧实现拿它同时做两件事：硬过滤掉到不了该页面的能力，以及反过来放宽域匹配。两件
-   * 都在"当前页面"语义下是错的，而且错得互相叠加：实测「你这不对吧」那次
-   * targetSurfaceIds=['workspace.generation']，于是 camera_stage 的能力被硬过滤掉、整个
-   * generation 域却被放宽进来——用户在问三维的事，租到的全是生成任务查询。
-   *
-   * 导航 Facet 会显式声明 capabilityKinds 含 navigate，那时两件事都成立且必要。
+   * "打开三维编辑器"这个 Facet 的 domain 是 navigation，而真正能打开它的
+   * open_camera_stage_project 的 domain 是 camera_stage：不放宽就永远租不到，模型只剩通用的
+   * switch_workspace，切到工具工作区就停了。
    */
   const surfaceIsTheGoal = facet.capabilityKinds.includes('navigate')
   const surfaceMatches = facet.targetSurfaceIds.length > 0
     && facet.targetSurfaceIds.some((surfaceId) => indexed.match.surfaceIds.includes(surfaceId))
-  /*
-   * 目标 Surface 命中时不再要求同域（仅限导航 Facet）。
-   *
-   * "打开三维编辑器"这个 Facet 的 domain 是 navigation，而真正能打开它的
-   * open_camera_stage_project 的 domain 是 camera_stage——域不匹配就被筛掉，永远租不到。
-   * 实测结果：模型只剩通用的 switch_workspace，切到工具工作区就停了，三维工程页面没打开。
-   */
-  const domainMatches = facet.domains.length === 0
+  return facet.domains.length === 0
     || facet.domains.includes(indexed.entry.domain)
     || facet.domains.includes(indexed.entry.category)
     || (surfaceIsTheGoal && surfaceMatches)
-  if (!domainMatches) return false
-  /*
-   * capabilityKinds 同样只排序，不硬拒——这是同一个教训的第三次。
-   *
-   * targetSurfaceIds、entityTypes 先后因为「软信号当硬过滤」被降级，capabilityKinds 是最后
-   * 一处，代价也最大：实测「给场景加个球，让它上下浮动」时，模型自己声明的 Facet kinds 是
-   * observe/query/plan/mutate，而唯一能在场景里创建对象的 place_camera_stage_object 的 impact
-   * effect 是 execute——于是 camera_stage 的 13 个能力进来了 11 个，**恰好少了唯一能干活的那个**，
-   * navigate 的 open_camera_stage_project 一并消失。模型看到的目录里真的没有放置工具，于是它
-   * 如实回答"应用当前版本加不了球"，用户看到的却是一句凭空的能力否认。
-   *
-   * 旧的兜底是「整个 Facet 一个都匹配不上时才放宽」，这里正好匹配上了 11 个，兜底永远不触发——
-   * 全量为空才救的策略，救不了"只少了关键那一个"。
-   *
-   * kind 仍然是有用的信号，但它的位置在排序里（见下面的 capabilityKindMatches 参与 sort），
-   * 不在准入上。真正该拦的"域完全不沾边"已经由 domainMatches 拦掉了。
-   */
-  /*
-   * entityTypes 只排序，不硬拒——和依赖顺序一样的教训（见 facet-progress.facetsForCall）。
-   *
-   * entityTypes 是一份扁平清单，不区分属于哪个域；而 domains 会被放宽（延续证据、路由域、
-   * 模型自报）。两者一相遇必然打架：实测一次 diagnose Facet 的 domains 被正确放宽成
-   * ['diagnostics','camera_stage']，entityTypes 却还是 ['diagnostics.event']——于是 camera_stage
-   * 的能力**一个都匹配不上**，发现返回 0 项能力、0 个租约，整次运行就此卡死。
-   *
-   * 真正该拦的是"域完全不沾边"，那已经由 domainMatches 拦掉了。实体不匹配只说明这个能力不是
-   * 首选，排序交给 entityTypeScore 和 requiredEffectScore。
-   */
-  if (
-    surfaceIsTheGoal
-    && facet.targetSurfaceIds.length > 0
-    && !surfaceMatches
-    && indexed.entry.category !== 'navigation'
-  ) return false
-  return true
 }
 
 /** Facet 点名的实体是否被这个能力覆盖；命中的排在前面。 */

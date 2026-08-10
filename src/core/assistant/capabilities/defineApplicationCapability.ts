@@ -14,21 +14,43 @@ export function capabilityControl(
     mode?: ApplicationCapabilityDefinition['control']['execution']['mode']
     cancelable?: boolean
     resultState?: ApplicationCapabilityDefinition['control']['execution']['resultState']
+    /**
+     * 同一次调用真正产生的其他 effect。
+     *
+     * 一条能力只声明一个 effect 是个隐患：Facet 结算按 effect 对账，声明漏了就永远对不上——
+     * 模型做完了活，任务图却停在"未结算"，只能反复重试。发现层排序也按 effect 走，漏声明的
+     * 能力会排到无关能力后面。宁可多写一条，也不要让"做了"和"声明会做"对不上。
+     */
+    alsoImpacts?: {
+      effect: ApplicationCapabilityDefinition['control']['impacts'][number]['effect']
+      entityTypes: string[]
+      propertyIds?: string[]
+    }[]
   } = {}
 ): ApplicationCapabilityDefinition['control'] {
+  const revisionScopes = options.revisionScopes ?? []
   return {
     execution: {
       mode: options.mode ?? 'immediate',
       cancelable: options.cancelable ?? false,
       resultState: options.resultState ?? (effect === 'observe' ? 'observed' : 'completed'),
     },
-    impacts: [{
-      effect,
-      entityTypes,
-      propertyIds: options.propertyIds ?? [],
-      revisionScopes: options.revisionScopes ?? [],
-      verificationRequired: options.verificationRequired ?? !['observe', 'navigate'].includes(effect),
-    }],
+    impacts: [
+      {
+        effect,
+        entityTypes,
+        propertyIds: options.propertyIds ?? [],
+        revisionScopes,
+        verificationRequired: options.verificationRequired ?? !['observe', 'navigate'].includes(effect),
+      },
+      ...(options.alsoImpacts ?? []).map((impact) => ({
+        effect: impact.effect,
+        entityTypes: impact.entityTypes,
+        propertyIds: impact.propertyIds ?? [],
+        revisionScopes,
+        verificationRequired: !['observe', 'navigate'].includes(impact.effect),
+      })),
+    ],
   }
 }
 

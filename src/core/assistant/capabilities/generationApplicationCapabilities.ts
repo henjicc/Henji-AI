@@ -157,8 +157,11 @@ const createVisibleGenerationTask = defineApplicationCapability({
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
+  // 它确实新建了一条 generation.task；只声明 execute 会让「创建一个生成任务」的 Facet 永远
+  // 对不上账，模型明明提交成功了，任务图却停在未结算。
   control: capabilityControl('execute', ['generation.task'], {
     revisionScopes: ['generation'], verificationRequired: false, resultState: 'submitted',
+    alsoImpacts: [{ effect: 'create', entityTypes: ['generation.task'] }],
   }),
   risk: 'R2',
   dataClasses: ['C1'],

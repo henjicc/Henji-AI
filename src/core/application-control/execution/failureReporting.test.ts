@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest'
 import type { ApplicationEntityProvider } from '../registry'
 import { ApplicationReflectionRegistry } from '../registry'
 import { ApplicationControlExecutionEngine } from './engine'
-import type { ApplicationExecutionContext } from './types'
+import type {
+  ApplicationControlExecutionDependencies,
+  ApplicationExecutionContext,
+} from './types'
 
 /**
  * 失败报告的诚实性。
@@ -18,7 +21,10 @@ import type { ApplicationExecutionContext } from './types'
 
 const SCOPE = 'sample.scope'
 
-function createEngine(fail: () => never) {
+function createEngine(
+  fail: () => never,
+  extraDependencies: Partial<ApplicationControlExecutionDependencies> = {}
+) {
   const provider: ApplicationEntityProvider = {
     entityType: 'sample.item',
     async listEntities() {
@@ -52,6 +58,7 @@ function createEngine(fail: () => never) {
   const engine = new ApplicationControlExecutionEngine(registry, {
     now: () => new Date('2026-08-01T00:00:00.000Z'),
     createOpaqueRef: (kind) => `${kind}:${String(++sequence).padStart(20, '0')}`,
+    ...extraDependencies,
   })
   engine.registerOperationExecutor({
     capabilityId: 'sample_operation',
@@ -113,5 +120,45 @@ describe('事务失败报告', () => {
     })
     expect(result.status === 'failed' && result.message).toContain('targetObjectId')
     expect(result.status === 'failed' && result.message).toContain('立方体')
+  })
+
+  /*
+   * 拒绝通用增删时不能给死胡同。
+   *
+   * 实测「给场景加个球」时模型收到的就是一句 `camera_stage.object 未声明可增删`，它据此推断
+   * "应用当前版本不允许通过助手新增几何对象"——而 place_camera_stage_object 一直都在。
+   * 拒绝本身没错，错在这句话没说正确的路在哪，最后变成一次凭空的能力否认。
+   *
+   * 这里守机制；那张 entityType → 能力 id 的表由能力目录派生，内容由
+   * features/assistant/applicationCapabilities/collectionCoverage.test.ts 守。
+   */
+  it('通用增删被拒时，错误里点名真正能做这件事的专用能力', async () => {
+    const engine = createEngine(() => {
+      throw new Error('不会走到这里')
+    }, {
+      describeCollectionWriters: (entityType, operation) => (
+        entityType === 'sample.item' && operation === 'create' ? ['place_sample_item'] : []
+      ),
+    })
+    const plan = await engine.plan({
+      summary: '创建一个样例',
+      transactionMode: 'atomic',
+      steps: [{
+        kind: 'collection', entityType: 'sample.item',
+        parent: { kind: 'sample.item', id: 'sample-parent' },
+        operation: { kind: 'create', items: [{ properties: {} }] },
+        expectedRevisions: { [SCOPE]: 0 },
+      }],
+    }, context())
+    const result = await engine.commit({
+      planRef: plan.planRef, expectedRevisions: { [SCOPE]: 0 },
+      idempotencyKey: 'idempotency-dead-end-001', approvedRisk: 'R1',
+    }, context())
+
+    expect(result.status).toBe('failed')
+    expect(
+      result.status === 'failed' ? result.message : '',
+      '拒绝里没有点名替代能力，模型只会得到一个死胡同',
+    ).toContain('place_sample_item')
   })
 })

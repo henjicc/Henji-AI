@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
+import type { ApplicationOperationImpact } from '@/core/application-control'
 import { BUILTIN_APPLICATION_CAPABILITY_REGISTRY } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 import { ASSET_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/assetApplicationCapabilities'
 import { CAMERA_STAGE_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/cameraStageApplicationCapabilities'
@@ -57,6 +58,48 @@ describe('application capability handler coverage', () => {
       expect(definition?.producesRefs).toContain('application.surface')
       expect(definition?.successEvidence.join(' ')).toMatch(/tool\.camera_stage|workspace\.canvas/)
     }
+  })
+
+  /**
+   * 门禁：**名字说自己会增/删/跳转的能力，impacts 里必须真的有那条 effect。**
+   *
+   * 声明漏一条 effect，代价有两处，而且两处都不报错、只是"没反应"：
+   * 1. Facet 结算按 effect 对账——模型明明干完了活，任务图停在"未结算"，只能反复重试；
+   * 2. 发现层的排序按 effect 走——真正该用的能力排到无关能力后面。
+   *
+   * 实测已经吃过两次：place_camera_stage_object 只声明 execute（当时还是硬过滤，直接消失），
+   * create_visible_generation_task 同样只声明 execute。名字里的动词是最便宜的交叉验证，
+   * 免费拿来当门禁。
+   */
+  it('名字里的动词与 impacts 声明的 effect 一致', () => {
+    /*
+     * 例外必须逐条写明理由，不接受"名字只是名字"。
+     * 这两条是**属性写入**而不是集合增删：素材的库归属存在 asset.library_refs 上，
+     * 走 append/remove 两个 operation，实体本身既没新建也没删除，声明 update 是准确的。
+     */
+    const justifiedExceptions = new Set(['add_asset_to_library', 'remove_asset_from_library'])
+    const rules: { pattern: RegExp; effect: ApplicationOperationImpact['effect'] }[] = [
+      { pattern: /^(?:create|add|new|duplicate)_/, effect: 'create' },
+      { pattern: /^(?:delete|remove)_/, effect: 'delete' },
+      { pattern: /^(?:open|show|switch|focus)_/, effect: 'navigate' },
+    ]
+
+    const mismatched: string[] = []
+    for (const definition of BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()) {
+      if (justifiedExceptions.has(definition.id)) continue
+      const effects = new Set(definition.control.impacts.map((impact) => impact.effect))
+      for (const rule of rules) {
+        if (!rule.pattern.test(definition.id)) continue
+        if (effects.has(rule.effect)) continue
+        mismatched.push(`${definition.id}（名字暗示 ${rule.effect}，实际只声明 ${[...effects].join('+')}）`)
+      }
+    }
+
+    expect(mismatched, [
+      '以下能力的名字与 impacts 对不上。要么补 alsoImpacts 把真正产生的 effect 声明全，',
+      '要么改名；确实是例外就写进 justifiedExceptions 并说明为什么：',
+      ...mismatched,
+    ].join('\n')).toEqual([])
   })
 
   it('所有声明产生应用 Surface 的能力都绑定导航作用域和界面成功证据', () => {

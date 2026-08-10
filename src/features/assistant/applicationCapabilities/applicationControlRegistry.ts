@@ -3,6 +3,7 @@ import {
   ApplicationReflectionRegistry,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
+import { BUILTIN_APPLICATION_CAPABILITIES } from '@/core/assistant/builtinApplicationCapabilityRegistry'
 
 import {
   createSettingsReflectionRegistration,
@@ -130,10 +131,41 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   return registry
 }
 
+/**
+ * entityType → 真正能创建/删除它的专用能力，从能力目录的 impacts 派生。
+ *
+ * 引擎拒绝通用增删时用它把死胡同变成改道（见 ApplicationControlExecutionDependencies
+ * .describeCollectionWriters）。**派生而不是手写注解**：注解会和目录漂移，派生不会——
+ * 新增一条带 create impact 的能力，这里自动就有。
+ */
+export function collectionWritersByEntityType(
+  operation: 'create' | 'remove'
+): ReadonlyMap<string, readonly string[]> {
+  const effect = operation === 'create' ? 'create' : 'delete'
+  const writers = new Map<string, string[]>()
+  for (const capability of BUILTIN_APPLICATION_CAPABILITIES) {
+    for (const impact of capability.control?.impacts ?? []) {
+      if (impact.effect !== effect) continue
+      for (const entityType of impact.entityTypes) {
+        const list = writers.get(entityType) ?? []
+        if (!list.includes(capability.id)) list.push(capability.id)
+        writers.set(entityType, list)
+      }
+    }
+  }
+  return writers
+}
+
 /** 与注册表同理：全部执行器注册成功才赋给模块单例，避免半成品被后续调用静默复用。 */
 export function getApplicationControlExecutionEngine(): ApplicationControlExecutionEngine {
   if (executionEngine) return executionEngine
-  const next = new ApplicationControlExecutionEngine(getApplicationReflectionRegistry())
+  const creators = collectionWritersByEntityType('create')
+  const removers = collectionWritersByEntityType('remove')
+  const next = new ApplicationControlExecutionEngine(getApplicationReflectionRegistry(), {
+    describeCollectionWriters: (entityType, operation) => (
+      (operation === 'create' ? creators : removers).get(entityType) ?? []
+    ),
+  })
   next.registerMutationExecutor(new SettingsMutationExecutor())
   next.registerMutationExecutor(new CanvasNodeMutationExecutor())
   next.registerMutationExecutor(new CanvasProjectMutationExecutor())

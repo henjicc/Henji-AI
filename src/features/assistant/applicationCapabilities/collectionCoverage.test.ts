@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
 import {
+  collectionWritersByEntityType,
   getApplicationControlExecutionEngine,
   getApplicationReflectionRegistry,
 } from './applicationControlRegistry'
@@ -119,6 +120,35 @@ describe('集合写入覆盖一致', () => {
       uncovered.map((entity) => `${entity.domain}/${entity.id}`),
       '以下实体既没有写入执行器，也没有 writeExclusion.reason：要么补执行器，要么写明该状态由谁维护',
     ).toEqual([])
+  })
+
+  /**
+   * 门禁：**拒绝通用增删时必须指出正确的路，不能给死胡同。**
+   *
+   * 实测「给场景加个球」时模型收到的就是一句 `camera_stage.object 未声明可增删`，它据此推断
+   * "应用当前版本不允许通过助手新增几何对象"——而 place_camera_stage_object 一直都在。
+   * 拒绝没错，错在这句话把模型送进了死胡同，最终变成一次凭空的能力否认。
+   *
+   * 改道信息由能力目录派生（见 applicationControlRegistry.collectionWritersByEntityType），
+   * 这条守的是那条派生真的接到了引擎上、并且真的出现在模型能读到的错误里。
+   */
+  it('通用增删被拒时能报出真正能做这件事的专用能力', () => {
+    const creators = collectionWritersByEntityType('create')
+    const removers = collectionWritersByEntityType('remove')
+
+    // 钉住那次实测：球体建不出来时，模型至少要被告知该走哪条能力。
+    expect(creators.get('camera_stage.object')).toContain('place_camera_stage_object')
+    expect(removers.get('camera_stage.object')).toContain('delete_camera_stage_object')
+
+    /*
+     * 防空转：这张表由能力目录派生，一旦派生逻辑坏掉（比如 impacts 结构变了）会静默变成空 Map，
+     * 上面两条也就跟着失去意义。实体数量不该少于当前这些真正建/删得了的类型。
+     */
+    expect(creators.size).toBeGreaterThanOrEqual(8)
+    expect(removers.size).toBeGreaterThanOrEqual(8)
+    for (const [entityType, ids] of creators) {
+      expect(ids.length, entityType).toBeGreaterThan(0)
+    }
   })
 
   it('排除原因必须说明由谁维护，不接受敷衍表述', () => {

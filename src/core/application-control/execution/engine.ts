@@ -99,11 +99,13 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
   private readonly store: ApplicationExecutionPlanStore
   private readonly verifier: ApplicationTransactionVerifier
   private readonly planner: ApplicationPlanBuilder
+  private readonly describeCollectionWriters?: ApplicationControlExecutionDependencies['describeCollectionWriters']
 
   constructor(
     private readonly registry: ApplicationReflectionRegistry,
     dependencies: ApplicationControlExecutionDependencies = {}
   ) {
+    this.describeCollectionWriters = dependencies.describeCollectionWriters
     this.now = dependencies.now ?? (() => new Date())
     this.createOpaqueRef = dependencies.createOpaqueRef ?? defaultOpaqueRef
     this.store = new ApplicationExecutionPlanStore(
@@ -382,9 +384,18 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     const descriptor = this.registry.describe({ entityTypes: [step.entityType] }, context).entities[0]
     if (!descriptor) throw new Error(`ENTITY_TYPE_NOT_FOUND:${step.entityType}`)
     const rule = descriptor.collectionWrite
-    if (!rule) throw new Error(`COLLECTION_WRITE_NOT_DECLARED:${step.entityType} 未声明可增删`)
+    const operation = step.operation.kind === 'create' ? 'create' : 'remove'
+    if (!rule) {
+      throw new Error(
+        `COLLECTION_WRITE_NOT_DECLARED:${step.entityType} 未声明可增删${this.collectionWriterHint(step.entityType, operation)}`
+      )
+    }
     if (step.operation.kind === 'create') {
-      if (!rule.creatable) throw new Error(`COLLECTION_CREATE_NOT_ALLOWED:${step.entityType}`)
+      if (!rule.creatable) {
+        throw new Error(
+          `COLLECTION_CREATE_NOT_ALLOWED:${step.entityType}${this.collectionWriterHint(step.entityType, 'create')}`
+        )
+      }
       if (step.operation.items.length > rule.maxItemsPerChange) {
         throw new Error(
           `COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多创建 ${rule.maxItemsPerChange} 个，`
@@ -399,10 +410,26 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       }
       return
     }
-    if (!rule.removable) throw new Error(`COLLECTION_REMOVE_NOT_ALLOWED:${step.entityType}`)
+    if (!rule.removable) {
+      throw new Error(
+        `COLLECTION_REMOVE_NOT_ALLOWED:${step.entityType}${this.collectionWriterHint(step.entityType, 'remove')}`
+      )
+    }
     if (step.operation.targets.length > rule.maxItemsPerChange) {
       throw new Error(`COLLECTION_TOO_MANY_ITEMS:${step.entityType} 一次最多删除 ${rule.maxItemsPerChange} 个`)
     }
+  }
+
+  /**
+   * 拒绝通用增删时，把真正能做这件事的专用能力一并说出来。
+   *
+   * 没有这一句，模型收到的是死胡同，只能推断"应用做不到"——那正是它上一次凭空否认能力的
+   * 来源。有这一句，同一个拒绝就变成一次改道。
+   */
+  private collectionWriterHint(entityType: string, operation: 'create' | 'remove'): string {
+    const writers = this.describeCollectionWriters?.(entityType, operation) ?? []
+    if (writers.length === 0) return ''
+    return `；${operation === 'create' ? '创建' : '删除'}这类实体走专用能力：${writers.join('、')}`
   }
 
   private async preflightPlan(

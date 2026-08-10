@@ -37,9 +37,13 @@ const applyCameraMove = defineApplicationCapability({
   outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:camera:${input.cameraId}`,
   resolveTargetIds: (input) => cameraStageTarget(input.projectId, { cameraId: input.cameraId }),
+  // 语义运镜是靠写关键帧和轨迹实现的：只声明 execute，一个「建关键帧做运镜」的 Facet 就永远
+  // 对不上账——模型做完了活，任务图仍显示未结算。
   control: cameraStageControl('execute', ['camera_stage.camera', 'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe'], [
     'camera_stage.camera.look_at_target', 'camera_stage.camera.look_at_object_ref',
     'camera_stage.camera.transform.position', 'camera_stage.shot.transition_duration',
+  ], ['toolbox'], [
+    { effect: 'create', entityTypes: ['camera_stage.keyframe', 'camera_stage.trajectory'] },
   ]),
   summarize: (output) => `摄像机运镜事务 ${output.transactionRef} 已完成。`,
 })

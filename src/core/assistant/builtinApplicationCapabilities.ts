@@ -359,7 +359,10 @@ export const createImageEditPreviewFromRefCapability = defineCapability({
   aliases: ['矩形标注', '文字标注', '图片编辑预览', 'annotate image'],
   side: 'frontend',
   readOnly: false,
-  control: capabilityControl('execute', ['image_edit.preview']),
+  // 同 create_image_edit_preview：预览是新建的实体，create 必须一并声明，Facet 才结得了账。
+  control: capabilityControl('execute', ['image_edit.preview'], {
+    alsoImpacts: [{ effect: 'create', entityTypes: ['image_edit.preview'] }],
+  }),
   risk: 'R1',
   dataClasses: ['C1'],
   permission: 'image_edit:write',

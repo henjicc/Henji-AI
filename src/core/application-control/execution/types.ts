@@ -148,6 +148,17 @@ export interface ApplicationControlExecutionDependencies {
   createOpaqueRef?: (kind: 'plan' | 'transaction' | 'undo') => string
   maxPlans?: number
   maxIdempotencyResults?: number
+  /**
+   * 某个实体没开放通用增删时，创建/删除到底走哪条专用能力。
+   *
+   * 拒绝一次通用写入本身没问题，**不告诉对方正确的路**才是问题。实测「给场景加个球」时模型
+   * 拿到的就是一句 `camera_stage.object 未声明可增删`，它据此推断"应用当前版本不允许新增几何
+   * 对象"——而 place_camera_stage_object 一直都在。一句死胡同换来一次凭空的能力否认。
+   *
+   * 由能力目录**派生**（entityType → 声明了 create/delete impact 的能力 id），不是逐个实体
+   * 手写注解：注解会漂移，派生不会。core 层不认识能力目录，所以从外面注入。
+   */
+  describeCollectionWriters?: (entityType: string, operation: 'create' | 'remove') => readonly string[]
 }
 
 export interface ApplicationControlExecutionApi {

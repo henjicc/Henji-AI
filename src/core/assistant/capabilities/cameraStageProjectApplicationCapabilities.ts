@@ -102,7 +102,14 @@ const bakeToProCapability = defineApplicationCapability({
     reversible: false,
     dataClasses: ['C1'],
   }),
-  control: cameraStageControl('delete', ['camera_stage.project', 'camera_stage.shot', 'camera_stage.keyframe'], ['camera_stage.project.editor_mode']),
+  /*
+   * 主 effect 保持 delete：镜头卡被单向清掉、撤销历史一并作废，confirmation_required 与
+   * destructive 都由它决定，不能改。但烘焙同时**产出**整条关键帧时间轴（producesRefs 里就写着
+   * camera_stage.keyframe），漏声明 create 会让「把镜头卡转成关键帧」这类 Facet 结不了账。
+   */
+  control: cameraStageControl('delete', ['camera_stage.project', 'camera_stage.shot', 'camera_stage.keyframe'], ['camera_stage.project.editor_mode'], ['toolbox'], [
+    { effect: 'create', entityTypes: ['camera_stage.keyframe'] },
+  ]),
   summarize: (output) => output.status === 'baked'
     ? `3D 工程 ${output.projectId} 已烘焙为专业工程，${output.shotCount} 张镜头卡固化成 ${output.trackCount} 条关键帧轨道。`
     : `3D 工程 ${output.projectId} 已经是专业模式，无需烘焙。`,
