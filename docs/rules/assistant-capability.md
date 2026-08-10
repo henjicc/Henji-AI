@@ -38,6 +38,42 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - feature 整体没接助手（既无 Reflection 也无账本）必须登记进 `check-assistant-capabilities.cjs` 的 `ASSISTANT_BLIND_FEATURES` 并写明原因——那是一张**会缩短的清单**，不是豁免表。这是 feature 级的检查，与下面 store 级的检查并存、互不替代。
 - **store 级清点按内容识别，不按目录约定**：任何文件只要导入 `zustand` 且调用 `create<...>(`，就算一个 store，不论它放在 `src/stores/`、`src/features/*/store/`，还是别的目录（例如 `src/services/largeUploadPolicy.ts` 里就藏着一个 store）。没有账本覆盖的 store 必须登记进 `ASSISTANT_BLIND_STORES` 并写明归属任务编号，同一张**会缩短的清单**。
 
+### 能力可达性：注册好的能力，模型必须找得到
+
+覆盖判断只保证「能力存在」，不保证「模型能拿到它」。这一节管后半段——已经因此翻车四次，
+每次形状完全一样：发现层拿模型填的某个软信号做硬过滤，模型填得稍有出入，注册好的能力就从
+目录里整个消失，模型于是如实回答「应用没有这个能力」。它没说谎，用户看到的却是凭空的能力否认。
+
+- **发现层的准入只允许按域判断**（`capability-discovery.ts` 的 `structuralMatch`）。
+  `targetSurfaceIds`、`entityTypes`、`capabilityKinds`、导航 Surface 全部只参与排序，**不得**
+  用于过滤。这些字段来自模型对任务的猜测，猜错的代价不该是能力消失；域是注册表定义的、模型
+  只是转述，所以只有它留下。想加新的过滤条件时，先读 `structuralMatch` 上方那四条事故记录。
+- 排序信号不够用时，改排序（`requiredEffectScore` / `entityTypeScore` / `capabilityKindMatches`
+  / `targetSurfaceScore`），不要改回过滤：排错顺序只是慢一点，过滤错了是直接没有。
+- **能力声明的 effect 必须覆盖它真正产生的全部 effect**，用 `alsoImpacts` 补齐。漏一条的代价
+  有两处且都不报错：Facet 按 effect 对账，声明漏了就永远结不了账（模型干完了活，任务图停在
+  未结算）；发现层排序也按 effect 走，漏声明的能力排到无关能力后面。名字里带
+  create/add/delete/remove/open/switch 的能力，`registry.test.ts` 会强制它声明对应 effect，
+  例外必须写进 `justifiedExceptions` 并说明理由。
+- 门禁在 `electron/main/services/agent-runtime/context/capability-reachability.test.ts`：
+  全部能力 × 9 组 kinds × 故意填错的实体与页面，任一能力从自己域里消失即红；另一条守
+  「模型把实体和 effect 都说对时必须真的进租约」——发现得到却租不到，对模型是同一种结局。
+- 它与 `storeActionCoverage.test.ts` 合起来才是完整命题：账本守「绑定的能力 id 确实存在」，
+  可达性守「存在的能力确实找得到」。**两条缺一条，命题就断了**，删任何一条前先想清楚这件事。
+
+### 拒绝要给改道，不要给死胡同
+
+助手撞墙时收到的那句话，决定它下一步是改道还是向用户宣布「做不到」。已经吃过一次亏：模型
+收到 `camera_stage.object 未声明可增删`，据此推断应用不支持新增几何体，而
+`place_camera_stage_object` 一直都在。
+
+- 拒绝通用增删时，必须点名真正能做这件事的专用能力。这份对照表由能力目录的 impacts **派生**
+  （`collectionWritersByEntityType`），不逐个实体手写注解——注解会漂移，派生不会。
+- 属性写不了时，必须把 `readOnlyReason` 与 provider 给出的动态原因一并抛出，不能只报
+  `PROPERTY_NOT_WRITABLE:<id>`：模型分不清是权限、是有意只读、还是当前状态暂时不可写。
+- 通用规则：**任何拒绝都要让对方知道下一步能做什么**。手里已经有的信息不给，等于逼模型去猜，
+  而它猜错的结果会被当成事实讲给用户。
+
 ## 禁止事项
 
 - **禁止**新增旧式 `HostCommand`、`HostQuery`、`kind: 'command'`、`kind: 'query'`、固定前端命令/查询执行表，或依赖兼容描述生成器的 Agent 工具

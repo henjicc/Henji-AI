@@ -148,8 +148,19 @@ export class ApplicationPlanBuilder {
     )).map((item) => [item.propertyId, item]))
     const conditions: ApplicationVerificationCondition[] = []
     const mutations = step.mutations.map((mutation) => {
-      if (!availability.get(mutation.propertyId)?.writable) {
-        throw new Error(`PROPERTY_NOT_WRITABLE:${mutation.propertyId}`)
+      const propertyAvailability = availability.get(mutation.propertyId)
+      if (!propertyAvailability?.writable) {
+        /*
+         * 把 reasons 一并抛出去。
+         *
+         * 只报一句 `PROPERTY_NOT_WRITABLE:<id>` 是死胡同：模型不知道是权限、是这个属性有意
+         * 只读、还是当前状态下暂时不可写，于是只能推断"应用不支持改这个"，最后变成一次凭空
+         * 的能力否认。readOnlyReason 与 provider 给的动态原因本来就在手里，不给才是浪费。
+         */
+        const reasons = propertyAvailability?.reasons ?? []
+        throw new Error(
+          `PROPERTY_NOT_WRITABLE:${mutation.propertyId}${reasons.length > 0 ? `（${reasons.join('；')}）` : ''}`
+        )
       }
       const resultingValue = this.dependencies.registry.normalizePropertyValue(
         step.entityType,

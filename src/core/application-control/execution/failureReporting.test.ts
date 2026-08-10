@@ -33,11 +33,14 @@ function createEngine(
     async readEntity(ref) {
       return {
         ref, entityType: 'sample.item', revisions: { [SCOPE]: 0 },
-        properties: {}, capturedAt: '2026-08-01T00:00:00.000Z',
+        properties: { 'sample.item.locked': '锁定值' }, capturedAt: '2026-08-01T00:00:00.000Z',
       }
     },
-    async getPropertyAvailability() {
-      return []
+    async getPropertyAvailability(_ref, propertyIds) {
+      return propertyIds.map((propertyId) => ({
+        propertyId, readable: true, writable: true,
+        requiredPermissions: [], reasons: [], revisions: { [SCOPE]: 0 },
+      }))
     },
   }
   const registry = new ApplicationReflectionRegistry('application-capabilities/v2')
@@ -51,7 +54,20 @@ function createEngine(
         version: 1, digest: `sha256:${'a'.repeat(64)}`,
       },
     },
-    properties: [],
+    properties: [{
+      id: 'sample.item.locked', entityType: 'sample.item', version: 1,
+      title: '锁定字段', description: '有意只读的样例属性。',
+      value: { kind: 'string', maxLength: 64 },
+      nullable: false, dataClass: 'C0', exposures: ['assistant'],
+      requiredPermissions: { read: [], write: ['sample:write'] },
+      // 有意只读：这句话必须原样出现在拒绝里，否则模型只知道"写不了"，不知道为什么。
+      readOnlyReason: '该值由导入流程维护，改它要重新导入源文件。',
+      schemaRef: {
+        catalogVersion: 'application-capabilities/v2', kind: 'property', id: 'sample.item.locked',
+        version: 1, digest: `sha256:${'b'.repeat(64)}`,
+      },
+      revisionScopes: [SCOPE],
+    }],
     provider,
   })
   let sequence = 0
@@ -59,6 +75,15 @@ function createEngine(
     now: () => new Date('2026-08-01T00:00:00.000Z'),
     createOpaqueRef: (kind) => `${kind}:${String(++sequence).padStart(20, '0')}`,
     ...extraDependencies,
+  })
+  // 只为让 planner 走到属性可写性判定；这个执行器本身不会被执行到。
+  engine.registerMutationExecutor({
+    entityType: 'sample.item',
+    writableProperties: new Set(['sample.item.locked']),
+    propertyOperations: new Map([['sample.item.locked', new Set(['set' as const])]]),
+    apply: async () => {
+      throw new Error('不该走到这里')
+    },
   })
   engine.registerOperationExecutor({
     capabilityId: 'sample_operation',
@@ -160,5 +185,27 @@ describe('事务失败报告', () => {
       result.status === 'failed' ? result.message : '',
       '拒绝里没有点名替代能力，模型只会得到一个死胡同',
     ).toContain('place_sample_item')
+  })
+
+  /*
+   * 同一类死胡同的另一处：属性写不了时只报 `PROPERTY_NOT_WRITABLE:<id>`。
+   *
+   * 模型分不清是权限、是有意只读、还是当前状态暂时不可写，于是只能推断"应用不支持改这个"。
+   * readOnlyReason 与 provider 给的动态原因本来就在手里，不给才是浪费。
+   */
+  it('属性写不了时，拒绝里带上真正的原因', async () => {
+    const engine = createEngine(() => {
+      throw new Error('不会走到这里')
+    })
+    await expect(engine.plan({
+      summary: '改一个只读字段',
+      transactionMode: 'atomic',
+      steps: [{
+        kind: 'mutation', entityType: 'sample.item',
+        target: { kind: 'sample.item', id: 'sample-1' },
+        mutations: [{ propertyId: 'sample.item.locked', operation: 'set', value: '新值' }],
+        expectedRevisions: { [SCOPE]: 0 },
+      }],
+    }, context())).rejects.toThrow('重新导入源文件')
   })
 })
