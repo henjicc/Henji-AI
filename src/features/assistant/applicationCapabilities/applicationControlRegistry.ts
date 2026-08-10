@@ -33,6 +33,10 @@ import { createAssetReflectionRegistrations } from '@/features/assets/applicatio
 import { AssetLibraryMutationExecutor } from '@/features/assets/application/assetLibraryMutationExecutor'
 import { AssetLibraryCollectionExecutor } from '@/features/assets/application/assetLibraryCollectionExecutor'
 import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
+import { createImageMarkReflectionRegistrations } from '@/features/imageMark/application/imageMarkReflection'
+import { ImageMarkDocumentMutationExecutor } from '@/features/imageMark/application/imageMarkDocumentMutationExecutor'
+import { ImageMarkAnnotationMutationExecutor } from '@/features/imageMark/application/imageMarkAnnotationMutationExecutor'
+import { ImageMarkAnnotationCollectionExecutor } from '@/features/imageMark/application/imageMarkAnnotationCollectionExecutor'
 import { createStoryboardReflectionRegistrations } from '@/features/canvas/application/storyboardReflection'
 import { createToolboxReflectionRegistration } from '@/features/toolbox/application/toolboxReflection'
 import {
@@ -114,6 +118,7 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   registerAll(next, 'canvas', createCanvasReflectionRegistrations())
   registerAll(next, 'storyboard', createStoryboardReflectionRegistrations())
   registerAll(next, 'image_edit', createImageEditReflectionRegistrations())
+  registerAll(next, 'image_mark', createImageMarkReflectionRegistrations())
   registerAll(next, 'toolbox', [createToolboxReflectionRegistration()])
   registerAll(next, 'generation', createGenerationReflectionRegistrations())
   registerAll(next, 'generation_draft', [createGenerationDraftReflectionRegistration()])
@@ -136,6 +141,11 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   next.registerMutationExecutor(new GenerationModelMutationExecutor())
   // 生成草稿：5.4 注册 generation.draft 实体后闭合它的可写属性声明。
   next.registerMutationExecutor(new GenerationDraftMutationExecutor())
+  // 标注文档与标注对象：6.2 闭合 image_mark.document/image_mark.annotation 的可写属性声明，
+  // 标注的新建/删除走下面的集合执行器。
+  next.registerMutationExecutor(new ImageMarkDocumentMutationExecutor())
+  next.registerMutationExecutor(new ImageMarkAnnotationMutationExecutor())
+  next.registerCollectionExecutor(new ImageMarkAnnotationCollectionExecutor())
   // 素材：闭合 asset.tags 与 asset.library_refs 的悬空可写声明
   next.registerMutationExecutor(new AssetMutationExecutor({
     readRevision: () => assetMutationDependencies.readRevision(),

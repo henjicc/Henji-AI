@@ -132,8 +132,6 @@ for (const file of walk(path.join(root, 'src', 'core', 'application-control'))) 
  * 能做的事"的量化终点。条目要说清楚拦路的是什么、归到哪一期。
  */
 const ASSISTANT_BLIND_FEATURES = {
-  imageMark: '期 5：标注编辑器的文档态全在 React hook 局部态里（useMarkController / useMarkHistory），'
-    + '要先提升成 store 才谈得上注册实体，与生成页是同一类重构。',
   imageEdit: '期 5：图片编辑会话是不可变快照，已有 image_edit.* 三实体的 writeExclusion 说明；'
     + '编辑器 UI 态随 imageMark 一起处理。',
   logs: '日志面板是独立窗口里的内存环形缓冲，只有暂停与清空两个动作，且不进任何持久化状态；'

@@ -31,6 +31,8 @@ import { IMAGE_EDITOR_HANDOFF_STORE_LEDGER } from '@/features/imageEdit/applicat
 import { IMAGE_EDITOR_UI_STORE_LEDGER } from '@/features/imageEdit/application/imageEditorUiStoreLedger'
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore'
 import { useImageEditorUiStore } from '@/features/imageEdit/store/imageEditorUiStore'
+import { useImageEditSessionStore } from '@/features/imageEdit/store/imageEditSessionStore'
+import { IMAGE_MARK_STORE_LEDGER } from '@/features/imageMark/application/imageMarkStoreLedger'
 import { ALERT_DIALOG_STORE_LEDGER } from '@/features/settings/application-control/alertDialogStoreLedger'
 import { LARGE_UPLOAD_POLICY_STORE_LEDGER } from '@/features/settings/application-control/largeUploadPolicyStoreLedger'
 import { SETTINGS_STORE_LEDGER } from '@/features/settings/application-control/settingsStoreLedger'
@@ -90,6 +92,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: GENERATION_TASK_PROGRESS_STORE_LEDGER, state: () => useGenerationTaskProgressStore.getState() },
   { ledger: GENERATION_HISTORY_FILTER_STORE_LEDGER, state: () => useGenerationHistoryFilterStore.getState() },
   { ledger: GENERATION_DRAFT_STORE_LEDGER, state: () => useGenerationDraftStore.getState() },
+  { ledger: IMAGE_MARK_STORE_LEDGER, state: () => useImageEditSessionStore.getState() },
 ]
 
 /**

@@ -59,6 +59,7 @@ import type {
 import { registerAssetCapabilityHandlers } from './registerAssetCapabilityHandlers'
 import { registerCanvasCapabilityHandlers } from './registerCanvasCapabilityHandlers'
 import { registerGenerationCapabilityHandlers } from './registerGenerationCapabilityHandlers'
+import { registerImageMarkCapabilityHandlers } from './registerImageMarkCapabilityHandlers'
 import { registerToolboxCapabilityHandlers } from './registerToolboxCapabilityHandlers'
 import { observeApplicationSurface } from './surfaceObservation'
 
@@ -210,6 +211,7 @@ registerGenerationCapabilityHandlers(registry)
 registerAssetCapabilityHandlers(registry)
 registerCanvasCapabilityHandlers(registry)
 registerToolboxCapabilityHandlers(registry)
+registerImageMarkCapabilityHandlers(registry)
 
 const frontendCapabilityCount = BUILTIN_APPLICATION_CAPABILITY_REGISTRY
   .list()
