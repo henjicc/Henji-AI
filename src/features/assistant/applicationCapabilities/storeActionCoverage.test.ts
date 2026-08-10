@@ -145,7 +145,7 @@ const LEDGERS: LedgerCase[] = [
  * 筛选框的本地状态，没有对应"重置查询"的语义，归为 view_state。**GAP_BASELINE 2 → 8**，
  * 4.1 白名单里的 store 条目全部清空，19/19 全覆盖达成。
  */
-const GAP_BASELINE = 8
+const GAP_BASELINE = 0
 
 function actionNames(state: object): string[] {
   return Object.entries(state)

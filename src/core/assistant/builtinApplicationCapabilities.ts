@@ -270,9 +270,20 @@ export const listGenerationHistoryCapability = defineCapability({
   producesRefs: ['generation.record', 'generation.result'],
   successEvidence: ['返回按时间倒序排列的记录及稳定引用，不暴露本地路径。'],
   failureRecovery: ['没有成功结果时明确返回空列表，不创建画布或其他项目。'],
+  /*
+   * 筛选维度与生成页的筛选栏一一对应。此前只有 mediaType / status / limit，
+   * 界面上的关键词、供应商、模型、时间范围助手一概查不到——用户能筛出来的记录，
+   * 助手说找不到。谓词与界面共用 generationHistoryFilter.ts，避免两套语义漂移。
+   */
   inputSchema: z.object({
     mediaType: z.enum(['image', 'video', 'audio']).optional(),
     status: z.enum(['success', 'completed', 'error', 'failed']).optional(),
+    keyword: z.string().min(1).max(200).optional(),
+    providerId: z.string().min(1).max(120).optional(),
+    modelId: z.string().min(1).max(200).optional(),
+    timePreset: z.enum(['7d', '30d', '90d', 'custom']).optional(),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     limit: z.number().int().min(1).max(30).default(10),
   }).strict(),
   outputSchema: z.object({ records: z.array(z.record(z.string(), z.unknown())) }).strict(),
@@ -281,10 +292,21 @@ export const listGenerationHistoryCapability = defineCapability({
     properties: {
       mediaType: { type: 'string', enum: ['image', 'video', 'audio'] },
       status: { type: 'string', enum: ['success', 'completed', 'error', 'failed'] },
+      keyword: { type: 'string', description: '在提示词、模型名、供应商、错误信息里做大小写不敏感的子串匹配。' },
+      providerId: { type: 'string', description: '供应商 id，如 ppio / fal / kie。' },
+      modelId: { type: 'string', description: '模型 id，需与记录里的 modelId 完全一致。' },
+      timePreset: { type: 'string', enum: ['7d', '30d', '90d', 'custom'], description: "相对区间；用 startDate / endDate 时填 'custom'。" },
+      startDate: { type: 'string', description: "YYYY-MM-DD，仅 timePreset 为 'custom' 时生效。" },
+      endDate: { type: 'string', description: "YYYY-MM-DD，仅 timePreset 为 'custom' 时生效。" },
       limit: { type: 'integer', minimum: 1, maximum: 30 },
     },
     additionalProperties: false,
   },
+  inputExamples: [
+    { keyword: '猫', mediaType: 'image', limit: 5 },
+    { providerId: 'fal', timePreset: '7d', status: 'success' },
+    { timePreset: 'custom', startDate: '2026-08-01', endDate: '2026-08-07' },
+  ],
 })
 
 export const openImageEditorWithSourceCapability = defineCapability({

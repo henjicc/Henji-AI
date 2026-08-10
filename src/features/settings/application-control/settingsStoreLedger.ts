@@ -16,20 +16,26 @@ const THEME_COLOR_PROPERTY_IDS = THEME_COLOR_TOKENS.map(
   (token) => `interface.theme_color_${token.toLowerCase()}`,
 ) as [string, ...string[]]
 
-const PROTECTED_GAP_REASON = 'protected 设置对应的写入动作，尚未注册为反射属性（4.4 处理，'
-  + '模型显示范围/软件更新会松绑，其余含密钥或系统路径的项目预期继续保持只读并改写理由）。'
-
 export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'settingsStore',
   title: '设置',
   entries: {
     /*
-     * setProviderApiKey 对应 security.provider_keys，是当前唯一一个在整个仓库里
-     * 除自身定义外找不到任何调用方的 protected 相关动作——真正的密钥写入走
-     * aiSetProviderApiKey 这个 IPC 命令，这个 store 方法本身是死代码。仍然登记为
-     * gap 而不是 excluded：4.4 要统一审视全部 7 项 protected 设置，这一条留给它判断。
+     * 4.4 的判断结论：这一条不是 gap。
+     *
+     * gap 的定义是「人能做、助手不能做」，而这个 store 方法在整个仓库里没有任何调用方——
+     * 界面上没有任何入口会触发它，人也一样做不了。真正的密钥写入走 aiRuntime 的
+     * setProviderApiKey（IPC → keystore），根本不经过这个 store；它只维护
+     * providerKeyStatus 这张"某供应商配没配密钥"的布尔表，而那张表由
+     * services/providerKeyStatus.ts 在启动时批量同步（见下面的 syncProviderKeyStatus）。
      */
-    setProviderApiKey: { kind: 'gap', plannedPhase: '4.4', reason: PROTECTED_GAP_REASON },
+    setProviderApiKey: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '整个仓库没有任何调用方，界面上不存在触发入口，人同样做不了，因此不构成人机差集。'
+        + '它只写 providerKeyStatus 布尔表，而该表由 services/providerKeyStatus.ts 启动时批量同步；'
+        + '真实密钥写入走 aiRuntime 的 IPC 通道进 keystore，不经过这个 store。',
+    },
     setProviderKeyStatus: {
       kind: 'excluded',
       category: 'derived',
@@ -46,12 +52,20 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setUploadFallbackEnabled: property('generation.upload_fallback'),
     setLargeUploadStrategy: property('generation.large_upload_strategy'),
     /*
-     * setDownloadPresetPaths 对应 storage.download_paths，同样在整个仓库里没有任何
-     * UI 调用方——用户目前无法通过界面配置下载预设路径，这个字段只被读取
-     * （canvasDownloadService.ts）从未被写入。与 setProviderApiKey 同理，仍登记为
-     * gap 交给 4.4 统一处理，而不是自行判定为死代码排除。
+     * 4.4 的判断结论：同样不是 gap，同样是没有调用方的死方法。
+     *
+     * downloadPresetPaths 这个字段只被 canvasDownloadService.ts 读取，从未被写入——
+     * 也就是说界面上现在根本没有配置下载预设路径的入口，人配不了，助手自然也谈不上差集。
+     * 这是产品侧的一个待补功能，不是助手覆盖问题；等界面补上入口时，这条账要跟着改成
+     * 对应的设置属性绑定（storage.download_paths 届时也要注册成正规设置定义）。
      */
-    setDownloadPresetPaths: { kind: 'gap', plannedPhase: '4.4', reason: PROTECTED_GAP_REASON },
+    setDownloadPresetPaths: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '整个仓库没有任何写入方，界面上不存在配置下载预设路径的入口，人同样做不了，'
+        + '因此不构成人机差集；该字段目前只被 canvasDownloadService.ts 读取。'
+        + '界面补上入口后需回来改成 storage.download_paths 的属性绑定。',
+    },
     setUseUploadFilenameAsNodeTitle: property('canvas.upload_filename_as_title'),
     setEnableImageViewerInfoPanel: property('generation.viewer_info'),
     setImageViewerInfoPanelCollapsed: {
