@@ -9,6 +9,7 @@ import {
   buildCapabilityDiscoveryInputForFacets,
   createCapabilityDiscoveryInputFromTaskGraph,
 } from '../../../../../src/core/assistant/capabilityDiscovery'
+import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
 import { createDeterministicTaskGraph, createModelTaskGraph } from './task-facets'
@@ -170,7 +171,9 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     expect(result.capabilities.every((capability) => capability.schemaRef.kind === 'operation')).toBe(true)
     expect(result.leasedToolNames).toContain('open_application_surface')
     expect(result.leasedToolNames).not.toContain('read_application_schemas')
-    expect(result.leasedToolNames.length).toBeLessThanOrEqual(15)
+    // 上限取自唯一来源，不再手写一个数：kind 从准入降级成排序后每个 Facet 的候选变多了，
+    // 手写的 15 会在"租约仍然有界"这个真正的性质之外，额外把一个没有出处的数字钉死。
+    expect(result.leasedToolNames.length).toBeLessThanOrEqual(AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
     expect(result.fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
   })
 
@@ -255,13 +258,50 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
   })
 
   /*
-   * capabilityKinds 是 structuralMatch 里最后一处硬过滤，同样需要保底。
+   * 回归：「给场景加个球，让它上下浮动」，模型回答"应用当前版本加不了球"。
    *
-   * 它本身有意义（要写入的 Facet 不该只租到只读工具），但和 entityTypes、targetSurfaceIds 一样，
-   * 领域一放宽就会误伤——实测 diagnose Facet 的 kinds 是 ['observe','query']，把并进来的
-   * camera_stage 写入能力全挡在外面。放宽比返回 0 项能力有用，但必须如实告诉模型。
+   * 上面几条用例走的都是**确定性路由**造出来的 Facet，它的 capabilityKinds 恰好含 execute，
+   * 于是一直是绿的。实测失败的那次 Facet 是**模型自己 declare_action_plan 声明**的，kinds 里
+   * 只有 observe/query/plan/mutate——而唯一能在场景里创建对象的 place_camera_stage_object，
+   * impact effect 是 execute。camera_stage 的 13 个能力进来 11 个，恰好少了能干活的那一个。
+   *
+   * 模型没有说谎：它看到的目录里真的没有放置工具。所以这条盯的是「Facet 声明的 kinds 与能力
+   * 声明的 effect 用词不一致时，能力不能因此消失」。
    */
-  it('能力类型一个都匹配不上时放宽过滤，并如实说明', () => {
+  it('模型声明的 kinds 不含 execute 时，放置对象能力仍然可发现、可租约', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-model-declared-kinds', {
+      discoveryVersion: 'application-capability-discovery/v2',
+      facets: [{
+        facetId: 'camera_object_animation',
+        queries: ['在场景里加一个球体并做上下浮动动画'],
+        domains: ['camera_stage'],
+        entityTypes: ['camera_stage.object', 'camera_stage.keyframe'],
+        // 实测模型给出的就是这一组，没有 execute。
+        capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
+        targetSurfaceIds: ['tool.camera_stage'],
+        requiredEffects: [
+          { effect: 'create', entityTypes: ['camera_stage.object'], propertyIds: [] },
+          { effect: 'create', entityTypes: ['camera_stage.keyframe'], propertyIds: [] },
+        ],
+      }],
+      cursor: 0,
+      limit: 40,
+    }, fullContext(registry))
+
+    const facet = result.facets.find((item) => item.facetId === 'camera_object_animation')
+    expect(facet?.capabilityNames).toContain('place_camera_stage_object')
+    // 只是"发现得到"不够：不进租约，下一轮的活动工具集里照样没有它。
+    expect(result.leasedToolNames).toContain('place_camera_stage_object')
+  })
+
+  /*
+   * 与上一条配套：kind 已经不再决定去留，但"这批能力没有一个是你要的类型"仍要如实说出来。
+   * diagnostics 域里没有任何写入能力，声明 mutate 就属于这种情况。
+   */
+  it('能力类型一个都匹配不上时照常返回能力，并如实说明', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })

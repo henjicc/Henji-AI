@@ -132,8 +132,7 @@ function capabilityKindMatches(
 
 function structuralMatch(
   facet: ApplicationCapabilityDiscoveryFacet,
-  indexed: IndexedCapability,
-  ignoreCapabilityKinds = false
+  indexed: IndexedCapability
 ): boolean {
   /*
    * targetSurfaceIds 只有在「去某个页面」本身就是目的时才有语义。
@@ -161,7 +160,22 @@ function structuralMatch(
     || facet.domains.includes(indexed.entry.category)
     || (surfaceIsTheGoal && surfaceMatches)
   if (!domainMatches) return false
-  if (!ignoreCapabilityKinds && !capabilityKindMatches(facet, indexed)) return false
+  /*
+   * capabilityKinds 同样只排序，不硬拒——这是同一个教训的第三次。
+   *
+   * targetSurfaceIds、entityTypes 先后因为「软信号当硬过滤」被降级，capabilityKinds 是最后
+   * 一处，代价也最大：实测「给场景加个球，让它上下浮动」时，模型自己声明的 Facet kinds 是
+   * observe/query/plan/mutate，而唯一能在场景里创建对象的 place_camera_stage_object 的 impact
+   * effect 是 execute——于是 camera_stage 的 13 个能力进来了 11 个，**恰好少了唯一能干活的那个**，
+   * navigate 的 open_camera_stage_project 一并消失。模型看到的目录里真的没有放置工具，于是它
+   * 如实回答"应用当前版本加不了球"，用户看到的却是一句凭空的能力否认。
+   *
+   * 旧的兜底是「整个 Facet 一个都匹配不上时才放宽」，这里正好匹配上了 11 个，兜底永远不触发——
+   * 全量为空才救的策略，救不了"只少了关键那一个"。
+   *
+   * kind 仍然是有用的信号，但它的位置在排序里（见下面的 capabilityKindMatches 参与 sort），
+   * 不在准入上。真正该拦的"域完全不沾边"已经由 domainMatches 拦掉了。
+   */
   /*
    * entityTypes 只排序，不硬拒——和依赖顺序一样的教训（见 facet-progress.facetsForCall）。
    *
@@ -324,8 +338,8 @@ export class AgentCapabilityDiscoveryCatalog {
         observationSuggestions: [
           ...observationSuggestions(item.facet),
           ...(item.kindsRelaxed
-            ? [`按 ${item.facet.capabilityKinds.join('、')} 没有匹配到任何能力，已放宽能力类型过滤；`
-              + '返回的能力可能不是该 Facet 最贴切的类型，提交写入前请确认它的 effect 与目标一致。']
+            ? [`返回的能力里没有一个属于 ${item.facet.capabilityKinds.join('、')}，已放宽能力类型过滤；`
+              + '这批能力可能不是该 Facet 最贴切的类型，提交写入前请确认它的 effect 与目标一致。']
             : []),
         ].slice(0, 16),
       })),
@@ -425,7 +439,7 @@ export class AgentCapabilityDiscoveryCatalog {
      * 首项恒为 Facet 自身领域；其余都是延续证据、路由域或模型自报带进来的。
      */
     widenedDomainNames: Set<string>
-    /** 按 capabilityKinds 一个都匹配不上、已放宽该过滤。要如实告诉模型。 */
+    /** 返回的能力里没有一个符合声明的 capabilityKinds。要如实告诉模型。 */
     kindsRelaxed: boolean
     schemaRefs: ApplicationSchemaRef[]
     missingReason: 'no_matching_capability' | 'permission_filtered' | 'unsupported_domain'
@@ -433,30 +447,33 @@ export class AgentCapabilityDiscoveryCatalog {
     const semanticNames = new Set(facet.queries.flatMap((query) => (
       this.registry.search(query, undefined, context, 100).map((entry) => entry.name)
     )))
+    /*
+     * capabilityKinds 不再算「结构过滤」：它已经降级成排序信号（见 structuralMatch），
+     * 留在这里会让「只声明了 queries + kinds」的 Facet 变成完全不过滤。
+     */
     const hasStructuralFilter = facet.domains.length > 0
       || facet.entityTypes.length > 0
-      || facet.capabilityKinds.length > 0
       || facet.targetSurfaceIds.length > 0
-    const passes = (item: IndexedCapability, ignoreKinds: boolean): boolean => (
-      structuralMatch(facet, item, ignoreKinds)
+    const passes = (item: IndexedCapability): boolean => (
+      structuralMatch(facet, item)
       && (facet.queries.length === 0 || hasStructuralFilter || semanticNames.has(item.entry.name))
     )
+    const candidates = indexed.filter(passes)
     /*
-     * capabilityKinds 是 structuralMatch 里最后一处硬过滤，同样需要保底。
-     *
-     * 它本身是有意义的（要写入的 Facet 不该租只读工具），但和 entityTypes、targetSurfaceIds 一样，
-     * 一旦领域被放宽就会误伤：实测 diagnose Facet 的 kinds 是 ['observe','query']，把并进来的
-     * camera_stage 写入能力全挡在外面。所以先按 kind 匹配，**整个 Facet 一个都匹配不上时**才放宽，
-     * 并在建议里如实说明——放宽比返回 0 项能力有用，但不能悄悄放宽。
+     * kind 不再决定去留，但仍要如实告诉模型「这批能力里没有一个是你声明的类型」——
+     * 它多半意味着这个 Facet 的 kinds 或域填错了，提交写入前该自己核对一遍 effect。
      */
-    const strict = indexed.filter((item) => passes(item, false))
-    const kindsRelaxed = strict.length === 0 && facet.capabilityKinds.length > 0
-    const matches = (kindsRelaxed ? indexed.filter((item) => passes(item, true)) : strict)
+    const kindsRelaxed = facet.capabilityKinds.length > 0
+      && candidates.length > 0
+      && !candidates.some((item) => capabilityKindMatches(facet, item))
+    const matches = candidates
       .sort((left, right) => (
       requiredEffectScore(facet, right) - requiredEffectScore(facet, left)
       // entityTypes 从硬过滤降级成排序信号后，命中实体的能力必须仍然排在最前，否则租约名额
       // 会被同域里不相干的能力占掉。
       || Number(entityTypeScore(facet, right)) - Number(entityTypeScore(facet, left))
+      // kind 从准入降级到这里：类型对得上的排在前面，对不上的仍然拿得到名额。
+      || Number(capabilityKindMatches(facet, right)) - Number(capabilityKindMatches(facet, left))
       // 能真正到达目标 Surface 的能力优先于通用导航，否则"打开三维编辑器"会退化成切工作区。
       || Number(targetSurfaceScore(facet, right)) - Number(targetSurfaceScore(facet, left))
       || Number(semanticNames.has(right.entry.name)) - Number(semanticNames.has(left.entry.name))
@@ -478,7 +495,7 @@ export class AgentCapabilityDiscoveryCatalog {
      * 正确判定只有一种：忽略宿主可用性重新匹配一遍，能匹配上就说明确实是被过滤掉了。
      */
     const permissionFiltered = matches.length === 0
-      && this.indexAll().some((candidate) => structuralMatch(facet, candidate, true))
+      && this.indexAll().some((candidate) => structuralMatch(facet, candidate))
     return {
       facet,
       kindsRelaxed,

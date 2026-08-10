@@ -49,9 +49,19 @@ const placeObject = defineApplicationCapability({
   }),
   outputSchema: capabilityOutputSchema(cameraStageTransactionResultShape),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
+  /*
+   * 这条能力是「场景里凭空多出一个物体」的**唯一**入口（几何体、角色、摄像机都走它），
+   * 但它此前只声明 execute——于是一个声明了 mutate/create 的 Facet 根本发现不了它，模型
+   * 手里只剩复制和删除，只能如实回答"加不了球"。effect 少声明一条，对模型就是能力不存在。
+   *
+   * reusePolicy 命中已有对象时这次调用其实没有新建，但 Facet 关心的是"场景里有没有这个
+   * 对象"，复用同样达成，所以 create 照记不虚报。
+   */
   control: cameraStageControl('execute', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera'], [
     'camera_stage.object.transform.position', 'camera_stage.object.transform.rotation', 'camera_stage.object.transform.scale',
     'camera_stage.camera.transform.position', 'camera_stage.camera.transform.rotation',
+  ], ['toolbox'], [
+    { effect: 'create', entityTypes: ['camera_stage.object', 'camera_stage.camera'] },
   ]),
   summarize: (output) => `3D 对象布置事务 ${output.transactionRef} 已完成。`,
 })

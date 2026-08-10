@@ -89,11 +89,22 @@ export function cameraStageTarget(projectId: string, extra: Record<string, strin
   return { projectId, ...extra }
 }
 
+type CameraStageEffect = 'observe' | 'create' | 'update' | 'delete' | 'navigate' | 'execute'
+
 export function cameraStageControl(
-  effect: 'observe' | 'create' | 'update' | 'delete' | 'navigate' | 'execute',
+  effect: CameraStageEffect,
   entityTypes: string[],
   propertyIds: string[] = [],
   revisionScopes: string[] = ['toolbox'],
+  /**
+   * 同一次调用真正产生的其他 effect。
+   *
+   * 一个能力只声明一个 effect 是个隐患：能力发现按 effect 匹配 Facet 声明的
+   * capabilityKinds / requiredEffects，声明漏了就等于对那类意图隐身。实测
+   * place_camera_stage_object 只声明 execute，而它 producesRefs 里明明白白写着会产出
+   * camera_stage.object——于是一个「要创建对象」的 Facet 完全看不见它。
+   */
+  alsoImpacts: { effect: CameraStageEffect; entityTypes: string[]; propertyIds?: string[] }[] = [],
 ): NonNullable<ApplicationCapabilityDefinition['control']> {
   return {
     execution: {
@@ -101,12 +112,15 @@ export function cameraStageControl(
       cancelable: false,
       resultState: effect === 'observe' ? 'observed' : 'completed',
     },
-    impacts: [{
-      effect,
-      entityTypes,
-      propertyIds,
-      revisionScopes,
-      verificationRequired: effect !== 'observe' && effect !== 'navigate',
-    }],
+    impacts: [
+      { effect, entityTypes, propertyIds, revisionScopes, verificationRequired: effect !== 'observe' && effect !== 'navigate' },
+      ...alsoImpacts.map((impact) => ({
+        effect: impact.effect,
+        entityTypes: impact.entityTypes,
+        propertyIds: impact.propertyIds ?? [],
+        revisionScopes,
+        verificationRequired: impact.effect !== 'observe' && impact.effect !== 'navigate',
+      })),
+    ],
   }
 }
