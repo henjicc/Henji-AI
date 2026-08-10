@@ -17,6 +17,7 @@ import { saveCurrentProject } from '../projects/cameraStageProjectService'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion } from './cameraMotionService'
+import { assertProModeForKeyframes } from './cameraStageKeyframeService'
 import { restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
 import { CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
@@ -215,6 +216,12 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     const originalTime = Number(parts.pop())
     const path = parts.join(':')
     if (!objectId || !path || !Number.isFinite(originalTime)) throw new Error('NOT_FOUND')
+    /*
+     * 简易模式同样要挡——而且这条比"新建关键帧"更隐蔽：简易模式的 animation.tracks 是**从镜头卡
+     * 编译出来的**，所以关键帧在观察结果里真的列得出来、稳定引用也真的能寻址到。改一条会成功，
+     * 下一次任何镜头卡改动重新编译，改动原样消失。
+     */
+    assertProModeForKeyframes('修改')
     const undoToken = captureCameraStageUndo(projectId)
     const draft: CameraStageKeyframeDraft = { objectId, path, currentTime: originalTime }
     await applyWriterTable(CAMERA_STAGE_KEYFRAME_WRITERS, draft, step.mutations)

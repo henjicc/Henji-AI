@@ -78,6 +78,31 @@ async function rollback(projectId: string, undoToken: string, event: string): Pr
   }
 }
 
+/**
+ * 专业模式下新建镜头卡会**销毁用户已有的关键帧时间轴**，必须挡在门口。
+ *
+ * `addShot` 返回的 patch 里带着 `animation: compile(shots, objects)`——它是简易模式的核心
+ * 语义（镜头卡是时间轴的唯一来源），但在专业模式下这行等于把整条手工关键帧时间轴替换成
+ * "由一张镜头卡编译出来的结果"。用户几十条关键帧，一次调用全没。
+ *
+ * 人在界面上撞不到：`ShotTimelinePanel`（唯一带「新建镜头卡」按钮的面板）只在简易模式渲染，
+ * 专业模式挂的是 `TimelinePanel`。所以这是一条**只有助手走得到的破坏性路径**，
+ * 不设防就是人机能力"负对齐"——助手能做人做不到的破坏。
+ *
+ * 与 cameraStageKeyframeService.assertProModeForKeyframes 互为镜像：两个模式各有自己的
+ * 时间轴表达，跨模式写入不是"权限不够"，是那条路本身不通。
+ */
+function assertSimpleModeForShots(action: '新建' | '删除'): void {
+  const state = useCameraStageStore.getState()
+  if (state.editorMode === 'simple') return
+  throw new Error(
+    `SHOT_REQUIRES_SIMPLE_MODE：当前工程是专业模式，${action}镜头卡不被支持。`
+    + '专业模式的时间轴是关键帧轨道，镜头卡在这里已经不存在了（烘焙时被清空）；'
+    + `${action}镜头卡会用一张卡编译出的结果覆盖掉现有的 ${state.animation.tracks.length} 条关键帧轨道。`
+    + '要在专业模式下做动画，请用 camera_stage.keyframe 的集合写入直接增删关键帧。'
+  )
+}
+
 export const cameraStageShotService = {
   /** 批量新建镜头卡；同一批次里落在同一帧的两项会像人工操作一样合并成一张卡。 */
   async createShots(projectId: string, inputs: CameraStageShotCreateInput[]): Promise<{
@@ -89,6 +114,7 @@ export const cameraStageShotService = {
       event: 'camera_stage.shot.create.start', projectId, shotCount: inputs.length,
     })
     await ensureProjectLoaded(projectId)
+    assertSimpleModeForShots('新建')
     const before = useCameraStageStore.getState()
     assertShotInputsValid(inputs, before.objects)
     const undoToken = captureCameraStageUndo(projectId)
@@ -127,6 +153,8 @@ export const cameraStageShotService = {
     undoToken: string
   }> {
     await ensureProjectLoaded(projectId)
+    // 专业模式下 shots 已被烘焙清空，走到这里只会报 SHOT_NOT_FOUND——那句话解释不了真正的原因。
+    assertSimpleModeForShots('删除')
     const state = useCameraStageStore.getState()
     const missing = shotIds.filter((id) => !state.shots.some((shot) => shot.id === id))
     if (missing.length > 0) {

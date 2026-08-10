@@ -52,6 +52,32 @@ async function ensureProjectLoaded(projectId: string): Promise<void> {
 }
 
 /**
+ * 简易模式下写关键帧是**静默数据丢失**，必须挡在门口。
+ *
+ * 简易模式的真相是「镜头卡才是时间轴」：`shotSlice` 里有 14 处
+ * `animation: compile(shots, objects)`——任何一次镜头卡改动都会把 animation 整个重算一遍，
+ * 直接写进 `animation.tracks` 的关键帧当场被覆盖；`bakeToProMode()` 同样是从镜头卡重新编译，
+ * 也不会保留它们。而 `play()` 在简易模式只看镜头卡数量，所以这些关键帧连播都播不出来。
+ *
+ * 三件事叠加的结果：助手写完关键帧、拿到成功回执、向用户报告"动画做好了"，而场景里什么都
+ * 没有发生。这比直接失败糟得多——失败至少还能改道。所以宁可在这里拒绝，并且**把改道说清楚**。
+ *
+ * 人在界面上撞不到这个坑：简易模式压根没有关键帧编辑界面。这一条不是给助手加限制，
+ * 是把人机行为对齐。
+ */
+export function assertProModeForKeyframes(action: '写入' | '删除' | '清空' | '修改'): void {
+  const state = useCameraStageStore.getState()
+  if (state.editorMode !== 'simple') return
+  throw new Error(
+    `KEYFRAME_REQUIRES_PRO_MODE：当前工程是简易模式，${action}关键帧不会生效。`
+    + '简易模式下时间轴由镜头卡编译而成，直接写入的关键帧会被下一次镜头卡改动覆盖，'
+    + '也无法播放。两条可选路径：'
+    + '① 用 bake_camera_stage_to_pro 把工程烘焙成专业模式（单向，之后不能改回简易），再写关键帧；'
+    + `② 留在简易模式，改用 camera_stage.shot 的集合写入建镜头卡来做动画（当前 ${state.shots.length} 张）。`
+  )
+}
+
+/**
  * 纯输入校验，**必须在任何写入之前跑完**，错误信息要能让调用方自我修正。
  * 这是三维布置那次事故的教训：写到一半才发现参数不对，留下的残局比失败本身更难收拾。
  */
@@ -110,6 +136,7 @@ export const cameraStageKeyframeService = {
       keyframeCount: keyframes.length,
     })
     await ensureProjectLoaded(projectId)
+    assertProModeForKeyframes('写入')
     const before = useCameraStageStore.getState()
     assertKeyframesValid(keyframes, new Set(before.objects.map((object) => object.id)))
     const undoToken = captureCameraStageUndo(projectId)
@@ -154,6 +181,7 @@ export const cameraStageKeyframeService = {
     undoToken: string
   }> {
     await ensureProjectLoaded(projectId)
+    assertProModeForKeyframes('删除')
     const before = useCameraStageStore.getState()
     assertKeyframesValid(targets, new Set(before.objects.map((object) => object.id)))
     const missing = targets.filter((target) => !getTrack(before.animation, target.objectId, target.propertyPath))
@@ -192,6 +220,7 @@ export const cameraStageKeyframeService = {
     undoToken: string
   }> {
     await ensureProjectLoaded(projectId)
+    assertProModeForKeyframes('清空')
     const before = useCameraStageStore.getState()
     assertTracksValid(targets, new Set(before.objects.map((object) => object.id)))
     const missing = targets.filter((target) => !getTrack(before.animation, target.objectId, target.propertyPath))

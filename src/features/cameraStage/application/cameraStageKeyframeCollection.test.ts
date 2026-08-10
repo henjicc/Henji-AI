@@ -36,7 +36,9 @@ describe('三维关键帧集合写入', () => {
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
       sceneSettings: createDefaultSceneSettings(),
-      editorMode: 'simple',
+      // 关键帧只在专业模式下成立：简易模式的时间轴由镜头卡编译，直写的关键帧会被覆盖。
+      // 这几条用例原本全都跑在 simple 上——恰好是这个功能静默失效的那个模式。
+      editorMode: 'pro',
       shots: [],
     }, { id: 'project-1', name: '关键帧测试' })
   })
@@ -115,7 +117,9 @@ describe('三维动画轨道整条清空', () => {
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
       sceneSettings: createDefaultSceneSettings(),
-      editorMode: 'simple',
+      // 关键帧只在专业模式下成立：简易模式的时间轴由镜头卡编译，直写的关键帧会被覆盖。
+      // 这几条用例原本全都跑在 simple 上——恰好是这个功能静默失效的那个模式。
+      editorMode: 'pro',
       shots: [],
     }, { id: 'project-1', name: '轨道清空测试' })
   })
@@ -175,7 +179,9 @@ describe('三维关键帧集合执行器：轨道级引用与关键帧级引用'
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
       sceneSettings: createDefaultSceneSettings(),
-      editorMode: 'simple',
+      // 关键帧只在专业模式下成立：简易模式的时间轴由镜头卡编译，直写的关键帧会被覆盖。
+      // 这几条用例原本全都跑在 simple 上——恰好是这个功能静默失效的那个模式。
+      editorMode: 'pro',
       shots: [],
     }, { id: 'project-1', name: '轨道级引用测试' })
   })
@@ -225,5 +231,47 @@ describe('三维关键帧集合执行器：轨道级引用与关键帧级引用'
       { id: `project-1:${objectId}:transform.position.y` },
       { id: `project-1:${objectId}:transform.position.x:0` },
     ]))).rejects.toThrow('MIXED_REMOVE_TARGETS_NOT_SUPPORTED')
+  })
+
+  /*
+   * 回归：简易模式下写关键帧是**静默数据丢失**。
+   *
+   * 简易模式里镜头卡才是时间轴，shotSlice 有 14 处 `animation: compile(shots, objects)`——
+   * 任何一次镜头卡改动都会把直写的关键帧整个覆盖掉；bakeToProMode 同样从镜头卡重编译，
+   * 也不保留；play() 在简易模式只看镜头卡数量，所以这些关键帧连播都播不出来。
+   *
+   * 三件事叠加：助手写完、拿到成功回执、告诉用户"动画做好了"，而场景里什么都没发生。
+   * 这比直接失败糟得多——失败至少还能改道。
+   *
+   * 上面几条用例此前全都跑在 simple 上，正是这个功能静默失效的那个模式，所以一直全绿。
+   */
+  it('简易模式下写关键帧必须被拒绝，并说清两条改道路径', async () => {
+    useCameraStageStore.setState({ editorMode: 'simple' })
+    const objectId = cubeId()
+    const attempt = cameraStageKeyframeService.createKeyframes('project-1', [
+      { objectId, propertyPath: 'transform.position.y', time: 0, value: 0.5 },
+    ])
+
+    await expect(attempt).rejects.toThrow('KEYFRAME_REQUIRES_PRO_MODE')
+    // 拒绝必须给改道，不能是死胡同：两条路都要点名。
+    await expect(attempt).rejects.toThrow(/bake_camera_stage_to_pro/)
+    await expect(attempt).rejects.toThrow(/camera_stage\.shot/)
+    // 关键：被拒绝时一个关键帧都不许落下，否则拒绝本身又变成了半写状态。
+    expect(useCameraStageStore.getState().animation.tracks).toHaveLength(0)
+  })
+
+  it('简易模式下删除与清空同样被拒绝', async () => {
+    const objectId = cubeId()
+    await cameraStageKeyframeService.createKeyframes('project-1', [
+      { objectId, propertyPath: 'transform.position.y', time: 0, value: 0.5 },
+    ])
+    useCameraStageStore.setState({ editorMode: 'simple' })
+
+    await expect(cameraStageKeyframeService.removeKeyframes('project-1', [
+      { objectId, propertyPath: 'transform.position.y', time: 0 },
+    ])).rejects.toThrow('KEYFRAME_REQUIRES_PRO_MODE')
+    await expect(cameraStageKeyframeService.clearTracks('project-1', [
+      { objectId, propertyPath: 'transform.position.y' },
+    ])).rejects.toThrow('KEYFRAME_REQUIRES_PRO_MODE')
   })
 })

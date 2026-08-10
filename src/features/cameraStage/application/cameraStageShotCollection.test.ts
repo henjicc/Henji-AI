@@ -126,4 +126,41 @@ describe('三维镜头卡集合写入', () => {
     // 第一张卡的过渡时长必须重算为到新的下一张卡（5秒）的间隔，而不是残留旧值（2秒）。
     expect(remaining[0].transitionDuration).toBeCloseTo(5, 2)
   })
+
+  /*
+   * 回归：专业模式下新建镜头卡会**销毁用户已有的关键帧时间轴**。
+   *
+   * `addShot` 的 patch 里带着 `animation: compile(shots, objects)`——这是简易模式的核心语义
+   * （镜头卡是时间轴的唯一来源），但在专业模式下它等于把整条手工关键帧时间轴替换成"由一张
+   * 镜头卡编译出来的结果"。用户几十条关键帧，一次调用全没。
+   *
+   * 人撞不到这个坑：带「新建镜头卡」按钮的 ShotTimelinePanel 只在简易模式渲染。也就是说这是
+   * 一条只有助手走得到的破坏性路径——不设防就是人机能力"负对齐"：助手能做人做不到的破坏。
+   */
+  it('专业模式下新建镜头卡必须被拒绝，且不碰已有关键帧轨道', async () => {
+    useCameraStageStore.setState({
+      editorMode: 'pro',
+      shots: [],
+      animation: {
+        ...useCameraStageStore.getState().animation,
+        tracks: [{
+          objectId: useCameraStageStore.getState().objects[1].id,
+          propertyPath: 'transform.position.y',
+          keyframes: [
+            { time: 0, value: 0, easing: 'linear' },
+            { time: 1, value: 2, easing: 'linear' },
+          ],
+        }],
+      },
+    })
+
+    await expect(cameraStageShotService.createShots('project-1', [{ time: 0 }]))
+      .rejects.toThrow('SHOT_REQUIRES_SIMPLE_MODE')
+    // 拒绝要给改道：专业模式下该走关键帧集合写入。
+    await expect(cameraStageShotService.createShots('project-1', [{ time: 0 }]))
+      .rejects.toThrow(/camera_stage\.keyframe/)
+    // 最关键的一条：用户的轨道必须原封不动。
+    expect(useCameraStageStore.getState().animation.tracks).toHaveLength(1)
+    expect(useCameraStageStore.getState().animation.tracks[0].keyframes).toHaveLength(2)
+  })
 })
