@@ -27,9 +27,9 @@ export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<st
   'storage.download_paths': {
     id: 'storage.download_paths', title: '下载目录',
     description: 'OS 文件选择器由系统弹出，不在渲染进程里，助手没有办法代替用户点选目录，'
-      + '只能查询是否已配置；配置或修改下载预设路径请用 open_application_surface 把用户带到 '
-      + 'general-storage 分区，由用户自己选择目录。',
-    aliases: ['下载路径', '保存目录', '本地路径'], target: { tab: 'general', sectionId: 'general-storage' }, sensitive: true, writable: false,
+      + '只能查询已配置几条；配置或删除下载预设路径请用 open_application_surface 把用户带到 '
+      + 'general-storage 分区的「下载预设路径」，由用户自己选择目录。',
+    aliases: ['下载路径', '保存目录', '本地路径', '下载预设路径'], target: { tab: 'general', sectionId: 'general-storage' }, sensitive: true, writable: false,
   },
   'storage.data_path': {
     id: 'storage.data_path', title: '应用数据目录',

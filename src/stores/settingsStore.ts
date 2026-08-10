@@ -1,5 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+
+/** 下载预设路径的条数上限：菜单里超过这个数就要滚动，反而比「另存为」更慢 */
+export const DOWNLOAD_PRESET_PATH_LIMIT = 8;
+
 import { setLogCaptureMode as syncLogCaptureMode, type LogCaptureMode } from '@/commands/logging';
 import type { UploadProvider } from '@/core/config/providers';
 import {
@@ -76,6 +80,7 @@ interface SettingsState {
   setUploadProvider: (provider: UploadProvider) => void;
   setUploadFallbackEnabled: (enabled: boolean) => void;
   setLargeUploadStrategy: (strategy: LargeUploadStrategy) => void;
+  /** 画布节点下载菜单的「保存到…」预设目录，上限 DOWNLOAD_PRESET_PATH_LIMIT 条 */
   setDownloadPresetPaths: (paths: string[]) => void;
   setUseUploadFilenameAsNodeTitle: (enabled: boolean) => void;
   setEnableImageViewerInfoPanel: (enabled: boolean) => void;

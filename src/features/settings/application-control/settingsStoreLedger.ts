@@ -52,19 +52,25 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setUploadFallbackEnabled: property('generation.upload_fallback'),
     setLargeUploadStrategy: property('generation.large_upload_strategy'),
     /*
-     * 4.4 的判断结论：同样不是 gap，同样是没有调用方的死方法。
+     * 此前这条被记成"没有调用方的死方法"——当时确实如此：字段只被 canvasDownloadService.ts
+     * 读取，界面上没有任何配置入口，而画布下载菜单为空时却提示"请在设置 - 通用中添加"，
+     * 等于让用户去做一件做不到的事。设置分区补上入口后（DownloadSection），人能做了，
+     * 于是它变成一条真正的「人能做、助手不能做」。
      *
-     * downloadPresetPaths 这个字段只被 canvasDownloadService.ts 读取，从未被写入——
-     * 也就是说界面上现在根本没有配置下载预设路径的入口，人配不了，助手自然也谈不上差集。
-     * 这是产品侧的一个待补功能，不是助手覆盖问题；等界面补上入口时，这条账要跟着改成
-     * 对应的设置属性绑定（storage.download_paths 届时也要注册成正规设置定义）。
+     * 归类为 user_only 而不是 gap：添加一条预设路径必须在系统目录选择器里选一个**真实存在**
+     * 的目录，那个对话框由 OS 弹出、不在渲染进程里，助手没有办法代替用户点；凭空写一个路径
+     * 字符串只会在下载菜单里造出一条点了就失败的项。
+     *
+     * 移除已有路径在技术上不需要选择器，助手是做得到的——但只能删不能加的半截能力比没有更让
+     * 人困惑，而且用户要清理预设路径，在设置里直接点删除比让助手代劳更快。这是权衡后的取舍，
+     * 不是安全顾虑；若将来有实际场景需要助手批量清理，再单独放开移除方向。
      */
     setDownloadPresetPaths: {
       kind: 'excluded',
-      category: 'internal',
-      reason: '整个仓库没有任何写入方，界面上不存在配置下载预设路径的入口，人同样做不了，'
-        + '因此不构成人机差集；该字段目前只被 canvasDownloadService.ts 读取。'
-        + '界面补上入口后需回来改成 storage.download_paths 的属性绑定。',
+      category: 'user_only',
+      reason: '添加预设路径要在系统目录选择器里选一个真实存在的目录，该对话框由 OS 弹出、'
+        + '不在渲染进程里，助手无法代劳；凭空写路径只会造出点了就失败的菜单项。'
+        + '助手可用 open_application_surface 把用户带到 general-storage 分区自行配置。',
     },
     setUseUploadFilenameAsNodeTitle: property('canvas.upload_filename_as_title'),
     setEnableImageViewerInfoPanel: property('generation.viewer_info'),

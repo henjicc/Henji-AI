@@ -221,7 +221,12 @@
       "buttonOnlyHint": "开启后，只有点击下载按钮时才使用快速下载，右键菜单下载依然手动选择目录",
       "pathLabel": "快速下载保存路径",
       "pathPlaceholder": "选择保存目录",
-      "pathHint": "所有快速下载的文件将保存到此目录"
+      "pathHint": "所有快速下载的文件将保存到此目录",
+      "presetPathsLabel": "下载预设路径",
+      "presetPathsHint": "画布节点的下载菜单里会列出这些目录，一键保存过去；与快速下载相互独立",
+      "presetPathsAdd": "添加目录",
+      "presetPathsCount": "已添加 {{count}} / {{limit}}",
+      "presetPathsRemove": "移除预设路径 {{path}}"
     },
     "updates": {
       "title": "更新检测",

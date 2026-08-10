@@ -221,7 +221,12 @@
       "buttonOnlyHint": "Right-click downloads will still prompt for a folder",
       "pathLabel": "Quick download path",
       "pathPlaceholder": "Select a folder",
-      "pathHint": "All quick downloads will be saved here"
+      "pathHint": "All quick downloads will be saved here",
+      "presetPathsLabel": "Download preset folders",
+      "presetPathsHint": "These folders appear in the canvas node download menu for one-click saving; independent of quick download.",
+      "presetPathsAdd": "Add folder",
+      "presetPathsCount": "{{count}} / {{limit}} added",
+      "presetPathsRemove": "Remove preset folder {{path}}"
     },
     "updates": {
       "title": "Updates",
