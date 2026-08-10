@@ -77,6 +77,37 @@ describe('useImageEditorSession', () => {
     act(() => result.current.markController.history.handleUndo());
     expect(result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)).toBeNull();
   });
+
+  it('6.1：两个 hook 实例各有独立的 sessionId，互相隔离（模拟同时开着两个宿主）', () => {
+    const first = renderHook(() => useImageEditorSession({}));
+    const second = renderHook(() => useImageEditorSession({}));
+
+    expect(first.result.current.sessionId).not.toBe(second.result.current.sessionId);
+
+    act(() => {
+      first.result.current.documentController.updateOperation(IMAGE_EDIT_OPERATION_IDS.diffusion, (params) => ({
+        ...params,
+        strength: 0.7,
+      }));
+    });
+
+    expect(first.result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)).not.toBeNull();
+    // 第二个实例完全没被第一个实例的写入影响
+    expect(second.result.current.documentController.getOperation(IMAGE_EDIT_OPERATION_IDS.diffusion)).toBeNull();
+
+    act(() => {
+      second.result.current.markController.history.commitDoc({
+        ...second.result.current.markDoc,
+        crop: { x: 1, y: 2, width: 30, height: 40 },
+      });
+    });
+
+    expect(imageEditDocumentToMarkDoc(second.result.current.document).crop).toEqual({
+      x: 1, y: 2, width: 30, height: 40,
+    });
+    // 第一个实例的裁剪状态不受第二个实例影响
+    expect(imageEditDocumentToMarkDoc(first.result.current.document).crop).toBeNull();
+  });
 });
 
 describe('图片编辑器检查器宽度', () => {
