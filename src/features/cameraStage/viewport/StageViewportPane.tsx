@@ -25,12 +25,14 @@ const FIXED_LABELS = {
 
 function sourceValue(source: StageViewportSource): string {
   if (source.kind === 'director') return 'director'
+  if (source.kind === 'active_camera') return 'active_camera'
   if (source.kind === 'fixed') return `fixed:${source.view}`
   return `camera:${source.cameraId}`
 }
 
 function parseSource(value: string): StageViewportSource {
   if (value === 'director') return { kind: 'director' }
+  if (value === 'active_camera') return { kind: 'active_camera' }
   if (value.startsWith('camera:')) return { kind: 'camera', cameraId: value.slice(7) }
   const view = value.slice(6) as keyof typeof FIXED_LABELS
   return { kind: 'fixed', view }
@@ -43,17 +45,29 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
   const setSource = useCameraStageViewportStore((state) => state.setViewportSource)
   const toggleMaximized = useCameraStageViewportStore((state) => state.toggleMaximized)
   const objects = useCameraStageStore((state) => state.objects)
+  const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
   const middlePointer = useRef<{ x: number; y: number; time: number } | null>(null)
   const cameras = useMemo(() => getCameraObjects(objects), [objects])
   const configuredCameraId = config.source.kind === 'camera' ? config.source.cameraId : null
-  const source = configuredCameraId
+  /*
+   * 绑死的摄像机不在场景里时，退回**跟随当前机位**而不是自由透视。
+   *
+   * 退回自由透视会让四窗格里出现两个一模一样的透视画面（左上角本来就是自由透视），信息量
+   * 直接少掉四分之一，而用户什么都没做——只是换了个工程，或者删掉了那台摄像机。
+   */
+  const source: StageViewportSource = configuredCameraId
     && !cameras.some((camera) => camera.id === configuredCameraId)
-    ? { kind: 'director' } as const
+    ? { kind: 'active_camera' }
     : config.source
+  // 取景框覆盖层要知道画的是哪台机器；跟随档在这里落成具体 id。
+  const overlayCameraId = source.kind === 'camera'
+    ? source.cameraId
+    : source.kind === 'active_camera' ? activeCameraId : null
   const options = [
     { label: '自由透视', value: 'director' },
+    { label: '当前摄像机', value: 'active_camera' },
     ...Object.entries(FIXED_LABELS).map(([view, label]) => ({ label, value: `fixed:${view}` })),
     ...cameras.map((camera) => ({ label: `摄像机 · ${camera.name}`, value: `camera:${camera.id}` })),
   ]
@@ -62,6 +76,9 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
     setActive(viewportId)
     if (source.kind === 'camera') {
       setActiveCameraId(source.cameraId)
+      setViewMode('camera')
+    } else if (source.kind === 'active_camera') {
+      // 已经是当前机位，不需要再指定一次；只把编辑模式切到摄像机视角。
       setViewMode('camera')
     } else {
       setViewMode('director')
@@ -73,6 +90,8 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
     setSource(viewportId, next)
     if (next.kind === 'camera') {
       setActiveCameraId(next.cameraId)
+      setViewMode('camera')
+    } else if (next.kind === 'active_camera') {
       setViewMode('camera')
     } else {
       setViewMode('director')
@@ -103,7 +122,7 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
         primary={primary}
         captureRef={primary ? captureRef : undefined}
       />
-      {source.kind === 'camera' && <StageAspectRatioOverlay cameraId={source.cameraId} />}
+      {overlayCameraId && <StageAspectRatioOverlay cameraId={overlayCameraId} />}
       <div className="pointer-events-auto absolute left-2 top-2 z-20">
         <Dropdown<string>
           value={sourceValue(source)}

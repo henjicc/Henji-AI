@@ -20,8 +20,15 @@ const StageViewportWorkspace: React.FC<StageViewportWorkspaceProps> = ({ capture
     const cameraIds = new Set(objects.filter((object) => object.type === 'camera').map((camera) => camera.id))
     for (const id of STAGE_VIEWPORT_IDS) {
       const source = viewports[id].source
+      /*
+       * 绑死的摄像机没了就改成跟随当前机位，不要退回自由透视。
+       *
+       * 视口配置存在本机、摄像机 id 属于工程：换个工程那个 id 必然失效。退回自由透视的结果是
+       * 四窗格里出现两个一模一样的透视画面（左上角本来就是自由透视），用户什么都没做，
+       * 信息量白掉四分之一。这正是"新建工程后有两个相同透视图"的来源。
+       */
       if (source.kind === 'camera' && !cameraIds.has(source.cameraId)) {
-        setViewportSource(id, { kind: 'director' })
+        setViewportSource(id, { kind: 'active_camera' })
       }
     }
   }, [objects, setViewportSource, viewports])

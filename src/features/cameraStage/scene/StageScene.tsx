@@ -158,17 +158,23 @@ const StageScene: React.FC<StageSceneProps> = ({
     }
     return targets
   }, [objects])
+  /*
+   * `active_camera` 走 renderCameraId 而不是 activeCameraId：简易模式播放/scrub 跨机位切换点时
+   * 渲染机位按镜头卡时间表走（重要记录 005），跟随档要跟的是**画面上真正在用的那台**，
+   * 否则播放到切机位那一刻，跟随窗格还停在上一台机器上。
+   */
   const requestedCameraId = viewportSource?.kind === 'camera'
     ? viewportSource.cameraId
-    : viewportSource
-      ? null
-      : renderCameraId
+    : !viewportSource || viewportSource.kind === 'active_camera'
+      ? renderCameraId
+      : null
   const activeCamera = objects.find(
     (item): item is StageCameraObject => item.id === requestedCameraId && item.type === 'camera',
   )
   const activeCameraTarget = activeCamera ? cameraLookAtTargets.get(activeCamera.id) : undefined
   const isCameraView = viewportSource
-    ? viewportSource.kind === 'camera' && !!activeCamera && !!activeCameraTarget
+    ? (viewportSource.kind === 'camera' || viewportSource.kind === 'active_camera')
+      && !!activeCamera && !!activeCameraTarget
     : viewMode === 'camera' && !!activeCamera && !!activeCameraTarget
   const isFixedView = viewportSource?.kind === 'fixed'
   const canvasCamera = isFixedView
