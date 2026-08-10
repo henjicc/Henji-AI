@@ -11,6 +11,8 @@ import {
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
+import { useGenerationDraftStore } from '../store/generationDraftStore'
+import { GENERATION_DRAFT_FIELDS } from './generationDraftFields'
 import { GENERATION_MODEL_FIELDS, getGenerationModelsRevision, type GenerationModelFieldSource } from './generationModelFields'
 import {
   getGenerationModelSchema,
@@ -215,4 +217,79 @@ export function createGenerationReflectionRegistrations(): ApplicationEntityRegi
       ...modelSchemaDocuments(),
     ] : [],
   }))
+}
+
+/*
+ * generation.draft 是单例实体（5.4），结构上与 model/task/result 三支的"目录型多实例"
+ * 完全不同（不能列表分页、不需要按 id 搜索），单独一个 provider 类，不塞进上面
+ * GenerationReflectionProvider 的多分支——那样只会把已经四路分支的 ternary 再拉长一路。
+ * 与 settingsReflection.ts 的 SettingsReflectionProvider 是同一类写法。
+ */
+const GENERATION_DRAFT_ENTITY_TYPE = 'generation.draft'
+const GENERATION_DRAFT_REF = { kind: GENERATION_DRAFT_ENTITY_TYPE, id: 'singleton', label: '生成草稿' } as const
+
+class GenerationDraftReflectionProvider implements ApplicationEntityProvider {
+  readonly entityType = GENERATION_DRAFT_ENTITY_TYPE
+
+  async listEntities() {
+    return {
+      refs: [GENERATION_DRAFT_REF],
+      nextCursor: null,
+      revisions: { generation_draft: useGenerationDraftStore.getState().revision },
+    }
+  }
+
+  async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
+    if (ref.kind !== GENERATION_DRAFT_ENTITY_TYPE || ref.id !== GENERATION_DRAFT_REF.id) throw new Error('NOT_FOUND')
+    const values = fieldReadValues(GENERATION_DRAFT_FIELDS, useGenerationDraftStore.getState().draft)
+    return {
+      ref: GENERATION_DRAFT_REF,
+      entityType: GENERATION_DRAFT_ENTITY_TYPE,
+      revisions: { generation_draft: useGenerationDraftStore.getState().revision },
+      properties: request.propertyIds
+        ? Object.fromEntries(Object.entries(values).filter(([id]) => request.propertyIds?.includes(id)))
+        : values,
+      capturedAt: new Date().toISOString(),
+    }
+  }
+
+  async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
+    if (ref.kind !== GENERATION_DRAFT_ENTITY_TYPE || ref.id !== GENERATION_DRAFT_REF.id) throw new Error('NOT_FOUND')
+    const descriptorMap = new Map(fieldDescriptors(GENERATION_DRAFT_FIELDS).map((item) => [item.id, item]))
+    const revisions = { generation_draft: useGenerationDraftStore.getState().revision }
+    return propertyIds.map((propertyId) => {
+      const descriptor = descriptorMap.get(propertyId)
+      if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+      const writable = !descriptor.readOnlyReason
+      return {
+        propertyId,
+        readable: true,
+        writable,
+        reasons: writable ? [] : [descriptor.readOnlyReason ?? '只读状态'],
+        requiredPermissions: writable ? descriptor.requiredPermissions.write : descriptor.requiredPermissions.read,
+        revisions,
+      }
+    })
+  }
+}
+
+export function createGenerationDraftReflectionRegistration(): ApplicationEntityRegistration {
+  return {
+    entity: {
+      id: GENERATION_DRAFT_ENTITY_TYPE,
+      domain: 'generation',
+      version: 1,
+      title: '生成草稿',
+      description: '用户正在搭建、尚未提交的生成输入——与已提交的 generation.task 是两回事。',
+      refKind: GENERATION_DRAFT_ENTITY_TYPE,
+      dataClass: 'C1',
+      exposures: ['ui', 'assistant', 'local_adapter'],
+      parentTypes: [],
+      revisionScopes: ['generation_draft'],
+      queryCapabilityIds: ['read_application_entity'],
+      schemaRef: schemaRef('entity', GENERATION_DRAFT_ENTITY_TYPE),
+    },
+    properties: fieldDescriptors(GENERATION_DRAFT_FIELDS),
+    provider: new GenerationDraftReflectionProvider(),
+  }
 }

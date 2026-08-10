@@ -22,8 +22,10 @@ import { useCameraStageViewportStore } from '@/features/cameraStage/store/camera
 import { CANVAS_GENERATION_PROGRESS_STORE_LEDGER } from '@/features/canvas/application/canvasGenerationProgressStoreLedger'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
+import { GENERATION_DRAFT_STORE_LEDGER } from '@/features/generation/application/generationDraftStoreLedger'
 import { GENERATION_HISTORY_FILTER_STORE_LEDGER } from '@/features/generation/application/generationHistoryFilterStoreLedger'
 import { GENERATION_TASK_PROGRESS_STORE_LEDGER } from '@/features/generation/application/generationTaskProgressStoreLedger'
+import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import { NAVIGATION_STORE_LEDGER } from '@/features/navigation/application/navigationStoreLedger'
 import { IMAGE_EDITOR_HANDOFF_STORE_LEDGER } from '@/features/imageEdit/application/imageEditorHandoffStoreLedger'
 import { IMAGE_EDITOR_UI_STORE_LEDGER } from '@/features/imageEdit/application/imageEditorUiStoreLedger'
@@ -87,6 +89,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: CANVAS_GENERATION_PROGRESS_STORE_LEDGER, state: () => useCanvasGenerationProgressStore.getState() },
   { ledger: GENERATION_TASK_PROGRESS_STORE_LEDGER, state: () => useGenerationTaskProgressStore.getState() },
   { ledger: GENERATION_HISTORY_FILTER_STORE_LEDGER, state: () => useGenerationHistoryFilterStore.getState() },
+  { ledger: GENERATION_DRAFT_STORE_LEDGER, state: () => useGenerationDraftStore.getState() },
 ]
 
 /**

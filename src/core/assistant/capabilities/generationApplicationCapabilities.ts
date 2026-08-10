@@ -110,11 +110,11 @@ const prepareGenerationTask = defineApplicationCapability({
   id: 'prepare_generation_task',
   version: 1,
   title: '校验生成参数',
-  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果。',
+  description: '在提交前验证模型、媒体类型、必填项、参数范围和联动结果；省略的字段用当前生成草稿（generation.draft）补全。',
   domain: 'generation',
   aliases: ['检查生成参数', '准备生成', 'prepare generation'],
   readOnly: true,
-  control: capabilityControl('observe', ['generation.preparation']),
+  control: capabilityControl('observe', ['generation.preparation', 'generation.draft']),
   risk: 'R0',
   dataClasses: ['C1'],
   permission: 'generation:prepare',
@@ -124,12 +124,12 @@ const prepareGenerationTask = defineApplicationCapability({
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: [],
-  acceptsRefs: ['generation.model'],
+  acceptsRefs: ['generation.model', 'generation.draft'],
   producesRefs: ['generation.preparation'],
   inputSchema: z.object({
-    modelId: z.string().min(1),
-    prompt: z.string().max(32 * 1024),
-    mediaType: z.enum(['image', 'video', 'audio']),
+    modelId: z.string().min(1).optional(),
+    prompt: z.string().max(32 * 1024).optional(),
+    mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -142,8 +142,8 @@ const prepareGenerationTask = defineApplicationCapability({
     }).passthrough(),
   }),
   concurrencyKey: 'generation_prepare',
-  resolveConcurrencyKey: (input) => `generation_prepare:${input.modelId}`,
-  resolveTargetIds: (input) => ({ modelId: input.modelId }),
+  resolveConcurrencyKey: (input) => `generation_prepare:${input.modelId ?? 'draft'}`,
+  resolveTargetIds: (input) => ({ modelId: input.modelId ?? 'draft' }),
   summarize: (output) => `模型 ${output.preparation.modelId} 的生成参数已通过校验。`,
 })
 
@@ -151,7 +151,9 @@ const createVisibleGenerationTask = defineApplicationCapability({
   id: 'create_visible_generation_task',
   version: 1,
   title: '创建可见生成任务',
-  description: '在生成工作区创建用户可见的图片、视频或音频生成任务。',
+  description: '在生成工作区创建用户可见的图片、视频或音频生成任务；省略的字段用当前生成草稿'
+    + '（generation.draft）补全，让助手能像人一样先逐步搭建输入（写提示词、选模型、上传媒体）'
+    + '再提交，而不必每次一次性传全部参数。',
   domain: 'generation',
   aliases: ['生成图片', '生成视频', '生成音频', 'create generation'],
   readOnly: false,
@@ -168,16 +170,16 @@ const createVisibleGenerationTask = defineApplicationCapability({
   supportsUndo: false,
   completionKind: 'submitted',
   requiredScopes: ['generation'],
-  acceptsRefs: ['generation.model', 'asset'],
+  acceptsRefs: ['generation.model', 'generation.draft', 'asset'],
   producesRefs: ['generation.task'],
   successEvidence: [
     '返回稳定 taskId、submitted 状态和最新 generation revision。',
     '该结果只证明任务已提交；生成完成必须由后续状态证据确认。',
   ],
   inputSchema: z.object({
-    modelId: z.string().min(1),
-    prompt: z.string().max(32 * 1024),
-    mediaType: z.enum(['image', 'video', 'audio']),
+    modelId: z.string().min(1).optional(),
+    prompt: z.string().max(32 * 1024).optional(),
+    mediaType: z.enum(['image', 'video', 'audio']).optional(),
     params: z.record(z.string(), z.unknown()).optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
@@ -185,12 +187,14 @@ const createVisibleGenerationTask = defineApplicationCapability({
     status: z.literal('submitted'),
   }),
   concurrencyKey: 'generation',
-  resolveConcurrencyKey: (input) => `generation:${input.modelId}`,
-  resolveTargetIds: (input) => ({ modelId: input.modelId }),
+  resolveConcurrencyKey: (input) => `generation:${input.modelId ?? 'draft'}`,
+  resolveTargetIds: (input) => ({ modelId: input.modelId ?? 'draft' }),
   preview: (input) => ({
     title: '创建生成任务',
-    summary: `使用模型 ${input.modelId} 创建 ${input.mediaType} 任务；提示词长度 ${input.prompt.length}。`,
-    targetIds: { modelId: input.modelId },
+    summary: `使用模型 ${input.modelId ?? '（当前草稿选中的模型）'} 创建 `
+      + `${input.mediaType ?? '（按草稿模型推断）'} 任务；`
+      + (input.prompt ? `提示词长度 ${input.prompt.length}。` : '提示词取自当前生成草稿。'),
+    targetIds: { modelId: input.modelId ?? 'draft' },
     reversible: false,
     dataClasses: ['C1'],
     destination: '已配置的生成模型 Provider',

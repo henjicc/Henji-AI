@@ -35,7 +35,11 @@ import { AssetLibraryCollectionExecutor } from '@/features/assets/application/as
 import { createImageEditReflectionRegistrations } from '@/features/imageEdit/application/imageEditReflection'
 import { createStoryboardReflectionRegistrations } from '@/features/canvas/application/storyboardReflection'
 import { createToolboxReflectionRegistration } from '@/features/toolbox/application/toolboxReflection'
-import { createGenerationReflectionRegistrations } from '@/features/generation/application/generationReflection'
+import {
+  createGenerationDraftReflectionRegistration,
+  createGenerationReflectionRegistrations,
+} from '@/features/generation/application/generationReflection'
+import { GenerationDraftMutationExecutor } from '@/features/generation/application/generationDraftMutationExecutor'
 import { GenerationModelMutationExecutor } from '@/features/generation/application/generationModelMutationExecutor'
 import { createAssistantRuntimeReflectionRegistrations } from '@/features/assistant/application/assistantRuntimeReflection'
 
@@ -112,6 +116,7 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   registerAll(next, 'image_edit', createImageEditReflectionRegistrations())
   registerAll(next, 'toolbox', [createToolboxReflectionRegistration()])
   registerAll(next, 'generation', createGenerationReflectionRegistrations())
+  registerAll(next, 'generation_draft', [createGenerationDraftReflectionRegistration()])
   registerAll(next, 'assistant_runtime', createAssistantRuntimeReflectionRegistrations())
   registerAll(next, 'camera_stage', createCameraStageReflectionRegistrations(
     () => cameraStageDependencies.readRevision()
@@ -129,6 +134,8 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   next.registerMutationExecutor(new CanvasProjectMutationExecutor())
   // 生成模型：闭合 4.4 松绑 models.visibility 后新增的 generation.model.hidden 悬空可写声明。
   next.registerMutationExecutor(new GenerationModelMutationExecutor())
+  // 生成草稿：5.4 注册 generation.draft 实体后闭合它的可写属性声明。
+  next.registerMutationExecutor(new GenerationDraftMutationExecutor())
   // 素材：闭合 asset.tags 与 asset.library_refs 的悬空可写声明
   next.registerMutationExecutor(new AssetMutationExecutor({
     readRevision: () => assetMutationDependencies.readRevision(),
