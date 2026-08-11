@@ -79,6 +79,53 @@ describe('三维四窗格状态迁移', () => {
     expect(migrated.layout).toBe('single')
   })
 
+  /*
+   * 实测漏网：改完默认布局后左下角仍是"自由透视"，和左上角一模一样。
+   *
+   * 原因是 v2 迁移把"用户自己选的来源"原样保留了——可本地存的那份根本不是用户选的，是上一个
+   * bug 的产物：摄像机 id 失效时旧代码把那一格改成自由透视并存了下来。迁移忠实地把 bug 的
+   * 结果搬进了新版本，于是重复只是换了个位置。
+   *
+   * 重复本身就是可判定的损坏信号，v3 起一律修掉。
+   */
+  it('v2 里遗留的重复窗格被修回四种不同画面', () => {
+    const migrated = migrateViewportState({
+      layout: 'quad',
+      activeViewportId: 'perspective',
+      maximizedViewportId: null,
+      viewports: {
+        perspective: { id: 'perspective', source: { kind: 'director' } },
+        camera: { id: 'camera', source: { kind: 'active_camera' } },
+        // 上一个 bug 存下来的：本该是顶视图，被改成了自由透视
+        top: { id: 'top', source: { kind: 'director' } },
+        front: { id: 'front', source: { kind: 'fixed', view: 'front' } },
+      },
+    }, 2)
+
+    expect(migrated.viewports.top.source).toEqual({ kind: 'fixed', view: 'top' })
+    const sources = STAGE_VIEWPORT_IDS.map((id) => describeSource(migrated.viewports[id].source))
+    expect(new Set(sources).size, sources.join('、')).toBe(4)
+  })
+
+  it('默认值也撞车时按候补顺序另找一个，不会退化成重复', () => {
+    const migrated = migrateViewportState({
+      layout: 'quad',
+      activeViewportId: 'perspective',
+      maximizedViewportId: null,
+      viewports: {
+        // 用户把第一格改成了顶视图，正好占掉第三格的默认值
+        perspective: { id: 'perspective', source: { kind: 'fixed', view: 'top' } },
+        camera: { id: 'camera', source: { kind: 'active_camera' } },
+        top: { id: 'top', source: { kind: 'fixed', view: 'top' } },
+        front: { id: 'front', source: { kind: 'fixed', view: 'front' } },
+      },
+    }, 2)
+
+    expect(migrated.viewports.perspective.source).toEqual({ kind: 'fixed', view: 'top' })
+    const sources = STAGE_VIEWPORT_IDS.map((id) => describeSource(migrated.viewports[id].source))
+    expect(new Set(sources).size, sources.join('、')).toBe(4)
+  })
+
   it('已经是当前版本的状态原样返回', () => {
     const current = {
       layout: 'quad' as const,
