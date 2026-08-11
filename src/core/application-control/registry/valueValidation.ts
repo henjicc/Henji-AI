@@ -1,8 +1,36 @@
 import type { JsonValue } from '../identifiers'
 import type { ApplicationPropertyDescriptor, ApplicationPropertyValue } from '../reflection'
 
-function invalid(propertyId: string, reason: string): never {
-  throw new Error(`INVALID_PROPERTY_VALUE:${propertyId}:${reason}`)
+/**
+ * `hint` 不是可选的装饰，是这条错误有没有用的分界线。
+ *
+ * 实测「让球上下浮动」那次，模型连撞七次通用写入：一次 `INVALID_REF`、一次
+ * `PROPERTY_NOT_FOUND`、两次 NOT_FOUND，每条都只有一个错误码。它只能靠**猜**下一次换什么
+ * 格式——猜引用要不要带工程前缀、猜位置属性有没有 y 分量、猜 ref_list 收的是字符串还是对象。
+ * 七次全花在拼格式上，一次都没花在用户的需求上。
+ *
+ * 校验器手里明明有 refKinds、有 value 的形状、有实际收到的东西，不说就是浪费。
+ */
+function invalid(propertyId: string, reason: string, hint?: string): never {
+  throw new Error(`INVALID_PROPERTY_VALUE:${propertyId}:${reason}${hint ? `（${hint}）` : ''}`)
+}
+
+/** 把模型实际传进来的东西压成一句能读的话，别把整个对象糊进错误里。 */
+function describeReceived(input: unknown): string {
+  if (input === null) return 'null'
+  if (Array.isArray(input)) return `数组（${input.length} 项）`
+  if (typeof input === 'object') return `对象 {${Object.keys(input as object).slice(0, 6).join(', ')}}`
+  if (typeof input === 'string') return `字符串 "${input.slice(0, 60)}"`
+  return String(input)
+}
+
+/** ref / ref_list 的正确形状说明，带一个能照抄的样例。 */
+function refShapeHint(refKinds: readonly string[], received: unknown): string {
+  const kind = refKinds[0] ?? 'entity.type'
+  return `引用必须是对象 {"kind":"<实体类型>","id":"<稳定 id>"}，不是字符串；`
+    + `kind 只能取 ${refKinds.join(' / ')}；`
+    + `id 用 list_application_entities 或观察结果里返回的原值（通常带父级前缀，如 "<工程 id>:<对象 id>"）。`
+    + `例：{"kind":"${kind}","id":"…"}。实际收到：${describeReceived(received)}`
 }
 
 function validateNumberRange(
@@ -93,26 +121,36 @@ function normalizeNonNullValue(
       return validateVector(descriptor.id, input, 3, valueType.componentRange)
     case 'ref': {
       if (!input || typeof input !== 'object' || Array.isArray(input)) {
-        return invalid(descriptor.id, 'EXPECTED_REF')
+        return invalid(descriptor.id, 'EXPECTED_REF', refShapeHint(valueType.refKinds, input))
       }
       const kind = input.kind
       const id = input.id
       if (typeof kind !== 'string' || !valueType.refKinds.includes(kind) || typeof id !== 'string') {
-        return invalid(descriptor.id, 'INVALID_REF')
+        return invalid(descriptor.id, 'INVALID_REF', refShapeHint(valueType.refKinds, input))
       }
       return input
     }
     case 'ref_list': {
-      if (!Array.isArray(input)) return invalid(descriptor.id, 'EXPECTED_REF_LIST')
-      if (valueType.maxItems !== undefined && input.length > valueType.maxItems) {
-        return invalid(descriptor.id, 'TOO_MANY_REFS')
+      if (!Array.isArray(input)) {
+        return invalid(
+          descriptor.id,
+          'EXPECTED_REF_LIST',
+          `这是引用列表，要传数组。${refShapeHint(valueType.refKinds, input)}`,
+        )
       }
-      for (const item of input) {
+      if (valueType.maxItems !== undefined && input.length > valueType.maxItems) {
+        return invalid(
+          descriptor.id,
+          'TOO_MANY_REFS',
+          `最多 ${valueType.maxItems} 项，本次 ${input.length} 项`,
+        )
+      }
+      for (const [index, item] of input.entries()) {
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          return invalid(descriptor.id, 'INVALID_REF')
+          return invalid(descriptor.id, 'INVALID_REF', `第 ${index} 项：${refShapeHint(valueType.refKinds, item)}`)
         }
         if (typeof item.kind !== 'string' || !valueType.refKinds.includes(item.kind) || typeof item.id !== 'string') {
-          return invalid(descriptor.id, 'INVALID_REF')
+          return invalid(descriptor.id, 'INVALID_REF', `第 ${index} 项：${refShapeHint(valueType.refKinds, item)}`)
         }
       }
       return input

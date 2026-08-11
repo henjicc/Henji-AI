@@ -42,6 +42,62 @@ describe('三维镜头卡集合写入', () => {
     return useCameraStageStore.getState().objects.find((object) => object.type === 'camera')!.id
   }
 
+  function cubeId(): string {
+    return useCameraStageStore.getState().objects.find((object) => object.type === 'primitive')!.id
+  }
+
+  function cubeYInShot(shotId: string): number | undefined {
+    const shot = useCameraStageStore.getState().shots.find((candidate) => candidate.id === shotId)
+    return shot?.objectStates[cubeId()]?.transform.position.y
+  }
+
+  /**
+   * 简易模式做动画的**唯一正确配方**，钉死在这里。
+   *
+   * 实测助手连撞十几次都没做出动画，因为它以为「建三张卡」就是做动画——建卡只是在某个时间点
+   * 录下**当前**姿态，三次都不动物体，三张卡自然一模一样，播放起来纹丝不动。
+   *
+   * 真正的配方和人在界面上做的一样：**把播放头挪到 T，再拖物体**——`compileSimpleEdit` 会在
+   * T 自动记一张状态卡（AE 式自动打点）。建卡与改姿态是两件事，不要指望建卡顺带改姿态。
+   *
+   * 这条是功能证明而不是格式检查：直接读三张卡里球的 y，值必须真的不同。
+   */
+  it('挪播放头再改姿态，简易模式自动记下三张不同的状态卡', () => {
+    const cube = cubeId()
+
+    // t=0 低位
+    useCameraStageStore.getState().seek(0)
+    useCameraStageStore.getState().updateTransform(cube, { position: { x: 0, y: 0.5, z: 0 } })
+    // t=1 高位
+    useCameraStageStore.getState().seek(1)
+    useCameraStageStore.getState().updateTransform(cube, { position: { x: 0, y: 2.5, z: 0 } })
+    // t=2 回落
+    useCameraStageStore.getState().seek(2)
+    useCameraStageStore.getState().updateTransform(cube, { position: { x: 0, y: 0.5, z: 0 } })
+
+    const shots = useCameraStageStore.getState().shots
+    expect(shots.length, '每个时间点都该自动记下一张状态卡').toBeGreaterThanOrEqual(3)
+    const yByTime = new Map(shots.map((shot) => [
+      Math.round(shot.time * 100) / 100,
+      shot.objectStates[cube]?.transform.position.y,
+    ]))
+    expect(yByTime.get(0)).toBeCloseTo(0.5, 2)
+    expect(yByTime.get(1), '中间那张卡没记下高位，播放起来是不动的').toBeCloseTo(2.5, 2)
+    expect(yByTime.get(2)).toBeCloseTo(0.5, 2)
+  })
+
+  it('建卡只录当前姿态，不动物体就三张卡全一样——这不是做动画的路子', async () => {
+    const cube = cubeId()
+    useCameraStageStore.getState().updateTransform(cube, { position: { x: 0, y: 0.5, z: 0 } })
+    const created = await cameraStageShotService.createShots('project-1', [
+      { time: 0 }, { time: 1 }, { time: 2 },
+    ])
+
+    const ys = created.shotIds.map((id) => cubeYInShot(id))
+    // 钉住这个事实本身：助手误以为建卡就是做动画，正是从这里开始白忙一整轮的
+    expect(new Set(ys).size, '建卡本身不产生差异，动画必须靠改姿态').toBe(1)
+  })
+
   it('能按指定时间新建一张镜头卡', async () => {
     const result = await cameraStageShotService.createShots('project-1', [
       { time: 1.5, name: '开场' },

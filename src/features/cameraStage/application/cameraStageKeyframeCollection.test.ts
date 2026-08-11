@@ -245,7 +245,7 @@ describe('三维关键帧集合执行器：轨道级引用与关键帧级引用'
    *
    * 上面几条用例此前全都跑在 simple 上，正是这个功能静默失效的那个模式，所以一直全绿。
    */
-  it('简易模式下写关键帧必须被拒绝，并说清两条改道路径', async () => {
+  it('简易模式下写关键帧必须被拒绝，并给出真的能做出动画的那条路', async () => {
     useCameraStageStore.setState({ editorMode: 'simple' })
     const objectId = cubeId()
     const attempt = cameraStageKeyframeService.createKeyframes('project-1', [
@@ -253,9 +253,17 @@ describe('三维关键帧集合执行器：轨道级引用与关键帧级引用'
     ])
 
     await expect(attempt).rejects.toThrow('KEYFRAME_REQUIRES_PRO_MODE')
-    // 拒绝必须给改道，不能是死胡同：两条路都要点名。
+    /*
+     * 这条提示的第一版把助手指向了「用 camera_stage.shot 的集合写入建镜头卡来做动画」——
+     * 那是错的，实测助手照着做了十几轮也没做出动画：建卡只是录下**当前**姿态，中间不改姿态
+     * 三张卡就一模一样。改道给错方向比不给还糟，它把模型的重试全引到了死路上。
+     *
+     * 正确配方是「挪播放头 → 改姿态」，两个字段都必须点名到位。
+     */
+    await expect(attempt).rejects.toThrow(/camera_stage\.playback/)
+    await expect(attempt).rejects.toThrow(/current_time/)
+    await expect(attempt).rejects.toThrow(/transform\.position/)
     await expect(attempt).rejects.toThrow(/bake_camera_stage_to_pro/)
-    await expect(attempt).rejects.toThrow(/camera_stage\.shot/)
     // 关键：被拒绝时一个关键帧都不许落下，否则拒绝本身又变成了半写状态。
     expect(useCameraStageStore.getState().animation.tracks).toHaveLength(0)
   })

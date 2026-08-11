@@ -204,6 +204,70 @@ describe('ApplicationReflectionRegistry', () => {
     expect(availability.find((item) => item.propertyId === 'sample.mode')?.writable).toBe(false)
   })
 
+  /*
+   * 拒绝必须能被自我修正——这是「不要给死胡同」在通用动词上的落点。
+   *
+   * 实测「让球上下浮动」那次，模型连撞七次通用写入：`PROPERTY_NOT_FOUND:transform.position.y`
+   * （它按关键帧那套点分轴路径写，而属性层是整条 vector3）、两次 `NOT_FOUND`（id 要带工程
+   * 前缀）、一次 `INVALID_REF`（ref_list 收对象不收字符串）。每条都只有一个错误码，模型只能
+   * 靠猜，七次全花在拼格式上，一次都没花在用户的需求上。
+   *
+   * 校验器手里明明有可用属性清单、有 refKinds、有实际收到的东西——不说就是浪费。
+   */
+  it('属性名写错时报出这个实体真正有哪些属性', () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register(registration())
+    let message = ''
+    try {
+      registry.normalizePropertyValue('sample.item', 'sample.levl', 4, assistantContext)
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('PROPERTY_NOT_FOUND')
+    // 只给错误码等于让模型继续猜；相近项必须点名
+    expect(message).toContain('sample.level')
+  })
+
+  it('引用格式写错时报出正确形状、允许的 kind 和实际收到的东西', () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register(registration())
+    // sample.owner 是 C2 + sample:secret，用有权限的上下文才走得到值校验那一步
+    const privilegedContext = {
+      exposure: 'assistant' as const,
+      permissions: new Set(['sample:read', 'sample:write', 'sample:secret']),
+      acceptedDataClasses: new Set(['C0', 'C1', 'C2'] as const),
+    }
+    let message = ''
+    try {
+      // 模型最容易犯的错：把 ref 当成裸字符串传
+      registry.normalizePropertyValue('sample.item', 'sample.owner', 'owner-1', privilegedContext)
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('EXPECTED_REF')
+    expect(message).toContain('sample.owner')
+    expect(message, '没告诉模型 ref 长什么样').toMatch(/kind.*id/)
+    expect(message, '没回显实际收到的内容').toContain('owner-1')
+  })
+
+  it('实体读不到时说明引用从哪里取，不留一个光秃秃的 NOT_FOUND', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register({
+      ...registration(),
+      provider: {
+        ...provider,
+        async readEntity() {
+          throw new Error('NOT_FOUND')
+        },
+      },
+    })
+    await expect(registry.readEntity(
+      { kind: 'sample.item', id: '裸 id' },
+      ['sample.enabled'],
+      assistantContext,
+    )).rejects.toThrow(/list_application_entities/)
+  })
+
   it('拒绝重复实体、重复属性、非法路径和提供者类型不一致', () => {
     const registry = new ApplicationReflectionRegistry(catalogVersion)
     registry.register(registration())

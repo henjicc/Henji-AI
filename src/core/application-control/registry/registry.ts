@@ -234,9 +234,27 @@ export class ApplicationReflectionRegistry {
       this.requireProperty(entity.id, propertyId),
       context
     ))
-    const snapshot = applicationEntitySnapshotSchema.parse(
-      await this.requireProvider(entity.id).readEntity(ref, { propertyIds: allowed })
-    )
+    /*
+     * provider 抛出的 NOT_FOUND 光秃秃一个词，模型分不清是**引用格式写错**还是**这个东西真的
+     * 不存在**——实测它连读两次都拿 NOT_FOUND，然后才自己猜出 id 要带工程前缀。
+     *
+     * 这里把它包成一句能自我修正的话：把收到的 ref 原样回显，并指向拿稳定引用的正确入口。
+     * 放在注册表这一层而不是各领域 provider 里，是因为所有域都会撞同一个坑，逐个 provider
+     * 写一遍必然写漏几个。
+     */
+    let raw: unknown
+    try {
+      raw = await this.requireProvider(entity.id).readEntity(ref, { propertyIds: allowed })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/NOT_FOUND/.test(message)) throw error
+      throw new Error(
+        `ENTITY_NOT_FOUND:${entity.id}:${ref.id}（收到的引用 {"kind":"${ref.kind}","id":"${ref.id}"} `
+        + '在当前状态里找不到。稳定 id 请用 list_application_entities 或对应的观察能力取原值，'
+        + '不要自己拼接或截断——多数实体的 id 带父级前缀）'
+      )
+    }
+    const snapshot = applicationEntitySnapshotSchema.parse(raw)
     if (snapshot.entityType !== entity.id || snapshot.ref.kind !== entity.refKind) {
       throw new Error(`INVALID_ENTITY_SNAPSHOT:${entity.id}`)
     }
@@ -308,8 +326,32 @@ export class ApplicationReflectionRegistry {
 
   private requireProperty(entityType: string, propertyId: string): ApplicationPropertyDescriptor {
     const property = this.propertiesByEntity.get(entityType)?.get(propertyId)
-    if (!property) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+    if (!property) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}${this.propertySuggestion(entityType, propertyId)}`)
     return property
+  }
+
+  /**
+   * 属性名写错时，把这个实体真正有哪些属性告诉对方。
+   *
+   * 实测模型写了 `transform.position.y`——它按关键帧那套「点分轴路径」的写法推断，而属性层
+   * 这里是整条 vector3 `camera_stage.object.transform.position`。只回一句
+   * `PROPERTY_NOT_FOUND:transform.position.y`，它无从知道是**前缀漏了**还是**这个属性根本
+   * 不存在**，只能继续猜。同一批次里它猜了三次都没猜对。
+   *
+   * 名字里带同一个词根的排在前面（`position` 命中 `...transform.position`），这类拼写偏差
+   * 占绝大多数；没有相近项时给全量清单，实体的属性本来就是有限的几十条。
+   */
+  private propertySuggestion(entityType: string, propertyId: string): string {
+    const available = [...(this.propertiesByEntity.get(entityType)?.keys() ?? [])]
+    if (available.length === 0) return `（实体 ${entityType} 没有注册任何属性）`
+    const tail = propertyId.split('.').filter(Boolean)
+    const near = available.filter((candidate) => tail.some(
+      (part) => part.length >= 3 && candidate.includes(part),
+    ))
+    const listed = (near.length > 0 ? near : available).slice(0, 24)
+    return `（${entityType} ${near.length > 0 ? '相近的属性' : '可用属性'}：${listed.join('、')}`
+      + `${listed.length < (near.length > 0 ? near.length : available.length) ? ' …' : ''}`
+      + '；属性 id 必须写完整，含实体类型前缀）'
   }
 
   private requireProvider(entityType: string): ApplicationEntityProvider {

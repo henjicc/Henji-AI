@@ -70,10 +70,14 @@ export function assertProModeForKeyframes(action: '写入' | '删除' | '清空'
   if (state.editorMode !== 'simple') return
   throw new Error(
     `KEYFRAME_REQUIRES_PRO_MODE：当前工程是简易模式，${action}关键帧不会生效。`
-    + '简易模式下时间轴由镜头卡编译而成，直接写入的关键帧会被下一次镜头卡改动覆盖，'
-    + '也无法播放。两条可选路径：'
-    + '① 用 bake_camera_stage_to_pro 把工程烘焙成专业模式（单向，之后不能改回简易），再写关键帧；'
-    + `② 留在简易模式，改用 camera_stage.shot 的集合写入建镜头卡来做动画（当前 ${state.shots.length} 张）。`
+    + '简易模式下时间轴由镜头卡编译而成，直接写入的关键帧会被下一次镜头卡改动覆盖，也无法播放。'
+    + '简易模式做动画的正确做法是**挪播放头、再改姿态**，和人在界面上拖时间轴再拖物体一样：'
+    + '每个时间点先写 camera_stage.playback 的 current_time，再写该物体的 '
+    + 'camera_stage.object.transform.position（或 rotation / scale），应用会自动在那个时间点记下'
+    + '一张状态卡。上下浮动就是三轮：t=0 低位 → t=1 高位 → t=2 低位。'
+    + `注意**新建镜头卡本身不产生动画**——它只是在某一时刻录下当前姿态，中间不改姿态就三张卡全一样（当前 ${state.shots.length} 张）。`
+    + '确实需要逐条关键帧控制（缓动曲线、单轴独立打点）时，用 bake_camera_stage_to_pro 烘焙成'
+    + '专业模式再写关键帧，注意这一步单向不可逆。'
   )
 }
 

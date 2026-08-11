@@ -137,7 +137,21 @@ export class ApplicationPlanBuilder {
     const scopes = new Set<string>()
     for (const propertyId of propertyIds) {
       const descriptor = this.dependencies.registry.getProperty(propertyId)
-      if (!descriptor || descriptor.entityType !== step.entityType) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+      if (!descriptor || descriptor.entityType !== step.entityType) {
+        /*
+         * 走注册表那条同样的报错，好拿到「这个实体有哪些属性」的清单。
+         *
+         * 属性写错名是通用写入最高频的摩擦：模型手里只有一个错误码时只能一次次猜，实测连猜
+         * 三次都没对。descriptor 存在但属于别的实体也走这里——那句「可用属性」正好点破它
+         * 把 shot 的属性写到了 object 上。
+         */
+        throw new Error(
+          `PROPERTY_NOT_FOUND:${propertyId}`
+          + `（${step.entityType} 可用属性：${this.dependencies.registry
+            .listProperties(step.entityType).map((item) => item.id).slice(0, 24).join('、')}`
+          + '；属性 id 必须写完整，含实体类型前缀）'
+        )
+      }
       descriptor.revisionScopes.forEach((scope) => scopes.add(scope))
     }
     assertRevisions(step.expectedRevisions, snapshot.revisions, [...scopes])

@@ -122,6 +122,18 @@ export const cameraStageShotService = {
       const shotIds: string[] = []
       for (const input of inputs) {
         const state = useCameraStageStore.getState()
+        /*
+         * seek 是对的，别改成 setPlaybackTime。
+         *
+         * 这条服务复刻的是「把播放头拖到 T，点新建镜头卡」——那张卡本来就该录下 T 时刻的
+         * 插值姿态，所以必须 scrub。改成只挪播放头会让一批卡全部录下播放头**原来**位置的
+         * 姿态，反而全都一样。
+         *
+         * 简易模式做动画走的是另一条路（见 cameraStageKeyframeService 的
+         * KEYFRAME_REQUIRES_PRO_MODE 提示）：先写 camera_stage.playback.current_time 把播放头
+         * 挪到 T，再改物体 transform——`compileSimpleEdit` 会在 T 自动记一张状态卡。
+         * 建卡与改姿态是两件事，不要指望在建卡这一步顺带改姿态。
+         */
         state.seek(input.time)
         state.addShot()
         const after = useCameraStageStore.getState()
