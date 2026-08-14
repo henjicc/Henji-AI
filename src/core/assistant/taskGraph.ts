@@ -92,63 +92,6 @@ export const agentTaskActionGroupSchema = z.object({
 }).strict()
 export type AgentTaskActionGroup = z.infer<typeof agentTaskActionGroupSchema>
 
-export const agentActionPlanDeclarationSchema = z.object({
-  facets: z.array(z.object({
-    facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
-    requiredEffects: z.array(agentTaskRequiredEffectSchema).min(1).max(32),
-  }).strict()).min(1).max(16),
-  actionGroups: z.array(agentTaskActionGroupSchema).min(1).max(32),
-}).strict()
-export type AgentActionPlanDeclaration = z.infer<typeof agentActionPlanDeclarationSchema>
-
-export const agentAcceptedActionPlanDeclarationSchema = agentActionPlanDeclarationSchema.extend({
-  accepted: z.literal(true),
-})
-
-/**
- * 模型直接填写的 action plan 输入。
- *
- * 严格版（`agentActionPlanDeclarationSchema`）要求模型逐条给出 effectId、actionGroupId 和一份
- * 与 Facet 互相自洽的 actionGroups 列表——这些全是运行时可以自己推导的东西。实测里模型连着
- * 两次只拿到 "facets.0: Invalid input"，整次运行就被连续失败预算掐死。
- *
- * 这里只要求模型说清"要对什么实体产生什么 effect、至少几次"，其余 ID 与分组由
- * `normalizeDeclaredActionPlan` 推导；未知键直接剥离而不是判失败。
- */
-const declaredRequiredEffectInputSchema = z.object({
-  effectId: z.string().min(1).max(64).optional(),
-  effect: agentTaskEffectKindSchema,
-  entityTypes: z.array(z.string().min(1).max(128)).max(AGENT_FACET_ENTITY_TYPE_LIMIT).default([]),
-  propertyIds: z.array(z.string().min(1).max(128)).max(128).default([]),
-  minimumCount: z.number().int().min(1).max(256).default(1),
-  targetRefs: z.array(agentTaskEffectTargetSchema).max(128).default([]),
-  verificationRequired: z.boolean().default(false),
-  actionGroupId: z.string().min(1).max(64).optional(),
-})
-
-export const agentActionPlanDeclarationInputSchema = z.object({
-  facets: z.array(z.object({
-    facetId: z.string().min(1).max(64),
-    requiredEffects: z.array(declaredRequiredEffectInputSchema).min(1).max(32),
-  })).min(1).max(16),
-  /**
-   * 路由领域判错时要作废的旧 Facet。
-   *
-   * 只能作废尚未产生任何证据、也没有任何执行痕迹的 Facet，且本次声明必须同时补建了新 Facet——
-   * 否则它就成了"没做完也能收工"的后门。运行时会校验这两条，不满足时返回明确 issue。
-   */
-  supersededFacetIds: z.array(z.string().min(1).max(64)).max(8).default([]),
-  // 只为兼容旧调用保留；分组一律由运行时推导，模型写错也不会导致整次声明失败。
-  actionGroups: z.array(z.object({
-    actionGroupId: z.string().min(1).max(64),
-    facetId: z.string().min(1).max(64),
-    mode: z.enum(['parallel_read', 'atomic_batch', 'ordered_write', 'dependent']).optional(),
-    effectIds: z.array(z.string().min(1).max(64)).max(32).default([]),
-    dependsOn: z.array(z.string().min(1).max(64)).max(12).default([]),
-  })).max(32).default([]),
-})
-export type AgentActionPlanDeclarationInput = z.infer<typeof agentActionPlanDeclarationInputSchema>
-
 export const agentTaskFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
   domain: z.string().regex(/^[a-z][a-z0-9_.-]{1,63}$/),
@@ -177,6 +120,8 @@ export const agentTaskDependencySchema = z.object({
 const agentTaskGraphV2Schema = z.object({
   version: z.literal(AGENT_TASK_GRAPH_VERSION),
   goal: z.string().min(1).max(32 * 1024),
+  /** 用户明确禁止的世界变化；计划、脚本预检和最终结算都必须遵守。 */
+  forbiddenEffects: z.array(agentTaskEffectKindSchema).max(6).default([]),
   facets: z.array(agentTaskFacetSchema).min(1).max(AGENT_TASK_FACET_LIMIT),
   actionGroups: z.array(agentTaskActionGroupSchema).max(32).default([]),
   dependencies: z.array(agentTaskDependencySchema).max(64),
@@ -302,26 +247,6 @@ export function deriveActionGroups(facets: AgentTaskFacet[]): AgentTaskActionGro
       dependsOn,
     }
   })
-}
-
-/**
- * 把模型的宽松声明补全为严格 Effect：ID 一律按 Facet 派生，保证全图唯一且与推导出的分组自洽。
- */
-export function normalizeDeclaredRequiredEffects(
-  facetId: string,
-  declared: AgentActionPlanDeclarationInput['facets'][number]['requiredEffects']
-): AgentTaskRequiredEffect[] {
-  const actionGroupId = derivedId(facetId, '_actions')
-  return declared.map((effect, index) => ({
-    effectId: derivedId(facetId, `_e${index + 1}`),
-    effect: effect.effect,
-    entityTypes: effect.entityTypes,
-    propertyIds: effect.propertyIds,
-    minimumCount: effect.minimumCount,
-    targetRefs: effect.targetRefs,
-    verificationRequired: effect.verificationRequired,
-    actionGroupId,
-  }))
 }
 
 function implicitEffectForFacet(facet: Record<string, unknown>): AgentTaskRequiredEffect {

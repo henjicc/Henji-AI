@@ -45,9 +45,15 @@ npm run electron:build         # 完整构建：manifest/seeds + 全部静态检
 npm run electron:dist          # 生成安装包
 npm run electron:smoke         # 构建产物冒烟验收
 npm run logs:query -- --chain <runId>   # 按运行链路查日志
+
+# 真实环境跑助手（无窗口 Electron，复用正式助手与完整工具链，结束输出 runId）
+npm run assistant:cli -- --goal "任务描述" --trace detailed
+npm run assistant:live:suite -- --only camera --skip-generation
 ```
 
 其余检查命令按改动类型选用，见 [docs/rules/testing.md](docs/rules/testing.md)。`electron:build` / `electron:dist` 费时，不要无必要地频繁执行。
+
+**助手行为要验证就真跑，不要默认写成手动步骤交给用户。** `assistant:cli` 跑在真实配置环境上，完整参数见 [assistant-capability.md](docs/rules/assistant-capability.md)。两条硬约束：改过 `electron/main/**` 必须先 `electron:build`，否则跑的是旧产物；`--approval full_access` 会产生**真实付费与写入**，必须由用户显式确认，默认不要带。
 
 ## 全局架构边界
 

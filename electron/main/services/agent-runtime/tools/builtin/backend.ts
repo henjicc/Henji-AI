@@ -15,14 +15,12 @@ import {
 } from '../../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../../src/core/assistant/toolBudget'
 import { AgentCapabilityDiscoveryCatalog } from '../../context/capability-discovery'
+import { hydrateHenjiScriptApi } from '../../context/script-api-hydration'
+import { rememberHenjiScriptApiLease } from '../../context/script-api-lease'
 import { selectLeaseableToolNames } from '../../context/tool-activation'
 import { createBackendCapabilityTool } from '../backend-capability-tool'
-import {
-  agentAcceptedActionPlanDeclarationSchema,
-  agentActionPlanDeclarationInputSchema,
-  deriveActionGroups,
-  normalizeDeclaredRequiredEffects,
-} from '../../../../../../src/core/assistant/taskGraph'
+import type { FrontendToolInvoker } from './frontend-utils'
+import { requireFrontendSuccess } from './frontend-utils'
 
 const applicationCapabilityCategorySchema = z.enum([
   'catalog',
@@ -52,17 +50,32 @@ function eraseToolDefinition<TInput, TOutput>(
 
 export function createBackendBuiltinTools(
   registry: AgentToolRegistry,
-  artifactAccess: AgentArtifactToolAccess
+  artifactAccess: AgentArtifactToolAccess,
+  invokeFrontend?: FrontendToolInvoker,
 ): AgentToolDefinition[] {
   const discoveryCatalog = new AgentCapabilityDiscoveryCatalog(registry)
   const discoverCapabilities = createBackendCapabilityTool(
     discoverApplicationCapabilitiesCapability,
     {
-      execute: (input, context) => Promise.resolve(discoveryCatalog.discover(
-        context.runId,
-        input,
-        context.hostContext
-      )),
+      execute: async (input, context) => {
+        const discovered = discoveryCatalog.discover(context.runId, input, context.hostContext)
+        if (!invokeFrontend) return discovered
+        const description = requireFrontendSuccess(await invokeFrontend({
+          kind: 'capability',
+          capability: {
+            id: 'describe_application_entities',
+            version: 1,
+            input: {
+              domains: [...new Set(input.facets.flatMap((facet) => facet.domains))],
+              entityTypes: discovered.scriptApi.entities.entityTypes,
+              refs: [],
+            },
+          },
+        }, context))
+        const hydrated = hydrateHenjiScriptApi(discovered, description)
+        rememberHenjiScriptApiLease(context.runId, hydrated.scriptApi)
+        return hydrated
+      },
     }
   )
   const readSchemas = createBackendCapabilityTool(readApplicationSchemasCapability, {
@@ -163,96 +176,11 @@ export function createBackendBuiltinTools(
     },
   })
 
-  const declareActionPlan = defineAgentTool({
-    name: 'declare_action_plan',
-    version: 1,
-    title: '声明多项操作计划',
-    description: '声明或修正本次任务的可结算 Effect；只登记计划，不执行业务写入。'
-      + '三种用法：①首次多项写入前声明 Effect；'
-      + '②任务图里没有合适的 facetId 时，直接用一个新的 facetId 声明——只要 entityTypes 指向真实实体类型，'
-      + '运行时会按该实体所属领域补建 Facet 并发放对应能力；'
-      + '③路由把领域判错时，用 supersededFacetIds 作废那个错误的 Facet（仅限尚未产生任何证据的 Facet，'
-      + '且必须同时补建替代它的新 Facet），否则它会一直卡着让整次运行无法结算。',
-    category: 'application',
-    side: 'backend',
-    risk: 'R0',
-    permission: 'application:read',
-    readOnly: true,
-    destructive: false,
-    openWorld: false,
-    idempotent: true,
-    timeoutMs: 5_000,
-    retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
-    supportsPreview: false,
-    supportsUndo: false,
-    requiredContext: [],
-    // 输入用宽松版：effectId / actionGroupId / actionGroups 全部由运行时按 Facet 推导。
-    // 让模型手写这些交叉引用只会换来一句 "Invalid input"，而它无从自纠。
-    inputSchema: agentActionPlanDeclarationInputSchema,
-    outputSchema: agentAcceptedActionPlanDeclarationSchema,
-    aiInputSchema: z.toJSONSchema(agentActionPlanDeclarationInputSchema, {
-      target: 'draft-7', io: 'input',
-    }) as Record<string, unknown>,
-    // 真正的规范化与提交由执行守卫完成，这里只回显被接受的声明。
-    execute: (input) => Promise.resolve({
-      accepted: true as const,
-      facets: input.facets.map((facet) => ({
-        facetId: facet.facetId,
-        requiredEffects: normalizeDeclaredRequiredEffects(facet.facetId, facet.requiredEffects),
-      })),
-      actionGroups: deriveActionGroups(input.facets.map((facet) => ({
-        facetId: facet.facetId,
-        domain: 'application',
-        goal: facet.facetId,
-        targetEntityTypes: [],
-        requiredObservations: [],
-        capabilityKinds: ['plan' as const],
-        targetSurfaceId: null,
-        dependsOn: [],
-        parallelizable: false,
-        completionConditions: [facet.facetId],
-        requiredEffects: normalizeDeclaredRequiredEffects(facet.facetId, facet.requiredEffects),
-        uncertainties: [],
-        confidence: 1,
-        status: 'pending' as const,
-        statusReason: '',
-        evidence: [],
-      }))),
-    }),
-    concurrencyKey: () => 'action-plan',
-    targetIds: () => ({}),
-    dataClasses: () => ['C0'],
-    summarize: (output) => `已声明 ${output.actionGroups.length} 个操作组。`,
-    // 两条示例覆盖两种真实用法：给已有 Facet 补 Effect，以及路由判错时补建新 Facet 并作废旧的。
-    // 后者是本工具最容易被忽略的能力——模型不知道能这么用，就只能停下来说自己被阻塞。
-    inputExamples: [
-      {
-        facets: [{
-          facetId: 'camera_scene',
-          requiredEffects: [
-            { effect: 'execute', entityTypes: ['camera_stage.object'], minimumCount: 2 },
-            { effect: 'update', entityTypes: ['camera_stage.object'], minimumCount: 2 },
-          ],
-        }],
-        actionGroups: [],
-        supersededFacetIds: [],
-      },
-      {
-        facets: [{
-          facetId: 'camera_scene',
-          requiredEffects: [{ effect: 'execute', entityTypes: ['camera_stage.object'], minimumCount: 1 }],
-        }],
-        actionGroups: [],
-        supersededFacetIds: ['canvas'],
-      },
-    ],
-  })
 
   return [
     eraseToolDefinition(discoverCapabilities),
     eraseToolDefinition(readSchemas),
     eraseToolDefinition(searchCapabilities),
-    eraseToolDefinition(declareActionPlan),
     createQueryDiagnosticEventsTool(),
     ...createAssistantSkillTools(),
     ...createUserInstructionTools(),

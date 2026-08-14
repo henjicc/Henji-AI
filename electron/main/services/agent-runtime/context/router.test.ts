@@ -13,6 +13,37 @@ describe('AgentIntentRouter', () => {
     expect(classifier).not.toHaveBeenCalled()
   })
 
+  it('设置里的临时切换与恢复统一建模为两次 update，不被“恢复”误判成 execute', async () => {
+    const classifier = vi.fn()
+    const result = await new AgentIntentRouter(classifier).route(
+      'run-settings-restore',
+      '读取当前界面主题色调，把它临时切换到另一个合法值，验证后恢复原值并再次验证',
+      contextSnapshot(),
+      new AbortController().signal,
+    )
+    expect(result).toMatchObject({ intent: 'settings', source: 'deterministic' })
+    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
+      effect: 'update', minimumCount: 2, verificationRequired: true,
+    })
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
+  it('直接使用稳定设置 ID 时无需路由模型也能进入设置写入与恢复任务', async () => {
+    const classifier = vi.fn(() => Promise.reject(new Error('router unavailable')))
+    const result = await new AgentIntentRouter(classifier).route(
+      'run-settings-ids',
+      '先读取 general.language 与 interface.theme_tone 的当前真实值；用一次 Henji Script 修改并读回验证，随后仍在同一脚本中恢复原值并再次读回验证。',
+      contextSnapshot(),
+      new AbortController().signal,
+    )
+
+    expect(result).toMatchObject({ intent: 'settings', source: 'deterministic' })
+    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
+      effect: 'update', minimumCount: 2, verificationRequired: true,
+    })
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
   it('询问助手整体能力时直接回答，不调用路由模型或能力搜索', async () => {
     const classifier = vi.fn()
     const result = await new AgentIntentRouter(classifier).route(
@@ -36,7 +67,7 @@ describe('AgentIntentRouter', () => {
     expect(result).toMatchObject({ intent: 'general', source: 'fallback', path: 'primary' })
   })
 
-  it('明显的画布与定位组合请求拒绝缺少验证的模型图并回退完整确定性图', async () => {
+  it('明显的画布与定位组合请求直接使用完整确定性图，不等待模型重复规划', async () => {
     const classifier = vi.fn().mockResolvedValue({
       intent: 'canvas',
       candidateIntents: ['canvas', 'navigate'],
@@ -76,13 +107,13 @@ describe('AgentIntentRouter', () => {
       toolDomains: ['canvas', 'navigation', 'catalog'],
     })
     expect(result.taskGraph?.facets.map((facet) => facet.facetId)).toEqual([
-      'canvas_structure', 'canvas_verify', 'show_target_surface',
+      'canvas_node_catalog', 'canvas_structure', 'canvas_verify', 'show_target_surface',
     ])
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'canvas_structure')?.requiredEffects[0])
-      .toMatchObject({ effect: 'create', entityTypes: ['canvas.node'], minimumCount: 2 })
+      .toMatchObject({ effect: 'create', entityTypes: ['canvas.node'], minimumCount: 1 })
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'canvas_verify'))
       .toMatchObject({ capabilityKinds: ['observe', 'query'], dependsOn: ['canvas_structure'] })
-    expect(classifier).toHaveBeenCalledOnce()
+    expect(classifier).not.toHaveBeenCalled()
   })
 
   it('三维工程、场景、运镜和展示请求一次拆出有依赖的完整任务图', async () => {
@@ -114,7 +145,7 @@ describe('AgentIntentRouter', () => {
       .toMatchObject({ capabilityKinds: ['observe'], targetSurfaceId: 'tool.camera_stage' })
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'show_target_surface'))
       .toMatchObject({ targetSurfaceId: 'tool.camera_stage', parallelizable: false })
-    expect(classifier).toHaveBeenCalledOnce()
+    expect(classifier).not.toHaveBeenCalled()
   })
 
   it('模型路由 Facet 经过本地领域白名单校验后形成可持久任务图', async () => {
@@ -226,6 +257,71 @@ describe('AgentIntentRouter', () => {
       effect: 'execute', entityTypes: ['generation.task'], verificationRequired: true,
     })
     expect(classifier).not.toHaveBeenCalled()
+  })
+
+  it('生成目标同时提到选择可用模型时仍以生成写入为主动作', async () => {
+    const classifier = vi.fn()
+    const result = await new AgentIntentRouter(classifier).route(
+      'run-photo-with-model',
+      '生成一张蓝色玻璃球图片，选择当前可用的图片模型并等待完成',
+      contextSnapshot(),
+      new AbortController().signal
+    )
+    expect(result).toMatchObject({ intent: 'generate', source: 'deterministic' })
+    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
+      effect: 'execute', entityTypes: ['generation.task'], verificationRequired: true,
+    })
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
+  it('生成后确认进入历史仍是生成任务，不被“生成历史”反向覆盖', async () => {
+    const classifier = vi.fn()
+    const result = await new AgentIntentRouter(classifier).route(
+      'run-generate-history',
+      '生成一张西湖图片，等待完成并确认结果已经进入正式生成历史',
+      contextSnapshot(), new AbortController().signal
+    )
+    expect(result).toMatchObject({ intent: 'generate', source: 'deterministic' })
+    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
+      effect: 'execute', entityTypes: ['generation.task'],
+    })
+    expect(classifier).not.toHaveBeenCalled()
+  })
+
+  it('创建素材库直接进入素材领域，不回退到澄清任务', async () => {
+    const classifier = vi.fn()
+    const result = await new AgentIntentRouter(classifier).route(
+      'run-create-library', '创建一个名为真实验收的素材库',
+      contextSnapshot(), new AbortController().signal
+    )
+    expect(result).toMatchObject({
+      intent: 'assets', source: 'deterministic', toolDomains: expect.arrayContaining(['assets']),
+    })
+    expect(result.taskGraph?.facets.flatMap((facet) => facet.requiredEffects)
+      .find((effect) => effect.effect === 'create')).toMatchObject({
+      effect: 'create', entityTypes: ['asset.library'], minimumCount: 1,
+    })
+    expect(classifier).not.toHaveBeenCalled()
+
+    const collection = await new AgentIntentRouter(classifier).route(
+      'run-create-collection', '创建素材集合：在 asset.catalog:default 下新增一项 asset.library',
+      contextSnapshot(), new AbortController().signal
+    )
+    expect(collection.taskGraph?.facets.flatMap((facet) => facet.requiredEffects)
+      .find((effect) => effect.effect === 'create')).toMatchObject({
+      effect: 'create', entityTypes: ['asset.library'],
+    })
+  })
+
+  it('设置切换后恢复原值会预先声明两次写入，第二次不再临时补计划', async () => {
+    const result = await new AgentIntentRouter().route(
+      'run-settings-restore',
+      '把主题切换为另一个合法值，读回后恢复原值并再次确认',
+      contextSnapshot(), new AbortController().signal
+    )
+    expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
+      effect: 'update', entityTypes: ['settings.registry'], minimumCount: 2,
+    })
   })
 
   it('路由模型附属字段变形时保留已校验的主意图并回退本地工具域策略', async () => {

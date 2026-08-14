@@ -14,6 +14,7 @@ export { AGENT_ACTIVE_TOOL_LIMIT, AGENT_TOOL_SCHEMA_BUDGET_BYTES }
 
 const CAPABILITY_DISCOVERY_TOOL = 'discover_application_capabilities'
 const CURRENT_CONTEXT_TOOL = 'get_current_application_context'
+const HENJI_SCRIPT_TOOL = 'run_henji_script'
 /**
  * 技能加载必须和能力发现一样常驻。
  *
@@ -24,6 +25,14 @@ const CURRENT_CONTEXT_TOOL = 'get_current_application_context'
  * 等于死代码。实测就是这么坏的。
  */
 const SKILL_LOAD_TOOL = 'load_assistant_skill'
+const RUNTIME_MODEL_TOOLS = new Set([
+  SKILL_LOAD_TOOL,
+  CURRENT_CONTEXT_TOOL,
+  CAPABILITY_DISCOVERY_TOOL,
+  'read_agent_artifact',
+  'query_diagnostic_events',
+  HENJI_SCRIPT_TOOL,
+])
 
 /**
  * 反射层的通用动词同样必须常驻，理由和 `load_assistant_skill` 一模一样。
@@ -36,12 +45,23 @@ const SKILL_LOAD_TOOL = 'load_assistant_skill'
  * 通用动词是地板，不是候选：没有它们，助手连"这个东西能不能改"都问不出来。
  */
 const REFLECTION_TOOLS = [
-  'declare_action_plan',
-  'describe_application_entities',
-  'change_application_entities',
-  'list_application_entities',
-  'read_application_entity',
+  HENJI_SCRIPT_TOOL,
 ]
+
+function modelVisible(
+  registry: AgentToolRegistry,
+  name: string,
+): boolean {
+  if (RUNTIME_MODEL_TOOLS.has(name)) return true
+  const definition = registry.get(name)
+  // 诊断查询观察的是助手运行本身，不属于 Application Control 世界状态；它不能进入脚本，
+  // 仍由诊断路由直接提供。应用实体、模型目录与业务只读查询则全部收口进脚本。
+  if (definition?.capability?.domain === 'diagnostics') return true
+  // 任何 Application Capability（包括只读查询）都只允许脚本解释器通过 Gateway 调用。
+  // 模型侧只保留发现/上下文等运行时工具与唯一应用入口 run_henji_script，避免重新退化成
+  // “先 list、再 read、再 write”的逐工具编排，也避免低层 schema、版本和 revision 泄露。
+  return !definition?.capability
+}
 
 // 工具结果被上下文预算卸载后，artifactRef 只能由这个工具回读。把它作为核心地板，
 // 避免模型为了读取系统刚产生的产物而虚构一个不在 Task Graph 前沿里的 artifacts Facet。
@@ -142,6 +162,9 @@ export function activateAgentTools(
     models: 'search_models',
     generation: 'create_visible_generation_task',
     navigation: 'switch_workspace',
+    camera_stage: HENJI_SCRIPT_TOOL,
+    canvas: HENJI_SCRIPT_TOOL,
+    settings: HENJI_SCRIPT_TOOL,
   }
   const namesByCategory = directCategories.map((category) => available
     .filter((entry) => entry.category === category)
@@ -181,7 +204,9 @@ export function activateAgentTools(
     ...input.recentToolNames,
   ])
   const unavailableNames = candidates.filter((name) => !availableNames.has(name))
-  const availableCandidates = candidates.filter((name) => availableNames.has(name))
+  const availableCandidates = candidates.filter((name) => (
+    availableNames.has(name) && modelVisible(registry, name)
+  ))
   const registrations = registry.registrations(availableCandidates, input.context)
   const active: AgentToolRegistration[] = []
   const droppedForCount: string[] = []

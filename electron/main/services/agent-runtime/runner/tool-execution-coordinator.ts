@@ -14,7 +14,6 @@ import {
 } from './tool-call-scheduler'
 import type { AgentFacetProgress } from '../../../../../src/core/assistant/progress'
 import type { AgentFacetProgressTracker } from './facet-progress'
-import type { PreparedDeclaredActionPlan } from './facet-action-plan'
 import { observationFailure } from './facet-effect-ledger'
 import { createMainLogger } from '../../logging'
 
@@ -57,7 +56,8 @@ interface AgentToolExecutionCoordinatorOptions {
  *
  * 实测这就是关键帧那一步每次必然多烧一轮的原因：确定性任务图给关键帧写死 minimumCount=1
  * （场景 Facet 会按物体数算，这里没有），模型一次提交 6 个关键帧被判成 6 次写入，运行时拿
- * 自己的低估值把它挡下来，只能先 declare_action_plan 再重发——而声明的内容与实际写入完全一致。
+ * 自己的低估值把它挡下来，只能重发一次——而计划内容与实际写入完全一致。（旧实现要求先走
+ * declare_action_plan 声明协议，该协议已整体移除。）
  *
  * 真实条目数仍由 resolveObservedEffects 计入 Effect Ledger，结算精度不受影响；单次批量的规模
  * 另有 collectionWrite.maxItemsPerChange 与写入预算兜底。
@@ -89,10 +89,9 @@ export class AgentToolExecutionCoordinator {
     calls: ModelStepToolCall[],
     route: AgentRouteDecision,
     expectedRevisions: Partial<HostScopeRevisions>,
-    activeToolNames: ReadonlySet<string>
+    activeToolNames: ReadonlySet<string>,
+    trustedInternalToolNames: ReadonlySet<string> = new Set(),
   ): Promise<void> {
-    const pendingActionPlans = new Map<string, Extract<PreparedDeclaredActionPlan, { ok: true }>>()
-    const committedActionPlans = new Set<string>()
     const rejectGuard = (
       call: ModelStepToolCall,
       decision: string | { code: AgentToolErrorCode; reason: string },
@@ -130,6 +129,7 @@ export class AgentToolExecutionCoordinator {
       registry: this.options.registry,
       catalogPlanner: this.options.catalogPlanner,
       activeToolNames,
+      trustedInternalToolNames,
       signal: this.options.signal,
       waitIfPaused: this.options.waitIfPaused,
       throwIfCancelled: this.options.throwIfCancelled,
@@ -146,36 +146,24 @@ export class AgentToolExecutionCoordinator {
       normalizeInput: (call) => this.options.getProgressTracker()?.normalizeCallInput(call) ?? null,
       executionGuard: (call, revisions, allowSettledActionGroupSibling) => {
         const currentTracker = this.options.getProgressTracker()
-        if (call.toolName === 'declare_action_plan') {
-          logger.info('Agent Action Plan 声明校验开始', {
-            event: 'agent_task_graph.action_plan.started',
-            requestId: this.options.runId,
-            taskId: call.toolCallId,
-          })
-          const prepared = currentTracker?.prepareDeclaredActionPlan(call.input)
-          if (!prepared || !prepared.ok) {
-            const issues = prepared && !prepared.ok ? prepared.issues : [{
-              code: 'INVALID_TASK_GRAPH' as const,
-              path: 'declaration',
-              message: '当前运行没有可更新的 Task Graph',
-            }]
-            const reason = issues.map((issue) => `${issue.path}: ${issue.message}`).join('；').slice(0, 900)
-            logger.warn('Agent Action Plan 声明校验失败', {
-              event: 'agent_task_graph.action_plan.failed',
-              requestId: this.options.runId,
-              taskId: call.toolCallId,
-              context: { issueCodes: issues.map((issue) => issue.code) },
-            })
-            return rejectGuard(call, { code: 'INVALID_INPUT', reason }, issues.map((issue) => issue.code))
-          }
-          pendingActionPlans.set(call.toolCallId, prepared)
+        if (call.toolName === 'run_henji_script') {
+          const recoveryReason = this.options.recoveryGuard.validate(call)
+          return recoveryReason ? rejectGuard(call, recoveryReason) : null
         }
+        // 续跑调用不是模型提出的新写入，而是宿主对已在源运行中通过完整预检、已持久化 IR
+        // 的确定性恢复。它的每个内部步骤仍会重新经过 Gateway、availability、权限和 revision
+        // 校验；拿外层内部工具名再走 Task Graph 匹配，只会把合法断点误判为图外写入。
+        if (call.toolName === 'resume_henji_script') return null
         if (currentTracker
           && !currentTracker.hasSufficientActionPlan(intendedWriteCalls)
           && this.options.registry.executionMetadata(call.toolName, call.input)?.readOnly === false) {
           return rejectGuard(call, {
             code: 'ACTION_PLAN_REQUIRED',
-            reason: '该响应包含多项写入，但当前 Task Graph 没有足够的 Effect 数量；请先调用 declare_action_plan，再提交写入。',
+            // 出口只有一个：重写一段覆盖全部目标 Effect 的完整 Henji Script。
+            // 旧文案让模型去调 declare_action_plan，而那个工具早已不在它的工具集里——
+            // 一条执行不了的指引等于让模型原地卡死。
+            reason: '该响应包含多项写入，但当前 Task Graph 没有足够的 Effect 数量；'
+              + '请重新发现所需 scriptApi，并用一段覆盖全部目标 Effect 的完整 Henji Script 提交写入，不要拆成多次低层写入。',
           })
         }
         const recoveryReason = this.options.recoveryGuard.validate(call)
@@ -193,50 +181,16 @@ export class AgentToolExecutionCoordinator {
             )
           : null
       },
-      finalizeSuccessfulOutcome: (call) => {
-        if (call.toolName !== 'declare_action_plan') return
-        const tracker = this.options.getProgressTracker()
-        const prepared = pendingActionPlans.get(call.toolCallId)
-        if (!tracker || !prepared) throw new Error('ACTION_PLAN_PREPARATION_MISSING')
-        tracker.commitDeclaredActionPlan(prepared)
-        pendingActionPlans.delete(call.toolCallId)
-        committedActionPlans.add(call.toolCallId)
-      },
       onOutcome: (call, observation, revisions) => {
+        const failure = observationFailure(observation)
+        const metadata = this.options.registry.executionMetadata(call.toolName, call.input)
+        if (failure
+          && metadata?.readOnly === false
+          && ['TIMEOUT', 'EXECUTION_FAILED', 'CANCELLED'].includes(failure.code)) {
+          this.options.recoveryGuard.activateUnknownWrite(call, metadata.category ?? null)
+        }
         const tracker = this.options.getProgressTracker()
         if (!tracker) return
-        if (call.toolName === 'declare_action_plan') {
-          const failure = observationFailure(observation)
-          if (committedActionPlans.delete(call.toolCallId)) {
-            route.taskGraph = tracker.taskGraphSnapshot()
-            route.taskFacets = route.taskGraph.facets.map((facet) => facet.facetId)
-            logger.info('Agent Action Plan 已原子提交', {
-              event: 'agent_task_graph.action_plan.completed',
-              requestId: this.options.runId,
-              taskId: call.toolCallId,
-              context: {
-                facetIds: route.taskFacets,
-                actionGroupCount: route.taskGraph.actionGroups.length,
-              },
-            })
-            this.options.emit({
-              type: 'PlanUpdated',
-              intent: route.intent,
-              summary: route.reason,
-              toolDomains: route.toolDomains,
-              taskGraph: route.taskGraph,
-            })
-          } else if (pendingActionPlans.delete(call.toolCallId)) {
-            logger.warn('Agent Action Plan 执行失败，未提交候选任务图', {
-              event: 'agent_task_graph.action_plan.failed',
-              requestId: this.options.runId,
-              taskId: call.toolCallId,
-              context: { issueCodes: [failure?.code ?? 'EXECUTION_FAILED'] },
-            })
-          }
-          this.options.onProgressUpdated?.()
-          return
-        }
         const events = tracker.observe({ call, observation, expectedRevisions: revisions })
         this.options.onProgressUpdated?.()
         for (const event of [...events, ...tracker.drainPendingEvents()]) {

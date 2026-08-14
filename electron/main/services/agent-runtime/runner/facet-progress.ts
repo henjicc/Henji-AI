@@ -30,9 +30,8 @@ import {
 } from './facet-effect-ledger'
 import {
   hasSufficientActionPlan as checkSufficientActionPlan,
-  prepareDeclaredActionPlan,
+  potentialEffectsForCall,
   resolveActionGroupForCall,
-  type PreparedDeclaredActionPlan,
 } from './facet-action-plan'
 import { buildAgentProgressSettlement, buildSettlementGuidance } from './facet-settlement'
 import { buildUserResumeProgress, listActiveFacetIds, listDependencyFrontierFacetIds } from './facet-progress-state'
@@ -55,6 +54,9 @@ export class AgentFacetProgressTracker {
   private requiresExplicitActionPlan: boolean
   private readonly facets = new Map<string, AgentTaskFacet>()
   private readonly callRecords = new Map<string, CallRecord>()
+  /** revision 冲突属于哪几个 Facet；同 Facet 的成功只读观察后允许重新规划写入。 */
+  private readonly conflictFacetIds = new Map<string, Set<string>>()
+  private readonly conflictCategories = new Map<string, string>()
   private readonly observationDigests = new Map<string, Set<string>>()
   private readonly effectLedger: AgentEffectLedger
   private readonly discoveredSchemas = new Set<string>()
@@ -125,57 +127,6 @@ export class AgentFacetProgressTracker {
     )
   }
 
-  prepareDeclaredActionPlan(declaration: unknown): PreparedDeclaredActionPlan {
-    return prepareDeclaredActionPlan({
-      declaration,
-      taskGraph: this.taskGraph,
-      facets: this.facets,
-      // 补建 Facet 的领域必须来自真实注册表：模型可以纠正路由，但编不出不存在的领域。
-      knownDomains: new Set(this.registry.allDefinitions().flatMap((definition) => [
-        definition.category,
-        definition.capability?.domain ?? definition.category,
-      ])),
-      // 有过观察摘要就说明这个 Facet 已经动过手，不允许被一句话作废。
-      touchedFacetIds: new Set(this.observationDigests.keys()),
-    })
-  }
-
-  commitDeclaredActionPlan(prepared: Extract<PreparedDeclaredActionPlan, { ok: true }>): void {
-    const before = new Map([...this.facets].map(([id, facet]) => [id, facet.status]))
-    this.taskGraph = prepared.taskGraph
-    this.requiresExplicitActionPlan = false
-    this.facets.clear()
-    for (const facet of prepared.taskGraph.facets) {
-      this.facets.set(facet.facetId, { ...facet })
-      if (prepared.declaredFacetIds.has(facet.facetId)) this.observationDigests.delete(facet.facetId)
-    }
-    this.effectLedger.rebuild(prepared.taskGraph, prepared.declaredFacetIds)
-    /*
-     * 记录"路由结论被推翻"这件事本身。
-     *
-     * "要不要保留独立的意图路由模型"目前无法回答，因为没有任何数据说明它多久错一次——上一轮
-     * 那个 3/3 全错是人工翻日志得到的。补建与作废是路由判错的唯一可观测信号，从这里开始计量。
-     */
-    for (const facet of prepared.taskGraph.facets) {
-      const previousStatus = before.get(facet.facetId)
-      if (previousStatus === undefined) {
-        logger.info('Agent 任务图补建 Facet', {
-          event: 'agent_task_graph.facet.declared',
-          context: {
-            facetId: facet.facetId,
-            domain: facet.domain,
-            routeDomains: this.routeDomains,
-            inRouteDomains: this.routeDomains.includes(facet.domain),
-          },
-        })
-      } else if (facet.status === 'superseded' && previousStatus !== 'superseded') {
-        logger.info('Agent 任务图作废 Facet', {
-          event: 'agent_task_graph.facet.superseded',
-          context: { facetId: facet.facetId, domain: facet.domain, routeDomains: this.routeDomains },
-        })
-      }
-    }
-  }
 
   /**
    * 把模型申报、但不在任务图前沿里的 Facet 并进发现请求。
@@ -328,7 +279,7 @@ export class AgentFacetProgressTracker {
       }
     }
     const definition = this.registry.get(call.toolName)
-    if (definition && !definition.readOnly && call.toolName !== 'declare_action_plan'
+    if (definition && !definition.readOnly
       && this.facetsForCall(call, undefined, allowSettledActionGroupSibling).length === 0) {
       const expected = [...this.facets.values()]
         .filter((facet) => !isTerminal(facet.status))
@@ -339,7 +290,7 @@ export class AgentFacetProgressTracker {
       return {
         code: 'ACTION_PLAN_REQUIRED',
         reason: `${call.toolName} 的 effect、实体或属性不在当前任务图里。任务图待办 Effect：${expected.join('、') || '无'}；`
-          + '如果这个写入确实是任务的一部分，用 declare_action_plan 补声明该 Effect（只需 effect/entityTypes/minimumCount）。'
+          + '如果这个写入确实是任务的一部分，重新生成覆盖该 Effect 的完整 Henji Script。'
           // 路由只看得到当前这一句话，判错领域是常态；模型拿得到完整会话历史，必须有权纠正它。
           + '任务图里没有合适的 facetId 时，直接用一个新的 facetId 声明：只要 entityTypes 指向真实实体类型'
           + '（形如 camera_stage.object），运行时会按该实体所属领域补建 Facet 并发放对应能力。',
@@ -388,15 +339,42 @@ export class AgentFacetProgressTracker {
     record.attempts += 1
     this.callRecords.set(signature, record)
     const failure = observationFailure(input.observation)
-    if (failure) return this.recordFailure(input.call, signature, record, failure)
+    if (failure) {
+      // 受控程序可能在前几步已经产生真实 Effect，后一步才失败。先记账已发生的世界变化，
+      // 再只让尚未完成的 Facet 进入失败状态，不能丢副作用，也不能把已完成 Facet 倒退。
+      const progress = (input.observation.effects?.length ?? 0) > 0
+        ? this.recordSuccess(input.call, input.observation, signature, record)
+        : []
+      return [...progress, ...this.recordFailure(input.call, signature, record, failure)]
+    }
+    const definition = this.registry.get(input.call.toolName)
+    if (definition?.readOnly) {
+      const observedFacetIds = new Set(
+        this.facetsForCall(input.call, resolveObservedEffects(
+          this.registry,
+          input.call,
+          input.observation,
+          stableEvidence(input.observation),
+        )).map((facet) => facet.facetId),
+      )
+      for (const [conflictSignature, facetIds] of this.conflictFacetIds) {
+        const sameFacet = [...facetIds].some((facetId) => observedFacetIds.has(facetId))
+        const sameCategory = this.conflictCategories.get(conflictSignature) === definition.category
+        if (!sameFacet && !sameCategory) continue
+        const conflictRecord = this.callRecords.get(conflictSignature)
+        if (conflictRecord && ['CONFLICT', 'STALE_CONTEXT'].includes(conflictRecord.lastErrorCode ?? '')) {
+          conflictRecord.lastErrorCode = null
+          conflictRecord.failureCount = 0
+        }
+        this.conflictFacetIds.delete(conflictSignature)
+        this.conflictCategories.delete(conflictSignature)
+      }
+    }
     if (input.call.toolName === 'discover_application_capabilities') {
       return this.recordDiscovery(input.observation, signature, record)
     }
     if (input.call.toolName === 'read_application_schemas') {
       return this.recordSchemas(input.call, input.observation, signature, record)
-    }
-    if (input.call.toolName === 'declare_action_plan') {
-      return []
     }
     return this.recordSuccess(input.call, input.observation, signature, record)
   }
@@ -432,7 +410,18 @@ export class AgentFacetProgressTracker {
   ): AgentFacetProgress[] {
     record.failureCount += 1
     record.lastErrorCode = failure.code
-    const facets = this.facetsForCall(call)
+    // 能力发现是所有应用操作的共同前置入口，本身不会与某个业务 Effect 匹配。
+    // 一旦它发生不可恢复故障，若仍使用 facetsForCall() 会得到空数组，任务图便保持 active，
+    // 模型只能再次调用同一个必败入口。此时应把真实受影响范围定义为整张未结算任务图。
+    const facets = (call.toolName === 'discover_application_capabilities'
+      ? [...this.facets.values()]
+      : this.facetsForCall(call)
+    ).filter((facet) => !isTerminal(facet.status))
+    if (['CONFLICT', 'STALE_CONTEXT'].includes(failure.code)) {
+      this.conflictFacetIds.set(signature, new Set(facets.map((facet) => facet.facetId)))
+      const category = this.registry.get(call.toolName)?.category
+      if (category) this.conflictCategories.set(signature, category)
+    }
     if (failure.code === 'PERMISSION_DENIED') {
       return facets.map((facet) => this.blockFacet(
         facet.facetId, 'permission_blocked', failure.message, signature
@@ -455,6 +444,14 @@ export class AgentFacetProgressTracker {
     if (failure.code === 'APPROVAL_REJECTED') {
       return facets.map((facet) => this.blockFacet(
         facet.facetId, 'permission_blocked', failure.message, signature
+      ))
+    }
+    if (!failure.retryable && failure.recovery === 'none') {
+      return facets.map((facet) => this.blockFacet(
+        facet.facetId,
+        'terminal_failure',
+        `${failure.code} 无可用自动恢复路径：${failure.message}`,
+        signature,
       ))
     }
     if (record.failureCount >= 2) {
@@ -570,7 +567,7 @@ export class AgentFacetProgressTracker {
     const outputDigest = digestJson(observation.output)
     const observedEffects = resolveObservedEffects(this.registry, call, observation, evidence)
     if (definition && !definition.readOnly) record.succeededWrite = true
-    return this.facetsForCall(call, observedEffects).map((facet) => {
+    const recordFacets = (facets: AgentTaskFacet[]): AgentFacetProgress[] => facets.map((facet) => {
       const seen = this.observationDigests.get(facet.facetId) ?? new Set<string>()
       const changed = !seen.has(outputDigest)
       seen.add(outputDigest)
@@ -599,6 +596,29 @@ export class AgentFacetProgressTracker {
         executionFingerprint: signature,
       })
     })
+    const observationOnly = observedEffects.length > 0
+      && observedEffects.every((effect) => effect.effect === 'observe')
+    const events: AgentFacetProgress[] = []
+    if (observationOnly) {
+      /*
+       * 同一份权威观察按依赖拓扑逐波结算。
+       *
+       * 第一波只能处理当时已经 ready 的 Facet；只有这一波真实完成之后，第二波才能复用同一
+       * 观察去结算刚被解锁的下游验证。这样最终删除后的 list 可以同时完成“删除已验证”和
+       * “最终状态已验证”，而任务开始时的 list 绝不会越过尚未执行的 create/update/delete。
+       */
+      const processed = new Set<string>()
+      while (true) {
+        const wave = this.facetsForCall(call, observedEffects)
+          .filter((facet) => !processed.has(facet.facetId))
+        if (wave.length === 0) break
+        for (const facet of wave) processed.add(facet.facetId)
+        events.push(...recordFacets(wave))
+      }
+    } else {
+      events.push(...recordFacets(this.facetsForCall(call, observedEffects)))
+    }
+    return events
   }
 
   private facetsForCall(
@@ -606,16 +626,7 @@ export class AgentFacetProgressTracker {
     resolvedEffects?: AgentObservedEffect[],
     includeTerminal = false
   ): AgentTaskFacet[] {
-    const definition = this.registry.get(call.toolName)
-    const effects = resolvedEffects ?? (definition?.capability?.control?.impacts ?? []).map((impact) => ({
-      effect: impact.effect,
-      entityTypes: impact.entityTypes,
-      propertyIds: impact.propertyIds,
-      targetRefs: [],
-      count: 1,
-      verified: false,
-      evidence: [],
-    }))
+    const effects = resolvedEffects ?? potentialEffectsForCall(this.registry, call)
     const matches = resolvedEffects ? effectMatches : potentialEffectMatches
     const matching = [...this.facets.values()].filter((facet) => (
       (includeTerminal || !isTerminal(facet.status))
@@ -640,7 +651,18 @@ export class AgentFacetProgressTracker {
     const ready = matching.filter((facet) => facet.dependsOn.every(
       (dependency) => this.facets.get(dependency)?.status === 'completed'
     ))
-    const candidates = ready.length > 0 ? ready : matching
+    /*
+     * 一个原子程序会按顺序执行整条依赖链，最终一次返回所有子步骤的 Effect Receipt。
+     * 这些 Effect 已经是“执行后事实”，不能再用执行前的依赖前沿裁掉下游 Facet；否则整份程序
+     * 只会记给第一个 Facet，模型会误判动画/播放未完成并重复写入。普通单效果调用仍按前沿归属。
+     */
+    const observationOnly = effects.length > 0
+      && effects.every((effect) => effect.effect === 'observe')
+    const candidates = observationOnly
+      ? ready
+      : resolvedEffects && resolvedEffects.length > 1
+        ? matching
+        : ready.length > 0 ? ready : matching
     if (candidates.length === 0) return []
     /*
      * 纯观察可以同时验证多个 Facet，写入不行。
@@ -650,8 +672,32 @@ export class AgentFacetProgressTracker {
      * 构成多个 Facet 的验证证据。实测那次观察只记给了 camera_scene，camera_object_animation
      * 拿不到验证证据，明明关键帧已经落库却永远停在 active。
      */
-    if (effects.length > 0 && effects.every((effect) => effect.effect === 'observe')) {
+    if (observationOnly) {
       return candidates
+    }
+    if (resolvedEffects && resolvedEffects.length > 1) {
+      /*
+       * 一个原子事务可以报告多个**不同的真实 Effect**，每条 Effect 各结算一个 Facet。
+       *
+       * 仍然禁止“一次写入给多个相同 Facet 重复计数”：逐 Effect 只选第一个尚未选中的匹配项。
+       * Camera Stage 的对象动画正是这种级联事务——输入是 object update，正式执行器同时报告
+       * state_keyframe create；只取第一个候选会让动画 Facet 永远留在 active。
+       */
+      const selected: AgentTaskFacet[] = []
+      for (const effect of resolvedEffects) {
+        const facet = candidates.find((candidate) => !selected.includes(candidate)
+          && candidate.requiredEffects.some((required) => (
+            effectMatches(required, effect)
+            || (
+              required.verificationRequired
+              && this.effectLedger.count(required.effectId) >= required.minimumCount
+              && effect.verified
+              && overlapsForVerification(required, effect)
+            )
+          )))
+        if (facet) selected.push(facet)
+      }
+      if (selected.length > 0) return selected
     }
     const parallel = candidates.filter((facet) => facet.parallelizable)
     return parallel.length === candidates.length ? parallel : [candidates[0]]

@@ -34,9 +34,11 @@ describe('AgentIntentRouter 3D fallback', () => {
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'camera_project')
       ?.requiredEffects[0]).toMatchObject({ effect: 'create', entityTypes: ['camera_stage.project'] })
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'camera_scene')
+      // 阈值恒为 1：门禁只证明"布置和外观写入各自真实发生过一次并通过验证"。
+      // 用户要两个物体还是五个，由脚本解释器逐步读回校验，不由这里从中文原话里数。
       ?.requiredEffects).toEqual(expect.arrayContaining([
-        expect.objectContaining({ effect: 'execute', minimumCount: 2 }),
-        expect.objectContaining({ effect: 'update', minimumCount: 2 }),
+        expect.objectContaining({ effect: 'execute', minimumCount: 1 }),
+        expect.objectContaining({ effect: 'update', minimumCount: 1 }),
       ]))
   })
 })

@@ -131,7 +131,22 @@ function registry(input?: {
           revisionScopes: ['toolbox'],
           verificationRequired: !definition.readOnly,
         }] },
-        resolveObservedEffects: definition.resolver,
+        resolveObservedEffects: definition.resolver ?? ((_toolInput: unknown, output: unknown) => {
+          const record = output && typeof output === 'object' && !Array.isArray(output)
+            ? output as Record<string, unknown> : {}
+          const objectId = typeof record.objectId === 'string' ? record.objectId : 'object-1'
+          return [{
+            effect: definition.effect,
+            entityTypes: definition.entityTypes,
+            propertyIds: definition.propertyIds,
+            targetRefs: definition.effect === 'navigate'
+              ? [{ kind: 'application.surface', id: String(record.surfaceId ?? 'tool.camera_stage') }]
+              : [{ kind: definition.entityTypes[0] ?? 'camera_stage.object', id: objectId }],
+            count: 1,
+            verified: definition.readOnly,
+            evidence: [`${definition.name}:${objectId}`],
+          }]
+        }),
       } as never,
       version: 1,
       title: definition.name,
@@ -245,7 +260,10 @@ describe('AgentFacetProgressTracker', () => {
       facets: [{ facetId: 'camera', queries: ['新建工程'] }],
     })) as { facets: { queries: string[]; requiredEffects: unknown[] }[] }
     expect(normalized.facets[0].requiredEffects).toEqual([
-      { effect: 'create', entityTypes: ['camera_stage.project'], propertyIds: [] },
+      {
+        effect: 'create', entityTypes: ['camera_stage.project'], propertyIds: [],
+        minimumCount: 1,
+      },
     ])
     // 模型自带的检索词保留，运行时目标补在前面。
     expect(normalized.facets[0].queries).toContain('新建工程')
@@ -333,47 +351,8 @@ describe('AgentFacetProgressTracker', () => {
    * 回归：一次结构化观察只记给了第一个候选 Facet。
    *
    * "只取第一个候选"是为了防止一次写入被多个 Facet 重复计数，但观察不是写入。一次
-   * observe_camera_stage_scene 返回整个场景，本来就同时构成多个 Facet 的验证证据；实测它只记给
-   * camera_scene，camera_object_animation 拿不到证据，关键帧已落库却永远停在 active。
+   * observe_camera_stage_scene 返回整个场景，本来就同时构成多个 Facet 的验证证据。
    */
-  /*
-   * 回归：declare_action_plan 把已完成的 Facet 打回 pending。
-   *
-   * 追踪器把活动状态放在独立的 facets Map 里，taskGraph.facets 始终是任务开始时的快照。旧实现
-   * 对未声明的 Facet 回退到快照，提交时又用合并结果重建整个 Map——实测 6 个 Facet 全部完成过，
-   * 补声明关键帧计划时集体重置；之后有新工具调用的五个陆续重新完成，唯独已导航完毕的
-   * show_target_surface 不会再被触发，永远停在 pending，整次运行报"仍有 1 个 Facet 未结算"。
-   */
-  it('补声明某个 Facet 不会重置其他 Facet 运行中取得的状态', () => {
-    const tracker = new AgentFacetProgressTracker(graph([
-      facet({ facetId: 'navigated', domain: 'camera_stage', capabilityKinds: ['observe'] }),
-      facet({ facetId: 'pending_write', domain: 'camera_stage' }),
-    ]), registry(), true)
-
-    // navigated 在运行中真实完成；它之后不会再有工具调用来重新触发。
-    tracker.observe({
-      call: call('read_camera', { id: 'observe-once' }), expectedRevisions: {},
-      observation: observation('read_camera', { objectId: 'object-1', revision: 2 }),
-    })
-    expect(tracker.settlement().completedFacetIds).toContain('navigated')
-
-    const prepared = tracker.prepareDeclaredActionPlan({
-      facets: [{
-        facetId: 'pending_write',
-        requiredEffects: [{
-          effect: 'create', entityTypes: ['camera_stage.object'], minimumCount: 2,
-        }],
-      }],
-    })
-    expect(prepared.ok).toBe(true)
-    if (!prepared.ok) return
-    tracker.commitDeclaredActionPlan(prepared)
-
-    expect(tracker.settlement().completedFacetIds).toContain('navigated')
-    expect(tracker.taskGraphSnapshot().facets.find((item) => item.facetId === 'navigated')?.status)
-      .toBe('completed')
-  })
-
   it('纯观察同时结算所有匹配 Facet，写入仍只归属一个', () => {
     const sceneEffect = (facetId: string) => ({
       effectId: `${facetId}_effect`, effect: 'create' as const,
@@ -403,6 +382,75 @@ describe('AgentFacetProgressTracker', () => {
     })
     expect(observed.map((event) => event.facetId).sort()).toEqual(['scene_a', 'scene_b'])
     expect(tracker.settlement().status).toBe('completed')
+  })
+
+  it('一次观察会继续结算被同一观察刚刚解锁的下游验证 Facet', () => {
+    const deleted = facet({
+      facetId: 'deleted', domain: 'camera_stage',
+      requiredEffects: [{
+        effectId: 'deleted_effect', effect: 'delete', entityTypes: ['camera_stage.object'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+        actionGroupId: 'deleted_actions',
+      }],
+    })
+    const verified = facet({
+      facetId: 'verified', domain: 'camera_stage', dependsOn: ['deleted'],
+      capabilityKinds: ['observe'],
+      requiredEffects: [{
+        effectId: 'verified_effect', effect: 'observe', entityTypes: ['camera_stage.object'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+        actionGroupId: 'verified_actions',
+      }],
+    })
+    const tracker = new AgentFacetProgressTracker(graph([deleted, verified]), registry(), false, [{
+      effectId: 'deleted_effect', count: 1, verified: false, evidenceDigests: [], evidence: [],
+    }])
+
+    const observed = tracker.observe({
+      call: call('read_camera', { id: 'verify-delete' }), expectedRevisions: {},
+      observation: observation('read_camera', { verified: true, objectId: 'object-1', revision: 2 }),
+    })
+
+    expect(observed.map((event) => event.facetId).sort()).toEqual(['deleted', 'verified'])
+    expect(tracker.settlement().status).toBe('completed')
+  })
+
+  it('任务开始时的观察不能越过尚未执行的写入完成下游验证', () => {
+    const lookup = facet({
+      facetId: 'lookup', domain: 'camera_stage', capabilityKinds: ['observe'],
+      requiredEffects: [{
+        effectId: 'lookup_effect', effect: 'observe', entityTypes: ['camera_stage.object'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+        actionGroupId: 'lookup_actions',
+      }],
+    })
+    const write = facet({
+      facetId: 'write', domain: 'camera_stage', dependsOn: ['lookup'],
+      requiredEffects: [{
+        effectId: 'write_effect', effect: 'delete', entityTypes: ['camera_stage.object'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+        actionGroupId: 'write_actions',
+      }],
+    })
+    const verify = facet({
+      facetId: 'verify', domain: 'camera_stage', dependsOn: ['write'], capabilityKinds: ['observe'],
+      requiredEffects: [{
+        effectId: 'verify_effect', effect: 'observe', entityTypes: ['camera_stage.object'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+        actionGroupId: 'verify_actions',
+      }],
+    })
+    const tracker = new AgentFacetProgressTracker(graph([lookup, write, verify]), registry())
+
+    const observed = tracker.observe({
+      call: call('read_camera', { id: 'initial' }), expectedRevisions: {},
+      observation: observation('read_camera', { verified: true, objectId: 'object-1', revision: 1 }),
+    })
+
+    expect(observed.map((event) => event.facetId)).toEqual(['lookup'])
+    expect(tracker.taskGraphSnapshot().facets.find((item) => item.facetId === 'verify')?.status)
+      .not.toBe('completed')
+    expect(tracker.settlement().status).toBe('active')
   })
 
   it('同一 action group 已开始后不会因第一项结算而拦截兄弟调用', () => {
@@ -444,6 +492,98 @@ describe('AgentFacetProgressTracker', () => {
       observation: observation('write_camera', { revision: 1 }),
     })).toEqual([])
     expect(tracker.settlement().status).toBe('active')
+  })
+
+  it('一次通用事务报告对象更新与自动关键帧创建时，两条 Facet 都会结算', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({
+        facetId: 'object_write', domain: 'camera_stage',
+        requiredEffects: [{
+          effectId: 'object_write_effect', effect: 'update', entityTypes: ['camera_stage.object'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+          actionGroupId: 'object_write_actions',
+        }],
+      }),
+      facet({
+        facetId: 'animation', domain: 'camera_stage',
+        requiredEffects: [{
+          effectId: 'animation_effect', effect: 'create', entityTypes: ['camera_stage.state_keyframe'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+          actionGroupId: 'animation_actions',
+        }],
+      }),
+    ]), registry({
+      writeResolver: () => [{
+        effect: 'update', entityTypes: ['camera_stage.object'], propertyIds: [], targetRefs: [],
+        count: 1, verified: false, evidence: ['transaction:1'],
+      }, {
+        effect: 'create', entityTypes: ['camera_stage.state_keyframe'], propertyIds: [], targetRefs: [],
+        count: 1, verified: false, evidence: ['cascade:create:camera_stage.state_keyframe'],
+      }],
+    }))
+
+    tracker.observe({
+      call: call('write_camera'), expectedRevisions: {},
+      observation: observation('write_camera', { revision: 2 }),
+    })
+
+    expect(tracker.settlement()).toMatchObject({
+      status: 'completed',
+      completedFacetIds: expect.arrayContaining(['object_write', 'animation']),
+    })
+  })
+
+  it('原子程序的多 Effect Receipt 一次结算整条依赖链', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({
+        facetId: 'project', domain: 'camera_stage',
+        requiredEffects: [{
+          effectId: 'project_effect', effect: 'create', entityTypes: ['camera_stage.project'],
+          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+          actionGroupId: 'project_actions',
+        }],
+      }),
+      facet({
+        facetId: 'animation', domain: 'camera_stage', dependsOn: ['project'],
+        requiredEffects: [{
+          effectId: 'animation_effect', effect: 'update', entityTypes: ['camera_stage.object'],
+          propertyIds: ['camera_stage.object.animatable.transform.position.y'], minimumCount: 1,
+          targetRefs: [], verificationRequired: false, actionGroupId: 'animation_actions',
+        }],
+      }),
+      facet({
+        facetId: 'playback', domain: 'camera_stage', dependsOn: ['animation'],
+        requiredEffects: [{
+          effectId: 'playback_effect', effect: 'update', entityTypes: ['camera_stage.playback'],
+          propertyIds: ['camera_stage.playback.playing'], minimumCount: 1,
+          targetRefs: [], verificationRequired: false, actionGroupId: 'playback_actions',
+        }],
+      }),
+    ]), registry({
+      writeResolver: () => [{
+        effect: 'create', entityTypes: ['camera_stage.project'], propertyIds: [], targetRefs: [],
+        count: 1, verified: false, evidence: ['program:create'],
+      }, {
+        effect: 'update', entityTypes: ['camera_stage.object'],
+        propertyIds: ['camera_stage.object.animatable.transform.position.y'], targetRefs: [],
+        count: 1, verified: false, evidence: ['program:animate'],
+      }, {
+        effect: 'update', entityTypes: ['camera_stage.playback'],
+        propertyIds: ['camera_stage.playback.playing'], targetRefs: [],
+        count: 1, verified: false, evidence: ['program:play'],
+      }],
+    }))
+
+    const events = tracker.observe({
+      call: call('write_camera'), expectedRevisions: {},
+      observation: observation('write_camera', { revision: 2 }),
+    })
+
+    expect(events.map((event) => event.facetId)).toEqual(['project', 'animation', 'playback'])
+    expect(tracker.settlement()).toMatchObject({
+      status: 'completed',
+      completedFacetIds: expect.arrayContaining(['project', 'animation', 'playback']),
+    })
   })
 
   it('图外写入在执行前返回 ACTION_PLAN_REQUIRED', () => {
@@ -612,6 +752,26 @@ describe('AgentFacetProgressTracker', () => {
     })
   })
 
+  it('revision 冲突后同领域观察成功即可用最新事实重新规划，即使 revision 数值未变化', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'camera', domain: 'camera_stage' }),
+    ]), registry())
+    const write = call('write_camera')
+    tracker.observe({
+      call: write,
+      expectedRevisions: { toolbox: 4 },
+      observation: failure(write.toolName, 'CONFLICT', 'refresh_context'),
+    })
+    const read = call('read_camera', { id: 'current-scene' })
+    tracker.observe({
+      call: read,
+      expectedRevisions: { toolbox: 4 },
+      observation: observation(read.toolName, { objectId: 'object-1', revision: 4 }),
+    })
+
+    expect(tracker.validate(write, { toolbox: 4 })).toBeNull()
+  })
+
   it('无效输入重复且明确需要用户动作时复用 waiting_user 结算', () => {
     const tracker = new AgentFacetProgressTracker(graph([
       facet({ facetId: 'camera', domain: 'camera_stage' }),
@@ -650,6 +810,31 @@ describe('AgentFacetProgressTracker', () => {
     })
     expect(tracker.settlement()).toMatchObject({
       status: 'blocked', blockedFacets: [{ facetId: 'camera' }],
+    })
+  })
+
+  it('能力发现首次发生不可重试故障时立即阻断整条任务链', () => {
+    const tracker = new AgentFacetProgressTracker(graph([
+      facet({ facetId: 'discover_then_write', domain: 'camera_stage' }),
+      facet({ facetId: 'verify', domain: 'diagnostics', dependsOn: ['discover_then_write'] }),
+    ]), registry())
+
+    const events = tracker.observe({
+      call: call('discover_application_capabilities', { facets: [{ facetId: 'discover_then_write' }] }),
+      expectedRevisions: {},
+      observation: failure('discover_application_capabilities', 'EXECUTION_FAILED', 'none'),
+    })
+
+    expect(events).toContainEqual(expect.objectContaining({
+      facetId: 'discover_then_write', status: 'blocked', kind: 'terminal_failure',
+    }))
+    expect(tracker.settlement()).toMatchObject({
+      status: 'blocked',
+      blockedFacets: expect.arrayContaining([
+        { facetId: 'discover_then_write', reason: expect.stringContaining('无可用自动恢复路径') },
+        { facetId: 'verify', reason: expect.any(String) },
+      ]),
+      remainingFacetIds: [],
     })
   })
 })

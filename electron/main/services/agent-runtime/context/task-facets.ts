@@ -8,6 +8,7 @@ import {
   agentTaskGraphSchema,
   deriveActionGroups,
   type AgentTaskFacet,
+  type AgentTaskEffectKind,
   type AgentTaskGraph,
   type AgentTaskRequiredEffect,
 } from '../../../../../src/core/assistant/taskGraph'
@@ -17,7 +18,13 @@ import {
   cameraTaskGraphCoversGoal,
   type DeterministicFacetInput,
 } from './deterministic-camera-task'
-import { explicitlyCreatesProject, inferIntentTaskSemantics } from './task-intent-semantics'
+import {
+  asksToGenerateMedia,
+  explicitlyCreatesProject,
+  hasAffirmativeIntent,
+  hasNegatedIntent,
+  inferIntentTaskSemantics,
+} from './task-intent-semantics'
 
 const modelFacetSchema = z.object({
   facetId: z.string().regex(/^[a-z][a-z0-9_-]{1,63}$/),
@@ -65,7 +72,7 @@ const entityTypesByDomain: Partial<Record<AgentToolDomain, string[]>> = {
   camera_stage: ['camera_stage.project', 'camera_stage.scene', 'camera_stage.camera'],
   image_edit: ['image_edit.session', 'generation.result', 'asset'],
   assets: ['asset'],
-  settings: ['application.setting'],
+  settings: ['settings.registry'],
   workflows: ['workflow', 'workflow.run'],
 }
 
@@ -182,6 +189,7 @@ function graph(goal: string, facets: AgentTaskFacet[]): AgentTaskGraph {
   return agentTaskGraphSchema.parse({
     version: AGENT_TASK_GRAPH_VERSION,
     goal,
+    forbiddenEffects: inferForbiddenEffects(goal),
     facets: normalized,
     actionGroups: deriveActionGroups(normalized),
     dependencies: normalized.flatMap((facet) => facet.dependsOn.map((dependency) => ({
@@ -196,7 +204,26 @@ function graph(goal: string, facets: AgentTaskFacet[]): AgentTaskGraph {
   })
 }
 
-function ensureEarlyCameraSurface(facets: AgentTaskFacet[]): AgentTaskFacet[] {
+function inferForbiddenEffects(goal: string): AgentTaskEffectKind[] {
+  const effects: AgentTaskEffectKind[] = []
+  if (hasNegatedIntent(goal, /(?:打开|进入|切换|定位|聚焦|展示|open|navigate|switch|focus)/i)) {
+    effects.push('navigate')
+  }
+  if (hasNegatedIntent(goal, /(?:删除|移除|清空|delete|remove)/i)) effects.push('delete')
+  return effects
+}
+
+function ensureExplicitCameraSurface(goal: string, facets: AgentTaskFacet[]): AgentTaskFacet[] {
+  const navigationRequested = hasAffirmativeIntent(
+    goal,
+    /(?:打开|进入|切换|展示|查看|定位|让我看到|open|show|navigate)/i,
+  )
+  if (!navigationRequested) {
+    return facets.filter((facet) => !(
+      facet.targetSurfaceId === 'tool.camera_stage'
+      && facet.capabilityKinds.includes('navigate')
+    ))
+  }
   const cameraWrites = facets.filter((facet) => facet.domain === 'camera_stage'
     && facet.capabilityKinds.some((kind) => kind === 'mutate' || kind === 'execute'))
   if (cameraWrites.length === 0) return facets
@@ -237,17 +264,6 @@ function inferNavigationSurface(goal: string, snapshot: HostContextSnapshot): st
   return snapshot.surface?.id ?? null
 }
 
-function inferRequestedCount(goal: string): number {
-  const numeric = [...goal.matchAll(/(?:创建|添加|放置|摆放|新建|设置|修改)?\s*(\d{1,3})\s*(?:个|项|条|组|枚|座)/gi)]
-    .flatMap((match) => match[1] ? [Number(match[1])] : [])
-  const values: Readonly<Record<string, number>> = {
-    一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
-  }
-  const chinese = [...goal.matchAll(/(?:创建|添加|放置|摆放|新建|设置|修改)?\s*([一二两三四五六七八九十])\s*(?:个|项|条|组|枚|座)/g)]
-    .flatMap((match) => match[1] ? [values[match[1]] ?? 1] : [])
-  return Math.min(256, Math.max(1, ...numeric, ...chinese))
-}
-
 export interface DeterministicTaskGraphMatch {
   graph: AgentTaskGraph
   intents: AgentIntent[]
@@ -263,15 +279,198 @@ export function createDeterministicTaskGraph(
   const hasCanvas = /(?:画布|节点|连线|流程图|canvas)/i.test(normalized)
   const hasCanvasTask = hasCanvas
     && /(?:节点|连线|流程图|画布项目|画布里|画布中|canvas\s*(?:node|edge|project)|布局)/i.test(normalized)
-  const hasNavigation = /(?:打开|进入|切换|展示|查看|定位|让我看到|open|show|navigate)/i.test(normalized)
-  if (!hasCamera && !hasCanvasTask) return null
+  const hasGeneration = hasCanvasTask && asksToGenerateMedia(normalized)
+  const usesGenerationResult = hasCanvasTask
+    && /(?:生成结果|生成的(?:图片|图像|照片|海报|插画|视频|音频)|generation\.result|generated\s+(?:result|image|media))/i.test(normalized)
+  const hasNavigation = hasAffirmativeIntent(
+    normalized,
+    /(?:打开|进入|切换|展示|查看|定位|让我看到|open|show|navigate)/i,
+  )
+  const hasAssets = /(?:素材|素材库|素材集|asset\s*(?:library|collection)?)/i.test(normalized)
+  const hasAssetLibrary = /(?:素材库|素材集|素材集合|asset\s*(?:library|collection))/i.test(normalized)
+  const createsAssetLibrary = hasAssets && hasAffirmativeIntent(
+    normalized,
+    /(?:创建|新建|建立).{0,24}(?:素材库|素材集|素材集合|asset\s*(?:library|collection))|(?:素材库|素材集|素材集合).{0,16}(?:创建|新建|建立)/i,
+  )
+  const updatesAsset = hasAssets && hasAffirmativeIntent(
+    normalized,
+    /(?:重命名|改名|标签|归类|加入|添加到|放入|rename|tag|categorize)/i,
+  )
+  const updatesAssetLibrary = hasAssetLibrary && hasAffirmativeIntent(
+    normalized,
+    /(?:素材库|素材集|素材集合).{0,8}(?:重命名|改名)|(?:重命名|改名)(?:这个|该|上述|新建的)?(?:素材库|素材集|素材集合)|(?:将它|把它|这个集合|该集合|上述集合).{0,8}(?:重命名|改名)/i,
+  )
+  const deletesAsset = hasAssets && hasAffirmativeIntent(
+    normalized,
+    /(?:删除|永久删除|delete).{0,20}(?:素材|图片|视频|音频|asset)|(?:素材|图片|视频|音频|asset).{0,20}(?:删除|永久删除|delete)/i,
+  )
+  const deletesAssetLibrary = hasAssetLibrary && hasAffirmativeIntent(
+    normalized,
+    /(?:删除|移除)(?:这个|该|上述|新建的)?(?:素材库|素材集|素材集合)|(?:素材库|素材集|素材集合).{0,8}(?:删除|移除)|(?:然后删除|并删除|再删除|删除)(?:这个|该|上述)?集合/i,
+  )
+  const updatesConcreteAsset = updatesAsset && !updatesAssetLibrary
+  const deletesConcreteAsset = deletesAsset && !deletesAssetLibrary
+  const hasAssetTask = createsAssetLibrary || updatesConcreteAsset || deletesConcreteAsset
+    || updatesAssetLibrary || deletesAssetLibrary
+  if (!hasCamera && !hasCanvasTask && !hasAssetTask) return null
 
   const facets: AgentTaskFacet[] = []
-  const canvasSemantics = hasCanvasTask ? inferIntentTaskSemantics('canvas', normalized) : null
+  if (hasAssetTask) {
+    const lookupEntityType = updatesConcreteAsset || deletesConcreteAsset ? 'asset' : 'asset.library'
+    facets.push(buildFacet({
+      facetId: 'asset_lookup', domain: 'assets',
+      goal: '从正式素材状态源取得目标素材与现有素材库的完整稳定引用。',
+      entityTypes: ['asset', 'asset.library'],
+      observationKinds: ['entity_state', 'entity_schema'],
+      capabilityKinds: ['observe', 'query'],
+      completionConditions: ['目标素材与素材库引用已从正式状态源读得，不使用截断或猜测 ID。'],
+      requiredEffects: [{
+        effectId: 'asset_lookup_effect', effect: 'observe', entityTypes: [lookupEntityType],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+        actionGroupId: 'asset_lookup_actions',
+      }],
+    }))
+    if (createsAssetLibrary) facets.push(buildFacet({
+      facetId: 'asset_library_create', domain: 'assets',
+      goal: '创建用户明确要求的新素材库，并取得完整稳定引用。',
+      entityTypes: ['asset.library'],
+      observationKinds: ['entity_state', 'entity_schema'],
+      capabilityKinds: ['observe', 'plan', 'mutate'],
+      dependsOn: ['asset_lookup'],
+      completionConditions: ['新素材库已创建并可从正式状态源读回。'],
+      requiredEffects: [{
+        effectId: 'asset_library_create_effect', effect: 'create', entityTypes: ['asset.library'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: !deletesAssetLibrary,
+        actionGroupId: 'asset_library_create_actions',
+      }],
+    }))
+    if (updatesConcreteAsset) facets.push(buildFacet({
+      facetId: 'asset_update', domain: 'assets',
+      goal: '完成素材重命名、标签或素材库归类等用户明确要求的属性更新。',
+      entityTypes: ['asset'],
+      observationKinds: ['entity_state', 'entity_schema'],
+      capabilityKinds: ['observe', 'plan', 'mutate'],
+      dependsOn: ['asset_lookup', ...(createsAssetLibrary ? ['asset_library_create'] : [])],
+      completionConditions: ['素材全部目标属性已经从正式状态源读回。'],
+      requiredEffects: [{
+        effectId: 'asset_update_effect', effect: 'update', entityTypes: ['asset'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+        actionGroupId: 'asset_update_actions',
+      }],
+    }))
+    if (updatesAssetLibrary) facets.push(buildFacet({
+      facetId: 'asset_library_update', domain: 'assets',
+      goal: '完成用户明确要求的素材库重命名。',
+      entityTypes: ['asset.library'],
+      observationKinds: ['entity_state', 'entity_schema'],
+      capabilityKinds: ['observe', 'plan', 'mutate'],
+      dependsOn: ['asset_lookup', ...(createsAssetLibrary ? ['asset_library_create'] : [])],
+      completionConditions: ['素材库重命名已由正式写入回执确认。'],
+      requiredEffects: [{
+        effectId: 'asset_library_update_effect', effect: 'update', entityTypes: ['asset.library'],
+        propertyIds: ['asset.library.name'], minimumCount: 1, targetRefs: [],
+        verificationRequired: !deletesAssetLibrary,
+        actionGroupId: 'asset_library_update_actions',
+      }],
+    }))
+    if (deletesConcreteAsset) facets.push(buildFacet({
+      facetId: 'asset_delete', domain: 'assets',
+      goal: '删除用户明确指定的素材，并验证目标实体不再存在。',
+      entityTypes: ['asset'],
+      observationKinds: ['entity_state'],
+      capabilityKinds: ['observe', 'plan', 'mutate'],
+      dependsOn: ['asset_lookup'],
+      completionConditions: ['正式状态源确认目标素材已删除。'],
+      requiredEffects: [{
+        effectId: 'asset_delete_effect', effect: 'delete', entityTypes: ['asset'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+        actionGroupId: 'asset_delete_actions',
+      }],
+    }))
+    if (deletesAssetLibrary) facets.push(buildFacet({
+      facetId: 'asset_library_delete', domain: 'assets',
+      goal: '删除用户明确指定的素材库，并验证目标实体不再存在。',
+      entityTypes: ['asset.library'],
+      observationKinds: ['entity_state'],
+      capabilityKinds: ['observe', 'plan', 'mutate'],
+      dependsOn: [
+        'asset_lookup',
+        ...(createsAssetLibrary ? ['asset_library_create'] : []),
+        ...(updatesAssetLibrary ? ['asset_library_update'] : []),
+      ],
+      completionConditions: ['正式状态源确认目标素材库已删除。'],
+      requiredEffects: [{
+        effectId: 'asset_library_delete_effect', effect: 'delete', entityTypes: ['asset.library'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+        actionGroupId: 'asset_library_delete_actions',
+      }],
+    }))
+    facets.push(buildFacet({
+      facetId: 'asset_verify', domain: 'assets',
+      goal: '从正式素材状态源汇合验证素材及素材库的最终状态。',
+      entityTypes: ['asset', 'asset.library'],
+      observationKinds: ['entity_state'],
+      capabilityKinds: ['observe', 'query'],
+      dependsOn: [
+        ...(createsAssetLibrary ? ['asset_library_create'] : []),
+        ...(updatesConcreteAsset ? ['asset_update'] : []),
+        ...(deletesConcreteAsset ? ['asset_delete'] : []),
+        ...(updatesAssetLibrary ? ['asset_library_update'] : []),
+        ...(deletesAssetLibrary ? ['asset_library_delete'] : []),
+      ],
+      completionConditions: ['所有要求的素材变化都有结构化读回证据，且没有执行被否定的动作。'],
+      requiredEffects: [{
+        effectId: 'asset_verify_effect', effect: 'observe', entityTypes: ['asset', 'asset.library'],
+        propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
+        actionGroupId: 'asset_verify_actions',
+      }],
+    }))
+  }
+  if (hasGeneration) facets.push(buildFacet({
+    facetId: 'generation_result', domain: 'generation',
+    goal: '提交用户要求的媒体生成，并在外部任务续接后从正式状态源确认成功结果与稳定 generation.result 引用。',
+    entityTypes: ['generation.task', 'generation.result'],
+    observationKinds: ['entity_state', 'operation_schema'],
+    capabilityKinds: ['observe', 'query', 'execute'],
+    completionConditions: ['生成任务达到正式成功终态，并返回可供后续步骤使用的完整 generation.result 引用。'],
+    requiredEffects: [{
+      effectId: 'generation_result_effect', effect: 'execute', entityTypes: ['generation.task'],
+      propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
+      actionGroupId: 'generation_result_actions',
+    }],
+  }))
+  // 跨域“生成后放入画布”的画布侧事实永远是创建媒体源节点。不能让前半句的“生成”把
+  // canvas 语义污染成 execute，也不能要求用户额外说出实现词“节点”。
+  const canvasSemantics = hasCanvasTask
+    ? hasGeneration || usesGenerationResult
+      ? {
+          effect: 'create' as const,
+          entityTypes: ['canvas.node'],
+          capabilityKinds: ['observe', 'query', 'plan', 'mutate'] as const,
+        }
+      : inferIntentTaskSemantics('canvas', normalized)
+    : null
   let canvasNeedsVerification = false
+  let canvasWriteFacetId = 'canvas_structure'
   if (hasCanvasTask) {
-    const createsCanvasProject = explicitlyCreatesProject(normalized)
-    const targetsNode = /(?:节点|连线|node|edge)/i.test(normalized)
+    const createsCanvasProject = explicitlyCreatesProject(normalized) || hasAffirmativeIntent(
+      normalized,
+      /(?:新建|创建|建立).{0,36}画布(?![^，。；;,.!?！？\n]{0,16}(?:节点|node))/i,
+    )
+    const explicitlyCreatesCanvasNode = hasAffirmativeIntent(
+      normalized,
+      /(?:创建|添加|新建|放置|摆放).{0,24}(?:节点|node)|(?:节点|node).{0,16}(?:创建|添加|新建|放置|摆放)/i,
+    )
+    const createsAdditionalCanvasNode = hasGeneration && hasAffirmativeIntent(
+      normalized,
+      /(?:(?:再|另|另外|额外|同时|并且).{0,12})?(?:创建|添加|新建|放置|摆放).{0,24}(?:文本|文字|说明|注释|输入|输出|处理)(?:.{0,8})(?:节点|node)|(?:再|另|另外|额外).{0,12}(?:创建|添加|新建|放置|摆放).{0,24}(?:节点|node)/i,
+    )
+    const targetsNode = hasGeneration || usesGenerationResult || /(?:节点|连线|node|edge)/i.test(normalized)
+    // “生成媒体并放入画布”使用固定的媒体源节点，节点类型已由验证过的跨域 Recipe
+    // 封装，不应再制造一个必须由模型单独查询的目录 Facet。只有用户另外要求创建其他
+    // 类型节点时，才需要节点目录发现。
+    const needsCanvasNodeCatalog = targetsNode && canvasSemantics?.effect === 'create'
+      && (hasGeneration ? createsAdditionalCanvasNode : (!usesGenerationResult || explicitlyCreatesCanvasNode))
     const connectsNodes = /(?:连接|连线|接入|connect|edge)/i.test(normalized)
     if (createsCanvasProject) facets.push(buildFacet({
       facetId: 'canvas_project', domain: 'canvas',
@@ -285,9 +484,25 @@ export function createDeterministicTaskGraph(
         actionGroupId: 'canvas_project_actions',
       }],
     }))
+    if (needsCanvasNodeCatalog) facets.push(buildFacet({
+      facetId: 'canvas_node_catalog', domain: 'canvas',
+      goal: '搜索允许创建的画布节点类型，并读取所选节点类型的正式结构。',
+      entityTypes: ['canvas.node_type'],
+      observationKinds: ['entity_schema', 'operation_schema'],
+      capabilityKinds: ['observe', 'query'],
+      completionConditions: ['已从正式目录取得节点类型稳定引用，并读取对应输入输出端口结构。'],
+      requiredEffects: [{
+        effectId: 'canvas_node_catalog_effect', effect: 'observe', entityTypes: ['canvas.node_type'],
+        propertyIds: [], minimumCount: 2, targetRefs: [], verificationRequired: false,
+        actionGroupId: 'canvas_node_catalog_actions',
+      }],
+    }))
     if (!createsCanvasProject || targetsNode) {
       const semantics = canvasSemantics as ReturnType<typeof inferIntentTaskSemantics>
-      const facetId = targetsNode ? 'canvas_structure' : 'canvas_project'
+      const facetId = targetsNode
+        ? usesGenerationResult ? 'canvas_generation_result' : 'canvas_structure'
+        : 'canvas_project'
+      canvasWriteFacetId = facetId
       facets.push(buildFacet({
         facetId, domain: 'canvas',
         goal: targetsNode ? '完成用户要求的画布节点和连线结构。' : '完成用户要求的画布项目操作。',
@@ -296,12 +511,19 @@ export function createDeterministicTaskGraph(
           : semantics.entityTypes,
         observationKinds: ['entity_state', 'entity_schema', 'operation_schema'],
         capabilityKinds: semantics.capabilityKinds,
-        dependsOn: createsCanvasProject ? ['canvas_project'] : [],
+        dependsOn: [
+          ...(createsCanvasProject ? ['canvas_project'] : []),
+          ...(needsCanvasNodeCatalog ? ['canvas_node_catalog'] : []),
+          ...(hasGeneration ? ['generation_result'] : []),
+        ],
         completionConditions: ['目标画布项目或节点结构具有稳定引用、revision 和结构化结果。'],
         requiredEffects: [{
           effectId: `${facetId}_effect`, effect: semantics.effect,
           entityTypes: semantics.entityTypes, propertyIds: [],
-          minimumCount: targetsNode && semantics.effect === 'create' ? inferRequestedCount(normalized) : 1,
+          // 阈值恒为 1，理由同 deterministic-camera-task.ts：数量由脚本解释器逐步读回校验，
+          // 不由正则从中文句子里猜。原先这里还有一条“提到文本节点且有生成就要求 2 个”的
+          // 特判——那正是按单个提示词打补丁，删掉。
+          minimumCount: 1,
           targetRefs: [], verificationRequired: !['observe', 'navigate'].includes(semantics.effect),
           actionGroupId: `${facetId}_actions`,
         }, ...(connectsNodes && semantics.effect === 'create' ? [{
@@ -319,7 +541,7 @@ export function createDeterministicTaskGraph(
     facetId: 'canvas_verify', domain: 'canvas',
     goal: '用结构化画布状态验证节点、连线和布局结果。',
     observationKinds: ['entity_state'], capabilityKinds: ['observe', 'query'],
-    dependsOn: ['canvas_structure'], parallelizable: false,
+    dependsOn: [canvasWriteFacetId], parallelizable: false,
     completionConditions: ['结构化读取确认目标节点、连线和布局满足要求。'],
     requiredEffects: [{
       effectId: 'canvas_verify_effect', effect: 'observe',
@@ -346,6 +568,8 @@ export function createDeterministicTaskGraph(
     intents: unique([
       ...(hasCamera ? ['camera_stage' as const] : []),
       ...(hasCanvasTask ? ['canvas' as const] : []),
+      ...(hasGeneration ? ['generate' as const] : []),
+      ...(hasAssetTask ? ['assets' as const] : []),
       ...(hasNavigation ? ['navigate' as const] : []),
     ]),
     domains: unique(facets.map((facet) => facet.domain as AgentToolDomain)),
@@ -455,7 +679,7 @@ export function tryCreateModelTaskGraph(input: {
       requiredEffects: item.requiredEffects,
     }))
   if (facets.length === 0) return null
-  const planned = graph(input.goal, ensureEarlyCameraSurface(facets))
+  const planned = graph(input.goal, ensureExplicitCameraSurface(input.goal, facets))
   return input.candidateDomains.includes('camera_stage')
     && !cameraTaskGraphCoversGoal(input.goal, planned.facets)
     ? null
