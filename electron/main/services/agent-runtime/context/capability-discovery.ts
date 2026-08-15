@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { z } from 'zod'
 
 import {
   AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
@@ -8,11 +9,11 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
 import {
   APPLICATION_CAPABILITY_DISCOVERY_VERSION,
+  HENJI_SCRIPT_LANGUAGE_RULES,
   applicationCapabilityDiscoveryInputSchema,
   applicationCapabilityDiscoveryOutputSchema,
   applicationSchemaReadInputSchema,
   applicationSchemaReadOutputSchema,
-  type ApplicationCapabilityDiscoveryFacet,
   type ApplicationCapabilityDiscoveryInput,
   type ApplicationCapabilityDiscoveryMatch,
   type ApplicationCapabilityDiscoveryOutput,
@@ -25,6 +26,8 @@ import {
 import type { ApplicationSchemaRef } from '../../../../../src/core/application-control'
 import type { AgentToolRegistry } from '../tools/registry'
 import { selectLeaseableToolNames } from './tool-activation'
+import { rememberHenjiScriptApiLease } from './script-api-lease'
+import { HENJI_RECIPE_REGISTRY } from '../../application-control/henji-script/recipes'
 
 /**
  * Facet 点名了实体时，被放宽进来的域最多补几个租约。
@@ -36,6 +39,24 @@ import { selectLeaseableToolNames } from './tool-activation'
  * 闭包才有用，三分之一的名额正好覆盖它，同时不至于挤掉别的 Facet。
  */
 const LEASE_TAIL_LIMIT = Math.max(3, Math.floor(AGENT_FACET_LEASE_TOOL_LIMIT / 3))
+
+const SCRIPT_INTERNAL_CAPABILITIES = new Set([
+  'run_henji_script',
+  'describe_application_entities', 'list_application_entities',
+  'read_application_entity', 'change_application_entities',
+])
+
+function publicResultShape(schema: z.ZodType): { fields: string[]; hasResultRefs: boolean } {
+  try {
+    const jsonSchema = z.toJSONSchema(schema, { target: 'draft-7', io: 'output' }) as {
+      properties?: Record<string, unknown>
+    }
+    const fields = Object.keys(jsonSchema.properties ?? {}).slice(0, 64)
+    return { fields, hasResultRefs: fields.includes('resultRefs') }
+  } catch {
+    return { fields: [], hasResultRefs: false }
+  }
+}
 
 const surfaceIdsByDomain: Readonly<Record<string, string[]>> = {
   application: [],
@@ -106,29 +127,6 @@ function surfaceIds(entry: AgentToolCatalogEntry): string[] {
   ])
 }
 
-function capabilityKindMatches(
-  facet: ApplicationCapabilityDiscoveryFacet,
-  indexed: IndexedCapability
-): boolean {
-  if (facet.capabilityKinds.length === 0) return true
-  return facet.capabilityKinds.some((kind) => {
-    const impacts = indexed.definition.capability?.control?.impacts ?? []
-    if (kind === 'observe' || kind === 'query') {
-      return indexed.entry.readOnly && impacts.some((impact) => impact.effect === 'observe')
-    }
-    if (kind === 'navigate') return impacts.some((impact) => impact.effect === 'navigate')
-    if (kind === 'plan') {
-      return indexed.entry.readOnly && (
-        indexed.entry.supportsPreview
-        || /^(?:plan|prepare|search|get|list)_/.test(indexed.entry.name)
-      )
-    }
-    if (kind === 'mutate') return impacts.some((impact) => (
-      ['create', 'update', 'delete'].includes(impact.effect)
-    ))
-    return impacts.some((impact) => impact.effect === 'execute')
-  })
-}
 
 /**
  * 准入只有一条：域。其余全部是排序信号。
@@ -152,92 +150,72 @@ function capabilityKindMatches(
  *
  * 每次修完都只堵住了当次那一条，因为**过滤这个动作本身**才是错的：这些字段全部来自模型对
  * 任务的猜测，猜错的代价不该是能力消失。域是唯一由注册表定义、模型只是转述的字段，所以它
- * 留下；其余交给 requiredEffectScore / entityTypeScore / capabilityKindMatches / targetSurfaceScore
- * 排序——排错顺序只是慢一点，过滤错了是直接没有。
+ * 留下；其余交给 entityTypeScore 与语义查询排序，再由 pairReadAndWriteByEntity 兜底——
+ * 排错顺序只是慢一点，过滤错了是直接没有。
  *
- * 见 capability-reachability.test.ts：那条门禁会枚举全部能力 × 全部 kind 组合，任何一处
- * 重新变成硬过滤都会当场变红。
+ * 见 capability-reachability.test.ts：那条门禁会枚举全部能力 × 全部域，并把实体一律填错，
+ * 任何一处重新变成硬过滤都会当场变红。
  */
 function structuralMatch(
-  facet: ApplicationCapabilityDiscoveryFacet,
+  request: ApplicationCapabilityDiscoveryInput,
   indexed: IndexedCapability
 ): boolean {
-  /*
-   * 目标 Surface 命中时放宽域要求（仅限导航 Facet）——这是放宽，不是过滤。
-   *
-   * "打开三维编辑器"这个 Facet 的 domain 是 navigation，而真正能打开它的
-   * open_camera_stage_project 的 domain 是 camera_stage：不放宽就永远租不到，模型只剩通用的
-   * switch_workspace，切到工具工作区就停了。
-   */
-  const surfaceIsTheGoal = facet.capabilityKinds.includes('navigate')
-  const surfaceMatches = facet.targetSurfaceIds.length > 0
-    && facet.targetSurfaceIds.some((surfaceId) => indexed.match.surfaceIds.includes(surfaceId))
-  return facet.domains.length === 0
-    || facet.domains.includes(indexed.entry.domain)
-    || facet.domains.includes(indexed.entry.category)
-    || (surfaceIsTheGoal && surfaceMatches)
+  return request.domains.length === 0
+    || request.domains.includes(indexed.entry.domain)
+    || request.domains.includes(indexed.entry.category)
 }
 
-/** Facet 点名的实体是否被这个能力覆盖；命中的排在前面。 */
+/** 请求点名的实体是否被这个能力覆盖；命中的排在前面。 */
 function entityTypeScore(
-  facet: ApplicationCapabilityDiscoveryFacet,
+  request: ApplicationCapabilityDiscoveryInput,
   indexed: IndexedCapability
 ): boolean {
-  return facet.entityTypes.length > 0
-    && facet.entityTypes.some((entityType) => indexed.match.entityTypes.includes(entityType))
+  return request.entityTypes.length > 0
+    && request.entityTypes.some((entityType) => indexed.match.entityTypes.includes(entityType))
 }
 
 /**
- * 租约名额（每个 Facet 只有 AGENT_FACET_LEASE_TOOL_LIMIT 个）按这个分数发放。
+ * 保证每个被点名的实体在投影里**读写成对**。
  *
- * 除了"能直接产生所需 effect"的写入能力，**能观察同一实体的只读能力同样必须进租约**：带
- * verificationRequired 的 Effect 只有拿到观察证据才算完成，Facet 完成才轮到下游前沿。实测里
- * 只读的 observe/verify 因为 0 分被字母序挤进 deferred，于是 camera_project 永远停在 active、
- * 依赖前沿再也不推进，整次运行卡死在"允许：无"。
+ * 替代的是 `requiredEffectScore`。那个函数存在的唯一理由，注释写得很清楚：带
+ * verificationRequired 的 Effect 必须拿到观察证据才算完成，而只读的 observe/verify 能力
+ * 因为 0 分被字母序挤进 deferred，Facet 于是永远停在 active、依赖前沿再也不推进。
+ *
+ * 但它的输入 `requiredEffects` 是运行时代填的——模型写不出来，所以旧实现必须强行改写模型的
+ * 请求，才轮得到这个分数生效。整条链路是为了喂饱一个模型看不见的字段而存在的。
+ *
+ * 换成一条**从注册表推导**的结构规则：脚本要写就得先读（拿 ref、读回验证），要读也常常
+ * 需要写（否则这次发现没意义）。所以对每个点名实体，至少保证一个只读能力和一个写能力进入
+ * 投影，剩余名额再按分数补齐。这条规则不依赖模型的任何猜测，可以穷举验证。
+ *
+ * **它只在名额不够分时才真正生效**：当前目录规模下排序已经把实体命中的能力全放进来了，
+ * 撤掉这个函数测试也不会变红。保留它是因为名额是固定的而目录会增长——某个实体的能力数
+ * 一旦超过预算，按字母序被切掉的很可能恰好是那个写能力。见测试里用小 limit 直接验证。
  */
-function requiredEffectScore(
-  facet: ApplicationCapabilityDiscoveryFacet,
-  indexed: IndexedCapability
-): number {
-  const requiredEffects = facet.requiredEffects ?? []
-  if (requiredEffects.length === 0) return 0
-  return requiredEffects.reduce((total, required) => {
-    const quality = (indexed.definition.capability?.control?.impacts ?? []).reduce((best, impact) => {
-      const entityMatch = required.entityTypes.length === 0
-        || impact.entityTypes.length === 0
-        || required.entityTypes.some((entityType) => impact.entityTypes.includes(entityType))
-      if (!entityMatch) return best
-      if (impact.effect === 'observe' && required.effect !== 'observe') {
-        // 验证观察能力：排在直接写入能力之后、无关能力之前。
-        return Math.max(best, indexed.entry.readOnly ? 2 : 0)
-      }
-      if (impact.effect !== required.effect) return best
-      const propertyMatch = required.propertyIds.length === 0
-        || impact.propertyIds.length === 0
-        || required.propertyIds.some((propertyId) => impact.propertyIds.includes(propertyId))
-      if (!propertyMatch) return best
-      // 明确声明实体/属性的正式能力优先于开放世界通用动词；后者仍可作为兜底。
-      return Math.max(best, impact.entityTypes.length > 0 ? 3 : 1)
-    }, 0)
-    return total + quality
-  }, 0)
+export function pairReadAndWriteByEntity(
+  request: ApplicationCapabilityDiscoveryInput,
+  sorted: IndexedCapability[],
+  limit: number
+): string[] {
+  const guaranteed: string[] = []
+  for (const entityType of request.entityTypes) {
+    const touching = sorted.filter((item) => item.match.entityTypes.includes(entityType))
+    const readable = touching.find((item) => item.entry.readOnly)
+    const writable = request.writes ? touching.find((item) => !item.entry.readOnly) : undefined
+    for (const item of [readable, writable]) {
+      if (item && !guaranteed.includes(item.entry.name)) guaranteed.push(item.entry.name)
+    }
+  }
+  const rest = sorted
+    .map((item) => item.entry.name)
+    .filter((name) => !guaranteed.includes(name))
+  return [...guaranteed, ...rest].slice(0, limit)
 }
 
-function targetSurfaceScore(
-  facet: ApplicationCapabilityDiscoveryFacet,
-  indexed: IndexedCapability
-): boolean {
-  return facet.targetSurfaceIds.length > 0
-    && facet.targetSurfaceIds.some((surfaceId) => indexed.match.surfaceIds.includes(surfaceId))
-}
-
-function observationSuggestions(facet: ApplicationCapabilityDiscoveryFacet): string[] {
+function observationSuggestions(request: ApplicationCapabilityDiscoveryInput): string[] {
   return unique([
-    ...(facet.entityTypes.length > 0
-      ? [`先按 schemaRef 读取 ${facet.entityTypes.join('、')} 的控制结构，再观察当前实体 revision。`]
-      : []),
-    ...(facet.targetSurfaceIds.length > 0
-      ? [`仅在用户要求查看或定位时打开 ${facet.targetSurfaceIds.join('、')}。`]
+    ...(request.entityTypes.length > 0
+      ? [`先按 schemaRef 读取 ${request.entityTypes.join('、')} 的控制结构，再观察当前实体 revision。`]
       : []),
   ])
 }
@@ -260,12 +238,15 @@ export class AgentCapabilityDiscoveryCatalog {
     })
     const cacheKey = `${runId}:${fingerprint}`
     const cached = this.cache.get(cacheKey)
-    if (cached) return applicationCapabilityDiscoveryOutputSchema.parse({ ...cached, reused: true })
+    if (cached) {
+      const reused = applicationCapabilityDiscoveryOutputSchema.parse({ ...cached, reused: true })
+      rememberHenjiScriptApiLease(runId, reused.scriptApi)
+      return reused
+    }
 
     const indexed = this.index(context)
-    const facetResults = input.facets.map((facet) => this.matchFacet(facet, indexed, context))
-    const capabilityNames = unique(facetResults.flatMap((item) => item.names))
-    const allMatches = capabilityNames.flatMap((name) => {
+    const matched = this.matchRequest(input, indexed, context)
+    const allMatches = matched.names.flatMap((name) => {
       const item = indexed.find((candidate) => candidate.entry.name === name)
       return item ? [item.match] : []
     })
@@ -273,37 +254,44 @@ export class AgentCapabilityDiscoveryCatalog {
     const nextCursor = input.cursor + capabilities.length < allMatches.length
       ? input.cursor + capabilities.length
       : null
-    /*
-     * 发现范围可以放宽，租约名额不能跟着稀释——但也不能反过来把别的域饿死。
-     *
-     * entityTypes 从硬过滤降级成排序信号之后，一个 Facet 匹配到的能力从"只有实体命中的"变成
-     * "整个域的"，直接 slice(0, 12) 会把同域里不相干的能力也塞满租约（实测租约数 15 → 17）。
-     * 但反过来"只发给实体命中的"同样错：diagnose Facet 的实体是 diagnostics.event，被放宽进来的
-     * camera_stage 能力一个都命中不了，于是又回到 0 个 camera_stage 租约——换个地方复现同一个
-     * 死锁。
-     *
-     * 所以是"优先 + 有限补位"：实体命中的先占，剩下的按排序补至多 LEASE_TAIL_LIMIT 个。放宽域
-     * 至少拿得到几个能用的能力，又不会挤掉别的 Facet。
-     */
-    const leaseCandidates = unique(facetResults.flatMap((item) => {
-      if (item.facet.entityTypes.length === 0) return item.names.slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
-      const matched = item.names.filter((name) => item.entityMatchedNames.has(name))
-      // 补位只发给被放宽进来的域。Facet 自己的域已经由实体命中覆盖，再补进来的都是同域里
-      // 不相干的能力（改名、删除工程之类），白占名额。
-      const widened = item.names.filter((name) => (
-        !item.entityMatchedNames.has(name) && item.widenedDomainNames.has(name)
-      ))
-      return [
-        ...matched.slice(0, AGENT_FACET_LEASE_TOOL_LIMIT),
-        ...widened.slice(0, LEASE_TAIL_LIMIT),
-      ].slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
-    })).slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
-    const leaseSelection = selectLeaseableToolNames(this.registry, context, leaseCandidates)
+    const leaseSelection = selectLeaseableToolNames(this.registry, context, matched.leaseCandidates)
     const leasedToolNames = leaseSelection.leasedToolNames
     const leasedNameSet = new Set(leasedToolNames)
+    const scriptMatches = allMatches.filter((item) => leasedNameSet.has(item.name))
+    const availableNames = new Set(this.registry.list(context).map((entry) => entry.name))
+    /*
+     * Recipe 覆盖判定改由「点名实体」驱动。
+     *
+     * 旧实现按 requiredEffects 做贪心集合覆盖——那份 Effect 是运行时代填的，模型写不出来。
+     * 现在只问一个可从注册表回答的问题：这条 Recipe 碰的实体是不是本次任务点名的实体之一。
+     */
+    const scriptRecipes = HENJI_RECIPE_REGISTRY.list(new Set(input.domains)).filter((recipe) => (
+      recipe.actionIds.every((actionId) => availableNames.has(actionId))
+    ))
+    const applicableScriptRecipes = input.entityTypes.length === 0
+      ? scriptRecipes
+      : scriptRecipes.filter((recipe) => recipe.covers.some((covered) => (
+        covered.entityTypes.some((entityType) => input.entityTypes.includes(entityType))
+      )))
+    const recipeCoveredEntityTypes = new Set(applicableScriptRecipes.flatMap((recipe) => (
+      recipe.covers.flatMap((covered) => covered.entityTypes)
+    )))
+    const recipesCoverAllRequestedEntities = input.entityTypes.length > 0
+      && applicableScriptRecipes.length > 0
+      && input.entityTypes.every((entityType) => recipeCoveredEntityTypes.has(entityType))
+    const scriptEntityTypes = unique([
+      ...scriptMatches.flatMap((item) => item.entityTypes),
+      ...input.entityTypes,
+    ]).slice(0, 64)
+    const scriptPropertyIds = unique([
+      ...scriptMatches.flatMap((item) => item.propertyIds),
+      ...input.queries.flatMap((query) => (
+        query.match(/\b[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+\b/gi) ?? []
+      )),
+    ]).slice(0, 256)
     const deferredToolNames = unique([
       ...leaseSelection.deferredToolNames,
-      ...capabilityNames.filter((name) => !leasedNameSet.has(name)),
+      ...matched.names.filter((name) => !leasedNameSet.has(name)),
     ])
     const output = applicationCapabilityDiscoveryOutputSchema.parse({
       discoveryVersion: APPLICATION_CAPABILITY_DISCOVERY_VERSION,
@@ -311,31 +299,69 @@ export class AgentCapabilityDiscoveryCatalog {
       fingerprint,
       reused: false,
       capabilities,
-      facets: facetResults.map((item) => ({
-        facetId: item.facet.facetId,
-        capabilityNames: item.names.filter((name) => leasedNameSet.has(name)),
-        schemaRefs: item.names.flatMap((name, index) => (
-          leasedNameSet.has(name) ? [item.schemaRefs[index]] : []
-        )).filter((ref): ref is ApplicationSchemaRef => Boolean(ref)),
-        observationSuggestions: [
-          ...observationSuggestions(item.facet),
-          ...(item.kindsRelaxed
-            ? [`返回的能力里没有一个属于 ${item.facet.capabilityKinds.join('、')}，已放宽能力类型过滤；`
-              + '这批能力可能不是该 Facet 最贴切的类型，提交写入前请确认它的 effect 与目标一致。']
-            : []),
-        ].slice(0, 16),
-      })),
-      missing: facetResults.flatMap((item) => item.names.length > 0 ? [] : [{
-        facetId: item.facet.facetId,
-        reason: item.missingReason,
-        requestedDomains: item.facet.domains,
-        requestedEntityTypes: item.facet.entityTypes,
-      }]),
+      observationSuggestions: observationSuggestions(input).slice(0, 16),
+      missing: matched.names.length > 0 ? [] : [{
+        reason: matched.missingReason,
+        requestedDomains: input.domains,
+        requestedEntityTypes: input.entityTypes,
+      }],
       leasedToolNames: leasedToolNames.filter((name) => ![
         'discover_application_capabilities', 'search_application_capabilities',
       ].includes(name)),
       deferredToolNames: deferredToolNames.slice(0, 100),
       deferredCount: deferredToolNames.length,
+      scriptApi: {
+        language: 'henji-ts/v1',
+        entryTool: 'run_henji_script',
+        forbiddenEffects: [],
+        rules: [...HENJI_SCRIPT_LANGUAGE_RULES],
+        entities: {
+          methods: ['list', 'read', 'create', 'update', 'remove'],
+          entityTypes: scriptEntityTypes,
+          propertyIds: scriptPropertyIds,
+          entityDefinitions: [],
+          propertyDefinitions: [],
+        },
+        assertions: {
+          equal: 'app.assert.equal(actual, expected)',
+          exists: 'app.assert.exists(value)',
+          absent: 'app.assert.absent(value)',
+          matches: 'app.assert.matches(value, pattern)',
+        },
+        /*
+         * 配方能覆盖全部点名实体时不再倾倒低层 action——这是**体积即行为**。
+         *
+         * 我一度把两者都给出，理由是"模型自己选更省一轮试错"。实测相反：三维场景投影
+         * 22,477 字节、画布 28,242 字节，都越过 19,200 的卸载阈值，于是发现结果被存成
+         * artifact，模型只能 read_agent_artifact 一页页读回来——一次运行 18 次回读、9 轮
+         * 仍未收敛。给得越多，模型实际看到的越少。
+         *
+         * 覆盖判定改用 entityTypes（v3 请求里模型真写得出来的字段），不再用运行时代填的
+         * requiredEffects。判定保守：只有请求点了名、且每个点名实体都被某条配方覆盖时才抑制；
+         * 有一个没覆盖到就照常给 action。配方的容量上限由 recipes[].limits 交给模型自己判断。
+         */
+        actions: (recipesCoverAllRequestedEntities ? [] : scriptMatches).flatMap((item) => {
+          if (SCRIPT_INTERNAL_CAPABILITIES.has(item.name)) return []
+          const definition = this.registry.get(item.name)
+          return definition ? [{
+            id: item.name,
+            title: item.title,
+            parameters: definition.aiInputSchema,
+            returns: publicResultShape(definition.outputSchema),
+          }] : []
+        }).slice(0, 32),
+        recipes: applicableScriptRecipes.map((recipe) => ({
+          id: recipe.id, title: recipe.title, parameters: recipe.parameters,
+          returns: { fields: ['resultRefs'], hasResultRefs: true },
+          verification: [...recipe.verification],
+          // 容量上限如实给出，让模型自己判断这条 Recipe 装不装得下本次任务。
+          limits: recipe.covers.map((covered) => ({
+            effect: covered.effect,
+            entityTypes: [...covered.entityTypes],
+            maximumCount: covered.maximumCount,
+          })).slice(0, 16),
+        })).slice(0, 16),
+      },
       page: {
         returnedItems: capabilities.length,
         nextCursor,
@@ -343,6 +369,7 @@ export class AgentCapabilityDiscoveryCatalog {
       },
     })
     this.cache.set(cacheKey, output)
+    rememberHenjiScriptApiLease(runId, output.scriptApi)
     return output
   }
 
@@ -405,59 +432,32 @@ export class AgentCapabilityDiscoveryCatalog {
     })
   }
 
-  private matchFacet(
-    facet: ApplicationCapabilityDiscoveryFacet,
+  /**
+   * 一次扁平匹配。准入只有域，其余全是排序信号。
+   *
+   * `structuralMatch` 保持原样——它上面那段注释记录了四次同形事故（surface / entityTypes /
+   * capabilityKinds / 导航 surface 分别被当成硬过滤，导致已注册能力对模型隐身）。
+   * 每次修都只堵住当次那一条，因为**过滤这个动作本身**才是错的。
+   */
+  private matchRequest(
+    request: ApplicationCapabilityDiscoveryInput,
     indexed: IndexedCapability[],
     context: HostContextSnapshot | null
   ): {
-    facet: ApplicationCapabilityDiscoveryFacet
     names: string[]
-    /** 其中真正覆盖了 Facet 点名实体的能力；租约名额优先发给它们。 */
-    entityMatchedNames: Set<string>
-    /**
-     * 来自「被放宽进来的域」的能力，即 Facet 自身领域之外的那些。
-     *
-     * `buildCapabilityDiscoveryInputForFacets` 按 `[facet.domain, ...extraDomains]` 构造 domains，
-     * 首项恒为 Facet 自身领域；其余都是延续证据、路由域或模型自报带进来的。
-     */
-    widenedDomainNames: Set<string>
-    /** 返回的能力里没有一个符合声明的 capabilityKinds。要如实告诉模型。 */
-    kindsRelaxed: boolean
-    schemaRefs: ApplicationSchemaRef[]
+    leaseCandidates: string[]
     missingReason: 'no_matching_capability' | 'permission_filtered' | 'unsupported_domain'
   } {
-    const semanticNames = new Set(facet.queries.flatMap((query) => (
+    const semanticNames = new Set(request.queries.flatMap((query) => (
       this.registry.search(query, undefined, context, 100).map((entry) => entry.name)
     )))
-    /*
-     * capabilityKinds 不再算「结构过滤」：它已经降级成排序信号（见 structuralMatch），
-     * 留在这里会让「只声明了 queries + kinds」的 Facet 变成完全不过滤。
-     */
-    const hasStructuralFilter = facet.domains.length > 0
-      || facet.entityTypes.length > 0
-      || facet.targetSurfaceIds.length > 0
-    const passes = (item: IndexedCapability): boolean => (
-      structuralMatch(facet, item)
-      && (facet.queries.length === 0 || hasStructuralFilter || semanticNames.has(item.entry.name))
-    )
-    const candidates = indexed.filter(passes)
-    /*
-     * kind 不再决定去留，但仍要如实告诉模型「这批能力里没有一个是你声明的类型」——
-     * 它多半意味着这个 Facet 的 kinds 或域填错了，提交写入前该自己核对一遍 effect。
-     */
-    const kindsRelaxed = facet.capabilityKinds.length > 0
-      && candidates.length > 0
-      && !candidates.some((item) => capabilityKindMatches(facet, item))
-    const matches = candidates
-      .sort((left, right) => (
-      requiredEffectScore(facet, right) - requiredEffectScore(facet, left)
-      // entityTypes 从硬过滤降级成排序信号后，命中实体的能力必须仍然排在最前，否则租约名额
-      // 会被同域里不相干的能力占掉。
-      || Number(entityTypeScore(facet, right)) - Number(entityTypeScore(facet, left))
-      // kind 从准入降级到这里：类型对得上的排在前面，对不上的仍然拿得到名额。
-      || Number(capabilityKindMatches(facet, right)) - Number(capabilityKindMatches(facet, left))
-      // 能真正到达目标 Surface 的能力优先于通用导航，否则"打开三维编辑器"会退化成切工作区。
-      || Number(targetSurfaceScore(facet, right)) - Number(targetSurfaceScore(facet, left))
+    const hasStructuralFilter = request.domains.length > 0 || request.entityTypes.length > 0
+    const candidates = indexed.filter((item) => (
+      structuralMatch(request, item)
+      && (hasStructuralFilter || semanticNames.has(item.entry.name))
+    ))
+    const sorted = [...candidates].sort((left, right) => (
+      Number(entityTypeScore(request, right)) - Number(entityTypeScore(request, left))
       || Number(semanticNames.has(right.entry.name)) - Number(semanticNames.has(left.entry.name))
       || left.entry.name.localeCompare(right.entry.name)
     ))
@@ -465,35 +465,27 @@ export class AgentCapabilityDiscoveryCatalog {
       definition.category,
       definition.capability?.domain ?? definition.category,
     ]))
-    const unsupported = facet.domains.length > 0 && facet.domains.every((domain) => !knownDomains.has(domain))
+    const unsupported = request.domains.length > 0
+      && request.domains.every((domain) => !knownDomains.has(domain))
     /*
      * permission_filtered 必须真的是权限造成的。
      *
      * 旧判定是"本轮没匹配到 && 存在同域定义"——只要那个域有任何能力存在就报权限过滤。实测
-     * 一次 diagnose Facet 因为 entityTypes 不匹配而 0 命中，被报成 permission_filtered，助手照着
-     * 这个标签给用户编出了"需要先授权 3D 对象写入能力"这个根本不存在的原因，还建议用户去授权。
-     * 错误标签比没有标签更贵：它会被当成事实写进答复。
-     *
-     * 正确判定只有一种：忽略宿主可用性重新匹配一遍，能匹配上就说明确实是被过滤掉了。
+     * 一次 0 命中被报成 permission_filtered，助手照着这个标签编出了"需要先授权 3D 对象写入
+     * 能力"这个根本不存在的原因，还建议用户去授权。错误标签比没有标签更贵：它会被当成事实
+     * 写进答复。正确判定只有一种：忽略宿主可用性重新匹配一遍，能匹配上才是真被过滤了。
      */
-    const permissionFiltered = matches.length === 0
-      && this.indexAll().some((candidate) => structuralMatch(facet, candidate))
+    const permissionFiltered = sorted.length === 0
+      && this.indexAll().some((candidate) => structuralMatch(request, candidate))
     return {
-      facet,
-      kindsRelaxed,
-      names: matches.map((item) => item.entry.name),
-      entityMatchedNames: new Set(matches
-        .filter((item) => entityTypeScore(facet, item))
-        .map((item) => item.entry.name)),
-      widenedDomainNames: new Set(matches
-        .filter((item) => facet.domains.length > 1
-          && item.entry.domain !== facet.domains[0]
-          && item.entry.category !== facet.domains[0])
-        .map((item) => item.entry.name)),
-      schemaRefs: matches.map((item) => item.match.schemaRef),
+      names: sorted.map((item) => item.entry.name),
+      leaseCandidates: pairReadAndWriteByEntity(request, sorted, AGENT_DISCOVERY_LEASE_TOOL_LIMIT),
       missingReason: unsupported
         ? 'unsupported_domain'
         : permissionFiltered ? 'permission_filtered' : 'no_matching_capability',
     }
   }
 }
+
+
+

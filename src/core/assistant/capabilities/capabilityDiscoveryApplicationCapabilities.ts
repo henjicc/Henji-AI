@@ -44,73 +44,53 @@ export const discoverApplicationCapabilitiesCapability = defineApplicationCapabi
   supportsPreview: false,
   supportsUndo: false,
   requiredScopes: [],
-  prerequisites: ['任务已拆分为一个或多个明确 Facet。'],
-  acceptsRefs: ['agent.task_facet'],
+  prerequisites: ['已知道本次任务要读写哪些实体类型，或至少能用自然语言描述目标。'],
+  acceptsRefs: [],
   producesRefs: ['application.capability', 'application.schema'],
-  successEvidence: ['每个 Facet 都返回命中或明确缺失原因，并提供稳定 schemaRef 与发现指纹。'],
+  successEvidence: ['返回可用能力与 scriptApi 投影，或给出明确缺失原因与稳定 schemaRef。'],
   failureRecovery: ['缺失能力时停止换词搜索；根据缺失领域向用户说明，或等待应用升级。'],
   inputSchema: applicationCapabilityDiscoveryInputSchema,
   outputSchema: applicationCapabilityDiscoveryOutputSchema,
   aiInputSchema: {
     type: 'object',
     properties: {
-      discoveryVersion: { type: 'string', const: APPLICATION_CAPABILITY_DISCOVERY_VERSION },
-      facets: {
-        type: 'array',
-        minItems: 1,
-        maxItems: 16,
-        items: {
-          type: 'object',
-          properties: {
-            facetId: { type: 'string' },
-            queries: { type: 'array', maxItems: 8, items: { type: 'string' } },
-            domains: { type: 'array', maxItems: 8, items: { type: 'string' } },
-            entityTypes: { type: 'array', maxItems: 16, items: { type: 'string' } },
-            capabilityKinds: {
-              type: 'array', maxItems: 6,
-              items: { type: 'string', enum: ['observe', 'query', 'plan', 'mutate', 'navigate', 'execute'] },
-            },
-            targetSurfaceIds: { type: 'array', maxItems: 8, items: { type: 'string' } },
-          },
-          required: ['facetId'],
-          additionalProperties: false,
-        },
+      queries: {
+        type: 'array', minItems: 1, maxItems: 8, items: { type: 'string' },
+        description: '用自然语言描述本次任务要做的事，一条一个目标',
       },
+      domains: {
+        type: 'array', maxItems: 8, items: { type: 'string' },
+        description: '领域，例如 camera_stage / canvas / settings。这是唯一的硬准入条件',
+      },
+      entityTypes: {
+        type: 'array', maxItems: 24, items: { type: 'string' },
+        description: '本次任务要读写的实体类型，形如 camera_stage.object。投影与排序的主信号',
+      },
+      writes: { type: 'boolean', description: '本轮是否会写入；只读任务填 false 可显著压缩返回体积' },
       cursor: { type: 'integer', minimum: 0 },
       limit: { type: 'integer', minimum: 1, maximum: 20 },
     },
-    required: ['facets'],
+    required: ['queries'],
     additionalProperties: false,
   },
   concurrencyKey: 'catalog:discover',
   parallelSafe: true,
-  resolveConcurrencyKey: (input) => `catalog:discover:${input.facets.map((facet) => facet.facetId).sort().join(',')}`,
+  resolveConcurrencyKey: (input) => `catalog:discover:${[...input.domains].sort().join(',')}`,
   summarize: (output) => (
-    `批量发现 ${output.facets.length} 个 Facet，返回 ${output.capabilities.length} 项能力`
-    + `${output.missing.length > 0 ? `，${output.missing.length} 个 Facet 缺失` : ''}${output.reused ? '（复用缓存）' : ''}。`
+    `返回 ${output.capabilities.length} 项能力`
+    + `${output.missing.length > 0 ? '，未命中任何能力' : ''}${output.reused ? '（复用缓存）' : ''}。`
   ),
   /*
    * 发现结果是整次运行里最大的一条工具结果（实测单条 29.9KB = 那次运行对话历史的 38%），
-   * 而它体积的大头恰好是**同一轮 `tools` 参数已经发过一遍**的输入 schema：
-   * `capabilities[].schemaRef` 3.7KB + `facets[].schemaRefs` 11.2KB，其中未被租约覆盖、
-   * 也就是真正只能靠 `read_application_schemas` 取回的部分只有 12 字节。
-   *
-   * 所以 schemaRefs 按租约过滤而不是一刀切：已租约的工具模型这轮就拿着完整 schema，
-   * 未租约（deferred）的才留下引用，读取路径不受影响。
+   * 而它体积的大头恰好是**同一轮 `tools` 参数已经发过一遍**的输入 schema。
+   * 所以历史投影里把这部分剥掉，读取路径不受影响。
    */
-  projectForHistory: (output) => {
-    const leased = new Set(output.leasedToolNames)
-    return {
-      ...output,
-      capabilities: omitRecordKeys(output.capabilities, CAPABILITY_DISCOVERY_HISTORY_OMITTED_KEYS),
-      facets: output.facets.map((facet) => ({
-        ...facet,
-        schemaRefs: facet.schemaRefs.filter((ref) => !leased.has(ref.id)),
-      })),
-      note: '已租约能力的输入 schema 由本轮 tools 参数提供，本记录不再重复；'
-        + 'schemaRefs 只保留尚未租约的候选，需要时用 read_application_schemas 读取。',
-    }
-  },
+  projectForHistory: (output) => ({
+    ...output,
+    capabilities: omitRecordKeys(output.capabilities, CAPABILITY_DISCOVERY_HISTORY_OMITTED_KEYS),
+    note: '已租约能力的输入 schema 由本轮 tools 参数与 scriptApi 投影提供，本记录不再重复；'
+      + '需要未租约能力的 schema 时用 read_application_schemas 读取。',
+  }),
 })
 
 export const readApplicationSchemasCapability = defineApplicationCapability({

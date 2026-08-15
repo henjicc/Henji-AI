@@ -83,6 +83,40 @@ export class AgentToolExecutionCoordinator {
   /** 整次运行内已经纠正过的守卫问题，用来区分"第一次被纠正"和"重复犯同一个错"。 */
   private readonly rejectedGuardSignatures = new Set<string>()
 
+  /** 本次运行已经取回过的 artifact 分页，键是 `ref@cursor`。 */
+  private readonly servedArtifactReads = new Set<string>()
+
+  /**
+   * 同一 artifact 的同一页读过就不再读——它返回的字节完全相同，且已经在对话历史里。
+   *
+   * 预算里的 `repeatedToolCalls` 只比**连续**相同的签名，模型交替读几个 artifact 就绕过去了。
+   * 实测一次运行 38 次 read_agent_artifact、6 个 ref 各读 4 次、25 个模型步仍未收敛，全程没有
+   * 任何东西拦它——因为每次调用的签名都和上一次不同。
+   *
+   * 这条判的是事实不是措辞：同一 (ref, cursor) 的返回内容逐字节相同，重复取回不可能带来新信息。
+   * 要继续往下读就带 nextCursor，那是另一个键，不会被拦。
+   */
+  private rejectRepeatedArtifactRead(
+    call: ModelStepToolCall
+  ): { code: AgentToolErrorCode; reason: string } | null {
+    if (call.toolName !== 'read_agent_artifact') return null
+    const input = call.input && typeof call.input === 'object' && !Array.isArray(call.input)
+      ? call.input as Record<string, unknown>
+      : {}
+    const ref = typeof input.artifactRef === 'string' ? input.artifactRef : null
+    if (!ref) return null
+    const key = `${ref}@${typeof input.cursor === 'number' ? input.cursor : 'start'}`
+    if (!this.servedArtifactReads.has(key)) {
+      this.servedArtifactReads.add(key)
+      return null
+    }
+    return {
+      code: 'INVALID_INPUT',
+      reason: `该 artifact 的这一页本轮已经取回过（${key}），内容与上次逐字节相同，请直接使用上文里的那份结果；`
+        + '确实需要后续内容时带上返回的 nextCursor 继续读，不要重复读同一页。',
+    }
+  }
+
   constructor(private readonly options: AgentToolExecutionCoordinatorOptions) {}
 
   async execute(
@@ -143,8 +177,9 @@ export class AgentToolExecutionCoordinator {
       emit: this.options.emit,
       onDiscoveredTools: this.options.onDiscoveredTools,
       resolveActionGroup: (call) => this.options.getProgressTracker()?.actionGroupForCall(call) ?? null,
-      normalizeInput: (call) => this.options.getProgressTracker()?.normalizeCallInput(call) ?? null,
       executionGuard: (call, revisions, allowSettledActionGroupSibling) => {
+        const repeatedRead = this.rejectRepeatedArtifactRead(call)
+        if (repeatedRead) return rejectGuard(call, repeatedRead, ['repeated_artifact_read'])
         const currentTracker = this.options.getProgressTracker()
         if (call.toolName === 'run_henji_script') {
           const recoveryReason = this.options.recoveryGuard.validate(call)
@@ -207,3 +242,5 @@ export class AgentToolExecutionCoordinator {
     }
   }
 }
+
+

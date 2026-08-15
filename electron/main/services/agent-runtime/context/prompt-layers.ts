@@ -10,7 +10,7 @@ import type {
   AgentContextBuildInput,
   AgentContextLayer,
 } from './types'
-import { createCapabilityDiscoveryInputFromTaskGraph } from '../../../../../src/core/assistant/capabilityDiscovery'
+import { createCapabilityDiscoveryFallbackInput } from '../../../../../src/core/assistant/capabilityDiscovery'
 import type { AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 
 /** observations 索引最多登记多少条最近观察。 */
@@ -172,15 +172,15 @@ function planFacetSummaries(taskGraph: AgentTaskGraph): Record<string, unknown>[
 function planState(input: AgentContextBuildInput): Record<string, unknown> {
   const summary = input.workingSummary
   const taskGraph = input.route.taskGraph
-  const rawDiscoveryRequest = taskGraph
-    ? createCapabilityDiscoveryInputFromTaskGraph(taskGraph)
-    : null
-  const leasedFacetIds = new Set(summary?.toolLeases.map((lease) => lease.facetId) ?? [])
-  const discoveryFacets = rawDiscoveryRequest?.facets.filter((facet) => (
-    !leasedFacetIds.has(facet.facetId)
-  )) ?? []
-  const discoveryRequest = rawDiscoveryRequest && discoveryFacets.length > 0
-    ? { ...rawDiscoveryRequest, facets: discoveryFacets }
+  /*
+   * 发现请求降级为**兜底建议**，不再是"下一步怎么做"的唯一依据。
+   *
+   * 旧实现由任务图逐 Facet 构造，并由 normalizeCallInput 覆盖模型自拟的请求；主模型——
+   * 唯一拿得到完整会话历史的角色——因此连"我要的东西在另一个领域"都表达不了。
+   * 现在模型自己写请求，这里只在它还没租到任何能力时给一个起点。
+   */
+  const discoveryRequest = taskGraph && (summary?.toolLeases.length ?? 0) === 0
+    ? createCapabilityDiscoveryFallbackInput(taskGraph)
     : null
   /*
    * 键序即抗截断优先级：本层从尾部裁剪，模型必须能看到的东西排在最前。
@@ -482,3 +482,4 @@ export function updateToolContractLayer(
       }
     : layer)
 }
+

@@ -126,16 +126,12 @@ describe('能力可达性', () => {
       const expected = capabilities.filter((item) => item.domain === domain)
       for (const [index, kinds] of KIND_SETS.entries()) {
         const output = catalog.discover(`reachability-${domain}-${index}`, {
-          discoveryVersion: 'application-capability-discovery/v2',
-          facets: [{
-            facetId: 'probe',
-            queries: [],
-            domains: [domain],
-            // 实体与页面一律填错：模型填不准是常态，不该因此丢能力。
-            entityTypes: [WRONG_ENTITY_TYPE],
-            capabilityKinds: [...kinds],
-            targetSurfaceIds: [WRONG_SURFACE_ID],
-          }],
+          discoveryVersion: 'application-capability-discovery/v3',
+          queries: [`域 ${domain} 的第 ${index} 组探针`],
+          domains: [domain],
+          // 实体一律填错：模型填不准是常态，不该因此丢能力。
+          entityTypes: [WRONG_ENTITY_TYPE],
+          writes: true,
           cursor: 0,
           limit: 48,
         }, context)
@@ -172,20 +168,11 @@ describe('能力可达性', () => {
     const unleased: string[] = []
     for (const item of capabilities) {
       const output = catalog.discover(`lease-${item.name}`, {
-        discoveryVersion: 'application-capability-discovery/v2',
-        facets: [{
-          facetId: 'probe',
-          queries: [],
-          domains: [item.domain],
-          entityTypes: item.entityTypes,
-          capabilityKinds: [],
-          targetSurfaceIds: [],
-          requiredEffects: item.effects.map((effect) => ({
-            effect: effect as 'observe' | 'create' | 'update' | 'delete' | 'navigate' | 'execute',
-            entityTypes: item.entityTypes,
-            propertyIds: [],
-          })),
-        }],
+        discoveryVersion: 'application-capability-discovery/v3',
+        queries: [`使用 ${item.name}`],
+        domains: [item.domain],
+        entityTypes: item.entityTypes,
+        writes: true,
         cursor: 0,
         limit: 48,
       }, context)
@@ -200,3 +187,6 @@ describe('能力可达性', () => {
     ].join('\n')).toEqual([])
   })
 })
+
+
+

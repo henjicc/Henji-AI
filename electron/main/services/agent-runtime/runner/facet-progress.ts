@@ -36,8 +36,6 @@ import {
 import { buildAgentProgressSettlement, buildSettlementGuidance } from './facet-settlement'
 import { buildUserResumeProgress, listActiveFacetIds, listDependencyFrontierFacetIds } from './facet-progress-state'
 import {
-  buildCapabilityDiscoveryInputForFacets,
-  listDiscoverableFacets,
 } from '../../../../../src/core/assistant/capabilityDiscovery'
 
 const logger = createMainLogger('main.agent_runtime')
@@ -197,60 +195,18 @@ export class AgentFacetProgressTracker {
     return listDependencyFrontierFacetIds([...this.facets.values()], limit)
   }
 
-  /**
-   * 把能力发现请求改写成运行时唯一正确的那一份，而不是拒绝模型。
+  /*
+   * 这里曾经有一个 normalizeCallInput：把模型写的能力发现请求整个改写成运行时的依赖前沿，
+   * 模型申报的 facetId / entityTypes / capabilityKinds 除 queries 与 domains 外全部丢弃。
    *
-   * 依赖前沿和它的 requiredEffects 全都是运行时可以直接算出来的；让模型去复述这份集合，猜错
-   * 就判 INVALID_INPUT，只会白白烧掉一轮并计进连续失败预算。更糟的是当前沿 Facet 已全部持有
-   * 租约时旧实现返回"允许：无"，于是任何后续发现都必然失败——而让前沿推进所需要的只读观察
-   * 能力恰好又没被租到，整次运行就此死锁（实测的三维建场景任务就是这样断在第 11 轮）。
+   * 它的出发点是对的——依赖前沿和 requiredEffects 运行时算得出来，让模型复述只会白烧一轮。
+   * 但代价是主模型（唯一拿得到完整会话历史的角色）连"我要的东西在另一个领域"都表达不了，
+   * 只能把工具可用性当成意图证据，反过来推翻自己原本正确的判断。
    *
-   * 现在：前沿一律并入请求（模型漏掉依赖也不会卡住），但**模型自己申报的 Facet 同样并入**，
-   * 而不是被覆盖掉——见下面 mergeDeclaredFacets 的说明。重复发现交给 no_change 计数做软刹车。
+   * 发现请求扁平化到实体粒度之后，模型完全写得出来：queries / domains / entityTypes / writes
+   * 都是它知道的事。所以不再改写——模型写什么就发什么，任务图只在模型尚未租到任何能力时
+   * 通过 plan_state.discoveryRequest 给一个兜底建议。
    */
-  normalizeCallInput(call: ModelStepToolCall): unknown | null {
-    if (call.toolName !== 'discover_application_capabilities') return null
-    const scope = listDiscoverableFacets([...this.facets.values()])
-    if (scope.length === 0) return null
-    const undiscovered = scope.filter((facet) => !this.discoveredFacetIds.has(facet.facetId))
-    const targets = this.mergeDeclaredFacets(
-      undiscovered.length > 0 ? undiscovered : scope,
-      call.input
-    )
-    const input = asRecord(call.input)
-    const extraQueries: Record<string, string[]> = {}
-    if (Array.isArray(input?.facets)) {
-      for (const rawFacet of input.facets) {
-        const facet = asRecord(rawFacet)
-        if (typeof facet?.facetId !== 'string') continue
-        if (Array.isArray(facet.queries)) {
-          extraQueries[facet.facetId] = facet.queries.filter(
-            (query): query is string => typeof query === 'string' && query.length > 0
-          )
-        }
-        /*
-         * 模型自己申报的领域必须收下。
-         *
-         * 这是它唯一能说出"我要的能力不在这个域里"的地方。旧实现把 domains 整个覆盖成
-         * [facet.domain]，模型即使准确诊断出"当前上下文未持有 camera_stage 租约"也无处申诉，
-         * 只能把工具可用性当成意图证据，反过来推翻自己原本正确的判断——实测就是这么坏的。
-         * 领域只放宽不收窄，权限仍由 registry.list(context) 与审批把关，放宽本身不越权。
-         */
-        if (Array.isArray(facet.domains)) {
-          for (const domain of facet.domains) {
-            if (typeof domain === 'string' && domain.length > 0 && domain.length <= 128) {
-              this.extraDiscoveryDomains.add(domain)
-            }
-          }
-        }
-      }
-    }
-    return buildCapabilityDiscoveryInputForFacets(
-      targets,
-      extraQueries,
-      [...this.extraDiscoveryDomains]
-    )
-  }
 
   validate(
     call: ModelStepToolCall,
@@ -745,3 +701,4 @@ export class AgentFacetProgressTracker {
     return event
   }
 }
+

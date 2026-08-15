@@ -178,128 +178,6 @@ function registry(input?: {
 }
 
 describe('AgentFacetProgressTracker', () => {
-  it('能力发现请求被规范化到真实依赖前沿，而不是判失败', () => {
-    const tracker = new AgentFacetProgressTracker(graph([
-      facet({ facetId: 'ready_a', domain: 'camera_stage' }),
-      facet({ facetId: 'ready_b', domain: 'camera_stage' }),
-      facet({ facetId: 'later', domain: 'camera_stage', dependsOn: ['ready_a'] }),
-    ]), registry())
-
-    const facetIdsOf = (input: unknown): string[] => (
-      (input as { facets: { facetId: string }[] }).facets.map((item) => item.facetId)
-    )
-    // 无论模型少写、多写还是只写下游，都补正成"整条链路一次发现完"，且不产生任何拒绝。
-    for (const requested of [
-      [{ facetId: 'ready_a' }],
-      [{ facetId: 'ready_a' }, { facetId: 'ready_b' }, { facetId: 'later' }],
-      [{ facetId: 'later' }],
-    ]) {
-      const target = call('discover_application_capabilities', { facets: requested })
-      expect(facetIdsOf(tracker.normalizeCallInput(target))).toEqual(['ready_a', 'ready_b', 'later'])
-      expect(tracker.validate(target, {})).toBeNull()
-    }
-  })
-
-  /*
-   * 回归："在 3D 镜头参考里新建工程并布置场景"整次运行卡死的那条链路。
-   *
-   * 工程创建成功但还差一次验证观察 → camera_project 停在 active → 依赖前沿始终只有它自己
-   * → 旧实现的能力发现返回"允许：无"、导航写入返回 ACTION_PLAN_REQUIRED，模型转去
-   * declare_action_plan 又撞 schema，四次守卫失败直接触发 CONSECUTIVE_FAILURES。
-   */
-  it('前置 Facet 尚未验证完成时，能力发现与下游导航都不再死锁', () => {
-    const tracker = new AgentFacetProgressTracker(graph([
-      facet({
-        facetId: 'camera_project', domain: 'camera_stage',
-        targetEntityTypes: ['camera_stage.project'],
-        requiredEffects: [{
-          effectId: 'camera_project_effect', effect: 'create',
-          entityTypes: ['camera_stage.project'], propertyIds: [], minimumCount: 1,
-          targetRefs: [], verificationRequired: true, actionGroupId: 'camera_project_actions',
-        }],
-      }),
-      facet({
-        facetId: 'show_target_surface', domain: 'navigation',
-        capabilityKinds: ['observe', 'navigate'], dependsOn: ['camera_project'],
-        requiredEffects: [{
-          effectId: 'show_target_surface_effect', effect: 'navigate', entityTypes: [],
-          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false,
-          actionGroupId: 'show_target_surface_actions',
-        }],
-      }),
-    ]), registry({ writeEntityTypes: ['camera_stage.project'] }))
-
-    tracker.observe({
-      call: call('write_camera', { id: 'project' }), expectedRevisions: {},
-      observation: observation('write_camera', { projectId: 'project-1', revision: 3 }),
-    })
-    expect(tracker.dependencyFrontierFacetIds()).toEqual(['camera_project'])
-
-    const discovery = call('discover_application_capabilities', {
-      facets: [{ facetId: 'show_target_surface' }],
-    })
-    expect(tracker.normalizeCallInput(discovery)).not.toBeNull()
-    expect(tracker.validate(discovery, {})).toBeNull()
-    expect(tracker.validate(call('navigate_surface', { id: 'tools' }), {})).toBeNull()
-  })
-
-  it('规范化把运行时 requiredEffects 带进发现请求，租约排序才有依据', () => {
-    const tracker = new AgentFacetProgressTracker(graph([
-      facet({
-        facetId: 'camera',
-        domain: 'camera_stage',
-        targetEntityTypes: ['camera_stage.project'],
-        requiredEffects: [{
-          effectId: 'camera_effect', effect: 'create', entityTypes: ['camera_stage.project'],
-          propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
-          actionGroupId: 'camera_actions',
-        }],
-      }),
-    ]), registry())
-    const normalized = tracker.normalizeCallInput(call('discover_application_capabilities', {
-      facets: [{ facetId: 'camera', queries: ['新建工程'] }],
-    })) as { facets: { queries: string[]; requiredEffects: unknown[] }[] }
-    expect(normalized.facets[0].requiredEffects).toEqual([
-      {
-        effect: 'create', entityTypes: ['camera_stage.project'], propertyIds: [],
-        minimumCount: 1,
-      },
-    ])
-    // 模型自带的检索词保留，运行时目标补在前面。
-    expect(normalized.facets[0].queries).toContain('新建工程')
-  })
-
-  /*
-   * 模型自报的领域是它唯一的申诉渠道。
-   *
-   * 旧实现把 domains 整个覆盖成 [facet.domain]，模型即使准确说出"当前上下文未持有
-   * camera_stage 租约"也要不回来，只能把工具可用性当意图证据、推翻自己原本正确的判断。
-   */
-  it('模型自报的领域并入发现请求，而不是被覆盖掉', () => {
-    const tracker = new AgentFacetProgressTracker(graph([
-      facet({ facetId: 'picture', domain: 'generation', targetEntityTypes: ['generation.task'] }),
-    ]), registry())
-    const normalized = tracker.normalizeCallInput(call('discover_application_capabilities', {
-      facets: [{ facetId: 'picture', domains: ['camera_stage'] }],
-    })) as { facets: { domains: string[] }[] }
-    expect(normalized.facets[0].domains).toContain('generation')
-    expect(normalized.facets[0].domains).toContain('camera_stage')
-  })
-
-  it('会话延续领域在第一次发现时就生效', () => {
-    const tracker = new AgentFacetProgressTracker(
-      graph([facet({ facetId: 'picture', domain: 'generation', targetEntityTypes: ['generation.task'] })]),
-      registry(),
-      false,
-      [],
-      [],
-      ['camera_stage']
-    )
-    const normalized = tracker.normalizeCallInput(
-      call('discover_application_capabilities', {})
-    ) as { facets: { domains: string[] }[] }
-    expect(normalized.facets[0].domains).toContain('camera_stage')
-  })
 
   /*
    * 写入本身不构成验证，但一次覆盖到位的结构化观察就够了。
@@ -654,19 +532,6 @@ describe('AgentFacetProgressTracker', () => {
     })
   })
 
-  it('一次发现覆盖整条链路，下游 Facet 的工具提前租好', () => {
-    const tracker = new AgentFacetProgressTracker(graph([
-      facet({ facetId: 'anchor', domain: 'camera_stage', capabilityKinds: ['query'] }),
-      facet({ facetId: 'write', domain: 'camera_stage', dependsOn: ['anchor'] }),
-    ]), registry())
-    // 执行顺序仍由依赖前沿约束，只有能力发现的范围放宽。
-    expect(tracker.dependencyFrontierFacetIds()).toEqual(['anchor'])
-    const normalized = tracker.normalizeCallInput(call('discover_application_capabilities', {
-      facets: [{ facetId: 'write' }],
-    })) as { facets: { facetId: string }[] }
-    expect(normalized.facets.map((item) => item.facetId)).toEqual(['anchor', 'write'])
-  })
-
   it('新 schema 算进展，同一 Facet 的重复发现靠 no_change 软刹车而不是硬失败', () => {
     const tracker = new AgentFacetProgressTracker(graph([
       facet({ facetId: 'camera', domain: 'camera_stage' }),
@@ -701,16 +566,6 @@ describe('AgentFacetProgressTracker', () => {
     }
     expect(tracker.validate(discoveryCall, {})).toMatchObject({ events: expect.any(Array) })
     expect(tracker.settlement().status).toBe('active')
-  })
-
-  it('前沿 Facet 全部持有租约时仍可发现，不会返回"允许：无"死锁', () => {
-    const tracker = new AgentFacetProgressTracker(graph([
-      facet({ facetId: 'camera', domain: 'camera_stage' }),
-    ]), registry(), false, [], ['camera'])
-    const target = call('discover_application_capabilities', { facets: [{ facetId: 'camera' }] })
-    const normalized = tracker.normalizeCallInput(target) as { facets: { facetId: string }[] }
-    expect(normalized.facets.map((item) => item.facetId)).toEqual(['camera'])
-    expect(tracker.validate(target, {})).toBeNull()
   })
 
   it('成功写入后阻止相同参数和 base revision 的重复创建并保留部分完成', () => {

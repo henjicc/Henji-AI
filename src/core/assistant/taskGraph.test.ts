@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { agentTaskGraphSchema, createSingleFacetTaskGraph } from './taskGraph'
 import {
-  createCapabilityDiscoveryInputFromTaskGraph,
+  createCapabilityDiscoveryFallbackInput,
   listDependencyFrontierFacets,
 } from './capabilityDiscovery'
 
@@ -83,16 +83,13 @@ describe('agentTaskGraphSchema', () => {
         },
       ],
     })
-    const request = createCapabilityDiscoveryInputFromTaskGraph(graph)
-    expect(request?.facets).toHaveLength(2)
-    expect(request?.facets[1]).toMatchObject({
-      facetId: 'show_settings',
-      domains: ['navigation'],
-      targetSurfaceIds: ['settings.general'],
-    })
+    const request = createCapabilityDiscoveryFallbackInput(graph)
+    // 请求已扁平化到实体粒度：不再逐 Facet 列举，只汇总领域与实体。
+    expect(request?.domains).toEqual(expect.arrayContaining(['settings', 'navigation']))
+    expect(request?.queries.length).toBeGreaterThan(0)
   })
 
-  it('依赖前沿只含已就绪 Facet，而发现范围一次覆盖整条链路', () => {
+  it('兜底发现请求只覆盖依赖前沿，模型可自行放宽', () => {
     const first = createSingleFacetTaskGraph({
       goal: '先读取工程', facetId: 'project', domain: 'camera_stage',
       capabilityKinds: ['observe'], completionCondition: '取得工程引用',
@@ -121,10 +118,12 @@ describe('agentTaskGraphSchema', () => {
     expect(listDependencyFrontierFacets(graph.facets).map((facet) => facet.facetId))
       .toEqual(['project'])
     /*
-     * 但"该发现哪些能力"必须覆盖下游：只发现当前前沿意味着每推进一步都要再来一次
-     * 完整往返（发现 → 结果卸载 → 分页读回），一个多 Facet 任务光协议就烧掉二十多轮。
+     * 兜底请求只是个起点，不再替模型决定发现范围：模型自己写 queries / domains /
+     * entityTypes，想要下游领域直接写进去即可。
      */
-    expect(createCapabilityDiscoveryInputFromTaskGraph(graph)?.facets.map((facet) => facet.facetId))
-      .toEqual(['project', 'scene'])
+    const fallback = createCapabilityDiscoveryFallbackInput(graph)
+    expect(fallback?.domains).toContain('camera_stage')
+    expect(fallback?.writes).toBe(false)
   })
 })
+

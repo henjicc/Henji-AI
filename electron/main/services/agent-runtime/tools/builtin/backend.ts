@@ -67,7 +67,7 @@ export function createBackendBuiltinTools(
             id: 'describe_application_entities',
             version: 1,
             input: {
-              domains: [...new Set(input.facets.flatMap((facet) => facet.domains))],
+              domains: input.domains,
               entityTypes: discovered.scriptApi.entities.entityTypes,
               refs: [],
             },

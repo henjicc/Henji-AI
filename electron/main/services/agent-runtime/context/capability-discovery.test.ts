@@ -4,15 +4,15 @@ import {
   AGENT_CONTRACT_VERSION,
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
-import type { ApplicationCapabilityDiscoveryOutput } from '../../../../../src/core/assistant/capabilityDiscovery'
-import {
-  buildCapabilityDiscoveryInputForFacets,
-  createCapabilityDiscoveryInputFromTaskGraph,
+import type {
+  ApplicationCapabilityDiscoveryInput,
+  ApplicationCapabilityDiscoveryOutput,
 } from '../../../../../src/core/assistant/capabilityDiscovery'
+import { applicationCapabilityDiscoveryInputSchema } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
-import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
-import { createDeterministicTaskGraph, createModelTaskGraph } from './task-facets'
+import { AGENT_CORE_TOOL_NAMES } from './tool-activation'
+import { AgentCapabilityDiscoveryCatalog, pairReadAndWriteByEntity } from './capability-discovery'
 
 function fullContext(registry: ReturnType<typeof createBuiltinAgentToolRegistry>): HostContextSnapshot {
   return {
@@ -21,12 +21,7 @@ function fullContext(registry: ReturnType<typeof createBuiltinAgentToolRegistry>
     revision: 5,
     scopeRevisions: { navigation: 2, generation: 1, canvas: 3, toolbox: 4, assets: 1 },
     workspace: { id: 'tools', activeToolId: 'cameraStage' },
-    surface: {
-      id: 'tool.camera_stage',
-      kind: 'tool',
-      focusedRef: null,
-      selectedRefs: [],
-    },
+    surface: { id: 'tool.camera_stage', kind: 'tool', focusedRef: null, selectedRefs: [] },
     project: { id: 'project-1', selectedNodeId: null },
     generation: { commandReady: true },
     assets: { view: 'closed', selectedAssetId: null },
@@ -38,400 +33,257 @@ function fullContext(registry: ReturnType<typeof createBuiltinAgentToolRegistry>
   }
 }
 
+function request(
+  partial: Partial<ApplicationCapabilityDiscoveryInput> & Pick<ApplicationCapabilityDiscoveryInput, 'queries'>
+): ApplicationCapabilityDiscoveryInput {
+  return applicationCapabilityDiscoveryInputSchema.parse(partial)
+}
+
+function createCatalog(): {
+  catalog: AgentCapabilityDiscoveryCatalog
+  registry: ReturnType<typeof createBuiltinAgentToolRegistry>
+  context: HostContextSnapshot
+} {
+  const registry = createBuiltinAgentToolRegistry(async () => {
+    throw new Error('测试不执行前端工具')
+  })
+  return { registry, catalog: new AgentCapabilityDiscoveryCatalog(registry), context: fullContext(registry) }
+}
+
+function discover(
+  input: ApplicationCapabilityDiscoveryInput,
+  runId = 'run-discovery'
+): ApplicationCapabilityDiscoveryOutput {
+  const { catalog, context } = createCatalog()
+  return catalog.discover(runId, input, context)
+}
+
 describe('AgentCapabilityDiscoveryCatalog', () => {
   /*
-   * 回归：切了工作区但没打开三维工程页面。
+   * 准入只有域，其余全是排序信号。
    *
-   * show_target_surface 的 domain 是 navigation，而真正能打开 tool.camera_stage 的
-   * open_camera_stage_project domain 是 camera_stage——旧的同域过滤直接把它筛掉，模型只剩
-   * 通用 switch_workspace，切到工具工作区就停了。
+   * capability-discovery.ts 的 structuralMatch 上方记录了四次同形事故：surface、entityTypes、
+   * capabilityKinds、导航 surface 分别被当成硬过滤，已注册能力因此对模型隐身。每次修都只堵住
+   * 当次那一条，因为**过滤这个动作本身**才是错的。这条门禁守住"域之外不再有硬过滤"。
    */
-  it('导航 Facet 能发现真正到达目标 Surface 的能力，并排在通用切换之前', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const context = fullContext(registry)
-    const match = createDeterministicTaskGraph(
-      '在 3D 镜头参考里边新建一个项目，放一个立方体，打开页面看看',
-      context,
-    )
-    expect(match).not.toBeNull()
-    if (!match) return
-    const navigationGraph = {
-      ...match.graph,
-      facets: match.graph.facets.map((facet) => ({
-        ...facet,
-        status: facet.facetId === 'camera_project' ? 'completed' as const : facet.status,
-      })),
-    }
-    const request = createCapabilityDiscoveryInputFromTaskGraph(navigationGraph)
-    const navigationFacet = request?.facets.find((facet) => facet.facetId === 'show_target_surface')
-    expect(navigationFacet).toBeDefined()
-    if (!navigationFacet) return
-    const output = new AgentCapabilityDiscoveryCatalog(registry).discover(
-      'run-navigation-surface',
-      { ...request!, facets: [navigationFacet] },
-      context,
-    )
-    const names = output.facets[0]?.capabilityNames ?? []
-    expect(names).toContain('open_camera_stage_project')
-    expect(names.indexOf('open_camera_stage_project')).toBeLessThan(
-      names.includes('switch_workspace') ? names.indexOf('switch_workspace') : names.length
-    )
-  })
-
-  it('用户原话推进到场景前沿时优先租约摆放与更新对象能力', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const context = fullContext(registry)
-    const match = createDeterministicTaskGraph(
-      '在 3D 镜头参考里边，新建一个叫测试9527的项目，然后放一个紫色立方体和一个红色圆柱体，做 60 帧环绕运镜，两个物体上下漂浮',
-      context,
-    )
-    expect(match).not.toBeNull()
-    if (!match) return
-    const sceneGraph = {
-      ...match.graph,
-      facets: match.graph.facets.map((facet) => ({
-        ...facet,
-        status: ['camera_project', 'show_target_surface'].includes(facet.facetId)
-          ? 'completed' as const
-          : facet.status,
-      })),
-    }
-    const request = createCapabilityDiscoveryInputFromTaskGraph(sceneGraph)
-    // 当前可运行的 Facet 排在最前，下游 Facet 一并带上，整条链路一次租完。
-    expect(request?.facets[0]).toEqual(expect.objectContaining({
-      facetId: 'camera_scene',
-      entityTypes: expect.arrayContaining(['camera_stage.object']),
-      requiredEffects: expect.arrayContaining([
-        expect.objectContaining({ effect: 'execute', entityTypes: ['camera_stage.object'] }),
-        expect.objectContaining({ effect: 'update', entityTypes: ['camera_stage.object'] }),
-      ]),
+  it('点名实体不会把同一次请求里其他域的能力筛掉', () => {
+    const result = discover(request({
+      queries: ['在三维场景里放置对象', '打开三维编辑器'],
+      domains: ['camera_stage', 'navigation'],
+      entityTypes: ['camera_stage.object'],
     }))
-    expect(request?.facets.map((facet) => facet.facetId)).toEqual(
-      expect.arrayContaining(['camera_scene', 'camera_motion', 'camera_verify'])
-    )
-    if (!request) return
-    const discovered = new AgentCapabilityDiscoveryCatalog(registry)
-      .discover('run-reported-camera-scene', request, context)
-    expect(discovered.facets[0]?.capabilityNames).toEqual(expect.arrayContaining([
-      'place_camera_stage_object', 'update_camera_stage_object',
-    ]))
+    const names = result.capabilities.map((item) => item.name)
+    // 实体只命中 camera_stage，但 navigation 域的能力不能因此消失。
+    expect(names.some((name) => name.includes('camera_stage'))).toBe(true)
+    expect(result.capabilities.some((item) => (
+      item.domain === 'navigation' || item.category === 'navigation'
+    ))).toBe(true)
   })
 
-  it('一次解析跨领域 Facet、schemaRef、缺失项和建议激活集合', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
+  /*
+   * 本阶段的核心替代设计：读写配对保底。
+   *
+   * 它替换的是 requiredEffectScore——那个分数的输入由运行时代填，模型写不出来，所以旧实现
+   * 必须先把模型的请求整个改写掉才轮得到它生效。现在改成一条从注册表推导的结构规则：
+   * 脚本要写就得先读（拿 ref、读回验证），所以每个点名实体至少保证一读一写进入投影。
+   * 这条规则不依赖模型的任何猜测，可以对全部已注册实体穷举验证。
+   */
+  it('每个点名实体在租约里读写成对', () => {
+    const { catalog, registry, context } = createCatalog()
+    const entityTypes = [...new Set(registry.allDefinitions()
+      .flatMap((definition) => definition.capability?.control?.impacts ?? [])
+      .flatMap((impact) => impact.entityTypes))]
+      .filter((entityType) => entityType.includes('.'))
+
+    expect(entityTypes.length).toBeGreaterThan(0)
+    for (const entityType of entityTypes.slice(0, 12)) {
+      // 刻意不填 domains：这条门禁只验证「配对保底」本身，把域准入隔离出去。
+      const result = catalog.discover(`run-pair-${entityType}`, request({
+        queries: [`操作 ${entityType}`], entityTypes: [entityType], writes: true,
+      }), context)
+      /*
+       * 判据是「可达」而不是「在租约里」。
+       *
+       * 核心地板工具（get_current_application_context 等）本来就永久激活，
+       * selectLeaseableToolNames 刻意跳过它们——不发租约不等于拿不到。
+       */
+      const reachable = new Set([...result.leasedToolNames, ...AGENT_CORE_TOOL_NAMES])
+      const touching = registry.allDefinitions().filter((definition) => (
+        (definition.capability?.control?.impacts ?? [])
+          .some((impact) => impact.entityTypes.includes(entityType))
+      ))
+      const hasReadable = touching.some((definition) => definition.readOnly)
+      const hasWritable = touching.some((definition) => !definition.readOnly)
+      if (hasReadable) {
+        expect(touching.some((definition) => definition.readOnly && reachable.has(definition.name)), entityType)
+          .toBe(true)
+      }
+      if (hasWritable) {
+        expect(touching.some((definition) => !definition.readOnly && reachable.has(definition.name)), entityType)
+          .toBe(true)
+      }
+    }
+  })
+
+  /*
+   * 名额不够分时，配对保底才真正生效——这条用小 limit 直接验证它。
+   *
+   * 上一条门禁在当前目录规模下撤掉规则也不会变红（排序已经把实体命中的能力全放进来了）。
+   * 但名额是固定的而目录会增长，某个实体的能力数一旦超过预算，按字母序被切掉的很可能
+   * 恰好是那个写能力——那时模型只剩只读能力，写入直接没有入口。
+   */
+  it('名额被切时仍保证点名实体读写各留一个', () => {
+    const { registry, context } = createCatalog()
+    const entityType = 'camera_stage.object'
     const catalog = new AgentCapabilityDiscoveryCatalog(registry)
-    const context = fullContext(registry)
-    const result = catalog.discover('run-batch', {
-      discoveryVersion: 'application-capability-discovery/v2',
-      facets: [{
-        facetId: 'camera_scene',
-        queries: ['添加三维物体并设置位置'],
-        domains: ['camera_stage'],
-        entityTypes: ['camera_stage.object'],
-        capabilityKinds: ['observe', 'mutate', 'execute'],
-        targetSurfaceIds: ['tool.camera_stage'],
-        requiredEffects: [
-          { effect: 'execute', entityTypes: ['camera_stage.object'], propertyIds: [] },
-          { effect: 'update', entityTypes: ['camera_stage.object'], propertyIds: [] },
-        ],
-      }, {
-        facetId: 'show_surface',
-        queries: ['打开三维工具'],
-        domains: ['navigation'],
-        entityTypes: [],
-        capabilityKinds: ['navigate'],
-        targetSurfaceIds: ['tool.camera_stage'],
-      }, {
-        facetId: 'unsupported',
-        queries: ['不存在的领域'],
-        domains: ['unknown_domain'],
-        entityTypes: [],
-        capabilityKinds: ['execute'],
-        targetSurfaceIds: [],
-      }],
-      cursor: 0,
-      limit: 20,
-    }, context)
-
-    expect(result.facets.find((facet) => facet.facetId === 'camera_scene')?.capabilityNames.length)
-      .toBeGreaterThan(0)
-    expect(result.facets.find((facet) => facet.facetId === 'camera_scene')?.capabilityNames)
-      .toEqual(expect.arrayContaining(['place_camera_stage_object', 'update_camera_stage_object']))
-    expect(result.facets.find((facet) => facet.facetId === 'show_surface')?.capabilityNames)
-      .toContain('open_application_surface')
-    expect(result.missing).toContainEqual(expect.objectContaining({
-      facetId: 'unsupported', reason: 'unsupported_domain',
-    }))
-    expect(result.capabilities.every((capability) => capability.schemaRef.kind === 'operation')).toBe(true)
-    expect(result.leasedToolNames).toContain('open_application_surface')
-    expect(result.leasedToolNames).not.toContain('read_application_schemas')
-    // 上限取自唯一来源，不再手写一个数：kind 从准入降级成排序后每个 Facet 的候选变多了，
-    // 手写的 15 会在"租约仍然有界"这个真正的性质之外，额外把一个没有出处的数字钉死。
-    expect(result.leasedToolNames.length).toBeLessThanOrEqual(AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
-    expect(result.fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/)
+    const all = catalog.discover('run-pair-budget', request({
+      queries: [`操作 ${entityType}`], entityTypes: [entityType], writes: true,
+    }), context)
+    const touching = registry.allDefinitions().filter((definition) => (
+      (definition.capability?.control?.impacts ?? [])
+        .some((impact) => impact.entityTypes.includes(entityType))
+    ))
+    expect(touching.filter((item) => item.readOnly).length).toBeGreaterThan(0)
+    expect(touching.filter((item) => !item.readOnly).length).toBeGreaterThan(0)
+    // 直接对配对函数施加只有 2 个名额的极端预算：读写必须各占一个。
+    const sorted = all.capabilities.flatMap((match) => {
+      const definition = registry.get(match.name)
+      return definition ? [{
+        entry: { name: match.name, readOnly: match.readOnly },
+        match,
+      }] : []
+    }) as never[]
+    const picked = pairReadAndWriteByEntity(
+      request({ queries: ['x'], entityTypes: [entityType], writes: true }),
+      sorted,
+      2,
+    )
+    expect(picked).toHaveLength(2)
+    const pickedDefinitions = picked.map((name) => registry.get(name))
+    expect(pickedDefinitions.some((item) => item?.readOnly === true)).toBe(true)
+    expect(pickedDefinitions.some((item) => item?.readOnly === false)).toBe(true)
   })
 
   /*
-   * 回归：用户说「你这不对吧」，整次运行卡死在 0 项能力。
+   * 最差输入：模型只写了 queries，没写 domains 也没写 entityTypes。
    *
-   * 路由把主意图判成 diagnose，但读了历史后正确地把 camera_stage 放进了 toolDomains。任务图
-   * 只有一个 diagnose Facet，于是发现请求带的是 domains=['diagnostics','camera_stage'] 加
-   * entityTypes=['diagnostics.event']——entityTypes 当时是跨域的硬 AND 过滤，camera_stage 的能力
-   * 一个都匹配不上，返回 0 项能力、0 个租约。更糟的是缺失原因被报成 permission_filtered，
-   * 助手照着这个标签给用户编出了"需要先授权 3D 对象写入能力"这个根本不存在的原因。
+   * normalizeCallInput 删除之后，模型写什么就发什么，所以这条路径必须真的能用——
+   * 否则一次字段填得不全的发现就等于整次运行没有出口。
    */
-  it('域被放宽后，entityTypes 不再把新域的能力全筛掉', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    // 走生产链路：intent=diagnose 的任务图 → 发现请求 → 把 camera_stage 作为额外域并入。
-    // 快照刻意停在生成工作区——实测时应用重启后就在这里，而上一轮的活是在三维编辑器里干的。
-    const base = fullContext(registry)
-    const context: HostContextSnapshot = {
-      ...base,
-      surface: {
-        id: 'workspace.generation',
-        kind: 'workspace',
-        focusedRef: null,
-        selectedRefs: [],
-      },
+  it('只写自然语言查询也能命中非零能力', () => {
+    const result = discover(request({ queries: ['在三维场景里放一个球体'] }))
+    expect(result.capabilities.length).toBeGreaterThan(0)
+    expect(result.leasedToolNames.length).toBeGreaterThan(0)
+  })
+
+  it('只读任务可以关闭写能力投影，压缩返回体积', () => {
+    const readOnly = discover(request({
+      queries: ['查看三维场景当前状态'], domains: ['camera_stage'],
+      entityTypes: ['camera_stage.object'], writes: false,
+    }), 'run-readonly')
+    const writable = discover(request({
+      queries: ['查看三维场景当前状态'], domains: ['camera_stage'],
+      entityTypes: ['camera_stage.object'], writes: true,
+    }), 'run-writable')
+    expect(readOnly.scriptApi.actions.length).toBeLessThanOrEqual(writable.scriptApi.actions.length)
+  })
+
+  /*
+   * 回归：错误的缺失标签比没有标签更贵。
+   *
+   * 实测一次 0 命中被报成 permission_filtered，助手照着这个标签给用户编出了"需要先授权 3D
+   * 对象写入能力"这个根本不存在的原因，还建议用户去授权——它会被当成事实写进答复。
+   */
+  it('缺失原因不把没匹配上误报成权限过滤', () => {
+    const result = discover(request({
+      queries: ['操作一个不存在的东西'], domains: ['not_a_real_domain'],
+    }), 'run-missing')
+    expect(result.capabilities).toHaveLength(0)
+    expect(result.missing[0]?.reason).toBe('unsupported_domain')
+  })
+
+  it('脚本投影给出精确参数签名与实体属性，模型不必猜 SDK', () => {
+    const result = discover(request({
+      queries: ['在三维场景放置对象并设置位置'],
+      domains: ['camera_stage'],
+      entityTypes: ['camera_stage.object'],
+    }), 'run-projection')
+    expect(result.scriptApi.language).toBe('henji-ts/v1')
+    expect(result.scriptApi.entryTool).toBe('run_henji_script')
+    expect(result.scriptApi.entities.entityTypes).toContain('camera_stage.object')
+    for (const action of result.scriptApi.actions) {
+      expect(action.parameters, action.id).toBeTruthy()
+      expect(action.returns.fields.length, action.id).toBeGreaterThanOrEqual(0)
     }
-    const taskGraph = createModelTaskGraph({
-      goal: '你这不对吧',
-      rawFacets: undefined,
-      primaryIntent: 'diagnose',
-      candidateDomains: ['diagnostics', 'camera_stage'],
-      snapshot: context,
-    })
-    expect(taskGraph.facets.map((facet) => facet.facetId)).toEqual(['diagnose'])
-    const request = buildCapabilityDiscoveryInputForFacets(taskGraph.facets, {}, ['camera_stage'])
-    expect(request?.facets[0]).toEqual(expect.objectContaining({
-      domains: expect.arrayContaining(['diagnostics', 'camera_stage']),
-      entityTypes: ['diagnostics.event'],
-      targetSurfaceIds: ['workspace.generation'],
-    }))
-    if (!request) return
-    const result = new AgentCapabilityDiscoveryCatalog(registry)
-      .discover("run-not-right", request, context)
-
-    // 关键断言：camera_stage 的能力必须真的进得来，而不是被 diagnostics.event 这个
-    // 跨域 entityTypes 过滤全部筛掉。
-    expect(result.leasedToolNames.some((name) => name.includes('camera_stage'))).toBe(true)
-    expect(result.missing).toEqual([])
   })
 
   /*
-   * 回归：用户说「你继续」，任务图判成 canvas，place_camera_stage_object 被延迟发放。
+   * 回归：容量不足的 Recipe 被投影出来，模型选中它、失败、重试。
    *
-   * 上一条修复让 camera_stage 的能力进得来了，但进来的是靠补位名额、按字母序选的四个
-   * （apply/get/list/observe）——恰好不含任务真正需要的 place_camera_stage_object，模型只能
-   * 绕道通用实体工具，最后卡在"任务图仍有 1 个 Facet 未结算"。
+   * 设置领域的 Recipe 只能做 1 次 update，而"改一个值再恢复原值"需要 2 次。旧实现拿运行时
+   * 代填的 requiredEffects.minimumCount 把装不下的配方直接过滤掉；请求扁平化后那个字段没有
+   * 了，容量不足的配方也进了投影——实测一次设置任务因此烧掉 3 次脚本调用和 2 次守卫失败。
    *
-   * 路由接管后 Facet 的 domain 就是 camera_stage、entityTypes 是 camera_stage.object，
-   * 放置能力属于实体命中，直接进租约而不是补位。
+   * 修法不是把 requiredEffects 加回来，而是把上限如实给模型：过滤错了是直接没有出路，
+   * 信息给全了模型自己会选。
    */
-  it('承接上一轮的三维任务时，放置对象能力直接进租约', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const context = fullContext(registry)
-    const taskGraph = createModelTaskGraph({
-      goal: '在三维镜头里新建工程，放一个紫色立方体和红色圆柱',
-      rawFacets: undefined,
-      primaryIntent: 'camera_stage',
-      candidateDomains: ['camera_stage'],
-      snapshot: context,
-    })
-    const request = buildCapabilityDiscoveryInputForFacets(taskGraph.facets)
-    if (!request) return
-    const result = new AgentCapabilityDiscoveryCatalog(registry)
-      .discover('run-continue', request, context)
-
-    expect(result.leasedToolNames).toContain('place_camera_stage_object')
-    expect(result.deferredToolNames).not.toContain('place_camera_stage_object')
-  })
-
-  /*
-   * 回归：「给场景加个球，让它上下浮动」，模型回答"应用当前版本加不了球"。
-   *
-   * 上面几条用例走的都是**确定性路由**造出来的 Facet，它的 capabilityKinds 恰好含 execute，
-   * 于是一直是绿的。实测失败的那次 Facet 是**模型自己 declare_action_plan 声明**的，kinds 里
-   * 只有 observe/query/plan/mutate——而唯一能在场景里创建对象的 place_camera_stage_object，
-   * impact effect 是 execute。camera_stage 的 13 个能力进来 11 个，恰好少了能干活的那一个。
-   *
-   * 模型没有说谎：它看到的目录里真的没有放置工具。所以这条盯的是「Facet 声明的 kinds 与能力
-   * 声明的 effect 用词不一致时，能力不能因此消失」。
-   */
-  it('模型声明的 kinds 不含 execute 时，放置对象能力仍然可发现、可租约', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-model-declared-kinds', {
-      discoveryVersion: 'application-capability-discovery/v2',
-      facets: [{
-        facetId: 'camera_object_animation',
-        queries: ['在场景里加一个球体并做上下浮动动画'],
-        domains: ['camera_stage'],
-        entityTypes: ['camera_stage.object', 'camera_stage.keyframe'],
-        // 实测模型给出的就是这一组，没有 execute。
-        capabilityKinds: ['observe', 'query', 'plan', 'mutate'],
-        targetSurfaceIds: ['tool.camera_stage'],
-        requiredEffects: [
-          { effect: 'create', entityTypes: ['camera_stage.object'], propertyIds: [] },
-          { effect: 'create', entityTypes: ['camera_stage.keyframe'], propertyIds: [] },
-        ],
-      }],
-      cursor: 0,
-      limit: 40,
-    }, fullContext(registry))
-
-    const facet = result.facets.find((item) => item.facetId === 'camera_object_animation')
-    expect(facet?.capabilityNames).toContain('place_camera_stage_object')
-    // 只是"发现得到"不够：不进租约，下一轮的活动工具集里照样没有它。
-    expect(result.leasedToolNames).toContain('place_camera_stage_object')
-  })
-
-  /*
-   * 与上一条配套：kind 已经不再决定去留，但"这批能力没有一个是你要的类型"仍要如实说出来。
-   * diagnostics 域里没有任何写入能力，声明 mutate 就属于这种情况。
-   */
-  it('能力类型一个都匹配不上时照常返回能力，并如实说明', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-kind-relax', {
-      discoveryVersion: 'application-capability-discovery/v2',
-      facets: [{
-        facetId: 'diagnose',
-        queries: [],
-        domains: ['diagnostics'],
-        entityTypes: [],
-        // diagnostics 域里没有任何写入能力，严格匹配必然为空。
-        capabilityKinds: ['mutate'],
-        targetSurfaceIds: [],
-      }],
-      cursor: 0,
-      limit: 20,
-    }, fullContext(registry))
-
-    const facet = result.facets.find((item) => item.facetId === 'diagnose')
-    expect(facet?.capabilityNames.length).toBeGreaterThan(0)
-    expect(facet?.observationSuggestions.join('')).toContain('已放宽能力类型过滤')
-  })
-
-  it('缺失原因不把"没匹配上"误报成权限过滤', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    // 域已知、宿主也没有屏蔽任何能力，只是这个 kind 组合无人满足——这不是权限问题。
-    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-reason', {
-      discoveryVersion: 'application-capability-discovery/v2',
-      facets: [{
-        facetId: 'impossible',
-        queries: [],
-        domains: ['camera_stage'],
-        entityTypes: [],
-        capabilityKinds: [],
-        targetSurfaceIds: ['workspace.assets'],
-      }],
-      cursor: 0,
-      limit: 20,
-    }, fullContext(registry))
-
-    const missing = result.missing.find((item) => item.facetId === 'impossible')
-    if (missing) expect(missing.reason).toBe('no_matching_capability')
-  })
-
-  it('相同发现指纹复用缓存，schemaRef 可稳定读取完整输入结构', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const catalog = new AgentCapabilityDiscoveryCatalog(registry)
-    const context = fullContext(registry)
-    const input = {
-      discoveryVersion: 'application-capability-discovery/v2' as const,
-      facets: [{
-        facetId: 'canvas',
-        queries: ['读取画布项目'],
-        domains: ['canvas'],
-        entityTypes: ['canvas.project'],
-        capabilityKinds: ['query' as const],
-        targetSurfaceIds: ['workspace.canvas'],
-      }],
-      cursor: 0,
-      limit: 2,
+  it('Recipe 投影带上单次调用的容量上限', () => {
+    const result = discover(request({
+      queries: ['修改一个设置值再恢复原值'],
+      domains: ['settings'],
+      entityTypes: ['settings.registry'],
+      writes: true,
+    }), 'run-limits')
+    const recipes = result.scriptApi.recipes
+    expect(recipes.length).toBeGreaterThan(0)
+    for (const recipe of recipes) {
+      expect(recipe.limits, recipe.id).toBeDefined()
+      expect(recipe.limits?.length, recipe.id).toBeGreaterThan(0)
+      for (const limit of recipe.limits ?? []) {
+        expect(limit.maximumCount, `${recipe.id}/${limit.effect}`).toBeGreaterThan(0)
+      }
     }
+  })
+
+  it('相同请求复用缓存并标记 reused', () => {
+    const { catalog, context } = createCatalog()
+    const input = request({
+      queries: ['画布节点编排'], domains: ['canvas'], entityTypes: ['canvas.node'],
+    })
     const first = catalog.discover('run-cache', input, context)
     const second = catalog.discover('run-cache', input, context)
-    expect(second).toMatchObject({ fingerprint: first.fingerprint, reused: true })
-    expect(first.page.returnedItems).toBeLessThanOrEqual(2)
-
-    const ref = first.facets[0]?.schemaRefs[0]
-    expect(ref).toBeDefined()
-    const schemas = catalog.readSchemas({ refs: ref ? [ref] : [] })
-    expect(schemas.documents).toHaveLength(1)
-    expect(schemas.documents[0]?.inputSchema).toBeTypeOf('object')
-    expect(schemas.missing).toEqual([])
+    expect(first.reused).toBe(false)
+    expect(second.reused).toBe(true)
+    expect(second.fingerprint).toBe(first.fingerprint)
+    expect(second.capabilities.map((item) => item.name))
+      .toEqual(first.capabilities.map((item) => item.name))
   })
 
-  it('后端原生能力执行与输出 schema 使用同一目录实现', async () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const tool = registry.get('discover_application_capabilities')
-    expect(tool?.capability?.id).toBe('discover_application_capabilities')
-    const output = await tool?.execute({
-      facets: [{
-        facetId: 'assets',
-        queries: ['读取素材'],
-        domains: ['assets'],
-        entityTypes: ['asset'],
-        capabilityKinds: ['query'],
-        targetSurfaceIds: ['workspace.assets'],
-      }],
-      cursor: 0,
-      limit: 20,
-      discoveryVersion: 'application-capability-discovery/v2',
-    }, {
-      runId: 'run-tool', threadId: 'thread-tool', toolCallId: 'call-tool',
-      signal: new AbortController().signal,
-      hostContext: fullContext(registry),
-    }) as ApplicationCapabilityDiscoveryOutput
-    expect(output.catalogVersion).toBe('application-capabilities/v2')
-    expect(output.facets[0]?.capabilityNames.length).toBeGreaterThan(0)
+  it('schemaRef 可按引用读回完整输入结构', () => {
+    const { catalog, context } = createCatalog()
+    const result = catalog.discover('run-schema', request({
+      queries: ['画布节点编排'], domains: ['canvas'], entityTypes: ['canvas.node'],
+    }), context)
+    const ref = result.capabilities[0]?.schemaRef
+    expect(ref).toBeTruthy()
+    if (!ref) return
+    const documents = catalog.readSchemas({ refs: [ref] })
+    expect(documents.documents[0]?.inputSchema).toBeTruthy()
+    expect(documents.missing).toHaveLength(0)
   })
 
-  it('能力种类按正式 impacts 匹配，不再用目录名猜 navigate/execute/mutate', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const result = new AgentCapabilityDiscoveryCatalog(registry).discover('run-impact-kind', {
-      discoveryVersion: 'application-capability-discovery/v2',
-      facets: [{
-        facetId: 'open_canvas', queries: ['打开画布项目'], domains: ['canvas'],
-        entityTypes: ['canvas.project'], capabilityKinds: ['navigate'], targetSurfaceIds: ['workspace.canvas'],
-      }, {
-        facetId: 'edit_image', queries: ['创建图片编辑预览'], domains: ['image_edit'],
-        entityTypes: ['image_edit.preview'], capabilityKinds: ['execute'], targetSurfaceIds: ['tool.image_edit'],
-      }, {
-        facetId: 'change_settings', queries: ['修改设置'], domains: ['settings'],
-        entityTypes: ['application.setting'], capabilityKinds: ['mutate'], targetSurfaceIds: [],
-      }],
-      cursor: 0,
-      limit: 20,
-    }, fullContext(registry))
-
-    expect(result.facets.find((facet) => facet.facetId === 'open_canvas')?.capabilityNames)
-      .toContain('open_canvas_project')
-    expect(result.facets.find((facet) => facet.facetId === 'edit_image')?.capabilityNames)
-      .toContain('create_image_edit_preview')
-    expect(result.facets.find((facet) => facet.facetId === 'change_settings')?.capabilityNames)
-      .toContain('apply_application_settings_change')
+  it('租约与 deferred 互斥，且租约不超过发现预算', () => {
+    const result = discover(request({
+      queries: ['三维场景与画布的全部操作'],
+      domains: ['camera_stage', 'canvas', 'navigation'],
+    }), 'run-budget')
+    expect(result.leasedToolNames.length).toBeLessThanOrEqual(AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
+    // 同一个名字不能既已租约又被判为延迟——模型会据此决定下一轮能不能调它。
+    for (const name of result.leasedToolNames) {
+      expect(result.deferredToolNames, name).not.toContain(name)
+    }
   })
 })
+
+
+

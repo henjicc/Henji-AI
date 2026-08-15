@@ -81,56 +81,6 @@ describe('写入计划门禁与发现请求规范化', () => {
     expect(tracker.hasSufficientActionPlan(2)).toBe(true)
   })
 
-  it('模型在发现请求里申报的领域会被并入，而不是被前沿覆盖', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const tracker = new AgentFacetProgressTracker(
-      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
-      registry,
-      true
-    )
-    const normalized = tracker.normalizeCallInput({
-      toolCallId: 'c1',
-      toolName: 'discover_application_capabilities',
-      input: {
-        facets: [{
-          facetId: 'camera_scene',
-          queries: ['放置三维对象'],
-          entityTypes: ['camera_stage.object'],
-        }],
-      },
-      dynamic: false,
-    }) as { facets: Array<{ facetId: string; domains: string[]; entityTypes: string[] }> }
-
-    const declared = normalized.facets.find((item) => item.facetId === 'camera_scene')
-    expect(declared, '模型申报的 Facet 必须出现在规范化后的请求里').toBeDefined()
-    expect(declared?.domains).toContain('camera_stage')
-    expect(declared?.entityTypes).toContain('camera_stage.object')
-    // 运行时前沿仍然在，模型漏掉依赖也不会把自己锁死。
-    expect(normalized.facets.map((item) => item.facetId)).toContain('canvas')
-  })
-
-  it('申报的领域必须真实存在，编造的域不会被并入', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const tracker = new AgentFacetProgressTracker(
-      graph([facet({ facetId: 'canvas', domain: 'canvas' })]),
-      registry,
-      true
-    )
-    const normalized = tracker.normalizeCallInput({
-      toolCallId: 'c2',
-      toolName: 'discover_application_capabilities',
-      input: {
-        facets: [{ facetId: 'made_up', entityTypes: ['not_a_domain.thing'] }],
-      },
-      dynamic: false,
-    }) as { facets: Array<{ facetId: string }> }
-    expect(normalized.facets.map((item) => item.facetId)).not.toContain('made_up')
-  })
-
   /*
    * 根源回归：「任务图声明的 Effect 已满足」不等于「用户的目标达成」。
    *

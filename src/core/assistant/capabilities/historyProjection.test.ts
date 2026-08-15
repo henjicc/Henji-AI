@@ -68,16 +68,10 @@ function discoveryOutput(): Record<string, unknown> {
       category: 'camera_stage',
       readOnly: false,
       risk: 'R1',
-      entityTypes: ['camera_stage.project', 'camera_stage.camera', 'camera_stage.shot'],
+      entityTypes: ['camera_stage.project', 'camera_stage.camera', 'camera_stage.state_keyframe'],
       propertyIds: ['camera_stage.project.name'],
       surfaceIds: ['tool.camera_stage'],
       schemaRef: schemaRef('create_camera_stage_project'),
-    }],
-    facets: [{
-      facetId: 'camera_scene',
-      capabilityNames: ['create_camera_stage_project', 'place_camera_stage_object'],
-      schemaRefs: [schemaRef('create_camera_stage_project'), schemaRef('place_camera_stage_object')],
-      observationSuggestions: ['先观察场景再写入。'],
     }],
     missing: [],
     leasedToolNames: ['create_camera_stage_project'],
@@ -139,9 +133,6 @@ describe('工具结果的历史投影', () => {
       expect(capability).toHaveProperty(key)
     }
 
-    // 已租约的工具这一轮就带着完整 schema，未租约（deferred）的才需要留下引用。
-    const refs = (result.facets as { schemaRefs: { id: string }[] }[])[0].schemaRefs
-    expect(refs.map((ref) => ref.id)).toEqual(['place_camera_stage_object'])
 
     // 租约、缺失与分页信息一律原样保留：它们决定模型下一步能调什么。
     expect(result.leasedToolNames).toEqual(['create_camera_stage_project'])
@@ -151,12 +142,6 @@ describe('工具结果的历史投影', () => {
     expect(result.fingerprint).toBe(discoveryOutput().fingerprint)
   })
 
-  it('全部能力都已租约时不再留任何 schemaRef', () => {
-    const output = discoveryOutput()
-    output.leasedToolNames = ['create_camera_stage_project', 'place_camera_stage_object']
-    const result = projected('discover_application_capabilities', output)
-    expect((result.facets as { schemaRefs: unknown[] }[])[0].schemaRefs).toEqual([])
-  })
 
   /*
    * 示例调用：JSON Schema 表达不了嵌套结构长什么样、可选字段何时该填、参数之间怎么配合——
@@ -183,3 +168,4 @@ describe('工具结果的历史投影', () => {
     }
   })
 })
+
