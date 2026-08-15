@@ -28,7 +28,7 @@ describe('AgentIntentRouter 3D fallback', () => {
       snapshot(),
       new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'camera_stage', source: 'deterministic' })
+    expect(result).toMatchObject({ intent: 'camera_stage', explicitUserIntent: true })
     expect(result.taskGraph?.facets.filter((facet) => facet.dependsOn.length === 0)
       .map((facet) => facet.facetId)).toEqual(['camera_project'])
     expect(result.taskGraph?.facets.find((facet) => facet.facetId === 'camera_project')
@@ -42,3 +42,4 @@ describe('AgentIntentRouter 3D fallback', () => {
       ]))
   })
 })
+

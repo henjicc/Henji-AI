@@ -24,8 +24,11 @@ import { applicationCapabilitySearchResultSchema } from '../../../../../src/core
 import { applicationCapabilityDiscoveryOutputSchema } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
 import { createBackendBuiltinTools } from '../tools/builtin/backend'
+import { createBackendCapabilityTool } from '../tools/backend-capability-tool'
+import { runHenjiScriptCapability } from '../../../../../src/core/assistant/capabilities/henjiScriptApplicationCapabilities'
 import { createFrontendApplicationCapabilityTools } from '../tools/builtin/frontend-capabilities'
 import { AgentToolRegistry } from '../tools/registry'
+import type { AgentToolDefinition } from '../tools/types'
 import { activateAgentTools } from './tool-activation'
 import { estimateModelMessagesTokens } from './compaction'
 import { selectContextLayers } from './layer-budget'
@@ -178,6 +181,9 @@ describe('工具激活不得让通用动词落选', () => {
       } as never),
       // 通用反射动词是 frontend 侧能力，必须一起注册，否则这条门禁只是在测后端内置工具
       ...createFrontendApplicationCapabilityTools((async () => ({})) as never),
+      createBackendCapabilityTool(runHenjiScriptCapability, {
+        execute: async () => { throw new Error('测试不执行 Henji Script') },
+      }) as unknown as AgentToolDefinition,
     ]
     for (const definition of definitions) registry.register(definition)
     // 前端能力只有出现在宿主快照的 availableCapabilities 里才算可用，传 null 会把它们全过滤掉
@@ -188,7 +194,7 @@ describe('工具激活不得让通用动词落选', () => {
     return activateAgentTools(registry, {
       route: {
         routeVersion: 'agent-route/v2', intent: 'camera_stage', candidateIntents: ['camera_stage'],
-        complexity: 'multi_step', path: 'workflow', toolDomains, source: 'deterministic', reason: '三维任务',
+        complexity: 'multi_step',toolDomains,reason: '三维任务',
       } as never,
       context,
       pinnedToolNames: [],
@@ -197,12 +203,11 @@ describe('工具激活不得让通用动词落选', () => {
     })
   }
 
-  it('三维任务也拿得到通用反射动词', () => {
-    // 这些能力的 domain 是 application，而三维任务的 toolDomains 是 camera_stage/toolbox。
-    // 只靠 directNames 命中的话它们永远进不来——实测就是这么丢的。
+  it('三维任务也拿得到唯一 Henji Script 写入口', () => {
     const active = new Set(activate(['toolbox', 'camera_stage', 'catalog']).activeToolNames)
-    expect(active.has('change_application_entities')).toBe(true)
-    expect(active.has('describe_application_entities')).toBe(true)
+    expect(active.has('run_henji_script')).toBe(true)
+    expect(active.has('change_application_entities')).toBe(false)
+    expect(active.has('execute_application_program')).toBe(false)
   })
 
   it('技能加载与能力发现同样常驻', () => {
@@ -228,3 +233,4 @@ describe('工具激活不得让通用动词落选', () => {
     }
   })
 })
+

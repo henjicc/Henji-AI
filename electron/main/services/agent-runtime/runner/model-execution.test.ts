@@ -128,6 +128,7 @@ describe('runRouterModelClassification', () => {
     const runModelStep = vi.fn().mockResolvedValue({
       structuredOutput: {
         intent: 'generate', candidateIntents: ['generate'], toolDomains: ['generation'],
+        explicitUserIntent: true,
         complexity: 'simple', reason: '图片生成',
       },
       text: '',
@@ -222,6 +223,7 @@ describe('runRouterModelClassification', () => {
     const runModelStep = vi.fn().mockResolvedValue({
       structuredOutput: {
         intent: 'generate', candidateIntents: ['generate'], toolDomains: ['generation'],
+        explicitUserIntent: true,
         complexity: 'simple', reason: '可能被截断的分类',
       },
       text: '',

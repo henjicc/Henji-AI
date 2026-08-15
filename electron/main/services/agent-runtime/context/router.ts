@@ -13,16 +13,12 @@ import {
 import {
   createDeterministicTaskGraph,
   createModelTaskGraph,
-  taskGraphCoversBaseline,
   tryCreateModelTaskGraph,
 } from './task-facets'
-import { inferIntentTaskSemantics } from './task-intent-semantics'
+import { asksToGenerateMedia, hasAffirmativeIntent, inferIntentTaskSemantics } from './task-intent-semantics'
 import {
   continuationDomains,
-  continuationIntents,
   describeContinuationForRouter,
-  isContinuationGoal,
-  isPureContinuationGoal,
   type AgentThreadContinuation,
 } from './thread-continuation'
 
@@ -36,7 +32,6 @@ const routerModelDecisionSchema = z.object({
   toolDomains: z.unknown().optional(),
   complexity: z.unknown().optional(),
   reason: z.unknown().optional(),
-  taskFacets: z.unknown().optional(),
 }).passthrough()
 
 export type RouterModelClassifier = (
@@ -47,83 +42,33 @@ export type RouterModelClassifier = (
 ) => Promise<unknown>
 
 /**
- * 把上一轮的领域并入本轮决策。
+ * 只要同线程有历史证据，就无条件把上一轮的领域并进 toolDomains。
  *
- * 只做**放宽**：新增候选意图与工具域，绝不改写主意图，也不删除任何已有域。理由是路由的主意图
- * 还影响模型目录注入、任务图形状等一串下游行为，而"多给几个候选工具"的代价只是能力发现多排
- * 几个候选——两边风险完全不对称。真正卡死的是"camera_stage 根本不在池子里"，把它放进去就够了。
+ * 这里以前挂着三条中文正则来判"这句话算不算承接"：句首的「再/还/继续/接着」、一张
+ * 「不对/没成功/怎么回事/重来」的不满词表，外加 30 字符长度上限。方向从一开始就是错的——
+ * 用户表达不满时的原话恰恰最短、最没有信息量、最不可能被词表穷尽，而那正是最需要承接的时候。
+ * 实测连着三次都栽在这里：「再帮我添加一个白色的球体」判成 generate、「你这不对吧」判成
+ * diagnose、「你继续」判成 canvas，上一轮三次都在 camera_stage。
+ *
+ * 放宽的代价很小：toolDomains 只影响能力发现的候选排序与至多 4 个锚点工具，真正的准入仍由
+ * registry.list(context) 和审批把关。收窄的代价是整次运行没有出口。所以不再判断，直接并集。
  */
 function widenWithContinuation(
   decision: AgentRouteDecision,
-  goal: string,
   continuation: AgentThreadContinuation | null
 ): AgentRouteDecision {
-  if (!continuation || !isContinuationGoal(goal)) return decision
+  if (!continuation) return decision
   const extraDomains = continuationDomains(continuation)
     .filter((domain) => !decision.toolDomains.includes(domain))
   if (extraDomains.length === 0) return decision
-  const extraIntents = continuationIntents(continuation)
-    .filter((intent) => intent !== decision.intent)
   return {
     ...decision,
-    candidateIntents: uniqueValues([...(decision.candidateIntents ?? [decision.intent]), ...extraIntents], 6),
     toolDomains: uniqueValues([...decision.toolDomains, ...extraDomains], 10),
-    suggestedCapabilityQueries: uniqueValues([
-      ...(decision.suggestedCapabilityQueries ?? []),
-      ...extraDomains,
-    ], 10),
     continuationDomains: extraDomains,
-    reason: `${decision.reason}；检测到承接上一轮任务，已并入领域 ${extraDomains.join('、')}`,
+    reason: `${decision.reason}；同线程存在上一轮任务，已并入领域 ${extraDomains.join('、')}`,
   }
 }
 
-/**
- * 纯承接语句直接沿用上一轮的领域，不进分类。
- *
- * 「你继续」「你这不对吧」的信息量是零，让路由模型分类它得到的任何 intent 都是噪声：实测
- * 「你这不对吧」判成 diagnose、「你继续」判成 canvas，而上一轮两次都在 camera_stage。主意图
- * 决定任务图形状，形状一错，真正需要的能力（place_camera_stage_object）就只能靠补位名额碰运气。
- *
- * 与 {@link widenWithContinuation} 的分工：那里处理"带着新诉求的承接"（再帮我加一个球体），
- * 只放宽领域、不碰主意图；这里处理"什么都没带的承接"，此时没有需要保留的主意图。
- * 领域仍然只来自历史证据，权限照旧由 registry.list(context) 与审批把关。
- */
-function pureContinuationRoute(
-  goal: string,
-  snapshot: HostContextSnapshot,
-  continuation: AgentThreadContinuation | null
-): AgentRouteDecision | null {
-  if (!continuation || !isPureContinuationGoal(goal)) return null
-  const domains = continuationDomains(continuation)
-  const intents = continuationIntents(continuation)
-  const intent = intents[0]
-  if (domains.length === 0 || !intent) return null
-  // Facet 的目标文本用上一轮的用户诉求，否则任务图里只会留下一句"你继续"，
-  // 模型和结算都读不出这一步到底要做什么。
-  const previousGoal = continuation.previousUserGoals.find((item) => item.trim() !== goal.trim())
-  const decision: AgentRouteDecision = {
-    routeVersion: 'agent-route/v2',
-    intent,
-    candidateIntents: uniqueValues(intents, 4),
-    complexity: 'ambiguous',
-    path: routePolicy[intent].path,
-    toolDomains: uniqueValues([...domains, ...routePolicy[intent].toolDomains], 10),
-    source: 'fallback',
-    reason: `本轮目标只是承接上一轮，未携带新诉求；沿用上一轮领域 ${domains.join('、')}`,
-    anchorSurfaceId: continuation.surfaceIds[0] ?? snapshot.surface?.id,
-    continuationDomains: domains,
-    suggestedCapabilityQueries: uniqueValues(domains, 10),
-  }
-  decision.taskGraph = createModelTaskGraph({
-    goal: previousGoal ?? goal,
-    rawFacets: undefined,
-    primaryIntent: intent,
-    candidateDomains: decision.toolDomains,
-    snapshot,
-  })
-  decision.taskFacets = decision.taskGraph.facets.map((facet) => facet.facetId)
-  return decision
-}
 
 interface DeterministicRule {
   intent: AgentIntent
@@ -131,24 +76,24 @@ interface DeterministicRule {
   toolDomains?: AgentToolDomain[]
 }
 
-const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'path' | 'toolDomains'>> = {
-  navigate: { path: 'workflow', toolDomains: ['navigation'] },
-  generate: { path: 'workflow', toolDomains: ['models', 'generation', 'navigation'] },
-  inspect_model: { path: 'workflow', toolDomains: ['models'] },
-  read_generation: { path: 'workflow', toolDomains: ['generation'] },
-  cancel_generation: { path: 'workflow', toolDomains: ['generation'] },
-  diagnose: { path: 'workflow', toolDomains: ['diagnostics'] },
-  canvas: { path: 'workflow', toolDomains: ['canvas'] },
-  toolbox: { path: 'workflow', toolDomains: ['toolbox'] },
-  camera_stage: { path: 'workflow', toolDomains: ['toolbox', 'camera_stage'] },
-  storyboard: { path: 'workflow', toolDomains: ['storyboard'] },
-  image_edit: { path: 'workflow', toolDomains: ['toolbox', 'image_edit', 'assets'] },
-  assets: { path: 'workflow', toolDomains: ['assets'] },
-  workflow: { path: 'workflow', toolDomains: ['workflows'] },
-  user_instructions: { path: 'workflow', toolDomains: ['user_instructions'] },
-  memory: { path: 'workflow', toolDomains: ['memory'] },
-  settings: { path: 'workflow', toolDomains: ['settings', 'navigation'] },
-  general: { path: 'primary', toolDomains: ['catalog'] },
+const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'toolDomains'>> = {
+  navigate: { toolDomains: ['navigation'] },
+  generate: { toolDomains: ['models', 'generation', 'navigation'] },
+  inspect_model: { toolDomains: ['models'] },
+  read_generation: { toolDomains: ['generation'] },
+  cancel_generation: { toolDomains: ['generation'] },
+  diagnose: { toolDomains: ['diagnostics'] },
+  canvas: { toolDomains: ['canvas'] },
+  toolbox: { toolDomains: ['toolbox'] },
+  camera_stage: { toolDomains: ['toolbox', 'camera_stage'] },
+  storyboard: { toolDomains: ['storyboard'] },
+  image_edit: { toolDomains: ['toolbox', 'image_edit', 'assets'] },
+  assets: { toolDomains: ['assets'] },
+  workflow: { toolDomains: ['workflows'] },
+  user_instructions: { toolDomains: ['user_instructions'] },
+  memory: { toolDomains: ['memory'] },
+  settings: { toolDomains: ['settings', 'navigation'] },
+  general: { toolDomains: ['catalog'] },
 }
 
 function uniqueValues<TValue extends string>(values: TValue[], limit: number): TValue[] {
@@ -207,11 +152,6 @@ function regexMatcher(pattern: RegExp): (goal: string) => boolean {
   return (goal) => pattern.test(goal)
 }
 
-function asksToGenerateMedia(goal: string): boolean {
-  return /(?:生成|制作|创作|画|create|generate).{0,24}(?:图片|图像|照片|视频|音频|音乐|语音|image|video|audio)/i.test(goal)
-    && !/(?:历史|记录|状态|进度|取消|停止)/i.test(goal)
-}
-
 function asksToInspectModel(goal: string): boolean {
   return /(?:查找|搜索|查看|查询|比较|推荐).{0,20}(?:模型|model)|(?:模型|model).{0,20}(?:参数|价格|能力|支持)/i.test(goal)
 }
@@ -226,7 +166,10 @@ const deterministicRules: DeterministicRule[] = [
   { intent: 'generate', matches: asksToGenerateMedia },
   { intent: 'inspect_model', matches: asksToInspectModel },
   { intent: 'canvas', matches: asksForCanvasAction },
-  { intent: 'assets', matches: regexMatcher(/(?:素材库|asset library).{0,24}(?:查询|查看|标签|集合|选择|删除|移除)|(?:查询|查看|选择|删除|移除).{0,24}(?:素材库|asset library)/i) },
+  { intent: 'assets', matches: (goal) => (
+    /(?:素材库|素材集合|素材集|asset (?:library|collection))/i.test(goal)
+    && hasAffirmativeIntent(goal, /(?:创建|新建|改名|重命名|查询|查看|标签|集合|选择|删除|移除)/i)
+  ) },
   { intent: 'workflow', matches: regexMatcher(/(?:工作流|workflow)/i) },
   { intent: 'memory', matches: regexMatcher(/(?:助手记忆|长期记忆|记住这|忘记这|agent memory)/i) },
   { intent: 'toolbox', matches: regexMatcher(/(?:工具箱|toolbox).{0,16}(?:有什么|状态|工具)/i) },
@@ -260,36 +203,25 @@ function deterministicRoute(
       'catalog',
     ], 8)
     return {
-      routeVersion: 'agent-route/v2',
       intent,
-      candidateIntents: composite.intents,
       complexity: 'multi_step',
-      path: 'workflow',
       toolDomains,
-      source: 'deterministic',
       reason: `识别为 ${composite.graph.facets.length} 个有依赖的跨领域任务 Facet`,
-      anchorSurfaceId: snapshot.surface?.id,
-      taskFacets: composite.graph.facets.map((facet) => facet.facetId),
-      suggestedCapabilityQueries: composite.graph.facets.map((facet) => facet.domain),
+      explicitUserIntent: true,
       taskGraph: composite.graph,
     }
   }
   if (
     snapshot.surface?.id === 'workspace.generation'
+    && !asksToGenerateMedia(normalized)
     && /(?:最后|最近|上一)(?:一张|一个|条)|生成历史|历史记录/i.test(normalized)
   ) {
     return {
-      routeVersion: 'agent-route/v2',
       intent: 'read_generation',
-      candidateIntents: ['read_generation', 'image_edit'],
       complexity: /(?:编辑|标注|裁剪|旋转|文字|矩形)/i.test(normalized) ? 'multi_step' : 'simple',
-      path: 'workflow',
       toolDomains: ['generation', 'image_edit', 'catalog'],
-      source: 'deterministic',
       reason: '当前生成页面中的相对指代锚定生成历史',
-      anchorSurfaceId: snapshot.surface.id,
-      taskFacets: ['current_surface', 'generation_history'],
-      suggestedCapabilityQueries: ['最近成功生成结果', '图片编辑'],
+      explicitUserIntent: true,
       taskGraph: createSingleFacetTaskGraph({
         goal,
         facetId: 'generation_history',
@@ -302,20 +234,19 @@ function deterministicRoute(
       }),
     }
   }
-  if (/(?:设置|偏好|毛玻璃|主题|圆角|启动页面|上传服务)/i.test(normalized)) {
+  if (
+    /(?:设置|偏好|毛玻璃|主题|圆角|启动页面|上传服务)/i.test(normalized)
+    || /\b(?:general|interface|storage)\.[a-z][a-z0-9_.-]*/i.test(normalized)
+  ) {
     const taskSemantics = inferIntentTaskSemantics('settings', goal)
+    const restoresOriginalValue = taskSemantics.effect === 'update'
+      && /(?:恢复|还原|改回|切回|restore|revert).{0,12}(?:原值|原来|之前|original|previous)|(?:原值|原来|之前).{0,12}(?:恢复|还原|改回|切回)/i.test(normalized)
     return {
-      routeVersion: 'agent-route/v2',
       intent: 'settings',
-      candidateIntents: ['settings'],
       complexity: /(?:并且|同时|批量|以及)/i.test(normalized) ? 'multi_step' : 'simple',
-      path: 'workflow',
       toolDomains: ['settings', 'navigation', 'catalog'],
-      source: 'deterministic',
       reason: '识别为应用设置查询或修改',
-      anchorSurfaceId: snapshot.surface?.id,
-      taskFacets: ['settings'],
-      suggestedCapabilityQueries: ['应用设置'],
+      explicitUserIntent: true,
       taskGraph: createSingleFacetTaskGraph({
         goal,
         facetId: 'settings',
@@ -324,6 +255,8 @@ function deterministicRoute(
         capabilityKinds: taskSemantics.capabilityKinds,
         effect: taskSemantics.effect,
         entityTypes: taskSemantics.entityTypes,
+        minimumCount: restoresOriginalValue ? 2 : 1,
+        verificationRequired: taskSemantics.effect === 'update',
         completionCondition: '设置读取或变更结果包含稳定设置 ID 与 revision。',
       }),
     }
@@ -331,17 +264,11 @@ function deterministicRoute(
   if (/(?:图片编辑|矩形标注|文字标注|裁剪图片|旋转图片)/i.test(normalized)) {
     const taskSemantics = inferIntentTaskSemantics('image_edit', goal)
     return {
-      routeVersion: 'agent-route/v2',
       intent: 'image_edit',
-      candidateIntents: ['image_edit'],
       complexity: 'multi_step',
-      path: 'workflow',
       toolDomains: ['image_edit', 'generation', 'assets', 'catalog'],
-      source: 'deterministic',
       reason: '识别为图片编辑任务',
-      anchorSurfaceId: snapshot.surface?.id,
-      taskFacets: ['image_edit'],
-      suggestedCapabilityQueries: ['图片编辑 来源引用'],
+      explicitUserIntent: true,
       taskGraph: createSingleFacetTaskGraph({
         goal,
         facetId: 'image_edit',
@@ -355,21 +282,21 @@ function deterministicRoute(
     }
   }
   const matches = deterministicRules.filter((rule) => rule.matches(goal))
+  // “生成一张图，并选择/查看合适模型”同时命中 generate 与 inspect_model 时，主动作必须优先。
+  // inspect_model 只是生成链路的前置查询，不能把真正的写入任务降级成纯读。
+  const generationMatch = matches.find((rule) => rule.intent === 'generate')
+  if (generationMatch) matches.splice(0, matches.length, generationMatch)
   if (matches.length !== 1) return null
-    const [match] = matches
+  const [match] = matches
   const taskSemantics = inferIntentTaskSemantics(match.intent, goal)
   return {
-    routeVersion: 'agent-route/v2',
     intent: match.intent,
-    candidateIntents: [match.intent],
     complexity: 'simple',
-    path: routePolicy[match.intent].path,
     toolDomains: match.toolDomains ?? routePolicy[match.intent].toolDomains,
-    source: 'deterministic',
     reason: `命中确定性 ${match.intent} 规则`,
-    anchorSurfaceId: snapshot.surface?.id,
-    taskFacets: [match.intent],
-    suggestedCapabilityQueries: match.toolDomains ?? routePolicy[match.intent].toolDomains,
+    // 能力概览规则（intent=general，toolDomains 为空）只是回答"你能做什么"，不是应用任务，
+    // 不发放 R1 写工具的自动放行位；其余确定性规则都命中了一个具体动作。
+    explicitUserIntent: match.intent !== 'general',
     taskGraph: createSingleFacetTaskGraph({
       goal,
       facetId: match.intent,
@@ -397,18 +324,18 @@ export class AgentIntentRouter {
     continuation: AgentThreadContinuation | null = null
   ): Promise<AgentRouteDecision> {
     const widen = (decision: AgentRouteDecision): AgentRouteDecision => (
-      widenWithContinuation(decision, goal, continuation)
+      widenWithContinuation(decision, continuation)
     )
     const deterministic = deterministicRoute(goal, snapshot)
-    // 纯承接语句没有可分类的内容，直接沿用上一轮；确定性规则命中说明目标其实带了内容，让它优先。
-    if (!deterministic) {
-      const continued = pureContinuationRoute(goal, snapshot, continuation)
-      if (continued) {
-        this.logDecision(runId, continued)
-        return continued
-      }
-    }
-    if (deterministic && (deterministic.complexity !== 'multi_step' || !this.classifyWithModel)) {
+    /*
+     * 确定性任务图已经把领域、Effect、依赖与验证闭环全部声明完时，直接进入执行层。
+     *
+     * 旧实现仍会让 router 模型“润色” multi_step 图。真实 Camera Stage 运行中，本地图在
+     * 1ms 内已正确生成，router 却按主模型的 60s × 4 次重试等待了 254 秒，最终超时后仍然
+     * 回退到原图——整段调用没有提供任何执行信息。开放性目标仍走模型路由；这里只短路已经
+     * 由本地可验证规则完整覆盖的目标，因此不缩小能力范围，也不改变权限判断。
+     */
+    if (deterministic) {
       const decision = widen(deterministic)
       this.logDecision(runId, decision)
       return decision
@@ -423,56 +350,17 @@ export class AgentIntentRouter {
         ))
         const candidateIntents = selectEnumValues(classified.candidateIntents, AGENT_INTENTS, 4)
         const requestedDomains = selectEnumValues(classified.toolDomains, AGENT_TOOL_DOMAINS, 6)
-        if (deterministic) {
-          const candidatePlan = tryCreateModelTaskGraph({
-            goal,
-            rawFacets: classified.taskFacets,
-            primaryIntent: deterministic.intent,
-            candidateDomains: deterministic.toolDomains,
-            snapshot,
-          })
-          const planned = candidatePlan && deterministic.taskGraph
-            && taskGraphCoversBaseline(candidatePlan, deterministic.taskGraph)
-            ? candidatePlan
-            : null
-          const decision = widen(planned
-            ? {
-                ...deterministic,
-                source: 'router_model',
-                reason: `${deterministic.reason}；结构化 Planner 已声明 Effect 与依赖`,
-                taskGraph: planned,
-                taskFacets: planned.facets.map((facet) => facet.facetId),
-              }
-            : deterministic)
-          this.logDecision(runId, decision)
-          return decision
-        }
         const decision: AgentRouteDecision = {
-          routeVersion: 'agent-route/v2',
           intent: classified.intent,
-          candidateIntents: uniqueValues([
-            classified.intent,
-            ...candidateIntents,
-          ], 4),
           complexity: selectComplexity(classified.complexity),
-          path: routePolicy[classified.intent].path,
           toolDomains: resolveCandidateDomains(
             classified.intent,
             candidateIntents,
             requestedDomains
           ),
-          source: 'router_model',
           reason: selectReason(classified.reason, classified.intent),
-          anchorSurfaceId: snapshot.surface?.id,
-          taskFacets: uniqueValues([
-            classified.intent,
-            ...candidateIntents,
-          ], 6),
-          suggestedCapabilityQueries: resolveCandidateDomains(
-            classified.intent,
-            candidateIntents,
-            requestedDomains
-          ),
+          // 路由模型判成 general 说明它没识别出具体应用任务；此时不发放 R1 写工具的自动放行位。
+          explicitUserIntent: classified.intent !== 'general',
         }
         const planned = tryCreateModelTaskGraph({
           goal,
@@ -489,7 +377,6 @@ export class AgentIntentRouter {
             candidateDomains: decision.toolDomains,
             snapshot,
           })
-          decision.taskFacets = decision.taskGraph.facets.map((facet) => facet.facetId)
         }
         const widened = widen(decision)
         this.logDecision(runId, widened)
@@ -519,17 +406,13 @@ export class AgentIntentRouter {
       return decision
     }
     const fallback: AgentRouteDecision = {
-      routeVersion: 'agent-route/v2',
       intent: 'general',
-      candidateIntents: ['general'],
       complexity: 'ambiguous',
-      path: 'primary',
       toolDomains: ['catalog'],
-      source: 'fallback',
       reason: '确定性规则未命中，router 不可用或分类失败',
-      anchorSurfaceId: snapshot.surface?.id,
-      taskFacets: ['ambiguous'],
-      suggestedCapabilityQueries: ['当前页面相关能力'],
+      // 兜底说明本轮**没有**识别出用户想做什么。此时绝不能自动放行写工具——
+      // 那正好是最不该假设"用户明确要求过"的时刻。
+      explicitUserIntent: false,
       taskGraph: createSingleFacetTaskGraph({
         goal,
         facetId: 'clarify_goal',
@@ -552,8 +435,7 @@ export class AgentIntentRouter {
       context: {
         intent: decision.intent,
         complexity: decision.complexity,
-        path: decision.path,
-        source: decision.source,
+        explicitUserIntent: decision.explicitUserIntent,
         toolDomains: decision.toolDomains,
         continuationDomains: decision.continuationDomains ?? [],
         taskFacetIds: decision.taskGraph?.facets.map((facet) => facet.facetId) ?? [],
@@ -561,3 +443,5 @@ export class AgentIntentRouter {
     })
   }
 }
+
+

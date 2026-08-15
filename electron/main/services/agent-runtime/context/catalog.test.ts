@@ -51,10 +51,9 @@ function contextSnapshot(): HostContextSnapshot {
 const primaryRoute: AgentRouteDecision = {
   intent: 'general',
   complexity: 'ambiguous',
-  path: 'primary',
   toolDomains: ['catalog'],
-  source: 'fallback',
   reason: '测试能力发现',
+  explicitUserIntent: false,
 }
 
 describe('AgentToolCatalogPlanner', () => {
@@ -135,10 +134,9 @@ describe('AgentToolCatalogPlanner', () => {
     const route: AgentRouteDecision = {
       intent: 'general',
       complexity: 'simple',
-      path: 'primary',
       toolDomains: [],
-      source: 'deterministic',
       reason: '能力概览直接回答',
+      explicitUserIntent: false,
     }
 
     /*
@@ -156,10 +154,9 @@ describe('AgentToolCatalogPlanner', () => {
     const route: AgentRouteDecision = {
       intent: 'generate',
       complexity: 'simple',
-      path: 'workflow',
       toolDomains: ['models', 'generation', 'navigation'],
-      source: 'deterministic',
       reason: '命中生成规则',
+      explicitUserIntent: true,
     }
     const activation = planner.select(route, contextSnapshot())
     const names = activation.activeToolNames
@@ -184,18 +181,24 @@ describe('AgentToolCatalogPlanner', () => {
     }
 
     expect(planner.select({
-      intent: 'canvas', complexity: 'multi_step', path: 'workflow',
-      toolDomains: ['canvas', 'navigation', 'catalog'], source: 'deterministic', reason: '画布任务',
+      intent: 'canvas', complexity: 'multi_step',
+      explicitUserIntent: true,
+      toolDomains: ['canvas', 'navigation', 'catalog'],
+      reason: '画布任务',
     }, context).activeToolNames).toContain('run_henji_script')
 
     expect(new AgentToolCatalogPlanner(registry).select({
-      intent: 'camera_stage', complexity: 'multi_step', path: 'workflow',
-      toolDomains: ['camera_stage', 'navigation', 'catalog'], source: 'deterministic', reason: '三维任务',
+      intent: 'camera_stage', complexity: 'multi_step',
+      explicitUserIntent: true,
+      toolDomains: ['camera_stage', 'navigation', 'catalog'],
+      reason: '三维任务',
     }, context).activeToolNames).toContain('run_henji_script')
 
     expect(new AgentToolCatalogPlanner(registry).select({
-      intent: 'settings', complexity: 'multi_step', path: 'workflow',
-      toolDomains: ['settings', 'navigation', 'catalog'], source: 'deterministic', reason: '设置任务',
+      intent: 'settings', complexity: 'multi_step',
+      explicitUserIntent: true,
+      toolDomains: ['settings', 'navigation', 'catalog'],
+      reason: '设置任务',
     }, context).activeToolNames).toContain('run_henji_script')
     for (const legacy of [
       'run_canvas_image_pipeline_program',
@@ -204,8 +207,10 @@ describe('AgentToolCatalogPlanner', () => {
       'execute_application_program',
     ]) {
       expect(new AgentToolCatalogPlanner(registry).select({
-        intent: 'camera_stage', complexity: 'multi_step', path: 'workflow',
-        toolDomains: ['camera_stage', 'catalog'], source: 'deterministic', reason: '单入口门禁',
+        intent: 'camera_stage', complexity: 'multi_step',
+        explicitUserIntent: true,
+        toolDomains: ['camera_stage', 'catalog'],
+      reason: '单入口门禁',
       }, context).activeToolNames).not.toContain(legacy)
     }
   })
@@ -610,8 +615,8 @@ describe('激活恢复挂起时不得结算停止', () => {
 
     planner.select({
       routeVersion: 'agent-route/v2', intent: 'diagnose', candidateIntents: ['diagnose'],
-      complexity: 'simple', path: 'workflow', toolDomains: ['diagnostics'],
-      source: 'deterministic', reason: '诊断',
+      complexity: 'simple',toolDomains: ['diagnostics'],
+     reason: '诊断',
     } as never, null)
     // 已经披露出去了，恢复标志必须清掉，否则任务永远结算不了
     expect(planner.hasPendingActivationRecovery()).toBe(false)
@@ -624,3 +629,6 @@ describe('激活恢复挂起时不得结算停止', () => {
     expect(planner.hasPendingActivationRecovery()).toBe(false)
   })
 })
+
+
+

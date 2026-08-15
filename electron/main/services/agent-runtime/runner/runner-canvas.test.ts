@@ -8,10 +8,16 @@ import {
 } from '../../../../../src/core/assistant/hostContracts'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
+import {
+  HENJI_ENTITY_METHOD_SIGNATURES,
+  HENJI_SCRIPT_LANGUAGE_RULES,
+} from '../../../../../src/core/assistant/capabilityDiscovery'
 import type { ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
 import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
+import { createHenjiScriptService, createHenjiScriptTools } from '../henji-script/tools'
+import { rememberHenjiScriptApiLease } from '../context/script-api-lease'
 import { AgentRunner } from './runner'
 
 function request(): AgentStartRunRequest {
@@ -20,7 +26,7 @@ function request(): AgentStartRunRequest {
     schemaVersion: AGENT_RUNTIME_SCHEMA_VERSION,
     threadId: 'thread-canvas',
     goal: '在画布添加两个节点并连接',
-    approvalMode: 'ask',
+    approvalMode: 'full_access',
     profile: {
       id: 'profile-canvas', name: '画布评测',
       primary: { providerId: 'provider', modelId: 'model' },
@@ -51,26 +57,30 @@ function request(): AgentStartRunRequest {
 
 function stepResult(input: ModelStepInput, call: number): ModelStepResult {
   const toolCalls = call === 1
-    ? [
-        { toolCallId: 'call-add-1', toolName: 'add_canvas_node', input: { projectId: 'project-1' }, dynamic: false },
-        { toolCallId: 'call-add-2', toolName: 'add_canvas_node', input: { projectId: 'project-1' }, dynamic: false },
-        { toolCallId: 'call-connect', toolName: 'connect_canvas_nodes', input: { projectId: 'project-1' }, dynamic: false },
-      ]
-    : call === 2
-      ? [{
-          toolCallId: 'call-verify', toolName: 'get_canvas_project',
-          input: { projectId: 'project-1' }, dynamic: false,
-        }]
+    ? [{
+        toolCallId: 'call-script', toolName: 'run_henji_script', dynamic: false,
+        input: {
+          language: 'henji-ts/v1', summary: '添加两个节点、连接并验证',
+          source: `
+            await app.action('search_canvas_node_types', { ordinal: 1 });
+            await app.action('get_canvas_node_schema', { ordinal: 2 });
+            await app.action('add_canvas_node', { projectId: 'project-1' });
+            await app.action('add_canvas_node', { projectId: 'project-1' });
+            await app.action('connect_canvas_nodes', { projectId: 'project-1' });
+            await app.action('get_canvas_project', { projectId: 'project-1' });
+          `,
+        },
+      }]
       : []
   return {
     requestId: input.requestId, runId: input.runId, stepId: input.stepId,
     providerId: input.providerId, modelId: input.modelId,
-    text: call <= 2 ? '' : '画布操作完成', reasoningText: '', structuredOutput: null,
+    text: call === 1 ? '' : '画布操作完成', reasoningText: '', structuredOutput: null,
     toolCalls,
-    responseMessages: call <= 2
+    responseMessages: call === 1
       ? [{ role: 'assistant', content: toolCalls.map((toolCall) => ({ type: 'tool-call' as const, ...toolCall })) }]
       : [{ role: 'assistant', content: '画布操作完成' }],
-    finishReason: call <= 2 ? 'tool-calls' : 'stop',
+    finishReason: call === 1 ? 'tool-calls' : 'stop',
     usage: {
       inputTokens: 10, inputNoCacheTokens: 10, cacheReadTokens: 0, cacheWriteTokens: 0,
       outputTokens: 2, textTokens: 2, reasoningTokens: 0, totalTokens: 12,
@@ -88,11 +98,42 @@ describe('AgentRunner canvas batch', () => {
       workspace: { id: 'nodes', activeToolId: null },
       project: { id: 'project-1', selectedNodeId: null },
       generation: { commandReady: true }, assets: { view: 'closed', selectedAssetId: null }, uiReady: true,
-      availableCapabilities: ['add_canvas_node', 'connect_canvas_nodes', 'get_canvas_project'],
+      availableCapabilities: [
+        'run_henji_script',
+        'search_canvas_node_types', 'get_canvas_node_schema',
+        'add_canvas_node', 'connect_canvas_nodes', 'get_canvas_project',
+      ],
       capturedAt: new Date().toISOString(),
     }
     const registry = new AgentToolRegistry()
     const executions: string[] = []
+    let entitySequence = 0
+    for (const toolName of ['search_canvas_node_types', 'get_canvas_node_schema'] as const) {
+      registry.register(defineAgentTool({
+        name: toolName, version: 1, title: toolName, description: `读取 ${toolName}。`,
+        capability: {
+          id: toolName, domain: 'canvas', aliases: [], dataClasses: ['C0'], acceptsRefs: [],
+          producesRefs: ['canvas.node_type'], availability: [], concurrencyKey: 'canvas_catalog',
+          control: { impacts: [{
+            effect: 'observe', entityTypes: ['canvas.node_type'], propertyIds: [],
+            revisionScopes: [], verificationRequired: false,
+          }] },
+          resolveObservedEffects: () => [{
+            effect: 'observe', entityTypes: ['canvas.node_type'], propertyIds: [], targetRefs: [],
+            count: 1, verified: true, evidence: [`${toolName}:observed`],
+          }],
+        } as never,
+        category: 'canvas', side: 'backend', risk: 'R0', permission: 'canvas:read',
+        readOnly: true, destructive: false, openWorld: false, idempotent: true,
+        timeoutMs: 1_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+        supportsPreview: false, supportsUndo: false, requiredContext: [],
+        inputSchema: z.object({ ordinal: z.number().optional() }).strict(),
+        outputSchema: z.object({ ok: z.literal(true), ordinal: z.number().optional() }).strict(),
+        aiInputSchema: { type: 'object', properties: { ordinal: { type: 'number' } }, additionalProperties: false },
+        execute: async (input) => ({ ok: true as const, ordinal: input.ordinal }), concurrencyKey: () => 'canvas_catalog',
+        targetIds: () => ({}), dataClasses: () => ['C0'], summarize: () => `${toolName} 已读取`,
+      }))
+    }
     for (const toolName of ['add_canvas_node', 'connect_canvas_nodes'] as const) {
       registry.register(defineAgentTool({
         name: toolName, version: 1, title: toolName, description: `测试 ${toolName} revision 串联。`,
@@ -104,10 +145,12 @@ describe('AgentRunner canvas batch', () => {
             entityTypes: [toolName === 'add_canvas_node' ? 'canvas.node' : 'canvas.edge'],
             propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
           }] },
-          resolveObservedEffects: () => [{
+          resolveObservedEffects: (_input: unknown, output: { entityId: string }) => [{
             effect: 'create',
             entityTypes: [toolName === 'add_canvas_node' ? 'canvas.node' : 'canvas.edge'],
-            propertyIds: [], targetRefs: [], count: 1, verified: true, evidence: [`${toolName}:completed`],
+            propertyIds: [],
+            targetRefs: [{ kind: toolName === 'add_canvas_node' ? 'canvas.node' : 'canvas.edge', id: output.entityId }],
+            count: 1, verified: true, evidence: [`${toolName}:${output.entityId}`],
           }],
         } as never,
         category: 'canvas', side: 'backend', risk: 'R0', permission: 'canvas:write',
@@ -116,17 +159,22 @@ describe('AgentRunner canvas batch', () => {
         supportsPreview: false, supportsUndo: false, requiredContext: ['canvas'],
         inputSchema: z.object({ projectId: z.string() }).strict(),
         outputSchema: z.object({
-          projectId: z.string(), scopeRevisions: hostScopeRevisionsSchema,
+          projectId: z.string(), entityId: z.string(), scopeRevisions: hostScopeRevisionsSchema,
         }).strict(),
         aiInputSchema: { type: 'object', properties: { projectId: { type: 'string' } }, required: ['projectId'] },
         execute: async (input) => {
           executions.push(toolName)
+          entitySequence += 1
           context = {
             ...context,
             revision: context.revision + 1,
             scopeRevisions: { ...context.scopeRevisions, canvas: context.scopeRevisions.canvas + 1 },
           }
-          return { projectId: input.projectId, scopeRevisions: context.scopeRevisions }
+          return {
+            projectId: input.projectId,
+            entityId: `${toolName}-${entitySequence}`,
+            scopeRevisions: context.scopeRevisions,
+          }
         },
         concurrencyKey: () => 'canvas', targetIds: (input) => ({ projectId: input.projectId }),
         dataClasses: () => ['C1'], summarize: () => `${toolName} 完成`,
@@ -166,6 +214,27 @@ describe('AgentRunner canvas batch', () => {
       getHostContext: () => context,
       appendPermissionAudit: async () => {},
     })
+    const scriptService = createHenjiScriptService(registry)
+    for (const tool of createHenjiScriptTools({
+      service: scriptService, gateway, getHostContext: () => context,
+    })) registry.register(tool)
+    rememberHenjiScriptApiLease('run-canvas-batch', {
+      forbiddenEffects: [],
+      language: 'henji-ts/v1', entryTool: 'run_henji_script',
+      rules: [...HENJI_SCRIPT_LANGUAGE_RULES],
+      entities: {
+        methods: ['list', 'read', 'create', 'update', 'remove'],
+        signatures: HENJI_ENTITY_METHOD_SIGNATURES,
+        entityTypes: [], propertyIds: [], entityDefinitions: [], propertyDefinitions: [],
+      },
+      actions: [
+        'search_canvas_node_types', 'get_canvas_node_schema',
+        'add_canvas_node', 'connect_canvas_nodes', 'get_canvas_project',
+      ].map((id) => ({
+        id, title: id, parameters: {}, returns: { fields: ['resultRefs'], hasResultRefs: true },
+      })),
+      recipes: [],
+    })
     const events: AgentEvent[] = []
     let resolveTerminal: (state: AgentRunState) => void = () => undefined
     const terminal = new Promise<AgentRunState>((resolve) => { resolveTerminal = resolve })
@@ -186,6 +255,7 @@ describe('AgentRunner canvas batch', () => {
                 intent: 'canvas',
                 complexity: 'multi_step',
                 reason: '用户要求编排画布节点',
+                explicitUserIntent: true,
                 taskFacets: [{
                   facetId: 'canvas_write', domain: 'canvas', goal: '新增节点并连接',
                   capabilityKinds: ['mutate'], completionConditions: ['节点与连线都有结构化证据。'],
@@ -224,9 +294,10 @@ describe('AgentRunner canvas batch', () => {
 
     runner.start()
     const state = await terminal
-    expect(state.status).toBe('completed')
+    expect(state.status, JSON.stringify(state.error)).toBe('completed')
     expect(executions).toEqual(['add_canvas_node', 'add_canvas_node', 'connect_canvas_nodes'])
-    expect(events.filter((event) => event.type === 'ToolCompleted')).toHaveLength(4)
+    expect(events.filter((event) => event.type === 'ToolCompleted')).toHaveLength(1)
     expect(events.some((event) => event.type === 'ToolFailed')).toBe(false)
   })
 })
+

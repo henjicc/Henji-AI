@@ -6,7 +6,6 @@ import { AgentIntentRouter } from './router'
 import {
   deriveThreadContinuation,
   describeContinuationForRouter,
-  isContinuationGoal,
 } from './thread-continuation'
 
 /*
@@ -56,36 +55,36 @@ describe('会话延续证据', () => {
     expect(continuation?.previousUserGoals[0]).toContain('三维镜头')
   })
 
-  it('延续词判定不把全新任务卷进来', () => {
-    expect(isContinuationGoal('再帮我添加一个白色的球体')).toBe(true)
-    expect(isContinuationGoal('继续把动画补完')).toBe(true)
-    expect(isContinuationGoal('帮我生成一张猫的图片')).toBe(false)
-    expect(isContinuationGoal('打开素材库')).toBe(false)
-  })
-
   /*
-   * 复现第二次实测失败：用户取消了那次跑偏的生成之后，只说了一句「你这不对吧」。
+   * 真实语料全量保留，但断言从「isContinuationGoal 判定正确」改成「上一轮领域可达」。
    *
-   * 这句话命不中任何延续词，延续加宽整个被跳过；路由判成 diagnose，任务图只生成一个 diagnose
-   * Facet，能力发现返回 0 项能力 0 个租约，助手最后只能停下来解释自己被阻塞。可这句话里
-   * **没有任何新任务信息**——它唯一可能指向的就是上一轮。
+   * 这三组原话覆盖了三次实测事故与两类边界：带新诉求的承接、零信息量的反馈式追问、
+   * 自带完整新诉求的长句。以前它们守的是一张中文词表判得准不准；那张词表已经删除
+   * （见 thread-continuation.ts 顶部说明），现在守的是用户能不能接着上一轮把事做完。
    */
-  it('不带延续词的反馈式追问同样算承接', () => {
+  it('同线程里的任何一句话都让上一轮领域可达', async () => {
+    const router = new AgentIntentRouter(async () => (
+      // 分类器刻意返回实测里那些错误结论，验证并集独立生效。
+      { intent: 'generate', toolDomains: ['generation'], reason: '判成生成' }
+    ))
     for (const goal of [
+      // 带新诉求的承接
+      '再帮我添加一个白色的球体', '继续把动画补完',
+      // 零信息量的反馈式追问：三次事故里最致命的一类
       '你这不对吧', '不对啊', '没成功啊', '怎么回事', '为什么没做',
       '失败了？', '重来', '你搞错了', '？？？',
-    ]) {
-      expect(isContinuationGoal(goal), goal).toBe(true)
-    }
-  })
-
-  it('自带完整新诉求的长句不靠承接兜底', () => {
-    // 这类句子路由本来就能判对，不需要把上一轮的域拖进来。
-    for (const goal of [
+      // 自带完整新诉求的长句：以前被判为「非承接」，现在同样并入——代价只是多几个候选领域
       '这个图太糊了，帮我换一个模型重新生成一张更清晰的猫的图片',
       '为什么我的素材库里有这么多重复文件，帮我整理一下素材库并删除重复项',
     ]) {
-      expect(isContinuationGoal(goal), goal).toBe(false)
+      const decision = await router.route(
+        `run-corpus-${goal}`,
+        goal,
+        generationSnapshot(),
+        new AbortController().signal,
+        deriveThreadContinuation(cameraStageHistory())
+      )
+      expect(decision.toolDomains, goal).toContain('camera_stage')
     }
   })
 
@@ -111,6 +110,7 @@ describe('路由承接上一轮任务', () => {
       toolDomains: ['generation', 'models'],
       complexity: 'simple',
       reason: '当前在生成工作区，判断为生成一张白色球体图片',
+      explicitUserIntent: true,
     }))
     const decision = await router.route(
       'run-1',
@@ -119,9 +119,10 @@ describe('路由承接上一轮任务', () => {
       new AbortController().signal,
       deriveThreadContinuation(cameraStageHistory())
     )
+    // 断言的是**行为**（上一轮领域可达），不是某个实现细节命中了。
+    // candidateIntents 已随 7 个零消费方字段一起删除；能不能做到事，只看 toolDomains。
     expect(decision.toolDomains).toContain('camera_stage')
     expect(decision.continuationDomains).toContain('camera_stage')
-    expect(decision.candidateIntents).toContain('camera_stage')
     // 主意图不被改写：路由的 intent 还牵着模型目录注入等一串下游行为。
     expect(decision.intent).toBe('generate')
   })
@@ -149,6 +150,7 @@ describe('路由承接上一轮任务', () => {
       toolDomains: ['diagnostics'],
       complexity: 'ambiguous',
       reason: '用户在质疑上一轮结果，判断为诊断',
+      explicitUserIntent: true,
     }))
     const decision = await router.route(
       'run-not-right',
@@ -162,21 +164,28 @@ describe('路由承接上一轮任务', () => {
   })
 
   /*
-   * 复现第三次实测失败：用户只说了「你继续」。
+   * 复现第三次实测失败：用户只说了「你继续」。路由模型把它判成 canvas，任务图于是只生成一个
+   * canvas Facet，上一轮真正在做的 camera_stage 只能靠补位名额挤进来——补位按字母序选，恰好
+   * 没选中 place_camera_stage_object，运行卡在"任务图仍有 1 个 Facet 未结算"。
    *
-   * 路由模型把它判成 canvas（画布），任务图于是只生成一个 canvas Facet，上一轮真正在做的
-   * camera_stage 只能靠补位名额挤进来——而补位按字母序选，恰好没选中 place_camera_stage_object，
-   * 运行卡在"任务图仍有 1 个 Facet 未结算"。
+   * 这几句原话全部保留，但断言从「实现命中了承接分支」改成「上一轮的领域可达」。
    *
-   * 一句「你继续」的信息量是零，让模型去分类它得到的任何 intent 都是噪声。
+   * 旧实现靠 isPureContinuationGoal 这张中文词表（「你继续/不对/没成功/怎么回事」+ 30 字符
+   * 上限）短路整条路由：跳过分类器、继承上一轮 intent、用上一轮原话建任务图。它确实多做了
+   * 两件好事，但代价是一张永远补不完的词表——用户表达不满的说法是无穷的，而漏掉一句的后果
+   * 就是这三次实测事故。
+   *
+   * 现在改成无条件并集：不判断这句话算不算承接，只要同线程有历史证据就把上一轮领域并进来。
+   * 卡死运行的**核心**原因是「camera_stage 根本不在池子里」，并集直接消除它。
+   *
+   * 明确记录被放弃的两点：分类器不再被短路（一句零信息量的话仍会烧一次模型调用），
+   * intent 也不再继承上一轮。后者在任务图删除后消费方只剩模型目录注入与评测打分，影响有限。
    */
-  it('纯承接语句不进分类，直接沿用上一轮领域', async () => {
-    let classifierCalls = 0
-    const router = new AgentIntentRouter(async () => {
-      classifierCalls += 1
-      return { intent: 'canvas', toolDomains: ['canvas'], reason: '判断为画布任务' }
-    })
-    for (const goal of ['你继续', '继续吧', '你这不对吧', '没成功啊']) {
+  it('零信息量的承接语句仍让上一轮领域可达', async () => {
+    const router = new AgentIntentRouter(async () => (
+      { intent: 'canvas', toolDomains: ['canvas'], reason: '判断为画布任务' }
+    ))
+    for (const goal of ['你继续', '继续吧', '你这不对吧', '没成功啊', '怎么回事', '重来', '？？？']) {
       const decision = await router.route(
         `run-${goal}`,
         goal,
@@ -184,25 +193,10 @@ describe('路由承接上一轮任务', () => {
         new AbortController().signal,
         deriveThreadContinuation(cameraStageHistory())
       )
-      expect(decision.intent, goal).toBe('camera_stage')
+      // 判据是「做得到事」，不是「分类对了」。
       expect(decision.toolDomains, goal).toContain('camera_stage')
-      expect(decision.taskGraph?.facets.every((facet) => facet.domain === 'camera_stage'), goal)
-        .toBe(true)
+      expect(decision.continuationDomains, goal).toContain('camera_stage')
     }
-    // 分类一句没有信息量的话既浪费一次模型调用（实测 18 秒），结果又只会是噪声。
-    expect(classifierCalls).toBe(0)
-  })
-
-  it('任务图的目标文本取上一轮的用户诉求，不是那句「你继续」', async () => {
-    const decision = await new AgentIntentRouter(async () => ({ intent: 'canvas', reason: 'x' })).route(
-      'run-goal-text',
-      '你继续',
-      generationSnapshot(),
-      new AbortController().signal,
-      deriveThreadContinuation(cameraStageHistory())
-    )
-    // 任务图里只留一句"你继续"的话，模型和结算都读不出这一步要做什么。
-    expect(JSON.stringify(decision.taskGraph)).toContain('三维镜头')
   })
 
   it('没有历史领域证据时不接管路由', async () => {
@@ -222,11 +216,20 @@ describe('路由承接上一轮任务', () => {
     expect(decision.intent).toBe('general')
   })
 
-  it('不是延续语句时保持原样，不平白扩域', async () => {
+  /*
+   * 无条件并集的代价，明写出来。
+   *
+   * 同线程里问一件全新的事，上一轮的领域也会被并进 toolDomains。这是刻意接受的交换：
+   * 判断"这句话是不是承接"只能靠读文本，而那正是被删掉的那张词表。两边代价严重不对称——
+   * 多带一两个候选领域只影响能力发现的排序（准入仍由 registry.list 与审批把关），
+   * 而少带一个领域会让整次运行没有出口，已实测三次。
+   */
+  it('新任务也会并入上一轮领域，主意图不受影响', async () => {
     const router = new AgentIntentRouter(async () => ({
       intent: 'generate',
       toolDomains: ['generation'],
       reason: '生成一张图片',
+      explicitUserIntent: true,
     }))
     const decision = await router.route(
       'run-3',
@@ -235,7 +238,29 @@ describe('路由承接上一轮任务', () => {
       new AbortController().signal,
       deriveThreadContinuation(cameraStageHistory())
     )
+    expect(decision.toolDomains).toContain('camera_stage')
+    // 主意图不被延续证据改写：它牵着模型目录注入与评测打分。
+    expect(decision.intent).toBe('generate')
+    expect(decision.toolDomains).toContain('generation')
+  })
+
+  it('没有历史证据的线程不扩域', async () => {
+    const router = new AgentIntentRouter(async () => ({
+      intent: 'generate',
+      toolDomains: ['generation'],
+      reason: '生成一张图片',
+      explicitUserIntent: true,
+    }))
+    const decision = await router.route(
+      'run-fresh',
+      '帮我生成一张猫的图片',
+      generationSnapshot(),
+      new AbortController().signal,
+      null
+    )
     expect(decision.toolDomains).not.toContain('camera_stage')
     expect(decision.continuationDomains).toBeUndefined()
   })
 })
+
+

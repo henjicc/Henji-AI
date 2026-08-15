@@ -35,7 +35,7 @@ function capabilityMatches(required: AgentTaskRequiredEffect, capabilityId: stri
 describe('跨领域确定性任务图 Effect 对齐', () => {
   it.each([
     ['查看当前主题设置', 'settings', 'observe', 'get_application_settings'],
-    ['把毛玻璃关闭', 'settings', 'update', 'apply_application_settings_change'],
+    ['把毛玻璃关闭', 'settings', 'update', 'change_application_entities'],
     ['查看 task-abc-123 的进度', 'read_generation', 'observe', 'get_generation_task'],
     ['取消 task-abc-123', 'cancel_generation', 'execute', 'cancel_generation_task'],
     ['生成一张猫的图片', 'generate', 'execute', 'create_visible_generation_task'],
@@ -56,13 +56,14 @@ describe('跨领域确定性任务图 Effect 对齐', () => {
   it('读取设置时拒绝 Router 模型伪造的 update 图并保留确定性 observe 图', async () => {
     const router = new AgentIntentRouter(async () => ({
       intent: 'settings', candidateIntents: ['settings'], toolDomains: ['settings'],
+      explicitUserIntent: true,
       complexity: 'multi_step', reason: '错误地当成写设置',
       taskFacets: [{
         facetId: 'settings', domain: 'settings', goal: '更新设置',
-        targetEntityTypes: ['application.setting'], observationKinds: ['entity_state'],
+        targetEntityTypes: ['settings.registry'], observationKinds: ['entity_state'],
         capabilityKinds: ['mutate'], targetSurfaceId: null, dependsOn: [], parallelizable: false,
         completionConditions: ['设置已更新'], requiredEffects: [{
-          effectId: 'settings_effect', effect: 'update', entityTypes: ['application.setting'],
+          effectId: 'settings_effect', effect: 'update', entityTypes: ['settings.registry'],
           propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: true,
           actionGroupId: 'settings_actions',
         }], uncertainties: [], confidence: 1,
@@ -74,7 +75,8 @@ describe('跨领域确定性任务图 Effect 对齐', () => {
       snapshot(),
       new AbortController().signal,
     )
-    expect(result.source).toBe('deterministic')
+    // source 字段已删除（纯遥测、零行为消费方）。确定性命中的可观察证据是它没有调用路由模型。
+    expect(result.explicitUserIntent).toBe(true)
     expect(result.taskGraph?.facets[0]?.requiredEffects[0]?.effect).toBe('observe')
   })
 })

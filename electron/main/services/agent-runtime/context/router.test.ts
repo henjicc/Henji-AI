@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { contextSnapshot } from './context-test-fixtures'
+import { decideToolAuthorization } from '../tools/approval-policy'
 import { AgentIntentRouter } from './router'
 
 describe('AgentIntentRouter', () => {
@@ -9,7 +10,7 @@ describe('AgentIntentRouter', () => {
     const result = await new AgentIntentRouter(classifier).route(
       'run-1', '切换到素材库工作区', contextSnapshot(), new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'navigate', source: 'deterministic', path: 'workflow' })
+    expect(result).toMatchObject({ intent: 'navigate', explicitUserIntent: true })
     expect(classifier).not.toHaveBeenCalled()
   })
 
@@ -21,7 +22,7 @@ describe('AgentIntentRouter', () => {
       contextSnapshot(),
       new AbortController().signal,
     )
-    expect(result).toMatchObject({ intent: 'settings', source: 'deterministic' })
+    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: true })
     expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
       effect: 'update', minimumCount: 2, verificationRequired: true,
     })
@@ -37,7 +38,7 @@ describe('AgentIntentRouter', () => {
       new AbortController().signal,
     )
 
-    expect(result).toMatchObject({ intent: 'settings', source: 'deterministic' })
+    expect(result).toMatchObject({ intent: 'settings', explicitUserIntent: true })
     expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
       effect: 'update', minimumCount: 2, verificationRequired: true,
     })
@@ -51,9 +52,8 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'general',
-      source: 'deterministic',
+      explicitUserIntent: false,
       complexity: 'simple',
-      path: 'primary',
       toolDomains: [],
     })
     expect(classifier).not.toHaveBeenCalled()
@@ -64,7 +64,43 @@ describe('AgentIntentRouter', () => {
     const result = await router.route(
       'run-1', '帮我处理一下这个需求', contextSnapshot(), new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'general', source: 'fallback', path: 'primary' })
+    expect(result).toMatchObject({ intent: 'general', explicitUserIntent: false })
+  })
+
+  /*
+   * 授权门禁：explicitUserIntent 是权限位，不是分类标签。
+   *
+   * 它唯一的消费方是 approval-policy —— assistant_decides 模式下只有它为真才自动放行 R1
+   * 非只读非破坏性工具。以前这个语义靠 `intent !== 'general'` 现场推断，intent 取值一演化
+   * 就会静默改变每次运行的授权范围。这里把「路由没识别出任务 → 不自动放行写工具」钉死。
+   */
+  it('路由没识别出具体任务时不发放写工具自动放行位', async () => {
+    const failed = await new AgentIntentRouter(async () => { throw new Error('offline') }).route(
+      'run-auth-fallback', '帮我处理一下这个需求', contextSnapshot(), new AbortController().signal
+    )
+    expect(failed.explicitUserIntent).toBe(false)
+    expect(decideToolAuthorization({
+      mode: 'assistant_decides', risk: 'R1', readOnly: false, destructive: false,
+      dataClasses: ['C1'], explicitUserIntent: failed.explicitUserIntent,
+    })).toBe('approval_required')
+
+    const overview = await new AgentIntentRouter(async () => {
+      throw new Error('不应调用分类器')
+    }).route('run-auth-overview', '你能做什么', contextSnapshot(), new AbortController().signal)
+    expect(overview.explicitUserIntent).toBe(false)
+  })
+
+  it('识别出具体应用任务时才自动放行 R1 写工具', async () => {
+    const result = await new AgentIntentRouter(async () => {
+      throw new Error('不应调用分类器')
+    }).route(
+      'run-auth-settings', '把界面主题改成深色', contextSnapshot(), new AbortController().signal
+    )
+    expect(result.explicitUserIntent).toBe(true)
+    expect(decideToolAuthorization({
+      mode: 'assistant_decides', risk: 'R1', readOnly: false, destructive: false,
+      dataClasses: ['C1'], explicitUserIntent: result.explicitUserIntent,
+    })).toBe('auto_allowed')
   })
 
   it('明显的画布与定位组合请求直接使用完整确定性图，不等待模型重复规划', async () => {
@@ -74,6 +110,7 @@ describe('AgentIntentRouter', () => {
       toolDomains: ['canvas', 'navigation'],
       complexity: 'multi_step',
       reason: '用户要求编排多个画布节点',
+      explicitUserIntent: true,
       taskFacets: [{
         facetId: 'canvas_structure', domain: 'canvas', goal: '创建两个画布节点并连接',
         targetEntityTypes: ['canvas.node', 'canvas.edge'], observationKinds: ['entity_state'],
@@ -101,9 +138,8 @@ describe('AgentIntentRouter', () => {
       new AbortController().signal
     )
     expect(result).toMatchObject({
-      routeVersion: 'agent-route/v2',
       intent: 'canvas',
-      source: 'deterministic',
+      explicitUserIntent: true,
       toolDomains: ['canvas', 'navigation', 'catalog'],
     })
     expect(result.taskGraph?.facets.map((facet) => facet.facetId)).toEqual([
@@ -126,8 +162,8 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'camera_stage',
+      explicitUserIntent: true,
       complexity: 'multi_step',
-      source: 'deterministic',
     })
     expect(result.toolDomains).toEqual(expect.arrayContaining([
       'toolbox', 'camera_stage', 'navigation', 'catalog',
@@ -155,6 +191,7 @@ describe('AgentIntentRouter', () => {
       toolDomains: ['workflows', 'assets'],
       complexity: 'multi_step',
       reason: '先选择素材，再运行工作流',
+      explicitUserIntent: true,
       taskFacets: [{
         facetId: 'select_asset',
         domain: 'assets',
@@ -210,6 +247,7 @@ describe('AgentIntentRouter', () => {
       intent: 'user_instructions',
       complexity: 'simple',
       reason: '用户要求长期保存供应商偏好',
+      explicitUserIntent: true,
     })
     const result = await new AgentIntentRouter(classifier).route(
       'run-preferences',
@@ -219,7 +257,7 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'user_instructions',
-      source: 'router_model',
+      explicitUserIntent: true,
       toolDomains: ['user_instructions'],
     })
     expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
@@ -249,8 +287,7 @@ describe('AgentIntentRouter', () => {
     )
     expect(result).toMatchObject({
       intent: 'generate',
-      source: 'deterministic',
-      path: 'workflow',
+      explicitUserIntent: true,
       toolDomains: ['models', 'generation', 'navigation'],
     })
     expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
@@ -267,7 +304,7 @@ describe('AgentIntentRouter', () => {
       contextSnapshot(),
       new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'generate', source: 'deterministic' })
+    expect(result).toMatchObject({ intent: 'generate', explicitUserIntent: true })
     expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
       effect: 'execute', entityTypes: ['generation.task'], verificationRequired: true,
     })
@@ -281,7 +318,7 @@ describe('AgentIntentRouter', () => {
       '生成一张西湖图片，等待完成并确认结果已经进入正式生成历史',
       contextSnapshot(), new AbortController().signal
     )
-    expect(result).toMatchObject({ intent: 'generate', source: 'deterministic' })
+    expect(result).toMatchObject({ intent: 'generate', explicitUserIntent: true })
     expect(result.taskGraph?.facets[0]?.requiredEffects[0]).toMatchObject({
       effect: 'execute', entityTypes: ['generation.task'],
     })
@@ -295,7 +332,8 @@ describe('AgentIntentRouter', () => {
       contextSnapshot(), new AbortController().signal
     )
     expect(result).toMatchObject({
-      intent: 'assets', source: 'deterministic', toolDomains: expect.arrayContaining(['assets']),
+      intent: 'assets',toolDomains: expect.arrayContaining(['assets']),
+      explicitUserIntent: true,
     })
     expect(result.taskGraph?.facets.flatMap((facet) => facet.requiredEffects)
       .find((effect) => effect.effect === 'create')).toMatchObject({
@@ -331,13 +369,14 @@ describe('AgentIntentRouter', () => {
       toolDomains: { workspace: 'generation', mediaType: 'image' },
       complexity: 'simple',
       reason: '用户请求创建图片生成任务',
+      explicitUserIntent: true,
     }))
     const result = await router.route(
       'run-malformed-router-output', '创建一张图片', contextSnapshot(), new AbortController().signal
     )
     expect(result).toMatchObject({
       intent: 'generate',
-      source: 'router_model',
+      explicitUserIntent: true,
       complexity: 'simple',
       toolDomains: ['models', 'generation', 'navigation'],
     })
@@ -348,19 +387,22 @@ describe('AgentIntentRouter', () => {
       intent: 'generate',
       candidateIntents: ['assets'],
       complexity: 'simple',
-      path: 'primary',
       toolDomains: ['catalog', 'assets'],
       reason: '用户希望生成照片',
+      explicitUserIntent: true,
     }))
     const result = await router.route(
       'run-router-policy', '帮我完成这个视觉需求', contextSnapshot(), new AbortController().signal
     )
+    // candidateIntents 已删（零消费方）；模型能否越权只看最终 toolDomains 是不是本地白名单推导的。
     expect(result).toMatchObject({
       intent: 'generate',
-      source: 'router_model',
-      path: 'workflow',
-      candidateIntents: ['generate', 'assets'],
+      explicitUserIntent: true,
       toolDomains: ['models', 'generation', 'navigation', 'assets', 'catalog'],
     })
   })
 })
+
+
+
+

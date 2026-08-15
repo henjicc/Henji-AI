@@ -89,18 +89,21 @@ export interface AgentContextLayerReport {
 }
 
 export interface AgentRouteDecision {
-  routeVersion?: 'agent-route/v2'
   intent: AgentIntent
-  candidateIntents?: AgentIntent[]
   complexity: 'simple' | 'multi_step' | 'ambiguous'
-  path: AgentRoutePath
   toolDomains: AgentToolDomain[]
-  source: 'deterministic' | 'router_model' | 'fallback'
   reason: string
-  /** 软规划信息，只影响能力排序，不限制能力发现，也不授予权限。 */
-  anchorSurfaceId?: string
-  taskFacets?: string[]
-  suggestedCapabilityQueries?: string[]
+  /**
+   * 本轮用户目标是否是一个具体的应用任务（而不是闲聊或路由兜底）。
+   *
+   * **这是一个授权位，不是分类标签。** 唯一消费方是 approval-policy：`assistant_decides`
+   * 模式下，只有它为真才自动放行 R1 非只读非破坏性工具。
+   *
+   * 以前这个语义靠 `intent !== 'general'` 现场推断——把一个用于提示词与评测打分的分类标签
+   * 当权限位用，intent 的取值稍有演化就会静默改变每次运行的授权范围。现在由 router 在每一个
+   * return 点显式赋值，且**必填无默认值**，漏赋值在 TypeScript 编译期就会被拦下。
+   */
+  explicitUserIntent: boolean
   /**
    * 因承接上一轮任务而额外放宽的工具域。
    *

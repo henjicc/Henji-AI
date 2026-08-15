@@ -89,14 +89,16 @@ function restoreAgentRoute(
 ): AgentRouteDecision {
   const toolDomains = recovered.toolDomains.filter(isAgentToolDomain)
   return {
-    routeVersion: 'agent-route/v2',
     intent: isAgentIntent(recovered.intent) ? recovered.intent : 'general',
     complexity: recovered.taskGraph ? 'multi_step' : 'simple',
-    path: toolDomains.length > 0 ? 'workflow' : 'primary',
     toolDomains,
-    source: 'fallback',
     reason: recovered.summary,
-    taskFacets: recovered.taskGraph?.facets.map((facet) => facet.facetId),
+    /*
+     * 恢复出来的运行沿用原来的授权判定：有任务图说明当初识别出了具体应用任务。
+     * 保存点里没有单独存这个位，所以用任务图存在与否作为等价重建依据——续跑不该
+     * 比原运行拿到更宽的授权，也不该更窄（更窄会让本来自动放行的写入突然卡审批）。
+     */
+    explicitUserIntent: Boolean(recovered.taskGraph),
     taskGraph: recovered.taskGraph,
   }
 }
@@ -556,7 +558,6 @@ export class AgentRunner {
         this.syncLeaseCheckpoint()
         if (this.progressTracker && route.taskGraph) {
           route.taskGraph = this.progressTracker.taskGraphSnapshot()
-          route.taskFacets = route.taskGraph.facets.map((facet) => facet.facetId)
         }
         const activation = this.externalContinuation.extendActivation(
           this.catalogPlanner.select(route, currentSnapshot),

@@ -420,7 +420,8 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple', path: 'primary', toolDomains: ['catalog'], reason: '一般问答',
+            intent: 'general', complexity: 'simple',toolDomains: ['catalog'], reason: '一般问答',
+            explicitUserIntent: false,
           },
           responseMessages: [{ role: 'assistant', content: '' }],
         })
@@ -514,9 +515,9 @@ describe('AgentRunner', () => {
           structuredOutput: {
             intent: 'general',
             complexity: 'multi_step',
-            path: 'primary',
             toolDomains: ['diagnostics'],
             reason: '长链路读取',
+            explicitUserIntent: false,
             taskFacets: [{
               facetId: 'long_chain', domain: 'diagnostics', goal: '读取 26 个独立事实',
               targetEntityTypes: ['diagnostics.fact'], observationKinds: [],
@@ -582,7 +583,8 @@ describe('AgentRunner', () => {
       if (input.stepId.startsWith('router:')) {
         return result(input, {
           structuredOutput: {
-            intent: 'general', complexity: 'simple', path: 'primary',
+            intent: 'general', complexity: 'simple',
+            explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
         })
@@ -622,7 +624,8 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'ambiguous', path: 'primary',
+            intent: 'general', complexity: 'ambiguous',
+            explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '需要澄清',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -692,7 +695,8 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple', path: 'primary',
+            intent: 'general', complexity: 'simple',
+            explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -819,6 +823,7 @@ describe('AgentRunner', () => {
             intent: 'generate',
             complexity: 'simple',
             reason: '用户要求生成图片',
+            explicitUserIntent: true,
           },
           responseMessages: [{ role: 'assistant', content: '' }],
         })
@@ -988,7 +993,8 @@ describe('AgentRunner', () => {
         return Promise.resolve(result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple', path: 'primary',
+            intent: 'general', complexity: 'simple',
+            explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -1040,7 +1046,8 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple', path: 'primary',
+            intent: 'general', complexity: 'simple',
+            explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -1075,3 +1082,7 @@ describe('AgentRunner', () => {
     })
   })
 })
+
+
+
+

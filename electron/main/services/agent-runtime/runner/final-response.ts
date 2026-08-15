@@ -20,7 +20,8 @@ export function requireFinalResponseEvidence(input: {
 }): string | null {
   const finalText = input.result.text.trim()
     || (input.result.structuredOutput ? JSON.stringify(input.result.structuredOutput) : '')
-  if (finalText && (input.route.intent === 'general' || input.observationCount > 0)) return finalText
+  // 没被判定为具体应用任务时（闲聊、能力概览、路由兜底）不要求工具证据。
+  if (finalText && (!input.route.explicitUserIntent || input.observationCount > 0)) return finalText
   if (input.alreadyGuided) return finalText || null
   input.budget.recordFailure()
   input.budget.recordProgress(`no-tool:${input.route.intent}:${input.result.finishReason}`)

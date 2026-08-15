@@ -71,69 +71,20 @@ const INTENT_BY_DOMAIN: Readonly<Partial<Record<AgentToolDomain, AgentIntent>>> 
   models: 'inspect_model',
 }
 
-/**
- * 「再/还/继续/接着/顺便/也」这类词说明用户在延续上一轮，而不是开一件新事。
+/*
+ * 这里曾经有四条中文正则来判断「这句话算不算承接上一轮」：句首的 CONTINUATION_PATTERN
+ * （再/还/继续/接着/顺便）、一张 REACTION_PATTERN 不满词表（不对/没成功/怎么回事/重来）、
+ * 30 字符的 REACTION_LENGTH_LIMIT，以及整句匹配的 BARE_CONTINUATION_PATTERN。
  *
- * 判定刻意保守：只认句首或紧跟"帮我/给我"的延续词，避免把"再来一张全新的图"这类真正的新任务
- * 也拖进上一轮的领域。放宽领域本身是安全的（只是多给几个候选工具），但没必要滥用。
+ * 方向从一开始就是错的。用户表达不满时的原话最短、最没有信息量、最不可能被词表穷尽，
+ * 而那恰恰是最需要承接上一轮的时候——漏掉一句的后果就是三次实测事故：「再帮我添加一个
+ * 白色的球体」判成 generate、「你这不对吧」判成 diagnose、「你继续」判成 canvas，
+ * 上一轮三次都在 camera_stage，主模型三次都读懂了用户，却没有入口纠正那个判决。
+ *
+ * 现在不再判断：只要同线程有历史证据，router 就无条件把上一轮领域并进 toolDomains
+ * （见 router.ts 的 widenWithContinuation）。本文件只保留纯抽取——从历史里读出领域与
+ * Surface 证据，不做任何文本判断。
  */
-const CONTINUATION_PATTERN = /^\s*(?:那|那么)?\s*(?:再|还|继续|接着|顺便|另外|然后)(?![见会)])|^\s*(?:帮我|给我|麻烦)?\s*(?:再|还|继续|接着|顺便)|\b(?:also|another|continue|keep going)\b/i
-
-/**
- * 真实用户表达困惑时不会带延续词。
- *
- * 实测：上一轮「再帮我添加一个白色的球体」被判成 generate、跑去生成图片，用户取消后说了句
- * 「你这不对吧」。这句话命不中任何延续词，于是延续加宽整个被跳过，路由判成 diagnose，任务图
- * 只剩一个 diagnose Facet，能力发现返回 0 项能力——助手最后只能停下来解释自己被阻塞了。
- *
- * 词表方向本身就是错的：「不对」「没成功」「怎么回事」「重来」这类话**没有携带任何新任务信息**，
- * 它们唯一可能指向的就是上一轮。越是这种表达越该承接，而不是越该新开一件事。所以这里判的是
- * 「这句话里有没有新任务」，不是「有没有出现某个延续词」。
- *
- * 仍然保守：只认短句。长句通常自带完整的新诉求（"这个图太糊了，帮我用另一个模型重画"），
- * 那种句子本来就能被路由正确识别，不需要靠承接兜底。
- */
-const REACTION_PATTERN = /(?:不对|不太对|没对|不行|不成|没成功|没有成功|失败|错了|搞错|弄错|有问题|怎么回事|怎么搞的|为什么|为啥|咋回事|重来|再试|试一下|没反应|没动静|没变化|没执行|没做)|[?？]{1,}\s*$|\b(?:wrong|not right|failed|didn'?t work|retry|try again|huh)\b/i
-
-/** 反馈式追问的长度上限（字符）。超过这个长度的句子通常自带完整新诉求。 */
-const REACTION_LENGTH_LIMIT = 30
-
-/**
- * 整句只有"继续"的意思，没带任何新内容。
- *
- * 与 CONTINUATION_PATTERN 的区别是必须**整句匹配**：「再帮我添加一个白色的球体」也以延续词
- * 开头，但它带着一个具体新诉求；「你继续」「接着弄吧」除了"承接"之外什么都没说。
- */
-const BARE_CONTINUATION_PATTERN = /^\s*(?:那|那么|好|好的|行|嗯|ok)?[，,、]?\s*(?:你|请|麻烦|帮我|给我)?\s*(?:继续|接着(?:弄|做|来|干)?|往下(?:做|走)?|go\s*on|continue|keep\s*going)\s*(?:吧|呀|啊|嘛|下去|一下)?\s*[。.!！~…]*$/i
-
-/**
- * 本轮目标是否**纯粹**在承接上一轮，不携带任何新任务信息。
- *
- * 「你继续」「你这不对吧」「没成功啊」属于这一类：它们的信息量是零，让路由模型去分类这样一句话，
- * 得到的任何 intent 都是噪声——实测「你继续」被判成 canvas（画布），任务图于是只生成一个 canvas
- * Facet，上一轮真正在做的 camera_stage 只能靠补位名额挤进来，而补位是按字母序选的，恰好没选中
- * 任务真正需要的 place_camera_stage_object，整次运行卡在"1 个 Facet 未结算"。
- *
- * 这类目标不该被分类，该直接沿用上一轮的领域。与 {@link isContinuationGoal} 分开：后者包含
- * 「再帮我加一个球体」这种带新诉求的承接，那种仍然只放宽领域、不改主意图。
- */
-export function isPureContinuationGoal(goal: string): boolean {
-  const normalized = goal.normalize('NFKC').trim()
-  if (normalized.length > REACTION_LENGTH_LIMIT) return false
-  return BARE_CONTINUATION_PATTERN.test(normalized) || REACTION_PATTERN.test(normalized)
-}
-
-/**
- * 本轮目标是否在承接同一会话的上一轮任务。
- *
- * 两条来源：显式延续词，或不携带新任务信息的反馈式追问。命中只用于**放宽**可发现领域，
- * 不改主意图、不授予任何权限。
- */
-export function isContinuationGoal(goal: string): boolean {
-  const normalized = goal.normalize('NFKC').trim()
-  if (CONTINUATION_PATTERN.test(normalized)) return true
-  return isPureContinuationGoal(normalized)
-}
 
 function messageText(message: ModelStepMessage): string {
   if (typeof message.content === 'string') return message.content

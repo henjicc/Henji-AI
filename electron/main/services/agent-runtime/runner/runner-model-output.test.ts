@@ -148,6 +148,7 @@ function routerResult(input: ModelStepInput): ModelStepResult {
       path: 'primary',
       toolDomains: ['diagnostics'],
       reason: '测试模型输出完整性',
+      explicitUserIntent: false,
     },
     responseMessages: [{ role: 'assistant', content: '' }],
   })
@@ -378,3 +379,4 @@ describe('AgentRunner 模型输出完整性', () => {
     expect(runner.getState().status).toBe('cancelled')
   })
 })
+

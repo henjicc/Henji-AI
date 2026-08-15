@@ -59,8 +59,9 @@ export function skillBuildInput(skills: AssistantSkillMetadata[] | undefined): A
     skills,
     snapshot: contextSnapshot(),
     route: {
-      intent: 'generate', complexity: 'simple', path: 'workflow', toolDomains: ['generation'],
-      source: 'deterministic', reason: '技能索引测试',
+      intent: 'generate', complexity: 'simple',toolDomains: ['generation'],
+      explicitUserIntent: true,
+     reason: '技能索引测试',
     },
     conversation: [],
     observations: [],
@@ -79,3 +80,4 @@ export function observation(output: unknown): AgentToolObservation {
     output,
   }
 }
+

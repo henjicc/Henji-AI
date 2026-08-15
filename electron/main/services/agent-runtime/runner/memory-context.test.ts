@@ -25,10 +25,9 @@ function snapshot(): HostContextSnapshot {
 const route: AgentRouteDecision = {
   intent: 'generate',
   complexity: 'multi_step',
-  path: 'primary',
   toolDomains: ['models', 'generation'],
-  source: 'deterministic',
   reason: '生成任务',
+  explicitUserIntent: true,
 }
 
 function result(): AgentMemoryRetrievalResult {
@@ -109,3 +108,5 @@ describe('AgentMemoryContextProvider', () => {
     expect(second).toEqual(first)
   })
 })
+
+

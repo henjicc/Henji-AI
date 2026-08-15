@@ -199,7 +199,9 @@ export class AgentToolExecutionCoordinator {
       },
     })
     try {
-      await scheduler.execute(calls, route.intent !== 'general', expectedRevisions)
+      // 授权位来自路由的显式判定，不再从 intent 字符串反推：intent 是给提示词与评测用的
+      // 分类标签，把它当权限位用意味着标签取值一变，R1 写工具的自动放行范围就静默改变。
+      await scheduler.execute(calls, route.explicitUserIntent, expectedRevisions)
     } finally {
       this.options.setActiveToolCall(null)
     }
