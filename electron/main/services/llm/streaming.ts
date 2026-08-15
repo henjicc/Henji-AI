@@ -7,6 +7,10 @@ import type {
   LlmStreamEmitter,
   LlmStreamOutput,
 } from './types'
+import {
+  applyProviderRequestBodyQuirks,
+  resolveProviderExtraAuthHeaders,
+} from '../../../../src/core/llm/providerProtocol'
 
 interface StreamChatOptions {
   endpoint: string
@@ -61,7 +65,7 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
     payload.reasoning = request.reasoning
   }
 
-  return payload
+  return applyProviderRequestBodyQuirks(request.providerId, payload) as JsonObject
 }
 
 export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Promise<LlmStreamOutput> {
@@ -70,6 +74,7 @@ export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Pr
     headers: {
       Accept: 'text/event-stream',
       Authorization: `Bearer ${options.apiKey}`,
+      ...resolveProviderExtraAuthHeaders(options.request.providerId, options.apiKey),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(buildOpenAiCompatiblePayload(options.request)),
@@ -245,3 +250,6 @@ function normalizeBaseUrl(input: string | undefined, fallback: string | undefine
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+
+
+

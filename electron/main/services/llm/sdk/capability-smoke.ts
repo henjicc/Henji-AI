@@ -8,6 +8,7 @@ import {
 } from '../../../../../src/core/llm/capabilitySmoke'
 import type { ModelStepInput, ModelStepResult, ModelStepUsage } from '../../../../../src/core/llm/modelStep'
 import { cancelLlmTask } from '../task-registry'
+import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
 import { runModelStep } from './runtime'
 import { modelStepProviderAdapters } from './provider-adapter'
 import './provider'
@@ -29,6 +30,21 @@ const emptyUsage: ModelStepUsage = {
 function extractErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return message.match(/\[([^\]]+)]/)?.[1] ?? 'unknown_error'
+}
+
+/**
+ * 取消有两种合法表示，走哪条是**竞态**，不是能力差异。
+ *
+ * 探测在 30ms 后取消请求。定时器在请求派发前触发，runtime 抛 `[task_cancelled]`；派发后
+ * 触发，中止信号进到供应商调用里，抛的是 `[provider_error]{category:"cancelled"}`。
+ * 快的网关更容易落到后一条。
+ *
+ * 旧实现只认前一种，于是同一份代码在 deepseek 上过、在 mimo 上挂——实测 mimo-v2.5-pro 其余
+ * 五项全过，只因这一项被判失败，主模型就被整个判为不可用。这是本地判定太窄，不是模型不支持。
+ */
+function isCancellationError(error: unknown): boolean {
+  return extractErrorCode(error) === 'task_cancelled'
+    || parseModelProviderError(error)?.category === 'cancelled'
 }
 
 function addNullable(left: number | null, right: number | null): number | null {
@@ -190,7 +206,7 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
       await runModelStep(input, () => undefined)
       return false
     } catch (error) {
-      return extractErrorCode(error) === 'task_cancelled'
+      return isCancellationError(error)
     } finally {
       clearTimeout(timer)
     }
@@ -234,3 +250,4 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
   }
   return result
 }
+

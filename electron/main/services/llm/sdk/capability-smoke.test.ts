@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import { serializeModelProviderError } from '../../../../../src/core/llm/providerProtocol'
 
 vi.mock('./runtime', () => ({ runModelStep: vi.fn() }))
 
@@ -72,4 +73,75 @@ describe('verifyModelCapabilities', () => {
     expect(result.cost).toEqual({ status: 'unknown' })
     expect(vi.mocked(runModelStep).mock.calls[2][0].capabilities.structuredOutputMode).toBe('json')
   })
+
+  /*
+   * 取消有两种合法表示，走哪条是竞态：定时器在请求派发前触发抛 `[task_cancelled]`，派发后
+   * 触发则是 `[provider_error]{category:"cancelled"}`。
+   *
+   * 旧实现只认前一种，于是同一份代码在 deepseek 上过、在 mimo 上挂——mimo-v2.5-pro 其余五项
+   * 全过，只因这一项被判失败，主模型就被整个判为不可用（agent_model_unavailable）。
+   */
+  it('供应商侧的取消错误同样算 cancel 通过', async () => {
+    vi.mocked(runModelStep)
+      .mockImplementationOnce(async (_input, emit) => {
+        emit({ type: 'TextDelta', text: 'OK' })
+        return createResult()
+      })
+      .mockResolvedValueOnce(createResult({
+        finishReason: 'tool-calls',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'capability_probe', input: { value: 'ok' }, dynamic: false }],
+      }))
+      .mockResolvedValueOnce(createResult({ structuredOutput: { ok: true } }))
+      .mockRejectedValueOnce(new Error(serializeModelProviderError({
+        code: 'MODEL_STEP_CANCELLED',
+        category: 'cancelled',
+        status: null,
+        retryable: false,
+        retryAfterMs: null,
+        providerId: 'provider',
+        modelId: 'model',
+        requestId: 'smoke-2:cancel',
+        message: '模型请求已取消',
+      })))
+
+    const result = await verifyModelCapabilities({
+      requestId: 'smoke-2',
+      providerId: 'provider',
+      modelId: 'model',
+      adapter: 'openai',
+      baseUrl: 'https://example.com/v1',
+      structuredOutputMode: 'json',
+    })
+
+    expect(result.checks.find((check) => check.id === 'cancel')?.status).toBe('passed')
+  })
+
+  it('非取消类错误仍然判 cancel 失败', async () => {
+    vi.mocked(runModelStep)
+      .mockImplementationOnce(async (_input, emit) => {
+        emit({ type: 'TextDelta', text: 'OK' })
+        return createResult()
+      })
+      .mockResolvedValueOnce(createResult({
+        finishReason: 'tool-calls',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'capability_probe', input: { value: 'ok' }, dynamic: false }],
+      }))
+      .mockResolvedValueOnce(createResult({ structuredOutput: { ok: true } }))
+      .mockRejectedValueOnce(new Error(serializeModelProviderError({
+        code: '500', category: 'server', status: 500, retryable: true, retryAfterMs: null,
+        providerId: 'provider', modelId: 'model', requestId: 'smoke-3:cancel', message: '服务器错误',
+      })))
+
+    const result = await verifyModelCapabilities({
+      requestId: 'smoke-3',
+      providerId: 'provider',
+      modelId: 'model',
+      adapter: 'openai',
+      baseUrl: 'https://example.com/v1',
+      structuredOutputMode: 'json',
+    })
+
+    expect(result.checks.find((check) => check.id === 'cancel')?.status).toBe('failed')
+  })
 })
+

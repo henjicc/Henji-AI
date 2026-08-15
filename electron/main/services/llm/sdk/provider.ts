@@ -10,6 +10,10 @@ import {
 } from '../../../../../src/core/assistant/traceSanitize'
 import type { AgentTraceHttpRequest, AgentTraceHttpResponse } from '../../../../../src/core/assistant/trace'
 import type { ModelStepInput, ModelStepUsage } from '../../../../../src/core/llm/modelStep'
+import {
+  applyProviderRequestBodyQuirks,
+  resolveProviderExtraAuthHeaders,
+} from '../../../../../src/core/llm/providerProtocol'
 import { resolveOpenAiCompatibleEndpoint, resolvePpioChatEndpoint } from '../streaming'
 import {
   modelStepProviderAdapters,
@@ -27,6 +31,7 @@ interface DeepSeekUsage {
 function stripChatCompletions(endpoint: string): string {
   return endpoint.replace(/\/chat\/completions\/?$/, '')
 }
+
 
 export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId' | 'adapter' | 'baseUrl'>): string {
   const normalizedInput = {
@@ -55,6 +60,7 @@ function createOpenAiCompatibleLanguageModel(
   const provider = createOpenAICompatible({
     name: 'openai-compatible',
     apiKey,
+    headers: resolveProviderExtraAuthHeaders(input.providerId, apiKey),
     baseURL: resolveModelStepBaseUrl(input),
     includeUsage: input.capabilities.usage,
     supportsStructuredOutputs: usesNativeJsonSchema(input),
@@ -64,9 +70,13 @@ function createOpenAiCompatibleLanguageModel(
           captureDeepSeekUsage: adapter === 'deepseek',
         })
       : undefined,
-    transformRequestBody: adapter === 'deepseek' && input.capabilities.reasoning && reasoning
-      ? body => applyModelStepProviderNativeOptions(body, reasoning)
-      : undefined,
+    // 两类差异叠加：deepseek 的 thinking 选项，以及各家对请求体字段的自有要求。
+    transformRequestBody: (body) => applyProviderRequestBodyQuirks(
+      input.providerId,
+      adapter === 'deepseek' && input.capabilities.reasoning && reasoning
+        ? applyModelStepProviderNativeOptions(body, reasoning)
+        : body,
+    ),
   })
   return provider.chatModel(input.modelId)
 }
@@ -271,3 +281,4 @@ function parseSseUsage(line: string): DeepSeekUsage | undefined {
     return undefined
   }
 }
+

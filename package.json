@@ -17,10 +17,12 @@
     "check:model-i18n": "node scripts/check-model-i18n.cjs",
     "check:main-imports": "node scripts/check-main-imports.cjs",
     "check:application-control-coverage": "vitest run src/core/assistant/applicationControlCoverage.test.ts",
-    "check:application-control-invariants": "vitest run src/features/assistant/applicationCapabilities/collectionCoverage.test.ts src/features/assistant/applicationCapabilities/propertyCoverage.test.ts src/features/assistant/applicationCapabilities/storeActionCoverage.test.ts src/features/assistant/applicationCapabilities/applicationReflectionAdapter.test.ts src/features/assets/application/assetMutationExecutor.test.ts src/features/assets/application/assetLibraryExecutors.test.ts electron/main/services/asset-library/index.test.ts src/features/cameraStage/store/playbackCameraLookAt.test.ts src/features/cameraStage/store/playbackSamplingConsistency.test.ts src/features/cameraStage/application/cameraStageNameContract.test.ts src/features/canvas/application/canvasReflection.test.ts src/features/canvas/application/canvasCollectionExecutor.test.ts electron/main/services/agent-runtime/context/budget-consistency.test.ts",
+    "check:application-control-invariants": "vitest run src/core/application-control/registry/registry.test.ts src/core/application-control/execution/engine.test.ts src/features/assistant/applicationCapabilities/collectionCoverage.test.ts src/features/assistant/applicationCapabilities/propertyCoverage.test.ts src/features/assistant/applicationCapabilities/storeActionCoverage.test.ts src/features/assistant/applicationCapabilities/applicationReflectionAdapter.test.ts src/features/assistant/applicationCapabilities/resultBehaviorCoverage.test.ts src/features/settings/application-control/settingsReflectionResult.test.ts src/features/assets/application/assetMutationExecutor.test.ts src/features/assets/application/assetLibraryExecutors.test.ts electron/main/services/asset-library/index.test.ts src/features/cameraStage/store/playbackCameraLookAt.test.ts src/features/cameraStage/store/playbackSamplingConsistency.test.ts src/features/cameraStage/application/cameraStageNameContract.test.ts src/features/cameraStage/application/cameraStageReflection.test.ts src/features/cameraStage/application/cameraStageStateKeyframeAnimationResult.test.ts src/features/cameraStage/application/cameraStageArchitectureResult.test.ts src/features/cameraStage/application/cameraStageStateKeyframeCollection.test.ts src/features/cameraStage/application/cameraMotionService.test.ts src/features/cameraStage/application/cameraStagePoseWrite.test.ts src/features/cameraStage/domain/sceneSerialization.test.ts src/features/canvas/application/canvasReflection.test.ts src/features/canvas/application/canvasCollectionExecutor.test.ts src/features/canvas/application/canvasApplicationService.test.ts src/features/generation/application/generationModelMutationExecutor.test.ts src/features/generation/application/generationDraftMutationExecutor.test.ts src/features/imageMark/application/imageMarkReflection.test.ts electron/main/services/agent-runtime/context/budget-consistency.test.ts",
     "check:assistant-capabilities": "node scripts/check-assistant-capabilities.cjs && npm run check:application-control-coverage && npm run check:application-control-invariants",
     "logs:query": "node scripts/query-logs.cjs",
     "assistant:cli": "node scripts/run-assistant-cli.cjs",
+    "assistant:live": "node scripts/run-assistant-cli.cjs --trace detailed --require-verified-write",
+    "assistant:live:suite": "node scripts/run-assistant-live-suite.cjs",
     "build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:surface:strict && npm run check:icons:strict && npm run check:model-i18n && npm run check:assistant-capabilities && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
@@ -51,7 +53,8 @@
     "ui:tour": "node scripts/ui-tour.cjs",
     "check:ui-visual": "node scripts/ui-visual-audit.cjs",
     "check:icons": "node scripts/check-icon-tokens.cjs",
-    "check:icons:strict": "node scripts/check-icon-tokens.cjs --strict"
+    "check:icons:strict": "node scripts/check-icon-tokens.cjs --strict",
+    "llm:verify": "node scripts/verify-llm-model.cjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "2.0.62",
@@ -93,6 +96,7 @@
     "sharp": "^0.35.2",
     "three": "^0.169.0",
     "three-stdlib": "^2.36.1",
+    "typescript": "^5.0.2",
     "uuid": "^13.0.0",
     "yauzl": "^3.4.0",
     "zod": "4.4.3",
@@ -123,7 +127,6 @@
     "playwright": "^1.61.1",
     "postcss": "^8.4.31",
     "tailwindcss": "^3.3.3",
-    "typescript": "^5.0.2",
     "vite": "^4.4.5",
     "vitest": "^1.6.1"
   }

@@ -28,7 +28,8 @@ import { getAppLocalDataDir } from '../services/system'
 import {
   type AssistantCliOptions,
 } from './arguments'
-import { waitForSubmittedGenerationTasks } from './generation-wait'
+import { waitForExternalContinuation, waitForSubmittedGenerationTasks } from './generation-wait'
+import { evaluateAssistantCliAcceptance } from './acceptance'
 
 const logger = createMainLogger('main.assistant_cli')
 const HOST_READY_TIMEOUT_MS = 30_000
@@ -71,6 +72,23 @@ async function waitForHostContext(owner: WebContents, timeoutMs: number): Promis
     await new Promise<void>((resolve) => { setTimeout(resolve, 100) })
   }
   throw new Error('等待助手宿主初始化超时')
+}
+
+export async function loadStoredLlmConfigForCli(): Promise<StoredLlmConfig> {
+  return await loadLlmConfig()
+}
+
+function resolveLlmConfigPath(): string {
+  const dataDirectoryRow = getDb().prepare(
+    "SELECT value FROM settings WHERE key = 'custom_data_directory'"
+  ).get() as { value: string } | undefined
+  const dataRoot = dataDirectoryRow?.value.trim() || path.join(getAppLocalDataDir(), 'Henji-AI')
+  return path.join(dataRoot, 'llm-config.json')
+}
+
+export async function saveStoredLlmConfigForCli(config: StoredLlmConfig): Promise<void> {
+  const filePath = resolveLlmConfigPath()
+  await fs.writeFile(filePath, `${JSON.stringify(storedLlmConfigSchema.parse(config), null, 2)}\n`, 'utf8')
 }
 
 async function loadLlmConfig(): Promise<StoredLlmConfig> {
@@ -172,16 +190,19 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
   const runtime = getAgentRuntimeService()
   const started = await runtime.startRun(owner, request)
   const deadline = Date.now() + options.timeoutMs
-  const emittedSequences = new Set<number>()
-  const writeEvent = (event: AgentEvent): void => {
-    if (emittedSequences.has(event.sequence)) return
-    emittedSequences.add(event.sequence)
-    writeRecord({ type: 'event', runId: started.runId, event })
+  const emittedSequences = new Set<string>()
+  const externalGenerationTaskIds = new Set<string>()
+  const writeEvent = (runId: string, event: AgentEvent): void => {
+    const key = `${runId}:${event.sequence}`
+    if (emittedSequences.has(key)) return
+    emittedSequences.add(key)
+    if (event.type === 'ExternalWaitRegistered') externalGenerationTaskIds.add(event.taskId)
+    writeRecord({ type: 'event', runId, event })
   }
-  const unsubscribe = runtime.subscribeRunEvents(owner, started.runId, writeEvent)
+  const unsubscribe = runtime.subscribeRunEvents(owner, started.runId, (event) => writeEvent(started.runId, event))
   try {
     const initialSnapshot = runtime.getRunSnapshot(owner, started.runId)
-    for (const event of initialSnapshot.events) writeEvent(event)
+    for (const event of initialSnapshot.events) writeEvent(started.runId, event)
     writeRecord({
       type: 'started',
       runId: started.runId,
@@ -199,6 +220,7 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
     const generationWait = options.awaitGeneration
       ? await waitForSubmittedGenerationTasks({
           state,
+          taskIds: [...externalGenerationTaskIds],
           timeoutMs: Math.max(0, deadline - Date.now()),
           observe: async (taskId, attempt) => await observeGenerationTask(owner, started.runId, taskId, attempt),
           onObservation: (task) => writeRecord({ type: 'generation_task_observation', runId: started.runId, task }),
@@ -207,21 +229,53 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
     if (generationWait) {
       writeRecord({ type: 'generation_task_wait', runId: started.runId, ...generationWait })
     }
-    const traces = getAgentTraceStore().query({ runId: started.runId, limit: 200 })
-    const trace = traces.runs.find((item) => item.runId === started.runId)
-    writeRecord({ type: 'finished', runId: started.runId, state })
+    const continuation = generationWait && generationWait.status !== 'timed_out'
+      ? await waitForExternalContinuation({
+          sourceRunId: started.runId,
+          threadId: request.threadId,
+          sourceState: state,
+          timeoutMs: Math.max(0, deadline - Date.now()),
+          listRuns: (threadId) => runtime.listRuns(threadId, 100),
+          getState: (runId) => runtime.getRunState(owner, runId),
+        })
+      : null
+    const finalRunId = continuation?.runId ?? started.runId
+    const finalState = continuation?.state ?? state
+    if (continuation) {
+      writeRecord({ type: 'external_continuation', sourceRunId: started.runId, ...continuation })
+      if (finalRunId !== started.runId) {
+        for (const event of runtime.getRunSnapshot(owner, finalRunId).events) writeEvent(finalRunId, event)
+      }
+    }
+    const completedExternalEffects = generationWait?.status === 'completed'
+      ? generationWait.tasks.filter((task) => task.status === 'completed').length
+      : 0
+    const acceptance = evaluateAssistantCliAcceptance(
+      finalState,
+      options.requireVerifiedWrite,
+      completedExternalEffects,
+    )
+    writeRecord({ type: 'acceptance', runId: finalRunId, acceptance })
+    const traces = getAgentTraceStore().query({ runId: finalRunId, limit: 200 })
+    const trace = traces.runs.find((item) => item.runId === finalRunId)
+    writeRecord({ type: 'finished', runId: finalRunId, sourceRunId: started.runId, state: finalState })
     writeTrace(trace, options.printTrace)
     logger.info('命令行助手运行结束', {
       event: 'assistant_cli.run.completed',
       requestId: started.runId,
       context: {
-        status: state.status,
-        turns: state.usage.turns,
-        totalTokens: state.usage.totalTokens,
+        status: finalState.status,
+        turns: finalState.usage.turns,
+        totalTokens: finalState.usage.totalTokens,
         generationWaitStatus: generationWait?.status ?? null,
+        continuationStatus: continuation?.status ?? null,
+        acceptancePassed: acceptance.passed,
+        effectCount: acceptance.effectCount,
       },
     })
-    return state.status === 'completed' && (!generationWait || generationWait.status === 'completed' || generationWait.status === 'skipped')
+    return acceptance.passed
+      && (!generationWait || generationWait.status === 'completed' || generationWait.status === 'skipped')
+      && (!continuation || continuation.status === 'completed' || continuation.status === 'skipped')
       ? 0
       : 1
   } finally {
@@ -241,3 +295,4 @@ export async function runAssistantCli(owner: WebContents, options: AssistantCliO
     return 1
   }
 }
+

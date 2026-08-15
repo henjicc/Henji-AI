@@ -1,4 +1,5 @@
 import { getLlmProviderApiKey } from '../keystore'
+import { resolveProviderExtraAuthHeaders } from '../../../../src/core/llm/providerProtocol'
 
 export interface DiscoveredModelItem {
   modelId: string
@@ -63,7 +64,10 @@ export async function discoverModels(
   const apiKey = getLlmProviderApiKey(providerId)
   const url = resolveModelsEndpoint(baseUrl)
   const headers: Record<string, string> = { Accept: 'application/json' }
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`
+    Object.assign(headers, resolveProviderExtraAuthHeaders(providerId, apiKey))
+  }
 
   const response = await fetch(url, { method: 'GET', headers })
   if (!response.ok) throw new Error(`获取模型列表失败: ${response.status}`)
@@ -77,3 +81,4 @@ function resolveModelsEndpoint(baseUrl: string): string {
   const normalized = baseUrl.trim().replace(/\/+$/, '')
   return normalized.endsWith('/v1') ? `${normalized}/models` : `${normalized}/v1/models`
 }
+

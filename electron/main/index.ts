@@ -38,6 +38,7 @@ import {
   parseAssistantCliArguments,
 } from './assistant-cli/arguments'
 import { runAssistantCli } from './assistant-cli/runner'
+import { runAssistantModelVerification } from './assistant-cli/verify-model'
 
 registerMediaProtocolScheme()
 if (!isAssistantCliMode()) {
@@ -88,6 +89,12 @@ app.whenReady().then(() => {
   registerWindowIpc()
   initializeUpdater()
   void runLogRetention()
+  // 无界面模型能力验证：接新供应商时请求体常要试几轮，不该每轮都让人去点设置界面。
+  if (process.argv.includes('--verify-model')) {
+    void runAssistantModelVerification(process.argv.slice(1)).then((code) => { app.exit(code) })
+    return
+  }
+
   if (isAssistantCliMode()) {
     let assistantCliOptions
     try {
@@ -95,8 +102,7 @@ app.whenReady().then(() => {
     } catch (error) {
       const detail = error instanceof Error ? error.message : '未知参数错误'
       process.stdout.write(`${JSON.stringify({ type: 'error', message: '命令行参数无效', detail })}\n`)
-      process.exitCode = 1
-      app.quit()
+      app.exit(1)
       return
     }
     if ('help' in assistantCliOptions) {
@@ -104,10 +110,15 @@ app.whenReady().then(() => {
       app.quit()
       return
     }
-    const cliWindow = createWindow({ headless: true })
-    void runAssistantCli(cliWindow.webContents, assistantCliOptions).then((exitCode) => {
-      process.exitCode = exitCode
-      app.quit()
+    const cliWindow = createWindow({ headless: !assistantCliOptions.visible })
+    void runAssistantCli(cliWindow.webContents, assistantCliOptions).then(async (exitCode) => {
+      // CLI 必须有确定的进程终点。供应商请求取消后极少数 SDK 会迟迟不释放连接，
+      // 不能让已经产出终态的真实验收命令永远挂住。
+      await Promise.race([
+        disposeAgentRuntimeService(),
+        new Promise<void>((resolve) => { setTimeout(resolve, 5_000) }),
+      ])
+      app.exit(exitCode)
     })
     return
   }
@@ -130,3 +141,4 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   void disposeAgentRuntimeService()
 })
+
