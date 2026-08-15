@@ -133,6 +133,8 @@ export class AgentRunner {
   private progressTracker: AgentFacetProgressTracker | null = null
   /** 模型本轮显式调用 ask_user 留下的待提问内容；消费后立即清空。 */
   private pendingUserQuestion: PendingUserQuestion | null = null
+  /** "没有工具证据"的指引本次运行只下发一次，避免同一句话反复顶回去空烧回合。 */
+  private finalResponseGuided = false
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private primaryAttachmentMessage: ModelStepMessage | null = null
@@ -185,7 +187,6 @@ export class AgentRunner {
     })
     this.completionCoordinator = new AgentCompletionCoordinator({
       runId: options.runId,
-      registry: options.dependencies.registry,
       emit: (event) => this.emit(event),
     })
     this.pauseController = new AgentPauseController({
@@ -742,7 +743,11 @@ export class AgentRunner {
         }
         const finalText = requireFinalResponseEvidence({
           result, route, observationCount: this.observations.length, budget: this.budget,
-          appendGuidance: (content) => this.conversationJournal.appendEphemeral({ role: 'user', content }),
+          appendGuidance: (content) => {
+            this.finalResponseGuided = true
+            this.conversationJournal.appendEphemeral({ role: 'user', content })
+          },
+          alreadyGuided: this.finalResponseGuided,
         })
         if (!finalText) {
           this.sealExecutionIfEligible()
@@ -757,14 +762,7 @@ export class AgentRunner {
         }
         this.setPhase('verifying')
         this.sealExecutionIfEligible()
-        const completion = this.completionCoordinator.evaluate(
-          route, finalText, this.observations, this.progressTracker?.settlement())
-        if (completion.kind === 'repair') {
-          this.budget.recordFailure()
-          this.budget.recordProgress(`verification:${completion.summary}`)
-          this.conversationJournal.appendEphemeral({ role: 'user', content: completion.message })
-          continue
-        }
+        this.completionCoordinator.evaluate(this.observations)
         if (this.state.executionOutcome.effects.length > 0
           && this.state.executionOutcome.status !== 'sealed_success') {
           const blocker = executionSealingBlocker({

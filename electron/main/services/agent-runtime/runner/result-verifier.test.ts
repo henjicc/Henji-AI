@@ -2,21 +2,23 @@ import { z } from 'zod'
 import { describe, expect, it } from 'vitest'
 
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { AgentRouteDecision } from '../context/types'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
-import { buildRecoveryGuidance, verifyAgentCompletion } from './result-verifier'
-import { AgentCompletionCoordinator } from './completion-coordinator'
+import { buildRecoveryGuidance } from './result-verifier'
 
-const generateRoute: AgentRouteDecision = {
-  intent: 'generate',
-  candidateIntents: ['generate'],
-  complexity: 'simple',
-  path: 'workflow',
-  toolDomains: ['models', 'generation', 'navigation'],
-  source: 'router_model',
-  reason: '生成测试',
-}
+/*
+ * 这个文件曾经覆盖 verifyAgentCompletion 的一整套「最终答复措辞审判」：用正则检查中文答复里
+ * 有没有出现 /无法|失败|未找到|不存在|需要|请提供|请确认|参数|权限|稍后/ 之一（explainsFailure）、
+ * 有没有说「生成成功」（claimsSuccess）、有没有否认导航（deniesNavigation）。命不中就判失败并
+ * 强制多烧一轮修正，二次不过整次运行报 VERIFICATION_REPAIR_FAILED。
+ *
+ * 那些检查的是词汇量而不是诚实度，已随 verifyAgentCompletion 一并删除。事实层现在由
+ * run_henji_script 的 verification 承担（解释器对真相源逐步回读，见 completion-coordinator.test.ts），
+ * 语义层交给模型和用户。
+ *
+ * 这里只剩 buildRecoveryGuidance：它按结构化 error code 生成下一步指引，输入是工具返回的事实、
+ * 输出是给模型的信息而不是否决，属于底座。
+ */
 
 function observation(toolName: string, output: unknown): AgentToolObservation {
   return {
@@ -60,100 +62,32 @@ function registryWithTool(input: { name: string; readOnly: boolean }): AgentTool
   return registry
 }
 
-describe('Agent result verifier', () => {
-  it('模糊一般请求转换为结构化澄清', () => {
-    const result = verifyAgentCompletion({
-      route: {
-        ...generateRoute,
-        intent: 'general',
-        complexity: 'ambiguous',
-        toolDomains: ['catalog'],
-      },
-      finalText: '请提供需要处理的项目名称和具体操作？',
-      observations: [],
-      registry: new AgentToolRegistry(),
-    })
-    /*
-     * 措辞不再触发澄清。以前这句话里的「请提供」和问号会让运行挂进 waiting_user，
-     * 而模型其实并没有请求提问——它只是那么写了。现在停不停下来由模型显式调用
-     * ask_user 决定（见 runner/ask-user.test.ts），验证器不再从散文里嗅探意图。
-     */
-    expect(result).toMatchObject({ passed: true, clarificationRequired: false })
-  })
-
-  it('提交态允许如实结束但拒绝声称生成成功', () => {
-    const registry = registryWithTool({ name: 'create_visible_generation_task', readOnly: false })
-    const observations = [observation('create_visible_generation_task', {
-      taskId: 'task-1', status: 'submitted', revision: 2,
-    })]
-
-    expect(verifyAgentCompletion({
-      route: generateRoute,
-      finalText: '任务 task-1 已提交，当前正在排队或生成。',
-      observations,
-      registry,
-    }).passed).toBe(true)
-    expect(verifyAgentCompletion({
-      route: generateRoute,
-      finalText: '图片生成成功。',
-      observations,
-      registry,
-    }).passed).toBe(false)
-  })
-
-  it('写操作必须返回稳定引用、状态或 revision', () => {
-    const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
-    expect(verifyAgentCompletion({
-      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
-      finalText: '已经修改。',
-      observations: [observation('write_test_resource', { ok: true })],
-      registry,
-    }).passed).toBe(false)
-    expect(verifyAgentCompletion({
-      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
-      finalText: '节点 node-1 已写入。',
-      observations: [observation('write_test_resource', { nodeId: 'node-1' })],
-      registry,
-    }).passed).toBe(true)
-  })
-
-  it('最终说明不得否认 Effect Receipt 已记录的界面导航', () => {
-    const navigated: AgentToolObservation = {
-      ...observation('run_henji_script', { status: 'completed', revision: 2 }),
-      effects: [{
-        effect: 'navigate', entityTypes: ['application.surface'], propertyIds: [],
-        targetRefs: [{ kind: 'application.surface', id: 'workspace.canvas' }],
-        count: 1, verified: true, evidence: [],
-      }],
-    }
-    expect(verifyAgentCompletion({
-      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
-      finalText: '任务已完成，全程未切换或打开任何界面。',
-      observations: [navigated],
-      registry: registryWithTool({ name: 'run_henji_script', readOnly: false }),
-    })).toMatchObject({ passed: false, summary: expect.stringContaining('Effect Receipt') })
-  })
-
-  it('未知写入副作用禁止自动重放并能转为清晰澄清', () => {
+describe('结构化失败恢复指引', () => {
+  it('未知写入副作用禁止自动重放', () => {
     const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
     const timeout = observation('write_test_resource', {
       ok: false,
       error: { code: 'TIMEOUT', message: '执行超时', retryable: true, recovery: 'wait' },
     })
     expect(buildRecoveryGuidance([timeout], registry)).toContain('副作用未知，禁止自动重放')
+  })
 
-    const invalid = observation('write_test_resource', {
+  it('陈旧上下文与冲突要求用最新 revision 重新规划', () => {
+    const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
+    const stale = observation('write_test_resource', {
       ok: false,
-      error: { code: 'INVALID_INPUT', message: '目标不明确', retryable: true, recovery: 'user_action' },
+      error: { code: 'STALE_CONTEXT', message: '快照过期', retryable: true, recovery: 'refresh_context' },
     })
-    const result = verifyAgentCompletion({
-      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
-      finalText: '目标项目不明确，请提供要修改的 projectId？',
-      observations: [invalid],
-      registry,
+    expect(buildRecoveryGuidance([stale], registry)).toContain('不得覆盖用户的新修改')
+  })
+
+  it('授权类失败明确说明未执行，且不得重复请求授权', () => {
+    const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
+    const rejected = observation('write_test_resource', {
+      ok: false,
+      error: { code: 'APPROVAL_REJECTED', message: '用户拒绝', retryable: false, recovery: 'none' },
     })
-    // 失败被如实说明即可通过；是否停下来问用户由模型调 ask_user 决定，不再看措辞。
-    expect(result).toMatchObject({ passed: true, clarificationRequired: false })
+    expect(buildRecoveryGuidance([rejected], registry)).toContain('不得绕过或重复请求授权')
   })
 
   it('供应商参数错误要求保留原模型修正，生成中不重复轮询', () => {
@@ -178,91 +112,9 @@ describe('Agent result verifier', () => {
     expect(buildRecoveryGuidance([generating], registry)).toContain('不得在同一 Agent 运行中立即重复读取')
   })
 
-  it('最终事实冲突只允许一次结构化修正，第二次安全失败', () => {
-    const registry = registryWithTool({
-      name: 'create_visible_generation_task',
-      readOnly: false,
-    })
-    const observations = [observation('create_visible_generation_task', {
-      taskId: 'task-1',
-      status: 'submitted',
-    })]
-    const coordinator = new AgentCompletionCoordinator({
-      runId: 'run-verification',
-      registry,
-      emit: () => undefined,
-    })
-
-    expect(coordinator.evaluate(generateRoute, '图片生成成功。', observations))
-      .toMatchObject({ kind: 'repair' })
-    expect(() => coordinator.evaluate(generateRoute, '图片生成成功。', observations))
-      .toThrowError('VERIFICATION_REPAIR_FAILED')
-  })
-
-  it('部分完成必须主动说明阻塞，等待用户时转入现有澄清流程', () => {
-    const observations = [observation('read_camera', { revision: 5 })]
-    const settlement = {
-      status: 'partial' as const,
-      completedFacetIds: ['scene'],
-      blockedFacets: [{ facetId: 'motion', reason: '缺少动作能力' }],
-      waitingFacetIds: [],
-      remainingFacetIds: [],
-      evidence: ['scene@5'],
-      summary: '完成 1，受阻 1。',
-      suggestedNextStep: '安装动作能力。',
-    }
-    expect(verifyAgentCompletion({
-      route: generateRoute,
-      finalText: '场景已完成，但动作部分受阻：当前缺少动作能力。',
-      observations,
-      registry: new AgentToolRegistry(),
-      progressSettlement: settlement,
-    })).toMatchObject({ passed: true, clarificationRequired: false })
-    expect(verifyAgentCompletion({
-      route: generateRoute,
-      finalText: '已经全部完成。',
-      observations,
-      registry: new AgentToolRegistry(),
-      progressSettlement: settlement,
-    }).passed).toBe(false)
-
-    expect(verifyAgentCompletion({
-      route: generateRoute,
-      finalText: '需要你确认要修改哪个对象，请提供对象 ID？',
-      observations,
-      registry: new AgentToolRegistry(),
-      progressSettlement: {
-        ...settlement,
-        status: 'waiting_user',
-        completedFacetIds: [],
-        blockedFacets: [],
-        waitingFacetIds: ['scene'],
-      },
-      // 结算为 waiting_user 时，答复如实说明受阻即算通过；把运行真正挂起等用户
-      // 是模型调 ask_user 的结果，不再由这句话里的问号推断。
-    })).toMatchObject({ passed: true, clarificationRequired: false })
-  })
-
-  it('第一次写入后 Effect Ledger 仍 active 时拒绝提前最终答复', () => {
+  it('没有失败时不下发恢复指引', () => {
     const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
-    expect(verifyAgentCompletion({
-      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
-      finalText: '两个节点都已经创建完成。',
-      observations: [observation('write_test_resource', { nodeId: 'node-1', revision: 1 })],
-      registry,
-      progressSettlement: {
-        status: 'active',
-        completedFacetIds: [],
-        blockedFacets: [],
-        waitingFacetIds: [],
-        remainingFacetIds: ['create_two_nodes'],
-        evidence: ['canvas.node:node-1'],
-        summary: '任务图仍有 1 个 Facet 未结算。',
-        suggestedNextStep: null,
-      },
-    })).toMatchObject({
-      passed: false,
-      summary: '任务图仍有 1 个 Facet 未结算，不能提前结束。',
-    })
+    const success = observation('write_test_resource', { nodeId: 'node-1', revision: 3 })
+    expect(buildRecoveryGuidance([success], registry)).toBeNull()
   })
 })

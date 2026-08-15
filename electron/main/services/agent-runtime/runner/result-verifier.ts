@@ -11,12 +11,6 @@ interface ObservationFailure {
   recovery: string
 }
 
-export interface AgentCompletionVerification {
-  passed: boolean
-  summary: string
-  evidence: string[]
-  clarificationRequired: boolean
-}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -35,26 +29,6 @@ function observationFailure(observation: AgentToolObservation): ObservationFailu
     retryable: error.retryable === true,
     recovery: typeof error.recovery === 'string' ? error.recovery : 'none',
   }
-}
-
-function generationStatus(observations: AgentToolObservation[]): string | null {
-  for (const observation of [...observations].reverse()) {
-    if (observation.source.toolName === 'run_henji_script') {
-      const output = asRecord(observation.output)
-      const submitted = Array.isArray(output?.submittedTasks) ? output.submittedTasks : []
-      const latest = asRecord(submitted.at(-1))
-      if (typeof latest?.status === 'string') return latest.status.toLowerCase()
-    }
-    if (observation.source.toolName === 'get_generation_task') {
-      const task = asRecord(asRecord(observation.output)?.task)
-      if (typeof task?.status === 'string') return task.status.toLowerCase()
-    }
-    if (observation.source.toolName === 'create_visible_generation_task') {
-      const status = asRecord(observation.output)?.status
-      if (typeof status === 'string') return status.toLowerCase()
-    }
-  }
-  return null
 }
 
 function generationTaskRecoveryGuidance(observations: AgentToolObservation[]): string | null {
@@ -77,26 +51,6 @@ function generationTaskRecoveryGuidance(observations: AgentToolObservation[]): s
     }
   }
   return null
-}
-
-function hasWriteEvidence(observation: AgentToolObservation): boolean {
-  const output = asRecord(observation.output)
-  if (!output) return false
-  if (extractResultReferences(output)) return true
-  return typeof output.revision === 'number'
-    || typeof output.status === 'string'
-    || typeof output.updatedAt === 'string'
-    || typeof output.version === 'number'
-    || Boolean(asRecord(output.scopeRevisions))
-}
-
-function explainsFailure(finalText: string, failure: ObservationFailure): boolean {
-  const normalized = finalText.toLowerCase()
-  if (['APPROVAL_REJECTED', 'APPROVAL_EXPIRED', 'CANCELLED'].includes(failure.code)) {
-    return /拒绝|过期|取消|未执行|没有执行/.test(finalText)
-  }
-  return /无法|失败|未找到|不存在|需要|请提供|请确认|参数|权限|稍后/.test(finalText)
-    || normalized.includes(failure.code.toLowerCase())
 }
 
 /*
@@ -147,120 +101,3 @@ export function buildRecoveryGuidance(
   return ['[结构化失败恢复要求]', ...guidance].join('\n')
 }
 
-export function verifyAgentCompletion(input: {
-  route: AgentRouteDecision
-  finalText: string
-  observations: AgentToolObservation[]
-  registry: AgentToolRegistry
-  progressSettlement?: AgentProgressSettlement
-}): AgentCompletionVerification {
-  if (input.route.intent === 'general' && input.observations.length === 0) {
-    return {
-      passed: true,
-      summary: '一般回答不需要工具证据。',
-      evidence: [],
-      clarificationRequired: false,
-    }
-  }
-  if (input.observations.length === 0) {
-    return { passed: false, summary: '缺少任何工具观察，无法证明任务完成。', evidence: [], clarificationRequired: false }
-  }
-
-  const settlement = input.progressSettlement
-  if (settlement?.status === 'active') {
-    return {
-      passed: false,
-      summary: `任务图仍有 ${settlement.remainingFacetIds.length} 个 Facet 未结算，不能提前结束。`,
-      evidence: settlement.evidence.slice(-8),
-      clarificationRequired: false,
-    }
-  }
-  if (settlement && ['partial', 'blocked', 'waiting_user'].includes(settlement.status)) {
-    const explainsBlocker = /无法|未完成|受阻|缺少|权限|需要|请提供|请确认|请选择|不存在/.test(input.finalText)
-    return {
-      passed: explainsBlocker,
-      summary: explainsBlocker
-        ? `最终答复如实反映任务图 ${settlement.status} 结算。`
-        : `任务图已结算为 ${settlement.status}，但最终答复没有说明阻塞或未完成部分。`,
-      evidence: settlement.evidence.slice(-8),
-      clarificationRequired: false,
-    }
-  }
-
-  let lastFailure: { index: number; failure: ObservationFailure } | null = null
-  let lastSuccessIndex = -1
-  const successful: AgentToolObservation[] = []
-  input.observations.forEach((observation, index) => {
-    const failure = observationFailure(observation)
-    if (failure) {
-      lastFailure = { index, failure }
-      return
-    }
-    lastSuccessIndex = index
-    successful.push(observation)
-  })
-  const unresolvedFailure = lastFailure as { index: number; failure: ObservationFailure } | null
-  if (unresolvedFailure && unresolvedFailure.index > lastSuccessIndex) {
-    const explained = explainsFailure(input.finalText, unresolvedFailure.failure)
-    return {
-      passed: explained,
-      summary: explained
-        ? `最终答复如实说明 ${unresolvedFailure.failure.code}，未宣称动作成功。`
-        : `最近工具失败 ${unresolvedFailure.failure.code} 尚未恢复或向用户说明。`,
-      evidence: [`error:${unresolvedFailure.failure.code}`],
-      clarificationRequired: false,
-    }
-  }
-
-  const writeWithoutEvidence = successful.find((observation) => {
-    const definition = input.registry.get(observation.source.toolName)
-    return definition && !definition.readOnly && !hasWriteEvidence(observation)
-  })
-  if (writeWithoutEvidence) {
-    return {
-      passed: false,
-      summary: `${writeWithoutEvidence.source.toolName} 缺少稳定结果引用、状态或 revision。`,
-      evidence: [],
-      clarificationRequired: false,
-    }
-  }
-
-  const status = generationStatus(successful)
-  if (status) {
-    const completed = ['completed', 'succeeded', 'success'].includes(status)
-    const claimsSuccess = /生成成功|已生成完成|生成已完成|已经生成完毕/.test(input.finalText)
-    if (!completed && claimsSuccess) {
-      return {
-        passed: false,
-        summary: `生成任务真实状态为 ${status}，最终答复却声称生成成功。`,
-        evidence: [`generation_status:${status}`],
-        clarificationRequired: false,
-      }
-    }
-  }
-
-  const observedEffects = successful.flatMap((observation) => observation.effects ?? [])
-  const navigated = observedEffects.some((effect) => effect.effect === 'navigate')
-  const deniesNavigation = /(?:全程|本轮)?\s*(?:没有|未|并未|无需)\s*(?:切换|打开|进入|导航)|未切换或打开/.test(input.finalText)
-  if (navigated && deniesNavigation) {
-    return {
-      passed: false,
-      summary: 'Effect Receipt 记录了界面导航，最终答复却声称没有切换或打开界面。',
-      evidence: observedEffects.filter((effect) => effect.effect === 'navigate')
-        .flatMap((effect) => effect.targetRefs.map((ref) => `navigate:${ref.kind}:${ref.id}`)).slice(0, 8),
-      clarificationRequired: false,
-    }
-  }
-
-  const evidence = successful.slice(-8).map((observation) => {
-    const references = extractResultReferences(observation.output)
-    const suffix = references ? `:${Object.entries(references).map(([key, value]) => `${key}=${value}`).join(',')}` : ''
-    return `${observation.source.toolName}${suffix}`
-  })
-  return {
-    passed: true,
-    summary: '工具观察和最终答复具有一致的结构化完成证据。',
-    evidence,
-    clarificationRequired: false,
-  }
-}
