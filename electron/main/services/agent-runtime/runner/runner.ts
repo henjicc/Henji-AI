@@ -13,6 +13,11 @@ import { AgentArtifactStore } from '../context/offload'
 import { AgentContextBuilder } from '../context/builder'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { AGENT_CORE_TOOL_NAMES } from '../context/tool-activation'
+import type { AgentTurnSnapshotDraft } from '../../../../../src/core/assistant/turn'
+import {
+  readPendingUserQuestion,
+  type PendingUserQuestion,
+} from '../tools/builtin/ask-user'
 import { AgentToolGatewayError } from '../tools/gateway'
 import {
   AgentRunMetrics,
@@ -26,6 +31,7 @@ import { AgentStateMachine, isTerminalAgentState } from './state-machine'
 import type { AgentRunnerOptions } from './types'
 import { AgentRecoveryWriteGuard } from './recovery-guard'
 import { markWorkingSummaryRecoveryVerified } from './working-summary'
+import { executionSealingBlocker } from './execution-sealing'
 import { AgentMemoryContextProvider } from './memory-context'
 import { AgentRunnerLifecycle } from './lifecycle'
 import { AgentTerminalApprovalCleanup } from './terminal-approval-cleanup'
@@ -125,6 +131,8 @@ export class AgentRunner {
   private readonly completionCoordinator: AgentCompletionCoordinator
   private readonly threadTitleCoordinator: AgentThreadTitleCoordinator
   private progressTracker: AgentFacetProgressTracker | null = null
+  /** 模型本轮显式调用 ask_user 留下的待提问内容；消费后立即清空。 */
+  private pendingUserQuestion: PendingUserQuestion | null = null
   private currentModelRequestId: string | null = null
   private asyncEventError: unknown | null = null
   private primaryAttachmentMessage: ModelStepMessage | null = null
@@ -254,6 +262,13 @@ export class AgentRunner {
       requestApproval: (call, approval) => this.approvalCoordinator.request(call, approval),
       onObservation: (call, observation) => {
         this.observations.push(observation)
+        const definition = options.dependencies.registry.get(call.toolName)
+        if (definition?.readOnly === false && (observation.effects?.length ?? 0) > 0) {
+          this.lifecycle.recordExecutionEffects(observation.effects ?? [])
+        }
+        // 提问工具本身不阻塞；这里只登记，真正的等待在工具回合结束后由 execute() 接管。
+        const question = readPendingUserQuestion(call, observation)
+        if (question) this.pendingUserQuestion = question
         // 按观察契约而不是工具名识别：任何返回 visual_pending_model 且带合法附件的
         // 观察结果都会真正进入模型视野。绑死工具名会让新增观察能力静默拿不到像素，
         // 模型却以为自己“看过了”。
@@ -270,7 +285,9 @@ export class AgentRunner {
           `tool:${call.toolCallId}`
         )
         this.recoveryGuard.observe(call, observation)
-        if (this.recoveryGuard.consumeVerification(call, observation) && this.state.workingSummary) {
+        if ((this.recoveryGuard.consumeVerification(call, observation)
+          || this.externalContinuation.verifiesRecovery(call, observation))
+          && this.state.workingSummary) {
           this.state.workingSummary = markWorkingSummaryRecoveryVerified(this.state.workingSummary)
         }
       },
@@ -381,6 +398,37 @@ export class AgentRunner {
     await this.approvalCoordinator.respond(approvalId, decision)
     return this.getState()
   }
+  /**
+   * 停下来等用户回答模型刚提出的问题。
+   *
+   * 触发源是模型显式调用 `ask_user`，不是运行时从最终答复的措辞里嗅探问号——后者两种失败
+   * 都会发生：模型确实在问却没命中词表（运行直接 completed，用户的回答变成新运行、丢掉本轮
+   * 上下文），或者答复里恰好有个问号（运行挂在这里等一个用户不知道要答什么的东西）。
+   */
+  private async waitForUserAnswer(turnSnapshot: AgentTurnSnapshotDraft): Promise<void> {
+    const pending = this.pendingUserQuestion
+    if (!pending) return
+    this.pendingUserQuestion = null
+    this.setPhase('blocked', pending.reason)
+    const waitId = randomUUID()
+    const answerPromise = this.clarificationWaiter.wait(waitId)
+    this.state.waitingClarificationId = waitId
+    this.transition('waiting_user', pending.reason)
+    await this.savePointCoordinator.save('waiting_user', turnSnapshot)
+    this.emit({
+      type: 'ClarificationRequired',
+      waitId,
+      question: pending.question,
+      reason: pending.reason,
+    })
+    const answer = await answerPromise
+    this.throwIfCancelled()
+    if (!answer) throw new Error('[CLARIFICATION_CANCELLED] 澄清等待已取消')
+    this.progressTracker?.resumeWaitingFacets(answer)
+      .forEach((progress) => this.emit(toAgentFacetProgressEvent(progress)))
+    this.conversationJournal.appendEphemeral({ role: 'user', content: answer })
+  }
+
   respondClarification(waitId: string, content: string): AgentRunState {
     settleAgentClarification({
       waitId, content,
@@ -498,7 +546,7 @@ export class AgentRunner {
             })
           }
         }
-        const currentSnapshot = this.requireContext()
+        let currentSnapshot = this.requireContext()
         this.setPhase('preparing')
         this.catalogPlanner.syncActiveFacets(
           this.progressTracker?.activeFacetIds() ?? [],
@@ -594,9 +642,29 @@ export class AgentRunner {
           route,
           scopeRevisions: currentSnapshot.scopeRevisions,
           activeToolNames: context.activeToolNames,
+          refreshHost: () => this.requireContext(),
           rebuild: preparedTurn.rebuild,
         })
-        if (authoritativeContext) context = authoritativeContext
+        if (authoritativeContext) {
+          // 权威查询可能和异步状态通知并发推进 scope revision。模型输入与随后工具预检必须共用
+          // 查询后的新快照，不能只重建消息却继续拿查询前 revision 执行。
+          currentSnapshot = authoritativeContext.host
+          context = authoritativeContext.context
+          if (authoritativeContext.terminalError) {
+            this.lifecycle.fail(authoritativeContext.terminalError)
+            return
+          }
+        }
+        // 一旦正式状态源已经让任务图结算，就立刻封存执行事实，并把本轮降为纯说明。
+        // 继续给模型工具只会诱发重复读取、旧 revision 冲突，甚至封存后的额外写入。
+        // 任意正式调用序列都可能已经满足整张任务图；不能只承认宿主配方或外部续跑。
+        // 通用受控程序、单次批量事务同样会一次产出全部写入与验证 Effect。每轮模型前都做
+        // 纯结构化封存判断，不满足时只是 no-op；满足后立刻撤掉工具，避免模型在成功之后
+        // 继续写、补建无关 Facet，或因一次错误验证脚本把已完成任务拖回恢复流程。
+        this.sealExecutionIfEligible()
+        if (this.state.executionOutcome.status === 'sealed_success') {
+          context = { ...context, tools: [], activeToolNames: [] }
+        }
         const primary = await runPrimaryStepWithOverflowRecovery({
           turn, context, rebuild: preparedTurn.rebuild,
           modelTurns: this.modelTurnCoordinator,
@@ -620,6 +688,9 @@ export class AgentRunner {
         })) continue
         this.externalContinuation.assertNoResubmit(result.toolCalls)
         if (result.toolCalls.length > 0) {
+          if (this.state.executionOutcome.status === 'sealed_success') {
+            throw new Error('[PRESENTATION_WRITE_FORBIDDEN] 应用执行结果已经封存，最终说明阶段不得再调用工具')
+          }
           this.setPhase(result.toolCalls.some((call) => (
             ['discover_application_capabilities', 'search_application_capabilities'].includes(call.toolName)
           )) ? 'discovering' : 'executing')
@@ -653,14 +724,39 @@ export class AgentRunner {
             this.lifecycle.finishTerminal()
             return
           }
+          /*
+           * 提问必须在封存之前处理。
+           *
+           * 封存之后这次运行只允许说明、不允许继续写入（PRESENTATION_WRITE_FORBIDDEN）。
+           * 而用户对问题的回答恰恰经常要求继续写入——"用昨天那个素材库"之后还得真去改它。
+           * 先封存再等提问，等于让用户回答完却什么都做不了。
+           */
+          if (this.pendingUserQuestion) {
+            await this.waitForUserAnswer(turnSnapshot)
+            continue
+          }
+          // 工具回合本身可能已经产出整张任务图所需的 Effect 与正式验证。
+          // 在进入下一次模型请求前立即封存，确保下一轮只能负责说明，不能继续写入。
+          this.sealExecutionIfEligible()
           continue
         }
         const finalText = requireFinalResponseEvidence({
           result, route, observationCount: this.observations.length, budget: this.budget,
           appendGuidance: (content) => this.conversationJournal.appendEphemeral({ role: 'user', content }),
         })
-        if (!finalText) continue
+        if (!finalText) {
+          this.sealExecutionIfEligible()
+          if (this.state.executionOutcome.status === 'sealed_success') {
+            this.setPhase('completed')
+            this.lifecycle.completeWithFallback(
+              new Error('[FINAL_RESPONSE_EMPTY] 应用执行已经封存，但最终说明为空')
+            )
+            return
+          }
+          continue
+        }
         this.setPhase('verifying')
+        this.sealExecutionIfEligible()
         const completion = this.completionCoordinator.evaluate(
           route, finalText, this.observations, this.progressTracker?.settlement())
         if (completion.kind === 'repair') {
@@ -669,24 +765,17 @@ export class AgentRunner {
           this.conversationJournal.appendEphemeral({ role: 'user', content: completion.message })
           continue
         }
-        if (completion.clarificationRequired) {
-          this.setPhase('blocked', completion.summary)
-          const waitId = randomUUID()
-          const answerPromise = this.clarificationWaiter.wait(waitId)
-          this.state.waitingClarificationId = waitId
-          this.transition('waiting_user', completion.summary)
-          await this.savePointCoordinator.save('waiting_user', turnSnapshot)
-          this.emit({
-            type: 'ClarificationRequired',
-            waitId,
-            question: finalText,
-            reason: completion.summary,
+        if (this.state.executionOutcome.effects.length > 0
+          && this.state.executionOutcome.status !== 'sealed_success') {
+          const blocker = executionSealingBlocker({
+            settlement: this.progressTracker?.settlement(),
+            summary: this.state.workingSummary,
+            effectCount: this.state.executionOutcome.effects.length,
           })
-          const answer = await answerPromise
-          this.throwIfCancelled()
-          if (!answer) throw new Error('[CLARIFICATION_CANCELLED] 澄清等待已取消')
-          this.progressTracker?.resumeWaitingFacets(answer).forEach((progress) => this.emit(toAgentFacetProgressEvent(progress)))
-          this.conversationJournal.appendEphemeral({ role: 'user', content: answer })
+          this.conversationJournal.appendEphemeral({
+            role: 'user',
+            content: `[执行事实尚未封存] ${blocker ?? '结构化执行状态尚未完成。'}请先用正式状态源消除未收敛事项，再生成最终说明。`,
+          })
           continue
         }
         if (await this.currentMessageConsumer.pull() > 0) continue
@@ -741,6 +830,21 @@ export class AgentRunner {
     this.throwIfCancelled()
     this.setPhase('completed')
     this.lifecycle.complete(finalText)
+  }
+  private sealExecutionIfEligible(): void {
+    if (this.state.executionOutcome.status === 'sealed_success') return
+    const settlement = this.progressTracker?.settlement()
+    const effects = this.state.executionOutcome.effects
+    if (executionSealingBlocker({
+      settlement,
+      summary: this.state.workingSummary,
+      effectCount: effects.length,
+    }) || !settlement) return
+    this.lifecycle.sealExecution({
+      effects,
+      summary: settlement.summary,
+      evidence: settlement.evidence,
+    })
   }
   private async fail(error: unknown): Promise<void> {
     this.approvalCoordinator.cancel(); await this.terminalApprovalCleanup.run()

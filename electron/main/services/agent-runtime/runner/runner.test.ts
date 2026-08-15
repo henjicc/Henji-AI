@@ -9,9 +9,12 @@ import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../.
 import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
+import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentRunner } from './runner'
 import * as approvalLogging from './approval-logging'
 import { ProviderModelStepError } from '../../llm/sdk/provider-error'
+import { createSingleFacetTaskGraph } from '../../../../../src/core/assistant/taskGraph'
+import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 
 function hostContext(): HostContextSnapshot {
   return {
@@ -134,6 +137,277 @@ describe('AgentRunner', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('外部任务续跑继承源写入回执，并在一次权威读取后封存成功', async () => {
+    const registry = new AgentToolRegistry()
+    const readTask = vi.fn(async () => ({ task: { id: 'task-1', status: 'success' } }))
+    registry.register(defineAgentTool({
+      name: 'get_generation_task', version: 1, title: '读取生成任务',
+      description: '读取外部生成任务的权威状态。', category: 'generation', side: 'backend',
+      risk: 'R0', permission: 'generation:read', readOnly: true, destructive: false,
+      openWorld: false, idempotent: true, timeoutMs: 1_000,
+      retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: false,
+      supportsUndo: false, requiredContext: ['generation'],
+      inputSchema: z.object({ taskId: z.string() }).strict(),
+      outputSchema: z.object({ task: z.object({ id: z.string(), status: z.string() }).strict() }).strict(),
+      aiInputSchema: {
+        type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'],
+        additionalProperties: false,
+      },
+      capability: {
+        id: 'get_generation_task', domain: 'generation', aliases: [], dataClasses: ['C1'],
+        acceptsRefs: ['generation.task'], producesRefs: ['generation.task', 'generation.result'],
+        availability: [], concurrencyKey: 'generation', readOnly: true,
+        control: { impacts: [{
+          effect: 'observe', entityTypes: ['generation.task', 'generation.result'], propertyIds: [],
+          revisionScopes: ['generation'], verificationRequired: false,
+        }] },
+        resolveObservedEffects: (input: { taskId: string }) => [{
+          effect: 'observe', entityTypes: ['generation.task', 'generation.result'], propertyIds: [],
+          targetRefs: [{ kind: 'generation.task', id: input.taskId }], count: 1,
+          verified: true, evidence: [`generation.task:${input.taskId}:success`],
+        }],
+      } as never,
+      execute: readTask, concurrencyKey: (input) => `generation:${input.taskId}`,
+      targetIds: (input) => ({ taskId: input.taskId }), dataClasses: () => ['C1'],
+      summarize: () => '生成任务已成功。',
+    }))
+    const { gateway } = createRuntime(registry)
+    const graph = createSingleFacetTaskGraph({
+      goal: '生成一张图片', facetId: 'generate_image', domain: 'generation',
+      capabilityKinds: ['execute', 'observe'], effect: 'execute',
+      entityTypes: ['generation.task'], verificationRequired: true,
+      completionCondition: '任务达到权威成功终态。',
+    })
+    const recoveryContext = createAgentWorkingSummary('生成一张图片')
+    recoveryContext.route = {
+      intent: 'generate', summary: '等待外部生成完成', toolDomains: ['generation'], taskGraph: graph,
+    }
+    recoveryContext.effectLedger = [{
+      effectId: graph.facets[0].requiredEffects[0].effectId,
+      count: 1, verificationCount: 0, verified: false,
+      evidenceDigests: ['source-submit'], evidence: ['generation.task:task-1:submitted'],
+    }]
+    // 真实外部任务终态会推进 generation revision。子运行启动时会将这个
+    // 正常变化标记为 resume_read_only；宿主权威读取成功后必须在同一回合清除。
+    recoveryContext.recovery = {
+      mode: 'resume_read_only', reason: '宿主 revision 已变化，恢复后先重新读取状态。',
+      toolName: null, toolCategory: null,
+    }
+    recoveryContext.unresolvedItems = [
+      '恢复时宿主作用域已变化：generation；后续工具必须使用新 revision。',
+    ]
+    const request: AgentStartRunRequest = {
+      ...runRequest('生成任务 task-1 已报告状态 success，请完成续接。'),
+      externalContinuation: {
+        waitId: 'wait-1', sourceRunId: 'source-run', taskId: 'task-1', observedStatus: 'success',
+        sourceTotalTokens: 100, sourceKnownCostUsd: null,
+        sourceEffects: [{
+          effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
+          targetRefs: [{ kind: 'generation.task', id: 'task-1' }], count: 1,
+          verified: false, evidence: ['generation.task:task-1:submitted'],
+        }],
+      },
+    }
+    const events: AgentEvent[] = []
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runner = new AgentRunner({
+      runId: 'continuation-run', request, recoveryContext,
+      dependencies: {
+        registry, gateway, getHostContext: hostContext,
+        runModelStep: async (input) => {
+          expect(input.tools).toEqual([])
+          return result(input, {
+            text: '图片生成已经完成，权威任务状态为成功。',
+            responseMessages: [{ role: 'assistant', content: '图片生成已经完成，权威任务状态为成功。' }],
+          })
+        },
+        cancelModelStep: vi.fn(), onEvent: (event) => events.push(event), onTerminal: terminalResolve,
+      },
+    })
+
+    runner.start()
+    const state = await terminal
+
+    expect(readTask).toHaveBeenCalledTimes(1)
+    expect(state).toMatchObject({ status: 'completed' })
+    expect(state.executionOutcome).toMatchObject({
+      status: 'sealed_success',
+      effects: [expect.objectContaining({
+        effect: 'execute', targetRefs: [{ kind: 'generation.task', id: 'task-1' }],
+      })],
+    })
+    expect(events.some((event) => event.type === 'ExecutionOutcomeSealed')).toBe(true)
+    expect(events.some((event) => event.type === 'ToolFailed')).toBe(false)
+    expect(state.workingSummary?.recovery.mode).toBe('none')
+    expect(state.workingSummary?.unresolvedItems).toEqual([])
+  })
+
+  it('外部生成失败时权威读取一次后立即终止，不再请求模型或重复读取', async () => {
+    const registry = new AgentToolRegistry()
+    const readTask = vi.fn(async () => ({ task: { id: 'task-failed', status: 'error' } }))
+    registry.register(defineAgentTool({
+      name: 'get_generation_task', version: 1, title: '读取生成任务',
+      description: '读取外部生成任务的权威状态。', category: 'generation', side: 'backend',
+      risk: 'R0', permission: 'generation:read', readOnly: true, destructive: false,
+      openWorld: false, idempotent: true, timeoutMs: 1_000,
+      retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: false,
+      supportsUndo: false, requiredContext: ['generation'],
+      inputSchema: z.object({ taskId: z.string() }).strict(),
+      outputSchema: z.object({ task: z.object({ id: z.string(), status: z.string() }).strict() }).strict(),
+      aiInputSchema: {
+        type: 'object', properties: { taskId: { type: 'string' } }, required: ['taskId'],
+        additionalProperties: false,
+      },
+      capability: {
+        id: 'get_generation_task', domain: 'generation', aliases: [], dataClasses: ['C1'],
+        acceptsRefs: ['generation.task'], producesRefs: ['generation.task'],
+        availability: [], concurrencyKey: 'generation', readOnly: true,
+        control: { impacts: [{
+          effect: 'observe', entityTypes: ['generation.task'], propertyIds: [],
+          revisionScopes: ['generation'], verificationRequired: false,
+        }] },
+        resolveObservedEffects: (input: { taskId: string }) => [{
+          effect: 'observe', entityTypes: ['generation.task'], propertyIds: [],
+          targetRefs: [{ kind: 'generation.task', id: input.taskId }], count: 1,
+          verified: true, evidence: [`generation.task:${input.taskId}:error`],
+        }],
+      } as never,
+      execute: readTask, concurrencyKey: (input) => `generation:${input.taskId}`,
+      targetIds: (input) => ({ taskId: input.taskId }), dataClasses: () => ['C1'],
+      summarize: () => '生成任务失败。',
+    }))
+    const { gateway } = createRuntime(registry)
+    const graph = createSingleFacetTaskGraph({
+      goal: '生成一张图片', facetId: 'generate_image', domain: 'generation',
+      capabilityKinds: ['execute', 'observe'], effect: 'execute',
+      entityTypes: ['generation.task'], verificationRequired: true,
+      completionCondition: '任务达到权威成功终态。',
+    })
+    const recoveryContext = createAgentWorkingSummary('生成一张图片')
+    recoveryContext.route = {
+      intent: 'generate', summary: '等待外部生成完成', toolDomains: ['generation'], taskGraph: graph,
+    }
+    const request: AgentStartRunRequest = {
+      ...runRequest('生成任务 task-failed 已报告状态 error，请完成续接。'),
+      externalContinuation: {
+        waitId: 'wait-failed', sourceRunId: 'source-run', taskId: 'task-failed', observedStatus: 'error',
+        sourceTotalTokens: 100, sourceKnownCostUsd: null,
+        sourceEffects: [{
+          effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
+          targetRefs: [{ kind: 'generation.task', id: 'task-failed' }], count: 1,
+          verified: false, evidence: ['generation.task:task-failed:submitted'],
+        }],
+      },
+    }
+    const runModelStep = vi.fn(async (input: ModelStepInput) => result(input))
+    const events: AgentEvent[] = []
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runner = new AgentRunner({
+      runId: 'failed-continuation-run', request, recoveryContext,
+      dependencies: {
+        registry, gateway, getHostContext: hostContext, runModelStep,
+        cancelModelStep: vi.fn(), onEvent: (event) => events.push(event), onTerminal: terminalResolve,
+      },
+    })
+
+    runner.start()
+    const state = await terminal
+
+    expect(readTask).toHaveBeenCalledTimes(1)
+    expect(runModelStep).not.toHaveBeenCalled()
+    expect(state).toMatchObject({
+      status: 'failed',
+      error: { code: 'SCRIPT_STEP_FAILED', retryable: false, recovery: 'none' },
+    })
+    expect(events.filter((event) => event.type === 'RunFailed')).toHaveLength(1)
+  })
+
+  it.each([
+    { finalText: '设置已经修改并验证。', expectedStatus: 'completed' as const },
+    { finalText: '', expectedStatus: 'completed_with_warning' as const },
+  ])('覆盖整张任务图后立即封存；最终说明为“$finalText”时不再开启第三轮', async ({ finalText, expectedStatus }) => {
+    const registry = new AgentToolRegistry()
+    registry.register(defineAgentTool({
+      name: 'run_henji_script', version: 1, title: '运行 Henji Script',
+      description: '以受控脚本修改并验证设置。', category: 'application', side: 'backend',
+      risk: 'R0', permission: 'settings:write', readOnly: false, destructive: false,
+      openWorld: false, idempotent: false, timeoutMs: 1_000,
+      retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: false,
+      supportsUndo: false, requiredContext: ['settings'],
+      inputSchema: z.object({ value: z.string() }).strict(),
+      outputSchema: z.object({ status: z.literal('completed'), scopeRevisions: z.record(z.string(), z.number()) }).strict(),
+      aiInputSchema: {
+        type: 'object', properties: { value: { type: 'string' } }, required: ['value'],
+        additionalProperties: false,
+      },
+      capability: {
+        id: 'run_henji_script', domain: 'application', aliases: [], dataClasses: ['C0'],
+        acceptsRefs: [], producesRefs: ['settings.registry'], availability: [],
+        concurrencyKey: 'settings', readOnly: false,
+        control: { impacts: [{
+          effect: 'update', entityTypes: ['settings.registry'], propertyIds: [],
+          revisionScopes: ['settings'], verificationRequired: true,
+        }] },
+        resolveObservedEffects: () => [{
+          effect: 'update', entityTypes: ['settings.registry'], propertyIds: [],
+          targetRefs: [{ kind: 'settings.registry', id: 'default' }], count: 1,
+          verified: true, evidence: ['settings.registry:default'],
+        }],
+      } as never,
+      execute: async () => ({
+        status: 'completed' as const,
+        scopeRevisions: { navigation: 0, generation: 0, canvas: 0, toolbox: 0, assets: 0, settings: 1, surface: 0 },
+      }),
+      concurrencyKey: () => 'settings', targetIds: () => ({}), dataClasses: () => ['C0'],
+      summarize: () => '设置程序已完成并验证。',
+    }))
+    const { gateway } = createRuntime(registry)
+    const programEvents: AgentEvent[] = []
+    let primaryTurns = 0
+    let presentationToolNames: string[] | null = null
+    const runModelStep = vi.fn(async (input: ModelStepInput) => {
+      primaryTurns += 1
+      if (primaryTurns === 1) {
+        expect((input.tools ?? []).map((tool) => tool.name)).toContain('run_henji_script')
+        const toolCall = {
+          toolCallId: 'settings-program', toolName: 'run_henji_script',
+          input: { value: 'test' }, dynamic: false,
+        }
+        return result(input, {
+          text: '',
+          toolCalls: [toolCall],
+          responseMessages: [{ role: 'assistant', content: [{ type: 'tool-call', ...toolCall }] }],
+          finishReason: 'tool-calls',
+        })
+      }
+      presentationToolNames = (input.tools ?? []).map((tool) => tool.name)
+      return result(input, { text: finalText })
+    })
+    let terminalResolve: (state: AgentRunState) => void = () => undefined
+    const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
+    const runner = new AgentRunner({
+      runId: 'program-presentation-run',
+      request: runRequest('把界面主题设置改成测试值'),
+      dependencies: {
+        registry, gateway, getHostContext: hostContext, runModelStep,
+        cancelModelStep: vi.fn(), onEvent: (event) => programEvents.push(event), onTerminal: terminalResolve,
+      },
+    })
+
+    runner.start()
+    const state = await terminal
+    expect(state.status).toBe(expectedStatus)
+    expect(state.executionOutcome.status).toBe('sealed_success')
+    expect(state.presentationOutcome.status)
+      .toBe(expectedStatus === 'completed' ? 'generated' : 'fallback')
+    expect(presentationToolNames).toEqual([])
+    expect(programEvents.some((event) => event.type === 'ToolCompleted')).toBe(true)
+    expect(programEvents.some((event) => event.type === 'ToolFailed')).toBe(false)
+    expect(runModelStep).toHaveBeenCalledTimes(2)
   })
 
   it('模糊请求经过 router 后完成 final，事件序号严格递增', async () => {
@@ -336,7 +610,10 @@ describe('AgentRunner', () => {
   })
 
   it('澄清问题使用稳定 waitId 恢复原运行且回答只消费一次', async () => {
-    const { registry, gateway } = createRuntime()
+    // 澄清由模型显式调用 ask_user 触发，不再从最终答复的措辞里嗅探问号。
+    const { registry, gateway } = createRuntime(createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    }))
     let primaryCalls = 0
     let terminalResolve: (state: AgentRunState) => void = () => undefined
     const terminal = new Promise<AgentRunState>((resolve) => { terminalResolve = resolve })
@@ -353,9 +630,15 @@ describe('AgentRunner', () => {
       }
       primaryCalls += 1
       if (primaryCalls === 1) {
+        const call = {
+          toolCallId: 'call-ask-layout',
+          toolName: 'ask_user',
+          input: { question: '请确认使用横版还是竖版？', reason: '版式会决定后续所有尺寸参数。' },
+        }
         return result(input, {
-          text: '请确认使用横版还是竖版？',
-          responseMessages: [{ role: 'assistant', content: '请确认使用横版还是竖版？' }],
+          text: '',
+          toolCalls: [{ ...call, dynamic: false }],
+          responseMessages: [{ role: 'assistant', content: [{ type: 'tool-call', ...call }] }],
         })
       }
       expect(input.messages).toEqual(expect.arrayContaining([
@@ -467,12 +750,12 @@ describe('AgentRunner', () => {
     const registry = new AgentToolRegistry()
     const executions: string[] = []
     registry.register(defineAgentTool({
-      name: 'create_visible_generation_task',
+      name: 'run_henji_script',
       version: 1,
       title: '创建生成任务',
       description: '测试生成任务工具。',
       capability: {
-        id: 'create_visible_generation_task', domain: 'generation', aliases: [], dataClasses: ['C1'],
+        id: 'run_henji_script', domain: 'application', aliases: [], dataClasses: ['C1'],
         acceptsRefs: [], producesRefs: ['generation.task'], availability: [], concurrencyKey: 'generation',
         control: { impacts: [{
           effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
@@ -545,12 +828,12 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           finishReason: 'tool-calls',
-          toolCalls: [{ toolCallId: 'tool-1', toolName: 'create_visible_generation_task', input: { prompt: '测试' }, dynamic: false }],
+          toolCalls: [{ toolCallId: 'tool-1', toolName: 'run_henji_script', input: { prompt: '测试' }, dynamic: false }],
           responseMessages: [{
             role: 'assistant',
             content: [
               { type: 'reasoning', text: '需要先提交生成任务。' },
-              { type: 'tool-call', toolCallId: 'tool-1', toolName: 'create_visible_generation_task', input: { prompt: '测试' }, dynamic: false },
+              { type: 'tool-call', toolCallId: 'tool-1', toolName: 'run_henji_script', input: { prompt: '测试' }, dynamic: false },
             ],
           }],
         })

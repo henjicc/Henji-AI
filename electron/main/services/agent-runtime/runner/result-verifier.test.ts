@@ -73,7 +73,12 @@ describe('Agent result verifier', () => {
       observations: [],
       registry: new AgentToolRegistry(),
     })
-    expect(result).toMatchObject({ passed: true, clarificationRequired: true })
+    /*
+     * 措辞不再触发澄清。以前这句话里的「请提供」和问号会让运行挂进 waiting_user，
+     * 而模型其实并没有请求提问——它只是那么写了。现在停不停下来由模型显式调用
+     * ask_user 决定（见 runner/ask-user.test.ts），验证器不再从散文里嗅探意图。
+     */
+    expect(result).toMatchObject({ passed: true, clarificationRequired: false })
   })
 
   it('提交态允许如实结束但拒绝声称生成成功', () => {
@@ -112,6 +117,23 @@ describe('Agent result verifier', () => {
     }).passed).toBe(true)
   })
 
+  it('最终说明不得否认 Effect Receipt 已记录的界面导航', () => {
+    const navigated: AgentToolObservation = {
+      ...observation('run_henji_script', { status: 'completed', revision: 2 }),
+      effects: [{
+        effect: 'navigate', entityTypes: ['application.surface'], propertyIds: [],
+        targetRefs: [{ kind: 'application.surface', id: 'workspace.canvas' }],
+        count: 1, verified: true, evidence: [],
+      }],
+    }
+    expect(verifyAgentCompletion({
+      route: { ...generateRoute, intent: 'canvas', toolDomains: ['canvas'] },
+      finalText: '任务已完成，全程未切换或打开任何界面。',
+      observations: [navigated],
+      registry: registryWithTool({ name: 'run_henji_script', readOnly: false }),
+    })).toMatchObject({ passed: false, summary: expect.stringContaining('Effect Receipt') })
+  })
+
   it('未知写入副作用禁止自动重放并能转为清晰澄清', () => {
     const registry = registryWithTool({ name: 'write_test_resource', readOnly: false })
     const timeout = observation('write_test_resource', {
@@ -130,7 +152,8 @@ describe('Agent result verifier', () => {
       observations: [invalid],
       registry,
     })
-    expect(result).toMatchObject({ passed: true, clarificationRequired: true })
+    // 失败被如实说明即可通过；是否停下来问用户由模型调 ask_user 决定，不再看措辞。
+    expect(result).toMatchObject({ passed: true, clarificationRequired: false })
   })
 
   it('供应商参数错误要求保留原模型修正，生成中不重复轮询', () => {
@@ -215,7 +238,9 @@ describe('Agent result verifier', () => {
         blockedFacets: [],
         waitingFacetIds: ['scene'],
       },
-    })).toMatchObject({ passed: true, clarificationRequired: true })
+      // 结算为 waiting_user 时，答复如实说明受阻即算通过；把运行真正挂起等用户
+      // 是模型调 ask_user 的结果，不再由这句话里的问号推断。
+    })).toMatchObject({ passed: true, clarificationRequired: false })
   })
 
   it('第一次写入后 Effect Ledger 仍 active 时拒绝提前最终答复', () => {

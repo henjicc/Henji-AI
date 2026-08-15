@@ -39,6 +39,12 @@ function observationFailure(observation: AgentToolObservation): ObservationFailu
 
 function generationStatus(observations: AgentToolObservation[]): string | null {
   for (const observation of [...observations].reverse()) {
+    if (observation.source.toolName === 'run_henji_script') {
+      const output = asRecord(observation.output)
+      const submitted = Array.isArray(output?.submittedTasks) ? output.submittedTasks : []
+      const latest = asRecord(submitted.at(-1))
+      if (typeof latest?.status === 'string') return latest.status.toLowerCase()
+    }
     if (observation.source.toolName === 'get_generation_task') {
       const task = asRecord(asRecord(observation.output)?.task)
       if (typeof task?.status === 'string') return task.status.toLowerCase()
@@ -93,10 +99,15 @@ function explainsFailure(finalText: string, failure: ObservationFailure): boolea
     || normalized.includes(failure.code.toLowerCase())
 }
 
-function needsClarification(finalText: string, failure: ObservationFailure): boolean {
-  return ['NOT_FOUND', 'INVALID_INPUT', 'PERMISSION_DENIED'].includes(failure.code)
-    && (/请提供|请确认|请选择|需要你|[?？]/.test(finalText))
-}
+/*
+ * 这里曾经有一个 needsClarification()：用正则在模型的中文答复里找问号和"请提供/请确认"，
+ * 据此决定运行要不要停下来等用户。它是全仓库进入 waiting_user 的唯一入口，两种失败都实测
+ * 发生过——模型确实在问却没命中词表，运行直接 completed；答复里恰好有个问号，运行挂着等一个
+ * 用户不知道要答什么的东西。
+ *
+ * 现在由模型显式调用 `ask_user` 触发（见 tools/builtin/ask-user.ts 与 runner 的
+ * waitForUserAnswer）。判断"我需要问用户"是模型的判断题，运行时从散文里嗅不出来。
+ */
 
 export function buildRecoveryGuidance(
   observations: AgentToolObservation[],
@@ -144,15 +155,11 @@ export function verifyAgentCompletion(input: {
   progressSettlement?: AgentProgressSettlement
 }): AgentCompletionVerification {
   if (input.route.intent === 'general' && input.observations.length === 0) {
-    const clarificationRequired = input.route.complexity === 'ambiguous'
-      && /请提供|请确认|请选择|需要你|[?？]/.test(input.finalText)
     return {
       passed: true,
-      summary: clarificationRequired
-        ? '模糊目标已转换为清晰的用户问题，未执行写操作。'
-        : '一般回答不需要工具证据。',
+      summary: '一般回答不需要工具证据。',
       evidence: [],
-      clarificationRequired,
+      clarificationRequired: false,
     }
   }
   if (input.observations.length === 0) {
@@ -170,15 +177,13 @@ export function verifyAgentCompletion(input: {
   }
   if (settlement && ['partial', 'blocked', 'waiting_user'].includes(settlement.status)) {
     const explainsBlocker = /无法|未完成|受阻|缺少|权限|需要|请提供|请确认|请选择|不存在/.test(input.finalText)
-    const clarificationRequired = settlement.status === 'waiting_user'
-      && /请提供|请确认|请选择|需要你|[?？]/.test(input.finalText)
     return {
       passed: explainsBlocker,
       summary: explainsBlocker
         ? `最终答复如实反映任务图 ${settlement.status} 结算。`
         : `任务图已结算为 ${settlement.status}，但最终答复没有说明阻塞或未完成部分。`,
       evidence: settlement.evidence.slice(-8),
-      clarificationRequired,
+      clarificationRequired: false,
     }
   }
 
@@ -197,14 +202,13 @@ export function verifyAgentCompletion(input: {
   const unresolvedFailure = lastFailure as { index: number; failure: ObservationFailure } | null
   if (unresolvedFailure && unresolvedFailure.index > lastSuccessIndex) {
     const explained = explainsFailure(input.finalText, unresolvedFailure.failure)
-    const clarificationRequired = explained && needsClarification(input.finalText, unresolvedFailure.failure)
     return {
       passed: explained,
       summary: explained
         ? `最终答复如实说明 ${unresolvedFailure.failure.code}，未宣称动作成功。`
         : `最近工具失败 ${unresolvedFailure.failure.code} 尚未恢复或向用户说明。`,
       evidence: [`error:${unresolvedFailure.failure.code}`],
-      clarificationRequired,
+      clarificationRequired: false,
     }
   }
 
@@ -232,6 +236,19 @@ export function verifyAgentCompletion(input: {
         evidence: [`generation_status:${status}`],
         clarificationRequired: false,
       }
+    }
+  }
+
+  const observedEffects = successful.flatMap((observation) => observation.effects ?? [])
+  const navigated = observedEffects.some((effect) => effect.effect === 'navigate')
+  const deniesNavigation = /(?:全程|本轮)?\s*(?:没有|未|并未|无需)\s*(?:切换|打开|进入|导航)|未切换或打开/.test(input.finalText)
+  if (navigated && deniesNavigation) {
+    return {
+      passed: false,
+      summary: 'Effect Receipt 记录了界面导航，最终答复却声称没有切换或打开界面。',
+      evidence: observedEffects.filter((effect) => effect.effect === 'navigate')
+        .flatMap((effect) => effect.targetRefs.map((ref) => `navigate:${ref.kind}:${ref.id}`)).slice(0, 8),
+      clarificationRequired: false,
     }
   }
 

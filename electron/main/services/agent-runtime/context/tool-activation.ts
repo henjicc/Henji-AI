@@ -25,10 +25,18 @@ const HENJI_SCRIPT_TOOL = 'run_henji_script'
  * 等于死代码。实测就是这么坏的。
  */
 const SKILL_LOAD_TOOL = 'load_assistant_skill'
+/**
+ * 提问是模型的判断，不是运行时能从答复措辞里嗅出来的，因此必须常驻。
+ *
+ * 而且它**不能**跟着 `toolDomains` 走：纯闲聊（toolDomains 为空）同样可能需要澄清，
+ * 而那正是最容易被旧正则误判的一类——短句、无信息量、没有任何领域词。
+ */
+const ASK_USER_TOOL = 'ask_user'
 const RUNTIME_MODEL_TOOLS = new Set([
   SKILL_LOAD_TOOL,
   CURRENT_CONTEXT_TOOL,
   CAPABILITY_DISCOVERY_TOOL,
+  ASK_USER_TOOL,
   'read_agent_artifact',
   'query_diagnostic_events',
   HENJI_SCRIPT_TOOL,
@@ -72,6 +80,7 @@ export const AGENT_CORE_TOOL_NAMES = [
   SKILL_LOAD_TOOL,
   CURRENT_CONTEXT_TOOL,
   CAPABILITY_DISCOVERY_TOOL,
+  ASK_USER_TOOL,
   ARTIFACT_READ_TOOL,
   ...REFLECTION_TOOLS,
 ] as const
@@ -193,6 +202,8 @@ export function activateAgentTools(
    * 租约排在路由锚点和最近工具之前，目录扩张时只延迟新候选，不能静默驱逐执行中的工作集。
    */
   const candidates = unique([
+    // 提问排在最前且无条件：它是唯一一个纯闲聊也必须可用的工具，见 ASK_USER_TOOL 的说明。
+    ASK_USER_TOOL,
     ...skillNames,
     ...capabilitySearchNames,
     ...artifactNames,

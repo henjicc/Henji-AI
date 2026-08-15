@@ -5,7 +5,8 @@ import {
   AGENT_CONTRACT_VERSION,
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
-import { createBuiltinAgentToolRegistry } from '../tools/builtin'
+import { createBuiltinAgentToolRegistry as createBaseBuiltinAgentToolRegistry } from '../tools/builtin'
+import { createBackendCapabilityTool } from '../tools/backend-capability-tool'
 import { createBackendBuiltinTools } from '../tools/builtin/backend'
 import { AgentToolRegistry } from '../tools/registry'
 import { defineAgentTool } from '../tools/define-tool'
@@ -13,6 +14,17 @@ import { AgentToolCatalogPlanner } from './catalog'
 import { AGENT_ACTIVE_TOOL_LIMIT, AGENT_TOOL_SCHEMA_BUDGET_BYTES } from './tool-activation'
 import { AGENT_FACET_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import type { AgentRouteDecision } from './types'
+import { runHenjiScriptCapability } from '../../../../../src/core/assistant/capabilities/henjiScriptApplicationCapabilities'
+
+function createBuiltinAgentToolRegistry(
+  ...args: Parameters<typeof createBaseBuiltinAgentToolRegistry>
+): ReturnType<typeof createBaseBuiltinAgentToolRegistry> {
+  const registry = createBaseBuiltinAgentToolRegistry(...args)
+  registry.register(createBackendCapabilityTool(runHenjiScriptCapability, {
+    execute: async () => { throw new Error('测试不执行 Henji Script') },
+  }))
+  return registry
+}
 
 function contextSnapshot(): HostContextSnapshot {
   return {
@@ -78,7 +90,7 @@ describe('AgentToolCatalogPlanner', () => {
    * slice(0, 15)。实测 place_camera_stage_object 排在租约第 18 位被切掉，模型手里只剩通用
    * 动词，写入直接报 COLLECTION_WRITE_NOT_DECLARED，整张任务图剩四个 Facet 未结算。
    */
-  it('整条链路的租约不被下游字面量截断，全部进入活动工具集', () => {
+  it('底层租约完整保留给脚本内核，但模型只看到唯一写入口', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })
@@ -100,6 +112,7 @@ describe('AgentToolCatalogPlanner', () => {
     const leasedPerFacet = cameraNames.slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
     planner.rememberDiscovered('discover_application_capabilities', {
       leasedToolNames: [...leasedPerFacet, ...navigationNames],
+      scriptApi: { entryTool: 'run_henji_script' },
       facets: [
         { facetId: 'camera_scene', capabilityNames: leasedPerFacet },
         { facetId: 'show_target_surface', capabilityNames: navigationNames },
@@ -108,11 +121,13 @@ describe('AgentToolCatalogPlanner', () => {
     const activeNames = planner.select({
       ...primaryRoute, intent: 'camera_stage', toolDomains: ['camera_stage', 'catalog'],
     }, context).activeToolNames
-    // 每个 Facet 的全部名额都要落地，跨 Facet 的租约总量也不能被 15 这个旧上限吃掉。
-    for (const name of [...leasedPerFacet, ...navigationNames]) expect(activeNames).toContain(name)
+    expect(activeNames).toContain('run_henji_script')
+    for (const name of [...leasedPerFacet, ...navigationNames]) {
+      expect(activeNames).not.toContain(name)
+    }
   })
 
-  it('能力概览直达路由不激活任何工具', () => {
+  it('能力概览直达路由只激活提问工具', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })
@@ -126,10 +141,14 @@ describe('AgentToolCatalogPlanner', () => {
       reason: '能力概览直接回答',
     }
 
-    expect(planner.select(route, contextSnapshot()).activeToolNames).toEqual([])
+    /*
+     * ask_user 是唯一不跟随 toolDomains 的工具。纯闲聊同样可能需要澄清，而这恰恰是最容易
+     * 被旧正则误判的一类——短句、无信息量、没有任何领域词。除它以外仍然一个工具都不激活。
+     */
+    expect(planner.select(route, contextSnapshot()).activeToolNames).toEqual(['ask_user'])
   })
 
-  it('明确生成请求直接获得模型、生成与工作区切换工具', () => {
+  it('明确生成请求也不暴露低层模型与生成能力，应用操作统一收口到脚本', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })
@@ -147,10 +166,48 @@ describe('AgentToolCatalogPlanner', () => {
     expect(names.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
     expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
     expect(names).toContain('discover_application_capabilities')
-    expect(names).toContain('search_models')
-    expect(names).toContain('get_model_schema')
-    expect(names).toContain('create_visible_generation_task')
-    expect(names).toContain('switch_workspace')
+    expect(names).not.toContain('search_models')
+    expect(names).not.toContain('get_model_schema')
+    expect(names).toContain('run_henji_script')
+    expect(names).not.toContain('create_visible_generation_task')
+    expect(names).not.toContain('switch_workspace')
+  })
+
+  it('复杂画布、三维和设置任务首轮都只获得 Henji Script 写入口', () => {
+    const registry = createBuiltinAgentToolRegistry(async () => {
+      throw new Error('测试不执行前端工具')
+    })
+    const planner = new AgentToolCatalogPlanner(registry)
+    const context = {
+      ...contextSnapshot(),
+      availableCapabilities: registry.allDefinitions().map((definition) => definition.name),
+    }
+
+    expect(planner.select({
+      intent: 'canvas', complexity: 'multi_step', path: 'workflow',
+      toolDomains: ['canvas', 'navigation', 'catalog'], source: 'deterministic', reason: '画布任务',
+    }, context).activeToolNames).toContain('run_henji_script')
+
+    expect(new AgentToolCatalogPlanner(registry).select({
+      intent: 'camera_stage', complexity: 'multi_step', path: 'workflow',
+      toolDomains: ['camera_stage', 'navigation', 'catalog'], source: 'deterministic', reason: '三维任务',
+    }, context).activeToolNames).toContain('run_henji_script')
+
+    expect(new AgentToolCatalogPlanner(registry).select({
+      intent: 'settings', complexity: 'multi_step', path: 'workflow',
+      toolDomains: ['settings', 'navigation', 'catalog'], source: 'deterministic', reason: '设置任务',
+    }, context).activeToolNames).toContain('run_henji_script')
+    for (const legacy of [
+      'run_canvas_image_pipeline_program',
+      'run_camera_stage_state_animation_program',
+      'run_application_settings_program',
+      'execute_application_program',
+    ]) {
+      expect(new AgentToolCatalogPlanner(registry).select({
+        intent: 'camera_stage', complexity: 'multi_step', path: 'workflow',
+        toolDomains: ['camera_stage', 'catalog'], source: 'deterministic', reason: '单入口门禁',
+      }, context).activeToolNames).not.toContain(legacy)
+    }
   })
 
   it('目录项提供工具使用、证据、恢复和并行语义', () => {
@@ -188,10 +245,11 @@ describe('AgentToolCatalogPlanner', () => {
     // 它必须真的在本轮工具里，否则模型看得见清单却调不动。
     expect(planner.select(primaryRoute, contextSnapshot()).activeToolNames)
       .toEqual([
+        'ask_user',
         'load_assistant_skill',
         'discover_application_capabilities',
         'read_agent_artifact',
-        'declare_action_plan',
+        'run_henji_script',
       ])
 
     const capabilities = registry.search('图片生成', undefined, contextSnapshot())
@@ -205,8 +263,9 @@ describe('AgentToolCatalogPlanner', () => {
 
     const activeNames = planner.select(primaryRoute, contextSnapshot()).activeToolNames
     expect(activeNames).toContain('discover_application_capabilities')
-    expect(activeNames).toContain('create_visible_generation_task')
-    expect(activeNames).toContain('search_models')
+    expect(activeNames).not.toContain('create_visible_generation_task')
+    expect(activeNames).toContain('run_henji_script')
+    expect(activeNames).not.toContain('search_models')
     expect(activeNames).toContain('load_assistant_skill')
   })
 
@@ -222,11 +281,13 @@ describe('AgentToolCatalogPlanner', () => {
       ).activeToolNames
       expect(active).toContain('load_assistant_skill')
       // 领域知识决定后面怎么发现和调用能力，顺序反了没有意义。
-      expect(active.indexOf('load_assistant_skill')).toBe(0)
+      // 断相对顺序而不是绝对下标：ask_user 常驻在最前，且它与技能加载无先后依赖。
+      expect(active.indexOf('load_assistant_skill'))
+        .toBeLessThan(active.indexOf('discover_application_capabilities'))
     }
   })
 
-  it('刚用过的工具不会被轮换的发现列表挤掉', () => {
+  it('刚租赁的底层写工具不会绕过 Henji Script 暴露给模型', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })
@@ -243,13 +304,13 @@ describe('AgentToolCatalogPlanner', () => {
       facets: [{ facetId: 'camera_scene', capabilityNames: ['place_camera_stage_object'] }],
     })
     const route = { ...primaryRoute, toolDomains: ['camera_stage' as const] }
-    expect(planner.select(route, fullContext).candidateCount).toBeGreaterThan(8)
+    expect(planner.select(route, fullContext).activeToolNames).toContain('run_henji_script')
 
     // 用掉一个工具后，接下来的几轮它都必须还在——模型正处在使用它的序列中间。
     planner.rememberObservation('place_camera_stage_object', {})
     for (let turn = 0; turn < 4; turn += 1) {
       expect(planner.select(route, fullContext).activeToolNames)
-        .toContain('place_camera_stage_object')
+        .not.toContain('place_camera_stage_object')
     }
   })
 
@@ -284,8 +345,8 @@ describe('AgentToolCatalogPlanner', () => {
       const activation = planner.select(primaryRoute, fullContext)
       expect(activation.activeToolNames.length).toBeLessThanOrEqual(AGENT_ACTIVE_TOOL_LIMIT)
       expect(activation.schemaBytes).toBeLessThanOrEqual(AGENT_TOOL_SCHEMA_BUDGET_BYTES)
-      expect(activation.leasedToolNames).toEqual(expect.arrayContaining(candidates))
-      expect(activation.droppedLeasedToolNames).toEqual([])
+      expect(activation.leasedToolNames).toEqual([])
+      expect(activation.activeToolNames).toContain('run_henji_script')
     }
 
     planner.syncActiveFacets(['facet_1', 'facet_2'], taskGraphFacetIds)
@@ -311,8 +372,9 @@ describe('AgentToolCatalogPlanner', () => {
     const kept = planner.select(primaryRoute, fullContext)
     for (const name of candidates.slice(0, 5)) {
       expect(kept.leasedToolNames, `${name} 属于模型自报的 Facet，不该被任务图结算回收`)
-        .toContain(name)
+        .not.toContain(name)
     }
+    expect(kept.activeToolNames).toContain('run_henji_script')
   })
 
   it('100 个目录能力下仍只激活真实租约且不突破 32/96KB', () => {
@@ -456,8 +518,10 @@ describe('AgentToolCatalogPlanner', () => {
       for (const name of planner.select(primaryRoute, fullContext).activeToolNames) activated.add(name)
     }
 
-    expect([...activated]).toEqual(expect.arrayContaining(leasedToolNames))
-    expect([...activated].filter((name) => leasedToolNames.includes(name))).toHaveLength(leasedToolNames.length)
+    expect([...activated]).toContain('run_henji_script')
+    for (const name of leasedToolNames.filter((candidate) => registry.get(candidate)?.readOnly === false)) {
+      expect([...activated]).not.toContain(name)
+    }
   })
 
   it('分页未结束时固定读取工具，最后一页后释放固定状态', () => {
