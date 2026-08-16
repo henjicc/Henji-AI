@@ -97,10 +97,25 @@ describeWithElectronSqlite('AgentArtifactPersistenceStore', () => {
       runId: 'run-1', threadId: 'thread-1', artifactRef: 'artifact:fields',
       fields: ['omitted'], cursor: first.nextCursor ?? undefined,
     }))).toThrow(/cursor/)
+    /*
+     * 部分命中必须返回命中的那些，缺的写进 missingFields——不是整单拒绝。
+     *
+     * 模型不知道 artifact 的确切形状，猜错字段名是必然的。整单拒绝会让它换一串继续猜：
+     * 实测某个模型因此重复 10 次直到运行被判死（46 轮、77 万 token、0 个 Effect）。
+     */
+    const partial = store.read(agentArtifactReadRequestSchema.parse({
+      runId: 'run-1', threadId: 'thread-1', artifactRef: 'artifact:fields',
+      fields: ['visible', 'missing'], limitBytes: 512,
+    }))
+    expect(partial.selectedFields).toEqual(['visible'])
+    expect(partial.missingFields).toEqual(['missing'])
+    expect(partial.content).toContain('visible')
+
+    // 一个都没命中才真的没法继续：返回空对象会让模型以为 artifact 是空的。
     expect(() => store.read(agentArtifactReadRequestSchema.parse({
       runId: 'run-1', threadId: 'thread-1', artifactRef: 'artifact:fields',
       fields: ['missing'],
-    }))).toThrow(/不包含顶层字段：missing。可用顶层字段：visible、omitted/)
+    }))).toThrow(/不包含请求的任何顶层字段：missing。可用顶层字段：visible、omitted/)
   })
 
   it('拒绝跨 run、跨 thread、不存在引用与 C3 内容', () => {

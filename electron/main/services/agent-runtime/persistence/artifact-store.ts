@@ -58,28 +58,47 @@ function decodeCursor(cursor: string | undefined, digest: string, totalBytes: nu
   return offset
 }
 
+/**
+ * 按 fields 筛选顶层字段：**给出存在的，如实说明哪些不存在**，不整单拒绝。
+ *
+ * 旧实现是全有或全无——请求的字段里只要有一个不存在就抛 INVALID_INPUT。模型并不知道
+ * artifact 的确切形状（它是运行时按结果拼出来的），于是只能猜一串字段名；猜中 11 个、
+ * 猜错 1 个，整次调用照样失败，它再换一串继续猜。
+ *
+ * 实测同一份代码：一个模型上重复 10 次直到运行被判死（46 轮、77 万 token、0 个 Effect），
+ * 另一个模型上一次都没发生。全有或全无把「模型猜字段名」这件必然会发生的事变成了死循环。
+ *
+ * 现在：命中的字段照常返回；未命中的写进 missingFields 一并告诉模型，附可用字段清单。
+ * 一个都没命中才是真的没法继续——那时才报错，因为返回空对象会让模型以为 artifact 是空的。
+ */
 function selectPayload(payload: unknown, fields: string[] | undefined): {
   payload: unknown
   selectedFields: string[]
+  missingFields: string[]
 } {
-  if (!fields) return { payload, selectedFields: [] }
+  if (!fields) return { payload, selectedFields: [], missingFields: [] }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new Error('[INVALID_INPUT] fields 只允许筛选 Artifact 顶层对象字段')
   }
   const record = payload as Record<string, unknown>
   const availableFields = Object.keys(record).filter(Boolean).slice(0, 32)
-  const selectedFields = [...new Set(fields)].sort((left, right) => left.localeCompare(right))
-  for (const field of selectedFields) {
-    if (!Object.prototype.hasOwnProperty.call(record, field)) {
-      const available = availableFields.length > 0
-        ? `。可用顶层字段：${availableFields.join('、')}`
-        : '。该 Artifact 没有可筛选的顶层字段，请省略 fields'
-      throw new Error(`[INVALID_INPUT] Artifact 不包含顶层字段：${field}${available}`)
-    }
+  const requested = [...new Set(fields)].sort((left, right) => left.localeCompare(right))
+  const selectedFields = requested.filter(
+    (field) => Object.prototype.hasOwnProperty.call(record, field)
+  )
+  const missingFields = requested.filter((field) => !selectedFields.includes(field))
+
+  if (selectedFields.length === 0) {
+    const available = availableFields.length > 0
+      ? `。可用顶层字段：${availableFields.join('、')}`
+      : '。该 Artifact 没有可筛选的顶层字段，请省略 fields'
+    throw new Error(`[INVALID_INPUT] Artifact 不包含请求的任何顶层字段：${requested.join('、')}${available}`)
   }
+
   return {
     payload: Object.fromEntries(selectedFields.map((field) => [field, record[field]])),
     selectedFields,
+    missingFields,
   }
 }
 
@@ -149,6 +168,7 @@ export class AgentArtifactPersistenceStore {
         nextCursor: hasMore ? encodeCursor(page.nextOffset, digest) : null,
         hasMore,
         selectedFields: selected.selectedFields,
+        missingFields: selected.missingFields,
       })
       logger.info('Agent Artifact 分页读取完成', {
         event: 'agent_artifact.read.completed',
@@ -210,3 +230,4 @@ export class AgentArtifactPersistenceStore {
     return row
   }
 }
+

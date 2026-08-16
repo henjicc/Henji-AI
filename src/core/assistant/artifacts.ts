@@ -48,5 +48,12 @@ export const agentArtifactPageSchema = z.object({
   nextCursor: z.string().min(1).max(200).nullable(),
   hasMore: z.boolean(),
   selectedFields: z.array(z.string().min(1).max(500)).max(32),
+  /**
+   * 请求了但这份 Artifact 里没有的顶层字段。
+   *
+   * 模型并不知道 artifact 的确切形状，猜错字段名是必然会发生的事。整单拒绝会让它换一串
+   * 继续猜——实测某个模型因此重复 10 次直到运行被判死。如实回报缺哪些，它一次就能修正。
+   */
+  missingFields: z.array(z.string().min(1).max(500)).max(32).default([]),
 }).strict()
 export type AgentArtifactPage = z.infer<typeof agentArtifactPageSchema>

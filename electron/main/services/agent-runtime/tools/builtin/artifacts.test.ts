@@ -38,6 +38,7 @@ function page(dataClass: 'C1' | 'C2' | 'C3'): AgentArtifactPage {
     nextCursor: dataClass === 'C1' ? 'v1:4096:0123456789abcdef' : null,
     hasMore: dataClass === 'C1',
     selectedFields: [],
+  missingFields: [],
   }
 }
 
@@ -101,3 +102,4 @@ describe('read_agent_artifact', () => {
     } satisfies Partial<AgentToolGatewayError>)
   })
 })
+
