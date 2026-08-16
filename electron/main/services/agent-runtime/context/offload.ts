@@ -49,10 +49,29 @@ export function resolveOffloadRecordThreshold(byteThreshold: number): number {
   )
 }
 
+/**
+ * 分页结果本身**永不再卸载**，否则读 artifact 会无限套娃。
+ *
+ * 分页上限 32KB，卸载阈值最低 8KB——读回来的一页必然超阈值，于是又被存成新 artifact：
+ * 模型读 A 拿到页 B，B 被卸载成 C，读 C 又得到页 D……而这些页的顶层字段是
+ * schemaVersion/content/nextCursor 那一套，跟它想读的发现结果完全不同形状。
+ *
+ * 实测 camera 场景里模型因此彻底分不清手上是哪个 artifact，反复请求发现结果的字段却总是
+ * 拿到分页壳的字段清单，31 轮 0 个 Effect。分页已经由 limitBytes 限住了，再卸载一次是自相矛盾。
+ */
+function isArtifactPage(output: unknown): boolean {
+  return Boolean(output)
+    && typeof output === 'object'
+    && !Array.isArray(output)
+    && (output as Record<string, unknown>).contentEncoding === 'json-fragment'
+    && typeof (output as Record<string, unknown>).artifactRef === 'string'
+}
+
 export function shouldOffloadObservation(
   output: unknown,
   byteThreshold = OFFLOAD_BYTE_THRESHOLD
 ): boolean {
+  if (isArtifactPage(output)) return false
   return Buffer.byteLength(JSON.stringify(output), 'utf8') > byteThreshold
     || recordCount(output) > resolveOffloadRecordThreshold(byteThreshold)
 }
@@ -89,3 +108,4 @@ export class AgentArtifactStore {
     for (const artifactRef of artifactRefs) this.artifacts.delete(artifactRef)
   }
 }
+

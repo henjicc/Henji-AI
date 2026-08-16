@@ -5,7 +5,7 @@ import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import { toolMessage } from '../runner/runner-results'
 import { buildAgentContextLayers } from './prompt-layers'
 import { skillBuildInput } from './context-test-fixtures'
-import { AgentArtifactStore } from './offload'
+import { AgentArtifactStore, shouldOffloadObservation } from './offload'
 import type { AgentContextBuildInput } from './types'
 
 /*
@@ -96,3 +96,37 @@ describe('卸载判定的同一把尺子', () => {
     expect(offloadedInObservationLayer()).toBe(true)
   })
 })
+
+/*
+ * 回归：读 artifact 的结果又被卸载成新 artifact，无限套娃。
+ *
+ * 分页上限 32KB、卸载阈值最低 8KB，所以读回来的一页必然超阈值。模型读 A 拿到页 B，
+ * B 被卸载成 C……而页的顶层字段是 schemaVersion/content/nextCursor 那一套，跟它想读的
+ * 内容完全不同形状。实测 camera 场景因此 31 轮 0 个 Effect。
+ */
+describe('分页结果不再被卸载', () => {
+  const page = {
+    schemaVersion: 'agent-artifact/v1',
+    artifactRef: 'artifact:a',
+    source: 'discover_application_capabilities',
+    dataClasses: ['C1'],
+    contentEncoding: 'json-fragment',
+    content: 'x'.repeat(30_000),
+    returnedBytes: 30_000,
+    totalBytes: 90_000,
+    nextCursor: 'v1:30000:abcdef0123456789',
+    hasMore: true,
+    selectedFields: [],
+    missingFields: [],
+  }
+
+  it('远超阈值的分页结果也不卸载', () => {
+    expect(shouldOffloadObservation(page, 8 * 1024)).toBe(false)
+  })
+
+  it('形状相近但不是分页结果的照常卸载', () => {
+    const notPage = { ...page, contentEncoding: 'text/plain' }
+    expect(shouldOffloadObservation(notPage, 8 * 1024)).toBe(true)
+  })
+})
+
