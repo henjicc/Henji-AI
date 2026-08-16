@@ -134,7 +134,8 @@ export const HENJI_ENTITY_METHOD_SIGNATURES = {
 
 export const HENJI_SCRIPT_LANGUAGE_RULES = [
   '只允许 const 声明；不允许 let、var、用户函数或类。',
-  '不支持 Array.find/map/filter 等任意方法；有界遍历只使用 for...of，循环体不能修改变量。',
+  '不支持 Array.find/map/filter 等任意方法；数组只能读 .length 和非负整数下标，'
+    + '有界遍历只使用 for...of 且被遍历的必须是字面量数组或 app.range(...)，不能是读取结果。',
   '普通结果字段使用点访问；含点号的属性 ID 使用静态字符串字面量下标，例如 properties[\'asset.library.name\']。',
   'create/update/remove 已由宿主从正式状态源自动读回验证；不要仅为重复验证而额外 list/read。',
   'update(ref, mutations) 的 mutations 直接使用完整属性 ID 到值的映射，不要再嵌套 properties。',

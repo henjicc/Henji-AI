@@ -429,6 +429,71 @@ describe('HenjiScriptService', () => {
     ])
   })
 
+  /*
+   * "删掉它，然后确认它不在了"是用户会原样说出口的话，脚本必须写得出来。
+   *
+   * 之前写不出来：remove 之后再 read 同一个引用必然抛 ENTITY_NOT_FOUND，整段脚本失败；而 list
+   * 返回的 refs 在受限语言里没法过滤（不支持 .find/.filter，for...of 只遍历静态数组）。模型只能
+   * 在"照做"和"脚本能跑"之间二选一——实测素材库那次它选了照做，最后一段失败，8 个真实写入全部
+   * 没能封存。
+   *
+   * 放行的依据是事实而不是宽容：remove 的 verifyEntityCall 刚 list 过一遍确认它真的不在了。
+   */
+  it('删除后再读同一个引用返回 null，可以直接断言 absent', async () => {
+    const { output, calls } = await run(`
+      const ref = { kind: 'test.entity', id: 'entity-1' };
+      await app.entities.remove(ref);
+      const after = await app.entities.read(ref, ['test.entity.value']);
+      app.assert.absent(after);
+    `)
+
+    expect(output).toMatchObject({ status: 'completed', verification: { passed: true } })
+    // 关键：删除后的那次 read 不再打到网关，因为 remove 的读回验证已经确认过不存在
+    expect(calls.filter((call) => call.toolName === 'read_application_entity')).toHaveLength(0)
+    expect(output.verification.evidence).toEqual(
+      expect.arrayContaining([expect.stringContaining('absence-confirmed')])
+    )
+  })
+
+  it('没删过的引用读不到时照旧硬报错', async () => {
+    const { output } = await run(`
+      const missing = await app.entities.read({ kind: 'test.entity', id: 'never-existed' }, []);
+      app.assert.absent(missing);
+    `)
+    expect(output.status).not.toBe('completed')
+  })
+
+
+  /*
+   * 断言失败必须报出实际值：运行时手里明明有 actual 和 expected 两个值，只说"断言 equal 未通过"
+   * 等于让调用方整段重写脚本再猜一遍，而真实原因可能只是名称多了个空格。实测素材库那次连撞两次。
+   */
+  it('断言失败时报出实际值与期望值', async () => {
+    const { output } = await run(`
+      const entity = await app.entities.read(
+        { kind: 'test.entity', id: 'entity-1' },
+        ['test.entity.value']
+      );
+      app.assert.equal(entity.properties['test.entity.value'], 999);
+    `)
+
+    expect(output.error).toMatchObject({ code: 'SCRIPT_VERIFICATION_FAILED' })
+    expect(output.error?.message).toContain('实际值')
+    expect(output.error?.message).toContain('999')
+  })
+
+  it('matches 失败时说明它是子串包含而不是正则', async () => {
+    const { output } = await run(`
+      const entity = await app.entities.read(
+        { kind: 'test.entity', id: 'entity-1' },
+        ['test.entity.value']
+      );
+      app.assert.matches(entity.ref.id, '^entity-\\d+$');
+    `)
+    expect(output.error?.message).toContain('子串包含')
+  })
+
+
   it('未发现 API 与截断引用都在执行器调用次数为 0 时拒绝', async () => {
     const unknown = await run("await app.action('not_registered', {});")
     expect(unknown.output).toMatchObject({

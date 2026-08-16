@@ -26,6 +26,9 @@ class FakeAssetLibraryDb {
     if (sql.startsWith('INSERT INTO asset_libraries')) {
       return { run: (id: string, name: string, createdAt: number, updatedAt: number) => {
         if (this.libraries.has(id)) throw new Error('UNIQUE constraint failed')
+        for (const row of this.libraries.values()) {
+          if (row.name === name) throw new Error('UNIQUE constraint failed: asset_libraries.name')
+        }
         this.libraries.set(id, { id, name, created_at: createdAt, updated_at: updatedAt })
       } }
     }
@@ -62,7 +65,7 @@ vi.mock('../logging', () => ({
   createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
-import { deleteLibrary, inspectLibrary, restoreLibrary } from './index'
+import { createLibrary, deleteLibrary, inspectLibrary, restoreLibrary } from './index'
 
 describe('素材集合快照恢复', () => {
   let database: FakeAssetLibraryDb
@@ -97,3 +100,29 @@ describe('素材集合快照恢复', () => {
     expect(() => inspectLibrary('library-1')).toThrow('资产库不存在')
   })
 })
+
+/*
+ * 名称冲突要翻译成人话：`UNIQUE constraint failed: asset_libraries.name` 对调用方等于没有信息，
+ * 它既不知道哪个字段冲突（name 是列名不是属性 ID），也不知道该改名还是改用已存在的那个。
+ * 实测助手连撞两次，每次都原样重试同一个名称。
+ */
+describe('素材集合名称冲突', () => {
+  beforeEach(() => {
+    const db = new FakeAssetLibraryDb()
+    mocks.getDb.mockReturnValue(db)
+  })
+
+  it('重名时给出被占用的名称和两条可行出路，不泄露 SQL 原文', () => {
+    createLibrary('验收素材库')
+    let message = ''
+    try {
+      createLibrary('验收素材库')
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('验收素材库')
+    expect(message).toContain('已被占用')
+    expect(message).not.toContain('UNIQUE constraint')
+  })
+})
+

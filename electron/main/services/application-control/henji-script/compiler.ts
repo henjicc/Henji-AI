@@ -30,9 +30,56 @@ function locationOf(sourceFile: ts.SourceFile, node: ts.Node): HenjiSourceLocati
   return { line: point.line + 1, column: point.character + 1 }
 }
 
-function unsupported(sourceFile: ts.SourceFile, node: ts.Node, message: string): never {
+/**
+ * 被拒绝的那几种写法，各自对应到 Henji Script 里能做同一件事的写法。
+ *
+ * 拒绝信息只写 `不支持语法 NewExpression` 是没用的：`NewExpression` 是 TypeScript 编译器的
+ * 内部枚举名，调用方既不知道自己哪一行写了它，也不知道该改成什么。实测素材库那次运行，六段
+ * 脚本里有四段直接死在语法上——循环展不开、JSON.stringify、正则字面量、new——每次都只收到
+ * 一个 SyntaxKind 名字，只能换个写法再猜一次，四个回合一件事都没做成。
+ *
+ * 这张表按**模型真的会写出来的东西**列，不追求穷举 SyntaxKind。
+ */
+const SYNTAX_ALTERNATIVES: Readonly<Record<string, string>> = {
+  NewExpression: '不要 new 任何对象：脚本里只有字面量、读取结果和 app.* 调用；需要时间戳或随机值就交给宿主生成。',
+  RegularExpressionLiteral: '正则只能作为字符串字面量传给 app.assert.matches，不能写成 /…/ 字面量参与运算。',
+  ArrowFunction: '不允许自定义函数：有界遍历用 for...of，条件用三元表达式。',
+  FunctionExpression: '不允许自定义函数：有界遍历用 for...of，条件用三元表达式。',
+  AwaitExpression: 'await 只能直接写在 app.* 调用前，不能 await 其他表达式。',
+  SpreadElement: '不支持展开运算符；把要写的字段逐条列出来。',
+  ObjectBindingPattern: '不支持解构；用 const 取一次再点访问。',
+  ArrayBindingPattern: '不支持解构；用 const 取一次再按下标访问。',
+  ThisKeyword: '脚本里没有 this。',
+  PrefixUnaryExpression: '一元运算只支持负号字面量；取反请改用三元表达式或 app.assert。',
+}
+
+const CALL_ALTERNATIVES: Readonly<Record<string, string>> = {
+  'JSON.stringify': '不要序列化：断言直接比对字段值（app.assert.equal），需要整段内容就把读取结果原样传给下一步。',
+  'JSON.parse': '读取结果已经是结构化对象，不需要解析。',
+  'Math.random': '脚本必须确定性；随机值由宿主生成，不能在脚本里取。',
+  'Date.now': '脚本必须确定性；时间戳由宿主生成，不能在脚本里取。',
+  'Object.keys': '不支持反射遍历；直接写出要用的属性 ID。',
+  'Object.entries': '不支持反射遍历；直接写出要用的属性 ID。',
+  'Array.isArray': '不支持类型判断；结果字段的形状由 scriptApi 的 schema 给出。',
+}
+
+/** 出错那一行的原文，截短后放进错误信息——比 SyntaxKind 名字有用得多。 */
+function sourceSnippet(sourceFile: ts.SourceFile, node: ts.Node): string {
+  const text = node.getText(sourceFile).replace(/\s+/g, ' ').trim()
+  return text.length > 80 ? `${text.slice(0, 80)}…` : text
+}
+
+function unsupported(
+  sourceFile: ts.SourceFile,
+  node: ts.Node,
+  message: string,
+  alternative?: string
+): never {
   throw new HenjiScriptError(
-    'SCRIPT_UNSUPPORTED_SYNTAX', 'compile', message, locationOf(sourceFile, node)
+    'SCRIPT_UNSUPPORTED_SYNTAX',
+    'compile',
+    `${message}：\`${sourceSnippet(sourceFile, node)}\`${alternative ? `。${alternative}` : ''}`,
+    locationOf(sourceFile, node)
   )
 }
 
@@ -158,7 +205,10 @@ function compileExpression(
   if (ts.isCallExpression(node)) {
     const pathName = apiPath(sourceFile, node.expression)
     if (!pathName.startsWith('app.') || !HELPER_NAMES.has(pathName.slice(4))) {
-      unsupported(sourceFile, node, `表达式中不允许调用 ${pathName}`)
+      unsupported(
+      sourceFile, node, `表达式中不允许调用 ${pathName}`,
+      CALL_ALTERNATIVES[pathName] ?? `表达式里只能调用 app.${[...HELPER_NAMES].join(' / app.')}`
+    )
     }
     return {
       kind: 'helper', name: pathName.slice(4),
@@ -167,7 +217,10 @@ function compileExpression(
   }
   if (ts.isParenthesizedExpression(node)) return compileExpression(sourceFile, node.expression, variables)
   if (ts.isIdentifier(node)) unsupported(sourceFile, node, `未知变量 ${node.text}`)
-  return unsupported(sourceFile, node, `不支持语法 ${ts.SyntaxKind[node.kind]}`)
+  return unsupported(
+    sourceFile, node, `不支持语法 ${ts.SyntaxKind[node.kind]}`,
+    SYNTAX_ALTERNATIVES[ts.SyntaxKind[node.kind]]
+  )
 }
 
 function staticValue(expression: HenjiValueExpression): unknown {
@@ -277,8 +330,22 @@ function compileStatements(
       }
       const iterable = staticValue(compileExpression(state.sourceFile, statement.expression, state.variables))
       if (!Array.isArray(iterable) || iterable.length > MAX_LOOP_ITERATIONS) {
+        /*
+         * 说清楚是**哪一种**拒绝：循环体在编译期就要展开，所以被遍历的东西必须是字面量数组
+         * 或 app.range(...)。只说"必须可静态展开"时，调用方分不清是"我写的次数太多"还是
+         * "我遍历的是一个读取结果"——后者是实测里真正发生的那种，它会一直换写法重试。
+         */
         throw new HenjiScriptError(
-          'SCRIPT_PLAN_REJECTED', 'compile', `循环必须可静态展开且最多 ${MAX_LOOP_ITERATIONS} 次`,
+          'SCRIPT_PLAN_REJECTED', 'compile',
+          Array.isArray(iterable)
+            ? `循环最多展开 ${MAX_LOOP_ITERATIONS} 次，这里是 ${iterable.length} 次：`
+              + `\`${sourceSnippet(state.sourceFile, statement.expression)}\``
+            : '循环体在编译期展开，被遍历的必须是字面量数组或 app.range(整数字面量)，'
+              + `不能是读取结果：\`${sourceSnippet(state.sourceFile, statement.expression)}\`。`
+              + '两种可行写法：(1) 要确认某个实体的属性，直接对它的 ref 调 app.entities.read '
+              + '再 app.assert——list 返回的 refs 只有 kind/id，本来就读不到名称之类的属性值，'
+              + '逐项扫描也得不到答案；(2) 要对多个已知实体逐个写入，把它们写成多次 '
+              + 'app.entities.update / remove 调用。',
           locationOf(state.sourceFile, statement),
         )
       }
@@ -319,7 +386,11 @@ function compileStatements(
       })
       continue
     }
-    return unsupported(state.sourceFile, statement, `不支持语句 ${ts.SyntaxKind[statement.kind]}`)
+    return unsupported(
+      state.sourceFile, statement, `不支持语句 ${ts.SyntaxKind[statement.kind]}`,
+      SYNTAX_ALTERNATIVES[ts.SyntaxKind[statement.kind]]
+        ?? '语句只支持 const 声明、for...of、if/else 和 await app.* 调用。'
+    )
   }
 }
 

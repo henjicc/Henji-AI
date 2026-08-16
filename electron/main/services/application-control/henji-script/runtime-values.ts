@@ -27,7 +27,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * 这和 artifact 字段筛选、zod 校验消息是同一类问题：报了失败，没给能自纠的事实。
  */
 function describeAvailable(current: unknown): string {
-  if (Array.isArray(current)) return `。当前是长度 ${current.length} 的数组`
+  if (Array.isArray(current)) {
+    return `。当前是长度 ${current.length} 的数组：可以读 .length，或用非负整数下标取某一项`
+  }
   if (isRecord(current)) {
     const keys = Object.keys(current).slice(0, 24)
     return keys.length > 0 ? `。可用字段：${keys.join('、')}` : '。当前对象没有任何字段'
@@ -47,6 +49,19 @@ function readPath(value: unknown, path: readonly (string | number)[]): unknown {
       }
       current = current[part]
     } else {
+      /*
+       * 数组的 length 必须读得到。
+       *
+       * 这是数组唯一一个既安全、又几乎必然要用的属性：模型拿到 refs 之后要判断"有没有"、
+       * "有几个"，除了 length 没有别的办法（受限语言不支持 .find/.filter，for...of 也只遍历
+       * 静态数组）。旧实现把它一并拒了，错误信息还写着"当前是长度 8 的数组"——运行时明明
+       * 知道答案，却因为它不是 hasOwnProperty 意义上的字段而不肯说。实测同一段脚本因此连撞
+       * 三次，每次都只能整段重写。
+       */
+      if (Array.isArray(current) && part === 'length') {
+        current = current.length
+        continue
+      }
       if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, part)) {
         throw new HenjiScriptError(
           'SCRIPT_STEP_FAILED', 'execute',

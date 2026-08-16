@@ -57,4 +57,15 @@ describe('Henji Script 取值失败的消息', () => {
   it('路径正确时正常取值', () => {
     expect(readVariable({ r: { a: { b: [10, 20] } } }, 'r', ['a', 'b', 1])).toBe(20)
   })
+  /*
+   * 数组的 length 必须读得到：受限语言不支持 .find/.filter，for...of 又只遍历静态数组，
+   * 模型要判断"有没有 / 有几个"除了 length 没有别的办法。旧实现把它一并拒了，错误信息还写着
+   * "当前是长度 8 的数组"——运行时知道答案却不肯说。实测同一段脚本连撞三次。
+   */
+  it('数组可以读 length，读不到的字段仍然报出可用形状', () => {
+    const values = { r: { refs: [{ id: 'a' }, { id: 'b' }] } }
+    expect(readVariable(values, 'r', ['refs', 'length'])).toBe(2)
+    expect(() => readVariable(values, 'r', ['refs', 'size'])).toThrow(/长度 2 的数组/)
+  })
+
 })

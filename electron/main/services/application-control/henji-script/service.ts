@@ -37,6 +37,11 @@ import {
 } from './runtime-values'
 import { HenjiScriptPreflight } from './preflight'
 
+/** 引用在本段脚本内的稳定键。 */
+function refKey(ref: ApplicationRef): string {
+  return `${ref.kind}\u0000${ref.id}`
+}
+
 const ENTITY_TOOL = {
   'entities.list': 'list_application_entities',
   'entities.read': 'read_application_entity',
@@ -66,6 +71,8 @@ interface ScriptRuntimeState {
   receipts: RunHenjiScriptOutput['steps']
   verificationEvidence: string[]
   submittedTasks: RunHenjiScriptOutput['submittedTasks']
+  /** 本段脚本里已经删掉、且宿主已读回确认不存在的引用。 */
+  removed: Set<string>
 }
 
 export interface HenjiScriptServiceOptions {
@@ -346,7 +353,7 @@ export class HenjiScriptService {
       parents: new Map(checkpoint.parents.map(({ ref, parent }) => [`${ref.kind}\u0000${ref.id}`, parent])),
       refs: new Map(checkpoint.resultRefs.map((ref) => [`${ref.kind}\u0000${ref.id}`, ref])),
       effects: [...checkpoint.effects], receipts: [...checkpoint.steps],
-      verificationEvidence: [...checkpoint.verificationState.evidence], submittedTasks: [],
+      verificationEvidence: [...checkpoint.verificationState.evidence], submittedTasks: [], removed: new Set(),
     }
   }
 
@@ -407,7 +414,26 @@ export class HenjiScriptService {
           instruction, args, state.parents, inferredCollectionParent,
         )
         const beforeEffects = state.effects.length
-        const result = await this.gatewayCall(toolName, input, instruction, scriptRunRef, context)
+        /*
+         * "删掉它，然后确认它不在了"——这是用户会原样说出口的话，脚本必须写得出来。
+         *
+         * 之前写不出来：`remove` 之后再 `read` 同一个引用必然抛 ENTITY_NOT_FOUND，整段脚本失败；
+         * 而 `list` 返回的 refs 在受限语言里没法过滤（不支持 .find/.filter，for...of 只能遍历
+         * 静态数组）。于是模型只能在"照做"和"脚本能跑"之间二选一。实测素材库那次它选了照做，
+         * 最后一段脚本失败，8 个真实写入全部没能封存。
+         *
+         * 这里让"读一个本段刚删掉的引用"返回 null，`app.assert.absent(...)` 就能自然收尾。
+         * 不是放宽校验：`entities.remove` 的 verifyEntityCall 刚刚已经 list 过一遍、确认它真的
+         * 不在了，本段脚本内这条信息是权威的。没删过的引用照旧硬报错。
+         */
+        const readingRemovedRef = instruction.api === 'entities.read'
+          && state.removed.has(refKey(fullRef(args[0], instruction.location)))
+        const result = readingRemovedRef
+          ? { output: null, effects: [], summary: '该引用已在本段脚本中删除并经正式状态源确认不存在。' }
+          : await this.gatewayCall(toolName, input, instruction, scriptRunRef, context)
+        if (readingRemovedRef) {
+          state.verificationEvidence.push(`${instruction.stepId}:absence-confirmed`)
+        }
         const calledDefinition = this.options.registry.get(toolName)
         const verificationContract = calledDefinition?.capability?.verificationContract
         if (verificationContract?.kind === 'effect_receipt') {
@@ -443,7 +469,9 @@ export class HenjiScriptService {
         const stepResult = isRecord(result.output)
           ? { ...result.output, resultRefs }
           : { value: result.output ?? null, resultRefs }
-        state.values.set(instruction.stepId, stepResult)
+        // 读一个本段已删除的引用，结果就是"没有"——直接存 null，`app.assert.absent(x)` 才能
+        // 按字面意思写。包成 { value: null } 的话模型得写 absent(x.value)，那是猜不出来的。
+        state.values.set(instruction.stepId, readingRemovedRef ? null : stepResult)
         stepRefs.forEach((ref, key) => state.refs.set(key, ref))
         if (instruction.api === 'entities.create') {
           const options = isRecord(args[1]) ? args[1] : {}
@@ -475,7 +503,7 @@ export class HenjiScriptService {
         } else if (instruction.api.startsWith('entities.') && instruction.api !== 'entities.list') {
           await this.verifyEntityCall(
             instruction, args, result.output, result.effects, scriptRunRef, context,
-            state.verificationEvidence, state.effects,
+            state.verificationEvidence, state.effects, state.removed,
           )
         } else if (this.options.registry.get(toolName)?.readOnly === true) {
           state.verificationEvidence.push(`${instruction.stepId}:${toolName}:formal-read`)
@@ -539,7 +567,7 @@ export class HenjiScriptService {
     const scriptRunRef = `henji-script:${randomUUID()}`
     const state: ScriptRuntimeState = {
       values: new Map(), parents: new Map(), refs: new Map(), effects: [], receipts: [],
-      verificationEvidence: [], submittedTasks: [],
+      verificationEvidence: [], submittedTasks: [], removed: new Set(),
     }
     try {
       const executionContext: ScriptExecutionContext = {
@@ -605,7 +633,28 @@ export class HenjiScriptService {
     else if (instruction.assertion === 'absent') passed = args[0] === null || args[0] === undefined || (Array.isArray(args[0]) && args[0].length === 0)
     else passed = typeof args[0] === 'string' && typeof args[1] === 'string' && args[0].includes(args[1])
     if (!passed) {
-      throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify', `断言 ${instruction.assertion} 未通过`, instruction.location, instruction.stepId)
+      /*
+       * 断言失败必须报出**实际值**，否则调用方连"到底差在哪"都不知道。
+       *
+       * 旧文案只有「断言 equal 未通过」。运行时手里明明有 actual 和 expected 两个值——实测
+       * 助手连撞两次 equal/matches，每次都只能整段重写脚本再猜一遍，而真实原因可能只是名称
+       * 多了个空格。这跟"实体类型写错不列出可用类型"是同一个病。
+       *
+       * matches 走 includes 语义，也一并说清楚：模型常按正则理解它。
+       */
+      const shown = (value: unknown): string => {
+        const text = typeof value === 'string' ? value : JSON.stringify(value) ?? String(value)
+        return text.length > 200 ? `${text.slice(0, 200)}…` : text
+      }
+      const detail = instruction.assertion === 'exists' || instruction.assertion === 'absent'
+        ? `实际值：${shown(args[0])}`
+        : `实际值：${shown(args[0])}；期望${instruction.assertion === 'matches' ? '包含' : ''}：${shown(args[1])}`
+      throw new HenjiScriptError(
+        'SCRIPT_VERIFICATION_FAILED', 'verify',
+        `断言 ${instruction.assertion} 未通过。${detail}`
+        + (instruction.assertion === 'matches' ? '（matches 是子串包含，不是正则匹配）' : ''),
+        instruction.location, instruction.stepId
+      )
     }
   }
 
@@ -618,6 +667,8 @@ export class HenjiScriptService {
     context: ScriptExecutionContext,
     evidence: string[],
     effectLedger: AgentObservedEffect[],
+    /** remove 成功并读回确认后登记；同段脚本内再读这个引用即视为已确认不存在。 */
+    removedRefs?: Set<string>,
   ): Promise<void> {
     if (instruction.api === 'entities.update') {
       const ref = fullRef(args[0], instruction.location)
@@ -663,6 +714,7 @@ export class HenjiScriptService {
         throw new HenjiScriptError('SCRIPT_VERIFICATION_FAILED', 'verify', '删除后实体仍存在', instruction.location, instruction.stepId)
       }
       evidence.push(`${instruction.stepId}:absence-read-back:${ref.kind}`)
+      removedRefs?.add(refKey(ref))
     }
   }
 }

@@ -115,6 +115,39 @@ describe('Henji Script compiler', () => {
     }
   })
 
+  /*
+   * 拒绝必须能被自我修正：只回一个 SyntaxKind 名字，调用方既不知道自己哪一行写了它，
+   * 也不知道该改成什么。实测素材库那次运行六段脚本里有四段死在语法上——循环展不开、
+   * JSON.stringify、正则字面量、new——四个回合一件事都没做成。
+   */
+  it.each([
+    {
+      label: 'new',
+      source: "const now = new Date(); await app.action('x', { at: now });",
+      contains: ['new Date()', '不要 new'],
+    },
+    {
+      label: 'JSON.stringify',
+      source: "const r = await app.action('x', {}); app.assert.equal(JSON.stringify(r), '{}');",
+      contains: ['JSON.stringify', 'app.assert.equal'],
+    },
+    {
+      label: '遍历读取结果',
+      source: "const r = await app.entities.list('asset', {}); for (const item of r.refs) { await app.entities.remove(item); }",
+      contains: ['r.refs', '字面量数组'],
+    },
+  ])('拒绝 $label 时同时给出原文与可用的替代写法', ({ source, contains }) => {
+    let message = ''
+    try {
+      compile(source)
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).not.toBe('')
+    for (const fragment of contains) expect(message).toContain(fragment)
+  })
+
+
   it('允许用静态字符串字面量读取带点号的公开属性 ID', () => {
     const plan = compile(`
       const entity = await app.entities.read(

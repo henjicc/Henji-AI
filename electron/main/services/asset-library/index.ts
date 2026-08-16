@@ -75,7 +75,35 @@ export function checkAssetPaths(filePaths: string[]): boolean[] {
   })
 }
 
-export function createLibrary(name: string): AssetLibraryDto { const now = Date.now(); const id = crypto.randomUUID(); getDb().prepare('INSERT INTO asset_libraries (id,name,created_at,updated_at) VALUES (?,?,?,?)').run(id, name.trim(), now, now); return { id, name: name.trim(), createdAt: now, updatedAt: now } }
+/**
+ * 素材库名称唯一冲突要翻译成人话，不能把 SQLite 的原文抛出去。
+ *
+ * `UNIQUE constraint failed: asset_libraries.name` 对调用方等于没有信息：它既不知道是哪个字段
+ * 冲突（"name" 是列名不是属性 ID），也不知道该改名还是改用已存在的那个。实测助手连撞两次，
+ * 每次都原样重试同一个名字。
+ */
+function translateLibraryNameConflict(error: unknown, name: string): Error {
+  const message = error instanceof Error ? error.message : String(error)
+  if (!/UNIQUE constraint failed:\s*asset_libraries\.name/i.test(message)) {
+    return error instanceof Error ? error : new Error(message)
+  }
+  return new Error(
+    `素材库名称「${name}」已被占用。换一个名称，或先用列表能力取到同名素材库的稳定引用直接使用它。`
+  )
+}
+
+export function createLibrary(name: string): AssetLibraryDto {
+  const now = Date.now()
+  const id = crypto.randomUUID()
+  const trimmed = name.trim()
+  try {
+    getDb().prepare('INSERT INTO asset_libraries (id,name,created_at,updated_at) VALUES (?,?,?,?)')
+      .run(id, trimmed, now, now)
+  } catch (error) {
+    throw translateLibraryNameConflict(error, trimmed)
+  }
+  return { id, name: trimmed, createdAt: now, updatedAt: now }
+}
 export function listLibraries(): AssetLibraryDto[] { return (getDb().prepare('SELECT * FROM asset_libraries ORDER BY name COLLATE NOCASE').all() as LibraryRow[]).map((row) => ({ id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at })) }
 export function inspectLibrary(id: string): AssetLibrarySnapshotDto {
   const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=?').get(id) as LibraryRow | undefined
@@ -85,7 +113,18 @@ export function inspectLibrary(id: string): AssetLibrarySnapshotDto {
   ).all(id) as Array<{ asset_id: string }>).map((item) => item.asset_id)
   return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at, assetIds }
 }
-export function renameLibrary(id: string, name: string): AssetLibraryDto { getDb().prepare('UPDATE asset_libraries SET name=?, updated_at=? WHERE id=?').run(name.trim(), Date.now(), id); const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=?').get(id) as LibraryRow | undefined; if (!row) throw new Error('资产库不存在'); return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at } }
+export function renameLibrary(id: string, name: string): AssetLibraryDto {
+  const trimmed = name.trim()
+  try {
+    getDb().prepare('UPDATE asset_libraries SET name=?, updated_at=? WHERE id=?')
+      .run(trimmed, Date.now(), id)
+  } catch (error) {
+    throw translateLibraryNameConflict(error, trimmed)
+  }
+  const row = getDb().prepare('SELECT * FROM asset_libraries WHERE id=?').get(id) as LibraryRow | undefined
+  if (!row) throw new Error('资产库不存在')
+  return { id: row.id, name: row.name, createdAt: row.created_at, updatedAt: row.updated_at }
+}
 export function deleteLibrary(id: string): void { getDb().prepare('DELETE FROM asset_libraries WHERE id=?').run(id) }
 export function restoreLibrary(snapshot: AssetLibrarySnapshotDto): AssetLibraryDto {
   logger.info('开始恢复素材集合', {
