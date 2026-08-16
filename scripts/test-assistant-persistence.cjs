@@ -43,6 +43,15 @@ const testFiles = [
     'services',
     'agent-runtime',
     'persistence',
+    'migration-13.test.ts'
+  ),
+  path.join(
+    workspaceRoot,
+    'electron',
+    'main',
+    'services',
+    'agent-runtime',
+    'persistence',
     'session-store.test.ts'
   ),
   path.join(

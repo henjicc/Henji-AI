@@ -7,13 +7,13 @@ import {
   type AgentEvent,
   type AgentEventInput,
 } from '../../../../../src/core/assistant/events'
+import { VERIFICATION_FAILURE_PREFIX } from '../../../../../src/core/assistant/workingSummaryReducer'
 import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import {
   assessInterruptedWorkingSummary,
   markWorkingSummaryRecoveryVerified,
   reduceAgentWorkingSummary,
 } from './working-summary'
-import { createSingleFacetTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 
 function event(input: AgentEventInput): AgentEvent {
   return agentEventSchema.parse({
@@ -30,7 +30,7 @@ describe('Agent 工作摘要', () => {
   it('从计划与工具事件重建步骤和稳定证据', () => {
     let summary = createAgentWorkingSummary('创建画布节点')
     summary = reduceAgentWorkingSummary(summary, event({
-      type: 'PlanUpdated', intent: 'canvas', summary: '先读取目录再创建', toolDomains: ['canvas'],
+      type: 'PlanUpdated', explicitUserIntent: true, intent: 'canvas', summary: '先读取目录再创建', toolDomains: ['canvas'],
     }), null)
     summary = reduceAgentWorkingSummary(summary, event({
       type: 'ToolRequested', toolCallId: 'call-1', toolName: 'create_node', title: '创建画布节点', inputDigest: 'digest',
@@ -67,45 +67,23 @@ describe('Agent 工作摘要', () => {
     })
   })
 
-  it('持久化 Facet 进展和结构化阻塞原因', () => {
-    const taskGraph = createSingleFacetTaskGraph({
-      goal: '修改三维镜头', facetId: 'camera', domain: 'camera_stage',
-      capabilityKinds: ['mutate'], completionCondition: '返回新的 revision',
-    })
-    let summary = createAgentWorkingSummary('修改三维镜头')
-    summary = reduceAgentWorkingSummary(summary, event({
-      type: 'PlanUpdated', intent: 'camera_stage', summary: '修改镜头',
-      toolDomains: ['camera_stage'], taskGraph,
-    }), null)
-    summary = reduceAgentWorkingSummary(summary, event({
-      type: 'FacetProgressed',
-      facetId: 'camera',
-      status: 'blocked',
-      progressKind: 'revision_conflict',
-      summary: '相同 base revision 冲突后未刷新。',
-      evidence: ['toolbox@4'],
-      blocker: '需要先读取最新 revision。',
-    }), null)
-
-    expect(summary.route?.taskGraph?.facets[0]).toMatchObject({
-      status: 'blocked',
-      statusReason: '需要先读取最新 revision。',
-      evidence: ['toolbox@4'],
-    })
-    expect(summary.unresolvedItems).toContain('camera：需要先读取最新 revision。')
-  })
-
-  it('后续验证通过时清除已经解决的 Facet 未结算提示', () => {
+  /*
+   * 验证未通过的记录必须能被后来的一次通过清掉——unresolvedItems 非空会让 executionSealingBlocker
+   * 拒绝封存，清不掉就等于整次运行再也封存不了。回收靠固定前缀，不靠匹配那句话的内容。
+   */
+  it('后续验证通过时清除上一次验证失败留下的未收敛项', () => {
     let summary = createAgentWorkingSummary('播放动画')
     summary = reduceAgentWorkingSummary(summary, event({
       type: 'VerificationCompleted', passed: false,
-      summary: '任务图仍有 1 个 Facet 未结算，不能提前结束。', evidence: [],
+      summary: '播放状态没有读回 playing=true。', evidence: [],
     }), null)
-    expect(summary.unresolvedItems).toContain('任务图仍有 1 个 Facet 未结算，不能提前结束。')
+    expect(summary.unresolvedItems).toEqual([
+      `${VERIFICATION_FAILURE_PREFIX}播放状态没有读回 playing=true。`,
+    ])
 
     summary = reduceAgentWorkingSummary(summary, event({
       type: 'VerificationCompleted', passed: true,
-      summary: '任务图全部完成。', evidence: ['playback:playing=true'],
+      summary: '脚本逐步验证通过。', evidence: ['playback:playing=true'],
     }), null)
     expect(summary.unresolvedItems).toEqual([])
   })

@@ -2,7 +2,7 @@ import type {
   HenjiScriptApiProjection,
   HenjiScriptPropertyDefinition,
 } from '../../../../../src/core/assistant/capabilityDiscovery'
-import type { AgentTaskEffectKind } from '../../../../../src/core/assistant/taskGraph'
+import type { AgentEffectKind } from '../../../../../src/core/assistant/observedEffect'
 
 export interface HenjiScriptApiLease {
   actions: ReadonlySet<string>
@@ -10,7 +10,7 @@ export interface HenjiScriptApiLease {
   entityTypes: ReadonlySet<string>
   propertyIds: ReadonlySet<string>
   propertyDefinitions: ReadonlyMap<string, HenjiScriptPropertyDefinition>
-  forbiddenEffects?: ReadonlySet<AgentTaskEffectKind>
+  forbiddenEffects?: ReadonlySet<AgentEffectKind>
 }
 
 const leases = new Map<string, HenjiScriptApiLease>()

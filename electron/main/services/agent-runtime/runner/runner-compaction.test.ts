@@ -70,8 +70,7 @@ function routerResult(input: ModelStepInput): ModelStepResult {
   return result(input, {
     text: '', structuredOutput: {
       intent: 'general', candidateIntents: ['general'], toolDomains: ['catalog'],
-      explicitUserIntent: false,
-      complexity: 'simple', reason: '持续对话',
+      explicitUserIntent: false, reason: '持续对话',
     }, responseMessages: [{ role: 'assistant', content: '' }],
   })
 }

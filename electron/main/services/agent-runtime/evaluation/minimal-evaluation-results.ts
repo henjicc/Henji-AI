@@ -22,7 +22,7 @@ export interface MinimalEvaluationCaseResult {
     capabilityDiscoveryCalls: number
     batchRate: number
     toolNotActiveCount: number
-    effectSatisfactionRate: number
+    verifiedEffectRate: number
     knownCostUsd: number | null
   }
 }
@@ -46,7 +46,7 @@ export interface MinimalEvaluationSummary {
   ordinaryEfficiencyPassRate: number
   averageBatchRate: number
   totalToolNotActiveCount: number
-  averageEffectSatisfactionRate: number
+  averageVerifiedEffectRate: number
   toolAccuracyRate: number
   parameterAccuracyRate: number
   planAccuracyRate: number

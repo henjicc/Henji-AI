@@ -273,6 +273,26 @@ describe('ApplicationReflectionRegistry', () => {
     expect(message).toContain('sample.level')
   })
 
+  /*
+   * 同一条道理往上挪一层：实体类型是脚本里第一个要写对的东西，写错就一步都走不了。
+   *
+   * 实测助手为了改一个设置值连着猜了 settings.preference / settings.value / application.setting
+   * 三个不存在的类型，中间四次重新发现能力都没能纠正——因为 `ENTITY_TYPE_NOT_FOUND:settings.value`
+   * 这句话里根本没有"那到底叫什么"。整次运行 17 回合、24.9 万 token，最终一个写入都没做成。
+   */
+  it('实体类型写错时报出真正注册了哪些实体', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register(registration())
+    let message = ''
+    try {
+      await registry.listEntities('sample.itm', { limit: 10 }, assistantContext)
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('ENTITY_TYPE_NOT_FOUND')
+    expect(message).toContain('sample.item')
+  })
+
   it('引用格式写错时报出正确形状、允许的 kind 和实际收到的东西', () => {
     const registry = new ApplicationReflectionRegistry(catalogVersion)
     registry.register(registration())

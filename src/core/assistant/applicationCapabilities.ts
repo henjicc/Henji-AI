@@ -15,7 +15,7 @@ import type {
   AgentToolPreview,
 } from './toolContracts'
 import type { HostScope } from './hostContracts'
-import type { AgentObservedEffect } from './taskGraph'
+import type { AgentObservedEffect } from './observedEffect'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from './toolBudget'
 
 const applicationCapabilityRiskSchema = z.enum(['R0', 'R1', 'R2', 'R3', 'R4'])

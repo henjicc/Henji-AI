@@ -4,7 +4,6 @@ import type { CanvasBatchOperation } from '../../../../../src/core/assistant/cap
 import type { CanvasNodePlacement } from '../../../../../src/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import type { AgentToolRegistry } from '../tools/registry'
 import { digestJson } from '../tools/security'
-import type { AgentTaskActionGroup } from '../../../../../src/core/assistant/taskGraph'
 
 export const COMPILED_ACTION_GROUP_VERSION = 'compiled-action-group/v1' as const
 
@@ -12,7 +11,7 @@ export interface CompiledActionGroup {
   version: typeof COMPILED_ACTION_GROUP_VERSION
   actionGroupId: string
   digest: string
-  mode: 'parallel_read' | 'atomic_batch' | 'ordered_write' | 'dependent'
+  mode: 'parallel_read' | 'atomic_batch' | 'ordered_write'
   memberCalls: readonly ModelStepToolCall[]
   executableCalls: readonly ModelStepToolCall[]
   reversible: boolean
@@ -164,47 +163,34 @@ function compileReflectionTransaction(
   })
 }
 
-type ActionGroupHint = Pick<AgentTaskActionGroup, 'actionGroupId' | 'mode'>
-
+/**
+ * 把本轮的一组调用编译成一个可执行组。
+ *
+ * 这里曾经接受一个 `resolveActionGroup` 提示，按任务图声明的 Action Group 把调用分桶，并让
+ * 任务图声明的 mode 覆盖真实推导——分桶依据是运行前的猜测，猜错就把本该合成一次事务的调用
+ * 拆开，或者反过来。现在分组只看**本轮实际发来的调用**：能合成画布批次就合，能合成一次反射
+ * 事务就合，都不能就按元数据判并行读还是顺序写。
+ */
 function compileCallSet(
   calls: ModelStepToolCall[],
   expectedRevisions: Partial<HostScopeRevisions>,
-  registry: AgentToolRegistry,
-  hint: ActionGroupHint | null
+  registry: AgentToolRegistry
 ): CompiledActionGroup {
-  const canvas = hint?.mode === 'atomic_batch' || !hint
-    ? compileCanvasBatch(calls, expectedRevisions, registry)
-    : null
-  if (canvas) return hint
-    ? deepFreeze({
-        ...canvas,
-        actionGroupId: hint.actionGroupId,
-        digest: digestJson({ digest: canvas.digest, actionGroupId: hint.actionGroupId, mode: hint.mode }),
-      })
-    : canvas
-  const reflection = hint?.mode === 'atomic_batch' || !hint
-    ? compileReflectionTransaction(calls, expectedRevisions, registry)
-    : null
-  if (reflection) return hint
-    ? deepFreeze({
-        ...reflection,
-        actionGroupId: hint.actionGroupId,
-        digest: digestJson({ digest: reflection.digest, actionGroupId: hint.actionGroupId, mode: hint.mode }),
-      })
-    : reflection
+  const canvas = compileCanvasBatch(calls, expectedRevisions, registry)
+  if (canvas) return canvas
+  const reflection = compileReflectionTransaction(calls, expectedRevisions, registry)
+  if (reflection) return reflection
   const metadata = calls.map((call) => registry.executionMetadata(call.toolName, call.input))
   const digest = digestJson({ calls: calls.map((call) => ({
     toolName: call.toolName, input: call.input,
   })), expectedRevisions })
   return deepFreeze({
     version: COMPILED_ACTION_GROUP_VERSION,
-    actionGroupId: hint?.actionGroupId ?? `calls_${digest.slice(-16)}`,
-    digest: digestJson({ digest, actionGroupId: hint?.actionGroupId ?? null, mode: hint?.mode ?? null }),
-    mode: hint?.mode === 'dependent'
-      ? 'dependent'
-      : metadata.every((item) => item?.parallelSafe && item.risk === 'R0')
-        ? 'parallel_read'
-        : 'ordered_write',
+    actionGroupId: `calls_${digest.slice(-16)}`,
+    digest: digestJson({ digest, actionGroupId: null, mode: null }),
+    mode: metadata.every((item) => item?.parallelSafe && item.risk === 'R0')
+      ? 'parallel_read'
+      : 'ordered_write',
     memberCalls: Object.freeze([...calls]),
     executableCalls: Object.freeze([...calls]),
     reversible: calls.every((call) => (
@@ -217,27 +203,7 @@ function compileCallSet(
 export function compileActionGroups(
   calls: ModelStepToolCall[],
   expectedRevisions: Partial<HostScopeRevisions>,
-  registry: AgentToolRegistry,
-  resolveActionGroup?: (call: ModelStepToolCall) => ActionGroupHint | null
+  registry: AgentToolRegistry
 ): CompiledActionGroup[] {
-  const immutableCalls = freezeCalls(calls)
-  if (!resolveActionGroup) {
-    return [compileCallSet(immutableCalls, expectedRevisions, registry, null)]
-  }
-  const groups: Array<{ hint: ActionGroupHint | null; calls: ModelStepToolCall[] }> = []
-  const groupIndexes = new Map<string, number>()
-  for (const [index, call] of immutableCalls.entries()) {
-    const hint = resolveActionGroup(call)
-    const key = hint?.actionGroupId ?? `unplanned_${index}`
-    const existingIndex = groupIndexes.get(key)
-    if (existingIndex === undefined) {
-      groupIndexes.set(key, groups.length)
-      groups.push({ hint, calls: [call] })
-    } else {
-      groups[existingIndex]?.calls.push(call)
-    }
-  }
-  return groups.map((group) => (
-    compileCallSet(group.calls, expectedRevisions, registry, group.hint)
-  ))
+  return [compileCallSet(freezeCalls(calls), expectedRevisions, registry)]
 }

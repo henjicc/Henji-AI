@@ -12,7 +12,7 @@ import { AgentEventStream } from './event-stream'
 import { serializeError } from './runner-results'
 import type { AgentStateMachine } from './state-machine'
 import { reduceAgentWorkingSummary } from './working-summary'
-import { agentObservedEffectSchema, type AgentObservedEffect } from '../../../../../src/core/assistant/taskGraph'
+import { agentObservedEffectSchema, type AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
 
 const logger = createMainLogger('main.agent_runtime')
 
@@ -136,13 +136,18 @@ export class AgentRunnerLifecycle {
     this.finishTerminal()
   }
 
+  /**
+   * 最终说明生成失败时的兜底文案。
+   *
+   * 只能由**已经发生的事实**拼成：封存时记下的验证摘要，以及 Effect 里真实出现过的实体类型。
+   * 旧实现读的是任务图里 status 为 completed 的 Facet goal——那是运行前的计划文本，说的是
+   * "本来打算做什么"，而这条消息出现的场合恰恰是"事情做完了但话没说出来"。
+   */
   private fallbackSummary(): string {
     const outcome = this.options.state.executionOutcome
-    const completedGoals = this.options.state.workingSummary?.route?.taskGraph?.facets
-      .filter((facet) => facet.status === 'completed')
-      .map((facet) => facet.goal)
-      .slice(0, 6) ?? []
-    const completed = completedGoals.length > 0 ? completedGoals.join('、') : outcome.verificationSummary.summary
+    const entityTypes = [...new Set(outcome.effects.flatMap((effect) => effect.entityTypes))].slice(0, 6)
+    const completed = outcome.verificationSummary.summary
+      || (entityTypes.length > 0 ? `已修改 ${entityTypes.join('、')}` : '')
     return `应用操作已经完成，并通过结构化状态验证。已完成：${completed || '已验证的应用修改'}。最终说明生成失败，可继续使用当前结果。`
   }
 

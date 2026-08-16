@@ -144,7 +144,6 @@ function routerResult(input: ModelStepInput): ModelStepResult {
     text: '',
     structuredOutput: {
       intent: 'general',
-      complexity: 'simple',
       path: 'primary',
       toolDomains: ['diagnostics'],
       reason: '测试模型输出完整性',

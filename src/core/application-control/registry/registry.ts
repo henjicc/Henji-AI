@@ -375,8 +375,32 @@ export class ApplicationReflectionRegistry {
 
   private requireEntity(entityType: string): ApplicationEntityTypeDescriptor {
     const entity = this.entities.get(entityType)
-    if (!entity) throw new Error(`ENTITY_TYPE_NOT_FOUND:${entityType}`)
+    if (!entity) throw new Error(`ENTITY_TYPE_NOT_FOUND:${entityType}${this.entityTypeSuggestion(entityType)}`)
     return entity
+  }
+
+  /**
+   * 实体类型写错时，把这个域里真正注册了哪些实体告诉对方。
+   *
+   * 与 propertySuggestion 同一条道理，只是代价更大：实体类型是脚本里第一个要写对的东西，写错
+   * 就一步都走不了。实测助手为了改一个设置值，连着猜了 `settings.preference`、`settings.value`、
+   * `application.setting` 三个都不存在的类型，四次重新发现能力都没能纠正——因为
+   * `ENTITY_TYPE_NOT_FOUND:settings.value` 这句话里根本没有"那到底叫什么"的信息。它不是在犯傻，
+   * 是运行时知道答案却不肯说。
+   *
+   * 前缀同域的排在前面（`settings.value` 命中 `settings.registry`）；同域没有就给全量清单——
+   * 注册实体本来就是有限的几十条，全说出来远比让它继续猜便宜。
+   */
+  private entityTypeSuggestion(entityType: string): string {
+    const available = [...this.entities.keys()]
+    if (available.length === 0) return '（当前上下文没有注册任何实体类型）'
+    const domain = entityType.split('.')[0] ?? ''
+    const sameDomain = domain.length >= 3
+      ? available.filter((candidate) => candidate.startsWith(`${domain}.`))
+      : []
+    const listed = (sameDomain.length > 0 ? sameDomain : available).slice(0, 32)
+    return `（${sameDomain.length > 0 ? `${domain} 域已注册的实体类型` : '可用实体类型'}：`
+      + `${listed.join('、')}${listed.length < (sameDomain.length > 0 ? sameDomain.length : available.length) ? ' …' : ''}）`
   }
 
   private requireProperty(entityType: string, propertyId: string): ApplicationPropertyDescriptor {

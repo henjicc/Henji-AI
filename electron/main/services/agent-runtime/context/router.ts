@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import { createMainLogger } from '../../logging'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import { createSingleFacetTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 import {
   AGENT_INTENTS,
   AGENT_TOOL_DOMAINS,
@@ -10,12 +9,7 @@ import {
   type AgentRouteDecision,
   type AgentToolDomain,
 } from './types'
-import {
-  createDeterministicTaskGraph,
-  createModelTaskGraph,
-  tryCreateModelTaskGraph,
-} from './task-facets'
-import { asksToGenerateMedia, hasAffirmativeIntent, inferIntentTaskSemantics } from './task-intent-semantics'
+import { asksToGenerateMedia, hasAffirmativeIntent } from './task-intent-semantics'
 import {
   continuationDomains,
   describeContinuationForRouter,
@@ -30,7 +24,6 @@ const routerModelDecisionSchema = z.object({
   // 工具权限仍只由本地 routePolicy 和白名单值决定，绝不采纳模型自由生成的对象。
   candidateIntents: z.unknown().optional(),
   toolDomains: z.unknown().optional(),
-  complexity: z.unknown().optional(),
   reason: z.unknown().optional(),
 }).passthrough()
 
@@ -83,9 +76,11 @@ const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'toolDomains'>> 
   read_generation: { toolDomains: ['generation'] },
   cancel_generation: { toolDomains: ['generation'] },
   diagnose: { toolDomains: ['diagnostics'] },
-  canvas: { toolDomains: ['canvas'] },
+  // canvas 与 camera_stage 带上 navigation：这两类任务写完之后几乎总要把用户带到能看见结果的
+  // 页面上（提示词里明写了这条），锚点工具里没有导航能力就得多绕一轮发现。
+  canvas: { toolDomains: ['canvas', 'navigation'] },
   toolbox: { toolDomains: ['toolbox'] },
-  camera_stage: { toolDomains: ['toolbox', 'camera_stage'] },
+  camera_stage: { toolDomains: ['toolbox', 'camera_stage', 'navigation'] },
   storyboard: { toolDomains: ['storyboard'] },
   image_edit: { toolDomains: ['toolbox', 'image_edit', 'assets'] },
   assets: { toolDomains: ['assets'] },
@@ -110,10 +105,6 @@ function selectEnumValues<TValue extends string>(
   return uniqueValues(value.filter((item): item is TValue => (
     typeof item === 'string' && allowedValues.has(item)
   )), limit)
-}
-
-function selectComplexity(value: unknown): AgentRouteDecision['complexity'] {
-  return value === 'simple' || value === 'multi_step' || value === 'ambiguous' ? value : 'ambiguous'
 }
 
 function selectReason(value: unknown, intent: AgentIntent): string {
@@ -170,6 +161,17 @@ const deterministicRules: DeterministicRule[] = [
     /(?:素材库|素材集合|素材集|asset (?:library|collection))/i.test(goal)
     && hasAffirmativeIntent(goal, /(?:创建|新建|改名|重命名|查询|查看|标签|集合|选择|删除|移除)/i)
   ) },
+  /*
+   * 三维镜头参考的领域信号。
+   *
+   * 这里原先接的是 `createDeterministicTaskGraph`——约三百行中文正则，除了判领域还要推出
+   * "该有几个 Facet、每个 Facet 要几个 Effect"。推出来的数量只要和模型实际写的对不上，运行
+   * 就再也结算不了。数量的唯一权威是脚本解释器的逐属性读回，所以那部分整体删除，只留下这条
+   * 判**领域**的软信号：判错的代价是候选能力排序偏一点，不是运行卡死。
+   */
+  { intent: 'camera_stage', matches: regexMatcher(
+    /(?:三维|3d)\s*(?:工程|场景|编辑器|项目)|镜头参考|运镜|关键帧|(?:摄像机|相机|camera).{0,12}(?:位置|视角|轨迹|fov)/i
+  ) },
   { intent: 'workflow', matches: regexMatcher(/(?:工作流|workflow)/i) },
   { intent: 'memory', matches: regexMatcher(/(?:助手记忆|长期记忆|记住这|忘记这|agent memory)/i) },
   { intent: 'toolbox', matches: regexMatcher(/(?:工具箱|toolbox).{0,16}(?:有什么|状态|工具)/i) },
@@ -192,25 +194,6 @@ function deterministicRoute(
   snapshot: HostContextSnapshot
 ): AgentRouteDecision | null {
   const normalized = goal.normalize('NFKC')
-  const composite = createDeterministicTaskGraph(goal, snapshot)
-  if (composite) {
-    const intent = composite.intents.includes('camera_stage')
-      ? 'camera_stage'
-      : composite.intents.includes('canvas') ? 'canvas' : composite.intents[0] ?? 'general'
-    const toolDomains = uniqueValues([
-      ...composite.intents.flatMap((candidate) => routePolicy[candidate].toolDomains),
-      ...composite.domains,
-      'catalog',
-    ], 8)
-    return {
-      intent,
-      complexity: 'multi_step',
-      toolDomains,
-      reason: `识别为 ${composite.graph.facets.length} 个有依赖的跨领域任务 Facet`,
-      explicitUserIntent: true,
-      taskGraph: composite.graph,
-    }
-  }
   if (
     snapshot.surface?.id === 'workspace.generation'
     && !asksToGenerateMedia(normalized)
@@ -218,67 +201,28 @@ function deterministicRoute(
   ) {
     return {
       intent: 'read_generation',
-      complexity: /(?:编辑|标注|裁剪|旋转|文字|矩形)/i.test(normalized) ? 'multi_step' : 'simple',
       toolDomains: ['generation', 'image_edit', 'catalog'],
       reason: '当前生成页面中的相对指代锚定生成历史',
       explicitUserIntent: true,
-      taskGraph: createSingleFacetTaskGraph({
-        goal,
-        facetId: 'generation_history',
-        domain: 'generation',
-        targetSurfaceId: snapshot.surface.id,
-        capabilityKinds: ['observe', 'query'],
-        effect: 'observe',
-        entityTypes: ['generation.record', 'generation.result'],
-        completionCondition: '返回目标生成记录或明确说明没有符合条件的记录。',
-      }),
     }
   }
   if (
     /(?:设置|偏好|毛玻璃|主题|圆角|启动页面|上传服务)/i.test(normalized)
     || /\b(?:general|interface|storage)\.[a-z][a-z0-9_.-]*/i.test(normalized)
   ) {
-    const taskSemantics = inferIntentTaskSemantics('settings', goal)
-    const restoresOriginalValue = taskSemantics.effect === 'update'
-      && /(?:恢复|还原|改回|切回|restore|revert).{0,12}(?:原值|原来|之前|original|previous)|(?:原值|原来|之前).{0,12}(?:恢复|还原|改回|切回)/i.test(normalized)
     return {
       intent: 'settings',
-      complexity: /(?:并且|同时|批量|以及)/i.test(normalized) ? 'multi_step' : 'simple',
       toolDomains: ['settings', 'navigation', 'catalog'],
       reason: '识别为应用设置查询或修改',
       explicitUserIntent: true,
-      taskGraph: createSingleFacetTaskGraph({
-        goal,
-        facetId: 'settings',
-        domain: 'settings',
-        targetSurfaceId: snapshot.surface?.id,
-        capabilityKinds: taskSemantics.capabilityKinds,
-        effect: taskSemantics.effect,
-        entityTypes: taskSemantics.entityTypes,
-        minimumCount: restoresOriginalValue ? 2 : 1,
-        verificationRequired: taskSemantics.effect === 'update',
-        completionCondition: '设置读取或变更结果包含稳定设置 ID 与 revision。',
-      }),
     }
   }
   if (/(?:图片编辑|矩形标注|文字标注|裁剪图片|旋转图片)/i.test(normalized)) {
-    const taskSemantics = inferIntentTaskSemantics('image_edit', goal)
     return {
       intent: 'image_edit',
-      complexity: 'multi_step',
       toolDomains: ['image_edit', 'generation', 'assets', 'catalog'],
       reason: '识别为图片编辑任务',
       explicitUserIntent: true,
-      taskGraph: createSingleFacetTaskGraph({
-        goal,
-        facetId: 'image_edit',
-        domain: 'image_edit',
-        targetSurfaceId: 'tool.image_edit',
-        capabilityKinds: taskSemantics.capabilityKinds,
-        effect: taskSemantics.effect,
-        entityTypes: taskSemantics.entityTypes,
-        completionCondition: '返回图片编辑会话或预览稳定引用及 revision。',
-      }),
     }
   }
   const matches = deterministicRules.filter((rule) => rule.matches(goal))
@@ -288,28 +232,13 @@ function deterministicRoute(
   if (generationMatch) matches.splice(0, matches.length, generationMatch)
   if (matches.length !== 1) return null
   const [match] = matches
-  const taskSemantics = inferIntentTaskSemantics(match.intent, goal)
   return {
     intent: match.intent,
-    complexity: 'simple',
     toolDomains: match.toolDomains ?? routePolicy[match.intent].toolDomains,
     reason: `命中确定性 ${match.intent} 规则`,
     // 能力概览规则（intent=general，toolDomains 为空）只是回答"你能做什么"，不是应用任务，
     // 不发放 R1 写工具的自动放行位；其余确定性规则都命中了一个具体动作。
     explicitUserIntent: match.intent !== 'general',
-    taskGraph: createSingleFacetTaskGraph({
-      goal,
-      facetId: match.intent,
-      domain: (match.toolDomains ?? routePolicy[match.intent].toolDomains)[0] ?? 'catalog',
-      targetSurfaceId: snapshot.surface?.id,
-      capabilityKinds: taskSemantics.capabilityKinds,
-      effect: taskSemantics.effect,
-      entityTypes: taskSemantics.entityTypes,
-      verificationRequired: match.intent === 'generate',
-      completionCondition: match.intent === 'general'
-        ? '直接回答用户问题且不声称执行未发生的动作。'
-        : '目标动作具有结构化结果或明确的受阻说明。',
-    }),
   }
 }
 
@@ -352,7 +281,6 @@ export class AgentIntentRouter {
         const requestedDomains = selectEnumValues(classified.toolDomains, AGENT_TOOL_DOMAINS, 6)
         const decision: AgentRouteDecision = {
           intent: classified.intent,
-          complexity: selectComplexity(classified.complexity),
           toolDomains: resolveCandidateDomains(
             classified.intent,
             candidateIntents,
@@ -361,22 +289,6 @@ export class AgentIntentRouter {
           reason: selectReason(classified.reason, classified.intent),
           // 路由模型判成 general 说明它没识别出具体应用任务；此时不发放 R1 写工具的自动放行位。
           explicitUserIntent: classified.intent !== 'general',
-        }
-        const planned = tryCreateModelTaskGraph({
-          goal,
-          rawFacets: classified.taskFacets,
-          primaryIntent: classified.intent,
-          candidateDomains: decision.toolDomains,
-          snapshot,
-        })
-        if (planned || classified.intent !== 'general') {
-          decision.taskGraph = planned ?? createModelTaskGraph({
-            goal,
-            rawFacets: classified.taskFacets,
-            primaryIntent: classified.intent,
-            candidateDomains: decision.toolDomains,
-            snapshot,
-          })
         }
         const widened = widen(decision)
         this.logDecision(runId, widened)
@@ -407,21 +319,11 @@ export class AgentIntentRouter {
     }
     const fallback: AgentRouteDecision = {
       intent: 'general',
-      complexity: 'ambiguous',
       toolDomains: ['catalog'],
       reason: '确定性规则未命中，router 不可用或分类失败',
       // 兜底说明本轮**没有**识别出用户想做什么。此时绝不能自动放行写工具——
       // 那正好是最不该假设"用户明确要求过"的时刻。
       explicitUserIntent: false,
-      taskGraph: createSingleFacetTaskGraph({
-        goal,
-        facetId: 'clarify_goal',
-        domain: 'catalog',
-        targetSurfaceId: snapshot.surface?.id,
-        capabilityKinds: ['query'],
-        completionCondition: '向用户提出一个最小澄清问题，或明确说明不支持的边界。',
-        uncertainty: '确定性规则和路由模型均未形成可信任务分解。',
-      }),
     }
     const widenedFallback = widen(fallback)
     this.logDecision(runId, widenedFallback)
@@ -434,11 +336,9 @@ export class AgentIntentRouter {
       requestId: runId,
       context: {
         intent: decision.intent,
-        complexity: decision.complexity,
         explicitUserIntent: decision.explicitUserIntent,
         toolDomains: decision.toolDomains,
         continuationDomains: decision.continuationDomains ?? [],
-        taskFacetIds: decision.taskGraph?.facets.map((facet) => facet.facetId) ?? [],
       },
     })
   }

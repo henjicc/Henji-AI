@@ -120,9 +120,9 @@ export async function runRouterModelClassification(
       '根据完整语义分类，不依赖固定关键词，也不要把内容题材误判成模型搜索。',
       'generate 表示生成图片、视频或音频；diagnose 表示寻找错误原因或解决办法；canvas 表示操作画布或项目；memory 表示用户明确要求查看、保存、纠正或删除助手长期记忆。',
       'intent 是当前最可能主意图；candidateIntents 和 toolDomains 用于表达跨工作区、多步骤或不确定任务的合法候选，不能用它们请求越权能力。',
-      '把 multi_step、多个目标或多个写入效果的需求拆成 taskFacets。每个 Facet 只表达一个可验证目标，并声明 requiredEffects；不要猜工具名或业务参数。',
-      'requiredEffects 必须忠实保留数量词和稳定目标：例如“创建两个节点”使用 minimumCount=2。effect 只能是 observe/create/update/delete/navigate/execute。',
-      '同一批可一起提交的 Effect 使用相同 actionGroupId；依赖前一步输出引用的步骤必须拆成有 dependsOn 的 Facet。verificationRequired 表示写入后必须有独立结构化读取证据。',
+      // 只判领域，不拆步骤：拆步骤要在动手前猜"会做几件事、每件产生什么 Effect"，猜错就没有出口。
+      // 那部分整体删除了，判错领域的代价只是候选能力排序偏一点，主模型仍可自己写发现请求要回来。
+      '不要规划步骤、不要预测会产生哪些写入效果：那些由主模型看着完整会话历史决定。',
       // 当前页面只是弱证据：用户常在 A 页面下达针对 B 页面的指令，尤其是承接上一轮任务时。
       '宿主快照说明用户此刻在哪，不代表任务属于那里。若延续证据显示上一轮在别的领域，优先按上一轮的领域分类，并把需要的领域写进 toolDomains。',
       '输出必须符合给定 JSON 结构。',
@@ -154,73 +154,9 @@ export async function runRouterModelClassification(
           toolDomains: {
             type: 'array', maxItems: 6, items: { type: 'string', enum: [...AGENT_TOOL_DOMAINS] },
           },
-          complexity: { type: 'string', enum: ['simple', 'multi_step', 'ambiguous'] },
           reason: { type: 'string', maxLength: 500 },
-          taskFacets: {
-            type: 'array',
-            minItems: 1,
-            maxItems: 16,
-            items: {
-              type: 'object',
-              properties: {
-                facetId: { type: 'string', pattern: '^[a-z][a-z0-9_-]{1,63}$' },
-                domain: { type: 'string', enum: [...AGENT_TOOL_DOMAINS] },
-                goal: { type: 'string', maxLength: 1_000 },
-                targetEntityTypes: { type: 'array', maxItems: 16, items: { type: 'string' } },
-                observationKinds: {
-                  type: 'array', maxItems: 4,
-                  items: { type: 'string', enum: ['current_surface', 'entity_state', 'entity_schema', 'operation_schema'] },
-                },
-                capabilityKinds: {
-                  type: 'array', minItems: 1, maxItems: 6,
-                  items: { type: 'string', enum: ['observe', 'query', 'plan', 'mutate', 'navigate', 'execute'] },
-                },
-                targetSurfaceId: { type: ['string', 'null'] },
-                dependsOn: { type: 'array', maxItems: 12, items: { type: 'string' } },
-                parallelizable: { type: 'boolean' },
-                completionConditions: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'string' } },
-                requiredEffects: {
-                  type: 'array', minItems: 1, maxItems: 32,
-                  items: {
-                    type: 'object',
-                    properties: {
-                      effectId: { type: 'string', pattern: '^[a-z][a-z0-9_-]{1,63}$' },
-                      effect: { type: 'string', enum: ['observe', 'create', 'update', 'delete', 'navigate', 'execute'] },
-                      entityTypes: { type: 'array', maxItems: 16, items: { type: 'string' } },
-                      propertyIds: { type: 'array', maxItems: 128, items: { type: 'string' } },
-                      minimumCount: { type: 'integer', minimum: 1, maximum: 256 },
-                      targetRefs: {
-                        type: 'array', maxItems: 128,
-                        items: {
-                          type: 'object',
-                          properties: { kind: { type: 'string' }, id: { type: 'string' } },
-                          required: ['kind', 'id'],
-                          additionalProperties: false,
-                        },
-                      },
-                      verificationRequired: { type: 'boolean' },
-                      actionGroupId: { type: 'string', pattern: '^[a-z][a-z0-9_-]{1,63}$' },
-                    },
-                    required: [
-                      'effectId', 'effect', 'entityTypes', 'propertyIds', 'minimumCount',
-                      'targetRefs', 'verificationRequired', 'actionGroupId',
-                    ],
-                    additionalProperties: false,
-                  },
-                },
-                uncertainties: { type: 'array', maxItems: 8, items: { type: 'string' } },
-                confidence: { type: 'number', minimum: 0, maximum: 1 },
-              },
-              required: [
-                'facetId', 'domain', 'goal', 'targetEntityTypes', 'observationKinds',
-                'capabilityKinds', 'targetSurfaceId', 'dependsOn', 'parallelizable',
-                'completionConditions', 'requiredEffects', 'uncertainties', 'confidence',
-              ],
-              additionalProperties: false,
-            },
-          },
         },
-        required: ['intent', 'candidateIntents', 'toolDomains', 'complexity', 'reason', 'taskFacets'],
+        required: ['intent', 'candidateIntents', 'toolDomains', 'reason'],
         additionalProperties: false,
       },
     },

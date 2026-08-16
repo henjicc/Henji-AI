@@ -37,7 +37,7 @@ import { AgentRunnerLifecycle } from './lifecycle'
 import { AgentTerminalApprovalCleanup } from './terminal-approval-cleanup'
 import { AgentConversationCompactor } from './conversation-compactor'
 import { AgentModelTurnCoordinator } from './model-turn-coordinator'
-import { AgentToolExecutionCoordinator, toAgentFacetProgressEvent } from './tool-execution-coordinator'
+import { AgentToolExecutionCoordinator } from './tool-execution-coordinator'
 import { AgentSavePointCoordinator } from './save-point-coordinator'
 import { AgentTurnContextCoordinator } from './turn-context-coordinator'
 import { logAgentToolActivation } from './activation-logging'
@@ -61,7 +61,6 @@ import { routeAgentGoal } from './route-goal'
 import { requireFinalResponseEvidence } from './final-response'
 import { createRunnerModelOutputGuard, createRunnerThreadTitleCoordinator } from './runner-components'
 import { createRunnerConversation } from './runner-conversation'
-import { AgentFacetProgressTracker } from './facet-progress'
 import { prepareAgentAttachmentContext } from './attachment-context'
 import { agentAttachmentSchema, type AgentAttachment } from '../../../../../src/core/assistant/attachments'
 import { readPendingVisualObservation } from '../../../../../src/core/assistant/surfaceObservation'
@@ -90,16 +89,11 @@ function restoreAgentRoute(
   const toolDomains = recovered.toolDomains.filter(isAgentToolDomain)
   return {
     intent: isAgentIntent(recovered.intent) ? recovered.intent : 'general',
-    complexity: recovered.taskGraph ? 'multi_step' : 'simple',
     toolDomains,
     reason: recovered.summary,
-    /*
-     * 恢复出来的运行沿用原来的授权判定：有任务图说明当初识别出了具体应用任务。
-     * 保存点里没有单独存这个位，所以用任务图存在与否作为等价重建依据——续跑不该
-     * 比原运行拿到更宽的授权，也不该更窄（更窄会让本来自动放行的写入突然卡审批）。
-     */
-    explicitUserIntent: Boolean(recovered.taskGraph),
-    taskGraph: recovered.taskGraph,
+    // 授权位从保存点逐位读回。它曾经靠"保存点里有没有任务图"反推——续跑因此可能比原运行
+    // 拿到更宽或更窄的授权，而这两个方向都不该由一个无关结构的存在与否决定。
+    explicitUserIntent: recovered.explicitUserIntent,
   }
 }
 
@@ -132,7 +126,6 @@ export class AgentRunner {
   private readonly terminalApprovalCleanup: AgentTerminalApprovalCleanup
   private readonly completionCoordinator: AgentCompletionCoordinator
   private readonly threadTitleCoordinator: AgentThreadTitleCoordinator
-  private progressTracker: AgentFacetProgressTracker | null = null
   /** 模型本轮显式调用 ask_user 留下的待提问内容；消费后立即清空。 */
   private pendingUserQuestion: PendingUserQuestion | null = null
   /** "没有工具证据"的指引本次运行只下发一次，避免同一句话反复顶回去空烧回合。 */
@@ -159,20 +152,15 @@ export class AgentRunner {
     })
     this.budget = new AgentRunMetrics(options.request.budget)
     this.catalogPlanner = new AgentToolCatalogPlanner(options.dependencies.registry)
+    // 跨轮租约记忆直接从历史里的发现结果恢复：那条 tool 消息上记着这次发现真的发放了哪些
+    // 工具。曾经还额外按 Facet 分桶存一份 toolLeases，任务图删除后分桶没有意义了。
     this.catalogPlanner.restoreLeases(this.conversation.flatMap((message) => {
       if (message.role !== 'tool' || !Array.isArray(message.content)) return []
-      return message.content.flatMap((part) => {
-        if (!Array.isArray(part.toolLeases)) return []
-        return part.toolLeases.flatMap((rawLease) => {
-          if (!rawLease || typeof rawLease !== 'object' || Array.isArray(rawLease)) return []
-          const lease = rawLease as Record<string, unknown>
-          if (typeof lease.facetId !== 'string' || !Array.isArray(lease.toolNames)) return []
-          return [{
-            facetId: lease.facetId,
-            toolNames: lease.toolNames.filter((name): name is string => typeof name === 'string'),
-          }]
-        })
-      })
+      return message.content.flatMap((part) => (
+        Array.isArray(part.leasedToolNames)
+          ? part.leasedToolNames.filter((name): name is string => typeof name === 'string')
+          : []
+      ))
     }))
     this.catalogPlanner.restoreLeases(
       options.recoveryContext?.toolLeases ?? [],
@@ -304,8 +292,6 @@ export class AgentRunner {
         })
         this.syncLeaseCheckpoint()
       },
-      getProgressTracker: () => this.progressTracker,
-      onProgressUpdated: () => this.syncLeaseCheckpoint(),
     })
     this.savePointCoordinator = new AgentSavePointCoordinator({
       append: options.dependencies.appendSavePoint,
@@ -428,8 +414,6 @@ export class AgentRunner {
     const answer = await answerPromise
     this.throwIfCancelled()
     if (!answer) throw new Error('[CLARIFICATION_CANCELLED] 澄清等待已取消')
-    this.progressTracker?.resumeWaitingFacets(answer)
-      .forEach((progress) => this.emit(toAgentFacetProgressEvent(progress)))
     this.conversationJournal.appendEphemeral({ role: 'user', content: answer })
   }
 
@@ -462,16 +446,6 @@ export class AgentRunner {
             ),
             emit: (event) => this.emit(event),
           })
-      if (recoveredRoute?.taskGraph) {
-        route.reason = `${route.reason}；已恢复上一执行段的 Task Graph 与 Effect Ledger`
-        this.emit({
-          type: 'PlanUpdated',
-          intent: route.intent,
-          summary: route.reason,
-          toolDomains: route.toolDomains,
-          taskGraph: route.taskGraph,
-        })
-      }
       const attachments = this.options.request.attachments ?? []
       if (attachments.length > 0) {
         const preparedAttachments = await prepareAgentAttachmentContext(attachments, this.models)
@@ -494,25 +468,6 @@ export class AgentRunner {
           })
         }
       }
-      this.progressTracker = route.taskGraph
-        ? new AgentFacetProgressTracker(
-            route.taskGraph,
-            this.options.dependencies.registry,
-            route.complexity === 'multi_step',
-            this.options.recoveryContext?.effectLedger,
-            this.options.recoveryContext?.toolLeases.map((lease) => lease.facetId),
-            /*
-             * 路由判出来的域必须整个交给执行层，不能只给延续域。
-             *
-             * 能力发现被 normalizeCallInput 强制改写成任务图的依赖前沿，所以「域在 route.toolDomains
-             * 里、却没有任何 Facet 覆盖」等于那个域永远不可达。实测：用户说「你这不对吧」，路由模型
-             * 读了历史、把 camera_stage 正确放进了 toolDomains，但主意图是 diagnose、任务图只生成了
-             * 一个 diagnose Facet——发现请求于是只带 diagnostics.event，camera_stage 的能力一个都租
-             * 不到，助手只能报「被阻塞」。route.toolDomains 是路由对本轮范围的完整判断，执行层没有
-             * 理由只看其中一半。放宽域不越权：权限仍由 registry.list(context) 与审批把关。
-             */
-            [...route.toolDomains, ...(route.continuationDomains ?? [])]
-          ) : null
       this.setPhase('preparing')
       while (!isTerminalAgentState(this.machine.status)) {
         await this.pauseController.wait()
@@ -532,8 +487,8 @@ export class AgentRunner {
               role: 'user',
               content: [
                 '[HARNESS_CLOSEOUT_MODE]',
-                '已达到软预算：禁止扩展新 Facet、无目标浏览和非必要能力发现。',
-                '只执行已声明 action plan、结构化验证、补偿与最终收口；若现有计划不足，请立即保存检查点并说明阻塞，不得重复搜索。',
+                '已达到软预算：不要再扩展目标、无目标浏览或重复发现能力。',
+                '只做完手上这件事、验证结果、必要的补偿与收口；确实做不完就立即保存检查点并说明阻塞，不要重复搜索。',
                 '[END_HARNESS_CLOSEOUT_MODE]',
               ].join('\n'),
             })
@@ -552,14 +507,7 @@ export class AgentRunner {
         }
         let currentSnapshot = this.requireContext()
         this.setPhase('preparing')
-        this.catalogPlanner.syncActiveFacets(
-          this.progressTracker?.activeFacetIds() ?? [],
-          this.progressTracker?.allFacetIds() ?? []
-        )
         this.syncLeaseCheckpoint()
-        if (this.progressTracker && route.taskGraph) {
-          route.taskGraph = this.progressTracker.taskGraphSnapshot()
-        }
         const activation = this.externalContinuation.extendActivation(
           this.catalogPlanner.select(route, currentSnapshot),
           currentSnapshot
@@ -658,16 +606,6 @@ export class AgentRunner {
             return
           }
         }
-        // 一旦正式状态源已经让任务图结算，就立刻封存执行事实，并把本轮降为纯说明。
-        // 继续给模型工具只会诱发重复读取、旧 revision 冲突，甚至封存后的额外写入。
-        // 任意正式调用序列都可能已经满足整张任务图；不能只承认宿主配方或外部续跑。
-        // 通用受控程序、单次批量事务同样会一次产出全部写入与验证 Effect。每轮模型前都做
-        // 纯结构化封存判断，不满足时只是 no-op；满足后立刻撤掉工具，避免模型在成功之后
-        // 继续写、补建无关 Facet，或因一次错误验证脚本把已完成任务拖回恢复流程。
-        this.sealExecutionIfEligible()
-        if (this.state.executionOutcome.status === 'sealed_success') {
-          context = { ...context, tools: [], activeToolNames: [] }
-        }
         const primary = await runPrimaryStepWithOverflowRecovery({
           turn, context, rebuild: preparedTurn.rebuild,
           modelTurns: this.modelTurnCoordinator,
@@ -691,9 +629,6 @@ export class AgentRunner {
         })) continue
         this.externalContinuation.assertNoResubmit(result.toolCalls)
         if (result.toolCalls.length > 0) {
-          if (this.state.executionOutcome.status === 'sealed_success') {
-            throw new Error('[PRESENTATION_WRITE_FORBIDDEN] 应用执行结果已经封存，最终说明阶段不得再调用工具')
-          }
           this.setPhase(result.toolCalls.some((call) => (
             ['discover_application_capabilities', 'search_application_capabilities'].includes(call.toolName)
           )) ? 'discovering' : 'executing')
@@ -716,31 +651,14 @@ export class AgentRunner {
               return this.savePointCoordinator.save('after_tools', turnSnapshot)
             },
             registerExternalWait: (items) => this.externalWaitRegistration.registerIfSubmitted(items, turnSnapshot),
-            // 有工具在等下一轮重新披露时不下发停止指令：否则"下一轮再给你"这个承诺永远兑现
-            // 不了，模型只能带着一句"按规则需等下一轮披露"收工，而它其实已经知道该调什么了。
-            progressGuidance: () => (
-              this.catalogPlanner.hasPendingActivationRecovery()
-                ? null
-                : this.progressTracker?.settlementGuidance() ?? null
-            ),
           })) {
             this.lifecycle.finishTerminal()
             return
           }
-          /*
-           * 提问必须在封存之前处理。
-           *
-           * 封存之后这次运行只允许说明、不允许继续写入（PRESENTATION_WRITE_FORBIDDEN）。
-           * 而用户对问题的回答恰恰经常要求继续写入——"用昨天那个素材库"之后还得真去改它。
-           * 先封存再等提问，等于让用户回答完却什么都做不了。
-           */
           if (this.pendingUserQuestion) {
             await this.waitForUserAnswer(turnSnapshot)
             continue
           }
-          // 工具回合本身可能已经产出整张任务图所需的 Effect 与正式验证。
-          // 在进入下一次模型请求前立即封存，确保下一轮只能负责说明，不能继续写入。
-          this.sealExecutionIfEligible()
           continue
         }
         const finalText = requireFinalResponseEvidence({
@@ -765,19 +683,6 @@ export class AgentRunner {
         this.setPhase('verifying')
         this.sealExecutionIfEligible()
         this.completionCoordinator.evaluate(this.observations)
-        if (this.state.executionOutcome.effects.length > 0
-          && this.state.executionOutcome.status !== 'sealed_success') {
-          const blocker = executionSealingBlocker({
-            settlement: this.progressTracker?.settlement(),
-            summary: this.state.workingSummary,
-            effectCount: this.state.executionOutcome.effects.length,
-          })
-          this.conversationJournal.appendEphemeral({
-            role: 'user',
-            content: `[执行事实尚未封存] ${blocker ?? '结构化执行状态尚未完成。'}请先用正式状态源消除未收敛事项，再生成最终说明。`,
-          })
-          continue
-        }
         if (await this.currentMessageConsumer.pull() > 0) continue
         this.complete(finalText)
       }
@@ -831,19 +736,29 @@ export class AgentRunner {
     this.setPhase('completed')
     this.lifecycle.complete(finalText)
   }
+  /**
+   * 封存点：**模型自己决定收工**（本轮不再调工具、给出了最终答复）。
+   *
+   * 旧封存点是"任务图结算完成"，也就是运行前那张猜出来的 Facet 图全部对上账。猜错域、猜多
+   * 一个 Facet，这次运行就永远封存不了；反过来图先结算，模型即使知道还差颜色没设也会被撤掉
+   * 工具。两种失败方向都不看真实世界。
+   *
+   * 现在只封存**事实**：有真实写入 Effect，且这次运行客观上已经停下来（没有执行中的步骤、
+   * 没有待批审批、恢复检查已完成、没有记下的未收敛事项）。摘要与证据取自工作摘要里已经发生
+   * 过的观察，而不是任何计划文本。
+   */
   private sealExecutionIfEligible(): void {
     if (this.state.executionOutcome.status === 'sealed_success') return
-    const settlement = this.progressTracker?.settlement()
     const effects = this.state.executionOutcome.effects
     if (executionSealingBlocker({
-      settlement,
       summary: this.state.workingSummary,
       effectCount: effects.length,
-    }) || !settlement) return
+    })) return
+    const verifiedCount = effects.filter((effect) => effect.verified).length
     this.lifecycle.sealExecution({
       effects,
-      summary: settlement.summary,
-      evidence: settlement.evidence,
+      summary: `已完成 ${effects.length} 项应用写入，其中 ${verifiedCount} 项有正式状态源读回证据。`,
+      evidence: [...new Set(effects.flatMap((effect) => effect.evidence))].slice(0, 24),
     })
   }
   private async fail(error: unknown): Promise<void> {
@@ -882,8 +797,6 @@ export class AgentRunner {
       ...this.state.workingSummary,
       toolLeases: this.catalogPlanner.currentLeaseSnapshot(),
       toolLeaseCatalogRevision: this.catalogPlanner.currentCatalogRevision(),
-      effectLedger: this.progressTracker?.effectLedgerSnapshot()
-        ?? this.state.workingSummary.effectLedger,
       updatedAt: new Date().toISOString(),
     }
   }

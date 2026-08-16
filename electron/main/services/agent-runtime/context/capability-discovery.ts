@@ -3,7 +3,6 @@ import { z } from 'zod'
 
 import {
   AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
-  AGENT_FACET_LEASE_TOOL_LIMIT,
 } from '../../../../../src/core/assistant/toolBudget'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
@@ -38,7 +37,6 @@ import { HENJI_RECIPE_REGISTRY } from '../../application-control/henji-script/re
  * 名额由 Facet 租约上限推导而不是拍一个数：一个新域至少要凑齐「观察 → 写入 → 验证」这个最小
  * 闭包才有用，三分之一的名额正好覆盖它，同时不至于挤掉别的 Facet。
  */
-const LEASE_TAIL_LIMIT = Math.max(3, Math.floor(AGENT_FACET_LEASE_TOOL_LIMIT / 3))
 
 const SCRIPT_INTERNAL_CAPABILITIES = new Set([
   'run_henji_script',
@@ -279,16 +277,20 @@ export class AgentCapabilityDiscoveryCatalog {
     const recipesCoverAllRequestedEntities = input.entityTypes.length > 0
       && applicableScriptRecipes.length > 0
       && input.entityTypes.every((entityType) => recipeCoveredEntityTypes.has(entityType))
-    const scriptEntityTypes = unique([
-      ...scriptMatches.flatMap((item) => item.entityTypes),
-      ...input.entityTypes,
-    ]).slice(0, 64)
-    const scriptPropertyIds = unique([
-      ...scriptMatches.flatMap((item) => item.propertyIds),
-      ...input.queries.flatMap((query) => (
-        query.match(/\b[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+\b/gi) ?? []
-      )),
-    ]).slice(0, 256)
+    /*
+     * scriptApi 里的实体与属性清单**只能来自注册表**，绝不能回声模型自己写的请求。
+     *
+     * 这里曾经把 `input.entityTypes` 和从 `input.queries` 里正则抠出来的点分标识符一起并进
+     * 清单。那等于把模型的**提问**当成**事实**答复回去：模型问"有没有 settings.preference"，
+     * 投影回答"你的实体清单是：settings.preference、settings.registry…"，模型当然就照着写脚本，
+     * 然后撞 ENTITY_TYPE_NOT_FOUND。实测这条让一次改设置的任务从 5 回合 3.8 万 token 变成
+     * 18 回合 25 万 token，中间四次重新发现能力都纠正不过来——因为每次发现都在重复同一个谎。
+     *
+     * 清单短一点没关系：模型看不到某个实体，它会去发现；模型看到一个不存在的实体，它会一直
+     * 撞墙。宁可少说，不能乱说。
+     */
+    const scriptEntityTypes = unique(scriptMatches.flatMap((item) => item.entityTypes)).slice(0, 64)
+    const scriptPropertyIds = unique(scriptMatches.flatMap((item) => item.propertyIds)).slice(0, 256)
     const deferredToolNames = unique([
       ...leaseSelection.deferredToolNames,
       ...matched.names.filter((name) => !leasedNameSet.has(name)),

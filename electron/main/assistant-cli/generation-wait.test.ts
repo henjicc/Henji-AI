@@ -55,7 +55,6 @@ function stateWithTask(taskId = 'task-cli-1'): AgentRunState {
       unresolvedItems: [],
       toolLeases: [],
       toolLeaseCatalogRevision: null,
-      effectLedger: [],
       scopeRevisions: { navigation: 0, generation: 1, canvas: 0, toolbox: 0, assets: 0 },
     artifactRefs: [],
     attachmentRefs: [],

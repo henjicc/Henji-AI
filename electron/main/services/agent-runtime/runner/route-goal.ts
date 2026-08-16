@@ -30,7 +30,7 @@ export async function routeAgentGoal(input: {
     intent: route.intent,
     summary: route.reason,
     toolDomains: route.toolDomains,
-    taskGraph: route.taskGraph,
+    explicitUserIntent: route.explicitUserIntent,
   })
   return route
 }

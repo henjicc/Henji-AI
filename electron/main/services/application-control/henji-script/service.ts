@@ -10,7 +10,7 @@ import type {
   HostContextSnapshot,
   HostScopeRevisions,
 } from '../../../../../src/core/assistant/hostContracts'
-import type { AgentObservedEffect } from '../../../../../src/core/assistant/taskGraph'
+import type { AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
 import {
   henjiScriptCheckpointSchema,
   type HenjiScriptCheckpoint,

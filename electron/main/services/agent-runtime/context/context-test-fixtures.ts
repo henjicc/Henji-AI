@@ -59,7 +59,7 @@ export function skillBuildInput(skills: AssistantSkillMetadata[] | undefined): A
     skills,
     snapshot: contextSnapshot(),
     route: {
-      intent: 'generate', complexity: 'simple',toolDomains: ['generation'],
+      intent: 'generate', toolDomains: ['generation'],
       explicitUserIntent: true,
      reason: '技能索引测试',
     },

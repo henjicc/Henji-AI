@@ -481,6 +481,47 @@ const migrations: SchemaMigration[] = [
       }
     },
   },
+  {
+    version: 13,
+    name: 'agent-task-graph-removed-fresh-runs',
+    /*
+     * 任务图/Facet/结算/Effect Ledger 整体删除，历史运行记录随之无法反序列化。
+     *
+     * 保存点里存着 `route.taskGraph` 与 `effectLedger`，新 schema 已经不认这两个字段；而
+     * `store.ts` 的版本检查条件是「版本不匹配**且**状态非终态」——已完成/失败/取消的历史运行
+     * 被排除在外，会直奔 `agentRunStateSchema.parse` 然后抛。**光撞 checkpoint 版本号救不了它们**，
+     * 必须真的删掉运行记录。
+     *
+     * 删的是运行记录，不是对话：用户的提问和助手的回复逐条保留，只把父子链重建成连续的。
+     * 业务数据（三维工程、画布、素材库、设置）在别的表里，本迁移一个字节都不碰。
+     */
+    up: (database) => {
+      database.exec(`
+        PRAGMA defer_foreign_keys = ON;
+
+        DELETE FROM agent_messages WHERE role = 'system_event';
+        DELETE FROM agent_session_entries
+        WHERE kind NOT IN ('user_message', 'assistant_message');
+        DELETE FROM agent_generation_status_events;
+
+        UPDATE agent_session_entries SET parent_entry_id = NULL;
+        UPDATE agent_threads SET last_run_id = NULL;
+        DELETE FROM agent_runs;
+
+        WITH ordered AS (
+          SELECT entry_id,
+                 LAG(entry_id) OVER (PARTITION BY thread_id ORDER BY sequence ASC) AS previous_id
+          FROM agent_session_entries
+          WHERE kind IN ('user_message', 'assistant_message')
+        )
+        UPDATE agent_session_entries
+        SET parent_entry_id = (
+          SELECT ordered.previous_id FROM ordered
+          WHERE ordered.entry_id = agent_session_entries.entry_id
+        ), run_id = NULL;
+      `)
+    },
+  },
 ]
 
 export function runAgentSchemaMigrations(database: Database.Database): void {

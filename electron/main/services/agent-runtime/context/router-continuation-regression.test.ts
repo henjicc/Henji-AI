@@ -108,7 +108,6 @@ describe('路由承接上一轮任务', () => {
       intent: 'generate',
       candidateIntents: ['generate'],
       toolDomains: ['generation', 'models'],
-      complexity: 'simple',
       reason: '当前在生成工作区，判断为生成一张白色球体图片',
       explicitUserIntent: true,
     }))
@@ -148,7 +147,6 @@ describe('路由承接上一轮任务', () => {
     const router = new AgentIntentRouter(async () => ({
       intent: 'diagnose',
       toolDomains: ['diagnostics'],
-      complexity: 'ambiguous',
       reason: '用户在质疑上一轮结果，判断为诊断',
       explicitUserIntent: true,
     }))

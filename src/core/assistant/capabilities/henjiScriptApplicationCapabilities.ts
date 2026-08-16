@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { applicationRefSchema } from '../../application-control'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import { henjiScriptCheckpointSchema } from '../externalWait'
-import { agentObservedEffectSchema } from '../taskGraph'
+import { agentObservedEffectSchema } from '../observedEffect'
 import { defineApplicationCapability } from './defineApplicationCapability'
 
 export const HENJI_SCRIPT_LANGUAGE = 'henji-ts/v1' as const

@@ -4,7 +4,7 @@ import {
   AGENT_CONTRACT_VERSION,
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
-import type { AgentTaskCapabilityKind } from '../../../../../src/core/assistant/taskGraph'
+import type { AgentCapabilityKind } from '../../../../../src/core/assistant/observedEffect'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AGENT_CORE_TOOL_NAMES } from './tool-activation'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
@@ -30,7 +30,7 @@ import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
  */
 
 /** 模型真实会填的 kinds 组合，含实测那次翻车的那一组。 */
-const KIND_SETS: readonly (readonly AgentTaskCapabilityKind[])[] = [
+const KIND_SETS: readonly (readonly AgentCapabilityKind[])[] = [
   [],
   ['observe'],
   ['query'],
@@ -51,7 +51,6 @@ const KIND_SETS: readonly (readonly AgentTaskCapabilityKind[])[] = [
  * 哪儿），域被延续证据放宽后 entityTypes 也留在上一个域上。这两个值填不准是常态，不是异常。
  */
 const WRONG_ENTITY_TYPE = 'diagnostics.event'
-const WRONG_SURFACE_ID = 'workspace.generation'
 
 function fullContext(registry: ReturnType<typeof createBuiltinAgentToolRegistry>): HostContextSnapshot {
   return {

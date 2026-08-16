@@ -11,7 +11,7 @@ import { CANVAS_MUTATION_APPLICATION_CAPABILITIES } from '@/core/assistant/capab
 import { CANVAS_PROJECT_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/canvasProjectApplicationCapabilities'
 import { GENERATION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import { TOOLBOX_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/toolboxApplicationCapabilities'
-import { agentObservedEffectSchema } from '@/core/assistant/taskGraph'
+import { agentObservedEffectSchema } from '@/core/assistant/observedEffect'
 
 import { listRendererApplicationCapabilityIds } from './registry'
 

@@ -63,19 +63,9 @@ export interface AgentToolCallSchedulerOptions {
   onObservation: (call: ModelStepToolCall, observation: AgentToolObservation) => void
   emit: (event: AgentEventInput) => void
   onDiscoveredTools: (toolCallId: string, toolNames: string[]) => void
-  resolveActionGroup?: (call: ModelStepToolCall) => {
-    actionGroupId: string
-    mode: CompiledActionGroup['mode']
-  } | null
-  /**
-   * 在守卫与执行之前把调用参数改写成运行时唯一正确的那一份；返回 null 表示保持原样。
-   * 用于"运行时自己就知道答案"的参数（例如能力发现的依赖前沿），避免让模型去猜再判失败。
-   */
-  normalizeInput?: (call: ModelStepToolCall) => unknown | null
   executionGuard?: (
     call: ModelStepToolCall,
-    expectedRevisions: Partial<HostScopeRevisions>,
-    allowSettledActionGroupSibling: boolean
+    expectedRevisions: Partial<HostScopeRevisions>
   ) => string | AgentExecutionGuardRejection | null
   onOutcome?: (
     call: ModelStepToolCall,
@@ -156,12 +146,7 @@ export class AgentToolCallScheduler {
     expectedRevisions: Partial<HostScopeRevisions>
   ): Promise<void> {
     let currentExpectedRevisions = { ...expectedRevisions }
-    const groups = compileActionGroups(
-      calls,
-      expectedRevisions,
-      this.options.registry,
-      this.options.resolveActionGroup
-    )
+    const groups = compileActionGroups(calls, expectedRevisions, this.options.registry)
     for (const group of groups) {
       if (group.canvasBatch) {
         const outcome = await this.executeCanvasBatch(
@@ -182,25 +167,22 @@ export class AgentToolCallScheduler {
             this.options.supportsParallelTools,
             this.options.registry
           )
-      let completedSiblingCount = 0
       for (const batch of batches) {
-      await this.options.waitIfPaused()
-      this.options.throwIfCancelled()
-      this.options.setActiveToolCall(batch[0]?.toolCallId ?? null)
-      const outcomes = await Promise.all(batch.map((call) => this.executeOne(
-        call,
-        explicitUserIntent,
-        currentExpectedRevisions,
-        collapsed ? 'approved_action_group' : 'direct',
-        completedSiblingCount > 0
-      )))
-      for (const outcome of outcomes) {
-        if (collapsed) this.recordCompiledOutcome(group, outcome)
-        else this.recordOutcome(outcome)
-      }
-      currentExpectedRevisions = mergeRevisions(currentExpectedRevisions, outcomes)
-      completedSiblingCount += outcomes.filter((outcome) => !outcome.error).length
-      this.options.setActiveToolCall(null)
+        await this.options.waitIfPaused()
+        this.options.throwIfCancelled()
+        this.options.setActiveToolCall(batch[0]?.toolCallId ?? null)
+        const outcomes = await Promise.all(batch.map((call) => this.executeOne(
+          call,
+          explicitUserIntent,
+          currentExpectedRevisions,
+          collapsed ? 'approved_action_group' : 'direct'
+        )))
+        for (const outcome of outcomes) {
+          if (collapsed) this.recordCompiledOutcome(group, outcome)
+          else this.recordOutcome(outcome)
+        }
+        currentExpectedRevisions = mergeRevisions(currentExpectedRevisions, outcomes)
+        this.options.setActiveToolCall(null)
       }
     }
   }
@@ -221,7 +203,7 @@ export class AgentToolCallScheduler {
     }
     this.options.setActiveToolCall(planCall.toolCallId)
     const planned = await this.executeOne(
-      planCall, explicitUserIntent, expectedRevisions, 'direct', false, true
+      planCall, explicitUserIntent, expectedRevisions, 'direct', true
     )
     if (planned.error) return planned
     this.recordOutcome(planned)
@@ -259,7 +241,7 @@ export class AgentToolCallScheduler {
     }
     this.options.setActiveToolCall(commitCall.toolCallId)
     return await this.executeOne(
-      commitCall, explicitUserIntent, expectedRevisions, 'approved_action_group', false, true
+      commitCall, explicitUserIntent, expectedRevisions, 'approved_action_group', true
     )
   }
 
@@ -268,15 +250,11 @@ export class AgentToolCallScheduler {
     explicitUserIntent: boolean,
     expectedRevisions: Partial<HostScopeRevisions>,
     authorizationSource: 'direct' | 'approved_action_group',
-    allowSettledActionGroupSibling = false,
     hostCompiled = false
   ): Promise<ToolCallOutcome> {
     let activationRecoveryQueued = false
     let contractCorrection = false
-    const normalizedInput = hostCompiled ? null : this.options.normalizeInput?.(requestedCall)
-    const call: ModelStepToolCall = normalizedInput === null || normalizedInput === undefined
-      ? requestedCall
-      : { ...requestedCall, input: normalizedInput }
+    const call = requestedCall
     const metadata = this.options.registry.executionMetadata(call.toolName, call.input)
     this.options.emit({
       type: 'ToolRequested',
@@ -312,11 +290,7 @@ export class AgentToolCallScheduler {
           activationRecoveryQueued ? 'refresh_context' : 'user_action'
         )
       }
-      const guardReason = this.options.executionGuard?.(
-        call,
-        expectedRevisions,
-        allowSettledActionGroupSibling
-      )
+      const guardReason = this.options.executionGuard?.(call, expectedRevisions)
       if (guardReason) {
         const structured: AgentExecutionGuardRejection = typeof guardReason === 'string'
           ? { code: 'RECOVERY_VERIFICATION_REQUIRED', reason: guardReason }

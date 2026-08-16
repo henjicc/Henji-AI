@@ -180,7 +180,7 @@ describe('AgentRunner terminal approval cleanup', () => {
       if (input.stepId.startsWith('router:')) {
         return modelResult(input, {
           structuredOutput: {
-            intent: 'generate', complexity: 'simple', reason: '创建图片',
+            intent: 'generate', reason: '创建图片',
           },
         })
       }

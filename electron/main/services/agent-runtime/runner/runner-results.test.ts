@@ -180,10 +180,9 @@ describe('工具结果的历史投影接线', () => {
     expect(serialized).toContain('"drop"')
   })
 
-  it('租约与 Facet 租约仍从完整结果提取，不受投影影响', () => {
+  it('租约仍从完整结果提取，不受投影影响', () => {
     const leaseObservation = observation({
       leasedToolNames: ['place_camera_stage_object'],
-      facets: [{ facetId: 'camera_scene', capabilityNames: ['place_camera_stage_object'] }],
       drop: 'x'.repeat(200),
     })
     const message = toolMessage(
@@ -194,9 +193,6 @@ describe('工具结果的历史投影接线', () => {
     )
     const part = message.content[0] as Record<string, unknown>
     expect(part.leasedToolNames).toEqual(['place_camera_stage_object'])
-    expect(part.toolLeases).toEqual([
-      { facetId: 'camera_scene', toolNames: ['place_camera_stage_object'] },
-    ])
     expect(JSON.stringify(message)).not.toContain('"drop"')
   })
 })

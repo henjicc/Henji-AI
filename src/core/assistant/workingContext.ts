@@ -1,8 +1,7 @@
 import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
-import { agentTaskGraphSchema } from './taskGraph'
-import { AGENT_FACET_LEASE_TOOL_LIMIT, AGENT_LEASE_FRONTIER_FACET_LIMIT } from './toolBudget'
+import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from './toolBudget'
 
 export const AGENT_WORKING_SUMMARY_VERSION = 'agent-working-summary/v1' as const
 
@@ -51,7 +50,8 @@ export const agentWorkingSummarySchema = z.object({
     intent: z.string().min(1).max(100),
     summary: z.string().min(1).max(500),
     toolDomains: z.array(z.string().min(1).max(100)).max(8),
-    taskGraph: agentTaskGraphSchema.optional(),
+    /** 见 PlanUpdated.explicitUserIntent：续跑必须拿到与原运行**逐位相同**的授权范围。 */
+    explicitUserIntent: z.boolean().default(false),
   }).strict().nullable(),
   planVersion: z.number().int().nonnegative(),
   activeStep: agentWorkingStepSchema.nullable(),
@@ -63,22 +63,18 @@ export const agentWorkingSummarySchema = z.object({
   scopeRevisions: hostScopeRevisionsSchema.nullable(),
   artifactRefs: z.array(z.string().min(1).max(500)).max(12),
   attachmentRefs: z.array(z.string().regex(/^asset:[^\s]+$/)).max(8).default([]),
-  toolLeases: z.array(z.object({
-    facetId: z.string().min(1).max(64),
-    toolNames: z.array(z.string().min(1).max(200)).max(AGENT_FACET_LEASE_TOOL_LIMIT),
-  }).strict()).max(AGENT_LEASE_FRONTIER_FACET_LIMIT).default([]),
+  /*
+   * 本次运行已经发放出去的稳定工具租约，扁平一份。
+   *
+   * 曾经按 Facet 分桶，于是"任务图结算"能把模型正在用的工具收回去——实测模型手里只剩只读
+   * 工具，只能回一句"放置对象工具不在本轮可用列表里"。任务图删除后租约的生命周期只由两件
+   * **事实**决定：目录版本变了，或者工具真的不可用了。
+   */
+  toolLeases: z.array(z.string().min(1).max(200)).max(AGENT_DISCOVERY_LEASE_TOOL_LIMIT).default([]),
   toolLeaseCatalogRevision: z.union([
     z.string().min(1).max(200),
     z.number().int().nonnegative(),
   ]).nullable().default(null),
-  effectLedger: z.array(z.object({
-    effectId: z.string().min(1).max(64),
-    count: z.number().int().nonnegative().max(256),
-    verificationCount: z.number().int().nonnegative().max(256).default(0),
-    verified: z.boolean(),
-    evidenceDigests: z.array(z.string().min(1).max(128)).max(256),
-    evidence: z.array(z.string().min(1).max(500)).max(12),
-  }).strict()).max(32).default([]),
   recovery: agentWorkingRecoverySchema,
   updatedAt: z.string().datetime(),
 }).strict()
@@ -101,7 +97,6 @@ export function createAgentWorkingSummary(goal: string): AgentWorkingSummary {
     attachmentRefs: [],
     toolLeases: [],
     toolLeaseCatalogRevision: null,
-    effectLedger: [],
     recovery: {
       mode: 'none',
       reason: '',

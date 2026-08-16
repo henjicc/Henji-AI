@@ -253,7 +253,6 @@ describe('AgentRunner canvas batch', () => {
               text: '',
               structuredOutput: {
                 intent: 'canvas',
-                complexity: 'multi_step',
                 reason: '用户要求编排画布节点',
                 explicitUserIntent: true,
                 taskFacets: [{

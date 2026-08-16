@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { agentObservedEffectSchema } from './taskGraph'
+import { agentObservedEffectSchema } from './observedEffect'
 
 import {
   agentApprovalRequestSchema,

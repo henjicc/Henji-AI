@@ -64,7 +64,7 @@ function planEvent(intent: string): AgentEvent {
     sequence: 1,
     occurredAt: new Date().toISOString(),
     runId: 'run-eval',
-    type: 'PlanUpdated',
+    type: 'PlanUpdated', explicitUserIntent: true,
     intent,
     summary: '评测路由',
     toolDomains: [intent],
@@ -150,7 +150,7 @@ describe('minimal assistant evaluator', () => {
       ordinaryEfficiencyPassRate: 1,
       averageBatchRate: 1,
       totalToolNotActiveCount: 0,
-      averageEffectSatisfactionRate: 1,
+      averageVerifiedEffectRate: 1,
       failures: [],
     })
     expect(summary.results.every((result) => result.passed)).toBe(true)
@@ -191,12 +191,12 @@ describe('minimal assistant evaluator', () => {
     const state = runState()
     state.workingSummary = {
       ...createAgentWorkingSummary('写入并验证节点'),
-      route: { intent: 'canvas', summary: '写入后读取验证', toolDomains: ['canvas'] },
+      route: { intent: 'canvas', summary: '写入后读取验证', toolDomains: ['canvas'], explicitUserIntent: true },
     }
     const capture: MinimalEvaluationCapture = {
       runId: 'run-eval', state,
       events: [
-        agentEvent(1, { type: 'PlanUpdated', intent: 'canvas', summary: '写入后读取验证', toolDomains: ['canvas'] }),
+        agentEvent(1, { type: 'PlanUpdated', explicitUserIntent: true, intent: 'canvas', summary: '写入后读取验证', toolDomains: ['canvas'] }),
         agentEvent(2, {
           type: 'ToolRequested', toolCallId: 'call-node', toolName: 'add_canvas_node', title: '添加画布节点',
           inputDigest: 'digest', category: 'canvas', readOnly: false, idempotent: false,

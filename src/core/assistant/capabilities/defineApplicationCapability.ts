@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type {
   ApplicationCapabilityDefinition,
 } from '../applicationCapabilities'
-import type { AgentObservedEffect } from '../taskGraph'
+import type { AgentObservedEffect } from '../observedEffect'
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)

@@ -103,27 +103,7 @@ describe('Action Plan Compiler', () => {
     expect(groups[0]?.executableCalls).toHaveLength(2)
   })
 
-  it('Task Graph 的 actionGroupId 是编译边界，不把同轮不同组误合并', () => {
-    const registry = createBuiltinAgentToolRegistry(async () => {
-      throw new Error('测试不执行前端工具')
-    })
-    const calls: ModelStepToolCall[] = [1, 2].map((index) => ({
-      toolCallId: `add-${index}`,
-      toolName: 'add_canvas_node',
-      dynamic: false,
-      input: { projectId: 'project-1', nodeType: 'text', placement: { mode: 'viewport_center' } },
-    }))
-    const groups = compileActionGroups(calls, { canvas: 7 }, registry, (call) => ({
-      actionGroupId: call.toolCallId === 'add-1' ? 'first_group' : 'second_group',
-      mode: 'ordered_write',
-    }))
-
-    expect(groups).toHaveLength(2)
-    expect(groups.map((group) => group.actionGroupId)).toEqual(['first_group', 'second_group'])
-    expect(groups.every((group) => !group.canvasBatch && group.atomic === false)).toBe(true)
-  })
-
-  it('不可逆步骤即使声明 atomic_batch 也降级为非原子有序执行', () => {
+  it('不可逆步骤按顺序写执行，不标记为原子', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })
@@ -133,13 +113,9 @@ describe('Action Plan Compiler', () => {
       dynamic: false,
       input: { taskId: `task-${index}`, reason: '用户要求停止' },
     }))
-    const [group] = compileActionGroups(calls, { generation: 3 }, registry, () => ({
-      actionGroupId: 'cancel_group', mode: 'atomic_batch',
-    }))
+    const [group] = compileActionGroups(calls, { generation: 3 }, registry)
 
-    expect(group).toMatchObject({
-      actionGroupId: 'cancel_group', mode: 'ordered_write', atomic: false, reversible: false,
-    })
+    expect(group).toMatchObject({ mode: 'ordered_write', atomic: false, reversible: false })
     expect(group?.executableCalls).toHaveLength(2)
   })
 })

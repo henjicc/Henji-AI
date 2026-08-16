@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
-import type { AgentObservedEffect } from '../taskGraph'
+import type { AgentObservedEffect } from '../observedEffect'
 import {
   capabilityControl,
   capabilityOutputSchema,

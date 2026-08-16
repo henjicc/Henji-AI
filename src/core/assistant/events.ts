@@ -5,12 +5,7 @@ import { AGENT_ACTIVE_TOOL_LIMIT } from './toolBudget'
 import { modelStepUsageSchema } from '../llm/modelStep'
 import { modelProviderErrorCategorySchema } from '../llm/providerProtocol'
 import { agentWorkingSummarySchema } from './workingContext'
-import {
-  agentObservedEffectSchema,
-  agentTaskFacetStatusSchema,
-  agentTaskGraphSchema,
-} from './taskGraph'
-import { agentFacetProgressKindSchema } from './progress'
+import { agentObservedEffectSchema } from './observedEffect'
 
 export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v2' as const
 
@@ -233,7 +228,14 @@ const planUpdatedEventSchema = z.object({
   intent: z.string().min(1).max(100),
   summary: z.string().min(1).max(500),
   toolDomains: z.array(z.string().min(1).max(100)).max(8),
-  taskGraph: agentTaskGraphSchema.optional(),
+  /*
+   * 授权位：用户这一句是否表达了明确的应用操作意图。
+   *
+   * 必须随事件持久化，不能在续跑时反推。它曾经靠"保存点里有没有任务图"重建——任务图删除
+   * 后那个替身没了，而更早的问题是替身本身就不可靠：授权范围会随一个无关结构的存在与否
+   * 静默变宽变窄。
+   */
+  explicitUserIntent: z.boolean().default(false),
 }).strict()
 
 const toolRequestedEventSchema = z.object({
@@ -281,18 +283,6 @@ const toolFailedEventSchema = z.object({
   category: z.string().min(1).max(100).optional(),
   readOnly: z.boolean().optional(),
   idempotent: z.boolean().optional(),
-}).strict()
-
-const facetProgressedEventSchema = z.object({
-  ...eventBase,
-  type: z.literal('FacetProgressed'),
-  facetId: z.string().min(1).max(64),
-  status: agentTaskFacetStatusSchema,
-  progressKind: agentFacetProgressKindSchema,
-  summary: z.string().min(1).max(1_000),
-  evidence: z.array(z.string().min(1).max(500)).max(12),
-  executionFingerprint: z.string().min(1).max(200).optional(),
-  blocker: z.string().min(1).max(1_000).optional(),
 }).strict()
 
 const approvalRequiredEventSchema = z.object({
@@ -460,7 +450,6 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   toolStartedEventSchema,
   toolCompletedEventSchema,
   toolFailedEventSchema,
-  facetProgressedEventSchema,
   approvalRequiredEventSchema,
   approvalResolvedEventSchema,
   contextUpdatedEventSchema,

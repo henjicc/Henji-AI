@@ -41,7 +41,7 @@ vi.mock('./applicationControlRegistry', () => ({
 }))
 
 import { APPLICATION_REFLECTION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/applicationReflectionApplicationCapabilities'
-import { agentObservedEffectSchema } from '@/core/assistant/taskGraph'
+import { agentObservedEffectSchema } from '@/core/assistant/observedEffect'
 
 import { applicationReflectionHandlers } from './applicationReflectionAdapter'
 
@@ -540,7 +540,7 @@ describe('应用反射通用能力适配器', () => {
       .toEqual(['canvas'])
     expect(capability.resolveRequiredScopes(input('asset', 'asset.favorite') as never))
       .toEqual(['assets'])
-    expect(capability.resolveRequiredScopes(input('application.setting', 'application.setting.value') as never))
+    expect(capability.resolveRequiredScopes(input('settings.registry', 'interface.theme_tone') as never))
       .toEqual(['settings'])
   })
 })

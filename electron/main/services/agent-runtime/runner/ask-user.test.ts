@@ -135,7 +135,6 @@ function routerDecision(input: ModelStepInput): ModelStepResult {
       intent: 'assets',
       candidateIntents: ['assets'],
       toolDomains: ['assets'],
-      complexity: 'simple',
       reason: '测试路由：素材库操作',
       explicitUserIntent: true,
       taskFacets: [{

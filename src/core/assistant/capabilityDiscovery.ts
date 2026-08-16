@@ -6,12 +6,8 @@ import {
   jsonValueSchema,
 } from '../application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from './applicationCapabilities'
-import { agentTaskEffectKindSchema } from './taskGraph'
-import type { AgentTaskFacet, AgentTaskGraph } from './taskGraph'
-import {
-  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
-  AGENT_LEASE_FRONTIER_FACET_LIMIT,
-} from './toolBudget'
+import { agentEffectKindSchema } from './observedEffect'
+import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from './toolBudget'
 
 export const APPLICATION_CAPABILITY_DISCOVERY_VERSION = 'application-capability-discovery/v3' as const
 
@@ -154,7 +150,7 @@ export const henjiScriptApiProjectionSchema = z.object({
   language: z.literal('henji-ts/v1'),
   entryTool: z.literal('run_henji_script'),
   exactRecipe: z.boolean().optional(),
-  forbiddenEffects: z.array(agentTaskEffectKindSchema).max(6).default([]),
+  forbiddenEffects: z.array(agentEffectKindSchema).max(6).default([]),
   rules: z.array(z.string().min(1).max(300)).length(HENJI_SCRIPT_LANGUAGE_RULES.length)
     .default([...HENJI_SCRIPT_LANGUAGE_RULES]),
   entities: z.object({
@@ -232,93 +228,3 @@ export const applicationSchemaReadOutputSchema = z.object({
   missing: z.array(applicationSchemaRefSchema).max(20),
 }).strict()
 export type ApplicationSchemaReadOutput = z.infer<typeof applicationSchemaReadOutputSchema>
-
-export function listDependencyFrontierFacets(
-  facets: AgentTaskFacet[],
-  limit = AGENT_LEASE_FRONTIER_FACET_LIMIT,
-): AgentTaskFacet[] {
-  const completed = new Set(facets
-    .filter((facet) => facet.status === 'completed')
-    .map((facet) => facet.facetId))
-  return facets.filter((facet) => (
-    !['completed', 'blocked', 'waiting_user'].includes(facet.status)
-    && facet.dependsOn.every((dependency) => completed.has(dependency))
-  )).slice(0, limit)
-}
-
-/**
- * 从任务图推出一次**扁平**发现请求，作为模型没有自拟请求时的兜底。
- *
- * 与旧实现的关键差别：它不再改写模型写的请求，只在模型没写时提供一个起点。
- * 旧的 `normalizeCallInput` 会把模型申报的 facetId / entityTypes / capabilityKinds 全部替换
- * 成运行时依赖前沿，于是主模型——唯一拿得到完整会话历史的角色——连"我要的东西在另一个领域"
- * 都表达不了。现在模型写什么就发什么。
- */
-export function createCapabilityDiscoveryFallbackInput(
-  taskGraph: AgentTaskGraph
-): ApplicationCapabilityDiscoveryInput | null {
-  const facets = listDependencyFrontierFacets(taskGraph.facets)
-  if (facets.length === 0) return null
-  return applicationCapabilityDiscoveryInputSchema.parse({
-    queries: [...new Set(facets.map((facet) => facet.goal))].slice(0, 8),
-    domains: [...new Set(facets.map((facet) => facet.domain))].slice(0, 8),
-    entityTypes: [...new Set(facets.flatMap((facet) => [
-      ...facet.targetEntityTypes,
-      ...facet.requiredEffects.flatMap((effect) => effect.entityTypes),
-    ]))].slice(0, 24),
-    writes: facets.some((facet) => (
-      facet.capabilityKinds.includes('mutate') || facet.capabilityKinds.includes('execute')
-    )),
-  })
-}
-
-/**
- * 由运行时 Facet 直接构造发现请求。
- *
- * `requiredEffects` 是租约排序的唯一依据（见 capability-discovery 的 requiredEffectScore）。
- * 模型手写的发现请求带不上它，结果租约名额退化成按名字排序，实测把 observe/verify 这类
- * 只读能力全挤进 deferred，Facet 因此永远拿不到验证证据、永远无法完成——依赖前沿卡死。
- * 所以运行时侧的规范化必须始终用这个函数生成请求，不能沿用模型自拟的字段。
- *
- * 但"不沿用"不等于"全部丢弃"：`extraQueries` 与 `extraDomains` 是模型（以及会话延续证据）
- * 唯一能表达"我要的东西不在这个域里"的通道。旧实现把模型自拟的 domains 整个覆盖掉，于是
- * 模型明明说了"当前上下文未持有 camera_stage 租约"，却没有任何办法把这个域要回来——只能
- * 反过来认为自己判断错了。运行时保留对 Facet 集合与 requiredEffects 的裁定权，领域则做并集。
- */
-export function buildCapabilityDiscoveryInputForFacets(
-  facets: AgentTaskFacet[],
-  extraQueriesByFacetId: Readonly<Record<string, string[]>> = {},
-  extraDomains: readonly string[] = [],
-  forbiddenEffects: AgentTaskGraph['forbiddenEffects'] = [],
-): ApplicationCapabilityDiscoveryInput | null {
-  if (facets.length === 0) return null
-  return applicationCapabilityDiscoveryInputSchema.parse({
-    discoveryVersion: APPLICATION_CAPABILITY_DISCOVERY_VERSION,
-    forbiddenEffects,
-    facets: facets.map((facet) => ({
-      facetId: facet.facetId,
-      queries: [...new Set([
-        facet.goal,
-        ...(extraQueriesByFacetId[facet.facetId] ?? []),
-      ])].slice(0, 8),
-      domains: [...new Set([facet.domain, ...extraDomains])].slice(0, 8),
-      entityTypes: [...new Set([
-        ...facet.targetEntityTypes,
-        ...facet.requiredEffects.flatMap((effect) => effect.entityTypes),
-      ])],
-      capabilityKinds: facet.capabilityKinds,
-      targetSurfaceIds: facet.targetSurfaceId ? [facet.targetSurfaceId] : [],
-      requiredEffects: facet.requiredEffects.map((effect) => ({
-        effect: effect.effect,
-        entityTypes: effect.entityTypes,
-        propertyIds: effect.propertyIds,
-        minimumCount: effect.minimumCount,
-      })),
-    })),
-    cursor: 0,
-    limit: AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
-  })
-}
-
-
-

@@ -13,10 +13,7 @@ import type {
 } from '../../../../../src/core/llm/modelStep'
 import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
 import { resolveOffloadByteThreshold, shouldOffloadObservation } from '../context/offload'
-import {
-  AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
-  AGENT_FACET_LEASE_TOOL_LIMIT,
-} from '../../../../../src/core/assistant/toolBudget'
+import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { sanitizeObservationValue } from '../context/sanitize'
 import { AgentToolGatewayError } from '../tools/gateway'
 import { AgentBudgetExceededError } from './budget'
@@ -52,11 +49,7 @@ export function serializeError(error: unknown): SerializedAgentError {
   }
 }
 
-/**
- * 工具失败信封 `{ ok: false, error: { code } }`。
- *
- * 定义放在这里而不是 facet-effect-ledger，是因为后者已经 import 本模块，反向引用会成环。
- */
+/** 工具失败信封 `{ ok: false, error: { code } }`。 */
 export function failureEnvelope(output: unknown): {
   code: string
   message?: string
@@ -75,6 +68,27 @@ export function failureEnvelope(output: unknown): {
     ...(typeof value.message === 'string' ? { message: value.message } : {}),
     ...(typeof value.retryable === 'boolean' ? { retryable: value.retryable } : {}),
     ...(typeof value.recovery === 'string' ? { recovery: value.recovery } : {}),
+  }
+}
+
+export interface ObservationFailure {
+  code: string
+  message: string
+  retryable: boolean
+  recovery: string
+}
+
+/** 从观察里读出结构化失败；不是失败就返回 null。 */
+export function observationFailure(
+  observation: AgentToolObservation
+): ObservationFailure | null {
+  const failure = failureEnvelope(observation.output)
+  if (!failure) return null
+  return {
+    code: failure.code,
+    message: failure.message ?? observation.summary,
+    retryable: failure.retryable ?? false,
+    recovery: failure.recovery ?? 'none',
   }
 }
 
@@ -138,18 +152,6 @@ export function toolMessage(
         .filter((name: unknown): name is string => typeof name === 'string')
         .slice(0, AGENT_DISCOVERY_LEASE_TOOL_LIMIT)
     : []
-  const leasedSet = new Set(leasedToolNames)
-  const rawFacets = Array.isArray(outputRecord?.facets) ? outputRecord.facets : []
-  const toolLeases = rawFacets.flatMap((rawFacet) => {
-    const facet = rawFacet && typeof rawFacet === 'object' && !Array.isArray(rawFacet)
-      ? rawFacet as Record<string, unknown>
-      : null
-    if (typeof facet?.facetId !== 'string' || !Array.isArray(facet.capabilityNames)) return []
-    const toolNames = facet.capabilityNames.filter((name): name is string => (
-      typeof name === 'string' && leasedSet.has(name)
-    )).slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
-    return toolNames.length > 0 ? [{ facetId: facet.facetId, toolNames }] : []
-  })
   return {
     role: 'tool',
     content: [{
@@ -158,7 +160,6 @@ export function toolMessage(
       toolName: call.toolName,
       output: { type: 'json', value: output },
       ...(leasedToolNames.length > 0 ? { leasedToolNames } : {}),
-      ...(toolLeases.length > 0 ? { toolLeases } : {}),
     }],
   }
 }

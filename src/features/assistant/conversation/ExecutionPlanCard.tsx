@@ -1,23 +1,17 @@
 import {
   AlertCircle,
-  Ban,
   CheckCircle2,
   ChevronRight,
-  CircleHelp,
   CircleDot,
   ClipboardCheck,
   ListChecks,
-  LoaderCircle,
 } from 'lucide-react'
 import type { CSSProperties } from 'react'
 
 import { UI_TEXT_META_CLASS } from '@/components/ui'
 import type { AgentRunStatus } from '@/core/assistant/events'
 
-import type {
-  AgentExecutionFacetPresentation,
-  AgentExecutionPresentation,
-} from './agentRunReducer'
+import type { AgentExecutionPresentation } from './agentRunReducer'
 
 const deferredBlockStyle: CSSProperties = {
   contentVisibility: 'auto',
@@ -48,35 +42,12 @@ function planStatusLabel(
   return '执行中'
 }
 
-const FACET_STATUS_LABELS: Record<AgentExecutionFacetPresentation['status'], string> = {
-  pending: '待执行',
-  active: '进行中',
-  completed: '已完成',
-  blocked: '受阻',
-  waiting_user: '待补充',
-  skipped: '已跳过',
-  // 路由把领域判错、助手换了正确的步骤来做。对用户不是失败，只是"这一条不作数了"。
-  superseded: '已替换',
-}
-
-function FacetStatusIcon({ status }: { status: AgentExecutionFacetPresentation['status'] }): JSX.Element {
-  if (status === 'completed') return <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" />
-  if (status === 'active') return <LoaderCircle className="mt-0.5 h-3 w-3 shrink-0 animate-spin text-accent" />
-  if (status === 'waiting_user') return <CircleHelp className="mt-0.5 h-3 w-3 shrink-0 text-warning" />
-  if (status === 'blocked') return <AlertCircle className="mt-0.5 h-3 w-3 shrink-0 text-danger" />
-  if (status === 'skipped' || status === 'superseded') {
-    return <Ban className="mt-0.5 h-3 w-3 shrink-0 text-text-muted" />
-  }
-  return <CircleDot className="mt-0.5 h-3 w-3 shrink-0 text-text-muted" />
-}
-
 export function ExecutionPlanCard({
   presentation,
   runStatus,
 }: ExecutionPlanCardProps): JSX.Element {
   const {
     summary,
-    facets,
     artifactRefs,
     verification,
     clarification,
@@ -92,7 +63,6 @@ export function ExecutionPlanCard({
     || completedSteps.length
     || failedSteps.length
     || evidence.length
-    || facets.length
     || artifactRefs.length
     || verification
     || clarification
@@ -117,24 +87,6 @@ export function ExecutionPlanCard({
             <div>
               <span className="font-medium text-text-dark">目标判断：</span>
               {summary.route.summary}
-            </div>
-          ) : null}
-
-          {facets.length > 0 ? (
-            <div className="mt-2 space-y-1" aria-label="子目标状态">
-              {facets.map((facet) => (
-                <div key={facet.facetId} className="flex min-w-0 items-start gap-1.5">
-                  <FacetStatusIcon status={facet.status} />
-                  <span className="shrink-0 font-medium text-text-dark">{FACET_STATUS_LABELS[facet.status]}</span>
-                  <div className="min-w-0">
-                    <div className="break-words">{facet.goal}</div>
-                    {facet.reason ? <div className="break-words text-text-muted">{facet.reason}</div> : null}
-                    {facet.evidence.length > 0 ? (
-                      <div className="break-words text-text-muted">证据：{facet.evidence.slice(-2).join('；')}</div>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
             </div>
           ) : null}
 

@@ -179,27 +179,28 @@ const GENERIC_MUTATION_SCOPES = ['assets', 'canvas', 'settings', 'toolbox'] as c
 function mutationScope(identifier: string): HostScope | null {
   if (identifier === 'asset' || identifier.startsWith('asset.')) return 'assets'
   if (identifier.startsWith('canvas.')) return 'canvas'
-  if (identifier === 'application.setting' || identifier.startsWith('application.setting.')) return 'settings'
+  // settings.registry 是反射注册表登记的唯一设置实体类型；application.setting 是一个从未注册过
+  // 的旧名字，留着只会让通用写入认不出设置域、拿不到 settings scope。
+  if (identifier === 'settings.registry' || identifier.startsWith('settings.')) return 'settings'
   if (identifier.startsWith('camera_stage.') || identifier.startsWith('toolbox.')) return 'toolbox'
   return null
 }
 
+/**
+ * 作用域由 **entityType** 决定，不由属性 ID 决定。
+ *
+ * 属性总是属于某个实体，拿它再判一次作用域不会带来新信息，却会凭空造出"未知命名空间"：设置
+ * 域的属性 ID 是 `interface.theme_tone`、`general.language` 这种按功能分区的名字，跟实体类型
+ * 前缀根本不同名。旧实现把它们也丢进判定，于是每一次改设置都判成未知，退化成锁全部四个域的
+ * 并发基线——而这条从来没被测出来，因为用例里写的是编造的 `application.setting.value`。
+ */
 function requiredMutationScopes(input: z.infer<typeof changeEntitiesInputSchema>): HostScope[] {
   const scopes = new Set<HostScope>()
   let hasUnknownWritableNamespace = false
   for (const change of input.changes) {
-    const identifiers = [
-      change.entityType,
-      ...(change.kind === 'set_properties' ? Object.keys(change.properties) : []),
-      ...(change.kind === 'mutate_properties'
-        ? change.mutations.map((mutation) => mutation.propertyId)
-        : []),
-    ]
-    for (const identifier of identifiers) {
-      const scope = mutationScope(identifier)
-      if (scope) scopes.add(scope)
-      else hasUnknownWritableNamespace = true
-    }
+    const scope = mutationScope(change.entityType)
+    if (scope) scopes.add(scope)
+    else hasUnknownWritableNamespace = true
   }
   // 未知命名空间不能退化成“无需并发基线”。用全部已注册的可写反射领域兜底，
   // 让后续属性/集合校验给出真实错误，同时仍保持 Gateway 的乐观并发边界。

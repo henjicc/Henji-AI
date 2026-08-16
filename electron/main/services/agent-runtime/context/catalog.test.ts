@@ -12,7 +12,7 @@ import { AgentToolRegistry } from '../tools/registry'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolCatalogPlanner } from './catalog'
 import { AGENT_ACTIVE_TOOL_LIMIT, AGENT_TOOL_SCHEMA_BUDGET_BYTES } from './tool-activation'
-import { AGENT_FACET_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
+import { AGENT_DOMAIN_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import type { AgentRouteDecision } from './types'
 import { runHenjiScriptCapability } from '../../../../../src/core/assistant/capabilities/henjiScriptApplicationCapabilities'
 
@@ -50,7 +50,6 @@ function contextSnapshot(): HostContextSnapshot {
 
 const primaryRoute: AgentRouteDecision = {
   intent: 'general',
-  complexity: 'ambiguous',
   toolDomains: ['catalog'],
   reason: '测试能力发现',
   explicitUserIntent: false,
@@ -105,17 +104,13 @@ describe('AgentToolCatalogPlanner', () => {
       .map((definition) => definition.name)
     const navigationNames = ['switch_workspace', 'open_application_surface']
     // 旧的 slice(0, 5) / slice(0, 15) 在这个规模下必然截断。
-    expect(cameraNames.length).toBeGreaterThan(AGENT_FACET_LEASE_TOOL_LIMIT)
+    expect(cameraNames.length).toBeGreaterThan(AGENT_DOMAIN_LEASE_TOOL_LIMIT)
 
     const planner = new AgentToolCatalogPlanner(registry)
-    const leasedPerFacet = cameraNames.slice(0, AGENT_FACET_LEASE_TOOL_LIMIT)
+    const leasedPerFacet = cameraNames.slice(0, AGENT_DOMAIN_LEASE_TOOL_LIMIT)
     planner.rememberDiscovered('discover_application_capabilities', {
       leasedToolNames: [...leasedPerFacet, ...navigationNames],
       scriptApi: { entryTool: 'run_henji_script' },
-      facets: [
-        { facetId: 'camera_scene', capabilityNames: leasedPerFacet },
-        { facetId: 'show_target_surface', capabilityNames: navigationNames },
-      ],
     })
     const activeNames = planner.select({
       ...primaryRoute, intent: 'camera_stage', toolDomains: ['camera_stage', 'catalog'],
@@ -133,7 +128,6 @@ describe('AgentToolCatalogPlanner', () => {
     const planner = new AgentToolCatalogPlanner(registry)
     const route: AgentRouteDecision = {
       intent: 'general',
-      complexity: 'simple',
       toolDomains: [],
       reason: '能力概览直接回答',
       explicitUserIntent: false,
@@ -153,7 +147,6 @@ describe('AgentToolCatalogPlanner', () => {
     const planner = new AgentToolCatalogPlanner(registry)
     const route: AgentRouteDecision = {
       intent: 'generate',
-      complexity: 'simple',
       toolDomains: ['models', 'generation', 'navigation'],
       reason: '命中生成规则',
       explicitUserIntent: true,
@@ -181,22 +174,19 @@ describe('AgentToolCatalogPlanner', () => {
     }
 
     expect(planner.select({
-      intent: 'canvas', complexity: 'multi_step',
-      explicitUserIntent: true,
+      intent: 'canvas', explicitUserIntent: true,
       toolDomains: ['canvas', 'navigation', 'catalog'],
       reason: '画布任务',
     }, context).activeToolNames).toContain('run_henji_script')
 
     expect(new AgentToolCatalogPlanner(registry).select({
-      intent: 'camera_stage', complexity: 'multi_step',
-      explicitUserIntent: true,
+      intent: 'camera_stage', explicitUserIntent: true,
       toolDomains: ['camera_stage', 'navigation', 'catalog'],
       reason: '三维任务',
     }, context).activeToolNames).toContain('run_henji_script')
 
     expect(new AgentToolCatalogPlanner(registry).select({
-      intent: 'settings', complexity: 'multi_step',
-      explicitUserIntent: true,
+      intent: 'settings', explicitUserIntent: true,
       toolDomains: ['settings', 'navigation', 'catalog'],
       reason: '设置任务',
     }, context).activeToolNames).toContain('run_henji_script')
@@ -207,8 +197,7 @@ describe('AgentToolCatalogPlanner', () => {
       'execute_application_program',
     ]) {
       expect(new AgentToolCatalogPlanner(registry).select({
-        intent: 'camera_stage', complexity: 'multi_step',
-        explicitUserIntent: true,
+        intent: 'camera_stage', explicitUserIntent: true,
         toolDomains: ['camera_stage', 'catalog'],
       reason: '单入口门禁',
       }, context).activeToolNames).not.toContain(legacy)
@@ -319,7 +308,15 @@ describe('AgentToolCatalogPlanner', () => {
     }
   })
 
-  it('三个前沿 Facet 的 15 个租约跨轮稳定，终态后释放且不突破 32/96KB', () => {
+  /*
+   * 租约是发现层对模型的**承诺**，只有两件事实能撤回它：目录版本变了，或者工具真的不可用。
+   *
+   * 这条用例原来还测 syncActiveFacets——Facet 进终态就回收对应租约。实测「你继续」那次，模型在
+   * 发现请求里申报了三个 Facet、发现层正确租约了 14 个工具（含 place_camera_stage_object），
+   * 紧接着任务图（只有一个 clarify_goal）把这些租约全删了；模型手里只剩只读工具，只能回答"放置
+   * 对象工具没有在本轮可用列表里"。任务图删除后回收路径一并删除，租约运行期常驻。
+   */
+  it('15 个租约跨轮稳定，不被任何猜测回收，且不突破 32/96KB', () => {
     const registry = createBuiltinAgentToolRegistry(async () => {
       throw new Error('测试不执行前端工具')
     })
@@ -338,13 +335,7 @@ describe('AgentToolCatalogPlanner', () => {
     const planner = new AgentToolCatalogPlanner(registry)
     planner.rememberDiscovered('discover_application_capabilities', {
       leasedToolNames: candidates,
-      facets: [0, 1, 2].map((index) => ({
-        facetId: `facet_${index}`,
-        capabilityNames: candidates.slice(index * 5, index * 5 + 5),
-      })),
     })
-    const taskGraphFacetIds = ['facet_0', 'facet_1', 'facet_2']
-    planner.syncActiveFacets(taskGraphFacetIds, taskGraphFacetIds)
 
     for (let turn = 0; turn < 3; turn += 1) {
       const activation = planner.select(primaryRoute, fullContext)
@@ -354,31 +345,7 @@ describe('AgentToolCatalogPlanner', () => {
       expect(activation.activeToolNames).toContain('run_henji_script')
     }
 
-    planner.syncActiveFacets(['facet_1', 'facet_2'], taskGraphFacetIds)
-    const released = planner.select(primaryRoute, fullContext)
-    for (const name of candidates.slice(0, 5)) expect(released.leasedToolNames).not.toContain(name)
-
-    /*
-     * 回归：发现层承诺的租约被激活层反悔。
-     *
-     * 实测「你继续」那次，模型在发现请求里申报了 camera_project / camera_scene_add_sphere /
-     * camera_verify 三个 Facet，发现层正确租约了 14 个工具（含 place_camera_stage_object），
-     * 紧接着 syncActiveFacets 按任务图（只有一个 clarify_goal）把这三个 Facet 的租约全删了。
-     * 模型手里只剩 5 个只读工具，最后只能回答"放置对象工具没有在本轮可用列表里，请你再发一次
-     * 指令"——用户看到的就是"明明有上下文，它为什么不做"。
-     *
-     * 租约是发现层对模型的承诺，回收权只能覆盖任务图自己发出去的那些。
-     */
-    planner.rememberDiscovered('discover_application_capabilities', {
-      leasedToolNames: candidates,
-      facets: [{ facetId: 'model_declared_facet', capabilityNames: candidates.slice(0, 5) }],
-    })
-    planner.syncActiveFacets(['facet_1', 'facet_2'], taskGraphFacetIds)
     const kept = planner.select(primaryRoute, fullContext)
-    for (const name of candidates.slice(0, 5)) {
-      expect(kept.leasedToolNames, `${name} 属于模型自报的 Facet，不该被任务图结算回收`)
-        .not.toContain(name)
-    }
     expect(kept.activeToolNames).toContain('run_henji_script')
   })
 
@@ -421,10 +388,7 @@ describe('AgentToolCatalogPlanner', () => {
     }
     const leased = Array.from({ length: 15 }, (_, index) => `catalog_pressure_${index}`)
     const planner = new AgentToolCatalogPlanner(registry)
-    planner.restoreLeases(Array.from({ length: 3 }, (_, facetIndex) => ({
-      facetId: `facet_${facetIndex}`,
-      toolNames: leased.slice(facetIndex * 5, facetIndex * 5 + 5),
-    })))
+    planner.restoreLeases(leased)
 
     expect(registry.list(null)).toHaveLength(100)
     const activation = planner.select(primaryRoute, null)
@@ -441,7 +405,7 @@ describe('AgentToolCatalogPlanner', () => {
     const planner = new AgentToolCatalogPlanner(registry)
     const firstContext = { ...contextSnapshot(), catalogRevision: 1 } as HostContextSnapshot
     planner.select(primaryRoute, firstContext)
-    planner.restoreLeases([{ facetId: 'facet', toolNames: ['read_agent_artifact'] }])
+    planner.restoreLeases(['read_agent_artifact'])
     expect(planner.select(primaryRoute, firstContext).leasedToolNames).toContain('read_agent_artifact')
     const nextContext = { ...firstContext, catalogRevision: 2 } as HostContextSnapshot
     expect(planner.select(primaryRoute, nextContext).leasedToolNames).not.toContain('read_agent_artifact')
@@ -452,10 +416,7 @@ describe('AgentToolCatalogPlanner', () => {
       throw new Error('测试不执行前端工具')
     })
     const planner = new AgentToolCatalogPlanner(registry)
-    planner.restoreLeases([{
-      facetId: 'camera_scene',
-      toolNames: ['place_camera_stage_object'],
-    }])
+    planner.restoreLeases(['place_camera_stage_object'])
 
     planner.select({ ...primaryRoute, toolDomains: ['camera_stage'] }, contextSnapshot())
     expect(planner.currentLeaseSnapshot()).toEqual([])
@@ -466,9 +427,7 @@ describe('AgentToolCatalogPlanner', () => {
       throw new Error('测试不执行前端工具')
     })
     const restored = new AgentToolCatalogPlanner(registry)
-    restored.restoreLeases([
-      { facetId: 'facet', toolNames: ['read_agent_artifact'] },
-    ], 1)
+    restored.restoreLeases(['read_agent_artifact'], 1)
     const changedContext = { ...contextSnapshot(), catalogRevision: 2 } as HostContextSnapshot
     expect(restored.select(primaryRoute, changedContext).leasedToolNames)
       .not.toContain('read_agent_artifact')
@@ -614,8 +573,7 @@ describe('激活恢复挂起时不得结算停止', () => {
     expect(planner.hasPendingActivationRecovery()).toBe(true)
 
     planner.select({
-      routeVersion: 'agent-route/v2', intent: 'diagnose', candidateIntents: ['diagnose'],
-      complexity: 'simple',toolDomains: ['diagnostics'],
+      routeVersion: 'agent-route/v2', intent: 'diagnose', candidateIntents: ['diagnose'],toolDomains: ['diagnostics'],
      reason: '诊断',
     } as never, null)
     // 已经披露出去了，恢复标志必须清掉，否则任务永远结算不了

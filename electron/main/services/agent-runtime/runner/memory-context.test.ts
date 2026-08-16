@@ -24,7 +24,6 @@ function snapshot(): HostContextSnapshot {
 
 const route: AgentRouteDecision = {
   intent: 'generate',
-  complexity: 'multi_step',
   toolDomains: ['models', 'generation'],
   reason: '生成任务',
   explicitUserIntent: true,

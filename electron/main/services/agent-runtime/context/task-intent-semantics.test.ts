@@ -1,29 +1,31 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  asksToGenerateMedia,
-  explicitlyCreatesProject,
-  inferIntentTaskSemantics,
-} from './task-intent-semantics'
+import { asksToGenerateMedia, hasAffirmativeIntent } from './task-intent-semantics'
 
+/*
+ * 这里曾经还测 inferIntentTaskSemantics 与 explicitlyCreatesProject——把一句话推成
+ * "本轮必须产生哪些 Effect、几个"，喂给任务图当结算依据。任务图删除后那部分一并删掉，
+ * 剩下的两个函数只判动作极性，供路由分类使用。
+ */
 describe('任务动作极性', () => {
-  it('重命名和归类任务里的“不要删除”不会覆盖真实更新意图', () => {
-    expect(inferIntentTaskSemantics(
-      'assets',
-      '把最新素材重命名并添加标签，不要删除任何素材或工程',
-    )).toMatchObject({ effect: 'update' })
-    expect(inferIntentTaskSemantics(
-      'assets',
-      '把最新素材加入新素材库，不要删除任何素材或工程',
-    ).effect).not.toBe('delete')
+  const deletePattern = /(?:删除|移除|清除|delete|remove)/i
+  const createPattern = /(?:新建|创建|建立|添加|加入|create|add)/i
+
+  it('“不要删除”不会覆盖同一句里的真实更新意图', () => {
+    const goal = '把最新素材重命名并添加标签，不要删除任何素材或工程'
+    expect(hasAffirmativeIntent(goal, createPattern)).toBe(true)
+    expect(hasAffirmativeIntent(goal, deletePattern)).toBe(false)
   })
 
   it('同一句话允许否定一个动作并肯定另一个动作', () => {
-    expect(explicitlyCreatesProject('不要创建新项目，在现有项目中创建一个节点')).toBe(false)
-    expect(inferIntentTaskSemantics(
-      'canvas',
-      '不要删除现有节点，请创建一个新的文字节点',
-    )).toMatchObject({ effect: 'create' })
+    const goal = '不要删除现有节点，请创建一个新的文字节点'
+    expect(hasAffirmativeIntent(goal, deletePattern)).toBe(false)
+    expect(hasAffirmativeIntent(goal, createPattern)).toBe(true)
+  })
+
+  it('协调否定覆盖第二个及后续动作', () => {
+    expect(hasAffirmativeIntent('不要删除或移除任何素材', deletePattern)).toBe(false)
+    expect(hasAffirmativeIntent('不要删除，但要新建一个素材库', createPattern)).toBe(true)
   })
 
   it('媒体生成只接受肯定动作', () => {

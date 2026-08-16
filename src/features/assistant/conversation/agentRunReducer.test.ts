@@ -51,7 +51,7 @@ function runState(workingSummary = createAgentWorkingSummary('处理复杂任务
 describe('agentRunViewReducer', () => {
   it('按 eventId 去重并按 sequence 重排重放事件', () => {
     const second = event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
-      type: 'PlanUpdated', sequence: 2, intent: 'diagnose', summary: '诊断错误', toolDomains: ['diagnostics'],
+      type: 'PlanUpdated', explicitUserIntent: true, sequence: 2, intent: 'diagnose', summary: '诊断错误', toolDomains: ['diagnostics'],
     })
     const first = event<Extract<AgentEvent, { type: 'RunStarted' }>>({
       type: 'RunStarted', sequence: 1, threadId: 'thread-1',
@@ -240,7 +240,7 @@ describe('agentRunViewReducer', () => {
     const initialState = runState(createAgentWorkingSummary('生成一张海报'))
     const events: AgentEvent[] = [
       event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
-        type: 'PlanUpdated', sequence: 1, intent: 'generate', summary: '选择模型后提交任务', toolDomains: ['models', 'generation'],
+        type: 'PlanUpdated', explicitUserIntent: true, sequence: 1, intent: 'generate', summary: '选择模型后提交任务', toolDomains: ['models', 'generation'],
       }),
       event<Extract<AgentEvent, { type: 'ToolRequested' }>>({
         type: 'ToolRequested', sequence: 2, toolCallId: 'call-create', toolName: 'create_visible_generation_task',
@@ -322,65 +322,30 @@ describe('agentRunViewReducer', () => {
     ).nextAction).toBe('进入第 2/3 段执行')
   })
 
-  it('投影 Facet 完成、受阻、依赖跳过和大型证据，恢复后保持一致', () => {
-    const initialState = runState()
-    const events: AgentEvent[] = [
+  /*
+   * 这条用例原来还断言 Facet 的完成/受阻/依赖跳过如何投影到界面。任务图删除后执行计划卡
+   * 不再展示子目标——展示的全部改成已经发生的事实：执行过的步骤、证据、大型产物。
+   */
+  it('投影大型证据引用，恢复后保持一致', () => {
+    const events = [
       event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
-        type: 'PlanUpdated', sequence: 1, intent: 'camera_stage', summary: '布置场景并验证', toolDomains: ['camera_stage'],
-        taskGraph: {
-          version: 'agent-task-graph/v2', goal: '布置场景并验证', forbiddenEffects: [],
-          facets: [
-            {
-              facetId: 'scene', domain: 'camera_stage', goal: '布置场景', targetEntityTypes: ['camera_stage.object'],
-              requiredObservations: [], capabilityKinds: ['mutate'], targetSurfaceId: 'camera_stage', dependsOn: [],
-              parallelizable: false, completionConditions: ['对象已放置'], uncertainties: [], confidence: 1,
-              requiredEffects: [{
-                effectId: 'scene-effect', effect: 'create', entityTypes: ['camera_stage.object'],
-                propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false, actionGroupId: 'scene-group',
-              }],
-              status: 'pending', statusReason: '', evidence: [],
-            },
-            {
-              facetId: 'verify', domain: 'camera_stage', goal: '验证构图', targetEntityTypes: [],
-              requiredObservations: [], capabilityKinds: ['observe'], targetSurfaceId: 'camera_stage', dependsOn: ['scene'],
-              parallelizable: false, completionConditions: ['构图已验证'], uncertainties: [], confidence: 1,
-              requiredEffects: [{
-                effectId: 'verify-effect', effect: 'observe', entityTypes: ['camera_stage.object'],
-                propertyIds: [], minimumCount: 1, targetRefs: [], verificationRequired: false, actionGroupId: 'verify-group',
-              }],
-              status: 'pending', statusReason: '', evidence: [],
-            },
-          ],
-          dependencies: [{ fromFacetId: 'scene', toFacetId: 'verify' }],
-          actionGroups: [
-            { actionGroupId: 'scene-group', facetId: 'scene', mode: 'ordered_write', effectIds: ['scene-effect'], dependsOn: [] },
-            { actionGroupId: 'verify-group', facetId: 'verify', mode: 'dependent', effectIds: ['verify-effect'], dependsOn: ['scene-group'] },
-          ],
-          stopConditions: ['受阻时停止并说明'],
-        },
-      }),
-      event<Extract<AgentEvent, { type: 'FacetProgressed' }>>({
-        type: 'FacetProgressed', sequence: 2, facetId: 'scene', status: 'blocked',
-        progressKind: 'revision_conflict', summary: '工程已被修改', evidence: ['revision:2'], blocker: '请刷新工程状态',
-      }),
-      event<Extract<AgentEvent, { type: 'FacetProgressed' }>>({
-        type: 'FacetProgressed', sequence: 3, facetId: 'verify', status: 'blocked',
-        progressKind: 'no_change', summary: '前置步骤未完成', evidence: ['dependency:scene'], blocker: '依赖场景布置',
+        type: 'PlanUpdated', explicitUserIntent: true, sequence: 1, intent: 'camera_stage',
+        summary: '布置场景并验证', toolDomains: ['camera_stage'],
       }),
       event<Extract<AgentEvent, { type: 'ArtifactOffloaded' }>>({
-        type: 'ArtifactOffloaded', sequence: 4, artifactRef: 'artifact:scene-report', source: 'observe_scene', originalBytes: 50_000,
+        type: 'ArtifactOffloaded', sequence: 2, artifactRef: 'artifact:scene-report',
+        source: 'observe_scene', originalBytes: 50_000,
       }),
     ]
     const hydrated = agentRunViewReducer(createInitialAgentRunViewState(), {
-      type: 'hydrate', snapshot: { state: initialState, events },
+      type: 'hydrate', snapshot: { state: runState(), events },
     })
     const presentation = selectExecutionPresentation(hydrated.runState, hydrated.events)
 
-    expect(presentation.facets).toEqual([
-      expect.objectContaining({ facetId: 'scene', status: 'blocked', reason: '请刷新工程状态' }),
-      expect.objectContaining({ facetId: 'verify', status: 'skipped', evidence: ['dependency:scene'] }),
-    ])
     expect(presentation.artifactRefs).toEqual(['artifact:scene-report'])
+    expect(presentation.summary?.route).toMatchObject({
+      intent: 'camera_stage', toolDomains: ['camera_stage'], explicitUserIntent: true,
+    })
   })
 
   it('只在等待用户时展示澄清，并用结构化错误代码生成可读反馈', () => {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { applicationRefSchema } from '../application-control'
-import { agentObservedEffectSchema } from './taskGraph'
+import { agentObservedEffectSchema } from './observedEffect'
 
 export const GENERATION_STATUS_EVENT_VERSION = 'generation-status/v1' as const
 export const AGENT_EXTERNAL_WAIT_VERSION = 'agent-external-wait/v2' as const

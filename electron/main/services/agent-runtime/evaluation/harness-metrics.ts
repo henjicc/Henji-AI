@@ -14,33 +14,22 @@ export function collectHarnessRunMetrics(capture: MinimalEvaluationCapture): Pic
   | 'capabilityDiscoveryCalls'
   | 'batchRate'
   | 'toolNotActiveCount'
-  | 'effectSatisfactionRate'
+  | 'verifiedEffectRate'
 > {
   const requestedTools = capture.events.filter((event) => event.type === 'ToolRequested')
   const writeToolCalls = requestedTools.filter((event) => event.readOnly === false).length
   const batchedWrites = requestedTools.filter((event) => (
     ['change_application_entities', 'commit_canvas_batch'].includes(event.toolName)
   )).length
-  const latestGraph = [...capture.events].reverse().find((event) => (
-    event.type === 'PlanUpdated' && event.taskGraph
-  ))
-  const graph = (latestGraph?.type === 'PlanUpdated' ? latestGraph.taskGraph : undefined)
-    ?? capture.state.workingSummary?.route?.taskGraph
-  const requiredEffects = graph?.facets.reduce(
-    (count, facet) => count + facet.requiredEffects.length,
-    0
-  ) ?? 0
-  const ledger = new Map((capture.state.workingSummary?.effectLedger ?? []).map(
-    (entry) => [entry.effectId, entry]
-  ))
-  const satisfiedEffects = graph?.facets.reduce((count, facet) => (
-    count + facet.requiredEffects.filter((effect) => {
-      const entry = ledger.get(effect.effectId)
-      return entry
-        ? entry.count >= effect.minimumCount && (!effect.verificationRequired || entry.verified)
-        : facet.status === 'completed'
-    }).length
-  ), 0) ?? 0
+  /*
+   * 「写入里有多少带正式状态源读回证据」。
+   *
+   * 这里曾经是 effectSatisfactionRate：拿运行前那张任务图声明的 requiredEffects 当分母，对
+   * Effect Ledger 逐条比 minimumCount。分母是猜的，猜多了永远不到 1，猜少了永远是 1——它
+   * 度量的其实是"路由猜得准不准"，不是"助手做没做成"。现在分子分母都取自真实发生的 Effect。
+   */
+  const effects = capture.state.executionOutcome.effects
+  const verifiedEffects = effects.filter((effect) => effect.verified).length
   return {
     modelTurns: capture.state.usage.turns,
     writeToolCalls,
@@ -51,7 +40,7 @@ export function collectHarnessRunMetrics(capture: MinimalEvaluationCapture): Pic
     toolNotActiveCount: capture.events.filter((event) => (
       event.type === 'ToolFailed' && event.error.code === 'TOOL_NOT_ACTIVE'
     )).length,
-    effectSatisfactionRate: requiredEffects === 0 ? 1 : satisfiedEffects / requiredEffects,
+    verifiedEffectRate: effects.length === 0 ? 1 : verifiedEffects / effects.length,
   }
 }
 
@@ -64,7 +53,7 @@ export function summarizeHarnessMetrics(
   | 'ordinaryEfficiencyPassRate'
   | 'averageBatchRate'
   | 'totalToolNotActiveCount'
-  | 'averageEffectSatisfactionRate'
+  | 'averageVerifiedEffectRate'
 > {
   const normalCaseIds = new Set(cases.flatMap((testCase) => (
     ['golden', 'historical'].includes(testCase.category) ? [testCase.id] : []
@@ -89,8 +78,8 @@ export function summarizeHarnessMetrics(
       (total, result) => total + result.metrics.toolNotActiveCount,
       0
     ),
-    averageEffectSatisfactionRate: results.length === 0 ? 1 : results.reduce(
-      (total, result) => total + result.metrics.effectSatisfactionRate,
+    averageVerifiedEffectRate: results.length === 0 ? 1 : results.reduce(
+      (total, result) => total + result.metrics.verifiedEffectRate,
       0
     ) / results.length,
   }

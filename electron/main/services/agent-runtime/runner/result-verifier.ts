@@ -1,8 +1,6 @@
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentToolRegistry } from '../tools/registry'
-import type { AgentRouteDecision } from '../context/types'
-import { extractResultReferences } from './runner-results'
-import type { AgentProgressSettlement } from '../../../../../src/core/assistant/progress'
+
 
 interface ObservationFailure {
   code: string

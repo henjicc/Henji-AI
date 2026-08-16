@@ -4,7 +4,7 @@ import type { ModelStepMessage, ModelStepTool } from '../../../../../src/core/ll
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import type { AgentTaskGraph } from '../../../../../src/core/assistant/taskGraph'
+
 
 export const AGENT_INTENTS = [
   'navigate',
@@ -90,7 +90,6 @@ export interface AgentContextLayerReport {
 
 export interface AgentRouteDecision {
   intent: AgentIntent
-  complexity: 'simple' | 'multi_step' | 'ambiguous'
   toolDomains: AgentToolDomain[]
   reason: string
   /**
@@ -104,15 +103,8 @@ export interface AgentRouteDecision {
    * return 点显式赋值，且**必填无默认值**，漏赋值在 TypeScript 编译期就会被拦下。
    */
   explicitUserIntent: boolean
-  /**
-   * 因承接上一轮任务而额外放宽的工具域。
-   *
-   * 与 toolDomains 分开记录：能力发现要用它给每个 Facet 补充可搜索领域，而 Facet 自身的
-   * domain 只描述"这一步本来属于哪儿"，不该被延续证据改写。
-   */
+  /** 因承接上一轮任务而额外放宽的工具域；与 toolDomains 分开记录，只用于日志与解释。 */
   continuationDomains?: AgentToolDomain[]
-  /** 可持久化的多领域任务图；旧保存点读取时允许缺失。 */
-  taskGraph?: AgentTaskGraph
 }
 
 export interface AgentContextArtifact {

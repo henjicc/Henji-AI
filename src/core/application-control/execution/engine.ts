@@ -500,7 +500,19 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     previousSteps: ApplicationPlannedStep[] = [],
   ): Promise<void> {
     const descriptor = this.registry.describe({ entityTypes: [step.entityType] }, context).entities[0]
-    if (!descriptor) throw new Error(`ENTITY_TYPE_NOT_FOUND:${step.entityType}`)
+    if (!descriptor) {
+      // 与 registry.requireEntity 同一条道理：只说"没找到"，调用方无从知道正确的叫什么。
+      const available = this.registry.describe({}, context).entities.map((entity) => entity.id)
+      const domain = step.entityType.split('.')[0] ?? ''
+      const sameDomain = domain.length >= 3
+        ? available.filter((candidate) => candidate.startsWith(`${domain}.`))
+        : []
+      const listed = (sameDomain.length > 0 ? sameDomain : available).slice(0, 32)
+      throw new Error(
+        `ENTITY_TYPE_NOT_FOUND:${step.entityType}`
+        + (listed.length > 0 ? `（可用实体类型：${listed.join('、')}）` : '')
+      )
+    }
     const rule = descriptor.collectionWrite
     const operation = step.operation.kind === 'create' ? 'create' : 'remove'
     if (!rule) {

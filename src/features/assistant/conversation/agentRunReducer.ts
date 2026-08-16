@@ -368,42 +368,12 @@ export function selectModelPublicUpdates(events: AgentEvent[]): AgentModelPublic
 
 export interface AgentExecutionPresentation {
   summary: NonNullable<AgentRunState['workingSummary']> | null
-  facets: AgentExecutionFacetPresentation[]
   artifactRefs: string[]
   verification: Extract<AgentEvent, { type: 'VerificationCompleted' }> | null
   clarification: Extract<AgentEvent, { type: 'ClarificationRequired' }> | null
   lastCompaction: Extract<AgentEvent, { type: 'ContextCompacted' }> | null
   retrying: Extract<AgentEvent, { type: 'ModelRetrying' }> | null
   nextAction: string
-}
-
-export type AgentExecutionFacetStatus =
-  'pending' | 'active' | 'completed' | 'blocked' | 'waiting_user' | 'skipped' | 'superseded'
-
-export interface AgentExecutionFacetPresentation {
-  facetId: string
-  goal: string
-  domain: string
-  status: AgentExecutionFacetStatus
-  reason: string
-  evidence: string[]
-}
-
-function selectFacetPresentations(
-  summary: NonNullable<AgentRunState['workingSummary']> | null
-): AgentExecutionFacetPresentation[] {
-  const facets = summary?.route?.taskGraph?.facets ?? []
-  const blockedIds = new Set(facets.flatMap((facet) => facet.status === 'blocked' ? [facet.facetId] : []))
-  return facets.map((facet) => ({
-    facetId: facet.facetId,
-    goal: facet.goal,
-    domain: facet.domain,
-    status: facet.status === 'blocked' && facet.dependsOn.some((id) => blockedIds.has(id))
-      ? 'skipped'
-      : facet.status,
-    reason: facet.statusReason,
-    evidence: facet.evidence,
-  }))
 }
 
 export function selectExecutionPresentation(
@@ -428,15 +398,14 @@ export function selectExecutionPresentation(
   }
   const summary = state?.workingSummary ?? null
   if (state && state.status !== 'waiting_user') clarification = null
-  const facets = selectFacetPresentations(summary)
   let nextAction = '正在理解目标并准备下一步。'
   if (clarification) nextAction = clarification.question
   else if (phase?.phase === 'continuing') nextAction = phase.detail ?? '正在保存检查点并进入下一段执行。'
-  else if (phase?.phase === 'planning') nextAction = '正在规划可结算的任务效果与依赖。'
-  else if (phase?.phase === 'discovering') nextAction = '正在为当前依赖前沿发现并租约所需能力。'
-  else if (phase?.phase === 'preparing') nextAction = '正在准备当前阶段的上下文与执行计划。'
-  else if (phase?.phase === 'executing') nextAction = '正在执行已声明的操作组。'
-  else if (phase?.phase === 'verifying') nextAction = '正在核对结构化效果与目标证据。'
+  else if (phase?.phase === 'planning') nextAction = '正在理解目标并判断需要哪些能力。'
+  else if (phase?.phase === 'discovering') nextAction = '正在发现并租约本次任务需要的能力。'
+  else if (phase?.phase === 'preparing') nextAction = '正在准备当前阶段的上下文。'
+  else if (phase?.phase === 'executing') nextAction = '正在执行应用操作。'
+  else if (phase?.phase === 'verifying') nextAction = '正在从正式状态源核对执行结果。'
   else if (retrying) nextAction = retrying.delayMs > 0
     ? `模型请求暂时失败，将在 ${Math.ceil(retrying.delayMs / 1000)} 秒后重试。`
     : '模型步骤暂时失败，助手正在安全地重新规划。'
@@ -448,9 +417,6 @@ export function selectExecutionPresentation(
   else if (state?.status === 'waiting_user') nextAction = '需要你补充必要信息后才能继续。'
   else if (summary && summary.recovery.mode !== 'none') nextAction = summary.recovery.reason
   else if (summary?.activeStep) nextAction = `正在执行：${summary.activeStep.title}`
-  else if (facets.some((facet) => facet.status === 'active')) {
-    nextAction = `正在处理：${facets.find((facet) => facet.status === 'active')?.goal ?? '当前子目标'}`
-  }
   else if (state?.status === 'completed' || state?.status === 'completed_with_warning') {
     nextAction = verification?.passed
       ? '执行结果已通过结构化验证，请查看助手结论。'
@@ -464,7 +430,6 @@ export function selectExecutionPresentation(
   }
   return {
     summary,
-    facets,
     artifactRefs: summary?.artifactRefs ?? [],
     verification,
     clarification,

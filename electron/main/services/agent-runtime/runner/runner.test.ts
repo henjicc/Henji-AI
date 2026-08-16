@@ -13,7 +13,6 @@ import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentRunner } from './runner'
 import * as approvalLogging from './approval-logging'
 import { ProviderModelStepError } from '../../llm/sdk/provider-error'
-import { createSingleFacetTaskGraph } from '../../../../../src/core/assistant/taskGraph'
 import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 
 function hostContext(): HostContextSnapshot {
@@ -174,21 +173,10 @@ describe('AgentRunner', () => {
       summarize: () => '生成任务已成功。',
     }))
     const { gateway } = createRuntime(registry)
-    const graph = createSingleFacetTaskGraph({
-      goal: '生成一张图片', facetId: 'generate_image', domain: 'generation',
-      capabilityKinds: ['execute', 'observe'], effect: 'execute',
-      entityTypes: ['generation.task'], verificationRequired: true,
-      completionCondition: '任务达到权威成功终态。',
-    })
     const recoveryContext = createAgentWorkingSummary('生成一张图片')
     recoveryContext.route = {
-      intent: 'generate', summary: '等待外部生成完成', toolDomains: ['generation'], taskGraph: graph,
+      intent: 'generate', summary: '等待外部生成完成', toolDomains: ['generation'], explicitUserIntent: true,
     }
-    recoveryContext.effectLedger = [{
-      effectId: graph.facets[0].requiredEffects[0].effectId,
-      count: 1, verificationCount: 0, verified: false,
-      evidenceDigests: ['source-submit'], evidence: ['generation.task:task-1:submitted'],
-    }]
     // 真实外部任务终态会推进 generation revision。子运行启动时会将这个
     // 正常变化标记为 resume_read_only；宿主权威读取成功后必须在同一回合清除。
     recoveryContext.recovery = {
@@ -218,7 +206,8 @@ describe('AgentRunner', () => {
       dependencies: {
         registry, gateway, getHostContext: hostContext,
         runModelStep: async (input) => {
-          expect(input.tools).toEqual([])
+          // 续跑的说明回合仍然带着工具。封存点前移之后不再在模型请求前撤掉工具——
+          // 模型如果发现事情没做完，得有出口；重复提交由 assertNoResubmit 单独拦。
           return result(input, {
             text: '图片生成已经完成，权威任务状态为成功。',
             responseMessages: [{ role: 'assistant', content: '图片生成已经完成，权威任务状态为成功。' }],
@@ -280,15 +269,9 @@ describe('AgentRunner', () => {
       summarize: () => '生成任务失败。',
     }))
     const { gateway } = createRuntime(registry)
-    const graph = createSingleFacetTaskGraph({
-      goal: '生成一张图片', facetId: 'generate_image', domain: 'generation',
-      capabilityKinds: ['execute', 'observe'], effect: 'execute',
-      entityTypes: ['generation.task'], verificationRequired: true,
-      completionCondition: '任务达到权威成功终态。',
-    })
     const recoveryContext = createAgentWorkingSummary('生成一张图片')
     recoveryContext.route = {
-      intent: 'generate', summary: '等待外部生成完成', toolDomains: ['generation'], taskGraph: graph,
+      intent: 'generate', summary: '等待外部生成完成', toolDomains: ['generation'], explicitUserIntent: true,
     }
     const request: AgentStartRunRequest = {
       ...runRequest('生成任务 task-failed 已报告状态 error，请完成续接。'),
@@ -329,7 +312,7 @@ describe('AgentRunner', () => {
   it.each([
     { finalText: '设置已经修改并验证。', expectedStatus: 'completed' as const },
     { finalText: '', expectedStatus: 'completed_with_warning' as const },
-  ])('覆盖整张任务图后立即封存；最终说明为“$finalText”时不再开启第三轮', async ({ finalText, expectedStatus }) => {
+  ])('一段脚本做完就在给出最终答复时封存，最终说明为“$finalText”时不再开启第三轮', async ({ finalText, expectedStatus }) => {
     const registry = new AgentToolRegistry()
     registry.register(defineAgentTool({
       name: 'run_henji_script', version: 1, title: '运行 Henji Script',
@@ -404,7 +387,12 @@ describe('AgentRunner', () => {
     expect(state.executionOutcome.status).toBe('sealed_success')
     expect(state.presentationOutcome.status)
       .toBe(expectedStatus === 'completed' ? 'generated' : 'fallback')
-    expect(presentationToolNames).toEqual([])
+    /*
+     * 说明回合仍然带着工具。旧实现在模型请求前判"任务图结算完成"就把工具整个撤掉，于是模型
+     * 即使知道用户要的颜色还没设，也只能回一句"需要我确认时回复一声"。现在封存发生在模型
+     * 自己给出最终答复之后，撤工具既没必要也有害。
+     */
+    expect(presentationToolNames).toContain('run_henji_script')
     expect(programEvents.some((event) => event.type === 'ToolCompleted')).toBe(true)
     expect(programEvents.some((event) => event.type === 'ToolFailed')).toBe(false)
     expect(runModelStep).toHaveBeenCalledTimes(2)
@@ -420,7 +408,7 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple',toolDomains: ['catalog'], reason: '一般问答',
+            intent: 'general', toolDomains: ['catalog'], reason: '一般问答',
             explicitUserIntent: false,
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -514,7 +502,6 @@ describe('AgentRunner', () => {
           text: '',
           structuredOutput: {
             intent: 'general',
-            complexity: 'multi_step',
             toolDomains: ['diagnostics'],
             reason: '长链路读取',
             explicitUserIntent: false,
@@ -583,8 +570,7 @@ describe('AgentRunner', () => {
       if (input.stepId.startsWith('router:')) {
         return result(input, {
           structuredOutput: {
-            intent: 'general', complexity: 'simple',
-            explicitUserIntent: false,
+            intent: 'general', explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
         })
@@ -624,8 +610,7 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'ambiguous',
-            explicitUserIntent: false,
+            intent: 'general', explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '需要澄清',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -695,8 +680,7 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple',
-            explicitUserIntent: false,
+            intent: 'general', explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -821,7 +805,6 @@ describe('AgentRunner', () => {
           text: '',
           structuredOutput: {
             intent: 'generate',
-            complexity: 'simple',
             reason: '用户要求生成图片',
             explicitUserIntent: true,
           },
@@ -993,8 +976,7 @@ describe('AgentRunner', () => {
         return Promise.resolve(result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple',
-            explicitUserIntent: false,
+            intent: 'general', explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
@@ -1046,8 +1028,7 @@ describe('AgentRunner', () => {
         return result(input, {
           text: '',
           structuredOutput: {
-            intent: 'general', complexity: 'simple',
-            explicitUserIntent: false,
+            intent: 'general', explicitUserIntent: false,
             toolDomains: ['catalog'], reason: '一般问答',
           },
           responseMessages: [{ role: 'assistant', content: '' }],
