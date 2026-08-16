@@ -4,6 +4,7 @@ import {
   type ApplicationPropertyDescriptor,
   type ApplicationRef,
   type JsonValue,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
@@ -140,6 +141,10 @@ class AssistantRuntimeReflectionProvider implements ApplicationEntityProvider {
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
       return { propertyId, readable: true, writable: false, reasons: ['只读状态'], requiredPermissions: descriptor.requiredPermissions.read, revisions: snapshot.revisions }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { assistant_runtime: 0 }, ['assistant_runtime:write'])
   }
 
   private async findArtifactRun(artifactRef: string): Promise<AssistantRunApplicationSnapshot> {

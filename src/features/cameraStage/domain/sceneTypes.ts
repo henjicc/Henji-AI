@@ -9,7 +9,7 @@
 import type { StageBodyVariantId } from './bodyVariants'
 import type { StageCharacterMotion } from './characterMotion'
 import type { StageCharacterPose } from './poseTypes'
-import type { StageCameraEffector } from './shotTypes'
+import type { StageCameraEffector } from './stateKeyframeTypes'
 
 export interface StageVec3 {
   x: number

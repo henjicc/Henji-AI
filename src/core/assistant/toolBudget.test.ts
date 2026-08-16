@@ -57,7 +57,7 @@ describe('活动工具预算', () => {
 
   it('ContextUpdated 事件容得下满载的一轮', () => {
     const parsed = agentEventSchema.safeParse({
-      schemaVersion: 'agent-event/v1',
+      schemaVersion: 'agent-event/v2',
       eventId: 'event-budget',
       occurredAt: new Date().toISOString(),
       type: 'ContextUpdated',

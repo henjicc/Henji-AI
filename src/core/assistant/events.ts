@@ -5,10 +5,14 @@ import { AGENT_ACTIVE_TOOL_LIMIT } from './toolBudget'
 import { modelStepUsageSchema } from '../llm/modelStep'
 import { modelProviderErrorCategorySchema } from '../llm/providerProtocol'
 import { agentWorkingSummarySchema } from './workingContext'
-import { agentTaskFacetStatusSchema, agentTaskGraphSchema } from './taskGraph'
+import {
+  agentObservedEffectSchema,
+  agentTaskFacetStatusSchema,
+  agentTaskGraphSchema,
+} from './taskGraph'
 import { agentFacetProgressKindSchema } from './progress'
 
-export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v1' as const
+export const AGENT_EVENT_SCHEMA_VERSION = 'agent-event/v2' as const
 
 export const agentRunStatusSchema = z.enum([
   'initializing',
@@ -19,6 +23,7 @@ export const agentRunStatusSchema = z.enum([
   'waiting_external',
   'paused',
   'completed',
+  'completed_with_warning',
   'budget_exhausted',
   'failed',
   'cancelled',
@@ -98,6 +103,19 @@ export const agentRunStateSchema = z.object({
   updatedAt: z.string().datetime(),
   finalText: z.string().nullable(),
   error: serializedAgentErrorSchema.nullable(),
+  executionOutcome: z.object({
+    status: z.enum(['pending', 'sealed_success', 'failed']),
+    effects: z.array(agentObservedEffectSchema).max(512),
+    verificationSummary: z.object({
+      summary: z.string().max(2_000),
+      evidence: z.array(z.string().max(500)).max(24),
+    }).strict(),
+    sealedAt: z.string().datetime().optional(),
+  }).strict(),
+  presentationOutcome: z.object({
+    status: z.enum(['pending', 'generated', 'fallback']),
+    warning: serializedAgentErrorSchema.optional(),
+  }).strict(),
   budget: agentBudgetConfigSchema,
   usage: agentBudgetUsageSchema,
   lastScopeRevisions: hostScopeRevisionsSchema.nullable(),
@@ -399,6 +417,22 @@ const runCompletedEventSchema = z.object({
   usage: agentBudgetUsageSchema,
 }).strict()
 
+const executionOutcomeSealedEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('ExecutionOutcomeSealed'),
+  effects: z.array(agentObservedEffectSchema).max(512),
+  summary: z.string().min(1).max(2_000),
+  evidence: z.array(z.string().min(1).max(500)).max(24),
+}).strict()
+
+const runCompletedWithWarningEventSchema = z.object({
+  ...eventBase,
+  type: z.literal('RunCompletedWithWarning'),
+  finalText: z.string().min(1),
+  warning: serializedAgentErrorSchema,
+  usage: agentBudgetUsageSchema,
+}).strict()
+
 const runFailedEventSchema = z.object({
   ...eventBase,
   type: z.literal('RunFailed'),
@@ -441,6 +475,8 @@ export const agentEventSchema = z.discriminatedUnion('type', [
   externalWaitResumedEventSchema,
   savePointCreatedEventSchema,
   runCompletedEventSchema,
+  executionOutcomeSealedEventSchema,
+  runCompletedWithWarningEventSchema,
   runFailedEventSchema,
   runCancelledEventSchema,
 ])

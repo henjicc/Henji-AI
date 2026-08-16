@@ -38,11 +38,18 @@ export interface AgentToolExecutionContext {
   hostContext: HostContextSnapshot | null
 }
 
-export type AgentToolAuthorizationSource = 'direct' | 'approved_workflow' | 'approved_action_group'
+export type AgentToolAuthorizationSource =
+  | 'direct'
+  | 'approved_workflow'
+  | 'approved_program'
+  | 'approved_script'
+  | 'approved_action_group'
 
 export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   /** 应用宿主能力必须提供；运行时内部工具可以直接使用 Agent 工具契约。 */
   capability?: ApplicationCapabilityDefinition<TInput, TOutput>
+  /** false 表示仅供运行时确定性续跑调用，绝不进入模型目录或工具 schema。 */
+  modelVisible?: boolean
   name: string
   version: number
   title: string
@@ -58,6 +65,7 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   idempotent: boolean
   timeoutMs: number
   maxCallsPerRun?: number
+  countsTowardCallLimit?: (output: TOutput) => boolean
   retryPolicy: AgentToolRetryPolicy
   supportsPreview: boolean
   supportsUndo: boolean
@@ -65,6 +73,8 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   resolveRequiredContext?: (input: TInput) => HostScope[]
   inputSchema: z.ZodType<TInput>
   outputSchema: z.ZodType<TOutput>
+  /** 仅受控解释器断点可放宽对象深度；普通工具始终使用 default。 */
+  outputLimitProfile?: 'default' | 'checkpoint'
   aiInputSchema: Record<string, unknown>
   preview?: (input: TInput, context: AgentToolExecutionContext) => Promise<AgentToolPreview> | AgentToolPreview
   execute: (input: TInput, context: AgentToolExecutionContext) => Promise<TOutput>
@@ -72,6 +82,8 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   targetIds: (input: TInput) => Record<string, string>
   dataClasses: (output: TOutput) => AgentDataClass[]
   summarize: (output: TOutput) => string
+  /** 内部写工具也必须显式提供 Effect；模型可见应用能力通常由 capability 提供。 */
+  resolveObservedEffects?: (input: TInput, output: TOutput) => AgentToolObservation['effects']
   /**
    * 结果写入对话历史时的投影；见 ApplicationCapabilityDefinition.projectForHistory。
    * 未声明时结果按原样内联。只影响 tool 消息，不影响 observation 本体与结算证据。
@@ -94,6 +106,8 @@ export interface AgentToolExecuteRequest {
   explicitUserIntent: boolean
   authorizationSource?: AgentToolAuthorizationSource
   parentToolCallId?: string
+  /** 仅宿主可设置；允许 modelVisible:false 的后端工具接收受签名保护的结构化断点。 */
+  trustedInternal?: boolean
   signal: AbortSignal
 }
 

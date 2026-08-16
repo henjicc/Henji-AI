@@ -7,6 +7,7 @@ import {
   type ApplicationPropertyValue,
   type ApplicationRef,
   type JsonValue,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
@@ -184,6 +185,16 @@ class CanvasReflectionProvider implements ApplicationEntityProvider {
         revisions: { [REVISION_SCOPE]: 0 },
       }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    const snapshot = await readCanvasProjectSnapshot(parent.id)
+    return unrestrictedCollectionAvailability(
+      this.entityType,
+      parent,
+      { [REVISION_SCOPE]: revisionOf(snapshot.updatedAt) },
+      ['canvas:write'],
+    )
   }
 
   private async readProperties(ref: ApplicationRef): Promise<Record<string, JsonValue>> {

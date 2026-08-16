@@ -6,7 +6,7 @@
  * 通用动词看不见它们，助手安静地少了一整块能力，直到用户实测才发现。同类事故已经发生多次。
  *
  * 此前唯一的反向门禁靠 `setSceneXxx → xxx` 的命名约定推导，只对那一组成立：`updateShotTiming`、
- * `bakeToProMode`、`play`、`clearTrack` 没有任何可推导的映射。所以保留方向（从 store 枚举，
+ * `play` 等动作没有任何可推导的映射。所以保留方向（从 store 枚举，
  * 不从注册表自证），把推导方式换成显式账本。
  *
  * 三层保证，各堵一个洞：
@@ -106,7 +106,7 @@ function auditBinding(
   if (binding.kind === 'property') {
     /*
      * 这条检查把界面级账本和属性级门禁串了起来：账上写「updateShotTiming 对应
-     * camera_stage.shot.time」，而属性级门禁知道执行器写不了 time —— 于是这里立刻红。
+     * camera_stage.state_keyframe.time」，而属性级门禁知道执行器写不了 time —— 于是这里立刻红。
      * 单靠任何一道门禁都发现不了这个组合。
      */
     const missing = binding.propertyIds.filter((id) => !input.writableProperties.has(id))

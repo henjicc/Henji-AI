@@ -96,6 +96,8 @@ export const applicationPropertyDescriptorSchema = z.object({
   revisionScopes: z.array(applicationScopeIdSchema).min(1).max(16),
   schemaRef: applicationSchemaRefSchema,
   readOnlyReason: z.string().min(1).max(500).optional(),
+  /** 会话控制会在提交后继续变化；这类属性以执行器证据验收，不做最终状态等值断言。 */
+  verificationStrategy: z.enum(['state', 'execution']).optional(),
   relation: z.object({
     targetEntityTypes: z.array(applicationEntityTypeIdSchema).min(1).max(32),
     cardinality: z.enum(['one', 'optional', 'many']),
@@ -103,15 +105,83 @@ export const applicationPropertyDescriptorSchema = z.object({
 }).strict()
 export type ApplicationPropertyDescriptor = z.infer<typeof applicationPropertyDescriptorSchema>
 
+export const applicationAvailabilityRecoverySchema = z.object({
+  summary: z.string().min(1).max(500),
+  capabilityIds: z.array(z.string().regex(/^[a-z][a-z0-9_]{1,63}$/)).max(12),
+  entityTypes: z.array(applicationEntityTypeIdSchema).max(16),
+  propertyIds: z.array(applicationPropertyIdSchema).max(32),
+}).strict()
+export type ApplicationAvailabilityRecovery = z.infer<typeof applicationAvailabilityRecoverySchema>
+
+export const applicationAvailabilityBlockSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('structural') }).strict(),
+  z.object({ kind: z.literal('permission') }).strict(),
+  z.object({
+    kind: z.literal('state'),
+    requirementId: z.string().regex(/^[a-z][a-z0-9_.-]{1,127}$/),
+    affectedEntityTypes: z.array(applicationEntityTypeIdSchema).max(32),
+    revisionScopes: z.array(applicationScopeIdSchema).max(16),
+  }).strict(),
+])
+export type ApplicationAvailabilityBlock = z.infer<typeof applicationAvailabilityBlockSchema>
+
 export const applicationPropertyAvailabilitySchema = z.object({
   propertyId: applicationPropertyIdSchema,
   readable: z.boolean(),
   writable: z.boolean(),
   reasons: z.array(z.string().min(1).max(500)).max(12),
+  blocks: z.array(applicationAvailabilityBlockSchema).max(12).optional(),
+  recoveries: z.array(applicationAvailabilityRecoverySchema).max(8).optional(),
   requiredPermissions: z.array(z.string().min(1).max(120)).max(12),
   revisions: applicationRevisionSetSchema,
 }).strict()
 export type ApplicationPropertyAvailability = z.infer<typeof applicationPropertyAvailabilitySchema>
+
+export const applicationCollectionOperationAvailabilitySchema = z.object({
+  available: z.boolean(),
+  reasons: z.array(z.string().min(1).max(500)).max(12),
+  blocks: z.array(applicationAvailabilityBlockSchema).max(12).optional(),
+  requiredPermissions: z.array(z.string().min(1).max(120)).max(12),
+  recoveries: z.array(applicationAvailabilityRecoverySchema).max(8),
+}).strict()
+export type ApplicationCollectionOperationAvailability = z.infer<
+  typeof applicationCollectionOperationAvailabilitySchema
+>
+
+/**
+ * 某个父实体当前能否增删指定子实体。静态 collectionWrite 表示结构能力，这里表示此刻状态。
+ */
+export const applicationCollectionAvailabilitySchema = z.object({
+  entityType: applicationEntityTypeIdSchema,
+  parent: applicationRefSchema,
+  create: applicationCollectionOperationAvailabilitySchema,
+  remove: applicationCollectionOperationAvailabilitySchema,
+  revisions: applicationRevisionSetSchema,
+}).strict()
+export type ApplicationCollectionAvailability = z.infer<typeof applicationCollectionAvailabilitySchema>
+
+/** 普通领域没有额外状态限制时使用；静态 collectionWrite 仍由 Registry 负责裁决。 */
+export function unrestrictedCollectionAvailability(
+  entityType: string,
+  parent: z.infer<typeof applicationRefSchema>,
+  revisions: Record<string, number>,
+  requiredPermissions: string[] = [],
+): ApplicationCollectionAvailability {
+  const operation = {
+    available: true,
+    reasons: [],
+    blocks: [],
+    requiredPermissions,
+    recoveries: [],
+  }
+  return applicationCollectionAvailabilitySchema.parse({
+    entityType,
+    parent,
+    create: operation,
+    remove: operation,
+    revisions,
+  })
+}
 
 export const applicationEntitySnapshotSchema = z.object({
   ref: applicationRefSchema,

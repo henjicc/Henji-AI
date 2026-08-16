@@ -16,7 +16,7 @@ vi.mock('@/commands/cameraStageProjects', () => ({
   upsertCameraStageProjectRecord: commandMocks.upsertRecord,
 }))
 
-import { deleteProject, saveProjectDraft, type CameraStageProjectDraft } from './cameraStageProjectService'
+import { deleteProject, listProjects, saveProjectDraft, type CameraStageProjectDraft } from './cameraStageProjectService'
 
 function createDraft(id: string): CameraStageProjectDraft {
   return {
@@ -35,6 +35,25 @@ function createDraft(id: string): CameraStageProjectDraft {
 }
 
 describe('cameraStageProjectService 工程写入串行化', () => {
+  it('工程列表只返回当前 schema，旧记录不进入界面和反射枚举', async () => {
+    commandMocks.listSummaries.mockResolvedValue([
+      { id: 'current', name: '新工程', createdAt: 1, updatedAt: 2, objectCount: 1 },
+      { id: 'old', name: '旧工程', createdAt: 1, updatedAt: 2, objectCount: 1 },
+    ])
+    commandMocks.getRecord.mockImplementation(async (id: string) => ({
+      id,
+      name: id === 'current' ? '新工程' : '旧工程',
+      createdAt: 1,
+      updatedAt: 2,
+      objectCount: 1,
+      sceneJson: JSON.stringify({ schemaVersion: id === 'current' ? 13 : 12 }),
+    }))
+
+    await expect(listProjects()).resolves.toEqual([
+      { id: 'current', name: '新工程', createdAt: 1, updatedAt: 2, objectCount: 1 },
+    ])
+  })
+
   it('删除等待在途保存完成，并阻止删除后的迟到保存复活工程', async () => {
     const projectId = 'delete-race-project'
     let finishSave: (() => void) | undefined

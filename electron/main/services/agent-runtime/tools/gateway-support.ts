@@ -138,8 +138,8 @@ export function assertOutputDataClassesCovered(
 
 export function validateAuthorizationSource(request: AgentToolExecuteRequest): void {
   const source = request.authorizationSource ?? 'direct'
-  if (source === 'approved_workflow' && !request.parentToolCallId) {
-    throw new AgentToolGatewayError('INVALID_INPUT', '工作流委托缺少父工具调用 ID')
+  if (['approved_workflow', 'approved_program', 'approved_script'].includes(source) && !request.parentToolCallId) {
+    throw new AgentToolGatewayError('INVALID_INPUT', '受控编排委托缺少父工具调用 ID')
   }
   if (source === 'direct' && request.parentToolCallId) {
     throw new AgentToolGatewayError('INVALID_INPUT', '直接工具调用不能携带父工具调用 ID')

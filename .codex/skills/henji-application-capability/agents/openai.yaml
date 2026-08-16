@@ -1,4 +1,4 @@
 interface:
   display_name: "痕迹AI 应用能力适配"
-  short_description: "新增页面、工具、设置或数据能力时完成助手原生适配与验证"
-  default_prompt: "使用 $henji-application-capability 将这个功能注册为原生应用能力并完成覆盖验证。"
+  short_description: "按反射注册表、Henji Script 与结果验证规范接入应用能力"
+  default_prompt: "使用 $henji-application-capability 将这个功能接入 Application Control，并确保 Henji Script 可发现、可执行且能从正式状态源验证结果。"

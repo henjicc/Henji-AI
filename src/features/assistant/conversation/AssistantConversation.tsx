@@ -62,7 +62,7 @@ import {
   assistantAttachmentDraftReducer,
 } from './assistantAttachments'
 
-const terminalStatuses = new Set(['completed', 'budget_exhausted', 'failed', 'cancelled'])
+const terminalStatuses = new Set(['completed', 'completed_with_warning', 'budget_exhausted', 'failed', 'cancelled'])
 const deferredBlockStyle: CSSProperties = {
   contentVisibility: 'auto',
   containIntrinsicSize: 'auto 96px',
@@ -392,8 +392,8 @@ export function AssistantConversation(): JSX.Element {
                 <span className={`shrink-0 font-medium ${UI_TEXT_META_CLASS}`}>执行过程</span>
                 <span className={`min-w-0 flex-1 truncate ${UI_TEXT_META_CLASS}`}>
                   {terminalStatuses.has(runState.status)
-                    ? runState.status === 'completed'
-                      ? '已完成'
+                    ? runState.status === 'completed' || runState.status === 'completed_with_warning'
+                      ? runState.status === 'completed_with_warning' ? '已完成，有提示' : '已完成'
                       : runState.status === 'budget_exhausted'
                         ? runState.error ? '已达任务预算，需要确认后继续' : '准备续跑'
                         : runState.status === 'failed' ? '未完成' : '已取消'
@@ -528,6 +528,13 @@ export function AssistantConversation(): JSX.Element {
             <div className="flex items-center gap-1.5 font-medium"><AlertCircle className="h-4 w-4" />{runErrorPresentation?.title}</div>
             <p className="mt-1.5 leading-5 text-text-muted">{runState.error.message}</p>
             <p className="mt-1.5 leading-5 text-text-muted">下一步：{runErrorPresentation?.nextAction}</p>
+          </section>
+        ) : null}
+
+        {runState?.presentationOutcome.status === 'fallback' && runState.presentationOutcome.warning ? (
+          <section style={deferredBlockStyle} className="rounded-lg bg-warning/10 p-3 text-xs text-warning">
+            <div className="flex items-center gap-1.5 font-medium"><AlertCircle className="h-4 w-4" />操作已完成，说明生成失败</div>
+            <p className="mt-1.5 leading-5 text-text-muted">{runState.presentationOutcome.warning.message}</p>
           </section>
         ) : null}
 

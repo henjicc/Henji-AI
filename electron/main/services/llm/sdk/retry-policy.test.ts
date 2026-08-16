@@ -80,18 +80,47 @@ describe('executeModelStepWithRetry', () => {
     expect(operation).toHaveBeenCalledTimes(4)
   })
 
-  it('流已产生文本后不自动重放请求', async () => {
-    const operation = vi.fn(async (emit) => {
-      emit({ type: 'TextDelta', text: '部分输出' })
-      throw providerError('server')
-    })
+  it('流出部分文本但尚未提交工具调用时仍可安全重试', async () => {
+    const operation = vi.fn()
+      .mockImplementationOnce(async (emit) => {
+        emit({ type: 'TextDelta', text: '部分输出' })
+        throw providerError('server')
+      })
+      .mockResolvedValueOnce(result)
+    const emit = vi.fn()
     await expect(executeModelStepWithRetry({
       input,
       signal: new AbortController().signal,
-      emit: vi.fn(),
+      emit,
       operation,
-      sleep: vi.fn(),
-    })).rejects.toMatchObject({ details: { category: 'server' } })
-    expect(operation).toHaveBeenCalledTimes(1)
+      sleep: vi.fn().mockResolvedValue(undefined),
+    })).resolves.toBe(result)
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'Retrying' }))
+  })
+
+  it('供应商丢失错误细节时按本地请求截止时间识别超时并重试', async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce({})
+      .mockResolvedValueOnce(result)
+    const now = vi.fn()
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(60_001)
+      .mockReturnValueOnce(60_002)
+    const emit = vi.fn()
+    await expect(executeModelStepWithRetry({
+      input: { ...input, settings: { timeoutMs: 60_000, maxRetries: 1 } },
+      signal: new AbortController().signal,
+      emit,
+      operation,
+      sleep: vi.fn().mockResolvedValue(undefined),
+      now,
+    })).resolves.toBe(result)
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'Retrying',
+      category: 'network',
+      code: 'MODEL_REQUEST_TIMEOUT',
+    }))
   })
 })

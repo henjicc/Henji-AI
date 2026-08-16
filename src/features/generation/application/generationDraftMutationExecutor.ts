@@ -24,6 +24,7 @@ const WRITERS = fieldWriterTable(FIELDS)
  * 不重写 reducer——最终提交都落在 5.1 的 applyGenerationDraftPatch 上（经 5.3 的
  * store.patch）。 */
 export class GenerationDraftMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = GENERATION_DRAFT_ENTITY_TYPE
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -51,7 +52,7 @@ export class GenerationDraftMutationExecutor implements ApplicationMutationExecu
     return {
       status: 'completed',
       resultingRevisions: { generation_draft: revision },
-      producedRefs: [{ kind: this.entityType, id: SINGLETON_ID, revision }],
+      directRefs: [{ kind: this.entityType, id: SINGLETON_ID, revision }],
       evidence: step.mutations.map((mutation) => ({
         kind: 'property_value' as const,
         target: { kind: this.entityType, id: SINGLETON_ID, revision },
@@ -76,7 +77,7 @@ export class GenerationDraftMutationExecutor implements ApplicationMutationExecu
     return {
       status: 'completed',
       resultingRevisions: { generation_draft: revision },
-      producedRefs: [{ kind: this.entityType, id: SINGLETON_ID, revision }],
+      directRefs: [{ kind: this.entityType, id: SINGLETON_ID, revision }],
       evidence: [{
         kind: 'entity_state',
         target: { kind: this.entityType, id: SINGLETON_ID, revision },

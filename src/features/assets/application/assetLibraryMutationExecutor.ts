@@ -20,6 +20,7 @@ const undoRecords = new Map<string, { libraryId: string; name: string }>()
 
 /** 素材集合改名的通用属性执行器；界面与助手共用同一个平台领域入口。写入表定义收敛在 assetFields.ts。 */
 export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = ASSET_ENTITY_TYPES.library
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -56,7 +57,7 @@ export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor
     return {
       status: 'completed',
       resultingRevisions: { assets: revision },
-      producedRefs: [{ kind: this.entityType, id: libraryId, revision }],
+      directRefs: [{ kind: this.entityType, id: libraryId, revision }],
       evidence: [{
         kind: 'property_value',
         target: { kind: this.entityType, id: libraryId, revision },
@@ -83,7 +84,7 @@ export class AssetLibraryMutationExecutor implements ApplicationMutationExecutor
     return {
       status: 'completed',
       resultingRevisions: { assets: revision },
-      producedRefs: [{ kind: this.entityType, id: record.libraryId, revision }],
+      directRefs: [{ kind: this.entityType, id: record.libraryId, revision }],
       evidence: [{
         kind: 'entity_state',
         target: { kind: this.entityType, id: record.libraryId, revision },

@@ -5,9 +5,11 @@ description: 用户说生成失败了、卡住了、报错了、图没出来、�
 
 # 排查生成失败
 
+应用状态读取也遵守单一入口：需要列出或读取生成任务时，先取得 `scriptApi`，在一次 `run_henji_script` 中使用发现到的 `app.entities` / `app.action` 完成读取。`query_diagnostic_events` 是运行诊断入口，可以在拿到稳定 runId/taskId 后单独调用；不要直接逐次调用旧的生成应用工具。
+
 ## 先拿到 runId 或 taskId
 
-没有稳定 ID 就无法可靠关联。用户说"刚才那次"时，先用 `list_generation_history` 或 `get_generation_task` 把它对应到具体任务，再查日志。
+没有稳定 ID 就无法可靠关联。用户说"刚才那次"时，先通过 Henji Script 从正式生成任务状态源列出或读取任务，把它对应到具体引用，再查日志。只能使用本轮 `scriptApi` 真实披露的实体、属性和 action，不能照抄固定工具名。
 
 拿不到 ID 就直说关联置信度降低，**不要**凭时间接近就断言是同一次。
 

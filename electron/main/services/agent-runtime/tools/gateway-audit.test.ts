@@ -96,6 +96,7 @@ function request(
   approvalId?: string,
   authorization?:
     | { source: 'approved_workflow'; parentToolCallId: string }
+    | { source: 'approved_program'; parentToolCallId: string }
     | { source: 'approved_action_group'; parentToolCallId?: never }
 ) {
   return {
@@ -398,5 +399,20 @@ describe('AgentToolGateway permission audit', () => {
       source: 'approved_action_group',
     })
     expect(current.facts[0]?.authorization.parentToolCallId).toBeUndefined()
+  })
+
+  it('受控程序委托审计保存程序父调用', async () => {
+    const current = fixture({ risk: 'R0', readOnly: true })
+    await current.gateway.execute(request(
+      'program-input',
+      'full_access',
+      undefined,
+      { source: 'approved_program', parentToolCallId: 'program-parent' }
+    ))
+
+    expect(current.facts[0]?.authorization).toMatchObject({
+      source: 'approved_program',
+      parentToolCallId: 'program-parent',
+    })
   })
 })

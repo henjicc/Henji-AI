@@ -1,10 +1,10 @@
 import { create } from 'zustand'
-import type { StageShot } from '../domain/shotTypes'
+import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 
 export type StageEditorTool = 'translate' | 'rotate' | 'scale' | 'path'
 
 export interface StagePathSelection {
-  shotId: string
+  stateKeyframeId: string
   objectId: string
 }
 
@@ -12,25 +12,25 @@ export type StagePathControlSelection =
   | { kind: 'start' | 'end' }
   | { kind: 'knot'; knotId: string }
 
-export function resolvePathShotId(
-  shots: StageShot[],
+export function resolvePathStateKeyframeId(
+  stateKeyframes: StageStateKeyframe[],
   currentTime: number,
-  selectedShotId: string | null,
+  selectedStateKeyframeId: string | null,
 ): string | null {
-  if (shots.length < 2) return null
-  const selectedIndex = selectedShotId ? shots.findIndex((shot) => shot.id === selectedShotId) : -1
-  if (selectedIndex >= 0 && selectedIndex < shots.length - 1
-    && Math.abs(shots[selectedIndex].time - currentTime) < 1e-4) {
-    return shots[selectedIndex].id
+  if (stateKeyframes.length < 2) return null
+  const selectedIndex = selectedStateKeyframeId ? stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === selectedStateKeyframeId) : -1
+  if (selectedIndex >= 0 && selectedIndex < stateKeyframes.length - 1
+    && Math.abs(stateKeyframes[selectedIndex].time - currentTime) < 1e-4) {
+    return stateKeyframes[selectedIndex].id
   }
-  const activeIndex = shots.findIndex((shot, index) => (
-    index < shots.length - 1
-    && currentTime >= shot.time
-    && currentTime < shots[index + 1].time
+  const activeIndex = stateKeyframes.findIndex((stateKeyframe, index) => (
+    index < stateKeyframes.length - 1
+    && currentTime >= stateKeyframe.time
+    && currentTime < stateKeyframes[index + 1].time
   ))
-  if (activeIndex >= 0) return shots[activeIndex].id
-  if (selectedIndex >= 0) return shots[Math.min(selectedIndex, shots.length - 2)].id
-  return shots[0].id
+  if (activeIndex >= 0) return stateKeyframes[activeIndex].id
+  if (selectedIndex >= 0) return stateKeyframes[Math.min(selectedIndex, stateKeyframes.length - 2)].id
+  return stateKeyframes[0].id
 }
 
 interface CameraStageToolState {

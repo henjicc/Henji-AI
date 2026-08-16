@@ -357,6 +357,17 @@ export function useTaskGeneration({
         errorMessage: task.error?.slice(0, 1_000) ?? null,
       }
     },
+    getResult: (taskId) => {
+      const task = tasksRef.current.find((item) => item.id === taskId)
+      if (!task || task.status !== 'success' || !task.result) return null
+      return {
+        taskId: task.id,
+        mediaType: task.result.type,
+        url: task.result.url,
+        ...(task.result.filePath ? { filePath: task.result.filePath } : {}),
+        prompt: task.result.prompt,
+      }
+    },
     cancel: async (taskId, reason) => {
       const task = tasksRef.current.find((item) => item.id === taskId)
       if (!task) throw new Error('TASK_NOT_FOUND')

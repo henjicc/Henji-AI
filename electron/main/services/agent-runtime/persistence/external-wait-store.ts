@@ -31,6 +31,7 @@ interface WaitRow {
   consumed_at: number | null
   resumed_run_id: string | null
   error: string | null
+  continuation_json: string | null
 }
 
 function toIso(value: number | null): string | null {
@@ -56,6 +57,7 @@ function rowToRecord(row: WaitRow): AgentExternalWaitRecord {
     consumedAt: toIso(row.consumed_at),
     resumedRunId: row.resumed_run_id,
     error: row.error,
+    continuation: row.continuation_json ? JSON.parse(row.continuation_json) as unknown : null,
   })
 }
 
@@ -68,13 +70,14 @@ export class AgentExternalWaitStore {
     this.database.prepare(`
       INSERT INTO agent_external_waits(
         wait_id, thread_id, source_run_id, task_id, target_statuses_json,
-        status, resume_policy, save_point_sequence, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+        status, resume_policy, save_point_sequence, created_at, expires_at, continuation_json
+      ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
       ON CONFLICT(source_run_id, task_id) DO NOTHING
     `).run(
       input.waitId, input.threadId, input.sourceRunId, input.taskId,
       JSON.stringify(input.targetStatuses), input.resumePolicy,
-      input.savePointSequence, now, now + input.timeoutMs
+      input.savePointSequence, now, now + input.timeoutMs,
+      input.continuation ? JSON.stringify(input.continuation) : null
     )
     this.refreshLastObserved(input.taskId)
     const record = this.getBySourceTask(input.sourceRunId, input.taskId)

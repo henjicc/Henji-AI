@@ -65,7 +65,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 
 4. **`nodes/index.ts`**：把新组件加进 `nodeTypes` 映射（key 是 `CANVAS_NODE_TYPES` 里的值）。
 5. **i18n**：补 `node.menu.xxx`、`node.xxx.promptPlaceholder/promptRequired/apiKeyRequired/resultTitle` 等 key（zh-CN / en-US 都要）。
-6. 跑 `npm run gen:model-manifest && npm run check:model-i18n && npm run lint`。
+6. 按 `docs/rules/testing.md` 选择最小验证：运行节点/注册表精确测试；只有改到模型 manifest 或翻译时才运行 `gen:model-manifest` / `check:model-i18n`，不要默认跑全量 lint。
 
 价格徽标、生成按钮、提示词框、端口、resize 全部由 `GenerationNodeShell` 内置，**不要**在这层重新实现任何一项。
 
@@ -148,4 +148,4 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 - [ ] 没有节点内置"生成"按钮（`capabilities.toolbarGenerate` + `canvasEventBus` 替代）
 - [ ] 节点自身的 `useNodeModelParams` 调用传了 `media`（除非它是共享 `storedParams` 的次要实例）
 - [ ] `nodeRegistry.ts` 的 `CanvasNodeDefinition` 字段填全，对照 [references/node-registry-fields.md](references/node-registry-fields.md)
-- [ ] 跑 `npm run gen:model-manifest && npm run check:colors && npm run check:model-i18n && npm run lint && npx tsc --noEmit -p tsconfig.json`
+- [ ] 已按 `docs/rules/testing.md` 跑节点/注册表精确测试及本次真正涉及的颜色、模型 i18n、类型专项检查；没有无理由叠加全量命令

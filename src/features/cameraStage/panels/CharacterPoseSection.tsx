@@ -17,7 +17,6 @@ import type { StagePoseJointId } from '../domain/poseTypes'
 import type { StageCharacterObject, StageVec3 } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { poseJointPath } from '../domain/animatableProps'
-import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 
 /**
  * 角色专属属性区：体型变体切换、预设姿势一键应用、FK 逐关节欧拉滑杆。
@@ -41,24 +40,19 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 interface JointSlidersProps {
   jointName: string
   value: StageVec3
-  objectId: string
   jointId: StagePoseJointId
   onChange: (next: StageVec3, changedPath: string) => void
 }
 
-const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, objectId, jointId, onChange }) => {
+const JointSliders: React.FC<JointSlidersProps> = ({ jointName, value, jointId, onChange }) => {
   const basePath = poseJointPath(jointId)
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center gap-1 text-xs text-text-muted">
-        <KeyframeStopwatch objectId={objectId} groupPath={basePath} />
-        <span>{jointName}</span>
-      </div>
+      <div className="text-xs text-text-muted">{jointName}</div>
       {AXES.map((axis) => {
         const path = `${basePath}.${axis}`
         return (
           <div key={axis} className="flex items-center gap-1.5">
-            <KeyframeStopwatch objectId={objectId} path={path} className="h-4 w-4" />
             <span className="w-3 shrink-0 text-center text-2xs text-text-muted">{AXIS_LABELS[axis]}</span>
             <UiRangeInput
               min={-180}
@@ -204,7 +198,6 @@ const CharacterPoseSection: React.FC<{ object: StageCharacterObject }> = ({ obje
                       <JointSliders
                         key={joint.id}
                         jointName={joint.name}
-                        objectId={object.id}
                         jointId={joint.id}
                         value={object.pose.joints[joint.id] ?? ZERO_EULER}
                         onChange={(next, changedPath) => handleJointChange(joint.id, next, changedPath)}

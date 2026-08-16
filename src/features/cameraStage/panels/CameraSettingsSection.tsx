@@ -16,9 +16,8 @@ import type {
   StageCameraObject,
   StageVec3,
 } from '../domain/sceneTypes'
-import type { StageCameraEffector } from '../domain/shotTypes'
+import type { StageCameraEffector } from '../domain/stateKeyframeTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
-import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 
 type LookAtMode = StageCameraLookAt['mode']
 
@@ -227,10 +226,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
     <div className="flex flex-col gap-3">
       <SectionTitle>相机</SectionTitle>
       <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-1 text-xs text-text-muted">
-          <KeyframeStopwatch objectId={object.id} groupPath="transform.rotation" />
-          <span>旋转（°）</span>
-        </div>
+        <div className="text-xs text-text-muted">旋转（°）</div>
         <Vec3NumberRow
           label="X / Y / Z"
           value={cameraRotation}
@@ -238,10 +234,7 @@ const CameraSettingsSection: React.FC<{ object: StageCameraObject }> = ({ object
         />
       </div>
       <div className="flex flex-col gap-1.5">
-        <div className="flex items-center gap-1 text-xs text-text-muted">
-          <KeyframeStopwatch objectId={object.id} groupPath="fov" />
-          <span>焦距（mm，全画幅等效）</span>
-        </div>
+        <div className="text-xs text-text-muted">焦距（mm，全画幅等效）</div>
         <div className="flex items-center gap-1.5">
           <UiRangeInput
             min={10}

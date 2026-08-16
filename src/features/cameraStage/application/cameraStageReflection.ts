@@ -15,13 +15,18 @@ import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import {
+  cameraStageCollectionAvailability,
+  cameraStageProjectIdFromRef,
+  cameraStagePropertyRestriction,
+} from './cameraStageAvailability'
+import {
   CAMERA_ANIMATABLE_PATH_BY_PROPERTY_ID,
   CAMERA_FIELDS,
   OBJECT_ANIMATABLE_PATH_BY_PROPERTY_ID,
   OBJECT_FIELDS,
 } from './cameraStageObjectFields'
 import { SCENE_APPEARANCE_FIELDS, SCENE_TIMELINE_FIELDS } from './cameraStageSceneFields'
-import { KEYFRAME_FIELDS, PLAYBACK_FIELDS, PROJECT_FIELDS, SHOT_FIELDS } from './cameraStageTimelineFields'
+import { PLAYBACK_FIELDS, PROJECT_FIELDS, STATE_KEYFRAME_FIELDS } from './cameraStageTimelineFields'
 import { TRAJECTORY_FIELDS } from './cameraStageTrajectoryFields'
 import { calculateStageObjectBounds } from './sceneAnalysis'
 
@@ -32,9 +37,8 @@ const ENTITY_TYPES = {
   scene: 'camera_stage.scene',
   object: 'camera_stage.object',
   camera: 'camera_stage.camera',
-  shot: 'camera_stage.shot',
+  stateKeyframe: 'camera_stage.state_keyframe',
   trajectory: 'camera_stage.trajectory',
-  keyframe: 'camera_stage.keyframe',
   playback: 'camera_stage.playback',
 } as const
 
@@ -121,19 +125,15 @@ const VECTOR3 = { kind: 'vector3', unit: 'scene_unit' } as const
 const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = {
   [ENTITY_TYPES.project]: [
     ...fieldDescriptors(PROJECT_FIELDS),
-    property(ENTITY_TYPES.project, 'editor_mode', '编辑模式', { kind: 'enum', values: [{ value: 'simple', label: '简易' }, { value: 'pro', label: '专业' }] }, {
-      readOnly: '编辑模式只能在新建工程时选定（create_camera_stage_project 的 mode 参数），或通过 '
-        + 'bake_camera_stage_to_pro 从简易单向烘焙为专业；应用本身不支持把已有内容的工程从专业改回简易。',
-    }),
     property(ENTITY_TYPES.project, 'object_count', '对象数量', INTEGER, { readOnly: '对象数量由场景内容计算。' }),
-    property(ENTITY_TYPES.project, 'shot_count', '镜头数量', INTEGER, { readOnly: '镜头数量由镜头列表计算。' }),
+    property(ENTITY_TYPES.project, 'state_keyframe_count', '状态关键帧数量', INTEGER, { readOnly: '数量由状态关键帧集合计算。' }),
   ],
   [ENTITY_TYPES.scene]: [
     property(ENTITY_TYPES.scene, 'project_ref', '所属工程', { kind: 'ref', refKinds: [ENTITY_TYPES.project] }, { readOnly: '所属工程不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.project], cardinality: 'one' } }),
     property(ENTITY_TYPES.scene, 'object_refs', '场景对象', { kind: 'ref_list', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '对象集合通过正式创建和删除操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'many' } }),
-    property(ENTITY_TYPES.scene, 'shot_refs', '镜头卡', { kind: 'ref_list', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '镜头卡的增删排序通过 camera_stage.shot 的集合写入维护，这里只读列出当前集合。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'many' } }),
+    property(ENTITY_TYPES.scene, 'state_keyframe_refs', '状态关键帧', { kind: 'ref_list', refKinds: [ENTITY_TYPES.stateKeyframe] }, { readOnly: '状态关键帧的增删排序通过 camera_stage.state_keyframe 的集合写入维护，这里只读列出当前集合。', relation: { targetEntityTypes: [ENTITY_TYPES.stateKeyframe], cardinality: 'many' } }),
     /*
-     * 场景外观 25 项 + 时间轴 3 项：界面上有的每一项这里都要有。
+     * 场景外观 25 项 + 活动摄像机：界面上有的每一项这里都要有。
      *
      * 这一组此前一项都没注册，于是"把天空改成深蓝""地面换成网格""把太阳调到黄昏"这类
      * 请求助手全都做不了——不是被权限挡住，是通用动词**根本看不见**这些字段。按项目规则
@@ -155,23 +155,18 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.camera, 'look_at_mode', '注视模式', { kind: 'enum', values: [{ value: 'manual', label: '坐标' }, { value: 'object', label: '对象' }] }, { readOnly: '注视模式由注视点或注视对象修改推导。' }),
     property(ENTITY_TYPES.camera, 'effector_count', '效果器数量', INTEGER, { readOnly: '效果器数量由效果器列表计算。' }),
   ],
-  [ENTITY_TYPES.shot]: [
-    ...fieldDescriptors(SHOT_FIELDS),
+  [ENTITY_TYPES.stateKeyframe]: [
+    ...fieldDescriptors(STATE_KEYFRAME_FIELDS),
   ],
   [ENTITY_TYPES.playback]: [
     ...fieldDescriptors(PLAYBACK_FIELDS),
   ],
   [ENTITY_TYPES.trajectory]: [
-    property(ENTITY_TYPES.trajectory, 'shot_ref', '起始镜头', { kind: 'ref', refKinds: [ENTITY_TYPES.shot] }, { readOnly: '轨迹所属镜头不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.shot], cardinality: 'one' } }),
+    property(ENTITY_TYPES.trajectory, 'state_keyframe_ref', '起始状态关键帧', { kind: 'ref', refKinds: [ENTITY_TYPES.stateKeyframe] }, { readOnly: '轨迹所属状态关键帧不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.stateKeyframe], cardinality: 'one' } }),
     property(ENTITY_TYPES.trajectory, 'object_ref', '运动对象', { kind: 'ref', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '轨迹对象不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'one' } }),
     property(ENTITY_TYPES.trajectory, 'source', '轨迹来源', STRING, { readOnly: '轨迹来源由语义操作或手动编辑产生；手动编辑后由写入自动标记为 custom，见 knots 等可写属性。' }),
     property(ENTITY_TYPES.trajectory, 'knot_count', '控制点数量', INTEGER, { readOnly: '控制点数量由 knots 属性的数组长度计算，写 knots 即可增减控制点。' }),
     ...fieldDescriptors(TRAJECTORY_FIELDS),
-  ],
-  [ENTITY_TYPES.keyframe]: [
-    property(ENTITY_TYPES.keyframe, 'object_ref', '关键帧对象', { kind: 'ref', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '关键帧对象不可变更。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'one' } }),
-    property(ENTITY_TYPES.keyframe, 'property_path', '属性路径', STRING, { readOnly: '属性路径由轨道定义。' }),
-    ...fieldDescriptors(KEYFRAME_FIELDS),
   ],
 }
 
@@ -216,9 +211,10 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   }
 
   async readEntity(ref: ApplicationRef, request: { propertyIds?: string[] }) {
-    const properties = await this.readProperties(ref)
+    const normalizedRef = await this.normalizeRef(ref)
+    const properties = await this.readProperties(normalizedRef)
     return {
-      ref,
+      ref: normalizedRef,
       entityType: this.entityType,
       revisions: { [REVISION_SCOPE]: this.readRevision() },
       properties: filterProperties(properties, request.propertyIds),
@@ -227,25 +223,38 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
   }
 
   async getPropertyAvailability(ref: ApplicationRef, propertyIds: string[]) {
-    await this.readProperties(ref)
+    const normalizedRef = await this.normalizeRef(ref)
+    await this.readProperties(normalizedRef)
+    const snapshot = await cameraStageApplicationService.readSnapshot(cameraStageProjectIdFromRef(normalizedRef))
     const descriptors = new Map(propertiesByEntity[this.entityType].map((item) => [item.id, item]))
     return propertyIds.map((propertyId) => {
       const descriptor = descriptors.get(propertyId)
       if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${propertyId}`)
+      const restriction = cameraStagePropertyRestriction(this.entityType, propertyId, snapshot)
       return {
         propertyId,
         readable: true,
-        writable: !descriptor.readOnlyReason,
-        reasons: descriptor.readOnlyReason ? [descriptor.readOnlyReason] : [],
+        writable: !descriptor.readOnlyReason && !restriction,
+        reasons: [descriptor.readOnlyReason, restriction?.reason].filter((reason): reason is string => Boolean(reason)),
+        ...(restriction ? { blocks: restriction.blocks } : {}),
+        ...(restriction ? { recoveries: restriction.recoveries } : {}),
         requiredPermissions: ['camera_stage:read'],
         revisions: { [REVISION_SCOPE]: this.readRevision() },
       }
     })
   }
 
+  async getCollectionAvailability(parent: ApplicationRef) {
+    const snapshot = await cameraStageApplicationService.readSnapshot(cameraStageProjectIdFromRef(parent))
+    return cameraStageCollectionAvailability(this.entityType, parent, snapshot, this.readRevision())
+  }
+
   private async snapshots(): Promise<CameraStageProjectSnapshot[]> {
     const projects = await cameraStageApplicationService.listProjects()
-    return await Promise.all(projects.map((project) => cameraStageApplicationService.readSnapshot(project.id)))
+    const results = await Promise.allSettled(
+      projects.map((project) => cameraStageApplicationService.readSnapshot(project.id)),
+    )
+    return results.flatMap((result) => result.status === 'fulfilled' ? [result.value] : [])
   }
 
   private async allRefs(): Promise<ApplicationRef[]> {
@@ -261,10 +270,36 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       }
       if (this.entityType === ENTITY_TYPES.object) return snapshot.objects.filter((object) => object.type !== 'camera').map((object) => childRef(this.entityType, snapshot.id, object.id, object.name))
       if (this.entityType === ENTITY_TYPES.camera) return snapshot.objects.filter((object) => object.type === 'camera').map((object) => childRef(this.entityType, snapshot.id, object.id, object.name))
-      if (this.entityType === ENTITY_TYPES.shot) return snapshot.shots.map((shot) => childRef(this.entityType, snapshot.id, shot.id, shot.name))
-      if (this.entityType === ENTITY_TYPES.trajectory) return snapshot.shots.flatMap((shot) => Object.entries(shot.transition.perObject).flatMap(([objectId, detail]) => detail.spatialPath ? [childRef(this.entityType, snapshot.id, `${shot.id}:${objectId}`)] : []))
-      return snapshot.animation.tracks.flatMap((track) => track.keyframes.map((keyframe) => childRef(this.entityType, snapshot.id, `${track.objectId}:${track.propertyPath}:${keyframe.time}`)))
+      if (this.entityType === ENTITY_TYPES.stateKeyframe) return snapshot.stateKeyframes.map((stateKeyframe) => childRef(this.entityType, snapshot.id, stateKeyframe.id, stateKeyframe.name))
+      if (this.entityType === ENTITY_TYPES.trajectory) return snapshot.stateKeyframes.flatMap((stateKeyframe) => Object.entries(stateKeyframe.transition.perObject).flatMap(([objectId, detail]) => detail.spatialPath ? [childRef(this.entityType, snapshot.id, `${stateKeyframe.id}:${objectId}`)] : []))
+      return []
     })
+  }
+
+  /**
+   * 接受当前工程内唯一的子实体短 ID，并立即规范化成正式的 `projectId:childId`。
+   *
+   * 模型偶尔会从已返回的稳定引用里只保留末段 UUID。让它因此多失败、再 list 一轮没有任何
+   * 安全价值：短 ID 只有在全工程唯一时才解析，存在歧义仍按 NOT_FOUND 拒绝。
+   */
+  private async normalizeRef(ref: ApplicationRef): Promise<ApplicationRef> {
+    if (ref.kind !== this.entityType || ref.id.includes(':')) return ref
+    const shortRefEntityTypes = new Set<EntityType>([
+      ENTITY_TYPES.object, ENTITY_TYPES.camera, ENTITY_TYPES.stateKeyframe,
+    ])
+    if (!shortRefEntityTypes.has(this.entityType)) return ref
+    const matches = (await this.snapshots()).flatMap((snapshot) => {
+      if (this.entityType === ENTITY_TYPES.stateKeyframe) {
+        return snapshot.stateKeyframes.some((item) => item.id === ref.id)
+          ? [childRef(this.entityType, snapshot.id, ref.id, ref.label)]
+          : []
+      }
+      const expectsCamera = this.entityType === ENTITY_TYPES.camera
+      const object = snapshot.objects.find((item) => item.id === ref.id
+        && (item.type === 'camera') === expectsCamera)
+      return object ? [childRef(this.entityType, snapshot.id, ref.id, ref.label ?? object.name)] : []
+    })
+    return matches.length === 1 ? matches[0] : ref
   }
 
   private async readProperties(ref: ApplicationRef): Promise<Record<string, JsonValue>> {
@@ -287,21 +322,20 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
       if (!object || (this.entityType === ENTITY_TYPES.camera) !== (object.type === 'camera')) throw new Error('NOT_FOUND')
       return object.type === 'camera' ? this.cameraProperties(projectId, object) : this.objectProperties(object)
     }
-    if (this.entityType === ENTITY_TYPES.shot) {
-      const shot = snapshot.shots.find((candidate) => candidate.id === childId)
-      if (!shot) throw new Error('NOT_FOUND')
-      return this.shotProperties(projectId, shot, snapshot.objects)
+    if (this.entityType === ENTITY_TYPES.stateKeyframe) {
+      const stateKeyframe = snapshot.stateKeyframes.find((candidate) => candidate.id === childId)
+      if (!stateKeyframe) throw new Error('NOT_FOUND')
+      return this.stateKeyframeProperties(projectId, stateKeyframe, snapshot.objects)
     }
     if (this.entityType === ENTITY_TYPES.trajectory) return this.trajectoryProperties(projectId, snapshot, childId)
-    return this.keyframeProperties(projectId, snapshot, childId)
+    throw new Error('NOT_FOUND')
   }
 
   private projectProperties(snapshot: CameraStageProjectSnapshot): Record<string, JsonValue> {
     return {
       ...fieldReadValues(PROJECT_FIELDS, snapshot),
-      [`${ENTITY_TYPES.project}.editor_mode`]: snapshot.editorMode,
       [`${ENTITY_TYPES.project}.object_count`]: snapshot.objects.length,
-      [`${ENTITY_TYPES.project}.shot_count`]: snapshot.shots.length,
+      [`${ENTITY_TYPES.project}.state_keyframe_count`]: snapshot.stateKeyframes.length,
     }
   }
 
@@ -309,7 +343,7 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     return {
       [`${ENTITY_TYPES.scene}.project_ref`]: { kind: ENTITY_TYPES.project, id: snapshot.id, label: snapshot.name },
       [`${ENTITY_TYPES.scene}.object_refs`]: snapshot.objects.map((object) => childRef(object.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, snapshot.id, object.id, object.name)),
-      [`${ENTITY_TYPES.scene}.shot_refs`]: snapshot.shots.map((shot) => childRef(ENTITY_TYPES.shot, snapshot.id, shot.id, shot.name)),
+      [`${ENTITY_TYPES.scene}.state_keyframe_refs`]: snapshot.stateKeyframes.map((stateKeyframe) => childRef(ENTITY_TYPES.stateKeyframe, snapshot.id, stateKeyframe.id, stateKeyframe.name)),
       ...fieldReadValues(SCENE_TIMELINE_FIELDS, snapshot),
       ...sceneAppearanceProperties(snapshot.sceneSettings),
     }
@@ -334,22 +368,22 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     }
   }
 
-  private shotProperties(projectId: string, shot: CameraStageProjectSnapshot['shots'][number], objects: StageObject[]): Record<string, JsonValue> {
-    return fieldReadValues(SHOT_FIELDS, { projectId, shot, objects })
+  private stateKeyframeProperties(projectId: string, stateKeyframe: CameraStageProjectSnapshot['stateKeyframes'][number], objects: StageObject[]): Record<string, JsonValue> {
+    return fieldReadValues(STATE_KEYFRAME_FIELDS, { projectId, stateKeyframe, objects })
   }
 
   private trajectoryProperties(projectId: string, snapshot: CameraStageProjectSnapshot, id: string): Record<string, JsonValue> {
-    const [shotId, objectId] = id.split(':')
-    const index = snapshot.shots.findIndex((shot) => shot.id === shotId)
-    const shot = snapshot.shots[index]
-    const nextShot = snapshot.shots[index + 1]
-    const path = shot?.transition.perObject[objectId]?.spatialPath
-    const startPosition = shot?.objectStates[objectId]?.transform.position
-    const endPosition = nextShot?.objectStates[objectId]?.transform.position
+    const [stateKeyframeId, objectId] = id.split(':')
+    const index = snapshot.stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === stateKeyframeId)
+    const stateKeyframe = snapshot.stateKeyframes[index]
+    const nextStateKeyframe = snapshot.stateKeyframes[index + 1]
+    const path = stateKeyframe?.transition.perObject[objectId]?.spatialPath
+    const startPosition = stateKeyframe?.objectStates[objectId]?.transform.position
+    const endPosition = nextStateKeyframe?.objectStates[objectId]?.transform.position
     if (!path || !startPosition || !endPosition) throw new Error('NOT_FOUND')
     const object = snapshot.objects.find((candidate) => candidate.id === objectId)
     return {
-      [`${ENTITY_TYPES.trajectory}.shot_ref`]: childRef(ENTITY_TYPES.shot, projectId, shotId),
+      [`${ENTITY_TYPES.trajectory}.state_keyframe_ref`]: childRef(ENTITY_TYPES.stateKeyframe, projectId, stateKeyframeId),
       [`${ENTITY_TYPES.trajectory}.object_ref`]: childRef(object?.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, projectId, objectId),
       [`${ENTITY_TYPES.trajectory}.source`]: path.source.kind === 'preset' ? path.source.preset.kind : 'custom',
       [`${ENTITY_TYPES.trajectory}.knot_count`]: path.knots.length,
@@ -357,31 +391,15 @@ class CameraStageReflectionProvider implements ApplicationEntityProvider {
     }
   }
 
-  private keyframeProperties(projectId: string, snapshot: CameraStageProjectSnapshot, id: string): Record<string, JsonValue> {
-    const parts = id.split(':')
-    const objectId = parts.shift()
-    const time = Number(parts.pop())
-    const propertyPath = parts.join(':')
-    const track = snapshot.animation.tracks.find((candidate) => candidate.objectId === objectId && candidate.propertyPath === propertyPath)
-    const keyframe = track?.keyframes.find((candidate) => candidate.time === time)
-    if (!objectId || !track || !keyframe) throw new Error('NOT_FOUND')
-    const object = snapshot.objects.find((candidate) => candidate.id === objectId)
-    return {
-      [`${ENTITY_TYPES.keyframe}.object_ref`]: childRef(object?.type === 'camera' ? ENTITY_TYPES.camera : ENTITY_TYPES.object, projectId, objectId),
-      [`${ENTITY_TYPES.keyframe}.property_path`]: propertyPath,
-      ...fieldReadValues(KEYFRAME_FIELDS, keyframe),
-    }
-  }
 }
 
 const ENTITY_META: Record<EntityType, { title: string; description: string; parents: EntityType[]; queryIds: string[] }> = {
   [ENTITY_TYPES.project]: { title: '三维工程', description: '可持久化的三维场景与运镜工程。', parents: [], queryIds: ['get_camera_stage_project'] },
-  [ENTITY_TYPES.scene]: { title: '三维场景', description: '工程中的对象、活动摄像机和动画集合。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.scene]: { title: '三维场景', description: '工程中的对象、活动摄像机和状态关键帧集合。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.object]: { title: '三维对象', description: '基础几何体或角色对象。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.camera]: { title: '三维摄像机', description: '具有取景、注视和轨迹控制的摄像机。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
-  [ENTITY_TYPES.shot]: { title: '三维镜头', description: '场景状态关键点和过渡定义。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
-  [ENTITY_TYPES.trajectory]: { title: '三维轨迹', description: '对象或摄像机在相邻镜头间的空间路径。', parents: [ENTITY_TYPES.shot], queryIds: ['observe_camera_stage_scene'] },
-  [ENTITY_TYPES.keyframe]: { title: '三维关键帧', description: '动画轨道上的时间和值控制点。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.stateKeyframe]: { title: '状态关键帧', description: '指定时刻的完整场景状态和到下一时刻的过渡定义。', parents: [ENTITY_TYPES.scene], queryIds: ['observe_camera_stage_scene'] },
+  [ENTITY_TYPES.trajectory]: { title: '三维轨迹', description: '对象或摄像机在相邻状态关键帧间的空间路径。', parents: [ENTITY_TYPES.stateKeyframe], queryIds: ['observe_camera_stage_scene'] },
   [ENTITY_TYPES.playback]: { title: '三维播放控制', description: '时间轴的播放、播放头位置与循环开关。只对当前打开的工程有意义。', parents: [ENTITY_TYPES.project], queryIds: ['observe_camera_stage_scene'] },
 }
 
@@ -402,33 +420,11 @@ export function createCameraStageReflectionRegistrations(readRevision: RevisionR
         revisionScopes: [REVISION_SCOPE],
         queryCapabilityIds: meta.queryIds,
         schemaRef: schemaRef('entity', entityType),
-        ...(entityType === ENTITY_TYPES.keyframe ? {
-          /**
-           * 关键帧可增删。这一句就是"助手能不能做动画"的开关：实体、属性、provider 早就注册
-           * 齐了，助手能读能改，却因为没有创建路径而做不了任何对象动画——上下漂浮、自转、
-           * 位移全都做不了，只能回一句"没有专用能力"。
-           */
+        ...(entityType === ENTITY_TYPES.stateKeyframe ? {
           collectionWrite: {
             creatable: true,
             removable: true,
-            requiredPropertyIds: [
-              `${ENTITY_TYPES.keyframe}.object_ref`,
-              `${ENTITY_TYPES.keyframe}.property_path`,
-              `${ENTITY_TYPES.keyframe}.time`,
-              `${ENTITY_TYPES.keyframe}.value`,
-            ],
-            maxItemsPerChange: 128,
-          },
-        } : {}),
-        ...(entityType === ENTITY_TYPES.shot ? {
-          /**
-           * 镜头卡可增删（2.1）。此前只能靠专用能力 add_camera_stage_shot 新建，删不掉也排不了
-           * 序——store 侧的 removeShot/removeShots 早就是完整实现，缺的只是这一句声明。
-           */
-          collectionWrite: {
-            creatable: true,
-            removable: true,
-            requiredPropertyIds: [`${ENTITY_TYPES.shot}.time`],
+            requiredPropertyIds: [`${ENTITY_TYPES.stateKeyframe}.time`],
             maxItemsPerChange: 64,
           },
         } : {}),

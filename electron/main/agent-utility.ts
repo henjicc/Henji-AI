@@ -7,7 +7,6 @@ import {
   type AgentRunState,
 } from '../../src/core/assistant/events'
 import {
-  hostContextSnapshotSchema,
   type HostContextSnapshot,
 } from '../../src/core/assistant/hostContracts'
 import { agentMemoryRetrievalResultSchema } from '../../src/core/assistant/memory'
@@ -58,12 +57,12 @@ import {
 } from '../../src/core/llm/modelStep'
 import { AgentArtifactStore } from './services/agent-runtime/context/offload'
 import { AgentRunner } from './services/agent-runtime/runner/runner'
-import { createBuiltinAgentToolRegistry } from './services/agent-runtime/tools/builtin'
 import { AgentToolGateway } from './services/agent-runtime/tools/gateway'
-import { AgentToolRegistry } from './services/agent-runtime/tools/registry'
-import type { AgentToolDefinition } from './services/agent-runtime/tools/types'
-import { DeterministicWorkflowService } from './services/application-control/workflows/service'
-import { createWorkflowTools } from './services/agent-runtime/workflows/tools'
+import { createUtilityProxyRegistries } from './services/agent-runtime/tools/utility-proxy-registry'
+import {
+  createHenjiScriptService,
+  createHenjiScriptTools,
+} from './services/agent-runtime/henji-script/tools'
 import { createMainLogger } from './services/logging'
 import {
   calculateModelStepKnownCostUsd,
@@ -92,6 +91,7 @@ if (!parentPort) throw new Error('Agent utility process 缺少父进程通信端
 
 const logger = createMainLogger('main.agent_utility')
 const hostContexts = new Map<string, HostContextSnapshot>()
+const runThreadIds = new Map<string, string>()
 const runners = new Map<string, AgentRunner>()
 const activeModelSteps = new Map<string, AbortController>()
 const pendingRpc = new Map<string, {
@@ -149,64 +149,34 @@ export async function appendPermissionAudit(
   )
 }
 
-function createProxyRegistry(): {
-  registry: AgentToolRegistry
-  catalogRegistry: AgentToolRegistry
-} {
-  const source = createBuiltinAgentToolRegistry(
-    async () => { throw new Error('utility proxy registry 不直接执行 frontend 工具') },
-    {
-      describe: async (request) => agentArtifactDescriptorSchema.parse(
-        await rpc('artifact.describe', agentArtifactDescribeRequestSchema.parse(request))
-      ),
-      read: async (request) => agentArtifactPageSchema.parse(
-        await rpc('artifact.read', agentArtifactReadRequestSchema.parse(request))
-      ),
-    }
-  )
-  const proxy = new AgentToolRegistry()
-  for (const definition of source.allDefinitions()) {
-    const proxied: AgentToolDefinition = {
-      ...definition,
-      execute: definition.name === 'read_agent_artifact'
-        || definition.name === 'search_application_capabilities'
-        ? definition.execute
-        : async (input, context) => {
-          const response = await rpc('tool.execute', {
-            runId: context.runId,
-            threadId: context.threadId,
-            toolCallId: context.toolCallId,
-            toolName: definition.name,
-            input,
-          }, context.signal)
-          const parsed = z.object({
-            output: z.unknown(),
-            hostContext: hostContextSnapshotSchema.nullable(),
-          }).parse(response)
-          if (parsed.hostContext) hostContexts.set(context.runId, parsed.hostContext)
-          return parsed.output
-        },
-    }
-    proxy.register(proxied)
-  }
-  return { registry: proxy, catalogRegistry: source }
-}
-
-const proxyRegistries = createProxyRegistry()
+const proxyRegistries = createUtilityProxyRegistries({
+  executeMainTool: (payload, signal) => rpc('tool.execute', payload, signal),
+  resolveThreadId: (runId) => runThreadIds.get(runId) ?? null,
+  getHostContext: (runId) => hostContexts.get(runId) ?? null,
+  rememberHostContext: (runId, context) => hostContexts.set(runId, context),
+  artifactAccess: {
+    describe: async (request) => agentArtifactDescriptorSchema.parse(
+      await rpc('artifact.describe', agentArtifactDescribeRequestSchema.parse(request))
+    ),
+    read: async (request) => agentArtifactPageSchema.parse(
+      await rpc('artifact.read', agentArtifactReadRequestSchema.parse(request))
+    ),
+  },
+})
 const registry = proxyRegistries.registry
 const gateway = new AgentToolGateway({
   registry,
   getHostContext: (runId) => hostContexts.get(runId) ?? null,
   appendPermissionAudit,
 })
-const workflowService = new DeterministicWorkflowService()
-for (const workflowTool of createWorkflowTools({
-  service: workflowService,
+const henjiScriptService = createHenjiScriptService(registry)
+for (const scriptTool of createHenjiScriptTools({
+  service: henjiScriptService,
   gateway,
   getHostContext: (runId) => hostContexts.get(runId) ?? null,
 })) {
-  registry.register(workflowTool)
-  proxyRegistries.catalogRegistry.register(workflowTool)
+  registry.register(scriptTool)
+  proxyRegistries.catalogRegistry.register(scriptTool)
 }
 const artifactStore = new AgentArtifactStore({
   save: (runId, artifact) => {
@@ -434,6 +404,7 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
   const parsed = agentUtilityStartPayloadSchema.parse(payload)
   if (runners.has(parsed.runId)) throw new Error('[duplicate_run] 运行已存在')
   hostContexts.set(parsed.runId, parsed.hostContext)
+  runThreadIds.set(parsed.runId, parsed.request.threadId)
   const runner = new AgentRunner({
     runId: parsed.runId,
     request: parsed.request,
@@ -506,8 +477,12 @@ async function handleStart(payload: unknown): Promise<AgentRunState> {
 
 async function executeCommand(action: AgentUtilityCommandAction, payload: unknown): Promise<unknown> {
   if (action === 'run.start') return await handleStart(payload)
-  if (action === 'run.release') return releaseUtilityRunPayload(
-    payload, { runners, hostContexts, activeModelSteps })
+  if (action === 'run.release') {
+    const runId = z.object({ runId: z.string().min(1) }).parse(payload).runId
+    const result = releaseUtilityRunPayload(payload, { runners, hostContexts, activeModelSteps })
+    runThreadIds.delete(runId)
+    return result
+  }
   return await executeUtilityControlCommand({
     action,
     payload,

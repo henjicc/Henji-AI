@@ -54,6 +54,7 @@ import {
   listCanvasProjectSummaries,
 } from '@/features/canvas/application/canvasQueryService'
 import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
+import { addGenerationResultToCanvas } from './generationResultCanvasApplicationService'
 import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloadService'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
@@ -160,6 +161,15 @@ export function registerCanvasCapabilityHandlers(
       placement: CanvasNodePlacement
     }>('add_asset_to_canvas', input)
     return await addAssetToCanvas(parsed)
+  })
+
+  registrar.registerHandler('add_generation_result_to_canvas', (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput & {
+      resultRef: { kind: 'generation.result'; id: string }
+      placement: CanvasNodePlacement
+    }>('add_generation_result_to_canvas', input)
+    return addGenerationResultToCanvas(parsed)
   })
 
   registrar.registerHandler('connect_canvas_nodes', (input, context) => {

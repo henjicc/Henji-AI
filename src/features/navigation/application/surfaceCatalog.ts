@@ -77,7 +77,7 @@ const surfaceDefinitions = [
     id: 'tool.camera_stage', kind: 'tool', workspace: 'tools', toolId: 'cameraStage', ...immediate,
     acceptedRefKinds: [
       'camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera',
-      'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe',
+      'camera_stage.state_keyframe', 'camera_stage.trajectory',
     ],
     openPolicy: 'after_target_resolved',
   },

@@ -8,6 +8,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useNavigationStore } from '@/stores/navigationStore'
 
 import { getHostScopeRevisions, retainHostContextTracking } from './hostContext'
+import { notifyApplicationDomainChanged } from '@/core/application-control/domainChangeSignal'
 
 /**
  * `toolbox` 这个 scope 同时被三维场景写入当成乐观并发基线（`baseRevision`）。
@@ -55,6 +56,12 @@ describe('宿主作用域 revision', () => {
     expect(after.canvas).toBe(before.canvas)
     expect(after.assets).toBe(before.assets)
     expect(after.surface).toBeGreaterThan(before.surface)
+  })
+
+  it('正式素材写入信号推进 assets，而素材库纯界面状态仍不推进', () => {
+    const before = getHostScopeRevisions()
+    notifyApplicationDomainChanged('assets')
+    expect(getHostScopeRevisions().assets).toBe(before.assets + 1)
   })
 
   it('画布节点数据变化仍然推进 canvas', () => {

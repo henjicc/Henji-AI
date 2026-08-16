@@ -7,10 +7,12 @@ import {
 } from '../identifiers'
 import {
   applicationEntitySnapshotSchema,
+  applicationCollectionAvailabilitySchema,
   applicationEntityTypeDescriptorSchema,
   applicationPropertyAvailabilitySchema,
   applicationPropertyDescriptorSchema,
   type ApplicationEntitySnapshot,
+  type ApplicationCollectionAvailability,
   type ApplicationEntityTypeDescriptor,
   type ApplicationPropertyAvailability,
   type ApplicationPropertyDescriptor,
@@ -297,8 +299,61 @@ export class ApplicationReflectionRegistry {
           ...(!canRead ? ['当前调用方无权读取该属性'] : []),
           ...(canRead && !canWrite && descriptor.readOnlyReason ? [descriptor.readOnlyReason] : []),
         ],
+        blocks: [
+          ...(availability.blocks ?? []),
+          ...(!canRead || !this.canWriteProperty(descriptor, context)
+            ? [{ kind: 'permission' as const }] : []),
+          ...(descriptor.readOnlyReason ? [{ kind: 'structural' as const }] : []),
+        ],
       }
     })
+  }
+
+  async getCollectionAvailability(
+    parent: ApplicationRef,
+    entityType: string,
+    context: ApplicationControlAccessContext
+  ): Promise<ApplicationCollectionAvailability> {
+    const entity = this.requireEntity(entityType)
+    const rule = entity.collectionWrite
+    if (!rule) throw new Error(`COLLECTION_WRITE_NOT_DECLARED:${entityType}`)
+    const dynamic = applicationCollectionAvailabilitySchema.parse(
+      await this.requireProvider(entityType).getCollectionAvailability(parent)
+    )
+    if (dynamic.entityType !== entityType
+      || dynamic.parent.kind !== parent.kind
+      || dynamic.parent.id !== parent.id) {
+      throw new Error(`COLLECTION_AVAILABILITY_MISMATCH:${entityType}`)
+    }
+    const mergeOperation = (
+      operation: 'create' | 'remove',
+      availableByDeclaration: boolean,
+      availability: ApplicationCollectionAvailability['create'],
+    ): ApplicationCollectionAvailability['create'] => {
+      const permitted = hasAllPermissions(availability.requiredPermissions, context)
+      const available = availableByDeclaration && availability.available && permitted
+      return {
+        ...availability,
+        available,
+        reasons: [
+          ...availability.reasons,
+          ...(!availableByDeclaration
+            ? [`${operation === 'create' ? '创建' : '删除'}未在静态集合声明中开放`]
+            : []),
+          ...(!permitted ? ['当前调用方缺少集合写入权限'] : []),
+        ],
+        blocks: [
+          ...(availability.blocks ?? []),
+          ...(!availableByDeclaration ? [{ kind: 'structural' as const }] : []),
+          ...(!permitted ? [{ kind: 'permission' as const }] : []),
+        ],
+      }
+    }
+    return {
+      ...dynamic,
+      create: mergeOperation('create', rule.creatable, dynamic.create),
+      remove: mergeOperation('remove', rule.removable, dynamic.remove),
+    }
   }
 
   private canReadProperty(

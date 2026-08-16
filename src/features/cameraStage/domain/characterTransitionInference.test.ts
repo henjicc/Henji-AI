@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createCharacterObject, pickDefaultColor } from './sceneDefaults'
-import { captureShotObjectState } from './shotTypes'
+import { captureStateKeyframeObjectState } from './stateKeyframeTypes'
 import {
   CHARACTER_JOG_MIN_SPEED,
   CHARACTER_MOVE_MIN_SPEED,
@@ -10,8 +10,8 @@ import {
 
 function statesForSpeed(speed: number, duration = 1) {
   const character = createCharacterObject('角色', pickDefaultColor(0))
-  const from = captureShotObjectState(character)
-  const to = captureShotObjectState(character)
+  const from = captureStateKeyframeObjectState(character)
+  const to = captureStateKeyframeObjectState(character)
   to.transform = {
     ...to.transform,
     position: { ...to.transform.position, z: speed * duration },

@@ -12,7 +12,7 @@ interface TimeRulerProps {
   mode: TimeRulerMode
   fps: number
   onScrub: (time: number) => void
-  /** 可选主刻度格式化；简易模式用 hh:mm:ss:ff，专业模式保留原格式。 */
+  /** 可选主刻度格式化；状态关键帧时间轴使用 hh:mm:ss:ff。 */
   formatLabel?: (time: number) => string
 }
 

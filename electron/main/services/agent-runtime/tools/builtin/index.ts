@@ -13,7 +13,7 @@ export function createBuiltinAgentToolRegistry(
 ): AgentToolRegistry {
   const registry = new AgentToolRegistry()
   for (const tool of createFrontendApplicationCapabilityTools(invokeFrontend)) registry.register(tool)
-  for (const tool of createBackendBuiltinTools(registry, artifactAccess)) registry.register(tool)
+  for (const tool of createBackendBuiltinTools(registry, artifactAccess, invokeFrontend)) registry.register(tool)
   return registry
 }
 

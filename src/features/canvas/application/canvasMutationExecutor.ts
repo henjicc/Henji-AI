@@ -53,6 +53,7 @@ function revision(): number {
 }
 
 export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = CANVAS_ENTITY_TYPES.node
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -121,7 +122,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
     return targets.map((target) => ({
       status: 'completed' as const,
       resultingRevisions: { canvas: resultingRevision },
-      producedRefs: [{ kind: this.entityType, id: `${projectId}:${target.nodeId}`, revision: resultingRevision }],
+      directRefs: [{ kind: this.entityType, id: `${projectId}:${target.nodeId}`, revision: resultingRevision }],
       evidence: target.step.mutations.map((mutation) => ({
         kind: 'property_value' as const,
         target: { kind: this.entityType, id: `${projectId}:${target.nodeId}`, revision: resultingRevision },
@@ -165,7 +166,7 @@ export class CanvasNodeMutationExecutor implements ApplicationMutationExecutor {
       return {
         status: 'completed',
         resultingRevisions: { canvas: resultingRevision },
-        producedRefs: [{ kind: CANVAS_ENTITY_TYPES.project, id: entry.projectId, revision: resultingRevision }],
+        directRefs: [],
         evidence: [{
           kind: 'entity_state',
           target: { kind: CANVAS_ENTITY_TYPES.project, id: entry.projectId, revision: resultingRevision },

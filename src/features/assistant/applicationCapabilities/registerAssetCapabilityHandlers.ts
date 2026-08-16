@@ -2,7 +2,7 @@ import { assetApplicationService } from '@/features/assets/application/assetAppl
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
-import { getHostScopeRevisions, notifyHostScopeChanged } from '../hostContext/hostContext'
+import { getHostScopeRevisions } from '../hostContext/hostContext'
 import { configureAssetMutationDependencies } from './applicationControlRegistry'
 
 interface AssetQueryInput {
@@ -18,11 +18,6 @@ interface AssetQueryInput {
 export function registerAssetCapabilityHandlers(
   registrar: ApplicationCapabilityHandlerRegistrar
 ): void {
-  const runWrite = async (operation: () => Promise<Record<string, unknown>>) => {
-    const result = await operation()
-    notifyHostScopeChanged('assets')
-    return result
-  }
   registrar.registerHandler('query_assets', async (input) => {
     const parsed = parseCapabilityInput<AssetQueryInput>('query_assets', input)
     return await assetApplicationService.query(parsed)
@@ -44,7 +39,8 @@ export function registerAssetCapabilityHandlers(
   registrar.registerHandler('select_asset', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ assetId: string | null }>('select_asset', input)
-    return await runWrite(() => assetApplicationService.select(parsed.assetId))
+    // 选中项只是瞬时 UI 状态，不是素材领域真相，不推进 optimistic revision。
+    return await assetApplicationService.select(parsed.assetId)
   })
 
   registrar.registerHandler('set_asset_tags', async (input, context) => {
@@ -53,12 +49,14 @@ export function registerAssetCapabilityHandlers(
       assetId: string
       tags: string[]
     }>('set_asset_tags', input)
-    return await runWrite(() => assetApplicationService.replaceTags(parsed.assetId, parsed.tags))
+    return await assetApplicationService.replaceTags(parsed.assetId, parsed.tags)
   })
 
   configureAssetMutationDependencies({
     readRevision: () => getHostScopeRevisions().assets,
-    bumpRevision: () => notifyHostScopeChanged('assets'),
+    // 所有正式素材写入都在 commands/assetLibrary 的唯一写边界发出领域变更信号。
+    // 执行器不得再次 bump，否则一次写入会制造两个 revision 并放大后续冲突。
+    bumpRevision: () => undefined,
   })
   registrar.registerHandler('add_asset_to_library', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
@@ -66,7 +64,7 @@ export function registerAssetCapabilityHandlers(
       libraryId: string
       assetId: string
     }>('add_asset_to_library', input)
-    return await runWrite(() => assetApplicationService.addToLibrary(parsed.libraryId, parsed.assetId))
+    return await assetApplicationService.addToLibrary(parsed.libraryId, parsed.assetId)
   })
 
   registrar.registerHandler('remove_asset_from_library', async (input, context) => {
@@ -75,12 +73,12 @@ export function registerAssetCapabilityHandlers(
       libraryId: string
       assetId: string
     }>('remove_asset_from_library', input)
-    return await runWrite(() => assetApplicationService.removeFromLibrary(parsed.libraryId, parsed.assetId))
+    return await assetApplicationService.removeFromLibrary(parsed.libraryId, parsed.assetId)
   })
 
   registrar.registerHandler('delete_asset', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<{ assetId: string }>('delete_asset', input)
-    return await runWrite(() => assetApplicationService.delete(parsed.assetId))
+    return await assetApplicationService.delete(parsed.assetId)
   })
 }

@@ -26,6 +26,19 @@ function errorRecord(error: unknown): ErrorRecord {
   return error && typeof error === 'object' ? error as ErrorRecord : {}
 }
 
+function errorChain(error: unknown): ErrorRecord[] {
+  const records: ErrorRecord[] = []
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current && typeof current === 'object' && records.length < 4 && !seen.has(current)) {
+    seen.add(current)
+    const record = current as ErrorRecord
+    records.push(record)
+    current = record.cause
+  }
+  return records
+}
+
 function nestedRecord(value: unknown): ErrorRecord {
   return value && typeof value === 'object' ? value as ErrorRecord : {}
 }
@@ -48,7 +61,7 @@ function statusValue(record: ErrorRecord): number | null {
   return typeof candidate === 'number' && Number.isInteger(candidate) ? candidate : null
 }
 
-function providerCode(record: ErrorRecord): string {
+function providerCode(record: ErrorRecord): string | null {
   const data = nestedRecord(record.data)
   const dataError = nestedRecord(data.error)
   const responseBody = jsonRecord(record.responseBody)
@@ -57,7 +70,6 @@ function providerCode(record: ErrorRecord): string {
     ?? stringValue(data.code)
     ?? stringValue(dataError.code)
     ?? stringValue(responseError.code)
-    ?? 'PROVIDER_ERROR'
 }
 
 function providerMessage(record: ErrorRecord): string | null {
@@ -76,9 +88,29 @@ function providerMessage(record: ErrorRecord): string | null {
     .slice(0, 500)
 }
 
-function categoryFor(status: number | null, code: string, error: unknown): ModelProviderErrorCategory {
+function isTimeoutError(records: ErrorRecord[], code: string): boolean {
+  const timeoutCodes = [
+    'ETIMEDOUT',
+    'UND_ERR_CONNECT_TIMEOUT',
+    'UND_ERR_HEADERS_TIMEOUT',
+    'UND_ERR_BODY_TIMEOUT',
+  ]
+  if (timeoutCodes.includes(code.toUpperCase())) return true
+  return records.some((record) => {
+    const name = stringValue(record.name)?.toLowerCase() ?? ''
+    const message = stringValue(record.message)?.toLowerCase() ?? ''
+    return name.includes('timeout')
+      || /(?:timed?\s*out|timeout|deadline exceeded)/i.test(message)
+  })
+}
+
+function categoryFor(
+  status: number | null,
+  code: string,
+  records: ErrorRecord[]
+): ModelProviderErrorCategory {
   const normalizedCode = code.toLowerCase()
-  if (error instanceof Error && error.name === 'AbortError') return 'cancelled'
+  if (records.some((record) => stringValue(record.name) === 'AbortError')) return 'cancelled'
   if (normalizedCode.includes('context_length') || normalizedCode.includes('context_window')) {
     return 'context_overflow'
   }
@@ -88,8 +120,10 @@ function categoryFor(status: number | null, code: string, error: unknown): Model
   if (status === 429) return 'rate_limit'
   if (status !== null && status >= 500) return 'server'
   if (status === 400 || status === 404 || status === 405 || status === 422) return 'invalid_request'
+  if (isTimeoutError(records, code)) return 'network'
   if (['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'UND_ERR_CONNECT_TIMEOUT']
     .includes(code.toUpperCase())) return 'network'
+  if (records.some((record) => record.isRetryable === true)) return 'network'
   return 'unknown'
 }
 
@@ -131,20 +165,23 @@ function safeMessage(
 
 export function normalizeProviderError(input: ModelStepInput, error: unknown): ProviderModelStepError {
   if (error instanceof ProviderModelStepError) return error
-  const record = errorRecord(error)
-  const status = statusValue(record)
-  const code = providerCode(record)
-  const category = categoryFor(status, code, error)
+  const records = errorChain(error)
+  const status = records.map(statusValue).find((value) => value !== null) ?? null
+  const reportedCode = records.map(providerCode).find((value) => value !== null) ?? null
+  const timeout = isTimeoutError(records, reportedCode ?? '')
+  const code = reportedCode ?? (timeout ? 'MODEL_REQUEST_TIMEOUT' : 'PROVIDER_ERROR')
+  const category = categoryFor(status, code, records)
+  const detail = records.map(providerMessage).find((value) => value !== null) ?? null
   return new ProviderModelStepError({
     code,
     category,
     status,
     retryable: ['network', 'rate_limit', 'server'].includes(category),
-    retryAfterMs: retryAfterMs(record),
+    retryAfterMs: records.map(retryAfterMs).find((value) => value !== null) ?? null,
     providerId: input.providerId,
     modelId: input.modelId,
     requestId: input.requestId,
-    message: safeMessage(category, providerMessage(record)),
+    message: safeMessage(category, detail),
   }, { cause: error })
 }
 

@@ -42,6 +42,7 @@ async function rollbackRemoved(snapshots: AssetLibrarySnapshot[]): Promise<void>
 /** 素材集合的创建/删除执行器；删除前保存集合及成员关系，补偿时按原稳定 ID 原子恢复。 */
 export class AssetLibraryCollectionExecutor implements ApplicationCollectionExecutor {
   readonly entityType = ASSET_ENTITY_TYPES.library
+  readonly effectContract = { direct: [], cascades: [] }
 
   constructor(private readonly dependencies: {
     readRevision: () => number
@@ -103,12 +104,12 @@ export class AssetLibraryCollectionExecutor implements ApplicationCollectionExec
     return {
       status: 'completed',
       resultingRevisions: { assets: revision },
-      producedRefs: created.map((item) => ({
+      directRefs: (step.operation.kind === 'create' ? created.map((item) => ({
         kind: this.entityType,
         id: String(item.id),
         label: String(item.name),
         revision,
-      })),
+      })) : removed.map((item) => ({ kind: this.entityType, id: item.id, revision }))),
       evidence: [{
         kind: 'operation_result',
         target: { kind: ASSET_ENTITY_TYPES.catalog, id: step.parent.id, revision },
@@ -138,7 +139,9 @@ export class AssetLibraryCollectionExecutor implements ApplicationCollectionExec
     return {
       status: 'completed',
       resultingRevisions: { assets: revision },
-      producedRefs: [],
+      directRefs: record.kind === 'create'
+        ? record.libraryIds.map((id) => ({ kind: this.entityType, id, revision }))
+        : record.snapshots.map((item) => ({ kind: this.entityType, id: item.id, revision })),
       evidence: [{
         kind: 'entity_state',
         target: { kind: ASSET_ENTITY_TYPES.catalog, id: 'default', revision },

@@ -129,8 +129,8 @@
 
 - `npm run gen:model-manifest`
 - `npm run check:model-i18n`
-- `npm run lint`
-- 若修改 Electron runtime/provider/upload：`npx tsc -p tsconfig.electron.json --noEmit` 与 `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`
-- 推荐 `npm run electron:dev` 验证真实提交与回包；若需完整产物链路，再跑 `npm run electron:build`。
+- 运行改动模型、参数转换和请求构建的精确/相关测试；其余检查按 `docs/rules/testing.md` 的风险级别选择，不默认追加全量 lint。
+- 若修改 Electron runtime/provider/upload 的共享契约，按风险追加主进程类型检查、相关 lint 或构建。
+- 需要真实服务验证时再用 `npm run electron:dev` 提交与检查回包；只有完整产物链路相关时才跑 `npm run electron:build`。
 - 若本地已有运行中的 Electron 进程，改完后需重启或触发 manifest reload，确认 runtime 使用最新 `resources/model-manifest.json`。
 - 若出现“UI 仍显示旧参数”或“请求仍打到旧路由”，先排查是否是运行中的 Electron / dev 进程未重载最新 manifest，而不是直接怀疑 builder。

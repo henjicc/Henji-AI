@@ -67,6 +67,28 @@ describe('ApplicationCapabilityRegistry', () => {
     expect(() => new ApplicationCapabilityRegistry().register(missingEvidence)).toThrow()
   })
 
+  it('算法写能力缺少机器可执行验证契约时注册失败', () => {
+    const write = {
+      ...capability('write_without_verification'),
+      readOnly: false,
+      control: {
+        execution: { mode: 'immediate' as const, cancelable: false, resultState: 'completed' as const },
+        impacts: [{
+          effect: 'update' as const, entityTypes: ['test.entity'], propertyIds: ['test.entity.value'],
+          revisionScopes: [], verificationRequired: true,
+        }],
+      },
+      resolveObservedEffects: () => [{
+        effect: 'update' as const, entityTypes: ['test.entity'], propertyIds: ['test.entity.value'],
+        targetRefs: [{ kind: 'test.entity', id: 'entity-1' }], count: 1,
+        verified: false, evidence: [],
+      }],
+      verificationContract: undefined,
+    }
+    expect(() => new ApplicationCapabilityRegistry().register(write))
+      .toThrow('verificationContract')
+  })
+
   it('拒绝开放额外字段、任意 Store Patch 和脚本执行输入', () => {
     const registry = new ApplicationCapabilityRegistry()
     expect(() => registry.register({
@@ -102,5 +124,12 @@ describe('ApplicationCapabilityRegistry', () => {
       registry.register(capability(`read_test_${index}`))
     }
     expect(registry.list()).toHaveLength(100)
+  })
+
+  it('设置写入只保留通用反射事务，不重新注册专用计划与应用能力', () => {
+    const ids = new Set(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().map((item) => item.id))
+    expect(ids.has('change_application_entities')).toBe(true)
+    expect(ids.has('plan_application_settings_change')).toBe(false)
+    expect(ids.has('apply_application_settings_change')).toBe(false)
   })
 })

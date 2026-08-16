@@ -44,6 +44,7 @@ export const cameraStagePlacementInputSchema = z.object({
 })
 
 export class CameraStagePlacementOperationExecutor implements ApplicationSemanticOperationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly capabilityId = 'place_camera_stage_object'
   readonly capabilityVersion = 1
   readonly risk = 'R1' as const
@@ -82,7 +83,13 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },
-      producedRefs: [{ kind: entityType, id: `${result.projectId}:${result.objectId}`, revision }],
+      directRefs: [{ kind: entityType, id: `${result.projectId}:${result.objectId}`, revision }],
+      directEffects: [{
+        effect: result.decision === 'created' ? 'create' : 'update', entityType,
+        refs: [{ kind: entityType, id: `${result.projectId}:${result.objectId}`, revision }],
+        propertyIds: [], origin: { kind: 'direct' },
+      }],
+      cascadeEffects: [],
       evidence: [{
         kind: 'operation_result',
         target: { kind: entityType, id: `${result.projectId}:${result.objectId}`, revision },
@@ -115,7 +122,9 @@ export class CameraStagePlacementOperationExecutor implements ApplicationSemanti
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },
-      producedRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
+      directRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
+      directEffects: [{ effect: 'execute', entityType: CAMERA_STAGE_ENTITY_TYPES.project, refs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }], propertyIds: [], origin: { kind: 'direct' } }],
+      cascadeEffects: [],
       evidence: [{
         kind: 'entity_state',
         target: { kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision },

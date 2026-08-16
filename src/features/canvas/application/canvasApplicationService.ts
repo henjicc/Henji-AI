@@ -11,7 +11,7 @@ import {
   type CanvasEdge,
   type CanvasNode,
 } from '../domain/canvasNodes'
-import { parseCanvasNodeData } from '../domain/nodeControlRegistry'
+import { parseCanvasNodeData, parseTrustedMediaNodeData } from '../domain/nodeControlRegistry'
 import {
   getCanvasNodeDefinition,
   isConnectionCompatible,
@@ -144,6 +144,7 @@ export function rememberCanvasUndo(projectId: string, operation: string): string
 
 function resolveNodePosition(placement: CanvasNodePlacement): { x: number; y: number } {
   const canvas = useCanvasStore.getState()
+  if (placement.mode === 'absolute') return { x: placement.x, y: placement.y }
   if (placement.mode === 'right_of_node') {
     if (!canvas.nodes.some((node) => node.id === placement.anchorNodeId)) {
       throw new CanvasApplicationError('NOT_FOUND', '布局锚点节点不存在', true, {
@@ -180,16 +181,22 @@ function createsCycle(sourceNodeId: string, targetNodeId: string, edges: CanvasE
   return false
 }
 
-function resolveConnectionHandles(sourceNode: CanvasNode, targetNode: CanvasNode): {
+function resolveConnectionHandles(
+  sourceNode: CanvasNode,
+  targetNode: CanvasNode,
+  requested: { sourceHandle?: string; targetHandle?: string } = {},
+): {
   sourceHandle: string
   targetHandle: string
 } {
-  const sourceHandle = 'source'
+  const sourceHandle = requested.sourceHandle ?? 'source'
   const definition = getCanvasNodeDefinition(sourceNode.type)
   const mediaKind = getSourcePortMediaKind(definition?.ports, sourceHandle)
-  const targetHandle = mediaKind && ['image', 'video', 'audio'].includes(mediaKind)
-    ? resolveMediaTargetHandle(targetNode.type, mediaKind as RowMediaKind)
-    : 'target'
+  const targetHandle = requested.targetHandle ?? (
+    mediaKind && ['image', 'video', 'audio'].includes(mediaKind)
+      ? resolveMediaTargetHandle(targetNode.type, mediaKind as RowMediaKind)
+      : 'target'
+  )
   return { sourceHandle, targetHandle }
 }
 
@@ -221,10 +228,31 @@ export function addCanvasNode(input: {
   return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
 }
 
+/**
+ * 把已经由素材领域确认存在的媒体放入画布。公共 addCanvasNode 仍拒绝媒体路径；这条入口只接收
+ * assetCanvasApplicationService 从正式素材记录构造的数据，避免安全边界与内部导入互相冲突。
+ */
+export function addTrustedMediaCanvasNode(input: {
+  projectId: string
+  nodeType: string
+  placement: CanvasNodePlacement
+  data: Record<string, unknown>
+}): Record<string, unknown> {
+  requireCurrentCanvasProject(input.projectId)
+  const parsed = parseTrustedMediaNodeData(input.nodeType, input.data)
+  const position = resolveNodePosition(input.placement)
+  const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
+  const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
+  persistCanvasState()
+  return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
+}
+
 export function connectCanvasNodes(input: {
   projectId: string
   sourceNodeId: string
   targetNodeId: string
+  sourceHandle?: string
+  targetHandle?: string
 }): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
   if (input.sourceNodeId === input.targetNodeId) {
@@ -242,7 +270,7 @@ export function connectCanvasNodes(input: {
   if (createsCycle(input.sourceNodeId, input.targetNodeId, canvas.edges)) {
     throw new CanvasApplicationError('CONFLICT', '该连接会形成画布循环依赖')
   }
-  const handles = resolveConnectionHandles(sourceNode, targetNode)
+  const handles = resolveConnectionHandles(sourceNode, targetNode, input)
   const paramValidation = isParamPortId(handles.targetHandle)
     ? validateParamConnection(
         sourceNode,

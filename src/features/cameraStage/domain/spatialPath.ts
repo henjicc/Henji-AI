@@ -2,12 +2,12 @@ import { v4 as uuidv4 } from 'uuid'
 import { easeProgress } from './keyframeEngine'
 import type { StageEasingPreset } from './animationTypes'
 import type { StageVec3 } from './sceneTypes'
-import { compileCameraMoveSamples } from './shotCameraMovePresets'
+import { compileCameraMoveSamples } from './stateKeyframeCameraMovePresets'
 import type {
   StageCameraMovePreset,
   StageSpatialPath,
   StageSpatialPathKnot,
-} from './shotTypes'
+} from './stateKeyframeTypes'
 
 export interface StageSpatialPathSample {
   time: number

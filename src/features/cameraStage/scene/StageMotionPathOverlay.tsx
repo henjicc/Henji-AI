@@ -4,8 +4,8 @@ import { CAMERA_STAGE_MOTION_PATH_HEX } from '@/core/theme/colorTokens'
 import { easeProgress } from '../domain/keyframeEngine'
 import { createSpatialPathSampler, markSpatialPathCustom } from '../domain/spatialPath'
 import type { StageVec3 } from '../domain/sceneTypes'
-import type { StageShot, StageSpatialPath } from '../domain/shotTypes'
-import type { StageSpeedPreset } from '../domain/shotTypes'
+import type { StageStateKeyframe, StageSpatialPath } from '../domain/stateKeyframeTypes'
+import type { StageSpeedPreset } from '../domain/stateKeyframeTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import {
   useCameraStageToolStore,
@@ -15,12 +15,12 @@ import PathControlPoint from './PathControlPoint'
 
 interface StageMotionPathOverlayProps {
   objectId: string
-  shots: StageShot[]
+  stateKeyframes: StageStateKeyframe[]
   editable?: boolean
 }
 
 interface PathSegment {
-  shot: StageShot
+  stateKeyframe: StageStateKeyframe
   from: StageVec3
   to: StageVec3
   path?: StageSpatialPath
@@ -39,37 +39,37 @@ function samePosition(a: StageVec3, b: StageVec3): boolean {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 1e-6
 }
 
-const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectId, shots, editable = true }) => {
+const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectId, stateKeyframes, editable = true }) => {
   const pathSelection = useCameraStageToolStore((state) => state.pathSelection)
   const controlSelection = useCameraStageToolStore((state) => state.controlSelection)
   const selectPath = useCameraStageToolStore((state) => state.selectPath)
   const selectControl = useCameraStageToolStore((state) => state.selectControl)
-  const setShotSpatialPath = useCameraStageStore((state) => state.setShotSpatialPath)
-  const setShotPathAnchor = useCameraStageStore((state) => state.setShotPathAnchor)
+  const setStateKeyframeSpatialPath = useCameraStageStore((state) => state.setStateKeyframeSpatialPath)
+  const setStateKeyframePathAnchor = useCameraStageStore((state) => state.setStateKeyframePathAnchor)
   const segments = useMemo<PathSegment[]>(() => {
     const result: PathSegment[] = []
-    for (let index = 0; index < shots.length - 1; index += 1) {
-      const shot = shots[index]
-      const next = shots[index + 1]
-      const from = shot.objectStates[objectId]?.transform.position
+    for (let index = 0; index < stateKeyframes.length - 1; index += 1) {
+      const stateKeyframe = stateKeyframes[index]
+      const next = stateKeyframes[index + 1]
+      const from = stateKeyframe.objectStates[objectId]?.transform.position
       const to = next.objectStates[objectId]?.transform.position
-      const path = shot.transition.perObject[objectId]?.spatialPath
+      const path = stateKeyframe.transition.perObject[objectId]?.spatialPath
       if (!from || !to || (samePosition(from, to) && !path)) continue
-      result.push({ shot, from, to, path })
+      result.push({ stateKeyframe, from, to, path })
     }
     return result
-  }, [objectId, shots])
+  }, [objectId, stateKeyframes])
 
   const selectedSegment = segments.find((segment) => (
-    pathSelection?.objectId === objectId && pathSelection.shotId === segment.shot.id
+    pathSelection?.objectId === objectId && pathSelection.stateKeyframeId === segment.stateKeyframe.id
   ))
 
   const selectSegment = (segment: PathSegment): void => {
-    selectPath({ shotId: segment.shot.id, objectId })
+    selectPath({ stateKeyframeId: segment.stateKeyframe.id, objectId })
   }
 
   const updatePath = (segment: PathSegment, path: StageSpatialPath): void => {
-    setShotSpatialPath(segment.shot.id, objectId, markSpatialPathCustom(path))
+    setStateKeyframeSpatialPath(segment.stateKeyframe.id, objectId, markSpatialPathCustom(path))
   }
 
   const controlMatches = (selection: StagePathControlSelection): boolean => {
@@ -81,7 +81,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
   return (
     <>
       {segments.map((segment) => {
-        const selected = selectedSegment?.shot.id === segment.shot.id
+        const selected = selectedSegment?.stateKeyframe.id === segment.stateKeyframe.id
         const samplePath = segment.path
           ? createSpatialPathSampler(segment.from, segment.to, segment.path)
           : null
@@ -93,7 +93,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
         const timeDots = selected
           ? Array.from({ length: TIME_DOT_COUNT + 1 }, (_, index) => {
             const progress = easeProgress(
-              SPEED_EASING[segment.shot.transition.perObject[objectId]?.speedPreset ?? 'easeInOut'],
+              SPEED_EASING[segment.stateKeyframe.transition.perObject[objectId]?.speedPreset ?? 'easeInOut'],
               index / TIME_DOT_COUNT,
             )
             return samplePath
@@ -107,7 +107,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
           : []
         const dotPositions = new Float32Array(timeDots.flatMap((point) => [point.x, point.y, point.z]))
         return (
-          <React.Fragment key={segment.shot.id}>
+          <React.Fragment key={segment.stateKeyframe.id}>
             <Line
               points={points.map((point) => [point.x, point.y, point.z])}
               color={CAMERA_STAGE_MOTION_PATH_HEX.path}
@@ -144,7 +144,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
             shape="anchor"
             selected={controlMatches({ kind: 'start' })}
             onSelect={() => selectControl({ kind: 'start' })}
-            onDrag={(position) => setShotPathAnchor(selectedSegment.shot.id, objectId, 'start', position)}
+            onDrag={(position) => setStateKeyframePathAnchor(selectedSegment.stateKeyframe.id, objectId, 'start', position)}
           />
           {selectedSegment.path?.knots.map((knot) => (
             <PathControlPoint
@@ -166,7 +166,7 @@ const StageMotionPathOverlay: React.FC<StageMotionPathOverlayProps> = ({ objectI
             shape="anchor"
             selected={controlMatches({ kind: 'end' })}
             onSelect={() => selectControl({ kind: 'end' })}
-            onDrag={(position) => setShotPathAnchor(selectedSegment.shot.id, objectId, 'end', position)}
+            onDrag={(position) => setStateKeyframePathAnchor(selectedSegment.stateKeyframe.id, objectId, 'end', position)}
           />
         </>
       )}

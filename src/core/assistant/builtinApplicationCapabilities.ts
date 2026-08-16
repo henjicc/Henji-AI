@@ -11,7 +11,10 @@ import {
   APPLICATION_WINDOW_OBSERVATION_TARGET,
 } from './applicationSurfaces'
 import { agentAttachmentSchema } from './attachments'
-import { capabilityControl } from './capabilities/defineApplicationCapability'
+import {
+  capabilityControl,
+  directOnlyObservedEffects,
+} from './capabilities/defineApplicationCapability'
 
 function defineCapability<TInput, TOutput>(
   definition: Omit<
@@ -27,6 +30,21 @@ function defineCapability<TInput, TOutput>(
     availability: definition.availability
       ?? definition.requiredScopes.map((scope) => `${scope} 作用域可用`),
     concurrencyKey: definition.concurrencyKey ?? definition.domain,
+    verificationContract: definition.verificationContract ?? (
+      definition.readOnly || definition.control.impacts.every((impact) => (
+        ['observe', 'navigate'].includes(impact.effect)
+      ))
+        ? undefined
+        : {
+            kind: 'effect_receipt' as const,
+            requireEffects: true,
+            requireVerifiedEffects: false,
+          }
+    ),
+    resolveObservedEffects: definition.resolveObservedEffects
+      ?? (definition.control.impacts.length > 0
+        ? directOnlyObservedEffects<TOutput>(definition.control)
+        : undefined),
   }
 }
 
@@ -407,5 +425,18 @@ export const createImageEditPreviewFromRefCapability = defineCapability({
     },
     required: ['sourceRef', 'operations'],
     additionalProperties: false,
+  },
+  resolveObservedEffects: (_input, output) => {
+    const targetRefs = [{ kind: 'image_edit.preview', id: output.previewRef }]
+    return [
+      {
+        effect: 'execute', entityTypes: ['image_edit.preview'], propertyIds: [],
+        targetRefs, count: 1, verified: false, evidence: [],
+      },
+      {
+        effect: 'create', entityTypes: ['image_edit.preview'], propertyIds: [],
+        targetRefs, count: 1, verified: false, evidence: [],
+      },
+    ]
   },
 })

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { agentObservedEffectSchema } from './taskGraph'
 
 import {
   agentApprovalRequestSchema,
@@ -68,6 +69,8 @@ export const agentToolObservationSchema = z.object({
   dataClasses: z.array(agentDataClassSchema).min(1).max(4),
   summary: z.string().max(2_000),
   output: z.unknown(),
+  /** 网关在执行器返回后立即解析并校验的世界变化；结算不得再从 output/evidence 猜。 */
+  effects: z.array(agentObservedEffectSchema).max(512).optional(),
   artifactRef: z.string().min(1).optional(),
   undo: z.object({
     kind: z.string().min(1),

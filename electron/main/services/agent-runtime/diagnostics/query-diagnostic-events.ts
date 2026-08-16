@@ -119,7 +119,7 @@ export async function queryDiagnosticEvidence(
         break
       }
       beforeLine = result.nextBeforeLine
-      const oldestTimestamp = result.events.at(-1)?.timestamp
+      const oldestTimestamp = result.events[result.events.length - 1]?.timestamp
       if (oldestTimestamp && Date.parse(oldestTimestamp) < from.getTime()) break
     }
   }

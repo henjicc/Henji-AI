@@ -198,4 +198,16 @@ describe('AgentModelOutputGuard', () => {
     expect(capture.observations).toEqual([])
     expect(capture.recoveryMessages[0]).toContain('达到输出长度上限')
   })
+
+  it('拒绝把供应商泄漏到普通文本中的 DSML 工具协议当作最终答复', () => {
+    const capture = createGuardCapture()
+    const leaked = modelResult('stop', [])
+    leaked.text = '继续验证。<｜｜DSML｜｜tool_calls>\n<｜｜DSML｜｜invoke name="verify_scene">...'
+    leaked.responseMessages = [{ role: 'assistant', content: leaked.text }]
+
+    expect(capture.guard.accept(leaked)).toBe(false)
+    expect(capture.events).toEqual([])
+    expect(capture.observations).toEqual([])
+    expect(capture.recoveryMessages[0]).toContain('序列化成了普通文本')
+  })
 })

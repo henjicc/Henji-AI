@@ -256,7 +256,7 @@ export class ApplicationObservationQueryService {
           : `使用 cursor v1:${nextOffset} 继续读取观察结果。`]
       : []
     return applicationStructuredObservationResponseSchema.parse({
-      contractVersion: 'application-control/v1',
+      contractVersion: 'application-control/v2',
       requestId: request.requestId,
       catalogVersion: this.dependencies.registry.catalogVersion,
       items: pageItems,

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { createLogger } from '@/core/logging'
 import { readAssetDragPayload } from '@/features/assets/drag/assetDragPayload'
 import type { CanvasEdge, CanvasNode, CanvasNodeData, CanvasNodeType } from '../domain/canvasNodes'
-import { assetSourceNodeData, assetSourceNodeType } from '../application/assetMediaAssignment'
+import { mediaSourceNodeData, mediaSourceNodeType } from '../application/assetMediaAssignment'
 import { canvasEventBus } from '../application/canvasServices'
 import { resolveMediaFiles } from '../canvasUtils'
 
@@ -35,7 +35,7 @@ export function useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist
     const payload = readAssetDragPayload(event.dataTransfer)
     if (payload) {
       event.preventDefault()
-      addNode(assetSourceNodeType(payload.type), reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY }), assetSourceNodeData(payload))
+      addNode(mediaSourceNodeType(payload.type), reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY }), mediaSourceNodeData(payload))
       schedulePersist()
       return
     }
@@ -67,7 +67,7 @@ export function useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist
     try {
       const basePosition = reactFlowInstance.screenToFlowPosition({ x: event.clientX, y: event.clientY })
       const imported = mediaFiles.map((media, index) => {
-        const nodeId = addNode(assetSourceNodeType(media.kind), {
+        const nodeId = addNode(mediaSourceNodeType(media.kind), {
           x: basePosition.x + (index % EXTERNAL_MEDIA_COLUMNS) * EXTERNAL_MEDIA_COLUMN_GAP,
           y: basePosition.y + Math.floor(index / EXTERNAL_MEDIA_COLUMNS) * EXTERNAL_MEDIA_ROW_GAP,
         })

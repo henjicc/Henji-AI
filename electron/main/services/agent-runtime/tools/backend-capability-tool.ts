@@ -7,6 +7,7 @@ import { defineAgentTool } from './define-tool'
 export interface BackendCapabilityExecution<TInput, TOutput> {
   execute: (input: TInput, context: AgentToolExecutionContext) => Promise<TOutput>
   preview?: AgentToolDefinition<TInput, TOutput>['preview']
+  outputLimitProfile?: AgentToolDefinition<TInput, TOutput>['outputLimitProfile']
 }
 
 export function createBackendCapabilityTool<TInput, TOutput>(
@@ -32,6 +33,7 @@ export function createBackendCapabilityTool<TInput, TOutput>(
     idempotent: capability.idempotent,
     timeoutMs: capability.timeoutMs,
     maxCallsPerRun: capability.maxCallsPerRun,
+    countsTowardCallLimit: capability.countsTowardCallLimit,
     retryPolicy: capability.retryPolicy ?? {
       maxRetries: capability.readOnly ? 1 : 0,
       baseDelayMs: capability.readOnly ? 100 : 0,
@@ -41,6 +43,7 @@ export function createBackendCapabilityTool<TInput, TOutput>(
     requiredContext: capability.requiredScopes,
     inputSchema: capability.inputSchema,
     outputSchema: capability.outputSchema,
+    outputLimitProfile: execution.outputLimitProfile,
     aiInputSchema: capability.aiInputSchema,
     semantics: {
       whenToUse: [capability.description, ...capability.aliases.slice(0, 4)],
@@ -67,6 +70,9 @@ export function createBackendCapabilityTool<TInput, TOutput>(
       ?? capability.dataClasses,
     summarize: (output) => capability.summarize?.(output)
       ?? `${capability.title}已完成。`,
+    resolveObservedEffects: capability.resolveObservedEffects
+      ? (input, output) => capability.resolveObservedEffects?.(input, output) ?? []
+      : undefined,
     projectForHistory: capability.projectForHistory
       ? (output) => capability.projectForHistory?.(output)
       : undefined,

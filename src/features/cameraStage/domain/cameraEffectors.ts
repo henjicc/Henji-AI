@@ -1,4 +1,4 @@
-import type { StageCameraEffector } from './shotTypes'
+import type { StageCameraEffector } from './stateKeyframeTypes'
 import type { StageVec3 } from './sceneTypes'
 
 export interface CameraEffectorOffset {

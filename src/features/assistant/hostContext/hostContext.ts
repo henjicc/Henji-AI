@@ -17,6 +17,10 @@ import {
   isVisibleGenerationTaskHandlerReady,
   subscribeVisibleGenerationTaskChanges,
 } from '@/workspaces/GenerationWorkspace/application/visibleGenerationTaskCommand'
+import {
+  getApplicationDomainChangeRevision,
+  subscribeApplicationDomainChanges,
+} from '@/core/application-control/domainChangeSignal'
 
 const rendererSessionId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
   ? crypto.randomUUID()
@@ -36,6 +40,17 @@ const listeners = new Set<() => void>()
 let revision = 0
 let trackingRefCount = 0
 let disposeTracking: (() => void) | null = null
+let observedAssetDomainRevision = 0
+
+function syncAssetDomainRevision(): void {
+  const current = getApplicationDomainChangeRevision('assets')
+  const delta = Math.max(0, current - observedAssetDomainRevision)
+  observedAssetDomainRevision = current
+  if (delta === 0) return
+  revision += delta
+  scopeRevisions.assets += delta
+  for (const listener of listeners) listener()
+}
 
 /**
  * 推进一个作用域的 revision。
@@ -102,8 +117,7 @@ function startTracking(): () => void {
         || state.activeCameraId !== previous.activeCameraId
         || state.animation !== previous.animation
         || state.sceneSettings !== previous.sceneSettings
-        || state.editorMode !== previous.editorMode
-        || state.shots !== previous.shots
+        || state.stateKeyframes !== previous.stateKeyframes
       ) {
         bumpScope('toolbox')
       }
@@ -117,6 +131,9 @@ function startTracking(): () => void {
       }
     }),
     subscribeVisibleGenerationTaskChanges(() => bumpScope('generation')),
+    subscribeApplicationDomainChanges((scope) => {
+      if (scope === 'assets') syncAssetDomainRevision()
+    }),
   ]
   return () => {
     for (const unsubscribe of unsubscribers) unsubscribe()
@@ -141,6 +158,8 @@ export function subscribeHostContext(listener: () => void): () => void {
 }
 
 export function getHostScopeRevisions(): HostScopeRevisions {
+  // 即使素材写入发生在助手桥尚未挂载时，也在下一次读取基线时补齐，不能静默丢 revision。
+  syncAssetDomainRevision()
   return { ...scopeRevisions }
 }
 

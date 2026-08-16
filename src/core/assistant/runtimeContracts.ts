@@ -6,7 +6,7 @@ import { llmApiProtocolSchema } from '../llm/providerProtocol'
 import { agentExternalContinuationSchema } from './externalWait'
 import { agentAttachmentsSchema } from './attachments'
 
-export const AGENT_RUNTIME_SCHEMA_VERSION = 'agent-runtime/v1' as const
+export const AGENT_RUNTIME_SCHEMA_VERSION = 'agent-runtime/v2' as const
 export const agentApprovalModeSchema = z.enum(['ask', 'assistant_decides', 'full_access'])
 export type AgentApprovalMode = z.infer<typeof agentApprovalModeSchema>
 

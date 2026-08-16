@@ -6,7 +6,7 @@ import {
   jsonValueSchema,
 } from '../application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from './applicationCapabilities'
-import { agentTaskCapabilityKindSchema, agentTaskEffectKindSchema } from './taskGraph'
+import { agentTaskEffectKindSchema } from './taskGraph'
 import type { AgentTaskFacet, AgentTaskGraph } from './taskGraph'
 import {
   AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
@@ -318,4 +318,6 @@ export function buildCapabilityDiscoveryInputForFacets(
     limit: AGENT_DISCOVERY_LEASE_TOOL_LIMIT,
   })
 }
+
+
 

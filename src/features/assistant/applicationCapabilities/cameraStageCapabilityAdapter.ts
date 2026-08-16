@@ -144,15 +144,31 @@ export async function openCameraStageProject(projectId: string): Promise<Record<
   return { ...result, baseRevision: baseRevision() }
 }
 
-export async function createCameraStageProject(name: string, mode: 'simple' | 'pro'): Promise<Record<string, unknown>> {
-  const result = await cameraStageApplicationService.createProject(name, mode)
+export async function createCameraStageProject(name: string): Promise<Record<string, unknown>> {
+  const result = await cameraStageApplicationService.createProject(name)
   useCameraStageSessionStore.getState().setAppView('editor')
   notifyHostScopeChanged('toolbox')
   const state = useCameraStageStore.getState()
   const defaultCameraId = state.activeCameraId
-  const defaultShotId = state.shots[0]?.id
-  if (!defaultCameraId || !defaultShotId) throw new Error('CAPABILITY_REJECTED')
-  return { ...result, defaultCameraId, defaultShotId, baseRevision: baseRevision() }
+  const defaultStateKeyframeId = state.stateKeyframes[0]?.id
+  const projectId = result.projectId
+  if (typeof projectId !== 'string' || !projectId || !defaultCameraId || !defaultStateKeyframeId) {
+    throw new Error('CAPABILITY_REJECTED')
+  }
+  return {
+    ...result,
+    defaultCameraId,
+    defaultStateKeyframeId,
+    resultRefs: [
+      { kind: 'camera_stage.project', id: projectId },
+      { kind: 'camera_stage.camera', id: `${projectId}:${defaultCameraId}` },
+      {
+        kind: 'camera_stage.state_keyframe',
+        id: `${projectId}:${defaultStateKeyframeId}`,
+      },
+    ],
+    baseRevision: baseRevision(),
+  }
 }
 
 export async function renameCameraStageProject(input: { projectId: string; name: string; baseRevision: number }, context: CapabilityExecutionContext): Promise<Record<string, unknown>> {
@@ -165,13 +181,6 @@ export async function renameCameraStageProject(input: { projectId: string; name:
 export async function deleteCameraStageProject(input: { projectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
   assertBaseRevision(input.baseRevision)
   const result = await cameraStageApplicationService.deleteProject(input.projectId)
-  notifyHostScopeChanged('toolbox')
-  return { ...result, baseRevision: baseRevision() }
-}
-
-export async function bakeCameraStageToPro(input: { projectId: string; baseRevision: number }): Promise<Record<string, unknown>> {
-  assertBaseRevision(input.baseRevision)
-  const result = await cameraStageApplicationService.bakeToProMode(input.projectId)
   notifyHostScopeChanged('toolbox')
   return { ...result, baseRevision: baseRevision() }
 }

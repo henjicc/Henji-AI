@@ -106,6 +106,41 @@ const getModelSchema = defineApplicationCapability({
   summarize: (output) => `已读取模型 ${String(output.meta.id ?? '')} 的参数结构。`,
 })
 
+const resolveGenerationModel = defineApplicationCapability({
+  id: 'resolve_generation_model',
+  version: 1,
+  title: '解析可执行生成模型',
+  description: '由宿主根据媒体类型、用户偏好、当前草稿与已配置供应商选择可实际执行的生成模型。',
+  domain: 'generation',
+  aliases: ['选择可用模型', '解析生成模型', 'resolve generation model'],
+  readOnly: true,
+  control: capabilityControl('observe', ['generation.model', 'settings.registry']),
+  risk: 'R0',
+  dataClasses: ['C0'],
+  permission: 'generation:prepare',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 10_000,
+  supportsPreview: false,
+  supportsUndo: false,
+  requiredScopes: [],
+  producesRefs: ['generation.model'],
+  inputSchema: z.object({
+    requestedModelId: z.string().trim().min(1).max(200).optional(),
+    preferredProviderIds: z.array(z.string().trim().min(1).max(100)).max(8).default([]),
+    prompt: z.string().max(32 * 1024),
+    mediaType: z.enum(['image', 'video', 'audio']),
+    params: z.record(z.string(), z.unknown()).default({}),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    modelId: z.string().min(1),
+    providerId: z.string().min(1),
+    selection: z.enum(['requested', 'preferred_provider', 'current_draft', 'configured_fallback']),
+  }),
+  concurrencyKey: 'generation_model_resolution',
+  summarize: (output) => `已解析可执行模型 ${output.modelId}（${output.providerId}）。`,
+})
+
 const prepareGenerationTask = defineApplicationCapability({
   id: 'prepare_generation_task',
   version: 1,
@@ -179,6 +214,7 @@ const createVisibleGenerationTask = defineApplicationCapability({
     '返回稳定 taskId、submitted 状态和最新 generation revision。',
     '该结果只证明任务已提交；生成完成必须由后续状态证据确认。',
   ],
+  executionPrerequisites: ['prepare_generation_task'],
   inputSchema: z.object({
     modelId: z.string().min(1).optional(),
     prompt: z.string().max(32 * 1024).optional(),
@@ -192,6 +228,23 @@ const createVisibleGenerationTask = defineApplicationCapability({
   concurrencyKey: 'generation',
   resolveConcurrencyKey: (input) => `generation:${input.modelId ?? 'draft'}`,
   resolveTargetIds: (input) => ({ modelId: input.modelId ?? 'draft' }),
+  resolveObservedEffects: (_input, output) => [{
+    effect: 'execute',
+    entityTypes: ['generation.task'],
+    propertyIds: [],
+    targetRefs: [{ kind: 'generation.task', id: output.taskId }],
+    count: 1,
+    verified: false,
+    evidence: [`generation.task:${output.taskId}:submitted`],
+  }, {
+    effect: 'create',
+    entityTypes: ['generation.task'],
+    propertyIds: [],
+    targetRefs: [{ kind: 'generation.task', id: output.taskId }],
+    count: 1,
+    verified: false,
+    evidence: [`generation.task:${output.taskId}:created`],
+  }],
   preview: (input) => ({
     title: '创建生成任务',
     summary: `使用模型 ${input.modelId ?? '（当前草稿选中的模型）'} 创建 `
@@ -294,6 +347,7 @@ export const GENERATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinitio
   switchWorkspace,
   searchModels,
   getModelSchema,
+  resolveGenerationModel,
   prepareGenerationTask,
   createVisibleGenerationTask,
   getGenerationTask,

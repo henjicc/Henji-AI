@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const APPLICATION_CONTROL_CONTRACT_VERSION = 'application-control/v1' as const
+export const APPLICATION_CONTROL_CONTRACT_VERSION = 'application-control/v2' as const
 export const APPLICATION_CAPABILITY_CATALOG_VERSION_PATTERN = /^application-capabilities\/v[1-9][0-9]*$/
 
 const stableIdPattern = /^[a-z][a-z0-9_.-]{1,127}$/

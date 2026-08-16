@@ -3,7 +3,6 @@ import { Boxes, Pencil, Plus, Trash2 } from 'lucide-react'
 import { UiButton, UiEmpty, UiIconButton, UiInput, UiLoading, UiModal, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cameraStageProjects'
 import { cameraStageApplicationService } from '../application/cameraStageApplicationService'
-import type { StageEditorMode } from '../domain/shotTypes'
 import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
 
 /**
@@ -33,7 +32,6 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const [renameValue, setRenameValue] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<CameraStageProjectPlatformSummary | null>(null)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
-  const [createMode, setCreateMode] = useState<StageEditorMode>('simple')
   const [createName, setCreateName] = useState(CAMERA_STAGE_DEFAULT_PROJECT_NAME)
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -52,33 +50,25 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
   const handleCreate = useCallback(async (): Promise<void> => {
     setBusy(true)
     try {
-      await cameraStageApplicationService.createProject(
-        createName.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME,
-        createMode,
-      )
+      await cameraStageApplicationService.createProject(createName.trim() || CAMERA_STAGE_DEFAULT_PROJECT_NAME)
       setCreateDialogOpen(false)
       onEnterEditor()
     } finally {
       setBusy(false)
     }
-  }, [createMode, createName, onEnterEditor])
+  }, [createName, onEnterEditor])
 
   const handleOpen = useCallback(
     async (projectId: string): Promise<void> => {
       setBusy(true)
       try {
-        try {
-          await cameraStageApplicationService.openProject(projectId)
-          onEnterEditor()
-        } catch (error) {
-          if (!(error instanceof Error) || error.message !== 'NOT_FOUND') throw error
-          await refresh()
-        }
+        await cameraStageApplicationService.openProject(projectId)
+        onEnterEditor()
       } finally {
         setBusy(false)
       }
     },
-    [onEnterEditor, refresh],
+    [onEnterEditor],
   )
 
   const submitRename = useCallback(async (): Promise<void> => {
@@ -104,7 +94,6 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
           description="搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图"
           actions={(
             <UiButton variant="primary" onClick={() => {
-              setCreateMode('simple')
               setCreateName(CAMERA_STAGE_DEFAULT_PROJECT_NAME)
               setCreateDialogOpen(true)
             }} disabled={busy}>
@@ -187,27 +176,6 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
               }}
               placeholder={CAMERA_STAGE_DEFAULT_PROJECT_NAME}
             />
-          </div>
-          <div className="pt-1 text-sm text-text-muted">选择编辑方式。创建后模式会随工程保存。</div>
-          <div className="grid grid-cols-2 gap-2">
-            <UiOptionButton
-              variant="card"
-              active={createMode === 'simple'}
-              className="h-auto flex-col !items-start gap-1 p-3 text-left"
-              onClick={() => setCreateMode('simple')}
-            >
-              <span className="text-sm font-medium">简易模式 · 推荐</span>
-              <span className="text-xs text-text-muted">用镜头卡组织运镜，无需关键帧。</span>
-            </UiOptionButton>
-            <UiOptionButton
-              variant="card"
-              active={createMode === 'pro'}
-              className="h-auto flex-col !items-start gap-1 p-3 text-left"
-              onClick={() => setCreateMode('pro')}
-            >
-              <span className="text-sm font-medium">专业模式</span>
-              <span className="text-xs text-text-muted">使用关键帧时间轴进行精细编辑。</span>
-            </UiOptionButton>
           </div>
         </div>
       </UiModal>

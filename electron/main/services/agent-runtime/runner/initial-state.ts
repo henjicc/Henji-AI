@@ -37,6 +37,12 @@ export function createInitialAgentRunState(
     updatedAt: now,
     finalText: null,
     error: null,
+    executionOutcome: {
+      status: 'pending',
+      effects: request.externalContinuation?.sourceEffects ?? [],
+      verificationSummary: { summary: '', evidence: [] },
+    },
+    presentationOutcome: { status: 'pending' },
     budget,
     usage: {
       turns: 0,

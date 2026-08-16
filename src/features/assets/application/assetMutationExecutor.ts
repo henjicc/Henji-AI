@@ -71,6 +71,7 @@ async function restoreSnapshot(
 
 /** 素材通用属性写入；全部状态变换委托素材领域服务，并保存可真实恢复的领域快照。写入表定义收敛在 assetFields.ts。 */
 export class AssetMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = ASSET_ENTITY_TYPES.asset
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -112,7 +113,7 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
     return {
       status: 'completed',
       resultingRevisions: { assets: revision },
-      producedRefs: [{ kind: this.entityType, id: assetId, revision }],
+      directRefs: [{ kind: this.entityType, id: assetId, revision }],
       evidence: step.mutations.map((mutation) => ({
         kind: 'property_value' as const,
         target: { kind: this.entityType, id: assetId, revision },
@@ -142,7 +143,7 @@ export class AssetMutationExecutor implements ApplicationMutationExecutor {
     return {
       status: 'completed',
       resultingRevisions: { assets: revision },
-      producedRefs: [{ kind: this.entityType, id: record.assetId, revision }],
+      directRefs: [{ kind: this.entityType, id: record.assetId, revision }],
       evidence: [{
         kind: 'entity_state',
         target: { kind: this.entityType, id: record.assetId, revision },

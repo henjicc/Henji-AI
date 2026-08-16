@@ -31,6 +31,7 @@ interface UndoPayload {
  * （fieldDefinition.ts "直写型" 的先例），不需要单独的 patch 类型。
  */
 export class ImageMarkDocumentMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.document
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -55,7 +56,7 @@ export class ImageMarkDocumentMutationExecutor implements ApplicationMutationExe
     return {
       status: 'completed',
       resultingRevisions: { image_mark: revision },
-      producedRefs: [{ kind: this.entityType, id: sessionId, revision }],
+      directRefs: [{ kind: this.entityType, id: sessionId, revision }],
       evidence: step.mutations.map((mutation) => ({
         kind: 'property_value' as const,
         target: { kind: this.entityType, id: sessionId, revision },
@@ -80,7 +81,7 @@ export class ImageMarkDocumentMutationExecutor implements ApplicationMutationExe
     return {
       status: 'completed',
       resultingRevisions: { image_mark: revision },
-      producedRefs: [{ kind: this.entityType, id: sessionId, revision }],
+      directRefs: [{ kind: this.entityType, id: sessionId, revision }],
       evidence: [{
         kind: 'entity_state',
         target: { kind: this.entityType, id: sessionId, revision },

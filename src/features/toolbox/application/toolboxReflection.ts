@@ -4,6 +4,7 @@ import {
   type ApplicationPropertyDescriptor,
   type ApplicationRef,
   type JsonValue,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
@@ -95,6 +96,11 @@ class ToolboxReflectionProvider implements ApplicationEntityProvider {
       }
     })
   }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { toolbox: 1 }, ['toolbox:write'])
+  }
+
 }
 
 export function createToolboxReflectionRegistration(): ApplicationEntityRegistration {

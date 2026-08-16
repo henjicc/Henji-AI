@@ -9,28 +9,26 @@ import type {
   ApplicationPlannedStep,
   ApplicationPropertyWriterTable,
   ApplicationSemanticOperationExecutor,
+  ApplicationEffectReceipt,
   JsonValue,
 } from '@/core/application-control'
-import { applyWriterTable, propertyOperations, writableProperties } from '@/core/application-control'
+import { applyWriterTable, directOnlyEffectContract, fieldEffectContract, propertyOperations, writableProperties } from '@/core/application-control'
 
 import { saveCurrentProject } from '../projects/cameraStageProjectService'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { cameraStageApplicationService } from './cameraStageApplicationService'
 import { applyCameraStageMotion } from './cameraMotionService'
-import { assertProModeForKeyframes } from './cameraStageKeyframeService'
 import { restoreCameraStageUndo, captureCameraStageUndo } from './cameraStageUndo'
-import { CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
+import { CAMERA_FIELDS, OBJECT_FIELDS, CAMERA_STAGE_CAMERA_WRITERS, CAMERA_STAGE_OBJECT_WRITERS, type CameraStageObjectDraft } from './cameraStageObjectFields'
 import { CAMERA_STAGE_ENTITY_TYPES } from './cameraStageReflection'
 import { CAMERA_STAGE_SCENE_WRITERS } from './cameraStageSceneFields'
 import {
-  CAMERA_STAGE_KEYFRAME_WRITERS,
   CAMERA_STAGE_PLAYBACK_WRITERS,
   CAMERA_STAGE_PROJECT_WRITERS,
-  CAMERA_STAGE_SHOT_WRITERS,
-  type CameraStageKeyframeDraft,
+  CAMERA_STAGE_STATE_KEYFRAME_WRITERS,
   type CameraStagePlaybackDraft,
   type CameraStageProjectDraft,
-  type CameraStageShotDraft,
+  type CameraStageStateKeyframeDraft,
 } from './cameraStageTimelineFields'
 import { CAMERA_STAGE_TRAJECTORY_WRITERS, type CameraStageTrajectoryDraft } from './cameraStageTrajectoryFields'
 
@@ -48,14 +46,13 @@ function childTarget(id: string): { projectId: string; childId: string } {
   return { projectId: id.slice(0, separator), childId: id.slice(separator + 1) }
 }
 
-/** 六类实体各一张写入表；`writableProperties` 由它派生，门禁据此与反射层声明做双向比对。 */
+/** 每类公开实体各一张写入表；`writableProperties` 由它派生。 */
 const WRITER_TABLES = {
   [CAMERA_STAGE_ENTITY_TYPES.project]: CAMERA_STAGE_PROJECT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.scene]: CAMERA_STAGE_SCENE_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.object]: CAMERA_STAGE_OBJECT_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.camera]: CAMERA_STAGE_CAMERA_WRITERS,
-  [CAMERA_STAGE_ENTITY_TYPES.shot]: CAMERA_STAGE_SHOT_WRITERS,
-  [CAMERA_STAGE_ENTITY_TYPES.keyframe]: CAMERA_STAGE_KEYFRAME_WRITERS,
+  [CAMERA_STAGE_ENTITY_TYPES.stateKeyframe]: CAMERA_STAGE_STATE_KEYFRAME_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.playback]: CAMERA_STAGE_PLAYBACK_WRITERS,
   [CAMERA_STAGE_ENTITY_TYPES.trajectory]: CAMERA_STAGE_TRAJECTORY_WRITERS,
 } as const satisfies Record<MutationEntityType, ApplicationPropertyWriterTable<never>>
@@ -70,7 +67,53 @@ function mutationEvidence(step: MutationStep, revision: number): ApplicationEvid
   }))
 }
 
+function isAutomaticStateKeyframeMutation(step: MutationStep): boolean {
+  return (step.entityType === CAMERA_STAGE_ENTITY_TYPES.object
+      || step.entityType === CAMERA_STAGE_ENTITY_TYPES.camera)
+    && step.mutations.some((mutation) => mutation.propertyId.includes('.animatable.')
+      || mutation.propertyId.endsWith('.pose_preset'))
+}
+
+function automaticStateKeyframeEvidence(
+  projectId: string,
+  beforeIds: ReadonlySet<string>,
+  revision: number,
+): { refs: ApplicationCompletedStepResult['directRefs']; effects: ApplicationEffectReceipt[]; evidence: ApplicationEvidence[] } {
+  const state = useCameraStageStore.getState()
+  const created = state.stateKeyframes.filter((item) => !beforeIds.has(item.id))
+  const affected = created.length > 0
+    ? created.map((item) => ({ item, effect: 'create' as const }))
+    : state.stateKeyframes
+      .filter((item) => item.id === state.selectedStateKeyframeId)
+      .map((item) => ({ item, effect: 'update' as const }))
+  const refs = affected.map(({ item }) => ({
+    kind: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe,
+    id: `${projectId}:${item.id}`,
+    label: item.name,
+    revision,
+  }))
+  return {
+    refs,
+    effects: affected.map(({ effect }, index) => ({
+      effect,
+      entityType: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe,
+      refs: [refs[index]],
+      propertyIds: [],
+      origin: { kind: 'cascade', declarationId: `camera_stage.auto_state_keyframe_${effect}` },
+    })),
+    evidence: affected.map(({ effect }, index) => ({
+      kind: 'entity_state',
+      target: refs[index],
+      fact: effect === 'create' ? '动画编辑自动创建状态关键帧。' : '动画编辑更新已有状态关键帧。',
+      // 通用 change 能力以输入声明直接写入；自动打点属于领域级联副作用，必须把真实 Effect
+      // 结构化带回运行时账本，不能再靠模型从文案猜“是否创建了关键帧”。
+      capturedAt: new Date().toISOString(),
+    })),
+  }
+}
+
 export class CameraStageMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract
   readonly writableProperties: ReadonlySet<string>
   readonly propertyOperations: ReadonlyMap<string, ReadonlySet<ApplicationMutationOperation>>
 
@@ -80,18 +123,34 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
   ) {
     this.writableProperties = writableProperties(WRITER_TABLES[entityType])
     this.propertyOperations = propertyOperations(WRITER_TABLES[entityType])
+    this.effectContract = entityType === CAMERA_STAGE_ENTITY_TYPES.object
+      ? fieldEffectContract(OBJECT_FIELDS)
+      : entityType === CAMERA_STAGE_ENTITY_TYPES.camera
+        ? fieldEffectContract(CAMERA_FIELDS)
+        : directOnlyEffectContract()
   }
 
   async apply(step: MutationStep): Promise<ApplicationCompletedStepResult> {
     if (step.entityType !== this.entityType || step.target.kind !== this.entityType) throw new Error('NOT_FOUND')
+    const recordsAutomaticStateKeyframe = isAutomaticStateKeyframeMutation(step)
+    const projectId = recordsAutomaticStateKeyframe ? childTarget(step.target.id).projectId : null
+    const beforeStateKeyframeIds = new Set(
+      recordsAutomaticStateKeyframe
+        ? useCameraStageStore.getState().stateKeyframes.map((item) => item.id)
+        : [],
+    )
     const undoToken = await this.applyMutations(step)
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
+    const automatic = projectId
+      ? automaticStateKeyframeEvidence(projectId, beforeStateKeyframeIds, revision)
+      : { refs: [], effects: [], evidence: [] }
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },
-      producedRefs: [{ ...step.target, revision }],
-      evidence: mutationEvidence(step, revision),
+      directRefs: [{ ...step.target, revision }],
+      cascadeEffects: automatic.effects,
+      evidence: [...mutationEvidence(step, revision), ...automatic.evidence],
       undoToken,
     }
   }
@@ -111,7 +170,8 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },
-      producedRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
+      directRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
+      cascadeEffects: [],
       evidence: [{
         kind: 'entity_state',
         target: { kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision },
@@ -125,10 +185,10 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.project) return await this.applyProject(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.scene) return await this.applyScene(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.object || this.entityType === CAMERA_STAGE_ENTITY_TYPES.camera) return await this.applyObject(step)
-    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.shot) return await this.applyShot(step)
+    if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.stateKeyframe) return await this.applyStateKeyframe(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.playback) return await this.applyPlayback(step)
     if (this.entityType === CAMERA_STAGE_ENTITY_TYPES.trajectory) return await this.applyTrajectory(step)
-    return await this.applyKeyframe(step)
+    throw new Error('NOT_FOUND')
   }
 
   private async applyProject(step: MutationStep): Promise<string> {
@@ -190,16 +250,17 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     return (await cameraStageApplicationService.updateObject(projectId, objectId, draft.update)).undoToken
   }
 
-  private async applyShot(step: MutationStep): Promise<string> {
-    const { projectId, childId: shotId } = childTarget(step.target.id)
-    const draft: CameraStageShotDraft = {}
-    await applyWriterTable(CAMERA_STAGE_SHOT_WRITERS, draft, step.mutations)
-    return (await cameraStageApplicationService.updateShot(projectId, shotId, draft)).undoToken
+  private async applyStateKeyframe(step: MutationStep): Promise<string> {
+    const { projectId, childId: stateKeyframeId } = childTarget(step.target.id)
+    const draft: CameraStageStateKeyframeDraft = {}
+    await applyWriterTable(CAMERA_STAGE_STATE_KEYFRAME_WRITERS, draft, step.mutations)
+    return (await cameraStageApplicationService.updateStateKeyframe(projectId, stateKeyframeId, draft)).undoToken
   }
 
   private async applyPlayback(step: MutationStep): Promise<string> {
     const projectId = step.target.id
-    await cameraStageApplicationService.openProject(projectId)
+    // updatePlayback 自己会按需加载；工程已经打开时绝不能重复 loadSnapshot。
+    // 连续 seek→改属性的事务若每次 seek 都重开工程，会制造无意义 revision 并用磁盘快照覆盖前序内存状态。
     const undoToken = captureCameraStageUndo(projectId)
     const draft: CameraStagePlaybackDraft = {}
     await applyWriterTable(CAMERA_STAGE_PLAYBACK_WRITERS, draft, step.mutations)
@@ -208,43 +269,22 @@ export class CameraStageMutationExecutor implements ApplicationMutationExecutor 
     return undoToken
   }
 
-  private async applyKeyframe(step: MutationStep): Promise<string> {
-    const { projectId, childId } = childTarget(step.target.id)
-    await cameraStageApplicationService.openProject(projectId)
-    const parts = childId.split(':')
-    const objectId = parts.shift()
-    const originalTime = Number(parts.pop())
-    const path = parts.join(':')
-    if (!objectId || !path || !Number.isFinite(originalTime)) throw new Error('NOT_FOUND')
-    /*
-     * 简易模式同样要挡——而且这条比"新建关键帧"更隐蔽：简易模式的 animation.tracks 是**从镜头卡
-     * 编译出来的**，所以关键帧在观察结果里真的列得出来、稳定引用也真的能寻址到。改一条会成功，
-     * 下一次任何镜头卡改动重新编译，改动原样消失。
-     */
-    assertProModeForKeyframes('修改')
-    const undoToken = captureCameraStageUndo(projectId)
-    const draft: CameraStageKeyframeDraft = { objectId, path, currentTime: originalTime }
-    await applyWriterTable(CAMERA_STAGE_KEYFRAME_WRITERS, draft, step.mutations)
-    await saveCurrentProject()
-    return undoToken
-  }
-
-  /** 轨迹稳定引用形如 `projectId:shotId:objectId`（`allRefs()` 里 `childRef` 拼的 `${shotId}:${objectId}`）。 */
+  /** 轨迹稳定引用形如 `projectId:stateKeyframeId:objectId`（`allRefs()` 里 `childRef` 拼的 `${stateKeyframeId}:${objectId}`）。 */
   private async applyTrajectory(step: MutationStep): Promise<string> {
     const { projectId, childId } = childTarget(step.target.id)
     const separator = childId.indexOf(':')
     if (separator < 1) throw new Error('NOT_FOUND')
-    const shotId = childId.slice(0, separator)
+    const stateKeyframeId = childId.slice(0, separator)
     const objectId = childId.slice(separator + 1)
     const snapshot = await cameraStageApplicationService.readSnapshot(projectId)
-    const index = snapshot.shots.findIndex((shot) => shot.id === shotId)
-    const shot = snapshot.shots[index]
-    const nextShot = snapshot.shots[index + 1]
-    const path = shot?.transition.perObject[objectId]?.spatialPath
-    if (!shot || !nextShot || !path) throw new Error('NOT_FOUND')
+    const index = snapshot.stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === stateKeyframeId)
+    const stateKeyframe = snapshot.stateKeyframes[index]
+    const nextStateKeyframe = snapshot.stateKeyframes[index + 1]
+    const path = stateKeyframe?.transition.perObject[objectId]?.spatialPath
+    if (!stateKeyframe || !nextStateKeyframe || !path) throw new Error('NOT_FOUND')
     const draft: CameraStageTrajectoryDraft = { path: structuredClone(path), pathTouched: false }
     await applyWriterTable(CAMERA_STAGE_TRAJECTORY_WRITERS, draft, step.mutations)
-    return (await cameraStageApplicationService.updateTrajectory(projectId, shotId, objectId, {
+    return (await cameraStageApplicationService.updateTrajectory(projectId, stateKeyframeId, objectId, {
       path: draft.pathTouched ? draft.path : undefined,
       startPosition: draft.startPosition,
       endPosition: draft.endPosition,
@@ -264,14 +304,20 @@ const motionInputSchema = z.object({
   ]),
   targetObjectId: z.string().min(1).optional(),
   targetPoint: vec3Schema.optional(),
-  startShotId: z.string().min(1).optional(),
-  endShotId: z.string().min(1).optional(),
-  startTime: z.number().min(0).max(3600).optional(),
+  startStateKeyframeId: z.string().min(1).optional(),
+  endStateKeyframeId: z.string().min(1).optional(),
   duration: z.number().positive().max(3600),
   speed: z.enum(['uniform', 'easeInOut', 'fastStart', 'slowStart']),
 }).strict()
 
 export class CameraStageMotionOperationExecutor implements ApplicationSemanticOperationExecutor {
+  readonly effectContract = {
+    direct: [],
+    cascades: [{
+      declarationId: 'camera_stage.motion_state_keyframes', effect: 'update' as const,
+      entityType: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe, propertyIds: [], revisionScopes: ['toolbox'],
+    }],
+  }
   readonly capabilityId = 'apply_camera_stage_camera_move'
   readonly capabilityVersion = 1
   readonly risk = 'R1' as const
@@ -295,10 +341,19 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },
-      producedRefs: [
+      directRefs: [
         { kind: CAMERA_STAGE_ENTITY_TYPES.camera, id: `${result.projectId}:${result.cameraId}`, revision },
-        ...result.affectedShotIds.map((id) => ({ kind: CAMERA_STAGE_ENTITY_TYPES.shot, id: `${result.projectId}:${id}`, revision })),
       ],
+      directEffects: [{
+        effect: 'execute', entityType: CAMERA_STAGE_ENTITY_TYPES.camera,
+        refs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.camera, id: `${result.projectId}:${result.cameraId}`, revision }],
+        propertyIds: [], origin: { kind: 'direct' },
+      }],
+      cascadeEffects: [{
+        effect: 'update', entityType: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe,
+        refs: result.affectedStateKeyframeIds.map((id) => ({ kind: CAMERA_STAGE_ENTITY_TYPES.stateKeyframe, id: `${result.projectId}:${id}`, revision })),
+        propertyIds: [], origin: { kind: 'cascade', declarationId: 'camera_stage.motion_state_keyframes' },
+      }],
       evidence: [{
         kind: 'operation_result',
         target: { kind: CAMERA_STAGE_ENTITY_TYPES.camera, id: `${result.projectId}:${result.cameraId}`, revision },
@@ -311,8 +366,8 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
             start: { x: result.path.start.x, y: result.path.start.y, z: result.path.start.z },
             end: { x: result.path.end.x, y: result.path.end.y, z: result.path.end.z },
           },
-          affectedShotIds: result.affectedShotIds,
-          affectedKeyframeCount: result.affectedKeyframeCount,
+          affectedStateKeyframeIds: result.affectedStateKeyframeIds,
+          affectedStateKeyframeCount: result.affectedStateKeyframeCount,
         },
         capturedAt: new Date().toISOString(),
       }],
@@ -332,7 +387,9 @@ export class CameraStageMotionOperationExecutor implements ApplicationSemanticOp
     return {
       status: 'completed',
       resultingRevisions: { toolbox: revision },
-      producedRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
+      directRefs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }],
+      directEffects: [{ effect: 'execute', entityType: CAMERA_STAGE_ENTITY_TYPES.project, refs: [{ kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }], propertyIds: [], origin: { kind: 'direct' } }],
+      cascadeEffects: [],
       evidence: [{ kind: 'entity_state', fact: '三维运镜已撤销。', target: { kind: CAMERA_STAGE_ENTITY_TYPES.project, id: restored.projectId, revision }, capturedAt: new Date().toISOString() }],
     }
   }
@@ -343,8 +400,7 @@ export const CAMERA_STAGE_MUTATION_ENTITY_TYPES: MutationEntityType[] = [
   CAMERA_STAGE_ENTITY_TYPES.scene,
   CAMERA_STAGE_ENTITY_TYPES.object,
   CAMERA_STAGE_ENTITY_TYPES.camera,
-  CAMERA_STAGE_ENTITY_TYPES.shot,
-  CAMERA_STAGE_ENTITY_TYPES.keyframe,
+  CAMERA_STAGE_ENTITY_TYPES.stateKeyframe,
   CAMERA_STAGE_ENTITY_TYPES.playback,
   CAMERA_STAGE_ENTITY_TYPES.trajectory,
 ]

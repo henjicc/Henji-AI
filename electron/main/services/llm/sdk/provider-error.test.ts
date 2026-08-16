@@ -43,4 +43,34 @@ describe('normalizeProviderError', () => {
     expect(error.details.retryAfterMs).toBe(2_000)
     expect(error.message).not.toContain('do-not-leak')
   })
+
+  it('把供应商超时识别为可重试网络错误', () => {
+    const timeout = new Error('Request timed out after 60000ms')
+    timeout.name = 'TimeoutError'
+    const error = normalizeProviderError(input, timeout)
+    expect(error.details).toMatchObject({
+      code: 'MODEL_REQUEST_TIMEOUT',
+      category: 'network',
+      retryable: true,
+    })
+  })
+
+  it('读取包装错误 cause 中的超时码和供应商重试提示', () => {
+    const error = normalizeProviderError(input, {
+      message: 'AI SDK request failed',
+      cause: { code: 'UND_ERR_HEADERS_TIMEOUT', isRetryable: true },
+    })
+    expect(error.details).toMatchObject({
+      code: 'UND_ERR_HEADERS_TIMEOUT',
+      category: 'network',
+      retryable: true,
+    })
+  })
+
+  it('尊重 SDK 的可重试提示但不覆盖明确鉴权分类', () => {
+    expect(normalizeProviderError(input, { isRetryable: true }).details)
+      .toMatchObject({ category: 'network', retryable: true })
+    expect(normalizeProviderError(input, { statusCode: 401, isRetryable: true }).details)
+      .toMatchObject({ category: 'authentication', retryable: false })
+  })
 })

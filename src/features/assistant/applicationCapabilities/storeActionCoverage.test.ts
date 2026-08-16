@@ -103,8 +103,8 @@ const LEDGERS: LedgerCase[] = [
  * 补齐了某项（调小），或者界面新增了一个确实还做不了的功能（连同 gap 理由一起说明）。
  *
  * 建账当天 21 项。播放控制 5 项已补齐（注册成 camera_stage.playback 单例实体，零新增工具），
- * 2.1 又烧掉镜头卡增删排序 3 项（removeShot/removeShots 接到集合写入，reorderShot 绑到已可写
- * 的 time 属性，专用能力 add_camera_stage_shot 一并下线）。2.2 烧掉镜头卡状态捕获 1 项
+ * 2.1 又烧掉状态关键帧增删排序 3 项（removeShot/removeShots 接到集合写入，reorderShot 绑到已可写
+ * 的 time 属性，专用能力 add_camera_stage_shot 一并下线）。2.2 烧掉状态关键帧状态捕获 1 项
  * （captureIntoSelectedShot 绑到新增的 capture_object_refs 属性，不依赖选中态）。2.3 烧掉编辑
  * 模式切换与烘焙 2 项——读代码发现"专业→简易无约束"的假设不成立（store 直接拒绝这个方向），
  * setEditorMode 只是新建工程的内部步骤、已被 create_camera_stage_project 覆盖，改绑 excluded；
@@ -113,7 +113,7 @@ const LEDGERS: LedgerCase[] = [
  * 等价于当前时间点打点，只在专业模式下可写），applyPosePreset 绑到新增的 pose_preset 枚举属性。
  * 2.5 烧掉三维最后 3 项——clearTrack 接到集合删除的轨道级引用（工程:对象:属性路径，不带时间）；
  * setShotSpatialPath/setShotPathAnchor 绑到 camera_stage.trajectory 新增的 5 条可写属性
- * （knots 等三条整条路径替换，start_position/end_position 挪相邻镜头卡快照）。**三维 11 项
+ * （knots 等三条整条路径替换，start_position/end_position 挪相邻状态关键帧快照）。**三维 11 项
  * 缺口全部归零**。3.1 烧掉画布 3 项——clearCanvas/ungroupNode/redo 均注册为专用能力
  * （clear_canvas/ungroup_canvas_node/redo_canvas_change），与 undo_canvas_change/
  * group_canvas_nodes 同属工程级整体状态操作，不勉强表达成集合写入。3.2 烧掉最后 2 项——

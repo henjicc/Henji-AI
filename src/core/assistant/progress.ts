@@ -18,6 +18,7 @@ export const agentFacetProgressKindSchema = z.enum([
   'repeated_discovery',
   'repeated_write',
   'repeated_failure',
+  'terminal_failure',
   'capability_missing',
   'permission_blocked',
   'revision_conflict',

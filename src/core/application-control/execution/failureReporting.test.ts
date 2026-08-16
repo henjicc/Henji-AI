@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { ApplicationEntityProvider } from '../registry'
 import { ApplicationReflectionRegistry } from '../registry'
+import { unrestrictedCollectionAvailability } from '../reflection'
 import { ApplicationControlExecutionEngine } from './engine'
 import type {
   ApplicationControlExecutionDependencies,
@@ -42,6 +43,9 @@ function createEngine(
         requiredPermissions: [], reasons: [], revisions: { [SCOPE]: 0 },
       }))
     },
+    async getCollectionAvailability(parent) {
+      return unrestrictedCollectionAvailability('sample.item', parent, { [SCOPE]: 0 })
+    },
   }
   const registry = new ApplicationReflectionRegistry('application-capabilities/v2')
   registry.register({
@@ -78,6 +82,7 @@ function createEngine(
   })
   // 只为让 planner 走到属性可写性判定；这个执行器本身不会被执行到。
   engine.registerMutationExecutor({
+    effectContract: { direct: [], cascades: [] },
     entityType: 'sample.item',
     writableProperties: new Set(['sample.item.locked']),
     propertyOperations: new Map([['sample.item.locked', new Set(['set' as const])]]),
@@ -86,6 +91,7 @@ function createEngine(
     },
   })
   engine.registerOperationExecutor({
+    effectContract: { direct: [], cascades: [] },
     capabilityId: 'sample_operation',
     capabilityVersion: 1,
     risk: 'R1',

@@ -8,6 +8,7 @@ import { useProjectStore, type Project } from '@/stores/projectStore'
 
 import {
   addCanvasNode,
+  addTrustedMediaCanvasNode,
   connectCanvasNodes,
   focusCanvasNode,
   redoCanvasChange,
@@ -92,6 +93,70 @@ describe('canvas application service', () => {
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
     undoCanvasChange(projectId, String(upload.undoRef))
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
+  })
+
+  it('把正式素材数据落成可读取的媒体源节点', () => {
+    const created = addTrustedMediaCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.upload,
+      placement: { mode: 'viewport_center' },
+      data: {
+        imageUrl: 'C:/managed-assets/result.png',
+        previewImageUrl: 'henji-media://asset/result',
+        aspectRatio: '4:3',
+        sourceFileName: 'result.png',
+        isSizeManuallyAdjusted: false,
+      },
+    })
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === created.nodeId)?.data)
+      .toMatchObject({
+        imageUrl: 'C:/managed-assets/result.png',
+        previewImageUrl: 'henji-media://asset/result',
+        aspectRatio: '4:3',
+      })
+  })
+
+  it('绝对坐标布局不依赖当前视口，可精确复现脚本位置', () => {
+    useCanvasStore.setState({ currentViewport: { x: 900, y: -400, zoom: 2 } })
+    const created = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.stringSource,
+      placement: { mode: 'absolute', x: 320, y: 180 },
+      data: { value: '绝对坐标' },
+    })
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === created.nodeId)?.position)
+      .toEqual({ x: 320, y: 180 })
+  })
+
+  it('按明确参数端口连接文本值节点与图片生成节点', () => {
+    const prompt = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.stringSource,
+      placement: { mode: 'viewport_center' },
+      data: { displayName: '提示词', value: '一只纸雕风格的猫' },
+    })
+    const generation = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.imageEdit,
+      placement: { mode: 'right_of_node', anchorNodeId: String(prompt.nodeId) },
+      data: { prompt: '' },
+    })
+
+    const connection = connectCanvasNodes({
+      projectId,
+      sourceNodeId: String(prompt.nodeId),
+      targetNodeId: String(generation.nodeId),
+      sourceHandle: 'source',
+      targetHandle: 'param:__prompt',
+    })
+
+    expect(connection).toMatchObject({ sourceHandle: 'source', targetHandle: 'param:__prompt' })
+    expect(useCanvasStore.getState().edges).toContainEqual(expect.objectContaining({
+      source: prompt.nodeId,
+      target: generation.nodeId,
+      sourceHandle: 'source',
+      targetHandle: 'param:__prompt',
+    }))
   })
 
   it('撤销之后能重做，重做之后没有可重做操作时拒绝', () => {

@@ -13,7 +13,7 @@ import {
  *
  * 内部应用接口早就建好了实体/属性反射、观察查询和事务执行，但一直没有任何 Agent 能力把它
  * 暴露出去：助手只能调那些手写的专用能力，反射层只有适配器内部在用。后果是每一个「新建 X」
- * 「改 X 的 Y」都得单独写一遍能力，漏掉一个就彻底不可用——`camera_stage.keyframe` 实体、
+ * 「改 X 的 Y」都得单独写一遍能力，漏掉一个就彻底不可用——例如状态关键帧实体、
  * 属性、provider 全都注册齐了，助手却做不了任何对象动画，就是这么来的。
  *
  * 这四个能力让助手可以：**发现有哪些实体和属性 → 读实例 → 改属性或增删成员**。
@@ -26,6 +26,7 @@ import {
 const refSchema = z.object({
   kind: z.string().min(1),
   id: z.string().min(1),
+  revision: z.number().int().nonnegative().optional(),
   label: z.string().min(1).max(200).optional(),
 }).strict()
 
@@ -40,10 +41,13 @@ const describeEntities = defineApplicationCapability({
   inputSchema: z.object({
     domains: z.array(z.string().min(1)).max(16).default([]),
     entityTypes: z.array(z.string().min(1)).max(32).default([]),
+    refs: z.array(refSchema).max(16).default([]),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     entities: z.array(z.record(z.string(), z.unknown())),
     properties: z.array(z.record(z.string(), z.unknown())),
+    propertyAvailability: z.array(z.record(z.string(), z.unknown())).default([]),
+    collectionAvailability: z.array(z.record(z.string(), z.unknown())).default([]),
   }),
   resolveConcurrencyKey: () => 'application:describe',
   resolveTargetIds: () => ({}),
@@ -91,7 +95,10 @@ const listEntities = defineApplicationCapability({
     effect: 'observe', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: false,
   }] },
   resolveObservedEffects: (input, output) => [{
-    effect: 'observe', entityTypes: [input.entityType], propertyIds: [], targetRefs: output.refs,
+    // ApplicationRef 还可带 label/revision；任务图的 Effect ref 是严格的 kind/id 二元组。
+    // 直接透传会让整个成功查询在网关末端被 Zod 判成 INVALID_INPUT。
+    effect: 'observe', entityTypes: [input.entityType], propertyIds: [],
+    targetRefs: output.refs.map((ref) => ({ kind: ref.kind, id: ref.id })),
     count: Math.max(1, output.refs.length), verified: true, evidence: [],
   }],
 })
@@ -202,8 +209,8 @@ function requiredMutationScopes(input: z.infer<typeof changeEntitiesInputSchema>
 }
 
 const changeEntities = defineApplicationCapability({
-  id: 'change_application_entities', version: 1, title: '修改应用状态',
-  description: '在一次事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。用它做那些没有专用能力的常规改动。失败会整体回滚。属性键用 describe_application_entities 返回的完整属性 ID，也可以只写 entityType 之后的那一段（例如实体为 camera_stage.keyframe 时，object_ref 等价于 camera_stage.keyframe.object_ref）。',
+  id: 'change_application_entities', version: 2, title: '修改应用状态',
+  description: '在一次有序事务里设置、清空或增删实体属性值，也可以在集合中新增或删除成员。changes 会按数组顺序执行，后一步能看到前一步刚建立的状态；同一目标的多步常规改动应合并到一次调用，失败会整体回滚。target 必须原样使用 list_application_entities 或读取结果返回的稳定引用，不要截取 ID。属性键用 describe_application_entities 返回的完整属性 ID，也可以只写 entityType 之后的那一段（例如实体为 camera_stage.state_keyframe 时，time 等价于 camera_stage.state_keyframe.time）。',
   domain: 'application',
   aliases: ['改属性', '增删属性值', '加关键帧', '做动画', '上下漂浮', '新增成员', '删除成员', 'change entities', 'set property'],
   readOnly: false, risk: 'R1', dataClasses: ['C1'], permission: 'application:write',
@@ -223,7 +230,8 @@ const changeEntities = defineApplicationCapability({
     status: z.literal('completed'),
     transactionRef: z.string(),
     resultingRevisions: z.record(z.string(), z.number().int().nonnegative()),
-    producedRefs: z.array(z.record(z.string(), z.unknown())),
+    resultRefs: z.array(z.record(z.string(), z.unknown())),
+    effects: z.array(z.record(z.string(), z.unknown())),
     evidence: z.array(z.record(z.string(), z.unknown())),
   }),
   resolveConcurrencyKey: (input) => `application:change:${input.changes[0]?.entityType ?? 'unknown'}`,
@@ -247,24 +255,40 @@ const changeEntities = defineApplicationCapability({
       changes: [{
         kind: 'set_properties',
         entityType: 'camera_stage.object',
-        target: { kind: 'camera_stage.object', id: 'obj-1' },
+        target: { kind: 'camera_stage.object', id: 'project-id:object-id' },
         // 属性键可以省略 entityType 前缀，两种写法等价。
         // 示例里的颜色是三维场景数据，不是界面令牌；拼接写法用于避开 UI 十六进制检查。
         properties: { color: `#${'ffffff'}`, 'camera_stage.object.name': '白色球体' },
       }],
     },
     {
-      summary: '给球体加两个上下漂浮关键帧',
-      changes: [{
-        kind: 'create_items',
-        entityType: 'camera_stage.keyframe',
-        parent: { kind: 'camera_stage.object', id: 'obj-1' },
-        // create_items 的每个成员都要包一层 properties。
-        items: [
-          { properties: { frame: 0, position_y: 0 } },
-          { properties: { frame: 30, position_y: 1.5 } },
-        ],
-      }],
+      summary: '一次事务记录三点浮动并播放',
+      changes: [
+        ...[[0, 0], [1, 1.5], [2, 0]].flatMap(([time, y]) => ([
+          {
+            kind: 'set_properties' as const,
+            entityType: 'camera_stage.playback',
+            target: { kind: 'camera_stage.playback', id: 'project-id' },
+            properties: { 'camera_stage.playback.current_time': time },
+          },
+          {
+            kind: 'set_properties' as const,
+            entityType: 'camera_stage.object',
+            target: { kind: 'camera_stage.object', id: 'project-id:object-id' },
+            properties: { 'camera_stage.object.animatable.transform.position.y': y },
+          },
+        ])),
+        {
+          kind: 'set_properties' as const,
+          entityType: 'camera_stage.playback',
+          target: { kind: 'camera_stage.playback', id: 'project-id' },
+          properties: {
+            'camera_stage.playback.current_time': 0,
+            'camera_stage.playback.loop': true,
+            'camera_stage.playback.playing': true,
+          },
+        },
+      ],
     },
   ],
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [
@@ -272,24 +296,25 @@ const changeEntities = defineApplicationCapability({
     { effect: 'update', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: true },
     { effect: 'delete', entityTypes: [], propertyIds: [], revisionScopes: [], verificationRequired: true },
   ] },
-  resolveObservedEffects: (input, output) => input.changes.map((change) => {
-    const target = change.kind === 'remove_items'
-      ? change.targets
-      : change.kind === 'create_items' ? [change.parent] : [change.target]
-    const propertyIds = change.kind === 'set_properties'
-      ? Object.keys(change.properties)
-      : change.kind === 'mutate_properties' ? change.mutations.map((mutation) => mutation.propertyId) : []
-    return {
-      effect: change.kind === 'create_items' ? 'create' as const
-        : change.kind === 'remove_items' ? 'delete' as const : 'update' as const,
-      entityTypes: [change.entityType],
-      propertyIds,
-      targetRefs: target.map((ref) => ({ kind: ref.kind, id: ref.id })),
-      count: change.kind === 'create_items' ? change.items.length
-        : change.kind === 'remove_items' ? change.targets.length : 1,
+  resolveObservedEffects: (_input, output) => output.effects.flatMap((raw) => {
+    const effect = raw.effect
+    const entityType = raw.entityType
+    const refs = Array.isArray(raw.refs) ? raw.refs.flatMap((value) => {
+      const ref = value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown> : null
+      return typeof ref?.kind === 'string' && typeof ref.id === 'string'
+        ? [{ kind: ref.kind, id: ref.id }] : []
+    }) : []
+    if (!['create', 'update', 'delete', 'execute'].includes(String(effect)) || typeof entityType !== 'string') return []
+    return [{
+      effect: effect as 'create' | 'update' | 'delete' | 'execute',
+      entityTypes: [entityType],
+      propertyIds: Array.isArray(raw.propertyIds) ? raw.propertyIds.filter((id): id is string => typeof id === 'string') : [],
+      targetRefs: refs,
+      count: Math.max(1, refs.length),
       verified: false,
       evidence: [`transaction:${output.transactionRef}`],
-    }
+    }]
   }),
 })
 

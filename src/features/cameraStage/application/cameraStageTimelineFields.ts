@@ -3,29 +3,25 @@ import { z } from 'zod'
 import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef, type JsonValue } from '@/core/application-control'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
-import type { StageEasingPreset, StageKeyframeValue } from '../domain/animationTypes'
 import type { StageObject } from '../domain/sceneTypes'
-import type { StageShot } from '../domain/shotTypes'
-import { setTrackKeyframeValue } from '../store/animationActions'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
-import type { CameraStageShotUpdate } from './cameraStageApplicationService'
+import type { CameraStageStateKeyframeUpdate } from './cameraStageApplicationService'
 import {
-  booleanCodec, enumCodec, nameCodec, numberCodec, refIdCodec, stageDescriptor, stageField, stringCodec,
+  booleanCodec, enumCodec, nameCodec, numberCodec, refIdCodec, stageDescriptor, stageField,
   type ValueCodec,
 } from './cameraStageFieldShared'
 
 /*
- * 三维 project(1) / shot(6) / keyframe(3) / playback(3) 共 13 条可写属性的统一定义——1.3 迁移。
+ * 三维 project / stateKeyframe / playback 可写属性的统一定义。
  *
- * 四类实体各自的写入目标（draft）形态都不同：project 是一次性 rename 累积器，shot 是整份补丁，
+ * 三类实体各自的写入目标（draft）形态都不同：project 是一次性 rename 累积器，stateKeyframe 是整份补丁，
  * playback 是三项累积成一次提交，keyframe 的 draft 只带上下文（objectId/path/currentTime）、
  * 真正的写入落在全局 store（time 的顺序依赖、value/easing 需要查当前关键帧）。
  */
 
 const PROJECT_ENTITY_TYPE = 'camera_stage.project' as const
-const SHOT_ENTITY_TYPE = 'camera_stage.shot' as const
-const KEYFRAME_ENTITY_TYPE = 'camera_stage.keyframe' as const
+const STATE_KEYFRAME_ENTITY_TYPE = 'camera_stage.state_keyframe' as const
 const PLAYBACK_ENTITY_TYPE = 'camera_stage.playback' as const
 const CAMERA_ENTITY_TYPE = 'camera_stage.camera' as const
 const OBJECT_ENTITY_TYPE = 'camera_stage.object' as const
@@ -50,13 +46,13 @@ export const PROJECT_FIELDS = [
 
 export const CAMERA_STAGE_PROJECT_WRITERS = fieldWriterTable(PROJECT_FIELDS)
 
-/* ── 镜头卡 ───────────────────────────────────────────────────────────── */
+/* ── 状态关键帧 ───────────────────────────────────────────────────────────── */
 
-export type CameraStageShotDraft = CameraStageShotUpdate
+export type CameraStageStateKeyframeDraft = CameraStageStateKeyframeUpdate
 
-interface ShotFieldSource {
+interface StateKeyframeFieldSource {
   readonly projectId: string
-  readonly shot: StageShot
+  readonly stateKeyframe: StageStateKeyframe
   /** 只有 `capture_object_refs` 读取需要——判断某个对象 id 是普通对象还是摄像机。 */
   readonly objects: readonly StageObject[]
 }
@@ -73,89 +69,89 @@ function parseCaptureObjectRefs(raw: JsonValue | undefined): string[] {
   })
 }
 
-function shotField<T, TAction extends string>(
+function stateKeyframeField<T, TAction extends string>(
   suffix: string,
   title: string,
   codec: ValueCodec<T>,
   options: {
-    read: (source: ShotFieldSource) => T
-    write: (draft: CameraStageShotDraft, value: T) => void
+    read: (source: StateKeyframeFieldSource) => T
+    write: (draft: CameraStageStateKeyframeDraft, value: T) => void
     storeActions: readonly TAction[]
     unit?: string
     nullable?: boolean
   },
 ) {
-  return stageField<ShotFieldSource, CameraStageShotDraft, T, TAction>(SHOT_ENTITY_TYPE, suffix, title, codec, options)
+  return stageField<StateKeyframeFieldSource, CameraStageStateKeyframeDraft, T, TAction>(STATE_KEYFRAME_ENTITY_TYPE, suffix, title, codec, options)
 }
 
 /*
- * `time` 被 `moveShotTime` 与 `updateShotTiming` 两个 store 动作共用——时间点落到 store 的
- * moveShotTime，那里负责对帧量化并保持镜头卡有序；`fieldLedgerEntries()` 会把两个动作各自的
+ * `time` 被 `moveStateKeyframeTime` 与 `updateStateKeyframeTiming` 两个 store 动作共用——时间点落到 store 的
+ * moveStateKeyframeTime，那里负责对帧量化并保持状态关键帧有序；`fieldLedgerEntries()` 会把两个动作各自的
  * 绑定都建出来，`time` 出现在两条账本条目里。
  */
-export const SHOT_FIELDS = [
-  shotField('name', '镜头名称', nameCodec(CAMERA_STAGE_NAME_MAX_LENGTH), {
-    read: ({ shot }) => shot.name, write: (draft, v) => { draft.name = v }, storeActions: ['updateShotName'] as const,
+export const STATE_KEYFRAME_FIELDS = [
+  stateKeyframeField('name', '关键帧名称', nameCodec(CAMERA_STAGE_NAME_MAX_LENGTH), {
+    read: ({ stateKeyframe }) => stateKeyframe.name, write: (draft, v) => { draft.name = v }, storeActions: ['updateStateKeyframeName'] as const,
   }),
-  shotField('time', '时间点', numberCodec({ min: 0, max: 3600 }), {
-    read: ({ shot }) => shot.time, write: (draft, v) => { draft.time = v },
-    storeActions: ['moveShotTime', 'updateShotTiming'] as const, unit: 'second',
+  stateKeyframeField('time', '时间点', numberCodec({ min: 0, max: 3600 }), {
+    read: ({ stateKeyframe }) => stateKeyframe.time, write: (draft, v) => { draft.time = v },
+    storeActions: ['moveStateKeyframeTime', 'updateStateKeyframeTiming'] as const, unit: 'second',
   }),
-  shotField('hold', '停留时长', numberCodec({ min: 0, max: 3600 }), {
-    read: ({ shot }) => shot.hold, write: (draft, v) => { draft.hold = v },
-    storeActions: ['updateShotTiming'] as const, unit: 'second',
+  stateKeyframeField('hold', '停留时长', numberCodec({ min: 0, max: 3600 }), {
+    read: ({ stateKeyframe }) => stateKeyframe.hold, write: (draft, v) => { draft.hold = v },
+    storeActions: ['updateStateKeyframeTiming'] as const, unit: 'second',
   }),
-  shotField('transition_duration', '过渡时长', numberCodec({ min: 0, max: 3600 }), {
-    read: ({ shot }) => shot.transitionDuration, write: (draft, v) => { draft.transitionDuration = v },
-    storeActions: ['updateShotTransition'] as const, unit: 'second',
+  stateKeyframeField('transition_duration', '过渡时长', numberCodec({ min: 0, max: 3600 }), {
+    read: ({ stateKeyframe }) => stateKeyframe.transitionDuration, write: (draft, v) => { draft.transitionDuration = v },
+    storeActions: ['updateStateKeyframeTransition'] as const, unit: 'second',
   }),
-  shotField('continuity', '连续性', enumCodec(['stop', 'smooth'] as const, { stop: '停靠', smooth: '连续' }), {
-    read: ({ shot }) => shot.continuity, write: (draft, v) => { draft.continuity = v },
-    storeActions: ['updateShotContinuity'] as const,
+  stateKeyframeField('continuity', '连续性', enumCodec(['stop', 'smooth'] as const, { stop: '停靠', smooth: '连续' }), {
+    read: ({ stateKeyframe }) => stateKeyframe.continuity, write: (draft, v) => { draft.continuity = v },
+    storeActions: ['updateStateKeyframeContinuity'] as const,
   }),
   {
-    propertyId: `${SHOT_ENTITY_TYPE}.camera_ref`,
-    descriptor: stageDescriptor(SHOT_ENTITY_TYPE, 'camera_ref', '拍摄机位', { kind: 'ref', refKinds: [CAMERA_ENTITY_TYPE] }, {
+    propertyId: `${STATE_KEYFRAME_ENTITY_TYPE}.camera_ref`,
+    descriptor: stageDescriptor(STATE_KEYFRAME_ENTITY_TYPE, 'camera_ref', '拍摄机位', { kind: 'ref', refKinds: [CAMERA_ENTITY_TYPE] }, {
       nullable: true,
       relation: { targetEntityTypes: [CAMERA_ENTITY_TYPE], cardinality: 'optional' },
     }),
-    read: ({ projectId, shot }: ShotFieldSource) => (shot.cameraId
-      ? ({ kind: CAMERA_ENTITY_TYPE, id: `${projectId}:${shot.cameraId}` } satisfies ApplicationRef)
+    read: ({ projectId, stateKeyframe }: StateKeyframeFieldSource) => (stateKeyframe.cameraId
+      ? ({ kind: CAMERA_ENTITY_TYPE, id: `${projectId}:${stateKeyframe.cameraId}` } satisfies ApplicationRef)
       : null),
     writer: {
-      write: (draft: CameraStageShotDraft, mutation: ApplicationPropertyMutation) => {
+      write: (draft: CameraStageStateKeyframeDraft, mutation: ApplicationPropertyMutation) => {
         draft.cameraId = refIdCodec([CAMERA_ENTITY_TYPE]).parse(mutation.value)
       },
     },
-    storeActions: ['updateShotCamera'] as const,
+    storeActions: ['updateStateKeyframeCamera'] as const,
   },
   /*
-   * 简易模式的核心动作：把列出的对象/摄像机当前在场景中的实时状态记录进这一张卡（2.2）。
-   * 只覆盖列出的对象、只落在这一张卡上——不触碰这张卡的其余对象、也不触碰其他镜头卡，
+   * 把列出的对象/摄像机当前在场景中的实时状态记录进这一枚状态关键帧。
+   * 只覆盖列出的对象、只落在目标状态关键帧上——不触碰其余对象、也不触碰其他时间点，
    * 不会重新打开"新对象在其余卡上停留默认状态、播放时插值"那个已修问题（重要记录 004）。
-   * 读取返回这张卡当前跟踪状态的全部对象；写入是否生效可在这张卡的时间点观察对象属性验证。
+   * 读取返回该状态关键帧当前记录的全部对象；写入是否生效可在对应时间点观察对象属性验证。
    */
   {
-    propertyId: `${SHOT_ENTITY_TYPE}.capture_object_refs`,
-    descriptor: stageDescriptor(SHOT_ENTITY_TYPE, 'capture_object_refs', '捕获对象状态', { kind: 'ref_list', refKinds: [OBJECT_ENTITY_TYPE, CAMERA_ENTITY_TYPE] }, {
+    propertyId: `${STATE_KEYFRAME_ENTITY_TYPE}.capture_object_refs`,
+    descriptor: stageDescriptor(STATE_KEYFRAME_ENTITY_TYPE, 'capture_object_refs', '捕获对象状态', { kind: 'ref_list', refKinds: [OBJECT_ENTITY_TYPE, CAMERA_ENTITY_TYPE] }, {
       relation: { targetEntityTypes: [OBJECT_ENTITY_TYPE, CAMERA_ENTITY_TYPE], cardinality: 'many' },
-      description: '写入会把列出的对象/摄像机当前在场景中的实时状态（位置、旋转、缩放、颜色等）记录进这张镜头卡，'
-        + '只影响列出的对象和这一张卡。读取返回这张卡当前跟踪状态的全部对象。',
+      description: '写入会把列出的对象/摄像机当前在场景中的实时状态（位置、旋转、缩放、颜色等）记录进这张状态关键帧，'
+        + '只影响列出的对象和目标状态关键帧。读取返回该时间点当前跟踪状态的全部对象。',
     }),
-    read: ({ projectId, shot, objects }: ShotFieldSource): JsonValue => Object.keys(shot.objectStates).map((id) => ({
+    read: ({ projectId, stateKeyframe, objects }: StateKeyframeFieldSource): JsonValue => Object.keys(stateKeyframe.objectStates).map((id) => ({
       kind: objects.find((object) => object.id === id)?.type === 'camera' ? CAMERA_ENTITY_TYPE : OBJECT_ENTITY_TYPE,
       id: `${projectId}:${id}`,
     } satisfies ApplicationRef)),
     writer: {
-      write: (draft: CameraStageShotDraft, mutation: ApplicationPropertyMutation) => {
+      write: (draft: CameraStageStateKeyframeDraft, mutation: ApplicationPropertyMutation) => {
         draft.captureObjectIds = parseCaptureObjectRefs(mutation.value)
       },
     },
-    storeActions: ['captureIntoSelectedShot'] as const,
+    storeActions: ['captureIntoSelectedStateKeyframe'] as const,
   },
 ]
 
-export const CAMERA_STAGE_SHOT_WRITERS = fieldWriterTable(SHOT_FIELDS)
+export const CAMERA_STAGE_STATE_KEYFRAME_WRITERS = fieldWriterTable(STATE_KEYFRAME_FIELDS)
 
 /* ── 播放控制 ─────────────────────────────────────────────────────────── */
 
@@ -183,6 +179,7 @@ export const PLAYBACK_FIELDS = [
       write: (draft, v) => { draft.playing = v },
       storeActions: ['play', 'pause', 'stop'],
       description: '时间轴是否正在播放。助手做完动画后靠它自己预览验证，而不是让用户去点播放。',
+      verificationStrategy: 'execution',
     },
   ),
   stageField<PlaybackSnapshot, CameraStagePlaybackDraft, number, 'stop' | 'seek'>(
@@ -193,6 +190,7 @@ export const PLAYBACK_FIELDS = [
       storeActions: ['stop', 'seek'],
       unit: 'second',
       description: '播放头当前所在时间。写入等价于界面上拖动时间指针。',
+      verificationStrategy: 'execution',
     },
   ),
   stageField<PlaybackSnapshot, CameraStagePlaybackDraft, boolean, 'toggleLoop'>(
@@ -206,72 +204,3 @@ export const PLAYBACK_FIELDS = [
 ]
 
 export const CAMERA_STAGE_PLAYBACK_WRITERS = fieldWriterTable(PLAYBACK_FIELDS)
-
-/* ── 关键帧 ───────────────────────────────────────────────────────────── */
-
-/**
- * `currentTime` 是顺序依赖状态：同一批 mutation 里先改 time 再改 value 时，
- * value 必须用**新**时间去定位关键帧，否则找不到。
- */
-export interface CameraStageKeyframeDraft {
-  readonly objectId: string
-  readonly path: string
-  currentTime: number
-}
-
-interface KeyframeSnapshot {
-  readonly time: number
-  readonly value: StageKeyframeValue
-  readonly easing: unknown
-}
-
-function keyframeValueSummary(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
-
-export const KEYFRAME_FIELDS = [
-  stageField<KeyframeSnapshot, CameraStageKeyframeDraft, number, 'moveKeyframe'>(
-    KEYFRAME_ENTITY_TYPE, 'time', '时间', numberCodec({ min: 0, max: 3600 }),
-    {
-      read: (kf) => kf.time,
-      write: (draft, nextTime) => {
-        useCameraStageStore.getState().moveKeyframe(draft.objectId, draft.path, draft.currentTime, nextTime)
-        draft.currentTime = nextTime
-      },
-      storeActions: ['moveKeyframe'],
-      unit: 'second',
-    },
-  ),
-  stageField<KeyframeSnapshot, CameraStageKeyframeDraft, string, 'setKeyframeValue'>(
-    KEYFRAME_ENTITY_TYPE, 'value', '值摘要', stringCodec,
-    {
-      read: (kf) => keyframeValueSummary(kf.value),
-      write: (draft, raw) => {
-        const track = useCameraStageStore.getState().animation.tracks
-          .find((candidate) => candidate.objectId === draft.objectId && candidate.propertyPath === draft.path)
-        const keyframe = track?.keyframes.find((candidate) => candidate.time === draft.currentTime)
-        if (!keyframe) throw new Error('NOT_FOUND')
-        const value: StageKeyframeValue = typeof keyframe.value === 'number' ? Number(raw) : raw
-        if (typeof value === 'number' && !Number.isFinite(value)) throw new Error('INVALID_INPUT')
-        useCameraStageStore.setState((current) => ({
-          animation: setTrackKeyframeValue(current.animation, draft.objectId, draft.path, draft.currentTime, value),
-        }))
-      },
-      storeActions: ['setKeyframeValue'],
-    },
-  ),
-  stageField<KeyframeSnapshot, CameraStageKeyframeDraft, string, 'setKeyframesEasing'>(
-    KEYFRAME_ENTITY_TYPE, 'easing', '缓动', stringCodec,
-    {
-      read: (kf) => keyframeValueSummary(kf.easing),
-      write: (draft, raw) => {
-        const easing = z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut', 'hold']).parse(raw) as StageEasingPreset
-        useCameraStageStore.getState()
-          .setKeyframesEasing([{ objectId: draft.objectId, path: draft.path, time: draft.currentTime }], easing)
-      },
-      storeActions: ['setKeyframesEasing'],
-    },
-  ),
-]
-
-export const CAMERA_STAGE_KEYFRAME_WRITERS = fieldWriterTable(KEYFRAME_FIELDS)

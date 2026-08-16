@@ -4,7 +4,7 @@ import { useNavigationStore } from '@/stores/navigationStore'
 
 export function listToolboxTools(): Record<string, unknown>[] {
   return [
-    { id: 'cameraStage', name: '3D 镜头参考', capabilities: ['project', 'object', 'shot', 'camera_move', 'render'] },
+    { id: 'cameraStage', name: '3D 镜头参考', capabilities: ['project', 'object', 'state_keyframe', 'camera_move', 'render'] },
     ...listImageEditorToolControls().map((tool) => ({
       id: tool.id,
       name: tool.label,
@@ -24,9 +24,9 @@ export function getToolboxState(): Record<string, unknown> {
       projectId: camera.currentProjectId,
       projectName: camera.currentProjectName,
       objectCount: camera.objects.length,
-      shotCount: camera.shots.length,
+      stateKeyframeCount: camera.stateKeyframes.length,
       selectedObjectId: camera.selectedId,
-      selectedShotId: camera.selectedShotId,
+      selectedStateKeyframeId: camera.selectedStateKeyframeId,
     },
   }
 }

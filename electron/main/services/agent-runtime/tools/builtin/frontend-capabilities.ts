@@ -54,10 +54,6 @@ function summarize(
     const records = output.records
     return `已读取 ${Array.isArray(records) ? records.length : 0} 条生成记录。`
   }
-  if (definition.id === 'apply_application_settings_change') {
-    const applied = output.applied
-    return `已应用 ${Array.isArray(applied) ? applied.length : 0} 项设置。`
-  }
   return `${definition.title}已完成。`
 }
 

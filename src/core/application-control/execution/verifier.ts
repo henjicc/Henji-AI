@@ -61,6 +61,10 @@ export class ApplicationTransactionVerifier {
       try {
         const propertyIds = condition.kind === 'property_equals' ? [condition.propertyId] : undefined
         const snapshot = await this.registry.readEntity(condition.target, propertyIds, context)
+        if (condition.kind === 'entity_absent') {
+          unmetConditions.push(`目标实体仍然存在：${condition.target.kind}/${condition.target.id}`)
+          continue
+        }
         if (condition.kind === 'entity_exists') {
           evidence.push({
             kind: 'entity_state',
@@ -82,7 +86,21 @@ export class ApplicationTransactionVerifier {
             capturedAt: now.toISOString(),
           })
         }
-      } catch {
+      } catch (error) {
+        if (condition.kind === 'entity_absent') {
+          const message = error instanceof Error ? error.message : String(error)
+          if (/(?:^|[_:])NOT_FOUND(?::|$)|ENTITY_NOT_FOUND/i.test(message)) {
+            evidence.push({
+              kind: 'operation_result',
+              target: condition.target,
+              fact: '目标实体已不存在。',
+              capturedAt: now.toISOString(),
+            })
+          } else {
+            unmetConditions.push(`无法确认目标实体不存在：${condition.target.kind}/${condition.target.id}`)
+          }
+          continue
+        }
         unmetConditions.push(`目标实体不可读取：${condition.target.kind}/${condition.target.id}`)
       }
     }

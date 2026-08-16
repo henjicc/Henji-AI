@@ -79,7 +79,7 @@ export class AgentExternalWaitCoordinator {
 
   async cancel(
     owner: WebContents,
-    raw: { schemaVersion: 'agent-runtime/v1'; waitId: string; cancelGeneration: boolean }
+    raw: { schemaVersion: 'agent-runtime/v2'; waitId: string; cancelGeneration: boolean }
   ): Promise<AgentExternalWaitRecord> {
     const input = agentCancelExternalWaitRequestSchema.parse(raw)
     const wait = this.options.persistence.externalWait.get(input.waitId)
@@ -121,8 +121,11 @@ export class AgentExternalWaitCoordinator {
         agentQueuedMessagePayloadSchema.parse(entry.payload).content
       ))
       const goal = [
+        `原始用户目标：${sourceRequest.goal}`,
         `生成任务 ${wait.taskId} 已报告状态 ${wait.lastObservedStatus}。`,
-        '这是一次自动续接：必须先读取该任务的权威状态并据此回答；不得再次创建或提交生成任务。',
+        wait.continuation
+          ? '这是 Henji Script 自动续接：宿主会先读取权威状态并从已校验 IR 断点继续；不得重新规划、重新提交或重建引用。'
+          : '这是一次自动续接：必须先读取该任务的权威状态并据此回答；不得再次创建或提交生成任务。',
         ...extra.map((content) => `用户在等待期间补充：${content}`),
       ].join('\n')
       const started = await this.options.startContinuation(owner, {
@@ -138,6 +141,8 @@ export class AgentExternalWaitCoordinator {
           observedStatus: wait.lastObservedStatus,
           sourceTotalTokens: sourceState.usage.totalTokens,
           sourceKnownCostUsd: sourceState.usage.knownCostUsd,
+          sourceEffects: sourceState.executionOutcome.effects,
+          scriptCheckpoint: wait.continuation ?? null,
         },
       }, wait.sourceRunId, sourceState.workingSummary)
       if (!this.options.persistence.externalWait.consume(wait.waitId, started.runId)) {

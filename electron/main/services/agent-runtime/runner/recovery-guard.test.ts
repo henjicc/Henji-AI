@@ -47,6 +47,36 @@ describe('AgentRecoveryWriteGuard', () => {
     expect(guard.validate(writeCall)).toBeNull()
   })
 
+  it('同一运行内的通用写失败后，可由命中受影响实体的领域读取解除保护', () => {
+    const definitions = new Map([
+      ['change_application_entities', { readOnly: false, category: 'application' }],
+      ['get_asset', { readOnly: true, category: 'assets' }],
+      ['read_canvas', { readOnly: true, category: 'canvas' }],
+    ])
+    const registry = { get: (name: string) => definitions.get(name) } as unknown as AgentToolRegistry
+    const guard = new AgentRecoveryWriteGuard(undefined, registry)
+    const failedWrite = {
+      toolCallId: 'write', toolName: 'change_application_entities', dynamic: false,
+      input: { changes: [{ kind: 'set_properties', entityType: 'asset', properties: {} }] },
+    }
+    guard.activateUnknownWrite(failedWrite, 'application')
+    const observation: AgentToolObservation = {
+      source: { toolName: 'get_asset', toolVersion: 1, toolCallId: 'read-asset' },
+      trust: 'untrusted_observation', dataClasses: ['C1'], summary: '素材已读取', output: { asset: {} },
+      effects: [{
+        effect: 'observe', entityTypes: ['asset'], propertyIds: [], targetRefs: [],
+        count: 1, verified: true, evidence: ['asset:verified'],
+      }],
+    }
+
+    expect(guard.consumeVerification({
+      toolCallId: 'wrong', toolName: 'read_canvas', input: {}, dynamic: false,
+    }, { ...observation, effects: [{ ...observation.effects![0], entityTypes: ['canvas.node'] }] })).toBe(false)
+    expect(guard.consumeVerification({
+      toolCallId: 'read-asset', toolName: 'get_asset', input: {}, dynamic: false,
+    }, observation)).toBe(true)
+  })
+
   it('供应商参数错误后只允许修正原模型并提交一次', () => {
     const definitions = new Map([
       ['get_generation_task', { readOnly: true, category: 'generation' }],

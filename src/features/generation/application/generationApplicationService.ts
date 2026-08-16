@@ -1,4 +1,6 @@
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
+import { registry } from '@/core/ModelRegistry'
+import { generationService } from '@/core/services/GenerationService'
 import {
   cancelVisibleGenerationTask,
   getVisibleGenerationTask,
@@ -27,6 +29,90 @@ export interface GenerationTaskSnapshot extends VisibleGenerationTaskSummary {
   recovery: ReturnType<typeof createGenerationTaskRecoveryAdvice>
 }
 
+export interface ResolveGenerationModelInput extends Omit<GenerationPreparationInput, 'modelId'> {
+  requestedModelId?: string
+  preferredProviderIds?: string[]
+  currentModelId?: string
+}
+
+export interface ResolvedGenerationModel {
+  modelId: string
+  providerId: string
+  selection: 'requested' | 'preferred_provider' | 'current_draft' | 'configured_fallback'
+}
+
+function unique(values: readonly (string | undefined)[]): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value?.trim())).map((value) => value.trim()))]
+}
+
+export function selectExecutableGenerationModel(
+  input: ResolveGenerationModelInput,
+  configuredProviderIds: readonly string[],
+): ResolvedGenerationModel {
+  const configuredProviders = new Set(configuredProviderIds)
+  const requested = input.requestedModelId ? registry.getModel(input.requestedModelId) : undefined
+  if (input.requestedModelId && !requested) {
+    throw new GenerationPreparationError('MODEL_NOT_FOUND', '指定的生成模型不存在', {
+      modelId: input.requestedModelId,
+    })
+  }
+  if (requested && !configuredProviders.has(requested.meta.provider)) {
+    throw new GenerationPreparationError('INVALID_INPUT', '指定模型的供应商尚未配置，提交前已安全拒绝', {
+      modelId: requested.meta.id,
+      providerId: requested.meta.provider,
+      reason: 'provider_not_configured',
+    })
+  }
+
+  const allCandidates = registry.listAllModels().filter((model) => (
+    model.meta.type === input.mediaType && configuredProviders.has(model.meta.provider)
+  ))
+  const preferredProviders = unique(input.preferredProviderIds ?? [])
+  const ordered = requested
+    ? [requested]
+    : [
+        ...preferredProviders.flatMap((providerId) => allCandidates.filter((model) => model.meta.provider === providerId)),
+        ...allCandidates.filter((model) => model.meta.id === input.currentModelId),
+        ...allCandidates,
+      ]
+  const seen = new Set<string>()
+  const failures: Array<{ modelId: string; reason: string }> = []
+  for (const model of ordered) {
+    if (seen.has(model.meta.id)) continue
+    seen.add(model.meta.id)
+    try {
+      prepareGenerationTask({
+        modelId: model.meta.id,
+        prompt: input.prompt,
+        mediaType: input.mediaType,
+        options: input.options,
+      })
+      const selection: ResolvedGenerationModel['selection'] = requested
+        ? 'requested'
+        : preferredProviders.includes(model.meta.provider)
+          ? 'preferred_provider'
+          : model.meta.id === input.currentModelId
+            ? 'current_draft'
+            : 'configured_fallback'
+      return { modelId: model.meta.id, providerId: model.meta.provider, selection }
+    } catch (error) {
+      failures.push({
+        modelId: model.meta.id,
+        reason: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  throw new GenerationPreparationError('INVALID_INPUT', '没有已配置且兼容当前输入的生成模型', {
+    mediaType: input.mediaType,
+    configuredProviders: [...configuredProviders],
+    failures: failures.slice(0, 12),
+  })
+}
+
+async function resolveGenerationModel(input: ResolveGenerationModelInput): Promise<ResolvedGenerationModel> {
+  return selectExecutableGenerationModel(input, await generationService.getConfiguredProviders())
+}
+
 function taskRevision(task: VisibleGenerationTaskSummary): number {
   const seed = JSON.stringify(task)
   return [...seed].reduce((total, character) => (total * 33 + character.charCodeAt(0)) >>> 0, 5381)
@@ -53,6 +139,10 @@ export const generationApplicationService = {
 
   getModelSchema(modelId: string) {
     return getGenerationModelSchema(modelId)
+  },
+
+  resolveModel(input: ResolveGenerationModelInput) {
+    return resolveGenerationModel(input)
   },
 
   prepare(input: GenerationPreparationInput) {

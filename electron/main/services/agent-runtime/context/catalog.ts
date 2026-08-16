@@ -69,6 +69,12 @@ export class AgentToolCatalogPlanner {
     if (!['discover_application_capabilities', 'search_application_capabilities'].includes(toolName)
       || !output || typeof output !== 'object') return []
     const outputRecord = output as Record<string, unknown>
+    const scriptApi = outputRecord.scriptApi
+    if (toolName === 'discover_application_capabilities'
+      && scriptApi && typeof scriptApi === 'object' && !Array.isArray(scriptApi)
+      && (scriptApi as Record<string, unknown>).entryTool === 'run_henji_script') {
+      return []
+    }
     const explicitlyLeased = Array.isArray(outputRecord.leasedToolNames)
       ? outputRecord.leasedToolNames.filter((name): name is string => typeof name === 'string')
       : []

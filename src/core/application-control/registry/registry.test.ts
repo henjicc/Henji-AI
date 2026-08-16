@@ -5,7 +5,7 @@ import type {
   ApplicationEntityRegistration,
 } from './types'
 import { ApplicationReflectionRegistry } from './registry'
-import type { ApplicationPropertyDescriptor } from '../reflection'
+import { unrestrictedCollectionAvailability, type ApplicationPropertyDescriptor } from '../reflection'
 
 const catalogVersion = 'application-capabilities/v2'
 const digest = `sha256:${'a'.repeat(64)}`
@@ -128,6 +128,9 @@ const provider: ApplicationEntityProvider = {
       revisions: { 'sample.items': 3 },
     }))
   },
+  async getCollectionAvailability(parent) {
+    return unrestrictedCollectionAvailability('sample.item', parent, { 'sample.items': 3 })
+  },
 }
 
 function registration(): ApplicationEntityRegistration {
@@ -141,10 +144,16 @@ function registration(): ApplicationEntityRegistration {
       refKind: 'sample.item',
       dataClass: 'C1',
       exposures: ['ui', 'assistant'],
-      parentTypes: [],
+      parentTypes: ['sample.parent'],
       revisionScopes: ['sample.items'],
       queryCapabilityIds: ['get_sample_item'],
       schemaRef: schemaRef('entity', 'sample.item'),
+      collectionWrite: {
+        creatable: true,
+        removable: false,
+        requiredPropertyIds: ['sample.enabled'],
+        maxItemsPerChange: 8,
+      },
     },
     properties,
     provider,
@@ -202,6 +211,42 @@ describe('ApplicationReflectionRegistry', () => {
     )
     expect(availability.find((item) => item.propertyId === 'sample.enabled')?.writable).toBe(true)
     expect(availability.find((item) => item.propertyId === 'sample.mode')?.writable).toBe(false)
+  })
+
+  it('集合可用性同时合并静态声明、provider 当前状态与调用方权限', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register({
+      ...registration(),
+      provider: {
+        ...provider,
+        async getCollectionAvailability(parent) {
+          return {
+            entityType: 'sample.item', parent, revisions: { 'sample.items': 3 },
+            create: {
+              available: false, reasons: ['当前模式不允许创建'],
+              requiredPermissions: ['sample:write'], recoveries: [],
+            },
+            remove: {
+              available: true, reasons: [],
+              requiredPermissions: ['sample:write'], recoveries: [],
+            },
+          }
+        },
+      },
+    })
+    const availability = await registry.getCollectionAvailability(
+      { kind: 'sample.parent', id: 'parent-1' }, 'sample.item', assistantContext,
+    )
+    expect(availability.create).toMatchObject({ available: false, reasons: ['当前模式不允许创建'] })
+    expect(availability.remove.available).toBe(false)
+    expect(availability.remove.reasons).toContain('删除未在静态集合声明中开放')
+
+    const noWrite = { ...assistantContext, permissions: new Set(['sample:read']) }
+    const denied = await registry.getCollectionAvailability(
+      { kind: 'sample.parent', id: 'parent-1' }, 'sample.item', noWrite,
+    )
+    expect(denied.create.available).toBe(false)
+    expect(denied.create.reasons).toContain('当前调用方缺少集合写入权限')
   })
 
   /*

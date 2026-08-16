@@ -4,6 +4,7 @@ import {
   type ApplicationPropertyDescriptor,
   type ApplicationPropertyValue,
   type ApplicationRef,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 import { z } from 'zod'
@@ -117,6 +118,10 @@ class SettingsReflectionProvider implements ApplicationEntityProvider {
         revisions: { settings: getSettingsRegistryRevision() },
       }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { settings: getSettingsRegistryRevision() }, ['settings:write'])
   }
 }
 

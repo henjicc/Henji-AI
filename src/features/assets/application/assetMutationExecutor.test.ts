@@ -83,6 +83,7 @@ describe('素材属性写入执行器', () => {
 
     expect(mocks.rename).toHaveBeenCalledWith('asset-1', '新名称')
     expect(mocks.replaceTags).toHaveBeenCalledWith('asset-1', ['风景', '夜景'])
+    expect(mocks.state).toMatchObject({ displayName: '新名称', tags: ['风景', '夜景'] })
     expect(result.resultingRevisions.assets).toBe(1)
   })
 

@@ -57,7 +57,12 @@ export function serializeError(error: unknown): SerializedAgentError {
  *
  * 定义放在这里而不是 facet-effect-ledger，是因为后者已经 import 本模块，反向引用会成环。
  */
-export function failureEnvelope(output: unknown): { code: string; message?: string; recovery?: string } | null {
+export function failureEnvelope(output: unknown): {
+  code: string
+  message?: string
+  retryable?: boolean
+  recovery?: string
+} | null {
   if (!output || typeof output !== 'object' || Array.isArray(output)) return null
   const record = output as Record<string, unknown>
   if (record.ok !== false) return null
@@ -68,6 +73,7 @@ export function failureEnvelope(output: unknown): { code: string; message?: stri
   return {
     code: value.code,
     ...(typeof value.message === 'string' ? { message: value.message } : {}),
+    ...(typeof value.retryable === 'boolean' ? { retryable: value.retryable } : {}),
     ...(typeof value.recovery === 'string' ? { recovery: value.recovery } : {}),
   }
 }
@@ -173,7 +179,7 @@ export function extractResultReferences(output: unknown): Record<string, string>
   const references: Record<string, string> = {}
   const referenceKeys = [
     'taskId', 'projectId', 'nodeId', 'edgeId', 'undoRef', 'workspace', 'workspaceId', 'surfaceId', 'modelId',
-    'assetId', 'libraryId', 'previewRef', 'objectId', 'shotId', 'workflowId', 'workflowRunId',
+    'assetId', 'libraryId', 'previewRef', 'objectId', 'stateKeyframeId', 'workflowId', 'workflowRunId',
   ] as const
   for (const key of referenceKeys) {
     const value = record[key]

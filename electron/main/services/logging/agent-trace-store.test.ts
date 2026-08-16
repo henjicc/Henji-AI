@@ -134,6 +134,33 @@ describeWithElectronSqlite('AgentTraceStore', () => {
     expect(store.query({ limit: 50 }).runs[0].steps[0].status).toBe('interrupted')
   })
 
+  it('运行摘要以权威运行终态为准，可选标题失败不得覆盖主任务成功', () => {
+    const startedAt = new Date().toISOString()
+    store.start({
+      traceId: 'trace-title', runId: 'run-1', requestId: 'thread-title:thread-1:1',
+      stepId: 'thread-title:1', kind: 'summarizer', providerId: 'provider', modelId: 'model',
+      startedAt, captureMode: 'summary',
+    })
+    store.fail({
+      traceId: 'trace-title', completedAt: new Date(Date.parse(startedAt) + 10).toISOString(),
+      elapsedMs: 10, status: 'failed', usage, error: { message: '标题模型失败' },
+    })
+    store.start({
+      traceId: 'trace-primary', runId: 'run-1', requestId: 'run-1:step-1',
+      stepId: 'step-1', kind: 'primary', turn: 1, providerId: 'provider', modelId: 'model',
+      startedAt, captureMode: 'summary',
+    })
+    store.complete({
+      traceId: 'trace-primary', completedAt: new Date(Date.parse(startedAt) + 20).toISOString(),
+      elapsedMs: 20, finishReason: 'stop', usage,
+    })
+    database?.prepare("UPDATE agent_runs SET status = 'completed' WHERE run_id = 'run-1'").run()
+
+    expect(store.query({ limit: 50 }).runs[0]).toMatchObject({
+      status: 'completed', requestCount: 2, completedCount: 1, failedCount: 1,
+    })
+  })
+
   it('失败摘要在写入数据库前再次脱敏', () => {
     const startedAt = new Date().toISOString()
     store.start({

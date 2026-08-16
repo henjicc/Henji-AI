@@ -69,11 +69,23 @@ export const cameraStageTransactionResultShape = {
    */
   baseRevision: cameraStageBaseRevisionSchema,
   resultingRevisions: z.record(z.string(), z.number().int().nonnegative()),
-  producedRefs: z.array(z.object({
+  resultRefs: z.array(z.object({
     kind: z.string(),
     id: z.string(),
     revision: z.number().int().nonnegative().optional(),
     label: z.string().optional(),
+  }).strict()),
+  effects: z.array(z.object({
+    effect: z.enum(['create', 'update', 'delete', 'execute']),
+    entityType: z.string().min(1),
+    refs: z.array(z.object({
+      kind: z.string(), id: z.string(), revision: z.number().int().nonnegative().optional(), label: z.string().optional(),
+    }).strict()),
+    propertyIds: z.array(z.string()),
+    origin: z.union([
+      z.object({ kind: z.literal('direct') }).strict(),
+      z.object({ kind: z.literal('cascade'), declarationId: z.string().min(1) }).strict(),
+    ]),
   }).strict()),
   evidence: z.array(z.record(z.string(), z.unknown())),
   verification: z.object({

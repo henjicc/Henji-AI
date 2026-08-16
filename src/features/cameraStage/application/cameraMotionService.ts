@@ -1,11 +1,8 @@
 import { createLogger } from '@/core/logging'
 
-import type { StageEasingPreset, StageSceneAnimation } from '../domain/animationTypes'
-import { compileCameraMoveSamples } from '../domain/shotCameraMovePresets'
 import type { StageCameraObject, StageVec3 } from '../domain/sceneTypes'
-import type { StageCameraMovePreset, StageSpeedPreset } from '../domain/shotTypes'
+import type { StageCameraMovePreset, StageSpeedPreset } from '../domain/stateKeyframeTypes'
 import { saveCurrentProject, loadProjectIntoScene } from '../projects/cameraStageProjectService'
-import { upsertTrackKeyframe } from '../store/animationActions'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { captureCameraStageUndo } from './cameraStageUndo'
 
@@ -17,9 +14,8 @@ export interface CameraStageMotionInput {
   move: StageCameraMovePreset
   targetObjectId?: string
   targetPoint?: StageVec3
-  startShotId?: string
-  endShotId?: string
-  startTime?: number
+  startStateKeyframeId?: string
+  endStateKeyframeId?: string
   duration: number
   speed: StageSpeedPreset
 }
@@ -31,8 +27,8 @@ export interface CameraStageMotionResult {
   moveKind: StageCameraMovePreset['kind']
   startTime: number
   endTime: number
-  affectedShotIds: string[]
-  affectedKeyframeCount: number
+  affectedStateKeyframeIds: string[]
+  affectedStateKeyframeCount: number
   path: {
     source: StageCameraMovePreset['kind']
     sampleCount: number
@@ -65,80 +61,22 @@ function resolveTarget(input: CameraStageMotionInput): { point: StageVec3; objec
     : { point: { ...camera.lookAt.fallbackTarget }, objectId: camera.lookAt.objectId }
 }
 
-function speedToEasing(speed: StageSpeedPreset): StageEasingPreset {
-  if (speed === 'uniform') return 'linear'
-  if (speed === 'fastStart') return 'easeOut'
-  if (speed === 'slowStart') return 'easeIn'
-  return 'easeInOut'
-}
-
-function countCameraPositionKeyframes(animation: StageSceneAnimation, cameraId: string): number {
-  return animation.tracks
-    .filter((track) => track.objectId === cameraId && track.propertyPath.startsWith('transform.position.'))
-    .reduce((total, track) => total + track.keyframes.length, 0)
-}
-
 async function ensureLoaded(projectId: string): Promise<void> {
   if (useCameraStageStore.getState().currentProjectId === projectId) return
   if (!await loadProjectIntoScene(projectId)) throw new Error('NOT_FOUND')
 }
 
-function applyProfessionalMotion(
-  input: CameraStageMotionInput,
-  camera: StageCameraObject,
-  target: StageVec3,
-): Omit<CameraStageMotionResult, 'projectId' | 'cameraId' | 'targetObjectId' | 'moveKind' | 'undoToken'> {
-  const state = useCameraStageStore.getState()
-  const startTime = input.startTime ?? state.playback.currentTime
-  const endTime = startTime + input.duration
-  const samples = compileCameraMoveSamples(
-    input.move,
-    camera.transform.position,
-    target,
-    startTime,
-    endTime,
-    speedToEasing(input.speed),
-  )
-  let animation = state.animation
-  for (const sample of samples) {
-    for (const axis of ['x', 'y', 'z'] as const) {
-      animation = upsertTrackKeyframe(
-        animation,
-        camera.id,
-        `transform.position.${axis}`,
-        sample.time,
-        sample.position[axis],
-        sample.easing,
-      )
-    }
-  }
-  animation = { ...animation, duration: Math.max(animation.duration, endTime) }
-  useCameraStageStore.setState({ animation })
-  return {
-    startTime,
-    endTime,
-    affectedShotIds: [],
-    affectedKeyframeCount: samples.length * 3,
-    path: {
-      source: input.move.kind,
-      sampleCount: samples.length,
-      start: { ...samples[0].position },
-      end: { ...samples[samples.length - 1].position },
-    },
-  }
-}
-
-function applySimpleMotion(
+function applyStateKeyframeMotion(
   input: CameraStageMotionInput,
   camera: StageCameraObject,
   target: { point: StageVec3; objectId: string | null },
 ): Omit<CameraStageMotionResult, 'projectId' | 'cameraId' | 'targetObjectId' | 'moveKind' | 'undoToken'> {
   let state = useCameraStageStore.getState()
-  const startShot = input.startShotId
-    ? state.shots.find((shot) => shot.id === input.startShotId)
-    : state.shots.find((shot) => shot.id === state.selectedShotId) ?? state.shots[0]
-  if (!startShot) throw new Error('NOT_AVAILABLE')
-  state.selectShot(startShot.id)
+  const startStateKeyframe = input.startStateKeyframeId
+    ? state.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === input.startStateKeyframeId)
+    : state.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === state.selectedStateKeyframeId) ?? state.stateKeyframes[0]
+  if (!startStateKeyframe) throw new Error('NOT_AVAILABLE')
+  state.selectStateKeyframe(startStateKeyframe.id)
   state = useCameraStageStore.getState()
   state.updateObject(camera.id, {
     lookAt: target.objectId
@@ -146,41 +84,41 @@ function applySimpleMotion(
       : { mode: 'manual', target: target.point },
   })
   state = useCameraStageStore.getState()
-  state.captureIntoSelectedShot([camera.id])
+  state.captureIntoSelectedStateKeyframe([camera.id])
 
-  const startIndex = state.shots.findIndex((shot) => shot.id === startShot.id)
-  let endShot = input.endShotId
-    ? state.shots.find((shot) => shot.id === input.endShotId)
-    : state.shots[startIndex + 1]
-  if (input.endShotId && (!endShot || state.shots[startIndex + 1]?.id !== input.endShotId)) {
-    throw new Error('SHOT_RANGE_NOT_ADJACENT')
+  const startIndex = state.stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === startStateKeyframe.id)
+  let endStateKeyframe = input.endStateKeyframeId
+    ? state.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === input.endStateKeyframeId)
+    : state.stateKeyframes[startIndex + 1]
+  if (input.endStateKeyframeId && (!endStateKeyframe || state.stateKeyframes[startIndex + 1]?.id !== input.endStateKeyframeId)) {
+    throw new Error('STATE_KEYFRAME_RANGE_NOT_ADJACENT')
   }
-  if (!endShot) {
-    state.seek(startShot.time + input.duration)
-    useCameraStageStore.getState().addShot()
+  if (!endStateKeyframe) {
+    state.seek(startStateKeyframe.time + input.duration)
+    useCameraStageStore.getState().addStateKeyframe()
     state = useCameraStageStore.getState()
-    endShot = state.shots.find((shot) => shot.id === state.selectedShotId)
+    endStateKeyframe = state.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === state.selectedStateKeyframeId)
   }
-  if (!endShot) throw new Error('CAPABILITY_REJECTED')
+  if (!endStateKeyframe) throw new Error('CAPABILITY_REJECTED')
 
-  state.updateShotCamera(startShot.id, camera.id)
-  state.updateShotCamera(endShot.id, camera.id)
-  state.updateShotTiming(startShot.id, { transitionDuration: input.duration })
-  state.updateShotTransition(startShot.id, {
+  state.updateStateKeyframeCamera(startStateKeyframe.id, camera.id)
+  state.updateStateKeyframeCamera(endStateKeyframe.id, camera.id)
+  state.updateStateKeyframeTiming(startStateKeyframe.id, { transitionDuration: input.duration })
+  state.updateStateKeyframeTransition(startStateKeyframe.id, {
     perObject: { [camera.id]: { speedPreset: input.speed } },
   })
-  state.applyCameraPathPreset(startShot.id, camera.id, input.move)
+  state.applyCameraPathPreset(startStateKeyframe.id, camera.id, input.move)
   const updated = useCameraStageStore.getState()
-  const updatedStart = updated.shots.find((shot) => shot.id === startShot.id)
-  const updatedEnd = updated.shots.find((shot) => shot.id === endShot?.id)
+  const updatedStart = updated.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === startStateKeyframe.id)
+  const updatedEnd = updated.stateKeyframes.find((stateKeyframe) => stateKeyframe.id === endStateKeyframe?.id)
   const path = updatedStart?.transition.perObject[camera.id]?.spatialPath
   const startPosition = updatedStart?.objectStates[camera.id]?.transform.position ?? camera.transform.position
   const endPosition = updatedEnd?.objectStates[camera.id]?.transform.position ?? camera.transform.position
   return {
-    startTime: startShot.time,
-    endTime: updatedEnd?.time ?? startShot.time + input.duration,
-    affectedShotIds: [startShot.id, endShot.id],
-    affectedKeyframeCount: countCameraPositionKeyframes(updated.animation, camera.id),
+    startTime: startStateKeyframe.time,
+    endTime: updatedEnd?.time ?? startStateKeyframe.time + input.duration,
+    affectedStateKeyframeIds: [startStateKeyframe.id, endStateKeyframe.id],
+    affectedStateKeyframeCount: 2,
     path: {
       source: input.move.kind,
       sampleCount: (path?.knots.length ?? 0) + 2,
@@ -200,26 +138,12 @@ export async function applyCameraStageMotion(input: CameraStageMotionInput): Pro
   try {
     if (!Number.isFinite(input.duration) || input.duration <= 0 || input.duration > 3_600) throw new Error('INVALID_TIME_RANGE')
     await ensureLoaded(input.projectId)
-    let state = useCameraStageStore.getState()
+    const state = useCameraStageStore.getState()
     const camera = state.objects.find((object): object is StageCameraObject => object.id === input.cameraId && object.type === 'camera')
     if (!camera) throw new Error('NOT_FOUND')
     const target = resolveTarget(input)
     const undoToken = captureCameraStageUndo(input.projectId)
-    let updatedCamera = camera
-    if (state.editorMode !== 'simple') {
-      state.updateObject(camera.id, {
-        lookAt: target.objectId
-          ? { mode: 'object', objectId: target.objectId, fallbackTarget: target.point }
-          : { mode: 'manual', target: target.point },
-      })
-      state = useCameraStageStore.getState()
-      const nextCamera = state.objects.find((object): object is StageCameraObject => object.id === camera.id && object.type === 'camera')
-      if (!nextCamera) throw new Error('NOT_FOUND')
-      updatedCamera = nextCamera
-    }
-    const applied = state.editorMode === 'simple'
-      ? applySimpleMotion(input, updatedCamera, target)
-      : applyProfessionalMotion(input, updatedCamera, target.point)
+    const applied = applyStateKeyframeMotion(input, camera, target)
     await saveCurrentProject()
     const result: CameraStageMotionResult = {
       projectId: input.projectId,
@@ -234,7 +158,7 @@ export async function applyCameraStageMotion(input: CameraStageMotionInput): Pro
       projectId: input.projectId,
       cameraId: input.cameraId,
       moveKind: input.move.kind,
-      affectedKeyframeCount: result.affectedKeyframeCount,
+      affectedStateKeyframeCount: result.affectedStateKeyframeCount,
     })
     return result
   } catch (error) {

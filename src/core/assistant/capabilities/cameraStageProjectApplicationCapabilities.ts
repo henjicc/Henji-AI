@@ -25,12 +25,12 @@ const getProject = defineApplicationCapability({
   aliases: ['3D 工程详情', 'get camera stage project'], readOnly: true, risk: 'R0', dataClasses: ['C1'],
   permission: 'camera_stage:read', idempotent: true, destructive: false, timeoutMs: 8_000,
   supportsPreview: false, supportsUndo: false, requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project'],
-  producesRefs: ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe'],
+  producesRefs: ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
   inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
   outputSchema: capabilityOutputSchema({ project: z.record(z.string(), z.unknown()), baseRevision: z.number().int().nonnegative() }),
   concurrencyKey: 'camera_stage_project', resolveConcurrencyKey: (input) => `camera_stage_project:${input.projectId}`,
   resolveTargetIds: (input) => cameraStageTarget(input.projectId),
-  control: cameraStageControl('observe', ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe']),
+  control: cameraStageControl('observe', ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory']),
   summarize: (output) => `已读取 3D 运镜工程 ${String(output.project.id ?? '')}。`,
 })
 
@@ -44,22 +44,30 @@ const openProject = defineApplicationCapability({
   successEvidence: ['工程已载入，返回 surfaceId=tool.camera_stage，且宿主当前 Surface 已验证为 3D 镜头编辑器。'],
   failureRecovery: ['工程或 Surface 不可用时停止，不得继续在其他工程写入。'],
   inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
-  outputSchema: capabilityOutputSchema({ projectId: z.string(), name: z.string(), objectCount: z.number(), shotCount: z.number(), surfaceId: z.literal('tool.camera_stage'), baseRevision: z.number().int().nonnegative() }),
+  outputSchema: capabilityOutputSchema({ projectId: z.string(), name: z.string(), objectCount: z.number(), stateKeyframeCount: z.number(), surfaceId: z.literal('tool.camera_stage'), baseRevision: z.number().int().nonnegative() }),
   concurrencyKey: 'camera_stage_open', resolveTargetIds: (input) => cameraStageTarget(input.projectId),
   control: cameraStageControl('navigate', ['camera_stage.project'], [], ['navigation', 'toolbox']),
   summarize: (output) => `已打开 3D 运镜工程 ${output.projectId}。`,
 })
 
 const createProject = defineApplicationCapability({
-  id: 'create_camera_stage_project', version: 3, title: '新建 3D 运镜工程',
-  description: '创建带默认摄像机和初始镜头的 3D 运镜工程，但不切换当前界面。', domain: 'camera_stage',
+  id: 'create_camera_stage_project', version: 4, title: '新建 3D 运镜工程',
+  description: '创建带默认摄像机和 0 秒初始状态关键帧的 3D 运镜工程，但不切换当前界面。', domain: 'camera_stage',
   aliases: ['创建 3D 工程', 'new camera stage project'], readOnly: false, risk: 'R1', dataClasses: ['C1'],
   permission: 'camera_stage:write', idempotent: false, destructive: false, timeoutMs: 15_000,
-  supportsPreview: false, supportsUndo: false, requiredScopes: ['toolbox'], producesRefs: ['camera_stage.project', 'camera_stage.camera', 'camera_stage.shot'],
-  inputSchema: z.object({ name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH), mode: z.enum(['simple', 'pro']).default('simple') }).strict(),
-  outputSchema: capabilityOutputSchema({ projectId: z.string(), name: z.string(), mode: z.enum(['simple', 'pro']), defaultCameraId: z.string(), defaultShotId: z.string(), baseRevision: z.number().int().nonnegative() }),
+  supportsPreview: false, supportsUndo: false, requiredScopes: ['toolbox'], producesRefs: ['camera_stage.project', 'camera_stage.camera', 'camera_stage.state_keyframe'],
+  inputSchema: z.object({ name: z.string().trim().min(1).max(CAMERA_STAGE_NAME_MAX_LENGTH) }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string(), name: z.string(), defaultCameraId: z.string(),
+    defaultStateKeyframeId: z.string(), baseRevision: z.number().int().nonnegative(),
+    resultRefs: z.tuple([
+      z.object({ kind: z.literal('camera_stage.project'), id: z.string().min(1) }).strict(),
+      z.object({ kind: z.literal('camera_stage.camera'), id: z.string().min(1) }).strict(),
+      z.object({ kind: z.literal('camera_stage.state_keyframe'), id: z.string().min(1) }).strict(),
+    ]),
+  }),
   concurrencyKey: 'camera_stage_project', resolveTargetIds: (input) => ({ name: input.name }),
-  control: cameraStageControl('create', ['camera_stage.project', 'camera_stage.camera', 'camera_stage.shot']),
+  control: cameraStageControl('create', ['camera_stage.project', 'camera_stage.camera', 'camera_stage.state_keyframe']),
   summarize: (output) => `已创建 3D 运镜工程 ${output.projectId}。`,
 })
 
@@ -74,45 +82,6 @@ const renameProjectCapability = defineApplicationCapability({
   resolveConcurrencyKey: (input) => `camera_stage_project:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
   control: cameraStageControl('update', ['camera_stage.project'], ['camera_stage.project.name']),
   summarize: (output) => `3D 工程重命名事务 ${output.transactionRef} 已完成。`,
-})
-
-const bakeToProCapability = defineApplicationCapability({
-  id: 'bake_camera_stage_to_pro', version: 1, title: '烘焙 3D 简易工程为专业工程',
-  description: '把简易模式的镜头卡单向固化为专业模式的关键帧时间轴，固化后不能再以镜头卡方式编辑。',
-  domain: 'camera_stage', aliases: ['转为专业工程', '烘焙镜头卡', 'bake camera stage to pro'],
-  readOnly: false, risk: 'R2', dataClasses: ['C1'],
-  permission: 'camera_stage:write', idempotent: true, destructive: true, timeoutMs: 15_000,
-  supportsPreview: true, supportsUndo: false, requiredScopes: ['toolbox'],
-  acceptsRefs: ['camera_stage.project'], producesRefs: ['camera_stage.project', 'camera_stage.keyframe'],
-  successEvidence: ['输出的 status 为 baked 或 already_pro；baked 时附带烘焙前的镜头卡数量与烘焙后的关键帧轨道数量。'],
-  failureRecovery: [CONFLICT_RECOVERY],
-  inputSchema: z.object({ projectId: z.string().min(1), baseRevision: z.number().int().nonnegative() }).strict(),
-  outputSchema: capabilityOutputSchema({
-    projectId: z.string(),
-    status: z.enum(['baked', 'already_pro']),
-    shotCount: z.number().int().nonnegative(),
-    trackCount: z.number().int().nonnegative(),
-    baseRevision: z.number().int().nonnegative(),
-  }),
-  resolveConcurrencyKey: (input) => `camera_stage_project:${input.projectId}`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
-  preview: (input) => ({
-    title: '烘焙为专业工程',
-    summary: `把工程 ${input.projectId} 的镜头卡单向固化为专业关键帧时间轴；固化后不能再以镜头卡方式编辑，且会清空撤销历史。`,
-    targetIds: cameraStageTarget(input.projectId),
-    reversible: false,
-    dataClasses: ['C1'],
-  }),
-  /*
-   * 主 effect 保持 delete：镜头卡被单向清掉、撤销历史一并作废，confirmation_required 与
-   * destructive 都由它决定，不能改。但烘焙同时**产出**整条关键帧时间轴（producesRefs 里就写着
-   * camera_stage.keyframe），漏声明 create 会让「把镜头卡转成关键帧」这类 Facet 结不了账。
-   */
-  control: cameraStageControl('delete', ['camera_stage.project', 'camera_stage.shot', 'camera_stage.keyframe'], ['camera_stage.project.editor_mode'], ['toolbox'], [
-    { effect: 'create', entityTypes: ['camera_stage.keyframe'] },
-  ]),
-  summarize: (output) => output.status === 'baked'
-    ? `3D 工程 ${output.projectId} 已烘焙为专业工程，${output.shotCount} 张镜头卡固化成 ${output.trackCount} 条关键帧轨道。`
-    : `3D 工程 ${output.projectId} 已经是专业模式，无需烘焙。`,
 })
 
 const deleteProjectCapability = defineApplicationCapability({
@@ -130,5 +99,5 @@ const deleteProjectCapability = defineApplicationCapability({
 })
 
 export const CAMERA_STAGE_PROJECT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
-  listProjects, getProject, openProject, createProject, renameProjectCapability, bakeToProCapability, deleteProjectCapability,
+  listProjects, getProject, openProject, createProject, renameProjectCapability, deleteProjectCapability,
 ]

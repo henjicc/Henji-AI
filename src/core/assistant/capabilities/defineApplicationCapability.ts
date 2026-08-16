@@ -3,6 +3,59 @@ import { z } from 'zod'
 import type {
   ApplicationCapabilityDefinition,
 } from '../applicationCapabilities'
+import type { AgentObservedEffect } from '../taskGraph'
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function directResultRefs(output: unknown): Array<{ kind: string; id: string }> {
+  const record = asRecord(output)
+  const refs = Array.isArray(record?.resultRefs) ? record.resultRefs : []
+  const result = refs.flatMap((value) => {
+    const ref = asRecord(value)
+    return typeof ref?.kind === 'string' && typeof ref.id === 'string'
+      ? [{ kind: ref.kind, id: ref.id }]
+      : []
+  })
+  for (const key of ['ref', 'sourceRef', 'resultRef']) {
+    const ref = asRecord(record?.[key])
+    if (typeof ref?.kind === 'string' && typeof ref.id === 'string') {
+      result.push({ kind: ref.kind, id: ref.id })
+    }
+  }
+  const surfaceId = record?.surfaceId
+  if (typeof surfaceId === 'string' && surfaceId.trim()) {
+    result.push({ kind: 'application.surface', id: surfaceId })
+  }
+  const workspace = record?.workspace ?? record?.workspaceId
+  if (typeof workspace === 'string' && workspace.trim()) {
+    result.push({
+      kind: 'application.surface',
+      id: workspace.includes('.') ? workspace : `workspace.${workspace}`,
+    })
+  }
+  return result
+}
+
+export function directOnlyObservedEffects<TOutput>(
+  control: ApplicationCapabilityDefinition['control']
+): (_input: unknown, output: TOutput) => AgentObservedEffect[] {
+  return (_input, output) => {
+    const targetRefs = directResultRefs(output)
+    return control.impacts.map((impact) => ({
+      effect: impact.effect,
+      entityTypes: impact.entityTypes,
+      propertyIds: impact.propertyIds,
+      targetRefs,
+      count: Math.max(1, targetRefs.length),
+      verified: impact.effect === 'observe',
+      evidence: [],
+    }))
+  }
+}
 
 export function capabilityControl(
   effect: ApplicationCapabilityDefinition['control']['impacts'][number]['effect'],
@@ -65,6 +118,7 @@ type CapabilityDefaults = 'side'
   | 'successEvidence'
   | 'failureRecovery'
   | 'aiInputSchema'
+  | 'verificationContract'
 
 export type ApplicationCapabilitySpec<TInput, TOutput> =
   Omit<ApplicationCapabilityDefinition<TInput, TOutput>, CapabilityDefaults> & {
@@ -79,6 +133,7 @@ export type ApplicationCapabilitySpec<TInput, TOutput> =
     successEvidence?: string[]
     failureRecovery?: string[]
     aiInputSchema?: Record<string, unknown>
+    verificationContract?: ApplicationCapabilityDefinition['verificationContract']
   }
 
 function inputJsonSchema(schema: z.ZodType): Record<string, unknown> {
@@ -110,6 +165,21 @@ export function defineApplicationCapability<TInput, TOutput>(
     failureRecovery: specification.failureRecovery
       ?? ['重新读取当前应用状态或目标引用后再试；禁止猜测实体名称。'],
     aiInputSchema: specification.aiInputSchema ?? inputJsonSchema(specification.inputSchema),
+    verificationContract: specification.verificationContract ?? (
+      specification.readOnly || specification.control.impacts.every((impact) => (
+        ['observe', 'navigate'].includes(impact.effect)
+      ))
+        ? undefined
+        : {
+            kind: 'effect_receipt' as const,
+            requireEffects: true,
+            requireVerifiedEffects: false,
+          }
+    ),
+    resolveObservedEffects: specification.resolveObservedEffects
+      ?? (specification.control.impacts.length > 0
+        ? directOnlyObservedEffects<TOutput>(specification.control)
+        : undefined),
   }
 }
 

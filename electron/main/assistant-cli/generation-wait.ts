@@ -1,5 +1,6 @@
 import type { AgentRunState } from '../../../src/core/assistant/events'
 import type { ApplicationCapabilityResult } from '../../../src/core/assistant/hostContracts'
+import type { AgentRunSummary } from '../../../src/core/assistant/persistence'
 import {
   isGenerationTerminalStatus,
   normalizeGenerationTaskStatus,
@@ -19,8 +20,15 @@ export interface CliGenerationWaitResult {
   tasks: CliGenerationTaskObservation[]
 }
 
+export interface CliExternalContinuationResult {
+  status: 'completed' | 'timed_out' | 'skipped'
+  runId: string
+  state: AgentRunState
+}
+
 interface GenerationWaitInput {
   state: AgentRunState
+  taskIds?: string[]
   timeoutMs: number
   observe: (taskId: string, attempt: number) => Promise<ApplicationCapabilityResult>
   onObservation: (observation: CliGenerationTaskObservation) => void
@@ -100,7 +108,10 @@ function wait(delayMs: number): Promise<void> {
 export async function waitForSubmittedGenerationTasks(
   input: GenerationWaitInput
 ): Promise<CliGenerationWaitResult> {
-  const taskIds = extractSubmittedGenerationTaskIds(input.state)
+  const taskIds = [...new Set([
+    ...extractSubmittedGenerationTaskIds(input.state),
+    ...(input.taskIds ?? []),
+  ].filter((taskId) => taskId.length > 0))]
   if (taskIds.length === 0) return { status: 'skipped', tasks: [] }
 
   const deadline = Date.now() + Math.max(0, input.timeoutMs)
@@ -147,5 +158,52 @@ export async function waitForSubmittedGenerationTasks(
     tasks: taskIds.map((taskId) => observations.get(taskId)).filter(
       (task): task is CliGenerationTaskObservation => task !== undefined
     ),
+  }
+}
+
+export async function waitForExternalContinuation(input: {
+  sourceRunId: string
+  threadId: string
+  sourceState: AgentRunState
+  timeoutMs: number
+  listRuns: (threadId: string) => AgentRunSummary[]
+  getState: (runId: string) => AgentRunState
+  pollIntervalMs?: number
+  sleep?: (delayMs: number) => Promise<void>
+}): Promise<CliExternalContinuationResult> {
+  if (input.sourceState.status !== 'waiting_external') {
+    return { status: 'skipped', runId: input.sourceRunId, state: input.sourceState }
+  }
+  const deadline = Date.now() + Math.max(0, input.timeoutMs)
+  const pollIntervalMs = Math.max(100, input.pollIntervalMs ?? 250)
+  const sleep = input.sleep ?? wait
+  let currentRunId = input.sourceRunId
+  let currentState = input.sourceState
+
+  for (;;) {
+    const children = input.listRuns(input.threadId)
+      .filter((run) => run.parentRunId === currentRunId)
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+    const child = children.at(-1)
+    if (child) {
+      currentRunId = child.runId
+      currentState = input.getState(currentRunId)
+      if (currentState.status !== 'waiting_external'
+        && ['completed', 'completed_with_warning', 'budget_exhausted', 'failed', 'cancelled'].includes(currentState.status)) {
+        return { status: 'completed', runId: currentRunId, state: currentState }
+      }
+    } else if (currentRunId !== input.sourceRunId) {
+      currentState = input.getState(currentRunId)
+      if (currentState.status !== 'waiting_external'
+        && ['completed', 'completed_with_warning', 'budget_exhausted', 'failed', 'cancelled'].includes(currentState.status)) {
+        return { status: 'completed', runId: currentRunId, state: currentState }
+      }
+    }
+
+    const remainingMs = deadline - Date.now()
+    if (remainingMs <= 0) {
+      return { status: 'timed_out', runId: currentRunId, state: currentState }
+    }
+    await sleep(Math.min(pollIntervalMs, remainingMs))
   }
 }

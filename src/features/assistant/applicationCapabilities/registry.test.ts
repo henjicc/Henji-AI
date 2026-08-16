@@ -11,6 +11,7 @@ import { CANVAS_MUTATION_APPLICATION_CAPABILITIES } from '@/core/assistant/capab
 import { CANVAS_PROJECT_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/canvasProjectApplicationCapabilities'
 import { GENERATION_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/generationApplicationCapabilities'
 import { TOOLBOX_APPLICATION_CAPABILITIES } from '@/core/assistant/capabilities/toolboxApplicationCapabilities'
+import { agentObservedEffectSchema } from '@/core/assistant/taskGraph'
 
 import { listRendererApplicationCapabilityIds } from './registry'
 
@@ -51,6 +52,10 @@ describe('application capability handler coverage', () => {
     expect(createCamera?.requiredScopes).not.toContain('navigation')
     expect(createCamera?.producesRefs).not.toContain('application.surface')
     expect(createCamera?.description).toContain('不切换当前界面')
+    expect(createCamera?.version).toBe(4)
+    expect(createCamera?.inputSchema.safeParse({ name: '单一状态关键帧工程' }).success).toBe(true)
+    expect(createCamera?.inputSchema.safeParse({ name: '旧输入', mode: 'pro' }).success).toBe(false)
+    expect(BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('bake_camera_stage_to_pro')).toBeUndefined()
 
     for (const id of ['open_camera_stage_project', 'open_canvas_project', 'focus_canvas_node']) {
       const definition = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get(id)
@@ -113,5 +118,120 @@ describe('application capability handler coverage', () => {
         /Surface|页面|工作区|编辑器|定位/
       )
     }
+  })
+
+  it('所有写入和导航能力都能把成功结果记成强类型 Effect', () => {
+    const missing = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list().flatMap((definition) => (
+      !definition.readOnly
+      && definition.control.impacts.some((impact) => impact.effect !== 'observe')
+      && !definition.resolveObservedEffects
+        ? [definition.id]
+        : []
+    ))
+    expect(missing).toEqual([])
+
+    const openCamera = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('open_camera_stage_project')
+    const effects = openCamera?.resolveObservedEffects?.(
+      { projectId: 'project-1' },
+      { projectId: 'project-1', surfaceId: 'tool.camera_stage' },
+    ) ?? []
+    expect(effects.map((effect) => agentObservedEffectSchema.parse(effect))).toEqual([
+      expect.objectContaining({
+        effect: 'navigate',
+        targetRefs: [{ kind: 'application.surface', id: 'tool.camera_stage' }],
+      }),
+    ])
+
+    const createCamera = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('create_camera_stage_project')
+    expect(createCamera?.outputSchema.safeParse({
+      projectId: 'project-1', name: '缺少引用', defaultCameraId: 'camera-1',
+      defaultStateKeyframeId: 'state-1', baseRevision: 1, revision: 1,
+      scopeRevisions: { toolbox: 1 },
+    }).success).toBe(false)
+    const createdEffects = createCamera?.resolveObservedEffects?.(
+      { name: '稳定引用测试' },
+      {
+        projectId: 'project-1', name: '稳定引用测试', defaultCameraId: 'camera-1',
+        defaultStateKeyframeId: 'state-1', baseRevision: 1, revision: 1,
+        scopeRevisions: { toolbox: 1 },
+        resultRefs: [
+          { kind: 'camera_stage.project', id: 'project-1' },
+          { kind: 'camera_stage.camera', id: 'project-1:camera-1' },
+          { kind: 'camera_stage.state_keyframe', id: 'project-1:state-1' },
+        ],
+      },
+    ) ?? []
+    expect(createdEffects.map((effect) => agentObservedEffectSchema.parse(effect))).toEqual([
+      expect.objectContaining({
+        effect: 'create',
+        targetRefs: [
+          { kind: 'camera_stage.project', id: 'project-1' },
+          { kind: 'camera_stage.camera', id: 'project-1:camera-1' },
+          { kind: 'camera_stage.state_keyframe', id: 'project-1:state-1' },
+        ],
+      }),
+    ])
+  })
+
+  it('所有有控制影响的能力都能产出强类型 Effect，画布读写使用完整稳定引用', () => {
+    const missing = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.list()
+      .filter((definition) => definition.control.impacts.length > 0 && !definition.resolveObservedEffects)
+      .map((definition) => definition.id)
+    expect(missing).toEqual([])
+
+    const add = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_canvas_node')
+    const created = add?.resolveObservedEffects?.(
+      { projectId: 'project-1', nodeType: 'textInput', placement: { mode: 'viewport_center' } },
+      { projectId: 'project-1', nodeId: 'node-1', nodeType: 'textInput', undoRef: 'undo-1' },
+    ) ?? []
+    expect(created.map((effect) => agentObservedEffectSchema.parse(effect))).toEqual([
+      expect.objectContaining({
+        effect: 'create', targetRefs: [{ kind: 'canvas.node', id: 'node-1' }],
+      }),
+    ])
+
+    const read = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('get_canvas_project')
+    const observed = read?.resolveObservedEffects?.(
+      { projectId: 'project-1' },
+      { project: { id: 'project-1' }, nodes: [{ id: 'node-1' }], edges: [{ id: 'edge-1' }], truncated: false },
+    ) ?? []
+    expect(observed.map((effect) => agentObservedEffectSchema.parse(effect))[0]).toMatchObject({
+      effect: 'observe', verified: true,
+      targetRefs: expect.arrayContaining([
+        { kind: 'canvas.project', id: 'project-1' },
+        { kind: 'canvas.node', id: 'node-1' },
+        { kind: 'canvas.edge', id: 'edge-1' },
+      ]),
+    })
+  })
+
+  it('生成结果到画布有唯一正式桥梁，并产出精确节点 Effect', () => {
+    const bridge = BUILTIN_APPLICATION_CAPABILITY_REGISTRY.get('add_generation_result_to_canvas')
+    expect(bridge).toBeDefined()
+    expect(bridge?.acceptsRefs).toEqual(expect.arrayContaining([
+      'canvas.project', 'generation.result',
+    ]))
+    expect(bridge?.producesRefs).toContain('canvas.node')
+    expect(bridge?.inputSchema.safeParse({
+      projectId: 'canvas-1',
+      resultRef: { kind: 'generation.result', id: 'task-1' },
+      placement: { mode: 'absolute', x: 320, y: 180 },
+    }).success).toBe(true)
+    const effects = bridge?.resolveObservedEffects?.(
+      {
+        projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' },
+        placement: { mode: 'absolute', x: 320, y: 180 },
+      },
+      {
+        projectId: 'canvas-1', resultRef: { kind: 'generation.result', id: 'task-1' },
+        mediaType: 'image', nodeId: 'node-1', nodeType: 'uploadNode',
+        nodeRef: { kind: 'canvas.node', id: 'node-1' }, undoRef: 'undo-1',
+        revision: 2, scopeRevisions: { canvas: 2 },
+      },
+    ) ?? []
+    expect(effects).toEqual([expect.objectContaining({
+      effect: 'create', entityTypes: ['canvas.node'],
+      targetRefs: [{ kind: 'canvas.node', id: 'node-1' }],
+    })])
   })
 })

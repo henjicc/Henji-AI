@@ -10,6 +10,8 @@ export interface AssistantCliOptions {
   captureMode: AgentTraceCaptureMode
   printTrace: boolean
   awaitGeneration: boolean
+  visible: boolean
+  requireVerifiedWrite: boolean
   timeoutMs: number
   threadId?: string
 }
@@ -57,6 +59,8 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   let captureMode: AgentTraceCaptureMode = 'summary'
   let printTrace = false
   let awaitGeneration = false
+  let visible = false
+  let requireVerifiedWrite = false
   let timeoutMs = DEFAULT_TIMEOUT_MS
   let threadId: string | undefined
 
@@ -83,6 +87,12 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
       case '--await-generation':
         awaitGeneration = true
         break
+      case '--visible':
+        visible = true
+        break
+      case '--require-verified-write':
+        requireVerifiedWrite = true
+        break
       case '--timeout':
         timeoutMs = parseTimeout(requireValue(argv, index, argument))
         index += 1
@@ -100,7 +110,10 @@ export function parseAssistantCliArguments(argv: string[] = process.argv.slice(1
   if (goal.length > 32 * 1024) throw new Error('参数 --goal 不能超过 32768 个字符')
   if (threadId && threadId.length > 200) throw new Error('参数 --thread 不能超过 200 个字符')
 
-  return { goal, approvalMode, captureMode, printTrace, awaitGeneration, timeoutMs, ...(threadId ? { threadId } : {}) }
+  return {
+    goal, approvalMode, captureMode, printTrace, awaitGeneration, visible,
+    requireVerifiedWrite, timeoutMs, ...(threadId ? { threadId } : {}),
+  }
 }
 
 export function formatAssistantCliHelp(): string {
@@ -112,6 +125,8 @@ export function formatAssistantCliHelp(): string {
     '  --trace <summary|detailed>                      追踪捕获级别，默认 summary',
     '  --print-trace                                   在运行结束后输出已脱敏的详细追踪',
     '  --await-generation                              保持无窗口宿主并等待本次提交的生成任务结束',
+    '  --visible                                       显示真实 Electron 窗口，便于观察执行过程',
+    '  --require-verified-write                        要求至少一项应用写入已封存并通过结构化验证',
     '  --timeout <毫秒>                                最长运行时间，默认 600000，最大 3600000',
     '  --thread <标识>                                 指定运行线程标识',
     '  --help                                          显示本帮助',

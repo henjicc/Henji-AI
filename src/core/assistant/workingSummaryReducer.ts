@@ -90,6 +90,7 @@ export function reduceAgentWorkingSummary(
     next = { ...next, activeStep: currentStep(event) }
   } else if (event.type === 'ToolCompleted') {
     const step = completeActiveStep(next, event)
+    const recoveredTool = next.recovery.toolName === event.toolName
     next = {
       ...next,
       activeStep: null,
@@ -101,6 +102,12 @@ export function reduceAgentWorkingSummary(
         observedAt: event.occurredAt,
       }, 12),
       unresolvedItems: next.unresolvedItems.filter((item) => !item.includes(event.toolName)),
+      recovery: recoveredTool ? {
+        mode: 'none',
+        reason: `${event.toolName} 已在后续调用中成功完成。`,
+        toolName: null,
+        toolCategory: null,
+      } : next.recovery,
     }
   } else if (event.type === 'ToolFailed') {
     const step = failActiveStep(next, event)
@@ -172,7 +179,7 @@ export function reduceAgentWorkingSummary(
           }, 12)
         : next.evidence,
       unresolvedItems: event.passed
-        ? next.unresolvedItems
+        ? next.unresolvedItems.filter((item) => !/任务图仍有 \d+ 个 Facet 未结算/.test(item))
         : appendBounded(next.unresolvedItems, event.summary, 10),
     }
   } else if (event.type === 'ClarificationRequired') {

@@ -1,127 +1,51 @@
 /**
  * 3D 镜头参考场景的序列化 / 反序列化（工程持久化用）。
  *
- * 工程文件里存的是一份带 `schemaVersion` 的场景快照；加载时按版本做向前兼容：
- * 低于当前版本的旧工程逐级迁移，高于当前版本直接报错（提示升级应用）。
- * v2 起并入关键帧动画（tracks/duration/fps）；加载 v1 工程视为无动画。
- * v3 起关键帧轨道按分量存储（位置/旋转/缩放/关节拆成 X/Y/Z 三条 scalar 轨道）；
- * 加载 v2 的整体 Vec3 轨道时自动拆分为分量轨道。
- * v4 起并入场景级设置（背景色/网格显隐）；加载 v3 及以下工程视为默认设置。
- * v5 起摄像机对象新增 aspectRatio（画幅比例）字段；加载 v4 及以下工程时给已有摄像机补默认 16:9。
- * v6 起场景设置拆分为 ground / sky / sunlight / fog；加载 v5 及以下工程时把旧背景色/网格迁移到新结构。
- * v7 起场景设置新增 display.showNameLabels；加载 v6 及以下工程时默认不显示名称标签。
- * v8 起名称标签新增文字色/背景色/大小/位置偏移；加载 v7 及以下工程时回退默认标签样式。
- * v9 起名称标签新增背景跟随对象色、背景透明度与文字阴影参数；加载 v8 及以下工程时回退默认阴影样式。
- * v10 起角色对象新增 motion（静态姿势 / 内置 GLB 动作片段）；加载 v9 及以下工程时回退静态姿势。
- * v11 起并入简易模式数据：editorMode（编辑器模式）与 shots（镜头卡列表）随工程持久化，摄像机对象
- * 新增 effectors（效果器列表，一期仅摄像机）；加载 v10 及以下工程时 editorMode 回退为 'pro'、
- * shots 回退为空数组，已有摄像机补空 effectors。
+ * 开发阶段只接受当前 schema。旧记录可以继续留在数据库中，但不会进入工程列表、反射枚举、
+ * 编辑器、复制或渲染链路；这里不再承担旧模式迁移，避免历史第二真相源污染当前模型。
  */
 
 import { normalizeCharacterMotion } from './characterMotion'
-import { createDefaultAnimation } from './animationTypes'
-import type { StageKeyframe, StageSceneAnimation, StageTrack } from './animationTypes'
+import type { StageSceneAnimation } from './animationTypes'
 import { createDefaultSceneSettings } from './sceneDefaults'
 import { rotationFromPositionAndTarget } from './cameraUtils'
-import { normalizeEditorMode, normalizeShots } from './shotTypes'
-import type { StageEditorMode, StageShot } from './shotTypes'
-import { createCameraPresetPath } from './spatialPath'
-import { compileShotsToAnimation } from './shotCompiler'
-import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings, StageVec3 } from './sceneTypes'
+import { normalizeStateKeyframes } from './stateKeyframeTypes'
+import type { StageStateKeyframe } from './stateKeyframeTypes'
+import { compileStateKeyframesToAnimation } from './stateKeyframeCompiler'
+import type { StageCameraObject, StageCharacterObject, StageObject, StageSceneSettings } from './sceneTypes'
 
 /** 当前场景数据版本；结构不兼容变更时递增并补迁移分支 */
-export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 12
+export const CAMERA_STAGE_SCENE_SCHEMA_VERSION = 13
 
-export interface StageSceneSnapshot {
-  schemaVersion: number
-  objects: StageObject[]
-  /** 当前取景摄像机（自由/摄像机视角切换用），无摄像机时为 null */
-  activeCameraId: string | null
-  /** 关键帧动画数据（v2 引入） */
-  animation: StageSceneAnimation
-  /** 场景级设置（v4 引入） */
-  sceneSettings: StageSceneSettings
-  /** 编辑器模式（v11 引入）：simple = 镜头卡模式，pro = 现有关键帧模式 */
-  editorMode: StageEditorMode
-  /** 镜头卡列表（v11 引入），仅 simple 模式使用 */
-  shots: StageShot[]
-}
+export const UNSUPPORTED_CAMERA_STAGE_SCHEMA = 'UNSUPPORTED_CAMERA_STAGE_SCHEMA'
 
 export interface StageSceneSnapshotInput {
   objects: StageObject[]
+  /** 当前取景摄像机（自由/摄像机视角切换用），无摄像机时为 null */
   activeCameraId: string | null
-  animation: StageSceneAnimation
+  /** 场景级设置（v4 引入） */
   sceneSettings: StageSceneSettings
-  editorMode: StageEditorMode
-  shots: StageShot[]
+  /** 唯一可编辑时间轴真相源。 */
+  stateKeyframes: StageStateKeyframe[]
 }
 
-function legacyShotTarget(shot: StageShot, objectId: string, objects: StageObject[]): StageVec3 {
-  const lookAt = shot.objectStates[objectId]?.lookAt
-  if (!lookAt) return { x: 0, y: 0, z: 0 }
-  if (lookAt.mode === 'manual') return { ...lookAt.target }
-  const target = objects.find((object) => object.id === lookAt.objectId)
-  const targetState = shot.objectStates[lookAt.objectId]
-  if (!target || !targetState) return { ...lookAt.fallbackTarget }
-  const position = targetState.transform.position
-  return target.type === 'character'
-    ? { x: position.x, y: position.y + targetState.transform.scale.y, z: position.z }
-    : { ...position }
+export interface StageSceneSnapshot extends StageSceneSnapshotInput {
+  schemaVersion: number
+  /** 由状态关键帧即时编译，只存在于运行态。 */
+  animation: StageSceneAnimation
 }
 
-/** v11 的 cameraMoves 是编译期黑盒；加载时转成可见、可编辑的对象级空间路径。 */
-function materializeLegacyCameraPaths(shots: StageShot[], objects: StageObject[]): StageShot[] {
-  const result = shots.map((shot) => structuredClone(shot))
-  for (let index = 0; index < result.length - 1; index += 1) {
-    const shot = result[index]
-    const nextShot = result[index + 1]
-    for (const [objectId, move] of Object.entries(shot.transition.cameraMoves)) {
-      const detail = shot.transition.perObject[objectId] ?? {}
-      if (detail.spatialPath || move.kind === 'direct') continue
-      const fromPosition = shot.objectStates[objectId]?.transform.position
-      const nextState = nextShot.objectStates[objectId]
-      if (!fromPosition || !nextState) continue
-      const generated = createCameraPresetPath(move, fromPosition, legacyShotTarget(shot, objectId, objects))
-      shot.transition.perObject[objectId] = { ...detail, spatialPath: generated.path }
-      nextState.transform.position = generated.endPosition
-    }
-    shot.transition.cameraMoves = {}
-  }
-  return result
-}
+export type StageSceneRuntimeSnapshot = Omit<StageSceneSnapshot, 'schemaVersion'>
 
 export function serializeScene(input: StageSceneSnapshotInput): string {
-  const snapshot: StageSceneSnapshot = {
+  const snapshot = {
     schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
     objects: input.objects,
     activeCameraId: input.activeCameraId,
-    animation: input.animation,
     sceneSettings: input.sceneSettings,
-    editorMode: input.editorMode,
-    shots: input.shots,
+    stateKeyframes: input.stateKeyframes,
   }
   return JSON.stringify(snapshot)
-}
-
-/** 宽松解析动画字段：结构缺失/非法时回退为空动画，避免旧数据打不开 */
-function parseAnimation(raw: unknown): StageSceneAnimation {
-  const fallback = createDefaultAnimation()
-  if (!raw || typeof raw !== 'object') return fallback
-  const record = raw as Record<string, unknown>
-  const tracks = Array.isArray(record.tracks)
-    ? (record.tracks as StageSceneAnimation['tracks'])
-    : fallback.tracks
-  const duration = Number(record.duration)
-  const fps = Number(record.fps)
-  const motionSchedule = Array.isArray(record.motionSchedule)
-    ? (record.motionSchedule as StageSceneAnimation['motionSchedule'])
-    : fallback.motionSchedule
-  return {
-    tracks,
-    motionSchedule,
-    duration: Number.isFinite(duration) && duration > 0 ? duration : fallback.duration,
-    fps: Number.isFinite(fps) && fps > 0 ? Math.round(fps) : fallback.fps,
-  }
 }
 
 /** 宽松解析场景设置字段：结构缺失/非法时逐字段回退默认值 */
@@ -268,33 +192,7 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
     }
   }
 
-  return {
-    ground: {
-      color: fallback.ground.color,
-      pattern: record.gridVisible === false ? 'none' : 'grid',
-      density: fallback.ground.density,
-      gridLineColor: fallback.ground.gridLineColor,
-      gridLineThickness: fallback.ground.gridLineThickness,
-      checkerLightColor: fallback.ground.checkerLightColor,
-      checkerDarkColor: fallback.ground.checkerDarkColor,
-    },
-    sky: {
-      color: typeof record.backgroundColor === 'string' ? record.backgroundColor : fallback.sky.color,
-    },
-    sunlight: fallback.sunlight,
-    fog: fallback.fog,
-    display: fallback.display,
-  }
-}
-
-/** v4→v5：给缺少 aspectRatio 的摄像机对象补默认 16:9，非摄像机对象原样保留 */
-function withDefaultCameraAspectRatio(objects: StageObject[]): StageObject[] {
-  return objects.map((object) => {
-    if (object.type !== 'camera') return object
-    const camera = object as StageCameraObject & { aspectRatio?: StageCameraObject['aspectRatio'] }
-    if (camera.aspectRatio) return object
-    return { ...camera, aspectRatio: { preset: '16:9', ratio: 16 / 9 } }
-  })
+  return fallback
 }
 
 /** v9→v10：给角色对象补 motion，并顺手规范非法动作字段 */
@@ -333,20 +231,16 @@ function withNormalizedCameraRotations(objects: StageObject[]): StageObject[] {
   })
 }
 
-/** v2→v3：把整体 Vec3 值的轨道拆成 X/Y/Z 三条分量 scalar 轨道；非 Vec3 轨道原样保留 */
-function splitVec3Track(track: StageTrack): StageTrack[] {
-  const first = track.keyframes[0]?.value
-  const isVec3 = !!first && typeof first === 'object' && 'x' in (first as StageVec3)
-  if (!isVec3) return [track]
-  return (['x', 'y', 'z'] as const).map((axis) => ({
-    objectId: track.objectId,
-    propertyPath: `${track.propertyPath}.${axis}`,
-    keyframes: track.keyframes.map(
-      (kf): StageKeyframe => ({ time: kf.time, value: (kf.value as StageVec3)[axis], easing: kf.easing }),
-    ),
-  }))
+export function isCurrentCameraStageScene(sceneJson: string): boolean {
+  try {
+    const parsed = JSON.parse(sceneJson) as Record<string, unknown> | null
+    return parsed !== null && Number(parsed.schemaVersion) === CAMERA_STAGE_SCENE_SCHEMA_VERSION
+  } catch {
+    return false
+  }
 }
 
+/** 只读取当前 schema；派生动画始终从状态关键帧重新编译。 */
 export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   let parsed: unknown
   try {
@@ -363,34 +257,18 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
   if (!Number.isFinite(version) || version < 1) {
     throw new Error('[cameraStage] 场景数据缺少有效的 schemaVersion')
   }
-  if (version > CAMERA_STAGE_SCENE_SCHEMA_VERSION) {
-    throw new Error(
-      `[cameraStage] 场景数据版本 ${version} 高于当前支持的 ${CAMERA_STAGE_SCENE_SCHEMA_VERSION}，请升级应用后再打开`,
-    )
+  if (version !== CAMERA_STAGE_SCENE_SCHEMA_VERSION) {
+    throw new Error(`${UNSUPPORTED_CAMERA_STAGE_SCHEMA}:${version}`)
   }
 
   let objects = Array.isArray(record.objects) ? (record.objects as StageObject[]) : []
-  // v4 及以下工程的摄像机对象无 aspectRatio 字段 → 补默认 16:9
-  if (version < 5) {
-    objects = withDefaultCameraAspectRatio(objects)
-  }
   objects = withNormalizedCharacterMotion(objects)
-  // v10 及以下工程的摄像机对象无 effectors 字段 → 补空数组；同时顺手规范非法数据
   objects = withDefaultCameraEffectors(objects)
   objects = withNormalizedCameraRotations(objects)
   const activeCameraId = typeof record.activeCameraId === 'string' ? record.activeCameraId : null
-  // v1 工程无 animation 字段 → 视为无动画；v2+ 解析已有动画；v2 的整体 Vec3 轨道拆成分量轨道
-  let animation = version >= 2 ? parseAnimation(record.animation) : createDefaultAnimation()
-  if (version < 3 && animation.tracks.length > 0) {
-    animation = { ...animation, tracks: animation.tracks.flatMap(splitVec3Track) }
-  }
-  // v3 及以下工程无 sceneSettings 字段 → 视为默认设置；v4/v5 的旧结构在 parseSceneSettings 中迁移
-  const sceneSettings = version >= 4 ? parseSceneSettings(record.sceneSettings) : createDefaultSceneSettings()
-  // v10 及以下工程无 editorMode/shots 字段 → 一律视为专业工程、无镜头卡
-  const editorMode = version >= 11 ? normalizeEditorMode(record.editorMode) : 'pro'
-  const normalizedShots = version >= 11 ? normalizeShots(record.shots) : []
-  const shots = materializeLegacyCameraPaths(normalizedShots, objects)
-  if (editorMode === 'simple') animation = compileShotsToAnimation(shots, objects)
+  const sceneSettings = parseSceneSettings(record.sceneSettings)
+  const stateKeyframes = normalizeStateKeyframes(record.stateKeyframes)
+  const animation = compileStateKeyframesToAnimation(stateKeyframes, objects)
 
   return {
     schemaVersion: CAMERA_STAGE_SCENE_SCHEMA_VERSION,
@@ -398,7 +276,6 @@ export function deserializeScene(sceneJson: string): StageSceneSnapshot {
     activeCameraId,
     animation,
     sceneSettings,
-    editorMode,
-    shots,
+    stateKeyframes,
   }
 }

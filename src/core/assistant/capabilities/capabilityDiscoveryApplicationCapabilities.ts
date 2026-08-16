@@ -1,5 +1,4 @@
 import {
-  APPLICATION_CAPABILITY_DISCOVERY_VERSION,
   applicationCapabilityDiscoveryInputSchema,
   applicationCapabilityDiscoveryOutputSchema,
   applicationSchemaReadInputSchema,
@@ -136,3 +135,4 @@ export const CAPABILITY_DISCOVERY_APPLICATION_CAPABILITIES: ApplicationCapabilit
   discoverApplicationCapabilitiesCapability,
   readApplicationSchemasCapability,
 ]
+

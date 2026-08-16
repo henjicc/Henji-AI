@@ -2,6 +2,7 @@ import type { ApplicationExposure, ApplicationRef, ApplicationSchemaRef, JsonVal
 import type {
   ApplicationEntitySnapshot,
   ApplicationEntityTypeDescriptor,
+  ApplicationCollectionAvailability,
   ApplicationPropertyAvailability,
   ApplicationPropertyDescriptor,
 } from '../reflection'
@@ -39,6 +40,7 @@ export interface ApplicationEntityProvider {
     ref: ApplicationRef,
     propertyIds: string[]
   ): Promise<ApplicationPropertyAvailability[]>
+  getCollectionAvailability(parent: ApplicationRef): Promise<ApplicationCollectionAvailability>
 }
 
 export interface ApplicationSchemaDocument {

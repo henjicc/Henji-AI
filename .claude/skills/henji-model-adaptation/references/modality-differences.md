@@ -29,7 +29,7 @@
 
 - 核心关注：文本到语音、音色与音频编码配置。
 - 常见参数：`spec/voice/speed/volume/pitch/sampleRate/format`。
-- 当前仓库基线：`src/models/ppio/minimax-speech-2.6.model.ts`。
+- 当前仓库基线：`src/models/ppio/minimax-speech.model.ts`（当前 canonical model 为 MiniMax Speech 2.8）。
 
 ## 上传与媒体处理注意点
 

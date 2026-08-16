@@ -126,6 +126,22 @@ function applyEventToRunState(state: AgentRunState, event: AgentEvent): AgentRun
       next.currentStepId = null
       next.currentToolCallId = null
       break
+    case 'ExecutionOutcomeSealed':
+      next.executionOutcome = {
+        status: 'sealed_success', effects: event.effects,
+        verificationSummary: { summary: event.summary, evidence: event.evidence },
+        sealedAt: event.occurredAt,
+      }
+      break
+    case 'RunCompletedWithWarning':
+      next.status = 'completed_with_warning'
+      next.finalText = event.finalText
+      next.error = null
+      next.presentationOutcome = { status: 'fallback', warning: event.warning }
+      next.usage = event.usage
+      next.currentStepId = null
+      next.currentToolCallId = null
+      break
     case 'RunFailed':
       next.status = 'failed'
       next.error = event.error
@@ -435,7 +451,7 @@ export function selectExecutionPresentation(
   else if (facets.some((facet) => facet.status === 'active')) {
     nextAction = `正在处理：${facets.find((facet) => facet.status === 'active')?.goal ?? '当前子目标'}`
   }
-  else if (state?.status === 'completed') {
+  else if (state?.status === 'completed' || state?.status === 'completed_with_warning') {
     nextAction = verification?.passed
       ? '执行结果已通过结构化验证，请查看助手结论。'
       : '执行已经结束，请查看助手结论和未完成事项。'

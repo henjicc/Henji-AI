@@ -35,13 +35,12 @@ describe('三维播放控制', () => {
       activeCameraId: camera.id,
       animation: { ...createDefaultAnimation(), duration: 10 },
       sceneSettings: createDefaultSceneSettings(),
-      editorMode: 'simple',
-      shots: [],
+      stateKeyframes: [],
     }, { id: PROJECT_ID, name: '播放测试' })
     // 时间轴上要有东西才播得动，这是界面上"播放按钮是不是灰的"的同一个条件。
-    useCameraStageStore.getState().addShot()
+    useCameraStageStore.getState().addStateKeyframe()
     useCameraStageStore.getState().seek(5)
-    useCameraStageStore.getState().addShot()
+    useCameraStageStore.getState().addStateKeyframe()
     useCameraStageStore.getState().seek(0)
   })
 
@@ -81,10 +80,10 @@ describe('三维播放控制', () => {
       .rejects.toThrow('INVALID_TIME_RANGE')
   })
 
-  it('时间轴空的时候播放会明确报错，而不是静默什么都不做', async () => {
+  it('底层播放动作在空时间轴保持不播放，拒绝由反射 availability 统一负责', async () => {
     useCameraStageStore.getState().newScene('空场景')
     useCameraStageStore.getState().bindProject(PROJECT_ID, '空场景')
-    await expect(cameraStageApplicationService.updatePlayback(PROJECT_ID, { playing: true }))
-      .rejects.toThrow('PLAYBACK_NOT_READY')
+    const result = await cameraStageApplicationService.updatePlayback(PROJECT_ID, { playing: true })
+    expect(result.playback.playing).toBe(false)
   })
 })

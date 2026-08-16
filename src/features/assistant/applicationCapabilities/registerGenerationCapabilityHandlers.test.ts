@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   prepare: vi.fn(),
   submit: vi.fn(),
+  resolveModel: vi.fn(),
 }))
 
 vi.mock('@/features/generation/application/generationApplicationService', () => ({
@@ -12,6 +13,7 @@ vi.mock('@/features/generation/application/generationApplicationService', () => 
     getModelSchema: vi.fn(),
     prepare: mocks.prepare,
     submit: mocks.submit,
+    resolveModel: mocks.resolveModel,
     getTask: vi.fn(),
     cancelTask: vi.fn(),
   },
@@ -66,6 +68,7 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
     useGenerationDraftStore.setState({ draft: createEmptyGenerationDraft(), revision: 0 })
     mocks.submit.mockResolvedValue({ taskId: 'task-1', status: 'submitted', taskRef: { kind: 'generation.task', id: 'task-1' } })
     mocks.prepare.mockReturnValue({ prepared: true, modelId: testModel.meta.id, providerId: testModel.meta.provider, mediaType: 'image', options: {} })
+    mocks.resolveModel.mockResolvedValue({ modelId: testModel.meta.id, providerId: testModel.meta.provider, selection: 'configured_fallback' })
   })
 
   afterEach(() => {
@@ -142,5 +145,27 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
     const prepared = mocks.prepare.mock.calls[0][0]
     expect(prepared.modelId).toBe(testModel.meta.id)
     expect(prepared.prompt).toBe('准备阶段的草稿提示词')
+  })
+
+  it('resolve_generation_model 把当前草稿仅作为宿主候选，不直接沿用未配置模型', async () => {
+    useGenerationDraftStore.getState().patchField('selectedModel', testModel.meta.id)
+    const handler = registeredHandlers().get('resolve_generation_model')
+    if (!handler) throw new Error('HANDLER_NOT_FOUND')
+
+    const resolved = await handler({
+      preferredProviderIds: ['kie'], prompt: '生成图片', mediaType: 'image', params: {},
+    }, context)
+
+    expect(mocks.resolveModel).toHaveBeenCalledWith(expect.objectContaining({
+      currentModelId: testModel.meta.id,
+      preferredProviderIds: ['kie'],
+      prompt: '生成图片',
+      mediaType: 'image',
+    }))
+    expect(resolved).toEqual({
+      modelId: testModel.meta.id,
+      providerId: testModel.meta.provider,
+      selection: 'configured_fallback',
+    })
   })
 })

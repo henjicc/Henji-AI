@@ -63,9 +63,9 @@ export async function getAssistantUserInstructions(): Promise<AssistantUserInstr
       event: 'assistant_user_instructions.read.failed',
       error,
     })
-    throw new Error(`智能助手用户指令文件无效，请检查内容长度和格式：${filePath}`, {
-      cause: error,
-    })
+    const wrapped = new Error(`智能助手用户指令文件无效，请检查内容长度和格式：${filePath}`)
+    ;(wrapped as Error & { cause?: unknown }).cause = error
+    throw wrapped
   }
 }
 

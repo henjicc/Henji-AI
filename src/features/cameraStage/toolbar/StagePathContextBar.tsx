@@ -7,12 +7,12 @@ import {
   createPoseMotion,
   isCharacterAnimationClipName,
 } from '../domain/characterMotion'
-import { STAGE_CAMERA_MOVE_DEFAULTS } from '../domain/shotCameraMovePresets'
+import { STAGE_CAMERA_MOVE_DEFAULTS } from '../domain/stateKeyframeCameraMovePresets'
 import { defaultSpatialPath, markSpatialPathCustom } from '../domain/spatialPath'
 import type {
   StageCameraMovePreset,
   StageSpeedPreset,
-} from '../domain/shotTypes'
+} from '../domain/stateKeyframeTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { useCameraStageToolStore } from '../store/cameraStageToolStore'
 
@@ -62,22 +62,22 @@ function defaultPreset(kind: StageCameraMovePreset['kind']): StageCameraMovePres
 const StagePathContextBar: React.FC = () => {
   const selection = useCameraStageToolStore((state) => state.pathSelection)
   const tool = useCameraStageToolStore((state) => state.tool)
-  const shots = useCameraStageStore((state) => state.shots)
+  const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
   const objects = useCameraStageStore((state) => state.objects)
-  const setShotSpatialPath = useCameraStageStore((state) => state.setShotSpatialPath)
+  const setStateKeyframeSpatialPath = useCameraStageStore((state) => state.setStateKeyframeSpatialPath)
   const applyCameraPathPreset = useCameraStageStore((state) => state.applyCameraPathPreset)
-  const updateShotTransition = useCameraStageStore((state) => state.updateShotTransition)
+  const updateStateKeyframeTransition = useCameraStageStore((state) => state.updateStateKeyframeTransition)
 
   if (tool !== 'path' || !selection) return null
-  const shotIndex = shots.findIndex((shot) => shot.id === selection.shotId)
-  const shot = shots[shotIndex]
-  const nextShot = shots[shotIndex + 1]
+  const stateKeyframeIndex = stateKeyframes.findIndex((stateKeyframe) => stateKeyframe.id === selection.stateKeyframeId)
+  const stateKeyframe = stateKeyframes[stateKeyframeIndex]
+  const nextStateKeyframe = stateKeyframes[stateKeyframeIndex + 1]
   const object = objects.find((item) => item.id === selection.objectId)
-  const fromPosition = shot?.objectStates[selection.objectId]?.transform.position
-  const toPosition = nextShot?.objectStates[selection.objectId]?.transform.position
-  if (!shot || !nextShot || !object || !fromPosition || !toPosition) return null
+  const fromPosition = stateKeyframe?.objectStates[selection.objectId]?.transform.position
+  const toPosition = nextStateKeyframe?.objectStates[selection.objectId]?.transform.position
+  if (!stateKeyframe || !nextStateKeyframe || !object || !fromPosition || !toPosition) return null
 
-  const detail = shot.transition.perObject[object.id] ?? {}
+  const detail = stateKeyframe.transition.perObject[object.id] ?? {}
   const path = detail.spatialPath
   const pathChoice: PathChoice = path?.source.kind === 'preset'
     ? path.source.preset.kind
@@ -89,29 +89,29 @@ const StagePathContextBar: React.FC = () => {
     : detail.motionOverride ? 'pose' : 'auto'
 
   const updateDetail = (patch: Partial<typeof detail>): void => {
-    updateShotTransition(shot.id, {
+    updateStateKeyframeTransition(stateKeyframe.id, {
       perObject: { [object.id]: { ...detail, ...patch } },
     })
   }
 
   const handlePathChoice = (choice: PathChoice): void => {
     if (choice === 'linear') {
-      setShotSpatialPath(shot.id, object.id, undefined)
+      setStateKeyframeSpatialPath(stateKeyframe.id, object.id, undefined)
       return
     }
     if (choice === 'custom') {
-      setShotSpatialPath(
-        shot.id,
+      setStateKeyframeSpatialPath(
+        stateKeyframe.id,
         object.id,
         path ? markSpatialPathCustom(path) : defaultSpatialPath(fromPosition, toPosition),
       )
       return
     }
-    applyCameraPathPreset(shot.id, object.id, defaultPreset(choice))
+    applyCameraPathPreset(stateKeyframe.id, object.id, defaultPreset(choice))
   }
 
   const updatePreset = (preset: StageCameraMovePreset): void => {
-    applyCameraPathPreset(shot.id, object.id, preset)
+    applyCameraPathPreset(stateKeyframe.id, object.id, preset)
   }
 
   const parameterInput = (label: string, value: number, onChange: (value: number) => void): React.ReactNode => (
@@ -136,11 +136,11 @@ const StagePathContextBar: React.FC = () => {
     <div className="pointer-events-auto flex min-w-0 items-center gap-1.5 whitespace-nowrap">
       <div
         className="flex min-w-0 items-center gap-1.5 text-xs text-text-dark"
-        title={`${object.name}，关键帧 ${shotIndex + 1} 到 ${shotIndex + 2}`}
+        title={`${object.name}，关键帧 ${stateKeyframeIndex + 1} 到 ${stateKeyframeIndex + 2}`}
       >
         <Spline size={14} className="text-accent" />
         <span className="max-w-24 truncate font-medium">{object.name}</span>
-        <span className="text-text-muted">{shotIndex + 1} → {shotIndex + 2}</span>
+        <span className="text-text-muted">{stateKeyframeIndex + 1} → {stateKeyframeIndex + 2}</span>
       </div>
       <span className="mx-0.5 h-5 w-px shrink-0 bg-border-dark" />
 
@@ -266,7 +266,7 @@ const StagePathContextBar: React.FC = () => {
           className="h-8 w-8 rounded-md"
           title="重置为直线"
           aria-label="重置为直线"
-          onClick={() => setShotSpatialPath(shot.id, object.id, undefined)}
+          onClick={() => setStateKeyframeSpatialPath(stateKeyframe.id, object.id, undefined)}
         >
           <RotateCcw size={14} />
         </UiIconButton>

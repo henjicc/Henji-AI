@@ -6,12 +6,12 @@ import type { StageSceneSettings } from '../domain/sceneTypes'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
 import type { useCameraStageStore } from '../store/cameraStageStore'
 import {
-  booleanCodec, colorCodec, enumCodec, integerCodec, numberCodec, stageDescriptor, stageField, vector3Codec,
+  booleanCodec, colorCodec, enumCodec, numberCodec, stageDescriptor, stageField, vector3Codec,
   type ValueCodec,
 } from './cameraStageFieldShared'
 
 /*
- * 三维场景 28 条属性（外观 25 + 时间轴 3）的统一定义——1.1 统一字段定义机制的首个试点。
+ * 三维场景属性（外观 25 + 活动摄像机）的统一定义。
  *
  * 迁移前这 28 条要碰 3 个文件、4 个位置（描述符 / 读取 / 写入 / 账本），场景外观 24 项
  * 当初就是这样只漏了描述符和读取两处、界面能改助手却完全看不见。现在每条只在这里出现一次，
@@ -19,7 +19,7 @@ import {
  * 从这张表派生，漏一条就是整条从三处一起消失，会被 storeActionCoverage 门禁当场抓到。
  *
  * 通用的描述符/编解码/字段构造器收在 cameraStageFieldShared.ts，供本文件与其余实体的
- * Fields 文件（1.3 迁移的 object/camera/project/shot/keyframe/playback）共用。
+ * Fields 文件（1.3 迁移的 object/camera/project/stateKeyframe/keyframe/playback）共用。
  */
 
 type CameraStageState = ReturnType<typeof useCameraStageStore.getState>
@@ -45,25 +45,6 @@ function appearanceField<T, TAction extends string>(
 ) {
   const { storeAction, ...rest } = options
   return stageField<StageSceneSettings, CameraStageState, T, TAction>(
-    SCENE_ENTITY_TYPE, suffix, title, codec, { ...rest, storeActions: [storeAction] },
-  )
-}
-
-/** 固定 `TSource = CameraStageProjectSnapshot` 的薄封装，原因同上。 */
-function timelineField<T, TAction extends string>(
-  suffix: string,
-  title: string,
-  codec: ValueCodec<T>,
-  options: {
-    read: (snapshot: CameraStageProjectSnapshot) => T
-    write: (store: CameraStageState, value: T) => void
-    storeAction: TAction
-    unit?: string
-    nullable?: boolean
-  },
-) {
-  const { storeAction, ...rest } = options
-  return stageField<CameraStageProjectSnapshot, CameraStageState, T, TAction>(
     SCENE_ENTITY_TYPE, suffix, title, codec, { ...rest, storeActions: [storeAction] },
   )
 }
@@ -153,9 +134,7 @@ export const SCENE_APPEARANCE_FIELDS = [
 ]
 
 /*
- * 时间轴 3 项：读取源是整份工程快照（duration/fps 在 animation 下，active_camera_ref 要拼装 ref）。
- * 同样不标注数组类型，理由见上——`active_camera_ref` 那条不走 timelineField()（encode 需要
- * snapshot.id 拼 ref，与其余字段的 codec 形状不同），`storeActions` 用 `as const` 保住字面量。
+ * 活动摄像机引用需要工程 id 拼装稳定 ref，因此直接定义读写函数。
  */
 export const SCENE_TIMELINE_FIELDS = [
   {
@@ -178,12 +157,6 @@ export const SCENE_TIMELINE_FIELDS = [
     },
     storeActions: ['setActiveCameraId'] as const,
   },
-  timelineField('duration', '动画时长', numberCodec({ min: 0, max: 3600 }), {
-    read: (snapshot) => snapshot.animation.duration, write: (store, v) => store.setDuration(v), storeAction: 'setDuration', unit: 'second',
-  }),
-  timelineField('fps', '帧率', integerCodec({ min: 1, max: 240 }), {
-    read: (snapshot) => snapshot.animation.fps, write: (store, v) => store.setFps(v), storeAction: 'setFps', unit: 'fps',
-  }),
 ]
 
 export const CAMERA_STAGE_SCENE_WRITERS = {

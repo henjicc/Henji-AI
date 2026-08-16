@@ -92,6 +92,10 @@ function state(status: AgentRunState['status'] = 'running'): AgentRunState {
     updatedAt: now,
     finalText: null,
     error: null,
+    executionOutcome: {
+      status: 'pending', effects: [], verificationSummary: { summary: '', evidence: [] },
+    },
+    presentationOutcome: { status: 'pending' },
     budget: {
       maxTurns: 12,
       maxToolCalls: 24,
@@ -530,6 +534,50 @@ describeWithElectronSqlite('AgentPersistenceStore', () => {
     expect(new AgentPersistenceStore(database).loadState('run-1')).toMatchObject({
       runId: 'run-1', status: 'completed',
     })
+  })
+
+  it('migration 11 清除旧运行态但保留可见对话、记忆与业务工程', () => {
+    store.createRun('run-1', request(), state('completed'))
+    database.prepare(`
+      INSERT INTO agent_messages(message_id, thread_id, run_id, role, content, created_at)
+      VALUES ('message-user', 'thread-1', 'run-1', 'user', '旧问题', 10),
+             ('message-assistant', 'thread-1', 'run-1', 'assistant', '旧回答', 11),
+             ('message-internal', 'thread-1', 'run-1', 'system_event', '内部事件', 12)
+    `).run()
+    database.prepare(`
+      INSERT INTO agent_memories(
+        memory_id, scope_type, scope_id, kind, content, source_run_id, source_label,
+        sensitivity, status, conflict_key, expires_at, created_at, updated_at
+      ) VALUES ('memory-1', 'global', NULL, 'fact', '保留的记忆', 'run-1', '测试',
+                'C0', 'active', NULL, NULL, 10, 10)
+    `).run()
+    database.exec(`
+      CREATE TABLE camera_stage_projects_test_sentinel (
+        project_id TEXT PRIMARY KEY, payload TEXT NOT NULL
+      );
+      INSERT INTO camera_stage_projects_test_sentinel VALUES ('project-1', 'state-keyframes');
+      DELETE FROM app_schema_migrations WHERE version = 11;
+    `)
+
+    runAgentSchemaMigrations(database)
+
+    expect(database.prepare('SELECT COUNT(*) AS count FROM agent_runs').get()).toEqual({ count: 0 })
+    expect(database.prepare(`
+      SELECT role, content, run_id FROM agent_messages
+      WHERE message_id IN ('message-user', 'message-assistant', 'message-internal')
+      ORDER BY created_at
+    `).all()).toEqual([
+      { role: 'user', content: '旧问题', run_id: null },
+      { role: 'assistant', content: '旧回答', run_id: null },
+    ])
+    expect(database.prepare(`
+      SELECT content, source_run_id FROM agent_memories WHERE memory_id = 'memory-1'
+    `).get()).toEqual({ content: '保留的记忆', source_run_id: null })
+    expect(database.prepare('SELECT * FROM camera_stage_projects_test_sentinel').get())
+      .toEqual({ project_id: 'project-1', payload: 'state-keyframes' })
+    expect(database.prepare(`
+      SELECT last_run_id FROM agent_threads WHERE thread_id = 'thread-1'
+    `).get()).toEqual({ last_run_id: null })
   })
 
   it('v6 数据库增量迁移保存 waiting_external 运行且重启不误判为中断', () => {

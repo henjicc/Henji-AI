@@ -15,7 +15,9 @@ import { buildPermissionAuditTemplate } from './permission-audit'
 import { AgentToolRegistry } from './registry'
 import {
   TOOL_INPUT_LIMITS,
+  INTERNAL_CHECKPOINT_INPUT_LIMITS,
   TOOL_OUTPUT_LIMITS,
+  CHECKPOINT_OUTPUT_LIMITS,
   TOOL_PREVIEW_LIMITS,
   assertJsonWithinLimits,
   digestJson,
@@ -69,7 +71,7 @@ function inputWithAuthoritativeRevision(
     && candidate.data !== null
     && typeof candidate.data === 'object'
     && !Array.isArray(candidate.data)
-    && Object.hasOwn(candidate.data, 'baseRevision')
+    && Object.prototype.hasOwnProperty.call(candidate.data, 'baseRevision')
   if (!acceptsLegacyBaseRevision) return rawInput
   if (authoritative === undefined) {
     throw new AgentToolGatewayError('STALE_CONTEXT', '缺少 Gateway expected revision 信封中的 toolbox revision')
@@ -115,6 +117,9 @@ export class AgentToolGateway {
     const definition = this.options.registry.get(request.toolName)
     if (!definition) throw new AgentToolGatewayError('UNKNOWN_TOOL', `未注册工具：${request.toolName}`)
     if (definition.risk === 'R4') throw new AgentToolGatewayError('PERMISSION_DENIED', 'R4 工具禁止执行')
+    if (request.trustedInternal && (definition.modelVisible !== false || definition.side !== 'backend')) {
+      throw new AgentToolGatewayError('PERMISSION_DENIED', '受信内部调用只允许访问隐藏的后端工具')
+    }
 
     try {
       throwIfAborted(request.signal)
@@ -124,7 +129,10 @@ export class AgentToolGateway {
         request.input,
         request.expectedRevisions
       )
-      assertJsonWithinLimits(normalizedInput, TOOL_INPUT_LIMITS)
+      const inputLimits = request.trustedInternal
+        ? INTERNAL_CHECKPOINT_INPUT_LIMITS
+        : TOOL_INPUT_LIMITS
+      assertJsonWithinLimits(normalizedInput, inputLimits)
       const initialInput = definition.inputSchema.parse(normalizedInput)
       const executionContext = {
         runId: request.runId,
@@ -140,7 +148,7 @@ export class AgentToolGateway {
       assertJsonWithinLimits(rawPreview, TOOL_PREVIEW_LIMITS)
       const preview = agentToolPreviewSchema.parse(rawPreview)
       assertPreviewDataBoundary(preview)
-      assertJsonWithinLimits(initialInput, TOOL_INPUT_LIMITS)
+      assertJsonWithinLimits(initialInput, inputLimits)
       const input = definition.inputSchema.parse(initialInput)
       const requiredContext = requiredContextForInput(definition, input)
       assertApprovalPreviewTargets(definition, input, preview)
@@ -238,7 +246,9 @@ export class AgentToolGateway {
           event: 'auto_allowed',
           reasonCode: request.authorizationSource === 'approved_workflow'
             ? 'APPROVED_WORKFLOW_DELEGATION'
-            : 'POLICY_AUTO_ALLOWED',
+            : request.authorizationSource === 'approved_script'
+              ? 'APPROVED_SCRIPT_DELEGATION'
+              : 'POLICY_AUTO_ALLOWED',
         })
       }
       throwIfAborted(request.signal)
@@ -263,7 +273,7 @@ export class AgentToolGateway {
         })
       }
 
-      assertJsonWithinLimits(input, TOOL_INPUT_LIMITS)
+      assertJsonWithinLimits(input, inputLimits)
       const executableInput = definition.inputSchema.parse(input)
       if (digestJson(executableInput) !== inputDigest) {
         throw new AgentToolGatewayError('INVALID_INPUT', '工具最终参数在校验过程中发生变化')
@@ -327,19 +337,36 @@ export class AgentToolGateway {
           { ...executionContext, signal: linked.controller.signal, hostContext: latestContext }
         )
         throwIfAborted(linked.controller.signal)
-        assertJsonWithinLimits(output, TOOL_OUTPUT_LIMITS)
+        assertJsonWithinLimits(
+          output,
+          definition.outputLimitProfile === 'checkpoint'
+            ? CHECKPOINT_OUTPUT_LIMITS
+            : TOOL_OUTPUT_LIMITS,
+        )
         const parsedOutput = definition.outputSchema.parse(output)
+        if (
+          definition.maxCallsPerRun !== undefined
+          && definition.countsTowardCallLimit?.(parsedOutput) === false
+        ) {
+          this.executionCounts.set(executionCountKey, executionCount)
+        }
         const dataClasses = definition.dataClasses(parsedOutput)
         if (dataClasses.includes('C3')) {
           throw new AgentToolGatewayError('PERMISSION_DENIED', '工具结果包含 C3 秘密数据，禁止进入 Agent 上下文')
         }
         assertOutputDataClassesCovered(preview, dataClasses)
+        const effects = definition.resolveObservedEffects
+          ? definition.resolveObservedEffects(executableInput, parsedOutput)
+          : definition.capability?.resolveObservedEffects
+            ? definition.capability.resolveObservedEffects(executableInput, parsedOutput)
+            : []
         const observation = agentToolObservationSchema.parse({
           source: { toolName: definition.name, toolVersion: definition.version, toolCallId: request.toolCallId },
           trust: 'untrusted_observation',
           dataClasses,
           summary: summarizeSafeText(definition.summarize(parsedOutput)),
           output: parsedOutput,
+          effects,
           undo: definition.undo?.(parsedOutput),
         })
         this.ledger.succeed(ledgerKey, observation)

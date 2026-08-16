@@ -15,15 +15,15 @@ import {
 
 const observeScene = defineApplicationCapability({
   id: 'observe_camera_stage_scene', version: 1, title: '观察 3D 场景状态',
-  description: '读取工程对象、摄像机、镜头、边界盒、轨迹、关键帧和碰撞摘要。', domain: 'camera_stage',
+  description: '读取工程对象、摄像机、状态关键帧、边界盒、轨迹和碰撞摘要。', domain: 'camera_stage',
   aliases: ['观察三维场景', '场景状态', '摄像机和对象', 'observe 3D scene'], readOnly: true, risk: 'R0', dataClasses: ['C1'],
   permission: 'camera_stage:read', idempotent: true, destructive: false, timeoutMs: 10_000,
   supportsPreview: false, supportsUndo: false, requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project'],
-  producesRefs: ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe'],
+  producesRefs: ['camera_stage.project', 'camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory'],
   inputSchema: z.object({ projectId: z.string().min(1) }).strict(),
   outputSchema: capabilityOutputSchema({ scene: z.record(z.string(), z.unknown()), baseRevision: cameraStageBaseRevisionSchema }),
   resolveConcurrencyKey: (input) => `camera_stage:${input.projectId}:observe`, resolveTargetIds: (input) => cameraStageTarget(input.projectId),
-  control: cameraStageControl('observe', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.shot', 'camera_stage.trajectory', 'camera_stage.keyframe']),
+  control: cameraStageControl('observe', ['camera_stage.scene', 'camera_stage.object', 'camera_stage.camera', 'camera_stage.state_keyframe', 'camera_stage.trajectory']),
   summarize: (output) => `已观察 3D 工程 ${String(output.scene.projectId ?? '')} 的场景状态。`,
 })
 
@@ -80,7 +80,7 @@ const duplicateObject = defineApplicationCapability({
 })
 
 const deleteObject = defineApplicationCapability({
-  id: 'delete_camera_stage_object', version: 2, title: '删除 3D 场景对象', description: '永久删除明确对象并清理相关镜头与轨道引用。',
+  id: 'delete_camera_stage_object', version: 2, title: '删除 3D 场景对象', description: '永久删除明确对象并清理相关状态关键帧引用。',
   domain: 'camera_stage', aliases: ['删除 3D 物体', 'delete camera object'], readOnly: false, risk: 'R3', dataClasses: ['C1'],
   permission: 'camera_stage:delete', idempotent: true, destructive: true, timeoutMs: 10_000, supportsPreview: true, supportsUndo: false,
   requiredScopes: ['toolbox'], acceptsRefs: ['camera_stage.project', 'camera_stage.object', 'camera_stage.camera'],
@@ -114,8 +114,8 @@ const updateObject = defineApplicationCapability({
 })
 
 /*
- * add_camera_stage_shot / update_camera_stage_shot 已下线（2.1）：镜头卡的创建、删除、
- * 排序、改名/时间/机位等全部属性都已被 camera_stage.shot 的集合写入与统一字段定义覆盖，
+ * add_camera_stage_shot / update_camera_stage_shot 已下线（2.1）：状态关键帧的创建、删除、
+ * 排序、改名/时间/机位等全部属性都已被 camera_stage.state_keyframe 的集合写入与统一字段定义覆盖，
  * 两条专用能力是纯粹的重复实现，按项目规则删除而不是并存。
  */
 

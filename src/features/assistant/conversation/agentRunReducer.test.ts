@@ -16,7 +16,7 @@ import { describeStructuredError } from './errorPresentation'
 function event<TEvent extends AgentEvent>(value: Omit<TEvent, 'schemaVersion' | 'eventId' | 'occurredAt' | 'runId'>): TEvent {
   return {
     ...value,
-    schemaVersion: 'agent-event/v1',
+    schemaVersion: 'agent-event/v2',
     eventId: `event-${value.sequence}`,
     occurredAt: `2026-07-23T00:00:0${value.sequence}.000Z`,
     runId: 'run-1',
@@ -25,11 +25,13 @@ function event<TEvent extends AgentEvent>(value: Omit<TEvent, 'schemaVersion' | 
 
 function runState(workingSummary = createAgentWorkingSummary('处理复杂任务')): AgentRunState {
   return {
-    schemaVersion: 'agent-event/v1',
+    schemaVersion: 'agent-event/v2',
     runId: 'run-1', threadId: 'thread-1', status: 'running', sequence: 0, turn: 0,
     currentStepId: null, currentToolCallId: null, waitingApprovalId: null,
     startedAt: '2026-07-23T00:00:00.000Z', updatedAt: '2026-07-23T00:00:00.000Z',
     finalText: null, error: null,
+    executionOutcome: { status: 'pending', effects: [], verificationSummary: { summary: '', evidence: [] } },
+    presentationOutcome: { status: 'pending' },
     budget: {
       softMaxTurns: 10, maxTurns: 12, softMaxToolCalls: 20, maxToolCalls: 24,
       softMaxWriteToolCalls: 10, maxWriteToolCalls: 12,
@@ -281,6 +283,34 @@ describe('agentRunViewReducer', () => {
     expect(presentation.clarification?.reason).toBe('目标项目不明确')
   })
 
+  it('警告终态保留执行成功并独立展示说明降级', () => {
+    const initial = runState()
+    let state = agentRunViewReducer({
+      runState: initial, events: [], connection: 'connected', actionError: null,
+    }, { type: 'event', event: event<Extract<AgentEvent, { type: 'ExecutionOutcomeSealed' }>>({
+      type: 'ExecutionOutcomeSealed', sequence: 1,
+      effects: [{
+        effect: 'update', entityTypes: ['camera_stage.object'], propertyIds: [],
+        targetRefs: [], count: 1, verified: true, evidence: ['camera_stage.object:updated'],
+      }],
+      summary: '动画与播放已验证', evidence: ['state_keyframes:3'],
+    }) })
+    state = agentRunViewReducer(state, { type: 'event', event: event<Extract<AgentEvent, { type: 'RunCompletedWithWarning' }>>({
+      type: 'RunCompletedWithWarning', sequence: 2,
+      finalText: '应用操作已经完成，并通过结构化状态验证。',
+      warning: { code: 'MODEL_REQUEST_FAILED', message: '最终说明请求失败', retryable: true, recovery: 'none' },
+      usage: initial.usage,
+    }) })
+
+    expect(state.runState).toMatchObject({
+      status: 'completed_with_warning',
+      executionOutcome: { status: 'sealed_success' },
+      presentationOutcome: { status: 'fallback', warning: { code: 'MODEL_REQUEST_FAILED' } },
+      error: null,
+    })
+    expect(state.events.some((item) => item.type === 'RunFailed')).toBe(false)
+  })
+
   it('阶段与自动续跑只更新同一个进展面板文案', () => {
     const continuing = event<Extract<AgentEvent, { type: 'RunPhaseChanged' }>>({
       type: 'RunPhaseChanged', sequence: 1, previous: 'executing', phase: 'continuing',
@@ -298,7 +328,7 @@ describe('agentRunViewReducer', () => {
       event<Extract<AgentEvent, { type: 'PlanUpdated' }>>({
         type: 'PlanUpdated', sequence: 1, intent: 'camera_stage', summary: '布置场景并验证', toolDomains: ['camera_stage'],
         taskGraph: {
-          version: 'agent-task-graph/v2', goal: '布置场景并验证',
+          version: 'agent-task-graph/v2', goal: '布置场景并验证', forbiddenEffects: [],
           facets: [
             {
               facetId: 'scene', domain: 'camera_stage', goal: '布置场景', targetEntityTypes: ['camera_stage.object'],

@@ -51,4 +51,10 @@ describe('三维写入的 revision 契约', () => {
       .map((capability) => capability.id)
     expect(missing).toEqual([])
   })
+
+  it('旧程序配方不再作为第二套应用能力注册', () => {
+    expect(BUILTIN_APPLICATION_CAPABILITIES.map((capability) => capability.id)).not.toEqual(
+      expect.arrayContaining(['execute_application_program', 'run_camera_stage_state_animation_program']),
+    )
+  })
 })

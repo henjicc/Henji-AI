@@ -11,6 +11,7 @@
 import type { ApplicationPropertyDescriptor } from './reflection'
 import type { ApplicationStoreActionBinding } from './storeActionLedger'
 import type { ApplicationPropertyWriter, ApplicationPropertyWriterTable } from './execution/writerTable'
+import type { ApplicationCascadeEffectDeclaration, ApplicationEffectContract } from './execution/types'
 import type { JsonValue } from './identifiers'
 
 /**
@@ -31,6 +32,19 @@ export interface ApplicationFieldDefinition<TSource, TDraft, TAction extends str
   readonly read: (source: TSource) => JsonValue
   readonly writer?: ApplicationPropertyWriter<TDraft>
   readonly storeActions: readonly TAction[]
+  readonly cascadeEffects?: readonly ApplicationCascadeEffectDeclaration[]
+}
+
+export function fieldEffectContract<TSource, TDraft>(
+  fields: readonly ApplicationFieldDefinition<TSource, TDraft>[],
+): ApplicationEffectContract {
+  const cascades = new Map<string, ApplicationCascadeEffectDeclaration>()
+  for (const field of fields) {
+    for (const declaration of field.cascadeEffects ?? []) {
+      cascades.set(declaration.declarationId, declaration)
+    }
+  }
+  return { direct: [], cascades: [...cascades.values()] }
 }
 
 /** 供属性反射层使用：这一批字段的描述符列表。 */

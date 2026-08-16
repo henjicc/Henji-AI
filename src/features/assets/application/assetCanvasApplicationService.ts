@@ -1,13 +1,14 @@
-import { assetSourceNodeData, assetSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
-import { addCanvasNode } from '@/features/canvas/application/canvasApplicationService'
+import { mediaSourceNodeData, mediaSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
+import { addTrustedMediaCanvasNode } from '@/features/canvas/application/canvasApplicationService'
 import type { AssetDragPayload } from '@/features/assets/drag/assetDragPayload'
+import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 
 import { assetApplicationService } from './assetApplicationService'
 
 export async function addAssetToCanvas(input: {
   projectId: string
   assetId: string
-  placement: { mode: 'viewport_center' } | { mode: 'right_of_node'; anchorNodeId: string }
+  placement: CanvasNodePlacement
 }): Promise<Record<string, unknown>> {
   const asset = await assetApplicationService.inspect(input.assetId)
   const payload: AssetDragPayload = {
@@ -21,11 +22,11 @@ export async function addAssetToCanvas(input: {
     durationSeconds: asset.durationSeconds,
     displayName: asset.displayName,
   }
-  const result = addCanvasNode({
+  const result = addTrustedMediaCanvasNode({
     projectId: input.projectId,
-    nodeType: assetSourceNodeType(asset.mediaType),
+    nodeType: mediaSourceNodeType(asset.mediaType),
     placement: input.placement,
-    data: assetSourceNodeData(payload),
+    data: mediaSourceNodeData(payload),
   })
   return { ...result, assetId: asset.id, mediaType: asset.mediaType }
 }

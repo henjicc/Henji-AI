@@ -5,7 +5,7 @@ import type { Group } from 'three'
 import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
-import { resolvePathShotId, useCameraStageToolStore } from '../store/cameraStageToolStore'
+import { resolvePathStateKeyframeId, useCameraStageToolStore } from '../store/cameraStageToolStore'
 import DirectorViewTracker from './DirectorViewTracker'
 import StageDirectorViewRestorer from './StageDirectorViewRestorer'
 import StageCameraViewControls from './StageCameraViewControls'
@@ -48,45 +48,36 @@ const StageScene: React.FC<StageSceneProps> = ({
   const selectedId = useCameraStageStore((state) => state.selectedId)
   const gizmoMode = useCameraStageStore((state) => state.gizmoMode)
   const viewMode = useCameraStageStore((state) => state.viewMode)
-  // 渲染机位（重要记录 005，3.2）：简易模式播放/scrub 跨机位切换点时按时间表切换，与 activeCameraId
-  // （编辑机位，用户显式选择）区分；专业模式/无镜头卡时该 hook 直接回落 activeCameraId，行为不变。
+  // 播放/scrub 跨机位切换点时按状态关键帧时间表切换，与 activeCameraId（编辑机位）区分。
   const renderCameraId = useRenderCameraId()
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
-  const editorMode = useCameraStageStore((state) => state.editorMode)
-  const shots = useCameraStageStore((state) => state.shots)
-  const selectedShotId = useCameraStageStore((state) => state.selectedShotId)
+  const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
+  const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const setSelected = useCameraStageStore((state) => state.setSelected)
   const updateTransform = useCameraStageStore((state) => state.updateTransform)
   const updateCameraView = useCameraStageStore((state) => state.updateCameraView)
-  const prepareSimpleEdit = useCameraStageStore((state) => state.prepareSimpleEdit)
+  const prepareStateKeyframeEdit = useCameraStageStore((state) => state.prepareStateKeyframeEdit)
   const editorTool = useCameraStageToolStore((state) => state.tool)
   const pathSelection = useCameraStageToolStore((state) => state.pathSelection)
-  const automaticPathShotId = useMemo(
-    () => resolvePathShotId(shots, currentTime, selectedShotId),
-    [currentTime, selectedShotId, shots],
+  const automaticPathStateKeyframeId = useMemo(
+    () => resolvePathStateKeyframeId(stateKeyframes, currentTime, selectedStateKeyframeId),
+    [currentTime, selectedStateKeyframeId, stateKeyframes],
   )
 
   useEffect(() => {
     if (!interactive) return
     const tools = useCameraStageToolStore.getState()
-    if (editorMode !== 'simple') {
-      if (tools.tool === 'path') {
-        tools.setTool('translate')
-        useCameraStageStore.getState().setGizmoMode('translate')
-      }
-      return
-    }
     if (tools.tool !== 'path') return
-    if (!selectedId || !automaticPathShotId) {
+    if (!selectedId || !automaticPathStateKeyframeId) {
       tools.clearPathSelection()
       return
     }
     if (tools.pathSelection?.objectId !== selectedId
-      || tools.pathSelection.shotId !== automaticPathShotId) {
-      tools.selectPath({ shotId: automaticPathShotId, objectId: selectedId })
+      || tools.pathSelection.stateKeyframeId !== automaticPathStateKeyframeId) {
+      tools.selectPath({ stateKeyframeId: automaticPathStateKeyframeId, objectId: selectedId })
     }
-  }, [automaticPathShotId, editorMode, editorTool, interactive, selectedId])
+  }, [automaticPathStateKeyframeId, editorTool, interactive, selectedId])
 
   // 节点注册表用 state 而不是 ref：新对象"添加即选中"时，必须等它挂载注册后
   // 触发一次重渲染，TransformControls 才能立刻拿到节点（ref 版本不会重渲染，
@@ -141,8 +132,8 @@ const StageScene: React.FC<StageSceneProps> = ({
 
   const handleGizmoInteractionStart = useCallback((): void => {
     const id = useCameraStageStore.getState().selectedId
-    if (id) prepareSimpleEdit(id)
-  }, [prepareSimpleEdit])
+    if (id) prepareStateKeyframeEdit(id)
+  }, [prepareStateKeyframeEdit])
 
   const selectedNode = selectedId ? objectNodes.get(selectedId) : undefined
   const selectedObject = selectedId ? objects.find((item) => item.id === selectedId) : undefined
@@ -159,8 +150,8 @@ const StageScene: React.FC<StageSceneProps> = ({
     return targets
   }, [objects])
   /*
-   * `active_camera` 走 renderCameraId 而不是 activeCameraId：简易模式播放/scrub 跨机位切换点时
-   * 渲染机位按镜头卡时间表走（重要记录 005），跟随档要跟的是**画面上真正在用的那台**，
+   * `active_camera` 走 renderCameraId 而不是 activeCameraId：播放/scrub 跨机位切换点时
+   * 渲染机位按状态关键帧时间表走（重要记录 005），跟随档要跟的是**画面上真正在用的那台**，
    * 否则播放到切机位那一刻，跟随窗格还停在上一台机器上。
    */
   const requestedCameraId = viewportSource?.kind === 'camera'
@@ -180,7 +171,7 @@ const StageScene: React.FC<StageSceneProps> = ({
   const canvasCamera = isFixedView
     ? { position: [0, 0, 20] as [number, number, number], zoom: 45, near: 0.01, far: 2000 }
     : { position: [0, 4.2, 9] as [number, number, number], fov: 50 }
-  // 简易模式播放头落在过渡段时视口只读（重要记录 003）：隐藏 gizmo，阻断手动编辑插值状态
+  // 播放头落在过渡段时视口只读：隐藏 gizmo，阻断手动编辑插值状态
   const fogNear = Math.max(12, sceneSettings.fog.distance * 0.38)
   const fogFar = Math.max(fogNear + 1, sceneSettings.fog.distance)
 
@@ -240,8 +231,8 @@ const StageScene: React.FC<StageSceneProps> = ({
           nameLabelSettings={sceneSettings.display.nameLabel}
         />
       ))}
-      {editorMode === 'simple' && !isCameraView && selectedId && (
-        <StageMotionPathOverlay objectId={selectedId} shots={shots} editable={interactive} />
+      {!isCameraView && selectedId && (
+        <StageMotionPathOverlay objectId={selectedId} stateKeyframes={stateKeyframes} editable={interactive} />
       )}
       {interactive && selectedNode
         && (editorTool === 'translate' || editorTool === 'rotate' || editorTool === 'scale')

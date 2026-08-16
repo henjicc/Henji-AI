@@ -10,6 +10,7 @@ import {
 import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import {
   assessInterruptedWorkingSummary,
+  markWorkingSummaryRecoveryVerified,
   reduceAgentWorkingSummary,
 } from './working-summary'
 import { createSingleFacetTaskGraph } from '../../../../../src/core/assistant/taskGraph'
@@ -92,5 +93,65 @@ describe('Agent 工作摘要', () => {
       evidence: ['toolbox@4'],
     })
     expect(summary.unresolvedItems).toContain('camera：需要先读取最新 revision。')
+  })
+
+  it('后续验证通过时清除已经解决的 Facet 未结算提示', () => {
+    let summary = createAgentWorkingSummary('播放动画')
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'VerificationCompleted', passed: false,
+      summary: '任务图仍有 1 个 Facet 未结算，不能提前结束。', evidence: [],
+    }), null)
+    expect(summary.unresolvedItems).toContain('任务图仍有 1 个 Facet 未结算，不能提前结束。')
+
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'VerificationCompleted', passed: true,
+      summary: '任务图全部完成。', evidence: ['playback:playing=true'],
+    }), null)
+    expect(summary.unresolvedItems).toEqual([])
+  })
+
+  it('同一写入口后续成功时清除旧失败与恢复状态', () => {
+    let summary = createAgentWorkingSummary('批量修改素材')
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'ToolRequested', toolCallId: 'call-failed', toolName: 'run_henji_script',
+      inputDigest: 'bad-script', category: 'application', readOnly: false, idempotent: false,
+    }), null)
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'ToolFailed', toolCallId: 'call-failed', toolName: 'run_henji_script',
+      category: 'application', readOnly: false, idempotent: false,
+      error: {
+        code: 'EXECUTION_FAILED', message: '脚本预检失败', retryable: true,
+        recovery: 'refresh_context',
+      },
+    }), null)
+    expect(summary.recovery.mode).toBe('verify_before_write')
+
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'ToolCompleted', toolCallId: 'call-success', toolName: 'run_henji_script',
+      category: 'application', readOnly: false, idempotent: false,
+      summary: '脚本执行和正式验证均已完成。', resultReferences: { scriptRunRef: 'script-1' },
+    }), null)
+
+    expect(summary.unresolvedItems).toEqual([])
+    expect(summary.recovery.mode).toBe('none')
+  })
+
+  it('权威重读后清除 revision 恢复噪音，但保留真正丢失的产物', () => {
+    const summary = createAgentWorkingSummary('续跑外部任务')
+    summary.recovery = {
+      mode: 'resume_read_only', reason: '宿主 revision 已变化，恢复后先重新读取状态。',
+      toolName: null, toolCategory: null,
+    }
+    summary.unresolvedItems = [
+      '恢复时宿主作用域已变化：generation；后续工具必须使用新 revision。',
+      '1 个历史产物引用已不可用，不得据此声称已验证。',
+    ]
+
+    const recovered = markWorkingSummaryRecoveryVerified(summary)
+
+    expect(recovered.recovery.mode).toBe('none')
+    expect(recovered.unresolvedItems).toEqual([
+      '1 个历史产物引用已不可用，不得据此声称已验证。',
+    ])
   })
 })

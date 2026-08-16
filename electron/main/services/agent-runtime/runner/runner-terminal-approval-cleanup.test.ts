@@ -21,7 +21,7 @@ const context: HostContextSnapshot = {
   generation: { commandReady: true },
   assets: { view: 'closed', selectedAssetId: null },
   uiReady: true,
-  availableCapabilities: ['create_visible_generation_task', 'get_host_context'],
+  availableCapabilities: ['run_henji_script', 'get_host_context'],
   capturedAt: new Date().toISOString(),
 }
 
@@ -101,12 +101,12 @@ function modelResult(input: ModelStepInput, overrides: Partial<ModelStepResult>)
 function createRegistry(execute: () => Promise<{ taskId: string }>): AgentToolRegistry {
   const registry = new AgentToolRegistry()
   registry.register(defineAgentTool({
-    name: 'create_visible_generation_task',
+    name: 'run_henji_script',
     version: 1,
     title: '创建生成任务',
     description: '创建一个测试生成任务。',
     capability: {
-      id: 'create_visible_generation_task', domain: 'generation', aliases: [], dataClasses: ['C1'],
+      id: 'run_henji_script', domain: 'application', aliases: [], dataClasses: ['C1'],
       acceptsRefs: [], producesRefs: ['generation.task'], availability: [], concurrencyKey: 'generation',
       control: { impacts: [{
         effect: 'execute', entityTypes: ['generation.task'], propertyIds: [],
@@ -131,12 +131,12 @@ function createRegistry(execute: () => Promise<{ taskId: string }>): AgentToolRe
     supportsPreview: true,
     supportsUndo: false,
     requiredContext: ['generation'],
-    inputSchema: z.object({ prompt: z.string() }).strict(),
+    inputSchema: z.object({ language: z.literal('henji-ts/v1'), summary: z.string(), source: z.string() }).strict(),
     outputSchema: z.object({ taskId: z.string() }).strict(),
     aiInputSchema: {
       type: 'object',
-      properties: { prompt: { type: 'string' } },
-      required: ['prompt'],
+      properties: { language: { type: 'string' }, summary: { type: 'string' }, source: { type: 'string' } },
+      required: ['language', 'summary', 'source'],
     },
     preview: () => ({
       title: '创建任务',
@@ -188,8 +188,8 @@ describe('AgentRunner terminal approval cleanup', () => {
         finishReason: 'tool-calls',
         toolCalls: [{
           toolCallId: 'tool-terminal-cleanup',
-          toolName: 'create_visible_generation_task',
-          input: { prompt: '测试' },
+          toolName: 'run_henji_script',
+          input: { language: 'henji-ts/v1', summary: '测试', source: 'await app.action("test", {});' },
           dynamic: false,
         }],
         responseMessages: [{
@@ -197,8 +197,8 @@ describe('AgentRunner terminal approval cleanup', () => {
           content: [{
             type: 'tool-call',
             toolCallId: 'tool-terminal-cleanup',
-            toolName: 'create_visible_generation_task',
-            input: { prompt: '测试' },
+            toolName: 'run_henji_script',
+            input: { language: 'henji-ts/v1', summary: '测试', source: 'await app.action("test", {});' },
             dynamic: false,
           }],
         }],

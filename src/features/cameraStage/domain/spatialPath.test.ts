@@ -6,39 +6,8 @@ import {
   defaultSpatialPath,
   markSpatialPathCustom,
 } from './spatialPath'
-import { normalizeShots } from './shotTypes'
 
 describe('分段空间路径', () => {
-  it('旧单段切线结构会规范化为自定义路径', () => {
-    const shots = normalizeShots([{
-      id: 'shot-a',
-      name: 'A',
-      time: 0,
-      continuity: 'stop',
-      hold: 0,
-      transitionDuration: 2,
-      objectStates: {},
-      transition: {
-        perObject: {
-          box: {
-            spatialPath: {
-              kind: 'bezier',
-              outTangent: { x: 1, y: 2, z: 3 },
-              inTangent: { x: -1, y: 2, z: -3 },
-            },
-          },
-        },
-        cameraMoves: {},
-      },
-    }])
-    expect(shots[0].transition.perObject.box.spatialPath).toMatchObject({
-      source: { kind: 'custom' },
-      startOutTangent: { x: 1, y: 2, z: 3 },
-      knots: [],
-      endInTangent: { x: -1, y: 2, z: -3 },
-    })
-  })
-
   it('默认贝塞尔保持原直线且使用三等分手柄', () => {
     const from = { x: 0, y: 0, z: 0 }
     const to = { x: 6, y: 3, z: -3 }

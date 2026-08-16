@@ -10,8 +10,6 @@ import type { ModelStepCapabilities } from '../../../../../src/core/llm/modelSte
 import type { AgentInputModality } from '../../../../../src/core/llm/agentProfiles'
 import type { LlmApiProtocol } from '../../../../../src/core/llm/providerProtocol'
 
-const DEFAULT_AGENT_PROFILE_ID = 'default-agent'
-
 export interface AgentRuntimeModel {
   providerId: string
   modelId: string
@@ -71,9 +69,9 @@ function toRuntimeModel(request: AgentStartRunRequest, model: AgentRuntimeModelC
     },
     settings: {
       timeoutMs: request.profile.settings.timeoutMs,
-      maxRetries: request.profile.id === DEFAULT_AGENT_PROFILE_ID
-        ? 3
-        : request.profile.settings.maxRetries,
+      // 档案里的重试次数是用户选择，默认档案也不能静默改成 3 次。
+      // 真实运行中一次 60 秒超时因此被放大到 254 秒，且最后仍回退到确定性结果。
+      maxRetries: request.profile.settings.maxRetries,
       /*
        * 输出预算取"档案设定与工作下限的较大值"，再被模型真实上限夹住。
        *
@@ -125,11 +123,28 @@ function selectOptionalRole(
   role: 'router' | 'summarizer',
   fallback: AgentRuntimeModel
 ): AgentRuntimeModel {
+  const asUtilityModel = (runtime: AgentRuntimeModel): AgentRuntimeModel => ({
+    ...runtime,
+    reasoning: runtime.capabilities.reasoning
+      ? { enabled: false, effort: 'low' }
+      : runtime.reasoning,
+    settings: {
+      ...runtime.settings,
+      timeoutMs: Math.min(runtime.settings.timeoutMs, 12_000),
+      maxRetries: 0,
+      maxOutputTokens: Math.min(runtime.settings.maxOutputTokens, 4_096),
+    },
+  })
   const reference = resolveAgentRoleReference(request.profile, role)
-  if (!reference) return fallback
+  if (!reference) return asUtilityModel(fallback)
   const model = findModel(request.models, reference)
-  if (!model || !isAgentModelStaticallyCapable(model) || !isAgentModelVerified(request.profile, reference)) return fallback
-  return toRuntimeModel(request, model)
+  if (!model || !isAgentModelStaticallyCapable(model) || !isAgentModelVerified(request.profile, reference)) {
+    return asUtilityModel(fallback)
+  }
+  const runtime = toRuntimeModel(request, model)
+  // router / summarizer 都是可回退的短任务，不能继承主执行模型的长思考与多次网络重试。
+  // 主执行仍完整尊重用户档案；辅助模型失败时由本地确定性路由或摘要回退接管。
+  return asUtilityModel(runtime)
 }
 
 export function selectAgentRuntimeModels(request: AgentStartRunRequest): AgentRuntimeModelSet {

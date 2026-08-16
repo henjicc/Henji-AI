@@ -47,7 +47,7 @@ export interface StageTrack {
   keyframes: StageKeyframe[]
 }
 
-/** 简易模式编译出的角色临时动作区间；结束后切换到目标镜头卡动作。 */
+/** 状态关键帧编译出的角色临时动作区间；结束后切换到目标状态关键帧动作。 */
 export interface StageCharacterMotionScheduleEntry {
   objectId: string
   startTime: number
@@ -61,7 +61,7 @@ export interface ResolvedCharacterMotion {
   timeOrigin: number
 }
 
-/** 解析指定时刻的角色动作；区间结束后沿用目标卡动作，直到后续区间覆盖。 */
+/** 解析指定时刻的角色动作；区间结束后沿用目标状态关键帧的动作，直到后续区间覆盖。 */
 export function resolveCharacterMotionAtTime(
   schedule: StageCharacterMotionScheduleEntry[],
   objectId: string,

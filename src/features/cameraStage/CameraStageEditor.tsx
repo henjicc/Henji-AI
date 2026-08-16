@@ -11,7 +11,6 @@ import {
 } from '@/features/assets/services/cameraStageAssetCollection'
 import { cancelVideoFrameExport } from '@/commands/video'
 import { areCameraAspectRatiosConsistent, getCameraObjects } from './domain/cameraUtils'
-import { KEYFRAME_TIME_EPSILON } from './domain/animationTypes'
 import { buildRenderCameraSchedule } from './domain/renderCameraSchedule'
 import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
 import { copySceneScreenshotToClipboard, exportSceneScreenshot, persistSceneScreenshot } from './export/cameraStageScreenshot'
@@ -33,7 +32,6 @@ import { useCameraStageHistory } from './store/useCameraStageHistory'
 import QuickAddGroup from './toolbar/QuickAddGroup'
 import StagePathContextBar from './toolbar/StagePathContextBar'
 import StageViewportToolbar from './toolbar/StageViewportToolbar'
-import EditorModeBadge from './simple/EditorModeBadge'
 
 /**
  * 3D 镜头参考编辑器编排容器：顶部控制栏 + 停靠式面板工作区（视口/资源管理器/属性）。
@@ -60,20 +58,6 @@ interface CameraStageEditorProps {
   }
 }
 
-function hasMultipleTimelineKeyframes(
-  editorMode: 'simple' | 'pro',
-  shotCount: number,
-  animation: ReturnType<typeof useCameraStageStore.getState>['animation'],
-): boolean {
-  if (editorMode === 'simple') return shotCount > 1
-  return animation.tracks.some((track) => {
-    const firstTime = track.keyframes[0]?.time
-    return firstTime !== undefined && track.keyframes.some(
-      (keyframe) => Math.abs(keyframe.time - firstTime) > KEYFRAME_TIME_EPSILON,
-    )
-  })
-}
-
 const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   onBackToList,
   backLabel = '返回工程列表',
@@ -94,16 +78,15 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const setSessionViewMode = useCameraStageSessionStore((state) => state.setStageViewMode)
   const skyColor = useCameraStageStore((state) => state.sceneSettings.sky.color)
   const animation = useCameraStageStore((state) => state.animation)
-  const editorMode = useCameraStageStore((state) => state.editorMode)
-  const shotCount = useCameraStageStore((state) => state.shots.length)
+  const stateKeyframeCount = useCameraStageStore((state) => state.stateKeyframes.length)
   const cameras = getCameraObjects(objects)
   const activeCamera = cameras.find((item) => item.id === activeCameraId) ?? cameras[0]
 
   const { canUndo, undo, redo } = useCameraStageHistory()
   const { saveState } = useCameraStageAutosave()
 
-  const [shotHint, setShotHint] = useState<string | null>(null)
-  const [shotAction, setShotAction] = useState<'save' | 'copy' | null>(null)
+  const [stateKeyframeHint, setStateKeyframeHint] = useState<string | null>(null)
+  const [stateKeyframeAction, setStateKeyframeAction] = useState<'save' | 'copy' | null>(null)
   const [videoPreset, setVideoPreset] = useState<CameraStageVideoResolutionPreset>('720p')
   const [videoProgress, setVideoProgress] = useState<CameraStageVideoExportProgress | null>(null)
   const [assetTarget, setAssetTarget] = useState<CameraStageAssetTarget>(
@@ -118,9 +101,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const embeddedOutputRef = useRef(embeddedOutput)
   embeddedOutputRef.current = embeddedOutput
 
-  const outputKind = hasMultipleTimelineKeyframes(editorMode, shotCount, animation)
-    ? 'video'
-    : 'image'
+  const outputKind = stateKeyframeCount > 1 ? 'video' : 'image'
   const canScreenshot = viewMode === 'camera' && !!activeCamera
   const canExportVideo = outputKind === 'video'
     && canScreenshot
@@ -153,7 +134,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const prepareScreenshotDataUrl = useCallback(async (): Promise<string | null> => {
     const dataUrl = captureRef.current?.()
     if (!dataUrl) {
-      setShotHint('截图失败：未获取到画面')
+      setStateKeyframeHint('截图失败：未获取到画面')
       return null
     }
 
@@ -163,7 +144,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   }, [activeCamera, skyColor])
 
   const handleSaveScreenshot = useCallback(async (): Promise<void> => {
-    setShotAction('save')
+    setStateKeyframeAction('save')
     try {
       const dataUrl = await prepareScreenshotDataUrl()
       if (!dataUrl) return
@@ -182,17 +163,17 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       const { savedPath, saveMode } = result
       const fileName = savedPath.split(/[\\/]/).pop() ?? savedPath
       const collectedHint = assetTarget.enabled ? (collected ? '，已加入资产库' : '，资产收录失败') : ''
-      setShotHint(`${saveMode === 'quick' ? '已快速保存' : '已保存'}：${fileName}${collectedHint}`)
+      setStateKeyframeHint(`${saveMode === 'quick' ? '已快速保存' : '已保存'}：${fileName}${collectedHint}`)
     } catch {
-      setShotHint('截图导出失败')
+      setStateKeyframeHint('截图导出失败')
     } finally {
-      setShotAction(null)
+      setStateKeyframeAction(null)
     }
   }, [assetTarget, prepareScreenshotDataUrl])
 
   const handleUpdateCanvasFrame = useCallback(async (): Promise<void> => {
     if (!embeddedOutput) return
-    setShotAction('save')
+    setStateKeyframeAction('save')
     try {
       const dataUrl = await prepareScreenshotDataUrl()
       if (!dataUrl || !activeCamera) return
@@ -204,24 +185,24 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         displayName: `${useCameraStageStore.getState().currentProjectName}-当前帧`,
         target: assetTarget,
       })
-      setShotHint(assetTarget.enabled && !collected ? '当前帧已更新到画布，资产收录失败' : '当前帧已更新到画布')
+      setStateKeyframeHint(assetTarget.enabled && !collected ? '当前帧已更新到画布，资产收录失败' : '当前帧已更新到画布')
     } catch {
-      setShotHint('当前帧更新失败')
-    } finally { setShotAction(null) }
+      setStateKeyframeHint('当前帧更新失败')
+    } finally { setStateKeyframeAction(null) }
   }, [activeCamera, assetTarget, embeddedOutput, prepareScreenshotDataUrl])
 
   const handleCopyScreenshot = useCallback(async (): Promise<void> => {
-    setShotAction('copy')
+    setStateKeyframeAction('copy')
     try {
       const dataUrl = await prepareScreenshotDataUrl()
       if (!dataUrl) return
 
       await copySceneScreenshotToClipboard(dataUrl)
-      setShotHint('已复制到剪贴板')
+      setStateKeyframeHint('已复制到剪贴板')
     } catch {
-      setShotHint('截图复制失败')
+      setStateKeyframeHint('截图复制失败')
     } finally {
-      setShotAction(null)
+      setStateKeyframeAction(null)
     }
   }, [prepareScreenshotDataUrl])
 
@@ -231,9 +212,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     const exportCameras = getCameraObjects(exportState.objects)
     const exportCamera = exportCameras[0]
     if (!exportCamera) return
-    const renderCameraSchedule = exportState.editorMode === 'simple'
-      ? buildRenderCameraSchedule(exportState.shots, exportState.activeCameraId)
-      : []
+    const renderCameraSchedule = buildRenderCameraSchedule(exportState.stateKeyframes, exportState.activeCameraId)
     const renderCameraIds = new Set(
       (renderCameraSchedule.length > 0
         ? renderCameraSchedule.map((entry) => entry.cameraId)
@@ -243,7 +222,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     const renderCameras = exportCameras.filter((camera) => renderCameraIds.has(camera.id))
     const hasInconsistentCameraAspectRatio = !areCameraAspectRatiosConsistent(renderCameras)
     if (hasInconsistentCameraAspectRatio) {
-      setShotHint('检测到机位画幅不一致，将按首摄像机画幅导出')
+      setStateKeyframeHint('检测到机位画幅不一致，将按首摄像机画幅导出')
     }
 
     const previousPlayback = exportState.playback
@@ -288,7 +267,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       })
       if (!result) {
         if (videoCancelRef.current) {
-          setShotHint('已取消视频导出')
+          setStateKeyframeHint('已取消视频导出')
         }
       } else {
         if (embeddedOutput) embeddedOutput.onVideo(result)
@@ -299,10 +278,10 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           target: assetTarget,
         })
         const fileName = result.savedPath.split(/[\\/]/).pop() ?? result.savedPath
-        setShotHint(assetTarget.enabled && !collected ? `视频已导出：${fileName}，资产收录失败` : `视频已导出：${fileName}`)
+        setStateKeyframeHint(assetTarget.enabled && !collected ? `视频已导出：${fileName}，资产收录失败` : `视频已导出：${fileName}`)
       }
     } catch {
-      setShotHint('视频导出失败')
+      setStateKeyframeHint('视频导出失败')
     } finally {
       const latest = useCameraStageStore.getState()
       latest.seek(Math.min(previousPlayback.currentTime, latest.animation.duration))
@@ -341,10 +320,10 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
 
   // 截图提示 3s 后消失
   useEffect(() => {
-    if (!shotHint) return
-    const timer = window.setTimeout(() => setShotHint(null), 3000)
+    if (!stateKeyframeHint) return
+    const timer = window.setTimeout(() => setStateKeyframeHint(null), 3000)
     return () => window.clearTimeout(timer)
-  }, [shotHint])
+  }, [stateKeyframeHint])
 
   useEffect(() => {
     setSessionProjectId(currentProjectId)
@@ -416,7 +395,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               {videoProgressLabel}
             </span>
           )}
-          {shotHint && <span className="max-w-64 truncate text-xs text-text-muted">{shotHint}</span>}
+          {stateKeyframeHint && <span className="max-w-64 truncate text-xs text-text-muted">{stateKeyframeHint}</span>}
           {autosaveErrorLabel && (
             <span className="max-w-28 truncate text-xs text-text-muted" title={autosaveErrorLabel}>
               {autosaveErrorLabel}
@@ -425,7 +404,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
           <span className="max-w-40 truncate text-xs text-text-muted" title={projectName}>
             {projectName}
           </span>
-          <EditorModeBadge />
           <PanelTrigger
             panelWidth={208}
             panelClassName="overflow-hidden p-2"
@@ -472,11 +450,11 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             )}
           </PanelTrigger>
           {embeddedOutput && outputKind === 'image' ? (
-            <UiButton size="sm" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!shotAction} className="py-1.5 text-xs">
-              <Camera size={13} className="mr-1" />{shotAction ? '处理中…' : '更新图片'}
+            <UiButton size="sm" onClick={() => void handleUpdateCanvasFrame()} disabled={!canScreenshot || !!stateKeyframeAction} className="py-1.5 text-xs">
+              <Camera size={13} className="mr-1" />{stateKeyframeAction ? '处理中…' : '更新图片'}
             </UiButton>
           ) : !embeddedOutput ? <PanelTrigger
-            disabled={!canScreenshot || !!shotAction}
+            disabled={!canScreenshot || !!stateKeyframeAction}
             panelWidth={156}
             closeOnPanelClick
             panelClassName="overflow-hidden p-1"
@@ -485,7 +463,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                 <UiButton
                   size="sm"
                   variant="ghost"
-                  disabled={!!shotAction}
+                  disabled={!!stateKeyframeAction}
                   onClick={() => void handleSaveScreenshot()}
                   className="w-full justify-start gap-2 rounded-md border-0 px-2.5"
                 >
@@ -495,7 +473,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
                 <UiButton
                   size="sm"
                   variant="ghost"
-                  disabled={!!shotAction}
+                  disabled={!!stateKeyframeAction}
                   onClick={() => void handleCopyScreenshot()}
                   className="w-full justify-start gap-2 rounded-md border-0 px-2.5"
                 >
@@ -509,13 +487,13 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
               <UiButton
                 size="sm"
                 onClick={togglePanel}
-                disabled={!canScreenshot || !!shotAction}
+                disabled={!canScreenshot || !!stateKeyframeAction}
                 title={canScreenshot ? '当前摄像机取景截图' : '切换到摄像机视角后可截图'}
                 className="py-1.5 text-xs"
                 data-panel-trigger-button
               >
                 <Camera size={13} className="mr-1" />
-                {shotAction ? '处理中…' : '截图'}
+                {stateKeyframeAction ? '处理中…' : '截图'}
               </UiButton>
             )}
           </PanelTrigger> : null}

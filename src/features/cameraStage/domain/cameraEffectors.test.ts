@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { sampleEffectorOffset } from './cameraEffectors'
-import type { StageCameraEffector } from './shotTypes'
+import type { StageCameraEffector } from './stateKeyframeTypes'
 
 const HANDHELD: StageCameraEffector = {
   id: 'handheld', kind: 'handheld', enabled: true, intensity: 1, frequency: 1,

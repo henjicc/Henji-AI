@@ -102,6 +102,18 @@ const searchCanvasNodeTypes = defineApplicationCapability({
     nextCursor: z.number().int().nonnegative().nullable(),
   }),
   concurrencyKey: 'canvas_catalog',
+  resolveObservedEffects: (_input, output) => {
+    const refs = output.nodeTypes.flatMap((item) => (
+      typeof item.nodeType === 'string' && item.nodeType
+        ? [{ kind: 'canvas.node_type', id: item.nodeType }]
+        : []
+    ))
+    return [{
+      effect: 'observe', entityTypes: ['canvas.node_type'], propertyIds: [],
+      targetRefs: refs, count: Math.max(1, refs.length), verified: true,
+      evidence: [`catalog:${output.catalogVersion}`],
+    }]
+  },
   summarize: (output) => `画布节点目录返回 ${output.nodeTypes.length} 项。`,
 })
 
@@ -132,6 +144,11 @@ const getCanvasNodeSchema = defineApplicationCapability({
   concurrencyKey: 'canvas_schema',
   resolveConcurrencyKey: (input) => `canvas_schema:${input.nodeType}`,
   resolveTargetIds: (input) => ({ nodeType: input.nodeType }),
+  resolveObservedEffects: (input) => [{
+    effect: 'observe', entityTypes: ['canvas.node_type'], propertyIds: [],
+    targetRefs: [{ kind: 'canvas.node_type', id: input.nodeType }],
+    count: 1, verified: true, evidence: [`node_type:${input.nodeType}`],
+  }],
   summarize: (output) => `已读取节点 ${String(output.schema.nodeType ?? '')} 的结构。`,
 })
 
@@ -163,6 +180,11 @@ const createCanvasProject = defineApplicationCapability({
   }),
   concurrencyKey: 'canvas_project',
   resolveTargetIds: (input) => ({ name: input.name }),
+  resolveObservedEffects: (_input, output) => [{
+    effect: 'create', entityTypes: ['canvas.project'], propertyIds: [],
+    targetRefs: [{ kind: 'canvas.project', id: output.projectId }],
+    count: 1, verified: false, evidence: [`project:${output.projectId}`],
+  }],
   summarize: (output) => `已创建画布项目 ${output.projectId}。`,
 })
 
@@ -283,6 +305,27 @@ const getCanvasProject = defineApplicationCapability({
   concurrencyKey: 'canvas_project',
   resolveConcurrencyKey: (input) => `canvas_project:${input.projectId}`,
   resolveTargetIds: (input) => projectTarget(input.projectId),
+  resolveObservedEffects: (input, output) => {
+    const recordId = (value: Record<string, unknown>): string | null => (
+      typeof value.id === 'string' && value.id ? value.id : null
+    )
+    const refs = [
+      { kind: 'canvas.project', id: input.projectId },
+      ...output.nodes.flatMap((node) => {
+        const id = recordId(node)
+        return id ? [{ kind: 'canvas.node', id }] : []
+      }),
+      ...output.edges.flatMap((edge) => {
+        const id = recordId(edge)
+        return id ? [{ kind: 'canvas.edge', id }] : []
+      }),
+    ]
+    return [{
+      effect: 'observe', entityTypes: ['canvas.project', 'canvas.node', 'canvas.edge'],
+      propertyIds: [], targetRefs: refs, count: Math.max(1, refs.length), verified: true,
+      evidence: [`project:${input.projectId}`],
+    }]
+  },
   summarize: (output) => `画布项目包含 ${output.nodes.length} 个节点。`,
 })
 

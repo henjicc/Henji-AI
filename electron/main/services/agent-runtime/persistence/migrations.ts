@@ -348,6 +348,7 @@ const migrations: SchemaMigration[] = [
           consumed_at INTEGER,
           resumed_run_id TEXT,
           error TEXT,
+          continuation_json TEXT,
           UNIQUE(source_run_id, task_id)
         );
 
@@ -438,6 +439,46 @@ const migrations: SchemaMigration[] = [
         WHERE title LIKE '%' || char(13) || '%'
            OR title LIKE '%' || char(10) || '%';
       `)
+    },
+  },
+  {
+    version: 11,
+    name: 'agent-runtime-v2-fresh-runs',
+    up: (database) => {
+      database.exec(`
+        PRAGMA defer_foreign_keys = ON;
+
+        DELETE FROM agent_messages WHERE role = 'system_event';
+        DELETE FROM agent_session_entries
+        WHERE kind NOT IN ('user_message', 'assistant_message');
+        DELETE FROM agent_generation_status_events;
+
+        UPDATE agent_session_entries SET parent_entry_id = NULL;
+        UPDATE agent_threads SET last_run_id = NULL;
+        DELETE FROM agent_runs;
+
+        WITH ordered AS (
+          SELECT entry_id,
+                 LAG(entry_id) OVER (PARTITION BY thread_id ORDER BY sequence ASC) AS previous_id
+          FROM agent_session_entries
+          WHERE kind IN ('user_message', 'assistant_message')
+        )
+        UPDATE agent_session_entries
+        SET parent_entry_id = (
+          SELECT ordered.previous_id FROM ordered
+          WHERE ordered.entry_id = agent_session_entries.entry_id
+        ), run_id = NULL;
+      `)
+    },
+  },
+  {
+    version: 12,
+    name: 'henji-script-external-continuation',
+    up: (database) => {
+      const columns = database.prepare(`PRAGMA table_info(agent_external_waits)`).all() as Array<{ name: string }>
+      if (!columns.some((column) => column.name === 'continuation_json')) {
+        database.exec(`ALTER TABLE agent_external_waits ADD COLUMN continuation_json TEXT;`)
+      }
     },
   },
 ]

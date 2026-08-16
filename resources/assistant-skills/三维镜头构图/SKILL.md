@@ -3,57 +3,46 @@ name: 三维镜头构图
 description: 用户要在三维镜头工具里布置场景、摆放物体、调整构图，或要求做环绕、推拉、平移、升降运镜时使用。也适用于"帮我看看构图对不对"这类三维画面检查。
 ---
 
-# 三维布景与运镜
+# 三维布景、状态关键帧与运镜
 
-## 顺序不能颠倒
+应用写入只有一个入口：先调用 `discover_application_capabilities`，读取返回的
+`scriptApi`，然后只调用一次 `run_henji_script`。不要直接调用低层三维写工具，不要填写
+能力版本、revision、`$from/$path`，也不要声明 Action Plan。
 
+## 状态动画优先使用已验证 Recipe
+
+用户要新建工程、放置对象、制作多个时间点的动画并播放时，优先使用发现结果中的
+`camera_stage.state_animation`。它会在同一受控执行中创建工程、打开页面、放置对象、
+写入状态关键帧、开启播放，并从正式状态源验证结果。
+
+```ts
+const result = await app.recipe('camera_stage.state_animation', {
+  projectName: '浮动球演示',
+  object: { primitiveKind: 'sphere', name: '浮动球' },
+  samples: [
+    { time: 0, position: { y: 0 } },
+    { time: 1, position: { y: 1.5 } },
+    { time: 2, position: { y: 0 } },
+  ],
+  loop: true,
+  play: true,
+})
+app.assert.exists(result.resultRefs)
 ```
-取得/创建工程 → 打开三维页面 → 观察现状 → 布置 → 运镜 → 验证
-```
 
-**先打开页面再写入**，用户要能看着它发生。取得最小稳定工程引用（`list_camera_stage_projects` 或 `create_camera_stage_project`）之后立刻 `open_camera_stage_project`，不要闷头写完再切页面。
+这条路径已经通过真实 Electron 运行验证。只替换用户明确要求的名称、物体类型、时间和属性；
+不要把示例里的值误当成固定要求。
 
-## 先观察再动手
+## 自定义布景
 
-`observe_camera_stage_scene` 拿到现状之后再决定做什么。重点确认三件事：
+没有匹配 Recipe 时，按发现到的 `scriptApi.actions` 与实体属性组合一段 Henji Script。
+顺序保持为“取得或创建工程 → 打开三维页面 → 读取现状 → 布置 → 运镜 → 正式读取或断言”。
+变量保存完整稳定引用，由宿主传递；禁止手工拼接或截断 ID。
 
-- **有没有可复用的摄像机**。用户说"用现在这个摄像机"或没提摄像机时，复用活动摄像机，不要新建。
-- **主体对象是哪个**。用户说"两侧"、"旁边"、"对面"都是相对主体而言。
-- **已有对象的位置和包围盒**。新物体要避开它们。
+相对位置应依据正式观察到的主体与包围盒，不要凭空猜坐标。用户要求复用当前摄像机时不要新建。
 
-## 布置物体
+## 验证与视觉边界
 
-`place_camera_stage_object`。用户给了明确坐标就用明确坐标；只给了"左边"、"两侧"这类相对描述时，让服务按现有对象的包围盒自动布局，它会避免无意重叠。
-
-不要自己编坐标去猜"两侧"是多远——那样很容易穿模或者离题太远。
-
-## 运镜
-
-`apply_camera_stage_camera_move`，四种语义：`orbit`（环绕）、`dollyIn`/`dollyOut`（推/拉）、`truck`（平移）、`crane`（升降）。
-
-除 `crane` 外都必须声明注视对象（`targetObjectId`）或注视点（`targetPoint`），二选一，不能都给。
-
-## 做完必须验证
-
-**这一步不能省，也不能用"我觉得应该没问题"代替。**
-
-1. **先做结构化验证**：`verify_camera_stage_scene`，传上你期望的对象 ID、摄像机 ID 和运镜类型。它会真实检查对象是否存在、包围盒是否重叠、活动摄像机对不对、轨迹和关键帧在不在。
-   - 返回 `unmetConditions` 就先修正再复验，同一个目标最多修正一次。
-2. **再看画面**：`tool_contracts.visualObservationAvailable` 为 true 时，调 `observe_application_surface`。
-   - 想看整体状态用 `target: "window"`；只想看三维视口、排除侧栏干扰时用 `target: "tool.camera_stage"`。
-   - 结合截图和对象参数一起判断构图、遮挡、朝向。
-3. **`visualObservationAvailable` 为 false 时**，说明当前模型读不了图。只做参数验证，并在答复里明说"只做了参数验证、没有看画面"。
-
-**绝对不能在没有真实读到图的情况下描述画面长什么样。**
-
-## 用户接管
-
-页面打开后用户手动切走了，视为他接管了界面。继续在后台完成任务，说明当前状态，**不要反复把页面抢回来**。
-
-## 常见错误
-
-- 用户说"用现在这个工程"，却新建了一个
-- 复用摄像机的要求下又建了个新摄像机
-- 物体重叠、穿模
-- 放完直接说"已经摆好了"，没跑验证
-- 没截图却描述"画面看起来很平衡"
+脚本的 CRUD 会自动正式读回；算法型 action/recipe 必须自带验证契约。只有 Effect Receipt 与
+正式验证都通过才能声称完成。若当前模型不能读取应用画面，只能说明结构化验证结果，不能描述
+未经观察的构图、遮挡或视觉质量。

@@ -5,7 +5,7 @@ import { UiIconButton } from '@/components/ui'
 import type { StageGizmoMode } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import {
-  resolvePathShotId,
+  resolvePathStateKeyframeId,
   useCameraStageToolStore,
   type StageEditorTool,
 } from '../store/cameraStageToolStore'
@@ -30,9 +30,8 @@ const StageViewportToolbar: React.FC = () => {
   const setTool = useCameraStageToolStore((state) => state.setTool)
   const selectPath = useCameraStageToolStore((state) => state.selectPath)
   const selectedId = useCameraStageStore((state) => state.selectedId)
-  const selectedShotId = useCameraStageStore((state) => state.selectedShotId)
-  const editorMode = useCameraStageStore((state) => state.editorMode)
-  const shots = useCameraStageStore((state) => state.shots)
+  const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
+  const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
   const setGizmoMode = useCameraStageStore((state) => state.setGizmoMode)
 
@@ -44,17 +43,16 @@ const StageViewportToolbar: React.FC = () => {
     }
     if (!selectedId) return
     useCameraStageStore.getState().seek(currentTime)
-    const shotId = resolvePathShotId(shots, currentTime, selectedShotId)
-    if (shotId) {
-      selectPath({ shotId, objectId: selectedId })
+    const stateKeyframeId = resolvePathStateKeyframeId(stateKeyframes, currentTime, selectedStateKeyframeId)
+    if (stateKeyframeId) {
+      selectPath({ stateKeyframeId, objectId: selectedId })
     } else {
       setTool('path')
     }
   }
 
-  const pathDisabled = editorMode !== 'simple'
-    || !selectedId
-    || shots.length < 2
+  const pathDisabled = !selectedId
+    || stateKeyframes.length < 2
 
   return (
     <div className="flex items-center gap-0.5">

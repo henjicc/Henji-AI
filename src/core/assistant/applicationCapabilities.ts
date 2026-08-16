@@ -25,6 +25,15 @@ export const APPLICATION_CAPABILITY_CATALOG_VERSION = 'application-capabilities/
 export { applicationRefSchema }
 export type { ApplicationRef }
 
+export interface ApplicationCapabilityVerificationContract {
+  /** 第一版统一以 Gateway 观察到的强类型 Effect Receipt 作为最低可执行验证。 */
+  kind: 'effect_receipt'
+  /** 写能力必须至少产生一项非 observe/navigate 的真实 Effect。 */
+  requireEffects: boolean
+  /** 只有领域执行器已经完成正式读回时才可要求；其余由脚本后续正式验证完成。 */
+  requireVerifiedEffects: boolean
+}
+
 export const applicationCapabilityDescriptorSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]{1,63}$/),
   version: z.number().int().positive(),
@@ -108,6 +117,23 @@ export interface ApplicationCapabilityDefinition<TInput = unknown, TOutput = unk
    * propertyIds、targetRefs 这类有默认值的字段全写一遍，示例反而比真实调用还啰嗦。
    */
   inputExamples?: unknown[]
+  /**
+   * 受控应用程序在调用本能力前必须已经成功执行的能力 ID。
+   *
+   * 这是机器可读的执行前置，不是给模型看的提示词。程序编译器据此拒绝把“提交生成”
+   * 放在“校验生成参数”之前；普通直接工具调用仍由各自现有守卫负责。
+   */
+  executionPrerequisites?: string[]
+  /**
+   * 算法型写能力的机器可执行验证下限。注册表会拒绝缺失该契约的写能力；
+   * 文本 successEvidence 不能替代它。
+   */
+  verificationContract?: ApplicationCapabilityVerificationContract
+  /**
+   * 决定一次已返回结构化结果的调用是否消耗 maxCallsPerRun。
+   * 仅用于“零副作用的编译/预检拒绝可安全修正”这类受控入口；默认所有结果都计数。
+   */
+  countsTowardCallLimit?(output: TOutput): boolean
   preview?(input: TInput): AgentToolPreview
   createUndo?(output: TOutput): AgentToolObservation['undo']
   resolveObservedEffects?(input: TInput, output: TOutput): AgentObservedEffect[]
@@ -137,6 +163,9 @@ const NON_DESCRIPTOR_KEYS = [
   'summarize',
   'projectForHistory',
   'inputExamples',
+  'executionPrerequisites',
+  'verificationContract',
+  'countsTowardCallLimit',
   'preview',
   'createUndo',
   'resolveObservedEffects',
@@ -174,9 +203,23 @@ export class ApplicationCapabilityRegistry {
     }
     const properties = aiInputSchema.properties
     if (properties && typeof properties === 'object') {
-      const forbiddenInputs = ['patch', 'storePatch', 'executeScript', 'script', 'code']
+      const forbiddenInputs = ['patch', 'storePatch', 'executeScript', 'script', 'code', 'source']
       const forbidden = forbiddenInputs.find((key) => key in properties)
-      if (forbidden) throw new Error(`应用能力禁止任意 Patch 或脚本输入：${definition.id}.${forbidden}`)
+      if (forbidden && !(definition.id === 'run_henji_script' && forbidden === 'source')) {
+        throw new Error(`应用能力禁止任意 Patch 或脚本输入：${definition.id}.${forbidden}`)
+      }
+    }
+    const reportsDirectEffect = definition.control.impacts.some((impact) => (
+      impact.effect !== 'observe'
+    ))
+    if (!definition.readOnly && reportsDirectEffect && typeof definition.resolveObservedEffects !== 'function') {
+      throw new Error(`写入或导航能力必须提供结构化 Effect resolver：${definition.id}`)
+    }
+    const reportsWorldMutation = definition.control.impacts.some((impact) => (
+      !['observe', 'navigate'].includes(impact.effect)
+    ))
+    if (!definition.readOnly && reportsWorldMutation && !definition.verificationContract) {
+      throw new Error(`算法写能力必须提供机器可执行 verificationContract：${definition.id}`)
     }
     const current = this.definitions.get(definition.id)
     if (current) {

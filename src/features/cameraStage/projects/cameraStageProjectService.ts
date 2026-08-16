@@ -11,10 +11,10 @@ import type {
   CameraStageProjectPlatformRecord,
   CameraStageProjectPlatformSummary,
 } from '@/platform/contracts/cameraStageProjects'
-import { deserializeScene, serializeScene } from '../domain/sceneSerialization'
+import { deserializeScene, isCurrentCameraStageScene, serializeScene } from '../domain/sceneSerialization'
 import type { StageSceneAnimation } from '../domain/animationTypes'
 import type { StageObject, StageSceneSettings } from '../domain/sceneTypes'
-import type { StageEditorMode, StageShot } from '../domain/shotTypes'
+import type { StageStateKeyframe } from '../domain/stateKeyframeTypes'
 import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import {
   CAMERA_STAGE_DEFAULT_PROJECT_NAME,
@@ -64,8 +64,7 @@ export interface CameraStageProjectSnapshot {
   activeCameraId: string | null
   animation: StageSceneAnimation
   sceneSettings: StageSceneSettings
-  editorMode: StageEditorMode
-  shots: StageShot[]
+  stateKeyframes: StageStateKeyframe[]
 }
 
 function createDraftFingerprint(projectId: string, name: string, sceneJson: string): string {
@@ -80,10 +79,8 @@ export function createCurrentProjectDraft(now: number = Date.now()): CameraStage
   const sceneJson = serializeScene({
     objects: state.objects,
     activeCameraId: state.activeCameraId,
-    animation: state.animation,
     sceneSettings: state.sceneSettings,
-    editorMode: state.editorMode,
-    shots: state.shots,
+    stateKeyframes: state.stateKeyframes,
   })
 
   const record: CameraStageProjectPlatformRecord = {
@@ -134,47 +131,12 @@ export async function saveCurrentProject(): Promise<SavedProjectInfo> {
   return await saveProjectDraft(createCurrentProjectDraft())
 }
 
-/** 将当前简易工程单向烘焙为专业工程，并立即持久化。 */
-export async function bakeCurrentProjectToPro(): Promise<SavedProjectInfo | null> {
-  const before = useCameraStageStore.getState()
-  if (before.editorMode !== 'simple') return null
-  const shotCount = before.shots.length
-  logger.info('简易工程烘焙开始', {
-    event: 'simple_mode.bake.start',
-    projectId: before.currentProjectId,
-    shotCount,
-  })
-  before.bakeToProMode()
-  clearCameraStageHistory()
-  const baked = useCameraStageStore.getState()
-  try {
-    const project = await saveCurrentProject()
-    logger.info('简易工程烘焙完成', {
-      event: 'simple_mode.bake.completed',
-      projectId: project.id,
-      shotCount,
-      trackCount: baked.animation.tracks.length,
-    })
-    return project
-  } catch (error) {
-    logger.error('简易工程烘焙保存失败', error, {
-      event: 'simple_mode.bake.failed',
-      projectId: baked.currentProjectId,
-      shotCount,
-      trackCount: baked.animation.tracks.length,
-    })
-    throw error
-  }
-}
-
 /** 新建空白工程：重置为空场景并立即保存入库，返回新工程标识 */
 export async function createNewProject(
   name: string = CAMERA_STAGE_DEFAULT_PROJECT_NAME,
-  mode: StageEditorMode = 'simple',
 ): Promise<SavedProjectInfo> {
-  logger.info('新建运镜工程开始', { event: 'camera_stage.project.create.start', mode })
+  logger.info('新建运镜工程开始', { event: 'camera_stage.project.create.start' })
   useCameraStageStore.getState().newScene(name)
-  useCameraStageStore.getState().setEditorMode(mode)
   useCameraStageSessionStore.getState().setLastProjectId(null)
   // 新工程默认摄像机视角；会话持久化的 stageViewMode 会在进入编辑器时回放，必须同步更新
   useCameraStageSessionStore.getState().setStageViewMode('camera')
@@ -184,13 +146,11 @@ export async function createNewProject(
     logger.info('新建运镜工程完成', {
       event: 'camera_stage.project.create.completed',
       projectId: project.id,
-      mode,
     })
     return project
   } catch (error) {
     logger.error('新建运镜工程失败', error, {
       event: 'camera_stage.project.create.failed',
-      mode,
     })
     throw error
   }
@@ -199,11 +159,18 @@ export async function createNewProject(
 /** 为画布节点复制独立工程快照；复制后的后续编辑不再影响源工程。 */
 export async function cloneCameraStageProject(projectId: string, name?: string): Promise<SavedProjectInfo | null> {
   const source = await getCameraStageProjectRecord(projectId)
-  if (!source) return null
+  if (!source || !isCurrentCameraStageScene(source.sceneJson)) return null
+  const snapshot = deserializeScene(source.sceneJson)
   const id = uuidv4()
   const now = Date.now()
   const nextName = name?.trim() || `${source.name} 副本`
-  await upsertCameraStageProjectRecord({ ...source, id, name: nextName, createdAt: now, updatedAt: now })
+  const sceneJson = serializeScene({
+    objects: snapshot.objects,
+    activeCameraId: snapshot.activeCameraId,
+    sceneSettings: snapshot.sceneSettings,
+    stateKeyframes: snapshot.stateKeyframes,
+  })
+  await upsertCameraStageProjectRecord({ ...source, id, name: nextName, sceneJson, createdAt: now, updatedAt: now })
   logger.info('画布工程快照已复制', { event: 'camera_stage.project.clone.completed', projectId: id, context: { sourceProjectId: projectId } })
   return { id, name: nextName }
 }
@@ -214,7 +181,7 @@ export async function loadProjectIntoScene(
   options: { updateSession?: boolean } = {},
 ): Promise<boolean> {
   const record = await getCameraStageProjectRecord(projectId)
-  if (!record) {
+  if (!record || !isCurrentCameraStageScene(record.sceneJson)) {
     return false
   }
   const snapshot = deserializeScene(record.sceneJson)
@@ -224,8 +191,7 @@ export async function loadProjectIntoScene(
       activeCameraId: snapshot.activeCameraId,
       animation: snapshot.animation,
       sceneSettings: snapshot.sceneSettings,
-      editorMode: snapshot.editorMode,
-      shots: snapshot.shots,
+      stateKeyframes: snapshot.stateKeyframes,
     },
     { id: record.id, name: record.name },
   )
@@ -238,13 +204,18 @@ export async function loadProjectIntoScene(
 }
 
 export async function listProjects(): Promise<CameraStageProjectPlatformSummary[]> {
-  return await listCameraStageProjectSummaries()
+  const summaries = await listCameraStageProjectSummaries()
+  const checked = await Promise.all(summaries.map(async (summary) => {
+    const record = await getCameraStageProjectRecord(summary.id)
+    return record && isCurrentCameraStageScene(record.sceneJson) ? summary : null
+  }))
+  return checked.filter((summary): summary is CameraStageProjectPlatformSummary => summary !== null)
 }
 
 /** 读取持久化工程的完整领域快照；调用方不得解析 sceneJson 或复制兼容逻辑。 */
 export async function readProjectSnapshot(projectId: string): Promise<CameraStageProjectSnapshot | null> {
   const record = await getCameraStageProjectRecord(projectId)
-  if (!record) return null
+  if (!record || !isCurrentCameraStageScene(record.sceneJson)) return null
   const snapshot = deserializeScene(record.sceneJson)
   return {
     id: record.id,
@@ -255,8 +226,7 @@ export async function readProjectSnapshot(projectId: string): Promise<CameraStag
     activeCameraId: snapshot.activeCameraId,
     animation: snapshot.animation,
     sceneSettings: snapshot.sceneSettings,
-    editorMode: snapshot.editorMode,
-    shots: snapshot.shots,
+    stateKeyframes: snapshot.stateKeyframes,
   }
 }
 

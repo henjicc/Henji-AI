@@ -14,6 +14,8 @@ import type {
   ApplicationRisk,
   ApplicationSemanticOperationExecutor,
 } from './types'
+import { assertCollectionOperationAvailable } from './availability'
+import { acceptedPropertyOperations } from './writerTable'
 
 const RISK_RANK: Record<ApplicationRisk, number> = { R0: 0, R1: 1, R2: 2, R3: 3, R4: 4 }
 
@@ -35,6 +37,78 @@ function applyMutation(current: JsonValue | undefined, mutation: ApplicationProp
   return current.filter((_, itemIndex) => itemIndex !== index)
 }
 
+function lowerReplaceListMutation(
+  current: JsonValue | undefined,
+  desired: JsonValue,
+  propertyId: string,
+): ApplicationPropertyMutation[] {
+  if (!Array.isArray(current) || !Array.isArray(desired)) {
+    throw new Error(`PROPERTY_OPERATION_NOT_SUPPORTED:${propertyId} 的 set 仅能替换引用列表。`)
+  }
+  const removals = current
+    .filter((item) => !desired.some((candidate) => jsonEqual(candidate, item)))
+    .map((value) => ({ propertyId, operation: 'remove' as const, value }))
+  const additions = desired
+    .filter((item) => !current.some((candidate) => jsonEqual(candidate, item)))
+    .map((value) => ({ propertyId, operation: 'append' as const, value }))
+  return [...removals, ...additions]
+}
+
+/**
+ * 同一事务可以按顺序多次写同一个属性，中间值是过程，不是最终世界状态。
+ * 验证器只应检查最后一次写入；否则 `seek(0) → seek(1) → seek(2)` 会被要求在提交后
+ * 同时等于 0、1、2，事务明明执行成功也必然被判失败。
+ */
+function finalVerificationConditions(
+  conditions: ApplicationVerificationCondition[],
+): ApplicationVerificationCondition[] {
+  const lastPropertyCondition = new Map<string, number>()
+  conditions.forEach((condition, index) => {
+    if (condition.kind !== 'property_equals') return
+    lastPropertyCondition.set(
+      `${condition.target.kind}\u0000${condition.target.id}\u0000${condition.propertyId}`,
+      index,
+    )
+  })
+  return conditions.filter((condition, index) => {
+    if (condition.kind !== 'property_equals') return true
+    return lastPropertyCondition.get(
+      `${condition.target.kind}\u0000${condition.target.id}\u0000${condition.propertyId}`,
+    ) === index
+  })
+}
+
+/**
+ * A property write followed by deletion of the same entity is an intermediate
+ * state, not a final-state invariant. The executor receipts still record both
+ * operations, but the final verifier must not require the deleted entity to be
+ * readable. Only planner-generated property checks are filtered here; explicit
+ * caller verification conditions remain authoritative (and contradictory
+ * requests therefore still fail).
+ */
+function omitGeneratedConditionsSupersededByRemoval(
+  conditions: ApplicationVerificationCondition[],
+  steps: readonly ApplicationPlannedStep[],
+): ApplicationVerificationCondition[] {
+  const finallyRemoved = new Set<string>()
+  for (const step of steps) {
+    if (step.kind === 'mutation') {
+      finallyRemoved.delete(`${step.target.kind}\u0000${step.target.id}`)
+      continue
+    }
+    if (step.kind !== 'collection') continue
+    if (step.operation.kind === 'remove') {
+      step.operation.targets.forEach((target) => {
+        finallyRemoved.add(`${target.kind}\u0000${target.id}`)
+      })
+    }
+  }
+  return conditions.filter((condition) => (
+    condition.kind !== 'property_equals'
+    || !finallyRemoved.has(`${condition.target.kind}\u0000${condition.target.id}`)
+  ))
+}
+
 function assertRevisions(
   expected: Record<string, number>,
   current: Record<string, number>,
@@ -46,6 +120,36 @@ function assertRevisions(
       throw new Error(`REVISION_CONFLICT:${scope}:${expected[scope]}/${current[scope]}`)
     }
   }
+}
+
+function stateBlocksCanBeSatisfied(
+  blocks: readonly { kind: string; affectedEntityTypes?: string[]; revisionScopes?: string[] }[],
+  earlierSteps: readonly ApplicationPlannedStep[],
+  getMutationExecutor: (entityType: string) => ApplicationMutationExecutor | undefined,
+  getOperationExecutor: ApplicationPlanBuilderDependencies['getOperationExecutor'],
+): boolean {
+  const stateBlocks = blocks.filter((block) => block.kind === 'state')
+  if (stateBlocks.length === 0) return false
+  const impacts = earlierSteps.flatMap((step) => {
+    if (step.kind === 'mutation') {
+      const contract = getMutationExecutor(step.entityType)?.effectContract
+      return [
+        { entityType: step.entityType, revisionScopes: [] as readonly string[] },
+        ...(contract?.cascades ?? []),
+      ]
+    }
+    if (step.kind === 'collection') return [{ entityType: step.entityType, revisionScopes: [] as readonly string[] }]
+    const contract = getOperationExecutor(step.capabilityId, step.capabilityVersion)?.effectContract
+    return [...(contract?.direct ?? []), ...(contract?.cascades ?? [])]
+  })
+  return stateBlocks.every((block) => impacts.some((impact) => (
+    (block.affectedEntityTypes?.length ?? 0) === 0
+      || block.affectedEntityTypes?.includes(impact.entityType)
+  ) && (
+    (block.revisionScopes?.length ?? 0) === 0
+      || impact.revisionScopes.length === 0
+      || block.revisionScopes?.some((scope) => impact.revisionScopes.includes(scope))
+  )))
 }
 
 export interface ApplicationPlanBuilderDependencies {
@@ -70,22 +174,49 @@ export class ApplicationPlanBuilder {
     if (request.steps.length === 0 || request.steps.length > 256) throw new Error('INVALID_PLAN_STEPS')
     let risk: ApplicationRisk = 'R0'
     const normalizedSteps: ApplicationPlannedStep[] = []
-    const verificationConditions: ApplicationVerificationCondition[] = [
+    const requestedVerificationConditions: ApplicationVerificationCondition[] = [
       ...(request.verificationConditions ?? []),
     ]
+    const generatedVerificationConditions: ApplicationVerificationCondition[] = []
 
     for (const step of request.steps) {
       if (step.kind === 'mutation') {
-        const prepared = await this.prepareMutation(step, context)
+        const prepared = await this.prepareMutation(step, context, normalizedSteps)
         normalizedSteps.push(prepared.step)
-        verificationConditions.push(...prepared.conditions)
+        generatedVerificationConditions.push(...prepared.conditions)
         risk = highestRisk(risk, 'R1')
       } else if (step.kind === 'collection') {
-        // 集合写入的可行性（是否允许增删、必填属性、数量上限）由引擎预检统一判定，
-        // 这里只负责并发基线复核，避免两处各写一份判定规则。
-        const revisions = (await this.dependencies.registry.readEntity(step.parent, [], context)).revisions
+        const descriptor = this.dependencies.registry.describe(
+          { entityTypes: [step.entityType] }, context,
+        ).entities[0]
+        /*
+         * 静态未声明沿用 commit 的失败报告路径，它会附上目录派生的专用能力 recovery；
+         * 只有结构上支持的集合才查询动态状态并在计划阶段尽早拒绝。
+         */
+        let revisions: Record<string, number>
+        if (descriptor?.collectionWrite) {
+          const availability = await this.dependencies.registry.getCollectionAvailability(
+            step.parent, step.entityType, context,
+          )
+          const current = availability[step.operation.kind]
+          if (!current.available && !stateBlocksCanBeSatisfied(
+            current.blocks ?? [], normalizedSteps,
+            this.dependencies.getMutationExecutor, this.dependencies.getOperationExecutor,
+          )) {
+            assertCollectionOperationAvailable(availability, step.operation.kind)
+          }
+          revisions = availability.revisions
+        } else {
+          revisions = (await this.dependencies.registry.readEntity(step.parent, [], context)).revisions
+        }
         assertRevisions(step.expectedRevisions, revisions, Object.keys(revisions))
         normalizedSteps.push(step)
+        if (step.operation.kind === 'remove') {
+          generatedVerificationConditions.push(...step.operation.targets.map((target) => ({
+            kind: 'entity_absent' as const,
+            target,
+          })))
+        }
         risk = highestRisk(risk, 'R1')
       } else {
         const executor = this.dependencies.getOperationExecutor(step.capabilityId, step.capabilityVersion)
@@ -107,7 +238,7 @@ export class ApplicationPlanBuilder {
       throw new Error('INVALID_PLAN_EXPIRY')
     }
     return applicationChangePlanSchema.parse({
-      contractVersion: 'application-control/v1',
+      contractVersion: 'application-control/v2',
       planRef: this.dependencies.createPlanRef(),
       summary: request.summary.trim(),
       risk,
@@ -115,7 +246,10 @@ export class ApplicationPlanBuilder {
       atomic: request.transactionMode === 'atomic',
       transactionMode: request.transactionMode,
       steps: normalizedSteps,
-      verificationConditions,
+      verificationConditions: finalVerificationConditions([
+        ...requestedVerificationConditions,
+        ...omitGeneratedConditionsSupersededByRemoval(generatedVerificationConditions, normalizedSteps),
+      ]),
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + expiresInMs).toISOString(),
     })
@@ -123,12 +257,14 @@ export class ApplicationPlanBuilder {
 
   private async prepareMutation(
     step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>,
-    context: ApplicationExecutionContext
+    context: ApplicationExecutionContext,
+    earlierSteps: readonly ApplicationPlannedStep[],
   ): Promise<{
     step: Extract<ApplicationPlannedStep, { kind: 'mutation' }>
     conditions: ApplicationVerificationCondition[]
   }> {
-    if (!this.dependencies.getMutationExecutor(step.entityType)) {
+    const executor = this.dependencies.getMutationExecutor(step.entityType)
+    if (!executor) {
       throw new Error(`MUTATION_EXECUTOR_NOT_FOUND:${step.entityType}`)
     }
     const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
@@ -155,15 +291,28 @@ export class ApplicationPlanBuilder {
       descriptor.revisionScopes.forEach((scope) => scopes.add(scope))
     }
     assertRevisions(step.expectedRevisions, snapshot.revisions, [...scopes])
+    // provider 可以把当前工程内唯一的短引用规范化成完整稳定引用。计划及后续执行必须使用
+    // snapshot.ref，否则计划阶段虽然读到了实体，执行器仍会收到模型截断的 id 而失败。
+    const normalizedTarget = snapshot.ref
     const availability = new Map((await this.dependencies.registry.getPropertyAvailability(
-      step.target,
+      normalizedTarget,
       propertyIds,
       context
     )).map((item) => [item.propertyId, item]))
     const conditions: ApplicationVerificationCondition[] = []
-    const mutations = step.mutations.map((mutation) => {
+    const mutations = step.mutations.flatMap((mutation) => {
       const propertyAvailability = availability.get(mutation.propertyId)
-      if (!propertyAvailability?.writable) {
+      const descriptor = this.dependencies.registry.getProperty(mutation.propertyId)
+      if (!descriptor) throw new Error(`PROPERTY_NOT_FOUND:${mutation.propertyId}`)
+      const staticallyWritable = !descriptor.readOnlyReason
+        && descriptor.requiredPermissions.write.every((permission) => context.permissions.has(permission))
+      const canDependOnEarlierSteps = propertyAvailability
+        ? stateBlocksCanBeSatisfied(
+            propertyAvailability.blocks ?? [], earlierSteps,
+            this.dependencies.getMutationExecutor, this.dependencies.getOperationExecutor,
+          )
+        : false
+      if (!propertyAvailability?.writable && !(staticallyWritable && canDependOnEarlierSteps)) {
         /*
          * 把 reasons 一并抛出去。
          *
@@ -176,23 +325,38 @@ export class ApplicationPlanBuilder {
           `PROPERTY_NOT_WRITABLE:${mutation.propertyId}${reasons.length > 0 ? `（${reasons.join('；')}）` : ''}`
         )
       }
+      const currentValue = snapshot.properties[mutation.propertyId]
       const resultingValue = this.dependencies.registry.normalizePropertyValue(
         step.entityType,
         mutation.propertyId,
-        applyMutation(snapshot.properties[mutation.propertyId], mutation),
+        applyMutation(currentValue, mutation),
         context
       )
-      conditions.push({
-        kind: 'property_equals',
-        target: step.target,
-        propertyId: mutation.propertyId,
-        expected: resultingValue,
-      })
-      return mutation.operation === 'set' || mutation.operation === 'clear'
+      if (descriptor.verificationStrategy !== 'execution') {
+        conditions.push({
+          kind: 'property_equals',
+          target: normalizedTarget,
+          propertyId: mutation.propertyId,
+          expected: resultingValue,
+        })
+      }
+      const writerOperations = executor.propertyOperations.get(mutation.propertyId)
+      const accepted = acceptedPropertyOperations(writerOperations, descriptor.value.kind)
+      if (!accepted.has(mutation.operation)) {
+        throw new Error(
+          `PROPERTY_OPERATION_NOT_SUPPORTED:${mutation.propertyId}`
+          + ` 支持 ${[...accepted].join(' / ')} 操作，收到 ${mutation.operation}。`
+        )
+      }
+      if (mutation.operation === 'set' && !writerOperations?.has('set')) {
+        return lowerReplaceListMutation(currentValue, resultingValue, mutation.propertyId)
+      }
+      return [mutation.operation === 'set' || mutation.operation === 'clear'
         ? { ...mutation, value: mutation.operation === 'set' ? resultingValue : undefined }
-        : mutation
+        : mutation]
     })
-    return { step: { ...step, mutations }, conditions }
+    if (mutations.length === 0) throw new Error('NO_STATE_CHANGE')
+    return { step: { ...step, target: normalizedTarget, mutations }, conditions }
   }
 
   private assertTransactionMode(

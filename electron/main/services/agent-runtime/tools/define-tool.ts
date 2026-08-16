@@ -27,6 +27,9 @@ export function assertAgentToolDefinition<TInput, TOutput>(
   if (!definition.readOnly && definition.retryPolicy.maxRetries > 0 && !definition.idempotent) {
     throw new Error(`非幂等写工具不能自动重试：${definition.name}`)
   }
+  if (definition.modelVisible === false && !definition.readOnly && !definition.resolveObservedEffects) {
+    throw new Error(`内部写工具必须声明强类型 Effect resolver：${definition.name}`)
+  }
 }
 
 export function defineAgentTool<TInput, TOutput>(

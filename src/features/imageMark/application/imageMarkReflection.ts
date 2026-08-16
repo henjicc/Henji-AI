@@ -4,6 +4,7 @@ import {
   type ApplicationEntityProvider,
   type ApplicationEntityRegistration,
   type ApplicationRef,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 import { imageEditDocumentToMarkDoc, type ImageMarkDoc, type MarkItem } from '@/core/imageEdit'
@@ -78,6 +79,10 @@ class ImageMarkDocumentReflectionProvider implements ApplicationEntityProvider {
       }
     })
   }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { image_mark: 0 }, ['image_mark:write'])
+  }
 }
 
 function findAnnotation(markDoc: ImageMarkDoc, annotationId: string): MarkItem {
@@ -86,7 +91,7 @@ function findAnnotation(markDoc: ImageMarkDoc, annotationId: string): MarkItem {
   return item
 }
 
-/** 标注集合实体：跨全部当前打开的会话拉平列出，与 camera_stage.shot 跨全部工程拉平是同一惯例。 */
+/** 标注集合实体：跨全部当前打开的会话拉平列出，与 camera_stage.state_keyframe 跨全部工程拉平是同一惯例。 */
 class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider {
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.annotation
 
@@ -133,6 +138,16 @@ class ImageMarkAnnotationReflectionProvider implements ApplicationEntityProvider
         revisions,
       }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    const document = requireSessionDocument(parent.id)
+    return unrestrictedCollectionAvailability(
+      this.entityType,
+      parent,
+      { image_mark: documentRevision(document) },
+      ['image_mark:write'],
+    )
   }
 }
 

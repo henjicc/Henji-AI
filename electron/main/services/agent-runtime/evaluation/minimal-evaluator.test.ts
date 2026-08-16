@@ -34,6 +34,15 @@ function runState(status: AgentRunState['status'] = 'completed'): AgentRunState 
     updatedAt: now,
     finalText: status === 'completed' ? '已完成' : null,
     error: null,
+    executionOutcome: {
+      status: status === 'completed' ? 'sealed_success' : 'pending',
+      effects: [],
+      verificationSummary: { summary: status === 'completed' ? '评测已验证' : '', evidence: [] },
+      ...(status === 'completed' ? { sealedAt: now } : {}),
+    },
+    presentationOutcome: {
+      status: status === 'completed' ? 'generated' : 'pending',
+    },
     budget: {
       maxTurns: 12, maxToolCalls: 24, maxDurationMs: 600_000,
       maxInputTokens: 120_000, maxOutputTokens: 32_000,

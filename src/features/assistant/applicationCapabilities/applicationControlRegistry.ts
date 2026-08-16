@@ -17,8 +17,7 @@ import {
   CameraStageMutationExecutor,
 } from '@/features/cameraStage/application/cameraStageControlExecutors'
 import { CameraStagePlacementOperationExecutor } from '@/features/cameraStage/application/cameraStagePlacementExecutor'
-import { CameraStageKeyframeCollectionExecutor } from '@/features/cameraStage/application/cameraStageKeyframeCollectionExecutor'
-import { CameraStageShotCollectionExecutor } from '@/features/cameraStage/application/cameraStageShotCollectionExecutor'
+import { CameraStageStateKeyframeCollectionExecutor } from '@/features/cameraStage/application/cameraStageStateKeyframeCollectionExecutor'
 import { createCanvasReflectionRegistrations, CANVAS_ENTITY_TYPES } from '@/features/canvas/application/canvasReflection'
 import {
   CanvasCollectionExecutor,
@@ -115,7 +114,9 @@ export function getApplicationReflectionRegistry(): ApplicationReflectionRegistr
   if (registry) return registry
   const next = new ApplicationReflectionRegistry(APPLICATION_CAPABILITY_CATALOG_VERSION)
   registerAll(next, 'settings', [createSettingsReflectionRegistration()])
-  registerAll(next, 'assets', createAssetReflectionRegistrations())
+  registerAll(next, 'assets', createAssetReflectionRegistrations(
+    () => assetMutationDependencies.readRevision()
+  ))
   registerAll(next, 'canvas', createCanvasReflectionRegistrations())
   registerAll(next, 'storyboard', createStoryboardReflectionRegistrations())
   registerAll(next, 'image_edit', createImageEditReflectionRegistrations())
@@ -200,11 +201,7 @@ export function getApplicationControlExecutionEngine(): ApplicationControlExecut
   }
   next.registerOperationExecutor(new CameraStageMotionOperationExecutor(dependencies))
   next.registerOperationExecutor(new CameraStagePlacementOperationExecutor(dependencies))
-  // 集合写入：关键帧从"只能读改"变成"可以创建"，助手据此就能表达任意对象动画，
-  // 不再需要为上下漂浮、自转这类需求各写一个专用能力。
-  next.registerCollectionExecutor(new CameraStageKeyframeCollectionExecutor(dependencies))
-  // 镜头卡：删除/批量删除接到集合写入，同一次提交删掉功能重复的专用能力 add_camera_stage_shot。
-  next.registerCollectionExecutor(new CameraStageShotCollectionExecutor(dependencies))
+  next.registerCollectionExecutor(new CameraStageStateKeyframeCollectionExecutor(dependencies))
   // 画布节点与连线：写入全部委托 applyCanvasOperationsAtomically，与批量能力共用同一内核。
   // revision 依赖由适配器注入，注册表不直接 import hostContext——那条 import 会把 taskQueue
   // 一起拉进模块图，而它在初始化时读 localStorage，Node 环境的用例会直接崩。

@@ -11,7 +11,7 @@
 
 ## 结构边界
 
-能力定义放在 `src/core/assistant/` 的领域模块，并汇入统一 `ApplicationCapabilityRegistry`。定义只包含跨层契约，不导入组件、Store 实现、Electron 主进程服务或业务处理器。
+实体、属性和集合 CRUD 放在 Application Control 反射注册表；只有无法用 CRUD 表达的算法操作才放在 `src/core/assistant/` 的领域模块，并汇入统一 `ApplicationCapabilityRegistry`。两类定义都只包含跨层契约，不导入组件、Store 实现、Electron 主进程服务或业务处理器。
 
 渲染层和主进程分别维护模块级处理器注册。Agent Runtime 从同一份定义生成模型工具，不再手写第二份 `AgentToolDefinition` 元数据。
 
@@ -35,7 +35,7 @@
 AI 输入 schema 还必须满足：
 
 - 顶层 `additionalProperties: false`，所有可执行参数均显式列出。
-- 不得出现 `patch`、`storePatch`、`executeScript`、`script`、`code` 等开放式控制字段。
+- 除 `run_henji_script@1` 的受限 `source` 外，不得出现 `patch`、`storePatch`、`executeScript`、`script`、`code` 等开放式控制字段；`source` 只允许解析为自有 IR，永不执行 JavaScript。
 - 不得接受 Store 对象、组件状态、原始文件路径或任意键值对象来间接修改业务数据。
 - 需要扩展公开参数时，先扩展领域 schema/注册表，再由能力引用同一真相源。
 
@@ -51,15 +51,18 @@ AI 输入 schema 还必须满足：
 | 模型/媒体 | 唯一模态声明、provider 可表达性、primary/observer 路由、大小/时长/编码限制 |
 | 长任务 | 正式服务、等待/取消/恢复状态、Artifact 与结构化日志 |
 
-`ApplicationCapabilityDefinition`、反射注册表、领域注册表和 Surface 目录是唯一真相源；覆盖清单只聚合并验证，不复制第二份业务 schema。
+Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真相源，`ApplicationCapabilityDefinition` 是算法操作的唯一真相源，领域注册表和 Surface 目录分别维护执行与界面事实；`scriptApi` 和覆盖清单只聚合、投影并验证，不复制第二份业务 schema。
 
-## 查询、计划与提交
+## Henji Script 编排与提交
 
-复杂或批量写入使用三段式能力：
+模型侧的复杂或批量应用操作统一使用一次 `run_henji_script@1`：
 
-1. `search_*` 或 `get_*` 读取候选和当前 revision。
-2. `plan_*` 校验输入并返回差异、影响和不透明计划引用。
-3. `apply_*` 使用计划引用与 expected revision 原子提交。
+1. 能力发现返回当前租约允许的 `app.entities`、`app.action`、`app.recipe` 和 `app.assert`，并合并真实反射 schema。
+2. 模型只表达业务参数和数据依赖；宿主编译为受控 IR，注入版本、revision、权限、availability、Effect Contract 与验证契约。
+3. 无输出依赖的相邻实体写入自动合并到同一 Application Control 事务；算法操作经 `app.action` 进入相同 Gateway。
+4. 每个步骤从正式状态源读回验证，最终以 Effect Receipt 和状态差异双向对账结算。
+
+领域内部确需“预览/审批后提交”的高风险算法操作，可以保留不透明计划引用，但它是业务能力契约，不是模型逐步编排协议。禁止让模型手工管理能力版本、expected revision、输出路径或引用占位符。
 
 删除、覆盖、付费和外部写入继续经过统一审批，不在处理器内部自行降低风险等级。
 
@@ -109,3 +112,6 @@ AI 输入 schema 还必须满足：
 - 搜索别名能找到目标能力，错误 Router 分类不阻断发现。
 - 处理器成功后输出包含成功证据；失败时返回稳定错误码。
 - 跨模块引用失效时重新读取来源，不创建无关项目。
+- 首次 `scriptApi` 投影能看到真实 enum、范围、引用形状和写 operation；非法字面量及条件分支候选在 Gateway 调用数为 0 时拒绝。
+- 多步骤脚本只通过同一 IR/解释器执行，Recipe 不得拥有第二套执行器、Effect、补偿或验证逻辑。
+- 写入后的每项正式状态差异都有 Effect Receipt，每项 receipt 都能在最终状态找到对应变化；evidence 不能推动结算。

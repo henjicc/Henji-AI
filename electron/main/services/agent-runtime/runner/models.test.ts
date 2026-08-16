@@ -84,6 +84,17 @@ describe('selectAgentRuntimeModels', () => {
     })
   })
 
+  it('辅助角色即使回退到主模型也使用短超时、零重试并关闭推理', () => {
+    const input = request(1_000_000)
+    input.profile.settings.timeoutMs = 60_000
+    input.profile.settings.maxRetries = 2
+    const models = selectAgentRuntimeModels(input)
+    expect(models.primary.settings).toMatchObject({ timeoutMs: 60_000, maxRetries: 2 })
+    expect(models.router.settings).toMatchObject({ timeoutMs: 12_000, maxRetries: 0, maxOutputTokens: 4_096 })
+    expect(models.summarizer.settings).toMatchObject({ timeoutMs: 12_000, maxRetries: 0, maxOutputTokens: 4_096 })
+    expect(models.router.reasoning).toMatchObject({ enabled: false, effort: 'low' })
+  })
+
   it('观察模型可独立声明图片能力且不继承主模型验证要求', () => {
     const input = request(null)
     const observer = {

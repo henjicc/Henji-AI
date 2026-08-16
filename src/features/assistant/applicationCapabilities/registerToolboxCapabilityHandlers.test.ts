@@ -69,7 +69,7 @@ describe('toolbox capability handlers', () => {
       projectId: 'project-1',
       name: '镜头工程',
       objectCount: 2,
-      shotCount: 1,
+      stateKeyframeCount: 1,
     })
     const handler = registeredHandlers().get('open_camera_stage_project')
 
@@ -95,13 +95,27 @@ describe('toolbox capability handlers', () => {
     mocks.cameraAdapter.createCameraStageProject.mockResolvedValue({
       projectId: 'project-created',
       name: '后台工程',
-      mode: 'simple',
+      defaultCameraId: 'camera-1',
+      defaultStateKeyframeId: 'state-keyframe-1',
+      resultRefs: [
+        { kind: 'camera_stage.project', id: 'project-created' },
+        { kind: 'camera_stage.camera', id: 'project-created:camera-1' },
+        { kind: 'camera_stage.state_keyframe', id: 'project-created:state-keyframe-1' },
+      ],
     })
     const handler = registeredHandlers().get('create_camera_stage_project')
 
-    const result = await handler?.({ name: '后台工程', mode: 'simple' }, context)
+    const result = await handler?.({ name: '后台工程' }, context)
 
-    expect(result).toMatchObject({ projectId: 'project-created', name: '后台工程' })
+    expect(result).toMatchObject({
+      projectId: 'project-created',
+      name: '后台工程',
+      resultRefs: [
+        { kind: 'camera_stage.project', id: 'project-created' },
+        { kind: 'camera_stage.camera', id: 'project-created:camera-1' },
+        { kind: 'camera_stage.state_keyframe', id: 'project-created:state-keyframe-1' },
+      ],
+    })
     expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
   })
 

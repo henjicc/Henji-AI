@@ -121,7 +121,7 @@ describe('image_mark 反射与执行器（6.2）', () => {
     }, executionContext)
     expect(created.status, JSON.stringify(created)).toBe('completed')
     if (created.status !== 'completed') throw new Error('unreachable')
-    const annotationRef = created.producedRefs[0]
+    const annotationRef = created.resultRefs[0]
     expect(annotationRef.id.startsWith('session-b:')).toBe(true)
 
     const listed = await registry.listEntities('image_mark.annotation', { limit: 10 }, accessContext)

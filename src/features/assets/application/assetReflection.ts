@@ -6,6 +6,7 @@ import {
   type ApplicationPropertyDescriptor,
   type ApplicationRef,
   type JsonValue,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
@@ -78,18 +79,20 @@ const properties: Record<AssetEntityType, ApplicationPropertyDescriptor[]> = {
 }
 
 class AssetReflectionProvider implements ApplicationEntityProvider {
-  constructor(readonly entityType: AssetEntityType) {}
+  constructor(
+    readonly entityType: AssetEntityType,
+    private readonly readRevision: () => number,
+  ) {}
 
   async listEntities(request: { cursor?: string; limit: number }) {
     const offset = Math.max(0, Number.parseInt(request.cursor ?? '0', 10) || 0)
     if (this.entityType === ASSET_ENTITY_TYPES.catalog) {
-      const libraries = await assetApplicationService.listLibraries()
       return {
         refs: offset === 0 && request.limit > 0
           ? [{ kind: this.entityType, id: 'default', label: '素材库' }]
           : [],
         nextCursor: null,
-        revisions: { assets: Math.max(0, ...libraries.map((item) => Number(item.updatedAt) || 0)) },
+        revisions: { assets: this.readRevision() },
       }
     }
     if (this.entityType === ASSET_ENTITY_TYPES.library) {
@@ -98,7 +101,7 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
       return {
         refs: page.map((library) => ({ kind: this.entityType, id: String(library.id), label: String(library.name) })),
         nextCursor: offset + page.length < libraries.length ? String(offset + page.length) : null,
-        revisions: { assets: Math.max(0, ...libraries.map((item) => Number(item.updatedAt) || 0)) },
+        revisions: { assets: this.readRevision() },
       }
     }
     const pageNumber = Math.floor(offset / request.limit) + 1
@@ -111,7 +114,7 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
         return { kind: this.entityType, id: String(asset.id), label: String(asset.displayName) }
       }),
       nextCursor: offset + items.length < total ? String(offset + items.length) : null,
-      revisions: { assets: Math.max(0, ...items.map((item) => Number((item as Record<string, unknown>).updatedAt) || 0)) },
+      revisions: { assets: this.readRevision() },
     }
   }
 
@@ -130,7 +133,7 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
     return {
       ref,
       entityType: this.entityType,
-      revisions: { assets: Number(values[revisionKey] ?? 0) },
+      revisions: { assets: this.readRevision() },
       properties: selected,
       capturedAt: new Date().toISOString(),
     }
@@ -148,9 +151,18 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
         writable: !descriptor.readOnlyReason,
         reasons: descriptor.readOnlyReason ? [descriptor.readOnlyReason] : [],
         requiredPermissions: ['assets:read'],
-        revisions: { assets: 0 },
+        revisions: { assets: this.readRevision() },
       }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(
+      this.entityType,
+      parent,
+      { assets: this.readRevision() },
+      ['assets:write'],
+    )
   }
 
   private async readAsset(assetId: string): Promise<Record<string, JsonValue>> {
@@ -183,7 +195,9 @@ class AssetReflectionProvider implements ApplicationEntityProvider {
   }
 }
 
-export function createAssetReflectionRegistrations(): ApplicationEntityRegistration[] {
+export function createAssetReflectionRegistrations(
+  readRevision: () => number = () => 0,
+): ApplicationEntityRegistration[] {
   return (Object.values(ASSET_ENTITY_TYPES) as AssetEntityType[]).map((entityType) => ({
     entity: {
       id: entityType,
@@ -215,7 +229,7 @@ export function createAssetReflectionRegistrations(): ApplicationEntityRegistrat
       } : {}),
     },
     properties: properties[entityType],
-    provider: new AssetReflectionProvider(entityType),
+    provider: new AssetReflectionProvider(entityType, readRevision),
     schemaDocuments: entityType === ASSET_ENTITY_TYPES.asset ? [{
       ref: ASSET_TAGS_VALUE_SCHEMA_REF,
       value: { type: 'array', maxItems: 32, items: { type: 'string', maxLength: 80 } },

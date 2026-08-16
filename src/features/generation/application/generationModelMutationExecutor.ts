@@ -33,6 +33,7 @@ const WRITERS = fieldWriterTable(FIELDS)
 
 /** generation.model 属性写入执行器（4.4）：目前唯一可写的是 hidden，只碰 hidden_models 集合。 */
 export class GenerationModelMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = GENERATION_ENTITY_TYPES.model
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -54,7 +55,7 @@ export class GenerationModelMutationExecutor implements ApplicationMutationExecu
     return {
       status: 'completed',
       resultingRevisions: { models: revision },
-      producedRefs: [{ kind: this.entityType, id: modelId, revision }],
+      directRefs: [{ kind: this.entityType, id: modelId, revision }],
       evidence: step.mutations.map((mutation) => ({
         kind: 'property_value' as const,
         target: { kind: this.entityType, id: modelId, revision },
@@ -83,7 +84,7 @@ export class GenerationModelMutationExecutor implements ApplicationMutationExecu
     return {
       status: 'completed',
       resultingRevisions: { models: revision },
-      producedRefs: [{ kind: this.entityType, id: modelId, revision }],
+      directRefs: [{ kind: this.entityType, id: modelId, revision }],
       evidence: [{
         kind: 'entity_state',
         target: { kind: this.entityType, id: modelId, revision },

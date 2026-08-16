@@ -3,12 +3,11 @@ import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/came
 
 import { getAnimatablePropByPath } from '../domain/animatableProps'
 import type { StageCameraAspectRatio, StageCameraLookAt, StageObject, StageObjectPatch, StageTransform, StageVec3 } from '../domain/sceneTypes'
-import type { StageCameraEffector, StageEditorMode, StageShot, StageSpatialPath } from '../domain/shotTypes'
+import type { StageCameraEffector, StageStateKeyframe, StageSpatialPath } from '../domain/stateKeyframeTypes'
 import type { StageKeyframeValue, StagePlaybackState } from '../domain/animationTypes'
 import { POSE_PRESETS } from '../domain/posePresets.gen'
 import { markSpatialPathCustom } from '../domain/spatialPath'
 import {
-  bakeCurrentProjectToPro,
   createNewProject,
   deleteProject as deleteStoredProject,
   listProjects,
@@ -18,9 +17,9 @@ import {
   saveCurrentProject,
   type CameraStageProjectSnapshot,
 } from '../projects/cameraStageProjectService'
-import { compileShotsToAnimation } from '../domain/shotCompiler'
+import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
 import { useCameraStageStore } from '../store/cameraStageStore'
-import { captureObjectsIntoShot } from '../store/shotSlice'
+import { captureObjectsIntoStateKeyframe } from '../store/stateKeyframeSlice'
 import {
   calculateStageObjectBounds,
   dimensionsToScale,
@@ -47,24 +46,24 @@ export interface CameraStageObjectUpdate {
   effectors?: StageCameraEffector[]
 }
 
-export interface CameraStageShotUpdate {
+export interface CameraStageStateKeyframeUpdate {
   name?: string
-  /** 镜头卡在时间轴上的位置。落到 store 的 moveShotTime，那里负责对帧量化并保持镜头卡有序。 */
+  /** 状态关键帧在时间轴上的位置。落到 store 的 moveStateKeyframeTime，那里负责对帧量化并保持状态关键帧有序。 */
   time?: number
   hold?: number
   transitionDuration?: number
-  continuity?: StageShot['continuity']
+  continuity?: StageStateKeyframe['continuity']
   cameraId?: string | null
   /**
-   * 把列出的对象/摄像机当前在场景中的实时状态记录进这张镜头卡（2.2 状态捕获入口）。
-   * 只覆盖列出的对象，不触碰这张卡上其余对象、也不触碰其他镜头卡——不会重新打开
+   * 把列出的对象/摄像机当前在场景中的实时状态记录进这张状态关键帧（2.2 状态捕获入口）。
+   * 只覆盖列出的对象，不触碰这张卡上其余对象、也不触碰其他状态关键帧——不会重新打开
    * "新对象在其余卡上停留默认状态、播放时插值"那个已修问题（modelingWrite.test.ts）。
    */
   captureObjectIds?: string[]
 }
 
 export interface CameraStageSceneObservation {
-  project: { id: string; name: string; editorMode: StageEditorMode }
+  project: { id: string; name: string }
   activeCameraId: string | null
   objects: Array<{
     id: string
@@ -76,22 +75,21 @@ export interface CameraStageSceneObservation {
     primitiveKind?: string
     lookAt?: StageCameraLookAt
   }>
-  shots: Array<{
+  stateKeyframes: Array<{
     id: string
     name: string
     time: number
     hold: number
     transitionDuration: number
-    continuity: StageShot['continuity']
+    continuity: StageStateKeyframe['continuity']
     cameraId: string | null
   }>
   trajectories: Array<{
-    shotId: string
+    stateKeyframeId: string
     objectId: string
     source: string
     knotCount: number
   }>
-  keyframeCount: number
   collisions: Array<{ objectIds: [string, string] }>
 }
 
@@ -225,7 +223,7 @@ function requirePlacementTarget(objects: StageObject[], targetObjectId?: string)
 
 function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageSceneObservation {
   return {
-    project: { id: snapshot.id, name: snapshot.name, editorMode: snapshot.editorMode },
+    project: { id: snapshot.id, name: snapshot.name },
     activeCameraId: snapshot.activeCameraId,
     objects: snapshot.objects.map((object) => ({
       id: object.id,
@@ -237,20 +235,19 @@ function sceneObservation(snapshot: CameraStageProjectSnapshot): CameraStageScen
       ...(object.type === 'primitive' ? { primitiveKind: object.kind } : {}),
       ...(object.type === 'camera' ? { lookAt: structuredClone(object.lookAt) } : {}),
     })),
-    shots: snapshot.shots.map((shot) => ({
-      id: shot.id,
-      name: shot.name,
-      time: shot.time,
-      hold: shot.hold,
-      transitionDuration: shot.transitionDuration,
-      continuity: shot.continuity,
-      cameraId: shot.cameraId,
+    stateKeyframes: snapshot.stateKeyframes.map((stateKeyframe) => ({
+      id: stateKeyframe.id,
+      name: stateKeyframe.name,
+      time: stateKeyframe.time,
+      hold: stateKeyframe.hold,
+      transitionDuration: stateKeyframe.transitionDuration,
+      continuity: stateKeyframe.continuity,
+      cameraId: stateKeyframe.cameraId,
     })),
-    trajectories: snapshot.shots.flatMap((shot) => Object.entries(shot.transition.perObject).flatMap(([objectId, detail]) => {
+    trajectories: snapshot.stateKeyframes.flatMap((stateKeyframe) => Object.entries(stateKeyframe.transition.perObject).flatMap(([objectId, detail]) => {
       const path = detail.spatialPath
-      return path ? [{ shotId: shot.id, objectId, source: path.source.kind === 'preset' ? path.source.preset.kind : 'custom', knotCount: path.knots.length }] : []
+      return path ? [{ stateKeyframeId: stateKeyframe.id, objectId, source: path.source.kind === 'preset' ? path.source.preset.kind : 'custom', knotCount: path.knots.length }] : []
     })),
-    keyframeCount: snapshot.animation.tracks.reduce((total, track) => total + track.keyframes.length, 0),
     collisions: listSceneCollisionPairs(snapshot.objects),
   }
 }
@@ -267,8 +264,7 @@ async function readDomainSnapshot(projectId: string): Promise<CameraStageProject
       activeCameraId: current.activeCameraId,
       animation: current.animation,
       sceneSettings: current.sceneSettings,
-      editorMode: current.editorMode,
-      shots: current.shots,
+      stateKeyframes: current.stateKeyframes,
     }
   }
   const snapshot = await readProjectSnapshot(projectId)
@@ -315,62 +311,18 @@ export const cameraStageApplicationService = {
       if (update.playing) state.play()
       else state.pause()
     }
-    const playback = { ...useCameraStageStore.getState().playback }
-    /*
-     * store 的 play() 在时间轴为空时直接返回不做事。对人来说这没问题——按钮是灰的，
-     * 他看得见；对助手来说这是一次静默失败：它以为播上了，回头拿到的证据却是 playing:false，
-     * 而错误信息一个字都没有。把这条说清楚，模型才知道该先去建镜头卡或关键帧。
-     */
-    if (update.playing === true && !playback.playing) {
-      const current = useCameraStageStore.getState()
-      throw new Error(
-        'PLAYBACK_NOT_READY：时间轴上没有可播放的内容。'
-        + (current.editorMode === 'simple'
-          ? `简易模式需要至少一张镜头卡且时长大于 0（当前 ${current.shots.length} 张，时长 ${current.animation.duration}）。`
-          : `专业模式需要至少一条动画轨道（当前 ${current.animation.tracks.length} 条）。`)
-      )
-    }
-    return { projectId, playback }
+    return { projectId, playback: { ...useCameraStageStore.getState().playback } }
   },
 
-  async createProject(name: string, mode: StageEditorMode): Promise<{ projectId: string; name: string; mode: StageEditorMode }> {
-    const project = await createNewProject(name.trim(), mode)
-    return { projectId: project.id, name: project.name, mode }
+  async createProject(name: string): Promise<{ projectId: string; name: string }> {
+    const project = await createNewProject(name.trim())
+    return { projectId: project.id, name: project.name }
   },
 
-  async openProject(projectId: string): Promise<{ projectId: string; name: string; objectCount: number; shotCount: number }> {
+  async openProject(projectId: string): Promise<{ projectId: string; name: string; objectCount: number; stateKeyframeCount: number }> {
     if (!await loadProjectIntoScene(projectId)) throw new Error('NOT_FOUND')
     const state = useCameraStageStore.getState()
-    return { projectId, name: state.currentProjectName, objectCount: state.objects.length, shotCount: state.shots.length }
-  },
-
-  /**
-   * 把简易模式的镜头卡单向烘焙为专业模式的关键帧时间轴（2.3）。
-   *
-   * 不可逆：委托给 `bakeCurrentProjectToPro()`，与界面上 `EditorModeBadge` 的"转为专业工程"
-   * 按钮走同一份业务逻辑——烘焙后原镜头卡结构不再保留、撤销历史被清空。已经是专业模式时
-   * 是安全的空操作（不抛错，`status` 里如实反映）。
-   *
-   * `setEditorMode` 这个 store 动作本身**不**在这里暴露：它只在新建工程时对一个空场景调用
-   * （见 `createNewProject`），已被 `create_camera_stage_project` 覆盖；直接把它开放成通用
-   * 属性写入会绕开烘焙的编译与清理步骤，在"专业"模式下留下过期的 `shots` 数据。
-   */
-  async bakeToProMode(projectId: string): Promise<{
-    projectId: string
-    status: 'baked' | 'already_pro'
-    shotCount: number
-    trackCount: number
-  }> {
-    await ensureProjectLoaded(projectId)
-    const before = useCameraStageStore.getState()
-    if (before.editorMode !== 'simple') {
-      return { projectId, status: 'already_pro', shotCount: 0, trackCount: before.animation.tracks.length }
-    }
-    const shotCount = before.shots.length
-    const saved = await bakeCurrentProjectToPro()
-    if (!saved) throw new Error('CAPABILITY_REJECTED')
-    const baked = useCameraStageStore.getState()
-    return { projectId, status: 'baked', shotCount, trackCount: baked.animation.tracks.length }
+    return { projectId, name: state.currentProjectName, objectCount: state.objects.length, stateKeyframeCount: state.stateKeyframes.length }
   },
 
   async renameProject(projectId: string, name: string): Promise<{ projectId: string; name: string }> {
@@ -506,32 +458,30 @@ export const cameraStageApplicationService = {
     const patch = validateObjectUpdate(object, state.objects, update)
     const undoToken = captureCameraStageUndo(projectId)
     /*
-     * 助手的写入是**建模**，不是动画编辑，必须同步到所有关键帧卡。
+     * 助手的写入是**建模**，不是动画编辑，必须同步到所有状态关键帧。
      *
-     * 简易模式下 store.updateObject 会把改动只捕获进当前选中的那一张卡（captureObjectsIntoShot
-     * 对其他卡直接原样返回），而新对象在创建时是以默认状态写进**所有**卡的。两者一叠加：
+     * 动画编辑时 store.updateObject 会把改动只捕获进当前时间点的状态关键帧（captureObjectsIntoStateKeyframe
+     * 对其他状态关键帧直接原样返回），而新对象在创建时是以默认状态写进**所有**状态关键帧的。两者一叠加：
      * 助手"放一个白色球体"之后，球体在 1 张卡上是新位置+白色、在其余 146 张卡上是默认位置+
      * 默认颜色——播放时插值，球体一边移动一边变色，实测截图里它是淡黄色而不是白色。
      *
      * 人手动拖物体时希望自动打点（那确实是在编辑动画），所以 store.updateObject 的行为不动；
      * 走能力层的写入改用建模语义。
      */
-    state.updateObjectAcrossShots(objectId, patch)
+    state.updateObjectAcrossStateKeyframes(objectId, patch)
     await saveCurrentProject()
     return { projectId, objectId, updatedKeys: Object.keys(patch), undoToken }
   },
 
   /**
-   * 逐分量动画属性直接写入（2.4，方案 C）：轨道无关键帧则写静态值，轨道有关键帧则等价于
-   * 在当前播放时间点写/建一个关键帧——调用的是 store 里已经这样实现的 `updateTransform` /
-   * `updatePoseJoint` / `updateObject`（三者的 `autoKeyPaths` 分支本就是这个语义，未重写）。
+   * 逐分量动画属性直接写入：调用 store 的 `updateTransform` / `updatePoseJoint` / `updateObject`，
+   * 在当前播放时间创建或更新聚合状态关键帧。
    *
-   * 这条路径与 `updateObject()`（上面那个）故意分开：那个是"建模"语义，一律同步全部镜头卡、
+   * 这条路径与 `updateObject()`（上面那个）故意分开：那个是"建模"语义，一律同步全部状态关键帧、
    * 从不自动打点；这个是"动画编辑"语义，只在有轨道时才打点。两条路径混用同一个 store 动作
    * 会重新打开重要记录 002 描述的陷阱——静态值刚写完，播放头一动就被插值结果覆盖回去。
    *
-   * 只在专业模式下可写：简易模式没有独立的关键帧轨道（由镜头卡编译而来），"轨道有没有关键帧"
-   * 这个判断条件本身不成立。
+   * 所有动画编辑只存在这一条落地语义，派生轨道不会成为第二真相源。
    */
   async updateAnimatableProperties(
     projectId: string,
@@ -540,14 +490,6 @@ export const cameraStageApplicationService = {
   ): Promise<{ projectId: string; objectId: string; updatedPaths: string[]; undoToken: string }> {
     await ensureProjectLoaded(projectId)
     const object = requireObject(projectId, objectId)
-    const state = useCameraStageStore.getState()
-    if (state.editorMode !== 'pro') {
-      throw new Error(
-        'ANIMATABLE_WRITE_REQUIRES_PRO_MODE：逐分量动画属性直接写入只在专业模式下支持——简易模式'
-        + '没有独立的关键帧轨道。请改用 camera_stage.shot.capture_object_refs 记录到某张镜头卡，'
-        + '或先用 bake_camera_stage_to_pro 把工程转为专业模式。'
-      )
-    }
     const paths = Object.keys(values)
     if (paths.length === 0) throw new Error('INVALID_INPUT')
     for (const path of paths) {
@@ -577,9 +519,9 @@ export const cameraStageApplicationService = {
   },
 
   /**
-   * 一键套用预设姿势（2.4）：整体替换角色姿态，对已有轨道的关节自动打点——委托给
+   * 一键套用预设姿势：整体替换角色姿态并记录到当前状态关键帧——委托给
    * `store.applyPosePreset`，与界面姿态面板的预设按钮同一份实现，未重写。
-   * 语义上与逐分量写入同属"动画编辑"，同样只在专业模式下可写。
+   * 语义上与逐分量写入同属“动画编辑”，复用 store 的正式落地语义。
    */
   async applyObjectPosePreset(
     projectId: string,
@@ -590,12 +532,6 @@ export const cameraStageApplicationService = {
     const object = requireObject(projectId, objectId)
     if (object.type !== 'character') throw new Error('OBJECT_TYPE_MISMATCH：pose_preset 只对角色对象有效。')
     const state = useCameraStageStore.getState()
-    if (state.editorMode !== 'pro') {
-      throw new Error(
-        'ANIMATABLE_WRITE_REQUIRES_PRO_MODE：姿态预设只在专业模式下可写——简易模式没有独立的关键帧'
-        + '轨道。请先用 bake_camera_stage_to_pro 把工程转为专业模式。'
-      )
-    }
     const preset = POSE_PRESETS.find((candidate) => candidate.id === presetId)
     if (!preset) {
       throw new Error(`POSE_PRESET_NOT_FOUND：«${presetId}» 不是已知预设。可用预设：${POSE_PRESETS.map((item) => item.id).join('、')}。`)
@@ -607,30 +543,30 @@ export const cameraStageApplicationService = {
   },
 
   /**
-   * 手工编辑三维轨迹（2.5）：`path` 走 `store.setShotSpatialPath`（整条路径替换，与界面拖控制点
-   * /切线手柄同一份实现），`startPosition`/`endPosition` 走 `store.setShotPathAnchor`（挪相邻
-   * 镜头卡里该对象的位置快照）。两者是独立的 store 动作，可以同一次提交里都出现。
+   * 手工编辑三维轨迹（2.5）：`path` 走 `store.setStateKeyframeSpatialPath`（整条路径替换，与界面拖控制点
+   * /切线手柄同一份实现），`startPosition`/`endPosition` 走 `store.setStateKeyframePathAnchor`（挪相邻
+   * 状态关键帧里该对象的位置快照）。两者是独立的 store 动作，可以同一次提交里都出现。
    *
    * 与 `apply_camera_stage_camera_move`（`cameraMotionService.ts`）不冲突：那条路径产生初始
    * 轨迹（算法采样），这条路径编辑已产生的轨迹（人工调整），两者落地到同一个字段
-   * （`shot.transition.perObject[objectId].spatialPath`），互不知道对方存在也不需要知道——
+   * （`stateKeyframe.transition.perObject[objectId].spatialPath`），互不知道对方存在也不需要知道——
    * 后写的值就是最终值，与界面上"先套预设、再手动微调控制点"完全一致的行为。
    */
   async updateTrajectory(
     projectId: string,
-    shotId: string,
+    stateKeyframeId: string,
     objectId: string,
     update: { path?: StageSpatialPath; startPosition?: StageVec3; endPosition?: StageVec3 },
-  ): Promise<{ projectId: string; shotId: string; objectId: string; undoToken: string }> {
+  ): Promise<{ projectId: string; stateKeyframeId: string; objectId: string; undoToken: string }> {
     await ensureProjectLoaded(projectId)
     const state = useCameraStageStore.getState()
-    if (!state.shots.some((shot) => shot.id === shotId)) throw new Error('NOT_FOUND')
+    if (!state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === stateKeyframeId)) throw new Error('NOT_FOUND')
     const undoToken = captureCameraStageUndo(projectId)
-    if (update.path !== undefined) state.setShotSpatialPath(shotId, objectId, markSpatialPathCustom(update.path))
-    if (update.startPosition !== undefined) state.setShotPathAnchor(shotId, objectId, 'start', update.startPosition)
-    if (update.endPosition !== undefined) state.setShotPathAnchor(shotId, objectId, 'end', update.endPosition)
+    if (update.path !== undefined) state.setStateKeyframeSpatialPath(stateKeyframeId, objectId, markSpatialPathCustom(update.path))
+    if (update.startPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'start', update.startPosition)
+    if (update.endPosition !== undefined) state.setStateKeyframePathAnchor(stateKeyframeId, objectId, 'end', update.endPosition)
     await saveCurrentProject()
-    return { projectId, shotId, objectId, undoToken }
+    return { projectId, stateKeyframeId, objectId, undoToken }
   },
 
   async duplicateObject(projectId: string, objectId: string): Promise<{ projectId: string; objectId: string; duplicatedFromObjectId: string; undoToken: string }> {
@@ -652,10 +588,10 @@ export const cameraStageApplicationService = {
     return { projectId, objectId, status: 'deleted' }
   },
 
-  async updateShot(projectId: string, shotId: string, update: CameraStageShotUpdate): Promise<{ projectId: string; shotId: string; status: 'updated'; undoToken: string }> {
+  async updateStateKeyframe(projectId: string, stateKeyframeId: string, update: CameraStageStateKeyframeUpdate): Promise<{ projectId: string; stateKeyframeId: string; status: 'updated'; undoToken: string }> {
     await ensureProjectLoaded(projectId)
     const state = useCameraStageStore.getState()
-    if (!state.shots.some((shot) => shot.id === shotId)) throw new Error('NOT_FOUND')
+    if (!state.stateKeyframes.some((stateKeyframe) => stateKeyframe.id === stateKeyframeId)) throw new Error('NOT_FOUND')
     if (update.cameraId && !state.objects.some((object) => object.id === update.cameraId && object.type === 'camera')) throw new Error('INVALID_REFERENCE')
     if (update.hold !== undefined && (!Number.isFinite(update.hold) || update.hold < 0)) throw new Error('INVALID_TIME_RANGE')
     if (update.transitionDuration !== undefined && (!Number.isFinite(update.transitionDuration) || update.transitionDuration < 0)) throw new Error('INVALID_TIME_RANGE')
@@ -664,25 +600,25 @@ export const cameraStageApplicationService = {
       const missing = update.captureObjectIds.filter((id) => !state.objects.some((object) => object.id === id))
       if (missing.length > 0) {
         throw new Error(
-          `SHOT_CAPTURE_OBJECT_NOT_FOUND：${missing.join('、')} 不是本场景中的对象 id，`
+          `STATE_KEYFRAME_CAPTURE_OBJECT_NOT_FOUND：${missing.join('、')} 不是本场景中的对象 id，`
           + `capture_object_refs 里的引用必须取自观察结果里 objects[].id 的原值。`
         )
       }
     }
     const undoToken = captureCameraStageUndo(projectId)
-    if (update.name !== undefined) state.updateShotName(shotId, update.name)
+    if (update.name !== undefined) state.updateStateKeyframeName(stateKeyframeId, update.name)
     // 时间点先落，后续的 hold / 过渡时长都是相对这个位置计算的。
-    if (update.time !== undefined) state.moveShotTime(shotId, update.time)
-    if (update.hold !== undefined || update.transitionDuration !== undefined) state.updateShotTiming(shotId, update)
-    if (update.continuity !== undefined) state.updateShotContinuity(shotId, update.continuity)
-    if (update.cameraId !== undefined) state.updateShotCamera(shotId, update.cameraId)
+    if (update.time !== undefined) state.moveStateKeyframeTime(stateKeyframeId, update.time)
+    if (update.hold !== undefined || update.transitionDuration !== undefined) state.updateStateKeyframeTiming(stateKeyframeId, update)
+    if (update.continuity !== undefined) state.updateStateKeyframeContinuity(stateKeyframeId, update.continuity)
+    if (update.cameraId !== undefined) state.updateStateKeyframeCamera(stateKeyframeId, update.cameraId)
     if (update.captureObjectIds !== undefined) {
-      // 只覆盖列出的对象在这一张卡上的快照，不触碰这张卡的其余对象、也不触碰其他镜头卡。
+      // 只覆盖列出的对象在目标状态关键帧上的快照，不触碰其余对象或其他时间点。
       const current = useCameraStageStore.getState()
-      const shots = captureObjectsIntoShot(current.shots, shotId, current.objects, update.captureObjectIds)
-      useCameraStageStore.setState({ shots, animation: compileShotsToAnimation(shots, current.objects) })
+      const stateKeyframes = captureObjectsIntoStateKeyframe(current.stateKeyframes, stateKeyframeId, current.objects, update.captureObjectIds)
+      useCameraStageStore.setState({ stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, current.objects) })
     }
     await saveCurrentProject()
-    return { projectId, shotId, status: 'updated', undoToken }
+    return { projectId, stateKeyframeId, status: 'updated', undoToken }
   },
 }

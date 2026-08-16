@@ -2,6 +2,8 @@ import type {
   ApplicationChangePlan,
   ApplicationCommitRequest,
   ApplicationEvidence,
+  ApplicationEffectKind,
+  ApplicationEffectReceipt,
   ApplicationPlannedStep,
   ApplicationPropertyMutation,
   ApplicationTransactionMode,
@@ -32,9 +34,29 @@ export interface ApplicationExecutionContext extends ApplicationControlAccessCon
 export interface ApplicationCompletedStepResult {
   status: 'completed'
   resultingRevisions: Record<string, number>
-  producedRefs: ApplicationRef[]
+  directRefs: ApplicationRef[]
+  /** 算法型 operation 的直接 Effect；mutation/collection 的直接 Effect 由引擎生成。 */
+  directEffects?: ApplicationEffectReceipt[]
+  cascadeEffects?: ApplicationEffectReceipt[]
   evidence: ApplicationEvidence[]
   undoToken?: string
+}
+
+export interface ApplicationCascadeEffectDeclaration {
+  readonly declarationId: string
+  readonly effect: ApplicationEffectKind
+  readonly entityType: string
+  readonly propertyIds: readonly string[]
+  readonly revisionScopes: readonly string[]
+}
+
+export interface ApplicationEffectContract {
+  readonly direct: readonly ApplicationCascadeEffectDeclaration[]
+  readonly cascades: readonly ApplicationCascadeEffectDeclaration[]
+}
+
+export function directOnlyEffectContract(): ApplicationEffectContract {
+  return { direct: [], cascades: [] }
 }
 
 export interface ApplicationSubmittedStepResult {
@@ -56,12 +78,13 @@ export type ApplicationStepExecutionResult =
 
 export interface ApplicationMutationExecutor {
   readonly entityType: string
+  readonly effectContract: ApplicationEffectContract
   /**
    * 这个执行器**真的能写**的属性 id 全集。必须由写入表派生（`writableProperties(TABLE)`），
    * 不许手写字面量——手写就等于又开了一条会漂移的路。
    *
    * 门禁拿它与反射层「无 readOnlyReason 且有写权限」的属性集做双向比对：
-   * 少了 → 声明可写却写不了（`camera_stage.shot.time` 就是这么漏掉的，实体级门禁看不见）；
+   * 少了 → 声明可写却写不了（`camera_stage.state_keyframe.time` 就是这么漏掉的，实体级门禁看不见）；
    * 多了 → 执行器能写但模型看不见，是死代码。
    *
    * 设计成**必填字段**而非可选方法：可选就是复刻同一个盲区，没声明的照旧静默；
@@ -100,6 +123,7 @@ export interface ApplicationMutationExecutor {
  */
 export interface ApplicationCollectionExecutor {
   readonly entityType: string
+  readonly effectContract: ApplicationEffectContract
   apply(
     step: Extract<ApplicationPlannedStep, { kind: 'collection' }>,
     context: ApplicationExecutionContext
@@ -121,6 +145,7 @@ export interface ApplicationSemanticOperationExecutor {
   readonly risk: ApplicationRisk
   readonly requiredPermissions: string[]
   readonly supportsAtomic: boolean
+  readonly effectContract: ApplicationEffectContract
   normalizeInput(input: JsonValue): JsonValue
   getCurrentRevisions(input: JsonValue): Promise<Record<string, number>>
   execute(input: JsonValue, context: ApplicationExecutionContext): Promise<ApplicationStepExecutionResult>

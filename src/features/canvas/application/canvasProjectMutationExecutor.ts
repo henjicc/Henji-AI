@@ -29,6 +29,7 @@ const UNDO_PREFIX = 'canvas-project-undo:'
  * 与 `asset.tags` 是同一类悬空声明。
  */
 export class CanvasProjectMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = CANVAS_ENTITY_TYPES.project
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -44,7 +45,7 @@ export class CanvasProjectMutationExecutor implements ApplicationMutationExecuto
     return {
       status: 'completed',
       resultingRevisions: { canvas: revision },
-      producedRefs: [{ kind: this.entityType, id: projectId, revision }],
+      directRefs: [{ kind: this.entityType, id: projectId, revision }],
       evidence: step.mutations.map((mutation) => ({
         kind: 'property_value' as const,
         target: { kind: this.entityType, id: projectId, revision },
@@ -72,7 +73,7 @@ export class CanvasProjectMutationExecutor implements ApplicationMutationExecuto
     return {
       status: 'completed',
       resultingRevisions: { canvas: revision },
-      producedRefs: [{ kind: this.entityType, id: projectId, revision }],
+      directRefs: [{ kind: this.entityType, id: projectId, revision }],
       evidence: [{
         kind: 'entity_state',
         target: { kind: this.entityType, id: projectId, revision },

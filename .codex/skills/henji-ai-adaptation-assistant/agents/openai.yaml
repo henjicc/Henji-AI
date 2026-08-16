@@ -1,4 +1,4 @@
 interface:
   display_name: "痕迹AI适配助手"
-  short_description: "统一处理模型、供应商、参数与画布节点的适配工作流程"
-  default_prompt: "请使用 $henji-ai-adaptation-assistant 分析需求，并按模型或画布分支完成痕迹AI适配。"
+  short_description: "组合处理模型适配与画布节点接入"
+  default_prompt: "使用 $henji-ai-adaptation-assistant 协调模型适配与画布节点接入，并分别遵循两个专业 skill 的唯一规范。"

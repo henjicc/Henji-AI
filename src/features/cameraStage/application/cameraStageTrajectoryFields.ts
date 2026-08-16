@@ -5,22 +5,22 @@ import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationPro
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 import type { StageVec3 } from '../domain/sceneTypes'
-import type { StageSpatialPath, StageSpatialPathKnot } from '../domain/shotTypes'
+import type { StageSpatialPath, StageSpatialPathKnot } from '../domain/stateKeyframeTypes'
 import { stageDescriptor, stageField, vector3Codec, type ValueCodec } from './cameraStageFieldShared'
 
 /*
  * 三维轨迹（`camera_stage.trajectory`）5 条可写属性——2.5。
  *
  * 界面上手动编辑轨迹（拖控制点、拖切线手柄、拖起止端点）全部收敛到两个 store 动作：
- * `setShotSpatialPath`（整条路径替换——`StageMotionPathOverlay.tsx` 里拖任何一个控制点或
+ * `setStateKeyframeSpatialPath`（整条路径替换——`StageMotionPathOverlay.tsx` 里拖任何一个控制点或
  * 切线手柄都是"读当前路径→改一处→整条写回"，没有单独的"改一个控制点"store 方法）与
- * `setShotPathAnchor`（挪起止端点——语义是改相邻镜头卡里该对象的位置快照，不是改
- * `spatialPath.knots`，起止点由相邻卡快照提供、不重复存储，见 shotTypes.ts 的注释）。
+ * `setStateKeyframePathAnchor`（挪起止端点——语义是改相邻状态关键帧里该对象的位置快照，不是改
+ * `spatialPath.knots`，起止点由相邻卡快照提供、不重复存储，见 stateKeyframeTypes.ts 的注释）。
  *
  * 因此不新增 `trajectory_knot` 子实体：`knots` 作为一个 json 数组属性整体读写，与
  * `start_out_tangent`/`end_in_tangent`（路径自身的边缘切线）一起累加进
- * `CameraStageTrajectoryDraft.path`，一次性调用 `setShotSpatialPath`；
- * `start_position`/`end_position` 走独立的 `setShotPathAnchor`。
+ * `CameraStageTrajectoryDraft.path`，一次性调用 `setStateKeyframeSpatialPath`；
+ * `start_position`/`end_position` 走独立的 `setStateKeyframePathAnchor`。
  */
 
 const TRAJECTORY_ENTITY_TYPE = 'camera_stage.trajectory' as const
@@ -117,27 +117,27 @@ export const TRAJECTORY_FIELDS = [
         draft.pathTouched = true
       },
     },
-    storeActions: ['setShotSpatialPath'] as const,
+    storeActions: ['setStateKeyframeSpatialPath'] as const,
   },
   trajectoryField('start_out_tangent', '起点出手柄', vector3Codec('scene_unit'), {
     read: ({ path }) => path.startOutTangent,
     write: (draft, v) => { draft.path = { ...draft.path, startOutTangent: v }; draft.pathTouched = true },
-    storeActions: ['setShotSpatialPath'] as const,
+    storeActions: ['setStateKeyframeSpatialPath'] as const,
   }),
   trajectoryField('end_in_tangent', '终点入手柄', vector3Codec('scene_unit'), {
     read: ({ path }) => path.endInTangent,
     write: (draft, v) => { draft.path = { ...draft.path, endInTangent: v }; draft.pathTouched = true },
-    storeActions: ['setShotSpatialPath'] as const,
+    storeActions: ['setStateKeyframeSpatialPath'] as const,
   }),
   trajectoryField('start_position', '起点位置', vector3Codec('scene_unit'), {
     read: ({ startPosition }) => startPosition,
     write: (draft, v) => { draft.startPosition = v },
-    storeActions: ['setShotPathAnchor'] as const,
+    storeActions: ['setStateKeyframePathAnchor'] as const,
   }),
   trajectoryField('end_position', '终点位置', vector3Codec('scene_unit'), {
     read: ({ endPosition }) => endPosition,
     write: (draft, v) => { draft.endPosition = v },
-    storeActions: ['setShotPathAnchor'] as const,
+    storeActions: ['setStateKeyframePathAnchor'] as const,
   }),
 ]
 

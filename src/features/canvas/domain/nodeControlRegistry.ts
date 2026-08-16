@@ -12,6 +12,7 @@ import {
   getCanvasNodeDefinition,
   type CanvasNodeDefinition,
 } from './nodeRegistry'
+import { modelPortId, promptPortId } from './socketTypes'
 
 export const CANVAS_NODE_CONTROL_CATALOG_VERSION = 'canvas-node-control/v1' as const
 
@@ -20,6 +21,33 @@ const nodeDataBaseSchema = z.object({
 })
 
 const uploadNodeDataSchema = nodeDataBaseSchema.strict()
+
+/*
+ * 面向助手的 upload schema 刻意不接收媒体路径：否则模型可以绕过素材库，把任意本地路径
+ * 塞进画布节点。素材库导入则已经先通过 assetApplicationService.inspect 锚定为正式素材，
+ * 需要一条独立的窄通道承载这份受信任媒体数据，不能为了修复导入而放宽公共 schema。
+ */
+const trustedImageUploadNodeDataSchema = nodeDataBaseSchema.extend({
+  imageUrl: z.string().min(1).max(16 * 1024),
+  previewImageUrl: z.string().min(1).max(16 * 1024).nullable().optional(),
+  aspectRatio: z.string().min(1).max(40),
+  sourceFileName: z.string().max(512).nullable().optional(),
+  isSizeManuallyAdjusted: z.boolean().optional(),
+}).strict()
+
+const trustedVideoUploadNodeDataSchema = nodeDataBaseSchema.extend({
+  videoUrl: z.string().min(1).max(16 * 1024),
+  previewImageUrl: z.string().min(1).max(16 * 1024).nullable().optional(),
+  aspectRatio: z.string().min(1).max(40),
+  durationSec: z.number().finite().nonnegative().nullable().optional(),
+  sourceFileName: z.string().max(512).nullable().optional(),
+  isSizeManuallyAdjusted: z.boolean().optional(),
+}).strict()
+
+const trustedAudioUploadNodeDataSchema = nodeDataBaseSchema.extend({
+  audioUrl: z.string().min(1).max(16 * 1024),
+  sourceFileName: z.string().max(512).nullable().optional(),
+}).strict()
 
 const imageGenerationNodeDataSchema = nodeDataBaseSchema.extend({
   prompt: z.string().max(32 * 1024).optional(),
@@ -31,6 +59,7 @@ interface CanvasNodeControlConfig {
   nodeType: CanvasNodeType
   title: string
   description: string
+  aliases?: string[]
   dataSchema: z.ZodType<Record<string, unknown>>
   aiDataSchema: Record<string, unknown>
   requiresModelSchema: boolean
@@ -109,6 +138,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     nodeType: CANVAS_NODE_TYPES.imageEdit,
     title: 'AI 图片生成节点',
     description: '创建配置驱动的图片生成节点；modelId 和 params 必须来自模型目录与模型 schema。',
+    aliases: ['图片生成节点', '生图节点'],
     dataSchema: imageGenerationNodeDataSchema,
     aiDataSchema: {
       type: 'object',
@@ -202,6 +232,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     nodeType: CANVAS_NODE_TYPES.stringSource,
     title: '文本参数节点',
     description: '向兼容参数端口提供文本值。',
+    aliases: ['文本提示词节点', '提示词节点', '字符串节点'],
     dataSchema: stringSourceNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, value: { type: 'string', maxLength: 32768 } }, additionalProperties: false },
     requiresModelSchema: false,
@@ -254,6 +285,13 @@ export interface CanvasNodeControlCatalogEntry {
   supportsInput: boolean
   supportsOutput: boolean
   requiresModelSchema: boolean
+  aliases: string[]
+}
+
+export interface CanvasNodeConnectionHandle {
+  handleId: string
+  purpose: 'source' | 'prompt' | 'model'
+  valueType?: string
 }
 
 export interface CanvasNodeControlSchema {
@@ -266,6 +304,10 @@ export interface CanvasNodeControlSchema {
   defaultData: Record<string, unknown>
   connectivity: CanvasNodeDefinition['connectivity']
   ports: CanvasNodeDefinition['ports']
+  connectionHandles: {
+    source: CanvasNodeConnectionHandle | null
+    targets: CanvasNodeConnectionHandle[]
+  }
   requiresModelSchema: boolean
 }
 
@@ -281,13 +323,21 @@ function toCatalogEntry(config: CanvasNodeControlConfig): CanvasNodeControlCatal
     supportsInput: definition.connectivity.targetHandle,
     supportsOutput: definition.connectivity.sourceHandle,
     requiresModelSchema: config.requiresModelSchema,
+    aliases: config.aliases ?? [],
   }
 }
 
 export function searchCanvasNodeTypes(query: string): CanvasNodeControlCatalogEntry[] {
   const normalized = query.trim().toLowerCase()
+  const semanticQuery = normalized.replaceAll('节点', '')
   return nodeControlConfigs
-    .filter((config) => !normalized || `${config.nodeType} ${config.title} ${config.description}`.toLowerCase().includes(normalized))
+    .filter((config) => {
+      if (!normalized) return true
+      const corpus = `${config.nodeType} ${config.title} ${config.description} ${(config.aliases ?? []).join(' ')}`
+        .toLowerCase()
+      return corpus.includes(normalized)
+        || (semanticQuery.length > 0 && corpus.replaceAll('节点', '').includes(semanticQuery))
+    })
     .map(toCatalogEntry)
 }
 
@@ -306,6 +356,19 @@ export function getCanvasNodeSchema(nodeType: string): CanvasNodeControlSchema |
     defaultData: definition.createDefaultData() as Record<string, unknown>,
     connectivity: definition.connectivity,
     ports: definition.ports,
+    connectionHandles: {
+      source: definition.connectivity.sourceHandle
+        ? { handleId: 'source', purpose: 'source', valueType: definition.ports?.source?.emits }
+        : null,
+      targets: [
+        ...(definition.generation
+          ? [{ handleId: promptPortId(), purpose: 'prompt' as const, valueType: 'STRING' }]
+          : []),
+        ...(config.requiresModelSchema && definition.connectivity.targetHandleMode === 'rows'
+          ? [{ handleId: modelPortId(), purpose: 'model' as const, valueType: 'MODEL' }]
+          : []),
+      ],
+    },
     requiresModelSchema: config.requiresModelSchema,
   }
 }
@@ -319,6 +382,25 @@ export function parseCanvasNodeData(
   const data = config.dataSchema.parse(input ?? {})
   config.validateData?.(data)
   return { nodeType: config.nodeType, data: data as Partial<CanvasNodeData> }
+}
+
+/** 仅供已经从正式素材或生成结果解析出的媒体导入；不得接收模型或 IPC 原始输入。 */
+export function parseTrustedMediaNodeData(
+  nodeType: string,
+  input: Record<string, unknown>,
+): { nodeType: CanvasNodeType; data: Partial<CanvasNodeData> } {
+  const schema = nodeType === CANVAS_NODE_TYPES.upload
+    ? trustedImageUploadNodeDataSchema
+    : nodeType === CANVAS_NODE_TYPES.videoUpload
+      ? trustedVideoUploadNodeDataSchema
+      : nodeType === CANVAS_NODE_TYPES.audioUpload
+        ? trustedAudioUploadNodeDataSchema
+        : null
+  if (!schema) throw new Error(`媒体导入不支持节点类型：${nodeType}`)
+  return {
+    nodeType: nodeType as CanvasNodeType,
+    data: schema.parse(input) as Partial<CanvasNodeData>,
+  }
 }
 
 export function extractCanvasNodeData(

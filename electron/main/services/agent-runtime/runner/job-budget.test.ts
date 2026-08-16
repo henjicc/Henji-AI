@@ -5,11 +5,15 @@ import { decideAgentBudgetContinuation } from './job-budget'
 
 function state(runId: string, usage: Partial<AgentRunState['usage']>): AgentRunState {
   return agentRunStateSchema.parse({
-    schemaVersion: 'agent-event/v1', runId, threadId: 'thread', status: 'budget_exhausted',
+    schemaVersion: 'agent-event/v2', runId, threadId: 'thread', status: 'budget_exhausted',
     sequence: 1, turn: usage.turns ?? 0, currentStepId: null, currentToolCallId: null,
     waitingApprovalId: null, waitingClarificationId: null,
     startedAt: '2026-08-04T00:00:00.000Z', updatedAt: '2026-08-04T00:01:00.000Z',
     finalText: null, error: null,
+    executionOutcome: {
+      status: 'pending', effects: [], verificationSummary: { summary: '', evidence: [] },
+    },
+    presentationOutcome: { status: 'pending' },
     budget: {
       maxTurns: 32, maxToolCalls: 100, maxDurationMs: 1_800_000,
       maxInputTokens: null, maxOutputTokens: null, maxConsecutiveFailures: 3,

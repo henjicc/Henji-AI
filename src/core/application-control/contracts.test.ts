@@ -86,7 +86,7 @@ describe('application-control contracts', () => {
 
   it('计划、提交结果、证据与目录迁移策略可序列化', () => {
     const plan = applicationChangePlanSchema.parse({
-      contractVersion: 'application-control/v1',
+      contractVersion: 'application-control/v2',
       planRef: `plan:${'a'.repeat(20)}`,
       summary: '调整摄像机位置。',
       risk: 'R1',
@@ -114,7 +114,12 @@ describe('application-control contracts', () => {
       status: 'completed',
       transactionRef: `transaction:${'b'.repeat(20)}`,
       resultingRevisions: { 'camera_stage.scene': 4 },
-      producedRefs: [],
+      resultRefs: [],
+      effects: [{
+        effect: 'update', entityType: 'camera_stage.object',
+        refs: [{ kind: 'camera_stage.object', id: 'camera-1' }],
+        propertyIds: ['transform.position'], origin: { kind: 'direct' },
+      }],
       evidence: [{ kind: 'property_value', fact: '位置已更新。', data: { x: 1 }, capturedAt: '2026-08-01T00:00:01.000Z' }],
       verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: '2026-08-01T00:00:01.000Z' },
       undoRef: `undo:${'c'.repeat(20)}`,

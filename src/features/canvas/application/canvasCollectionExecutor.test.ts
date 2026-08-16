@@ -70,4 +70,39 @@ describe('画布集合写入执行器', () => {
     await executor.undo(String(result.undoToken))
     expect(useCanvasStore.getState().nodes).toHaveLength(0)
   })
+
+  it('删除容器节点时用强类型 cascade receipt 记下后代与关联连线', async () => {
+    const nodes = [
+      { id: 'parent', type: CANVAS_NODE_TYPES.textAnnotation, position: { x: 0, y: 0 }, data: {} },
+      { id: 'child', type: CANVAS_NODE_TYPES.textAnnotation, parentId: 'parent', position: { x: 10, y: 10 }, data: {} },
+      { id: 'peer', type: CANVAS_NODE_TYPES.textAnnotation, position: { x: 100, y: 0 }, data: {} },
+    ]
+    const edges = [{ id: 'edge-1', source: 'child', target: 'peer' }]
+    useCanvasStore.setState({ nodes: nodes as never, edges: edges as never })
+    expect(useCanvasStore.getState().edges).toHaveLength(1)
+    const executor = new CanvasCollectionExecutor(CANVAS_ENTITY_TYPES.node, {
+      readRevision: () => revision,
+      bumpRevision: () => { revision += 1 },
+    })
+    const result = await executor.apply({
+      kind: 'collection', parent: { kind: CANVAS_ENTITY_TYPES.project, id: projectId },
+      entityType: CANVAS_ENTITY_TYPES.node, expectedRevisions: { canvas: revision },
+      operation: { kind: 'remove', targets: [{ kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:parent` }] },
+    })
+
+    expect(useCanvasStore.getState().nodes.map((node) => node.id)).toEqual(['peer'])
+    expect(useCanvasStore.getState().edges).toEqual([])
+    expect(result.cascadeEffects).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        effect: 'delete', entityType: CANVAS_ENTITY_TYPES.node,
+        refs: [expect.objectContaining({ id: `${projectId}:child` })],
+        origin: { kind: 'cascade', declarationId: 'canvas.delete_descendant_nodes' },
+      }),
+      expect.objectContaining({
+        effect: 'delete', entityType: CANVAS_ENTITY_TYPES.edge,
+        refs: [expect.objectContaining({ id: `${projectId}:edge-1` })],
+        origin: { kind: 'cascade', declarationId: 'canvas.delete_connected_edges' },
+      }),
+    ]))
+  })
 })

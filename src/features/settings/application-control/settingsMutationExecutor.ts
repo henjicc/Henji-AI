@@ -26,6 +26,7 @@ function createUndoToken(): string {
 
 export class SettingsMutationExecutor implements ApplicationMutationExecutor {
   readonly entityType = SETTINGS_ENTITY_TYPE
+  readonly effectContract = { direct: [], cascades: [] }
   private readonly undoEntries = new Map<string, SettingsUndoEntry>()
 
   /*
@@ -89,7 +90,7 @@ export class SettingsMutationExecutor implements ApplicationMutationExecutor {
       return {
         status: 'completed' as const,
         resultingRevisions: { settings: revision },
-        producedRefs: [{ kind: this.entityType, id: 'singleton', revision }],
+        directRefs: [{ kind: this.entityType, id: 'singleton', revision }],
         evidence: step.mutations.map((mutation) => ({
           kind: 'property_value' as const,
           target: { kind: this.entityType, id: 'singleton', revision },
@@ -130,7 +131,7 @@ export class SettingsMutationExecutor implements ApplicationMutationExecutor {
       return {
         status: 'completed',
         resultingRevisions: { settings: revision },
-        producedRefs: [{ kind: this.entityType, id: 'singleton', revision }],
+        directRefs: [{ kind: this.entityType, id: 'singleton', revision }],
         evidence: [{
           kind: 'entity_state',
           target: { kind: this.entityType, id: 'singleton', revision },

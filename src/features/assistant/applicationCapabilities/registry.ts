@@ -9,9 +9,7 @@ import {
   observeApplicationSurfaceCapability,
 } from '@/core/assistant/builtinApplicationCapabilities'
 import {
-  applyApplicationSettingsChangeCapability,
   getApplicationSettingsCapability,
-  planApplicationSettingsChangeCapability,
   searchApplicationSettingsCapability,
 } from '@/core/assistant/capabilities/settingsApplicationCapabilities'
 import {
@@ -39,10 +37,8 @@ import {
   openImageEditorWithSource,
 } from './generationCapabilities'
 import {
-  applyApplicationSettingsChange,
   getApplicationSettings,
   listApplicationSettingIds,
-  planApplicationSettingsChange,
   searchApplicationSettings,
 } from './settingsRegistry'
 import {
@@ -179,19 +175,6 @@ function registerBuiltins(): void {
     const parsed = getApplicationSettingsCapability.inputSchema.parse(input)
     return getApplicationSettings(parsed.ids)
   })
-  registry.registerHandler(planApplicationSettingsChangeCapability.id, (input) => {
-    const parsed = planApplicationSettingsChangeCapability.inputSchema.parse(input)
-    const plan = planApplicationSettingsChange(parsed.changes)
-    return {
-      ...plan,
-      requiresReload: plan.changes.some((change) => change.requiresReload),
-      requiresRestart: plan.changes.some((change) => change.requiresRestart),
-    }
-  })
-  registry.registerHandler(applyApplicationSettingsChangeCapability.id, (input) => {
-    const parsed = applyApplicationSettingsChangeCapability.inputSchema.parse(input)
-    return applyApplicationSettingsChange(parsed.planRef)
-  })
   registry.registerHandler(listGenerationHistoryCapability.id, async (input) => {
     const parsed = listGenerationHistoryCapability.inputSchema.parse(input)
     return await listGenerationHistory(parsed)
@@ -289,8 +272,16 @@ function toFailure(error: unknown): ApplicationCapabilityResult {
   if (message === 'INVALID_INPUT' || message === 'VERSION_MISMATCH') {
     return { ok: false, error: { code: 'INVALID_INPUT', message: '应用能力参数无效', recoverable: true } }
   }
-  if (message === 'CONFLICT') {
-    return { ok: false, error: { code: 'CONFLICT', message: '应用状态已变化，请重新读取后再试', recoverable: true } }
+  if (message === 'CONFLICT' || message.startsWith('CONFLICT:')) {
+    const detail = message.slice('CONFLICT:'.length).trim()
+    return {
+      ok: false,
+      error: {
+        code: 'CONFLICT',
+        message: detail || '应用状态已变化，请重新读取后再试',
+        recoverable: true,
+      },
+    }
   }
   return {
     ok: false,

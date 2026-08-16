@@ -410,13 +410,17 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 - [ ] 同级元素间距是否统一（不要一行 `mt-2` 一行 `mt-3`）
 - [ ] 高频状态（进度/hover/拖拽）是否放在独立 store 而非大列表 state
 - [ ] 列表超过 ~50 项是否考虑了虚拟化
-- [ ] 界面改动后是否跑过 `npm run ui:tour`，查看六类界面、两档尺寸及交互状态的真实截图
+- [ ] 只有改动共享页面骨架、设计令牌或全局界面机制时才按 `docs/rules/testing.md` 运行相关 `ui:tour -- --only ...`；局部界面改动不默认跑全量场景
 
-## 完成前必跑
+## 完成前按风险选择
 
 ```bash
-npm run check:surface && npm run check:colors && npm run check:icons && npm run lint
+npm run check:surface
+npm run check:colors
+npm run check:icons
 ```
+
+只运行与本次改动直接相关的专项检查；验证级别和是否追加 lint、类型检查、构建由 `docs/rules/testing.md` 决定。
 
 改了动效档位或 `motion.ts` 再补一条（它保证 ms 数值与 `duration-*` 类不漂移）：
 
@@ -424,14 +428,14 @@ npm run check:surface && npm run check:colors && npm run check:icons && npm run 
 npx vitest run src/components/ui/motion.test.ts
 ```
 
-**界面改动或改了颜色令牌**，先构建，再分别跑截图巡检与规则审计：
+只有共享页面骨架、设计令牌、浮层/滚动/溢出机制等高影响界面改动，才先构建并按场景缩小范围运行截图巡检与规则审计：
 
 ```bash
-npm run ui:tour
+npm run ui:tour -- --only <受影响场景> --size <受影响尺寸>
 npm run check:ui-visual
 ```
 
-`ui:tour` 产出 `.ui-tour/index.md` 与截图，专门让人检查对齐、留白、视觉权重、hover /
+局部样式、文案或叶子组件改动只运行直接相关的静态检查和精确测试，不追加完整 `ui:tour`。`ui:tour` 产出 `.ui-tour/index.md` 与截图，专门让人检查对齐、留白、视觉权重、hover /
 聚焦 / 下拉 / 右键状态；`check:ui-visual` 只输出规则结论与 `.ui-audit/audit.json`，
 不做像素差异。两者共用场景配置但职责分离，截图差异不作为 CI 门禁。
 
@@ -464,4 +468,3 @@ npm run check:ui-visual
 - 组件复用与原生标签落点、颜色令牌三处入口：见 [docs/rules/frontend-ui.md](../../../docs/rules/frontend-ui.md) 与 [docs/rules/architecture.md](../../../docs/rules/architecture.md)
 - 画布节点的行组件拼装：见 skill `canvas-node-builder`
 - 提示词编辑器、文件上传控件：必须复用 `PromptEditor` / `FileUploader`，不要重写
-

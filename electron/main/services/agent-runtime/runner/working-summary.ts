@@ -66,7 +66,10 @@ export function markWorkingSummaryRecoveryVerified(
 ): AgentWorkingSummary {
   return agentWorkingSummarySchema.parse({
     ...current,
-    unresolvedItems: current.unresolvedItems.filter((item) => !item.includes('未收敛')),
+    unresolvedItems: current.unresolvedItems.filter((item) => (
+      !item.includes('未收敛')
+      && !item.startsWith('恢复时宿主作用域已变化：')
+    )),
     recovery: {
       mode: 'none',
       reason: '已通过同领域只读工具重新确认状态。',

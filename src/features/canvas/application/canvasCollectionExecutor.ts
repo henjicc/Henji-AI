@@ -7,6 +7,7 @@ import type {
   JsonValue,
 } from '@/core/application-control'
 import type { CanvasBatchOperation } from '@/core/assistant/capabilities/canvasBatchApplicationCapabilities'
+import { useCanvasStore } from '@/stores/canvasStore'
 
 import { applyCanvasOperationsAtomically, undoCanvasBatch } from './canvasBatchService'
 import { CANVAS_ENTITY_TYPES } from './canvasReflection'
@@ -48,6 +49,13 @@ function property(properties: Record<string, JsonValue>, entityType: string, suf
  * 本项目已经吃过四次亏的那种双路径。
  */
 export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
+  readonly effectContract = {
+    direct: [],
+    cascades: [
+      { declarationId: 'canvas.delete_descendant_nodes', effect: 'delete' as const, entityType: CANVAS_ENTITY_TYPES.node, propertyIds: [], revisionScopes: ['canvas'] },
+      { declarationId: 'canvas.delete_connected_edges', effect: 'delete' as const, entityType: CANVAS_ENTITY_TYPES.edge, propertyIds: [], revisionScopes: ['canvas'] },
+    ],
+  }
   constructor(
     readonly entityType: string,
     private readonly dependencies: CanvasCollectionDependencies,
@@ -58,12 +66,14 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
       ? step.parent.id.slice(0, step.parent.id.indexOf(':'))
       : step.parent.id
     const operations = this.toOperations(step)
+    const beforeNodes = new Set(useCanvasStore.getState().nodes.map((item) => item.id))
+    const beforeEdges = new Set(useCanvasStore.getState().edges.map((item) => item.id))
     const { appliedOperations, undoRef } = await applyCanvasOperationsAtomically(projectId, operations, {
       source: 'application_collection', entityType: this.entityType,
     })
     this.dependencies.bumpRevision()
     const revision = this.dependencies.readRevision()
-    const producedRefs = appliedOperations.flatMap((result) => {
+    const resultRefs = appliedOperations.flatMap((result) => {
       const id = typeof result.nodeId === 'string'
         ? result.nodeId
         : typeof result.edgeId === 'string' ? result.edgeId : null
@@ -72,7 +82,12 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     return {
       status: 'completed',
       resultingRevisions: { canvas: revision },
-      producedRefs: producedRefs.slice(0, 64),
+      directRefs: step.operation.kind === 'remove'
+        ? step.operation.targets.map((ref) => ({ ...ref, revision }))
+        : resultRefs.slice(0, 64),
+      cascadeEffects: step.operation.kind === 'remove' && this.entityType === CANVAS_ENTITY_TYPES.node
+        ? this.deletedCascadeEffects(projectId, beforeNodes, beforeEdges, revision, step)
+        : [],
       evidence: [{
         kind: 'operation_result',
         target: { kind: CANVAS_ENTITY_TYPES.project, id: projectId, revision },
@@ -104,7 +119,7 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
     return {
       status: 'completed',
       resultingRevisions: { canvas: revision },
-      producedRefs: [],
+      directRefs: [],
       evidence: [{
         kind: 'entity_state',
         target: { kind: CANVAS_ENTITY_TYPES.project, id: String(restored?.projectId ?? projectId), revision },
@@ -151,5 +166,28 @@ export class CanvasCollectionExecutor implements ApplicationCollectionExecutor {
       kind: 'delete_nodes' as const,
       nodeIds: step.operation.targets.map((target) => refChildId(target)),
     }]
+  }
+
+  private deletedCascadeEffects(
+    projectId: string,
+    beforeNodes: ReadonlySet<string>,
+    beforeEdges: ReadonlySet<string>,
+    revision: number,
+    step: CollectionStep,
+  ) {
+    const state = useCanvasStore.getState()
+    const remainingNodes = new Set(state.nodes.map((item) => item.id))
+    const remainingEdges = new Set(state.edges.map((item) => item.id))
+    const requested = new Set(step.operation.kind === 'remove' ? step.operation.targets.map(refChildId) : [])
+    const descendantRefs = [...beforeNodes]
+      .filter((id) => !remainingNodes.has(id) && !requested.has(id))
+      .map((id) => ({ kind: CANVAS_ENTITY_TYPES.node, id: `${projectId}:${id}`, revision }))
+    const edgeRefs = [...beforeEdges]
+      .filter((id) => !remainingEdges.has(id))
+      .map((id) => ({ kind: CANVAS_ENTITY_TYPES.edge, id: `${projectId}:${id}`, revision }))
+    return [
+      ...(descendantRefs.length > 0 ? [{ effect: 'delete' as const, entityType: CANVAS_ENTITY_TYPES.node, refs: descendantRefs, propertyIds: [], origin: { kind: 'cascade' as const, declarationId: 'canvas.delete_descendant_nodes' } }] : []),
+      ...(edgeRefs.length > 0 ? [{ effect: 'delete' as const, entityType: CANVAS_ENTITY_TYPES.edge, refs: edgeRefs, propertyIds: [], origin: { kind: 'cascade' as const, declarationId: 'canvas.delete_connected_edges' } }] : []),
+    ]
   }
 }

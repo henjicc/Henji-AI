@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { agentRunStateSchema } from './events'
 import { AGENT_RUNTIME_SCHEMA_VERSION, agentStartRunRequestSchema } from './runtimeContracts'
 
-export const AGENT_CHECKPOINT_VERSION = 'agent-checkpoint/v1' as const
+export const AGENT_CHECKPOINT_VERSION = 'agent-checkpoint/v2' as const
 
 export const agentRunRecoveryStatusSchema = z.enum(['none', 'recovery_required', 'retried'])
 export type AgentRunRecoveryStatus = z.infer<typeof agentRunRecoveryStatusSchema>

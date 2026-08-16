@@ -13,7 +13,7 @@ import {
  * 覆盖门禁：**声明可写的每一条属性，执行器必须真的写得了**。
  *
  * 兄弟门禁 collectionCoverage 只到**实体**粒度——实体有 mutation 执行器就算过。于是
- * `camera_stage.shot.time` 在反射层声明可写、执行器那条手写 if-else 链里没有对应分支这件事，
+ * `camera_stage.state_keyframe.time` 在反射层声明可写、执行器那条手写 if-else 链里没有对应分支这件事，
  * 全绿了不知道多久：助手改镜头时间点必然拿到 PROPERTY_NOT_WRITABLE，而这条错误在结算链上
  * 看不出跟能力覆盖有关，只能靠用户实机撞上。
  *

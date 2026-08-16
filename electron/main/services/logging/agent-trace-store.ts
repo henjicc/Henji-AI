@@ -54,6 +54,7 @@ interface TraceRow {
   updated_at: number
   thread_id: string | null
   goal: string | null
+  run_status: string | null
 }
 
 interface TraceIdentityRow {
@@ -169,6 +170,17 @@ function statusRank(status: AgentTraceStatus): number {
 
 function aggregateStatus(current: AgentTraceStatus, next: AgentTraceStatus): AgentTraceStatus {
   return statusRank(next) > statusRank(current) ? next : current
+}
+
+function statusFromRuntime(
+  runtimeStatus: string | null,
+  requestAggregate: AgentTraceStatus,
+): AgentTraceStatus {
+  if (runtimeStatus === 'completed' || runtimeStatus === 'completed_with_warning') return 'completed'
+  if (runtimeStatus === 'failed' || runtimeStatus === 'budget_exhausted') return 'failed'
+  if (runtimeStatus === 'cancelled') return 'cancelled'
+  if (runtimeStatus === null) return requestAggregate
+  return 'running'
 }
 
 export class AgentTraceStore {
@@ -315,7 +327,7 @@ export class AgentTraceStore {
     }
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : ''
     const rows = this.database.prepare(`
-      SELECT t.*, r.thread_id, r.goal
+      SELECT t.*, r.thread_id, r.goal, r.status AS run_status
       FROM agent_model_traces t
       LEFT JOIN agent_runs r ON r.run_id = t.run_id
       ${where}
@@ -326,7 +338,9 @@ export class AgentTraceStore {
     const hasMore = rows.length > query.limit
     const visibleRows = rows.slice(0, query.limit)
     const grouped = new Map<string, AgentTraceRunSummary>()
+    const runtimeStatuses = new Map<string, string | null>()
     for (const row of visibleRows) {
+      runtimeStatuses.set(row.run_id, row.run_status)
       const step = rowToStep(row)
       const existing = grouped.get(row.run_id)
       if (!existing) {
@@ -358,7 +372,11 @@ export class AgentTraceStore {
     }
 
     const runs = [...grouped.values()]
-      .map((run) => ({ ...run, steps: run.steps.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt)) }))
+      .map((run) => ({
+        ...run,
+        status: statusFromRuntime(runtimeStatuses.get(run.runId) ?? null, run.status),
+        steps: run.steps.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
+      }))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     const oldest = visibleRows[visibleRows.length - 1]?.started_at
     return agentTraceQueryResultSchema.parse({
@@ -370,7 +388,7 @@ export class AgentTraceStore {
 
   getDetail(traceId: string): AgentTraceDetailResult | null {
     const row = this.database.prepare(`
-      SELECT t.*, r.thread_id, r.goal
+      SELECT t.*, r.thread_id, r.goal, r.status AS run_status
       FROM agent_model_traces t
       LEFT JOIN agent_runs r ON r.run_id = t.run_id
       WHERE t.trace_id = ?

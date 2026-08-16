@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   redoCanvasChangeFromAgent: vi.fn(),
   ungroupCanvasNodeFromAgent: vi.fn(),
   clearCanvasProjectFromAgent: vi.fn(),
+  addGenerationResultToCanvas: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
@@ -52,6 +53,9 @@ vi.mock('@/features/canvas/application/canvasQueryService', () => ({
 }))
 vi.mock('@/features/assets/application/assetCanvasApplicationService', () => ({
   addAssetToCanvas: vi.fn(),
+}))
+vi.mock('./generationResultCanvasApplicationService', () => ({
+  addGenerationResultToCanvas: mocks.addGenerationResultToCanvas,
 }))
 vi.mock('@/features/canvas/application/canvasDownloadService', () => ({
   downloadCanvasMedia: mocks.downloadCanvasMediaFromAgent,
@@ -108,6 +112,24 @@ describe('canvas capability handlers', () => {
 
     expect(result).toMatchObject({ projectId: 'project-created' })
     expect(mocks.openApplicationSurface).not.toHaveBeenCalled()
+  })
+
+  it('生成结果桥梁把稳定引用和绝对坐标原样交给组合服务', async () => {
+    mocks.addGenerationResultToCanvas.mockReturnValue({
+      projectId: 'project-1', nodeId: 'node-1', nodeType: 'uploadNode',
+      nodeRef: { kind: 'canvas.node', id: 'node-1' },
+      resultRef: { kind: 'generation.result', id: 'task-1' }, undoRef: 'undo-1',
+    })
+    const handler = registeredHandlers().get('add_generation_result_to_canvas')
+    const input = {
+      projectId: 'project-1', resultRef: { kind: 'generation.result' as const, id: 'task-1' },
+      placement: { mode: 'absolute' as const, x: 320, y: 180 },
+    }
+
+    const result = await handler?.(input, context)
+
+    expect(mocks.addGenerationResultToCanvas).toHaveBeenCalledWith(input)
+    expect(result).toMatchObject({ nodeId: 'node-1' })
   })
 
   it('定位节点时自动载入目标项目、打开画布后再聚焦', async () => {

@@ -175,10 +175,13 @@ export function getTempDir(): string {
 }
 
 export async function nativeFetch(request: NativeFetchRequestDto): Promise<NativeFetchResponseDto> {
+  const requestBody = typeof request.body === 'string' || request.body === undefined
+    ? request.body
+    : Uint8Array.from(request.body).buffer
   const response = await fetch(request.url, {
     method: request.method,
     headers: request.headers,
-    body: request.body,
+    body: requestBody,
   })
   const body = new Uint8Array(await response.arrayBuffer())
   return {

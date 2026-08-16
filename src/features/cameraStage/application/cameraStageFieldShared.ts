@@ -32,6 +32,7 @@ export function stageDescriptor(
     nullable?: boolean
     relation?: ApplicationPropertyDescriptor['relation']
     description?: string
+    verificationStrategy?: ApplicationPropertyDescriptor['verificationStrategy']
   } = {},
 ): ApplicationPropertyDescriptor {
   const id = `${entityType}.${suffix}`
@@ -56,6 +57,7 @@ export function stageDescriptor(
       digest: digest(`property:${id}`),
     },
     ...(options.relation ? { relation: options.relation } : {}),
+    ...(options.verificationStrategy ? { verificationStrategy: options.verificationStrategy } : {}),
   }
 }
 
@@ -143,11 +145,11 @@ export function refIdCodec(refKinds: readonly string[]): ValueCodec<string | nul
  *
  * `storeActions` 接受**零到多个**动作名——大多数字段对应一个 store 方法，但三维 object 的
  * `name`/`visible`/`color`/`character_variant` 同时被 `updateObject` 与
- * `updateObjectAcrossShots` 两个 store 动作共用，camera 的部分字段（`fov`、
+ * `updateObjectAcrossStateKeyframes` 两个 store 动作共用，camera 的部分字段（`fov`、
  * `look_at_object_ref` 等）目前没有任何界面动作直接绑定（0 个）。
  *
  * `TAction` 特意不标注、靠 TS 从 `storeActions` 的字符串字面量元组参数推导——调用处必须用
- * `as const` 传入（如 `['updateObject', 'updateObjectAcrossShots'] as const`），账本侧
+ * `as const` 传入（如 `['updateObject', 'updateObjectAcrossStateKeyframes'] as const`），账本侧
  * `fieldLedgerEntries()` 才能拿到字面量 key 联合，保住 `Record<ActionName, …>` 的
  * 编译期完整性检查（漏一条 tsc 报错）。调用处一旦漏了 `as const` 或显式标注成 `string[]`
  * 就会破坏这一点；各领域的薄封装（`appearanceField` / `objectField` / …）因此也必须让
@@ -165,12 +167,14 @@ export function stageField<TSource, TDraft, T, TAction extends string>(
     unit?: string
     nullable?: boolean
     description?: string
+    verificationStrategy?: ApplicationPropertyDescriptor['verificationStrategy']
   },
 ): ApplicationFieldDefinition<TSource, TDraft, TAction> {
   return {
     propertyId: `${entityType}.${suffix}`,
     descriptor: stageDescriptor(entityType, suffix, title, codec.value, {
       unit: options.unit, nullable: options.nullable, description: options.description,
+      verificationStrategy: options.verificationStrategy,
     }),
     read: (source) => codec.encode(options.read(source)),
     writer: { write: (draft, mutation) => { options.write(draft, codec.parse(mutation.value)) } },

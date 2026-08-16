@@ -1,5 +1,5 @@
 import type { StageCharacterMotion } from './characterMotion'
-import type { StageShotObjectState } from './shotTypes'
+import type { StageStateKeyframeObjectState } from './stateKeyframeTypes'
 
 export const CHARACTER_MOVE_MIN_SPEED = 0.1
 export const CHARACTER_JOG_MIN_SPEED = 1.8
@@ -38,8 +38,8 @@ function inferMotion(speed: number): StageCharacterMotion {
 }
 
 export function inferCharacterTransition(
-  fromState: StageShotObjectState,
-  toState: StageShotObjectState,
+  fromState: StageStateKeyframeObjectState,
+  toState: StageStateKeyframeObjectState,
   transitionDuration: number,
   motionOverride?: StageCharacterMotion,
 ): CharacterTransitionInference {

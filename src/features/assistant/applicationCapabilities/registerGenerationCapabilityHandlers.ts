@@ -27,6 +27,14 @@ interface GenerationInput {
   params?: Record<string, unknown>
 }
 
+interface ResolveGenerationModelInput {
+  requestedModelId?: string
+  preferredProviderIds: string[]
+  prompt: string
+  mediaType: 'image' | 'video' | 'audio'
+  params: Record<string, unknown>
+}
+
 interface ResolvedGenerationInput {
   modelId: string
   prompt: string
@@ -108,6 +116,25 @@ export function registerGenerationCapabilityHandlers(
   registrar.registerHandler('get_model_schema', (input) => {
     const parsed = parseCapabilityInput<{ modelId: string }>('get_model_schema', input)
     return generationApplicationService.getModelSchema(parsed.modelId)
+  })
+
+  registrar.registerHandler('resolve_generation_model', async (input) => {
+    const parsed = parseCapabilityInput<ResolveGenerationModelInput>('resolve_generation_model', input)
+    const resolved = await generationApplicationService.resolveModel({
+      requestedModelId: parsed.requestedModelId,
+      preferredProviderIds: parsed.preferredProviderIds,
+      currentModelId: useGenerationDraftStore.getState().draft.selectedModel || undefined,
+      prompt: parsed.prompt,
+      mediaType: parsed.mediaType,
+      options: parsed.params,
+    })
+    // IPC capability handler 的返回边界是可序列化字典。不直接泄漏领域 service 的
+    // named interface，也不把未来可能增加的内部选择信息自动穿透给助手。
+    return {
+      modelId: resolved.modelId,
+      providerId: resolved.providerId,
+      selection: resolved.selection,
+    }
   })
 
   registrar.registerHandler('prepare_generation_task', (input) => {

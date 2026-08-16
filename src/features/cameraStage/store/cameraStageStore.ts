@@ -15,33 +15,27 @@ import { applyObjectPatch, getCameraObjects, isCameraId } from '../domain/camera
 import { getDirectorView, resetDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
-import type { StageSceneSnapshotInput } from '../domain/sceneSerialization'
+import type { StageSceneRuntimeSnapshot } from '../domain/sceneSerialization'
 import {
-  createShot,
-  type StageEditorMode,
-  type StageShot,
-} from '../domain/shotTypes'
-import { compileShotsToAnimation } from '../domain/shotCompiler'
-import { quantizeToFrame } from '../simple/timeline/shotClipGeometry'
+  createStateKeyframe,
+  type StageStateKeyframe,
+} from '../domain/stateKeyframeTypes'
+import { compileStateKeyframesToAnimation } from '../domain/stateKeyframeCompiler'
+import { quantizeToFrame } from '../stateKeyframes/timeline/stateKeyframeClipGeometry'
 import {
-  createDefaultAnimation,
   createDefaultPlayback,
-  type StageEasing,
   type StagePlaybackState,
   type StageSceneAnimation,
 } from '../domain/animationTypes'
-import { getAnimatablePropByPath, poseJointPath } from '../domain/animatableProps'
-import { getTrack, removeObjectTracks, upsertTrackKeyframe } from './animationActions'
-import { createKeyframeSlice } from './keyframeSlice'
 import {
-  compileSimpleEdit,
-  createShotSlice,
-  syncCameraLookAtAcrossShots,
-  syncAddedObjectToShots,
-  syncRemovedObjectFromShots,
-  type ShotTimingPatch,
-  type ShotTransitionPatch,
-} from './shotSlice'
+  compileStateKeyframeEdit,
+  createStateKeyframeSlice,
+  syncCameraLookAtAcrossStateKeyframes,
+  syncAddedObjectToStateKeyframes,
+  syncRemovedObjectFromStateKeyframes,
+  type StateKeyframeTimingPatch,
+  type StateKeyframeTransitionPatch,
+} from './stateKeyframeSlice'
 import { applyAnimationAtTime } from './playbackSampling'
 import type { CameraStagePathActions } from './pathActionTypes'
 import type {
@@ -65,43 +59,36 @@ export interface CameraStageState extends CameraStagePathActions {
   currentProjectId: string | null
   /** 当前工程名（新场景用默认名，保存后与工程记录一致） */
   currentProjectName: string
-  /** 关键帧动画数据（轨道 + 时长 + 帧率），进撤销历史、随工程持久化 */
+  /** 由状态关键帧编译出的播放数据；不单独持久化。 */
   animation: StageSceneAnimation
   /** 播放界面态（不进撤销历史、不持久化） */
   playback: StagePlaybackState
-  /** 时间轴当前选中的关键帧集合（objectId::path::time 键），界面态 */
-  selectedKeyframes: string[]
   /** 场景级设置（背景色/网格显隐），随工程持久化，不进撤销历史 */
   sceneSettings: StageSceneSettings
-  /** 编辑器模式（simple=镜头卡模式，pro=现有关键帧模式），随工程持久化；本任务仅接线字段与默认值，动作在 2.1 实现 */
-  editorMode: StageEditorMode
-  /** 镜头卡列表，随工程持久化；本任务仅接线字段与默认值，动作在 2.1 实现 */
-  shots: StageShot[]
-  selectedShotId: string | null
+  /** 唯一可编辑时间轴真相源，随工程持久化。 */
+  stateKeyframes: StageStateKeyframe[]
+  selectedStateKeyframeId: string | null
   /** 时间轴框选出的多个状态关键帧 id（界面态，不持久化、不进撤销历史） */
-  selectedShotIds: string[]
+  selectedStateKeyframeIds: string[]
   /** 聚焦选中对象请求令牌：每次递增触发一次视口平滑对准，界面态 */
   focusToken: number
-  addShot: () => void
-  moveShotTime: (id: string, time: number) => void
-  removeShot: (id: string) => void
+  addStateKeyframe: () => void
+  moveStateKeyframeTime: (id: string, time: number) => void
+  removeStateKeyframe: (id: string) => void
   /** 批量删除状态关键帧（框选后按 Delete），一次 set 合并为单条撤销记录 */
-  removeShots: (ids: string[]) => void
-  setSelectedShotIds: (ids: string[]) => void
-  reorderShot: (id: string, toIndex: number) => void
-  selectShot: (id: string) => void
-  /** 只更新 selectedShotId，不应用快照/不移动播放头（界面态，不进撤销历史）；scrub 跟随选中用 */
-  setSelectedShotIdOnly: (id: string) => void
-  updateShotTiming: (id: string, patch: ShotTimingPatch) => void
-  updateShotName: (id: string, name: string) => void
-  updateShotTransition: (id: string, patch: ShotTransitionPatch) => void
-  /** 修改镜头卡拍摄机位（重要记录 005）；null = 取消指定，沿用全局 activeCameraId */
-  updateShotCamera: (id: string, cameraId: string | null) => void
-  updateShotContinuity: (id: string, continuity: StageShot['continuity']) => void
-  captureIntoSelectedShot: (objectIds?: string[]) => void
-  setEditorMode: (mode: StageEditorMode) => void
-  /** 将简易镜头卡单向固化为专业关键帧工程；专业工程调用时无操作。 */
-  bakeToProMode: () => void
+  removeStateKeyframes: (ids: string[]) => void
+  setSelectedStateKeyframeIds: (ids: string[]) => void
+  reorderStateKeyframe: (id: string, toIndex: number) => void
+  selectStateKeyframe: (id: string) => void
+  /** 只更新 selectedStateKeyframeId，不应用快照/不移动播放头（界面态，不进撤销历史）；scrub 跟随选中用 */
+  setSelectedStateKeyframeIdOnly: (id: string) => void
+  updateStateKeyframeTiming: (id: string, patch: StateKeyframeTimingPatch) => void
+  updateStateKeyframeName: (id: string, name: string) => void
+  updateStateKeyframeTransition: (id: string, patch: StateKeyframeTransitionPatch) => void
+  /** 修改状态关键帧拍摄机位（重要记录 005）；null = 取消指定，沿用全局 activeCameraId */
+  updateStateKeyframeCamera: (id: string, cameraId: string | null) => void
+  updateStateKeyframeContinuity: (id: string, continuity: StageStateKeyframe['continuity']) => void
+  captureIntoSelectedStateKeyframe: (objectIds?: string[]) => void
   addPrimitive: (kind: StagePrimitiveKind) => void
   addCharacter: () => void
   addCamera: () => void
@@ -113,11 +100,11 @@ export interface CameraStageState extends CameraStagePathActions {
   setViewMode: (mode: StageViewMode) => void
   setActiveCameraId: (id: string | null) => void
   updateObject: (id: string, patch: StageObjectPatch) => void
-  /** 建模语义写入：改动同步进所有关键帧卡，不在单张卡上留点（助手与批量写入用）。 */
-  updateObjectAcrossShots: (id: string, patch: StageObjectPatch) => void
-  /** 简易模式交互开始前冻结当前帧，避免首个变换增量中途触发插帧重编译。 */
-  prepareSimpleEdit: (id: string) => void
-  updateTransform: (id: string, patch: Partial<StageTransform>, autoKeyPaths?: string[]) => void
+  /** 建模语义写入：改动同步进所有状态关键帧，不在单一时间点产生动画（助手与批量写入用）。 */
+  updateObjectAcrossStateKeyframes: (id: string, patch: StageObjectPatch) => void
+  /** 交互开始前冻结当前帧，避免首个变换增量中途触发插帧重编译。 */
+  prepareStateKeyframeEdit: (id: string) => void
+  updateTransform: (id: string, patch: Partial<StageTransform>, changedPaths?: string[]) => void
   /** 原子更新摄像机视图姿态，避免 OrbitControls 一次 change 被拆成多次编译。 */
   updateCameraView: (id: string, patch: {
     position?: StageVec3
@@ -125,7 +112,7 @@ export interface CameraStageState extends CameraStagePathActions {
     lookAtTarget?: StageVec3
   }) => void
   /** 更新角色单个关节的欧拉偏移（角度制） */
-  updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3, autoKeyPaths?: string[]) => void
+  updatePoseJoint: (id: string, jointId: StagePoseJointId, euler: StageVec3, changedPaths?: string[]) => void
   /** 一键应用预设姿势（整体替换当前姿态） */
   applyPosePreset: (id: string, preset: StagePosePreset) => void
   /** 关联到某个已保存工程（保存/加载后调用），仅更新工程标识不动场景数据 */
@@ -133,27 +120,7 @@ export interface CameraStageState extends CameraStagePathActions {
   /** 重置为空白新场景（新建工程用）：清空对象与工程标识，复位界面态 */
   newScene: (name: string) => void
   /** 用工程快照整体重置场景（加载工程用）；同时复位选中/视角等界面态 */
-  loadSnapshot: (snapshot: StageSceneSnapshotInput, project: { id: string; name: string }) => void
-
-  /* ---- 关键帧动画动作（tracked：进撤销历史） ---- */
-  /** 分组码表：整组（vec3 的 X/Y/Z 或单值）在当前时间统一打/删点（属性面板/时间轴父行用） */
-  toggleKeyframeGroup: (objectId: string, groupPath: string) => void
-  /** 单条 scalar/color 轨道码表三态切换（时间轴分量子行用） */
-  toggleKeyframe: (objectId: string, path: string) => void
-  /** 在当前时间以对象当前值强制打点（属性行改值自动打点用） */
-  keyframeAtCurrentTime: (objectId: string, path: string) => void
-  removeKeyframe: (objectId: string, path: string, time: number) => void
-  moveKeyframe: (objectId: string, path: string, fromTime: number, toTime: number) => void
-  /** 改某关键帧的值（曲线图里竖向拖点用） */
-  setKeyframeValue: (objectId: string, path: string, time: number, value: number) => void
-  /** 批量设置若干关键帧的缓动（速度曲线编辑器用） */
-  setKeyframesEasing: (
-    targets: Array<{ objectId: string; path: string; time: number }>,
-    easing: StageEasing,
-  ) => void
-  clearTrack: (objectId: string, path: string) => void
-  setDuration: (duration: number) => void
-  setFps: (fps: number) => void
+  loadSnapshot: (snapshot: StageSceneRuntimeSnapshot, project: { id: string; name: string }) => void
 
   /* ---- 播放/时间轴界面态动作（非 tracked） ---- */
   play: () => void
@@ -164,7 +131,6 @@ export interface CameraStageState extends CameraStagePathActions {
   /** 播放驱动低频回写播放头（不落对象、不进历史） */
   setPlaybackTime: (time: number) => void
   toggleLoop: () => void
-  setSelectedKeyframes: (keys: string[]) => void
 
   /* ---- 场景设置 / 视口交互动作（非 tracked） ---- */
   setSceneGroundColor: (color: string) => void
@@ -196,27 +162,11 @@ export interface CameraStageState extends CameraStagePathActions {
   requestFocusSelected: () => void
 }
 
-/** 时间轴关键帧唯一键（选中集合、拖拽标识用） */
-export function keyframeKey(objectId: string, path: string, time: number): string {
-  return `${objectId}::${path}::${time.toFixed(4)}`
-}
-
-/** 解析关键帧唯一键（objectId / path 均不含 '::'，故可安全按分隔符还原） */
-export function parseKeyframeKey(
-  key: string,
-): { objectId: string; path: string; time: number } | null {
-  const parts = key.split('::')
-  if (parts.length !== 3) return null
-  const time = Number(parts[2])
-  if (!Number.isFinite(time)) return null
-  return { objectId: parts[0], path: parts[1], time }
-}
-
 /** 新场景默认工程名 */
 export const CAMERA_STAGE_DEFAULT_PROJECT_NAME = '未命名场景'
 
 /** 撤销历史跟踪场景数据切片（对象列表 + 动画轨道），界面态/播放态不入历史 */
-type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'shots' | 'editorMode'>
+type TrackedState = Pick<CameraStageState, 'objects' | 'animation' | 'stateKeyframes'>
 
 /** 在暂停撤销跟踪的前提下把采样值落回对象（scrub/暂停/停止用，不污染历史与不自动打点） */
 function applySampledObjectsSilently(time: number): void {
@@ -227,23 +177,6 @@ function applySampledObjectsSilently(time: number): void {
     objects: applyAnimationAtTime(state.objects, state.animation, time),
   }))
   if (wasTracking) temporal.resume()
-}
-
-/** AE 式自动打点：对存在轨道的路径，在给定时间以对象当前值 upsert 关键帧 */
-function autoKeyPaths(
-  animation: StageSceneAnimation,
-  object: StageObject,
-  paths: string[],
-  time: number,
-): StageSceneAnimation {
-  let next = animation
-  for (const path of paths) {
-    if (!getTrack(next, object.id, path)) continue
-    const descriptor = getAnimatablePropByPath(path)
-    if (!descriptor) continue
-    next = upsertTrackKeyframe(next, object.id, path, time, descriptor.getValue(object))
-  }
-  return next
 }
 
 /**
@@ -287,7 +220,7 @@ function firstCameraId(objects: StageObject[]): string | null {
   return getCameraObjects(objects)[0]?.id ?? null
 }
 
-const initialShot = createShot([], '关键帧 1')
+const initialStateKeyframe = createStateKeyframe([], '关键帧 1')
 
 export const useCameraStageStore = create<CameraStageState>()(
   temporal(
@@ -299,14 +232,12 @@ export const useCameraStageStore = create<CameraStageState>()(
   activeCameraId: null,
   currentProjectId: null,
   currentProjectName: CAMERA_STAGE_DEFAULT_PROJECT_NAME,
-  animation: compileShotsToAnimation([initialShot], []),
+  animation: compileStateKeyframesToAnimation([initialStateKeyframe], []),
   playback: createDefaultPlayback(),
-  selectedKeyframes: [],
   sceneSettings: createDefaultSceneSettings(),
-  editorMode: 'simple',
-  shots: [initialShot],
-  selectedShotId: initialShot.id,
-  selectedShotIds: [],
+  stateKeyframes: [initialStateKeyframe],
+  selectedStateKeyframeId: initialStateKeyframe.id,
+  selectedStateKeyframeIds: [],
   focusToken: 0,
 
   addPrimitive: (kind) =>
@@ -317,9 +248,8 @@ export const useCameraStageStore = create<CameraStageState>()(
         pickDefaultColor(state.objects.length),
       )
       const objects = [...state.objects, object]
-      if (state.editorMode !== 'simple') return { objects, selectedId: object.id }
-      const shots = syncAddedObjectToShots(state.shots, object)
-      return { objects, shots, animation: compileShotsToAnimation(shots, objects), selectedId: object.id }
+      const stateKeyframes = syncAddedObjectToStateKeyframes(state.stateKeyframes, object)
+      return { objects, stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, objects), selectedId: object.id }
     }),
 
   addCharacter: () =>
@@ -329,9 +259,8 @@ export const useCameraStageStore = create<CameraStageState>()(
         pickDefaultColor(state.objects.length),
       )
       const objects = [...state.objects, object]
-      if (state.editorMode !== 'simple') return { objects, selectedId: object.id }
-      const shots = syncAddedObjectToShots(state.shots, object)
-      return { objects, shots, animation: compileShotsToAnimation(shots, objects), selectedId: object.id }
+      const stateKeyframes = syncAddedObjectToStateKeyframes(state.stateKeyframes, object)
+      return { objects, stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, objects), selectedId: object.id }
     }),
 
   addCamera: () =>
@@ -351,10 +280,11 @@ export const useCameraStageStore = create<CameraStageState>()(
       // 一是让顶部视角按钮的高亮立刻和实际画面对上，二是隐藏所有摄像机图标（含它自己），
       // 避免因为新摄像机就摆在刚才的视点上，导致自由视角下看到自己的图标近距离怼脸
       const objects = [...state.objects, finalObject]
-      const shots = state.editorMode === 'simple' ? syncAddedObjectToShots(state.shots, finalObject) : state.shots
+      const stateKeyframes = syncAddedObjectToStateKeyframes(state.stateKeyframes, finalObject)
       return {
         objects,
-        ...(state.editorMode === 'simple' ? { shots, animation: compileShotsToAnimation(shots, objects) } : {}),
+        stateKeyframes,
+        animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
         selectedId: finalObject.id,
         activeCameraId: finalObject.id,
         viewMode: 'camera',
@@ -369,10 +299,11 @@ export const useCameraStageStore = create<CameraStageState>()(
       clone.id = uuidv4()
       clone.name = nextName(state.objects, source.name)
       const objects = [...state.objects, clone]
-      const shots = state.editorMode === 'simple' ? syncAddedObjectToShots(state.shots, clone) : state.shots
+      const stateKeyframes = syncAddedObjectToStateKeyframes(state.stateKeyframes, clone)
       return {
         objects,
-        ...(state.editorMode === 'simple' ? { shots, animation: compileShotsToAnimation(shots, objects) } : {}),
+        stateKeyframes,
+        animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
         selectedId: clone.id,
         activeCameraId: clone.type === 'camera' ? clone.id : state.activeCameraId,
       }
@@ -382,13 +313,11 @@ export const useCameraStageStore = create<CameraStageState>()(
     set((state) => {
       const objects = state.objects.filter((item) => item.id !== id)
       const activeCameraId = state.activeCameraId === id ? firstCameraId(objects) : state.activeCameraId
-      const shots = state.editorMode === 'simple' ? syncRemovedObjectFromShots(state.shots, id) : state.shots
+      const stateKeyframes = syncRemovedObjectFromStateKeyframes(state.stateKeyframes, id)
       return {
         objects,
-        animation: state.editorMode === 'simple'
-          ? compileShotsToAnimation(shots, objects)
-          : removeObjectTracks(state.animation, id),
-        ...(state.editorMode === 'simple' ? { shots } : {}),
+        animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
+        stateKeyframes,
         selectedId: state.selectedId === id ? null : state.selectedId,
         activeCameraId,
         viewMode: state.viewMode === 'camera' && !activeCameraId ? 'director' : state.viewMode,
@@ -431,20 +360,19 @@ export const useCameraStageStore = create<CameraStageState>()(
     }),
 
   /**
-   * 建模语义的对象写入：改动同步进**所有**关键帧卡，不产生意料之外的动画。
+    * 建模语义的对象写入：改动同步进**所有**状态关键帧，不产生意料之外的动画。
    *
-   * 与 `updateObject` 的区别只在动画语义：那个是给人手动拖拽用的，把改动打成当前卡上的一个
+    * 与 `updateObject` 的区别只在动画语义：那个是给人手动拖拽用的，把改动记录到当前时间点，
    * 关键帧（编辑动画）；这个是给助手和批量写入用的，表达"这个对象本来就该是这样"（建模）。
    * 两者共用同一套 applyObjectPatch 与重编译路径，不是两份实现。
    */
-  updateObjectAcrossShots: (id, patch) =>
+  updateObjectAcrossStateKeyframes: (id, patch) =>
     set((state) => {
       const objects = applyObjectPatch(state.objects, id, patch)
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
-      if (state.editorMode !== 'simple') return { objects }
-      const shots = syncAddedObjectToShots(state.shots, object)
-      return { objects, shots, animation: compileShotsToAnimation(shots, objects) }
+      const stateKeyframes = syncAddedObjectToStateKeyframes(state.stateKeyframes, object)
+      return { objects, stateKeyframes, animation: compileStateKeyframesToAnimation(stateKeyframes, objects) }
     }),
 
   updateObject: (id, patch) =>
@@ -454,40 +382,26 @@ export const useCameraStageStore = create<CameraStageState>()(
       const objects = applyObjectPatch(state.objects, id, patch)
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
-      if (state.editorMode === 'simple') {
-        if (object.type === 'camera' && 'lookAt' in patch && Object.keys(patch).length === 1) {
-          return syncCameraLookAtAcrossShots(state, objects, id, object.lookAt)
-        }
-        return compileSimpleEdit(state, objects, [id])
+      if (object.type === 'camera' && 'lookAt' in patch && Object.keys(patch).length === 1) {
+        return syncCameraLookAtAcrossStateKeyframes(state, objects, id, object.lookAt)
       }
-      // color / fov 是可动画标量/颜色属性，有轨道时自动打点
-      const paths: string[] = []
-      if ('color' in patch) paths.push('color')
-      if ('fov' in patch) paths.push('fov')
-      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
-      return animation === state.animation ? { objects } : { objects, animation }
+      return compileStateKeyframeEdit(state, objects, [id])
     }),
 
-  prepareSimpleEdit: (id) =>
+  prepareStateKeyframeEdit: (id) =>
     set((state) => {
-      if (state.editorMode !== 'simple' || state.playback.playing) return {}
-      return compileSimpleEdit(state, state.objects, [id])
+      if (state.playback.playing) return {}
+      return compileStateKeyframeEdit(state, state.objects, [id])
     }),
 
-  updateTransform: (id, patch, explicitAutoKeyPaths) =>
+  updateTransform: (id, patch, _changedPaths) =>
     set((state) => {
       const objects = state.objects.map((item) =>
         item.id === id ? { ...item, transform: { ...item.transform, ...patch } } : item,
       )
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
-      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
-      // 分量化：每个变更的变换属性展开为 X/Y/Z 三条分量路径分别自动打点
-      const paths = explicitAutoKeyPaths ?? Object.keys(patch).flatMap((key) =>
-        ['x', 'y', 'z'].map((axis) => `transform.${key}.${axis}`),
-      )
-      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
-      return animation === state.animation ? { objects } : { objects, animation }
+      return compileStateKeyframeEdit(state, objects, [id])
     }),
 
   updateCameraView: (id, patch) =>
@@ -508,31 +422,18 @@ export const useCameraStageStore = create<CameraStageState>()(
       })
       const object = objects.find((item) => item.id === id)
       if (!object || object.type !== 'camera') return { objects }
-      if (state.editorMode === 'simple') {
-        const edit = patch.position || patch.rotation
-          ? compileSimpleEdit(state, objects, [id])
-          : { objects }
-        if (!patch.lookAtTarget) return edit
-        const intermediateState: CameraStageState = { ...state, ...edit, objects }
-        return {
-          ...edit,
-          ...syncCameraLookAtAcrossShots(
-            intermediateState,
-            objects,
-            id,
-            object.lookAt,
-          ),
-        }
+      const edit = patch.position || patch.rotation
+        ? compileStateKeyframeEdit(state, objects, [id])
+        : { objects }
+      if (!patch.lookAtTarget) return edit
+      const intermediateState: CameraStageState = { ...state, ...edit, objects }
+      return {
+        ...edit,
+        ...syncCameraLookAtAcrossStateKeyframes(intermediateState, objects, id, object.lookAt),
       }
-      const paths = [
-        ...(patch.position ? ['x', 'y', 'z'].map((axis) => `transform.position.${axis}`) : []),
-        ...(patch.rotation ? ['x', 'y', 'z'].map((axis) => `transform.rotation.${axis}`) : []),
-      ]
-      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
-      return animation === state.animation ? { objects } : { objects, animation }
     }),
 
-  updatePoseJoint: (id, jointId, euler, explicitAutoKeyPaths) =>
+  updatePoseJoint: (id, jointId, euler, _changedPaths) =>
     set((state) => {
       const objects = state.objects.map((item) =>
         item.id === id && item.type === 'character'
@@ -545,11 +446,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object) return { objects }
-      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
-      const base = poseJointPath(jointId)
-      const paths = explicitAutoKeyPaths ?? ['x', 'y', 'z'].map((axis) => `${base}.${axis}`)
-      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
-      return animation === state.animation ? { objects } : { objects, animation }
+      return compileStateKeyframeEdit(state, objects, [id])
     }),
 
   applyPosePreset: (id, preset) =>
@@ -561,13 +458,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       )
       const object = objects.find((item) => item.id === id)
       if (!object || object.type !== 'character') return { objects }
-      if (state.editorMode === 'simple') return compileSimpleEdit(state, objects, [id])
-      // 预设整体替换姿态：对所有已有关节轨道自动打点
-      const paths = state.animation.tracks
-        .filter((track) => track.objectId === id && track.propertyPath.startsWith('pose.joints.'))
-        .map((track) => track.propertyPath)
-      const animation = autoKeyPaths(state.animation, object, paths, state.playback.currentTime)
-      return animation === state.animation ? { objects } : { objects, animation }
+      return compileStateKeyframeEdit(state, objects, [id])
     }),
 
   bindProject: (id, name) => set({ currentProjectId: id, currentProjectName: name }),
@@ -579,7 +470,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       // 新工程默认自带一台摄像机并直接进入摄像机视角，打开即有可拍画面
       const camera = createCameraObject(nextName([], '摄像机'), pickDefaultColor(0))
       const objects = [camera]
-      const shots = [createShot(objects, '关键帧 1', camera.id)]
+      const stateKeyframes = [createStateKeyframe(objects, '关键帧 1', camera.id)]
       return {
       objects,
       selectedId: camera.id,
@@ -588,14 +479,12 @@ export const useCameraStageStore = create<CameraStageState>()(
       activeCameraId: camera.id,
       currentProjectId: null,
       currentProjectName: name,
-      animation: compileShotsToAnimation(shots, objects),
+      animation: compileStateKeyframesToAnimation(stateKeyframes, objects),
       playback: createDefaultPlayback(),
-      selectedKeyframes: [],
       sceneSettings: createDefaultSceneSettings(),
-      editorMode: 'simple',
-      shots,
-      selectedShotId: shots[0].id,
-      selectedShotIds: [],
+      stateKeyframes,
+      selectedStateKeyframeId: stateKeyframes[0].id,
+      selectedStateKeyframeIds: [],
       focusToken: 0,
       }
     })
@@ -606,7 +495,7 @@ export const useCameraStageStore = create<CameraStageState>()(
       const activeCameraId = isCameraId(snapshot.objects, snapshot.activeCameraId)
         ? snapshot.activeCameraId
         : firstCameraId(snapshot.objects)
-      const animation = snapshot.animation ?? createDefaultAnimation()
+      const animation = compileStateKeyframesToAnimation(snapshot.stateKeyframes, snapshot.objects)
       return {
         // 播放头加载后固定从 0 开始，因此场景对象也必须立即落到 t=0 的权威采样值。
         // 否则首屏会短暂展示持久化时的对象值，直到播放驱动首帧采样才跳到首关键帧。
@@ -619,24 +508,19 @@ export const useCameraStageStore = create<CameraStageState>()(
         currentProjectName: project.name,
         animation,
         playback: createDefaultPlayback(),
-        selectedKeyframes: [],
         sceneSettings: snapshot.sceneSettings ?? createDefaultSceneSettings(),
-        editorMode: snapshot.editorMode ?? 'pro',
-        shots: snapshot.shots ?? [],
-        selectedShotId: snapshot.shots?.[0]?.id ?? null,
-        selectedShotIds: [],
+        stateKeyframes: snapshot.stateKeyframes,
+        selectedStateKeyframeId: snapshot.stateKeyframes[0]?.id ?? null,
+        selectedStateKeyframeIds: [],
         focusToken: 0,
       }
     }),
 
-  ...createKeyframeSlice(set),
-  ...createShotSlice(set),
+  ...createStateKeyframeSlice(set),
 
   play: () =>
     set((state) => {
-      const canPlay = state.editorMode === 'simple'
-        ? state.shots.length > 0 && state.animation.duration > 0
-        : state.animation.tracks.length > 0
+      const canPlay = state.stateKeyframes.length > 0 && state.animation.duration > 0
       if (!canPlay) return {}
       // 播放到末尾后再按播放，从头开始
       const atEnd = state.playback.currentTime >= state.animation.duration
@@ -661,10 +545,8 @@ export const useCameraStageStore = create<CameraStageState>()(
   seek: (time) => {
     const state = useCameraStageStore.getState()
     const snapped = quantizeToFrame(time, state.animation.fps)
-    // 简易模式允许把播放头放到最后关键帧之后，以便在未来时间直接添加关键帧。
-    const clamped = state.editorMode === 'simple'
-      ? Math.max(0, snapped)
-      : Math.max(0, Math.min(state.animation.duration, snapped))
+    // 允许把播放头放到最后关键帧之后，以便在未来时间直接添加状态关键帧。
+    const clamped = Math.max(0, snapped)
     if (!state.playback.playing) applySampledObjectsSilently(clamped)
     set((current) => ({ playback: { ...current.playback, currentTime: clamped } }))
   },
@@ -673,8 +555,6 @@ export const useCameraStageStore = create<CameraStageState>()(
     set((state) => ({ playback: { ...state.playback, currentTime: time } })),
 
   toggleLoop: () => set((state) => ({ playback: { ...state.playback, loop: !state.playback.loop } })),
-
-  setSelectedKeyframes: (keys) => set({ selectedKeyframes: keys }),
 
   setSceneGroundColor: (color) =>
     set((state) => ({
@@ -933,15 +813,13 @@ export const useCameraStageStore = create<CameraStageState>()(
       partialize: (state): TrackedState => ({
         objects: state.objects,
         animation: state.animation,
-        shots: state.shots,
-        editorMode: state.editorMode,
+        stateKeyframes: state.stateKeyframes,
       }),
       // 对象数组与动画对象都走不可变更新，引用相等即无实质变化 → 跳过记录
       equality: (a, b) =>
         a.objects === b.objects &&
         a.animation === b.animation &&
-        a.shots === b.shots &&
-        a.editorMode === b.editorMode,
+        a.stateKeyframes === b.stateKeyframes,
       handleSet: (handleSet) => {
         historyRecord = handleSet
         return (pastState) => {

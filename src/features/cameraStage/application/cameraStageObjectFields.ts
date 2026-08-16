@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { fieldWriterTable, type ApplicationRef, type ApplicationPropertyMutation, type ApplicationPropertyValue, type JsonValue } from '@/core/application-control'
+import { fieldWriterTable, type ApplicationCascadeEffectDeclaration, type ApplicationRef, type ApplicationPropertyMutation, type ApplicationPropertyValue, type JsonValue } from '@/core/application-control'
 import { CAMERA_STAGE_NAME_MAX_LENGTH } from '@/core/assistant/capabilities/cameraStageCapabilitySchemas'
 
 import { getAnimatablePropByPath, listAnimatablePropertyPaths } from '../domain/animatableProps'
@@ -20,17 +20,17 @@ import {
  * 建模属性写入目标是累积器 `CameraStageObjectDraft` 的 `update` / `transform` /
  * `transformTouched` / `current`：变换三轴要先累积进同一个 transform 再一次性提交，
  * 逐轴提交会在时间轴上打出三个独立改动；`current` 供画幅与注视点互读。这条路径最终落到
- * `cameraStageApplicationService.updateObject()`——**建模语义**，一律同步全部镜头卡、
+ * `cameraStageApplicationService.updateObject()`——**建模语义**，一律同步全部状态关键帧、
  * 从不自动打点。
  *
  * 动画属性（`animatable.*` 与 `pose_preset`）写目标是同一个 draft 上另外两个累加字段
  * （`animatable` / `posePresetId`），最终落到 `updateAnimatableProperties()` /
- * `applyObjectPosePreset()`——**动画编辑语义**，只在专业模式下可写，且只在轨道已有关键帧时
- * 才打点。两条语义故意分流到不同的 draft 字段、不同的落地方法，混用会重新打开重要记录 002
+ * `applyObjectPosePreset()`——**动画编辑语义**：落成当前播放时间的完整状态关键帧。
+ * 两条语义故意分流到不同的 draft 字段、不同的落地方法，混用会重新打开重要记录 002
  * 描述的陷阱（静态值刚写完，播放头一动就被插值结果覆盖回去）；`CameraStageMutationExecutor`
  * 在提交前会拒绝同一批写入里混用两种语义。
  *
- * `updateObject` / `updateObjectAcrossShots` 两个 store 动作一次改好几条属性——
+ * `updateObject` / `updateObjectAcrossStateKeyframes` 两个 store 动作一次改好几条属性——
  * `fieldLedgerEntries()` 按声明顺序把它们累进同一条账本绑定（见 fieldDefinition.ts 的账本
  * 累积逻辑，这正是促成那处修复的实例）。
  */
@@ -100,13 +100,11 @@ function cameraField<T, TAction extends string>(
  *
  * 写入落进 `draft.animatable[path]`，只是累加、不直接调 store——真正的 store 调用（按
  * transform 分组 / 关节合并 / color·fov 直写）在 `cameraStageApplicationService
- * .updateAnimatableProperties()` 里，因为要在提交前判断专业/简易模式、且要把同一批里的
+ * .updateAnimatableProperties()` 里，因为要创建或更新完整状态关键帧、且要把同一批里的
  * 多个分量按 store 方法的参数形状分组，不是纯粹的字段级累加能做完的事。
  */
-const ANIMATABLE_DESCRIPTION = '逐分量动画属性：该轨道此刻没有关键帧时，写入是普通静态值；'
-  + '该轨道已有关键帧时，写入等价于在当前播放时间点新建或更新一个关键帧（与人在界面上拖动手柄时的'
-  + '自动打点行为一致）。只在专业模式下可写；简易模式请改用 camera_stage.shot.capture_object_refs，'
-  + '或先用 bake_camera_stage_to_pro 转到专业模式。'
+const ANIMATABLE_DESCRIPTION = '逐分量动画属性。先写 camera_stage.playback.current_time 定位时间，'
+  + '再写此属性，应用会在该时间点创建或更新完整状态关键帧。'
 
 /** 与反射层曾经的只读版本保持完全一致的 id 生成规则，避免属性 id 迁移改名。 */
 function animatablePropertyPathId(path: string): string {
@@ -142,6 +140,11 @@ function animatableField<TSource>(
     propertyId: `${entityType}.${suffix}`,
     descriptor: stageDescriptor(entityType, suffix, `可动画属性 ${descriptor.label}`, animatableValueSchema(descriptor.valueType), {
       description: ANIMATABLE_DESCRIPTION,
+      // 值取决于当前播放头。事务末尾若把播放头归零，读取到的是 t=0 的采样值，
+      // 不能拿它验证此前写入 t=1/t=2 的中间步骤；真实结果由状态关键帧与场景验证负责。
+      verificationStrategy: 'execution',
+      // 值取决于当前播放头。事务末尾若把播放头归零，读取到的是 t=0 的采样值，
+      // 不能拿它验证此前写入 t=1/t=2 的中间步骤；真实结果由状态关键帧与场景验证负责。
     }),
     read: (source: TSource): JsonValue => descriptor.getValue(getObject(source)) as JsonValue,
     writer: {
@@ -150,8 +153,20 @@ function animatableField<TSource>(
       },
     },
     storeActions: animatableStoreActions(path),
+    cascadeEffects: STATE_KEYFRAME_CASCADES,
   }
 }
+
+export const STATE_KEYFRAME_CASCADES = [
+  {
+    declarationId: 'camera_stage.auto_state_keyframe_create', effect: 'create',
+    entityType: 'camera_stage.state_keyframe', propertyIds: [], revisionScopes: ['toolbox'],
+  },
+  {
+    declarationId: 'camera_stage.auto_state_keyframe_update', effect: 'update',
+    entityType: 'camera_stage.state_keyframe', propertyIds: [], revisionScopes: ['toolbox'],
+  },
+] as const satisfies readonly ApplicationCascadeEffectDeclaration[]
 
 const OBJECT_ANIMATABLE_PATHS = listAnimatablePropertyPaths().filter((path) => path !== 'fov')
 const CAMERA_ANIMATABLE_PATHS = listAnimatablePropertyPaths().filter((path) => (
@@ -184,8 +199,9 @@ const POSE_PRESET_FIELD = {
     values: POSE_PRESETS.map((preset) => ({ value: preset.id, label: preset.name })),
   }, {
     nullable: true,
-    description: '一键套用预设姿势，整体替换角色当前姿态（对已有关键帧轨道的关节自动打点）。'
-      + '只在专业模式下可写；没有持久化的"当前预设"概念，读取始终为空。',
+    description: '一键套用预设姿势，整体替换角色当前姿态，并在当前播放时间落成状态关键帧。'
+      + '没有持久化的"当前预设"概念，读取始终为空。',
+    verificationStrategy: 'execution',
   }),
   read: (): JsonValue => null,
   writer: {
@@ -194,14 +210,15 @@ const POSE_PRESET_FIELD = {
     },
   },
   storeActions: ['applyPosePreset'] as const,
+  cascadeEffects: STATE_KEYFRAME_CASCADES,
 }
 
 const CHARACTER_VARIANT_LABELS = { standard: 'standard', strong: 'strong', slim: 'slim', child: 'child' } as const
-const OBJECT_IDENTITY_ACTIONS = ['updateObject', 'updateObjectAcrossShots'] as const
+const OBJECT_IDENTITY_ACTIONS = ['updateObject', 'updateObjectAcrossStateKeyframes'] as const
 
 /*
  * object 7 项：`name`/`visible`/`color`/`character_variant` 由 `updateObject` 与
- * `updateObjectAcrossShots` 两个 store 动作共用；变换三轴由 `updateTransform` 独占。
+ * `updateObjectAcrossStateKeyframes` 两个 store 动作共用；变换三轴由 `updateTransform` 独占。
  * 数组不标注宽泛类型，理由同 cameraStageSceneFields.ts：会拍扁 TAction 字面量。
  */
 export const OBJECT_FIELDS = [

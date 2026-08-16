@@ -5,6 +5,7 @@ import {
   type ApplicationChangePlan,
   type ApplicationCommitRequest,
   type ApplicationEvidence,
+  type ApplicationEffectReceipt,
   type ApplicationPlannedStep,
   type ApplicationTransactionMode,
   type ApplicationTransactionResult,
@@ -14,6 +15,8 @@ import type { ApplicationReflectionRegistry } from '../registry'
 import { ApplicationExecutionPlanStore } from './planStore'
 import { ApplicationPlanBuilder } from './planner'
 import { ApplicationTransactionVerifier } from './verifier'
+import { assertCollectionOperationAvailable } from './availability'
+import { acceptedPropertyOperations, type ApplicationMutationOperation } from './writerTable'
 import type {
   ApplicationCollectionExecutor,
   ApplicationCompletedStepResult,
@@ -66,6 +69,10 @@ function failureCause(message: string): string {
 
 function mergeRevisions(target: Record<string, number>, source: Record<string, number>): void {
   for (const [scope, revision] of Object.entries(source)) target[scope] = revision
+}
+
+function refKey(ref: { kind: string; id: string }): string {
+  return `${ref.kind}\u0000${ref.id}`
 }
 
 function planRevisions(plan: ApplicationChangePlan): Record<string, number> {
@@ -127,6 +134,19 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       throw new Error(`MUTATION_EXECUTOR_DUPLICATE:${executor.entityType}`)
     }
     this.mutationExecutors.set(executor.entityType, executor)
+  }
+
+  /** 返回通用计划入口实际接受的操作；包含计划器可安全编译的高层 set 语义。 */
+  getAcceptedPropertyOperations(
+    entityType: string,
+    propertyId: string,
+  ): readonly ApplicationMutationOperation[] {
+    const executor = this.mutationExecutors.get(entityType)
+    const descriptor = this.registry.getProperty(propertyId)
+    return [...acceptedPropertyOperations(
+      executor?.propertyOperations.get(propertyId),
+      descriptor?.entityType === entityType ? descriptor.value.kind : undefined,
+    )]
   }
 
   registerCollectionExecutor(executor: ApplicationCollectionExecutor): void {
@@ -213,7 +233,12 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       const undoRef = this.createUndoRef(stored.plan.steps, execution.completed)
       this.store.markCommitted(stored.plan.planRef)
       if (!verification.verified) {
-        const result = failure('VERIFICATION_FAILED', '提交已执行，但结构化验证未通过。', true, {
+        const detail = verification.unmetConditions.join('；')
+        const result = failure(
+          'VERIFICATION_FAILED',
+          `提交已执行，但结构化验证未通过${detail ? `：${detail}` : '。'}`,
+          true,
+          {
           transactionRef,
           currentRevisions: resultingRevisions,
           verification,
@@ -223,7 +248,8 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
             compensatedStepIndexes: [],
             uncompensatedStepIndexes: execution.completed.map((_, index) => index),
           },
-        })
+          },
+        )
         this.store.saveIdempotent(request.idempotencyKey, request.planRef, result)
         return result
       }
@@ -231,7 +257,8 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
         status: 'completed',
         transactionRef,
         resultingRevisions,
-        producedRefs: execution.completed.flatMap((item) => item.producedRefs),
+        resultRefs: execution.completed.flatMap((item) => item.directRefs),
+        effects: this.collectEffects(stored.plan.steps, execution.completed),
         evidence: [...evidence, ...verification.evidence],
         verification,
         ...(undoRef ? { undoRef } : {}),
@@ -281,7 +308,8 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
         status: 'completed',
         transactionRef: this.createOpaqueRef('transaction'),
         resultingRevisions: undoRevisions,
-        producedRefs: results.flatMap((item) => item.producedRefs),
+        resultRefs: results.flatMap((item) => item.directRefs),
+        effects: this.collectEffects([...record.steps].reverse(), results),
         evidence,
         verification: { verified: true, evidence: [], unmetConditions: [], checkedAt: this.now().toISOString() },
         completedAt: this.now().toISOString(),
@@ -303,7 +331,16 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       const steps = plan.steps as Array<Extract<ApplicationPlannedStep, { kind: 'mutation' }>>
       const executor = this.mutationExecutors.get(steps[0].entityType)
       if (!executor?.applyAtomic) throw new Error('ATOMIC_GROUP_NOT_SUPPORTED')
-      return { completed: await executor.applyAtomic(steps, context) }
+      const results = await executor.applyAtomic(steps, context)
+      try {
+        this.collectEffects(steps, results)
+      } catch (error) {
+        for (let index = results.length - 1; index >= 0; index -= 1) {
+          await this.compensateStep(steps[index], results[index], context)
+        }
+        throw error
+      }
+      return { completed: results }
     }
     const completed: ApplicationCompletedStepResult[] = []
     try {
@@ -313,6 +350,16 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
         if (result.status !== 'completed') {
           if (plan.steps.length !== 1) throw new Error('DEFERRED_GROUP_NOT_SUPPORTED')
           return { completed, deferred: result }
+        }
+        try {
+          this.collectEffects([step], [result])
+        } catch (error) {
+          if (plan.transactionMode === 'non_reversible') {
+            completed.push(result)
+          } else {
+            await this.compensateStep(step, result, context)
+          }
+          throw error
         }
         completed.push(result)
       }
@@ -342,6 +389,76 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
         }
       }
       throw new Error(`COMPENSATED_FAILURE:${compensated.join(',')}:${original}`)
+    }
+  }
+
+  private collectEffects(
+    steps: ApplicationPlannedStep[],
+    results: ApplicationCompletedStepResult[],
+  ): ApplicationEffectReceipt[] {
+    return results.flatMap((result, index) => {
+      const step = steps[index]
+      if (!step) throw new Error('EFFECT_STEP_RESULT_MISMATCH')
+      const executor = step.kind === 'mutation'
+        ? this.mutationExecutors.get(step.entityType)
+        : step.kind === 'collection'
+          ? this.collectionExecutors.get(step.entityType)
+          : this.getOperationExecutor(step.capabilityId, step.capabilityVersion)
+      if (!executor) throw new Error('EFFECT_EXECUTOR_NOT_FOUND')
+      const declarations = new Map(executor.effectContract.cascades.map((item) => [item.declarationId, item]))
+      for (const effect of result.cascadeEffects ?? []) {
+        if (effect.origin.kind !== 'cascade') throw new Error('CASCADE_EFFECT_ORIGIN_INVALID')
+        const declaration = declarations.get(effect.origin.declarationId)
+        if (!declaration
+          || declaration.effect !== effect.effect
+          || declaration.entityType !== effect.entityType
+          || declaration.propertyIds.some((propertyId) => !effect.propertyIds.includes(propertyId))) {
+          throw new Error(`UNDECLARED_CASCADE_EFFECT:${effect.origin.declarationId}`)
+        }
+      }
+      const direct = step.kind === 'mutation'
+        ? [{
+            effect: 'update' as const,
+            entityType: step.entityType,
+            refs: result.directRefs,
+            propertyIds: step.mutations.map((mutation) => mutation.propertyId),
+            origin: { kind: 'direct' as const },
+          }]
+        : step.kind === 'collection'
+          ? [{
+              effect: step.operation.kind === 'create' ? 'create' as const : 'delete' as const,
+              entityType: step.entityType,
+              refs: result.directRefs,
+              propertyIds: [],
+              origin: { kind: 'direct' as const },
+            }]
+          : result.directEffects ?? []
+      this.assertDirectRefs(step, direct)
+      return [...direct, ...(result.cascadeEffects ?? [])]
+    })
+  }
+
+  private assertDirectRefs(step: ApplicationPlannedStep, effects: ApplicationEffectReceipt[]): void {
+    if (step.kind === 'operation') {
+      if (effects.length === 0) throw new Error(`DIRECT_EFFECT_REQUIRED:${step.capabilityId}`)
+      return
+    }
+    const refs = effects.flatMap((effect) => effect.refs)
+    if (refs.some((ref) => ref.kind !== step.entityType)) throw new Error('DIRECT_EFFECT_REF_KIND_MISMATCH')
+    if (step.kind === 'mutation') {
+      const expected = refKey(step.target)
+      if (refs.length !== 1 || refKey(refs[0]) !== expected) throw new Error('DIRECT_EFFECT_REF_MISMATCH')
+      return
+    }
+    const expectedCount = step.operation.kind === 'create'
+      ? step.operation.items.length
+      : step.operation.targets.length
+    if (refs.length !== expectedCount) throw new Error('DIRECT_EFFECT_REF_COUNT_MISMATCH')
+    if (step.operation.kind === 'remove') {
+      const actual = new Set(refs.map(refKey))
+      if (step.operation.targets.some((target) => !actual.has(refKey(target)))) {
+        throw new Error('DIRECT_EFFECT_REF_MISMATCH')
+      }
     }
   }
 
@@ -377,10 +494,11 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
    * 全部在执行之前做完——这是三维布置那次事故的教训：任何能靠输入判断的错误都不该等到写了
    * 一半才抛。
    */
-  private assertCollectionAllowed(
+  private async assertCollectionAllowed(
     step: Extract<ApplicationPlannedStep, { kind: 'collection' }>,
-    context: ApplicationExecutionContext
-  ): void {
+    context: ApplicationExecutionContext,
+    previousSteps: ApplicationPlannedStep[] = [],
+  ): Promise<void> {
     const descriptor = this.registry.describe({ entityTypes: [step.entityType] }, context).entities[0]
     if (!descriptor) throw new Error(`ENTITY_TYPE_NOT_FOUND:${step.entityType}`)
     const rule = descriptor.collectionWrite
@@ -389,6 +507,19 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       throw new Error(
         `COLLECTION_WRITE_NOT_DECLARED:${step.entityType} 未声明可增删${this.collectionWriterHint(step.entityType, operation)}`
       )
+    }
+    const availability = await this.registry.getCollectionAvailability(step.parent, step.entityType, context)
+    const current = availability[operation]
+    const previousEffects = this.potentialEffects(previousSteps)
+    const stateBlocks = (current.blocks ?? []).filter((block) => block.kind === 'state')
+    const canDependOnPreviousSteps = !current.available && stateBlocks.length > 0
+      && stateBlocks.every((block) => previousEffects.some((effect) => (
+        block.affectedEntityTypes.includes(effect.entityType)
+        && (effect.revisionScopes.length === 0
+          || block.revisionScopes.some((scope) => effect.revisionScopes.includes(scope)))
+      )))
+    if (!current.available && !canDependOnPreviousSteps) {
+      assertCollectionOperationAvailable(availability, operation)
     }
     if (step.operation.kind === 'create') {
       if (!rule.creatable) {
@@ -438,12 +569,26 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     mode: ApplicationTransactionMode
   ): Promise<void> {
     this.assertCompensable(steps, mode)
-    for (const step of steps) {
+    for (const [stepIndex, step] of steps.entries()) {
       if (step.kind === 'mutation') {
         const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
         const availability = await this.registry.getPropertyAvailability(step.target, propertyIds, context)
         const blocked = availability.filter((item) => !item.writable)
-        if (blocked.length > 0) {
+        const dynamicallyDeferred = stepIndex > 0 && blocked.every((item) => {
+          const descriptor = this.registry.getProperty(item.propertyId)
+          const stateBlocks = (item.blocks ?? []).filter((block) => block.kind === 'state')
+          const previousEffects = this.potentialEffects(steps.slice(0, stepIndex))
+          return descriptor !== undefined
+            && !descriptor.readOnlyReason
+            && descriptor.requiredPermissions.write.every((permission) => context.permissions.has(permission))
+            && stateBlocks.length > 0
+            && stateBlocks.every((block) => previousEffects.some((effect) => (
+              block.affectedEntityTypes.includes(effect.entityType)
+              && (effect.revisionScopes.length === 0
+                || block.revisionScopes.some((scope) => effect.revisionScopes.includes(scope)))
+            )))
+        })
+        if (blocked.length > 0 && !dynamicallyDeferred) {
           // 带上是哪几条、为什么：只说"不可写"会让一个本可自纠的失败变成任务中断。
           throw new Error(`PROPERTY_NOT_WRITABLE:${blocked
             .map((item) => `${item.propertyId}（${item.reasons.join('；') || '无写权限'}）`)
@@ -452,7 +597,7 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
         continue
       }
       if (step.kind === 'collection') {
-        this.assertCollectionAllowed(step, context)
+        await this.assertCollectionAllowed(step, context, steps.slice(0, stepIndex))
         if (!this.collectionExecutors.has(step.entityType)) {
           throw new Error(`COLLECTION_EXECUTOR_NOT_FOUND:${step.entityType}`)
         }
@@ -466,17 +611,37 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     }
   }
 
+  private potentialEffects(steps: ApplicationPlannedStep[]) {
+    return steps.flatMap((step) => {
+      if (step.kind === 'mutation') {
+        const contract = this.mutationExecutors.get(step.entityType)?.effectContract
+        return [{ entityType: step.entityType, revisionScopes: [] as readonly string[] }, ...(contract?.cascades ?? [])]
+      }
+      if (step.kind === 'collection') return [{ entityType: step.entityType, revisionScopes: [] as readonly string[] }]
+      const contract = this.getOperationExecutor(step.capabilityId, step.capabilityVersion)?.effectContract
+      return [...(contract?.direct ?? []), ...(contract?.cascades ?? [])]
+    })
+  }
+
   private async executeStep(
     step: ApplicationPlannedStep,
     context: ApplicationExecutionContext
   ): Promise<ApplicationStepExecutionResult> {
     if (step.kind === 'mutation') {
+      const propertyIds = step.mutations.map((mutation) => mutation.propertyId)
+      const availability = await this.registry.getPropertyAvailability(step.target, propertyIds, context)
+      const blocked = availability.filter((item) => !item.writable)
+      if (blocked.length > 0) {
+        throw new Error(`PROPERTY_NOT_WRITABLE:${blocked
+          .map((item) => `${item.propertyId}（${item.reasons.join('；') || '无写权限'}）`)
+          .join('、')}`)
+      }
       const executor = this.mutationExecutors.get(step.entityType)
       if (!executor) throw new Error(`MUTATION_EXECUTOR_NOT_FOUND:${step.entityType}`)
       return await executor.apply(step, context)
     }
     if (step.kind === 'collection') {
-      this.assertCollectionAllowed(step, context)
+      await this.assertCollectionAllowed(step, context)
       const executor = this.collectionExecutors.get(step.entityType)
       if (!executor) throw new Error(`COLLECTION_EXECUTOR_NOT_FOUND:${step.entityType}`)
       return await executor.apply(step, context)
@@ -498,7 +663,9 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
       const current = step.kind === 'mutation'
         ? (await this.registry.readEntity(step.target, [], context)).revisions
         : step.kind === 'collection'
-          ? (await this.registry.readEntity(step.parent, [], context)).revisions
+          ? this.registry.describe({ entityTypes: [step.entityType] }, context).entities[0]?.collectionWrite
+            ? (await this.registry.getCollectionAvailability(step.parent, step.entityType, context)).revisions
+            : (await this.registry.readEntity(step.parent, [], context)).revisions
           : await this.requireOperationExecutor(step).getCurrentRevisions(step.input)
       mergeRevisions(revisions, current)
     }
@@ -619,6 +786,9 @@ export class ApplicationControlExecutionEngine implements ApplicationControlExec
     // 归类时丢掉它们，模型看到的就只剩"权限或可写状态已变化"，无从自纠。
     if (message.includes('PROPERTY_NOT_WRITABLE') || message.includes('PROPERTY_OPERATION_NOT_SUPPORTED')) {
       return failure('PERMISSION_DENIED', `属性写入被拒绝。原因：${message}`, true, { transactionRef })
+    }
+    if (message.includes('COLLECTION_CREATE_NOT_AVAILABLE') || message.includes('COLLECTION_REMOVE_NOT_AVAILABLE')) {
+      return failure('PERMISSION_DENIED', `集合写入被拒绝。原因：${message}`, true, { transactionRef })
     }
     if (message.includes('PERMISSION_DENIED')) {
       return failure('PERMISSION_DENIED', '提交时权限或属性可写状态已变化。', true, { transactionRef })

@@ -89,6 +89,35 @@ function createGateway(
   }
 }
 
+function createEffectGateway() {
+  const registry = new AgentToolRegistry()
+  registry.register(defineAgentTool({
+    name: 'effect_tool', version: 1, title: 'Effect 测试', description: '返回强类型世界变化。',
+    category: 'test', side: 'backend', risk: 'R1', permission: 'test:execute', readOnly: false,
+    destructive: false, openWorld: false, idempotent: true, timeoutMs: 1_000,
+    retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: false, supportsUndo: false,
+    requiredContext: [], inputSchema: z.object({ id: z.string() }).strict(),
+    outputSchema: z.object({ id: z.string() }).strict(),
+    aiInputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    capability: {
+      id: 'effect_tool', domain: 'test', aliases: [], dataClasses: ['C1'], acceptsRefs: [],
+      producesRefs: ['sample.item'], availability: [], concurrencyKey: 'test',
+      control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
+        effect: 'update', entityTypes: ['sample.item'], propertyIds: ['sample.item.value'],
+        revisionScopes: [], verificationRequired: true,
+      }] },
+      resolveObservedEffects: (_input: { id: string }, output: { id: string }) => [{
+        effect: 'update', entityTypes: ['sample.item'], propertyIds: ['sample.item.value'],
+        targetRefs: [{ kind: 'sample.item', id: output.id }], count: 1, verified: true,
+        evidence: [`updated:${output.id}`],
+      }],
+    } as never,
+    execute: async (input) => input, concurrencyKey: () => 'effect', targetIds: (input) => ({ id: input.id }),
+    dataClasses: () => ['C1'], summarize: () => '已更新',
+  }))
+  return new AgentToolGateway({ registry, getHostContext: createContext, appendPermissionAudit: async () => {} })
+}
+
 function request(
   input: unknown,
   approvalId?: string,
@@ -109,6 +138,114 @@ function request(
 }
 
 describe('AgentToolGateway', () => {
+  it('隐藏的宿主断点可使用专用深度边界，模型可见工具不能冒用', async () => {
+    const registry = new AgentToolRegistry()
+    const definition = (name: string, modelVisible: boolean) => defineAgentTool({
+      name, version: 1, title: '断点测试', description: '测试受控断点输入。',
+      category: 'test', side: 'backend' as const, modelVisible,
+      risk: 'R1' as const, permission: 'test:execute', readOnly: false,
+      destructive: false, openWorld: false, idempotent: false, timeoutMs: 1_000,
+      retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: false, supportsUndo: false,
+      requiredContext: [], inputSchema: z.object({ checkpoint: z.unknown() }).strict(),
+      outputSchema: z.object({ ok: z.boolean() }).strict(),
+      aiInputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => ({ ok: true }), concurrencyKey: () => name,
+      targetIds: () => ({}), dataClasses: () => ['C1' as const], summarize: () => '完成',
+      resolveObservedEffects: () => [],
+    })
+    registry.register(definition('hidden_checkpoint', false))
+    registry.register(definition('visible_checkpoint', true))
+    const gateway = new AgentToolGateway({
+      registry, getHostContext: createContext, appendPermissionAudit: async () => {},
+    })
+    let checkpoint: unknown = 'leaf'
+    for (let index = 0; index < 14; index += 1) checkpoint = { next: checkpoint }
+    const execute = (toolName: string, trustedInternal?: boolean) => gateway.execute({
+      runId: 'run-checkpoint', threadId: 'thread-1', toolCallId: `${toolName}:${trustedInternal}`,
+      toolName, input: { checkpoint }, expectedRevisions: {}, approvalMode: 'full_access',
+      explicitUserIntent: true, trustedInternal, signal: new AbortController().signal,
+    })
+
+    await expect(execute('hidden_checkpoint')).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    await expect(execute('hidden_checkpoint', true)).resolves.toMatchObject({ status: 'completed' })
+    await expect(execute('visible_checkpoint', true)).rejects.toMatchObject({ code: 'PERMISSION_DENIED' })
+  })
+
+  it('受控解释器的深层 checkpoint 输出使用专用边界，普通工具仍被拒绝', async () => {
+    const registry = new AgentToolRegistry()
+    let checkpoint: unknown = 'leaf'
+    for (let index = 0; index < 18; index += 1) checkpoint = { next: checkpoint }
+    const definition = (name: string, outputLimitProfile?: 'checkpoint') => defineAgentTool({
+      name, version: 1, title: '断点输出测试', description: '测试受控断点输出。',
+      category: 'test', side: 'backend' as const, risk: 'R1' as const,
+      permission: 'test:execute', readOnly: false, destructive: false, openWorld: false,
+      idempotent: false, timeoutMs: 1_000, retryPolicy: { maxRetries: 0, baseDelayMs: 0 },
+      supportsPreview: false, supportsUndo: false, requiredContext: [], outputLimitProfile,
+      inputSchema: z.object({}).strict(), outputSchema: z.object({ checkpoint: z.unknown() }).strict(),
+      aiInputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => ({ checkpoint }), concurrencyKey: () => name,
+      targetIds: () => ({}), dataClasses: () => ['C1' as const], summarize: () => '完成',
+      resolveObservedEffects: () => [],
+    })
+    registry.register(definition('ordinary_output'))
+    registry.register(definition('checkpoint_output', 'checkpoint'))
+    const gateway = new AgentToolGateway({
+      registry, getHostContext: createContext, appendPermissionAudit: async () => {},
+    })
+    const execute = (toolName: string) => gateway.execute({
+      runId: 'run-checkpoint-output', threadId: 'thread-1', toolCallId: toolName,
+      toolName, input: {}, expectedRevisions: {}, approvalMode: 'full_access',
+      explicitUserIntent: true, signal: new AbortController().signal,
+    })
+
+    await expect(execute('ordinary_output')).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+    await expect(execute('checkpoint_output')).resolves.toMatchObject({ status: 'completed' })
+  })
+
+  it('零副作用的编译或预检结果不消耗调用上限，产生副作用后立即锁定', async () => {
+    const registry = new AgentToolRegistry()
+    const calls: string[] = []
+    registry.register(defineAgentTool({
+      name: 'limited_script', version: 1, title: '受限脚本', description: '测试安全修正预算。',
+      category: 'test', side: 'backend', risk: 'R1', permission: 'test:execute', readOnly: false,
+      destructive: false, openWorld: false, idempotent: false, timeoutMs: 1_000,
+      maxCallsPerRun: 1,
+      countsTowardCallLimit: (output) => output.committed,
+      retryPolicy: { maxRetries: 0, baseDelayMs: 0 }, supportsPreview: false, supportsUndo: false,
+      requiredContext: ['generation'], inputSchema: z.object({ value: z.string() }).strict(),
+      outputSchema: z.object({ committed: z.boolean() }).strict(),
+      aiInputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
+      execute: async (input) => {
+        calls.push(input.value)
+        return { committed: input.value !== 'safe-reject' }
+      },
+      concurrencyKey: () => 'limited-script', targetIds: () => ({}), dataClasses: () => ['C1'],
+      summarize: () => '完成',
+    }))
+    const gateway = new AgentToolGateway({
+      registry, getHostContext: createContext, appendPermissionAudit: async () => {},
+    })
+    const execute = (value: string, toolCallId: string) => gateway.execute({
+      ...request({ value }, undefined, 'full_access'), toolName: 'limited_script', toolCallId,
+    })
+
+    await expect(execute('safe-reject', 'safe-call')).resolves.toMatchObject({ status: 'completed' })
+    await expect(execute('committed', 'write-call')).resolves.toMatchObject({ status: 'completed' })
+    await expect(execute('blocked', 'blocked-call')).rejects.toMatchObject({ code: 'CONFLICT' })
+    expect(calls).toEqual(['safe-reject', 'committed'])
+  })
+
+  it('执行后立即把 resolver 解析的 Effect 固化进 observation', async () => {
+    const result = await createEffectGateway().execute({
+      runId: 'run-effect', threadId: 'thread-1', toolCallId: 'call-effect', toolName: 'effect_tool',
+      input: { id: 'item-full-id' }, expectedRevisions: {}, approvalMode: 'full_access',
+      explicitUserIntent: true, signal: new AbortController().signal,
+    })
+    expect(result.status).toBe('completed')
+    expect(result.status === 'completed' ? result.observation.effects : []).toEqual([expect.objectContaining({
+      effect: 'update', targetRefs: [{ kind: 'sample.item', id: 'item-full-id' }], verified: true,
+    })])
+  })
   /*
    * 回归：集合写入被拒后模型无路可走。
    *
@@ -180,7 +317,7 @@ describe('AgentToolGateway', () => {
           transactionRef: 'transaction-1',
           baseRevision: 8,
           resultingRevisions: { toolbox: 8 },
-          producedRefs: [],
+          resultRefs: [], effects: [],
           evidence: [],
           verification: {
             verified: true,
@@ -240,7 +377,7 @@ describe('AgentToolGateway', () => {
         },
         data: {
           status: 'completed', transactionRef: 'transaction-generic',
-          resultingRevisions: { toolbox: 9 }, producedRefs: [], evidence: [],
+          resultingRevisions: { toolbox: 9 }, resultRefs: [], effects: [], evidence: [],
           revision: 9, scopeRevisions: { toolbox: 9 },
         },
       }
@@ -261,8 +398,8 @@ describe('AgentToolGateway', () => {
       changes: [{
         kind: 'create_items' as const,
         parent: { kind: 'camera_stage.object', id: 'object-1' },
-        entityType: 'camera_stage.keyframe',
-        items: [{ properties: { 'camera_stage.keyframe.frame': 0 } }],
+        entityType: 'camera_stage.state_keyframe',
+        items: [{ properties: { 'camera_stage.state_keyframe.time': 0 } }],
       }],
     }
 

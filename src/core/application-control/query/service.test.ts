@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ApplicationReflectionRegistry } from '../registry'
 import type { ApplicationEntityRegistration, ApplicationEntityProvider } from '../registry'
 import type { JsonValue } from '../identifiers'
+import { unrestrictedCollectionAvailability } from '../reflection'
 import { ApplicationObservationQueryService } from './service'
 
 const catalogVersion = 'application-capabilities/v2'
@@ -43,6 +44,9 @@ function registration(
         requiredPermissions: [`${domain}:read`],
         revisions,
       }))
+    },
+    async getCollectionAvailability(parent) {
+      return unrestrictedCollectionAvailability(entityType, parent, revisions)
     },
   }
   return {
@@ -109,7 +113,7 @@ describe('ApplicationObservationQueryService', () => {
   it('一次查询返回多领域 schema、实体、关系和 revision', async () => {
     const service = new ApplicationObservationQueryService({ registry: createRegistry() })
     const result = await service.observe({
-      contractVersion: 'application-control/v1',
+      contractVersion: 'application-control/v2',
       requestId: 'observe-multi',
       domains: ['alpha', 'beta'],
       refs: [{ kind: 'alpha.item', id: 'one' }],
@@ -145,7 +149,7 @@ describe('ApplicationObservationQueryService', () => {
       },
     })
     const result = await service.observe({
-      contractVersion: 'application-control/v1',
+      contractVersion: 'application-control/v2',
       requestId: 'observe-page',
       domains: ['alpha', 'beta'],
       refs: [{ kind: 'alpha.item', id: 'one' }],
@@ -163,7 +167,7 @@ describe('ApplicationObservationQueryService', () => {
   it('revision 不一致与错误游标会被明确拒绝', async () => {
     const service = new ApplicationObservationQueryService({ registry: createRegistry(4) })
     await expect(service.observe({
-      contractVersion: 'application-control/v1',
+      contractVersion: 'application-control/v2',
       requestId: 'observe-conflict',
       refs: [{ kind: 'beta.item', id: 'one' }],
       selection: { includeSchemas: false, includeValues: true },
@@ -182,7 +186,7 @@ describe('ApplicationObservationQueryService', () => {
       },
     })
     const result = await service.observe({
-      contractVersion: 'application-control/v1',
+      contractVersion: 'application-control/v2',
       requestId: 'observe-operations',
       entityTypes: ['alpha.item'],
       selection: { includeSchemas: false, includeValues: false, includeOperations: true },

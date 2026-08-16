@@ -3,7 +3,7 @@ import type { ApplicationPropertyMutation } from '../transactions'
 /**
  * 属性写入表：把「哪条属性能写、支持哪些 operation、怎么写」收敛成一张可被机器读取的表。
  *
- * 存在的理由是一个已经发生的事故：`camera_stage.shot.time` 在反射层声明为可写，而执行器里那条
+ * 存在的理由是一个已经发生的事故：`camera_stage.state_keyframe.time` 在反射层声明为可写，而执行器里那条
  * 手写 if-else 链**没有 time 分支**——助手改镜头时间点必然拿到 PROPERTY_NOT_WRITABLE，而覆盖门禁
  * 只到实体粒度（shot 有 mutation 执行器就算过），全绿了不知道多久。手写链条对门禁是不透明的：
  * 它无法枚举「这个执行器到底能写哪些属性」。
@@ -58,6 +58,22 @@ export function propertyOperations(
     propertyId,
     new Set(writer.operations ?? DEFAULT_OPERATIONS),
   ]))
+}
+
+/**
+ * 通用计划器对外接受的操作集合。
+ *
+ * `ref_list` 的领域写入器通常只需要实现 append/remove；但调用方用 set 表达“最终集合应当
+ * 是这些引用”更自然，也更适合脚本批量执行。计划器会把 set 编译成最小的 remove/append
+ * 差异，因此这里把这项编译能力作为真实公共契约暴露，领域执行器仍保持严格。
+ */
+export function acceptedPropertyOperations(
+  operations: ReadonlySet<ApplicationMutationOperation> | undefined,
+  valueKind: string | undefined,
+): ReadonlySet<ApplicationMutationOperation> {
+  const accepted = new Set(operations ?? [])
+  if (valueKind === 'ref_list' && accepted.has('append') && accepted.has('remove')) accepted.add('set')
+  return accepted
 }
 
 /**

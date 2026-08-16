@@ -137,6 +137,7 @@ function routerDecision(input: ModelStepInput): ModelStepResult {
       toolDomains: ['assets'],
       complexity: 'simple',
       reason: '测试路由：素材库操作',
+      explicitUserIntent: true,
       taskFacets: [{
         facetId: 'assets',
         goal: '完成素材库操作',
@@ -334,4 +335,5 @@ describe('ask_user 澄清通道', () => {
     expect(events.some((event) => event.type === 'ClarificationRequired')).toBe(false)
   })
 })
+
 

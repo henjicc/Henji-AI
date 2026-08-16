@@ -64,6 +64,13 @@ function hasCompleteToolCallEnvelope(result: ModelStepResult): boolean {
 }
 
 function incompleteReason(result: ModelStepResult): string | null {
+  // 部分 OpenAI-compatible 供应商会把本应位于协议层的工具调用串直接塞进普通文本，并以
+  // stop + 0 toolCalls 结束。若把它当最终答复，UI 会显示整段 DSML/XML，世界也不会发生
+  // 文本中声称的调用。只有 SDK 解析出的结构化 toolCalls 才有执行资格。
+  const serializedToolProtocol = /(?:<｜｜DSML｜｜tool_calls>|<\|tool_calls\|>|<tool_calls?>)[\s\S]{0,16384}(?:invoke\s+name=|<tool_call|<function[=>])/i
+  if (serializedToolProtocol.test(result.text)) {
+    return '模型把工具调用协议序列化成了普通文本，没有返回可执行的结构化工具调用。'
+  }
   switch (result.finishReason) {
     case 'stop':
       // 部分 OpenAI-compatible 服务会在完整 tool-call 后仍返回 stop；

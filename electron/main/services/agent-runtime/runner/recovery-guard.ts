@@ -6,6 +6,7 @@ import type { AgentToolRegistry } from '../tools/registry'
 interface RecoveryGuardState {
   toolName: string | null
   toolCategory: string | null
+  entityTypes: string[]
 }
 
 interface SameModelParameterRecoveryState {
@@ -46,8 +47,20 @@ export class AgentRecoveryWriteGuard {
       ? {
           toolName: summary.recovery.toolName,
           toolCategory: summary.recovery.toolCategory,
+          entityTypes: [],
         }
       : null
+  }
+
+  /** 同一运行内的未知写入也必须立即进入恢复态，不能只在重启恢复时从摘要初始化。 */
+  activateUnknownWrite(call: ModelStepToolCall, toolCategory: string | null): void {
+    const input = asRecord(call.input)
+    const changes = Array.isArray(input?.changes) ? input.changes : []
+    const entityTypes = changes.flatMap((change) => {
+      const entityType = asRecord(change)?.entityType
+      return typeof entityType === 'string' ? [entityType] : []
+    })
+    this.state = { toolName: call.toolName, toolCategory, entityTypes: [...new Set(entityTypes)] }
   }
 
   validate(call: ModelStepToolCall): string | null {
@@ -68,7 +81,12 @@ export class AgentRecoveryWriteGuard {
     if (!this.state || !observationSucceeded(observation)) return false
     const definition = this.registry.get(call.toolName)
     if (!definition?.readOnly) return false
-    if (this.state.toolCategory && definition.category !== this.state.toolCategory) return false
+    const observedEntityTypes = new Set((observation.effects ?? []).flatMap((effect) => effect.entityTypes))
+    const verifiesAffectedEntity = this.state.entityTypes.length > 0
+      && this.state.entityTypes.some((entityType) => observedEntityTypes.has(entityType))
+    if (this.state.toolCategory
+      && definition.category !== this.state.toolCategory
+      && !verifiesAffectedEntity) return false
     this.state = null
     return true
   }

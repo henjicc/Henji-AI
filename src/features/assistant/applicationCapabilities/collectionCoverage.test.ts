@@ -162,16 +162,13 @@ describe('集合写入覆盖一致', () => {
     }
   })
 
-  it('三维关键帧已经是可增删的实体', () => {
-    const keyframe = getApplicationReflectionRegistry()
-      .describe({ entityTypes: ['camera_stage.keyframe'] }, accessContext).entities[0]
-    expect(keyframe?.collectionWrite).toMatchObject({ creatable: true, removable: true })
-    // 必填属性缺一不可：少了任何一个，写出来的关键帧都落不到正确的轨道上
-    expect(keyframe?.collectionWrite?.requiredPropertyIds).toEqual(expect.arrayContaining([
-      'camera_stage.keyframe.object_ref',
-      'camera_stage.keyframe.property_path',
-      'camera_stage.keyframe.time',
-      'camera_stage.keyframe.value',
-    ]))
+  it('三维状态关键帧是唯一可增删的时间轴实体', () => {
+    const registry = getApplicationReflectionRegistry()
+    const stateKeyframe = registry
+      .describe({ entityTypes: ['camera_stage.state_keyframe'] }, accessContext).entities[0]
+    expect(stateKeyframe?.collectionWrite).toMatchObject({ creatable: true, removable: true })
+    expect(stateKeyframe?.collectionWrite?.requiredPropertyIds).toEqual(['camera_stage.state_keyframe.time'])
+    expect(registry.describe({}, accessContext).entities.map((entity) => entity.id))
+      .not.toContain('camera_stage.keyframe')
   })
 })

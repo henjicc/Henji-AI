@@ -12,7 +12,7 @@ import {
   resolveClipboardMediaFile,
   type ClipboardSnapshot,
 } from '@/features/canvas/canvasUtils'
-import { assetSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
+import { mediaSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
 
 interface UseCanvasShortcutsParams {
   wrapperRef: React.RefObject<HTMLDivElement>
@@ -111,7 +111,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       event.preventDefault()
       pasteImageHandledRef.current = true
 
-      const nodeType = assetSourceNodeType(media.kind)
+      const nodeType = mediaSourceNodeType(media.kind)
       const flowPosition = reactFlowInstance.screenToFlowPosition(pointerPosition)
       const newNodeId = addNode(nodeType, flowPosition)
       setSelectedNode(newNodeId)

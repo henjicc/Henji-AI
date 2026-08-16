@@ -54,7 +54,7 @@
 
 ## 音频模型建议顺序
 
-按现有 `ppio-minimax-speech-2.6`：
+按现有 `ppio-minimax-speech`：
 
 1. `spec`
 2. `voiceId`

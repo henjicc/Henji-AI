@@ -193,7 +193,7 @@ export class AgentToolRegistry {
 
   list(context: HostContextSnapshot | null = null): AgentToolCatalogEntry[] {
     return [...this.definitions.values()]
-      .filter((definition) => this.isAvailable(definition, context))
+      .filter((definition) => definition.modelVisible !== false && this.isAvailable(definition, context))
       .map((definition) => this.toCatalogEntry(definition))
       .sort((left, right) => left.name.localeCompare(right.name))
   }
@@ -211,7 +211,7 @@ export class AgentToolRegistry {
     const uniqueNames = [...new Set(names)].slice(0, 100)
     return uniqueNames.flatMap((name) => {
       const definition = this.definitions.get(name)
-      if (!definition || !this.isAvailable(definition, context)) return []
+      if (!definition || definition.modelVisible === false || !this.isAvailable(definition, context)) return []
       return [{ catalog: this.toCatalogEntry(definition), modelTool: this.toModelTool(definition) }]
     })
   }

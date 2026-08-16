@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { StageGizmoMode } from '../domain/sceneTypes'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import {
-  resolvePathShotId,
+  resolvePathStateKeyframeId,
   useCameraStageToolStore,
   type StageEditorTool,
 } from '../store/cameraStageToolStore'
@@ -73,10 +73,10 @@ export function useCameraStageShortcuts(params: UseCameraStageShortcutsParams): 
         useCameraStageToolStore.getState().setTool(mode.tool)
       } else if (key === 'g') {
         const state = useCameraStageStore.getState()
-        if (!selectedId || state.editorMode !== 'simple' || state.viewMode !== 'director') return
-        const shotId = resolvePathShotId(state.shots, state.playback.currentTime, state.selectedShotId)
-        if (shotId) {
-          useCameraStageToolStore.getState().selectPath({ shotId, objectId: selectedId })
+        if (!selectedId || state.viewMode !== 'director') return
+        const stateKeyframeId = resolvePathStateKeyframeId(state.stateKeyframes, state.playback.currentTime, state.selectedStateKeyframeId)
+        if (stateKeyframeId) {
+          useCameraStageToolStore.getState().selectPath({ stateKeyframeId, objectId: selectedId })
         }
       } else if (key === 'f') {
         if (!selectedId) return

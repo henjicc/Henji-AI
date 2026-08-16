@@ -9,7 +9,6 @@ import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
 import { openApplicationSurface } from './surfaceRegistry'
 import {
   applyCameraStageCameraMove,
-  bakeCameraStageToPro,
   createCameraStageProject,
   deleteCameraStageObject,
   deleteCameraStageProject,
@@ -78,11 +77,8 @@ export function registerToolboxCapabilityHandlers(
 
   registrar.registerHandler('create_camera_stage_project', async (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<{
-      name: string
-      mode: 'simple' | 'pro'
-    }>('create_camera_stage_project', input)
-    return await createCameraStageProject(parsed.name, parsed.mode)
+    const parsed = parseCapabilityInput<{ name: string }>('create_camera_stage_project', input)
+    return await createCameraStageProject(parsed.name)
   })
 
   registrar.registerHandler('rename_camera_stage_project', async (input, context) => {
@@ -98,12 +94,6 @@ export function registerToolboxCapabilityHandlers(
     throwIfCapabilityAborted(context.signal)
     const parsed = parseCapabilityInput<ProjectInput & { baseRevision: number }>('delete_camera_stage_project', input)
     return await deleteCameraStageProject(parsed)
-  })
-
-  registrar.registerHandler('bake_camera_stage_to_pro', async (input, context) => {
-    throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { baseRevision: number }>('bake_camera_stage_to_pro', input)
-    return await bakeCameraStageToPro(parsed)
   })
 
   registrar.registerHandler('place_camera_stage_object', async (input, context) => {

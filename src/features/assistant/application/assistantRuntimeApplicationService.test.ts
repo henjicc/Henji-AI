@@ -7,7 +7,7 @@ import { toAssistantRunApplicationSnapshot } from './assistantRuntimeApplication
 
 function state(status: AgentRunState['status']): AgentRunState {
   return {
-    schemaVersion: 'agent-event/v1',
+    schemaVersion: 'agent-event/v2',
     runId: 'run-1',
     threadId: 'thread-1',
     status,
@@ -21,6 +21,8 @@ function state(status: AgentRunState['status']): AgentRunState {
     updatedAt: '2026-08-01T00:01:00.000Z',
     finalText: null,
     error: null,
+    executionOutcome: { status: 'pending', effects: [], verificationSummary: { summary: '', evidence: [] } },
+    presentationOutcome: { status: 'pending' },
     budget: {
       softMaxTurns: 20,
       maxTurns: 100,

@@ -40,6 +40,7 @@ function planStatusLabel(
   if (runStatus === 'paused') return '已暂停'
   if (runStatus === 'cancelled') return '已取消'
   if (runStatus === 'failed') return '受阻'
+  if (runStatus === 'completed_with_warning') return '已完成，有提示'
   if (presentation.summary && presentation.summary.recovery.mode !== 'none') return '恢复中'
   if (presentation.verification?.passed) return '已验证'
   if (presentation.verification && !presentation.verification.passed) return '待验证'

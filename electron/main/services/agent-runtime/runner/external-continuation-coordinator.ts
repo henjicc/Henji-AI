@@ -1,7 +1,8 @@
 import type { AgentEventInput } from '../../../../../src/core/assistant/events'
 import type { AgentExternalContinuation } from '../../../../../src/core/assistant/externalWait'
-import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
+import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentTurnSnapshotDraft } from '../../../../../src/core/assistant/turn'
+import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import type { AgentContextBuildResult } from '../context/types'
 import type { AgentToolActivationSnapshot } from '../context/tool-activation'
@@ -9,6 +10,7 @@ import type { AgentRouteDecision } from '../context/types'
 import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentSavePointCoordinator } from './save-point-coordinator'
 import type { AgentToolExecutionCoordinator } from './tool-execution-coordinator'
+import { RESUME_HENJI_SCRIPT_TOOL } from '../henji-script/tools'
 
 const QUERY_TOOL = 'get_generation_task'
 const FORBIDDEN_TOOL = 'create_visible_generation_task'
@@ -42,6 +44,28 @@ export class AgentExternalContinuationCoordinator {
     })
   }
 
+  /**
+   * 外部续跑的第一步是宿主生成的权威读取，不是模型自由选择的“看一眼”。
+   * 只有它返回了覆盖原外部任务稳定引用的已验证 observe receipt，才能消除
+   * retry 创建子运行时因 revision 变化产生的 resume_read_only 状态。
+   *
+   * 这个判定不依赖工具成功文本，也不依赖图片生成的业务字段；只消费宿主生成的
+   * toolCallId 和强类型 Effect Receipt。
+   */
+  verifiesRecovery(call: ModelStepToolCall, observation: AgentToolObservation): boolean {
+    const continuation = this.options.continuation
+    if (!continuation
+      || call.toolCallId !== `external:${continuation.waitId}:query`
+      || call.toolName !== QUERY_TOOL) return false
+    return (observation.effects ?? []).some((effect) => (
+      effect.effect === 'observe'
+      && effect.verified
+      && effect.targetRefs.some((ref) => (
+        ref.kind === 'generation.task' && ref.id === continuation.taskId
+      ))
+    ))
+  }
+
   extendActivation(
     activation: AgentToolActivationSnapshot,
     context: Parameters<AgentToolRegistry['registrations']>[1]
@@ -73,8 +97,13 @@ export class AgentExternalContinuationCoordinator {
     route: AgentRouteDecision
     scopeRevisions: HostScopeRevisions
     activeToolNames: string[]
-    rebuild: () => AgentContextBuildResult
-  }): Promise<AgentContextBuildResult | null> {
+    refreshHost: () => HostContextSnapshot
+    rebuild: (host?: HostContextSnapshot) => AgentContextBuildResult
+  }): Promise<{
+    context: AgentContextBuildResult
+    host: HostContextSnapshot
+    terminalError?: Error
+  } | null> {
     const continuation = this.options.continuation
     if (!continuation || this.queried) return null
     this.queried = true
@@ -88,11 +117,39 @@ export class AgentExternalContinuationCoordinator {
     await this.options.tools.execute(
       [call],
       input.route,
-      input.scopeRevisions,
+      // 状态事件本身可能刚刚推进 generation revision。这里是只读的权威终态查询，
+      // 不应拿构建上下文前的 revision 制造一次注定无副作用的 STALE_CONTEXT。
+      {},
       new Set([...input.activeToolNames, QUERY_TOOL])
     )
+    const terminalError = continuation.observedStatus === 'success'
+      ? null
+      : new Error(
+          `[SCRIPT_STEP_FAILED] 外部生成以 ${continuation.observedStatus} 结束，后续写入未执行`,
+        )
+    if (continuation.scriptCheckpoint && !terminalError) {
+      const resumeCall: ModelStepToolCall = {
+        toolCallId: `external:${continuation.waitId}:resume-script`,
+        toolName: RESUME_HENJI_SCRIPT_TOOL,
+        input: {
+          checkpoint: continuation.scriptCheckpoint,
+          observedStatus: continuation.observedStatus,
+        },
+        dynamic: false,
+      }
+      await this.options.tools.execute(
+        [resumeCall], input.route, {},
+        new Set([...input.activeToolNames, QUERY_TOOL, RESUME_HENJI_SCRIPT_TOOL]),
+        new Set([RESUME_HENJI_SCRIPT_TOOL]),
+      )
+    }
     await this.options.savePoints.save('after_tools', input.snapshot)
-    return input.rebuild()
+    const host = input.refreshHost()
+    return {
+      context: input.rebuild(host),
+      host,
+      ...(terminalError ? { terminalError } : {}),
+    }
   }
 
   assertNoResubmit(toolCalls: ModelStepToolCall[]): void {

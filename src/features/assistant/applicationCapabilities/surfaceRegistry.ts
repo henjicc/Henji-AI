@@ -79,7 +79,7 @@ export async function focusApplicationEntity(
     if (childId && (ref.kind === 'camera_stage.object' || ref.kind === 'camera_stage.camera')) {
       useCameraStageStore.getState().setSelected(childId)
     }
-    if (childId && ref.kind === 'camera_stage.shot') useCameraStageStore.getState().selectShot(childId)
+    if (childId && ref.kind === 'camera_stage.state_keyframe') useCameraStageStore.getState().selectStateKeyframe(childId)
     return { ref, ...openApplicationSurface('tool.camera_stage', correlation) }
   }
   throw new Error('INVALID_INPUT')

@@ -35,8 +35,7 @@ describe('三维布置失败不留残留', () => {
       activeCameraId: camera.id,
       animation: createDefaultAnimation(),
       sceneSettings: createDefaultSceneSettings(),
-      editorMode: 'simple',
-      shots: [],
+      stateKeyframes: [],
     }, { id: 'project-1', name: '布置失败测试' })
   })
 

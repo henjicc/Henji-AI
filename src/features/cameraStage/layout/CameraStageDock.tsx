@@ -16,9 +16,7 @@ import 'dockview-react/dist/styles/dockview.css'
 import ObjectListPanel from '../panels/ObjectListPanel'
 import PropertyPanel from '../panels/PropertyPanel'
 import StageViewportWorkspace from '../viewport/StageViewportWorkspace'
-import TimelinePanel from '../timeline/TimelinePanel'
-import ShotTimelinePanel from '../simple/ShotTimelinePanel'
-import { useCameraStageStore } from '../store/cameraStageStore'
+import StateKeyframeTimelinePanel from '../stateKeyframes/StateKeyframeTimelinePanel'
 import { useCameraStageViewportStore } from '../store/cameraStageViewportStore'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { DockHeaderActions, DockTab } from './DockChrome'
@@ -46,10 +44,7 @@ const ViewportPanel: React.FC<IDockviewPanelProps> = () => {
 
 const ObjectsPanel: React.FC<IDockviewPanelProps> = () => <ObjectListPanel />
 const PropertiesPanel: React.FC<IDockviewPanelProps> = () => <PropertyPanel />
-const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => {
-  const editorMode = useCameraStageStore((state) => state.editorMode)
-  return editorMode === 'simple' ? <ShotTimelinePanel /> : <TimelinePanel />
-}
+const TimelineDockPanel: React.FC<IDockviewPanelProps> = () => <StateKeyframeTimelinePanel />
 
 const DOCK_COMPONENTS = {
   viewport: ViewportPanel,

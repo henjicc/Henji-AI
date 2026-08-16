@@ -5,7 +5,7 @@ interface CameraStageUndoSnapshot {
   project: { id: string; name: string }
   scene: Pick<
     ReturnType<typeof useCameraStageStore.getState>,
-    'objects' | 'activeCameraId' | 'animation' | 'sceneSettings' | 'editorMode' | 'shots'
+    'objects' | 'activeCameraId' | 'animation' | 'sceneSettings' | 'stateKeyframes'
   >
 }
 
@@ -29,8 +29,7 @@ export function captureCameraStageUndo(projectId: string): string {
       activeCameraId: state.activeCameraId,
       animation: state.animation,
       sceneSettings: state.sceneSettings,
-      editorMode: state.editorMode,
-      shots: state.shots,
+      stateKeyframes: state.stateKeyframes,
     }),
   })
   return token

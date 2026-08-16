@@ -65,9 +65,22 @@ export type VisibleGenerationTaskHandler = (input: VisibleGenerationTaskInput) =
 
 export type VisibleGenerationTaskSummary = GenerationTaskStatusSnapshot
 
+/**
+ * 仅供应用内部组合能力消费的生成结果。公开的生成查询仍只返回稳定引用与状态，
+ * 不把本地路径或临时媒体 URL 暴露给模型。
+ */
+export interface VisibleGenerationTaskResult {
+  taskId: string
+  mediaType: MediaType
+  url: string
+  filePath?: string
+  prompt: string
+}
+
 export interface VisibleGenerationTaskHandlers {
   create: VisibleGenerationTaskHandler
   get: (taskId: string) => VisibleGenerationTaskSummary | null
+  getResult: (taskId: string) => VisibleGenerationTaskResult | null
   list: () => VisibleGenerationTaskSummary[]
   cancel: (taskId: string, reason: string) => Promise<Record<string, unknown>>
 }
@@ -167,6 +180,11 @@ export async function runVisibleGenerationTaskCommand(input: VisibleGenerationTa
 export function getVisibleGenerationTask(taskId: string): VisibleGenerationTaskSummary | null {
   if (!registeredHandlers) throw new Error('可见生成任务命令尚未就绪')
   return registeredHandlers.get(taskId)
+}
+
+export function getVisibleGenerationTaskResult(taskId: string): VisibleGenerationTaskResult | null {
+  if (!registeredHandlers) throw new Error('可见生成任务命令尚未就绪')
+  return registeredHandlers.getResult(taskId)
 }
 
 export function listVisibleGenerationTasks(): VisibleGenerationTaskSummary[] {

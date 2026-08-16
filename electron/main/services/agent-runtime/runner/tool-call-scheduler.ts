@@ -14,6 +14,7 @@ import { digestJson } from '../tools/security'
 import {
   extractResultReferences,
   extractResultScopeRevisions,
+  failureEnvelope,
   rejectedObservation,
   serializeError,
 } from './runner-results'
@@ -49,6 +50,7 @@ export interface AgentToolCallSchedulerOptions {
   registry: AgentToolRegistry
   catalogPlanner: AgentToolCatalogPlanner
   activeToolNames: ReadonlySet<string>
+  trustedInternalToolNames?: ReadonlySet<string>
   signal: AbortSignal
   waitIfPaused: () => Promise<void>
   throwIfCancelled: () => void
@@ -341,6 +343,7 @@ export class AgentToolCallScheduler {
         approvalMode: this.options.approvalMode,
         explicitUserIntent,
         authorizationSource,
+        trustedInternal: this.options.trustedInternalToolNames?.has(call.toolName) === true,
         signal: this.options.signal,
       })
       if (result.status === 'approval_required') {
@@ -380,10 +383,19 @@ export class AgentToolCallScheduler {
       }
       if (result.status !== 'completed') throw new Error('工具审批状态未收敛')
       this.options.finalizeSuccessfulOutcome?.(call, result.observation, expectedRevisions)
+      const completedFailure = failureEnvelope(result.observation.output)
       return {
         call,
         observation: result.observation,
-        error: null,
+        error: completedFailure ? {
+          code: completedFailure.code,
+          message: completedFailure.message ?? result.observation.summary,
+          retryable: false,
+          recovery: ['refresh_context', 'request_approval', 'wait', 'user_action', 'none']
+            .includes(completedFailure.recovery ?? '')
+            ? completedFailure.recovery as 'refresh_context' | 'request_approval' | 'wait' | 'user_action' | 'none'
+            : 'none',
+        } : null,
         resultingRevisions: extractResultScopeRevisions(result.observation.output),
         activationRecoveryQueued: false,
         contractCorrection: false,

@@ -22,6 +22,7 @@ const WRITERS = fieldWriterTable(FIELDS)
 
 interface UndoPayload {
   sessionId: string
+  annotationId: string
   previousDocument: ImageEditDocument
 }
 
@@ -31,6 +32,7 @@ interface UndoPayload {
  * 再走 imageEditSessionStore.commitDocument 落地。
  */
 export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationExecutor {
+  readonly effectContract = { direct: [], cascades: [] }
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.annotation
   readonly writableProperties = writableProperties(WRITERS)
   readonly propertyOperations = propertyOperations(WRITERS)
@@ -61,7 +63,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
     return {
       status: 'completed',
       resultingRevisions: { image_mark: revision },
-      producedRefs: [{ ...annotationRef(sessionId, draft), revision }],
+      directRefs: [{ ...annotationRef(sessionId, draft), revision }],
       evidence: step.mutations.map((mutation) => ({
         kind: 'property_value' as const,
         target: { ...annotationRef(sessionId, draft), revision },
@@ -69,7 +71,7 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
         data: mutation.value ?? null,
         capturedAt: new Date().toISOString(),
       })),
-      undoToken: `${UNDO_PREFIX}${JSON.stringify({ sessionId, previousDocument } satisfies UndoPayload)}`,
+      undoToken: `${UNDO_PREFIX}${JSON.stringify({ sessionId, annotationId, previousDocument } satisfies UndoPayload)}`,
     }
   }
 
@@ -80,13 +82,13 @@ export class ImageMarkAnnotationMutationExecutor implements ApplicationMutationE
 
   async undo(undoToken: string): Promise<ApplicationCompletedStepResult> {
     if (!undoToken.startsWith(UNDO_PREFIX)) throw new Error('IMAGE_MARK_ANNOTATION_UNDO_INVALID')
-    const { sessionId, previousDocument } = JSON.parse(undoToken.slice(UNDO_PREFIX.length)) as UndoPayload
+    const { sessionId, annotationId, previousDocument } = JSON.parse(undoToken.slice(UNDO_PREFIX.length)) as UndoPayload
     useImageEditSessionStore.getState().commitDocument(sessionId, previousDocument)
     const revision = documentRevision(previousDocument)
     return {
       status: 'completed',
       resultingRevisions: { image_mark: revision },
-      producedRefs: [{ kind: IMAGE_MARK_ENTITY_TYPES.document, id: sessionId, revision }],
+      directRefs: [{ kind: this.entityType, id: `${sessionId}:${annotationId}`, revision }],
       evidence: [{
         kind: 'entity_state',
         target: { kind: IMAGE_MARK_ENTITY_TYPES.document, id: sessionId, revision },

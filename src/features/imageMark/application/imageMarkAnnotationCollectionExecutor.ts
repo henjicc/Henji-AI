@@ -39,6 +39,7 @@ function property(properties: Record<string, unknown>, suffix: string): unknown 
  */
 export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollectionExecutor {
   readonly entityType = IMAGE_MARK_ENTITY_TYPES.annotation
+  readonly effectContract = { direct: [], cascades: [] }
 
   async apply(step: CollectionStep): Promise<ApplicationCompletedStepResult> {
     const sessionId = step.parent.id
@@ -90,7 +91,7 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
     return {
       status: 'completed',
       resultingRevisions: { image_mark: revision },
-      producedRefs: [{ kind: IMAGE_MARK_ENTITY_TYPES.document, id: sessionId, revision }],
+      directRefs: [],
       evidence: [{
         kind: 'entity_state',
         target: { kind: IMAGE_MARK_ENTITY_TYPES.document, id: sessionId, revision },
@@ -112,7 +113,7 @@ export class ImageMarkAnnotationCollectionExecutor implements ApplicationCollect
     return {
       status: 'completed',
       resultingRevisions: { image_mark: revision },
-      producedRefs: refs.map((ref) => ({ ...ref, revision })).slice(0, 64),
+      directRefs: refs.map((ref) => ({ ...ref, revision })).slice(0, 64),
       evidence: [{
         kind: 'operation_result',
         target: { kind: IMAGE_MARK_ENTITY_TYPES.document, id: sessionId, revision },

@@ -76,8 +76,8 @@ description: 面向 Henji-AI 的模型与供应商适配工作流。用于“新
 
 ## 4. 完成标准
 
-- 至少通过与改动相关的快速检查：`npm run gen:model-manifest`、`npm run check:model-i18n`、`npm run lint`。
-- 若改到 Electron 主进程/runtime/provider/upload，追加 `npx tsc -p tsconfig.electron.json --noEmit` 与 `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`。
+- 按 `docs/rules/testing.md` 选择最小验证：模型定义改动通常运行 manifest、model i18n 与对应参数/请求构建精确测试，不默认跑全量 lint。
+- 只有改到 Electron 主进程/runtime/provider/upload 的共享契约时才追加主进程类型检查或相关 lint；先跑精确测试，影响边界不清时再升级。
 - 只有需要验证完整 Electron 类型链路、产物或发布链路时，再跑 `npm run electron:build`；构建后需要验收真实桌面能力时再跑 `npm run electron:smoke`。
 - 新增能力不引入跨层调用与 UI 直连模型 API。
 - 新增参数满足顺序约定，并明确“显示/请求”策略。

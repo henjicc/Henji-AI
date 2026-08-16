@@ -21,6 +21,38 @@ const forbidden = [
     label: 'v2 快照中的旧工具目录',
     allow: ['src/core/assistant/hostContracts.ts'],
   },
+  {
+    pattern: /PLAYBACK_NOT_READY|ANIMATABLE_WRITE_REQUIRES_PRO_MODE|KEYFRAME_REQUIRES_PRO_MODE|SHOT_REQUIRES_SIMPLE_MODE|assertProModeForKeyframes|assertSimpleModeForShots/,
+    label: '已迁移到动态 availability 的领域手写守卫',
+  },
+  {
+    pattern: /StageEditorMode|bakeToProMode|bake_camera_stage_to_pro|camera_stage\.shot|camera_stage\.keyframe|LEGACY_PRO_PROJECT_UNSUPPORTED|LegacyProfessionalProjectUnsupported/,
+    label: 'Camera Stage 已删除的双模式或公开属性轨道契约',
+  },
+  {
+    pattern: /\beditorMode\b/,
+    label: 'Camera Stage 当前运行态重新出现编辑模式',
+  },
+  {
+    pattern: /from\s+['"][^'"]*timeline\/TimelinePanel['"]|mode\s*:\s*z\.enum\(\[['"]simple['"],\s*['"]pro['"]\]\)/,
+    label: 'Camera Stage 专业时间轴入口或模式选择器',
+  },
+  {
+    pattern: /data\.applicationEffect|applicationEffect\s*:/,
+    label: '用 evidence 文本代替强类型 Effect Receipt',
+  },
+  {
+    pattern: /execute_application_program|run_camera_stage_state_animation_program|run_canvas_image_pipeline_program|run_application_settings_program|DeterministicWorkflowService|PROGRAM_RECIPE_AVAILABLE/,
+    label: '重新引入 Henji Script 之外的第二套编排内核',
+  },
+  {
+    pattern: /\bproducedRefs\b/,
+    label: '旧 producedRefs 副作用推断契约',
+  },
+  {
+    pattern: /plan_application_settings_change|apply_application_settings_change/,
+    label: '设置写入重新出现专用计划或应用能力（应走通用反射事务）',
+  },
 ]
 const protectedExecutionRoots = [
   'src/core/application-control',
@@ -44,6 +76,19 @@ const obsoleteFiles = [
   'electron/main/services/agent-runtime/tools/builtin/frontend-canvas-mutations.ts',
   'electron/main/services/agent-runtime/tools/builtin/frontend-canvas-batch.ts',
   'electron/main/services/agent-runtime/tools/builtin/frontend-toolbox.ts',
+  'src/features/cameraStage/store/keyframeSlice.ts',
+  'src/features/cameraStage/store/animationActions.ts',
+  'src/features/cameraStage/timeline/TimelinePanel.tsx',
+  'src/features/cameraStage/timeline/TimelineTrackList.tsx',
+  'src/features/cameraStage/timeline/EasingCurveEditor.tsx',
+  'src/features/cameraStage/application/cameraStageKeyframeService.ts',
+  'src/features/cameraStage/application/cameraStageKeyframeCollectionExecutor.ts',
+  'src/core/assistant/capabilities/applicationProgramApplicationCapabilities.ts',
+  'electron/main/services/application-control/programs/service.ts',
+  'electron/main/services/agent-runtime/programs/tools.ts',
+  'src/core/assistant/capabilities/workflowApplicationCapabilities.ts',
+  'electron/main/services/application-control/workflows/service.ts',
+  'electron/main/services/agent-runtime/workflows/tools.ts',
 ]
 const migratedBackendCapabilityIds = [
   'read_agent_artifact',
@@ -55,14 +100,6 @@ const migratedBackendCapabilityIds = [
   'get_user_instructions',
   'update_user_instructions',
   'load_assistant_skill',
-  'list_workflows',
-  'plan_workflow',
-  'execute_workflow',
-  'get_workflow_run',
-  'pause_workflow',
-  'resume_workflow',
-  'cancel_workflow',
-  'rollback_workflow',
 ]
 
 function walk(directory) {
@@ -109,6 +146,16 @@ for (const protectedRoot of protectedExecutionRoots) {
     for (const rule of protectedExecutionForbidden) {
       if (rule.pattern.test(source)) failures.push(`${rule.label}：${relative}`)
     }
+  }
+}
+
+for (const file of walk(path.join(root, 'src', 'core', 'assistant', 'capabilities'))) {
+  if (file.endsWith('.test.ts')) continue
+  const relative = path.relative(root, file).replaceAll('\\', '/')
+  const source = fs.readFileSync(file, 'utf8')
+  if (/\b(?:source|script|executeScript)\s*:\s*z\./.test(source)
+    && relative !== 'src/core/assistant/capabilities/henjiScriptApplicationCapabilities.ts') {
+    failures.push(`非 run_henji_script 能力暴露任意脚本字段：${relative}`)
   }
 }
 
@@ -197,7 +244,7 @@ for (const file of walk(path.join(root, 'src'))) {
  * 属性写入执行器必须表驱动，不许回到手写 if-else 属性链。
  *
  * 手写链条对覆盖门禁是不透明的——它无法枚举「这个执行器到底能写哪些属性」，于是
- * `camera_stage.shot.time` 声明可写、链条里没有对应分支这件事，实体级门禁全绿了不知道多久。
+ * 某实体属性声明可写、链条里没有对应分支这件事，实体级门禁可能长期全绿。
  * 表驱动之后 propertyCoverage 门禁能直接读出 key 集合与反射层声明双向比对，这条静态规则
  * 防的就是有人把某个执行器改回链式写法，把那道门禁重新变瞎。
  */

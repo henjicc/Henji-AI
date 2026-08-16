@@ -68,10 +68,9 @@
 
 - `npm run gen:model-manifest`
 - `npm run check:model-i18n`
-- `npm run lint`
-- `npx tsc -p tsconfig.electron.json --noEmit`
-- `npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0`
-- 若需要完整产物链路：`npm run electron:build`
+- 运行新 provider 的请求构建、轮询、结果解析和上传精确测试。
+- 按 `docs/rules/testing.md` 的风险级别选择主进程类型检查、相关 lint；不默认叠加全量命令。
+- 只有需要完整产物链路时才运行 `npm run electron:build`。
 - 若可用：`npm run electron:dev` 做端到端提交 + 轮询 + 结果下载验证
 
 ## 常见回退点

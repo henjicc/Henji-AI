@@ -114,9 +114,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         await waitForSceneCommit()
 
         const exportState = useCameraStageStore.getState()
-        const renderSchedule = exportState.editorMode === 'simple'
-          ? buildRenderCameraSchedule(exportState.shots, exportState.activeCameraId)
-          : []
+        const renderSchedule = buildRenderCameraSchedule(exportState.stateKeyframes, exportState.activeCameraId)
         const renderCameraIds = new Set(
           (renderSchedule.length > 0
             ? renderSchedule.map((entry) => entry.cameraId)

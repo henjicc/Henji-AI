@@ -1,0 +1,259 @@
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Plus } from 'lucide-react'
+import { UiIconButton } from '@/components/ui'
+import { CAMERA_STAGE_TIMELINE_HEX } from '@/core/theme/colorTokens'
+import { useCameraStageStore } from '../store/cameraStageStore'
+import { PlaybackButtons } from '../timeline/PlaybackControls'
+import TimeRuler from '../timeline/TimeRuler'
+import { clampPxPerSecond, timeToX, xToTime, type TimeRulerMode } from '../timeline/timeScale'
+import { TIMELINE_RULER_HEIGHT } from '../timeline/timelineLayout'
+import StateKeyframeClipTrack from './timeline/StateKeyframeClipTrack'
+import StateKeyframeTimecodeText from './timeline/StateKeyframeTimecodeText'
+import { formatCompactStateKeyframeTimecode, type StateKeyframeTimecodeMode } from './timeline/stateKeyframeTimecodeFormat'
+import { quantizeToFrame } from './timeline/stateKeyframeClipGeometry'
+import { STATE_KEYFRAME_CLIP_TRACK_HEIGHT } from './timeline/stateKeyframeTimelineLayout'
+import { useStateKeyframeMarqueeSelect } from './timeline/useStateKeyframeMarqueeSelect'
+
+/**
+ * 状态关键帧时间轴面板：工具条（播放控制 + 时间码）→ 时间标尺（可拖 scrub）→ 比例块轨道 → 播放头竖线贯穿。
+ * 块宽反映真实时长；过渡细节走块上方参数气泡（TransitionClipBlock 内接 PanelTrigger，见重要记录 004），
+ * 本面板只做编排接线，不再持有过渡抽屉展开态。
+ * pxPerSecond 是独立的编辑视口状态：仅由用户 Alt+滚轮修改。关键帧位置决定实际总时长，
+ * 新增/移动关键帧只能扩展内容范围，禁止自动 fit 改变时间尺度。
+ */
+
+/** 轨道内容最小宽度，避免空/极短工程时轨道过窄 */
+const MIN_CONTENT_WIDTH = 320
+/** 缩放到该像素密度以上时，标尺切换为帧刻度（更精细，配合 trim 帧级吸附） */
+const FRAME_TICK_PX_PER_SECOND = 200
+/** 滚轮缩放系数底数，deltaY 越大缩放越快。 */
+const WHEEL_ZOOM_BASE = 1.0018
+
+const StateKeyframeTimelinePanel: React.FC = () => {
+  const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
+  const objects = useCameraStageStore((state) => state.objects)
+  const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
+  const currentTime = useCameraStageStore((state) => state.playback.currentTime)
+  const duration = useCameraStageStore((state) => state.animation.duration)
+  const fps = useCameraStageStore((state) => state.animation.fps)
+  const addStateKeyframe = useCameraStageStore((state) => state.addStateKeyframe)
+  const selectStateKeyframe = useCameraStageStore((state) => state.selectStateKeyframe)
+  const removeStateKeyframe = useCameraStageStore((state) => state.removeStateKeyframe)
+  const moveStateKeyframeTime = useCameraStageStore((state) => state.moveStateKeyframeTime)
+  const updateStateKeyframeName = useCameraStageStore((state) => state.updateStateKeyframeName)
+  const updateStateKeyframeTiming = useCameraStageStore((state) => state.updateStateKeyframeTiming)
+  const updateStateKeyframeTransition = useCameraStageStore((state) => state.updateStateKeyframeTransition)
+  const updateStateKeyframeCamera = useCameraStageStore((state) => state.updateStateKeyframeCamera)
+  const updateStateKeyframeContinuity = useCameraStageStore((state) => state.updateStateKeyframeContinuity)
+  const setSelectedStateKeyframeIdOnly = useCameraStageStore((state) => state.setSelectedStateKeyframeIdOnly)
+  const selectedStateKeyframeIds = useCameraStageStore((state) => state.selectedStateKeyframeIds)
+  const setSelectedStateKeyframeIds = useCameraStageStore((state) => state.setSelectedStateKeyframeIds)
+  const removeStateKeyframes = useCameraStageStore((state) => state.removeStateKeyframes)
+  const seek = useCameraStageStore((state) => state.seek)
+
+  // 焦点不在输入控件时，空格播放/暂停。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.code !== 'Space' || event.repeat) return
+      const target = event.target as HTMLElement | null
+      const tagName = target?.tagName
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target?.isContentEditable) return
+      const state = useCameraStageStore.getState()
+      if (state.stateKeyframes.length === 0 || state.animation.duration <= 0) return
+      event.preventDefault()
+      if (state.playback.playing) state.pause()
+      else state.play()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [pxPerSecond, setPxPerSecond] = useState(clampPxPerSecond(120))
+  const [viewportWidth, setViewportWidth] = useState(MIN_CONTENT_WIDTH)
+  const [timecodeMode, setTimecodeMode] = useState<StateKeyframeTimecodeMode>('secondsFrames')
+
+  // 面板尺寸只影响可滚动内容留白，不得反向修改时间尺度。
+  useLayoutEffect(() => {
+    const container = scrollRef.current
+    if (!container) return undefined
+    const updateViewportWidth = (): void => {
+      const visibleWidth = container.clientWidth
+      if (visibleWidth <= 0) return
+      setViewportWidth(visibleWidth)
+    }
+    updateViewportWidth()
+    const observer = new ResizeObserver(updateViewportWidth)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
+
+  // 轨道在最后一个关键帧之后始终保留至少一屏空白，允许播放头进入未来时间。
+  const contentWidth = Math.max(MIN_CONTENT_WIDTH, timeToX(duration, pxPerSecond) + viewportWidth)
+  const rulerDuration = xToTime(contentWidth, pxPerSecond)
+  const rulerMode: TimeRulerMode = pxPerSecond >= FRAME_TICK_PX_PER_SECOND ? 'frames' : 'seconds'
+
+  // Alt+滚轮锚点缩放：指针所在时间点缩放后保持不动。
+  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>): void => {
+    if (!event.altKey) return
+    event.preventDefault()
+    const scroller = scrollRef.current
+    if (!scroller) return
+    const rect = scroller.getBoundingClientRect()
+    const viewportContentX = event.clientX - rect.left
+    if (viewportContentX < 0) return
+    const anchorContentX = viewportContentX + scroller.scrollLeft
+    const anchorTime = Math.max(0, xToTime(anchorContentX, pxPerSecond))
+    const factor = Math.pow(WHEEL_ZOOM_BASE, -event.deltaY)
+    const nextPxPerSecond = clampPxPerSecond(pxPerSecond * factor)
+    if (Math.abs(nextPxPerSecond - pxPerSecond) < 0.01) return
+    setPxPerSecond(nextPxPerSecond)
+    requestAnimationFrame(() => {
+      scroller.scrollLeft = Math.max(0, timeToX(anchorTime, nextPxPerSecond) - viewportContentX)
+    })
+  }, [pxPerSecond])
+
+  // 播放头吸附到某关键帧时同步选中，但不重复应用快照。
+  useEffect(() => {
+    const epsilon = 1 / (2 * Math.max(1, fps))
+    const stateKeyframe = stateKeyframes.find((item) => Math.abs(item.time - currentTime) <= epsilon)
+    if (!stateKeyframe || stateKeyframe.id === selectedStateKeyframeId) return
+    setSelectedStateKeyframeIdOnly(stateKeyframe.id)
+  }, [stateKeyframes, currentTime, fps, selectedStateKeyframeId, setSelectedStateKeyframeIdOnly])
+
+  const marquee = useStateKeyframeMarqueeSelect({
+    containerRef: scrollRef,
+    stateKeyframes,
+    pxPerSecond,
+    onCommit: setSelectedStateKeyframeIds,
+  })
+  // 拖拽中显示实时预览集合，松手后显示已提交集合
+  const highlightedStateKeyframeIds = marquee.previewIds ?? selectedStateKeyframeIds
+
+  // Delete/Backspace 删除框选或当前选中的关键帧；Escape 清空框选。
+  // 挂在面板容器上（React 冒泡）并 stopPropagation，避免触发全局"删除选中场景对象"快捷键。
+  const handlePanelKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>): void => {
+    const target = event.target as HTMLElement
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+    if (event.key === 'Escape') {
+      if (useCameraStageStore.getState().selectedStateKeyframeIds.length > 0) {
+        event.stopPropagation()
+        setSelectedStateKeyframeIds([])
+      }
+      return
+    }
+    if (event.key !== 'Delete' && event.key !== 'Backspace') return
+    const state = useCameraStageStore.getState()
+    const ids = state.selectedStateKeyframeIds.length > 0
+      ? state.selectedStateKeyframeIds
+      : state.selectedStateKeyframeId
+        ? [state.selectedStateKeyframeId]
+        : []
+    if (ids.length === 0) return
+    event.preventDefault()
+    event.stopPropagation()
+    removeStateKeyframes(ids)
+  }, [removeStateKeyframes, setSelectedStateKeyframeIds])
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-app" onKeyDown={handlePanelKeyDown}>
+      <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border-dark bg-surface-dark px-2">
+        <PlaybackButtons canPlay={stateKeyframes.length > 0 && duration > 0} />
+        <StateKeyframeTimecodeText
+          currentTime={currentTime}
+          duration={duration}
+          fps={fps}
+          mode={timecodeMode}
+          onModeChange={setTimecodeMode}
+        />
+        <UiIconButton
+          showBorder={false}
+          appearance="hover-only"
+          className="ml-4 h-7 w-7"
+          title="在播放头位置添加关键帧"
+          onClick={addStateKeyframe}
+        >
+          <Plus size={16} />
+        </UiIconButton>
+        <span className="ml-auto text-xs text-text-muted">状态关键帧</span>
+      </div>
+
+      <div
+        ref={scrollRef}
+        tabIndex={0}
+        className="min-h-0 flex-1 select-none overflow-auto outline-none"
+        onWheel={handleWheel}
+        onPointerDown={marquee.handlePointerDown}
+        onPointerMove={marquee.handlePointerMove}
+        onPointerUp={marquee.handlePointerUp}
+        onPointerCancel={marquee.handlePointerCancel}
+      >
+        <div className="relative inline-block min-w-full">
+          <TimeRuler
+            duration={rulerDuration}
+            pxPerSecond={pxPerSecond}
+            contentWidth={contentWidth}
+            mode={rulerMode}
+            fps={fps}
+            formatLabel={(time) => formatCompactStateKeyframeTimecode(time, timecodeMode, fps)}
+            onScrub={(time) => seek(quantizeToFrame(time, fps))}
+          />
+          <StateKeyframeClipTrack
+            stateKeyframes={stateKeyframes}
+            objects={objects}
+            pxPerSecond={pxPerSecond}
+            contentWidth={contentWidth}
+            fps={fps}
+            selectedStateKeyframeId={selectedStateKeyframeId}
+            multiSelectedStateKeyframeIds={highlightedStateKeyframeIds}
+            currentTime={currentTime}
+            onSelectStateKeyframe={selectStateKeyframe}
+            onRenameStateKeyframe={updateStateKeyframeName}
+            onRemoveStateKeyframe={removeStateKeyframe}
+            onUpdateStateKeyframeTiming={updateStateKeyframeTiming}
+            onUpdateStateKeyframeTransition={updateStateKeyframeTransition}
+            onUpdateStateKeyframeCamera={updateStateKeyframeCamera}
+            onMoveStateKeyframeTime={moveStateKeyframeTime}
+            onUpdateStateKeyframeContinuity={updateStateKeyframeContinuity}
+          />
+          <div
+            className="pointer-events-none absolute z-20"
+            style={{
+              left: timeToX(currentTime, pxPerSecond),
+              top: 0,
+              height: TIMELINE_RULER_HEIGHT + STATE_KEYFRAME_CLIP_TRACK_HEIGHT,
+              borderLeft: `1px solid ${CAMERA_STAGE_TIMELINE_HEX.playhead}`,
+            }}
+          >
+            <div
+              className="absolute top-0"
+              style={{
+                left: 0,
+                transform: 'translateX(-50%)',
+                width: 0,
+                height: 0,
+                borderLeft: '5px solid transparent',
+                borderRight: '5px solid transparent',
+                borderTop: `7px solid ${CAMERA_STAGE_TIMELINE_HEX.playhead}`,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {marquee.rect && (
+        <div
+          className="pointer-events-none fixed z-dropdown border border-accent bg-accent/10"
+          style={{
+            left: marquee.rect.left,
+            top: marquee.rect.top,
+            width: marquee.rect.width,
+            height: marquee.rect.height,
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+export default StateKeyframeTimelinePanel

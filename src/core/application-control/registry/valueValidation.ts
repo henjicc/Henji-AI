@@ -72,7 +72,7 @@ function validateVector(
 }
 
 function normalizeNonNullValue(
-  descriptor: ApplicationPropertyDescriptor,
+  descriptor: Pick<ApplicationPropertyDescriptor, 'id' | 'nullable' | 'value'>,
   valueType: ApplicationPropertyValue,
   input: JsonValue
 ): JsonValue {
@@ -161,7 +161,7 @@ function normalizeNonNullValue(
 }
 
 export function normalizeApplicationPropertyValue(
-  descriptor: ApplicationPropertyDescriptor,
+  descriptor: Pick<ApplicationPropertyDescriptor, 'id' | 'nullable' | 'value'>,
   input: JsonValue
 ): JsonValue {
   if (input === null) {

@@ -4,6 +4,7 @@ import {
   type ApplicationPropertyDescriptor,
   type ApplicationRef,
   type JsonValue,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
@@ -153,6 +154,10 @@ class ImageEditReflectionProvider implements ApplicationEntityProvider {
         revisions: { image_edit: preview.revision },
       }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { image_edit: 0 }, ['image_edit:write'])
   }
 
   private readProperties(ref: ApplicationRef): { preview: ImageEditPreviewSnapshot; properties: Record<string, JsonValue> } {

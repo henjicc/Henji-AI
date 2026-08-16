@@ -31,6 +31,7 @@ export interface CallRecord {
 export interface ObservationFailure {
   code: string
   message: string
+  retryable: boolean
   recovery: string
 }
 
@@ -40,6 +41,11 @@ interface EffectLedgerEntry {
   verified: boolean
   evidenceDigests: Set<string>
   evidence: string[]
+}
+
+interface RecordedEffectObservation {
+  outputDigest: string
+  effects: AgentObservedEffect[]
 }
 
 export interface RestoredEffectLedgerEntry {
@@ -69,6 +75,7 @@ export function observationFailure(
   return {
     code: failure.code,
     message: failure.message ?? observation.summary,
+    retryable: failure.retryable ?? false,
     recovery: failure.recovery ?? 'none',
   }
 }
@@ -97,42 +104,6 @@ export function callSignature(
 export function isTerminal(status: AgentTaskFacet['status']): boolean {
   return status === 'completed' || status === 'blocked'
     || status === 'waiting_user' || status === 'superseded'
-}
-
-function referencesFromResult(output: unknown): Array<{ kind: string; id: string }> {
-  const record = asRecord(output)
-  const producedRefs = Array.isArray(record?.producedRefs) ? record.producedRefs : []
-  const structured = producedRefs.flatMap((value) => {
-    const ref = asRecord(value)
-    return typeof ref?.kind === 'string' && typeof ref.id === 'string'
-      ? [{ kind: ref.kind, id: ref.id }]
-      : []
-  })
-  for (const key of ['ref', 'sourceRef', 'resultRef']) {
-    const ref = asRecord(record?.[key])
-    if (typeof ref?.kind === 'string' && typeof ref.id === 'string') {
-      structured.push({ kind: ref.kind, id: ref.id })
-    }
-  }
-  /*
-   * 导航能力实际到达的 Surface 必须成为可比对的稳定引用。
-   *
-   * 否则 effectMatches 对 navigate 只看 effect 名，`switch_workspace` 切到工具工作区就会
-   * 满足"打开 tool.camera_stage"的 Facet——实测里用户看到的正是这个：工作区切了，
-   * 三维工程页面没打开，而任务图却认为导航已完成、把 open_camera_stage_project 永远跳过。
-   */
-  const surfaceId = record?.surfaceId
-  if (typeof surfaceId === 'string' && surfaceId.trim()) {
-    structured.push({ kind: 'application.surface', id: surfaceId })
-  }
-  const workspace = record?.workspace ?? record?.workspaceId
-  if (typeof workspace === 'string' && workspace.trim()) {
-    structured.push({
-      kind: 'application.surface',
-      id: workspace.includes('.') ? workspace : `workspace.${workspace}`,
-    })
-  }
-  return structured
 }
 
 export function effectMatches(
@@ -181,12 +152,14 @@ export function resolveObservedEffects(
   observation: AgentToolObservation,
   evidence: string[]
 ): AgentObservedEffect[] {
+  if ((observation.effects?.length ?? 0) > 0) return observation.effects ?? []
   const definition = registry.get(call.toolName)
   if (!definition) return []
-  const custom = definition.capability?.resolveObservedEffects
+  const custom = definition.resolveObservedEffects
+    ?? definition.capability?.resolveObservedEffects
   if (custom) {
     try {
-      return custom(call.input, observation.output).flatMap((effect) => {
+      return (custom(call.input, observation.output) ?? []).flatMap((effect) => {
         const parsed = agentObservedEffectSchema.safeParse(effect)
         return parsed.success ? [parsed.data] : []
       })
@@ -201,24 +174,16 @@ export function resolveObservedEffects(
       return []
     }
   }
-  const impacts = definition.capability?.control?.impacts ?? []
-  const targetRefs = referencesFromResult(observation.output)
-  const output = asRecord(observation.output)
-  const verification = asRecord(output?.verification)
-  const verified = definition.readOnly || output?.verified === true || verification?.verified === true
-  return impacts.map((impact) => agentObservedEffectSchema.parse({
-    effect: impact.effect,
-    entityTypes: impact.entityTypes,
-    propertyIds: impact.propertyIds,
-    targetRefs,
-    count: 1,
-    verified,
-    evidence,
-  }))
+  return []
 }
 
 export class AgentEffectLedger {
   private entries = new Map<string, EffectLedgerEntry>()
+  /**
+   * Action Plan 允许在拿到稳定引用后收窄 targetRefs。收窄不能抹掉此前已经发生的事实，
+   * 因此保留每个 Facet 的强类型 Effect Receipt，并在契约变化时重新对账。
+   */
+  private readonly observationsByFacet = new Map<string, Map<string, RecordedEffectObservation>>()
 
   constructor(taskGraph: AgentTaskGraph, restored: RestoredEffectLedgerEntry[] = []) {
     for (const facet of taskGraph.facets) {
@@ -244,6 +209,11 @@ export class AgentEffectLedger {
           evidence: retained.evidence,
         }))
       }
+      if (resetFacetIds.has(facet.facetId)) {
+        for (const observation of this.observationsByFacet.get(facet.facetId)?.values() ?? []) {
+          this.apply(facet, observation.effects, observation.outputDigest)
+        }
+      }
     }
   }
 
@@ -263,6 +233,15 @@ export class AgentEffectLedger {
   }
 
   record(facet: AgentTaskFacet, observedEffects: AgentObservedEffect[], outputDigest: string): void {
+    const observations = this.observationsByFacet.get(facet.facetId)
+      ?? new Map<string, RecordedEffectObservation>()
+    const observationKey = digestJson({ outputDigest, observedEffects })
+    observations.set(observationKey, { outputDigest, effects: observedEffects })
+    this.observationsByFacet.set(facet.facetId, observations)
+    this.apply(facet, observedEffects, outputDigest)
+  }
+
+  private apply(facet: AgentTaskFacet, observedEffects: AgentObservedEffect[], outputDigest: string): void {
     for (const required of facet.requiredEffects) {
       const ledger = this.entries.get(required.effectId)
       if (!ledger) continue

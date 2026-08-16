@@ -16,10 +16,34 @@ export const TOOL_INPUT_LIMITS: JsonLimitOptions = {
   maxStringLength: 32 * 1024,
 }
 
+/**
+ * 只用于 modelVisible:false 的宿主持久化断点。Henji IR 本身会形成比普通工具输入更深的
+ * 受控表达式树，但仍受总字节、键数和字符串长度限制；模型调用绝不能选择这组边界。
+ */
+export const INTERNAL_CHECKPOINT_INPUT_LIMITS: JsonLimitOptions = {
+  maxBytes: 512 * 1024,
+  maxDepth: 24,
+  maxKeys: 10_000,
+  maxStringLength: 32 * 1024,
+}
+
 export const TOOL_OUTPUT_LIMITS: JsonLimitOptions = {
   maxBytes: 1024 * 1024,
   maxDepth: 16,
   maxKeys: 5_000,
+  maxStringLength: 256 * 1024,
+}
+
+/**
+ * 仅供带受控解释器 checkpoint 的工具输出使用。
+ *
+ * checkpoint 会包含已经过编译器校验的 Henji IR，天然比普通业务 DTO 更深；仍然保留严格的
+ * 总字节、键数与字符串上限，不能把这组边界用于任意应用工具输出。
+ */
+export const CHECKPOINT_OUTPUT_LIMITS: JsonLimitOptions = {
+  maxBytes: 1024 * 1024,
+  maxDepth: 24,
+  maxKeys: 10_000,
   maxStringLength: 256 * 1024,
 }
 

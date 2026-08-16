@@ -7,6 +7,7 @@ import {
   type ApplicationRef,
   type ApplicationSchemaRef,
   type JsonValue,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { normalizeGenerationTaskStatus } from '@/core/assistant/externalWait'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
@@ -149,6 +150,10 @@ class GenerationReflectionProvider implements ApplicationEntityProvider {
     })
   }
 
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { generation: 0 }, ['generation:write'])
+  }
+
   private listRefs(): ApplicationRef[] {
     if (this.entityType === GENERATION_ENTITY_TYPES.model) {
       return searchGenerationModelCatalog({}).models.map((model) => ({ kind: this.entityType, id: String(model.modelId), label: String(model.name) }))
@@ -270,6 +275,15 @@ class GenerationDraftReflectionProvider implements ApplicationEntityProvider {
         revisions,
       }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(
+      this.entityType,
+      parent,
+      { generation_draft: useGenerationDraftStore.getState().revision },
+      ['generation:write'],
+    )
   }
 }
 

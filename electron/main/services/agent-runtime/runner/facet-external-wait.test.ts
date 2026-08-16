@@ -42,7 +42,15 @@ function tool(input: {
               targetRefs: [], count: 1, verified: status === 'success', evidence: [],
             }]
           }
-        : undefined,
+        : (_toolInput: unknown, output: unknown) => {
+            const taskId = typeof output === 'object' && output
+              ? Reflect.get(output, 'taskId') : undefined
+            return [{
+              effect: 'execute' as const, entityTypes: ['generation.task'], propertyIds: [],
+              targetRefs: typeof taskId === 'string' ? [{ kind: 'generation.task', id: taskId }] : [],
+              count: 1, verified: false, evidence: [],
+            }]
+          },
     } as never,
     execute: async () => ({}), concurrencyKey: () => input.name,
     targetIds: () => ({}), dataClasses: () => ['C0'], summarize: () => input.name,

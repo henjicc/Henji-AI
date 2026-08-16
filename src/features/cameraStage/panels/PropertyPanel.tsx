@@ -5,7 +5,6 @@ import { UiButton, UiIconButton, UiInput, UiSwitch } from '@/components/ui'
 import { CAMERA_STAGE_OBJECT_PALETTE_HEX } from '@/core/theme/colorTokens'
 import type { StageObject, StageTransform, StageVec3 } from '../domain/sceneTypes'
 import { beginHistorySession, endHistorySession, useCameraStageStore } from '../store/cameraStageStore'
-import KeyframeStopwatch from '../timeline/KeyframeStopwatch'
 import CameraSettingsSection from './CameraSettingsSection'
 import CharacterPoseSection from './CharacterPoseSection'
 import SceneSettingsPanel from './SceneSettingsPanel'
@@ -31,8 +30,6 @@ interface Vec3RowProps {
   precision: number
   min?: number
   onChange: (next: StageVec3, changedPaths?: string[]) => void
-  /** 提供则在行首渲染码表按钮（可打关键帧的属性行） */
-  keyframe?: { objectId: string; path: string }
   scaleLocked?: boolean
   onScaleLockedChange?: (locked: boolean) => void
 }
@@ -45,16 +42,12 @@ const Vec3Row: React.FC<Vec3RowProps> = ({
   precision,
   min,
   onChange,
-  keyframe,
   scaleLocked = false,
   onScaleLockedChange,
 }) => (
   <div>
     <div className="mb-1 flex items-center justify-between gap-2 text-xs text-text-muted">
-      <div className="flex min-w-0 items-center gap-1">
-        {keyframe && <KeyframeStopwatch objectId={keyframe.objectId} groupPath={keyframe.path} />}
-        <span>{label}</span>
-      </div>
+      <span>{label}</span>
       {pathKey === 'scale' && onScaleLockedChange && (
         <UiIconButton
           type="button"
@@ -74,13 +67,6 @@ const Vec3Row: React.FC<Vec3RowProps> = ({
       {AXES.map((axis) => (
         <div key={axis} className="min-w-0 flex-1">
           <div className="mb-1 flex items-center gap-0.5 text-3xs text-text-muted">
-            {keyframe && (
-              <KeyframeStopwatch
-                objectId={keyframe.objectId}
-                path={`${keyframe.path}.${axis}`}
-                className="h-4 w-4"
-              />
-            )}
             <span>{AXIS_LABELS[axis]}</span>
           </div>
           <NumberInput
@@ -153,10 +139,7 @@ const PropertyPanel: React.FC = () => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-1">
-            <KeyframeStopwatch objectId={selected.id} groupPath="color" />
-            <SectionTitle>颜色</SectionTitle>
-          </div>
+          <SectionTitle>颜色</SectionTitle>
           <div className="flex items-center gap-1.5">
             <UiInput
               type="color"
@@ -190,7 +173,6 @@ const PropertyPanel: React.FC = () => {
               step={row.step}
               precision={row.precision}
               min={row.key === 'scale' ? 0.01 : undefined}
-              keyframe={{ objectId: selected.id, path: `transform.${row.key}` }}
               scaleLocked={row.key === 'scale' && scaleLocked}
               onScaleLockedChange={row.key === 'scale' ? handleScaleLockedChange : undefined}
               onChange={(next, changedPaths) => updateTransform(

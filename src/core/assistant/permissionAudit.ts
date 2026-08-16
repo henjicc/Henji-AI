@@ -54,18 +54,18 @@ export const agentPermissionAuditToolSchema = z.object({
 
 export const agentPermissionAuditAuthorizationSchema = z.object({
   approvalMode: agentApprovalModeSchema,
-  source: z.enum(['direct', 'approved_workflow', 'approved_action_group']),
+  source: z.enum(['direct', 'approved_workflow', 'approved_program', 'approved_script', 'approved_action_group']),
   parentToolCallId: z.string().min(1).max(200).optional(),
   reasonCode: stableCodeSchema.optional(),
 }).strict().superRefine((value, context) => {
-  if (value.source === 'approved_workflow' && !value.parentToolCallId) {
+  if (['approved_workflow', 'approved_program', 'approved_script'].includes(value.source) && !value.parentToolCallId) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['parentToolCallId'],
-      message: 'approved_workflow 必须关联父工具调用',
+      message: `${value.source} 必须关联父工具调用`,
     })
   }
-  if (value.source !== 'approved_workflow' && value.parentToolCallId) {
+  if (!['approved_workflow', 'approved_program', 'approved_script'].includes(value.source) && value.parentToolCallId) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['parentToolCallId'],

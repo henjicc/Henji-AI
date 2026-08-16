@@ -10,6 +10,11 @@ import {
 export const canvasNodePlacementSchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('viewport_center') }).strict(),
   z.object({
+    mode: z.literal('absolute'),
+    x: z.number().finite(),
+    y: z.number().finite(),
+  }).strict(),
+  z.object({
     mode: z.literal('right_of_node'),
     anchorNodeId: z.string().min(1),
   }).strict(),
@@ -37,8 +42,12 @@ const addCanvasNode = defineApplicationCapability({
   supportsPreview: false,
   supportsUndo: true,
   requiredScopes: ['canvas'],
+  prerequisites: [
+    'nodeType 必须来自 search_canvas_node_types，且应先用 get_canvas_node_schema 校验数据和端口。',
+  ],
   acceptsRefs: ['canvas.project', 'canvas.node_type'],
   producesRefs: ['canvas.node'],
+  executionPrerequisites: ['get_canvas_node_schema'],
   inputSchema: z.object({
     projectId: z.string().min(1),
     nodeType: z.string().min(1),
@@ -59,6 +68,11 @@ const addCanvasNode = defineApplicationCapability({
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
     effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
   }] },
+  resolveObservedEffects: (_input, output) => [{
+    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [],
+    targetRefs: [{ kind: 'canvas.node', id: output.nodeId }], count: 1, verified: false,
+    evidence: [`node:${output.nodeId}`],
+  }],
 })
 
 const addAssetToCanvas = defineApplicationCapability({
@@ -101,6 +115,58 @@ const addAssetToCanvas = defineApplicationCapability({
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
 })
 
+const addGenerationResultToCanvas = defineApplicationCapability({
+  id: 'add_generation_result_to_canvas',
+  version: 1,
+  title: '把生成结果放入画布',
+  description: '按稳定 generation.result 引用把已成功生成的媒体直接落成画布源节点，不要求先导入素材库。',
+  domain: 'canvas',
+  aliases: ['把生成结果放入画布', '生成图片加入画布', 'add generation result to canvas'],
+  readOnly: false,
+  control: capabilityControl('create', ['canvas.node'], { revisionScopes: ['canvas'] }),
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'canvas:write',
+  idempotent: true,
+  destructive: false,
+  timeoutMs: 12_000,
+  supportsPreview: false,
+  supportsUndo: true,
+  requiredScopes: ['canvas', 'generation'],
+  prerequisites: ['resultRef 必须来自已成功且 resultAvailable=true 的正式生成任务。'],
+  acceptsRefs: ['canvas.project', 'generation.result'],
+  producesRefs: ['canvas.node', 'generation.result'],
+  inputSchema: z.object({
+    projectId: z.string().min(1),
+    resultRef: z.object({
+      kind: z.literal('generation.result'),
+      id: z.string().min(1),
+    }).strict(),
+    placement: canvasNodePlacementSchema,
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string(),
+    resultRef: z.object({ kind: z.literal('generation.result'), id: z.string() }).strict(),
+    mediaType: z.enum(['image', 'video', 'audio']),
+    nodeId: z.string(),
+    nodeType: z.string(),
+    nodeRef: z.object({ kind: z.literal('canvas.node'), id: z.string() }).strict(),
+    undoRef: z.string(),
+  }),
+  concurrencyKey: 'canvas',
+  resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
+  resolveTargetIds: (input) => target(input.projectId, { resultId: input.resultRef.id }),
+  summarize: (output) => `已将生成结果 ${output.resultRef.id} 放入画布节点 ${output.nodeId}。`,
+  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  successEvidence: ['返回实际创建的 canvas.node 稳定引用，且可由正式画布读取能力复核。'],
+  failureRecovery: ['结果尚未完成时等待原生成任务；引用失效时重新读取生成任务，禁止改用素材 ID 猜测。'],
+  resolveObservedEffects: (_input, output) => [{
+    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [],
+    targetRefs: [output.nodeRef], count: 1, verified: false,
+    evidence: [`node:${output.nodeRef.id}`],
+  }],
+})
+
 const connectCanvasNodes = defineApplicationCapability({
   id: 'connect_canvas_nodes',
   version: 1,
@@ -120,16 +186,21 @@ const connectCanvasNodes = defineApplicationCapability({
   requiredScopes: ['canvas'],
   acceptsRefs: ['canvas.project', 'canvas.node'],
   producesRefs: ['canvas.edge'],
+  executionPrerequisites: ['add_canvas_node'],
   inputSchema: z.object({
     projectId: z.string().min(1),
     sourceNodeId: z.string().min(1),
     targetNodeId: z.string().min(1),
+    sourceHandle: z.string().min(1).max(160).optional(),
+    targetHandle: z.string().min(1).max(160).optional(),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     projectId: z.string(),
     edgeId: z.string(),
     sourceNodeId: z.string(),
     targetNodeId: z.string(),
+    sourceHandle: z.string(),
+    targetHandle: z.string(),
     undoRef: z.string(),
   }),
   concurrencyKey: 'canvas',
@@ -137,12 +208,19 @@ const connectCanvasNodes = defineApplicationCapability({
   resolveTargetIds: (input) => target(input.projectId, {
     sourceNodeId: input.sourceNodeId,
     targetNodeId: input.targetNodeId,
+    ...(input.sourceHandle ? { sourceHandle: input.sourceHandle } : {}),
+    ...(input.targetHandle ? { targetHandle: input.targetHandle } : {}),
   }),
   summarize: (output) => `已创建画布连接 ${output.edgeId}。`,
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
     effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
   }] },
+  resolveObservedEffects: (_input, output) => [{
+    effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [],
+    targetRefs: [{ kind: 'canvas.edge', id: output.edgeId }], count: 1, verified: false,
+    evidence: [`edge:${output.edgeId}`],
+  }],
 })
 
 const focusCanvasNode = defineApplicationCapability({
@@ -585,6 +663,7 @@ const disconnectCanvasEdge = defineApplicationCapability({
 export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   addCanvasNode,
   addAssetToCanvas,
+  addGenerationResultToCanvas,
   connectCanvasNodes,
   focusCanvasNode,
   undoCanvasChange,

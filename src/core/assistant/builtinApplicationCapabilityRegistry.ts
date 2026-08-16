@@ -28,8 +28,8 @@ import {
 import {
   ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
 } from './capabilities/assistantSkillApplicationCapabilities'
-import { WORKFLOW_APPLICATION_CAPABILITIES } from './capabilities/workflowApplicationCapabilities'
 import { IMAGE_MARK_APPLICATION_CAPABILITIES } from './capabilities/imageMarkApplicationCapabilities'
+import { HENJI_SCRIPT_APPLICATION_CAPABILITIES } from './capabilities/henjiScriptApplicationCapabilities'
 
 export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   getCurrentApplicationContextCapability,
@@ -54,7 +54,7 @@ export const BUILTIN_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[]
   ...TOOLBOX_APPLICATION_CAPABILITIES,
   ...ASSISTANT_RUNTIME_APPLICATION_CAPABILITIES,
   ...ASSISTANT_SKILL_APPLICATION_CAPABILITIES,
-  ...WORKFLOW_APPLICATION_CAPABILITIES,
+  ...HENJI_SCRIPT_APPLICATION_CAPABILITIES,
 ]
 
 export const BUILTIN_APPLICATION_CAPABILITY_REGISTRY = new ApplicationCapabilityRegistry()

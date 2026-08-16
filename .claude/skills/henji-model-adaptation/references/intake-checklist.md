@@ -48,8 +48,8 @@
 
 6) 验证
 - 将修改的文件范围：
-- 必跑命令：npm run gen:model-manifest / npm run check:model-i18n / npm run lint
-- 若涉及 Electron runtime/provider/upload：追加 npx tsc -p tsconfig.electron.json --noEmit
+- 验证：按 `docs/rules/testing.md` 选择最小集合；模型定义通常包含 manifest、model i18n 与对应精确测试，不默认跑全量 lint
+- 若涉及 Electron runtime/provider/upload 共享契约：再按风险追加主进程类型检查或相关 lint
 ```
 
 ## 阻断规则

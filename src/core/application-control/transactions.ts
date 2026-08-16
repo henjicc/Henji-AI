@@ -19,6 +19,24 @@ export const applicationOperationImpactSchema = z.object({
 }).strict()
 export type ApplicationOperationImpact = z.infer<typeof applicationOperationImpactSchema>
 
+export const applicationEffectKindSchema = z.enum(['create', 'update', 'delete', 'execute'])
+export type ApplicationEffectKind = z.infer<typeof applicationEffectKindSchema>
+
+export const applicationEffectReceiptSchema = z.object({
+  effect: applicationEffectKindSchema,
+  entityType: applicationEntityTypeIdSchema,
+  refs: z.array(applicationRefSchema).max(256),
+  propertyIds: z.array(applicationPropertyIdSchema).max(256),
+  origin: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('direct') }).strict(),
+    z.object({
+      kind: z.literal('cascade'),
+      declarationId: z.string().regex(/^[a-z][a-z0-9_.-]{1,127}$/),
+    }).strict(),
+  ]),
+}).strict()
+export type ApplicationEffectReceipt = z.infer<typeof applicationEffectReceiptSchema>
+
 export const applicationOperationExecutionSchema = z.object({
   mode: z.enum(['immediate', 'long_running', 'confirmation_required', 'user_interaction']),
   cancelable: z.boolean(),
@@ -79,7 +97,7 @@ export const applicationSemanticOperationPlanSchema = z.object({
  *
  * 这是反射层缺的第三个动词。此前只有"读任意属性"和"改任意已有实体的属性"是通用的，
  * 创建一律要手写专门能力——于是每一个「新建 X」都得单独适配一遍，漏掉一个就彻底不可用。
- * 实测后果：`camera_stage.keyframe` 实体、属性、provider 全都注册齐了，助手能读能改，
+ * 实测后果：某实体、属性、provider 全都注册齐了，助手能读能改，
  * 却因为没有创建路径而做不了任何动画。
  *
  * 与 mutation 共用同一套事务语义：expectedRevisions 乐观并发、失败补偿、撤销、结构化验证。
@@ -118,6 +136,10 @@ export const applicationVerificationConditionSchema = z.discriminatedUnion('kind
     target: applicationRefSchema,
   }).strict(),
   z.object({
+    kind: z.literal('entity_absent'),
+    target: applicationRefSchema,
+  }).strict(),
+  z.object({
     kind: z.literal('property_equals'),
     target: applicationRefSchema,
     propertyId: applicationPropertyIdSchema,
@@ -143,7 +165,7 @@ export const applicationTransactionModeSchema = z.enum([
 export type ApplicationTransactionMode = z.infer<typeof applicationTransactionModeSchema>
 
 export const applicationChangePlanSchema = z.object({
-  contractVersion: z.literal('application-control/v1'),
+  contractVersion: z.literal('application-control/v2'),
   planRef: applicationOpaqueRefSchema,
   summary: z.string().min(1).max(2_000),
   risk: z.enum(['R0', 'R1', 'R2', 'R3', 'R4']),
@@ -190,7 +212,8 @@ export const applicationTransactionResultSchema = z.discriminatedUnion('status',
     status: z.literal('completed'),
     transactionRef: applicationOpaqueRefSchema,
     resultingRevisions: applicationRevisionSetSchema,
-    producedRefs: z.array(applicationRefSchema).max(256),
+    resultRefs: z.array(applicationRefSchema).max(256),
+    effects: z.array(applicationEffectReceiptSchema).max(512),
     evidence: z.array(applicationEvidenceSchema).min(1).max(256),
     verification: applicationVerificationResultSchema,
     undoRef: applicationOpaqueRefSchema.optional(),

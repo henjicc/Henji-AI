@@ -4,6 +4,7 @@ import {
   type ApplicationPropertyDescriptor,
   type ApplicationRef,
   type JsonValue,
+  unrestrictedCollectionAvailability,
 } from '@/core/application-control'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
@@ -166,6 +167,10 @@ class StoryboardReflectionProvider implements ApplicationEntityProvider {
         revisions: snapshot.revisions,
       }
     })
+  }
+
+  async getCollectionAvailability(parent: ApplicationRef) {
+    return unrestrictedCollectionAvailability(this.entityType, parent, { storyboard: 0 }, ['storyboard:write'])
   }
 }
 
