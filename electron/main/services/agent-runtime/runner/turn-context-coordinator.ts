@@ -24,6 +24,8 @@ interface TurnContextCoordinatorOptions {
   compactor: AgentConversationCompactor
   savePoints: AgentSavePointCoordinator
   emit: Parameters<typeof emitAgentContextEvents>[3]
+  /** 按工具名解析历史投影；与 runner-results.toolMessage 共用同一份，保证先裁再判。 */
+  resolveHistoryProjection?: (toolName: string) => ((output: unknown) => unknown) | undefined
 }
 
 interface PrepareTurnContextInput {
@@ -75,16 +77,16 @@ export class AgentTurnContextCoordinator {
   async prepare(input: PrepareTurnContextInput): Promise<{
     context: ReturnType<AgentContextBuilder['build']>
     snapshot: AgentTurnSnapshotDraft
-    rebuild: () => ReturnType<AgentContextBuilder['build']>
+    rebuild: (host?: HostContextSnapshot) => ReturnType<AgentContextBuilder['build']>
   }> {
     const skills = await this.ensureSkills()
-    const build = (): ReturnType<AgentContextBuilder['build']> => this.options.contextBuilder.build({
+    const build = (host: HostContextSnapshot = input.host): ReturnType<AgentContextBuilder['build']> => this.options.contextBuilder.build({
       runId: this.options.runId,
       goal: input.goal,
       userInstructions: input.userInstructions,
       memoryContext: input.memoryContext,
       skills,
-      snapshot: input.host,
+      snapshot: host,
       route: input.route,
       conversation: input.getConversation(),
       observations: input.observations.slice(-20),
@@ -92,6 +94,8 @@ export class AgentTurnContextCoordinator {
       activeToolNames: input.registrations.map((item) => item.catalog.name),
       protectedToolNames: input.protectedToolNames,
       contextWindowBudget: this.options.models.primary.limits.contextWindow,
+      // 与 runner-results.toolMessage 用同一把尺子：先裁再判，否则同一份结果一边内联一边卸载。
+      resolveHistoryProjection: this.options.resolveHistoryProjection,
       maxOutputTokens: this.options.models.primary.settings.maxOutputTokens,
       workingSummary: input.workingSummary,
       lastModelUsage: this.lastModelUsage,
@@ -124,3 +128,4 @@ export class AgentTurnContextCoordinator {
     return { context, snapshot, rebuild: build }
   }
 }
+

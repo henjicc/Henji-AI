@@ -140,6 +140,14 @@ export interface AgentContextBuildInput {
   /** 核心地板和活动 Facet 租约；最终上下文裁剪不得静默删除。 */
   protectedToolNames?: string[]
   contextWindowBudget: number
+  /**
+   * 按工具名解析历史投影函数，由 runner 从工具注册表注入。
+   *
+   * 观察层的卸载判定必须和 runner-results.toolMessage 用同一把尺子，包括先裁再判——
+   * 否则同一份结果在 tool 消息里被内联、在观察层却被卸载成 artifact，模型看到 artifactRef
+   * 就会去分页读回一份它其实已经有的内容。
+   */
+  resolveHistoryProjection?: (toolName: string) => ((output: unknown) => unknown) | undefined
   maxOutputTokens?: number
   workingSummary?: AgentWorkingSummary
   lastModelUsage?: {
@@ -174,3 +182,4 @@ export interface AgentContextBuildResult {
   compactionReason: string | null
   contextPressure: 'normal' | 'soft' | 'hard'
 }
+

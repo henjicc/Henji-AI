@@ -322,6 +322,7 @@ export class AgentRunner {
       compactor: this.conversationCompactor,
       savePoints: this.savePointCoordinator,
       emit: (event) => this.emit(event),
+      resolveHistoryProjection: (toolName) => options.dependencies.registry.get(toolName)?.projectForHistory,
     })
     this.externalWaitRegistration = new AgentExternalWaitRegistration({
       runId: options.runId,

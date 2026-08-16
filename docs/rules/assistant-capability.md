@@ -25,9 +25,18 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - 声明可写属性必须注册 `ApplicationMutationExecutor`；声明 `collectionWrite` 必须注册 `ApplicationCollectionExecutor`，并在 `requiredPropertyIds` 中列出创建时必填字段。只读属性可以是创建必填项。
 - 每个实体必须满足二选一：至少有一种正式写入执行器，或填写机器可读的 `writeExclusion.reason`。排除原因必须说明该状态为何只读、由哪个正式模块或操作维护，不接受“暂时不支持”“以后再做”。
 - 新增实体后必须同时检查属性可写性、集合写入、执行器注册、排除原因、权限、revision、撤销/补偿与结构化验证；运行 `npm run check:assistant-capabilities` 让覆盖门禁复核。
-- **声明可写的每一条属性，都必须出现在执行器的 `writableProperties` 里**，且该集合必须由 `ApplicationPropertyWriterTable` 派生（`writableProperties(TABLE)`），不许手写字面量。属性写入执行器**禁止**用手写 if-else 属性链——链条无法被枚举，覆盖门禁就看不见"声明可写但执行器没有对应分支"这类缺口（`camera_stage.shot.time` 就是这么漏掉的，实体级门禁一直全绿）。
+- **声明可写的每一条属性，都必须出现在执行器的 `writableProperties` 里**，且该集合必须由 `ApplicationPropertyWriterTable` 派生（`writableProperties(TABLE)`），不许手写字面量。属性写入执行器**禁止**用手写 if-else 属性链——链条无法被枚举，覆盖门禁就看不见“声明可写但执行器没有对应分支”这类缺口。
 - 属性接受的 operation 由写入表的 `operations` 声明，不写默认只接受 `set`。集合类属性（如 `asset.library_refs` 只吃 `append`/`remove`）必须显式声明，否则模型只能靠试错。
 - **新增可写属性必须用统一字段定义（`ApplicationFieldDefinition` + `fieldDescriptors`/`fieldReadValues`/`fieldWriterTable`/`fieldLedgerEntries`，定义于 `src/core/application-control/fieldDefinition.ts`），禁止再分别手写属性描述符、读取映射、写入表项、账本条目四处登记。** 一条属性只在对应领域的 `*Fields.ts`（如 `cameraStageSceneFields.ts`、`canvasFields.ts`、`assetFields.ts`）里声明一次，四个消费方从这一条声明派生。这是缺口再生的根因修法：四处分别登记时，漏其中一两处不会报错，助手安静地少一块能力，只有用户实机撞上才发现（三维场景外观 24 项就是这样漏的）；统一定义之后漏一条是整条从四处一起消失，会被 `storeActionCoverage` 门禁当场抓到。同一个 store 动作被多个字段共用时（如 `updateObject` 一次改 name/visible/color/character_variant 四个属性），`fieldLedgerEntries()` 按声明顺序把它们累进同一条绑定，不需要手写聚合。
+
+### 动态可用性与结果真实性
+
+- 静态属性/`collectionWrite` 声明只表示“结构上支持”；`getPropertyAvailability` / `getCollectionAvailability` 才表示“在这个引用和当前状态下可执行”。每个 `ApplicationEntityProvider` 必须实现两种动态查询；没有额外集合限制时复用 `unrestrictedCollectionAvailability`。
+- 集合写入必须由 Registry 合并静态声明、provider 当前状态、调用方权限和 revision；事务计划、提交预检、每步执行前都复核同一结果。领域服务不得再复制模式守卫和错误拼接。
+- `describe_application_entities` 需要判断实例状态时传 `refs`；动态输出保留可用状态、原因与结构化 recovery 标识，历史投影剔除权限和 revision 噪音。
+- recovery 中任何操作步骤都必须先有正式 `describe → change → read/真相源` 结果测试跑通。不得凭读代码推断一条“应该可行”的路线后写进提示、错误或示例。
+- Camera Stage 只公开 `camera_stage.state_keyframe`：在同一次 `change_application_entities` 事务中按顺序交替写 `camera_stage.playback.current_time` 与对象、角色或摄像机的 `animatable.*` / `pose_preset`，最后可同事务写入播放控制；应用自动创建或更新各时间点的完整场景状态。除非依赖尚未返回的新引用，否则不得按时间点拆成多轮。该路线必须由正式单事务结果测试持续证明；派生属性轨道只供播放与导出，禁止重新注册为公开实体或持久化真相源。
+- 每个拥有 mutation/collection 执行器的写域必须登记 2–3 条结果场景。断言必须读取领域真相源或 `readEntity`；`completed`、evidence 数量或执行器被调用不算结果成立。
 
 ### 界面动作覆盖
 
@@ -45,19 +54,33 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 目录里整个消失，模型于是如实回答「应用没有这个能力」。它没说谎，用户看到的却是凭空的能力否认。
 
 - **发现层的准入只允许按域判断**（`capability-discovery.ts` 的 `structuralMatch`）。
-  `targetSurfaceIds`、`entityTypes`、`capabilityKinds`、导航 Surface 全部只参与排序，**不得**
-  用于过滤。这些字段来自模型对任务的猜测，猜错的代价不该是能力消失；域是注册表定义的、模型
-  只是转述，所以只有它留下。想加新的过滤条件时，先读 `structuralMatch` 上方那四条事故记录。
-- 排序信号不够用时，改排序（`requiredEffectScore` / `entityTypeScore` / `capabilityKindMatches`
-  / `targetSurfaceScore`），不要改回过滤：排错顺序只是慢一点，过滤错了是直接没有。
+  `entityTypes` 只参与排序，**不得**用于过滤。它来自模型对任务的猜测，猜错的代价不该是能力
+  消失；域是注册表定义的、模型只是转述，所以只有它留下。想加新的过滤条件时，先读
+  `structuralMatch` 上方那四条事故记录——`targetSurfaceIds`、`capabilityKinds` 就是在那里被
+  当成硬过滤翻的车，它们已随请求扁平化一起删除。
+- 排序信号不够用时，改排序（`entityTypeScore`、语义查询命中）或补保底
+  （`pairReadAndWriteByEntity`），不要改回过滤：排错顺序只是慢一点，过滤错了是直接没有。
+- **发现请求是模型写的，运行时不改写**（v3：`queries` / `domains` / `entityTypes` / `writes`）。
+  曾经有一个 `normalizeCallInput` 把模型的请求整个覆盖成运行时算出的依赖前沿，理由是"运行时
+  自己就知道答案"。代价是主模型——唯一拿得到完整会话历史的角色——连"我要的东西在另一个领域"
+  都表达不了，只能把工具可用性当成意图证据反推自己判断错了。要给建议就放进
+  `plan_state.discoveryRequest` 当起点，不要覆盖模型的输入。
+- **投影体积就是行为**。发现结果一旦越过卸载阈值就会被存成 artifact，模型只能分页回读——实测
+  一次运行 18 次 `read_agent_artifact`、25 个模型步不收敛。所以"把 action 和 recipe 都给出去让
+  模型自己选"是错的：给得越多，模型实际看到的越少。门禁在
+  `capability-discovery-size.test.ts`，直接判历史投影会不会触发卸载。
+- **卸载判定必须两处同尺子**，包括先裁再判。`runner-results.toolMessage` 与
+  `prompt-layers.formatObservation` 都调 `shouldOffloadObservation`，任何一处漏了
+  `projectForHistory`，同一份结果就会一边内联一边卸载，模型看到 artifactRef 就去回读一份它
+  已经有的内容。门禁在 `offload-same-ruler.test.ts`。
 - **能力声明的 effect 必须覆盖它真正产生的全部 effect**，用 `alsoImpacts` 补齐。漏一条的代价
   有两处且都不报错：Facet 按 effect 对账，声明漏了就永远结不了账（模型干完了活，任务图停在
   未结算）；发现层排序也按 effect 走，漏声明的能力排到无关能力后面。名字里带
   create/add/delete/remove/open/switch 的能力，`registry.test.ts` 会强制它声明对应 effect，
   例外必须写进 `justifiedExceptions` 并说明理由。
 - 门禁在 `electron/main/services/agent-runtime/context/capability-reachability.test.ts`：
-  全部能力 × 9 组 kinds × 故意填错的实体与页面，任一能力从自己域里消失即红；另一条守
-  「模型把实体和 effect 都说对时必须真的进租约」——发现得到却租不到，对模型是同一种结局。
+  全部能力 × 全部域 × 故意填错的实体，任一能力从自己域里消失即红；另一条守
+  「模型把域和实体都说对时必须真的进租约」——发现得到却租不到，对模型是同一种结局。
 - 它与 `storeActionCoverage.test.ts` 合起来才是完整命题：账本守「绑定的能力 id 确实存在」，
   可达性守「存在的能力确实找得到」。**两条缺一条，命题就断了**，删任何一条前先想清楚这件事。
 
@@ -84,9 +107,38 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - **禁止**从能力处理器直接调用 Store `setState` 做任意 Patch；仅允许正式领域服务内部对已声明字段执行确定性状态提交
 - **禁止**在 Application API、能力定义或 Agent Runtime 增加 `eval`、`new Function` 或任意脚本执行入口
 
+## Henji Script 单一自动化内核
+
+两个以上应用操作统一由模型可见的 `run_henji_script@1` 执行。模型只从能力发现的 `scriptApi` 使用 `app.entities` / `app.action` / `app.recipe` / `app.assert`；版本、revision、稳定引用和数据依赖全由宿主解析。
+
+- Henji Script 是 TypeScript 风格的受限子集：只用 TypeScript Compiler API 解析为自有 IR，永不运行转译后的 JavaScript。`import` / 文件 / 网络 / 进程 / DOM / Store / 反射 / 无界循环必须在首次写入前拒绝。
+- Henji Script 的引导分四层且不得互相复制：system prompt 只保留“应用操作必须先发现、只经 `run_henji_script` 执行”等不可选协议；`run_henji_script` 工具契约声明语言和安全边界；首次发现的 `scriptApi` 动态提供本轮真实 API/schema；内置领域 skill 只提供业务选择与已验证 Recipe。禁止在 system prompt 或通用 skill 静态抄写领域 action 参数。
+- 不新增泛化的“Henji Script 教程”内置 skill。语言语法和可调用 API 必须自描述于工具契约与 `scriptApi`，否则 skill 未触发或版本漂移时会形成旁路；领域 skill 只讲“何时用哪个 Recipe/业务顺序”，项目级 `henji-application-capability` skill 只指导开发者如何接入。
+- 只有 `run_henji_script@1` 可以声明 `source`；其他能力仍禁止 `source/script/executeScript` 类任意脚本入口。
+- Recipe 只生成同一份 Henji Script IR，不拥有第二套解释器、引用绑定、Effect、补偿或验证逻辑。任何具体步骤必须先通过正式结果测试。
+- 用户明确的负向执行约束（例如“不要切换界面”“不要删除”）必须进入 Task Graph 的 `forbiddenEffects`，经发现投影到本轮 `scriptApi` 租约，并在 Recipe 展开后、首次 Gateway 调用前按强类型 Effect 拒绝；不能仅靠不创建对应 Facet 或提示词提醒。最终说明也必须与 Effect Receipt 对账，禁止否认已经发生的副作用。
+- 脚本只能调用本轮 `scriptApi` 租约披露的 API；“全局注册了但本轮没发现”仍必须在执行器调用数为 0 时拒绝。
+- `scriptApi` 必须在首次发现时合并工具目录与渲染层真实反射注册表，只投影本轮实体定义及属性值约束；enum、范围、引用形状、nullable、写 operation、集合父类型和必填属性不得靠模型猜测或在提示词另抄。
+- 字面量、对象、数组及三元表达式等可静态确定的属性候选值必须在首次 Gateway 调用前按同一反射约束验证；任一分支非法就整段拒绝。依赖读取结果的值在脚本变量内流动，不为方便模型而把正式业务值塞进执行摘要。
+- 每个步骤仍通过唯一 Gateway 的 schema、权限、revision、动态 availability、Effect Receipt 与审计。完成只由 Effect 与正式状态验证决定，不信任脚本文本、`completed` 或 evidence。
+- 跨领域结果只通过完整 `ApplicationRef` 和正式桥梁能力传递，禁止拼接、截断或猜测引用。
+
 ## 必须接入的现有机制
 
 新能力必须接入：权限审批、revision、幂等、撤销、并发、脱敏、结构化日志、成功证据验证。
+
+- 同一通用事务允许按顺序多次写同一属性；只有最后一次写入参与最终状态等值验证，中间值必须由结果级场景验证其领域副作用。
+- 反射描述必须公开属性实际接受的 `writeOperations`。高层 `set` 与底层 append/remove 不一致时，由计划器确定性编译为最小差异；不受支持的操作必须在计划期拒绝，禁止留到执行期失败。
+- 后置步骤可以依赖前序步骤刚建立的动态可用状态：静态权限与只读声明在计划期强制，动态 availability 在执行该步骤前再次复核，失败时整组补偿。
+- 播放头、播放开关等提交后会继续变化的会话控制属性必须声明 `verificationStrategy: 'execution'`，用正式执行器证据验收；持久状态仍默认用最终世界状态验收。
+- 输入中 `entityType` 与 `target.kind` 表达同一事实时，由适配器统一规范化；领域 provider 可将全局唯一的短引用补全成正式稳定引用，但存在歧义时必须拒绝。不得让模型为可无歧义消解的引用格式多空转一轮。
+- 一次正式写入产生领域级联副作用（例如对象动画属性自动创建状态关键帧）时，执行器必须返回强类型 Effect Receipt；`evidence` 只用于验证和人类说明，禁止承担副作用记账。级联 receipt 必须引用静态 `declarationId`，未声明的级联使事务失败并补偿。
+- 工具网关在执行器完成后立即运行 `resolveObservedEffects` 并把校验后的 Effect 固化进 observation；Facet 结算和最终成功封存只消费这份结构化事实，不从输入、引用字段或 evidence 文本猜测。
+- 动态 availability 的阻断必须区分 structural、permission 与 state；只有 state 阻断且前序 direct/cascade Effect 可能满足条件时，才允许延迟到该步骤执行前复核。
+- 应用执行终态与最终语言说明终态必须分离。写事务、Effect 对账和正式验证完成后立即封存成功；封存后的模型失败、超时或文本事实校验失败只能进入 `completed_with_warning` 并使用确定性摘要，禁止产生 `RunFailed`。封存前失败仍按失败处理。
+- 外部等待前必须把经过 schema 校验的 Henji Script IR 断点、有限变量、完整稳定引用、Effect Receipt 与验证状态一起持久化；不得保存源码、模型文本或任意运行对象。自动续接固定执行“权威状态读取 → 同一解释器从断点继续”，禁止让模型重新生成剩余步骤，禁止从 working summary 或任务 ID 重建引用与 Effect；断点缺失或摘要不匹配时必须在后续写入前阻断。
+- 外部续跑的 Task Graph 与正式验证一旦满足封存条件，下一次模型调用立即进入无工具的纯说明阶段；不得继续暴露读取或写入工具，让模型重复验证已知事实或在成功之后追加动作。普通运行仍允许模型补全原目标中漏建的 Facet。Effect Receipt 中的 `targetRefs` 必须来自执行器真实输出并保持完整稳定引用。
+- `blocked` 表示上一条执行路线受阻，不是目标永久终止；模型提供修正后的 Effect 时可以重新开放该 Facet，但必须清空旧 Effect Ledger，已完成/等待用户等其他终态仍不可改写。
 
 ## 迁移纪律
 
@@ -120,6 +172,9 @@ CI 必须显式运行该门禁；门禁同时验证双端技能同步、旧执�
 | 账本留一条 store 里已删除的动作 | 账目对应的 store 动作已不存在，账没销 |
 | feature 无 Reflection 也无账本且未登记 | 领域对助手不可见且未登记原因 |
 | store 无账本（storeId 对不上）且未登记进 `ASSISTANT_BLIND_STORES` | store 未建账且未登记原因 |
+| 删掉 provider 的 `getCollectionAvailability` | TypeScript 点名缺失实现 |
+| 忽略 provider 的 `available:false` 或移除 describe 动态投影 | Registry/适配器测试看不到当前状态限制 |
+| 删除一个写域的结果场景登记 | `resultBehaviorCoverage` 点名缺失领域或数量不足 |
 
 再按 [testing.md](testing.md) 运行本次能力登记、处理器或正式业务服务的精确/相关测试。`npm run test:assistant-production` 只用于同时影响 runner、状态机、调度、审批、持久化或模型适配等多个助手运行时模块的改动，以及生产验收/发布前检查；不要因普通能力登记或界面适配运行整套助手测试。
 
