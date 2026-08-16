@@ -89,12 +89,21 @@ export const runHenjiScriptCapability = defineApplicationCapability({
   idempotent: false,
   destructive: false,
   timeoutMs: 120_000,
-  // 一次任务只有一份受控计划。禁止把目录读取、schema 读取和写入拆成多段脚本，
-  // 否则前一段会改变 revision，后一段又重新引入逐工具编排与竞态。
-  maxCallsPerRun: 1,
-  countsTowardCallLimit: (output) => !(
-    output.status === 'failed' && output.effects.length === 0
-  ),
+  /*
+   * 不设调用次数上限。
+   *
+   * 这里曾经是 maxCallsPerRun: 1，理由是"多段脚本会改变 revision、重新引入竞态"。但竞态由
+   * 网关的 expected-revision 信封逐调用兜住：后一段脚本重新读状态、按当前 revision 提交，
+   * 本来就是安全的。上限真正拦下的是**合法的分阶段完成**。
+   *
+   * 而它的失败模式是灾难性的：把"效率不高"升级成"任务做不完"。更贵的是模型知道有上限之后，
+   * 会为了省调用次数反复琢磨怎么一次写完——思考的 token 远比多调一次贵。实测三维场景一次
+   * 运行因此烧掉 46 轮、77 万 token，最终 0 个 Effect。
+   *
+   * "原地打转"该由**事实**来判，而不是由次数这个代理指标：同签名重复调用、无新进展、
+   * 连续失败、token 与回合预算都已经在守这件事，且它们不会误伤真正有进展的第二段脚本。
+   * 「尽量一段写完」仍然是提示词里的建议——那是引导，不是墙。
+   */
   supportsPreview: true,
   supportsUndo: false,
   requiredScopes: [],
@@ -150,3 +159,4 @@ export const runHenjiScriptCapability = defineApplicationCapability({
 export const HENJI_SCRIPT_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   runHenjiScriptCapability,
 ]
+

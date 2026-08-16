@@ -142,7 +142,8 @@ export const HENJI_SCRIPT_LANGUAGE_RULES = [
   '普通结果字段使用点访问；含点号的属性 ID 使用静态字符串字面量下标，例如 properties[\'asset.library.name\']。',
   'create/update/remove 已由宿主从正式状态源自动读回验证；不要仅为重复验证而额外 list/read。',
   'update(ref, mutations) 的 mutations 直接使用完整属性 ID 到值的映射，不要再嵌套 properties。',
-  '一段脚本必须覆盖当前任务的全部写入 Facet；不要在创建、更新和删除之间退出脚本。',
+  '尽量把能一起做的写进同一段：一段里连续完成创建、更新、删除最省，也最不容易出竞态。'
+    + '但确实需要上一段的结果才能决定下一步时，就写第二段——不要为了凑成一段反复琢磨。',
   '断言只支持 equal、exists、absent、matches；基于读取值选择替代值可使用确定性三元表达式。',
   'recipes[].limits 是该配方单次调用的容量上限（按 effect × 实体类型给出 maximumCount）。'
     + '本次任务需要的次数超过上限时不要硬套那条配方——它会执行失败，直接用 app.entities 与 app.action 自己组合。'

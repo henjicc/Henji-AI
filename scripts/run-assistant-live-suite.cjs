@@ -130,9 +130,27 @@ function summarize(result) {
   const reasons = []
   if (result.code !== 0) reasons.push(`子进程退出码 ${result.code}`)
   if (!acceptance?.passed) reasons.push(...(acceptance?.reasons ?? ['缺少 acceptance']))
-  if (scriptCalls !== 1) reasons.push(`run_henji_script 调用数应为 1，实际 ${scriptCalls}`)
-  if (!result.scenario.external && Number(state?.usage?.turns ?? 999) > 4) {
-    reasons.push(`主模型回合超过 4：${state?.usage?.turns ?? '未知'}`)
+  /*
+   * 判据是「有没有做完 + 有没有白干」，不是「用了几步」。
+   *
+   * 旧判据是 scriptCalls === 1 与 turns <= 4，和运行时那条 maxCallsPerRun: 1 同源——都在拿
+   * 次数这个代理指标当效率。实测它把合法的分阶段完成判成失败：camera 场景 10 回合 5 段脚本、
+   * 17 个 Effect、任务图结算完成，却因为「调用数应为 1」被记为不通过。
+   *
+   * 现在只设**跑飞的天花板**，用来抓真回归；效率靠 tokens/turns 这些数字自己说话，
+   * 白干由 guardFailures 抓——那是事实（工具真的失败了），不是猜测。
+   */
+  const RUNAWAY_SCRIPT_CALLS = 8
+  const RUNAWAY_TURNS = 16
+  const RUNAWAY_GUARD_FAILURES = 6
+  if (scriptCalls > RUNAWAY_SCRIPT_CALLS) {
+    reasons.push(`run_henji_script 调用数跑飞：${scriptCalls} > ${RUNAWAY_SCRIPT_CALLS}`)
+  }
+  if (guardFailures > RUNAWAY_GUARD_FAILURES) {
+    reasons.push(`工具失败次数过多：${guardFailures} > ${RUNAWAY_GUARD_FAILURES}`)
+  }
+  if (!result.scenario.external && Number(state?.usage?.turns ?? 999) > RUNAWAY_TURNS) {
+    reasons.push(`主模型回合跑飞：${state?.usage?.turns ?? '未知'} > ${RUNAWAY_TURNS}`)
   }
   if (forbiddenProtocol.length > 0) reasons.push(`出现旧协议：${forbiddenProtocol.join(', ')}`)
   return {
