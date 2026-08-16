@@ -33,6 +33,7 @@ import {
   createLinkedController,
   currentRevisions,
   executeToolWithRetry,
+  redactToolInputForLog,
   requiredContextForInput,
   throwIfAborted,
   toGatewayError,
@@ -414,11 +415,24 @@ export class AgentToolGateway {
       }
     } catch (error) {
       const gatewayError = this.withCapabilityHint(toGatewayError(error))
+      /*
+       * 失败必须能重建：错误码之外还要有**发回模型的那句话**和**模型传了什么**。
+       *
+       * 旧实现只记 errorCode。实测一次运行里 read_agent_artifact 连续 11 次 INVALID_INPUT，
+       * 日志能证明它失败了 11 次，却查不出错在哪个字段——因为参数和消息都没落盘，
+       * 排查只能靠猜。参数按工具的 dataClasses 脱敏后再记，键名一律保留（错的通常就是键名）。
+       */
       logger.error('Agent 工具执行失败', {
         event: 'agent_tool.execute.failed',
         requestId: request.runId,
         taskId: request.toolCallId,
-        context: { toolName: request.toolName, durationMs: Date.now() - startedAt, errorCode: gatewayError.code },
+        context: {
+          toolName: request.toolName,
+          durationMs: Date.now() - startedAt,
+          errorCode: gatewayError.code,
+          errorMessage: gatewayError.message,
+          input: redactToolInputForLog(request.input),
+        },
       })
       throw gatewayError
     }
@@ -454,3 +468,5 @@ export class AgentToolGateway {
     )
   }
 }
+
+

@@ -5,6 +5,7 @@ import type { AgentToolErrorCode, AgentToolPreview } from '../../../../../src/co
 import { AgentApprovalError } from './approval'
 import { AgentIdempotencyConflictError } from './idempotency'
 import { AgentPermissionAuditUnavailableError } from './permission-audit'
+import { redactAgentText } from './security'
 import type { AgentToolDefinition, AgentToolExecuteRequest } from './types'
 
 export class AgentToolGatewayError extends Error {
@@ -40,6 +41,33 @@ function describeZodIssues(error: z.ZodError): string {
   const omitted = error.issues.length - issues.length
   return `工具参数未通过 schema 校验——${issues.join('；')}`
     + `${omitted > 0 ? `；另有 ${omitted} 处问题` : ''}。请按活动工具的 schema 修正后重试。`
+}
+
+/** 单个字符串值在日志里最多保留多少字符——够认出错在哪，又不至于把整段脚本写进日志。 */
+const LOG_VALUE_MAX = 200
+
+/**
+ * 工具入参的日志投影：**键名全保留，值脱敏并截断**。
+ *
+ * 失败排查里最常需要的就是键名——`.strict()` 拒绝的是多出来的那个键，缺失报的是漏掉的那个键。
+ * 值则可能含密钥或整段脚本，所以走 redactAgentText 再截断。
+ */
+export function redactToolInputForLog(input: unknown, depth = 0): unknown {
+  if (typeof input === 'string') {
+    const redacted = redactAgentText(input)
+    return redacted.length > LOG_VALUE_MAX ? `${redacted.slice(0, LOG_VALUE_MAX)}…` : redacted
+  }
+  if (typeof input === 'number' || typeof input === 'boolean' || input === null) return input
+  if (depth >= 4) return '[层级过深]'
+  if (Array.isArray(input)) {
+    return input.slice(0, 20).map((item) => redactToolInputForLog(item, depth + 1))
+  }
+  if (input && typeof input === 'object') {
+    return Object.fromEntries(Object.entries(input as Record<string, unknown>)
+      .slice(0, 40)
+      .map(([key, value]) => [key, redactToolInputForLog(value, depth + 1)]))
+  }
+  return undefined
 }
 
 export function toGatewayError(error: unknown): AgentToolGatewayError {
@@ -218,4 +246,5 @@ export async function executeToolWithRetry(
   }
   throw new AgentToolGatewayError('EXECUTION_FAILED', '工具重试状态异常')
 }
+
 

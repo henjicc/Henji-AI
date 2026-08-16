@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { toGatewayError } from './gateway-support'
+import { redactToolInputForLog, toGatewayError } from './gateway-support'
 
 /*
  * 回归：INVALID_INPUT 不带任何定位信息，模型只能盲猜。
@@ -54,3 +54,33 @@ describe('INVALID_INPUT 必须能让模型自我修正', () => {
     expect(toGatewayError(new Error('TIMEOUT')).code).toBe('TIMEOUT')
   })
 })
+
+describe('工具入参的日志投影', () => {
+  /*
+   * 「模型可见即可重建」：进入模型请求的东西必须能从日志还原。旧实现只记 errorCode，
+   * 于是 11 次 INVALID_INPUT 只能证明"失败了 11 次"，查不出错在哪个字段。
+   */
+  it('保留键名——错的通常就是键名', () => {
+    const projected = redactToolInputForLog({ artifactRef: 'artifact:a', offset: 3 }) as Record<string, unknown>
+    expect(Object.keys(projected)).toEqual(['artifactRef', 'offset'])
+    expect(projected.offset).toBe(3)
+  })
+
+  it('值里的密钥被脱敏', () => {
+    const projected = redactToolInputForLog({ note: 'Bearer sk-abcdefgh12345678' }) as Record<string, string>
+    expect(projected.note).not.toContain('abcdefgh12345678')
+  })
+
+  it('超长值截断，不把整段脚本写进日志', () => {
+    const projected = redactToolInputForLog({ source: 'x'.repeat(5_000) }) as Record<string, string>
+    expect(projected.source.length).toBeLessThan(260)
+    expect(projected.source.endsWith('…')).toBe(true)
+  })
+
+  it('嵌套过深时停下，不会无限递归', () => {
+    let deep: unknown = 'bottom'
+    for (let index = 0; index < 12; index += 1) deep = { next: deep }
+    expect(JSON.stringify(redactToolInputForLog(deep))).toContain('层级过深')
+  })
+})
+
