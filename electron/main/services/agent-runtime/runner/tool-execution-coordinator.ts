@@ -83,39 +83,18 @@ export class AgentToolExecutionCoordinator {
   /** 整次运行内已经纠正过的守卫问题，用来区分"第一次被纠正"和"重复犯同一个错"。 */
   private readonly rejectedGuardSignatures = new Set<string>()
 
-  /** 本次运行已经取回过的 artifact 分页，键是 `ref@cursor`。 */
-  private readonly servedArtifactReads = new Set<string>()
-
-  /**
-   * 同一 artifact 的同一页读过就不再读——它返回的字节完全相同，且已经在对话历史里。
+  /*
+   * 这里曾经有一条 `rejectRepeatedArtifactRead`：同一 artifact 的同一页读过就拒绝，理由是
+   * 返回字节逐字节相同、重复取回不可能带来新信息。逻辑没错，但**实测把运行推向了不可恢复**。
    *
-   * 预算里的 `repeatedToolCalls` 只比**连续**相同的签名，模型交替读几个 artifact 就绕过去了。
-   * 实测一次运行 38 次 read_agent_artifact、6 个 ref 各读 4 次、25 个模型步仍未收敛，全程没有
-   * 任何东西拦它——因为每次调用的签名都和上一次不同。
+   * canvas 场景实测：该守卫触发 12 次 INVALID_INPUT，模型一直重试，最后被 CONSECUTIVE_FAILURES
+   * 判死，25 轮 0 Effect——而未加守卫时同一场景 14 轮能完成。原因是模型重复读并不是犯傻：
+   * 观察层只留 320 字符预览，对应的 tool 消息可能已被压缩掉，那份内容**确实不在它的上下文里**。
+   * 此时拒绝等于把它锁进死路：它要的东西拿不到，又没有别的出口。
    *
-   * 这条判的是事实不是措辞：同一 (ref, cursor) 的返回内容逐字节相同，重复取回不可能带来新信息。
-   * 要继续往下读就带 nextCursor，那是另一个键，不会被拦。
+   * 真正该修的是过度卸载本身（同一份结果一边内联一边卸载），那已由 formatObservation 与
+   * toolMessage 统一为"先裁再判"解决。重复回读是那个病的症状，症状不该用硬拦来治。
    */
-  private rejectRepeatedArtifactRead(
-    call: ModelStepToolCall
-  ): { code: AgentToolErrorCode; reason: string } | null {
-    if (call.toolName !== 'read_agent_artifact') return null
-    const input = call.input && typeof call.input === 'object' && !Array.isArray(call.input)
-      ? call.input as Record<string, unknown>
-      : {}
-    const ref = typeof input.artifactRef === 'string' ? input.artifactRef : null
-    if (!ref) return null
-    const key = `${ref}@${typeof input.cursor === 'number' ? input.cursor : 'start'}`
-    if (!this.servedArtifactReads.has(key)) {
-      this.servedArtifactReads.add(key)
-      return null
-    }
-    return {
-      code: 'INVALID_INPUT',
-      reason: `该 artifact 的这一页本轮已经取回过（${key}），内容与上次逐字节相同，请直接使用上文里的那份结果；`
-        + '确实需要后续内容时带上返回的 nextCursor 继续读，不要重复读同一页。',
-    }
-  }
 
   constructor(private readonly options: AgentToolExecutionCoordinatorOptions) {}
 
@@ -178,8 +157,6 @@ export class AgentToolExecutionCoordinator {
       onDiscoveredTools: this.options.onDiscoveredTools,
       resolveActionGroup: (call) => this.options.getProgressTracker()?.actionGroupForCall(call) ?? null,
       executionGuard: (call, revisions, allowSettledActionGroupSibling) => {
-        const repeatedRead = this.rejectRepeatedArtifactRead(call)
-        if (repeatedRead) return rejectGuard(call, repeatedRead, ['repeated_artifact_read'])
         const currentTracker = this.options.getProgressTracker()
         if (call.toolName === 'run_henji_script') {
           const recoveryReason = this.options.recoveryGuard.validate(call)
@@ -242,5 +219,6 @@ export class AgentToolExecutionCoordinator {
     }
   }
 }
+
 
 
