@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest'
 
 import { AGENT_CONTRACT_VERSION } from '../../../../../src/core/assistant/hostContracts'
-import type { ApplicationCapabilityDiscoveryOutput } from '../../../../../src/core/assistant/capabilityDiscovery'
+import {
+  applicationCapabilityDiscoveryOutputSchema,
+  type ApplicationCapabilityDiscoveryOutput,
+} from '../../../../../src/core/assistant/capabilityDiscovery'
+import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '../../../../../src/core/assistant/applicationCapabilities'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
 import { hydrateHenjiScriptApi } from './script-api-hydration'
+
+/** 一份最小的发现结果，只用来单测 hydrate 这一步；其余字段全走 schema 默认值。 */
+function baseOutput(): ApplicationCapabilityDiscoveryOutput {
+  return applicationCapabilityDiscoveryOutputSchema.parse({
+    discoveryVersion: 'application-capability-discovery/v3',
+    catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
+    fingerprint: `sha256:${'0'.repeat(64)}`,
+    reused: false,
+    capabilities: [],
+    leasedToolNames: [],
+    deferredToolNames: [],
+    deferredCount: 0,
+    page: { returnedItems: 0, nextCursor: null, hasMore: false },
+  })
+}
 
 describe('hydrateHenjiScriptApi', () => {
   it('把反射层枚举约束投影到首次发现结果，不要求模型猜设置值', () => {
@@ -58,6 +77,46 @@ describe('hydrateHenjiScriptApi', () => {
       expect.objectContaining({ id: 'settings.registry', parentTypes: [] }),
     ])
   })
+
+  /*
+   * 门禁：进了投影的实体，它的属性要全给，不能只给能力 impacts 点过名的那几条。
+   *
+   * impacts 是按"这个操作影响什么"写的，天然不完整。素材库能力声明了 asset.tags 却没声明
+   * asset.library.name，旧实现拿 propertyIds 当过滤器，模型拿到的投影里就根本没有名称字段——
+   * 实测它试了几次之后停下来问用户"素材库的名称应该写在哪个属性上"。它不是不会做，是被投影
+   * 告知这个字段不存在。软信号不得当硬过滤，这条和 structuralMatch 那条是同一句话。
+   */
+  it('能力 impacts 没点名的属性也必须进投影，只影响排序', () => {
+    const output = {
+      ...baseOutput(),
+      scriptApi: {
+        ...baseOutput().scriptApi,
+        entities: {
+          ...baseOutput().scriptApi.entities,
+          entityTypes: ['asset.library'],
+          // 只有 impacts 声明过的这一条
+          propertyIds: ['asset.tags'],
+        },
+      },
+    }
+    const hydrated = hydrateHenjiScriptApi(output, {
+      entities: [{ id: 'asset.library', title: '素材库', description: '素材集合', parentTypes: [] }],
+      properties: [{
+        id: 'asset.tags', entityType: 'asset.library', title: '标签', description: '标签',
+        value: { kind: 'string', maxLength: 40 }, writable: true, writeOperations: ['append', 'remove'],
+      }, {
+        id: 'asset.library.name', entityType: 'asset.library', title: '名称', description: '素材库名称',
+        value: { kind: 'string', maxLength: 120 }, writable: true, writeOperations: ['set'],
+      }],
+    })
+
+    const ids = hydrated.scriptApi.entities.propertyDefinitions.map((item) => item.id)
+    expect(ids).toContain('asset.library.name')
+    // impacts 声明过的排在前面：它仍然是排序信号，只是不再决定有无
+    expect(ids[0]).toBe('asset.tags')
+    expect(hydrated.scriptApi.entities.propertyIds).toContain('asset.library.name')
+  })
+
 
   it('真实发现工具会先读取渲染层反射结构，再封存带约束的脚本租约', async () => {
     const registry = createBuiltinAgentToolRegistry(async (operation) => {

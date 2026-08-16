@@ -31,18 +31,29 @@ export function hydrateHenjiScriptApi(
     return parsed.success ? [parsed.data] : []
   }).slice(0, 64)
 
-  const explicitlyLeasedProperties = new Set(output.scriptApi.entities.propertyIds)
+  /*
+   * 进了投影的实体，它的属性要**全给**，不能只给能力 impacts 点过名的那几条。
+   *
+   * 这里曾经拿 `scriptApi.entities.propertyIds` 当过滤器：只有被某条能力的 impacts 声明过的
+   * 属性才会带上定义。可 impacts 是按"这个操作影响什么"写的，天然不完整——素材库能力声明了
+   * `asset.tags`，却没声明 `asset.library.name`，于是模型拿到的投影里**根本没有名称字段**。
+   * 实测它试了几次之后停下来问用户"素材库的名称应该写在哪个属性上"——它不是不会做，是被
+   * 投影告知这个字段不存在。
+   *
+   * 准入仍然是注册表真相：实体类型必须在本轮投影里。impacts 声明退化成排序提示（声明过的排
+   * 前面），不再决定有无。这跟 structuralMatch 那条规则是同一句话——软信号不得当硬过滤。
+   */
+  const declaredProperties = new Set(output.scriptApi.entities.propertyIds)
   const propertyDefinitions = records(description.properties).flatMap((item) => {
     if (typeof item.id !== 'string' || typeof item.entityType !== 'string') return []
     if (!entityTypeSet.has(item.entityType)) return []
-    if (explicitlyLeasedProperties.size > 0 && !explicitlyLeasedProperties.has(item.id)) return []
     const parsed = henjiScriptPropertyDefinitionSchema.safeParse(item)
     return parsed.success ? [parsed.data] : []
-  }).slice(0, 256)
+  }).sort((left, right) => (
+    Number(declaredProperties.has(right.id)) - Number(declaredProperties.has(left.id))
+  )).slice(0, 256)
 
-  const propertyIds = explicitlyLeasedProperties.size > 0
-    ? output.scriptApi.entities.propertyIds
-    : propertyDefinitions.map((item) => item.id)
+  const propertyIds = propertyDefinitions.map((item) => item.id)
 
   return applicationCapabilityDiscoveryOutputSchema.parse({
     ...output,
