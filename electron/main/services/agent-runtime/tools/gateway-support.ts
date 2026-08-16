@@ -19,6 +19,29 @@ export class AgentToolGatewayError extends Error {
   }
 }
 
+/**
+ * 把 zod 的校验问题如实说给模型，而不是回一句"未通过 schema 校验"。
+ *
+ * 旧文案不带任何定位信息。模型收到它只能盲猜哪里错了——实测一次 canvas 运行里
+ * read_agent_artifact 连续 11 次 INVALID_INPUT（每次 durationMs 都是 0，说明卡在入参校验、
+ * 根本没进执行），模型改一个字段试一次，直到 CONSECUTIVE_FAILURES 把整次运行判死。
+ *
+ * 最常见的两种错法都能被这条消息直接点破：`.strict()` 下多传一个键（unrecognized_keys 会
+ * 列出键名），以及必填项缺失或类型不符（path 指到具体字段）。这属于把事实给全，不是加提示词。
+ */
+function describeZodIssues(error: z.ZodError): string {
+  const issues = error.issues.slice(0, 5).map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join('.') : '(根对象)'
+    if (issue.code === 'unrecognized_keys') {
+      return `${path} 不接受这些字段：${issue.keys.join('、')}`
+    }
+    return `${path}：${issue.message}`
+  })
+  const omitted = error.issues.length - issues.length
+  return `工具参数未通过 schema 校验——${issues.join('；')}`
+    + `${omitted > 0 ? `；另有 ${omitted} 处问题` : ''}。请按活动工具的 schema 修正后重试。`
+}
+
 export function toGatewayError(error: unknown): AgentToolGatewayError {
   if (error instanceof AgentToolGatewayError) return error
   if (error instanceof AgentApprovalError) {
@@ -31,7 +54,7 @@ export function toGatewayError(error: unknown): AgentToolGatewayError {
     return new AgentToolGatewayError(error.code, error.message, true, 'wait')
   }
   if (error instanceof z.ZodError) {
-    return new AgentToolGatewayError('INVALID_INPUT', '工具参数或结果未通过 schema 校验')
+    return new AgentToolGatewayError('INVALID_INPUT', describeZodIssues(error))
   }
   const message = error instanceof Error ? error.message : String(error)
   if (message.startsWith('JSON_')) {
@@ -195,3 +218,4 @@ export async function executeToolWithRetry(
   }
   throw new AgentToolGatewayError('EXECUTION_FAILED', '工具重试状态异常')
 }
+
