@@ -41,6 +41,14 @@ import {
   resolveReasoningMode,
   type ReasoningModeValue,
 } from './llmSettingsSectionHelpers'
+import { ModelSyncDialog } from './ModelSyncDialog'
+
+interface DiscoveredModelDraft {
+  modelId: string
+  displayName: string
+  contextWindow: number | null
+  maxOutputTokens: number | null
+}
 
 const LlmSettingsSection: React.FC = () => {
   const { config, keys, visibility, loading, updateKey, toggleVisibility, saveConfig } = useLlmSettings()
@@ -51,6 +59,8 @@ const LlmSettingsSection: React.FC = () => {
   const [showModelDialog, setShowModelDialog] = useState(false)
   const [modelSearchMap, setModelSearchMap] = useState<Record<string, string>>({})
   const [isFetchingModels, setIsFetchingModels] = useState<Record<string, boolean>>({})
+  const [syncProvider, setSyncProvider] = useState<LlmProviderConfig | null>(null)
+  const [syncDiscovered, setSyncDiscovered] = useState<DiscoveredModelDraft[]>([])
 
   const providers = useMemo(() => config.providers ?? [], [config.providers])
   const setProviderDraftPatch = (patch: Partial<LlmProviderConfig>): void => {
@@ -102,38 +112,60 @@ const LlmSettingsSection: React.FC = () => {
     setProviderDraft(createDefaultProvider())
   }
 
+  /*
+   * 获取模型列表只负责"取回来给用户看"，不再直接落库。
+   *
+   * 旧实现把远端返回的模型全部写进配置——硅基流动一次返回 118 个，用户打开设置看到的是
+   * 一屏自己没选过的模型，分不清哪些是自己要的。改成弹窗由用户逐个或整组添加。
+   */
   const handleFetchModels = async (provider: LlmProviderConfig): Promise<void> => {
     setIsFetchingModels(prev => ({ ...prev, [provider.providerId]: true }))
     try {
       const discovered = await fetchOpenAiCompatibleModels(provider)
-      const nextModels = [...config.models]
-      discovered.forEach((item) => {
-        const index = nextModels.findIndex(model => (
-          model.providerId === provider.providerId && model.modelId === item.modelId
-        ))
-        const discoveredCapabilities = {
-          contextWindow: item.contextWindow,
-          maxOutputTokens: item.maxOutputTokens,
-        }
-        if (index < 0) {
-          nextModels.push(createModelFromInput(provider, item.modelId, item.displayName, discoveredCapabilities))
-          return
-        }
-        const current = nextModels[index]
-        nextModels[index] = {
-          ...current,
-          displayName: current.displayName || item.displayName,
-          capabilities: {
-            ...current.capabilities,
-            contextWindow: item.contextWindow ?? current.capabilities.contextWindow,
-            maxOutputTokens: item.maxOutputTokens ?? current.capabilities.maxOutputTokens,
-          },
-        }
-      })
-      await persistConfig({ ...config, models: nextModels })
+      setSyncProvider(provider)
+      setSyncDiscovered(discovered.map(item => ({
+        modelId: item.modelId,
+        displayName: item.displayName || item.modelId,
+        contextWindow: item.contextWindow,
+        maxOutputTokens: item.maxOutputTokens,
+      })))
     } finally {
       setIsFetchingModels(prev => ({ ...prev, [provider.providerId]: false }))
     }
+  }
+
+  const handleSyncAdd = async (modelIds: string[]): Promise<void> => {
+    if (!syncProvider || modelIds.length === 0) return
+    const provider = syncProvider
+    const byId = new Map(syncDiscovered.map(item => [item.modelId, item]))
+    const existing = new Set(config.models
+      .filter(model => model.providerId === provider.providerId)
+      .map(model => model.modelId))
+    const added = modelIds
+      .filter(modelId => !existing.has(modelId))
+      .flatMap((modelId) => {
+        const item = byId.get(modelId)
+        return item
+          ? [createModelFromInput(provider, item.modelId, item.displayName, {
+              contextWindow: item.contextWindow,
+              maxOutputTokens: item.maxOutputTokens,
+            })]
+          : []
+      })
+    if (added.length === 0) return
+    await persistConfig({ ...config, models: [...config.models, ...added] })
+  }
+
+  const handleSyncRemove = async (modelIds: string[]): Promise<void> => {
+    if (!syncProvider || modelIds.length === 0) return
+    const provider = syncProvider
+    const removing = new Set(modelIds)
+    await persistConfig({
+      ...config,
+      models: config.models.filter(model => !(
+        model.providerId === provider.providerId && removing.has(model.modelId)
+      )),
+    })
   }
 
   const handleSaveModel = async (): Promise<void> => {
@@ -217,13 +249,16 @@ const LlmSettingsSection: React.FC = () => {
                 <div className="min-w-0 flex-1">
                   <div className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{provider.displayName}</div>
                 </div>
-                <div className="flex items-center gap-3" onClick={(event) => event.stopPropagation()}>
-                  <UiSwitch
-                    checked={provider.enabled}
-                    onCheckedChange={async (checked) => {
-                      await updateProviderField(provider.providerId, { enabled: checked })
-                    }}
-                  />
+                <div className="flex items-center gap-3">
+                  {/* 只有开关需要拦住冒泡；箭头必须留在行的点击区里，否则点它没反应。 */}
+                  <span onClick={(event) => event.stopPropagation()}>
+                    <UiSwitch
+                      checked={provider.enabled}
+                      onCheckedChange={async (checked) => {
+                        await updateProviderField(provider.providerId, { enabled: checked })
+                      }}
+                    />
+                  </span>
                   {expanded ? <ChevronUp size={18} className="text-text-muted" /> : <ChevronDown size={18} className="text-text-muted" />}
                 </div>
               </div>
@@ -476,8 +511,21 @@ const LlmSettingsSection: React.FC = () => {
         onClose={() => setShowModelDialog(false)}
         onSave={handleSaveModel}
       />
+
+      <ModelSyncDialog
+        open={syncProvider !== null}
+        providerName={syncProvider?.displayName ?? ''}
+        discovered={syncDiscovered}
+        addedModelIds={new Set(config.models
+          .filter(model => model.providerId === syncProvider?.providerId)
+          .map(model => model.modelId))}
+        onClose={() => setSyncProvider(null)}
+        onAdd={handleSyncAdd}
+        onRemove={handleSyncRemove}
+      />
     </div>
   )
 }
 
 export default LlmSettingsSection
+
