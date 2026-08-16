@@ -415,3 +415,9 @@ export function extractCanvasNodeData(
   config.validateData?.(parsed)
   return parsed as Partial<CanvasNodeData>
 }
+
+/** 这个节点类型的 data 到底接受哪些键；用于把"我丢掉了什么"说清楚。 */
+export function listCanvasNodeDataKeys(nodeType: string): string[] {
+  const config = configByType.get(nodeType as CanvasNodeType)
+  return Object.keys((config?.aiDataSchema.properties ?? {}) as Record<string, unknown>)
+}

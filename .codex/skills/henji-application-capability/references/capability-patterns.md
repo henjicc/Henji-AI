@@ -60,7 +60,7 @@ Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真
 1. 能力发现返回当前租约允许的 `app.entities`、`app.action`、`app.recipe` 和 `app.assert`，并合并真实反射 schema。
 2. 模型只表达业务参数和数据依赖；宿主编译为受控 IR，注入版本、revision、权限、availability、Effect Contract 与验证契约。
 3. 无输出依赖的相邻实体写入自动合并到同一 Application Control 事务；算法操作经 `app.action` 进入相同 Gateway。
-4. 每个步骤从正式状态源读回验证，最终以 Effect Receipt 和状态差异双向对账结算。
+4. 每个步骤从正式状态源读回验证，最终以 Effect Receipt 和状态差异双向对账。
 
 领域内部确需“预览/审批后提交”的高风险算法操作，可以保留不透明计划引用，但它是业务能力契约，不是模型逐步编排协议。禁止让模型手工管理能力版本、expected revision、输出路径或引用占位符。
 
@@ -114,4 +114,4 @@ Application Control 反射注册表是实体、属性与集合 CRUD 的唯一真
 - 跨模块引用失效时重新读取来源，不创建无关项目。
 - 首次 `scriptApi` 投影能看到真实 enum、范围、引用形状和写 operation；非法字面量及条件分支候选在 Gateway 调用数为 0 时拒绝。
 - 多步骤脚本只通过同一 IR/解释器执行，Recipe 不得拥有第二套执行器、Effect、补偿或验证逻辑。
-- 写入后的每项正式状态差异都有 Effect Receipt，每项 receipt 都能在最终状态找到对应变化；evidence 不能推动结算。
+- 写入后的每项正式状态差异都有 Effect Receipt，每项 receipt 都能在最终状态找到对应变化；evidence 不能当成写入证据。

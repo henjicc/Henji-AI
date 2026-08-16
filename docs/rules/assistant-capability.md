@@ -63,8 +63,11 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - **发现请求是模型写的，运行时不改写**（v3：`queries` / `domains` / `entityTypes` / `writes`）。
   曾经有一个 `normalizeCallInput` 把模型的请求整个覆盖成运行时算出的依赖前沿，理由是"运行时
   自己就知道答案"。代价是主模型——唯一拿得到完整会话历史的角色——连"我要的东西在另一个领域"
-  都表达不了，只能把工具可用性当成意图证据反推自己判断错了。要给建议就放进
-  `plan_state.discoveryRequest` 当起点，不要覆盖模型的输入。
+  都表达不了，只能把工具可用性当成意图证据反推自己判断错了。
+- **投影只能回答注册表知道的事，不能回声模型的提问。** `scriptApi.entities` 的实体与属性清单
+  只允许来自匹配到的能力，**不得**把请求里的 `entityTypes` 或从 `queries` 正则抠出的标识符并
+  进去——那等于模型问"有没有 X"、投影答"你的清单是：X、…"，模型照着写脚本必然撞
+  `ENTITY_TYPE_NOT_FOUND`，而且每次重新发现都在重复同一个谎。宁可少说，不能乱说。
 - **投影体积就是行为**。发现结果一旦越过卸载阈值就会被存成 artifact，模型只能分页回读——实测
   一次运行 18 次 `read_agent_artifact`、25 个模型步不收敛。所以"把 action 和 recipe 都给出去让
   模型自己选"是错的：给得越多，模型实际看到的越少。门禁在
@@ -73,9 +76,13 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
   `prompt-layers.formatObservation` 都调 `shouldOffloadObservation`，任何一处漏了
   `projectForHistory`，同一份结果就会一边内联一边卸载，模型看到 artifactRef 就去回读一份它
   已经有的内容。门禁在 `offload-same-ruler.test.ts`。
-- **能力声明的 effect 必须覆盖它真正产生的全部 effect**，用 `alsoImpacts` 补齐。漏一条的代价
-  有两处且都不报错：Facet 按 effect 对账，声明漏了就永远结不了账（模型干完了活，任务图停在
-  未结算）；发现层排序也按 effect 走，漏声明的能力排到无关能力后面。名字里带
+- **能力声明的 `entityTypes` 必须与反射注册表登记的**同一个名字**。** 同一样东西两个名字不是
+  命名不整齐：发现层会把能力声明的那个名字投影进 `scriptApi.entities.entityTypes`，模型照着写
+  脚本就撞 `ENTITY_TYPE_NOT_FOUND`，而真正存在的那个因为没有能力声明它，读写配对保底也认不出。
+  实测设置域声明 `application.setting`、注册表登记 `settings.registry`，一次改设置因此从 5 回合
+  3.8 万 token 变成 18 回合 25 万 token。
+- **能力声明的 effect 必须覆盖它真正产生的全部 effect**，用 `alsoImpacts` 补齐。漏一条不报错，
+  但发现层排序按 effect 走，漏声明的能力会排到无关能力后面。名字里带
   create/add/delete/remove/open/switch 的能力，`registry.test.ts` 会强制它声明对应 effect，
   例外必须写进 `justifiedExceptions` 并说明理由。
 - 门禁在 `electron/main/services/agent-runtime/context/capability-reachability.test.ts`：
@@ -116,7 +123,7 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - 不新增泛化的“Henji Script 教程”内置 skill。语言语法和可调用 API 必须自描述于工具契约与 `scriptApi`，否则 skill 未触发或版本漂移时会形成旁路；领域 skill 只讲“何时用哪个 Recipe/业务顺序”，项目级 `henji-application-capability` skill 只指导开发者如何接入。
 - 只有 `run_henji_script@1` 可以声明 `source`；其他能力仍禁止 `source/script/executeScript` 类任意脚本入口。
 - Recipe 只生成同一份 Henji Script IR，不拥有第二套解释器、引用绑定、Effect、补偿或验证逻辑。任何具体步骤必须先通过正式结果测试。
-- 用户明确的负向执行约束（例如“不要切换界面”“不要删除”）必须进入 Task Graph 的 `forbiddenEffects`，经发现投影到本轮 `scriptApi` 租约，并在 Recipe 展开后、首次 Gateway 调用前按强类型 Effect 拒绝；不能仅靠不创建对应 Facet 或提示词提醒。最终说明也必须与 Effect Receipt 对账，禁止否认已经发生的副作用。
+- 用户明确的负向执行约束（例如“不要切换界面”“不要删除”）由 Gateway 与审批边界承担；最终说明必须与 Effect Receipt 对账，禁止否认已经发生的副作用。
 - 脚本只能调用本轮 `scriptApi` 租约披露的 API；“全局注册了但本轮没发现”仍必须在执行器调用数为 0 时拒绝。
 - `scriptApi` 必须在首次发现时合并工具目录与渲染层真实反射注册表，只投影本轮实体定义及属性值约束；enum、范围、引用形状、nullable、写 operation、集合父类型和必填属性不得靠模型猜测或在提示词另抄。
 - 字面量、对象、数组及三元表达式等可静态确定的属性候选值必须在首次 Gateway 调用前按同一反射约束验证；任一分支非法就整段拒绝。依赖读取结果的值在脚本变量内流动，不为方便模型而把正式业务值塞进执行摘要。
@@ -133,12 +140,12 @@ AI 输入 schema 顶层必须设置 `additionalProperties: false`。禁止 `patc
 - 播放头、播放开关等提交后会继续变化的会话控制属性必须声明 `verificationStrategy: 'execution'`，用正式执行器证据验收；持久状态仍默认用最终世界状态验收。
 - 输入中 `entityType` 与 `target.kind` 表达同一事实时，由适配器统一规范化；领域 provider 可将全局唯一的短引用补全成正式稳定引用，但存在歧义时必须拒绝。不得让模型为可无歧义消解的引用格式多空转一轮。
 - 一次正式写入产生领域级联副作用（例如对象动画属性自动创建状态关键帧）时，执行器必须返回强类型 Effect Receipt；`evidence` 只用于验证和人类说明，禁止承担副作用记账。级联 receipt 必须引用静态 `declarationId`，未声明的级联使事务失败并补偿。
-- 工具网关在执行器完成后立即运行 `resolveObservedEffects` 并把校验后的 Effect 固化进 observation；Facet 结算和最终成功封存只消费这份结构化事实，不从输入、引用字段或 evidence 文本猜测。
+- 工具网关在执行器完成后立即运行 `resolveObservedEffects` 并把校验后的 Effect 固化进 observation；最终成功封存只消费这份结构化事实，不从输入、引用字段或 evidence 文本猜测。
 - 动态 availability 的阻断必须区分 structural、permission 与 state；只有 state 阻断且前序 direct/cascade Effect 可能满足条件时，才允许延迟到该步骤执行前复核。
 - 应用执行终态与最终语言说明终态必须分离。写事务、Effect 对账和正式验证完成后立即封存成功；封存后的模型失败、超时或文本事实校验失败只能进入 `completed_with_warning` 并使用确定性摘要，禁止产生 `RunFailed`。封存前失败仍按失败处理。
 - 外部等待前必须把经过 schema 校验的 Henji Script IR 断点、有限变量、完整稳定引用、Effect Receipt 与验证状态一起持久化；不得保存源码、模型文本或任意运行对象。自动续接固定执行“权威状态读取 → 同一解释器从断点继续”，禁止让模型重新生成剩余步骤，禁止从 working summary 或任务 ID 重建引用与 Effect；断点缺失或摘要不匹配时必须在后续写入前阻断。
-- 外部续跑的 Task Graph 与正式验证一旦满足封存条件，下一次模型调用立即进入无工具的纯说明阶段；不得继续暴露读取或写入工具，让模型重复验证已知事实或在成功之后追加动作。普通运行仍允许模型补全原目标中漏建的 Facet。Effect Receipt 中的 `targetRefs` 必须来自执行器真实输出并保持完整稳定引用。
-- `blocked` 表示上一条执行路线受阻，不是目标永久终止；模型提供修正后的 Effect 时可以重新开放该 Facet，但必须清空旧 Effect Ledger，已完成/等待用户等其他终态仍不可改写。
+- **封存点是「模型自己决定收工」**：本轮不再调工具、给出最终答复，且有真实写入 Effect、运行客观上已经停下来（没有执行中的步骤、没有待批审批、恢复检查已完成、没有记下的未收敛事项）。不得在模型请求前用任何预测判它做完了并撤掉工具——旧实现按运行前猜出来的任务图结算，模型明知用户要的颜色还没设也只能收工。Effect Receipt 中的 `targetRefs` 必须来自执行器真实输出并保持完整稳定引用。
+- **拒绝必须能被自我修正。** 任何拒绝路径都要带上运行时已经知道的事实：实体类型写错就列出该域注册了哪些，属性写错就列出这个实体有哪些，参数被静默丢弃就说清丢了哪些键、可用的是哪些，容量不够就给出上限。只给一个错误码等于让模型继续猜，而它猜不中就是死循环。
 
 ## 迁移纪律
 

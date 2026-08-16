@@ -7,7 +7,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 
 import { addCanvasNode, resetCanvasApplicationStateForTests, undoCanvasChange } from './canvasApplicationService'
-import { clearCanvasProject, groupCanvasNodes, ungroupCanvasNode } from './canvasMutationService'
+import { clearCanvasProject, groupCanvasNodes, ungroupCanvasNode, updateCanvasNode } from './canvasMutationService'
 
 const projectId = 'project-3-1'
 
@@ -75,6 +75,31 @@ describe('画布清空与解散分组', () => {
 
     it('画布已经是空的时拒绝，不产生空的撤销记录', () => {
       expect(() => clearCanvasProject(projectId)).toThrow('画布已经是空的')
+    })
+  })
+
+  /*
+   * 拒绝必须能被自我修正：只说"没有变化"，调用方无从知道是值本来就一样，还是键被悄悄丢掉了。
+   *
+   * 实测助手为了"把节点移动到指定坐标"传了 data: { x, y }——位置根本不是节点 data 字段
+   * （它是属性 canvas.node.position）。过滤后是空对象、补丁是空操作，它只收到一句"节点数据
+   * 未发生可保存的变化"，于是原样又试了一次。
+   */
+  describe('updateCanvasNode 的拒绝信息', () => {
+    it('把丢掉的键、可写字段和位置的正确通道一起说出来', () => {
+      const created = addCanvasNode({
+        projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' },
+      })
+      const nodeId = String(created.nodeId)
+      let message = ''
+      try {
+        updateCanvasNode({ projectId, nodeId, data: { x: 420, y: 280 } })
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error)
+      }
+      expect(message).toContain('x、y')
+      // 位置有正式通道，必须点名，否则模型只能继续在 data 里试
+      expect(message).toContain('canvas.node.position')
     })
   })
 
