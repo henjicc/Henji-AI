@@ -118,6 +118,39 @@ describeWithElectronSqlite('AgentArtifactPersistenceStore', () => {
     }))).toThrow(/不包含请求的任何顶层字段：missing。可用顶层字段：visible、omitted/)
   })
 
+  /*
+   * 模型天然会写 `scriptApi.actions` 这样的点路径去要子树——它看到的结果就是嵌套的。
+   * 只认顶层键的话，`scriptApi.actions` 会被判成不存在，而 `scriptApi` 明明就在那儿。
+   */
+  it('fields 支持点路径取子树', () => {
+    insertArtifact(database, 'artifact:nested', 'run-1', {
+      scriptApi: { actions: ['place'], entities: { types: ['object'] } },
+      page: { cursor: null },
+    })
+    const store = new AgentArtifactPersistenceStore(database)
+
+    const page = store.read(agentArtifactReadRequestSchema.parse({
+      runId: 'run-1', threadId: 'thread-1', artifactRef: 'artifact:nested',
+      fields: ['scriptApi.actions', 'scriptApi.entities.types', 'scriptApi.nope'], limitBytes: 2048,
+    }))
+    expect(page.selectedFields).toEqual(['scriptApi.actions', 'scriptApi.entities.types'])
+    expect(page.missingFields).toEqual(['scriptApi.nope'])
+    expect(page.content).toContain('place')
+    expect(page.content).toContain('object')
+  })
+
+  // 路径中途撞到非对象要判未命中，不能把数组当成可继续下钻的东西。
+  it('点路径穿不过数组时判未命中', () => {
+    insertArtifact(database, 'artifact:arr', 'run-1', { items: [{ id: 'a' }], keep: 1 })
+    const store = new AgentArtifactPersistenceStore(database)
+    const page = store.read(agentArtifactReadRequestSchema.parse({
+      runId: 'run-1', threadId: 'thread-1', artifactRef: 'artifact:arr',
+      fields: ['items.id', 'keep'], limitBytes: 1024,
+    }))
+    expect(page.selectedFields).toEqual(['keep'])
+    expect(page.missingFields).toEqual(['items.id'])
+  })
+
   it('拒绝跨 run、跨 thread、不存在引用与 C3 内容', () => {
     insertArtifact(database, 'artifact:private', 'run-1', { ok: true })
     insertArtifact(database, 'artifact:secret', 'run-1', { secret: true }, ['C3'])

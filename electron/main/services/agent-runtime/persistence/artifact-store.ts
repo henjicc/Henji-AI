@@ -71,7 +71,7 @@ function decodeCursor(cursor: string | undefined, digest: string, totalBytes: nu
  * 现在：命中的字段照常返回；未命中的写进 missingFields 一并告诉模型，附可用字段清单。
  * 一个都没命中才是真的没法继续——那时才报错，因为返回空对象会让模型以为 artifact 是空的。
  */
-function selectPayload(payload: unknown, fields: string[] | undefined): {
+export function selectPayload(payload: unknown, fields: string[] | undefined): {
   payload: unknown
   selectedFields: string[]
   missingFields: string[]
@@ -83,10 +83,12 @@ function selectPayload(payload: unknown, fields: string[] | undefined): {
   const record = payload as Record<string, unknown>
   const availableFields = Object.keys(record).filter(Boolean).slice(0, 32)
   const requested = [...new Set(fields)].sort((left, right) => left.localeCompare(right))
-  const selectedFields = requested.filter(
-    (field) => Object.prototype.hasOwnProperty.call(record, field)
-  )
-  const missingFields = requested.filter((field) => !selectedFields.includes(field))
+  const resolved = new Map(requested.flatMap((field) => {
+    const value = resolveFieldPath(record, field)
+    return value.found ? [[field, value.value] as const] : []
+  }))
+  const selectedFields = requested.filter((field) => resolved.has(field))
+  const missingFields = requested.filter((field) => !resolved.has(field))
 
   if (selectedFields.length === 0) {
     const available = availableFields.length > 0
@@ -96,10 +98,38 @@ function selectPayload(payload: unknown, fields: string[] | undefined): {
   }
 
   return {
-    payload: Object.fromEntries(selectedFields.map((field) => [field, record[field]])),
+    payload: Object.fromEntries(selectedFields.map((field) => [field, resolved.get(field)])),
     selectedFields,
     missingFields,
   }
+}
+
+/**
+ * 支持 `scriptApi.actions` 这样的点路径，不只是顶层键。
+ *
+ * 模型天然会写点路径去要子树——它看到的结果就是嵌套的。旧实现只认顶层键，于是
+ * `scriptApi.actions` 被判成"不存在的字段"，而 `scriptApi` 明明就在那儿。实测 camera 场景
+ * 一次请求四个字段全是点路径，四个全落空，整次调用被拒。
+ *
+ * 数组下标不支持：模型要的是"某一类东西"，不是"第 3 个"，加下标只会扩大猜错的面。
+ */
+function resolveFieldPath(
+  record: Record<string, unknown>,
+  field: string
+): { found: boolean; value: unknown } {
+  const segments = field.split('.').filter(Boolean)
+  if (segments.length === 0) return { found: false, value: undefined }
+  let current: unknown = record
+  for (const segment of segments) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return { found: false, value: undefined }
+    }
+    if (!Object.prototype.hasOwnProperty.call(current, segment)) {
+      return { found: false, value: undefined }
+    }
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return { found: true, value: current }
 }
 
 function safeUtf8Page(buffer: Buffer, offset: number, limitBytes: number): {
@@ -230,4 +260,6 @@ export class AgentArtifactPersistenceStore {
     return row
   }
 }
+
+
 
