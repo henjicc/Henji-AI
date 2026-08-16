@@ -115,7 +115,24 @@ function expressionPath(
     const base = expressionPath(sourceFile, node.expression, variables)
     if (!base) return null
     if (base.kind === 'variable') return { ...base, path: [...base.path, node.name.text] }
-    return unsupported(sourceFile, node, '只能从前序调用结果读取公开字段')
+    /*
+     * 自己刚写出来的 const 也要能读回字段。
+     *
+     * 脚本里 `const ref = { kind: 'canvas.node', id: created.resultRefs[0].id }` 之后再写
+     * `ref.id` 是最自然不过的写法，旧实现却一律拒成"只能从前序调用结果读取公开字段"——
+     * 那句话把限制说成了"只有调用结果能点访问"，而真正的限制其实是"不能动态取属性"。
+     * 对象字面量的键在编译期就确定，静态解析出来既安全也没有歧义。
+     */
+    const entry = base.kind === 'object'
+      ? base.entries.find((item) => item.key === node.name.text)
+      : undefined
+    if (entry) return entry.value
+    return unsupported(
+      sourceFile, node, '读不到这个字段',
+      base.kind === 'object'
+        ? `这个对象字面量只有：${base.entries.map((item) => item.key).join('、') || '（空对象）'}`
+        : '只能从前序调用结果或对象字面量读取字段。'
+    )
   }
   if (ts.isElementAccessExpression(node)) {
     const argument = node.argumentExpression
@@ -132,7 +149,24 @@ function expressionPath(
     const base = expressionPath(sourceFile, node.expression, variables)
     if (!base) return null
     if (base.kind === 'variable') return { ...base, path: [...base.path, segment] }
-    return unsupported(sourceFile, node, '只能从前序调用结果读取公开字段或数组项')
+    // 与点访问同一条道理：字面量的下标在编译期就确定，静态解析出来既安全也没有歧义。
+    if (base.kind === 'object' && typeof segment === 'string') {
+      const entry = base.entries.find((item) => item.key === segment)
+      if (entry) return entry.value
+      return unsupported(
+        sourceFile, node, '读不到这个字段',
+        `这个对象字面量只有：${base.entries.map((item) => item.key).join('、') || '（空对象）'}`
+      )
+    }
+    if (base.kind === 'array' && typeof segment === 'number') {
+      const item = base.items[segment]
+      if (item) return item
+      return unsupported(
+        sourceFile, node, `下标 ${segment} 超出范围`,
+        `这个数组字面量只有 ${base.items.length} 项`
+      )
+    }
+    return unsupported(sourceFile, node, '只能从前序调用结果、对象字面量或数组字面量读取')
   }
   return null
 }

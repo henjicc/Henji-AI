@@ -148,6 +148,38 @@ describe('Henji Script compiler', () => {
   })
 
 
+  /*
+   * 自己刚写出来的 const 也要能读回字段。
+   *
+   * `const ref = { kind: 'canvas.node', id: created.resultRefs[0].id }` 之后再写 `ref.id`
+   * 是最自然的写法，旧实现却拒成"只能从前序调用结果读取公开字段"——那句话把限制说成了
+   * "只有调用结果能点访问"，而真正的限制其实是"不能动态取属性"。实测画布场景连撞两次。
+   */
+  it('对象与数组字面量的静态字段和下标都能读回', () => {
+    const plan = compile(`
+      const created = await app.entities.create('test.entity', { properties: {} });
+      const ref = { kind: 'test.entity', id: created.resultRefs[0].id };
+      const names = ['first', 'second'];
+      await app.entities.update(ref, { 'test.entity.value': names[1] });
+      app.assert.exists(ref.id);
+    `)
+    expect(plan.instructions).toHaveLength(3)
+  })
+
+  it('字面量里没有的字段报出它到底有哪些', () => {
+    let message = ''
+    try {
+      compile(`
+        const ref = { kind: 'test.entity', id: 'entity-1' };
+        app.assert.exists(ref.revision);
+      `)
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('kind、id')
+  })
+
+
   it('允许用静态字符串字面量读取带点号的公开属性 ID', () => {
     const plan = compile(`
       const entity = await app.entities.read(
