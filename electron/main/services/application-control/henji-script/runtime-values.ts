@@ -19,17 +19,39 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
 }
 
+/**
+ * 取不到时必须说清**实际有什么**，否则模型只能再猜一遍。
+ *
+ * 旧文案只有「结果字段 projectId 不存在」。模型不知道该改成什么，于是重写整段脚本再试；
+ * 实测 camera 场景因此把 run_henji_script 的 5 次调用额度耗光，最终 0 个 Effect。
+ * 这和 artifact 字段筛选、zod 校验消息是同一类问题：报了失败，没给能自纠的事实。
+ */
+function describeAvailable(current: unknown): string {
+  if (Array.isArray(current)) return `。当前是长度 ${current.length} 的数组`
+  if (isRecord(current)) {
+    const keys = Object.keys(current).slice(0, 24)
+    return keys.length > 0 ? `。可用字段：${keys.join('、')}` : '。当前对象没有任何字段'
+  }
+  return `。当前值是 ${current === null ? 'null' : typeof current}，不能继续取字段`
+}
+
 function readPath(value: unknown, path: readonly (string | number)[]): unknown {
   let current = value
   for (const part of path) {
     if (typeof part === 'number') {
       if (!Array.isArray(current) || part >= current.length) {
-        throw new HenjiScriptError('SCRIPT_STEP_FAILED', 'execute', `数组下标 ${part} 不存在`)
+        throw new HenjiScriptError(
+          'SCRIPT_STEP_FAILED', 'execute',
+          `数组下标 ${part} 不存在${describeAvailable(current)}`
+        )
       }
       current = current[part]
     } else {
       if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, part)) {
-        throw new HenjiScriptError('SCRIPT_STEP_FAILED', 'execute', `结果字段 ${part} 不存在`)
+        throw new HenjiScriptError(
+          'SCRIPT_STEP_FAILED', 'execute',
+          `结果字段 ${part} 不存在${describeAvailable(current)}`
+        )
       }
       current = current[part]
     }
@@ -52,7 +74,12 @@ export function evaluate(expression: HenjiValueExpression, values: ReadonlyMap<s
   }
   if (expression.kind === 'variable') {
     if (!values.has(expression.name)) {
-      throw new HenjiScriptError('SCRIPT_STEP_FAILED', 'execute', `前序结果 ${expression.name} 不存在`)
+      const available = [...values.keys()].slice(0, 24)
+      throw new HenjiScriptError(
+        'SCRIPT_STEP_FAILED', 'execute',
+        `前序结果 ${expression.name} 不存在`
+        + (available.length > 0 ? `。已有前序结果：${available.join('、')}` : '。当前还没有任何前序结果')
+      )
     }
     return readPath(values.get(expression.name), expression.path)
   }
@@ -195,3 +222,4 @@ export function serializable(value: unknown, depth = 0): unknown {
 export function checkpointDigest(input: Omit<HenjiScriptCheckpoint, 'continuationDigest'>): string {
   return digest(input)
 }
+
