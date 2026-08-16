@@ -13,6 +13,8 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applica
 
 import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes'
 import { NODE_FIELDS, PROJECT_FIELDS } from './canvasFields'
+import { useCanvasStore } from '@/stores/canvasStore'
+import { useProjectStore } from '@/stores/projectStore'
 import { listCanvasProjects } from './canvasProjectService'
 import { readCanvasProjectSnapshot } from './canvasQueryService'
 
@@ -116,11 +118,27 @@ function childRef(kind: typeof CANVAS_ENTITY_TYPES.node | typeof CANVAS_ENTITY_T
   return { kind, id: `${projectId}:${id}` }
 }
 
+/**
+ * 画布子实体的稳定 id 是 `工程ID:子ID`，但专用能力（add_canvas_node 等）返回的是**裸 nodeId**。
+ *
+ * 同一样东西两种形状，调用方拿着能力返回的 id 去调通用动词就必然 NOT_FOUND——实测画布场景
+ * 反复撞这一条。规则本来就写着"领域 provider 可将全局唯一的短引用补全成正式稳定引用，但存在
+ * 歧义时必须拒绝"（docs/rules/assistant-capability.md），这里就是那条规则的落点：只有一个工程
+ * 里存在这个子 ID 时补全它，出现在多个工程里则照旧拒绝。
+ */
 function splitChildRef(ref: ApplicationRef, expected: CanvasEntityType): { projectId: string; childId: string } {
   if (ref.kind !== expected) throw new Error('NOT_FOUND')
   const separator = ref.id.indexOf(':')
-  if (separator < 1) throw new Error('NOT_FOUND')
-  return { projectId: ref.id.slice(0, separator), childId: ref.id.slice(separator + 1) }
+  if (separator >= 1) {
+    return { projectId: ref.id.slice(0, separator), childId: ref.id.slice(separator + 1) }
+  }
+  // 只在**当前打开的工程**里补全：助手的写入本来就发生在这个工程上，跨工程扫描既慢又可能歧义。
+  const projectId = useProjectStore.getState().currentProjectId
+  if (!projectId) throw new Error('NOT_FOUND')
+  const canvas = useCanvasStore.getState()
+  const children = expected === CANVAS_ENTITY_TYPES.edge ? canvas.edges : canvas.nodes
+  if (!children.some((child) => child.id === ref.id)) throw new Error('NOT_FOUND')
+  return { projectId, childId: ref.id }
 }
 
 function revisionOf(updatedAt: number): number {

@@ -62,6 +62,37 @@ describe('canvas reflection and mutation', () => {
     })
   })
 
+  /*
+   * 专用能力（add_canvas_node 等）返回的是裸 nodeId，通用动词要的是 `工程ID:节点ID`。
+   * 同一样东西两种形状，拿着能力返回的 id 去调通用动词就必然 NOT_FOUND——实测画布场景反复
+   * 撞这一条。规则本来就写着"领域 provider 可将全局唯一的短引用补全成正式稳定引用"。
+   */
+  it('裸子实体 id 在当前工程内被补全成正式稳定引用', async () => {
+    const registrations = createCanvasReflectionRegistrations()
+    const nodeProvider = registrations
+      .find((item) => item.entity.id === CANVAS_ENTITY_TYPES.node)?.provider
+    expect(nodeProvider).toBeDefined()
+
+    const snapshot = await nodeProvider?.readEntity(
+      { kind: CANVAS_ENTITY_TYPES.node, id: nodeId },
+      { propertyIds: [`${CANVAS_ENTITY_TYPES.node}.node_type`] }
+    )
+    expect(snapshot?.properties).toMatchObject({
+      [`${CANVAS_ENTITY_TYPES.node}.node_type`]: CANVAS_NODE_TYPES.textAnnotation,
+    })
+  })
+
+  it('当前工程里没有这个子 id 时照旧拒绝', async () => {
+    const registrations = createCanvasReflectionRegistrations()
+    const nodeProvider = registrations
+      .find((item) => item.entity.id === CANVAS_ENTITY_TYPES.node)?.provider
+    await expect(nodeProvider?.readEntity(
+      { kind: CANVAS_ENTITY_TYPES.node, id: 'never-existed' },
+      { propertyIds: [] }
+    )).rejects.toThrow('NOT_FOUND')
+  })
+
+
   it('提供项目、节点和连线稳定实体及受限节点属性', async () => {
     const registrations = createCanvasReflectionRegistrations()
     expect(registrations.map((item) => item.entity.id)).toEqual([
