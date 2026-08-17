@@ -50,6 +50,13 @@ export function createBackendBuiltinTools(
   const discoverCapabilities = createBackendCapabilityTool(
     discoverApplicationCapabilitiesCapability,
     {
+      /*
+       * 发现结果里的 `scriptApi.actions[].parameters` 是逐字投影的 JSON Schema，深度天然超出
+       * 普通业务 DTO。用默认档位时，任何一条稍深的入参 schema 都会让**整个域**的发现抛
+       * INVALID_INPUT——模型连目录都拿不到。实测 image_edit 因此长期不可发现（17 层 > 16）。
+       * 放宽的只是深度，字节与键数上限不变；门禁在 capability-discovery-size.test.ts。
+       */
+      outputLimitProfile: 'schema',
       execute: async (input, context) => {
         const discovered = discoveryCatalog.discover(context.runId, input, context.hostContext)
         if (!invokeFrontend) return discovered
@@ -72,6 +79,8 @@ export function createBackendBuiltinTools(
     }
   )
   const readSchemas = createBackendCapabilityTool(readApplicationSchemasCapability, {
+    // 同上：这条工具的全部输出就是 JSON Schema，它是发现投影之外取完整入参定义的唯一途径。
+    outputLimitProfile: 'schema',
     execute: (input) => Promise.resolve(discoveryCatalog.readSchemas(input)),
   })
   const searchCapabilities = defineAgentTool({

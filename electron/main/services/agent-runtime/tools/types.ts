@@ -13,6 +13,7 @@ import type {
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
 import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
 import type { ApplicationCapabilityDefinition } from '../../../../../src/core/assistant/applicationCapabilities'
+import type { ToolOutputLimitProfile } from './security'
 
 export interface AgentToolRetryPolicy {
   maxRetries: number
@@ -73,8 +74,11 @@ export interface AgentToolDefinition<TInput = unknown, TOutput = unknown> {
   resolveRequiredContext?: (input: TInput) => HostScope[]
   inputSchema: z.ZodType<TInput>
   outputSchema: z.ZodType<TOutput>
-  /** 仅受控解释器断点可放宽对象深度；普通工具始终使用 default。 */
-  outputLimitProfile?: 'default' | 'checkpoint'
+  /**
+   * 只有两类输出可以放宽对象深度：受控解释器断点（checkpoint）与携带 JSON Schema 的目录投影
+   * （schema）。普通业务工具始终 default。放宽的只是深度，字节与键数上限一律不变。
+   */
+  outputLimitProfile?: ToolOutputLimitProfile
   aiInputSchema: Record<string, unknown>
   preview?: (input: TInput, context: AgentToolExecutionContext) => Promise<AgentToolPreview> | AgentToolPreview
   execute: (input: TInput, context: AgentToolExecutionContext) => Promise<TOutput>

@@ -4,6 +4,7 @@ import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../..
 import { applicationCapabilityDiscoveryInputSchema } from '../../../../../src/core/assistant/capabilityDiscovery'
 import { discoverApplicationCapabilitiesCapability } from '../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
+import { assertJsonWithinLimits, resolveOutputLimits } from '../tools/security'
 import { AgentCapabilityDiscoveryCatalog } from './capability-discovery'
 import { AGENT_TOOL_DOMAINS } from './types'
 import {
@@ -115,6 +116,51 @@ describe('能力发现结果的体积', () => {
    */
   const DISCOVERY_TOOL = 'discover_application_capabilities'
   const CONTEXT_WINDOW = 64_000
+
+  /**
+   * 体积之外还有一条更硬的线：**发现结果必须过得了 Gateway 自己的输出安全限制。**
+   *
+   * 越过卸载阈值只是被推去分页（慢），越过 `TOOL_OUTPUT_LIMITS` 是**整个工具调用抛异常**——
+   * 模型连目录都拿不到，那个域从此对它不存在。而这条限制里最容易撞的是 `maxDepth`，
+   * 它与字节数几乎无关：一条 schema 深一点就能把整个域的发现打死，而该域的投影可能只有 11KB。
+   *
+   * 实测 `image_edit` 就是这样：`create_image_edit_preview` 的入参是判别联合套判别联合
+   * （operations[].kind='mark' → item 又是一个 7 分支联合），叠上投影本身的 7 层包装后达到 17 层，
+   * 超过上限 16，于是 `discover_application_capabilities` 在该域每次都 INVALID_INPUT。
+   */
+  it.each(scenarios)('$name 的发现结果过得了 Gateway 输出安全限制', ({ input, name }) => {
+    const output = catalog.discover(
+      `limits-${name}`,
+      applicationCapabilityDiscoveryInputSchema.parse(input),
+      context
+    )
+    // 档位按工具真实声明取，不写死——Gateway 用 resolveOutputLimits，这里也必须用，否则又是两把尺子。
+    const definition = registry.get(DISCOVERY_TOOL)
+    expect(definition, '发现工具没注册，下面的断言会假绿').toBeDefined()
+    const limits = resolveOutputLimits(definition?.outputLimitProfile)
+
+    expect(
+      () => assertJsonWithinLimits(output, limits),
+      `${name} 的发现结果撞上了 Gateway 输出限制：模型会拿到 INVALID_INPUT 而不是能力目录，`
+      + '这个域对它等于不存在。',
+    ).not.toThrow()
+  })
+
+  it('发现工具声明的输出档位允许携带 JSON Schema', () => {
+    /*
+     * 上一条只判"当前没撞线"。档位一旦被改回 default，撞线会立刻回来，而那条断言的报错
+     * 只会说"深度超限"，不会说"档位被改了"。这条把根因单独钉住。
+     */
+    for (const toolName of [DISCOVERY_TOOL, 'read_application_schemas']) {
+      const definition = registry.get(toolName)
+      expect(definition, `${toolName} 未注册`).toBeDefined()
+      expect(
+        definition?.outputLimitProfile,
+        `${toolName} 的输出是逐字投影的 JSON Schema，深度天然超出业务 DTO；`
+        + '用默认档位会让整个域的发现抛 INVALID_INPUT。',
+      ).toBe('schema')
+    }
+  })
 
   it('门禁用的阈值与生产一致，而不是更严的通用阈值', () => {
     const toolThreshold = resolveToolOffloadByteThreshold(DISCOVERY_TOOL, CONTEXT_WINDOW)

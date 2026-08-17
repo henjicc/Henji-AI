@@ -16,11 +16,10 @@ import { AgentToolRegistry } from './registry'
 import {
   TOOL_INPUT_LIMITS,
   INTERNAL_CHECKPOINT_INPUT_LIMITS,
-  TOOL_OUTPUT_LIMITS,
-  CHECKPOINT_OUTPUT_LIMITS,
   TOOL_PREVIEW_LIMITS,
   assertJsonWithinLimits,
   digestJson,
+  resolveOutputLimits,
   summarizeSafeText,
 } from './security'
 import type { AgentToolExecuteRequest } from './types'
@@ -338,12 +337,7 @@ export class AgentToolGateway {
           { ...executionContext, signal: linked.controller.signal, hostContext: latestContext }
         )
         throwIfAborted(linked.controller.signal)
-        assertJsonWithinLimits(
-          output,
-          definition.outputLimitProfile === 'checkpoint'
-            ? CHECKPOINT_OUTPUT_LIMITS
-            : TOOL_OUTPUT_LIMITS,
-        )
+        assertJsonWithinLimits(output, resolveOutputLimits(definition.outputLimitProfile))
         const parsedOutput = definition.outputSchema.parse(output)
         if (
           definition.maxCallsPerRun !== undefined

@@ -129,7 +129,21 @@ export function toGatewayError(error: unknown, input?: unknown): AgentToolGatewa
   }
   const message = error instanceof Error ? error.message : String(error)
   if (message.startsWith('JSON_')) {
-    return new AgentToolGatewayError('INVALID_INPUT', '工具参数或预览超过安全限制')
+    /*
+     * 超限拒绝必须说清撞的是哪条线。
+     *
+     * 这里原先把四条限制（字节 / 深度 / 键数 / 字符串长度）压成同一句"超过安全限制"，模型
+     * 收到后无从判断该缩短哪个字段、砍到多少才够，只能拿同一份载荷整段重试——而重试必然
+     * 再次超限。`assertJsonWithinLimits` 现在把限制名、实际值、上限和字段路径编进消息，
+     * 这里原样透出。
+     */
+    const [code, detail, where] = message.split('|')
+    return new AgentToolGatewayError(
+      'INVALID_INPUT',
+      detail
+        ? `工具参数或预览超过安全限制（${code}）：${detail}；${where ?? ''}。请缩短该字段后重试。`
+        : '工具参数或预览超过安全限制',
+    )
   }
   if (message === 'TIMEOUT') return new AgentToolGatewayError('TIMEOUT', '工具执行超时', true, 'wait')
   if (message === 'CANCELLED') return new AgentToolGatewayError('CANCELLED', '工具调用已取消')
