@@ -271,6 +271,7 @@ async function run(options: AssistantCliOptions, owner: WebContents): Promise<nu
         continuationStatus: continuation?.status ?? null,
         acceptancePassed: acceptance.passed,
         effectCount: acceptance.effectCount,
+        mutationCount: acceptance.mutationCount,
       },
     })
     return acceptance.passed

@@ -6,6 +6,7 @@ import type {
   AgentRunState,
   AgentRunStatus,
 } from '../../../../../src/core/assistant/events'
+import { isMutatingEffect } from '../../../../../src/core/assistant/observedEffect'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
@@ -756,11 +757,25 @@ export class AgentRunner {
       summary: this.state.workingSummary,
       effectCount: effects.length,
     })) return
-    const verifiedCount = effects.filter((effect) => effect.verified).length
+    /*
+     * 摘要必须分开数：写入是写入，读取是读取。
+     *
+     * 这里原先把 `effects` 整体称作"应用写入"，而它包含 observe。实测一次纯只读的工具箱
+     * 查询（8 段脚本全是 entities.read / entities.list）被报成"已完成 14 项应用写入，
+     * 其中 14 项有正式状态源读回证据"——用户问的是只读列表，拿到的却是一句凭空的写入声明。
+     * 规则要求最终说明与 Effect Receipt 对账，那既包括不否认发生过的副作用，也包括不虚报
+     * 没发生的。
+     */
+    const mutations = effects.filter((effect) => isMutatingEffect(effect))
+    const verifiedCount = mutations.filter((effect) => effect.verified).length
+    const observations = effects.length - mutations.length
     const caveat = sealingCaveat(this.state.workingSummary)
     this.lifecycle.sealExecution({
       effects,
-      summary: `已完成 ${effects.length} 项应用写入，其中 ${verifiedCount} 项有正式状态源读回证据。`
+      summary: (mutations.length > 0
+        ? `已完成 ${mutations.length} 项应用写入，其中 ${verifiedCount} 项有正式状态源读回证据。`
+        : '本次没有产生应用写入。')
+        + (observations > 0 ? `另有 ${observations} 项读取或导航观察。` : '')
         + (caveat ? `${caveat}` : ''),
       evidence: [...new Set(effects.flatMap((effect) => effect.evidence))].slice(0, 24),
     })

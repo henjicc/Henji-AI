@@ -24,6 +24,26 @@ export const agentEffectKindSchema = z.enum([
 ])
 export type AgentEffectKind = z.infer<typeof agentEffectKindSchema>
 
+/**
+ * 改变了世界的 Effect。`observe` 与 `navigate` 不在其中。
+ *
+ * 判据是"用户撤销这次运行时有没有东西要还原"：读一遍数据没有，切一次页面也没有——
+ * 界面位置由用户自己随时可改，不是助手留下的痕迹。
+ */
+const MUTATING_EFFECT_KINDS = new Set<AgentEffectKind>(['create', 'update', 'delete', 'execute'])
+
+/**
+ * 这条 Effect 是不是真的改了东西。
+ *
+ * **唯一判别入口**，封存摘要与 CLI 验收必须共用它。分头写 `effect !== 'observe'` 之类的判断
+ * 就会漂移，而漂移的方向恰恰是把只读当成写入——实测一次纯只读的工具箱查询（8 段脚本全是
+ * `entities.read` / `entities.list`）被封存摘要报成"已完成 14 项应用写入"，
+ * 同时让 `--require-verified-write` 这条验收门被一次没有任何写入的运行满足。
+ */
+export function isMutatingEffect(effect: { effect: AgentEffectKind }): boolean {
+  return MUTATING_EFFECT_KINDS.has(effect.effect)
+}
+
 /** 能力的动作类别。只用于能力发现的排序与可达性门禁，不参与任何执行判定。 */
 export const agentCapabilityKindSchema = z.enum([
   'observe',

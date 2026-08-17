@@ -87,6 +87,39 @@ describe('助手剧本 harness 自测', () => {
     expect(call?.ok, `${call?.errorCode}: ${call?.errorMessage}`).toBe(true)
   })
 
+  it('纯只读的运行不会被封存摘要报成"应用写入"', async () => {
+    /*
+     * 实测一次只读的工具箱查询（8 段脚本全是 entities.read / entities.list）被封存摘要报成
+     * "已完成 14 项应用写入，其中 14 项有正式状态源读回证据"——用户问的是只读列表，拿到的
+     * 却是一句凭空的写入声明。同一批数据还让 `--require-verified-write` 这条验收门被一次
+     * 没有任何写入的运行满足。根因是 executionOutcome.effects 把 observe 也算进去了。
+     */
+    const result = await runAssistantHarness({
+      goal: '只读取当前应用上下文，不要改动任何东西。',
+      intent: 'general',
+      steps: [
+        {
+          actions: [{
+            type: 'tool_call',
+            toolCall: {
+              toolCallId: 'call-readonly',
+              toolName: 'get_current_application_context',
+              input: {},
+              dynamic: false,
+            },
+          }],
+        },
+        { actions: [{ type: 'text', value: '已读取，未做任何修改。' }] },
+      ],
+    })
+
+    const summary = result.state.executionOutcome.verificationSummary.summary
+    expect(
+      summary,
+      `封存摘要不得把只读说成写入，实际："${summary}"`,
+    ).not.toMatch(/已完成 [1-9]\d* 项应用写入/)
+  })
+
   it('调用未发现的工具会被真实 Gateway 拒绝，而不是被 harness 放行', async () => {
     /*
      * 这条守的是 harness 没有绕过准入。剧本可以写任何工具名，真运行时必须照样按租约和
