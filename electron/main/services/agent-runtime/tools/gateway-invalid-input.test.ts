@@ -50,6 +50,45 @@ describe('INVALID_INPUT 必须能让模型自我修正', () => {
     expect(message).toContain('另有')
   })
 
+  /*
+   * zod 自己也有说不清的时候：`.refine()` 产出的 custom issue 默认消息就是干巴巴一句
+   * "Invalid input"。实测生成场景第一次能力发现收到的原话是
+   * 「queries：Invalid input；queries：Invalid input」，模型在推理里明说看不出哪里错，
+   * 只能换写法蒙，白烧一个回合。讲不出原因时，至少要把模型实际传了什么摆出来。
+   */
+  it('zod 讲不出原因时报出实际收到的值', () => {
+    const refined = z.object({
+      queries: z.array(z.string()).refine(() => false),
+    }).strict()
+    const parsed = refined.safeParse({ queries: ['生成一张图片'] })
+    const message = toGatewayError(
+      parsed.success ? new Error('unreachable') : parsed.error,
+      { queries: ['生成一张图片'] },
+    ).message
+
+    expect(message).toContain('实际收到')
+    expect(message).toContain('生成一张图片')
+  })
+
+  it('字段压根没传时说清是"没传"而不是值有问题', () => {
+    const refined = z.object({ queries: z.array(z.string()).optional() }).strict()
+      .superRefine((value, context) => {
+        if (!value.queries) {
+          context.addIssue({ code: 'custom', path: ['queries'], message: 'Invalid input' })
+        }
+      })
+    const parsed = refined.safeParse({})
+    const message = toGatewayError(
+      parsed.success ? new Error('unreachable') : parsed.error, {},
+    ).message
+    expect(message).toContain('实际没有传这个字段')
+  })
+
+  it('zod 已经说清楚的消息不再画蛇添足', () => {
+    const message = invalidInputMessage({ cursor: 'v1:0:abc' })
+    expect(message).not.toContain('实际收到')
+  })
+
   it('非 zod 错误不受影响', () => {
     expect(toGatewayError(new Error('TIMEOUT')).code).toBe('TIMEOUT')
   })

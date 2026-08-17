@@ -396,7 +396,7 @@ export class AgentToolGateway {
         if (!executionCommitted) {
           if (!definition.readOnly && linked.controller.signal.aborted) this.ledger.markUnknown(ledgerKey)
           else this.ledger.fail(ledgerKey)
-          const executionError = toGatewayError(error)
+          const executionError = toGatewayError(error, request.input)
           await this.approvalCoordinator.record({
             template: auditTemplate,
             approvalId: request.approvalId,
@@ -414,7 +414,7 @@ export class AgentToolGateway {
         this.locks.delete(concurrencyKey)
       }
     } catch (error) {
-      const gatewayError = this.withCapabilityHint(toGatewayError(error))
+      const gatewayError = this.withCapabilityHint(toGatewayError(error, request.input))
       /*
        * 失败必须能重建：错误码之外还要有**发回模型的那句话**和**模型传了什么**。
        *

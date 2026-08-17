@@ -494,6 +494,29 @@ describe('HenjiScriptService', () => {
   })
 
 
+  /*
+   * 整个运行一个租约都没有，是外部等待续跑之后最容易撞上的状态。只说"尚未取得租约"等于把
+   * 死路指给模型——租约怎么来的、还能不能补，它都不知道。实测生成场景模型只能放弃并在最终
+   * 答复里解释为什么放弃。其余五处租约拒绝都带补救办法，这条最外层的不能例外。
+   */
+  it('整个运行没有租约时，拒绝要指明重新发现能力', async () => {
+    const current = fixture(7)
+    const service = new HenjiScriptService({
+      registry: current.registry, getLease: () => null,
+    })
+    const output = await service.execute({
+      language: HENJI_SCRIPT_LANGUAGE, summary: '续跑后再写一段',
+      source: "await app.entities.list('test.entity', {});",
+    }, {
+      runId: 'run-continuation', threadId: 'thread-script', toolCallId: 'parent-script',
+      signal: new AbortController().signal, gateway: current.gateway as never,
+      getHostContext: () => current.host as never,
+    } as never)
+
+    expect(output.error).toMatchObject({ code: 'SCRIPT_API_NOT_DISCOVERED' })
+    expect(output.error?.message).toContain('discover_application_capabilities')
+  })
+
   it('未发现 API 与截断引用都在执行器调用次数为 0 时拒绝', async () => {
     const unknown = await run("await app.action('not_registered', {});")
     expect(unknown.output).toMatchObject({

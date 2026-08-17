@@ -30,13 +30,56 @@ export class AgentToolGatewayError extends Error {
  * 最常见的两种错法都能被这条消息直接点破：`.strict()` 下多传一个键（unrecognized_keys 会
  * 列出键名），以及必填项缺失或类型不符（path 指到具体字段）。这属于把事实给全，不是加提示词。
  */
-function describeZodIssues(error: z.ZodError): string {
+/** 沿 issue.path 取出模型实际传进来的那个值，取不到返回 undefined。 */
+function valueAtPath(input: unknown, path: PropertyKey[]): unknown {
+  let current = input
+  for (const key of path) {
+    if (current === null || typeof current !== 'object') return undefined
+    current = (current as Record<PropertyKey, unknown>)[key]
+  }
+  return current
+}
+
+/** 把实际收到的值压成一句能读的话：类型 + 截断后的内容。 */
+function describeReceived(value: unknown): string {
+  if (value === undefined) return '实际没有传这个字段'
+  const type = value === null ? 'null' : Array.isArray(value) ? `数组（${value.length} 项）` : typeof value
+  let rendered: string
+  try {
+    rendered = JSON.stringify(value) ?? String(value)
+  } catch {
+    return `实际收到 ${type}`
+  }
+  const clipped = rendered.length > 200 ? `${rendered.slice(0, 200)}…` : rendered
+  return `实际收到 ${type}：${clipped}`
+}
+
+/**
+ * 把 zod 的校验问题如实说给模型，而不是回一句"未通过 schema 校验"。
+ *
+ * 旧文案不带任何定位信息。模型收到它只能盲猜哪里错了——实测一次 canvas 运行里
+ * read_agent_artifact 连续 11 次 INVALID_INPUT（每次 durationMs 都是 0，说明卡在入参校验、
+ * 根本没进执行），模型改一个字段试一次，直到 CONSECUTIVE_FAILURES 把整次运行判死。
+ *
+ * 最常见的两种错法都能被这条消息直接点破：`.strict()` 下多传一个键（unrecognized_keys 会
+ * 列出键名），以及必填项缺失或类型不符（path 指到具体字段）。这属于把事实给全，不是加提示词。
+ *
+ * 但 zod 自己也有说不清的时候：`.refine()` 产出的 `custom` issue 默认消息就是干巴巴一句
+ * "Invalid input"。实测生成场景第一次能力发现收到的原话是
+ * 「queries：Invalid input；queries：Invalid input」——模型在推理里明说"这可能意味着整个
+ * queries 数组无效，或者其中的元素无效？也许 queries 不能包含特殊字符？"，只能靠换写法蒙，
+ * 白烧一个回合。zod 讲不出原因时，至少要把**模型实际传了什么**摆出来，让它自己对照 schema。
+ */
+function describeZodIssues(error: z.ZodError, input: unknown): string {
   const issues = error.issues.slice(0, 5).map((issue) => {
     const path = issue.path.length > 0 ? issue.path.join('.') : '(根对象)'
     if (issue.code === 'unrecognized_keys') {
       return `${path} 不接受这些字段：${issue.keys.join('、')}`
     }
-    return `${path}：${issue.message}`
+    // zod 只会说 "Invalid input" 的那些 issue，补上实际值才有可能自纠。
+    const uninformative = !/[:：]/.test(issue.message)
+    if (!uninformative) return `${path}：${issue.message}`
+    return `${path}：${issue.message}（${describeReceived(valueAtPath(input, [...issue.path]))}）`
   })
   const omitted = error.issues.length - issues.length
   return `工具参数未通过 schema 校验——${issues.join('；')}`
@@ -70,7 +113,7 @@ export function redactToolInputForLog(input: unknown, depth = 0): unknown {
   return undefined
 }
 
-export function toGatewayError(error: unknown): AgentToolGatewayError {
+export function toGatewayError(error: unknown, input?: unknown): AgentToolGatewayError {
   if (error instanceof AgentToolGatewayError) return error
   if (error instanceof AgentApprovalError) {
     return new AgentToolGatewayError(error.code, error.message, false, 'request_approval')
@@ -82,7 +125,7 @@ export function toGatewayError(error: unknown): AgentToolGatewayError {
     return new AgentToolGatewayError(error.code, error.message, true, 'wait')
   }
   if (error instanceof z.ZodError) {
-    return new AgentToolGatewayError('INVALID_INPUT', describeZodIssues(error))
+    return new AgentToolGatewayError('INVALID_INPUT', describeZodIssues(error, input))
   }
   const message = error instanceof Error ? error.message : String(error)
   if (message.startsWith('JSON_')) {

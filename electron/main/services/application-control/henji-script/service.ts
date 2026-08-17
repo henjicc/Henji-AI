@@ -578,7 +578,14 @@ export class HenjiScriptService {
       }
       const lease = this.options.getLease(context.runId)
       if (!lease) {
-        throw new HenjiScriptError('SCRIPT_API_NOT_DISCOVERED', 'preflight', '本次运行尚未通过能力发现取得 scriptApi 租约')
+        /*
+         * 只说"没有租约"等于把死路指给模型：它既不知道租约是怎么来的，也不知道还能不能补。
+         * 剩下五处租约拒绝都带着 leaseHint 说明补救办法，唯独这条最外层的没有——实测生成
+         * 场景的续跑运行撞上它，模型只能放弃并在最终答复里解释为什么放弃。
+         */
+        throw new HenjiScriptError('SCRIPT_API_NOT_DISCOVERED', 'preflight',
+          '本次运行尚未通过能力发现取得 scriptApi 租约。先调用 discover_application_capabilities，'
+          + '在 domains / entityTypes 里点名这段脚本要碰的领域与实体，拿到 scriptApi 后再运行本段脚本。')
       }
       const prepared = this.prepare(raw, lease)
       const result = await this.runPrepared(prepared.instructions, state, scriptRunRef, prepared.planDigest, executionContext, lease)

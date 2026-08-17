@@ -9,6 +9,7 @@ import type {
 } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
 import { getAssistantHostContext } from '../assistant/frontend-tool-bridge'
+import { inheritHenjiScriptApiLease } from './context/script-api-lease'
 import type { AgentRuntimeManager } from '../agent-runtime-manager/manager'
 import type { AgentMemoryStore } from '../assistant/memory-store'
 import type { AgentPersistenceStore } from './persistence/store'
@@ -61,6 +62,7 @@ export async function startRuntimeRun(
       )
     : undefined
   const runId = randomUUID()
+  if (options.parentRunId) inheritHenjiScriptApiLease(options.parentRunId, runId)
   const initialState = createInitialAgentRunState(runId, options.request, preparedRecoveryContext)
   options.runs.set(runId, {
     ownerWebContentsId: options.owner.id,

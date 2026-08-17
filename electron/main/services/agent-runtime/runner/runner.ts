@@ -31,7 +31,7 @@ import { AgentStateMachine, isTerminalAgentState } from './state-machine'
 import type { AgentRunnerOptions } from './types'
 import { AgentRecoveryWriteGuard } from './recovery-guard'
 import { markWorkingSummaryRecoveryVerified } from './working-summary'
-import { executionSealingBlocker } from './execution-sealing'
+import { executionSealingBlocker, sealingCaveat } from './execution-sealing'
 import { AgentMemoryContextProvider } from './memory-context'
 import { AgentRunnerLifecycle } from './lifecycle'
 import { AgentTerminalApprovalCleanup } from './terminal-approval-cleanup'
@@ -746,8 +746,8 @@ export class AgentRunner {
    * 工具。两种失败方向都不看真实世界。
    *
    * 现在只封存**事实**：有真实写入 Effect，且这次运行客观上已经停下来（没有执行中的步骤、
-   * 没有待批审批、恢复检查已完成、没有记下的未收敛事项）。摘要与证据取自工作摘要里已经发生
-   * 过的观察，而不是任何计划文本。
+   * 没有待批审批、恢复检查已完成）。摘要与证据取自工作摘要里已经发生过的观察，而不是任何
+   * 计划文本；中途没做成的事写进摘要的保留意见，不再拿来否决整条记录。
    */
   private sealExecutionIfEligible(): void {
     if (this.state.executionOutcome.status === 'sealed_success') return
@@ -757,9 +757,11 @@ export class AgentRunner {
       effectCount: effects.length,
     })) return
     const verifiedCount = effects.filter((effect) => effect.verified).length
+    const caveat = sealingCaveat(this.state.workingSummary)
     this.lifecycle.sealExecution({
       effects,
-      summary: `已完成 ${effects.length} 项应用写入，其中 ${verifiedCount} 项有正式状态源读回证据。`,
+      summary: `已完成 ${effects.length} 项应用写入，其中 ${verifiedCount} 项有正式状态源读回证据。`
+        + (caveat ? `${caveat}` : ''),
       evidence: [...new Set(effects.flatMap((effect) => effect.evidence))].slice(0, 24),
     })
   }
