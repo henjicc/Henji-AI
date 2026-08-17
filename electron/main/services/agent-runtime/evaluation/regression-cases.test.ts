@@ -47,7 +47,7 @@ describe('assistant regression datasets', () => {
 
   it('覆盖工具箱、3D、分镜、图片编辑、素材、工作流、指令、记忆与一般问答', () => {
     expect(new Set(DOMAIN_COVERAGE_EVALUATION_CASES.map((item) => item.expectedIntent))).toEqual(new Set([
-      'toolbox', 'camera_stage', 'storyboard', 'assets', 'workflow',
+      'toolbox', 'camera_stage', 'storyboard', 'assets',
       'user_instructions', 'memory', 'image_edit', 'general',
     ]))
     expect(DOMAIN_COVERAGE_EVALUATION_CASES.every((item) => (
@@ -116,15 +116,13 @@ describe('assistant regression datasets', () => {
  */
 describe('评测用例引用的工具与域必须真实存在', () => {
   /**
-   * 已知未实现的工具名。与 `capability-domain-coverage.test.ts` 的 `KNOWN_EMPTY_DOMAINS`
-   * 是**同一笔欠账的两处表现**：`workflows` 整个域都没有能力，`list_workflows` 是它在评测用例
-   * 里留下的影子。
+   * 已知未实现的工具名。**空清单是正常状态，不是待填的模板。**
    *
-   * 只许变短。补齐 workflows 能力或删掉该域时，这里和那边要一起销账——下面的销账断言会盯着。
+   * 这里曾经挂着 `list_workflows`：`workflows` 域注册了分类、路由意图、实体映射和这条评测
+   * 用例，却从来没有过一条能力，而应用里根本不存在工作流功能。整套登记随该域一起删除，
+   * 这条也就销了账——留一个永远选不出东西的分类，代价是模型每次都要花一轮才发现此路不通。
    */
-  const KNOWN_MISSING_TOOLS: Record<string, string> = {
-    list_workflows: 'workflows 域尚未注册任何能力，见 context/capability-domain-coverage.test.ts 的 KNOWN_EMPTY_DOMAINS',
-  }
+  const KNOWN_MISSING_TOOLS: Record<string, string> = {}
 
   const registry = createBuiltinAgentToolRegistry(async () => {
     throw new Error('测试不执行前端工具')

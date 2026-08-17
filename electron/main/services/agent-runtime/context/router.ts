@@ -86,7 +86,6 @@ export const AGENT_ROUTE_POLICY: Record<AgentIntent, Pick<AgentRouteDecision, 't
   // 只锚定 image_edit 时，模型改标注要先猜到 image_mark 这个域名才发现得到，而它猜不到。
   image_edit: { toolDomains: ['toolbox', 'image_edit', 'image_mark', 'assets'] },
   assets: { toolDomains: ['assets'] },
-  workflow: { toolDomains: ['workflows'] },
   user_instructions: { toolDomains: ['user_instructions'] },
   memory: { toolDomains: ['memory'] },
   settings: { toolDomains: ['settings', 'navigation'] },
@@ -174,7 +173,6 @@ const deterministicRules: DeterministicRule[] = [
   { intent: 'camera_stage', matches: regexMatcher(
     /(?:三维|3d)\s*(?:工程|场景|编辑器|项目)|镜头参考|运镜|关键帧|(?:摄像机|相机|camera).{0,12}(?:位置|视角|轨迹|fov)/i
   ) },
-  { intent: 'workflow', matches: regexMatcher(/(?:工作流|workflow)/i) },
   { intent: 'memory', matches: regexMatcher(/(?:助手记忆|长期记忆|记住这|忘记这|agent memory)/i) },
   { intent: 'toolbox', matches: regexMatcher(/(?:工具箱|toolbox).{0,16}(?:有什么|状态|工具)/i) },
   { intent: 'storyboard', matches: regexMatcher(/(?:分镜项目|storyboard)/i) },

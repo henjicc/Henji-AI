@@ -13,6 +13,8 @@ import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useUiStore } from '@/stores/uiStore'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
+import { getGenerationModelsRevision } from '@/features/generation/application/generationModelFields'
+import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import {
   isVisibleGenerationTaskHandlerReady,
   subscribeVisibleGenerationTaskChanges,
@@ -26,6 +28,19 @@ const rendererSessionId = typeof crypto !== 'undefined' && 'randomUUID' in crypt
   ? crypto.randomUUID()
   : `renderer-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 
+/**
+ * 宿主发布的乐观并发基线。
+ *
+ * **每个 provider 自报的 revision scope 都必须出现在这里。** 通用写入的计划器要求调用方为
+ * 目标实体的每一个 revision scope 提供期望值（`assertRevisions` 按 `Object.keys(revisions)`
+ * 逐个要），而调用方能拿到的只有这份快照——scope 没发布，模型就永远给不出期望值，
+ * 那条属性于是"声明可写、实际写不了"，报 `EXPECTED_REVISION_REQUIRED:<scope>` 且没有任何
+ * 恢复路径（重试分支只处理 REVISION_CONFLICT）。
+ *
+ * `generation_draft` 与 `models` 就是这样漏了很久：两个 provider 各自有真实 revision
+ * （草稿 store 的 `revision`、模型可见性事件计数），却从没发布出来，于是助手改提示词草稿、
+ * 隐藏模型这两条路一直是死的。门禁在 `hostScopeCoverage.test.ts`。
+ */
 const scopeRevisions: HostScopeRevisions = {
   navigation: 0,
   generation: 0,
@@ -34,6 +49,8 @@ const scopeRevisions: HostScopeRevisions = {
   assets: 0,
   settings: 0,
   surface: 0,
+  generation_draft: 0,
+  models: 0,
 }
 
 const listeners = new Set<() => void>()
@@ -50,6 +67,19 @@ function syncAssetDomainRevision(): void {
   revision += delta
   scopeRevisions.assets += delta
   for (const listener of listeners) listener()
+}
+
+/**
+ * 从**权威计数直接拉取**，而不是订阅后自增镜像。
+ *
+ * 这两个 scope 的真相在各自的领域里（草稿 store 的 `revision`、模型可见性事件的计数），
+ * 执行器返回的 `resultingRevisions` 用的也是同一个数。镜像一份出来就有两个真相源，
+ * 而漂移的方向恰恰是基线失真——模型拿着对不上的期望值写入，只会得到无从修复的 CONFLICT。
+ * 拉取没有这个问题：读到的永远就是执行器会拿来比对的那个数。
+ */
+function syncPulledRevisions(): void {
+  scopeRevisions.generation_draft = useGenerationDraftStore.getState().revision
+  scopeRevisions.models = getGenerationModelsRevision()
 }
 
 /**
@@ -160,6 +190,7 @@ export function subscribeHostContext(listener: () => void): () => void {
 export function getHostScopeRevisions(): HostScopeRevisions {
   // 即使素材写入发生在助手桥尚未挂载时，也在下一次读取基线时补齐，不能静默丢 revision。
   syncAssetDomainRevision()
+  syncPulledRevisions()
   return { ...scopeRevisions }
 }
 

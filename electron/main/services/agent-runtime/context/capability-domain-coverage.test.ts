@@ -34,15 +34,17 @@ import { AGENT_TOOL_DOMAINS } from './types'
  */
 const KNOWN_EMPTY_DOMAINS: Record<string, string> = {
   /*
-   * `workflows` 从未注册过任何能力，但分类、路由意图（`AGENT_ROUTE_POLICY.workflow`）、实体映射
-   * （thread-continuation.ts 的 `workflow.definition` / `workflow.run`）和域覆盖评测用例
-   * （regression-coverage-cases.ts 的 `list_workflows`，那个工具名同样不存在）全都在。
-   * 模型被路由到这里只会拿到空目录，然后如实回答"应用没有这个能力"。
+   * **空清单是正常状态，不是待填的模板。**
    *
-   * 出路二选一，不许继续挂着：注册真正的跨工作区工作流能力，或者把分类、路由意图、实体映射、
-   * 评测用例一起删掉。
+   * 这里曾经挂着 `workflows`：分类、路由意图、实体映射（`workflow.definition` /
+   * `workflow.run`）与域覆盖评测用例（`list_workflows`，那个工具名同样不存在）一应俱全，
+   * 唯独从来没有过一条能力——而应用里根本不存在工作流功能，`src/features/` 下没有这个目录。
+   * 那是一次为不存在的功能做的投机注册，代价是模型被路由过去、拿到空目录，
+   * 然后如实回答"应用没有这个能力"。
+   *
+   * 按这条门禁自己给的出路二选一，选了删：分类、路由意图、确定性规则、实体映射、权限映射、
+   * Surface 映射与评测用例一并移除。往这里加新条目之前，先确认那个域的功能真的存在。
    */
-  workflows: '跨工作区工作流能力尚未实现；分类、路由意图与评测用例已先行登记，需补齐能力或整体移除',
 }
 
 /**

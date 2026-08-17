@@ -66,13 +66,6 @@ export const DOMAIN_COVERAGE_EVALUATION_CASES: MinimalEvaluationCase[] = [
     toolName: 'query_assets',
   }),
   readDomainCoverageCase({
-    id: 'coverage-workflow-catalog',
-    goal: '列出可以安全执行的确定性跨工作区工作流。',
-    intent: 'workflow',
-    domain: 'workflows',
-    toolName: 'list_workflows',
-  }),
-  readDomainCoverageCase({
     id: 'coverage-user-instructions-read',
     goal: '读取我当前的助手自然语言指令，不要修改。',
     intent: 'user_instructions',

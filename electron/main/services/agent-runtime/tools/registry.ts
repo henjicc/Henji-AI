@@ -29,7 +29,6 @@ const categorySearchConcepts: Readonly<Record<string, string[]>> = {
   storyboard: ['workspace:canvas', 'action:generate'],
   image_edit: ['workspace:toolbox', 'media:image', 'action:edit'],
   assets: ['workspace:assets', 'media:image', 'media:video', 'media:audio'],
-  workflows: ['action:generate', 'workspace:canvas', 'workspace:toolbox'],
   artifacts: ['runtime:artifact'],
 }
 

@@ -19,7 +19,6 @@ export const AGENT_INTENTS = [
   'storyboard',
   'image_edit',
   'assets',
-  'workflow',
   'user_instructions',
   'memory',
   'settings',
@@ -53,7 +52,6 @@ export const AGENT_TOOL_DOMAINS = [
    */
   'image_mark',
   'assets',
-  'workflows',
   'user_instructions',
   'memory',
   'artifacts',
@@ -61,8 +59,6 @@ export const AGENT_TOOL_DOMAINS = [
   'settings',
 ] as const
 export type AgentToolDomain = typeof AGENT_TOOL_DOMAINS[number]
-
-export type AgentRoutePath = 'workflow' | 'primary'
 
 export const AGENT_CONTEXT_LAYER_IDS = [
   'model_catalog',

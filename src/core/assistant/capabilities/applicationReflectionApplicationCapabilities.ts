@@ -193,6 +193,20 @@ const changeEntitiesInputSchema = z.object({
 
 const GENERIC_MUTATION_SCOPES = ['assets', 'canvas', 'settings', 'toolbox'] as const satisfies readonly HostScope[]
 
+/**
+ * entityType → 宿主并发作用域。**漏一条的代价是那个实体彻底写不了。**
+ *
+ * 漏掉时不会报"没映射"，而是退化成兜底四域，于是计划器要的那个 scope 谁都没给，最终报
+ * `EXPECTED_REVISION_REQUIRED:<scope>`——而适配器的重试分支只处理 `REVISION_CONFLICT`，
+ * 没有任何恢复路径。属性声明得好好的，模型就是写不进去。
+ *
+ * 这张表已经漂移过两轮：第一轮是 `application.setting`（一个从未注册过的旧名字，让改设置
+ * 认不出 settings 域）；第二轮是 `generation.draft` / `generation.model` / `image_mark.*`
+ * 三个域从来没进过表，于是"改提示词草稿""隐藏模型""改标注文档"这三条路对助手一直是死的。
+ *
+ * 所以现在有门禁盯着它：`hostScopeCoverage.test.ts` 遍历反射注册表里每个可写实体，
+ * 要求都能映射到一个**宿主真的发布得出来**的 scope。新增写域漏改这张表会当场变红。
+ */
 function mutationScope(identifier: string): HostScope | null {
   if (identifier === 'asset' || identifier.startsWith('asset.')) return 'assets'
   if (identifier.startsWith('canvas.')) return 'canvas'
@@ -200,6 +214,11 @@ function mutationScope(identifier: string): HostScope | null {
   // 的旧名字，留着只会让通用写入认不出设置域、拿不到 settings scope。
   if (identifier === 'settings.registry' || identifier.startsWith('settings.')) return 'settings'
   if (identifier.startsWith('camera_stage.') || identifier.startsWith('toolbox.')) return 'toolbox'
+  // 生成域的草稿与模型目录各有独立的并发基线，不能并到 generation——那条 scope 由生成任务
+  // 变化推进，一个任务完成就会让草稿写入的基线过期，正是"界面动作推进领域基线"那类坑。
+  if (identifier === 'generation.draft') return 'generation_draft'
+  if (identifier === 'generation.model') return 'models'
+  if (identifier.startsWith('image_mark.')) return 'image_mark'
   return null
 }
 
