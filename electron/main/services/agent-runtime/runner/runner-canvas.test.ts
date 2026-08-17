@@ -89,6 +89,15 @@ function stepResult(input: ModelStepInput, call: number): ModelStepResult {
   }
 }
 
+/**
+ * 这条用**手写假工具**隔离验证 Runner + Gateway + 脚本解释器：领域执行器、渲染层与真相源都不在场，
+ * 所以它失败时一定是运行时自己的问题，定位很快（77ms）。
+ *
+ * 结果级的同一命题由 `src/tests/assistantHarness.canvas.test.ts` 走真链路覆盖。两条不是重复：
+ * 撤掉脚本解释器的 `absorbScopeRevisions` 时两条一起红（同一命题），而撤掉画布服务里绝对坐标的
+ * 落地时只有那条红——真相源断言看得见的东西，假工具版本结构上看不见。删任何一条之前先想清楚
+ * 自己丢的是"定位速度"还是"结果真实性"。
+ */
 describe('AgentRunner canvas batch', () => {
   it('同一模型步骤的连续写工具继承前一结果 revision', async () => {
     let context: HostContextSnapshot = {

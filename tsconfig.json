@@ -2,8 +2,15 @@
   "compilerOptions": {
     "target": "ES2020",
     "useDefineForClassFields": true,
+    /*
+     * lib 用 ES2022 而 target 保持 ES2020：lib 只决定类型可见性，不影响降级产物。
+     *
+     * 停在 ES2021 时 `new Error(msg, { cause })` 在渲染层是类型错误，而 Electron 42 的
+     * Chromium 与 Node 都早已支持它。这条也挡住了测试从渲染层侧引用主进程运行时模块
+     * （tsconfig.electron.json 用的就是 ES2022），跨树的助手测试 harness 需要这条放宽。
+     */
     "lib": [
-      "ES2021",
+      "ES2022",
       "DOM",
       "DOM.Iterable"
     ],
