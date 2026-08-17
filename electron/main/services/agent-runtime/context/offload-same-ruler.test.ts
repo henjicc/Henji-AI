@@ -145,27 +145,46 @@ describe('分页结果不再被卸载', () => {
 describe('按工具的内联下限', () => {
   const window = 64_000
 
-  it('发现结果在通用门槛之上、下限之内时仍然内联', () => {
+  /*
+   * camera 实测的三条载荷都必须内联：13 项能力约 55KB、20 项能力 66.4KB 与 71.8KB。
+   * 下限曾是 64KiB，正好卡在中间——同一份代码连测三次走出两条路径，4 回合 / 6 回合 / 10 回合，
+   * token 差三倍。判据要盯住实测过的最大那份，不能只覆盖典型值。
+   */
+  it('camera 实测过的三种发现结果体量都不分页', () => {
     const generic = resolveToolOffloadByteThreshold('read_application_entity', window)
     const discovery = resolveToolOffloadByteThreshold('discover_application_capabilities', window)
     expect(discovery).toBeGreaterThan(generic)
 
-    // 55KB：剥掉可证明重复的字段之后，camera 那份发现结果的实际体量
-    const payload = { data: 'x'.repeat(55 * 1024) }
-    expect(shouldOffloadObservation(payload, generic)).toBe(true)
-    expect(shouldOffloadObservation(payload, discovery)).toBe(false)
+    for (const bytes of [55 * 1024, 66_406, 71_822]) {
+      const payload = { data: 'x'.repeat(bytes) }
+      expect(shouldOffloadObservation(payload, generic), `${bytes} 应超过通用门槛`).toBe(true)
+      expect(shouldOffloadObservation(payload, discovery), `${bytes} 不该被推去分页`).toBe(false)
+    }
   })
 
   /*
-   * 下限只是下限：窗口更大时按窗口走，真的超大结果照旧分页——否则一次压缩就把整段历史冲掉。
+   * 下限只是下限：真的超大结果照旧分页——否则一次压缩就把整段历史冲掉。
    */
-  it('下限不封顶，超大结果照旧分页', () => {
-    expect(resolveToolOffloadByteThreshold('discover_application_capabilities', 2_000_000))
-      .toBeGreaterThan(64 * 1024)
-    const huge = { data: 'x'.repeat(200 * 1024) }
+  it('超大结果照旧分页', () => {
+    const huge = { data: 'x'.repeat(400 * 1024) }
     expect(shouldOffloadObservation(huge, resolveToolOffloadByteThreshold(
       'discover_application_capabilities', window,
     ))).toBe(true)
+  })
+
+  /*
+   * 下限是按工具定的常量，不看窗口。小窗口模型上直接内联 128KB 会把上下文撑爆，
+   * 那比分页糟得多——"必须整份看到"的诉求必须止步于物理可行的范围。
+   */
+  it('小预算下内联下限被预算本身压住', () => {
+    const small = resolveToolOffloadByteThreshold('discover_application_capabilities', 16_000)
+    expect(small).toBeLessThan(128 * 1024)
+    // 1 token 约 2 字节，最多吃掉预算的 60%
+    expect(small).toBeLessThanOrEqual(Math.floor(16_000 * 0.6 * 2))
+
+    // 预算够大时下限完整生效
+    expect(resolveToolOffloadByteThreshold('discover_application_capabilities', 200_000))
+      .toBeGreaterThanOrEqual(128 * 1024)
   })
 
   /*
@@ -173,7 +192,10 @@ describe('按工具的内联下限', () => {
    * 正是本文件开头那条"同一把尺子"警告过的形状，只是当时漏了按工具的下限这一半。
    */
   it('两处按工具解析门槛的函数是同一个', () => {
-    expect(resolveToolOffloadByteThreshold('search_models', 16_000))
-      .toBe(Math.max(24 * 1024, resolveToolOffloadByteThreshold('read_application_entity', 16_000)))
+    const generic = resolveToolOffloadByteThreshold('read_application_entity', 16_000)
+    const models = resolveToolOffloadByteThreshold('search_models', 16_000)
+    expect(models).toBeGreaterThan(generic)
+    // 下限同样受预算上限约束：16,000 token 的预算装不下 24KiB 的模型目录
+    expect(models).toBe(Math.max(generic, Math.min(24 * 1024, Math.floor(16_000 * 0.6 * 2))))
   })
 })

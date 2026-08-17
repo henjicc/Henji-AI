@@ -33,16 +33,36 @@ export function resolveOffloadByteThreshold(contextWindow: number | null | undef
  * 有些工具的结果模型**必然要全量看**，分页只会平白多出几轮回读，一个字节也省不下来。
  *
  * `discover_application_capabilities` 是最典型的一个：它返回的不是"可以扫一眼的观察结果"，
- * 而是模型写任何一段脚本都必须完整持有的 scriptApi 契约。实测 camera 场景 66KB 的发现结果
- * 被推去分页，模型用 3 个回合把它一字不落地读回来（32768+32768+12550＝原始大小），
- * 这三页照样全部留在上下文里——卸载只换来了 3 个回合的净损失。
+ * 而是模型写任何一段脚本都必须完整持有的 scriptApi 契约。
  *
- * 下限是**上限的下限**：真的超大结果仍然会分页，这里只保证常规体量一次到位。
+ * camera 场景同一份代码连测三次，路径不同结果就差三倍：
+ * - 内联（载荷落在下限内）：4 回合 5.75 万 token，零回读
+ * - 分页读 1 页：6 回合 9.47 万
+ * - 分页读 2 页 + 2 次读失败：10 回合 19.5 万
+ *
+ * 内联更便宜不是因为字节少，而是因为**前缀缓存**：这份内容从第一次出现之后每轮都是
+ * cacheRead，边际成本极低；分页却要额外的往返，每一轮往返都把整段历史重发一遍，
+ * 而读回来的页照样留在上下文里。曾担心"内联要多带 3 万 token"，实测被缓存吃掉了。
+ *
+ * 下限只是下限：超过它的结果仍然分页，另有窗口上限兜底。
  */
 const INLINE_FLOOR_BY_TOOL: Readonly<Record<string, number>> = {
   search_models: 24 * 1024,
-  discover_application_capabilities: 64 * 1024,
+  discover_application_capabilities: 128 * 1024,
 }
+
+/**
+ * 内联下限最多吃掉预算的 60%——再想整份看到，装不下就只能分页。
+ *
+ * 下限本身是按工具定的常量，不看窗口；小预算下直接内联 128KB 会把上下文撑爆，那比分页
+ * 糟得多。这条上限让"必须整份看到"的诉求止步于物理可行的范围。
+ *
+ * 60% 是照着实测定的，不是拍脑袋：默认 `contextWindowBudget` 是 64,000 token，camera 实测过的
+ * 发现结果是 66.4KB 与 71.8KB（≈33–36K token，占 52%–56%）。取 0.5 会把这两份都挡在门外，
+ * 于是又退回分页那条实测慢 2–3 倍的路；而真正内联成功的那次占 43%，运行是三次里最好的
+ * 一次。留 40% 给提示词与历史，配合压缩足够。
+ */
+const INLINE_FLOOR_CONTEXT_SHARE = 0.6
 
 /**
  * 按工具名解析卸载门槛。**观察层与 tool 消息层必须共用这一个函数。**
@@ -57,7 +77,11 @@ export function resolveToolOffloadByteThreshold(
 ): number {
   const resolved = resolveOffloadByteThreshold(contextWindow)
   const floor = INLINE_FLOOR_BY_TOOL[toolName]
-  return floor === undefined ? resolved : Math.max(floor, resolved)
+  if (floor === undefined) return resolved
+  const windowCap = contextWindow && Number.isFinite(contextWindow) && contextWindow > 0
+    ? Math.floor(contextWindow * INLINE_FLOOR_CONTEXT_SHARE * BYTES_PER_TOKEN)
+    : floor
+  return Math.max(resolved, Math.min(floor, windowCap))
 }
 
 function recordCount(value: unknown): number {
