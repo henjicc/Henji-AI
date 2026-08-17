@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 import {
@@ -7,10 +7,17 @@ import {
   getApplicationReflectionRegistry,
 } from '@/features/assistant/applicationCapabilities/applicationControlRegistry'
 import type { ApplicationMutationExecutor } from '@/core/application-control'
+import { createHostContextSnapshot } from '@/features/assistant/hostContext/hostContext'
+import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 
+import {
+  installHarnessNativeStorage,
+  resetHarnessNativeStorage,
+  uninstallHarnessNativeStorage,
+} from './harnessNativeStorage'
 import { runAssistantHarness } from './assistantRuntimeHarness'
 
 /**
@@ -54,24 +61,11 @@ const LOOP_NONCE = 'harness-写回环'
  */
 const KNOWN_UNREACHABLE: Record<string, string> = {
   image_mark: '标注文档要先打开图片编辑器会话，而会话需要一个真实素材源；'
-    + 'jsdom 下没有素材落盘，够不到实例。执行器层由 imageMarkReflection.test.ts 覆盖，'
-    + '缺的是"经模型链路"那一段，需要先让 harness 能造出素材。'
-    + '注意该域还有一条更硬的阻塞：并发基线发布不出来，见 hostScopeCoverage.test.ts 的 KNOWN_UNPUBLISHABLE。',
-  /*
-   * assets 与 camera_stage 卡在同一处：创建实例要经 platform 持久化，而 jsdom 下
-   * `getPlatform()` 直接抛 `Platform runtime is only available inside the Electron desktop shell`，
-   * 事务整体补偿回滚。
-   *
-   * **这是环境限制，不是链路缺陷**——两个域的真机场景每次都跑通，判据见 assistant:live:suite。
-   * 而且它卡在创建实例那一步，前面的能力发现、租约、脚本编译、Gateway 准入全都走通了。
-   *
-   * 解锁路径明确：给 harness 装一个只存内存的 `window.henjiNative` 替身，让 `detectShell()`
-   * 认出 shell。它属于替身白名单里的"持久化"一类，不含任何业务判断。没有现在就做，是因为
-   * platform 有 22 个子适配器，替身要么按需最小化（碰到没实现的方法必须**抛错而不是返回
-   * 空值**，否则就成了悄悄伪造业务结果），要么就会滑成一份平行的假 platform。
-   */
-  assets: 'jsdom 下 platform 持久化不可用，创建素材库时事务整体回滚；需给 harness 装最小内存 platform 替身',
-  camera_stage: 'jsdom 下 platform 持久化不可用，创建 3D 工程时同样回滚；与 assets 同一处阻塞、同一条解锁路径',
+    + 'harnessNativeStorage 目前只存素材集合，不存素材本身（素材还要经文件检查与缩略图，'
+    + '那已经越过"只存不判断"这条线），够不到实例。执行器层由 imageMarkReflection.test.ts 覆盖，'
+    + '缺的是"经模型链路"那一段。'
+    + '而且**先解决 platform 也没用**：该域还有一条更硬的阻塞——并发基线发布不出来，'
+    + '见 hostScopeCoverage.test.ts 的 KNOWN_UNPUBLISHABLE，那要改 provider 的并发模型。',
 }
 
 function loops(): WriteLoop[] {
@@ -114,6 +108,37 @@ function loops(): WriteLoop[] {
       property: 'generation.model.hidden',
       value: 'true',
     },
+    {
+      /*
+       * 素材集合是全域里唯一走「通用集合写入」创建的实例（其余域都靠专用 action），
+       * 所以这条同时是 `app.entities.create` 经模型链路落到真相源的唯一覆盖。
+       */
+      domain: 'assets', entityType: 'asset.library',
+      seed: [
+        "const created = await app.entities.create('asset.library', {",
+        "  parent: { kind: 'asset.catalog', id: 'default' },",
+        `  properties: { 'asset.library.name': '${LOOP_NONCE}-素材集合' },`,
+        '});',
+        'const ref = created.resultRefs[0];',
+      ].join('\n'),
+      ref: 'ref',
+      property: 'asset.library.name',
+      value: `'${LOOP_NONCE}-素材集合改名'`,
+    },
+    {
+      domain: 'camera_stage', entityType: 'camera_stage.project',
+      // 多带 trajectory：camera_stage.state_animation 这条 Recipe 覆盖不到它，action 才会正常投影。
+      discoverEntityTypes: ['camera_stage.project', 'camera_stage.trajectory'],
+      seed: [
+        `const created = await app.action('create_camera_stage_project', { name: '${LOOP_NONCE}-三维' });`,
+        "const ref = { kind: 'camera_stage.project', id: created.projectId };",
+      ].join('\n'),
+      ref: 'ref',
+      property: 'camera_stage.project.name',
+      value: `'${LOOP_NONCE}-三维改名'`,
+      assertStore: () => expect(useCameraStageStore.getState().currentProjectName)
+        .toBe(`${LOOP_NONCE}-三维改名`),
+    },
   ]
 }
 
@@ -149,12 +174,41 @@ function writableDomains(): string[] {
   )].sort()
 }
 
+/**
+ * 目标实体**自己声明**的并发作用域。
+ *
+ * 不写死映射：写死的那份是第二把尺子，实体改挂作用域时它不会跟着变，于是断言会在错误的
+ * 计数器上一路绿灯。这里取的就是通用写入计划器拿来要期望值的同一份声明。
+ */
+function declaredRevisionScopes(entityType: string): string[] {
+  const registry = getApplicationReflectionRegistry()
+  const description = registry.describe({}, {
+    exposure: 'assistant',
+    permissions: new Set(registry.listDeclaredPropertyPermissions()),
+    acceptedDataClasses: new Set(['C0', 'C1', 'C2']),
+  })
+  const entity = description.entities.find((item) => item.id === entityType)
+  if (!entity) throw new Error(`${entityType} 没有出现在反射注册表里，回环的目标实体写错了。`)
+  return [...entity.revisionScopes]
+}
+
 describe('读改验回环的全域穷举', () => {
   let originalTone: ReturnType<typeof useSettingsStore.getState>['themeTonePreset']
 
-  beforeAll(async () => { await loadRealModelsIntoRegistry() })
+  beforeAll(async () => {
+    /*
+     * 装上只存内存的 native 替身。assets 与 camera_stage 创建实例都要落持久化，缺了它
+     * `getPlatform()` 直接抛，事务整体补偿回滚——那正是这两个域曾经登记在 KNOWN_UNREACHABLE
+     * 里的原因。替身只换掉 IPC 之后那台 SQLite，电子适配器与领域链路仍是真的。
+     */
+    installHarnessNativeStorage()
+    await loadRealModelsIntoRegistry()
+  })
+
+  afterAll(() => { uninstallHarnessNativeStorage() })
 
   beforeEach(() => {
+    resetHarnessNativeStorage()
     originalTone = useSettingsStore.getState().themeTonePreset
     useProjectStore.setState({
       projects: [], currentProjectId: null, currentProject: null, isHydrated: true,
@@ -192,6 +246,8 @@ describe('读改验回环的全域穷举', () => {
   it('每个写域：读当前值 → 写新值 → 读回来都对得上', async () => {
     const failures: string[] = []
     for (const loop of loops()) {
+      const scopes = declaredRevisionScopes(loop.entityType)
+      const before = createHostContextSnapshot().scopeRevisions
       const result = await runAssistantHarness({
         goal: `${loop.domain} 读改验回环`,
         steps: [
@@ -247,12 +303,20 @@ describe('读改验回环的全域穷举', () => {
         continue
       }
       /*
-       * 写域必须看到对应 scope 的 revision 推进。没推进说明写入没走正式链路——
+       * 写域必须看到**目标实体自己声明的那个** scope 推进。没推进说明写入没走正式链路——
        * 那种情况下 readEntity 也可能读到"写进内存但没进真相源"的假值。
+       *
+       * 盯本域的 scope 而不是"任意一个 scope 大于 0"：后者在第一个域写完之后就恒真了
+       * （revision 是进程内累计的全局计数器），剩下的域实际上没有任何东西盯着。
        */
-      const anyRevision = Object.values(result.finalHostContext.scopeRevisions)
-        .some((value) => value > 0)
-      if (!anyRevision) failures.push(`${loop.domain}：写入后没有任何 revision 推进`)
+      const after = result.finalHostContext.scopeRevisions as Record<string, number>
+      const advanced = scopes.filter((scope) => (after[scope] ?? 0) > ((before as Record<string, number>)[scope] ?? 0))
+      if (advanced.length === 0) {
+        failures.push(
+          `${loop.domain}：写入后声明的 revision scope（${scopes.join('、')}）一个都没推进，`
+          + `写入多半没走正式链路。`
+        )
+      }
 
       try {
         loop.assertStore?.()

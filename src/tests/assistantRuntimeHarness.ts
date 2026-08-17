@@ -19,7 +19,9 @@
  * 允许的替身**只有四类**，每一类都落在进程边界或外部付费/像素边界上，都不含业务判断：
  *   1. LLM（剧本）
  *   2. IPC 传输（直接函数调用，但强制 JSON 往返，见 `invokeFrontend`）
- *   3. 持久化（AgentRunnerDependencies 里的可选项一律不接）
+ *   3. 持久化 —— 运行态那份在 AgentRunnerDependencies 里，可选项一律不接；业务那份是
+ *      `harnessNativeStorage.ts` 的内存 `window.henjiNative`（只有需要创建实例的用例装它，
+ *      未实现的方法一律抛错，绝不返回空值）
  *   4. 真实付费生成 API 与真实像素（由具体测试自行处理，harness 不碰）
  *
  * 判据：把替身撤掉后，被测行为的**判断逻辑**有没有任何一条搬进了替身里。JSON 往返、内存
