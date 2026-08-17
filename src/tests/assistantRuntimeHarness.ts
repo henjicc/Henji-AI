@@ -238,6 +238,47 @@ function createHostContextChannel(): {
   }
 }
 
+/** 录制产物的形状，由 `npm run assistant:record` 生成。 */
+export interface RecordedAssistantScript {
+  schemaVersion: 1
+  recordedFrom: { runId: string; status: string; goal: string; stepCount: number }
+  nonce: string | null
+  steps: Array<{ stepId: string; actions: ScriptedModelStepAction[] }>
+  warnings: string[]
+}
+
+/** 回放时注入的固定唯一名。真机跑仍生成新的随机值，两者互不影响。 */
+export const REPLAY_NONCE = 'n0000fx'
+
+/**
+ * 把录制产物还原成可回放的剧本与目标。
+ *
+ * 占位符替换是**整份替换**，包括脚本源码内部——录制当天的时间戳一旦焊进 `projectName`，
+ * 回放就会年复一年地创建同一个名字，而真机跑用的是新值，两边从此不是同一个场景。
+ *
+ * 带未处理告警的录制一律拒绝回放：那种剧本引用着上游步骤的真实产物 id，换个环境必然
+ * 指向不存在的东西，而失败会以某个领域错误的形式出现，没人会想到是录制的问题。
+ */
+export function loadRecordedScript(
+  recorded: RecordedAssistantScript,
+  nonce: string = REPLAY_NONCE
+): { goal: string; steps: HarnessModelStep[] } {
+  if (recorded.warnings.length > 0) {
+    throw new Error(
+      `录制 ${recorded.recordedFrom.runId} 带有未处理的告警，不能直接回放：\n`
+      + recorded.warnings.join('\n')
+      + '\n把焊死的运行时产物 id 改写成对前序步骤结果的引用，或把这条降级为手写剧本。'
+    )
+  }
+  const substitute = <T,>(value: T): T => (
+    JSON.parse(JSON.stringify(value).split('{{nonce}}').join(nonce)) as T
+  )
+  return {
+    goal: substitute(recorded.recordedFrom.goal),
+    steps: recorded.steps.map((step) => ({ actions: substitute(step.actions) })),
+  }
+}
+
 export function buildAssistantHarnessRuntime(options: AssistantHarnessOptions): {
   registry: AgentToolRegistry
   gateway: AgentToolGateway

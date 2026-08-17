@@ -23,6 +23,7 @@
     "assistant:cli": "node scripts/run-assistant-cli.cjs",
     "assistant:live": "node scripts/run-assistant-cli.cjs --trace detailed --require-verified-write",
     "assistant:live:suite": "node scripts/run-assistant-live-suite.cjs",
+    "assistant:record": "node scripts/record-assistant-script.cjs",
     "build": "npm run gen:progress-seeds && npm run gen:model-manifest && npm run check:colors && npm run check:surface:strict && npm run check:icons:strict && npm run check:model-i18n && npm run check:assistant-capabilities && tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
