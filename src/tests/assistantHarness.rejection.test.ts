@@ -3,6 +3,10 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
+import {
+  installHarnessNativeStorage,
+  uninstallHarnessNativeStorage,
+} from './harnessNativeStorage'
 import { runAssistantHarness, type HarnessToolCall } from './assistantRuntimeHarness'
 
 /**
@@ -106,6 +110,47 @@ describe('拒绝必须能被自我修正', () => {
      */
     expect(message, '拒绝里必须列出真实属性').toContain('general.language')
     expect(message, '拒绝里必须列出真实属性').toContain('interface.theme_tone')
+  })
+
+  /*
+   * 这条来自 2026-08-18 的真机验收：assets 场景「建→改名→删→再确认不存在」里，模型删完
+   * 素材集合后写了 `after.properties`，而读一个本段已删除的引用**按设计**存成 null
+   * （好让 `app.assert.absent(x)` 按字面意思写）。旧文案只有"当前值是 null，不能继续取字段"：
+   * 既不说为什么是 null，也不说该改成什么。代价是多烧一整轮——assets 用了 6 回合 6.6 万
+   * token，而形状相同的 canvas / settings 都只要 3 回合。
+   *
+   * 运行时是知道答案的：顶层变量为 null 只有"读了已删除引用"这一种来源。知道就必须说。
+   */
+  it('读已删除的引用再取字段时，说清为什么是 null 并给出 absent 写法', async () => {
+    installHarnessNativeStorage()
+    try {
+      const rejection = await rejectionOf({
+        goal: '读已删除的引用',
+        domain: 'assets',
+        entityTypes: ['asset.library'],
+        source: [
+          "const created = await app.entities.create('asset.library', {",
+          "  parent: { kind: 'asset.catalog', id: 'default' },",
+          "  properties: { 'asset.library.name': '拒绝用例-已删除引用' },",
+          '});',
+          'const ref = created.resultRefs[0];',
+          'await app.entities.remove(ref);',
+          // 读一个本段已删除的引用：按设计存成 null，好让 absent 按字面意思写。
+          "const gone = await app.entities.read(ref, ['asset.library.name']);",
+          // 触发点：模型没写 absent，而是当它还活着继续取字段。
+          'app.assert.exists(gone.properties);',
+        ].join('\n'),
+      })
+
+      const message = rejection.errorMessage ?? ''
+      expect(message, '必须说清 null 的来源是"引用已在本段删除"，否则模型不知道错在哪')
+        .toContain('已经被删除')
+      expect(message, '必须给出改道写法，否则模型只能继续猜')
+        .toContain('app.assert.absent')
+      expect(message, '必须点名模型试图取的那个字段').toContain('properties')
+    } finally {
+      uninstallHarnessNativeStorage()
+    }
   })
 
   it('未发现的领域动作被调用时，指出该重新发现', async () => {

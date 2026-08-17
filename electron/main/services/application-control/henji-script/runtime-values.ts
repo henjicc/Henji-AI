@@ -107,7 +107,23 @@ export function evaluate(expression: HenjiValueExpression, values: ReadonlyMap<s
         + (available.length > 0 ? `。已有前序结果：${available.join('、')}` : '。当前还没有任何前序结果')
       )
     }
-    return readPath(values.get(expression.name), expression.path)
+    /*
+     * 顶层变量是 `null` 只有一种来源：这一段里读了本段已经删掉的引用（service.ts 刻意把
+     * 它存成 null，好让 `app.assert.absent(x)` 按字面意思写）。运行时既然知道这件事，就
+     * 必须说出来——否则模型看到的只有"当前值是 null，不能继续取字段"，既不知道为什么，
+     * 也不知道该改成什么。实测 assets 场景因此多烧一整轮：6 回合 6.6 万 token，而形状
+     * 相同的 canvas / settings 都只用 3 回合。
+     */
+    const value = values.get(expression.name)
+    if (value === null && expression.path.length > 0) {
+      throw new HenjiScriptError(
+        'SCRIPT_STEP_FAILED', 'execute',
+        `前序结果 ${expression.name} 是 null：它读的引用在本段脚本里已经被删除，所以没有任何字段`
+        + `（读不到的引用一律存成 null）。要断言它确实不存在就直接写 `
+        + `app.assert.absent(${expression.name})，不要再取 .${expression.path.join('.')}。`
+      )
+    }
+    return readPath(value, expression.path)
   }
   if (expression.kind === 'template') {
     return expression.parts.map((part) => typeof part === 'string' ? part : String(evaluate(part, values))).join('')
