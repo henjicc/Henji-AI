@@ -51,6 +51,11 @@ const SYNTAX_ALTERNATIVES: Readonly<Record<string, string>> = {
   ArrayBindingPattern: '不支持解构；用 const 取一次再按下标访问。',
   ThisKeyword: '脚本里没有 this。',
   PrefixUnaryExpression: '一元运算只支持负号字面量；取反请改用三元表达式或 app.assert。',
+  // 模型按 TypeScript 习惯写 `'settings.registry' as const`，本来只想要那个字符串。
+  AsExpression: '不需要类型标注：去掉 as const / as 类型，直接写字符串或数字字面量。',
+  SatisfiesExpression: '不需要类型标注：去掉 satisfies，直接写字面量。',
+  TypeAssertionExpression: '不需要类型标注：去掉尖括号断言，直接写字面量。',
+  NonNullExpression: '不需要非空断言：去掉结尾的 !，字段不存在时宿主会直接告诉你。',
 }
 
 const CALL_ALTERNATIVES: Readonly<Record<string, string>> = {

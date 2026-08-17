@@ -136,6 +136,12 @@ describe('Henji Script compiler', () => {
       source: "const r = await app.entities.list('asset', {}); for (const item of r.refs) { await app.entities.remove(item); }",
       contains: ['r.refs', '字面量数组'],
     },
+    // 模型按 TypeScript 习惯写 `as const`，本来只想要那个字符串字面量。
+    {
+      label: 'as const',
+      source: "const kind = 'settings.registry' as const; await app.entities.list(kind, {});",
+      contains: ['as const', '直接写字符串或数字字面量'],
+    },
   ])('拒绝 $label 时同时给出原文与可用的替代写法', ({ source, contains }) => {
     let message = ''
     try {
