@@ -1,3 +1,5 @@
+import { isMutatingEffect } from '../../../../../src/core/assistant/observedEffect'
+import type { AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 
 /**
@@ -37,4 +39,37 @@ export function sealingCaveat(summary: AgentWorkingSummary | undefined): string 
   const items = summary?.unresolvedItems ?? []
   if (items.length === 0) return ''
   return `仍有未收敛事项：${items.join('；')}`
+}
+
+/**
+ * 封存摘要：**说清写了什么、读了什么，不报只能是 0 的数。**
+ *
+ * 这句话踩过两个相反的坑，都记在这里免得再踩第三次：
+ *
+ * 1. 曾经把 `effects` 整体称作"应用写入"，而它包含 observe。实测一次**纯只读**的工具箱查询
+ *    （8 段脚本全是 entities.read / entities.list）被报成"已完成 14 项应用写入"——用户问的是
+ *    只读列表，拿到的却是一句凭空的写入声明。同一个口径还让 `--require-verified-write`
+ *    被一次没有任何写入的运行满足。
+ *
+ * 2. 修完第一条后一度改成"其中 N 项有正式状态源读回证据"，只数写入里 `verified` 为真的。
+ *    但 `verified` 完全由能力静态声明、运行时**没有任何地方**会把它翻成 true，而 14 处写入类
+ *    Effect 声明里 `verified: true` 的有 **0 处**——读能力才声明 true（读本身就是验证）。
+ *    于是这个数只能是 0，四个真机场景全都报"其中 0 项有读回证据"，看着像验证坏了，
+ *    实际什么信息都没有。**一个只能取一个值的数字不是证据，是噪音。**
+ *
+ * 真正有信息量的是另一件事：写了却一次都没读回。所以这里报写入数与观察数，
+ * 并在"有写入、零观察"时明说结果未经读回确认——那才是需要人看一眼的形状。
+ */
+export function sealingSummary(effects: readonly AgentObservedEffect[]): string {
+  const mutations = effects.filter((effect) => isMutatingEffect(effect)).length
+  const observations = effects.length - mutations
+  if (mutations === 0) {
+    return observations > 0
+      ? `本次没有产生应用写入，只有 ${observations} 项读取或导航观察。`
+      : '本次没有产生应用写入。'
+  }
+  return `已完成 ${mutations} 项应用写入`
+    + (observations > 0
+      ? `，另有 ${observations} 项读取或导航观察。`
+      : '；本次没有任何读取观察，写入结果未经读回确认。')
 }

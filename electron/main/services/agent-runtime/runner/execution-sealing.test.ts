@@ -1,73 +1,69 @@
 import { describe, expect, it } from 'vitest'
 
-import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import { executionSealingBlocker, sealingCaveat } from './execution-sealing'
+import type { AgentEffectKind, AgentObservedEffect } from '../../../../../src/core/assistant/observedEffect'
+import { sealingSummary } from './execution-sealing'
 
-/*
- * 这里曾经有第一条判据 `settlement.status !== 'completed' → '任务图尚未完成'`，也曾经有一条
- * `unresolvedItems.length > 0 → 仍有未收敛事项`。两条都是拿"做得好不好"当"停没停下来"。
- * 现在剩下的三条全是事实：手上还有没有活、审批批完没、恢复检查做完没。
+function effect(kind: AgentEffectKind, verified = false): AgentObservedEffect {
+  return {
+    effect: kind, entityTypes: [], propertyIds: [], targetRefs: [],
+    count: 1, verified, evidence: [`${kind}:fixture`],
+  }
+}
+
+/**
+ * 封存摘要是**用户唯一会读到的那句结论**，所以它说错的代价直接落在用户身上。
+ * 这句话已经踩过两个方向相反的坑，两条都钉在这里。
  */
-describe('执行事实封存门禁', () => {
-  it('没有任何真实写入时不封存', () => {
-    expect(executionSealingBlocker({
-      summary: createAgentWorkingSummary('看一眼素材库'), effectCount: 0,
-    })).toContain('没有可封存')
+describe('封存摘要', () => {
+  it('纯只读运行不得被说成应用写入', () => {
+    /*
+     * 坑一：曾经把 effects 整体称作"应用写入"，而它包含 observe。实测一次只读的工具箱查询
+     * （8 段脚本全是 entities.read / entities.list）被报成"已完成 14 项应用写入"。
+     */
+    const summary = sealingSummary([effect('observe'), effect('observe'), effect('navigate')])
+    expect(summary).not.toMatch(/已完成 [1-9]\d* 项应用写入/)
+    expect(summary).toContain('没有产生应用写入')
+    expect(summary).toContain('3 项读取或导航观察')
   })
 
-  /*
-   * 实测生成场景：图片真的出图、画布工程真的建成、8 个 Effect 有读回证据，模型多试了一次
-   * 多余的脚本调用失败后自己判断"那步不必要"并给出最终答复。旧判据让那次失败把已经发生的
-   * 8 项写入永久钉死在 pending——拒绝封存不能让写入回滚，只会把事实从记录里抹掉。
-   */
-  it('中途有没做成的事，不妨碍把已经发生的写入封存', () => {
-    const summary = createAgentWorkingSummary('生成图片并放进画布')
-    summary.unresolvedItems = ['run_henji_script 未收敛：SCRIPT_API_NOT_DISCOVERED']
-    expect(executionSealingBlocker({ summary, effectCount: 8 })).toBeNull()
+  it('只把 create/update/delete/execute 计入写入', () => {
+    const summary = sealingSummary([
+      effect('observe'), effect('create'), effect('navigate'),
+      effect('update'), effect('delete'), effect('execute'),
+    ])
+    expect(summary).toContain('已完成 4 项应用写入')
+    expect(summary).toContain('2 项读取或导航观察')
   })
 
-  it('未收敛事项必须原样出现在封存摘要的保留意见里', () => {
-    const summary = createAgentWorkingSummary('生成图片并放进画布')
-    summary.unresolvedItems = [
-      'run_henji_script 未收敛：SCRIPT_API_NOT_DISCOVERED',
-      '验证未通过：脚本未通过完整验证。',
-    ]
-    const caveat = sealingCaveat(summary)
-    expect(caveat).toContain('SCRIPT_API_NOT_DISCOVERED')
-    expect(caveat).toContain('验证未通过')
-    expect(sealingCaveat(createAgentWorkingSummary('随便看看'))).toBe('')
+  it('不报只能取一个值的数字', () => {
+    /*
+     * 坑二：修完坑一后一度改成"其中 N 项有正式状态源读回证据"，只数写入里 verified 为真的。
+     * 但 verified 完全由能力静态声明、运行时没有任何地方会把它翻成 true，而全部 14 处写入类
+     * Effect 声明里 verified: true 的有 0 处——读能力才声明 true（读本身就是验证）。
+     * 于是那个数只能是 0，四个真机场景全报"其中 0 项有读回证据"，看着像验证坏了，
+     * 实际什么信息都没有。一个只能取一个值的数字不是证据，是噪音。
+     *
+     * 这条用"写入 verified 全 false"和"全 true"两种输入产出同一句话来钉死它：
+     * 摘要不得再对写入的 verified 位做任何声称。
+     */
+    const allFalse = sealingSummary([effect('create'), effect('update'), effect('observe')])
+    const allTrue = sealingSummary([
+      effect('create', true), effect('update', true), effect('observe', true),
+    ])
+    expect(allFalse).toBe(allTrue)
+    expect(allFalse).not.toContain('读回证据')
   })
 
-  it('恢复检查没做完时不封存', () => {
-    const summary = createAgentWorkingSummary('修改素材')
-    summary.recovery = {
-      mode: 'verify_before_write', reason: '必须先读取素材真实状态。',
-      toolName: 'change_application_entities', toolCategory: 'application',
-    }
-    expect(executionSealingBlocker({ summary, effectCount: 2 })).toContain('必须先读取')
+  it('有写入却一次都没读回时，明说结果未经确认', () => {
+    /*
+     * 这才是真正有信息量的那件事：写了但没验。坑二那个恒为 0 的数字把它盖住了。
+     */
+    const summary = sealingSummary([effect('create'), effect('update')])
+    expect(summary).toContain('已完成 2 项应用写入')
+    expect(summary).toContain('未经读回确认')
   })
 
-  it('还有执行中的步骤或待批审批时不封存', () => {
-    const summary = createAgentWorkingSummary('修改素材')
-    summary.activeStep = {
-      stepId: 'step-1', title: '运行 Henji Script', status: 'active',
-      toolName: 'run_henji_script', toolCategory: 'application',
-      readOnly: false, idempotent: false, summary: '', evidence: [],
-      startedAt: new Date(0).toISOString(), completedAt: null,
-    }
-    expect(executionSealingBlocker({ summary, effectCount: 2 })).toContain('执行中')
-
-    const pending = createAgentWorkingSummary('修改素材')
-    pending.pendingApprovals = [{
-      approvalId: 'approval-1', toolCallId: 'call-1',
-      toolName: 'run_henji_script', expiresAt: new Date(0).toISOString(),
-    }]
-    expect(executionSealingBlocker({ summary: pending, effectCount: 2 })).toContain('审批')
-  })
-
-  it('有真实写入且运行客观上已经停下来时允许封存', () => {
-    expect(executionSealingBlocker({
-      summary: createAgentWorkingSummary('修改素材'), effectCount: 2,
-    })).toBeNull()
+  it('什么都没发生时不编造数字', () => {
+    expect(sealingSummary([])).toBe('本次没有产生应用写入。')
   })
 })

@@ -1,6 +1,9 @@
 import type { AgentEvent } from './events'
 import type { HostScopeRevisions } from './hostContracts'
 import {
+  AGENT_WORKING_EVIDENCE_SUMMARY_MAX,
+  AGENT_WORKING_STEP_EVIDENCE_MAX,
+  AGENT_WORKING_STEP_SUMMARY_MAX,
   agentWorkingSummarySchema,
   createAgentWorkingSummary,
   type AgentWorkingStep,
@@ -12,6 +15,35 @@ export const VERIFICATION_FAILURE_PREFIX = '验证未通过：'
 
 function appendBounded<T>(items: T[], value: T, limit: number): T[] {
   return [...items, value].slice(-limit)
+}
+
+/**
+ * 截断到 schema 允许的长度，**保头保尾**。
+ *
+ * 不能简单地砍尾巴：一条可自纠的拒绝里，开头是"哪里错了"，结尾是"怎么改道"
+ * （`……确实需要别的，就重新调用 discover_application_capabilities`），中间才是那串可用清单。
+ * 砍尾等于把出路砍掉，模型拿到半句话只会继续撞墙——那正是这条规则最初要解决的问题。
+ * 所以省略中间，两端都留住。
+ *
+ * 为什么必须在这里截而不是靠 schema 校验兜底：校验失败会抛 ZodError，而这段代码跑在
+ * 构造工作摘要的路径上，抛出来就是整次运行 RunFailed——连 `ToolFailed` 事件都发不出去。
+ * 实测 camera_stage 写错属性时就是这样：拒绝消息要列出 24 项外观属性，超过 1000 字符，
+ * 一次本该可自纠的工具拒绝直接把运行打死。
+ */
+function boundedText(value: string, max: number): string {
+  if (value.length <= max) return value
+  const marker = `…（略去 ${value.length - max} 字）…`
+  const keep = Math.max(0, max - marker.length)
+  const head = Math.ceil(keep * 0.6)
+  return `${value.slice(0, head)}${marker}${value.slice(value.length - (keep - head))}`
+}
+
+function boundedStepSummary(value: string): string {
+  return boundedText(value, AGENT_WORKING_STEP_SUMMARY_MAX)
+}
+
+function boundedEvidenceSummary(value: string): string {
+  return boundedText(value, AGENT_WORKING_EVIDENCE_SUMMARY_MAX)
 }
 
 function currentStep(event: Extract<AgentEvent, { type: 'ToolRequested' }>): AgentWorkingStep {
@@ -43,8 +75,11 @@ function completeActiveStep(
     toolCategory: event.category ?? active?.toolCategory ?? null,
     readOnly: event.readOnly ?? active?.readOnly ?? null,
     idempotent: event.idempotent ?? active?.idempotent ?? null,
-    summary: event.summary,
-    evidence: Object.entries(event.resultReferences ?? {}).map(([key, value]) => `${key}:${value}`),
+    // ToolCompleted.summary 允许 2000 字符，这里只允许 1000——不截断的话，一次**成功**的
+    // 工具调用只要摘要够长就能让整次运行 RunFailed。
+    summary: boundedStepSummary(event.summary),
+    evidence: Object.entries(event.resultReferences ?? {})
+      .map(([key, value]) => boundedText(`${key}:${value}`, AGENT_WORKING_STEP_EVIDENCE_MAX)),
     startedAt: active?.startedAt ?? event.occurredAt,
     completedAt: event.occurredAt,
   }
@@ -63,8 +98,8 @@ function failActiveStep(
     toolCategory: event.category ?? active?.toolCategory ?? null,
     readOnly: event.readOnly ?? active?.readOnly ?? null,
     idempotent: event.idempotent ?? active?.idempotent ?? null,
-    summary: `${event.error.code}: ${event.error.message}`,
-    evidence: [`error:${event.error.code}`],
+    summary: boundedStepSummary(`${event.error.code}: ${event.error.message}`),
+    evidence: [boundedText(`error:${event.error.code}`, AGENT_WORKING_STEP_EVIDENCE_MAX)],
     startedAt: active?.startedAt ?? event.occurredAt,
     completedAt: event.occurredAt,
   }
@@ -100,7 +135,7 @@ export function reduceAgentWorkingSummary(
       completedSteps: appendBounded(next.completedSteps, step, 20),
       evidence: appendBounded(next.evidence, {
         source: event.toolName,
-        summary: event.summary,
+        summary: boundedEvidenceSummary(event.summary),
         references: event.resultReferences ?? {},
         observedAt: event.occurredAt,
       }, 12),
