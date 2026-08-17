@@ -10,6 +10,7 @@
 
 | 本次任务涉及 | 动手前必读 |
 |---|---|
+| **智能助手的任何改动**（能力、运行时、提示词、验证、排障、路线判断） | [docs/rules/assistant-goal.md](docs/rules/assistant-goal.md) + [docs/rules/assistant-status.md](docs/rules/assistant-status.md) |
 | 新增模块/服务、跨层调用、不确定逻辑该放前端还是后端、目录重构 | [docs/rules/architecture.md](docs/rules/architecture.md) |
 | 写任何 `.tsx` 界面代码、调颜色/圆角/阴影/层级/动效、"改了样式没生效" | [docs/rules/frontend-ui.md](docs/rules/frontend-ui.md) |
 | 新建或改造界面/页面骨架/面板/弹窗/侧栏/设置分区、按钮层级、分隔线 | skill `henji-ui-surface` |
@@ -102,3 +103,4 @@ npm run assistant:live:suite -- --only camera --skip-generation
 1. 跑完 [testing.md](docs/rules/testing.md) 中与本次改动匹配的检查，如实报告结果
 2. 涉及鼠标操作（拖拽、点击、悬浮、画布交互）的验证不要自己上手，写清操作步骤和验证点交给用户
 3. **必须明确告知是否需要重启 `npm run electron:dev`**，按此格式输出，不需额外解释：`✔️无需重启` / `⚠️ 需要重启`
+4. 助手改动还要多一步：对照 [assistant-status.md](docs/rules/assistant-status.md) 第零节，判断本次是否改变了「通/不通」、增减了欠账，或**推翻了以前已确定做好的内容**——命中任一条就更新那份台账。普通缺陷修复不用动它。
