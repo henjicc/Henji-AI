@@ -30,6 +30,7 @@ const ARRAY_METHOD_ALTERNATIVE = new Map<string, string>([
   ['filter', "改用 app.filter(数组, '字段名', 期望值)，返回全部命中的元素。"],
   ['some', "改用 app.find(数组, '字段名', 期望值) 再 app.assert.exists / app.assert.absent。"],
   ['findIndex', "改用 app.find(数组, '字段名', 期望值) 直接拿到那个元素，不要绕道下标。"],
+  ['slice', '改用 app.take(数组, 数量) 取前 N 项；受限语言不支持任意数组方法。'],
   ['map', '受限语言没有闭包。要取多项里的某个字段，先用 app.filter 选出来再逐项写明。'],
   ['forEach', '受限语言没有闭包。要对多个已知实体逐个写入，写成多次 app.entities.* 调用。'],
 ])

@@ -8,6 +8,7 @@ import {
   BUILTIN_APPLICATION_CAPABILITY_REGISTRY,
 } from '../builtinApplicationCapabilityRegistry'
 import { discoverApplicationCapabilitiesCapability } from './capabilityDiscoveryApplicationCapabilities'
+import { trimScriptApiDuplication } from './historyProjection'
 
 /*
  * 工具结果进入对话历史前的字段投影。
@@ -169,3 +170,74 @@ describe('工具结果的历史投影', () => {
   })
 })
 
+/*
+ * 只删"能从别的字段推导出来"的东西，"看起来啰嗦"不算。
+ *
+ * camera 那份 66KB 发现结果按字段归因：propertyIds 6.1KB 与 propertyDefinitions[].id 逐字
+ * 相同，entityType 4.8KB 在 139/139 条里都是自身 id 的前缀。合计 10.9KB 纯重复。
+ */
+interface TrimmedScriptApi {
+  actions: Array<{ id: string }>
+  entities: {
+    entityTypes: string[]
+    propertyIds?: string[]
+    propertyDefinitions: Array<Record<string, unknown>>
+  }
+}
+
+describe('scriptApi 投影只剥重复', () => {
+  function trim(): TrimmedScriptApi {
+    return trimScriptApiDuplication(scriptApi()) as TrimmedScriptApi
+  }
+
+  function scriptApi() {
+    return {
+      actions: [{ id: 'a' }],
+      entities: {
+        entityTypes: ['camera_stage.project'],
+        propertyIds: ['camera_stage.project.name', 'legacy.odd_id'],
+        propertyDefinitions: [
+          {
+            id: 'camera_stage.project.name', entityType: 'camera_stage.project',
+            title: '工程名称', description: '三维工程名称的稳定控制属性。', writable: true,
+          },
+          {
+            id: 'legacy.odd_id', entityType: 'camera_stage.project',
+            title: '历史字段', description: 'id 不以 entityType 开头。', writable: false,
+          },
+        ],
+      },
+    }
+  }
+
+  it('剥掉与 id 逐字相同的 propertyIds', () => {
+    const trimmed = trim()
+    expect(trimmed.entities.propertyIds).toBeUndefined()
+    expect(trimmed.entities.propertyDefinitions.map((item) => item.id))
+      .toEqual(['camera_stage.project.name', 'legacy.odd_id'])
+  })
+
+  /*
+   * entityType 同样可以从 id 前缀推导，一度也被剥掉，但真机验证里模型随即在"哪个属性属于
+   * 哪个实体"上连错两次。可推导不等于同样好用——要靠解析字符串前缀才能还原的关联，
+   * 就不算重复。少了 propertyIds 已经足够内联，这 4.8KB 是拿正确率换的。
+   */
+  it('entityType 一律保留，哪怕它是 id 的前缀', () => {
+    const trimmed = trim()
+    expect(trimmed.entities.propertyDefinitions[0].entityType).toBe('camera_stage.project')
+    expect(trimmed.entities.propertyDefinitions[1].entityType).toBe('camera_stage.project')
+  })
+
+  /*
+   * description 是模型在上百条属性里挑对那一条的语义线索，删了会换来猜属性名。
+   * 它啰嗦但不重复——不在本函数的处理范围内。
+   */
+  it('title、description 与值约束一律不动', () => {
+    const trimmed = trim()
+    expect(trimmed.entities.propertyDefinitions[0]).toMatchObject({
+      title: '工程名称', description: '三维工程名称的稳定控制属性。', writable: true,
+    })
+    expect(trimmed.actions).toEqual([{ id: 'a' }])
+    expect(trimmed.entities.entityTypes).toEqual(['camera_stage.project'])
+  })
+})

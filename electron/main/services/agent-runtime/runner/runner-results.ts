@@ -12,7 +12,7 @@ import type {
   ModelStepToolCall,
 } from '../../../../../src/core/llm/modelStep'
 import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
-import { resolveOffloadByteThreshold, shouldOffloadObservation } from '../context/offload'
+import { resolveToolOffloadByteThreshold, shouldOffloadObservation } from '../context/offload'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { sanitizeObservationValue } from '../context/sanitize'
 import { AgentToolGatewayError } from '../tools/gateway'
@@ -130,11 +130,8 @@ export function toolMessage(
   resolveProjection?: AgentHistoryProjectionResolver
 ): ModelStepMessage {
   // 门槛按本轮真实上下文窗口算：窗口大就直接内联，避免“结果过早卸载 → 模型看不到内容
-  // → 逐页读回来”的循环。模型目录另有 24 KiB 下限，保证候选一次到位。
-  const resolved = resolveOffloadByteThreshold(contextWindow)
-  const offloadThreshold = call.toolName === 'search_models'
-    ? Math.max(24 * 1024, resolved)
-    : resolved
+  // → 逐页读回来”的循环。按工具的内联下限见 offload.ts，观察层与这里共用同一个函数。
+  const offloadThreshold = resolveToolOffloadByteThreshold(call.toolName, contextWindow)
   // 卸载判定量的必须是**投影后**的体积：先裁再判，一份裁完只剩 7KB 的目录就不该被推去分页。
   const projected = projectHistoryOutput(call, observation, resolveProjection)
   const output = shouldOffloadObservation(projected, offloadThreshold)

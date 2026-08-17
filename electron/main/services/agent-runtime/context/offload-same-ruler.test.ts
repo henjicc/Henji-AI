@@ -5,7 +5,11 @@ import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
 import { toolMessage } from '../runner/runner-results'
 import { buildAgentContextLayers } from './prompt-layers'
 import { skillBuildInput } from './context-test-fixtures'
-import { AgentArtifactStore, shouldOffloadObservation } from './offload'
+import {
+  AgentArtifactStore,
+  resolveToolOffloadByteThreshold,
+  shouldOffloadObservation,
+} from './offload'
 import type { AgentContextBuildInput } from './types'
 
 /*
@@ -130,3 +134,46 @@ describe('分页结果不再被卸载', () => {
   })
 })
 
+/*
+ * 回归：模型必然要全量看的结果被推去分页，纯亏回合数。
+ *
+ * 实测 camera 场景 66KB 的发现结果被卸载，模型用 3 个回合把它一字不落读回来
+ * （32768+32768+12550＝原始大小），三页照样全留在上下文里——卸载一个字节没省，
+ * 只换来 3 个回合的净损失。发现结果不是"可以扫一眼的观察"，是写任何脚本都必须
+ * 完整持有的 scriptApi 契约。
+ */
+describe('按工具的内联下限', () => {
+  const window = 64_000
+
+  it('发现结果在通用门槛之上、下限之内时仍然内联', () => {
+    const generic = resolveToolOffloadByteThreshold('read_application_entity', window)
+    const discovery = resolveToolOffloadByteThreshold('discover_application_capabilities', window)
+    expect(discovery).toBeGreaterThan(generic)
+
+    // 55KB：剥掉可证明重复的字段之后，camera 那份发现结果的实际体量
+    const payload = { data: 'x'.repeat(55 * 1024) }
+    expect(shouldOffloadObservation(payload, generic)).toBe(true)
+    expect(shouldOffloadObservation(payload, discovery)).toBe(false)
+  })
+
+  /*
+   * 下限只是下限：窗口更大时按窗口走，真的超大结果照旧分页——否则一次压缩就把整段历史冲掉。
+   */
+  it('下限不封顶，超大结果照旧分页', () => {
+    expect(resolveToolOffloadByteThreshold('discover_application_capabilities', 2_000_000))
+      .toBeGreaterThan(64 * 1024)
+    const huge = { data: 'x'.repeat(200 * 1024) }
+    expect(shouldOffloadObservation(huge, resolveToolOffloadByteThreshold(
+      'discover_application_capabilities', window,
+    ))).toBe(true)
+  })
+
+  /*
+   * search_models 的 24KiB 下限原先只加在 toolMessage 里，观察层还用通用门槛——
+   * 正是本文件开头那条"同一把尺子"警告过的形状，只是当时漏了按工具的下限这一半。
+   */
+  it('两处按工具解析门槛的函数是同一个', () => {
+    expect(resolveToolOffloadByteThreshold('search_models', 16_000))
+      .toBe(Math.max(24 * 1024, resolveToolOffloadByteThreshold('read_application_entity', 16_000)))
+  })
+})

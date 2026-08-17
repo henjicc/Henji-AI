@@ -9,6 +9,7 @@ import { capabilityControl, defineApplicationCapability } from './defineApplicat
 import {
   CAPABILITY_DISCOVERY_HISTORY_OMITTED_KEYS,
   omitRecordKeys,
+  trimScriptApiDuplication,
 } from './historyProjection'
 
 const schemaRefAiSchema = {
@@ -87,6 +88,7 @@ export const discoverApplicationCapabilitiesCapability = defineApplicationCapabi
   projectForHistory: (output) => ({
     ...output,
     capabilities: omitRecordKeys(output.capabilities, CAPABILITY_DISCOVERY_HISTORY_OMITTED_KEYS),
+    scriptApi: trimScriptApiDuplication(output.scriptApi),
     note: '已租约能力的输入 schema 由本轮 tools 参数与 scriptApi 投影提供，本记录不再重复；'
       + '需要未租约能力的 schema 时用 read_application_schemas 读取。',
   }),

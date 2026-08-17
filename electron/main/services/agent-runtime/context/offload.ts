@@ -29,6 +29,37 @@ export function resolveOffloadByteThreshold(contextWindow: number | null | undef
   )
 }
 
+/**
+ * 有些工具的结果模型**必然要全量看**，分页只会平白多出几轮回读，一个字节也省不下来。
+ *
+ * `discover_application_capabilities` 是最典型的一个：它返回的不是"可以扫一眼的观察结果"，
+ * 而是模型写任何一段脚本都必须完整持有的 scriptApi 契约。实测 camera 场景 66KB 的发现结果
+ * 被推去分页，模型用 3 个回合把它一字不落地读回来（32768+32768+12550＝原始大小），
+ * 这三页照样全部留在上下文里——卸载只换来了 3 个回合的净损失。
+ *
+ * 下限是**上限的下限**：真的超大结果仍然会分页，这里只保证常规体量一次到位。
+ */
+const INLINE_FLOOR_BY_TOOL: Readonly<Record<string, number>> = {
+  search_models: 24 * 1024,
+  discover_application_capabilities: 64 * 1024,
+}
+
+/**
+ * 按工具名解析卸载门槛。**观察层与 tool 消息层必须共用这一个函数。**
+ *
+ * 之前 search_models 的 24KiB 下限只加在 runner-results.toolMessage 里，观察层还用着通用门槛，
+ * 于是同一份结果在 tool 消息里内联、在观察层却被卸载成 artifact——这正是 prompt-layers 里
+ * 那段注释警告过的"两把尺子"，只是当时补的是 contextWindow 和投影，漏了按工具的下限。
+ */
+export function resolveToolOffloadByteThreshold(
+  toolName: string,
+  contextWindow: number | null | undefined
+): number {
+  const resolved = resolveOffloadByteThreshold(contextWindow)
+  const floor = INLINE_FLOOR_BY_TOOL[toolName]
+  return floor === undefined ? resolved : Math.max(floor, resolved)
+}
+
 function recordCount(value: unknown): number {
   if (Array.isArray(value)) return value.length
   if (!value || typeof value !== 'object') return 0

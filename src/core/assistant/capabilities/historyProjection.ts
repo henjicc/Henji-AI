@@ -16,6 +16,31 @@ export function omitRecordKeys<T>(items: readonly T[], keys: readonly string[]):
 }
 
 /**
+ * 剥掉 scriptApi 投影里**可证明重复**的部分，一个字节的新信息都不删。
+ *
+ * 实测 camera 场景那份 66KB 的发现结果里，`entities.propertyIds` 占 6.1KB，与
+ * `propertyDefinitions[].id` **逐字相同**（已断言 true）。剥掉它 66KB 降到约 60KB，
+ * 落进内联下限，模型不必再用 3 个回合把它逐页读回来。
+ *
+ * **只剥这一项。** `propertyDefinitions[].entityType` 同样可以从 id 前缀推导（实测 139/139
+ * 条都是），一度也被剥掉，但真机验证里模型随即在"哪个属性属于哪个实体"上连错两次：
+ * 关键帧实体类型少写了一截前缀，又把工程级的 id 当成关键帧自己的属性。
+ * 可推导不等于同样好用——要模型去解析字符串前缀才能还原的关联，就不是重复。何况少了这
+ * 6.1KB 已经足够内联，那 4.8KB 是拿正确率换的，不划算。
+ *
+ * **不碰 `description`**：那是模型在上百条属性里挑对那一条的语义线索，见下面那条注释。
+ */
+export function trimScriptApiDuplication(scriptApi: unknown): unknown {
+  if (!scriptApi || typeof scriptApi !== 'object' || Array.isArray(scriptApi)) return scriptApi
+  const record = scriptApi as Record<string, unknown>
+  const entities = record.entities
+  if (!entities || typeof entities !== 'object' || Array.isArray(entities)) return scriptApi
+  const entityRecord = entities as Record<string, unknown>
+  const { propertyIds: _identicalToDefinitionIds, ...restEntities } = entityRecord
+  return { ...record, entities: restEntities }
+}
+
+/**
  * 属性与实体反射结果里对模型不可行动的字段。
  *
  * - `schemaRef`：`id` / `version` 只是把元素自身的字段又抄了一遍，`catalogVersion` 是常量，

@@ -2,7 +2,7 @@ import type { AgentToolObservation } from '../../../../../src/core/assistant/too
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
 import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
-import { AgentArtifactStore, resolveOffloadByteThreshold, shouldOffloadObservation } from './offload'
+import { AgentArtifactStore, resolveToolOffloadByteThreshold, shouldOffloadObservation } from './offload'
 import { sanitizeObservationValue } from './sanitize'
 import { redactAgentText } from '../tools/security'
 import type {
@@ -287,7 +287,10 @@ function formatObservation(
    */
   const output = projectObservationOutput(compacted, observation.source.toolName, resolveProjection)
   const sanitized = sanitizeObservationValue(output)
-  if (shouldOffloadObservation(sanitized, resolveOffloadByteThreshold(contextWindow))) {
+  if (shouldOffloadObservation(
+    sanitized,
+    resolveToolOffloadByteThreshold(observation.source.toolName, contextWindow),
+  )) {
     const artifact = artifactStore.offload(runId, observation, sanitized)
     return {
       text: JSON.stringify({
