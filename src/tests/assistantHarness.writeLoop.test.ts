@@ -9,6 +9,7 @@ import {
 import type { ApplicationMutationExecutor } from '@/core/application-control'
 import { createHostContextSnapshot } from '@/features/assistant/hostContext/hostContext'
 import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageStore'
+import { getPlatform } from '@/platform/runtime'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -50,8 +51,15 @@ interface WriteLoop {
   property: string
   /** 写进去的新值（脚本字面量）。 */
   value: string
-  /** 可选：从 zustand 真相源再确认一次，比 readEntity 更硬。 */
-  assertStore?: () => void
+  /**
+   * 可选：绕开 `readEntity` 再对一次账，比脚本内的 `app.assert.equal` 更硬。
+   *
+   * 该盯哪个真相源，取决于该域的 `readEntity` 读的是**哪一份**：读 zustand 的域（settings /
+   * canvas）就盯 store；读持久化的域（assets）脚本回读本身就落到存储，不必重复。
+   * 最需要这一条的是 camera_stage——它的 `readDomainSnapshot` 在工程已打开时直接返回
+   * store，于是"改名没落到持久化"这类缺陷从脚本回读里完全看不出来。
+   */
+  assertTruthSource?: () => void | Promise<void>
 }
 
 const LOOP_NONCE = 'harness-写回环'
@@ -75,7 +83,7 @@ function loops(): WriteLoop[] {
       ref: "{ kind: 'settings.registry', id: 'singleton' }",
       property: 'interface.theme_tone',
       value: "'cool'",
-      assertStore: () => expect(useSettingsStore.getState().themeTonePreset).toBe('cool'),
+      assertTruthSource: () => expect(useSettingsStore.getState().themeTonePreset).toBe('cool'),
     },
     {
       domain: 'generation', entityType: 'generation.draft', seed: '',
@@ -94,7 +102,7 @@ function loops(): WriteLoop[] {
       ref: 'ref',
       property: 'canvas.project.name',
       value: `'${LOOP_NONCE}-画布改名'`,
-      assertStore: () => expect(useProjectStore.getState().currentProject?.name)
+      assertTruthSource: () => expect(useProjectStore.getState().currentProject?.name)
         .toBe(`${LOOP_NONCE}-画布改名`),
     },
     {
@@ -136,8 +144,16 @@ function loops(): WriteLoop[] {
       ref: 'ref',
       property: 'camera_stage.project.name',
       value: `'${LOOP_NONCE}-三维改名'`,
-      assertStore: () => expect(useCameraStageStore.getState().currentProjectName)
-        .toBe(`${LOOP_NONCE}-三维改名`),
+      assertTruthSource: async () => {
+        expect(useCameraStageStore.getState().currentProjectName).toBe(`${LOOP_NONCE}-三维改名`)
+        /*
+         * 还要盯持久化那一份。三维改名同时写 store 和工程记录，而脚本回读只看得到 store
+         * （工程已打开时 `readDomainSnapshot` 直接返回 store），持久化那半边没有任何东西盯着：
+         * 存储层的 rename 是一条裸 UPDATE，id 传错就是静默零行，回读照样绿。
+         */
+        const persisted = await getPlatform().cameraStageProjects.listProjectSummaries()
+        expect(persisted.map((project) => project.name)).toContain(`${LOOP_NONCE}-三维改名`)
+      },
     },
   ]
 }
@@ -319,7 +335,7 @@ describe('读改验回环的全域穷举', () => {
       }
 
       try {
-        loop.assertStore?.()
+        await loop.assertTruthSource?.()
       } catch (error) {
         failures.push(`${loop.domain}：真相源对账失败 → ${(error as Error).message.slice(0, 200)}`)
       }
