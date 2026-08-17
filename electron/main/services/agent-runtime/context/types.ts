@@ -146,6 +146,16 @@ export interface AgentContextBuildInput {
     inputTokens: number
     conversationMessageCount: number
     /**
+     * 上一轮**本地估算**的输入 token 数，与 `inputTokens` 是同一份请求的两种口径。
+     *
+     * 有了这一对数就能算出估算器相对本供应商、本内容配比的真实倍率，让分层预算按真值走。
+     * 缺它的时候预算只能信估算器，而估算器按设计「宁可高估」：实测三维场景第 7 轮估 46,248、
+     * 供应商实收 32,046，高估 44%，于是预算凭空少了一万多，`user_instructions` 与
+     * `skills_index` 被判超额丢弃——两层都在可缓存前缀里，一丢整段对话缓存作废，
+     * 命中量从 20,480 掉回 4,096，而模型正好在写最终答复时失去了技能索引。
+     */
+    estimatedInputTokens?: number
+    /**
      * 上一轮供应商实际报告的前缀缓存命中/写入量。
      *
      * 只用于日志，不参与任何阈值计算。补它是因为「稳定层 → 对话历史 → 易变层」这个顺序

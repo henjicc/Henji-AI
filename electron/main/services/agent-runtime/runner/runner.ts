@@ -620,7 +620,9 @@ export class AgentRunner {
         })
         context = primary.context
         const result = primary.result
-        this.turnContextCoordinator.recordModelInputUsage(result.usage, this.conversation.length)
+        this.turnContextCoordinator.recordModelInputUsage(
+          result.usage, this.conversation.length, context.estimatedTokens,
+        )
         if (!await persistValidatedModelResponse({
           result,
           guard: this.modelOutputGuard,

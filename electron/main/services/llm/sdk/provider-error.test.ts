@@ -20,6 +20,15 @@ describe('normalizeProviderError', () => {
     [{ statusCode: 429, code: 'rate_limit' }, 'rate_limit', true],
     [{ statusCode: 503, code: 'unavailable' }, 'server', true],
     [{ code: 'ETIMEDOUT' }, 'network', true],
+    /*
+     * 传输途中被断开就是网络错误。`UND_ERR_SOCKET` 此前落到 unknown → retryable: false，
+     * 最典型的可重试错误被判成不可重试：实测三维场景连续两次真跑都死在它上面，
+     * 整次运行判失败、0 个 Effect。
+     */
+    [{ code: 'UND_ERR_SOCKET' }, 'network', true],
+    [{ code: 'ECONNRESET' }, 'network', true],
+    // 参数写错了重试多少次都一样，不能一并放进网络类。
+    [{ code: 'UND_ERR_INVALID_ARG' }, 'unknown', false],
     [{ statusCode: 400, code: 'context_length_exceeded' }, 'context_overflow', false],
     [{ statusCode: 422, code: 'invalid_argument' }, 'invalid_request', false],
   ])('将结构化供应商错误分类为 %s', (raw, category, retryable) => {

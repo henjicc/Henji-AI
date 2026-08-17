@@ -116,11 +116,26 @@ export function reduceAgentWorkingSummary(
     const step = failActiveStep(next, event)
     const unknownWrite = step.readOnly !== true
       && ['TIMEOUT', 'EXECUTION_FAILED', 'CANCELLED'].includes(event.error.code)
+    /*
+     * 只读调用失败不算"欠着事没做完"。
+     *
+     * `unresolvedItems` 不只是展示：`executionSealingBlocker` 见到它非空就拒绝封存，而清空
+     * 的唯一途径是**同名工具**后来成功一次。模型读一次失败就换条路把活干完——它本来就该这么
+     * 做——那条记录就再也清不掉。实测设置场景：一次 `read_agent_artifact` 报 NOT_FOUND，
+     * 模型换路完成任务、12 项正式验证全过、10 个真实写入，却因为这条陈年记录拿不到封存，
+     * 整次运行被判不通过。
+     *
+     * 只读失败世界没有变化、没有留下要收拾的东西，模型也已经用最终答复表明它认为做完了。
+     * 失败本身照常进 failedSteps，模型看得到；只是不再拿它去否决模型的判断。
+     * 写入失败照旧记账——那才是真的可能欠着东西。
+     */
     next = {
       ...next,
       activeStep: null,
       failedSteps: appendBounded(next.failedSteps, step, 10),
-      unresolvedItems: appendBounded(next.unresolvedItems, `${event.toolName} 未收敛：${event.error.code}`, 10),
+      unresolvedItems: step.readOnly === true
+        ? next.unresolvedItems
+        : appendBounded(next.unresolvedItems, `${event.toolName} 未收敛：${event.error.code}`, 10),
       recovery: unknownWrite ? {
         mode: 'verify_before_write',
         reason: `${event.toolName} 的写入副作用未知，恢复后必须先查询真实状态。`,

@@ -22,10 +22,6 @@ export class ProviderModelStepError extends Error {
   }
 }
 
-function errorRecord(error: unknown): ErrorRecord {
-  return error && typeof error === 'object' ? error as ErrorRecord : {}
-}
-
 function errorChain(error: unknown): ErrorRecord[] {
   const records: ErrorRecord[] = []
   const seen = new Set<unknown>()
@@ -121,8 +117,20 @@ function categoryFor(
   if (status !== null && status >= 500) return 'server'
   if (status === 400 || status === 404 || status === 405 || status === 422) return 'invalid_request'
   if (isTimeoutError(records, code)) return 'network'
-  if (['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'UND_ERR_CONNECT_TIMEOUT']
-    .includes(code.toUpperCase())) return 'network'
+  /*
+   * 连接在传输途中断掉，就是网络错误，不是"未知"。
+   *
+   * `UND_ERR_SOCKET`（undici：对端关闭了 socket）此前落到 unknown，于是被标成
+   * retryable: false——最典型的可重试错误被判成不可重试。实测三维场景连续两次真跑都死在
+   * 这一条上，整次运行直接判失败，一个 Effect 都没做成。
+   *
+   * 只列传输层的码：`UND_ERR_INVALID_ARG` 这类是调用方写错了参数，重试多少次都一样。
+   */
+  if ([
+    'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED', 'ETIMEDOUT', 'ENOTFOUND',
+    'EPIPE', 'EHOSTUNREACH', 'ENETUNREACH', 'ENETRESET', 'EAI_AGAIN',
+    'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET', 'UND_ERR_CLOSED', 'UND_ERR_DESTROYED',
+  ].includes(code.toUpperCase())) return 'network'
   if (records.some((record) => record.isRetryable === true)) return 'network'
   return 'unknown'
 }

@@ -17,7 +17,6 @@ import {
 } from '../../../../../src/core/assistant/externalWait'
 import type { AgentToolGateway } from '../../agent-runtime/tools/gateway'
 import type { AgentToolRegistry } from '../../agent-runtime/tools/registry'
-import type { AgentToolDefinition } from '../../agent-runtime/tools/types'
 import type { HenjiScriptApiLease } from '../../agent-runtime/context/script-api-lease'
 import {
   HenjiScriptError,
@@ -371,7 +370,9 @@ export class HenjiScriptService {
         const instruction = queue.shift() as HenjiInstruction
         if (context.signal.aborted) throw new HenjiScriptError('SCRIPT_STEP_FAILED', 'execute', '脚本已取消', instruction.location, instruction.stepId)
         if (instruction.kind === 'branch') {
-          const branch = Boolean(evaluate(instruction.condition, state.values)) ? instruction.whenTrue : instruction.whenFalse
+          const branch = evaluate(instruction.condition, state.values)
+            ? instruction.whenTrue
+            : instruction.whenFalse
           queue.unshift(...branch)
           continue
         }

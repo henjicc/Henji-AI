@@ -48,6 +48,7 @@ export class AgentTurnContextCoordinator {
   private lastModelUsage: {
     inputTokens: number
     conversationMessageCount: number
+    estimatedInputTokens?: number
     cacheReadTokens?: number | null
     cacheWriteTokens?: number | null
     inputNoCacheTokens?: number | null
@@ -63,11 +64,22 @@ export class AgentTurnContextCoordinator {
     return this.skills
   }
 
-  recordModelInputUsage(usage: ModelStepUsage, conversationMessageCount: number): void {
+  /**
+   * `estimatedInputTokens` 是构建这一轮上下文时本地估出来的数，和供应商回报的实收数配成一对。
+   * 少了它，下一轮的分层预算就只能信估算器的高估值。
+   */
+  recordModelInputUsage(
+    usage: ModelStepUsage,
+    conversationMessageCount: number,
+    estimatedInputTokens?: number
+  ): void {
     if (usage.inputTokens === null || usage.inputTokens <= 0) return
     this.lastModelUsage = {
       inputTokens: usage.inputTokens,
       conversationMessageCount,
+      estimatedInputTokens: estimatedInputTokens && estimatedInputTokens > 0
+        ? estimatedInputTokens
+        : undefined,
       cacheReadTokens: usage.cacheReadTokens,
       cacheWriteTokens: usage.cacheWriteTokens,
       inputNoCacheTokens: usage.inputNoCacheTokens,

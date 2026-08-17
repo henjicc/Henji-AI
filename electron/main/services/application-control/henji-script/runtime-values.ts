@@ -125,7 +125,7 @@ export function evaluate(expression: HenjiValueExpression, values: ReadonlyMap<s
     }
   }
   if (expression.kind === 'conditional') {
-    return Boolean(evaluate(expression.condition, values))
+    return evaluate(expression.condition, values)
       ? evaluate(expression.whenTrue, values)
       : evaluate(expression.whenFalse, values)
   }

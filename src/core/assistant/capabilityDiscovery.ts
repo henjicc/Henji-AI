@@ -142,6 +142,16 @@ export const HENJI_SCRIPT_LANGUAGE_RULES = [
   '尽量把能一起做的写进同一段：一段里连续完成创建、更新、删除最省，也最不容易出竞态。'
     + '但确实需要上一段的结果才能决定下一步时，就写第二段——不要为了凑成一段反复琢磨。',
   '断言只支持 equal、exists、absent、matches；基于读取值选择替代值可使用确定性三元表达式。',
+  /*
+   * 「删掉它，再确认它没了」是用户会原样说出口的话，而运行时**已经**为它做好了：
+   * service.ts 里读一个本段刚删掉的引用直接返回 null，不再抛 ENTITY_NOT_FOUND。
+   * 但这件事从来没写进规则，模型只能猜——实测素材库场景连撞三次，
+   * 先试 `.find()`、再试 `let` 循环、再试 `app.range(0, total)` 扫列表，
+   * 推理里原话是「不确定 read 一个已删除实体会抛错还是返回什么」。
+   * 能力做了却不说，等于没做。
+   */
+  '"删掉再确认它没了"：remove 之后直接对同一个 ref 调 read，本段删过的引用读回 null，'
+    + '配 app.assert.absent(读取结果) 收尾。不要 list 出来逐项找——list 的 refs 只有 kind/id。',
   'recipes[].limits 是该配方单次调用的容量上限（按 effect × 实体类型给出 maximumCount）。'
     + '本次任务需要的次数超过上限时不要硬套那条配方——它会执行失败，直接用 app.entities 与 app.action 自己组合。'
     + '例如"改一个设置值再恢复原值"是 2 次 update，装不进 maximumCount 为 1 的配方。',

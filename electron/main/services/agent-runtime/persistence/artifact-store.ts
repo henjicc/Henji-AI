@@ -94,7 +94,14 @@ export function selectPayload(payload: unknown, fields: string[] | undefined): {
     const available = availableFields.length > 0
       ? `。可用顶层字段：${availableFields.join('、')}`
       : '。该 Artifact 没有可筛选的顶层字段，请省略 fields'
-    throw new Error(`[INVALID_INPUT] Artifact 不包含请求的任何顶层字段：${requested.join('、')}${available}`)
+    const hints = requested.flatMap((field) => {
+      const path = findNestedPath(record, field)
+      return path ? [`${field} → ${path}`] : []
+    })
+    const hint = hints.length > 0 ? `。这些字段是嵌套的，改用点路径：${hints.join('；')}` : ''
+    throw new Error(
+      `[INVALID_INPUT] Artifact 不包含请求的任何顶层字段：${requested.join('、')}${hint}${available}`
+    )
   }
 
   return {
@@ -130,6 +137,35 @@ function resolveFieldPath(
     current = (current as Record<string, unknown>)[segment]
   }
   return { found: true, value: current }
+}
+
+/**
+ * 找出一个裸字段名在 artifact 里的实际点路径。
+ *
+ * 点路径早就支持了，但错误里只列顶层键——模型写 `recipes`，被告知"可用顶层字段：…、
+ * scriptApi、…"，而 `recipes` 就在 `scriptApi` 里面。运行时知道答案却只肯说"不在顶层"，
+ * 于是模型原样再试一次：实测三维场景连撞两次同一个字段，白烧两轮。
+ *
+ * 只查三层、只按叶子名精确匹配、最多给一条路径：目的是把已知的事实说出来，不是做模糊搜索。
+ */
+function findNestedPath(
+  record: Record<string, unknown>,
+  field: string,
+  depth = 3
+): string | null {
+  const leaf = field.split('.').filter(Boolean).at(-1)
+  if (!leaf) return null
+  const walk = (value: unknown, prefix: string[], remaining: number): string | null => {
+    if (remaining === 0 || !value || typeof value !== 'object' || Array.isArray(value)) return null
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      const path = [...prefix, key]
+      if (key === leaf && path.length > 1) return path.join('.')
+      const nested = walk(child, path, remaining - 1)
+      if (nested) return nested
+    }
+    return null
+  }
+  return walk(record, [], depth)
 }
 
 function safeUtf8Page(buffer: Buffer, offset: number, limitBytes: number): {
@@ -253,11 +289,34 @@ export class AgentArtifactPersistenceStore {
       JOIN agent_runs r ON r.run_id = a.run_id
       WHERE a.artifact_ref = ?
     `).get(request.artifactRef) as ArtifactRow | undefined
-    if (!row) throw new Error('[ARTIFACT_NOT_FOUND] Artifact 不存在或已删除')
+    if (!row) throw new Error(`[ARTIFACT_NOT_FOUND] Artifact 不存在或已删除${this.availableRefsHint(request)}`)
     if (row.run_id !== request.runId || row.thread_id !== request.threadId) {
       throw new Error('[PERMISSION_DENIED] Artifact 不属于当前 run/thread')
     }
     return row
+  }
+
+  /**
+   * 引用不存在时，把本次运行真正有哪些 artifact 说出来。
+   *
+   * 光说"不存在或已删除"，模型只能再猜一个 ref。实测设置场景：一次 NOT_FOUND 之后模型放弃
+   * 读取、换路完成任务——结果是好的，但那一轮白烧了，而且那条失败记录一度把封存卡死。
+   * 本次运行有哪些引用是数据库里现成的事实，没有任何理由不告诉它。
+   */
+  private availableRefsHint(request: AgentArtifactDescribeRequest): string {
+    try {
+      const rows = this.database.prepare(`
+        SELECT a.artifact_ref FROM agent_artifacts a
+        JOIN agent_runs r ON r.run_id = a.run_id
+        WHERE a.run_id = ? AND r.thread_id = ?
+        ORDER BY a.created_at DESC LIMIT 8
+      `).all(request.runId, request.threadId) as { artifact_ref: string }[]
+      if (rows.length === 0) return '。本次运行没有任何 artifact，不要再调用本工具。'
+      return `。本次运行可读的 artifactRef：${rows.map((item) => item.artifact_ref).join('、')}`
+    } catch {
+      // 提示是锦上添花，取不到就照常报原始错误，不能让它把 NOT_FOUND 变成别的失败。
+      return ''
+    }
   }
 }
 

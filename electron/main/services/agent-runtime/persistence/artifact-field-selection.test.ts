@@ -55,6 +55,21 @@ describe('artifact 字段筛选', () => {
       .toThrow(/不包含请求的任何顶层字段：alsoNope、nope。可用顶层字段：scriptApi、capabilities、note、items/)
   })
 
+  /*
+   * 字段确实存在、只是嵌套在里面时，必须把实际点路径说出来。
+   *
+   * 实测三维场景：模型写裸 `recipes`，被告知"可用顶层字段：…、scriptApi、…"——而 recipes
+   * 就在 scriptApi 里面。运行时知道答案却只肯说"不在顶层"，模型于是原样再试一次，白烧两轮。
+   */
+  it('缺失字段其实是嵌套字段时，直接给出可用的点路径', () => {
+    expect(() => selectPayload(PAYLOAD, ['actions']))
+      .toThrow(/这些字段是嵌套的，改用点路径：actions → scriptApi\.actions/)
+  })
+
+  it('真的不存在的字段不编造路径', () => {
+    expect(() => selectPayload(PAYLOAD, ['nope'])).not.toThrow(/改用点路径/)
+  })
+
   it('不传 fields 时原样返回', () => {
     const result = selectPayload(PAYLOAD, undefined)
     expect(result.payload).toBe(PAYLOAD)

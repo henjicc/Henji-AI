@@ -114,6 +114,51 @@ describe('Agent 工作摘要', () => {
     expect(summary.recovery.mode).toBe('none')
   })
 
+  /*
+   * 只读调用失败不算"欠着事没做完"。
+   *
+   * unresolvedItems 的唯一清除途径是同名工具后来成功一次；模型读一次失败就换条路把活干完
+   * ——它本来就该这么做——那条记录就再也清不掉，而 executionSealingBlocker 见它非空就拒绝封存。
+   * 实测设置场景：一次 read_agent_artifact 报 NOT_FOUND，模型换路完成任务、12 项正式验证全过、
+   * 10 个真实写入，却因为这条陈年记录拿不到封存，整次运行被判不通过。
+   */
+  it('只读工具失败进入 failedSteps，但不挡封存', () => {
+    let summary = createAgentWorkingSummary('修改设置并恢复')
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'ToolRequested', toolCallId: 'call-read', toolName: 'read_agent_artifact',
+      inputDigest: 'digest', category: 'artifacts', readOnly: true, idempotent: true,
+    }), null)
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'ToolFailed', toolCallId: 'call-read', toolName: 'read_agent_artifact',
+      category: 'artifacts', readOnly: true, idempotent: true,
+      error: {
+        code: 'NOT_FOUND', message: 'Artifact 不存在或已删除', retryable: false, recovery: 'user_action',
+      },
+    }), null)
+
+    // 失败照常留档，模型看得到；只是不再拿它去否决模型「已经做完」的判断。
+    expect(summary.failedSteps).toMatchObject([{ toolName: 'read_agent_artifact', status: 'failed' }])
+    expect(summary.unresolvedItems).toEqual([])
+    expect(summary.recovery.mode).toBe('none')
+  })
+
+  it('写入工具失败照旧记账', () => {
+    let summary = createAgentWorkingSummary('创建素材库')
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'ToolRequested', toolCallId: 'call-write', toolName: 'run_henji_script',
+      inputDigest: 'digest', category: 'application', readOnly: false, idempotent: false,
+    }), null)
+    summary = reduceAgentWorkingSummary(summary, event({
+      type: 'ToolFailed', toolCallId: 'call-write', toolName: 'run_henji_script',
+      category: 'application', readOnly: false, idempotent: false,
+      error: {
+        code: 'EXECUTION_FAILED', message: '脚本执行失败', retryable: true, recovery: 'refresh_context',
+      },
+    }), null)
+
+    expect(summary.unresolvedItems).toEqual(['run_henji_script 未收敛：EXECUTION_FAILED'])
+  })
+
   it('权威重读后清除 revision 恢复噪音，但保留真正丢失的产物', () => {
     const summary = createAgentWorkingSummary('续跑外部任务')
     summary.recovery = {
