@@ -66,6 +66,7 @@ const surfaceIdsByDomain: Readonly<Record<string, string[]>> = {
   camera_stage: ['tool.camera_stage'],
   storyboard: ['workspace.canvas'],
   image_edit: ['tool.image_edit'],
+  image_mark: ['tool.image_edit'],
   assets: ['workspace.assets', 'overlay.assets'],
   workflows: ['workspace.canvas'],
   settings: ['settings.general'],

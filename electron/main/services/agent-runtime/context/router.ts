@@ -21,7 +21,7 @@ const logger = createMainLogger('main.agent_router')
 const routerModelDecisionSchema = z.object({
   intent: z.enum(AGENT_INTENTS),
   // 供应商未强制 JSON Schema 时，附属字段偶发变形不应掩盖已识别的主意图。
-  // 工具权限仍只由本地 routePolicy 和白名单值决定，绝不采纳模型自由生成的对象。
+  // 工具权限仍只由本地 AGENT_ROUTE_POLICY 和白名单值决定，绝不采纳模型自由生成的对象。
   candidateIntents: z.unknown().optional(),
   toolDomains: z.unknown().optional(),
   reason: z.unknown().optional(),
@@ -69,7 +69,7 @@ interface DeterministicRule {
   toolDomains?: AgentToolDomain[]
 }
 
-const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'toolDomains'>> = {
+export const AGENT_ROUTE_POLICY: Record<AgentIntent, Pick<AgentRouteDecision, 'toolDomains'>> = {
   navigate: { toolDomains: ['navigation'] },
   generate: { toolDomains: ['models', 'generation', 'navigation'] },
   inspect_model: { toolDomains: ['models'] },
@@ -82,7 +82,9 @@ const routePolicy: Record<AgentIntent, Pick<AgentRouteDecision, 'toolDomains'>> 
   toolbox: { toolDomains: ['toolbox'] },
   camera_stage: { toolDomains: ['toolbox', 'camera_stage', 'navigation'] },
   storyboard: { toolDomains: ['storyboard'] },
-  image_edit: { toolDomains: ['toolbox', 'image_edit', 'assets'] },
+  // image_mark 与 image_edit 同住图片编辑器：前者管标注文档的撤销/重做，后者管预览与来源。
+  // 只锚定 image_edit 时，模型改标注要先猜到 image_mark 这个域名才发现得到，而它猜不到。
+  image_edit: { toolDomains: ['toolbox', 'image_edit', 'image_mark', 'assets'] },
   assets: { toolDomains: ['assets'] },
   workflow: { toolDomains: ['workflows'] },
   user_instructions: { toolDomains: ['user_instructions'] },
@@ -119,8 +121,8 @@ function resolveCandidateDomains(
   requestedDomains: AgentToolDomain[]
 ): AgentToolDomain[] {
   return uniqueValues([
-    ...routePolicy[intent].toolDomains,
-    ...candidateIntents.flatMap((candidate) => routePolicy[candidate].toolDomains),
+    ...AGENT_ROUTE_POLICY[intent].toolDomains,
+    ...candidateIntents.flatMap((candidate) => AGENT_ROUTE_POLICY[candidate].toolDomains),
     ...requestedDomains,
   ], 8)
 }
@@ -234,7 +236,7 @@ function deterministicRoute(
   const [match] = matches
   return {
     intent: match.intent,
-    toolDomains: match.toolDomains ?? routePolicy[match.intent].toolDomains,
+    toolDomains: match.toolDomains ?? AGENT_ROUTE_POLICY[match.intent].toolDomains,
     reason: `命中确定性 ${match.intent} 规则`,
     // 能力概览规则（intent=general，toolDomains 为空）只是回答"你能做什么"，不是应用任务，
     // 不发放 R1 写工具的自动放行位；其余确定性规则都命中了一个具体动作。

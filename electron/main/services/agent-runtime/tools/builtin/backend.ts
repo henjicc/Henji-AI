@@ -16,6 +16,7 @@ import {
 } from '../../../../../../src/core/assistant/capabilities/capabilityDiscoveryApplicationCapabilities'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../../src/core/assistant/toolBudget'
 import { AgentCapabilityDiscoveryCatalog } from '../../context/capability-discovery'
+import { AGENT_TOOL_DOMAINS } from '../../context/types'
 import { hydrateHenjiScriptApi } from '../../context/script-api-hydration'
 import { rememberHenjiScriptApiLease } from '../../context/script-api-lease'
 import { selectLeaseableToolNames } from '../../context/tool-activation'
@@ -23,25 +24,16 @@ import { createBackendCapabilityTool } from '../backend-capability-tool'
 import type { FrontendToolInvoker } from './frontend-utils'
 import { requireFrontendSuccess } from './frontend-utils'
 
-const applicationCapabilityCategorySchema = z.enum([
-  'catalog',
-  'application',
-  'navigation',
-  'models',
-  'generation',
-  'user_instructions',
-  'memory',
-  'diagnostics',
-  'canvas',
-  'toolbox',
-  'camera_stage',
-  'storyboard',
-  'image_edit',
-  'assets',
-  'workflows',
-  'artifacts',
-  'settings',
-])
+/*
+ * 分类清单只有一份：`AGENT_TOOL_DOMAINS`。
+ *
+ * 这里曾经并存三份同样的 17 项清单——`context/types.ts` 一份、本文件的 z.enum 一份、
+ * 下面 aiInputSchema 的 `enum:` 数组又一份。三份谁都不会因为对方改了而报错，于是
+ * "域注册了但没有能力"这类缺口可以在任意一份里安静地待着。收敛成派生之后，改一处即三处同步，
+ * 域清单本身也就有了唯一可被门禁盯住的真相源（见 capability-category-coverage.test.ts）。
+ */
+export const APPLICATION_CAPABILITY_CATEGORIES = AGENT_TOOL_DOMAINS
+const applicationCapabilityCategorySchema = z.enum(APPLICATION_CAPABILITY_CATEGORIES)
 
 function eraseToolDefinition<TInput, TOutput>(
   definition: AgentToolDefinition<TInput, TOutput>
@@ -119,25 +111,7 @@ export function createBackendBuiltinTools(
         query: { type: 'string' },
         category: {
           type: 'string',
-          enum: [
-            'catalog',
-            'application',
-            'navigation',
-            'models',
-            'generation',
-            'user_instructions',
-            'memory',
-            'diagnostics',
-            'canvas',
-            'toolbox',
-            'camera_stage',
-            'storyboard',
-            'image_edit',
-            'assets',
-            'workflows',
-            'artifacts',
-            'settings',
-          ],
+          enum: [...APPLICATION_CAPABILITY_CATEGORIES],
         },
         cursor: { type: 'integer', minimum: 0 },
         limit: { type: 'integer', minimum: 1, maximum: 20 },

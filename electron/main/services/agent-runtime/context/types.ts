@@ -38,6 +38,20 @@ export const AGENT_TOOL_DOMAINS = [
   'camera_stage',
   'storyboard',
   'image_edit',
+  /*
+   * `image_mark` 与 `image_edit` 是两个域，不是一个域的两种写法。
+   *
+   * 图片编辑器这个 Surface 上住着两套能力：`image_edit` 管预览与来源（create_image_edit_preview
+   * 等），`image_mark` 管标注文档本身（undo/redo，实体是 image_mark.document /
+   * image_mark.annotation）。后者此前从未出现在这份清单里，于是它既进不了
+   * `search_application_capabilities` 的分类枚举，也不被任何 intent 的 toolDomains 锚定——
+   * 模型没有任何途径学到"image_mark"这个词，只会猜 image_edit，而那是另一个域。
+   *
+   * 这与设置域那次事故是同一形状（能力声明 application.setting、注册表登记 settings.registry，
+   * 一次改设置从 5 回合 3.8 万 token 变成 18 回合 25 万）：同一样东西两个名字，或者一个名字
+   * 只登记了一半，代价都是模型撞墙。
+   */
+  'image_mark',
   'assets',
   'workflows',
   'user_instructions',
