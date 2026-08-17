@@ -506,6 +506,15 @@ describe('HenjiScriptService', () => {
       status: 'failed', error: { code: 'SCRIPT_API_NOT_DISCOVERED', phase: 'preflight' },
     })
     expect(registeredButNotLeased.calls).toHaveLength(0)
+    /*
+     * 拒绝必须带着可用清单和补救办法：可用能力就在同一个 lease 对象里，只说「没披露」
+     * 等于让模型继续猜。实测三维场景为 open_camera_stage_project 白费一整段脚本和一个回合。
+     */
+    expect(registeredButNotLeased.output.error?.message).toContain('本次租约可用的能力：read_test_state')
+    expect(registeredButNotLeased.output.error?.message).toContain('重新调用 discover_application_capabilities')
+
+    const unleasedEntity = await run("await app.entities.list('other.entity');")
+    expect(unleasedEntity.output.error?.message).toContain('本次租约可用的实体类型：test.entity')
 
     const truncated = await run(`
       await app.entities.update({ kind: 'test.entity', id: 'entity-…' }, { 'test.entity.value': 1 });

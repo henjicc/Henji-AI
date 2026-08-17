@@ -40,6 +40,22 @@ const ENTITY_TOOL = {
   'entities.remove': 'change_application_entities',
 } as const
 
+/**
+ * 租约里没有这一项时，把租约里**有**的那些说出来，并指明怎么拿到缺的那项。
+ *
+ * 原来五处只说「X 未在本次 scriptApi 租约中披露」，而可用清单就在同一个 lease 对象里。
+ * 模型拿到这句话既不知道该换哪个 ID，也不知道能重新发现——实测三维场景为
+ * `open_camera_stage_project` 白费一整段脚本和一个回合。
+ */
+function leaseHint(kindLabel: string, available: ReadonlySet<string>): string {
+  const items = [...available].slice(0, 24)
+  const listed = items.length > 0
+    ? `本次租约可用的${kindLabel}：${items.join('、')}`
+    : `本次租约没有任何${kindLabel}`
+  return `。${listed}。确实需要别的，就重新调用 discover_application_capabilities，`
+    + '在 domains / entityTypes 里点名它所属的领域与实体。'
+}
+
 export class HenjiScriptPreflight {
   constructor(private readonly registry: AgentToolRegistry) {}
 
@@ -87,8 +103,9 @@ export class HenjiScriptPreflight {
         const id = literalString(instruction.args[0])
         const allowed = instruction.api === 'action' ? lease.actions : lease.recipes
         if (!id || !allowed.has(id)) {
+          const label = instruction.api === 'action' ? '能力' : '配方'
           throw new HenjiScriptError('SCRIPT_API_NOT_DISCOVERED', 'preflight',
-            `${instruction.api === 'action' ? '能力' : '配方'} ${id ?? '(动态值)'} 未在本次 scriptApi 租约中披露`,
+            `${label} ${id ?? '(动态值)'} 未在本次 scriptApi 租约中披露${leaseHint(label, allowed)}`,
             instruction.location, instruction.stepId)
         }
         const kinds = instruction.api === 'action' ? this.registry.get(id)?.capability?.producesRefs ?? [] : []
@@ -102,14 +119,18 @@ export class HenjiScriptPreflight {
         : typeExpression?.kind === 'variable' ? producedKinds.get(typeExpression.name) ?? new Set<string>() : new Set<string>()
       for (const kind of possibleKinds) {
         if (!lease.entityTypes.has(kind)) throw new HenjiScriptError(
-          'SCRIPT_API_NOT_DISCOVERED', 'preflight', `实体类型 ${kind} 未在本次 scriptApi 租约中披露`, instruction.location, instruction.stepId)
+          'SCRIPT_API_NOT_DISCOVERED', 'preflight',
+          `实体类型 ${kind} 未在本次 scriptApi 租约中披露${leaseHint('实体类型', lease.entityTypes)}`,
+          instruction.location, instruction.stepId)
       }
       if (instruction.api === 'entities.create' && explicitKind) producedKinds.set(instruction.stepId, new Set([explicitKind]))
       const properties = instruction.api === 'entities.update' ? instruction.args[1]
         : instruction.api === 'entities.create' ? expressionObjectEntry(instruction.args[1], 'properties') : undefined
       for (const propertyId of propertyKeys(properties)) {
         if (!lease.propertyIds.has(propertyId)) throw new HenjiScriptError(
-          'SCRIPT_API_NOT_DISCOVERED', 'preflight', `属性 ${propertyId} 未在本次 scriptApi 租约中披露`, instruction.location, instruction.stepId)
+          'SCRIPT_API_NOT_DISCOVERED', 'preflight',
+          `属性 ${propertyId} 未在本次 scriptApi 租约中披露${leaseHint('属性', lease.propertyIds)}`,
+          instruction.location, instruction.stepId)
       }
       this.assertStaticPropertyValues(properties, lease, instruction)
     }
@@ -167,13 +188,17 @@ export class HenjiScriptPreflight {
     const entityType = instruction.api === 'entities.list' || instruction.api === 'entities.create'
       ? String(args[0]) : fullRef(args[0], instruction.location).kind
     if (!lease.entityTypes.has(entityType)) throw new HenjiScriptError(
-      'SCRIPT_API_NOT_DISCOVERED', 'preflight', `实体类型 ${entityType} 未在本次 scriptApi 租约中披露`, instruction.location, instruction.stepId)
+      'SCRIPT_API_NOT_DISCOVERED', 'preflight',
+      `实体类型 ${entityType} 未在本次 scriptApi 租约中披露${leaseHint('实体类型', lease.entityTypes)}`,
+      instruction.location, instruction.stepId)
     const properties = instruction.api === 'entities.update' ? args[1]
       : instruction.api === 'entities.create' && isRecord(args[1]) ? args[1].properties : null
     if (!isRecord(properties)) return
     for (const propertyId of Object.keys(properties)) {
       if (!lease.propertyIds.has(propertyId)) throw new HenjiScriptError(
-        'SCRIPT_API_NOT_DISCOVERED', 'preflight', `属性 ${propertyId} 未在本次 scriptApi 租约中披露`, instruction.location, instruction.stepId)
+        'SCRIPT_API_NOT_DISCOVERED', 'preflight',
+        `属性 ${propertyId} 未在本次 scriptApi 租约中披露${leaseHint('属性', lease.propertyIds)}`,
+        instruction.location, instruction.stepId)
       this.assertPropertyValue(propertyId, properties[propertyId] as JsonValue, lease, instruction)
     }
   }
