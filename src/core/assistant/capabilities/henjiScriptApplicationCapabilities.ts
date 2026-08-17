@@ -123,6 +123,31 @@ export const runHenjiScriptCapability = defineApplicationCapability({
     language: HENJI_SCRIPT_LANGUAGE,
     summary: '创建球体并做三点浮动动画',
     source: "const result = await app.recipe('camera_stage.state_animation', { projectName: '浮动球', object: { primitiveKind: 'sphere', name: '球' }, samples: [{ time: 0, position: { y: 0 } }, { time: 1, position: { y: 1.5 } }, { time: 2, position: { y: 0 } }], loop: true, play: true });\napp.assert.exists(result.resultRefs);",
+  }, {
+    /*
+     * 「按名字找到那一个」必须给例子。
+     *
+     * 脚本语言不允许遍历读取结果（循环在编译期展开），模型的第一反应几乎都是 .find / .filter
+     * / let 标志位，然后连撞好几次——实测素材库、画布、生成三个场景都撞过，素材库那次直接被
+     * 打挂。正确写法是把筛选交给 where，一个例子胜过一段说明。
+     */
+    language: HENJI_SCRIPT_LANGUAGE,
+    summary: '按名字找到素材库，删除后确认它不存在',
+    source: "const found = await app.entities.list('asset.library', { where: { name: '旧素材库' }, propertyIds: ['name'] });\n"
+      + 'app.assert.equal(found.refs.length, 1);\n'
+      + 'await app.entities.remove(found.refs[0]);\n'
+      + "const after = await app.entities.list('asset.library', { where: { name: '旧素材库' } });\n"
+      + 'app.assert.equal(after.refs.length, 0);',
+  }, {
+    /*
+     * 专用能力返回的数组不走 entities.list 的 where，得用 app.find 挑。
+     * 实测素材库场景就是在 `listResult.libraries.find(lib => lib.name === …)` 上连撞两次的。
+     */
+    language: HENJI_SCRIPT_LANGUAGE,
+    summary: '从某个能力返回的数组里按字段挑出一项',
+    source: "const listed = await app.action('list_asset_libraries', {});\n"
+      + "const target = app.find(listed.libraries, 'name', '我的素材库');\n"
+      + 'app.assert.exists(target);',
   }],
   control: {
     execution: { mode: 'immediate', cancelable: true, resultState: 'completed' },

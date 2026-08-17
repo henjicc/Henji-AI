@@ -72,9 +72,11 @@ const describeEntities = defineApplicationCapability({
 
 const listEntities = defineApplicationCapability({
   id: 'list_application_entities', version: 1, title: '列出应用实体实例',
-  description: '按实体类型列出当前存在的实例及其稳定引用，可按父实体过滤。',
+  description: '按实体类型列出当前存在的实例及其稳定引用。'
+    + 'propertyIds 可以一并读回每个实例的属性值；where 按属性等值筛选，只保留全部命中的实例。'
+    + '要"按名字找到那一个"就用 where，不要把列表取回来自己遍历——脚本语言不支持遍历读取结果。',
   domain: 'application',
-  aliases: ['列出实例', '有哪些对象', '列出关键帧', 'list entities'],
+  aliases: ['列出实例', '有哪些对象', '列出关键帧', '按名字查找', 'list entities'],
   readOnly: true, risk: 'R0', dataClasses: ['C1'], permission: 'application:read',
   idempotent: true, destructive: false, timeoutMs: 15_000, supportsPreview: false, supportsUndo: false,
   requiredScopes: [], acceptsRefs: [], producesRefs: [],
@@ -82,9 +84,24 @@ const listEntities = defineApplicationCapability({
     entityType: z.string().min(1),
     cursor: z.string().min(1).optional(),
     limit: z.number().int().min(1).max(200).default(50),
+    /*
+     * 属性投影与等值过滤：见 registry/types.ts 的 ApplicationEntityListProjection。
+     * 简单说——list 只给 kind/id，模型看不见名称，而脚本语言不允许遍历读取结果去逐个比对，
+     * 于是"确认改名成功了""把叫 X 的那个删掉"这类最普通的请求以前根本写不出来。
+     */
+    propertyIds: z.array(z.string().min(1)).max(16).default([]),
+    where: z.record(
+      z.string().min(1),
+      z.union([z.string(), z.number(), z.boolean(), z.null()])
+    ).default({}),
   }).strict(),
   outputSchema: capabilityOutputSchema({
     refs: z.array(refSchema),
+    /** 只有请求了 propertyIds / where 时才非空；与过滤后的 refs 一一对应。 */
+    items: z.array(z.object({
+      ref: refSchema,
+      properties: z.record(z.string(), z.unknown()),
+    }).strict()).default([]),
     nextCursor: z.string().nullable(),
     revisions: z.record(z.string(), z.number().int().nonnegative()),
   }),

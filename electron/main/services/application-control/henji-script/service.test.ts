@@ -517,6 +517,62 @@ describe('HenjiScriptService', () => {
     expect(output.error?.message).toContain('discover_application_capabilities')
   })
 
+  /*
+   * 「按名字挑出那一个」是模型的第一反应，而受限语言里没有闭包，也不会有。
+   *
+   * 实测素材库场景连撞 `.find(x => …)`、`let 标志位`、`for...of 读取结果` 三种写法，
+   * 6 次工具失败、0 个 Effect 被判死；画布与生成场景各撞过一次。app.find 用字段等值替代
+   * 闭包，覆盖实测的全部真实用法，又不引入任意代码执行。
+   */
+  it('app.find 按字段等值挑出一项，没命中时是 null', async () => {
+    const { output } = await run(`
+      const items = [{ id: 'a', name: '甲' }, { id: 'b', name: '乙' }];
+      const target = app.find(items, 'name', '乙');
+      app.assert.exists(target);
+      app.assert.equal(target.id, 'b');
+      app.assert.absent(app.find(items, 'name', '丙'));
+    `)
+    expect(output).toMatchObject({ status: 'completed', verification: { passed: true } })
+  })
+
+  it('app.filter 返回全部命中项，字段名支持点分路径', async () => {
+    const { output } = await run(`
+      const items = [
+        { ref: { kind: 'test.entity', id: 'a' } },
+        { ref: { kind: 'test.other', id: 'b' } },
+        { ref: { kind: 'test.entity', id: 'c' } }
+      ];
+      const hit = app.filter(items, 'ref.kind', 'test.entity');
+      app.assert.equal(hit.length, 2);
+    `)
+    expect(output).toMatchObject({ status: 'completed', verification: { passed: true } })
+  })
+
+  /*
+   * 字段名写错和真的没命中，对调用方是完全不同的两件事。静默返回 null 会让模型
+   * 以为"确实不存在"，然后基于错误结论继续往下做——比直接报错危险得多。
+   */
+  it('字段名写错时报错并列出实际有哪些字段，而不是静默返回没命中', async () => {
+    const { output } = await run(`
+      const items = [{ id: 'a', name: '甲' }];
+      const target = app.find(items, 'naem', 'x');
+      app.assert.exists(target);
+    `)
+    expect(output.status).not.toBe('completed')
+    expect(output.error?.message).toContain('naem')
+    expect(output.error?.message).toContain('可用字段')
+  })
+
+  it('拒绝 .find 闭包时给出 app.find 的替代写法', async () => {
+    const { output } = await run(`
+      const items = [{ id: 'a', name: '甲' }];
+      const target = items.find(item => item.id === 'a');
+      app.assert.exists(target);
+    `)
+    expect(output.error).toMatchObject({ code: 'SCRIPT_UNSUPPORTED_SYNTAX' })
+    expect(output.error?.message).toContain('app.find')
+  })
+
   it('未发现 API 与截断引用都在执行器调用次数为 0 时拒绝', async () => {
     const unknown = await run("await app.action('not_registered', {});")
     expect(unknown.output).toMatchObject({

@@ -20,6 +20,8 @@ import {
 
 import type {
   ApplicationControlAccessContext,
+  ApplicationEntityListItem,
+  ApplicationEntityListProjection,
   ApplicationEntityListRequest,
   ApplicationEntityListResult,
   ApplicationEntityProvider,
@@ -211,10 +213,33 @@ export class ApplicationReflectionRegistry {
     return normalizeApplicationPropertyValue(property, value)
   }
 
+  /**
+   * 属性 ID 允许只写 entityType 之后的那一段——写入路径早就这么约定了，读取路径没有理由更严。
+   *
+   * 解析不出来时走 requireProperty 抛错，那条错误会带上这个实体真正有哪些属性。
+   */
+  private resolvePropertyId(entityType: string, propertyId: string): string {
+    const byEntity = this.propertiesByEntity.get(entityType)
+    if (byEntity?.has(propertyId)) return propertyId
+    const prefixed = `${entityType}.${propertyId}`
+    if (byEntity?.has(prefixed)) return prefixed
+    return this.requireProperty(entityType, propertyId).id
+  }
+
+  /**
+   * 列出实体，并可按属性投影与等值过滤。
+   *
+   * 不带 projection 时行为与过去逐字一致（只返回 refs），这是绝大多数调用方的路径。
+   * 带 projection 时统一在这里读取并过滤：providers 一行不用改，所有实体类型自动受益。
+   *
+   * 过滤发生在**当前这一页之内**——refs 已经被 provider 按 limit/cursor 截过。这是有意的
+   * 简化：等值筛选用于"按名字定位那一个"，不是用于全库扫描；需要翻页的场景照旧用 nextCursor。
+   */
   async listEntities(
     entityType: string,
     request: ApplicationEntityListRequest,
-    context: ApplicationControlAccessContext
+    context: ApplicationControlAccessContext,
+    projection?: ApplicationEntityListProjection
   ): Promise<ApplicationEntityListResult> {
     const entity = this.requireEntity(entityType)
     if (!entity.exposures.includes(context.exposure)) throw new Error('PERMISSION_DENIED')
@@ -222,7 +247,26 @@ export class ApplicationReflectionRegistry {
     for (const ref of result.refs) {
       if (ref.kind !== entity.refKind) throw new Error(`INVALID_ENTITY_REF:${ref.kind}`)
     }
-    return result
+    const whereEntries = Object.entries(projection?.where ?? {})
+      .map(([key, value]) => [this.resolvePropertyId(entityType, key), value] as const)
+    const projected = (projection?.propertyIds ?? [])
+      .map((propertyId) => this.resolvePropertyId(entityType, propertyId))
+    if (whereEntries.length === 0 && projected.length === 0) return result
+
+    const needed = [...new Set([...projected, ...whereEntries.map(([id]) => id)])]
+    const items: ApplicationEntityListItem[] = []
+    for (const ref of result.refs) {
+      const snapshot = await this.readEntity(ref, needed, context)
+      const matches = whereEntries.every(([id, expected]) => (
+        JSON.stringify(snapshot.properties[id] ?? null) === JSON.stringify(expected ?? null)
+      ))
+      if (!matches) continue
+      items.push({
+        ref,
+        properties: Object.fromEntries(projected.map((id) => [id, snapshot.properties[id] ?? null])),
+      })
+    }
+    return { ...result, refs: items.map((item) => item.ref), items }
   }
 
   async readEntity(

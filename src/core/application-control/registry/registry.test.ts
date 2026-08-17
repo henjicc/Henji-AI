@@ -6,6 +6,7 @@ import type {
 } from './types'
 import { ApplicationReflectionRegistry } from './registry'
 import { unrestrictedCollectionAvailability, type ApplicationPropertyDescriptor } from '../reflection'
+import type { JsonValue } from '../identifiers'
 
 const catalogVersion = 'application-capabilities/v2'
 const digest = `sha256:${'a'.repeat(64)}`
@@ -164,6 +165,34 @@ const assistantContext = {
   exposure: 'assistant' as const,
   permissions: new Set(['sample:read', 'sample:write']),
   acceptedDataClasses: new Set(['C0', 'C1'] as const),
+}
+
+const multiValues: Record<string, Record<string, JsonValue>> = {
+  one: { 'sample.enabled': true, 'sample.level': 4, 'sample.mode': 'safe', 'sample.created_at': 'a' },
+  two: { 'sample.enabled': true, 'sample.level': 9, 'sample.mode': 'fast', 'sample.created_at': 'b' },
+  three: { 'sample.enabled': false, 'sample.level': 4, 'sample.mode': 'safe', 'sample.created_at': 'c' },
+}
+
+const multiProvider: ApplicationEntityProvider = {
+  ...provider,
+  async listEntities() {
+    return {
+      refs: ['one', 'two', 'three'].map((id) => ({ kind: 'sample.item', id, revision: 3 })),
+      nextCursor: null,
+      revisions: { 'sample.items': 3 },
+    }
+  },
+  async readEntity(ref, request) {
+    const values = multiValues[ref.id] ?? {}
+    const selected = new Set(request.propertyIds ?? Object.keys(values))
+    return {
+      ref,
+      entityType: 'sample.item',
+      revisions: { 'sample.items': 3 },
+      properties: Object.fromEntries(Object.entries(values).filter(([id]) => selected.has(id))),
+      capturedAt: '2026-08-01T00:00:00.000Z',
+    }
+  },
 }
 
 describe('ApplicationReflectionRegistry', () => {
@@ -331,6 +360,69 @@ describe('ApplicationReflectionRegistry', () => {
       ['sample.enabled'],
       assistantContext,
     )).rejects.toThrow(/list_application_entities/)
+  })
+
+  /*
+   * 「按名字找到那一个」是用户会原样说出口的话，以前脚本里写不出来。
+   *
+   * list 只返回 kind/id，模型看不见名称；受限脚本语言又不允许遍历读取结果去逐个比对。
+   * 两条合起来把"确认改名成功了""把叫 X 的那个删掉"变成死路——实测素材库场景因此被打挂
+   * （8 回合 6 次工具失败 0 个 Effect），画布与生成场景也各撞过一次。
+   *
+   * 筛选下沉到注册表统一做：providers 一行不用改，所有实体类型自动受益。
+   */
+  it('按属性等值过滤，只返回命中的实例并带上请求的属性值', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register({ ...registration(), provider: multiProvider })
+
+    const hit = await registry.listEntities(
+      'sample.item', { limit: 10 }, assistantContext,
+      { where: { 'sample.mode': 'safe' }, propertyIds: ['sample.level'] },
+    )
+    expect(hit.refs.map((ref) => ref.id)).toEqual(['one', 'three'])
+    expect(hit.items?.[0]?.properties).toEqual({ 'sample.level': 4 })
+
+    const miss = await registry.listEntities(
+      'sample.item', { limit: 10 }, assistantContext,
+      { where: { 'sample.mode': '不存在的模式' } },
+    )
+    expect(miss.refs).toEqual([])
+  })
+
+  /*
+   * 属性键的解析约定与写入路径逐字相同（applicationReflectionAdapter 的 resolvePropertyId）：
+   * 原样命中就用原样，补上 entityType 前缀能命中就补，都不命中就报错——不做任何猜测。
+   * 读写两条路径必须是同一套约定，否则模型得记两种写法。
+   */
+  it('过滤属性名解析不出来时，报出这个实体真正有哪些属性', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    registry.register({ ...registration(), provider: multiProvider })
+    let message = ''
+    try {
+      await registry.listEntities(
+        'sample.item', { limit: 10 }, assistantContext, { where: { level: 9 } },
+      )
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error)
+    }
+    expect(message).toContain('PROPERTY_NOT_FOUND')
+    expect(message).toContain('sample.level')
+  })
+
+  it('不请求投影时行为与过去逐字一致，不做任何额外读取', async () => {
+    const registry = new ApplicationReflectionRegistry(catalogVersion)
+    let reads = 0
+    registry.register({
+      ...registration(),
+      provider: { ...multiProvider, async readEntity(ref, request) {
+        reads += 1
+        return multiProvider.readEntity(ref, request)
+      } },
+    })
+    const result = await registry.listEntities('sample.item', { limit: 10 }, assistantContext)
+    expect(result.refs).toHaveLength(3)
+    expect(result.items).toBeUndefined()
+    expect(reads).toBe(0)
   })
 
   it('拒绝重复实体、重复属性、非法路径和提供者类型不一致', () => {

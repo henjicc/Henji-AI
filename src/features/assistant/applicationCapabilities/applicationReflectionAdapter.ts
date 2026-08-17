@@ -375,16 +375,23 @@ export const applicationReflectionHandlers = {
   },
 
   async listEntities(
-    input: { entityType: string; cursor?: string; limit: number },
+    input: {
+      entityType: string; cursor?: string; limit: number
+      propertyIds?: string[]; where?: Record<string, JsonValue>
+    },
     context: CapabilityExecutionContext
   ) {
     const result = await getApplicationReflectionRegistry().listEntities(
       input.entityType,
       { ...(input.cursor ? { cursor: input.cursor } : {}), limit: input.limit },
       executionContext(context),
+      { propertyIds: input.propertyIds, where: input.where },
     )
     rememberRefs(context.requestId ?? 'renderer', result.refs)
-    return { refs: result.refs, nextCursor: result.nextCursor, revisions: result.revisions }
+    return {
+      refs: result.refs, items: result.items ?? [],
+      nextCursor: result.nextCursor, revisions: result.revisions,
+    }
   },
 
   async readEntity(

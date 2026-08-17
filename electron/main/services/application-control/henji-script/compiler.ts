@@ -15,7 +15,30 @@ const MAX_NESTING = 4
 const MAX_LOOP_ITERATIONS = 64
 const MAX_OPERATIONS = 128
 const FORBIDDEN_PROPERTIES = new Set(['__proto__', 'prototype', 'constructor'])
-const HELPER_NAMES = new Set(['range', 'take', 'lerp', 'clamp', 'sin', 'cos', 'tan'])
+const HELPER_NAMES = new Set(['range', 'take', 'lerp', 'clamp', 'sin', 'cos', 'tan', 'find', 'filter'])
+
+/**
+ * `.find(x => x.name === '…')` 是模型的第一反应，而受限语言里没有闭包，也不会有。
+ *
+ * 实测这一条打挂过素材库场景、拖慢过画布与生成场景：模型连撞 `.find`、`let 标志位`、
+ * `for...of 读取结果` 三种写法，全被拒，最后放弃。拒绝本身是对的——闭包意味着任意求值——
+ * 但只说"不允许"等于不给出路。`app.find(数组, '字段', 值)` 用字段等值替代闭包：
+ * 表达力刚好覆盖实测的全部真实用法，又不引入任意代码执行。
+ */
+const ARRAY_METHOD_ALTERNATIVE = new Map<string, string>([
+  ['find', "改用 app.find(数组, '字段名', 期望值)，返回第一个命中的元素，没有就是 null。"],
+  ['filter', "改用 app.filter(数组, '字段名', 期望值)，返回全部命中的元素。"],
+  ['some', "改用 app.find(数组, '字段名', 期望值) 再 app.assert.exists / app.assert.absent。"],
+  ['findIndex', "改用 app.find(数组, '字段名', 期望值) 直接拿到那个元素，不要绕道下标。"],
+  ['map', '受限语言没有闭包。要取多项里的某个字段，先用 app.filter 选出来再逐项写明。'],
+  ['forEach', '受限语言没有闭包。要对多个已知实体逐个写入，写成多次 app.entities.* 调用。'],
+])
+
+/** 字段名支持点分路径（例如 'ref.id'），与运行期 app.find 的解析保持一致。 */
+function arrayMethodAlternative(pathName: string): string | undefined {
+  const segments = pathName.split('.')
+  return ARRAY_METHOD_ALTERNATIVE.get(segments[segments.length - 1] ?? '')
+}
 const CALL_APIS = new Set([
   'app.action', 'app.recipe',
   'app.entities.list', 'app.entities.read', 'app.entities.create',
@@ -128,6 +151,11 @@ function expressionPath(
      * 那句话把限制说成了"只有调用结果能点访问"，而真正的限制其实是"不能动态取属性"。
      * 对象字面量的键在编译期就确定，静态解析出来既安全也没有歧义。
      */
+    /*
+     * app.find(...) 挑出来那一项，接着读它的字段是必然要写的一步——不支持就等于白给。
+     * helper 的路径与 variable 完全同一套语义：编译期只记路径，运行期再解析。
+     */
+    if (base.kind === 'helper') return { ...base, path: [...(base.path ?? []), node.name.text] }
     const entry = base.kind === 'object'
       ? base.entries.find((item) => item.key === node.name.text)
       : undefined
@@ -154,6 +182,7 @@ function expressionPath(
     const base = expressionPath(sourceFile, node.expression, variables)
     if (!base) return null
     if (base.kind === 'variable') return { ...base, path: [...base.path, segment] }
+    if (base.kind === 'helper') return { ...base, path: [...(base.path ?? []), segment] }
     // 与点访问同一条道理：字面量的下标在编译期就确定，静态解析出来既安全也没有歧义。
     if (base.kind === 'object' && typeof segment === 'string') {
       const entry = base.entries.find((item) => item.key === segment)
@@ -246,7 +275,8 @@ function compileExpression(
     if (!pathName.startsWith('app.') || !HELPER_NAMES.has(pathName.slice(4))) {
       unsupported(
       sourceFile, node, `表达式中不允许调用 ${pathName}`,
-      CALL_ALTERNATIVES[pathName] ?? `表达式里只能调用 app.${[...HELPER_NAMES].join(' / app.')}`
+      CALL_ALTERNATIVES[pathName] ?? arrayMethodAlternative(pathName)
+        ?? `表达式里只能调用 app.${[...HELPER_NAMES].join(' / app.')}`
     )
     }
     return {
@@ -381,10 +411,11 @@ function compileStatements(
               + `\`${sourceSnippet(state.sourceFile, statement.expression)}\``
             : '循环体在编译期展开，被遍历的必须是字面量数组或 app.range(整数字面量)，'
               + `不能是读取结果：\`${sourceSnippet(state.sourceFile, statement.expression)}\`。`
-              + '两种可行写法：(1) 要确认某个实体的属性，直接对它的 ref 调 app.entities.read '
-              + '再 app.assert——list 返回的 refs 只有 kind/id，本来就读不到名称之类的属性值，'
-              + '逐项扫描也得不到答案；(2) 要对多个已知实体逐个写入，把它们写成多次 '
-              + 'app.entities.update / remove 调用。',
+              + '三种可行写法：(1) 要按名称之类的属性值找出某一个，用 '
+              + "app.entities.list(类型, { where: { 属性: 值 }, propertyIds: [属性] })——"
+              + '筛选在后端做，返回的 refs 已经只剩命中的那些；(2) 要确认某个实体的属性，'
+              + '直接对它的 ref 调 app.entities.read 再 app.assert；(3) 要对多个已知实体逐个写入，'
+              + '把它们写成多次 app.entities.update / remove 调用。',
           locationOf(state.sourceFile, statement),
         )
       }

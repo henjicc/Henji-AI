@@ -53,8 +53,8 @@ function readPath(value: unknown, path: readonly (string | number)[]): unknown {
        * 数组的 length 必须读得到。
        *
        * 这是数组唯一一个既安全、又几乎必然要用的属性：模型拿到 refs 之后要判断"有没有"、
-       * "有几个"，除了 length 没有别的办法（受限语言不支持 .find/.filter，for...of 也只遍历
-       * 静态数组）。旧实现把它一并拒了，错误信息还写着"当前是长度 8 的数组"——运行时明明
+       * "有几个"，除了 length 没有别的办法（挑某一个用 app.find，但计数只能靠它；for...of
+       * 也只遍历静态数组）。旧实现把它一并拒了，错误信息还写着"当前是长度 8 的数组"——运行时明明
        * 知道答案，却因为它不是 hasOwnProperty 意义上的字段而不肯说。实测同一段脚本因此连撞
        * 三次，每次都只能整段重写。
        */
@@ -70,6 +70,17 @@ function readPath(value: unknown, path: readonly (string | number)[]): unknown {
       }
       current = current[part]
     }
+  }
+  return current
+}
+
+/** readPath 的不抛错版本：给 app.find / app.filter 用，取不到就是 undefined。 */
+function tryReadFieldPath(value: unknown, path: readonly string[]): unknown {
+  let current = value
+  for (const part of path) {
+    if (Array.isArray(current) && part === 'length') { current = current.length; continue }
+    if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, part)) return undefined
+    current = current[part]
   }
   return current
 }
@@ -130,7 +141,12 @@ export function evaluate(expression: HenjiValueExpression, values: ReadonlyMap<s
       : evaluate(expression.whenFalse, values)
   }
   const args = expression.args.map((arg) => evaluate(arg, values))
-  switch (expression.name) {
+  // helper 结果上还可以继续取字段（app.find(...).id）；路径由编译器记下，这里统一解析。
+  return readPath(evaluateHelper(expression.name, args), expression.path ?? [])
+}
+
+function evaluateHelper(name: string, args: unknown[]): unknown {
+  switch (name) {
     case 'range': {
       const start = args.length > 1 ? numeric(args[0], 'range start') : 0
       const end = numeric(args.length > 1 ? args[1] : args[0], 'range end')
@@ -142,6 +158,30 @@ export function evaluate(expression: HenjiValueExpression, values: ReadonlyMap<s
     case 'take': return Array.isArray(args[0]) ? args[0].slice(0, numeric(args[1], 'take count')) : []
     case 'lerp': return numeric(args[0], 'lerp a') + (numeric(args[1], 'lerp b') - numeric(args[0], 'lerp a')) * numeric(args[2], 'lerp t')
     case 'clamp': return Math.min(numeric(args[2], 'clamp max'), Math.max(numeric(args[1], 'clamp min'), numeric(args[0], 'clamp value')))
+    /*
+     * 按字段等值从数组里挑元素——替代受限语言里不可能有的 `.find(x => …)` 闭包。
+     *
+     * 字段名支持点分路径（'ref.id'），因为能力返回的数组元素普遍是嵌套对象。
+     * 字段在所有元素里都取不到时**报错而不是返回空**：写错字段名和真的没有命中，
+     * 对调用方是完全不同的两件事，静默返回 null 会让它以为"确实不存在"。
+     */
+    case 'find':
+    case 'filter': {
+      const items = Array.isArray(args[0]) ? args[0] : []
+      const path = String(args[1] ?? '').split('.').filter(Boolean)
+      if (path.length === 0) throw new HenjiScriptError(
+        'SCRIPT_STEP_FAILED', 'execute',
+        `app.${name} 的第二个参数必须是字段名字符串，例如 'name' 或 'ref.id'`,
+      )
+      const resolved = items.map((item) => tryReadFieldPath(item, path))
+      if (items.length > 0 && resolved.every((value) => value === undefined)) {
+        throw new HenjiScriptError('SCRIPT_STEP_FAILED', 'execute',
+          `app.${name} 在数组元素里找不到字段 ${path.join('.')}`
+          + `${describeAvailable(items[0])}`)
+      }
+      const matched = items.filter((_item, index) => isDeepStrictEqual(resolved[index], args[2]))
+      return name === 'find' ? matched[0] ?? null : matched
+    }
     case 'sin': return Math.sin(numeric(args[0], 'sin value'))
     case 'cos': return Math.cos(numeric(args[0], 'cos value'))
     case 'tan': return Math.tan(numeric(args[0], 'tan value'))

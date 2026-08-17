@@ -11,7 +11,8 @@ export type HenjiValueExpression =
   | { kind: 'binary'; operator: string; left: HenjiValueExpression; right: HenjiValueExpression }
   | { kind: 'conditional'; condition: HenjiValueExpression; whenTrue: HenjiValueExpression; whenFalse: HenjiValueExpression }
   | { kind: 'template'; parts: Array<string | HenjiValueExpression> }
-  | { kind: 'helper'; name: string; args: HenjiValueExpression[] }
+  // path：对 helper 结果继续取字段，例如 app.find(...).id。与 variable 的 path 同一套语义。
+  | { kind: 'helper'; name: string; args: HenjiValueExpression[]; path?: Array<string | number> }
 
 export type HenjiCallKind =
   | 'action'
