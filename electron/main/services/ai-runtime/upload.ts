@@ -19,14 +19,13 @@ import {
   type PreparedMediaBinary,
   toBase64,
   toDataUri,
-  uploadToBizyair,
   uploadToFal,
   uploadToKie,
 } from './upload-providers'
 
 const logger = createMainLogger('ai-runtime')
-const PUBLIC_URL_UPLOAD_PROVIDERS = ['bizyair', 'kie'] as const
-const UPLOAD_PROVIDER_PRIORITY = ['bizyair', 'kie', 'fal'] as const
+const PUBLIC_URL_UPLOAD_PROVIDERS = ['kie'] as const
+const UPLOAD_PROVIDER_PRIORITY = ['kie', 'fal'] as const
 
 type PublicUrlUploadProvider = typeof PUBLIC_URL_UPLOAD_PROVIDERS[number]
 
@@ -208,14 +207,6 @@ async function uploadForHostedUrl(prepared: PreparedMediaBinary): Promise<string
     try {
       return await uploadToKie(kieKey, prepared)
     } catch {
-      // Fall through to BizyAir, matching the legacy fallback order.
-    }
-  }
-  const bizyairKey = getAiProviderApiKey('bizyair')
-  if (bizyairKey) {
-    try {
-      return await uploadToBizyair(bizyairKey, prepared)
-    } catch {
       // Fall back to data URI for backward compatibility.
     }
   }
@@ -232,9 +223,7 @@ async function uploadForPublicUrl(prepared: PreparedMediaBinary, strategy: Uploa
       continue
     }
     try {
-      return provider === 'bizyair'
-        ? await uploadToBizyair(apiKey, prepared)
-        : await uploadToKie(apiKey, prepared)
+      return await uploadToKie(apiKey, prepared)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       failures.push(`${displayUploadProvider(provider)} 上传失败: ${message}`)
@@ -242,7 +231,7 @@ async function uploadForPublicUrl(prepared: PreparedMediaBinary, strategy: Uploa
   }
   throw new AiRuntimeError(
     'public_media_url_required',
-    `当前 PPIO 模型字段要求公网 HTTP/HTTPS 媒体 URL。请直接传入公网 URL，或配置 BizyAir / KIE API Key。${failures.join('；')}`
+    `当前 PPIO 模型字段要求公网 HTTP/HTTPS 媒体 URL。请直接传入公网 URL，或配置 KIE API Key。${failures.join('；')}`
   )
 }
 
@@ -344,7 +333,6 @@ function matchPublicUrlProvider(provider: string): PublicUrlUploadProvider | und
 }
 
 function displayUploadProvider(provider: string): string {
-  if (provider === 'bizyair') return 'BizyAir'
   if (provider === 'kie') return 'KIE'
   if (provider === 'fal') return 'Fal'
   return 'Upload provider'

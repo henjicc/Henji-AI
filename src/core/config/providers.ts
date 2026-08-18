@@ -1,5 +1,5 @@
-export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'bizyair'
-export type UploadProvider = 'fal' | 'kie' | 'bizyair'
+export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie'
+export type UploadProvider = 'fal' | 'kie'
 
 export type ProviderLink = {
   id: string
@@ -45,18 +45,10 @@ export const API_KEY_PROVIDERS: ApiKeyProviderMeta[] = [
       { id: 'home', url: 'https://kie.ai?ref=eef20ef0b0595cad227d45b29c635f6c' },
       { id: 'keys', url: 'https://kie.ai/zh-CN/api-key' }
     ]
-  },
-  {
-    id: 'bizyair',
-    links: [
-      { id: 'home', url: 'https://bizyair.cn/' },
-      { id: 'keys', url: 'https://bizyair.cn/user/api-key' }
-    ]
   }
 ]
 
 export const UPLOAD_PROVIDERS: UploadProviderMeta[] = [
-  { id: 'bizyair' },
   { id: 'kie' },
   { id: 'fal' }
 ]

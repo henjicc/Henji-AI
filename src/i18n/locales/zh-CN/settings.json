@@ -71,17 +71,6 @@
           "home": "KIE 官网",
           "keys": "API 密钥"
         }
-      },
-      "bizyair": {
-        "title": "BizyAir",
-        "label": "BizyAir API 密钥",
-        "placeholder": "请输入 BizyAir API 密钥",
-        "help": "注册并在密钥管理页面获取 API 密钥。",
-        "guide": "先去 {{home}} 注册，然后去 {{keys}} 获取密钥。",
-        "links": {
-          "home": "BizyAir 官网",
-          "keys": "密钥管理"
-        }
       }
     }
   },
@@ -350,7 +339,6 @@
       "fallbackLabel": "启用自动回退",
       "fallbackHint": "当首选提供商不可用或上传失败时，尝试使用其他已配置的提供商。",
       "providers": {
-        "bizyair": "BizyAir",
         "kie": "KIE",
         "fal": "Fal.ai"
       }

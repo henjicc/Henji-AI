@@ -6,7 +6,7 @@ export interface RegisterProviderFactoryOptions {
   overwrite?: boolean
 }
 
-const BUILTIN_PROVIDER_IDS: ProviderId[] = ['ppio', 'fal', 'kie', 'modelscope', 'bizyair']
+const BUILTIN_PROVIDER_IDS: ProviderId[] = ['ppio', 'fal', 'kie', 'modelscope']
 
 /**
  * ProviderFactoryRegistry is kept for compatibility.

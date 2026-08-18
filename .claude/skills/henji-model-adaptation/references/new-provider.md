@@ -1,6 +1,6 @@
 # 场景 A：新增供应商
 
-仅在 `providerId` 不在现有生成 runtime 集合（`ppio/fal/kie/modelscope`）时走本流程。注意：`bizyair` 当前主要作为 API Key / 上传兜底提供方存在，不等于已接入模型生成 provider。
+仅在 `providerId` 不在现有生成 runtime 集合（`ppio/fal/kie/modelscope`）时走本流程。注意：仅作为 API Key / 上传兜底存在的供应商，不等于已接入模型生成 provider。
 
 ## 1) 接入 Electron runtime（必须）
 

@@ -61,7 +61,7 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
   (value) => setUpdateFrequency(value)),
   storeSetting({
     id: 'generation.upload_provider', title: '默认上传服务', description: '设置生成任务优先使用的媒体上传服务。',
-    aliases: ['上传服务', '上传供应商', 'upload provider'], schema: z.enum(['fal', 'kie', 'bizyair']), defaultValue: 'bizyair',
+    aliases: ['上传服务', '上传供应商', 'upload provider'], schema: z.enum(['fal', 'kie']), defaultValue: 'kie',
     target: { tab: 'api', sectionId: 'api-upload' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().uploadProvider,
   (value) => useSettingsStore.getState().setUploadProvider(value)),

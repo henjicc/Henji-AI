@@ -3,7 +3,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 
 const logger = createLogger('services.upload.UploadService')
 
-export type UploadProviderType = 'fal' | 'kie' | 'bizyair'
+export type UploadProviderType = 'fal' | 'kie'
 
 /**
  * UploadService now keeps only upload strategy settings for UI.

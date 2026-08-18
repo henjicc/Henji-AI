@@ -31,8 +31,8 @@ export type AssetTabAction = 'floating' | 'workspace';
 export type AssetPanelPosition = 'top' | 'left' | 'right';
 export type AssetTriggerEdge = 'left' | 'right';
 export type AssetThumbnailFit = 'cover' | 'contain';
-const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope', 'bizyair'] as const;
-const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'bizyair';
+const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope'] as const;
+const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'kie';
 
 interface SettingsState {
   providerKeyStatus: ProviderKeyStatusMap;
@@ -179,7 +179,7 @@ function normalizeProviderKeyStatus(input: DynamicValue): ProviderKeyStatusMap {
 }
 
 function normalizeUploadProvider(input: DynamicValue): UploadProvider {
-  return input === 'fal' || input === 'kie' || input === 'bizyair'
+  return input === 'fal' || input === 'kie'
     ? input
     : DEFAULT_UPLOAD_PROVIDER;
 }
@@ -309,7 +309,8 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'settings-storage',
-      version: 9,
+      // v10：BizyAir 上传服务下线，旧值需重新归一化到 KIE
+      version: 10,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
       // "完整捕获" 导致日志长期膨胀（决策见 docs/task/日志调试中心/decisions.md）。
       partialize: (state) => {

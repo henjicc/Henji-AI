@@ -71,17 +71,6 @@
           "home": "KIE Website",
           "keys": "API Key"
         }
-      },
-      "bizyair": {
-        "title": "BizyAir",
-        "label": "BizyAir API Key",
-        "placeholder": "Enter BizyAir API Key",
-        "help": "Register and get your API key from the key management page.",
-        "guide": "Visit {{home}} first, then open {{keys}} to get your key.",
-        "links": {
-          "home": "BizyAir Website",
-          "keys": "Key Management"
-        }
       }
     }
   },
@@ -350,7 +339,6 @@
       "fallbackLabel": "Enable fallback",
       "fallbackHint": "Try other configured providers when the primary fails.",
       "providers": {
-        "bizyair": "BizyAir",
         "kie": "KIE",
         "fal": "Fal.ai"
       }
