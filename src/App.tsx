@@ -29,19 +29,53 @@ import { useAssistantHostBridge } from '@/features/assistant/frontendTools/useAs
 import { toggleAssistant, useAssistantUiStore } from '@/features/assistant/store/assistantUiStore'
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
+import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 
 const logger = createLogger('App')
 
 // 设置面板、智能助手、资产悬浮面板都是「按需打开」的浮层，却各自拖着一大棵子树
 // （设置分区、Markdown 渲染、资产库列表）。放进启动同步图会让冷启动白解析一遍，
 // 因此改为首次打开时才加载；打开过之后保持挂载，退场动画不受影响。
-const SettingsModal = lazy(() => import('@/components/Settings'))
-const AssistantSidebar = lazy(() =>
-  import('@/features/assistant/AssistantSidebar').then((m) => ({ default: m.AssistantSidebar })),
-)
+//
+// loader 必须提到模块作用域并具名：空闲预取与 React.lazy 复用同一个引用，
+// 第二次 import() 才会直接命中模块缓存，否则预取白做一遍。
+const loadSettingsModal = () => import('@/components/Settings')
+const loadAssistantSidebar = () => import('@/features/assistant/AssistantSidebar')
+const loadAssetLibraryFloatingPanel = () => import('@/features/assets/AssetLibraryFloatingPanel')
+
+const SettingsModal = lazy(loadSettingsModal)
+const AssistantSidebar = lazy(() => loadAssistantSidebar().then((m) => ({ default: m.AssistantSidebar })))
 const AssetLibraryFloatingPanel = lazy(() =>
-  import('@/features/assets/AssetLibraryFloatingPanel').then((m) => ({ default: m.AssetLibraryFloatingPanel })),
+  loadAssetLibraryFloatingPanel().then((m) => ({ default: m.AssetLibraryFloatingPanel })),
 )
+
+/*
+ * 懒加载省下的冷启动开销，代价全落在「第一次点开」那一下：设置面板自己那棵子树有
+ * 59 个模块（约 265KB 源码）不在启动图里，生产态是一个约 180KB 的新 chunk 要下载
+ * 加解析，dev 下则是 59 个模块逐个请求 + 转译。Suspense 的 fallback 是 null，
+ * 这段时间界面上什么都不出现，观感就是「点了没反应，卡一下才弹出来」——首次打开慢、
+ * 之后每次都正常，就是这个原因（毛玻璃不背这个锅：它每次打开都要重画，不会只卡第一次）。
+ *
+ * 所以在启动之后的空闲时间把这三块 chunk 先取回来，用户真正点击时 import() 直接命中缓存。
+ * 顺序按点击概率排：设置 > 资产面板 > 助手。
+ */
+const overlayPrefetchOrder = [loadSettingsModal, loadAssetLibraryFloatingPanel, loadAssistantSidebar]
+
+/*
+ * dev 下 Vite 是收到请求才逐个转译的，预取会往队列里压几百个模块。工作区的预取排在
+ * 15s（见 TabContainer），浮层再往后让一档，免得把用户正在等的那次切 Tab 挤到队尾。
+ * 生产态是现成的 chunk，没有这个问题，直接等第一个空闲帧。
+ */
+const OVERLAY_PREFETCH_DEV_DELAY_MS = 20000
+
+/**
+ * 悬停即预取。空闲预取解决不了「刚启动就点」这一下（dev 下预取要让开转译队列，
+ * 生产态也可能还没轮到空闲帧），而指针进入按钮到按下之间总有 100ms 以上，
+ * 正好用来把 chunk 取回来。重复调用无害：import() 命中缓存直接返回。
+ */
+const prefetchSettingsModal = (): void => {
+  void loadSettingsModal().catch(() => undefined)
+}
 
 /**
  * 简化后的 App 组件
@@ -170,6 +204,12 @@ const App: React.FC = () => {
     return () => clearTimeout(timer)
   }, [])
 
+  // 首屏渲染完成后利用空闲时间把三个浮层的 chunk 拉回来，抹平「第一次点开设置要卡一下」。
+  useEffect(() => prefetchWhenIdle(overlayPrefetchOrder, {
+    strategy: 'idle',
+    startDelayMs: import.meta.env.DEV ? OVERLAY_PREFETCH_DEV_DELAY_MS : 0,
+  }), [])
+
   return (
     <NotificationProvider>
       <div
@@ -186,6 +226,7 @@ const App: React.FC = () => {
           onTabChange={handleTabChange}
           onAssetClick={handleAssetClick}
           onOpenSettings={() => openSettings()}
+          onPrefetchSettings={prefetchSettingsModal}
           assistantOpen={assistantOpen}
           onAssistantClick={toggleAssistant}
         />

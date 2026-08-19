@@ -47,7 +47,7 @@ const DataPathSection: React.FC = () => {
             onClick={selectDirectory}
             disabled={isMigrating}
             variant="primary"
-            size="sm"
+            size="field-sm"
             className="shrink-0 whitespace-nowrap px-4"
           >
             {t('actions.select')}
@@ -56,7 +56,7 @@ const DataPathSection: React.FC = () => {
             onClick={openResetConfirm}
             disabled={isMigrating}
             variant="muted"
-            size="sm"
+            size="field-sm"
             className="shrink-0 whitespace-nowrap px-4"
           >
             {t('actions.resetDefault')}

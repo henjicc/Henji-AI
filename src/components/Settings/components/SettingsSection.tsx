@@ -41,8 +41,13 @@ const SettingsSection: React.FC<SettingsSectionProps> = ({ id, description, chil
        * 颜色只由 `ui-glass-adaptive-divider` 给，**不能再叠 `UI_DIVIDER_CLASS`**——
        * 那个类带的 `border-border-dark/60` 是 utilities 层，会盖掉自适应规则，
        * 深色线压在半透明玻璃上几乎看不见（实测截图里这条线是完全隐形的）。
+       *
+       * `mt-10` 与 `pt-10` 必须成对出现。`border-t` 画在 section 盒子的上沿，
+       * 只写 `pt-10` 时线的**上方没有任何留白**——上一节最后一个控件的下边框
+       * 直接贴着这条线，读起来像给那个控件加了第二条底边，而不是两节之间的分界。
+       * 分隔线属于两节之间的空白，两侧留白必须相等，它才落在中间。
        */
-      className={`border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} pt-10 first:border-t-0 first:pt-0`}
+      className={`mt-10 border-t ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} pt-10 first:mt-0 first:border-t-0 first:pt-0`}
     >
       <h3 className={UI_TEXT_TITLE_CLASS}>{t(`navSections.${id}`)}</h3>
       {description ? <p className="mt-1 text-xs text-text-muted">{description}</p> : null}

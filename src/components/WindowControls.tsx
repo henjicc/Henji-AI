@@ -38,11 +38,13 @@ interface WindowControlsProps {
   onTabChange?: (tabId: WorkspaceId) => void
   onAssetClick?: () => void
   onOpenSettings?: () => void
+  /** 指针移到设置按钮上时预取设置面板 chunk：悬停到点击之间的空档足够抹平首次加载 */
+  onPrefetchSettings?: () => void
   assistantOpen?: boolean
   onAssistantClick?: () => void
 }
 
-const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings, assistantOpen = false, onAssistantClick }) => {
+const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings, onPrefetchSettings, assistantOpen = false, onAssistantClick }) => {
   const { t } = useI18n('ui')
   const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
@@ -112,6 +114,9 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
   const handleOpenSettings = (): void => {
     onOpenSettings?.()
   }
+  const handlePrefetchSettings = (): void => {
+    onPrefetchSettings?.()
+  }
 
   // Tab 组件 - 居中显示
   const TabBar = () => (
@@ -151,6 +156,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             <UiIconButton
               type="button"
               onClick={handleOpenSettings}
+              onPointerEnter={handlePrefetchSettings}
               className="!w-6 !h-6 !rounded-md border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('actions.settings')}
             >
@@ -240,6 +246,7 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             <UiIconButton
               type="button"
               onClick={handleOpenSettings}
+              onPointerEnter={handlePrefetchSettings}
               className="!w-8 !h-8 !rounded border-0 bg-transparent hover:bg-surface-dark/80"
               title={t('actions.settings')}
             >

@@ -6,6 +6,7 @@ interface RenameDialogProps {
   isOpen: boolean;
   title: string;
   defaultValue?: string;
+  placeholder?: string;
   onClose: () => void;
   onConfirm: (name: string) => void;
 }
@@ -14,6 +15,7 @@ export function RenameDialog({
   isOpen,
   title,
   defaultValue = '',
+  placeholder,
   onClose,
   onConfirm,
 }: RenameDialogProps): JSX.Element {
@@ -63,7 +65,7 @@ export function RenameDialog({
         value={name}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder={t('project.namePlaceholder')}
+        placeholder={placeholder ?? t('project.namePlaceholder')}
         className="h-10"
         autoFocus
       />

@@ -254,7 +254,18 @@
     "nodes": "节点数",
     "noProjects": "暂无项目",
     "empty": "暂无项目",
-    "emptyHint": "点击上方按钮创建新项目"
+    "emptyHint": "点击上方按钮创建新项目",
+    "nodesCount": "{{count}} 个节点",
+    "selectMultiple": "多选",
+    "selectItem": "选中",
+    "deselectItem": "取消选中",
+    "selectedCount": "已选择 {{count}} 项",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "deleteSelected": "删除所选",
+    "confirmDelete": "删除",
+    "deleteConfirmSingle": "确定删除「{{name}}」？此操作不可恢复。",
+    "deleteConfirmMultiple": "确定删除选中的 {{count}} 个项目？此操作不可恢复。"
   },
   "settings": {
     "title": "设置",

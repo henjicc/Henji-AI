@@ -36,7 +36,7 @@ import {
 
 type ButtonVariant = 'primary' | 'muted' | 'ghost' | 'plain' | 'glass';
 
-type ButtonSize = 'sm' | 'md' | 'control' | 'field';
+type ButtonSize = 'sm' | 'md' | 'field' | 'field-sm';
 
 interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -137,19 +137,40 @@ function resolveButtonVariant(variant: ButtonVariant): string {
   return `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_SURFACE_CLASS} border border-border-dark text-text-dark hover:bg-layer`;
 }
 
-function resolveButtonSize(size: ButtonSize, variant: ButtonVariant): string {
+/**
+ * 按钮的高度档。
+ *
+ * **和字段并排的按钮，高度必须来自字段高度令牌，不能自己另起一套数字。**
+ * 这是「选择 / 恢复默认按钮比输入框矮一截」的根因：字段有 42/38 两档具名令牌，
+ * 而按钮这边原先只有 `h-8`(32) / `h-10`(40) / `field`(42) 三个各自为政的值——
+ * 紧凑档 38px 的字段**根本没有对应的按钮档**，调用点只能退而求其次写 `size="sm"`，
+ * 于是每一处「输入框 + 按钮」的行都稳定错开 6px（数据保存目录、快速下载路径都是）。
+ * 补上 `field-sm` 之后，两档字段各有一个高度完全相同的按钮档，调用点不需要再猜。
+ *
+ * - `sm` 32px：不与字段并排的独立小动作（工具条、行内操作）
+ * - `md` 40px：默认
+ * - `field` 42px：与 `UI_FIELD_CONTROL_HEIGHT_CLASS` 的字段并排
+ * - `field-sm` 38px：与 `UI_FIELD_CONTROL_HEIGHT_SM_CLASS` 的字段并排
+ *
+ * 高度**不得**按 variant 分叉。所有 variant 都带 1px 边框（`primary` 是
+ * `border-transparent`）、box-sizing 一致，同一档给 primary 40px、给 muted 42px
+ * 只会让并排的两个按钮肉眼错开——被删掉的 `control` 档就是这么写的，零调用点。
+ *
+ * 也不再补 `min-h-*`：横向 flex 行里高度是交叉轴，`items-stretch` 遇到显式高度
+ * 不会拉伸，`flex-shrink` 也压不到交叉轴，那个 `min-h` 从来没起过作用；
+ * 而它一旦用模板字符串拼出来，Tailwind 扫不到字面量就会静默不生成。
+ */
+function resolveButtonSize(size: ButtonSize): string {
   if (size === 'sm') {
     return 'h-8 px-3 text-xs';
   }
 
   if (size === 'field') {
-    return `${UI_FIELD_CONTROL_HEIGHT_CLASS} min-h-[42px] px-3.5 text-sm leading-none`;
+    return `${UI_FIELD_CONTROL_HEIGHT_CLASS} px-3.5 text-sm leading-none`;
   }
 
-  if (size === 'control') {
-    return variant === 'primary'
-      ? 'h-[40px] min-h-[40px] px-4 text-sm leading-none'
-      : 'h-[42px] min-h-[42px] px-4 text-sm leading-none';
+  if (size === 'field-sm') {
+    return `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} px-3.5 text-sm leading-none`;
   }
 
   return 'h-10 px-3.5 text-sm';
@@ -159,7 +180,7 @@ export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
   ({ className = '', variant = 'muted', size = 'md', ...props }, ref) => (
     <button
       ref={ref}
-      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${resolveButtonVariant(variant)} ${resolveButtonSize(size, variant)} ${className}`}
+      className={`inline-flex items-center justify-center rounded-lg font-medium transition-colors ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${resolveButtonVariant(variant)} ${resolveButtonSize(size)} ${className}`}
       {...props}
     />
   )

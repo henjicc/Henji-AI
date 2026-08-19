@@ -1,4 +1,5 @@
 import {
+  CheckSquare,
   Clapperboard,
   Grid2x2,
   Image as ImageIcon,
@@ -65,3 +66,5 @@ export const ICON_PRESET: LucideIcon = Star
 export const ICON_TASK: LucideIcon = ListChecks
 /** 分镜（分镜节点、分镜切分结果） */
 export const ICON_STORYBOARD: LucideIcon = Grid2x2
+/** 多选（工程列表等卡片网格的批量选择入口） */
+export const ICON_MULTI_SELECT: LucideIcon = CheckSquare

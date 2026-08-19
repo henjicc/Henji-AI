@@ -100,18 +100,20 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
           </div>
         )}
         {libraries.map((library) => (
-          <div key={library.id} className="group flex min-h-9 items-center gap-1">
+          <div key={library.id} className="group relative flex min-h-9 items-center">
             {editingId === library.id ? (
-              <>
+              <div className="flex w-full items-center gap-1">
                 <UiInput autoFocus className="!h-8 min-w-0 flex-1 !px-2" value={editingName} onChange={(event) => setEditingName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void submitRename(library); if (event.key === 'Escape') setEditingId(null) }} />
                 <UiIconButton className="!h-7 !w-7" onClick={() => void submitRename(library)}><Check className="h-3.5 w-3.5" /></UiIconButton>
-              </>
+              </div>
             ) : (
               <>
-                <UiNavButton active={activeId === library.id} onClick={() => onSelect(library.id)} className="!h-9 min-w-0 flex-1 !rounded-lg !px-3">
+                {/* 名称按钮占满整行，静息态不为悬浮操作预留宽度——那两个图标按钮
+                    是覆盖在它之上的同级元素，不挤占布局空间，避免长名称被过早截断。 */}
+                <UiNavButton active={activeId === library.id} onClick={() => onSelect(library.id)} className="!h-9 w-full !rounded-lg !px-3">
                   <Folder className="h-4 w-4 shrink-0" /><span className="truncate">{library.name}</span>
                 </UiNavButton>
-                <div className={`flex shrink-0 ${deletingId === library.id ? '' : 'opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100'}`}>
+                <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 ${deletingId === library.id ? 'pointer-events-auto opacity-100' : 'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'}`}>
                   {deletingId === library.id ? (
                     <>
                       <UiIconButton className="!h-7 !w-7" hoverVariant="danger" title={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check className="h-3.5 w-3.5" /></UiIconButton>

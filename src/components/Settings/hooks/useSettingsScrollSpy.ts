@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 
 /**
  * 分节标题停靠在内容区顶部时留出的距离。
@@ -132,7 +132,12 @@ export function useSettingsScrollSpy({
 
   // 尾部占位测量。刻意只依赖「容器高度」和「最后一个分节高度」，不读 scrollHeight，
   // 否则占位本身会算进去，形成 ResizeObserver 的自激循环。
-  useEffect(() => {
+  //
+  // 必须是 layout effect 且首测同步：切大类时占位高度会变（上一个大类的末节高、
+  // 新大类的末节矮），而「跳到新大类的最后一个分节」恰恰要靠这块占位才滚得上去。
+  // 首测若排到 rAF，本帧的占位还是上一个大类的旧值，那次跳转就会停在半路，
+  // 要等 DEEP_LINK_RESCROLL_MS 的补位才落位——用户看到的就是"先显示别处，过一会儿才跳"。
+  useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
 
@@ -160,7 +165,8 @@ export function useSettingsScrollSpy({
       frame = requestAnimationFrame(measure)
     }
 
-    schedule()
+    // 首测同步：本次提交里就要拿到新大类的占位高度，不能推迟到下一帧
+    measure()
     const observer = new ResizeObserver(schedule)
     observer.observe(container)
     const sections = readSections(container)

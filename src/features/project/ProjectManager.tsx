@@ -1,15 +1,30 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, FolderOpen, Pencil, Trash2, PackageOpen, PackageCheck } from 'lucide-react';
+import { FolderOpen, PackageCheck, PackageOpen, Plus } from 'lucide-react';
+import ContextMenu from '@/components/ContextMenu';
+import { DeleteConfirmDialog } from '@/components/DeleteConfirmDialog';
+import { ProjectCardGrid, type ProjectCardGridItem } from '@/components/ProjectCardGrid';
+import { ProjectSelectionToolbar } from '@/components/ProjectSelectionToolbar';
+import { RenameDialog } from '@/components/RenameDialog';
+import { ICON_WORKSPACE_CANVAS } from '@/core/theme/icons';
 import { createLogger } from '@/core/logging';
-import { UI_TEXT_META_CLASS, UiButton, UiEmpty, UiError, UiIconButton, UiPageHeader, UiPanel, UiRegion } from '@/components/ui';
-import { useProjectStore } from '@/stores/projectStore';
+import { UiButton, UiError, UiPageHeader, UiRegion } from '@/components/ui';
 import { UI_CONTENT_OVERLAY_INSET_CLASS } from '@/components/ui/motion';
+import { useContextMenu } from '@/hooks/useContextMenu';
+import { useMultiSelect } from '@/hooks/useMultiSelect';
+import { useProjectStore, type ProjectSummary } from '@/stores/projectStore';
 import { exportProjectToPackage } from '@/services/projectPackage/exportProject';
 import { importProjectFromPackage } from '@/services/projectPackage/importProject';
-import { RenameDialog } from './RenameDialog';
 
 const logger = createLogger('features.project.ProjectManager');
+
+function toCardItem(project: ProjectSummary, nodesCountLabel: (count: number) => string): ProjectCardGridItem {
+  return {
+    id: project.id,
+    name: project.name,
+    metaLine: `${nodesCountLabel(project.nodeCount)} · ${new Date(project.updatedAt).toLocaleDateString()}`,
+  };
+}
 
 export function ProjectManager(): JSX.Element {
   const { t } = useTranslation();
@@ -19,37 +34,29 @@ export function ProjectManager(): JSX.Element {
   const [packagingProjectId, setPackagingProjectId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [packageError, setPackageError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ProjectCardGridItem[] | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const { projects, isOpeningProject, createProject, deleteProject, renameProject, openProject, hydrate } =
     useProjectStore();
 
-  const handleCreateProject = () => {
+  const { menuVisible, menuPosition, menuItems, showMenu, hideMenu } = useContextMenu();
+  const selection = useMultiSelect(projects.map((project) => project.id));
+
+  const cardItems = projects.map((project) => toCardItem(project, (count) => t('project.nodesCount', { count })));
+
+  const handleCreateProject = (): void => {
     setEditingProjectId(null);
     setEditingProjectName('');
     setShowRenameDialog(true);
   };
 
-  const handleRenameClick = (id: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingProjectId(id);
-    setEditingProjectName(name);
-    setShowRenameDialog(true);
-  };
-
-  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    deleteProject(id);
-  };
-
-  const handleExportClick = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (packagingProjectId) {
-      return;
-    }
+  const handleExport = async (projectId: string): Promise<void> => {
+    if (packagingProjectId) return;
     setPackageError(null);
-    setPackagingProjectId(id);
+    setPackagingProjectId(projectId);
     try {
-      await exportProjectToPackage(id);
+      await exportProjectToPackage(projectId);
     } catch (error) {
       logger.error('[ProjectManager] 项目导出失败', error);
       setPackageError(error instanceof Error ? error.message : t('project.exportFailed'));
@@ -58,17 +65,13 @@ export function ProjectManager(): JSX.Element {
     }
   };
 
-  const handleImportClick = async () => {
-    if (isImporting) {
-      return;
-    }
+  const handleImportClick = async (): Promise<void> => {
+    if (isImporting) return;
     setPackageError(null);
     setIsImporting(true);
     try {
       const importedId = await importProjectFromPackage();
-      if (importedId) {
-        await hydrate();
-      }
+      if (importedId) await hydrate();
     } catch (error) {
       logger.error('[ProjectManager] 项目导入失败', error);
       setPackageError(error instanceof Error ? error.message : t('project.importFailed'));
@@ -77,7 +80,7 @@ export function ProjectManager(): JSX.Element {
     }
   };
 
-  const handleConfirm = (name: string) => {
+  const handleConfirm = (name: string): void => {
     if (editingProjectId) {
       renameProject(editingProjectId, name);
     } else {
@@ -85,8 +88,15 @@ export function ProjectManager(): JSX.Element {
     }
   };
 
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString();
+  const confirmDelete = async (): Promise<void> => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      pendingDelete.forEach((item) => deleteProject(item.id));
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
   };
 
   return (
@@ -95,12 +105,22 @@ export function ProjectManager(): JSX.Element {
         <UiPageHeader
           className="mb-8"
           title={t('project.title')}
-          actions={(
+          actions={selection.active ? (
+            <ProjectSelectionToolbar
+              selection={selection}
+              labels={{
+                selectedCount: (count) => t('project.selectedCount', { count }),
+                selectAll: t('project.selectAll'),
+                deselectAll: t('project.deselectAll'),
+                deleteSelected: t('project.deleteSelected'),
+                cancel: t('common.cancel'),
+              }}
+              onDeleteSelected={() => setPendingDelete(cardItems.filter((item) => selection.isSelected(item.id)))}
+            />
+          ) : (
             <>
               <UiButton
-                onClick={() => {
-                  void handleImportClick();
-                }}
+                onClick={() => void handleImportClick()}
                 variant="muted"
                 size="sm"
                 className="gap-2 px-4"
@@ -109,12 +129,7 @@ export function ProjectManager(): JSX.Element {
                 <PackageOpen className="w-4 h-4" />
                 {isImporting ? t('project.importing') : t('project.importPackage')}
               </UiButton>
-              <UiButton
-                onClick={handleCreateProject}
-                variant="primary"
-                size="sm"
-                className="gap-2 px-4"
-              >
+              <UiButton onClick={handleCreateProject} variant="primary" size="sm" className="gap-2 px-4">
                 <Plus className="w-5 h-5" />
                 {t('project.newProject')}
               </UiButton>
@@ -124,67 +139,42 @@ export function ProjectManager(): JSX.Element {
 
         {packageError && <UiError size="xs" className="mb-4" message={packageError} />}
 
-        {projects.length === 0 ? (
-          <UiEmpty
-            icon={<FolderOpen className="h-12 w-12" />}
-            title={t('project.empty')}
-            description={t('project.emptyHint')}
-          />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((project) => (
-              <UiPanel
-                key={project.id}
-                onClick={() => openProject(project.id)}
-                className="cursor-pointer border border-border-dark p-4 transition-colors hover:border-primary/50 group"
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-text-dark truncate flex-1">
-                    {project.name}
-                  </h3>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <UiIconButton
-                      appearance="hover-only"
-                      onClick={(e) => {
-                        void handleExportClick(project.id, e);
-                      }}
-                      className="!h-7 !w-7"
-                      title={t('project.exportPackage')}
-                      disabled={packagingProjectId === project.id}
-                    >
-                      <PackageCheck className="w-4 h-4 text-text-muted hover:text-text-dark" />
-                    </UiIconButton>
-                    <UiIconButton
-                      appearance="hover-only"
-                      onClick={(e) => handleRenameClick(project.id, project.name, e)}
-                      className="!h-7 !w-7"
-                      title={t('project.rename')}
-                    >
-                      <Pencil className="w-4 h-4 text-text-muted hover:text-text-dark" />
-                    </UiIconButton>
-                    <UiIconButton
-                      appearance="hover-only"
-                      hoverVariant="danger"
-                      onClick={(e) => handleDeleteClick(project.id, e)}
-                      className="!h-7 !w-7"
-                      title={t('project.delete')}
-                    >
-                      <Trash2 className="w-4 h-4 text-text-muted hover:text-red-500" />
-                    </UiIconButton>
-                  </div>
-                </div>
-                <div className={UI_TEXT_META_CLASS}>
-                  <p>
-                    {t('project.nodes')}: {project.nodeCount}
-                  </p>
-                  <p>
-                    {t('project.updatedAt')}: {formatDate(project.updatedAt)}
-                  </p>
-                </div>
-              </UiPanel>
-            ))}
-          </div>
-        )}
+        <ProjectCardGrid
+          items={cardItems}
+          loading={false}
+          loadingMessage=""
+          busy={isOpeningProject}
+          icon={ICON_WORKSPACE_CANVAS}
+          selection={selection}
+          labels={{
+            open: t('project.open'),
+            rename: t('project.rename'),
+            delete: t('project.delete'),
+            selectMultiple: t('project.selectMultiple'),
+            selectItem: t('project.selectItem'),
+            deselectItem: t('project.deselectItem'),
+          }}
+          emptyIcon={<FolderOpen className="h-12 w-12" />}
+          emptyTitle={t('project.empty')}
+          emptyDescription={t('project.emptyHint')}
+          onOpen={(item) => openProject(item.id)}
+          onRename={(item) => {
+            setEditingProjectId(item.id);
+            setEditingProjectName(item.name);
+            setShowRenameDialog(true);
+          }}
+          onDeleteRequest={(items) => setPendingDelete(items)}
+          extraActions={(item) => [
+            {
+              id: 'export',
+              label: t('project.exportPackage'),
+              icon: <PackageCheck size={13} />,
+              onClick: () => void handleExport(item.id),
+              disabled: packagingProjectId === item.id,
+            },
+          ]}
+          showMenu={showMenu}
+        />
       </UiRegion>
 
       {isOpeningProject && (
@@ -198,6 +188,25 @@ export function ProjectManager(): JSX.Element {
         onClose={() => setShowRenameDialog(false)}
         onConfirm={handleConfirm}
       />
+
+      <DeleteConfirmDialog
+        isOpen={!!pendingDelete}
+        title={t('project.delete')}
+        message={
+          pendingDelete
+            ? pendingDelete.length === 1
+              ? t('project.deleteConfirmSingle', { name: pendingDelete[0].name })
+              : t('project.deleteConfirmMultiple', { count: pendingDelete.length })
+            : ''
+        }
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('project.confirmDelete')}
+        busy={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void confirmDelete()}
+      />
+
+      <ContextMenu items={menuItems} position={menuPosition} onClose={hideMenu} visible={menuVisible} />
     </div>
   );
 }

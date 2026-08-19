@@ -48,6 +48,16 @@ export const UI_NAV_INDICATOR_BOTTOM_CLASS =
 export const UI_MULTISELECT_ITEM_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_WEAK_CLASS} ${UI_COLOR_ACCENT_TEXT_CLASS}`;
 
+/**
+ * 多选选中态的 `!` 覆盖版本。
+ *
+ * 供 `UiOptionButton variant="card"` 这类内部已用 `active` prop 表达
+ * "单选：当前值是什么"（强实底 + 白字）的组件，在外部以多选语义覆盖其静息态时使用——
+ * 两种语义不能共用同一个 `active` 分支，只能在调用点用 `!` 类覆盖赢过内部样式。
+ */
+export const UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS =
+  '!border-brand-500 !bg-layer !text-brand-300';
+
 /** 布尔控件开态：强调色只用于开关轨道或复选框本体。 */
 export const UI_BOOLEAN_CONTROL_ACTIVE_CLASS =
   `${UI_COLOR_ACCENT_BORDER_CLASS} ${UI_COLOR_ACCENT_SOFT_BG_CLASS}`;

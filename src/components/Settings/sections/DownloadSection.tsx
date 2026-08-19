@@ -100,7 +100,7 @@ const DownloadSection: React.FC<DownloadSectionProps> = ({
             onClick={handleSelectPath}
             disabled={!enableQuickDownload}
             variant="primary"
-            size="sm"
+            size="field-sm"
             className="shrink-0 whitespace-nowrap px-4"
           >
             {t('actions.select')}

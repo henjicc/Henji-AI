@@ -254,7 +254,18 @@
     "nodes": "Nodes",
     "noProjects": "No Projects",
     "empty": "No Projects",
-    "emptyHint": "Click the button above to create a new project"
+    "emptyHint": "Click the button above to create a new project",
+    "nodesCount": "{{count}} nodes",
+    "selectMultiple": "Select multiple",
+    "selectItem": "Select",
+    "deselectItem": "Deselect",
+    "selectedCount": "{{count}} selected",
+    "selectAll": "Select all",
+    "deselectAll": "Deselect all",
+    "deleteSelected": "Delete selected",
+    "confirmDelete": "Delete",
+    "deleteConfirmSingle": "Delete \"{{name}}\"? This cannot be undone.",
+    "deleteConfirmMultiple": "Delete the selected {{count}} projects? This cannot be undone."
   },
   "settings": {
     "title": "Settings",

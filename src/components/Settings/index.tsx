@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
@@ -56,6 +56,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   // 每次目录导航自增。延迟补位的定位只有在"期间没有更新的导航"时才允许生效，
   // 否则用户刚点的目标会被上一次跳转的补位动作拽回去。
   const navTokenRef = useRef(0)
+  // 已经处理过归位的大类。定位 effect 现在也会因为尾部占位变化而重跑，
+  // 没有这个标记就会把「占位变了」误当成「换大类了」，顺手把用户滚到顶部。
+  const settledTabRef = useRef<SettingsTab | null>(null)
 
   // 关闭分两步：先让 UiModal 播完淡出，再由 App 卸载本组件。
   // 等待时长必须跟着 UiModal 的过渡走，此前写死 300ms 比实际过渡长 120ms，
@@ -85,34 +88,51 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
 
   // 切换大类后归位：有跨大类跳转目标就滚到目标，否则回到顶部。
   //
-  // 这里刻意**不用 requestAnimationFrame 推迟**：新大类的 DOM 在本 effect 运行时已经提交，
-  // 同步就能量到位置。推迟一帧会和「用户紧接着点了同大类的另一个分节」撞车——
-  // 那次点击已经开始平滑滚动，随后补上的 scrollTop = 0 会把它拽回顶部（实测复现过）。
-  useEffect(() => {
-    const token = (navTokenRef.current += 1)
-    const pending = pendingScrollRef.current
-    pendingScrollRef.current = null
+  // **必须是 layout effect。** 之前用的是 `useEffect`，那是 passive effect——浏览器
+  // 已经把新大类按 scrollTop 原样画过一帧才轮到它。从「平台密钥」（密钥大类的第一节，
+  // scrollTop≈0）跳到「更新维护」时，那一帧画出来的正是通用大类最顶上的「基础设置」，
+  // 于是先闪一下顶部内容、再跳到目标。layout effect 在提交后、绘制前同步跑，
+  // 位置定好了才出画面，中间那一帧就不存在了。
+  //
+  // 同理刻意**不用 requestAnimationFrame 推迟**：推迟一帧还会和「用户紧接着点了
+  // 同大类的另一个分节」撞车——那次点击已经开始平滑滚动，随后补上的 scrollTop = 0
+  // 会把它拽回顶部（实测复现过）。
+  //
+  // 依赖里带 `tailSpacerHeight`：目标是新大类的最后一个分节时（「更新维护」就是），
+  // 得等尾部占位按新大类量过一遍才滚得上去。占位是同步测的，这次重跑同样在绘制前完成。
+  useLayoutEffect(() => {
     const container = contentRef.current
     if (!container) return
+    const tabChanged = settledTabRef.current !== activeTab
+    settledTabRef.current = activeTab
+
+    const pending = pendingScrollRef.current
     if (!pending) {
-      container.scrollTop = 0
+      // 只有真的换了大类才归零；占位变化引起的重跑不能动用户当前的滚动位置
+      if (tabChanged) container.scrollTop = 0
       return
     }
+
+    const token = (navTokenRef.current += 1)
     scrollToSection(pending, 'auto')
-    // 密钥状态、LLM 配置这类分区是异步加载的，落位后上方高度会变，补一次定位
+    // 密钥状态、LLM 配置这类分区是异步加载的，落位后上方高度会变，补一次定位。
+    // 这一刻同时是「本次跳转结束」：清掉 pending，之后再有占位变化就不会重新拽走用户。
     const timer = window.setTimeout(() => {
-      if (navTokenRef.current === token) {
-        scrollToSection(pending, 'auto')
-      }
+      if (navTokenRef.current !== token) return
+      scrollToSection(pending, 'auto')
+      pendingScrollRef.current = null
     }, DEEP_LINK_RESCROLL_MS)
     return () => window.clearTimeout(timer)
-  }, [activeTab, scrollToSection])
+  }, [activeTab, tailSpacerHeight, scrollToSection])
 
   const handleSectionSelect = useCallback(
     (tabId: SettingsTab, sectionId: string): void => {
       navTokenRef.current += 1
       setActiveSectionId(sectionId)
       if (tabId === activeTab) {
+        // 同大类内跳转不经过上面那个 effect，遗留的 pending 必须自己清掉，
+        // 否则下一次占位变化会把用户从这里拽回上一次跨大类的目标。
+        pendingScrollRef.current = null
         scrollToSection(sectionId)
         return
       }
