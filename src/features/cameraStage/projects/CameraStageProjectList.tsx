@@ -17,6 +17,7 @@ import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
 
 interface CameraStageProjectListProps {
   onEnterEditor: () => void
+  onBackToToolbox?: () => void
 }
 
 const LABELS: ProjectLibraryLabels = {
@@ -69,7 +70,7 @@ function toCardItem(project: CameraStageProjectPlatformSummary): ProjectCardGrid
   }
 }
 
-const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnterEditor }) => {
+const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnterEditor, onBackToToolbox }) => {
   const [projects, setProjects] = useState<CameraStageProjectPlatformSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -127,6 +128,8 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
     <ProjectLibraryPage
       title="3D 镜头参考"
       description="搭建三维场景、摆姿势、调摄像机，截图给 AI 当参考图"
+      onBack={onBackToToolbox}
+      backLabel="返回工具箱"
       items={projects.map(toCardItem)}
       icon={ICON_TOOL_CAMERA_STAGE}
       loading={loading}

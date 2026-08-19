@@ -1,9 +1,7 @@
 import React, { Suspense, lazy } from 'react'
-import { ArrowLeft } from 'lucide-react'
 import { ICON_TOOL_CAMERA_STAGE, ICON_TOOL_IMAGE_EDIT } from '@/core/theme/icons'
 import type { LucideIcon } from 'lucide-react'
-import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiLoading, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
-import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiLoading, UiOptionButton, UiPageHeader, UiRegion } from '@/components/ui'
 import type { ToolboxToolId } from '@/core/types/workspace'
 import { selectToolboxTool, useNavigationStore } from '@/stores/navigationStore'
 
@@ -15,6 +13,11 @@ const ImageMarkTool = lazy(() => import('@/features/imageMark/standalone/ImageMa
 /**
  * 工具箱工作区：多工具入口首页 + 各工具的打开/返回导航。
  * 新工具在 TOOLS 里登记并在 renderTool 中接线即可，不改布局骨架。
+ *
+ * **外层不画任何条带**：返回工具箱的入口由工具自己按所处形态放置——有页面标题的
+ * 形态放在标题左侧（`UiPageHeader onBack`），全屏工作面形态放在自带命令带的左端。
+ * 此前外层统一画一条「← 工具名」带，结果与应用标题栏叠成双标题栏，还要靠
+ * `ownsCommandBar` 之类的开关逐个工具关掉；判据改成「页面长什么样」后特例就没了。
  */
 
 interface ToolboxToolMeta {
@@ -22,11 +25,6 @@ interface ToolboxToolMeta {
   name: string
   description: string
   icon: LucideIcon
-  /**
-   * 工具自带命令带（返回按钮由工具渲染在自己那条带里），外层不再画标题带。
-   * 一个视图只允许一条命令带，见 skill `henji-ui-surface` 的「页面骨架：横向条带」。
-   */
-  ownsCommandBar?: boolean
 }
 
 const TOOLS: ToolboxToolMeta[] = [
@@ -35,7 +33,6 @@ const TOOLS: ToolboxToolMeta[] = [
     name: '图片编辑',
     description: '打开或粘贴图片，快速打序号、框选、画箭头、加文字、打码，支持裁剪与旋转，一键复制或保存',
     icon: ICON_TOOL_IMAGE_EDIT,
-    ownsCommandBar: true,
   },
   {
     id: 'cameraStage',
@@ -48,7 +45,7 @@ const TOOLS: ToolboxToolMeta[] = [
 function renderTool(id: ToolboxToolId, onBack: () => void): React.ReactNode {
   switch (id) {
     case 'cameraStage':
-      return <CameraStageApp />
+      return <CameraStageApp onBackToToolbox={onBack} />
     case 'imageMark':
       return <ImageMarkTool onBack={onBack} />
   }
@@ -56,13 +53,9 @@ function renderTool(id: ToolboxToolId, onBack: () => void): React.ReactNode {
 
 const ToolboxWorkspace: React.FC = () => {
   const activeToolId = useNavigationStore((state) => state.activeToolId)
-  const cameraStageView = useCameraStageSessionStore((state) => state.appView)
 
   const activeTool = TOOLS.find((tool) => tool.id === activeToolId)
   const backToToolbox = () => selectToolboxTool(null)
-  // 3D 镜头参考只在编辑器形态下自带命令带；列表形态仍需要外层标题带提供返回。
-  const showToolHeader = !activeTool?.ownsCommandBar
-    && (activeToolId !== 'cameraStage' || cameraStageView !== 'editor')
 
   if (activeTool) {
     return (
@@ -70,20 +63,6 @@ const ToolboxWorkspace: React.FC = () => {
         data-application-surface-id={activeTool.id === 'cameraStage' ? 'tool.camera_stage' : 'tool.image_edit'}
         className="flex h-full flex-col bg-app"
       >
-        {showToolHeader && (
-          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
-            <UiIconButton
-              showBorder={false}
-              appearance="hover-only"
-              className="h-7 w-7"
-              title="返回工具箱"
-              onClick={backToToolbox}
-            >
-              <ArrowLeft size={15} />
-            </UiIconButton>
-            <span className={UI_TEXT_LABEL_CLASS}>{activeTool.name}</span>
-          </div>
-        )}
         <div className="min-h-0 flex-1">
           <Suspense fallback={<UiLoading className="h-full" />}>
             {renderTool(activeTool.id, backToToolbox)}

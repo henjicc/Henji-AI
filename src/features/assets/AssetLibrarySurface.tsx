@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, Search, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FolderPlus, LoaderCircle, Search, X } from 'lucide-react'
 import { Dropdown, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiRegion, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
@@ -158,14 +158,10 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
         <div className="shrink-0 p-6 pb-4">
           <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto">
             <UiPageHeader
-              title={t('topbar.tabs.assets')}
+              title={t('tabs.assets')}
               description={t('assetLibrary.count', { count: page.total })}
-              actions={onBack ? (
-                <UiButton variant="muted" size="sm" className="gap-2" onClick={onBack}>
-                  <ArrowLeft className="h-4 w-4" />
-                  {t('assetLibrary.back')}
-                </UiButton>
-              ) : undefined}
+              onBack={onBack}
+              backLabel={t('assetLibrary.back')}
             />
           </UiRegion>
         </div>

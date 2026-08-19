@@ -12,7 +12,12 @@ import { useCameraStageStore } from './store/cameraStageStore'
  * 列表页负责新建/打开/重命名/删除并把场景加载进 store，编辑器负责场景搭建与截图。
  */
 
-const CameraStageAppInner: React.FC = () => {
+interface CameraStageAppProps {
+  /** 返回工具箱；由工具箱外壳注入，最终落在列表页标题左侧的返回按钮上 */
+  onBackToToolbox?: () => void
+}
+
+const CameraStageAppInner: React.FC<CameraStageAppProps> = ({ onBackToToolbox }) => {
   const view = useCameraStageSessionStore((state) => state.appView)
   const lastProjectId = useCameraStageSessionStore((state) => state.lastProjectId)
   const stageViewMode = useCameraStageSessionStore((state) => state.stageViewMode)
@@ -80,12 +85,17 @@ const CameraStageAppInner: React.FC = () => {
   if (view === 'editor') {
     return <CameraStageEditor onBackToList={() => setAppView('list')} />
   }
-  return <CameraStageProjectList onEnterEditor={() => setAppView('editor')} />
+  return (
+    <CameraStageProjectList
+      onEnterEditor={() => setAppView('editor')}
+      onBackToToolbox={onBackToToolbox}
+    />
+  )
 }
 
-const CameraStageApp: React.FC = () => (
+const CameraStageApp: React.FC<CameraStageAppProps> = ({ onBackToToolbox }) => (
   <CameraStageErrorBoundary>
-    <CameraStageAppInner />
+    <CameraStageAppInner onBackToToolbox={onBackToToolbox} />
   </CameraStageErrorBoundary>
 )
 

@@ -5,11 +5,12 @@ import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/ima
 import {
   PanelTrigger,
   UI_TEXT_BODY_CLASS,
-  UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiIconButton,
   UiOptionButton,
+  UiPageHeader,
+  UiRegion,
 } from '@/components/ui';
 import { readClipboardImage } from '@/commands/clipboard';
 import { ICON_ASSET_LIBRARY } from '@/core/theme/icons';
@@ -255,11 +256,11 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
 
   if (!source) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border-dark bg-surface-dark px-2">
-          {backButton}
-          <span className={UI_TEXT_LABEL_CLASS}>图片编辑</span>
-        </div>
+      // 空态没有工作面，是一张普通页面：返回进标题左侧，不为它单画一条命令带
+      <div className="flex h-full flex-col overflow-y-auto bg-app p-6">
+        <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
+          <UiPageHeader title="图片编辑" onBack={onBack} backLabel="返回工具箱" />
+        </UiRegion>
         <div className="flex min-h-0 flex-1 items-center justify-center p-8">
           <div
             className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${

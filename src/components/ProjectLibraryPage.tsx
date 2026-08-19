@@ -52,6 +52,9 @@ interface ProjectLibraryPageProps {
   headerActions?: React.ReactNode;
   /** 标题区与网格之间的场景专属内容（如错误条） */
   banner?: React.ReactNode;
+  /** 二级页面的返回入口，渲染在标题左侧；一级页面（画布工作区）不传 */
+  onBack?: () => void;
+  backLabel?: string;
   extraActions?: (item: ProjectCardGridItem) => ProjectCardGridExtraAction[];
   onOpen: (item: ProjectCardGridItem) => void;
   onCreate: (name: string) => void;
@@ -86,6 +89,8 @@ export function ProjectLibraryPage({
   labels,
   headerActions,
   banner,
+  onBack,
+  backLabel,
   extraActions,
   onOpen,
   onCreate,
@@ -128,6 +133,8 @@ export function ProjectLibraryPage({
           className="mb-6"
           title={title}
           description={description}
+          onBack={onBack}
+          backLabel={backLabel}
           actions={selection.active ? (
             <ProjectSelectionToolbar
               selection={selection}

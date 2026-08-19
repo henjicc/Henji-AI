@@ -14,8 +14,9 @@
  *   Card     UiPanel               唯一允许画完整卡片的一层（浮层/弹窗/侧栏/画布节点）
  */
 import type { HTMLAttributes, ReactNode } from 'react';
-import { Info } from 'lucide-react';
+import { ArrowLeft, Info } from 'lucide-react';
 import Tooltip from './Tooltip';
+import { UiIconButton } from './primitives';
 import {
   UI_BUTTON_RESET_CLASS,
   UI_DIVIDER_CLASS,
@@ -60,6 +61,17 @@ interface UiPageHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'
   description?: ReactNode;
   /** 右侧操作区 */
   actions?: ReactNode;
+  /**
+   * 二级页面的返回入口，渲染在标题左侧。
+   *
+   * 全应用返回入口只有三种形态，判据是页面本身长什么样，不是哪个文件画的：
+   * 有页面标题的二级页面 → 这里；自带命令带的全屏工作面 → 那条带的左端；
+   * 没有命令带的全屏工作面（画布）→ 浮在内容上的玻璃按钮。
+   * 不要再为返回单开一条横向条带——那会和应用标题栏叠成「双标题栏」。
+   */
+  onBack?: () => void;
+  /** 返回按钮的无障碍名称与悬浮提示，如「返回工具箱」 */
+  backLabel?: string;
 }
 
 interface UiFormRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
@@ -173,11 +185,26 @@ export function UiPageHeader({
   title,
   description,
   actions,
+  onBack,
+  backLabel,
   ...props
 }: UiPageHeaderProps): JSX.Element {
   return (
-    <div data-ui-page-header className={`flex items-start justify-between gap-4 ${className}`} {...props}>
-      <div className="min-w-0">
+    <div data-ui-page-header className={`flex items-start gap-2 ${className}`} {...props}>
+      {onBack ? (
+        // -ml-1.5 让图标的视觉左边缘与标题文字对齐（按钮自带内边距）
+        <UiIconButton
+          showBorder={false}
+          appearance="hover-only"
+          className="-ml-1.5 h-7 w-7 shrink-0"
+          title={backLabel}
+          aria-label={backLabel}
+          onClick={onBack}
+        >
+          <ArrowLeft size={16} />
+        </UiIconButton>
+      ) : null}
+      <div className="min-w-0 flex-1">
         <h2 data-ui-page-title className={UI_TEXT_TITLE_CLASS}>{title}</h2>
         {description ? <p className={`mt-1 ${UI_TEXT_META_CLASS}`}>{description}</p> : null}
       </div>
