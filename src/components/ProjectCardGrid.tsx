@@ -134,7 +134,10 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+    // 列数由可用宽度算出，不写断点：卡片最小 16rem，能塞几列就几列。
+    // 断点式 grid-cols-* 在这里是错的——同一个断点下窗口还能继续变宽，列数却卡死。
+    // min(16rem,100%) 保证窗口窄于一张卡时不横向溢出。
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(16rem,100%),1fr))] gap-4">
       {onCreate && !selection.active && (
         <UiOptionButton
           variant="card"
