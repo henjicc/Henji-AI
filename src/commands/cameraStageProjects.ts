@@ -2,6 +2,7 @@ import { getPlatform } from '@/platform'
 import type {
   CameraStageProjectPlatformRecord,
   CameraStageProjectPlatformSummary,
+  CameraStageProjectPlatformWrite,
 } from '@/platform/contracts/cameraStageProjects'
 
 export async function listCameraStageProjectSummaries(): Promise<CameraStageProjectPlatformSummary[]> {
@@ -15,7 +16,7 @@ export async function getCameraStageProjectRecord(
 }
 
 export async function upsertCameraStageProjectRecord(
-  record: CameraStageProjectPlatformRecord,
+  record: CameraStageProjectPlatformWrite,
 ): Promise<void> {
   await getPlatform().cameraStageProjects.upsertProjectRecord(record)
 }

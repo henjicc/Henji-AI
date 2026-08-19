@@ -44,6 +44,12 @@ export const PROJECT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
       reason: 'persistCanvasState() 在每次画布写入后自动调用来落盘；画布内容本身的写入走 '
         + 'canvas.node / canvas.edge 的通用动词，这里只是落盘环节，不是独立入口。',
     },
+    setProjectCover: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '项目卡封面缩略图的本地路径回写，由退出项目时的封面生成流程（canvasProjectCover.ts）'
+        + '自动调用；封面只是列表里的展示图，不属于工程内容，助手没有单独设置它的需求。',
+    },
     saveCurrentProjectViewport: { kind: 'excluded', category: 'view_state', reason: VIEWPORT_REASON },
     cancelPendingViewportPersist: {
       kind: 'excluded',

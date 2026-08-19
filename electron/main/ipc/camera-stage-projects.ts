@@ -6,6 +6,7 @@ import {
   upsertCameraStageProject,
   type CameraStageProjectRecordDto,
   type CameraStageProjectSummaryDto,
+  type CameraStageProjectWriteDto,
 } from '../services/camera-stage-projects'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 
@@ -18,7 +19,7 @@ interface RenamePayload extends ProjectIdPayload {
   updatedAt: number
 }
 
-function parseProjectRecord(input: unknown): CameraStageProjectRecordDto {
+function parseProjectRecord(input: unknown): CameraStageProjectWriteDto {
   const record = parseRecord(input)
   const id = record.id
   const name = record.name
@@ -76,7 +77,7 @@ export function registerCameraStageProjectsIpc(): void {
     parseProjectIdPayload,
     ({ projectId }) => getCameraStageProject(projectId),
   )
-  registerIpcHandler<CameraStageProjectRecordDto, void>(
+  registerIpcHandler<CameraStageProjectWriteDto, void>(
     'cameraStageProjects:upsert',
     parseProjectRecord,
     (record) => {
@@ -93,8 +94,8 @@ export function registerCameraStageProjectsIpc(): void {
   registerIpcHandler<ProjectIdPayload, void>(
     'cameraStageProjects:delete',
     parseProjectIdPayload,
-    ({ projectId }) => {
-      deleteCameraStageProject(projectId)
+    async ({ projectId }) => {
+      await deleteCameraStageProject(projectId)
     },
   )
 }

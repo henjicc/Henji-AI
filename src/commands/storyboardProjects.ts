@@ -2,6 +2,7 @@ import { getPlatform } from '@/platform'
 import type {
   StoryboardProjectPlatformRecord,
   StoryboardProjectPlatformSummary,
+  StoryboardProjectPlatformWrite,
 } from '@/platform/contracts/storyboardProjects'
 
 export async function listStoryboardProjectSummaries(): Promise<StoryboardProjectPlatformSummary[]> {
@@ -12,7 +13,7 @@ export async function getStoryboardProjectRecord(projectId: string): Promise<Sto
   return await getPlatform().storyboardProjects.getProjectRecord(projectId)
 }
 
-export async function upsertStoryboardProjectRecord(record: StoryboardProjectPlatformRecord): Promise<void> {
+export async function upsertStoryboardProjectRecord(record: StoryboardProjectPlatformWrite): Promise<void> {
   await getPlatform().storyboardProjects.upsertProjectRecord(record)
 }
 

@@ -64,6 +64,8 @@ export interface ProjectSummary {
   createdAt: number;
   updatedAt: number;
   nodeCount: number;
+  /** 项目封面缩略图的本地路径；未生成过封面时为 null */
+  coverPath: string | null;
 }
 
 export interface Project extends ProjectSummary {
@@ -273,6 +275,7 @@ function toProjectSummary(record: ProjectSummaryRecord): ProjectSummary {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     nodeCount: record.nodeCount,
+    coverPath: record.coverPath ?? null,
   };
 }
 
@@ -328,6 +331,7 @@ function fromProjectRecord(record: ProjectRecord): Project {
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     nodeCount: record.nodeCount,
+    coverPath: (record as { coverPath?: string | null }).coverPath ?? null,
     nodes: parsedNodes,
     edges: parsedEdges,
     viewport: parsedViewport ?? DEFAULT_VIEWPORT,
@@ -598,6 +602,7 @@ interface ProjectState {
   createProject: (name: string) => string;
   deleteProject: (id: string) => void;
   renameProject: (id: string, name: string) => void;
+  setProjectCover: (id: string, coverPath: string | null) => void;
   openProject: (id: string) => void;
   closeProject: () => void;
   getCurrentProject: () => Project | null;
@@ -652,6 +657,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
       nodeCount: 0,
+      coverPath: null,
       nodes: [],
       edges: [],
       viewport: DEFAULT_VIEWPORT,
@@ -717,6 +723,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
   },
 
+  setProjectCover: (id, coverPath) => {
+    set((state) => ({
+      projects: state.projects.map((summary) => (
+        summary.id === id ? { ...summary, coverPath } : summary
+      )),
+      currentProject: state.currentProject?.id === id
+        ? { ...state.currentProject, coverPath }
+        : state.currentProject,
+    }));
+  },
+
   openProject: (id) => {
     const reqSeq = ++openProjectRequestSeq;
     set({ isOpeningProject: true });
@@ -743,6 +760,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             createdAt: project.createdAt,
             updatedAt: project.updatedAt,
             nodeCount: project.nodeCount,
+            coverPath: project.coverPath,
           }),
         }));
       } catch (error) {
@@ -778,6 +796,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         createdAt: nextProject.createdAt,
         updatedAt: nextProject.updatedAt,
         nodeCount: nextProject.nodeCount,
+        coverPath: nextProject.coverPath,
       };
       persistProject(nextProject, { immediate: true });
     }
@@ -845,6 +864,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         createdAt: nextProject.createdAt,
         updatedAt: nextProject.updatedAt,
         nodeCount: nextProject.nodeCount,
+        coverPath: nextProject.coverPath,
       }),
     }));
     persistProject(nextProject);

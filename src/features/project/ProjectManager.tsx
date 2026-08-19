@@ -23,6 +23,7 @@ function toCardItem(project: ProjectSummary, nodesCountLabel: (count: number) =>
     id: project.id,
     name: project.name,
     metaLine: `${nodesCountLabel(project.nodeCount)} · ${new Date(project.updatedAt).toLocaleDateString()}`,
+    coverPath: project.coverPath,
   };
 }
 
@@ -157,6 +158,8 @@ export function ProjectManager(): JSX.Element {
           emptyIcon={<FolderOpen className="h-12 w-12" />}
           emptyTitle={t('project.empty')}
           emptyDescription={t('project.emptyHint')}
+          onCreate={handleCreateProject}
+          createLabel={t('project.newProject')}
           onOpen={(item) => openProject(item.id)}
           onRename={(item) => {
             setEditingProjectId(item.id);

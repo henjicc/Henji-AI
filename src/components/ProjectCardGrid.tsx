@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckSquare, FolderOpen, Pencil, Square, Trash2 } from 'lucide-react';
+import { CheckSquare, FolderOpen, Pencil, Plus, Square, Trash2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import {
   UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS,
@@ -9,6 +9,7 @@ import {
   UiLoading,
   UiOptionButton,
 } from '@/components/ui';
+import { ProjectCardCover } from '@/components/ProjectCardCover';
 import type { MenuItem } from '@/hooks/useContextMenu';
 import type { UseMultiSelectResult } from '@/hooks/useMultiSelect';
 
@@ -16,6 +17,8 @@ export interface ProjectCardGridItem {
   id: string;
   name: string;
   metaLine: string;
+  /** 封面缩略图本地路径；为空时卡片显示占位图 */
+  coverPath?: string | null;
 }
 
 export interface ProjectCardGridExtraAction {
@@ -46,6 +49,9 @@ interface ProjectCardGridProps {
   emptyIcon?: React.ReactNode;
   emptyTitle: string;
   emptyDescription?: string;
+  /** 传入后网格首格是「新建」入口；不传则只渲染既有项目 */
+  onCreate?: () => void;
+  createLabel?: string;
   onOpen: (item: ProjectCardGridItem) => void;
   onRename: (item: ProjectCardGridItem) => void;
   onDeleteRequest: (items: ProjectCardGridItem[]) => void;
@@ -54,11 +60,12 @@ interface ProjectCardGridProps {
 }
 
 /**
- * 项目/工程列表的卡片网格：打开、重命名、删除、右键菜单、多选批量删除。
+ * 项目/工程列表的卡片网格：封面 + 名称 + 元信息，打开、重命名、删除、右键菜单、多选批量删除。
  *
  * 画布工程与 3D 镜头参考工程共用同一份实现，避免同一交互长成两个样子。
  * 悬浮操作与多选复选框都是覆盖在卡片按钮之上的**同级**元素（不嵌进 `<button>` 内部），
  * 静息态不为它们预留任何布局宽度——同样的坑见资产库侧栏那次修复。
+ * 悬浮动作压在封面（真实媒体）之上，所以那一簇用 `ui-glass`，不是压在纯色 UI 上的滥用。
  */
 export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   items,
@@ -71,6 +78,8 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   emptyIcon,
   emptyTitle,
   emptyDescription,
+  onCreate,
+  createLabel,
   onOpen,
   onRename,
   onDeleteRequest,
@@ -125,38 +134,50 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+      {onCreate && !selection.active && (
+        <UiOptionButton
+          variant="card"
+          type="button"
+          className="h-full w-full flex-col justify-center gap-3 !items-center p-2.5 text-center"
+          onClick={onCreate}
+          disabled={busy}
+        >
+          {/* 高度交给网格拉伸对齐同排项目卡，不写死数值 */}
+          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-veil-soft">
+            <Plus className="h-5 w-5" />
+          </span>
+          <span className="text-sm font-medium">{createLabel}</span>
+        </UiOptionButton>
+      )}
+
       {items.map((item) => {
         const selected = selection.isSelected(item.id);
         return (
           <div key={item.id} className="group relative">
-            {/*
-              左侧留白用互斥的 pl-4/pl-10 三元切换，不能写成 `p-4` + 条件 `pl-10` 叠加——
-              二者都改 padding-left，一个来自 shorthand 一个来自单边工具类，胜负取决于
-              Tailwind 产物的类顺序而非 className 书写顺序，是静默失效的坑。
-            */}
             <UiOptionButton
               variant="card"
               type="button"
-              className={`h-auto w-full flex-col !items-start gap-2 pt-4 pr-4 pb-4 text-left ${selection.active ? 'pl-10' : 'pl-4'} ${selected ? UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS : ''}`}
+              className={`h-auto w-full flex-col !items-stretch gap-0 p-2.5 text-left ${selected ? UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS : ''}`}
               onClick={() => (selection.active ? selection.toggle(item.id) : onOpen(item))}
               onContextMenu={(event) => showMenu(event, buildMenuItems(item))}
               disabled={busy}
             >
-              {/* 多选态下用左上角复选框顶替这个位置，避免两者在同一角落重叠。 */}
-              {Icon && !selection.active ? <Icon className="h-5 w-5 text-text-muted" /> : null}
-              <span className={`w-full truncate text-sm font-medium ${selection.active ? '' : 'pr-14'}`}>
-                {item.name}
+              <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-lg bg-app">
+                <ProjectCardCover coverPath={item.coverPath} icon={Icon} seed={item.id} alt={item.name} />
               </span>
-              <span className="text-xs text-text-muted">{item.metaLine}</span>
+              <span className="flex flex-col gap-0.5 px-1 pb-0.5 pt-2.5">
+                <span className="truncate text-sm font-medium">{item.name}</span>
+                <span className="truncate text-xs text-text-muted">{item.metaLine}</span>
+              </span>
             </UiOptionButton>
 
             {selection.active ? (
-              <div className="absolute left-3 top-3.5">
+              <div className="absolute left-4 top-4">
                 <UiCheckbox checked={selected} onCheckedChange={() => selection.toggle(item.id)} />
               </div>
             ) : (
-              <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="ui-glass absolute right-4 top-4 flex gap-0.5 rounded-lg p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                 <UiIconButton
                   showBorder={false}
                   appearance="hover-only"

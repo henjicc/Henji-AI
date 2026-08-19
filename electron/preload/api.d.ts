@@ -184,6 +184,7 @@ export interface HenjiStoryboardProjectSummary {
   createdAt: number
   updatedAt: number
   nodeCount: number
+  coverPath: string | null
 }
 
 export interface HenjiStoryboardProjectRecord extends HenjiStoryboardProjectSummary {
@@ -193,10 +194,12 @@ export interface HenjiStoryboardProjectRecord extends HenjiStoryboardProjectSumm
   historyJson: string
 }
 
+export type HenjiStoryboardProjectWrite = Omit<HenjiStoryboardProjectRecord, 'coverPath'>
+
 export interface HenjiStoryboardProjectsApi {
   listProjectSummaries(): Promise<HenjiStoryboardProjectSummary[]>
   getProjectRecord(projectId: string): Promise<HenjiStoryboardProjectRecord | null>
-  upsertProjectRecord(record: HenjiStoryboardProjectRecord): Promise<void>
+  upsertProjectRecord(record: HenjiStoryboardProjectWrite): Promise<void>
   updateProjectViewportRecord(projectId: string, viewportJson: string): Promise<void>
   renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void>
   deleteProjectRecord(projectId: string): Promise<void>
@@ -208,16 +211,38 @@ export interface HenjiCameraStageProjectSummary {
   createdAt: number
   updatedAt: number
   objectCount: number
+  coverPath: string | null
 }
 
 export interface HenjiCameraStageProjectRecord extends HenjiCameraStageProjectSummary {
   sceneJson: string
 }
 
+export type HenjiCameraStageProjectWrite = Omit<HenjiCameraStageProjectRecord, 'coverPath'>
+
+export type HenjiProjectCoverScope = 'canvas' | 'camera-stage'
+export type HenjiProjectCoverSourceKind = 'image' | 'video'
+
+export interface HenjiProjectCoverRequest {
+  scope: HenjiProjectCoverScope
+  projectId: string
+  source: string
+  sourceKind: HenjiProjectCoverSourceKind
+}
+
+export interface HenjiProjectCoverResult {
+  projectId: string
+  coverPath: string | null
+}
+
+export interface HenjiProjectCoversApi {
+  saveCover(request: HenjiProjectCoverRequest): Promise<HenjiProjectCoverResult>
+}
+
 export interface HenjiCameraStageProjectsApi {
   listProjectSummaries(): Promise<HenjiCameraStageProjectSummary[]>
   getProjectRecord(projectId: string): Promise<HenjiCameraStageProjectRecord | null>
-  upsertProjectRecord(record: HenjiCameraStageProjectRecord): Promise<void>
+  upsertProjectRecord(record: HenjiCameraStageProjectWrite): Promise<void>
   renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void>
   deleteProjectRecord(projectId: string): Promise<void>
 }
@@ -929,6 +954,7 @@ export interface HenjiNativeApi {
   canvasProjects: HenjiCanvasProjectsApi
   storyboardProjects: HenjiStoryboardProjectsApi
   cameraStageProjects: HenjiCameraStageProjectsApi
+  projectCovers: HenjiProjectCoversApi
   cameraStageRender: HenjiCameraStageRenderApi
   customModels: HenjiCustomModelsApi
   keystore: HenjiKeystoreApi

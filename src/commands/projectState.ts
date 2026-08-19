@@ -13,6 +13,7 @@ export interface ProjectSummaryRecord {
   createdAt: number;
   updatedAt: number;
   nodeCount: number;
+  coverPath: string | null;
 }
 
 export interface ProjectRecord {

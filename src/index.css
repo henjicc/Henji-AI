@@ -1446,3 +1446,16 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   height: 12px;
   background: rgb(var(--accent-rgb));
 }
+
+/*
+ * 项目卡封面占位图：项目还没有任何内容时代替截图。
+ * 颜色只用主题令牌里的品牌色，卡与卡之间的差异靠 --cover-x / --cover-y 两个内联变量
+ * 挪动光斑位置——刻意不做色相旋转：转色相会转出与暗色界面打架的橙/绿，
+ * 而占位图应该是一族安静的同色系底图，不是彩虹。
+ */
+.project-cover-placeholder {
+  background:
+    radial-gradient(85% 85% at var(--cover-x, 25%) var(--cover-y, 20%), rgb(var(--brand-500-rgb) / 0.34) 0%, transparent 64%),
+    radial-gradient(75% 75% at calc(100% - var(--cover-x, 25%)) calc(100% - var(--cover-y, 20%)), rgb(var(--brand-300-rgb) / 0.12) 0%, transparent 60%),
+    linear-gradient(145deg, rgb(var(--layer-rgb) / 0.80), rgb(var(--panel-rgb) / 0.95));
+}

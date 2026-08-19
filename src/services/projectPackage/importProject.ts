@@ -60,6 +60,7 @@ export async function importProjectFromPackage(): Promise<string | null> {
     createdAt: now,
     updatedAt: now,
     nodeCount: nodes.length,
+    coverPath: null,
     nodes,
     edges,
     viewport: manifest.viewport ?? DEFAULT_VIEWPORT,

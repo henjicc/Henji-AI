@@ -36,6 +36,12 @@ export const CAMERA_STAGE_SESSION_STORE_LEDGER: ApplicationStoreActionLedger<Act
      * 只用于应用重启后恢复上次看到的视角（见 cameraStageProjectService.ts /
      * CameraStageApp.tsx 的恢复逻辑）。与 setViewMode 本身同一类排除。
      */
+    markCoversChanged: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '工程封面写盘完成后的列表刷新信号，由退出编辑器时的封面生成流程自动调用；'
+        + '封面只是列表里的展示图，不属于工程数据，助手没有触发它的需求。',
+    },
     setStageViewMode: {
       kind: 'excluded',
       category: 'view_state',

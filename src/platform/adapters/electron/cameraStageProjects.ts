@@ -1,5 +1,5 @@
 import type {
-  CameraStageProjectPlatformRecord,
+  CameraStageProjectPlatformWrite,
   CameraStageProjectsPlatform,
 } from '@/platform/contracts/cameraStageProjects'
 
@@ -20,7 +20,7 @@ export function createElectronCameraStageProjects(): CameraStageProjectsPlatform
       const record = await getNativeCameraStageProjects().getProjectRecord(projectId)
       return record ?? null
     },
-    upsertProjectRecord: (record: CameraStageProjectPlatformRecord) =>
+    upsertProjectRecord: (record: CameraStageProjectPlatformWrite) =>
       getNativeCameraStageProjects().upsertProjectRecord(record),
     renameProjectRecord: (projectId: string, name: string, updatedAt: number) =>
       getNativeCameraStageProjects().renameProjectRecord(projectId, name, updatedAt),

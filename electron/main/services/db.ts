@@ -136,7 +136,8 @@ export function initializeSchema(conn: Database.Database): void {
       nodes_json TEXT NOT NULL,
       edges_json TEXT NOT NULL,
       viewport_json TEXT NOT NULL,
-      history_json TEXT NOT NULL
+      history_json TEXT NOT NULL,
+      cover_path TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_storyboard_projects_updated_at
@@ -148,7 +149,8 @@ export function initializeSchema(conn: Database.Database): void {
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
       object_count INTEGER NOT NULL DEFAULT 0,
-      scene_json TEXT NOT NULL
+      scene_json TEXT NOT NULL,
+      cover_path TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_camera_stage_projects_updated_at
@@ -227,7 +229,23 @@ export function initializeSchema(conn: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_asset_library_items_asset ON asset_library_items(asset_id);
     CREATE INDEX IF NOT EXISTS idx_asset_tag_items_asset ON asset_tag_items(asset_id);
   `)
+  ensureColumn(conn, 'storyboard_projects', 'cover_path', 'TEXT')
+  ensureColumn(conn, 'camera_stage_projects', 'cover_path', 'TEXT')
   runAgentSchemaMigrations(conn)
+}
+
+/**
+ * 给本文件用 `CREATE TABLE IF NOT EXISTS` 维护的老表补列。
+ *
+ * 这些表不走 `app_schema_migrations` 版本账本（那是主进程 agent 侧的），
+ * 而 `IF NOT EXISTS` 对已存在的库不会追加新列，所以旧库必须在这里显式补。
+ */
+function ensureColumn(conn: Database.Database, table: string, column: string, definition: string): void {
+  const columns = conn.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (columns.some((item) => item.name === column)) {
+    return
+  }
+  conn.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
 }
 
 export function getDb(): Database.Database {

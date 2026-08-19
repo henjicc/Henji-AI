@@ -1,5 +1,6 @@
 import type {
   StoryboardProjectPlatformRecord,
+  StoryboardProjectPlatformWrite,
   StoryboardProjectsPlatform,
 } from '@/platform/contracts/storyboardProjects'
 
@@ -24,7 +25,7 @@ export function createElectronStoryboardProjects(): StoryboardProjectsPlatform {
       const record = await getNativeStoryboardProjects().getProjectRecord(projectId)
       return record ? normalizeRecord(record) : null
     },
-    upsertProjectRecord: (record: StoryboardProjectPlatformRecord) => getNativeStoryboardProjects().upsertProjectRecord(record),
+    upsertProjectRecord: (record: StoryboardProjectPlatformWrite) => getNativeStoryboardProjects().upsertProjectRecord(record),
     updateProjectViewportRecord: (projectId: string, viewportJson: string) =>
       getNativeStoryboardProjects().updateProjectViewportRecord(projectId, viewportJson),
     renameProjectRecord: (projectId: string, name: string, updatedAt: number) =>

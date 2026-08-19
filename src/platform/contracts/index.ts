@@ -10,6 +10,7 @@ import type { ImagePlatform } from './image'
 import type { VideoPlatform } from './video'
 import type { ClipboardPlatform } from './clipboard'
 import type { DragDropPlatform } from './dragDrop'
+import type { ProjectCoversPlatform } from './projectCovers'
 import type { ProjectPackagePlatform } from './projectPackage'
 import type { StoryboardProjectsPlatform } from './storyboardProjects'
 import type { CameraStageProjectsPlatform } from './cameraStageProjects'
@@ -33,6 +34,7 @@ export interface PlatformRuntime {
   video: VideoPlatform
   clipboard: ClipboardPlatform
   dragDrop: DragDropPlatform
+  projectCovers: ProjectCoversPlatform
   projectPackage: ProjectPackagePlatform
   storyboardProjects: StoryboardProjectsPlatform
   cameraStageProjects: CameraStageProjectsPlatform
@@ -57,6 +59,7 @@ export type {
   VideoPlatform,
   ClipboardPlatform,
   DragDropPlatform,
+  ProjectCoversPlatform,
   ProjectPackagePlatform,
   StoryboardProjectsPlatform,
   CameraStageProjectsPlatform,
@@ -79,6 +82,7 @@ export * from './image'
 export * from './video'
 export * from './clipboard'
 export * from './dragDrop'
+export * from './projectCovers'
 export * from './projectPackage'
 export * from './storyboardProjects'
 export * from './cameraStageProjects'

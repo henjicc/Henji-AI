@@ -8,8 +8,8 @@ import {
   upsertCameraStageProjectRecord,
 } from '@/commands/cameraStageProjects'
 import type {
-  CameraStageProjectPlatformRecord,
   CameraStageProjectPlatformSummary,
+  CameraStageProjectPlatformWrite,
 } from '@/platform/contracts/cameraStageProjects'
 import { deserializeScene, isCurrentCameraStageScene, serializeScene } from '../domain/sceneSerialization'
 import type { StageSceneAnimation } from '../domain/animationTypes'
@@ -51,7 +51,7 @@ export interface SavedProjectInfo {
 export interface CameraStageProjectDraft {
   id: string
   name: string
-  record: CameraStageProjectPlatformRecord
+  record: CameraStageProjectPlatformWrite
   fingerprint: string
 }
 
@@ -83,7 +83,7 @@ export function createCurrentProjectDraft(now: number = Date.now()): CameraStage
     stateKeyframes: state.stateKeyframes,
   })
 
-  const record: CameraStageProjectPlatformRecord = {
+  const record: CameraStageProjectPlatformWrite = {
     id,
     name,
     createdAt: now, // upsert 冲突更新时不覆盖 created_at，仅新建时生效

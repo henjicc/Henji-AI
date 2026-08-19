@@ -20,6 +20,7 @@ function project(): Project {
     createdAt: 1,
     updatedAt: 2,
     nodeCount: 0,
+    coverPath: null,
     nodes: [],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 },

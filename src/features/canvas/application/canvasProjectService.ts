@@ -2,6 +2,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type ProjectSummary } from '@/stores/projectStore'
 
 import { CanvasApplicationError, openCanvasProject } from './canvasApplicationService'
+import { updateCanvasProjectCover } from './canvasProjectCover'
 
 const EMPTY_VIEWPORT = { x: 0, y: 0, zoom: 1 }
 
@@ -41,6 +42,7 @@ export async function closeCanvasProject(projectId: string): Promise<Record<stri
       currentProjectId: store.currentProjectId,
     })
   }
+  await updateCanvasProjectCover(projectId)
   store.closeProject()
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   useCanvasStore.getState().setViewportState(EMPTY_VIEWPORT)

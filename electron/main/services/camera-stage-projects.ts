@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { clearProjectCover } from './project-covers'
 
 /**
  * 3D 镜头参考场景工程持久化服务层。
@@ -12,6 +13,7 @@ interface CameraStageProjectRow {
   updated_at: number | string
   object_count: number | null
   scene_json: string
+  cover_path: string | null
 }
 
 export interface CameraStageProjectSummaryDto {
@@ -20,11 +22,15 @@ export interface CameraStageProjectSummaryDto {
   createdAt: number
   updatedAt: number
   objectCount: number
+  coverPath: string | null
 }
 
 export interface CameraStageProjectRecordDto extends CameraStageProjectSummaryDto {
   sceneJson: string
 }
+
+/** 写入侧不带封面：封面由 project-covers 单独登记，场景自动保存不得把它覆盖成空。 */
+export type CameraStageProjectWriteDto = Omit<CameraStageProjectRecordDto, 'coverPath'>
 
 function normalizeTimestamp(value: number | string | null | undefined): number {
   const parsed = Number(value)
@@ -41,6 +47,7 @@ function rowToSummary(row: CameraStageProjectRow): CameraStageProjectSummaryDto 
     createdAt: normalizeTimestamp(row.created_at),
     updatedAt: normalizeTimestamp(row.updated_at),
     objectCount: Math.max(0, Number(row.object_count ?? 0)),
+    coverPath: row.cover_path ?? null,
   }
 }
 
@@ -54,7 +61,7 @@ function rowToRecord(row: CameraStageProjectRow): CameraStageProjectRecordDto {
 export function listCameraStageProjectSummaries(): CameraStageProjectSummaryDto[] {
   const rows = getDb()
     .prepare(
-      `SELECT id, name, created_at, updated_at, object_count, scene_json
+      `SELECT id, name, created_at, updated_at, object_count, scene_json, cover_path
        FROM camera_stage_projects
        ORDER BY updated_at DESC`,
     )
@@ -65,7 +72,7 @@ export function listCameraStageProjectSummaries(): CameraStageProjectSummaryDto[
 export function getCameraStageProject(projectId: string): CameraStageProjectRecordDto | null {
   const row = getDb()
     .prepare(
-      `SELECT id, name, created_at, updated_at, object_count, scene_json
+      `SELECT id, name, created_at, updated_at, object_count, scene_json, cover_path
        FROM camera_stage_projects
        WHERE id = ?
        LIMIT 1`,
@@ -74,7 +81,7 @@ export function getCameraStageProject(projectId: string): CameraStageProjectReco
   return row ? rowToRecord(row) : null
 }
 
-export function upsertCameraStageProject(record: CameraStageProjectRecordDto): void {
+export function upsertCameraStageProject(record: CameraStageProjectWriteDto): void {
   getDb()
     .prepare(
       `INSERT INTO camera_stage_projects (
@@ -107,6 +114,7 @@ export function renameCameraStageProject(projectId: string, name: string, update
     .run(name, normalizeTimestamp(updatedAt), projectId)
 }
 
-export function deleteCameraStageProject(projectId: string): void {
+export async function deleteCameraStageProject(projectId: string): Promise<void> {
+  await clearProjectCover('camera-stage', projectId)
   getDb().prepare('DELETE FROM camera_stage_projects WHERE id = ?').run(projectId)
 }

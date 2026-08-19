@@ -22,6 +22,7 @@ import {
   type CameraStageVideoResolutionPreset,
 } from './export/cameraStageVideo'
 import { useCameraStageAutosave } from './hooks/useCameraStageAutosave'
+import { updateCameraStageProjectCover } from './projects/cameraStageProjectCover'
 import { useCameraStageShortcuts } from './hooks/useCameraStageShortcuts'
 import CameraStageDock from './layout/CameraStageDock'
 import type { CameraStageDockHandle } from './layout/CameraStageDock'
@@ -345,6 +346,16 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
     redo,
   })
 
+  /** 退出前先把当前摄像机视图落成工程封面，再交回列表；封面失败不阻塞返回。 */
+  const handleBackToList = useCallback((): void => {
+    const projectId = useCameraStageStore.getState().currentProjectId
+    const capture = captureRef.current
+    if (projectId && capture) {
+      void updateCameraStageProjectCover(projectId, () => capture())
+    }
+    onBackToList?.()
+  }, [onBackToList])
+
   const autosaveErrorLabel = saveState === 'error' ? '自动保存失败' : null
   const videoProgressLabel = videoProgress
     ? videoProgress.phase === 'encoding'
@@ -361,7 +372,7 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
             appearance="hover-only"
             className="h-7 w-7"
             aria-label={backLabel}
-            onClick={onBackToList}
+            onClick={handleBackToList}
           >
             <ArrowLeft size={15} />
           </UiIconButton>

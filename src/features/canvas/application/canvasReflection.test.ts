@@ -39,6 +39,7 @@ function project(canvasNode: CanvasNode): Project {
     createdAt: 1,
     updatedAt: 2,
     nodeCount: 1,
+    coverPath: null,
     nodes: [canvasNode],
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 },

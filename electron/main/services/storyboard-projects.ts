@@ -1,4 +1,5 @@
 import { getDb } from './db'
+import { clearProjectCover } from './project-covers'
 
 interface StoryboardProjectRow {
   id: string
@@ -10,6 +11,7 @@ interface StoryboardProjectRow {
   edges_json: string
   viewport_json: string
   history_json: string
+  cover_path: string | null
 }
 
 export interface StoryboardProjectSummaryDto {
@@ -18,6 +20,7 @@ export interface StoryboardProjectSummaryDto {
   createdAt: number
   updatedAt: number
   nodeCount: number
+  coverPath: string | null
 }
 
 export interface StoryboardProjectRecordDto extends StoryboardProjectSummaryDto {
@@ -26,6 +29,9 @@ export interface StoryboardProjectRecordDto extends StoryboardProjectSummaryDto 
   viewportJson: string
   historyJson: string
 }
+
+/** 写入侧不带封面：封面由 project-covers 单独登记，工程自动保存不得把它覆盖成空。 */
+export type StoryboardProjectWriteDto = Omit<StoryboardProjectRecordDto, 'coverPath'>
 
 function normalizeTimestamp(value: number | string | null | undefined): number {
   const parsed = Number(value)
@@ -42,6 +48,7 @@ function rowToSummary(row: StoryboardProjectRow): StoryboardProjectSummaryDto {
     createdAt: normalizeTimestamp(row.created_at),
     updatedAt: normalizeTimestamp(row.updated_at),
     nodeCount: Math.max(0, Number(row.node_count ?? 0)),
+    coverPath: row.cover_path ?? null,
   }
 }
 
@@ -57,7 +64,7 @@ function rowToRecord(row: StoryboardProjectRow): StoryboardProjectRecordDto {
 
 export function listStoryboardProjectSummaries(): StoryboardProjectSummaryDto[] {
   const rows = getDb().prepare(
-    `SELECT id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json
+    `SELECT id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json, cover_path
      FROM storyboard_projects
      ORDER BY updated_at DESC`
   ).all() as StoryboardProjectRow[]
@@ -66,7 +73,7 @@ export function listStoryboardProjectSummaries(): StoryboardProjectSummaryDto[] 
 
 export function getStoryboardProject(projectId: string): StoryboardProjectRecordDto | null {
   const row = getDb().prepare(
-    `SELECT id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json
+    `SELECT id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json, cover_path
      FROM storyboard_projects
      WHERE id = ?
      LIMIT 1`
@@ -74,7 +81,7 @@ export function getStoryboardProject(projectId: string): StoryboardProjectRecord
   return row ? rowToRecord(row) : null
 }
 
-export function upsertStoryboardProject(record: StoryboardProjectRecordDto): void {
+export function upsertStoryboardProject(record: StoryboardProjectWriteDto): void {
   getDb().prepare(
     `INSERT INTO storyboard_projects (
       id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json
@@ -117,6 +124,7 @@ export function renameStoryboardProject(projectId: string, name: string, updated
   ).run(name, normalizeTimestamp(updatedAt), projectId)
 }
 
-export function deleteStoryboardProject(projectId: string): void {
+export async function deleteStoryboardProject(projectId: string): Promise<void> {
+  await clearProjectCover('canvas', projectId)
   getDb().prepare('DELETE FROM storyboard_projects WHERE id = ?').run(projectId)
 }

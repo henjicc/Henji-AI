@@ -18,6 +18,7 @@ import { registerLlmRuntimeIpc } from './ipc/llm-runtime'
 import { registerLoggingIpc } from './ipc/logging'
 import { registerMediaIpc } from './ipc/media'
 import { registerPingIpc } from './ipc/registry'
+import { registerProjectCoversIpc } from './ipc/project-covers'
 import { registerProjectPackageIpc } from './ipc/project-package'
 import { registerStreamIpc } from './ipc/stream'
 import { registerStoryboardProjectsIpc } from './ipc/storyboard-projects'
@@ -80,6 +81,7 @@ app.whenReady().then(() => {
   registerLoggingIpc()
   registerMediaIpc()
   registerPingIpc()
+  registerProjectCoversIpc()
   registerProjectPackageIpc()
   registerStreamIpc()
   registerStoryboardProjectsIpc()

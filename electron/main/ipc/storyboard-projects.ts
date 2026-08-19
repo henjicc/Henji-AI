@@ -7,6 +7,7 @@ import {
   upsertStoryboardProject,
   type StoryboardProjectRecordDto,
   type StoryboardProjectSummaryDto,
+  type StoryboardProjectWriteDto,
 } from '../services/storyboard-projects'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 
@@ -23,7 +24,7 @@ interface RenamePayload extends ProjectIdPayload {
   updatedAt: number
 }
 
-function parseProjectRecord(input: unknown): StoryboardProjectRecordDto {
+function parseProjectRecord(input: unknown): StoryboardProjectWriteDto {
   const record = parseRecord(input)
   const id = record.id
   const name = record.name
@@ -103,7 +104,7 @@ export function registerStoryboardProjectsIpc(): void {
   registerIpcHandler<ProjectIdPayload, StoryboardProjectRecordDto | null>('storyboardProjects:get', parseProjectIdPayload, ({ projectId }) => {
     return getStoryboardProject(projectId)
   })
-  registerIpcHandler<StoryboardProjectRecordDto, void>('storyboardProjects:upsert', parseProjectRecord, (record) => {
+  registerIpcHandler<StoryboardProjectWriteDto, void>('storyboardProjects:upsert', parseProjectRecord, (record) => {
     upsertStoryboardProject(record)
   })
   registerIpcHandler<ViewportPayload, void>('storyboardProjects:updateViewport', parseViewportPayload, ({ projectId, viewportJson }) => {
@@ -112,7 +113,7 @@ export function registerStoryboardProjectsIpc(): void {
   registerIpcHandler<RenamePayload, void>('storyboardProjects:rename', parseRenamePayload, ({ projectId, name, updatedAt }) => {
     renameStoryboardProject(projectId, name, updatedAt)
   })
-  registerIpcHandler<ProjectIdPayload, void>('storyboardProjects:delete', parseProjectIdPayload, ({ projectId }) => {
-    deleteStoryboardProject(projectId)
+  registerIpcHandler<ProjectIdPayload, void>('storyboardProjects:delete', parseProjectIdPayload, async ({ projectId }) => {
+    await deleteStoryboardProject(projectId)
   })
 }

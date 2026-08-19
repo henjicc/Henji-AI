@@ -10,6 +10,7 @@ import { useContextMenu } from '@/hooks/useContextMenu'
 import { useMultiSelect } from '@/hooks/useMultiSelect'
 import type { CameraStageProjectPlatformSummary } from '@/platform/contracts/cameraStageProjects'
 import { cameraStageApplicationService } from '../application/cameraStageApplicationService'
+import { useCameraStageSessionStore } from '../store/cameraStageSessionStore'
 import { CAMERA_STAGE_DEFAULT_PROJECT_NAME } from '../store/cameraStageStore'
 
 /**
@@ -39,6 +40,7 @@ function toCardItem(project: CameraStageProjectPlatformSummary): ProjectCardGrid
     id: project.id,
     name: project.name,
     metaLine: `${project.objectCount} 个对象 · ${formatTime(project.updatedAt)}`,
+    coverPath: project.coverPath,
   }
 }
 
@@ -64,9 +66,12 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
     }
   }, [])
 
+  // 退出编辑器时写入的封面是异步落盘的，coverRevision 变化即重新拉一次摘要
+  const coverRevision = useCameraStageSessionStore((state) => state.coverRevision)
+
   useEffect(() => {
     void refresh()
-  }, [refresh])
+  }, [refresh, coverRevision])
 
   const handleCreate = useCallback(async (name: string): Promise<void> => {
     setBusy(true)
@@ -158,6 +163,11 @@ const CameraStageProjectList: React.FC<CameraStageProjectListProps> = ({ onEnter
           }}
           emptyTitle="还没有工程"
           emptyDescription="点击右上「新建工程」开始。"
+          onCreate={() => {
+            setEditingProject(null)
+            setShowEditDialog(true)
+          }}
+          createLabel="新建工程"
           onOpen={(item) => void handleOpen(item.id)}
           onRename={(item) => {
             const target = projects.find((project) => project.id === item.id) ?? null
