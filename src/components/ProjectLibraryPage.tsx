@@ -15,6 +15,7 @@ import {
 } from '@/components/ProjectSelectionToolbar';
 import { RenameDialog } from '@/components/RenameDialog';
 import { UiButton, UiPageHeader, UiRegion } from '@/components/ui';
+import { PROJECT_GRID_MAX_WIDTH_CLASS } from '@/components/projectGridLayout';
 import { useContextMenu } from '@/hooks/useContextMenu';
 import { useMultiSelect } from '@/hooks/useMultiSelect';
 
@@ -127,10 +128,10 @@ export function ProjectLibraryPage({
   };
 
   return (
-    // 不设内容最大宽度：项目网格按窗口宽度自适应列数（见 ProjectCardGrid），
-    // 再套 max-w-* 会让宽窗口两侧空出一大片而列数卡死。左右留白交给这里的横向 padding。
+    // 列数由窗口宽度算出（见 ProjectCardGrid），左右留白交给这里的横向 padding。
+    // 最大宽度只为封顶列数（7 列），标题区与网格共用它，否则超宽屏上「新建」按钮会飞到网格右边之外。
     <div className="ui-scrollbar h-full w-full overflow-auto bg-app px-6 py-6 xl:px-10 2xl:px-14">
-      <UiRegion>
+      <UiRegion maxWidthClassName={PROJECT_GRID_MAX_WIDTH_CLASS} className="mx-auto">
         <UiPageHeader
           className="mb-6"
           title={title}
