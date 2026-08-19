@@ -1,8 +1,10 @@
 import type { PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import type { ModelCapabilitySmokeResult } from './capabilitySmoke'
 import type { LlmApiProtocol } from './providerProtocol'
+import type { LlmReasoningConfig } from './reasoning'
 
 export type { CapabilitySmokeCheck, CapabilitySmokeStatus } from './capabilitySmoke'
+export type { LlmReasoningConfig, LlmReasoningEffort } from './reasoning'
 
 export interface LlmCapabilities {
   text: boolean
@@ -19,13 +21,6 @@ export interface LlmCapabilities {
   contextWindow: number | null
   maxOutputTokens: number | null
   usage: boolean
-}
-
-export type LlmReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max'
-
-export interface LlmReasoningConfig {
-  enabled: boolean
-  effort: LlmReasoningEffort
 }
 
 export interface LlmProviderConfig {
@@ -102,6 +97,14 @@ export interface PromptOptimizationProfile {
   updatedAt: string
 }
 
+export interface TextProcessingPromptTemplate {
+  id: string
+  name: string
+  systemPrompt: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface LlmToolSchema {
   name: string
   description?: string
@@ -126,6 +129,7 @@ export interface LlmConfigState {
   models: LlmModelConfig[]
   promptProfiles: PromptOptimizationProfile[]
   selectedPromptProfileId?: string
+  textProcessingPromptTemplates: TextProcessingPromptTemplate[]
   agentProfiles: AgentModelProfile[]
   selectedAgentProfileId?: string
   tools: LlmToolSchema[]

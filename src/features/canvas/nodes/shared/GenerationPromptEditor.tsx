@@ -3,6 +3,7 @@ import { Handle, Position } from '@xyflow/react'
 
 import {
   PromptEditor,
+  UI_TEXT_META_CLASS,
   type PromptEditorActivation,
   type PromptEditorHandle,
   type PromptReferenceItem,
@@ -25,6 +26,7 @@ export interface GenerationPromptEditorProps {
   readOnly: boolean
   invalid: boolean
   placeholder: string
+  label?: string
   onChange: (document: PromptDocumentV1) => void
   onSubmit: () => void
   onEditEnd: () => void
@@ -43,6 +45,7 @@ export function GenerationPromptEditor({
   readOnly,
   invalid,
   placeholder,
+  label,
   onChange,
   onSubmit,
   onEditEnd,
@@ -116,6 +119,7 @@ export function GenerationPromptEditor({
       className="group/row relative flex flex-1 flex-col"
       style={{ minHeight: GENERATION_PROMPT_MIN_HEIGHT_PX }}
     >
+      {label ? <div className={`mb-1 px-1 ${UI_TEXT_META_CLASS}`}>{label}</div> : null}
       <Handle
         type="target"
         id={promptPortId()}

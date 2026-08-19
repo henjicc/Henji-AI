@@ -14,6 +14,7 @@ import { ImageNode } from './ImageNode';
 import { StoryboardGenNode } from './StoryboardGenNode';
 import { StoryboardNode } from './StoryboardNode';
 import { TextAnnotationNode } from './TextAnnotationNode';
+import { TextProcessingNode } from './TextProcessingNode';
 import { UploadNode } from './UploadNode';
 import { VideoGenNode } from './VideoGenNode';
 import { CameraStageNode } from './CameraStageNode';
@@ -60,6 +61,7 @@ export const nodeTypes: NodeTypes = {
   storyboardGenNode: withNodePaintFrame(StoryboardGenNode, { bottom: 84 }),
   storyboardNode: withNodePaintFrame(StoryboardNode),
   textAnnotationNode: withNodePaintFrame(TextAnnotationNode),
+  textProcessingNode: withNodePaintFrame(TextProcessingNode, { bottom: 60 }),
   uploadNode: withNodePaintFrame(UploadNode),
   videoGenNode: withNodePaintFrame(VideoGenNode),
   audioGenNode: withNodePaintFrame(AudioGenNode),
@@ -86,6 +88,7 @@ export {
   StoryboardGenNode,
   StoryboardNode,
   TextAnnotationNode,
+  TextProcessingNode,
   UploadNode,
   VideoGenNode,
   VideoNode,

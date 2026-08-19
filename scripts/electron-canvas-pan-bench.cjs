@@ -119,7 +119,7 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
     await page.waitForTimeout(600)
   }
-  await page.getByRole('heading', { name: projectName }).click()
+  await page.getByText(projectName, { exact: true }).click()
   await page.waitForSelector('.react-flow', { timeout: 30000 })
   await page.waitForFunction(
     (expected) => document.querySelectorAll('.react-flow__node').length >= expected,
@@ -142,7 +142,7 @@ async function recoverFixtureViewport(page, fixture, viewport) {
     projectId: fixture.projectId,
     nextViewport: viewport,
   })
-  await page.getByRole('heading', { name: fixture.projectName }).click()
+  await page.getByText(fixture.projectName, { exact: true }).click()
   await page.waitForSelector('.react-flow', { timeout: 30000 })
   await page.waitForFunction(
     (expected) => document.querySelectorAll('.react-flow__node').length >= expected,

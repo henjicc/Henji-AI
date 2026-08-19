@@ -62,7 +62,7 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
 
   const providerOrAdapter = `${request.providerId} ${request.adapter ?? ''}`.toLowerCase()
   if (request.reasoning !== undefined && providerOrAdapter.includes('deepseek')) {
-    payload.reasoning = request.reasoning
+    payload.reasoning = request.reasoning.enabled
   }
 
   return applyProviderRequestBodyQuirks(request.providerId, payload) as JsonObject

@@ -36,6 +36,7 @@ describe('normalizeLlmConfig', () => {
     expect(config.providers.find((item) => item.providerId === 'custom')?.apiProtocol)
       .toBe('openai-compatible')
     expect(model?.apiProtocol).toBe('openai-compatible')
+    expect(config.textProcessingPromptTemplates.length).toBeGreaterThan(0)
   })
 
   it('无效的模型档案选择会回退到首个档案', () => {
@@ -76,5 +77,23 @@ describe('normalizeLlmConfig', () => {
       model.capabilities.contextWindow === DEEPSEEK_V4_CONTEXT_WINDOW
       && model.capabilities.maxOutputTokens === DEEPSEEK_V4_MAX_OUTPUT_TOKENS
     ))).toBe(true)
+  })
+
+  it('保留用户明确清空的文本处理模板，并过滤无名称模板', () => {
+    const defaults = normalizeLlmConfig(null)
+    expect(normalizeLlmConfig({
+      ...defaults,
+      textProcessingPromptTemplates: [],
+    }).textProcessingPromptTemplates).toEqual([])
+
+    const config = normalizeLlmConfig({
+      ...defaults,
+      textProcessingPromptTemplates: [
+        { ...defaults.textProcessingPromptTemplates[0], name: '  我的模板  ' },
+        { ...defaults.textProcessingPromptTemplates[1], name: '   ' },
+      ],
+    })
+    expect(config.textProcessingPromptTemplates).toHaveLength(1)
+    expect(config.textProcessingPromptTemplates[0].name).toBe('我的模板')
   })
 })

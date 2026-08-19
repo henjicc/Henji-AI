@@ -20,6 +20,7 @@ import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraS
 import { useCameraStageToolStore } from '@/features/cameraStage/store/cameraStageToolStore'
 import { useCameraStageViewportStore } from '@/features/cameraStage/store/cameraStageViewportStore'
 import { CANVAS_GENERATION_PROGRESS_STORE_LEDGER } from '@/features/canvas/application/canvasGenerationProgressStoreLedger'
+import { CANVAS_TEXT_STREAM_STORE_LEDGER } from '@/features/canvas/application/canvasTextStreamStoreLedger'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
 import { GENERATION_DRAFT_STORE_LEDGER } from '@/features/generation/application/generationDraftStoreLedger'
@@ -41,6 +42,7 @@ import { UI_STORE_LEDGER } from '@/features/settings/application-control/uiStore
 import { useLargeUploadPromptStore } from '@/services/largeUploadPolicy'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
+import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useGenerationHistoryFilterStore } from '@/stores/generationHistoryFilterStore'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
@@ -89,6 +91,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: ALERT_DIALOG_STORE_LEDGER, state: () => useAlertDialogStore.getState() },
   { ledger: LARGE_UPLOAD_POLICY_STORE_LEDGER, state: () => useLargeUploadPromptStore.getState() },
   { ledger: CANVAS_GENERATION_PROGRESS_STORE_LEDGER, state: () => useCanvasGenerationProgressStore.getState() },
+  { ledger: CANVAS_TEXT_STREAM_STORE_LEDGER, state: () => useCanvasTextStreamStore.getState() },
   { ledger: GENERATION_TASK_PROGRESS_STORE_LEDGER, state: () => useGenerationTaskProgressStore.getState() },
   { ledger: GENERATION_HISTORY_FILTER_STORE_LEDGER, state: () => useGenerationHistoryFilterStore.getState() },
   { ledger: GENERATION_DRAFT_STORE_LEDGER, state: () => useGenerationDraftStore.getState() },

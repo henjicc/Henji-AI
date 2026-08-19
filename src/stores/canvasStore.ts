@@ -53,6 +53,7 @@ import {
 } from '@/features/canvas/application/imageNodeSizing';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
+import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore';
 import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueResolver';
 import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
 
@@ -285,6 +286,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         node.type === CANVAS_NODE_TYPES.imageEdit
         || node.type === CANVAS_NODE_TYPES.videoGen
         || node.type === CANVAS_NODE_TYPES.audioGen
+        || node.type === CANVAS_NODE_TYPES.textProcessing
       ) {
         migrateGenerationPromptData(mergedData as DynamicValueMap);
       }
@@ -789,6 +791,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       activeHistoryGroup: null,
     });
     useCanvasGenerationProgressStore.getState().clearAllProgress();
+    useCanvasTextStreamStore.getState().clearAllPreviews();
   },
 
   setViewportState: (viewport) => {
@@ -1465,6 +1468,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     if (removedNodeIds) {
       useCanvasGenerationProgressStore.getState().clearProgress(removedNodeIds);
+      useCanvasTextStreamStore.getState().clearPreviews(removedNodeIds);
     }
   },
 
@@ -1768,5 +1772,6 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       };
     });
     useCanvasGenerationProgressStore.getState().clearAllProgress();
+    useCanvasTextStreamStore.getState().clearAllPreviews();
   },
 }));

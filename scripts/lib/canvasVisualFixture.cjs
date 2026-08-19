@@ -13,6 +13,18 @@ const DEFAULT_MODEL_IDS = {
 }
 
 const MISSING_TYPE_FIXTURES = {
+  textProcessingNode: {
+    data: {
+      displayName: '文本处理',
+      prompt: '总结输入内容',
+      mediaInputs: {},
+      providerId: 'ppio',
+      modelId: 'deepseek/deepseek-v4-flash',
+      lastOutput: '',
+    },
+    width: 360,
+    height: 190,
+  },
   groupNode: { data: { displayName: '组', label: '组' }, width: 360, height: 240 },
   exportAudioNode: { data: { displayName: '音频结果', audioUrl: null, durationSec: null } },
   intSourceNode: { data: { displayName: '整数', value: 0 }, width: 180, height: 64 },

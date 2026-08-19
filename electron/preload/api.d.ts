@@ -22,6 +22,7 @@ import type {
   AgentRetryRunRequest,
   AgentRunSummary,
 } from '../../src/core/assistant/persistence'
+import type { LlmReasoningConfig } from '../../src/core/llm/reasoning'
 import type {
   AgentListThreadsRequest,
   AgentThreadSummary,
@@ -461,7 +462,7 @@ export interface HenjiLlmChatRequest {
   modelId: string
   adapter?: string
   baseUrl?: string
-  reasoning?: boolean
+  reasoning?: LlmReasoningConfig
   messages: HenjiLlmChatMessage[]
   capabilities?: Record<string, unknown>
   tools?: unknown

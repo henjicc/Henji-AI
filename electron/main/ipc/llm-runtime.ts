@@ -15,6 +15,7 @@ import { runModelStep } from '../services/llm/sdk/runtime'
 import { verifyModelCapabilities } from '../services/llm/sdk/capability-smoke'
 import { discoverModels } from '../services/llm/discovery'
 import type { DiscoveredModelItem } from '../services/llm/discovery'
+import { parseLlmReasoningConfig } from '../services/llm/request-contract'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
 
 interface ChatStreamPayload {
@@ -101,7 +102,7 @@ function parseLlmChatRequest(input: unknown): LlmChatRequestDto {
     modelId: readString(record, 'modelId'),
     adapter: readOptionalString(record, 'adapter'),
     baseUrl: readOptionalString(record, 'baseUrl'),
-    reasoning: readOptionalBoolean(record, 'reasoning'),
+    reasoning: parseLlmReasoningConfig(record.reasoning),
     messages: readMessages(record.messages),
     capabilities: readOptionalJsonObject(record, 'capabilities'),
     tools: readOptionalJsonValue(record, 'tools'),
@@ -164,15 +165,6 @@ function readOptionalString(record: Record<string, unknown>, field: string): str
   if (value === undefined) return undefined
   if (typeof value !== 'string') {
     throw new Error(`Expected string field "${field}"`)
-  }
-  return value
-}
-
-function readOptionalBoolean(record: Record<string, unknown>, field: string): boolean | undefined {
-  const value = record[field]
-  if (value === undefined) return undefined
-  if (typeof value !== 'boolean') {
-    throw new Error(`Expected boolean field "${field}"`)
   }
   return value
 }

@@ -101,6 +101,7 @@
       "aiImageGeneration": "AI Image",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
+      "textProcessing": "Text Processing",
       "textAnnotation": "Text Annotation",
       "videoGen": "AI Video",
       "audioGen": "AI Audio",
@@ -163,7 +164,23 @@
     },
     "textAnnotation": {
       "placeholder": "Write Markdown text. It will render when unselected.",
-      "empty": "Empty note"
+      "empty": "Empty text",
+      "generating": "Generating text…"
+    },
+    "textProcessing": {
+      "userPromptLabel": "User input",
+      "promptPlaceholder": "Enter the content for the model to process",
+      "promptTemplateLabel": "Prompt template",
+      "customTemplate": "Custom",
+      "editTemplates": "Edit templates",
+      "systemPromptLabel": "System prompt",
+      "templateProvided": "Provided by template",
+      "systemPromptPlaceholder": "For example: You are a careful editor. Respond in Markdown.",
+      "templateSaveFailed": "Failed to save prompt templates. Please try again.",
+      "promptRequired": "Please enter a prompt",
+      "resultTitle": "Text Result",
+      "noModel": "No model available",
+      "noModelConfigured": "No text model is available. Enable a language model in Settings first."
     },
     "videoGen": {
       "promptRequired": "Please enter a prompt",

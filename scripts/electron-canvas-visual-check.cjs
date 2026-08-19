@@ -40,9 +40,9 @@ const FILL_ALL_TYPES = process.env.VISUAL_FILL_ALL_TYPES === '1'
 const STYLE_ID = '__canvas_visual_check_style__'
 const CAPTURE_SETTLE_MS = 250
 
-// nodeTypes 唯一注册点当前实际为 21 种；旧计划中的“20 种”是调研期计数错误。
+// 与 nodeTypes 唯一注册点保持一致，视觉夹具据此覆盖所有内置节点类型。
 const REGISTERED_NODE_TYPES = [
-  'uploadNode', 'imageNode', 'exportImageNode', 'textAnnotationNode', 'groupNode',
+  'uploadNode', 'imageNode', 'exportImageNode', 'textProcessingNode', 'textAnnotationNode', 'groupNode',
   'storyboardNode', 'storyboardGenNode', 'videoGenNode', 'audioGenNode',
   'exportVideoNode', 'exportAudioNode', 'videoUploadNode', 'audioUploadNode',
   'intSourceNode', 'floatSourceNode', 'stringSourceNode', 'booleanSourceNode',
@@ -92,7 +92,7 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
     await page.waitForTimeout(600)
   }
-  await page.getByRole('heading', { name: projectName }).click()
+  await page.getByText(projectName, { exact: true }).click()
   await page.waitForSelector('.react-flow', { timeout: 30000 })
   await page.waitForFunction(
     (expected) => document.querySelectorAll('.react-flow__node').length >= expected,

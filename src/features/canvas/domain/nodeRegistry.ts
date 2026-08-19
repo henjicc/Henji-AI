@@ -10,6 +10,7 @@ import {
   type StoryboardSplitNodeData,
   type StoryboardGenNodeData,
   type TextAnnotationNodeData,
+  type TextProcessingNodeData,
   type UploadImageNodeData,
 } from './canvasNodes';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
@@ -42,6 +43,7 @@ import {
   type NodeValueOutput,
 } from './nodePorts';
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
+import { DEFAULT_PPIO_MODEL_ID, DEFAULT_PPIO_PROVIDER_ID } from '@/core/llm/defaults';
 import type { ModelTag } from '@/core/types';
 
 /**
@@ -275,16 +277,67 @@ const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData>
     promptInput: false,
   },
   connectivity: {
-    sourceHandle: false,
-    targetHandle: false,
+    sourceHandle: true,
+    targetHandle: true,
     connectMenu: {
       fromSource: false,
-      fromTarget: false,
+      fromTarget: true,
     },
+    manualSource: true,
   },
+  ports: {
+    source: { emits: 'text' },
+    target: { accepts: ['text'] },
+  },
+  getValueOutput: (data) => ({
+    socketType: 'STRING',
+    value: (data as TextAnnotationNodeData).content,
+  }),
   createDefaultData: () => ({
     displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.textAnnotation],
     content: '',
+    isGenerating: false,
+    generationStartedAt: null,
+    generationError: null,
+  }),
+};
+
+const textProcessingNodeDefinition: CanvasNodeDefinition<TextProcessingNodeData> = {
+  type: CANVAS_NODE_TYPES.textProcessing,
+  menuLabelKey: 'node.menu.textProcessing',
+  menuIcon: 'sparkles',
+  visibleInMenu: true,
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+    toolbarGenerate: true,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: {
+      fromSource: true,
+      fromTarget: false,
+    },
+    manualSource: true,
+    targetHandleMode: 'rows',
+  },
+  ports: {
+    source: { emits: 'text' },
+    target: { accepts: ['image', 'video', 'audio'] },
+  },
+  getValueOutput: (data) => ({
+    socketType: 'STRING',
+    value: (data as TextProcessingNodeData).lastOutput ?? '',
+  }),
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.textProcessing],
+    prompt: '',
+    systemPrompt: '',
+    mediaInputs: {},
+    providerId: DEFAULT_PPIO_PROVIDER_ID,
+    modelId: DEFAULT_PPIO_MODEL_ID,
+    lastOutput: '',
   }),
 };
 
@@ -419,6 +472,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.upload]: uploadNodeDefinition,
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
+  [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,
   [CANVAS_NODE_TYPES.group]: groupNodeDefinition,
   [CANVAS_NODE_TYPES.storyboardSplit]: storyboardSplitDefinition,

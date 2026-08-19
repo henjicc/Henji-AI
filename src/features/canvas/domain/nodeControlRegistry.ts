@@ -63,6 +63,7 @@ interface CanvasNodeControlConfig {
   dataSchema: z.ZodType<Record<string, unknown>>
   aiDataSchema: Record<string, unknown>
   requiresModelSchema: boolean
+  hasPromptHandle?: boolean
   validateData?: (data: Record<string, unknown>) => void
 }
 
@@ -103,6 +104,14 @@ function validateModelSelectorData(
 
 const textAnnotationNodeDataSchema = nodeDataBaseSchema.extend({
   content: z.string().max(32 * 1024).optional(),
+}).strict()
+
+const textProcessingNodeDataSchema = nodeDataBaseSchema.extend({
+  prompt: z.string().max(32 * 1024).optional(),
+  systemPrompt: z.string().max(32 * 1024).optional(),
+  systemPromptTemplateId: z.string().min(1).max(200).optional(),
+  providerId: z.string().min(1).max(200).optional(),
+  modelId: z.string().min(1).max(500).optional(),
 }).strict()
 
 const generationNodeDataSchema = nodeDataBaseSchema.extend({
@@ -179,6 +188,25 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, modelId: { type: 'string' }, params: { type: 'object', additionalProperties: true }, gridRows: { type: 'integer', minimum: 1, maximum: 8 }, gridCols: { type: 'integer', minimum: 1, maximum: 8 } }, additionalProperties: false },
     requiresModelSchema: true,
     validateData: validateImageGenerationData,
+  },
+  {
+    nodeType: CANVAS_NODE_TYPES.textProcessing,
+    title: '文本处理节点',
+    description: '使用已配置的大语言模型处理提示词，可按模型能力接收图片、视频或音频。',
+    aliases: ['大语言模型节点', 'LLM 节点', '文本生成节点'],
+    dataSchema: textProcessingNodeDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: {
+        displayName: { type: 'string', maxLength: 120 },
+        prompt: { type: 'string', maxLength: 32768 },
+        providerId: { type: 'string', maxLength: 200 },
+        modelId: { type: 'string', maxLength: 500 },
+      },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
+    hasPromptHandle: true,
   },
   {
     nodeType: CANVAS_NODE_TYPES.textAnnotation,
@@ -361,7 +389,7 @@ export function getCanvasNodeSchema(nodeType: string): CanvasNodeControlSchema |
         ? { handleId: 'source', purpose: 'source', valueType: definition.ports?.source?.emits }
         : null,
       targets: [
-        ...(definition.generation
+        ...(definition.generation || config.hasPromptHandle
           ? [{ handleId: promptPortId(), purpose: 'prompt' as const, valueType: 'STRING' }]
           : []),
         ...(config.requiresModelSchema && definition.connectivity.targetHandleMode === 'rows'

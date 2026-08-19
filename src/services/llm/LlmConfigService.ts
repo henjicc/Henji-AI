@@ -26,6 +26,7 @@ import type {
   LlmReasoningConfig,
   LlmReasoningEffort,
   PromptOptimizationProfile,
+  TextProcessingPromptTemplate,
 } from '@/core/llm/types'
 import { readJsonFromAppData, writeJsonToAppData } from '@/utils/save'
 
@@ -198,6 +199,22 @@ function resolveSelectedPromptProfileId(
   return promptProfiles[0]?.id
 }
 
+function normalizeTextProcessingPromptTemplate(
+  template: TextProcessingPromptTemplate,
+): TextProcessingPromptTemplate | null {
+  const id = template.id?.trim()
+  const name = template.name?.trim()
+  if (!id || !name) return null
+  const now = new Date().toISOString()
+  return {
+    id,
+    name,
+    systemPrompt: typeof template.systemPrompt === 'string' ? template.systemPrompt : '',
+    createdAt: template.createdAt || now,
+    updatedAt: template.updatedAt || now,
+  }
+}
+
 export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmConfigState {
   const defaults = createDefaultLlmConfig()
   if (!input) return defaults
@@ -234,6 +251,11 @@ export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmCo
       }
       return profile
     })
+  const textProcessingPromptTemplates = input.textProcessingPromptTemplates === undefined
+    ? defaults.textProcessingPromptTemplates
+    : input.textProcessingPromptTemplates
+      .map(normalizeTextProcessingPromptTemplate)
+      .filter((template): template is TextProcessingPromptTemplate => template !== null)
   if (!promptProfiles.some(profile => profile.isDefault && profile.enabled)) {
     const firstEnabled = promptProfiles.find(profile => profile.enabled)
     if (firstEnabled) {
@@ -256,6 +278,7 @@ export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmCo
       input.selectedPromptProfileId,
       promptProfiles.length ? promptProfiles : defaults.promptProfiles
     ),
+    textProcessingPromptTemplates,
     agentProfiles,
     selectedAgentProfileId: resolvedAgentProfileId,
     tools: input.tools ?? defaults.tools,

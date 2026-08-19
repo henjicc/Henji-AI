@@ -8,6 +8,7 @@ import type {
   LlmReasoningConfig,
   LlmReasoningEffort,
   PromptOptimizationProfile,
+  TextProcessingPromptTemplate,
 } from './types'
 import {
   normalizePromptOptimizationProfileDocuments,
@@ -50,6 +51,43 @@ function createDeepSeekV4Capabilities(): LlmCapabilities {
 
 export const DEFAULT_PROMPT_PROFILE_ID = 'default-general-optimizer'
 export const DEFAULT_AGENT_PROFILE_ID = 'default-agent'
+
+export function createDefaultTextProcessingPromptTemplates(
+  now = new Date().toISOString(),
+): TextProcessingPromptTemplate[] {
+  return [
+    {
+      id: 'text-processing-general-optimizer',
+      name: '通用提示词优化',
+      systemPrompt: [
+        '你是提示词优化助手。请在不改变用户原意的前提下，补充必要细节并改善结构与表达。',
+        '只输出优化后的提示词，不要解释，不要添加标题或前后缀。',
+      ].join('\n'),
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'text-processing-image-optimizer',
+      name: '图像提示词优化',
+      systemPrompt: [
+        '你是图像生成提示词优化助手。保留用户原意，补足主体、场景、风格、构图、镜头、光线与画面质量描述。',
+        '只输出优化后的提示词，不要解释，不要添加标题或前后缀。',
+      ].join('\n'),
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'text-processing-video-optimizer',
+      name: '视频提示词优化',
+      systemPrompt: [
+        '你是视频生成提示词优化助手。保留用户原意，补足主体动作、场景变化、镜头运动、节奏、光线与时间连续性。',
+        '只输出优化后的提示词，不要解释，不要添加标题或前后缀。',
+      ].join('\n'),
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]
+}
 
 export function createDefaultAgentModelProfile(now = new Date().toISOString()): AgentModelProfile {
   return {
@@ -195,6 +233,7 @@ export function createDefaultLlmConfig(): LlmConfigState {
     models: createBuiltInLlmModels(),
     promptProfiles: [profile],
     selectedPromptProfileId: profile.id,
+    textProcessingPromptTemplates: createDefaultTextProcessingPromptTemplates(),
     agentProfiles: [agentProfile],
     selectedAgentProfileId: agentProfile.id,
     tools: [],

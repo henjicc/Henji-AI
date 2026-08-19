@@ -6,6 +6,7 @@ export const CANVAS_NODE_TYPES = {
   upload: 'uploadNode',
   imageEdit: 'imageNode',
   exportImage: 'exportImageNode',
+  textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',
   group: 'groupNode',
   storyboardSplit: 'storyboardNode',
@@ -123,7 +124,21 @@ export interface GroupNodeData extends NodeDisplayData {
   [key: string]: DynamicValue;
 }
 
-export interface TextAnnotationNodeData extends NodeDisplayData {
+export interface TextProcessingNodeData extends NodeDisplayData {
+  prompt: string;
+  promptDocument?: PromptDocumentV1;
+  promptMediaBindings?: PromptMediaBinding[];
+  systemPrompt: string;
+  systemPromptDocument?: PromptDocumentV1;
+  systemPromptTemplateId?: string;
+  mediaInputs?: Partial<Record<RowMediaKind, string[]>>;
+  providerId: string;
+  modelId: string;
+  lastOutput?: string;
+  [key: string]: DynamicValue;
+}
+
+export interface TextAnnotationNodeData extends NodeDisplayData, NodeGenerationStatus {
   content: string;
   [key: string]: DynamicValue;
 }
@@ -293,6 +308,7 @@ export interface ModelSelectorNodeData extends NodeDisplayData {
 export type CanvasNodeData =
   | UploadImageNodeData
   | ExportImageNodeData
+  | TextProcessingNodeData
   | TextAnnotationNodeData
   | GroupNodeData
   | ImageEditNodeData
@@ -361,6 +377,12 @@ export function isTextAnnotationNode(
   node: CanvasNode | null | undefined
 ): node is Node<TextAnnotationNodeData, typeof CANVAS_NODE_TYPES.textAnnotation> {
   return node?.type === CANVAS_NODE_TYPES.textAnnotation;
+}
+
+export function isTextProcessingNode(
+  node: CanvasNode | null | undefined
+): node is Node<TextProcessingNodeData, typeof CANVAS_NODE_TYPES.textProcessing> {
+  return node?.type === CANVAS_NODE_TYPES.textProcessing;
 }
 
 export function isStoryboardSplitNode(

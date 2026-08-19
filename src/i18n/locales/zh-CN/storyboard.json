@@ -101,6 +101,7 @@
       "aiImageGeneration": "AI 图片",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
+      "textProcessing": "文本处理",
       "textAnnotation": "文本注释",
       "videoGen": "AI 视频",
       "audioGen": "AI 音频",
@@ -163,7 +164,23 @@
     },
     "textAnnotation": {
       "placeholder": "输入 Markdown 文本，取消选中后会渲染预览",
-      "empty": "空注释"
+      "empty": "空文本",
+      "generating": "正在生成文本…"
+    },
+    "textProcessing": {
+      "userPromptLabel": "用户输入",
+      "promptPlaceholder": "输入需要模型处理的内容",
+      "promptTemplateLabel": "提示词模板",
+      "customTemplate": "自定义",
+      "editTemplates": "编辑模板",
+      "systemPromptLabel": "系统提示词",
+      "templateProvided": "由模板提供",
+      "systemPromptPlaceholder": "例如：你是一名严谨的编辑，请使用 Markdown 输出",
+      "templateSaveFailed": "提示词模板保存失败，请稍后重试",
+      "promptRequired": "请输入提示词",
+      "resultTitle": "文本结果",
+      "noModel": "暂无可用模型",
+      "noModelConfigured": "没有可用的文本模型，请先在设置中启用大语言模型"
     },
     "videoGen": {
       "promptRequired": "请输入提示词",

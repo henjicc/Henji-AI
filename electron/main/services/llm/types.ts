@@ -1,4 +1,5 @@
 import type { JsonObject, JsonValue } from '../ai-runtime/types'
+import type { LlmReasoningConfig } from '../../../../src/core/llm/reasoning'
 
 export type { JsonObject, JsonValue }
 
@@ -24,7 +25,7 @@ export interface LlmChatRequestDto {
   modelId: string
   adapter?: string
   baseUrl?: string
-  reasoning?: boolean
+  reasoning?: LlmReasoningConfig
   messages: LlmChatMessage[]
   capabilities?: JsonObject
   tools?: JsonValue
