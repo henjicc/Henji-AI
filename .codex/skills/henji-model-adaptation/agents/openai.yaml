@@ -1,4 +1,4 @@
 interface:
   display_name: "Henji 适配助手"
-  short_description: "针对Henji-AI新增供应商与模型的结构化适配流程指引"
-  default_prompt: "Use $henji-model-adaptation to analyze the request, output a confirmation checklist, and then adapt the provider/model in Henji-AI."
+  short_description: "Henji-AI 模型 API 调研、文档与结构化适配流程"
+  default_prompt: "Use $henji-model-adaptation to research model aliases, APIs, pricing, and platform scope, output a confirmation checklist, and then document or adapt the provider/model in Henji-AI."
