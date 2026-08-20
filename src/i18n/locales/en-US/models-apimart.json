@@ -1,11 +1,20 @@
 {
   "defs": {
+    "apimart-gemini-omni-flash": { "meta": { "name": "Gemini Omni Flash" } },
     "apimart-gpt-image-2": { "meta": { "name": "GPT Image 2" } },
     "apimart-grok-imagine-2.0": { "meta": { "name": "Grok Imagine Image 2.0" } },
+    "apimart-kling-3.0": { "meta": { "name": "Kling 3.0" } },
+    "apimart-kling-3.0-omni": { "meta": { "name": "Kling 3.0 Omni" } },
+    "apimart-kling-3.0-turbo": { "meta": { "name": "Kling 3.0 Turbo" } },
     "apimart-midjourney": { "meta": { "name": "Midjourney" } },
+    "apimart-minimax-h3": { "meta": { "name": "MiniMax H3" } },
     "apimart-nano-banana-2": { "meta": { "name": "Nano Banana 2" } },
     "apimart-nano-banana-pro": { "meta": { "name": "Nano Banana Pro" } },
     "apimart-qwen-image-3.0": { "meta": { "name": "Qwen Image 3.0" } },
+    "apimart-seedance-2.0": { "meta": { "name": "Seedance 2.0" } },
+    "apimart-seedance-2.0-fast": { "meta": { "name": "Seedance 2.0 Fast" } },
+    "apimart-seedance-2.0-mini": { "meta": { "name": "Seedance 2.0 Mini" } },
+    "apimart-seedance-2.5": { "meta": { "name": "Seedance 2.5" } },
     "apimart-seedream-5.0-lite": { "meta": { "name": "Seedream 5.0 Lite" } },
     "apimart-seedream-5.0-pro": { "meta": { "name": "Seedream 5.0 Pro" } },
     "apimart-z-image-turbo": { "meta": { "name": "Z-Image Turbo" } }
