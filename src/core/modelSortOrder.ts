@@ -4,8 +4,9 @@ import type { ModelType } from './types/ModelDefinition'
 export const PROVIDER_ORDER: Record<string, number> = {
   ppio: 0,
   kie: 1,
-  modelscope: 2,
-  fal: 3
+  apimart: 2,
+  modelscope: 3,
+  fal: 4
 }
 
 /** 生成 tab 模型面板的类型宏观分组顺序 */

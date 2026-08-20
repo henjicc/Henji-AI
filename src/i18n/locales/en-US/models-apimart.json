@@ -1,0 +1,13 @@
+{
+  "defs": {
+    "apimart-gpt-image-2": { "meta": { "name": "GPT Image 2" } },
+    "apimart-grok-imagine-2.0": { "meta": { "name": "Grok Imagine Image 2.0" } },
+    "apimart-midjourney": { "meta": { "name": "Midjourney" } },
+    "apimart-nano-banana-2": { "meta": { "name": "Nano Banana 2" } },
+    "apimart-nano-banana-pro": { "meta": { "name": "Nano Banana Pro" } },
+    "apimart-qwen-image-3.0": { "meta": { "name": "Qwen Image 3.0" } },
+    "apimart-seedream-5.0-lite": { "meta": { "name": "Seedream 5.0 Lite" } },
+    "apimart-seedream-5.0-pro": { "meta": { "name": "Seedream 5.0 Pro" } },
+    "apimart-z-image-turbo": { "meta": { "name": "Z-Image Turbo" } }
+  }
+}

@@ -1,5 +1,6 @@
 import { AiRuntimeError } from '../errors'
 import type { ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
+import * as apimart from './apimart'
 import * as fal from './fal'
 import * as kie from './kie'
 import * as modelscope from './modelscope'
@@ -10,6 +11,8 @@ export async function executeGenerate(
   input: ProviderExecutionInput
 ): Promise<ProviderExecutionResult> {
   switch (providerId) {
+    case 'apimart':
+      return await apimart.execute(input)
     case 'ppio':
       return await ppio.execute(input)
     case 'kie':
@@ -28,6 +31,8 @@ export async function executeContinuePolling(
   input: ProviderContinuePollingInput
 ): Promise<ProviderExecutionResult> {
   switch (providerId) {
+    case 'apimart':
+      return await apimart.continuePolling(input)
     case 'ppio':
       return await ppio.continuePolling(input)
     case 'kie':

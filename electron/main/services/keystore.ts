@@ -7,7 +7,7 @@ const DATA_DIR_NAME = 'Henji-AI'
 const KEYSTORE_FILE_NAME = 'provider-keys.enc.json'
 
 export const AI_KEY_NAMESPACE = 'ai'
-export const KNOWN_AI_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'modelscope'] as const
+export const KNOWN_AI_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'apimart', 'modelscope'] as const
 export const LLM_KEY_NAMESPACE = 'llm'
 
 type KeyNamespace = string

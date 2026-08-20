@@ -26,7 +26,8 @@
     "ppio": "派欧云",
     "fal": "fal",
     "modelscope": "魔搭",
-    "kie": "KIE"
+    "kie": "KIE",
+    "apimart": "APIMart"
   },
   "tags": {
     "text-to-image": "图片生成",

@@ -1,4 +1,4 @@
-export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie'
+export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'apimart'
 export type UploadProvider = 'fal' | 'kie'
 
 export type ProviderLink = {
@@ -44,6 +44,14 @@ export const API_KEY_PROVIDERS: ApiKeyProviderMeta[] = [
     links: [
       { id: 'home', url: 'https://kie.ai?ref=eef20ef0b0595cad227d45b29c635f6c' },
       { id: 'keys', url: 'https://kie.ai/zh-CN/api-key' }
+    ]
+  },
+  {
+    id: 'apimart',
+    links: [
+      { id: 'home', url: 'https://apimart.ai/' },
+      { id: 'keys', url: 'https://apimart.ai/dashboard/api-keys' },
+      { id: 'docs', url: 'https://docs.apimart.ai/' }
     ]
   }
 ]

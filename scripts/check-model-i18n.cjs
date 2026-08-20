@@ -9,7 +9,7 @@ const PARAMS_LOCALES = ['zh-CN', 'en-US'].map((locale) => ({
   file: path.join(LOCALE_ROOT, locale, 'params.json'),
   json: JSON.parse(fs.readFileSync(path.join(LOCALE_ROOT, locale, 'params.json'), 'utf8')),
 }))
-const MODEL_LOCALE_FILES = ['models-ppio.json', 'models-fal.json', 'models-kie.json', 'models-modelscope.json']
+const MODEL_LOCALE_FILES = ['models-ppio.json', 'models-fal.json', 'models-kie.json', 'models-apimart.json', 'models-modelscope.json']
 
 function walkFiles(dir, matcher, results = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

@@ -71,6 +71,18 @@
           "home": "KIE Website",
           "keys": "API Key"
         }
+      },
+      "apimart": {
+        "title": "APIMart",
+        "label": "APIMart API Key",
+        "placeholder": "Enter APIMart API Key",
+        "help": "Get your API key from the APIMart console.",
+        "guide": "Sign in on {{home}}, then open {{keys}} to get your key; see {{docs}} for API documentation.",
+        "links": {
+          "home": "APIMart Website",
+          "keys": "API Key",
+          "docs": "API Docs"
+        }
       }
     }
   },

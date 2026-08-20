@@ -26,7 +26,8 @@
     "ppio": "PPIO",
     "fal": "fal",
     "modelscope": "ModelScope",
-    "kie": "KIE"
+    "kie": "KIE",
+    "apimart": "APIMart"
   },
   "tags": {
     "text-to-image": "Image Generation",

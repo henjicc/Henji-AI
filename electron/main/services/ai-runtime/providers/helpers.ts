@@ -61,6 +61,10 @@ export function pushUniqueUrl(target: string[], url: string): void {
 }
 
 export function collectDeepUrls(value: JsonValue, target: string[]): void {
+  if (typeof value === 'string') {
+    if (/^https?:\/\//.test(value)) pushUniqueUrl(target, value)
+    return
+  }
   if (Array.isArray(value)) {
     for (const item of value) {
       collectDeepUrls(item, target)
