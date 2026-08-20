@@ -74,3 +74,10 @@ APIMart 价格页显示 `SEEDREAM-5-0-LITE` 默认 `$0.0228/张`。价格来源�
 - [KIE 图片编辑](https://docs.kie.ai/cn/market/seedream/5-lite-image-to-image.md)
 - [KIE 任务详情](https://docs.kie.ai/cn/market/common/get-task-detail.md)
 - [KIE 定价](https://kie.ai/pricing)：公开可见，无需登录；搜索 `seedream` 获取 Lite 价格。
+
+## Fal 适配（2026-08-21）
+
+- 端点：[文生图](https://fal.ai/models/bytedance/seedream/v5/lite/text-to-image/api) `bytedance/seedream/v5/lite/text-to-image`；[图片编辑](https://fal.ai/models/bytedance/seedream/v5/lite/edit/api) `bytedance/seedream/v5/lite/edit`，最多 10 张输入图。
+- 参数：画布独立比例与 `2K|3K|4K`；智能比例使用 `auto_2K|auto_3K|auto_4K`，固定比例合成为宽高对象。`num_images` 和 `max_images` 各 1–6；不展示 `sync_mode`、内部 BytePlus URL 开关。
+- 价格：`$0.035/实际输出图`，多图模式最终数量可能介于 `num_images` 与 `num_images × max_images`，界面按上限估算。
+- 来源：[Fal 可读文档](https://fal.ai/models/bytedance/seedream/v5/lite/text-to-image/llms.txt)。

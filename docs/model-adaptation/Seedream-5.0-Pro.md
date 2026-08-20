@@ -68,3 +68,10 @@ APIMart 定价页显示：默认 `$0.036/张`、1K `$0.02928/张`、2K `$0.05856
 - [KIE Pro 图层拆分](https://docs.kie.ai/41313512e0.md)
 - [KIE 任务详情](https://docs.kie.ai/cn/market/common/get-task-detail.md)
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `seedream` 获取 Pro 各档价格。
+
+## Fal 适配（2026-08-21）
+
+- 端点：[文生图](https://fal.ai/models/bytedance/seedream/v5/pro/text-to-image/api) `bytedance/seedream/v5/pro/text-to-image`；[图片编辑](https://fal.ai/models/bytedance/seedream/v5/pro/edit/api) `bytedance/seedream/v5/pro/edit`，最多使用最后 10 张参考图。
+- 参数：画布独立比例与 `1K|2K`；智能比例发送 `auto_1K|auto_2K`，固定比例合成为合法宽高。数量 1–6；不展示/发送 `output_format`、`sync_mode`。
+- 暂定价格：面积 ≤1536² 为 `$0.0675/输出图`，更大至 2048² 为 `$0.135/输出图`；编辑第 1 张输入图免费，第 2 张起 `+$0.0045/张/输出图`。
+- 来源：[Fal 文生图文档](https://fal.ai/models/bytedance/seedream/v5/pro/text-to-image/llms.txt)、[Fal 编辑文档](https://fal.ai/models/bytedance/seedream/v5/pro/edit/llms.txt)。

@@ -50,3 +50,10 @@
 - [KIE GPT Image 2 图生图](https://docs.kie.ai/cn/market/gpt/gpt-image-2-image-to-image.md)
 - [KIE 任务详情](https://docs.kie.ai/cn/market/common/get-task-detail.md)
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `gpt image`。
+
+## Fal 适配（2026-08-21）
+
+- 端点：[文生图](https://fal.ai/models/openai/gpt-image-2/api) `openai/gpt-image-2`；[图片编辑](https://fal.ai/models/openai/gpt-image-2/edit/api) `openai/gpt-image-2/edit`。编辑最多 16 张参考图，可选 `mask_url`；本项目按有无图片自动路由。
+- 画布将比例和质量拆开：比例映射 `image_size` 预设，质量映射 `quality=low|medium|high`；图片数量 `1–4`。`output_format`、`sync_mode` 不展示也不请求。
+- Fal 按 token 计费：文本输入/缓存/输出为 `$5/$1.25/$10` 每百万 token，图片输入/缓存/输出为 `$8/$2/$30` 每百万 token。官方 1024×1024 示例约为低 `$0.006`、标准 `$0.053`、高质量 `$0.211/张`；最终成本随尺寸、质量与 token 数变化。
+- 来源：[Fal 模型页](https://fal.ai/models/openai/gpt-image-2)、[Fal 可读文档](https://fal.ai/models/openai/gpt-image-2/llms.txt)。

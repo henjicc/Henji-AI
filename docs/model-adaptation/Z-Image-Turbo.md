@@ -64,3 +64,10 @@ APIMart 价格页显示默认 `$0.01/张`，`prompt_extend` 档约 `$0.02/张`�
 - [KIE Z-image API](https://docs.kie.ai/cn/market/z-image/z-image.md)
 - [KIE 任务详情](https://docs.kie.ai/cn/market/common/get-task-detail.md)
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `z-image`。
+
+## Fal 适配（2026-08-21）
+
+- 端点：[文生图](https://fal.ai/models/fal-ai/z-image/turbo/api) `fal-ai/z-image/turbo`；[图生图](https://fal.ai/models/fal-ai/z-image/turbo/image-to-image/api) `fal-ai/z-image/turbo/image-to-image`，图生图使用单一 `image_url` 与 `strength`。
+- 参数：画布独立比例与 `1K|2K`，请求合成为 `image_size`；推理步数 1–8；加速 `none|regular|high`；可选提示扩写。`output_format` 不显示也不发送，安全检查保持开启。
+- 价格：`$0.005/百万像素`，提示扩写另加 `$0.0025/次`。这替换了项目原先错误的固定 `$0.01/张`。
+- 来源：[Fal 文生图文档](https://fal.ai/models/fal-ai/z-image/turbo/llms.txt)、[Fal 图生图文档](https://fal.ai/models/fal-ai/z-image/turbo/image-to-image/llms.txt)。

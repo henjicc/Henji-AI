@@ -58,3 +58,10 @@
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：通用创建协议。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：通用轮询协议。
 - [KIE 定价](https://kie.ai/pricing)：公开总定价入口；文生图和图片编辑价格也可在此交叉核对。
+
+## Fal 适配（2026-08-21）
+
+- 端点：[文生图](https://fal.ai/models/xai/grok-imagine-image/v2.0/text-to-image/api) `xai/grok-imagine-image/v2.0/text-to-image`；[图片编辑](https://fal.ai/models/xai/grok-imagine-image/v2.0/edit/api) `xai/grok-imagine-image/v2.0/edit`，最多 3 张输入图。
+- 参数：13 种比例，`resolution=1k|2k`，`quality=low|medium`，`num_images=1–4`。画布比例与分辨率独立；`output_format`、`sync_mode` 不展示也不发送。
+- 价格：1K 低/标准为 `$0.04/$0.06/张`，2K 低/标准为 `$0.06/$0.08/张`；编辑另加 `$0.01/输入图`。
+- 来源：[Fal 可读文档](https://fal.ai/models/xai/grok-imagine-image/v2.0/text-to-image/llms.txt)。

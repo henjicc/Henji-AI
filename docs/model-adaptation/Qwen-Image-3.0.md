@@ -76,3 +76,10 @@ APIMart 价格页显示标准版默认/1K/2K 均约 `$0.0205712/张`；Pro 默�
 - [KIE 图生图](https://docs.kie.ai/cn/market/qwen3/image-to-image.md)
 - [KIE 任务详情](https://docs.kie.ai/cn/market/common/get-task-detail.md)
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `qwen` 获取标准版/Pro 价格。
+
+## Fal 适配（2026-08-21）
+
+- 端点：[文生图](https://fal.ai/models/alibaba/qwen-image-3/text-to-image/api) `alibaba/qwen-image-3/text-to-image`；[图片编辑](https://fal.ai/models/alibaba/qwen-image-3/edit/api) `alibaba/qwen-image-3/edit`，编辑需要 1–3 张参考图。
+- Fal API 用 `image_size` 同时承载尺寸；项目在画布拆成比例与 `1K|2K`，请求时合成为合法宽高对象。另支持数量 1–6、提示扩写开关；不展示/发送负面提示词、`seed`、`output_format`。
+- 价格：1K `$0.04/张`，2K `$0.075/张`，生成与编辑一致。
+- 来源：[Fal 可读文档](https://fal.ai/models/alibaba/qwen-image-3/text-to-image/llms.txt)。

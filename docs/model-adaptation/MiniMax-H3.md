@@ -54,3 +54,10 @@
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：创建与回调。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：查询与结果。
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `minimax`。
+
+## Fal 适配（2026-08-21）
+
+- 端点：`minimax/h3/text-to-video`、`minimax/h3/image-to-video`、`minimax/h3/reference-to-video`；分别覆盖文生、首尾帧和图片/视频/音频联合参考。
+- 参数：`duration=5–15`；分辨率 `480P|768P|2K|4K`；文生/参考模式比例为 `21:9|16:9|4:3|1:1|3:4|9:16`，参考模式可用 `adaptive`。参考上限为图片 9、视频 3、音频 3。
+- 价格：480P/768P/2K/4K 分别 `$0.05/$0.06/$0.13/$0.16 每秒`；参考模式前 5 张图免费，第 6 张起 `$0.08/张`。
+- 来源：[Fal 文生视频文档](https://fal.ai/models/minimax/h3/text-to-video/llms.txt)、[Fal 参考生视频文档](https://fal.ai/models/minimax/h3/reference-to-video/llms.txt)。

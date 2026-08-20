@@ -63,3 +63,10 @@ KIE 价格按“是否有视频输入”和分辨率拆分；有视频输入档�
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：创建、回调与鉴权。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：查询和结果解析。
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `seedance`。
+
+## Fal 适配（2026-08-21）
+
+- 端点：`bytedance/seedance-2.0/{text-to-video|image-to-video|reference-to-video}`；图生支持首尾帧，参考模式支持图片最多 9、视频 3、音频 3。
+- 参数：比例 `auto|21:9|16:9|4:3|1:1|3:4|9:16`；分辨率 `480p|720p|1080p|4k`；时长 `4–15`；原生音频；标准/高码率。画布比例和分辨率独立，智能比例在有媒体时发送 `auto`。
+- 价格：Fal 明示 720p `$0.3034/秒`、1080p `$0.682/秒`；其余按 token 公式估算为 480p 约 `$0.1345/秒`、4K 约 `$1.5552/秒`。参考视频输入按输出分辨率另计。
+- 来源：[Fal 文生视频文档](https://fal.ai/models/bytedance/seedance-2.0/text-to-video/llms.txt)、[Fal 参考生视频文档](https://fal.ai/models/bytedance/seedance-2.0/reference-to-video/llms.txt)。

@@ -1,0 +1,113 @@
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/core', async () => {
+  const [{ defineModel }, modelText] = await Promise.all([
+    import('@/core/defineModel'),
+    import('@/core/i18n/modelText'),
+  ])
+  return { defineModel, ...modelText }
+})
+
+import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
+import { evalFunction } from '../../../electron/main/services/ai-runtime/js-runtime'
+import type { JsonObject } from '../../../electron/main/services/ai-runtime/types'
+import modelManifest from '../../../resources/model-manifest.json'
+import { falGeminiOmniFlashModel } from './gemini-omni-flash.model'
+import { falGptImage2Model } from './gpt-image-2.model'
+import { falGrokImagine20Model } from './grok-imagine-2.0.model'
+import { falKling30Model } from './kling-3.0.model'
+import { falKling30TurboModel } from './kling-3.0-turbo.model'
+import { falKling30OmniModel } from './kling-3.0-omni.model'
+import { falMiniMaxH3Model } from './minimax-h3.model'
+import { falNanoBanana2Model } from './nano-banana-2.model'
+import { nanoBananaProModel } from './nano-banana-pro.model'
+import { falQwenImage30Model } from './qwen-image-3.0.model'
+import { falSeedance20Model } from './seedance-2.0.model'
+import { falSeedance20FastModel } from './seedance-2.0-fast.model'
+import { falSeedance20MiniModel } from './seedance-2.0-mini.model'
+import { falSeedance25Model } from './seedance-2.5.model'
+import { falSeedream50LiteModel } from './seedream-5.0-lite.model'
+import { falSeedream50ProModel } from './seedream-5.0-pro.model'
+import { zImageTurboModel } from './z-image-turbo.model'
+
+const imageModels = [
+  falGptImage2Model,
+  falGrokImagine20Model,
+  falNanoBanana2Model,
+  nanoBananaProModel,
+  falQwenImage30Model,
+  falSeedream50LiteModel,
+  falSeedream50ProModel,
+  zImageTurboModel,
+]
+
+const videoModels = [
+  falGeminiOmniFlashModel,
+  falKling30Model,
+  falKling30TurboModel,
+  falKling30OmniModel,
+  falMiniMaxH3Model,
+  falSeedance20Model,
+  falSeedance20FastModel,
+  falSeedance20MiniModel,
+  falSeedance25Model,
+]
+
+function evaluateManifestBuilder(modelId: string, params: JsonObject) {
+  const model = modelManifest.models.find((item) => item.modelId === modelId)
+  expect(model?.request?.builderJs).toBeTruthy()
+  return evalFunction(model!.request!.builderJs!, params)
+}
+
+describe('docs/model-adaptation Fal 目标模型', () => {
+  it.each([...imageModels, ...videoModels])('$meta.id 在画布使用独立比例与分辨率参数', (model) => {
+    expect(model.params.some((param) => param.type === 'composite')).toBe(false)
+    const spec = analyzeRatioResolutionParams(model.params, [])
+    expect(spec?.aspectParam?.id).toBeTruthy()
+    expect(spec?.resolutionParam?.id).toBeTruthy()
+    expect(spec?.aspectParam?.id).not.toBe(spec?.resolutionParam?.id)
+  })
+
+  it.each([...imageModels, ...videoModels])('$meta.id 的 manifest builder 可在独立 VM 执行', (model) => {
+    expect(evaluateManifestBuilder(model.meta.id, { prompt: 'test' })).toMatchObject({ prompt: 'test' })
+  })
+
+  it.each(imageModels)('$meta.id 不展示也不发送 output_format', (model) => {
+    expect(model.params.some((param) => /output.?format/i.test(param.id))).toBe(false)
+    expect(model.request?.builder?.({ prompt: 'test' })).not.toHaveProperty('output_format')
+  })
+
+  it('GPT Image 2、Nano Banana Pro 与 Z-Image 使用官方价格和路由', async () => {
+    expect(await (falGptImage2Model.endpoints as { selector: (params: DynamicValueMap) => Promise<string> }).selector({ images: ['a.png'] }))
+      .toBe('openai/gpt-image-2/edit')
+    expect(nanoBananaProModel.pricing.calculator?.({ falNanoBananaProResolution: '4K' })).toBe(0.3)
+    expect(zImageTurboModel.pricing.description).toContain('$0.005/百万像素')
+    expect(zImageTurboModel.request?.builder?.({ prompt: 'edit', images: ['a.png'] })).toMatchObject({
+      image_url: 'a.png', strength: 0.6
+    })
+  })
+
+  it('Kling 三个型号按档位与媒体切换 Fal 官方端点', async () => {
+    const standard = falKling30Model.endpoints as { selector: (params: DynamicValueMap) => Promise<string> }
+    const turbo = falKling30TurboModel.endpoints as { selector: (params: DynamicValueMap) => Promise<string> }
+    const omni = falKling30OmniModel.endpoints as { selector: (params: DynamicValueMap) => Promise<string> }
+    expect(await standard.selector({ falKling30Resolution: 'pro', images: ['a.png'] }))
+      .toBe('fal-ai/kling-video/v3/pro/image-to-video')
+    expect(await turbo.selector({ falKling30TurboResolution: 'standard' }))
+      .toBe('fal-ai/kling-video/v3/turbo/standard/text-to-video')
+    expect(await omni.selector({ falKling30OmniResolution: 'pro', falKling30OmniMode: 'reference-to-video' }))
+      .toBe('fal-ai/kling-video/o3/pro/reference-to-video')
+  })
+
+  it('MiniMax 与 Seedance 覆盖首尾帧和多模态参考字段', () => {
+    expect(falMiniMaxH3Model.request?.builder?.({
+      prompt: 'reference', falMiniMaxH3Mode: 'reference-to-video',
+      images: ['a.png'], videos: ['v.mp4'], audios: ['voice.mp3']
+    })).toMatchObject({
+      reference_image_urls: ['a.png'], reference_video_urls: ['v.mp4'], reference_audio_urls: ['voice.mp3']
+    })
+    expect(falSeedance25Model.request?.builder?.({
+      prompt: 'frames', images: ['first.png', 'last.png']
+    })).toMatchObject({ image_url: 'first.png', end_image_url: 'last.png' })
+  })
+})

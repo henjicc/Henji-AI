@@ -54,3 +54,10 @@ KIE 定价页按 `kling 3.0` 搜索可见 Turbo 四条价格，文生与图生�
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：创建与回调。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：查询与结果。
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `kling 3.0`。
+
+## Fal 适配（2026-08-21）
+
+- Fal 端点：`fal-ai/kling-video/v3/turbo/{standard|pro}/{text-to-video|image-to-video}`；图生端点需要单一 `image_url`。
+- 参数：`duration=3–15`；文生比例 `16:9|9:16|1:1`。Fal schema 不提供音频、尾帧与显式分辨率字段；画布的分辨率栏按路由档位显示“标准/专业”。
+- 价格：Turbo Standard `$0.112/秒`，Turbo Pro `$0.14/秒`。
+- 来源：[Fal Turbo Standard 文档](https://fal.ai/models/fal-ai/kling-video/v3/turbo/standard/text-to-video/llms.txt)、[Fal Turbo Pro 文档](https://fal.ai/models/fal-ai/kling-video/v3/turbo/pro/text-to-video/llms.txt)。

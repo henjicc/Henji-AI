@@ -68,3 +68,11 @@ KIE 价格应从 [Kling O3 模型页](https://kie.ai/kling-o3)逐个切换能力
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：创建与回调。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：查询与结果。
 - [KIE 定价](https://kie.ai/pricing)：公开总定价入口；本模型的完整档位以模型页逐模式价格为准。
+
+## Fal 适配（2026-08-21）
+
+- Fal 使用 O3 路由名承载 Kling 3.0 Omni：`fal-ai/kling-video/o3/{standard|pro}/{text-to-video|image-to-video|reference-to-video}`。这与 KIE 的 “Kling O3” 命名一致。
+- 文生支持比例；图生支持首尾帧；参考模式支持多张 `image_urls` 及更复杂的 `elements`。本项目接入文生、首尾帧与图片参考，暂不暴露结构化多镜头/元素对象。
+- 公共参数为 `duration=3–15`、`generate_audio`、`shot_type`。Fal 无独立 `resolution` 字段，画布分辨率栏按端点档显示“标准/专业”。
+- 价格：标准 `$0.084/$0.112 每秒`，专业 `$0.112/$0.14 每秒`（无/有音频）。
+- 来源：[Fal O3 Standard 文档](https://fal.ai/models/fal-ai/kling-video/o3/standard/text-to-video/llms.txt)、[Fal O3 Pro 文档](https://fal.ai/models/fal-ai/kling-video/o3/pro/reference-to-video/llms.txt)。

@@ -38,3 +38,9 @@
 - [APIMart Midjourney API 总览](https://docs.apimart.ai/en/api-reference/images/midjourney/generation.md)：路由、动作范围和通用协议。
 - [APIMart Midjourney Imagine](https://docs.apimart.ai/en/api-reference/images/midjourney/imagine.md)：基础 Imagine 请求。
 - [APIMart 定价](https://apimart.ai/zh/pricing)：按动作与速度的价格。
+
+## Fal 核查（2026-08-21）
+
+Fal 官方模型目录、模型搜索与公开可读文档中均未发现 Midjourney 可调用端点，因而本次不为 Fal 伪造模型 ID、参数或价格，也不注册不可调用的 Fal 模型。继续使用已核实的 APIMart 适配；后续只有在 Fal 发布公开模型页与 API schema 后再接入。
+
+- 核查入口：[Fal 模型目录](https://fal.ai/explore)、[Fal 模型索引](https://fal.ai/llms.txt)。

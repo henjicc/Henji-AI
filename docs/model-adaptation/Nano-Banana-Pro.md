@@ -53,3 +53,10 @@
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：通用创建协议。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：通用轮询协议。
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `nano banana`。
+
+## Fal 适配（2026-08-21）
+
+- 端点：[生成](https://fal.ai/models/fal-ai/nano-banana-pro/api) `fal-ai/nano-banana-pro`；[编辑](https://fal.ai/models/fal-ai/nano-banana-pro/edit/api) `fal-ai/nano-banana-pro/edit`，按有无图片自动路由。
+- 参数：比例 `auto` 加 10 个固定比例；分辨率 `1K|2K|4K`；数量 1–4；可选联网搜索。项目固定 `limit_generations=true`，不显示/发送 `seed` 与 `output_format`。
+- 价格：基础 `$0.15/张`，4K 双倍为 `$0.30/张`；联网搜索 `+$0.015`。这替换了项目原先错误的 `$0.01/张` 估算。
+- 来源：[Fal 可读文档](https://fal.ai/models/fal-ai/nano-banana-pro/llms.txt)。

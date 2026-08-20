@@ -58,3 +58,10 @@ KIE 公开价格按分辨率和音频拆分：720P 无/有音频 `$0.07/$0.10/�
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：创建与回调。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：查询与结果。
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `kling 3.0`。
+
+## Fal 适配（2026-08-21）
+
+- Fal 分成标准/专业与文生/图生四个端点：`fal-ai/kling-video/v3/{standard|pro}/{text-to-video|image-to-video}`。图生端点支持首帧 `start_image_url` 和可选尾帧 `end_image_url`。
+- 共有 `duration=3–15`、`generate_audio`、`shot_type`；文生支持 `aspect_ratio=16:9|9:16|1:1` 与 `cfg_scale`。复杂多镜头/语音控制 schema 本次不暴露，避免构造不完整结构。
+- 画布将比例与档位独立：Fal 没有单独的 `resolution` 字段，因此分辨率栏按官方端点名显示“标准/专业”。价格为标准 `$0.084/$0.126 每秒`、专业 `$0.112/$0.168 每秒`（无/有音频）；语音控制未暴露且不纳入估算。
+- 来源：[Fal Standard 文档](https://fal.ai/models/fal-ai/kling-video/v3/standard/text-to-video/llms.txt)、[Fal Pro 文档](https://fal.ai/models/fal-ai/kling-video/v3/pro/text-to-video/llms.txt)。

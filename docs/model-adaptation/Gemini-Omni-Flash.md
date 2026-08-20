@@ -63,3 +63,10 @@ KIE 有视频输入时，720P/1080P 当前均 `$0.84/条`、4K `$1.26/条`；无
 - [KIE 创建任务](https://docs.kie.ai/cn/common-api/quickstart.md)：创建与回调。
 - [KIE 查询任务](https://docs.kie.ai/cn/market/common/get-task-detail.md)：查询与结果。
 - [KIE 定价](https://kie.ai/pricing)：公开可见；搜索 `gemini omni`。
+
+## Fal 适配（2026-08-21）
+
+- Fal 当前提供 [图生视频](https://fal.ai/models/google/gemini-omni-flash/image-to-video/api) `google/gemini-omni-flash/image-to-video` 与 [参考生视频](https://fal.ai/models/google/gemini-omni-flash/reference-to-video/api) `google/gemini-omni-flash/reference-to-video`，未提供纯文生视频端点。
+- 图生模式需要 1 张图片；参考模式支持 `image_urls` 1–10 张。共有 `prompt`、`aspect_ratio=16:9|9:16`、`duration=3–10`，输出固定为 720p，因此画布分辨率独立显示为单一 720p 档。
+- 按 token 计费：输入 `$1.875/百万 token`、输出 `$21.875/百万 token`；Fal 给出的 720p 参考成本约 `$0.13/秒`。
+- 来源：[Fal 可读文档](https://fal.ai/models/google/gemini-omni-flash/image-to-video/llms.txt)。
