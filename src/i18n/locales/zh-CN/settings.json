@@ -83,6 +83,30 @@
           "keys": "API 密钥",
           "docs": "API 文档"
         }
+      },
+      "bailian": {
+        "title": "阿里云百炼",
+        "label": "百炼 API 密钥",
+        "placeholder": "请输入百炼 API 密钥",
+        "help": "前往百炼控制台获取华北 2（北京）地域 API 密钥。",
+        "guide": "先去 {{home}} 开通模型，然后去 {{keys}} 获取密钥；接口说明见 {{docs}}。",
+        "links": {
+          "home": "百炼控制台",
+          "keys": "API 密钥",
+          "docs": "API 文档"
+        }
+      },
+      "volcengine": {
+        "title": "火山方舟",
+        "label": "火山方舟 API 密钥",
+        "placeholder": "请输入火山方舟 API 密钥",
+        "help": "前往火山方舟控制台开通模型并创建 API 密钥。",
+        "guide": "先去 {{home}} 开通模型，然后去 {{keys}} 获取密钥；接口说明见 {{docs}}。",
+        "links": {
+          "home": "火山方舟控制台",
+          "keys": "API 密钥",
+          "docs": "API 文档"
+        }
       }
     }
   },

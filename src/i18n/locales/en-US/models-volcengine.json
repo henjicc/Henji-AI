@@ -1,0 +1,6 @@
+{
+  "defs": {
+    "volcengine-seedream-5.0-lite": { "meta": { "name": "Seedream 5.0 Lite" } },
+    "volcengine-seedream-5.0-pro": { "meta": { "name": "Seedream 5.0 Pro" } }
+  }
+}

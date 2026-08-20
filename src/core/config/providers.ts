@@ -1,4 +1,4 @@
-export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'apimart'
+export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'apimart' | 'bailian' | 'volcengine'
 export type UploadProvider = 'fal' | 'kie'
 
 export type ProviderLink = {
@@ -52,6 +52,22 @@ export const API_KEY_PROVIDERS: ApiKeyProviderMeta[] = [
       { id: 'home', url: 'https://apimart.ai/' },
       { id: 'keys', url: 'https://apimart.ai/dashboard/api-keys' },
       { id: 'docs', url: 'https://docs.apimart.ai/' }
+    ]
+  },
+  {
+    id: 'bailian',
+    links: [
+      { id: 'home', url: 'https://bailian.console.aliyun.com/' },
+      { id: 'keys', url: 'https://bailian.console.aliyun.com/?apiKey=1#/api-key' },
+      { id: 'docs', url: 'https://help.aliyun.com/zh/model-studio/' }
+    ]
+  },
+  {
+    id: 'volcengine',
+    links: [
+      { id: 'home', url: 'https://console.volcengine.com/ark/' },
+      { id: 'keys', url: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey' },
+      { id: 'docs', url: 'https://api.volcengine.com/api-docs/view?action=ImageGenerations&serviceCode=ark&version=2024-01-01' }
     ]
   }
 ]

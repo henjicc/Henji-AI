@@ -1,10 +1,12 @@
 import { AiRuntimeError } from '../errors'
 import type { ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import * as apimart from './apimart'
+import * as bailian from './bailian'
 import * as fal from './fal'
 import * as kie from './kie'
 import * as modelscope from './modelscope'
 import * as ppio from './ppio'
+import * as volcengine from './volcengine'
 
 export async function executeGenerate(
   providerId: string,
@@ -13,6 +15,10 @@ export async function executeGenerate(
   switch (providerId) {
     case 'apimart':
       return await apimart.execute(input)
+    case 'bailian':
+      return await bailian.execute(input)
+    case 'volcengine':
+      return await volcengine.execute(input)
     case 'ppio':
       return await ppio.execute(input)
     case 'kie':
@@ -33,6 +39,10 @@ export async function executeContinuePolling(
   switch (providerId) {
     case 'apimart':
       return await apimart.continuePolling(input)
+    case 'bailian':
+      return await bailian.continuePolling(input)
+    case 'volcengine':
+      return await volcengine.continuePolling(input)
     case 'ppio':
       return await ppio.continuePolling(input)
     case 'kie':

@@ -83,6 +83,30 @@
           "keys": "API Key",
           "docs": "API Docs"
         }
+      },
+      "bailian": {
+        "title": "Alibaba Cloud Model Studio",
+        "label": "Model Studio API Key",
+        "placeholder": "Enter Model Studio API Key",
+        "help": "Get an API key for the China (Beijing) region from Model Studio.",
+        "guide": "Open {{home}} to enable the model, then get a key from {{keys}}; see {{docs}} for API documentation.",
+        "links": {
+          "home": "Model Studio Console",
+          "keys": "API Key",
+          "docs": "API Docs"
+        }
+      },
+      "volcengine": {
+        "title": "Volcengine Ark",
+        "label": "Volcengine Ark API Key",
+        "placeholder": "Enter Volcengine Ark API Key",
+        "help": "Enable the model and create an API key in the Volcengine Ark console.",
+        "guide": "Open {{home}} to enable the model, then get a key from {{keys}}; see {{docs}} for API documentation.",
+        "links": {
+          "home": "Ark Console",
+          "keys": "API Key",
+          "docs": "API Docs"
+        }
       }
     }
   },

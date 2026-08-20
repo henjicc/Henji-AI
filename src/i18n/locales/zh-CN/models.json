@@ -27,7 +27,9 @@
     "fal": "fal",
     "modelscope": "魔搭",
     "kie": "KIE",
-    "apimart": "APIMart"
+    "apimart": "APIMart",
+    "bailian": "阿里云百炼",
+    "volcengine": "火山方舟"
   },
   "tags": {
     "text-to-image": "图片生成",

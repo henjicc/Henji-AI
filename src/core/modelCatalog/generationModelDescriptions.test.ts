@@ -14,7 +14,7 @@ const modelSources = import.meta.glob('/src/models/**/*.model.ts', {
 
 describe('generationModelDescriptions', () => {
   it('所有供应商模型都引用已登记的通用模型标识', () => {
-    expect(Object.keys(modelSources)).toHaveLength(65)
+    expect(Object.keys(modelSources)).toHaveLength(94)
     for (const [file, source] of Object.entries(modelSources)) {
       const canonicalModelId = source.match(/canonicalModelId:\s*'([^']+)'/)?.[1]
       expect(canonicalModelId, file).toBeTruthy()
@@ -31,7 +31,7 @@ describe('generationModelDescriptions', () => {
   })
 
   it('所有通用模型都有中文定性描述并可注入模型元数据', () => {
-    expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(43)
+    expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(50)
     for (const description of Object.values(GENERATION_MODEL_DESCRIPTIONS)) {
       expect(description.zh.trim()).not.toBe('')
     }

@@ -1,0 +1,6 @@
+{
+  "defs": {
+    "bailian-qwen-image-3.0": { "meta": { "name": "Qwen Image 3.0" } },
+    "bailian-z-image-turbo": { "meta": { "name": "Z-Image Turbo" } }
+  }
+}

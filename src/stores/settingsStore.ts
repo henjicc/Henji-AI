@@ -31,7 +31,7 @@ export type AssetTabAction = 'floating' | 'workspace';
 export type AssetPanelPosition = 'top' | 'left' | 'right';
 export type AssetTriggerEdge = 'left' | 'right';
 export type AssetThumbnailFit = 'cover' | 'contain';
-const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'apimart', 'modelscope'] as const;
+const KNOWN_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'apimart', 'bailian', 'volcengine', 'modelscope'] as const;
 const DEFAULT_UPLOAD_PROVIDER: UploadProvider = 'kie';
 
 interface SettingsState {

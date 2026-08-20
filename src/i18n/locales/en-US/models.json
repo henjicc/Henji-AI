@@ -27,7 +27,9 @@
     "fal": "fal",
     "modelscope": "ModelScope",
     "kie": "KIE",
-    "apimart": "APIMart"
+    "apimart": "APIMart",
+    "bailian": "Alibaba Cloud Model Studio",
+    "volcengine": "Volcengine Ark"
   },
   "tags": {
     "text-to-image": "Image Generation",

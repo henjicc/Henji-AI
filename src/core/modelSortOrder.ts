@@ -5,8 +5,10 @@ export const PROVIDER_ORDER: Record<string, number> = {
   ppio: 0,
   kie: 1,
   apimart: 2,
-  modelscope: 3,
-  fal: 4
+  bailian: 3,
+  volcengine: 4,
+  modelscope: 5,
+  fal: 6
 }
 
 /** 生成 tab 模型面板的类型宏观分组顺序 */

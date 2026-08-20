@@ -12,6 +12,8 @@ import zhCN_models from './locales/zh-CN/models.json'
 import zhCN_models_modelscope from './locales/zh-CN/models-modelscope.json'
 import zhCN_models_kie from './locales/zh-CN/models-kie.json'
 import zhCN_models_apimart from './locales/zh-CN/models-apimart.json'
+import zhCN_models_bailian from './locales/zh-CN/models-bailian.json'
+import zhCN_models_volcengine from './locales/zh-CN/models-volcengine.json'
 import zhCN_models_fal from './locales/zh-CN/models-fal.json'
 import zhCN_models_ppio from './locales/zh-CN/models-ppio.json'
 import zhCN_params from './locales/zh-CN/params.json'
@@ -26,6 +28,8 @@ import enUS_models from './locales/en-US/models.json'
 import enUS_models_modelscope from './locales/en-US/models-modelscope.json'
 import enUS_models_kie from './locales/en-US/models-kie.json'
 import enUS_models_apimart from './locales/en-US/models-apimart.json'
+import enUS_models_bailian from './locales/en-US/models-bailian.json'
+import enUS_models_volcengine from './locales/en-US/models-volcengine.json'
 import enUS_models_fal from './locales/en-US/models-fal.json'
 import enUS_models_ppio from './locales/en-US/models-ppio.json'
 import enUS_params from './locales/en-US/params.json'
@@ -71,7 +75,7 @@ function deepMergeLocale(
 const resources = {
   'zh-CN': {
     common: deepMergeLocale(zhCN_common as DynamicValueMap, zhCN_storyboard as DynamicValueMap),
-    models: mergeModelDefs(zhCN_models, zhCN_models_ppio, zhCN_models_fal, zhCN_models_kie, zhCN_models_apimart, zhCN_models_modelscope),
+    models: mergeModelDefs(zhCN_models, zhCN_models_ppio, zhCN_models_fal, zhCN_models_kie, zhCN_models_apimart, zhCN_models_bailian, zhCN_models_volcengine, zhCN_models_modelscope),
     params: zhCN_params,
     errors: zhCN_errors,
     ui: zhCN_ui,
@@ -80,7 +84,7 @@ const resources = {
   },
   'en-US': {
     common: deepMergeLocale(enUS_common as DynamicValueMap, enUS_storyboard as DynamicValueMap),
-    models: mergeModelDefs(enUS_models, enUS_models_ppio, enUS_models_fal, enUS_models_kie, enUS_models_apimart, enUS_models_modelscope),
+    models: mergeModelDefs(enUS_models, enUS_models_ppio, enUS_models_fal, enUS_models_kie, enUS_models_apimart, enUS_models_bailian, enUS_models_volcengine, enUS_models_modelscope),
     params: enUS_params,
     errors: enUS_errors,
     ui: enUS_ui,
