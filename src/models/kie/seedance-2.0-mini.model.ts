@@ -189,13 +189,13 @@ export const kieSeedance20MiniModel = defineModel({
       const hasVideoInput = mode === 'reference-to-video' && hasUploadedVideo(params)
 
       const perSecond: Record<string, { noVideo: number; withVideo: number }> = {
-        '480p': { noVideo: 0.0475, withVideo: 0.030 },
-        '720p': { noVideo: 0.1025, withVideo: 0.0625 }
+        '480p': { noVideo: 0.019, withVideo: 0.012 },
+        '720p': { noVideo: 0.041, withVideo: 0.025 }
       }
       const rate = perSecond[resolution] ?? perSecond['720p']
       return (hasVideoInput ? rate.withVideo : rate.noVideo) * duration
     },
-    description: '480p: $0.0475/$0.030 per second (no/with video input); 720p: $0.1025/$0.0625'
+    description: '480p: $0.019/$0.012 per second (no/with video input); 720p: $0.041/$0.025'
   }
 })
 

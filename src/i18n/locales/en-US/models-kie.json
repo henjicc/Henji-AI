@@ -40,6 +40,26 @@
         "name": "Kling V2.6"
       }
     },
+    "kie-kling-3.0": {
+      "meta": {
+        "name": "Kling 3.0"
+      }
+    },
+    "kie-kling-3.0-turbo": {
+      "meta": {
+        "name": "Kling 3.0 Turbo"
+      }
+    },
+    "kie-kling-3.0-omni": {
+      "meta": {
+        "name": "Kling 3.0 Omni"
+      }
+    },
+    "kie-minimax-h3": {
+      "meta": {
+        "name": "MiniMax H3"
+      }
+    },
     "kie-nano-banana-pro": {
       "meta": {
         "name": "Nano Banana Pro"
@@ -78,6 +98,11 @@
     "kie-seedance-2.0-mini": {
       "meta": {
         "name": "Seedance 2.0 Mini"
+      }
+    },
+    "kie-seedance-2.5": {
+      "meta": {
+        "name": "Seedance 2.5"
       }
     },
     "kie-seedance-v1": {

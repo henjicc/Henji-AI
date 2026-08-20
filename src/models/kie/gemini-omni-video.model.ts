@@ -173,20 +173,20 @@ export const kieGeminiOmniVideoModel = defineModel({
       const isHigh4k = resolution === '4k'
 
       if (hasVideo) {
-        return isHigh4k ? 1.8 : 1.2
+        return isHigh4k ? 1.26 : 0.84
       }
 
       const duration = String(params.kieGeminiOmniVideoDuration || '8')
       const basePriceByDuration: Record<string, number> = {
-        '4': 0.45,
-        '6': 0.6,
-        '8': 0.75,
-        '10': 0.9
+        '4': 0.315,
+        '6': 0.42,
+        '8': 0.525,
+        '10': 0.63
       }
       const base = basePriceByDuration[duration] ?? basePriceByDuration['8']
-      return isHigh4k ? base + 0.6 : base
+      return isHigh4k ? base + 0.42 : base
     },
-    description: '无视频输入：4/6/8/10s 在 720p/1080p 下 $0.45/$0.6/$0.75/$0.9，4K 在同时长上加 $0.6；有视频输入：720p/1080p 固定 $1.2，4K 固定 $1.8'
+    description: '无视频输入：4/6/8/10s 在 720p/1080p 下 $0.315/$0.42/$0.525/$0.63，4K 为 $0.735/$0.84/$0.945/$1.05；有视频输入：720p/1080p 固定 $0.84，4K 固定 $1.26'
   }
 })
 
