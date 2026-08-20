@@ -29,6 +29,7 @@ import { registerWindowIpc } from './ipc/window'
 import { configureChromiumDevelopmentCache } from './chromium-development-cache'
 import { configureWebGpuRuntime, registerWebGpuDiagnostics } from './webgpu-runtime'
 import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllowedMediaRoots } from './protocol'
+import { configureMacDockIcon } from './app-icon'
 import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
 import { runLogRetention } from './services/logging'
 import { initializeUpdater } from './services/updater'
@@ -61,6 +62,7 @@ if (remoteDebuggingPort) {
 }
 
 app.whenReady().then(() => {
+  configureMacDockIcon()
   registerMediaProtocolHandler()
   restoreAllowedMediaRoots()
   registerAiRuntimeIpc()
@@ -143,4 +145,3 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   void disposeAgentRuntimeService()
 })
-

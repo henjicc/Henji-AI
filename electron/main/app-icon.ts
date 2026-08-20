@@ -30,3 +30,14 @@ export function resolveAppIconPath(): string | undefined {
   }
   return undefined
 }
+
+/**
+ * 开发态 macOS 不会从 electron-builder 的 mac.icon 配置读取 Dock 图标，
+ * 因此在应用就绪后显式复用仓库里的图标。打包态仍由 icon.icns 负责应用图标。
+ */
+export function configureMacDockIcon(): void {
+  if (process.platform !== 'darwin') return
+  const iconPath = resolveAppIconPath()
+  if (!iconPath) return
+  app.dock?.setIcon(iconPath)
+}
