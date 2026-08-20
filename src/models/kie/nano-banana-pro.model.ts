@@ -17,8 +17,12 @@ export const kieNanoBananaProModel = defineModel({
     type: 'image',
         i18nScope: 'models.defs.kie-nano-banana-pro',
     name: { key: 'meta.name', fallback: 'Nano Banana Pro' },
-    tags: ['text-to-image', 'image-to-image', 'provider-kie'],
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'supports-4k', 'provider-kie'],
     aliases: ['nano-banana-pro-kie']
+  },
+  inputLimits: {
+    images: { max: 8 },
+    videos: { max: 0 }
   },
   params: [
     {
@@ -26,14 +30,14 @@ export const kieNanoBananaProModel = defineModel({
       type: 'dropdown',
       order: 1,
       name: sharedFieldText('aspectRatio'),
-      default: '1:1',
+      default: 'smart',
       options: [
+        { value: 'smart', label: sharedOptionText('smart') },
         { value: '1:1', label: '1:1' },
         { value: '4:3', label: '4:3' },
         { value: '3:4', label: '3:4' },
         { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' },
-        { value: 'smart', label: sharedOptionText('smart') }
+        { value: '9:16', label: '9:16' }
       ]
     },
     {
@@ -47,18 +51,6 @@ export const kieNanoBananaProModel = defineModel({
         { value: '2K', label: '2K' },
         { value: '4K', label: '4K' }
       ]
-    },
-    {
-      id: 'kieNanoBananaOutputFormat',
-      type: 'dropdown',
-      order: 3,
-      name: sharedFieldText('outputFormat'),
-      default: 'png',
-      options: [
-        { value: 'png', label: 'PNG' },
-        { value: 'jpg', label: 'JPG' },
-        { value: 'webp', label: 'WEBP' }
-      ]
     }
   ],
   linkages: [],
@@ -67,21 +59,35 @@ export const kieNanoBananaProModel = defineModel({
     builder: (params) => {
       const images = resolveKieImageSources(params)
       const prompt = params.prompt || ''
-      const aspectRatio = params.kieNanoBananaAspectRatio || params.aspect_ratio
+      const rawAspectRatio = String(params.kieNanoBananaAspectRatio || params.aspect_ratio || 'smart')
       const resolution = params.kieNanoBananaResolution || params.resolution
 
-      const input: DynamicValueMap = { prompt }
-
-      if (aspectRatio && aspectRatio !== 'smart' && aspectRatio !== 'auto') {
-        input.aspect_ratio = aspectRatio
+      const supportedAspectRatios = ['1:1', '4:3', '3:4', '16:9', '9:16']
+      const ratioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+        ? params.__firstImageRatio
+        : 1
+      let aspectRatio = supportedAspectRatios.includes(rawAspectRatio) ? rawAspectRatio : '1:1'
+      if (rawAspectRatio === 'smart' || rawAspectRatio === 'auto') {
+        let bestDiff = Number.POSITIVE_INFINITY
+        for (const candidate of supportedAspectRatios) {
+          const pair = candidate.split(':').map(Number)
+          const candidateRatio = pair[0] / pair[1]
+          const difference = Math.abs(candidateRatio - ratioHint)
+          if (difference < bestDiff) {
+            bestDiff = difference
+            aspectRatio = candidate
+          }
+        }
       }
+
+      const input: DynamicValueMap = { prompt, aspect_ratio: aspectRatio }
 
       if (resolution) {
         input.resolution = resolution
       }
 
       if (images.length > 0) {
-        input.image_input = images
+        input.image_input = images.slice(0, 8)
       }
 
       return {
@@ -91,9 +97,9 @@ export const kieNanoBananaProModel = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '$',
+    calculator: (params) => params.kieNanoBananaResolution === '4K' ? 0.12 : 0.09,
+    description: '1K/2K $0.09/张，4K $0.12/张'
   }
 })
 

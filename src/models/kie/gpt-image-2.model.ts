@@ -21,13 +21,12 @@ export const kieGptImage2Model = defineModel({
       'supports-multi-image',
       'reference-mode',
       'supports-4k',
-      'max-images-6',
       'provider-kie'
     ],
     aliases: ['gpt-image-2-kie']
   },
   inputLimits: {
-    images: { max: 6 },
+    images: { max: 16 },
     videos: { max: 0 }
   },
   params: [
@@ -48,7 +47,12 @@ export const kieGptImage2Model = defineModel({
         { value: '4:5', label: '4:5' },
         { value: '3:4', label: '3:4' },
         { value: '2:3', label: '2:3' },
-        { value: '9:16', label: '9:16' }
+        { value: '9:16', label: '9:16' },
+        { value: '2:1', label: '2:1' },
+        { value: '1:2', label: '1:2' },
+        { value: '3:1', label: '3:1' },
+        { value: '1:3', label: '1:3' },
+        { value: '9:21', label: '9:21' }
       ]
     },
     {
@@ -64,37 +68,7 @@ export const kieGptImage2Model = defineModel({
       ]
     }
   ],
-  linkages: [
-    {
-      trigger: 'kieGptImage2AspectRatio',
-      effect: 'filterOptions',
-      target: 'kieGptImage2Resolution',
-      filter: (aspectRatio, options) => {
-        if (aspectRatio === '1:1') {
-          return options.filter(option => option.value !== '4K')
-        }
-        return options
-      }
-    },
-    {
-      trigger: 'kieGptImage2AspectRatio',
-      effect: 'setValue',
-      target: 'kieGptImage2Resolution',
-      condition: (aspectRatio, allParams) => {
-        return aspectRatio === '1:1' && allParams.kieGptImage2Resolution === '4K'
-      },
-      value: '2K'
-    },
-    {
-      trigger: 'kieGptImage2Resolution',
-      effect: 'setValue',
-      target: 'kieGptImage2Resolution',
-      condition: (resolution, allParams) => {
-        return resolution === '4K' && allParams.kieGptImage2AspectRatio === '1:1'
-      },
-      value: '2K'
-    }
-  ],
+  linkages: [],
   endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
@@ -106,7 +80,7 @@ export const kieGptImage2Model = defineModel({
         return pair[0] / pair[1]
       }
       const pickClosestRatio = (target: number): string => {
-        const options = ['21:9', '16:9', '3:2', '4:3', '5:4', '1:1', '4:5', '3:4', '2:3', '9:16']
+        const options = ['3:1', '21:9', '2:1', '16:9', '3:2', '4:3', '5:4', '1:1', '4:5', '3:4', '2:3', '9:16', '1:2', '9:21', '1:3']
         let best = '1:1'
         let bestDiff = Number.POSITIVE_INFINITY
         for (const ratioText of options) {
@@ -146,10 +120,6 @@ export const kieGptImage2Model = defineModel({
         : aspectRatioText
       const resolution = String(rawResolution)
 
-      if (aspectRatio === '1:1' && resolution === '4K') {
-        throw new Error('GPT Image 2 does not support 4K output for 1:1 aspect ratio')
-      }
-
       const input: DynamicValueMap = {
         prompt,
         aspect_ratio: aspectRatio,
@@ -170,11 +140,11 @@ export const kieGptImage2Model = defineModel({
     currency: '$',
     calculator: (params) => {
       const resolution = params.kieGptImage2Resolution || params.resolution
-      if (resolution === '4K') return 0.04
-      if (resolution === '2K') return 0.025
-      return 0.015
+      if (resolution === '4K') return 0.08
+      if (resolution === '2K') return 0.05
+      return 0.03
     },
-    description: '1K $0.015 / 2K $0.025 / 4K $0.040'
+    description: '1K $0.03 / 2K $0.05 / 4K $0.08'
   }
 })
 

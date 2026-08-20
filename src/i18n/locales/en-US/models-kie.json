@@ -15,6 +15,11 @@
         "name": "Grok Imagine Image"
       }
     },
+    "kie-grok-imagine-2.0": {
+      "meta": {
+        "name": "Grok Imagine Image 2.0"
+      }
+    },
     "kie-gpt-image-2": {
       "meta": {
         "name": "GPT Image 2"
@@ -48,6 +53,11 @@
     "kie-nano-banana-2-lite": {
       "meta": {
         "name": "Nano Banana 2 Lite"
+      }
+    },
+    "kie-qwen-image-3.0": {
+      "meta": {
+        "name": "Qwen Image 3.0"
       }
     },
     "kie-seedance-1.5-pro": {
@@ -97,7 +107,7 @@
     },
     "kie-z-image": {
       "meta": {
-        "name": "Z-Image"
+        "name": "Z-Image Turbo"
       }
     }
   }

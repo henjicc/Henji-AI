@@ -3,7 +3,6 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
-import type { CompositePanelDef } from '@/core/types'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -19,7 +18,7 @@ export const kieSeedream50LiteModel = defineModel({
     type: 'image',
     i18nScope: 'models.defs.kie-seedream-5.0-lite',
     name: { key: 'meta.name', fallback: 'Seedream 5.0 Lite' },
-    tags: ['text-to-image', 'image-to-image', 'multi-image', 'provider-kie'],
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-14', 'supports-4k', 'provider-kie'],
     aliases: ['seedream-5-lite-kie']
   },
   inputLimits: {
@@ -28,35 +27,28 @@ export const kieSeedream50LiteModel = defineModel({
   },
   params: [
     {
-      id: 'resolution',
-      type: 'composite',
+      id: 'kieSeedream50LiteAspectRatio',
+      type: 'dropdown',
       order: 1,
+      name: sharedFieldText('aspectRatio'),
+      default: 'smart',
+      options: [
+        { value: 'smart', label: sharedOptionText('smart') },
+        ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
+      ]
+    },
+    {
+      id: 'kieSeedream50LiteResolution',
+      type: 'dropdown',
+      order: 2,
       name: sharedFieldText('resolution'),
-      panel: 'resolution',
-      default: {
-        mode: 'aspect-quality',
-        aspectRatio: 'smart',
-        quality: 'basic'
-      },
-      config: {
-        mode: 'aspect-quality',
-        aspectRatios: {
-          options: [
-            { value: 'smart', label: sharedOptionText('smart') },
-            ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
-          ],
-          default: 'smart',
-          smartMatch: true
-        },
-        qualityTiers: {
-          options: [
-            { value: 'basic', label: sharedOptionText('standard') },
-            { value: 'high', label: sharedOptionText('high') }
-          ],
-          default: 'basic'
-        }
-      }
-    } as CompositePanelDef
+      default: '2K',
+      options: [
+        { value: '2K', label: '2K' },
+        { value: '3K', label: '3K' },
+        { value: '4K', label: '4K' }
+      ]
+    }
   ],
   linkages: [],
   endpoints: KIE_CREATE_TASK_ENDPOINT,
@@ -92,10 +84,12 @@ export const kieSeedream50LiteModel = defineModel({
         return closest
       }
 
-      const resolution = params.resolution && typeof params.resolution === 'object'
+      const legacyResolution = params.resolution && typeof params.resolution === 'object'
         ? params.resolution as DynamicValueMap
         : {}
-      const rawAspectRatio = typeof resolution.aspectRatio === 'string' ? resolution.aspectRatio : 'smart'
+      const rawAspectRatio = typeof params.kieSeedream50LiteAspectRatio === 'string'
+        ? params.kieSeedream50LiteAspectRatio
+        : (typeof legacyResolution.aspectRatio === 'string' ? legacyResolution.aspectRatio : 'smart')
       const imageRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
         ? params.__firstImageRatio
         : 1
@@ -103,10 +97,14 @@ export const kieSeedream50LiteModel = defineModel({
         ? resolveClosestAspectRatio(imageRatioHint)
         : rawAspectRatio
       const images = resolveImages()
+      const rawResolution = params.kieSeedream50LiteResolution ?? legacyResolution.quality
+      const quality = rawResolution === '4K' || rawResolution === 'ultra'
+        ? 'ultra'
+        : (rawResolution === '3K' || rawResolution === 'high' ? 'high' : 'basic')
       const input: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1',
-        quality: resolution.quality === 'high' ? 'high' : 'basic'
+        quality
       }
 
       if (images.length > 0) input.image_urls = images.slice(0, 14)

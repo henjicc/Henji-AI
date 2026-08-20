@@ -3,7 +3,6 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
-import type { CompositePanelDef } from '@/core/types'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
 
@@ -21,7 +20,7 @@ export const kieNanoBanana2Model = defineModel({
     type: 'image',
     i18nScope: 'models.defs.kie-nano-banana-2',
     name: { key: 'meta.name', fallback: 'Nano Banana 2' },
-    tags: ['text-to-image', 'image-to-image', 'multi-image', 'supports-4k', 'provider-kie'],
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-14', 'supports-4k', 'provider-kie'],
     aliases: ['nano-banana-2-kie']
   },
   inputLimits: {
@@ -30,36 +29,28 @@ export const kieNanoBanana2Model = defineModel({
   },
   params: [
     {
-      id: 'resolution',
-      type: 'composite',
+      id: 'kieNanoBanana2AspectRatio',
+      type: 'dropdown',
       order: 1,
+      name: sharedFieldText('aspectRatio'),
+      default: 'smart',
+      options: [
+        { value: 'smart', label: sharedOptionText('smart') },
+        ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
+      ]
+    },
+    {
+      id: 'kieNanoBanana2Resolution',
+      type: 'dropdown',
+      order: 2,
       name: sharedFieldText('resolution'),
-      panel: 'resolution',
-      default: {
-        mode: 'aspect-quality',
-        aspectRatio: 'smart',
-        quality: '1K'
-      },
-      config: {
-        mode: 'aspect-quality',
-        aspectRatios: {
-          options: [
-            { value: 'smart', label: sharedOptionText('smart') },
-            ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
-          ],
-          default: 'smart',
-          smartMatch: true
-        },
-        qualityTiers: {
-          options: [
-            { value: '1K', label: '1K' },
-            { value: '2K', label: '2K' },
-            { value: '4K', label: '4K' }
-          ],
-          default: '1K'
-        }
-      }
-    } as CompositePanelDef
+      default: '1K',
+      options: [
+        { value: '1K', label: '1K' },
+        { value: '2K', label: '2K' },
+        { value: '4K', label: '4K' }
+      ]
+    }
   ],
   linkages: [],
   endpoints: KIE_CREATE_TASK_ENDPOINT,
@@ -97,10 +88,12 @@ export const kieNanoBanana2Model = defineModel({
         return closest
       }
 
-      const resolution = params.resolution && typeof params.resolution === 'object'
+      const legacyResolution = params.resolution && typeof params.resolution === 'object'
         ? params.resolution as DynamicValueMap
         : {}
-      const rawAspectRatio = typeof resolution.aspectRatio === 'string' ? resolution.aspectRatio : 'smart'
+      const rawAspectRatio = typeof params.kieNanoBanana2AspectRatio === 'string'
+        ? params.kieNanoBanana2AspectRatio
+        : (typeof legacyResolution.aspectRatio === 'string' ? legacyResolution.aspectRatio : 'smart')
       const imageRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
         ? params.__firstImageRatio
         : 1
@@ -108,10 +101,13 @@ export const kieNanoBanana2Model = defineModel({
         ? resolveClosestAspectRatio(imageRatioHint)
         : rawAspectRatio
       const images = resolveImages()
+      const rawResolution = params.kieNanoBanana2Resolution ?? legacyResolution.quality
       const input: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1',
-        resolution: resolution.quality === '4K' || resolution.quality === '2K' ? resolution.quality : '1K'
+        resolution: rawResolution === '4K' || rawResolution === '2K'
+          ? rawResolution
+          : '1K'
       }
 
       if (images.length > 0) input.image_input = images.slice(0, 14)
@@ -122,11 +118,12 @@ export const kieNanoBanana2Model = defineModel({
   pricing: {
     currency: '$',
     calculator: (params) => {
-      const resolution = params.resolution && typeof params.resolution === 'object'
+      const legacyResolution = params.resolution && typeof params.resolution === 'object'
         ? params.resolution as DynamicValueMap
         : undefined
-      if (resolution?.quality === '4K') return 0.09
-      if (resolution?.quality === '2K') return 0.06
+      const resolution = params.kieNanoBanana2Resolution ?? legacyResolution?.quality
+      if (resolution === '4K') return 0.09
+      if (resolution === '2K') return 0.06
       return 0.04
     },
     description: '1K $0.04/张，2K $0.06/张，4K $0.09/张'

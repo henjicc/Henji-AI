@@ -3,7 +3,6 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
-import type { CompositePanelDef } from '@/core/types'
 import { countUploadedImages } from './mediaSources'
 
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
@@ -20,7 +19,7 @@ export const kieSeedream50ProModel = defineModel({
     type: 'image',
     i18nScope: 'models.defs.kie-seedream-5.0-pro',
     name: { key: 'meta.name', fallback: 'Seedream 5.0 Pro' },
-    tags: ['text-to-image', 'image-to-image', 'multi-image', 'provider-kie'],
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10', 'provider-kie'],
     aliases: ['seedream-5-pro-kie']
   },
   inputLimits: {
@@ -29,35 +28,27 @@ export const kieSeedream50ProModel = defineModel({
   },
   params: [
     {
-      id: 'resolution',
-      type: 'composite',
+      id: 'kieSeedream50ProAspectRatio',
+      type: 'dropdown',
       order: 1,
+      name: sharedFieldText('aspectRatio'),
+      default: 'smart',
+      options: [
+        { value: 'smart', label: sharedOptionText('smart') },
+        ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
+      ]
+    },
+    {
+      id: 'kieSeedream50ProResolution',
+      type: 'dropdown',
+      order: 2,
       name: sharedFieldText('resolution'),
-      panel: 'resolution',
-      default: {
-        mode: 'aspect-quality',
-        aspectRatio: 'smart',
-        quality: '1K'
-      },
-      config: {
-        mode: 'aspect-quality',
-        aspectRatios: {
-          options: [
-            { value: 'smart', label: sharedOptionText('smart') },
-            ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
-          ],
-          default: 'smart',
-          smartMatch: true
-        },
-        qualityTiers: {
-          options: [
-            { value: '1K', label: '1K' },
-            { value: '2K', label: '2K' }
-          ],
-          default: '1K'
-        }
-      }
-    } as CompositePanelDef
+      default: '1K',
+      options: [
+        { value: '1K', label: '1K' },
+        { value: '2K', label: '2K' }
+      ]
+    }
   ],
   linkages: [],
   endpoints: KIE_CREATE_TASK_ENDPOINT,
@@ -93,17 +84,20 @@ export const kieSeedream50ProModel = defineModel({
         return closest
       }
 
-      const resolution = params.resolution && typeof params.resolution === 'object'
+      const legacyResolution = params.resolution && typeof params.resolution === 'object'
         ? params.resolution as DynamicValueMap
         : {}
-      const rawAspectRatio = typeof resolution.aspectRatio === 'string' ? resolution.aspectRatio : 'smart'
+      const rawAspectRatio = typeof params.kieSeedream50ProAspectRatio === 'string'
+        ? params.kieSeedream50ProAspectRatio
+        : (typeof legacyResolution.aspectRatio === 'string' ? legacyResolution.aspectRatio : 'smart')
       const imageRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
         ? params.__firstImageRatio
         : 1
       const aspectRatio = rawAspectRatio === 'smart' || rawAspectRatio === 'auto' || rawAspectRatio.length === 0
         ? resolveClosestAspectRatio(imageRatioHint)
         : rawAspectRatio
-      const quality = resolution.quality === '2K' || resolution.quality === 'high' ? 'high' : 'basic'
+      const rawResolution = params.kieSeedream50ProResolution ?? legacyResolution.quality
+      const quality = rawResolution === '2K' || rawResolution === 'high' ? 'high' : 'basic'
       const images = resolveImages()
       const input: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
@@ -122,10 +116,11 @@ export const kieSeedream50ProModel = defineModel({
   pricing: {
     currency: '$',
     calculator: (params) => {
-      const resolution = params.resolution && typeof params.resolution === 'object'
+      const legacyResolution = params.resolution && typeof params.resolution === 'object'
         ? params.resolution as DynamicValueMap
         : undefined
-      const outputPrice = resolution?.quality === '2K' || resolution?.quality === 'high' ? 0.07 : 0.035
+      const resolution = params.kieSeedream50ProResolution ?? legacyResolution?.quality
+      const outputPrice = resolution === '2K' || resolution === 'high' ? 0.07 : 0.035
       return outputPrice + Math.max(0, countUploadedImages(params) - 1) * 0.0025
     },
     description: '1K $0.035/张，2K $0.07/张；首张输入免费，后续输入 $0.0025/张'
