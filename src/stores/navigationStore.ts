@@ -78,7 +78,9 @@ export function openAssetLibrary(view: Exclude<AssetLibraryView, 'closed'>): voi
   const navigation = useNavigationStore.getState()
   const assetStore = useAssetLibraryStore.getState()
 
-  if (navigation.activeWorkspace !== 'assets') {
+  if (navigation.activeWorkspace === 'assets' && view === 'floating') {
+    navigation.setActiveWorkspace(assetStore.sourceWorkspace)
+  } else if (navigation.activeWorkspace !== 'assets') {
     assetStore.setSourceWorkspace(navigation.activeWorkspace)
   }
   assetStore.setView(view)

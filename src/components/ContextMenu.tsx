@@ -10,9 +10,10 @@ interface ContextMenuProps {
 
     onClose: () => void
     visible: boolean
+    owner?: 'assets'
 }
 
-const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible }) => {
+const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, visible, owner }) => {
     const menuRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -41,6 +42,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose, vis
         <div
             ref={menuRef}
             data-context-menu
+            data-asset-context-menu={owner === 'assets' ? 'true' : undefined}
             className="ui-glass context-menu animate-scale-in"
             style={{
                 left: `${position.x}px`,

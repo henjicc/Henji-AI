@@ -21,6 +21,9 @@ const FILTER_REASON = '界面筛选条件只决定用户此刻看到哪些卡片
 const PANEL_REASON = '素材库以浮层还是整页打开、从哪个工作区打开，属于面板形态；'
   + '助手要打开素材库用 open_application_surface，要读素材用 query_assets。'
 
+const BATCH_SELECTION_REASON = '批量模式与当前勾选集合是尚未提交的临时界面状态；'
+  + '助手批量修改素材应直接对 asset 实体集合执行通用增删改，不应操纵用户的勾选框。'
+
 export const ASSET_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
   storeId: 'assetLibraryStore',
   title: '素材库',
@@ -31,6 +34,10 @@ export const ASSET_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     openFloating: { kind: 'excluded', category: 'view_state', reason: PANEL_REASON },
     close: { kind: 'excluded', category: 'view_state', reason: PANEL_REASON },
     setSourceWorkspace: { kind: 'excluded', category: 'view_state', reason: PANEL_REASON },
+    enterBatchMode: { kind: 'excluded', category: 'view_state', reason: BATCH_SELECTION_REASON },
+    toggleBatchAsset: { kind: 'excluded', category: 'view_state', reason: BATCH_SELECTION_REASON },
+    setBatchSelectedIds: { kind: 'excluded', category: 'view_state', reason: BATCH_SELECTION_REASON },
+    exitBatchMode: { kind: 'excluded', category: 'view_state', reason: BATCH_SELECTION_REASON },
 
     setKeyword: { kind: 'excluded', category: 'view_state', reason: FILTER_REASON },
     setMediaType: { kind: 'excluded', category: 'view_state', reason: FILTER_REASON },

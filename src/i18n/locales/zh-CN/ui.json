@@ -250,8 +250,9 @@
     "categories": "资产库", "createLibrary": "新建资产库", "libraryName": "资产库名称", "confirmDeleteLibrary": "再次点击确认删除", "empty": "资产库还是空的", "noResults": "没有符合条件的资产",
     "error": "资产加载失败", "restartRequired": "资产库后端尚未加载，请重启 Electron 开发进程后重试", "retry": "重试", "count": "共 {{count}} 项", "loadedCount": "已加载 {{loaded}} / {{count}} 项", "loadingMore": "正在加载更多", "scrollForMore": "继续滚动加载", "allLoaded": "已经到底了", "back": "返回原工作区",
     "thumbnailSize": "缩略图", "viewSettings": "显示设置", "thumbnailFit": "缩略图显示方式", "fitCover": "填满卡片", "fitContain": "完整显示", "fitCoverHint": "填满卡片，超出比例的边缘会被裁切。", "fitContainHint": "完整显示媒体内容，空余区域保留背景。",
-    "renameAsset": "重命名资产", "relocate": "重新定位文件", "removeFromLibrary": "从当前库移除",
-    "addToLibrary": "加入其他库", "deleteAsset": "从资产库删除", "allTags": "全部标签", "tags": "标签", "tagPlaceholder": "搜索或输入新标签", "membership": "所属资产库", "searchLibraries": "搜索资产库"
+    "renameAsset": "重命名", "relocate": "重新定位文件", "removeFromLibrary": "从当前库移除",
+    "addToLibrary": "加入其他库", "deleteAsset": "删除", "allTags": "全部标签", "tags": "标签", "tagPlaceholder": "搜索或输入新标签", "membership": "所属资产库", "searchLibraries": "搜索资产库",
+    "batchManage": "批量管理", "batchDone": "完成", "batchSelected": "已选择 {{count}} 项", "batchSelectAll": "全选已加载", "batchClear": "清空选择", "batchHint": "点击资产选择，可批量调整标签、所属资产库或删除。", "batchTags": "批量标签", "batchTagAdd": "添加标签", "batchTagRemove": "移除标签", "batchLibraries": "批量资产库", "batchLibraryAdd": "加入资产库", "batchLibraryRemove": "移出资产库", "batchDelete": "删除所选资产", "batchConfirmDelete": "再次点击确认删除", "batchNoSelection": "请先选择资产", "batchPartialFailure": "{{count}} 项处理失败，请重试", "batchEmptyMenu": "管理多个资产"
   },
   "windowControls": {
     "appName": "痕迹AI",

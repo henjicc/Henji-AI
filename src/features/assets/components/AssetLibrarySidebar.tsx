@@ -29,6 +29,7 @@ interface Props {
   onCreate: (name: string) => Promise<void>
   onRename: (library: AssetLibraryRecord, name: string) => Promise<void>
   onDelete: (library: AssetLibraryRecord) => Promise<void>
+  width?: number
 }
 
 export const AssetLibrarySidebar: React.FC<Props> = ({
@@ -44,6 +45,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
   onCreate,
   onRename,
   onDelete,
+  width,
 }) => {
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState('')
@@ -69,7 +71,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
   }
 
   return (
-    <aside className={`flex w-52 shrink-0 flex-col border-r ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
+    <aside className={`flex shrink-0 flex-col border-r ${width === undefined ? 'w-52' : ''} ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS} ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`} style={width === undefined ? undefined : { width }}>
       <nav className="space-y-1 p-2">
         <UiNavButton active={activeId === null && activeMediaType === null && activeSort === 'created'} onClick={onShowAll} className="!h-10 !rounded-lg !px-3">
           <ICON_ASSET_LIBRARY className="h-4 w-4" />{labels.all}
@@ -113,7 +115,7 @@ export const AssetLibrarySidebar: React.FC<Props> = ({
                 <UiNavButton active={activeId === library.id} onClick={() => onSelect(library.id)} className="!h-9 w-full !rounded-lg !px-3">
                   <Folder className="h-4 w-4 shrink-0" /><span className="truncate">{library.name}</span>
                 </UiNavButton>
-                <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 ${deletingId === library.id ? 'pointer-events-auto opacity-100' : 'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'}`}>
+                <div className={`pointer-events-none absolute right-1 top-1/2 flex -translate-y-1/2 bg-gradient-to-l from-layer via-layer/95 to-transparent pl-6 ${deletingId === library.id ? 'pointer-events-auto opacity-100' : 'opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100'}`}>
                   {deletingId === library.id ? (
                     <>
                       <UiIconButton className="!h-7 !w-7" hoverVariant="danger" title={labels.confirmDelete} onClick={() => { void onDelete(library); setDeletingId(null) }}><Check className="h-3.5 w-3.5" /></UiIconButton>

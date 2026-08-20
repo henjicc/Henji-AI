@@ -20,6 +20,8 @@ describe('navigationStore', () => {
     useAssetLibraryStore.setState({
       view: 'closed',
       sourceWorkspace: 'generation',
+      batchMode: false,
+      batchSelectedIds: [],
     })
   })
 
@@ -60,6 +62,19 @@ describe('navigationStore', () => {
     expect(useAssetLibraryStore.getState()).toMatchObject({
       view: 'floating',
       sourceWorkspace: 'tools',
+    })
+  })
+
+  it('完整素材库切回悬浮态时恢复来源工作区作为背景', () => {
+    switchWorkspace('nodes')
+    openAssetLibrary('workspace')
+
+    openAssetLibrary('floating')
+
+    expect(useNavigationStore.getState().activeWorkspace).toBe('nodes')
+    expect(useAssetLibraryStore.getState()).toMatchObject({
+      view: 'floating',
+      sourceWorkspace: 'nodes',
     })
   })
 

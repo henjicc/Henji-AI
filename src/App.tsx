@@ -15,6 +15,7 @@ import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
 import { LargeUploadChoiceDialog } from '@/components/upload/LargeUploadChoiceDialog'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAssetEdgeTrigger } from '@/features/assets/hooks/useAssetEdgeTrigger'
+import { hasOpenAssetChildOverlay } from '@/features/assets/assetOverlayOwnership'
 import { NotificationProvider } from '@/contexts/NotificationContext'
 import { useUiStore } from '@/stores/uiStore'
 import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
@@ -123,7 +124,8 @@ const App: React.FC = () => {
     closeAssetLibrary()
   }, [])
   const handleAssetClick = (): void => {
-    if (assetView !== 'closed') { closeAssets(); return }
+    if (assetView === 'workspace') { openAssetFloating(); return }
+    if (assetView === 'floating') { closeAssets(); return }
     if (assetTabAction === 'workspace') openAssetWorkspace(); else openAssetFloating()
   }
   const handleTabChange = switchWorkspace
@@ -131,7 +133,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key !== 'Escape' || assetView === 'closed') return
-      if (document.querySelector('[data-asset-preview="open"], [data-asset-card-menu]')) return
+      if (hasOpenAssetChildOverlay()) return
       if (event.target instanceof HTMLElement && event.target.closest('[data-asset-floating-panel] input')) return
       closeAssets()
     }
@@ -260,5 +262,3 @@ const App: React.FC = () => {
 }
 
 export default App
-
-
