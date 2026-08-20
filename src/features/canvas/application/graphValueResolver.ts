@@ -11,6 +11,7 @@ import {
   isConnectionCompatible,
   nodeHasSourceHandle,
   nodeHasTargetHandle,
+  resolveNodeSourceMediaKind,
 } from '../domain/nodeRegistry';
 import {
   MODEL_PARAM_ID,
@@ -47,9 +48,7 @@ export interface ParamConnectionValidationResult {
  * 无节点类型特判——上游值由各节点 getValueOutput 声明。
  */
 function getDeclaredSourceMediaKind(sourceNode: CanvasNode, sourceHandle?: string | null): RowMediaKind | null {
-  const source = getCanvasNodeDefinition(sourceNode.type)?.ports?.source;
-  const emits = source?.handles?.[sourceHandle ?? 'source'] ?? source?.emits;
-  return emits === 'image' || emits === 'video' || emits === 'audio' ? emits : null;
+  return resolveNodeSourceMediaKind(sourceNode.type, sourceNode.data, sourceHandle) ?? null;
 }
 
 function sourceEmitsMediaKind(sourceNode: CanvasNode, mediaKind: RowMediaKind, sourceHandle?: string | null): boolean {
@@ -58,6 +57,54 @@ function sourceEmitsMediaKind(sourceNode: CanvasNode, mediaKind: RowMediaKind, s
   }
   return getNodeMediaOutputs(sourceNode.type, sourceNode.data, sourceHandle ?? undefined)
     .some((output) => output.kind === mediaKind);
+}
+
+function resolveTargetHandleMediaKind(
+  targetNode: CanvasNode,
+  targetHandle: string | null | undefined,
+): RowMediaKind | null {
+  const paramId = parseParamPortId(targetHandle)
+  const handleKind = paramId ? mediaParamIdToKind(paramId) : null
+  const acceptedKinds = getCanvasNodeDefinition(targetNode.type)?.ports?.target?.accepts
+    ?.filter((kind): kind is RowMediaKind => (
+      kind === 'image' || kind === 'video' || kind === 'audio'
+    )) ?? []
+  if (handleKind) {
+    return acceptedKinds.includes(handleKind) ? handleKind : null
+  }
+  return acceptedKinds.length === 1 ? acceptedKinds[0] : null
+}
+
+/**
+ * 解析一条具体连线上的媒体类型。普通节点使用声明端口；类型待定的单端口源节点
+ * 在首条连线时从目标媒体行反推类型，锁定后则只允许同类型目标。
+ */
+export function resolveConnectionSourceMediaKind(
+  sourceNode: CanvasNode,
+  targetNode: CanvasNode,
+  sourceHandle: string | null | undefined,
+  targetHandle: string | null | undefined,
+): RowMediaKind | undefined {
+  const targetKind = resolveTargetHandleMediaKind(targetNode, targetHandle)
+  if (!targetKind) {
+    return undefined
+  }
+
+  const declaredKind = resolveNodeSourceMediaKind(sourceNode.type, sourceNode.data, sourceHandle)
+  if (declaredKind) {
+    return declaredKind === targetKind ? declaredKind : undefined
+  }
+
+  const definition = getCanvasNodeDefinition(sourceNode.type)
+  const normalizedSourceHandle = sourceHandle ?? 'source'
+  if (
+    definition?.connectivity.lockSourceMediaOnFirstConnection !== true
+    || normalizedSourceHandle !== 'source'
+  ) {
+    return undefined
+  }
+  const supportedKinds = Object.values(definition.ports?.source?.handles ?? {})
+  return supportedKinds.includes(targetKind) ? targetKind : undefined
 }
 
 function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamDef | undefined {
@@ -149,7 +196,12 @@ export function isParamConnectionCompatible(
 
   const mediaKind = mediaParamIdToKind(paramId);
   if (mediaKind) {
-    return sourceEmitsMediaKind(sourceNode, mediaKind, sourceHandle);
+    return resolveConnectionSourceMediaKind(
+      sourceNode,
+      targetNode,
+      sourceHandle,
+      targetHandle,
+    ) === mediaKind || sourceEmitsMediaKind(sourceNode, mediaKind, sourceHandle);
   }
 
   if (paramId === MODEL_PARAM_ID) {
@@ -356,7 +408,8 @@ function resolveSchemaTargetHandle(sourceNode: CanvasNode, targetNode: CanvasNod
 
 export function resolveCompatibleTargetHandleForSource(
   sourceNode: CanvasNode,
-  targetType: CanvasNodeType
+  targetType: CanvasNodeType,
+  sourceHandle?: string | null,
 ): string | null {
   if (!nodeHasTargetHandle(targetType)) {
     return null;
@@ -367,12 +420,38 @@ export function resolveCompatibleTargetHandleForSource(
     return null;
   }
 
-  for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data)) {
+  const declaredKind = getDeclaredSourceMediaKind(sourceNode, sourceHandle)
+  const targetAcceptedKinds = getCanvasNodeDefinition(targetType)?.ports?.target?.accepts
+    ?.filter((kind): kind is RowMediaKind => (
+      kind === 'image' || kind === 'video' || kind === 'audio'
+    )) ?? []
+  const inferredKind = !declaredKind
+    && (sourceHandle ?? 'source') === 'source'
+    && targetAcceptedKinds.length === 1
+    ? targetAcceptedKinds[0]
+    : null
+  const connectionKind = declaredKind ?? inferredKind
+  if (connectionKind) {
+    const mediaTargetHandle = resolveMediaTargetHandle(targetType, connectionKind)
+    if (isParamConnectionCompatible(sourceNode, targetNode, mediaTargetHandle, sourceHandle)) {
+      return mediaTargetHandle
+    }
+    if (isConnectionCompatible(sourceNode.type, targetType, sourceHandle, sourceNode.data)) {
+      return 'target'
+    }
+  }
+
+  for (const output of getNodeMediaOutputs(sourceNode.type, sourceNode.data, sourceHandle ?? undefined)) {
     if (output.kind === 'image' || output.kind === 'video' || output.kind === 'audio') {
-      if (isParamConnectionCompatible(sourceNode, targetNode, resolveMediaTargetHandle(targetType, output.kind as RowMediaKind))) {
+      if (isParamConnectionCompatible(
+        sourceNode,
+        targetNode,
+        resolveMediaTargetHandle(targetType, output.kind as RowMediaKind),
+        sourceHandle,
+      )) {
         return resolveMediaTargetHandle(targetType, output.kind as RowMediaKind);
       }
-      if (isConnectionCompatible(sourceNode.type, targetType)) {
+      if (isConnectionCompatible(sourceNode.type, targetType, sourceHandle, sourceNode.data)) {
         return 'target';
       }
     }
@@ -395,7 +474,8 @@ export function resolveCompatibleTargetHandleForSource(
 export function canSourceTypeConnectToTargetHandle(
   sourceType: CanvasNodeType,
   targetNode: CanvasNode,
-  targetHandle: string | null | undefined
+  targetHandle: string | null | undefined,
+  sourceHandle?: string | null,
 ): boolean {
   if (!nodeHasSourceHandle(sourceType)) {
     return false;
@@ -407,8 +487,8 @@ export function canSourceTypeConnectToTargetHandle(
   }
 
   return isParamPortId(targetHandle)
-    ? isParamConnectionCompatible(sourceNode, targetNode, targetHandle)
-    : isConnectionCompatible(sourceType, targetNode.type);
+    ? isParamConnectionCompatible(sourceNode, targetNode, targetHandle, sourceHandle)
+    : isConnectionCompatible(sourceType, targetNode.type, sourceHandle, sourceNode.data);
 }
 
 /** 字符串集合内容相等比较（供 store selector 避免无效重渲染） */

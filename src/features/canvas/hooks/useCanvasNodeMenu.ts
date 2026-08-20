@@ -9,11 +9,15 @@ import type {
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import {
+  type CanvasNodeDefinition,
   getMenuNodeDefinitions,
+  canvasNodeDefinitions,
   isConnectionCompatible,
   nodeHasSourceHandle,
   nodeHasTargetHandle,
 } from '@/features/canvas/domain/nodeRegistry'
+import { mediaSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
+import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import { isParamPortId } from '@/features/canvas/domain/socketTypes'
 import {
   canSourceTypeConnectToTargetHandle,
@@ -24,6 +28,8 @@ import {
   canNodeTypeBeManualConnectionSource,
   createPreviewPath,
   getClientPosition,
+  resolveMediaFileKind,
+  type CanvasMediaKind,
   type PendingConnectStart,
   type PreviewConnectionVisual
 } from '@/features/canvas/canvasUtils'
@@ -48,8 +54,29 @@ interface RectLike {
 const QUICK_ADD_GAP = 80
 const DEFAULT_QUICK_ADD_SIZE: RectLike = { x: 0, y: 0, width: 220, height: 120 }
 
+export function aggregateQuickConnectMenuDefinitions(
+  definitions: CanvasNodeDefinition[]
+): { types: CanvasNodeType[]; uploadKinds: CanvasMediaKind[] } {
+  const uploadKinds = definitions
+    .filter((definition) => definition.media?.role === 'source')
+    .map((definition) => definition.media?.kind)
+    .filter((kind): kind is CanvasMediaKind => Boolean(kind))
+  const types = definitions
+    .filter((definition) => definition.visibleInMenu)
+    .map((definition) => definition.type)
+  if (uploadKinds.length > 0) {
+    types.push(CANVAS_NODE_TYPES.universalUpload)
+  }
+  return {
+    types: Array.from(new Set(types)),
+    uploadKinds: Array.from(new Set(uploadKinds)),
+  }
+}
+
 function estimateQuickAddSize(type: CanvasNodeType): Pick<RectLike, 'width' | 'height'> {
   switch (type) {
+    case CANVAS_NODE_TYPES.universalUpload:
+      return { width: 240, height: 240 }
     case CANVAS_NODE_TYPES.intSource:
     case CANVAS_NODE_TYPES.floatSource:
     case CANVAS_NODE_TYPES.booleanSource:
@@ -142,12 +169,14 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 })
   const [flowPosition, setFlowPosition] = useState({ x: 0, y: 0 })
   const [menuAllowedTypes, setMenuAllowedTypes] = useState<CanvasNodeType[] | undefined>(undefined)
+  const [menuUploadKinds, setMenuUploadKinds] = useState<CanvasMediaKind[]>([])
   const [pendingConnectStart, setPendingConnectStart] = useState<PendingConnectStart | null>(null)
   const [previewConnectionVisual, setPreviewConnectionVisual] = useState<PreviewConnectionVisual | null>(null)
 
   const clearMenu = useCallback(() => {
     setShowNodeMenu(false)
     setMenuAllowedTypes(undefined)
+    setMenuUploadKinds([])
     setPendingConnectStart(null)
     setPreviewConnectionVisual(null)
   }, [])
@@ -163,28 +192,37 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       y: clientY - containerRect.top,
     })
     setMenuAllowedTypes(undefined)
+    setMenuUploadKinds([])
     setPendingConnectStart(null)
     setPreviewConnectionVisual(null)
     setShowNodeMenu(true)
   }, [reactFlowInstance, wrapperRef])
 
-  const resolveAllowedTypesForPending = useCallback((pending: PendingConnectStart): CanvasNodeType[] => {
+  const resolveAllowedTypesForPending = useCallback((pending: PendingConnectStart): {
+    types: CanvasNodeType[]
+    uploadKinds: CanvasMediaKind[]
+  } => {
     const fromNode = nodes.find((node) => node.id === pending.nodeId)
     if (!fromNode) {
-      return []
+      return { types: [], uploadKinds: [] }
     }
 
     if (pending.handleType === 'source') {
-      return getMenuNodeDefinitions()
+      return {
+        types: getMenuNodeDefinitions()
         .filter((definition) => definition.connectivity.targetHandle)
-        .filter((definition) => Boolean(resolveCompatibleTargetHandleForSource(fromNode, definition.type)))
-        .map((definition) => definition.type)
+        .filter((definition) => Boolean(
+          resolveCompatibleTargetHandleForSource(fromNode, definition.type, pending.handleId)
+        ))
+        .map((definition) => definition.type),
+        uploadKinds: [],
+      }
     }
 
-    return getMenuNodeDefinitions()
+    const compatibleDefinitions = Object.values(canvasNodeDefinitions)
       .filter((definition) => canNodeTypeBeManualConnectionSource(definition.type))
       .filter((definition) => canSourceTypeConnectToTargetHandle(definition.type, fromNode, pending.handleId))
-      .map((definition) => definition.type)
+    return aggregateQuickConnectMenuDefinitions(compatibleDefinitions)
   }, [nodes])
 
   const handlePaneClick = useCallback((event: ReactMouseEvent) => {
@@ -200,19 +238,36 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
     clearMenu()
   }, [clearMenu, openNodeMenuAtClientPosition, setSelectedNode])
 
-  const handleNodeSelect = useCallback((type: CanvasNodeType) => {
+  const handlePaneContextMenu = useCallback((event: ReactMouseEvent<Element> | MouseEvent) => {
+    event.preventDefault()
+    setSelectedNode(null)
+    openNodeMenuAtClientPosition(event.clientX, event.clientY)
+  }, [openNodeMenuAtClientPosition, setSelectedNode])
+
+  const handleNodeSelect = useCallback((requestedType: CanvasNodeType, file?: File) => {
+    let type = requestedType
+    if (requestedType === CANVAS_NODE_TYPES.universalUpload && pendingConnectStart) {
+      const kind = file ? resolveMediaFileKind(file) : null
+      if (!kind || !menuUploadKinds.includes(kind)) {
+        return
+      }
+      type = mediaSourceNodeType(kind)
+    }
+
     const newNodePosition = resolveQuickAddPosition(type, flowPosition, pendingConnectStart, nodes)
     const newNodeId = addNode(type, newNodePosition)
     if (pendingConnectStart) {
       if (pendingConnectStart.handleType === 'source') {
         // 从某节点的输出端口拖出 → 新节点作为目标，按端口/参数类型定位目标端口
         const fromNode = nodes.find((node) => node.id === pendingConnectStart.nodeId)
-        const targetHandle = fromNode ? resolveCompatibleTargetHandleForSource(fromNode, type) : null
+        const targetHandle = fromNode
+          ? resolveCompatibleTargetHandleForSource(fromNode, type, pendingConnectStart.handleId)
+          : null
         if (targetHandle) {
           connectNodes({
             source: pendingConnectStart.nodeId,
             target: newNodeId,
-            sourceHandle: 'source',
+            sourceHandle: pendingConnectStart.handleId ?? 'source',
             targetHandle,
           })
         }
@@ -226,14 +281,20 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
         })
       }
     }
+    if (file) {
+      window.setTimeout(() => {
+        canvasEventBus.publish('canvas/import-media', { nodeId: newNodeId, file })
+      }, 0)
+    }
     scheduleCanvasPersist(0)
     clearMenu()
-  }, [addNode, clearMenu, connectNodes, flowPosition, nodes, pendingConnectStart, scheduleCanvasPersist])
+  }, [addNode, clearMenu, connectNodes, flowPosition, menuUploadKinds, nodes, pendingConnectStart, scheduleCanvasPersist])
 
   const handleConnectStart = useCallback(
     (event: MouseEvent | TouchEvent, params: OnConnectStartParams) => {
       setShowNodeMenu(false)
       setMenuAllowedTypes(undefined)
+      setMenuUploadKinds([])
       setPreviewConnectionVisual(null)
 
       if (!params.nodeId || !params.handleType) {
@@ -312,7 +373,11 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
         const targetHandle = sourceNode && targetNode
           ? (pendingConnectStart.handleType === 'target'
             ? (pendingConnectStart.handleId ?? 'target')
-            : resolveCompatibleTargetHandleForSource(sourceNode, targetNode.type))
+            : resolveCompatibleTargetHandleForSource(
+              sourceNode,
+              targetNode.type,
+              pendingConnectStart.handleId,
+            ))
           : null
         const compatible = Boolean(
           sourceNode &&
@@ -322,8 +387,22 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
           nodeHasTargetHandle(targetNode.type) &&
           targetHandle &&
           (isParamPortId(targetHandle)
-            ? canSourceTypeConnectToTargetHandle(sourceNode.type, targetNode, targetHandle)
-            : isConnectionCompatible(sourceNode.type, targetNode.type, pendingConnectStart.handleId))
+            ? canSourceTypeConnectToTargetHandle(
+              sourceNode.type,
+              targetNode,
+              targetHandle,
+              pendingConnectStart.handleType === 'source'
+                ? pendingConnectStart.handleId
+                : 'source',
+            )
+            : isConnectionCompatible(
+              sourceNode.type,
+              targetNode.type,
+              pendingConnectStart.handleType === 'source'
+                ? pendingConnectStart.handleId
+                : 'source',
+              sourceNode.data,
+            ))
         )
         if (compatible && sourceNode && targetNode && targetHandle) {
           // 从目标端口起拖：直接沿用起拖时的具体 handle id（精确到行）；
@@ -331,7 +410,9 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
           connectNodes({
             source: sourceNode.id,
             target: targetNode.id,
-            sourceHandle: 'source',
+            sourceHandle: pendingConnectStart.handleType === 'source'
+              ? (pendingConnectStart.handleId ?? 'source')
+              : 'source',
             targetHandle,
           })
           scheduleCanvasPersist(0)
@@ -341,8 +422,8 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
         }
       }
 
-      const allowedTypes = resolveAllowedTypesForPending(pendingConnectStart)
-      if (allowedTypes.length === 0) {
+      const allowedMenu = resolveAllowedTypesForPending(pendingConnectStart)
+      if (allowedMenu.types.length === 0) {
         setPendingConnectStart(null)
         setPreviewConnectionVisual(null)
         return
@@ -402,7 +483,8 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
         x: clientPosition.x - containerRect.left,
         y: clientPosition.y - containerRect.top,
       })
-      setMenuAllowedTypes(allowedTypes)
+      setMenuAllowedTypes(allowedMenu.types)
+      setMenuUploadKinds(allowedMenu.uploadKinds)
       suppressNextPaneClickRef.current = true
       setShowNodeMenu(true)
     },
@@ -413,8 +495,10 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
     showNodeMenu,
     menuPosition,
     menuAllowedTypes,
+    menuUploadKinds,
     previewConnectionVisual,
     handlePaneClick,
+    handlePaneContextMenu,
     handleNodeSelect,
     handleConnectStart,
     handleConnectEnd,

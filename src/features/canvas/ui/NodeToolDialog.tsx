@@ -262,9 +262,6 @@ export function NodeToolDialog() {
     t,
   ]);
 
-  const widthClassName = activePlugin?.dialog.widthClassName
-    ?? 'w-[min(460px,calc(100vw-40px))]';
-
   const editorContent = useMemo(() => {
     if (!activePlugin) {
       return null;
@@ -310,7 +307,8 @@ export function NodeToolDialog() {
       isOpen={isOpen}
       title={`${activePlugin?.label ?? ''}${t('toolDialog.suffix')}`}
       onClose={closeDialog}
-      widthClassName={widthClassName}
+      size={activePlugin?.dialog.size ?? 'form'}
+      contentClassName="overflow-y-auto px-4 py-4"
       footer={
         <>
           <UiButton variant="ghost" size="sm" onClick={closeDialog}>

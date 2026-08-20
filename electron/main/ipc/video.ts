@@ -36,7 +36,11 @@ export function registerVideoIpc(): void {
     'video:generateThumbnail',
     parseThumbnailPayload,
     async (payload) => {
-      const dataUrl = await generateVideoThumbnail(payload.source, payload.timeOffsetSeconds)
+      const dataUrl = await generateVideoThumbnail(
+        payload.source,
+        payload.timeOffsetSeconds,
+        payload.knownDurationSeconds,
+      )
       return { dataUrl }
     }
   )
@@ -107,6 +111,7 @@ function parseThumbnailPayload(input: unknown): GenerateVideoThumbnailPayloadDto
   return {
     source: readString(record, 'source'),
     timeOffsetSeconds: readOptionalNumber(record, 'timeOffsetSeconds'),
+    knownDurationSeconds: readOptionalNumber(record, 'knownDurationSeconds'),
   }
 }
 

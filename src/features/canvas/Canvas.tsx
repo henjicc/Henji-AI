@@ -30,6 +30,7 @@ import {
   CANVAS_NODE_TYPES,
 } from '@/features/canvas/domain/canvasNodes';
 import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
+import { wouldCreateCanvasCycle } from '@/features/canvas/domain/connectionIndex';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
 import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
 import { areStringListsEqual } from '@/features/canvas/application/graphMediaResolver';
@@ -332,13 +333,22 @@ export function Canvas() {
       if (!sourceNode || !targetNode) {
         return;
       }
+      if (wouldCreateCanvasCycle(sourceNode.id, targetNode.id, edges)) {
+        showConnectionToast(t('canvas.connection.cycle'));
+        return;
+      }
       // 参数端口连线走插槽类型兼容；整节点媒体连线走媒体端口兼容
       const paramValidation = isParamPortId(connection.targetHandle)
         ? validateParamConnection(sourceNode, targetNode, connection.targetHandle, nodes, edges, connection.sourceHandle)
         : null;
       const compatible = paramValidation
         ? paramValidation.compatible
-        : isConnectionCompatible(sourceNode.type, targetNode.type, connection.sourceHandle);
+        : isConnectionCompatible(
+          sourceNode.type,
+          targetNode.type,
+          connection.sourceHandle,
+          sourceNode.data,
+        );
       if (!compatible) {
         if (paramValidation?.reason === 'media-limit-exceeded') {
           const mediaLabel = paramValidation.mediaKind
@@ -402,15 +412,30 @@ export function Canvas() {
     selectedNodeIdsRef.current = rawSelectedNodeIds;
   }
   const selectedNodeIds = selectedNodeIdsRef.current;
-  const selectedUploadNodeId = useMemo(() => {
+  const selectedUploadTarget = useMemo(() => {
     if (selectedNodeIds.length !== 1) {
-      return null;
+      return { nodeId: null, kinds: [] as Array<'image' | 'video' | 'audio'> };
     }
     const selectedNode = nodes.find((node) => node.id === selectedNodeIds[0]);
-    if (!selectedNode || selectedNode.type !== CANVAS_NODE_TYPES.upload) {
-      return null;
+    if (selectedNode?.type === CANVAS_NODE_TYPES.universalUpload) {
+      const lockedKind = selectedNode.data.lockedMediaKind;
+      return {
+        nodeId: selectedNode.id,
+        kinds: lockedKind
+          ? [lockedKind]
+          : ['image', 'video', 'audio'] as Array<'image' | 'video' | 'audio'>,
+      };
     }
-    return selectedNode.id;
+    if (selectedNode?.type === CANVAS_NODE_TYPES.upload) {
+      return { nodeId: selectedNode.id, kinds: ['image'] as Array<'image' | 'video' | 'audio'> };
+    }
+    if (selectedNode?.type === CANVAS_NODE_TYPES.videoUpload) {
+      return { nodeId: selectedNode.id, kinds: ['video'] as Array<'image' | 'video' | 'audio'> };
+    }
+    if (selectedNode?.type === CANVAS_NODE_TYPES.audioUpload) {
+      return { nodeId: selectedNode.id, kinds: ['audio'] as Array<'image' | 'video' | 'audio'> };
+    }
+    return { nodeId: null, kinds: [] as Array<'image' | 'video' | 'audio'> };
   }, [nodes, selectedNodeIds]);
 
   const { duplicateNodes, handleNodeDragStart, handleNodeDrag, handleNodeDragStop } = useCanvasDuplication({
@@ -430,7 +455,8 @@ export function Canvas() {
   useCanvasShortcuts({
     wrapperRef,
     reactFlowInstance,
-    selectedUploadNodeId,
+    selectedUploadNodeId: selectedUploadTarget.nodeId,
+    selectedUploadKinds: selectedUploadTarget.kinds,
     selectedNodeIds,
     selectedNodeId,
     nodes,
@@ -450,8 +476,10 @@ export function Canvas() {
     showNodeMenu,
     menuPosition,
     menuAllowedTypes,
+    menuUploadKinds,
     previewConnectionVisual,
     handlePaneClick,
+    handlePaneContextMenu,
     handleNodeSelect,
     handleConnectStart,
     handleConnectEnd,
@@ -492,6 +520,7 @@ export function Canvas() {
         onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onPaneClick={handlePaneClick}
+        onPaneContextMenu={handlePaneContextMenu}
         onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}
         nodeTypes={nodeTypes}
@@ -522,7 +551,8 @@ export function Canvas() {
       <CanvasOverlays
         nodesCount={nodes.length} emptyTitle={t('canvas.emptyHintTitle')} emptySubtitle={t('canvas.emptyHintSubtitle')}
         showNodeMenu={showNodeMenu} previewConnectionVisual={previewConnectionVisual} menuPosition={menuPosition}
-        menuAllowedTypes={menuAllowedTypes} onSelectNodeType={handleNodeSelect} onCloseNodeMenu={closeNodeMenu}
+        menuAllowedTypes={menuAllowedTypes} menuUploadKinds={menuUploadKinds}
+        onSelectNodeType={handleNodeSelect} onCloseNodeMenu={closeNodeMenu}
         imageViewerOpen={imageViewer.isOpen} imageViewerCurrentUrl={imageViewer.currentImageUrl || ''}
         imageViewerList={imageViewer.imageList} imageViewerIndex={imageViewer.currentIndex}
         onCloseImageViewer={closeImageViewer}

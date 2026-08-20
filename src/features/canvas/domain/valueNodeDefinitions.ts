@@ -33,6 +33,7 @@ function createValueSourceDefinition(
     menuIcon: MenuIconKey;
     socketType: SocketType;
     defaultValue: number | string | boolean;
+    menuOrder: number;
   }
 ): CanvasNodeDefinition<ValueSourceNodeData> {
   return {
@@ -40,6 +41,8 @@ function createValueSourceDefinition(
     menuLabelKey: options.menuLabelKey,
     menuIcon: options.menuIcon,
     visibleInMenu: true,
+    menuSection: 'parameters',
+    menuOrder: options.menuOrder,
     capabilities: {
       toolbar: false,
       promptInput: false,
@@ -63,14 +66,16 @@ function createValueSourceDefinition(
 
 export const intSourceNodeDefinition = createValueSourceDefinition(CANVAS_NODE_TYPES.intSource, {
   menuLabelKey: 'node.menu.intSource',
-  menuIcon: 'number',
+  menuIcon: 'integer',
+  menuOrder: 10,
   socketType: 'INT',
   defaultValue: 0,
 });
 
 export const floatSourceNodeDefinition = createValueSourceDefinition(CANVAS_NODE_TYPES.floatSource, {
   menuLabelKey: 'node.menu.floatSource',
-  menuIcon: 'number',
+  menuIcon: 'float',
+  menuOrder: 20,
   socketType: 'FLOAT',
   defaultValue: 0,
 });
@@ -78,13 +83,15 @@ export const floatSourceNodeDefinition = createValueSourceDefinition(CANVAS_NODE
 export const stringSourceNodeDefinition = createValueSourceDefinition(CANVAS_NODE_TYPES.stringSource, {
   menuLabelKey: 'node.menu.stringSource',
   menuIcon: 'text',
+  menuOrder: 30,
   socketType: 'STRING',
   defaultValue: '',
 });
 
 export const booleanSourceNodeDefinition = createValueSourceDefinition(CANVAS_NODE_TYPES.booleanSource, {
   menuLabelKey: 'node.menu.booleanSource',
-  menuIcon: 'toggle',
+  menuIcon: 'boolean',
+  menuOrder: 40,
   socketType: 'BOOLEAN',
   defaultValue: false,
 });

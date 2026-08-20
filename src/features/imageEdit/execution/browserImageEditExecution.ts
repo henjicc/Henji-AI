@@ -3,10 +3,16 @@ import {
   imageEditDocumentToMarkDoc,
   imageEditOperationRegistry,
   IMAGE_EDIT_OPERATION_IDS,
+  type BlurOperationParams,
   type ImageEditDocument,
 } from '@/core/imageEdit';
-import { exportMarkedImage } from '@/features/imageMark/render/exportMarkedImage';
+import {
+  exportMarkedImage,
+  exportMarkedImageFromSource,
+} from '@/features/imageMark/render/exportMarkedImage';
 import { persistImageBinary } from '@/commands/image';
+import { canvasToDataUrl } from '@/services/imageSource';
+import { renderBlurredImage } from './browserBlurRenderer';
 import { imageEditExecutionPort } from './imageEditExecution';
 
 export const browserImageEditExecutionPort = createImageEditExecutionPort(
@@ -15,6 +21,7 @@ export const browserImageEditExecutionPort = createImageEditExecutionPort(
     id: 'browser-canvas',
     supportedOperationIds: [
       IMAGE_EDIT_OPERATION_IDS.orientation,
+      IMAGE_EDIT_OPERATION_IDS.blur,
       IMAGE_EDIT_OPERATION_IDS.annotations,
       IMAGE_EDIT_OPERATION_IDS.crop,
     ],
@@ -27,6 +34,11 @@ async function exportBrowserDocument(sourceImageUrl: string, document: ImageEdit
   if (document.operations.some((operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion && operation.enabled)) {
     throw new Error('当前运行环境尚未提供柔光原生执行器');
   }
+  const blur = getEnabledBlurParams(document);
+  if (blur) {
+    const source = await renderBlurredImage(sourceImageUrl, blur, { purpose: 'export' });
+    return exportMarkedImageFromSource(source, imageEditDocumentToMarkDoc(document));
+  }
   return await exportMarkedImage(sourceImageUrl, imageEditDocumentToMarkDoc(document));
 }
 
@@ -38,9 +50,14 @@ export async function exportImageEditDocument(
     operation.enabled && operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion
   );
   if (hasDiffusion) {
+    const blur = getEnabledBlurParams(document);
+    const diffusionDocument = withoutBlurOperation(document);
+    const preparedSourceUrl = blur
+      ? canvasToDataUrl(await renderBlurredImage(sourceImageUrl, blur, { purpose: 'export' }))
+      : sourceImageUrl;
     const result = await imageEditExecutionPort.execute({
-      sourceImageUrl,
-      document,
+      sourceImageUrl: preparedSourceUrl,
+      document: diffusionDocument,
       purpose: 'export',
       quality: 'high',
       format: 'image/png',
@@ -59,6 +76,22 @@ export async function exportImageEditDocument(
     throw new Error('浏览器图片编辑兼容执行器未返回图片 URL');
   }
   return result.output.url;
+}
+
+export function getEnabledBlurParams(document: ImageEditDocument): BlurOperationParams | null {
+  const operation = document.operations.find((entry) =>
+    entry.enabled && entry.operationId === IMAGE_EDIT_OPERATION_IDS.blur
+  );
+  return (operation?.params as BlurOperationParams | undefined) ?? null;
+}
+
+export function withoutBlurOperation(document: ImageEditDocument): ImageEditDocument {
+  return {
+    ...document,
+    operations: document.operations.filter((operation) =>
+      operation.operationId !== IMAGE_EDIT_OPERATION_IDS.blur
+    ),
+  };
 }
 
 function extensionFromFormat(format: 'image/png' | 'image/jpeg' | 'image/webp'): string {

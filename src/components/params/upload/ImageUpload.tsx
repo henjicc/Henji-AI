@@ -16,6 +16,7 @@ import { fileToBase64 } from '@/utils/fileConverter'
 import { calculateAspectRatio } from '@/utils/smartMatch'
 import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
+import { importLocalMedia } from '@/services/localMediaImport'
 
 interface ImageUploadProps {
   param: ImageUploadParamDef
@@ -53,18 +54,24 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       return
     }
 
-    // 读取图片元数据
-    const img = await loadImage(file)
-    const aspectRatio = calculateAspectRatio(img.width, img.height)
-
     // 转换格式
     let imageData: string
+    let metadata: ImageMetadata
     if (param.format === 'base64') {
+      const img = await loadImage(file)
       const base64 = await fileToBase64(file)
       imageData = param.base64Prefix ? base64 : base64.split(',')[1]
+      metadata = {
+        aspectRatio: calculateAspectRatio(img.width, img.height),
+        width: img.width,
+        height: img.height,
+      }
     } else {
-      // URL 格式：创建 Object URL
-      imageData = URL.createObjectURL(file)
+      const imported = await importLocalMedia(file, 'image')
+      if (imported.kind !== 'image') return
+      imageData = imported.fullPath
+      const [width = 1, height = 1] = imported.aspectRatio.split(':').map(Number)
+      metadata = { aspectRatio: imported.aspectRatio, width, height }
     }
 
     onChange([...value, imageData])
@@ -72,9 +79,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     // 触发智能匹配
     if (onSmartMatch) {
       onSmartMatch({
-        aspectRatio,
-        width: img.width,
-        height: img.height
+        ...metadata,
       })
     }
   }

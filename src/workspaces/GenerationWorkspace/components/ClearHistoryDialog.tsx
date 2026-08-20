@@ -30,7 +30,7 @@ export function ClearHistoryDialog({ open, onClose, onClearFailed, onClearAll }:
       title={t('ui:workspace.clearDialog.title')}
       onClose={close}
       hideHeader
-      widthClassName="w-[400px]"
+      size="compact"
       contentClassName="p-4"
     >
       <div className={UI_TEXT_TITLE_CLASS}>{t('ui:workspace.clearDialog.title')}</div>

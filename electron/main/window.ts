@@ -7,6 +7,7 @@ import { cleanupAllVideoFrameExports } from './services/video/frame-export'
 import { closeLogWindow } from './windows/log-window'
 import { closeCameraStageRenderWindow } from './services/camera-stage-render'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
+import { warmupMediaImportPipeline } from './services/media-import'
 
 const logger = createMainLogger('main.window')
 let mainWindow: BrowserWindow | null = null
@@ -68,6 +69,9 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
     if (win.isDestroyed()) return
     win.maximize()
     win.show()
+    setTimeout(() => {
+      if (!win.isDestroyed()) void warmupMediaImportPipeline()
+    }, 1500)
   })
 
   if (!headless && !win.isVisible()) {

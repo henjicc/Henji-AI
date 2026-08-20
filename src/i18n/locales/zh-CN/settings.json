@@ -176,6 +176,8 @@
     },
     "canvas": {
       "title": "画布行为",
+      "autoInsertTextDisplayLabel": "自动插入文本展示",
+      "autoInsertTextDisplayHint": "连接文本处理节点到生成节点时，通过一个共享、可编辑的文本展示节点中转。已有连线不会被改写。",
       "imageViewerInfoLabel": "图片查看器显示图片信息",
       "imageViewerInfoHint": "放大查看图片时显示分辨率、文件大小等信息，可用 Tab 键快速折叠",
       "uploadFilenameTitleLabel": "上传节点使用文件名作为标题",

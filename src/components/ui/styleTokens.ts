@@ -248,5 +248,25 @@ export const UI_OPTION_ITEM_ACTIVE_OVERRIDE_CLASS =
 export const UI_DROPDOWN_OPTION_ACTIVE_CLASS =
   '!bg-brand-600 !text-white hover:!bg-brand-600';
 
+/**
+ * 居中弹窗的统一响应式尺寸。
+ *
+ * 每档都以当前窗口宽高为基准，并用上下限避免大屏过度铺开、小屏越界：
+ * - compact：确认、重命名、短提示
+ * - form：普通表单与配置
+ * - editor：需要并排编辑或较长内容的悬浮工作窗
+ * - workspace：图片编辑、设置、追踪对比等大工作面
+ * - fullscreen：仅 3D 镜头参考等明确需要占满窗口的场景
+ */
+export const UI_MODAL_SIZE_CLASS = {
+  compact: 'w-[min(92vw,clamp(22rem,32vw,30rem))]',
+  form: 'w-[min(92vw,clamp(30rem,44vw,44rem))]',
+  editor: 'h-[min(78vh,48rem)] w-[min(92vw,clamp(42rem,62vw,68rem))]',
+  workspace: 'h-[min(88vh,64rem)] w-[min(94vw,clamp(64rem,86vw,96rem))]',
+  fullscreen: 'h-full w-full !max-h-none !rounded-none !border-0',
+} as const;
+
+export type UiModalSize = keyof typeof UI_MODAL_SIZE_CLASS;
+
 export const UI_UPLOADER_CARD_BORDER_CLASS = 'border-1.5 border-veil-strong';
 export const UI_UPLOADER_CARD_BORDER_OVERRIDE_CLASS = '!border-1.5 !border-veil-strong';

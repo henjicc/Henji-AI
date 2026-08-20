@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { Play, Upload, Video } from 'lucide-react';
+import { Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -19,7 +19,8 @@ import {
 import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
-import { captureVideoPoster, detectVideoAspectRatioFromSource } from '@/features/canvas/generation/videoPoster';
+import { importCanvasMediaFile } from '@/features/canvas/application/mediaImport';
+import { ICON_NODE_VIDEO_GENERATION, ICON_NODE_VIDEO_UPLOAD } from '@/core/theme/icons';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle';
@@ -35,13 +36,15 @@ import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/use
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
 import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
 import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbnail';
-import { saveUploadVideo } from '@/utils/save';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { VideoViewerModal } from '@/components/mediaViewer/VideoViewerModal';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { CanvasVideoPlayer } from './video/CanvasVideoPlayer';
 import { uiTransition } from '@/components/ui/motion';
+
+const VideoUploadIcon = ICON_NODE_VIDEO_UPLOAD;
+const VideoGenerationIcon = ICON_NODE_VIDEO_GENERATION;
 
 type VideoNodeProps = NodeProps & {
   id: string;
@@ -122,32 +125,13 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     const sequence = uploadSequenceRef.current + 1;
     uploadSequenceRef.current = sequence;
 
-    // 先用本地文件直接探测宽高比，不等待落盘 + 抓帧的完整流程，
-    // 让节点尺寸尽快重新适配，避免“先维持旧尺寸、稍后才跳变”的延迟感
-    const optimisticBlobUrl = URL.createObjectURL(file);
-    detectVideoAspectRatioFromSource(optimisticBlobUrl)
-      .then((ratio) => {
-        if (uploadSequenceRef.current === sequence) {
-          updateNodeData(id, { aspectRatio: ratio });
-        }
-      })
-      .catch(() => {
-        // 探测失败时静默忽略，最终尺寸仍由下方 captureVideoPoster 的结果兜底
-      })
-      .finally(() => URL.revokeObjectURL(optimisticBlobUrl));
-
-    const saved = await saveUploadVideo(file, 'persist');
-    const poster = await captureVideoPoster(saved.fullPath);
+    const imported = await importCanvasMediaFile(file);
     if (uploadSequenceRef.current !== sequence) {
       return;
     }
-    updateNodeData(id, {
-      videoUrl: saved.fullPath,
-      previewImageUrl: poster.posterUrl,
-      aspectRatio: poster.aspectRatio,
-      durationSec: poster.durationSec,
-      sourceFileName: file.name,
-    });
+    if (imported.kind === 'video') {
+      updateNodeData(id, imported.data);
+    }
   }, [id, updateNodeData]);
 
   const handleFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -184,6 +168,12 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     });
   }, [id, processFile]);
 
+  useEffect(() => canvasEventBus.subscribe('upload-node/reupload', ({ nodeId }) => {
+    if (nodeId === id && isUploadVariant) {
+      inputRef.current?.click();
+    }
+  }), [id, isUploadVariant]);
+
   return (
     <div
       className={`
@@ -199,7 +189,9 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={isUploadVariant ? <Upload className="h-4 w-4" /> : <Video className="h-4 w-4" />}
+        icon={isUploadVariant
+          ? <VideoUploadIcon className="h-4 w-4" />
+          : <VideoGenerationIcon className="h-4 w-4" />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -210,6 +202,7 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
           <CanvasVideoPlayer
             src={videoSource}
             knownDuration={data.durationSec}
+            knownHasAudio={data.hasAudio}
             onOpenViewer={() => setIsViewerOpen(true)}
             autoPlayOnMount={isPlayerActive}
           />
@@ -249,12 +242,12 @@ export const VideoNode = memo(({ id, data, selected, type, width, height }: Vide
             onDrop={handleDrop}
             onDragOver={(event) => event.preventDefault()}
           >
-            <Upload className="h-7 w-7 opacity-60" />
+            <VideoUploadIcon className="h-7 w-7 opacity-60" />
             <span className="px-3 text-center text-xs leading-6">{t('node.videoNode.uploadHint')}</span>
           </label>
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-text-muted/85">
-            <Video className="h-7 w-7 opacity-60" />
+            <VideoGenerationIcon className="h-7 w-7 opacity-60" />
             <span className="px-4 text-center text-xs leading-6">{t('node.videoNode.waitingResult')}</span>
           </div>
         )}

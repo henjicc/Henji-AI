@@ -13,10 +13,12 @@ const DEFAULT_MODEL_IDS = {
 }
 
 const MISSING_TYPE_FIXTURES = {
+  universalUploadNode: { data: { displayName: '上传', lockedMediaKind: null, uploadError: null }, width: 240, height: 240 },
   textProcessingNode: {
     data: {
       displayName: '文本处理',
       prompt: '总结输入内容',
+      systemPromptTemplateId: 'text-processing-image-optimizer',
       mediaInputs: {},
       providerId: 'ppio',
       modelId: 'deepseek/deepseek-v4-flash',

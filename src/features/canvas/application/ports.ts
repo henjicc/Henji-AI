@@ -68,15 +68,15 @@ export interface CanvasEventMap {
     nodeId: string;
     file: File;
   };
-  'generation/run': {
-    nodeId: string;
-  };
   'camera-stage/open': {
     nodeId: string;
   };
   'camera-stage/output': {
     nodeId: string;
     kind: 'image' | 'video';
+  };
+  'camera-stage/render-image': {
+    nodeId: string;
   };
   'camera-stage/render-video': {
     nodeId: string;

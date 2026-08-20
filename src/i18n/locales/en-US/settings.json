@@ -176,6 +176,8 @@
     },
     "canvas": {
       "title": "Canvas Behavior",
+      "autoInsertTextDisplayLabel": "Auto-insert Text Display",
+      "autoInsertTextDisplayHint": "Route new text-processing connections through one shared, editable Text Display node. Existing connections stay unchanged.",
       "imageViewerInfoLabel": "Show image info in viewer",
       "imageViewerInfoHint": "Show resolution, file size and more when zooming images. Press Tab to collapse.",
       "uploadFilenameTitleLabel": "Use filename as upload node title",

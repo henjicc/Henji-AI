@@ -51,7 +51,7 @@ export type ToolIconKey = 'edit' | 'split';
 export type ToolEditorKind = 'form' | 'edit' | 'split';
 
 export interface CanvasToolDialogDefinition {
-  widthClassName: string;
+  size: 'editor' | 'workspace';
   resultNodeTitle: string;
   preloadStoryboardMetadata?: boolean;
 }

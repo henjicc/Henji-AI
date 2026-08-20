@@ -79,6 +79,47 @@ export function getIncomingEdges(edges: CanvasEdge[], nodeId: string): CanvasEdg
   return getEdgesByTarget(edges).get(nodeId) ?? EMPTY_EDGES;
 }
 
+let edgesBySourceCacheKey: CanvasEdge[] | null = null;
+let edgesBySourceCacheValue: Map<string, CanvasEdge[]> | null = null;
+
+/** 按 source 节点 id 分桶，供依赖执行与输出连接判断复用。 */
+export function getEdgesBySource(edges: CanvasEdge[]): Map<string, CanvasEdge[]> {
+  if (edgesBySourceCacheKey === edges && edgesBySourceCacheValue) {
+    return edgesBySourceCacheValue;
+  }
+  const map = new Map<string, CanvasEdge[]>();
+  for (const edge of edges) {
+    const bucket = map.get(edge.source);
+    if (bucket) bucket.push(edge);
+    else map.set(edge.source, [edge]);
+  }
+  edgesBySourceCacheKey = edges;
+  edgesBySourceCacheValue = map;
+  return map;
+}
+
+export function getOutgoingEdges(edges: CanvasEdge[], nodeId: string): CanvasEdge[] {
+  return getEdgesBySource(edges).get(nodeId) ?? EMPTY_EDGES;
+}
+
+export function wouldCreateCanvasCycle(
+  sourceNodeId: string,
+  targetNodeId: string,
+  edges: CanvasEdge[],
+): boolean {
+  const outgoing = getEdgesBySource(edges)
+  const pending = [targetNodeId]
+  const visited = new Set<string>()
+  while (pending.length > 0) {
+    const current = pending.pop()
+    if (!current || visited.has(current)) continue
+    if (current === sourceNodeId) return true
+    visited.add(current)
+    for (const edge of outgoing.get(current) ?? []) pending.push(edge.target)
+  }
+  return false
+}
+
 let nodeIndexCacheKey: CanvasNode[] | null = null;
 let nodeIndexCacheValue: Map<string, CanvasNode> | null = null;
 

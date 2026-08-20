@@ -7,6 +7,7 @@ import { createLogger } from '@/core/logging'
 import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import type { HostErrorCode } from '@/core/assistant/hostContracts'
 import {
+  CANVAS_NODE_TYPES,
   DEFAULT_NODE_WIDTH,
   type CanvasEdge,
   type CanvasNode,
@@ -24,6 +25,7 @@ import {
 } from '../domain/socketTypes'
 import { validateParamConnection } from './graphValueResolver'
 import { undoCanvasBatch } from './canvasBatchService'
+import { wouldCreateCanvasCycle } from '../domain/connectionIndex'
 
 const MAX_UNDO_RECORDS = 100
 const FOCUS_HANDLER_WAIT_MS = 2_000
@@ -162,25 +164,6 @@ function resolveNodePosition(placement: CanvasNodePlacement): { x: number; y: nu
   }
 }
 
-function createsCycle(sourceNodeId: string, targetNodeId: string, edges: CanvasEdge[]): boolean {
-  const outgoing = new Map<string, string[]>()
-  for (const edge of edges) {
-    const targets = outgoing.get(edge.source) ?? []
-    targets.push(edge.target)
-    outgoing.set(edge.source, targets)
-  }
-  const pending = [targetNodeId]
-  const visited = new Set<string>()
-  while (pending.length > 0) {
-    const current = pending.pop()
-    if (!current || visited.has(current)) continue
-    if (current === sourceNodeId) return true
-    visited.add(current)
-    pending.push(...(outgoing.get(current) ?? []))
-  }
-  return false
-}
-
 function resolveConnectionHandles(
   sourceNode: CanvasNode,
   targetNode: CanvasNode,
@@ -267,7 +250,7 @@ export function connectCanvasNodes(input: {
       targetNodeId: input.targetNodeId,
     })
   }
-  if (createsCycle(input.sourceNodeId, input.targetNodeId, canvas.edges)) {
+  if (wouldCreateCanvasCycle(input.sourceNodeId, input.targetNodeId, canvas.edges)) {
     throw new CanvasApplicationError('CONFLICT', '该连接会形成画布循环依赖')
   }
   const handles = resolveConnectionHandles(sourceNode, targetNode, input)
@@ -283,7 +266,12 @@ export function connectCanvasNodes(input: {
     : null
   const compatible = paramValidation
     ? paramValidation.compatible
-    : isConnectionCompatible(sourceNode.type, targetNode.type, handles.sourceHandle)
+    : isConnectionCompatible(
+      sourceNode.type,
+      targetNode.type,
+      handles.sourceHandle,
+      sourceNode.data,
+    )
   if (!compatible) {
     throw new CanvasApplicationError('INVALID_INPUT', '节点端口类型不兼容', true, {
       sourceType: sourceNode.type,
@@ -302,20 +290,31 @@ export function connectCanvasNodes(input: {
     throw new CanvasApplicationError('CONFLICT', '节点连接已存在', true, { edgeId: existing.id })
   }
 
+  const beforeNodeIds = new Set(canvas.nodes.map((node) => node.id))
+  const beforeEdgeIds = new Set(canvas.edges.map((edge) => edge.id))
   canvas.onConnect({
     source: input.sourceNodeId,
     target: input.targetNodeId,
     sourceHandle: handles.sourceHandle,
     targetHandle: handles.targetHandle,
   })
-  const edge = useCanvasStore.getState().edges.find((item) => isMatchingEdge(
-    item,
-    input.sourceNodeId,
-    input.targetNodeId,
-    handles.sourceHandle,
-    handles.targetHandle
+  const after = useCanvasStore.getState()
+  const nodeById = new Map(after.nodes.map((node) => [node.id, node]))
+  const directEdge = after.edges.find((item) => isMatchingEdge(
+    item, input.sourceNodeId, input.targetNodeId, handles.sourceHandle, handles.targetHandle
   ))
+  const bridgeEdge = after.edges.find((item) => (
+    item.source === input.sourceNodeId
+    && nodeById.get(item.target)?.type === CANVAS_NODE_TYPES.textAnnotation
+  ))
+  const edge = directEdge ?? (bridgeEdge
+    ? after.edges.find((item) => isMatchingEdge(
+      item, bridgeEdge.target, input.targetNodeId, 'source', handles.targetHandle
+    ))
+    : undefined)
   if (!edge) throw new CanvasApplicationError('CAPABILITY_REJECTED', '画布连接未能创建')
+  const createdNodeIds = after.nodes.filter((node) => !beforeNodeIds.has(node.id)).map((node) => node.id)
+  const createdEdgeIds = after.edges.filter((item) => !beforeEdgeIds.has(item.id)).map((item) => item.id)
   const undoRef = rememberCanvasUndo(input.projectId, 'connect_nodes')
   persistCanvasState()
   return {
@@ -323,6 +322,9 @@ export function connectCanvasNodes(input: {
     edgeId: edge.id,
     sourceNodeId: input.sourceNodeId,
     targetNodeId: input.targetNodeId,
+    effectiveSourceNodeId: edge.source,
+    ...(createdNodeIds.length > 0 ? { createdNodeIds } : {}),
+    ...(createdEdgeIds.length > 0 ? { createdEdgeIds } : {}),
     ...handles,
     undoRef,
   }

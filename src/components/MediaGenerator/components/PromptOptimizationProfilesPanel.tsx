@@ -86,12 +86,12 @@ function PromptTemplateEditor({
       value={value}
       onChange={onChange}
       preset="template-variables"
-      layout="fill-scroll"
+      layout="auto"
       variables={PROMPT_OPTIMIZATION_EDITOR_VARIABLES}
       ariaLabel={placeholder}
       placeholder={placeholder}
       className="relative isolate"
-      editorClassName={`ui-scrollbar max-h-[260px] ${rows > 4 ? 'min-h-[120px]' : 'min-h-[96px]'}`}
+      editorClassName={rows > 4 ? 'min-h-[120px]' : 'min-h-[96px]'}
     />
   )
 }

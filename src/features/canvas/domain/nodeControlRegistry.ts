@@ -112,6 +112,7 @@ const textProcessingNodeDataSchema = nodeDataBaseSchema.extend({
   systemPromptTemplateId: z.string().min(1).max(200).optional(),
   providerId: z.string().min(1).max(200).optional(),
   modelId: z.string().min(1).max(500).optional(),
+  fixedResult: z.boolean().optional(),
 }).strict()
 
 const generationNodeDataSchema = nodeDataBaseSchema.extend({
@@ -145,9 +146,9 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
   },
   {
     nodeType: CANVAS_NODE_TYPES.imageEdit,
-    title: 'AI 图片生成节点',
+    title: '图片生成节点',
     description: '创建配置驱动的图片生成节点；modelId 和 params 必须来自模型目录与模型 schema。',
-    aliases: ['图片生成节点', '生图节点'],
+    aliases: ['AI 图片', 'AI 图片生成节点', '生图节点'],
     dataSchema: imageGenerationNodeDataSchema,
     aiDataSchema: {
       type: 'object',
@@ -164,8 +165,9 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
   },
   {
     nodeType: CANVAS_NODE_TYPES.videoGen,
-    title: 'AI 视频生成节点',
+    title: '视频生成节点',
     description: '创建配置驱动的视频生成节点；模型与参数必须来自目录和 schema。',
+    aliases: ['AI 视频', 'AI 视频生成节点', '生视频节点'],
     dataSchema: generationNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, prompt: { type: 'string', maxLength: 32768 }, modelId: { type: 'string' }, params: { type: 'object', additionalProperties: true } }, additionalProperties: false },
     requiresModelSchema: true,
@@ -173,8 +175,9 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
   },
   {
     nodeType: CANVAS_NODE_TYPES.audioGen,
-    title: 'AI 音频生成节点',
+    title: '音频生成节点',
     description: '创建配置驱动的音频生成节点；模型与参数必须来自目录和 schema。',
+    aliases: ['AI 音频', 'AI 音频生成节点', '生音频节点'],
     dataSchema: generationNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, prompt: { type: 'string', maxLength: 32768 }, modelId: { type: 'string' }, params: { type: 'object', additionalProperties: true } }, additionalProperties: false },
     requiresModelSchema: true,
@@ -202,6 +205,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
         prompt: { type: 'string', maxLength: 32768 },
         providerId: { type: 'string', maxLength: 200 },
         modelId: { type: 'string', maxLength: 500 },
+        fixedResult: { type: 'boolean' },
       },
       additionalProperties: false,
     },
@@ -210,8 +214,8 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
   },
   {
     nodeType: CANVAS_NODE_TYPES.textAnnotation,
-    title: '文字注释节点',
-    description: '创建可编辑的画布文字注释。',
+    title: '文本展示节点',
+    description: '创建可编辑、可连接下游的文本展示节点。',
     dataSchema: textAnnotationNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, content: { type: 'string', maxLength: 32768 } }, additionalProperties: false },
     requiresModelSchema: false,

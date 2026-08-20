@@ -6,7 +6,11 @@ import { UI_CONTENT_OVERLAY_INSET_CLASS, UI_DIALOG_TRANSITION_MS } from './motio
 import { UiIconButton, UiPanel } from './primitives';
 import { useDialogFocusTrap } from './useDialogFocusTrap';
 import { useDialogTransition } from './useDialogTransition';
-import { UI_TEXT_TITLE_CLASS } from './styleTokens';
+import {
+  UI_MODAL_SIZE_CLASS,
+  UI_TEXT_TITLE_CLASS,
+  type UiModalSize,
+} from './styleTokens';
 
 interface UiModalProps {
   isOpen: boolean;
@@ -15,7 +19,10 @@ interface UiModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  widthClassName?: string;
+  /** 统一尺寸语义；业务弹窗不得再自行拼宽高。 */
+  size?: UiModalSize;
+  /** 仅用于非尺寸类的表面微调。 */
+  panelClassName?: string;
   contentClassName?: string;
   hideHeader?: boolean;
   overlayClassName?: string;
@@ -40,7 +47,8 @@ export function UiModal({
   onClose,
   children,
   footer,
-  widthClassName = 'w-[460px]',
+  size = 'compact',
+  panelClassName = '',
   contentClassName = 'px-4 py-4',
   hideHeader = false,
   overlayClassName = '',
@@ -83,7 +91,7 @@ export function UiModal({
       />
       <UiPanel
         variant={isGlass ? 'glass' : 'panel'}
-        className={`relative transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${widthClassName}`}
+        className={`relative flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden transition-opacity duration-200 ${isVisible ? 'opacity-100' : 'opacity-0'} ${UI_MODAL_SIZE_CLASS[size]} ${panelClassName}`}
       >
         {!hideHeader && (
           <div className="flex items-center justify-between border-b border-veil-subtle px-4 py-3">
@@ -100,7 +108,7 @@ export function UiModal({
           </div>
         )}
 
-        <div className={contentClassName}>{children}</div>
+        <div className={`flex min-h-0 flex-1 flex-col ${contentClassName}`}>{children}</div>
 
         {footer && (
           <div className="flex justify-end gap-2 border-t border-veil-subtle px-4 py-3">

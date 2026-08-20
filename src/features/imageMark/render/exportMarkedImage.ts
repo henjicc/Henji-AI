@@ -20,9 +20,27 @@ export async function exportMarkedImage(sourceUrl: string, doc: ImageMarkDoc): P
     hasCrop: Boolean(doc.crop),
   });
 
+  let image: HTMLImageElement;
   try {
-    const image = await loadImageElement(sourceUrl);
-    const oriented = renderOrientedCanvas(image, doc.orientation);
+    image = await loadImageElement(sourceUrl);
+  } catch (error) {
+    logger.error('image_mark.export.failed', {
+      itemCount: doc.items.length,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+  return exportMarkedImageFromSource(image, doc, startedAt);
+}
+
+/** 已在浏览器内存中的底图直接进入标注与裁剪合成，避免重复编码、解码。 */
+export function exportMarkedImageFromSource(
+  source: HTMLImageElement | HTMLCanvasElement,
+  doc: ImageMarkDoc,
+  startedAt = performance.now(),
+): string {
+  try {
+    const oriented = renderOrientedCanvas(source, doc.orientation);
     const context = oriented.getContext('2d');
     if (!context) {
       throw new Error('无法初始化画布');

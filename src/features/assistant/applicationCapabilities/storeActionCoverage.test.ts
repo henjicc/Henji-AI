@@ -19,6 +19,7 @@ import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageSto
 import { useCameraStageSessionStore } from '@/features/cameraStage/store/cameraStageSessionStore'
 import { useCameraStageToolStore } from '@/features/cameraStage/store/cameraStageToolStore'
 import { useCameraStageViewportStore } from '@/features/cameraStage/store/cameraStageViewportStore'
+import { CANVAS_EXECUTION_STATE_STORE_LEDGER } from '@/features/canvas/application/canvasExecutionStateStoreLedger'
 import { CANVAS_GENERATION_PROGRESS_STORE_LEDGER } from '@/features/canvas/application/canvasGenerationProgressStoreLedger'
 import { CANVAS_TEXT_STREAM_STORE_LEDGER } from '@/features/canvas/application/canvasTextStreamStoreLedger'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
@@ -41,6 +42,7 @@ import { THEME_STORE_LEDGER } from '@/features/settings/application-control/them
 import { UI_STORE_LEDGER } from '@/features/settings/application-control/uiStoreLedger'
 import { useLargeUploadPromptStore } from '@/services/largeUploadPolicy'
 import { useAlertDialogStore } from '@/stores/alertDialogStore'
+import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore'
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -90,6 +92,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: ASSISTANT_UI_STORE_LEDGER, state: () => useAssistantUiStore.getState() },
   { ledger: ALERT_DIALOG_STORE_LEDGER, state: () => useAlertDialogStore.getState() },
   { ledger: LARGE_UPLOAD_POLICY_STORE_LEDGER, state: () => useLargeUploadPromptStore.getState() },
+  { ledger: CANVAS_EXECUTION_STATE_STORE_LEDGER, state: () => useCanvasExecutionStateStore.getState() },
   { ledger: CANVAS_GENERATION_PROGRESS_STORE_LEDGER, state: () => useCanvasGenerationProgressStore.getState() },
   { ledger: CANVAS_TEXT_STREAM_STORE_LEDGER, state: () => useCanvasTextStreamStore.getState() },
   { ledger: GENERATION_TASK_PROGRESS_STORE_LEDGER, state: () => useGenerationTaskProgressStore.getState() },

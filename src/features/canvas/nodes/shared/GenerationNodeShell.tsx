@@ -42,13 +42,17 @@ import {
 } from '@/features/canvas/application/graphValueResolver';
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration';
 import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
-import { toModelPromptText } from '@/core/inputs/promptDocument';
+import { createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
 import { useNodeModelParams } from '@/features/canvas/params/useNodeModelParams';
 import { registry } from '@/core/ModelRegistry';
 import { GenerationService } from '@/core/services/GenerationService';
-import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import {
+  registerCanvasNodeExecutor,
+  runCanvasNode,
+  type CanvasNodeExecutionResult,
+} from '@/features/canvas/application/canvasExecutionService';
 import PriceEstimate from '@/components/ui/PriceEstimate';
 import { GenerationPromptEditor } from './GenerationPromptEditor';
 import {
@@ -104,7 +108,7 @@ function buildResultNodeTitle(prompt: string, fallbackTitle: string): string {
 /**
  * 生成类节点通用壳：标题 + 提示词输入（@引用）+ 逐行输入区（媒体/参数/模型）+ 端口。
  * 生成行为由 nodeRegistry 中该节点类型的 generation/ports 声明驱动；
- * 生成动作由顶部工具条触发（见 NodeActionToolbar），通过 canvasEventBus 'generation/run' 事件转发到此处。
+ * 生成动作由顶部工具条触发（见 NodeActionToolbar），统一交给画布运行协调器处理上游依赖。
  */
 export const GenerationNodeShell = memo(({
   id,
@@ -283,11 +287,36 @@ export const GenerationNodeShell = memo(({
     }
   }, [data.modelId, id, selectedModelId, updateNodeData]);
 
-  const handleGenerate = useCallback(async () => {
-    const prompt = toModelPromptText(effectivePromptDocument, { references: promptReferences }).trim();
+  const preflightGenerate = useCallback((): void => {
+    if (!isPromptOverridden) {
+      const prompt = toModelPromptText(effectivePromptDocument, { references: promptReferences }).trim();
+      if (!prompt) {
+        setPromptInvalid(true);
+        throw new Error(t(promptRequiredKey));
+      }
+    }
+    if (!providerKeyConfigured) {
+      showAlertDialog({
+        title: t('common:error'),
+        message: t(apiKeyRequiredKey),
+        type: 'warning',
+        settingsTarget: { tab: 'api' },
+      });
+      throw new Error(t(apiKeyRequiredKey));
+    }
+  }, [apiKeyRequiredKey, effectivePromptDocument, isPromptOverridden, promptReferences, promptRequiredKey, providerKeyConfigured, t]);
+
+  const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
+    const latestCanvas = useCanvasStore.getState();
+    const latestValues = collectInputValues(id, latestCanvas.nodes, latestCanvas.edges);
+    const latestPromptOverride = latestValues[PROMPT_PARAM_ID];
+    const runtimePromptDocument = isPromptOverridden && typeof latestPromptOverride === 'string'
+      ? createPlainTextPromptDocument(latestPromptOverride)
+      : effectivePromptDocument;
+    const prompt = toModelPromptText(runtimePromptDocument, { references: promptReferences }).trim();
     if (!prompt) {
       setPromptInvalid(true);
-      return;
+      throw new Error(t(promptRequiredKey));
     }
     setPromptInvalid(false);
 
@@ -300,7 +329,7 @@ export const GenerationNodeShell = memo(({
         type: 'warning',
         settingsTarget: { tab: 'api', sectionId: 'api-keys' },
       });
-      return;
+      throw new Error(t(apiKeyRequiredKey));
     }
 
     // 连线注入的标量值优先覆盖内联值（数值/源节点 → 参数端口）
@@ -392,14 +421,14 @@ export const GenerationNodeShell = memo(({
     } finally {
       setNodeGenerationProgress(newNodeId, null);
     }
-  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, modelParamValues, modelType, promptReferences, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+    return { status: 'completed', resultNodeIds: [newNodeId] };
+  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, promptReferences, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
-  useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
-    if (nodeId !== id) {
-      return;
-    }
-    void handleGenerate();
-  }), [handleGenerate, id]);
+  useEffect(() => registerCanvasNodeExecutor(id, {
+    kind: 'standard-generation',
+    preflight: preflightGenerate,
+    run: handleGenerate,
+  }), [handleGenerate, id, preflightGenerate]);
 
   return (
     <div
@@ -450,9 +479,7 @@ export const GenerationNodeShell = memo(({
           // 漏填时把“请输入提示词”直接顶到空框里当占位，比在节点底部加一行红字更省空间
           placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
           onChange={handlePromptChange}
-          onSubmit={() => {
-            void handleGenerate();
-          }}
+          onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
           onEditEnd={promptState.onEditEnd}
           onSelectNode={setSelectedNode}
         />

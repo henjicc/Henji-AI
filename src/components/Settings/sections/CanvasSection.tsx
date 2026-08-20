@@ -25,6 +25,8 @@ const CanvasSection: React.FC = () => {
   const setIgnoreAtTag = useSettingsStore((state) => state.setIgnoreAtTagWhenCopyingAndGenerating)
   const canvasLodLevel = useSettingsStore((state) => state.canvasLodLevel)
   const setCanvasLodLevel = useSettingsStore((state) => state.setCanvasLodLevel)
+  const autoInsertTextDisplayNode = useSettingsStore((state) => state.autoInsertTextDisplayNode)
+  const setAutoInsertTextDisplayNode = useSettingsStore((state) => state.setAutoInsertTextDisplayNode)
 
   const lodOptions = LOD_LEVEL_OPTIONS.map((value) => ({
     value,
@@ -41,6 +43,17 @@ const CanvasSection: React.FC = () => {
           options={lodOptions}
           onSelect={(value) => setCanvasLodLevel(value as CanvasLodLevel)}
           className={SETTINGS_INLINE_CONTROL_CLASS}
+        />
+      </UiFormRow>
+
+      <UiFormRow
+        label={t('sections.canvas.autoInsertTextDisplayLabel')}
+        info={t('sections.canvas.autoInsertTextDisplayHint')}
+        inline
+      >
+        <UiSwitch
+          checked={autoInsertTextDisplayNode}
+          onCheckedChange={setAutoInsertTextDisplayNode}
         />
       </UiFormRow>
 

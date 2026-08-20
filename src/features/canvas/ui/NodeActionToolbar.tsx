@@ -42,6 +42,7 @@ import { useAddToAssetLibrary } from '@/features/assets/hooks/useAddToAssetLibra
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService';
 import { checkAssetPaths } from '@/commands/assetLibrary';
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
+import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
 
 interface NodeActionToolbarProps {
   node: CanvasNode;
@@ -59,11 +60,13 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const isStoryboardGen = isStoryboardGenNode(node);
   const isStoryboardSplit = isStoryboardSplitNode(node);
   const canCopyStoryboardText = isStoryboardGen || isStoryboardSplit;
-  const canTriggerGeneration = Boolean(getNodeDefinition(node.type).capabilities.toolbarGenerate);
+  const nodeDefinition = getNodeDefinition(node.type);
+  const canTriggerGeneration = Boolean(nodeDefinition.capabilities.toolbarGenerate);
   const tools = useMemo(() => getNodeToolPlugins(node), [node]);
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const ungroupNode = useCanvasStore((state) => state.ungroupNode);
-  const canReupload = isUploadNode(node) && Boolean(node.data.imageUrl);
+  const canReupload = nodeDefinition.media?.role === 'source'
+    && Boolean(nodeDefinition.getOutputs?.(node.data).length);
   const downloadPresetPaths = useSettingsStore((state) => state.downloadPresetPaths);
   const {
     canDownload,
@@ -227,7 +230,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
             onClick={(event) => {
               event.stopPropagation();
-              canvasEventBus.publish('generation/run', { nodeId: node.id });
+              void runCanvasNode(node.id).catch(() => undefined);
             }}
           >
             <Sparkles className="h-3.5 w-3.5" />
@@ -237,10 +240,10 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
         {isCameraStage && (node.data.outputKind ?? 'image') === 'image' && (
             <UiChipButton
               className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_ACCENT_BUTTON_CLASS}`}
-              disabled={!node.data.imageUrl}
+              disabled={Boolean(node.data.imageExporting || node.data.videoExporting)}
               onClick={(event) => {
                 event.stopPropagation();
-                canvasEventBus.publish('camera-stage/output', { nodeId: node.id, kind: 'image' });
+                canvasEventBus.publish('camera-stage/render-image', { nodeId: node.id });
               }}
             >
               <Image className="h-3.5 w-3.5" />

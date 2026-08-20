@@ -14,8 +14,26 @@ import { getDefaultModelId } from './defaultModels';
 import { getCanvasNodeDefinition } from './nodeRegistry';
 import { hasResumableServerTask } from './resumableTask';
 import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
+import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
+const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
+  [CANVAS_NODE_TYPES.imageEdit]: 'AI 图片',
+  [CANVAS_NODE_TYPES.videoGen]: 'AI 视频',
+  [CANVAS_NODE_TYPES.audioGen]: 'AI 音频',
+  [CANVAS_NODE_TYPES.textAnnotation]: '文本注释',
+};
+
+/** 只迁移精确匹配的旧默认标题，用户自行编辑过的标题保持原样。 */
+export function migrateLegacyGenerationDisplayName(
+  nodeType: CanvasNodeType,
+  data: DynamicValueMap
+): void {
+  const legacyName = LEGACY_GENERATION_DISPLAY_NAMES[nodeType];
+  if (legacyName && data.displayName === legacyName) {
+    data.displayName = DEFAULT_NODE_DISPLAY_NAME[nodeType];
+  }
+}
 
 function isPromptMediaBinding(value: unknown): value is PromptMediaBinding {
   if (!value || typeof value !== 'object') return false;
@@ -67,6 +85,9 @@ export function resetTransientNodeRuntimeState(
   data.videoRenderPhase = null;
   data.videoRenderRequestId = null;
   data.videoRenderError = null;
+  data.imageExporting = false;
+  data.imageRenderRequestId = null;
+  data.imageRenderError = null;
 }
 
 /**

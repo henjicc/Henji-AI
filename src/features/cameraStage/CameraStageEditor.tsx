@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Camera, Clipboard, Film, Save, Undo2, X } from 'lucide-react'
 import { Dropdown, PanelTrigger, UiButton, UiCheckbox, UiIconButton } from '@/components/ui'
+import { createLogger } from '@/core/logging'
 import type { AssetLibraryRecord } from '@/platform/contracts/assetLibrary'
 import {
   collectCameraStageAsset,
@@ -12,7 +13,7 @@ import {
 import { cancelVideoFrameExport } from '@/commands/video'
 import { areCameraAspectRatiosConsistent, getCameraObjects } from './domain/cameraUtils'
 import { buildRenderCameraSchedule } from './domain/renderCameraSchedule'
-import { cropDataUrlToAspectRatio } from './export/cameraStageAspectCrop'
+import { captureCameraStageImageDataUrl } from './export/cameraStageImage'
 import { copySceneScreenshotToClipboard, exportSceneScreenshot, persistSceneScreenshot } from './export/cameraStageScreenshot'
 import {
   exportCameraStageVideo,
@@ -43,6 +44,8 @@ const VIDEO_RESOLUTION_OPTIONS: Array<{ label: string; value: CameraStageVideoRe
   { label: '720p', value: '720p' },
   { label: '1080p', value: '1080p' },
 ]
+
+const logger = createLogger('cameraStage.editor')
 
 interface CameraStageEditorProps {
   /** 返回工程列表 */
@@ -77,7 +80,6 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   const projectName = useCameraStageStore((state) => state.currentProjectName)
   const setSessionProjectId = useCameraStageSessionStore((state) => state.setLastProjectId)
   const setSessionViewMode = useCameraStageSessionStore((state) => state.setStageViewMode)
-  const skyColor = useCameraStageStore((state) => state.sceneSettings.sky.color)
   const animation = useCameraStageStore((state) => state.animation)
   const stateKeyframeCount = useCameraStageStore((state) => state.stateKeyframes.length)
   const cameras = getCameraObjects(objects)
@@ -133,16 +135,14 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
   }, [])
 
   const prepareScreenshotDataUrl = useCallback(async (): Promise<string | null> => {
-    const dataUrl = captureRef.current?.()
-    if (!dataUrl) {
+    const capture = captureRef.current
+    if (!capture || !activeCamera) {
       setStateKeyframeHint('截图失败：未获取到画面')
       return null
     }
-
-    return activeCamera
-      ? await cropDataUrlToAspectRatio(dataUrl, activeCamera.aspectRatio.ratio, skyColor)
-      : dataUrl
-  }, [activeCamera, skyColor])
+    const result = await captureCameraStageImageDataUrl(capture, activeCamera.aspectRatio.ratio)
+    return result.dataUrl
+  }, [activeCamera])
 
   const handleSaveScreenshot = useCallback(async (): Promise<void> => {
     setStateKeyframeAction('save')
@@ -165,7 +165,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
       const fileName = savedPath.split(/[\\/]/).pop() ?? savedPath
       const collectedHint = assetTarget.enabled ? (collected ? '，已加入资产库' : '，资产收录失败') : ''
       setStateKeyframeHint(`${saveMode === 'quick' ? '已快速保存' : '已保存'}：${fileName}${collectedHint}`)
-    } catch {
+    } catch (error) {
+      logger.error('3D 镜头截图导出失败', error, { event: 'camera_stage.screenshot.failed' })
       setStateKeyframeHint('截图导出失败')
     } finally {
       setStateKeyframeAction(null)
@@ -187,7 +188,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
         target: assetTarget,
       })
       setStateKeyframeHint(assetTarget.enabled && !collected ? '当前帧已更新到画布，资产收录失败' : '当前帧已更新到画布')
-    } catch {
+    } catch (error) {
+      logger.error('3D 镜头当前帧更新失败', error, { event: 'camera_stage.canvas_frame.failed' })
       setStateKeyframeHint('当前帧更新失败')
     } finally { setStateKeyframeAction(null) }
   }, [activeCamera, assetTarget, embeddedOutput, prepareScreenshotDataUrl])
@@ -200,7 +202,8 @@ const CameraStageEditor: React.FC<CameraStageEditorProps> = ({
 
       await copySceneScreenshotToClipboard(dataUrl)
       setStateKeyframeHint('已复制到剪贴板')
-    } catch {
+    } catch (error) {
+      logger.error('3D 镜头截图复制失败', error, { event: 'camera_stage.screenshot_copy.failed' })
       setStateKeyframeHint('截图复制失败')
     } finally {
       setStateKeyframeAction(null)

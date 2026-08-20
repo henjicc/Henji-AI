@@ -10,11 +10,16 @@ import { createLogger } from '@/core/logging'
 import type { CameraStageRenderRequest } from '@/platform/contracts/cameraStageRender'
 import { areCameraAspectRatiosConsistent, getCameraObjects } from '../domain/cameraUtils'
 import { buildRenderCameraSchedule } from '../domain/renderCameraSchedule'
+import { exportCameraStageImage } from '../export/cameraStageImage'
 import { exportCameraStageVideo } from '../export/cameraStageVideo'
 import { loadProjectIntoScene } from '../projects/cameraStageProjectService'
 import StageScene from '../scene/StageScene'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 import { useCameraStageStore } from '../store/cameraStageStore'
+import {
+  assertCameraStageRenderOutputKind,
+  assertCameraStageVideoRenderable,
+} from './cameraStageRenderValidation'
 
 const logger = createLogger('cameraStage.backgroundRenderWorker')
 
@@ -65,7 +70,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
 
     const reportFailure = async (error: unknown): Promise<void> => {
       const message = error instanceof Error ? error.message : String(error)
-      logger.error('后台 3D 视频渲染失败', error, {
+      logger.error('后台 3D 渲染失败', error, {
         event: 'camera_stage.background_worker.failed',
         requestId: request.requestId,
         context: { nodeId: request.nodeId, projectId: request.projectId },
@@ -80,6 +85,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
 
     void (async () => {
       try {
+        assertCameraStageRenderOutputKind(request.outputKind)
         await reportCameraStageRenderWorkerEvent({
           type: 'progress',
           requestId: request.requestId,
@@ -106,9 +112,13 @@ export default function CameraStageRenderWorker(): JSX.Element {
         const activeCameraId = cameras.some((camera) => camera.id === loadedState.activeCameraId)
           ? loadedState.activeCameraId
           : exportCamera.id
+        const activeCamera = cameras.find((camera) => camera.id === activeCameraId) ?? exportCamera
         loadedState.setActiveCameraId(activeCameraId)
         loadedState.setViewMode('camera')
-        loadedState.seek(0)
+        const selectedTimeSec = request.outputKind === 'image'
+          ? Math.min(Math.max(0, request.selectedTimeSec ?? 0), loadedState.animation.duration)
+          : 0
+        loadedState.seek(selectedTimeSec)
         setSceneRequestId(request.requestId)
         await waitForCaptureBridge(captureRef)
         await waitForSceneCommit()
@@ -123,6 +133,67 @@ export default function CameraStageRenderWorker(): JSX.Element {
         )
         const renderCameras = cameras.filter((camera) => renderCameraIds.has(camera.id))
 
+        if (request.outputKind === 'image') {
+          logger.info('后台 3D 静态帧渲染开始', {
+            event: 'camera_stage.background_worker.image_start',
+            requestId: request.requestId,
+            context: { nodeId: request.nodeId, projectId: request.projectId, selectedTimeSec },
+          })
+          const capture = captureRef.current
+          if (!capture) throw new Error('后台渲染场景未提供静态帧捕获能力')
+          await reportCameraStageRenderWorkerEvent({
+            type: 'progress',
+            requestId: request.requestId,
+            nodeId: request.nodeId,
+            phase: 'rendering',
+            progress: 0.1,
+          })
+          const image = await exportCameraStageImage(
+            capture,
+            activeCamera.aspectRatio.ratio,
+            request.requestId,
+            request.resolutionPreset === '1080p' ? 1080 : 720,
+          )
+          if (disposed) return
+          if (cancelRef.current) {
+            await reportCameraStageRenderWorkerEvent({
+              type: 'cancelled',
+              requestId: request.requestId,
+              nodeId: request.nodeId,
+            })
+            return
+          }
+          await reportCameraStageRenderWorkerEvent({
+            type: 'completed',
+            requestId: request.requestId,
+            nodeId: request.nodeId,
+            result: {
+              kind: 'image',
+              mediaUrl: image.mediaUrl,
+              mediaPath: image.mediaPath,
+              savedPath: image.mediaPath,
+              width: image.width,
+              height: image.height,
+              aspectRatio: activeCamera.aspectRatio.preset,
+              selectedTimeSec,
+            },
+          })
+          logger.info('后台 3D 静态帧渲染完成', {
+            event: 'camera_stage.background_worker.image_completed',
+            requestId: request.requestId,
+            context: { nodeId: request.nodeId, projectId: request.projectId, selectedTimeSec },
+          })
+          return
+        }
+
+        assertCameraStageVideoRenderable(
+          exportState.stateKeyframes.length,
+          exportState.animation.duration,
+        )
+
+        const firstRenderCameraId = renderSchedule[0]?.cameraId ?? activeCameraId
+        const firstRenderCamera = cameras.find((camera) => camera.id === firstRenderCameraId) ?? activeCamera
+
         logger.info('后台 3D 视频渲染开始', {
           event: 'camera_stage.background_worker.start',
           requestId: request.requestId,
@@ -134,7 +205,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
         })
         const result = await exportCameraStageVideo({
           projectName: exportState.currentProjectName,
-          cameraRatio: exportCamera.aspectRatio.ratio,
+          cameraRatio: firstRenderCamera.aspectRatio.ratio,
           renderCameraCount: renderCameras.length,
           isMultiCamera: renderCameras.length > 1,
           hasInconsistentCameraAspectRatio: !areCameraAspectRatiosConsistent(renderCameras),
@@ -177,7 +248,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           type: 'completed',
           requestId: request.requestId,
           nodeId: request.nodeId,
-          result,
+          result: { kind: 'video', ...result },
         })
         logger.info('后台 3D 视频渲染完成', {
           event: 'camera_stage.background_worker.completed',

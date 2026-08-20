@@ -249,15 +249,30 @@ export interface HenjiCameraStageProjectsApi {
 }
 
 export type HenjiCameraStageRenderResolutionPreset = '720p' | '1080p'
+export type HenjiCameraStageRenderOutputKind = 'image' | 'video'
 
 export interface HenjiCameraStageRenderRequest {
   requestId: string
   nodeId: string
   projectId: string
   resolutionPreset: HenjiCameraStageRenderResolutionPreset
+  outputKind: HenjiCameraStageRenderOutputKind
+  selectedTimeSec?: number
 }
 
-export interface HenjiCameraStageRenderResult {
+export interface HenjiCameraStageImageRenderResult {
+  kind: 'image'
+  mediaUrl: string
+  mediaPath: string
+  savedPath: string
+  width: number
+  height: number
+  aspectRatio: string
+  selectedTimeSec: number
+}
+
+export interface HenjiCameraStageVideoRenderResult {
+  kind: 'video'
   mediaUrl: string
   mediaPath: string
   savedPath: string
@@ -266,6 +281,8 @@ export interface HenjiCameraStageRenderResult {
   width: number
   height: number
 }
+
+export type HenjiCameraStageRenderResult = HenjiCameraStageImageRenderResult | HenjiCameraStageVideoRenderResult
 
 export type HenjiCameraStageRenderEvent =
   | {
@@ -679,7 +696,7 @@ export interface HenjiVideoApi {
   readVideoInfo(source: string): Promise<HenjiVideoInfoResult>
   trimVideoSource(payload: HenjiVideoTrimVideoSourcePayload): Promise<HenjiVideoTrimVideoSourceResult>
   compressVideoToFit(payload: HenjiVideoCompressVideoToFitPayload): Promise<HenjiVideoCompressVideoToFitResult>
-  generateThumbnail(payload: { source: string; timeOffsetSeconds?: number }): Promise<{ dataUrl: string }>
+  generateThumbnail(payload: { source: string; timeOffsetSeconds?: number; knownDurationSeconds?: number }): Promise<{ dataUrl: string }>
   generateThumbnailBytes(payload: { source: string; maxSize?: number }): Promise<{ bytes: Uint8Array }>
   startFrameExport(payload: HenjiVideoStartFrameExportPayload): Promise<{ sessionId: string }>
   appendFrameExport(payload: HenjiVideoAppendFrameExportPayload): Promise<{ frameIndex: number }>
@@ -780,6 +797,10 @@ export interface HenjiMediaApi {
   /** 解析 resources/ 下随应用分发的内置只读资源（如3D 镜头参考角色 GLB）的绝对路径，
    *  并把所在根目录注册进 henji-media:// 白名单；文件不存在或越界时返回 null。 */
   getBundledResourcePath(relativePath: string): Promise<string | null>
+  /** 受控渲染层媒体导入：路径只在主进程校验、复制和探测，不把文件内容送过 IPC。 */
+  importFromPath(request: import('../../src/core/media/localMediaImportContracts').ImportMediaFromPathRequest): Promise<import('../../src/core/media/localMediaImportContracts').LocalMediaImportResult>
+  /** 仅供剪贴板或合成 Blob 等没有真实路径的媒体使用。 */
+  importFromBytes(request: import('../../src/core/media/localMediaImportContracts').ImportMediaFromBytesRequest): Promise<import('../../src/core/media/localMediaImportContracts').LocalMediaImportResult>
   /** 只截取当前 Henji-AI 窗口内、由渲染层注册的应用表面区域，并在主进程覆盖敏感字段。 */
   captureApplicationSurface(request: import('../../src/core/assistant/surfaceObservation').SurfaceCaptureRequest): Promise<import('../../src/core/assistant/surfaceObservation').SurfaceCaptureResult>
 }

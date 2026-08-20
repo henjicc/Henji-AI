@@ -50,7 +50,7 @@ export function RequestChainView({ isOpen, onClose, requestId, events }: Request
       isOpen={isOpen}
       onClose={onClose}
       title={`${t('logsWindow.chain.title')} · ${compactId(requestId)}`}
-      widthClassName="w-[720px]"
+      size="form"
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <span className="text-xs text-text-muted">{t('logsWindow.chain.count', { count: events.length })}</span>

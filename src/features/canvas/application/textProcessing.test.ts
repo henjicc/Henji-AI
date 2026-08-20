@@ -4,10 +4,12 @@ import { DEFAULT_LLM_CAPABILITIES } from '@/core/llm/defaults'
 import type { LlmConfigState } from '@/core/llm/types'
 import {
   buildTextProcessingRequest,
+  createTextProcessingInputFingerprint,
   getTextProcessingMediaKinds,
   listTextProcessingModels,
   resolveTextProcessingSystemPrompt,
   resolveTextProcessingModel,
+  shouldReuseTextProcessingOutput,
 } from './textProcessing'
 
 function createConfig(): LlmConfigState {
@@ -124,5 +126,40 @@ describe('textProcessing', () => {
       .toBe('自定义内容')
     expect(resolveTextProcessingSystemPrompt('自定义内容', 'custom', templates))
       .toBe('自定义内容')
+  })
+
+  it('输入指纹稳定判等，并在模型、提示词或媒体变化时失效', () => {
+    const base = {
+      prompt: '优化提示词',
+      systemPrompt: '只输出结果',
+      providerId: 'active',
+      modelId: 'multimodal',
+      media: { image: ['image-a'], video: [], audio: [] },
+    }
+    const fingerprint = createTextProcessingInputFingerprint(base)
+
+    expect(createTextProcessingInputFingerprint({ ...base })).toBe(fingerprint)
+    expect(createTextProcessingInputFingerprint({ ...base, prompt: '另一条提示词' })).not.toBe(fingerprint)
+    expect(createTextProcessingInputFingerprint({ ...base, modelId: 'other-model' })).not.toBe(fingerprint)
+    expect(createTextProcessingInputFingerprint({
+      ...base,
+      media: { ...base.media, image: ['image-b'] },
+    })).not.toBe(fingerprint)
+  })
+
+  it('只在下游触发、固定结果开启、上次成功且输入未变时复用', () => {
+    const reusable = {
+      trigger: 'dependency' as const,
+      fixedResult: true,
+      lastExecutionStatus: 'success' as const,
+      lastOutputFingerprint: 'v1-same',
+      fingerprint: 'v1-same',
+    }
+
+    expect(shouldReuseTextProcessingOutput(reusable)).toBe(true)
+    expect(shouldReuseTextProcessingOutput({ ...reusable, trigger: 'direct' })).toBe(false)
+    expect(shouldReuseTextProcessingOutput({ ...reusable, fixedResult: false })).toBe(false)
+    expect(shouldReuseTextProcessingOutput({ ...reusable, lastExecutionStatus: 'failed' })).toBe(false)
+    expect(shouldReuseTextProcessingOutput({ ...reusable, fingerprint: 'v1-changed' })).toBe(false)
   })
 })

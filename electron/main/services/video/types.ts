@@ -29,6 +29,7 @@ export interface CompressVideoToFitResultDto {
 export interface GenerateVideoThumbnailPayloadDto {
   source: string
   timeOffsetSeconds?: number
+  knownDurationSeconds?: number
 }
 
 export interface GenerateVideoThumbnailResultDto {

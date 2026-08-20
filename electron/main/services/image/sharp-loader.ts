@@ -8,7 +8,12 @@ let sharpModulePromise: Promise<typeof SharpType> | null = null
  */
 export function loadSharp(): Promise<typeof SharpType> {
   if (!sharpModulePromise) {
-    sharpModulePromise = import('sharp').then((mod) => mod.default)
+    sharpModulePromise = import('sharp')
+      .then((mod) => mod.default)
+      .catch((error) => {
+        sharpModulePromise = null
+        throw error
+      })
   }
   return sharpModulePromise
 }

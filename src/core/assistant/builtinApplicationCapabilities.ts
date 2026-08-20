@@ -372,9 +372,9 @@ export const createImageEditPreviewFromRefCapability = defineCapability({
   id: 'create_image_edit_preview_from_ref',
   version: 1,
   title: '创建图片编辑预览',
-  description: '对生成结果或素材引用创建裁剪、旋转、镜像或标注预览，并在图片编辑器中显示。',
+  description: '对生成结果或素材引用创建裁剪、旋转、镜像、标注或模糊预览，并在图片编辑器中显示。',
   domain: 'image_edit',
-  aliases: ['矩形标注', '文字标注', '图片编辑预览', 'annotate image'],
+  aliases: ['矩形标注', '文字标注', '图片编辑预览', '图片模糊', '高斯模糊', 'annotate image'],
   side: 'frontend',
   readOnly: false,
   // 同 create_image_edit_preview：预览是新建的实体，create 必须一并声明，Facet 才结得了账。

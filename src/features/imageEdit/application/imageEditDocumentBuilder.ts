@@ -4,11 +4,16 @@ import {
   type ImageEditControlOperation,
 } from './imageEditControlCatalog';
 import {
+  createDefaultBlurOperationParams,
   createEmptyMarkDoc,
+  createImageEditOperation,
   createImageEditDocumentFromMarkDoc,
   createMarkId,
+  IMAGE_EDIT_OPERATION_IDS,
   imageEditDocumentToMarkDoc,
   replaceMarkDocInImageEditDocument,
+  upsertImageEditOperation,
+  type BlurOperationParams,
   type ImageEditDocument,
   type MarkItem,
 } from '@/core/imageEdit';
@@ -52,6 +57,7 @@ export function buildImageEditDocumentFromControlOperations(
   let doc = existingDocument ? imageEditDocumentToMarkDoc(existingDocument) : createEmptyMarkDoc();
   let currentWidth = sourceSize.width;
   let currentHeight = sourceSize.height;
+  let blurParams: BlurOperationParams | null = null;
   if (doc.orientation.rotate === 90 || doc.orientation.rotate === 270) {
     [currentWidth, currentHeight] = [currentHeight, currentWidth];
   }
@@ -90,12 +96,28 @@ export function buildImageEditDocumentFromControlOperations(
       continue;
     }
 
+    if (operation.kind === 'blur') {
+      const defaults = createDefaultBlurOperationParams();
+      blurParams = {
+        ...defaults,
+        algorithm: operation.algorithm ?? defaults.algorithm,
+        strength: operation.strength ?? defaults.strength,
+      };
+      continue;
+    }
+
     const parsed = imageEditMarkItemSchema.parse(operation.item);
     const item = { ...parsed, id: parsed.id ?? createMarkId() } as MarkItem;
     doc = { ...doc, items: [...doc.items, item] };
   }
 
-  return existingDocument
+  const document = existingDocument
     ? replaceMarkDocInImageEditDocument(existingDocument, doc)
     : createImageEditDocumentFromMarkDoc(doc);
+  return blurParams
+    ? upsertImageEditOperation(
+      document,
+      createImageEditOperation(IMAGE_EDIT_OPERATION_IDS.blur, blurParams),
+    )
+    : document;
 }

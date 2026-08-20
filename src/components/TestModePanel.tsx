@@ -86,8 +86,9 @@ const TestModePanel: React.FC<TestModePanelProps> = ({
       title={t('testMode.title')}
       onClose={handleClose}
       hideHeader
-      widthClassName="w-[600px] max-h-[80vh] overflow-y-auto border-yellow-500/50"
-      contentClassName="p-6"
+      size="form"
+      panelClassName="border-yellow-500/50"
+      contentClassName="overflow-y-auto p-6"
     >
         {/* 标题栏 */}
         <div className="flex items-center justify-between mb-6">

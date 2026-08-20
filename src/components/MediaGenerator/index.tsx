@@ -5,6 +5,7 @@ import PriceEstimate from '@/components/ui/PriceEstimate'
 import PresetPanel from '@/components/PresetPanel'
 import { VideoTrimModal } from '@/components/videoTrim/VideoTrimModal'
 import { saveUploadVideo } from '@/utils/save'
+import { getPathForFile, toDisplaySrc } from '@/platform/desktopApi'
 
 import { useUIState } from './state/useUIState'
 import { useModelState } from './state/useModelState'
@@ -122,7 +123,9 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
     // 打开窗口不落盘：用 object URL 直接预览。完整视频本身不会因为裁剪而被替换，
     // 确认裁剪只保存 [start, end] 选区，真正切片推迟到生成提交时才做。
     // file 保留在 state 里是为了确认时按需压缩（需要真实文件路径，通过 resolveSource 懒获取）。
-    setVideoTrimState({ index, file: videoFile, previewUrl: URL.createObjectURL(videoFile) })
+    const fullPath = uiState.uploadedVideoFilePaths[index] || getPathForFile(videoFile)
+    if (!fullPath) return
+    setVideoTrimState({ index, file: videoFile, previewUrl: toDisplaySrc(fullPath) })
   }
 
   const handleVideoTrimConfirm = (range: { start: number; end: number }): void => {
@@ -351,9 +354,10 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           const index = uiState.uploadedVideos.indexOf(videoUrl)
           const videoFile = index >= 0 ? uiState.uploadedVideoFiles[index] : undefined
           if (videoFile) {
-            const videoObjectUrl = URL.createObjectURL(videoFile)
+            const fullPath = uiState.uploadedVideoFilePaths[index] || getPathForFile(videoFile)
+            if (!fullPath) return
             window.dispatchEvent(new CustomEvent('open-video-viewer', {
-              detail: { videoUrl: videoObjectUrl }
+              detail: { videoUrl: toDisplaySrc(fullPath) }
             }))
           }
         }}
@@ -381,6 +385,8 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
           maxClipSeconds={videoTrimMaxClipSeconds}
           maxSizeMB={videoTrimMaxSizeMB}
           resolveSource={async () => {
+            const existingPath = uiState.uploadedVideoFilePaths[videoTrimState.index]
+            if (existingPath) return existingPath
             const saved = await saveUploadVideo(videoTrimState.file, 'persist')
             return saved.fullPath
           }}
@@ -395,7 +401,6 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
             uiState.setUploadedVideoFilePaths([newPath])
           }}
           onClose={() => {
-            URL.revokeObjectURL(videoTrimState.previewUrl)
             setVideoTrimState(null)
           }}
         />

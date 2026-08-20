@@ -185,7 +185,7 @@ const connectCanvasNodes = defineApplicationCapability({
   supportsUndo: true,
   requiredScopes: ['canvas'],
   acceptsRefs: ['canvas.project', 'canvas.node'],
-  producesRefs: ['canvas.edge'],
+  producesRefs: ['canvas.edge', 'canvas.node'],
   executionPrerequisites: ['add_canvas_node'],
   inputSchema: z.object({
     projectId: z.string().min(1),
@@ -199,6 +199,9 @@ const connectCanvasNodes = defineApplicationCapability({
     edgeId: z.string(),
     sourceNodeId: z.string(),
     targetNodeId: z.string(),
+    effectiveSourceNodeId: z.string(),
+    createdNodeIds: z.array(z.string()).optional(),
+    createdEdgeIds: z.array(z.string()).optional(),
     sourceHandle: z.string(),
     targetHandle: z.string(),
     undoRef: z.string(),
@@ -215,12 +218,23 @@ const connectCanvasNodes = defineApplicationCapability({
   createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
   control: { execution: { mode: 'immediate', cancelable: false, resultState: 'completed' }, impacts: [{
     effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
+  }, {
+    effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true,
   }] },
-  resolveObservedEffects: (_input, output) => [{
-    effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [],
-    targetRefs: [{ kind: 'canvas.edge', id: output.edgeId }], count: 1, verified: false,
-    evidence: [`edge:${output.edgeId}`],
-  }],
+  resolveObservedEffects: (_input, output) => {
+    const edgeIds = output.createdEdgeIds?.length ? output.createdEdgeIds : [output.edgeId]
+    return [{
+      effect: 'create' as const, entityTypes: ['canvas.edge'], propertyIds: [],
+      targetRefs: edgeIds.map((id) => ({ kind: 'canvas.edge' as const, id })),
+      count: edgeIds.length, verified: false,
+      evidence: edgeIds.map((id) => `edge:${id}`),
+    }, ...(output.createdNodeIds?.length ? [{
+      effect: 'create' as const, entityTypes: ['canvas.node'], propertyIds: [],
+      targetRefs: output.createdNodeIds.map((id) => ({ kind: 'canvas.node' as const, id })),
+      count: output.createdNodeIds.length, verified: false,
+      evidence: output.createdNodeIds.map((id) => `node:${id}`),
+    }] : [])]
+  },
 })
 
 const focusCanvasNode = defineApplicationCapability({

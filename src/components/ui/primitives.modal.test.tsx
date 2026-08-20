@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { UiButton, UiInput } from './primitives';
 import { UiModal } from './UiModal';
+import { UI_MODAL_SIZE_CLASS, type UiModalSize } from './styleTokens';
 
 afterEach(cleanup);
 
@@ -80,5 +81,25 @@ describe('UiModal', () => {
     );
 
     expect(view.getByRole('dialog', { name: '无标题栏弹窗' })).not.toBeNull();
+  });
+
+  it('所有尺寸档位都使用统一的响应式尺寸令牌', () => {
+    const sizes = Object.keys(UI_MODAL_SIZE_CLASS) as UiModalSize[];
+    const view = render(
+      <UiModal isOpen title="尺寸测试" onClose={vi.fn()}>
+        内容
+      </UiModal>,
+    );
+
+    for (const size of sizes) {
+      view.rerender(
+        <UiModal isOpen title="尺寸测试" onClose={vi.fn()} size={size}>
+          内容
+        </UiModal>,
+      );
+      const dialog = view.getByRole('dialog', { name: '尺寸测试' });
+      const panel = dialog.children.item(1);
+      expect(panel?.className).toContain(UI_MODAL_SIZE_CLASS[size]);
+    }
   });
 });

@@ -1,17 +1,31 @@
 import {
+  AudioLines,
   CheckSquare,
   Clapperboard,
+  FileAudio,
+  FileText,
+  FileVideo,
+  Film,
   Grid2x2,
+  Hash,
   Image as ImageIcon,
+  ImagePlus,
+  ImageUp,
+  Images,
   LayoutGrid,
   Library,
   ListChecks,
   MessageCircle,
   Music,
+  Sigma,
   Settings,
   SquarePen,
   Star,
+  ToggleLeft,
+  Type,
+  Upload,
   Video,
+  WandSparkles,
   Wrench,
   type LucideIcon,
 } from 'lucide-react'
@@ -68,3 +82,24 @@ export const ICON_TASK: LucideIcon = ListChecks
 export const ICON_STORYBOARD: LucideIcon = Grid2x2
 /** 多选（工程列表等卡片网格的批量选择入口） */
 export const ICON_MULTI_SELECT: LucideIcon = CheckSquare
+
+/* 画布节点概念 ------------------------------------------------------------- */
+
+export const ICON_NODE_UPLOAD: LucideIcon = Upload
+export const ICON_NODE_IMAGE_UPLOAD: LucideIcon = ImageUp
+export const ICON_NODE_VIDEO_UPLOAD: LucideIcon = FileVideo
+export const ICON_NODE_AUDIO_UPLOAD: LucideIcon = FileAudio
+export const ICON_NODE_IMAGE_GENERATION: LucideIcon = ImagePlus
+export const ICON_NODE_VIDEO_GENERATION: LucideIcon = Film
+export const ICON_NODE_AUDIO_GENERATION: LucideIcon = AudioLines
+export const ICON_NODE_STORYBOARD: LucideIcon = Grid2x2
+export const ICON_NODE_TEXT_PROCESSING: LucideIcon = WandSparkles
+export const ICON_NODE_TEXT_ANNOTATION: LucideIcon = FileText
+export const ICON_NODE_CAMERA_STAGE: LucideIcon = Clapperboard
+export const ICON_NODE_IMAGE_MODEL: LucideIcon = Images
+export const ICON_NODE_VIDEO_MODEL: LucideIcon = Video
+export const ICON_NODE_AUDIO_MODEL: LucideIcon = Music
+export const ICON_NODE_INTEGER: LucideIcon = Hash
+export const ICON_NODE_FLOAT: LucideIcon = Sigma
+export const ICON_NODE_TEXT: LucideIcon = Type
+export const ICON_NODE_BOOLEAN: LucideIcon = ToggleLeft

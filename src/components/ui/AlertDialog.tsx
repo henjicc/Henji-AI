@@ -3,7 +3,7 @@ import { UiButton, UiPanel } from './primitives'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_DIALOG_TRANSITION_MS, uiTransition } from './motion'
 import { useDialogFocusTrap } from './useDialogFocusTrap'
-import { UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS } from './styleTokens'
+import { UI_MODAL_SIZE_CLASS, UI_TEXT_BODY_CLASS, UI_TEXT_TITLE_CLASS } from './styleTokens'
 import { Info, TriangleAlert, X } from 'lucide-react'
 
 /** 弹窗底部的一个动作按钮 */
@@ -120,7 +120,7 @@ export default function AlertDialog({
 
       {/* 弹窗内容 */}
       <UiPanel
-        className="relative p-4 w-[400px] shadow-panel"
+        className={`relative max-h-[calc(100vh-2rem)] overflow-hidden p-4 shadow-panel ${UI_MODAL_SIZE_CLASS.compact}`}
         style={{
           opacity,
           transform: `scale(${0.97 + 0.03 * opacity})`,

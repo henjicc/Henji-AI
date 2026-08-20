@@ -34,7 +34,7 @@ export const LargeUploadChoiceDialog: React.FC = () => {
       title={t('largeUpload.title')}
       onClose={() => { /* 必须做出选择，不允许关闭 */ }}
       hideHeader
-      widthClassName="w-[460px]"
+      size="compact"
       contentClassName="space-y-4 p-5"
     >
         <h3 className="text-base font-semibold text-text-dark">

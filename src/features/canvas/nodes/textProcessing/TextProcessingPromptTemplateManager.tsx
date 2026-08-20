@@ -101,8 +101,8 @@ export function TextProcessingPromptTemplateManager({
       isOpen={isOpen}
       onClose={onClose}
       title="管理提示词模板"
-      widthClassName="w-[min(760px,92vw)]"
-      contentClassName="max-h-[min(620px,74vh)] overflow-hidden p-4"
+      size="editor"
+      contentClassName="overflow-hidden p-4"
       footer={(
         <>
           <UiButton type="button" variant="ghost" onClick={onClose} disabled={saving}>
@@ -114,7 +114,7 @@ export function TextProcessingPromptTemplateManager({
         </>
       )}
     >
-      <div className="grid min-h-[360px] gap-4 sm:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="grid min-h-0 flex-1 gap-4 sm:grid-cols-[240px_minmax(0,1fr)]">
         <div className="flex min-h-0 flex-col gap-2">
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
             {drafts.map((template) => (
@@ -152,7 +152,7 @@ export function TextProcessingPromptTemplateManager({
               ariaLabel="系统提示词"
               placeholder="输入这个模板使用的系统提示词"
               className="min-h-0 flex-1"
-              editorClassName="ui-scrollbar min-h-[240px] max-h-[420px]"
+              editorClassName="ui-scrollbar min-h-0"
             />
             <div className="flex items-center justify-between gap-3">
               <span className={UI_TEXT_META_CLASS}>模板仅包含纯文本，不支持变量。</span>

@@ -59,7 +59,7 @@ export function CreatePresetDialog({
       title={t('ui:presets.create.title')}
       onClose={onClose}
       hideHeader
-      widthClassName="w-full max-w-md"
+      size="form"
       contentClassName="p-6"
     >
         <h3 className="text-xl font-bold mb-4">{t('ui:presets.create.title')}</h3>

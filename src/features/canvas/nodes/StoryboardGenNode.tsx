@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Handle, Position, useUpdateNodeInternals } from '@xyflow/react'
-import { Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { ICON_NODE_STORYBOARD } from '@/core/theme/icons'
 
 import {
   CANVAS_NODE_TYPES,
@@ -57,9 +57,11 @@ import {
   generateStoryboardImage,
 } from '@/features/canvas/nodes/storyboardGen/generation'
 import { GenerationService } from '@/core/services/GenerationService'
-import { canvasEventBus } from '@/features/canvas/application/canvasServices'
+import { registerCanvasNodeExecutor } from '@/features/canvas/application/canvasExecutionService'
 import { StoryboardGridEditor } from '@/features/canvas/nodes/storyboardGen/StoryboardGridEditor'
 import { useStoryboardFramePrompts } from '@/features/canvas/nodes/storyboardGen/useStoryboardFramePrompts'
+
+const StoryboardIcon = ICON_NODE_STORYBOARD
 
 /** prompt/text 由分镜格子描述拼装，不进入逐行参数区 */
 const PROMPT_PARAM_IDS = ['prompt', 'text']
@@ -372,11 +374,9 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     }
   }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, frameDescriptionDrafts, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, setNodeGenerationProgress, setSelectedNode, t, updateNodeData])
 
-  useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
-    if (nodeId !== id) {
-      return
-    }
-    void handleGenerate()
+  useEffect(() => registerCanvasNodeExecutor(id, {
+    kind: 'storyboard-generation',
+    run: handleGenerate,
   }), [handleGenerate, id])
 
   const handleRowChange = useCallback((delta: number): void => {
@@ -403,7 +403,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     >
       <NodeHeader
         className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
-        icon={<Sparkles className="h-4 w-4" />}
+        icon={<StoryboardIcon className="h-4 w-4" />}
         titleText={resolvedTitle}
         iconAdjust={STORYBOARD_GEN_ICON_ADJUST}
         editable
@@ -418,7 +418,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         )}
       />
 
-      <NodeLodPlaceholder title={resolvedTitle} icon={<Sparkles className="h-6 w-6" />} />
+      <NodeLodPlaceholder title={resolvedTitle} icon={<StoryboardIcon className="h-6 w-6" />} />
 
       <StoryboardGridEditor
         nodeId={id}

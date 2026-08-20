@@ -16,6 +16,7 @@ import { StoryboardNode } from './StoryboardNode';
 import { TextAnnotationNode } from './TextAnnotationNode';
 import { TextProcessingNode } from './TextProcessingNode';
 import { UploadNode } from './UploadNode';
+import { UniversalUploadNode } from './UniversalUploadNode';
 import { VideoGenNode } from './VideoGenNode';
 import { CameraStageNode } from './CameraStageNode';
 import { VideoNode } from './VideoNode';
@@ -45,16 +46,20 @@ function withNodePaintFrame<TProps extends object>(
   if (!CANVAS_NODE_PAINT_CONTAINMENT_ENABLED || options?.disabled) {
     return Component;
   }
-  const WrappedNode: NodeRenderComponent<TProps> = (props) => createElement(
-    CanvasNodePaintFrame,
-    options,
-    createElement(Component, props),
-  );
+  const WrappedNode: NodeRenderComponent<TProps> = (props) => {
+    const nodeId = 'id' in props && typeof props.id === 'string' ? props.id : undefined;
+    return createElement(
+      CanvasNodePaintFrame,
+      { ...options, nodeId },
+      createElement(Component, props),
+    );
+  };
   WrappedNode.displayName = `withNodePaintFrame(${Component.displayName ?? Component.name ?? 'Node'})`;
   return WrappedNode;
 }
 
 export const nodeTypes: NodeTypes = {
+  universalUploadNode: withNodePaintFrame(UniversalUploadNode),
   exportImageNode: withNodePaintFrame(ImageNode),
   groupNode: withNodePaintFrame(GroupNode),
   imageNode: withNodePaintFrame(ImageEditNode, { bottom: 60 }),
@@ -90,6 +95,7 @@ export {
   TextAnnotationNode,
   TextProcessingNode,
   UploadNode,
+  UniversalUploadNode,
   VideoGenNode,
   VideoNode,
   IntSourceNode,

@@ -99,7 +99,7 @@ export function ModelSyncDialog({
       isOpen={open}
       onClose={onClose}
       title={`${providerName} 模型`}
-      widthClassName="max-w-2xl"
+      size="form"
       footer={(
         <div className="flex items-center gap-3">
           <span className={UI_TEXT_META_CLASS}>

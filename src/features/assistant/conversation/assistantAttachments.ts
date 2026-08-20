@@ -74,7 +74,7 @@ export async function importAssistantAttachment(file: File): Promise<AssistantAt
   if (inspected.inspectionStatus !== 'ready') {
     throw new Error(inspected.inspectionStatus === 'missing' ? '附件源文件已经失效' : '无法读取附件媒体信息')
   }
-  return { attachment: assetToAgentAttachment(inspected), previewSrc: saved.displaySrc || inspected.displayUrl }
+  return { attachment: assetToAgentAttachment(inspected), previewSrc: inspected.displayUrl }
 }
 
 export async function refreshAssistantAttachments(attachments: AgentAttachment[]): Promise<Array<{

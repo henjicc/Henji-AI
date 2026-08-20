@@ -50,7 +50,7 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
       isOpen={isOpen}
       title={model?.modelId ? '编辑模型' : '添加模型'}
       onClose={onClose}
-      widthClassName="w-[640px]"
+      size="form"
       footer={(
         <>
           <UiButton type="button" variant="muted" onClick={onClose}>取消</UiButton>

@@ -53,6 +53,8 @@ interface SettingsState {
   ignoreAtTagWhenCopyingAndGenerating: boolean;
   /** 画布低倍率简化等级（阈值映射见 features/canvas/nodes/shared/useCanvasContentLod.ts） */
   canvasLodLevel: CanvasLodLevel;
+  /** 文本处理连接生成节点时，是否自动插入共享文本展示节点。 */
+  autoInsertTextDisplayNode: boolean;
   /**
    * 日志捕获模式：standard 沿用截断策略节省体积；full 长文本/图片 base64 不截断。
    * 不持久化——应用重启回落 standard，避免用户忘记关闭导致日志膨胀（见 `partialize`）。
@@ -90,6 +92,7 @@ interface SettingsState {
   setStoryboardGenAutoInferEmptyFrame: (enabled: boolean) => void;
   setIgnoreAtTagWhenCopyingAndGenerating: (enabled: boolean) => void;
   setCanvasLodLevel: (level: CanvasLodLevel) => void;
+  setAutoInsertTextDisplayNode: (enabled: boolean) => void;
   setLogCaptureMode: (mode: LogCaptureMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
@@ -215,6 +218,7 @@ export const useSettingsStore = create<SettingsState>()(
       storyboardGenAutoInferEmptyFrame: true,
       ignoreAtTagWhenCopyingAndGenerating: true,
       canvasLodLevel: 'balanced',
+      autoInsertTextDisplayNode: false,
       logCaptureMode: 'standard',
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
@@ -275,6 +279,7 @@ export const useSettingsStore = create<SettingsState>()(
       setIgnoreAtTagWhenCopyingAndGenerating: (enabled) =>
         set({ ignoreAtTagWhenCopyingAndGenerating: enabled }),
       setCanvasLodLevel: (canvasLodLevel) => set({ canvasLodLevel }),
+      setAutoInsertTextDisplayNode: (autoInsertTextDisplayNode) => set({ autoInsertTextDisplayNode }),
       setLogCaptureMode: (mode) => {
         set({ logCaptureMode: mode });
         void syncLogCaptureMode(mode).catch(() => undefined);

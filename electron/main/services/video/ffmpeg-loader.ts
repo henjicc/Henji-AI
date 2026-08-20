@@ -16,18 +16,28 @@ let ffprobePathPromise: Promise<string> | null = null
 
 export function loadFfmpegPath(): Promise<string> {
   if (!ffmpegPathPromise) {
-    ffmpegPathPromise = import('ffmpeg-static').then((mod) => {
-      const raw = mod.default
-      if (!raw) throw new Error('ffmpeg binary is unavailable on this platform')
-      return resolveUnpackedBinaryPath(raw)
-    })
+    ffmpegPathPromise = import('ffmpeg-static')
+      .then((mod) => {
+        const raw = mod.default
+        if (!raw) throw new Error('ffmpeg binary is unavailable on this platform')
+        return resolveUnpackedBinaryPath(raw)
+      })
+      .catch((error) => {
+        ffmpegPathPromise = null
+        throw error
+      })
   }
   return ffmpegPathPromise
 }
 
 export function loadFfprobePath(): Promise<string> {
   if (!ffprobePathPromise) {
-    ffprobePathPromise = import('ffprobe-static').then((mod) => resolveUnpackedBinaryPath(mod.default.path))
+    ffprobePathPromise = import('ffprobe-static')
+      .then((mod) => resolveUnpackedBinaryPath(mod.default.path))
+      .catch((error) => {
+        ffprobePathPromise = null
+        throw error
+      })
   }
   return ffprobePathPromise
 }

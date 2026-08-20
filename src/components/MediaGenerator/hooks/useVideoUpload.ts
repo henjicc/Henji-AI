@@ -1,6 +1,8 @@
 import { createLogger } from '@/core/logging'
 import { useState, useCallback } from 'react'
-import { generateVideoThumbnail, validateVideo, VideoValidationOptions } from '@/utils/videoProcessing'
+import { validateVideo, VideoValidationOptions } from '@/utils/videoProcessing'
+import { importLocalMedia } from '@/services/localMediaImport'
+import { toDisplaySrc } from '@/platform/desktopApi'
 
 const logger = createLogger('components.MediaGenerator.hooks.useVideoUpload')
 
@@ -46,21 +48,15 @@ export const useVideoUpload = (
       const videoFile = files[0] // 只处理第一个视频文件
       logger.info('[useVideoUpload] 开始处理视频:', { data: [videoFile.name, '大小:', (videoFile.size / 1024 / 1024).toFixed(2), 'MB'] })
 
-      // 1. 验证视频
-      const videoElement = document.createElement('video')
-      videoElement.preload = 'metadata'
-
-      await new Promise((resolve, reject) => {
-        videoElement.onloadedmetadata = resolve
-        videoElement.onerror = reject
-        videoElement.src = URL.createObjectURL(videoFile)
-      })
+      const imported = await importLocalMedia(videoFile, 'video')
+      if (imported.kind !== 'video') throw new Error('视频导入结果类型错误')
+      const [ratioWidth = 1, ratioHeight = 1] = imported.aspectRatio.split(':').map(Number)
 
       const metadata = {
-        duration: videoElement.duration,
-        width: videoElement.videoWidth,
-        height: videoElement.videoHeight,
-        aspectRatio: videoElement.videoWidth / videoElement.videoHeight,
+        duration: imported.durationSeconds,
+        width: ratioWidth,
+        height: ratioHeight,
+        aspectRatio: ratioWidth / ratioHeight,
         fileSize: videoFile.size
       }
 
@@ -74,26 +70,14 @@ export const useVideoUpload = (
           if (onError) {
             onError('视频验证失败', validation.errors.join(', '))
           }
-          URL.revokeObjectURL(videoElement.src)
           setIsProcessingVideo(false)
           return
         }
       }
 
-      // 【关键修复】立即释放用于验证的 blob URL，避免 WebKit 后续访问已释放的 URL
-      // 注意：generateVideoThumbnail 会创建自己的 blob URL
-      URL.revokeObjectURL(videoElement.src)
-
-      // 2. 生成缩略图（用于预览）
-      logger.info('', '[useVideoUpload] 生成缩略图...')
-      const thumbnail = await generateVideoThumbnail(videoFile)
-      logger.info('', '[useVideoUpload] 缩略图生成成功')
-
-      // 3. 保存 File 对象引用、缩略图和视频 URL
-      // 注意：这里不读取视频内容，只保存 File 对象和 URL
-      setUploadedVideos([thumbnail]) // 缩略图用于 UI 显示
+      setUploadedVideos([toDisplaySrc(imported.posterPath)])
       setUploadedVideoFiles([videoFile]) // File 对象引用，点击生成时才读取
-      setUploadedVideoFilePaths([]) // 【关键修复】清空旧路径，确保下次保存时生成新路径
+      setUploadedVideoFilePaths([imported.fullPath])
 
       // 保存视频时长
       if (setUploadedVideoDuration) {

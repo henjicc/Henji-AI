@@ -129,6 +129,7 @@ export const IMAGE_EDIT_DOCUMENT_VERSION = 2 as const;
 
 export const IMAGE_EDIT_OPERATION_IDS = {
   orientation: 'image.orientation',
+  blur: 'image.blur',
   diffusion: 'image.diffusion',
   annotations: 'image.annotations',
   crop: 'image.crop',

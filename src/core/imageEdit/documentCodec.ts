@@ -1,6 +1,6 @@
 import { createEmptyImageEditDocument, createImageEditDocumentFromMarkDoc } from './document';
 import { parseMarkDoc, parseMarkItems, sanitizeMarkCrop, sanitizeMarkOrientation } from './markCodec';
-import { parseDiffusionOperationParams } from './operations';
+import { parseBlurOperationParams, parseDiffusionOperationParams } from './operations';
 import {
   IMAGE_EDIT_DOCUMENT_VERSION,
   IMAGE_EDIT_OPERATION_IDS,
@@ -84,6 +84,12 @@ function parseOperation(value: unknown): ImageEditOperation | null {
   } else if (value.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion) {
     try {
       params = parseDiffusionOperationParams(value.params);
+    } catch {
+      return null;
+    }
+  } else if (value.operationId === IMAGE_EDIT_OPERATION_IDS.blur) {
+    try {
+      params = parseBlurOperationParams(value.params);
     } catch {
       return null;
     }

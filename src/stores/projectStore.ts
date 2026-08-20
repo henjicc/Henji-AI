@@ -279,10 +279,34 @@ function toProjectSummary(record: ProjectSummaryRecord): ProjectSummary {
   };
 }
 
+function assertNoPersistedBlobMedia(value: unknown, pathLabel = 'project'): void {
+  if (typeof value === 'string') {
+    if (value.startsWith('blob:')) {
+      throw new Error(`Transient blob URL reached project persistence at ${pathLabel}`)
+    }
+    return
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoPersistedBlobMedia(item, `${pathLabel}[${index}]`))
+    return
+  }
+  if (typeof value === 'object' && value !== null) {
+    Object.entries(value).forEach(([key, item]) => assertNoPersistedBlobMedia(item, `${pathLabel}.${key}`))
+  }
+}
+
 function toProjectRecord(project: Project): ProjectRecord {
   const encodedProject = encodeProject(project);
   const persistedNodes = encodedProject.nodes;
   const persistedHistory = trimHistoryForPersistence(encodedProject.history);
+
+  if (import.meta.env.DEV) {
+    assertNoPersistedBlobMedia({
+      nodes: persistedNodes,
+      history: persistedHistory,
+      imagePool: encodedProject.imagePool ?? [],
+    });
+  }
 
   return {
     id: encodedProject.id,

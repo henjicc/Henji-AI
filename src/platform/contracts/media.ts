@@ -13,6 +13,13 @@ export interface MediaPlatform {
   getPathForFile(file: File): string
   /** 解析随应用分发的内置只读资源（resources/ 下相对路径）的绝对路径并放行媒体协议读取；不存在时返回 null */
   getBundledResourcePath(relativePath: string): Promise<string | null>
+  importFromPath(request: ImportMediaFromPathRequest): Promise<LocalMediaImportResult>
+  importFromBytes(request: ImportMediaFromBytesRequest): Promise<LocalMediaImportResult>
   captureApplicationSurface(request: SurfaceCaptureRequest): Promise<SurfaceCaptureResult>
 }
 import type { SurfaceCaptureRequest, SurfaceCaptureResult } from '@/core/assistant/surfaceObservation'
+import type {
+  ImportMediaFromBytesRequest,
+  ImportMediaFromPathRequest,
+  LocalMediaImportResult,
+} from '@/core/media/localMediaImportContracts'

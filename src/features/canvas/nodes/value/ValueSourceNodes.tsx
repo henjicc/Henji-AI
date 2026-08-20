@@ -1,5 +1,5 @@
 import { memo, useCallback } from 'react';
-import { ChevronDown, ChevronUp, Hash, ToggleLeft, Type } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { NodeProps } from '@xyflow/react';
 
 import { CANVAS_NODE_TYPES, type ValueSourceNodeData } from '@/features/canvas/domain/canvasNodes';
@@ -7,6 +7,17 @@ import { UiIconButton, UiInput, UiSwitch, UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 import { ValueSourceShell } from './ValueSourceShell';
+import {
+  ICON_NODE_BOOLEAN,
+  ICON_NODE_FLOAT,
+  ICON_NODE_INTEGER,
+  ICON_NODE_TEXT,
+} from '@/core/theme/icons';
+
+const IntegerIcon = ICON_NODE_INTEGER;
+const FloatIcon = ICON_NODE_FLOAT;
+const TextIcon = ICON_NODE_TEXT;
+const BooleanIcon = ICON_NODE_BOOLEAN;
 
 type ValueNodeProps = NodeProps & {
   id: string;
@@ -118,7 +129,7 @@ export const IntSourceNode = memo(({ id, data, selected, width, height }: ValueN
       height={height}
       minWidth={128}
       minHeight={56}
-      icon={<Hash className="h-4 w-4" />}
+      icon={<IntegerIcon className="h-4 w-4" />}
     >
       <NumberValueField value={Number(data.value)} integer onCommit={setValue} historyGroup={historyGroup} />
     </ValueSourceShell>
@@ -140,7 +151,7 @@ export const FloatSourceNode = memo(({ id, data, selected, width, height }: Valu
       height={height}
       minWidth={128}
       minHeight={56}
-      icon={<Hash className="h-4 w-4" />}
+      icon={<FloatIcon className="h-4 w-4" />}
     >
       <NumberValueField value={Number(data.value)} integer={false} onCommit={setValue} historyGroup={historyGroup} />
     </ValueSourceShell>
@@ -164,7 +175,7 @@ export const StringSourceNode = memo(({ id, data, selected, width, height }: Val
       height={height ?? 132}
       minWidth={240}
       minHeight={116}
-      icon={<Type className="h-4 w-4" />}
+      icon={<TextIcon className="h-4 w-4" />}
     >
       <UiTextArea
         value={typeof data.value === 'string' ? data.value : ''}
@@ -190,7 +201,7 @@ export const BooleanSourceNode = memo(({ id, data, selected, width, height }: Va
       width={width}
       height={height}
       minHeight={56}
-      icon={<ToggleLeft className="h-4 w-4" />}
+      icon={<BooleanIcon className="h-4 w-4" />}
     >
       <div className="flex items-center justify-between">
         <span className="text-xs text-text-muted">{String(Boolean(data.value))}</span>

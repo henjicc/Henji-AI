@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 
 import {
   addCanvasNode,
@@ -42,6 +43,7 @@ describe('canvas application service', () => {
       currentViewport: { x: 0, y: 0, zoom: 1 },
       canvasViewportSize: { width: 1_200, height: 800 },
     })
+    useSettingsStore.getState().setAutoInsertTextDisplayNode(false)
     const project = emptyProject()
     useProjectStore.setState({
       projects: [project],
@@ -158,6 +160,142 @@ describe('canvas application service', () => {
       sourceHandle: 'source',
       targetHandle: 'param:__prompt',
     }))
+  })
+
+  it('开启设置后原子插入一个共享文本展示节点并复用于多个目标', () => {
+    const processing = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.textProcessing,
+      placement: { mode: 'viewport_center' },
+      data: { prompt: '优化提示词' },
+    })
+    const firstTarget = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.imageEdit,
+      placement: { mode: 'right_of_node', anchorNodeId: String(processing.nodeId) },
+      data: { prompt: '' },
+    })
+    const secondTarget = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.videoGen,
+      placement: { mode: 'right_of_node', anchorNodeId: String(firstTarget.nodeId) },
+      data: { prompt: '' },
+    })
+    useSettingsStore.getState().setAutoInsertTextDisplayNode(true)
+
+    const first = connectCanvasNodes({
+      projectId,
+      sourceNodeId: String(processing.nodeId),
+      targetNodeId: String(firstTarget.nodeId),
+      targetHandle: 'param:__prompt',
+    })
+    const second = connectCanvasNodes({
+      projectId,
+      sourceNodeId: String(processing.nodeId),
+      targetNodeId: String(secondTarget.nodeId),
+      targetHandle: 'param:__prompt',
+    })
+
+    const displayNodes = useCanvasStore.getState().nodes.filter(
+      (node) => node.type === CANVAS_NODE_TYPES.textAnnotation
+    )
+    expect(displayNodes).toHaveLength(1)
+    expect(first).toMatchObject({
+      effectiveSourceNodeId: displayNodes[0].id,
+      createdNodeIds: [displayNodes[0].id],
+    })
+    expect(first.createdEdgeIds).toHaveLength(2)
+    expect(second).toMatchObject({ effectiveSourceNodeId: displayNodes[0].id })
+    expect(useCanvasStore.getState().edges).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: processing.nodeId, target: displayNodes[0].id }),
+      expect.objectContaining({ source: displayNodes[0].id, target: firstTarget.nodeId }),
+      expect.objectContaining({ source: displayNodes[0].id, target: secondTarget.nodeId }),
+    ]))
+  })
+
+  it('自动插入节点与两条连线可用一次撤销完整恢复', () => {
+    const processing = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.textProcessing,
+      placement: { mode: 'viewport_center' },
+      data: { prompt: '优化提示词' },
+    })
+    const target = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.imageEdit,
+      placement: { mode: 'right_of_node', anchorNodeId: String(processing.nodeId) },
+      data: { prompt: '' },
+    })
+    useSettingsStore.getState().setAutoInsertTextDisplayNode(true)
+
+    const connection = connectCanvasNodes({
+      projectId,
+      sourceNodeId: String(processing.nodeId),
+      targetNodeId: String(target.nodeId),
+      targetHandle: 'param:__prompt',
+    })
+    expect(useCanvasStore.getState().nodes).toHaveLength(3)
+    expect(useCanvasStore.getState().edges).toHaveLength(2)
+
+    expect(undoCanvasChange(projectId, String(connection.undoRef))).toMatchObject({ status: 'undone' })
+    expect(useCanvasStore.getState().nodes).toHaveLength(2)
+    expect(useCanvasStore.getState().edges).toHaveLength(0)
+  })
+
+  it('自动插入连接被循环检测拒绝时不留下展示节点或悬空边', () => {
+    const processing = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.textProcessing,
+      placement: { mode: 'viewport_center' },
+    })
+    const target = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.imageEdit,
+      placement: { mode: 'right_of_node', anchorNodeId: String(processing.nodeId) },
+    })
+    useCanvasStore.getState().onConnect({
+      source: String(target.nodeId),
+      target: String(processing.nodeId),
+      sourceHandle: 'source',
+      targetHandle: 'target',
+    })
+    const before = useCanvasStore.getState()
+    useSettingsStore.getState().setAutoInsertTextDisplayNode(true)
+
+    expect(() => connectCanvasNodes({
+      projectId,
+      sourceNodeId: String(processing.nodeId),
+      targetNodeId: String(target.nodeId),
+      targetHandle: 'param:__prompt',
+    })).toThrow('循环依赖')
+    expect(useCanvasStore.getState().nodes).toHaveLength(before.nodes.length)
+    expect(useCanvasStore.getState().edges).toHaveLength(before.edges.length)
+    expect(useCanvasStore.getState().nodes.some(
+      (node) => node.type === CANVAS_NODE_TYPES.textAnnotation
+    )).toBe(false)
+  })
+
+  it('文本处理无输出时只原子创建一次文本展示节点', () => {
+    const processing = addCanvasNode({
+      projectId,
+      nodeType: CANVAS_NODE_TYPES.textProcessing,
+      placement: { mode: 'viewport_center' },
+    })
+    const beforeHistory = useCanvasStore.getState().history.past.length
+    const firstDisplayId = useCanvasStore.getState().ensureTextDisplayOutput(
+      String(processing.nodeId),
+      { content: '' },
+    )
+    const secondDisplayId = useCanvasStore.getState().ensureTextDisplayOutput(
+      String(processing.nodeId),
+      { content: '' },
+    )
+
+    expect(firstDisplayId).toBeTruthy()
+    expect(secondDisplayId).toBeNull()
+    expect(useCanvasStore.getState().nodes).toHaveLength(2)
+    expect(useCanvasStore.getState().edges).toHaveLength(1)
+    expect(useCanvasStore.getState().history.past).toHaveLength(beforeHistory + 1)
   })
 
   it('撤销之后能重做，重做之后没有可重做操作时拒绝', () => {

@@ -13,6 +13,12 @@ describe('nodeControlRegistry assistant contract', () => {
       .toContain('stringSourceNode')
     expect(searchCanvasNodeTypes('图片生成节点').map((item) => item.nodeType))
       .toContain('imageNode')
+    expect(searchCanvasNodeTypes('AI 图片').map((item) => item.nodeType))
+      .toContain('imageNode')
+    expect(searchCanvasNodeTypes('AI 视频').map((item) => item.nodeType))
+      .toContain('videoGenNode')
+    expect(searchCanvasNodeTypes('AI 音频').map((item) => item.nodeType))
+      .toContain('audioGenNode')
   })
 
   it('公开经过真实连接验证的提示词端口，不要求助手猜 handle', () => {

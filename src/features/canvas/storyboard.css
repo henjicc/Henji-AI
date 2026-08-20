@@ -39,6 +39,7 @@
   --canvas-node-paint-left: 24px;
 
   box-sizing: content-box;
+  position: relative;
   padding:
     var(--canvas-node-paint-top)
     var(--canvas-node-paint-right)
@@ -50,6 +51,43 @@
     calc(-1 * var(--canvas-node-paint-bottom))
     calc(-1 * var(--canvas-node-paint-left));
   contain: paint;
+}
+
+/* 当前执行节点使用独立于选中框的外层光晕：选中仍表示编辑焦点，光晕只表示运行状态。
+   动画仅改变 opacity / transform，不触发布局；节点状态由执行协调器瞬态 store 驱动。 */
+@keyframes canvas-node-executing-pulse {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.015);
+  }
+}
+
+.canvas-node-paint-frame--executing::before {
+  content: '';
+  pointer-events: none;
+  position: absolute;
+  top: var(--canvas-node-paint-top);
+  right: var(--canvas-node-paint-right);
+  bottom: var(--canvas-node-paint-bottom);
+  left: var(--canvas-node-paint-left);
+  z-index: 1;
+  border: 2px solid rgb(var(--accent-rgb) / 0.86);
+  border-radius: var(--node-radius);
+  box-shadow: 0 0 18px rgb(var(--accent-rgb) / 0.38);
+  animation: canvas-node-executing-pulse 1.5s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-node-paint-frame--executing::before {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 /* 内层 frame 负责精确包住节点自己的溢出绘制；外层 React Flow 节点再建立一次

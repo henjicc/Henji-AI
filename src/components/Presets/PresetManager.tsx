@@ -122,7 +122,7 @@ export function PresetManager({ currentModelId, onClose }: PresetManagerProps) {
       title={t('ui:presets.manager.title')}
       onClose={onClose}
       hideHeader
-      widthClassName="w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+      size="editor"
       contentClassName="p-6 flex min-h-0 flex-1 flex-col"
     >
         <div className="preset-header flex justify-between items-center mb-4">

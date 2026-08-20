@@ -30,16 +30,19 @@ import {
   type NodeToolType,
   type StoryboardExportOptions,
   type StoryboardFrameItem,
+  type UploadPlaceholderResolution,
   isStoryboardSplitNode,
 } from '@/features/canvas/domain/canvasNodes';
 import {
+  getCanvasNodeDefinition,
   nodeHasSourceHandle,
   nodeHasTargetHandle,
 } from '@/features/canvas/domain/nodeRegistry';
-import { EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
+import { DEFAULT_NODE_DISPLAY_NAME, EXPORT_RESULT_DISPLAY_NAME } from '@/features/canvas/domain/nodeDisplay';
 import {
   migrateGenerationNodeData,
   migrateGenerationPromptData,
+  migrateLegacyGenerationDisplayName,
   migrateLegacyTargetHandle,
   resetTransientNodeRuntimeState,
 } from '@/features/canvas/domain/nodeMigrations';
@@ -54,8 +57,13 @@ import {
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore';
-import { findStaleParamEdgeIds } from '@/features/canvas/application/graphValueResolver';
-import { getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
+import {
+  findStaleParamEdgeIds,
+  resolveConnectionSourceMediaKind,
+} from '@/features/canvas/application/graphValueResolver';
+import { getNodeIndexById, wouldCreateCanvasCycle } from '@/features/canvas/domain/connectionIndex';
+import { PROMPT_PARAM_ID, parseParamPortId } from '@/features/canvas/domain/socketTypes';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 export type {
   ActiveToolDialog,
@@ -114,6 +122,11 @@ interface CanvasState {
     data?: Partial<CanvasNodeData>
   ) => string;
   addEdge: (source: string, target: string) => string | null;
+  /** 文本处理首次运行且没有输出时，原子创建并连接一个文本展示节点。 */
+  ensureTextDisplayOutput: (
+    sourceNodeId: string,
+    data?: Partial<CanvasNodeData>
+  ) => string | null;
   findNodePosition: (sourceNodeId: string, newNodeWidth: number, newNodeHeight: number) => { x: number; y: number };
   addDerivedUploadNode: (
     sourceNodeId: string,
@@ -147,6 +160,11 @@ interface CanvasState {
     data: Partial<CanvasNodeData>,
     options?: CanvasHistoryGroupOptions
   ) => void;
+  /** 受控媒体导入完成后，把类型待定的上传节点原位替换为具体媒体源节点。 */
+  resolveUploadPlaceholder: (
+    nodeId: string,
+    resolution: UploadPlaceholderResolution
+  ) => boolean;
   endHistoryGroup: (historyGroup: string) => void;
   /** 模型选择器节点展开/折叠专用：collapsedWidth 由组件按当前选中模型 chip 的实测内容宽度传入，
    * 让折叠态节点尺寸精确收紧到内容可容纳的最小宽度，而不是固定常量。 */
@@ -294,6 +312,11 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
       if ('aspectRatio' in mergedData && !mergedData.aspectRatio) {
         mergedData.aspectRatio = DEFAULT_ASPECT_RATIO;
       }
+
+      migrateLegacyGenerationDisplayName(
+        node.type as CanvasNodeType,
+        mergedData as DynamicValueMap
+      );
 
       // 后台任务不会跨应用重启恢复，统一清理节点内持久化的瞬时运行态。
       resetTransientNodeRuntimeState(
@@ -764,17 +787,105 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   onConnect: (connection) => {
     const sourceHandle = normalizeHandleId(connection.sourceHandle) ?? 'source';
     const targetHandle = normalizeHandleId(connection.targetHandle) ?? 'target';
-    set((state) => ({
-      edges: addEdge<CanvasEdge>(
+    const bridgePosition = get().findNodePosition(connection.source, 360, 220)
+    set((state) => {
+      const sourceNode = state.nodes.find((node) => node.id === connection.source)
+      const targetNode = state.nodes.find((node) => node.id === connection.target)
+      const sourceDefinition = sourceNode ? getCanvasNodeDefinition(sourceNode.type) : undefined
+      const shouldLockSourceMedia = sourceDefinition?.connectivity.lockSourceMediaOnFirstConnection === true
+      const sourceMediaKind = sourceNode && targetNode
+        ? resolveConnectionSourceMediaKind(sourceNode, targetNode, sourceHandle, targetHandle)
+        : undefined
+      if (shouldLockSourceMedia && !sourceMediaKind) {
+        return {}
+      }
+
+      const currentLockedKind = shouldLockSourceMedia
+        ? (sourceNode?.data as { lockedMediaKind?: DynamicValue } | undefined)?.lockedMediaKind
+        : null
+      if (currentLockedKind && currentLockedKind !== sourceMediaKind) {
+        return {}
+      }
+
+      const shouldInsertTextDisplay = useSettingsStore.getState().autoInsertTextDisplayNode
+        && sourceNode?.type === CANVAS_NODE_TYPES.textProcessing
+        && targetNode?.type !== CANVAS_NODE_TYPES.textAnnotation
+        && sourceHandle === 'source'
+        && parseParamPortId(targetHandle) === PROMPT_PARAM_ID
+      if (shouldInsertTextDisplay && sourceNode && targetNode) {
+        const nodeById = getNodeIndexById(state.nodes)
+        const existingBridgeEdge = state.edges.find((edge) => (
+          edge.source === sourceNode.id
+          && (edge.sourceHandle ?? 'source') === 'source'
+          && nodeById.get(edge.target)?.type === CANVAS_NODE_TYPES.textAnnotation
+        ))
+        let nextNodes = state.nodes
+        let nextEdges = state.edges
+        let bridgeNodeId = existingBridgeEdge?.target
+        if (!bridgeNodeId) {
+          const bridgeNode = canvasNodeFactory.createNode(
+            CANVAS_NODE_TYPES.textAnnotation,
+            bridgePosition,
+            { displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.textAnnotation] },
+          )
+          bridgeNodeId = bridgeNode.id
+          nextNodes = [...nextNodes, bridgeNode]
+          nextEdges = addEdge<CanvasEdge>({
+            source: sourceNode.id,
+            target: bridgeNode.id,
+            sourceHandle: 'source',
+            targetHandle: 'target',
+            type: 'disconnectableEdge',
+          }, nextEdges)
+        }
+        if (wouldCreateCanvasCycle(bridgeNodeId, targetNode.id, nextEdges)) return {}
+        const connectedEdges = addEdge<CanvasEdge>({
+          source: bridgeNodeId,
+          target: targetNode.id,
+          sourceHandle: 'source',
+          targetHandle,
+          type: 'disconnectableEdge',
+        }, nextEdges)
+        if (connectedEdges.length === state.edges.length && nextNodes === state.nodes) return {}
+        return {
+          nodes: nextNodes,
+          edges: connectedEdges,
+          history: {
+            past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+            future: [],
+          },
+          dragHistorySnapshot: null,
+        }
+      }
+
+      if (sourceNode && targetNode && wouldCreateCanvasCycle(sourceNode.id, targetNode.id, state.edges)) {
+        return {}
+      }
+
+      const nextEdges = addEdge<CanvasEdge>(
         { ...connection, sourceHandle, targetHandle, type: 'disconnectableEdge' },
         state.edges
-      ),
-      history: {
-        past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
-        future: [],
-      },
-      dragHistorySnapshot: null,
-    }));
+      )
+      if (nextEdges.length === state.edges.length) {
+        return {}
+      }
+
+      const nextNodes = shouldLockSourceMedia && sourceNode && !currentLockedKind
+        ? state.nodes.map((node) => node.id === sourceNode.id
+          ? { ...node, data: { ...node.data, lockedMediaKind: sourceMediaKind } }
+          : node)
+        : state.nodes
+
+      return {
+        nodes: nextNodes,
+        edges: nextEdges,
+        history: {
+          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          future: [],
+        },
+        dragHistorySnapshot: null,
+      }
+    });
   },
 
   setCanvasData: (nodes, edges, history) => {
@@ -896,6 +1007,43 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
 
     return edgeId;
+  },
+
+  ensureTextDisplayOutput: (sourceNodeId, data = {}) => {
+    const position = get().findNodePosition(sourceNodeId, 360, 220)
+    let createdNodeId: string | null = null
+    set((state) => {
+      const sourceNode = state.nodes.find((node) => node.id === sourceNodeId)
+      if (!sourceNode || sourceNode.type !== CANVAS_NODE_TYPES.textProcessing) return {}
+      const hasOutput = state.edges.some((edge) => (
+        edge.source === sourceNodeId && (edge.sourceHandle ?? 'source') === 'source'
+      ))
+      if (hasOutput) return {}
+
+      const displayNode = canvasNodeFactory.createNode(
+        CANVAS_NODE_TYPES.textAnnotation,
+        position,
+        data,
+      )
+      const nextEdges = addEdge<CanvasEdge>({
+        source: sourceNodeId,
+        target: displayNode.id,
+        sourceHandle: 'source',
+        targetHandle: 'target',
+        type: 'disconnectableEdge',
+      }, state.edges)
+      createdNodeId = displayNode.id
+      return {
+        nodes: [...state.nodes, displayNode],
+        edges: nextEdges,
+        history: {
+          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          future: [],
+        },
+        dragHistorySnapshot: null,
+      }
+    })
+    return createdNodeId
   },
 
   findNodePosition: (sourceNodeId, newNodeWidth, newNodeHeight) => {
@@ -1243,6 +1391,71 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         dragHistorySnapshot: null,
       };
     });
+  },
+
+  resolveUploadPlaceholder: (nodeId, resolution) => {
+    let resolved = false;
+    set((state) => {
+      const targetIndex = state.nodes.findIndex(
+        (node) => node.id === nodeId && node.type === CANVAS_NODE_TYPES.universalUpload
+      );
+      if (targetIndex < 0) {
+        return {};
+      }
+
+      const currentNode = state.nodes[targetIndex];
+      const targetDefinition = nodeCatalog.getDefinition(resolution.type);
+      const lockedMediaKind = (currentNode.data as { lockedMediaKind?: DynamicValue }).lockedMediaKind
+      if (lockedMediaKind && targetDefinition.media?.kind !== lockedMediaKind) {
+        return {}
+      }
+      const rawCurrentTitle = typeof currentNode.data.displayName === 'string'
+        ? currentNode.data.displayName.trim()
+        : '';
+      const customTitle = rawCurrentTitle
+        && rawCurrentTitle !== DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.universalUpload]
+        ? rawCurrentTitle
+        : '';
+      const importedTitle = typeof resolution.data.displayName === 'string'
+        ? resolution.data.displayName.trim()
+        : '';
+      const nextData = {
+        ...targetDefinition.createDefaultData(),
+        ...resolution.data,
+        displayName: customTitle || importedTitle || targetDefinition.createDefaultData().displayName,
+      } as CanvasNodeData;
+      const nextStyle = { ...(currentNode.style ?? {}) };
+      delete nextStyle.width;
+      delete nextStyle.height;
+
+      const nextNode: CanvasNode = {
+        ...currentNode,
+        type: resolution.type,
+        data: nextData,
+        measured: undefined,
+        width: undefined,
+        height: undefined,
+        style: nextStyle,
+      };
+      const nextNodes = [...state.nodes];
+      nextNodes[targetIndex] = nextNode;
+      const nextEdges = state.edges.map((edge) => edge.source === nodeId
+        ? { ...edge, sourceHandle: 'source' }
+        : edge)
+      resolved = true;
+
+      return {
+        nodes: nextNodes,
+        edges: nextEdges,
+        history: {
+          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          future: [],
+        },
+        dragHistorySnapshot: null,
+        activeHistoryGroup: null,
+      };
+    });
+    return resolved;
   },
 
   endHistoryGroup: (historyGroup) => {

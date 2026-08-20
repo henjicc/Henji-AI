@@ -13,7 +13,6 @@ import {
   createDefaultProviderReasoning,
   createDefaultLlmConfig,
 } from '@/core/llm/defaults'
-import { normalizePromptOptimizationProfileDocuments } from '@/core/llm/promptOptimization'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import type {
   AgentModelCapabilityVerification,
@@ -26,9 +25,13 @@ import type {
   LlmReasoningConfig,
   LlmReasoningEffort,
   PromptOptimizationProfile,
-  TextProcessingPromptTemplate,
 } from '@/core/llm/types'
 import { readJsonFromAppData, writeJsonToAppData } from '@/utils/save'
+import {
+  normalizePromptProfile,
+  normalizePromptProfileWithBuiltInMigration,
+  normalizeTextProcessingPromptTemplates,
+} from './promptConfigurationNormalization'
 
 const logger = createLogger('services.llm.LlmConfigService')
 const LLM_CONFIG_FILE = 'llm-config.json'
@@ -175,19 +178,6 @@ function normalizeModel(model: LlmModelConfig, providers: LlmProviderConfig[]): 
   }
 }
 
-function normalizeProfile(profile: PromptOptimizationProfile): PromptOptimizationProfile {
-  return normalizePromptOptimizationProfileDocuments({
-    ...profile,
-    enabled: profile.enabled !== false,
-    isDefault: profile.isDefault === true,
-    capabilities: {
-      text: profile.capabilities?.text !== false,
-      image: profile.capabilities?.image === true,
-      video: profile.capabilities?.video === true,
-    },
-  })
-}
-
 function resolveSelectedPromptProfileId(
   selectedPromptProfileId: string | undefined,
   promptProfiles: PromptOptimizationProfile[]
@@ -197,22 +187,6 @@ function resolveSelectedPromptProfileId(
     return trimmed
   }
   return promptProfiles[0]?.id
-}
-
-function normalizeTextProcessingPromptTemplate(
-  template: TextProcessingPromptTemplate,
-): TextProcessingPromptTemplate | null {
-  const id = template.id?.trim()
-  const name = template.name?.trim()
-  if (!id || !name) return null
-  const now = new Date().toISOString()
-  return {
-    id,
-    name,
-    systemPrompt: typeof template.systemPrompt === 'string' ? template.systemPrompt : '',
-    createdAt: template.createdAt || now,
-    updatedAt: template.updatedAt || now,
-  }
 }
 
 export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmConfigState {
@@ -227,7 +201,7 @@ export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmCo
     providers
   )
   const promptProfiles = (input.promptProfiles ?? defaults.promptProfiles)
-    .map(normalizeProfile)
+    .map(normalizePromptProfileWithBuiltInMigration)
     .map(profile => {
       const pointsToDeprecatedDefault = profile.providerId === 'openai' && profile.modelId === 'gpt-4o-mini'
       const pointsToDeprecatedDeepSeek = profile.providerId === DEFAULT_DEEPSEEK_PROVIDER_ID
@@ -251,11 +225,7 @@ export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmCo
       }
       return profile
     })
-  const textProcessingPromptTemplates = input.textProcessingPromptTemplates === undefined
-    ? defaults.textProcessingPromptTemplates
-    : input.textProcessingPromptTemplates
-      .map(normalizeTextProcessingPromptTemplate)
-      .filter((template): template is TextProcessingPromptTemplate => template !== null)
+  const textProcessingPromptTemplates = normalizeTextProcessingPromptTemplates(input.textProcessingPromptTemplates)
   if (!promptProfiles.some(profile => profile.isDefault && profile.enabled)) {
     const firstEnabled = promptProfiles.find(profile => profile.enabled)
     if (firstEnabled) {
@@ -366,7 +336,7 @@ export class LlmConfigService {
   async upsertPromptProfile(profile: PromptOptimizationProfile): Promise<LlmConfigState> {
     const config = await this.getConfig()
     const now = new Date().toISOString()
-    const nextProfile = normalizeProfile({
+    const nextProfile = normalizePromptProfile({
       ...profile,
       updatedAt: now,
       createdAt: profile.createdAt || now,

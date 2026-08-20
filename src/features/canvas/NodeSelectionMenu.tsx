@@ -1,141 +1,265 @@
-import { useMemo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Image, Upload, Sparkles, LayoutGrid, Type, Video, AudioLines, Hash, ToggleLeft } from 'lucide-react';
-import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion';
 import {
-  UiOptionButton,
-  UiPanel,
-} from '@/components/ui';
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react'
+import { useTranslation } from 'react-i18next'
 
-import type { CanvasNodeType } from '@/features/canvas/domain/canvasNodes';
-import { nodeCatalog } from '@/features/canvas/application/nodeCatalog';
-import type { MenuIconKey } from '@/features/canvas/domain/nodeRegistry';
+import { UiInput, UiOptionButton, UiPanel } from '@/components/ui'
+import { UI_POPOVER_TRANSITION_MS } from '@/components/ui/motion'
+import {
+  ICON_NODE_AUDIO_GENERATION,
+  ICON_NODE_AUDIO_MODEL,
+  ICON_NODE_AUDIO_UPLOAD,
+  ICON_NODE_BOOLEAN,
+  ICON_NODE_CAMERA_STAGE,
+  ICON_NODE_FLOAT,
+  ICON_NODE_IMAGE_GENERATION,
+  ICON_NODE_IMAGE_MODEL,
+  ICON_NODE_IMAGE_UPLOAD,
+  ICON_NODE_INTEGER,
+  ICON_NODE_STORYBOARD,
+  ICON_NODE_TEXT,
+  ICON_NODE_TEXT_ANNOTATION,
+  ICON_NODE_TEXT_PROCESSING,
+  ICON_NODE_UPLOAD,
+  ICON_NODE_VIDEO_GENERATION,
+  ICON_NODE_VIDEO_MODEL,
+  ICON_NODE_VIDEO_UPLOAD,
+} from '@/core/theme/icons'
+import type { CanvasMediaKind } from '@/features/canvas/canvasUtils'
+import { CANVAS_NODE_TYPES, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
+import {
+  type CanvasNodeDefinition,
+  type MenuIconKey,
+} from '@/features/canvas/domain/nodeRegistry'
+import { nodeCatalog } from '@/features/canvas/application/nodeCatalog'
+import {
+  getSortedNodeMenuDefinitions,
+  getUploadAccept,
+  NODE_MENU_MAX_HEIGHT,
+  NODE_MENU_SECTION_LABEL_KEY,
+  NODE_MENU_SECTION_ORDER,
+  resolveNodeMenuLayout,
+} from '@/features/canvas/application/nodeMenuLayout'
 
 interface NodeSelectionMenuProps {
-  position: { x: number; y: number };
-  allowedTypes?: CanvasNodeType[];
-  onSelect: (type: CanvasNodeType) => void;
-  onClose: () => void;
+  position: { x: number; y: number }
+  allowedTypes?: CanvasNodeType[]
+  uploadKinds: CanvasMediaKind[]
+  onSelect: (type: CanvasNodeType, file?: File) => void
+  onClose: () => void
 }
 
-const iconMap: Record<MenuIconKey, typeof Upload> = {
-  upload: Upload,
-  sparkles: Sparkles,
-  layout: LayoutGrid,
-  text: Type,
-  video: Video,
-  audio: AudioLines,
-  number: Hash,
-  toggle: ToggleLeft,
-};
+const iconMap: Record<MenuIconKey, typeof ICON_NODE_UPLOAD> = {
+  upload: ICON_NODE_UPLOAD,
+  imageUpload: ICON_NODE_IMAGE_UPLOAD,
+  videoUpload: ICON_NODE_VIDEO_UPLOAD,
+  audioUpload: ICON_NODE_AUDIO_UPLOAD,
+  imageGeneration: ICON_NODE_IMAGE_GENERATION,
+  videoGeneration: ICON_NODE_VIDEO_GENERATION,
+  audioGeneration: ICON_NODE_AUDIO_GENERATION,
+  storyboard: ICON_NODE_STORYBOARD,
+  textProcessing: ICON_NODE_TEXT_PROCESSING,
+  textAnnotation: ICON_NODE_TEXT_ANNOTATION,
+  cameraStage: ICON_NODE_CAMERA_STAGE,
+  imageModel: ICON_NODE_IMAGE_MODEL,
+  videoModel: ICON_NODE_VIDEO_MODEL,
+  audioModel: ICON_NODE_AUDIO_MODEL,
+  integer: ICON_NODE_INTEGER,
+  float: ICON_NODE_FLOAT,
+  text: ICON_NODE_TEXT,
+  boolean: ICON_NODE_BOOLEAN,
+}
 
 export function NodeSelectionMenu({
   position,
   allowedTypes,
+  uploadKinds,
   onSelect,
   onClose,
 }: NodeSelectionMenuProps) {
-  const { t } = useTranslation();
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [maxHeight, setMaxHeight] = useState<number | null>(null);
-
-  const allowedTypeSet = useMemo(
-    () => (allowedTypes ? new Set(allowedTypes) : null),
-    [allowedTypes]
-  );
+  const { t } = useTranslation()
+  const menuRef = useRef<HTMLDivElement>(null)
+  const uploadInputRef = useRef<HTMLInputElement>(null)
+  const [isVisible, setIsVisible] = useState(false)
+  const [layout, setLayout] = useState({
+    left: position.x,
+    top: position.y,
+    maxHeight: NODE_MENU_MAX_HEIGHT,
+    transformOrigin: 'top left',
+  })
 
   const menuItems = useMemo(() => {
-    const candidates = !allowedTypeSet || !allowedTypes
-      ? nodeCatalog.getMenuDefinitions()
-      : Array.from(new Set(allowedTypes)).map((type) => nodeCatalog.getDefinition(type));
+    const candidates = allowedTypes
+      ? Array.from(new Set(allowedTypes)).map((type) => nodeCatalog.getDefinition(type))
+      : nodeCatalog.getMenuDefinitions()
+    return getSortedNodeMenuDefinitions(candidates)
+  }, [allowedTypes])
 
-    const dedupedByLabel = new Map<string, (typeof candidates)[number]>();
-    for (const definition of candidates) {
-      const existing = dedupedByLabel.get(definition.menuLabelKey);
-      if (!existing) {
-        dedupedByLabel.set(definition.menuLabelKey, definition);
-        continue;
-      }
+  const sections = useMemo(() => NODE_MENU_SECTION_ORDER
+    .map((section) => ({
+      section,
+      items: menuItems.filter((item) => (item.menuSection ?? 'extensions') === section),
+    }))
+    .filter((entry) => entry.items.length > 0), [menuItems])
 
-      // Prefer user-visible definitions when multiple internal node types share the same label.
-      if (!existing.visibleInMenu && definition.visibleInMenu) {
-        dedupedByLabel.set(definition.menuLabelKey, definition);
-      }
-    }
+  const closeWithAnimation = useCallback((afterClose?: () => void) => {
+    setIsVisible(false)
+    window.setTimeout(() => {
+      onClose()
+      afterClose?.()
+    }, UI_POPOVER_TRANSITION_MS)
+  }, [onClose])
 
-    return Array.from(dedupedByLabel.values());
-  }, [allowedTypeSet, allowedTypes]);
+  const selectItem = useCallback((item: CanvasNodeDefinition, file?: File) => {
+    closeWithAnimation(() => onSelect(item.type, file))
+  }, [closeWithAnimation, onSelect])
 
   useEffect(() => {
-    requestAnimationFrame(() => {
-      setIsVisible(true);
-    });
-  }, []);
+    const frame = requestAnimationFrame(() => {
+      setIsVisible(true)
+      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [])
 
-  // 按面板实际渲染位置与窗口可视高度计算可用高度，避免菜单顶出窗口（顶出部分改为内部滚动）
   useLayoutEffect(() => {
-    const node = menuRef.current;
-    if (!node) {
-      return;
+    const menu = menuRef.current
+    const parent = menu?.offsetParent as HTMLElement | null
+    if (!menu || !parent) {
+      return
     }
-    const margin = 16;
-    const minHeight = 160;
-    const maxAllowed = 480;
-    const top = node.getBoundingClientRect().top;
-    const available = window.innerHeight - top - margin;
-    setMaxHeight(Math.max(minHeight, Math.min(maxAllowed, available)));
-  }, [position]);
-
-  const handleClose = useCallback(() => {
-    setIsVisible(false);
-    setTimeout(onClose, UI_POPOVER_TRANSITION_MS);
-  }, [onClose]);
+    setLayout(resolveNodeMenuLayout({
+      position,
+      parentWidth: parent.clientWidth,
+      parentHeight: parent.clientHeight,
+      menuWidth: menu.offsetWidth,
+      menuHeight: menu.scrollHeight,
+    }))
+  }, [position, sections])
 
   useEffect(() => {
     const onPointerDown = (event: MouseEvent) => {
-      if (menuRef.current?.contains(event.target as Node)) {
-        return;
+      if (event.button !== 0) {
+        return
       }
+      if (!menuRef.current?.contains(event.target as Node)) {
+        closeWithAnimation()
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown, true)
+    return () => document.removeEventListener('mousedown', onPointerDown, true)
+  }, [closeWithAnimation])
 
-      handleClose();
-    };
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeWithAnimation()
+      return
+    }
+    if (event.key === 'Enter') {
+      const activeItem = document.activeElement as HTMLButtonElement | null
+      if (activeItem?.getAttribute('role') === 'menuitem') {
+        event.preventDefault()
+        activeItem.click()
+      }
+      return
+    }
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+      return
+    }
+    event.preventDefault()
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []
+    )
+    if (items.length === 0) {
+      return
+    }
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement)
+    const delta = event.key === 'ArrowDown' ? 1 : -1
+    items[(currentIndex + delta + items.length) % items.length]?.focus()
+  }, [closeWithAnimation])
 
-    document.addEventListener('mousedown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown, true);
-    };
-  }, [handleClose]);
+  const handleUploadFile = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    const uploadItem = menuItems.find((item) => item.type === CANVAS_NODE_TYPES.universalUpload)
+    if (file && uploadItem) {
+      selectItem(uploadItem, file)
+    }
+  }, [menuItems, selectItem])
 
   return (
     <UiPanel
       ref={menuRef}
-      className={`
-        ui-scrollbar absolute z-50 w-[240px] overflow-y-auto overflow-x-hidden p-1
-        transition-opacity duration-150
-        ${isVisible ? 'opacity-100' : 'opacity-0'}
-      `}
-      style={{ left: position.x, top: position.y, maxHeight: maxHeight ?? undefined }}
+      variant="glass"
+      role="menu"
+      aria-label={t('node.menuTitle')}
+      className={`ui-scrollbar absolute z-dropdown w-[284px] overflow-y-auto overflow-x-hidden p-2 transition-[opacity,transform] duration-150 ease-out ${
+        isVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-1 scale-[0.98] opacity-0'
+      }`}
+      style={{
+        left: layout.left,
+        top: layout.top,
+        maxHeight: layout.maxHeight,
+        transformOrigin: layout.transformOrigin,
+      }}
+      onKeyDown={handleKeyDown}
     >
-      {menuItems.map((item) => {
-        const Icon = iconMap[item.menuIcon] ?? Image;
-        return (
-          <UiOptionButton
-            key={item.type}
-            variant="menu"
-            className="w-full gap-3 rounded-lg px-3 py-2.5 !transition-none"
-            onClick={() => {
-              handleClose();
-              setTimeout(() => onSelect(item.type), UI_POPOVER_TRANSITION_MS + 10);
-            }}
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-bg-dark">
-              <Icon className="h-4 w-4 text-accent" />
-            </div>
-            <span className="text-sm text-text-dark">{t(item.menuLabelKey)}</span>
-          </UiOptionButton>
-        );
-      })}
+      <div className="relative px-3 pb-2 pt-1 text-sm font-semibold text-text-dark">
+        {t('node.menuTitle')}
+      </div>
+      {sections.map(({ section, items }, sectionIndex) => (
+        <div
+          key={section}
+          className={sectionIndex > 0
+            ? 'relative mt-1 border-t border-border-dark/60 pt-1'
+            : 'relative'}
+        >
+          <div className="px-3 pb-1 pt-1 text-2xs font-medium tracking-wide text-text-muted">
+            {t(NODE_MENU_SECTION_LABEL_KEY[section])}
+          </div>
+          {items.map((item) => {
+            const Icon = iconMap[item.menuIcon]
+            const chooseFileFirst = Boolean(allowedTypes)
+              && item.menuBehavior === 'chooseMediaBeforeCreate'
+            return (
+              <UiOptionButton
+                key={item.type}
+                role="menuitem"
+                tabIndex={-1}
+                variant="menu"
+                className="h-11 w-full gap-3 rounded-lg px-3 !transition-none"
+                onClick={() => {
+                  if (chooseFileFirst) {
+                    uploadInputRef.current?.click()
+                    return
+                  }
+                  selectItem(item)
+                }}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-layer/70">
+                  <Icon className="h-4 w-4 text-accent" />
+                </span>
+                <span className="text-sm font-medium text-text-dark">{t(item.menuLabelKey)}</span>
+              </UiOptionButton>
+            )
+          })}
+        </div>
+      ))}
+      <UiInput
+        ref={uploadInputRef}
+        type="file"
+        accept={getUploadAccept(uploadKinds)}
+        className="hidden"
+        onChange={handleUploadFile}
+      />
     </UiPanel>
-  );
+  )
 }

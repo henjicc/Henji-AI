@@ -1,5 +1,12 @@
 import { parseMarkItems, sanitizeMarkCrop, sanitizeMarkOrientation } from './markCodec';
 import {
+  createDefaultBlurOperationParams,
+  hasBlurEffect,
+  InvalidBlurOperationParamsError,
+  parseBlurOperationParams as parseBlurParams,
+  type BlurOperationParams,
+} from './blurParams';
+import {
   createDefaultDiffusionOperationParams,
   hasDiffusionEffect,
   InvalidDiffusionOperationParamsError,
@@ -42,6 +49,17 @@ export function parseDiffusionOperationParams(value: unknown): DiffusionOperatio
     return parseDiffusionParams(value);
   } catch (error) {
     if (error instanceof InvalidDiffusionOperationParamsError) {
+      throw new InvalidImageEditOperationParamsError(error.message);
+    }
+    throw error;
+  }
+}
+
+export function parseBlurOperationParams(value: unknown): BlurOperationParams {
+  try {
+    return parseBlurParams(value);
+  } catch (error) {
+    if (error instanceof InvalidBlurOperationParamsError) {
       throw new InvalidImageEditOperationParamsError(error.message);
     }
     throw error;
@@ -153,6 +171,15 @@ export function createBuiltInImageEditOperationRegistry(): ImageEditOperationReg
     createDefaultParams: createDefaultDiffusionOperationParams,
     parseParams: parseDiffusionOperationParams,
     hasEffect: hasDiffusionEffect,
+  });
+  registry.register<BlurOperationParams>({
+    id: IMAGE_EDIT_OPERATION_IDS.blur,
+    stage: 'effect',
+    order: 140,
+    supportsMultiple: false,
+    createDefaultParams: createDefaultBlurOperationParams,
+    parseParams: parseBlurOperationParams,
+    hasEffect: hasBlurEffect,
   });
   return registry;
 }

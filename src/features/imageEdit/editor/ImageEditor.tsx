@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { IMAGE_EDIT_OPERATION_IDS, type ImageEditDocument } from '@/core/imageEdit';
+import {
+  IMAGE_EDIT_OPERATION_IDS,
+  type ImageEditDocument,
+} from '@/core/imageEdit';
 import { createLogger } from '@/core/logging';
 import { MarkEditor } from '@/features/imageMark/editor/MarkEditor';
 import type { MarkEditorStyleState } from '@/features/imageMark/editor/shared';
-import { resolveImageDisplayUrl } from '@/services/imageSource';
+import { renderOrientedCanvas } from '@/features/imageMark/render/orientedImage';
+import { canvasToDataUrl, resolveImageDisplayUrl } from '@/services/imageSource';
 import { imageEditExecutionPort } from '../execution/imageEditExecution';
+import {
+  getEnabledBlurParams,
+  withoutBlurOperation,
+} from '../execution/browserImageEditExecution';
+import { renderBlurredImage } from '../execution/browserBlurRenderer';
 import { ImageToolPanel } from './ImageToolPanel';
 import { ImageEditorDocumentProvider } from './ImageEditorDocumentProvider';
 import type { ImageEditorPreviewState } from './ImageEditorDocumentContext';
@@ -37,7 +46,7 @@ export function ImageEditor({
   const session = useImageEditorSession({ initialDocument, onDocumentChange });
   const [previewSourceUrl, setPreviewSourceUrl] = useState(sourceImageUrl);
   /**
-   * WebGPU 预览直接以画好的 canvas 交给 MarkEditor。绕 objectURL 的话每次改参数都要
+   * 像素效果预览直接以画好的 canvas 交给 MarkEditor。绕 objectURL 的话每次改参数都要
    * 「toBlob(PNG) → `<img>` 再解码」一趟，实测 1885×1060 要 19.8ms，比整条 GPU 管线
    * （金字塔 3.1ms + 合成 3.0ms）还贵两倍多。Sharp 降级返回的是 URL，仍走下面那条路。
    */
@@ -52,6 +61,8 @@ export function ImageEditor({
   const diffusionEnabled = session.document.operations.some((operation) =>
     operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion && operation.enabled
   );
+  const blurParams = getEnabledBlurParams(session.document);
+  const rasterEffectEnabled = diffusionEnabled || blurParams !== null;
   const orientation = session.markDoc.orientation;
   const logicalImageSize = useMemo(() => {
     if (!sourceSize) return undefined;
@@ -76,7 +87,7 @@ export function ImageEditor({
   useEffect(() => {
     const sourceChanged = sourceImageUrlRef.current !== sourceImageUrl;
     sourceImageUrlRef.current = sourceImageUrl;
-    if (!diffusionEnabled) {
+    if (!rasterEffectEnabled) {
       setPreviewSourceUrl(sourceImageUrl);
       previewFrameRef.current = null;
       setPreviewFrame(null);
@@ -104,9 +115,30 @@ export function ImageEditor({
     });
     void (async (): Promise<void> => {
       try {
+        let executionSourceUrl = sourceImageUrl;
+        let executionDocument = session.document;
+        if (blurParams) {
+          const blurred = await renderBlurredImage(sourceImageUrl, blurParams, {
+            purpose: 'preview',
+            maxPixels: 2_000_000,
+            signal: abortController.signal,
+          });
+          if (disposed || revision !== revisionRef.current) return;
+          if (!diffusionEnabled) {
+            const canvas = renderOrientedCanvas(blurred, orientation);
+            previewFrameRef.current = canvas;
+            setPreviewFrame(canvas);
+            setPreviewOrientationApplied(true);
+            setPreviewState({ phase: 'idle', backend: 'browser-canvas' });
+            return;
+          }
+          executionSourceUrl = canvasToDataUrl(blurred);
+          executionDocument = withoutBlurOperation(session.document);
+        }
+        if (!diffusionEnabled) return;
         const result = await imageEditExecutionPort.execute({
-          sourceImageUrl,
-          document: session.document,
+          sourceImageUrl: executionSourceUrl,
+          document: executionDocument,
           purpose: 'preview',
           quality: 'realtime',
           maxPixels: 2_000_000,
@@ -148,7 +180,7 @@ export function ImageEditor({
       disposed = true;
       abortController.abort();
     };
-  }, [diffusionEnabled, session.document, sourceImageUrl]);
+  }, [blurParams, diffusionEnabled, orientation, rasterEffectEnabled, session.document, sourceImageUrl]);
 
   const documentController = useMemo(() => ({
     ...session.documentController,

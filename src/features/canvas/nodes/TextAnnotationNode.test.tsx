@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentProps } from 'react'
 
@@ -11,6 +11,8 @@ const storeMocks = vi.hoisted(() => ({
   endHistoryGroup: vi.fn(),
   setSelectedNode: vi.fn(),
   updateNodeData: vi.fn(),
+  nodes: [] as Array<Record<string, unknown>>,
+  edges: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock('@xyflow/react', () => ({
@@ -37,7 +39,8 @@ vi.mock('@/components/ui', () => ({
 
 vi.mock('@/stores/canvasStore', () => ({
   useCanvasStore: (selector: (state: Record<string, unknown>) => unknown) => selector({
-    edges: [],
+    nodes: storeMocks.nodes,
+    edges: storeMocks.edges,
     endHistoryGroup: storeMocks.endHistoryGroup,
     setSelectedNode: storeMocks.setSelectedNode,
     updateNodeData: storeMocks.updateNodeData,
@@ -70,6 +73,8 @@ describe('TextAnnotationNode', () => {
     storeMocks.endHistoryGroup.mockReset()
     storeMocks.setSelectedNode.mockReset()
     storeMocks.updateNodeData.mockReset()
+    storeMocks.nodes = []
+    storeMocks.edges = []
     useCanvasTextStreamStore.getState().clearAllPreviews()
   })
 
@@ -87,7 +92,10 @@ describe('TextAnnotationNode', () => {
   })
 
   it('生成期间直接用瞬态预览做实时 Markdown 渲染', () => {
-    useCanvasTextStreamStore.getState().setPreview('text-result-1', '# 实时标题')
+    useCanvasTextStreamStore.getState().setPreview('text-result-1', {
+      content: '# 实时标题',
+      reasoning: '',
+    })
     const rendered = render(<TextAnnotationNode {...createProps({ content: '', isGenerating: true })} />)
 
     expect(rendered.getByTestId('markdown').textContent).toBe('# 实时标题')
@@ -96,10 +104,67 @@ describe('TextAnnotationNode', () => {
 
   it('超长流式结果退回纯文本预览，避免持续解析 Markdown', () => {
     const longPreview = `# ${'长文本'.repeat(2_001)}`
-    useCanvasTextStreamStore.getState().setPreview('text-result-1', longPreview)
+    useCanvasTextStreamStore.getState().setPreview('text-result-1', {
+      content: longPreview,
+      reasoning: '',
+    })
     const rendered = render(<TextAnnotationNode {...createProps({ content: '', isGenerating: true })} />)
 
     expect(rendered.queryByTestId('markdown')).toBeNull()
     expect(rendered.getByText(longPreview)).toBeTruthy()
+  })
+
+  it('生成期间展示思考过程，但正式内容仍保持独立', () => {
+    useCanvasTextStreamStore.getState().setPreview('text-result-1', {
+      content: '最终回答',
+      reasoning: '先分析用户意图',
+    })
+    const rendered = render(<TextAnnotationNode {...createProps({ content: '', isGenerating: true })} />)
+
+    expect(rendered.getByLabelText('node.textAnnotation.reasoning').textContent)
+      .toContain('先分析用户意图')
+    expect(rendered.getByTestId('markdown').textContent).toBe('最终回答')
+  })
+
+  it('生成失败后仍允许编辑已保留的部分结果', () => {
+    const rendered = render(<TextAnnotationNode {...createProps({ generationError: '上游失败' })} />)
+
+    fireEvent.click(rendered.getByTestId('markdown'))
+    expect(rendered.getByRole('textbox', { name: 'text-editor' })).toBeTruthy()
+  })
+
+  it('普通字符串输入变化时同步内容与上游修订', async () => {
+    storeMocks.nodes = [{
+      id: 'string-source',
+      type: 'stringSourceNode',
+      position: { x: 0, y: 0 },
+      data: { value: '来自连线的新内容' },
+    }]
+    storeMocks.edges = [{ id: 'edge-1', source: 'string-source', target: 'text-result-1' }]
+
+    render(<TextAnnotationNode {...createProps({ content: '旧内容' })} />)
+
+    await waitFor(() => expect(storeMocks.updateNodeData).toHaveBeenCalledWith(
+      'text-result-1',
+      { content: '来自连线的新内容', syncedInputRevision: 'string-source:来自连线的新内容' },
+      { skipHistory: true },
+    ))
+  })
+
+  it('上游修订未变化时保留用户手动编辑的展示内容', () => {
+    storeMocks.nodes = [{
+      id: 'text-source',
+      type: 'textProcessingNode',
+      position: { x: 0, y: 0 },
+      data: { lastOutput: '机器结果', lastOutputRevision: 3 },
+    }]
+    storeMocks.edges = [{ id: 'edge-1', source: 'text-source', target: 'text-result-1' }]
+
+    render(<TextAnnotationNode {...createProps({
+      content: '用户编辑后的内容',
+      syncedInputRevision: 'text-source:3',
+    })} />)
+
+    expect(storeMocks.updateNodeData).not.toHaveBeenCalled()
   })
 })

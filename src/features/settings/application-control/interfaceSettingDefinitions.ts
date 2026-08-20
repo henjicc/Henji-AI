@@ -80,6 +80,12 @@ export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefini
   }, () => useSettingsStore.getState().canvasLodLevel,
   (value) => useSettingsStore.getState().setCanvasLodLevel(value)),
   storeSetting({
+    id: 'canvas.auto_insert_text_display', title: '自动插入文本展示', description: '连接文本处理节点到生成节点时，自动通过一个可编辑的文本展示节点中转。',
+    aliases: ['文本展示中转', '文本处理连线', '自动预览文本'], schema: z.boolean(), defaultValue: false,
+    target: { tab: 'interface', sectionId: 'interface-canvas' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().autoInsertTextDisplayNode,
+  (value) => useSettingsStore.getState().setAutoInsertTextDisplayNode(value)),
+  storeSetting({
     id: 'canvas.upload_filename_as_title', title: '使用上传文件名作为节点标题', description: '上传素材后使用文件名帮助识别画布节点。',
     aliases: ['文件名节点标题', '上传标题'], schema: z.boolean(), defaultValue: true,
     target: { tab: 'interface', sectionId: 'interface-canvas' }, requiresReload: false, requiresRestart: false, sensitive: false,

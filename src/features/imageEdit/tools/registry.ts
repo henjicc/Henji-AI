@@ -1,4 +1,5 @@
-import { ScanLine, Sparkles } from 'lucide-react';
+import { Blend, ScanLine, Sparkles } from 'lucide-react';
+import { BlurInspector } from './blur/BlurInspector';
 import { GeometryInspector } from './geometry/GeometryInspector';
 import { DiffusionInspector } from './diffusion/DiffusionInspector';
 import type { ImageEditorToolDefinition } from './types';
@@ -27,6 +28,7 @@ export class ImageEditorToolRegistry {
 
 export const imageEditorToolRegistry = new ImageEditorToolRegistry();
 const geometry = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'geometry')!;
+const blur = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'blur')!;
 const diffusion = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'diffusion')!;
 
 imageEditorToolRegistry.register({
@@ -34,6 +36,12 @@ imageEditorToolRegistry.register({
   control: geometry,
   icon: ScanLine,
   inspector: GeometryInspector,
+});
+imageEditorToolRegistry.register({
+  ...blur,
+  control: blur,
+  icon: Blend,
+  inspector: BlurInspector,
 });
 imageEditorToolRegistry.register({
   ...diffusion,

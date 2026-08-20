@@ -27,7 +27,7 @@ export const imageEditToolPlugin: CanvasToolPlugin = {
   icon: 'edit',
   editor: 'edit',
   dialog: {
-    widthClassName: 'w-[min(90vw,1560px)]',
+    size: 'workspace',
     resultNodeTitle: '编辑结果',
   },
   operationIds: Object.values(IMAGE_EDIT_OPERATION_IDS),
@@ -53,7 +53,7 @@ export const splitStoryboardToolPlugin: CanvasToolPlugin = {
   icon: 'split',
   editor: 'split',
   dialog: {
-    widthClassName: 'w-[min(1120px,calc(100vw-40px))]',
+    size: 'editor',
     resultNodeTitle: EXPORT_RESULT_DISPLAY_NAME.generic,
     preloadStoryboardMetadata: true,
   },

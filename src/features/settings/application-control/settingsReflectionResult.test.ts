@@ -10,15 +10,18 @@ import { getSettingsRegistryRevision } from './settingsApplicationService'
 describe('设置的正式反射结果', () => {
   let originalLanguage: ReturnType<typeof getCurrentLanguage>
   let originalTone: ReturnType<typeof useSettingsStore.getState>['themeTonePreset']
+  let originalAutoInsertTextDisplay: boolean
 
   beforeEach(() => {
     originalLanguage = getCurrentLanguage()
     originalTone = useSettingsStore.getState().themeTonePreset
+    originalAutoInsertTextDisplay = useSettingsStore.getState().autoInsertTextDisplayNode
   })
 
   afterEach(() => {
     changeLanguage(originalLanguage)
     useSettingsStore.getState().setThemeTonePreset(originalTone)
+    useSettingsStore.getState().setAutoInsertTextDisplayNode(originalAutoInsertTextDisplay)
   })
 
   function context(requestId: string) {
@@ -29,7 +32,7 @@ describe('设置的正式反射结果', () => {
     }
   }
 
-  async function change(id: string, value: string): Promise<void> {
+  async function change(id: string, value: string | boolean): Promise<void> {
     await applicationReflectionHandlers.changeEntities({
       summary: `修改 ${id}`,
       changes: [{
@@ -64,5 +67,19 @@ describe('设置的正式反射结果', () => {
       ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'],
     }, context('settings-read-tone'))
     expect(snapshot.properties['interface.theme_tone']).toBe(next)
+  })
+
+  it('通过通用 change 修改自动插入文本展示，并持久化且可反射读回', async () => {
+    const next = !originalAutoInsertTextDisplay
+    await change('canvas.auto_insert_text_display', next)
+
+    expect(useSettingsStore.getState().autoInsertTextDisplayNode).toBe(next)
+    const snapshot = await applicationReflectionHandlers.readEntity({
+      ref: { kind: 'settings.registry', id: 'singleton' },
+      propertyIds: ['canvas.auto_insert_text_display'],
+    }, context('settings-read-auto-text-display'))
+    expect(snapshot.properties['canvas.auto_insert_text_display']).toBe(next)
+    expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}'))
+      .toMatchObject({ state: { autoInsertTextDisplayNode: next } })
   })
 })

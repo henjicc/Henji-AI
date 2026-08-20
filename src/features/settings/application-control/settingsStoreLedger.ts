@@ -85,6 +85,7 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setStoryboardGenAutoInferEmptyFrame: property('storyboard.auto_infer_empty_frame'),
     setIgnoreAtTagWhenCopyingAndGenerating: property('generation.ignore_at_tag_when_copying'),
     setCanvasLodLevel: property('canvas.detail_level'),
+    setAutoInsertTextDisplayNode: property('canvas.auto_insert_text_display'),
     setLogCaptureMode: property('diagnostics.log_capture_mode'),
     setUiRadiusPreset: property('interface.radius'),
     setThemeTonePreset: property('interface.theme_tone'),

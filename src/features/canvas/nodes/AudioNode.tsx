@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { AudioLines, Maximize2, Pause, Play, Upload, Volume2, VolumeX } from 'lucide-react';
+import { Maximize2, Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -24,14 +24,18 @@ import {
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { useGenerationProgressDisplay } from '@/features/canvas/nodes/shared/useGenerationProgressDisplay';
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
-import { formatDuration, getAudioDuration } from '@/utils/mediaDimensions';
+import { formatDuration } from '@/utils/mediaDimensions';
 import { useAudioWaveform } from '@/hooks/useAudioWaveform';
-import { saveUploadAudio } from '@/utils/save';
+import { importCanvasMediaFile } from '@/features/canvas/application/mediaImport';
+import { ICON_NODE_AUDIO_GENERATION, ICON_NODE_AUDIO_UPLOAD } from '@/core/theme/icons';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { AudioViewerModal } from '@/components/mediaViewer/AudioViewerModal';
 import Waveform from '@/components/Waveform';
 import { uiTransition } from '@/components/ui/motion';
+
+const AudioUploadIcon = ICON_NODE_AUDIO_UPLOAD;
+const AudioGenerationIcon = ICON_NODE_AUDIO_GENERATION;
 
 type AudioNodeProps = NodeProps & {
   id: string;
@@ -173,13 +177,10 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
   }, [seekToRatio]);
 
   const processFile = useCallback(async (file: File) => {
-    const saved = await saveUploadAudio(file, 'persist');
-    const durationSec = await getAudioDuration(resolveImageDisplayUrl(saved.fullPath)).catch(() => null);
-    updateNodeData(id, {
-      audioUrl: saved.fullPath,
-      durationSec,
-      sourceFileName: file.name,
-    });
+    const imported = await importCanvasMediaFile(file);
+    if (imported.kind === 'audio') {
+      updateNodeData(id, imported.data);
+    }
   }, [id, updateNodeData]);
 
   const handleFileChange = useCallback(async (event: ChangeEvent<HTMLInputElement>) => {
@@ -216,6 +217,12 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     });
   }, [id, processFile]);
 
+  useEffect(() => canvasEventBus.subscribe('upload-node/reupload', ({ nodeId }) => {
+    if (nodeId === id && isUploadVariant) {
+      inputRef.current?.click();
+    }
+  }), [id, isUploadVariant]);
+
   return (
     <div
       className={`
@@ -242,7 +249,9 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={isUploadVariant ? <Upload className="h-4 w-4" /> : <AudioLines className="h-4 w-4" />}
+        icon={isUploadVariant
+          ? <AudioUploadIcon className="h-4 w-4" />
+          : <AudioGenerationIcon className="h-4 w-4" />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -317,12 +326,12 @@ export const AudioNode = memo(({ id, data, selected, type }: AudioNodeProps) => 
           </div>
         ) : isUploadVariant ? (
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1.5 text-text-muted/85">
-            <Upload className="h-6 w-6 opacity-60" />
+            <AudioUploadIcon className="h-6 w-6 opacity-60" />
             <span className="text-2xs">{t('node.audioNode.uploadHint')}</span>
           </div>
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-text-muted/85">
-            <AudioLines className="h-6 w-6 opacity-60" />
+            <AudioGenerationIcon className="h-6 w-6 opacity-60" />
             <span className="text-2xs">{t('node.audioNode.waitingResult')}</span>
           </div>
         )}

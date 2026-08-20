@@ -39,7 +39,7 @@ export function AddCustomModelDialog({ onAdd, onClose }: AddCustomModelDialogPro
       title={t('customModels.addModel')}
       onClose={onClose}
       hideHeader
-      widthClassName="w-full max-w-md"
+      size="form"
       contentClassName="p-6"
     >
         <h3 className="text-lg font-bold mb-4">{t('customModels.addModel')}</h3>

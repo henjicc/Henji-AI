@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore';
 
 export interface CanvasNodePaintFrameOptions {
   top?: number;
@@ -10,6 +11,7 @@ export interface CanvasNodePaintFrameOptions {
 
 interface CanvasNodePaintFrameProps extends CanvasNodePaintFrameOptions {
   children?: ReactNode;
+  nodeId?: string;
 }
 
 interface CanvasNodePaintFrameStyle extends CSSProperties {
@@ -34,7 +36,12 @@ export function CanvasNodePaintFrame({
   bottom,
   left,
   disabled = false,
+  nodeId,
 }: CanvasNodePaintFrameProps): JSX.Element {
+  const isExecuting = useCanvasExecutionStateStore(
+    (state) => Boolean(nodeId && state.activeNodes[nodeId]),
+  );
+
   if (disabled) {
     return <>{children}</>;
   }
@@ -47,7 +54,12 @@ export function CanvasNodePaintFrame({
   };
 
   return (
-    <div className="canvas-node-paint-frame" style={style}>
+    <div
+      className={`canvas-node-paint-frame${isExecuting ? ' canvas-node-paint-frame--executing' : ''}`}
+      style={style}
+      data-node-executing={isExecuting ? 'true' : undefined}
+      aria-busy={isExecuting || undefined}
+    >
       {children}
     </div>
   );

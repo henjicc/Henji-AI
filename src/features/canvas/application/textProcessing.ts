@@ -127,3 +127,43 @@ export function buildTextProcessingRequest(input: {
     },
   }
 }
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, stableValue(child)]),
+  )
+}
+
+/** 缓存只需要稳定判等，不承担安全用途；短哈希避免把提示词和媒体数据原文写回工程。 */
+export function createTextProcessingInputFingerprint(input: {
+  prompt: string
+  systemPrompt: string
+  providerId: string
+  modelId: string
+  media: TextProcessingMedia
+}): string {
+  const serialized = JSON.stringify(stableValue(input))
+  let hash = 0x811c9dc5
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `v1-${(hash >>> 0).toString(16).padStart(8, '0')}`
+}
+
+export function shouldReuseTextProcessingOutput(input: {
+  trigger: 'direct' | 'dependency'
+  fixedResult?: boolean
+  lastExecutionStatus?: 'success' | 'failed'
+  lastOutputFingerprint?: string
+  fingerprint: string
+}): boolean {
+  return input.trigger === 'dependency'
+    && input.fixedResult !== false
+    && input.lastExecutionStatus === 'success'
+    && input.lastOutputFingerprint === input.fingerprint
+}

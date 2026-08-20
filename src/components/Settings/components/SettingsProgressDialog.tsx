@@ -23,7 +23,7 @@ const SettingsProgressDialog: React.FC<SettingsProgressDialogProps> = ({ open, t
       title={title}
       onClose={() => { /* 迁移进行中，刻意不允许关闭 */ }}
       hideHeader
-      widthClassName="w-[400px]"
+      size="compact"
       contentClassName="p-4"
     >
       <div className={UI_TEXT_TITLE_CLASS}>{title}</div>

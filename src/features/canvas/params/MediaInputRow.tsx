@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { Image as ImageIcon, Music, Scissors, Video, X } from 'lucide-react';
 
-import { prepareNodeImageFromFile, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import {
   areMediaOutputListsEqual,
   collectInputMediaByKind,
@@ -18,7 +18,7 @@ import {
   NODE_PORT_ROW_CLASS,
   NODE_PORT_VISIBLE_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
-import { saveUploadAudio, saveUploadVideo } from '@/utils/save';
+import { importLocalMedia } from '@/services/localMediaImport';
 import { UiIconButton, UiInput } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
@@ -63,16 +63,10 @@ interface UploadedMediaUrl {
 }
 
 async function fileToMediaUrl(file: File, kind: RowMediaKind): Promise<UploadedMediaUrl> {
-  if (kind === 'image') {
-    const prepared = await prepareNodeImageFromFile(file);
-    return { url: prepared.imageUrl, previewUrl: prepared.previewImageUrl };
-  }
-  if (kind === 'video') {
-    const saved = await saveUploadVideo(file, 'persist');
-    return { url: saved.fullPath };
-  }
-  const saved = await saveUploadAudio(file, 'persist');
-  return { url: saved.fullPath };
+  const imported = await importLocalMedia(file, kind);
+  return imported.kind === 'image'
+    ? { url: imported.fullPath, previewUrl: imported.previewPath }
+    : { url: imported.fullPath };
 }
 
 function resolveFileName(url: string): string {
@@ -123,7 +117,7 @@ export function MediaInputRow({
     state.edges.some((edge) => edge.target === nodeId && edge.targetHandle === mediaHandleId)
   );
   const upstreamUrls = useMemo(() => upstreamMedia.map((item) => item.url), [upstreamMedia]);
-  // 本地上传的图片在上传时已经生成过 previewImageUrl（见 prepareNodeImageFromFile），
+  // 本地上传的图片在导入服务中已经生成过 previewPath，
   // 这里缓存下来供缩略图复用，避免 28px 小图也去解码原图。仅运行时内存缓存，不参与持久化。
   const localPreviewMapRef = useRef(new Map<string, string>());
   const previewUrlByUrl = useMemo(() => {

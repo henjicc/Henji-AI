@@ -10,6 +10,7 @@ import {
 import {
   isTypingTarget,
   resolveClipboardMediaFile,
+  type CanvasMediaKind,
   type ClipboardSnapshot,
 } from '@/features/canvas/canvasUtils'
 import { mediaSourceNodeType } from '@/features/canvas/application/assetMediaAssignment'
@@ -18,6 +19,7 @@ interface UseCanvasShortcutsParams {
   wrapperRef: React.RefObject<HTMLDivElement>
   reactFlowInstance: ReactFlowInstance<CanvasNode, CanvasEdge>
   selectedUploadNodeId: string | null
+  selectedUploadKinds: CanvasMediaKind[]
   selectedNodeIds: string[]
   selectedNodeId: string | null
   nodes: CanvasNode[]
@@ -38,6 +40,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     wrapperRef,
     reactFlowInstance,
     selectedUploadNodeId,
+    selectedUploadKinds,
     selectedNodeIds,
     selectedNodeId,
     nodes,
@@ -88,10 +91,10 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       const media = resolveClipboardMediaFile(event)
       if (!media) return
 
-      if (selectedUploadNodeId && media.kind === 'image') {
+      if (selectedUploadNodeId && selectedUploadKinds.includes(media.kind)) {
         event.preventDefault()
         pasteImageHandledRef.current = true
-        canvasEventBus.publish('upload-node/paste-image', {
+        canvasEventBus.publish('canvas/import-media', {
           nodeId: selectedUploadNodeId,
           file: media.file,
         })
@@ -125,7 +128,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     return () => {
       document.removeEventListener('paste', handlePaste)
     }
-  }, [addNode, reactFlowInstance, scheduleCanvasPersist, selectedUploadNodeId, setSelectedNode, wrapperRef])
+  }, [addNode, reactFlowInstance, scheduleCanvasPersist, selectedUploadKinds, selectedUploadNodeId, setSelectedNode, wrapperRef])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

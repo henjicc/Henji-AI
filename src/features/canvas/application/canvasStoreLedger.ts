@@ -35,8 +35,20 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     deleteNode: NODE_REMOVE,
     deleteNodes: NODE_REMOVE,
     addEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'create' },
+    ensureTextDisplayOutput: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '文本处理首次运行时原子创建其输出展示节点，是生成执行器的内部结果落点；'
+        + '助手仍通过画布节点与连线的正式集合能力编排显式结构。',
+    },
     deleteEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'remove' },
     updateNodeData: { kind: 'capability', capabilityId: 'update_canvas_node' },
+    resolveUploadPlaceholder: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '本地文件完成类型识别与持久化后，将无端口上传占位节点原位收敛为具体媒体源节点；'
+        + '它不暴露本地路径，助手仍通过可信素材引用创建具体节点。',
+    },
     /*
      * 定义收敛在 canvasFields.ts；display_name 走 updateNodeData 能力，不在这里重复声明。
      * 3.2 又把分镜格子的 updateStoryboardFrame/reorderStoryboardFrame 并进同一批字段——

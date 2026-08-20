@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import { Sparkles } from 'lucide-react';
 import type { NodeProps } from '@xyflow/react';
 
 import { CANVAS_NODE_TYPES, type ImageEditNodeData } from '@/features/canvas/domain/canvasNodes';
@@ -7,6 +6,9 @@ import {
   GenerationNodeShell,
   type GenerationNodeShellData,
 } from '@/features/canvas/nodes/shared/GenerationNodeShell';
+import { ICON_NODE_IMAGE_GENERATION } from '@/core/theme/icons';
+
+const ImageGenerationIcon = ICON_NODE_IMAGE_GENERATION;
 
 type ImageEditNodeProps = NodeProps & {
   id: string;
@@ -22,7 +24,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
     selected={selected}
     width={width}
     height={height}
-    icon={<Sparkles className="h-4 w-4" />}
+    icon={<ImageGenerationIcon className="h-4 w-4" />}
     promptPlaceholderKey="node.imageEdit.promptPlaceholder"
     promptRequiredKey="node.imageEdit.promptRequired"
     apiKeyRequiredKey="node.imageEdit.apiKeyRequired"

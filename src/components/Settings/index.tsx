@@ -155,14 +155,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       // 遮罩，外层再叠 bg-black/70 会（1）把背景压到近 86% 黑，(2) 因为外层没有过渡，
       // 打开时先闪一帧纯黑、关闭时黑幕又突然消失。
       overlayClassName="p-4"
-      widthClassName="flex w-[min(90vw,1200px)] overflow-hidden"
+      size="workspace"
       contentClassName="flex min-h-0 flex-1"
     >
       {/* relative：让内容压在 .ui-glass::after 的噪点层同一层，避免文字被颗粒扰动 */}
       <div
         data-application-surface-id={activeSurfaceId}
-        className={`relative flex w-full flex-col ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}
-        style={{ height: 'calc(76vh - 72px)', minHeight: '440px', maxHeight: '868px' }}
+        className={`relative flex h-full w-full flex-col ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}
       >
         <div className={`flex h-14 shrink-0 items-center justify-between border-b px-4 ${UI_GLASS_ADAPTIVE_DIVIDER_CLASS}`}>
           <h2 className={UI_TEXT_TITLE_CLASS}>{t('title')}</h2>

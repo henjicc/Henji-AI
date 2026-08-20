@@ -9,6 +9,25 @@
 import type { SocketType } from '@/core/types/SocketType';
 
 export type MediaKind = 'image' | 'video' | 'audio' | 'text';
+export type MediaPortKind = Exclude<MediaKind, 'text'>;
+
+const MEDIA_SOURCE_PORT_PREFIX = 'source:';
+
+/** 多媒体源节点的类型化输出端口，如 source:image。 */
+export function mediaSourcePortId(kind: MediaPortKind): string {
+  return `${MEDIA_SOURCE_PORT_PREFIX}${kind}`;
+}
+
+/** 从类型化输出端口反查媒体类型，普通 source 端口返回 null。 */
+export function parseMediaSourcePortId(
+  handleId: string | null | undefined
+): MediaPortKind | null {
+  if (typeof handleId !== 'string' || !handleId.startsWith(MEDIA_SOURCE_PORT_PREFIX)) {
+    return null;
+  }
+  const kind = handleId.slice(MEDIA_SOURCE_PORT_PREFIX.length);
+  return kind === 'image' || kind === 'video' || kind === 'audio' ? kind : null;
+}
 
 export interface NodePorts {
   /** 输出端口（右侧 source handle）产出的媒体类型 */

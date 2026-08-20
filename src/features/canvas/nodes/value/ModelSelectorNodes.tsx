@@ -1,5 +1,5 @@
 import { memo, useCallback, useState, type ReactNode } from 'react';
-import { AudioLines, Maximize2, Minimize2, Sparkles, Video } from 'lucide-react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { NodeProps } from '@xyflow/react';
 
@@ -22,6 +22,15 @@ import { NODE_CONTROL_CHIP_CLASS } from '@/features/canvas/ui/nodeControlStyles'
 import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { ValueSourceShell } from './ValueSourceShell';
+import {
+  ICON_NODE_AUDIO_MODEL,
+  ICON_NODE_IMAGE_MODEL,
+  ICON_NODE_VIDEO_MODEL,
+} from '@/core/theme/icons';
+
+const ImageModelIcon = ICON_NODE_IMAGE_MODEL;
+const VideoModelIcon = ICON_NODE_VIDEO_MODEL;
+const AudioModelIcon = ICON_NODE_AUDIO_MODEL;
 
 type ModelSelectorNodeProps = NodeProps & {
   id: string;
@@ -208,7 +217,7 @@ export const ImageModelSelectorNode = memo((props: ModelSelectorNodeProps) => (
     {...props}
     nodeType={CANVAS_NODE_TYPES.imageModelSelector}
     mediaType="image"
-    icon={<Sparkles className="h-4 w-4" />}
+    icon={<ImageModelIcon className="h-4 w-4" />}
   />
 ));
 ImageModelSelectorNode.displayName = 'ImageModelSelectorNode';
@@ -218,7 +227,7 @@ export const VideoModelSelectorNode = memo((props: ModelSelectorNodeProps) => (
     {...props}
     nodeType={CANVAS_NODE_TYPES.videoModelSelector}
     mediaType="video"
-    icon={<Video className="h-4 w-4" />}
+    icon={<VideoModelIcon className="h-4 w-4" />}
   />
 ));
 VideoModelSelectorNode.displayName = 'VideoModelSelectorNode';
@@ -228,7 +237,7 @@ export const AudioModelSelectorNode = memo((props: ModelSelectorNodeProps) => (
     {...props}
     nodeType={CANVAS_NODE_TYPES.audioModelSelector}
     mediaType="audio"
-    icon={<AudioLines className="h-4 w-4" />}
+    icon={<AudioModelIcon className="h-4 w-4" />}
   />
 ));
 AudioModelSelectorNode.displayName = 'AudioModelSelectorNode';

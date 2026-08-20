@@ -1,24 +1,26 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { WandSparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 
-import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
 import { createLogger } from '@/core/logging'
+import { ICON_NODE_TEXT_PROCESSING } from '@/core/theme/icons'
+
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
   createPlainTextPromptDocument,
-  toModelPromptText,
 } from '@/core/inputs/promptDocument'
 import {
-  buildTextProcessingRequest,
   createTextProcessingModelKey,
   getTextProcessingMediaKinds,
   listTextProcessingModels,
   resolveTextProcessingModel,
   TEXT_PROCESSING_CUSTOM_TEMPLATE_ID,
 } from '@/features/canvas/application/textProcessing'
+import {
+  hasReachableNonDisplayConsumer,
+  runCanvasNode,
+} from '@/features/canvas/application/canvasExecutionService'
 import {
   areMediaOutputListsEqual,
   collectInputMedia,
@@ -29,12 +31,10 @@ import {
   collectInputValues,
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver'
-import { canvasEventBus } from '@/features/canvas/application/canvasServices'
 import {
-  CANVAS_NODE_TYPES,
-  type TextAnnotationNodeData,
   type TextProcessingNodeData,
 } from '@/features/canvas/domain/canvasNodes'
+import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex'
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay'
 import {
@@ -51,6 +51,7 @@ import { useGenerationNodeMinimumHeight } from '@/features/canvas/nodes/shared/u
 import { TextProcessingSystemPromptEditor } from '@/features/canvas/nodes/textProcessing/TextProcessingSystemPromptEditor'
 import { TextProcessingPromptTemplateSelector } from '@/features/canvas/nodes/textProcessing/TextProcessingPromptTemplateSelector'
 import { useTextProcessingSystemPrompt } from '@/features/canvas/nodes/textProcessing/useTextProcessingSystemPrompt'
+import { useTextProcessingExecution } from '@/features/canvas/nodes/textProcessing/useTextProcessingExecution'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
@@ -58,35 +59,27 @@ import {
   NODE_IDLE_BORDER_CLASS,
   NODE_PORT_NODE_CLASS,
   NODE_PORT_VISIBLE_CLASS,
+  NODE_ROW_CLASS,
+  NODE_ROW_CONTROL_SLOT_CLASS,
   NODE_ROW_GAP_CLASS,
+  NODE_ROW_HOVER_CLASS,
+  NODE_ROW_LABEL_CLASS,
   NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles'
 import { llmConfigService } from '@/services/llm/LlmConfigService'
-import { UploadService } from '@/services/upload/UploadService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
+import { UiSwitch } from '@/components/ui'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore'
 import type { LlmConfigState } from '@/core/llm/types'
 
+const TextProcessingIcon = ICON_NODE_TEXT_PROCESSING
 const logger = createLogger('features.canvas.text_processing')
 const MEDIA_LIMITS: Record<RowMediaKind, number> = { image: 8, video: 1, audio: 1 }
-const RESULT_WIDTH = 360
-const RESULT_HEIGHT = 220
-const STREAM_PREVIEW_INTERVAL_MS = 200
 
 type TextProcessingNodeProps = NodeProps & {
   id: string
   data: TextProcessingNodeData
   selected?: boolean
-}
-
-function buildResultTitle(prompt: string, fallback: string): string {
-  const normalized = prompt.trim()
-  return normalized.length > 16 ? `${normalized.slice(0, 16)}…` : normalized || fallback
-}
-
-function createRequestId(): string {
-  return `canvas-text-${crypto.randomUUID()}`
 }
 
 export const TextProcessingNode = memo(({
@@ -99,17 +92,15 @@ export const TextProcessingNode = memo(({
   const { t } = useTranslation()
   const [config, setConfig] = useState<LlmConfigState | null>(null)
   const [promptInvalid, setPromptInvalid] = useState(false)
-  const activeRequestIdsRef = useRef(new Set<string>())
-  const isRunningRef = useRef(false)
 
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
-  const addNode = useCanvasStore((state) => state.addNode)
-  const addEdge = useCanvasStore((state) => state.addEdge)
-  const findNodePosition = useCanvasStore((state) => state.findNodePosition)
   const hasSourceConnections = useCanvasStore(
     (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
   )
+  const hasNonDisplayConsumer = useCanvasStore((state) => (
+    hasReachableNonDisplayConsumer(id, state.nodes, state.edges)
+  ))
 
   const loadConfig = useCallback(async (): Promise<void> => {
     try {
@@ -127,12 +118,6 @@ export const TextProcessingNode = memo(({
     window.addEventListener(LLM_CONFIG_CHANGED_EVENT, loadConfig)
     return () => window.removeEventListener(LLM_CONFIG_CHANGED_EVENT, loadConfig)
   }, [loadConfig])
-
-  useEffect(() => () => {
-    for (const requestId of activeRequestIdsRef.current) {
-      void llmCancelTask(requestId)
-    }
-  }, [])
 
   const choices = useMemo(() => config ? listTextProcessingModels(config) : [], [config])
   const promptTemplates = useMemo(
@@ -209,7 +194,9 @@ export const TextProcessingNode = memo(({
   )
 
   useNodeHandlesSync(id, `prompt|${acceptedMediaKinds.join('|')}`)
-  const { rootRef, inputRowsRef, minimumHeight } = useGenerationNodeMinimumHeight(190)
+  const { rootRef, inputRowsRef, minimumHeight } = useGenerationNodeMinimumHeight(
+    isCustomPromptTemplate ? 190 : 320,
+  )
   const resolvedWidth = Math.max(320, Math.round(width ?? 360))
   const resolvedHeight = Math.max(minimumHeight, Math.round(height ?? minimumHeight))
   const resolvedTitle = resolveNodeDisplayName(CANVAS_NODE_TYPES.textProcessing, data)
@@ -260,142 +247,16 @@ export const TextProcessingNode = memo(({
     }
   }, [config, id, t])
 
-  const handleGenerate = useCallback(async (): Promise<void> => {
-    if (isRunningRef.current) return
-    const prompt = toModelPromptText(promptState.document, { references: promptState.references }).trim()
-    const systemPrompt = toModelPromptText(effectiveSystemPromptDocument).trim()
-    if (!prompt) {
-      setPromptInvalid(true)
-      return
-    }
-    if (!selectedChoice) {
-      showAlertDialog({
-        title: t('common:error'),
-        message: t('node.textProcessing.noModelConfigured'),
-        type: 'warning',
-        settingsTarget: { tab: 'api', sectionId: 'api-llm' },
-      })
-      return
-    }
-
-    isRunningRef.current = true
-    setPromptInvalid(false)
-    const requestId = createRequestId()
-    activeRequestIdsRef.current.add(requestId)
-    const startedAt = Date.now()
-    const media = {
-      image: promptState.mediaUrls.image,
-      video: promptState.mediaUrls.video,
-      audio: promptState.mediaUrls.audio,
-    }
-    const resultNodeId = addNode(
-      CANVAS_NODE_TYPES.textAnnotation,
-      findNodePosition(id, RESULT_WIDTH, RESULT_HEIGHT),
-      {
-        displayName: buildResultTitle(prompt, t('node.textProcessing.resultTitle')),
-        content: '',
-        isGenerating: true,
-        generationStartedAt: startedAt,
-        generationError: null,
-      },
-    )
-    addEdge(id, resultNodeId)
-
-    let output = ''
-    let previewTimer: ReturnType<typeof setTimeout> | null = null
-    let lastPreviewAt = 0
-    let failureHandled = false
-    const publishPreview = (): void => {
-      previewTimer = null
-      lastPreviewAt = Date.now()
-      useCanvasTextStreamStore.getState().setPreview(resultNodeId, output)
-    }
-    const schedulePreview = (): void => {
-      if (previewTimer !== null) return
-      const delay = Math.max(0, STREAM_PREVIEW_INTERVAL_MS - (Date.now() - lastPreviewAt))
-      if (delay === 0) {
-        publishPreview()
-        return
-      }
-      previewTimer = setTimeout(publishPreview, delay)
-    }
-    const commitOutput = (resultPatch: Partial<TextAnnotationNodeData>): void => {
-      if (previewTimer !== null) clearTimeout(previewTimer)
-      publishPreview()
-      updateNodeData(id, { lastOutput: output }, { skipHistory: true })
-      updateNodeData(resultNodeId, { content: output, ...resultPatch })
-      useCanvasTextStreamStore.getState().setPreview(resultNodeId, null)
-    }
-    const finishFailure = (message: string): void => {
-      if (failureHandled) return
-      failureHandled = true
-      commitOutput({
-        isGenerating: false,
-        generationStartedAt: null,
-        generationError: message,
-      })
-      logger.error('文本处理失败', new Error(message), {
-        event: 'canvas.text_processing.failed',
-        requestId,
-        nodeId: id,
-        providerId: selectedChoice.provider.providerId,
-        modelId: selectedChoice.model.modelId,
-      })
-    }
-
-    logger.info('文本处理开始', {
-      event: 'canvas.text_processing.started',
-      requestId,
-      nodeId: id,
-      providerId: selectedChoice.provider.providerId,
-      modelId: selectedChoice.model.modelId,
-      imageCount: media.image.length,
-      videoCount: media.video.length,
-      audioCount: media.audio.length,
-    })
-
-    const uploadService = UploadService.getInstance()
-    try {
-      await llmChatStream(buildTextProcessingRequest({
-        requestId,
-        prompt,
-        systemPrompt,
-        choice: selectedChoice,
-        media,
-        uploadProvider: uploadService.getCurrentProvider(),
-        uploadFallback: uploadService.isFallbackEnabled(),
-      }), (event) => {
-        if (event.type === 'Token') {
-          output += event.data
-          schedulePreview()
-        } else if (event.type === 'Error') {
-          finishFailure(event.data)
-        } else if (event.type === 'Done' && !failureHandled) {
-          commitOutput({
-            isGenerating: false,
-            generationStartedAt: null,
-            generationDurationMs: Date.now() - startedAt,
-            generationError: null,
-          })
-          logger.info('文本处理完成', {
-            event: 'canvas.text_processing.completed',
-            requestId,
-            nodeId: id,
-            outputChars: output.length,
-          })
-        }
-      })
-    } catch (error) {
-      finishFailure(error instanceof Error ? error.message : String(error))
-    } finally {
-      activeRequestIdsRef.current.delete(requestId)
-      isRunningRef.current = false
-    }
-  }, [addEdge, addNode, effectiveSystemPromptDocument, findNodePosition, id, promptState.document, promptState.mediaUrls.audio, promptState.mediaUrls.image, promptState.mediaUrls.video, promptState.references, selectedChoice, t, updateNodeData])
-
-  useEffect(() => canvasEventBus.subscribe('generation/run', ({ nodeId }) => {
-    if (nodeId === id) void handleGenerate()
-  }), [handleGenerate, id])
+  useTextProcessingExecution({
+    nodeId: id,
+    promptDocument: promptState.document,
+    promptReferences: promptState.references,
+    systemPromptDocument: effectiveSystemPromptDocument,
+    media: promptState.mediaUrls,
+    selectedChoice,
+    setPromptInvalid,
+    t,
+  })
 
   return (
     <div
@@ -406,12 +267,12 @@ export const TextProcessingNode = memo(({
     >
       <NodeHeader
         className={`${NODE_HEADER_FLOATING_POSITION_CLASS} canvas-node-lod-detail`}
-        icon={<WandSparkles className="h-4 w-4" />}
+        icon={<TextProcessingIcon className="h-4 w-4" />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
-      <NodeLodPlaceholder title={resolvedTitle} icon={<WandSparkles className="h-6 w-6" />} />
+      <NodeLodPlaceholder title={resolvedTitle} icon={<TextProcessingIcon className="h-6 w-6" />} />
 
       <div className="canvas-node-lod-detail relative flex min-h-0 flex-1 flex-col gap-1.5">
         <GenerationPromptEditor
@@ -426,24 +287,24 @@ export const TextProcessingNode = memo(({
             ? t('node.textProcessing.promptRequired')
             : t('node.textProcessing.promptPlaceholder')}
           onChange={promptState.handleChange}
-          onSubmit={() => void handleGenerate()}
+          onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
           onEditEnd={promptState.onEditEnd}
           onSelectNode={setSelectedNode}
         />
 
         <div ref={inputRowsRef} className={`flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
-          <TextProcessingSystemPromptEditor
-            selected={Boolean(selected)}
-            value={effectiveSystemPromptDocument}
-            readOnly={!isCustomPromptTemplate}
-            readOnlyHint={t('node.textProcessing.templateProvided')}
-            label={t('node.textProcessing.systemPromptLabel')}
-            placeholder={t('node.textProcessing.systemPromptPlaceholder')}
-            onChange={systemPromptState.handleChange}
-            onSubmit={() => void handleGenerate()}
-            onEditEnd={systemPromptState.onEditEnd}
-            onSelectNode={() => setSelectedNode(id)}
-          />
+          {isCustomPromptTemplate ? (
+            <TextProcessingSystemPromptEditor
+              selected={Boolean(selected)}
+              value={effectiveSystemPromptDocument}
+              label={t('node.textProcessing.systemPromptLabel')}
+              placeholder={t('node.textProcessing.systemPromptPlaceholder')}
+              onChange={systemPromptState.handleChange}
+              onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
+              onEditEnd={systemPromptState.onEditEnd}
+              onSelectNode={() => setSelectedNode(id)}
+            />
+          ) : null}
           <TextProcessingPromptTemplateSelector
             label={t('node.textProcessing.promptTemplateLabel')}
             customLabel={t('node.textProcessing.customTemplate')}
@@ -464,6 +325,21 @@ export const TextProcessingNode = memo(({
               onInlineChange={(next) => promptState.handleMediaInputChange(kind, next)}
             />
           ))}
+          {hasNonDisplayConsumer && (
+            <div
+              className={`${NODE_ROW_CLASS} ${NODE_ROW_HOVER_CLASS}`}
+              title={t('node.textProcessing.fixedResultHint')}
+            >
+              <span className={NODE_ROW_LABEL_CLASS}>{t('node.textProcessing.fixedResultLabel')}</span>
+              <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
+                <UiSwitch
+                  checked={data.fixedResult !== false}
+                  onCheckedChange={(fixedResult) => updateNodeData(id, { fixedResult })}
+                  aria-label={t('node.textProcessing.fixedResultLabel')}
+                />
+              </div>
+            </div>
+          )}
           <TextProcessingModelRow
             choices={choices}
             selectedKey={selectedChoice

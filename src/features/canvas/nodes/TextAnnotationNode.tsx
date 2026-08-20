@@ -1,9 +1,10 @@
 import { memo, useCallback, useEffect, useState, type MouseEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
-import { FileText, LoaderCircle } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
+import { ICON_NODE_TEXT_ANNOTATION } from '@/core/theme/icons';
 
 import { CANVAS_NODE_TYPES, type TextAnnotationNodeData } from '@/features/canvas/domain/canvasNodes';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
@@ -14,6 +15,8 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore';
 import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 import { getMainPortConnectionFlags } from '@/features/canvas/domain/connectionIndex';
+import { getIncomingEdges, getNodeIndexById } from '@/features/canvas/domain/connectionIndex';
+import { getNodeValueOutput } from '@/features/canvas/domain/nodeRegistry';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
 
@@ -24,6 +27,8 @@ import {
   NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
+
+const TextAnnotationIcon = ICON_NODE_TEXT_ANNOTATION;
 
 type TextAnnotationNodeProps = NodeProps & {
   id: string;
@@ -68,8 +73,26 @@ export const TextAnnotationNode = memo(({
   const content = typeof data.content === 'string' ? data.content : '';
   const isGenerating = data.isGenerating === true;
   const streamPreview = useCanvasTextStreamStore((state) => state.previews[id]);
-  const displayContent = isGenerating && streamPreview !== undefined ? streamPreview : content;
+  const displayContent = isGenerating && streamPreview !== undefined ? streamPreview.content : content;
+  const reasoningContent = isGenerating ? streamPreview?.reasoning ?? '' : '';
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
+  const incomingValue = useCanvasStore((state) => {
+    const edge = getIncomingEdges(state.edges, id).at(-1);
+    const source = edge ? getNodeIndexById(state.nodes).get(edge.source) : undefined;
+    const output = source ? getNodeValueOutput(source.type, source.data) : undefined;
+    return typeof output?.value === 'string' ? output.value : null;
+  });
+  const incomingRevision = useCanvasStore((state) => {
+    const edge = getIncomingEdges(state.edges, id).at(-1);
+    const source = edge ? getNodeIndexById(state.nodes).get(edge.source) : undefined;
+    if (!source) return null;
+    const output = getNodeValueOutput(source.type, source.data);
+    if (typeof output?.value !== 'string') return null;
+    const revision = source.type === CANVAS_NODE_TYPES.textProcessing
+      ? Number((source.data as { lastOutputRevision?: DynamicValue }).lastOutputRevision ?? 0)
+      : output.value;
+    return `${source.id}:${String(revision)}`;
+  });
   const shouldRenderMarkdown = !isGenerating || displayContent.length <= LIVE_MARKDOWN_MAX_CHARACTERS;
   const contentHistoryGroup = createCanvasTextHistoryGroup(id, 'content');
   const handleContentChange = useCallback((nextValue: string): void => {
@@ -81,15 +104,28 @@ export const TextAnnotationNode = memo(({
   const resolvedHeight = Math.max(MIN_HEIGHT, Math.round(height ?? DEFAULT_HEIGHT));
 
   useEffect(() => {
-    if (!selected || isGenerating || generationError) setIsEditing(false);
-  }, [generationError, isGenerating, selected]);
+    if (!selected || isGenerating) setIsEditing(false);
+  }, [isGenerating, selected]);
+
+  useEffect(() => {
+    if (
+      isGenerating
+      || incomingValue === null
+      || !incomingRevision
+      || data.syncedInputRevision === incomingRevision
+    ) return;
+    updateNodeData(id, {
+      content: incomingValue,
+      syncedInputRevision: incomingRevision,
+    }, { skipHistory: true });
+  }, [data.syncedInputRevision, id, incomingRevision, incomingValue, isGenerating, updateNodeData]);
 
   const handleContentClick = useCallback((event: MouseEvent<HTMLDivElement>): void => {
-    if (isGenerating || generationError) return;
+    if (isGenerating) return;
     if (event.target instanceof HTMLElement && event.target.closest('a')) return;
     setSelectedNode(id);
     setIsEditing(true);
-  }, [generationError, id, isGenerating, setSelectedNode]);
+  }, [id, isGenerating, setSelectedNode]);
 
   return (
     <div
@@ -106,7 +142,7 @@ export const TextAnnotationNode = memo(({
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<FileText className="h-4 w-4" />}
+        icon={<TextAnnotationIcon className="h-4 w-4" />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -119,7 +155,7 @@ export const TextAnnotationNode = memo(({
         maxHeight={MAX_HEIGHT}
       />
 
-      {selected && isEditing && !isGenerating && !generationError ? (
+      {selected && isEditing && !isGenerating ? (
         <UiTextArea
           autoFocus
           value={content}
@@ -134,7 +170,28 @@ export const TextAnnotationNode = memo(({
           className="nodrag nowheel h-full w-full overflow-auto px-1 py-0.5 text-sm leading-6 text-text-dark"
           onClick={handleContentClick}
         >
-          {displayContent.trim().length > 0 ? (
+          {reasoningContent.trim().length > 0 ? (
+            <div className="space-y-3">
+              <section aria-label={t('node.textAnnotation.reasoning')}>
+                <div className="sticky top-0 flex items-center gap-1.5 bg-surface-dark/95 py-0.5 text-xs text-text-muted">
+                  <LoaderCircle className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                  <span>{t('node.textAnnotation.reasoning')}</span>
+                </div>
+                <div className="mt-1 whitespace-pre-wrap break-words text-text-muted">
+                  {reasoningContent}
+                </div>
+              </section>
+              {displayContent.trim().length > 0 && (
+                <div className="border-t border-border-dark pt-2 text-text-dark">
+                  {shouldRenderMarkdown ? (
+                    <TextAnnotationMarkdown content={displayContent} />
+                  ) : (
+                    <div className="whitespace-pre-wrap break-words">{displayContent}</div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : displayContent.trim().length > 0 ? (
             shouldRenderMarkdown ? (
               <TextAnnotationMarkdown content={displayContent} />
             ) : (

@@ -20,7 +20,7 @@ export function AssistantTraceDiffDialog({
   loading,
 }: AssistantTraceDiffDialogProps): JSX.Element {
   return (
-    <UiModal isOpen={isOpen} onClose={onClose} title={title} widthClassName="w-[min(1120px,94vw)]" contentClassName="max-h-[78vh] overflow-y-auto">
+    <UiModal isOpen={isOpen} onClose={onClose} title={title} size="workspace" contentClassName="overflow-y-auto px-4 py-4">
       {loading ? (
         <UiLoading size="sm" message="正在计算相邻轮次差异…" />
       ) : !diff ? (

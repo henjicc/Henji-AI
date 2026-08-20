@@ -13,6 +13,8 @@ import { PromptOptimizationPreviewText } from './PromptOptimizationPreviewText'
 import { useMixedFileOrder } from './InputArea/hooks/useMixedFileOrder'
 import { usePromptOptimizationPreviewPlayback } from '../hooks/usePromptOptimizationPreviewPlayback'
 import { ArrowUp, LoaderCircle, Plus } from 'lucide-react'
+import { readVideoInfo } from '@/commands/video'
+import { getPathForFile } from '@/platform/desktopApi'
 export interface FileOrderItem {
   type: 'video' | 'image' | 'audio'
   index: number
@@ -191,6 +193,10 @@ const InputArea: React.FC<InputAreaProps> = ({
     visible: renderPromptOptimizationPreview,
   } = usePromptOptimizationPreviewPlayback(promptOptimizationPreview)
   const getVideoDuration = (file: File): Promise<number> => {
+    const fullPath = getPathForFile(file).trim()
+    if (fullPath) {
+      return readVideoInfo(fullPath).then((info) => info.durationSeconds)
+    }
     return new Promise((resolve, reject) => {
       const url = URL.createObjectURL(file)
       const video = document.createElement('video')

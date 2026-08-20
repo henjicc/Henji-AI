@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import { CANVAS_NODE_TYPES } from './canvasNodes';
-import { migrateGenerationPromptData, resetTransientNodeRuntimeState } from './nodeMigrations';
+import {
+  migrateGenerationPromptData,
+  migrateLegacyGenerationDisplayName,
+  resetTransientNodeRuntimeState,
+} from './nodeMigrations';
+
+describe('migrateLegacyGenerationDisplayName', () => {
+  it('迁移精确匹配的旧默认名，并保留用户自定义标题', () => {
+    const legacy: DynamicValueMap = { displayName: 'AI 图片' };
+    migrateLegacyGenerationDisplayName(CANVAS_NODE_TYPES.imageEdit, legacy);
+    expect(legacy.displayName).toBe('图片生成');
+
+    const custom: DynamicValueMap = { displayName: '产品主视觉' };
+    migrateLegacyGenerationDisplayName(CANVAS_NODE_TYPES.imageEdit, custom);
+    expect(custom.displayName).toBe('产品主视觉');
+  });
+});
 
 describe('migrateGenerationPromptData', () => {
   it('旧节点补齐兼容字符串并过滤损坏的媒体 binding', () => {
@@ -38,6 +54,9 @@ describe('resetTransientNodeRuntimeState', () => {
       videoRenderPhase: 'rendering',
       videoRenderRequestId: 'stale-request',
       videoRenderError: 'stale-error',
+      imageExporting: true,
+      imageRenderRequestId: 'stale-image-request',
+      imageRenderError: 'stale-image-error',
     };
 
     resetTransientNodeRuntimeState(CANVAS_NODE_TYPES.cameraStage, data);
@@ -52,6 +71,9 @@ describe('resetTransientNodeRuntimeState', () => {
       videoRenderPhase: null,
       videoRenderRequestId: null,
       videoRenderError: null,
+      imageExporting: false,
+      imageRenderRequestId: null,
+      imageRenderError: null,
     });
   });
 

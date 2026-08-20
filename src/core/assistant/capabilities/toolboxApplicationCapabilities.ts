@@ -97,9 +97,9 @@ const createImageEditPreview = defineApplicationCapability({
   id: 'create_image_edit_preview',
   version: 1,
   title: '创建图片编辑预览',
-  description: '对明确图片素材应用旋转、翻转、裁剪或标记操作，生成不覆盖原图的预览。',
+  description: '对明确图片素材应用旋转、翻转、裁剪、标记或模糊操作，生成不覆盖原图的预览。',
   domain: 'image_edit',
-  aliases: ['编辑素材图片', '图片标注预览', 'create image edit preview'],
+  aliases: ['编辑素材图片', '图片标注预览', '图片模糊', '高斯模糊', 'create image edit preview'],
   readOnly: false,
   // 预览是新建出来的实体，不只是一次运算：漏声明 create，「做一张编辑预览」的 Facet 结不了账。
   control: capabilityControl('execute', ['image_edit.preview'], {

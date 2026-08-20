@@ -331,6 +331,8 @@ const mediaApi: HenjiMediaApi = {
   isPathAllowed: (targetPath) => nativeInvoke('media:isPathAllowed', { targetPath }),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   getBundledResourcePath: (relativePath) => nativeInvoke('media:getBundledResourcePath', { relativePath }),
+  importFromPath: (request) => nativeInvoke('media:importFromPath', request),
+  importFromBytes: (request) => nativeInvoke('media:importFromBytes', request),
   captureApplicationSurface: (request) => nativeInvoke('media:captureApplicationSurface', request),
 }
 

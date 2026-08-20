@@ -7,6 +7,7 @@ import { readVideoInfo } from '@/commands/video';
 interface CanvasVideoPlayerProps {
   src: string;
   knownDuration?: number | null;
+  knownHasAudio?: boolean;
   onOpenViewer: () => void;
   /** poster 点击播放场景：挂载后元数据就绪即自动开播 */
   autoPlayOnMount?: boolean;
@@ -23,6 +24,7 @@ function formatTime(seconds: number): string {
 export function CanvasVideoPlayer({
   src,
   knownDuration,
+  knownHasAudio,
   onOpenViewer,
   autoPlayOnMount = false,
 }: CanvasVideoPlayerProps): JSX.Element {
@@ -32,7 +34,7 @@ export function CanvasVideoPlayer({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(knownDuration ?? 0);
   const [muted, setMuted] = useState(false);
-  const [hasAudio, setHasAudio] = useState<boolean | null>(null);
+  const [hasAudio, setHasAudio] = useState<boolean | null>(knownHasAudio ?? null);
   const [compactControls, setCompactControls] = useState(false);
 
   useEffect(() => {
@@ -42,6 +44,10 @@ export function CanvasVideoPlayer({
   }, [knownDuration, src]);
 
   useEffect(() => {
+    if (typeof knownHasAudio === 'boolean') {
+      setHasAudio(knownHasAudio);
+      return undefined;
+    }
     let cancelled = false;
     setHasAudio(null);
     void readVideoInfo(src).then(
@@ -53,7 +59,7 @@ export function CanvasVideoPlayer({
       },
     );
     return () => { cancelled = true; };
-  }, [src]);
+  }, [knownHasAudio, src]);
 
   useEffect(() => {
     const player = playerRef.current;

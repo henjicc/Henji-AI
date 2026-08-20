@@ -30,8 +30,8 @@
     "addImage": "添加图片",
     "splitStoryboard": "切割",
     "generate": "生成",
-    "emptyHintTitle": "双击鼠标添加节点",
-    "emptyHintSubtitle": "Double-click to add a node",
+    "emptyHintTitle": "双击或右键添加节点",
+    "emptyHintSubtitle": "Double-click or right-click to add a node",
     "mediaDrop": {
       "imported": "已导入 {{count}} 个媒体文件",
       "importedWithSkipped": "已导入 {{count}} 个媒体文件，跳过 {{skipped}} 个不支持的文件",
@@ -41,7 +41,8 @@
     "connection": {
       "typeMismatch": "连接类型不对，请连接到匹配的输入行",
       "mediaLimitExceeded": "{{media}}最多只能连接 {{max}} 个",
-      "mediaFallback": "媒体"
+      "mediaFallback": "媒体",
+      "cycle": "这条连接会形成循环依赖"
     },
     "toolbar": {
       "zoomIn": "放大",
@@ -93,28 +94,63 @@
     "collapse": "收起"
   },
   "node": {
+    "menuTitle": "添加节点",
+    "menuSections": {
+      "media": "媒体与生成",
+      "textTools": "文本与工具",
+      "models": "模型选择器",
+      "parameters": "参数",
+      "extensions": "其他"
+    },
     "generationError": {
       "viewDetail": "点击查看详情"
     },
     "menu": {
+      "upload": "上传",
       "uploadImage": "上传图片",
-      "aiImageGeneration": "AI 图片",
+      "aiImageGeneration": "图片生成",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
       "textProcessing": "文本处理",
-      "textAnnotation": "文本注释",
-      "videoGen": "AI 视频",
-      "audioGen": "AI 音频",
+      "textAnnotation": "文本展示",
+      "videoGen": "视频生成",
+      "audioGen": "音频生成",
       "uploadVideo": "上传视频",
       "uploadAudio": "上传音频",
       "intSource": "整数",
       "floatSource": "浮点数",
       "stringSource": "文本",
       "booleanSource": "开关",
-      "imageModelSelector": "图片模型选择器",
-      "videoModelSelector": "视频模型选择器",
-      "audioModelSelector": "音频模型选择器",
+      "imageModelSelector": "图片模型",
+      "videoModelSelector": "视频模型",
+      "audioModelSelector": "音频模型",
       "cameraStage": "3D 镜头参考"
+    },
+    "universalUpload": {
+      "preparing": "正在准备文件",
+      "action": {
+        "any": "上传文件",
+        "image": "上传图片",
+        "video": "上传视频",
+        "audio": "上传音频"
+      },
+      "hint": {
+        "any": "图片、视频或音频 · 点击、拖入或粘贴",
+        "image": "仅支持图片 · 点击、拖入或粘贴",
+        "video": "仅支持视频 · 点击、拖入或粘贴",
+        "audio": "仅支持音频 · 点击、拖入或粘贴"
+      },
+      "port": {
+        "any": "连接到图片、视频或音频输入",
+        "image": "连接到图片输入",
+        "video": "连接到视频输入",
+        "audio": "连接到音频输入"
+      },
+      "errors": {
+        "unsupported": "不支持这种文件格式",
+        "typeMismatch": "文件类型与当前连接不一致",
+        "failed": "导入失败，请重试"
+      }
     },
     "mediaRow": {
       "image": "图片",
@@ -165,7 +201,12 @@
     "textAnnotation": {
       "placeholder": "输入 Markdown 文本，取消选中后会渲染预览",
       "empty": "空文本",
-      "generating": "正在生成文本…"
+      "generating": "正在生成文本…",
+      "reasoning": "思考中"
+    },
+    "execution": {
+      "processing": "处理中",
+      "generating": "生成中"
     },
     "textProcessing": {
       "userPromptLabel": "用户输入",
@@ -180,7 +221,9 @@
       "promptRequired": "请输入提示词",
       "resultTitle": "文本结果",
       "noModel": "暂无可用模型",
-      "noModelConfigured": "没有可用的文本模型，请先在设置中启用大语言模型"
+      "noModelConfigured": "没有可用的文本模型，请先在设置中启用大语言模型",
+      "fixedResultLabel": "固定结果",
+      "fixedResultHint": "下游运行时复用输入未变化的最近结果；直接点击本节点生成仍会强制刷新。"
     },
     "videoGen": {
       "promptRequired": "请输入提示词",
@@ -210,10 +253,10 @@
       "preparing": "正在准备渲染场景",
       "rendering": "视频渲染中 {{progress}}%",
       "encoding": "视频编码中 {{progress}}%",
-      "renderFailed": "视频渲染失败",
+      "renderFailed": "渲染失败",
       "open": "打开 3D 镜头参考",
       "openHint": "双击打开 3D 镜头参考",
-      "openBlockedRendering": "视频渲染中，暂不可打开",
+      "openBlockedRendering": "渲染中，暂不可打开",
       "imageResultTitle": "3D 镜头参考图片",
       "videoResultTitle": "3D 镜头参考视频",
       "imageOutput": "图片输出",

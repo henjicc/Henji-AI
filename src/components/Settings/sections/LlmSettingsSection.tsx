@@ -405,7 +405,7 @@ const LlmSettingsSection: React.FC = () => {
         isOpen={showProviderManager}
         title="管理供应商"
         onClose={() => setShowProviderManager(false)}
-        widthClassName="w-[min(860px,calc(100vw-32px))]"
+        size="editor"
         footer={(
           <>
             <UiButton type="button" variant="muted" onClick={() => setShowProviderManager(false)}>关闭</UiButton>
@@ -415,7 +415,7 @@ const LlmSettingsSection: React.FC = () => {
           </>
         )}
       >
-        <div className="grid max-h-[min(680px,calc(100vh-150px))] grid-cols-[240px_minmax(0,1fr)] gap-4 overflow-hidden">
+        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] gap-4 overflow-hidden">
           <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
             {providers.map(provider => (
               <UiOptionButton

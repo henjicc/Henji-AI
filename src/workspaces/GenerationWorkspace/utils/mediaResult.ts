@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
 import type { GenerationTask } from '../types'
 import { toDisplaySrc } from '@/platform/desktopApi'
-import { fileToBlobSrc, isDesktop, saveAudioFromUrl, saveImageFromUrl, saveVideoFromUrl } from '@/utils/save'
+import { isDesktop, saveAudioFromUrl, saveImageFromUrl, saveVideoFromUrl } from '@/utils/save'
 import { joinMulti, splitMulti } from './multiFile'
 
 const logger = createLogger('workspaces.GenerationWorkspace.utils.mediaResult')
@@ -20,17 +20,8 @@ export async function toDisplayUrlStringFromFilePath(
   type: GenerationTask['type']
 ): Promise<string> {
   const paths = splitMulti(filePath)
-  if (type === 'video') {
-    return joinMulti(paths.map((p) => toDesktopDisplayUrl(p)))
-  }
-  const urls = await Promise.all(paths.map(async (p) => {
-    try {
-      return await fileToBlobSrc(p)
-    } catch {
-      return toDesktopDisplayUrl(p)
-    }
-  }))
-  return joinMulti(urls)
+  void type
+  return joinMulti(paths.map((p) => toDesktopDisplayUrl(p)))
 }
 
 export async function normalizeMediaResultForDesktop(

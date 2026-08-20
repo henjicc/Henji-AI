@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 
 import { UiModal } from '@/components/ui';
 import {
+  cancelCameraStageRender,
   onCameraStageRenderEvent,
   startCameraStageRender,
 } from '@/commands/cameraStageRender';
@@ -22,7 +23,10 @@ import { useCameraStageStore } from '@/features/cameraStage/store/cameraStageSto
 import { collectCameraStageAsset, type CameraStageAssetTarget } from '@/features/assets/services/cameraStageAssetCollection';
 
 const logger = createLogger('features.canvas.cameraStage');
-const renderAssetTargets = new Map<string, CameraStageAssetTarget>();
+const renderRequests = new Map<string, {
+  kind: 'image' | 'video';
+  target: CameraStageAssetTarget;
+}>();
 
 export function CameraStageNodeDialog(): JSX.Element | null {
   const { t } = useTranslation();
@@ -36,21 +40,48 @@ export function CameraStageNodeDialog(): JSX.Element | null {
   const nodeDisplayName = isActiveCameraStageNode ? node.data.displayName : undefined;
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
+  useEffect(() => {
+    for (const candidate of useCanvasStore.getState().nodes) {
+      if (!isCameraStageNode(candidate)) continue;
+      const requestId = candidate.data.imageRenderRequestId ?? candidate.data.videoRenderRequestId;
+      if ((!candidate.data.imageExporting && !candidate.data.videoExporting)
+        || (requestId && renderRequests.has(requestId))) continue;
+      if (requestId) void cancelCameraStageRender(requestId);
+      updateNodeData(candidate.id, {
+        imageExporting: false,
+        imageRenderRequestId: null,
+        imageRenderError: candidate.data.imageExporting ? '上一次图片渲染会话已中断，请重新输出' : null,
+        videoExporting: false,
+        videoProgress: null,
+        videoRenderPhase: null,
+        videoRenderRequestId: null,
+        videoRenderError: candidate.data.videoExporting ? '上一次视频渲染会话已中断，请重新输出' : null,
+      });
+    }
+  }, [updateNodeData]);
+
   useEffect(() => canvasEventBus.subscribe('camera-stage/open', ({ nodeId: nextNodeId }) => {
     const nextNode = useCanvasStore.getState().nodes.find((item) => item.id === nextNodeId);
-    if (isCameraStageNode(nextNode) && nextNode.data.videoExporting) {
-      logger.warn('3D 视频渲染期间已阻止打开编辑器', {
+    if (isCameraStageNode(nextNode) && (nextNode.data.videoExporting || nextNode.data.imageExporting)) {
+      logger.warn('3D 渲染期间已阻止打开编辑器', {
         event: 'canvas.camera_stage.open.blocked_rendering',
-        context: { nodeId: nextNodeId, requestId: nextNode.data.videoRenderRequestId },
+        context: {
+          nodeId: nextNodeId,
+          requestId: nextNode.data.imageRenderRequestId ?? nextNode.data.videoRenderRequestId,
+        },
       });
       return;
     }
     setNodeId(nextNodeId);
   }), []);
 
-  const startBackgroundRender = useCallback(async (nextNodeId: string): Promise<void> => {
+  const startBackgroundRender = useCallback(async (
+    nextNodeId: string,
+    outputKind: 'image' | 'video',
+  ): Promise<void> => {
     const currentNode = useCanvasStore.getState().nodes.find((item) => item.id === nextNodeId);
     if (!isCameraStageNode(currentNode)) return;
+    if (currentNode.data.imageExporting || currentNode.data.videoExporting) return;
     let projectId = currentNode.data.projectId;
     const requestId = crypto.randomUUID();
     try {
@@ -61,93 +92,170 @@ export function CameraStageNodeDialog(): JSX.Element | null {
       } else if (useCameraStageStore.getState().currentProjectId === projectId) {
         await saveCurrentProject();
       }
-      updateNodeData(nextNodeId, {
-        videoExporting: true,
-        videoProgress: 0,
-        videoRenderPhase: 'preparing',
-        videoRenderRequestId: requestId,
-        videoRenderError: null,
-      });
-      renderAssetTargets.set(requestId, {
-        enabled: currentNode.data.assetCollectionEnabled === true,
-        libraryId: currentNode.data.assetCollectionLibraryId ?? null,
+      updateNodeData(nextNodeId, outputKind === 'image'
+        ? {
+            imageExporting: true,
+            imageRenderRequestId: requestId,
+            imageRenderError: null,
+            videoRenderError: null,
+          }
+        : {
+            videoExporting: true,
+            videoProgress: 0,
+            videoRenderPhase: 'preparing',
+            videoRenderRequestId: requestId,
+            videoRenderError: null,
+            imageRenderError: null,
+          });
+      renderRequests.set(requestId, {
+        kind: outputKind,
+        target: {
+          enabled: currentNode.data.assetCollectionEnabled === true,
+          libraryId: currentNode.data.assetCollectionLibraryId ?? null,
+        },
       });
       await startCameraStageRender({
         requestId,
         nodeId: nextNodeId,
         projectId,
         resolutionPreset: '720p',
+        outputKind,
+        selectedTimeSec: outputKind === 'image' ? currentNode.data.selectedTimeSec : undefined,
       });
-      logger.info('画布 3D 视频后台渲染已提交', {
+      logger.info('画布 3D 后台渲染已提交', {
         event: 'canvas.camera_stage.background_render.started',
         requestId,
-        context: { nodeId: nextNodeId, projectId },
+        context: { nodeId: nextNodeId, projectId, outputKind },
       });
     } catch (error) {
-      renderAssetTargets.delete(requestId);
+      renderRequests.delete(requestId);
       const message = error instanceof Error ? error.message : String(error);
-      updateNodeData(nextNodeId, {
-        videoExporting: false,
-        videoProgress: null,
-        videoRenderPhase: null,
-        videoRenderRequestId: null,
-        videoRenderError: message,
-      });
-      logger.error('画布 3D 视频后台渲染提交失败', error, {
+      updateNodeData(nextNodeId, outputKind === 'image'
+        ? {
+            imageExporting: false,
+            imageRenderRequestId: null,
+            imageRenderError: message,
+          }
+        : {
+            videoExporting: false,
+            videoProgress: null,
+            videoRenderPhase: null,
+            videoRenderRequestId: null,
+            videoRenderError: message,
+          });
+      logger.error('画布 3D 后台渲染提交失败', error, {
         event: 'canvas.camera_stage.background_render.start_failed',
         requestId,
-        context: { nodeId: nextNodeId, projectId },
+        context: { nodeId: nextNodeId, projectId, outputKind },
       });
     }
   }, [updateNodeData]);
 
+  useEffect(() => canvasEventBus.subscribe('camera-stage/render-image', ({ nodeId: nextNodeId }) => {
+    void startBackgroundRender(nextNodeId, 'image');
+  }), [startBackgroundRender]);
+
   useEffect(() => canvasEventBus.subscribe('camera-stage/render-video', ({ nodeId: nextNodeId }) => {
-    void startBackgroundRender(nextNodeId);
+    void startBackgroundRender(nextNodeId, 'video');
   }), [startBackgroundRender]);
 
   useEffect(() => onCameraStageRenderEvent((event) => {
+    const pending = renderRequests.get(event.requestId);
+    if (!pending) return;
     const currentNode = useCanvasStore.getState().nodes.find((item) => item.id === event.nodeId);
-    if (!isCameraStageNode(currentNode) || currentNode.data.videoRenderRequestId !== event.requestId) return;
+    const matchesNode = isCameraStageNode(currentNode) && (
+      pending.kind === 'image'
+        ? currentNode.data.imageRenderRequestId === event.requestId
+        : currentNode.data.videoRenderRequestId === event.requestId
+    );
+    if (!matchesNode || !isCameraStageNode(currentNode)) return;
     if (event.type === 'progress') {
-      updateNodeData(event.nodeId, {
-        videoExporting: true,
-        videoProgress: event.progress,
-        videoRenderPhase: event.phase,
-      });
+      if (pending.kind === 'video') {
+        updateNodeData(event.nodeId, {
+          videoExporting: true,
+          videoProgress: event.progress,
+          videoRenderPhase: event.phase,
+        });
+      }
       return;
     }
     if (event.type === 'completed') {
-      updateNodeData(event.nodeId, {
-        videoUrl: event.result.mediaUrl,
-        durationSec: event.result.durationSeconds,
-        videoExporting: false,
-        videoProgress: null,
-        videoRenderPhase: null,
-        videoRenderRequestId: null,
-        videoRenderError: null,
-      });
-      canvasEventBus.publish('camera-stage/output', { nodeId: event.nodeId, kind: 'video' });
-      const target = renderAssetTargets.get(event.requestId);
-      renderAssetTargets.delete(event.requestId);
-      if (target) {
+      renderRequests.delete(event.requestId);
+      if (event.result.kind !== pending.kind) {
+        const expectedLabel = pending.kind === 'image' ? '图片' : '视频';
+        const actualLabel = event.result.kind === 'image' ? '图片' : '视频';
+        const message = `渲染结果类型异常：请求${expectedLabel}，实际收到${actualLabel}，请重试`;
+        updateNodeData(event.nodeId, pending.kind === 'image'
+          ? {
+              imageExporting: false,
+              imageRenderRequestId: null,
+              imageRenderError: message,
+            }
+          : {
+              videoExporting: false,
+              videoProgress: null,
+              videoRenderPhase: null,
+              videoRenderRequestId: null,
+              videoRenderError: message,
+            });
+        logger.error('画布 3D 后台渲染结果类型异常', {
+          event: 'canvas.camera_stage.background_render.kind_mismatch',
+          requestId: event.requestId,
+          context: { nodeId: event.nodeId, expectedKind: pending.kind, actualKind: event.result.kind },
+        });
+        return;
+      }
+      if (event.result.kind === 'image') {
+        updateNodeData(event.nodeId, {
+          imageUrl: event.result.mediaUrl,
+          previewImageUrl: event.result.mediaUrl,
+          aspectRatio: event.result.aspectRatio,
+          selectedTimeSec: event.result.selectedTimeSec,
+          imageExporting: false,
+          imageRenderRequestId: null,
+          imageRenderError: null,
+          videoRenderError: null,
+        });
+        canvasEventBus.publish('camera-stage/output', { nodeId: event.nodeId, kind: 'image' });
+      } else {
+        updateNodeData(event.nodeId, {
+          videoUrl: event.result.mediaUrl,
+          durationSec: event.result.durationSeconds,
+          videoExporting: false,
+          videoProgress: null,
+          videoRenderPhase: null,
+          videoRenderRequestId: null,
+          videoRenderError: null,
+          imageRenderError: null,
+        });
+        canvasEventBus.publish('camera-stage/output', { nodeId: event.nodeId, kind: 'video' });
+      }
+      if (pending.target) {
         void collectCameraStageAsset({
           filePath: event.result.mediaPath,
-          mediaType: 'video',
-          displayName: `${currentNode.data.displayName || '3D 镜头参考'}-视频`,
-          target,
+          mediaType: event.result.kind,
+          displayName: `${currentNode.data.displayName || '3D 镜头参考'}-${event.result.kind === 'image' ? '图片' : '视频'}`,
+          target: pending.target,
           requestId: event.requestId,
         });
       }
       return;
     }
-    renderAssetTargets.delete(event.requestId);
-    updateNodeData(event.nodeId, {
-      videoExporting: false,
-      videoProgress: null,
-      videoRenderPhase: null,
-      videoRenderRequestId: null,
-      videoRenderError: event.type === 'failed' ? event.message : null,
-    });
+    renderRequests.delete(event.requestId);
+    const message = event.type === 'failed' ? event.message : null;
+    updateNodeData(event.nodeId, pending.kind === 'image'
+      ? {
+          imageExporting: false,
+          imageRenderRequestId: null,
+          imageRenderError: message,
+        }
+      : {
+          videoExporting: false,
+          videoProgress: null,
+          videoRenderPhase: null,
+          videoRenderRequestId: null,
+          videoRenderError: message,
+        });
   }), [updateNodeData]);
 
   useEffect(() => {
@@ -216,7 +324,7 @@ export function CameraStageNodeDialog(): JSX.Element | null {
       title={t('node.menu.cameraStage')}
       onClose={close}
       hideHeader
-      widthClassName="flex h-full w-full flex-col overflow-hidden !rounded-none !border-0"
+      size="fullscreen"
       contentClassName="min-h-0 flex-1"
     >
       <div className="h-full overflow-hidden">

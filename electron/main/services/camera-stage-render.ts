@@ -5,15 +5,30 @@ import { cleanupAllVideoFrameExports } from './video/frame-export'
 import { createMainLogger } from './logging/main-logger'
 
 export type CameraStageRenderResolutionPreset = '720p' | '1080p'
+export type CameraStageRenderOutputKind = 'image' | 'video'
 
 export interface CameraStageRenderRequestDto {
   requestId: string
   nodeId: string
   projectId: string
   resolutionPreset: CameraStageRenderResolutionPreset
+  outputKind: CameraStageRenderOutputKind
+  selectedTimeSec?: number
 }
 
-export interface CameraStageRenderResultDto {
+export interface CameraStageImageRenderResultDto {
+  kind: 'image'
+  mediaUrl: string
+  mediaPath: string
+  savedPath: string
+  width: number
+  height: number
+  aspectRatio: string
+  selectedTimeSec: number
+}
+
+export interface CameraStageVideoRenderResultDto {
+  kind: 'video'
   mediaUrl: string
   mediaPath: string
   savedPath: string
@@ -22,6 +37,8 @@ export interface CameraStageRenderResultDto {
   width: number
   height: number
 }
+
+export type CameraStageRenderResultDto = CameraStageImageRenderResultDto | CameraStageVideoRenderResultDto
 
 export type CameraStageRenderEventDto =
   | {
@@ -60,11 +77,21 @@ let workerReady = false
 let activeTask: QueuedRenderTask | null = null
 let powerSaveBlockerId: number | null = null
 let workerReadyTimer: NodeJS.Timeout | null = null
+let activeTaskTimer: NodeJS.Timeout | null = null
+
+const IMAGE_RENDER_INACTIVITY_TIMEOUT_MS = 45_000
+const VIDEO_RENDER_INACTIVITY_TIMEOUT_MS = 120_000
 
 function clearWorkerReadyTimer(): void {
   if (!workerReadyTimer) return
   clearTimeout(workerReadyTimer)
   workerReadyTimer = null
+}
+
+function clearActiveTaskTimer(): void {
+  if (!activeTaskTimer) return
+  clearTimeout(activeTaskTimer)
+  activeTaskTimer = null
 }
 
 function failQueuedTasks(message: string): void {
@@ -111,6 +138,7 @@ function loadWorkerRenderer(win: BrowserWindow): void {
 function failActiveTask(message: string): void {
   const task = activeTask
   if (!task) return
+  clearActiveTaskTimer()
   sendToOwner(task, {
     type: 'failed',
     requestId: task.requestId,
@@ -124,6 +152,29 @@ function failActiveTask(message: string): void {
   })
   activeTask = null
   stopPowerSaveBlocker()
+}
+
+function recycleWorkerAfterTaskFailure(message: string, reason: string): void {
+  failActiveTask(message)
+  workerReady = false
+  void cleanupAllVideoFrameExports(reason)
+  const win = workerWindow
+  if (win && !win.isDestroyed()) win.destroy()
+}
+
+function armActiveTaskTimer(task: QueuedRenderTask): void {
+  clearActiveTaskTimer()
+  const timeoutMs = task.outputKind === 'image'
+    ? IMAGE_RENDER_INACTIVITY_TIMEOUT_MS
+    : VIDEO_RENDER_INACTIVITY_TIMEOUT_MS
+  activeTaskTimer = setTimeout(() => {
+    if (activeTask?.requestId !== task.requestId) return
+    const outputLabel = task.outputKind === 'image' ? '图片' : '视频'
+    recycleWorkerAfterTaskFailure(
+      `${outputLabel}渲染长时间没有进展，已自动结束，请重试`,
+      'camera_stage_render_inactivity_timeout',
+    )
+  }, timeoutMs)
 }
 
 function ensureWorkerWindow(): BrowserWindow {
@@ -189,17 +240,20 @@ function dispatchNextTask(): void {
   const task = queue.shift()
   if (!task) return
   activeTask = task
+  armActiveTaskTimer(task)
   startPowerSaveBlocker()
   logger.info('隐藏渲染任务开始', {
     event: 'camera_stage.background_render.start',
     requestId: task.requestId,
-    context: { nodeId: task.nodeId, projectId: task.projectId },
+    context: { nodeId: task.nodeId, projectId: task.projectId, outputKind: task.outputKind },
   })
   win.webContents.send('cameraStageRender:workerJob', {
     requestId: task.requestId,
     nodeId: task.nodeId,
     projectId: task.projectId,
     resolutionPreset: task.resolutionPreset,
+    outputKind: task.outputKind,
+    selectedTimeSec: task.selectedTimeSec,
   } satisfies CameraStageRenderRequestDto)
 }
 
@@ -259,8 +313,18 @@ export function handleCameraStageRenderWorkerEvent(
   if (!task || task.requestId !== event.requestId || task.nodeId !== event.nodeId) {
     throw new Error('Camera stage render worker event does not match the active task')
   }
+  if (event.type === 'completed' && event.result.kind !== task.outputKind) {
+    recycleWorkerAfterTaskFailure(
+      '渲染结果类型与请求不一致，已自动结束，请重试',
+      'camera_stage_render_result_kind_mismatch',
+    )
+    return
+  }
   sendToOwner(task, event)
-  if (event.type === 'progress') return
+  if (event.type === 'progress') {
+    armActiveTaskTimer(task)
+    return
+  }
 
   if (event.type === 'completed') {
     logger.info('隐藏渲染任务完成', {
@@ -269,7 +333,8 @@ export function handleCameraStageRenderWorkerEvent(
       context: {
         nodeId: task.nodeId,
         projectId: task.projectId,
-        frameCount: event.result.frameCount,
+        outputKind: event.result.kind,
+        frameCount: event.result.kind === 'video' ? event.result.frameCount : 1,
       },
     })
   } else if (event.type === 'cancelled') {
@@ -286,12 +351,14 @@ export function handleCameraStageRenderWorkerEvent(
     })
   }
   workerReady = false
+  clearActiveTaskTimer()
   activeTask = null
   stopPowerSaveBlocker()
 }
 
 export function closeCameraStageRenderWindow(): void {
   clearWorkerReadyTimer()
+  clearActiveTaskTimer()
   queue.splice(0, queue.length)
   activeTask = null
   stopPowerSaveBlocker()

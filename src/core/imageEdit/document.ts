@@ -71,7 +71,7 @@ export function getImageEditOperation<TParams extends object = object>(
 
 /**
  * 插入或替换操作实例。
- * 新实例按注册表 order 插入，保证朝向 → 柔光 → 标注 → 裁剪的兼容顺序；
+ * 新实例按注册表 order 插入，保证朝向 → 模糊/柔光 → 标注 → 裁剪的兼容顺序；
  * 已存在实例保留其文档 ID 和位置。
  */
 export function upsertImageEditOperation<TParams extends object>(

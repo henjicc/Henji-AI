@@ -36,6 +36,8 @@ function createModelSelectorDefinition(
     menuLabelKey: options.menuLabelKey,
     menuIcon: options.menuIcon,
     visibleInMenu: true,
+    menuSection: 'models',
+    menuOrder: options.mediaType === 'image' ? 10 : options.mediaType === 'video' ? 20 : 30,
     capabilities: {
       toolbar: false,
       promptInput: false,
@@ -60,15 +62,15 @@ function createModelSelectorDefinition(
 
 export const imageModelSelectorNodeDefinition = createModelSelectorDefinition(
   CANVAS_NODE_TYPES.imageModelSelector,
-  { menuLabelKey: 'node.menu.imageModelSelector', menuIcon: 'sparkles', mediaType: 'image' }
+  { menuLabelKey: 'node.menu.imageModelSelector', menuIcon: 'imageModel', mediaType: 'image' }
 );
 
 export const videoModelSelectorNodeDefinition = createModelSelectorDefinition(
   CANVAS_NODE_TYPES.videoModelSelector,
-  { menuLabelKey: 'node.menu.videoModelSelector', menuIcon: 'video', mediaType: 'video' }
+  { menuLabelKey: 'node.menu.videoModelSelector', menuIcon: 'videoModel', mediaType: 'video' }
 );
 
 export const audioModelSelectorNodeDefinition = createModelSelectorDefinition(
   CANVAS_NODE_TYPES.audioModelSelector,
-  { menuLabelKey: 'node.menu.audioModelSelector', menuIcon: 'audio', mediaType: 'audio' }
+  { menuLabelKey: 'node.menu.audioModelSelector', menuIcon: 'audioModel', mediaType: 'audio' }
 );

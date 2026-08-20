@@ -11,19 +11,13 @@ import { UploadArea } from './UploadArea'
 import { FilePreview } from './FilePreview'
 import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
+import { importLocalMedia } from '@/services/localMediaImport'
 
 interface VideoUploadProps {
   param: VideoUploadParamDef
   value: string[]
   onChange: (value: string[]) => void
   disabled?: boolean
-}
-
-interface VideoMetadata {
-  url: string
-  duration: number
-  width?: number
-  height?: number
 }
 
 export const VideoUpload: React.FC<VideoUploadProps> = ({
@@ -47,18 +41,16 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
     }
 
     // 读取视频元数据
-    const metadata = await loadVideoMetadata(file)
+    const imported = await importLocalMedia(file, 'video')
+    if (imported.kind !== 'video') return
 
     // 验证时长限制
-    if (param.maxDuration && metadata.duration > param.maxDuration) {
+    if (param.maxDuration && imported.durationSeconds > param.maxDuration) {
       showNotification(t('uploadArea.maxDuration', { maxDuration: param.maxDuration }), 'error')
       return
     }
 
-    // 创建 Object URL
-    const videoUrl = URL.createObjectURL(file)
-
-    onChange([...value, videoUrl])
+    onChange([...value, imported.fullPath])
   }
 
   // 处理删除
@@ -99,25 +91,4 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
       )}
     </div>
   )
-}
-
-// 辅助函数：加载视频并获取元数据
-function loadVideoMetadata(file: File): Promise<VideoMetadata> {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video')
-    video.preload = 'metadata'
-
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(video.src)
-      resolve({
-        url: URL.createObjectURL(file),
-        duration: video.duration,
-        width: video.videoWidth,
-        height: video.videoHeight
-      })
-    }
-
-    video.onerror = reject
-    video.src = URL.createObjectURL(file)
-  })
 }

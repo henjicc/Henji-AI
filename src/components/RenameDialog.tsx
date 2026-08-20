@@ -47,7 +47,7 @@ export function RenameDialog({
       title={title}
       onClose={onClose}
       hideHeader
-      widthClassName="w-80"
+      size="compact"
       contentClassName="p-6"
       footer={
         <>

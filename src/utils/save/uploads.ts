@@ -1,6 +1,5 @@
 import { createLogger } from '@/core/logging'
 import {
-  getPathForFile,
   join,
   mkdir,
   nativeFetch as httpFetch,
@@ -9,18 +8,15 @@ import {
   toDisplaySrc,
   writeFile,
 } from '@/platform/desktopApi'
-import {
-  grantMediaAccessForReference,
-  resolveLargeUploadAction,
-} from '@/services/largeUploadPolicy'
+import { importLocalMedia } from '@/services/localMediaImport'
 import { getUploadsPath } from '@/utils/dataPath'
 import { inferMimeFromPath as inferMimeFromPathShared } from '@/utils/mime'
-import { fileToBlobSrc, fileToDataUrl, bytesToDataUrl } from './fileUrls'
+import { bytesToDataUrl } from './fileUrls'
 import { sha256Hex } from './hash'
 
 const logger = createLogger('utils.save.uploads')
 
-const uploadCache: Map<string, { bytes: Uint8Array; dataUrl: string; displaySrc: string; compressedHash: string }> = new Map()
+const uploadCache: Map<string, { bytes: Uint8Array<ArrayBuffer>; dataUrl: string; displaySrc: string; compressedHash: string }> = new Map()
 
 function normalizeBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   const normalized = new Uint8Array(bytes.byteLength)
@@ -33,19 +29,9 @@ export async function saveUploadImage(
   mode: 'memory' | 'persist' = 'persist',
   opts?: { maxDimension?: number }
 ): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
-  // Fast path: use main process sharp when a real file path is available
-  if (fileOrBlob instanceof File) {
-    const filePath = getPathForFile(fileOrBlob)
-    if (filePath) {
-      const result = await window.henjiNative!.image.compressImageSource({
-        source: filePath,
-        maxPixels: 17_000_000,
-        quality: 0.85,
-        maxDimension: opts?.maxDimension,
-      })
-      const displaySrc = await fileToBlobSrc(result.fullPath, 'image/jpeg')
-      return { fullPath: result.fullPath, displaySrc, dataUrl: result.dataUrl }
-    }
+  if (mode === 'persist' && fileOrBlob instanceof File) {
+    const imported = await importLocalMedia(fileOrBlob, 'image')
+    return { fullPath: imported.fullPath, displaySrc: toDisplaySrc(imported.fullPath), dataUrl: '' }
   }
 
   const mime = 'image/jpeg'
@@ -72,21 +58,12 @@ export async function saveUploadImage(
   const full = await join(uploadsPath, name)
 
   if (mode === 'persist') {
-    await mkdir(uploadsPath, { recursive: true })
-    let exists = false
-    try {
-      await readFile(full)
-      exists = true
-    } catch {
-      // Missing cached file means it needs to be written.
-    }
-    if (!exists) {
-      await writeFile(full, cached.bytes)
-    }
-    const displaySrc = await fileToBlobSrc(full, mime)
-    const dataUrl = await fileToDataUrl(full, mime)
+    const imported = await importLocalMedia(
+      new File([cached.bytes], `${cached.compressedHash}.${ext}`, { type: mime }),
+      'image',
+    )
     logger.info('上传图片已持久化', { event: 'media_upload.image.persisted' })
-    return { fullPath: full, displaySrc, dataUrl }
+    return { fullPath: imported.fullPath, displaySrc: toDisplaySrc(imported.fullPath), dataUrl: '' }
   }
 
   return { fullPath: full, displaySrc: cached.displaySrc, dataUrl: cached.dataUrl }
@@ -102,19 +79,9 @@ export async function saveUploadVideo(
 ): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
   const mime = file.type || 'video/mp4'
   const ext = mime.includes('webm') ? 'webm' : 'mp4'
-
-  // 大文件策略（用户约定，见 services/largeUploadPolicy.ts）：
-  // ≤100MB 一律复制进 Uploads；>100MB 按设置执行（每次询问 / 复制 / 引用原路径）。
-  // 引用模式会主动授权原文件所在目录给 henji-media 协议（授权持久化，重启不失效），
-  // 避免复制几百 MB 视频的读取+哈希+落盘耗时；复制模式更稳妥但大文件较慢。
   if (mode === 'persist') {
-    const directPath = getPathForFile(file)
-    const action = await resolveLargeUploadAction(file, directPath ?? null)
-    if (action === 'reference' && directPath) {
-      await grantMediaAccessForReference(directPath)
-      logger.info('上传视频已引用原文件', { event: 'media_upload.video.referenced' })
-      return { fullPath: directPath, displaySrc: toDisplaySrc(directPath), dataUrl: '' }
-    }
+    const imported = await importLocalMedia(file, 'video')
+    return { fullPath: imported.fullPath, displaySrc: toDisplaySrc(imported.fullPath), dataUrl: '' }
   }
 
   const originalBuf = await file.arrayBuffer()
@@ -124,28 +91,6 @@ export async function saveUploadVideo(
   const name = `${hash}.${ext}`
   const uploadsPath = await getUploadsPath()
   const full = await join(uploadsPath, name)
-
-  if (mode === 'persist') {
-    await mkdir(uploadsPath, { recursive: true })
-
-    let exists = false
-    try {
-      await readFile(full)
-      exists = true
-    } catch {
-      // Missing cached file means it needs to be written.
-    }
-
-    if (!exists) {
-      await writeFile(full, bytes)
-    }
-
-    const displaySrc = await fileToBlobSrc(full, mime)
-    const dataUrl = await fileToDataUrl(full, mime)
-
-    logger.info('上传视频已持久化', { event: 'media_upload.video.persisted' })
-    return { fullPath: full, displaySrc, dataUrl }
-  }
 
   const dataUrl = bytesToDataUrl(bytes, mime)
   const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))
@@ -181,16 +126,9 @@ export async function saveUploadAudio(
   mode: 'memory' | 'persist' = 'persist'
 ): Promise<{ fullPath: string; displaySrc: string; dataUrl: string }> {
   const { mime, ext } = resolveAudioMimeAndExt(file)
-
-  // 与视频一致的大文件策略：>100MB 的音频（长录音/无损）按设置选择复制或引用原路径
   if (mode === 'persist') {
-    const directPath = getPathForFile(file)
-    const action = await resolveLargeUploadAction(file, directPath ?? null)
-    if (action === 'reference' && directPath) {
-      await grantMediaAccessForReference(directPath)
-      logger.info('上传音频已引用原文件', { event: 'media_upload.audio.referenced' })
-      return { fullPath: directPath, displaySrc: toDisplaySrc(directPath), dataUrl: '' }
-    }
+    const imported = await importLocalMedia(file, 'audio')
+    return { fullPath: imported.fullPath, displaySrc: toDisplaySrc(imported.fullPath), dataUrl: '' }
   }
 
   const originalBuf = await file.arrayBuffer()
@@ -200,28 +138,6 @@ export async function saveUploadAudio(
 
   const uploadsPath = await getUploadsPath()
   const full = await join(uploadsPath, name)
-
-  if (mode === 'persist') {
-    await mkdir(uploadsPath, { recursive: true })
-
-    let exists = false
-    try {
-      await readFile(full)
-      exists = true
-    } catch {
-      // Missing cached file means it needs to be written.
-    }
-
-    if (!exists) {
-      await writeFile(full, bytes)
-    }
-
-    const displaySrc = await fileToBlobSrc(full, mime)
-    const dataUrl = await fileToDataUrl(full, mime)
-
-    logger.info('上传音频已持久化', { event: 'media_upload.audio.persisted' })
-    return { fullPath: full, displaySrc, dataUrl }
-  }
 
   const dataUrl = bytesToDataUrl(bytes, mime)
   const displaySrc = URL.createObjectURL(new Blob([bytes], { type: mime }))

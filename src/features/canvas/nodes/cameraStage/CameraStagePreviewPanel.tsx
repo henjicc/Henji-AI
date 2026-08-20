@@ -7,24 +7,24 @@ import { ICON_TOOL_CAMERA_STAGE } from '@/core/theme/icons'
 interface CameraStagePreviewPanelProps {
   imageSource: string | null;
   imageViewerSource: string | null;
-  videoExporting: boolean;
-  videoProgress: number | null;
-  videoRenderPhase: 'preparing' | 'rendering' | 'encoding' | null;
-  videoRenderError: string | null;
+  rendering: boolean;
+  renderProgress: number | null;
+  renderPhase: 'preparing' | 'rendering' | 'encoding' | null;
+  renderError: string | null;
 }
 
 export function CameraStagePreviewPanel({
   imageSource,
   imageViewerSource,
-  videoExporting,
-  videoProgress,
-  videoRenderPhase,
-  videoRenderError,
+  rendering,
+  renderProgress,
+  renderPhase,
+  renderError,
 }: CameraStagePreviewPanelProps): JSX.Element {
   const { t } = useTranslation();
-  const progressKey = videoRenderPhase === 'preparing'
+  const progressKey = renderPhase === 'preparing'
     ? 'node.cameraStage.preparing'
-    : videoRenderPhase === 'encoding'
+    : renderPhase === 'encoding'
       ? 'node.cameraStage.encoding'
       : 'node.cameraStage.rendering';
 
@@ -45,24 +45,24 @@ export function CameraStagePreviewPanel({
         </div>
       )}
 
-      {videoExporting && (
+      {rendering && (
         <>
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-bg-dark/65">
             <div className="flex items-center gap-2 rounded-lg bg-surface-dark/90 px-3 py-2 text-xs text-text-dark">
               <LoaderCircle className="h-4 w-4 animate-spin text-accent" />
-              {t(progressKey, { progress: Math.round((videoProgress ?? 0) * 100) })}
+              {t(progressKey, { progress: Math.round((renderProgress ?? 0) * 100) })}
             </div>
           </div>
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1.5 bg-layer">
-            <div className="h-full origin-left bg-accent transition-transform duration-150" style={{ transform: `scaleX(${videoProgress ?? 0})` }} />
+            <div className="h-full origin-left bg-accent transition-transform duration-150" style={{ transform: `scaleX(${renderProgress ?? 0})` }} />
           </div>
         </>
       )}
 
-      {!videoExporting && videoRenderError && (
+      {!rendering && renderError && (
         <div
           className="pointer-events-none absolute inset-0 flex items-center justify-center bg-bg-dark/70"
-          title={videoRenderError}
+          title={renderError}
         >
           <div className="flex max-w-[80%] items-center gap-2 rounded-lg bg-surface-dark/90 px-3 py-2 text-xs text-text-dark">
             <AlertCircle className="h-4 w-4 shrink-0 text-danger" />
@@ -72,7 +72,7 @@ export function CameraStagePreviewPanel({
       )}
 
       <span className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-3xs text-text-muted opacity-0 transition-opacity group-hover:opacity-100">
-        {t(videoExporting ? 'node.cameraStage.openBlockedRendering' : 'node.cameraStage.openHint')}
+        {t(rendering ? 'node.cameraStage.openBlockedRendering' : 'node.cameraStage.openHint')}
       </span>
     </div>
   );

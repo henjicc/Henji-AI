@@ -250,7 +250,7 @@ export function AssistantTracePanel({ refreshToken }: AssistantTracePanelProps):
         isOpen={clearConfirmOpen}
         onClose={() => setClearConfirmOpen(false)}
         title="清空助手追踪"
-        widthClassName="w-[440px]"
+        size="compact"
         footer={<><UiButton type="button" variant="ghost" onClick={() => setClearConfirmOpen(false)}>取消</UiButton><UiButton type="button" variant="primary" onClick={() => void handleClear()}>确认清空</UiButton></>}
       >
         <div className="text-sm text-text-muted">

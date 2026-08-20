@@ -77,7 +77,8 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
     // 这里只服务导出；助手的视口观察统一走 observe_application_surface 截取
     // StageViewportWorkspace 上标注的 camera_stage.viewport_observer 区域。
     return () => {
-      captureRef.current = null
+      // 四视口切换 primary 时，新桥可能已经先接管 ref；旧桥卸载不能把新桥清空。
+      if (captureRef.current === captureFrame) captureRef.current = null
       disposeOffscreen()
     }
   }, [camera, captureRef, gl, scene])

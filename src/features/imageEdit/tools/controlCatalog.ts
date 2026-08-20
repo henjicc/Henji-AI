@@ -3,7 +3,7 @@ import { IMAGE_EDIT_OPERATION_IDS } from '@/core/imageEdit'
 import { imageEditOperationSchema, type ImageEditControlOperation } from '../application/imageEditControlCatalog'
 
 export interface ImageEditorToolControlDefinition {
-  id: 'geometry' | 'diffusion'
+  id: 'geometry' | 'blur' | 'diffusion'
   label: string
   operationId: string
   operationSchema: typeof imageEditOperationSchema
@@ -17,6 +17,13 @@ export const IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS: readonly ImageEditorToolCont
     operationId: IMAGE_EDIT_OPERATION_IDS.orientation,
     operationSchema: imageEditOperationSchema,
     kinds: ['rotate_cw', 'rotate_ccw', 'flip_h', 'flip_v', 'crop', 'mark'],
+  },
+  {
+    id: 'blur',
+    label: '模糊',
+    operationId: IMAGE_EDIT_OPERATION_IDS.blur,
+    operationSchema: imageEditOperationSchema,
+    kinds: ['blur'],
   },
   {
     id: 'diffusion',

@@ -52,8 +52,11 @@ function createMediaGenDefaultData(
 export const videoGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
   type: CANVAS_NODE_TYPES.videoGen,
   menuLabelKey: 'node.menu.videoGen',
-  menuIcon: 'video',
+  menuIcon: 'videoGeneration',
   visibleInMenu: true,
+  menuSection: 'media',
+  menuOrder: 30,
+  executionKind: 'standard-generation',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -84,8 +87,11 @@ export const videoGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
 export const audioGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
   type: CANVAS_NODE_TYPES.audioGen,
   menuLabelKey: 'node.menu.audioGen',
-  menuIcon: 'audio',
+  menuIcon: 'audioGeneration',
   visibleInMenu: true,
+  menuSection: 'media',
+  menuOrder: 40,
+  executionKind: 'standard-generation',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -116,7 +122,7 @@ export const audioGenNodeDefinition: CanvasNodeDefinition<MediaGenNodeData> = {
 export const exportVideoNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData> = {
   type: CANVAS_NODE_TYPES.exportVideo,
   menuLabelKey: 'node.menu.videoGen',
-  menuIcon: 'video',
+  menuIcon: 'videoGeneration',
   visibleInMenu: false,
   capabilities: {
     toolbar: true,
@@ -154,7 +160,7 @@ export const exportVideoNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData>
 export const exportAudioNodeDefinition: CanvasNodeDefinition<AudioMediaNodeData> = {
   type: CANVAS_NODE_TYPES.exportAudio,
   menuLabelKey: 'node.menu.audioGen',
-  menuIcon: 'audio',
+  menuIcon: 'audioGeneration',
   visibleInMenu: false,
   capabilities: {
     toolbar: true,
@@ -189,8 +195,11 @@ export const exportAudioNodeDefinition: CanvasNodeDefinition<AudioMediaNodeData>
 export const videoUploadNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData> = {
   type: CANVAS_NODE_TYPES.videoUpload,
   menuLabelKey: 'node.menu.uploadVideo',
-  menuIcon: 'upload',
-  visibleInMenu: true,
+  menuIcon: 'videoUpload',
+  visibleInMenu: false,
+  menuSection: 'media',
+  menuOrder: 10,
+  menuAggregationKey: 'upload',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -223,8 +232,11 @@ export const videoUploadNodeDefinition: CanvasNodeDefinition<VideoMediaNodeData>
 export const audioUploadNodeDefinition: CanvasNodeDefinition<AudioMediaNodeData> = {
   type: CANVAS_NODE_TYPES.audioUpload,
   menuLabelKey: 'node.menu.uploadAudio',
-  menuIcon: 'upload',
-  visibleInMenu: true,
+  menuIcon: 'audioUpload',
+  visibleInMenu: false,
+  menuSection: 'media',
+  menuOrder: 10,
+  menuAggregationKey: 'upload',
   capabilities: {
     toolbar: true,
     promptInput: false,

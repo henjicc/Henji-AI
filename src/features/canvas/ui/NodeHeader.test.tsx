@@ -4,7 +4,21 @@ import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore';
 import { NODE_HEADER_FLOATING_POSITION_CLASS, NodeHeader } from './NodeHeader';
+
+vi.mock('react-i18next', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-i18next')>();
+  return {
+    ...actual,
+    useTranslation: () => ({
+      t: (key: string) => ({
+        'node.execution.processing': '处理中',
+        'node.execution.generating': '生成中',
+      })[key] ?? key,
+    }),
+  };
+});
 
 vi.mock('@xyflow/react', () => ({
   useNodeId: () => 'node-1',
@@ -21,6 +35,7 @@ vi.mock('@xyflow/react', () => ({
 
 afterEach(() => {
   cleanup();
+  useCanvasExecutionStateStore.getState().resetNodeExecutions();
   document.body.replaceChildren();
 });
 
@@ -77,5 +92,43 @@ describe('NodeHeader', () => {
 
     fireEvent.keyDown(rendered.getByRole('textbox'), { key: 'Escape' });
     expect(nodeElement.classList.contains('canvas-node-header-editing')).toBe(false);
+  });
+
+  it('双击浮动标题时不将前置 click 冒泡为节点选中', () => {
+    const onNodeSelect = vi.fn();
+    const nodeElement = document.createElement('div');
+    nodeElement.className = 'react-flow__node nopan';
+    nodeElement.dataset.id = 'node-1';
+    document.body.appendChild(nodeElement);
+
+    const rendered = render(
+      <div onClick={onNodeSelect}>
+        <NodeHeader
+          className={NODE_HEADER_FLOATING_POSITION_CLASS}
+          titleText="AI 图片"
+          editable
+          onTitleChange={vi.fn()}
+        />
+      </div>,
+    );
+    const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
+
+    fireEvent.click(dragSurface!);
+    fireEvent.click(dragSurface!);
+    fireEvent.doubleClick(dragSurface!);
+
+    expect(onNodeSelect).not.toHaveBeenCalled();
+    expect(rendered.getByRole('textbox')).toBeTruthy();
+  });
+
+  it('在标题旁显示当前节点的执行阶段', () => {
+    useCanvasExecutionStateStore.getState().beginNodeExecution('node-1', {
+      runId: 'run-1',
+      phase: 'processing',
+    });
+
+    const { rendered } = renderHeader();
+
+    expect(rendered.getByRole('status').textContent).toContain('处理中');
   });
 });

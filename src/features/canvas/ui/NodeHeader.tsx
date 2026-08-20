@@ -10,7 +10,15 @@ import {
   useState,
 } from 'react';
 import { useInternalNode, useNodeId, ViewportPortal } from '@xyflow/react';
-import { UI_FIELD_FOCUS_CLASS, UI_FIELD_SURFACE_CLASS, UiButton, UiInput } from '@/components/ui';
+import { useTranslation } from 'react-i18next';
+import {
+  UI_COLOR_ACCENT_TEXT_CLASS,
+  UI_FIELD_FOCUS_CLASS,
+  UI_FIELD_SURFACE_CLASS,
+  UiButton,
+  UiInput,
+} from '@/components/ui';
+import { useCanvasExecutionStateStore } from '@/stores/canvasExecutionStateStore';
 
 type HeaderAdjust = {
   x?: number;
@@ -116,8 +124,12 @@ export function NodeHeader({
   editable = false,
   onTitleChange,
 }: NodeHeaderProps) {
+  const { t } = useTranslation();
   const nodeId = useNodeId();
   const internalNode = useInternalNode(nodeId ?? '');
+  const activeExecution = useCanvasExecutionStateStore(
+    (state) => nodeId ? state.activeNodes[nodeId] : undefined,
+  );
   const tone = toneClassName ?? NODE_HEADER_TONE_CLASS;
   const canEditTitle = editable && typeof titleText === 'string' && typeof onTitleChange === 'function';
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -268,6 +280,19 @@ export function NodeHeader({
   const resolvedMeta = metaText
     ? <span className={joinClasses(NODE_HEADER_META_CLASS, metaClassName)}>{metaText}</span>
     : meta;
+  const executionStatus = activeExecution ? (
+    <span
+      role="status"
+      aria-live="polite"
+      className={joinClasses(
+        'inline-flex shrink-0 items-center gap-1 text-2xs font-medium',
+        UI_COLOR_ACCENT_TEXT_CLASS,
+      )}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden="true" />
+      {t(`node.execution.${activeExecution.phase}`)}
+    </span>
+  ) : null;
 
   const handleDragSurfaceMouseDown = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
     if (!nodeId || event.button !== 0 || isEditingTitle) {
@@ -335,6 +360,7 @@ export function NodeHeader({
                 className
               )}
               onMouseDown={handleDragSurfaceMouseDown}
+              onClick={(event) => event.stopPropagation()}
               onDoubleClick={handleDragSurfaceDoubleClick}
             />
           </div>
@@ -357,6 +383,7 @@ export function NodeHeader({
             ) : null}
             <div className="flex min-w-0 flex-1 items-baseline gap-2" style={composeTransformStyle(titleAdjust)}>
               {resolvedTitle}
+              {executionStatus}
               {resolvedMeta}
             </div>
           </div>

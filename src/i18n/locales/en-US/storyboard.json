@@ -30,8 +30,8 @@
     "addImage": "Add Image",
     "splitStoryboard": "Split Storyboard",
     "generate": "Generate",
-    "emptyHintTitle": "Double-click to add a node",
-    "emptyHintSubtitle": "Double-click to add a node",
+    "emptyHintTitle": "Double-click or right-click to add a node",
+    "emptyHintSubtitle": "Double-click or right-click to add a node",
     "mediaDrop": {
       "imported": "Imported {{count}} media file(s)",
       "importedWithSkipped": "Imported {{count}} media file(s); skipped {{skipped}} unsupported file(s)",
@@ -41,7 +41,8 @@
     "connection": {
       "typeMismatch": "Connection type mismatch. Use the matching input row.",
       "mediaLimitExceeded": "{{media}} accepts up to {{max}} connection(s).",
-      "mediaFallback": "Media"
+      "mediaFallback": "Media",
+      "cycle": "This connection would create a dependency cycle."
     },
     "toolbar": {
       "zoomIn": "Zoom In",
@@ -93,28 +94,63 @@
     "collapse": "Collapse"
   },
   "node": {
+    "menuTitle": "Add Node",
+    "menuSections": {
+      "media": "Media & Generation",
+      "textTools": "Text & Tools",
+      "models": "Model Selectors",
+      "parameters": "Parameters",
+      "extensions": "Other"
+    },
     "generationError": {
       "viewDetail": "Click for details"
     },
     "menu": {
+      "upload": "Upload",
       "uploadImage": "Upload Image",
-      "aiImageGeneration": "AI Image",
+      "aiImageGeneration": "Image Generation",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textProcessing": "Text Processing",
-      "textAnnotation": "Text Annotation",
-      "videoGen": "AI Video",
-      "audioGen": "AI Audio",
+      "textAnnotation": "Text Display",
+      "videoGen": "Video Generation",
+      "audioGen": "Audio Generation",
       "uploadVideo": "Upload Video",
       "uploadAudio": "Upload Audio",
       "intSource": "Integer",
       "floatSource": "Float",
       "stringSource": "Text",
       "booleanSource": "Boolean",
-      "imageModelSelector": "Image Model Selector",
-      "videoModelSelector": "Video Model Selector",
-      "audioModelSelector": "Audio Model Selector",
+      "imageModelSelector": "Image Model",
+      "videoModelSelector": "Video Model",
+      "audioModelSelector": "Audio Model",
       "cameraStage": "3D Camera Reference"
+    },
+    "universalUpload": {
+      "preparing": "Preparing file",
+      "action": {
+        "any": "Upload File",
+        "image": "Upload Image",
+        "video": "Upload Video",
+        "audio": "Upload Audio"
+      },
+      "hint": {
+        "any": "Image, video, or audio · click, drop, or paste",
+        "image": "Images only · click, drop, or paste",
+        "video": "Videos only · click, drop, or paste",
+        "audio": "Audio only · click, drop, or paste"
+      },
+      "port": {
+        "any": "Connect to an image, video, or audio input",
+        "image": "Connect to an image input",
+        "video": "Connect to a video input",
+        "audio": "Connect to an audio input"
+      },
+      "errors": {
+        "unsupported": "This file format is not supported",
+        "typeMismatch": "The file type does not match the current connection",
+        "failed": "Import failed. Please try again"
+      }
     },
     "mediaRow": {
       "image": "Image",
@@ -165,7 +201,12 @@
     "textAnnotation": {
       "placeholder": "Write Markdown text. It will render when unselected.",
       "empty": "Empty text",
-      "generating": "Generating text…"
+      "generating": "Generating text…",
+      "reasoning": "Thinking"
+    },
+    "execution": {
+      "processing": "Processing",
+      "generating": "Generating"
     },
     "textProcessing": {
       "userPromptLabel": "User input",
@@ -180,7 +221,9 @@
       "promptRequired": "Please enter a prompt",
       "resultTitle": "Text Result",
       "noModel": "No model available",
-      "noModelConfigured": "No text model is available. Enable a language model in Settings first."
+      "noModelConfigured": "No text model is available. Enable a language model in Settings first.",
+      "fixedResultLabel": "Fixed Result",
+      "fixedResultHint": "Reuse the latest result when inputs are unchanged. Running this node directly always refreshes it."
     },
     "videoGen": {
       "promptRequired": "Please enter a prompt",
@@ -210,10 +253,10 @@
       "preparing": "Preparing render scene",
       "rendering": "Rendering video {{progress}}%",
       "encoding": "Encoding video {{progress}}%",
-      "renderFailed": "Video rendering failed",
+      "renderFailed": "Rendering failed",
       "open": "Open 3D Camera Reference",
       "openHint": "Double-click to open 3D Camera Reference",
-      "openBlockedRendering": "Video rendering in progress; editor unavailable",
+      "openBlockedRendering": "Rendering in progress; editor unavailable",
       "imageResultTitle": "3D Camera Reference Image",
       "videoResultTitle": "3D Camera Reference Video",
       "imageOutput": "Image output",

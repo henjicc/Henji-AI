@@ -194,17 +194,22 @@ async function encodeCompressedVideo(
 
 export async function generateVideoThumbnail(
   source: string,
-  timeOffsetSeconds: number = 1.0
+  timeOffsetSeconds: number = 1.0,
+  knownDurationSeconds?: number,
 ): Promise<string> {
   const ffmpegPath = await loadFfmpegPath()
   const localPath = await resolveLocalMediaPath(source)
 
   let seekTime = timeOffsetSeconds
-  try {
-    const info = await readVideoInfo(source)
-    seekTime = Math.min(Math.max(0, timeOffsetSeconds), Math.max(0, info.durationSeconds - 0.1))
-  } catch {
-    // use default seek time if info cannot be read
+  if (typeof knownDurationSeconds === 'number' && Number.isFinite(knownDurationSeconds)) {
+    seekTime = Math.min(Math.max(0, timeOffsetSeconds), Math.max(0, knownDurationSeconds - 0.1))
+  } else {
+    try {
+      const info = await readVideoInfo(source)
+      seekTime = Math.min(Math.max(0, timeOffsetSeconds), Math.max(0, info.durationSeconds - 0.1))
+    } catch {
+      // use default seek time if info cannot be read
+    }
   }
 
   const { stdout } = await execFileAsyncBuffer(ffmpegPath, [

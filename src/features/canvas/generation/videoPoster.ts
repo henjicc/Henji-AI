@@ -107,13 +107,12 @@ function detectVideoAspectRatioFallback(videoSource: string): Promise<string> {
 export async function captureVideoPoster(videoSource: string): Promise<VideoPosterInfo> {
   if (window.henjiNative) {
     try {
-      const [info, thumbnail] = await Promise.all([
-        window.henjiNative.video.readVideoInfo(videoSource),
-        window.henjiNative.video.generateThumbnail({
-          source: videoSource,
-          timeOffsetSeconds: POSTER_CAPTURE_TIME_SEC,
-        }),
-      ]);
+      const info = await window.henjiNative.video.readVideoInfo(videoSource);
+      const thumbnail = await window.henjiNative.video.generateThumbnail({
+        source: videoSource,
+        timeOffsetSeconds: POSTER_CAPTURE_TIME_SEC,
+        knownDurationSeconds: info.durationSeconds,
+      });
       const posterUrl = await persistImageLocally(thumbnail.dataUrl);
       return {
         posterUrl,

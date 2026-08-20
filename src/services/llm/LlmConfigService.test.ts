@@ -4,6 +4,8 @@ import {
   DEEPSEEK_V4_CONTEXT_WINDOW,
   DEEPSEEK_V4_MAX_OUTPUT_TOKENS,
   DEFAULT_AGENT_PROFILE_ID,
+  createDefaultPromptProfile,
+  createDefaultTextProcessingPromptTemplates,
 } from '@/core/llm/defaults'
 import type { LlmConfigState } from '@/core/llm/types'
 import { normalizeLlmConfig } from './LlmConfigService'
@@ -95,5 +97,110 @@ describe('normalizeLlmConfig', () => {
     })
     expect(config.textProcessingPromptTemplates).toHaveLength(1)
     expect(config.textProcessingPromptTemplates[0].name).toBe('我的模板')
+  })
+
+  it('升级内置提示词模板并保留用户已修改的内容', () => {
+    const defaults = normalizeLlmConfig(null)
+    const legacyTemplates = createDefaultTextProcessingPromptTemplates()
+      .filter((template) => template.id !== 'text-processing-wallpaper-optimizer')
+      .map((template) => ({
+        ...template,
+        systemPrompt: template.id === 'text-processing-general-optimizer'
+          ? '你是提示词优化助手。请在不改变用户原意的前提下，补充必要细节并改善结构与表达。\n只输出优化后的提示词，不要解释，不要添加标题或前后缀。'
+          : template.id === 'text-processing-image-optimizer'
+            ? '你是图像生成提示词优化助手。保留用户原意，补足主体、场景、风格、构图、镜头、光线与画面质量描述。\n只输出优化后的提示词，不要解释，不要添加标题或前后缀。'
+            : '你是视频生成提示词优化助手。保留用户原意，补足主体动作、场景变化、镜头运动、节奏、光线与时间连续性。\n只输出优化后的提示词，不要解释，不要添加标题或前后缀。',
+      }))
+    const legacyProfile = {
+      ...defaults.promptProfiles[0],
+      systemPrompt: '你是面向图像、视频和音频生成工作流的提示词优化助手。\n保留用户原意，补足主体、场景、风格、镜头、光线、构图和质量描述。\n只输出优化后的提示词，不要解释，不要添加标题。',
+      systemPromptDocument: undefined,
+      userTemplate: '请优化以下提示词，使其更适合生成模型使用：\n\n{{prompt}}',
+      userTemplateDocument: undefined,
+    }
+
+    const upgraded = normalizeLlmConfig({
+      ...defaults,
+      textProcessingPromptTemplates: legacyTemplates,
+      promptProfiles: [legacyProfile],
+    })
+
+    expect(upgraded.textProcessingPromptTemplates).toHaveLength(4)
+    expect(upgraded.textProcessingPromptTemplates.map((template) => template.id)).toEqual([
+      'text-processing-general-optimizer',
+      'text-processing-image-optimizer',
+      'text-processing-video-optimizer',
+      'text-processing-wallpaper-optimizer',
+    ])
+    expect(upgraded.textProcessingPromptTemplates[1].systemPrompt)
+      .toBe(defaults.textProcessingPromptTemplates[1].systemPrompt)
+    expect(upgraded.promptProfiles[0].systemPrompt).toBe(defaults.promptProfiles[0].systemPrompt)
+    expect(upgraded.promptProfiles[0].userTemplate).toBe(defaults.promptProfiles[0].userTemplate)
+
+    const customized = normalizeLlmConfig({
+      ...defaults,
+      textProcessingPromptTemplates: legacyTemplates.map((template) => (
+        template.id === 'text-processing-image-optimizer'
+          ? { ...template, systemPrompt: '我的自定义图像规则' }
+          : template
+      )),
+      promptProfiles: [{
+        ...legacyProfile,
+        systemPrompt: '我的自定义优化规则',
+      }],
+    })
+    expect(customized.textProcessingPromptTemplates.find((template) => template.id === 'text-processing-image-optimizer')?.systemPrompt)
+      .toBe('我的自定义图像规则')
+    expect(customized.promptProfiles[0].systemPrompt).toBe('我的自定义优化规则')
+
+    const wallpaperRemoved = normalizeLlmConfig({
+      ...defaults,
+      textProcessingPromptTemplates: defaults.textProcessingPromptTemplates
+        .filter((template) => template.id !== 'text-processing-wallpaper-optimizer'),
+    })
+    expect(wallpaperRemoved.textProcessingPromptTemplates).toHaveLength(3)
+  })
+
+  it('默认生成页优化配置会补充目标模型上下文', () => {
+    const profile = createDefaultPromptProfile()
+    expect(profile.userTemplate).toContain('{{target.model.type}}')
+    expect(profile.userTemplate).toContain('{{media.summary}}')
+    expect(profile.systemPrompt).toContain('图像任务')
+    expect(profile.systemPrompt).toContain('视频任务')
+  })
+
+  it('内置节点模板包含从模糊输入到完整结果的执行链', () => {
+    const templates = new Map(
+      createDefaultTextProcessingPromptTemplates().map((template) => [template.id, template.systemPrompt]),
+    )
+    const general = templates.get('text-processing-general-optimizer') ?? ''
+    const image = templates.get('text-processing-image-optimizer') ?? ''
+    const video = templates.get('text-processing-video-optimizer') ?? ''
+    const wallpaper = templates.get('text-processing-wallpaper-optimizer') ?? ''
+
+    expect(general.length).toBeGreaterThan(600)
+    expect(general).toContain('自由度')
+    expect(general).toContain('最低完整度')
+
+    expect(image.length).toBeGreaterThan(2_000)
+    expect(image).toContain('冲突消解')
+    expect(image).toContain('前景、中景、远景')
+    expect(image).toContain('抽象词转译')
+    expect(image).toContain('输出前自检')
+    expect(image).toContain('<bbox>')
+
+    expect(video.length).toBeGreaterThan(1_500)
+    expect(video).toContain('简单输入的处理')
+    expect(video).toContain('一个镜头最多一种主要运镜')
+    expect(video).toContain('编辑与延长')
+    expect(video).toContain('输出前自检')
+
+    expect(wallpaper.length).toBeGreaterThan(3_000)
+    expect(wallpaper).toContain('创作自由度')
+    expect(wallpaper).toContain('只选一个美学体系')
+    expect(wallpaper).toContain('壁纸版式')
+    expect(wallpaper).toContain('抽象词必须视觉化')
+    expect(wallpaper).toContain('250 至 450 个汉字')
+    expect(wallpaper).toContain('输出前自检')
   })
 })

@@ -1,4 +1,5 @@
 import type { CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
+import type { CanvasMediaKind } from '@/features/canvas/canvasUtils'
 import type { PreviewConnectionVisual } from '@/features/canvas/canvasUtils'
 import { NodeSelectionMenu } from '@/features/canvas/NodeSelectionMenu'
 import { CanvasEmptyHint } from '@/features/canvas/ui/CanvasEmptyHint'
@@ -12,7 +13,8 @@ interface CanvasOverlaysProps {
   previewConnectionVisual: PreviewConnectionVisual | null
   menuPosition: { x: number; y: number }
   menuAllowedTypes?: CanvasNodeType[]
-  onSelectNodeType: (type: CanvasNodeType) => void
+  menuUploadKinds: CanvasMediaKind[]
+  onSelectNodeType: (type: CanvasNodeType, file?: File) => void
   onCloseNodeMenu: () => void
   imageViewerOpen: boolean
   imageViewerCurrentUrl: string
@@ -30,6 +32,7 @@ export function CanvasOverlays({
   previewConnectionVisual,
   menuPosition,
   menuAllowedTypes,
+  menuUploadKinds,
   onSelectNodeType,
   onCloseNodeMenu,
   imageViewerOpen,
@@ -70,6 +73,7 @@ export function CanvasOverlays({
         <NodeSelectionMenu
           position={menuPosition}
           allowedTypes={menuAllowedTypes}
+          uploadKinds={menuUploadKinds}
           onSelect={onSelectNodeType}
           onClose={onCloseNodeMenu}
         />

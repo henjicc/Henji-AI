@@ -1,10 +1,16 @@
 import { create } from 'zustand'
 
 interface CanvasTextStreamState {
-  previews: Record<string, string>
-  setPreview: (nodeId: string, content: string | null) => void
+  previews: Record<string, CanvasTextStreamPreview>
+  runIds: Record<string, string>
+  setPreview: (nodeId: string, preview: CanvasTextStreamPreview | null, runId?: string) => void
   clearPreviews: (nodeIds: ReadonlySet<string>) => void
   clearAllPreviews: () => void
+}
+
+export interface CanvasTextStreamPreview {
+  content: string
+  reasoning: string
 }
 
 /**
@@ -15,18 +21,32 @@ interface CanvasTextStreamState {
  */
 export const useCanvasTextStreamStore = create<CanvasTextStreamState>((set) => ({
   previews: {},
+  runIds: {},
 
-  setPreview: (nodeId, content) => {
+  setPreview: (nodeId, preview, runId) => {
     set((state) => {
       const current = state.previews[nodeId]
-      if (content === null) {
+      const currentRunId = state.runIds[nodeId]
+      const startsNewRun = preview?.content === '' && preview.reasoning === ''
+      if (runId && currentRunId && currentRunId !== runId && !startsNewRun) return state
+      if (preview === null) {
+        if (runId && currentRunId && currentRunId !== runId) return state
         if (current === undefined) return state
         const next = { ...state.previews }
+        const nextRunIds = { ...state.runIds }
         delete next[nodeId]
-        return { previews: next }
+        delete nextRunIds[nodeId]
+        return { previews: next, runIds: nextRunIds }
       }
-      if (current === content) return state
-      return { previews: { ...state.previews, [nodeId]: content } }
+      if (
+        current?.content === preview.content
+        && current.reasoning === preview.reasoning
+        && (!runId || currentRunId === runId)
+      ) return state
+      return {
+        previews: { ...state.previews, [nodeId]: preview },
+        runIds: runId ? { ...state.runIds, [nodeId]: runId } : state.runIds,
+      }
     })
   },
 
@@ -35,12 +55,16 @@ export const useCanvasTextStreamStore = create<CanvasTextStreamState>((set) => (
       const hitKeys = Object.keys(state.previews).filter((nodeId) => nodeIds.has(nodeId))
       if (hitKeys.length === 0) return state
       const next = { ...state.previews }
+      const nextRunIds = { ...state.runIds }
       for (const nodeId of hitKeys) delete next[nodeId]
-      return { previews: next }
+      for (const nodeId of hitKeys) delete nextRunIds[nodeId]
+      return { previews: next, runIds: nextRunIds }
     })
   },
 
   clearAllPreviews: () => {
-    set((state) => (Object.keys(state.previews).length === 0 ? state : { previews: {} }))
+    set((state) => (Object.keys(state.previews).length === 0
+      ? state
+      : { previews: {}, runIds: {} }))
   },
 }))

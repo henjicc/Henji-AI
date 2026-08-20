@@ -130,8 +130,8 @@ const UpdateDialog: React.FC<UpdateDialogProps> = ({ releaseInfo, currentVersion
       title={t('update.title')}
       onClose={handleClose}
       hideHeader
-      widthClassName="w-full max-w-2xl overflow-hidden"
-      contentClassName=""
+      size="form"
+      contentClassName="overflow-y-auto"
     >
         {/* 头部 */}
         <div className="bg-gradient-to-r from-accent/10 to-transparent p-6 border-b border-border-dark/50">

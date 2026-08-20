@@ -12,7 +12,6 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
-import { Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('features.canvas.nodes.UploadNode')
@@ -44,9 +43,10 @@ import {
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import {
   detectAspectRatio,
-  prepareNodeImageFromFile,
   resolveImageDisplayUrl,
 } from '@/features/canvas/application/imageData';
+import { importCanvasMediaFile } from '@/features/canvas/application/mediaImport';
+import { ICON_NODE_IMAGE_UPLOAD } from '@/core/theme/icons';
 import { CanvasNodeImage } from '@/features/canvas/ui/CanvasNodeImage';
 import { useOriginalImageLod } from '@/features/canvas/nodes/shared/useOriginalImageLod';
 import { useMediaMicroLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
@@ -55,6 +55,8 @@ import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecoded
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { UiInput } from '@/components/ui';
+
+const ImageUploadIcon = ICON_NODE_IMAGE_UPLOAD;
 
 type UploadNodeProps = NodeProps & {
   id: string;
@@ -169,14 +171,15 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         });
 
       try {
-        const prepared = await prepareNodeImageFromFile(file);
-        const nextData: Partial<UploadImageNodeData> = {
-          imageUrl: prepared.imageUrl,
-          previewImageUrl: prepared.previewImageUrl,
-          aspectRatio: prepared.aspectRatio || '1:1',
-          sourceFileName: file.name,
-        };
-        if (useUploadFilenameAsNodeTitle) {
+        const imported = await importCanvasMediaFile(file);
+        if (imported.kind !== 'image') {
+          return;
+        }
+        const nextData = imported.data as Partial<UploadImageNodeData>;
+        if (
+          useUploadFilenameAsNodeTitle
+          && isNodeUsingDefaultDisplayName(CANVAS_NODE_TYPES.upload, data)
+        ) {
           nextData.displayName = file.name;
         }
         updateNodeData(id, nextData);
@@ -195,7 +198,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
         throw error;
       }
     },
-    [clearTransientPreview, id, updateNodeData, useUploadFilenameAsNodeTitle]
+    [clearTransientPreview, data, id, updateNodeData, useUploadFilenameAsNodeTitle]
   );
 
   const handleImageLoad = useCallback((event: SyntheticEvent<HTMLImageElement>) => {
@@ -340,7 +343,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
     >
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
-        icon={<Upload className="h-4 w-4" />}
+        icon={<ImageUploadIcon className="h-4 w-4" />}
         titleText={resolvedTitle}
         editable
         onTitleChange={(nextTitle) => updateNodeData(id, { displayName: nextTitle })}
@@ -365,7 +368,7 @@ export const UploadNode = memo(({ id, data, selected, width, height }: UploadNod
           onDragOver={(event) => event.preventDefault()}
         >
           <div className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-2 text-text-muted/85">
-            <Upload className="h-7 w-7 opacity-60" />
+            <ImageUploadIcon className="h-7 w-7 opacity-60" />
             <span className="px-3 text-center text-xs leading-6">{t('node.upload.hint')}</span>
           </div>
         </label>

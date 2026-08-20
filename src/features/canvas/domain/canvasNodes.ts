@@ -3,6 +3,7 @@ import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptD
 import type { RowMediaKind } from './socketTypes';
 
 export const CANVAS_NODE_TYPES = {
+  universalUpload: 'universalUploadNode',
   upload: 'uploadNode',
   imageEdit: 'imageNode',
   exportImage: 'exportImageNode',
@@ -135,11 +136,38 @@ export interface TextProcessingNodeData extends NodeDisplayData {
   providerId: string;
   modelId: string;
   lastOutput?: string;
+  /** 下游运行时是否允许复用输入未变化的最近一次成功结果。 */
+  fixedResult?: boolean;
+  /** 最近一次成功结果对应的规范化输入指纹。 */
+  lastOutputFingerprint?: string;
+  /** 每次成功运行递增，用于通知文本展示节点同内容也需要重新同步。 */
+  lastOutputRevision?: number;
+  /** 最近一次实际执行的状态；失败后不得继续静默复用旧结果。 */
+  lastExecutionStatus?: 'success' | 'failed';
   [key: string]: DynamicValue;
+}
+
+/** 尚未识别媒体类型的统一上传占位节点；识别成功后会原位替换为具体媒体源节点。 */
+export interface UniversalUploadNodeData extends NodeDisplayData {
+  /** 首次连线锁定的媒体类型；断开连线后仍保持，撤销该次连线则恢复未锁定。 */
+  lockedMediaKind?: RowMediaKind | null;
+  uploadError?: 'unsupported' | 'typeMismatch' | 'failed' | null;
+}
+
+export type ConcreteUploadNodeType =
+  | typeof CANVAS_NODE_TYPES.upload
+  | typeof CANVAS_NODE_TYPES.videoUpload
+  | typeof CANVAS_NODE_TYPES.audioUpload;
+
+export interface UploadPlaceholderResolution {
+  type: ConcreteUploadNodeType;
+  data: Partial<CanvasNodeData>;
 }
 
 export interface TextAnnotationNodeData extends NodeDisplayData, NodeGenerationStatus {
   content: string;
+  /** 最近一次已同步的上游节点与输出修订，避免重渲染覆盖用户手工编辑。 */
+  syncedInputRevision?: string;
   [key: string]: DynamicValue;
 }
 
@@ -259,6 +287,8 @@ export interface VideoMediaNodeData extends NodeDisplayData, NodeGenerationStatu
   previewImageUrl?: string | null;
   aspectRatio: string;
   durationSec?: number | null;
+  /** 新导入视频由主进程一次探测得出；旧工程缺省时播放器按需补探测。 */
+  hasAudio?: boolean;
   sourceFileName?: string | null;
   isSizeManuallyAdjusted?: boolean;
   [key: string]: DynamicValue;
@@ -272,6 +302,9 @@ export interface CameraStageNodeData extends NodeDisplayData {
   aspectRatio: string;
   durationSec: number | null;
   selectedTimeSec: number;
+  imageExporting?: boolean;
+  imageRenderRequestId?: string | null;
+  imageRenderError?: string | null;
   videoProgress?: number | null;
   videoExporting?: boolean;
   videoRenderPhase?: 'preparing' | 'rendering' | 'encoding' | null;
@@ -306,6 +339,7 @@ export interface ModelSelectorNodeData extends NodeDisplayData {
 }
 
 export type CanvasNodeData =
+  | UniversalUploadNodeData
   | UploadImageNodeData
   | ExportImageNodeData
   | TextProcessingNodeData
@@ -377,6 +411,12 @@ export function isTextAnnotationNode(
   node: CanvasNode | null | undefined
 ): node is Node<TextAnnotationNodeData, typeof CANVAS_NODE_TYPES.textAnnotation> {
   return node?.type === CANVAS_NODE_TYPES.textAnnotation;
+}
+
+export function isUniversalUploadNode(
+  node: CanvasNode | null | undefined
+): node is Node<UniversalUploadNodeData, typeof CANVAS_NODE_TYPES.universalUpload> {
+  return node?.type === CANVAS_NODE_TYPES.universalUpload;
 }
 
 export function isTextProcessingNode(

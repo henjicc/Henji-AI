@@ -60,6 +60,12 @@ export function createElectronMedia(): MediaPlatform {
     async getBundledResourcePath(relativePath: string): Promise<string | null> {
       return await getNative().media.getBundledResourcePath(relativePath)
     },
+    async importFromPath(request) {
+      return await getNative().media.importFromPath(request)
+    },
+    async importFromBytes(request) {
+      return await getNative().media.importFromBytes(request)
+    },
     async captureApplicationSurface(request) {
       return await getNative().media.captureApplicationSurface(request)
     },

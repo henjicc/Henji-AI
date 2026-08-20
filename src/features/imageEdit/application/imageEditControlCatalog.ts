@@ -1,4 +1,8 @@
 import { z } from 'zod'
+import {
+  IMAGE_BLUR_ALGORITHMS,
+  type ImageBlurAlgorithmId,
+} from '../../../core/imageEdit/blurParams'
 
 const markLabelSchema = {
   label: z.string().max(500).optional(),
@@ -23,6 +27,11 @@ export const imageEditMarkItemSchema = z.discriminatedUnion('type', [
 ])
 
 const rotationDegreesSchema = z.number().int().min(0).max(360).refine((degrees) => degrees % 90 === 0, 'degrees 必须是 90 的倍数').optional()
+const blurAlgorithmIds = IMAGE_BLUR_ALGORITHMS.map((algorithm) => algorithm.id) as [
+  ImageBlurAlgorithmId,
+  ...ImageBlurAlgorithmId[],
+]
+const blurAlgorithmSchema = z.enum(blurAlgorithmIds)
 
 export const imageEditOperationSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('rotate_cw'), degrees: rotationDegreesSchema }).strict(),
@@ -31,6 +40,7 @@ export const imageEditOperationSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('flip_v') }).strict(),
   z.object({ kind: z.literal('crop'), crop: z.object({ x: z.number().finite(), y: z.number().finite(), width: z.number().positive(), height: z.number().positive() }).strict() }).strict(),
   z.object({ kind: z.literal('mark'), item: imageEditMarkItemSchema }).strict(),
+  z.object({ kind: z.literal('blur'), algorithm: blurAlgorithmSchema.optional(), strength: z.number().finite().min(0).max(1).optional() }).strict(),
 ])
 
 export type ImageEditControlOperation = z.infer<typeof imageEditOperationSchema>

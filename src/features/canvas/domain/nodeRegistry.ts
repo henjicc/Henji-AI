@@ -11,6 +11,7 @@ import {
   type StoryboardGenNodeData,
   type TextAnnotationNodeData,
   type TextProcessingNodeData,
+  type UniversalUploadNodeData,
   type UploadImageNodeData,
 } from './canvasNodes';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
@@ -36,7 +37,10 @@ import {
 } from './modelSelectorDefinitions';
 import {
   arePortsCompatible,
+  getSourcePortMediaKind,
+  mediaSourcePortId,
   type MediaKind,
+  type MediaPortKind,
   type NodeGenerationSpec,
   type NodeMediaOutput,
   type NodePorts,
@@ -59,7 +63,27 @@ import type { ModelTag } from '@/core/types';
  * 行为差异一律通过本注册表的声明字段表达。
  */
 
-export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'video' | 'audio' | 'number' | 'toggle';
+export type MenuIconKey =
+  | 'upload'
+  | 'imageUpload'
+  | 'videoUpload'
+  | 'audioUpload'
+  | 'imageGeneration'
+  | 'videoGeneration'
+  | 'audioGeneration'
+  | 'storyboard'
+  | 'textProcessing'
+  | 'textAnnotation'
+  | 'cameraStage'
+  | 'imageModel'
+  | 'videoModel'
+  | 'audioModel'
+  | 'integer'
+  | 'float'
+  | 'text'
+  | 'boolean';
+
+export type NodeMenuSection = 'media' | 'textTools' | 'models' | 'parameters' | 'extensions';
 
 export interface CanvasNodeCapabilities {
   toolbar: boolean;
@@ -89,13 +113,28 @@ export interface CanvasNodeConnectivity {
    * - 缺省/'legacy'：单一 target handle，id 固定为 'target'（旧节点形态，如上传/导出/分镜节点）
    */
   targetHandleMode?: 'legacy' | 'rows';
+  /** 首条类型化输出连线是否把节点锁定为该媒体类型。 */
+  lockSourceMediaOnFirstConnection?: boolean;
 }
+
+export type CanvasNodeExecutionKind =
+  | 'text-processing'
+  | 'text-display'
+  | 'standard-generation'
+  | 'storyboard-generation';
 
 export interface CanvasNodeDefinition<TData extends CanvasNodeData = CanvasNodeData> {
   type: CanvasNodeType;
   menuLabelKey: string;
   menuIcon: MenuIconKey;
   visibleInMenu: boolean;
+  /** 菜单编排元数据；第三方定义缺省进入末尾的扩展分区。 */
+  menuSection?: NodeMenuSection;
+  menuOrder?: number;
+  menuAggregationKey?: string;
+  menuBehavior?: 'create' | 'chooseMediaBeforeCreate';
+  /** 画布运行协调器使用的声明式执行角色。 */
+  executionKind?: CanvasNodeExecutionKind;
   capabilities: CanvasNodeCapabilities;
   connectivity: CanvasNodeConnectivity;
   /** 节点主媒体类型与角色（source=素材输入 / generator=生成 / result=结果展示） */
@@ -128,11 +167,48 @@ function imageOutputsFromData(data: CanvasNodeData): NodeMediaOutput[] {
   }];
 }
 
+const universalUploadNodeDefinition: CanvasNodeDefinition<UniversalUploadNodeData> = {
+  type: CANVAS_NODE_TYPES.universalUpload,
+  menuLabelKey: 'node.menu.upload',
+  menuIcon: 'upload',
+  visibleInMenu: true,
+  menuSection: 'media',
+  menuOrder: 10,
+  menuAggregationKey: 'upload',
+  menuBehavior: 'chooseMediaBeforeCreate',
+  capabilities: { toolbar: true, promptInput: false },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: false,
+    connectMenu: { fromSource: false, fromTarget: false },
+    manualSource: true,
+    lockSourceMediaOnFirstConnection: true,
+  },
+  ports: {
+    source: {
+      emits: 'image',
+      handles: {
+        [mediaSourcePortId('image')]: 'image',
+        [mediaSourcePortId('video')]: 'video',
+        [mediaSourcePortId('audio')]: 'audio',
+      },
+    },
+  },
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.universalUpload],
+    lockedMediaKind: null,
+    uploadError: null,
+  }),
+};
+
 const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
   type: CANVAS_NODE_TYPES.upload,
   menuLabelKey: 'node.menu.uploadImage',
-  menuIcon: 'upload',
-  visibleInMenu: true,
+  menuIcon: 'imageUpload',
+  visibleInMenu: false,
+  menuSection: 'media',
+  menuOrder: 10,
+  menuAggregationKey: 'upload',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -166,8 +242,11 @@ const uploadNodeDefinition: CanvasNodeDefinition<UploadImageNodeData> = {
 const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
   type: CANVAS_NODE_TYPES.imageEdit,
   menuLabelKey: 'node.menu.aiImageGeneration',
-  menuIcon: 'sparkles',
+  menuIcon: 'imageGeneration',
   visibleInMenu: true,
+  menuSection: 'media',
+  menuOrder: 20,
+  executionKind: 'standard-generation',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -247,7 +326,7 @@ const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
 const groupNodeDefinition: CanvasNodeDefinition<GroupNodeData> = {
   type: CANVAS_NODE_TYPES.group,
   menuLabelKey: 'node.menu.storyboard',
-  menuIcon: 'layout',
+  menuIcon: 'storyboard',
   visibleInMenu: false,
   capabilities: {
     toolbar: false,
@@ -270,8 +349,11 @@ const groupNodeDefinition: CanvasNodeDefinition<GroupNodeData> = {
 const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData> = {
   type: CANVAS_NODE_TYPES.textAnnotation,
   menuLabelKey: 'node.menu.textAnnotation',
-  menuIcon: 'text',
+  menuIcon: 'textAnnotation',
   visibleInMenu: true,
+  menuSection: 'textTools',
+  menuOrder: 20,
+  executionKind: 'text-display',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -305,8 +387,11 @@ const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData>
 const textProcessingNodeDefinition: CanvasNodeDefinition<TextProcessingNodeData> = {
   type: CANVAS_NODE_TYPES.textProcessing,
   menuLabelKey: 'node.menu.textProcessing',
-  menuIcon: 'sparkles',
+  menuIcon: 'textProcessing',
   visibleInMenu: true,
+  menuSection: 'textTools',
+  menuOrder: 10,
+  executionKind: 'text-processing',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -338,14 +423,20 @@ const textProcessingNodeDefinition: CanvasNodeDefinition<TextProcessingNodeData>
     providerId: DEFAULT_PPIO_PROVIDER_ID,
     modelId: DEFAULT_PPIO_MODEL_ID,
     lastOutput: '',
+    fixedResult: true,
+    lastOutputFingerprint: undefined,
+    lastOutputRevision: 0,
+    lastExecutionStatus: undefined,
   }),
 };
 
 const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
   type: CANVAS_NODE_TYPES.cameraStage,
   menuLabelKey: 'node.menu.cameraStage',
-  menuIcon: 'video',
+  menuIcon: 'cameraStage',
   visibleInMenu: true,
+  menuSection: 'textTools',
+  menuOrder: 30,
   capabilities: { toolbar: true, promptInput: false },
   connectivity: {
     sourceHandle: true,
@@ -362,6 +453,9 @@ const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
     aspectRatio: '16:9',
     durationSec: null,
     selectedTimeSec: 0,
+    imageExporting: false,
+    imageRenderRequestId: null,
+    imageRenderError: null,
     videoProgress: null,
     videoExporting: false,
     videoRenderPhase: null,
@@ -376,7 +470,7 @@ const cameraStageNodeDefinition: CanvasNodeDefinition<CameraStageNodeData> = {
 const storyboardSplitDefinition: CanvasNodeDefinition<StoryboardSplitNodeData> = {
   type: CANVAS_NODE_TYPES.storyboardSplit,
   menuLabelKey: 'node.menu.storyboard',
-  menuIcon: 'layout',
+  menuIcon: 'storyboard',
   visibleInMenu: false,
   capabilities: {
     toolbar: false,
@@ -424,8 +518,11 @@ const STORYBOARD_GEN_MODEL_REQUIRED_TAGS: ModelTag[] = ['image-to-image'];
 const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> = {
   type: CANVAS_NODE_TYPES.storyboardGen,
   menuLabelKey: 'node.menu.storyboardGen',
-  menuIcon: 'sparkles',
+  menuIcon: 'storyboard',
   visibleInMenu: true,
+  menuSection: 'media',
+  menuOrder: 50,
+  executionKind: 'storyboard-generation',
   capabilities: {
     toolbar: true,
     promptInput: false,
@@ -469,6 +566,7 @@ const storyboardGenNodeDefinition: CanvasNodeDefinition<StoryboardGenNodeData> =
 };
 
 export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition> = {
+  [CANVAS_NODE_TYPES.universalUpload]: universalUploadNodeDefinition,
   [CANVAS_NODE_TYPES.upload]: uploadNodeDefinition,
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
@@ -570,12 +668,67 @@ export function isConnectionCompatible(
   sourceType: CanvasNodeType,
   targetType: CanvasNodeType,
   sourceHandle?: string | null,
+  sourceData?: CanvasNodeData,
 ): boolean {
+  if (sourceData) {
+    const emits = resolveNodeSourceMediaKind(sourceType, sourceData, sourceHandle)
+    const accepts = canvasNodeDefinitions[targetType]?.ports?.target?.accepts
+    if (emits) {
+      return Boolean(accepts?.includes(emits))
+    }
+    const sourceDefinition = canvasNodeDefinitions[sourceType]
+    const acceptedMediaKinds = accepts?.filter((kind): kind is MediaPortKind => (
+      kind === 'image' || kind === 'video' || kind === 'audio'
+    )) ?? []
+    return Boolean(
+      sourceDefinition?.connectivity.lockSourceMediaOnFirstConnection
+      && (sourceHandle ?? 'source') === 'source'
+      && acceptedMediaKinds.length === 1
+      && Object.values(sourceDefinition.ports?.source?.handles ?? {})
+        .includes(acceptedMediaKinds[0])
+    )
+  }
   return arePortsCompatible(
     canvasNodeDefinitions[sourceType]?.ports,
     canvasNodeDefinitions[targetType]?.ports,
     sourceHandle,
   );
+}
+
+/**
+ * 解析节点当前允许使用的输出媒体类型。静态端口声明负责 handle→类型映射，
+ * 可锁定节点再由 data 收窄，避免把运行时状态写成节点类型特判。
+ */
+export function resolveNodeSourceMediaKind(
+  sourceType: CanvasNodeType,
+  sourceData: CanvasNodeData,
+  sourceHandle?: string | null,
+): MediaPortKind | undefined {
+  const definition = canvasNodeDefinitions[sourceType]
+  const lockedKind = (sourceData as { lockedMediaKind?: DynamicValue }).lockedMediaKind
+  const normalizedSourceHandle = sourceHandle ?? 'source'
+  if (
+    definition.connectivity.lockSourceMediaOnFirstConnection
+    && normalizedSourceHandle === 'source'
+  ) {
+    return lockedKind === 'image' || lockedKind === 'video' || lockedKind === 'audio'
+      ? lockedKind
+      : undefined
+  }
+  const declaredKind = getSourcePortMediaKind(definition?.ports, sourceHandle)
+  if (declaredKind !== 'image' && declaredKind !== 'video' && declaredKind !== 'audio') {
+    return undefined
+  }
+  if (!definition.connectivity.lockSourceMediaOnFirstConnection) {
+    return declaredKind
+  }
+  if (
+    (lockedKind === 'image' || lockedKind === 'video' || lockedKind === 'audio')
+    && lockedKind !== declaredKind
+  ) {
+    return undefined
+  }
+  return declaredKind
 }
 
 /** 节点是否允许从输出端口手动拖出连线 */
