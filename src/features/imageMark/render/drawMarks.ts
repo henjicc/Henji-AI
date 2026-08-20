@@ -9,9 +9,13 @@ import {
   resolveLabelPlacement,
   resolveMosaicBlurRadius,
   resolveMosaicPixelSize,
+  resolveTextBackgroundPadding,
   resolveTextBaseSize,
+  resolveTextBlockSize,
 } from '../domain/metrics';
 import type { LabeledMark, MarkItem } from '../domain/types';
+import { resolveArrowHeadPoints } from '../domain/arrowGeometry';
+import { resolvePenTensionPoints } from '../domain/penGeometry';
 import { buildMosaicSource, drawBlurRegion, drawMosaicRegion } from './orientedImage';
 import type { ImageEditCanvas, ImageEditCanvasContext } from './canvasAdapter';
 
@@ -19,28 +23,79 @@ function markFont(fontSize: number): string {
   return `${MARK_FONT_STYLE} ${fontSize}px ${MARK_FONT_FAMILY}`;
 }
 
-function drawArrowHead(context: ImageEditCanvasContext, x1: number, y1: number, x2: number, y2: number, color: string, lineWidth: number): void {
-  const headLength = Math.max(10, lineWidth * 4);
-  const angle = Math.atan2(y2 - y1, x2 - x1);
+function drawArrowHead(context: ImageEditCanvasContext, points: number[], color: string): void {
   context.beginPath();
-  context.moveTo(x2, y2);
-  context.lineTo(x2 - headLength * Math.cos(angle - Math.PI / 6), y2 - headLength * Math.sin(angle - Math.PI / 6));
-  context.lineTo(x2 - headLength * Math.cos(angle + Math.PI / 6), y2 - headLength * Math.sin(angle + Math.PI / 6));
+  context.moveTo(points[0], points[1]);
+  context.lineTo(points[2], points[3]);
+  context.lineTo(points[4], points[5]);
   context.closePath();
   context.fillStyle = color;
   context.fill();
 }
 
-function drawTextBlock(context: ImageEditCanvasContext, text: string, x: number, y: number, fontSize: number, color: string): void {
+function drawTextBlock(
+  context: ImageEditCanvasContext,
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  color: string,
+  backgroundColor?: string
+): void {
   context.font = markFont(fontSize);
   context.textBaseline = 'top';
   context.textAlign = 'left';
   const lineHeight = Math.max(1, Math.round(fontSize * TEXT_LINE_HEIGHT));
-  context.shadowColor = 'rgba(0, 0, 0, 0.55)';
-  context.shadowBlur = Math.max(1, fontSize * 0.08);
-  context.shadowOffsetY = Math.max(1, Math.round(fontSize * 0.04));
+  const lines = text.split('\n');
+  if (backgroundColor) {
+    const padding = resolveTextBackgroundPadding(fontSize);
+    const size = resolveTextBlockSize(text, fontSize);
+    context.fillStyle = backgroundColor;
+    context.fillRect(
+      x - padding,
+      y - padding,
+      size.width + padding * 2,
+      size.height + padding * 2
+    );
+  }
   context.fillStyle = color;
-  text.split('\n').forEach((line, index) => context.fillText(line, x, y + index * lineHeight));
+  lines.forEach((line, index) => context.fillText(line, x, y + index * lineHeight));
+}
+
+function drawPenPath(context: ImageEditCanvasContext, points: number[]): void {
+  context.beginPath();
+  context.moveTo(points[0], points[1]);
+  const tensionPoints = resolvePenTensionPoints(points);
+  if (points.length > 4 && tensionPoints.length >= 6) {
+    context.quadraticCurveTo(
+      tensionPoints[0],
+      tensionPoints[1],
+      tensionPoints[2],
+      tensionPoints[3]
+    );
+    let index = 4;
+    while (index < tensionPoints.length - 2) {
+      context.bezierCurveTo(
+        tensionPoints[index],
+        tensionPoints[index + 1],
+        tensionPoints[index + 2],
+        tensionPoints[index + 3],
+        tensionPoints[index + 4],
+        tensionPoints[index + 5]
+      );
+      index += 6;
+    }
+    context.quadraticCurveTo(
+      tensionPoints[tensionPoints.length - 2],
+      tensionPoints[tensionPoints.length - 1],
+      points[points.length - 2],
+      points[points.length - 1]
+    );
+    return;
+  }
+  for (let index = 2; index < points.length; index += 2) {
+    context.lineTo(points[index], points[index + 1]);
+  }
 }
 
 function drawLabel(context: ImageEditCanvasContext, item: LabeledMark, imageWidth: number, imageHeight: number): void {
@@ -59,21 +114,25 @@ function drawLabel(context: ImageEditCanvasContext, item: LabeledMark, imageWidt
     context.restore();
   }
   context.save();
-  drawTextBlock(context, item.label, placement.x, placement.y, fontSize, item.stroke);
+  drawTextBlock(
+    context,
+    item.label,
+    placement.x,
+    placement.y,
+    fontSize,
+    item.stroke,
+    item.labelBackgroundColor
+  );
   context.restore();
 }
 
 function drawNumberBadge(context: ImageEditCanvasContext, x: number, y: number, value: number, color: string, fontSize: number): void {
   const radius = numberBadgeRadius(fontSize);
   context.save();
-  context.shadowColor = 'rgba(0, 0, 0, 0.4)';
-  context.shadowBlur = Math.max(2, radius * 0.25);
   context.beginPath();
   context.arc(x, y, radius, 0, Math.PI * 2);
   context.fillStyle = color;
   context.fill();
-  context.shadowColor = 'transparent';
-  context.shadowBlur = 0;
   context.font = markFont(fontSize);
   context.textAlign = 'center';
   context.textBaseline = 'middle';
@@ -148,17 +207,31 @@ export function drawMarkItems(
     if (item.type === 'arrow') {
       const [x1, y1, x2, y2] = item.points;
       context.save(); context.strokeStyle = item.stroke; context.lineWidth = item.lineWidth;
-      context.beginPath(); context.moveTo(x1, y1); context.lineTo(x2, y2); context.stroke();
-      drawArrowHead(context, x1, y1, x2, y2, item.stroke, item.lineWidth); context.restore(); drawLabel(context, item, imageWidth, imageHeight); continue;
+      context.lineCap = 'round'; context.lineJoin = 'round';
+      context.beginPath(); context.moveTo(x1, y1);
+      if (item.curveControl) {
+        context.quadraticCurveTo(item.curveControl[0], item.curveControl[1], x2, y2);
+      } else {
+        context.lineTo(x2, y2);
+      }
+      context.stroke();
+      drawArrowHead(context, resolveArrowHeadPoints(item), item.stroke); context.restore(); drawLabel(context, item, imageWidth, imageHeight); continue;
     }
     if (item.type === 'pen') {
       context.save(); context.strokeStyle = item.stroke; context.lineWidth = item.lineWidth; context.lineJoin = 'round'; context.lineCap = 'round';
-      context.beginPath(); context.moveTo(item.points[0], item.points[1]);
-      for (let index = 2; index < item.points.length; index += 2) context.lineTo(item.points[index], item.points[index + 1]);
+      drawPenPath(context, item.points);
       context.stroke(); context.restore(); continue;
     }
     if (item.type === 'text') {
-      context.save(); drawTextBlock(context, item.text, item.x, item.y, item.fontSize, item.color); context.restore(); continue;
+      context.save(); drawTextBlock(
+        context,
+        item.text,
+        item.x,
+        item.y,
+        item.fontSize,
+        item.color,
+        item.backgroundColor
+      ); context.restore(); continue;
     }
     if (item.type === 'number') drawNumberBadge(context, item.x, item.y, numberValues.get(item.id) ?? 0, item.color, item.fontSize);
   }

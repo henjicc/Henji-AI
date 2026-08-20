@@ -8,7 +8,15 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import { UiButton, UiChipButton, UiColorInput, UiIconButton, UiOptionButton, UiRangeInput } from '@/components/ui';
+import {
+  UiButton,
+  UiChipButton,
+  UiColorInput,
+  UiIconButton,
+  UiOptionButton,
+  UiRangeInput,
+  UiSwitch,
+} from '@/components/ui';
 import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import {
   MAX_LINE_WIDTH_PERCENT,
@@ -44,6 +52,8 @@ interface MarkToolbarProps {
   canUndo: boolean;
   canRedo: boolean;
   canClear: boolean;
+  /** 当前工具或选中项是否存在可设置背景的文字。 */
+  canSetTextBackground: boolean;
   /** 宿主前导内容(返回、打开文件、文件名),固定在命令带最左侧 */
   leading?: React.ReactNode;
   /** 宿主动作(如 取消/保存),固定在命令带最右侧 */
@@ -61,6 +71,52 @@ const ORIENTATION_BUTTONS: { op: OrientationOp; label: string; icon: typeof Rota
   { op: 'flip-h', label: '水平翻转', icon: FlipHorizontal2 },
   { op: 'flip-v', label: '垂直翻转', icon: FlipVertical2 },
 ];
+
+function ColorPicker({
+  label,
+  value,
+  onChange,
+  withShortcuts = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (color: string) => void;
+  withShortcuts?: boolean;
+}): JSX.Element {
+  return (
+    <div className="flex items-center gap-1" aria-label={label}>
+      <span className="mr-1 text-xs text-text-muted">{label}</span>
+      {IMAGE_EDITOR_PRESET_COLORS.map((presetColor, index) => (
+        <UiIconButton
+          key={presetColor}
+          type="button"
+          showBorder={false}
+          appearance="hover-only"
+          title={withShortcuts ? `${label} ${index + 1}(按 ${index + 1})` : `${label} ${index + 1}`}
+          aria-label={`${label} ${presetColor}`}
+          className={`h-7 w-7 rounded-full !p-1 ${
+            value.toLowerCase() === presetColor.toLowerCase()
+              ? 'ring-2 ring-veil-strong'
+              : ''
+          }`}
+          onClick={() => onChange(presetColor)}
+        >
+          <span
+            className="block h-full w-full rounded-full border border-veil-soft"
+            style={{ backgroundColor: presetColor }}
+          />
+        </UiIconButton>
+      ))}
+      <UiColorInput
+        value={value}
+        title={`自定义${label}`}
+        aria-label={`自定义${label}`}
+        onChange={(event) => onChange(event.target.value)}
+        className="!h-7 !w-7"
+      />
+    </div>
+  );
+}
 
 export function MarkToolbar({
   variant = 'legacy',
@@ -80,6 +136,7 @@ export function MarkToolbar({
   canUndo,
   canRedo,
   canClear,
+  canSetTextBackground,
   leading,
   actions,
 }: MarkToolbarProps): JSX.Element {
@@ -290,32 +347,30 @@ export function MarkToolbar({
               </div>
             )}
             {showColor && (
+              <ColorPicker
+                label="颜色"
+                value={style.color}
+                withShortcuts
+                onChange={(color) => onStylePatch({ color })}
+              />
+            )}
+            {canSetTextBackground && (
               <>
-                <div className="flex items-center gap-1">
-                  {IMAGE_EDITOR_PRESET_COLORS.slice(0, 9).map((presetColor, index) => (
-                    <UiIconButton
-                      key={presetColor}
-                      type="button"
-                      title={`颜色 ${index + 1}(按 ${index + 1})`}
-                      className={`h-6 w-6 rounded-full border-2 ${
-                        style.color.toLowerCase() === presetColor.toLowerCase()
-                          ? 'border-white/90'
-                          : 'border-transparent'
-                      }`}
-                      onClick={() => onStylePatch({ color: presetColor })}
-                    >
-                      <span
-                        className="block h-3.5 w-3.5 rounded-full"
-                        style={{ backgroundColor: presetColor }}
-                      />
-                    </UiIconButton>
-                  ))}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-text-muted">背景</span>
+                  <UiSwitch
+                    checked={style.textBackgroundEnabled}
+                    onCheckedChange={(textBackgroundEnabled) => onStylePatch({ textBackgroundEnabled })}
+                    aria-label="文字背景"
+                  />
                 </div>
-                <UiColorInput
-                  value={style.color}
-                  onChange={(event) => onStylePatch({ color: event.target.value })}
-                  className="!h-8"
-                />
+                {style.textBackgroundEnabled && (
+                  <ColorPicker
+                    label="背景色"
+                    value={style.textBackgroundColor}
+                    onChange={(textBackgroundColor) => onStylePatch({ textBackgroundColor })}
+                  />
+                )}
               </>
             )}
             {showWidth && (

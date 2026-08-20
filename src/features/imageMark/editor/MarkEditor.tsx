@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type Konva from 'konva';
-import { ANNOTATION_DEFAULT_STROKE_HEX } from '@/core/theme/colorTokens';
+import { ANNOTATION_DEFAULT_STROKE_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
 import { UI_TEXT_BODY_CLASS } from '@/components/ui';
 import { resolveImageDisplayUrl } from '@/services/imageSource';
 import {
@@ -12,6 +12,7 @@ import {
 import { clampCropRect } from '../domain/geometry';
 import {
   createEmptyMarkDoc,
+  isLabeledMark,
   type ImageMarkDoc,
   type MarkToolType,
 } from '../domain/types';
@@ -100,6 +101,8 @@ export function MarkEditor({
   const [tool, setToolState] = useState<MarkToolType>('callout');
   const [style, setStyle] = useState<MarkEditorStyleState>(() => ({
     color: initialStyle?.color ?? ANNOTATION_DEFAULT_STROKE_HEX,
+    textBackgroundEnabled: initialStyle?.textBackgroundEnabled ?? false,
+    textBackgroundColor: initialStyle?.textBackgroundColor ?? WHITE_HEX,
     lineWidthPercent: initialStyle?.lineWidthPercent ?? DEFAULT_LINE_WIDTH_PERCENT,
     textSizePercent: initialStyle?.textSizePercent ?? DEFAULT_TEXT_SIZE_PERCENT,
     mosaicStrengthPercent: initialStyle?.mosaicStrengthPercent ?? DEFAULT_MOSAIC_STRENGTH_PERCENT,
@@ -357,6 +360,19 @@ export function MarkEditor({
         canUndo={controller.canUndo}
         canRedo={controller.canRedo}
         canClear={doc.items.length > 0}
+        canSetTextBackground={
+          tool === 'text'
+          || tool === 'callout'
+          || (
+            tool === 'select'
+            && Boolean(
+              controller.selectedItem?.type === 'text'
+              || (controller.selectedItem
+                && isLabeledMark(controller.selectedItem)
+                && controller.selectedItem.label)
+            )
+          )
+        }
         leading={toolbarLeading}
         actions={toolbarActions}
       />

@@ -103,6 +103,13 @@ export const IMAGE_EDITOR_PRESET_COLORS = [
   '#000000',
 ] as const;
 
+/** 新建空白图片的背景预设；调用侧只负责文案，不自行写颜色字面量。 */
+export const BLANK_IMAGE_BACKGROUND_PRESET_HEX = [
+  WHITE_HEX,
+  '#f2f2f2',
+  BLACK_HEX,
+] as const;
+
 export const NANO_BANANA_ICON_COLORS = {
   peelDark: '#F3AD61',
   peelMid: '#F9C23C',

@@ -1,6 +1,14 @@
 import type Konva from 'konva';
-import { getPointsBounds, updateMarkPosition, updateMarkTransform } from '../domain/geometry';
+import {
+  applyPointMarkTransform,
+  getPointsBounds,
+  updateMarkPosition,
+  updateMarkTransform,
+} from '../domain/geometry';
 import type { MarkItem } from '../domain/types';
+import { arrowBoundsPoints } from '../domain/arrowGeometry';
+import { penBoundsPoints } from '../domain/penGeometry';
+import { updateArrowNodeGeometry } from './arrowNodes';
 
 /** 拖拽结束:把 Konva 节点位置写回标记项(处理各类型锚点差异) */
 export function applyNodeDragToMark(item: MarkItem, node: Konva.Node): MarkItem {
@@ -8,10 +16,15 @@ export function applyNodeDragToMark(item: MarkItem, node: Konva.Node): MarkItem 
   const nodeY = node.y();
 
   if (item.type === 'arrow' || item.type === 'pen') {
+    const boundsPoints = item.type === 'arrow' ? arrowBoundsPoints(item) : penBoundsPoints(item.points);
+    const { minX, minY } = getPointsBounds(boundsPoints);
+    const updated = updateMarkPosition(item, minX + nodeX, minY + nodeY);
     node.x(0);
     node.y(0);
-    const { minX, minY } = getPointsBounds(item.points);
-    return updateMarkPosition(item, minX + nodeX, minY + nodeY);
+    if (updated.type === 'arrow') {
+      updateArrowNodeGeometry(node, updated);
+    }
+    return updated;
   }
 
   if (item.type === 'ellipse') {
@@ -28,14 +41,21 @@ export function applyNodeTransformToMark(item: MarkItem, node: Konva.Node): Mark
   const scaleY = node.scaleY();
   const nodeX = node.x();
   const nodeY = node.y();
-  node.scaleX(1);
-  node.scaleY(1);
 
   if (item.type === 'arrow' || item.type === 'pen') {
+    const updated = applyPointMarkTransform(item, nodeX, nodeY, scaleX, scaleY);
+    node.scaleX(1);
+    node.scaleY(1);
     node.x(0);
     node.y(0);
-    return updateMarkTransform(item, nodeX, nodeY, scaleX, scaleY);
+    if (updated.type === 'arrow') {
+      updateArrowNodeGeometry(node, updated);
+    }
+    return updated;
   }
+
+  node.scaleX(1);
+  node.scaleY(1);
 
   if (item.type === 'ellipse') {
     const width = Math.max(5, item.width * scaleX);

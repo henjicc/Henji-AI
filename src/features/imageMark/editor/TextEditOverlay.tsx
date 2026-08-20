@@ -1,6 +1,11 @@
 import { useRef, type RefObject } from 'react';
 import { UiTextAreaField } from '@/components/ui';
-import { MARK_FONT_FAMILY, TEXT_LINE_HEIGHT, estimateTextWidth } from '../domain/metrics';
+import {
+  MARK_FONT_FAMILY,
+  TEXT_LINE_HEIGHT,
+  estimateTextWidth,
+  resolveTextBackgroundPadding,
+} from '../domain/metrics';
 import type { TextEditorState } from './shared';
 
 interface TextEditOverlayProps {
@@ -35,11 +40,17 @@ export function TextEditOverlay({
   const displayFontSize = Math.max(10, state.fontSize * scale);
   const lines = state.value === '' ? [''] : state.value.split('\n');
   // 空内容也保留一个明显的输入框,方便定位与后续缩放
-  const contentWidth = Math.max(
-    displayFontSize * 4,
-    ...lines.map((line) => estimateTextWidth(line, displayFontSize))
-  );
+  const contentWidth = state.value === ''
+    ? displayFontSize * 4
+    : Math.max(
+      displayFontSize,
+      ...lines.map((line) => estimateTextWidth(line, displayFontSize))
+    );
+  const emptyEditorAllowance = state.value === '' ? displayFontSize * 0.6 : 0;
   const contentHeight = Math.max(1, lines.length) * displayFontSize * TEXT_LINE_HEIGHT;
+  const backgroundPadding = state.backgroundColor
+    ? resolveTextBackgroundPadding(displayFontSize)
+    : 0;
 
   const settle = (action: () => void): void => {
     if (settledRef.current) {
@@ -76,17 +87,21 @@ export function TextEditOverlay({
         }
       }}
       rows={1}
-      className="absolute z-20 !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-sm !border-0 !bg-transparent !p-0 font-semibold caret-accent outline outline-2 outline-accent/90 focus:!ring-0"
+      className={`absolute z-20 !min-h-0 resize-none overflow-hidden whitespace-pre !rounded-sm !border-0 font-semibold caret-accent outline outline-2 outline-accent/90 focus:!ring-0 ${
+        state.backgroundColor ? '' : '!bg-transparent'
+      }`}
       style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        width: `${Math.ceil(contentWidth + displayFontSize * 0.6)}px`,
-        height: `${Math.ceil(contentHeight)}px`,
+        left: `${position.x - backgroundPadding}px`,
+        top: `${position.y - backgroundPadding}px`,
+        width: `${Math.ceil(contentWidth + emptyEditorAllowance + backgroundPadding * 2)}px`,
+        height: `${Math.ceil(contentHeight + backgroundPadding * 2)}px`,
+        padding: `${backgroundPadding}px`,
         fontSize: `${displayFontSize}px`,
         lineHeight: TEXT_LINE_HEIGHT,
         fontFamily: MARK_FONT_FAMILY,
         color: state.color,
-        textShadow: '0 1px 2px rgba(0, 0, 0, 0.55)',
+        backgroundColor: state.backgroundColor,
+        boxSizing: 'border-box',
       }}
     />
   );

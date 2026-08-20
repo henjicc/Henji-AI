@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ClipboardCopy, ClipboardPaste, FolderOpen, ImagePlus, Save } from 'lucide-react';
+import { ArrowLeft, ClipboardCopy, ClipboardPaste, FilePlus2, FolderOpen, ImagePlus, Save } from 'lucide-react';
 import { createLogger } from '@/core/logging';
 import { createEmptyImageEditDocument, type ImageEditDocument } from '@/core/imageEdit';
 import {
@@ -26,6 +26,8 @@ import { isLikelyLocalImagePath, readFileAsDataUrl } from '@/services/imageSourc
 import { exportImageEditDocument } from '@/features/imageEdit/execution/browserImageEditExecution';
 import { ImageEditor } from '@/features/imageEdit/editor/ImageEditor';
 import { useImageEditorHandoffStore } from '@/features/imageEdit/store/imageEditorHandoffStore';
+import { BlankImageDialog } from './BlankImageDialog';
+import { applyPngDpi, createBlankImageDataUrl, type BlankImageSpec } from './blankImage';
 
 const logger = createLogger('features.imageMark');
 
@@ -38,6 +40,8 @@ interface ImageMarkSource {
   sessionKey: number;
   /** 本次打开会话的初始编辑文档；助手创建的预览必须随图片一起交给编辑器。 */
   initialDocument: ImageEditDocument;
+  /** 新建空白图片的导出密度；普通导入图暂不改写其原始元数据。 */
+  dpi?: number;
 }
 
 export interface ImageMarkToolProps {
@@ -57,6 +61,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const [source, setSource] = useState<ImageMarkSource | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isBlankDialogOpen, setIsBlankDialogOpen] = useState(false);
   const pendingHandoff = useImageEditorHandoffStore((state) => state.pending);
   const consumeHandoff = useImageEditorHandoffStore((state) => state.consume);
   const documentRef = useRef<ImageEditDocument>(createEmptyImageEditDocument());
@@ -66,7 +71,8 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
   const acceptSource = useCallback(async (
     url: string,
     name: string,
-    document: ImageEditDocument = createEmptyImageEditDocument()
+    document: ImageEditDocument = createEmptyImageEditDocument(),
+    dpi?: number
   ) => {
     documentRef.current = document;
     // 打开/拖入的本地图片可能在媒体协议默认白名单之外,先授权其所在目录,
@@ -86,6 +92,7 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
       name,
       sessionKey: sourceSequenceRef.current,
       initialDocument: document,
+      ...(dpi ? { dpi } : {}),
     });
     logger.info('image_mark.standalone.open.completed', { name });
   }, []);
@@ -151,6 +158,40 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     }
   }, [acceptSource, showNotification]);
 
+  const handleCreateBlank = useCallback((spec: BlankImageSpec) => {
+    logger.debug('image_mark.blank.create.start', {
+      width: spec.width,
+      height: spec.height,
+      dpi: spec.dpi,
+    });
+    try {
+      const dataUrl = createBlankImageDataUrl(spec);
+      void acceptSource(
+        dataUrl,
+        `空白图片-${spec.width}x${spec.height}.png`,
+        createEmptyImageEditDocument(),
+        spec.dpi
+      ).then(() => {
+        setIsBlankDialogOpen(false);
+        logger.info('image_mark.blank.create.completed', {
+          width: spec.width,
+          height: spec.height,
+          dpi: spec.dpi,
+        });
+      }).catch((error) => {
+        logger.error('image_mark.blank.create.failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        showNotification('创建空白图片失败', 'error');
+      });
+    } catch (error) {
+      logger.error('image_mark.blank.create.failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      showNotification(error instanceof Error ? error.message : '创建空白图片失败', 'error');
+    }
+  }, [acceptSource, showNotification]);
+
   // 粘贴图片(截图或复制的图片文件)
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
@@ -199,7 +240,8 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
     setIsBusy(true);
     logger.debug('image_mark.standalone.export.start', { action });
     try {
-      const dataUrl = await exportImageEditDocument(source.url, documentRef.current);
+      const exportedDataUrl = await exportImageEditDocument(source.url, documentRef.current);
+      const dataUrl = source.dpi ? applyPngDpi(exportedDataUrl, source.dpi) : exportedDataUrl;
       if (action === 'copy') {
         await copyImageSourceToClipboard(dataUrl);
         logger.info('image_mark.standalone.copy.completed', { name: source.name });
@@ -256,51 +298,63 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
 
   if (!source) {
     return (
-      // 空态没有工作面，是一张普通页面：返回进标题左侧，不为它单画一条命令带
-      <div className="flex h-full flex-col overflow-y-auto bg-app p-6">
-        <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
-          <UiPageHeader title="图片编辑" onBack={onBack} backLabel="返回工具箱" />
-        </UiRegion>
-        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
-          <div
-            className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${
-              isDragOver ? 'border-accent bg-accent/10' : 'border-border-dark bg-surface-dark/40'
-            }`}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragOver(true);
-            }}
-            onDragLeave={() => setIsDragOver(false)}
-            onDrop={handleDrop}
-          >
-            <ImagePlus size={40} className="text-text-muted" />
-            <div className={UI_TEXT_BODY_CLASS}>拖入图片、Ctrl+V 粘贴，或</div>
-            <div className="flex items-center gap-2">
-              <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
-                <FolderOpen size={15} className="mr-1.5" />
-                从文件打开
-              </UiButton>
-              <UiButton variant="ghost" size="sm" onClick={() => void handlePasteFromClipboard()}>
-                <ClipboardPaste size={15} className="mr-1.5" />
-                粘贴剪贴板图片
-              </UiButton>
-            </div>
-            <div className={`leading-relaxed ${UI_TEXT_META_CLASS}`}>
-              支持序号、框选、箭头、文字、画笔、马赛克标记,以及裁剪与旋转翻转
+      <>
+        {/* 空态没有工作面，是一张普通页面：返回进标题左侧，不为它单画一条命令带 */}
+        <div className="flex h-full flex-col overflow-y-auto bg-app p-6">
+          <UiRegion maxWidthClassName="max-w-6xl" className="mx-auto w-full">
+            <UiPageHeader title="图片编辑" onBack={onBack} backLabel="返回工具箱" />
+          </UiRegion>
+          <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+            <div
+              className={`flex w-full max-w-xl flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 transition-colors ${
+                isDragOver ? 'border-accent bg-accent/10' : 'border-border-dark bg-surface-dark/40'
+              }`}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+            >
+              <ImagePlus size={40} className="text-text-muted" />
+              <div className={UI_TEXT_BODY_CLASS}>打开已有图片，或创建一张空白画布</div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <UiButton variant="primary" size="sm" onClick={() => void handleOpenFile()}>
+                  <FolderOpen size={15} className="mr-1.5" />
+                  从文件打开
+                </UiButton>
+                <UiButton variant="ghost" size="sm" onClick={() => setIsBlankDialogOpen(true)}>
+                  <FilePlus2 size={15} className="mr-1.5" />
+                  新建空白图片
+                </UiButton>
+                <UiButton variant="ghost" size="sm" onClick={() => void handlePasteFromClipboard()}>
+                  <ClipboardPaste size={15} className="mr-1.5" />
+                  粘贴剪贴板图片
+                </UiButton>
+              </div>
+              <div className={`leading-relaxed ${UI_TEXT_META_CLASS}`}>
+                也可以把图片拖到这里；支持序号、框选、弯曲箭头、文字、画笔、打码与裁剪
+              </div>
             </div>
           </div>
         </div>
-      </div>
+        <BlankImageDialog
+          isOpen={isBlankDialogOpen}
+          onClose={() => setIsBlankDialogOpen(false)}
+          onCreate={handleCreateBlank}
+        />
+      </>
     );
   }
 
   return (
-    <div
-      className="flex h-full flex-col"
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={handleDrop}
-    >
-      <ImageEditor
+    <>
+      <div
+        className="flex h-full flex-col"
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={handleDrop}
+      >
+        <ImageEditor
         key={source.sessionKey}
         sourceImageUrl={source.url}
         initialDocument={source.initialDocument}
@@ -334,6 +388,15 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
                   >
                     <ClipboardPaste size={15} />
                     粘贴剪贴板图片
+                  </UiOptionButton>
+                  <UiOptionButton
+                    type="button"
+                    variant="menu"
+                    className="gap-2 text-sm"
+                    onClick={() => setIsBlankDialogOpen(true)}
+                  >
+                    <FilePlus2 size={15} />
+                    新建空白图片
                   </UiOptionButton>
                 </div>
               )}
@@ -369,8 +432,14 @@ export function ImageMarkTool({ onBack }: ImageMarkToolProps = {}): JSX.Element 
           </>
         }
         className="min-h-0 flex-1"
+        />
+      </div>
+      <BlankImageDialog
+        isOpen={isBlankDialogOpen}
+        onClose={() => setIsBlankDialogOpen(false)}
+        onCreate={handleCreateBlank}
       />
-    </div>
+    </>
   );
 }
 

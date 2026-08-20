@@ -158,7 +158,7 @@ export function useMarkPointer({
         return;
       }
     }
-    if (nextItem.type === 'pen' && nextItem.points.length < 6) {
+    if (nextItem.type === 'pen' && nextItem.points.length < 4) {
       return;
     }
 

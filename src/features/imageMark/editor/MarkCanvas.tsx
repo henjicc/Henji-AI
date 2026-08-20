@@ -3,8 +3,15 @@ import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Transformer } fro
 import type { KonvaEventObject } from 'konva/lib/Node';
 import type Konva from 'konva';
 import { ANNOTATION_TRANSFORMER_HEX, WHITE_HEX } from '@/core/theme/colorTokens';
+import { stabilizeStraightArrowBounds } from '../domain/arrowGeometry';
 import { labelRefPoint } from '../domain/geometry';
-import { resolveConnectorLine, resolveLabelBlockRect, resolveShapeAnchorRect } from '../domain/metrics';
+import {
+  resolveConnectorLine,
+  resolveLabelBlockRect,
+  resolveLabelFontSize,
+  resolveShapeAnchorRect,
+  resolveTextBaseSize,
+} from '../domain/metrics';
 import { isLabeledMark, type ImageMarkDoc, type LabeledMark, type MarkItem, type MarkToolType } from '../domain/types';
 import { resolveNumberValues } from '../render/drawMarks';
 import { CropOverlayBox } from './CropOverlayBox';
@@ -12,6 +19,7 @@ import { MarkShapeNode } from './markShapes';
 import { applyNodeDragToMark, applyNodeTransformToMark } from './nodeSync';
 import { TextEditOverlay } from './TextEditOverlay';
 import type { TextEditorState } from './shared';
+import { ArrowCurveControl } from './ArrowCurveControl';
 
 interface MarkCanvasProps {
   orientedCanvas: HTMLCanvasElement | null;
@@ -102,7 +110,12 @@ export function MarkCanvas({
       return null;
     }
     const block = resolveLabelBlockRect(
-      { ...parentItem, label: textEditor.value, labelFontSize: textEditor.fontSize },
+      {
+        ...parentItem,
+        label: textEditor.value,
+        labelFontSize: textEditor.fontSize,
+        labelBackgroundColor: textEditor.backgroundColor,
+      },
       imageWidth,
       imageHeight
     );
@@ -170,16 +183,19 @@ export function MarkCanvas({
 
   // 标签独立选中后通过变换框拖角调整字号(与拖动一致,松手才回写)
   const handleLabelTransformEnd = useCallback((item: LabeledMark, node: Konva.Node) => {
-    const textNode = node as Konva.Text;
-    const scale = Math.max(textNode.scaleX(), textNode.scaleY());
-    textNode.scaleX(1);
-    textNode.scaleY(1);
+    const scale = Math.max(node.scaleX(), node.scaleY());
+    const fontSize = resolveLabelFontSize(item, resolveTextBaseSize(imageWidth, imageHeight));
+    const ref = labelRefPoint(item);
+    node.scaleX(1);
+    node.scaleY(1);
     const updated: MarkItem = {
       ...item,
-      labelFontSize: Math.max(8, Math.round(textNode.fontSize() * scale)),
+      labelFontSize: Math.max(8, Math.round(fontSize * scale)),
+      labelDx: node.x() - ref.x,
+      labelDy: node.y() - ref.y,
     };
     onItemsUpdated(doc.items.map((current) => (current.id === item.id ? updated : current)));
-  }, [doc.items, onItemsUpdated]);
+  }, [doc.items, imageHeight, imageWidth, onItemsUpdated]);
 
   const isLabelSelected = Boolean(selectedItem && activeLabelId === selectedItem.id);
   const transformerKeepRatio = isLabelSelected || selectedItem?.type === 'text' || selectedItem?.type === 'number';
@@ -201,6 +217,7 @@ export function MarkCanvas({
     : tool === 'select' || tool === 'crop'
       ? 'cursor-default'
       : 'cursor-crosshair';
+  const selectedArrow = selectedItem?.type === 'arrow' ? selectedItem : null;
 
   return (
     <div
@@ -326,10 +343,13 @@ export function MarkCanvas({
                     transformerRef.current = node;
                   }}
                   boundBoxFunc={(oldBox, newBox) => {
-                    if (newBox.width < 5 || newBox.height < 5) {
+                    const nextBox = selectedArrow
+                      ? stabilizeStraightArrowBounds(selectedArrow, oldBox, newBox)
+                      : newBox;
+                    if (nextBox.width < 5 || nextBox.height < 5) {
                       return oldBox;
                     }
-                    return newBox;
+                    return nextBox;
                   }}
                   rotateEnabled={false}
                   borderStroke={ANNOTATION_TRANSFORMER_HEX}
@@ -339,6 +359,16 @@ export function MarkCanvas({
                   ignoreStroke
                   keepRatio={transformerKeepRatio}
                   enabledAnchors={transformerAnchors}
+                />
+                <ArrowCurveControl
+                  selectedArrow={selectedArrow}
+                  tool={tool}
+                  activeLabelId={activeLabelId}
+                  scale={scale}
+                  items={doc.items}
+                  shapeRefs={shapeRefs}
+                  transformerRef={transformerRef}
+                  onItemsUpdated={onItemsUpdated}
                 />
               </Group>
             </Layer>

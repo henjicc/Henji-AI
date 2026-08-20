@@ -394,6 +394,31 @@
       hsl(240 85% 55%), hsl(300 85% 55%), hsl(360 85% 55%)
     );
   }
+
+  /*
+   * 自定义颜色入口统一为圆形色样，外圈用完整色相环提示“可选择任意颜色”。
+   * 色相环与媒体 veil 一样是刻意不跟随主题的功能性颜色。
+   */
+  .ui-color-input-spectrum {
+    background: conic-gradient(
+      hsl(0 85% 55%), hsl(60 85% 55%), hsl(120 85% 55%), hsl(180 85% 55%),
+      hsl(240 85% 55%), hsl(300 85% 55%), hsl(360 85% 55%)
+    );
+  }
+
+  .ui-color-input-spectrum::-webkit-color-swatch-wrapper {
+    padding: 2px;
+  }
+
+  .ui-color-input-spectrum::-webkit-color-swatch {
+    border: 0;
+    border-radius: 9999px;
+  }
+
+  .ui-color-input-spectrum::-moz-color-swatch {
+    border: 2px solid transparent;
+    border-radius: 9999px;
+  }
 }
 
 html,

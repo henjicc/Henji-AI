@@ -13,6 +13,7 @@ export interface UseMarkTextEditingParams {
   textInputRef: MutableRefObject<HTMLTextAreaElement | null>;
   /** 新建文字项使用的样式 */
   textColor: string;
+  textBackgroundColor?: string;
   fontSize: number;
   labelFontSize: number;
 }
@@ -26,6 +27,7 @@ export function useMarkTextEditing({
   imageHeight,
   textInputRef,
   textColor,
+  textBackgroundColor,
   fontSize,
   labelFontSize,
 }: UseMarkTextEditingParams) {
@@ -53,10 +55,13 @@ export function useMarkTextEditing({
       value: item.label ?? '',
       fontSize: item.labelFontSize ?? labelFontSize,
       color: item.stroke,
+      backgroundColor: item.label
+        ? item.labelBackgroundColor
+        : textBackgroundColor,
     });
     setSelectedId(item.id);
     focusTextInput();
-  }, [focusTextInput, imageHeight, imageWidth, labelFontSize, setSelectedId]);
+  }, [focusTextInput, imageHeight, imageWidth, labelFontSize, setSelectedId, textBackgroundColor]);
 
   const startTextEditing = useCallback((item: MarkItem | null, fallbackPoint?: { x: number; y: number }) => {
     if (item && item.type === 'text') {
@@ -68,6 +73,7 @@ export function useMarkTextEditing({
         value: item.text,
         fontSize: item.fontSize,
         color: item.color,
+        backgroundColor: item.backgroundColor,
       });
       setSelectedId(item.id);
       focusTextInput();
@@ -85,10 +91,11 @@ export function useMarkTextEditing({
       value: '',
       fontSize,
       color: textColor,
+      backgroundColor: textBackgroundColor,
     });
     setSelectedId(null);
     focusTextInput();
-  }, [focusTextInput, fontSize, openLabelEditor, setSelectedId, textColor]);
+  }, [focusTextInput, fontSize, openLabelEditor, setSelectedId, textBackgroundColor, textColor]);
 
   const handleCommitTextEditor = useCallback(() => {
     const editor = textEditor;
@@ -106,7 +113,16 @@ export function useMarkTextEditing({
           const { label: _label, labelFontSize: _size, ...rest } = item;
           return rest as MarkItem;
         }
-        return { ...item, label: value, labelFontSize: item.labelFontSize ?? editor.fontSize };
+        const next = {
+          ...item,
+          label: value,
+          labelFontSize: item.labelFontSize ?? editor.fontSize,
+        };
+        if (editor.backgroundColor) {
+          return { ...next, labelBackgroundColor: editor.backgroundColor };
+        }
+        const { labelBackgroundColor: _background, ...withoutBackground } = next;
+        return withoutBackground as MarkItem;
       });
       commitItems(nextItems);
       setTextEditor(null);
@@ -143,6 +159,7 @@ export function useMarkTextEditing({
       text: value,
       color: editor.color,
       fontSize: editor.fontSize,
+      ...(editor.backgroundColor ? { backgroundColor: editor.backgroundColor } : {}),
     };
     commitItems([...docRef.current.items, nextItem]);
     setSelectedId(nextItem.id);

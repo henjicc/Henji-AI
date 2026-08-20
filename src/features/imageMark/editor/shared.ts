@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { MarkItem, MarkToolType, MosaicMode } from '../domain/types';
+import { arrowBoundsPoints } from '../domain/arrowGeometry';
+import { penBoundsPoints } from '../domain/penGeometry';
 import { normalizeMarkRect } from '../domain/geometry';
 import { DEFAULT_MOSAIC_STRENGTH_PERCENT } from '../domain/metrics';
 
@@ -25,6 +27,8 @@ export const DEFAULT_VIEWPORT_CLASS = 'h-[min(62vh,640px)]';
 
 export interface MarkEditorStyleState {
   color: string;
+  textBackgroundEnabled: boolean;
+  textBackgroundColor: string;
   lineWidthPercent: number;
   textSizePercent: number;
   mosaicStrengthPercent: number;
@@ -53,6 +57,8 @@ export interface TextEditorState {
   /** 原位输入使用的字号(图片像素)与颜色,与最终渲染一致 */
   fontSize: number;
   color: string;
+  /** 缺省表示关闭纯色背景。 */
+  backgroundColor?: string;
 }
 
 export interface ToolButtonDef {
@@ -152,7 +158,12 @@ export function buildDraftMark(
   }
 
   if (draft.tool === 'pen') {
-    const points = [...(draft.points ?? [draft.startX, draft.startY]), draft.currentX, draft.currentY];
+    const sampledPoints = draft.points ?? [draft.startX, draft.startY];
+    const lastX = sampledPoints[sampledPoints.length - 2];
+    const lastY = sampledPoints[sampledPoints.length - 1];
+    const points = lastX === draft.currentX && lastY === draft.currentY
+      ? [...sampledPoints]
+      : [...sampledPoints, draft.currentX, draft.currentY];
     return {
       id: 'draft-pen',
       type: 'pen',
@@ -165,6 +176,9 @@ export function buildDraftMark(
   const end = constrainDraftEnd(draft, draft.currentX, draft.currentY);
 
   if (draft.tool === 'arrow') {
+    if (Math.hypot(end.x - draft.startX, end.y - draft.startY) < 4) {
+      return null;
+    }
     return {
       id: 'draft-arrow',
       type: 'arrow',
@@ -205,9 +219,10 @@ export function getMarkPosition(item: MarkItem): { x: number; y: number } {
   if (item.type === 'arrow' || item.type === 'pen') {
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < item.points.length; index += 2) {
-      minX = Math.min(minX, item.points[index]);
-      minY = Math.min(minY, item.points[index + 1]);
+    const points = item.type === 'arrow' ? arrowBoundsPoints(item) : penBoundsPoints(item.points);
+    for (let index = 0; index < points.length; index += 2) {
+      minX = Math.min(minX, points[index]);
+      minY = Math.min(minY, points[index + 1]);
     }
     return { x: minX, y: minY };
   }

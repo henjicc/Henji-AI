@@ -453,7 +453,7 @@ export const UiColorInput = forwardRef<HTMLInputElement, Omit<InputHTMLAttribute
     <input
       ref={ref}
       type="color"
-      className={`h-9 w-10 cursor-pointer rounded-md border bg-transparent p-1 ${UI_FIELD_SURFACE_CLASS} ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+      className={`ui-color-input-spectrum h-9 w-9 cursor-pointer appearance-none rounded-full border-0 p-0 ${UI_FIELD_FOCUS_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
       {...props}
     />
   )

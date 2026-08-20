@@ -139,6 +139,7 @@ export function useMarkController({
     imageHeight,
     textInputRef,
     textColor: style.color,
+    textBackgroundColor: style.textBackgroundEnabled ? style.textBackgroundColor : undefined,
     fontSize,
     labelFontSize,
   });

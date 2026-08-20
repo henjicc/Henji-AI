@@ -22,6 +22,8 @@ interface MarkLabelFields {
   labelFontSize?: number;
   labelDx?: number;
   labelDy?: number;
+  /** 标签文字的纯色背景；缺省表示不启用背景。 */
+  labelBackgroundColor?: string;
 }
 
 export interface RectMark extends MarkShapeStyle, MarkLabelFields {
@@ -46,6 +48,8 @@ export interface ArrowMark extends MarkShapeStyle, MarkLabelFields {
   id: string;
   type: 'arrow';
   points: [number, number, number, number];
+  /** 二次贝塞尔控制点；缺省时保持兼容的直箭头。 */
+  curveControl?: [number, number];
 }
 
 export interface PenMark extends MarkShapeStyle {
@@ -62,6 +66,8 @@ export interface TextMark {
   text: string;
   color: string;
   fontSize: number;
+  /** 文字的纯色背景；缺省表示不启用背景。 */
+  backgroundColor?: string;
 }
 
 export interface NumberMark {

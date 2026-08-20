@@ -50,6 +50,8 @@ export function useMarkStyleSync({
   const applyStylePatch = useCallback((patch: Partial<MarkEditorStyleState>, recordHistory: boolean) => {
     const nextStyle: MarkEditorStyleState = {
       color: patch.color ?? style.color,
+      textBackgroundEnabled: patch.textBackgroundEnabled ?? style.textBackgroundEnabled,
+      textBackgroundColor: patch.textBackgroundColor ?? style.textBackgroundColor,
       lineWidthPercent: clamp(
         patch.lineWidthPercent ?? style.lineWidthPercent,
         MIN_LINE_WIDTH_PERCENT,
@@ -78,7 +80,19 @@ export function useMarkStyleSync({
       if (item.id !== selectedItem.id) {
         return item;
       }
-      if (item.type === 'text' || item.type === 'number') {
+      if (item.type === 'text') {
+        const next = {
+          ...item,
+          color: nextStyle.color,
+          fontSize: percentToFontSize(nextStyle.textSizePercent, baseSize),
+        };
+        if (nextStyle.textBackgroundEnabled) {
+          return { ...next, backgroundColor: nextStyle.textBackgroundColor };
+        }
+        const { backgroundColor: _background, ...withoutBackground } = next;
+        return withoutBackground;
+      }
+      if (item.type === 'number') {
         return {
           ...item,
           color: nextStyle.color,
@@ -98,11 +112,19 @@ export function useMarkStyleSync({
         lineWidth: percentToLineWidth(nextStyle.lineWidthPercent, baseSize),
       };
       // 带标签的图形:字号设置同时作用于标签文字
-      if (isLabeledMark(next) && next.label && patch.textSizePercent !== undefined) {
-        return {
-          ...next,
-          labelFontSize: percentToFontSize(nextStyle.textSizePercent, baseSize),
-        };
+      if (isLabeledMark(next) && next.label) {
+        let labeled = patch.textSizePercent !== undefined
+          ? { ...next, labelFontSize: percentToFontSize(nextStyle.textSizePercent, baseSize) }
+          : next;
+        if (patch.textBackgroundEnabled !== undefined || patch.textBackgroundColor !== undefined) {
+          if (nextStyle.textBackgroundEnabled) {
+            labeled = { ...labeled, labelBackgroundColor: nextStyle.textBackgroundColor };
+          } else {
+            const { labelBackgroundColor: _background, ...withoutBackground } = labeled;
+            labeled = withoutBackground;
+          }
+        }
+        return labeled;
       }
       return next;
     });
@@ -163,7 +185,18 @@ export function useMarkStyleSync({
       return;
     }
     let patch: Partial<MarkEditorStyleState> = {};
-    if (selectedItem.type === 'text' || selectedItem.type === 'number') {
+    if (selectedItem.type === 'text') {
+      patch = {
+        color: selectedItem.color,
+        textBackgroundEnabled: Boolean(selectedItem.backgroundColor),
+        textBackgroundColor: selectedItem.backgroundColor ?? style.textBackgroundColor,
+        textSizePercent: clamp(
+          fontSizeToPercent(selectedItem.fontSize, baseSize),
+          MIN_TEXT_SIZE_PERCENT,
+          MAX_TEXT_SIZE_PERCENT
+        ),
+      };
+    } else if (selectedItem.type === 'number') {
       patch = {
         color: selectedItem.color,
         textSizePercent: clamp(
@@ -196,6 +229,10 @@ export function useMarkStyleSync({
           MIN_TEXT_SIZE_PERCENT,
           MAX_TEXT_SIZE_PERCENT
         );
+      }
+      if (isLabeledMark(selectedItem) && selectedItem.label) {
+        patch.textBackgroundEnabled = Boolean(selectedItem.labelBackgroundColor);
+        patch.textBackgroundColor = selectedItem.labelBackgroundColor ?? style.textBackgroundColor;
       }
     }
     setStyle((previous) => {

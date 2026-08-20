@@ -29,12 +29,14 @@ function readLabelFields(raw: Record<string, unknown>): {
   labelFontSize?: number;
   labelDx?: number;
   labelDy?: number;
+  labelBackgroundColor?: string;
 } {
   const result: {
     label?: string;
     labelFontSize?: number;
     labelDx?: number;
     labelDy?: number;
+    labelBackgroundColor?: string;
   } = {};
   if (typeof raw.label === 'string' && raw.label.trim().length > 0) {
     result.label = raw.label;
@@ -42,6 +44,9 @@ function readLabelFields(raw: Record<string, unknown>): {
     if (isFiniteNumber(raw.labelDx) && isFiniteNumber(raw.labelDy)) {
       result.labelDx = raw.labelDx;
       result.labelDy = raw.labelDy;
+    }
+    if (typeof raw.labelBackgroundColor === 'string' && raw.labelBackgroundColor.length > 0) {
+      result.labelBackgroundColor = raw.labelBackgroundColor;
     }
   }
   return result;
@@ -70,10 +75,16 @@ export function sanitizeMarkItem(item: unknown): MarkItem | null {
 
   if (type === 'arrow') {
     if (!Array.isArray(item.points) || item.points.length !== 4 || !item.points.every(isFiniteNumber)) return null;
+    const curveControl = Array.isArray(item.curveControl)
+      && item.curveControl.length === 2
+      && item.curveControl.every(isFiniteNumber)
+      ? [item.curveControl[0], item.curveControl[1]] as [number, number]
+      : undefined;
     return {
       id,
       type,
       points: [item.points[0], item.points[1], item.points[2], item.points[3]],
+      ...(curveControl ? { curveControl } : {}),
       stroke: typeof item.stroke === 'string' ? item.stroke : ANNOTATION_DEFAULT_STROKE_HEX,
       lineWidth: isFiniteNumber(item.lineWidth) ? Math.max(1, item.lineWidth) : 3,
       ...readLabelFields(item),
@@ -101,6 +112,9 @@ export function sanitizeMarkItem(item: unknown): MarkItem | null {
       text: item.text,
       color: typeof item.color === 'string' ? item.color : ANNOTATION_DEFAULT_TEXT_HEX,
       fontSize: isFiniteNumber(item.fontSize) ? Math.max(10, item.fontSize) : 28,
+      ...(typeof item.backgroundColor === 'string' && item.backgroundColor.length > 0
+        ? { backgroundColor: item.backgroundColor }
+        : {}),
     };
   }
 

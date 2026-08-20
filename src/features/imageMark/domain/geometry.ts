@@ -1,11 +1,15 @@
 import type {
+  ArrowMark,
   ImageMarkDoc,
   LabeledMark,
   MarkCropRect,
   MarkItem,
   MarkOrientation,
   MarkRotation,
+  PenMark,
 } from './types';
+import { arrowBoundsPoints } from './arrowGeometry';
+import { penBoundsPoints } from './penGeometry';
 
 /** 标签相对偏移的参考点:矩形/椭圆为左上角,箭头为箭头尖 */
 export function labelRefPoint(item: LabeledMark): { x: number; y: number } {
@@ -44,17 +48,72 @@ export function getPointsBounds(points: number[]): { minX: number; minY: number 
 }
 
 export function updateMarkPosition(item: MarkItem, newX: number, newY: number): MarkItem {
-  if (item.type === 'arrow' || item.type === 'pen') {
-    const { minX, minY } = getPointsBounds(item.points);
+  if (item.type === 'arrow') {
+    const { minX, minY } = getPointsBounds(arrowBoundsPoints(item));
     const dx = newX - minX;
     const dy = newY - minY;
     return {
       ...item,
       points: item.points.map((point, index) => (index % 2 === 0 ? point + dx : point + dy)),
-    } as MarkItem;
+      ...(item.curveControl
+        ? { curveControl: [item.curveControl[0] + dx, item.curveControl[1] + dy] as [number, number] }
+        : {}),
+    } as ArrowMark;
+  }
+
+  if (item.type === 'pen') {
+    const { minX, minY } = getPointsBounds(penBoundsPoints(item.points));
+    const dx = newX - minX;
+    const dy = newY - minY;
+    return {
+      ...item,
+      points: item.points.map((point, index) => (index % 2 === 0 ? point + dx : point + dy)),
+    };
   }
 
   return { ...item, x: newX, y: newY };
+}
+
+function transformPointCoordinates(
+  points: number[],
+  translateX: number,
+  translateY: number,
+  scaleX: number,
+  scaleY: number
+): number[] {
+  return points.map((point, index) => (
+    index % 2 === 0
+      ? translateX + point * scaleX
+      : translateY + point * scaleY
+  ));
+}
+
+/**
+ * 点集图形的节点原点固定在 (0,0)，其 points 已经是图片绝对坐标。
+ * 因此写回 Konva 节点变换时必须直接应用 x/y + scale，不能把节点 x/y 当作边界左上角。
+ */
+export function applyPointMarkTransform(
+  item: ArrowMark | PenMark,
+  translateX: number,
+  translateY: number,
+  scaleX: number,
+  scaleY: number
+): ArrowMark | PenMark {
+  if (item.type === 'arrow') {
+    const points = transformPointCoordinates(item.points, translateX, translateY, scaleX, scaleY);
+    const control = item.curveControl
+      ? transformPointCoordinates(item.curveControl, translateX, translateY, scaleX, scaleY)
+      : null;
+    return {
+      ...item,
+      points: [points[0], points[1], points[2], points[3]],
+      ...(control ? { curveControl: [control[0], control[1]] as [number, number] } : {}),
+    };
+  }
+  return {
+    ...item,
+    points: transformPointCoordinates(item.points, translateX, translateY, scaleX, scaleY),
+  };
 }
 
 export function updateMarkTransform(
@@ -92,17 +151,26 @@ export function updateMarkTransform(
     };
   }
 
-  if (item.type === 'arrow' || item.type === 'pen') {
-    const { minX, minY } = getPointsBounds(item.points);
-    return {
-      ...item,
-      points: item.points.map((point, index) => {
-        if (index % 2 === 0) {
-          return newX + (point - minX) * scaleX;
-        }
-        return newY + (point - minY) * scaleY;
-      }),
-    } as MarkItem;
+  if (item.type === 'arrow') {
+    const { minX, minY } = getPointsBounds(arrowBoundsPoints(item));
+    return applyPointMarkTransform(
+      item,
+      newX - minX * scaleX,
+      newY - minY * scaleY,
+      scaleX,
+      scaleY
+    );
+  }
+
+  if (item.type === 'pen') {
+    const { minX, minY } = getPointsBounds(penBoundsPoints(item.points));
+    return applyPointMarkTransform(
+      item,
+      newX - minX * scaleX,
+      newY - minY * scaleY,
+      scaleX,
+      scaleY
+    );
   }
 
   return item;
@@ -227,7 +295,14 @@ function remapMarkItem(item: MarkItem, width: number, height: number, op: Orient
   }
   if (item.type === 'arrow') {
     const points = remapPoints(item.points, width, height, op);
-    const next: MarkItem = { ...item, points: [points[0], points[1], points[2], points[3]] };
+    const control = item.curveControl
+      ? remapPoint(item.curveControl[0], item.curveControl[1], width, height, op)
+      : null;
+    const next: MarkItem = {
+      ...item,
+      points: [points[0], points[1], points[2], points[3]],
+      ...(control ? { curveControl: [control.x, control.y] as [number, number] } : {}),
+    };
     return remapLabelOffset(item, next as LabeledMark, width, height, op);
   }
   if (item.type === 'pen') {

@@ -15,6 +15,7 @@ export const DEFAULT_LINE_WIDTH_PERCENT = 0.4;
 export const MIN_LINE_WIDTH_PERCENT = 0.1;
 export const MAX_LINE_WIDTH_PERCENT = 3;
 export const TEXT_LINE_HEIGHT = 1.2;
+export const TEXT_BACKGROUND_PADDING_RATIO = 0.2;
 export const MARK_FONT_FAMILY = 'sans-serif';
 export const MARK_FONT_STYLE = '600';
 
@@ -93,6 +94,21 @@ export function estimateTextWidth(text: string, fontSize: number): number {
   return units * fontSize;
 }
 
+export function resolveTextBlockSize(
+  text: string,
+  fontSize: number
+): { width: number; height: number } {
+  const lines = text.split('\n');
+  return {
+    width: Math.max(...lines.map((line) => estimateTextWidth(line, fontSize)), fontSize),
+    height: Math.max(1, lines.length) * fontSize * TEXT_LINE_HEIGHT,
+  };
+}
+
+export function resolveTextBackgroundPadding(fontSize: number): number {
+  return Math.max(2, Math.round(fontSize * TEXT_BACKGROUND_PADDING_RATIO));
+}
+
 export function resolveLabelFontSize(item: LabeledMark, baseSize: number): number {
   if (typeof item.labelFontSize === 'number' && Number.isFinite(item.labelFontSize)) {
     return Math.max(8, item.labelFontSize);
@@ -124,9 +140,9 @@ export function resolveLabelPlacement(
 
   const label = item.label ?? '';
   const fontSize = resolveLabelFontSize(item, resolveTextBaseSize(imageWidth, imageHeight));
-  const lines = label.split('\n');
-  const blockHeight = lines.length * fontSize * TEXT_LINE_HEIGHT;
-  const blockWidth = Math.max(...lines.map((line) => estimateTextWidth(line, fontSize)), fontSize);
+  const block = resolveTextBlockSize(label, fontSize);
+  const blockHeight = block.height;
+  const blockWidth = block.width;
   const gap = Math.max(4, Math.round(fontSize * 0.35));
 
   if (item.type === 'arrow') {
@@ -160,13 +176,14 @@ export function resolveLabelBlockRect(
   imageHeight: number
 ): { x: number; y: number; width: number; height: number; fontSize: number } {
   const fontSize = resolveLabelFontSize(item, resolveTextBaseSize(imageWidth, imageHeight));
-  const lines = (item.label ?? '').split('\n');
   const placement = resolveLabelPlacement(item, imageWidth, imageHeight);
+  const size = resolveTextBlockSize(item.label ?? '', fontSize);
+  const padding = item.labelBackgroundColor ? resolveTextBackgroundPadding(fontSize) : 0;
   return {
-    x: placement.x,
-    y: placement.y,
-    width: Math.max(...lines.map((line) => estimateTextWidth(line, fontSize)), fontSize),
-    height: Math.max(1, lines.length) * fontSize * TEXT_LINE_HEIGHT,
+    x: placement.x - padding,
+    y: placement.y - padding,
+    width: size.width + padding * 2,
+    height: size.height + padding * 2,
     fontSize,
   };
 }
