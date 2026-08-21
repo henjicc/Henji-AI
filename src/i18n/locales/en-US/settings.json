@@ -29,7 +29,6 @@
     },
     "providers": {
       "ppio": {
-        "title": "PPIO",
         "label": "PPIO API Key",
         "placeholder": "Enter PPIO API Key",
         "help": "Register on the site and get your API key from the key management page.",
@@ -40,7 +39,6 @@
         }
       },
       "fal": {
-        "title": "Fal.ai",
         "label": "Fal.ai API Key",
         "placeholder": "Enter Fal.ai API Key",
         "help": "Get Key ID:Key Secret from the console.",
@@ -51,7 +49,6 @@
         }
       },
       "modelscope": {
-        "title": "ModelScope",
         "label": "ModelScope API Key",
         "placeholder": "Enter ModelScope API Key",
         "help": "Review the docs and get the access token from the token page.",
@@ -63,7 +60,6 @@
         }
       },
       "kie": {
-        "title": "KIE",
         "label": "KIE API Key",
         "placeholder": "Enter KIE API Key",
         "help": "Get your API key from the KIE console.",
@@ -74,7 +70,6 @@
         }
       },
       "apimart": {
-        "title": "APIMart",
         "label": "APIMart API Key",
         "placeholder": "Enter APIMart API Key",
         "help": "Get your API key from the APIMart console.",
@@ -86,7 +81,6 @@
         }
       },
       "bailian": {
-        "title": "Alibaba Cloud Model Studio",
         "label": "Model Studio API Key",
         "placeholder": "Enter Model Studio API Key",
         "help": "Get an API key for the China (Beijing) region from Model Studio.",
@@ -98,7 +92,6 @@
         }
       },
       "volcengine": {
-        "title": "Volcengine Ark",
         "label": "Volcengine Ark API Key",
         "placeholder": "Enter Volcengine Ark API Key",
         "help": "Enable the model and create an API key in the Volcengine Ark console.",

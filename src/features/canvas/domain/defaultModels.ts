@@ -12,20 +12,3 @@ export type CanvasModelMediaType = DefaultModelMediaType;
 export function getDefaultModelId(mediaType: CanvasModelMediaType, requiredTags: ModelTag[] = []): string {
   return modelDefaultsManager.resolveModelId(mediaType, requiredTags);
 }
-
-/** Provider 显示名映射（与设置页一致的简洁标签） */
-export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  ppio: 'PPIO',
-  fal: 'Fal',
-  kie: 'KIE',
-  modelscope: 'ModelScope',
-  bailian: 'Bailian',
-};
-
-export function getProviderDisplayName(providerId: string, locale?: string): string {
-  const normalizedProviderId = providerId.toLowerCase();
-  if (locale?.toLowerCase().startsWith('zh') && normalizedProviderId === 'bailian') {
-    return '百炼';
-  }
-  return PROVIDER_DISPLAY_NAMES[normalizedProviderId] ?? (providerId ? providerId.toUpperCase() : 'Unknown');
-}

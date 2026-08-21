@@ -22,7 +22,9 @@ const getLocalizedText = (text?: I18nText, locale?: string): string => {
  * @returns 供应商显示名称
  */
 export function getProviderDisplayName(providerId: string, locale?: string): string {
-  const key = `models:providers.${providerId}`
+  const normalizedProviderId = providerId.trim().toLowerCase()
+  if (!normalizedProviderId) return providerId
+  const key = `models:providers.${normalizedProviderId}`
   const translated = i18n.t(key, { lng: locale || getCurrentLocale(), defaultValue: providerId })
   return translated || providerId
 }

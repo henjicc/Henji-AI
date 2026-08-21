@@ -79,7 +79,7 @@ describe('OnboardingModal', () => {
     expect(screen.queryByText('界面语言')).toBeNull()
     expect(screen.getByDisplayValue('/mock/default/Henji-AI')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '继续' }))
-    expect(screen.getByText('选择一个主供应商')).toBeTruthy()
+    expect(screen.getByText('选择一个默认供应商')).toBeTruthy()
     const providerButtons = screen.getAllByRole('button')
       .filter((button) => ['KIE', 'APIMart', 'Fal.ai', '派欧云']
         .some((name) => button.textContent?.startsWith(name)))

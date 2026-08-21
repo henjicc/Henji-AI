@@ -28,8 +28,8 @@
     "modelscope": "魔搭",
     "kie": "KIE",
     "apimart": "APIMart",
-    "bailian": "阿里云百炼",
-    "volcengine": "火山方舟"
+    "bailian": "百炼",
+    "volcengine": "火山引擎"
   },
   "tags": {
     "text-to-image": "图片生成",

@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getProviderDisplayName } from '@/features/canvas/domain/defaultModels';
+import { getProviderDisplayName } from '@/utils/modelHelpers';
 import { ModelPickerList } from './ModelPickerList';
 
 const providerOptions = [
@@ -99,8 +99,12 @@ describe('ModelPickerList 供应商横向导航', () => {
     expect(providerList!.scrollLeft).toBe(48);
   });
 
-  it('中文环境下使用“百炼”作为简短供应商名', () => {
+  it('画布与生成页共用同一套供应商显示名', () => {
+    expect(getProviderDisplayName('VOLCENGINE', 'zh-CN')).toBe('火山引擎');
+    expect(getProviderDisplayName('Modelscope', 'zh-CN')).toBe('魔搭');
+    expect(getProviderDisplayName('PPIO', 'zh-CN')).toBe('派欧云');
     expect(getProviderDisplayName('bailian', 'zh-CN')).toBe('百炼');
-    expect(getProviderDisplayName('bailian', 'en-US')).toBe('Bailian');
+    expect(getProviderDisplayName('bailian', 'en-US')).toBe('Alibaba Cloud Model Studio');
+    expect(getProviderDisplayName('custom-provider', 'zh-CN')).toBe('custom-provider');
   });
 });

@@ -137,7 +137,7 @@ function ProviderStep({
           >
             <div>
               <div className="flex items-center gap-2">
-                <span className={UI_TEXT_SECTION_CLASS}>{t(`provider.items.${providerId}.name`)}</span>
+                <span className={UI_TEXT_SECTION_CLASS}>{getProviderDisplayName(providerId)}</span>
                 {providerId === 'kie' ? (
                   <span className={`text-3xs font-medium ${
                     primaryProvider === providerId ? UI_META_BADGE_CLASS : UI_META_BADGE_ACCENT_CLASS

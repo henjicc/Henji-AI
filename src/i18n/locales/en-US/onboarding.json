@@ -58,19 +58,15 @@
     "more": "ModelScope, Model Studio, and Volcengine Ark can still be configured under Provider Keys.",
     "items": {
       "kie": {
-        "name": "KIE",
         "description": "Broad coverage of new image and video models in one place—good for getting started quickly."
       },
       "fal": {
-        "name": "Fal.ai",
         "description": "A rich first-party model ecosystem with clear endpoints and fine-grained parameters."
       },
       "apimart": {
-        "name": "APIMart",
         "description": "A unified API with detailed model metadata for cross-model workflows."
       },
       "ppio": {
-        "name": "PPIO",
         "description": "Good regional connectivity for common models and latency-sensitive work, but its supported model selection is currently more limited."
       }
     }

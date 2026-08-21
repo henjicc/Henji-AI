@@ -29,7 +29,6 @@
     },
     "providers": {
       "ppio": {
-        "title": "派欧云",
         "label": "派欧云 API 密钥",
         "placeholder": "请输入派欧云 API 密钥",
         "help": "前往官网注册并在密钥管理页面获取 API 密钥。",
@@ -40,7 +39,6 @@
         }
       },
       "fal": {
-        "title": "Fal.ai",
         "label": "Fal.ai API 密钥",
         "placeholder": "请输入 Fal.ai API 密钥",
         "help": "在控制台获取 API 密钥。",
@@ -51,7 +49,6 @@
         }
       },
       "modelscope": {
-        "title": "魔搭",
         "label": "魔搭 API 密钥",
         "placeholder": "请输入魔搭 API 密钥",
         "help": "注册并查看说明后在访问令牌页面获取。",
@@ -63,7 +60,6 @@
         }
       },
       "kie": {
-        "title": "KIE",
         "label": "KIE API 密钥",
         "placeholder": "请输入 KIE API 密钥",
         "help": "前往 KIE 控制台获取 API 密钥。",
@@ -74,7 +70,6 @@
         }
       },
       "apimart": {
-        "title": "APIMart",
         "label": "APIMart API 密钥",
         "placeholder": "请输入 APIMart API 密钥",
         "help": "前往 APIMart 控制台获取 API 密钥。",
@@ -86,7 +81,6 @@
         }
       },
       "bailian": {
-        "title": "阿里云百炼",
         "label": "百炼 API 密钥",
         "placeholder": "请输入百炼 API 密钥",
         "help": "前往百炼控制台获取华北 2（北京）地域 API 密钥。",
@@ -98,13 +92,12 @@
         }
       },
       "volcengine": {
-        "title": "火山方舟",
-        "label": "火山方舟 API 密钥",
-        "placeholder": "请输入火山方舟 API 密钥",
-        "help": "前往火山方舟控制台开通模型并创建 API 密钥。",
+        "label": "火山引擎 API 密钥",
+        "placeholder": "请输入火山引擎 API 密钥",
+        "help": "前往火山引擎控制台开通模型并创建 API 密钥。",
         "guide": "先去 {{home}} 开通模型，然后去 {{keys}} 获取密钥；接口说明见 {{docs}}。",
         "links": {
-          "home": "火山方舟控制台",
+          "home": "火山引擎控制台",
           "keys": "API 密钥",
           "docs": "API 文档"
         }
@@ -373,7 +366,7 @@
     },
     "upload": {
       "title": "通用文件上传服务",
-      "description": "为 ModelScope、PPIO 等不具备原生文件上传功能的模型提供文件托管服务。",
+      "description": "为魔搭、派欧云等不具备原生文件上传功能的模型提供文件托管服务。",
       "providerLabel": "默认上传提供商",
       "fallbackLabel": "启用自动回退",
       "fallbackHint": "当首选提供商不可用或上传失败时，尝试使用其他已配置的提供商。",

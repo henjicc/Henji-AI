@@ -7,12 +7,10 @@ import type { ModelTag } from '@/core/types';
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import ParameterPanel from '@/components/MediaGenerator/components/ParameterPanel';
 import { UiChipButton, UiPanel } from '@/components/ui';
-import {
-  getProviderDisplayName,
-  type CanvasModelMediaType,
-} from '@/features/canvas/domain/defaultModels';
+import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
 import { getI18nText } from '@/core/types/I18nText';
 import { UI_TRIGGER_PANEL_CLASS } from '@/components/ui/styleTokens';
+import { getProviderDisplayName } from '@/utils/modelHelpers';
 import { ModelPickerList } from './ModelPickerList';
 import { useModelPickerList } from './useModelPickerList';
 import { useNodeModelParams } from './useNodeModelParams';

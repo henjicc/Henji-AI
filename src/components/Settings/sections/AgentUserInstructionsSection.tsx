@@ -129,7 +129,7 @@ export default function AgentUserInstructionsSection(): JSX.Element {
           value={document}
           onChange={setDocument}
           ariaLabel="智能助手用户指令"
-          placeholder={'例如：\n图片生成优先使用 PPIO；兼容时优先质量。\n回答尽量简洁，修改代码后先完成自动化检查。'}
+          placeholder={'例如：\n图片生成优先使用派欧云；兼容时优先质量。\n回答尽量简洁，修改代码后先完成自动化检查。'}
           disabled={busy}
           maxCharacters={ASSISTANT_USER_INSTRUCTIONS_MAX_CHARACTERS}
           showCharacterCount

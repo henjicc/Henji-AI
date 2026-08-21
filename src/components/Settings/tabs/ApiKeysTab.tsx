@@ -14,6 +14,7 @@ import { useExternalLink } from '../hooks/useExternalLink'
 import { ExternalLink } from 'lucide-react'
 import type { ProviderLink } from '@/core/config/providers'
 import { detectShell } from '@/platform/runtime'
+import { getProviderDisplayName } from '@/utils/modelHelpers'
 
 const GUIDE_PLACEHOLDER_PATTERN = /(\{\{[a-z0-9_-]+\}\})/gi
 
@@ -67,7 +68,7 @@ const ApiKeysTab: React.FC = () => {
       <SettingsSection id="api-keys" description={showKeyMigrationHint ? t('apiKeys.migrationHint') : undefined}>
         {API_KEY_PROVIDERS.map(provider => {
           const placeholder = t(`apiKeys.providers.${provider.id}.placeholder`)
-          const title = t(`apiKeys.providers.${provider.id}.title`)
+          const title = getProviderDisplayName(provider.id)
           const guide = t(`apiKeys.providers.${provider.id}.guide`)
           const linkLabels = Object.fromEntries(
             provider.links.map(link => [link.id, t(`apiKeys.providers.${provider.id}.links.${link.id}`)])

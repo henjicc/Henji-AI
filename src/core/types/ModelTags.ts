@@ -82,8 +82,8 @@ export type KnownModelTag =
   | 'provider-fal'               // Fal 提供商
   | 'provider-kie'               // KIE 提供商
   | 'provider-apimart'           // APIMart 提供商
-  | 'provider-bailian'           // 阿里云百炼提供商
-  | 'provider-volcengine'        // 火山方舟提供商
+  | 'provider-bailian'           // 百炼提供商
+  | 'provider-volcengine'        // 火山引擎提供商
   | 'provider-modelscope'        // 魔搭提供商
 
 /**
@@ -202,7 +202,7 @@ export const TAG_DESCRIPTIONS: Record<ModelTag, string> = {
   'provider-fal': 'Fal 提供商',
   'provider-kie': 'KIE 提供商',
   'provider-apimart': 'APIMart 提供商',
-  'provider-bailian': '阿里云百炼提供商',
-  'provider-volcengine': '火山方舟提供商',
+  'provider-bailian': '百炼提供商',
+  'provider-volcengine': '火山引擎提供商',
   'provider-modelscope': '魔搭提供商'
 }

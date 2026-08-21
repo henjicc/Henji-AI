@@ -6,10 +6,8 @@ import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
 import type { ModelTag } from '@/core/types';
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags';
-import {
-  getProviderDisplayName,
-  type CanvasModelMediaType,
-} from '@/features/canvas/domain/defaultModels';
+import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
+import { getProviderDisplayName } from '@/utils/modelHelpers';
 
 export interface ProviderFilterOption {
   id: string;
@@ -146,7 +144,7 @@ export function useModelPickerList({ mediaType, modelId, requiredTags = [] }: Us
       key: model.meta.id,
       displayName,
       providerId: model.meta.provider,
-      providerName: getProviderDisplayName(model.meta.provider),
+      providerName: getProviderDisplayName(model.meta.provider, i18n.language),
       detailLabels,
       icon: model.meta.icon,
       searchTerms: [model.meta.id, description, ...(model.meta.aliases ?? [])],
