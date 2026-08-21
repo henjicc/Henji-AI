@@ -167,13 +167,15 @@ export function ModelPickerList({
       return;
     }
     const reportWidth = (): void => {
-      onPreferredWidthChange(Math.ceil(measurementElement.getBoundingClientRect().width));
+      // 测内容自身而不是屏幕投影尺寸。PanelTrigger 带 scale 动画且自身已有 width，
+      // getBoundingClientRect 会把祖先变换/约束算进去，导致宽面板切到窄供应商时仍回报旧宽度。
+      onPreferredWidthChange(Math.ceil(measurementElement.scrollWidth));
     };
     reportWidth();
     const observer = new ResizeObserver(reportWidth);
     observer.observe(measurementElement);
     return () => observer.disconnect();
-  }, [onPreferredWidthChange]);
+  }, [measuredModels, onPreferredWidthChange, providerOptions, searchPlaceholder]);
 
   return (
     <div className={variant === 'inline' ? 'flex h-full min-h-0 w-full flex-col' : 'relative'}>
