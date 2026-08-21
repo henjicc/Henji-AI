@@ -43,9 +43,6 @@ mac:
   category: public.app-category.graphics-design
   target:
     - target: dmg
-      arch:
-        - x64
-        - arm64
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
 publish:
