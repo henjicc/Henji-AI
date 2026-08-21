@@ -1,27 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CheckCircle2,
-  Database,
   ExternalLink,
   KeyRound,
   Layers3,
   ShieldCheck,
-  Sparkles,
   WandSparkles,
 } from 'lucide-react'
 
 import {
+  UI_COLOR_ACCENT_TEXT_CLASS,
+  UI_META_BADGE_ACCENT_CLASS,
+  UI_META_BADGE_CLASS,
   UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
   UI_TEXT_SECTION_CLASS,
   UI_TEXT_TITLE_CLASS,
+  Dropdown,
   UiButton,
-  UiGroup,
   UiModal,
   UiOptionButton,
   UiPanel,
 } from '@/components/ui'
 import ApiKeyInput from '@/components/Settings/components/ApiKeyInput'
+import { useDataPath } from '@/components/Settings/hooks/useDataPath'
 import { aiGetProviderApiKey, aiSetProviderApiKey, aiTestProviderConnection } from '@/commands/aiRuntime'
 import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import { emitApplicationEvent } from '@/core/events/applicationEvents'
@@ -40,11 +42,13 @@ import {
   onboardingManager,
 } from '../application/onboardingManager'
 import { useOnboardingState } from '../application/useOnboardingState'
+import { OnboardingBasicsStep, OnboardingDataPathDialogs } from './OnboardingBasicsStep'
 
 const logger = createLogger('features.onboarding.modal')
 
-const PRIMARY_PROVIDER_IDS: ApiKeyProvider[] = ['kie', 'fal', 'apimart', 'ppio']
+const PRIMARY_PROVIDER_IDS: ApiKeyProvider[] = ['kie', 'apimart', 'fal', 'ppio']
 const LANGUAGE_OPTIONS: LanguageOption[] = ['auto', 'zh-CN', 'en-US']
+const appIconUrl = new URL('../../../../resources/icons/128x128@2x.png', import.meta.url).href
 
 function ProviderConnectionResult({
   value,
@@ -88,56 +92,25 @@ function WelcomeStep(): JSX.Element {
   ]
   return (
     <div className="flex min-h-[25rem] flex-col justify-center">
-      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/15 text-accent">
-        <Sparkles className="h-6 w-6" />
+      <div className="mb-7 flex items-center gap-4">
+        <img src={appIconUrl} alt="" className="h-16 w-16 rounded-2xl" />
+        <div>
+          <div className={`text-xs font-medium uppercase tracking-wider ${UI_COLOR_ACCENT_TEXT_CLASS}`}>
+            {t('welcome.eyebrow')}
+          </div>
+          <div className="mt-1 text-2xl font-semibold text-text-dark">{t('productName')}</div>
+        </div>
       </div>
-      <div className={`mb-2 text-xs font-medium uppercase tracking-wider text-accent`}>{t('welcome.eyebrow')}</div>
       <h3 className="max-w-xl text-2xl font-semibold leading-tight text-text-dark">{t('welcome.headline')}</h3>
       <p className={`mt-3 max-w-xl leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('welcome.description')}</p>
       <div className="mt-7 space-y-3">
         {features.map(({ icon: Icon, text }) => (
           <div key={text} className="flex items-center gap-3">
-            <Icon className="h-4 w-4 shrink-0 text-accent" />
+            <Icon className={`h-4 w-4 shrink-0 ${UI_COLOR_ACCENT_TEXT_CLASS}`} />
             <span className={UI_TEXT_BODY_CLASS}>{text}</span>
           </div>
         ))}
       </div>
-    </div>
-  )
-}
-
-function BasicsStep(): JSX.Element {
-  const { t } = useI18n('onboarding')
-  const [language, setLanguage] = useState<LanguageOption>(getCurrentLanguage())
-  return (
-    <div className="min-h-[25rem]">
-      <h3 className={UI_TEXT_TITLE_CLASS}>{t('basics.headline')}</h3>
-      <p className={`mt-2 leading-6 ${UI_TEXT_BODY_CLASS}`}>{t('basics.description')}</p>
-      <UiGroup title={t('basics.language')} className="mt-7">
-        <div className="grid grid-cols-3 gap-2">
-          {LANGUAGE_OPTIONS.map((option) => (
-            <UiOptionButton
-              key={option}
-              variant="card"
-              active={language === option}
-              className="justify-center"
-              onClick={() => {
-                changeLanguage(option)
-                setLanguage(option)
-              }}
-            >
-              {t(`basics.languageOptions.${option}`)}
-            </UiOptionButton>
-          ))}
-        </div>
-      </UiGroup>
-      <UiPanel variant="inset" className="mt-7 flex gap-3 p-4">
-        <Database className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
-        <div>
-          <div className={UI_TEXT_SECTION_CLASS}>{t('basics.dataTitle')}</div>
-          <p className={`mt-1 leading-5 ${UI_TEXT_META_CLASS}`}>{t('basics.dataDescription')}</p>
-        </div>
-      </UiPanel>
     </div>
   )
 }
@@ -165,12 +138,18 @@ function ProviderStep({
               <div className="flex items-center gap-2">
                 <span className={UI_TEXT_SECTION_CLASS}>{t(`provider.items.${providerId}.name`)}</span>
                 {providerId === 'kie' ? (
-                  <span className="rounded bg-accent/15 px-1.5 py-0.5 text-3xs font-medium text-accent">
+                  <span className={`text-3xs font-medium ${
+                    primaryProvider === providerId ? UI_META_BADGE_CLASS : UI_META_BADGE_ACCENT_CLASS
+                  }`}>
                     {t('provider.recommended')}
                   </span>
                 ) : null}
               </div>
-              <p className={`mt-1.5 leading-5 ${UI_TEXT_META_CLASS}`}>{t(`provider.items.${providerId}.description`)}</p>
+              <p className={`mt-1.5 leading-5 ${
+                primaryProvider === providerId ? 'text-xs text-white/80' : UI_TEXT_META_CLASS
+              }`}>
+                {t(`provider.items.${providerId}.description`)}
+              </p>
             </div>
           </UiOptionButton>
         ))}
@@ -270,6 +249,8 @@ export function OnboardingModal(): JSX.Element {
   const [keyVisible, setKeyVisible] = useState(false)
   const [testing, setTesting] = useState(false)
   const [connectionResult, setConnectionResult] = useState<ProviderConnectionTestResultDto | null>(null)
+  const [language, setLanguage] = useState<LanguageOption>(getCurrentLanguage())
+  const dataPath = useDataPath(state.isOpen)
   const stepIndex = ONBOARDING_STEP_IDS.indexOf(state.activeStepId)
   const providerConfigured = state.configuredProviders.includes(state.primaryProvider)
 
@@ -300,7 +281,7 @@ export function OnboardingModal(): JSX.Element {
     const props = { primaryProvider: state.primaryProvider }
     switch (state.activeStepId) {
       case 'welcome': return <WelcomeStep />
-      case 'basics': return <BasicsStep />
+      case 'basics': return <OnboardingBasicsStep dataPath={dataPath} />
       case 'provider': return <ProviderStep {...props} />
       case 'api-key': return (
         <ApiKeyStep
@@ -320,7 +301,7 @@ export function OnboardingModal(): JSX.Element {
         <FirstTaskStep providerId={state.primaryProvider} configured={providerConfigured} />
       )
     }
-  }, [apiKey, connectionResult, keyVisible, providerConfigured, state.activeStepId, state.primaryProvider])
+  }, [apiKey, connectionResult, dataPath, keyVisible, providerConfigured, state.activeStepId, state.primaryProvider])
 
   const saveAndTest = async (): Promise<void> => {
     const trimmed = apiKey.trim()
@@ -420,7 +401,7 @@ export function OnboardingModal(): JSX.Element {
         ) : null}
         <UiButton
           variant="primary"
-          disabled={testing || (state.activeStepId === 'api-key' && !connectionResult && !apiKey.trim())}
+          disabled={dataPath.isMigrating || testing || (state.activeStepId === 'api-key' && !connectionResult && !apiKey.trim())}
           onClick={primaryAction}
         >
           {primaryLabel}
@@ -433,6 +414,24 @@ export function OnboardingModal(): JSX.Element {
     <UiModal
       isOpen={state.isOpen}
       title={t('title')}
+      headerActions={(
+        <Dropdown
+          appearance="text"
+          value={language}
+          options={LANGUAGE_OPTIONS.map((option) => ({
+            value: option,
+            label: t(`basics.languageOptions.${option}`),
+          }))}
+          ariaLabel={t('actions.language')}
+          minWidthStrategy="none"
+          panelWidthStrategy="options"
+          buttonClassName="w-auto"
+          onSelect={(option) => {
+            changeLanguage(option)
+            setLanguage(option)
+          }}
+        />
+      )}
       onClose={() => onboardingManager.defer()}
       size="form"
       contentClassName="px-6 py-5"
@@ -452,6 +451,7 @@ export function OnboardingModal(): JSX.Element {
         <span className={`shrink-0 ${UI_TEXT_META_CLASS}`}>{t(`steps.${state.activeStepId}`)}</span>
       </div>
       {step}
+      <OnboardingDataPathDialogs dataPath={dataPath} />
     </UiModal>
   )
 }

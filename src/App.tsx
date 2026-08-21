@@ -234,7 +234,6 @@ const App: React.FC = () => {
           onTabChange={handleTabChange}
           onAssetClick={handleAssetClick}
           onOpenSettings={() => openSettings()}
-          onOpenHelp={() => onboardingManager.open()}
           onPrefetchSettings={prefetchSettingsModal}
           assistantOpen={assistantOpen}
           onAssistantClick={toggleAssistant}

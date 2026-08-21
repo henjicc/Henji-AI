@@ -5,7 +5,7 @@ import { UiChipButton, UiIconButton } from '@/components/ui'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 import type { WorkspaceId } from '@/core/types/workspace'
 import type { AssetLibraryView } from '@/features/assets/store/assetLibraryStore'
-import { CircleHelp, Copy, Minus, Sparkles, Square, X, type LucideIcon } from 'lucide-react'
+import { Copy, Minus, Sparkles, Square, X, type LucideIcon } from 'lucide-react'
 import {
   ICON_ASSET_LIBRARY,
   ICON_SETTINGS,
@@ -38,14 +38,13 @@ interface WindowControlsProps {
   onTabChange?: (tabId: WorkspaceId) => void
   onAssetClick?: () => void
   onOpenSettings?: () => void
-  onOpenHelp?: () => void
   /** 指针移到设置按钮上时预取设置面板 chunk：悬停到点击之间的空档足够抹平首次加载 */
   onPrefetchSettings?: () => void
   assistantOpen?: boolean
   onAssistantClick?: () => void
 }
 
-const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings, onOpenHelp, onPrefetchSettings, assistantOpen = false, onAssistantClick }) => {
+const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation', assetView = 'closed', onTabChange, onAssetClick, onOpenSettings, onPrefetchSettings, assistantOpen = false, onAssistantClick }) => {
   const { t } = useI18n('ui')
   const [isDesktopShell, setIsDesktopShell] = React.useState<boolean>(false)
   const [isMacOS, setIsMacOS] = React.useState<boolean>(false)
@@ -156,15 +155,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           >
             <UiIconButton
               type="button"
-              onClick={handleOpenSettings}
-              onPointerEnter={handlePrefetchSettings}
-              className="!w-6 !h-6 !rounded-md border-0 bg-transparent hover:bg-surface-dark/80"
-              title={t('actions.settings')}
-            >
-              <ICON_SETTINGS className="h-3.5 w-3.5 text-text-soft" />
-            </UiIconButton>
-            <UiIconButton
-              type="button"
               onClick={handleClose}
               className="!w-3 !h-3 !rounded-full !border-0 !bg-red-400 hover:!bg-red-400/80 !p-0 group"
               title={t('windowControls.close')}
@@ -201,16 +191,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
           <div className="absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1" style={noDragRegionStyle} data-window-nodrag>
             <UiIconButton
               type="button"
-              showBorder={false}
-              appearance="hover-only"
-              onClick={onOpenHelp}
-              className="!h-7 !w-7"
-              title={t('actions.firstSetup')}
-            >
-              <CircleHelp className="h-4 w-4" />
-            </UiIconButton>
-            <UiIconButton
-              type="button"
               active={assistantOpen}
               showBorder={false}
               appearance="hover-only"
@@ -219,6 +199,17 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
               title="智能助手"
             >
               <Sparkles className="h-4 w-4" />
+            </UiIconButton>
+            <UiIconButton
+              type="button"
+              showBorder={false}
+              appearance="hover-only"
+              onClick={handleOpenSettings}
+              onPointerEnter={handlePrefetchSettings}
+              className="!h-7 !w-7"
+              title={t('actions.settings')}
+            >
+              <ICON_SETTINGS className="h-4 w-4" />
             </UiIconButton>
           </div>
 
@@ -243,16 +234,6 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
             style={noDragRegionStyle}
             data-window-nodrag
           >
-            <UiIconButton
-              type="button"
-              showBorder={false}
-              appearance="hover-only"
-              onClick={onOpenHelp}
-              className="!h-8 !w-8 !rounded"
-              title={t('actions.firstSetup')}
-            >
-              <CircleHelp className="h-4 w-4" />
-            </UiIconButton>
             <UiIconButton
               type="button"
               active={assistantOpen}
@@ -309,4 +290,3 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
 }
 
 export default WindowControls
-

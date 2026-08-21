@@ -1,9 +1,10 @@
 {
-  "title": "Welcome to Henji AI",
+  "title": "Henji AI · First-time setup",
+  "productName": "Henji AI",
   "progress": "Step {{current}} of {{total}}",
   "steps": {
     "welcome": "Welcome",
-    "basics": "Basics",
+    "basics": "Data folder",
     "provider": "Primary provider",
     "api-key": "API key",
     "first-task": "First creation"
@@ -20,31 +21,35 @@
     "prepareTask": "Prepare first task",
     "createLater": "Create later",
     "openGuide": "Get API key",
+    "language": "Change language",
+    "chooseDirectory": "Choose another location",
     "openApiSettings": "Open provider keys",
     "rerun": "Run first-time setup again",
     "dismiss": "Got it"
   },
   "welcome": {
-    "eyebrow": "Start with a real creation",
-    "headline": "Bring multiple AI platforms into one creative workspace",
-    "description": "We'll choose a primary provider, store its key securely, and prepare your first image task. Every step is optional and can be reopened from Settings.",
+    "eyebrow": "Your all-in-one AI workspace",
+    "headline": "One workspace for every AI tool you need",
+    "description": "Connect multiple providers and freely choose image, video, and audio models. Creation, editing, and workflows live together, while every result and project is saved directly on your device.",
     "features": {
-      "models": "Use image, video, and audio models in one place",
-      "canvas": "Create quickly in Generate, then compose workflows on Canvas",
-      "local": "Projects and preferences stay local; API keys use secure system storage"
+      "models": "Connect multiple providers and choose models freely",
+      "canvas": "Create, edit, and build canvas workflows in one place",
+      "local": "Keep generated results and projects directly on your device"
     }
   },
   "basics": {
-    "headline": "Confirm two basics",
-    "description": "Language changes immediately. The desktop app has already prepared a data directory that can be migrated later in Settings.",
+    "headline": "Choose your data storage location",
+    "description": "This is the best time to choose a location, while there is little data to move. Pick another folder or keep the default.",
     "language": "Interface language",
     "languageOptions": {
       "auto": "Follow system",
       "zh-CN": "简体中文",
       "en-US": "English"
     },
-    "dataTitle": "Data directory is ready",
-    "dataDescription": "Generation history, projects, and download settings use the app data directory. No path selection is needed during first launch."
+    "dataTitle": "Data storage location",
+    "dataDescription": "Generated results, projects, and related data are stored here. Henji AI creates a Henji-AI folder inside any location you choose.",
+    "currentPath": "Current data storage location",
+    "defaultPath": "Keep the default location: {{path}}"
   },
   "provider": {
     "headline": "Choose a primary provider",
@@ -66,7 +71,7 @@
       },
       "ppio": {
         "name": "PPIO",
-        "description": "Good regional connectivity for common models and latency-sensitive work."
+        "description": "Good regional connectivity for common models and latency-sensitive work, but its supported model selection is currently more limited."
       }
     }
   },
@@ -105,16 +110,24 @@
     }
   },
   "firstTask": {
-    "headline": "Prepare your first real task",
-    "description": "We'll open Generate, select an image model from your primary provider, and insert an editable prompt. The model is called only after you click Generate.",
+    "headline": "Create your first result in Generate",
+    "description": "We'll open Generate, preselect an image model, and insert an editable prompt. In-app guidance will then show where to choose a model, edit the prompt, and start generation.",
     "promptLabel": "Example prompt",
     "prompt": "A warm bookstore on a rainy night, neon reflected in the window, cinematic composition, delicate lighting",
     "ready": "{{provider}} is configured and ready.",
     "notReady": "{{provider}} is not configured yet. You can still prepare the task; the app will ask for a key before generation."
   },
   "coach": {
-    "title": "Your first task is ready",
-    "description": "Review the model and prompt, then click Generate. Onboarding completes automatically when a result returns.",
+    "progress": "{{current}} / {{total}}",
+    "modelTitle": "Choose a model first",
+    "modelDescription": "Filter models by provider, type, and capability here. An image model from your primary provider is already selected, but you can change it.",
+    "promptTitle": "Now review your prompt",
+    "promptDescription": "The example is ready to use. Keep it or replace it with the image you want to create.",
+    "generateTitle": "Click here to generate",
+    "generateDescription": "This step calls the model. You can keep using the app after submitting; onboarding completes automatically when the result returns.",
+    "next": "Next",
+    "finish": "End guide",
+    "skip": "Skip in-app guide",
     "successTitle": "Your first creation is complete",
     "successDescription": "Next, try another model, add a reference image, or continue the workflow on Canvas."
   },

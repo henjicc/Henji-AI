@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
 import {
@@ -22,8 +22,30 @@ vi.mock('@/platform/desktopApi', () => ({
   openExternal: vi.fn(),
 }))
 
+vi.mock('@/components/Settings/hooks/useDataPath', () => ({
+  useDataPath: () => ({
+    currentPath: '/mock/default/Henji-AI',
+    defaultPath: '/mock/default/Henji-AI',
+    isMigrating: false,
+    progress: { current: 0, total: 0, file: '' },
+    showProgress: false,
+    alert: { open: false, type: 'success', message: { key: '' } },
+    conflict: { open: false, targetPath: '' },
+    confirmResetOpen: false,
+    selectDirectory: vi.fn(),
+    openResetConfirm: vi.fn(),
+    closeResetConfirm: vi.fn(),
+    resolveConflict: vi.fn(),
+    resetToDefault: vi.fn(),
+    closeAlert: vi.fn(),
+    closeConflict: vi.fn(),
+  }),
+}))
+
 describe('OnboardingModal', () => {
   beforeEach(async () => {
+    localStorage.clear()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     await i18n.changeLanguage('zh-CN')
     vi.mocked(aiGetProviderApiKey).mockResolvedValue(null)
     vi.mocked(aiSetProviderApiKey).mockResolvedValue()
@@ -38,13 +60,33 @@ describe('OnboardingModal', () => {
     onboardingManager.restart()
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('从欢迎页走到供应商选择，并保存测试密钥但不触发生成', async () => {
     render(<OnboardingModal />)
 
+    const languageButton = screen.getByRole('button', { name: '切换语言' })
+    expect(languageButton.textContent).toContain('跟随系统')
+    fireEvent.click(languageButton)
+    fireEvent.click(screen.getByRole('option', { name: '简体中文' }))
+    expect(localStorage.getItem('henji-language')).toBe('zh-CN')
+    expect(languageButton.textContent).toContain('简体中文')
+
     fireEvent.click(screen.getByRole('button', { name: '开始设置' }))
-    expect(screen.getByText('先确认两个基础项')).toBeTruthy()
+    expect(screen.getByText('设置数据保存目录')).toBeTruthy()
+    expect(screen.queryByText('界面语言')).toBeNull()
+    expect(screen.getByDisplayValue('/mock/default/Henji-AI')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '继续' }))
     expect(screen.getByText('选择一个主供应商')).toBeTruthy()
+    const providerButtons = screen.getAllByRole('button')
+      .filter((button) => ['KIE', 'APIMart', 'Fal.ai', '派欧云']
+        .some((name) => button.textContent?.startsWith(name)))
+      .map((button) => button.textContent?.match(/^(KIE|APIMart|Fal\.ai|派欧云)/)?.[0])
+    expect(providerButtons).toEqual(['KIE', 'APIMart', 'Fal.ai', '派欧云'])
+    expect(screen.getByText('推荐起步').className).toContain('bg-veil-faint')
+    expect(screen.getByText(/但目前支持的模型相对较少/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /Fal.ai/ }))
     fireEvent.click(screen.getByRole('button', { name: '继续' }))

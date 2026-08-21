@@ -38,36 +38,38 @@ export function GeneratorConfigurationBar({
 
   return (
     <div className="mb-2.5 flex flex-wrap items-end gap-3 px-1">
-      <PanelTrigger
-        label={t('title')}
-        display={`${currentProvider?.name}：${currentModel?.name || t('selectModel')}`}
-        className="w-auto min-w-[180px] flex-shrink-0"
-        panelWidth={1100}
-        alignment="aboveCenter"
-        stableHeight
-        closeOnPanelClick={(target) => {
-          if ((target as HTMLElement).closest('[data-prevent-close]')) return false
-          return Boolean((target as HTMLElement).closest('[data-close-on-select]'))
-        }}
-        renderPanel={() => (
-          <ModelSelectorPanel
-            selectedProvider={uiState.selectedProvider}
-            selectedModel={uiState.selectedModel}
-            modelFilterProvider={uiState.modelFilterProvider}
-            modelFilterType={uiState.modelFilterType}
-            modelFilterFunction={uiState.modelFilterFunction}
-            favoriteModels={uiState.favoriteModels}
-            onModelSelect={(providerId, modelId) => {
-              uiState.setSelectedProvider(providerId)
-              uiState.setSelectedModel(modelId)
-            }}
-            onFilterProviderChange={uiState.setModelFilterProvider}
-            onFilterTypeChange={uiState.setModelFilterType}
-            onFilterFunctionChange={uiState.setModelFilterFunction}
-            onToggleFavorite={handleToggleFavorite}
-          />
-        )}
-      />
+      <div data-onboarding-target="model">
+        <PanelTrigger
+          label={t('title')}
+          display={`${currentProvider?.name}：${currentModel?.name || t('selectModel')}`}
+          className="w-auto min-w-[180px] flex-shrink-0"
+          panelWidth={1100}
+          alignment="aboveCenter"
+          stableHeight
+          closeOnPanelClick={(target) => {
+            if ((target as HTMLElement).closest('[data-prevent-close]')) return false
+            return Boolean((target as HTMLElement).closest('[data-close-on-select]'))
+          }}
+          renderPanel={() => (
+            <ModelSelectorPanel
+              selectedProvider={uiState.selectedProvider}
+              selectedModel={uiState.selectedModel}
+              modelFilterProvider={uiState.modelFilterProvider}
+              modelFilterType={uiState.modelFilterType}
+              modelFilterFunction={uiState.modelFilterFunction}
+              favoriteModels={uiState.favoriteModels}
+              onModelSelect={(providerId, modelId) => {
+                uiState.setSelectedProvider(providerId)
+                uiState.setSelectedModel(modelId)
+              }}
+              onFilterProviderChange={uiState.setModelFilterProvider}
+              onFilterTypeChange={uiState.setModelFilterType}
+              onFilterFunctionChange={uiState.setModelFilterFunction}
+              onToggleFavorite={handleToggleFavorite}
+            />
+          )}
+        />
+      </div>
 
       <ParameterPanel
         currentModel={currentModel}

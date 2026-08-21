@@ -50,6 +50,8 @@ type DropdownProps<T extends string | number | boolean> = {
   zIndex?: number
   minWidthStrategy?: 'options' | 'display' | 'none'
   panelWidthStrategy?: 'button' | 'options'
+  /** `text` 用于标题栏等弱化入口：静息态只有文字与箭头，浮层仍使用统一菜单表面。 */
+  appearance?: 'field' | 'text'
 }
 
 export default function Dropdown<T extends string | number | boolean>(props: DropdownProps<T>) {
@@ -72,6 +74,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
     zIndex = 1000,
     minWidthStrategy = 'display',
     panelWidthStrategy = 'button',
+    appearance = 'field',
   } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
@@ -327,7 +330,8 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         ref={triggerRef}
         type="button"
         disabled={disabled}
-        variant="muted"
+        variant={appearance === 'text' ? 'plain' : 'muted'}
+        size={appearance === 'text' ? 'sm' : 'md'}
         onClick={() => {
           if (disabled) return
           if (open) {
@@ -345,8 +349,10 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         aria-label={ariaLabelledBy ? undefined : ariaLabel ?? label ?? resolvedDisplay}
         aria-labelledby={ariaLabelledBy}
         className={
-          `${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-          } ${buttonClassName || 'w-full'}`
+          `${appearance === 'text'
+            ? 'gap-1 font-normal'
+            : `${UI_TRIGGER_BUTTON_CLASS} rounded-lg px-3 py-2 ${UI_FIELD_CONTROL_HEIGHT_SM_CLASS}`
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${buttonClassName || 'w-full'}`
         }
         style={{
           outline: 'none',
@@ -355,7 +361,7 @@ export default function Dropdown<T extends string | number | boolean>(props: Dro
         }}
       >
         <span className={`${buttonLabelClassName || 'text-sm'} truncate`}>{resolvedDisplay}</span>
-        <ChevronDown className={`w-4 h-4 text-text-muted transition-transform duration-200 ml-2 ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 text-text-muted transition-transform duration-200 ${appearance === 'text' ? 'ml-0.5' : 'ml-2'} ${open ? 'rotate-180' : ''}`} />
       </UiButton>
       {(open || closing) && (
         portal && fixedPos ? (

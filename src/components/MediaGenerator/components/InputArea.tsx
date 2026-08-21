@@ -363,7 +363,7 @@ const InputArea: React.FC<InputAreaProps> = ({
         )}
 
         {/* 文本输入框 */}
-        <div className="relative">
+        <div data-onboarding-target="prompt" className="relative">
           <PromptEditor
             ref={promptEditorRef}
             value={promptDocument}
@@ -425,6 +425,7 @@ const InputArea: React.FC<InputAreaProps> = ({
           {/* 生成按钮 */}
           <UiIconButton
           type="button"
+          data-onboarding-target="generate"
           onClick={onGenerate}
           disabled={generateDisabled || isPromptOptimizing || renderPromptOptimizationPreview}
           title={isGenerating ? t('inputArea.button.queue') : t('inputArea.button.generate')}

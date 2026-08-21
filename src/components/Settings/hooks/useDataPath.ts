@@ -57,7 +57,7 @@ export interface UseDataPathResult {
 
 const EMPTY_PROGRESS: MigrationProgress = { current: 0, total: 0, file: '' }
 
-export function useDataPath(): UseDataPathResult {
+export function useDataPath(enabled = true): UseDataPathResult {
   const [currentPath, setCurrentPath] = useState<string>('')
   const [defaultPath, setDefaultPath] = useState<string>('')
   const [isMigrating, setIsMigrating] = useState(false)
@@ -75,6 +75,7 @@ export function useDataPath(): UseDataPathResult {
   const [confirmResetOpen, setConfirmResetOpen] = useState(false)
 
   useEffect(() => {
+    if (!enabled) return
     const loadPaths = async () => {
       try {
         const [current, defaultRoot] = await Promise.all([
@@ -87,8 +88,8 @@ export function useDataPath(): UseDataPathResult {
         logger.error('加载数据路径失败:', error)
       }
     }
-    loadPaths()
-  }, [])
+    void loadPaths()
+  }, [enabled])
 
   const setAlertState = (type: AlertType, key: string, params?: Record<string, string | number>) => {
     setAlert({ open: true, type, message: { key, params } })
@@ -119,6 +120,11 @@ export function useDataPath(): UseDataPathResult {
     setIsMigrating(true)
     setShowProgress(true)
     setProgress(EMPTY_PROGRESS)
+    const startedAt = performance.now()
+    logger.info('开始迁移数据目录', {
+      event: 'data_path.migration.started',
+      context: { mode, applyDefault },
+    })
     try {
       await migrateData(oldPath, newPath, (current, total, file) => {
         setProgress({ current, total, file })
@@ -131,8 +137,23 @@ export function useDataPath(): UseDataPathResult {
       setCurrentPath(newPath)
       window.dispatchEvent(new Event('dataPathChanged'))
       setAlertState('success', 'alerts.migrationSuccess')
+      logger.info('数据目录迁移完成', {
+        event: 'data_path.migration.completed',
+        context: {
+          mode,
+          applyDefault,
+          durationMs: Math.round(performance.now() - startedAt),
+        },
+      })
     } catch (error) {
-      logger.error('数据迁移失败:', error)
+      logger.error('数据迁移失败:', error, {
+        event: 'data_path.migration.failed',
+        context: {
+          mode,
+          applyDefault,
+          durationMs: Math.round(performance.now() - startedAt),
+        },
+      })
       const message = error instanceof Error ? error.message : 'UnknownError'
       setAlertState('error', 'alerts.migrationFailed', { message })
     } finally {
@@ -200,4 +221,3 @@ export function useDataPath(): UseDataPathResult {
     closeConflict
   }
 }
-

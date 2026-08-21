@@ -19,6 +19,8 @@ interface UiModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** 与标题同排的轻量上下文动作，例如语言或视图切换。 */
+  headerActions?: ReactNode;
   /** 统一尺寸语义；业务弹窗不得再自行拼宽高。 */
   size?: UiModalSize;
   /** 仅用于非尺寸类的表面微调。 */
@@ -47,6 +49,7 @@ export function UiModal({
   onClose,
   children,
   footer,
+  headerActions,
   size = 'compact',
   panelClassName = '',
   contentClassName = 'px-4 py-4',
@@ -95,7 +98,10 @@ export function UiModal({
       >
         {!hideHeader && (
           <div className="flex items-center justify-between border-b border-veil-subtle px-4 py-3">
-            <h2 id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</h2>
+            <div className="flex min-w-0 items-center gap-3">
+              <h2 id={titleId} className={UI_TEXT_TITLE_CLASS}>{title}</h2>
+              {headerActions}
+            </div>
             <UiIconButton
               className="h-8 w-8"
               appearance="hover-only"

@@ -81,4 +81,21 @@ describe('Dropdown 键盘交互', () => {
     expect(panel.style.top).toBe('632px')
     expect(panel.classList.contains('ui-glass')).toBe(true)
   })
+
+  it('文字外观只保留轻量文字按钮语义', () => {
+    const rendered = render(React.createElement(Dropdown, {
+      appearance: 'text',
+      ariaLabel: '切换语言',
+      value: 'zh-CN',
+      options: [
+        { value: 'zh-CN', label: '简体中文' },
+        { value: 'en-US', label: 'English' },
+      ],
+    }))
+
+    const trigger = rendered.getByRole('button', { name: '切换语言' })
+    expect(trigger.className).toContain('border-transparent')
+    expect(trigger.className).toContain('font-normal')
+    expect(trigger.className).not.toContain('bg-surface-dark')
+  })
 })

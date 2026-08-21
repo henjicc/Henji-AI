@@ -1,9 +1,10 @@
 {
-  "title": "欢迎使用痕迹AI",
+  "title": "痕迹AI · 首次设置",
+  "productName": "痕迹AI",
   "progress": "第 {{current}} 步，共 {{total}} 步",
   "steps": {
     "welcome": "欢迎",
-    "basics": "基础设置",
+    "basics": "数据目录",
     "provider": "主供应商",
     "api-key": "API 密钥",
     "first-task": "首次创作"
@@ -20,31 +21,35 @@
     "prepareTask": "准备首个任务",
     "createLater": "稍后再创作",
     "openGuide": "获取密钥",
+    "language": "切换语言",
+    "chooseDirectory": "选择其他位置",
     "openApiSettings": "打开平台密钥",
     "rerun": "重新运行首次设置",
     "dismiss": "知道了"
   },
   "welcome": {
-    "eyebrow": "从一个真实作品开始",
-    "headline": "把多个 AI 平台，收进一个创作工作台",
-    "description": "接下来会帮你选定主供应商、安全保存密钥，并准备第一个图像任务。每一步都可以跳过，之后也能从设置重新进入。",
+    "eyebrow": "全能 AI 工作台",
+    "headline": "一个工作台，自由使用你需要的 AI",
+    "description": "在这里连接不同供应商，自由选择图像、视频与音频模型。创作、编辑和工作流能力集中在一处，所有生成结果与项目都会直接保存在本地。",
     "features": {
-      "models": "统一使用图像、视频与音频模型",
-      "canvas": "在生成页快速创作，在画布里组合工作流",
-      "local": "项目与偏好保存在本机，API 密钥进入系统安全存储"
+      "models": "多供应商统一接入，模型选择更自由",
+      "canvas": "生成、编辑、画布工作流等常用能力一站完成",
+      "local": "生成结果与项目直接保存在本地，内容始终由你掌控"
     }
   },
   "basics": {
-    "headline": "先确认两个基础项",
-    "description": "语言会立即生效；数据目录已由桌面端自动配置，之后可以在设置中迁移。",
+    "headline": "设置数据保存目录",
+    "description": "现在数据最少，正适合决定保存位置。你可以选择其他目录，也可以直接使用默认位置。",
     "language": "界面语言",
     "languageOptions": {
       "auto": "跟随系统",
       "zh-CN": "简体中文",
       "en-US": "English"
     },
-    "dataTitle": "数据目录已准备好",
-    "dataDescription": "生成记录、项目和下载设置会使用应用数据目录。无需在首次启动时手动选择路径。"
+    "dataTitle": "数据保存目录",
+    "dataDescription": "生成结果、项目和相关数据都会保存在这里。选择其他位置时，痕迹AI 会在所选目录中创建 Henji-AI 文件夹。",
+    "currentPath": "当前数据保存目录",
+    "defaultPath": "不修改将使用默认位置：{{path}}"
   },
   "provider": {
     "headline": "选择一个主供应商",
@@ -66,7 +71,7 @@
       },
       "ppio": {
         "name": "派欧云",
-        "description": "国内网络体验友好，适合常用模型与低延迟场景。"
+        "description": "国内网络体验友好，适合常用模型与低延迟场景，但目前支持的模型相对较少。"
       }
     }
   },
@@ -105,16 +110,24 @@
     }
   },
   "firstTask": {
-    "headline": "准备第一个真实任务",
-    "description": "我会打开生成页、选择主供应商下的一个图像模型，并填入一段可直接修改的提示词。只有你点击“生成”才会真正调用模型。",
+    "headline": "去生成页完成第一次创作",
+    "description": "我会打开生成页、预选一个图像模型，并填入一段可直接修改的提示词。接下来会在软件界面中依次指引你选择模型、编辑提示词并点击生成。",
     "promptLabel": "示例提示词",
     "prompt": "一间雨夜里的温暖书店，橱窗映着霓虹灯，电影感构图，细腻光影",
     "ready": "{{provider}} 已配置，可以直接开始。",
     "notReady": "{{provider}} 尚未配置；任务仍可准备，生成前应用会提醒你补充密钥。"
   },
   "coach": {
-    "title": "首个任务已准备好",
-    "description": "检查模型和提示词，满意后点击生成。成功返回结果时，引导会自动完成。",
+    "progress": "{{current}} / {{total}}",
+    "modelTitle": "先选择一个模型",
+    "modelDescription": "这里可以按供应商、类型和能力筛选模型。已为你预选主供应商下的图像模型，也可以打开后换一个。",
+    "promptTitle": "再确认你的提示词",
+    "promptDescription": "示例内容已经填好。你可以直接使用，也可以改成自己想创作的画面。",
+    "generateTitle": "点击这里开始生成",
+    "generateDescription": "这一步会真实调用模型。提交后可以继续使用软件，结果返回时首次引导会自动完成。",
+    "next": "下一步",
+    "finish": "结束引导",
+    "skip": "跳过应用内引导",
     "successTitle": "首次创作已完成",
     "successDescription": "接下来可以切换模型、添加参考图，或把生成流程放进画布继续组合。"
   },

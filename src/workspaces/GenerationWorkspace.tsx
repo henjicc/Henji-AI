@@ -8,6 +8,7 @@ import TestModePanel from '@/components/TestModePanel'
 import { UiSharedGlassHost, UiTaskHistoryFilterBar } from '@/components/ui'
 import { useContextMenu } from '@/hooks/useContextMenu'
 import { useI18n } from '@/hooks/useI18n'
+import { useOnboardingState } from '@/features/onboarding/application/useOnboardingState'
 import { getModelDisplayName } from '@/utils/modelHelpers'
 import type { ImageEditSession } from '@/core/imageEdit'
 import { FloatingInputPanel } from './GenerationWorkspace/components/FloatingInputPanel'
@@ -145,6 +146,11 @@ const GenerationWorkspace: React.FC = () => {
     handlePanelMouseLeave,
     handlePanelMouseMove,
   } = useBottomPanel({ listContainerRef })
+  const onboarding = useOnboardingState()
+  useEffect(() => {
+    if (!onboarding.firstTaskPrepared || onboarding.firstTaskCompleted) return
+    expandPanelSmooth()
+  }, [expandPanelSmooth, onboarding.firstTaskCompleted, onboarding.firstTaskPrepared])
   const [panelModelId, setPanelModelId] = useState('')
   const [panelPrompt, setPanelPrompt] = useState('')
   const handleUsePrompt = useCallback((prompt: string): void => {

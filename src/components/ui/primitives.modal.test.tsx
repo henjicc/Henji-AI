@@ -83,6 +83,21 @@ describe('UiModal', () => {
     expect(view.getByRole('dialog', { name: '无标题栏弹窗' })).not.toBeNull();
   });
 
+  it('支持在标题旁放置轻量上下文动作', () => {
+    const view = render(
+      <UiModal
+        isOpen
+        title="首次设置"
+        headerActions={<UiButton variant="plain">简体中文</UiButton>}
+        onClose={vi.fn()}
+      >
+        内容
+      </UiModal>,
+    );
+
+    expect(view.getByRole('button', { name: '简体中文' })).not.toBeNull();
+  });
+
   it('所有尺寸档位都使用统一的响应式尺寸令牌', () => {
     const sizes = Object.keys(UI_MODAL_SIZE_CLASS) as UiModalSize[];
     const view = render(
