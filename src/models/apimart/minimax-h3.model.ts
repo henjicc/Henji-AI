@@ -36,7 +36,7 @@ export const apimartMiniMaxH3Model = defineModel({
     },
     {
       id: 'apimartMiniMaxH3Resolution', type: 'dropdown', order: 3,
-      name: sharedFieldText('resolution'), default: '768P',
+      name: sharedFieldText('resolution'), default: '2K',
       options: ['768P', '2K'].map((value) => ({ value, label: value }))
     },
     {
@@ -58,29 +58,29 @@ export const apimartMiniMaxH3Model = defineModel({
       const audios = pickSources(params.uploadedAudioFilePaths, params.audios)
       const supported = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16']
       const raw = String(params.apimartMiniMaxH3AspectRatio || 'smart')
-      const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0 ? params.__firstImageRatio : 16 / 9
       let aspectRatio = supported.includes(raw) ? raw : '16:9'
-      if (raw === 'smart' || raw === 'auto') {
-        let difference = Number.POSITIVE_INFINITY
-        for (const candidate of supported) {
-          const pair = candidate.split(':').map(Number)
-          const next = Math.abs(pair[0] / pair[1] - hint)
-          if (next < difference) { difference = next; aspectRatio = candidate }
-        }
-      }
+      const referenceMode = params.apimartMiniMaxH3Mode === 'reference-to-video'
+      if ((raw === 'smart' || raw === 'auto' || raw === 'adaptive') && referenceMode) aspectRatio = 'adaptive'
       const body: DynamicValueMap = {
-        model: 'MiniMax-H3', prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        model: 'MiniMax-H3', prompt: typeof params.prompt === 'string' ? params.prompt.trim().slice(0, 7000) : '',
         duration: Math.min(15, Math.max(4, Math.round(Number(params.apimartMiniMaxH3Duration || 5)))),
-        resolution: params.apimartMiniMaxH3Resolution === '2K' ? '2K' : '768P',
-        aspect_ratio: aspectRatio
+        resolution: params.apimartMiniMaxH3Resolution === '768P' ? '768P' : '2K',
+        nsfw_check: false
       }
-      if (params.apimartMiniMaxH3Mode === 'reference-to-video') {
+      if (!body.prompt) throw new Error('MiniMax H3 的提示词不能为空')
+      if (referenceMode) {
+        if (audios.length > 0 && images.length + videos.length === 0) {
+          throw new Error('MiniMax H3 的参考音频必须与参考图片或参考视频一起使用')
+        }
+        body.aspect_ratio = aspectRatio
         if (images.length > 0) body.image_urls = images.slice(0, 9)
         if (videos.length > 0) body.video_urls = videos.slice(0, 3)
         if (audios.length > 0) body.audio_urls = audios.slice(0, 3)
       } else if (images.length > 0) {
         body.first_frame_image = images[0]
         if (images[1]) body.last_frame_image = images[1]
+      } else {
+        body.aspect_ratio = aspectRatio
       }
       return body
     }
@@ -90,10 +90,18 @@ export const apimartMiniMaxH3Model = defineModel({
     calculator: (params) => {
       const duration = Math.min(15, Math.max(4, Math.round(Number(params.apimartMiniMaxH3Duration || 5))))
       const rate = params.apimartMiniMaxH3Resolution === '2K' ? 0.09144 : 0.05712
-      const images = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths.length : (Array.isArray(params.images) ? params.images.length : 0)
-      return duration * rate + Math.max(0, images - 5) * 0.02288
+      const uploadedImages = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : []
+      const images = uploadedImages.length > 0 ? uploadedImages : (Array.isArray(params.images) ? params.images : [])
+      const uploadedVideos = Array.isArray(params.uploadedVideoFilePaths) ? params.uploadedVideoFilePaths : []
+      const videos = uploadedVideos.length > 0 ? uploadedVideos : (Array.isArray(params.videos) ? params.videos : [])
+      const referenceMode = params.apimartMiniMaxH3Mode === 'reference-to-video'
+      const inputVideoDuration = referenceMode && typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds * videos.length
+        : 0
+      const extraImages = referenceMode ? Math.max(0, images.length - 5) : 0
+      return (duration + inputVideoDuration) * rate + extraImages * 0.02288
     },
-    description: '768P $0.05712/秒，2K $0.09144/秒；参考图前 5 张免费，之后 $0.02288/张'
+    description: '768P $0.05712/秒，2K $0.09144/秒；参考视频按时长同价计费，参考图前 5 张免费，之后 $0.02288/张'
   }
 })
 

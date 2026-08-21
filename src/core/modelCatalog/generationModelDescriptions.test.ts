@@ -31,7 +31,7 @@ describe('generationModelDescriptions', () => {
   })
 
   it('所有通用模型都有中文定性描述并可注入模型元数据', () => {
-    expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(50)
+    expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(51)
     for (const description of Object.values(GENERATION_MODEL_DESCRIPTIONS)) {
       expect(description.zh.trim()).not.toBe('')
     }

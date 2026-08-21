@@ -39,7 +39,7 @@ export const kieZImageModel = defineModel({
   endpoints: KIE_CREATE_TASK_ENDPOINT,
   request: {
     builder: (params) => {
-      const prompt = params.prompt || ''
+      const prompt = typeof params.prompt === 'string' ? params.prompt.slice(0, 1000) : ''
       const rawAspectRatio = String(params.kieZImageAspectRatio || params.aspect_ratio || 'smart')
 
       const supportedAspectRatios = ['1:1', '4:3', '3:4', '16:9', '9:16']

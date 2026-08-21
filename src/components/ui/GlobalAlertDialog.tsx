@@ -70,7 +70,9 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     if (current.settingsTarget) {
       const target = current.settingsTarget
       result.push({
-        label: t('alertDialog.goToSettings'),
+        label: t(target.sectionId === 'api-keys'
+          ? 'alertDialog.goToConfigure'
+          : 'alertDialog.goToSettings'),
         variant: 'primary',
         onClick: () => {
           // 先关掉弹窗再开设置，避免两层遮罩叠在一起

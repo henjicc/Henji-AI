@@ -297,10 +297,10 @@ export const GenerationNodeShell = memo(({
     }
     if (!providerKeyConfigured) {
       showAlertDialog({
-        title: t('common:error'),
-        message: t(apiKeyRequiredKey),
-        type: 'warning',
-        settingsTarget: { tab: 'api' },
+        title: t('common:providerKeyRequired.title'),
+        message: t('common:providerKeyRequired.message'),
+        type: 'info',
+        settingsTarget: { tab: 'api', sectionId: 'api-keys' },
       });
       throw new Error(t(apiKeyRequiredKey));
     }
@@ -324,9 +324,9 @@ export const GenerationNodeShell = memo(({
     // 它有明确的补救动作，所以走带「去设置」的统一弹窗
     if (!providerKeyConfigured) {
       showAlertDialog({
-        title: t('common:error'),
-        message: t(apiKeyRequiredKey),
-        type: 'warning',
+        title: t('common:providerKeyRequired.title'),
+        message: t('common:providerKeyRequired.message'),
+        type: 'info',
         settingsTarget: { tab: 'api', sectionId: 'api-keys' },
       });
       throw new Error(t(apiKeyRequiredKey));

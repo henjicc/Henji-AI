@@ -1,7 +1,7 @@
 import { AiRuntimeError } from '../errors'
 import { POLL_QUERY_FAILED, pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
-import { getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
+import { collectDeepUrls, getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
 import { fetchProvider } from './provider-fetch'
 
 const KIE_BASE_URL = 'https://api.kie.ai'
@@ -45,7 +45,8 @@ async function sendCreateTask(input: ProviderExecutionInput, endpoint: string): 
   })
   const payload = await readJsonResponse(response, 'KIE')
   const code = getPointer(payload, '/code')
-  if (typeof code === 'number' && code !== 200) {
+  const success = getPointer(payload, '/success')
+  if ((typeof code === 'number' && code !== 200) || success === false) {
     throw new AiRuntimeError('provider_task_failed', stringAt(payload, '/msg') ?? 'KIE create task failed')
   }
   return payload
@@ -66,12 +67,14 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
       // 查询本身没成功（含 taskId 已被清理的情况），不是"任务还在跑"
       return POLL_QUERY_FAILED
     }
-    const state = stringAt(payload, '/data/state') ?? ''
+    if (getPointer(payload, '/success') === false) return POLL_QUERY_FAILED
+    const state = (stringAt(payload, '/data/state') ?? '').trim().toLowerCase()
     if (state === 'success') return payload
     if (state === 'fail') {
       throw new AiRuntimeError('provider_task_failed', stringAt(payload, '/data/failMsg') ?? 'KIE task failed')
     }
-    return undefined
+    if (['waiting', 'queuing', 'generating'].includes(state)) return undefined
+    return POLL_QUERY_FAILED
   })
 }
 
@@ -85,22 +88,30 @@ function extractUrls(payload: JsonValue): string[] {
     try {
       const parsed = JSON.parse(resultJson) as JsonValue
       const urls: string[] = []
-      extractFromArray(getPointer(parsed, '/resultUrls'), urls)
-      extractFromArray(getPointer(parsed, '/images'), urls)
-      extractFromArray(getPointer(parsed, '/videos'), urls)
+      for (const pointer of ['/resultUrls', '/images', '/videos', '/firstFrameUrl', '/lastFrameUrl']) {
+        extractFromValue(getPointer(parsed, pointer), urls)
+      }
+      const resultObject = getPointer(parsed, '/resultObject')
+      if (resultObject !== undefined) collectDeepUrls(resultObject, urls)
       if (urls.length > 0) return urls
     } catch {
       // Fall through to direct payload extraction.
     }
   }
   const urls: string[] = []
-  extractFromArray(getPointer(payload, '/resultUrls'), urls)
-  extractFromArray(getPointer(payload, '/images'), urls)
-  extractFromArray(getPointer(payload, '/videos'), urls)
+  for (const pointer of ['/resultUrls', '/images', '/videos', '/firstFrameUrl', '/lastFrameUrl']) {
+    extractFromValue(getPointer(payload, pointer), urls)
+  }
+  const resultObject = getPointer(payload, '/resultObject')
+  if (resultObject !== undefined) collectDeepUrls(resultObject, urls)
   return urls
 }
 
-function extractFromArray(value: JsonValue | undefined, target: string[]): void {
+function extractFromValue(value: JsonValue | undefined, target: string[]): void {
+  if (typeof value === 'string') {
+    pushUniqueUrl(target, value)
+    return
+  }
   if (!Array.isArray(value)) return
   for (const item of value) {
     if (typeof item === 'string') pushUniqueUrl(target, item)

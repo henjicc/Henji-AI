@@ -11,7 +11,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
     tags: ['text-to-video', 'image-to-video', 'video-to-video', 'supports-video-editing', 'supports-multi-image', 'mixed-upload-mode', 'provider-apimart'],
     aliases: ['gemini-omni-flash-apimart'], polling: { interval: 5000, maxAttempts: 180, expectedAttempts: 60 }
   },
-  inputLimits: { images: { max: 7 }, videos: { max: 1 } },
+  inputLimits: { images: { max: 16 }, videos: { max: 1 } },
   params: [
     {
       id: 'apimartGeminiOmniFlashAspectRatio', type: 'dropdown', order: 1,
@@ -56,11 +56,18 @@ export const apimartGeminiOmniFlashModel = defineModel({
         aspect_ratio: aspectRatio,
         resolution: '720p'
       }
-      if (images.length > 0) body.image_urls = images.slice(0, 7)
-      if (videos.length > 0) body.video_urls = videos.slice(0, 1)
-      if (typeof params.apimartGeminiOmniFlashExtendTaskId === 'string' && params.apimartGeminiOmniFlashExtendTaskId.trim()) {
-        body.extend_from_task_id = params.apimartGeminiOmniFlashExtendTaskId.trim()
+      const extendTaskId = typeof params.apimartGeminiOmniFlashExtendTaskId === 'string'
+        ? params.apimartGeminiOmniFlashExtendTaskId.trim()
+        : ''
+      if (videos.length > 0 && extendTaskId) {
+        throw new Error('Gemini Omni Flash 不能同时传入参考视频和延续任务 ID')
       }
+      if (!body.prompt && images.length + videos.length === 0 && !extendTaskId) {
+        throw new Error('Gemini Omni Flash 至少需要提示词或一份参考素材')
+      }
+      if (images.length > 0) body.image_urls = images.slice(0, 16)
+      if (videos.length > 0) body.video_urls = videos.slice(0, 1)
+      if (extendTaskId) body.extend_from_task_id = extendTaskId
       return body
     }
   },

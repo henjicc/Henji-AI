@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { uploadToApiMart } from './upload-providers'
+import { uploadToApiMart, uploadToKie } from './upload-providers'
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -98,5 +98,26 @@ describe('upload providers', () => {
       code: 'upload_failed',
       message: expect.stringContaining('HTTP 401'),
     })
+  })
+
+  it('KIE 上传不指定易冲突的远端文件名，并读取 downloadUrl', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      success: true,
+      code: 200,
+      data: { downloadUrl: 'https://tempfile.redpandaai.co/unique/example.png' },
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(uploadToKie('kie-secret', {
+      bytes: new Uint8Array([1, 2, 3]),
+      mimeType: 'image/png',
+      filename: 'example.png',
+    })).resolves.toBe('https://tempfile.redpandaai.co/unique/example.png')
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit
+    const form = request.body as FormData
+    expect(form.get('uploadPath')).toBe('henji-uploads')
+    expect(form.get('fileName')).toBeNull()
+    expect((form.get('file') as File).name).toBe('example.png')
   })
 })

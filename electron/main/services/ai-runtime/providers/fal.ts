@@ -2,6 +2,7 @@ import { AiRuntimeError } from '../errors'
 import { pollUntilResult } from '../polling'
 import type { JsonObject, JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { collectDeepUrls, normalizeEndpoint, readJsonResponse } from './helpers'
+import { fetchProvider } from './provider-fetch'
 
 const FAL_SYNC_BASE_URL = 'https://fal.run'
 const FAL_QUEUE_BASE_URL = 'https://queue.fal.run'
@@ -14,9 +15,14 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
     : await submit(input, normalizeEndpoint(FAL_QUEUE_BASE_URL, input.route), cleanInput)
 
   if (!syncMode) {
-    const taskId = readString(payload, 'request_id') ?? readString(payload, 'status_url') ?? input.requestId
+    const taskId = readString(payload, 'request_id') ?? readString(payload, 'status_url')
+    if (!taskId) {
+      throw new AiRuntimeError('empty_result', 'Fal queue response has neither request_id nor status_url')
+    }
     return { status: 'pending', url: '', taskId, metadata: payload }
   }
+
+  assertFalSucceeded(payload)
 
   const urls = extractUrls(payload)
   if (urls.length === 0) {
@@ -38,14 +44,16 @@ export async function continuePolling(input: ProviderContinuePollingInput): Prom
 }
 
 async function submit(input: ProviderExecutionInput, endpoint: string, cleanInput: JsonValue): Promise<JsonValue> {
-  const response = await fetch(endpoint, {
+  const response = await fetchProvider('Fal', endpoint, {
     method: 'POST',
     headers: {
       Authorization: `Key ${input.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ input: cleanInput }),
+    body: JSON.stringify(cleanInput),
     signal: input.signal,
+  }, {
+    retryPreconnectOnce: true,
   })
   return await readJsonResponse(response, 'Fal')
 }
@@ -58,20 +66,36 @@ async function pollByStatusUrl(input: ProviderContinuePollingInput, statusUrl: s
     })
     const payload = await readJsonResponse(response, 'Fal')
     const state = (readString(payload, 'status') ?? '').toUpperCase()
-    if (state === 'COMPLETED' || state === 'OK') {
+    if (state === 'COMPLETED') {
+      assertFalSucceeded(payload)
       const responseUrl = readString(payload, 'response_url')
-      if (!responseUrl) return enrichRequestId(payload, input.taskId)
-      const finalResponse = await fetch(responseUrl, {
+      const resultUrl = responseUrl ?? statusUrl.replace(/\/status(?:\?.*)?$/, '')
+      const finalResponse = await fetchProvider('Fal', resultUrl, {
         headers: { Authorization: `Key ${input.apiKey}` },
         signal: input.signal,
+      }, {
+        retryPreconnectOnce: true,
       })
-      return enrichRequestId(await readJsonResponse(finalResponse, 'Fal'), input.taskId)
+      const result = await readJsonResponse(finalResponse, 'Fal')
+      assertFalSucceeded(result)
+      return enrichRequestId(result, input.taskId)
     }
     if (state === 'FAILED' || state === 'ERROR') {
       throw new AiRuntimeError('provider_task_failed', 'Fal task failed')
     }
     return undefined
   })
+}
+
+function assertFalSucceeded(payload: JsonValue): void {
+  if (!isJsonObject(payload)) return
+  const message = readString(payload, 'error')
+    ?? readString(payload, 'detail')
+    ?? readString(payload, 'message')
+  const errorType = readString(payload, 'error_type')
+  if (message || errorType) {
+    throw new AiRuntimeError('provider_task_failed', message ?? errorType ?? 'Fal task failed')
+  }
 }
 
 function stripSyncMode(value: JsonValue): JsonValue {

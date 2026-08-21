@@ -41,11 +41,15 @@ export const falSeedance25Model = defineModel({
       name: sharedFieldText('duration'), default: 5, min: 4, max: 30, step: 1
     },
     {
-      id: 'falSeedance25GenerateAudio', type: 'switch', order: 5,
+      id: 'falSeedance25AutoDuration', type: 'switch', order: 5,
+      name: { zh: '自动时长', en: 'Automatic Duration' }, default: false
+    },
+    {
+      id: 'falSeedance25GenerateAudio', type: 'switch', order: 6,
       name: sharedFieldText('generateAudio'), default: true
     },
     {
-      id: 'falSeedance25Bitrate', type: 'dropdown', order: 6,
+      id: 'falSeedance25Bitrate', type: 'dropdown', order: 7,
       name: { zh: '码率', en: 'Bitrate' }, default: 'standard',
       options: [{ value: 'standard', label: { zh: '标准', en: 'Standard' } }, { value: 'high', label: { zh: '高', en: 'High' } }]
     }
@@ -85,7 +89,9 @@ export const falSeedance25Model = defineModel({
       const body: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         resolution: ['480p', '1080p'].includes(String(params.falSeedance25Resolution)) ? String(params.falSeedance25Resolution) : '720p',
-        duration: String(Math.min(30, Math.max(4, Math.round(Number(params.falSeedance25Duration || 5))))),
+        duration: params.falSeedance25AutoDuration === true
+          ? 'auto'
+          : String(Math.min(30, Math.max(4, Math.round(Number(params.falSeedance25Duration || 5))))),
         aspect_ratio: raw === 'smart' && (images.length + videos.length) > 0 ? 'auto' : ratio,
         generate_audio: params.falSeedance25GenerateAudio !== false,
         bitrate_mode: params.falSeedance25Bitrate === 'high' ? 'high' : 'standard'
@@ -104,11 +110,20 @@ export const falSeedance25Model = defineModel({
   pricing: {
     currency: '$',
     calculator: (params) => {
-      const duration = Math.min(30, Math.max(4, Math.round(Number(params.falSeedance25Duration || 5))))
+      const duration = params.falSeedance25AutoDuration === true
+        ? 30
+        : Math.min(30, Math.max(4, Math.round(Number(params.falSeedance25Duration || 5))))
       const rates: Record<string, number> = { '480p': 0.2205, '720p': 0.473, '1080p': 1.137 }
-      return duration * (rates[String(params.falSeedance25Resolution || '720p')] ?? rates['720p'])
+      const baseRate = rates[String(params.falSeedance25Resolution || '720p')] ?? rates['720p']
+      const uploadedVideos = Array.isArray(params.uploadedVideoFilePaths) ? params.uploadedVideoFilePaths : []
+      const videos = uploadedVideos.length > 0 ? uploadedVideos : (Array.isArray(params.videos) ? params.videos : [])
+      const hasVideo = params.falSeedance25Mode === 'reference-to-video' && videos.length > 0
+      const inputDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds * videos.length
+        : 0
+      return (duration + (hasVideo ? inputDuration : 0)) * baseRate * (hasVideo ? 0.6 : 1)
     },
-    description: '输出约：480p $0.2205、720p $0.4730、1080p $1.137/秒；参考视频输入另计'
+    description: '输出约：480p $0.2205、720p $0.4730、1080p $1.137/秒；有视频参考时费率乘 0.6，并按输入与输出总时长计费；自动时长按 30 秒预估'
   }
 })
 

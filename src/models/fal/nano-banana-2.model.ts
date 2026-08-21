@@ -40,13 +40,20 @@ export const falNanoBanana2Model = defineModel({
         { value: 'minimal', label: { zh: '最少', en: 'Minimal' } },
         { value: 'high', label: { zh: '高', en: 'High' } }
       ]
+    },
+    {
+      id: 'falNanoBanana2PdfUrl', type: 'text', order: 6,
+      name: { zh: 'PDF 上下文 URL', en: 'PDF Context URL' }, default: '',
+      placeholder: { zh: '公网 URL 或 Data URL，最大 15 MB', en: 'Public or data URL, up to 15 MB' }
     }
   ],
   linkages: [],
   endpoints: {
     selector: async (params) => {
       const sources = ['uploadedFilePaths', 'images', 'uploadedVideoFilePaths', 'videos', 'uploadedAudioFilePaths', 'audios']
-      return sources.some((key) => Array.isArray(params[key]) && params[key].length > 0)
+      const hasMedia = sources.some((key) => Array.isArray(params[key]) && params[key].length > 0)
+      const hasPdf = typeof params.falNanoBanana2PdfUrl === 'string' && params.falNanoBanana2PdfUrl.trim().length > 0
+      return hasMedia || hasPdf
         ? 'fal-ai/nano-banana-2/edit' : 'fal-ai/nano-banana-2'
     }
   },
@@ -89,6 +96,8 @@ export const falNanoBanana2Model = defineModel({
       if (images.length > 0) body.image_urls = images.slice(0, 14)
       if (videos.length > 0) body.video_url = videos[0]
       if (audios.length > 0) body.audio_url = audios[0]
+      const pdfUrl = typeof params.falNanoBanana2PdfUrl === 'string' ? params.falNanoBanana2PdfUrl.trim() : ''
+      if (pdfUrl) body.pdf_url = pdfUrl
       return body
     }
   },

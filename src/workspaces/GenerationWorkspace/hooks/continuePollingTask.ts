@@ -4,7 +4,7 @@ import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDime
 import type { GenerationTask } from '../types'
 import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
-import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
+import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 
@@ -136,4 +136,3 @@ export async function continuePollingTask({
     useGenerationTaskProgressStore.getState().clearProgress(task.id)
   }
 }
-

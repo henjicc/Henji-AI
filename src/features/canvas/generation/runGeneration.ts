@@ -3,6 +3,7 @@ import { registry } from '@/core/ModelRegistry';
 import { GenerationService } from '@/core/services/GenerationService';
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
 import { persistImageLocally } from '@/features/canvas/application/imageData';
+import { extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId';
 
 const logger = createLogger('features.canvas.generation.runGeneration');
 
@@ -82,23 +83,6 @@ export function resolveCanvasModelId(inputModelId: string, mediaType: CanvasMedi
     fallback: models[0].meta.id,
   });
   return models[0].meta.id;
-}
-
-function extractTaskIdFromMetadata(metadata: DynamicValueMap | undefined): string | undefined {
-  if (!metadata) return undefined;
-  const direct = metadata.task_id ?? metadata.taskId ?? metadata.request_id ?? metadata.requestId;
-  if (typeof direct === 'string' && direct.trim().length > 0) {
-    return direct.trim();
-  }
-  const task = metadata.task;
-  if (task && typeof task === 'object') {
-    const taskRecord = task as DynamicValueMap;
-    const nested = taskRecord.task_id ?? taskRecord.taskId ?? taskRecord.request_id ?? taskRecord.requestId;
-    if (typeof nested === 'string' && nested.trim().length > 0) {
-      return nested.trim();
-    }
-  }
-  return undefined;
 }
 
 function splitMultiValue(value: string | undefined): string[] {
@@ -187,7 +171,7 @@ export async function runCanvasGeneration(request: CanvasGenerationRequest): Pro
   });
 
   if (result.status === 'pending') {
-    const taskId = result.taskId ?? extractTaskIdFromMetadata(result.metadata);
+    const taskId = result.taskId ?? extractServerTaskIdFromMetadata(result.metadata);
     if (!taskId) {
       throw new Error('异步任务缺少 taskId，无法继续轮询');
     }

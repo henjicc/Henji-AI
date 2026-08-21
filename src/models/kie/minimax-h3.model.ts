@@ -78,7 +78,7 @@ export const kieMiniMaxH3Model = defineModel({
       type: 'dropdown',
       order: 3,
       name: sharedFieldText('resolution'),
-      default: '768P',
+      default: '2K',
       options: [
         { value: '768P', label: '768P' },
         { value: '2K', label: '2K' }
@@ -89,7 +89,7 @@ export const kieMiniMaxH3Model = defineModel({
       type: 'number',
       order: 4,
       name: sharedFieldText('duration'),
-      default: 5,
+      default: 6,
       min: 4,
       max: 15,
       step: 1
@@ -114,32 +114,25 @@ export const kieMiniMaxH3Model = defineModel({
         : 'text-image-to-video'
       const supportedAspectRatios = ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16']
       const rawAspectRatio = String(params.kieMiniMaxH3AspectRatio || 'smart')
-      const ratioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
-        ? params.__firstImageRatio
-        : 16 / 9
       let aspectRatio = supportedAspectRatios.includes(rawAspectRatio) ? rawAspectRatio : '16:9'
-      if (rawAspectRatio === 'smart' || rawAspectRatio === 'auto') {
-        let bestDiff = Number.POSITIVE_INFINITY
-        for (const candidate of supportedAspectRatios) {
-          const pair = candidate.split(':').map(Number)
-          const difference = Math.abs(pair[0] / pair[1] - ratioHint)
-          if (difference < bestDiff) {
-            bestDiff = difference
-            aspectRatio = candidate
-          }
-        }
+      if ((rawAspectRatio === 'smart' || rawAspectRatio === 'auto' || rawAspectRatio === 'adaptive') && mode === 'reference-to-video') {
+        aspectRatio = 'adaptive'
       }
       const input: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
-        duration: Math.min(15, Math.max(4, Number(params.kieMiniMaxH3Duration || 5))),
-        resolution: params.kieMiniMaxH3Resolution === '2K' ? '2K' : '768P'
+        prompt: typeof params.prompt === 'string' ? params.prompt.trim().slice(0, 7000) : '',
+        duration: Math.min(15, Math.max(4, Number(params.kieMiniMaxH3Duration || 6))),
+        resolution: params.kieMiniMaxH3Resolution === '768P' ? '768P' : '2K'
       }
+      if (!input.prompt) throw new Error('MiniMax H3 的提示词不能为空')
 
       if (mode === 'reference-to-video') {
+        if (audios.length > 0 && images.length + videos.length === 0) {
+          throw new Error('MiniMax H3 的参考音频必须与参考图片或参考视频一起使用')
+        }
         input.aspect_ratio = aspectRatio
-        if (images.length > 0) input.image_urls = images.slice(0, 9)
-        if (videos.length > 0) input.video_urls = videos.slice(0, 3)
-        if (audios.length > 0) input.audio_urls = audios.slice(0, 3)
+        if (images.length > 0) input.reference_image_urls = images.slice(0, 9)
+        if (videos.length > 0) input.reference_video_urls = videos.slice(0, 3)
+        if (audios.length > 0) input.reference_audio_urls = audios.slice(0, 3)
         return { model: 'minimax-h3/reference-to-video', input }
       }
 
@@ -156,7 +149,7 @@ export const kieMiniMaxH3Model = defineModel({
   pricing: {
     currency: '$',
     calculator: (params) => {
-      const duration = Math.min(15, Math.max(4, Number(params.kieMiniMaxH3Duration || 5)))
+      const duration = Math.min(15, Math.max(4, Number(params.kieMiniMaxH3Duration || 6)))
       const rate = params.kieMiniMaxH3Resolution === '2K' ? 0.13 : 0.08
       const firstVideoDuration = typeof params.__firstVideoDurationSeconds === 'number'
         ? Math.max(0, params.__firstVideoDurationSeconds)

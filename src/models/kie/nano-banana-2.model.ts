@@ -103,7 +103,7 @@ export const kieNanoBanana2Model = defineModel({
       const images = resolveImages()
       const rawResolution = params.kieNanoBanana2Resolution ?? legacyResolution.quality
       const input: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 20000) : '',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1',
         resolution: rawResolution === '4K' || rawResolution === '2K'
           ? rawResolution

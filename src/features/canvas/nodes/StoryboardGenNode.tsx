@@ -286,9 +286,9 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     // 缺 API Key 有明确补救动作，走带「去设置」的统一弹窗（与 GenerationNodeShell 一致）
     if (!providerKeyConfigured) {
       showAlertDialog({
-        title: t('common:error'),
-        message: t('node.imageEdit.apiKeyRequired'),
-        type: 'warning',
+        title: t('common:providerKeyRequired.title'),
+        message: t('common:providerKeyRequired.message'),
+        type: 'info',
         settingsTarget: { tab: 'api', sectionId: 'api-keys' },
       })
       return

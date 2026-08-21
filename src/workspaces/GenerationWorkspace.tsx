@@ -108,6 +108,8 @@ const GenerationWorkspace: React.FC = () => {
       testModeIntercepted: t('ui:workspace.toast.testModeIntercepted'),
       missingInput: t('ui:alerts.missingInput.message'),
       genericGenerateFailed: t('ui:workspace.toast.generateFailed'),
+      providerKeyRequiredTitle: t('common:providerKeyRequired.title'),
+      providerKeyRequiredMessage: t('common:providerKeyRequired.message'),
     }
   }, [t])
   const { isGenerating, handleGenerate, handleContinuePolling } = useTaskGeneration({

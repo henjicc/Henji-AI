@@ -1,5 +1,7 @@
 import { getAiProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
+import { buildApiMartEndpoints } from './apimart-endpoints'
+import { fetchProvider } from './providers/provider-fetch'
 import type {
   ProviderConnectionStatus,
   ProviderConnectionTestResultDto,
@@ -10,6 +12,7 @@ const CONNECTION_TIMEOUT_MS = 12_000
 
 interface ProviderProbe {
   endpoint: string
+  fallbackEndpoints?: readonly string[]
   authorizationPrefix: 'Bearer'
   kind: 'kie_balance' | 'apimart_balance' | 'model_catalog'
 }
@@ -21,7 +24,8 @@ const PROVIDER_PROBES: Readonly<Record<string, ProviderProbe>> = {
     kind: 'kie_balance',
   },
   apimart: {
-    endpoint: 'https://api.apimart.ai/v1/balance',
+    endpoint: buildApiMartEndpoints('/v1/balance')[0],
+    fallbackEndpoints: buildApiMartEndpoints('/v1/balance').slice(1),
     authorizationPrefix: 'Bearer',
     kind: 'apimart_balance',
   },
@@ -151,13 +155,16 @@ export async function testProviderConnection(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT_MS)
   try {
-    const response = await fetch(probe.endpoint, {
+    const response = await fetchProvider(providerId, probe.endpoint, {
       method: 'GET',
       headers: {
         Authorization: `${probe.authorizationPrefix} ${apiKey}`,
         Accept: 'application/json',
       },
       signal: controller.signal,
+    }, {
+      retryPreconnectOnce: true,
+      fallbackEndpoints: probe.fallbackEndpoints,
     })
     const payload = probe.kind === 'model_catalog' ? null : await readResponsePayload(response)
     const tested = probe.kind === 'kie_balance'

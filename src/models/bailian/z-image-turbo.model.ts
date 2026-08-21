@@ -2,7 +2,7 @@
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
-const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] as const
+const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '7:9', '9:7', '21:9', '9:21'] as const
 
 export const bailianZImageTurboModel = defineModel({
   meta: {
@@ -31,7 +31,7 @@ export const bailianZImageTurboModel = defineModel({
   linkages: [], endpoints: '/api/v1/services/aigc/multimodal-generation/generation',
   request: {
     builder: (params) => {
-      const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3']
+      const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '7:9', '9:7', '21:9', '9:21']
       const raw = String(params.bailianZImageTurboAspectRatio || 'smart')
       const aspectRatio = ratios.includes(raw) ? raw : '1:1'
       const pair = aspectRatio.split(':').map(Number)
@@ -42,7 +42,7 @@ export const bailianZImageTurboModel = defineModel({
       return {
         model: 'z-image-turbo',
         input: {
-          messages: [{ role: 'user', content: [{ text: typeof params.prompt === 'string' ? params.prompt : '' }] }]
+          messages: [{ role: 'user', content: [{ text: typeof params.prompt === 'string' ? params.prompt.slice(0, 800) : '' }] }]
         },
         parameters: {
           size: `${width}*${height}`,

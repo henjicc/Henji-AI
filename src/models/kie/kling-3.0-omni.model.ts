@@ -166,16 +166,18 @@ export const kieKling30OmniModel = defineModel({
         }
       }
       const input: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
-        duration: String(params.kieKling30OmniDuration || '5'),
+        prompt: typeof params.prompt === 'string' ? params.prompt.trim().slice(0, 3072) : '',
+        duration: Math.min(15, Math.max(3, Number(params.kieKling30OmniDuration || 5))),
         resolution: params.kieKling30OmniResolution === '1080p' || params.kieKling30OmniResolution === '4k'
           ? params.kieKling30OmniResolution
           : '720p',
         aspect_ratio: aspectRatio,
         audio: params.kieKling30OmniAudio === true
       }
+      if (!input.prompt && mode !== 'transformation') throw new Error('Kling 3.0 Omni 的提示词不能为空')
 
       if (mode === 'image-to-video') {
+        input.aspect_ratio = 'auto'
         if (images[0]) input.image_urls = [images[0]]
         return { model: 'kling-3.0-omni/image-to-video', input }
       }

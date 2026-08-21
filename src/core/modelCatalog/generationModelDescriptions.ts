@@ -20,6 +20,7 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'kling-image-o1': { zh: '将图片生成与编辑统一在同一模型中，强项是多参考主体一致性、局部修改以及表情、光影和风格控制，适合连续角色和商业修图。', en: '' },
   'majicmix-realistic': { zh: '基于 Stable Diffusion 的社区写实 Checkpoint，擅长人物摄影和东方人像审美，兼容成熟的 LoRA、ControlNet 生态；不同版本差异较大，复杂文字和指令理解较弱。', en: '' },
   'midjourney': { zh: '强调审美表现、氛围、构图和风格化成片质量的通用图片模型，适合概念设计、插画和高完成度视觉探索。', en: '' },
+  'midjourney-video': { zh: '将 Midjourney 生成图或上传图片动画化为短视频，支持起止帧、运动幅度和批量生成。', en: '' },
   'modelscope-custom': { zh: '魔搭的动态自定义模型入口，并非固定基础模型，不推荐智能助手使用。', en: '' },
   'nano-banana': { zh: 'Google 初代 Gemini 原生图像模型，通常对应 Gemini 2.5 Flash Image，主打快速生成、多轮自然语言编辑和主体一致性；复杂文字及知识型构图弱于后续版本。有些过时，已不太推荐。', en: '' },
   'nano-banana-pro': { zh: '比 Nano Banana 更专业高质量版本，复杂推理、世界知识、多语言文字、品牌一致性和精细控制能力突出，适合海报、信息图和专业设计。', en: '' },

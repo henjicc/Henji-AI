@@ -38,7 +38,7 @@ curl -X POST https://queue.fal.run/fal-ai/flux/dev \
   -d '{"prompt":"a cat"}'
 ```
 
-官方 REST 示例直接发送模型输入对象。Henji-AI 的 provider 运行时会按当前网关契约包为 `{ "input": ... }`；新模型接入时必须用该 endpoint 的实时 `llms.txt`/OpenAPI 验证最终请求形状。
+官方 REST 接口直接发送模型输入对象；JavaScript SDK 的 `{ input: ... }` 是 SDK 调用选项，不能原样作为 HTTP 请求体。Henji-AI provider 已按 REST 契约直接发送 builder 输出。
 
 提交结果：
 

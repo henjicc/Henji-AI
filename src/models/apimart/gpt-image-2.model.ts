@@ -1,6 +1,7 @@
-/** APIMart GPT Image 2 图片生成与编辑模型 */
+/** APIMart GPT Image 2 EXT 与官方渠道统一模型 */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
+import { hasUploadedImage } from '@/models/shared/mediaPresence'
 
 const APIMART_IMAGE_ENDPOINT = '/v1/images/generations'
 const ASPECT_RATIOS = [
@@ -18,14 +19,22 @@ export const apimartGptImage2Model = defineModel({
     type: 'image',
     i18nScope: 'models.defs.apimart-gpt-image-2',
     name: { key: 'meta.name', fallback: 'GPT Image 2' },
-    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-16', 'supports-4k', 'provider-apimart'],
-    aliases: ['gpt-image-2-apimart'],
-    polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-16', 'multi-output', 'supports-4k', 'provider-apimart'],
+    aliases: ['gpt-image-2-apimart', 'apimart-gpt-image-2-official', 'gpt-image-2-official-apimart'],
+    polling: { interval: 3000, maxAttempts: 240, expectedAttempts: 50 }
   },
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },
   params: [
     {
-      id: 'apimartGptImage2AspectRatio', type: 'dropdown', order: 1,
+      id: 'apimartGptImage2Version', type: 'dropdown', order: 1,
+      name: sharedFieldText('version'), default: 'ext',
+      options: [
+        { value: 'ext', label: { zh: '普通', en: 'Standard' } },
+        { value: 'official', label: { zh: '官方', en: 'Official' } }
+      ]
+    },
+    {
+      id: 'apimartGptImage2AspectRatio', type: 'dropdown', order: 2,
       name: sharedFieldText('aspectRatio'), default: 'smart',
       options: [
         { value: 'smart', label: sharedOptionText('smart') },
@@ -33,9 +42,43 @@ export const apimartGptImage2Model = defineModel({
       ]
     },
     {
-      id: 'apimartGptImage2Resolution', type: 'dropdown', order: 2,
+      id: 'apimartGptImage2Resolution', type: 'dropdown', order: 3,
       name: sharedFieldText('resolution'), default: '1K',
       options: ['1K', '2K', '4K'].map((value) => ({ value, label: value }))
+    },
+    {
+      id: 'apimartGptImage2Quality', type: 'dropdown', order: 4,
+      name: sharedFieldText('quality'), default: 'auto',
+      visible: { condition: (params) => params.apimartGptImage2Version === 'official' },
+      options: [
+        { value: 'auto', label: sharedOptionText('auto') },
+        { value: 'low', label: { zh: '低', en: 'Low' } },
+        { value: 'medium', label: { zh: '标准', en: 'Medium' } },
+        { value: 'high', label: { zh: '高', en: 'High' } }
+      ]
+    },
+    {
+      id: 'apimartGptImage2Background', type: 'dropdown', order: 5,
+      name: { zh: '背景', en: 'Background' }, default: 'auto',
+      visible: { condition: (params) => params.apimartGptImage2Version === 'official' },
+      options: [
+        { value: 'auto', label: sharedOptionText('auto') },
+        { value: 'opaque', label: { zh: '不透明', en: 'Opaque' } },
+        { value: 'transparent', label: { zh: '透明', en: 'Transparent' } }
+      ]
+    },
+    {
+      id: 'apimartGptImage2Count', type: 'number', order: 6,
+      name: { zh: '生成数量', en: 'Output Count' }, default: 1, min: 1, max: 4, step: 1,
+      visible: { condition: (params) => params.apimartGptImage2Version === 'official' }
+    },
+    {
+      id: 'apimartGptImage2MaskUrl', type: 'text', order: 7,
+      name: { zh: '局部重绘遮罩 URL', en: 'Inpainting Mask URL' }, default: '',
+      placeholder: { zh: '与首张参考图同尺寸、带透明通道', en: 'Same size as first reference, with alpha' },
+      visible: {
+        condition: (params) => params.apimartGptImage2Version === 'official' && hasUploadedImage(params)
+      }
     }
   ],
   linkages: [],
@@ -62,22 +105,60 @@ export const apimartGptImage2Model = defineModel({
       }
       const resolution = ['2K', '4K'].includes(String(params.apimartGptImage2Resolution))
         ? String(params.apimartGptImage2Resolution).toLowerCase() : '1k'
+      const prompt = typeof params.prompt === 'string' ? params.prompt.slice(0, 20000) : ''
+      const isOfficial = params.apimartGptImage2Version === 'official'
+
+      if (!isOfficial) {
+        const body: DynamicValueMap = {
+          model: 'gpt-image-2', prompt, n: 1, size, resolution, nsfw_check: false
+        }
+        if (images.length > 0) body.image_urls = images.slice(0, 16)
+        return body
+      }
+
+      const quality = ['low', 'medium', 'high'].includes(String(params.apimartGptImage2Quality))
+        ? String(params.apimartGptImage2Quality)
+        : 'auto'
+      const background = ['opaque', 'transparent'].includes(String(params.apimartGptImage2Background))
+        ? String(params.apimartGptImage2Background)
+        : 'auto'
       const body: DynamicValueMap = {
-        model: 'gpt-image-2',
-        prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 20000) : '',
-        n: 1,
+        model: 'gpt-image-2-official',
+        prompt,
+        n: Math.min(4, Math.max(1, Math.round(Number(params.apimartGptImage2Count || 1)))),
         size,
-        resolution
+        resolution,
+        quality,
+        background,
+        nsfw_check: false
       }
       if (images.length > 0) body.image_urls = images.slice(0, 16)
+      const maskUrl = typeof params.apimartGptImage2MaskUrl === 'string'
+        ? params.apimartGptImage2MaskUrl.trim()
+        : ''
+      if (maskUrl) {
+        if (images.length === 0) throw new Error('GPT Image 2 局部重绘必须同时提供至少 1 张参考图')
+        body.mask_url = maskUrl
+      }
       return body
     }
   },
   pricing: {
     currency: '$',
-    calculator: (params) => params.apimartGptImage2Resolution === '4K'
-      ? 0.021 : (params.apimartGptImage2Resolution === '2K' ? 0.014 : 0.0085),
-    description: '1K $0.0085/张，2K $0.014/张，4K $0.021/张'
+    calculator: (params) => {
+      if (params.apimartGptImage2Version !== 'official') {
+        return params.apimartGptImage2Resolution === '4K'
+          ? 0.021 : (params.apimartGptImage2Resolution === '2K' ? 0.014 : 0.0085)
+      }
+      const quality = String(params.apimartGptImage2Quality || 'auto')
+      const oneK: Record<string, number> = { auto: 0.0048, low: 0.0048, medium: 0.0424, high: 0.1688 }
+      const resolutionMultiplier = params.apimartGptImage2Resolution === '4K'
+        ? 8
+        : (params.apimartGptImage2Resolution === '2K' ? 4 : 1)
+      const count = Math.min(4, Math.max(1, Math.round(Number(params.apimartGptImage2Count || 1))))
+      return count * (oneK[quality] ?? oneK.auto) * resolutionMultiplier
+    },
+    description: 'EXT：1K $0.0085、2K $0.014、4K $0.021/张；官方渠道按 token 结算，显示值为不含输入 token 的估算'
   }
 })
 

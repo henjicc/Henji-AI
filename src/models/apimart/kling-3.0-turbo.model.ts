@@ -36,7 +36,7 @@ export const apimartKling30TurboModel = defineModel({
       const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const raw = String(params.apimartKling30TurboAspectRatio || 'smart')
       const body: DynamicValueMap = {
-        model: 'kling-3.0-turbo', prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 2500) : '',
+        model: 'kling-3.0-turbo', prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 3072) : '',
         resolution: params.apimartKling30TurboResolution === '1080p' ? '1080p' : '720p',
         duration: Math.min(15, Math.max(3, Math.round(Number(params.apimartKling30TurboDuration || 5))))
       }

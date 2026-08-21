@@ -1,9 +1,10 @@
 import { Blob } from 'node:buffer'
+import { buildApiMartEndpoints } from './apimart-endpoints'
 import { AiRuntimeError } from './errors'
+import { fetchProvider } from './providers/provider-fetch'
 import type { JsonObject, JsonValue } from './types'
 
 const KIE_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload'
-const APIMART_IMAGE_UPLOAD_URL = 'https://api.apimart.ai/v1/uploads/images'
 const APIMART_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 const APIMART_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
@@ -34,10 +35,14 @@ export async function uploadToApiMart(apiKey: string, prepared: PreparedMediaBin
   const form = new FormData()
   form.append('file', new Blob([prepared.bytes], { type: prepared.mimeType }), prepared.filename)
 
-  const response = await fetch(APIMART_IMAGE_UPLOAD_URL, {
+  const endpoints = buildApiMartEndpoints('/v1/uploads/images')
+  const response = await fetchProvider('APIMart image upload', endpoints[0], {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body: form,
+  }, {
+    retryPreconnectOnce: true,
+    fallbackEndpoints: endpoints.slice(1),
   })
   const payload = await readJson(response, 'APIMart image upload')
   const fileUrl = readStringPointer(payload, '/url') ?? readStringPointer(payload, '/data/url')
@@ -50,7 +55,7 @@ export async function uploadToApiMart(apiKey: string, prepared: PreparedMediaBin
 export async function uploadToKie(apiKey: string, prepared: PreparedMediaBinary): Promise<string> {
   const form = new FormData()
   form.append('uploadPath', 'henji-uploads')
-  form.append('fileName', prepared.filename)
+  // 不指定 fileName，让 KIE 生成唯一文件名；同名覆盖会命中 CDN 缓存并短暂返回旧文件。
   form.append('file', new Blob([prepared.bytes], { type: inferMime(prepared.filename) }), prepared.filename)
 
   const response = await fetch(KIE_UPLOAD_URL, {

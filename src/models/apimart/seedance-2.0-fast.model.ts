@@ -44,6 +44,10 @@ export const apimartSeedance20FastModel = defineModel({
     {
       id: 'apimartSeedance20FastReturnLastFrame', type: 'switch', order: 6,
       name: { zh: '返回尾帧', en: 'Return Last Frame' }, default: false
+    },
+    {
+      id: 'apimartSeedance20FastWebSearch', type: 'switch', order: 7,
+      name: { zh: '联网搜索', en: 'Web Search' }, default: false
     }
   ],
   linkages: [], endpoints: '/v1/videos/generations',
@@ -60,15 +64,21 @@ export const apimartSeedance20FastModel = defineModel({
       const audios = pickSources(params.uploadedAudioFilePaths, params.audios)
       const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9']
       const raw = String(params.apimartSeedance20FastAspectRatio || 'smart')
-      const size = ratios.includes(raw) ? raw : '16:9'
+      let size = ratios.includes(raw) ? raw : '16:9'
+      if ((raw === 'smart' || raw === 'auto' || raw === 'adaptive') && images.length + videos.length > 0) size = 'adaptive'
       const body: DynamicValueMap = {
-        model: 'seedance-2.0-fast', prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        model: 'seedance-2.0-fast', prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 4000) : '',
         duration: Math.min(15, Math.max(4, Math.round(Number(params.apimartSeedance20FastDuration || 5)))),
         size, resolution: params.apimartSeedance20FastResolution === '480p' ? '480p' : '720p',
         generate_audio: params.apimartSeedance20FastGenerateAudio !== false,
-        return_last_frame: params.apimartSeedance20FastReturnLastFrame === true
+        return_last_frame: params.apimartSeedance20FastReturnLastFrame === true,
+        nsfw_check: false
       }
+      if (params.apimartSeedance20FastWebSearch === true) body.tools = [{ type: 'web_search' }]
       if (params.apimartSeedance20FastMode === 'reference-to-video') {
+        if (audios.length > 0 && images.length + videos.length === 0) {
+          throw new Error('Seedance 2.0 Fast 的参考音频必须与参考图片或参考视频一起使用')
+        }
         if (images.length > 0) body.image_urls = images.slice(0, 9)
         if (videos.length > 0) body.video_urls = videos.slice(0, 3)
         if (audios.length > 0) body.audio_urls = audios.slice(0, 3)
@@ -80,9 +90,21 @@ export const apimartSeedance20FastModel = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: (params) => Math.min(15, Math.max(4, Math.round(Number(params.apimartSeedance20FastDuration || 5))))
-      * (params.apimartSeedance20FastResolution === '480p' ? 0.03984 : 0.0856),
-    description: '输出每秒：480p $0.03984，720p $0.0856；参考输入另计'
+    calculator: (params) => {
+      const duration = Math.min(15, Math.max(4, Math.round(Number(params.apimartSeedance20FastDuration || 5))))
+      const rate = params.apimartSeedance20FastResolution === '480p'
+        ? { noVideo: 0.03984, withVideo: 0.02368 }
+        : { noVideo: 0.0856, withVideo: 0.05128 }
+      const videos = Array.isArray(params.uploadedVideoFilePaths)
+        ? params.uploadedVideoFilePaths
+        : (Array.isArray(params.videos) ? params.videos : [])
+      const hasVideo = params.apimartSeedance20FastMode === 'reference-to-video' && videos.length > 0
+      const inputDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds * videos.length
+        : 0
+      return (duration + (hasVideo ? inputDuration : 0)) * (hasVideo ? rate.withVideo : rate.noVideo)
+    },
+    description: '无/有视频输入每秒：480p $0.03984/$0.02368，720p $0.0856/$0.05128；有视频时按输入与输出总时长计费'
   }
 })
 

@@ -55,8 +55,11 @@ export const falGeminiOmniFlashModel = defineModel({
         ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
       const uploaded = clean(params.uploadedFilePaths)
       const images = uploaded.length > 0 ? uploaded : clean(params.images)
+      const prompt = typeof params.prompt === 'string' ? params.prompt.trim() : ''
+      if (!prompt) throw new Error('Gemini Omni Flash 的提示词不能为空')
+      if (images.length === 0) throw new Error('Gemini Omni Flash 至少需要 1 张图片')
       const body: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        prompt,
         aspect_ratio: params.falGeminiOmniFlashAspectRatio === '9:16' ? '9:16' : '16:9',
         duration: Math.min(10, Math.max(3, Math.round(Number(params.falGeminiOmniFlashDuration || 8))))
       }

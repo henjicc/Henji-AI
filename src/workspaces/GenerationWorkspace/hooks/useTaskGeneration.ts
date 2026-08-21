@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { GenerationService } from '@/core/services/GenerationService'
+import { showAlertDialog } from '@/stores/alertDialogStore'
 import { toAudioDisplayUrl } from '@/utils/audioPreview'
 import { getMediaDimensions, getMediaDurationFormatted } from '@/utils/mediaDimensions'
 import type { ImageEditSession } from '@/core/imageEdit'
@@ -8,7 +9,7 @@ import type { MediaType, GenerationTask, GeneratorOptions, ToastNotification } f
 import { splitMulti } from '../utils/multiFile'
 import { resolveProgressSettleDelayMs } from '../utils/progressAnimation'
 import { isRecord, isStringArray } from '../utils/typeGuards'
-import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '../utils/taskServerId'
+import { extractServerTaskIdFromErrorMessage, extractServerTaskIdFromMetadata } from '@/features/generation/application/taskServerId'
 import { normalizeMediaResultForDesktop } from '../utils/mediaResult'
 import { continuePollingTask } from './continuePollingTask'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
@@ -39,6 +40,8 @@ export interface UseTaskGenerationMessages {
   testModeIntercepted: string
   missingInput: string
   genericGenerateFailed: string
+  providerKeyRequiredTitle: string
+  providerKeyRequiredMessage: string
 }
 
 export interface UseTaskGenerationParams {
@@ -75,6 +78,10 @@ function maybeToUserMessage(error: DynamicValue): string {
     }
   }
   return getUserMessage(error)
+}
+
+function isProviderKeyMissingError(message: string): boolean {
+  return /\[api_key_missing\]|api key not configured for provider/i.test(message)
 }
 
 function extractVoiceIdFromMetadata(metadata: DynamicValue): string | undefined {
@@ -147,6 +154,15 @@ export function useTaskGeneration({
     tasksRef.current = tasks
   }, [tasks])
 
+  const showProviderKeyRequired = useCallback((): void => {
+    showAlertDialog({
+      title: messages.providerKeyRequiredTitle,
+      message: messages.providerKeyRequiredMessage,
+      type: 'info',
+      settingsTarget: { tab: 'api', sectionId: 'api-keys' },
+    })
+  }, [messages.providerKeyRequiredMessage, messages.providerKeyRequiredTitle])
+
   const generateWithService = useCallback(async (
     modelId: string,
     input: string,
@@ -207,8 +223,12 @@ export function useTaskGeneration({
       const result = await generateWithService(task.model, task.prompt, options, handleProgress)
       const resultObj: DynamicValueMap = isRecord(result) ? result : {}
       const metadata = resultObj['metadata']
-      const serverTaskId = extractServerTaskIdFromMetadata(metadata)
-        ?? (typeof resultObj['taskId'] === 'string' ? resultObj['taskId'] : undefined)
+      const normalizedResultTaskId = typeof resultObj['taskId'] === 'string'
+        ? resultObj['taskId'].trim() || undefined
+        : undefined
+      // GenerationService 已将供应商任务 ID 归一到 taskId；元数据只用于兼容旧响应。
+      // 不能让供应商的 request_id 覆盖真正用于轮询的任务 ID。
+      const serverTaskId = normalizedResultTaskId ?? extractServerTaskIdFromMetadata(metadata)
       if (serverTaskId) {
         updateTask(taskId, { serverTaskId })
       }
@@ -282,7 +302,10 @@ export function useTaskGeneration({
       })
     } catch (error) {
       logger.error('[Workspace] 生成失败', error)
-      const errorMessage = maybeToUserMessage(error) || messages.genericGenerateFailed
+      const rawErrorMessage = maybeToUserMessage(error) || messages.genericGenerateFailed
+      const providerKeyMissing = isProviderKeyMissingError(rawErrorMessage)
+      if (providerKeyMissing) showProviderKeyRequired()
+      const errorMessage = providerKeyMissing ? messages.providerKeyRequiredMessage : rawErrorMessage
       const serverTaskIdFromError = extractServerTaskIdFromErrorMessage(errorMessage)
       updateTask(taskId, {
         status: 'error',
@@ -294,7 +317,7 @@ export function useTaskGeneration({
       // 任务链路结束（成功/失败/转轮询完成后），清掉瞬态进度，避免 store 残留
       useGenerationTaskProgressStore.getState().clearProgress(taskId)
     }
-  }, [generateWithService, messages.genericGenerateFailed, notify, updateProgress, updateTask])
+  }, [generateWithService, messages.genericGenerateFailed, messages.providerKeyRequiredMessage, notify, showProviderKeyRequired, updateProgress, updateTask])
 
   const handleContinuePolling = useCallback(async (task: GenerationTask): Promise<void> => {
     await continuePollingTask({
@@ -314,6 +337,8 @@ export function useTaskGeneration({
       executeTask,
       setGenerating: setIsGenerating,
       notify,
+      validateProviderKey: (providerId) => GenerationService.getInstance().validateApiKey(providerId),
+      onProviderKeyMissing: showProviderKeyRequired,
       messages,
       imageEditStates: imageEditStatesRef.current,
       setUploadedImages: (images) => setUploadedImagesRef.current?.(images),
@@ -324,6 +349,7 @@ export function useTaskGeneration({
     imageEditStatesRef,
     messages,
     notify,
+    showProviderKeyRequired,
     setTasks,
     setUploadedFilePathsRef,
     setUploadedImagesRef,

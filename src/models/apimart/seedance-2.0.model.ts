@@ -44,6 +44,10 @@ export const apimartSeedance20Model = defineModel({
     {
       id: 'apimartSeedance20ReturnLastFrame', type: 'switch', order: 6,
       name: { zh: '返回尾帧', en: 'Return Last Frame' }, default: false
+    },
+    {
+      id: 'apimartSeedance20WebSearch', type: 'switch', order: 7,
+      name: { zh: '联网搜索', en: 'Web Search' }, default: false
     }
   ],
   linkages: [], endpoints: '/v1/videos/generations',
@@ -60,26 +64,23 @@ export const apimartSeedance20Model = defineModel({
       const audios = pickSources(params.uploadedAudioFilePaths, params.audios)
       const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9']
       const raw = String(params.apimartSeedance20AspectRatio || 'smart')
-      const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0 ? params.__firstImageRatio : 16 / 9
       let size = ratios.includes(raw) ? raw : '16:9'
-      if (raw === 'smart' || raw === 'auto') {
-        let difference = Number.POSITIVE_INFINITY
-        for (const candidate of ratios) {
-          const pair = candidate.split(':').map(Number)
-          const next = Math.abs(pair[0] / pair[1] - hint)
-          if (next < difference) { difference = next; size = candidate }
-        }
-      }
+      if ((raw === 'smart' || raw === 'auto' || raw === 'adaptive') && images.length + videos.length > 0) size = 'adaptive'
       const resolution = ['480p', '1080p', '4K'].includes(String(params.apimartSeedance20Resolution))
         ? String(params.apimartSeedance20Resolution) : '720p'
       const body: DynamicValueMap = {
-        model: 'seedance-2.0', prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        model: 'seedance-2.0', prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 4000) : '',
         duration: Math.min(15, Math.max(4, Math.round(Number(params.apimartSeedance20Duration || 5)))),
-        size, resolution,
+        size, resolution: resolution === '4K' ? '4k' : resolution,
         generate_audio: params.apimartSeedance20GenerateAudio !== false,
-        return_last_frame: params.apimartSeedance20ReturnLastFrame === true
+        return_last_frame: params.apimartSeedance20ReturnLastFrame === true,
+        nsfw_check: false
       }
+      if (params.apimartSeedance20WebSearch === true) body.tools = [{ type: 'web_search' }]
       if (params.apimartSeedance20Mode === 'reference-to-video') {
+        if (audios.length > 0 && images.length + videos.length === 0) {
+          throw new Error('Seedance 2.0 的参考音频必须与参考图片或参考视频一起使用')
+        }
         if (images.length > 0) body.image_urls = images.slice(0, 9)
         if (videos.length > 0) body.video_urls = videos.slice(0, 3)
         if (audios.length > 0) body.audio_urls = audios.slice(0, 3)
@@ -93,10 +94,23 @@ export const apimartSeedance20Model = defineModel({
     currency: '$',
     calculator: (params) => {
       const duration = Math.min(15, Math.max(4, Math.round(Number(params.apimartSeedance20Duration || 5))))
-      const rates: Record<string, number> = { '480p': 0.066, '720p': 0.142, '1080p': 0.3544, '4K': 0.722 }
-      return duration * (rates[String(params.apimartSeedance20Resolution || '720p')] ?? rates['720p'])
+      const rates: Record<string, { noVideo: number; withVideo: number }> = {
+        '480p': { noVideo: 0.066, withVideo: 0.04 },
+        '720p': { noVideo: 0.142, withVideo: 0.08584 },
+        '1080p': { noVideo: 0.3544, withVideo: 0.21568 },
+        '4K': { noVideo: 0.722, withVideo: 0.44432 }
+      }
+      const rate = rates[String(params.apimartSeedance20Resolution || '720p')] ?? rates['720p']
+      const videos = Array.isArray(params.uploadedVideoFilePaths)
+        ? params.uploadedVideoFilePaths
+        : (Array.isArray(params.videos) ? params.videos : [])
+      const hasVideo = params.apimartSeedance20Mode === 'reference-to-video' && videos.length > 0
+      const inputDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds * videos.length
+        : 0
+      return (duration + (hasVideo ? inputDuration : 0)) * (hasVideo ? rate.withVideo : rate.noVideo)
     },
-    description: '输出每秒：480p $0.066，720p $0.142，1080p $0.3544，4K $0.722；参考输入另计'
+    description: '无/有视频输入每秒：480p $0.066/$0.04，720p $0.142/$0.08584，1080p $0.3544/$0.21568，4K $0.722/$0.44432；有视频时按输入与输出总时长计费'
   }
 })
 

@@ -55,6 +55,8 @@ export interface VisibleGenerationTaskDependencies {
   executeTask: (taskId: string, task: GenerationTask) => Promise<void>
   setGenerating: (isGenerating: boolean) => void
   notify: (message: string, type?: ToastNotification['type']) => void
+  validateProviderKey: (providerId: string) => Promise<boolean>
+  onProviderKeyMissing: () => void
   messages: VisibleGenerationTaskMessages
   imageEditStates: Map<string, ImageEditSession>
   setUploadedImages?: (images: string[]) => void
@@ -343,6 +345,10 @@ export async function createVisibleGenerationTask(
 
   const info: DynamicValue = registry.getModelInfo(model)
   const providerId = isRecord(info) && typeof info.provider === 'string' ? info.provider : undefined
+  if (providerId && !(await dependencies.validateProviderKey(providerId))) {
+    dependencies.onProviderKeyMissing()
+    return null
+  }
   const taskVideoPaths = isStringArray(options.uploadedVideoFilePaths) ? options.uploadedVideoFilePaths : undefined
   const taskAudioPaths = isStringArray(options.uploadedAudioFilePaths) ? options.uploadedAudioFilePaths : undefined
   const videoUrls = taskVideoPaths?.length ? taskVideoPaths.map(toVideoDisplayUrl) : (isStringArray(options.videos) ? options.videos : undefined)

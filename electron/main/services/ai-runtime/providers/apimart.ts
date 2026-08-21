@@ -1,10 +1,10 @@
 import { AiRuntimeError } from '../errors'
+import { buildApiMartEndpoints } from '../apimart-endpoints'
 import { POLL_QUERY_FAILED, pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
-import { collectDeepUrls, getPointer, normalizeEndpoint, readJsonResponse, stringAt } from './helpers'
+import { collectDeepUrls, getPointer, isJsonObject, readJsonResponse, stringAt } from './helpers'
 import { fetchProvider } from './provider-fetch'
 
-const APIMART_BASE_URL = 'https://api.apimart.ai'
 const RESPONSE_VERSION = '2026-07-27'
 
 export async function execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
@@ -31,7 +31,8 @@ export async function continuePolling(input: ProviderContinuePollingInput): Prom
 }
 
 async function sendCreateTask(input: ProviderExecutionInput): Promise<JsonValue> {
-  const response = await fetchProvider('APIMart', normalizeEndpoint(APIMART_BASE_URL, input.route), {
+  const endpoints = buildApiMartEndpoints(input.route)
+  const response = await fetchProvider('APIMart', endpoints[0], {
     method: input.method,
     headers: {
       Authorization: `Bearer ${input.apiKey}`,
@@ -39,11 +40,16 @@ async function sendCreateTask(input: ProviderExecutionInput): Promise<JsonValue>
       'Idempotency-Key': input.requestId,
       'X-APIMart-Response-Version': RESPONSE_VERSION,
     },
-    body: JSON.stringify(input.body),
+    // APIMart 全供应商统一关闭平台预审。这里在最终发送边界强制覆盖，
+    // 防止当前或未来模型漏写、误写 nsfw_check。
+    body: JSON.stringify(isJsonObject(input.body)
+      ? { ...input.body, nsfw_check: false }
+      : input.body),
     signal: input.signal,
   }, {
-    // APIMart 支持幂等键；仍只重试可证明尚未连接成功的请求，避免扩大重放范围。
+    // 仅在能证明尚未建立连接时切换官方大陆备用线路，避免扩大重放范围。
     retryPreconnectOnce: true,
+    fallbackEndpoints: endpoints.slice(1),
   })
   const payload = await readJsonResponse(response, 'APIMart')
   assertPayloadSucceeded(payload, 'APIMart create task failed')
@@ -52,8 +58,8 @@ async function sendCreateTask(input: ProviderExecutionInput): Promise<JsonValue>
 
 async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue> {
   return await pollUntilResult(input, async () => {
-    const endpoint = `${APIMART_BASE_URL}/v1/tasks/${encodeURIComponent(input.taskId)}`
-    const response = await fetchProvider('APIMart', endpoint, {
+    const endpoints = buildApiMartEndpoints(`/v1/tasks/${encodeURIComponent(input.taskId)}`)
+    const response = await fetchProvider('APIMart', endpoints[0], {
       headers: {
         Authorization: `Bearer ${input.apiKey}`,
         'X-APIMart-Response-Version': RESPONSE_VERSION,
@@ -61,6 +67,7 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
       signal: input.signal,
     }, {
       retryPreconnectOnce: true,
+      fallbackEndpoints: endpoints.slice(1),
     })
     const payload = await readJsonResponse(response, 'APIMart')
     const status = extractStatus(payload)

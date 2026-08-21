@@ -13,8 +13,13 @@
   },
   "alertDialog": {
     "goToSettings": "去设置",
+    "goToConfigure": "去配置",
     "copyDetail": "复制错误详情",
     "detailCopied": "已复制"
+  },
+  "providerKeyRequired": {
+    "title": "还没有配置密钥",
+    "message": "你还没有配置密钥，你需要去配置一下。"
   },
 
   "confirm": "确定",

@@ -454,7 +454,13 @@ export function prepareGenerationTask(input: GenerationPreparationInput): Record
     ...validateDynamicConstraints(model, normalized, supplied),
     ...mediaErrors,
   ]
-  const hasInput = input.prompt.trim().length > 0 || imagesCount > 0 || videosCount > 0 || audiosCount > 0
+  const hasAlternativeInput = model.alternativeInputParamIds?.some((paramId) => {
+    const value = normalized[paramId]
+    if (typeof value === 'string') return value.trim().length > 0
+    if (Array.isArray(value)) return value.length > 0
+    return value !== undefined && value !== null && value !== false
+  }) === true
+  const hasInput = input.prompt.trim().length > 0 || imagesCount > 0 || videosCount > 0 || audiosCount > 0 || hasAlternativeInput
   if (!hasInput) {
     paramErrors.push({ paramId: 'prompt', type: 'required', message: '必须提供提示词或允许的媒体引用' })
   }

@@ -109,7 +109,7 @@ describe('拒绝必须能被自我修正', () => {
      * 完整性由反射注册表自己的测试守；这条守的是**拒绝有没有把已知事实交出来**。
      */
     expect(message, '拒绝里必须列出真实属性').toContain('general.language')
-    expect(message, '拒绝里必须列出真实属性').toContain('interface.theme_tone')
+    expect(message, '拒绝里必须列出真实属性').toContain('interface.scale')
   })
 
   /*

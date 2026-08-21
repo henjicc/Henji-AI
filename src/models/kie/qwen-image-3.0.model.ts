@@ -38,9 +38,20 @@ export const kieQwenImage30Model = defineModel({
   },
   params: [
     {
-      id: 'kieQwenImage30AspectRatio',
+      id: 'kieQwenImage30Variant',
       type: 'dropdown',
       order: 1,
+      name: sharedFieldText('variant'),
+      default: 'standard',
+      options: [
+        { value: 'standard', label: { zh: '标准版', en: 'Standard' } },
+        { value: 'pro', label: 'Pro' }
+      ]
+    },
+    {
+      id: 'kieQwenImage30AspectRatio',
+      type: 'dropdown',
+      order: 2,
       name: sharedFieldText('aspectRatio'),
       default: 'smart',
       options: [
@@ -51,7 +62,7 @@ export const kieQwenImage30Model = defineModel({
     {
       id: 'kieQwenImage30Resolution',
       type: 'dropdown',
-      order: 2,
+      order: 3,
       name: sharedFieldText('resolution'),
       default: '1K',
       options: [
@@ -62,7 +73,7 @@ export const kieQwenImage30Model = defineModel({
     {
       id: 'kieQwenImage30PromptExtend',
       type: 'switch',
-      order: 3,
+      order: 4,
       name: { zh: '提示词扩写', en: 'Prompt Expansion' },
       default: true
     }
@@ -104,16 +115,24 @@ export const kieQwenImage30Model = defineModel({
         input.image_urls = images.slice(0, 3)
       }
 
+      const isPro = params.kieQwenImage30Variant === 'pro'
       return {
-        model: images.length > 0 ? 'qwen3/image-to-image' : 'qwen3/text-to-image',
+        model: isPro
+          ? (images.length > 0 ? 'qwen3/pro-image-to-image' : 'qwen3-pro/text-to-image')
+          : (images.length > 0 ? 'qwen3/image-to-image' : 'qwen3/text-to-image'),
         input
       }
     }
   },
   pricing: {
     currency: '$',
-    calculator: (params) => 0.024 + countUploadedImages(params) * 0.0025,
-    description: '1K/2K 输出 $0.024/张；图片编辑输入 $0.0025/张'
+    calculator: (params) => {
+      const output = params.kieQwenImage30Variant === 'pro'
+        ? (params.kieQwenImage30Resolution === '2K' ? 0.06 : 0.032)
+        : 0.024
+      return output + countUploadedImages(params) * 0.0025
+    },
+    description: '标准版 1K/2K $0.024/张；Pro 1K $0.032、2K $0.06/张；图片编辑输入 $0.0025/张'
   }
 })
 

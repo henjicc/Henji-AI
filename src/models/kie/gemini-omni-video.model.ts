@@ -82,6 +82,24 @@ export const kieGeminiOmniVideoModel = defineModel({
         { value: '1080p', label: '1080p' },
         { value: '4k', label: '4K' }
       ]
+    },
+    {
+      id: 'kieGeminiOmniVideoAudioIds',
+      type: 'textarea',
+      order: 4,
+      name: { zh: '音频资产 ID', en: 'Audio Asset IDs' },
+      description: { zh: '每行一个，最多 3 个', en: 'One per line, up to 3' },
+      default: '',
+      rows: 3
+    },
+    {
+      id: 'kieGeminiOmniVideoCharacterIds',
+      type: 'textarea',
+      order: 5,
+      name: { zh: '角色资产 ID', en: 'Character Asset IDs' },
+      description: { zh: '每行一个，与图片共享 7 个槽位', en: 'One per line; shares 7 slots with images' },
+      default: '',
+      rows: 3
     }
   ],
   linkages: [],
@@ -108,8 +126,19 @@ export const kieGeminiOmniVideoModel = defineModel({
       const images = pickSources(params.uploadedFilePaths, params.images)
       const videos = pickSources(params.uploadedVideoFilePaths, params.videos)
       const hasVideo = videos.length > 0
-      const maxImages = hasVideo ? MAX_IMAGES_WITH_VIDEO : MAX_IMAGES_NO_VIDEO
-      const resolution = params.kieGeminiOmniVideoResolution || '720p'
+      const splitIds = (value: DynamicValue): string[] => typeof value === 'string'
+        ? value.split(/[\n,]/u).map((item) => item.trim()).filter(Boolean)
+        : []
+      const audioIds = splitIds(params.kieGeminiOmniVideoAudioIds).slice(0, 3)
+      const characterIds = splitIds(params.kieGeminiOmniVideoCharacterIds)
+      if (hasVideo && characterIds.length > 3) throw new Error('Gemini Omni 带视频时最多支持 3 个角色资产')
+      const availableImageSlots = (hasVideo ? MAX_IMAGES_WITH_VIDEO : MAX_IMAGES_NO_VIDEO) - characterIds.length
+      if (availableImageSlots < 0 || images.length > availableImageSlots) {
+        throw new Error('Gemini Omni 的图片与角色资产超过共享的 7 个槽位')
+      }
+      const resolution = params.kieGeminiOmniVideoResolution === '1080p' || params.kieGeminiOmniVideoResolution === '4k'
+        ? params.kieGeminiOmniVideoResolution
+        : '720p'
 
       const aspectRatioRaw = String(params.kieGeminiOmniVideoAspectRatio || 'smart')
       const aspectRatio = ASPECT_RATIOS.includes(aspectRatioRaw)
@@ -137,14 +166,16 @@ export const kieGeminiOmniVideoModel = defineModel({
         })()
 
       const input: DynamicValueMap = {
-        prompt,
+        prompt: typeof prompt === 'string' ? prompt.slice(0, 20000) : '',
         aspect_ratio: aspectRatio,
         resolution
       }
 
       if (images.length > 0) {
-        input.image_urls = images.slice(0, maxImages)
+        input.image_urls = images
       }
+      if (audioIds.length > 0) input.audio_ids = audioIds
+      if (characterIds.length > 0) input.character_ids = characterIds
 
       if (hasVideo) {
         const rawClipDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0

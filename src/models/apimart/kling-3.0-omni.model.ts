@@ -11,31 +11,50 @@ export const apimartKling30OmniModel = defineModel({
     aliases: ['kling-v3-omni-apimart'], polling: { interval: 3000, maxAttempts: 300, expectedAttempts: 80 }
   },
   inputLimits: {
-    images: { max: 7 }, videos: { max: 1 },
-    rules: [{ videoConstraints: { minDurationSec: 3, maxDurationSec: 10, maxSizeMB: 200, trim: { maxClipSeconds: 10 } } }]
+    images: { max: 2 }, videos: { max: 1 },
+    rules: [
+      { when: 'apimartKling30OmniMode === "reference-to-video"', images: { max: 7 }, videos: { max: 1 } },
+      { videoConstraints: { minDurationSec: 3, maxDurationSec: 10, maxSizeMB: 200, trim: { maxClipSeconds: 10 } } }
+    ]
   },
   params: [
     {
-      id: 'apimartKling30OmniAspectRatio', type: 'dropdown', order: 1,
+      id: 'apimartKling30OmniMode', type: 'dropdown', order: 1,
+      name: sharedFieldText('mode'), default: 'text-image-to-video',
+      options: [
+        { value: 'text-image-to-video', label: { zh: '文生 / 首尾帧', en: 'Text / Start-End Frame' } },
+        { value: 'reference-to-video', label: { zh: '多图参考', en: 'Image Reference' } }
+      ]
+    },
+    {
+      id: 'apimartKling30OmniAspectRatio', type: 'dropdown', order: 2,
       name: sharedFieldText('aspectRatio'), default: 'smart',
       options: [{ value: 'smart', label: sharedOptionText('smart') }, ...['16:9', '9:16', '1:1'].map((ratio) => ({ value: ratio, label: ratio }))]
     },
     {
-      id: 'apimartKling30OmniResolution', type: 'dropdown', order: 2,
+      id: 'apimartKling30OmniResolution', type: 'dropdown', order: 3,
       name: sharedFieldText('resolution'), default: '720p',
       options: ['720p', '1080p', '4K'].map((value) => ({ value, label: value }))
     },
     {
-      id: 'apimartKling30OmniDuration', type: 'number', order: 3,
+      id: 'apimartKling30OmniDuration', type: 'number', order: 4,
       name: sharedFieldText('duration'), default: 5, min: 3, max: 15, step: 1
     },
     {
-      id: 'apimartKling30OmniAudio', type: 'switch', order: 4,
+      id: 'apimartKling30OmniAudio', type: 'switch', order: 5,
       name: sharedFieldText('generateAudio'), default: false
     },
     {
-      id: 'apimartKling30OmniKeepOriginalSound', type: 'switch', order: 5,
+      id: 'apimartKling30OmniKeepOriginalSound', type: 'switch', order: 6,
       name: { zh: '保留视频原声', en: 'Keep Original Sound' }, default: false
+    },
+    {
+      id: 'apimartKling30OmniVideoReferenceType', type: 'dropdown', order: 7,
+      name: { zh: '视频参考类型', en: 'Video Reference Type' }, default: 'base',
+      options: [
+        { value: 'base', label: { zh: '视频编辑', en: 'Base / Edit' } },
+        { value: 'feature', label: { zh: '特征参考', en: 'Feature Reference' } }
+      ]
     }
   ],
   linkages: [], endpoints: '/v1/videos/generations',
@@ -58,12 +77,20 @@ export const apimartKling30OmniModel = defineModel({
         aspect_ratio: ['16:9', '9:16', '1:1'].includes(raw) ? raw : '16:9'
       }
       if (videos.length > 0) {
+        const referenceType = params.apimartKling30OmniVideoReferenceType === 'feature' ? 'feature' : 'base'
         body.video_list = [{
-          video_url: videos[0], refer_type: 'base',
+          video_url: videos[0], refer_type: referenceType,
           keep_original_sound: params.apimartKling30OmniKeepOriginalSound === true ? 'yes' : 'no'
         }]
+        if (referenceType === 'feature' && images.length > 0) body.image_urls = images.slice(0, 1)
       } else {
-        if (images.length > 0) body.image_urls = images.slice(0, 7)
+        if (images.length > 0) {
+          if (params.apimartKling30OmniMode === 'reference-to-video') body.image_urls = images.slice(0, 7)
+          else body.image_with_roles = images.slice(0, 2).map((url, index) => ({
+            url,
+            role: index === 0 ? 'first_frame' : 'last_frame'
+          }))
+        }
         body.audio = params.apimartKling30OmniAudio === true
       }
       return body
@@ -79,10 +106,14 @@ export const apimartKling30OmniModel = defineModel({
       const audio = params.apimartKling30OmniAudio === true
       const rate = resolution === '4K'
         ? 0.42856
-        : (resolution === '1080p' ? (hasVideo ? 0.1792 : (audio ? 0.112 : 0.0896)) : (hasVideo ? 0.1344 : (audio ? 0.0896 : 0.0672)))
-      return duration * rate
+        : (resolution === '1080p' ? (hasVideo ? 0.1344 : (audio ? 0.112 : 0.0896)) : (hasVideo ? 0.1008 : (audio ? 0.0896 : 0.0672)))
+      const sourceDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds
+        : duration
+      const billedDuration = hasVideo && params.apimartKling30OmniVideoReferenceType !== 'feature' ? sourceDuration : duration
+      return billedDuration * rate
     },
-    description: '基础每秒 720p $0.0672、1080p $0.0896、4K $0.42856；音频或视频参考使用对应附加档位'
+    description: '基础每秒 720p $0.0672、1080p $0.0896、4K $0.42856；视频参考档为 720p $0.1008、1080p $0.1344，base 编辑按源视频时长计费'
   }
 })
 

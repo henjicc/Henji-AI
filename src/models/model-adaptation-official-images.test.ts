@@ -68,6 +68,16 @@ describe('docs/model-adaptation 官方图片模型', () => {
     })).toBeCloseTo(0.4)
   })
 
+  it('百炼 Qwen Pro 使用官方模型 ID 与 1K/2K 分档价格', () => {
+    expect(bailianQwenImage30Model.request?.builder?.({
+      prompt: 'worksheet', bailianQwenImage30Variant: 'pro', bailianQwenImage30Resolution: '2K'
+    })).toMatchObject({ model: 'qwen-image-3.0-pro' })
+    expect(bailianQwenImage30Model.pricing.calculator?.({
+      bailianQwenImage30Variant: 'pro', bailianQwenImage30Resolution: '2K', bailianQwenImage30Count: 2,
+      uploadedFilePaths: ['a.png']
+    })).toBeCloseTo(1.02)
+  })
+
   it('百炼 Z-Image 保留 1K/2K 显示并按提示词改写计价', () => {
     const request = bailianZImageTurboModel.request?.builder?.({
       prompt: 'portrait',
@@ -93,12 +103,12 @@ describe('docs/model-adaptation 官方图片模型', () => {
     })
     expect(request).toMatchObject({
       model: 'doubao-seedream-5-0-260128',
-      size: '4736x3552',
+      size: '4704x3520',
       sequential_image_generation: 'auto',
-      sequential_image_generation_options: { max_images: 15 },
+      sequential_image_generation_options: { max_images: 3 },
       response_format: 'url',
     })
-    expect(request?.image).toHaveLength(10)
+    expect(request?.image).toHaveLength(12)
     expect(request).not.toHaveProperty('seed')
     expect(request).not.toHaveProperty('negative_prompt')
     expect(request).not.toHaveProperty('output_format')
@@ -122,5 +132,32 @@ describe('docs/model-adaptation 官方图片模型', () => {
     })
     expect(request).not.toHaveProperty('n')
     expect(request).not.toHaveProperty('output_format')
+  })
+
+  it('Seedream Pro 图层拆分走方舟同模型专属契约并按输出图层计价', () => {
+    expect(volcengineSeedream50ProModel.request?.builder?.({
+      prompt: 'separate layers',
+      uploadedFilePaths: ['source.png'],
+      volcengineSeedream50ProMode: 'layer-decomposition',
+      volcengineSeedream50ProLayerSize: 'auto'
+    })).toEqual({
+      model: 'doubao-seedream-5-0-pro-260628',
+      prompt: 'separate layers',
+      image: 'source.png',
+      layer_decomposition: true,
+      size: 'auto',
+      response_format: 'url',
+      watermark: false
+    })
+    expect(() => volcengineSeedream50ProModel.request?.builder?.({
+      volcengineSeedream50ProMode: 'layer-decomposition',
+      uploadedFilePaths: []
+    })).toThrow('必须且只能输入 1 张图片')
+    expect(volcengineSeedream50ProModel.pricing.calculator?.({
+      volcengineSeedream50ProMode: 'layer-decomposition', volcengineSeedream50ProLayerSize: '1.5K'
+    })).toBe(0.15)
+    expect(volcengineSeedream50ProModel.pricing.calculator?.({
+      volcengineSeedream50ProResolution: '2K', uploadedFilePaths: ['a.png', 'b.png']
+    })).toBeCloseTo(0.62)
   })
 })

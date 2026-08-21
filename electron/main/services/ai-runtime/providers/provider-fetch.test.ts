@@ -49,6 +49,29 @@ describe('fetchProvider', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
   })
 
+  it('主线路尚未建立连接时按顺序切换备用线路', async () => {
+    const response = new Response('{}', { status: 200 })
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(networkError('ENETUNREACH'))
+      .mockResolvedValueOnce(response)
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(fetchProvider(
+      'APIMart',
+      'https://api.apimart.ai/v1/tasks/task-1',
+      { method: 'GET' },
+      {
+        retryPreconnectOnce: true,
+        fallbackEndpoints: ['https://api.apib.ai/v1/tasks/task-1'],
+      }
+    )).resolves.toBe(response)
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.apimart.ai/v1/tasks/task-1',
+      'https://api.apib.ai/v1/tasks/task-1',
+    ])
+  })
+
   it('用户取消或超时中止不触发重试', async () => {
     const controller = new AbortController()
     controller.abort()

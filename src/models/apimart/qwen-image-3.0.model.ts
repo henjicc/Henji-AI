@@ -17,18 +17,30 @@ export const apimartQwenImage30Model = defineModel({
   inputLimits: { images: { max: 3 }, videos: { max: 0 } },
   params: [
     {
-      id: 'apimartQwenImage30AspectRatio', type: 'dropdown', order: 1,
+      id: 'apimartQwenImage30Variant', type: 'dropdown', order: 1,
+      name: sharedFieldText('variant'), default: 'standard',
+      options: [
+        { value: 'standard', label: { zh: '标准版', en: 'Standard' } },
+        { value: 'pro', label: 'Pro' }
+      ]
+    },
+    {
+      id: 'apimartQwenImage30AspectRatio', type: 'dropdown', order: 2,
       name: sharedFieldText('aspectRatio'), default: 'smart',
       options: [{ value: 'smart', label: sharedOptionText('smart') }, ...ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))]
     },
     {
-      id: 'apimartQwenImage30Resolution', type: 'dropdown', order: 2,
+      id: 'apimartQwenImage30Resolution', type: 'dropdown', order: 3,
       name: sharedFieldText('resolution'), default: '1K',
       options: ['1K', '2K'].map((value) => ({ value, label: value }))
     },
     {
-      id: 'apimartQwenImage30Count', type: 'number', order: 3,
+      id: 'apimartQwenImage30Count', type: 'number', order: 4,
       name: { zh: '生成数量', en: 'Output Count' }, default: 1, min: 1, max: 6, step: 1
+    },
+    {
+      id: 'apimartQwenImage30PromptExtend', type: 'switch', order: 5,
+      name: sharedFieldText('promptExpansion'), default: false
     }
   ],
   linkages: [],
@@ -53,21 +65,28 @@ export const apimartQwenImage30Model = defineModel({
       }
       const count = Math.min(6, Math.max(1, Math.round(Number(params.apimartQwenImage30Count || 1))))
       const body: DynamicValueMap = {
-        model: 'qwen-image-3.0',
+        model: params.apimartQwenImage30Variant === 'pro' ? 'qwen-image-3.0-pro' : 'qwen-image-3.0',
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size,
         resolution: params.apimartQwenImage30Resolution === '2K' ? '2K' : '1K',
         n: count,
-        prompt_extend: true
+        prompt_extend: params.apimartQwenImage30PromptExtend === true
       }
+      if (body.prompt_extend === true) body.prompt_extend_mode = 'direct'
       if (images.length > 0) body.image_urls = images.slice(0, 3)
       return body
     }
   },
   pricing: {
     currency: '$',
-    calculator: (params) => Math.min(6, Math.max(1, Math.round(Number(params.apimartQwenImage30Count || 1)))) * 0.0205712,
-    description: '标准版 1K/2K $0.0205712/张'
+    calculator: (params) => {
+      const count = Math.min(6, Math.max(1, Math.round(Number(params.apimartQwenImage30Count || 1))))
+      if (params.apimartQwenImage30Variant === 'pro') {
+        return count * (params.apimartQwenImage30Resolution === '2K' ? 0.0571432 : 0.0285712)
+      }
+      return count * 0.0205712
+    },
+    description: '标准版 1K/2K $0.0205712/张；Pro 1K $0.0285712、2K $0.0571432/张'
   }
 })
 

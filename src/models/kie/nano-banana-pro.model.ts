@@ -34,10 +34,15 @@ export const kieNanoBananaProModel = defineModel({
       options: [
         { value: 'smart', label: sharedOptionText('smart') },
         { value: '1:1', label: '1:1' },
+        { value: '2:3', label: '2:3' },
+        { value: '3:2', label: '3:2' },
         { value: '4:3', label: '4:3' },
         { value: '3:4', label: '3:4' },
+        { value: '4:5', label: '4:5' },
+        { value: '5:4', label: '5:4' },
         { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' }
+        { value: '9:16', label: '9:16' },
+        { value: '21:9', label: '21:9' }
       ]
     },
     {
@@ -45,7 +50,7 @@ export const kieNanoBananaProModel = defineModel({
       type: 'dropdown',
       order: 2,
       name: sharedFieldText('resolution'),
-      default: '2K',
+      default: '1K',
       options: [
         { value: '1K', label: '1K' },
         { value: '2K', label: '2K' },
@@ -58,11 +63,11 @@ export const kieNanoBananaProModel = defineModel({
   request: {
     builder: (params) => {
       const images = resolveKieImageSources(params)
-      const prompt = params.prompt || ''
+      const prompt = typeof params.prompt === 'string' ? params.prompt.slice(0, 10000) : ''
       const rawAspectRatio = String(params.kieNanoBananaAspectRatio || params.aspect_ratio || 'smart')
       const resolution = params.kieNanoBananaResolution || params.resolution
 
-      const supportedAspectRatios = ['1:1', '4:3', '3:4', '16:9', '9:16']
+      const supportedAspectRatios = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9']
       const ratioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
         ? params.__firstImageRatio
         : 1

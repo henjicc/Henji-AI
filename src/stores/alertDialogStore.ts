@@ -15,7 +15,7 @@ export interface AlertDialogRequest {
   title: string
   message: string
   type?: AlertDialogType
-  /** 有值时渲染「去设置」按钮并定位到该分节 */
+  /** 有值时渲染设置动作并定位到该分节；API 密钥分节会显示「去配置」 */
   settingsTarget?: SettingsNavigationTarget
   /** 有值时渲染「复制错误详情」按钮；放完整技术信息（堆栈、响应体等） */
   detail?: string

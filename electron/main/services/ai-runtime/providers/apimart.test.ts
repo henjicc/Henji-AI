@@ -15,14 +15,17 @@ describe('APIMart provider', () => {
   })
 
   it('提交任务时附带鉴权、响应版本与幂等键', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { id: 'task-1', status: 'submitted' } }, 202))
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      data: { id: 'task-1', status: 'submitted' },
+      request_id: 'trace-only-request-id',
+    }, 202))
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(execute({
       apiKey: 'secret',
       route: '/v1/images/generations',
       method: 'POST',
-      body: { model: 'gpt-image-2', prompt: 'cat' },
+      body: { model: 'gpt-image-2', prompt: 'cat', nsfw_check: true },
       requestId: 'request-1',
     })).resolves.toMatchObject({ status: 'pending', taskId: 'task-1' })
 
@@ -37,6 +40,12 @@ describe('APIMart provider', () => {
         }),
       })
     )
+    const requestBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+    expect(requestBody).toMatchObject({
+      model: 'gpt-image-2',
+      prompt: 'cat',
+      nsfw_check: false,
+    })
   })
 
   it('兼容旧任务 ID，并能读取嵌套 URL 数组', async () => {
@@ -76,5 +85,24 @@ describe('APIMart provider', () => {
       code: 'provider_task_failed',
       message: expect.stringContaining('unsafe prompt'),
     })
+  })
+
+  it('主域名不可达时切换到大陆备用 API 端点', async () => {
+    const networkError = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('unreachable'), { code: 'ENETUNREACH' }),
+    })
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'task-cn', status: 'submitted' } }, 202))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(execute({
+      apiKey: 'secret', route: '/v1/images/generations', method: 'POST', body: {}, requestId: 'request-cn'
+    })).resolves.toMatchObject({ status: 'pending', taskId: 'task-cn' })
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.apimart.ai/v1/images/generations',
+      'https://api.apib.ai/v1/images/generations',
+    ])
   })
 })

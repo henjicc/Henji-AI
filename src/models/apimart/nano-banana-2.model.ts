@@ -24,10 +24,27 @@ export const apimartNanoBanana2Model = defineModel({
     {
       id: 'apimartNanoBanana2Resolution', type: 'dropdown', order: 2,
       name: sharedFieldText('resolution'), default: '1K',
-      options: ['1K', '2K', '4K'].map((value) => ({ value, label: value }))
+      options: ['0.5K', '1K', '2K', '4K'].map((value) => ({ value, label: value }))
+    },
+    {
+      id: 'apimartNanoBanana2GoogleSearch', type: 'switch', order: 3,
+      name: { zh: 'Google 搜索', en: 'Google Search' }, default: false
+    },
+    {
+      id: 'apimartNanoBanana2GoogleImageSearch', type: 'switch', order: 4,
+      name: { zh: 'Google 图片搜索', en: 'Google Image Search' }, default: false
     }
   ],
-  linkages: [],
+  linkages: [
+    {
+      trigger: 'apimartNanoBanana2GoogleImageSearch',
+      effect: 'autoSwitch',
+      target: 'apimartNanoBanana2GoogleSearch',
+      condition: (enabled: boolean, allParams: DynamicValueMap) => enabled === true && allParams.apimartNanoBanana2GoogleSearch !== true,
+      value: true,
+      noRestore: true
+    }
+  ],
   endpoints: APIMART_IMAGE_ENDPOINT,
   request: {
     builder: (params) => {
@@ -47,13 +64,16 @@ export const apimartNanoBanana2Model = defineModel({
           if (next < difference) { difference = next; size = candidate }
         }
       }
-      const resolution = ['2K', '4K'].includes(String(params.apimartNanoBanana2Resolution))
+      const resolution = ['0.5K', '2K', '4K'].includes(String(params.apimartNanoBanana2Resolution))
         ? String(params.apimartNanoBanana2Resolution) : '1K'
+      const googleImageSearch = params.apimartNanoBanana2GoogleImageSearch === true
       const body: DynamicValueMap = {
         model: 'gemini-3.1-flash-image-preview',
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size,
-        resolution
+        resolution,
+        google_search: params.apimartNanoBanana2GoogleSearch === true || googleImageSearch,
+        google_image_search: googleImageSearch
       }
       if (images.length > 0) body.image_urls = images.slice(0, 14)
       return body
@@ -63,7 +83,7 @@ export const apimartNanoBanana2Model = defineModel({
     currency: '$',
     calculator: (params) => params.apimartNanoBanana2Resolution === '4K'
       ? 0.025 : (params.apimartNanoBanana2Resolution === '2K' ? 0.02 : 0.015),
-    description: '1K $0.015/张，2K $0.02/张，4K $0.025/张'
+    description: '0.5K/1K $0.015/张，2K $0.02/张，4K $0.025/张'
   }
 })
 

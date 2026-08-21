@@ -99,6 +99,13 @@ export const kieSeedance20FastModel = defineModel({
       order: 6,
       name: { zh: '联网搜索', en: 'Web Search' },
       default: false
+    },
+    {
+      id: 'kieSeedance20FastReturnLastFrame',
+      type: 'switch',
+      order: 7,
+      name: { zh: '返回尾帧', en: 'Return Last Frame' },
+      default: false
     }
   ],
   linkages: [],
@@ -115,7 +122,7 @@ export const kieSeedance20FastModel = defineModel({
       const images = pickSources(params.uploadedFilePaths, params.images)
       const videos = pickSources(params.uploadedVideoFilePaths, params.videos)
       const audios = pickSources(params.uploadedAudioFilePaths, params.audios)
-      const prompt = params.prompt || ''
+      const prompt = typeof params.prompt === 'string' ? params.prompt.slice(0, 20000) : ''
       const mode = params.kieSeedance20FastMode === 'reference-to-video' ? 'reference-to-video' : 'text-image-to-video'
       const resolution = params.kieSeedance20FastResolution || params.resolution || '720p'
       const duration = Number(params.kieSeedance20FastDuration ?? params.duration ?? 5)
@@ -130,8 +137,8 @@ export const kieSeedance20FastModel = defineModel({
         }
         const ratioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
           ? params.__firstImageRatio
-          : 1
-        let best = '1:1'
+          : 16 / 9
+        let best = '16:9'
         let bestDiff = Number.POSITIVE_INFINITY
         for (const ratioText of supportedAspectRatios) {
           const pair = ratioText.split(':').map(Number)
@@ -152,7 +159,8 @@ export const kieSeedance20FastModel = defineModel({
         duration,
         generate_audio: generateAudio,
         web_search: webSearch,
-        nsfw_checker: true
+        nsfw_checker: true,
+        return_last_frame: params.kieSeedance20FastReturnLastFrame === true
       }
 
       if (mode === 'reference-to-video') {
@@ -193,9 +201,16 @@ export const kieSeedance20FastModel = defineModel({
         '720p': { noVideo: 0.124, withVideo: 0.075 }
       }
       const rate = perSecond[resolution] ?? perSecond['720p']
-      return (hasVideoInput ? rate.withVideo : rate.noVideo) * duration
+      const videoCount = Array.isArray(params.uploadedVideoFilePaths)
+        ? params.uploadedVideoFilePaths.length
+        : (Array.isArray(params.videos) ? params.videos.length : 0)
+      const firstVideoDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds
+        : 0
+      const billedSeconds = duration + (hasVideoInput ? firstVideoDuration * videoCount : 0)
+      return (hasVideoInput ? rate.withVideo : rate.noVideo) * billedSeconds
     },
-    description: '480p: $0.059/$0.034 per second (no/with video input); 720p: $0.124/$0.075'
+    description: '480p: $0.059/$0.034 per second (no/with video input); 720p: $0.124/$0.075；有视频时按输入与输出总时长计费'
   }
 })
 

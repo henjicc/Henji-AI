@@ -93,7 +93,7 @@ docs/model-adaptation/
 | GPT-Image-2 | `gpt-image-2`（别名 `gpt-image-2-ext`）、`gpt-image-2-official` | `gpt-image-2-text-to-image`、`gpt-image-2-image-to-image` | `openai/gpt-image-2`、`openai/gpt-image-2/edit` |
 | Nano Banana 2 | `gemini-3.1-flash-image-preview`(-official)、`gemini-3.1-flash-lite-image`(-ext) | `nano-banana-2`、`nano-banana-2-lite` | `fal-ai/nano-banana-2`、`fal-ai/nano-banana-2/edit` |
 | Nano Banana Pro | `gemini-3-pro-image-preview`(-official) | `nano-banana-pro` | `fal-ai/nano-banana-pro`、`fal-ai/nano-banana-pro/edit` |
-| Midjourney | `midjourney`（新路由自动注入） | — | — |
+| Midjourney | `midjourney`（Imagine）、`midjourney-blend`、`midjourney-edit`、`midjourney-video`（新路由均自动注入平台模型 ID） | — | — |
 | Grok Imagine 2.0 | `grok-imagine-2.0-ext`、`grok-imagine-image-2.0` | `grok-imagine-image-2-0/{text-to-image,image-edit,segment-map,segment-edit}` | `xai/grok-imagine-image/v2.0/{text-to-image,edit}` |
 | Seedance 2.0 | `seedance-2.0` | `bytedance/seedance-2` | `bytedance/seedance-2.0/{text-to-video,image-to-video,reference-to-video}` |
 | Seedance 2.0 Fast | `seedance-2.0-fast` | `bytedance/seedance-2-fast` | `bytedance/seedance-2.0/fast/...` |

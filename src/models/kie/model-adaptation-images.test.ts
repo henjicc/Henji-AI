@@ -15,6 +15,7 @@ import modelManifest from '../../../resources/model-manifest.json'
 import { kieGptImage2Model } from './gpt-image-2.model'
 import { kieGrokImagine20Model } from './grok-imagine-2.0.model'
 import { kieNanoBanana2Model } from './nano-banana-2.model'
+import { kieNanoBanana2LiteModel } from './nano-banana-2-lite.model'
 import { kieNanoBananaProModel } from './nano-banana-pro.model'
 import { kieQwenImage30Model } from './qwen-image-3.0.model'
 import { kieSeedream50LiteModel } from './seedream-5.0-lite.model'
@@ -46,6 +47,7 @@ describe('docs/model-adaptation KIE 图片模型', () => {
   it.each([
     'kie-gpt-image-2',
     'kie-nano-banana-2',
+    'kie-nano-banana-2-lite',
     'kie-nano-banana-pro',
     'kie-qwen-image-3.0',
     'kie-seedream-5.0-lite',
@@ -61,13 +63,13 @@ describe('docs/model-adaptation KIE 图片模型', () => {
     expect(kieGptImage2Model.request?.builder?.({
       prompt: 'edit',
       uploadedFilePaths: ['https://example.com/a.png'],
-      kieGptImage2AspectRatio: '1:1',
+      kieGptImage2AspectRatio: '16:9',
       kieGptImage2Resolution: '4K'
     })).toEqual({
       model: 'gpt-image-2-image-to-image',
       input: {
         prompt: 'edit',
-        aspect_ratio: '1:1',
+        aspect_ratio: '16:9',
         resolution: '4K',
         input_urls: ['https://example.com/a.png']
       }
@@ -75,6 +77,10 @@ describe('docs/model-adaptation KIE 图片模型', () => {
     expect(kieGptImage2Model.pricing.calculator?.({ kieGptImage2Resolution: '1K' })).toBe(0.03)
     expect(kieGptImage2Model.pricing.calculator?.({ kieGptImage2Resolution: '2K' })).toBe(0.05)
     expect(kieGptImage2Model.pricing.calculator?.({ kieGptImage2Resolution: '4K' })).toBe(0.08)
+    expect(() => kieGptImage2Model.request?.builder?.({
+      prompt: 'invalid', uploadedFilePaths: ['a.png'],
+      kieGptImage2AspectRatio: '1:1', kieGptImage2Resolution: '4K'
+    })).toThrow('1:1 比例不支持 4K')
   })
 
   it('Nano Banana 2 与 Pro 不展示也不发送输出格式', () => {
@@ -93,6 +99,26 @@ describe('docs/model-adaptation KIE 图片模型', () => {
     })
     expect(request?.input).not.toHaveProperty('output_format')
     expect(kieNanoBananaProModel.pricing.calculator?.({ kieNanoBananaResolution: '4K' })).toBe(0.12)
+  })
+
+  it('Nano Banana Pro 使用 KIE 完整比例集合、1K 默认值与 8 张上限', () => {
+    const aspect = kieNanoBananaProModel.params.find((param) => param.id === 'kieNanoBananaAspectRatio')
+    const resolution = kieNanoBananaProModel.params.find((param) => param.id === 'kieNanoBananaResolution')
+    expect(aspect?.type).toBe('dropdown')
+    if (!aspect || aspect.type !== 'dropdown') throw new Error('Nano Banana Pro 比例参数应为下拉框')
+    expect(aspect.options.map((option) => option.value)).toContain('21:9')
+    expect(resolution?.default).toBe('1K')
+    expect(kieNanoBananaProModel.inputLimits).toMatchObject({ images: { max: 8 } })
+  })
+
+  it('Nano Banana 2 Lite 使用独立图片字段且没有分辨率参数', () => {
+    expect(kieNanoBanana2LiteModel.params.some((param) => /resolution/i.test(param.id))).toBe(false)
+    expect(kieNanoBanana2LiteModel.request?.builder?.({
+      prompt: 'lite', uploadedFilePaths: Array.from({ length: 12 }, (_, index) => `${index}.png`)
+    })).toMatchObject({
+      model: 'nano-banana-2-lite',
+      input: { image_urls: Array.from({ length: 10 }, (_, index) => `${index}.png`) }
+    })
   })
 
   it('Seedream 5.0 Lite 用 2K/3K/4K 展示并映射 KIE quality', () => {
@@ -134,6 +160,29 @@ describe('docs/model-adaptation KIE 图片模型', () => {
     })).toBeCloseTo(0.0725)
   })
 
+  it('Seedream 5.0 Pro 图层拆分使用独立模型、单图字段和专属尺寸', () => {
+    expect(kieSeedream50ProModel.request?.builder?.({
+      prompt: 'split layers',
+      uploadedFilePaths: ['source.png'],
+      kieSeedream50ProMode: 'layer-decomposition',
+      kieSeedream50ProLayerSize: '2K'
+    })).toEqual({
+      model: 'seedream/5-pro-layer-decomposition',
+      input: {
+        prompt: 'split layers',
+        image_url: 'source.png',
+        size: '2K'
+      }
+    })
+    expect(() => kieSeedream50ProModel.request?.builder?.({
+      kieSeedream50ProMode: 'layer-decomposition',
+      uploadedFilePaths: ['a.png', 'b.png']
+    })).toThrow('必须且只能输入 1 张图片')
+    expect(kieSeedream50ProModel.pricing.calculator?.({
+      kieSeedream50ProMode: 'layer-decomposition', kieSeedream50ProLayerSize: '2K'
+    })).toBe(0.07)
+  })
+
   it('Qwen Image 3.0 自动路由并固定省略 output_format', () => {
     const request = kieQwenImage30Model.request?.builder?.({
       prompt: 'edit',
@@ -155,16 +204,30 @@ describe('docs/model-adaptation KIE 图片模型', () => {
     expect(kieQwenImage30Model.pricing.calculator?.({ uploadedFilePaths: ['a.png'] })).toBe(0.0265)
   })
 
-  it('Grok Imagine Image 2.0 映射文生图与任务图片编辑', () => {
+  it('Qwen Image 3.0 Pro 使用 KIE 的 Pro 路由和分档价格', () => {
+    expect(kieQwenImage30Model.request?.builder?.({
+      prompt: 'dense layout',
+      kieQwenImage30Variant: 'pro',
+      kieQwenImage30Resolution: '2K'
+    })).toMatchObject({ model: 'qwen3-pro/text-to-image' })
+    expect(kieQwenImage30Model.request?.builder?.({
+      prompt: 'edit', uploadedFilePaths: ['a.png'], kieQwenImage30Variant: 'pro'
+    })).toMatchObject({ model: 'qwen3/pro-image-to-image' })
+    expect(kieQwenImage30Model.pricing.calculator?.({
+      kieQwenImage30Variant: 'pro', kieQwenImage30Resolution: '2K', uploadedFilePaths: ['a.png']
+    })).toBeCloseTo(0.0625)
+  })
+
+  it('Grok Imagine Image 2.0 映射文生图与直接多图编辑', () => {
     expect(kieGrokImagine20Model.request?.builder?.({
       prompt: 'replace sky',
-      kieGrokImagine20Mode: 'image-edit',
-      kieGrokImagine20TaskId: 'task-1',
-      kieGrokImagine20MaskIndexes: '0, 2, invalid'
+      uploadedFilePaths: ['a.png', 'b.png'],
+      kieGrokImagine20AspectRatio: 'smart'
     })).toEqual({
       model: 'grok-imagine-image-2-0/image-edit',
-      input: { prompt: 'replace sky', task_id: 'task-1', mask_indexs: [0, 2] }
+      input: { prompt: 'replace sky', aspect_ratio: 'auto', image_urls: ['a.png', 'b.png'] }
     })
+    expect(kieGrokImagine20Model.inputLimits).toMatchObject({ images: { max: 5 } })
   })
 
   it('Z-Image 使用 Turbo 通用标识与 KIE 当前美元价格', () => {

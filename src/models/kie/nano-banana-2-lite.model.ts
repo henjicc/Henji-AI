@@ -87,7 +87,7 @@ export const kieNanoBanana2LiteModel = defineModel({
         : rawAspectRatio
       const images = resolveImages()
       const input: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 20000) : '',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1'
       }
 

@@ -15,17 +15,25 @@ export const bailianQwenImage30Model = defineModel({
   inputLimits: { images: { max: 3 }, videos: { max: 0 } },
   params: [
     {
-      id: 'bailianQwenImage30AspectRatio', type: 'dropdown', order: 1,
+      id: 'bailianQwenImage30Variant', type: 'dropdown', order: 1,
+      name: sharedFieldText('variant'), default: 'standard',
+      options: [
+        { value: 'standard', label: { zh: '标准版', en: 'Standard' } },
+        { value: 'pro', label: 'Pro' }
+      ]
+    },
+    {
+      id: 'bailianQwenImage30AspectRatio', type: 'dropdown', order: 2,
       name: sharedFieldText('aspectRatio'), default: 'smart',
       options: [{ value: 'smart', label: sharedOptionText('smart') }, ...ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))]
     },
     {
-      id: 'bailianQwenImage30Resolution', type: 'dropdown', order: 2,
+      id: 'bailianQwenImage30Resolution', type: 'dropdown', order: 3,
       name: sharedFieldText('resolution'), default: '1K',
       options: ['1K', '2K'].map((value) => ({ value, label: value }))
     },
     {
-      id: 'bailianQwenImage30Count', type: 'number', order: 3,
+      id: 'bailianQwenImage30Count', type: 'number', order: 4,
       name: { zh: '生成数量', en: 'Output Count' }, default: 1, min: 1, max: 6, step: 1
     }
   ],
@@ -57,7 +65,7 @@ export const bailianQwenImage30Model = defineModel({
       const content: DynamicValue[] = images.map((image) => ({ image }))
       content.push({ text: typeof params.prompt === 'string' ? params.prompt : '' })
       return {
-        model: 'qwen-image-3.0',
+        model: params.bailianQwenImage30Variant === 'pro' ? 'qwen-image-3.0-pro' : 'qwen-image-3.0',
         input: { messages: [{ role: 'user', content }] },
         parameters: {
           prompt_extend: true, prompt_extend_mode: 'direct', enable_thinking: false,
@@ -71,9 +79,12 @@ export const bailianQwenImage30Model = defineModel({
     calculator: (params) => {
       const count = Math.min(6, Math.max(1, Math.round(Number(params.bailianQwenImage30Count || 1))))
       const images = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths.length : (Array.isArray(params.images) ? params.images.length : 0)
-      return count * 0.18 + Math.min(3, images) * 0.02
+      const outputPrice = params.bailianQwenImage30Variant === 'pro'
+        ? (params.bailianQwenImage30Resolution === '2K' ? 0.5 : 0.25)
+        : 0.18
+      return count * outputPrice + Math.min(3, images) * 0.02
     },
-    description: '1K/2K 输出 ¥0.18/张；输入图 ¥0.02/张'
+    description: '标准版 1K/2K 输出 ¥0.18/张；Pro 1K ¥0.25、2K ¥0.50/张；输入图 ¥0.02/张'
   }
 })
 

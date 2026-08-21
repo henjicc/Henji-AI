@@ -102,7 +102,7 @@ export const kieSeedream50LiteModel = defineModel({
         ? 'ultra'
         : (rawResolution === '3K' || rawResolution === 'high' ? 'high' : 'basic')
       const input: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 3000) : '',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1',
         quality
       }

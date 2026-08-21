@@ -85,6 +85,12 @@ export const falSeedance20MiniModel = defineModel({
         generate_audio: params.falSeedance20MiniGenerateAudio !== false
       }
       if (params.falSeedance20MiniMode === 'reference-to-video') {
+        if (images.length + videos.length + audios.length > 12) {
+          throw new Error('Fal Seedance 2.0 Mini 的参考素材总数不能超过 12 个')
+        }
+        if (audios.length > 0 && images.length + videos.length === 0) {
+          throw new Error('Fal Seedance 2.0 Mini 的参考音频必须与参考图片或参考视频一起使用')
+        }
         if (images.length > 0) body.image_urls = images.slice(0, 9)
         if (videos.length > 0) body.video_urls = videos.slice(0, 3)
         if (audios.length > 0) body.audio_urls = audios.slice(0, 3)
@@ -99,9 +105,16 @@ export const falSeedance20MiniModel = defineModel({
     currency: '$',
     calculator: (params) => {
       const duration = Math.min(15, Math.max(4, Math.round(Number(params.falSeedance20MiniDuration || 5))))
-      return duration * (params.falSeedance20MiniResolution === '480p' ? 0.0721 : 0.1547)
+      const baseRate = params.falSeedance20MiniResolution === '480p' ? 0.0721 : 0.1547
+      const uploadedVideos = Array.isArray(params.uploadedVideoFilePaths) ? params.uploadedVideoFilePaths : []
+      const videos = uploadedVideos.length > 0 ? uploadedVideos : (Array.isArray(params.videos) ? params.videos : [])
+      const hasVideo = params.falSeedance20MiniMode === 'reference-to-video' && videos.length > 0
+      const inputDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds * videos.length
+        : 0
+      return (duration + (hasVideo ? inputDuration : 0)) * baseRate * (hasVideo ? 0.6 : 1)
     },
-    description: '输出约：480p $0.0721、720p $0.1547/秒；参考视频输入按输出分辨率的 0.6 倍另计'
+    description: '输出约：480p $0.0721、720p $0.1547/秒；有视频参考时费率乘 0.6，并按输入与输出总时长计费'
   }
 })
 

@@ -210,7 +210,7 @@ curl https://api.apimart.ai/v1/user/balance -H "Authorization: Bearer $KEY"   # 
 
 已知差异：
 
-1. **Base URL 仍固定** `https://api.apimart.ai`，文档已记录大陆备用线路；代码还没有用户可选域名或受控切换策略
+1. Base URL 默认使用 `https://api.apimart.ai`；仅在能证明尚未建立连接的网络故障下，按 `api.apib.ai` → `api.aiuxu.com` → `api.aishuch.com` 受控切换，不对已建立连接的失败重放计费请求
 2. 图片已经接入 `/v1/uploads/images`；APIMart 没有通用视频 / 音频上传端点，公共预处理层会明确拒绝这两类本地文件并提示改用公网 URL，具体模型有专用上传协议时再单独接入
 3. `extractUrls` 已处理 `images[].url` 为数组的情况（`collectDeepUrls` 深挖），无需改
 4. 未使用 Webhook（桌面端合理），不需要改

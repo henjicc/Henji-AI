@@ -88,7 +88,7 @@ describe('docs/model-adaptation KIE 视频模型', () => {
   it('MiniMax H3 自动选择文生、首尾帧和多模态参考端点', () => {
     expect(kieMiniMaxH3Model.request?.builder?.({ prompt: 'text' })).toMatchObject({
       model: 'minimax-h3/text-to-video',
-      input: { aspect_ratio: '16:9', resolution: '768P' }
+      input: { aspect_ratio: '16:9', resolution: '2K', duration: 6 }
     })
     expect(kieMiniMaxH3Model.request?.builder?.({
       prompt: 'frames',
@@ -106,9 +106,10 @@ describe('docs/model-adaptation KIE 视频模型', () => {
     })).toMatchObject({
       model: 'minimax-h3/reference-to-video',
       input: {
-        image_urls: ['character.png'],
-        video_urls: ['motion.mp4'],
-        audio_urls: ['voice.mp3']
+        reference_image_urls: ['character.png'],
+        reference_video_urls: ['motion.mp4'],
+        reference_audio_urls: ['voice.mp3'],
+        aspect_ratio: 'adaptive'
       }
     })
   })
@@ -161,6 +162,32 @@ describe('docs/model-adaptation KIE 视频模型', () => {
         uploadedVideoFilePaths: ['video.mp4']
       })).toMatchObject({ model: expectedModel })
     }
+    expect(kieKling30OmniModel.request?.builder?.({
+      prompt: 'image',
+      kieKling30OmniMode: 'image-to-video',
+      uploadedFilePaths: ['image.png'],
+      kieKling30OmniDuration: '7'
+    })).toMatchObject({ input: { aspect_ratio: 'auto', duration: 7 } })
+  })
+
+  it('Gemini Omni 传递音频/角色资产并校验共享图片槽位', () => {
+    expect(kieGeminiOmniVideoModel.request?.builder?.({
+      prompt: 'character',
+      images: ['a.png', 'b.png'],
+      kieGeminiOmniVideoAudioIds: 'voice-1\nvoice-2',
+      kieGeminiOmniVideoCharacterIds: 'character-1, character-2'
+    })).toMatchObject({
+      input: {
+        image_urls: ['a.png', 'b.png'],
+        audio_ids: ['voice-1', 'voice-2'],
+        character_ids: ['character-1', 'character-2']
+      }
+    })
+    expect(() => kieGeminiOmniVideoModel.request?.builder?.({
+      prompt: 'too many slots',
+      images: Array.from({ length: 6 }, (_, index) => `${index}.png`),
+      kieGeminiOmniVideoCharacterIds: 'character-1\ncharacter-2'
+    })).toThrow(/7/)
   })
 
   it('Seedance 2.5 支持 30/10/10 参考输入上限并按视频输入计价', () => {
@@ -173,5 +200,45 @@ describe('docs/model-adaptation KIE 视频模型', () => {
       kieSeedance25Duration: 10,
       kieSeedance25Resolution: '1080p'
     })).toBeCloseTo(3.425)
+  })
+
+  it('Seedance 2.0 默认 16:9 并可返回尾帧', () => {
+    expect(kieSeedance20Model.request?.builder?.({
+      prompt: 'continue',
+      kieSeedance20ReturnLastFrame: true
+    })).toMatchObject({
+      input: { aspect_ratio: '16:9', return_last_frame: true }
+    })
+    expect(kieSeedance20FastModel.request?.builder?.({
+      prompt: 'continue',
+      kieSeedance20FastReturnLastFrame: true
+    })).toMatchObject({
+      input: { aspect_ratio: '16:9', return_last_frame: true }
+    })
+  })
+
+  it('Seedance 2.5 支持 adaptive、-1 自动时长和字符串联网搜索开关', () => {
+    expect(kieSeedance25Model.request?.builder?.({
+      prompt: 'search and animate',
+      kieSeedance25AutoDuration: true,
+      kieSeedance25WebSearch: true
+    })).toMatchObject({
+      input: {
+        aspect_ratio: 'adaptive',
+        duration: -1,
+        web_search: 'true',
+        nsfw_checker: true
+      }
+    })
+  })
+
+  it('Seedance 2.5 视频参考计价包含输入时长', () => {
+    expect(kieSeedance25Model.pricing.calculator?.({
+      kieSeedance25Mode: 'reference-to-video',
+      uploadedVideoFilePaths: ['video.mp4'],
+      __firstVideoDurationSeconds: 6,
+      kieSeedance25Duration: 10,
+      kieSeedance25Resolution: '1080p'
+    })).toBeCloseTo(5.48)
   })
 })

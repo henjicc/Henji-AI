@@ -13,6 +13,7 @@ import { ParamRenderer } from '@/components/params/ParamRenderer'
 import { isParamDisabled, isParamVisible } from '@/components/params/paramVisibility'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import AspectResolutionPanel from './AspectResolutionPanel'
+import { isPrimarySelectorParam } from './parameterOrder'
 
 interface ParameterPanelProps {
   currentModel: DynamicValue
@@ -35,12 +36,6 @@ function isDurationParam(param: ParamDef): boolean {
     .filter(Boolean)
     .join(' ')
   return DURATION_PARAM_HINT.test(searchText)
-}
-
-function isPrimaryModeParam(param: ParamDef): boolean {
-  const zhName = getI18nText(param.name, 'zh').trim().toLowerCase()
-  const enName = getI18nText(param.name, 'en').trim().toLowerCase()
-  return zhName === '模式' || enName === 'mode'
 }
 
 /**
@@ -118,32 +113,32 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
   const consumedParamIds = new Set(specialPanelSpec?.consumedParamIds || [])
   const renderParams = filteredParams.filter((param) => !consumedParamIds.has(param.id))
-  const modeParams = useMemo(
-    () => renderParams.filter(isPrimaryModeParam),
+  const primarySelectorParams = useMemo(
+    () => renderParams.filter(isPrimarySelectorParam),
     [renderParams]
   )
-  const nonModeParams = useMemo(
-    () => renderParams.filter((param) => !isPrimaryModeParam(param)),
+  const remainingParams = useMemo(
+    () => renderParams.filter((param) => !isPrimarySelectorParam(param)),
     [renderParams]
   )
   const orderedRenderParams = useMemo(() => {
     if (!specialPanelSpec) {
-      return nonModeParams
+      return remainingParams
     }
-    const durationParams = nonModeParams.filter(isDurationParam)
-    const normalParams = nonModeParams.filter((param) => !isDurationParam(param))
+    const durationParams = remainingParams.filter(isDurationParam)
+    const normalParams = remainingParams.filter((param) => !isDurationParam(param))
     return [...durationParams, ...normalParams]
-  }, [nonModeParams, specialPanelSpec])
+  }, [remainingParams, specialPanelSpec])
 
   // 模型未在 ModelRegistry 中注册（可能是旧模型）或没有参数 - 静默返回 null
   if (!modelDef || params.length === 0) {
     return null
   }
 
-  // 渲染参数：主模式参数始终跟在模型选择器后，分辨率/比例面板保持其余参数前置
+  // 渲染参数：模式/版本/变体选择始终跟在模型选择器后，分辨率/比例面板保持其余参数前置
   return (
     <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
-      {modeParams.map((param) => (
+      {primarySelectorParams.map((param) => (
         <ParamRenderer
           key={param.id}
           param={param}

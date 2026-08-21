@@ -45,6 +45,15 @@ export const falMiniMaxH3Model = defineModel({
     {
       id: 'falMiniMaxH3PromptExpansion', type: 'switch', order: 5,
       name: sharedFieldText('promptExpansion'), default: true
+    },
+    {
+      id: 'falMiniMaxH3PromptExpansionMode', type: 'dropdown', order: 6,
+      name: { zh: '提示词扩写模式', en: 'Prompt Expansion Mode' }, default: 'balanced',
+      options: [
+        { value: 'balanced', label: { zh: '平衡', en: 'Balanced' } },
+        { value: 'fast', label: { zh: '快速', en: 'Fast' } },
+        { value: 'quality', label: { zh: '高质量', en: 'Quality' } }
+      ]
     }
   ],
   linkages: [],
@@ -81,13 +90,23 @@ export const falMiniMaxH3Model = defineModel({
       }
       const resolution = ['480P', '768P', '4K'].includes(String(params.falMiniMaxH3Resolution)) ? String(params.falMiniMaxH3Resolution) : '2K'
       const body: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        prompt: typeof params.prompt === 'string' ? params.prompt.trim().slice(0, 7000) : '',
         duration: Math.min(15, Math.max(5, Math.round(Number(params.falMiniMaxH3Duration || 5)))),
         resolution,
         enable_prompt_expansion: params.falMiniMaxH3PromptExpansion !== false,
+        prompt_expansion_mode: ['fast', 'quality'].includes(String(params.falMiniMaxH3PromptExpansionMode))
+          ? String(params.falMiniMaxH3PromptExpansionMode)
+          : 'balanced',
         enable_safety_checker: true
       }
+      if (!body.prompt) throw new Error('MiniMax H3 的提示词不能为空')
       if (params.falMiniMaxH3Mode === 'reference-to-video') {
+        if (images.length + videos.length + audios.length > 12) {
+          throw new Error('Fal MiniMax H3 的参考素材总数不能超过 12 个')
+        }
+        if (audios.length > 0 && images.length + videos.length === 0) {
+          throw new Error('Fal MiniMax H3 的参考音频必须与参考图片或参考视频一起使用')
+        }
         body.aspect_ratio = raw === 'smart' && (images.length + videos.length) > 0 ? 'adaptive' : ratio
         if (images.length > 0) body.reference_image_urls = images.slice(0, 9)
         if (videos.length > 0) body.reference_video_urls = videos.slice(0, 3)

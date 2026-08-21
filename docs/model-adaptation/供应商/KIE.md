@@ -63,7 +63,7 @@ KIE 还有 Suno、4o Image、Runway 等历史/专用 API。新的 Market 模型�
 }
 ```
 
-`resultJson` 不只有 `resultUrls`；个别模型返回 `images`、`videos`、`resultObject`、`firstFrameUrl` 或 `lastFrameUrl`。模型文档必须记录例外结构。
+`resultJson` 不只有 `resultUrls`；个别模型返回 `images`、`videos`、`resultObject`、`firstFrameUrl` 或 `lastFrameUrl`。公共运行时已覆盖这些媒体 URL 形态，模型文档仍必须记录例外结构。
 
 ## 3. 文件上传
 
@@ -81,6 +81,8 @@ curl -X POST https://kieai.redpandaai.co/api/file-stream-upload \
 
 - `data.fileUrl`
 - `data.downloadUrl`
+
+项目上传时不主动指定远端 `fileName`，由 KIE 生成唯一文件名，避免同名覆盖后的 CDN 缓存短暂返回旧内容。
 
 ### 3.2 有效期冲突
 

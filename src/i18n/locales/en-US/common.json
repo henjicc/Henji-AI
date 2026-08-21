@@ -13,8 +13,13 @@
   },
   "alertDialog": {
     "goToSettings": "Open Settings",
+    "goToConfigure": "Configure",
     "copyDetail": "Copy error details",
     "detailCopied": "Copied"
+  },
+  "providerKeyRequired": {
+    "title": "Provider key not configured",
+    "message": "You haven't configured a provider key yet. Configure one before generating."
   },
 
   "confirm": "Confirm",

@@ -105,6 +105,20 @@ export const kieSeedance25Model = defineModel({
       order: 6,
       name: { zh: '返回尾帧', en: 'Return Last Frame' },
       default: false
+    },
+    {
+      id: 'kieSeedance25AutoDuration',
+      type: 'switch',
+      order: 7,
+      name: { zh: '自动时长', en: 'Automatic Duration' },
+      default: false
+    },
+    {
+      id: 'kieSeedance25WebSearch',
+      type: 'switch',
+      order: 8,
+      name: { zh: '联网搜索', en: 'Web Search' },
+      default: false
     }
   ],
   linkages: [],
@@ -126,32 +140,23 @@ export const kieSeedance25Model = defineModel({
         : 'text-image-to-video'
       const supportedAspectRatios = ['1:1', '4:3', '3:4', '16:9', '9:16', '21:9']
       const rawAspectRatio = String(params.kieSeedance25AspectRatio || 'smart')
-      const ratioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
-        ? params.__firstImageRatio
-        : 1
-      let aspectRatio = supportedAspectRatios.includes(rawAspectRatio) ? rawAspectRatio : '1:1'
-      if (rawAspectRatio === 'smart' || rawAspectRatio === 'auto') {
-        let bestDiff = Number.POSITIVE_INFINITY
-        for (const candidate of supportedAspectRatios) {
-          const pair = candidate.split(':').map(Number)
-          const difference = Math.abs(pair[0] / pair[1] - ratioHint)
-          if (difference < bestDiff) {
-            bestDiff = difference
-            aspectRatio = candidate
-          }
-        }
-      }
+      let aspectRatio = supportedAspectRatios.includes(rawAspectRatio) ? rawAspectRatio : 'adaptive'
+      if (rawAspectRatio === 'smart' || rawAspectRatio === 'auto' || rawAspectRatio === 'adaptive') aspectRatio = 'adaptive'
 
       const input: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 30000) : '',
         aspect_ratio: aspectRatio,
         resolution: params.kieSeedance25Resolution === '480p' || params.kieSeedance25Resolution === '1080p'
           ? params.kieSeedance25Resolution
           : '720p',
-        duration: Math.min(30, Math.max(4, Number(params.kieSeedance25Duration || 5))),
+        duration: params.kieSeedance25AutoDuration === true
+          ? -1
+          : Math.min(30, Math.max(4, Number(params.kieSeedance25Duration || 5))),
         generate_audio: params.kieSeedance25GenerateAudio !== false,
-        return_last_frame: params.kieSeedance25ReturnLastFrame === true
+        return_last_frame: params.kieSeedance25ReturnLastFrame === true,
+        nsfw_checker: true
       }
+      if (params.kieSeedance25WebSearch === true) input.web_search = 'true'
 
       if (mode === 'reference-to-video') {
         if (images.length > 0) input.reference_image_urls = images.slice(0, 30)
@@ -169,7 +174,9 @@ export const kieSeedance25Model = defineModel({
     currency: '$',
     calculator: (params) => {
       const resolution = String(params.kieSeedance25Resolution || '720p')
-      const duration = Math.min(30, Math.max(4, Number(params.kieSeedance25Duration || 5)))
+      const duration = params.kieSeedance25AutoDuration === true
+        ? 30
+        : Math.min(30, Math.max(4, Number(params.kieSeedance25Duration || 5)))
       const hasVideoInput = params.kieSeedance25Mode === 'reference-to-video' && hasUploadedVideo(params)
       const perSecond: Record<string, { noVideo: number; withVideo: number }> = {
         '480p': { noVideo: 0.14, withVideo: 0.085 },
@@ -177,9 +184,16 @@ export const kieSeedance25Model = defineModel({
         '1080p': { noVideo: 0.57, withVideo: 0.3425 }
       }
       const rate = perSecond[resolution] ?? perSecond['720p']
-      return duration * (hasVideoInput ? rate.withVideo : rate.noVideo)
+      const videoCount = Array.isArray(params.uploadedVideoFilePaths)
+        ? params.uploadedVideoFilePaths.length
+        : (Array.isArray(params.videos) ? params.videos.length : 0)
+      const firstVideoDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds
+        : 0
+      const billedSeconds = duration + (hasVideoInput ? firstVideoDuration * videoCount : 0)
+      return billedSeconds * (hasVideoInput ? rate.withVideo : rate.noVideo)
     },
-    description: '无/有视频输入每秒：480p $0.14/$0.085，720p $0.315/$0.19，1080p $0.57/$0.3425'
+    description: '无/有视频输入每秒：480p $0.14/$0.085，720p $0.315/$0.19，1080p $0.57/$0.3425；有视频时按输入与输出总时长计费，自动时长按 30 秒预估'
   }
 })
 

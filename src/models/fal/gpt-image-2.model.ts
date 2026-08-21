@@ -34,6 +34,18 @@ export const falGptImage2Model = defineModel({
     {
       id: 'falGptImage2NumImages', type: 'number', order: 3,
       name: sharedFieldText('numberOfImages'), default: 1, min: 1, max: 4, step: 1
+    },
+    {
+      id: 'falGptImage2MaskUrl', type: 'text', order: 4,
+      name: { zh: '局部重绘遮罩 URL', en: 'Inpainting Mask URL' }, default: '',
+      placeholder: { zh: '带透明通道的遮罩图 URL', en: 'Mask image URL with alpha channel' },
+      visible: {
+        condition: (params) => {
+          const uploaded = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : []
+          const images = uploaded.length > 0 ? uploaded : (Array.isArray(params.images) ? params.images : [])
+          return images.length > 0
+        }
+      }
     }
   ],
   linkages: [],
@@ -76,6 +88,11 @@ export const falGptImage2Model = defineModel({
         num_images: Math.min(4, Math.max(1, Math.round(Number(params.falGptImage2NumImages || 1))))
       }
       if (images.length > 0) body.image_urls = images.slice(0, 16)
+      const maskUrl = typeof params.falGptImage2MaskUrl === 'string' ? params.falGptImage2MaskUrl.trim() : ''
+      if (maskUrl) {
+        if (images.length === 0) throw new Error('GPT Image 2 局部重绘必须同时提供至少 1 张参考图')
+        body.mask_url = maskUrl
+      }
       return body
     }
   },

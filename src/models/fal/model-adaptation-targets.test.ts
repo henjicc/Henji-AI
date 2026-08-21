@@ -69,7 +69,10 @@ describe('docs/model-adaptation Fal 目标模型', () => {
   })
 
   it.each([...imageModels, ...videoModels])('$meta.id 的 manifest builder 可在独立 VM 执行', (model) => {
-    expect(evaluateManifestBuilder(model.meta.id, { prompt: 'test' })).toMatchObject({ prompt: 'test' })
+    const params: JsonObject = model.meta.id === 'fal-ai-gemini-omni-flash'
+      ? { prompt: 'test', images: ['input.png'] }
+      : { prompt: 'test' }
+    expect(evaluateManifestBuilder(model.meta.id, params)).toMatchObject({ prompt: 'test' })
   })
 
   it.each(imageModels)('$meta.id 不展示也不发送 output_format', (model) => {
@@ -104,10 +107,56 @@ describe('docs/model-adaptation Fal 目标模型', () => {
       prompt: 'reference', falMiniMaxH3Mode: 'reference-to-video',
       images: ['a.png'], videos: ['v.mp4'], audios: ['voice.mp3']
     })).toMatchObject({
-      reference_image_urls: ['a.png'], reference_video_urls: ['v.mp4'], reference_audio_urls: ['voice.mp3']
+      reference_image_urls: ['a.png'], reference_video_urls: ['v.mp4'], reference_audio_urls: ['voice.mp3'],
+      prompt_expansion_mode: 'balanced'
     })
     expect(falSeedance25Model.request?.builder?.({
       prompt: 'frames', images: ['first.png', 'last.png']
     })).toMatchObject({ image_url: 'first.png', end_image_url: 'last.png' })
+  })
+
+  it('Fal Seedance 校验 2.0 参考素材依赖并支持 2.5 自动时长', () => {
+    expect(() => falSeedance20Model.request?.builder?.({
+      prompt: 'audio only',
+      falSeedance20Mode: 'reference-to-video',
+      audios: ['voice.mp3']
+    })).toThrow(/must|reference|\u5fc5须|\u53c2考/u)
+    expect(() => falSeedance20FastModel.request?.builder?.({
+      prompt: 'too many',
+      falSeedance20FastMode: 'reference-to-video',
+      images: Array.from({ length: 9 }, (_, index) => `image-${index}.png`),
+      videos: ['a.mp4', 'b.mp4', 'c.mp4'],
+      audios: ['voice.mp3']
+    })).toThrow(/12/)
+    expect(falSeedance25Model.request?.builder?.({
+      prompt: 'automatic',
+      falSeedance25AutoDuration: true
+    })).toMatchObject({ duration: 'auto' })
+  })
+
+  it('Fal Seedance 有视频参考时按折扣费率与总时长计价', () => {
+    expect(falSeedance20Model.pricing.calculator?.({
+      falSeedance20Mode: 'reference-to-video',
+      uploadedVideoFilePaths: ['source.mp4'],
+      __firstVideoDurationSeconds: 10,
+      falSeedance20Duration: 5,
+      falSeedance20Resolution: '720p'
+    })).toBeCloseTo(2.7306)
+    expect(falSeedance25Model.pricing.calculator?.({
+      falSeedance25Mode: 'reference-to-video',
+      uploadedVideoFilePaths: ['source.mp4'],
+      __firstVideoDurationSeconds: 10,
+      falSeedance25Duration: 5,
+      falSeedance25Resolution: '720p'
+    })).toBeCloseTo(4.257)
+  })
+
+  it('Nano Banana 2 的 PDF 上下文会切换编辑端点并下发 pdf_url', async () => {
+    const endpoints = falNanoBanana2Model.endpoints as { selector: (params: DynamicValueMap) => Promise<string> }
+    expect(await endpoints.selector({ falNanoBanana2PdfUrl: 'https://example.com/context.pdf' }))
+      .toBe('fal-ai/nano-banana-2/edit')
+    expect(falNanoBanana2Model.request?.builder?.({
+      prompt: 'read context', falNanoBanana2PdfUrl: 'https://example.com/context.pdf'
+    })).toMatchObject({ pdf_url: 'https://example.com/context.pdf' })
   })
 })

@@ -50,7 +50,7 @@ export const falKling30TurboModel = defineModel({
       const images = uploaded.length > 0 ? uploaded : clean(params.images)
       const raw = String(params.falKling30TurboAspectRatio || 'smart')
       const body: DynamicValueMap = {
-        prompt: typeof params.prompt === 'string' ? params.prompt : '',
+        prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 2500) : '',
         duration: String(Math.min(15, Math.max(3, Math.round(Number(params.falKling30TurboDuration || 5)))))
       }
       if (images.length > 0) body.image_url = images[0]

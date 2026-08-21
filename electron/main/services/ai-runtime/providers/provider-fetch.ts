@@ -46,29 +46,37 @@ export async function fetchProvider(
   provider: string,
   endpoint: string,
   init: RequestInit,
-  options: { retryPreconnectOnce: boolean }
+  options: { retryPreconnectOnce: boolean; fallbackEndpoints?: readonly string[] }
 ): Promise<Response> {
-  try {
-    return await fetch(endpoint, init)
-  } catch (error) {
-    if (isAbort(error, init.signal ?? undefined)) throw error
-    const failure = describeNetworkFailure(error)
-    if (options.retryPreconnectOnce && SAFE_PRECONNECT_RETRY_CODES.has(failure.code)) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 250))
-      try {
-        return await fetch(endpoint, init)
-      } catch (retryError) {
-        if (isAbort(retryError, init.signal ?? undefined)) throw retryError
-        const retryFailure = describeNetworkFailure(retryError)
-        throw new AiRuntimeError(
-          'provider_network_error',
-          `${provider} 网络连接失败（${retryFailure.code}），请检查网络后重试`
-        )
+  const endpoints = [endpoint, ...(options.fallbackEndpoints ?? []).filter((value) => value !== endpoint)]
+  let lastFailure: NetworkFailure | undefined
+
+  for (let index = 0; index < endpoints.length; index += 1) {
+    try {
+      return await fetch(endpoints[index], init)
+    } catch (error) {
+      if (isAbort(error, init.signal ?? undefined)) throw error
+      const failure = describeNetworkFailure(error)
+      lastFailure = failure
+      const isSafePreconnectFailure = SAFE_PRECONNECT_RETRY_CODES.has(failure.code)
+      if (isSafePreconnectFailure && index < endpoints.length - 1) continue
+
+      if (options.retryPreconnectOnce && isSafePreconnectFailure) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 250))
+        try {
+          return await fetch(endpoints[index], init)
+        } catch (retryError) {
+          if (isAbort(retryError, init.signal ?? undefined)) throw retryError
+          lastFailure = describeNetworkFailure(retryError)
+        }
       }
+      break
     }
-    throw new AiRuntimeError(
-      'provider_network_error',
-      `${provider} 网络请求失败（${failure.code}），请检查网络后重试`
-    )
   }
+
+  const failure = lastFailure ?? { code: 'UNKNOWN_NETWORK_ERROR', message: 'Unknown network failure' }
+  throw new AiRuntimeError(
+    'provider_network_error',
+    `${provider} 网络连接失败（${failure.code}），请检查网络后重试`
+  )
 }

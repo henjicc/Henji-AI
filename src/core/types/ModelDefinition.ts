@@ -402,6 +402,14 @@ export interface ModelDefinition {
   inputLimits?: InputLimits
 
   /**
+   * 可以独立构成一次生成输入的自定义参数。
+   *
+   * 用于「父任务 ID」这类既不是 prompt 也不是媒体上传的有效输入，
+   * 避免在通用准备阶段被误判为「空请求」。
+   */
+  alternativeInputParamIds?: string[]
+
+  /**
    * Runtime constraints applied after request builder output.
    *
    * Used by generated manifest + Electron runtime as a final safety net to

@@ -175,6 +175,26 @@ describe('generationPreparation', () => {
     })).toThrow('生成媒体类型与模型能力不匹配')
   })
 
+  it('允许父任务 ID 这类自定义参数独立构成输入', () => {
+    const taskBasedModel: ModelDefinition = {
+      ...testModel,
+      meta: { ...testModel.meta, id: 'agent-preparation-task-input', type: 'video' },
+      alternativeInputParamIds: ['sourceTaskId'],
+      params: [{
+        id: 'sourceTaskId', type: 'text', valueType: 'string', order: 1,
+        name: { zh: '来源任务', en: 'Source Task' }, default: '', required: true,
+      }],
+      request: { builder: (params) => ({ task_id: params.sourceTaskId }) },
+    }
+    registry.register(taskBasedModel)
+    expect(prepareGenerationTask({
+      modelId: taskBasedModel.meta.id,
+      prompt: '',
+      mediaType: 'video',
+      options: { sourceTaskId: 'task-1' },
+    })).toMatchObject({ prepared: true })
+  })
+
   it('KIE Z-Image 比例配置与供应商接口文档保持一致', () => {
     const source = readFileSync('src/models/kie/z-image.model.ts', 'utf8')
     expect(source).toContain("{ value: '4:3', label: '4:3' }")

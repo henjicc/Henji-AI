@@ -24,15 +24,42 @@ export const kieSeedream50ProModel = defineModel({
   },
   inputLimits: {
     images: { max: 10 },
-    videos: { max: 0 }
+    videos: { max: 0 },
+    rules: [
+      { when: 'kieSeedream50ProMode === "layer-decomposition"', images: { min: 1, max: 1 } }
+    ]
   },
+  requirements: [
+    {
+      id: 'kie-seedream-5-pro-layer-single-image',
+      when: 'kieSeedream50ProMode === "layer-decomposition"',
+      require: { images: { exact: 1 } },
+      message: {
+        title: '需要一张图片',
+        message: '图层拆分模式必须且只能输入 1 张图片。',
+        type: 'warning'
+      }
+    }
+  ],
   params: [
+    {
+      id: 'kieSeedream50ProMode',
+      type: 'dropdown',
+      order: 1,
+      name: { zh: '模式', en: 'Mode' },
+      default: 'generate',
+      options: [
+        { value: 'generate', label: { zh: '生成 / 编辑', en: 'Generate / Edit' } },
+        { value: 'layer-decomposition', label: { zh: '图层拆分', en: 'Layer Decomposition' } }
+      ]
+    },
     {
       id: 'kieSeedream50ProAspectRatio',
       type: 'dropdown',
-      order: 1,
+      order: 2,
       name: sharedFieldText('aspectRatio'),
       default: 'smart',
+      visible: { condition: 'kieSeedream50ProMode !== "layer-decomposition"' },
       options: [
         { value: 'smart', label: sharedOptionText('smart') },
         ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
@@ -41,11 +68,26 @@ export const kieSeedream50ProModel = defineModel({
     {
       id: 'kieSeedream50ProResolution',
       type: 'dropdown',
-      order: 2,
+      order: 3,
       name: sharedFieldText('resolution'),
       default: '1K',
+      visible: { condition: 'kieSeedream50ProMode !== "layer-decomposition"' },
       options: [
         { value: '1K', label: '1K' },
+        { value: '2K', label: '2K' }
+      ]
+    },
+    {
+      id: 'kieSeedream50ProLayerSize',
+      type: 'dropdown',
+      order: 4,
+      name: sharedFieldText('resolution'),
+      default: 'auto',
+      visible: { condition: 'kieSeedream50ProMode === "layer-decomposition"' },
+      options: [
+        { value: 'auto', label: sharedOptionText('auto') },
+        { value: '1K', label: '1K' },
+        { value: '1.5K', label: '1.5K' },
         { value: '2K', label: '2K' }
       ]
     }
@@ -99,6 +141,18 @@ export const kieSeedream50ProModel = defineModel({
       const rawResolution = params.kieSeedream50ProResolution ?? legacyResolution.quality
       const quality = rawResolution === '2K' || rawResolution === 'high' ? 'high' : 'basic'
       const images = resolveImages()
+      if (params.kieSeedream50ProMode === 'layer-decomposition') {
+        if (images.length !== 1) throw new Error('Seedream 5.0 Pro 图层拆分模式必须且只能输入 1 张图片')
+        const rawLayerSize = String(params.kieSeedream50ProLayerSize || 'auto')
+        return {
+          model: 'seedream/5-pro-layer-decomposition',
+          input: {
+            prompt: typeof params.prompt === 'string' ? params.prompt : '',
+            image_url: images[0],
+            size: ['auto', '1K', '1.5K', '2K'].includes(rawLayerSize) ? rawLayerSize : 'auto'
+          }
+        }
+      }
       const input: DynamicValueMap = {
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         aspect_ratio: supportedAspectRatios.includes(aspectRatio) ? aspectRatio : '1:1',
@@ -120,10 +174,13 @@ export const kieSeedream50ProModel = defineModel({
         ? params.resolution as DynamicValueMap
         : undefined
       const resolution = params.kieSeedream50ProResolution ?? legacyResolution?.quality
+      if (params.kieSeedream50ProMode === 'layer-decomposition') {
+        return params.kieSeedream50ProLayerSize === '2K' ? 0.07 : 0.035
+      }
       const outputPrice = resolution === '2K' || resolution === 'high' ? 0.07 : 0.035
       return outputPrice + Math.max(0, countUploadedImages(params) - 1) * 0.0025
     },
-    description: '1K $0.035/张，2K $0.07/张；首张输入免费，后续输入 $0.0025/张'
+    description: '生成/编辑：1K $0.035、2K $0.07/张，首张输入免费、后续输入 $0.0025/张；图层拆分：自动/1K/1.5K $0.035、2K $0.07/输出图层'
   }
 })
 

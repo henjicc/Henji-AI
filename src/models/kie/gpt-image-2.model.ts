@@ -105,7 +105,7 @@ export const kieGptImage2Model = defineModel({
       const uploadedFilePaths = filterMediaSources(params.uploadedFilePaths)
       const legacyImages = filterMediaSources(params.images)
       const images = uploadedFilePaths.length > 0 ? uploadedFilePaths : legacyImages
-      const prompt = typeof params.prompt === 'string' ? params.prompt : ''
+      const prompt = typeof params.prompt === 'string' ? params.prompt.slice(0, 20000) : ''
       const rawAspectRatio = params.kieGptImage2AspectRatio || params.aspect_ratio
       const rawResolution = params.kieGptImage2Resolution || params.resolution || '1K'
       const ratioHint = typeof params.__firstImageRatio === 'number' &&
@@ -120,6 +120,22 @@ export const kieGptImage2Model = defineModel({
         : aspectRatioText
       const resolution = String(rawResolution)
 
+      const textUnsupportedRatios = ['5:4', '4:5', '3:1', '1:3', '9:21']
+      if (images.length === 0 && (resolution === '2K' || resolution === '4K') && textUnsupportedRatios.includes(aspectRatio)) {
+        throw new Error(`GPT Image 2 文生图的 ${aspectRatio} 比例不支持 ${resolution} 分辨率`)
+      }
+      if (images.length > 0) {
+        if ((aspectRatio === '5:4' || aspectRatio === '4:5') && resolution !== '1K') {
+          throw new Error(`GPT Image 2 图生图的 ${aspectRatio} 比例仅支持 1K 分辨率`)
+        }
+        if (aspectRatio === '1:1' && resolution === '4K') {
+          throw new Error('GPT Image 2 图生图的 1:1 比例不支持 4K 分辨率')
+        }
+        if ((aspectRatioText === 'auto' || !aspectRatioText) && resolution !== '1K') {
+          throw new Error('GPT Image 2 图生图的自动比例仅支持 1K 分辨率')
+        }
+      }
+
       const input: DynamicValueMap = {
         prompt,
         aspect_ratio: aspectRatio,
@@ -127,7 +143,7 @@ export const kieGptImage2Model = defineModel({
       }
 
       if (images.length > 0) {
-        input.input_urls = images
+        input.input_urls = images.slice(0, 16)
       }
 
       return {

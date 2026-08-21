@@ -91,6 +91,12 @@ export const falSeedance20FastModel = defineModel({
         bitrate_mode: params.falSeedance20FastBitrate === 'high' ? 'high' : 'standard'
       }
       if (params.falSeedance20FastMode === 'reference-to-video') {
+        if (images.length + videos.length + audios.length > 12) {
+          throw new Error('Fal Seedance 2.0 Fast 的参考素材总数不能超过 12 个')
+        }
+        if (audios.length > 0 && images.length + videos.length === 0) {
+          throw new Error('Fal Seedance 2.0 Fast 的参考音频必须与参考图片或参考视频一起使用')
+        }
         if (images.length > 0) body.image_urls = images.slice(0, 9)
         if (videos.length > 0) body.video_urls = videos.slice(0, 3)
         if (audios.length > 0) body.audio_urls = audios.slice(0, 3)
@@ -105,9 +111,16 @@ export const falSeedance20FastModel = defineModel({
     currency: '$',
     calculator: (params) => {
       const duration = Math.min(15, Math.max(4, Math.round(Number(params.falSeedance20FastDuration || 5))))
-      return duration * (params.falSeedance20FastResolution === '480p' ? 0.1076 : 0.2419)
+      const baseRate = params.falSeedance20FastResolution === '480p' ? 0.1076 : 0.2419
+      const uploadedVideos = Array.isArray(params.uploadedVideoFilePaths) ? params.uploadedVideoFilePaths : []
+      const videos = uploadedVideos.length > 0 ? uploadedVideos : (Array.isArray(params.videos) ? params.videos : [])
+      const hasVideo = params.falSeedance20FastMode === 'reference-to-video' && videos.length > 0
+      const inputDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
+        ? params.__firstVideoDurationSeconds * videos.length
+        : 0
+      return (duration + (hasVideo ? inputDuration : 0)) * baseRate * (hasVideo ? 0.6 : 1)
     },
-    description: '输出约：480p $0.1076、720p $0.2419/秒；参考视频输入另计'
+    description: '输出约：480p $0.1076、720p $0.2419/秒；有视频参考时费率乘 0.6，并按输入与输出总时长计费'
   }
 })
 
