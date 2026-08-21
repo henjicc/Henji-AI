@@ -23,7 +23,11 @@ function iconCandidates(fileName: string): string[] {
  * 找不到时返回 undefined，由 Electron 回退到默认图标，不阻塞窗口创建。
  */
 export function resolveAppIconPath(): string | undefined {
-  const fileNames = process.platform === 'win32' ? ['icon.ico', 'icon.png'] : ['icon.png']
+  const fileNames = process.platform === 'win32'
+    ? ['icon.ico', 'icon.png']
+    : process.platform === 'darwin'
+      ? ['icon_macos_resize.png', 'icon.png']
+      : ['icon.png']
   for (const fileName of fileNames) {
     const found = iconCandidates(fileName).find(isReadableFile)
     if (found) return found
