@@ -412,6 +412,27 @@ export interface HenjiAiRecordProgressSampleResponse {
   estimate: HenjiAiProgressEstimate
 }
 
+export interface HenjiProviderConnectionTestResult {
+  providerId: string
+  status:
+    | 'connected'
+    | 'saved_unverified'
+    | 'not_configured'
+    | 'invalid_key'
+    | 'insufficient_balance'
+    | 'rate_limited'
+    | 'timeout'
+    | 'network_error'
+    | 'service_error'
+  verified: boolean
+  checkedAt: string
+  durationMs: number
+  httpStatus?: number
+  remainingBalance?: number
+  balanceUnit?: 'credits' | 'provider_units'
+  unlimitedBalance?: boolean
+}
+
 export interface HenjiKeystoreApi {
   setKey(namespace: string, providerId: string, apiKey: string): Promise<void>
   removeKey(namespace: string, providerId: string): Promise<void>
@@ -424,6 +445,7 @@ export interface HenjiAiApi {
   removeProviderApiKey(providerId: string): Promise<void>
   getProviderApiKey(providerId: string): Promise<string | null>
   getProviderKeyStatus(): Promise<HenjiProviderKeyStatus[]>
+  testProviderConnection(providerId: string): Promise<HenjiProviderConnectionTestResult>
   generate(request: HenjiAiGenerateRequest): Promise<HenjiAiGenerateResponse>
   continuePolling(request: HenjiAiContinuePollingRequest): Promise<HenjiAiGenerateResponse>
   cancelTask(taskId: string): Promise<void>

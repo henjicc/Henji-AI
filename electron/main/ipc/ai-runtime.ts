@@ -19,7 +19,9 @@ import type {
   AiRecordProgressSampleRequestDto,
   AiRecordProgressSampleResponseDto,
   ProviderKeyStatusDto,
+  ProviderConnectionTestResultDto,
 } from '../services/ai-runtime/types'
+import { testProviderConnection } from '../services/ai-runtime/provider-connection'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 
 function parseGenerateRequest(input: unknown): AiGenerateRequestDto {
@@ -64,6 +66,12 @@ function parseRecordSampleRequest(input: unknown): AiRecordProgressSampleRequest
 }
 
 export function registerAiRuntimeIpc(): void {
+  registerIpcHandler<string, ProviderConnectionTestResultDto>(
+    'ai:testProviderConnection',
+    (input) => parseStringField(input, 'providerId'),
+    (providerId) => testProviderConnection(providerId)
+  )
+
   registerIpcHandler<AiGenerateRequestDto, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async (request) => {
     return await generate(request)
   })

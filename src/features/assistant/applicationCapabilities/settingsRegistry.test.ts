@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { useSettingsStore } from '@/stores/settingsStore'
+import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
 
 import {
   applyApplicationSettingsChange,
@@ -47,5 +48,20 @@ describe('assistant settings registry', () => {
     expect(result.settings[0]).toHaveProperty('configured')
     expect(result.settings[1]).not.toHaveProperty('value')
     expect(result.settings[1]).not.toHaveProperty('path')
+  })
+
+  it('主供应商通过通用设置能力读写 Onboarding Manager 真相源', () => {
+    const before = onboardingManager.getSnapshot().primaryProvider
+    const next = before === 'fal' ? 'kie' : 'fal'
+    const plan = planApplicationSettingsChange([
+      { id: 'general.primary_provider', value: next },
+    ])
+    const applied = applyApplicationSettingsChange(plan.planRef)
+
+    expect(applied.applied).toEqual([
+      expect.objectContaining({ id: 'general.primary_provider', value: next }),
+    ])
+    expect(onboardingManager.getSnapshot().primaryProvider).toBe(next)
+    onboardingManager.setPrimaryProvider(before)
   })
 })

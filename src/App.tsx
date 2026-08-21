@@ -31,6 +31,9 @@ import { toggleAssistant, useAssistantUiStore } from '@/features/assistant/store
 import { openAssistantForDiagnosis } from '@/features/assistant/diagnostics/openAssistantDiagnosis'
 import { UI_DURATION, uiTransition } from '@/components/ui/motion'
 import { prefetchWhenIdle } from '@/utils/idlePrefetch'
+import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
+import { OnboardingModal } from '@/features/onboarding/components/OnboardingModal'
+import { OnboardingHints } from '@/features/onboarding/components/OnboardingHints'
 
 const logger = createLogger('App')
 
@@ -186,7 +189,10 @@ const App: React.FC = () => {
       // 供应商密钥状态与自定义模型都不参与首屏渲染，放到后面并行跑，不再挡住启动链。
       // 密钥状态不能省：画布/生成前置校验读的就是它，冷启动不同步会误判"未配置 API Key"。
       await Promise.all([
-        step('app.startup.provider_keys.completed', syncProviderKeyStatuses),
+        step('app.startup.provider_keys.completed', async () => {
+          const status = await syncProviderKeyStatuses()
+          onboardingManager.reconcileConfiguredProviders(status)
+        }),
         step('app.startup.custom_models.completed', async () => {
           const customModelService = getCustomModelService(databaseService)
           await customModelService.loadEnabledModels()
@@ -228,6 +234,7 @@ const App: React.FC = () => {
           onTabChange={handleTabChange}
           onAssetClick={handleAssetClick}
           onOpenSettings={() => openSettings()}
+          onOpenHelp={() => onboardingManager.open()}
           onPrefetchSettings={prefetchSettingsModal}
           assistantOpen={assistantOpen}
           onAssistantClick={toggleAssistant}
@@ -256,6 +263,8 @@ const App: React.FC = () => {
         </Suspense>
         <LargeUploadChoiceDialog />
         <GlobalAlertDialog onAskAssistant={openAssistantForDiagnosis} />
+        <OnboardingHints />
+        <OnboardingModal />
       </div>
     </NotificationProvider>
   )

@@ -12,7 +12,8 @@
   },
   "actions": {
     "clearHistory": "Clear History",
-    "settings": "Settings"
+    "settings": "Settings",
+    "firstSetup": "First-time setup and help"
   },
   "alerts": {
     "missingInput": {

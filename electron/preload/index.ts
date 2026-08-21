@@ -220,6 +220,7 @@ const aiApi: HenjiAiApi = {
   removeProviderApiKey: (providerId) => nativeInvoke('ai:removeProviderApiKey', { providerId }),
   getProviderApiKey: (providerId) => nativeInvoke('ai:getProviderApiKey', { providerId }),
   getProviderKeyStatus: () => nativeInvoke('ai:getRuntimeProviderKeyStatus'),
+  testProviderConnection: (providerId) => nativeInvoke('ai:testProviderConnection', { providerId }),
   generate: (request) => nativeInvoke('ai:generate', request),
   continuePolling: (request) => nativeInvoke('ai:continuePolling', request),
   cancelTask: (taskId) => nativeInvoke('ai:cancelTask', { taskId }),

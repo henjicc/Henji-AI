@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   UI_GLASS_ADAPTIVE_DIVIDER_CLASS,
   UI_GLASS_ADAPTIVE_REGION_CLASS,
@@ -33,7 +33,7 @@ type SettingsTab = SettingsTabId
  * 不会再出现两边对不上、或者内容区根本没有标题的情况。
  */
 const SECTION_MAP: Record<SettingsTab, string[]> = {
-  general: ['general-basic', 'general-storage', 'general-behavior', 'general-maintenance'],
+  general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance'],
   api: ['api-keys', 'api-upload', 'api-llm', 'api-agent-preferences', 'api-agent-skills'],
   interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],
   models: ['models-visibility']
@@ -59,6 +59,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
   // 已经处理过归位的大类。定位 effect 现在也会因为尾部占位变化而重跑，
   // 没有这个标记就会把「占位变了」误当成「换大类了」，顺手把用户滚到顶部。
   const settledTabRef = useRef<SettingsTab | null>(null)
+  const handledTargetRef = useRef(target ? `${target.tab}:${target.sectionId ?? ''}` : '')
 
   // 关闭分两步：先让 UiModal 播完淡出，再由 App 卸载本组件。
   // 等待时长必须跟着 UiModal 的过渡走，此前写死 300ms 比实际过渡长 120ms，
@@ -141,6 +142,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
     },
     [activeTab, scrollToSection]
   )
+
+  useEffect(() => {
+    if (!target) return
+    const key = `${target.tab}:${target.sectionId ?? ''}`
+    if (handledTargetRef.current === key) return
+    handledTargetRef.current = key
+    handleSectionSelect(target.tab, target.sectionId ?? SECTION_MAP[target.tab][0] ?? '')
+  }, [handleSectionSelect, target])
 
   return (
     <UiModal

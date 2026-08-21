@@ -191,6 +191,10 @@ const ASSISTANT_BLIND_FEATURES = {
     + '让助手改写自己的运行状态会破坏结算与证据链。',
   settings: '设置项的实体与属性注册在 application-control 子目录下，由 settingsReflection 覆盖；'
     + '这一层没有独立 store。',
+  onboarding: '首次引导是可跳过、可回退的界面编排状态，不是独立业务实体；主供应商已通过 '
+    + 'settings.registry 的 general.primary_provider 正式属性覆盖，设置分区已登记 Surface。'
+    + 'API 密钥继续走受保护的 security.provider_keys，步骤进度与提示显隐属于 view_state，'
+    + '不为助手另建专用能力或伪造 StoreLedger。',
   toolbox: '工具目录由工具箱注册表定义，属于应用结构而非用户数据，已有 toolbox.tool 的 writeExclusion。',
 }
 for (const feature of fs.readdirSync(path.join(root, 'src', 'features'), { withFileTypes: true })) {

@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging'
+import { emitApplicationEvent } from '@/core/events/applicationEvents'
 
 const logger = createLogger('core.services.GenerationService')
 /**
@@ -650,6 +651,11 @@ export class GenerationService {
       })
       progressTracker?.complete()
 
+      emitApplicationEvent('generation-completed', {
+        modelId,
+        providerId: model.meta.provider,
+      })
+
       return {
         status: response.status,
         url: response.url,
@@ -780,6 +786,11 @@ export class GenerationService {
         },
       })
       progressTracker?.complete()
+
+      emitApplicationEvent('generation-completed', {
+        modelId,
+        providerId: model?.meta.provider,
+      })
 
       return {
         status: response.status,
@@ -952,4 +963,3 @@ export class GenerationService {
 }
 
 export const generationService = GenerationService.getInstance()
-

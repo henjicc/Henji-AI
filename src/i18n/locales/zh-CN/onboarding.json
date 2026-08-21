@@ -1,0 +1,132 @@
+{
+  "title": "欢迎使用痕迹AI",
+  "progress": "第 {{current}} 步，共 {{total}} 步",
+  "steps": {
+    "welcome": "欢迎",
+    "basics": "基础设置",
+    "provider": "主供应商",
+    "api-key": "API 密钥",
+    "first-task": "首次创作"
+  },
+  "actions": {
+    "start": "开始设置",
+    "continue": "继续",
+    "back": "返回",
+    "later": "稍后继续",
+    "skipAll": "跳过引导",
+    "skipStep": "跳过此步",
+    "saveAndTest": "保存并测试",
+    "testing": "正在测试…",
+    "prepareTask": "准备首个任务",
+    "createLater": "稍后再创作",
+    "openGuide": "获取密钥",
+    "openApiSettings": "打开平台密钥",
+    "rerun": "重新运行首次设置",
+    "dismiss": "知道了"
+  },
+  "welcome": {
+    "eyebrow": "从一个真实作品开始",
+    "headline": "把多个 AI 平台，收进一个创作工作台",
+    "description": "接下来会帮你选定主供应商、安全保存密钥，并准备第一个图像任务。每一步都可以跳过，之后也能从设置重新进入。",
+    "features": {
+      "models": "统一使用图像、视频与音频模型",
+      "canvas": "在生成页快速创作，在画布里组合工作流",
+      "local": "项目与偏好保存在本机，API 密钥进入系统安全存储"
+    }
+  },
+  "basics": {
+    "headline": "先确认两个基础项",
+    "description": "语言会立即生效；数据目录已由桌面端自动配置，之后可以在设置中迁移。",
+    "language": "界面语言",
+    "languageOptions": {
+      "auto": "跟随系统",
+      "zh-CN": "简体中文",
+      "en-US": "English"
+    },
+    "dataTitle": "数据目录已准备好",
+    "dataDescription": "生成记录、项目和下载设置会使用应用数据目录。无需在首次启动时手动选择路径。"
+  },
+  "provider": {
+    "headline": "选择一个主供应商",
+    "description": "主供应商决定首次任务优先使用哪个平台，不会隐藏其他模型，也可以随时修改。",
+    "recommended": "推荐起步",
+    "more": "魔搭、百炼与火山方舟仍可在平台密钥中单独配置。",
+    "items": {
+      "kie": {
+        "name": "KIE",
+        "description": "新模型覆盖广，图像与视频入口集中，适合先快速跑通。"
+      },
+      "fal": {
+        "name": "Fal.ai",
+        "description": "官方模型生态丰富，端点清晰，适合追新模型与细粒度参数。"
+      },
+      "apimart": {
+        "name": "APIMart",
+        "description": "统一接口与模型元数据较完整，适合跨模型工作流。"
+      },
+      "ppio": {
+        "name": "派欧云",
+        "description": "国内网络体验友好，适合常用模型与低延迟场景。"
+      }
+    }
+  },
+  "apiKey": {
+    "headline": "安全保存 {{provider}} 密钥",
+    "description": "密钥会通过 Electron safeStorage 加密保存在本机，不写入项目、普通设置或日志。",
+    "placeholder": "粘贴 {{provider}} API 密钥",
+    "show": "显示密钥",
+    "hide": "隐藏密钥",
+    "configured": "已检测到本机已保存密钥，你可以直接测试或替换。",
+    "testNote": "连接测试只调用只读余额或模型目录，不创建生成任务、不产生模型费用。",
+    "results": {
+      "connected": "连接成功，密钥有效",
+      "saved_unverified": "已安全保存；该平台暂未提供可确认的无计费校验端点",
+      "not_configured": "尚未保存密钥",
+      "invalid_key": "认证失败，请检查密钥是否完整或已撤销",
+      "insufficient_balance": "密钥有效，但余额不足",
+      "rate_limited": "密钥有效，当前请求频率受限",
+      "timeout": "连接超时，请检查网络后重试",
+      "network_error": "网络连接失败，请检查网络或代理设置",
+      "service_error": "平台服务返回异常，请稍后重试"
+    },
+    "details": {
+      "verified": "在线验证：{{value}}",
+      "yes": "通过",
+      "no": "未通过",
+      "http": "HTTP 状态：{{value}}",
+      "duration": "耗时：{{value}} ms",
+      "balance": "剩余余额：{{value}} {{unit}}",
+      "balanceUnlimited": "剩余余额：无限额度",
+      "units": {
+        "credits": "积分",
+        "provider_units": "平台额度"
+      },
+      "checkedAt": "检测时间：{{value}}"
+    }
+  },
+  "firstTask": {
+    "headline": "准备第一个真实任务",
+    "description": "我会打开生成页、选择主供应商下的一个图像模型，并填入一段可直接修改的提示词。只有你点击“生成”才会真正调用模型。",
+    "promptLabel": "示例提示词",
+    "prompt": "一间雨夜里的温暖书店，橱窗映着霓虹灯，电影感构图，细腻光影",
+    "ready": "{{provider}} 已配置，可以直接开始。",
+    "notReady": "{{provider}} 尚未配置；任务仍可准备，生成前应用会提醒你补充密钥。"
+  },
+  "coach": {
+    "title": "首个任务已准备好",
+    "description": "检查模型和提示词，满意后点击生成。成功返回结果时，引导会自动完成。",
+    "successTitle": "首次创作已完成",
+    "successDescription": "接下来可以切换模型、添加参考图，或把生成流程放进画布继续组合。"
+  },
+  "settings": {
+    "statusLabel": "首次设置状态",
+    "primaryProvider": "主供应商",
+    "status": {
+      "not_started": "尚未开始",
+      "in_progress": "进行中",
+      "completed": "已完成",
+      "skipped": "已跳过"
+    },
+    "description": "重新打开欢迎流程，或调整首次任务优先使用的平台。已保存密钥不会被清除。"
+  }
+}

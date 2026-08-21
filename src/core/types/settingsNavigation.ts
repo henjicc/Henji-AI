@@ -12,6 +12,7 @@ export type SettingsTabId = 'general' | 'api' | 'interface' | 'models'
  */
 export const SETTINGS_SECTION_IDS = [
   'general-basic',
+  'general-onboarding',
   'general-storage',
   'general-behavior',
   'general-maintenance',

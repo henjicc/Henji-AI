@@ -12,6 +12,7 @@ import {
   useAssetLibraryStore,
   type AssetLibraryView,
 } from '@/features/assets/store/assetLibraryStore'
+import { emitApplicationEvent } from '@/core/events/applicationEvents'
 
 const logger = createLogger('stores.navigation')
 
@@ -65,6 +66,7 @@ export function switchWorkspace(workspace: WorkspaceId): void {
   }
 
   useNavigationStore.getState().setActiveWorkspace(workspace)
+  emitApplicationEvent('workspace-opened', { workspaceId: workspace })
   logger.info('工作区切换完成', {
     event: 'navigation.workspace_switch.completed',
     previousWorkspace,

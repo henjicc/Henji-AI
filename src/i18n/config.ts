@@ -22,6 +22,7 @@ import zhCN_ui from './locales/zh-CN/ui.json'
 import zhCN_history from './locales/zh-CN/history.json'
 import zhCN_settings from './locales/zh-CN/settings.json'
 import zhCN_storyboard from './locales/zh-CN/storyboard.json'
+import zhCN_onboarding from './locales/zh-CN/onboarding.json'
 
 import enUS_common from './locales/en-US/common.json'
 import enUS_models from './locales/en-US/models.json'
@@ -38,6 +39,7 @@ import enUS_ui from './locales/en-US/ui.json'
 import enUS_history from './locales/en-US/history.json'
 import enUS_settings from './locales/en-US/settings.json'
 import enUS_storyboard from './locales/en-US/storyboard.json'
+import enUS_onboarding from './locales/en-US/onboarding.json'
 
 
 type ModelLocale = DynamicValueMap & { defs?: DynamicValueMap }
@@ -81,6 +83,7 @@ const resources = {
     ui: zhCN_ui,
     history: zhCN_history,
     settings: zhCN_settings,
+    onboarding: zhCN_onboarding,
   },
   'en-US': {
     common: deepMergeLocale(enUS_common as DynamicValueMap, enUS_storyboard as DynamicValueMap),
@@ -90,6 +93,7 @@ const resources = {
     ui: enUS_ui,
     history: enUS_history,
     settings: enUS_settings,
+    onboarding: enUS_onboarding,
   },
 }
 
@@ -100,7 +104,7 @@ i18n
     resources,
     fallbackLng: 'zh-CN',
     defaultNS: 'common',
-    ns: ['common', 'models', 'params', 'errors', 'ui', 'history', 'settings'],
+    ns: ['common', 'models', 'params', 'errors', 'ui', 'history', 'settings', 'onboarding'],
 
     interpolation: {
       escapeValue: false, // React 已经转义

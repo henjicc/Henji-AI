@@ -5,6 +5,27 @@ export interface ProviderKeyStatusDto {
   configured: boolean
 }
 
+export interface ProviderConnectionTestResultDto {
+  providerId: string
+  status:
+    | 'connected'
+    | 'saved_unverified'
+    | 'not_configured'
+    | 'invalid_key'
+    | 'insufficient_balance'
+    | 'rate_limited'
+    | 'timeout'
+    | 'network_error'
+    | 'service_error'
+  verified: boolean
+  checkedAt: string
+  durationMs: number
+  httpStatus?: number
+  remainingBalance?: number
+  balanceUnit?: 'credits' | 'provider_units'
+  unlimitedBalance?: boolean
+}
+
 export interface AiGenerateRequestDto {
   modelId: string
   params: DynamicValueMap
@@ -63,6 +84,7 @@ export interface AiRuntimePlatform {
   removeProviderApiKey(providerId: string): Promise<void>
   getProviderApiKey(providerId: string): Promise<string | null>
   getProviderKeyStatus(): Promise<ProviderKeyStatusDto[]>
+  testProviderConnection(providerId: string): Promise<ProviderConnectionTestResultDto>
   generate(request: AiGenerateRequestDto): Promise<AiGenerateResponseDto>
   continuePolling(request: AiContinuePollingRequestDto): Promise<AiGenerateResponseDto>
   cancelTask(taskId: string): Promise<void>

@@ -13,11 +13,18 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { changeLanguage, getCurrentLanguage } from '@/utils/language'
 import { getUpdateConfig, setUpdateEnabled, setUpdateFrequency } from '@/utils/updateConfig'
 import { z } from 'zod'
+import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
 
 import { storageSetting, storeSetting } from './definitionFactories'
 import type { ApplicationSettingDefinition } from './types'
 
 export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
+  storeSetting({
+    id: 'general.primary_provider', title: '主供应商', description: '设置首次任务与新手引导优先使用的模型供应商，不会隐藏其他供应商。',
+    aliases: ['首选供应商', '默认平台', 'primary provider'], schema: z.enum(['ppio', 'fal', 'modelscope', 'kie', 'apimart', 'bailian', 'volcengine']), defaultValue: 'kie',
+    target: { tab: 'general', sectionId: 'general-onboarding' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => onboardingManager.getSnapshot().primaryProvider,
+  (value) => onboardingManager.setPrimaryProvider(value)),
   storeSetting({
     id: 'general.startup_workspace', title: '启动工作区', description: '设置应用启动后默认显示生成、画布或工具箱。',
     aliases: ['启动页面', '默认页面', 'startup'], schema: z.enum(['generation', 'nodes', 'tools']), defaultValue: 'generation',

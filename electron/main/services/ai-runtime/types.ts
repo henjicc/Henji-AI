@@ -13,6 +13,29 @@ export interface ProviderKeyStatusDto {
   configured: boolean
 }
 
+export type ProviderConnectionStatus =
+  | 'connected'
+  | 'saved_unverified'
+  | 'not_configured'
+  | 'invalid_key'
+  | 'insufficient_balance'
+  | 'rate_limited'
+  | 'timeout'
+  | 'network_error'
+  | 'service_error'
+
+export interface ProviderConnectionTestResultDto {
+  providerId: string
+  status: ProviderConnectionStatus
+  verified: boolean
+  checkedAt: string
+  durationMs: number
+  httpStatus?: number
+  remainingBalance?: number
+  balanceUnit?: 'credits' | 'provider_units'
+  unlimitedBalance?: boolean
+}
+
 export interface AiGenerateRequestDto {
   modelId: string
   params: JsonObject

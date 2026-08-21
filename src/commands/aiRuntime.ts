@@ -6,6 +6,8 @@ export interface ProviderKeyStatusDto {
   configured: boolean
 }
 
+export type { ProviderConnectionTestResultDto } from '@/platform/contracts/aiRuntime'
+
 export interface AiGenerateRequestDto {
   modelId: string
   params: DynamicValueMap
@@ -83,6 +85,13 @@ export async function aiGetProviderApiKey(providerId: string): Promise<string | 
 export async function aiGetProviderKeyStatus(): Promise<ProviderKeyStatusDto[]> {
   ensureDesktopRuntime()
   return await getPlatform().aiRuntime.getProviderKeyStatus()
+}
+
+export async function aiTestProviderConnection(
+  providerId: string
+): Promise<import('@/platform/contracts/aiRuntime').ProviderConnectionTestResultDto> {
+  ensureDesktopRuntime()
+  return await getPlatform().aiRuntime.testProviderConnection(providerId)
 }
 
 export async function aiGenerate(request: AiGenerateRequestDto): Promise<AiGenerateResponseDto> {

@@ -8,6 +8,7 @@ import {
 } from '@/commands/aiRuntime'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { syncProviderKeyStatuses } from '@/services/providerKeyStatus'
+import { emitApplicationEvent } from '@/core/events/applicationEvents'
 
 const logger = createLogger('components.Settings.hooks.useApiKeys')
 
@@ -111,11 +112,13 @@ export function useApiKeys(): UseApiKeysResult {
           if (!trimmed) {
             await aiRemoveProviderApiKey(provider)
             setProviderKeyStatus(provider, false)
+            emitApplicationEvent('provider-key-removed', { providerId: provider })
             return
           }
 
           await aiSetProviderApiKey(provider, trimmed)
           setProviderKeyStatus(provider, true)
+          emitApplicationEvent('provider-key-configured', { providerId: provider })
         } catch (error) {
           logger.error(`[useApiKeys] update key failed: ${provider}`, error)
         }
@@ -129,4 +132,3 @@ export function useApiKeys(): UseApiKeysResult {
 
   return { keys, visibility, updateKey, toggleVisibility }
 }
-

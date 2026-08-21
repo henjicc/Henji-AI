@@ -5,6 +5,7 @@ import { GENERAL_APPLICATION_SETTING_DEFINITIONS } from './generalSettingDefinit
 import { INTERFACE_APPLICATION_SETTING_DEFINITIONS } from './interfaceSettingDefinitions'
 import { PROTECTED_APPLICATION_SETTING_DEFINITIONS } from './protectedSettingDefinitions'
 import type { ApplicationSettingDefinition, SettingChangePlan } from './types'
+import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
 
 const logger = createLogger('features.settings.application_control')
 const MAX_SETTING_PLANS = 64
@@ -21,6 +22,14 @@ let revision = 0
 
 useSettingsStore.subscribe((state, previous) => {
   if (state !== previous) revision += 1
+})
+
+let primaryProvider = onboardingManager.getSnapshot().primaryProvider
+onboardingManager.subscribe(() => {
+  const nextProvider = onboardingManager.getSnapshot().primaryProvider
+  if (nextProvider === primaryProvider) return
+  primaryProvider = nextProvider
+  revision += 1
 })
 
 function createPlanRef(): string {

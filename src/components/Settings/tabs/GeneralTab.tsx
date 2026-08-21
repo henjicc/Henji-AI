@@ -12,6 +12,7 @@ import DisplaySection from '../sections/DisplaySection'
 import DownloadSection from '../sections/DownloadSection'
 import PromptOptimizationSection from '../sections/PromptOptimizationSection'
 import UpdateSection from '../sections/UpdateSection'
+import OnboardingSection from '../sections/OnboardingSection'
 
 const GeneralTab: React.FC = () => {
   const { settings, updateSetting } = useSettings()
@@ -24,6 +25,10 @@ const GeneralTab: React.FC = () => {
           maxHistoryCount={settings.maxHistoryCount}
           onChange={(value) => updateSetting('maxHistoryCount', value)}
         />
+      </SettingsSection>
+
+      <SettingsSection id="general-onboarding">
+        <OnboardingSection />
       </SettingsSection>
 
       <SettingsSection id="general-storage">

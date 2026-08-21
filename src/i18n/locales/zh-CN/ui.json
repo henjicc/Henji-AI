@@ -12,7 +12,8 @@
   },
   "actions": {
     "clearHistory": "清除历史",
-    "settings": "设置"
+    "settings": "设置",
+    "firstSetup": "首次设置与帮助"
   },
   "alerts": {
     "missingInput": {

@@ -24,6 +24,9 @@ export function createElectronAiRuntime(): AiRuntimePlatform {
     getProviderKeyStatus: async () => {
       return await getNativeAi().getProviderKeyStatus()
     },
+    testProviderConnection: async (providerId) => {
+      return await getNativeAi().testProviderConnection(providerId)
+    },
     generate: async (request) => {
       return await getNativeAi().generate(request)
     },
