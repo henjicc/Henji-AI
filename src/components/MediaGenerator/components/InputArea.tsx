@@ -20,6 +20,7 @@ export interface FileOrderItem {
   index: number
 }
 interface InputAreaProps {
+  compact?: boolean
   promptDocument: PromptDocumentV1
   onPromptDocumentChange: (document: PromptDocumentV1) => void
   promptReferences: readonly PromptReferenceItem[]
@@ -63,6 +64,7 @@ interface InputAreaProps {
  * 包含图片上传和文本输入
  */
 const InputArea: React.FC<InputAreaProps> = ({
+  compact = false,
   promptDocument,
   onPromptDocumentChange,
   promptReferences,
@@ -282,10 +284,11 @@ const InputArea: React.FC<InputAreaProps> = ({
       onAudioUpload([audioFiles[0]])
     }
   }
-  // 高屏保持原来的创作空间；矮屏自动收紧到仍能容纳 82px 媒体上传器与发送按钮的高度。
-  // 长提示词提前进入内部滚动，不挤占历史结果区。
-  const promptHeightClass =
-    'min-h-[clamp(96px,15vh,146px)] max-h-[clamp(176px,30vh,260px)]'
+  // 紧凑模式由生成工作区的真实可用尺寸决定，CSS 像素已包含系统缩放与应用缩放。
+  // 96px 仍能容纳 82px 媒体上传器与发送按钮；长提示词在编辑区内部滚动。
+  const promptHeightClass = compact
+    ? 'min-h-[96px] max-h-[176px]'
+    : 'min-h-[146px] max-h-[260px]'
   const promptLeftPaddingClass =
     shouldShowUpload
       ? 'pl-[116px]'

@@ -6,6 +6,7 @@ import { ChevronUp } from 'lucide-react'
 
 interface FloatingInputPanelProps {
   containerRef: React.RefObject<HTMLDivElement>
+  compact: boolean
   isCollapsed: boolean
   isCollapsing: boolean
   modelLabel: string
@@ -21,6 +22,7 @@ interface FloatingInputPanelProps {
 
 export function FloatingInputPanel({
   containerRef,
+  compact,
   isCollapsed,
   isCollapsing,
   modelLabel,
@@ -47,6 +49,7 @@ export function FloatingInputPanel({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onMouseMove={onMouseMove}
+      data-layout-density={compact ? 'compact' : 'comfortable'}
     >
       <UiPanel
         variant="glass"
@@ -56,7 +59,7 @@ export function FloatingInputPanel({
           maxHeight: isCollapsed || isCollapsing ? '52px' : '600px',
           minHeight: isCollapsed || isCollapsing ? '52px' : 'auto',
           opacity: 1,
-          padding: '12px',
+          padding: compact ? '8px' : '12px',
           overflow: isCollapsed && !isCollapsing ? 'visible' : 'hidden',
         }}
         onClick={() => {

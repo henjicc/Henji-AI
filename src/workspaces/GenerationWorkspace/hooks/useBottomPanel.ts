@@ -8,6 +8,7 @@ interface UseBottomPanelOptions {
 interface UseBottomPanelResult {
   inputContainerRef: RefObject<HTMLDivElement>
   inputPadding: number
+  isCompactLayout: boolean
   isPanelCollapsed: boolean
   isCollapsing: boolean
   expandPanelSmooth: () => void
@@ -17,9 +18,24 @@ interface UseBottomPanelResult {
   handlePanelMouseMove: () => void
 }
 
+const COMPACT_WORKSPACE_MAX_HEIGHT_PX = 920
+const COMPACT_WORKSPACE_MAX_WIDTH_PX = 1180
+const COMPACT_NARROW_WORKSPACE_MAX_HEIGHT_PX = 1050
+
+export function shouldUseCompactBottomPanelLayout(
+  availableWidth: number,
+  availableHeight: number
+): boolean {
+  return availableHeight <= COMPACT_WORKSPACE_MAX_HEIGHT_PX || (
+    availableWidth <= COMPACT_WORKSPACE_MAX_WIDTH_PX &&
+    availableHeight <= COMPACT_NARROW_WORKSPACE_MAX_HEIGHT_PX
+  )
+}
+
 export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): UseBottomPanelResult {
   const inputContainerRef = useRef<HTMLDivElement>(null)
   const [inputPadding, setInputPadding] = useState<number>(400)
+  const [isCompactLayout, setIsCompactLayout] = useState(false)
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false)
   const [isCollapsing, setIsCollapsing] = useState(false)
 
@@ -97,6 +113,9 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
 
     const update = () => {
       const h = inputEl.offsetHeight || 0
+      const availableHeight = listEl.clientHeight
+      const availableWidth = listEl.clientWidth
+      setIsCompactLayout(shouldUseCompactBottomPanelLayout(availableWidth, availableHeight))
       const actualHeight = (isPanelCollapsed && !isCollapsing) ? 60 : h
       const newPadding = actualHeight + 48
       setInputPadding(newPadding)
@@ -120,6 +139,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
     update()
     const ro = new ResizeObserver(update)
     ro.observe(inputEl)
+    ro.observe(listEl)
     return () => ro.disconnect()
   }, [isPanelCollapsed, isCollapsing, listContainerRef])
 
@@ -255,6 +275,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
   return {
     inputContainerRef,
     inputPadding,
+    isCompactLayout,
     isPanelCollapsed,
     isCollapsing,
     expandPanelSmooth,

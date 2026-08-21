@@ -28,6 +28,7 @@ import type { Preset } from '@/types/preset'
 import { Trash2 } from 'lucide-react'
 
 interface MediaGeneratorProps {
+  compact?: boolean
   onGenerate: (input: string, model: string, type: 'image' | 'video' | 'audio', options?: DynamicValue) => void | Promise<void>
   isLoading: boolean
   onOpenClearHistory: () => void
@@ -46,6 +47,7 @@ interface MediaGeneratorProps {
  * 使用模块化架构和配置驱动设计
  */
 const MediaGenerator: React.FC<MediaGeneratorProps> = ({
+  compact = false,
   onGenerate,
   isLoading,
   onOpenClearHistory,
@@ -318,6 +320,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
 
       {/* 输入区域 */}
       <InputArea
+        compact={compact}
         promptDocument={uiState.promptDocument}
         onPromptDocumentChange={uiState.setPromptDocument}
         promptReferences={uiState.promptReferences}
@@ -407,7 +410,7 @@ const MediaGenerator: React.FC<MediaGeneratorProps> = ({
       )}
 
       {/* 底部工具栏：按钮 + 价格估算 */}
-      <div className="mt-2.5 flex items-center justify-between border-t border-surface-dark/70 px-1 pt-2.5">
+      <div className={`${compact ? 'mt-2 pt-2' : 'mt-2.5 pt-2.5'} flex items-center justify-between border-t border-surface-dark/70 px-1`}>
         <div className="flex items-center gap-2">
           {/* 清除历史按钮 */}
           {/* 破坏性动作：静息保持中性、hover 才出危险色。

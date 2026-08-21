@@ -139,6 +139,7 @@ const GenerationWorkspace: React.FC = () => {
   const {
     inputContainerRef,
     inputPadding,
+    isCompactLayout,
     isPanelCollapsed,
     isCollapsing,
     expandPanelSmooth,
@@ -437,6 +438,7 @@ const GenerationWorkspace: React.FC = () => {
         </UiSharedGlassHost>
         <FloatingInputPanel
           containerRef={inputContainerRef}
+          compact={isCompactLayout}
           isCollapsed={isPanelCollapsed}
           isCollapsing={isCollapsing}
           modelLabel={panelModelId ? getModelDisplayName(panelModelId) : ''}
@@ -448,6 +450,7 @@ const GenerationWorkspace: React.FC = () => {
           onMouseMove={handlePanelMouseMove}
         >
           <MediaGenerator
+            compact={isCompactLayout}
             onGenerate={handleGenerate}
             isLoading={isGenerating}
             isGenerating={isGenerating}
