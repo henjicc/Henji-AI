@@ -177,6 +177,7 @@ describe('图片操作注册与执行端口', () => {
         backends: ['webgpu-worker'],
         supportedOperationIds: [
           IMAGE_EDIT_OPERATION_IDS.orientation,
+          IMAGE_EDIT_OPERATION_IDS.blur,
           IMAGE_EDIT_OPERATION_IDS.diffusion,
           IMAGE_EDIT_OPERATION_IDS.annotations,
           IMAGE_EDIT_OPERATION_IDS.crop,
