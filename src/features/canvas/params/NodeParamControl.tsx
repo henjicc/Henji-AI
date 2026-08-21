@@ -137,26 +137,28 @@ function CompactNumberControl({
         <UiIconButton
           type="button"
           showBorder={false}
+          appearance="color-only"
           disabled={disabled}
           tabIndex={-1}
           onClick={(event) => {
             event.stopPropagation();
             stepBy(1);
           }}
-          className="!h-3.5 !w-5 !rounded-none !border-0 !bg-transparent !p-0 text-text-muted hover:!bg-layer hover:!text-text-dark"
+          className="!h-3.5 !w-5 !rounded-none !border-0 !p-0"
         >
           <ChevronUp className="h-3 w-3" />
         </UiIconButton>
         <UiIconButton
           type="button"
           showBorder={false}
+          appearance="color-only"
           disabled={disabled}
           tabIndex={-1}
           onClick={(event) => {
             event.stopPropagation();
             stepBy(-1);
           }}
-          className="!h-3.5 !w-5 !rounded-none !border-0 !bg-transparent !p-0 text-text-muted hover:!bg-layer hover:!text-text-dark"
+          className="!h-3.5 !w-5 !rounded-none !border-0 !p-0"
         >
           <ChevronDown className="h-3 w-3" />
         </UiIconButton>

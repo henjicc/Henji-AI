@@ -46,8 +46,12 @@ interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   active?: boolean;
   showBorder?: boolean;
-  /** `glass`：压在图片/视频/画布上时用，材质与交互态全部来自 `.ui-glass`，详见 resolveButtonVariant */
-  appearance?: 'default' | 'hover-only' | 'glass';
+  /**
+   * `hover-only`：静息无框无底，悬浮时出现表面反馈。
+   * `color-only`：始终无框无底，悬浮/按下时只压暗图标，适合数字步进箭头。
+   * `glass`：压在图片/视频/画布上时用，材质与交互态全部来自 `.ui-glass`。
+   */
+  appearance?: 'default' | 'hover-only' | 'color-only' | 'glass';
   hoverVariant?: 'default' | 'danger';
 }
 
@@ -213,14 +217,17 @@ export function UiIconButton({
   ...props
 }: UiIconButtonProps) {
   const hoverOnly = appearance === 'hover-only';
+  const colorOnly = appearance === 'color-only';
   // hover-only 的语义就是静息态无框无底；不能再让遗漏 showBorder={false}
   // 的调用点静默退回成有背景的默认按钮。
-  const bordered = hoverOnly ? false : showBorder;
+  const bordered = hoverOnly || colorOnly ? false : showBorder;
   const adaptiveSurfaceClass = !active && appearance === 'default' ? UI_GLASS_ADAPTIVE_CONTROL_CLASS : '';
   const stateClass = appearance === 'glass'
     // 玻璃档没有走 UI_FIELD_SURFACE_CLASS，禁用态要自己补，否则查看器的上/下一张
     // 到头时按钮看起来仍可点
     ? `ui-glass ui-glass-interactive text-white ${UI_FIELD_DISABLED_CLASS}${active ? ' !text-brand-300' : ''}`
+    : colorOnly
+    ? 'border-transparent text-text-soft hover:text-text-muted active:text-text-faint'
     : active
     ? (bordered
       ? UI_MULTISELECT_ITEM_ACTIVE_CLASS

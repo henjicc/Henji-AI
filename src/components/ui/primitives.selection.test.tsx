@@ -81,6 +81,7 @@ describe('Ui primitives 选中态词汇表', () => {
         <UiIconButton aria-label="中性图标动作" />
         <UiIconButton active aria-label="选中图标动作" />
         <UiIconButton appearance="hover-only" aria-label="静息工具栏动作" />
+        <UiIconButton appearance="color-only" aria-label="纯图标反馈动作" />
       </>,
     );
 
@@ -96,6 +97,19 @@ describe('Ui primitives 选中态词汇表', () => {
     expect(view.getByRole('button', { name: '中性图标动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(true);
     expect(view.getByRole('button', { name: '选中图标动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
     expect(view.getByRole('button', { name: '静息工具栏动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
+    expect(view.getByRole('button', { name: '纯图标反馈动作' }).classList.contains(UI_GLASS_ADAPTIVE_CONTROL_CLASS)).toBe(false);
+  });
+
+  it('纯图标反馈动作始终不添加背景，悬浮时只压暗图标', () => {
+    const view = render(
+      <UiIconButton appearance="color-only" aria-label="数字步进箭头" />,
+    );
+
+    const button = view.getByRole('button', { name: '数字步进箭头' });
+    expect(button.className).not.toMatch(/(?:^|\s)(?:hover:|active:)?bg-/);
+    expect(button.classList.contains('text-text-soft')).toBe(true);
+    expect(button.classList.contains('hover:text-text-muted')).toBe(true);
+    expect(button.classList.contains('active:text-text-faint')).toBe(true);
   });
 
   it('布尔态只强调开关与复选框控件本体', () => {

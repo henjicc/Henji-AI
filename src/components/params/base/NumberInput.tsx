@@ -8,7 +8,15 @@ import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UiIconButton, UiInput, UiOptionButton } from '@/components/ui'
+import {
+  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
+  UI_FIELD_LABEL_CLASS,
+  UI_GLASS_ADAPTIVE_CONTROL_CLASS,
+  UI_TEXT_META_CLASS,
+  UiIconButton,
+  UiInput,
+  UiOptionButton,
+} from '@/components/ui'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -164,24 +172,26 @@ export const NumberInput: React.FC<NumberInputProps> = ({
             max={param.max}
             step={step}
             placeholder={placeholderText}
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-28 pr-8`}
+            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} w-28 pr-8`}
           />
           <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
             <UiIconButton
               type="button"
               showBorder={false}
+              appearance="color-only"
               onClick={() => handleStepChange(1)}
               disabled={disabled || (param.max !== undefined && safeValue >= param.max)}
-              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-text-soft hover:text-text-dark"
+              className="!h-4 !w-6 rounded-none border-0 p-0 text-3xs leading-none text-text-soft"
             >
               ▲
             </UiIconButton>
             <UiIconButton
               type="button"
               showBorder={false}
+              appearance="color-only"
               onClick={() => handleStepChange(-1)}
               disabled={disabled || (param.min !== undefined && safeValue <= param.min)}
-              className="!h-4 !w-6 rounded-none border-0 bg-transparent p-0 text-3xs leading-none text-text-soft hover:text-text-dark"
+              className="!h-4 !w-6 rounded-none border-0 p-0 text-3xs leading-none text-text-soft"
             >
               ▼
             </UiIconButton>
