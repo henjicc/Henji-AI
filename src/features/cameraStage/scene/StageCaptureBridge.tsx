@@ -8,6 +8,8 @@ import {
   WebGLRenderTarget,
 } from 'three'
 import type { Camera, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
+import { updateCameraStageProjectCover } from '../projects/cameraStageProjectCover'
+import { useCameraStageStore } from '../store/cameraStageStore'
 import { resolveCenteredCaptureView } from './captureFraming'
 
 /**
@@ -47,6 +49,7 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
 
   useEffect(() => {
     let resources: ExportRendererResources | null = null
+    let coverTimer: number | null = null
 
     const disposeOffscreen = (): void => {
       resources?.sceneTarget.dispose()
@@ -74,9 +77,43 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
 
     captureFrame.disposeOffscreen = disposeOffscreen
     captureRef.current = captureFrame
+
+    const clearCoverTimer = (): void => {
+      if (coverTimer === null) return
+      window.clearTimeout(coverTimer)
+      coverTimer = null
+    }
+    const refreshCover = (): void => {
+      clearCoverTimer()
+      const projectId = useCameraStageStore.getState().currentProjectId
+      if (projectId) void updateCameraStageProjectCover(projectId, () => captureFrame())
+    }
+    const scheduleCoverRefresh = (): void => {
+      clearCoverTimer()
+      coverTimer = window.setTimeout(refreshCover, 1_200)
+    }
+    const unsubscribe = useCameraStageStore.subscribe((state, previous) => {
+      const contentChanged = state.currentProjectId !== previous.currentProjectId
+        || state.objects !== previous.objects
+        || state.stateKeyframes !== previous.stateKeyframes
+        || state.sceneSettings !== previous.sceneSettings
+        || state.activeCameraId !== previous.activeCameraId
+      if (state.currentProjectId && contentChanged) scheduleCoverRefresh()
+    })
+    if (useCameraStageStore.getState().currentProjectId) scheduleCoverRefresh()
+    const flushWhenHidden = (): void => {
+      if (document.visibilityState === 'hidden') refreshCover()
+    }
+    document.addEventListener('visibilitychange', flushWhenHidden)
+    window.addEventListener('pagehide', refreshCover)
+
     // 这里只服务导出；助手的视口观察统一走 observe_application_surface 截取
     // StageViewportWorkspace 上标注的 camera_stage.viewport_observer 区域。
     return () => {
+      clearCoverTimer()
+      unsubscribe()
+      document.removeEventListener('visibilitychange', flushWhenHidden)
+      window.removeEventListener('pagehide', refreshCover)
       // 四视口切换 primary 时，新桥可能已经先接管 ref；旧桥卸载不能把新桥清空。
       if (captureRef.current === captureFrame) captureRef.current = null
       disposeOffscreen()

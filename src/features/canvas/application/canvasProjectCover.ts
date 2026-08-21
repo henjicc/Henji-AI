@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import { saveProjectCover } from '@/commands/projectCovers'
+import type { ProjectCoverSource } from '@/platform/contracts/projectCovers'
 import { getPlatform } from '@/platform'
 import { SURFACE_OBSERVATION_SCHEMA_VERSION, type SurfaceCaptureRect } from '@/core/assistant/surfaceObservation'
 import { useCanvasStore, type CanvasNode } from '@/stores/canvasStore'
@@ -9,10 +10,10 @@ import { getCanvasNodeDefinition } from '../domain/nodeRegistry'
 const logger = createLogger('features.canvas.application.canvasProjectCover')
 
 /**
- * 画布项目封面：优先取项目里第一张生成结果，没有生成结果时退回节点区域截图。
+ * 画布项目封面：优先取项目里最早的生成图片，没有生成结果时退回节点区域截图。
  *
- * 退出项目时调用（返回按钮与助手的关闭能力都走这里），而不是每次生成都更新——
- * 封面只是列表里的缩略图，跟着生成实时刷新等于给每次生成加一次转码与落盘。
+ * 自动更新层会在封面来源变化后低频调用；退出项目时再补一次立即刷新。
+ * 转码、拼图与落盘统一交给主进程 project-covers 服务。
  */
 
 /** 节点区域截图四周留出的呼吸空间（CSS px） */
@@ -20,42 +21,29 @@ const CAPTURE_PADDING = 24
 /** 主进程截图 rect 上限，见 surfaceCaptureRectSchema */
 const MAX_CAPTURE_EDGE = 4_096
 
-interface CoverSource {
-  source: string
-  sourceKind: 'image' | 'video'
-}
-
 /** 生成结果节点：注册表里 role=result 的节点承载生成产物，generator 节点自身也可能留有结果 */
 function isGeneratedResultNode(node: CanvasNode): boolean {
-  const role = getCanvasNodeDefinition(node.type ?? '')?.media?.role
-  return role === 'result'
+  const media = getCanvasNodeDefinition(node.type ?? '')?.media
+  return media?.role === 'result' && media.kind === 'image'
 }
 
-function readNodeMedia(node: CanvasNode): CoverSource | null {
+function readNodeImages(node: CanvasNode): ProjectCoverSource[] {
   const definition = getCanvasNodeDefinition(node.type ?? '')
   const outputs = definition?.getOutputs?.(node.data) ?? []
-  for (const output of outputs) {
-    if (output.kind === 'audio') continue
-    // 视频节点的封面帧优先用已有海报图，省掉一次抽帧
-    const preview = typeof output.previewUrl === 'string' ? output.previewUrl : null
-    if (output.kind === 'video') {
-      if (preview) return { source: preview, sourceKind: 'image' }
-      if (output.url) return { source: output.url, sourceKind: 'video' }
-      continue
-    }
-    if (output.url) return { source: output.url, sourceKind: 'image' }
-  }
-  return null
+  return outputs
+    .filter((output) => output.kind === 'image' && typeof output.url === 'string' && output.url.length > 0)
+    .map((output) => ({ source: output.url, sourceKind: 'image' }))
 }
 
-/** 画布里第一张用户生成的内容；没有生成结果时返回 null */
-function findGeneratedCoverSource(nodes: CanvasNode[]): CoverSource | null {
+/** 画布里最早的四张生成图片；节点数组按创建顺序持久化，因此顺序跨重启保持稳定。 */
+export function findGeneratedCoverSources(nodes: CanvasNode[]): ProjectCoverSource[] {
+  const sources: ProjectCoverSource[] = []
   for (const node of nodes) {
     if (!isGeneratedResultNode(node)) continue
-    const media = readNodeMedia(node)
-    if (media) return media
+    sources.push(...readNodeImages(node))
+    if (sources.length >= 4) return sources.slice(0, 4)
   }
-  return null
+  return sources
 }
 
 function toIntRect(rect: { x: number; y: number; width: number; height: number }): SurfaceCaptureRect {
@@ -124,18 +112,17 @@ async function captureNodeAreaDataUrl(): Promise<string | null> {
  */
 export async function updateCanvasProjectCover(projectId: string): Promise<void> {
   try {
-    const generated = findGeneratedCoverSource(useCanvasStore.getState().nodes)
-    const cover = generated ?? await (async (): Promise<CoverSource | null> => {
+    const generated = findGeneratedCoverSources(useCanvasStore.getState().nodes)
+    const sources = generated.length > 0 ? generated : await (async (): Promise<ProjectCoverSource[]> => {
       const dataUrl = await captureNodeAreaDataUrl()
-      return dataUrl ? { source: dataUrl, sourceKind: 'image' } : null
+      return dataUrl ? [{ source: dataUrl, sourceKind: 'image' }] : []
     })()
-    if (!cover) return
+    if (sources.length === 0) return
 
     const result = await saveProjectCover({
       scope: 'canvas',
       projectId,
-      source: cover.source,
-      sourceKind: cover.sourceKind,
+      sources,
     })
     useProjectStore.getState().setProjectCover(projectId, result.coverPath)
   } catch (error) {

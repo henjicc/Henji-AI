@@ -315,7 +315,7 @@
     "nodes": "Nodes",
     "noProjects": "No Projects",
     "empty": "No Projects",
-    "emptyHint": "Click the button above to create a new project",
+    "emptyHint": "Create your first project to start organizing your canvas",
     "nodesCount": "{{count}} nodes",
     "selectMultiple": "Select multiple",
     "selectItem": "Select",

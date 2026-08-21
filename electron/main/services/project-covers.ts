@@ -1,9 +1,16 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { getDb, getHenjiDataDir } from './db'
-import { generateImageThumbnailBytes } from './image/ops'
+import { loadSharp } from './image/sharp-loader'
+import { resolveSourceBytes } from './image/source'
 import { generateVideoThumbnailBytes } from './video/ops'
 import { createMainLogger } from './logging'
+import {
+  selectProjectCoverSources,
+  type ProjectCoverSourceDto,
+} from './project-cover-layout'
+
+export type { ProjectCoverSourceDto, ProjectCoverSourceKind } from './project-cover-layout'
 
 /**
  * 工程封面：画布工程与 3D 镜头参考工程共用同一套落盘、清理与登记逻辑。
@@ -13,14 +20,11 @@ import { createMainLogger } from './logging'
  */
 
 export type ProjectCoverScope = 'canvas' | 'camera-stage'
-export type ProjectCoverSourceKind = 'image' | 'video'
 
 export interface SaveProjectCoverPayloadDto {
   scope: ProjectCoverScope
   projectId: string
-  /** 任意媒体形态：本地路径 / file:// / henji-media:// / http(s) / data: */
-  source: string
-  sourceKind: ProjectCoverSourceKind
+  sources: ProjectCoverSourceDto[]
 }
 
 export interface ProjectCoverResultDto {
@@ -28,8 +32,9 @@ export interface ProjectCoverResultDto {
   coverPath: string | null
 }
 
-/** 封面在卡片里最大也就 ~360 CSS px 宽，2x DPR 下 720；640 足够且单张仅十几 KB */
-const COVER_MAX_EDGE = 640
+/** 项目卡封面固定 4:3；640 宽能覆盖常见 2x DPR，同时控制单张文件体积。 */
+const COVER_WIDTH = 640
+const COVER_HEIGHT = 480
 const COVER_DIR_NAME = 'ProjectCovers'
 const SCOPE_TABLES: Record<ProjectCoverScope, string> = {
   canvas: 'storyboard_projects',
@@ -37,6 +42,7 @@ const SCOPE_TABLES: Record<ProjectCoverScope, string> = {
 }
 
 const logger = createMainLogger('main.project-covers')
+const coverSaveQueues = new Map<string, Promise<void>>()
 
 function coverDir(): string {
   return path.join(getHenjiDataDir(), COVER_DIR_NAME)
@@ -64,17 +70,58 @@ async function removeFileQuietly(target: string | null): Promise<void> {
   }
 }
 
+async function renderSourceTile(
+  source: ProjectCoverSourceDto,
+  width: number,
+  height: number,
+): Promise<Buffer> {
+  const input = source.sourceKind === 'video'
+    ? await generateVideoThumbnailBytes(source.source, Math.max(width, height))
+    : (await resolveSourceBytes(source.source)).bytes
+  const sharp = await loadSharp()
+  return await sharp(input)
+    .resize(width, height, { fit: 'cover', position: 'centre' })
+    .webp({ quality: 80 })
+    .toBuffer()
+}
+
+async function renderProjectCover(sources: ProjectCoverSourceDto[]): Promise<Buffer> {
+  const selected = sources
+  if (selected.length === 0) throw new Error('Project cover requires at least one source')
+  if (selected.length === 1) {
+    return await renderSourceTile(selected[0], COVER_WIDTH, COVER_HEIGHT)
+  }
+
+  const columns = 2
+  const rows = selected.length === 4 ? 2 : 1
+  const tileWidth = COVER_WIDTH / columns
+  const tileHeight = COVER_HEIGHT / rows
+  const tiles = await Promise.all(selected.map(async (source, index) => ({
+    input: await renderSourceTile(source, tileWidth, tileHeight),
+    left: (index % columns) * tileWidth,
+    top: Math.floor(index / columns) * tileHeight,
+  })))
+  const sharp = await loadSharp()
+  return await sharp({
+    create: {
+      width: COVER_WIDTH,
+      height: COVER_HEIGHT,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 1 },
+    },
+  }).composite(tiles).webp({ quality: 80 }).toBuffer()
+}
+
 /**
  * 落盘一张工程封面并登记到工程表。
  *
  * 文件名带时间戳且落盘后删除上一张：`<img>` 与协议层都会按 URL 缓存，
  * 同名覆盖会让卡片继续显示旧封面。
  */
-export async function saveProjectCover(payload: SaveProjectCoverPayloadDto): Promise<ProjectCoverResultDto> {
-  const { scope, projectId, source, sourceKind } = payload
-  const bytes = sourceKind === 'video'
-    ? await generateVideoThumbnailBytes(source, COVER_MAX_EDGE)
-    : await generateImageThumbnailBytes(source, COVER_MAX_EDGE)
+async function persistProjectCover(payload: SaveProjectCoverPayloadDto): Promise<ProjectCoverResultDto> {
+  const { scope, projectId, sources } = payload
+  const selectedSources = selectProjectCoverSources(sources)
+  const bytes = await renderProjectCover(selectedSources)
 
   const directory = coverDir()
   await fsp.mkdir(directory, { recursive: true })
@@ -84,11 +131,44 @@ export async function saveProjectCover(payload: SaveProjectCoverPayloadDto): Pro
   writeCoverPath(scope, projectId, target)
   await removeFileQuietly(previousPath)
 
-  logger.info('工程封面已更新', {
-    event: 'project_cover.saved',
-    context: { scope, projectId, sourceKind, byteLength: bytes.byteLength },
-  })
   return { projectId, coverPath: target }
+}
+
+/** 同一工程的自动更新与退出补刷新串行执行，避免并发覆盖留下孤儿封面文件。 */
+export async function saveProjectCover(payload: SaveProjectCoverPayloadDto): Promise<ProjectCoverResultDto> {
+  const { scope, projectId, sources } = payload
+  const selectedSources = selectProjectCoverSources(sources)
+  const queueKey = `${scope}:${projectId}`
+  const previous = coverSaveQueues.get(queueKey) ?? Promise.resolve()
+  logger.info('开始更新工程封面', {
+    event: 'project_cover.save.start',
+    context: { scope, projectId, requestedSourceCount: sources.length },
+  })
+
+  const task = previous.catch(() => undefined).then(async () => await persistProjectCover(payload))
+  const completion = task.then(() => undefined, () => undefined)
+  coverSaveQueues.set(queueKey, completion)
+  try {
+    const result = await task
+    logger.info('工程封面已更新', {
+      event: 'project_cover.save.completed',
+      context: {
+        scope,
+        projectId,
+        sourceCount: selectedSources.length,
+        sourceKinds: selectedSources.map((item) => item.sourceKind),
+      },
+    })
+    return result
+  } catch (error) {
+    logger.error('工程封面更新失败', {
+      event: 'project_cover.save.failed',
+      context: { scope, projectId, error: String(error) },
+    })
+    throw error
+  } finally {
+    if (coverSaveQueues.get(queueKey) === completion) coverSaveQueues.delete(queueKey)
+  }
 }
 
 /** 删除工程时清掉封面文件；工程行本身由各自的 delete 语句带走。 */

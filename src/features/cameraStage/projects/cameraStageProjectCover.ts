@@ -20,8 +20,7 @@ export async function updateCameraStageProjectCover(
     await saveProjectCover({
       scope: 'camera-stage',
       projectId,
-      source: dataUrl,
-      sourceKind: 'image',
+      sources: [{ source: dataUrl, sourceKind: 'image' }],
     })
     useCameraStageSessionStore.getState().markCoversChanged()
   } catch (error) {

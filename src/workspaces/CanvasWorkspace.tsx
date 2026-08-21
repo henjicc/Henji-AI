@@ -3,6 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { UiButton } from '@/components/ui';
 import { Canvas } from '@/features/canvas/Canvas';
 import { updateCanvasProjectCover } from '@/features/canvas/application/canvasProjectCover';
+import { useCanvasProjectCoverAutosave } from '@/features/canvas/application/useCanvasProjectCoverAutosave';
 import { ProjectManager } from '@/features/project/ProjectManager';
 import { useProjectStore } from '@/stores/projectStore';
 import '@/features/canvas/storyboard.css';
@@ -13,6 +14,8 @@ const CanvasWorkspace = (): JSX.Element => {
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const closeProject = useProjectStore((state) => state.closeProject);
   const [isLeavingProject, setIsLeavingProject] = useState(false);
+
+  useCanvasProjectCoverAutosave(currentProjectId);
 
   useEffect(() => {
     void hydrate();

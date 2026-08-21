@@ -28,7 +28,7 @@ const LABELS: ProjectLibraryLabels = {
   defaultNewName: CAMERA_STAGE_DEFAULT_PROJECT_NAME,
   loadingMessage: '加载中…',
   emptyTitle: '还没有工程',
-  emptyDescription: '点击右上「新建工程」开始。',
+  emptyDescription: '新建第一个工程，开始搭建镜头参考。',
   deleteTitle: '删除工程',
   deleteConfirmSingle: (name) => `确定删除「${name}」？此操作不可恢复。`,
   deleteConfirmMultiple: (count) => `确定删除选中的 ${count} 个工程？此操作不可恢复。`,

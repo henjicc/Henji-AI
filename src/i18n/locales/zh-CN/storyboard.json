@@ -315,7 +315,7 @@
     "nodes": "节点数",
     "noProjects": "暂无项目",
     "empty": "暂无项目",
-    "emptyHint": "点击上方按钮创建新项目",
+    "emptyHint": "创建第一个项目，开始整理你的画布内容",
     "nodesCount": "{{count}} 个节点",
     "selectMultiple": "多选",
     "selectItem": "选中",

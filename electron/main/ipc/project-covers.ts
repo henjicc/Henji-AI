@@ -2,6 +2,7 @@ import {
   saveProjectCover,
   type ProjectCoverResultDto,
   type ProjectCoverScope,
+  type ProjectCoverSourceDto,
   type ProjectCoverSourceKind,
   type SaveProjectCoverPayloadDto,
 } from '../services/project-covers'
@@ -14,8 +15,7 @@ function parseSaveCoverPayload(input: unknown): SaveProjectCoverPayloadDto {
   const record = parseRecord(input)
   const scope = record.scope
   const projectId = record.projectId
-  const source = record.source
-  const sourceKind = record.sourceKind ?? 'image'
+  const rawSources = record.sources
 
   if (typeof scope !== 'string' || !SCOPES.includes(scope as ProjectCoverScope)) {
     throw new Error('Expected project cover scope')
@@ -23,18 +23,27 @@ function parseSaveCoverPayload(input: unknown): SaveProjectCoverPayloadDto {
   if (typeof projectId !== 'string' || projectId.length === 0) {
     throw new Error('Expected non-empty projectId')
   }
-  if (typeof source !== 'string' || source.trim().length === 0) {
-    throw new Error('Expected non-empty project cover source')
+  if (!Array.isArray(rawSources) || rawSources.length < 1 || rawSources.length > 4) {
+    throw new Error('Expected 1 to 4 project cover sources')
   }
-  if (typeof sourceKind !== 'string' || !SOURCE_KINDS.includes(sourceKind as ProjectCoverSourceKind)) {
-    throw new Error('Expected project cover sourceKind')
-  }
+
+  const sources = rawSources.map((item): ProjectCoverSourceDto => {
+    const sourceRecord = parseRecord(item)
+    const source = sourceRecord.source
+    const sourceKind = sourceRecord.sourceKind ?? 'image'
+    if (typeof source !== 'string' || source.trim().length === 0) {
+      throw new Error('Expected non-empty project cover source')
+    }
+    if (typeof sourceKind !== 'string' || !SOURCE_KINDS.includes(sourceKind as ProjectCoverSourceKind)) {
+      throw new Error('Expected project cover sourceKind')
+    }
+    return { source, sourceKind: sourceKind as ProjectCoverSourceKind }
+  })
 
   return {
     scope: scope as ProjectCoverScope,
     projectId,
-    source,
-    sourceKind: sourceKind as ProjectCoverSourceKind,
+    sources,
   }
 }
 

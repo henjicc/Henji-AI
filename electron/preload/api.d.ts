@@ -231,11 +231,15 @@ export type HenjiCameraStageProjectWrite = Omit<HenjiCameraStageProjectRecord, '
 export type HenjiProjectCoverScope = 'canvas' | 'camera-stage'
 export type HenjiProjectCoverSourceKind = 'image' | 'video'
 
+export interface HenjiProjectCoverSource {
+  source: string
+  sourceKind: HenjiProjectCoverSourceKind
+}
+
 export interface HenjiProjectCoverRequest {
   scope: HenjiProjectCoverScope
   projectId: string
-  source: string
-  sourceKind: HenjiProjectCoverSourceKind
+  sources: HenjiProjectCoverSource[]
 }
 
 export interface HenjiProjectCoverResult {

@@ -3,6 +3,7 @@ import { CheckSquare, FolderOpen, Pencil, Plus, Square, Trash2 } from 'lucide-re
 import type { LucideIcon } from 'lucide-react';
 import {
   UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS,
+  UiButton,
   UiCheckbox,
   UiEmpty,
   UiIconButton,
@@ -131,7 +132,20 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
   }
 
   if (items.length === 0) {
-    return <UiEmpty size="sm" icon={emptyIcon} title={emptyTitle} description={emptyDescription} />;
+    return (
+      <UiEmpty
+        size="sm"
+        icon={emptyIcon}
+        title={emptyTitle}
+        description={emptyDescription}
+        action={onCreate ? (
+          <UiButton variant="primary" size="sm" className="gap-2 px-4" onClick={onCreate} disabled={busy}>
+            <Plus className="h-4 w-4" />
+            {createLabel}
+          </UiButton>
+        ) : undefined}
+      />
+    );
   }
 
   return (
