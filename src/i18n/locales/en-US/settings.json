@@ -4,7 +4,7 @@
   "theme": "Theme",
   "navSections": {
     "general-basic": "Basics",
-    "general-onboarding": "First-time Setup",
+    "general-onboarding": "Defaults & First-time Setup",
     "general-storage": "Data & Downloads",
     "general-behavior": "Behavior & Concurrency",
     "general-maintenance": "Updates",

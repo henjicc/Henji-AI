@@ -5,7 +5,7 @@
   "steps": {
     "welcome": "Welcome",
     "basics": "Data folder",
-    "provider": "Primary provider",
+    "provider": "Default provider",
     "api-key": "API key",
     "first-task": "First creation"
   },
@@ -52,8 +52,8 @@
     "defaultPath": "Keep the default location: {{path}}"
   },
   "provider": {
-    "headline": "Choose a primary provider",
-    "description": "This only decides which platform your first task prefers. Other models remain available, and you can change it at any time.",
+    "headline": "Choose a default provider",
+    "description": "New nodes and your first task prefer this platform. Other models remain available, and you can change it at any time.",
     "recommended": "Recommended start",
     "more": "ModelScope, Model Studio, and Volcengine Ark can still be configured under Provider Keys.",
     "items": {
@@ -133,13 +133,30 @@
   },
   "settings": {
     "statusLabel": "First-time setup status",
-    "primaryProvider": "Primary provider",
+    "primaryProvider": "Default provider",
+    "primaryProviderHint": "New nodes prefer this provider. If it has no model for a media type, Henji AI falls back to another available provider.",
+    "defaultsTitle": "Defaults for new nodes",
+    "defaultsDescription": "Choose separate default models for images, video, and audio. The same model is matched automatically across providers.",
+    "defaultModelHint": "This saves the model itself, not a provider-specific endpoint. Leave it unset to let the default provider choose.",
+    "defaultModels": {
+      "image": "Default image model",
+      "video": "Default video model",
+      "audio": "Default audio model"
+    },
+    "mediaTypes": {
+      "image": "image",
+      "video": "video",
+      "audio": "audio"
+    },
+    "notSet": "Not set",
+    "defaultsCleared": "The new provider does not offer the previous default {{types}} model. The affected defaults were cleared; choose replacements if needed.",
+    "onboardingTitle": "First-time setup guide",
     "status": {
       "not_started": "Not started",
       "in_progress": "In progress",
       "completed": "Completed",
       "skipped": "Skipped"
     },
-    "description": "Reopen the welcome flow or change the provider preferred for the first task. Saved keys are preserved."
+    "description": "Reopen the welcome flow. Saved defaults and provider keys are preserved."
   }
 }

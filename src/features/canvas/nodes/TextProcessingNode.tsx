@@ -340,8 +340,12 @@ export const TextProcessingNode = memo(({
               <span className={NODE_ROW_LABEL_CLASS}>{t('node.textProcessing.fixedResultLabel')}</span>
               <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
                 <UiSwitch
+                  appearance="segmented"
                   checked={data.fixedResult !== false}
                   onCheckedChange={(fixedResult) => updateNodeData(id, { fixedResult })}
+                  offLabel={t('common:off', '关')}
+                  onLabel={t('common:on', '开')}
+                  size="compact"
                   aria-label={t('node.textProcessing.fixedResultLabel')}
                 />
               </div>

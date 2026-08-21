@@ -18,8 +18,8 @@ export default function Toggle(props: ToggleProps): JSX.Element {
     label,
     checked,
     onChange,
-    onText = '开启',
-    offText = '关闭',
+    onText = '开',
+    offText = '关',
     className,
     disabled = false,
     ariaLabel,
@@ -41,4 +41,3 @@ export default function Toggle(props: ToggleProps): JSX.Element {
     </div>
   )
 }
-

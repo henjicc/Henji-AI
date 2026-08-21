@@ -7,6 +7,22 @@ const os = require('node:os')
 const path = require('node:path')
 const process = require('node:process')
 
+const ONBOARDING_STORAGE_KEY = 'henji-onboarding-state'
+const AUTOMATION_ONBOARDING_STATE = JSON.stringify({
+  version: 2,
+  status: 'skipped',
+  entryReason: 'existing_install',
+  activeStepId: 'welcome',
+  completedStepIds: [],
+  configuredProviders: [],
+  verifiedProviders: [],
+  shownHintIds: [],
+  firstTaskPrepared: false,
+  firstTaskCompleted: false,
+  startedAt: null,
+  completedAt: new Date(0).toISOString(),
+})
+
 function getCdpPort() {
   return 43000 + Math.floor(Math.random() * 10000)
 }
@@ -90,12 +106,37 @@ async function firstApplicationPage(browser) {
   throw new Error('No Electron application page found over CDP')
 }
 
+/**
+ * 自动化测试不验证首次引导时，用一次 reload 在应用模块初始化前写入跳过态。
+ * close() 会恢复原值，避免测试改变用户真实配置。
+ */
+async function suppressOnboardingForAutomation(page) {
+  await page.waitForFunction(() => window.location.href !== 'about:blank', null, { timeout: 30000 })
+  const previousValue = await page.evaluate(({ key, value }) => {
+    const previous = window.localStorage.getItem(key)
+    window.localStorage.setItem(key, value)
+    return previous
+  }, { key: ONBOARDING_STORAGE_KEY, value: AUTOMATION_ONBOARDING_STATE })
+  await page.addInitScript(({ key, value }) => {
+    window.localStorage.setItem(key, value)
+  }, { key: ONBOARDING_STORAGE_KEY, value: AUTOMATION_ONBOARDING_STATE })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+
+  return async () => {
+    await page.evaluate(({ key, previous }) => {
+      if (previous === null) window.localStorage.removeItem(key)
+      else window.localStorage.setItem(key, previous)
+    }, { key: ONBOARDING_STORAGE_KEY, previous: previousValue })
+  }
+}
+
 async function launchElectronApp({
   mainEntry,
   cwd,
   extraEnv = {},
   isolateUserData = false,
   useElectronApi = false,
+  skipOnboarding = false,
 } = {}) {
   const userDataDir = isolateUserData ? createIsolatedUserDataDir() : null
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, mainEntry] : [mainEntry]
@@ -118,12 +159,17 @@ async function launchElectronApp({
         cwd,
         env: createElectronEnv(launchEnv),
       })
+      const page = await app.firstWindow({ timeout: 30000 })
+      const restoreOnboarding = skipOnboarding
+        ? await suppressOnboardingForAutomation(page)
+        : null
       return {
         mode: 'electron-api',
         app,
-        page: await app.firstWindow({ timeout: 30000 }),
+        page,
         close: async () => {
           try {
+            await restoreOnboarding?.().catch(() => undefined)
             await app.close()
           } finally {
             await cleanupIsolatedUserDataDir(userDataDir)
@@ -164,11 +210,15 @@ async function launchElectronApp({
     await waitForCdp(port)
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`)
     const page = await firstApplicationPage(browser)
+    const restoreOnboarding = skipOnboarding
+      ? await suppressOnboardingForAutomation(page)
+      : null
     return {
       mode: 'cdp',
       browser,
       page,
       close: async () => {
+        await restoreOnboarding?.().catch(() => undefined)
         await browser.close()
         await stopElectronChild(child)
         await cleanupIsolatedUserDataDir(userDataDir)

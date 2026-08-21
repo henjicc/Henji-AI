@@ -89,6 +89,7 @@
     "searchPlaceholder": "Search by model name, provider, or description",
     "clearSearch": "Clear search",
     "allProviders": "All",
+    "providerScrollbar": "Scroll provider list",
     "noModels": "No matching models",
     "expand": "Expand",
     "collapse": "Collapse"

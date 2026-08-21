@@ -1,16 +1,16 @@
 /**
  * SwitchInput 组件
  *
- * 支持开关切换（滑块形态）
+ * 支持开关切换（显式双段形态）
  * 支持 i18n 显示名称
  * 支持禁用和条件显示
  */
 
-import React from 'react'
+import React, { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SwitchParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import Toggle from '@/components/ui/Toggle'
+import { UI_FIELD_LABEL_CLASS, UiSwitch } from '@/components/ui'
 
 interface SwitchInputProps {
   param: SwitchParamDef
@@ -31,24 +31,30 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
   const displayName = getI18nText(param.name, i18n.language)
 
   // 获取开关文字
-  const onText = t('common:on', '开启')
-  const offText = t('common:off', '关闭')
+  const onText = t('common:on', '开')
+  const offText = t('common:off', '关')
+  const labelId = useId()
+  const checked = Boolean(value ?? param.default)
 
   return (
-    <Toggle
-      className="w-auto"
-      label={displayName ? (
-        <>
+    <div className="w-auto">
+      {displayName ? (
+        <span id={labelId} className={UI_FIELD_LABEL_CLASS}>
           {displayName}
           {param.required && <span className="text-red-500 ml-1">*</span>}
-        </>
-      ) : undefined}
-      checked={value}
-      onChange={onChange}
-      onText={onText}
-      offText={offText}
-      disabled={disabled}
-    />
+        </span>
+      ) : null}
+      <UiSwitch
+        appearance="segmented"
+        checked={checked}
+        onCheckedChange={onChange}
+        offLabel={offText}
+        onLabel={onText}
+        disabled={disabled}
+        aria-labelledby={displayName ? labelId : undefined}
+        aria-label={displayName ? undefined : checked ? onText : offText}
+        title={checked ? onText : offText}
+      />
+    </div>
   )
 }
-

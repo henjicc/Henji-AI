@@ -1,6 +1,7 @@
 import { memo, useCallback } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { NodeProps } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 
 import { CANVAS_NODE_TYPES, type ValueSourceNodeData } from '@/features/canvas/domain/canvasNodes';
 import { UiIconButton, UiInput, UiSwitch, UiTextArea } from '@/components/ui';
@@ -193,6 +194,11 @@ StringSourceNode.displayName = 'StringSourceNode';
 
 export const BooleanSourceNode = memo(({ id, data, selected, width, height }: ValueNodeProps) => {
   const setValue = useSetValue(id);
+  const { t } = useTranslation();
+  const checked = Boolean(data.value);
+  const offLabel = t('common:off', '关');
+  const onLabel = t('common:on', '开');
+
   return (
     <ValueSourceShell
       id={id}
@@ -206,8 +212,15 @@ export const BooleanSourceNode = memo(({ id, data, selected, width, height }: Va
       icon={<BooleanIcon className="h-4 w-4" />}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs text-text-muted">{String(Boolean(data.value))}</span>
-        <UiSwitch checked={Boolean(data.value)} onCheckedChange={setValue} />
+        <span className="text-xs text-text-muted">{checked ? onLabel : offLabel}</span>
+        <UiSwitch
+          appearance="segmented"
+          checked={checked}
+          onCheckedChange={setValue}
+          offLabel={offLabel}
+          onLabel={onLabel}
+          size="compact"
+        />
       </div>
     </ValueSourceShell>
   );

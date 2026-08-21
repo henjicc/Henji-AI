@@ -6,6 +6,7 @@ import {
   OnboardingManager,
   type OnboardingStorage,
 } from './onboardingManager'
+import { ModelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 
 class MemoryStorage implements OnboardingStorage {
   private readonly values = new Map<string, string>()
@@ -19,10 +20,14 @@ class MemoryStorage implements OnboardingStorage {
   }
 }
 
+function createManager(storage = new MemoryStorage()): OnboardingManager {
+  return new OnboardingManager(storage, new ModelDefaultsManager(storage))
+}
+
 describe('OnboardingManager', () => {
   it('新安装自动打开欢迎流程并写入版本化状态', () => {
     const storage = new MemoryStorage()
-    const manager = new OnboardingManager(storage)
+    const manager = createManager(storage)
 
     expect(manager.getSnapshot()).toMatchObject({
       version: ONBOARDING_STATE_VERSION,
@@ -40,7 +45,7 @@ describe('OnboardingManager', () => {
     const storage = new MemoryStorage()
     storage.setItem('settings-storage', '{}')
 
-    const manager = new OnboardingManager(storage)
+    const manager = createManager(storage)
 
     expect(manager.getSnapshot()).toMatchObject({
       status: 'completed',
@@ -50,7 +55,7 @@ describe('OnboardingManager', () => {
   })
 
   it('支持继续、返回、稍后和手动重新运行', () => {
-    const manager = new OnboardingManager(new MemoryStorage())
+    const manager = createManager()
     manager.open()
     manager.next()
     manager.next()
@@ -72,7 +77,7 @@ describe('OnboardingManager', () => {
   })
 
   it('记录主供应商、密钥验证和首次真实任务完成', () => {
-    const manager = new OnboardingManager(new MemoryStorage())
+    const manager = createManager()
     manager.open()
     manager.setPrimaryProvider('apimart')
     manager.markProviderConfigured('apimart')
@@ -95,7 +100,7 @@ describe('OnboardingManager', () => {
     const storage = new MemoryStorage()
     storage.setItem(ONBOARDING_STORAGE_KEY, '{broken')
 
-    expect(new OnboardingManager(storage).getSnapshot()).toMatchObject({
+    expect(createManager(storage).getSnapshot()).toMatchObject({
       status: 'not_started',
       entryReason: 'fresh_install',
       isOpen: true,

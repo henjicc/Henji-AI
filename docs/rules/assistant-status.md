@@ -27,7 +27,7 @@
 |---|---|
 | 注册域 | 12 |
 | 实体类型 | 28 |
-| 属性 | 266 |
+| 属性 | 269 |
 | 可写实体 | 17 |
 | 写域 | 7：`assets` `camera_stage` `canvas` `generation` `image_mark` `models` `settings` |
 | 只读域 | 5：`artifacts` `assistant_runtime` `image_edit` `storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
@@ -51,9 +51,10 @@
   （`assistantHarness.writeLoop.test.ts`）。
 - **判据 4（可自纠）**：拒绝路径的自我修正由 `assistantHarness.rejectionMatrix.test.ts` 守。
 
-2026-08-21 新增 `general.primary_provider`：首次设置的主供应商由独立 Onboarding Manager
-持有，界面与助手都通过同一个正式设置定义读写；对应的 `settings.general.onboarding` Surface
-也已登记，可从设置定位与观察。API 密钥仍属于受保护状态，未扩大助手读取权限。
+2026-08-21 新增 `general.primary_provider` 与按媒体分类的 `generation.default_*_model`：默认供应商
+和图片、视频、音频默认模型由独立默认项管理器持有，界面与助手都通过同一个正式设置定义读写；
+切换供应商导致默认模型失效时会产生强类型级联 Effect。对应的 `settings.general.onboarding` Surface
+已登记，可从设置定位与观察。API 密钥仍属于受保护状态，未扩大助手读取权限。
 
 验证层（详见 [testing.md](testing.md) 第四节）：
 

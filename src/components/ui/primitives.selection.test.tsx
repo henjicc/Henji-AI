@@ -1,10 +1,11 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
+  UI_COLOR_ACCENT_FILL_TEXT_CLASS,
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
@@ -122,6 +123,57 @@ describe('Ui primitives 选中态词汇表', () => {
 
     expectClasses(view.getByRole('switch', { name: '已开启' }), UI_BOOLEAN_CONTROL_ACTIVE_CLASS);
     expectClasses(view.getByRole('checkbox', { name: '已勾选' }), UI_BOOLEAN_CONTROL_ACTIVE_CLASS);
+  });
+
+  it('开关保留圆润默认外观，并支持带显式文案的双段外观', () => {
+    const onCheckedChange = vi.fn();
+    const view = render(
+      <>
+        <UiSwitch checked={false} aria-label="圆润开关" />
+        <UiSwitch
+          appearance="segmented"
+          checked={false}
+          offLabel="关"
+          onLabel="开"
+          aria-label="关闭的双段开关"
+          onCheckedChange={onCheckedChange}
+        />
+        <UiSwitch
+          appearance="segmented"
+          checked
+          offLabel="关"
+          onLabel="开"
+          size="compact"
+          aria-label="开启的双段开关"
+        />
+      </>,
+    );
+
+    const pill = view.getByRole('switch', { name: '圆润开关' });
+    const segmentedOff = view.getByRole('switch', { name: '关闭的双段开关' });
+    const segmentedOn = view.getByRole('switch', { name: '开启的双段开关' });
+
+    expect(pill.classList.contains('rounded-full')).toBe(true);
+    expect(segmentedOff.classList.contains('rounded-lg')).toBe(true);
+    expect(segmentedOff.classList.contains('bg-surface-dark')).toBe(true);
+    expect(segmentedOff.textContent).toBe('关开');
+    expect(segmentedOff.firstElementChild?.classList.contains('bg-layer')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('translate-x-0')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('transition-[transform,background-color]')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('rounded-md')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('inset-y-1')).toBe(true);
+    expect(segmentedOff.firstElementChild?.classList.contains('duration-200')).toBe(true);
+    expect(segmentedOn.firstElementChild?.classList.contains(UI_COLOR_ACCENT_FILL_TEXT_CLASS)).toBe(true);
+    expect(segmentedOn.firstElementChild?.classList.contains('translate-x-full')).toBe(true);
+    expect(segmentedOn.firstElementChild?.classList.contains('rounded')).toBe(true);
+    expect(segmentedOn.firstElementChild?.classList.contains('inset-y-0.5')).toBe(true);
+    expect(segmentedOn.classList.contains('h-7')).toBe(true);
+    expect(segmentedOn.classList.contains('w-20')).toBe(true);
+    expect(segmentedOn.classList.contains('rounded-md')).toBe(true);
+    expect(segmentedOn.classList.contains('bg-surface-dark')).toBe(true);
+
+    fireEvent.click(segmentedOff);
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
   });
 
   it('精细控件保留至少 24 像素的命中高度', () => {

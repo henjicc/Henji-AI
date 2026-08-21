@@ -275,7 +275,7 @@ export const NodeModelParamsControls = memo(({
           <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
           {selectedModel && (
             <span className="shrink-0 text-xs leading-none text-text-muted/80">
-              {getProviderDisplayName(selectedModel.meta.provider)}
+              {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
             </span>
           )}
         </UiChipButton>
@@ -288,7 +288,7 @@ export const NodeModelParamsControls = memo(({
             <span className="text-xs font-normal leading-none">{selectedModelName}</span>
             {selectedModel && (
               <span className="text-xs leading-none text-text-muted/80">
-                {getProviderDisplayName(selectedModel.meta.provider)}
+                {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
               </span>
             )}
           </div>

@@ -10,6 +10,7 @@
  *   - willchange：已知会导致文字发虚的负例；必须被像素检查抓到
  *
  * 环境变量：VISUAL_PROJECT、VISUAL_MULT、VISUAL_SET、VISUAL_OUT、
+ * VISUAL_SKIP_ONBOARDING=0（仅在需要检查引导本身时显示）、
  * VISUAL_FILL_ALL_TYPES=1（在临时 fixture 补齐缺失类型）、
  * VISUAL_REQUIRE_ALL_TYPES=1（源项目缺少注册类型时失败）。
  */
@@ -26,6 +27,7 @@ const {
 } = require('./lib/canvasPanBench.cjs')
 const { cropCompare, diffBuffers, worstBlock } = require('./lib/canvasVisualDiff.cjs')
 const {
+  ensureVisualSourceProject,
   prepareFullTypeFixture,
   prepareModelSelectorFixture,
 } = require('./lib/canvasVisualFixture.cjs')
@@ -37,6 +39,7 @@ const SOURCE_PROJECT = process.env.VISUAL_PROJECT || 'TEST'
 const MULTIPLIER = Math.max(1, Number(process.env.VISUAL_MULT || 1))
 const SELECTOR_STATE = process.env.VISUAL_SELECTOR_STATE || 'preserve'
 const FILL_ALL_TYPES = process.env.VISUAL_FILL_ALL_TYPES === '1'
+const SKIP_ONBOARDING = process.env.VISUAL_SKIP_ONBOARDING !== '0'
 const STYLE_ID = '__canvas_visual_check_style__'
 const CAPTURE_SETTLE_MS = 250
 
@@ -100,6 +103,44 @@ async function openFixtureProject(page, projectName, expectedNodeCount) {
     { timeout: 40000 }
   )
   await page.waitForTimeout(2500)
+}
+
+async function openSyntheticModelPicker(page) {
+  const imageSelector = page.locator('[data-id="__visual_source_imageModelSelectorNode"]')
+  const trigger = imageSelector.locator('button').filter({ hasText: /KIE/i }).first()
+  await trigger.click()
+  await page.getByRole('scrollbar', { name: /供应商|provider/i }).waitFor({ timeout: 10000 })
+  await page.waitForTimeout(350)
+}
+
+async function lowerSyntheticFixtureViewport(page, fixture) {
+  const viewport = { ...fixture.viewport, y: fixture.viewport.y + 120 }
+  await page.evaluate(async ({ projectId, viewportJson }) => {
+    await window.henjiNative.db.execute(
+      'UPDATE storyboard_projects SET viewport_json = ? WHERE id = ?',
+      [viewportJson, projectId]
+    )
+  }, { projectId: fixture.projectId, viewportJson: JSON.stringify(viewport) })
+  return { ...fixture, viewport }
+}
+
+async function captureModelPickerScrollbarSpacing(page) {
+  return page.evaluate(() => {
+    const providerList = document.querySelector('.model-provider-scroll-viewport')
+    const thumb = document.querySelector('[data-provider-scroll-thumb]')
+    const dividedSection = providerList?.parentElement?.parentElement
+    if (!providerList || !thumb || !dividedSection) return null
+    const providerRect = providerList.getBoundingClientRect()
+    const thumbRect = thumb.getBoundingClientRect()
+    const sectionRect = dividedSection.getBoundingClientRect()
+    const abovePx = Number((thumbRect.top - providerRect.bottom).toFixed(3))
+    const belowPx = Number((sectionRect.bottom - thumbRect.bottom).toFixed(3))
+    return {
+      abovePx,
+      belowPx,
+      differencePx: Number(Math.abs(abovePx - belowPx).toFixed(3)),
+    }
+  })
 }
 
 async function captureGeometry(page) {
@@ -291,24 +332,35 @@ async function main() {
 
   const runDir = path.join(OUT_DIR, `canvas-visual-${Date.now()}`)
   fs.mkdirSync(runDir, { recursive: true })
-  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT })
+  const app = await launchElectronApp({
+    mainEntry: MAIN_ENTRY,
+    cwd: ROOT,
+    skipOnboarding: SKIP_ONBOARDING,
+  })
   const page = app.page
   let fixture = null
+  let source = null
   let session = null
   try {
     await waitForApp(page)
     session = await page.context().newCDPSession(page)
     await removeFixtures(page, FIXTURE_PREFIX)
+    source = await ensureVisualSourceProject(page, SOURCE_PROJECT, FIXTURE_PREFIX)
     const windowSize = await page.evaluate(() => ({ innerWidth: window.innerWidth, innerHeight: window.innerHeight }))
     fixture = await createRealContentFixture(page, {
-      sourceProject: SOURCE_PROJECT,
+      sourceProject: source.sourceProject,
       multiplier: MULTIPLIER,
       tempName: `${FIXTURE_PREFIX}visual_${Date.now()}`,
       viewportPlan: { ...windowSize, sweepScreenDistance: 500 },
     })
     fixture = await prepareModelSelectorFixture(page, fixture, SELECTOR_STATE)
     fixture = await prepareFullTypeFixture(page, fixture, FILL_ALL_TYPES)
+    if (source.created) fixture = await lowerSyntheticFixtureViewport(page, fixture)
     await openFixtureProject(page, fixture.projectName, fixture.nodeCount)
+    if (source.created) await openSyntheticModelPicker(page)
+    const modelPickerScrollbarSpacing = source.created
+      ? await captureModelPickerScrollbarSpacing(page)
+      : null
 
     const startViewport = { x: fixture.viewport.x, y: fixture.viewport.y }
     // Chromium 首张截图会触发一次最终光栅，不能把这 3/255 的一次性舍入变化算进基线。
@@ -332,12 +384,21 @@ async function main() {
       CONFIGS[name].expect === 'pass' ? comparison.passed : !comparison.passed,
     ]))
     const coverageOk = process.env.VISUAL_REQUIRE_ALL_TYPES !== '1' || missingTypes.length === 0
-    const ok = Object.values(expectationResults).every(Boolean) && gesture.passed && coverageOk
+    const modelPickerSpacingOk = !modelPickerScrollbarSpacing
+      || modelPickerScrollbarSpacing.differencePx <= 1
+    const ok = Object.values(expectationResults).every(Boolean)
+      && gesture.passed
+      && coverageOk
+      && modelPickerSpacingOk
     const output = {
       ok,
       generatedAt: new Date().toISOString(),
       params: {
         sourceProject: SOURCE_PROJECT,
+        resolvedSourceProject: source.sourceProject,
+        syntheticSourceCreated: source.created,
+        syntheticModelPickerOpened: source.created,
+        skipOnboarding: SKIP_ONBOARDING,
         multiplier: MULTIPLIER,
         selectorState: SELECTOR_STATE,
         fillAllTypes: FILL_ALL_TYPES,
@@ -354,6 +415,8 @@ async function main() {
       baselineGeometry: baseline.geometry,
       comparisons,
       gesture,
+      modelPickerScrollbarSpacing,
+      modelPickerSpacingOk,
       expectationResults,
     }
     const outFile = path.join(runDir, 'result.json')
@@ -365,6 +428,8 @@ async function main() {
         passed: value.passed, pixels: value.pixels, geometry: value.geometry,
       }])),
       gesture: { passed: gesture.passed, pixels: gesture.pixels, geometry: gesture.geometry },
+      modelPickerScrollbarSpacing,
+      modelPickerSpacingOk,
       expectationResults,
       result: path.relative(ROOT, outFile),
     }, null, 2))
@@ -373,8 +438,8 @@ async function main() {
     if (fixture) {
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click().catch(() => undefined)
       await sleep(800)
-      await removeFixtures(page, FIXTURE_PREFIX).catch(() => undefined)
     }
+    if (source || fixture) await removeFixtures(page, FIXTURE_PREFIX).catch(() => undefined)
     await session?.detach().catch(() => undefined)
     await app.close()
   }

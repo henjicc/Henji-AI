@@ -37,6 +37,7 @@ import { changeLanguage, getCurrentLanguage, type LanguageOption } from '@/utils
 import { getProviderDisplayName } from '@/utils/modelHelpers'
 import { useI18n } from '@/hooks/useI18n'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
+import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import {
   ONBOARDING_STEP_IDS,
   onboardingManager,
@@ -336,15 +337,13 @@ export function OnboardingModal(): JSX.Element {
   }
 
   const prepareFirstTask = (): void => {
-    const preferredModel = registry
-      .getModelsByProvider(state.primaryProvider)
-      .find((model) => model.meta.type === 'image')
+    const preferredModel = registry.getModel(modelDefaultsManager.resolveModelId('image'))
     useGenerationDraftStore.getState().setLegacyInput(t('firstTask.prompt'))
     if (preferredModel) {
       useGenerationDraftStore.getState().patch({
-        selectedProvider: state.primaryProvider,
+        selectedProvider: preferredModel.meta.provider,
         selectedModel: preferredModel.meta.id,
-        modelFilterProvider: state.primaryProvider,
+        modelFilterProvider: preferredModel.meta.provider,
         modelFilterType: 'image',
       })
     }

@@ -399,6 +399,8 @@ function CompactPanelControl({
  * 不复用 TextInput/NumberInput/DropdownInput/SwitchInput（它们自带整行标签布局）。
  */
 export function NodeParamControl({ param, value, onChange, historyGroup, disabled }: NodeParamControlProps) {
+  const { t } = useTranslation();
+
   switch (param.type) {
     case 'text':
     case 'textarea':
@@ -423,8 +425,12 @@ export function NodeParamControl({ param, value, onChange, historyGroup, disable
     case 'switch':
       return (
         <UiSwitch
+          appearance="segmented"
           checked={Boolean(value ?? (param as SwitchParamDef).default)}
           onCheckedChange={onChange}
+          offLabel={t('common:off', '关')}
+          onLabel={t('common:on', '开')}
+          size="compact"
           disabled={disabled}
         />
       );

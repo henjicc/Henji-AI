@@ -30,8 +30,8 @@
   "success": "成功",
   "warning": "警告",
   "info": "信息",
-  "on": "开启",
-  "off": "关闭",
+  "on": "开",
+  "off": "关",
 
   "status": {
     "queued": "排队中",

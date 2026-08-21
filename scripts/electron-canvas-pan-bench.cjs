@@ -287,7 +287,7 @@ async function main() {
     }
   }
 
-  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT })
+  const app = await launchElectronApp({ mainEntry: MAIN_ENTRY, cwd: ROOT, skipOnboarding: true })
   const page = app.page
   let fixture = null
   let session = null

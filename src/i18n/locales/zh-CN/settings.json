@@ -4,7 +4,7 @@
   "theme": "主题",
   "navSections": {
     "general-basic": "基础设置",
-    "general-onboarding": "首次设置",
+    "general-onboarding": "默认项与首次设置",
     "general-storage": "数据与下载",
     "general-behavior": "行为与并发",
     "general-maintenance": "更新维护",

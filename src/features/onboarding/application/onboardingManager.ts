@@ -3,9 +3,14 @@ import {
   API_KEY_PROVIDERS,
   type ApiKeyProvider,
 } from '@/core/config/providers'
+import {
+  ModelDefaultsManager,
+  modelDefaultsManager,
+  type DefaultModelMediaType,
+} from '@/features/settings/modelDefaultsManager'
 
 export const ONBOARDING_STORAGE_KEY = 'henji-onboarding-state'
-export const ONBOARDING_STATE_VERSION = 1
+export const ONBOARDING_STATE_VERSION = 2
 
 export const ONBOARDING_STEP_IDS = [
   'welcome',
@@ -19,13 +24,12 @@ export type OnboardingStepId = (typeof ONBOARDING_STEP_IDS)[number]
 export type OnboardingStatus = 'not_started' | 'in_progress' | 'completed' | 'skipped'
 export type OnboardingEntryReason = 'fresh_install' | 'existing_install' | 'manual'
 
-export interface OnboardingStateV1 {
-  version: 1
+export interface OnboardingStateV2 {
+  version: 2
   status: OnboardingStatus
   entryReason: OnboardingEntryReason
   activeStepId: OnboardingStepId
   completedStepIds: OnboardingStepId[]
-  primaryProvider: ApiKeyProvider
   configuredProviders: ApiKeyProvider[]
   verifiedProviders: ApiKeyProvider[]
   shownHintIds: string[]
@@ -35,7 +39,8 @@ export interface OnboardingStateV1 {
   completedAt: string | null
 }
 
-export interface OnboardingSnapshot extends OnboardingStateV1 {
+export interface OnboardingSnapshot extends OnboardingStateV2 {
+  primaryProvider: ApiKeyProvider
   isOpen: boolean
 }
 
@@ -62,7 +67,7 @@ function nowIso(): string {
   return new Date().toISOString()
 }
 
-function createInitialState(entryReason: OnboardingEntryReason): OnboardingStateV1 {
+function createInitialState(entryReason: OnboardingEntryReason): OnboardingStateV2 {
   const existingInstall = entryReason === 'existing_install'
   return {
     version: ONBOARDING_STATE_VERSION,
@@ -70,7 +75,6 @@ function createInitialState(entryReason: OnboardingEntryReason): OnboardingState
     entryReason,
     activeStepId: 'welcome',
     completedStepIds: existingInstall ? [...ONBOARDING_STEP_IDS] : [],
-    primaryProvider: 'kie',
     configuredProviders: [],
     verifiedProviders: [],
     shownHintIds: [],
@@ -91,12 +95,11 @@ function readStringArray<TValue extends string>(
   ))))
 }
 
-function normalizePersistedState(value: unknown): OnboardingStateV1 | null {
+function normalizePersistedState(value: unknown): OnboardingStateV2 | null {
   if (!value || typeof value !== 'object') return null
   const raw = value as Record<string, unknown>
   const status = raw.status
   const activeStepId = raw.activeStepId
-  const primaryProvider = raw.primaryProvider
   if (
     status !== 'not_started'
     && status !== 'in_progress'
@@ -114,9 +117,6 @@ function normalizePersistedState(value: unknown): OnboardingStateV1 | null {
       ? activeStepId as OnboardingStepId
       : 'welcome',
     completedStepIds: readStringArray(raw.completedStepIds, stepIds),
-    primaryProvider: typeof primaryProvider === 'string' && providerIds.has(primaryProvider as ApiKeyProvider)
-      ? primaryProvider as ApiKeyProvider
-      : 'kie',
     configuredProviders: readStringArray(raw.configuredProviders, providerIds),
     verifiedProviders: readStringArray(raw.verifiedProviders, providerIds),
     shownHintIds: readStringArray(raw.shownHintIds),
@@ -131,7 +131,7 @@ function hasLegacyInstallation(storage: OnboardingStorage): boolean {
   return LEGACY_INSTALLATION_KEYS.some((key) => storage.getItem(key) !== null)
 }
 
-function loadState(storage: OnboardingStorage): OnboardingStateV1 {
+function loadState(storage: OnboardingStorage): OnboardingStateV2 {
   const persisted = storage.getItem(ONBOARDING_STORAGE_KEY)
   if (persisted) {
     try {
@@ -154,15 +154,19 @@ function browserStorage(): OnboardingStorage {
 }
 
 export class OnboardingManager {
-  private state: OnboardingStateV1
+  private state: OnboardingStateV2
   private isOpen: boolean
   private snapshot: OnboardingSnapshot
   private readonly listeners = new Set<() => void>()
 
-  constructor(private readonly storage: OnboardingStorage) {
+  constructor(
+    private readonly storage: OnboardingStorage,
+    private readonly defaultsManager: ModelDefaultsManager = modelDefaultsManager,
+  ) {
     this.state = loadState(storage)
     this.isOpen = this.state.status === 'not_started' || this.state.status === 'in_progress'
-    this.snapshot = { ...this.state, isOpen: this.isOpen }
+    this.snapshot = this.createSnapshot()
+    this.defaultsManager.subscribe(() => this.publish())
     this.persist()
   }
 
@@ -191,7 +195,6 @@ export class OnboardingManager {
       ...createInitialState('manual'),
       status: 'in_progress',
       entryReason: 'manual',
-      primaryProvider: this.state.primaryProvider,
       configuredProviders: this.state.configuredProviders,
       verifiedProviders: this.state.verifiedProviders,
       startedAt: nowIso(),
@@ -243,8 +246,8 @@ export class OnboardingManager {
     this.update({ activeStepId: previousStepId })
   }
 
-  setPrimaryProvider(providerId: ApiKeyProvider): void {
-    this.update({ primaryProvider: providerId })
+  setPrimaryProvider(providerId: ApiKeyProvider): DefaultModelMediaType[] {
+    return this.defaultsManager.setProvider(providerId)
   }
 
   reconcileConfiguredProviders(status: Partial<Record<ApiKeyProvider, boolean>>): void {
@@ -306,7 +309,7 @@ export class OnboardingManager {
     this.update({ shownHintIds: [...this.state.shownHintIds, normalized] })
   }
 
-  private update(patch: Partial<OnboardingStateV1>): void {
+  private update(patch: Partial<OnboardingStateV2>): void {
     this.state = { ...this.state, ...patch, version: ONBOARDING_STATE_VERSION }
     this.commit()
   }
@@ -321,8 +324,16 @@ export class OnboardingManager {
   }
 
   private publish(): void {
-    this.snapshot = { ...this.state, isOpen: this.isOpen }
+    this.snapshot = this.createSnapshot()
     this.listeners.forEach((listener) => listener())
+  }
+
+  private createSnapshot(): OnboardingSnapshot {
+    return {
+      ...this.state,
+      primaryProvider: this.defaultsManager.getSnapshot().providerId,
+      isOpen: this.isOpen,
+    }
   }
 }
 

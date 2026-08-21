@@ -1,14 +1,19 @@
 import { createLogger } from '@/core/logging'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 
 import { GENERAL_APPLICATION_SETTING_DEFINITIONS } from './generalSettingDefinitions'
 import { INTERFACE_APPLICATION_SETTING_DEFINITIONS } from './interfaceSettingDefinitions'
 import { PROTECTED_APPLICATION_SETTING_DEFINITIONS } from './protectedSettingDefinitions'
 import type { ApplicationSettingDefinition, SettingChangePlan } from './types'
-import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
 
 const logger = createLogger('features.settings.application_control')
 const MAX_SETTING_PLANS = 64
+const DEFAULT_MODEL_PROPERTY_IDS = [
+  'generation.default_image_model',
+  'generation.default_video_model',
+  'generation.default_audio_model',
+] as const
 
 const definitions = [
   ...GENERAL_APPLICATION_SETTING_DEFINITIONS,
@@ -24,11 +29,7 @@ useSettingsStore.subscribe((state, previous) => {
   if (state !== previous) revision += 1
 })
 
-let primaryProvider = onboardingManager.getSnapshot().primaryProvider
-onboardingManager.subscribe(() => {
-  const nextProvider = onboardingManager.getSnapshot().primaryProvider
-  if (nextProvider === primaryProvider) return
-  primaryProvider = nextProvider
+modelDefaultsManager.subscribe(() => {
   revision += 1
 })
 
@@ -60,17 +61,31 @@ function publicDefinition(definition: ApplicationSettingDefinition): Record<stri
   }
 }
 
+function affectedDefinitions(changes: SettingChangePlan['changes']): ApplicationSettingDefinition[] {
+  const ids = new Set(changes.map((change) => change.id))
+  if (ids.has('general.primary_provider')) {
+    DEFAULT_MODEL_PROPERTY_IDS.forEach((propertyId) => ids.add(propertyId))
+  }
+  return [...ids].flatMap((id) => {
+    const definition = definitionMap.get(id)
+    return definition ? [definition] : []
+  })
+}
+
 function applySettingChangesAtomically(changes: SettingChangePlan['changes']): void {
-  const completed: SettingChangePlan['changes'] = []
+  const affected = affectedDefinitions(changes)
+  const beforeValues = new Map(affected.map((definition) => [definition.id, definition.read()]))
   try {
     for (const change of changes) {
       const definition = definitionMap.get(change.id)
       if (!definition) throw new Error('NOT_FOUND')
       definition.write(change.after)
-      completed.push(change)
     }
   } catch (error) {
-    for (const change of completed.reverse()) definitionMap.get(change.id)?.write(change.before)
+    for (const definition of affected) {
+      const before = beforeValues.get(definition.id)
+      if (before !== undefined && definition.read() !== before) definition.write(before)
+    }
     throw error
   }
 }
@@ -170,6 +185,8 @@ export function applyApplicationSettingsChange(planRef: string): {
     event: 'settings.apply.start',
     settingIds: plan.changes.map((change) => change.id),
   })
+  const affected = affectedDefinitions(plan.changes)
+  const beforeValues = new Map(affected.map((definition) => [definition.id, definition.read()]))
   try {
     applySettingChangesAtomically(plan.changes)
   } catch (error) {
@@ -181,10 +198,25 @@ export function applyApplicationSettingsChange(planRef: string): {
   }
   if (plan.revision === revision) revision += 1
   plans.delete(planRef)
+  const explicitIds = new Set(plan.changes.map((change) => change.id))
+  const actualChanges = affected.flatMap((definition) => {
+    const before = beforeValues.get(definition.id)
+    const after = definition.read()
+    if (before === undefined || before === after) return []
+    const planned = plan.changes.find((change) => change.id === definition.id)
+    return [{
+      id: definition.id,
+      before,
+      after,
+      title: definition.title,
+      requiresReload: planned?.requiresReload ?? definition.requiresReload,
+      requiresRestart: planned?.requiresRestart ?? definition.requiresRestart,
+    }]
+  })
   const undoPlan: SettingChangePlan = {
     planRef: createPlanRef(),
     revision,
-    changes: plan.changes.map((change) => ({ ...change, before: change.after, after: change.before })),
+    changes: actualChanges.map((change) => ({ ...change, before: change.after, after: change.before })),
   }
   plans.set(undoPlan.planRef, undoPlan)
   trimPlans()
@@ -194,15 +226,16 @@ export function applyApplicationSettingsChange(planRef: string): {
     revision,
   })
   return {
-    applied: plan.changes.map((change) => ({
+    applied: actualChanges.map((change) => ({
       id: change.id,
       title: change.title,
       value: definitionMap.get(change.id)?.read(),
+      cascaded: !explicitIds.has(change.id),
     })),
     revision,
     undoRef: undoPlan.planRef,
-    requiresReload: plan.changes.some((change) => change.requiresReload),
-    requiresRestart: plan.changes.some((change) => change.requiresRestart),
+    requiresReload: actualChanges.some((change) => change.requiresReload),
+    requiresRestart: actualChanges.some((change) => change.requiresRestart),
   }
 }
 

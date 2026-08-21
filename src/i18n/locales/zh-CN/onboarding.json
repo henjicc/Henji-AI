@@ -5,7 +5,7 @@
   "steps": {
     "welcome": "欢迎",
     "basics": "数据目录",
-    "provider": "主供应商",
+    "provider": "默认供应商",
     "api-key": "API 密钥",
     "first-task": "首次创作"
   },
@@ -52,8 +52,8 @@
     "defaultPath": "不修改将使用默认位置：{{path}}"
   },
   "provider": {
-    "headline": "选择一个主供应商",
-    "description": "主供应商决定首次任务优先使用哪个平台，不会隐藏其他模型，也可以随时修改。",
+    "headline": "选择一个默认供应商",
+    "description": "默认供应商决定新节点和首次任务优先使用哪个平台，不会隐藏其他模型，也可以随时修改。",
     "recommended": "推荐起步",
     "more": "魔搭、百炼与火山方舟仍可在平台密钥中单独配置。",
     "items": {
@@ -133,13 +133,30 @@
   },
   "settings": {
     "statusLabel": "首次设置状态",
-    "primaryProvider": "主供应商",
+    "primaryProvider": "默认供应商",
+    "primaryProviderHint": "新建节点时优先使用这个供应商；如果它不提供某类模型，会回退到其他可用供应商。",
+    "defaultsTitle": "新节点默认项",
+    "defaultsDescription": "默认模型按图片、视频和音频分别设置。相同模型在不同供应商之间会自动对应。",
+    "defaultModelHint": "保存的是模型本身，而不是某个供应商的接口。留空时由当前默认供应商自动选择。",
+    "defaultModels": {
+      "image": "默认图片模型",
+      "video": "默认视频模型",
+      "audio": "默认音频模型"
+    },
+    "mediaTypes": {
+      "image": "图片",
+      "video": "视频",
+      "audio": "音频"
+    },
+    "notSet": "未设置",
+    "defaultsCleared": "新供应商不提供原先的{{types}}默认模型，相关设置已清空，请重新选择。",
+    "onboardingTitle": "首次设置引导",
     "status": {
       "not_started": "尚未开始",
       "in_progress": "进行中",
       "completed": "已完成",
       "skipped": "已跳过"
     },
-    "description": "重新打开欢迎流程，或调整首次任务优先使用的平台。已保存密钥不会被清除。"
+    "description": "重新打开欢迎流程。已保存的默认项和平台密钥不会被清除。"
   }
 }

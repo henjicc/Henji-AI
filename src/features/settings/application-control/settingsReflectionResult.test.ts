@@ -2,6 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { applicationReflectionHandlers } from '@/features/assistant/applicationCapabilities/applicationReflectionAdapter'
+import { registry } from '@/core/ModelRegistry'
+import type { ModelDefinition } from '@/core/types'
+import { modelDefaultsManager } from '@/features/settings/modelDefaultsManager'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { changeLanguage, getCurrentLanguage } from '@/utils/language'
 
@@ -11,17 +14,26 @@ describe('设置的正式反射结果', () => {
   let originalLanguage: ReturnType<typeof getCurrentLanguage>
   let originalTone: ReturnType<typeof useSettingsStore.getState>['themeTonePreset']
   let originalAutoInsertTextDisplay: boolean
+  let originalProvider: ReturnType<typeof modelDefaultsManager.getSnapshot>['providerId']
+  let originalImageModel: string
 
   beforeEach(() => {
     originalLanguage = getCurrentLanguage()
     originalTone = useSettingsStore.getState().themeTonePreset
     originalAutoInsertTextDisplay = useSettingsStore.getState().autoInsertTextDisplayNode
+    originalProvider = modelDefaultsManager.getSnapshot().providerId
+    originalImageModel = modelDefaultsManager.getSnapshot().models.image
   })
 
   afterEach(() => {
     changeLanguage(originalLanguage)
     useSettingsStore.getState().setThemeTonePreset(originalTone)
     useSettingsStore.getState().setAutoInsertTextDisplayNode(originalAutoInsertTextDisplay)
+    modelDefaultsManager.setDefaultModel('image', '')
+    modelDefaultsManager.setProvider(originalProvider)
+    if (originalImageModel) modelDefaultsManager.setDefaultModel('image', originalImageModel)
+    if (registry.getModel('settings-cascade-kie-image')) registry.unregister('settings-cascade-kie-image')
+    if (registry.getModel('settings-cascade-fal-image')) registry.unregister('settings-cascade-fal-image')
   })
 
   function context(requestId: string) {
@@ -32,8 +44,8 @@ describe('设置的正式反射结果', () => {
     }
   }
 
-  async function change(id: string, value: string | boolean): Promise<void> {
-    await applicationReflectionHandlers.changeEntities({
+  async function change(id: string, value: string | boolean) {
+    return applicationReflectionHandlers.changeEntities({
       summary: `修改 ${id}`,
       changes: [{
         kind: 'set_properties',
@@ -81,5 +93,50 @@ describe('设置的正式反射结果', () => {
     expect(snapshot.properties['canvas.auto_insert_text_display']).toBe(next)
     expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}'))
       .toMatchObject({ state: { autoInsertTextDisplayNode: next } })
+  })
+
+  it('切换默认供应商时为被清空的默认模型返回级联 Effect，并从真相源读回', async () => {
+    const createModel = (id: string, canonicalModelId: string, provider: string): ModelDefinition => ({
+      meta: {
+        id,
+        canonicalModelId,
+        provider,
+        type: 'image',
+        name: { zh: id, en: id },
+        tags: [],
+      },
+      inputLimits: { images: { max: 0 }, videos: { max: 0 }, audios: { max: 0 } },
+      params: [],
+      linkages: [],
+      endpoints: '/test',
+      request: { builder: (params) => params },
+      pricing: { currency: '$', fixed: 1 },
+    })
+    registry.register(createModel('settings-cascade-kie-image', 'nano-banana', 'kie'))
+    registry.register(createModel('settings-cascade-fal-image', 'nano-banana-2', 'fal'))
+    modelDefaultsManager.setProvider('kie')
+    modelDefaultsManager.setDefaultModel('image', 'nano-banana')
+
+    const result = await change('general.primary_provider', 'fal')
+
+    expect(result.effects).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        effect: 'update',
+        entityType: 'settings.registry',
+        propertyIds: ['generation.default_image_model'],
+        origin: {
+          kind: 'cascade',
+          declarationId: 'settings.generation.default_image_model.cleared',
+        },
+      }),
+    ]))
+    const snapshot = await applicationReflectionHandlers.readEntity({
+      ref: { kind: 'settings.registry', id: 'singleton' },
+      propertyIds: ['general.primary_provider', 'generation.default_image_model'],
+    }, context('settings-read-defaults-after-provider-change'))
+    expect(snapshot.properties).toMatchObject({
+      'general.primary_provider': 'fal',
+      'generation.default_image_model': 'auto',
+    })
   })
 })

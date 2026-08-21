@@ -89,6 +89,7 @@
     "searchPlaceholder": "搜索模型名称、供应商或描述",
     "clearSearch": "清空搜索",
     "allProviders": "全部",
+    "providerScrollbar": "滚动供应商列表",
     "noModels": "没有匹配的模型",
     "expand": "展开",
     "collapse": "收起"

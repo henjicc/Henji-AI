@@ -7,9 +7,81 @@ const SELECTOR_TYPES = [
 ]
 
 const DEFAULT_MODEL_IDS = {
-  imageModelSelectorNode: 'nano-banana',
-  videoModelSelectorNode: 'seedance-1.0-pro',
+  imageModelSelectorNode: 'kie-nano-banana-2',
+  videoModelSelectorNode: 'kie-kling-3.0',
   audioModelSelectorNode: 'ppio-minimax-speech',
+}
+
+const SELECTOR_DISPLAY_NAMES = {
+  imageModelSelectorNode: '图片模型',
+  videoModelSelectorNode: '视频模型',
+  audioModelSelectorNode: '音频模型',
+}
+
+function buildSyntheticVisualSourceNodes() {
+  return SELECTOR_TYPES.map((type, index) => {
+    const isExpanded = type !== 'imageModelSelectorNode'
+    const width = isExpanded ? 320 : 240
+    const height = isExpanded ? 380 : 44
+    return {
+      id: `__visual_source_${type}`,
+      type,
+      position: { x: index * 440, y: isExpanded ? 0 : 300 },
+      data: {
+        displayName: SELECTOR_DISPLAY_NAMES[type],
+        modelId: DEFAULT_MODEL_IDS[type],
+        isExpanded,
+      },
+      width,
+      height,
+      measured: { width, height },
+      style: { width, height },
+      selected: false,
+    }
+  })
+}
+
+/**
+ * 优先复用指定真实项目；不存在时创建可清理的最小模型选择器基准项目。
+ * 返回的临时源项目名带 FIXTURE_PREFIX，由调用方统一清理。
+ */
+async function ensureVisualSourceProject(page, requestedName, fixturePrefix) {
+  const existing = await page.evaluate(async (projectName) => {
+    const rows = await window.henjiNative.db.select(
+      'SELECT id, name FROM storyboard_projects WHERE name = ? ORDER BY updated_at DESC LIMIT 1',
+      [projectName]
+    )
+    return rows.length ? rows[0] : null
+  }, requestedName)
+  if (existing) {
+    return { sourceProject: requestedName, created: false, projectId: existing.id }
+  }
+
+  const sourceProject = `${fixturePrefix}visual_source_${Date.now()}`
+  const nodes = buildSyntheticVisualSourceNodes()
+  const projectId = await page.evaluate(async (payload) => {
+    const id = `visual-source-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const now = Date.now()
+    await window.henjiNative.db.execute(
+      `INSERT INTO storyboard_projects
+       (id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        payload.name,
+        now,
+        now,
+        payload.nodes.length,
+        JSON.stringify(payload.nodes),
+        '[]',
+        JSON.stringify({ x: 120, y: 120, zoom: 0.8 }),
+        JSON.stringify({ past: [], future: [], imagePool: [] }),
+      ]
+    )
+    return id
+  }, { name: sourceProject, nodes })
+
+  return { sourceProject, requestedSourceProject: requestedName, created: true, projectId }
 }
 
 const MISSING_TYPE_FIXTURES = {
@@ -148,4 +220,9 @@ async function prepareFullTypeFixture(page, fixture, enabled) {
   return { ...fixture, nodeCount: result.nodeCount, fullTypeFixture: true }
 }
 
-module.exports = { prepareFullTypeFixture, prepareModelSelectorFixture }
+module.exports = {
+  buildSyntheticVisualSourceNodes,
+  ensureVisualSourceProject,
+  prepareFullTypeFixture,
+  prepareModelSelectorFixture,
+}

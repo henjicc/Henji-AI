@@ -397,6 +397,7 @@ async function launchUiInspectionApp({ root, mainEntry }) {
     cwd: root,
     isolateUserData: true,
     useElectronApi: true,
+    skipOnboarding: true,
   })
   try {
     await waitForApp(app.page)

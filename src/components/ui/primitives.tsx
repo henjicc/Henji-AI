@@ -1,17 +1,13 @@
 import {
   forwardRef,
   type ButtonHTMLAttributes,
-  type HTMLAttributes,
   type InputHTMLAttributes,
-  type SelectHTMLAttributes,
-  type TextareaHTMLAttributes,
 } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import {
   UI_BOOLEAN_CONTROL_ACTIVE_CLASS,
   UI_BUTTON_RESET_CLASS,
   UI_COLOR_ACCENT_FILL_TEXT_CLASS,
-  UI_FIELD_CONTROL_HEIGHT_CLASS,
   UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_FIELD_DISABLED_CLASS,
   UI_FIELD_FOCUS_CLASS,
@@ -19,7 +15,6 @@ import {
   UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_GLASS_ADAPTIVE_NAV_CLASS,
   UI_GLASS_ADAPTIVE_OPTION_CLASS,
-  UI_INSET_SURFACE_CLASS,
   UI_MULTISELECT_ITEM_ACTIVE_CLASS,
   UI_NAV_INDICATOR_BOTTOM_CLASS,
   UI_NAV_INDICATOR_END_CLASS,
@@ -27,158 +22,28 @@ import {
   UI_OPTION_ITEM_ACTIVE_CLASS,
   UI_OPTION_ITEM_CLASS,
   UI_OPTION_ITEM_HOVER_CLASS,
-  UI_PANEL_SURFACE_CLASS,
 } from './styleTokens';
+import { useScopedTextHistoryProps } from './useScopedTextHistory';
 import {
-  type ScopedTextHistoryBinding,
-  useScopedTextHistoryProps,
-} from './useScopedTextHistory';
-
-type ButtonVariant = 'primary' | 'muted' | 'ghost' | 'plain' | 'glass';
-
-type ButtonSize = 'sm' | 'md' | 'field' | 'field-sm';
-
-interface UiButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
-}
-
-interface UiIconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  active?: boolean;
-  showBorder?: boolean;
-  /**
-   * `hover-only`：静息无框无底，悬浮时出现表面反馈。
-   * `color-only`：始终无框无底，悬浮/按下时只压暗图标，适合数字步进箭头。
-   * `glass`：压在图片/视频/画布上时用，材质与交互态全部来自 `.ui-glass`。
-   */
-  appearance?: 'default' | 'hover-only' | 'color-only' | 'glass';
-  hoverVariant?: 'default' | 'danger';
-}
-
-interface UiChipButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  active?: boolean;
-  /** `navigation` 表示“正在看哪里”；默认 `toggle` 表示多选/标签开态。 */
-  selectionRole?: 'toggle' | 'navigation';
-}
-
-interface UiNavButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  active?: boolean;
-}
-
-interface UiCheckboxProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
-  checked: boolean;
-  onCheckedChange?: (checked: boolean) => void;
-}
-
-interface UiSwitchProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onChange'> {
-  checked: boolean;
-  onCheckedChange?: (checked: boolean) => void;
-}
-
-interface UiSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {}
-
-interface UiOptionButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  active?: boolean;
-  /**
-   * `menu`：静息态完全透明，只靠 hover 与选中态表达状态。
-   *
-   * 用于**同质选项的集合**（菜单项、模型网格、列表项）：一屏里几十个选项各自描边时，
-   * 边框互相抵消、不再传递任何信息，只剩视觉重量。可点击性由 hover 反馈与排布规律表达，
-   * 不需要静息态的框。孤立的单个按钮不适用，那种情况下框才真的在划定边界。
-   *
-   * 静息态刻意**不写 `bg-transparent`**：button 的透明背景由 preflight 保证，
-   * 而写出来会和调用方补的 `bg-veil-faint`（二维网格撑格子用）在同一 CSS 属性上打架，
-   * 胜负取决于 Tailwind 产物里的先后顺序而非 className 顺序，是个静默失效的坑。
-   */
-  variant?: 'default' | 'card' | 'flat' | 'menu';
-}
-
-interface UiInputProps extends InputHTMLAttributes<HTMLInputElement> {
-  textHistory?: ScopedTextHistoryBinding;
-}
-
-interface UiTextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
-  textHistory?: ScopedTextHistoryBinding;
-}
-
-function resolveTextHistoryValue(value: string | number | readonly string[] | undefined): string {
-  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
-}
-
-/**
- * 动作按钮的三档视觉重量，对应动作的重要性而非控件种类：
- *
- * - `primary` 实底：一个表面**只允许一个**，是这一屏的主动作
- * - `ghost` / `muted` 描边：次级动作，同一组的同级动作必须同档
- * - `plain` 无边框：辅助动作（工具栏、行内操作），hover 才出底
- *
- * ⚠️ `ghost` 与 `muted` 目前视觉等价（都是描边 + 底色），是历史命名，
- * 不要按字面理解成"无边框"——真正的无边框档是 `plain`。
- * 图标版的同档是 `UiIconButton appearance="hover-only" showBorder={false}`。
- *
- * `glass` 不在这三档之内，它是**材质**而非重量：只在按钮压住图片/视频/画布
- * （背后是用户内容而非纯色 UI）时用。刻意不输出任何 border-color / bg 工具类——
- * 那些是 utilities 层，会盖掉 components 层 `.ui-glass` 的 tint 与受光边，
- * 把玻璃打回"只有 blur"的廉价观感。交互态由 `.ui-glass-interactive` 叠白纱提供。
- */
-function resolveButtonVariant(variant: ButtonVariant): string {
-  if (variant === 'primary') {
-    return `border border-transparent ${UI_COLOR_ACCENT_FILL_TEXT_CLASS} text-white hover:brightness-110`;
-  }
-
-  if (variant === 'glass') {
-    return 'ui-glass ui-glass-interactive text-white';
-  }
-
-  if (variant === 'plain') {
-    return 'border border-transparent text-text-muted hover:bg-layer hover:text-text-dark';
-  }
-
-  if (variant === 'ghost') {
-    return `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} border border-border-dark bg-surface-dark text-text-dark hover:bg-layer`;
-  }
-
-  return `${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_SURFACE_CLASS} border border-border-dark text-text-dark hover:bg-layer`;
-}
-
-/**
- * 按钮的高度档。
- *
- * **和字段并排的按钮，高度必须来自字段高度令牌，不能自己另起一套数字。**
- * 这是「选择 / 恢复默认按钮比输入框矮一截」的根因：字段有 42/38 两档具名令牌，
- * 而按钮这边原先只有 `h-8`(32) / `h-10`(40) / `field`(42) 三个各自为政的值——
- * 紧凑档 38px 的字段**根本没有对应的按钮档**，调用点只能退而求其次写 `size="sm"`，
- * 于是每一处「输入框 + 按钮」的行都稳定错开 6px（数据保存目录、快速下载路径都是）。
- * 补上 `field-sm` 之后，两档字段各有一个高度完全相同的按钮档，调用点不需要再猜。
- *
- * - `sm` 32px：不与字段并排的独立小动作（工具条、行内操作）
- * - `md` 40px：默认
- * - `field` 42px：与 `UI_FIELD_CONTROL_HEIGHT_CLASS` 的字段并排
- * - `field-sm` 38px：与 `UI_FIELD_CONTROL_HEIGHT_SM_CLASS` 的字段并排
- *
- * 高度**不得**按 variant 分叉。所有 variant 都带 1px 边框（`primary` 是
- * `border-transparent`）、box-sizing 一致，同一档给 primary 40px、给 muted 42px
- * 只会让并排的两个按钮肉眼错开——被删掉的 `control` 档就是这么写的，零调用点。
- *
- * 也不再补 `min-h-*`：横向 flex 行里高度是交叉轴，`items-stretch` 遇到显式高度
- * 不会拉伸，`flex-shrink` 也压不到交叉轴，那个 `min-h` 从来没起过作用；
- * 而它一旦用模板字符串拼出来，Tailwind 扫不到字面量就会静默不生成。
- */
-function resolveButtonSize(size: ButtonSize): string {
-  if (size === 'sm') {
-    return 'h-8 px-3 text-xs';
-  }
-
-  if (size === 'field') {
-    return `${UI_FIELD_CONTROL_HEIGHT_CLASS} px-3.5 text-sm leading-none`;
-  }
-
-  if (size === 'field-sm') {
-    return `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} px-3.5 text-sm leading-none`;
-  }
-
-  return 'h-10 px-3.5 text-sm';
-}
+  type UiButtonProps,
+  type UiCheckboxProps,
+  type UiChipButtonProps,
+  type UiIconButtonProps,
+  type UiInputProps,
+  type UiNavButtonProps,
+  type UiOptionButtonProps,
+  type UiPanelProps,
+  type UiRangeInputProps,
+  type UiSelectProps,
+  type UiSwitchProps,
+  type UiTextAreaProps,
+  UI_RANGE_TRACK_TONE_CLASS,
+  resolveButtonSize,
+  resolveButtonVariant,
+  resolveTextHistoryValue,
+  resolveUiPanelSurface,
+} from './primitiveInternals';
+export type { UiRangeTrackTone } from './primitiveInternals';
 
 export const UiButton = forwardRef<HTMLButtonElement, UiButtonProps>(
   ({ className = '', variant = 'muted', size = 'md', ...props }, ref) => (
@@ -273,37 +138,6 @@ export const UiChipButton = forwardRef<HTMLButtonElement, UiChipButtonProps>(
 );
 
 UiChipButton.displayName = 'UiChipButton';
-
-type UiPanelVariant = 'panel' | 'inset' | 'bare' | 'glass';
-
-interface UiPanelProps extends HTMLAttributes<HTMLDivElement> {
-  /**
-   * 表面变体，用来避免"卡片套卡片"：
-   * - `panel`（默认）：完整浮层表面（边框 + 背景 + 阴影），用于最外层独立面板/弹窗
-   * - `inset`：内嵌分区，仅用更暗的背景做层次，无边框无阴影，用于已在某个 panel 内部再分组
-   * - `bare`：纯语义分组容器，无边框无背景无阴影，只保留圆角，靠留白区分层次
-   * - `glass`：与 `panel` 同级，但材质换成毛玻璃。**只在浮层压住用户内容
-   *   （图片 / 视频 / 画布）时用**——背后是纯色 UI 时模糊零收益，白多一个合成层。
-   *
-   * 铁律：同一层视觉深度只画一次边框/背景。进入一个已经有边框的容器后，
-   * 内部分组请用 `inset` 或 `bare`，不要再套一层 `panel`，也不要手写 `border + bg-*` 的 div。
-   */
-  variant?: UiPanelVariant;
-}
-
-// 圆角跟随层级：外层面板 rounded-xl，内嵌元素 rounded-lg。内层圆角不得大于外层。
-function resolveUiPanelSurface(variant: UiPanelVariant): string {
-  if (variant === 'inset') {
-    return `rounded-lg ${UI_INSET_SURFACE_CLASS}`;
-  }
-  if (variant === 'bare') {
-    return 'rounded-lg';
-  }
-  if (variant === 'glass') {
-    return 'ui-glass ui-glass-elevated rounded-xl';
-  }
-  return `rounded-xl ${UI_PANEL_SURFACE_CLASS}`;
-}
 
 export const UiPanel = forwardRef<HTMLDivElement, UiPanelProps>(
   ({ className = '', variant = 'panel', ...props }, ref) => (
@@ -422,20 +256,6 @@ export const UiInput = forwardRef<HTMLInputElement, UiInputProps>(
 
 UiInput.displayName = 'UiInput';
 
-/** 轨道底色。`hue` 铺满色相光谱，供色相选择使用。 */
-export type UiRangeTrackTone = 'neutral' | 'hue';
-
-interface UiRangeInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
-  trackTone?: UiRangeTrackTone;
-}
-
-// 两种轨道底色必须互斥：都落在 background 上，叠着写的话胜负取决于 Tailwind
-// 产物顺序而非 className 顺序，会静默失效。
-const UI_RANGE_TRACK_TONE_CLASS: Record<UiRangeTrackTone, string> = {
-  neutral: '[&::-webkit-slider-runnable-track]:bg-layer/80 [&::-moz-range-track]:bg-layer/80',
-  hue: 'ui-range-track-hue',
-};
-
 export const UiRangeInput = forwardRef<HTMLInputElement, UiRangeInputProps>(
   ({ className = '', trackTone = 'neutral', ...props }, ref) => (
     <input
@@ -496,32 +316,84 @@ export const UiCheckbox = forwardRef<HTMLButtonElement, UiCheckboxProps>(
 UiCheckbox.displayName = 'UiCheckbox';
 
 export const UiSwitch = forwardRef<HTMLButtonElement, UiSwitchProps>(
-  ({ className = '', checked, onCheckedChange, onClick, ...props }, ref) => (
-    <button
-      ref={ref}
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
-        checked
-          ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
-          : 'border-border-dark bg-surface-dark hover:border-text-muted/60'
-      } ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
-      onClick={(event) => {
-        onClick?.(event);
-        if (!event.defaultPrevented) {
-          onCheckedChange?.(!checked);
-        }
-      }}
-      {...props}
-    >
-      <span
-        className={`pointer-events-none ml-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-150 ${
-          checked ? 'translate-x-5' : 'translate-x-0'
-        }`}
-      />
-    </button>
-  )
+  ({ className = '', checked, onCheckedChange, onClick, appearance = 'pill', offLabel, onLabel, size = 'field', ...props }, ref) => {
+    const handleClick: ButtonHTMLAttributes<HTMLButtonElement>['onClick'] = (event) => {
+      onClick?.(event);
+      if (!event.defaultPrevented) {
+        onCheckedChange?.(!checked);
+      }
+    };
+
+    if (appearance === 'segmented') {
+      const isCompact = size === 'compact';
+      const sizeClass = isCompact
+        ? 'h-7 w-20 rounded-md bg-surface-dark text-xs'
+        : `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} w-28 rounded-lg bg-surface-dark text-sm`;
+      const thumbRadiusClass = isCompact
+        ? 'rounded'
+        : 'rounded-md';
+      const thumbVerticalInsetClass = isCompact
+        ? 'inset-y-0.5'
+        : 'inset-y-1';
+
+      return (
+        <button
+          ref={ref}
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          className={`relative inline-grid grid-cols-2 items-stretch border border-border-dark p-1 font-medium uppercase transition-colors duration-150 hover:border-text-muted/60 ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${sizeClass} ${className}`}
+          onClick={handleClick}
+          {...props}
+        >
+          <span
+            aria-hidden="true"
+            className={`pointer-events-none absolute ${thumbVerticalInsetClass} left-1 w-[calc(50%_-_0.25rem)] ${thumbRadiusClass} transition-[transform,background-color] duration-200 ${
+              checked
+                ? `${UI_COLOR_ACCENT_FILL_TEXT_CLASS} translate-x-full`
+                : 'translate-x-0 bg-layer'
+            }`}
+          />
+          <span
+            className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-200 ${
+              checked ? 'text-text-soft' : 'text-text-dark'
+            }`}
+          >
+            {offLabel}
+          </span>
+          <span
+            className={`pointer-events-none relative flex min-w-0 items-center justify-center transition-colors duration-200 ${
+              checked ? 'text-white' : 'text-text-soft'
+            }`}
+          >
+            {onLabel}
+          </span>
+        </button>
+      );
+    }
+
+    return (
+      <button
+        ref={ref}
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full border transition-colors ${
+          checked
+            ? UI_BOOLEAN_CONTROL_ACTIVE_CLASS
+            : 'border-border-dark bg-surface-dark hover:border-text-muted/60'
+        } ${UI_BUTTON_RESET_CLASS} ${UI_FIELD_DISABLED_CLASS} ${className}`}
+        onClick={handleClick}
+        {...props}
+      >
+        <span
+          className={`pointer-events-none ml-0.5 h-5 w-5 rounded-full bg-white transition-transform duration-150 ${
+            checked ? 'translate-x-5' : 'translate-x-0'
+          }`}
+        />
+      </button>
+    );
+  }
 );
 
 UiSwitch.displayName = 'UiSwitch';
