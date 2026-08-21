@@ -331,7 +331,12 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             visibility: ready ? 'visible' : 'hidden'
           }}
         >
-          {renderPanel()}
+          <div
+            data-panel-scroll-region
+            className="ui-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          >
+            {renderPanel()}
+          </div>
         </div>,
         document.body
       )}

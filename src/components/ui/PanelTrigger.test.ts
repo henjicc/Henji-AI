@@ -1,12 +1,20 @@
 /** @vitest-environment jsdom */
 
-import { describe, expect, it, vi } from 'vitest'
+import React from 'react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import PanelTrigger from './PanelTrigger'
 import {
   isPanelInteractionPortalTarget,
   shouldClosePanelAfterInternalClick,
 } from './panelTriggerClosePolicy'
 
 const TARGET = {} as Node
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 describe('PanelTrigger 面板内部点击关闭策略', () => {
   it('未配置时保持交互型面板打开', () => {
@@ -34,5 +42,39 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     expect(isPanelInteractionPortalTarget(dropdown)).toBe(true)
     expect(isPanelInteractionPortalTarget(suggestion)).toBe(true)
     expect(isPanelInteractionPortalTarget(document.createElement('div'))).toBe(false)
+  })
+
+  it('可用高度不足时由共享内容区滚动，不让长面板溢出外壳', () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe(): void {}
+      disconnect(): void {}
+    })
+
+    const view = render(React.createElement(PanelTrigger, {
+      display: '比例 / 分辨率',
+      panelWidth: 360,
+      alignment: 'aboveCenter',
+      renderPanel: () => React.createElement('div', { style: { height: '900px' } }),
+    }))
+    const trigger = view.getByRole('button')
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      bottom: 620,
+      height: 40,
+      left: 320,
+      right: 440,
+      top: 580,
+      width: 120,
+      x: 320,
+      y: 580,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.click(trigger)
+
+    const scrollRegion = document.querySelector('[data-panel-scroll-region]')
+    expect(scrollRegion).not.toBeNull()
+    expect(scrollRegion?.classList.contains('min-h-0')).toBe(true)
+    expect(scrollRegion?.classList.contains('overflow-y-auto')).toBe(true)
+    expect(scrollRegion?.classList.contains('overscroll-contain')).toBe(true)
   })
 })
