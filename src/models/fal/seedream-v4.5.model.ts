@@ -3,7 +3,6 @@
  */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
-import type { CompositePanelDef } from '@/core/types'
 import {
   calculateSeedreamSizeFromRatio,
   getImageSize,
@@ -85,57 +84,37 @@ export const seedreamV45Model = defineModel({
   },
   params: [
     {
-      id: 'falSeedreamV45Resolution',
+      id: 'falSeedreamV45AspectRatio',
       order: 1,
-      type: 'composite',
-      valueType: 'object',
+      type: 'dropdown',
+      name: sharedFieldText('aspectRatio'),
+      default: 'smart',
+      options: [
+        { value: 'smart', label: sharedOptionText('smart') },
+        { value: '21:9', label: '21:9' },
+        { value: '16:9', label: '16:9' },
+        { value: '3:2', label: '3:2' },
+        { value: '4:3', label: '4:3' },
+        { value: '1:1', label: '1:1' },
+        { value: '3:4', label: '3:4' },
+        { value: '2:3', label: '2:3' },
+        { value: '9:16', label: '9:16' },
+      ],
+    },
+    {
+      id: 'falSeedreamV45Resolution',
+      order: 2,
+      type: 'dropdown',
       name: sharedFieldText('resolution'),
-      panel: 'resolution',
-      default: {
-        mode: 'hybrid',
-        aspectRatio: 'smart',
-        quality: '2K',
-        width: 2048,
-        height: 2048,
-      },
-      config: {
-        mode: 'hybrid',
-        aspectRatios: {
-          options: [
-            { value: 'smart', label: sharedOptionText('smart') },
-            { value: '21:9', label: '21:9' },
-            { value: '16:9', label: '16:9' },
-            { value: '3:2', label: '3:2' },
-            { value: '4:3', label: '4:3' },
-            { value: '1:1', label: '1:1' },
-            { value: '3:4', label: '3:4' },
-            { value: '2:3', label: '2:3' },
-            { value: '9:16', label: '9:16' },
-          ],
-          default: 'smart',
-          smartMatch: true,
-        },
-        qualityTiers: {
-          options: [
-            { value: '2K', label: sharedOptionText('2k') },
-            { value: '4K', label: sharedOptionText('4k') },
-          ],
-          default: '2K',
-        },
-        customSize: {
-          enabled: true,
-          minWidth: 1920,
-          maxWidth: 4096,
-          minHeight: 1920,
-          maxHeight: 4096,
-          step: 1,
-          lockRatio: false,
-        },
-      },
-    } as CompositePanelDef,
+      default: '2K',
+      options: [
+        { value: '2K', label: sharedOptionText('2k') },
+        { value: '4K', label: sharedOptionText('4k') },
+      ],
+    },
     {
       id: 'falSeedream45NumImages',
-      order: 2,
+      order: 3,
       type: 'number',
       name: sharedFieldText('numberOfImages'),
       default: 1,
@@ -143,34 +122,7 @@ export const seedreamV45Model = defineModel({
       max: 6,
     },
   ],
-  linkages: [
-    {
-      trigger: 'falSeedreamV45Resolution',
-      effect: 'setValue',
-      target: 'falSeedreamV45Resolution',
-      condition: (triggerValue: SeedreamResolutionValue) => {
-        return Boolean(
-          triggerValue &&
-          triggerValue.aspectRatio &&
-          triggerValue.aspectRatio !== 'smart'
-        )
-      },
-      value: (triggerValue: SeedreamResolutionValue) => {
-        const ratio = resolveSeedreamRatio(triggerValue.aspectRatio, null)
-        const quality = triggerValue.quality === '4K' ? '4K' : '2K'
-        const size = calculateSeedreamSizeFromRatio(
-          ratio,
-          quality,
-          FAL_SEEDREAM_V45_CONSTRAINTS
-        )
-        return {
-          ...triggerValue,
-          width: size.width,
-          height: size.height,
-        }
-      },
-    },
-  ],
+  linkages: [],
   endpoints: {
     selector: async (params) => {
       const images = params.images || []
@@ -184,9 +136,18 @@ export const seedreamV45Model = defineModel({
       const images = Array.isArray(params.images) ? (params.images as string[]) : []
       const prompt = String(params.prompt || '')
       const numImages = Number(params.falSeedream45NumImages || 1)
-      const resolutionValue = params.falSeedreamV45Resolution as SeedreamResolutionValue | undefined
+      const legacyResolution = params.falSeedreamV45Resolution && typeof params.falSeedreamV45Resolution === 'object'
+        ? params.falSeedreamV45Resolution as SeedreamResolutionValue
+        : undefined
+      const aspectRatio = legacyResolution?.aspectRatio ?? String(params.falSeedreamV45AspectRatio || 'smart')
+      const quality = legacyResolution?.quality === '4K' || params.falSeedreamV45Resolution === '4K'
+        ? '4K'
+        : '2K'
 
-      const imageSize = await resolveFalSeedreamV45Size(resolutionValue, images)
+      const imageSize = await resolveFalSeedreamV45Size(
+        legacyResolution ?? { aspectRatio, quality },
+        images
+      )
 
       const requestData: DynamicValueMap = {
         prompt,

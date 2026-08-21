@@ -1,5 +1,4 @@
 import { defineModel, sharedFieldText, sharedOptionText, sharedText } from '@/core'
-import type { CompositePanelDef } from '@/core/types'
 import { normalizeSeedreamSizeString } from '@/models/shared/seedreamResolution'
 import { resolvePpioImageSources } from './mediaSources'
 
@@ -70,48 +69,31 @@ export const seedream50LiteModel = defineModel({
   },
   params: [
     {
-      id: 'resolution',
-      type: 'composite',
+      id: 'ppioSeedream50LiteAspectRatio',
+      type: 'dropdown',
       order: 1,
+      name: sharedFieldText('aspectRatio'),
+      default: 'smart',
+      options: [
+        { value: 'smart', label: sharedOptionText('smart') },
+        ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
+      ]
+    },
+    {
+      id: 'ppioSeedream50LiteResolution',
+      type: 'dropdown',
+      order: 2,
       name: sharedFieldText('resolution'),
-      panel: 'resolution',
-      default: {
-        mode: 'aspect-quality',
-        aspectRatio: 'smart',
-        quality: '2K'
-      },
-      config: {
-        mode: 'aspect-quality',
-        aspectRatios: {
-          options: [
-            { value: 'smart', label: sharedOptionText('smart') },
-            ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
-          ],
-          default: 'smart',
-          smartMatch: true
-        },
-        qualityTiers: {
-          options: [
-            { value: '2K', label: sharedOptionText('hd2k') },
-            { value: '4K', label: sharedOptionText('uhd4k') }
-          ],
-          default: '2K'
-        },
-        customSize: {
-          enabled: true,
-          minWidth: 256,
-          maxWidth: 12900,
-          minHeight: 256,
-          maxHeight: 12900,
-          step: 1,
-          lockRatio: false
-        }
-      }
-    } as CompositePanelDef,
+      default: '2K',
+      options: [
+        { value: '2K', label: sharedOptionText('hd2k') },
+        { value: '4K', label: sharedOptionText('uhd4k') }
+      ]
+    },
     {
       id: 'maxImages',
       type: 'number',
-      order: 2,
+      order: 3,
       name: sharedFieldText('quantity'),
       tooltip: sharedText('tips.numberOfImagesLimit'),
       default: 1,
@@ -122,7 +104,7 @@ export const seedream50LiteModel = defineModel({
     {
       id: 'optimizePrompt',
       type: 'switch',
-      order: 3,
+      order: 4,
       name: sharedFieldText('promptOptimization'),
       tooltip: sharedText('tips.promptOptimization'),
       default: false
@@ -205,28 +187,34 @@ export const seedream50LiteModel = defineModel({
         return { width, height }
       }
       const localResolveRequestSize = (): string => {
-        const resolutionRecord = params.resolution && typeof params.resolution === 'object'
+        const legacyResolution = params.resolution && typeof params.resolution === 'object'
           ? params.resolution as DynamicValueMap
           : undefined
 
-        if (!resolutionRecord) {
+        if (!legacyResolution && params.ppioSeedream50LiteAspectRatio === undefined && params.ppioSeedream50LiteResolution === undefined) {
           const size = normalizeSeedreamSizeString(
             typeof params.size === 'string' ? params.size.trim() : undefined,
             SEEDREAM_50_CONSTRAINTS
           )
-          return size ?? '2048x2048'
+          if (size) {
+            return size
+          }
         }
 
-        const aspectRatioRaw = typeof resolutionRecord.aspectRatio === 'string' ? resolutionRecord.aspectRatio : 'smart'
+        const aspectRatioRaw = typeof legacyResolution?.aspectRatio === 'string'
+          ? legacyResolution.aspectRatio
+          : String(params.ppioSeedream50LiteAspectRatio || 'smart')
         const isSmartAspect = aspectRatioRaw === 'smart' || aspectRatioRaw === 'auto' || aspectRatioRaw.length === 0
-        const width = localToPositiveNumber(resolutionRecord.width)
-        const height = localToPositiveNumber(resolutionRecord.height)
+        const width = localToPositiveNumber(legacyResolution?.width)
+        const height = localToPositiveNumber(legacyResolution?.height)
         if (!isSmartAspect && width && height) {
           const normalized = localNormalizeSizeByRatioAndPixels(width / height, width * height)
           return `${normalized.width}x${normalized.height}`
         }
 
-        const quality = resolutionRecord.quality === '4K' ? '4K' : '2K'
+        const quality = legacyResolution?.quality === '4K' || params.ppioSeedream50LiteResolution === '4K'
+          ? '4K'
+          : '2K'
         const targetPixels = quality === '4K' ? 10404496 : 2048 * 2048
         const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
           ? params.__firstImageRatio

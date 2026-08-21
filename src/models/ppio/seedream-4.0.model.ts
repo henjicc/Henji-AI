@@ -14,8 +14,7 @@ const logger = createLogger('models.ppio.seedream-4.0.model')
  * - 4K模式：目标像素 4096×4096
  */
 
-import { defineModel } from '@/core'
-import type { CompositePanelDef } from '@/core/types'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 import {
     calculateSeedreamSizeFromRatio,
     getImageSize,
@@ -33,8 +32,6 @@ const SEEDREAM_40_CONSTRAINTS = {
     maxAspectRatio: 16,
     maxPixels: 16777216,
 }
-
-type ResolutionValue = SeedreamResolutionValue & { mode?: string }
 
 export const seedream40Model = defineModel({
     meta: {
@@ -55,60 +52,41 @@ export const seedream40Model = defineModel({
     },
 
     params: [
-        // 1. 分辨率面板（特殊复合面板）
         {
-            id: 'resolution',
-            type: 'composite',
+            id: 'ppioSeedream40AspectRatio',
+            type: 'dropdown',
             order: 1,
-            valueType: 'object',
-            name: { key: 'params.resolution.name', fallback: 'Resolution' },
-            panel: 'resolution',
-            default: {
-                mode: 'aspect-quality',
-                aspectRatio: 'smart',
-                quality: '2K'
-            },
-            config: {
-                mode: 'aspect-quality',
-                aspectRatios: {
-                    options: [
-                        { value: 'smart', label: { key: 'params.resolution.options.aspectRatios.smart', fallback: 'Smart' } },
-                        { value: '21:9', label: '21:9' },
-                        { value: '16:9', label: '16:9' },
-                        { value: '3:2', label: '3:2' },
-                        { value: '4:3', label: '4:3' },
-                        { value: '1:1', label: '1:1' },
-                        { value: '3:4', label: '3:4' },
-                        { value: '2:3', label: '2:3' },
-                        { value: '9:16', label: '9:16' }
-                    ],
-                    default: 'smart',
-                    smartMatch: true
-                },
-                qualityTiers: {
-                    options: [
-                        { value: '2K', label: { key: 'params.resolution.options.qualityTiers.2K', fallback: 'HD 2K' } },
-                        { value: '4K', label: { key: 'params.resolution.options.qualityTiers.4K', fallback: 'UHD 4K' } }
-                    ],
-                    default: '2K'
-                },
-                customSize: {
-                    enabled: true,
-                    minWidth: 15,
-                    maxWidth: 4096,
-                    minHeight: 15,
-                    maxHeight: 4096,
-                    step: 1,
-                    lockRatio: false
-                }
-            }
-        } as CompositePanelDef,
+            name: sharedFieldText('aspectRatio'),
+            default: 'smart',
+            options: [
+                { value: 'smart', label: sharedOptionText('smart') },
+                { value: '21:9', label: '21:9' },
+                { value: '16:9', label: '16:9' },
+                { value: '3:2', label: '3:2' },
+                { value: '4:3', label: '4:3' },
+                { value: '1:1', label: '1:1' },
+                { value: '3:4', label: '3:4' },
+                { value: '2:3', label: '2:3' },
+                { value: '9:16', label: '9:16' }
+            ]
+        },
+        {
+            id: 'ppioSeedream40Resolution',
+            type: 'dropdown',
+            order: 2,
+            name: sharedFieldText('resolution'),
+            default: '2K',
+            options: [
+                { value: '2K', label: sharedOptionText('hd2k') },
+                { value: '4K', label: sharedOptionText('uhd4k') }
+            ]
+        },
 
         // 2. 数量（数字输入）
         {
             id: 'maxImages',
             type: 'number',
-            order: 2,
+            order: 3,
             valueType: 'number',
             name: { key: 'params.maxImages.name', fallback: 'Quantity' },
             tooltip: { key: 'params.maxImages.tooltip', fallback: 'Set to 1 to generate a single image; greater than 1 will generate multiple images. Total reference + generated images cannot exceed 15.' },
@@ -132,35 +110,7 @@ export const seedream40Model = defineModel({
         ]
     },
 
-    linkages: [
-        // 当分辨率的 aspectRatio 或 quality 变化时，自动计算 width 和 height
-        {
-            trigger: 'resolution',
-            effect: 'setValue',
-            target: 'resolution',
-            condition: (triggerValue: ResolutionValue) => {
-                // 只在非智能模式下计算
-                return Boolean(triggerValue && triggerValue.aspectRatio && triggerValue.aspectRatio !== 'smart')
-            },
-            value: (triggerValue: ResolutionValue) => {
-                if (!triggerValue.aspectRatio || triggerValue.aspectRatio === 'smart') {
-                    return triggerValue
-                }
-
-                const size = calculateSeedreamSizeFromRatio(
-                    resolveSeedreamRatio(triggerValue.aspectRatio, null),
-                    triggerValue.quality === '4K' ? '4K' : '2K',
-                    SEEDREAM_40_CONSTRAINTS
-                )
-
-                return {
-                    ...triggerValue,
-                    width: size.width,
-                    height: size.height
-                }
-            }
-        }
-    ],
+    linkages: [],
 
     endpoints: '/seedream-4.0',
 
@@ -183,64 +133,53 @@ export const seedream40Model = defineModel({
                 watermark: false
             }
 
-            // 处理分辨率
-            if (params.resolution) {
-                const resolution = params.resolution as ResolutionValue
+            const legacyResolution = params.resolution && typeof params.resolution === 'object'
+                ? params.resolution as SeedreamResolutionValue
+                : undefined
+            const aspectRatio = legacyResolution?.aspectRatio ?? String(params.ppioSeedream40AspectRatio || 'smart')
+            const quality = legacyResolution?.quality === '4K' || params.ppioSeedream40Resolution === '4K'
+                ? '4K'
+                : '2K'
 
-                // 智能模式：有图按首图比例，无图按 1:1
-                if (resolution.aspectRatio === 'smart') {
-                    try {
-                        const ratioHint = typeof params.__firstImageRatio === 'number' &&
-                            Number.isFinite(params.__firstImageRatio) &&
-                            params.__firstImageRatio > 0
-                            ? params.__firstImageRatio
-                            : null
-                        let ratio = ratioHint ?? 1
-                        let sourceLabel = ratioHint ? `hint:${ratioHint.toFixed(4)}` : '1:1 默认'
-
-                        if (ratioHint === null && previewImages.length > 0) {
-                            const imageSize = await getImageSize(previewImages[0])
-                            ratio = imageSize.width / imageSize.height
-                            sourceLabel = `${imageSize.width}x${imageSize.height}`
-                        }
-                        const quality = resolution.quality === '4K' ? '4K' : '2K'
-                        const size = calculateSeedreamSizeFromRatio(
-                            resolveSeedreamRatio('smart', ratio),
-                            quality,
-                            SEEDREAM_40_CONSTRAINTS
-                        )
-                        requestData.size = `${size.width}x${size.height}`
-                        logger.info(`[Seedream 4.0] 智能模式计算尺寸: ${sourceLabel} (${ratio.toFixed(2)}) -> ${size.width}x${size.height} (${quality})`)
-                    } catch (error) {
-                        logger.error('[Seedream 4.0] 智能模式计算尺寸失败:', error)
-                    }
-                }
-                // 如果不是智能模式
-                else if (resolution.aspectRatio !== 'smart') {
-                    // 优先使用 resolution 中的 width/height
-                    if (resolution.width && resolution.height) {
-                        const size = normalizeSeedreamCustomSize(
-                            resolution.width,
-                            resolution.height,
-                            SEEDREAM_40_CONSTRAINTS
-                        )
-                        requestData.size = `${size.width}x${size.height}`
-                    }
-                    // 如果 resolution 中没有 width/height，但是有直接传入的 size，使用它
-                    else if (params.size) {
-                        const normalizedSize = normalizeSeedreamSizeString(params.size, SEEDREAM_40_CONSTRAINTS)
-                        if (normalizedSize) {
-                            requestData.size = normalizedSize
-                        }
-                    }
-                }
-            }
-            // 如果没有 resolution 参数，但是有直接传入的 size，使用它
-            else if (params.size) {
+            if (legacyResolution?.width && legacyResolution.height) {
+                const size = normalizeSeedreamCustomSize(
+                    legacyResolution.width,
+                    legacyResolution.height,
+                    SEEDREAM_40_CONSTRAINTS
+                )
+                requestData.size = `${size.width}x${size.height}`
+            } else if (
+                params.size &&
+                params.ppioSeedream40AspectRatio === undefined &&
+                params.ppioSeedream40Resolution === undefined
+            ) {
                 const normalizedSize = normalizeSeedreamSizeString(params.size, SEEDREAM_40_CONSTRAINTS)
                 if (normalizedSize) {
                     requestData.size = normalizedSize
                 }
+            } else {
+                let ratioHint: number | null = null
+                if (aspectRatio === 'smart' || aspectRatio === 'auto') {
+                    ratioHint = typeof params.__firstImageRatio === 'number' &&
+                        Number.isFinite(params.__firstImageRatio) &&
+                        params.__firstImageRatio > 0
+                        ? params.__firstImageRatio
+                        : null
+                    if (ratioHint === null && previewImages.length > 0) {
+                        try {
+                            const imageSize = await getImageSize(previewImages[0])
+                            ratioHint = imageSize.width / imageSize.height
+                        } catch (error) {
+                            logger.warn('[Seedream 4.0] 读取参考图比例失败，回退到 1:1', error)
+                        }
+                    }
+                }
+                const size = calculateSeedreamSizeFromRatio(
+                    resolveSeedreamRatio(aspectRatio, ratioHint ?? 1),
+                    quality,
+                    SEEDREAM_40_CONSTRAINTS
+                )
+                requestData.size = `${size.width}x${size.height}`
             }
 
             // 处理图片上传

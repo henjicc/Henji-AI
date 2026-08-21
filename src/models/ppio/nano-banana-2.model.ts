@@ -1,5 +1,4 @@
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
-import type { CompositePanelDef } from '@/core/types'
 import { resolvePpioImageSources } from './mediaSources'
 
 const SUPPORTED_ASPECT_RATIOS = [
@@ -37,37 +36,29 @@ export const nanoBanana2Model = defineModel({
   },
   params: [
     {
-      id: 'resolution',
-      type: 'composite',
+      id: 'ppioNanoBanana2AspectRatio',
+      type: 'dropdown',
       order: 1,
+      name: sharedFieldText('aspectRatio'),
+      default: 'smart',
+      options: [
+        { value: 'smart', label: sharedOptionText('smart') },
+        ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
+      ]
+    },
+    {
+      id: 'ppioNanoBanana2Resolution',
+      type: 'dropdown',
+      order: 2,
       name: sharedFieldText('resolution'),
-      panel: 'resolution',
-      default: {
-        mode: 'aspect-quality',
-        aspectRatio: 'smart',
-        quality: '1K'
-      },
-      config: {
-        mode: 'aspect-quality',
-        aspectRatios: {
-          options: [
-            { value: 'smart', label: sharedOptionText('smart') },
-            ...SUPPORTED_ASPECT_RATIOS.map((ratio) => ({ value: ratio, label: ratio }))
-          ],
-          default: 'smart',
-          smartMatch: true
-        },
-        qualityTiers: {
-          options: [
-            { value: '0.5K', label: '0.5K' },
-            { value: '1K', label: '1K' },
-            { value: '2K', label: '2K' },
-            { value: '4K', label: '4K' }
-          ],
-          default: '1K'
-        }
-      }
-    } as CompositePanelDef,
+      default: '1K',
+      options: [
+        { value: '0.5K', label: '0.5K' },
+        { value: '1K', label: '1K' },
+        { value: '2K', label: '2K' },
+        { value: '4K', label: '4K' }
+      ]
+    },
   ],
   linkages: [],
   endpoints: {
@@ -126,15 +117,15 @@ export const nanoBanana2Model = defineModel({
         return bestValue
       }
 
-      const resolution = params.resolution && typeof params.resolution === 'object'
-        ? params.resolution
-        : {}
-      const quality = typeof resolution.quality === 'string'
-        ? resolution.quality
-        : '1K'
-      const rawAspectRatio = typeof resolution.aspectRatio === 'string'
-        ? resolution.aspectRatio
-        : 'smart'
+      const legacyResolution = params.resolution && typeof params.resolution === 'object'
+        ? params.resolution as DynamicValueMap
+        : undefined
+      const quality = typeof legacyResolution?.quality === 'string'
+        ? legacyResolution.quality
+        : String(params.ppioNanoBanana2Resolution || '1K')
+      const rawAspectRatio = typeof legacyResolution?.aspectRatio === 'string'
+        ? legacyResolution.aspectRatio
+        : String(params.ppioNanoBanana2AspectRatio || 'smart')
       const imageRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
         ? params.__firstImageRatio
         : 1
@@ -158,12 +149,12 @@ export const nanoBanana2Model = defineModel({
   pricing: {
     currency: '¥',
     calculator: (params) => {
-      const resolution = params.resolution && typeof params.resolution === 'object'
+      const legacyResolution = params.resolution && typeof params.resolution === 'object'
         ? params.resolution as DynamicValueMap
         : undefined
-      const quality = typeof resolution?.quality === 'string'
-        ? resolution.quality
-        : '1K'
+      const quality = typeof legacyResolution?.quality === 'string'
+        ? legacyResolution.quality
+        : String(params.ppioNanoBanana2Resolution || '1K')
 
       if (quality === '0.5K') return 0.315
       if (quality === '2K') return 0.707

@@ -57,21 +57,22 @@ const CUSTOM_BUILDER_OVERRIDES = {
     const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt
     const requestData = { prompt: finalPrompt, watermark: false }
     const requestImages = resolvePpioImageSources(params)
-    if (params.resolution) {
-      const resolution = params.resolution
-      const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
-      if (!isSmart && resolution.width && resolution.height) {
-        const size = normalizeSize(Number(resolution.width) / Number(resolution.height), Number(resolution.width) * Number(resolution.height))
-        requestData.size = size.width + 'x' + size.height
-      } else {
-        const quality = resolution.quality === '4K' ? '4K' : '2K'
-        const target = quality === '4K' ? 16777216 : 4194304
-        const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
-        const size = normalizeSize(ratio, target)
-        requestData.size = size.width + 'x' + size.height
-      }
-    } else if (params.size) {
+    const legacyResolution = params.resolution && typeof params.resolution === 'object' ? params.resolution : null
+    const aspectRatio = legacyResolution && typeof legacyResolution.aspectRatio === 'string'
+      ? legacyResolution.aspectRatio
+      : String(params.ppioSeedream40AspectRatio || 'smart')
+    const quality = (legacyResolution && legacyResolution.quality === '4K') || params.ppioSeedream40Resolution === '4K' ? '4K' : '2K'
+    const isSmart = aspectRatio === 'smart' || aspectRatio === 'auto' || !aspectRatio
+    if (legacyResolution && legacyResolution.width && legacyResolution.height) {
+      const size = normalizeSize(Number(legacyResolution.width) / Number(legacyResolution.height), Number(legacyResolution.width) * Number(legacyResolution.height))
+      requestData.size = size.width + 'x' + size.height
+    } else if (params.size && params.ppioSeedream40AspectRatio === undefined && params.ppioSeedream40Resolution === undefined) {
       requestData.size = params.size
+    } else {
+      const target = quality === '4K' ? 16777216 : 4194304
+      const ratio = isSmart ? smartRatioHint : (parseRatio(aspectRatio) || 1)
+      const size = normalizeSize(ratio, target)
+      requestData.size = size.width + 'x' + size.height
     }
     if (requestImages.length > 0) {
       requestData.images = requestImages
@@ -128,21 +129,22 @@ const CUSTOM_BUILDER_OVERRIDES = {
     const finalPrompt = maxImages > 1 ? ('生成' + maxImages + '张图片。' + prompt) : prompt
     const requestData = { prompt: finalPrompt, watermark: false }
     const requestImages = resolvePpioImageSources(params)
-    if (params.resolution) {
-      const resolution = params.resolution
-      const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
-      if (!isSmart && resolution.width && resolution.height) {
-        const size = normalizeSize(Number(resolution.width) / Number(resolution.height), Number(resolution.width) * Number(resolution.height))
-        requestData.size = size.width + 'x' + size.height
-      } else {
-        const quality = resolution.quality === '4K' ? '4K' : '2K'
-        const target = quality === '4K' ? 16777216 : 4194304
-        const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
-        const size = normalizeSize(ratio, target)
-        requestData.size = size.width + 'x' + size.height
-      }
-    } else if (params.size) {
+    const legacyResolution = params.resolution && typeof params.resolution === 'object' ? params.resolution : null
+    const aspectRatio = legacyResolution && typeof legacyResolution.aspectRatio === 'string'
+      ? legacyResolution.aspectRatio
+      : String(params.ppioSeedream45AspectRatio || 'smart')
+    const quality = (legacyResolution && legacyResolution.quality === '4K') || params.ppioSeedream45Resolution === '4K' ? '4K' : '2K'
+    const isSmart = aspectRatio === 'smart' || aspectRatio === 'auto' || !aspectRatio
+    if (legacyResolution && legacyResolution.width && legacyResolution.height) {
+      const size = normalizeSize(Number(legacyResolution.width) / Number(legacyResolution.height), Number(legacyResolution.width) * Number(legacyResolution.height))
+      requestData.size = size.width + 'x' + size.height
+    } else if (params.size && params.ppioSeedream45AspectRatio === undefined && params.ppioSeedream45Resolution === undefined) {
       requestData.size = params.size
+    } else {
+      const target = quality === '4K' ? 16777216 : 4194304
+      const ratio = isSmart ? smartRatioHint : (parseRatio(aspectRatio) || 1)
+      const size = normalizeSize(ratio, target)
+      requestData.size = size.width + 'x' + size.height
     }
     if (requestImages.length > 0) {
       requestData.image = requestImages
@@ -271,29 +273,30 @@ const CUSTOM_BUILDER_OVERRIDES = {
       ? Math.trunc(Number(params.maxImages))
       : (Number.isFinite(Number(params.max_images)) ? Math.trunc(Number(params.max_images)) : 1)
     const maxGeneratedImages = clamp(rawMaxImages, 1, Math.max(1, 15 - requestImages.length))
-    const resolution = params.resolution && typeof params.resolution === 'object' ? params.resolution : null
+    const legacyResolution = params.resolution && typeof params.resolution === 'object' ? params.resolution : null
     const smartRatioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
       ? params.__firstImageRatio
       : 1
     let sizeText = '2048x2048'
-    if (resolution) {
-      const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
-      if (!isSmart && resolution.width && resolution.height) {
-        const size = normalizeCustomSize(resolution.width, resolution.height)
-        sizeText = size.width + 'x' + size.height
-      } else {
-        const quality = resolution.quality === '4K' ? '4K' : '2K'
-        const target = quality === '4K' ? 10404496 : 4194304
-        const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
-        const size = normalizeRatioSize(ratio, target)
-        sizeText = size.width + 'x' + size.height
-      }
-    } else if (params.size) {
+    const aspectRatio = legacyResolution && typeof legacyResolution.aspectRatio === 'string'
+      ? legacyResolution.aspectRatio
+      : String(params.ppioSeedream50LiteAspectRatio || 'smart')
+    const quality = (legacyResolution && legacyResolution.quality === '4K') || params.ppioSeedream50LiteResolution === '4K' ? '4K' : '2K'
+    const isSmart = aspectRatio === 'smart' || aspectRatio === 'auto' || !aspectRatio
+    if (legacyResolution && !isSmart && legacyResolution.width && legacyResolution.height) {
+      const size = normalizeCustomSize(legacyResolution.width, legacyResolution.height)
+      sizeText = size.width + 'x' + size.height
+    } else if (params.size && params.ppioSeedream50LiteAspectRatio === undefined && params.ppioSeedream50LiteResolution === undefined) {
       const parsed = parseSizeString(params.size)
       if (parsed) {
         const size = normalizeCustomSize(parsed.width, parsed.height)
         sizeText = size.width + 'x' + size.height
       }
+    } else {
+      const target = quality === '4K' ? 10404496 : 4194304
+      const ratio = isSmart ? smartRatioHint : (parseRatio(aspectRatio) || 1)
+      const size = normalizeRatioSize(ratio, target)
+      sizeText = size.width + 'x' + size.height
     }
     const requestData = {
       prompt: typeof params.prompt === 'string' ? params.prompt : '',
@@ -324,13 +327,18 @@ const CUSTOM_BUILDER_OVERRIDES = {
     const images = Array.isArray(params.images) ? params.images : []
     const prompt = typeof params.prompt === 'string' ? params.prompt : ''
     const numImages = Number(params.falSeedream40NumImages || 1)
-    const resolution = params.falSeedreamV4Resolution || {}
-    const quality = resolution.quality === '4K' ? '4K' : '2K'
-    const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
-    let width = Number(resolution.width || 0)
-    let height = Number(resolution.height || 0)
+    const legacyResolution = params.falSeedreamV4Resolution && typeof params.falSeedreamV4Resolution === 'object'
+      ? params.falSeedreamV4Resolution
+      : null
+    const aspectRatio = legacyResolution && typeof legacyResolution.aspectRatio === 'string'
+      ? legacyResolution.aspectRatio
+      : String(params.falSeedreamV4AspectRatio || 'smart')
+    const quality = (legacyResolution && legacyResolution.quality === '4K') || params.falSeedreamV4Resolution === '4K' ? '4K' : '2K'
+    const isSmart = aspectRatio === 'smart' || aspectRatio === 'auto' || !aspectRatio
+    let width = Number((legacyResolution && legacyResolution.width) || 0)
+    let height = Number((legacyResolution && legacyResolution.height) || 0)
     if (!(width > 0 && height > 0) || isSmart) {
-      const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
+      const ratio = isSmart ? smartRatioHint : (parseRatio(aspectRatio) || 1)
       const normalizedRatio = clamp(ratio, 1 / 16, 16)
       const target = quality === '4K' ? 16777216 : 4194304
       let h = Math.sqrt(target / normalizedRatio)
@@ -364,13 +372,18 @@ const CUSTOM_BUILDER_OVERRIDES = {
     const images = Array.isArray(params.images) ? params.images : []
     const prompt = typeof params.prompt === 'string' ? params.prompt : ''
     const numImages = Number(params.falSeedream45NumImages || 1)
-    const resolution = params.falSeedreamV45Resolution || {}
-    const quality = resolution.quality === '4K' ? '4K' : '2K'
-    const isSmart = resolution.aspectRatio === 'smart' || resolution.aspectRatio === 'auto' || !resolution.aspectRatio
-    let width = Number(resolution.width || 0)
-    let height = Number(resolution.height || 0)
+    const legacyResolution = params.falSeedreamV45Resolution && typeof params.falSeedreamV45Resolution === 'object'
+      ? params.falSeedreamV45Resolution
+      : null
+    const aspectRatio = legacyResolution && typeof legacyResolution.aspectRatio === 'string'
+      ? legacyResolution.aspectRatio
+      : String(params.falSeedreamV45AspectRatio || 'smart')
+    const quality = (legacyResolution && legacyResolution.quality === '4K') || params.falSeedreamV45Resolution === '4K' ? '4K' : '2K'
+    const isSmart = aspectRatio === 'smart' || aspectRatio === 'auto' || !aspectRatio
+    let width = Number((legacyResolution && legacyResolution.width) || 0)
+    let height = Number((legacyResolution && legacyResolution.height) || 0)
     if (!(width > 0 && height > 0) || isSmart) {
-      const ratio = isSmart ? smartRatioHint : (parseRatio(resolution.aspectRatio) || 1)
+      const ratio = isSmart ? smartRatioHint : (parseRatio(aspectRatio) || 1)
       const normalizedRatio = clamp(ratio, 1 / 16, 16)
       const target = quality === '4K' ? 16777216 : 4194304
       let h = Math.sqrt(target / normalizedRatio)
