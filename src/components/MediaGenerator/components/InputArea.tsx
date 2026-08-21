@@ -282,7 +282,10 @@ const InputArea: React.FC<InputAreaProps> = ({
       onAudioUpload([audioFiles[0]])
     }
   }
-  const promptMinHeightClass = 'min-h-[146px]'
+  // 高屏保持原来的创作空间；矮屏自动收紧到仍能容纳 82px 媒体上传器与发送按钮的高度。
+  // 长提示词提前进入内部滚动，不挤占历史结果区。
+  const promptHeightClass =
+    'min-h-[clamp(96px,15vh,146px)] max-h-[clamp(176px,30vh,260px)]'
   const promptLeftPaddingClass =
     shouldShowUpload
       ? 'pl-[116px]'
@@ -391,7 +394,7 @@ const InputArea: React.FC<InputAreaProps> = ({
             }
             className="relative isolate overflow-visible rounded-2xl"
             editorShellClassName="!rounded-2xl !border-border-dark/35 !bg-transparent transition-colors duration-200 focus-within:!border-veil-soft focus-within:!ring-0"
-            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 leading-6 ${promptMinHeightClass} max-h-[260px] whitespace-pre-wrap break-words ${UI_TEXT_BODY_CLASS}`}
+            editorClassName={`ui-scrollbar w-full ${promptLeftPaddingClass} py-3 pr-14 leading-6 ${promptHeightClass} whitespace-pre-wrap break-words ${UI_TEXT_BODY_CLASS}`}
             disabled={isLoading || isPromptOptimizing || renderPromptOptimizationPreview}
           />
           {renderPromptOptimizationPreview ? (
