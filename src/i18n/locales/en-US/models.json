@@ -24,7 +24,7 @@
   },
   "providers": {
     "ppio": "PPIO",
-    "fal": "Fal.ai",
+    "fal": "Fal",
     "modelscope": "ModelScope",
     "kie": "KIE",
     "apimart": "APIMart",

@@ -100,6 +100,8 @@ describe('ModelPickerList 供应商横向导航', () => {
   });
 
   it('画布与生成页共用同一套供应商显示名', () => {
+    expect(getProviderDisplayName('fal', 'zh-CN')).toBe('Fal');
+    expect(getProviderDisplayName('FAL', 'en-US')).toBe('Fal');
     expect(getProviderDisplayName('VOLCENGINE', 'zh-CN')).toBe('火山引擎');
     expect(getProviderDisplayName('Modelscope', 'zh-CN')).toBe('魔搭');
     expect(getProviderDisplayName('PPIO', 'zh-CN')).toBe('派欧云');

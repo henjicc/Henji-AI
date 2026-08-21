@@ -129,7 +129,7 @@ const UniversalResolutionSelector: React.FC<UniversalResolutionSelectorProps> = 
             maxRatio: 3,
             absoluteMaxPixels: 36000000,
             allowOvershoot: true,
-            name: 'fal.ai',
+            name: 'Fal',
           }
 
       const targetHeight = Math.sqrt(targetPixels / aspectRatio)

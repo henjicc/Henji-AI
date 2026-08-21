@@ -39,13 +39,13 @@
         }
       },
       "fal": {
-        "label": "Fal.ai API 密钥",
-        "placeholder": "请输入 Fal.ai API 密钥",
+        "label": "Fal API 密钥",
+        "placeholder": "请输入 Fal API 密钥",
         "help": "在控制台获取 API 密钥。",
         "guide": "先去 {{home}} 登录，然后去 {{console}} 创建密钥。",
         "links": {
-          "home": "Fal.ai 官网",
-          "console": "Fal.ai 控制台"
+          "home": "Fal 官网",
+          "console": "Fal 控制台"
         }
       },
       "modelscope": {
@@ -372,7 +372,7 @@
       "fallbackHint": "当首选提供商不可用或上传失败时，尝试使用其他已配置的提供商。",
       "providers": {
         "kie": "KIE",
-        "fal": "Fal.ai"
+        "fal": "Fal"
       }
     }
   },

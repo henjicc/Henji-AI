@@ -81,18 +81,18 @@ describe('OnboardingModal', () => {
     fireEvent.click(screen.getByRole('button', { name: '继续' }))
     expect(screen.getByText('选择一个默认供应商')).toBeTruthy()
     const providerButtons = screen.getAllByRole('button')
-      .filter((button) => ['KIE', 'APIMart', 'Fal.ai', '派欧云']
+      .filter((button) => ['KIE', 'APIMart', 'Fal', '派欧云']
         .some((name) => button.textContent?.startsWith(name)))
-      .map((button) => button.textContent?.match(/^(KIE|APIMart|Fal\.ai|派欧云)/)?.[0])
-    expect(providerButtons).toEqual(['KIE', 'APIMart', 'Fal.ai', '派欧云'])
+      .map((button) => button.textContent?.match(/^(KIE|APIMart|Fal|派欧云)/)?.[0])
+    expect(providerButtons).toEqual(['KIE', 'APIMart', 'Fal', '派欧云'])
     expect(screen.getByText('推荐起步').className).toContain('bg-veil-faint')
     expect(screen.getByText(/但目前支持的模型相对较少/)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: /Fal.ai/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Fal/ }))
     fireEvent.click(screen.getByRole('button', { name: '继续' }))
-    expect(await screen.findByText('安全保存 Fal.ai 密钥')).toBeTruthy()
+    expect(await screen.findByText('安全保存 Fal 密钥')).toBeTruthy()
 
-    fireEvent.change(screen.getByPlaceholderText('粘贴 Fal.ai API 密钥'), {
+    fireEvent.change(screen.getByPlaceholderText('粘贴 Fal API 密钥'), {
       target: { value: 'fal-test-key' },
     })
     fireEvent.click(screen.getByRole('button', { name: '保存并测试' }))

@@ -39,13 +39,13 @@
         }
       },
       "fal": {
-        "label": "Fal.ai API Key",
-        "placeholder": "Enter Fal.ai API Key",
+        "label": "Fal API Key",
+        "placeholder": "Enter Fal API Key",
         "help": "Get Key ID:Key Secret from the console.",
         "guide": "Sign in on {{home}}, then create your key in {{console}}.",
         "links": {
-          "home": "Fal.ai Website",
-          "console": "Fal.ai Console"
+          "home": "Fal Website",
+          "console": "Fal Console"
         }
       },
       "modelscope": {
@@ -372,7 +372,7 @@
       "fallbackHint": "Try other configured providers when the primary fails.",
       "providers": {
         "kie": "KIE",
-        "fal": "Fal.ai"
+        "fal": "Fal"
       }
     }
   },
