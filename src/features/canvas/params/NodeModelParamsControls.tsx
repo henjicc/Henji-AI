@@ -12,6 +12,7 @@ import {
   type CanvasModelMediaType,
 } from '@/features/canvas/domain/defaultModels';
 import { getI18nText } from '@/core/types/I18nText';
+import { UI_TRIGGER_PANEL_CLASS } from '@/components/ui/styleTokens';
 import { ModelPickerList } from './ModelPickerList';
 import { useModelPickerList } from './useModelPickerList';
 import { useNodeModelParams } from './useNodeModelParams';
@@ -126,6 +127,7 @@ export const NodeModelParamsControls = memo(({
     providerOptions,
     providerModels,
     filteredModels,
+    selectedModelOption,
     selectedModel,
     selectedModelName,
   } = useModelPickerList({ mediaType, modelId, requiredTags });
@@ -331,7 +333,7 @@ export const NodeModelParamsControls = memo(({
           }`}
           style={buildAdaptivePanelStyle(modelPanelAnchor, modelPanelWidth, viewportWidth)}
         >
-          <UiPanel className="w-full p-2">
+          <div className={`${UI_TRIGGER_PANEL_CLASS} w-full p-2`}>
             <ModelPickerList
               variant="floating"
               modelSearchQuery={modelSearchQuery}
@@ -343,14 +345,14 @@ export const NodeModelParamsControls = memo(({
               modelsForWidthMeasurement={providerModels}
               onPreferredWidthChange={setModelPanelContentWidth}
               filteredModels={filteredModels}
-              selectedModel={selectedModel}
+              selectedModel={selectedModelOption}
               revealSelectedModel={openPanel === 'model'}
               onModelChange={(nextModelId) => {
                 onModelChange(nextModelId);
                 setOpenPanel(null);
               }}
             />
-          </UiPanel>
+          </div>
         </div>,
         document.body
       )}

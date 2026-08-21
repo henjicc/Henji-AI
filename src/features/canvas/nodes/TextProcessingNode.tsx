@@ -293,6 +293,13 @@ export const TextProcessingNode = memo(({
         />
 
         <div ref={inputRowsRef} className={`flex shrink-0 flex-col ${NODE_ROW_GAP_CLASS}`}>
+          <TextProcessingModelRow
+            choices={choices}
+            selectedKey={selectedChoice
+              ? createTextProcessingModelKey(selectedChoice.model.providerId, selectedChoice.model.modelId)
+              : ''}
+            onSelect={handleModelSelect}
+          />
           {isCustomPromptTemplate ? (
             <TextProcessingSystemPromptEditor
               selected={Boolean(selected)}
@@ -340,13 +347,6 @@ export const TextProcessingNode = memo(({
               </div>
             </div>
           )}
-          <TextProcessingModelRow
-            choices={choices}
-            selectedKey={selectedChoice
-              ? createTextProcessingModelKey(selectedChoice.model.providerId, selectedChoice.model.modelId)
-              : ''}
-            onSelect={handleModelSelect}
-          />
         </div>
       </div>
 

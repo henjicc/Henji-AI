@@ -133,7 +133,7 @@ function ModelSelectorExpandedBody({
     setProviderFilter,
     providerOptions,
     filteredModels,
-    selectedModel,
+    selectedModelOption,
   } = useModelPickerList({ mediaType, modelId: data.modelId });
 
   return (
@@ -146,7 +146,7 @@ function ModelSelectorExpandedBody({
         onProviderFilterChange={setProviderFilter}
         providerOptions={providerOptions}
         filteredModels={filteredModels}
-        selectedModel={selectedModel}
+        selectedModel={selectedModelOption}
         onModelChange={setModelId}
       />
     </div>

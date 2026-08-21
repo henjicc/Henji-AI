@@ -486,6 +486,26 @@ body,
   background: rgb(var(--text-muted-rgb) / 0.72);
 }
 
+/* 模型选择器的供应商栏使用常驻的自定义横向滚动条，隐藏会受系统设置自动消失的原生滚动条。 */
+.model-provider-scroll-viewport {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.model-provider-scroll-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+/* 保留原 ui-scrollbar 的粗细与颜色，只把横向滑块改成常驻，避免系统自动隐藏。 */
+.model-provider-scroll-thumb {
+  height: 7px;
+  background: rgb(var(--text-muted-rgb) / 0.5);
+}
+
+.model-provider-scrollbar:hover .model-provider-scroll-thumb {
+  background: rgb(var(--text-muted-rgb) / 0.72);
+}
+
 /* 动画关键帧 */
 @keyframes scaleIn {
   from {
