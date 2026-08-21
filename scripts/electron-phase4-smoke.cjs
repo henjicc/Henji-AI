@@ -117,6 +117,16 @@ async function checkNativeBridge(page) {
 async function checkWorkspaceShell(page) {
   let tempProjectName = null
 
+  const onboardingDialog = page.getByRole('dialog', {
+    name: /欢迎使用痕迹AI|Welcome to Henji AI/,
+  })
+  if (await onboardingDialog.isVisible().catch(() => false)) {
+    await onboardingDialog.getByRole('button', {
+      name: /稍后继续|Continue later/,
+    }).click()
+    await onboardingDialog.waitFor({ state: 'hidden' })
+  }
+
   await page.getByRole('button', { name: /画布|Canvas/ }).click()
   await page.waitForTimeout(500)
 
