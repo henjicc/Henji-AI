@@ -21,6 +21,10 @@ import {
   type UiRadiusPreset,
 } from '@/core/theme/runtimeTheme';
 import type { StartupWorkspaceId } from '@/core/types/workspace';
+import {
+  DEFAULT_UI_SCALE_MODE,
+  type UiScaleMode,
+} from '@/core/theme/uiScale';
 
 export type ProviderKeyStatusMap = Record<string, boolean>;
 /** 超过大文件阈值的本地媒体上传处理方式：每次询问 / 复制进数据目录 / 直接引用原文件 */
@@ -60,6 +64,8 @@ interface SettingsState {
    * 不持久化——应用重启回落 standard，避免用户忘记关闭导致日志膨胀（见 `partialize`）。
    */
   logCaptureMode: LogCaptureMode;
+  /** 整个可见应用窗口的界面缩放；auto 按窗口逻辑尺寸在 90%/100% 间选择。 */
+  uiScaleMode: UiScaleMode;
   uiRadiusPreset: UiRadiusPreset;
   themeTonePreset: ThemeTonePreset;
   /** 界面毛玻璃效果。关闭后 `--ui-blur` 置 0，所有走该令牌的浮层一起变成不模糊 */
@@ -94,6 +100,7 @@ interface SettingsState {
   setCanvasLodLevel: (level: CanvasLodLevel) => void;
   setAutoInsertTextDisplayNode: (enabled: boolean) => void;
   setLogCaptureMode: (mode: LogCaptureMode) => void;
+  setUiScaleMode: (mode: UiScaleMode) => void;
   setUiRadiusPreset: (preset: UiRadiusPreset) => void;
   setThemeTonePreset: (preset: ThemeTonePreset) => void;
   setUiBlurEnabled: (enabled: boolean) => void;
@@ -220,6 +227,7 @@ export const useSettingsStore = create<SettingsState>()(
       canvasLodLevel: 'balanced',
       autoInsertTextDisplayNode: false,
       logCaptureMode: 'standard',
+      uiScaleMode: DEFAULT_UI_SCALE_MODE,
       uiRadiusPreset: 'default',
       themeTonePreset: 'neutral',
       uiBlurEnabled: true,
@@ -284,6 +292,7 @@ export const useSettingsStore = create<SettingsState>()(
         set({ logCaptureMode: mode });
         void syncLogCaptureMode(mode).catch(() => undefined);
       },
+      setUiScaleMode: (uiScaleMode) => set({ uiScaleMode }),
       setUiRadiusPreset: (uiRadiusPreset) => set({ uiRadiusPreset }),
       setThemeTonePreset: (themeTonePreset) => set({ themeTonePreset }),
       setUiBlurEnabled: (uiBlurEnabled) => set({ uiBlurEnabled }),

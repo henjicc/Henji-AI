@@ -4,6 +4,7 @@ import {
   type ThemeColorToken,
 } from '@/core/theme/runtimeTheme'
 import { SETTINGS_ACCENT_HEX } from '@/core/theme/colorTokens'
+import { DEFAULT_UI_SCALE_MODE, UI_SCALE_MODES } from '@/core/theme/uiScale'
 import {
   COLLAPSE_SETTING_CHANGED_EVENT,
   COLLAPSE_SETTING_SPECS,
@@ -31,6 +32,12 @@ function themeColorDefinition(token: ThemeColorToken): ApplicationSettingDefinit
 }
 
 export const INTERFACE_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefinition[] = [
+  storeSetting({
+    id: 'interface.scale', title: '界面缩放', description: '调整整个应用界面的显示大小，自动模式会根据窗口可用空间选择合适比例。',
+    aliases: ['界面大小', '显示缩放', 'UI 缩放', 'scale', 'zoom'], schema: z.enum(UI_SCALE_MODES), defaultValue: DEFAULT_UI_SCALE_MODE,
+    target: { tab: 'interface', sectionId: 'interface-layout' }, requiresReload: false, requiresRestart: false, sensitive: false,
+  }, () => useSettingsStore.getState().uiScaleMode,
+  (value) => useSettingsStore.getState().setUiScaleMode(value)),
   storeSetting({
     id: 'interface.blur_enabled', title: '毛玻璃效果', description: '控制图片、视频和画布上浮层的毛玻璃材质。',
     aliases: ['毛玻璃', '模糊', '玻璃效果', 'blur', 'glass'], schema: z.boolean(), defaultValue: true,

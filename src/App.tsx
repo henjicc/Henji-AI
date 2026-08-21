@@ -9,6 +9,7 @@ import { modelscopeCustomModelService } from './services/modelscopeCustomModels/
 import { loadAllModels } from './core/loaders'
 import { registerDefaultPanels } from '@/components/params/panels/registerDefaultPanels'
 import { useApplyRuntimeTheme } from './hooks/useApplyRuntimeTheme'
+import { useApplyUiScale } from './hooks/useApplyUiScale'
 import { useDevToolsShortcut } from './hooks/useDevToolsShortcut'
 import { useLogWindowShortcut } from './hooks/useLogWindowShortcut'
 import { useAssetLibraryStore } from '@/features/assets/store/assetLibraryStore'
@@ -90,6 +91,7 @@ const prefetchSettingsModal = (): void => {
  */
 const App: React.FC = () => {
   useApplyRuntimeTheme()
+  useApplyUiScale()
   useDevToolsShortcut()
   useLogWindowShortcut()
   const [isReady, setIsReady] = useState(false)

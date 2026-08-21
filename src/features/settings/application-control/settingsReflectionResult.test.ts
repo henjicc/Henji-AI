@@ -13,6 +13,7 @@ import { getSettingsRegistryRevision } from './settingsApplicationService'
 describe('设置的正式反射结果', () => {
   let originalLanguage: ReturnType<typeof getCurrentLanguage>
   let originalTone: ReturnType<typeof useSettingsStore.getState>['themeTonePreset']
+  let originalUiScaleMode: ReturnType<typeof useSettingsStore.getState>['uiScaleMode']
   let originalAutoInsertTextDisplay: boolean
   let originalProvider: ReturnType<typeof modelDefaultsManager.getSnapshot>['providerId']
   let originalImageModel: string
@@ -20,6 +21,7 @@ describe('设置的正式反射结果', () => {
   beforeEach(() => {
     originalLanguage = getCurrentLanguage()
     originalTone = useSettingsStore.getState().themeTonePreset
+    originalUiScaleMode = useSettingsStore.getState().uiScaleMode
     originalAutoInsertTextDisplay = useSettingsStore.getState().autoInsertTextDisplayNode
     originalProvider = modelDefaultsManager.getSnapshot().providerId
     originalImageModel = modelDefaultsManager.getSnapshot().models.image
@@ -28,6 +30,7 @@ describe('设置的正式反射结果', () => {
   afterEach(() => {
     changeLanguage(originalLanguage)
     useSettingsStore.getState().setThemeTonePreset(originalTone)
+    useSettingsStore.getState().setUiScaleMode(originalUiScaleMode)
     useSettingsStore.getState().setAutoInsertTextDisplayNode(originalAutoInsertTextDisplay)
     modelDefaultsManager.setDefaultModel('image', '')
     modelDefaultsManager.setProvider(originalProvider)
@@ -79,6 +82,20 @@ describe('设置的正式反射结果', () => {
       ref: { kind: 'settings.registry', id: 'singleton' }, propertyIds: ['interface.theme_tone'],
     }, context('settings-read-tone'))
     expect(snapshot.properties['interface.theme_tone']).toBe(next)
+  })
+
+  it('通过通用 change 修改界面缩放，并持久化且可反射读回', async () => {
+    const next = originalUiScaleMode === '90' ? '100' : '90'
+    await change('interface.scale', next)
+
+    expect(useSettingsStore.getState().uiScaleMode).toBe(next)
+    const snapshot = await applicationReflectionHandlers.readEntity({
+      ref: { kind: 'settings.registry', id: 'singleton' },
+      propertyIds: ['interface.scale'],
+    }, context('settings-read-interface-scale'))
+    expect(snapshot.properties['interface.scale']).toBe(next)
+    expect(JSON.parse(localStorage.getItem('settings-storage') ?? '{}'))
+      .toMatchObject({ state: { uiScaleMode: next } })
   })
 
   it('通过通用 change 修改自动插入文本展示，并持久化且可反射读回', async () => {

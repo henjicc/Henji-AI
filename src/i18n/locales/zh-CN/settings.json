@@ -278,6 +278,14 @@
       "collapseOnScrollLabel": "仅滚动时折叠",
       "collapseOnScrollHint": "开启后，只在浏览历史记录时折叠面板，鼠标移出时不会折叠",
       "startupTitle": "启动",
+      "uiScaleLabel": "界面缩放",
+      "uiScaleHint": "自动模式会根据窗口可用空间调整界面大小，小屏幕优先显示更多完整内容。",
+      "uiScaleOptions": {
+        "auto": "自动",
+        "90": "90%",
+        "100": "100%",
+        "110": "110%"
+      },
       "startupWorkspaceLabel": "启动默认页面",
       "startupWorkspaceHint": "打开软件时直接停在这个页面，常用画布或工具箱时不必每次再切一次",
       "startupWorkspaceOptions": {

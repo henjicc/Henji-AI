@@ -87,6 +87,7 @@ export const SETTINGS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     setCanvasLodLevel: property('canvas.detail_level'),
     setAutoInsertTextDisplayNode: property('canvas.auto_insert_text_display'),
     setLogCaptureMode: property('diagnostics.log_capture_mode'),
+    setUiScaleMode: property('interface.scale'),
     setUiRadiusPreset: property('interface.radius'),
     setThemeTonePreset: property('interface.theme_tone'),
     setUiBlurEnabled: property('interface.blur_enabled'),

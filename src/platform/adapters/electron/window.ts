@@ -1,4 +1,5 @@
 import type { WindowPlatform } from '@/platform/contracts/window'
+import type { UiScaleFactor, WindowContentSize } from '@/core/theme/uiScale'
 
 const DOMAIN = 'window'
 
@@ -11,6 +12,8 @@ interface ElectronWindowApi {
   toggleMaximize(): Promise<void>
   close(): Promise<void>
   isMaximized(): Promise<boolean>
+  getContentSize(): Promise<WindowContentSize>
+  setZoomFactor(factor: UiScaleFactor): Promise<void>
   onStateChanged(handler: (state: ElectronWindowState) => void): () => void
   toggleDevTools(): Promise<void>
 }
@@ -40,6 +43,12 @@ export function createElectronWindow(): WindowPlatform {
     },
     async isMaximized() {
       return await getWindowApi().isMaximized()
+    },
+    async getContentSize() {
+      return await getWindowApi().getContentSize()
+    },
+    async setZoomFactor(factor) {
+      await getWindowApi().setZoomFactor(factor)
     },
     onResized(handler) {
       return getWindowApi().onStateChanged(() => handler())

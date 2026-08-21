@@ -122,11 +122,18 @@ export interface HenjiWindowStatePayload {
   isMaximized: boolean
 }
 
+export interface HenjiWindowContentSize {
+  width: number
+  height: number
+}
+
 export interface HenjiWindowApi {
   minimize(): Promise<void>
   toggleMaximize(): Promise<void>
   close(): Promise<void>
   isMaximized(): Promise<boolean>
+  getContentSize(): Promise<HenjiWindowContentSize>
+  setZoomFactor(factor: 0.9 | 1 | 1.1): Promise<void>
   toggleDevTools(): Promise<void>
   onStateChanged(handler: (payload: HenjiWindowStatePayload) => void): () => void
 }

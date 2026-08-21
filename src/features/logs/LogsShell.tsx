@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { useApplyRuntimeTheme } from '@/hooks/useApplyRuntimeTheme'
+import { useApplyUiScale } from '@/hooks/useApplyUiScale'
 import { useI18n } from '@/hooks/useI18n'
 import { getPlatform } from '@/platform/runtime'
 import { UiIconButton } from '@/components/ui'
@@ -18,6 +19,7 @@ const noDragRegionStyle: AppRegionStyle = { WebkitAppRegion: 'no-drag' }
  */
 export default function LogsShell(): JSX.Element {
   useApplyRuntimeTheme()
+  useApplyUiScale()
   const { t } = useI18n('ui')
   const [isMaximized, setIsMaximized] = useState(false)
 

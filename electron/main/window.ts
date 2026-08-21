@@ -22,12 +22,14 @@ export function getMainWindow(): BrowserWindow | null {
 
 export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   const headless = options.headless === true
+  const allowOversizeForInspection = process.env['HENJI_UI_INSPECTION_ALLOW_OVERSIZE'] === '1'
   const iconPath = resolveAppIconPath()
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 960,
     minHeight: 640,
+    enableLargerThanScreen: allowOversizeForInspection,
     show: false,
     frame: false,
     backgroundColor: APP_WINDOW_BACKGROUND_HEX,

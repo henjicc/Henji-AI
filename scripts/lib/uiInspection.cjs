@@ -388,7 +388,7 @@ const UI_INSPECTION_SCENES = Object.freeze([
   },
 ])
 
-async function launchUiInspectionApp({ root, mainEntry }) {
+async function launchUiInspectionApp({ root, mainEntry, extraEnv = {} }) {
   if (!fs.existsSync(mainEntry)) {
     throw new Error(`未找到 Electron 构建产物：${mainEntry}\n请先运行 npm run electron:build`)
   }
@@ -398,6 +398,10 @@ async function launchUiInspectionApp({ root, mainEntry }) {
     isolateUserData: true,
     useElectronApi: true,
     skipOnboarding: true,
+    extraEnv: {
+      HENJI_UI_INSPECTION_ALLOW_OVERSIZE: '1',
+      ...extraEnv,
+    },
   })
   try {
     await waitForApp(app.page)

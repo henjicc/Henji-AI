@@ -278,6 +278,14 @@
       "collapseOnScrollLabel": "Collapse only on scroll",
       "collapseOnScrollHint": "Only collapse while scrolling history",
       "startupTitle": "Startup",
+      "uiScaleLabel": "Interface scale",
+      "uiScaleHint": "Auto adjusts the interface to the available window space so smaller screens can show more complete content.",
+      "uiScaleOptions": {
+        "auto": "Auto",
+        "90": "90%",
+        "100": "100%",
+        "110": "110%"
+      },
       "startupWorkspaceLabel": "Default page on launch",
       "startupWorkspaceHint": "Open the app directly on this page, so you do not have to switch every time",
       "startupWorkspaceOptions": {

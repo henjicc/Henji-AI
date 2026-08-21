@@ -9,6 +9,7 @@ import CanvasSection from '../sections/CanvasSection'
 import StartupSection from '../sections/StartupSection'
 import ThemeSection from '../sections/ThemeSection'
 import AssetLibrarySection from '../sections/AssetLibrarySection'
+import UiScaleSection from '../sections/UiScaleSection'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
 
@@ -79,6 +80,7 @@ const InterfaceTab: React.FC = () => {
   return (
     <UiRegion maxWidthClassName={SETTINGS_CONTENT_MAX_WIDTH_CLASS} className={SETTINGS_CONTENT_CLASS}>
       <SettingsSection id="interface-layout">
+        <UiScaleSection />
         <StartupSection />
         <BottomPanelSection
           enableAutoCollapse={settings.enableAutoCollapse}
@@ -121,4 +123,3 @@ const InterfaceTab: React.FC = () => {
 }
 
 export default InterfaceTab
-

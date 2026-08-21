@@ -70,6 +70,8 @@ const windowApi: HenjiWindowApi = {
   toggleMaximize: () => nativeInvoke('window:toggleMaximize'),
   close: () => nativeInvoke('window:close'),
   isMaximized: () => nativeInvoke('window:isMaximized'),
+  getContentSize: () => nativeInvoke('window:getContentSize'),
+  setZoomFactor: (factor) => nativeInvoke('window:setZoomFactor', { factor }),
   toggleDevTools: () => nativeInvoke('window:toggleDevTools'),
   onStateChanged: (handler) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: HenjiWindowStatePayload): void => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { COLLAPSE_SETTING_SPECS, COLLAPSE_WATCH_EVENTS, useLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
+import { shouldUseCompactGenerationLayout } from '@/core/layout/uiAvailableSpace'
 
 interface UseBottomPanelOptions {
   listContainerRef: RefObject<HTMLDivElement>
@@ -16,20 +17,6 @@ interface UseBottomPanelResult {
   handlePanelMouseEnter: () => void
   handlePanelMouseLeave: () => void
   handlePanelMouseMove: () => void
-}
-
-const COMPACT_WORKSPACE_MAX_HEIGHT_PX = 920
-const COMPACT_WORKSPACE_MAX_WIDTH_PX = 1180
-const COMPACT_NARROW_WORKSPACE_MAX_HEIGHT_PX = 1050
-
-export function shouldUseCompactBottomPanelLayout(
-  availableWidth: number,
-  availableHeight: number
-): boolean {
-  return availableHeight <= COMPACT_WORKSPACE_MAX_HEIGHT_PX || (
-    availableWidth <= COMPACT_WORKSPACE_MAX_WIDTH_PX &&
-    availableHeight <= COMPACT_NARROW_WORKSPACE_MAX_HEIGHT_PX
-  )
 }
 
 export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): UseBottomPanelResult {
@@ -115,7 +102,7 @@ export function useBottomPanel({ listContainerRef }: UseBottomPanelOptions): Use
       const h = inputEl.offsetHeight || 0
       const availableHeight = listEl.clientHeight
       const availableWidth = listEl.clientWidth
-      setIsCompactLayout(shouldUseCompactBottomPanelLayout(availableWidth, availableHeight))
+      setIsCompactLayout(shouldUseCompactGenerationLayout(availableWidth, availableHeight))
       const actualHeight = (isPanelCollapsed && !isCollapsing) ? 60 : h
       const newPadding = actualHeight + 48
       setInputPadding(newPadding)

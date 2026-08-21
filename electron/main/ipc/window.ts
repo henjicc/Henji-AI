@@ -1,15 +1,26 @@
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
-import { parseVoid, registerIpcHandler } from './registry'
+import { isUiScaleFactor, type UiScaleFactor } from '../../../src/core/theme/uiScale'
+import { parseRecord, parseVoid, registerIpcHandler } from './registry'
 
 const WINDOW_MINIMIZE = 'window:minimize'
 const WINDOW_TOGGLE_MAXIMIZE = 'window:toggleMaximize'
 const WINDOW_CLOSE = 'window:close'
 const WINDOW_IS_MAXIMIZED = 'window:isMaximized'
+const WINDOW_GET_CONTENT_SIZE = 'window:getContentSize'
+const WINDOW_SET_ZOOM_FACTOR = 'window:setZoomFactor'
 const WINDOW_TOGGLE_DEVTOOLS = 'window:toggleDevTools'
 const WINDOW_STATE_CHANGED = 'window:stateChanged'
 
 interface WindowStatePayload {
   isMaximized: boolean
+}
+
+export function parseZoomFactor(input: unknown): UiScaleFactor {
+  const factor = parseRecord(input)['factor']
+  if (!isUiScaleFactor(factor)) {
+    throw new Error('Expected zoom factor to be one of 0.9, 1, or 1.1')
+  }
+  return factor
 }
 
 function getEventWindow(event: IpcMainInvokeEvent): BrowserWindow {
@@ -64,6 +75,15 @@ export function registerWindowIpc(): void {
 
   registerIpcHandler(WINDOW_IS_MAXIMIZED, parseVoid, (_input, event): boolean => {
     return getEventWindow(event).isMaximized()
+  })
+
+  registerIpcHandler(WINDOW_GET_CONTENT_SIZE, parseVoid, (_input, event) => {
+    const [width, height] = getEventWindow(event).getContentSize()
+    return { width, height }
+  })
+
+  registerIpcHandler(WINDOW_SET_ZOOM_FACTOR, parseZoomFactor, (factor, event) => {
+    getEventWindow(event).webContents.setZoomFactor(factor)
   })
 
   registerIpcHandler(WINDOW_TOGGLE_DEVTOOLS, parseVoid, (_input, event) => {
