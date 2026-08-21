@@ -7,7 +7,7 @@
 |---|---|
 | 最后更新 | 2026-08-22 |
 | 模型数量 | 18（图片 9 / 视频 9） |
-| 供应商文件数量 | 56 |
+| 模型供应商文档数量 | 56 |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal |
 
 ## 一、目录结构约定
@@ -16,6 +16,13 @@
 docs/model-adaptation/
 ├── README.md                      # 本文件：总清单 + 索引
 ├── 文档采集手册.md                  # 如何发现 / 抓取 / 处理供应商文档（做调研前先看这份）
+├── 供应商/                         # 先完成供应商公共协议，再做具体模型
+│   ├── 快速适配供应商.md             # 新供应商的统一核对与落地清单
+│   ├── APIMart.md
+│   ├── KIE.md
+│   ├── Fal.md
+│   ├── 百炼.md
+│   └── 火山引擎.md
 ├── <模型名>/                       # 一个模型一个文件夹
 │   └── <模型名>_<供应商名>.md       # 支持该模型的每个供应商一个文件
 ```
@@ -24,6 +31,16 @@ docs/model-adaptation/
   派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎
 - 每个供应商文件都是**自包含**的：接入协议、能力清单、请求参数、响应结构、价格、适配要点、原始链接索引，看完这一份就能完成该供应商的适配
 - 每份文件都标注**信息来源链接**以及**该链接是否需要登录**
+
+### 供应商基础文档
+
+模型适配前先看 [快速适配供应商](供应商/快速适配供应商.md)，确认供应商公共层已经覆盖端点、鉴权、上传、任务查询、结果解析和计价。现有五家基础文档：
+
+- [APIMart](供应商/APIMart.md)：含中国大陆备用线路与图片上传协议
+- [KIE](供应商/KIE.md)：生成任务、文件上传、实际扣费与余额查询
+- [Fal](供应商/Fal.md)：同步 / 队列协议、Fal CDN、官方计价 API
+- [百炼](供应商/百炼.md)：地域端点、临时 OSS 上传与同步 / 异步边界
+- [火山引擎](供应商/火山引擎.md)：方舟端点、图片结果与 Files API 使用边界
 
 ## 二、通用适配规则
 
@@ -94,7 +111,7 @@ docs/model-adaptation/
 |---|---|---|---|---|---|
 | **火山引擎** | `https://ark.cn-beijing.volces.com` | `Authorization: Bearer $ARK_API_KEY` | `POST /api/v3/images/generations`（**同步**） | — | `data[].url` / `b64_json` |
 | **百炼** | `https://{WorkspaceId}.<region>.maas.aliyuncs.com` | `Authorization: Bearer sk-xxxx` | `POST /api/v1/services/aigc/multimodal-generation/generation`（同步）；异步加头 `X-DashScope-Async: enable` 并换 `image-generation/generation` | `GET /api/v1/tasks/{task_id}` | `output.choices[].message.content[].image` |
-| **APIMart** | `https://api.apimart.ai` | `Authorization: Bearer <KEY>` | `POST /v1/images/generations`、`POST /v1/videos/generations` | `GET /v1/tasks/{task_id}` | `result.images[]` / `result.videos[]` |
+| **APIMart** | `https://api.apimart.ai`；大陆备用线路见[基础文档](供应商/APIMart.md) | `Authorization: Bearer <KEY>` | `POST /v1/images/generations`、`POST /v1/videos/generations` | `GET /v1/tasks/{task_id}` | `result.images[]` / `result.videos[]` |
 | **KIE** | `https://api.kie.ai` | `Authorization: Bearer <KEY>` | `POST /api/v1/jobs/createTask` | `GET /api/v1/jobs/recordInfo?taskId=` | `JSON.parse(resultJson).resultUrls` |
 | **Fal** | `https://fal.run` / `https://queue.fal.run` | `Authorization: Key $FAL_KEY` | `POST https://queue.fal.run/<endpoint-id>` | `GET .../requests/{id}/status`、`GET .../requests/{id}` | `images[]` / `video` |
 

@@ -3,6 +3,9 @@ import { AiRuntimeError } from './errors'
 import type { JsonObject, JsonValue } from './types'
 
 const KIE_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload'
+const APIMART_IMAGE_UPLOAD_URL = 'https://api.apimart.ai/v1/uploads/images'
+const APIMART_MAX_IMAGE_BYTES = 20 * 1024 * 1024
+const APIMART_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
 export interface PreparedMediaBinary {
   bytes: Uint8Array
@@ -12,6 +15,36 @@ export interface PreparedMediaBinary {
 
 export function uploadToFal(prepared: PreparedMediaBinary): string {
   return toDataUri(prepared.bytes, prepared.mimeType)
+}
+
+export async function uploadToApiMart(apiKey: string, prepared: PreparedMediaBinary): Promise<string> {
+  if (!APIMART_IMAGE_MIME_TYPES.has(prepared.mimeType)) {
+    throw new AiRuntimeError(
+      'unsupported_media_type',
+      `APIMart 图片上传仅支持 JPEG、PNG、WebP、GIF，当前类型为 ${prepared.mimeType}。`
+    )
+  }
+  if (prepared.bytes.byteLength > APIMART_MAX_IMAGE_BYTES) {
+    throw new AiRuntimeError(
+      'upload_too_large',
+      `APIMart 图片上传上限为 20 MB，当前文件为 ${prepared.bytes.byteLength} bytes。`
+    )
+  }
+
+  const form = new FormData()
+  form.append('file', new Blob([prepared.bytes], { type: prepared.mimeType }), prepared.filename)
+
+  const response = await fetch(APIMART_IMAGE_UPLOAD_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  })
+  const payload = await readJson(response, 'APIMart image upload')
+  const fileUrl = readStringPointer(payload, '/url') ?? readStringPointer(payload, '/data/url')
+  if (!fileUrl) {
+    throw new AiRuntimeError('upload_failed', `APIMart image upload missing file URL: ${JSON.stringify(payload)}`)
+  }
+  return fileUrl
 }
 
 export async function uploadToKie(apiKey: string, prepared: PreparedMediaBinary): Promise<string> {

@@ -19,6 +19,7 @@ import {
   type PreparedMediaBinary,
   toBase64,
   toDataUri,
+  uploadToApiMart,
   uploadToFal,
   uploadToKie,
 } from './upload-providers'
@@ -186,6 +187,13 @@ async function rewriteMediaSource(
   }
 
   const prepared = prepareMediaBinary(trimmed, mediaKind)
+  if (context.providerId === 'apimart') {
+    if (mediaKind === 'image') return await uploadApimartImage(prepared, context.route)
+    throw new AiRuntimeError(
+      'public_media_url_required',
+      `APIMart 没有通用的${mediaKind === 'video' ? '视频' : '音频'}上传端点，请直接传入公网 HTTP/HTTPS URL。`
+    )
+  }
   if (context.providerId === 'fal') {
     return uploadToFal(prepared)
   }
@@ -199,6 +207,39 @@ async function rewriteMediaSource(
     return await uploadForHostedUrl(prepared)
   }
   return toDataUri(prepared.bytes, prepared.mimeType)
+}
+
+async function uploadApimartImage(prepared: PreparedMediaBinary, route: string): Promise<string> {
+  const apiKey = getAiProviderApiKey('apimart')
+  if (!apiKey) {
+    throw new AiRuntimeError(
+      'missing_api_key',
+      'APIMart 本地图片必须先上传，请先在设置中配置 APIMart API Key，或直接传入公网图片 URL。'
+    )
+  }
+
+  logger.info('开始上传 APIMart 本地图片', {
+    event: 'ai_runtime.upload.apimart_started',
+    providerId: 'apimart',
+    context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
+  })
+  try {
+    const url = await uploadToApiMart(apiKey, prepared)
+    logger.info('APIMart 本地图片上传完成', {
+      event: 'ai_runtime.upload.apimart_completed',
+      providerId: 'apimart',
+      context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
+    })
+    return url
+  } catch (error) {
+    logger.error('APIMart 本地图片上传失败', {
+      event: 'ai_runtime.upload.apimart_failed',
+      providerId: 'apimart',
+      context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
+      error,
+    })
+    throw error
+  }
 }
 
 async function uploadForHostedUrl(prepared: PreparedMediaBinary): Promise<string> {
