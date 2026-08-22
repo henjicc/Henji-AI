@@ -144,6 +144,11 @@ function parseLogQueryPayload(input: unknown): LogQueryParams {
     throw new Error('Expected beforeTimestamp to be a string')
   }
 
+  const afterTimestamp = record.afterTimestamp
+  if (afterTimestamp !== undefined && typeof afterTimestamp !== 'string') {
+    throw new Error('Expected afterTimestamp to be a string')
+  }
+
   let beforeLine: number | undefined
   if (record.beforeLine !== undefined) {
     const value = record.beforeLine
@@ -166,6 +171,7 @@ function parseLogQueryPayload(input: unknown): LogQueryParams {
     requestId,
     keyword,
     beforeTimestamp,
+    afterTimestamp,
     beforeLine,
     limit,
   }

@@ -32,6 +32,8 @@ export interface LogQueryParams {
   keyword?: string
   /** 分页游标：只返回时间戳严格早于该值的事件，用于"加载更早"翻页。省略则从最新事件开始。 */
   beforeTimestamp?: string
+  /** 只返回时间戳大于等于该值的事件；真实性测试用它截取本场景产生的日志。 */
+  afterTimestamp?: string
   /**
    * 同一日志文件内的行号游标（从 0 开始，不含该行及其后的内容）。
    * UI 分页优先使用它，避免多条事件拥有相同毫秒级 timestamp 时用时间戳游标漏项。
@@ -145,6 +147,9 @@ function matchesFilters(event: MainLogEvent, params: LogQueryParams): boolean {
     return false
   }
   if (params.beforeTimestamp && !(event.timestamp < params.beforeTimestamp)) {
+    return false
+  }
+  if (params.afterTimestamp && event.timestamp < params.afterTimestamp) {
     return false
   }
   if (params.keyword && !matchesKeyword(event, params.keyword)) {

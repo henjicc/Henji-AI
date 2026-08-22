@@ -116,6 +116,35 @@ npx vitest run
 
 助手剧本的正路优先**录制**而不是手写（`npm run assistant:record -- --list`）：手写正路等于替模型想它会怎么做，必然漂移到不现实；真模型写出来的脚本才代表它实际会写什么，契约变更时也只需重录一次。手写留给故意的坏输入——撞墙、拒绝、歧义、冲突，这些真模型很难稳定复现。录制源是 `agent_model_traces`（需 `--trace detailed`），不是 `agent_events`：后者的 `ToolRequested` 只存 `inputDigest`，没有入参。
 
+### 真实性测试统一入口
+
+当问题必须回答“在真实应用里到底通不通”，统一走 `npm run test:reality`，按证据成本选层，禁止另写一条临时 Electron/Playwright 启动链：
+
+| 层 | `--suite` | 使用的真实性 |
+|---|---|---|
+| 精确逻辑 | `unit --test <文件>` | 正式代码与精确输入，不启动应用 |
+| 运行时集成 | `integration` | 真注册表、真 Gateway、真解释器、真执行器；只替换进程边界 |
+| 界面操作 | `ui` / `ui-audit` | 真实 Electron、真实 DOM/WebGL、Playwright 操作、截图/规则与运行时证据 |
+| 外部真机 | `live` | 真实模型、网络、API 密钥、付费请求与业务数据 |
+
+数据模式与副作用必须彼此独立：
+
+- 默认 `--profile temporary`，使用隔离临时 userData，退出后回收；适合创建、删除和任意 fixture。
+- `--profile real` / `--real-data` 才复用用户正在使用的工程、设置与系统密钥链。它不是把密钥复制到临时目录，而是让测试进程使用正式 Electron 资料目录，避免 safeStorage 与配置漂移。
+- real 模式默认跳过声明了 `writesUserData` 的 UI 场景；只有用户明确授权后才传 `--allow-writes`。
+- `live` 同时要求 `--profile real --allow-paid --allow-writes`，三项缺一即在启动外部请求前拒绝。用户只要求“支持真实环境”不等于授权本次产生费用或写入。
+- 同一入口可以重复传 `--suite`，但任一层失败立即停止；不得用后续更多通过项稀释前面的失败。
+
+```bash
+npm run test:reality -- --suite unit --test src/features/example.test.ts
+npm run test:reality -- --suite integration
+npm run test:reality -- --suite ui --only 3D --size 1440x900
+npm run test:reality -- --suite ui --profile real --only 设置
+npm run test:reality -- --suite live --profile real --allow-paid --allow-writes --only camera
+```
+
+UI 真实性测试不能只证明“脚本点完了”或“截图生成了”。每个场景同时订阅浏览器 `console error` / `pageerror`，并通过应用正式 logging 查询接口用 `afterTimestamp + level + limit` 截取该场景之后的结构化错误与警告。错误进入失败判据，警告进入 `evidence.json` 供诊断。**不要让测试脚本直接读取整份日志文件**：日志文件仍是唯一持久化来源，主进程接口负责流式过滤、限量和脱敏，脚本只消费窄结果；只有日志 IPC/查询服务本身坏掉时，才把直接读文件作为救援路径。
+
 ## 四、按改动类型追加专项检查
 
 以下命令也遵循“只在直接相关时运行”，不是累加清单。

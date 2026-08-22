@@ -28,6 +28,8 @@ export interface LogQueryParams {
   requestId?: string
   keyword?: string
   beforeTimestamp?: string
+  /** 只返回时间戳大于等于该值的事件，适合按一次测试/操作的起点截取证据。 */
+  afterTimestamp?: string
   beforeLine?: number
   limit?: number
 }

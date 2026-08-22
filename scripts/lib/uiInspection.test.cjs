@@ -9,6 +9,7 @@ const {
   parseUiInspectionArgs,
   parseWindowSize,
   resolveOutputDir,
+  selectInspectionScenes,
 } = require('./uiInspection.cjs')
 
 test('默认覆盖两档项目窗口尺寸', () => {
@@ -16,6 +17,29 @@ test('默认覆盖两档项目窗口尺寸', () => {
   assert.deepEqual(options.sizes, DEFAULT_WINDOW_SIZES)
   assert.equal(options.outDir, '.ui-tour')
   assert.deepEqual(options.only, [])
+  assert.equal(options.profile, 'temporary')
+  assert.equal(options.allowWrites, false)
+})
+
+test('真实数据模式必须显式开启，写业务数据的场景默认被拦截', () => {
+  const options = parseUiInspectionArgs(['--real-data'], '.ui-tour')
+  assert.equal(options.profile, 'real')
+  const selection = selectInspectionScenes([
+    { id: 'read', name: '只读', setup() {} },
+    { id: 'write', name: '写入', writesUserData: true, setup() {} },
+  ], options)
+  assert.deepEqual(selection.scenes.map((scene) => scene.id), ['read'])
+  assert.deepEqual(selection.blocked.map((scene) => scene.id), ['write'])
+
+  const allowed = selectInspectionScenes([...selection.scenes, ...selection.blocked], {
+    ...options,
+    allowWrites: true,
+  })
+  assert.deepEqual(allowed.scenes.map((scene) => scene.id).sort(), ['read', 'write'])
+})
+
+test('拒绝未知的数据模式', () => {
+  assert.throws(() => parseUiInspectionArgs(['--profile', 'production'], '.ui-tour'), /temporary 或 real/)
 })
 
 test('支持重复尺寸、逗号筛选和自定义输出目录', () => {
@@ -74,5 +98,6 @@ test('场景覆盖六类界面且规则数固定为十一条', () => {
   assert.equal(sceneIds.has('settings-llm'), true)
   assert.equal(sceneIds.has('toolbox-image-edit'), true)
   assert.equal(sceneIds.has('toolbox-camera-stage'), true)
+  assert.equal(sceneIds.has('toolbox-camera-stage-lineart'), true)
   assert.equal(sceneIds.has('assistant-memory'), true)
 })

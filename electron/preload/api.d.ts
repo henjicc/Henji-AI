@@ -921,6 +921,7 @@ export interface HenjiLogQueryParams {
   requestId?: string
   keyword?: string
   beforeTimestamp?: string
+  afterTimestamp?: string
   beforeLine?: number
   limit?: number
 }

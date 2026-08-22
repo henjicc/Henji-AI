@@ -4,6 +4,7 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
+const { createRuntimeEvidenceCollector } = require('./lib/runtimeEvidence.cjs')
 const { UI_AUDIT_RULES, auditUiDom } = require('./lib/uiAuditDom.cjs')
 const {
   UI_INSPECTION_SCENES,
@@ -12,6 +13,7 @@ const {
   launchUiInspectionApp,
   parseUiInspectionArgs,
   resolveOutputDir,
+  selectInspectionScenes,
   setInspectionWindowSize,
 } = require('./lib/uiInspection.cjs')
 
@@ -26,6 +28,7 @@ function printHelp() {
   npm run check:ui-visual
   npm run check:ui-visual -- --size 960x640
   npm run check:ui-visual -- --only 设置
+  npm run check:ui-visual -- --profile real --only 设置
   npm run check:ui-visual -- --out .ui-audit/my-run
 
 规则通过时退出码为 0；任一规则命中或场景失败时退出码为 1。
@@ -106,16 +109,23 @@ async function main() {
     printHelp()
     return
   }
-  const scenes = filterScenes(UI_INSPECTION_SCENES, options.only)
-  if (scenes.length === 0) {
+  const matchedScenes = filterScenes(UI_INSPECTION_SCENES, options.only)
+  if (matchedScenes.length === 0) {
     throw new Error(`--only 没有匹配到场景。可用界面：${[...new Set(UI_INSPECTION_SCENES.map((scene) => scene.surface))].join('、')}`)
+  }
+  const selection = selectInspectionScenes(matchedScenes, options)
+  const scenes = selection.scenes
+  if (scenes.length === 0) {
+    throw new Error('匹配场景会写入真实业务数据；如确认允许，请显式传入 --allow-writes')
   }
 
   const outDir = resolveOutputDir(ROOT, options.outDir)
   fs.mkdirSync(outDir, { recursive: true })
   const results = {}
   const failures = []
-  const app = await launchUiInspectionApp({ root: ROOT, mainEntry: MAIN_ENTRY })
+  const runtimeEvidence = {}
+  const app = await launchUiInspectionApp({ root: ROOT, mainEntry: MAIN_ENTRY, profile: options.profile })
+  const collector = createRuntimeEvidenceCollector(app.page)
 
   try {
     for (const size of options.sizes) {
@@ -123,6 +133,8 @@ async function main() {
       const sizeLabel = formatWindowSize(size)
       for (const scene of scenes) {
         const resultKey = `${sizeLabel} / ${scene.name}`
+        collector.begin(resultKey)
+        let sceneFailed = false
         try {
           await scene.setup(app.page)
           const result = await app.page.evaluate(auditUiDom, {
@@ -132,13 +144,27 @@ async function main() {
           results[resultKey] = result
           printSceneResult(resultKey, result)
         } catch (error) {
+          sceneFailed = true
           const message = error instanceof Error ? error.message : String(error)
           failures.push({ name: scene.name, size: sizeLabel, message })
           console.error(`\n✗ ${resultKey}：${message}`)
         }
+        try {
+          runtimeEvidence[resultKey] = await collector.finish()
+          if (!sceneFailed && !runtimeEvidence[resultKey].passed) {
+            const runtimeErrorCount = runtimeEvidence[resultKey].browserErrors.length
+              + runtimeEvidence[resultKey].logErrors.length
+            failures.push({ name: scene.name, size: sizeLabel, message: `捕获到 ${runtimeErrorCount} 个运行时错误` })
+          }
+        } catch (error) {
+          collector.cancel()
+          const message = error instanceof Error ? error.message : String(error)
+          failures.push({ name: scene.name, size: sizeLabel, message: `运行时证据查询失败：${message}` })
+        }
       }
     }
   } finally {
+    collector.dispose()
     await app.close()
   }
 
@@ -158,9 +184,12 @@ async function main() {
       ruleCount: UI_AUDIT_RULES.length,
       sceneCount: Object.keys(results).length,
       failures,
+      profile: options.profile,
+      skippedWriteScenes: selection.blocked.map((scene) => scene.name),
     },
     scenes: results,
     crossScene,
+    runtimeEvidence,
   }
   const reportPath = path.join(outDir, 'audit.json')
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), 'utf8')
