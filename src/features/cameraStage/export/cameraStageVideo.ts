@@ -8,6 +8,7 @@ import {
 import { createLogger } from '@/core/logging'
 import { QUICK_DOWNLOAD_SETTING_SPECS, readLocalStorageSettings } from '@/hooks/useLocalStorageSetting'
 import { join, saveDialog, toDisplaySrc } from '@/platform/desktopApi'
+import type { StageRenderStyle } from '../domain/renderStyles'
 
 const logger = createLogger('cameraStage.videoExport')
 
@@ -35,6 +36,8 @@ export interface CameraStageVideoExportOptions {
   fps: number
   durationSeconds: number
   resolutionPreset: CameraStageVideoResolutionPreset
+  /** 本次成片的渲染方式；只进日志，画面本身由截帧管线按工程设置成像 */
+  renderStyle: StageRenderStyle
   captureFrame: (targetSize: { width: number; height: number }) => Promise<Uint8Array | null>
   disposeCaptureFrame: () => void
   seekFrame: (time: number) => Promise<void>
@@ -110,6 +113,7 @@ export async function exportCameraStageVideo(
         height,
         frameCount,
         fps: options.fps,
+        renderStyle: options.renderStyle,
         renderCameraCount: options.renderCameraCount,
         isMultiCamera: options.isMultiCamera,
       },

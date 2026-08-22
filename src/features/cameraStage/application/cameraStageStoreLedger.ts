@@ -45,7 +45,7 @@ export const CAMERA_STAGE_STORE_LEDGER: ApplicationStoreActionLedger<ActionName>
     ...fieldLedgerEntries(CAMERA_FIELDS),
 
     /*
-     * ── 场景外观（25 项）与时间轴（3 项）─────────────────────
+     * ── 场景外观（26 项）与时间轴（3 项）─────────────────────
      * 定义收敛在 cameraStageSceneFields.ts，账本条目从 storeActions 派生，不再逐条手写。
      */
     ...fieldLedgerEntries(SCENE_APPEARANCE_FIELDS),

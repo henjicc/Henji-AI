@@ -212,6 +212,7 @@ export default function CameraStageRenderWorker(): JSX.Element {
           fps: exportState.animation.fps,
           durationSeconds: exportState.animation.duration,
           resolutionPreset: request.resolutionPreset,
+          renderStyle: exportState.sceneSettings.render.style,
           captureFrame: async (targetSize) => captureRef.current?.(targetSize) ?? null,
           disposeCaptureFrame: () => captureRef.current?.disposeOffscreen(),
           seekFrame: (time) => {

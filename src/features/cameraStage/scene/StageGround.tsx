@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react'
 import { Grid } from '@react-three/drei'
 import type { MeshStandardMaterial, WebGLProgramParametersWithUniforms } from 'three'
 import { BLACK_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
+import { STAGE_STYLE_HIDDEN_KEY } from '../render/stageStyleTags'
 import type { StageGroundSettings } from '../domain/sceneTypes'
 
 const GROUND_SIZE = 160
@@ -122,6 +123,8 @@ const StageGround: React.FC<{ settings: StageGroundSettings }> = ({ settings }) 
       {settings.pattern === 'grid' && (
         <Grid
           key={`ground-grid-${settings.density}-${settings.gridLineColor}-${settings.gridLineThickness}`}
+          // 网格线是摆场景用的辅助面；深度/线稿画面里它会被当成一块贴着地面的实体几何
+          userData={{ [STAGE_STYLE_HIDDEN_KEY]: true }}
           infiniteGrid
           position={[0, 0.001, 0]}
           cellSize={gridCellSize}

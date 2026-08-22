@@ -4,6 +4,7 @@ import { OrbitControls } from '@react-three/drei'
 import type { Group } from 'three'
 import { cameraTargetFromRotation, resolveCameraLookAtTarget } from '../domain/cameraUtils'
 import type { StageCameraObject } from '../domain/sceneTypes'
+import { isStageStyleRenderStyle } from '../render/stageStyleRenderer'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { resolvePathStateKeyframeId, useCameraStageToolStore } from '../store/cameraStageToolStore'
 import DirectorViewTracker from './DirectorViewTracker'
@@ -14,6 +15,7 @@ import type { StageCaptureFn } from './StageCaptureBridge'
 import StageFocusController from './StageFocusController'
 import StageGround from './StageGround'
 import StageObjectMesh from './StageObjectMesh'
+import StageStyleRenderLayer from './StageStyleRenderLayer'
 import StagePlaybackDriver from './StagePlaybackDriver'
 import StageSunLight from './StageSunLight'
 import StageViewportCamera from './StageViewportCamera'
@@ -51,6 +53,7 @@ const StageScene: React.FC<StageSceneProps> = ({
   // 播放/scrub 跨机位切换点时按状态关键帧时间表切换，与 activeCameraId（编辑机位）区分。
   const renderCameraId = useRenderCameraId()
   const sceneSettings = useCameraStageStore((state) => state.sceneSettings)
+  const renderStyle = useCameraStageStore((state) => state.sceneSettings.render.style)
   const stateKeyframes = useCameraStageStore((state) => state.stateKeyframes)
   const selectedStateKeyframeId = useCameraStageStore((state) => state.selectedStateKeyframeId)
   const currentTime = useCameraStageStore((state) => state.playback.currentTime)
@@ -196,6 +199,11 @@ const StageScene: React.FC<StageSceneProps> = ({
         />
       )}
       {primary && captureRef && <StageCaptureBridge captureRef={captureRef} />}
+      {/*
+        * 渲染方式只接管摄像机画面：导演视角要保留彩色渲染，否则手柄、路径、辅助线全被
+        * 覆盖材质吃掉，摆场景就没法看了。成片（截图/导出/画布渲染）都走摄像机画面。
+        */}
+      {isCameraView && isStageStyleRenderStyle(renderStyle) && <StageStyleRenderLayer style={renderStyle} />}
       {primary && <StagePlaybackDriver />}
       <StageSunLight settings={sceneSettings} />
       <StageGround

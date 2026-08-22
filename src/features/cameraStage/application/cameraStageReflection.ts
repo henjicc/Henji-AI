@@ -133,7 +133,7 @@ const propertiesByEntity: Record<EntityType, ApplicationPropertyDescriptor[]> = 
     property(ENTITY_TYPES.scene, 'object_refs', '场景对象', { kind: 'ref_list', refKinds: [ENTITY_TYPES.object, ENTITY_TYPES.camera] }, { readOnly: '对象集合通过正式创建和删除操作维护。', relation: { targetEntityTypes: [ENTITY_TYPES.object, ENTITY_TYPES.camera], cardinality: 'many' } }),
     property(ENTITY_TYPES.scene, 'state_keyframe_refs', '状态关键帧', { kind: 'ref_list', refKinds: [ENTITY_TYPES.stateKeyframe] }, { readOnly: '状态关键帧的增删排序通过 camera_stage.state_keyframe 的集合写入维护，这里只读列出当前集合。', relation: { targetEntityTypes: [ENTITY_TYPES.stateKeyframe], cardinality: 'many' } }),
     /*
-     * 场景外观 25 项 + 活动摄像机：界面上有的每一项这里都要有。
+     * 场景外观 26 项 + 活动摄像机：界面上有的每一项这里都要有。
      *
      * 这一组此前一项都没注册，于是"把天空改成深蓝""地面换成网格""把太阳调到黄昏"这类
      * 请求助手全都做不了——不是被权限挡住，是通用动词**根本看不见**这些字段。按项目规则

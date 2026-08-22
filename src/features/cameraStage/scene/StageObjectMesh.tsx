@@ -12,6 +12,7 @@ import type {
   StagePrimitiveKind,
   StageVec3,
 } from '../domain/sceneTypes'
+import { STAGE_STYLE_SUBJECT_KEY } from '../render/stageStyleTags'
 import CameraModel from './CameraModel'
 import CharacterModel from './CharacterModel'
 import StageObjectNameLabel from './StageObjectNameLabel'
@@ -271,6 +272,8 @@ const StageObjectMesh: React.FC<StageObjectMeshProps> = ({
         ref={groupRef}
         name={object.id}
         visible={object.visible}
+        // 深度图的归一化区间只按场景对象统计，地面与辅助线不参与
+        userData={{ [STAGE_STYLE_SUBJECT_KEY]: true }}
         position={[transform.position.x, transform.position.y, transform.position.z]}
         rotation={[
           renderedRotation.x * DEG2RAD,

@@ -9,6 +9,7 @@
 import type { StageBodyVariantId } from './bodyVariants'
 import type { StageCharacterMotion } from './characterMotion'
 import type { StageCharacterPose } from './poseTypes'
+import type { StageRenderStyle } from './renderStyles'
 import type { StageCameraEffector } from './stateKeyframeTypes'
 
 export interface StageVec3 {
@@ -143,6 +144,11 @@ export interface StageNameLabelSettings {
   shadowAngle: number
 }
 
+/** 最终渲染设置：摄像机画面与导出成片共用的成像方式 */
+export interface StageRenderSettings {
+  style: StageRenderStyle
+}
+
 export interface StageDisplaySettings {
   showNameLabels: boolean
   nameLabel: StageNameLabelSettings
@@ -155,4 +161,5 @@ export interface StageSceneSettings {
   sunlight: StageSunlightSettings
   fog: StageFogSettings
   display: StageDisplaySettings
+  render: StageRenderSettings
 }

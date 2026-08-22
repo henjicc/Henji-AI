@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { BLACK_HEX, CAMERA_STAGE_COLOR_HEX, CAMERA_STAGE_OBJECT_PALETTE_HEX, WHITE_HEX } from '@/core/theme/colorTokens'
 import { createPoseMotion } from './characterMotion'
+import { DEFAULT_STAGE_RENDER_STYLE } from './renderStyles'
 import { POSE_PRESETS } from './posePresets.gen'
 import { clonePose, createEmptyPose } from './poseTypes'
 import { rotationFromPositionAndTarget } from './cameraUtils'
@@ -132,6 +133,9 @@ export function createDefaultSceneSettings(): StageSceneSettings {
     fog: {
       enabled: true,
       distance: 90,
+    },
+    render: {
+      style: DEFAULT_STAGE_RENDER_STYLE,
     },
     display: {
       showNameLabels: false,

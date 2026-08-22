@@ -1,6 +1,11 @@
 import React, { useMemo, useRef } from 'react'
 import { Dropdown } from '@/components/ui'
 import { getCameraObjects } from '../domain/cameraUtils'
+import {
+  STAGE_RENDER_STYLE_LABELS,
+  STAGE_RENDER_STYLE_OPTIONS,
+  type StageRenderStyle,
+} from '../domain/renderStyles'
 import StageScene from '../scene/StageScene'
 import StageAspectRatioOverlay from '../scene/StageAspectRatioOverlay'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
@@ -48,6 +53,8 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
   const activeCameraId = useCameraStageStore((state) => state.activeCameraId)
   const setViewMode = useCameraStageStore((state) => state.setViewMode)
   const setActiveCameraId = useCameraStageStore((state) => state.setActiveCameraId)
+  const renderStyle = useCameraStageStore((state) => state.sceneSettings.render.style)
+  const setRenderStyle = useCameraStageStore((state) => state.setSceneRenderStyle)
   const middlePointer = useRef<{ x: number; y: number; time: number } | null>(null)
   const cameras = useMemo(() => getCameraObjects(objects), [objects])
   const configuredCameraId = config.source.kind === 'camera' ? config.source.cameraId : null
@@ -100,6 +107,8 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
 
   return (
     <div
+      data-camera-stage-viewport-id={viewportId}
+      data-camera-stage-render-style={overlayCameraId ? renderStyle : 'beauty'}
       className={`relative min-h-0 min-w-0 overflow-hidden border ${active ? 'border-accent' : 'border-border-dark'}`}
       onPointerDownCapture={(event) => {
         activateViewport()
@@ -123,6 +132,27 @@ const StageViewportPane: React.FC<StageViewportPaneProps> = ({ viewportId, captu
         captureRef={primary ? captureRef : undefined}
       />
       {overlayCameraId && <StageAspectRatioOverlay cameraId={overlayCameraId} />}
+      {/*
+        * 渲染方式跟着画面走：只有正在显示摄像机取景的窗格才给这个入口——
+        * 它决定的是这台机位的成片长什么样，自由透视与固定视图仍是彩色的编辑视角。
+        */}
+      {overlayCameraId && (
+        <div className="pointer-events-auto absolute right-2 top-2 z-20">
+          <Dropdown<StageRenderStyle>
+            value={renderStyle}
+            display={STAGE_RENDER_STYLE_LABELS[renderStyle]}
+            options={STAGE_RENDER_STYLE_OPTIONS}
+            onSelect={setRenderStyle}
+            ariaLabel="渲染方式"
+            className="min-w-20"
+            buttonClassName="h-7 bg-surface-dark/90 py-1 text-xs"
+            buttonLabelClassName="text-xs"
+            optionLabelClassName="text-xs"
+            minWidthStrategy="options"
+            panelWidthStrategy="options"
+          />
+        </div>
+      )}
       <div className="pointer-events-auto absolute left-2 top-2 z-20">
         <Dropdown<string>
           value={sourceValue(source)}

@@ -14,6 +14,7 @@ import { createPoseMotion } from '../domain/characterMotion'
 import { applyObjectPatch, getCameraObjects, isCameraId } from '../domain/cameraUtils'
 import { getDirectorView, resetDirectorView } from '../scene/directorViewState'
 import { clonePose } from '../domain/poseTypes'
+import type { StageRenderStyle } from '../domain/renderStyles'
 import type { StagePoseJointId, StagePosePreset } from '../domain/poseTypes'
 import type { StageSceneRuntimeSnapshot } from '../domain/sceneSerialization'
 import {
@@ -158,6 +159,7 @@ export interface CameraStageState extends CameraStagePathActions {
   setSceneNameLabelShadowBlur: (blur: number) => void
   setSceneNameLabelShadowDistance: (distance: number) => void
   setSceneNameLabelShadowAngle: (angle: number) => void
+  setSceneRenderStyle: (style: StageRenderStyle) => void
   /** 请求把视口平滑对准当前选中对象（无选中对象时不生效） */
   requestFocusSelected: () => void
 }
@@ -802,6 +804,14 @@ export const useCameraStageStore = create<CameraStageState>()(
             shadowAngle: ((angle % 360) + 360) % 360,
           },
         },
+      },
+    })),
+
+  setSceneRenderStyle: (style) =>
+    set((state) => ({
+      sceneSettings: {
+        ...state.sceneSettings,
+        render: { ...state.sceneSettings.render, style },
       },
     })),
 

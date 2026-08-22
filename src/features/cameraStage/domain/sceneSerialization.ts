@@ -6,6 +6,7 @@
  */
 
 import { normalizeCharacterMotion } from './characterMotion'
+import { normalizeStageRenderStyle } from './renderStyles'
 import type { StageSceneAnimation } from './animationTypes'
 import { createDefaultSceneSettings } from './sceneDefaults'
 import { rotationFromPositionAndTarget } from './cameraUtils'
@@ -59,6 +60,7 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
     const sunlightRecord = record.sunlight as Record<string, unknown> | undefined
     const fogRecord = record.fog as Record<string, unknown> | undefined
     const displayRecord = record.display as Record<string, unknown> | undefined
+    const renderRecord = record.render as Record<string, unknown> | undefined
     const nameLabelRecord = displayRecord?.nameLabel as Record<string, unknown> | undefined
     const pattern = groundRecord?.pattern
     const density = Number(groundRecord?.density)
@@ -126,6 +128,9 @@ function parseSceneSettings(raw: unknown): StageSceneSettings {
           Number.isFinite(fogDistance) && fogDistance >= 30 && fogDistance <= 200
             ? fogDistance
             : fallback.fog.distance,
+      },
+      render: {
+        style: normalizeStageRenderStyle(renderRecord?.style),
       },
       display: {
         showNameLabels:

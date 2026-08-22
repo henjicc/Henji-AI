@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import { fieldWriterTable, type ApplicationPropertyMutation, type ApplicationRef, type JsonValue } from '@/core/application-control'
 
+import { STAGE_RENDER_STYLE_LABELS, STAGE_RENDER_STYLE_VALUES } from '../domain/renderStyles'
 import type { StageSceneSettings } from '../domain/sceneTypes'
 import type { CameraStageProjectSnapshot } from '../projects/cameraStageProjectService'
 import type { useCameraStageStore } from '../store/cameraStageStore'
@@ -11,7 +12,7 @@ import {
 } from './cameraStageFieldShared'
 
 /*
- * 三维场景属性（外观 25 + 活动摄像机）的统一定义。
+ * 三维场景属性（外观 26 + 活动摄像机）的统一定义。
  *
  * 迁移前这 28 条要碰 3 个文件、4 个位置（描述符 / 读取 / 写入 / 账本），场景外观 24 项
  * 当初就是这样只漏了描述符和读取两处、界面能改助手却完全看不见。现在每条只在这里出现一次，
@@ -50,7 +51,7 @@ function appearanceField<T, TAction extends string>(
 }
 
 /*
- * 场景外观 25 项：读取源是 `StageSceneSettings`，与 `sceneAppearanceProperties()` 的入参一致。
+ * 场景外观 26 项：读取源是 `StageSceneSettings`，与 `sceneAppearanceProperties()` 的入参一致。
  * 特意不给数组标注宽泛的 `ApplicationFieldDefinition<...>[]` 类型——那会把每个字段的
  * `TAction` 字面量提前拍扁成 `string`，账本侧的编译期完整性检查就没了意义。让 TS 直接
  * 从下面这些 `appearanceField()` 调用推出联合类型。
@@ -94,6 +95,9 @@ export const SCENE_APPEARANCE_FIELDS = [
   }),
   appearanceField('fog_distance', '雾距离', numberCodec({ min: 0, max: 10_000 }), {
     read: (s) => s.fog.distance, write: (store, v) => store.setSceneFogDistance(v), storeAction: 'setSceneFogDistance', unit: 'scene_unit',
+  }),
+  appearanceField('render_style', '渲染方式', enumCodec(STAGE_RENDER_STYLE_VALUES, STAGE_RENDER_STYLE_LABELS), {
+    read: (s) => s.render.style, write: (store, v) => store.setSceneRenderStyle(v), storeAction: 'setSceneRenderStyle',
   }),
   appearanceField('show_name_labels', '显示名称标签', booleanCodec, {
     read: (s) => s.display.showNameLabels, write: (store, v) => store.setSceneShowNameLabels(v), storeAction: 'setSceneShowNameLabels',

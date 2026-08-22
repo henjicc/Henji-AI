@@ -9,6 +9,8 @@ import {
 } from 'three'
 import type { Camera, PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import { updateCameraStageProjectCover } from '../projects/cameraStageProjectCover'
+import { StageStyleRenderer, isStageStyleRenderStyle } from '../render/stageStyleRenderer'
+import type { StageStyleRenderStyle } from '../render/stageStyleRenderer'
 import { useCameraStageStore } from '../store/cameraStageStore'
 import { resolveCenteredCaptureView } from './captureFraming'
 
@@ -16,6 +18,10 @@ import { resolveCenteredCaptureView } from './captureFraming'
  * 截图桥：Canvas 内部注册两类捕获能力。
  * - 不传参数：读取视口 PNG dataURL，供截图功能沿用既有裁剪路径。
  * - 传目标尺寸：渲染至离屏 RenderTarget 后直接读取原始 RGBA，避免逐帧 PNG 压缩。
+ *
+ * 离屏渲染按工程当前的渲染方式分流：彩色走场景渲染 + OutputPass 补色调映射与 sRGB；
+ * 深度/线稿等样式画面本身就是显示态数据，直接由样式管线写出，再补一次转换会把灰度整体拉偏，
+ * 视口预览与导出成片就对不上了。
  */
 
 export interface StageOffscreenCaptureOptions {
@@ -49,6 +55,7 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
 
   useEffect(() => {
     let resources: ExportRendererResources | null = null
+    let styleRenderer: StageStyleRenderer | null = null
     let coverTimer: number | null = null
 
     const disposeOffscreen = (): void => {
@@ -56,6 +63,8 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
       resources?.outputTarget.dispose()
       resources?.outputPass.dispose()
       resources = null
+      styleRenderer?.dispose()
+      styleRenderer = null
     }
 
     function captureFrame(): string | null
@@ -72,6 +81,11 @@ const StageCaptureBridge: React.FC<StageCaptureBridgeProps> = ({ captureRef }) =
       }
 
       resources = getExportRenderer(resources, options)
+      const renderStyle = useCameraStageStore.getState().sceneSettings.render.style
+      if (isStageStyleRenderStyle(renderStyle)) {
+        styleRenderer = styleRenderer ?? new StageStyleRenderer()
+        return captureStyledRgba(resources, styleRenderer, renderStyle, gl, scene, camera, options)
+      }
       return captureOffscreenRgba(resources, gl, scene, camera, options)
     }
 
@@ -151,13 +165,11 @@ function getExportRenderer(
   }
 }
 
-async function captureOffscreenRgba(
-  resources: ExportRendererResources,
-  renderer: WebGLRenderer,
-  scene: Scene,
+/** 导出画幅与视口画幅不一致时，用视图偏移在原始取景里居中裁出目标画幅。 */
+function createExportCamera(
   camera: Camera,
   options: StageOffscreenCaptureOptions,
-): Promise<Uint8Array | null> {
+): PerspectiveCamera {
   if (!isPerspectiveCamera(camera)) {
     throw new Error('[cameraStage] 离屏视频帧导出仅支持透视相机')
   }
@@ -172,29 +184,75 @@ async function captureOffscreenRgba(
     captureView.width,
     captureView.height,
   )
+  return exportCamera
+}
 
-  const { sceneTarget, outputTarget, outputPass, pixels } = resources
+/**
+ * 离屏渲染前后收好渲染器的全局状态。
+ *
+ * setRenderTarget 会直接采用 RenderTarget 自带的物理像素 viewport（0,0,width,height）。
+ * 这里不能再调用 renderer.setViewport：它会额外乘上主视图的 devicePixelRatio，
+ * 在高 DPI 屏幕上造成离屏画面只截取左下区域并被放大。
+ */
+function withOffscreenRendererState<T>(renderer: WebGLRenderer, run: () => T): T {
   const previousTarget = renderer.getRenderTarget()
   const previousViewport = renderer.getViewport(new Vector4())
   const previousScissor = renderer.getScissor(new Vector4())
   const previousScissorTest = renderer.getScissorTest()
   try {
-    // setRenderTarget 会直接采用 RenderTarget 自带的物理像素 viewport（0,0,width,height）。
-    // 这里不能再调用 renderer.setViewport：它会额外乘上主视图的 devicePixelRatio，
-    // 在高 DPI 屏幕上造成离屏画面只截取左下区域并被放大。
-    renderer.setRenderTarget(sceneTarget)
     renderer.setScissorTest(false)
-    renderer.clear()
-    renderer.render(scene, exportCamera)
-    outputPass.render(renderer, outputTarget, sceneTarget, 0, false)
-    renderer.readRenderTargetPixels(outputTarget, 0, 0, options.width, options.height, pixels)
+    return run()
   } finally {
     renderer.setRenderTarget(previousTarget)
     renderer.setViewport(previousViewport)
     renderer.setScissor(previousScissor)
     renderer.setScissorTest(previousScissorTest)
   }
-  return pixels
+}
+
+async function captureOffscreenRgba(
+  resources: ExportRendererResources,
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: Camera,
+  options: StageOffscreenCaptureOptions,
+): Promise<Uint8Array | null> {
+  const exportCamera = createExportCamera(camera, options)
+  const { sceneTarget, outputTarget, outputPass, pixels } = resources
+  return withOffscreenRendererState(renderer, () => {
+    renderer.setRenderTarget(sceneTarget)
+    renderer.clear()
+    renderer.render(scene, exportCamera)
+    outputPass.render(renderer, outputTarget, sceneTarget, 0, false)
+    renderer.readRenderTargetPixels(outputTarget, 0, 0, options.width, options.height, pixels)
+    return pixels
+  })
+}
+
+async function captureStyledRgba(
+  resources: ExportRendererResources,
+  styleRenderer: StageStyleRenderer,
+  style: StageStyleRenderStyle,
+  renderer: WebGLRenderer,
+  scene: Scene,
+  camera: Camera,
+  options: StageOffscreenCaptureOptions,
+): Promise<Uint8Array | null> {
+  const exportCamera = createExportCamera(camera, options)
+  const { outputTarget, pixels } = resources
+  return withOffscreenRendererState(renderer, () => {
+    styleRenderer.render({
+      renderer,
+      scene,
+      camera: exportCamera,
+      style,
+      target: outputTarget,
+      width: options.width,
+      height: options.height,
+    })
+    renderer.readRenderTargetPixels(outputTarget, 0, 0, options.width, options.height, pixels)
+    return pixels
+  })
 }
 
 function isPerspectiveCamera(camera: Camera): camera is PerspectiveCamera {
