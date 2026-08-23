@@ -92,7 +92,9 @@ export function useModelPickerOptions({ options, selectedKey }: UseModelPickerOp
     [modelSearchQuery, providerModels]
   );
   const selectedModelOption = useMemo(
-    () => options.find((option) => option.key === selectedKey) ?? options[0],
+    () => options.find((option) => option.key === selectedKey)
+      ?? options.find((option) => option.searchTerms?.includes(selectedKey))
+      ?? options[0],
     [options, selectedKey]
   );
 

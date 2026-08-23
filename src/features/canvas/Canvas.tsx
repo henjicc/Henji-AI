@@ -50,6 +50,7 @@ import { CanvasOverlays } from './ui/CanvasOverlays';
 import { CanvasMiniMap } from './ui/CanvasMiniMap';
 import { useCanvasAssetDrop } from './hooks/useCanvasAssetDrop';
 import { useCanvasGlassPerformance } from './hooks/useCanvasGlassPerformance';
+import { isUiInspectionReadOnly } from '@/platform/runtime';
 
 interface CanvasToastState {
   message: string;
@@ -94,6 +95,7 @@ export function Canvas() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectionToast, setConnectionToast] = useState<CanvasToastState | null>(null);
+  const inspectionReadOnly = isUiInspectionReadOnly();
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
   const history = useCanvasStore((state) => state.history);
@@ -123,7 +125,7 @@ export function Canvas() {
   const saveCurrentProjectViewport = useProjectStore((state) => state.saveCurrentProjectViewport);
   const cancelPendingViewportPersist = useProjectStore((state) => state.cancelPendingViewportPersist);
   const persistCanvasSnapshot = useCallback(() => {
-    if (isRestoringCanvasRef.current) {
+    if (inspectionReadOnly || isRestoringCanvasRef.current) {
       return;
     }
 
@@ -141,7 +143,7 @@ export function Canvas() {
       reactFlowInstance.getViewport(),
       currentHistory
     );
-  }, [getCurrentProject, reactFlowInstance, saveCurrentProject]);
+  }, [getCurrentProject, inspectionReadOnly, reactFlowInstance, saveCurrentProject]);
 
   const scheduleCanvasPersist = useCallback(
     (delayMs = 140) => {
@@ -382,12 +384,12 @@ export function Canvas() {
       clearViewportGestureClasses();
       setViewportState(viewport);
       const project = getCurrentProject();
-      if (!project || isRestoringCanvasRef.current) {
+      if (!project || inspectionReadOnly || isRestoringCanvasRef.current) {
         return;
       }
       saveCurrentProjectViewport(viewport);
     },
-    [clearViewportGestureClasses, getCurrentProject, saveCurrentProjectViewport, setViewportState]
+    [clearViewportGestureClasses, getCurrentProject, inspectionReadOnly, saveCurrentProjectViewport, setViewportState]
   );
 
   const handleMoveStart = useCallback(

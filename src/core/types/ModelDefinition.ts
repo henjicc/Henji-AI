@@ -310,6 +310,20 @@ export interface ModelMeta {
   aliases?: string[]
 
   /**
+   * 旧模型 ID 合并为当前模型别名时，对应的参数默认值迁移。
+   *
+   * 例如旧的独立「编辑」模型并入统一模型后，旧 ID 仍可解析到当前模型，
+   * 同时自动把 mode 设为 edit，避免历史画布或草稿静默回到生成模式。
+   */
+  aliasParamDefaults?: Record<string, DynamicValueMap>
+
+  /**
+   * 旧模型入口合并后，已保存参数 ID 到当前 schema 参数 ID 的映射。
+   * 新参数值始终优先；映射只补齐尚未存在的目标参数。
+   */
+  aliasParamMappings?: Record<string, Record<string, string>>
+
+  /**
    * 系列分组 ID（可选）
    *
    * 用于在模型选择面板中把同一产品系列的不同版本聚在一起：

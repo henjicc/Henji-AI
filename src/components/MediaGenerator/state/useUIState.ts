@@ -10,6 +10,7 @@ import {
 } from '../promptState'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import type { GenerationDraft } from '@/features/generation/domain/generationDraft'
+import { registry } from '@/core/ModelRegistry'
 
 /**
  * 纯 UI 状态管理（不包含模型参数）
@@ -100,6 +101,20 @@ function useUIStateValue() {
   useEffect(() => {
     const currentProviders = getAvailableProviders()
     if (currentProviders.length === 0) return
+
+    const resolvedSelection = registry.getModel(selectedModel)
+    if (resolvedSelection) {
+      const canonicalProvider = resolvedSelection.meta.provider
+      const canonicalModel = resolvedSelection.meta.id
+      const isAvailable = currentProviders.some(
+        provider => provider.id === canonicalProvider && provider.models.some(model => model.id === canonicalModel)
+      )
+      if (isAvailable) {
+        if (selectedProvider !== canonicalProvider) setSelectedProvider(canonicalProvider)
+        if (selectedModel !== canonicalModel) setSelectedModel(canonicalModel)
+        return
+      }
+    }
 
     const isValidSelection = currentProviders.some(
       provider =>

@@ -13,6 +13,10 @@ import { ParamFlowTracker } from '@/core/debug/ParamFlowTracker'
 import type { ParamFlowRecord } from '@/core/debug/types'
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer'
 import {
+  applyModelAliasParamDefaults,
+  normalizeModelAliasParams,
+} from '@/core/params/modelAliasDefaults'
+import {
   reconcileGenerationParams,
   resolveGenerationParamOptions,
 } from '@/features/generation/domain/generationParams'
@@ -135,8 +139,8 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
 
   // 3. 提取默认值
   const defaults = useMemo(() => {
-    return extractDefaults(schema)
-  }, [schema])
+    return applyModelAliasParamDefaults(modelId, model, schema, extractDefaults(schema))
+  }, [model, modelId, schema])
 
   // 4. 联动规则（5.2 起联动本身是纯函数，见 src/features/generation/domain/generationParams.ts）
   const linkages = useMemo(() => model?.linkages ?? [], [model])
@@ -222,20 +226,21 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
 
   // 6. 批量设置参数
   const setParams = useCallback((values: DynamicValueMap) => {
+    const normalizedValues = normalizeModelAliasParams(model, values)
     setParamsState((prev) => {
       // 检查是否有嵌套路径
-      const hasNestedPaths = Object.keys(values).some((key) => key.includes('.'))
+      const hasNestedPaths = Object.keys(normalizedValues).some((key) => key.includes('.'))
 
       if (hasNestedPaths) {
-        return batchSetNestedValues(prev, values)
+        return batchSetNestedValues(prev, normalizedValues)
       }
 
       return {
         ...prev,
-        ...values
+        ...normalizedValues
       }
     })
-  }, [])
+  }, [model])
 
   // 7. 重置所有参数
   const resetParams = useCallback(() => {

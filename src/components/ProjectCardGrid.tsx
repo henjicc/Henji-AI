@@ -173,6 +173,8 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
         return (
           <div key={item.id} className="group relative">
             <UiOptionButton
+              data-project-id={item.id}
+              data-project-meta={item.metaLine}
               variant="card"
               type="button"
               className={`h-auto w-full flex-col !items-stretch gap-0 p-2.5 text-left ${selected ? UI_MULTISELECT_ITEM_ACTIVE_OVERRIDE_CLASS : ''}`}

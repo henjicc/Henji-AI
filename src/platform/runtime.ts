@@ -23,6 +23,15 @@ export function isDesktopRuntime(): boolean {
   return detectShell() !== null
 }
 
+/** UI 巡检读取真实资料时只暂停隐式持久化，不替换或复制用户配置。 */
+export function isUiInspectionReadOnly(): boolean {
+  if (typeof window === 'undefined') return false
+  const native = window.henjiNative as {
+    runtimeInfo?: { uiInspectionReadOnly?: boolean }
+  } | undefined
+  return native?.runtimeInfo?.uiInspectionReadOnly === true
+}
+
 let cachedPlatform: PlatformRuntime | null = null
 let cachedShell: ShellKind | null = null
 

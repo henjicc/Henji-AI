@@ -389,8 +389,8 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 5. 用排版令牌建立层级（标题/正文/元信息），先不加任何容器装饰
 6. 只在四条准入条件全中时才用 Card
 7. 写代码：颜色用语义类，字号/圆角/阴影/层级用登记令牌
-8. 跑自检清单
-9. 告知用户是否需要重启 electron:dev，并写清需要手动验证的交互点
+8. 跑自检清单；高影响 UI 再运行真实 Electron 视觉场景并由 Agent 逐张目视截图
+9. 完成前按项目规则检查开发环境：未运行就启动，需要重启就只重启当前仓库进程树
 ```
 
 **第 2 步不能跳。** 审查界面时只做组件级检查（每个按钮用没用对 primitive）会漏掉所有骨架问题——
@@ -457,6 +457,8 @@ npx vitest run src/components/ui/motion.test.ts
 npm run ui:tour -- --only <受影响场景> --size <受影响尺寸>
 npm run check:ui-visual
 ```
+
+用户要求“真实运行环境”的视觉审查时，使用 `npm run test:reality -- --suite ui|ui-audit --profile real --only ...` 的正式 Electron 场景；默认只读，不传 `--allow-writes`。禁止用浏览器、ego-browser、Chrome、裸 Vite 或 temporary profile 代替。场景断言通过后，Agent 仍必须打开实际截图，检查对齐、裁切、层级、颜色、文案和面板开合状态；DOM 通过不等于视觉通过。巡检结束后退出巡检实例，并恢复或重启当前仓库的 `electron:dev`。
 
 局部样式、文案或叶子组件改动只运行直接相关的静态检查和精确测试，不追加完整 `ui:tour`。`ui:tour` 产出 `.ui-tour/index.md` 与截图，专门让人检查对齐、留白、视觉权重、hover /
 聚焦 / 下拉 / 右键状态；`check:ui-visual` 只输出规则结论与 `.ui-audit/audit.json`，

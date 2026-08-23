@@ -55,20 +55,21 @@ export function ParamGroupTrigger({
     : (i18n.language.startsWith('zh') ? '默认' : 'Default')
 
   return (
-    <PanelTrigger
-      label={compact ? undefined : groupName}
-      display={summary}
-      className={compact ? 'min-w-0' : 'w-auto min-w-[108px]'}
-      buttonClassName={compact
-        ? '!h-7 !w-auto !max-w-[116px] !justify-between !gap-1.5 !rounded-md !px-2 !py-0 !text-xs !font-normal'
-        : 'w-auto min-w-[108px]'}
-      buttonLabelClassName="text-xs"
-      panelWidth={group.panelWidth ?? 440}
-      alignment="aboveCenter"
-      gap={compact ? 8 : 45}
-      freezePositionOnOpen
-      closeOnPanelClick={false}
-      renderPanel={() => (
+    <div data-param-group-id={group.id} className="contents">
+      <PanelTrigger
+        label={compact ? undefined : groupName}
+        display={summary}
+        className={compact ? 'min-w-0' : 'w-auto min-w-[108px]'}
+        buttonClassName={compact
+          ? '!h-7 !w-auto !max-w-[116px] !justify-between !gap-1.5 !rounded-md !px-2 !py-0 !text-xs !font-normal'
+          : 'w-auto min-w-[108px]'}
+        buttonLabelClassName="text-xs"
+        panelWidth={group.panelWidth ?? 440}
+        alignment="aboveCenter"
+        gap={compact ? 8 : 45}
+        freezePositionOnOpen
+        closeOnPanelClick={false}
+        renderPanel={() => (
         <div className="p-3">
           {sections.map(({ section, params: sectionParams }, index) => (
             <UiGroup
@@ -101,7 +102,8 @@ export function ParamGroupTrigger({
             </UiGroup>
           ))}
         </div>
-      )}
-    />
+        )}
+      />
+    </div>
   )
 }

@@ -401,6 +401,12 @@ function isMediaAutoResizableType(type: CanvasNodeType): boolean {
     || type === CANVAS_NODE_TYPES.videoUpload;
 }
 
+function isManualSizeTrackingNodeType(type: CanvasNodeType): boolean {
+  return isMediaAutoResizableType(type)
+    || type === CANVAS_NODE_TYPES.videoGen
+    || type === CANVAS_NODE_TYPES.audioGen;
+}
+
 function isModelSelectorNodeType(type: CanvasNodeType): boolean {
   return type === CANVAS_NODE_TYPES.imageModelSelector
     || type === CANVAS_NODE_TYPES.videoModelSelector
@@ -698,7 +704,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       let nextNodes = applyNodeChanges<CanvasNode>(changes, state.nodes);
       if (resizedNodeIds.size > 0) {
         nextNodes = nextNodes.map((node) => {
-          if (!resizedNodeIds.has(node.id) || !isMediaAutoResizableType(node.type)) {
+          if (!resizedNodeIds.has(node.id) || !isManualSizeTrackingNodeType(node.type)) {
             return node;
           }
           return withManualSizeLock(node);

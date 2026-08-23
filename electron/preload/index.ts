@@ -503,6 +503,9 @@ const updaterApi: HenjiUpdaterApi = {
 }
 
 const api: HenjiNativeApi = {
+  runtimeInfo: {
+    uiInspectionReadOnly: process.env['HENJI_UI_INSPECTION_READ_ONLY'] === '1',
+  },
   assistant: assistantApi,
   ai: aiApi,
   llm: llmApi,

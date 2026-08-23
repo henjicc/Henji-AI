@@ -62,6 +62,8 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 上传参数的新 schema 值使用数组结构，builder 仅可为旧工程兼容读取历史字符串 URL；兼容路径不能重新暴露 URL 输入框。对话/工具面板 `ParamRenderer` 与画布 `NodeParamControl` 必须能消费同一上传 schema。
 - 参数压缩不能破坏用户已经形成的跨模型心智：比例、分辨率、时长、数量、质量等高频通用参数，优先保持同模态模型已有的名称、控件类型、顶层位置和交互方式；不得仅为了“参数更少”把它们吞进供应商/模型专属高级面板。标准交互不等于统一 options/default，合法值和默认值仍以当前 API 契约为准。
 - 模型特有、低频或需要强联动解释的参数才进入 `composite` / 特殊面板；面板内部仍复用现有 `Ui*`、标准参数控件、上传与排序能力，不重做比例选择器、下拉、开关或文件上传。
+- 同一供应商、同一模型家族、同一模态下，仅因端点、接口渠道或子能力不同而拆出的模型，默认优先合并为一个产品入口，用顶层 `mode` / `channel` 明示切换；独立模态、完全不同的用户目标或无法共存的生命周期才保留多个模型卡片。平台文档分成多页不等于产品必须分成多个模型。
+- 合并或重命名模型时，旧 ID 放进 `meta.aliases` 只是第一步：旧入口隐含的模式/渠道写入 `meta.aliasParamDefaults`，旧参数 ID 迁移写入 `meta.aliasParamMappings`。四个消费方必须一起验证：生成页初始值、模型切换迁移、画布节点参数、主进程 RequestBuilder；禁止出现“能解析旧 ID，但旧工程悄悄换了渠道或丢参数”。
 - 标准生成节点通过 `GenerationNodeShell -> NodeInputRows -> NodeParamRows` 自动读取模型 schema。只改模型参数定义、显隐、联动、计价或请求映射时，默认不修改 `src/features/canvas/**`，也不加载 `canvas-node-builder`。只有新增/改造节点 DOM、端口、节点注册、节点专属交互，或现有 `ParamRenderer` / `NodeParamControl` 无法共同表达新参数类型时，才进入画布节点工作流。
 - 新增或调整复合/特殊参数面板时，必须确认对话/工具面板的 `ParamRenderer` 与画布的 `NodeParamControl` 都能消费同一 schema 和同一值结构；优先修正共享参数面板能力，不为画布复制一份模型专属实现。
 - Henji-AI 当前产品约定：新增模型默认不暴露 `output_format` / `outputFormat`，也不向 API 传递该字段；即使文档支持，也先按“不显示且不请求”处理，除非用户后续明确推翻这条约定。

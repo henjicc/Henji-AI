@@ -21,16 +21,20 @@ export const apimartGptImage2Model = defineModel({
     name: { key: 'meta.name', fallback: 'GPT Image 2' },
     tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-16', 'multi-output', 'supports-4k', 'provider-apimart'],
     aliases: ['gpt-image-2-apimart', 'apimart-gpt-image-2-official', 'gpt-image-2-official-apimart'],
+    aliasParamDefaults: {
+      'apimart-gpt-image-2-official': { apimartGptImage2Version: 'official' },
+      'gpt-image-2-official-apimart': { apimartGptImage2Version: 'official' }
+    },
     polling: { interval: 3000, maxAttempts: 240, expectedAttempts: 50 }
   },
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },
   params: [
     {
       id: 'apimartGptImage2Version', type: 'dropdown', order: 1,
-      name: sharedFieldText('version'), default: 'ext',
+      name: sharedFieldText('apiChannel'), default: 'ext',
       options: [
-        { value: 'ext', label: { zh: '普通', en: 'Standard' } },
-        { value: 'official', label: { zh: '官方', en: 'Official' } }
+        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } },
+        { value: 'official', label: { zh: '官方接口', en: 'Official' } }
       ]
     },
     {

@@ -236,6 +236,7 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
   }, [filteredAndSortedModels, highlightedIndex, getColumnsCount, onModelSelect])
   return (
     <div
+      data-model-selector-panel
       ref={wrapperRef}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
@@ -351,6 +352,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               <UiOptionButton
                 type="button"
                 key={`${p.id}-${m.id}`}
+                data-provider-id={p.id}
+                data-model-id={m.id}
                 ref={isHighlighted ? highlightedItemRef : null}
                 data-close-on-select
                 onClick={() => onModelSelect(p.id, m.id)}

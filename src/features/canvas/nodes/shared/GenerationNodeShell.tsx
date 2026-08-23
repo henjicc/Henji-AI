@@ -58,7 +58,10 @@ import {
   useGenerationPromptDocument,
   type GenerationNodeShellData,
 } from './useGenerationPromptDocument';
-import { useGenerationNodeMinimumHeight } from './useGenerationNodeMinimumHeight';
+import {
+  resolveGenerationNodeManualDimension,
+  useGenerationNodeMinimumHeight,
+} from './useGenerationNodeMinimumHeight';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -238,13 +241,20 @@ export const GenerationNodeShell = memo(({
     inputRowsRef,
     minimumHeight: resolvedMinimumHeight,
   } = useGenerationNodeMinimumHeight(minHeight);
-  // 未手动 resize 时按内容自适应宽度；手动调整后使用用户尺寸并受 min/max 约束。
-  const hasManualWidth = typeof width === 'number' && Number.isFinite(width);
-  const resolvedWidth = hasManualWidth ? Math.max(minWidth, Math.round(width)) : null;
+  // ReactFlow 的 width/height 同时包含内容测量值。只有用户拖拽过尺寸后才沿用，
+  // 避免旧版参数组内联展开产生的测量高度在收起后继续把节点撑大。
+  const isSizeManuallyAdjusted = data.isSizeManuallyAdjusted === true;
+  const resolvedWidth = resolveGenerationNodeManualDimension(
+    width,
+    minWidth,
+    isSizeManuallyAdjusted,
+  );
   // 提示词正文长度不参与最低高度，否则长文本会反向锁死 NodeResizeControl。
-  const resolvedHeight = typeof height === 'number' && Number.isFinite(height)
-    ? Math.max(resolvedMinimumHeight, Math.round(height))
-    : resolvedMinimumHeight;
+  const resolvedHeight = resolveGenerationNodeManualDimension(
+    height,
+    resolvedMinimumHeight,
+    isSizeManuallyAdjusted,
+  ) ?? resolvedMinimumHeight;
 
   useEffect(() => {
     if (data.modelId !== selectedModelId) {
@@ -404,6 +414,8 @@ export const GenerationNodeShell = memo(({
   return (
     <div
       ref={rootRef}
+      data-generation-node-id={id}
+      data-generation-node-model-id={effectiveModelId}
       className={`
         canvas-node-dynamic-min-height group relative flex flex-col overflow-visible rounded-[var(--node-radius)] border bg-surface-dark/90 p-2 transition-colors duration-150
         ${selected

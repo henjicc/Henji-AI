@@ -1003,6 +1003,9 @@ export interface HenjiUpdaterApi {
 }
 
 export interface HenjiNativeApi {
+  runtimeInfo: {
+    uiInspectionReadOnly: boolean
+  }
   assistant: HenjiAssistantApi
   ai: HenjiAiApi
   llm: HenjiLlmApi

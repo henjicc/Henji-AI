@@ -8,6 +8,7 @@ var SHARED_FIELDS = {
   aspectRatio: 'Aspect Ratio',
   audioFormat: 'Audio Format',
   audioSpec: 'Audio Spec',
+  apiChannel: 'API Channel',
   autoFix: 'Auto Fix',
   backgroundMusic: 'Background Music',
   baseSize: 'Base Size',

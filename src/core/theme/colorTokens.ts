@@ -14,20 +14,20 @@ export const CANVAS_GRID_ALT_HEX = '#404040';
  * 仅在此处集中维护 hex；端口组件通过 getSocketColor 取色，不写颜色字面量。
  */
 export const SOCKET_TYPE_COLOR_HEX: Record<string, string> = {
-  STRING: '#22C55E',
-  TEXT: '#22C55E',
-  NUMBER: '#3B82F6',
-  INT: '#3B82F6',
-  FLOAT: '#0EA5E9',
-  BOOLEAN: '#A855F7',
-  ENUM: '#F59E0B',
-  IMAGE: '#14B8A6',
-  VIDEO: '#EF4444',
-  AUDIO: '#EC4899',
-  MODEL: '#FACC15',
-  OBJECT: '#A3A3A3',
+  STRING: '#4ADE80',
+  TEXT: '#4ADE80',
+  NUMBER: '#60A5FA',
+  INT: '#60A5FA',
+  FLOAT: '#38BDF8',
+  BOOLEAN: '#C084FC',
+  ENUM: '#FBBF24',
+  IMAGE: '#2DD4BF',
+  VIDEO: '#F87171',
+  AUDIO: '#F472B6',
+  MODEL: '#FDE047',
+  OBJECT: '#D4D4D4',
 };
-export const SOCKET_TYPE_COLOR_FALLBACK_HEX = '#A3A3A3';
+export const SOCKET_TYPE_COLOR_FALLBACK_HEX = '#D4D4D4';
 
 export const STORYBOARD_BG_HEX = '#171717';
 export const STORYBOARD_CELL_BG_HEX = '#262626';

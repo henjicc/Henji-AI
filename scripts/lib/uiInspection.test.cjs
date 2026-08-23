@@ -68,12 +68,43 @@ test('拒绝格式错误或低于项目下限的尺寸', () => {
 test('only 同时匹配场景 id、界面与中文场景名', () => {
   const generationScenes = filterScenes(UI_INSPECTION_SCENES, ['生成'])
   const focusScenes = filterScenes(UI_INSPECTION_SCENES, ['focus'])
-  assert.equal(generationScenes.length, 4)
+  assert.equal(generationScenes.length, 9)
   assert.deepEqual(focusScenes.map((scene) => scene.id).sort(), [
     'assets-search-focus',
     'assistant-focus',
     'generation-prompt-focus',
   ])
+})
+
+test('Midjourney 参数面板场景可在真实资料模式下只读运行', () => {
+  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'generation-midjourney-settings')
+  assert.ok(scene)
+  assert.notEqual(scene.writesUserData, true)
+  const selection = selectInspectionScenes([scene], parseUiInspectionArgs([
+    '--profile',
+    'real',
+    '--only',
+    'Midjourney',
+  ], '.ui-tour'))
+  assert.deepEqual(selection.scenes.map((candidate) => candidate.id), ['generation-midjourney-settings'])
+  assert.deepEqual(selection.blocked, [])
+})
+
+test('模型合并与参考图状态都有定向视觉场景', () => {
+  const sceneIds = UI_INSPECTION_SCENES.map((scene) => scene.id)
+  assert.equal(sceneIds.includes('generation-model-midjourney'), true)
+  assert.equal(sceneIds.includes('generation-model-gemini-omni'), true)
+  assert.equal(sceneIds.includes('generation-model-gpt-image-2'), true)
+  assert.equal(sceneIds.includes('generation-midjourney-reference'), true)
+})
+
+test('画布 Midjourney 场景在只读巡检运行态下不会声明写用户数据', () => {
+  const scenes = UI_INSPECTION_SCENES.filter((scene) => scene.id.startsWith('canvas-midjourney-'))
+  assert.deepEqual(scenes.map((scene) => scene.id), [
+    'canvas-midjourney-node',
+    'canvas-midjourney-settings',
+  ])
+  assert.equal(scenes.every((scene) => scene.writesUserData !== true), true)
 })
 
 test('输出目录相对项目根解析且绝对路径保持不变', () => {
@@ -95,6 +126,10 @@ test('场景覆盖六类界面且规则数固定为十一条', () => {
   assert.equal(UI_AUDIT_RULES.length, 11)
   assert.equal(new Set(UI_AUDIT_RULES.map((rule) => rule.key)).size, 11)
   const sceneIds = new Set(UI_INSPECTION_SCENES.map((scene) => scene.id))
+  assert.equal(sceneIds.has('generation-model-panel'), true)
+  assert.equal(sceneIds.has('generation-midjourney-settings'), true)
+  assert.equal(sceneIds.has('canvas-midjourney-node'), true)
+  assert.equal(sceneIds.has('canvas-midjourney-settings'), true)
   assert.equal(sceneIds.has('settings-llm'), true)
   assert.equal(sceneIds.has('toolbox-image-edit'), true)
   assert.equal(sceneIds.has('toolbox-camera-stage'), true)

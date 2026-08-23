@@ -43,6 +43,10 @@ Henji-AI 画布节点不是各写各的 UI，而是从一组标准化"参数行�
 
 判断"是否需要 'rows' 端口形态"：节点只要声明 `ports.target.accepts` 含 `image`/`video`/`audio` 中任意一种，就必须在 `connectivity` 里加 `targetHandleMode: 'rows'`，并用 `MediaInputRow` 渲染对应媒体行——**禁止**新增节点手写单一 `id="target"` 的 Handle 来接收媒体（旧节点遗留的 legacy 写法，不要再复制）。
 
+判断“参数组如何呈现”：`panel` / `composite` 只能在节点中占一行摘要触发器，详细内容用 `ParamGroupTrigger` 打开节点布局流之外的浮动特殊面板；禁止在节点内部直接展开整组参数并撑高节点。组内只有已经连线、需要持续显示连接状态的参数保留为紧凑行。打开和关闭面板前后，ReactFlow 测量高度必须不变。
+
+端口颜色必须来自已登记的媒体/数据类型语义 token，并在深色画布上同时满足可见亮度、最小可点尺寸和轮廓分离；不要在节点调用点任意挑色。端口或 token 改动后，除静态检查外必须查看真实 Electron 画布截图。
+
 ## 路径 A：完全复用 GenerationNodeShell
 
 适用于"标准生成节点"：一个提示词框 + 模型/媒体/参数行 + 生成出一个结果节点。AI 图片/视频/音频节点都是这样实现的。
@@ -154,6 +158,8 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 - [ ] 没有手写的模型选择 chip / 媒体缩略图 / 逐行参数布局（这些是 `ModelInputRow`/`MediaInputRow`/`NodeParamRows` 的职责）
 - [ ] 没有手写单一 `id="target"` 的 Handle 来接收媒体（`targetHandleMode: 'rows'` + `MediaInputRow` 替代）
 - [ ] 没有节点内置"生成"按钮（`capabilities.toolbarGenerate` + `canvasEventBus` 替代）
+- [ ] `panel` / `composite` 使用单行触发器和节点外浮动面板，开关面板不改变节点高度
+- [ ] 接入点使用登记的语义 token，在深色画布、未连接和缩放状态下都清楚可见
 - [ ] 节点自身的 `useNodeModelParams` 调用传了 `media`（除非它是共享 `storedParams` 的次要实例）
 - [ ] `nodeRegistry.ts` 的 `CanvasNodeDefinition` 字段填全，对照 [references/node-registry-fields.md](references/node-registry-fields.md)
 - [ ] 已按 `docs/rules/testing.md` 跑节点/注册表精确测试及本次真正涉及的颜色、模型 i18n、类型专项检查；没有无理由叠加全量命令

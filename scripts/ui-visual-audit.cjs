@@ -124,7 +124,12 @@ async function main() {
   const results = {}
   const failures = []
   const runtimeEvidence = {}
-  const app = await launchUiInspectionApp({ root: ROOT, mainEntry: MAIN_ENTRY, profile: options.profile })
+  const app = await launchUiInspectionApp({
+    root: ROOT,
+    mainEntry: MAIN_ENTRY,
+    profile: options.profile,
+    readOnly: !options.allowWrites,
+  })
   const collector = createRuntimeEvidenceCollector(app.page)
 
   try {

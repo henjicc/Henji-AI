@@ -10,7 +10,7 @@ export const NODE_CONTROL_PRIMARY_BUTTON_CLASS =
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
 
 export const NODE_PORT_BASE_CLASS =
-  '!h-2.5 !w-2.5 !border !border-surface-dark !opacity-0 transition-opacity duration-150';
+  '!h-3 !w-3 !border-2 !border-veil-strong !opacity-80 transition-opacity duration-150';
 
 export const NODE_PORT_VISIBLE_CLASS = '!opacity-100';
 
@@ -58,4 +58,3 @@ export const NODE_IDLE_BORDER_CLASS = 'border-veil hover:border-veil-strong';
 
 /** 不需要 hover 反馈的节点（如分组节点）用这个 */
 export const NODE_IDLE_BORDER_STATIC_CLASS = 'border-veil';
-

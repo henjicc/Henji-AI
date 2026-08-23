@@ -103,7 +103,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 每次改完代码：
 
 1. 跑完 [testing.md](docs/rules/testing.md) 中与本次改动匹配的检查，如实报告结果
-2. 涉及鼠标操作（拖拽、点击、悬浮、画布交互）的验证不要自己上手，写清操作步骤和验证点交给用户
+2. 不要人工接管用户鼠标做验收；拖拽、点击、悬浮、画布交互优先通过项目正式 `npm run test:reality -- --suite ui|ui-audit` 自动化执行。只有正式场景尚未覆盖或必须由用户作主观判断时，才写清操作步骤和验证点交给用户。真实应用视觉审查禁止使用浏览器、ego-browser 或 Chrome 工具代替 Electron；必须使用真实 Electron 窗口、项目正式场景和实际截图，并由 Agent 打开截图目视检查。
 3. **最终回复前必须检查本项目开发环境是否正在运行**，只识别工作目录属于当前仓库的 `npm run electron:dev` 进程，禁止按 `node` / `Electron` 名称宽泛结束其他项目进程：
    - 未运行：在可持续运行的终端会话中执行 `npm run electron:dev`，确认启动成功后再交付
    - 已运行且本次改动需要重启：只结束当前仓库对应的完整开发进程树，然后重新执行 `npm run electron:dev`

@@ -5,6 +5,8 @@ const TAB_NAMES = Object.freeze({
   assets: /^(资产|Assets)$/i,
 })
 
+const REFERENCE_FIXTURE_IMAGE = `${process.cwd()}/resources/icons/icon.png`
+
 function createUiInspectionScenes({ settlePage }) {
   async function closeTransientUi(page) {
     await page.keyboard.press('Escape')
@@ -54,6 +56,62 @@ function createUiInspectionScenes({ settlePage }) {
     await waitForPageHeader(page)
   }
 
+  async function openGenerationModelPanel(page) {
+    await setupGeneration(page)
+    const modelLabel = page.locator('label').filter({ hasText: /^(模型|Model)$/i }).first()
+    await modelLabel.locator('..').locator('[data-panel-trigger-button]').click()
+    const modelPanel = page.locator('[data-model-selector-panel]:visible')
+    await modelPanel.waitFor({ state: 'visible', timeout: 8000 })
+    const searchInput = modelPanel.locator('input[placeholder*="模型"], input[placeholder*="model" i]').first()
+    await searchInput.waitFor({ state: 'visible', timeout: 8000 })
+    return searchInput
+  }
+
+  async function selectGenerationModel(page, modelName, modelId) {
+    const searchInput = await openGenerationModelPanel(page)
+    await searchInput.fill(modelName)
+    const modelPanel = page.locator('[data-model-selector-panel]:visible')
+    const modelButton = modelId
+      ? modelPanel.locator(`[data-model-id="${modelId}"][data-provider-id="apimart"]`).first()
+      : modelPanel.getByRole('button').filter({ hasText: modelName }).first()
+    await modelButton.waitFor({ state: 'visible', timeout: 8000 })
+    await modelButton.click()
+    await modelPanel.waitFor({ state: 'hidden', timeout: 8000 })
+  }
+
+  async function setupGenerationModelSearch(page, query, expectedModelId, excludedModelIds = []) {
+    const searchInput = await openGenerationModelPanel(page)
+    await searchInput.fill(query)
+    const panel = page.locator('[data-model-selector-panel]:visible')
+    const expected = panel.locator(`[data-provider-id="apimart"][data-model-id="${expectedModelId}"]`)
+    await expected.waitFor({ state: 'visible', timeout: 8000 })
+    for (const modelId of excludedModelIds) {
+      if (await panel.locator(`[data-provider-id="apimart"][data-model-id="${modelId}"]`).count()) {
+        throw new Error(`模型合并后仍显示旧入口：${modelId}`)
+      }
+    }
+    await settlePage(page)
+  }
+
+  async function setupGenerationMidjourneySettings(page, withCharacterReference) {
+    // 生成页草稿是内存态；真实资料巡检时 ImageUpload 也会切换为 data URL 预览，
+    // 不会把夹具导入用户媒体目录。
+    await selectGenerationModel(page, 'Midjourney', 'apimart-midjourney')
+    const settingsLabel = page.locator('label').filter({ hasText: /^(MJ 设置|MJ Settings)$/i }).first()
+    await settingsLabel.waitFor({ state: 'visible', timeout: 8000 })
+    await settingsLabel.locator('..').locator('[data-panel-trigger-button]').click()
+    const panel = page.locator('[data-panel-scroll-region]:visible').last()
+    await panel.waitFor({ state: 'visible', timeout: 8000 })
+    await panel.getByText(/^(参考控制|References)$/i).waitFor({ state: 'visible', timeout: 8000 })
+    if (withCharacterReference) {
+      const characterReferenceLabel = panel.locator('label').filter({ hasText: /^(角色参考图|Character Reference)$/i })
+      const characterReference = characterReferenceLabel.locator('..')
+      await characterReference.locator('input[type="file"]').setInputFiles(REFERENCE_FIXTURE_IMAGE)
+      await panel.getByText(/^(角色权重|Character Weight)$/i).waitFor({ state: 'visible', timeout: 8000 })
+    }
+    await settlePage(page)
+  }
+
   async function setupSettings(page) {
     await setupGeneration(page)
     await clickNamedButton(page, /^(设置|Settings)$/i)
@@ -63,7 +121,63 @@ function createUiInspectionScenes({ settlePage }) {
 
   async function setupCanvas(page) {
     await openWorkspace(page, 'canvas')
+    const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
+    if (await viewport.count()) return
     await waitForPageHeader(page)
+  }
+
+  async function setupCanvasProject(page) {
+    await setupCanvas(page)
+    const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
+    if (await viewport.count()) return viewport
+
+    const projectCard = page.locator('[data-project-id]:visible').first()
+    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
+    await projectCard.click()
+    await viewport.waitFor({ state: 'visible', timeout: 12000 })
+    await settlePage(page, 700)
+    return viewport
+  }
+
+  async function setupCanvasMidjourneyNode(page, openSettings) {
+    const viewport = await setupCanvasProject(page)
+    let node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-midjourney"])').last()
+
+    if (!await node.count()) {
+      const box = await viewport.boundingBox()
+      if (!box) throw new Error('画布视口没有可交互区域')
+      await viewport.click({
+        button: 'right',
+        position: { x: Math.round(box.width * 0.56), y: Math.round(box.height * 0.48) },
+      })
+      const menu = page.getByRole('menu', { name: /^(添加节点|Add Node)$/i })
+      await menu.waitFor({ state: 'visible', timeout: 8000 })
+      await menu.getByRole('menuitem', { name: /^(图片生成|Image Generation)$/i }).click()
+      node = page.locator('.react-flow__node:has([data-generation-node-model-id])').last()
+      await node.waitFor({ state: 'visible', timeout: 8000 })
+
+      const modelLabel = node.locator('span').filter({ hasText: /^(模型|Model)$/i }).first()
+      await modelLabel.locator('..').getByRole('button').first().click()
+      const allProviders = page.getByRole('button', { name: /^(全部|All)$/i }).filter({ visible: true }).last()
+      await allProviders.click()
+      const searchInput = page.locator('input[placeholder*="模型"], input[placeholder*="model" i]').filter({ visible: true }).last()
+      await searchInput.fill('Midjourney')
+      const midjourney = page.getByRole('button').filter({ hasText: 'Midjourney' }).filter({ hasText: 'APIMart' }).last()
+      await midjourney.click()
+      node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-midjourney"])').last()
+      await node.waitFor({ state: 'visible', timeout: 8000 })
+    }
+
+    await node.click()
+    await settlePage(page, 500)
+    if (openSettings) {
+      const group = node.locator('[data-param-group-id="midjourney-settings"]')
+      await group.locator('[data-panel-trigger-button]').click()
+      const panel = page.locator('[data-panel-scroll-region]:visible').last()
+      await panel.waitFor({ state: 'visible', timeout: 8000 })
+      await panel.getByText(/^(参考控制|References)$/i).waitFor({ state: 'visible', timeout: 8000 })
+      await settlePage(page)
+    }
   }
 
   async function setupToolbox(page) {
@@ -128,12 +242,54 @@ function createUiInspectionScenes({ settlePage }) {
       surface: '生成',
       name: '生成-模型选择面板',
       setup: async (page) => {
-        await setupGeneration(page)
-        const modelLabel = page.locator('label').filter({ hasText: /模型|Model/i }).first()
-        await modelLabel.locator('..').locator('[data-panel-trigger-button]').click()
-        await page.locator('input[placeholder*="模型"], input[placeholder*="model" i]').first().waitFor({ state: 'visible' })
+        await openGenerationModelPanel(page)
         await settlePage(page)
       },
+    },
+    {
+      id: 'generation-model-midjourney',
+      surface: '生成',
+      name: '生成-模型合并-Midjourney',
+      setup: async (page) => setupGenerationModelSearch(
+        page,
+        'Midjourney',
+        'apimart-midjourney',
+        ['apimart-midjourney-edit', 'apimart-midjourney-blend'],
+      ),
+    },
+    {
+      id: 'generation-model-gemini-omni',
+      surface: '生成',
+      name: '生成-模型合并-Gemini Omni',
+      setup: async (page) => setupGenerationModelSearch(
+        page,
+        'Gemini Omni',
+        'apimart-gemini-omni-flash',
+        ['apimart-gemini-omni-flash-ext'],
+      ),
+    },
+    {
+      id: 'generation-model-gpt-image-2',
+      surface: '生成',
+      name: '生成-模型合并-GPT Image 2',
+      setup: async (page) => setupGenerationModelSearch(
+        page,
+        'GPT Image 2',
+        'apimart-gpt-image-2',
+        ['apimart-gpt-image-2-official'],
+      ),
+    },
+    {
+      id: 'generation-midjourney-settings',
+      surface: '生成',
+      name: '生成-Midjourney 参数特殊面板',
+      setup: async (page) => setupGenerationMidjourneySettings(page, false),
+    },
+    {
+      id: 'generation-midjourney-reference',
+      surface: '生成',
+      name: '生成-Midjourney 参考图与权重',
+      setup: async (page) => setupGenerationMidjourneySettings(page, true),
     },
     {
       id: 'generation-prompt-focus',
@@ -212,6 +368,18 @@ function createUiInspectionScenes({ settlePage }) {
       },
     },
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
+    {
+      id: 'canvas-midjourney-node',
+      surface: '画布',
+      name: '画布-Midjourney 节点与端口',
+      setup: async (page) => setupCanvasMidjourneyNode(page, false),
+    },
+    {
+      id: 'canvas-midjourney-settings',
+      surface: '画布',
+      name: '画布-Midjourney 参数特殊面板',
+      setup: async (page) => setupCanvasMidjourneyNode(page, true),
+    },
     { id: 'toolbox-home', surface: '工具箱', name: '工具箱-首页', setup: setupToolbox },
     {
       id: 'toolbox-hover',

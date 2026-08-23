@@ -149,7 +149,7 @@ async function settlePage(page, delayMs = 350) {
 
 const UI_INSPECTION_SCENES = createUiInspectionScenes({ settlePage })
 
-async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile = 'temporary' }) {
+async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile = 'temporary', readOnly = true }) {
   if (!fs.existsSync(mainEntry)) {
     throw new Error(`未找到 Electron 构建产物：${mainEntry}\n请先运行 npm run electron:build`)
   }
@@ -161,6 +161,7 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile =
     skipOnboarding: true,
     extraEnv: {
       HENJI_UI_INSPECTION_ALLOW_OVERSIZE: '1',
+      HENJI_UI_INSPECTION_READ_ONLY: readOnly ? '1' : '0',
       ...extraEnv,
     },
   })

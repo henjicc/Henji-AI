@@ -11,6 +11,7 @@ import { registry } from '../ModelRegistry'
 import type { ModelDefinition, ParamDef } from '../types'
 import type { ParamFlowTracker } from '../debug/ParamFlowTracker'
 import { EndpointSelector, type SelectContext } from './EndpointSelector'
+import { mergeModelAliasParamDefaults } from '../params/modelAliasDefaults'
 
 /**
  * 构建结果接口
@@ -102,17 +103,19 @@ export class RequestBuilder {
       throw new Error(`[RequestBuilder] Model not found: ${modelId}`)
     }
 
+    const effectiveParams = mergeModelAliasParamDefaults(modelId, model, params)
+
     // 检查是否有新配置
     if (this.hasNewConfig(model)) {
       if (debug) {
         logger.info('[RequestBuilder] Using new config engine')
       }
-      return await this.buildWithNewConfig(model, params, context, debug, tracker)
+      return await this.buildWithNewConfig(model, effectiveParams, context, debug, tracker)
     } else {
       if (debug) {
         logger.info('[RequestBuilder] Using legacy builder (fallback)')
       }
-      return this.buildWithOldConfig(modelId, params, context)
+      return this.buildWithOldConfig(modelId, effectiveParams, context)
     }
   }
 
@@ -384,4 +387,3 @@ export class RequestBuilder {
  * 单例实例
  */
 export const requestBuilder = new RequestBuilder()
-

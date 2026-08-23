@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { findGeneratedCoverSources, updateCanvasProjectCover } from './canvasProjectCover'
+import { isUiInspectionReadOnly } from '@/platform/runtime'
 
 /** 新生成图片落盘后尽快刷新；纯节点布局变化等到用户停手，避免拖拽期间反复截图。 */
 const GENERATED_MEDIA_DEBOUNCE_MS = 240
@@ -17,7 +18,7 @@ export function useCanvasProjectCoverAutosave(projectId: string | null): void {
   const lastSavedMediaSignatureRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!projectId) return
+    if (!projectId || isUiInspectionReadOnly()) return
     let disposed = false
 
     const clearTimer = (): void => {

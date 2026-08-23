@@ -7,6 +7,7 @@ import { useCanvasProjectCoverAutosave } from '@/features/canvas/application/use
 import { ProjectManager } from '@/features/project/ProjectManager';
 import { useProjectStore } from '@/stores/projectStore';
 import '@/features/canvas/storyboard.css';
+import { isUiInspectionReadOnly } from '@/platform/runtime';
 
 const CanvasWorkspace = (): JSX.Element => {
   const isHydrated = useProjectStore((state) => state.isHydrated);
@@ -14,6 +15,7 @@ const CanvasWorkspace = (): JSX.Element => {
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const closeProject = useProjectStore((state) => state.closeProject);
   const [isLeavingProject, setIsLeavingProject] = useState(false);
+  const inspectionReadOnly = isUiInspectionReadOnly();
 
   useCanvasProjectCoverAutosave(currentProjectId);
 
@@ -30,12 +32,12 @@ const CanvasWorkspace = (): JSX.Element => {
     const projectId = useProjectStore.getState().currentProjectId;
     setIsLeavingProject(true);
     try {
-      if (projectId) await updateCanvasProjectCover(projectId);
+      if (projectId && !inspectionReadOnly) await updateCanvasProjectCover(projectId);
     } finally {
       setIsLeavingProject(false);
       closeProject();
     }
-  }, [closeProject, isLeavingProject]);
+  }, [closeProject, inspectionReadOnly, isLeavingProject]);
 
   return (
     <ReactFlowProvider>

@@ -23,6 +23,10 @@ export const apimartGrokImagine20Model = defineModel({
     name: { key: 'meta.name', fallback: 'Grok Imagine Image 2.0' },
     tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-3', 'multi-output', 'supports-2k', 'provider-apimart'],
     aliases: ['grok-imagine-2-apimart', 'apimart-grok-imagine-2.0-official', 'grok-imagine-image-2-official-apimart'],
+    aliasParamDefaults: {
+      'apimart-grok-imagine-2.0-official': { apimartGrokImagine20Version: 'official' },
+      'grok-imagine-image-2-official-apimart': { apimartGrokImagine20Version: 'official' }
+    },
     polling: { interval: 3000, maxAttempts: 200, expectedAttempts: 40 }
   },
   inputLimits: {
@@ -35,10 +39,10 @@ export const apimartGrokImagine20Model = defineModel({
   params: [
     {
       id: 'apimartGrokImagine20Version', type: 'dropdown', order: 1,
-      name: sharedFieldText('version'), default: 'ext',
+      name: sharedFieldText('apiChannel'), default: 'ext',
       options: [
-        { value: 'ext', label: { zh: '普通', en: 'Standard' } },
-        { value: 'official', label: { zh: '官方', en: 'Official' } }
+        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } },
+        { value: 'official', label: { zh: '官方接口', en: 'Official' } }
       ]
     },
     {

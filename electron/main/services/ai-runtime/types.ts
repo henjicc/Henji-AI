@@ -110,6 +110,8 @@ export interface ModelManifest {
 export interface ModelManifestItem {
   modelId: string
   aliases?: string[]
+  aliasParamDefaults?: Record<string, JsonObject>
+  aliasParamMappings?: Record<string, Record<string, string>>
   providerId: string
   modelType?: string
   polling?: PollingConfig

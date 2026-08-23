@@ -7,6 +7,7 @@
     "apimart-kling-3.0-omni": { "meta": { "name": "Kling 3.0 Omni" } },
     "apimart-kling-3.0-turbo": { "meta": { "name": "Kling 3.0 Turbo" } },
     "apimart-midjourney": { "meta": { "name": "Midjourney" } },
+    "apimart-midjourney-video": { "meta": { "name": "Midjourney Video" } },
     "apimart-minimax-h3": { "meta": { "name": "MiniMax H3" } },
     "apimart-nano-banana-2": { "meta": { "name": "Nano Banana 2" } },
     "apimart-nano-banana-pro": { "meta": { "name": "Nano Banana Pro" } },

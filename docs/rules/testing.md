@@ -145,6 +145,8 @@ npm run test:reality -- --suite live --profile real --allow-paid --allow-writes 
 
 UI 真实性测试不能只证明“脚本点完了”或“截图生成了”。每个场景同时订阅浏览器 `console error` / `pageerror`，并通过应用正式 logging 查询接口用 `afterTimestamp + level + limit` 截取该场景之后的结构化错误与警告。错误进入失败判据，警告进入 `evidence.json` 供诊断。**不要让测试脚本直接读取整份日志文件**：日志文件仍是唯一持久化来源，主进程接口负责流式过滤、限量和脱敏，脚本只消费窄结果；只有日志 IPC/查询服务本身坏掉时，才把直接读文件作为救援路径。
 
+真实应用视觉审查按固定顺序执行：需要时先 `electron:build` → 确认并暂停占用同一真实资料目录的当前仓库开发实例 → 用 `test:reality --suite ui|ui-audit --profile real` 运行只读场景 → Agent 逐张打开实际截图检查对齐、裁切、层级、颜色与文案 → 核对 `evidence.json` 和结构化日志 → 退出巡检实例 → 按任务完成标准恢复或重启开发环境。禁止用浏览器、ego-browser、Chrome、裸 Vite 或临时 profile 的截图冒充真实用户环境；DOM 断言通过也不能替代目视截图。项目正式 Electron 自动化可以执行点击、悬浮和画布交互，不受下文“不要人工上手”的限制。
+
 ## 四、按改动类型追加专项检查
 
 以下命令也遵循“只在直接相关时运行”，不是累加清单。
@@ -297,7 +299,7 @@ Get-ChildItem -Path src,electron -Recurse -Include *.ts,*.tsx |
   ForEach-Object { $n = (Get-Content $_.FullName).Count; if ($n -gt 500) { "$($_.FullName)`t$n" } }
 ```
 
-涉及鼠标操作的验证不要自己上手——拖拽、点击、悬浮、画布交互等把具体操作步骤和验证点交给用户。真实 API key 下的生成链路、真实项目包导入导出、macOS 真机行为同样交给用户。
+不要人工接管用户鼠标做验收。拖拽、点击、悬浮、画布交互优先补入并运行正式 Electron UI 场景；尚未覆盖或必须由用户主观判断的交互，再把具体操作步骤和验证点交给用户。真实 API key 下的生成链路、真实项目包导入导出、macOS 真机行为仍交给用户，除非用户已明确授权对应真实副作用。
 
 ## 六、任务完成标准
 

@@ -4,6 +4,10 @@ import { registry } from '@/core/ModelRegistry';
 import { LinkageEngine } from '@/core/linkage';
 import type { ParamDef } from '@/core/types';
 import { extractDefaults } from '@/hooks/utils/defaultExtractor';
+import {
+  applyModelAliasParamDefaults,
+  normalizeModelAliasParams,
+} from '@/core/params/modelAliasDefaults';
 import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
 
 export interface UseNodeModelParamsOptions {
@@ -62,7 +66,10 @@ export function useNodeModelParams({
 
   const schema = useMemo(() => registry.getSchema(modelId), [modelId]);
 
-  const defaults = useMemo(() => extractDefaults(schema), [schema]);
+  const defaults = useMemo(
+    () => applyModelAliasParamDefaults(modelId, model, schema, extractDefaults(schema)),
+    [model, modelId, schema]
+  );
 
   const linkageEngine = useMemo(() => {
     if (!model?.linkages || model.linkages.length === 0) {
@@ -79,12 +86,12 @@ export function useNodeModelParams({
   const values = useMemo(
     () => ({
       ...defaults,
-      ...(storedParams ?? {}),
+      ...normalizeModelAliasParams(model, storedParams ?? {}),
       images: mediaImages,
       videos: mediaVideos,
       audios: mediaAudios,
     }),
-    [defaults, storedParams, mediaImages, mediaVideos, mediaAudios]
+    [defaults, model, storedParams, mediaImages, mediaVideos, mediaAudios]
   );
 
   const setParam = useCallback((key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => {

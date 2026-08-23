@@ -33,6 +33,19 @@ export function resolveGenerationNodeMinimumHeight(
 }
 
 /**
+ * ReactFlow 会把内容测量尺寸也通过 NodeProps.width/height 回传。只有用户确实拖拽过尺寸时，
+ * 才能把这个值当成显式尺寸；否则参数组曾经内联展开产生的旧测量值会永久撑高节点。
+ */
+export function resolveGenerationNodeManualDimension(
+  measuredDimension: number | undefined,
+  minimumDimension: number,
+  isSizeManuallyAdjusted: boolean,
+): number | null {
+  if (!isSizeManuallyAdjusted || !Number.isFinite(measuredDimension)) return null
+  return Math.max(minimumDimension, Math.round(measuredDimension as number))
+}
+
+/**
  * 只测量不会随节点纵向拖拽伸缩的参数区，用数值型下限约束节点。
  * 提示词正文被刻意排除，因此无论文本多长，都只在编辑器内部滚动。
  */

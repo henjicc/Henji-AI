@@ -11,14 +11,14 @@ vi.mock('@/core', async () => {
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { LinkageEngine } from '@/core/linkage/LinkageEngine'
+import { EndpointSelector } from '@/core/request/EndpointSelector'
+import { requestBuilder } from '@/core/request/RequestBuilder'
 import { evalFunction } from '../../../electron/main/services/ai-runtime/js-runtime'
 import type { JsonObject } from '../../../electron/main/services/ai-runtime/types'
 import modelManifest from '../../../resources/model-manifest.json'
 import { apimartGptImage2Model } from './gpt-image-2.model'
 import { apimartGrokImagine20Model } from './grok-imagine-2.0.model'
 import { apimartMidjourneyModel } from './midjourney.model'
-import { apimartMidjourneyBlendModel } from './midjourney-blend.model'
-import { apimartMidjourneyEditModel } from './midjourney-edit.model'
 import { apimartMidjourneyVideoModel } from './midjourney-video.model'
 import { apimartNanoBanana2Model } from './nano-banana-2.model'
 import { apimartNanoBanana2LiteModel } from './nano-banana-2-lite.model'
@@ -73,7 +73,7 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
     expect(apimartNanoBanana2Model.request?.builder?.({ prompt: 'cat' })).toMatchObject({ model: 'gemini-3.1-flash-image-preview' })
     expect(apimartNanoBananaProModel.request?.builder?.({ prompt: 'cat' })).toMatchObject({ model: 'gemini-3-pro-image-preview' })
     expect(apimartQwenImage30Model.request?.builder?.({ prompt: 'cat' })).toMatchObject({ model: 'qwen-image-3.0' })
-    expect(apimartMidjourneyModel).toMatchObject({ endpoints: '/v1/midjourney/generations' })
+    expect(apimartMidjourneyModel.endpoints).toMatchObject({ selector: expect.any(Function) })
   })
 
   it('Midjourney Imagine 传递结构化参数、垫图和参考图', () => {
@@ -144,17 +144,29 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
     })).not.toMatchObject({ hd: true, stop: 50 })
   })
 
-  it('Midjourney Blend、Edit 与 Video 使用独立端点和约束', () => {
-    expect(apimartMidjourneyBlendModel.endpoints).toBe('/v1/midjourney/generations/blend')
-    expect(apimartMidjourneyBlendModel.request?.builder?.({
-      images: ['a.png', 'b.png'], apimartMidjourneyBlendAspectRatio: '3:2'
-    })).toMatchObject({ image_urls: ['a.png', 'b.png'], size: '3:2', speed: 'relax' })
-    expect(() => apimartMidjourneyBlendModel.request?.builder?.({ images: ['a.png'] })).toThrow(/2/)
+  it('Midjourney 在单个模型内按模式切换端点、约束与请求', async () => {
+    const selector = new EndpointSelector(apimartMidjourneyModel.endpoints)
+    await expect(selector.select({ apimartMidjourneyMode: 'imagine' }, {}))
+      .resolves.toMatchObject({ route: { path: '/v1/midjourney/generations' } })
+    await expect(selector.select({ apimartMidjourneyMode: 'edit' }, {}))
+      .resolves.toMatchObject({ route: { path: '/v1/midjourney/generations/edits' } })
+    await expect(selector.select({ apimartMidjourneyMode: 'blend' }, {}))
+      .resolves.toMatchObject({ route: { path: '/v1/midjourney/generations/blend' } })
 
-    expect(apimartMidjourneyEditModel.endpoints).toBe('/v1/midjourney/generations/edits')
-    expect(apimartMidjourneyEditModel.request?.builder?.({
-      prompt: 'replace background', images: ['source.png']
+    expect(apimartMidjourneyModel.request?.builder?.({
+      apimartMidjourneyMode: 'blend', images: ['a.png', 'b.png'], apimartMidjourneyAspectRatio: '3:2'
+    })).toMatchObject({ image_urls: ['a.png', 'b.png'], size: '3:2', speed: 'relax' })
+    expect(() => apimartMidjourneyModel.request?.builder?.({
+      apimartMidjourneyMode: 'blend', images: ['a.png']
+    })).toThrow(/2/)
+
+    expect(apimartMidjourneyModel.request?.builder?.({
+      apimartMidjourneyMode: 'edit', prompt: 'replace background', images: ['source.png']
     })).toMatchObject({ prompt: 'replace background', image_urls: ['source.png'] })
+    expect(resolveInputLimits('apimart-midjourney', { apimartMidjourneyMode: 'blend' }).images)
+      .toEqual({ min: 2, max: 4 })
+    expect(resolveInputLimits('apimart-midjourney', { apimartMidjourneyMode: 'edit' }).images)
+      .toEqual({ min: 1, max: 6 })
 
     expect(apimartMidjourneyVideoModel.request?.builder?.({
       prompt: 'camera moves',
@@ -188,11 +200,27 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
     })).toBe(1.6)
   })
 
-  it('Midjourney 新路由的 manifest builder 可在独立 VM 执行', () => {
-    expect(evaluateManifestBuilder('apimart-midjourney-blend', { images: ['a.png', 'b.png'] }))
+  it('Midjourney 统一模型的 manifest 与旧 ID 兼容模式可执行', async () => {
+    expect(evaluateManifestBuilder('apimart-midjourney', {
+      apimartMidjourneyMode: 'blend', images: ['a.png', 'b.png']
+    }))
       .toMatchObject({ image_urls: ['a.png', 'b.png'] })
-    expect(evaluateManifestBuilder('apimart-midjourney-edit', { prompt: 'edit', images: ['a.png'] }))
+    expect(evaluateManifestBuilder('apimart-midjourney', {
+      apimartMidjourneyMode: 'edit', prompt: 'edit', images: ['a.png']
+    }))
       .toMatchObject({ image_urls: ['a.png'] })
+    expect(modelManifest.models.some((model) => model.modelId === 'apimart-midjourney-edit')).toBe(false)
+    expect(modelManifest.models.some((model) => model.modelId === 'apimart-midjourney-blend')).toBe(false)
+    await expect(requestBuilder.build('apimart-midjourney-edit', { prompt: 'edit', images: ['a.png'] }))
+      .resolves.toMatchObject({ url: '/v1/midjourney/generations/edits', body: { image_urls: ['a.png'] } })
+    await expect(requestBuilder.build('apimart-midjourney-blend', {
+      images: ['a.png', 'b.png'],
+      apimartMidjourneyBlendAspectRatio: '16:9',
+      apimartMidjourneyBlendSpeed: 'turbo',
+    })).resolves.toMatchObject({
+      url: '/v1/midjourney/generations/blend',
+      body: { image_urls: ['a.png', 'b.png'], size: '16:9', speed: 'turbo' },
+    })
     expect(evaluateManifestBuilder('apimart-midjourney-video', { apimartMidjourneyVideoTaskId: 'task-1' }))
       .toMatchObject({ task_id: 'task-1' })
   })
@@ -212,8 +240,8 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
     expect(apimartGptImage2Model.params[0]).toMatchObject({
       id: 'apimartGptImage2Version', order: 1, default: 'ext',
       options: [
-        { value: 'ext', label: { zh: '普通', en: 'Standard' } },
-        { value: 'official', label: { zh: '官方', en: 'Official' } }
+        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } },
+        { value: 'official', label: { zh: '官方接口', en: 'Official' } }
       ]
     })
     expect(apimartGptImage2Model.request?.builder?.({
@@ -338,8 +366,8 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
     expect(apimartGrokImagine20Model.params[0]).toMatchObject({
       id: 'apimartGrokImagine20Version', order: 1, default: 'ext',
       options: [
-        { value: 'ext', label: { zh: '普通', en: 'Standard' } },
-        { value: 'official', label: { zh: '官方', en: 'Official' } }
+        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } },
+        { value: 'official', label: { zh: '官方接口', en: 'Official' } }
       ]
     })
     expect(apimartGrokImagine20Model.request?.builder?.({

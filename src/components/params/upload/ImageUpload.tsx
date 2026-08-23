@@ -15,6 +15,7 @@ import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
 import { importLocalMedia } from '@/services/localMediaImport'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
+import { isUiInspectionReadOnly } from '@/platform/runtime'
 
 interface ImageUploadProps {
   param: ImageUploadParamDef
@@ -70,10 +71,13 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
 
       let imageData: string
       let metadata: ImageMetadata
-      if (param.format === 'base64') {
+      if (param.format === 'base64' || isUiInspectionReadOnly()) {
         const img = await loadImage(file)
         const base64 = await fileToBase64(file)
-        imageData = param.base64Prefix ? base64 : base64.split(',')[1]
+        // 真实资料只读巡检不能把测试图片导入用户媒体目录；保留 data URL 仅用于本次内存态视觉检查。
+        imageData = isUiInspectionReadOnly()
+          ? base64
+          : (param.base64Prefix ? base64 : base64.split(',')[1])
         metadata = {
           aspectRatio: calculateAspectRatio(img.width, img.height),
           width: img.width,
@@ -109,6 +113,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
       )}
 
       <FileUploader
+        density="compact"
         files={safeValue.map((source) => param.format === 'base64' && !param.base64Prefix
           ? `data:image/png;base64,${source}`
           : resolveImageDisplayUrl(source))}

@@ -13,7 +13,7 @@ import { evalFunction } from '../../../electron/main/services/ai-runtime/js-runt
 import type { JsonObject } from '../../../electron/main/services/ai-runtime/types'
 import modelManifest from '../../../resources/model-manifest.json'
 import { apimartGeminiOmniFlashModel } from './gemini-omni-flash.model'
-import { apimartGeminiOmniFlashExtModel } from './gemini-omni-flash-ext.model'
+import { requestBuilder } from '@/core/request/RequestBuilder'
 import { apimartKling30Model } from './kling-3.0.model'
 import { apimartKling30OmniModel } from './kling-3.0-omni.model'
 import { apimartKling30TurboModel } from './kling-3.0-turbo.model'
@@ -32,7 +32,6 @@ function evaluateManifestBuilder(modelId: string, params: JsonObject) {
 describe('docs/model-adaptation APIMart 视频模型', () => {
   const models = [
     apimartGeminiOmniFlashModel,
-    apimartGeminiOmniFlashExtModel,
     apimartKling30Model,
     apimartKling30OmniModel,
     apimartKling30TurboModel,
@@ -58,7 +57,6 @@ describe('docs/model-adaptation APIMart 视频模型', () => {
 
   it.each([
     'apimart-gemini-omni-flash',
-    'apimart-gemini-omni-flash-ext',
     'apimart-kling-3.0',
     'apimart-kling-3.0-omni',
     'apimart-kling-3.0-turbo',
@@ -93,12 +91,13 @@ describe('docs/model-adaptation APIMart 视频模型', () => {
     })).toThrow(/video|task|\u89c6频|\u4efb务/u)
   })
 
-  it('Gemini Omni Flash Ext 使用独立的离散时长、图片约束和按次价格', () => {
-    expect(apimartGeminiOmniFlashExtModel.request?.builder?.({
+  it('Gemini Omni Flash 在统一模型中切换普通接口的离散时长、图片约束和价格', async () => {
+    expect(apimartGeminiOmniFlashModel.request?.builder?.({
+      apimartGeminiOmniFlashChannel: 'ext',
       prompt: 'reference',
       images: ['a.png', 'b.png', 'c.png'],
       videos: ['motion.mp4'],
-      apimartGeminiOmniFlashExtResolution: '4k',
+      apimartGeminiOmniFlashResolution: '4k',
       apimartGeminiOmniFlashExtDuration: '10'
     })).toMatchObject({
       model: 'Omni-Flash-Ext',
@@ -107,15 +106,29 @@ describe('docs/model-adaptation APIMart 视频模型', () => {
       video_urls: ['motion.mp4'],
       resolution: '4k'
     })
-    expect(apimartGeminiOmniFlashExtModel.request?.builder?.({
-      prompt: 'reference', videos: ['motion.mp4']
+    expect(apimartGeminiOmniFlashModel.request?.builder?.({
+      apimartGeminiOmniFlashChannel: 'ext', prompt: 'reference', videos: ['motion.mp4']
     })).not.toHaveProperty('duration')
-    expect(() => apimartGeminiOmniFlashExtModel.request?.builder?.({
-      prompt: 'invalid', images: ['a.png', 'b.png']
+    expect(() => apimartGeminiOmniFlashModel.request?.builder?.({
+      apimartGeminiOmniFlashChannel: 'ext', prompt: 'invalid', images: ['a.png', 'b.png']
     })).toThrow(/0|1|3/)
-    expect(apimartGeminiOmniFlashExtModel.pricing.calculator?.({
-      videos: ['motion.mp4'], apimartGeminiOmniFlashExtResolution: '4k'
+    expect(apimartGeminiOmniFlashModel.pricing.calculator?.({
+      apimartGeminiOmniFlashChannel: 'ext', videos: ['motion.mp4'], apimartGeminiOmniFlashResolution: '4k'
     })).toBe(0.24)
+    expect(modelManifest.models.some((model) => model.modelId === 'apimart-gemini-omni-flash-ext')).toBe(false)
+    await expect(requestBuilder.build('apimart-gemini-omni-flash-ext', {
+      prompt: 'legacy ext',
+      apimartGeminiOmniFlashExtGenerationType: 'frame',
+      apimartGeminiOmniFlashExtAspectRatio: '9:16',
+      apimartGeminiOmniFlashExtResolution: '4k',
+      apimartGeminiOmniFlashExtDuration: '10',
+      images: ['frame.png'],
+    })).resolves.toMatchObject({
+      body: {
+        model: 'Omni-Flash-Ext', generation_type: 'frame', aspect_ratio: '9:16',
+        resolution: '4k', duration: 10, image_urls: ['frame.png'],
+      },
+    })
   })
 
   it('MiniMax H3 在首尾帧与多模态参考模式之间切换', () => {

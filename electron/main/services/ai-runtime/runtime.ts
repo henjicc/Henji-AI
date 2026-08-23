@@ -80,9 +80,10 @@ export async function generate(
 
   try {
     const model = resolveModel(request.modelId)
+    const effectiveParams = mergeAliasParamDefaults(request.modelId, request.params, model)
     const providerId = model.providerId
     const apiKey = requireApiKey(providerId)
-    const builtRequest = buildRequest(request.params, model)
+    const builtRequest = buildRequest(effectiveParams, model)
     const normalizedBody = normalizeRequestBody(builtRequest.body, model.runtimeConstraints)
     if (!builtRequest.route.trim()) {
       throw new AiRuntimeError('invalid_route', 'Request route is empty')
@@ -92,7 +93,7 @@ export async function generate(
       providerId,
       builtRequest.route,
       normalizedBody,
-      request.params,
+      effectiveParams,
       model.runtimeConstraints,
       requestId
     )
@@ -181,9 +182,10 @@ export async function continuePolling(
 
   try {
     const model = resolveModel(request.modelId)
+    const effectiveParams = mergeAliasParamDefaults(request.modelId, request.params ?? {}, model)
     const providerId = model.providerId
     const apiKey = requireApiKey(providerId)
-    const builtRequest = buildRequest(request.params ?? {}, model)
+    const builtRequest = buildRequest(effectiveParams, model)
 
     logger.info('后端发起轮询请求', {
       event: 'generation.runtime.request_json',
@@ -256,15 +258,20 @@ export function reloadModelManifest(): number {
 }
 
 export function getEstimate(request: AiGetProgressEstimateRequestDto): AiProgressEstimateDto {
-  return getProgressEstimate(request.modelId, request.params ?? {})
+  const model = resolveModel(request.modelId)
+  return getProgressEstimate(
+    request.modelId,
+    mergeAliasParamDefaults(request.modelId, request.params ?? {}, model)
+  )
 }
 
 export function recordSample(
   request: AiRecordProgressSampleRequestDto
 ): AiRecordProgressSampleResponseDto {
+  const model = resolveModel(request.modelId)
   return recordProgressSample(
     request.modelId,
-    request.params ?? {},
+    mergeAliasParamDefaults(request.modelId, request.params ?? {}, model),
     request.startedAtMs,
     request.finishedAtMs,
     request.source
@@ -273,6 +280,23 @@ export function recordSample(
 
 function resolveRequestId(request: AiGenerateRequestDto): string {
   return request.requestId?.trim() || `${request.modelId}-${Date.now()}`
+}
+
+function mergeAliasParamDefaults(
+  requestedModelId: string,
+  params: JsonObject,
+  model: ModelManifestItem
+): JsonObject {
+  const normalizedParams: JsonObject = { ...params }
+  for (const mapping of Object.values(model.aliasParamMappings ?? {})) {
+    for (const [legacyParamId, currentParamId] of Object.entries(mapping)) {
+      if (normalizedParams[currentParamId] === undefined && normalizedParams[legacyParamId] !== undefined) {
+        normalizedParams[currentParamId] = normalizedParams[legacyParamId]
+      }
+    }
+  }
+  const defaults = model.aliasParamDefaults?.[requestedModelId]
+  return defaults ? { ...defaults, ...normalizedParams } : normalizedParams
 }
 
 function resolveModel(modelId: string): ModelManifestItem {

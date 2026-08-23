@@ -9,6 +9,7 @@ import { isDesktop, inferMimeFromPath } from '../../utils/save'
 import { useReorderDrag } from './fileUploader/useReorderDrag'
 import { UiButton, UiIconButton, UiInput } from './primitives'
 import { UI_DURATION, uiTransition } from './motion'
+import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS } from './styleTokens'
 import { Play, Plus, X } from 'lucide-react'
 
 const logger = createLogger('components.ui.FileUploader')
@@ -27,6 +28,8 @@ export interface FileUploaderProps {
     disabled?: boolean
     className?: string
     hideUploadButton?: boolean
+    /** 紧凑档用于参数面板：缩略图与逐行控件统一为 38px 正方形。 */
+    density?: 'default' | 'compact'
     videoCount?: number  // 混合模式下，前 N 个文件是视频（已废弃，使用 fileTypes）
     fileTypes?: Array<'video' | 'image'>  // 每个文件的类型（用于混合模式）
 }
@@ -45,6 +48,7 @@ export default function FileUploader({
     disabled = false,
     className = '',
     hideUploadButton = false,
+    density = 'default',
     videoCount = 0,
     fileTypes
 }: FileUploaderProps) {
@@ -214,6 +218,12 @@ export default function FileUploader({
     }
 
     const canUploadMore = !maxCount || files.length < maxCount
+    const isCompact = density === 'compact'
+    const itemFrameClass = isCompact
+        ? `${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} aspect-square`
+        : 'h-16 w-12'
+    // 预览宽度 + `gap-2`（8px），拖拽排序与视觉尺寸必须保持一致。
+    const reorderStep = isCompact ? 46 : 56
 
     return (
         <div
@@ -237,11 +247,10 @@ export default function FileUploader({
                 if (shouldShift && !isDraggingThis && !isDroppingThis) {
                     const from = dragState.fromIndex!
                     const to = dragState.toIndex!
-                    // 使用准确的位移量，图片宽度为48px + 8px gap = 56px
                     if (from < to && index > from && index <= to) {
-                        translateX = -56
+                        translateX = -reorderStep
                     } else if (from > to && index < from && index >= to) {
-                        translateX = 56
+                        translateX = reorderStep
                     }
                 }
 
@@ -255,7 +264,7 @@ export default function FileUploader({
                 if (isDroppingThis) {
                     const from = dragState.fromIndex!
                     const to = dragState.toIndex!
-                    const moveX = (to - from) * 56 // 56px per item
+                    const moveX = (to - from) * reorderStep
                     dropTransform = `translateX(${moveX}px)`
                 }
 
@@ -306,7 +315,7 @@ export default function FileUploader({
                         onMouseDown={(e) => handleMouseDown(index, e)}
                         onMouseUp={(e) => !dragState.isDragging && handleCustomPreviewDrop(e, index)}
                     >
-                        <div className={`relative w-12 h-16 rounded-lg shadow-thumb-sm ${isDraggingThis ? 'ring-2 ring-accent shadow-thumb' : ''} ${isCustomDragging ? 'ring-2 ring-accent' : ''}`}>
+                        <div className={`relative ${itemFrameClass} rounded-lg shadow-thumb-sm ${isDraggingThis ? 'ring-2 ring-accent shadow-thumb' : ''} ${isCustomDragging ? 'ring-2 ring-accent' : ''}`}>
                             {(() => {
                                 // 判断当前文件是视频还是图片
                                 // 优先使用 fileTypes 数组（精确），回退到 videoCount（位置判断）
@@ -366,7 +375,7 @@ export default function FileUploader({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className={`h-16 w-12 rounded-lg border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-layer/90' : 'border-border-dark/50 bg-layer/80 hover:border-border-dark/50'} flex-shrink-0`}
+                    className={`${itemFrameClass} rounded-lg border-2 border-dashed p-0 shadow-thumb ${isDragging ? 'border-accent bg-layer/90' : 'border-border-dark/50 bg-layer/80 hover:border-border-dark/50'} flex-shrink-0`}
                     onClick={() => !disabled && inputRef.current?.click()}
                 >
                     <Plus className={`h-5 w-5 ${isDragging ? 'text-accent' : 'text-text-muted'}`} />
@@ -385,5 +394,4 @@ export default function FileUploader({
         </div>
     )
 }
-
 

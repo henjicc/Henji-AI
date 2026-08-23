@@ -5,6 +5,7 @@ import {
 } from '@/core/params/ratioResolution'
 import type { I18nText, ParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types'
+import { mergeModelAliasParamDefaults } from '@/core/params/modelAliasDefaults'
 
 interface ChoiceOption {
   value: string | number
@@ -296,6 +297,11 @@ export function transferModelParamOverridesBetweenModels(
   targetModelId: string,
   sourceValues: DynamicValueMap
 ): DynamicValueMap {
+  const sourceModel = registry.getModel(sourceModelId)
+  const targetModel = registry.getModel(targetModelId)
+  if (sourceModel && targetModel && sourceModel.meta.id === targetModel.meta.id) {
+    return mergeModelAliasParamDefaults(sourceModelId, sourceModel, sourceValues)
+  }
   return transferModelParamOverrides({
     sourceSchema: registry.getSchema(sourceModelId),
     targetSchema: registry.getSchema(targetModelId),

@@ -778,6 +778,22 @@ function parseAliases(metaBlock) {
   return normalized.length > 0 ? normalized : undefined
 }
 
+function parseAliasParamDefaults(metaBlock) {
+  const defaultsExpr = extractValueExpression(metaBlock, 'aliasParamDefaults')
+  const defaults = evaluateStaticExpression(defaultsExpr)
+  return defaults && typeof defaults === 'object' && !Array.isArray(defaults)
+    ? defaults
+    : undefined
+}
+
+function parseAliasParamMappings(metaBlock) {
+  const mappingsExpr = extractValueExpression(metaBlock, 'aliasParamMappings')
+  const mappings = evaluateStaticExpression(mappingsExpr)
+  return mappings && typeof mappings === 'object' && !Array.isArray(mappings)
+    ? mappings
+    : undefined
+}
+
 function parseNamedRoutes(endpointBlock) {
   const routesBlock = extractObjectLiteral(endpointBlock, 'routes')
   if (!routesBlock) return undefined
@@ -939,6 +955,8 @@ function parseModel(filePath) {
   const constMap = parseConstStringMap(text)
   const polling = parsePolling(metaBlock)
   const aliases = parseAliases(metaBlock)
+  const aliasParamDefaults = parseAliasParamDefaults(metaBlock)
+  const aliasParamMappings = parseAliasParamMappings(metaBlock)
   const progress = parseProgressConfig(metaBlock)
   const progressLearning = parseProgressLearning(metaBlock)
   const endpoints = parseEndpointConfig(text, constMap)
@@ -948,6 +966,8 @@ function parseModel(filePath) {
   return {
     modelId,
     aliases,
+    aliasParamDefaults,
+    aliasParamMappings,
     providerId,
     modelType,
     polling,
