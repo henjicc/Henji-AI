@@ -25,7 +25,7 @@ import {
 import ApiKeyInput from '@/components/Settings/components/ApiKeyInput'
 import { useDataPath } from '@/components/Settings/hooks/useDataPath'
 import { aiGetProviderApiKey, aiSetProviderApiKey, aiTestProviderConnection } from '@/commands/aiRuntime'
-import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
+import { getApiKeyProviderGuideLink, type ApiKeyProvider } from '@/core/config/providers'
 import { emitApplicationEvent } from '@/core/events/applicationEvents'
 import { createLogger } from '@/core/logging'
 import { registry } from '@/core/ModelRegistry'
@@ -179,9 +179,7 @@ function ApiKeyStep({
 }): JSX.Element {
   const { t } = useI18n('onboarding')
   const providerName = getProviderDisplayName(providerId)
-  const provider = API_KEY_PROVIDERS.find((item) => item.id === providerId)
-  const keyLink = provider?.links.find((link) => ['keys', 'console', 'token'].includes(link.id))
-    ?? provider?.links[0]
+  const keyLink = getApiKeyProviderGuideLink(providerId)
   return (
     <div className="min-h-[25rem]">
       <h3 className={UI_TEXT_TITLE_CLASS}>{t('apiKey.headline', { provider: providerName })}</h3>

@@ -73,9 +73,9 @@
         "label": "APIMart API 密钥",
         "placeholder": "请输入 APIMart API 密钥",
         "help": "前往 APIMart 控制台获取 API 密钥。",
-        "guide": "先去 {{home}} 登录，然后去 {{keys}} 获取密钥；接口说明见 {{docs}}。",
+        "guide": "先去 {{register}} 注册，然后去 {{keys}} 获取密钥；接口说明见 {{docs}}。",
         "links": {
-          "home": "APIMart 官网",
+          "register": "APIMart 官网",
           "keys": "API 密钥",
           "docs": "API 文档"
         }

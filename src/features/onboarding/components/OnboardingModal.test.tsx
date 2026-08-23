@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import i18n from '@/i18n/config'
@@ -9,6 +9,8 @@ import {
   aiSetProviderApiKey,
   aiTestProviderConnection,
 } from '@/commands/aiRuntime'
+import { getApiKeyProviderGuideLink } from '@/core/config/providers'
+import { openExternal } from '@/platform/desktopApi'
 import { onboardingManager } from '../application/onboardingManager'
 import { OnboardingModal } from './OnboardingModal'
 
@@ -61,6 +63,7 @@ describe('OnboardingModal', () => {
   })
 
   afterEach(() => {
+    cleanup()
     vi.restoreAllMocks()
   })
 
@@ -101,5 +104,15 @@ describe('OnboardingModal', () => {
     expect(aiTestProviderConnection).toHaveBeenCalledWith('fal')
     expect(await screen.findByText('连接成功，密钥有效')).toBeTruthy()
     expect(screen.getByText('HTTP 状态：200')).toBeTruthy()
+  })
+
+  it('从统一供应商配置打开 APIMart 注册引导链接', async () => {
+    onboardingManager.setPrimaryProvider('apimart')
+    onboardingManager.goToStep('api-key')
+    render(<OnboardingModal />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '获取密钥' }))
+
+    expect(openExternal).toHaveBeenCalledWith(getApiKeyProviderGuideLink('apimart')?.url)
   })
 })
