@@ -1,6 +1,6 @@
 ---
 name: canvas-node-builder
-description: Henji-AI 画布（ReactFlow）新增/改造节点时使用。指导如何选择节点实现方式（GenerationNodeShell 复用 / 标准行组件拼装 / 纯展示节点）、如何在 nodeRegistry.ts 中声明 CanvasNodeDefinition、如何组装 ModelInputRow/MediaInputRow/NodeParamRows、特殊节点如何在标准行组件之上叠加专属面板。触发场景：用户要求"新建一个画布节点"、"加一个 XX 节点"、"这个节点 UI 不规范/不一致，按标准改一下"、"这个节点的图片/视频/音频输入要怎么接"。
+description: Henji-AI 画布（ReactFlow）新增/改造节点时使用。指导如何选择节点实现方式（GenerationNodeShell 复用 / 标准行组件拼装 / 纯展示节点）、如何在 nodeRegistry.ts 中声明 CanvasNodeDefinition、如何组装 ModelInputRow/MediaInputRow/NodeParamRows、特殊节点如何在标准行组件之上叠加专属面板。普通模型 schema 会被标准生成节点自动读取；只改供应商、模型参数、显隐、计价或请求构建时不使用本 skill。触发场景：用户要求"新建一个画布节点"、"加一个 XX 节点"、"这个节点 UI 不规范/不一致，按标准改一下"、"这个节点的图片/视频/音频输入要怎么接"。
 ---
 
 # Canvas Node Builder
@@ -19,6 +19,13 @@ Henji-AI 画布节点不是各写各的 UI，而是从一组标准化"参数行�
 | `NodeInputRows` | 上面三者的编排容器：模型行 → 媒体行 → 参数行 |
 
 壳层（`src/features/canvas/nodes/shared/GenerationNodeShell.tsx`）：标题/价格/提示词框/`NodeInputRows`/端口/resize 全部内置，新增一个"标准生成节点"时大概率只需要传 props，不需要写 UI。
+
+## 先判断是否真的需要改画布
+
+- 标准生成节点通过 `GenerationNodeShell -> NodeInputRows -> NodeParamRows -> NodeParamControl` 读取模型注册源。新增/修改模型参数、显隐、联动、计价和 builder 后，画布通常会自动更新，不需要节点文件同步一份参数。
+- 不要因为“这个模型能在画布里选择”就新增节点组件、修改 `nodeRegistry.ts`，或在节点里写模型 ID 分支。
+- 只有以下情况才继续使用本 skill：新增节点类型；改变节点端口/媒体行/结果节点；增加节点内容区的独有交互；或共享 `NodeParamControl` 无法表达已经确认的新参数类型。
+- 新增复合/特殊参数面板但仍属于模型 schema 时，先保证 `ParamRenderer` 与 `NodeParamControl` 共用同一个注册面板和值结构；这属于共享参数呈现，不是节点专属面板。只有确实需要节点 DOM/画布交互时才走路径 B。
 
 ## 第一步：判断节点该怎么实现
 

@@ -1,6 +1,6 @@
 ---
 name: henji-model-adaptation
-description: 面向 Henji-AI 的模型与供应商调研、文档整理和适配工作流。用于“新增供应商”“给现有供应商新增模型”“模型和供应商都要新增”“核查 API/价格/平台别名”“校对参数顺序/隐藏参数/默认请求值”这类需求；先输出确认清单，用户确认后再实施。
+description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数体验和适配工作流。用于“新增供应商”“给现有供应商新增模型”“模型和供应商都要新增”“核查 API/价格/平台别名”“校对参数顺序、通用交互、隐藏参数或默认请求值”这类需求；先输出确认清单，用户确认后再实施。普通模型 schema 会被标准画布节点自动读取，不因模型会出现在画布里而自动触发节点开发。
 ---
 
 # Henji Model Adaptation
@@ -36,7 +36,8 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理和适配
     - 简单场景：纯自动切换，不暴露 `mode`；
     - 更重视用户心智可见性时：暴露 `mode`，默认显示“文/图生视频”，上传 2 张图后自动切到“首尾帧”。
   - 一旦再引入“多参考图”“视频编辑”“视频参考”这类分支，则升级为显式 `mode` 主导。
-- 设计参数顺序时，读取 `references/param-order-patterns.md`。
+- 设计参数顺序、分组、特殊面板或“高级设置”时，读取 `references/param-order-patterns.md`；先保留跨模型通用参数的标准交互，再收纳模型特有或低频参数。
+- 若实施需要新增/改造 `.tsx` 参数面板，按项目规则同时使用 `henji-ui-surface`；这仍属于共享参数呈现，不因它也会出现在画布里而自动变成画布节点任务。
 - 处理“不展示参数/固定默认请求值”时，读取 `references/hidden-default-params.md`。
 - 判断图片/视频/音频差异时，读取 `references/modality-differences.md`。
 - 涉及比例/分辨率时，优先执行“智能比例 + 本地转具体值”的规则（见 `references/param-order-patterns.md`）。
@@ -56,6 +57,10 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理和适配
 - 供应商模型文件只填写 `meta.canonicalModelId`，禁止填写 `meta.description`。适配前先检查 `src/core/modelCatalog/generationModelDescriptions.ts`：已有同一通用模型标识就直接引用；不存在就新增空描述条目，并在交付时明确告诉用户需要在该文件补充这个模型的定性描述。通用描述只写模型擅长方向或相对定位，不重复 tags 已表达的固有能力。
 - 对接已接入的 provider 时，先核对该 provider 在仓库里的既有 route 写法与 runtime 约定，再决定 `endpoints` 填什么；不要只按文档标题猜路径，也不要漏掉现有 provider 统一前缀（例如部分 PPIO 路由实际要走 `/async/...`）。
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
+- 参数压缩不能破坏用户已经形成的跨模型心智：比例、分辨率、时长、数量、质量等高频通用参数，优先保持同模态模型已有的名称、控件类型、顶层位置和交互方式；不得仅为了“参数更少”把它们吞进供应商/模型专属高级面板。标准交互不等于统一 options/default，合法值和默认值仍以当前 API 契约为准。
+- 模型特有、低频或需要强联动解释的参数才进入 `composite` / 特殊面板；面板内部仍复用现有 `Ui*`、标准参数控件、上传与排序能力，不重做比例选择器、下拉、开关或文件上传。
+- 标准生成节点通过 `GenerationNodeShell -> NodeInputRows -> NodeParamRows` 自动读取模型 schema。只改模型参数定义、显隐、联动、计价或请求映射时，默认不修改 `src/features/canvas/**`，也不加载 `canvas-node-builder`。只有新增/改造节点 DOM、端口、节点注册、节点专属交互，或现有 `ParamRenderer` / `NodeParamControl` 无法共同表达新参数类型时，才进入画布节点工作流。
+- 新增或调整复合/特殊参数面板时，必须确认对话/工具面板的 `ParamRenderer` 与画布的 `NodeParamControl` 都能消费同一 schema 和同一值结构；优先修正共享参数面板能力，不为画布复制一份模型专属实现。
 - Henji-AI 当前产品约定：新增模型默认不暴露 `output_format` / `outputFormat`，也不向 API 传递该字段；即使文档支持，也先按“不显示且不请求”处理，除非用户后续明确推翻这条约定。
 - 若参数显隐/联动/计价依赖“是否已上传图片/视频”，必须同时覆盖三种执行场景各自的运行时字段名，不能只查一个：生成提交时是 `uploadedFilePaths`/`uploadedVideoFilePaths`，画布节点实时值是 `images`/`videos`，对话/工具面板实时上传状态是 `uploadedImages`/`uploadedVideos`。只查其中一个键会导致另外两个场景判断错误（参数该隐藏没隐藏、画布里 mode 自动切换不触发、计价按错分支）。优先复用 `src/models/shared/mediaPresence.ts` 的 `hasUploadedImage`/`hasUploadedVideo`/`countUploadedImages`/`countUploadedVideos`（KIE/PPIO 模型可从同目录 `./mediaSources` 导入，已重导出），仅限 `visible.condition`/`linkage`/`pricing.calculator` 使用，不能进 `request.builder`/`endpoints.selector`（会被序列化进独立 VM，import 失效）。
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src/platform/* -> electron/preload/index.ts -> electron/main/ipc/ai-runtime.ts -> electron/main/services/ai-runtime/**`。
