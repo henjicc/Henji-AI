@@ -91,7 +91,15 @@ describe('docs/model-adaptation APIMart 视频模型', () => {
     })).toThrow(/video|task|\u89c6频|\u4efb务/u)
   })
 
-  it('Gemini Omni Flash 在统一模型中切换普通接口的离散时长、图片约束和价格', async () => {
+  it('Gemini Omni Flash 在统一模型中切换普通渠道的离散时长、图片约束和价格', async () => {
+    expect(apimartGeminiOmniFlashModel.params[0]).toMatchObject({
+      id: 'apimartGeminiOmniFlashChannel', order: 1, default: 'official',
+      name: { key: 'params.fields.apiChannel' },
+      options: [
+        { value: 'official', label: { key: 'params.options.official' } },
+        { value: 'ext', label: { key: 'params.options.regular' } }
+      ]
+    })
     expect(apimartGeminiOmniFlashModel.request?.builder?.({
       apimartGeminiOmniFlashChannel: 'ext',
       prompt: 'reference',

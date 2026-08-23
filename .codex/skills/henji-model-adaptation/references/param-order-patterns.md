@@ -10,7 +10,8 @@
 ## 全局规则
 
 - 不把 `prompt` 放进模型 params（项目已有统一输入区）。
-- 有模式切换时，把模式参数尽量放在最前（通常 `order: 1`）。
+- 有产品级渠道切换时，渠道必须是唯一的首项（通常 `order: 1`），严格排在分辨率、比例、模式等所有参数之前；名称统一为“渠道”，选项统一为“普通 / 官方”。音频“声道”不属于本规则。
+- 没有渠道选择但有模式切换时，把模式参数尽量放在最前（通常 `order: 1`）。
 - 同一组参数在不同模式下隐藏时，保持 `order` 稳定。
 - 数值高级参数（seed/cfg/fps 等）放在后段。
 
@@ -54,20 +55,22 @@
 
 ## 视频模型建议顺序
 
-1. `mode` / `variant` / `version`
-2. `duration` 或 `aspectRatio`
-3. `aspectRatio` / `resolution` / `quality`
-4. `quality` / `serviceTier` / `characterOrientation`
-5. `audio` / `camera` / `cfgScale` / `seed` / `promptExtend`
+1. `apiChannel`（仅存在产品渠道切换时）
+2. `mode` / `variant` / `version`
+3. `duration` 或 `aspectRatio`
+4. `aspectRatio` / `resolution` / `quality`
+5. `quality` / `serviceTier` / `characterOrientation`
+6. `audio` / `camera` / `cfgScale` / `seed` / `promptExtend`
 
 说明：当前仓库中视频模型最常见是“模式优先、时长与比例前置”。
 
 ## 图片模型建议顺序
 
-1. `aspectRatio` / `resolution` / `size`（或复合分辨率面板）
-2. `quantity` / `numImages` / `baseSize`
-3. `quality` / `steps` / `guidance`
-4. `style` / `promptOptimization` / 其他高级项
+1. `apiChannel`（仅存在产品渠道切换时）
+2. `aspectRatio` / `resolution` / `size`（或复合分辨率面板）
+3. `quantity` / `numImages` / `baseSize`
+4. `quality` / `steps` / `guidance`
+5. `style` / `promptOptimization` / 其他高级项
 
 说明：图片模型更偏向“分辨率先决”。
 

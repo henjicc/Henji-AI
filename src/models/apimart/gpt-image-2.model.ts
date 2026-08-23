@@ -33,8 +33,8 @@ export const apimartGptImage2Model = defineModel({
       id: 'apimartGptImage2Version', type: 'dropdown', order: 1,
       name: sharedFieldText('apiChannel'), default: 'ext',
       options: [
-        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } },
-        { value: 'official', label: { zh: '官方接口', en: 'Official' } }
+        { value: 'ext', label: sharedOptionText('regular') },
+        { value: 'official', label: sharedOptionText('official') }
       ]
     },
     {

@@ -91,6 +91,7 @@ function createUiInspectionScenes({ settlePage }) {
       }
     }
     await settlePage(page)
+    return expected
   }
 
   async function setupGenerationMidjourneySettings(page, withCharacterReference) {
@@ -271,13 +272,20 @@ function createUiInspectionScenes({ settlePage }) {
     {
       id: 'generation-model-gpt-image-2',
       surface: '生成',
-      name: '生成-模型合并-GPT Image 2',
-      setup: async (page) => setupGenerationModelSearch(
-        page,
-        'GPT Image 2',
-        'apimart-gpt-image-2',
-        ['apimart-gpt-image-2-official'],
-      ),
+      name: '生成-模型合并与渠道-GPT Image 2',
+      setup: async (page) => {
+        const modelButton = await setupGenerationModelSearch(
+          page, 'GPT Image 2', 'apimart-gpt-image-2', ['apimart-gpt-image-2-official'],
+        )
+        await modelButton.click()
+        await page.locator('[data-model-selector-panel]:visible').waitFor({ state: 'hidden', timeout: 8000 })
+        const channelField = page.locator('label').filter({ hasText: /^(渠道|Channel)$/i }).first().locator('..')
+        await channelField.getByRole('button', { name: /^(普通|Standard)$/i }).click()
+        await page.getByRole('option', { name: /^(普通|Standard)$/i }).waitFor({ state: 'visible', timeout: 8000 })
+        await page.getByRole('option', { name: /^(官方|Official)$/i }).waitFor({ state: 'visible', timeout: 8000 })
+        await page.keyboard.press('Escape')
+        await settlePage(page)
+      },
     },
     {
       id: 'generation-midjourney-settings',

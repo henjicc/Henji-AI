@@ -1,6 +1,6 @@
 /** APIMart Gemini Omni Flash 官方与 Ext 渠道统一模型 */
 
-import { defineModel, sharedFieldText } from '@/core'
+import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
 
 export const apimartGeminiOmniFlashModel = defineModel({
   meta: {
@@ -46,15 +46,15 @@ export const apimartGeminiOmniFlashModel = defineModel({
     id: 'apimart-gemini-omni-ext-prompt',
     when: 'apimartGeminiOmniFlashChannel === "ext"',
     require: { prompt: true },
-    message: { title: '提示词必需', message: '普通接口需要填写提示词。', type: 'warning' }
+    message: { title: '提示词必需', message: '普通渠道需要填写提示词。', type: 'warning' }
   }],
   params: [
     {
       id: 'apimartGeminiOmniFlashChannel', type: 'dropdown', order: 1,
       name: sharedFieldText('apiChannel'), default: 'official',
       options: [
-        { value: 'official', label: { zh: '官方接口', en: 'Official' } },
-        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } }
+        { value: 'official', label: sharedOptionText('official') },
+        { value: 'ext', label: sharedOptionText('regular') }
       ]
     },
     {
@@ -126,13 +126,13 @@ export const apimartGeminiOmniFlashModel = defineModel({
       const channel = params.apimartGeminiOmniFlashChannel === 'ext' ? 'ext' : 'official'
 
       if (channel === 'ext') {
-        if (!prompt) throw new Error('Gemini Omni Flash 普通接口的提示词不能为空')
+        if (!prompt) throw new Error('Gemini Omni Flash 普通渠道的提示词不能为空')
         if (images.length === 2 || images.length > 3) {
-          throw new Error('Gemini Omni Flash 普通接口只支持 0、1 或 3 张图片')
+          throw new Error('Gemini Omni Flash 普通渠道只支持 0、1 或 3 张图片')
         }
         const generationType = params.apimartGeminiOmniFlashGenerationType === 'frame' ? 'frame' : 'reference'
         if (generationType === 'frame' && images.length > 1) {
-          throw new Error('Gemini Omni Flash 普通接口的首帧模式只能传入 1 张图片')
+          throw new Error('Gemini Omni Flash 普通渠道的首帧模式只能传入 1 张图片')
         }
         const resolution = params.apimartGeminiOmniFlashResolution === '1080p'
           || params.apimartGeminiOmniFlashResolution === '4k'
@@ -157,10 +157,10 @@ export const apimartGeminiOmniFlashModel = defineModel({
         ? params.apimartGeminiOmniFlashExtendTaskId.trim()
         : ''
       if (videos.length > 0 && extendTaskId) {
-        throw new Error('Gemini Omni Flash 官方接口不能同时传入参考视频和延续任务 ID')
+        throw new Error('Gemini Omni Flash 官方渠道不能同时传入参考视频和延续任务 ID')
       }
       if (!prompt && images.length + videos.length === 0 && !extendTaskId) {
-        throw new Error('Gemini Omni Flash 官方接口至少需要提示词或一份参考素材')
+        throw new Error('Gemini Omni Flash 官方渠道至少需要提示词或一份参考素材')
       }
       const body: DynamicValueMap = {
         model: 'gemini-omni-flash-preview',
@@ -192,7 +192,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
       const high4k: Record<string, number> = { '4': 0.75, '6': 0.8, '8': 0.85, '10': 0.9 }
       return (resolution === '4k' ? high4k : standard)[duration]
     },
-    description: '官方接口 720p $0.088/秒；普通接口按分辨率、时长或参考视频档位计费'
+    description: '官方渠道 720p $0.088/秒；普通渠道按分辨率、时长或参考视频档位计费'
   }
 })
 

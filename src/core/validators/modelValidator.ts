@@ -6,6 +6,7 @@
 
 import { ModelDefinition, ParamDef } from '../types'
 import { hasGenerationModelDescription } from '../modelCatalog/generationModelDescriptions'
+import { validateModelParamConventions } from './modelParamConventionValidator'
 import { validateParamPresentation } from './paramPresentationValidator'
 
 /**
@@ -277,6 +278,10 @@ function validateParams(model: ModelDefinition): void {
       throw new ModelValidationError(`Duplicate param ID: ${param.id}`)
     }
     paramIds.add(param.id)
+  })
+
+  validateModelParamConventions(model, (message) => {
+    throw new ModelValidationError(message)
   })
 }
 

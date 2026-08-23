@@ -15,6 +15,12 @@ function dropdownParam(id: string, zh: string, en: string): ParamDef {
 }
 
 describe('ParameterPanel 参数顺序', () => {
+  it('产品渠道应显示在比例与分辨率之前', () => {
+    const param = dropdownParam('providerChannel', '渠道', 'Channel')
+    param.name = { key: 'params.fields.apiChannel', absolute: true }
+    expect(isPrimarySelectorParam(param)).toBe(true)
+  })
+
   it.each([
     ['mode', '模式', 'Mode'],
     ['version', '版本', 'Version'],
@@ -25,5 +31,11 @@ describe('ParameterPanel 参数顺序', () => {
 
   it('普通参数不应被错误提前', () => {
     expect(isPrimarySelectorParam(dropdownParam('resolution', '分辨率', 'Resolution'))).toBe(false)
+  })
+
+  it('音频声道不应被当作产品渠道提前', () => {
+    const param = dropdownParam('audioChannel', '声道', 'Channel')
+    param.name = { key: 'params.fields.channel', absolute: true }
+    expect(isPrimarySelectorParam(param)).toBe(false)
   })
 })

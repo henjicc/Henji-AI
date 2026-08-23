@@ -239,9 +239,10 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
   it('GPT Image 2 显示 K 档并映射 APIMart 小写 resolution', () => {
     expect(apimartGptImage2Model.params[0]).toMatchObject({
       id: 'apimartGptImage2Version', order: 1, default: 'ext',
+      name: { key: 'params.fields.apiChannel' },
       options: [
-        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } },
-        { value: 'official', label: { zh: '官方接口', en: 'Official' } }
+        { value: 'ext', label: { key: 'params.options.regular' } },
+        { value: 'official', label: { key: 'params.options.official' } }
       ]
     })
     expect(apimartGptImage2Model.request?.builder?.({
@@ -365,9 +366,10 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
   it('Grok EXT 只发送白名单字段并按输出数量计价', () => {
     expect(apimartGrokImagine20Model.params[0]).toMatchObject({
       id: 'apimartGrokImagine20Version', order: 1, default: 'ext',
+      name: { key: 'params.fields.apiChannel' },
       options: [
-        { value: 'ext', label: { zh: '普通接口', en: 'Standard' } },
-        { value: 'official', label: { zh: '官方接口', en: 'Official' } }
+        { value: 'ext', label: { key: 'params.options.regular' } },
+        { value: 'official', label: { key: 'params.options.official' } }
       ]
     })
     expect(apimartGrokImagine20Model.request?.builder?.({

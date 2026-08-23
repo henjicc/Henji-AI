@@ -154,7 +154,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     return null
   }
 
-  // 渲染参数：模式/版本/变体选择始终跟在模型选择器后，分辨率/比例面板保持其余参数前置
+  // 渲染参数：渠道最优先，其次是模式/版本/变体；分辨率/比例面板保持其余参数前置
   return (
     <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
       {primarySelectorParams.map((param) => (
