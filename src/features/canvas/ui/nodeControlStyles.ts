@@ -10,13 +10,15 @@ export const NODE_CONTROL_PRIMARY_BUTTON_CLASS =
 export const NODE_CONTROL_ICON_CLASS = 'h-3 w-3';
 
 export const NODE_PORT_BASE_CLASS =
-  '!h-3 !w-3 !border-2 !border-veil-strong !opacity-80 transition-opacity duration-150';
+  "!h-2 !w-2 !border !border-veil-strong !opacity-0 transition-opacity duration-150 before:absolute before:-inset-2 before:content-[''] [&.connectingfrom]:!opacity-100 [&.connectingto]:!opacity-100";
 
 export const NODE_PORT_VISIBLE_CLASS = '!opacity-100';
 
-export const NODE_PORT_ROW_CLASS = `${NODE_PORT_BASE_CLASS} group-hover/row:!opacity-100`;
+export const NODE_PORT_ROW_CLASS =
+  `${NODE_PORT_BASE_CLASS} group-hover/row:!opacity-100 hover:!opacity-100`;
 
-export const NODE_PORT_NODE_CLASS = `${NODE_PORT_BASE_CLASS} group-hover:!opacity-100`;
+export const NODE_PORT_NODE_CLASS =
+  `${NODE_PORT_BASE_CLASS} group-hover:!opacity-100 hover:!opacity-100`;
 
 /**
  * 节点逐行输入的统一卡片外壳（媒体/参数/模型/提示词行共用）。

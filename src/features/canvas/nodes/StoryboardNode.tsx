@@ -18,9 +18,11 @@ import {
   NODE_CONTROL_ICON_CLASS,
   NODE_CONTROL_PRIMARY_BUTTON_CLASS,
   NODE_IDLE_BORDER_CLASS,
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
   NODE_SELECTED_BORDER_CLASS,
 } from '@/features/canvas/ui/nodeControlStyles';
-import { mediaPortId } from '@/features/canvas/domain/socketTypes';
+import { getSocketColor, mediaPortId } from '@/features/canvas/domain/socketTypes';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { FrameCard } from '@/features/canvas/nodes/storyboardSplit/FrameCard';
 import { StoryboardExportSettingsPanel } from '@/features/canvas/nodes/storyboardSplit/ExportSettingsPanel';
@@ -61,6 +63,12 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   const reorderStoryboardFrame = useCanvasStore((state) => state.reorderStoryboardFrame);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
+  const hasTargetConnections = useCanvasStore((state) =>
+    state.edges.some((edge) => edge.target === id)
+  );
+  const hasSourceConnections = useCanvasStore((state) =>
+    state.edges.some((edge) => edge.source === id)
+  );
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
 
@@ -389,13 +397,15 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         type="target"
         id={mediaPortId('image')}
         position={Position.Left}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        style={{ background: getSocketColor('IMAGE') }}
+        className={`${NODE_PORT_NODE_CLASS} ${hasTargetConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
       />
       <Handle
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        style={{ background: getSocketColor('IMAGE') }}
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
       />
       <NodeResizeHandle
         minWidth={baseLayout.nodeWidth}

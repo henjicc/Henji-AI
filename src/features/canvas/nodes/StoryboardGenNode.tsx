@@ -12,7 +12,7 @@ import {
 } from '@/features/canvas/domain/canvasNodes'
 import { EXPORT_RESULT_DISPLAY_NAME, resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay'
 import { getDefaultModelId } from '@/features/canvas/domain/defaultModels'
-import { MODEL_PARAM_ID } from '@/features/canvas/domain/socketTypes'
+import { getSocketColor, MODEL_PARAM_ID } from '@/features/canvas/domain/socketTypes'
 import {
   areMediaOutputListsEqual,
   collectInputMediaByKind,
@@ -41,7 +41,13 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader'
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder'
 import { NodeResizeHandle } from '@/features/canvas/ui/NodeResizeHandle'
-import { NODE_IDLE_BORDER_CLASS, NODE_ROW_GAP_CLASS, NODE_SELECTED_BORDER_CLASS } from '@/features/canvas/ui/nodeControlStyles'
+import {
+  NODE_IDLE_BORDER_CLASS,
+  NODE_PORT_NODE_CLASS,
+  NODE_PORT_VISIBLE_CLASS,
+  NODE_ROW_GAP_CLASS,
+  NODE_SELECTED_BORDER_CLASS,
+} from '@/features/canvas/ui/nodeControlStyles'
 import PriceEstimate from '@/components/ui/PriceEstimate'
 import {
   STORYBOARD_GEN_ICON_ADJUST,
@@ -85,6 +91,9 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress)
   const addNode = useCanvasStore((state) => state.addNode)
   const addEdge = useCanvasStore((state) => state.addEdge)
+  const hasSourceConnections = useCanvasStore((state) =>
+    state.edges.some((edge) => edge.source === id)
+  )
   const findNodePosition = useCanvasStore((state) => state.findNodePosition)
   const providerKeyStatus = useSettingsStore((state) => state.providerKeyStatus)
   const keepStyleConsistent = useSettingsStore((state) => state.storyboardGenKeepStyleConsistent)
@@ -471,7 +480,8 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         type="source"
         id="source"
         position={Position.Right}
-        className="!h-2 !w-2 !border-surface-dark !bg-accent"
+        style={{ background: getSocketColor('IMAGE') }}
+        className={`${NODE_PORT_NODE_CLASS} ${hasSourceConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
       />
       <NodeResizeHandle
         minWidth={baseFrameLayout.nodeWidth}
