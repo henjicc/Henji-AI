@@ -18,7 +18,8 @@ export const apimartMidjourneyEditModel = defineModel({
     message: { title: '图片必需', message: 'Midjourney Edit 需要至少 1 张待编辑图片。', type: 'warning' }
   }],
   params: apimartMidjourneyModel.params,
-  linkages: [],
+  paramPresentation: apimartMidjourneyModel.paramPresentation,
+  linkages: apimartMidjourneyModel.linkages,
   endpoints: '/v1/midjourney/generations/edits',
   request: {
     // Manifest 会把 builder 放进独立 VM，因此不能引用 Imagine 文件的闭包函数。
@@ -48,16 +49,18 @@ export const apimartMidjourneyEditModel = defineModel({
       }
       const ratio = String(params.apimartMidjourneyAspectRatio || 'smart')
       if (ratio !== 'smart' && /^\d+:\d+$/u.test(ratio)) body.size = ratio
-      const version = String(params.apimartMidjourneyVersion || 'auto')
+      const requestedVersion = String(params.apimartMidjourneyVersion || 'auto')
+      const niji = params.apimartMidjourneyNiji === true
+      const version = niji && !['auto', '6', '7'].includes(requestedVersion) ? '7' : requestedVersion
       if (version !== 'auto') body.version = version
-      if (params.apimartMidjourneyNiji === true) {
+      if (niji) {
         body.niji = true
         if (version === 'auto' || !['6', '7'].includes(version)) body.version = '7'
       }
       if (params.apimartMidjourneyTile === true) body.tile = true
       if (params.apimartMidjourneyRaw === true) body.raw = true
-      if (params.apimartMidjourneyDraft === true) body.draft = true
-      if (params.apimartMidjourneyHd === true) body.hd = true
+      if (params.apimartMidjourneyDraft === true && !niji && ['auto', '7', '8.1', '8.2'].includes(version)) body.draft = true
+      if (params.apimartMidjourneyHd === true && !niji && ['auto', '8.1', '8.2'].includes(version)) body.hd = true
       const repeat = Math.min(40, Math.max(1, Math.round(Number(params.apimartMidjourneyRepeat ?? 1))))
       if (repeat > 1) body.repeat = repeat
       const references = [
@@ -72,7 +75,10 @@ export const apimartMidjourneyEditModel = defineModel({
       if (body.sref) body.sw = Math.min(1000, Math.max(0, Math.round(Number(params.apimartMidjourneyStyleWeight ?? 100))))
       if (body.dref) body.dw = Math.min(100, Math.max(0, Number(params.apimartMidjourneyDepthWeight ?? 100)))
       const stop = Math.min(100, Math.max(10, Math.round(Number(params.apimartMidjourneyStop ?? 100))))
-      if (stop < 100) body.stop = stop
+      const supportsStop = niji
+        ? version === '6'
+        : ['5.1', '5.2', '6', '6.1'].includes(version)
+      if (stop < 100 && supportsStop) body.stop = stop
       if (typeof params.apimartMidjourneyExtra === 'string' && params.apimartMidjourneyExtra.trim()) {
         body.extra = params.apimartMidjourneyExtra.trim()
       }

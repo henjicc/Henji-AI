@@ -1,12 +1,18 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
+import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
+import { registry } from '@/core/ModelRegistry';
+import { LinkageEngine } from '@/core/linkage';
 import type { ParamDef } from '@/core/types';
 import { deriveSocketType, getSocketColor } from '@/core/types/SocketType';
 import { getI18nText } from '@/core/types/I18nText';
-import { isParamVisible } from '@/components/params/paramVisibility';
+import { buildParamPresentationItems } from '@/core/params/paramPresentation';
+import { ParamGroupTrigger } from '@/components/params/ParamGroupTrigger';
+import { isParamDisabled, isParamVisible } from '@/components/params/paramVisibility';
+import { UiIconButton } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import {
   areStringSetsEqual,
@@ -31,6 +37,8 @@ import { createCanvasTextHistoryGroup } from '@/features/canvas/hooks/useCanvasT
 interface NodeParamRowsProps {
   /** 节点 id（用于读取连到本节点参数端口的上游值） */
   nodeId: string;
+  /** 当前模型 id（读取参数展示分组与联动规则） */
+  modelId: string;
   /** 模型参数 schema（registry.getSchema 结果） */
   schema: ParamDef[];
   /** 默认值与持久化合并后的当前参数值 */
@@ -51,12 +59,14 @@ interface NodeParamRowsProps {
  */
 export const NodeParamRows = memo(({
   nodeId,
+  modelId,
   schema,
   values,
   setParam,
   excludeParamIds,
 }: NodeParamRowsProps) => {
   const { i18n } = useTranslation();
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() => new Set());
   const connectedParamIds = useStoreWithEqualityFn(
     useCanvasStore,
     (state) => getConnectedParamIds(nodeId, state.edges),
@@ -79,55 +89,136 @@ export const NodeParamRows = memo(({
     [values, connectedValues]
   );
 
+  const modelDef = useMemo(() => registry.getModel(modelId), [modelId]);
+  const linkageEngine = useMemo(() => (
+    modelDef?.linkages?.length ? new LinkageEngine(modelDef.linkages) : null
+  ), [modelDef]);
+
   const visibleParams = useMemo(
     () =>
       [...schema]
         .filter((param) => !excluded.has(param.id))
-        .filter((param) => isParamVisible(param, mergedValues, null))
+        .filter((param) => isParamVisible(param, mergedValues, linkageEngine))
+        .map((param): ParamDef => {
+          if (!linkageEngine || (param.type !== 'dropdown' && param.type !== 'radio')) {
+            return param;
+          }
+          const options = linkageEngine.getFilteredOptions(param.id, mergedValues, schema);
+          if (!options.length || options === param.options) {
+            return param;
+          }
+          return { ...param, options } as ParamDef;
+        })
         .sort((a, b) => a.order - b.order),
-    [schema, excluded, mergedValues]
+    [schema, excluded, linkageEngine, mergedValues]
+  );
+
+  const presentationItems = useMemo(
+    () => buildParamPresentationItems(visibleParams, modelDef?.paramPresentation),
+    [modelDef?.paramPresentation, visibleParams]
+  );
+
+  const displayedParamIds = useMemo(
+    () => presentationItems.flatMap((item) => {
+      if (item.kind === 'param') return [item.param.id];
+      if (expandedGroupIds.has(item.group.id)) return item.params.map((param) => param.id);
+      return item.params
+        .filter((param) => connectedParamIds.has(param.id))
+        .map((param) => param.id);
+    }),
+    [connectedParamIds, expandedGroupIds, presentationItems]
   );
 
   // 参数行随联动 hide/show 增减，端口纵向位置会整体位移
-  useNodeHandlesSync(nodeId, visibleParams.map((param) => param.id).join('|'));
+  useNodeHandlesSync(nodeId, displayedParamIds.join('|'));
+
+  const renderParamRow = (param: ParamDef) => {
+    const isConnected = connectedParamIds.has(param.id);
+    const socketType = deriveSocketType(param);
+    const socketColor = getSocketColor(socketType);
+    const label = getI18nText(param.name, i18n.language) || param.id;
+    const textHistoryGroup = createCanvasTextHistoryGroup(nodeId, `params.${param.id}`);
+    const textHistoryOptions = param.type === 'text' || param.type === 'textarea'
+      ? { historyGroup: textHistoryGroup }
+      : undefined;
+    return (
+      <div
+        key={param.id}
+        className={`${NODE_ROW_CLASS} ${isConnected ? '' : NODE_ROW_HOVER_CLASS}`}
+      >
+        <Handle
+          type="target"
+          id={paramPortId(param.id)}
+          position={Position.Left}
+          style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+          className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        />
+        <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
+        <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
+          <NodeParamControl
+            param={param}
+            value={mergedValues[param.id]}
+            onChange={(next) => setParam(param.id, next, textHistoryOptions)}
+            historyGroup={textHistoryGroup}
+            disabled={isConnected || isParamDisabled(param, mergedValues, linkageEngine)}
+          />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
-      {visibleParams.map((param) => {
-        const isConnected = connectedParamIds.has(param.id);
-        const socketType = deriveSocketType(param);
-        const socketColor = getSocketColor(socketType);
-        const label = getI18nText(param.name, i18n.language) || param.id;
-        const textHistoryGroup = createCanvasTextHistoryGroup(nodeId, `params.${param.id}`);
-        const textHistoryOptions = param.type === 'text' || param.type === 'textarea'
-          ? { historyGroup: textHistoryGroup }
-          : undefined;
-        return (
-          <div
-            key={param.id}
-            className={`${NODE_ROW_CLASS} ${
-              isConnected ? '' : NODE_ROW_HOVER_CLASS
-            }`}
-          >
-            <Handle
-              type="target"
-              id={paramPortId(param.id)}
-              position={Position.Left}
-              style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
-              className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}
-            />
-            <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
-            <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
-              <NodeParamControl
-                param={param}
-                value={mergedValues[param.id]}
-                onChange={(next) => setParam(param.id, next, textHistoryOptions)}
-                historyGroup={textHistoryGroup}
-                disabled={isConnected}
+      {presentationItems.flatMap((item) => {
+        if (item.kind === 'param') return [renderParamRow(item.param)];
+
+        const expanded = expandedGroupIds.has(item.group.id);
+        const inlineParams = expanded
+          ? item.params
+          : item.params.filter((param) => connectedParamIds.has(param.id));
+        const groupName = getI18nText(item.group.name, i18n.language) || item.group.id;
+        return [
+          <div key={`group:${item.group.id}`} className={`${NODE_ROW_CLASS} ${NODE_ROW_HOVER_CLASS}`}>
+            <span className={NODE_ROW_LABEL_CLASS}>{groupName}</span>
+            <div className={`${NODE_ROW_CONTROL_SLOT_CLASS} gap-1`}>
+              <ParamGroupTrigger
+                group={item.group}
+                params={item.params}
+                values={mergedValues}
+                onChange={(paramId, next) => {
+                  const param = item.params.find((candidate) => candidate.id === paramId);
+                  const options = param?.type === 'text' || param?.type === 'textarea'
+                    ? { historyGroup: createCanvasTextHistoryGroup(nodeId, `params.${paramId}`) }
+                    : undefined;
+                  setParam(paramId, next, options);
+                }}
+                linkageEngine={linkageEngine}
+                disabledParamIds={connectedParamIds}
+                compact
               />
+              <UiIconButton
+                type="button"
+                showBorder={false}
+                appearance="hover-only"
+                className="!h-7 !w-7 shrink-0"
+                title={expanded ? '收起可连接参数' : '展开可连接参数'}
+                aria-label={expanded ? '收起可连接参数' : '展开可连接参数'}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedGroupIds((current) => {
+                    const next = new Set(current);
+                    if (next.has(item.group.id)) next.delete(item.group.id);
+                    else next.add(item.group.id);
+                    return next;
+                  });
+                }}
+              >
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+              </UiIconButton>
             </div>
-          </div>
-        );
+          </div>,
+          ...inlineParams.map(renderParamRow),
+        ];
       })}
     </>
   );

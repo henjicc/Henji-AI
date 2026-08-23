@@ -1,6 +1,7 @@
 /** APIMart Midjourney Imagine 图片生成模型 */
 
 import { defineModel, sharedFieldText, sharedOptionText } from '@/core'
+import { hasUploadedImage } from '@/models/shared/mediaPresence'
 
 export const apimartMidjourneyModel = defineModel({
   meta: {
@@ -86,7 +87,7 @@ export const apimartMidjourneyModel = defineModel({
     },
     {
       id: 'apimartMidjourneyRepeat', type: 'number', order: 14,
-      name: { zh: '重复生成', en: 'Repeat' }, default: 1, min: 1, max: 40, step: 1
+      name: { zh: '生成数量', en: 'Generation Count' }, default: 1, min: 1, max: 40, step: 1
     },
     {
       id: 'apimartMidjourneyCharacterReference', type: 'text', order: 15,
@@ -123,7 +124,127 @@ export const apimartMidjourneyModel = defineModel({
       default: '', rows: 2
     }
   ],
-  linkages: [],
+  paramPresentation: {
+    groups: [{
+      id: 'midjourney-settings',
+      name: { zh: 'MJ 设置', en: 'MJ Settings' },
+      order: 15,
+      panelWidth: 480,
+      sections: [
+        {
+          id: 'model',
+          name: { zh: '模型', en: 'Model' },
+          paramIds: [
+            'apimartMidjourneyVersion',
+            'apimartMidjourneyNiji'
+          ]
+        },
+        {
+          id: 'style',
+          name: { zh: '风格', en: 'Style' },
+          paramIds: [
+            'apimartMidjourneyStylize',
+            'apimartMidjourneyChaos',
+            'apimartMidjourneyWeird',
+            'apimartMidjourneyRaw',
+            'apimartMidjourneyTile',
+            'apimartMidjourneyDraft',
+            'apimartMidjourneyHd'
+          ]
+        },
+        {
+          id: 'references',
+          name: { zh: '参考控制', en: 'References' },
+          paramIds: [
+            'apimartMidjourneyImageWeight',
+            'apimartMidjourneyCharacterReference',
+            'apimartMidjourneyCharacterWeight',
+            'apimartMidjourneyStyleReference',
+            'apimartMidjourneyStyleWeight',
+            'apimartMidjourneyDepthReference',
+            'apimartMidjourneyDepthWeight'
+          ]
+        },
+        {
+          id: 'advanced',
+          name: { zh: '高级', en: 'Advanced' },
+          paramIds: [
+            'apimartMidjourneyStop',
+            'apimartMidjourneyExtra'
+          ]
+        }
+      ]
+    }]
+  },
+  linkages: [
+    {
+      trigger: 'apimartMidjourneyNiji',
+      effect: 'filterOptions',
+      target: 'apimartMidjourneyVersion',
+      filter: (_niji, options, allParams) => allParams.apimartMidjourneyNiji === true
+        ? options.filter((option) => ['auto', '6', '7'].includes(String(option.value)))
+        : options
+    },
+    {
+      trigger: 'apimartMidjourneyNiji',
+      effect: 'autoSwitch',
+      target: 'apimartMidjourneyVersion',
+      condition: (niji, allParams) => niji === true && !['auto', '6', '7'].includes(String(allParams.apimartMidjourneyVersion)),
+      value: '7'
+    },
+    {
+      trigger: ['apimartMidjourneyVersion', 'apimartMidjourneyNiji'],
+      effect: 'hide',
+      targets: ['apimartMidjourneyDraft'],
+      condition: (_value, allParams) => allParams.apimartMidjourneyNiji === true ||
+        !['auto', '7', '8.1', '8.2'].includes(String(allParams.apimartMidjourneyVersion))
+    },
+    {
+      trigger: ['apimartMidjourneyVersion', 'apimartMidjourneyNiji'],
+      effect: 'hide',
+      targets: ['apimartMidjourneyHd'],
+      condition: (_value, allParams) => allParams.apimartMidjourneyNiji === true ||
+        !['auto', '8.1', '8.2'].includes(String(allParams.apimartMidjourneyVersion))
+    },
+    {
+      trigger: ['apimartMidjourneyVersion', 'apimartMidjourneyNiji'],
+      effect: 'hide',
+      targets: ['apimartMidjourneyStop'],
+      condition: (_value, allParams) => {
+        const version = String(allParams.apimartMidjourneyVersion)
+        return allParams.apimartMidjourneyNiji === true
+          ? version !== '6'
+          : !['5.1', '5.2', '6', '6.1'].includes(version)
+      }
+    },
+    {
+      trigger: ['uploadedImages', 'images'],
+      effect: 'hide',
+      targets: ['apimartMidjourneyImageWeight'],
+      condition: (_value, allParams) => !hasUploadedImage(allParams)
+    },
+    {
+      trigger: 'apimartMidjourneyCharacterReference',
+      effect: 'hide',
+      targets: ['apimartMidjourneyCharacterWeight'],
+      condition: (_value, allParams) => typeof allParams.apimartMidjourneyCharacterReference !== 'string' ||
+        allParams.apimartMidjourneyCharacterReference.trim().length === 0
+    },
+    {
+      trigger: 'apimartMidjourneyStyleReference',
+      effect: 'hide',
+      targets: ['apimartMidjourneyStyleWeight'],
+      condition: (_value, allParams) => typeof allParams.apimartMidjourneyStyleReference !== 'string' ||
+        allParams.apimartMidjourneyStyleReference.trim().length === 0
+    },
+    {
+      trigger: 'apimartMidjourneyDepthReference',
+      effect: 'hide',
+      targets: ['apimartMidjourneyDepthWeight'],
+      condition: (_value, allParams) => typeof allParams.apimartMidjourneyDepthReference !== 'string' ||
+        allParams.apimartMidjourneyDepthReference.trim().length === 0
+    }
+  ],
   endpoints: '/v1/midjourney/generations',
   request: {
     builder: (params) => {
@@ -149,9 +270,11 @@ export const apimartMidjourneyModel = defineModel({
       }
       const ratio = String(params.apimartMidjourneyAspectRatio || 'smart')
       if (ratio !== 'smart' && /^\d+:\d+$/u.test(ratio)) body.size = ratio
-      const version = String(params.apimartMidjourneyVersion || 'auto')
+      const requestedVersion = String(params.apimartMidjourneyVersion || 'auto')
+      const niji = params.apimartMidjourneyNiji === true
+      const version = niji && !['auto', '6', '7'].includes(requestedVersion) ? '7' : requestedVersion
       if (version !== 'auto') body.version = version
-      if (params.apimartMidjourneyNiji === true) {
+      if (niji) {
         body.niji = true
         if (version === 'auto' || !['6', '7'].includes(version)) body.version = '7'
       }
@@ -161,8 +284,8 @@ export const apimartMidjourneyModel = defineModel({
       }
       if (params.apimartMidjourneyTile === true) body.tile = true
       if (params.apimartMidjourneyRaw === true) body.raw = true
-      if (params.apimartMidjourneyDraft === true) body.draft = true
-      if (params.apimartMidjourneyHd === true) body.hd = true
+      if (params.apimartMidjourneyDraft === true && !niji && ['auto', '7', '8.1', '8.2'].includes(version)) body.draft = true
+      if (params.apimartMidjourneyHd === true && !niji && ['auto', '8.1', '8.2'].includes(version)) body.hd = true
       const repeat = Math.min(40, Math.max(1, Math.round(Number(params.apimartMidjourneyRepeat ?? 1))))
       if (repeat > 1) body.repeat = repeat
       const references = [
@@ -177,7 +300,10 @@ export const apimartMidjourneyModel = defineModel({
       if (body.sref) body.sw = Math.min(1000, Math.max(0, Math.round(Number(params.apimartMidjourneyStyleWeight ?? 100))))
       if (body.dref) body.dw = Math.min(100, Math.max(0, Number(params.apimartMidjourneyDepthWeight ?? 100)))
       const stop = Math.min(100, Math.max(10, Math.round(Number(params.apimartMidjourneyStop ?? 100))))
-      if (stop < 100) body.stop = stop
+      const supportsStop = niji
+        ? version === '6'
+        : ['5.1', '5.2', '6', '6.1'].includes(version)
+      if (stop < 100 && supportsStop) body.stop = stop
       if (typeof params.apimartMidjourneyExtra === 'string' && params.apimartMidjourneyExtra.trim()) {
         body.extra = params.apimartMidjourneyExtra.trim()
       }

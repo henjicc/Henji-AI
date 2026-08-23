@@ -9,8 +9,10 @@ import { registry } from '@/core/ModelRegistry'
 import { LinkageEngine } from '@/core/linkage'
 import { useModelParams } from '@/hooks/useModelParams'
 import { ParamRenderer } from './ParamRenderer'
+import { ParamGroupTrigger } from './ParamGroupTrigger'
 import { UiEmpty } from '@/components/ui'
 import { isParamDisabled, isParamVisible } from './paramVisibility'
+import { buildParamPresentationItems } from '@/core/params/paramPresentation'
 import type { ParamDef } from '@/core/types'
 import './ParamsPanel.css'
 
@@ -88,6 +90,10 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
         return { ...param, options } as ParamDef
       })
     }, [getFilteredOptions, visibleSchema])
+    const presentationItems = useMemo(
+      () => buildParamPresentationItems(renderSchema, modelDef?.paramPresentation),
+      [modelDef?.paramPresentation, renderSchema]
+    )
 
     // 空态统一走 UiEmpty：原先是手写 div + ParamsPanel.css 里的 .params-panel-empty，
     // 那份 CSS 还硬编码了 #a1a1aa（不跟随主题）
@@ -97,14 +103,23 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
 
     return (
       <div className={`params-panel ${className || ''}`}>
-        {renderSchema.map(paramDef => (
+        {presentationItems.map((item) => item.kind === 'param' ? (
           <ParamRenderer
-            key={paramDef.id}
-            param={paramDef}
-            value={params[paramDef.id]}
-            onChange={(value) => setParam(paramDef.id, value)}
+            key={item.param.id}
+            param={item.param}
+            value={params[item.param.id]}
+            onChange={(value) => setParam(item.param.id, value)}
             allValues={params}
-            disabled={isParamDisabled(paramDef, params, linkageEngine)}
+            disabled={isParamDisabled(item.param, params, linkageEngine)}
+          />
+        ) : (
+          <ParamGroupTrigger
+            key={item.group.id}
+            group={item.group}
+            params={item.params}
+            values={params}
+            onChange={setParam}
+            linkageEngine={linkageEngine}
           />
         ))}
       </div>

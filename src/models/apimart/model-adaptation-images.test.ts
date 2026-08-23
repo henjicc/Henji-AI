@@ -114,6 +114,36 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
     })).toBeCloseTo(0.16512)
   })
 
+  it('Midjourney 把通用参数留在顶层，并按版本与输入联动专属参数', () => {
+    const groupedIds = apimartMidjourneyModel.paramPresentation?.groups
+      .flatMap((group) => group.sections)
+      .flatMap((section) => section.paramIds) ?? []
+    expect(groupedIds).not.toContain('apimartMidjourneyAspectRatio')
+    expect(groupedIds).not.toContain('apimartMidjourneySpeed')
+    expect(groupedIds).not.toContain('apimartMidjourneyQuality')
+    expect(groupedIds).not.toContain('apimartMidjourneyRepeat')
+    expect(groupedIds).toContain('apimartMidjourneyVersion')
+
+    const linkage = new LinkageEngine(apimartMidjourneyModel.linkages ?? [])
+    expect(linkage.getFilteredOptions('apimartMidjourneyVersion', {
+      apimartMidjourneyNiji: true,
+      apimartMidjourneyVersion: '7'
+    }, apimartMidjourneyModel.params).map((option) => option.value)).toEqual(['auto', '7', '6'])
+    expect(linkage.isParamHidden('apimartMidjourneyImageWeight', { images: [] })).toBe(true)
+    expect(linkage.isParamHidden('apimartMidjourneyImageWeight', { images: ['input.png'] })).toBe(false)
+    expect(linkage.isParamHidden('apimartMidjourneyHd', {
+      apimartMidjourneyNiji: false,
+      apimartMidjourneyVersion: '7'
+    })).toBe(true)
+
+    expect(apimartMidjourneyModel.request?.builder?.({
+      prompt: 'safe version flags',
+      apimartMidjourneyVersion: '7',
+      apimartMidjourneyHd: true,
+      apimartMidjourneyStop: 50
+    })).not.toMatchObject({ hd: true, stop: 50 })
+  })
+
   it('Midjourney Blend、Edit 与 Video 使用独立端点和约束', () => {
     expect(apimartMidjourneyBlendModel.endpoints).toBe('/v1/midjourney/generations/blend')
     expect(apimartMidjourneyBlendModel.request?.builder?.({
@@ -142,6 +172,17 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
       apimartMidjourneyVideoAnimateMode: 'auto',
       apimartMidjourneyVideoIndex: '3'
     })).toMatchObject({ task_id: 'task-1', index: 3, animate_mode: 'auto' })
+    expect(apimartMidjourneyVideoModel.request?.builder?.({
+      images: ['uploaded.png'],
+      apimartMidjourneyVideoTaskId: 'stale-task',
+      apimartMidjourneyVideoAnimateMode: 'auto'
+    })).toMatchObject({ image_urls: ['uploaded.png'], animate_mode: 'manual' })
+    expect(resolveInputLimits('apimart-midjourney-video', {
+      apimartMidjourneyVideoTaskId: 'task-1'
+    }).images.max).toBe(0)
+    expect(resolveInputLimits('apimart-midjourney-video', {
+      apimartMidjourneyVideoTaskId: 'stale-task', images: ['uploaded.png']
+    }).images.max).toBe(2)
     expect(apimartMidjourneyVideoModel.pricing.calculator?.({
       apimartMidjourneyVideoResolution: '720p', apimartMidjourneyVideoBatchSize: '4'
     })).toBe(1.6)

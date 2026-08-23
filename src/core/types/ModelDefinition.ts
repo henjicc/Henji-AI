@@ -160,6 +160,34 @@ export type ProgressConfig = ProgressTimeConfig | ProgressPollingConfig
 export type ProviderId = 'ppio' | 'fal' | 'kie' | 'modelscope' | string
 
 /**
+ * 参数展示分区。
+ *
+ * 这里只引用现有扁平参数 ID，不创建新的复合值；请求构建、预设、跨模型迁移与
+ * 画布端口仍然继续读取原参数。
+ */
+export interface ParamPresentationSection {
+  id: string
+  name: I18nText
+  paramIds: string[]
+}
+
+/**
+ * 可收起的参数展示组。宿主界面可以按自身交互形态渲染为浮层或可展开行，
+ * 但必须共享这里声明的名称、顺序与分区。
+ */
+export interface ParamPresentationGroup {
+  id: string
+  name: I18nText
+  order: number
+  sections: ParamPresentationSection[]
+  panelWidth?: number
+}
+
+export interface ModelParamPresentation {
+  groups: ParamPresentationGroup[]
+}
+
+/**
  * 模型元数据
  *
  * 包含模型的基本信息
@@ -382,6 +410,14 @@ export interface ModelDefinition {
    * 详细类型将在 Phase 1-1-2 中定义
    */
   params: ParamDef[]
+
+  /**
+   * 参数的纯展示编排（可选）。
+   *
+   * 高频通用参数继续留在顶层；模型专属或低频参数可在这里组合展示。
+   * 该字段不得改变参数 ID、值结构或请求字段。
+   */
+  paramPresentation?: ModelParamPresentation
 
   /**
    * 参数联动规则（可选）

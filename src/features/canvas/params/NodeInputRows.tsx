@@ -115,6 +115,7 @@ export function NodeInputRows({
 
       <NodeParamRows
         nodeId={nodeId}
+        modelId={modelId}
         schema={schema}
         values={values}
         setParam={setParam}

@@ -6,6 +6,7 @@
 
 import { ModelDefinition, ParamDef } from '../types'
 import { hasGenerationModelDescription } from '../modelCatalog/generationModelDescriptions'
+import { validateParamPresentation } from './paramPresentationValidator'
 
 /**
  * 验证错误类
@@ -30,13 +31,18 @@ export function validateModel(model: ModelDefinition): void {
   // 2. 验证参数定义
   validateParams(model)
 
-  // 3. 验证联动规则
+  // 3. 验证参数展示编排
+  validateParamPresentation(model, (message) => {
+    throw new ModelValidationError(message)
+  })
+
+  // 4. 验证联动规则
   validateLinkages(model)
 
-  // 4. 验证端点配置
+  // 5. 验证端点配置
   validateEndpoints(model)
 
-  // 5. 验证价格配置
+  // 6. 验证价格配置
   validatePricing(model)
 }
 

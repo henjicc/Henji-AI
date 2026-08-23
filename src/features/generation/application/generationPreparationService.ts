@@ -2,6 +2,7 @@ import { toApplicationStableIdSegment } from '@/core/application-control'
 import { LinkageEngine } from '@/core/linkage'
 import { registry } from '@/core/ModelRegistry'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { hasAlternativeModelInput } from '@/core/inputs/alternativeInput'
 import {
   DEFAULT_USD_TO_CNY_RATE,
   convertPriceAmount,
@@ -13,7 +14,6 @@ import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applica
 
 export type GenerationMediaType = 'image' | 'video' | 'audio'
 export type GenerationModelSearchSort = 'registry' | 'recommended' | 'lowest_estimated_price'
-
 export interface GenerationModelSearchInput {
   query?: string
   mediaType?: GenerationMediaType
@@ -454,13 +454,7 @@ export function prepareGenerationTask(input: GenerationPreparationInput): Record
     ...validateDynamicConstraints(model, normalized, supplied),
     ...mediaErrors,
   ]
-  const hasAlternativeInput = model.alternativeInputParamIds?.some((paramId) => {
-    const value = normalized[paramId]
-    if (typeof value === 'string') return value.trim().length > 0
-    if (Array.isArray(value)) return value.length > 0
-    return value !== undefined && value !== null && value !== false
-  }) === true
-  const hasInput = input.prompt.trim().length > 0 || imagesCount > 0 || videosCount > 0 || audiosCount > 0 || hasAlternativeInput
+  const hasInput = input.prompt.trim().length > 0 || imagesCount > 0 || videosCount > 0 || audiosCount > 0 || hasAlternativeModelInput(model, normalized)
   if (!hasInput) {
     paramErrors.push({ paramId: 'prompt', type: 'required', message: '必须提供提示词或允许的媒体引用' })
   }

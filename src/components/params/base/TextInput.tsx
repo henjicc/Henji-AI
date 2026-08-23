@@ -74,7 +74,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   }
 
   // 多行普通文本输入
-  if (param.multiline) {
+  if (param.type === 'textarea' || param.multiline) {
     return (
       <div className="w-auto">
         <label className={UI_FIELD_LABEL_CLASS}>

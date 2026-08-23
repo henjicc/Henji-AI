@@ -12,6 +12,11 @@ import { LinkageEngine } from '@/core/linkage'
 import { ParamRenderer } from '@/components/params/ParamRenderer'
 import { isParamDisabled, isParamVisible } from '@/components/params/paramVisibility'
 import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution'
+import {
+  buildParamPresentationItems,
+  getPresentedParamIds,
+} from '@/core/params/paramPresentation'
+import { ParamGroupTrigger } from '@/components/params/ParamGroupTrigger'
 import AspectResolutionPanel from './AspectResolutionPanel'
 import { isPrimarySelectorParam } from './parameterOrder'
 
@@ -113,13 +118,21 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
 
   const consumedParamIds = new Set(specialPanelSpec?.consumedParamIds || [])
   const renderParams = filteredParams.filter((param) => !consumedParamIds.has(param.id))
+  const presentedParamIds = useMemo(
+    () => getPresentedParamIds(modelDef?.paramPresentation),
+    [modelDef?.paramPresentation]
+  )
   const primarySelectorParams = useMemo(
-    () => renderParams.filter(isPrimarySelectorParam),
-    [renderParams]
+    () => renderParams.filter((param) => (
+      !presentedParamIds.has(param.id) && isPrimarySelectorParam(param)
+    )),
+    [presentedParamIds, renderParams]
   )
   const remainingParams = useMemo(
-    () => renderParams.filter((param) => !isPrimarySelectorParam(param)),
-    [renderParams]
+    () => renderParams.filter((param) => (
+      presentedParamIds.has(param.id) || !isPrimarySelectorParam(param)
+    )),
+    [presentedParamIds, renderParams]
   )
   const orderedRenderParams = useMemo(() => {
     if (!specialPanelSpec) {
@@ -129,6 +142,12 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
     const normalParams = remainingParams.filter((param) => !isDurationParam(param))
     return [...durationParams, ...normalParams]
   }, [remainingParams, specialPanelSpec])
+  const presentationItems = useMemo(
+    () => modelDef?.paramPresentation
+      ? buildParamPresentationItems(remainingParams, modelDef.paramPresentation)
+      : orderedRenderParams.map((param) => ({ kind: 'param' as const, order: param.order, param })),
+    [modelDef?.paramPresentation, orderedRenderParams, remainingParams]
+  )
 
   // 模型未在 ModelRegistry 中注册（可能是旧模型）或没有参数 - 静默返回 null
   if (!modelDef || params.length === 0) {
@@ -159,16 +178,27 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           onChange={onChange}
         />
       )}
-      {orderedRenderParams.map((param) => (
+      {presentationItems.map((item) => item.kind === 'param' ? (
         <ParamRenderer
-          key={param.id}
-          param={param}
-          value={values[param.id]}
-          onChange={(value) => onChange(param.id, value)}
+          key={item.param.id}
+          param={item.param}
+          value={values[item.param.id]}
+          onChange={(value) => onChange(item.param.id, value)}
           allValues={runtimeValues}
           uploadedImages={uploadedImages}
           uploadedVideos={uploadedVideos}
-          disabled={isParamDisabled(param, runtimeValues, linkageEngine)}
+          disabled={isParamDisabled(item.param, runtimeValues, linkageEngine)}
+        />
+      ) : (
+        <ParamGroupTrigger
+          key={item.group.id}
+          group={item.group}
+          params={item.params}
+          values={runtimeValues}
+          onChange={onChange}
+          linkageEngine={linkageEngine}
+          uploadedImages={uploadedImages}
+          uploadedVideos={uploadedVideos}
         />
       ))}
     </div>

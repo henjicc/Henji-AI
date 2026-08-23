@@ -459,6 +459,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         )}
         <NodeParamRows
           nodeId={id}
+          modelId={effectiveModelId}
           schema={modelParamSchema}
           values={modelParamValues}
           setParam={setParam}

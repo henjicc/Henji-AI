@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -19,7 +19,6 @@ import {
   MODEL_PARAM_ID,
   PROMPT_PARAM_ID,
   getSocketColor,
-  type RowMediaKind,
 } from '@/features/canvas/domain/socketTypes';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import { NodeLodPlaceholder } from '@/features/canvas/ui/NodeLodPlaceholder';
@@ -63,13 +62,8 @@ import { useGenerationNodeMinimumHeight } from './useGenerationNodeMinimumHeight
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
-import { showAlertDialog } from '@/stores/alertDialogStore';
-
-const DEFAULT_GENERATION_DURATION_MS = 60_000;
-const RESULT_TITLE_MAX_CHARS = 10;
-/** prompt/text 由结构化提示词编辑器单独渲染，不进入逐行参数区 */
-const PROMPT_PARAM_IDS = ['prompt', 'text'];
-const ROW_MEDIA_KINDS: RowMediaKind[] = ['image', 'video', 'audio'];
+import { DEFAULT_GENERATION_DURATION_MS, PROMPT_PARAM_IDS, ROW_MEDIA_KINDS, buildResultNodeTitle, ensureGenerationProviderConfigured, resolveGenerationPromptInput } from './generationNodeGuards';
+import { useNodeVideoTrimRange } from './useNodeVideoTrimRange';
 
 export type { GenerationNodeShellData } from './useGenerationPromptDocument';
 
@@ -92,17 +86,6 @@ export interface GenerationNodeShellProps {
   minHeight?: number;
   maxWidth?: number;
   maxHeight?: number;
-}
-
-function buildResultNodeTitle(prompt: string, fallbackTitle: string): string {
-  const normalizedPrompt = prompt.trim();
-  if (!normalizedPrompt) {
-    return fallbackTitle;
-  }
-  if (normalizedPrompt.length <= RESULT_TITLE_MAX_CHARS) {
-    return normalizedPrompt;
-  }
-  return `${normalizedPrompt.slice(0, RESULT_TITLE_MAX_CHARS)}...`;
 }
 
 /**
@@ -203,30 +186,12 @@ export const GenerationNodeShell = memo(({
   const handlePromptChange = promptState.handleChange;
   const handleMediaInputChange = promptState.handleMediaInputChange;
 
-  // 裁剪窗口选中的 [start, end] 只是附加在视频引用上的元数据，不替换 mediaInputs.video——
-  // 完整视频始终保留，重新打开裁剪窗口可以在完整时长范围内重新选择。
-  const videoTrimRange = useMemo(
-    () => (
-      typeof data.videoTrimStart === 'number' && typeof data.videoTrimEnd === 'number'
-        ? { start: data.videoTrimStart, end: data.videoTrimEnd }
-        : null
-    ),
-    [data.videoTrimStart, data.videoTrimEnd]
-  );
-  const handleVideoTrimRangeChange = useCallback((range: { start: number; end: number }) => {
-    updateNodeData(id, { videoTrimStart: range.start, videoTrimEnd: range.end });
-  }, [id, updateNodeData]);
-
-  // 换了一个视频（节点切换了引用，不只是同一个视频重新拖了选区）时清空裁剪选区，
-  // 对齐对话面板"换视频重置选区"的逻辑。
-  const primaryVideoRef = useRef<string | null>(null);
-  useEffect(() => {
-    const primaryVideo = effectiveVideos[0] ?? null;
-    if (primaryVideoRef.current !== null && primaryVideoRef.current !== primaryVideo && (data.videoTrimStart !== undefined || data.videoTrimEnd !== undefined)) {
-      updateNodeData(id, { videoTrimStart: undefined, videoTrimEnd: undefined });
-    }
-    primaryVideoRef.current = primaryVideo;
-  }, [effectiveVideos, data.videoTrimStart, data.videoTrimEnd, id, updateNodeData]);
+  const { videoTrimRange, handleVideoTrimRangeChange } = useNodeVideoTrimRange({
+    nodeId: id,
+    videos: effectiveVideos,
+    start: data.videoTrimStart,
+    end: data.videoTrimEnd,
+  });
 
   const selectedModelId = useMemo(() => {
     const stored = typeof data.modelId === 'string' ? data.modelId.trim() : '';
@@ -288,23 +253,26 @@ export const GenerationNodeShell = memo(({
   }, [data.modelId, id, selectedModelId, updateNodeData]);
 
   const preflightGenerate = useCallback((): void => {
-    if (!isPromptOverridden) {
-      const prompt = toModelPromptText(effectivePromptDocument, { references: promptReferences }).trim();
-      if (!prompt) {
-        setPromptInvalid(true);
-        throw new Error(t(promptRequiredKey));
-      }
+    const latestCanvas = useCanvasStore.getState();
+    const latestValues = collectInputValues(id, latestCanvas.nodes, latestCanvas.edges);
+    const runtimeValues = { ...modelParamValues, ...latestValues };
+    const promptInput = resolveGenerationPromptInput(
+      effectiveModel,
+      runtimeValues,
+      toModelPromptText(effectivePromptDocument, { references: promptReferences }),
+      isPromptOverridden ? latestValues[PROMPT_PARAM_ID] : undefined
+    );
+    if (!promptInput.hasValidInput) {
+      setPromptInvalid(true);
+      throw new Error(t(promptRequiredKey));
     }
-    if (!providerKeyConfigured) {
-      showAlertDialog({
-        title: t('common:providerKeyRequired.title'),
-        message: t('common:providerKeyRequired.message'),
-        type: 'info',
-        settingsTarget: { tab: 'api', sectionId: 'api-keys' },
-      });
-      throw new Error(t(apiKeyRequiredKey));
-    }
-  }, [apiKeyRequiredKey, effectivePromptDocument, isPromptOverridden, promptReferences, promptRequiredKey, providerKeyConfigured, t]);
+    setPromptInvalid(false);
+    ensureGenerationProviderConfigured(providerKeyConfigured, {
+      title: t('common:providerKeyRequired.title'),
+      message: t('common:providerKeyRequired.message'),
+      error: t(apiKeyRequiredKey),
+    });
+  }, [apiKeyRequiredKey, effectiveModel, effectivePromptDocument, id, isPromptOverridden, modelParamValues, promptReferences, promptRequiredKey, providerKeyConfigured, t]);
 
   const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
     const latestCanvas = useCanvasStore.getState();
@@ -313,24 +281,27 @@ export const GenerationNodeShell = memo(({
     const runtimePromptDocument = isPromptOverridden && typeof latestPromptOverride === 'string'
       ? createPlainTextPromptDocument(latestPromptOverride)
       : effectivePromptDocument;
-    const prompt = toModelPromptText(runtimePromptDocument, { references: promptReferences }).trim();
-    if (!prompt) {
+    const runtimeValues = { ...modelParamValues, ...latestValues };
+    const promptInput = resolveGenerationPromptInput(
+      effectiveModel,
+      runtimeValues,
+      toModelPromptText(runtimePromptDocument, { references: promptReferences }),
+      isPromptOverridden ? latestPromptOverride : undefined
+    );
+    if (!promptInput.hasValidInput) {
       setPromptInvalid(true);
       throw new Error(t(promptRequiredKey));
     }
     setPromptInvalid(false);
+    const { prompt } = promptInput;
 
     // 缺 API Key 是"还没开始生成"的前置失败，不建输出节点；
     // 它有明确的补救动作，所以走带「去设置」的统一弹窗
-    if (!providerKeyConfigured) {
-      showAlertDialog({
-        title: t('common:providerKeyRequired.title'),
-        message: t('common:providerKeyRequired.message'),
-        type: 'info',
-        settingsTarget: { tab: 'api', sectionId: 'api-keys' },
-      });
-      throw new Error(t(apiKeyRequiredKey));
-    }
+    ensureGenerationProviderConfigured(providerKeyConfigured, {
+      title: t('common:providerKeyRequired.title'),
+      message: t('common:providerKeyRequired.message'),
+      error: t(apiKeyRequiredKey),
+    });
 
     // 连线注入的标量值优先覆盖内联值（数值/源节点 → 参数端口）
     const { nodes: graphNodes, edges: graphEdges } = useCanvasStore.getState();
@@ -422,7 +393,7 @@ export const GenerationNodeShell = memo(({
       setNodeGenerationProgress(newNodeId, null);
     }
     return { status: 'completed', resultNodeIds: [newNodeId] };
-  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, promptReferences, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, promptReferences, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'standard-generation',
