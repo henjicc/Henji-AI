@@ -86,6 +86,29 @@ async function ensureVisualSourceProject(page, requestedName, fixturePrefix) {
 
 const MISSING_TYPE_FIXTURES = {
   universalUploadNode: { data: { displayName: '上传', lockedMediaKind: null, uploadError: null }, width: 240, height: 240 },
+  uploadNode: {
+    data: {
+      displayName: '图片上传', imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',
+      isSizeManuallyAdjusted: false, sourceFileName: null,
+    },
+    width: 240,
+    height: 240,
+  },
+  imageNode: {
+    data: {
+      displayName: '图片生成', imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',
+      isSizeManuallyAdjusted: false, prompt: '', modelId: DEFAULT_MODEL_IDS.imageModelSelectorNode,
+      params: {}, mediaInputs: {}, isGenerating: false, generationStartedAt: null,
+    },
+  },
+  exportImageNode: {
+    data: {
+      displayName: '图片结果', imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',
+      isSizeManuallyAdjusted: false, resultKind: 'generic',
+    },
+    width: 240,
+    height: 240,
+  },
   textProcessingNode: {
     data: {
       displayName: '文本处理',
@@ -99,16 +122,95 @@ const MISSING_TYPE_FIXTURES = {
     width: 360,
     height: 190,
   },
+  textAnnotationNode: {
+    data: {
+      displayName: '文本', content: '画布视觉检查', isGenerating: false,
+      generationStartedAt: null, generationError: null,
+    },
+    width: 300,
+    height: 160,
+  },
   groupNode: { data: { displayName: '组', label: '组' }, width: 360, height: 240 },
+  storyboardNode: {
+    data: {
+      displayName: '分镜', aspectRatio: '1:1', frameAspectRatio: '1:1',
+      gridRows: 2, gridCols: 2, frames: [],
+    },
+    width: 360,
+    height: 280,
+  },
+  storyboardGenNode: {
+    data: {
+      displayName: '分镜生成', gridRows: 2, gridCols: 2, frames: [],
+      modelId: DEFAULT_MODEL_IDS.imageModelSelectorNode, params: {}, mediaInputs: {},
+      imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',
+      isGenerating: false, generationStartedAt: null,
+    },
+  },
+  videoGenNode: {
+    data: {
+      displayName: '视频生成', prompt: '', modelId: DEFAULT_MODEL_IDS.videoModelSelectorNode,
+      params: {}, mediaInputs: {}, isGenerating: false, generationStartedAt: null,
+    },
+  },
+  audioGenNode: {
+    data: {
+      displayName: '音频生成', prompt: '', modelId: DEFAULT_MODEL_IDS.audioModelSelectorNode,
+      params: {}, mediaInputs: {}, isGenerating: false, generationStartedAt: null,
+    },
+  },
+  exportVideoNode: {
+    data: {
+      displayName: '视频结果', videoUrl: null, previewImageUrl: null, aspectRatio: '16:9',
+      durationSec: null, isSizeManuallyAdjusted: false, isGenerating: false,
+      generationStartedAt: null,
+    },
+    width: 320,
+    height: 220,
+  },
   exportAudioNode: { data: { displayName: '音频结果', audioUrl: null, durationSec: null } },
+  videoUploadNode: {
+    data: {
+      displayName: '视频上传', videoUrl: null, previewImageUrl: null, aspectRatio: '16:9',
+      durationSec: null, sourceFileName: null, isSizeManuallyAdjusted: false,
+    },
+    width: 320,
+    height: 220,
+  },
+  audioUploadNode: {
+    data: { displayName: '音频上传', audioUrl: null, durationSec: null, sourceFileName: null },
+    width: 320,
+    height: 160,
+  },
   intSourceNode: { data: { displayName: '整数', value: 0 }, width: 180, height: 64 },
   floatSourceNode: { data: { displayName: '小数', value: 0.5 }, width: 180, height: 64 },
   stringSourceNode: { data: { displayName: '文本', value: '测试' }, width: 240, height: 96 },
   booleanSourceNode: { data: { displayName: '布尔', value: false }, width: 180, height: 64 },
+  imageModelSelectorNode: {
+    data: { displayName: '图片模型', modelId: DEFAULT_MODEL_IDS.imageModelSelectorNode, isExpanded: false },
+    width: 240,
+    height: 44,
+  },
+  videoModelSelectorNode: {
+    data: { displayName: '视频模型', modelId: DEFAULT_MODEL_IDS.videoModelSelectorNode, isExpanded: false },
+    width: 240,
+    height: 44,
+  },
   audioModelSelectorNode: {
     data: { displayName: '音频模型', modelId: 'ppio-minimax-speech', isExpanded: false },
     width: 240,
     height: 44,
+  },
+  cameraStageNode: {
+    data: {
+      displayName: '镜头工作台', projectId: null, imageUrl: null, previewImageUrl: null,
+      videoUrl: null, aspectRatio: '16:9', durationSec: null, selectedTimeSec: 0,
+      imageExporting: false, imageRenderRequestId: null, imageRenderError: null,
+      videoProgress: null, videoExporting: false, videoRenderPhase: null,
+      videoRenderRequestId: null, videoRenderError: null, outputKind: 'image',
+    },
+    width: 480,
+    height: 320,
   },
 }
 

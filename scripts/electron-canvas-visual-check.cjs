@@ -25,7 +25,13 @@ const {
   resetViewport,
   sleep,
 } = require('./lib/canvasPanBench.cjs')
-const { cropCompare, diffBuffers, worstBlock } = require('./lib/canvasVisualDiff.cjs')
+const {
+  RASTER_CONTROL_RATIO_LIMIT,
+  cropCompare,
+  diffBuffers,
+  passesRasterControl,
+  worstBlock,
+} = require('./lib/canvasVisualDiff.cjs')
 const {
   ensureVisualSourceProject,
   prepareFullTypeFixture,
@@ -111,6 +117,14 @@ async function openSyntheticModelPicker(page) {
   await trigger.click()
   await page.getByRole('scrollbar', { name: /供应商|provider/i }).waitFor({ timeout: 10000 })
   await page.waitForTimeout(350)
+}
+
+async function closeSyntheticModelPicker(page) {
+  const imageSelector = page.locator('[data-id="__visual_source_imageModelSelectorNode"]')
+  const trigger = imageSelector.locator('button').filter({ hasText: /KIE/i }).first()
+  await trigger.click()
+  await page.getByRole('scrollbar', { name: /供应商|provider/i }).waitFor({ state: 'hidden', timeout: 10000 })
+  await page.waitForTimeout(250)
 }
 
 async function lowerSyntheticFixtureViewport(page, fixture) {
@@ -361,6 +375,7 @@ async function main() {
     const modelPickerScrollbarSpacing = source.created
       ? await captureModelPickerScrollbarSpacing(page)
       : null
+    if (source.created) await closeSyntheticModelPicker(page)
 
     const startViewport = { x: fixture.viewport.x, y: fixture.viewport.y }
     // Chromium 首张截图会触发一次最终光栅，不能把这 3/255 的一次性舍入变化算进基线。
@@ -379,15 +394,19 @@ async function main() {
       .filter(([, summary]) => summary.sampleCount > 0)
       .map(([type]) => type)
     const missingTypes = REGISTERED_NODE_TYPES.filter((type) => !presentTypes.includes(type))
+    const negativeControl = comparisons.willchange
     const expectationResults = Object.fromEntries(Object.entries(comparisons).map(([name, comparison]) => [
       name,
-      CONFIGS[name].expect === 'pass' ? comparison.passed : !comparison.passed,
+      CONFIGS[name].expect === 'pass'
+        ? (name === 'paintdisabled' ? passesRasterControl(comparison, negativeControl) : comparison.passed)
+        : !comparison.passed,
     ]))
+    const gestureExpectationPassed = passesRasterControl(gesture, negativeControl)
     const coverageOk = process.env.VISUAL_REQUIRE_ALL_TYPES !== '1' || missingTypes.length === 0
     const modelPickerSpacingOk = !modelPickerScrollbarSpacing
       || modelPickerScrollbarSpacing.differencePx <= 1
     const ok = Object.values(expectationResults).every(Boolean)
-      && gesture.passed
+      && gestureExpectationPassed
       && coverageOk
       && modelPickerSpacingOk
     const output = {
@@ -415,6 +434,17 @@ async function main() {
       baselineGeometry: baseline.geometry,
       comparisons,
       gesture,
+      gestureExpectationPassed,
+      rasterCalibration: {
+        negativeControl: 'willchange',
+        ratioLimit: RASTER_CONTROL_RATIO_LIMIT,
+        paintdisabledRatio: negativeControl?.pixels?.changedPct > 0
+          ? round(comparisons.paintdisabled.pixels.changedPct / negativeControl.pixels.changedPct)
+          : null,
+        gestureRatio: negativeControl?.pixels?.changedPct > 0
+          ? round(gesture.pixels.changedPct / negativeControl.pixels.changedPct)
+          : null,
+      },
       modelPickerScrollbarSpacing,
       modelPickerSpacingOk,
       expectationResults,
@@ -427,7 +457,13 @@ async function main() {
       comparisons: Object.fromEntries(Object.entries(comparisons).map(([name, value]) => [name, {
         passed: value.passed, pixels: value.pixels, geometry: value.geometry,
       }])),
-      gesture: { passed: gesture.passed, pixels: gesture.pixels, geometry: gesture.geometry },
+      gesture: {
+        passed: gesture.passed,
+        accepted: gestureExpectationPassed,
+        pixels: gesture.pixels,
+        geometry: gesture.geometry,
+      },
+      rasterCalibration: output.rasterCalibration,
       modelPickerScrollbarSpacing,
       modelPickerSpacingOk,
       expectationResults,

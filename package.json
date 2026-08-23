@@ -28,7 +28,7 @@
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
-    "test:ui-inspection": "node --test scripts/lib/uiInspection.test.cjs scripts/lib/runtimeEvidence.test.cjs scripts/lib/realityTestPlan.test.cjs",
+    "test:ui-inspection": "node --test scripts/lib/uiInspection.test.cjs scripts/lib/runtimeEvidence.test.cjs scripts/lib/realityTestPlan.test.cjs scripts/lib/canvasVisualDiff.test.cjs",
     "test:reality": "node scripts/run-reality-tests.cjs",
     "test:assistant-persistence": "node scripts/test-assistant-persistence.cjs",
     "test:assistant-model-compat": "vitest run electron/main/services/llm/sdk/model-step.test.ts electron/main/services/llm/sdk/provider-error.test.ts electron/main/services/llm/sdk/provider-adapter.test.ts electron/main/services/llm/sdk/retry-policy.test.ts electron/main/services/llm/sdk/scripted-model-step.test.ts electron/main/services/llm/sdk/trace.test.ts electron/main/services/agent-runtime/runner/model-execution.test.ts electron/main/services/agent-runtime/runner/budget.test.ts electron/main/services/agent-runtime/runner/runner.test.ts src/services/llm/LlmConfigService.test.ts",

@@ -5,6 +5,7 @@ const path = require('node:path')
 const sharp = require('sharp')
 
 const PIXEL_DIFF_THRESHOLD = 2
+const RASTER_CONTROL_RATIO_LIMIT = 0.75
 
 async function readGray(buffer) {
   const { data, info } = await sharp(buffer)
@@ -98,9 +99,25 @@ async function cropCompare(bufferA, bufferB, rect, outPathA, outPathB) {
   return { rect: area, files: [outPathA, outPathB] }
 }
 
+/**
+ * Chromium 在分数缩放下切换 paint containment 会重新栅格化文字，无法要求逐像素为零。
+ * 使用同轮次的 will-change 已知负例作机器内控制：候选必须几何完全一致，且变化像素占比
+ * 显著低于负例。若负例未产生差异，则不能用它放宽候选判定，仍保持失败。
+ */
+function passesRasterControl(candidate, negativeControl, ratioLimit = RASTER_CONTROL_RATIO_LIMIT) {
+  if (candidate?.passed) return true
+  if (!candidate?.geometry || !Object.values(candidate.geometry).every(Boolean)) return false
+  const candidatePct = Number(candidate?.pixels?.changedPct)
+  const controlPct = Number(negativeControl?.pixels?.changedPct)
+  if (!Number.isFinite(candidatePct) || !Number.isFinite(controlPct) || controlPct <= 0) return false
+  return candidatePct / controlPct <= ratioLimit
+}
+
 module.exports = {
   PIXEL_DIFF_THRESHOLD,
+  RASTER_CONTROL_RATIO_LIMIT,
   cropCompare,
   diffBuffers,
+  passesRasterControl,
   worstBlock,
 }
