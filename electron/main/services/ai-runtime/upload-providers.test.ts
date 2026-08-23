@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { uploadToApiMart, uploadToKie } from './upload-providers'
+const falUploadMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@fal-ai/client', () => ({
+  createFalClient: vi.fn(() => ({ storage: { upload: falUploadMock } })),
+}))
+
+import { uploadToApiMart, uploadToFal, uploadToKie } from './upload-providers'
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -12,6 +18,22 @@ function jsonResponse(payload: unknown, status = 200): Response {
 describe('upload providers', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    falUploadMock.mockReset()
+  })
+
+  it('通过 Fal 官方存储客户端上传文件并返回 CDN URL', async () => {
+    falUploadMock.mockResolvedValue('https://v3b.fal.media/files/b/example/reference.png')
+
+    await expect(uploadToFal('fal-secret', {
+      bytes: new Uint8Array([1, 2, 3]),
+      mimeType: 'image/png',
+      filename: 'reference.png',
+    })).resolves.toBe('https://v3b.fal.media/files/b/example/reference.png')
+
+    const file = falUploadMock.mock.calls[0]?.[0] as File
+    expect(file.name).toBe('reference.png')
+    expect(file.type).toBe('image/png')
+    expect(file.size).toBe(3)
   })
 
   it('通过 APIMart 官方 multipart 接口上传图片并返回公网 URL', async () => {

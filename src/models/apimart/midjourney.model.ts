@@ -90,16 +90,22 @@ export const apimartMidjourneyModel = defineModel({
       name: { zh: '生成数量', en: 'Generation Count' }, default: 1, min: 1, max: 40, step: 1
     },
     {
-      id: 'apimartMidjourneyCharacterReference', type: 'text', order: 15,
-      name: { zh: '角色参考图 URL', en: 'Character Reference URL' }, default: ''
+      id: 'apimartMidjourneyCharacterReference', type: 'image-upload', order: 15,
+      name: { zh: '角色参考图', en: 'Character Reference' }, default: [],
+      valueType: 'array', maxCount: 1, format: 'url',
+      accept: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], maxSize: 20 * 1024 * 1024
     },
     {
-      id: 'apimartMidjourneyStyleReference', type: 'text', order: 16,
-      name: { zh: '风格参考图 URL', en: 'Style Reference URL' }, default: ''
+      id: 'apimartMidjourneyStyleReference', type: 'image-upload', order: 16,
+      name: { zh: '风格参考图', en: 'Style Reference' }, default: [],
+      valueType: 'array', maxCount: 1, format: 'url',
+      accept: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], maxSize: 20 * 1024 * 1024
     },
     {
-      id: 'apimartMidjourneyDepthReference', type: 'text', order: 17,
-      name: { zh: '深度参考图 URL', en: 'Depth Reference URL' }, default: ''
+      id: 'apimartMidjourneyDepthReference', type: 'image-upload', order: 17,
+      name: { zh: '深度参考图', en: 'Depth Reference' }, default: [],
+      valueType: 'array', maxCount: 1, format: 'url',
+      accept: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], maxSize: 20 * 1024 * 1024
     },
     {
       id: 'apimartMidjourneyDepthWeight', type: 'number', order: 18,
@@ -227,24 +233,43 @@ export const apimartMidjourneyModel = defineModel({
       trigger: 'apimartMidjourneyCharacterReference',
       effect: 'hide',
       targets: ['apimartMidjourneyCharacterWeight'],
-      condition: (_value, allParams) => typeof allParams.apimartMidjourneyCharacterReference !== 'string' ||
-        allParams.apimartMidjourneyCharacterReference.trim().length === 0
+      condition: (_value, allParams) => {
+        const reference = allParams.apimartMidjourneyCharacterReference
+        return Array.isArray(reference)
+          ? !reference.some((item) => typeof item === 'string' && item.trim().length > 0)
+          : !(typeof reference === 'string' && reference.trim().length > 0)
+      }
     },
     {
       trigger: 'apimartMidjourneyStyleReference',
       effect: 'hide',
       targets: ['apimartMidjourneyStyleWeight'],
-      condition: (_value, allParams) => typeof allParams.apimartMidjourneyStyleReference !== 'string' ||
-        allParams.apimartMidjourneyStyleReference.trim().length === 0
+      condition: (_value, allParams) => {
+        const reference = allParams.apimartMidjourneyStyleReference
+        return Array.isArray(reference)
+          ? !reference.some((item) => typeof item === 'string' && item.trim().length > 0)
+          : !(typeof reference === 'string' && reference.trim().length > 0)
+      }
     },
     {
       trigger: 'apimartMidjourneyDepthReference',
       effect: 'hide',
       targets: ['apimartMidjourneyDepthWeight'],
-      condition: (_value, allParams) => typeof allParams.apimartMidjourneyDepthReference !== 'string' ||
-        allParams.apimartMidjourneyDepthReference.trim().length === 0
+      condition: (_value, allParams) => {
+        const reference = allParams.apimartMidjourneyDepthReference
+        return Array.isArray(reference)
+          ? !reference.some((item) => typeof item === 'string' && item.trim().length > 0)
+          : !(typeof reference === 'string' && reference.trim().length > 0)
+      }
     }
   ],
+  runtimeConstraints: {
+    mediaFields: [
+      { field: 'cref', kind: 'image' },
+      { field: 'sref', kind: 'image' },
+      { field: 'dref', kind: 'image' }
+    ]
+  },
   endpoints: '/v1/midjourney/generations',
   request: {
     builder: (params) => {
@@ -294,7 +319,9 @@ export const apimartMidjourneyModel = defineModel({
         ['dref', params.apimartMidjourneyDepthReference]
       ] as const
       for (const [field, value] of references) {
-        if (typeof value === 'string' && value.trim()) body[field] = value.trim()
+        const candidates = Array.isArray(value) ? value : [value]
+        const reference = candidates.find((item) => typeof item === 'string' && item.trim().length > 0)
+        if (typeof reference === 'string') body[field] = reference.trim()
       }
       if (body.cref) body.cw = Math.min(100, Math.max(0, Math.round(Number(params.apimartMidjourneyCharacterWeight ?? 100))))
       if (body.sref) body.sw = Math.min(1000, Math.max(0, Math.round(Number(params.apimartMidjourneyStyleWeight ?? 100))))

@@ -85,6 +85,7 @@ function isSimpleParam(param: ParamDef): boolean {
     && param.type !== 'composite'
     && param.type !== 'image-upload'
     && param.type !== 'video-upload'
+    && param.type !== 'file-upload'
 }
 
 function isSimpleValue(value: DynamicValue): value is string | number | boolean {

@@ -68,7 +68,17 @@ npm run check:model-i18n
 
 以 `src/core/types/ComponentTypes.ts` 为准：
 
-`text`（单行）、`textarea`（多行）、`number`、`dropdown`、`switch`、`radio`、`panel`（分组面板）、`composite`（自定义复合面板）、`image-upload`、`video-upload`、`resolution`、`aspect-ratio`
+`text`（单行）、`textarea`（多行）、`number`、`dropdown`、`switch`、`radio`、`panel`（分组面板）、`composite`（自定义复合面板）、`image-upload`、`video-upload`、`file-upload`、`resolution`、`aspect-ratio`
+
+## 媒体与文件 URL 参数（硬约束）
+
+- 参数面板禁止出现让用户手动填写图片、视频、音频、PDF 等媒体/文件 URL 的文本输入框；API 字段名包含 `url` 不代表 UI 也应该是文本框。
+- 必须按素材语义改用 `image-upload` / `video-upload` / `file-upload`，或复用现有 `FileUploader` 的上传按钮。角色图、风格图、深度图、遮罩图等语义不同的素材应各自保留清晰的上传入口，不能混成一个无法辨认用途的通用图片数组。
+- 上传组件只保存本地受管路径或兼容旧数据中的远程 URL；真正的供应商网络上传统一在 Electron 主进程生成运行时完成。业务 UI 禁止直接请求供应商上传 API。
+- 必须调用**当前生成供应商自己的官方文件上传服务**，拿到公网 URL 后再写入生成请求。供应商没有对应官方上传能力时，不得退化为“请用户自己找公网 URL”；应把该能力标为暂不可用并向用户确认处理方案。
+- 对 `cref`、`sref`、`dref`、`mask_url`、`pdf_url` 这类无法靠通用字段名可靠识别的请求字段，在模型 `runtimeConstraints.mediaFields` 中声明字段与素材类型，由公共预处理层上传并替换；禁止把模型 ID 判断塞进上传运行时。
+- builder 可以兼容读取旧工程保存的字符串 URL，但新 schema 默认值与新写入值必须使用上传类型约定的数组结构；兼容读取不等于继续暴露可编辑 URL 输入框。
+- 改动后必须同时验证对话/工具面板的 `ParamRenderer` 与画布 `NodeParamControl`；标准节点仍自动读取同一 schema，不复制模型专属上传 UI。
 
 ## 联动系统
 

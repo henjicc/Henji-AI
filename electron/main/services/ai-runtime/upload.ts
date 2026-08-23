@@ -15,6 +15,7 @@ import {
 } from './media-fields'
 import { resolvePpioMediaRewriteMode } from './ppio-media'
 import type { JsonObject, JsonValue } from './types'
+import type { RuntimeConstraintsDsl } from './types'
 import {
   type PreparedMediaBinary,
   toBase64,
@@ -41,13 +42,18 @@ interface PreprocessContext {
   strategy: UploadStrategy
   /** 值 → 媒体类型。由 params 里的媒体源反查，不依赖 builder 起的字段名。 */
   mediaSources: MediaSourceIndex
+  /** schema 显式声明的特殊上传字段，优先于通用字段名推断。 */
+  mediaFields: ReadonlyMap<string, Exclude<MediaKind, 'unknown'>>
+  requestId?: string
 }
 
 export async function preprocessRequestBody(
   providerId: string,
   route: string,
   body: JsonValue,
-  params: JsonObject = {}
+  params: JsonObject = {},
+  constraints?: RuntimeConstraintsDsl,
+  requestId?: string
 ): Promise<JsonValue> {
   const next = cloneJson(body)
   const context: PreprocessContext = {
@@ -55,6 +61,8 @@ export async function preprocessRequestBody(
     route,
     strategy: resolveUploadStrategy(params),
     mediaSources: buildMediaSourceIndex(params),
+    mediaFields: new Map((constraints?.mediaFields ?? []).map(({ field, kind }) => [field, kind])),
+    requestId,
   }
   await preprocessFieldValue(context, 'unknown', undefined, next)
   warnUnresolvedLocalMedia(providerId, route, next)
@@ -137,7 +145,7 @@ async function preprocessFieldValue(
 
   await preprocessPpioWan27ReferenceMediaObject(context, value)
   for (const [key, nestedValue] of Object.entries(value)) {
-    const nextKind = inheritMediaKind(mediaKind, key)
+    const nextKind = context.mediaFields.get(key) ?? inheritMediaKind(mediaKind, key)
     if (typeof nestedValue === 'string') {
       const kind = resolveMediaKind(context.mediaSources, nextKind, nestedValue)
       if (kind !== 'unknown') {
@@ -188,14 +196,16 @@ async function rewriteMediaSource(
 
   const prepared = prepareMediaBinary(trimmed, mediaKind)
   if (context.providerId === 'apimart') {
-    if (mediaKind === 'image') return await uploadApimartImage(prepared, context.route)
+    if (mediaKind === 'image') return await uploadApimartImage(prepared, context.route, context.requestId)
     throw new AiRuntimeError(
       'public_media_url_required',
-      `APIMart 没有通用的${mediaKind === 'video' ? '视频' : '音频'}上传端点，请直接传入公网 HTTP/HTTPS URL。`
+      `APIMart 没有通用的${mediaKind === 'video' ? '视频' : (mediaKind === 'audio' ? '音频' : '文件')}上传端点。`
     )
   }
   if (context.providerId === 'fal') {
-    return uploadToFal(prepared)
+    const apiKey = getAiProviderApiKey('fal')
+    if (!apiKey) throw new AiRuntimeError('missing_api_key', 'Fal 本地文件必须先上传，请先在设置中配置 Fal API Key。')
+    return await uploadFalFile(apiKey, prepared, context.route, context.requestId)
   }
   if (context.providerId === 'ppio') {
     const mode = resolvePpioMediaRewriteMode(context.route, fieldName, mediaKind === 'video')
@@ -209,17 +219,55 @@ async function rewriteMediaSource(
   return toDataUri(prepared.bytes, prepared.mimeType)
 }
 
-async function uploadApimartImage(prepared: PreparedMediaBinary, route: string): Promise<string> {
+async function uploadFalFile(
+  apiKey: string,
+  prepared: PreparedMediaBinary,
+  route: string,
+  requestId?: string
+): Promise<string> {
+  logger.info('开始上传 Fal 本地文件', {
+    event: 'ai_runtime.upload.fal_started',
+    requestId,
+    providerId: 'fal',
+    context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
+  })
+  try {
+    const url = await uploadToFal(apiKey, prepared)
+    logger.info('Fal 本地文件上传完成', {
+      event: 'ai_runtime.upload.fal_completed',
+      requestId,
+      providerId: 'fal',
+      context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
+    })
+    return url
+  } catch (error) {
+    logger.error('Fal 本地文件上传失败', {
+      event: 'ai_runtime.upload.fal_failed',
+      requestId,
+      providerId: 'fal',
+      context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
+      error,
+    })
+    throw error
+  }
+}
+
+async function uploadApimartImage(
+  prepared: PreparedMediaBinary,
+  route: string,
+  requestId?: string
+): Promise<string> {
   const apiKey = getAiProviderApiKey('apimart')
   if (!apiKey) {
     throw new AiRuntimeError(
       'missing_api_key',
-      'APIMart 本地图片必须先上传，请先在设置中配置 APIMart API Key，或直接传入公网图片 URL。'
+      'APIMart 本地图片必须先上传，请先在设置中配置 APIMart API Key。'
     )
   }
 
   logger.info('开始上传 APIMart 本地图片', {
     event: 'ai_runtime.upload.apimart_started',
+    requestId,
     providerId: 'apimart',
     context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
   })
@@ -227,6 +275,7 @@ async function uploadApimartImage(prepared: PreparedMediaBinary, route: string):
     const url = await uploadToApiMart(apiKey, prepared)
     logger.info('APIMart 本地图片上传完成', {
       event: 'ai_runtime.upload.apimart_completed',
+      requestId,
       providerId: 'apimart',
       context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
     })
@@ -234,6 +283,7 @@ async function uploadApimartImage(prepared: PreparedMediaBinary, route: string):
   } catch (error) {
     logger.error('APIMart 本地图片上传失败', {
       event: 'ai_runtime.upload.apimart_failed',
+      requestId,
       providerId: 'apimart',
       context: { route, mimeType: prepared.mimeType, bytes: prepared.bytes.byteLength },
       error,

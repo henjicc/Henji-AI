@@ -88,7 +88,14 @@ export async function generate(
       throw new AiRuntimeError('invalid_route', 'Request route is empty')
     }
 
-    const preprocessedBody = await preprocessRequestBody(providerId, builtRequest.route, normalizedBody, request.params)
+    const preprocessedBody = await preprocessRequestBody(
+      providerId,
+      builtRequest.route,
+      normalizedBody,
+      request.params,
+      model.runtimeConstraints,
+      requestId
+    )
     logger.info('后端发起生成请求', {
       event: 'generation.runtime.request_json',
       requestId,

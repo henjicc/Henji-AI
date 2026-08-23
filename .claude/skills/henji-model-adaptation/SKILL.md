@@ -57,6 +57,9 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 供应商模型文件只填写 `meta.canonicalModelId`，禁止填写 `meta.description`。适配前先检查 `src/core/modelCatalog/generationModelDescriptions.ts`：已有同一通用模型标识就直接引用；不存在就新增空描述条目，并在交付时明确告诉用户需要在该文件补充这个模型的定性描述。通用描述只写模型擅长方向或相对定位，不重复 tags 已表达的固有能力。
 - 对接已接入的 provider 时，先核对该 provider 在仓库里的既有 route 写法与 runtime 约定，再决定 `endpoints` 填什么；不要只按文档标题猜路径，也不要漏掉现有 provider 统一前缀（例如部分 PPIO 路由实际要走 `/async/...`）。
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
+- API 的媒体/文件字段即使名为 `*_url`，参数面板也禁止呈现手动 URL 文本框。角色图、风格图、深度图、遮罩图用 `image-upload`，视频/音频/PDF 等使用对应上传类型或现有上传按钮；由 Electron 主进程调用当前供应商官方上传服务并把返回 URL 写入请求，业务 UI 不直连上传 API。
+- 特殊请求字段（如 `cref` / `sref` / `dref` / `mask_url` / `pdf_url`）必须通过 `runtimeConstraints.mediaFields` 声明媒体类型，让公共预处理层识别并上传；禁止在上传运行时添加模型 ID 分支。若供应商没有对应官方上传能力，不得让用户自行填写公网链接，应暂停该能力并向用户确认。
+- 上传参数的新 schema 值使用数组结构，builder 仅可为旧工程兼容读取历史字符串 URL；兼容路径不能重新暴露 URL 输入框。对话/工具面板 `ParamRenderer` 与画布 `NodeParamControl` 必须能消费同一上传 schema。
 - 参数压缩不能破坏用户已经形成的跨模型心智：比例、分辨率、时长、数量、质量等高频通用参数，优先保持同模态模型已有的名称、控件类型、顶层位置和交互方式；不得仅为了“参数更少”把它们吞进供应商/模型专属高级面板。标准交互不等于统一 options/default，合法值和默认值仍以当前 API 契约为准。
 - 模型特有、低频或需要强联动解释的参数才进入 `composite` / 特殊面板；面板内部仍复用现有 `Ui*`、标准参数控件、上传与排序能力，不重做比例选择器、下拉、开关或文件上传。
 - 标准生成节点通过 `GenerationNodeShell -> NodeInputRows -> NodeParamRows` 自动读取模型 schema。只改模型参数定义、显隐、联动、计价或请求映射时，默认不修改 `src/features/canvas/**`，也不加载 `canvas-node-builder`。只有新增/改造节点 DOM、端口、节点注册、节点专属交互，或现有 `ParamRenderer` / `NodeParamControl` 无法共同表达新参数类型时，才进入画布节点工作流。

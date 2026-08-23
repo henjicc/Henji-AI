@@ -24,6 +24,7 @@ import { SwitchInput } from './base/SwitchInput'
 import { RadioInput } from './base/RadioInput'
 import { ImageUpload } from './upload/ImageUpload'
 import { VideoUpload } from './upload/VideoUpload'
+import { FileUpload } from './upload/FileUpload'
 
 // 导入特殊面板
 import { CompositePanel } from './panels/CompositePanel'
@@ -48,6 +49,7 @@ const COMPONENT_MAP: Partial<Record<string, React.ComponentType<DynamicValue>>> 
   radio: RadioInput,
   'image-upload': ImageUpload,
   'video-upload': VideoUpload,
+  'file-upload': FileUpload,
   composite: CompositePanel,
 }
 
@@ -217,4 +219,3 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
 })
 
 ParamRenderer.displayName = 'ParamRenderer'
-

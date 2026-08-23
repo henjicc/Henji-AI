@@ -519,6 +519,16 @@ export interface ImageUploadParamDef extends BaseParamDef {
   uploadButtonText?: I18nText
 }
 
+/** 不带媒体预览的通用文件上传参数（例如 PDF 上下文）。 */
+export interface FileUploadParamDef extends BaseParamDef {
+  type: 'file-upload'
+  valueType?: 'array'
+  maxCount?: number
+  accept?: string[]
+  maxSize?: number
+  uploadButtonText?: I18nText
+}
+
 /**
  * 视频上传参数
  *
@@ -676,5 +686,6 @@ export type ParamDef =
   | CompositePanelDef
   | ImageUploadParamDef
   | VideoUploadParamDef
+  | FileUploadParamDef
   | ResolutionParamDef
   | AspectRatioParamDef

@@ -75,6 +75,8 @@ export type {
   RuntimeNumberFieldConstraint,
   RuntimeEnumFieldConstraint,
   RuntimeImageSizeFieldConstraint,
+  RuntimeMediaFieldKind,
+  RuntimeMediaFieldConstraint,
   RuntimeConstraints
 } from './RuntimeConstraints'
 
@@ -91,6 +93,7 @@ export type {
   CompositePanelDef,
   ImageUploadParamDef,
   VideoUploadParamDef,
+  FileUploadParamDef,
   ResolutionParamDef,
   AspectRatioParamDef
 } from './ParamDef'

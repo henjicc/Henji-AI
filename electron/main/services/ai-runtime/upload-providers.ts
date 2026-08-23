@@ -1,4 +1,5 @@
-import { Blob } from 'node:buffer'
+import { Blob, File } from 'node:buffer'
+import { createFalClient } from '@fal-ai/client'
 import { buildApiMartEndpoints } from './apimart-endpoints'
 import { AiRuntimeError } from './errors'
 import { fetchProvider } from './providers/provider-fetch'
@@ -14,8 +15,10 @@ export interface PreparedMediaBinary {
   filename: string
 }
 
-export function uploadToFal(prepared: PreparedMediaBinary): string {
-  return toDataUri(prepared.bytes, prepared.mimeType)
+export async function uploadToFal(apiKey: string, prepared: PreparedMediaBinary): Promise<string> {
+  const client = createFalClient({ credentials: apiKey })
+  const file = new File([prepared.bytes], prepared.filename, { type: prepared.mimeType })
+  return await client.storage.upload(file)
 }
 
 export async function uploadToApiMart(apiKey: string, prepared: PreparedMediaBinary): Promise<string> {

@@ -20,6 +20,13 @@ export const apimartMidjourneyEditModel = defineModel({
   params: apimartMidjourneyModel.params,
   paramPresentation: apimartMidjourneyModel.paramPresentation,
   linkages: apimartMidjourneyModel.linkages,
+  runtimeConstraints: {
+    mediaFields: [
+      { field: 'cref', kind: 'image' },
+      { field: 'sref', kind: 'image' },
+      { field: 'dref', kind: 'image' }
+    ]
+  },
   endpoints: '/v1/midjourney/generations/edits',
   request: {
     // Manifest 会把 builder 放进独立 VM，因此不能引用 Imagine 文件的闭包函数。
@@ -69,7 +76,9 @@ export const apimartMidjourneyEditModel = defineModel({
         ['dref', params.apimartMidjourneyDepthReference]
       ] as const
       for (const [field, value] of references) {
-        if (typeof value === 'string' && value.trim()) body[field] = value.trim()
+        const candidates = Array.isArray(value) ? value : [value]
+        const reference = candidates.find((item) => typeof item === 'string' && item.trim().length > 0)
+        if (typeof reference === 'string') body[field] = reference.trim()
       }
       if (body.cref) body.cw = Math.min(100, Math.max(0, Math.round(Number(params.apimartMidjourneyCharacterWeight ?? 100))))
       if (body.sref) body.sw = Math.min(1000, Math.max(0, Math.round(Number(params.apimartMidjourneyStyleWeight ?? 100))))

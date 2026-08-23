@@ -73,15 +73,18 @@ export const apimartGptImage2Model = defineModel({
       visible: { condition: (params) => params.apimartGptImage2Version === 'official' }
     },
     {
-      id: 'apimartGptImage2MaskUrl', type: 'text', order: 7,
-      name: { zh: '局部重绘遮罩 URL', en: 'Inpainting Mask URL' }, default: '',
-      placeholder: { zh: '与首张参考图同尺寸、带透明通道', en: 'Same size as first reference, with alpha' },
+      id: 'apimartGptImage2MaskUrl', type: 'image-upload', order: 7,
+      name: { zh: '局部重绘遮罩', en: 'Inpainting Mask' }, default: [],
+      valueType: 'array', maxCount: 1, format: 'url',
+      accept: ['image/png', 'image/webp'], maxSize: 20 * 1024 * 1024,
+      description: { zh: '请上传与首张参考图同尺寸、带透明通道的遮罩图', en: 'Upload a mask with alpha matching the first reference image size' },
       visible: {
         condition: (params) => params.apimartGptImage2Version === 'official' && hasUploadedImage(params)
       }
     }
   ],
   linkages: [],
+  runtimeConstraints: { mediaFields: [{ field: 'mask_url', kind: 'image' }] },
   endpoints: APIMART_IMAGE_ENDPOINT,
   request: {
     builder: (params) => {
@@ -133,9 +136,11 @@ export const apimartGptImage2Model = defineModel({
         nsfw_check: false
       }
       if (images.length > 0) body.image_urls = images.slice(0, 16)
-      const maskUrl = typeof params.apimartGptImage2MaskUrl === 'string'
-        ? params.apimartGptImage2MaskUrl.trim()
-        : ''
+      const maskCandidates = Array.isArray(params.apimartGptImage2MaskUrl)
+        ? params.apimartGptImage2MaskUrl
+        : [params.apimartGptImage2MaskUrl]
+      const maskValue = maskCandidates.find((item) => typeof item === 'string' && item.trim().length > 0)
+      const maskUrl = typeof maskValue === 'string' ? maskValue.trim() : ''
       if (maskUrl) {
         if (images.length === 0) throw new Error('GPT Image 2 局部重绘必须同时提供至少 1 张参考图')
         body.mask_url = maskUrl

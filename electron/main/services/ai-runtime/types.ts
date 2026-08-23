@@ -191,6 +191,12 @@ export interface RuntimeConstraintsDsl {
   numberFields?: RuntimeNumberFieldConstraintDsl[]
   enumFields?: RuntimeEnumFieldConstraintDsl[]
   imageSizeFields?: RuntimeImageSizeFieldConstraintDsl[]
+  mediaFields?: RuntimeMediaFieldConstraintDsl[]
+}
+
+export interface RuntimeMediaFieldConstraintDsl {
+  field: string
+  kind: 'image' | 'video' | 'audio' | 'file'
 }
 
 export interface RuntimeNumberFieldConstraintDsl {

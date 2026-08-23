@@ -27,8 +27,22 @@ export interface RuntimeImageSizeFieldConstraint {
   maxAspectRatio?: number
 }
 
+export type RuntimeMediaFieldKind = 'image' | 'video' | 'audio' | 'file'
+
+/**
+ * 声明请求体中需要由主进程上传并替换为公网 URL 的字段。
+ *
+ * 用于 cref / mask_url / pdf_url 这类无法仅凭通用字段名可靠判断媒体类型的字段，
+ * 避免在上传运行时继续堆供应商或模型特例。
+ */
+export interface RuntimeMediaFieldConstraint {
+  field: string
+  kind: RuntimeMediaFieldKind
+}
+
 export interface RuntimeConstraints {
   numberFields?: RuntimeNumberFieldConstraint[]
   enumFields?: RuntimeEnumFieldConstraint[]
   imageSizeFields?: RuntimeImageSizeFieldConstraint[]
+  mediaFields?: RuntimeMediaFieldConstraint[]
 }

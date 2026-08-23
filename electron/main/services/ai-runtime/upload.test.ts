@@ -54,6 +54,23 @@ describe('request media preprocessing', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('按模型 schema 声明上传 Midjourney 特殊参考图字段', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      url: 'https://upload.apimart.ai/f/image/character.png',
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(preprocessRequestBody(
+      'apimart',
+      '/v1/midjourney/generations',
+      { cref: 'data:image/png;base64,AQID' },
+      { apimartMidjourneyCharacterReference: ['data:image/png;base64,AQID'] },
+      { mediaFields: [{ field: 'cref', kind: 'image' }] }
+    )).resolves.toEqual({
+      cref: 'https://upload.apimart.ai/f/image/character.png',
+    })
+  })
+
   it('APIMart 未配置 Key 时说明可用的修正方式', async () => {
     mockedGetKey.mockReturnValue(null)
 
@@ -64,7 +81,7 @@ describe('request media preprocessing', () => {
       { image: 'data:image/png;base64,AQID' }
     )).rejects.toMatchObject({
       code: 'missing_api_key',
-      message: expect.stringContaining('配置 APIMart API Key，或直接传入公网图片 URL'),
+      message: expect.stringContaining('配置 APIMart API Key'),
     })
   })
 

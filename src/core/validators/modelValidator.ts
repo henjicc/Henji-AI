@@ -305,6 +305,7 @@ function validateParam(param: ParamDef, index: number): void {
     'composite',
     'image-upload',
     'video-upload',
+    'file-upload',
     'resolution',
     'aspect-ratio'
   ]

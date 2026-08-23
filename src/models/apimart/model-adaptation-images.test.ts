@@ -87,7 +87,7 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
       apimartMidjourneyStylize: 800,
       apimartMidjourneyChaos: 25,
       apimartMidjourneyTile: true,
-      apimartMidjourneyStyleReference: 'https://example.com/style.png',
+      apimartMidjourneyStyleReference: ['https://example.com/style.png'],
       apimartMidjourneyStyleWeight: 500,
       apimartMidjourneyExtra: '--exp 10'
     })).toMatchObject({
@@ -233,14 +233,14 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
       apimartGptImage2Quality: 'high',
       apimartGptImage2Background: 'transparent',
       apimartGptImage2Count: 3,
-      apimartGptImage2MaskUrl: 'mask.png'
+      apimartGptImage2MaskUrl: ['mask.png']
     })).toEqual({
       model: 'gpt-image-2-official', prompt: 'replace object', n: 3, size: '3:2',
       resolution: '4k', quality: 'high', background: 'transparent',
       image_urls: ['source.png'], mask_url: 'mask.png', nsfw_check: false
     })
     expect(() => apimartGptImage2Model.request?.builder?.({
-      prompt: 'invalid', apimartGptImage2Version: 'official', apimartGptImage2MaskUrl: 'mask.png'
+      prompt: 'invalid', apimartGptImage2Version: 'official', apimartGptImage2MaskUrl: ['mask.png']
     })).toThrow('必须同时提供至少 1 张参考图')
     expect(apimartGptImage2Model.pricing.calculator?.({
       apimartGptImage2Version: 'official', apimartGptImage2Resolution: '2K',

@@ -18,6 +18,7 @@
  * - panel: 参数面板（用于分组）
  * - image-upload: 图片上传
  * - video-upload: 视频上传
+ * - file-upload: 通用文件上传
  *
  * 特殊组件：
  * - resolution: 分辨率选择器（自定义组件）
@@ -36,6 +37,7 @@ export type ComponentType =
   | 'composite'
   | 'image-upload'
   | 'video-upload'
+  | 'file-upload'
   // 特殊组件
   | 'resolution'
   | 'aspect-ratio'

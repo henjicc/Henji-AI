@@ -12,7 +12,7 @@
 
 import type { JsonObject, JsonValue } from './types'
 
-export type MediaKind = 'image' | 'video' | 'audio' | 'unknown'
+export type MediaKind = 'image' | 'video' | 'audio' | 'file' | 'unknown'
 export type ResolvedMediaKind = Exclude<MediaKind, 'unknown'>
 export type MediaSourceIndex = ReadonlyMap<string, ResolvedMediaKind>
 

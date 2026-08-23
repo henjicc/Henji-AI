@@ -153,10 +153,10 @@ describe('docs/model-adaptation Fal 目标模型', () => {
 
   it('Nano Banana 2 的 PDF 上下文会切换编辑端点并下发 pdf_url', async () => {
     const endpoints = falNanoBanana2Model.endpoints as { selector: (params: DynamicValueMap) => Promise<string> }
-    expect(await endpoints.selector({ falNanoBanana2PdfUrl: 'https://example.com/context.pdf' }))
+    expect(await endpoints.selector({ falNanoBanana2PdfUrl: ['https://example.com/context.pdf'] }))
       .toBe('fal-ai/nano-banana-2/edit')
     expect(falNanoBanana2Model.request?.builder?.({
-      prompt: 'read context', falNanoBanana2PdfUrl: 'https://example.com/context.pdf'
+      prompt: 'read context', falNanoBanana2PdfUrl: ['https://example.com/context.pdf']
     })).toMatchObject({ pdf_url: 'https://example.com/context.pdf' })
   })
 })

@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 import type {
   CompositePanelDef,
   DropdownParamDef,
+  FileUploadParamDef,
+  ImageUploadParamDef,
   NumberParamDef,
   ParamDef,
   RadioParamDef,
@@ -24,6 +26,7 @@ import { AspectRatioSelector } from '@/components/params/panels/ResolutionPanel/
 import type { AspectRatioOption } from '@/components/params/panels/ResolutionPanel/types';
 import { PromptEditor, UiIconButton, UiInput, UiSwitch } from '@/components/ui';
 import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
+import { FileUpload, ImageUpload } from '@/components/params/upload';
 import { useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 import {
   resolveTextParamPromptDocument,
@@ -391,6 +394,48 @@ function CompactPanelControl({
   );
 }
 
+function CompactUploadControl({
+  param,
+  value,
+  onChange,
+  disabled,
+}: {
+  param: ImageUploadParamDef | FileUploadParamDef;
+  value: DynamicValue;
+  onChange: (value: string[]) => void;
+  disabled?: boolean;
+}) {
+  const { i18n } = useTranslation();
+  const values = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : (typeof value === 'string' && value.trim() ? [value.trim()] : []);
+  const display = values.length > 0
+    ? (i18n.language.startsWith('zh') ? `已选 ${values.length} 个` : `${values.length} selected`)
+    : (i18n.language.startsWith('zh') ? '上传' : 'Upload');
+
+  return (
+    <PanelTrigger
+      display={display}
+      disabled={disabled}
+      buttonClassName={COMPACT_TRIGGER_CLASS}
+      buttonLabelClassName={COMPACT_TRIGGER_LABEL_CLASS}
+      panelWidth={280}
+      alignment="aboveCenter"
+      gap={8}
+      closeOnPanelClick={false}
+      renderPanel={() => (
+        <div className="p-3">
+          {param.type === 'image-upload' ? (
+            <ImageUpload param={param} value={values} onChange={onChange} disabled={disabled} showLabel={false} />
+          ) : (
+            <FileUpload param={param} value={values} onChange={onChange} disabled={disabled} showLabel={false} />
+          )}
+        </div>
+      )}
+    />
+  );
+}
+
 /**
  * ComfyUI 风格紧凑右对齐参数控件：每个参数渲染为单行右侧的小尺寸控件。
  * 不复用对话模式 ParamRenderer 的"标签在上、控件占满整行"布局——
@@ -460,6 +505,16 @@ export function NodeParamControl({ param, value, onChange, historyGroup, disable
           param={param as CompositePanelDef}
           value={value}
           onChange={onChange}
+          disabled={disabled}
+        />
+      );
+    case 'image-upload':
+    case 'file-upload':
+      return (
+        <CompactUploadControl
+          param={param as ImageUploadParamDef | FileUploadParamDef}
+          value={value}
+          onChange={onChange as (value: string[]) => void}
           disabled={disabled}
         />
       );

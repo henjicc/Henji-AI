@@ -1,29 +1,28 @@
-import { createLogger } from '@/core/logging'
-
-const logger = createLogger('components.params.upload.ImageUpload')
 /**
  * ImageUpload 组件
  *
- * 图片上传组件，支持拖拽、预览、编辑和智能匹配
+ * 图片上传组件。这里只负责把文件安全导入本地并写回参数；
+ * 供应商 CDN 上传统一由 Electron 生成运行时在提交请求前完成。
  */
 
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ImageUploadParamDef } from '@/core/types'
-import { UploadArea } from './UploadArea'
-import { FilePreview } from './FilePreview'
+import FileUploader from '@/components/ui/FileUploader'
 import { fileToBase64 } from '@/utils/fileConverter'
 import { calculateAspectRatio } from '@/utils/smartMatch'
 import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
 import { importLocalMedia } from '@/services/localMediaImport'
+import { resolveImageDisplayUrl } from '@/services/imageSource'
 
 interface ImageUploadProps {
   param: ImageUploadParamDef
-  value: string[]
+  value: DynamicValue
   onChange: (value: string[]) => void
   onSmartMatch?: (metadata: ImageMetadata) => void
   disabled?: boolean
+  showLabel?: boolean
 }
 
 interface ImageMetadata {
@@ -37,100 +36,89 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   value,
   onChange,
   onSmartMatch,
-  disabled = false
+  disabled = false,
+  showLabel = true,
 }) => {
   const { i18n, t } = useTranslation('ui')
   const { showNotification } = useNotification()
-  // const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const safeValue = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : (typeof value === 'string' && value.trim() ? [value.trim()] : [])
 
   // 获取显示名称
   const displayName = getI18nText(param.name, i18n.language)
 
   // 处理上传
-  const handleUpload = async (file: File) => {
+  const handleUpload = async (files: File[]) => {
     const maxCount = param.maxCount || 1
-    if (value.length >= maxCount) {
+    if (safeValue.length >= maxCount) {
       showNotification(t('uploadArea.maxImages', { max: maxCount }), 'error')
       return
     }
-
-    // 转换格式
-    let imageData: string
-    let metadata: ImageMetadata
-    if (param.format === 'base64') {
-      const img = await loadImage(file)
-      const base64 = await fileToBase64(file)
-      imageData = param.base64Prefix ? base64 : base64.split(',')[1]
-      metadata = {
-        aspectRatio: calculateAspectRatio(img.width, img.height),
-        width: img.width,
-        height: img.height,
+    const acceptedTypes = param.accept ?? ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+    const maxSize = param.maxSize ?? 20 * 1024 * 1024
+    const nextValues = [...safeValue]
+    for (const file of files.slice(0, maxCount - safeValue.length)) {
+      if (!acceptedTypes.includes(file.type)) {
+        showNotification(t('uploadArea.unsupportedType', { type: file.type }), 'error')
+        continue
       }
-    } else {
-      const imported = await importLocalMedia(file, 'image')
-      if (imported.kind !== 'image') return
-      imageData = imported.fullPath
-      const [width = 1, height = 1] = imported.aspectRatio.split(':').map(Number)
-      metadata = { aspectRatio: imported.aspectRatio, width, height }
-    }
+      if (file.size > maxSize) {
+        showNotification(t('uploadArea.tooLarge', { maxSize: Math.round(maxSize / 1024 / 1024) }), 'error')
+        continue
+      }
 
-    onChange([...value, imageData])
+      let imageData: string
+      let metadata: ImageMetadata
+      if (param.format === 'base64') {
+        const img = await loadImage(file)
+        const base64 = await fileToBase64(file)
+        imageData = param.base64Prefix ? base64 : base64.split(',')[1]
+        metadata = {
+          aspectRatio: calculateAspectRatio(img.width, img.height),
+          width: img.width,
+          height: img.height,
+        }
+      } else {
+        const imported = await importLocalMedia(file, 'image')
+        if (imported.kind !== 'image') continue
+        imageData = imported.fullPath
+        const [width = 1, height = 1] = imported.aspectRatio.split(':').map(Number)
+        metadata = { aspectRatio: imported.aspectRatio, width, height }
+      }
 
-    // 触发智能匹配
-    if (onSmartMatch) {
-      onSmartMatch({
-        ...metadata,
-      })
+      nextValues.push(imageData)
+      onSmartMatch?.(metadata)
     }
+    onChange(nextValues)
   }
 
   // 处理删除
   const handleDelete = (index: number) => {
-    const newValue = value.filter((_, i) => i !== index)
+    const newValue = safeValue.filter((_, i) => i !== index)
     onChange(newValue)
   }
 
-  // 处理编辑
-  const handleEdit = (index: number) => {
-    // setEditingIndex(index)
-    // TODO: 集成 ImageEditor
-    logger.info('Edit image at index:', index)
-  }
-
   return (
-    <div className="image-upload-wrapper">
-      <label className="param-label">
-        {displayName}
-        {param.required && <span className="required-mark">*</span>}
-      </label>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      {showLabel && (
+        <label className="param-label">
+          {displayName}
+          {param.required && <span className="required-mark">*</span>}
+        </label>
+      )}
 
-      <div className="upload-container">
-        {value.map((url, index) => {
-          const displayUrl = param.format === 'base64' && !param.base64Prefix
-            ? `data:image/png;base64,${url}`
-
-            : url
-
-          return (
-            <FilePreview
-              key={index}
-              type="image"
-              url={displayUrl}
-              onDelete={() => handleDelete(index)}
-              onEdit={() => handleEdit(index)}
-            />
-          )
-        })}
-
-        {value.length < (param.maxCount || 1) && (
-          <UploadArea
-            accept={['image/png', 'image/jpeg', 'image/webp', 'image/jpg']}
-            maxSize={10}
-            onUpload={handleUpload}
-            disabled={disabled}
-          />
-        )}
-      </div>
+      <FileUploader
+        files={safeValue.map((source) => param.format === 'base64' && !param.base64Prefix
+          ? `data:image/png;base64,${source}`
+          : resolveImageDisplayUrl(source))}
+        accept={(param.accept ?? ['image/png', 'image/jpeg', 'image/webp', 'image/gif']).join(',')}
+        maxCount={param.maxCount ?? 1}
+        multiple={(param.maxCount ?? 1) > 1}
+        disabled={disabled}
+        onUpload={handleUpload}
+        onRemove={handleDelete}
+      />
 
       {param.description && (
         <div className="param-description">{getI18nText(param.description, i18n.language)}</div>

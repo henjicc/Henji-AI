@@ -141,6 +141,8 @@ export class NodeConverter implements INodeConverter {
         return 'image'
       case 'video-upload':
         return 'video'
+      case 'file-upload':
+        return 'any'
       case 'panel':
         // 根据面板类型决定
         if ((param as DynamicValue).panelType === 'resolution') return 'object'
@@ -271,4 +273,3 @@ export class NodeConverter implements INodeConverter {
  * 单例实例
  */
 export const nodeConverter = NodeConverter.getInstance()
-

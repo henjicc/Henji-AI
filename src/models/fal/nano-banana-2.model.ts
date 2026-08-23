@@ -42,17 +42,22 @@ export const falNanoBanana2Model = defineModel({
       ]
     },
     {
-      id: 'falNanoBanana2PdfUrl', type: 'text', order: 6,
-      name: { zh: 'PDF 上下文 URL', en: 'PDF Context URL' }, default: '',
-      placeholder: { zh: '公网 URL 或 Data URL，最大 15 MB', en: 'Public or data URL, up to 15 MB' }
+      id: 'falNanoBanana2PdfUrl', type: 'file-upload', order: 6,
+      name: { zh: 'PDF 上下文', en: 'PDF Context' }, default: [],
+      valueType: 'array', maxCount: 1, accept: ['application/pdf'], maxSize: 15 * 1024 * 1024,
+      uploadButtonText: { zh: '上传 PDF', en: 'Upload PDF' }
     }
   ],
   linkages: [],
+  runtimeConstraints: { mediaFields: [{ field: 'pdf_url', kind: 'file' }] },
   endpoints: {
     selector: async (params) => {
       const sources = ['uploadedFilePaths', 'images', 'uploadedVideoFilePaths', 'videos', 'uploadedAudioFilePaths', 'audios']
       const hasMedia = sources.some((key) => Array.isArray(params[key]) && params[key].length > 0)
-      const hasPdf = typeof params.falNanoBanana2PdfUrl === 'string' && params.falNanoBanana2PdfUrl.trim().length > 0
+      const pdfValues = Array.isArray(params.falNanoBanana2PdfUrl)
+        ? params.falNanoBanana2PdfUrl
+        : [params.falNanoBanana2PdfUrl]
+      const hasPdf = pdfValues.some((item) => typeof item === 'string' && item.trim().length > 0)
       return hasMedia || hasPdf
         ? 'fal-ai/nano-banana-2/edit' : 'fal-ai/nano-banana-2'
     }
@@ -96,7 +101,11 @@ export const falNanoBanana2Model = defineModel({
       if (images.length > 0) body.image_urls = images.slice(0, 14)
       if (videos.length > 0) body.video_url = videos[0]
       if (audios.length > 0) body.audio_url = audios[0]
-      const pdfUrl = typeof params.falNanoBanana2PdfUrl === 'string' ? params.falNanoBanana2PdfUrl.trim() : ''
+      const pdfCandidates = Array.isArray(params.falNanoBanana2PdfUrl)
+        ? params.falNanoBanana2PdfUrl
+        : [params.falNanoBanana2PdfUrl]
+      const pdfValue = pdfCandidates.find((item) => typeof item === 'string' && item.trim().length > 0)
+      const pdfUrl = typeof pdfValue === 'string' ? pdfValue.trim() : ''
       if (pdfUrl) body.pdf_url = pdfUrl
       return body
     }

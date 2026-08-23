@@ -68,6 +68,8 @@ export function deriveSocketType(input: {
       return 'IMAGE'
     case 'video-upload':
       return 'VIDEO'
+    case 'file-upload':
+      return 'OBJECT'
     case 'resolution':
     case 'aspect-ratio':
     case 'composite':
