@@ -64,6 +64,52 @@ function createTestModel(
 const sourceModel = createTestModel('param-transfer-source', 'sourceRatio', 'sourceResolution', '720p')
 const targetModel = createTestModel('param-transfer-target', 'targetRatio', 'targetResolution', '1080p')
 
+const aliasMergedModel: ModelDefinition = {
+  meta: {
+    id: 'param-alias-target',
+    canonicalModelId: 'nano-banana',
+    provider: 'test-provider',
+    type: 'image',
+    name: { zh: '旧入口合并测试模型', en: 'Alias merge test model' },
+    tags: ['text-to-image'],
+    aliases: ['param-alias-target-edit'],
+    aliasParamDefaults: {
+      'param-alias-target-edit': { mode: 'edit' },
+    },
+    aliasParamMappings: {
+      'param-alias-target-edit': { legacyRatio: 'ratio' },
+    },
+  },
+  params: [
+    {
+      id: 'mode',
+      type: 'dropdown',
+      order: 1,
+      name: { zh: '模式', en: 'Mode' },
+      default: 'generate',
+      options: [
+        { value: 'generate', label: 'Generate' },
+        { value: 'edit', label: 'Edit' },
+      ],
+    },
+    {
+      id: 'ratio',
+      type: 'dropdown',
+      order: 2,
+      name: { zh: '宽高比', en: 'Aspect Ratio' },
+      default: '1:1',
+      options: [
+        { value: '1:1', label: '1:1' },
+        { value: '9:16', label: '9:16' },
+      ],
+    },
+  ],
+  linkages: [],
+  endpoints: '/test',
+  request: { builder: () => ({}) },
+  pricing: { currency: '$', fixed: 0.1, description: '测试价格' },
+}
+
 /*
  * 5.2：验证 useModelParams 改接 src/features/generation/domain/generationParams.ts
  * 之后，联动仍然在 setParam/getFilteredOptions 这两条路径上生效——这是对"内部改用纯函数，
@@ -153,6 +199,38 @@ describe('useModelParams 模型切换', () => {
     expect(result.current.params.targetResolution).toBe('1080p')
     expect(result.current.params[`${targetModel.meta.id}Audio`]).toBe(false)
     expect(result.current.params).not.toHaveProperty('sourceRatio')
+  })
+})
+
+describe('useModelParams 旧模型入口合并', () => {
+  beforeEach(() => {
+    registry.clear()
+    registry.register(aliasMergedModel)
+  })
+
+  afterEach(() => {
+    registry.clear()
+  })
+
+  it('旧编辑入口切换到合并入口后保留模式，并迁移旧参数 ID', async () => {
+    const { result, rerender } = renderHook(
+      ({ modelId }) => useModelParams(modelId),
+      { initialProps: { modelId: 'param-alias-target-edit' } }
+    )
+
+    expect(result.current.params.mode).toBe('edit')
+
+    act(() => {
+      result.current.setParams({ legacyRatio: '9:16' })
+    })
+    expect(result.current.params.ratio).toBe('9:16')
+
+    rerender({ modelId: aliasMergedModel.meta.id })
+
+    await waitFor(() => {
+      expect(result.current.params.mode).toBe('edit')
+      expect(result.current.params.ratio).toBe('9:16')
+    })
   })
 })
 
