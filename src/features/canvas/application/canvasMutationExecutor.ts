@@ -43,7 +43,7 @@ function fingerprint(nodes: CanvasNode[], edges: CanvasEdge[]): string {
     nodes: nodes.map((node) => ({ id: node.id, position: node.position, data: node.data })),
     edges: edges.map((edge) => ({
       id: edge.id, source: edge.source, target: edge.target,
-      sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle,
+      sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle, data: edge.data,
     })),
   })
 }

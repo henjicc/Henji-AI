@@ -1,7 +1,10 @@
 import { registry } from '@/core/ModelRegistry';
 import { resolveInputLimits } from '@/core/inputs/inputLimits';
-import type { ParamDef } from '@/core/types';
+import { LinkageEngine } from '@/core/linkage';
+import type { ModelDefinition, ParamDef } from '@/core/types';
+import { buildParamPresentationItems, type ParamPresentationItem } from '@/core/params/paramPresentation';
 import { deriveSocketType, isSocketCompatible } from '@/core/types/SocketType';
+import { isParamVisible } from '@/components/params/paramVisibility';
 import type { CanvasEdge, CanvasNode, CanvasNodeType } from '../domain/canvasNodes';
 import { getIncomingEdges, getNodeIndexById } from '../domain/connectionIndex';
 import {
@@ -41,6 +44,61 @@ export interface ParamConnectionValidationResult {
   maxCount?: number;
 }
 
+export interface VisibleMediaInputPort {
+  kind: RowMediaKind;
+  handleId: string;
+  maxCount: number;
+  source: 'primary' | 'schema';
+  paramId: string;
+}
+
+export interface VisibleSchemaParamRows {
+  visibleParams: ParamDef[];
+  presentationItems: ParamPresentationItem[];
+  displayedParams: ParamDef[];
+  linkageEngine: LinkageEngine | null;
+}
+
+export function resolveVisibleSchemaParamRows(
+  model: ModelDefinition | undefined,
+  schema: ParamDef[],
+  values: DynamicValueMap,
+  excludedParamIds: ReadonlySet<string>,
+  connectedParamIds: ReadonlySet<string>,
+): VisibleSchemaParamRows {
+  const linkageEngine = model?.linkages?.length ? new LinkageEngine(model.linkages) : null;
+  const visibleParams = [...schema]
+    .filter((param) => !excludedParamIds.has(param.id))
+    .filter((param) => isParamVisible(param, values, linkageEngine))
+    .map((param): ParamDef => {
+      if (!linkageEngine || (param.type !== 'dropdown' && param.type !== 'radio')) return param;
+      const options = linkageEngine.getFilteredOptions(param.id, values, schema);
+      return !options.length || options === param.options ? param : { ...param, options } as ParamDef;
+    })
+    .sort((left, right) => left.order - right.order);
+  const presentationItems = buildParamPresentationItems(visibleParams, model?.paramPresentation);
+  const displayedParams = presentationItems.flatMap((item) => item.kind === 'param'
+    ? [item.param]
+    : item.params.filter((param) => connectedParamIds.has(param.id)));
+  return { visibleParams, presentationItems, displayedParams, linkageEngine };
+}
+
+/** schema 上传参数对应的媒体类型；通用文件参数仅在 accept 明确为单一媒体族时参与自动连接。 */
+export function getSchemaMediaParamKind(param: ParamDef | undefined): RowMediaKind | null {
+  if (!param) return null;
+  if (param.type === 'image-upload') return 'image';
+  if (param.type === 'video-upload') return 'video';
+  if (param.type !== 'file-upload') return null;
+  const accepts = 'accept' in param && Array.isArray(param.accept) ? param.accept : [];
+  const kinds = new Set<RowMediaKind>();
+  for (const accept of accepts) {
+    if (accept.startsWith('image/')) kinds.add('image');
+    if (accept.startsWith('video/')) kinds.add('video');
+    if (accept.startsWith('audio/')) kinds.add('audio');
+  }
+  return kinds.size === 1 ? [...kinds][0] : null;
+}
+
 /**
  * 标量值注入解析（数值/源节点 → 下游参数端口）。
  *
@@ -64,7 +122,9 @@ function resolveTargetHandleMediaKind(
   targetHandle: string | null | undefined,
 ): RowMediaKind | null {
   const paramId = parseParamPortId(targetHandle)
-  const handleKind = paramId ? mediaParamIdToKind(paramId) : null
+  const handleKind = paramId
+    ? (mediaParamIdToKind(paramId) ?? getSchemaMediaParamKind(findParamForTargetNode(targetNode, paramId)))
+    : null
   const acceptedKinds = getCanvasNodeDefinition(targetNode.type)?.ports?.target?.accepts
     ?.filter((kind): kind is RowMediaKind => (
       kind === 'image' || kind === 'video' || kind === 'audio'
@@ -107,7 +167,7 @@ export function resolveConnectionSourceMediaKind(
   return supportedKinds.includes(targetKind) ? targetKind : undefined
 }
 
-function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamDef | undefined {
+export function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamDef | undefined {
   const modelId = (targetNode.data as { modelId?: DynamicValue }).modelId;
   if (typeof modelId === 'string' && modelId) {
     const storedParam = registry.getSchema(modelId).find((item) => item.id === paramId);
@@ -125,6 +185,79 @@ function findParamForTargetNode(targetNode: CanvasNode, paramId: string): ParamD
     .getModelsByType(generationType)
     .flatMap((model) => model.params)
     .find((item) => item.id === paramId);
+}
+
+/**
+ * 返回目标节点当前真实可见的媒体输入端口，顺序与 NodeInputRows 一致：
+ * 主媒体行（图→视频→音频）在前，随后是按 order 排列的 schema 上传参数。
+ */
+export function resolveVisibleMediaInputPorts(
+  targetNode: CanvasNode,
+  nodes: CanvasNode[],
+  edges: CanvasEdge[],
+): VisibleMediaInputPort[] {
+  const definition = getCanvasNodeDefinition(targetNode.type);
+  if (!definition?.connectivity.targetHandle) return [];
+
+  if (definition.connectivity.targetHandleMode !== 'rows') {
+    return (definition.ports?.target?.accepts ?? [])
+      .filter((kind): kind is RowMediaKind => kind === 'image' || kind === 'video' || kind === 'audio')
+      .map((kind) => ({ kind, handleId: 'target', maxCount: Number.POSITIVE_INFINITY, source: 'primary', paramId: MEDIA_LIMIT_KEY[kind] }));
+  }
+
+  const modelId = resolveTargetModelId(targetNode, nodes, edges);
+  const values = resolveTargetParams(targetNode, nodes, edges);
+  const acceptedKinds = definition.ports?.target?.accepts ?? [];
+  const ports: VisibleMediaInputPort[] = [];
+
+  if (modelId) {
+    const limits = resolveInputLimits(modelId, values);
+    for (const kind of ['image', 'video', 'audio'] as const) {
+      const maxCount = acceptedKinds.includes(kind) ? limits[MEDIA_LIMIT_KEY[kind]].max : 0;
+      if (maxCount > 0) {
+        ports.push({
+          kind,
+          handleId: resolveMediaTargetHandle(targetNode.type, kind),
+          maxCount,
+          source: 'primary',
+          paramId: parseParamPortId(resolveMediaTargetHandle(targetNode.type, kind)) ?? 'target',
+        });
+      }
+    }
+
+    const model = registry.getModel(modelId);
+    const paramRows = resolveVisibleSchemaParamRows(
+      model,
+      registry.getSchema(modelId),
+      values,
+      new Set(),
+      getConnectedParamIds(targetNode.id, edges),
+    );
+    for (const param of paramRows.displayedParams) {
+      const kind = getSchemaMediaParamKind(param);
+      if (!kind) continue;
+      const maxCount = 'maxCount' in param && typeof param.maxCount === 'number'
+        ? Math.max(0, param.maxCount)
+        : 1;
+      if (maxCount > 0) {
+        ports.push({ kind, handleId: paramPortId(param.id), maxCount, source: 'schema', paramId: param.id });
+      }
+    }
+    return ports;
+  }
+
+  for (const kind of ['image', 'video', 'audio'] as const) {
+    if (acceptedKinds.includes(kind)) {
+      ports.push({
+        kind,
+        handleId: resolveMediaTargetHandle(targetNode.type, kind),
+        maxCount: Number.POSITIVE_INFINITY,
+        source: 'primary',
+        paramId: parseParamPortId(resolveMediaTargetHandle(targetNode.type, kind)) ?? 'target',
+      });
+    }
+  }
+  return ports;
 }
 
 /** 返回连到本节点参数端口、且有边的 paramId 集合（不要求上游能解析出值） */
@@ -158,6 +291,7 @@ export function collectInputValues(
   }
 
   const nodeById = getNodeIndexById(nodes);
+  const targetNode = nodeById.get(nodeId);
   for (const edge of incoming) {
     const paramId = parseParamPortId(edge.targetHandle);
     if (!paramId) {
@@ -165,6 +299,17 @@ export function collectInputValues(
     }
     const sourceNode = nodeById.get(edge.source);
     if (!sourceNode) {
+      continue;
+    }
+    const mediaKind = targetNode
+      ? getSchemaMediaParamKind(findParamForTargetNode(targetNode, paramId))
+      : null;
+    if (mediaKind) {
+      const previous = Array.isArray(overrides[paramId]) ? overrides[paramId] as DynamicValue[] : [];
+      const nextUrls = getNodeMediaOutputs(sourceNode.type, sourceNode.data, edge.sourceHandle ?? undefined)
+        .filter((output) => output.kind === mediaKind && Boolean(output.url))
+        .map((output) => output.url);
+      overrides[paramId] = [...new Set([...previous, ...nextUrls])];
       continue;
     }
     const output = getNodeValueOutput(sourceNode.type, sourceNode.data);
@@ -194,7 +339,7 @@ export function isParamConnectionCompatible(
     return false;
   }
 
-  const mediaKind = mediaParamIdToKind(paramId);
+  const mediaKind = mediaParamIdToKind(paramId) ?? getSchemaMediaParamKind(findParamForTargetNode(targetNode, paramId));
   if (mediaKind) {
     return resolveConnectionSourceMediaKind(
       sourceNode,
@@ -273,10 +418,11 @@ export function findStaleParamEdgeIds(
     return [];
   }
 
-  const acceptedKinds = getCanvasNodeDefinition(targetNode.type)?.ports?.target?.accepts ?? [];
   const schemaParamIds = new Set(registry.getSchema(modelId).map((item) => item.id));
-  const limits = resolveInputLimits(modelId, resolveTargetParams(targetNode, nodes, edges));
-  const mediaUsage: Partial<Record<RowMediaKind, number>> = {};
+  const visibleMediaPorts = new Map(
+    resolveVisibleMediaInputPorts(targetNode, nodes, edges).map((port) => [port.handleId, port] as const),
+  );
+  const mediaUsage = new Map<string, number>();
   const staleEdgeIds: string[] = [];
 
   for (const edge of edges) {
@@ -288,14 +434,16 @@ export function findStaleParamEdgeIds(
       continue;
     }
 
-    const mediaKind = mediaParamIdToKind(paramId);
+    const mediaKind = mediaParamIdToKind(paramId)
+      ?? getSchemaMediaParamKind(findParamForTargetNode(targetNode, paramId));
     if (mediaKind) {
-      const maxCount = acceptedKinds.includes(mediaKind) ? limits[MEDIA_LIMIT_KEY[mediaKind]].max : 0;
-      const usedCount = mediaUsage[mediaKind] ?? 0;
-      if (usedCount >= maxCount) {
+      const handleId = paramPortId(paramId);
+      const port = visibleMediaPorts.get(handleId);
+      const usedCount = mediaUsage.get(handleId) ?? 0;
+      if (!port || usedCount >= port.maxCount) {
         staleEdgeIds.push(edge.id);
       } else {
-        mediaUsage[mediaKind] = usedCount + 1;
+        mediaUsage.set(handleId, usedCount + 1);
       }
       continue;
     }
@@ -331,11 +479,7 @@ function countMediaConnections(
       continue;
     }
 
-    const edgeParamId = parseParamPortId(edge.targetHandle);
-    if (edgeParamId && mediaParamIdToKind(edgeParamId) !== mediaKind) {
-      continue;
-    }
-    if (!edgeParamId && edge.targetHandle !== 'target') {
+    if ((edge.targetHandle ?? 'target') !== targetHandle) {
       continue;
     }
 
@@ -361,18 +505,16 @@ export function validateParamConnection(
   }
 
   const paramId = parseParamPortId(targetHandle);
-  const mediaKind = paramId ? mediaParamIdToKind(paramId) : null;
+  const param = paramId ? findParamForTargetNode(targetNode, paramId) : undefined;
+  const mediaKind = paramId ? (mediaParamIdToKind(paramId) ?? getSchemaMediaParamKind(param)) : null;
   if (!mediaKind || !targetHandle) {
     return { compatible: true };
   }
 
-  const modelId = resolveTargetModelId(targetNode, nodes, edges);
-  if (!modelId) {
-    return { compatible: true };
-  }
-
-  const limits = resolveInputLimits(modelId, resolveTargetParams(targetNode, nodes, edges));
-  const maxCount = limits[MEDIA_LIMIT_KEY[mediaKind]].max;
+  const port = resolveVisibleMediaInputPorts(targetNode, nodes, edges)
+    .find((candidate) => candidate.handleId === targetHandle && candidate.kind === mediaKind);
+  if (!port) return { compatible: false, reason: 'type-mismatch' };
+  const maxCount = port.maxCount;
   const currentCount = countMediaConnections(targetNode, mediaKind, targetHandle, nodes, edges, sourceNode);
 
   return currentCount < maxCount

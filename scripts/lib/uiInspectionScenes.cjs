@@ -181,6 +181,126 @@ function createUiInspectionScenes({ settlePage }) {
     }
   }
 
+  async function setupCanvasAssetGroup(page, expanded) {
+    await setupCanvas(page)
+    if (await page.locator('.react-flow').count()) {
+      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await settlePage(page)
+    }
+    const projectCard = page.locator('[data-project-id]:visible').first()
+    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
+    const projectId = await projectCard.getAttribute('data-project-id')
+    if (!projectId) throw new Error('素材组视觉场景找不到临时画布工程')
+    const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    const nodes = [
+      {
+        id: '__asset_group', type: 'assetGroupNode', position: { x: 180, y: 220 },
+        width: 220, height: 144, measured: { width: 220, height: 144 }, style: { width: 220, height: 144 },
+        data: {
+          displayName: '角色设定', memberOrder: ['__asset_image_1', '__asset_image_2'],
+          coverMemberId: '__asset_image_1',
+          bindings: [{
+            id: '__asset_binding', targetNodeId: '__asset_target',
+            targetPortByKind: { image: 'param:__image' }, excludedMemberIds: [],
+          }],
+        },
+      },
+      {
+        id: '__asset_image_1', type: 'uploadNode', parentId: '__asset_group', hidden: true,
+        position: { x: 0, y: 0 }, width: 240, height: 180, style: { width: 240, height: 180 },
+        data: { displayName: '角色正面', imageUrl: pixel, previewImageUrl: pixel, aspectRatio: '4:3' },
+      },
+      {
+        id: '__asset_image_2', type: 'uploadNode', parentId: '__asset_group', hidden: true,
+        position: { x: 270, y: 40 }, width: 240, height: 180, style: { width: 240, height: 180 },
+        data: { displayName: '角色服装', imageUrl: pixel, previewImageUrl: pixel, aspectRatio: '4:3' },
+      },
+      {
+        id: '__asset_target', type: 'imageNode', position: { x: 720, y: 170 }, width: 360, height: 520,
+        style: { width: 360, height: 520 },
+        data: {
+          displayName: '参考生成', prompt: '保持角色一致性', modelId: 'kie-nano-banana-2',
+          params: {}, mediaInputs: {}, imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',
+          isGenerating: false, generationStartedAt: null,
+        },
+      },
+    ]
+    await page.evaluate(async (payload) => {
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 120, y: 80, zoom: 0.85 }), payload.projectId]
+      )
+    }, { projectId, nodes })
+    await projectCard.click()
+    const group = page.locator('.react-flow__node[data-id="__asset_group"]')
+    await group.waitFor({ state: 'visible', timeout: 12000 })
+    await settlePage(page, 700)
+    if (expanded) {
+      await group.getByRole('button', { name: /展开素材组|Expand asset group/i }).click()
+      await page.getByText(/已临时展开|temporarily expanded/i).waitFor({ state: 'visible', timeout: 8000 })
+      await settlePage(page, 700)
+    }
+  }
+
+  async function setupCanvasBatchConnection(page) {
+    await setupCanvas(page)
+    if (await page.locator('.react-flow').count()) {
+      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await settlePage(page)
+    }
+    const projectCard = page.locator('[data-project-id]:visible').first()
+    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
+    const projectId = await projectCard.getAttribute('data-project-id')
+    if (!projectId) throw new Error('批量连接场景找不到临时画布工程')
+    const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    const nodes = [
+      {
+        id: '__batch_image_1', type: 'uploadNode', position: { x: 120, y: 140 },
+        width: 240, height: 180, style: { width: 240, height: 180 },
+        data: { displayName: '角色正面', imageUrl: pixel, previewImageUrl: pixel, aspectRatio: '4:3' },
+      },
+      {
+        id: '__batch_image_2', type: 'uploadNode', position: { x: 120, y: 390 },
+        width: 240, height: 180, style: { width: 240, height: 180 },
+        data: { displayName: '角色侧面', imageUrl: pixel, previewImageUrl: pixel, aspectRatio: '4:3' },
+      },
+      {
+        id: '__batch_target', type: 'imageNode', position: { x: 690, y: 210 }, width: 360, height: 520,
+        style: { width: 360, height: 520 },
+        data: {
+          displayName: '批量参考生成', prompt: '保持角色一致性', modelId: 'kie-nano-banana-2',
+          params: {}, mediaInputs: {}, imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',
+          isGenerating: false, generationStartedAt: null,
+        },
+      },
+    ]
+    await page.evaluate(async (payload) => {
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 140, y: 70, zoom: 0.82 }), payload.projectId]
+      )
+    }, { projectId, nodes })
+    await projectCard.click()
+    const first = page.locator('.react-flow__node[data-id="__batch_image_1"]')
+    const second = page.locator('.react-flow__node[data-id="__batch_image_2"]')
+    const target = page.locator('.react-flow__node[data-id="__batch_target"]')
+    await first.waitFor({ state: 'visible', timeout: 12000 })
+    await first.click({ position: { x: 120, y: 90 } })
+    await second.click({ position: { x: 120, y: 90 }, modifiers: ['Meta'] })
+    await page.waitForFunction(() => document.querySelectorAll('.react-flow__node.selected').length === 2, undefined, { timeout: 8000 })
+    const connector = page.getByRole('button', { name: /批量连接|Batch connect/i }).last()
+    await connector.waitFor({ state: 'visible', timeout: 8000 })
+    const connectorBox = await connector.boundingBox()
+    const targetBox = await target.boundingBox()
+    if (!connectorBox || !targetBox) throw new Error('批量连接场景无法定位连接点或目标节点')
+    await page.mouse.move(connectorBox.x + connectorBox.width / 2, connectorBox.y + connectorBox.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(targetBox.x + targetBox.width * 0.72, targetBox.y + targetBox.height * 0.24, { steps: 12 })
+    await page.mouse.up()
+    await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length >= 2, undefined, { timeout: 8000 })
+    await settlePage(page, 700)
+  }
+
   async function setupToolbox(page) {
     await openWorkspace(page, 'toolbox')
     for (const title of ['返回工程列表', '返回工具箱']) {
@@ -387,6 +507,24 @@ function createUiInspectionScenes({ settlePage }) {
       surface: '画布',
       name: '画布-Midjourney 参数特殊面板',
       setup: async (page) => setupCanvasMidjourneyNode(page, true),
+    },
+    {
+      id: 'canvas-asset-group-collapsed',
+      surface: '画布',
+      name: '画布-素材组折叠与束线',
+      setup: async (page) => setupCanvasAssetGroup(page, false),
+    },
+    {
+      id: 'canvas-asset-group-expanded',
+      surface: '画布',
+      name: '画布-素材组临时展开',
+      setup: async (page) => setupCanvasAssetGroup(page, true),
+    },
+    {
+      id: 'canvas-batch-connection',
+      surface: '画布',
+      name: '画布-框选素材批量拖连',
+      setup: setupCanvasBatchConnection,
     },
     { id: 'toolbox-home', surface: '工具箱', name: '工具箱-首页', setup: setupToolbox },
     {

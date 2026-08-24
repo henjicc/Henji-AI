@@ -16,6 +16,7 @@ import {
   ICON_NODE_AUDIO_GENERATION,
   ICON_NODE_AUDIO_MODEL,
   ICON_NODE_AUDIO_UPLOAD,
+  ICON_NODE_ASSET_GROUP,
   ICON_NODE_BOOLEAN,
   ICON_NODE_CAMERA_STAGE,
   ICON_NODE_FLOAT,
@@ -75,6 +76,7 @@ const iconMap: Record<MenuIconKey, typeof ICON_NODE_UPLOAD> = {
   float: ICON_NODE_FLOAT,
   text: ICON_NODE_TEXT,
   boolean: ICON_NODE_BOOLEAN,
+  assetGroup: ICON_NODE_ASSET_GROUP,
 }
 
 export function NodeSelectionMenu({

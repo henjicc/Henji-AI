@@ -359,6 +359,7 @@ export function NodeHeader({
                 isEditingTitle ? 'pointer-events-none' : 'pointer-events-auto',
                 className
               )}
+              style={rightSlot ? { width: 'calc(100% - 2.5rem)' } : undefined}
               onMouseDown={handleDragSurfaceMouseDown}
               onClick={(event) => event.stopPropagation()}
               onDoubleClick={handleDragSurfaceDoubleClick}

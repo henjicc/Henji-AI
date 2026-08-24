@@ -27,6 +27,7 @@ interface UseCanvasShortcutsParams {
   deleteNode: (nodeId: string) => void
   deleteNodes: (nodeIds: string[]) => void
   groupNodes: (nodeIds: string[]) => string | null
+  createAssetGroup: (nodeIds: string[]) => void
   undo: () => boolean
   redo: () => boolean
   scheduleCanvasPersist: (delayMs?: number) => void
@@ -48,6 +49,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     deleteNode,
     deleteNodes,
     groupNodes,
+    createAssetGroup,
     undo,
     redo,
     scheduleCanvasPersist,
@@ -138,7 +140,8 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
       const key = event.key.toLowerCase()
       const isUndo = commandPressed && key === 'z' && !event.shiftKey
       const isRedo = commandPressed && (key === 'y' || (key === 'z' && event.shiftKey))
-      const isGroup = commandPressed && key === 'g'
+      const isAssetGroup = commandPressed && event.shiftKey && key === 'g'
+      const isGroup = commandPressed && !event.shiftKey && key === 'g'
       const isCopy = commandPressed && key === 'c' && !event.shiftKey
       const isPaste = commandPressed && key === 'v' && !event.shiftKey
 
@@ -180,6 +183,13 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
         return
       }
 
+      if (isAssetGroup) {
+        if (selectedNodeIds.length < 2) return
+        event.preventDefault()
+        createAssetGroup(selectedNodeIds)
+        return
+      }
+
       if (isGroup) {
         if (selectedNodeIds.length < 2) return
         event.preventDefault()
@@ -215,6 +225,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
   }, [
     deleteNode,
     deleteNodes,
+    createAssetGroup,
     duplicateNodes,
     edges,
     groupNodes,

@@ -1358,6 +1358,16 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
   width: 56px;
 }
 
+/* 素材组只保留一个真实表面；两层偏移投影表达“多张节点叠放”，不额外制造卡片层级。 */
+.asset-group-node-stack {
+  box-shadow:
+    4px 4px 0 var(--ui-surface-panel),
+    5px 5px 0 var(--ui-border-soft),
+    8px 8px 0 var(--ui-surface-panel),
+    9px 9px 0 var(--ui-border-soft),
+    var(--ui-shadow-panel);
+}
+
 /* Context Menu Styles
  *
  * 材质由调用方的 `ui-glass` 类提供（见 ContextMenu.tsx / GlobalContextMenuProvider.tsx），

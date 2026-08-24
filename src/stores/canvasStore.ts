@@ -23,6 +23,7 @@ import {
   MODEL_SELECTOR_EXPANDED_DEFAULT_WIDTH,
   type ActiveToolDialog,
   type CanvasEdge,
+  type CanvasConnectionInput,
   type CanvasNode,
   type CanvasNodeData,
   type CanvasNodeType,
@@ -64,6 +65,11 @@ import {
 import { getNodeIndexById, wouldCreateCanvasCycle } from '@/features/canvas/domain/connectionIndex';
 import { PROMPT_PARAM_ID, parseParamPortId } from '@/features/canvas/domain/socketTypes';
 import { useSettingsStore } from '@/stores/settingsStore';
+import {
+  reconcileAssetGroupGraph,
+  setAssetGroupMemberExcludedGraph,
+  type AssetGroupGraph,
+} from '@/features/canvas/application/assetGroupGraph';
 
 export type {
   ActiveToolDialog,
@@ -114,6 +120,8 @@ interface CanvasState {
   onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<CanvasEdge>[]) => void;
   onConnect: (connection: Connection) => void;
+  connectMany: (connections: CanvasConnectionInput[]) => string[];
+  commitAssetGroupGraph: (graph: AssetGroupGraph, selectedNodeId?: string | null) => void;
 
   setCanvasData: (nodes: CanvasNode[], edges: CanvasEdge[], history?: CanvasHistoryState) => void;
   addNode: (
@@ -853,9 +861,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           type: 'disconnectableEdge',
         }, nextEdges)
         if (connectedEdges.length === state.edges.length && nextNodes === state.nodes) return {}
+        const reconciled = reconcileAssetGroupGraph(nextNodes, connectedEdges);
         return {
-          nodes: nextNodes,
-          edges: connectedEdges,
+          nodes: reconciled.nodes,
+          edges: reconciled.edges,
           history: {
             past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
             future: [],
@@ -882,9 +891,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           : node)
         : state.nodes
 
+      const reconciled = reconcileAssetGroupGraph(nextNodes, nextEdges);
       return {
-        nodes: nextNodes,
-        edges: nextEdges,
+        nodes: reconciled.nodes,
+        edges: reconciled.edges,
         history: {
           past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
           future: [],
@@ -894,13 +904,85 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
   },
 
+  connectMany: (connections) => {
+    const normalized = connections.filter((connection) => (
+      connection.source !== connection.target
+      && connection.source.trim().length > 0
+      && connection.target.trim().length > 0
+    ));
+    if (normalized.length === 0) return [];
+
+    const createdEdgeIds: string[] = [];
+    set((state) => {
+      const nodeById = getNodeIndexById(state.nodes);
+      let nextEdges = state.edges;
+      let nextNodes = state.nodes;
+
+      for (const connection of normalized) {
+        const sourceNode = nodeById.get(connection.source);
+        const targetNode = nodeById.get(connection.target);
+        if (!sourceNode || !targetNode) continue;
+        if (wouldCreateCanvasCycle(sourceNode.id, targetNode.id, nextEdges)) continue;
+        const duplicate = nextEdges.some((edge) => (
+          edge.source === connection.source
+          && edge.target === connection.target
+          && (edge.sourceHandle ?? 'source') === connection.sourceHandle
+          && (edge.targetHandle ?? 'target') === connection.targetHandle
+        ));
+        if (duplicate) continue;
+
+        const beforeIds = new Set(nextEdges.map((edge) => edge.id));
+        nextEdges = addEdge<CanvasEdge>({
+          ...connection,
+          type: 'disconnectableEdge',
+        }, nextEdges);
+        const createdEdge = nextEdges.find((edge) => !beforeIds.has(edge.id));
+        if (createdEdge) createdEdgeIds.push(createdEdge.id);
+
+        const sourceDefinition = getCanvasNodeDefinition(sourceNode.type);
+        const currentLockedKind = (sourceNode.data as { lockedMediaKind?: DynamicValue }).lockedMediaKind;
+        const mediaKind = resolveConnectionSourceMediaKind(
+          sourceNode,
+          targetNode,
+          connection.sourceHandle,
+          connection.targetHandle,
+        );
+        if (
+          createdEdge
+          && sourceDefinition?.connectivity.lockSourceMediaOnFirstConnection
+          && !currentLockedKind
+          && mediaKind
+        ) {
+          nextNodes = nextNodes.map((node) => node.id === sourceNode.id
+            ? { ...node, data: { ...node.data, lockedMediaKind: mediaKind } }
+            : node);
+          nodeById.set(sourceNode.id, nextNodes.find((node) => node.id === sourceNode.id) as CanvasNode);
+        }
+      }
+
+      if (createdEdgeIds.length === 0) return {};
+      const reconciled = reconcileAssetGroupGraph(nextNodes, nextEdges);
+      return {
+        nodes: reconciled.nodes,
+        edges: reconciled.edges,
+        history: {
+          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          future: [],
+        },
+        dragHistorySnapshot: null,
+      };
+    });
+    return createdEdgeIds;
+  },
+
   setCanvasData: (nodes, edges, history) => {
     const normalizedNodes = normalizeNodes(nodes);
     const normalizedEdges = normalizeEdgesWithNodes(edges, normalizedNodes);
+    const reconciled = reconcileAssetGroupGraph(normalizedNodes, normalizedEdges);
 
     set({
-      nodes: normalizedNodes,
-      edges: normalizedEdges,
+      nodes: reconciled.nodes,
+      edges: reconciled.edges,
       selectedNodeId: null,
       activeToolDialog: null,
       history: normalizeHistory(history),
@@ -909,6 +991,23 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     });
     useCanvasGenerationProgressStore.getState().clearAllProgress();
     useCanvasTextStreamStore.getState().clearAllPreviews();
+  },
+
+  commitAssetGroupGraph: (graph, selectedNodeId) => {
+    set((state) => {
+      const reconciled = reconcileAssetGroupGraph(graph.nodes, graph.edges);
+      return {
+        nodes: reconciled.nodes,
+        edges: reconciled.edges,
+        selectedNodeId: selectedNodeId === undefined ? state.selectedNodeId : selectedNodeId,
+        activeToolDialog: resolveActiveToolDialog(state.activeToolDialog, reconciled.nodes),
+        history: {
+          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          future: [],
+        },
+        dragHistorySnapshot: null,
+      };
+    });
   },
 
   setViewportState: (viewport) => {
@@ -1365,7 +1464,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       // 模型切换后旧参数端口（含媒体端口）可能不复存在，回收已失效的连线，
       // 避免连线在画布上视觉悬空、指向一个已不再渲染的端口。
       let nextEdges = state.edges;
-      if ('modelId' in data) {
+      if ('modelId' in data || 'params' in data) {
         const targetNode = nextNodes.find((node) => node.id === nodeId);
         if (targetNode) {
           const staleEdgeIds = new Set(findStaleParamEdgeIds(targetNode, nextNodes, state.edges));
@@ -1375,15 +1474,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         }
       }
 
+      const reconciled = reconcileAssetGroupGraph(nextNodes, nextEdges);
+      nextEdges = reconciled.edges;
+
       if (options?.skipHistory) {
-        return { nodes: nextNodes, edges: nextEdges };
+        return { nodes: reconciled.nodes, edges: nextEdges };
       }
 
       const historyGroup = options?.historyGroup;
       const shouldRecordHistory = !options?.skipHistory
         && (!historyGroup || state.activeHistoryGroup !== historyGroup);
       return {
-        nodes: nextNodes,
+        nodes: reconciled.nodes,
         edges: nextEdges,
         history: shouldRecordHistory
           ? {
@@ -1666,11 +1768,12 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       const nextEdges = state.edges.filter(
         (edge) => !deleteSet.has(edge.source) && !deleteSet.has(edge.target)
       );
+      const reconciled = reconcileAssetGroupGraph(nextNodes, nextEdges);
       removedNodeIds = deleteSet;
 
       return {
-        nodes: nextNodes,
-        edges: nextEdges,
+        nodes: reconciled.nodes,
+        edges: reconciled.edges,
         selectedNodeId:
           state.selectedNodeId && deleteSet.has(state.selectedNodeId) ? null : state.selectedNodeId,
         activeToolDialog:
@@ -1894,13 +1997,27 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   deleteEdge: (edgeId) => {
     set((state) => {
-      const hasEdge = state.edges.some((edge) => edge.id === edgeId);
-      if (!hasEdge) {
+      const edge = state.edges.find((item) => item.id === edgeId);
+      if (!edge) {
         return {};
       }
 
+      const managed = edge.data?.managedByAssetGroup;
+      const changed = managed
+        ? setAssetGroupMemberExcludedGraph(
+            state.nodes,
+            state.edges,
+            managed.groupId,
+            managed.bindingId,
+            managed.memberId,
+            true,
+          )
+        : reconcileAssetGroupGraph(state.nodes, state.edges.filter((item) => item.id !== edgeId));
+      if (!changed) return {};
+
       return {
-        edges: state.edges.filter((edge) => edge.id !== edgeId),
+        nodes: changed.nodes,
+        edges: changed.edges,
         history: {
           past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
           future: [],
@@ -1931,12 +2048,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     const currentSnapshot = createSnapshot(state.nodes, state.edges);
     const nextPast = state.history.past.slice(0, -1);
+    const reconciled = reconcileAssetGroupGraph(target.nodes, target.edges);
 
     set({
-      nodes: target.nodes,
-      edges: target.edges,
-      selectedNodeId: resolveSelectedNodeId(state.selectedNodeId, target.nodes),
-      activeToolDialog: resolveActiveToolDialog(state.activeToolDialog, target.nodes),
+      nodes: reconciled.nodes,
+      edges: reconciled.edges,
+      selectedNodeId: resolveSelectedNodeId(state.selectedNodeId, reconciled.nodes),
+      activeToolDialog: resolveActiveToolDialog(state.activeToolDialog, reconciled.nodes),
       history: {
         past: nextPast,
         future: pushSnapshot(state.history.future, currentSnapshot),
@@ -1956,12 +2074,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
     const currentSnapshot = createSnapshot(state.nodes, state.edges);
     const nextFuture = state.history.future.slice(0, -1);
+    const reconciled = reconcileAssetGroupGraph(target.nodes, target.edges);
 
     set({
-      nodes: target.nodes,
-      edges: target.edges,
-      selectedNodeId: resolveSelectedNodeId(state.selectedNodeId, target.nodes),
-      activeToolDialog: resolveActiveToolDialog(state.activeToolDialog, target.nodes),
+      nodes: reconciled.nodes,
+      edges: reconciled.edges,
+      selectedNodeId: resolveSelectedNodeId(state.selectedNodeId, reconciled.nodes),
+      activeToolDialog: resolveActiveToolDialog(state.activeToolDialog, reconciled.nodes),
       history: {
         past: pushSnapshot(state.history.past, currentSnapshot),
         future: nextFuture,

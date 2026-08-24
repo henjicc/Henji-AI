@@ -1,7 +1,12 @@
 import { useCanvasStore } from '@/stores/canvasStore'
 
 import type { CanvasNodePlacement } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
-import { isStoryboardSplitNode, type CanvasNodeData, type StoryboardFrameItem } from '../domain/canvasNodes'
+import {
+  isAssetGroupNode,
+  isStoryboardSplitNode,
+  type CanvasNodeData,
+  type StoryboardFrameItem,
+} from '../domain/canvasNodes'
 import { extractCanvasNodeData, listCanvasNodeDataKeys } from '../domain/nodeControlRegistry'
 import {
   addCanvasNode,
@@ -10,6 +15,13 @@ import {
   rememberCanvasUndo,
   requireCurrentCanvasProject,
 } from './canvasApplicationService'
+import {
+  bindAssetGroup,
+  createAssetGroup,
+  disconnectAssetGroup,
+  dissolveAssetGroup,
+  updateAssetGroup,
+} from './assetGroupApplicationService'
 
 interface CanvasNodePatch {
   nodeId: string
@@ -28,6 +40,8 @@ export interface CanvasNodePropertyPatch {
   displayName?: string
   position?: { x: number; y: number }
   storyboardFrames?: CanvasStoryboardFramePatch[]
+  assetGroupMemberOrder?: string[]
+  assetGroupCoverMemberId?: string | null
 }
 
 function requireNode(projectId: string, nodeId: string): { id: string; type: string; data: CanvasNodeData } {
@@ -69,6 +83,15 @@ export function applyCanvasNodePropertyPatches(
     }
   })
   applyCanvasNodePatches(projectId, normalized)
+  for (const patch of patches) {
+    if (patch.assetGroupMemberOrder === undefined && patch.assetGroupCoverMemberId === undefined) continue
+    updateAssetGroup({
+      projectId,
+      groupId: patch.nodeId,
+      memberOrder: patch.assetGroupMemberOrder,
+      coverMemberId: patch.assetGroupCoverMemberId,
+    })
+  }
 }
 
 /**
@@ -197,13 +220,22 @@ export function selectCanvasNode(projectId: string, nodeId: string | null): Reco
   return { projectId, selectedNodeId: nodeId }
 }
 
-export function groupCanvasNodes(projectId: string, nodeIds: string[]): Record<string, unknown> {
+export function groupCanvasNodes(
+  projectId: string,
+  nodeIds: string[],
+  groupKind: 'spatial' | 'asset' = 'spatial',
+): Record<string, unknown> {
   requireCurrentCanvasProject(projectId)
+  if (groupKind === 'asset') {
+    const result = createAssetGroup({ projectId, memberIds: nodeIds })
+    const undoRef = rememberCanvasUndo(projectId, 'group_asset_nodes')
+    return { projectId, groupNodeId: result.groupId, groupKind, accepted: result.accepted, undoRef }
+  }
   const groupNodeId = useCanvasStore.getState().groupNodes(nodeIds)
   if (!groupNodeId) throw new CanvasApplicationError('INVALID_INPUT', '至少需要两个存在且不相互嵌套的节点才能分组', true)
   const undoRef = rememberCanvasUndo(projectId, 'group_nodes')
   persistCanvasState()
-  return { projectId, groupNodeId, undoRef }
+  return { projectId, groupNodeId, groupKind, undoRef }
 }
 
 /**
@@ -214,12 +246,40 @@ export function groupCanvasNodes(projectId: string, nodeIds: string[]): Record<s
  */
 export function ungroupCanvasNode(projectId: string, groupNodeId: string): Record<string, unknown> {
   requireCurrentCanvasProject(projectId)
+  const candidate = useCanvasStore.getState().nodes.find((node) => node.id === groupNodeId)
+  if (candidate && isAssetGroupNode(candidate)) {
+    dissolveAssetGroup({ projectId, groupId: groupNodeId })
+    const undoRef = rememberCanvasUndo(projectId, 'ungroup_asset_node')
+    return { projectId, groupNodeId, undoRef }
+  }
   if (!useCanvasStore.getState().ungroupNode(groupNodeId)) {
     throw new CanvasApplicationError('NOT_FOUND', '目标不是可解散的分组节点，或分组内没有子节点', true, { groupNodeId })
   }
   const undoRef = rememberCanvasUndo(projectId, 'ungroup_node')
   persistCanvasState()
   return { projectId, groupNodeId, undoRef }
+}
+
+export function connectAssetGroupToTarget(
+  projectId: string,
+  groupNodeId: string,
+  targetNodeId: string,
+): Record<string, unknown> {
+  requireCurrentCanvasProject(projectId)
+  const status = bindAssetGroup({ projectId, groupId: groupNodeId, targetNodeId })
+  const undoRef = rememberCanvasUndo(projectId, 'connect_asset_group')
+  return { projectId, groupNodeId, targetNodeId, ...status, undoRef }
+}
+
+export function disconnectAssetGroupFromTarget(
+  projectId: string,
+  groupNodeId: string,
+  targetNodeId: string,
+): Record<string, unknown> {
+  requireCurrentCanvasProject(projectId)
+  disconnectAssetGroup({ projectId, groupId: groupNodeId, targetNodeId })
+  const undoRef = rememberCanvasUndo(projectId, 'disconnect_asset_group')
+  return { projectId, groupNodeId, targetNodeId, undoRef }
 }
 
 export function disconnectCanvasEdge(projectId: string, edgeId: string): Record<string, unknown> {

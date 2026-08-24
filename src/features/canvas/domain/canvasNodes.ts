@@ -10,6 +10,7 @@ export const CANVAS_NODE_TYPES = {
   textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',
   group: 'groupNode',
+  assetGroup: 'assetGroupNode',
   storyboardSplit: 'storyboardNode',
   storyboardGen: 'storyboardGenNode',
   videoGen: 'videoGenNode',
@@ -123,6 +124,19 @@ export interface ExportImageNodeData extends NodeImageData {
 export interface GroupNodeData extends NodeDisplayData {
   label: string;
   [key: string]: DynamicValue;
+}
+
+export interface AssetGroupBinding {
+  id: string;
+  targetNodeId: string;
+  targetPortByKind: Partial<Record<RowMediaKind, string>>;
+  excludedMemberIds: string[];
+}
+
+export interface AssetGroupNodeData extends NodeDisplayData {
+  memberOrder: string[];
+  coverMemberId: string | null;
+  bindings: AssetGroupBinding[];
 }
 
 export interface TextProcessingNodeData extends NodeDisplayData {
@@ -345,6 +359,7 @@ export type CanvasNodeData =
   | TextProcessingNodeData
   | TextAnnotationNodeData
   | GroupNodeData
+  | AssetGroupNodeData
   | ImageEditNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
@@ -356,7 +371,33 @@ export type CanvasNodeData =
   | ModelSelectorNodeData;
 
 export type CanvasNode = Node<CanvasNodeData, CanvasNodeType>;
-export type CanvasEdge = Edge;
+
+export interface CanvasEdgeData extends Record<string, unknown> {
+  managedByAssetGroup?: {
+    groupId: string;
+    bindingId: string;
+    memberId: string;
+  };
+  assetGroupBundle?: {
+    groupId: string;
+    bindingId: string;
+    targetNodeId: string;
+    connected: number;
+    pending: number;
+    unsupported: number;
+    excluded: number;
+  };
+}
+
+export type CanvasEdge = Edge<CanvasEdgeData>;
+
+export interface CanvasConnectionInput {
+  source: string;
+  target: string;
+  sourceHandle: string;
+  targetHandle: string;
+  data?: CanvasEdgeData;
+}
 
 export interface NodeCreationDto {
   type: CanvasNodeType;
@@ -405,6 +446,12 @@ export function isGroupNode(
   node: CanvasNode | null | undefined
 ): node is Node<GroupNodeData, typeof CANVAS_NODE_TYPES.group> {
   return node?.type === CANVAS_NODE_TYPES.group;
+}
+
+export function isAssetGroupNode(
+  node: CanvasNode | null | undefined
+): node is Node<AssetGroupNodeData, typeof CANVAS_NODE_TYPES.assetGroup> {
+  return node?.type === CANVAS_NODE_TYPES.assetGroup;
 }
 
 export function isTextAnnotationNode(

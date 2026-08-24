@@ -7,7 +7,14 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 
 import { addCanvasNode, resetCanvasApplicationStateForTests, undoCanvasChange } from './canvasApplicationService'
-import { clearCanvasProject, groupCanvasNodes, ungroupCanvasNode, updateCanvasNode } from './canvasMutationService'
+import {
+  clearCanvasProject,
+  connectAssetGroupToTarget,
+  disconnectAssetGroupFromTarget,
+  groupCanvasNodes,
+  ungroupCanvasNode,
+  updateCanvasNode,
+} from './canvasMutationService'
 
 const projectId = 'project-3-1'
 
@@ -105,6 +112,26 @@ describe('画布清空与解散分组', () => {
   })
 
   describe('ungroupCanvasNode', () => {
+    it('助手可创建素材组、建立与解除目标绑定，并对账真实成员关系', () => {
+      const nodeA = addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } })
+      const nodeB = addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } })
+      const target = addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.imageEdit, placement: { mode: 'viewport_center' } })
+      const grouped = groupCanvasNodes(projectId, [String(nodeA.nodeId), String(nodeB.nodeId)], 'asset')
+      const groupNodeId = String(grouped.groupNodeId)
+      const group = useCanvasStore.getState().nodes.find((node) => node.id === groupNodeId)
+
+      expect(grouped).toMatchObject({ groupKind: 'asset', accepted: 2 })
+      expect(group?.type).toBe(CANVAS_NODE_TYPES.assetGroup)
+      expect(useCanvasStore.getState().nodes.filter((node) => node.parentId === groupNodeId)).toHaveLength(2)
+
+      const connected = connectAssetGroupToTarget(projectId, groupNodeId, String(target.nodeId))
+      expect(Number(connected.connected) + Number(connected.pending)).toBeGreaterThan(0)
+      expect(useCanvasStore.getState().edges.some((edge) => edge.data?.managedByAssetGroup?.groupId === groupNodeId)).toBe(true)
+
+      disconnectAssetGroupFromTarget(projectId, groupNodeId, String(target.nodeId))
+      expect(useCanvasStore.getState().edges.some((edge) => edge.data?.managedByAssetGroup?.groupId === groupNodeId)).toBe(false)
+    })
+
     it('解散分组后子节点保留、group 节点消失', () => {
       const nodeA = addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } })
       const nodeB = addCanvasNode({ projectId, nodeType: CANVAS_NODE_TYPES.upload, placement: { mode: 'viewport_center' } })

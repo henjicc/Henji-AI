@@ -13,6 +13,7 @@ import {
   ImageUp,
   Images,
   LayoutGrid,
+  Layers3,
   Library,
   ListChecks,
   MessageCircle,
@@ -103,3 +104,5 @@ export const ICON_NODE_INTEGER: LucideIcon = Hash
 export const ICON_NODE_FLOAT: LucideIcon = Sigma
 export const ICON_NODE_TEXT: LucideIcon = Type
 export const ICON_NODE_BOOLEAN: LucideIcon = ToggleLeft
+/** 素材组 / 参考素材包 */
+export const ICON_NODE_ASSET_GROUP: LucideIcon = Layers3

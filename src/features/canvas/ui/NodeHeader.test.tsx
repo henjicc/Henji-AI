@@ -67,6 +67,7 @@ describe('NodeHeader', () => {
     const dragSurface = rendered.container.querySelector<HTMLElement>('[data-node-header-drag-surface="node-1"]');
     expect(dragSurface).not.toBeNull();
     expect(dragSurface?.classList.contains('nopan')).toBe(true);
+    expect(dragSurface?.style.width).toBe('calc(100% - 2.5rem)');
 
     fireEvent.mouseDown(dragSurface!, {
       button: 0,

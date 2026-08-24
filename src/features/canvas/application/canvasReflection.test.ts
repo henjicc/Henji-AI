@@ -118,6 +118,8 @@ describe('canvas reflection and mutation', () => {
       'canvas.node.display_name',
       'canvas.node.position',
       'canvas.node.storyboard_frames',
+      'canvas.node.asset_group_member_order',
+      'canvas.node.asset_group_cover_member_id',
     ])
     const projectRegistration = registrations.find((item) => item.entity.id === CANVAS_ENTITY_TYPES.project)
     expect(projectRegistration?.properties.find((item) => item.id === 'canvas.project.name')).toMatchObject({

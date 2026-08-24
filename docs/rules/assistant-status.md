@@ -21,13 +21,13 @@
 
 数字带日期戳。看到日期久远又拿不准时，按「取数方式」重新跑一遍，不要直接引用。
 
-## 一、能力盘（快照：2026-08-21）
+## 一、能力盘（快照：2026-08-24）
 
 | 项 | 数 |
 |---|---|
 | 注册域 | 12 |
 | 实体类型 | 28 |
-| 属性 | 269 |
+| 属性 | 271 |
 | 可写实体 | 17 |
 | 写域 | 7：`assets` `camera_stage` `canvas` `generation` `image_mark` `models` `settings` |
 | 只读域 | 5：`artifacts` `assistant_runtime` `image_edit` `storyboard` `toolbox`（每个都有显式 `writeExclusion.reason`，是**有意只读**不是漏做） |
@@ -56,11 +56,16 @@
 切换供应商导致默认模型失效时会产生强类型级联 Effect。对应的 `settings.general.onboarding` Surface
 已登记，可从设置定位与观察。API 密钥仍属于受保护状态，未扩大助手读取权限。
 
+2026-08-24 画布新增持久化素材组：`group_canvas_nodes` 可明确创建空间组或素材组，新增素材组目标绑定/
+解绑能力；成员顺序与封面通过 `canvas.node.asset_group_member_order`、
+`canvas.node.asset_group_cover_member_id` 正式属性反射与写入。界面、快捷键和助手共用同一素材组事务服务，
+容量不足、目标接口变化和成员排除均由该服务确定性重算。
+
 验证层（详见 [testing.md](testing.md) 第四节）：
 
 | 层 | 命令 | 规模（2026-08-18） |
 |---|---|---|
-| L-A 静态不变量 | `npm run check:assistant-capabilities` | 27 文件 / 145 用例 / 7 秒 |
+| L-A 静态不变量 | `npm run check:assistant-capabilities` | 27 文件 / 152 用例 / 19 秒（2026-08-24） |
 | L-B 剧本 harness | `npm run test:assistant-harness` | 9 文件 / 33 用例 / 11 秒（验伪线 60 秒） |
 | L-C 真机 | `npm run assistant:live:suite` | 分钟级、真实付费 |
 

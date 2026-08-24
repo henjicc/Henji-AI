@@ -13,6 +13,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.textProcessing]: '文本处理',
   [CANVAS_NODE_TYPES.textAnnotation]: '文本展示',
   [CANVAS_NODE_TYPES.group]: '分组',
+  [CANVAS_NODE_TYPES.assetGroup]: '素材组',
   [CANVAS_NODE_TYPES.storyboardSplit]: '切割结果',
   [CANVAS_NODE_TYPES.storyboardGen]: '分镜生成',
   [CANVAS_NODE_TYPES.videoGen]: '视频生成',

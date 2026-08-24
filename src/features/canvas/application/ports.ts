@@ -85,6 +85,9 @@ export interface CanvasEventMap {
     message: string;
     type?: 'success' | 'error';
   };
+  'asset-group/open': {
+    groupId: string;
+  };
 }
 
 export interface CanvasEventBus {

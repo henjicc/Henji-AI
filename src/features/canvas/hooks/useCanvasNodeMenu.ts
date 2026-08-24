@@ -42,6 +42,7 @@ interface UseCanvasNodeMenuParams {
   connectNodes: (connection: Connection) => void
   scheduleCanvasPersist: (delayMs?: number) => void
   setSelectedNode: (nodeId: string | null) => void
+  connectAssetGroup: (groupId: string, targetNodeId: string) => void
 }
 
 interface RectLike {
@@ -161,7 +162,8 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
     addNode,
     connectNodes,
     scheduleCanvasPersist,
-    setSelectedNode
+    setSelectedNode,
+    connectAssetGroup,
   } = params
 
   const suppressNextPaneClickRef = useRef(false)
@@ -204,6 +206,9 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
   } => {
     const fromNode = nodes.find((node) => node.id === pending.nodeId)
     if (!fromNode) {
+      return { types: [], uploadKinds: [] }
+    }
+    if (fromNode.type === CANVAS_NODE_TYPES.assetGroup) {
       return { types: [], uploadKinds: [] }
     }
 
@@ -361,6 +366,13 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       const dropNodeId = dropNodeElement?.dataset?.id ?? null
 
       if (dropNodeId && dropNodeId !== pendingConnectStart.nodeId) {
+        const pendingNode = nodes.find((node) => node.id === pendingConnectStart.nodeId)
+        if (pendingConnectStart.handleType === 'source' && pendingNode?.type === CANVAS_NODE_TYPES.assetGroup) {
+          connectAssetGroup(pendingNode.id, dropNodeId)
+          setPendingConnectStart(null)
+          setPreviewConnectionVisual(null)
+          return
+        }
         const sourceNode =
           pendingConnectStart.handleType === 'source'
             ? nodes.find((node) => node.id === pendingConnectStart.nodeId)
@@ -488,7 +500,7 @@ export function useCanvasNodeMenu(params: UseCanvasNodeMenuParams) {
       suppressNextPaneClickRef.current = true
       setShowNodeMenu(true)
     },
-    [connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, scheduleCanvasPersist, wrapperRef]
+    [connectAssetGroup, connectNodes, nodes, pendingConnectStart, reactFlowInstance, resolveAllowedTypesForPending, scheduleCanvasPersist, wrapperRef]
   )
 
   return {

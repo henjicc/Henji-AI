@@ -10,7 +10,7 @@ import {
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 import type { CanvasNode } from '@/stores/canvasStore'
 
-import { isStoryboardSplitNode } from '../domain/canvasNodes'
+import { isAssetGroupNode, isStoryboardSplitNode } from '../domain/canvasNodes'
 import type { CanvasNodePropertyPatch, CanvasStoryboardFramePatch } from './canvasMutationService'
 import { renameCanvasProject } from './canvasProjectService'
 
@@ -35,6 +35,7 @@ function canvasDescriptor(
   title: string,
   value: ApplicationPropertyValue,
   description?: string,
+  nullable = false,
 ): ApplicationPropertyDescriptor {
   const id = `${entityType}.${suffix}`
   return {
@@ -44,7 +45,7 @@ function canvasDescriptor(
     title,
     description: description ?? `画布${title}的稳定控制属性。`,
     value,
-    nullable: false,
+    nullable,
     dataClass: 'C1',
     exposures: ['ui', 'assistant', 'local_adapter'],
     requiredPermissions: { read: ['canvas:read'], write: ['canvas:write'] },
@@ -98,11 +99,24 @@ const STORYBOARD_FRAMES_VALUE: ApplicationPropertyValue = {
   },
 }
 
+const ASSET_GROUP_MEMBER_ORDER_VALUE: ApplicationPropertyValue = {
+  kind: 'json',
+  schemaRef: {
+    catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
+    kind: 'property',
+    id: `${NODE_ENTITY_TYPE}.asset_group_member_order.value`,
+    version: 1,
+    digest: digest(`property:${NODE_ENTITY_TYPE}.asset_group_member_order.value`),
+  },
+}
+
 const storyboardFramePatchSchema = z.object({
   id: z.string().min(1),
   note: z.string().max(4_000).optional(),
   order: z.number().int().min(0).optional(),
 }).strict()
+
+const assetGroupMemberOrderSchema = z.array(z.string().min(1)).max(200)
 
 function parseStoryboardFramePatches(raw: JsonValue | undefined): CanvasStoryboardFramePatch[] {
   return z.array(storyboardFramePatchSchema).min(1).max(200).parse(raw)
@@ -159,6 +173,42 @@ export const NODE_FIELDS: ApplicationFieldDefinition<
       },
     },
     storeActions: ['updateStoryboardFrame', 'reorderStoryboardFrame'],
+  },
+  {
+    propertyId: `${NODE_ENTITY_TYPE}.asset_group_member_order`,
+    descriptor: canvasDescriptor(
+      NODE_ENTITY_TYPE,
+      'asset_group_member_order',
+      '素材组成员顺序',
+      ASSET_GROUP_MEMBER_ORDER_VALUE,
+      '只对素材组节点有意义。值为成员节点 ID 数组；排序同时决定容量不足时的自动连接优先级。',
+    ),
+    read: (node) => (isAssetGroupNode(node) ? node.data.memberOrder : []) as JsonValue,
+    writer: {
+      write(patch, mutation) {
+        patch.assetGroupMemberOrder = assetGroupMemberOrderSchema.parse(mutation.value)
+      },
+    },
+    storeActions: [],
+  },
+  {
+    propertyId: `${NODE_ENTITY_TYPE}.asset_group_cover_member_id`,
+    descriptor: canvasDescriptor(
+      NODE_ENTITY_TYPE,
+      'asset_group_cover_member_id',
+      '素材组封面成员',
+      { kind: 'string', minLength: 1, maxLength: 160 },
+      '只对素材组节点有意义。写入组内成员节点 ID；null 表示保持当前自动封面。',
+      true,
+    ),
+    read: (node) => (isAssetGroupNode(node) ? node.data.coverMemberId : null),
+    writer: {
+      write(patch, mutation) {
+        if (mutation.value !== null && typeof mutation.value !== 'string') throw new Error('INVALID_INPUT')
+        patch.assetGroupCoverMemberId = mutation.value
+      },
+    },
+    storeActions: [],
   },
 ]
 

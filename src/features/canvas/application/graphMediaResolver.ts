@@ -2,6 +2,8 @@ import type { CanvasEdge, CanvasNode } from '../domain/canvasNodes';
 import { getIncomingEdges, getNodeIndexById } from '../domain/connectionIndex';
 import { getNodeMediaOutputs } from '../domain/nodeRegistry';
 import type { MediaKind, NodeMediaOutput } from '../domain/nodePorts';
+import { parseParamPortId } from '../domain/socketTypes';
+import { findParamForTargetNode, getSchemaMediaParamKind } from './graphValueResolver';
 
 /**
  * 收集节点全部上游媒体输出（按连线顺序，URL 去重）。
@@ -21,9 +23,18 @@ export function collectInputMedia(
   }
 
   const nodeById = getNodeIndexById(nodes);
+  const targetNode = nodeById.get(nodeId);
   const seen = new Set<string>();
   const outputs: NodeMediaOutput[] = [];
   for (const edge of incoming) {
+    const targetParamId = parseParamPortId(edge.targetHandle);
+    if (
+      targetNode
+      && targetParamId
+      && getSchemaMediaParamKind(findParamForTargetNode(targetNode, targetParamId))
+    ) {
+      continue;
+    }
     const sourceNode = nodeById.get(edge.source);
     if (!sourceNode) {
       continue;

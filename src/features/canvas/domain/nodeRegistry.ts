@@ -6,6 +6,7 @@ import {
   type CameraStageNodeData,
   type ExportImageNodeData,
   type GroupNodeData,
+  type AssetGroupNodeData,
   type ImageEditNodeData,
   type StoryboardSplitNodeData,
   type StoryboardGenNodeData,
@@ -81,7 +82,8 @@ export type MenuIconKey =
   | 'integer'
   | 'float'
   | 'text'
-  | 'boolean';
+  | 'boolean'
+  | 'assetGroup';
 
 export type NodeMenuSection = 'media' | 'textTools' | 'models' | 'parameters' | 'extensions';
 
@@ -346,6 +348,28 @@ const groupNodeDefinition: CanvasNodeDefinition<GroupNodeData> = {
   }),
 };
 
+const assetGroupNodeDefinition: CanvasNodeDefinition<AssetGroupNodeData> = {
+  type: CANVAS_NODE_TYPES.assetGroup,
+  menuLabelKey: 'node.menu.assetGroup',
+  menuIcon: 'assetGroup',
+  visibleInMenu: false,
+  capabilities: { toolbar: true, promptInput: false },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: false,
+    connectMenu: { fromSource: false, fromTarget: false },
+    manualSource: true,
+  },
+  // 实际媒体类型由组成员展开，组端口只负责启动绑定手势，不能作为普通媒体边使用。
+  ports: { source: { emits: 'image' } },
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.assetGroup],
+    memberOrder: [],
+    coverMemberId: null,
+    bindings: [],
+  }),
+};
+
 const textAnnotationNodeDefinition: CanvasNodeDefinition<TextAnnotationNodeData> = {
   type: CANVAS_NODE_TYPES.textAnnotation,
   menuLabelKey: 'node.menu.textAnnotation',
@@ -573,6 +597,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,
   [CANVAS_NODE_TYPES.group]: groupNodeDefinition,
+  [CANVAS_NODE_TYPES.assetGroup]: assetGroupNodeDefinition,
   [CANVAS_NODE_TYPES.storyboardSplit]: storyboardSplitDefinition,
   [CANVAS_NODE_TYPES.storyboardGen]: storyboardGenNodeDefinition,
   [CANVAS_NODE_TYPES.videoGen]: videoGenNodeDefinition,

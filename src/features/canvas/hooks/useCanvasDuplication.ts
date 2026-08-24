@@ -1,7 +1,13 @@
 import { useCallback, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Connection, NodeChange } from '@xyflow/react'
 import { useCanvasStore } from '@/stores/canvasStore'
-import { CANVAS_NODE_TYPES, type CanvasEdge, type CanvasNode, type CanvasNodeType } from '@/features/canvas/domain/canvasNodes'
+import {
+  CANVAS_NODE_TYPES,
+  isAssetGroupNode,
+  type CanvasEdge,
+  type CanvasNode,
+  type CanvasNodeType,
+} from '@/features/canvas/domain/canvasNodes'
 import { cloneCameraStageProject } from '@/features/cameraStage/projects/cameraStageProjectService'
 import { rebaseCanvasLocalPromptData } from '@/features/canvas/application/generationPromptDocument'
 import {
@@ -12,6 +18,7 @@ import {
   type DuplicateOptions,
   type DuplicateResult,
 } from '@/features/canvas/canvasUtils'
+import { reconcileAssetGroupGraph } from '@/features/canvas/application/assetGroupGraph'
 
 interface UseCanvasDuplicationParams {
   nodes: CanvasNode[]
@@ -49,12 +56,18 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
       const dedupedIds = Array.from(new Set(sourceNodeIds))
       if (dedupedIds.length === 0) return null
 
-      const sourceNodes = nodes.filter((node) => dedupedIds.includes(node.id))
+      const requestedIds = new Set(dedupedIds)
+      for (const node of nodes) {
+        if (node.parentId && requestedIds.has(node.parentId)) requestedIds.add(node.id)
+      }
+      const sourceNodes = nodes.filter((node) => requestedIds.has(node.id))
       if (sourceNodes.length === 0) return null
 
       const sourceIdSet = new Set(sourceNodes.map((node) => node.id))
       const internalEdges = edges.filter(
-        (edge) => sourceIdSet.has(edge.source) && sourceIdSet.has(edge.target)
+        (edge) => sourceIdSet.has(edge.source)
+          && sourceIdSet.has(edge.target)
+          && !edge.data?.managedByAssetGroup
       )
 
       const baseOffsets = [
@@ -158,6 +171,44 @@ export function useCanvasDuplication(params: UseCanvasDuplicationParams) {
           sourceHandle: edge.sourceHandle ?? 'source',
           targetHandle: edge.targetHandle ?? 'target',
         })
+      }
+
+      const copiedAssetGroups = sourceNodes.filter(isAssetGroupNode)
+      if (copiedAssetGroups.length > 0) {
+        const current = useCanvasStore.getState()
+        const regroupedNodes = current.nodes.map((node) => {
+          const originalEntry = Array.from(idMap.entries()).find(([, copiedId]) => copiedId === node.id)
+          if (!originalEntry) return node
+          const original = sourceNodes.find((candidate) => candidate.id === originalEntry[0])
+          if (!original) return node
+          if (isAssetGroupNode(original)) {
+            return {
+              ...node,
+              data: {
+                ...original.data,
+                memberOrder: original.data.memberOrder
+                  .map((memberId) => idMap.get(memberId))
+                  .filter((memberId): memberId is string => Boolean(memberId)),
+                coverMemberId: original.data.coverMemberId
+                  ? idMap.get(original.data.coverMemberId) ?? null
+                  : null,
+                bindings: [],
+              },
+            }
+          }
+          if (original.parentId && idMap.has(original.parentId)) {
+            return {
+              ...node,
+              parentId: idMap.get(original.parentId),
+              position: original.position,
+              hidden: true,
+              selected: false,
+            }
+          }
+          return node
+        })
+        const reconciled = reconcileAssetGroupGraph(regroupedNodes, current.edges)
+        useCanvasStore.setState({ nodes: reconciled.nodes, edges: reconciled.edges })
       }
 
       if (!options.disableOffsetIteration) {

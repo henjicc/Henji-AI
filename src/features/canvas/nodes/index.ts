@@ -9,6 +9,7 @@ import {
 import { AudioGenNode } from './AudioGenNode';
 import { AudioNode } from './AudioNode';
 import { GroupNode } from './GroupNode';
+import { AssetGroupNode } from './AssetGroupNode';
 import { ImageEditNode } from './ImageEditNode';
 import { ImageNode } from './ImageNode';
 import { StoryboardGenNode } from './StoryboardGenNode';
@@ -62,6 +63,7 @@ export const nodeTypes: NodeTypes = {
   universalUploadNode: withNodePaintFrame(UniversalUploadNode),
   exportImageNode: withNodePaintFrame(ImageNode),
   groupNode: withNodePaintFrame(GroupNode),
+  assetGroupNode: withNodePaintFrame(AssetGroupNode, { right: 16, bottom: 16 }),
   imageNode: withNodePaintFrame(ImageEditNode, { bottom: 60 }),
   storyboardGenNode: withNodePaintFrame(StoryboardGenNode, { bottom: 84 }),
   storyboardNode: withNodePaintFrame(StoryboardNode),
@@ -88,6 +90,7 @@ export {
   AudioGenNode,
   AudioNode,
   GroupNode,
+  AssetGroupNode,
   ImageEditNode,
   ImageNode,
   StoryboardGenNode,

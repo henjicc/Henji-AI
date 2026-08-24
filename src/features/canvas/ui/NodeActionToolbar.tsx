@@ -16,6 +16,7 @@ import {
   isUploadNode,
   isVideoMediaNode,
   isAudioMediaNode,
+  isAssetGroupNode,
   type CanvasNode,
 } from '@/features/canvas/domain/canvasNodes';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
@@ -43,6 +44,7 @@ import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectio
 import { checkAssetPaths } from '@/commands/assetLibrary';
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
 import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
+import { dissolveAssetGroup } from '@/features/canvas/application/assetGroupApplicationService';
 
 interface NodeActionToolbarProps {
   node: CanvasNode;
@@ -352,14 +354,15 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
             {t('nodeToolbar.download')}
           </UiChipButton>
         )}
-        {!isImageEdit && isGroupNode(node) && (
+        {!isImageEdit && (isGroupNode(node) || isAssetGroupNode(node)) && (
           <UiChipButton
             key="group-ungroup"
             className={`h-8 ${NODE_TOOLBAR_BUTTON_RADIUS_CLASS} px-2.5 text-xs ${NODE_TOOLBAR_NEUTRAL_BUTTON_CLASS} hover:!border-amber-400/60 hover:!bg-amber-500/20 hover:!text-amber-200`}
             onClick={(event) => {
               event.stopPropagation();
               closeDownloadMenu();
-              ungroupNode(node.id);
+              if (isAssetGroupNode(node)) dissolveAssetGroup({ groupId: node.id });
+              else ungroupNode(node.id);
             }}
           >
             <Unlink2 className="h-3.5 w-3.5" />

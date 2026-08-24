@@ -46,7 +46,14 @@ describe('MultiNodeActionToolbar', () => {
       { id: 'node-2' },
       { id: 'node-3' },
     ] as CanvasNode[]
-    const rendered = render(<MultiNodeActionToolbar nodes={nodes} />)
+    const rendered = render(
+      <MultiNodeActionToolbar
+        nodes={nodes}
+        onBatchConnect={vi.fn()}
+        onCreateAssetGroup={vi.fn()}
+        onAddToAssetGroup={vi.fn()}
+      />
+    )
 
     expect(rendered.getByText('下载 2 项')).toBeTruthy()
     expect(rendered.container.querySelector('[data-toolbar-node-ids]')?.getAttribute('data-toolbar-node-ids'))

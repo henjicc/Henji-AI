@@ -42,7 +42,24 @@
       "typeMismatch": "Connection type mismatch. Use the matching input row.",
       "mediaLimitExceeded": "{{media}} accepts up to {{max}} connection(s).",
       "mediaFallback": "Media",
-      "cycle": "This connection would create a dependency cycle."
+      "cycle": "This connection would create a dependency cycle.",
+      "batchSummary": "Connected {{connected}} item(s); skipped {{skipped}}",
+      "skipReason": {
+        "source-not-media": "not media",
+        "source-no-output": "no media yet",
+        "target-unsupported": "unsupported",
+        "capacity-exceeded": "capacity full",
+        "duplicate": "duplicate",
+        "cycle": "would create cycle",
+        "port-hidden": "port hidden"
+      }
+    },
+    "assetGroup": {
+      "created": "Grouped {{count}} media item(s)",
+      "createFailed": "Could not create asset group",
+      "addFailed": "Could not add media to asset group",
+      "memberCount": "Asset group now contains {{count}} item(s)",
+      "bindingSummary": "Connected {{connected}}, pending {{pending}}, ignored {{unsupported}}"
     },
     "toolbar": {
       "zoomIn": "Zoom In",
@@ -70,6 +87,9 @@
     "copyText": "Copy Text",
     "download": "Download",
     "batchDownload": "Download {{count}} items",
+    "batchConnect": "Connect selected media",
+    "createAssetGroup": "Create Asset Group",
+    "addToAssetGroup": "Add to Asset Group",
     "chooseDownloadFolder": "Choose destination folder...",
     "batchDownloadCompleted": "Downloaded {{count}} media file(s)",
     "batchDownloadPartial": "Downloaded {{saved}}; {{failed}} failed",
@@ -107,6 +127,7 @@
       "viewDetail": "Click for details"
     },
     "menu": {
+      "assetGroup": "Asset Group",
       "upload": "Upload",
       "uploadImage": "Upload Image",
       "aiImageGeneration": "Image Generation",

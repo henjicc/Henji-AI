@@ -12,7 +12,6 @@ import {
   BackgroundVariant,
   SelectionMode,
   useReactFlow,
-  type Connection,
   type DefaultEdgeOptions,
   type EdgeChange,
   type NodeChange,
@@ -29,12 +28,8 @@ import {
   type CanvasNode,
   CANVAS_NODE_TYPES,
 } from '@/features/canvas/domain/canvasNodes';
-import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
-import { wouldCreateCanvasCycle } from '@/features/canvas/domain/connectionIndex';
-import { isParamPortId } from '@/features/canvas/domain/socketTypes';
-import { validateParamConnection } from '@/features/canvas/application/graphValueResolver';
 import { areStringListsEqual } from '@/features/canvas/application/graphMediaResolver';
-import { canNodeBeManualConnectionSource, DEFAULT_VIEWPORT } from './canvasUtils';
+import { DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
@@ -50,7 +45,11 @@ import { CanvasOverlays } from './ui/CanvasOverlays';
 import { CanvasMiniMap } from './ui/CanvasMiniMap';
 import { useCanvasAssetDrop } from './hooks/useCanvasAssetDrop';
 import { useCanvasGlassPerformance } from './hooks/useCanvasGlassPerformance';
-import { isUiInspectionReadOnly } from '@/platform/runtime';
+import { AssetGroupFocusOverlay } from './ui/AssetGroupFocusOverlay';
+import { disconnectAssetGroup } from './application/assetGroupApplicationService';
+import { useCanvasConnectionActions } from './hooks/useCanvasConnectionActions';
+import { useCanvasAssetGroups } from './hooks/useCanvasAssetGroups';
+import { useCanvasPersistence } from './hooks/useCanvasPersistence';
 
 interface CanvasToastState {
   message: string;
@@ -91,19 +90,14 @@ export function Canvas() {
   const reactFlowInstance = useReactFlow<CanvasNode, CanvasEdge>();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const { prepareGlassGesture, clearGlassGesture } = useCanvasGlassPerformance(wrapperRef);
-  const isRestoringCanvasRef = useRef(true);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [connectionToast, setConnectionToast] = useState<CanvasToastState | null>(null);
-  const inspectionReadOnly = isUiInspectionReadOnly();
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
-  const history = useCanvasStore((state) => state.history);
-  const dragHistorySnapshot = useCanvasStore((state) => state.dragHistorySnapshot);
   const applyNodesChange = useCanvasStore((state) => state.onNodesChange);
   const applyEdgesChange = useCanvasStore((state) => state.onEdgesChange);
   const connectNodes = useCanvasStore((state) => state.onConnect);
-  const setCanvasData = useCanvasStore((state) => state.setCanvasData);
+  const connectMany = useCanvasStore((state) => state.connectMany);
   const addNode = useCanvasStore((state) => state.addNode);
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode);
   const selectedNodeId = useCanvasStore((state) => state.selectedNodeId);
@@ -116,48 +110,17 @@ export function Canvas() {
   const openToolDialog = useCanvasStore((state) => state.openToolDialog);
   const closeToolDialog = useCanvasStore((state) => state.closeToolDialog);
   const setViewportState = useCanvasStore((state) => state.setViewportState);
-  const setCanvasViewportSize = useCanvasStore((state) => state.setCanvasViewportSize);
   const imageViewer = useCanvasStore((state) => state.imageViewer);
   const closeImageViewer = useCanvasStore((state) => state.closeImageViewer);
   const navigateImageViewer = useCanvasStore((state) => state.navigateImageViewer);
   const getCurrentProject = useProjectStore((state) => state.getCurrentProject);
-  const saveCurrentProject = useProjectStore((state) => state.saveCurrentProject);
   const saveCurrentProjectViewport = useProjectStore((state) => state.saveCurrentProjectViewport);
   const cancelPendingViewportPersist = useProjectStore((state) => state.cancelPendingViewportPersist);
-  const persistCanvasSnapshot = useCallback(() => {
-    if (inspectionReadOnly || isRestoringCanvasRef.current) {
-      return;
-    }
-
-    const currentProject = getCurrentProject();
-    if (!currentProject) {
-      return;
-    }
-
-    const currentNodes = useCanvasStore.getState().nodes;
-    const currentEdges = useCanvasStore.getState().edges;
-    const currentHistory = useCanvasStore.getState().history;
-    saveCurrentProject(
-      currentNodes,
-      currentEdges,
-      reactFlowInstance.getViewport(),
-      currentHistory
-    );
-  }, [getCurrentProject, inspectionReadOnly, reactFlowInstance, saveCurrentProject]);
-
-  const scheduleCanvasPersist = useCallback(
-    (delayMs = 140) => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-      }
-
-      saveTimerRef.current = setTimeout(() => {
-        saveTimerRef.current = null;
-        persistCanvasSnapshot();
-      }, delayMs);
-    },
-    [persistCanvasSnapshot]
-  );
+  const {
+    schedulePersist: scheduleCanvasPersist,
+    isRestoringRef: isRestoringCanvasRef,
+    inspectionReadOnly,
+  } = useCanvasPersistence(wrapperRef, reactFlowInstance);
 
   const showConnectionToast = useCallback((message: string, type: CanvasToastState['type'] = 'error') => {
     if (toastTimerRef.current) {
@@ -187,7 +150,6 @@ export function Canvas() {
     const unsubscribeClose = canvasEventBus.subscribe('tool-dialog/close', () => {
       closeToolDialog();
     });
-
     return () => {
       unsubscribeToast();
       unsubscribeOpen();
@@ -205,62 +167,6 @@ export function Canvas() {
     });
   }), [reactFlowInstance, setSelectedNode]);
 
-  useEffect(() => {
-    isRestoringCanvasRef.current = true;
-    const project = getCurrentProject();
-    if (project) {
-      setCanvasData(project.nodes, project.edges, project.history);
-      setViewportState(project.viewport ?? DEFAULT_VIEWPORT);
-      requestAnimationFrame(() => {
-        reactFlowInstance.setViewport(project.viewport ?? DEFAULT_VIEWPORT, { duration: 0 });
-      });
-    } else {
-      setViewportState(DEFAULT_VIEWPORT);
-    }
-    const restoreTimer = setTimeout(() => {
-      isRestoringCanvasRef.current = false;
-    }, 0);
-
-    return () => {
-      clearTimeout(restoreTimer);
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-      persistCanvasSnapshot();
-    };
-  }, [getCurrentProject, persistCanvasSnapshot, reactFlowInstance, setCanvasData, setViewportState]);
-
-  useEffect(() => {
-    if (isRestoringCanvasRef.current || dragHistorySnapshot) {
-      return;
-    }
-
-    scheduleCanvasPersist();
-  }, [nodes, edges, history, dragHistorySnapshot, scheduleCanvasPersist]);
-
-  useEffect(() => {
-    const element = wrapperRef.current;
-    if (!element) {
-      return;
-    }
-
-    const updateSize = () => {
-      const rect = element.getBoundingClientRect();
-      setCanvasViewportSize({
-        width: Math.max(0, Math.round(rect.width)),
-        height: Math.max(0, Math.round(rect.height)),
-      });
-    };
-
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [setCanvasViewportSize]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<CanvasNode>[]) => {
@@ -319,57 +225,29 @@ export function Canvas() {
     (event: ReactMouseEvent, edge: CanvasEdge) => {
       event.preventDefault();
       event.stopPropagation();
-      deleteEdge(edge.id);
+      const bundle = edge.data?.assetGroupBundle;
+      if (bundle) disconnectAssetGroup({ groupId: bundle.groupId, targetNodeId: bundle.targetNodeId });
+      else deleteEdge(edge.id);
       scheduleCanvasPersist(0);
     },
     [deleteEdge, scheduleCanvasPersist]
   );
 
-  const handleConnect = useCallback(
-    (connection: Connection) => {
-      if (!canNodeBeManualConnectionSource(connection.source, nodes)) {
-        return;
-      }
-      const sourceNode = nodes.find((node) => node.id === connection.source);
-      const targetNode = nodes.find((node) => node.id === connection.target);
-      if (!sourceNode || !targetNode) {
-        return;
-      }
-      if (wouldCreateCanvasCycle(sourceNode.id, targetNode.id, edges)) {
-        showConnectionToast(t('canvas.connection.cycle'));
-        return;
-      }
-      // 参数端口连线走插槽类型兼容；整节点媒体连线走媒体端口兼容
-      const paramValidation = isParamPortId(connection.targetHandle)
-        ? validateParamConnection(sourceNode, targetNode, connection.targetHandle, nodes, edges, connection.sourceHandle)
-        : null;
-      const compatible = paramValidation
-        ? paramValidation.compatible
-        : isConnectionCompatible(
-          sourceNode.type,
-          targetNode.type,
-          connection.sourceHandle,
-          sourceNode.data,
-        );
-      if (!compatible) {
-        if (paramValidation?.reason === 'media-limit-exceeded') {
-          const mediaLabel = paramValidation.mediaKind
-            ? t(`node.mediaRow.${paramValidation.mediaKind}`)
-            : t('canvas.connection.mediaFallback');
-          showConnectionToast(t('canvas.connection.mediaLimitExceeded', {
-            media: mediaLabel,
-            max: paramValidation.maxCount ?? 0,
-          }));
-        } else {
-          showConnectionToast(t('canvas.connection.typeMismatch'));
-        }
-        return;
-      }
-      connectNodes(connection);
-      scheduleCanvasPersist(0);
-    },
-    [connectNodes, edges, nodes, scheduleCanvasPersist, showConnectionToast, t]
-  );
+  const {
+    handleConnect,
+    handleBatchConnect,
+    createAssetGroup: handleCreateAssetGroup,
+    addToAssetGroup: handleAddToAssetGroup,
+    bindAssetGroup: handleBindAssetGroup,
+  } = useCanvasConnectionActions({
+    nodes,
+    edges,
+    connectNodes,
+    connectMany,
+    schedulePersist: scheduleCanvasPersist,
+    showToast: showConnectionToast,
+    t,
+  });
 
   const clearViewportGestureClasses = useCallback(() => {
     wrapperRef.current?.classList.remove('canvas-viewport-moving');
@@ -389,7 +267,7 @@ export function Canvas() {
       }
       saveCurrentProjectViewport(viewport);
     },
-    [clearViewportGestureClasses, getCurrentProject, inspectionReadOnly, saveCurrentProjectViewport, setViewportState]
+    [clearViewportGestureClasses, getCurrentProject, inspectionReadOnly, isRestoringCanvasRef, saveCurrentProjectViewport, setViewportState]
   );
 
   const handleMoveStart = useCallback(
@@ -451,6 +329,21 @@ export function Canvas() {
     scheduleCanvasPersist,
   });
 
+  const {
+    activeGroupId,
+    closeAssetGroup,
+    handleDragStop: handleCanvasNodeDragStop,
+    renderGraph,
+  } = useCanvasAssetGroups({
+    wrapperRef,
+    nodes,
+    edges,
+    selectedNodeId,
+    selectedNodeIds,
+    onNodeDragStop: handleNodeDragStop,
+    addToAssetGroup: handleAddToAssetGroup,
+  });
+
   // 应用重启后接着轮询未完成的异步生成任务
   useCanvasResumePolling();
 
@@ -466,6 +359,7 @@ export function Canvas() {
     deleteNode,
     deleteNodes,
     groupNodes,
+    createAssetGroup: handleCreateAssetGroup,
     undo,
     redo,
     scheduleCanvasPersist,
@@ -491,9 +385,10 @@ export function Canvas() {
     reactFlowInstance,
     nodes,
     addNode,
-    connectNodes,
+    connectNodes: handleConnect,
     scheduleCanvasPersist,
     setSelectedNode,
+    connectAssetGroup: handleBindAssetGroup,
   });
   const assetDrop = useCanvasAssetDrop({ reactFlowInstance, addNode, schedulePersist: scheduleCanvasPersist });
   // 低倍率内容 LOD：只在跨越阈值时翻转一次 class，节点正文的显隐全部由 CSS 承担
@@ -510,8 +405,8 @@ export function Canvas() {
       onDrop={assetDrop.onDrop}
     >
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={renderGraph.nodes}
+        edges={renderGraph.edges}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onEdgeDoubleClick={handleEdgeDoubleClick}
@@ -520,8 +415,11 @@ export function Canvas() {
         onConnectEnd={handleConnectEnd}
         onNodeDragStart={handleNodeDragStart}
         onNodeDrag={handleNodeDrag}
-        onNodeDragStop={handleNodeDragStop}
-        onPaneClick={handlePaneClick}
+        onNodeDragStop={handleCanvasNodeDragStop}
+        onPaneClick={(event) => {
+          closeAssetGroup();
+          handlePaneClick(event);
+        }}
         onPaneContextMenu={handlePaneContextMenu}
         onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}
@@ -543,12 +441,19 @@ export function Canvas() {
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color={CANVAS_GRID_ALT_HEX} />
         <CanvasMiniMap />
 
-        <SelectedNodeOverlay />
+        <SelectedNodeOverlay
+          onBatchConnect={handleBatchConnect}
+          onCreateAssetGroup={handleCreateAssetGroup}
+          onAddToAssetGroup={handleAddToAssetGroup}
+        />
       </ReactFlow>
 
       <NodeToolDialog />
       <CameraStageNodeDialog />
       <CanvasConnectionToast toast={connectionToast} />
+      {activeGroupId && (
+        <AssetGroupFocusOverlay groupId={activeGroupId} onClose={closeAssetGroup} />
+      )}
 
       <CanvasOverlays
         nodesCount={nodes.length} emptyTitle={t('canvas.emptyHintTitle')} emptySubtitle={t('canvas.emptyHintSubtitle')}

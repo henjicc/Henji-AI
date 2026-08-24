@@ -51,7 +51,7 @@ const CAPTURE_SETTLE_MS = 250
 
 // 与 nodeTypes 唯一注册点保持一致，视觉夹具据此覆盖所有内置节点类型。
 const REGISTERED_NODE_TYPES = [
-  'universalUploadNode', 'uploadNode', 'imageNode', 'exportImageNode', 'textProcessingNode', 'textAnnotationNode', 'groupNode',
+  'universalUploadNode', 'uploadNode', 'imageNode', 'exportImageNode', 'textProcessingNode', 'textAnnotationNode', 'groupNode', 'assetGroupNode',
   'storyboardNode', 'storyboardGenNode', 'videoGenNode', 'audioGenNode',
   'exportVideoNode', 'exportAudioNode', 'videoUploadNode', 'audioUploadNode',
   'intSourceNode', 'floatSourceNode', 'stringSourceNode', 'booleanSourceNode',

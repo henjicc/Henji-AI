@@ -35,6 +35,12 @@ export const CANVAS_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     deleteNode: NODE_REMOVE,
     deleteNodes: NODE_REMOVE,
     addEdge: { kind: 'collection', entityType: ENTITY.edge, operation: 'create' },
+    connectMany: { kind: 'collection', entityType: ENTITY.edge, operation: 'create' },
+    commitAssetGroupGraph: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '素材组领域服务提交已完成校验的整图事务，不直接暴露为应用能力。',
+    },
     ensureTextDisplayOutput: {
       kind: 'excluded',
       category: 'internal',

@@ -131,6 +131,11 @@ const MISSING_TYPE_FIXTURES = {
     height: 160,
   },
   groupNode: { data: { displayName: '组', label: '组' }, width: 360, height: 240 },
+  assetGroupNode: {
+    data: { displayName: '素材组', memberOrder: [], coverMemberId: null, bindings: [] },
+    width: 220,
+    height: 144,
+  },
   storyboardNode: {
     data: {
       displayName: '分镜', aspectRatio: '1:1', frameAspectRatio: '1:1',

@@ -4,19 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
 
 import { registry } from '@/core/ModelRegistry';
-import { LinkageEngine } from '@/core/linkage';
 import type { ParamDef } from '@/core/types';
 import { deriveSocketType, getSocketColor } from '@/core/types/SocketType';
 import { getI18nText } from '@/core/types/I18nText';
-import { buildParamPresentationItems } from '@/core/params/paramPresentation';
 import { ParamGroupTrigger } from '@/components/params/ParamGroupTrigger';
-import { isParamDisabled, isParamVisible } from '@/components/params/paramVisibility';
+import { isParamDisabled } from '@/components/params/paramVisibility';
 import { useCanvasStore } from '@/stores/canvasStore';
 import {
   areStringSetsEqual,
   areValueOverridesEqual,
   collectInputValues,
   getConnectedParamIds,
+  resolveVisibleSchemaParamRows,
 } from '@/features/canvas/application/graphValueResolver';
 import { paramPortId } from '@/features/canvas/domain/socketTypes';
 import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
@@ -88,42 +87,14 @@ export const NodeParamRows = memo(({
   );
 
   const modelDef = useMemo(() => registry.getModel(modelId), [modelId]);
-  const linkageEngine = useMemo(() => (
-    modelDef?.linkages?.length ? new LinkageEngine(modelDef.linkages) : null
-  ), [modelDef]);
-
-  const visibleParams = useMemo(
-    () =>
-      [...schema]
-        .filter((param) => !excluded.has(param.id))
-        .filter((param) => isParamVisible(param, mergedValues, linkageEngine))
-        .map((param): ParamDef => {
-          if (!linkageEngine || (param.type !== 'dropdown' && param.type !== 'radio')) {
-            return param;
-          }
-          const options = linkageEngine.getFilteredOptions(param.id, mergedValues, schema);
-          if (!options.length || options === param.options) {
-            return param;
-          }
-          return { ...param, options } as ParamDef;
-        })
-        .sort((a, b) => a.order - b.order),
-    [schema, excluded, linkageEngine, mergedValues]
+  const rowPlan = useMemo(
+    () => resolveVisibleSchemaParamRows(modelDef, schema, mergedValues, excluded, connectedParamIds),
+    [connectedParamIds, excluded, mergedValues, modelDef, schema],
   );
-
-  const presentationItems = useMemo(
-    () => buildParamPresentationItems(visibleParams, modelDef?.paramPresentation),
-    [modelDef?.paramPresentation, visibleParams]
-  );
-
+  const { linkageEngine, presentationItems } = rowPlan;
   const displayedParamIds = useMemo(
-    () => presentationItems.flatMap((item) => {
-      if (item.kind === 'param') return [item.param.id];
-      return item.params
-        .filter((param) => connectedParamIds.has(param.id))
-        .map((param) => param.id);
-    }),
-    [connectedParamIds, presentationItems]
+    () => rowPlan.displayedParams.map((param) => param.id),
+    [rowPlan.displayedParams],
   );
 
   // 参数行随联动 hide/show 增减，端口纵向位置会整体位移

@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   ungroupCanvasNodeFromAgent: vi.fn(),
   clearCanvasProjectFromAgent: vi.fn(),
   addGenerationResultToCanvas: vi.fn(),
+  connectAssetGroupToTarget: vi.fn(),
+  disconnectAssetGroupFromTarget: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
@@ -43,6 +45,8 @@ vi.mock('@/features/canvas/application/canvasMutationService', () => ({
   groupCanvasNodes: vi.fn(),
   ungroupCanvasNode: mocks.ungroupCanvasNodeFromAgent,
   clearCanvasProject: mocks.clearCanvasProjectFromAgent,
+  connectAssetGroupToTarget: mocks.connectAssetGroupToTarget,
+  disconnectAssetGroupFromTarget: mocks.disconnectAssetGroupFromTarget,
   selectCanvasNode: vi.fn(),
   updateCanvasNode: vi.fn(),
 }))
@@ -201,6 +205,23 @@ describe('canvas capability handlers', () => {
 
     expect(mocks.ungroupCanvasNodeFromAgent).toHaveBeenCalledWith('project-1', 'group-1')
     expect(result).toMatchObject({ groupNodeId: 'group-1' })
+  })
+
+  it('素材组绑定与解绑转发到统一领域服务', async () => {
+    mocks.connectAssetGroupToTarget.mockReturnValue({
+      projectId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1',
+      connected: 2, pending: 1, unsupported: 0, excluded: 0, undoRef: 'canvas-undo:2',
+    })
+    const connect = registeredHandlers().get('connect_asset_group_to_target')
+    await connect?.({ projectId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1' }, context)
+    expect(mocks.connectAssetGroupToTarget).toHaveBeenCalledWith('project-1', 'group-1', 'target-1')
+
+    mocks.disconnectAssetGroupFromTarget.mockReturnValue({
+      projectId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1', undoRef: 'canvas-undo:3',
+    })
+    const disconnect = registeredHandlers().get('disconnect_asset_group_from_target')
+    await disconnect?.({ projectId: 'project-1', groupNodeId: 'group-1', targetNodeId: 'target-1' }, context)
+    expect(mocks.disconnectAssetGroupFromTarget).toHaveBeenCalledWith('project-1', 'group-1', 'target-1')
   })
 
   it('清空画布只需要 projectId，转发给正式服务', async () => {

@@ -40,7 +40,9 @@ import {
 } from '@/features/canvas/application/canvasProjectService'
 import {
   clearCanvasProject,
+  connectAssetGroupToTarget,
   deleteCanvasNodes,
+  disconnectAssetGroupFromTarget,
   disconnectCanvasEdge,
   duplicateCanvasNode,
   groupCanvasNodes,
@@ -243,11 +245,30 @@ export function registerCanvasCapabilityHandlers(
 
   registrar.registerHandler('group_canvas_nodes', (input, context) => {
     throwIfCapabilityAborted(context.signal)
-    const parsed = parseCapabilityInput<ProjectInput & { nodeIds: string[] }>(
+    const parsed = parseCapabilityInput<ProjectInput & {
+      nodeIds: string[]
+      groupKind: 'spatial' | 'asset'
+    }>(
       'group_canvas_nodes',
       input
     )
-    return groupCanvasNodes(parsed.projectId, parsed.nodeIds)
+    return groupCanvasNodes(parsed.projectId, parsed.nodeIds, parsed.groupKind)
+  })
+
+  registrar.registerHandler('connect_asset_group_to_target', (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput & { groupNodeId: string; targetNodeId: string }>(
+      'connect_asset_group_to_target', input,
+    )
+    return connectAssetGroupToTarget(parsed.projectId, parsed.groupNodeId, parsed.targetNodeId)
+  })
+
+  registrar.registerHandler('disconnect_asset_group_from_target', (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput & { groupNodeId: string; targetNodeId: string }>(
+      'disconnect_asset_group_from_target', input,
+    )
+    return disconnectAssetGroupFromTarget(parsed.projectId, parsed.groupNodeId, parsed.targetNodeId)
   })
 
   registrar.registerHandler('ungroup_canvas_node', (input, context) => {

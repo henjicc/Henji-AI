@@ -53,7 +53,14 @@ function cleanupExpiredPlans(): void {
 function fingerprint(nodes: CanvasNode[], edges: CanvasEdge[]): string {
   return JSON.stringify({
     nodes: nodes.map((node) => ({ id: node.id, type: node.type, position: node.position, data: node.data })),
-    edges: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, sourceHandle: edge.sourceHandle, targetHandle: edge.targetHandle })),
+    edges: edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+      data: edge.data,
+    })),
   })
 }
 

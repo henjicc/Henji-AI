@@ -42,7 +42,24 @@
       "typeMismatch": "连接类型不对，请连接到匹配的输入行",
       "mediaLimitExceeded": "{{media}}最多只能连接 {{max}} 个",
       "mediaFallback": "媒体",
-      "cycle": "这条连接会形成循环依赖"
+      "cycle": "这条连接会形成循环依赖",
+      "batchSummary": "已连接 {{connected}} 个素材，跳过 {{skipped}} 个",
+      "skipReason": {
+        "source-not-media": "非媒体",
+        "source-no-output": "暂无素材",
+        "target-unsupported": "目标不支持",
+        "capacity-exceeded": "容量已满",
+        "duplicate": "重复连接",
+        "cycle": "会形成循环",
+        "port-hidden": "接口不可见"
+      }
+    },
+    "assetGroup": {
+      "created": "已收纳 {{count}} 个素材",
+      "createFailed": "无法创建素材组",
+      "addFailed": "无法加入素材组",
+      "memberCount": "素材组现有 {{count}} 个素材",
+      "bindingSummary": "已连接 {{connected}} 个，待连接 {{pending}} 个，忽略 {{unsupported}} 个"
     },
     "toolbar": {
       "zoomIn": "放大",
@@ -70,6 +87,9 @@
     "copyText": "复制文本",
     "download": "下载",
     "batchDownload": "下载 {{count}} 项",
+    "batchConnect": "批量连接所选素材",
+    "createAssetGroup": "收纳为素材组",
+    "addToAssetGroup": "加入素材组",
     "chooseDownloadFolder": "选择保存文件夹...",
     "batchDownloadCompleted": "已下载 {{count}} 个媒体文件",
     "batchDownloadPartial": "已下载 {{saved}} 个，{{failed}} 个失败",
@@ -107,6 +127,7 @@
       "viewDetail": "点击查看详情"
     },
     "menu": {
+      "assetGroup": "素材组",
       "upload": "上传",
       "uploadImage": "上传图片",
       "aiImageGeneration": "图片生成",
