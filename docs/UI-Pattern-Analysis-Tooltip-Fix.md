@@ -264,5 +264,5 @@ const displayName = getI18nText(param.name, i18n.language)
 
 - [UI Pattern Analysis - PanelTrigger Tooltip](./UI-Pattern-Analysis-PanelTrigger-Tooltip.md)
 - [开发规范与架构指南](./开发规范与架构指南.md)
-- [Model Adaptation Guide](./model-adaptation-guide-new.md)
+- [模型与供应商适配规范](./rules/model-adaptation.md)
 

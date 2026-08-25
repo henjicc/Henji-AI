@@ -184,11 +184,10 @@ MediaGenerator/ConversationWorkspace
 
 ## 扩展开发
 
-想要添加新的 AI 模型或供应商？请参考 **[模型与供应商适配指南（新架构）](docs/model-adaptation-guide-new.md)**，了解如何：
+想要添加新的 AI 模型或供应商？
 
-- 定义新模型的参数 Schema
-- 实现 Provider 逻辑
-- 自动注册模型到系统中
+- **[模型与供应商适配规范](docs/rules/model-adaptation.md)**：参数 Schema 定义、联动系统、请求构建、媒体上传约束、manifest 生成
+- **[模型适配资料库](docs/model-adaptation/README.md)**：各模型在各供应商上的 API 契约与价格，是核对字段和价格的唯一来源
 
 ## 许可证
 

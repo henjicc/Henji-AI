@@ -17,7 +17,7 @@
 | 改动 `src/features/canvas/**`、节点 DOM、画布卡顿 | [docs/rules/canvas.md](docs/rules/canvas.md) |
 | 新建或改造画布节点 | skill `canvas-node-builder` + 上面的 canvas.md |
 | 传递图片/视频/音频 URL 或路径、接入新媒体消费方、排查 `Failed to fetch` | [docs/rules/media-url.md](docs/rules/media-url.md) |
-| 新增供应商/模型、改参数 schema、改请求构建或轮询 | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + skill `henji-model-adaptation` |
+| 新增供应商/模型、改参数 schema、改请求构建或轮询、核对 API 字段或价格 | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + [docs/model-adaptation/README.md](docs/model-adaptation/README.md)（API 与价格资料唯一来源）+ skill `henji-model-adaptation` |
 | 新增/改造工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、权限、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability` |
 | 涉及网络请求、文件读写、长耗时任务、导入导出、状态流转、用户可见失败 | [docs/rules/logging.md](docs/rules/logging.md) |
 | 改动 `electron/main/**` 或 `electron/preload/**`、加 IPC、打包配置、自动更新 | [docs/rules/electron-desktop.md](docs/rules/electron-desktop.md) |
