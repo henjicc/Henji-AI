@@ -125,12 +125,12 @@ export const kieHailuo23Model = defineModel({
       const mode = params.kieHailuo23Mode === 'pro' ? 'pro' : 'standard'
       const duration = Number(params.kieHailuo23Duration) === 10 ? 10 : 6
       const resolution = params.kieHailuo23Resolution === '1080P' ? '1080P' : '768P'
-      const standardPrices: Record<string, number> = { '6-768P': 0.15, '10-768P': 0.26, '6-1080P': 0.26 }
-      const proPrices: Record<string, number> = { '6-768P': 0.22, '10-768P': 0.45, '6-1080P': 0.39 }
+      const standardPrices: Record<string, number> = { '6-768P': 0.15, '10-768P': 0.25, '6-1080P': 0.25 }
+      const proPrices: Record<string, number> = { '6-768P': 0.225, '10-768P': 0.45, '6-1080P': 0.4 }
       const key = `${duration}-${resolution}`
       return (mode === 'pro' ? proPrices : standardPrices)[key] ?? standardPrices['6-768P']
     },
-    description: 'Standard：6s768P $0.15、10s768P $0.26、6s1080P $0.26；Pro：6s768P $0.22、10s768P $0.45、6s1080P $0.39'
+    description: 'Standard：6s768P $0.15、10s768P $0.25、6s1080P $0.25；Pro：6s768P $0.225、10s768P $0.45、6s1080P $0.4'
   }
 })
 

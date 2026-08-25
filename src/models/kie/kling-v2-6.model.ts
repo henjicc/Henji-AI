@@ -217,9 +217,9 @@ export const kieKlingV26Model = defineModel({
       const duration = params.kieKlingV26Duration === '10' ? 10 : 5
       const enableAudio = params.kieKlingV26EnableAudio !== false
       if (duration === 10) return enableAudio ? 1.1 : 0.55
-      return enableAudio ? 0.55 : 0.28
+      return enableAudio ? 0.55 : 0.275
     },
-    description: '文/图生视频：5s 无音频 $0.28、10s $0.55；有音频 5s $0.55、10s $1.10；动作控制：720p $0.055/秒，1080p $0.09/秒'
+    description: '文/图生视频：5s 无音频 $0.275、10s $0.55；有音频 5s $0.55、10s $1.10；动作控制：720p $0.055/秒，1080p $0.09/秒'
   }
 })
 

@@ -48,7 +48,9 @@ export const kieGrokImagineVideoModel = defineModel({
       order: 2,
       name: sharedFieldText('mode'),
       default: 'normal',
+      // 官方 mode 枚举是 fun / normal / spicy（默认 normal）
       options: [
+        { value: 'fun', label: sharedOptionText('fun') },
         { value: 'normal', label: sharedOptionText('normal') },
         { value: 'spicy', label: sharedOptionText('spicy') }
       ]

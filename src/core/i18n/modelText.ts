@@ -79,6 +79,7 @@ var SHARED_OPTIONS = {
   disabled: 'Disabled',
   enabled: 'Enabled',
   enhanced: 'Enhanced',
+  fun: 'Fun',
   hd2k: 'HD 2K',
   high: 'High',
   low: 'Low',
