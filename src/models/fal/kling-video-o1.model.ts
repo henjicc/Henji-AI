@@ -25,8 +25,10 @@ export const klingVideoO1Model = defineModel({
         images: { max: 7 }
       },
       {
+        // 官方 schema：带视频时 elements + 参考图合计最多 4 张
+        // （reference-to-video 无视频，上限才是 7）
         when: 'falKlingVideoO1Mode === "video-to-video-edit" || falKlingVideoO1Mode === "video-to-video-reference"',
-        images: { max: 7 },
+        images: { max: 4 },
         videos: { exact: 1 }
       }
     ]

@@ -44,7 +44,7 @@ X-ModelScope-Async-Mode: true
 | `size` 范围 | **[512×512, 2048×2048]** —— 下限是 512，不是魔搭通用的 64 |
 | 魔粒档位 | standard，1 魔粒/次 |
 
-> 项目 `src/models/modelscope/utils.ts` 统一用 `calculateResolutionWithBounds(..., 64, 2048)`，通用路径可能生成小于 512 的尺寸从而被接口拒绝。`z-image-turbo.model.ts` 自身的 `min: 512` 是对的，但通用兜底路径需要核对。
+> 已修正：builder 通过 `sizeBounds: { min: 512, max: 2048 }` 下发本模型的边界，通用兜底路径不再可能算出低于 512 的边长。此前 `utils.ts` 对所有模型统一用 `[64, 2048]`。
 
 ## 3. 响应
 
