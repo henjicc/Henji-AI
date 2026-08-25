@@ -5,10 +5,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
-| 模型数量 | 18（图片 9 / 视频 9） |
-| 模型供应商文档数量 | 56 |
-| 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal |
+| 最后更新 | 2026-08-26 |
+| 模型数量 | 主清单 18（图片 9 / 视频 9）+ 供应商专属 5 |
+| 模型供应商文档数量 | 62 |
+| 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal、派欧云、魔搭 |
 
 ## 一、目录结构约定
 
@@ -22,7 +22,9 @@ docs/model-adaptation/
 │   ├── KIE.md
 │   ├── Fal.md
 │   ├── 百炼.md
-│   └── 火山引擎.md
+│   ├── 火山引擎.md
+│   ├── 派欧云.md
+│   └── 魔搭.md
 ├── <模型名>/                       # 一个模型一个文件夹
 │   └── <模型名>_<供应商名>.md       # 支持该模型的每个供应商一个文件
 ```
@@ -41,6 +43,8 @@ docs/model-adaptation/
 - [Fal](供应商/Fal.md)：同步 / 队列协议、Fal CDN、官方计价 API
 - [百炼](供应商/百炼.md)：地域端点、临时 OSS 上传与同步 / 异步边界
 - [火山引擎](供应商/火山引擎.md)：方舟端点、图片结果与 Files API 使用边界
+- [派欧云](供应商/派欧云.md)：异步任务协议、**无官方上传（借用 KIE）**、实名认证前置、在售清单极小
+- [魔搭](供应商/魔搭.md)：API-Inference 统一接口、**魔粒积分计费**、仅图片、可用性判定方法
 
 ## 二、通用适配规则
 
@@ -54,33 +58,47 @@ docs/model-adaptation/
 
 ### 图片（9）
 
-| 模型 | 火山引擎 | 百炼 | APIMart | KIE | Fal |
-|---|---|---|---|---|---|
-| [Seedream 5.0 Pro](Seedream-5.0-Pro/) | [✅ 官方](Seedream-5.0-Pro/Seedream-5.0-Pro_火山引擎.md) | — | [✅](Seedream-5.0-Pro/Seedream-5.0-Pro_APIMart.md) | [✅](Seedream-5.0-Pro/Seedream-5.0-Pro_KIE.md) | [✅](Seedream-5.0-Pro/Seedream-5.0-Pro_Fal.md) |
-| [Seedream 5.0 Lite](Seedream-5.0-Lite/) | [✅ 官方](Seedream-5.0-Lite/Seedream-5.0-Lite_火山引擎.md) | — | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_APIMart.md) | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_KIE.md) | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_Fal.md) |
-| [Qwen Image 3.0](Qwen-Image-3.0/) | — | [✅ 官方](Qwen-Image-3.0/Qwen-Image-3.0_百炼.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_APIMart.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_KIE.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_Fal.md) |
-| [Z-Image Turbo](Z-Image-Turbo/) | — | [✅ 官方](Z-Image-Turbo/Z-Image-Turbo_百炼.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_APIMart.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_KIE.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_Fal.md) |
-| [GPT-Image-2](GPT-Image-2/) | — | — | [✅](GPT-Image-2/GPT-Image-2_APIMart.md) | [✅](GPT-Image-2/GPT-Image-2_KIE.md) | [✅](GPT-Image-2/GPT-Image-2_Fal.md) |
-| [Nano Banana 2](Nano-Banana-2/) | — | — | [✅](Nano-Banana-2/Nano-Banana-2_APIMart.md) | [✅](Nano-Banana-2/Nano-Banana-2_KIE.md) | [✅](Nano-Banana-2/Nano-Banana-2_Fal.md) |
-| [Nano Banana Pro](Nano-Banana-Pro/) | — | — | [✅](Nano-Banana-Pro/Nano-Banana-Pro_APIMart.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_KIE.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Fal.md) |
-| [Midjourney](Midjourney/) | — | — | [✅](Midjourney/Midjourney_APIMart.md) | ❌ 无 | ❌ 无 |
-| [Grok Imagine 2.0](Grok-Imagine-2.0/) | — | — | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_APIMart.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_KIE.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_Fal.md) |
+| 模型 | 火山引擎 | 百炼 | APIMart | KIE | Fal | 派欧云 | 魔搭 |
+|---|---|---|---|---|---|---|---|
+| [Seedream 5.0 Pro](Seedream-5.0-Pro/) | [✅ 官方](Seedream-5.0-Pro/Seedream-5.0-Pro_火山引擎.md) | — | [✅](Seedream-5.0-Pro/Seedream-5.0-Pro_APIMart.md) | [✅](Seedream-5.0-Pro/Seedream-5.0-Pro_KIE.md) | [✅](Seedream-5.0-Pro/Seedream-5.0-Pro_Fal.md) | ❌ 无 | ❌ 无 |
+| [Seedream 5.0 Lite](Seedream-5.0-Lite/) | [✅ 官方](Seedream-5.0-Lite/Seedream-5.0-Lite_火山引擎.md) | — | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_APIMart.md) | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_KIE.md) | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_Fal.md) | ❌ 无 | ❌ 无 |
+| [Qwen Image 3.0](Qwen-Image-3.0/) | — | [✅ 官方](Qwen-Image-3.0/Qwen-Image-3.0_百炼.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_APIMart.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_KIE.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_Fal.md) | ❌ 无 | ❌ 无 |
+| [Z-Image Turbo](Z-Image-Turbo/) | — | [✅ 官方](Z-Image-Turbo/Z-Image-Turbo_百炼.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_APIMart.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_KIE.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_Fal.md) | ❌ 无 | [✅](Z-Image-Turbo/Z-Image-Turbo_魔搭.md) |
+| [GPT-Image-2](GPT-Image-2/) | — | — | [✅](GPT-Image-2/GPT-Image-2_APIMart.md) | [✅](GPT-Image-2/GPT-Image-2_KIE.md) | [✅](GPT-Image-2/GPT-Image-2_Fal.md) | ❌ 无 | ❌ 无 |
+| [Nano Banana 2](Nano-Banana-2/) | — | — | [✅](Nano-Banana-2/Nano-Banana-2_APIMart.md) | [✅](Nano-Banana-2/Nano-Banana-2_KIE.md) | [✅](Nano-Banana-2/Nano-Banana-2_Fal.md) | ❌ 无 | ❌ 无 |
+| [Nano Banana Pro](Nano-Banana-Pro/) | — | — | [✅](Nano-Banana-Pro/Nano-Banana-Pro_APIMart.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_KIE.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Fal.md) | ❌ 无 | ❌ 无 |
+| [Midjourney](Midjourney/) | — | — | [✅](Midjourney/Midjourney_APIMart.md) | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
+| [Grok Imagine 2.0](Grok-Imagine-2.0/) | — | — | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_APIMart.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_KIE.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_Fal.md) | ❌ 无 | ❌ 无 |
 
 ### 视频（9）
 
-| 模型 | APIMart | KIE | Fal |
-|---|---|---|---|
-| [Seedance 2.0](Seedance-2.0/) | [✅](Seedance-2.0/Seedance-2.0_APIMart.md) | [✅](Seedance-2.0/Seedance-2.0_KIE.md) | [✅](Seedance-2.0/Seedance-2.0_Fal.md) |
-| [Seedance 2.0 Fast](Seedance-2.0-Fast/) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_APIMart.md) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_KIE.md) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_Fal.md) |
-| [Seedance 2.0 Mini](Seedance-2.0-Mini/) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_APIMart.md) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_KIE.md) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_Fal.md) |
-| [Seedance 2.5](Seedance-2.5/) | [✅](Seedance-2.5/Seedance-2.5_APIMart.md) | [✅](Seedance-2.5/Seedance-2.5_KIE.md) | [✅](Seedance-2.5/Seedance-2.5_Fal.md) |
-| [MiniMax H3](MiniMax-H3/) | [✅](MiniMax-H3/MiniMax-H3_APIMart.md) | [✅](MiniMax-H3/MiniMax-H3_KIE.md) | [✅](MiniMax-H3/MiniMax-H3_Fal.md) |
-| [Kling 3.0](Kling-3.0/) | [✅](Kling-3.0/Kling-3.0_APIMart.md) | [✅](Kling-3.0/Kling-3.0_KIE.md) | [✅](Kling-3.0/Kling-3.0_Fal.md) |
-| [Kling 3.0 Turbo](Kling-3.0-Turbo/) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_APIMart.md) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_KIE.md) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_Fal.md) |
-| [Kling 3.0 Omni](Kling-3.0-Omni/) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_APIMart.md) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_KIE.md) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_Fal.md) |
-| [Gemini Omni Flash](Gemini-Omni-Flash/) | [✅](Gemini-Omni-Flash/Gemini-Omni-Flash_APIMart.md) | [✅](Gemini-Omni-Flash/Gemini-Omni-Flash_KIE.md) | [✅](Gemini-Omni-Flash/Gemini-Omni-Flash_Fal.md) |
+| 模型 | APIMart | KIE | Fal | 派欧云 | 魔搭 |
+|---|---|---|---|---|---|
+| [Seedance 2.0](Seedance-2.0/) | [✅](Seedance-2.0/Seedance-2.0_APIMart.md) | [✅](Seedance-2.0/Seedance-2.0_KIE.md) | [✅](Seedance-2.0/Seedance-2.0_Fal.md) | ❌ 已下架 | ❌ 无 |
+| [Seedance 2.0 Fast](Seedance-2.0-Fast/) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_APIMart.md) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_KIE.md) | [✅](Seedance-2.0-Fast/Seedance-2.0-Fast_Fal.md) | ❌ 已下架 | ❌ 无 |
+| [Seedance 2.0 Mini](Seedance-2.0-Mini/) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_APIMart.md) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_KIE.md) | [✅](Seedance-2.0-Mini/Seedance-2.0-Mini_Fal.md) | ❌ 已下架 | ❌ 无 |
+| [Seedance 2.5](Seedance-2.5/) | [✅](Seedance-2.5/Seedance-2.5_APIMart.md) | [✅](Seedance-2.5/Seedance-2.5_KIE.md) | [✅](Seedance-2.5/Seedance-2.5_Fal.md) | ❌ 已下架 | ❌ 无 |
+| [MiniMax H3](MiniMax-H3/) | [✅](MiniMax-H3/MiniMax-H3_APIMart.md) | [✅](MiniMax-H3/MiniMax-H3_KIE.md) | [✅](MiniMax-H3/MiniMax-H3_Fal.md) | ❌ 无 | ❌ 无 |
+| [Kling 3.0](Kling-3.0/) | [✅](Kling-3.0/Kling-3.0_APIMart.md) | [✅](Kling-3.0/Kling-3.0_KIE.md) | [✅](Kling-3.0/Kling-3.0_Fal.md) | [✅](Kling-3.0/Kling-3.0_派欧云.md) | ❌ 无 |
+| [Kling 3.0 Turbo](Kling-3.0-Turbo/) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_APIMart.md) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_KIE.md) | [✅](Kling-3.0-Turbo/Kling-3.0-Turbo_Fal.md) | ❌ 无 | ❌ 无 |
+| [Kling 3.0 Omni](Kling-3.0-Omni/) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_APIMart.md) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_KIE.md) | [✅](Kling-3.0-Omni/Kling-3.0-Omni_Fal.md) | ❌ 无 | ❌ 无 |
+| [Gemini Omni Flash](Gemini-Omni-Flash/) | [✅](Gemini-Omni-Flash/Gemini-Omni-Flash_APIMart.md) | [✅](Gemini-Omni-Flash/Gemini-Omni-Flash_KIE.md) | [✅](Gemini-Omni-Flash/Gemini-Omni-Flash_Fal.md) | ❌ 无 | ❌ 无 |
 
 视频类模型在**火山引擎与百炼上未纳入本清单**：Seedance 系列的官方接口不在本次适配范围，Kling 官方接口按用户要求**仅作参考、暂不适配**（能力地图：https://www.klingai.com/document-api/guides/capability-map/video ）。
+
+### 供应商专属模型（5）
+
+以下模型**不在主清单里**，但已在代码中适配并对用户开放，文档用于维护现有实现。它们只在单一供应商上提供，未来是否纳入主清单待定。
+
+| 模型 | 模态 | 供应商 | 文档 |
+|---|---|---|---|
+| MiniMax Hailuo 2.3 | 视频 | 派欧云 | [Hailuo-2.3_派欧云.md](Hailuo-2.3/Hailuo-2.3_派欧云.md) |
+| Wan 2.5 Preview | 视频 | 派欧云 | [Wan-2.5-Preview_派欧云.md](Wan-2.5-Preview/Wan-2.5-Preview_派欧云.md) |
+| Wan 2.6 | 视频 | 派欧云 | [Wan-2.6_派欧云.md](Wan-2.6/Wan-2.6_派欧云.md) |
+| Wan 2.7 | 视频 | 派欧云 | [Wan-2.7_派欧云.md](Wan-2.7/Wan-2.7_派欧云.md) |
+| MiniMax Speech | 音频 | 派欧云 | [MiniMax-Speech_派欧云.md](MiniMax-Speech/MiniMax-Speech_派欧云.md) |
+
+魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image`、`Qwen/Qwen-Image-Edit-2509`、`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
 
 ## 四、平台模型 ID 速查
 
@@ -89,7 +107,7 @@ docs/model-adaptation/
 | Seedream 5.0 Pro | `seedream-5-0-pro` | `seedream/5-pro-text-to-image`、`5-pro-image-to-image`、`5-pro-layer-decomposition` | `bytedance/seedream/v5/pro/{text-to-image,edit}` |
 | Seedream 5.0 Lite | `seedream-5-0-lite` | `seedream/5-lite-text-to-image`、`5-lite-image-to-image` | `bytedance/seedream/v5/lite/{text-to-image,edit}` |
 | Qwen Image 3.0 | `qwen-image-3.0`、`qwen-image-3.0-pro` | `qwen3/{text-to-image,image-to-image}`、`qwen3-pro/text-to-image`、`qwen3/pro-image-to-image` | `alibaba/qwen-image-3/{text-to-image,edit}` |
-| Z-Image Turbo | `z-image-turbo` | `z-image` | `fal-ai/z-image/turbo`、`fal-ai/z-image/turbo/image-to-image` |
+| Z-Image Turbo | `z-image-turbo` | `z-image` | `fal-ai/z-image/turbo`、`fal-ai/z-image/turbo/image-to-image`；魔搭 `Tongyi-MAI/Z-Image-Turbo` |
 | GPT-Image-2 | `gpt-image-2`（别名 `gpt-image-2-ext`）、`gpt-image-2-official` | `gpt-image-2-text-to-image`、`gpt-image-2-image-to-image` | `openai/gpt-image-2`、`openai/gpt-image-2/edit` |
 | Nano Banana 2 | `gemini-3.1-flash-image-preview`(-official)、`gemini-3.1-flash-lite-image`(-ext) | `nano-banana-2`、`nano-banana-2-lite` | `fal-ai/nano-banana-2`、`fal-ai/nano-banana-2/edit` |
 | Nano Banana Pro | `gemini-3-pro-image-preview`(-official) | `nano-banana-pro` | `fal-ai/nano-banana-pro`、`fal-ai/nano-banana-pro/edit` |
@@ -100,7 +118,7 @@ docs/model-adaptation/
 | Seedance 2.0 Mini | `seedance-2.0-mini` | `bytedance/seedance-2-mini` | `bytedance/seedance-2.0/mini/...` |
 | Seedance 2.5 | `seedance-2.5` | `bytedance/seedance-2-5` | `bytedance/seedance-2.5/...` |
 | MiniMax H3 | `MiniMax-H3`、`MiniMax-H3-Context-IR`、`MiniMax-H3-Regeneration` | `minimax-h3/{text-to-video,image-to-video,reference-to-video}` | `minimax/h3/{text-to-video,image-to-video,reference-to-video}` |
-| Kling 3.0 | `kling-v3` | `kling-3.0/video` | `fal-ai/kling-video/v3/{pro,standard}/...` |
+| Kling 3.0 | `kling-v3` | `kling-3.0/video` | `fal-ai/kling-video/v3/{pro,standard}/...`；派欧云 `/v3/async/kling-v3.0-{std,pro,4k}-{t2v,i2v}` |
 | Kling 3.0 Turbo | `kling-3.0-turbo` | `kling/v3-turbo-{text,image}-to-video` | `fal-ai/kling-video/v3/turbo/{pro,standard}/...` |
 | Kling 3.0 Omni | `kling-v3-omni` | `kling-3.0-omni/{text-to-video,image-to-video,reference-to-video,transformation}` | `fal-ai/kling-video/o3/{pro,standard}/...` |
 | Gemini Omni Flash | `gemini-omni-flash-preview`、`Omni-Flash-Ext` | `gemini-omni-video` + `/api/v1/omni/audio/create` + `/api/v1/omni/character/create` | `google/gemini-omni-flash/{image-to-video,reference-to-video}` |
@@ -114,12 +132,16 @@ docs/model-adaptation/
 | **APIMart** | `https://api.apimart.ai`；大陆备用线路见[基础文档](供应商/APIMart.md) | `Authorization: Bearer <KEY>` | `POST /v1/images/generations`、`POST /v1/videos/generations` | `GET /v1/tasks/{task_id}` | `result.images[]` / `result.videos[]` |
 | **KIE** | `https://api.kie.ai` | `Authorization: Bearer <KEY>` | `POST /api/v1/jobs/createTask` | `GET /api/v1/jobs/recordInfo?taskId=` | `JSON.parse(resultJson).resultUrls` |
 | **Fal** | `https://fal.run` / `https://queue.fal.run` | `Authorization: Key $FAL_KEY` | `POST https://queue.fal.run/<endpoint-id>` | `GET .../requests/{id}/status`、`GET .../requests/{id}` | `images[]` / `video` |
+| **派欧云** | `https://api.ppio.com/v3`（代码仍用旧域名 `api.ppinfra.com`，待核实） | `Authorization: Bearer <KEY>` | `POST /v3/async/<route>` | `GET /v3/async/task-result?task_id=` | `images[].image_url` / `videos[].video_url` / `audios[].audio_url`（TTL 3600s） |
+| **魔搭** | `https://api-inference.modelscope.cn` | `Authorization: Bearer <TOKEN>` | `POST /v1/images/generations` + 头 `X-ModelScope-Async-Mode: true`（代码写的是 `/api/v1/jobs/createTask`，待核实） | `GET /v1/tasks/{task_id}` + 头 `X-ModelScope-Task-Type: image_generation` | `output_images[]` |
 
 任务状态枚举：
 - APIMart：`pending` / `processing` / `completed` / `failed` / `cancelled`（Midjourney 另有 MJ 风格状态 `NOT_START` / `SUBMITTED` / `IN_PROGRESS` / `MODAL` / `SUCCESS` / `FAILURE`）
 - KIE：`waiting` / `queuing` / `generating` / `success` / `fail`
 - Fal：`IN_QUEUE` / `IN_PROGRESS` / `COMPLETED`
 - 百炼异步：`PENDING` / `RUNNING` / `SUCCEEDED` / `FAILED` / `CANCELED` / `UNKNOWN`
+- 派欧云：`TASK_STATUS_QUEUED` / `TASK_STATUS_PROCESSING` / `TASK_STATUS_SUCCEED` / `TASK_STATUS_FAILED`
+- 魔搭：`SUCCEED` / `FAILED`
 
 ## 六、常用外部入口
 
@@ -135,6 +157,10 @@ docs/model-adaptation/
 | 火山方舟模型价格 | https://www.volcengine.com/docs/82379/1544106 | 否 |
 | 百炼模型价格 | https://help.aliyun.com/zh/model-studio/model-pricing | 否 |
 | 可灵官方视频能力地图（仅参考） | https://www.klingai.com/document-api/guides/capability-map/video | 否 |
+| 派欧云文档索引 | https://ppio.com/docs/llms.txt | 否 |
+| 派欧云定价页 | https://ppio.com/pricing | 否 |
+| 魔搭 API-Inference 文档 | https://www.modelscope.cn/docs/model-service/API-Inference/intro | 否 |
+| 魔搭魔粒说明 | https://www.modelscope.cn/docs/magicube/intro | 否 |
 | APIMart API Key | https://apimart.ai/keys | **是** |
 | KIE API Key | https://kie.ai/api-key | **是** |
 | Fal API Key | https://fal.ai/dashboard/keys | **是** |
