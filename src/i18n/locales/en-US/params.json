@@ -78,9 +78,14 @@
     "adaptive": "Adaptive",
     "anime": "Anime",
     "auto": "Auto",
+    "clay": "Clay",
+    "comic": "Comic",
     "consistentWithImage": "Consistent with Image",
     "consistentWithVideo": "Consistent with Video",
+    "cyberpunk": "Cyberpunk",
     "default": "Default",
+    "disabled": "Disabled",
+    "enabled": "Enabled",
     "enhanced": "Enhanced",
     "hd2k": "HD 2K",
     "high": "High",
@@ -90,9 +95,9 @@
     "medium": "Medium",
     "multiShot": "Multi-shot",
     "normal": "Normal",
+    "official": "Official",
     "offlineMode": "Offline Mode",
     "onlineMode": "Online Mode",
-    "official": "Official",
     "pro": "Pro",
     "professional": "Professional",
     "realistic": "Realistic",
@@ -104,6 +109,7 @@
     "smart": "Smart",
     "spicy": "Spicy",
     "standard": "Standard",
+    "threeDAnimation": "3D Animation",
     "turbo": "Turbo",
     "uhd4k": "UHD 4K"
   },
@@ -119,13 +125,11 @@
     "videoExtension": "Video Extension",
     "videoReference": "Video Reference"
   },
-
   "placeholders": {
     "prompt": "Enter your prompt...",
     "negativePrompt": "Enter negative prompt...",
     "seed": "Leave empty for random"
   },
-
   "tips": {
     "prompt": "Describe what you want to generate",
     "negativePrompt": "Describe what you don't want",

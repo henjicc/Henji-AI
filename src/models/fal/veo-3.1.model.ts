@@ -122,7 +122,24 @@ export const veo31Model = defineModel({
       default: false
     }
   ],
-  linkages: [],
+  linkages: [
+    // 参考生视频官方只接受 8s（image-to-video / 首尾帧才有 4s/6s/8s），
+    // 选中该模式时收敛选项并把已选的 4s/6s 拉回 8s，避免把非法 duration 发给 API
+    {
+      trigger: 'falVeo31Mode',
+      effect: 'filterOptions',
+      target: 'falVeo31VideoDuration',
+      filter: (mode, options) =>
+        mode === 'reference-to-video' ? options.filter((opt) => opt.value === 8) : options
+    },
+    {
+      trigger: 'falVeo31Mode',
+      effect: 'autoSwitch',
+      target: 'falVeo31VideoDuration',
+      condition: (mode, allParams) =>
+        mode === 'reference-to-video' && allParams.falVeo31VideoDuration !== 8,
+      value: 8
+    },],
   endpoints: {
     selector: async (params) => {
       const mode = params.falVeo31Mode || 'text-image-to-video'

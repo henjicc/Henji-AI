@@ -63,11 +63,15 @@ export const pixverseV55Model = defineModel({
       order: 4,
       type: 'dropdown',
       name: sharedFieldText('style'),
+      // 官方枚举只有这 5 个；此前的 realistic 不在其中，选中会把非法值发给 API
       default: 'none',
       options: [
         { value: 'none', label: sharedOptionText('default') },
-        { value: 'realistic', label: sharedOptionText('realistic') },
-        { value: 'anime', label: sharedOptionText('anime') }
+        { value: 'anime', label: sharedOptionText('anime') },
+        { value: '3d_animation', label: sharedOptionText('threeDAnimation') },
+        { value: 'clay', label: sharedOptionText('clay') },
+        { value: 'comic', label: sharedOptionText('comic') },
+        { value: 'cyberpunk', label: sharedOptionText('cyberpunk') }
       ]
     },
     {
@@ -75,10 +79,12 @@ export const pixverseV55Model = defineModel({
       order: 5,
       type: 'dropdown',
       name: sharedFieldText('thinkingType'),
-      default: 'normal',
+      // 官方枚举是 enabled / disabled / auto；此前的 normal / enhanced 不被接口接受
+      default: 'auto',
       options: [
-        { value: 'normal', label: sharedOptionText('normal') },
-        { value: 'enhanced', label: sharedOptionText('enhanced') }
+        { value: 'auto', label: sharedOptionText('auto') },
+        { value: 'enabled', label: sharedOptionText('enabled') },
+        { value: 'disabled', label: sharedOptionText('disabled') }
       ]
     },
     {

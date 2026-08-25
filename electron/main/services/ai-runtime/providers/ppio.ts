@@ -3,7 +3,9 @@ import { pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { getPointer, normalizeEndpoint, pushUniqueUrl, readJsonResponse, stringAt } from './helpers'
 
-const PPIO_BASE_URL = 'https://api.ppinfra.com/v3'
+// 官网与全部文档示例现已统一使用 api.ppio.com；旧域名 api.ppinfra.com 目前仍可用
+// （两者对同一路由返回一致），但官方已无任何引用，按现行域名接入。
+const PPIO_BASE_URL = 'https://api.ppio.com/v3'
 
 export async function execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
   const endpoint = normalizeEndpoint(PPIO_BASE_URL, input.route)

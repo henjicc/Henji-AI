@@ -78,9 +78,14 @@
     "adaptive": "智能",
     "anime": "动漫",
     "auto": "自动",
+    "clay": "黏土",
+    "comic": "漫画",
     "consistentWithImage": "与图片一致",
     "consistentWithVideo": "与视频一致",
+    "cyberpunk": "赛博朋克",
     "default": "默认",
+    "disabled": "关闭",
+    "enabled": "开启",
     "enhanced": "增强",
     "hd2k": "高清 2K",
     "high": "高",
@@ -90,9 +95,9 @@
     "medium": "中",
     "multiShot": "多镜头",
     "normal": "普通",
+    "official": "官方",
     "offlineMode": "离线模式",
     "onlineMode": "在线模式",
-    "official": "官方",
     "pro": "Pro",
     "professional": "专业",
     "realistic": "写实",
@@ -104,6 +109,7 @@
     "smart": "智能",
     "spicy": "激进",
     "standard": "标准",
+    "threeDAnimation": "3D 动画",
     "turbo": "Turbo",
     "uhd4k": "超清 4K"
   },
@@ -119,13 +125,11 @@
     "videoExtension": "视频延长",
     "videoReference": "视频参考"
   },
-
   "placeholders": {
     "prompt": "请输入提示词...",
     "negativePrompt": "请输入负面提示词...",
     "seed": "留空则随机生成"
   },
-
   "tips": {
     "prompt": "描述你想要生成的内容",
     "negativePrompt": "描述你不想要的内容",

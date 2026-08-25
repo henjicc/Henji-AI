@@ -18,9 +18,6 @@ export function resolvePpioMediaRewriteMode(
   }
 
   if (route === '/v1/chat/completions' && normalized === 'url') return 'public-url'
-  if (route === '/async/kling-2.5-turbo-i2v' && normalized === 'image') return 'raw-base64'
-  if (route === '/async/pixverse-v4.5-i2v' && normalized === 'image') return 'raw-base64'
-  if (route === '/async/kling-v2.6-pro-motion-control' && normalized === 'image') return 'public-url'
   if (route === '/async/kling-v3.0-4k-i2v' && (normalized === 'image' || normalized === 'end_image')) {
     return 'public-url'
   }

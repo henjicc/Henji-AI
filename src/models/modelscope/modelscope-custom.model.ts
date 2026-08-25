@@ -107,9 +107,11 @@ export const modelscopeCustomModel = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '魔粒',
+    // 自定义模型的档位取决于用户填入的模型（轻量 0.5 / 主流 1 / 旗舰 2 魔粒），
+    // 无法在提交前预知，按主流档展示。
+    calculator: () => 1,
+    description: '按模型档位扣魔粒：轻量 0.5、主流 1、旗舰 2 魔粒/次'
   }
 })
 

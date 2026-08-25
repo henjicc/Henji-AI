@@ -46,6 +46,9 @@ export const hailuo02Model = defineModel({
       type: 'dropdown',
       name: sharedFieldText('duration'),
       default: '6',
+      // Pro 端点的 schema 里没有 duration 字段，官方固定 6 秒（$0.48/条）。
+      // 不隐藏的话用户选 10s 会看到 $0.80 预估，但请求不带该字段、实际仍按 6s 出账。
+      visible: { condition: 'falHailuo02Version !== "pro"' },
       options: [
         { value: '6', label: '6s' },
         { value: '10', label: '10s' }
@@ -153,12 +156,13 @@ export const hailuo02Model = defineModel({
       const duration = params.falHailuo02Duration === '10' ? 10 : 6
       const version = params.falHailuo02Version === 'pro' ? 'pro' : 'standard'
       const isFastMode = params.falHailuo02FastMode === true && hasUploadedImage(params)
-      if (version === 'pro') return 0.08 * duration
+      // Pro 不接受 duration 入参，官方固定 6 秒，计价不能读 UI 上的时长
+      if (version === 'pro') return 0.08 * 6
       if (isFastMode) return 0.017 * duration
       const resolution = params.falHailuo02Resolution === '512P' ? '512P' : '768P'
       return (resolution === '512P' ? 0.017 : 0.045) * duration
     },
-    description: 'Standard：768P $0.045/秒，512P $0.017/秒；Fast（图生视频）：512P $0.017/秒；Pro：固定 1080P $0.08/秒'
+    description: 'Standard：768P $0.045/秒，512P $0.017/秒；Fast（图生视频）：512P $0.017/秒；Pro：固定 1080P、固定 6 秒，$0.08/秒（$0.48/条）'
   }
 })
 

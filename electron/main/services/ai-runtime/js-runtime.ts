@@ -66,7 +66,9 @@ function calculateResolutionWithBounds(baseSize, widthRatio, heightRatio, minSiz
   height = Math.floor(Math.max(actualMin, Math.min(actualMax, height)) / 16) * 16;
   return { width, height };
 }
-function resolveModelscopeSize(modelId, imageSize, baseSize) {
+// ⚠️ 以下两个函数是 src/models/modelscope/utils.ts 的等价实现，供 builderJs 在 VM 内调用。
+// 两处必须保持行为一致，改一处就要改另一处（见 modelscope/utils.test.ts 的一致性回归）。
+function resolveModelscopeSize(modelId, imageSize, baseSize, bounds) {
   if (!imageSize) return undefined;
   if (typeof imageSize === "string" && imageSize.includes("x")) return imageSize;
   let ratio = imageSize === "smart" || imageSize === "auto" || imageSize === "自定义" ? "1:1" : imageSize;
@@ -78,8 +80,10 @@ function resolveModelscopeSize(modelId, imageSize, baseSize) {
     const size = calculateQwenResolution(w, h);
     return size.width + "x" + size.height;
   }
-  const normalizedBase = normalizeBaseSize(Number(baseSize || 1024), 512, 2048, 8);
-  const size = calculateResolutionWithBounds(normalizedBase, w, h, 64, 2048);
+  const lo = bounds && typeof bounds.min === "number" ? bounds.min : 64;
+  const hi = bounds && typeof bounds.max === "number" ? bounds.max : 2048;
+  const normalizedBase = normalizeBaseSize(Number(baseSize || 1024), lo, hi, 8);
+  const size = calculateResolutionWithBounds(normalizedBase, w, h, lo, hi);
   return size.width + "x" + size.height;
 }
 function buildModelscopeRequest(params, options) {
@@ -92,7 +96,7 @@ function buildModelscopeRequest(params, options) {
   const baseSizeParam = typeof params.resolutionBaseSize === "number"
     ? params.resolutionBaseSize
     : (typeof options.baseSize === "number" ? options.baseSize : undefined);
-  const sizeValue = sizeParam || resolveModelscopeSize(options.modelId, imageSizeParam, baseSizeParam);
+  const sizeValue = sizeParam || resolveModelscopeSize(options.modelId, imageSizeParam, baseSizeParam, options.sizeBounds);
   if (sizeValue) request.size = sizeValue;
   const steps = params.modelscopeSteps !== undefined ? params.modelscopeSteps : params.steps;
   if (steps !== undefined) request.steps = steps;
@@ -100,9 +104,10 @@ function buildModelscopeRequest(params, options) {
   if (options.allowGuidance !== false && params.modelscopeGuidance !== undefined) request.guidance = params.modelscopeGuidance;
   if (params.seed !== undefined) request.seed = params.seed;
   if (options.allowImage) {
-    let images = [];
-    if (Array.isArray(params.image_url)) images = params.image_url;
-    else if (Array.isArray(params.images)) images = params.images;
+    // 生成页提交是 uploadedFilePaths，画布节点是 images，旧工程可能是 image_url；三者都要认
+    let images = filterMediaSources(params.uploadedFilePaths);
+    if (images.length === 0 && Array.isArray(params.image_url)) images = params.image_url;
+    if (images.length === 0) images = filterMediaSources(params.images);
     if (images.length > 0) request.image_url = images;
   }
   return request;

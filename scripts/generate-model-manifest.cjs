@@ -7,9 +7,13 @@ const ROOT = process.cwd()
 const MODELS_DIR = path.join(ROOT, 'src', 'models')
 const OUTPUT = path.join(ROOT, 'resources', 'model-manifest.json')
 
+// 这些常量是跨文件 import 进模型定义的，constMap 解析不到，只能在这里镜像一份。
+// 改动时必须同步对应的源文件，否则 manifest 与源码静默分叉：
+//   KIE_CREATE_TASK_ENDPOINT        -> src/models/kie/*.model.ts
+//   MODELSCOPE_CREATE_TASK_ENDPOINT -> src/models/modelscope/utils.ts
 const KNOWN_ENDPOINT_CONSTANTS = {
   KIE_CREATE_TASK_ENDPOINT: '/api/v1/jobs/createTask',
-  MODELSCOPE_CREATE_TASK_ENDPOINT: '/api/v1/jobs/createTask',
+  MODELSCOPE_CREATE_TASK_ENDPOINT: '/v1/images/generations',
 }
 
 const CUSTOM_BUILDER_OVERRIDES = {

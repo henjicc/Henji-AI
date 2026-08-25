@@ -39,7 +39,7 @@ export const modelscopeMajicMixRealisticModel = defineModel({
       order: 2,
       name: sharedFieldText('baseSize'),
       default: 1024,
-      min: 512,
+      min: 64,
       max: 2048,
       step: 8
     },
@@ -81,13 +81,16 @@ export const modelscopeMajicMixRealisticModel = defineModel({
       allowGuidance: true,
       allowNegativePrompt: true,
       allowImage: false,
-      baseSize: 1024
+      baseSize: 1024,
+      sizeBounds: { min: 64, max: 2048 }
     })
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '魔粒',
+    calculator: () => 1,
+    // 魔搭 API-Inference 不收钱，扣的是魔粒积分（standard 档 1 魔粒/次）。
+    // 日常免费额度约 250 魔粒/天（登录 200 + 绑定阿里云 50），过期不累积。
+    description: '1 魔粒/次（standard 档），魔搭免费额度约 250 魔粒/天'
   }
 })
 

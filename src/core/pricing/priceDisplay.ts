@@ -1,3 +1,5 @@
+import { isNonMonetaryCurrency } from '@/core/types/PricingConfig'
+
 export type PriceEstimateCurrency = 'CNY' | 'USD'
 
 export type PriceEstimateCurrencyMode = 'auto' | 'cny' | 'usd'
@@ -33,6 +35,11 @@ export const PRICE_SETTING_CHANGED_EVENT = 'priceSettingChanged'
 
 function formatPrice(value: number): string {
   return value.toFixed(2)
+}
+
+/** 非货币单位（如魔搭魔粒）按整数数量展示，末尾多余的 0 去掉 */
+function formatUnitAmount(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100)
 }
 
 export function normalizePriceEstimateCurrencyMode(
@@ -111,6 +118,18 @@ export function formatPriceEstimate(
 
   if (!sourceCurrency) {
     const symbol = options.sourceCurrencySymbol || resolveCurrencySymbol(targetCurrency)
+
+    // 非货币单位（魔粒等）不能换算，也不该写成 "魔粒2.00"，按「数量 + 单位」渲染
+    if (isNonMonetaryCurrency(options.sourceCurrencySymbol)) {
+      return {
+        amount: options.amount,
+        currency: targetCurrency,
+        symbol,
+        display: `${formatUnitAmount(options.amount)} ${symbol}`,
+        converted: false,
+      }
+    }
+
     return {
       amount: options.amount,
       currency: targetCurrency,

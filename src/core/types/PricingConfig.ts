@@ -5,9 +5,20 @@
  */
 
 /**
- * 货币符号
+ * 计价单位
+ *
+ * 前四个是货币符号，可按汇率互相换算。
+ * `魔粒` 是魔搭 ModelScope 的积分单位：不是货币、无法充值、靠每日登录等行为免费获取，
+ * 因此不参与汇率换算，展示时按「数量 + 单位」渲染。
  */
-export type Currency = '¥' | '$' | '€' | '£'
+export type Currency = '¥' | '$' | '€' | '£' | '魔粒'
+
+/** 非货币计价单位，不参与汇率换算 */
+export const NON_MONETARY_CURRENCIES: readonly Currency[] = ['魔粒']
+
+export function isNonMonetaryCurrency(currency?: string): boolean {
+  return currency === '魔粒'
+}
 
 /**
  * 价格配置

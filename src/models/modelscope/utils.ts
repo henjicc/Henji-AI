@@ -1,7 +1,12 @@
 import { calculateQwenResolution } from '@/utils/qwenResolutionCalculator'
 import { calculateResolutionWithBounds, normalizeBaseSize } from '@/utils/resolutionCalculator'
 
-export const MODELSCOPE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask'
+/**
+ * 魔搭 API-Inference 的图像生成提交路由。
+ * 曾误用 KIE 的 `/api/v1/jobs/createTask`（同一次批量改动里复制串了供应商），
+ * 官方文档与每个模型页的示例代码统一都是这一条。
+ */
+export const MODELSCOPE_CREATE_TASK_ENDPOINT = '/v1/images/generations'
 
 export const MODELSCOPE_ASPECT_RATIO_OPTIONS = [
   { value: '21:9', label: '21:9' },
@@ -16,14 +21,25 @@ export const MODELSCOPE_ASPECT_RATIO_OPTIONS = [
 ]
 
 const DEFAULT_BASE_SIZE = 1024
-const BASE_SIZE_MIN = 512
-const BASE_SIZE_MAX = 2048
 const BASE_SIZE_STEP = 8
+
+/**
+ * 官方按模型族给出的 `size` 边界，超出会被接口拒绝：
+ * SD 系列 [64, 2048]、FLUX [64, 1024]、Qwen-Image [64, 1664]、Z-Image [512, 2048]。
+ * 不能对所有模型共用一组上下界。
+ */
+export const MODELSCOPE_DEFAULT_SIZE_BOUNDS = { min: 64, max: 2048 } as const
+
+export interface ModelscopeSizeBounds {
+  min: number
+  max: number
+}
 
 export function resolveModelscopeSize(
   modelId: string,
   imageSize?: string,
-  baseSize?: number
+  baseSize?: number,
+  bounds: ModelscopeSizeBounds = MODELSCOPE_DEFAULT_SIZE_BOUNDS
 ): string | undefined {
   if (!imageSize) return undefined
 
@@ -47,15 +63,21 @@ export function resolveModelscopeSize(
 
   const normalizedBase = normalizeBaseSize(
     Number(baseSize || DEFAULT_BASE_SIZE),
-    BASE_SIZE_MIN,
-    BASE_SIZE_MAX,
+    bounds.min,
+    bounds.max,
     BASE_SIZE_STEP
   )
 
-  const size = calculateResolutionWithBounds(normalizedBase, w, h, 64, 2048)
+  const size = calculateResolutionWithBounds(normalizedBase, w, h, bounds.min, bounds.max)
   return `${size.width}x${size.height}`
 }
 
+/**
+ * ⚠️ 这个函数会被序列化进 manifest 的 builderJs，实际在
+ * `electron/main/services/ai-runtime/js-runtime.ts` 的 JS_PRELUDE 里执行——
+ * 那里有一份**手工维护的等价实现**。改动本函数（或 resolveModelscopeSize）
+ * 必须同步改 PRELUDE 那份，否则运行时行为不变、改动静默失效。
+ */
 export function buildModelscopeRequest(
   params: DynamicValueMap,
   options: {
@@ -64,6 +86,7 @@ export function buildModelscopeRequest(
     allowNegativePrompt?: boolean
     allowImage?: boolean
     baseSize?: number
+    sizeBounds?: ModelscopeSizeBounds
   }
 ): DynamicValueMap {
   const prompt = typeof params.prompt === 'string' ? params.prompt : ''
@@ -86,7 +109,12 @@ export function buildModelscopeRequest(
 
   const sizeValue =
     sizeParam ||
-    resolveModelscopeSize(options.modelId, imageSizeParam, baseSizeParam)
+    resolveModelscopeSize(
+      options.modelId,
+      imageSizeParam,
+      baseSizeParam,
+      options.sizeBounds ?? MODELSCOPE_DEFAULT_SIZE_BOUNDS
+    )
 
   if (sizeValue) {
     request.size = sizeValue
