@@ -64,8 +64,8 @@ export function useCanvasAssetGroups(input: UseCanvasAssetGroupsInput) {
   }, [addToAssetGroup, nodes, onNodeDragStop, selectedNodeIds, wrapperRef]);
 
   const renderGraph = useMemo(
-    () => createAssetGroupRenderGraph(nodes, edges, activeGroupId),
-    [activeGroupId, edges, nodes],
+    () => createAssetGroupRenderGraph(nodes, edges),
+    [edges, nodes],
   );
 
   return { activeGroupId, closeAssetGroup: () => setActiveGroupId(null), handleDragStop, renderGraph };

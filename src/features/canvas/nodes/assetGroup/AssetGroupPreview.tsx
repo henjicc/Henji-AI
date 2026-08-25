@@ -22,10 +22,12 @@ const AssetGroupPreviewTile = memo(({
   item,
   className,
   overflowCount,
+  showKindBadge,
 }: {
   item: AssetGroupPreviewItem;
   className: string;
   overflowCount: number;
+  showKindBadge: boolean;
 }) => {
   const [failed, setFailed] = useState(false);
   const source = item.source ? resolveImageDisplayUrl(item.source) : null;
@@ -49,7 +51,7 @@ const AssetGroupPreviewTile = memo(({
           <FallbackIcon className="h-6 w-6" />
         </div>
       )}
-      {item.kind === 'video' && (
+      {showKindBadge && item.kind === 'video' && (
         <span className="ui-glass pointer-events-none absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-lg text-text-dark">
           <ICON_MEDIA_VIDEO className="h-3 w-3" />
         </span>
@@ -65,7 +67,13 @@ const AssetGroupPreviewTile = memo(({
 
 AssetGroupPreviewTile.displayName = 'AssetGroupPreviewTile';
 
-export const AssetGroupPreview = memo(({ items }: { items: AssetGroupPreviewItem[] }) => {
+export const AssetGroupPreview = memo(({
+  items,
+  showKindBadge = true,
+}: {
+  items: AssetGroupPreviewItem[];
+  showKindBadge?: boolean;
+}) => {
   const visibleItems = items.slice(0, MAX_VISIBLE_PREVIEWS);
   const overflowCount = Math.max(0, items.length - MAX_VISIBLE_PREVIEWS);
 
@@ -88,6 +96,7 @@ export const AssetGroupPreview = memo(({ items }: { items: AssetGroupPreviewItem
           item={item}
           className={tileSpanClass(index, visibleItems.length)}
           overflowCount={index === visibleItems.length - 1 ? overflowCount : 0}
+          showKindBadge={showKindBadge}
         />
       ))}
     </div>

@@ -59,7 +59,25 @@
       "createFailed": "无法创建素材组",
       "addFailed": "无法加入素材组",
       "memberCount": "素材组现有 {{count}} 个素材",
-      "bindingSummary": "已连接 {{connected}} 个，待连接 {{pending}} 个，忽略 {{unsupported}} 个"
+      "bindingSummary": "已连接 {{connected}} 个，待连接 {{pending}} 个，忽略 {{unsupported}} 个",
+      "manager": {
+        "label": "素材组管理",
+        "memberCount": "{{count}} 个素材",
+        "open": "管理素材组",
+        "close": "关闭素材组管理",
+        "connect": "连接素材组",
+        "cover": "封面",
+        "setCover": "设为封面",
+        "moveEarlier": "向前移动",
+        "moveLater": "向后移动",
+        "remove": "移出素材组",
+        "emptyTitle": "素材组里还没有内容",
+        "emptyDescription": "关闭管理界面后，可将图片、视频或音频节点拖入素材组。",
+        "connections": "自动连接",
+        "unknownTarget": "未知节点",
+        "connectionStatus": "已连接 {{connected}} · 待连接 {{pending}} · 不支持 {{unsupported}}",
+        "restore": "恢复自动连接"
+      }
     },
     "toolbar": {
       "zoomIn": "放大",

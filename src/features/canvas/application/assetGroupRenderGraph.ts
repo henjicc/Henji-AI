@@ -8,24 +8,23 @@ export interface AssetGroupRenderGraph {
 }
 
 /**
- * 素材组的折叠/展开仅是渲染投影：store 始终保存真实成员边，项目数据和 Undo 不记录焦点态。
+ * 素材组在画布上始终保持折叠投影；成员管理由独立工作面完成。
+ * store 仍保存真实成员边，项目数据和 Undo 不记录管理工作面的打开状态。
  */
 export function createAssetGroupRenderGraph(
   nodes: CanvasNode[],
   edges: CanvasEdge[],
-  activeGroupId: string | null,
 ): AssetGroupRenderGraph {
   const assetGroups = nodes.filter(isAssetGroupNode);
   const groupIds = new Set(assetGroups.map((group) => group.id));
   const renderNodes = nodes.map((node) => {
     if (!node.parentId || !groupIds.has(node.parentId)) return node;
-    return { ...node, hidden: node.parentId !== activeGroupId };
+    return { ...node, hidden: true };
   });
 
   const hiddenBindingIds = new Set<string>();
   const bundleEdges: CanvasEdge[] = [];
   for (const group of assetGroups) {
-    if (group.id === activeGroupId) continue;
     for (const binding of group.data.bindings) {
       hiddenBindingIds.add(binding.id);
       const status = summarizeAssetGroupBinding(nodes, edges, group.id, binding);

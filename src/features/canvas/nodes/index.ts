@@ -63,7 +63,7 @@ export const nodeTypes: NodeTypes = {
   universalUploadNode: withNodePaintFrame(UniversalUploadNode),
   exportImageNode: withNodePaintFrame(ImageNode),
   groupNode: withNodePaintFrame(GroupNode),
-  assetGroupNode: withNodePaintFrame(AssetGroupNode, { right: 16, bottom: 16 }),
+  assetGroupNode: withNodePaintFrame(AssetGroupNode),
   imageNode: withNodePaintFrame(ImageEditNode, { bottom: 60 }),
   storyboardGenNode: withNodePaintFrame(StoryboardGenNode, { bottom: 84 }),
   storyboardNode: withNodePaintFrame(StoryboardNode),

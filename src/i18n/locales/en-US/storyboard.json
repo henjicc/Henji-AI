@@ -59,7 +59,25 @@
       "createFailed": "Could not create asset group",
       "addFailed": "Could not add media to asset group",
       "memberCount": "Asset group now contains {{count}} item(s)",
-      "bindingSummary": "Connected {{connected}}, pending {{pending}}, ignored {{unsupported}}"
+      "bindingSummary": "Connected {{connected}}, pending {{pending}}, ignored {{unsupported}}",
+      "manager": {
+        "label": "Asset group manager",
+        "memberCount": "{{count}} media item(s)",
+        "open": "Manage asset group",
+        "close": "Close asset group manager",
+        "connect": "Connect asset group",
+        "cover": "Cover",
+        "setCover": "Set as cover",
+        "moveEarlier": "Move earlier",
+        "moveLater": "Move later",
+        "remove": "Remove from asset group",
+        "emptyTitle": "This asset group is empty",
+        "emptyDescription": "Close the manager, then drag image, video, or audio nodes into the asset group.",
+        "connections": "Automatic connections",
+        "unknownTarget": "Unknown node",
+        "connectionStatus": "Connected {{connected}} · Pending {{pending}} · Unsupported {{unsupported}}",
+        "restore": "Restore automatic connections"
+      }
     },
     "toolbar": {
       "zoomIn": "Zoom In",

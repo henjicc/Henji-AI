@@ -198,7 +198,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const nodes = [
       {
         id: '__asset_group', type: 'assetGroupNode', position: { x: 180, y: 220 },
-        width: 220, height: 144, measured: { width: 220, height: 144 }, style: { width: 220, height: 144 },
+        width: 340, height: 220, measured: { width: 340, height: 220 }, style: { width: 340, height: 220 },
         data: {
           displayName: '角色设定',
           memberOrder: ['__asset_image_1', '__asset_image_2', '__asset_video', '__asset_image_3'],
@@ -253,8 +253,9 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await group.waitFor({ state: 'visible', timeout: 12000 })
     await settlePage(page, 700)
     if (expanded) {
-      await group.getByRole('button', { name: /展开素材组|Expand asset group/i }).click()
-      await page.getByText(/已临时展开|temporarily expanded/i).waitFor({ state: 'visible', timeout: 8000 })
+      await group.getByRole('button', { name: /管理素材组|Manage asset group/i }).click()
+      await page.getByRole('region', { name: /素材组管理|Asset group manager/i })
+        .waitFor({ state: 'visible', timeout: 8000 })
       await settlePage(page, 700)
     }
   }
@@ -621,7 +622,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       id: 'canvas-asset-group-expanded',
       surface: '画布',
       writesUserData: true,
-      name: '画布-素材组临时展开',
+      name: '画布-素材组管理工作面',
       setup: async (page) => setupCanvasAssetGroup(page, true),
     },
     {

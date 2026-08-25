@@ -2,9 +2,10 @@
 
 import { renderHook } from '@testing-library/react';
 import type { TFunction } from 'i18next';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { resolveCompatibleTargetHandleForSource } from '@/features/canvas/application/graphValueResolver';
+import * as assetGroupApplicationService from '@/features/canvas/application/assetGroupApplicationService';
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes';
 import { canvasNodeDefinitions } from '@/features/canvas/domain/nodeRegistry';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -36,6 +37,8 @@ describe('useCanvasConnectionActions.handleConnect', () => {
   beforeEach(() => {
     useCanvasStore.getState().setCanvasData([uploadNode('upload-1')], [], { past: [], future: [] });
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it('连接同一次事件里刚创建的节点（快捷连接不能读渲染期快照）', () => {
     const { result } = renderActions();
@@ -81,5 +84,41 @@ describe('useCanvasConnectionActions.handleConnect', () => {
 
     expect(useCanvasStore.getState().edges).toHaveLength(0);
     expect(showToast).toHaveBeenCalled();
+  });
+
+  it('从素材组端口拖出时转为整组绑定', () => {
+    const bindAssetGroup = vi.spyOn(assetGroupApplicationService, 'bindAssetGroup')
+      .mockReturnValue({ connected: 2, pending: 1, unsupported: 0, excluded: 0 });
+    const group: CanvasNode = {
+      id: 'group-1',
+      type: CANVAS_NODE_TYPES.assetGroup,
+      position: { x: 0, y: 0 },
+      data: {
+        ...canvasNodeDefinitions[CANVAS_NODE_TYPES.assetGroup].createDefaultData(),
+        memberOrder: ['upload-1'],
+      },
+    } as CanvasNode;
+    const target: CanvasNode = {
+      id: 'target-1',
+      type: CANVAS_NODE_TYPES.videoGen,
+      position: { x: 400, y: 0 },
+      data: canvasNodeDefinitions[CANVAS_NODE_TYPES.videoGen].createDefaultData(),
+    } as CanvasNode;
+    useCanvasStore.getState().setCanvasData(
+      [uploadNode('upload-1'), group, target],
+      [],
+      { past: [], future: [] },
+    );
+    const { result } = renderActions();
+
+    result.current.handleConnect({
+      source: group.id,
+      target: target.id,
+      sourceHandle: 'source',
+      targetHandle: 'param:__image',
+    });
+
+    expect(bindAssetGroup).toHaveBeenCalledWith({ groupId: group.id, targetNodeId: target.id });
+    expect(useCanvasStore.getState().edges).toHaveLength(0);
   });
 });

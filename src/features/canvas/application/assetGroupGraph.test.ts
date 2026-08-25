@@ -149,15 +149,12 @@ describe('assetGroupGraph', () => {
     expect(removed?.edges.some((edge) => edge.id === manual.id)).toBe(true);
   });
 
-  it('折叠时投影为束线，展开时恢复真实独立边，解散后边转为手动边', () => {
+  it('管理工作面打开前后都保持折叠束线，解散后边转为手动边', () => {
     const graph = fixture();
-    const collapsed = createAssetGroupRenderGraph(graph.nodes, graph.edges, null);
+    const collapsed = createAssetGroupRenderGraph(graph.nodes, graph.edges);
     expect(collapsed.edges).toHaveLength(1);
     expect(collapsed.edges[0].data?.assetGroupBundle).toMatchObject({ groupId: graph.groupId, connected: 2 });
-
-    const expanded = createAssetGroupRenderGraph(graph.nodes, graph.edges, graph.groupId);
-    expect(expanded.edges).toHaveLength(2);
-    expect(expanded.nodes.filter((item) => item.parentId === graph.groupId).every((item) => !item.hidden)).toBe(true);
+    expect(collapsed.nodes.filter((item) => item.parentId === graph.groupId).every((item) => item.hidden)).toBe(true);
 
     const dissolved = ungroupAssetGroupGraph(graph.nodes, graph.edges, graph.groupId);
     expect(dissolved?.nodes.some((item) => item.id === graph.groupId)).toBe(false);
