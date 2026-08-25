@@ -175,7 +175,12 @@ async function launchElectronApp({
         close: async () => {
           try {
             await restoreOnboarding?.().catch(() => undefined)
-            await app.close()
+            if (!page.isClosed()) {
+              const closed = page.waitForEvent('close', { timeout: 10000 }).catch(() => undefined)
+              await page.evaluate(async () => { await window.henjiNative?.window.close() }).catch(() => undefined)
+              await closed
+            }
+            await app.close().catch(() => undefined)
           } finally {
             await cleanupIsolatedUserDataDir(userDataDir)
           }
@@ -224,7 +229,12 @@ async function launchElectronApp({
       page,
       close: async () => {
         await restoreOnboarding?.().catch(() => undefined)
-        await browser.close()
+        if (!page.isClosed()) {
+          const closed = page.waitForEvent('close', { timeout: 10000 }).catch(() => undefined)
+          await page.evaluate(async () => { await window.henjiNative?.window.close() }).catch(() => undefined)
+          await closed
+        }
+        await browser.close().catch(() => undefined)
         await stopElectronChild(child)
         await cleanupIsolatedUserDataDir(userDataDir)
       },

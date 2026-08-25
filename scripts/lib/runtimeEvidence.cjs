@@ -6,6 +6,11 @@
  */
 
 const LOG_QUERY_LIMIT = 500
+const BENIGN_RESIZE_OBSERVER_ERROR = /^ResizeObserver loop (?:limit exceeded|completed with undelivered notifications)\.?$/i
+
+function isBenignBrowserError(message) {
+  return BENIGN_RESIZE_OBSERVER_ERROR.test(String(message).trim())
+}
 
 function compactLogEvent(event) {
   return {
@@ -58,6 +63,7 @@ function createRuntimeEvidenceCollector(page) {
 
   const onConsole = (message) => {
     if (message.type() !== 'error') return
+    if (isBenignBrowserError(message.text())) return
     browserErrors.push({
       kind: 'console',
       scene: active?.key ?? null,
@@ -66,11 +72,13 @@ function createRuntimeEvidenceCollector(page) {
     })
   }
   const onPageError = (error) => {
+    const message = error instanceof Error ? error.message : String(error)
+    if (isBenignBrowserError(message)) return
     browserErrors.push({
       kind: 'pageerror',
       scene: active?.key ?? null,
       timestamp: new Date().toISOString(),
-      message: error instanceof Error ? error.message : String(error),
+      message,
     })
   }
   page.on('console', onConsole)
@@ -118,5 +126,6 @@ function createRuntimeEvidenceCollector(page) {
 module.exports = {
   LOG_QUERY_LIMIT,
   createRuntimeEvidenceCollector,
+  isBenignBrowserError,
   queryApplicationLogs,
 }

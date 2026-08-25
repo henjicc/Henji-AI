@@ -15,6 +15,12 @@ initLoggerConfig()
 // 只记录，不吞错——异常仍按浏览器默认行为继续传播。
 const crashLogger = createLogger('app.errors')
 window.addEventListener('error', (event) => {
+  if (/^ResizeObserver loop (?:limit exceeded|completed with undelivered notifications)\.?$/i.test(event.message.trim())) {
+    // 浏览器为避免单帧内尺寸回调自激而把剩余通知延后；它不是组件异常，也不会导致白屏。
+    // 作为 crash 记录会让真实界面巡检与用户日志产生大量假红。
+    event.preventDefault()
+    return
+  }
   crashLogger.error('渲染层未捕获异常', {
     event: 'app.uncaught_error.captured',
     message: event.message,

@@ -1,6 +1,7 @@
 const fs = require('node:fs')
 const path = require('node:path')
 const { launchElectronApp: launchElectronAppBase, waitForApp, assert } = require('./lib/electronLaunch.cjs')
+const { isBenignBrowserError } = require('./lib/runtimeEvidence.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
 const MAIN_ENTRY = path.join(ROOT, 'out', 'main', 'index.cjs')
@@ -118,7 +119,7 @@ async function checkWorkspaceShell(page) {
   let tempProjectName = null
 
   const onboardingDialog = page.getByRole('dialog', {
-    name: /欢迎使用痕迹AI|Welcome to Henji AI/,
+    name: /首次设置|First-time setup/,
   })
   if (await onboardingDialog.isVisible().catch(() => false)) {
     await onboardingDialog.getByRole('button', {
@@ -132,7 +133,9 @@ async function checkWorkspaceShell(page) {
 
   if (await page.locator('.react-flow').count() === 0) {
     tempProjectName = `Phase 4 Smoke ${Date.now()}`
-    await page.getByRole('button', { name: /新建项目|New Project/ }).click()
+    await page.locator('[data-ui-page-header]').getByRole('button', {
+      name: /新建项目|New Project/,
+    }).click()
     // 必须限定到项目名输入框：页面上还有智能助手的提示词编辑器，它是
     // contenteditable 且带 role="textbox"，不限定会命中两个元素直接报 strict 违规。
     const nameInput = page.getByRole('textbox', { name: /项目名称|Project name/ })
@@ -213,12 +216,14 @@ async function main() {
     const page = app.page
     page.on('console', (message) => {
       if (message.type() === 'error') {
+        if (isBenignBrowserError(message.text())) return
         const location = message.location()
         const source = location.url ? ` (${location.url}:${location.lineNumber + 1})` : ''
         consoleErrors.push(`${message.text()}${source}`)
       }
     })
     page.on('pageerror', (error) => {
+      if (isBenignBrowserError(error.message)) return
       pageErrors.push(error.message)
     })
 

@@ -35,3 +35,22 @@ test('按场景边界同时收集浏览器异常和应用接口日志', async ()
   assert.equal(page.queries.length, 2)
   assert.equal(page.queries.every((query) => typeof query.queryAfter === 'string'), true)
 })
+
+test('ResizeObserver 调度通知不计作应用崩溃', async () => {
+  const page = new FakePage()
+  page.evaluate = async (_fn, input) => ({
+    events: [], hasMore: false, corruptedLines: 0, queryLevel: input.queryLevel,
+  })
+  const collector = createRuntimeEvidenceCollector(page)
+  collector.begin('尺寸变化')
+  page.emit('pageerror', new Error('ResizeObserver loop completed with undelivered notifications.'))
+  page.emit('console', {
+    type: () => 'error',
+    text: () => 'ResizeObserver loop limit exceeded',
+  })
+  const evidence = await collector.finish()
+  collector.dispose()
+
+  assert.equal(evidence.passed, true)
+  assert.deepEqual(evidence.browserErrors, [])
+})
