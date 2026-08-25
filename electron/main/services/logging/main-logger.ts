@@ -34,6 +34,36 @@ function inferEvent(message: string, level: MainLogLevel): string {
   return compact ? compact.slice(0, 64) : `${level}.event`
 }
 
+export function serializeMainLogError(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+  if (typeof value === 'bigint') return value.toString()
+  if (typeof value !== 'object') return String(value)
+  if (seen.has(value)) return '[circular]'
+  seen.add(value)
+
+  if (value instanceof Error) {
+    const errorRecord = value as Error & { code?: unknown; cause?: unknown }
+    const enumerable = Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, serializeMainLogError(item, seen)])
+    )
+    return {
+      ...enumerable,
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      ...(errorRecord.code !== undefined ? { code: serializeMainLogError(errorRecord.code, seen) } : {}),
+      ...(errorRecord.cause !== undefined ? { cause: serializeMainLogError(errorRecord.cause, seen) } : {}),
+    }
+  }
+  if (Array.isArray(value)) return value.map((item) => serializeMainLogError(item, seen))
+  if (value instanceof Date) return value.toISOString()
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [key, serializeMainLogError(item, seen)])
+  )
+}
+
 function logAt(domain: string, level: MainLogLevel, message: string, meta: MainLoggerMeta): void {
   const event: MainLogEvent = {
     timestamp: new Date().toISOString(),
@@ -46,7 +76,7 @@ function logAt(domain: string, level: MainLogLevel, message: string, meta: MainL
     modelId: meta.modelId,
     providerId: meta.providerId,
     context: meta.context,
-    error: meta.error,
+    error: meta.error === undefined ? undefined : serializeMainLogError(meta.error),
     source: 'backend',
   }
 

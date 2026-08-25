@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   root: '',
   allowMediaRoot: vi.fn(),
   probeLocalMedia: vi.fn(),
+  loadSharp: vi.fn(),
+  warmNativeMediaTools: vi.fn(),
+  loggerInfo: vi.fn(),
 }))
 
 vi.mock('../../protocol', () => ({
@@ -17,19 +20,19 @@ vi.mock('../image/path-utils', () => ({
   getUploadsDir: () => `${mocks.root}/Uploads`,
   getDataRootDir: () => mocks.root,
 }))
-vi.mock('../image/sharp-loader', () => ({ loadSharp: vi.fn() }))
+vi.mock('../image/sharp-loader', () => ({ loadSharp: mocks.loadSharp }))
 vi.mock('../logging', () => ({
   createMainLogger: () => ({
-    trace: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(),
+    trace: vi.fn(), debug: vi.fn(), info: mocks.loggerInfo, warn: vi.fn(), error: vi.fn(),
   }),
 }))
 vi.mock('./probe', () => ({
   probeLocalMedia: mocks.probeLocalMedia,
-  warmNativeMediaTools: vi.fn(),
+  warmNativeMediaTools: mocks.warmNativeMediaTools,
   writeVideoPoster: vi.fn(),
 }))
 
-import { importMediaFromBytes, importMediaFromPath } from './index'
+import { importMediaFromBytes, importMediaFromPath, warmupMediaImportPipeline } from './index'
 
 describe('main media import service', () => {
   beforeEach(async () => {
@@ -42,6 +45,9 @@ describe('main media import service', () => {
       height: 0,
       hasAudio: true,
     })
+    mocks.loadSharp.mockReset().mockResolvedValue(vi.fn())
+    mocks.warmNativeMediaTools.mockReset().mockResolvedValue(undefined)
+    mocks.loggerInfo.mockReset()
   })
 
   afterEach(async () => {
@@ -114,5 +120,18 @@ describe('main media import service', () => {
       expectedKind: 'audio',
       ownership: 'managed',
     })).rejects.toThrow('absolute file path')
+  })
+
+  it('预热覆盖图像、原生工具与临时文件清理，并记录分阶段耗时', async () => {
+    await warmupMediaImportPipeline()
+
+    expect(mocks.loadSharp).toHaveBeenCalledOnce()
+    expect(mocks.warmNativeMediaTools).toHaveBeenCalledOnce()
+    expect(mocks.loggerInfo).toHaveBeenCalledWith('媒体导入预热完成', expect.objectContaining({
+      event: 'media_import.warmup.completed',
+      context: expect.objectContaining({
+        phases: expect.objectContaining({ sharp: expect.any(Number), native_tools: expect.any(Number) }),
+      }),
+    }))
   })
 })

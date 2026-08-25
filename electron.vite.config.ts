@@ -10,7 +10,7 @@ export default defineConfig({
     build: {
       outDir: 'out/main',
       rollupOptions: {
-        external: ['better-sqlite3', 'ffmpeg-static', 'ffprobe-static'],
+        external: ['better-sqlite3', 'ffmpeg-ffprobe-static'],
         input: {
           index: resolve(__dirname, 'electron/main/index.ts'),
           'agent-utility': resolve(__dirname, 'electron/main/agent-utility.ts'),

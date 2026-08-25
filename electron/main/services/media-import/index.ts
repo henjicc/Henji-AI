@@ -43,6 +43,28 @@ interface PhaseTimings {
   previewMs: number
 }
 
+type WarmupPhase = 'sharp' | 'native_tools' | 'temp_cleanup'
+
+class MediaImportWarmupError extends Error {
+  readonly phase: WarmupPhase
+
+  constructor(phase: WarmupPhase, cause: unknown) {
+    super(`Media import warmup failed during ${phase}`, { cause })
+    this.name = 'MediaImportWarmupError'
+    this.phase = phase
+  }
+}
+
+async function runWarmupPhase(phase: WarmupPhase, task: () => Promise<void>): Promise<[WarmupPhase, number]> {
+  const started = performance.now()
+  try {
+    await task()
+    return [phase, roundMs(performance.now() - started)]
+  } catch (error) {
+    throw new MediaImportWarmupError(phase, error)
+  }
+}
+
 function roundMs(value: number): number {
   return Math.round(value * 10) / 10
 }
@@ -387,21 +409,27 @@ export function warmupMediaImportPipeline(): Promise<void> {
   warmupState = 'running'
   const started = performance.now()
   warmupPromise = Promise.all([
-    loadSharp().then(() => undefined),
-    warmNativeMediaTools(),
-    cleanupStaleMediaImportTemps().then(() => undefined),
-  ]).then(() => {
+    runWarmupPhase('sharp', async () => { await loadSharp() }),
+    runWarmupPhase('native_tools', warmNativeMediaTools),
+    runWarmupPhase('temp_cleanup', async () => { await cleanupStaleMediaImportTemps() }),
+  ]).then((phaseResults) => {
     warmupState = 'ready'
     logger.info('媒体导入预热完成', {
       event: 'media_import.warmup.completed',
-      context: { totalMs: roundMs(performance.now() - started) },
+      context: {
+        totalMs: roundMs(performance.now() - started),
+        phases: Object.fromEntries(phaseResults),
+      },
     })
   }).catch((error) => {
     warmupState = 'failed'
     warmupPromise = null
     logger.warn('媒体导入预热失败，真实导入将重试', {
       event: 'media_import.warmup.failed',
-      context: { totalMs: roundMs(performance.now() - started) },
+      context: {
+        totalMs: roundMs(performance.now() - started),
+        phase: error instanceof MediaImportWarmupError ? error.phase : 'unknown',
+      },
       error,
     })
   })

@@ -115,6 +115,28 @@ async function checkNativeBridge(page) {
   }, { tinyPngDataUrl: TINY_PNG_DATA_URL })
 }
 
+async function checkMediaWarmup(page, launchedAt) {
+  const deadline = Date.now() + 10000
+  while (Date.now() < deadline) {
+    const events = await page.evaluate(async (afterTimestamp) => {
+      const result = await window.henjiNative.logging.queryLogEvents({
+        date: new Date().toISOString().slice(0, 10),
+        domainPrefix: 'main.media_import',
+        keyword: 'media_import.warmup',
+        afterTimestamp,
+        limit: 20,
+      })
+      return result.events
+    }, launchedAt)
+    const failed = events.find((event) => event.event === 'media_import.warmup.failed')
+    if (failed) throw new Error(`media import warmup failed: ${JSON.stringify(failed.error)}`)
+    const completed = events.find((event) => event.event === 'media_import.warmup.completed')
+    if (completed) return completed.context
+    await page.waitForTimeout(200)
+  }
+  throw new Error('media import warmup did not complete within 10 seconds')
+}
+
 async function checkWorkspaceShell(page) {
   let tempProjectName = null
 
@@ -210,6 +232,7 @@ async function main() {
 
   const consoleErrors = []
   const pageErrors = []
+  const launchedAt = new Date().toISOString()
   const app = await launchElectronApp()
 
   try {
@@ -230,6 +253,7 @@ async function main() {
     await waitForApp(page)
     const nativeResult = await checkNativeBridge(page)
     const canvasMetrics = await checkWorkspaceShell(page)
+    const mediaWarmup = await checkMediaWarmup(page, launchedAt)
 
     assert(pageErrors.length === 0, `page errors: ${pageErrors.join('\n')}`)
     assert(consoleErrors.length === 0, `console errors: ${consoleErrors.join('\n')}`)
@@ -242,6 +266,7 @@ async function main() {
         providerStatusCount: nativeResult.providerStatusCount,
       },
       canvasMetrics,
+      mediaWarmup,
       pageErrors,
       consoleErrors,
     }, null, 2))
