@@ -72,7 +72,13 @@ export function createAssetGroup(input: {
   memberIds: string[];
   name?: string;
   projectId?: string;
-}): { projectId: string; groupId: string; accepted: number } {
+}): {
+  projectId: string;
+  groupId: string;
+  accepted: number;
+  preservedConnectionCount: number;
+  disconnectedConnectionCount: number;
+} {
   const projectId = requireProject(input.projectId);
   const canvas = useCanvasStore.getState();
   const groupCount = canvas.nodes.filter(isAssetGroupNode).length;
@@ -88,12 +94,41 @@ export function createAssetGroup(input: {
     projectId,
     requestedCount: input.memberIds.length,
   });
-  const graph = createAssetGroupGraph(canvas.nodes, canvas.edges, group, input.memberIds);
-  if (!graph) throw new AssetGroupApplicationError('INVALID_INPUT', '至少需要选择两个可连接的图片、视频或音频节点');
-  const createdNode = graph.nodes.find((node) => node.id === group.id);
-  const created = createdNode && isAssetGroupNode(createdNode) ? createdNode : undefined;
-  commit('create', graph, group.id);
-  return { projectId, groupId: group.id, accepted: created?.data.memberOrder.length ?? 0 };
+  try {
+    const graph = createAssetGroupGraph(canvas.nodes, canvas.edges, group, input.memberIds);
+    if (!graph) throw new AssetGroupApplicationError('INVALID_INPUT', '至少需要选择两个可连接的图片、视频或音频节点');
+    const createdNode = graph.nodes.find((node) => node.id === group.id);
+    const created = createdNode && isAssetGroupNode(createdNode) ? createdNode : undefined;
+    const createdMemberIds = new Set(created?.data.memberOrder ?? []);
+    const originalOutboundEdges = canvas.edges.filter((edge) => (
+      createdMemberIds.has(edge.source) && !createdMemberIds.has(edge.target)
+    ));
+    const preservedConnectionCount = created?.data.bindings.length
+      ? graph.edges.filter((edge) => edge.data?.managedByAssetGroup?.groupId === group.id).length
+      : 0;
+    const disconnectedConnectionCount = created?.data.bindings.length ? 0 : originalOutboundEdges.length;
+    commit('create', graph, group.id);
+    logger.info('素材组创建连线策略完成', {
+      event: 'canvas.asset_group.create.connection_policy.completed',
+      projectId,
+      groupId: group.id,
+      preservedConnectionCount,
+      disconnectedConnectionCount,
+    });
+    return {
+      projectId,
+      groupId: group.id,
+      accepted: created?.data.memberOrder.length ?? 0,
+      preservedConnectionCount,
+      disconnectedConnectionCount,
+    };
+  } catch (error) {
+    logger.error('创建素材组失败', error, {
+      event: 'canvas.asset_group.create.failed',
+      context: { projectId, requestedCount: input.memberIds.length },
+    });
+    throw error;
+  }
 }
 
 export function addAssetGroupMembers(input: {

@@ -123,4 +123,37 @@ describe('useCanvasConnectionActions.handleConnect', () => {
     expect(bindAssetGroup).toHaveBeenCalledWith({ groupId: group.id, targetNodeId: target.id });
     expect(useCanvasStore.getState().edges).toHaveLength(0);
   });
+
+  it('创建素材组后明确提示连线被保留或被解开', () => {
+    const showToast = vi.fn();
+    const createAssetGroup = vi.spyOn(assetGroupApplicationService, 'createAssetGroup')
+      .mockReturnValueOnce({
+        projectId: 'project-1',
+        groupId: 'group-1',
+        accepted: 2,
+        preservedConnectionCount: 2,
+        disconnectedConnectionCount: 0,
+      })
+      .mockReturnValueOnce({
+        projectId: 'project-1',
+        groupId: 'group-2',
+        accepted: 2,
+        preservedConnectionCount: 0,
+        disconnectedConnectionCount: 2,
+      });
+    const { result } = renderHook(() => useCanvasConnectionActions({
+      connectNodes: useCanvasStore.getState().onConnect,
+      connectMany: useCanvasStore.getState().connectMany,
+      schedulePersist: () => undefined,
+      showToast,
+      t: ((key: string) => key) as unknown as TFunction,
+    }));
+
+    result.current.createAssetGroup(['upload-1', 'upload-2']);
+    result.current.createAssetGroup(['upload-1', 'upload-2']);
+
+    expect(createAssetGroup).toHaveBeenCalledTimes(2);
+    expect(showToast).toHaveBeenNthCalledWith(1, 'canvas.assetGroup.createdPreserved', 'success');
+    expect(showToast).toHaveBeenNthCalledWith(2, 'canvas.assetGroup.createdDisconnected', 'success');
+  });
 });

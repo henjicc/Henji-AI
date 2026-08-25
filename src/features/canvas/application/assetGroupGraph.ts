@@ -214,6 +214,25 @@ export function createAssetGroupGraph(
   const position = { x: Math.round(bounds.minX), y: Math.round(bounds.minY) };
   const memberIds = members.map((member) => member.id);
   const memberSet = new Set(memberIds);
+  const outboundEdges = edges.filter((edge) => memberSet.has(edge.source) && !memberSet.has(edge.target));
+  const outboundTargetIds = [...new Set(outboundEdges.map((edge) => edge.target))];
+  const shouldPreserveSharedTarget = outboundTargetIds.length === 1;
+  const sharedTargetId = shouldPreserveSharedTarget ? outboundTargetIds[0] : null;
+  const connectedMemberIds = new Set(outboundEdges.map((edge) => edge.source));
+  const targetPortByKind: Partial<Record<RowMediaKind, string>> = {};
+  if (sharedTargetId) {
+    for (const edge of outboundEdges) {
+      const member = nodeById.get(edge.source);
+      const kind = member ? resolveAssetGroupMemberKind(member) : null;
+      if (kind && edge.targetHandle) targetPortByKind[kind] = edge.targetHandle;
+    }
+  }
+  const inheritedBindings: AssetGroupBinding[] = sharedTargetId ? [{
+    id: `asset-group:create:${groupNode.id}:${sharedTargetId}`,
+    targetNodeId: sharedTargetId,
+    targetPortByKind,
+    excludedMemberIds: memberIds.filter((id) => !connectedMemberIds.has(id)),
+  }] : [];
   const sharedParentId = members.every((member) => member.parentId === members[0].parentId)
     ? members[0].parentId
     : undefined;
@@ -233,7 +252,7 @@ export function createAssetGroupGraph(
       ...groupNode.data,
       memberOrder: memberIds,
       coverMemberId: memberIds[0],
-      bindings: [],
+      bindings: inheritedBindings,
     },
   };
   const nextNodes: CanvasNode[] = [];
@@ -258,7 +277,10 @@ export function createAssetGroupGraph(
     });
   }
   if (!insertedGroup) nextNodes.push(assetGroup);
-  return reconcileAssetGroupGraph(nextNodes, edges);
+  const nextEdges = outboundTargetIds.length > 0
+    ? edges.filter((edge) => !outboundEdges.includes(edge))
+    : edges;
+  return reconcileAssetGroupGraph(nextNodes, nextEdges);
 }
 
 export function addAssetGroupMembersGraph(

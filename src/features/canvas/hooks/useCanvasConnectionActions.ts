@@ -148,7 +148,18 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
   const createGroup = useCallback((memberIds: string[]) => {
     try {
       const result = createAssetGroup({ memberIds });
-      showToast(t('canvas.assetGroup.created', { count: result.accepted }), 'success');
+      const message = result.disconnectedConnectionCount > 0
+        ? t('canvas.assetGroup.createdDisconnected', {
+          count: result.accepted,
+          disconnected: result.disconnectedConnectionCount,
+        })
+        : result.preservedConnectionCount > 0
+          ? t('canvas.assetGroup.createdPreserved', {
+            count: result.accepted,
+            preserved: result.preservedConnectionCount,
+          })
+          : t('canvas.assetGroup.created', { count: result.accepted });
+      showToast(message, 'success');
     } catch (error) {
       showToast(error instanceof Error ? error.message : t('canvas.assetGroup.createFailed'));
     }

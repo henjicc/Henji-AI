@@ -17,7 +17,7 @@ vi.mock('./mediaImport', () => ({
   importCanvasMediaFile: mocks.importCanvasMediaFile,
 }));
 
-import { addAssetToAssetGroup, importFilesToAssetGroup } from './assetGroupApplicationService';
+import { addAssetToAssetGroup, createAssetGroup, importFilesToAssetGroup } from './assetGroupApplicationService';
 
 const projectId = 'asset-group-import-project';
 
@@ -104,5 +104,30 @@ describe('assetGroupApplicationService media import', () => {
       hidden: true,
       data: expect.objectContaining({ audioUrl: '/voice.wav', sourceFileName: '旁白' }),
     });
+  });
+
+  it('不同目标的现有连线随创建事务一起解开并可由历史恢复', () => {
+    const imageOne = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.upload, { x: 0, y: 0 }, {
+      imageUrl: '/one.png', aspectRatio: '1:1',
+    });
+    const imageTwo = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.upload, { x: 300, y: 0 }, {
+      imageUrl: '/two.png', aspectRatio: '1:1',
+    });
+    const targetOne = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.imageEdit, { x: 0, y: 300 });
+    const targetTwo = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.imageEdit, { x: 400, y: 300 });
+    useCanvasStore.getState().setCanvasData(
+      [imageOne, imageTwo, targetOne, targetTwo],
+      [
+        { id: 'edge-1', source: imageOne.id, target: targetOne.id, sourceHandle: 'source', targetHandle: 'param:__image' },
+        { id: 'edge-2', source: imageTwo.id, target: targetTwo.id, sourceHandle: 'source', targetHandle: 'param:__image' },
+      ],
+      { past: [], future: [] },
+    );
+
+    const result = createAssetGroup({ memberIds: [imageOne.id, imageTwo.id] });
+
+    expect(result).toMatchObject({ accepted: 2, preservedConnectionCount: 0, disconnectedConnectionCount: 2 });
+    expect(useCanvasStore.getState().edges).toEqual([]);
+    expect(useCanvasStore.getState().history.past[0]?.edges).toHaveLength(2);
   });
 });

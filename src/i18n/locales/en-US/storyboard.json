@@ -56,6 +56,8 @@
     },
     "assetGroup": {
       "created": "Grouped {{count}} media item(s)",
+      "createdPreserved": "Grouped {{count}} media item(s) and preserved {{preserved}} shared-target connection(s)",
+      "createdDisconnected": "Grouped {{count}} media item(s) and disconnected {{disconnected}} mixed-target connection(s)",
       "createFailed": "Could not create asset group",
       "addFailed": "Could not add media to asset group",
       "memberCount": "Asset group now contains {{count}} item(s)",

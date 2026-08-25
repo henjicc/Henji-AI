@@ -56,6 +56,8 @@
     },
     "assetGroup": {
       "created": "已收纳 {{count}} 个素材",
+      "createdPreserved": "已收纳 {{count}} 个素材，并保留 {{preserved}} 条同目标连线",
+      "createdDisconnected": "已收纳 {{count}} 个素材，并解开 {{disconnected}} 条不同目标连线",
       "createFailed": "无法创建素材组",
       "addFailed": "无法加入素材组",
       "memberCount": "素材组现有 {{count}} 个素材",

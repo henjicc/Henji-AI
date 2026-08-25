@@ -24,6 +24,7 @@ import {
 import { createAssetGroupRenderGraph } from './assetGroupRenderGraph';
 
 const MODEL_ID = 'asset-group-model';
+const MULTI_IMAGE_MODEL_ID = 'asset-group-multi-image-model';
 const model: ModelDefinition = {
   meta: {
     id: MODEL_ID,
@@ -49,6 +50,11 @@ const model: ModelDefinition = {
   endpoints: '/test',
   request: { builder: (params) => params },
   pricing: { currency: '$', fixed: 0, description: 'test' },
+};
+const multiImageModel: ModelDefinition = {
+  ...model,
+  meta: { ...model.meta, id: MULTI_IMAGE_MODEL_ID, name: { zh: '素材组多图测试', en: 'Asset group multi-image test' } },
+  inputLimits: { images: { max: 4 }, videos: { max: 0 }, audios: { max: 1 } },
 };
 
 function node(type: CanvasNodeType, id: string, data: Record<string, unknown> = {}): CanvasNode {
@@ -83,6 +89,7 @@ describe('assetGroupGraph', () => {
   beforeEach(() => {
     registry.clear();
     registry.register(model);
+    registry.register(multiImageModel);
   });
 
   afterEach(() => registry.clear());
@@ -112,6 +119,72 @@ describe('assetGroupGraph', () => {
     );
     expect(reordered?.edges.filter((edge) => edge.targetHandle === mediaPortId('image')).map((edge) => edge.source))
       .toEqual(['image-2']);
+  });
+
+  it('收纳前成员连接同一模型时转为素材组束线并保持连接', () => {
+    const imageOne = node(CANVAS_NODE_TYPES.upload, 'same-image-1', { imageUrl: 'image://one' });
+    const imageTwo = node(CANVAS_NODE_TYPES.upload, 'same-image-2', { imageUrl: 'image://two' });
+    const target = node(CANVAS_NODE_TYPES.imageEdit, 'same-target', { modelId: MULTI_IMAGE_MODEL_ID });
+    const group = node(CANVAS_NODE_TYPES.assetGroup, 'same-group');
+    const targetHandle = mediaPortId('image');
+    const created = createAssetGroupGraph(
+      [imageOne, imageTwo, target],
+      [
+        { id: 'same-edge-1', source: imageOne.id, target: target.id, sourceHandle: 'source', targetHandle },
+        { id: 'same-edge-2', source: imageTwo.id, target: target.id, sourceHandle: 'source', targetHandle },
+      ],
+      group,
+      [imageOne.id, imageTwo.id],
+    );
+
+    const createdGroup = created?.nodes.find((item) => item.id === group.id);
+    expect(createdGroup && isAssetGroupNode(createdGroup) ? createdGroup.data.bindings : [])
+      .toEqual([expect.objectContaining({ targetNodeId: target.id, excludedMemberIds: [] })]);
+    expect(created?.edges.map((edge) => edge.source)).toEqual([imageOne.id, imageTwo.id]);
+    expect(created?.edges.every((edge) => edge.data?.managedByAssetGroup?.groupId === group.id)).toBe(true);
+    const rendered = created ? createAssetGroupRenderGraph(created.nodes, created.edges) : null;
+    expect(rendered?.edges).toEqual([
+      expect.objectContaining({ source: group.id, target: target.id, type: 'assetGroupBundleEdge' }),
+    ]);
+  });
+
+  it('收纳前成员连接不同模型时自动解开全部外连线', () => {
+    const imageOne = node(CANVAS_NODE_TYPES.upload, 'mixed-image-1', { imageUrl: 'image://one' });
+    const imageTwo = node(CANVAS_NODE_TYPES.upload, 'mixed-image-2', { imageUrl: 'image://two' });
+    const targetOne = node(CANVAS_NODE_TYPES.imageEdit, 'mixed-target-1', { modelId: MODEL_ID });
+    const targetTwo = node(CANVAS_NODE_TYPES.imageEdit, 'mixed-target-2', { modelId: MODEL_ID });
+    const group = node(CANVAS_NODE_TYPES.assetGroup, 'mixed-group');
+    const created = createAssetGroupGraph(
+      [imageOne, imageTwo, targetOne, targetTwo],
+      [
+        { id: 'mixed-edge-1', source: imageOne.id, target: targetOne.id, sourceHandle: 'source', targetHandle: mediaPortId('image') },
+        { id: 'mixed-edge-2', source: imageTwo.id, target: targetTwo.id, sourceHandle: 'source', targetHandle: mediaPortId('image') },
+      ],
+      group,
+      [imageOne.id, imageTwo.id],
+    );
+
+    const createdGroup = created?.nodes.find((item) => item.id === group.id);
+    expect(createdGroup && isAssetGroupNode(createdGroup) ? createdGroup.data.bindings : []).toEqual([]);
+    expect(created?.edges).toEqual([]);
+  });
+
+  it('同一目标只有部分成员已连接时保持原状，不擅自连接其余成员', () => {
+    const connected = node(CANVAS_NODE_TYPES.upload, 'partial-image-1', { imageUrl: 'image://one' });
+    const disconnected = node(CANVAS_NODE_TYPES.upload, 'partial-image-2', { imageUrl: 'image://two' });
+    const target = node(CANVAS_NODE_TYPES.imageEdit, 'partial-target', { modelId: MODEL_ID });
+    const group = node(CANVAS_NODE_TYPES.assetGroup, 'partial-group');
+    const created = createAssetGroupGraph(
+      [connected, disconnected, target],
+      [{ id: 'partial-edge', source: connected.id, target: target.id, sourceHandle: 'source', targetHandle: mediaPortId('image') }],
+      group,
+      [connected.id, disconnected.id],
+    );
+
+    const createdGroup = created?.nodes.find((item) => item.id === group.id);
+    expect(createdGroup && isAssetGroupNode(createdGroup) ? createdGroup.data.bindings[0].excludedMemberIds : [])
+      .toEqual([disconnected.id]);
+    expect(created?.edges.map((edge) => edge.source)).toEqual([connected.id]);
   });
 
   it('只重排指定媒体类型并保持其他类型的槽位不变', () => {
