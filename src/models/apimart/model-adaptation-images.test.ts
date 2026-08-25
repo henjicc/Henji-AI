@@ -335,7 +335,7 @@ describe('docs/model-adaptation APIMart 图片模型', () => {
     expect(apimartSeedream50ProModel.request?.builder?.({
       prompt: 'logo', apimartSeedream50ProResolution: '1.5K', apimartSeedream50ProBackground: 'transparent'
     })).toMatchObject({ resolution: '1.5K', background: 'transparent' })
-    expect(apimartSeedream50ProModel.pricing.calculator?.({ apimartSeedream50ProResolution: '1.5K' })).toBe(0.036)
+    expect(apimartSeedream50ProModel.pricing.calculator?.({ apimartSeedream50ProResolution: '1.5K' })).toBe(0.02928)
   })
 
   it('Seedream Pro 图层拆分严格使用单图、专属字段和按图层价格', () => {

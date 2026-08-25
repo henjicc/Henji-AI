@@ -52,6 +52,28 @@ export const kieGrokImagineVideoModel = defineModel({
         { value: 'normal', label: sharedOptionText('normal') },
         { value: 'spicy', label: sharedOptionText('spicy') }
       ]
+    },
+    {
+      id: 'kieGrokImagineVideoDuration',
+      type: 'number',
+      order: 3,
+      name: sharedFieldText('duration'),
+      default: 6,
+      min: 6,
+      max: 30,
+      step: 1
+    },
+    {
+      id: 'kieGrokImagineVideoResolution',
+      type: 'dropdown',
+      order: 4,
+      name: sharedFieldText('resolution'),
+      default: '480p',
+      options: [
+        { value: '480p', label: '480p' },
+        { value: '720p', label: '720p' },
+        { value: '1080p', label: '1080p' }
+      ]
     }
   ],
   linkages: [],
@@ -63,12 +85,14 @@ export const kieGrokImagineVideoModel = defineModel({
       const hasImages = images.length > 0
       const aspectRatio = params.kieGrokImagineVideoAspectRatio || params.aspect_ratio
       const mode = params.kieGrokImagineVideoMode || params.mode
+      const duration = Math.min(30, Math.max(6, Math.round(Number(params.kieGrokImagineVideoDuration) || 6)))
+      const resolution = params.kieGrokImagineVideoResolution || '480p'
 
       const model = hasImages
         ? 'grok-imagine/image-to-video'
         : 'grok-imagine/text-to-video'
 
-      const input: DynamicValueMap = { prompt }
+      const input: DynamicValueMap = { prompt, duration, resolution }
 
       if (!hasImages && aspectRatio) {
         input.aspect_ratio = aspectRatio
@@ -89,9 +113,13 @@ export const kieGrokImagineVideoModel = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '$',
+    calculator: (params) => {
+      const duration = Math.min(30, Math.max(6, Math.round(Number(params.kieGrokImagineVideoDuration) || 6)))
+      const rate: Record<string, number> = { '480p': 0.012, '720p': 0.0225, '1080p': 0.04 }
+      return (rate[params.kieGrokImagineVideoResolution as string] ?? rate['480p']) * duration
+    },
+    description: '480p $0.012/秒，720p $0.0225/秒，1080p $0.04/秒'
   }
 })
 

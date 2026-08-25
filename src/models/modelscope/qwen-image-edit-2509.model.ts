@@ -13,7 +13,7 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
     type: 'image',
     i18nScope: 'models.defs.Qwen/Qwen-Image-Edit-2509',
     name: { key: 'meta.name', fallback: 'Qwen-Image-Edit-2509' },
-    tags: ['image-to-image', 'supports-image-editing', 'provider-modelscope'],
+    tags: ['image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-modelscope'],
     polling: {
       interval: 3000,
       maxAttempts: 120,
@@ -21,16 +21,16 @@ export const modelscopeQwenImageEdit2509Model = defineModel({
     }
   },
   inputLimits: {
-    images: { exact: 1 },
+    images: { min: 1, max: 3 },
     videos: { max: 0 }
   },
   requirements: [
     {
       id: 'qwen-image-edit-image',
-      require: { images: { exact: 1 } },
+      require: { images: { min: 1 } },
       message: {
         title: '图片必需',
-        message: '图片编辑需要上传1张图片',
+        message: '图片编辑需要上传至少1张图片',
         type: 'warning'
       }
     },

@@ -20,6 +20,10 @@ export const kieSeedream45Model = defineModel({
     tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-kie'],
     aliases: ['seedream-4.5-kie']
   },
+  inputLimits: {
+    images: { max: 14 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'kieSeedreamAspectRatio',
@@ -33,7 +37,10 @@ export const kieSeedream45Model = defineModel({
         { value: '4:3', label: '4:3' },
         { value: '3:4', label: '3:4' },
         { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' }
+        { value: '9:16', label: '9:16' },
+        { value: '2:3', label: '2:3' },
+        { value: '3:2', label: '3:2' },
+        { value: '21:9', label: '21:9' }
       ]
     },
     {
@@ -118,9 +125,9 @@ export const kieSeedream45Model = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '$',
+    calculator: () => 0.0325,
+    description: '$0.0325/张'
   }
 })
 

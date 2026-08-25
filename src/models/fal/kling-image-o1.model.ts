@@ -12,7 +12,11 @@ export const klingImageO1Model = defineModel({
     type: 'image',
         i18nScope: 'models.defs.fal-ai-kling-image-o1',
     name: { key: 'meta.name', fallback: 'Kling Image O1' },
-    tags: ['image', 'text-to-image', 'image-to-image']
+    tags: ['image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10', 'provider-fal']
+  },
+  inputLimits: {
+    images: { min: 1, max: 10 },
+    videos: { max: 0 }
   },
   params: [
     // 1. 生成数量
@@ -64,7 +68,12 @@ export const klingImageO1Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const prompt = params.prompt || ''
 
       const requestData: DynamicValue = {
@@ -93,9 +102,9 @@ export const klingImageO1Model = defineModel({
     currency: '$',
     calculator: (params) => {
       const numImages = params.falKlingImageO1NumImages || 1
-      return 0.02 * numImages
+      return 0.028 * numImages
     },
-    description: '基础价格 $0.02/张'
+    description: '$0.028/张'
   }
 })
 

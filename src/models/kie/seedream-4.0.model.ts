@@ -20,6 +20,10 @@ export const kieSeedream40Model = defineModel({
     tags: ['text-to-image', 'image-to-image', 'supports-4k', 'provider-kie'],
     aliases: ['seedream-4.0-kie']
   },
+  inputLimits: {
+    images: { max: 10 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'kieSeedream40AspectRatio',
@@ -146,9 +150,12 @@ export const kieSeedream40Model = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '$',
+    calculator: (params) => {
+      const maxImages = Math.min(6, Math.max(1, Math.round(Number(params.kieSeedream40MaxImages) || 1)))
+      return maxImages * 0.025
+    },
+    description: '$0.025/张，按生成数量（1~6 张）计费'
   }
 })
 

@@ -319,12 +319,12 @@ export const kling30Model = defineModel({
       const pricePerSecond = resolution === '4K'
         ? (sound ? 4.41 : 2.94)
         : (resolution === '1080P'
-          ? (sound ? 2.352 : 1.568)
-          : (sound ? 1.764 : 1.176))
+          ? (sound ? 1.2 : 0.8)
+          : (sound ? 0.9 : 0.6))
 
       return pricePerSecond * safeDuration
     },
-    description: '720P(Standard)：无声 ¥1.176/秒，有声 ¥1.764/秒；1080P(Pro)：无声 ¥1.568/秒，有声 ¥2.352/秒；4K：无声 ¥2.94/秒，有声 ¥4.41/秒；动作控制 720P ¥0.9135/秒，1080P ¥1.218/秒'
+    description: '720P(Standard)：无声 ¥0.6/秒，有声 ¥0.9/秒；1080P(Pro)：无声 ¥0.8/秒，有声 ¥1.2/秒；4K：无声 ¥2.94/秒，有声 ¥4.41/秒；动作控制 720P ¥0.9135/秒，1080P ¥1.218/秒'
   }
 })
 

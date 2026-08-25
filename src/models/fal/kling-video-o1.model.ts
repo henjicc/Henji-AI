@@ -14,7 +14,7 @@ export const klingVideoO1Model = defineModel({
     type: 'video',
         i18nScope: 'models.defs.fal-ai-kling-video-o1',
     name: { key: 'meta.name', fallback: 'Kling Video O1' },
-    tags: ['video', 'text-to-video', 'image-to-video']
+    tags: ['video', 'text-to-video', 'image-to-video', 'start-end-frame', 'reference-mode', 'supports-video-editing', 'multi-mode-switch']
   },
   inputLimits: {
     images: { max: 2 },
@@ -118,12 +118,19 @@ export const klingVideoO1Model = defineModel({
   request: {
     builder: (params) => {
       const mode = params.falKlingVideoO1Mode || 'image-to-video'
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploadedImages = filterSources(params.uploadedFilePaths)
+      const images = uploadedImages.length > 0 ? uploadedImages : filterSources(params.images)
+      const uploadedVideos = filterSources(params.uploadedVideoFilePaths)
+      const videos = uploadedVideos.length > 0 ? uploadedVideos : filterSources(params.videos)
       const prompt = params.prompt || ''
       const duration = params.falKlingVideoO1VideoDuration || 5
       const aspectRatio = params.falKlingVideoO1AspectRatio
       const keepAudio = params.falKlingVideoO1KeepAudio || false
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = typeof params.video === 'string' ? params.video : videos[0]
 
       const requestData: DynamicValue = {
         prompt,
@@ -166,8 +173,13 @@ export const klingVideoO1Model = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.15,
-    description: '基础价格 $0.15/次'
+    calculator: (params) => {
+      const mode = params.falKlingVideoO1Mode || 'image-to-video'
+      const duration = Number(params.falKlingVideoO1VideoDuration) || 5
+      const isVideoEdit = mode === 'video-to-video-edit' || mode === 'video-to-video-reference'
+      return (isVideoEdit ? 0.168 : 0.112) * duration
+    },
+    description: '图生视频/参考生视频 $0.112/秒；视频编辑/参考 $0.168/秒'
   }
 })
 

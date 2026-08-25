@@ -62,7 +62,12 @@ export const hailuo23Model = defineModel({
   linkages: [],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const version = params.falHailuo23Version || 'standard'
       const fastMode = params.falHailuo23FastMode !== false
 
@@ -85,7 +90,12 @@ export const hailuo23Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const prompt = params.prompt || ''
       const version = params.falHailuo23Version || 'standard'
       const duration = params.falHailuo23Duration || '6'
@@ -110,8 +120,16 @@ export const hailuo23Model = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.08,
-    description: '基础价格 $0.08/次'
+    calculator: (params) => {
+      const duration = params.falHailuo23Duration === '10' ? 10 : 6
+      const version = params.falHailuo23Version === 'pro' ? 'pro' : 'standard'
+      const fastMode = params.falHailuo23FastMode !== false
+      if (version === 'pro') return fastMode ? 0.33 : 0.49
+      return fastMode
+        ? (duration === 10 ? 0.32 : 0.19)
+        : (duration === 10 ? 0.56 : 0.28)
+    },
+    description: 'Standard：6s $0.28、10s $0.56；Standard 快速：6s $0.19、10s $0.32；Pro：$0.49/次；Pro 快速：$0.33/次'
   }
 })
 

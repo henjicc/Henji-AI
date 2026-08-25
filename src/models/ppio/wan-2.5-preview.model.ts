@@ -5,7 +5,7 @@
  */
 
 import { defineModel, sharedFieldText } from '@/core'
-import { resolvePpioImageSources } from './mediaSources'
+import { hasUploadedImage, resolvePpioImageSources } from './mediaSources'
 
 const DEFAULT_WAN25_SIZE = '1280*720'
 const DEFAULT_WAN25_RESOLUTION = '720P'
@@ -25,6 +25,18 @@ const SUPPORTED_WAN25_SIZES = new Set([
   '1248*1632',
 ])
 const SUPPORTED_WAN25_RESOLUTIONS = new Set(['480P', '720P', '1080P'])
+
+/** t2v 用 size 字符串（如 "1280*720"）标定档位，按面积就近归到 480P/720P/1080P 三档定价。 */
+const WAN25_SIZE_TIER: Record<string, '480P' | '720P' | '1080P'> = {
+  '832*480': '480P', '480*832': '480P', '624*624': '480P',
+  '1280*720': '720P', '720*1280': '720P', '960*960': '720P', '1088*832': '720P', '832*1088': '720P',
+  '1920*1080': '1080P', '1080*1920': '1080P', '1440*1440': '1080P', '1632*1248': '1080P', '1248*1632': '1080P',
+}
+
+/** ¥/秒；官方 5 秒档 480P ¥1.5、720P ¥3.0、1080P ¥5.0，按时长线性计费。 */
+const WAN25_PRICE_PER_SECOND: Record<'480P' | '720P' | '1080P', number> = {
+  '480P': 0.3, '720P': 0.6, '1080P': 1.0,
+}
 
 function resolveBoolean(value: DynamicValue, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback
@@ -219,12 +231,15 @@ export const wan25PreviewModel = defineModel({
   pricing: {
     currency: '¥',
     calculator: (params) => {
-      const duration = params.ppioWan25VideoDuration || 5
-      const basePrice = 0.3
-      const durationMultiplier = duration / 5
-      return basePrice * durationMultiplier
+      const duration = Number(params.ppioWan25VideoDuration) || 5
+      const tier = hasUploadedImage(params)
+        ? (SUPPORTED_WAN25_RESOLUTIONS.has(params.ppioWan25Resolution as string)
+          ? params.ppioWan25Resolution as '480P' | '720P' | '1080P'
+          : '720P')
+        : (WAN25_SIZE_TIER[params.ppioWan25Size as string] ?? '720P')
+      return WAN25_PRICE_PER_SECOND[tier] * duration
     },
-    description: '基础价格 ¥0.3/5秒'
+    description: '480P ¥0.3/秒，720P ¥0.6/秒，1080P ¥1.0/秒，按生成时长计费'
   }
 })
 

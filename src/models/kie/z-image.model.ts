@@ -17,6 +17,10 @@ export const kieZImageModel = defineModel({
     tags: ['text-to-image', 'provider-kie'],
     aliases: ['z-image-kie']
   },
+  inputLimits: {
+    images: { max: 0 },
+    videos: { max: 0 }
+  },
   params: [
     {
       id: 'kieZImageAspectRatio',

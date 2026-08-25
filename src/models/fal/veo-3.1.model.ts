@@ -126,7 +126,12 @@ export const veo31Model = defineModel({
   endpoints: {
     selector: async (params) => {
       const mode = params.falVeo31Mode || 'text-image-to-video'
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const fastMode = params.falVeo31FastMode === true
 
       if (mode === 'start-end-frame') {
@@ -148,7 +153,12 @@ export const veo31Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const prompt = params.prompt || ''
       const mode = params.falVeo31Mode || 'text-image-to-video'
       const duration = params.falVeo31VideoDuration || 8
@@ -199,8 +209,16 @@ export const veo31Model = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.15,
-    description: '基础价格 $0.15/次'
+    calculator: (params) => {
+      const duration = Number(params.falVeo31VideoDuration) || 8
+      const fastMode = params.falVeo31FastMode === true
+      const generateAudio = params.falVeo31GenerateAudio !== false
+      const rate = fastMode
+        ? (generateAudio ? 0.15 : 0.1)
+        : (generateAudio ? 0.4 : 0.2)
+      return rate * duration
+    },
+    description: '标准（720p/1080p）：无音频 $0.20/秒，有音频 $0.40/秒；快速：无音频 $0.10/秒，有音频 $0.15/秒'
   }
 })
 

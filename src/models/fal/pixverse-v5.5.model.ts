@@ -14,7 +14,7 @@ export const pixverseV55Model = defineModel({
     type: 'video',
         i18nScope: 'models.defs.fal-ai-pixverse-v5.5',
     name: { key: 'meta.name', fallback: 'PixVerse V5.5' },
-    tags: ['video', 'text-to-video', 'image-to-video']
+    tags: ['video', 'text-to-video', 'image-to-video', 'start-end-frame']
   },
   inputLimits: {
     images: { max: 2 },
@@ -96,10 +96,30 @@ export const pixverseV55Model = defineModel({
       default: false
     }
   ],
-  linkages: [],
+  linkages: [
+    // 官方文档明确 10 秒档不提供 1080p
+    {
+      trigger: 'falPixverse55VideoDuration',
+      effect: 'filterOptions',
+      target: 'pixverseResolution',
+      filter: (duration, options) => (duration === 10 ? options.filter((opt) => opt.value !== '1080p') : options)
+    },
+    {
+      trigger: 'falPixverse55VideoDuration',
+      effect: 'autoSwitch',
+      target: 'pixverseResolution',
+      condition: (duration, allParams) => duration === 10 && allParams.pixverseResolution === '1080p',
+      value: '720p'
+    }
+  ],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       if (images.length === 0) {
         return 'fal-ai/pixverse/v5.5/text-to-video'
       }
@@ -111,7 +131,12 @@ export const pixverseV55Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const prompt = params.prompt || ''
       const aspectRatio = params.pixverseAspectRatio
       const resolution = params.pixverseResolution
@@ -155,8 +180,32 @@ export const pixverseV55Model = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.09,
-    description: '基础价格 $0.09/次'
+    calculator: (params) => {
+      const isTransition = (() => {
+        const uploaded = Array.isArray(params.uploadedFilePaths)
+          ? params.uploadedFilePaths.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+        const images = uploaded.length > 0
+          ? uploaded
+          : (Array.isArray(params.images)
+            ? params.images.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+            : [])
+        return images.length >= 2
+      })()
+      const resolution = params.pixverseResolution === '1080p' ? '1080p' : '720p'
+      const base = isTransition
+        ? (resolution === '1080p' ? 1.2 : 0.6)
+        : (resolution === '1080p' ? 0.4 : 0.2)
+      const audio = params.pixverseGenerateAudio !== false
+      const multiClip = params.pixverseMultiClip === true
+      const surcharge = multiClip
+        ? (isTransition ? (audio ? 0.4 : 0.3) : (audio ? 0.15 : 0.1))
+        : (audio ? (isTransition ? 0.1 : 0.05) : 0)
+      const duration = Number(params.falPixverse55VideoDuration) || 5
+      const durationMultiplier = duration === 10 ? 2.2 : (duration === 8 ? 2 : 1)
+      return (base + surcharge) * durationMultiplier
+    },
+    description: '单clip无音频 5s：720p $0.20、1080p $0.40；转场（双图）5s：720p $0.60、1080p $1.20；音频 +$0.05（转场 +$0.10）；多clip +$0.10/$0.15（转场 +$0.30/$0.40）；8s 双倍，10s 2.2倍且不支持 1080p'
   }
 })
 

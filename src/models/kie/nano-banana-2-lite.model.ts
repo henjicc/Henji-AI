@@ -20,7 +20,7 @@ export const kieNanoBanana2LiteModel = defineModel({
     type: 'image',
     i18nScope: 'models.defs.kie-nano-banana-2-lite',
     name: { key: 'meta.name', fallback: 'Nano Banana 2 Lite' },
-    tags: ['text-to-image', 'image-to-image', 'multi-image', 'provider-kie'],
+    tags: ['text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'provider-kie'],
     aliases: ['nano-banana-2-lite-kie']
   },
   inputLimits: {

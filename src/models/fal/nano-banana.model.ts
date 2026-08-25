@@ -53,13 +53,23 @@ export const nanoBananaModel = defineModel({
   ],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       return images.length > 0 ? 'fal-ai/nano-banana/edit' : 'fal-ai/nano-banana'
     }
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const prompt = params.prompt || ''
 
       const requestData: DynamicValue = {
@@ -86,9 +96,9 @@ export const nanoBananaModel = defineModel({
     currency: '$',
     calculator: (params) => {
       const numImages = params.falNanoBananaNumImages || 1
-      return 0.005 * numImages
+      return 0.039 * numImages
     },
-    description: '基础价格 $0.005/张'
+    description: '$0.039/张'
   }
 })
 

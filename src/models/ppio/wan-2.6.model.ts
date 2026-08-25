@@ -232,19 +232,12 @@ export const wan26Model = defineModel({
   pricing: {
     currency: '¥',
     calculator: (params) => {
-      const basePrice = 0.6
-      const duration = params.ppioWan26VideoDuration || 5
+      const duration = Number(params.ppioWan26VideoDuration) || 5
       const quality = params.ppioWan26Quality || '720P'
-
-      // Quality multiplier
-      const qualityMultiplier = quality === '1080P' ? 1.5 : 1
-
-      // Duration multiplier
-      const durationMultiplier = duration / 5
-
-      return basePrice * qualityMultiplier * durationMultiplier
+      const pricePerSecond = quality === '1080P' ? 1.0 : 0.6
+      return pricePerSecond * duration
     },
-    description: '基础价格 ¥0.6/5秒，1080P 增加 50%'
+    description: '720P ¥0.6/秒，1080P ¥1.0/秒，按生成时长计费'
   }
 })
 

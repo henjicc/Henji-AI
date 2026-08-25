@@ -36,7 +36,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
     polling: { interval: 5000, maxAttempts: 180, expectedAttempts: 60 }
   },
   inputLimits: {
-    images: { max: 16 }, videos: { max: 1 },
+    images: { max: 4 }, videos: { max: 1 },
     rules: [{
       when: 'apimartGeminiOmniFlashChannel === "ext"',
       images: { max: 3 }
@@ -169,7 +169,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
         aspect_ratio: aspectRatio,
         resolution: '720p'
       }
-      if (images.length > 0) body.image_urls = images.slice(0, 16)
+      if (images.length > 0) body.image_urls = images.slice(0, 4)
       if (videos.length > 0) body.video_urls = videos.slice(0, 1)
       if (extendTaskId) body.extend_from_task_id = extendTaskId
       return body

@@ -177,7 +177,14 @@ export const ltx2Model = defineModel({
   request: {
     builder: (params) => {
       const mode = params.falLtx2Mode || 'text-to-video'
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploadedImages = filterSources(params.uploadedFilePaths)
+      const images = uploadedImages.length > 0 ? uploadedImages : filterSources(params.images)
+      const uploadedVideos = filterSources(params.uploadedVideoFilePaths)
+      const videos = uploadedVideos.length > 0 ? uploadedVideos : filterSources(params.videos)
       const prompt = params.prompt || ''
       const duration = params.falLtx2VideoDuration || 6
       const resolution = params.falLtx2Resolution || '1080p'
@@ -186,7 +193,7 @@ export const ltx2Model = defineModel({
       const retakeStartTime = params.falLtx2RetakeStartTime || 0
       const retakeMode = params.falLtx2RetakeMode || 'replace_audio_and_video'
       const retakeDuration = params.falLtx2RetakeDuration || duration
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = typeof params.video === 'string' ? params.video : videos[0]
 
       if (mode === 'retake-video') {
         return {
@@ -216,8 +223,21 @@ export const ltx2Model = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.07,
-    description: '基础价格 $0.07/次'
+    calculator: (params) => {
+      const mode = params.falLtx2Mode || 'text-to-video'
+      if (mode === 'retake-video') {
+        const retakeDuration = Number(params.falLtx2RetakeDuration) || 5
+        return 0.1 * retakeDuration
+      }
+      const duration = Number(params.falLtx2VideoDuration) || 6
+      const fastMode = params.falLtx2FastMode !== false
+      const resolution = params.falLtx2Resolution || '1080p'
+      const ratePerSecond: Record<string, number> = fastMode
+        ? { '1080p': 0.04, '1440p': 0.08, '2160p': 0.16 }
+        : { '1080p': 0.06, '1440p': 0.12, '2160p': 0.24 }
+      return (ratePerSecond[resolution as string] ?? ratePerSecond['1080p']) * duration
+    },
+    description: '快速：1080p $0.04/秒、1440p $0.08/秒、2160p $0.16/秒；标准：1080p $0.06/秒、1440p $0.12/秒、2160p $0.24/秒；视频重拍 $0.10/秒'
   }
 })
 

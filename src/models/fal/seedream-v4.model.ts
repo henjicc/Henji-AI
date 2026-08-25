@@ -65,7 +65,11 @@ export const seedreamV4Model = defineModel({
     type: 'image',
     i18nScope: 'models.defs.fal-ai-bytedance-seedream-v4',
     name: { key: 'meta.name', fallback: 'Seedream V4' },
-    tags: ['image', 'text-to-image', 'image-to-image'],
+    tags: ['image', 'text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10'],
+  },
+  inputLimits: {
+    images: { max: 10 },
+    videos: { max: 0 },
   },
   runtimeConstraints: {
     imageSizeFields: [
@@ -123,7 +127,12 @@ export const seedreamV4Model = defineModel({
   linkages: [],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const uploaded = Array.isArray(params.uploadedFilePaths)
+        ? (params.uploadedFilePaths as string[]).filter((item) => typeof item === 'string' && item.trim().length > 0)
+        : []
+      const images = uploaded.length > 0
+        ? uploaded
+        : (Array.isArray(params.images) ? (params.images as string[]) : [])
       return images.length > 0
         ? 'fal-ai/bytedance/seedream/v4/edit'
         : 'fal-ai/bytedance/seedream/v4/text-to-image'
@@ -131,7 +140,12 @@ export const seedreamV4Model = defineModel({
   },
   request: {
     builder: async (params) => {
-      const images = Array.isArray(params.images) ? (params.images as string[]) : []
+      const uploaded = Array.isArray(params.uploadedFilePaths)
+        ? (params.uploadedFilePaths as string[]).filter((item) => typeof item === 'string' && item.trim().length > 0)
+        : []
+      const images = uploaded.length > 0
+        ? uploaded
+        : (Array.isArray(params.images) ? (params.images as string[]) : [])
       const prompt = String(params.prompt || '')
       const numImages = Number(params.falSeedream40NumImages || 1)
       const legacyResolution = params.falSeedreamV4Resolution && typeof params.falSeedreamV4Resolution === 'object'
@@ -165,9 +179,9 @@ export const seedreamV4Model = defineModel({
     currency: '$',
     calculator: (params) => {
       const numImages = params.falSeedream40NumImages || 1
-      return 0.015 * numImages
+      return 0.03 * numImages
     },
-    description: '基础价格 $0.015/张',
+    description: '$0.03/张',
   },
 })
 

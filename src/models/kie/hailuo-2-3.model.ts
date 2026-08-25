@@ -120,9 +120,17 @@ export const kieHailuo23Model = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '$',
+    calculator: (params) => {
+      const mode = params.kieHailuo23Mode === 'pro' ? 'pro' : 'standard'
+      const duration = Number(params.kieHailuo23Duration) === 10 ? 10 : 6
+      const resolution = params.kieHailuo23Resolution === '1080P' ? '1080P' : '768P'
+      const standardPrices: Record<string, number> = { '6-768P': 0.15, '10-768P': 0.26, '6-1080P': 0.26 }
+      const proPrices: Record<string, number> = { '6-768P': 0.22, '10-768P': 0.45, '6-1080P': 0.39 }
+      const key = `${duration}-${resolution}`
+      return (mode === 'pro' ? proPrices : standardPrices)[key] ?? standardPrices['6-768P']
+    },
+    description: 'Standard：6s768P $0.15、10s768P $0.26、6s1080P $0.26；Pro：6s768P $0.22、10s768P $0.45、6s1080P $0.39'
   }
 })
 

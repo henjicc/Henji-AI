@@ -17,7 +17,7 @@ export const kieHailuo02Model = defineModel({
     type: 'video',
         i18nScope: 'models.defs.kie-hailuo-02',
     name: { key: 'meta.name', fallback: 'Hailuo 02' },
-    tags: ['text-to-video', 'image-to-video', 'provider-kie'],
+    tags: ['text-to-video', 'image-to-video', 'start-end-frame', 'provider-kie'],
     aliases: ['hailuo-02-kie'],
     polling: {
       interval: 3000,
@@ -130,9 +130,15 @@ export const kieHailuo02Model = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '$',
+    calculator: (params) => {
+      const duration = Number(params.kieHailuo02Duration) || 6
+      const resolution = params.kieHailuo02Resolution || '768P'
+      const usePro = duration === 6 && resolution === '1080P'
+      if (usePro) return 0.0475 * duration
+      return (resolution === '512P' ? 0.01 : 0.025) * duration
+    },
+    description: 'Standard：768P $0.025/秒，512P $0.010/秒；Pro（1080P 固定 6 秒）：$0.0475/秒'
   }
 })
 

@@ -3,6 +3,7 @@
  */
 
 import { defineModel, sharedFieldText } from '@/core'
+import { hasUploadedImage } from '@/models/shared/mediaPresence'
 
 export const hailuo02Model = defineModel({
   meta: {
@@ -14,7 +15,7 @@ export const hailuo02Model = defineModel({
     type: 'video',
         i18nScope: 'models.defs.fal-ai-minimax-hailuo-02',
     name: { key: 'meta.name', fallback: 'MiniMax Hailuo 02' },
-    tags: ['video', 'text-to-video', 'image-to-video'],
+    tags: ['video', 'text-to-video', 'image-to-video', 'start-end-frame'],
     aliases: ['fal-ai-hailuo-02', 'minimax-hailuo-02-fal']
   },
   inputLimits: {
@@ -56,10 +57,11 @@ export const hailuo02Model = defineModel({
       type: 'dropdown',
       name: sharedFieldText('resolution'),
       default: '768P',
+      // Pro 固定 1080P 且不接受 resolution 入参；Standard 官方只开放 512P/768P 两档
+      visible: { condition: 'falHailuo02Version !== "pro"' },
       options: [
         { value: '512P', label: '512P' },
-        { value: '768P', label: '768P' },
-        { value: '1080P', label: '1080P' }
+        { value: '768P', label: '768P' }
       ]
     },
     {
@@ -80,7 +82,12 @@ export const hailuo02Model = defineModel({
   linkages: [],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const imageCount = images.length
       const version = params.falHailuo02Version || 'standard'
       const fastMode = params.falHailuo02FastMode === true
@@ -104,7 +111,12 @@ export const hailuo02Model = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const prompt = params.prompt || ''
       const version = params.falHailuo02Version || 'standard'
       const resolution = params.falHailuo02Resolution || '768P'
@@ -125,11 +137,11 @@ export const hailuo02Model = defineModel({
         requestData.resolution = resolution
       }
 
-      if (images.length === 1) {
+      if (images.length >= 1) {
         requestData.image_url = images[0]
-      } else if (images.length >= 2) {
-        requestData.first_frame_image_url = images[0]
-        requestData.last_frame_image_url = images[1]
+      }
+      if (images.length >= 2) {
+        requestData.end_image_url = images[1]
       }
 
       return requestData
@@ -137,8 +149,16 @@ export const hailuo02Model = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.1,
-    description: '基础价格 $0.1/次'
+    calculator: (params) => {
+      const duration = params.falHailuo02Duration === '10' ? 10 : 6
+      const version = params.falHailuo02Version === 'pro' ? 'pro' : 'standard'
+      const isFastMode = params.falHailuo02FastMode === true && hasUploadedImage(params)
+      if (version === 'pro') return 0.08 * duration
+      if (isFastMode) return 0.017 * duration
+      const resolution = params.falHailuo02Resolution === '512P' ? '512P' : '768P'
+      return (resolution === '512P' ? 0.017 : 0.045) * duration
+    },
+    description: 'Standard：768P $0.045/秒，512P $0.017/秒；Fast（图生视频）：512P $0.017/秒；Pro：固定 1080P $0.08/秒'
   }
 })
 

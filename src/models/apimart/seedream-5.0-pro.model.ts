@@ -125,11 +125,11 @@ export const apimartSeedream50ProModel = defineModel({
           ? 0.01464
           : 0.02928
       }
-      return params.apimartSeedream50ProResolution === '2K'
-        ? 0.05856
-        : (params.apimartSeedream50ProResolution === '1K' ? 0.02928 : 0.036)
+      return params.apimartSeedream50ProResolution === '2K' ? 0.05856 : 0.02928
     },
-    description: '生成/编辑：1K $0.02928、1.5K $0.036、2K $0.05856/张；图层拆分：1K/1.5K $0.01464、2K/自动 $0.02928/输出图层'
+    // 模型专属页（apimart.ai/zh/model/seedream-5-0-pro）价格表：1K 与 1.5K 同价 $0.02928，
+    // 汇总定价页（/zh/pricing）写的 1.5K $0.036 与之矛盾；按调研规范优先取模型专属页的逐档价格。
+    description: '生成/编辑：1K/1.5K $0.02928、2K $0.05856/张；图层拆分：1K/1.5K $0.01464、2K/自动 $0.02928/输出图层'
   }
 })
 

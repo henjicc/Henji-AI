@@ -63,10 +63,10 @@ const LANGUAGE_BOOST_OPTIONS = [
 ]
 
 const CLONE_PREVIEW_MODEL_OPTIONS = [
-  { value: 'speech-02-hd', label: 'speech-02-hd' },
-  { value: 'speech-02-turbo', label: 'speech-02-turbo' },
-  { value: 'speech-2.5-hd-preview', label: 'speech-2.5-hd-preview' },
-  { value: 'speech-2.5-turbo-preview', label: 'speech-2.5-turbo-preview' },
+  { value: 'speech-2.6-hd', label: 'speech-2.6-hd' },
+  { value: 'speech-2.6-turbo', label: 'speech-2.6-turbo' },
+  { value: 'speech-2.8-hd', label: 'speech-2.8-hd' },
+  { value: 'speech-2.8-turbo', label: 'speech-2.8-turbo' },
 ]
 
 interface MinimaxVoiceCatalogItem {
@@ -332,7 +332,7 @@ export const minimaxSpeechModel = defineModel({
         promptAudioFileName: '',
         promptText: '',
         previewText: '',
-        previewModel: 'speech-2.5-turbo-preview',
+        previewModel: 'speech-2.8-turbo',
         accuracy: 0.7,
         needNoiseReduction: false,
         needVolumeNormalization: false,
@@ -539,13 +539,32 @@ export const minimaxSpeechModel = defineModel({
         ? params.text
         : (typeof params.prompt === 'string' ? params.prompt : '')
       const text = rawText.trim()
+
+      const isVoiceCloneRequest = params.minimaxCloneOperation === 'clone' || params.minimaxMode === 'voice-clone'
+      if (isVoiceCloneRequest) {
+        const clonePanel = params.minimaxVoiceClonePanel && typeof params.minimaxVoiceClonePanel === 'object'
+          ? (params.minimaxVoiceClonePanel as DynamicValueMap)
+          : {}
+        const previewText = text.length > 0
+          ? text
+          : (typeof clonePanel.previewText === 'string' ? clonePanel.previewText.trim() : '')
+        let total = 9.9
+        if (previewText.length > 0) {
+          const previewModel = typeof clonePanel.previewModel === 'string' ? clonePanel.previewModel : ''
+          const rate = previewModel.includes('turbo') ? 2.0 : 3.5
+          total += Math.max(0.01, (previewText.length / 10000) * rate)
+        }
+        return total
+      }
+
       if (text.length === 0) {
         return 0
       }
-      const calculated = text.length / 10000
+      const rate = params.minimaxAudioSpec === 'turbo' ? 2.0 : 3.5
+      const calculated = (text.length / 10000) * rate
       return calculated < 0.01 ? 0.01 : calculated
     },
-    description: '¥1.0000 / 万字符',
+    description: 'HD ¥3.5000/万字符，Turbo ¥2.0000/万字符；声音克隆 ¥9.9/音色，同时试听按所选试听模型的 HD/Turbo 单价另计',
   },
 })
 

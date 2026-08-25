@@ -5,7 +5,7 @@
  */
 
 import { defineModel, sharedFieldText } from '@/core'
-import { resolvePpioImageSources } from './mediaSources'
+import { hasUploadedImage, resolvePpioImageSources } from './mediaSources'
 
 export const minimaxHailuo23Model = defineModel({
   meta: {
@@ -141,14 +141,18 @@ export const minimaxHailuo23Model = defineModel({
   pricing: {
     currency: '¥',
     calculator: (params) => {
-      const duration = params.ppioHailuo23VideoDuration || 6
-      const resolution = params.ppioHailuo23VideoResolution || '768P'
-      const basePrice = 0.4
-      const durationMultiplier = duration / 6
-      const resolutionMultiplier = resolution === '1080P' ? 1.5 : 1
-      return basePrice * durationMultiplier * resolutionMultiplier
+      const duration = params.ppioHailuo23VideoDuration === 10 ? 10 : 6
+      // 10 秒档固定回落到 768P（与 builder 的分辨率强制规则一致），1080P 只在 6 秒档存在
+      const resolution = duration === 10
+        ? '768P'
+        : (params.ppioHailuo23VideoResolution === '1080P' ? '1080P' : '768P')
+      const isFast = params.ppioHailuo23FastMode === true && hasUploadedImage(params)
+      const standardPrices: Record<string, number> = { '6-768P': 2.0, '10-768P': 4.0, '6-1080P': 3.5 }
+      const fastPrices: Record<string, number> = { '6-768P': 1.35, '10-768P': 2.25, '6-1080P': 2.3 }
+      const key = `${duration}-${resolution}`
+      return (isFast ? fastPrices : standardPrices)[key] ?? standardPrices['6-768P']
     },
-    description: '基础价格 ¥0.4/6秒（768P），1080P价格1.5倍'
+    description: '标准：6s768P ¥2、10s768P ¥4、6s1080P ¥3.5；快速模式（仅图生视频）：6s768P ¥1.35、10s768P ¥2.25、6s1080P ¥2.3'
   }
 })
 

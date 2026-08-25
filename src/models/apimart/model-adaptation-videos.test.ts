@@ -83,9 +83,10 @@ describe('docs/model-adaptation APIMart 视频模型', () => {
     })
   })
 
-  it('Gemini Omni Flash 官方渠道支持 16 图并拦截视频与延续任务冲突', () => {
+  it('Gemini Omni Flash 官方渠道最多支持 4 图并拦截视频与延续任务冲突', () => {
+    // 官方模型页原文："最多 4 张参考图"（apimart.ai/zh/model/gemini-omni-flash-preview）
     const images = Array.from({ length: 16 }, (_, index) => `${index}.png`)
-    expect(apimartGeminiOmniFlashModel.request?.builder?.({ prompt: 'group', images })).toMatchObject({ image_urls: images })
+    expect(apimartGeminiOmniFlashModel.request?.builder?.({ prompt: 'group', images })).toMatchObject({ image_urls: images.slice(0, 4) })
     expect(() => apimartGeminiOmniFlashModel.request?.builder?.({
       prompt: 'conflict', videos: ['source.mp4'], apimartGeminiOmniFlashExtendTaskId: 'task-1'
     })).toThrow(/video|task|\u89c6频|\u4efb务/u)

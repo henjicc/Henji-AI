@@ -68,7 +68,12 @@ export const wan25PreviewModel = defineModel({
   linkages: [],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       return images.length > 0
         ? 'fal-ai/wan-25-preview/image-to-video'
         : 'fal-ai/wan-25-preview/text-to-video'
@@ -76,7 +81,12 @@ export const wan25PreviewModel = defineModel({
   },
   request: {
     builder: (params) => {
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploaded = filterSources(params.uploadedFilePaths)
+      const images = uploaded.length > 0 ? uploaded : filterSources(params.images)
       const prompt = params.prompt || ''
       const duration = params.falWan25VideoDuration || 5
       const aspectRatio = params.falWan25AspectRatio
@@ -112,8 +122,12 @@ export const wan25PreviewModel = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.13,
-    description: '基础价格 $0.13/次'
+    calculator: (params) => {
+      const duration = Number(params.falWan25VideoDuration) || 5
+      const rate: Record<string, number> = { '480p': 0.05, '720p': 0.1, '1080p': 0.15 }
+      return (rate[params.falWan25Resolution as string] ?? rate['1080p']) * duration
+    },
+    description: '480P $0.05/秒，720P $0.10/秒，1080P $0.15/秒'
   }
 })
 

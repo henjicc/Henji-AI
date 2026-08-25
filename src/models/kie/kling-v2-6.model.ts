@@ -206,9 +206,20 @@ export const kieKlingV26Model = defineModel({
     }
   },
   pricing: {
-    currency: '¥',
-    calculator: () => 0.12,
-    description: '基础价格 ¥0.12/次'
+    currency: '$',
+    calculator: (params) => {
+      const mode = params.kieKlingV26Mode || 'text-image-to-video'
+      if (mode === 'motion-control') {
+        const resolution = params.kieKlingV26Resolution === '1080p' ? '1080p' : '720p'
+        const duration = 5
+        return (resolution === '1080p' ? 0.09 : 0.055) * duration
+      }
+      const duration = params.kieKlingV26Duration === '10' ? 10 : 5
+      const enableAudio = params.kieKlingV26EnableAudio !== false
+      if (duration === 10) return enableAudio ? 1.1 : 0.55
+      return enableAudio ? 0.55 : 0.28
+    },
+    description: '文/图生视频：5s 无音频 $0.28、10s $0.55；有音频 5s $0.55、10s $1.10；动作控制：720p $0.055/秒，1080p $0.09/秒'
   }
 })
 

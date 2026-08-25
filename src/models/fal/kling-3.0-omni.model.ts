@@ -91,9 +91,9 @@ export const falKling30OmniModel = defineModel({
       const duration = Math.min(15, Math.max(3, Math.round(Number(params.falKling30OmniDuration || 5))))
       const audio = params.falKling30OmniGenerateAudio === true
       const pro = params.falKling30OmniResolution === 'pro'
-      return duration * (pro ? (audio ? 0.14 : 0.112) : (audio ? 0.112 : 0.084))
+      return duration * (pro ? (audio ? 0.168 : 0.112) : (audio ? 0.126 : 0.084))
     },
-    description: '标准 $0.084/$0.112，专业 $0.112/$0.14 每秒（无/有音频）'
+    description: '标准 $0.084/$0.126，专业 $0.112/$0.168 每秒（无/有音频，不含语音控制加价档）'
   }
 })
 

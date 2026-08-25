@@ -66,7 +66,11 @@ export const seedreamV45Model = defineModel({
     type: 'image',
     i18nScope: 'models.defs.fal-ai-bytedance-seedream-v4.5',
     name: { key: 'meta.name', fallback: 'Seedream V4.5' },
-    tags: ['image', 'text-to-image', 'image-to-image'],
+    tags: ['image', 'text-to-image', 'image-to-image', 'supports-image-editing', 'supports-multi-image', 'max-images-10'],
+  },
+  inputLimits: {
+    images: { max: 10 },
+    videos: { max: 0 },
   },
   runtimeConstraints: {
     imageSizeFields: [
@@ -125,7 +129,12 @@ export const seedreamV45Model = defineModel({
   linkages: [],
   endpoints: {
     selector: async (params) => {
-      const images = params.images || []
+      const uploaded = Array.isArray(params.uploadedFilePaths)
+        ? (params.uploadedFilePaths as string[]).filter((item) => typeof item === 'string' && item.trim().length > 0)
+        : []
+      const images = uploaded.length > 0
+        ? uploaded
+        : (Array.isArray(params.images) ? (params.images as string[]) : [])
       return images.length > 0
         ? 'fal-ai/bytedance/seedream/v4.5/edit'
         : 'fal-ai/bytedance/seedream/v4.5/text-to-image'
@@ -133,7 +142,12 @@ export const seedreamV45Model = defineModel({
   },
   request: {
     builder: async (params) => {
-      const images = Array.isArray(params.images) ? (params.images as string[]) : []
+      const uploaded = Array.isArray(params.uploadedFilePaths)
+        ? (params.uploadedFilePaths as string[]).filter((item) => typeof item === 'string' && item.trim().length > 0)
+        : []
+      const images = uploaded.length > 0
+        ? uploaded
+        : (Array.isArray(params.images) ? (params.images as string[]) : [])
       const prompt = String(params.prompt || '')
       const numImages = Number(params.falSeedream45NumImages || 1)
       const legacyResolution = params.falSeedreamV45Resolution && typeof params.falSeedreamV45Resolution === 'object'
@@ -167,9 +181,9 @@ export const seedreamV45Model = defineModel({
     currency: '$',
     calculator: (params) => {
       const numImages = params.falSeedream45NumImages || 1
-      return 0.015 * numImages
+      return 0.04 * numImages
     },
-    description: '基础价格 $0.015/张',
+    description: '$0.04/张',
   },
 })
 

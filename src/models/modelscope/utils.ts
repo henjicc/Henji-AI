@@ -112,9 +112,14 @@ export function buildModelscopeRequest(
   }
 
   if (options.allowImage) {
-    const images = Array.isArray(params.image_url)
-      ? params.image_url
-      : (Array.isArray(params.images) ? params.images : [])
+    const filterSources = (value: DynamicValue): string[] =>
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : []
+    const uploaded = filterSources(params.uploadedFilePaths)
+    const images = uploaded.length > 0
+      ? uploaded
+      : (Array.isArray(params.image_url) ? params.image_url : filterSources(params.images))
 
     if (images.length > 0) {
       request.image_url = images

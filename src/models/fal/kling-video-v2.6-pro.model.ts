@@ -15,7 +15,7 @@ export const klingVideoV26ProModel = defineModel({
     type: 'video',
         i18nScope: 'models.defs.fal-ai-kling-video-v2.6-pro',
     name: { key: 'meta.name', fallback: 'Kling Video V2.6 Pro' },
-    tags: ['video', 'text-to-video', 'image-to-video']
+    tags: ['video', 'text-to-video', 'image-to-video', 'motion-control']
   },
   inputLimits: {
     images: { max: 1 },
@@ -173,7 +173,12 @@ export const klingVideoV26ProModel = defineModel({
           : 'fal-ai/kling-video/v2.6/standard/motion-control'
       }
 
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploadedImages = filterSources(params.uploadedFilePaths)
+      const images = uploadedImages.length > 0 ? uploadedImages : filterSources(params.images)
       return images.length > 0
         ? 'fal-ai/kling-video/v2.6/pro/image-to-video'
         : 'fal-ai/kling-video/v2.6/pro/text-to-video'
@@ -182,7 +187,14 @@ export const klingVideoV26ProModel = defineModel({
   request: {
     builder: (params) => {
       const mode = params.falKlingV26ProMode || 'text-image-to-video'
-      const images = params.images || []
+      const filterSources = (value: DynamicValue): string[] =>
+        Array.isArray(value)
+          ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          : []
+      const uploadedImages = filterSources(params.uploadedFilePaths)
+      const images = uploadedImages.length > 0 ? uploadedImages : filterSources(params.images)
+      const uploadedVideos = filterSources(params.uploadedVideoFilePaths)
+      const videos = uploadedVideos.length > 0 ? uploadedVideos : filterSources(params.videos)
       const prompt = params.prompt || ''
       const duration = params.falKlingV26ProVideoDuration || 5
       const aspectRatio = params.falKlingV26ProAspectRatio || '16:9'
@@ -190,7 +202,7 @@ export const klingVideoV26ProModel = defineModel({
       const cfgScale = params.falKlingV26ProCfgScale
       const characterOrientation = params.falKlingV26ProCharacterOrientation || 'video'
       const keepOriginalSound = params.falKlingV26ProKeepOriginalSound !== false
-      const videoInput = params.video || (Array.isArray(params.videos) ? params.videos.find((v: DynamicValue) => typeof v === 'string' && v.startsWith('http')) : undefined)
+      const videoInput = typeof params.video === 'string' ? params.video : videos[0]
 
       if (mode === 'motion-control') {
         const requestData: DynamicValue = {
@@ -229,8 +241,17 @@ export const klingVideoV26ProModel = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: () => 0.12,
-    description: '基础价格 $0.12/次'
+    calculator: (params) => {
+      const mode = params.falKlingV26ProMode || 'text-image-to-video'
+      const duration = Number(params.falKlingV26ProVideoDuration) || 5
+      if (mode === 'motion-control') {
+        const resolution = params.falKlingV26ProResolution || '720p'
+        return (resolution === '1080p' ? 0.112 : 0.07) * duration
+      }
+      const generateAudio = params.falKlingV26ProGenerateAudio !== false
+      return (generateAudio ? 0.14 : 0.07) * duration
+    },
+    description: '无音频 $0.07/秒，有音频 $0.14/秒；动作控制 720p $0.07/秒，1080p $0.112/秒'
   }
 })
 
