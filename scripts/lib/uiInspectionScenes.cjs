@@ -182,14 +182,27 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await projectCard.waitFor({ state: 'visible', timeout: 12000 })
     const projectId = await projectCard.getAttribute('data-project-id')
     if (!projectId) throw new Error('素材组视觉场景找不到临时画布工程')
-    const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
+    const preview = (first, second, label) => `data:image/svg+xml,${encodeURIComponent([
+      '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="220" viewBox="0 0 320 220">',
+      `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${first}"/><stop offset="1" stop-color="${second}"/></linearGradient></defs>`,
+      '<rect width="320" height="220" fill="url(#g)"/>',
+      `<text x="24" y="190" fill="white" font-family="sans-serif" font-size="32" font-weight="700">${label}</text>`,
+      '</svg>',
+    ].join(''))}`
+    const previews = {
+      front: preview('midnightblue', 'cornflowerblue', 'FRONT'),
+      outfit: preview('darkslateblue', 'mediumorchid', 'OUTFIT'),
+      motion: preview('darkgreen', 'mediumseagreen', 'MOTION'),
+      detail: preview('darkgoldenrod', 'coral', 'DETAIL'),
+    }
     const nodes = [
       {
         id: '__asset_group', type: 'assetGroupNode', position: { x: 180, y: 220 },
         width: 220, height: 144, measured: { width: 220, height: 144 }, style: { width: 220, height: 144 },
         data: {
-          displayName: '角色设定', memberOrder: ['__asset_image_1', '__asset_image_2'],
-          coverMemberId: '__asset_image_1',
+          displayName: '角色设定',
+          memberOrder: ['__asset_image_1', '__asset_image_2', '__asset_video', '__asset_image_3'],
+          coverMemberId: '__asset_video',
           bindings: [{
             id: '__asset_binding', targetNodeId: '__asset_target',
             targetPortByKind: { image: 'param:__image' }, excludedMemberIds: [],
@@ -199,12 +212,25 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       {
         id: '__asset_image_1', type: 'uploadNode', parentId: '__asset_group', hidden: true,
         position: { x: 0, y: 0 }, width: 240, height: 180, style: { width: 240, height: 180 },
-        data: { displayName: '角色正面', imageUrl: pixel, previewImageUrl: pixel, aspectRatio: '4:3' },
+        data: { displayName: '角色正面', imageUrl: previews.front, previewImageUrl: previews.front, aspectRatio: '4:3' },
       },
       {
         id: '__asset_image_2', type: 'uploadNode', parentId: '__asset_group', hidden: true,
         position: { x: 270, y: 40 }, width: 240, height: 180, style: { width: 240, height: 180 },
-        data: { displayName: '角色服装', imageUrl: pixel, previewImageUrl: pixel, aspectRatio: '4:3' },
+        data: { displayName: '角色服装', imageUrl: previews.outfit, previewImageUrl: previews.outfit, aspectRatio: '4:3' },
+      },
+      {
+        id: '__asset_video', type: 'videoUploadNode', parentId: '__asset_group', hidden: true,
+        position: { x: 540, y: 80 }, width: 240, height: 180, style: { width: 240, height: 180 },
+        data: {
+          displayName: '角色动作', videoUrl: 'data:video/mp4;base64,',
+          previewImageUrl: previews.motion, aspectRatio: '16:9', durationSec: 4,
+        },
+      },
+      {
+        id: '__asset_image_3', type: 'exportImageNode', parentId: '__asset_group', hidden: true,
+        position: { x: 810, y: 120 }, width: 240, height: 180, style: { width: 240, height: 180 },
+        data: { displayName: '角色细节', imageUrl: previews.detail, previewImageUrl: previews.detail, aspectRatio: '4:3' },
       },
       {
         id: '__asset_target', type: 'imageNode', position: { x: 720, y: 170 }, width: 360, height: 520,

@@ -15,11 +15,12 @@ import {
   CANVAS_NODE_TYPES,
   type AssetGroupNodeData,
 } from '@/features/canvas/domain/canvasNodes';
-import { getNodeMediaOutputs } from '@/features/canvas/domain/nodeRegistry';
 import { resolveAssetGroupMemberKind } from '@/features/canvas/application/assetGroupGraph';
 import { resolveNodeDisplayName } from '@/features/canvas/domain/nodeDisplay';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { NodeHeader } from '@/features/canvas/ui/NodeHeader';
+import { AssetGroupPreview } from '@/features/canvas/nodes/assetGroup/AssetGroupPreview';
+import { resolveAssetGroupPreviewItems } from '@/features/canvas/nodes/assetGroup/assetGroupPreviewModel';
 import {
   NODE_IDLE_BORDER_STATIC_CLASS,
   NODE_PORT_NODE_CLASS,
@@ -44,12 +45,14 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
     }
     return counts;
   }, [members]);
-  const coverNode = members.find((member) => member.id === data.coverMemberId) ?? members[0];
-  const cover = coverNode ? getNodeMediaOutputs(coverNode.type, coverNode.data)[0] : undefined;
+  const previewItems = useMemo(
+    () => resolveAssetGroupPreviewItems(members, data),
+    [data, members],
+  );
 
   return (
     <div className="group relative h-full min-h-36 w-full min-w-56 overflow-visible">
-      <div className={`asset-group-node-stack relative h-full overflow-hidden rounded-[var(--node-radius)] border bg-surface-dark ${
+      <div className={`asset-group-node-stack relative flex h-full flex-col overflow-hidden rounded-[var(--node-radius)] border bg-surface-dark ${
         selected ? NODE_SELECTED_BORDER_CLASS : NODE_IDLE_BORDER_STATIC_CLASS
       }`}>
         <NodeHeader
@@ -73,18 +76,8 @@ export const AssetGroupNode = memo(({ id, data, selected }: AssetGroupNodeProps)
             </UiIconButton>
           )}
         />
-        <div className="relative h-24 overflow-hidden bg-app">
-          {cover?.kind === 'image' && (
-            <img src={cover.previewUrl ?? cover.url} alt="" className="h-full w-full object-cover" draggable={false} />
-          )}
-          {cover?.kind === 'video' && cover.previewUrl && (
-            <img src={cover.previewUrl} alt="" className="h-full w-full object-cover" draggable={false} />
-          )}
-          {!cover && (
-            <div className="flex h-full items-center justify-center text-text-faint">
-              <ICON_NODE_ASSET_GROUP className="h-8 w-8" />
-            </div>
-          )}
+        <div className="relative min-h-0 flex-1 overflow-hidden bg-app">
+          <AssetGroupPreview items={previewItems} />
           <div className="ui-glass absolute bottom-2 left-2 flex items-center gap-2 rounded-lg px-2 py-1 text-2xs text-text-dark">
             <span className="flex items-center gap-1"><ICON_MEDIA_IMAGE className="h-3 w-3" />{mediaSummary.image}</span>
             <span className="flex items-center gap-1"><ICON_MEDIA_VIDEO className="h-3 w-3" />{mediaSummary.video}</span>
