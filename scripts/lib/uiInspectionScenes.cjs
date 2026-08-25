@@ -303,7 +303,10 @@ function createUiInspectionScenes({ settlePage }) {
 
   /**
    * 拖放建节点必须自动连上，且长提示词只在节点内换行、不把节点撑宽。
-   * 两条都是真实回归过的行为，只有真实 Electron 的拖拽与排版能证伪。
+   *
+   * 全程走应用正式路径：自己新建工程、用真实图片文件走正式上传链路、用真实拖拽
+   * 手势连线。不再直接 UPDATE storyboard_projects——那既会覆盖已有工程，塞进去的
+   * 占位像素也不能代表用户真实画布。
    */
   async function setupCanvasQuickConnectPrompt(page) {
     await setupCanvas(page)
@@ -311,40 +314,46 @@ function createUiInspectionScenes({ settlePage }) {
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
       await settlePage(page)
     }
-    const projectCard = page.locator('[data-project-id]:visible').first()
-    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
-    const projectId = await projectCard.getAttribute('data-project-id')
-    if (!projectId) throw new Error('拖放连接场景找不到临时画布工程')
-    const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='
-    const nodes = [
-      {
-        id: '__quick_image', type: 'uploadNode', position: { x: 120, y: 220 },
-        width: 240, height: 180, style: { width: 240, height: 180 },
-        data: { displayName: '参考图', imageUrl: pixel, previewImageUrl: pixel, aspectRatio: '4:3' },
-      },
-    ]
-    await page.evaluate(async (payload) => {
-      await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 80, y: 40, zoom: 0.9 }), payload.projectId]
-      )
-    }, { projectId, nodes })
-    await projectCard.click()
-
-    const source = page.locator('.react-flow__node[data-id="__quick_image"]')
-    await source.waitFor({ state: 'visible', timeout: 12000 })
+    await clickNamedButton(page, /^(新建项目|New Project)$/i)
+    const createDialog = page.locator('[data-dialog="true"]:visible').last()
+    await createDialog.waitFor({ state: 'visible', timeout: 8000 })
+    await createDialog.locator('input').first().fill('回归-拖放连接与提示词换行')
+    const confirmButton = createDialog.getByRole('button', { name: /确定|确认|Confirm|OK/i }).last()
+    if (!await confirmButton.count()) {
+      const dump = await createDialog.evaluate((element) => Array.from(
+        element.querySelectorAll('button')
+      ).map((button) => button.textContent?.trim()).join(' | '))
+      throw new Error(`新建项目对话框没有可识别的确认按钮，实际按钮：${dump}`)
+    }
+    await confirmButton.click()
+    const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
+    await viewport.waitFor({ state: 'visible', timeout: 12000 })
     await settlePage(page, 700)
+
+    const box = await viewport.boundingBox()
+    if (!box) throw new Error('拖放连接场景没有可交互的画布视口')
+    await viewport.click({ button: 'right', position: { x: 220, y: 300 } })
+    const addMenu = page.getByRole('menu', { name: /^(添加节点|Add Node)$/i })
+    await addMenu.waitFor({ state: 'visible', timeout: 8000 })
+    await addMenu.getByRole('menuitem', { name: /^(上传|Upload)$/i }).click()
+
+    const source = page.locator('.react-flow__node:has(input[type="file"])').last()
+    await source.waitFor({ state: 'visible', timeout: 8000 })
+    await source.locator('input[type="file"]').setInputFiles(REFERENCE_FIXTURE_IMAGE)
+    await source.locator('img').first().waitFor({ state: 'visible', timeout: 12000 })
+    await settlePage(page, 700)
+
     const handle = source.locator('.react-flow__handle.source').first()
     const handleBox = await handle.boundingBox()
     if (!handleBox) throw new Error('拖放连接场景无法定位输出端口')
     await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2)
     await page.mouse.down()
-    await page.mouse.move(handleBox.x + 460, handleBox.y + 30, { steps: 16 })
+    await page.mouse.move(handleBox.x + 430, handleBox.y + 40, { steps: 16 })
     await page.mouse.up()
 
-    const menu = page.getByRole('menu', { name: /^(添加节点|Add Node)$/i })
-    await menu.waitFor({ state: 'visible', timeout: 8000 })
-    await menu.getByRole('menuitem', { name: /^(视频生成|Video Generation)$/i }).click()
+    const quickMenu = page.getByRole('menu', { name: /^(添加节点|Add Node)$/i })
+    await quickMenu.waitFor({ state: 'visible', timeout: 8000 })
+    await quickMenu.getByRole('menuitem', { name: /^(视频生成|Video Generation)$/i }).click()
     // 拖放建节点必须自动连上；连线数为 0 说明快捷连接又被静默丢弃了
     await page.waitForFunction(
       () => document.querySelectorAll('.react-flow__edge').length >= 1,
@@ -356,8 +365,7 @@ function createUiInspectionScenes({ settlePage }) {
     const generated = page.locator('.react-flow__node:has([data-generation-node-id])').last()
     await generated.waitFor({ state: 'visible', timeout: 8000 })
     const widthBefore = (await generated.boundingBox())?.width ?? 0
-    const promptBox = generated.getByRole('textbox').first()
-    await promptBox.click()
+    await generated.getByRole('textbox').first().click()
     await settlePage(page, 400)
     await page.keyboard.type('这是一段刻意写得很长的提示词，用来验证提示词在节点内自动换行而不是把节点撑宽，'
       + '包含足够多的字符以超过节点默认宽度好几倍，这样才能真正暴露宽度回归问题。')
@@ -585,18 +593,21 @@ function createUiInspectionScenes({ settlePage }) {
     {
       id: 'canvas-asset-group-collapsed',
       surface: '画布',
+      writesUserData: true,
       name: '画布-素材组折叠与束线',
       setup: async (page) => setupCanvasAssetGroup(page, false),
     },
     {
       id: 'canvas-asset-group-expanded',
       surface: '画布',
+      writesUserData: true,
       name: '画布-素材组临时展开',
       setup: async (page) => setupCanvasAssetGroup(page, true),
     },
     {
       id: 'canvas-batch-connection',
       surface: '画布',
+      writesUserData: true,
       name: '画布-框选素材批量拖连',
       setup: setupCanvasBatchConnection,
     },

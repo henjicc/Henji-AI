@@ -140,16 +140,21 @@ async function launchElectronApp({
 } = {}) {
   const userDataDir = isolateUserData ? createIsolatedUserDataDir() : null
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, mainEntry] : [mainEntry]
+  // LOCALAPPDATA/APPDATA 只在 Windows 上决定数据目录；macOS / Linux 走
+  // app.getPath('appData')，必须由主进程按 HENJI_ISOLATED_APP_DATA 重定向，
+  // 否则 --user-data-dir 隔离的只是 Chromium 侧，业务数据仍写用户真实资料。
   const launchEnv = userDataDir
     ? {
         ...extraEnv,
         LOCALAPPDATA: path.join(userDataDir, 'local-app-data'),
         APPDATA: path.join(userDataDir, 'roaming-app-data'),
+        HENJI_ISOLATED_APP_DATA: path.join(userDataDir, 'app-data'),
       }
     : extraEnv
   if (userDataDir) {
     fs.mkdirSync(launchEnv.LOCALAPPDATA, { recursive: true })
     fs.mkdirSync(launchEnv.APPDATA, { recursive: true })
+    fs.mkdirSync(launchEnv.HENJI_ISOLATED_APP_DATA, { recursive: true })
   }
   if (useElectronApi || process.env.HENJI_SMOKE_USE_ELECTRON_API === '1') {
     try {

@@ -42,6 +42,19 @@ import {
 import { runAssistantCli } from './assistant-cli/runner'
 import { runAssistantModelVerification } from './assistant-cli/verify-model'
 
+/*
+ * 自动化隔离的唯一开关。
+ *
+ * `--user-data-dir` 只改 userData，而本应用的数据库、日志、媒体目录全部挂在
+ * `app.getPath('appData')` 下；Windows 上启动脚本还能靠覆盖 LOCALAPPDATA 兜住，
+ * macOS / Linux 没有等价环境变量，"隔离临时数据"会直接写用户真实资料。
+ * 在 ready 之前重定向 appData，四处数据目录调用点自动跟随，无需各自加分支。
+ */
+const isolatedAppData = process.env['HENJI_ISOLATED_APP_DATA']
+if (isolatedAppData) {
+  app.setPath('appData', isolatedAppData)
+}
+
 registerMediaProtocolScheme()
 if (!isAssistantCliMode()) {
   configureChromiumDevelopmentCache()
