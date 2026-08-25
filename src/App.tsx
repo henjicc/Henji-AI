@@ -35,6 +35,8 @@ import { prefetchWhenIdle } from '@/utils/idlePrefetch'
 import { onboardingManager } from '@/features/onboarding/application/onboardingManager'
 import { OnboardingModal } from '@/features/onboarding/components/OnboardingModal'
 import { OnboardingHints } from '@/features/onboarding/components/OnboardingHints'
+import { getPlatform } from '@/platform/runtime'
+import { useProjectStore } from '@/stores/projectStore'
 
 const logger = createLogger('App')
 
@@ -159,6 +161,23 @@ const App: React.FC = () => {
     }
     window.addEventListener('keydown', handleAssistantShortcut)
     return () => window.removeEventListener('keydown', handleAssistantShortcut)
+  }, [])
+  useEffect(() => {
+    let closing = false
+    return getPlatform().window.onCloseRequested(() => {
+      if (closing) return
+      closing = true
+      void (async () => {
+        try {
+          const projectStore = useProjectStore.getState()
+          if (projectStore.currentProjectId) await projectStore.closeProject()
+          await getPlatform().window.confirmClose()
+        } catch (error) {
+          closing = false
+          logger.error('关闭应用前保存画布项目失败', error, { event: 'app.close.persistence.failed' })
+        }
+      })()
+    })
   }, [])
   // 应用初始化
   useEffect(() => {

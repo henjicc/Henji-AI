@@ -33,6 +33,11 @@ export const PROJECT_STORE_LEDGER: ApplicationStoreActionLedger<ActionName> = {
     renameProject: CAPABILITY('rename_canvas_project'),
     openProject: CAPABILITY('open_canvas_project'),
     closeProject: CAPABILITY('close_canvas_project'),
+    clearPersistenceError: {
+      kind: 'excluded',
+      category: 'internal',
+      reason: '仅清除画布项目写盘失败提示；成功写入时会自动清除，不是业务数据操作。',
+    },
     getCurrentProject: {
       kind: 'excluded',
       category: 'internal',

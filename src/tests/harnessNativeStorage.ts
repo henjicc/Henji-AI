@@ -3,8 +3,8 @@
  *
  * ── 为什么需要它 ──
  * jsdom 下 `detectShell()` 找不到 `window.henjiNative`，`getPlatform()` 直接抛
- * `Platform runtime is only available inside the Electron desktop shell`。素材集合与 3D 工程
- * 的创建都要经持久化落地，于是事务整体补偿回滚，两个域的读改验回环够不到实例——不是链路
+ * `Platform runtime is only available inside the Electron desktop shell`。素材集合、画布与 3D 工程
+ * 的创建都要经持久化落地，于是事务整体补偿回滚，相关域的读改验回环够不到实例——不是链路
  * 缺陷，是环境限制（真机场景每次都通过）。
  *
  * ── 替身落在哪条线上 ──
@@ -33,6 +33,11 @@ import type {
   CameraStageProjectPlatformRecord,
   CameraStageProjectPlatformSummary,
 } from '@/platform/contracts/cameraStageProjects'
+import type {
+  StoryboardProjectPlatformRecord,
+  StoryboardProjectPlatformSummary,
+  StoryboardProjectPlatformWrite,
+} from '@/platform/contracts/storyboardProjects'
 
 const FIX_HINT = '替身只负责存储：要用到新方法，就在 src/tests/harnessNativeStorage.ts 里补一段'
   + '**只存不判断**的实现，不要返回空值糊过去——那等于伪造业务结果。'
@@ -154,11 +159,55 @@ const cameraStageProjectsStorage = {
   },
 }
 
+/* ── 画布工程存储 ───────────────────────────────────────────────────────── */
+
+const storyboardProjects = new Map<string, StoryboardProjectPlatformRecord>()
+
+const storyboardProjectsStorage = {
+  async listProjectSummaries(): Promise<StoryboardProjectPlatformSummary[]> {
+    return [...storyboardProjects.values()]
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .map(({ nodesJson: _nodesJson, edgesJson: _edgesJson, viewportJson: _viewportJson,
+        historyJson: _historyJson, ...summary }) => wire(summary))
+  },
+
+  async getProjectRecord(projectId: string): Promise<StoryboardProjectPlatformRecord | null> {
+    const record = storyboardProjects.get(projectId)
+    return record ? wire(record) : null
+  },
+
+  async upsertProjectRecord(record: StoryboardProjectPlatformWrite): Promise<void> {
+    const existing = storyboardProjects.get(record.id)
+    storyboardProjects.set(record.id, wire({
+      ...record,
+      createdAt: existing?.createdAt ?? record.createdAt,
+      coverPath: existing?.coverPath ?? null,
+    }))
+  },
+
+  async updateProjectViewportRecord(projectId: string, viewportJson: string): Promise<void> {
+    const record = storyboardProjects.get(projectId)
+    if (!record) return
+    storyboardProjects.set(projectId, { ...record, viewportJson })
+  },
+
+  async renameProjectRecord(projectId: string, name: string, updatedAt: number): Promise<void> {
+    const record = storyboardProjects.get(projectId)
+    if (!record) return
+    storyboardProjects.set(projectId, { ...record, name, updatedAt })
+  },
+
+  async deleteProjectRecord(projectId: string): Promise<void> {
+    storyboardProjects.delete(projectId)
+  },
+}
+
 /* ── 装配与安装 ─────────────────────────────────────────────────────────── */
 
 const NAMESPACES: Record<string, object> = {
   assetLibrary: assetLibraryStorage,
   cameraStageProjects: cameraStageProjectsStorage,
+  storyboardProjects: storyboardProjectsStorage,
 }
 
 /**
@@ -196,7 +245,7 @@ function createNativeBridge(): object {
       if (namespace) return namespace
       throw new Error(
         `[harness-native] henjiNative.${property} 没有实现：`
-        + `替身只装了 ${[...wrapped.keys()].join('、')} 两个命名空间。${FIX_HINT}`
+        + `替身只装了 ${[...wrapped.keys()].join('、')} 这些命名空间。${FIX_HINT}`
       )
     },
     has: (_target, property) => typeof property === 'string' && wrapped.has(property),
@@ -222,6 +271,7 @@ export function installHarnessNativeStorage(): void {
 export function resetHarnessNativeStorage(): void {
   libraries.clear()
   cameraStageProjects.clear()
+  storyboardProjects.clear()
 }
 
 export function uninstallHarnessNativeStorage(): void {

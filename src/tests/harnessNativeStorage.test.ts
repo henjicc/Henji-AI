@@ -31,7 +31,7 @@ describe('harness 内存 native 替身', () => {
     const native = (window as unknown as { henjiNative: Record<string, unknown> }).henjiNative
     expect(() => native.db).toThrowError(/henjiNative\.db 没有实现/)
     // 抛的错要能自纠：说清替身装了什么，以及该去哪里补。
-    expect(() => native.canvasProjects).toThrowError(/assetLibrary、cameraStageProjects/)
+    expect(() => native.canvasProjects).toThrowError(/assetLibrary、cameraStageProjects、storyboardProjects/)
     expect(() => native.canvasProjects).toThrowError(/harnessNativeStorage\.ts/)
   })
 
@@ -69,6 +69,18 @@ describe('harness 内存 native 替身', () => {
     })
     expect(await projects.getProjectRecord('p1')).toMatchObject({
       name: '二', createdAt: 100, updatedAt: 900, objectCount: 2,
+    })
+  })
+
+  it('画布工程可经真实电子适配器写入并回读', async () => {
+    const projects = getPlatform().storyboardProjects
+    await projects.upsertProjectRecord({
+      id: 'canvas-1', name: '画布', createdAt: 1, updatedAt: 2, nodeCount: 0,
+      nodesJson: '[]', edgesJson: '[]', viewportJson: '{}', historyJson: '{}',
+    })
+    await projects.renameProjectRecord('canvas-1', '画布改名', 3)
+    expect(await projects.getProjectRecord('canvas-1')).toMatchObject({
+      name: '画布改名', createdAt: 1, updatedAt: 3, coverPath: null,
     })
   })
 

@@ -136,6 +136,8 @@ export interface HenjiWindowApi {
   setZoomFactor(factor: 0.9 | 1 | 1.1): Promise<void>
   toggleDevTools(): Promise<void>
   onStateChanged(handler: (payload: HenjiWindowStatePayload) => void): () => void
+  onCloseRequested(handler: () => void): () => void
+  confirmClose(): Promise<void>
 }
 
 export interface HenjiDiagnosticsStreamEvent {

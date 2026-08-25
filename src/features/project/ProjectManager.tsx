@@ -61,7 +61,7 @@ export function ProjectManager(): JSX.Element {
   const [isImporting, setIsImporting] = useState(false);
   const [packageError, setPackageError] = useState<string | null>(null);
 
-  const { projects, isOpeningProject, createProject, deleteProject, renameProject, openProject, hydrate } =
+  const { projects, isOpeningProject, persistenceError, createProject, deleteProject, renameProject, openProject, hydrate } =
     useProjectStore();
 
   const cardItems = projects.map((project) => toCardItem(project, (count) => t('project.nodesCount', { count })));
@@ -116,7 +116,13 @@ export function ProjectManager(): JSX.Element {
             {isImporting ? t('project.importing') : t('project.importPackage')}
           </UiButton>
         )}
-        banner={packageError ? <UiError size="xs" className="mb-4" message={packageError} /> : null}
+        banner={(packageError || persistenceError) ? (
+          <UiError
+            size="xs"
+            className="mb-4"
+            message={packageError ?? t(persistenceError ?? 'project.persistenceFailed')}
+          />
+        ) : null}
         extraActions={(item) => [
           {
             id: 'export',
@@ -127,9 +133,11 @@ export function ProjectManager(): JSX.Element {
           },
         ]}
         onOpen={(item) => openProject(item.id)}
-        onCreate={(name) => createProject(name)}
-        onRename={(item, name) => renameProject(item.id, name)}
-        onDelete={(items) => items.forEach((item) => deleteProject(item.id))}
+        onCreate={(name) => { void createProject(name).catch(() => undefined) }}
+        onRename={(item, name) => { void renameProject(item.id, name).catch(() => undefined) }}
+        onDelete={async (items) => {
+          await Promise.all(items.map((item) => deleteProject(item.id))).catch(() => undefined)
+        }}
       />
 
       {isOpeningProject && (

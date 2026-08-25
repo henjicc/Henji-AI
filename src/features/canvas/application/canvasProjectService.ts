@@ -26,7 +26,7 @@ export async function createCanvasProject(name: string): Promise<Record<string, 
   await ensureProjectsHydrated()
   const normalized = name.trim()
   if (!normalized) throw new CanvasApplicationError('INVALID_INPUT', '画布项目名称不能为空', true)
-  const projectId = useProjectStore.getState().createProject(normalized)
+  const projectId = await useProjectStore.getState().createProject(normalized)
   const project = useProjectStore.getState().currentProject
   useCanvasStore.getState().setCanvasData(project?.nodes ?? [], project?.edges ?? [], project?.history)
   useCanvasStore.getState().setViewportState(project?.viewport ?? EMPTY_VIEWPORT)
@@ -43,7 +43,7 @@ export async function closeCanvasProject(projectId: string): Promise<Record<stri
     })
   }
   await updateCanvasProjectCover(projectId)
-  store.closeProject()
+  await store.closeProject()
   useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
   useCanvasStore.getState().setViewportState(EMPTY_VIEWPORT)
   return { projectId, status: 'closed' }
@@ -54,7 +54,7 @@ export async function renameCanvasProject(projectId: string, name: string): Prom
   requireProjectSummary(projectId)
   const normalized = name.trim()
   if (!normalized) throw new CanvasApplicationError('INVALID_INPUT', '画布项目名称不能为空', true)
-  useProjectStore.getState().renameProject(projectId, normalized)
+  await useProjectStore.getState().renameProject(projectId, normalized)
   return { projectId, name: normalized }
 }
 
@@ -64,11 +64,11 @@ export async function deleteCanvasProject(projectId: string): Promise<Record<str
   const store = useProjectStore.getState()
   const wasCurrent = store.currentProjectId === projectId
   if (wasCurrent) {
-    store.closeProject()
+    await store.closeProject()
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] })
     useCanvasStore.getState().setViewportState(EMPTY_VIEWPORT)
   }
-  useProjectStore.getState().deleteProject(projectId)
+  await useProjectStore.getState().deleteProject(projectId)
   return { projectId, status: 'deleted', wasCurrent }
 }
 

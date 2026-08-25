@@ -11,4 +11,7 @@ export interface WindowPlatform {
   onResized(handler: () => void): () => void
   /** 开发期：打开/关闭 DevTools（Electron 用 webContents.openDevTools 平替 toggle_devtools）。 */
   toggleDevTools(): Promise<void>
+  /** 主进程准备关闭窗口时触发；渲染层完成关键写入后必须调用 confirmClose。 */
+  onCloseRequested(handler: () => void): () => void
+  confirmClose(): Promise<void>
 }

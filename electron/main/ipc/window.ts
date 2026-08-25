@@ -10,6 +10,10 @@ const WINDOW_GET_CONTENT_SIZE = 'window:getContentSize'
 const WINDOW_SET_ZOOM_FACTOR = 'window:setZoomFactor'
 const WINDOW_TOGGLE_DEVTOOLS = 'window:toggleDevTools'
 const WINDOW_STATE_CHANGED = 'window:stateChanged'
+const WINDOW_CLOSE_REQUESTED = 'window:closeRequested'
+const WINDOW_CONFIRM_CLOSE = 'window:confirmClose'
+
+const approvedCloseWindows = new WeakSet<BrowserWindow>()
 
 interface WindowStatePayload {
   isMaximized: boolean
@@ -58,6 +62,14 @@ export function bindWindowStateEvents(win: BrowserWindow): void {
   win.on('resize', emit)
   win.on('enter-full-screen', emit)
   win.on('leave-full-screen', emit)
+  win.on('close', (event) => {
+    if (approvedCloseWindows.has(win)) {
+      approvedCloseWindows.delete(win)
+      return
+    }
+    event.preventDefault()
+    if (!win.webContents.isDestroyed()) win.webContents.send(WINDOW_CLOSE_REQUESTED)
+  })
 }
 
 export function registerWindowIpc(): void {
@@ -93,5 +105,11 @@ export function registerWindowIpc(): void {
     } else {
       win.webContents.openDevTools({ mode: 'detach' })
     }
+  })
+
+  registerIpcHandler(WINDOW_CONFIRM_CLOSE, parseVoid, (_input, event) => {
+    const win = getEventWindow(event)
+    approvedCloseWindows.add(win)
+    win.close()
   })
 }

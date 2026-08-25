@@ -22,6 +22,7 @@ import {
   type ProjectRecord,
   type ProjectSummaryRecord,
 } from '@/commands/projectState';
+import { createProjectPersistenceQueue } from './projectPersistenceQueue';
 
 const logger = createLogger('stores.projectStore')
 
@@ -40,23 +41,9 @@ function createEmptyHistory(): CanvasHistoryState {
 
 const IMAGE_REF_PREFIX = '__img_ref__:';
 let openProjectRequestSeq = 0;
-const UPSERT_DEBOUNCE_MS = 260;
-const VIEWPORT_UPSERT_DEBOUNCE_MS = 280;
 const VIEWPORT_EPSILON = 0.001;
-const IDLE_PERSIST_TIMEOUT_MS = 1200;
-const FALLBACK_IDLE_DELAY_MS = 64;
 const MAX_PERSISTED_HISTORY_STEPS = 12;
 const MAX_HISTORY_RESTORE_JSON_CHARS = 1_500_000;
-const DELETE_RETRY_DELAY_MS = 80;
-const MAX_DELETE_RETRIES = 10;
-
-const queuedProjectUpserts = new Map<string, Project>();
-const projectUpsertTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const projectUpsertsInFlight = new Set<string>();
-const queuedViewportUpserts = new Map<string, string>();
-const viewportUpsertTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const viewportUpsertsInFlight = new Set<string>();
-const deletingProjectIds = new Set<string>();
 
 export interface ProjectSummary {
   id: string;
@@ -382,29 +369,6 @@ export function encodeProjectAsRecord(project: Project): ProjectRecord {
   return toProjectRecord(project);
 }
 
-interface PersistProjectOptions {
-  immediate?: boolean;
-  debounceMs?: number;
-}
-
-interface PersistViewportOptions {
-  immediate?: boolean;
-  debounceMs?: number;
-}
-
-function scheduleIdlePersist(task: () => void): void {
-  const idleHost = globalThis as typeof globalThis & {
-    requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
-  };
-
-  if (typeof idleHost.requestIdleCallback === 'function') {
-    idleHost.requestIdleCallback(task, { timeout: IDLE_PERSIST_TIMEOUT_MS });
-    return;
-  }
-
-  setTimeout(task, FALLBACK_IDLE_DELAY_MS);
-}
-
 function hasViewportMeaningfulDelta(current: Viewport, next: Viewport): boolean {
   return (
     Math.abs(current.x - next.x) > VIEWPORT_EPSILON ||
@@ -421,190 +385,20 @@ function normalizeViewport(viewport: Viewport): Viewport {
   };
 }
 
-function clearQueuedProjectUpsert(projectId: string): void {
-  const timer = projectUpsertTimers.get(projectId);
-  if (timer) {
-    clearTimeout(timer);
-    projectUpsertTimers.delete(projectId);
-  }
-  queuedProjectUpserts.delete(projectId);
+let reportBackgroundPersistenceError: (operation: 'save' | 'viewport', error: unknown) => void = (
+  operation,
+  error
+) => {
+  logger.error(`Failed to persist project ${operation}`, error)
 }
 
-function clearQueuedViewportUpsert(projectId: string): void {
-  const timer = viewportUpsertTimers.get(projectId);
-  if (timer) {
-    clearTimeout(timer);
-    viewportUpsertTimers.delete(projectId);
-  }
-  queuedViewportUpserts.delete(projectId);
-}
-
-interface FlushProjectUpsertOptions {
-  bypassIdle?: boolean;
-}
-
-function flushProjectUpsert(projectId: string, options?: FlushProjectUpsertOptions): void {
-  if (deletingProjectIds.has(projectId) || projectUpsertsInFlight.has(projectId)) {
-    return;
-  }
-
-  const project = queuedProjectUpserts.get(projectId);
-  if (!project) {
-    return;
-  }
-
-  queuedProjectUpserts.delete(projectId);
-  projectUpsertsInFlight.add(projectId);
-
-  const settle = () => {
-    projectUpsertsInFlight.delete(projectId);
-
-    if (deletingProjectIds.has(projectId)) {
-      return;
-    }
-
-    if (queuedProjectUpserts.has(projectId)) {
-      flushProjectUpsert(projectId);
-    }
-  };
-
-  const executePersist = () => {
-    if (deletingProjectIds.has(projectId)) {
-      settle();
-      return;
-    }
-
-    const record = toProjectRecord(project);
-    void upsertProjectRecord(record)
-      .catch((error) => {
-        logger.error('Failed to persist project record', error);
-      })
-      .finally(settle);
-  };
-
-  if (options?.bypassIdle) {
-    executePersist();
-    return;
-  }
-
-  scheduleIdlePersist(executePersist);
-}
-
-function queueProjectUpsert(project: Project, options?: PersistProjectOptions): void {
-  const projectId = project.id;
-  deletingProjectIds.delete(projectId);
-  queuedProjectUpserts.set(projectId, project);
-
-  const existingTimer = projectUpsertTimers.get(projectId);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-    projectUpsertTimers.delete(projectId);
-  }
-
-  const debounceMs = options?.immediate ? 0 : (options?.debounceMs ?? UPSERT_DEBOUNCE_MS);
-  if (debounceMs <= 0) {
-    flushProjectUpsert(projectId, { bypassIdle: true });
-    return;
-  }
-
-  const timer = setTimeout(() => {
-    projectUpsertTimers.delete(projectId);
-    flushProjectUpsert(projectId);
-  }, debounceMs);
-  projectUpsertTimers.set(projectId, timer);
-}
-
-function persistProject(project: Project, options?: PersistProjectOptions): void {
-  clearQueuedViewportUpsert(project.id);
-  queueProjectUpsert(project, options);
-}
-
-function flushViewportUpsert(projectId: string): void {
-  if (deletingProjectIds.has(projectId) || viewportUpsertsInFlight.has(projectId)) {
-    return;
-  }
-
-  const viewportJson = queuedViewportUpserts.get(projectId);
-  if (typeof viewportJson !== 'string') {
-    return;
-  }
-
-  queuedViewportUpserts.delete(projectId);
-  viewportUpsertsInFlight.add(projectId);
-
-  void updateProjectViewportRecord(projectId, viewportJson)
-    .catch((error) => {
-      logger.error('Failed to persist project viewport', error);
-    })
-    .finally(() => {
-      viewportUpsertsInFlight.delete(projectId);
-
-      if (deletingProjectIds.has(projectId)) {
-        return;
-      }
-
-      if (queuedViewportUpserts.has(projectId)) {
-        flushViewportUpsert(projectId);
-      }
-    });
-}
-
-function queueViewportUpsert(
-  projectId: string,
-  viewport: Viewport,
-  options?: PersistViewportOptions
-): void {
-  deletingProjectIds.delete(projectId);
-  queuedViewportUpserts.set(projectId, JSON.stringify(viewport));
-
-  const existingTimer = viewportUpsertTimers.get(projectId);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-    viewportUpsertTimers.delete(projectId);
-  }
-
-  const debounceMs = options?.immediate ? 0 : (options?.debounceMs ?? VIEWPORT_UPSERT_DEBOUNCE_MS);
-  if (debounceMs <= 0) {
-    flushViewportUpsert(projectId);
-    return;
-  }
-
-  const timer = setTimeout(() => {
-    viewportUpsertTimers.delete(projectId);
-    flushViewportUpsert(projectId);
-  }, debounceMs);
-  viewportUpsertTimers.set(projectId, timer);
-}
-
-function persistProjectDelete(projectId: string): void {
-  deletingProjectIds.add(projectId);
-  clearQueuedProjectUpsert(projectId);
-  clearQueuedViewportUpsert(projectId);
-
-  const attemptDelete = (retryCount: number): void => {
-    if (projectUpsertsInFlight.has(projectId) || viewportUpsertsInFlight.has(projectId)) {
-      if (retryCount >= MAX_DELETE_RETRIES) {
-        deletingProjectIds.delete(projectId);
-        return;
-      }
-
-      setTimeout(() => {
-        attemptDelete(retryCount + 1);
-      }, DELETE_RETRY_DELAY_MS);
-      return;
-    }
-
-    void deleteProjectRecord(projectId)
-      .catch((error) => {
-        logger.error('Failed to delete project record', error);
-      })
-      .finally(() => {
-        deletingProjectIds.delete(projectId);
-      });
-  };
-
-  attemptDelete(0);
-}
+const persistenceQueue = createProjectPersistenceQueue<Project>({
+  getProjectId: (project) => project.id,
+  upsertProject: async (project) => { await upsertProjectRecord(toProjectRecord(project)) },
+  updateViewport: updateProjectViewportRecord,
+  deleteProject: deleteProjectRecord,
+  onBackgroundError: (operation, error) => reportBackgroundPersistenceError(operation, error),
+})
 
 function updateProjectSummary(
   summaries: ProjectSummary[],
@@ -621,14 +415,16 @@ interface ProjectState {
   currentProject: Project | null;
   isHydrated: boolean;
   isOpeningProject: boolean;
+  persistenceError: string | null;
 
   hydrate: () => Promise<void>;
-  createProject: (name: string) => string;
-  deleteProject: (id: string) => void;
-  renameProject: (id: string, name: string) => void;
+  createProject: (name: string) => Promise<string>;
+  deleteProject: (id: string) => Promise<void>;
+  renameProject: (id: string, name: string) => Promise<void>;
   setProjectCover: (id: string, coverPath: string | null) => void;
   openProject: (id: string) => void;
-  closeProject: () => void;
+  closeProject: () => Promise<void>;
+  clearPersistenceError: () => void;
   getCurrentProject: () => Project | null;
   saveCurrentProject: (
     nodes: CanvasNode[],
@@ -646,6 +442,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProject: null,
   isHydrated: false,
   isOpeningProject: false,
+  persistenceError: null,
 
   hydrate: async () => {
     if (get().isHydrated) {
@@ -672,7 +469,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  createProject: (name) => {
+  createProject: async (name) => {
     const id = uuidv4();
     const now = Date.now();
     const project: Project = {
@@ -688,63 +485,74 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       history: createEmptyHistory(),
     };
 
+    try {
+      await persistenceQueue.flushProject(project)
+    } catch (error) {
+      logger.error('Failed to create project record', error)
+      set({ persistenceError: 'project.persistenceFailed' })
+      throw error
+    }
     set((state) => ({
       projects: [{ ...project }, ...state.projects],
       currentProjectId: id,
       currentProject: project,
       isOpeningProject: false,
+      persistenceError: null,
     }));
-    persistProject(project, { immediate: true });
     return id;
   },
 
-  deleteProject: (id) => {
+  deleteProject: async (id) => {
+    try {
+      await persistenceQueue.deleteProject(id)
+    } catch (error) {
+      logger.error('Failed to delete project record', error)
+      set({ persistenceError: 'project.persistenceFailed' })
+      throw error
+    }
     set((state) => ({
       projects: state.projects.filter((project) => project.id !== id),
       currentProjectId: state.currentProjectId === id ? null : state.currentProjectId,
       currentProject: state.currentProject?.id === id ? null : state.currentProject,
       isOpeningProject: false,
+      persistenceError: null,
     }));
-
-    persistProjectDelete(id);
   },
 
-  renameProject: (id, name) => {
+  renameProject: async (id, name) => {
     const now = Date.now();
+    const currentProject = get().currentProject
+    const previousSummary = get().projects.find((project) => project.id === id)
+    const nextCurrentProject = currentProject?.id === id
+      ? { ...currentProject, name, updatedAt: now }
+      : null
 
-    set((state) => {
-      const projects = state.projects.map((summary) =>
-        summary.id === id
-          ? {
-              ...summary,
-              name,
-              updatedAt: now,
-            }
-          : summary
-      );
+    set((state) => ({
+      projects: state.projects.map((summary) => summary.id === id
+        ? { ...summary, name, updatedAt: now }
+        : summary).sort((a, b) => b.updatedAt - a.updatedAt),
+      currentProject: state.currentProject?.id === id
+        ? { ...state.currentProject, name, updatedAt: now }
+        : state.currentProject,
+    }))
 
-      return {
-        projects: projects.sort((a, b) => b.updatedAt - a.updatedAt),
-        currentProject:
-          state.currentProject?.id === id
-            ? {
-                ...state.currentProject,
-                name,
-                updatedAt: now,
-              }
-            : state.currentProject,
-      };
-    });
-
-    const nextCurrentProject = get().currentProject?.id === id ? get().currentProject : null;
-    if (nextCurrentProject) {
-      persistProject(nextCurrentProject, { immediate: true });
-      return;
+    try {
+      if (nextCurrentProject) await persistenceQueue.flushProject(nextCurrentProject)
+      else await renameProjectRecord(id, name, now)
+    } catch (error) {
+      logger.error('Failed to rename project record', error)
+      set((state) => ({
+        projects: previousSummary
+          ? updateProjectSummary(state.projects, previousSummary)
+          : state.projects,
+        currentProject: state.currentProject?.id === id && currentProject
+          ? { ...state.currentProject, name: currentProject.name, updatedAt: currentProject.updatedAt }
+          : state.currentProject,
+        persistenceError: 'project.persistenceFailed',
+      }))
+      throw error
     }
-
-    void renameProjectRecord(id, name, now).catch((error) => {
-      logger.error('Failed to rename project record', error);
-    });
+    set({ persistenceError: null })
   },
 
   setProjectCover: (id, coverPath) => {
@@ -797,7 +605,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     })();
   },
 
-  closeProject: () => {
+  closeProject: async () => {
     openProjectRequestSeq += 1;
     const { currentProjectId, currentProject } = get();
     let persistedSummary: ProjectSummary | null = null;
@@ -822,7 +630,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         nodeCount: nextProject.nodeCount,
         coverPath: nextProject.coverPath,
       };
-      persistProject(nextProject, { immediate: true });
+      try {
+        await persistenceQueue.flushProject(nextProject)
+      } catch (error) {
+        logger.error('Failed to persist project before closing', error)
+        set({ persistenceError: 'project.persistenceFailed' })
+        throw error
+      }
     }
 
     set((state) => ({
@@ -832,8 +646,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       currentProjectId: null,
       currentProject: null,
       isOpeningProject: false,
+      persistenceError: null,
     }));
   },
+
+  clearPersistenceError: () => set({ persistenceError: null }),
 
   getCurrentProject: () => {
     const { currentProjectId, currentProject } = get();
@@ -891,7 +708,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         coverPath: nextProject.coverPath,
       }),
     }));
-    persistProject(nextProject);
+    persistenceQueue.clearViewport(nextProject.id)
+    persistenceQueue.queueProject(nextProject);
   },
 
   saveCurrentProjectViewport: (viewport) => {
@@ -912,7 +730,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     };
 
     set({ currentProject: nextProject });
-    queueViewportUpsert(currentProjectId, nextViewport);
+    persistenceQueue.queueViewport(currentProjectId, JSON.stringify(nextViewport));
   },
 
   cancelPendingViewportPersist: () => {
@@ -920,6 +738,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!currentProjectId) {
       return;
     }
-    clearQueuedViewportUpsert(currentProjectId);
+    persistenceQueue.clearViewport(currentProjectId);
   },
 }));
+
+reportBackgroundPersistenceError = (operation, error) => {
+  logger.error(`Failed to persist project ${operation}`, error)
+  useProjectStore.setState({ persistenceError: 'project.persistenceFailed' })
+}

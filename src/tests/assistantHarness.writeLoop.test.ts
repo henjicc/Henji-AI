@@ -102,8 +102,11 @@ function loops(): WriteLoop[] {
       ref: 'ref',
       property: 'canvas.project.name',
       value: `'${LOOP_NONCE}-画布改名'`,
-      assertTruthSource: () => expect(useProjectStore.getState().currentProject?.name)
-        .toBe(`${LOOP_NONCE}-画布改名`),
+      assertTruthSource: async () => {
+        expect(useProjectStore.getState().currentProject?.name).toBe(`${LOOP_NONCE}-画布改名`)
+        const persisted = await getPlatform().storyboardProjects.listProjectSummaries()
+        expect(persisted.map((project) => project.name)).toContain(`${LOOP_NONCE}-画布改名`)
+      },
     },
     {
       domain: 'models', entityType: 'generation.model',
@@ -213,8 +216,8 @@ describe('读改验回环的全域穷举', () => {
 
   beforeAll(async () => {
     /*
-     * 装上只存内存的 native 替身。assets 与 camera_stage 创建实例都要落持久化，缺了它
-     * `getPlatform()` 直接抛，事务整体补偿回滚——那正是这两个域曾经登记在 KNOWN_UNREACHABLE
+   * 装上只存内存的 native 替身。assets、canvas 与 camera_stage 创建实例都要落持久化，缺了它
+   * `getPlatform()` 直接抛，事务整体补偿回滚——这也是相关域曾经登记在 KNOWN_UNREACHABLE
      * 里的原因。替身只换掉 IPC 之后那台 SQLite，电子适配器与领域链路仍是真的。
      */
     installHarnessNativeStorage()

@@ -16,6 +16,8 @@ interface ElectronWindowApi {
   setZoomFactor(factor: UiScaleFactor): Promise<void>
   onStateChanged(handler: (state: ElectronWindowState) => void): () => void
   toggleDevTools(): Promise<void>
+  onCloseRequested(handler: () => void): () => void
+  confirmClose(): Promise<void>
 }
 
 interface ElectronNativeApi {
@@ -55,6 +57,12 @@ export function createElectronWindow(): WindowPlatform {
     },
     async toggleDevTools() {
       await getWindowApi().toggleDevTools()
+    },
+    onCloseRequested(handler) {
+      return getWindowApi().onCloseRequested(handler)
+    },
+    async confirmClose() {
+      await getWindowApi().confirmClose()
     },
   }
 }

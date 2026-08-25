@@ -323,6 +323,7 @@
     "importing": "Importing…",
     "exportFailed": "Failed to export project",
     "importFailed": "Failed to import project",
+    "persistenceFailed": "Failed to save the canvas project. Check available disk space and try again.",
     "open": "Open Project",
     "save": "Save Project",
     "name": "Project Name",

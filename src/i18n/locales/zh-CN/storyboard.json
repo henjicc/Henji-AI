@@ -323,6 +323,7 @@
     "importing": "导入中…",
     "exportFailed": "项目导出失败",
     "importFailed": "项目导入失败",
+    "persistenceFailed": "画布项目保存失败，请检查磁盘空间后重试",
     "open": "打开项目",
     "save": "保存项目",
     "name": "项目名称",

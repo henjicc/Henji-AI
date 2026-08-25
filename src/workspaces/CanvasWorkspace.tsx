@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ReactFlowProvider } from '@xyflow/react';
-import { UiButton } from '@/components/ui';
+import { useTranslation } from 'react-i18next';
+import { UiButton, UiError } from '@/components/ui';
 import { Canvas } from '@/features/canvas/Canvas';
 import { updateCanvasProjectCover } from '@/features/canvas/application/canvasProjectCover';
 import { useCanvasProjectCoverAutosave } from '@/features/canvas/application/useCanvasProjectCoverAutosave';
@@ -10,10 +11,12 @@ import '@/features/canvas/storyboard.css';
 import { isUiInspectionReadOnly } from '@/platform/runtime';
 
 const CanvasWorkspace = (): JSX.Element => {
+  const { t } = useTranslation();
   const isHydrated = useProjectStore((state) => state.isHydrated);
   const hydrate = useProjectStore((state) => state.hydrate);
   const currentProjectId = useProjectStore((state) => state.currentProjectId);
   const closeProject = useProjectStore((state) => state.closeProject);
+  const persistenceError = useProjectStore((state) => state.persistenceError);
   const [isLeavingProject, setIsLeavingProject] = useState(false);
   const inspectionReadOnly = isUiInspectionReadOnly();
 
@@ -32,10 +35,15 @@ const CanvasWorkspace = (): JSX.Element => {
     const projectId = useProjectStore.getState().currentProjectId;
     setIsLeavingProject(true);
     try {
-      if (projectId && !inspectionReadOnly) await updateCanvasProjectCover(projectId);
+      try {
+        if (projectId && !inspectionReadOnly) await updateCanvasProjectCover(projectId);
+      } finally {
+        await closeProject();
+      }
+    } catch {
+      // store 已记录并公开保存错误；留在画布上，避免误导用户以为已经安全退出。
     } finally {
       setIsLeavingProject(false);
-      closeProject();
     }
   }, [closeProject, inspectionReadOnly, isLeavingProject]);
 
@@ -59,6 +67,13 @@ const CanvasWorkspace = (): JSX.Element => {
               >
                 返回项目
               </UiButton>
+            )}
+            {persistenceError && (
+              <UiError
+                className="absolute left-1/2 top-3 z-sticky -translate-x-1/2"
+                message={t('project.persistenceFailed')}
+                size="xs"
+              />
             )}
             <Canvas />
           </div>

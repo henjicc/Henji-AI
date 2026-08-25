@@ -135,10 +135,12 @@ describe('canvas reflection and mutation', () => {
     useProjectStore.setState({
       projects: [oldProject],
       currentProject: oldProject,
-      renameProject: (id, name) => useProjectStore.setState((state) => ({
-        projects: state.projects.map((item) => item.id === id ? { ...item, name } : item),
-        currentProject: state.currentProject?.id === id ? { ...state.currentProject, name } : state.currentProject,
-      })),
+      renameProject: async (id, name) => {
+        useProjectStore.setState((state) => ({
+          projects: state.projects.map((item) => item.id === id ? { ...item, name } : item),
+          currentProject: state.currentProject?.id === id ? { ...state.currentProject, name } : state.currentProject,
+        }))
+      },
     })
     const executor = new CanvasProjectMutationExecutor()
     const result = await executor.apply({
