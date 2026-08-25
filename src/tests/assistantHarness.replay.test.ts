@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 import { useCanvasStore } from '@/stores/canvasStore'
@@ -13,6 +13,11 @@ import {
   runAssistantHarness,
   type RecordedAssistantScript,
 } from './assistantRuntimeHarness'
+import {
+  installHarnessNativeStorage,
+  resetHarnessNativeStorage,
+  uninstallHarnessNativeStorage,
+} from './harnessNativeStorage'
 
 /**
  * 录制回放：**用真模型当时写出来的那份脚本，在零成本环境里重跑一遍。**
@@ -24,9 +29,15 @@ import {
  * inputDigest，没有入参。生成命令见 `npm run assistant:record -- --list`。
  */
 describe('真机录制的剧本回放', () => {
-  beforeAll(async () => { await loadRealModelsIntoRegistry() })
+  beforeAll(async () => {
+    installHarnessNativeStorage()
+    await loadRealModelsIntoRegistry()
+  })
+
+  afterAll(() => { uninstallHarnessNativeStorage() })
 
   beforeEach(() => {
+    resetHarnessNativeStorage()
     useProjectStore.setState({
       projects: [], currentProjectId: null, currentProject: null, isHydrated: true,
     })

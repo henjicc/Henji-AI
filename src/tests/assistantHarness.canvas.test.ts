@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 
 import { runAssistantHarness } from './assistantRuntimeHarness'
+import {
+  installHarnessNativeStorage,
+  resetHarnessNativeStorage,
+  uninstallHarnessNativeStorage,
+} from './harnessNativeStorage'
 
 /**
  * 画布批量写入的**结果级**回归：一次脚本里连着写多次，值真的落进了真相源。
@@ -21,11 +26,15 @@ import { runAssistantHarness } from './assistantRuntimeHarness'
  */
 describe('画布批量写入的结果级回归', () => {
   beforeAll(async () => {
+    installHarnessNativeStorage()
     await loadRealModelsIntoRegistry()
   })
 
+  afterAll(() => { uninstallHarnessNativeStorage() })
+
   beforeEach(() => {
-    // 真相源清干净再跑，免得上一条用例的项目影响断言。持久化在 jsdom 下是尽力而为的空操作。
+    // 真相源与进程边界存储都清干净，显式工程操作仍要等待一次真实的持久化结果。
+    resetHarnessNativeStorage()
     useProjectStore.setState({
       projects: [], currentProjectId: null, currentProject: null, isHydrated: true,
     })
