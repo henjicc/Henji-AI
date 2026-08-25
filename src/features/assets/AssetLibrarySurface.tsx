@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { CheckSquare2, ChevronLeft, ChevronRight, FolderPlus, GripVertical, LoaderCircle, Search, X } from 'lucide-react'
-import { Dropdown, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
+import { Dropdown, UI_GLASS_ADAPTIVE_REGION_CLASS, UI_TEXT_META_CLASS, UiButton, UiChipButton, UiEmpty, UiError, UiIconButton, UiInput, UiPageHeader, UiRangeInput, UiSharedGlassHost } from '@/components/ui'
 import type { AssetLibraryRecord, AssetMediaType, AssetPage, AssetRecord } from '@/platform/contracts/assetLibrary'
 import { addAssetToLibrary, createAssetLibrary, deleteAsset, deleteAssetLibrary, listAssetLibraries, listAssetTags, queryAssets, removeAssetFromLibrary, renameAssetLibrary, setAssetTags, updateAsset } from '@/commands/assetLibrary'
 import { createLogger } from '@/core/logging'
@@ -212,6 +212,15 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
 
   return (
     <div className={`relative flex h-full min-h-0 flex-col overflow-hidden text-text-dark ${mode === 'floating' ? `z-raised ${UI_GLASS_ADAPTIVE_REGION_CLASS}` : 'bg-app'}`}>
+      {mode === 'workspace' && (
+        <UiPageHeader
+          className="shrink-0 px-3 pt-3"
+          title={t('assetLibrary.categories')}
+          description={t('assetLibrary.count', { count: page.total })}
+          onBack={onClose}
+          backLabel={t('assetLibrary.back')}
+        />
+      )}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <AssetLibrarySidebar
           libraries={libraries}
@@ -264,7 +273,7 @@ export const AssetLibrarySurface: React.FC<Props> = ({ mode, active = true, onCl
               <Dropdown<string> value={selectedTag ?? ''} options={[{ value: '', label: t('assetLibrary.allTags') }, ...availableTags.map((tag) => ({ value: tag, label: tag }))]} onSelect={(value) => setSelectedTag(value || null)} className="shrink-0" buttonClassName="!h-10 !px-3" minWidthStrategy="options" panelWidthStrategy="button" />
               {mode === 'floating' && <UiButton variant="primary" className="!h-10 shrink-0 px-4" onClick={onOpenWorkspace}>{t('assetLibrary.manage')}</UiButton>}
               {mode === 'workspace' && <UiButton variant="primary" className="!h-10 shrink-0 px-4" onClick={() => startBatchManagement()}>{t('assetLibrary.batchManage')}</UiButton>}
-              {onClose && <UiIconButton appearance="hover-only" className="!h-10 !w-10 shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
+              {mode === 'floating' && onClose && <UiIconButton appearance="hover-only" className="!h-10 !w-10 shrink-0" onClick={onClose}><X className="h-4 w-4" /></UiIconButton>}
             </>
           )}
         </header>

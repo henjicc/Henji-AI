@@ -6,6 +6,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import {
@@ -78,6 +79,8 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 }) => {
   const { i18n } = useTranslation()
   const displayName = getI18nText(param.name, i18n.language)
+  const increaseLabel = i18n.language.startsWith('zh') ? `增加${displayName}` : `Increase ${displayName}`
+  const decreaseLabel = i18n.language.startsWith('zh') ? `减少${displayName}` : `Decrease ${displayName}`
   const placeholderText = param.placeholder
     ? getI18nText(param.placeholder, i18n.language)
     : undefined
@@ -172,18 +175,19 @@ export const NumberInput: React.FC<NumberInputProps> = ({
             max={param.max}
             step={step}
             placeholder={placeholderText}
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} w-28 pr-8`}
+            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} w-32 pr-14`}
           />
-          <div className="absolute inset-y-0 right-1 flex flex-col justify-center gap-1">
+          <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
             <UiIconButton
               type="button"
               showBorder={false}
               appearance="color-only"
               onClick={() => handleStepChange(1)}
               disabled={disabled || (param.max !== undefined && safeValue >= param.max)}
-              className="!h-4 !w-6 rounded-none border-0 p-0 text-3xs leading-none text-text-soft"
+              className="!h-6 !w-6 rounded-none border-0 p-0 text-text-soft"
+              aria-label={increaseLabel}
             >
-              ▲
+              <ChevronUp className="h-3.5 w-3.5" />
             </UiIconButton>
             <UiIconButton
               type="button"
@@ -191,9 +195,10 @@ export const NumberInput: React.FC<NumberInputProps> = ({
               appearance="color-only"
               onClick={() => handleStepChange(-1)}
               disabled={disabled || (param.min !== undefined && safeValue <= param.min)}
-              className="!h-4 !w-6 rounded-none border-0 p-0 text-3xs leading-none text-text-soft"
+              className="!h-6 !w-6 rounded-none border-0 p-0 text-text-soft"
+              aria-label={decreaseLabel}
             >
-              ▼
+              <ChevronDown className="h-3.5 w-3.5" />
             </UiIconButton>
           </div>
         </div>

@@ -354,7 +354,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
                 onConfigChange={setConfig}
               />
               {streaming && output ? (
-                <div className={`mx-4 mb-4 max-h-28 overflow-y-auto rounded-lg border border-border-dark bg-app p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
+                <div className={`mx-4 mb-4 rounded-lg border border-border-dark bg-app p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
                   {output}
                 </div>
               ) : null}

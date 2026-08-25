@@ -109,6 +109,7 @@ function CompactNumberControl({
 
   return (
     <div
+      data-ui-field-control
       className="nodrag nowheel flex h-7 w-[72px] overflow-hidden rounded-md border border-border-dark bg-surface-dark"
       onMouseDown={(event) => event.stopPropagation()}
     >

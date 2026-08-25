@@ -7,7 +7,7 @@ const TAB_NAMES = Object.freeze({
 
 const REFERENCE_FIXTURE_IMAGE = `${process.cwd()}/resources/icons/icon.png`
 
-function createUiInspectionScenes({ settlePage }) {
+function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   async function closeTransientUi(page) {
     await page.keyboard.press('Escape')
     await page.waitForTimeout(240)
@@ -127,47 +127,37 @@ function createUiInspectionScenes({ settlePage }) {
     await waitForPageHeader(page)
   }
 
-  async function setupCanvasProject(page) {
-    await setupCanvas(page)
-    const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
-    if (await viewport.count()) return viewport
-
-    const projectCard = page.locator('[data-project-id]:visible').first()
-    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
-    await projectCard.click()
-    await viewport.waitFor({ state: 'visible', timeout: 12000 })
-    await settlePage(page, 700)
-    return viewport
-  }
-
   async function setupCanvasMidjourneyNode(page, openSettings) {
-    const viewport = await setupCanvasProject(page)
-    let node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-midjourney"])').last()
-
-    if (!await node.count()) {
-      const box = await viewport.boundingBox()
-      if (!box) throw new Error('画布视口没有可交互区域')
-      await viewport.click({
-        button: 'right',
-        position: { x: Math.round(box.width * 0.56), y: Math.round(box.height * 0.48) },
-      })
-      const menu = page.getByRole('menu', { name: /^(添加节点|Add Node)$/i })
-      await menu.waitFor({ state: 'visible', timeout: 8000 })
-      await menu.getByRole('menuitem', { name: /^(图片生成|Image Generation)$/i }).click()
-      node = page.locator('.react-flow__node:has([data-generation-node-model-id])').last()
-      await node.waitFor({ state: 'visible', timeout: 8000 })
-
-      const modelLabel = node.locator('span').filter({ hasText: /^(模型|Model)$/i }).first()
-      await modelLabel.locator('..').getByRole('button').first().click()
-      const allProviders = page.getByRole('button', { name: /^(全部|All)$/i }).filter({ visible: true }).last()
-      await allProviders.click()
-      const searchInput = page.locator('input[placeholder*="模型"], input[placeholder*="model" i]').filter({ visible: true }).last()
-      await searchInput.fill('Midjourney')
-      const midjourney = page.getByRole('button').filter({ hasText: 'Midjourney' }).filter({ hasText: 'APIMart' }).last()
-      await midjourney.click()
-      node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-midjourney"])').last()
-      await node.waitFor({ state: 'visible', timeout: 8000 })
+    await setupCanvas(page)
+    if (await page.locator('.react-flow').count()) {
+      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await settlePage(page)
     }
+    const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
+    const projectCard = await fixtureCard.count() ? fixtureCard : page.locator('[data-project-id]:visible').first()
+    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
+    const projectId = await projectCard.getAttribute('data-project-id')
+    if (!projectId) throw new Error('Midjourney 视觉场景找不到专用画布工程')
+    const nodeData = {
+      id: '__ui_midjourney_node', type: 'imageNode', position: { x: 300, y: 120 },
+      width: 360, height: 560, measured: { width: 360, height: 560 }, style: { width: 360, height: 560 },
+      data: {
+        displayName: 'Midjourney', prompt: 'cinematic portrait', modelId: 'apimart-midjourney',
+        params: {}, mediaInputs: {}, imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',
+        isGenerating: false, generationStartedAt: null,
+      },
+    }
+    await page.evaluate(async (payload) => {
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 90, zoom: 0.9 }), payload.projectId]
+      )
+    }, { projectId, node: nodeData })
+    await projectCard.click()
+    const viewport = page.locator('[data-application-observation-region="canvas.viewport_observer"]:visible')
+    await viewport.waitFor({ state: 'visible', timeout: 12000 })
+    const node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-midjourney"])').last()
+    await node.waitFor({ state: 'visible', timeout: 12000 })
 
     await node.click()
     await settlePage(page, 500)
@@ -187,7 +177,8 @@ function createUiInspectionScenes({ settlePage }) {
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
       await settlePage(page)
     }
-    const projectCard = page.locator('[data-project-id]:visible').first()
+    const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
+    const projectCard = await fixtureCard.count() ? fixtureCard : page.locator('[data-project-id]:visible').first()
     await projectCard.waitFor({ state: 'visible', timeout: 12000 })
     const projectId = await projectCard.getAttribute('data-project-id')
     if (!projectId) throw new Error('素材组视觉场景找不到临时画布工程')
@@ -248,7 +239,8 @@ function createUiInspectionScenes({ settlePage }) {
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
       await settlePage(page)
     }
-    const projectCard = page.locator('[data-project-id]:visible').first()
+    const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
+    const projectCard = await fixtureCard.count() ? fixtureCard : page.locator('[data-project-id]:visible').first()
     await projectCard.waitFor({ state: 'visible', timeout: 12000 })
     const projectId = await projectCard.getAttribute('data-project-id')
     if (!projectId) throw new Error('批量连接场景找不到临时画布工程')
@@ -581,12 +573,14 @@ function createUiInspectionScenes({ settlePage }) {
     {
       id: 'canvas-midjourney-node',
       surface: '画布',
+      writesUserData: true,
       name: '画布-Midjourney 节点与端口',
       setup: async (page) => setupCanvasMidjourneyNode(page, false),
     },
     {
       id: 'canvas-midjourney-settings',
       surface: '画布',
+      writesUserData: true,
       name: '画布-Midjourney 参数特殊面板',
       setup: async (page) => setupCanvasMidjourneyNode(page, true),
     },

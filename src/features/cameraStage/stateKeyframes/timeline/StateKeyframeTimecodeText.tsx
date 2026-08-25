@@ -1,4 +1,5 @@
 import React from 'react'
+import { UI_COLOR_ACCENT_TEXT_CLASS, UiButton } from '@/components/ui'
 import { formatStateKeyframeTimecode, nextStateKeyframeTimecodeMode, type StateKeyframeTimecodeMode } from './stateKeyframeTimecodeFormat'
 
 /**
@@ -15,21 +16,21 @@ interface StateKeyframeTimecodeTextProps {
 }
 
 const StateKeyframeTimecodeText: React.FC<StateKeyframeTimecodeTextProps> = ({ currentTime, duration, fps, mode, onModeChange }) => {
-  const handleClick = (event: React.MouseEvent<HTMLSpanElement>): void => {
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>): void => {
     if (!event.ctrlKey) return
     onModeChange(nextStateKeyframeTimecodeMode(mode))
   }
 
   return (
-    <span
-      role="button"
-      tabIndex={0}
+    <UiButton
+      type="button"
+      variant="plain"
       title="按住 Ctrl 点击切换时间码格式（秒 / 帧 / 秒:帧）"
-      className="cursor-default select-none rounded px-1 font-mono text-xs tabular-nums text-accent hover:bg-layer"
+      className={`!h-6 !min-h-6 select-none !rounded !px-1 font-mono text-xs font-normal tabular-nums hover:bg-layer ${UI_COLOR_ACCENT_TEXT_CLASS}`}
       onClick={handleClick}
     >
       {formatStateKeyframeTimecode(currentTime, mode, fps)} / {formatStateKeyframeTimecode(duration, mode, fps)}
-    </span>
+    </UiButton>
   )
 }
 

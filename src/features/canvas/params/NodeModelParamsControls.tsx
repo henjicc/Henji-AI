@@ -272,7 +272,7 @@ export const NodeModelParamsControls = memo(({
         >
           <span className="min-w-0 flex-1 truncate text-xs font-normal leading-none">{selectedModelName}</span>
           {selectedModel && (
-            <span className="shrink-0 text-xs leading-none text-text-muted/80">
+            <span className={`shrink-0 text-xs leading-none ${openPanel === 'model' ? 'text-white/90' : 'text-text-soft'}`}>
               {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
             </span>
           )}
@@ -285,7 +285,7 @@ export const NodeModelParamsControls = memo(({
           >
             <span className="text-xs font-normal leading-none">{selectedModelName}</span>
             {selectedModel && (
-              <span className="text-xs leading-none text-text-muted/80">
+              <span className="text-xs leading-none text-text-soft">
                 {getProviderDisplayName(selectedModel.meta.provider, i18n.language)}
               </span>
             )}
@@ -313,7 +313,7 @@ export const NodeModelParamsControls = memo(({
               <>
                 <span className="truncate text-xs leading-none">{paramsSummary[0]}</span>
                 {paramsSummary[1] && (
-                  <span className="text-xs leading-none text-text-muted/80">· {paramsSummary[1]}</span>
+                  <span className="text-xs leading-none text-text-soft">· {paramsSummary[1]}</span>
                 )}
               </>
             ) : (

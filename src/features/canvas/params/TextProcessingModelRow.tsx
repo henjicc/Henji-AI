@@ -125,7 +125,7 @@ export function TextProcessingModelRow({
                   {selectedModelOption?.displayName ?? t('node.textProcessing.noModel')}
                 </span>
                 {selectedModelOption ? (
-                  <span className="shrink-0 text-xs leading-none text-text-muted/80">
+                  <span className="shrink-0 text-xs leading-none text-text-soft">
                     {selectedModelOption.providerName}
                   </span>
                 ) : null}

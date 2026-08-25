@@ -4,6 +4,9 @@ const { launchElectronApp, waitForApp } = require('./electronLaunch.cjs')
 const { createUiInspectionScenes } = require('./uiInspectionScenes.cjs')
 
 const WINDOW_SIZE_TOLERANCE_PX = 2
+const UI_INSPECTION_CANVAS_PROJECT_ID = '__henji_ui_inspection_canvas_fixture__'
+const UI_INSPECTION_CANVAS_PROJECT_NAME = '__Henji UI Inspection Canvas Fixture__'
+const UI_INSPECTION_QUICK_PROJECT_NAME = '回归-拖放连接与提示词换行'
 
 const DEFAULT_WINDOW_SIZES = Object.freeze([
   Object.freeze({ width: 1440, height: 900 }),
@@ -147,7 +150,54 @@ async function settlePage(page, delayMs = 350) {
   }))
 }
 
-const UI_INSPECTION_SCENES = createUiInspectionScenes({ settlePage })
+const UI_INSPECTION_SCENES = createUiInspectionScenes({
+  canvasFixtureProjectId: UI_INSPECTION_CANVAS_PROJECT_ID,
+  settlePage,
+})
+
+async function seedCanvasInspectionFixture(page) {
+  const seededAt = Date.now()
+  await page.evaluate(async ({ projectId, projectName, now }) => {
+    await window.henjiNative.db.execute(
+      `INSERT OR IGNORE INTO storyboard_projects
+       (id, name, created_at, updated_at, node_count, nodes_json, edges_json, viewport_json, history_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        projectId,
+        projectName,
+        now,
+        now,
+        0,
+        '[]',
+        '[]',
+        JSON.stringify({ x: 120, y: 80, zoom: 0.85 }),
+        JSON.stringify({ past: [], future: [], imagePool: [] }),
+      ]
+    )
+    const rows = await window.henjiNative.db.select(
+      'SELECT name FROM storyboard_projects WHERE id = ? LIMIT 1',
+      [projectId]
+    )
+    if (rows[0]?.name !== projectName) {
+      throw new Error('UI 巡检专用画布工程 ID 已被其他工程占用')
+    }
+  }, { projectId: UI_INSPECTION_CANVAS_PROJECT_ID, projectName: UI_INSPECTION_CANVAS_PROJECT_NAME, now: seededAt })
+  return seededAt
+}
+
+async function cleanupCanvasInspectionFixtures(page, seededAt) {
+  await page.evaluate(async ({ projectId, projectName, quickProjectName, cleanupAfter }) => {
+    await window.henjiNative.db.execute(
+      'DELETE FROM storyboard_projects WHERE (id = ? AND name = ?) OR (name = ? AND created_at >= ?)',
+      [projectId, projectName, quickProjectName, cleanupAfter]
+    )
+  }, {
+    projectId: UI_INSPECTION_CANVAS_PROJECT_ID,
+    projectName: UI_INSPECTION_CANVAS_PROJECT_NAME,
+    quickProjectName: UI_INSPECTION_QUICK_PROJECT_NAME,
+    cleanupAfter: seededAt,
+  })
+}
 
 async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile = 'temporary', readOnly = true }) {
   if (!fs.existsSync(mainEntry)) {
@@ -167,6 +217,20 @@ async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile =
   })
   try {
     await waitForApp(app.page)
+    const shouldSeedCanvasFixture = profile === 'temporary' || !readOnly
+    if (shouldSeedCanvasFixture) {
+      const fixtureSeededAt = await seedCanvasInspectionFixture(app.page)
+      const closeApp = app.close.bind(app)
+      app.close = async () => {
+        try {
+          if (profile === 'real') {
+            await cleanupCanvasInspectionFixtures(app.page, fixtureSeededAt)
+          }
+        } finally {
+          await closeApp()
+        }
+      }
+    }
     await settlePage(app.page, 900)
     return app
   } catch (error) {

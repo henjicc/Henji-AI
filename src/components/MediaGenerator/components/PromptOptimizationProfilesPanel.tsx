@@ -217,7 +217,7 @@ export function PromptOptimizationProfilesPanel({
       </div>
 
       <div className="grid min-h-0 gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
+        <div className="space-y-2 pr-1">
           {profiles.map(profile => (
             <UiOptionButton
               key={profile.id}
@@ -242,7 +242,7 @@ export function PromptOptimizationProfilesPanel({
           </UiButton>
         </div>
 
-        <div className="min-h-0 space-y-3 overflow-y-auto p-1">
+        <div className="space-y-3 p-1">
           <UiInput
             value={selectedProfile.name}
             onChange={(event) => patchProfile({ name: event.target.value })}

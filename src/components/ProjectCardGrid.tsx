@@ -187,7 +187,7 @@ export const ProjectCardGrid: React.FC<ProjectCardGridProps> = ({
               </span>
               <span className="flex flex-col gap-0.5 px-1 pb-0.5 pt-2.5">
                 <span className="truncate text-sm font-medium">{item.name}</span>
-                <span className="truncate text-xs text-text-muted">{item.metaLine}</span>
+                <span className="truncate text-xs text-text-soft">{item.metaLine}</span>
               </span>
             </UiOptionButton>
 

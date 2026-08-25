@@ -149,33 +149,39 @@ const WindowControls: React.FC<WindowControlsProps> = ({ activeTab = 'generation
         <>
           {/* macOS: 左侧窗口控制按钮 */}
           <div
-            className="absolute left-3 top-1/2 flex -translate-y-1/2 items-center gap-2"
+            className="absolute left-1 top-1/2 flex -translate-y-1/2 items-center"
             style={noDragRegionStyle}
             data-window-nodrag
           >
             <UiIconButton
               type="button"
               onClick={handleClose}
-              className="!w-3 !h-3 !rounded-full !border-0 !bg-red-400 hover:!bg-red-400/80 !p-0 group"
+              className="group !h-6 !w-6 !rounded-full !border-0 !bg-transparent !p-0 hover:!bg-transparent"
               title={t('windowControls.close')}
             >
-              <X className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              <span className="flex h-3 w-3 items-center justify-center rounded-full bg-red-400 group-hover:bg-red-400/80">
+                <X className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              </span>
             </UiIconButton>
             <UiIconButton
               type="button"
               onClick={handleMinimize}
-              className="!w-3 !h-3 !rounded-full !border-0 !bg-yellow-400 hover:!bg-yellow-400/80 !p-0 group"
+              className="group !h-6 !w-6 !rounded-full !border-0 !bg-transparent !p-0 hover:!bg-transparent"
               title={t('windowControls.minimize')}
             >
-              <Minus className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              <span className="flex h-3 w-3 items-center justify-center rounded-full bg-yellow-400 group-hover:bg-yellow-400/80">
+                <Minus className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              </span>
             </UiIconButton>
             <UiIconButton
               type="button"
               onClick={handleToggleMaximize}
-              className="!w-3 !h-3 !rounded-full !border-0 !bg-green-500 hover:!bg-green-500/80 !p-0 group"
+              className="group !h-6 !w-6 !rounded-full !border-0 !bg-transparent !p-0 hover:!bg-transparent"
               title={t('windowControls.maximize')}
             >
-              <Square className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              <span className="flex h-3 w-3 items-center justify-center rounded-full bg-green-500 group-hover:bg-green-500/80">
+                <Square className="h-2 w-2 text-black/50 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              </span>
             </UiIconButton>
           </div>
 

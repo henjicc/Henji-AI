@@ -98,13 +98,13 @@ test('模型合并与参考图状态都有定向视觉场景', () => {
   assert.equal(sceneIds.includes('generation-midjourney-reference'), true)
 })
 
-test('画布 Midjourney 场景在只读巡检运行态下不会声明写用户数据', () => {
+test('画布 Midjourney 场景只操作可清理的专用工程，真实只读巡检会跳过', () => {
   const scenes = UI_INSPECTION_SCENES.filter((scene) => scene.id.startsWith('canvas-midjourney-'))
   assert.deepEqual(scenes.map((scene) => scene.id), [
     'canvas-midjourney-node',
     'canvas-midjourney-settings',
   ])
-  assert.equal(scenes.every((scene) => scene.writesUserData !== true), true)
+  assert.equal(scenes.every((scene) => scene.writesUserData === true), true)
 })
 
 test('输出目录相对项目根解析且绝对路径保持不变', () => {

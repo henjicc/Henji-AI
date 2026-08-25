@@ -84,7 +84,8 @@ function auditUiDom(context = {}) {
   const label = (element) => {
     const classes = classText(element).trim().replace(/\s+/g, '.').slice(0, 110)
     const id = element.id ? `#${element.id}` : ''
-    return `${element.tagName.toLowerCase()}${id}${classes ? `.${classes}` : ''}`
+    const accessibleName = element.getAttribute('aria-label') || element.getAttribute('title') || ''
+    return `${element.tagName.toLowerCase()}${id}${classes ? `.${classes}` : ''}${accessibleName ? `[${accessibleName.slice(0, 32)}]` : ''}`
   }
   const hasHiddenAncestor = (element) => {
     let node = element
@@ -125,10 +126,29 @@ function auditUiDom(context = {}) {
     return ['auto', 'scroll'].includes(style.overflowY)
       && element.scrollHeight > element.clientHeight + 2
   }
+  const isManagedLayoutElement = (element) => Boolean(
+    element.closest('.react-flow, .henji-cameraStage-dock')
+  ) || classText(element).split(/\s+/).some((name) => name.startsWith('dv-'))
+  const hasHorizontalClipAncestor = (element) => {
+    const rect = element.getBoundingClientRect()
+    let node = element.parentElement
+    while (node && node !== document.body) {
+      const style = getComputedStyle(node)
+      if (['hidden', 'clip'].includes(style.overflowX)) {
+        const parentRect = node.getBoundingClientRect()
+        if (rect.left < parentRect.left - 1 || rect.right > parentRect.right + 1) return true
+      }
+      node = node.parentElement
+    }
+    return false
+  }
 
   const all = Array.from(document.querySelectorAll('body *')).filter(isVisible)
 
   const isSurface = (element) => {
+    // 输入控件的边框表达可操作区域，不是结构层；把它算成一层会把
+    // 「画布节点 → 参数行 → 下拉控件」误判为三层卡片。
+    if (element.matches('button, input, select, textarea, [data-ui-field-control]') || element.matches('.react-flow__handle')) return false
     const style = getComputedStyle(element)
     const borderWidth = Number.parseFloat(style.borderTopWidth) || 0
     const borderColor = parseRgb(style.borderTopColor)
@@ -204,6 +224,8 @@ function auditUiDom(context = {}) {
   for (const element of all) {
     const position = getComputedStyle(element).position
     if (position !== 'fixed' && position !== 'absolute') continue
+    // React Flow 与 Dockview 的定位由依赖库运行时样式管理，业务 JSX 无法也不应复制。
+    if (isManagedLayoutElement(element)) continue
     const classes = classText(element)
     const positionVisibleInClass = new RegExp(`(^|\\s)!?${position}(\\s|$)`).test(classes)
     const positionVisibleInline = element.style.position === position
@@ -241,13 +263,16 @@ function auditUiDom(context = {}) {
   for (const element of all) {
     const rect = element.getBoundingClientRect()
     const style = getComputedStyle(element)
-    const outsideViewport = rect.left < -2 || rect.right > window.innerWidth + 2
+    // 被明确裁切容器截住的子元素不会撑破页面；时间轴首尾拖柄和画布节点常会有意越界半格。
+    const outsideViewport = (rect.left < -2 || rect.right > window.innerWidth + 2)
+      && !hasHorizontalClipAncestor(element)
     const clippedContainer = element.children.length > 0
       && !directText(element)
       && rect.width >= window.innerWidth * 0.75
       && element.clientWidth > 32
       && element.scrollWidth > element.clientWidth + 2
       && ['hidden', 'clip'].includes(style.overflowX)
+      && !element.matches('.react-flow')
     if (outsideViewport || clippedContainer) {
       out.horizontalOverflow.push({
         reason: outsideViewport ? 'viewport' : 'clipped-container',
@@ -287,8 +312,11 @@ function auditUiDom(context = {}) {
   for (const element of Array.from(document.querySelectorAll(targetSelector)).filter(isVisible)) {
     const style = getComputedStyle(element)
     if (element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true' || style.pointerEvents === 'none') continue
+    // 画布视口里的控件会随缩放矩阵一起缩放，getBoundingClientRect 不是其 CSS 命中区尺寸。
+    if (element.closest('.react-flow__viewport')) continue
     const rect = element.getBoundingClientRect()
-    if (rect.width < 24 || rect.height < 24) {
+    // Chromium 在分数像素布局中会把 24px 报成 23.999…，留半像素只用于消除舍入误报。
+    if (rect.width < 23.5 || rect.height < 23.5) {
       out.smallTargets.push({
         width: Math.round(rect.width * 10) / 10,
         height: Math.round(rect.height * 10) / 10,
