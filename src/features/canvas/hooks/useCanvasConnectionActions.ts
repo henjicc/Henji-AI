@@ -19,12 +19,11 @@ import {
 import { isConnectionCompatible } from '@/features/canvas/domain/nodeRegistry';
 import { isParamPortId } from '@/features/canvas/domain/socketTypes';
 import { canNodeBeManualConnectionSource } from '@/features/canvas/canvasUtils';
+import { useCanvasStore } from '@/stores/canvasStore';
 
 type Toast = (message: string, type?: 'success' | 'error') => void;
 
 interface UseCanvasConnectionActionsInput {
-  nodes: CanvasNode[];
-  edges: CanvasEdge[];
   connectNodes: (connection: Connection) => void;
   connectMany: (connections: CanvasConnectionInput[]) => string[];
   schedulePersist: (delayMs?: number) => void;
@@ -32,8 +31,18 @@ interface UseCanvasConnectionActionsInput {
   t: TFunction;
 }
 
+/**
+ * 连接判定读 store 当前图，而不是调用方渲染期的 nodes/edges 快照：
+ * 快捷连接在同一次事件里先 addNode 再连线，此刻 React 尚未重渲染，
+ * 快照里没有新节点，连线会在 targetNode 查找处被静默丢弃。
+ */
+function readCanvasGraph(): { nodes: CanvasNode[]; edges: CanvasEdge[] } {
+  const state = useCanvasStore.getState();
+  return { nodes: state.nodes, edges: state.edges };
+}
+
 export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInput) {
-  const { nodes, edges, connectNodes, connectMany, schedulePersist, showToast, t } = input;
+  const { connectNodes, connectMany, schedulePersist, showToast, t } = input;
 
   const bindGroup = useCallback((groupId: string, targetNodeId: string) => {
     try {
@@ -45,6 +54,7 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
   }, [showToast, t]);
 
   const handleConnect = useCallback((connection: Connection) => {
+    const { nodes, edges } = readCanvasGraph();
     if (!canNodeBeManualConnectionSource(connection.source, nodes)) return;
     const sourceNode = nodes.find((node) => node.id === connection.source);
     const targetNode = nodes.find((node) => node.id === connection.target);
@@ -111,9 +121,10 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
     }
     connectNodes(connection);
     schedulePersist(0);
-  }, [bindGroup, connectMany, connectNodes, edges, nodes, schedulePersist, showToast, t]);
+  }, [bindGroup, connectMany, connectNodes, schedulePersist, showToast, t]);
 
   const handleBatchConnect = useCallback((sourceNodeIds: string[], targetNodeId: string) => {
+    const { nodes, edges } = readCanvasGraph();
     const plan = planMediaConnections({ sourceNodeIds, targetNodeId, nodes, edges });
     if (plan.connections.length > 0) {
       connectMany(plan.connections);
@@ -132,7 +143,7 @@ export function useCanvasConnectionActions(input: UseCanvasConnectionActionsInpu
       skipped: plan.skipped.length,
     });
     showToast(reasons ? `${summary}（${reasons}）` : summary, plan.connections.length > 0 ? 'success' : 'error');
-  }, [connectMany, edges, nodes, schedulePersist, showToast, t]);
+  }, [connectMany, schedulePersist, showToast, t]);
 
   const createGroup = useCallback((memberIds: string[]) => {
     try {

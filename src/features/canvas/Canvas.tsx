@@ -240,8 +240,6 @@ export function Canvas() {
     addToAssetGroup: handleAddToAssetGroup,
     bindAssetGroup: handleBindAssetGroup,
   } = useCanvasConnectionActions({
-    nodes,
-    edges,
     connectNodes,
     connectMany,
     schedulePersist: scheduleCanvasPersist,
