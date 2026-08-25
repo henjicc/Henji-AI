@@ -114,10 +114,14 @@ export function GenerationPromptEditor({
     activeEditorRef.current?.setScrollTop(savedScrollTopRef.current)
   }, [isEditorActive])
 
+  // 提示词正文不参与节点宽度测量：节点根是 width:max-content（宽度由模型行、
+  // 媒体行等固定行决定），不隔离时一行长提示词的 max-content 宽会一路把节点
+  // 撑到 maxWidth 而不换行。inline 轴尺寸隔离让本行按外层已定宽度渲染并正常
+  // 折行，与高度侧「正文不进入最低高度」的处理对称。
   return (
     <div
       className="group/row relative flex flex-1 flex-col"
-      style={{ minHeight: GENERATION_PROMPT_MIN_HEIGHT_PX }}
+      style={{ minHeight: GENERATION_PROMPT_MIN_HEIGHT_PX, contain: 'inline-size' }}
     >
       {label ? <div className={`mb-1 px-1 ${UI_TEXT_META_CLASS}`}>{label}</div> : null}
       <Handle
