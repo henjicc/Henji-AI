@@ -13,13 +13,17 @@ import {
 
 /*
  * 5.2 任务文档要求挑联动最复杂的 2-3 个模型做等价性验证。按 linkage 数量实测排序（
- * grep 每个 *.model.ts 里 linkages 数组的 trigger 条目数）选出前三，覆盖三种不同的
+ * grep 每个 *.model.ts 里 linkages 数组的 trigger 条目数）选出前列，覆盖三种不同的
  * 联动效果组合：
- * - ppio-kling-o1：5 条，全是 autoSwitch（模式与画幅比互相联动，条件最复杂）
- * - ppio-vidu-q3：4 条，autoSwitch + hide（hide 不改参数值，只影响可见性，不在
- *   reconcile 的覆盖范围内，这里只验证它的 2 条 autoSwitch）
- * - ppio-seedance-v1.5-pro：3 条，autoSwitch + filterOptions（选项会随图片上传状态多出
- *   一项 adaptive）
+ * - kie-seedance-v1：2 条，全是 autoSwitch（版本/上传图片数量都会把快速模式收回）
+ * - ppio-minimax-hailuo-2.3：hide + filterOptions + autoSwitch（10 秒档不支持 1080P，
+ *   filterOptions 收窄选项，autoSwitch 把已选的 1080P 收回 768P）
+ * - ppio-kling-3.0：filterOptions + autoSwitch（动作控制模式不支持 4K，选项被收窄，
+ *   已选的 4K 自动切回 1080P）
+ *
+ * 之前这里用的 ppio-kling-o1 / ppio-vidu-q3 / ppio-seedance-v1.5-pro 三个模型已经
+ * 被 PPIO 官方下线（2026-07-15~2026-08-19，见供应商适配巡检），随之从代码里移除，
+ * 这里按同样的方法重新在存活模型里选出当前最复杂的几个。
  *
  * 用的是 loadRealModelsIntoRegistry() 装进注册表的真实生产模型定义，不是手写 fixture——
  * 这样测试跟着模型 schema 一起演进，模型文件改了联动规则这里就会跟着变红，不会变成
@@ -30,118 +34,122 @@ describe('generationParams：联动纯函数（对照真实模型 schema）', ()
     await loadRealModelsIntoRegistry()
   })
 
-  describe('ppio-kling-o1（5 条 autoSwitch，模式 × 画幅比）', () => {
-    const modelId = 'ppio-kling-o1'
+  describe('kie-seedance-v1（2 条 autoSwitch，版本 × 上传图片数量收回快速模式）', () => {
+    const modelId = 'kie-seedance-v1'
 
-    it('上传 2 张图后模式自动切到 start-end-frame，画幅比自动切到 smart', () => {
+    it('Pro 版本快速模式开启时，上传图片数量变成 2 张（不等于1）会自动关闭快速模式', () => {
       const model = registry.getModel(modelId)
       const schema = registry.getSchema(modelId)
       if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages，检查测试环境`)
 
       const base = {
         ...extractDefaults(schema),
-        ppioKlingO1Mode: 'text-image-to-video',
+        kieSeedanceV1Version: 'pro',
+        kieSeedanceV1FastMode: true,
         uploadedImages: ['a.png', 'b.png'],
       }
 
       const reconciled = reconcileGenerationParams(schema, base, model.linkages, ['uploadedImages'])
-      expect(reconciled.ppioKlingO1Mode).toBe('start-end-frame')
-      expect(reconciled.ppioKlingO1AspectRatio).toBe('smart')
+      expect(reconciled.kieSeedanceV1FastMode).toBe(false)
     })
 
-    it('删光图片后（画幅比曾是 smart）画幅比回落到 16:9', () => {
+    it('快速模式开启时，把版本从 Pro 切回 Lite 会自动关闭快速模式', () => {
       const model = registry.getModel(modelId)
       const schema = registry.getSchema(modelId)
       if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
 
       const base = {
         ...extractDefaults(schema),
-        ppioKlingO1Mode: 'text-image-to-video',
-        ppioKlingO1AspectRatio: 'smart',
-        uploadedImages: [],
+        kieSeedanceV1Version: 'lite',
+        kieSeedanceV1FastMode: true,
       }
 
-      const reconciled = reconcileGenerationParams(schema, base, model.linkages, ['uploadedImages'])
-      expect(reconciled.ppioKlingO1AspectRatio).toBe('16:9')
+      const reconciled = reconcileGenerationParams(schema, base, model.linkages, ['kieSeedanceV1Version'])
+      expect(reconciled.kieSeedanceV1FastMode).toBe(false)
     })
 
-    it('validateGenerationParams 认为一个不在选项里的画幅比不合法', () => {
+    it('validateGenerationParams 认为一个不在选项里的版本不合法', () => {
       const schema = registry.getSchema(modelId)
-      const invalid = { ...extractDefaults(schema), ppioKlingO1AspectRatio: 'not-a-real-ratio' }
+      const invalid = { ...extractDefaults(schema), kieSeedanceV1Version: 'ultra' }
       const result = validateGenerationParams(schema, invalid)
       expect(result.valid).toBe(false)
-      expect(result.issues.map((issue) => issue.paramId)).toContain('ppioKlingO1AspectRatio')
+      expect(result.issues.map((issue) => issue.paramId)).toContain('kieSeedanceV1Version')
     })
   })
 
-  describe('ppio-vidu-q3（4 条：2 条 autoSwitch + 2 条 hide）', () => {
-    const modelId = 'ppio-vidu-q3'
+  describe('ppio-minimax-hailuo-2.3（hide + filterOptions + autoSwitch，时长 × 分辨率）', () => {
+    const modelId = 'ppio-minimax-hailuo-2.3'
 
-    it('上传 2 张图后模式自动切到 start-end-frame；只剩 1 张图后切回 text-image-to-video', () => {
+    it('10 秒档不提供 1080P 选项', () => {
       const model = registry.getModel(modelId)
       const schema = registry.getSchema(modelId)
       if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
 
-      const twoImages = {
+      const params = { ...extractDefaults(schema), ppioHailuo23VideoDuration: 10 }
+      const options = resolveGenerationParamOptions(schema, params, model.linkages)
+      const values = options.ppioHailuo23VideoResolution?.map((option) => option.value)
+      expect(values).not.toContain('1080P')
+    })
+
+    it('已选 1080P 时把时长切到 10 秒，分辨率自动收回 768P', () => {
+      const model = registry.getModel(modelId)
+      const schema = registry.getSchema(modelId)
+      if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
+
+      const base = {
         ...extractDefaults(schema),
-        ppioViduQ3Mode: 'text-image-to-video',
-        uploadedImages: ['a.png', 'b.png'],
+        ppioHailuo23VideoResolution: '1080P',
+        ppioHailuo23VideoDuration: 10,
       }
-      const afterUpload = reconcileGenerationParams(schema, twoImages, model.linkages, ['uploadedImages'])
-      expect(afterUpload.ppioViduQ3Mode).toBe('start-end-frame')
 
-      const oneImage = { ...afterUpload, uploadedImages: ['a.png'] }
-      const afterRemove = reconcileGenerationParams(schema, oneImage, model.linkages, ['uploadedImages'])
-      expect(afterRemove.ppioViduQ3Mode).toBe('text-image-to-video')
+      const reconciled = reconcileGenerationParams(schema, base, model.linkages, ['ppioHailuo23VideoDuration'])
+      expect(reconciled.ppioHailuo23VideoResolution).toBe('768P')
     })
   })
 
-  describe('ppio-seedance-v1.5-pro（3 条：2 条 autoSwitch + 1 条 filterOptions）', () => {
-    const modelId = 'ppio-seedance-v1.5-pro'
+  describe('ppio-kling-3.0（filterOptions + autoSwitch，动作控制模式收窄分辨率）', () => {
+    const modelId = 'ppio-kling-3.0'
 
-    it('上传图片后画幅比自动切到 adaptive，且 adaptive 选项被提到最前面', () => {
+    it('动作控制模式下分辨率选项不包含 4K', () => {
       const model = registry.getModel(modelId)
       const schema = registry.getSchema(modelId)
       if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
 
-      // adaptive 本来就是基础选项列表里的最后一项（schema 默认值），filterOptions 联动
-      // 是"上传图片时把 adaptive 挪到最前面"，不是"从无到有"。
-      const noImages = { ...extractDefaults(schema), uploadedImages: [] }
-      const optionsBefore = resolveGenerationParamOptions(schema, noImages, model.linkages)
-      expect(optionsBefore.ppioSeedance15ProAspectRatio?.[0]).toMatchObject({ value: '16:9' })
-
-      const withImages = { ...extractDefaults(schema), uploadedImages: ['a.png'] }
-      const reconciled = reconcileGenerationParams(schema, withImages, model.linkages, ['uploadedImages'])
-      expect(reconciled.ppioSeedance15ProAspectRatio).toBe('adaptive')
-
-      const optionsAfter = resolveGenerationParamOptions(schema, withImages, model.linkages)
-      expect(optionsAfter.ppioSeedance15ProAspectRatio?.[0]).toMatchObject({ value: 'adaptive' })
+      const params = { ...extractDefaults(schema), ppioKling30Mode: 'motion-control' }
+      const options = resolveGenerationParamOptions(schema, params, model.linkages)
+      const values = options.ppioKling30Resolution?.map((option) => option.value)
+      expect(values).not.toContain('4K')
     })
 
-    it('删光图片后（画幅比曾是 adaptive）画幅比保持 adaptive——第二条 autoSwitch 的条件本身就是这样写的', () => {
+    it('已选 4K 时把模式切到动作控制，分辨率自动收回 1080P', () => {
       const model = registry.getModel(modelId)
       const schema = registry.getSchema(modelId)
       if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
 
-      const base = { ...extractDefaults(schema), ppioSeedance15ProAspectRatio: 'adaptive', uploadedImages: [] }
-      const reconciled = reconcileGenerationParams(schema, base, model.linkages, ['uploadedImages'])
-      expect(reconciled.ppioSeedance15ProAspectRatio).toBe('adaptive')
+      const base = {
+        ...extractDefaults(schema),
+        ppioKling30Resolution: '4K',
+        ppioKling30Mode: 'motion-control',
+      }
+
+      const reconciled = reconcileGenerationParams(schema, base, model.linkages, ['ppioKling30Mode'])
+      expect(reconciled.ppioKling30Resolution).toBe('1080P')
     })
   })
 
   it('reconcileGenerationParams 省略 changedKeys 时对全部已有 key 各跑一遍，效果等价于精确指定', () => {
-    const modelId = 'ppio-kling-o1'
+    const modelId = 'ppio-minimax-hailuo-2.3'
     const model = registry.getModel(modelId)
     const schema = registry.getSchema(modelId)
     if (!model?.linkages) throw new Error(`模型 ${modelId} 缺少 linkages`)
 
     const base = {
       ...extractDefaults(schema),
-      ppioKlingO1Mode: 'text-image-to-video',
-      uploadedImages: ['a.png', 'b.png'],
+      ppioHailuo23VideoResolution: '1080P',
+      ppioHailuo23VideoDuration: 10,
     }
 
-    const precise = reconcileGenerationParams(schema, base, model.linkages, ['uploadedImages'])
+    const precise = reconcileGenerationParams(schema, base, model.linkages, ['ppioHailuo23VideoDuration'])
     const omitted = reconcileGenerationParams(schema, base, model.linkages)
     expect(omitted).toEqual(precise)
   })

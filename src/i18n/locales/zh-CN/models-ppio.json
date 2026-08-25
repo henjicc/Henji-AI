@@ -1,48 +1,5 @@
 {
   "defs": {
-    "ppio-seedream-4.0": {
-      "meta": {
-        "name": "Seedream 4.0"
-      },
-      "params": {
-        "resolution": {
-          "name": "分辨率",
-          "options": {
-            "aspectRatios": {
-              "smart": "智能"
-            },
-            "qualityTiers": {
-              "2K": "高清 2K",
-              "4K": "超清 4K"
-            }
-          }
-        },
-        "maxImages": {
-          "name": "数量",
-          "tooltip": "设置为1时仅生成单张图片；大于1时，会根据该数值生成多张图片。参考图+生成图片的总数不能超过15张。"
-        }
-      }
-    },
-    "ppio-kling-2.5-turbo": {
-      "meta": {
-        "name": "可灵 2.5 Turbo"
-      }
-    },
-    "ppio-kling-2.6-pro": {
-      "meta": {
-        "name": "可灵 2.6 Pro"
-      },
-      "params": {
-        "ppioKling26CharacterOrientation": {
-          "tooltip": "默认为人物朝向与视频一致，此时角色动作/表情/运镜/朝向都会按照动作视频生成。可以通过提示词控制其他信息。最长支持30s生成时长。\\n\\n选择人物朝向与图片一致，此时角色动作/表情都会按照动作视频生成，朝向与图片中人物朝向一致，运镜及其他信息可以通过提示词自定义。最长支持5s生成时长。"
-        }
-      }
-    },
-    "ppio-kling-o1": {
-      "meta": {
-        "name": "可灵 O1"
-      }
-    },
     "ppio-kling-3.0": {
       "meta": {
         "name": "可灵 3.0"
@@ -53,11 +10,6 @@
         }
       }
     },
-    "ppio-minimax-hailuo-02": {
-      "meta": {
-        "name": "Minimax Hailuo 02"
-      }
-    },
     "ppio-minimax-hailuo-2.3": {
       "meta": {
         "name": "Minimax Hailuo 2.3"
@@ -66,66 +18,6 @@
     "ppio-minimax-speech": {
       "meta": {
         "name": "Minimax Speech 2.8"
-      }
-    },
-    "ppio-pixverse-v4.5": {
-      "meta": {
-        "name": "PixVerse V4.5"
-      }
-    },
-    "ppio-seedance-v1.5-pro": {
-      "meta": {
-        "name": "Seedance 1.5 Pro"
-      },
-      "params": {
-        "ppioSeedance15ProServiceTier": {
-          "tooltip": "在线推理模式，RPM 和并发配额较低，适用于时效性要求高的场景。离线推理模式，TPD 配额更高，价格为在线模式的 50%，适用于对延迟不敏感的场景。"
-        }
-      }
-    },
-    "ppio-seedance-v1": {
-      "meta": {
-        "name": "Seedance 1.0"
-      }
-    },
-    "ppio-seedream-4.5": {
-      "meta": {
-        "name": "Seedream 4.5"
-      }
-    },
-    "ppio-seedream-5.0-lite": {
-      "meta": {
-        "name": "Seedream 5.0 Lite"
-      }
-    },
-    "ppio-nano-banana-2": {
-      "meta": {
-        "name": "Nano Banana 2"
-      }
-    },
-    "ppio-grok-imagine-image": {
-      "meta": {
-        "name": "Grok Imagine 图片"
-      }
-    },
-    "ppio-grok-imagine-video": {
-      "meta": {
-        "name": "Grok Imagine 视频"
-      }
-    },
-    "ppio-vidu-q1": {
-      "meta": {
-        "name": "Vidu Q1"
-      }
-    },
-    "ppio-vidu-q2": {
-      "meta": {
-        "name": "Vidu Q2"
-      }
-    },
-    "ppio-vidu-q3": {
-      "meta": {
-        "name": "Vidu Q3"
       }
     },
     "ppio-wan-2.5-preview": {
