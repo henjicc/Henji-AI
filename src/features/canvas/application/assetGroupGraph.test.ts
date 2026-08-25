@@ -15,6 +15,7 @@ import {
   bindAssetGroupGraph,
   createAssetGroupGraph,
   removeAssetGroupMemberGraph,
+  reorderAssetGroupMembersWithinKind,
   setAssetGroupMemberExcludedGraph,
   summarizeAssetGroupBinding,
   ungroupAssetGroupGraph,
@@ -111,6 +112,19 @@ describe('assetGroupGraph', () => {
     );
     expect(reordered?.edges.filter((edge) => edge.targetHandle === mediaPortId('image')).map((edge) => edge.source))
       .toEqual(['image-2']);
+  });
+
+  it('只重排指定媒体类型并保持其他类型的槽位不变', () => {
+    const graph = fixture();
+    const reordered = reorderAssetGroupMembersWithinKind(
+      graph.nodes,
+      ['image-1', 'audio-1', 'image-2', 'video-1'],
+      'image',
+      0,
+      1,
+    );
+
+    expect(reordered).toEqual(['image-2', 'audio-1', 'image-1', 'video-1']);
   });
 
   it('删除组管理边会记录排除，恢复前不会自动补回', () => {

@@ -38,7 +38,9 @@ describe('useCanvasConnectionActions.handleConnect', () => {
     useCanvasStore.getState().setCanvasData([uploadNode('upload-1')], [], { past: [], future: [] });
   });
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
   it('连接同一次事件里刚创建的节点（快捷连接不能读渲染期快照）', () => {
     const { result } = renderActions();

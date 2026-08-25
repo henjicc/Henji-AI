@@ -34,6 +34,42 @@ export function resolveAssetGroupMemberKind(node: CanvasNode): RowMediaKind | nu
   return null;
 }
 
+/**
+ * 只调整同一种媒体在成员序列中占据的槽位，其他媒体的相对位置保持不变。
+ * 连接规划会消费这份顺序，因此管理界面的拖拽会同步影响各类型输入的优先级。
+ */
+export function reorderAssetGroupMembersWithinKind(
+  nodes: CanvasNode[],
+  memberOrder: string[],
+  kind: RowMediaKind,
+  fromIndex: number,
+  toIndex: number,
+): string[] {
+  const nodeById = new Map(nodes.map((node) => [node.id, node] as const));
+  const kindOrder = memberOrder.filter((id) => {
+    const member = nodeById.get(id);
+    return member ? resolveAssetGroupMemberKind(member) === kind : false;
+  });
+  if (
+    fromIndex === toIndex
+    || fromIndex < 0
+    || toIndex < 0
+    || fromIndex >= kindOrder.length
+    || toIndex >= kindOrder.length
+  ) return memberOrder;
+
+  const [moved] = kindOrder.splice(fromIndex, 1);
+  kindOrder.splice(toIndex, 0, moved);
+  let nextKindIndex = 0;
+  return memberOrder.map((id) => {
+    const member = nodeById.get(id);
+    if (!member || resolveAssetGroupMemberKind(member) !== kind) return id;
+    const replacement = kindOrder[nextKindIndex];
+    nextKindIndex += 1;
+    return replacement;
+  });
+}
+
 function absolutePosition(node: CanvasNode, nodeById: Map<string, CanvasNode>): { x: number; y: number } {
   let x = node.position.x;
   let y = node.position.y;

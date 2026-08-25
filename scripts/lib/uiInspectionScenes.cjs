@@ -201,7 +201,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         width: 340, height: 220, measured: { width: 340, height: 220 }, style: { width: 340, height: 220 },
         data: {
           displayName: '角色设定',
-          memberOrder: ['__asset_image_1', '__asset_image_2', '__asset_video', '__asset_image_3'],
+          memberOrder: ['__asset_image_1', '__asset_image_2', '__asset_video', '__asset_audio', '__asset_image_3'],
           coverMemberId: '__asset_video',
           bindings: [{
             id: '__asset_binding', targetNodeId: '__asset_target',
@@ -228,8 +228,15 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         },
       },
       {
+        id: '__asset_audio', type: 'audioUploadNode', parentId: '__asset_group', hidden: true,
+        position: { x: 700, y: 100 }, width: 240, height: 150, style: { width: 240, height: 150 },
+        data: {
+          displayName: '角色旁白', audioUrl: 'data:audio/wav;base64,', durationSec: 6,
+        },
+      },
+      {
         id: '__asset_image_3', type: 'exportImageNode', parentId: '__asset_group', hidden: true,
-        position: { x: 810, y: 120 }, width: 240, height: 180, style: { width: 240, height: 180 },
+        position: { x: 970, y: 120 }, width: 240, height: 180, style: { width: 240, height: 180 },
         data: { displayName: '角色细节', imageUrl: previews.detail, previewImageUrl: previews.detail, aspectRatio: '4:3' },
       },
       {
@@ -318,6 +325,14 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await page.mouse.up()
     await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length >= 2, undefined, { timeout: 8000 })
     await settlePage(page, 700)
+  }
+
+  async function setupCanvasAssetGroupRemoveConfirmation(page) {
+    await setupCanvasAssetGroup(page, true)
+    await page.getByRole('button', { name: /移出素材组|Remove from asset group/i }).first().click()
+    await page.getByRole('dialog', { name: /移出素材|Remove media/i })
+      .waitFor({ state: 'visible', timeout: 8000 })
+    await settlePage(page)
   }
 
   /**
@@ -624,6 +639,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-素材组管理工作面',
       setup: async (page) => setupCanvasAssetGroup(page, true),
+    },
+    {
+      id: 'canvas-asset-group-remove-confirmation',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-素材组移出确认',
+      setup: setupCanvasAssetGroupRemoveConfirmation,
     },
     {
       id: 'canvas-batch-connection',

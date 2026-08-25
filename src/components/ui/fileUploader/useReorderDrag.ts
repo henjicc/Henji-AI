@@ -15,6 +15,7 @@ interface UseReorderDragParams {
   disabled: boolean
   isCustomDragging: boolean
   files: string[]
+  layout?: 'horizontal' | 'grid'
   onReorder?: (from: number, to: number) => void
   onDragStateChange?: (isDragging: boolean) => void
   onImageClick?: (imageUrl: string, imageList: string[]) => void
@@ -32,14 +33,27 @@ const INITIAL_DRAG_STATE: FilePreviewDragState = {
 }
 
 export function useReorderDrag(params: UseReorderDragParams) {
-  const { disabled, isCustomDragging, files, onReorder, onDragStateChange, onImageClick } = params
+  const {
+    disabled,
+    isCustomDragging,
+    files,
+    layout = 'horizontal',
+    onReorder,
+    onDragStateChange,
+    onImageClick
+  } = params
   const [dragState, setDragState] = useState<FilePreviewDragState>(INITIAL_DRAG_STATE)
   const dragStateRef = useRef(dragState)
   const itemRefs = useRef<(HTMLDivElement | null)[]>([])
   // 拖拽开始那一刻（尚未有任何让位位移）缓存的原始几何，命中判定全程用这份快照而不是实时 rect。
   // 否则一旦目标项被视觉上让位位移过，它的实时 rect 已经偏离自己的原始槛位，
   // 鼠标往回拖时再也找不到"回到原位"的判定锚点，会出现只能单向让位、换不回去的问题。
-  const originalRectsRef = useRef<Array<{ left: number; width: number } | null>>([])
+  const originalRectsRef = useRef<Array<{
+    left: number
+    top: number
+    width: number
+    height: number
+  } | null>>([])
   dragStateRef.current = dragState
 
   const resetDragState = useCallback(() => {
@@ -81,6 +95,8 @@ export function useReorderDrag(params: UseReorderDragParams) {
       // （实时 rect 还要受调用方为视觉跟手施加的 transform、画布缩放等影响，换算麻烦还容易兜圈子）
       const draggingCenterX =
         draggingOriginal.left + draggingOriginal.width / 2 + (e.clientX - dragStateRef.current.startX)
+      const draggingCenterY =
+        draggingOriginal.top + draggingOriginal.height / 2 + (e.clientY - dragStateRef.current.startY)
 
       let newToIndex = from
       let minDist = Infinity
@@ -91,14 +107,19 @@ export function useReorderDrag(params: UseReorderDragParams) {
         const rect = originalRectsRef.current[i]
         if (!rect) continue
         const targetCenterX = rect.left + rect.width / 2
-        const dist = Math.abs(draggingCenterX - targetCenterX)
+        const targetCenterY = rect.top + rect.height / 2
+        const dist = layout === 'grid'
+          ? Math.hypot(draggingCenterX - targetCenterX, draggingCenterY - targetCenterY)
+          : Math.abs(draggingCenterX - targetCenterX)
         if (dist < minDist) {
           minDist = dist
           newToIndex = i
         }
       }
 
-      const threshold = 28
+      const threshold = layout === 'grid'
+        ? Math.max(draggingOriginal.width, draggingOriginal.height)
+        : 28
       if (minDist < threshold && newToIndex !== oldTo) {
         setDragState({
           ...dragStateRef.current,
@@ -134,7 +155,7 @@ export function useReorderDrag(params: UseReorderDragParams) {
       window.removeEventListener('mousemove', handleMouseMove)
       window.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [dragState.isDragging, onReorder, resetDragState])
+  }, [dragState.isDragging, layout, onReorder, resetDragState])
 
   useEffect(() => {
     onDragStateChange?.(dragState.isDragging || dragState.isDropping)
@@ -153,7 +174,10 @@ export function useReorderDrag(params: UseReorderDragParams) {
       if (deltaX > 25 || deltaY > 25) {
         // 此刻还没有任何让位位移发生，是缓存"原始槛位"几何的唯一安全时机
         originalRectsRef.current = itemRefs.current.map((el) =>
-          el ? { left: el.getBoundingClientRect().left, width: el.getBoundingClientRect().width } : null
+          el ? (() => {
+            const rect = el.getBoundingClientRect()
+            return { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+          })() : null
         )
         setDragState((prev) => ({ ...prev, isDragging: true }))
         moved = true

@@ -1,10 +1,21 @@
 import { v4 as uuidv4 } from 'uuid';
 
 import { createLogger } from '@/core/logging';
+import type { AssetDragPayload } from '@/features/assets/drag/assetDragPayload';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
-import { CANVAS_NODE_TYPES, isAssetGroupNode, type AssetGroupNodeData } from '../domain/canvasNodes';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { resolveMediaFiles } from '../canvasUtils';
+import {
+  CANVAS_NODE_TYPES,
+  isAssetGroupNode,
+  type AssetGroupNodeData,
+  type CanvasNode,
+  type CanvasNodeData,
+} from '../domain/canvasNodes';
+import { mediaSourceNodeData, mediaSourceNodeType } from './assetMediaAssignment';
 import { canvasNodeFactory } from './canvasServices';
+import { importCanvasMediaFile } from './mediaImport';
 import {
   addAssetGroupMembersGraph,
   bindAssetGroupGraph,
@@ -97,6 +108,123 @@ export function addAssetGroupMembers(input: {
   const groupNode = graph?.nodes.find((node) => node.id === input.groupId);
   const group = groupNode && isAssetGroupNode(groupNode) ? groupNode : undefined;
   return { projectId, groupId: input.groupId, memberCount: group?.data.memberOrder.length ?? 0 };
+}
+
+function requireAssetGroup(groupId: string): CanvasNode {
+  const group = useCanvasStore.getState().nodes.find((node) => node.id === groupId);
+  if (!group || !isAssetGroupNode(group)) {
+    throw new AssetGroupApplicationError('NOT_FOUND', '素材组不存在');
+  }
+  return group;
+}
+
+function commitNewMembers(groupId: string, newMembers: CanvasNode[], operation: string): void {
+  const canvas = useCanvasStore.getState();
+  const graph = addAssetGroupMembersGraph(
+    [...canvas.nodes, ...newMembers],
+    canvas.edges,
+    groupId,
+    newMembers.map((member) => member.id),
+  );
+  commit(operation, graph, groupId);
+}
+
+export function addAssetToAssetGroup(input: {
+  groupId: string;
+  asset: AssetDragPayload;
+  projectId?: string;
+}): { projectId: string; groupId: string; memberId: string } {
+  const projectId = requireProject(input.projectId);
+  const group = requireAssetGroup(input.groupId);
+  logger.info('资产加入素材组开始', {
+    event: 'canvas.asset_group.asset.add.start',
+    projectId,
+    groupId: input.groupId,
+    assetId: input.asset.assetId,
+    mediaType: input.asset.type,
+  });
+  const member = canvasNodeFactory.createNode(
+    mediaSourceNodeType(input.asset.type),
+    group.position,
+    mediaSourceNodeData(input.asset),
+  );
+  commitNewMembers(input.groupId, [member], 'asset.add');
+  return { projectId, groupId: input.groupId, memberId: member.id };
+}
+
+export async function importFilesToAssetGroup(input: {
+  groupId: string;
+  files: readonly File[];
+  projectId?: string;
+}): Promise<{ projectId: string; groupId: string; added: number; skipped: number; failed: number }> {
+  const projectId = requireProject(input.projectId);
+  requireAssetGroup(input.groupId);
+  const mediaFiles = resolveMediaFiles(input.files);
+  const skipped = Math.max(0, input.files.length - mediaFiles.length);
+  logger.info('文件加入素材组开始', {
+    event: 'canvas.asset_group.files.import.start',
+    projectId,
+    groupId: input.groupId,
+    fileCount: input.files.length,
+    supportedCount: mediaFiles.length,
+    skipped,
+  });
+
+  const settled = await Promise.allSettled(mediaFiles.map(async ({ file }) => ({
+    file,
+    imported: await importCanvasMediaFile(file),
+  })));
+  const successful = settled.flatMap((result) => result.status === 'fulfilled' ? [result.value] : []);
+  const failed = settled.length - successful.length;
+  if (successful.length === 0) {
+    if (failed > 0) {
+      const firstFailure = settled.find((result) => result.status === 'rejected');
+      logger.error('文件加入素材组失败', firstFailure?.status === 'rejected' ? firstFailure.reason : undefined, {
+        event: 'canvas.asset_group.files.import.failed',
+        context: { projectId, groupId: input.groupId, failed, skipped },
+      });
+    } else {
+      logger.info('文件加入素材组完成', {
+        event: 'canvas.asset_group.files.import.completed',
+        projectId,
+        groupId: input.groupId,
+        added: 0,
+        failed,
+        skipped,
+      });
+    }
+    return { projectId, groupId: input.groupId, added: 0, skipped, failed };
+  }
+
+  try {
+    const group = requireAssetGroup(input.groupId);
+    const useFileName = useSettingsStore.getState().useUploadFilenameAsNodeTitle;
+    const members = successful.map(({ file, imported }) => canvasNodeFactory.createNode(
+      imported.type,
+      group.position,
+      {
+        ...imported.data,
+        ...(useFileName ? { displayName: file.name } : {}),
+      } as Partial<CanvasNodeData>,
+    ));
+    commitNewMembers(input.groupId, members, 'files.import');
+    logger.info('文件加入素材组完成', {
+      event: 'canvas.asset_group.files.import.completed',
+      projectId,
+      groupId: input.groupId,
+      added: members.length,
+      failed,
+      skipped,
+      mediaTypes: Array.from(new Set(successful.map(({ imported }) => imported.kind))),
+    });
+    return { projectId, groupId: input.groupId, added: members.length, skipped, failed };
+  } catch (error) {
+    logger.error('文件加入素材组失败', error, {
+      event: 'canvas.asset_group.files.import.failed',
+      context: { projectId, groupId: input.groupId, failed, skipped },
+    });
+    throw error;
+  }
 }
 
 export function removeAssetGroupMember(input: {
