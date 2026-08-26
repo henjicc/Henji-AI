@@ -26,11 +26,9 @@
   - `src/models/fal/wan-2.5-preview.model.ts`
   - `src/models/fal/z-image-turbo.model.ts`
 - `watermark: false`
-  - `src/models/ppio/seedance-1.5-pro.model.ts`
-  - `src/models/ppio/seedream-4.0.model.ts`
-  - `src/models/ppio/seedream-4.5.model.ts`
   - `src/models/ppio/wan-2.5-preview.model.ts`
   - `src/models/ppio/wan-2.6.model.ts`
+  - `src/models/ppio/wan-2.7.model.ts`
 - 历史存量里存在输出格式字段，但不要作为新增适配参考：
   - `output_format: 'png'` in `src/models/fal/z-image-turbo.model.ts`
 

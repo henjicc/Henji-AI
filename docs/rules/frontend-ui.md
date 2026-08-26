@@ -9,6 +9,7 @@
 - 业务组件（`components/`、`features/`、`workspaces/`）只消费 `@/components/ui` 导出的 `Ui*` 组件
 - 原生 `<button>/<input>/<select>/<textarea>` 只允许在 `src/components/ui/primitives.tsx` 中实现；禁止在业务组件重新引入原生控件并单独写样式
 - 能复用现有 `Ui*`、`Dropdown`、`PanelTrigger` 时优先复用
+- `PanelTrigger` 的 `closeOnPanelClick`：面板内只承载**单一类型**可选项（如纯比例选择、纯预设列表）时传 `closeOnPanelClick`，选完即收起；面板内并列**多种类型**独立选项（如比例+分辨率+自定义尺寸的复合面板）时保持默认 `false`，选完不收起，让用户接着调下一组
 - **新增通用组件的门槛**：只有现有组件确实覆盖不了时才新增；动手前先告诉用户原因和替代方案，等用户确认后再创建
 - 新增交互控件优先扩展 `Ui*`（`UiButton`/`UiInput`/`UiOptionButton`），再由业务层复用
 - 状态展示统一用 `UiEmpty`/`UiLoading`/`UiError`，禁止页面内联手写状态块

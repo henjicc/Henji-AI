@@ -8,8 +8,8 @@
 
 推荐参考：
 
-- PPIO 图片：`src/models/ppio/seedream-5.0-lite.model.ts`、`src/models/ppio/seedream-4.5.model.ts`
-- PPIO 视频：`src/models/ppio/wan-2.7.model.ts`、`src/models/ppio/vidu-q3.model.ts`、`src/models/ppio/kling-o1.model.ts`
+- PPIO 图片：**当前没有已适配的 PPIO 图片模型**（原有 5 个已随官方停服下线，PPIO 图像侧只剩 Qwen-Image 未接入）
+- PPIO 视频：`src/models/ppio/wan-2.7.model.ts`、`src/models/ppio/kling-3.0.model.ts`、`src/models/ppio/minimax-hailuo-2.3.model.ts`
 - PPIO 音频：`src/models/ppio/minimax-speech.model.ts`
 - FAL 图片：`src/models/fal/nano-banana-pro.model.ts`、`src/models/fal/z-image-turbo.model.ts`
 - FAL 视频：`src/models/fal/kling-video-v2.6-pro.model.ts`、`src/models/fal/kling-video-o1.model.ts`

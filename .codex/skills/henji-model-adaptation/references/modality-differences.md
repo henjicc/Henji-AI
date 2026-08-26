@@ -42,6 +42,6 @@
 - 模式复杂的视频模型，优先先做“单模式跑通”，再扩展多模式。
 - 音频模型不要沿用视频的参数顺序与交互假设。
 - 现有归并参考：
-  - 图片自动切换：`src/models/ppio/nano-banana-2.model.ts`
-  - 视频显式 mode：`src/models/ppio/kling-o1.model.ts`
+  - 图片自动切换：`src/models/fal/nano-banana.model.ts`、`src/models/kie/nano-banana-pro.model.ts`
+  - 视频显式 mode：`src/models/fal/kling-video-o1.model.ts`
   - 视频多端点显式 mode：`src/models/ppio/wan-2.7.model.ts`、`src/models/fal/kling-video-v2.6-pro.model.ts`

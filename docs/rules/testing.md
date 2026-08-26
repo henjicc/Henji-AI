@@ -288,16 +288,18 @@ L-B **不证明**"模型会这么做"，只证明"这么做的话运行时是对
 
 以下检查仅在改动可能引入对应问题时执行：
 
-```powershell
-# 原生控件检查（命中应仅在 primitives.tsx）
-$files = Get-ChildItem src -Recurse -Include *.tsx
-$hits = $files | Select-String -Pattern '<button','<input','<select','<textarea' -CaseSensitive
-$hits | Where-Object { $_.Path -notlike '*src\components\ui\primitives.tsx' }
+```bash
+# 原生控件检查（业务代码里的命中都要处理；测试替身与 ui 基元层除外）
+grep -rn --include='*.tsx' -E '<(button|input|select|textarea)\b' src \
+  | grep -vE '\.test\.tsx:|src/components/ui/' \
+  | grep -vE ':[[:space:]]*(\*|//)'
 
 # 文件行数治理（重点关注本次新增/修改后超过 500 行的文件）
-Get-ChildItem -Path src,electron -Recurse -Include *.ts,*.tsx |
-  ForEach-Object { $n = (Get-Content $_.FullName).Count; if ($n -gt 500) { "$($_.FullName)`t$n" } }
+find src electron \( -name '*.ts' -o -name '*.tsx' \) \
+  | xargs wc -l | awk '$1 > 500 && $2 != "total"' | sort -rn
 ```
+
+第一条排除了测试替身、`src/components/ui/` 基元层和注释行。**任何剩余命中都是需要处理的违规**——写这条规则时的存量违规是 `src/components/Settings/sections/ModelSyncDialog.tsx` 的分组折叠按钮。
 
 不要人工接管用户鼠标做验收。拖拽、点击、悬浮、画布交互优先补入并运行正式 Electron UI 场景；尚未覆盖或必须由用户主观判断的交互，再把具体操作步骤和验证点交给用户。真实 API key 下的生成链路、真实项目包导入导出、macOS 真机行为仍交给用户，除非用户已明确授权对应真实副作用。
 

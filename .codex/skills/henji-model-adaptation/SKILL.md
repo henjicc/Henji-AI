@@ -73,7 +73,12 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src/platform/* -> electron/preload/index.ts -> electron/main/ipc/ai-runtime.ts -> electron/main/services/ai-runtime/**`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
 - 牢记 runtime 约束：`endpoints.selector` 与 `request.builder` 会被 `scripts/generate-model-manifest.cjs` 序列化为 `selectorJs` / `builderJs`，再由 `electron/main/services/ai-runtime/js-runtime.ts` 在 Node VM 中独立执行；不能依赖模型文件顶层 helper/闭包变量，除非该 helper 已明确存在于 `JS_PRELUDE`，需要的新工具函数应内联在函数体内或同步更新 manifest/runtime 支撑。
-- 若模型在 `scripts/generate-model-manifest.cjs` 有 `CUSTOM_BUILDER_OVERRIDES`，修改模型 builder 时必须同步检查 override，避免 manifest 与源码行为不一致。
+- **同源分叉是这条链路最容易踩的坑，且不会报错，只会静默失效。** 改任何被 builder/selector 用到的共享常量或 helper 前，先确认它在仓库里有几份副本，全部一起改：
+  - `scripts/generate-model-manifest.cjs` 的 `KNOWN_ENDPOINT_CONSTANTS`：跨文件 `import` 进来的端点常量，manifest 生成时**优先取这份**而不是源码，源码改了这里不改就会写进错的路由；
+  - `scripts/generate-model-manifest.cjs` 的 `CUSTOM_BUILDER_OVERRIDES`：命中的模型直接用手写 builder，源码 builder 完全不生效；
+  - `electron/main/services/ai-runtime/js-runtime.ts` 的 `JS_PRELUDE`：`buildModelscopeRequest`、`resolveModelscopeSize` 这类共享 helper 在这里有一份**手工维护的等价实现**，VM 里执行的是这份，改 `src/models/**/utils.ts` 那份对运行时毫无影响。
+  - 注意这与上一条的"顶层 helper 会 ReferenceError"是**两个相反方向**的问题：helper 不在 PRELUDE 里会报错（看得见），在 PRELUDE 里有副本则不报错但改动失效（看不见）。后者更危险。
+  - 判断改动是否真的生效：跑 `npm run gen:model-manifest` 后直接读 `resources/model-manifest.json` 里该模型的 `builderJs` / `defaultRoute`，或写测试执行序列化后的产物（参考 `src/models/modelscope/utils.test.ts`、`src/models/ppio/kling-3.0.test.ts`），不要只测源码函数。
 - 多端点模型除“自动切路由”外，还要检查“分支参数契约”：
   - 文档只在部分端点定义的参数，应只在对应分支显示/发送；
   - 不要把分支不支持的参数继续展示在 UI 上，再靠 builder 静默忽略；

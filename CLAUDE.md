@@ -26,4 +26,6 @@
 
 ### 命令执行
 
-本机是 Windows + PowerShell。`docs/rules/testing.md` 第三节的人工核查脚本是 PowerShell 语法，用 PowerShell 工具执行；npm 命令两种 shell 都可以。
+本机是 **macOS + zsh**。`docs/rules/testing.md` 第五节的人工核查脚本给的是 POSIX shell 语法，直接用 Bash 工具执行即可；npm 命令各平台一致。
+
+在 Windows + PowerShell 上开发时，同一节的命令需要自行改写（`rg`/`find`/`wc` 等在 PowerShell 里没有等价的默认实现）。
