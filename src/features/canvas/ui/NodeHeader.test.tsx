@@ -20,6 +20,13 @@ vi.mock('react-i18next', async (importOriginal) => {
   };
 });
 
+const storeApiGetState = vi.fn(() => ({
+  addSelectedNodes: vi.fn(),
+  unselectNodesAndEdges: vi.fn(),
+  multiSelectionActive: false,
+  nodeLookup: new Map([['node-1', { id: 'node-1', selected: false }]]),
+}));
+
 vi.mock('@xyflow/react', () => ({
   useNodeId: () => 'node-1',
   useInternalNode: () => ({
@@ -30,6 +37,7 @@ vi.mock('@xyflow/react', () => ({
       userNode: {},
     },
   }),
+  useStoreApi: () => ({ getState: storeApiGetState }),
   ViewportPortal: ({ children }: { children: ReactNode }) => children,
 }));
 

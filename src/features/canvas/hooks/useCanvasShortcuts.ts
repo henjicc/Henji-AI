@@ -22,6 +22,7 @@ interface UseCanvasShortcutsParams {
   selectedUploadKinds: CanvasMediaKind[]
   selectedNodeIds: string[]
   selectedNodeId: string | null
+  focusedNodeId: string | null
   nodes: CanvasNode[]
   edges: CanvasEdge[]
   deleteNode: (nodeId: string) => void
@@ -44,6 +45,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     selectedUploadKinds,
     selectedNodeIds,
     selectedNodeId,
+    focusedNodeId,
     nodes,
     edges,
     deleteNode,
@@ -72,7 +74,24 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     }
   }, [])
 
+  // 节点内子元素持有焦点时（提示词/参数输入框等）视为该节点被激活：这些控件普遍
+  // 标了 nodrag，原生"按下即选中"不会触发，只能靠 focus 兜底。只在 focusedNodeId
+  // 本身变化时才主动置选中——不能并进下面那条同步 effect（它的依赖还包含
+  // selectedNodeId/selectedNodeIds），否则点击空白区域取消选中时，focusedNodeId
+  // 还没来得及（跨帧异步）更新为 null，会被这里重新强制选回旧节点。
   useEffect(() => {
+    if (focusedNodeId) {
+      setSelectedNode(focusedNodeId)
+    }
+  }, [focusedNodeId, setSelectedNode])
+
+  useEffect(() => {
+    // 焦点还在某个节点内时交给上面那条 effect 兜底，这里不做任何清空/纠正，
+    // 避免和"点击空白区域显式取消选中"之类的操作互相打架。
+    if (focusedNodeId) {
+      return
+    }
+
     if (selectedNodeIds.length === 1) {
       if (selectedNodeId !== selectedNodeIds[0]) {
         setSelectedNode(selectedNodeIds[0])
@@ -83,7 +102,7 @@ export function useCanvasShortcuts(params: UseCanvasShortcutsParams): void {
     if (selectedNodeId !== null) {
       setSelectedNode(null)
     }
-  }, [selectedNodeId, selectedNodeIds, setSelectedNode])
+  }, [focusedNodeId, selectedNodeId, selectedNodeIds, setSelectedNode])
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {

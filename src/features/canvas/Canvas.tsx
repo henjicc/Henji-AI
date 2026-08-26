@@ -33,6 +33,7 @@ import { DEFAULT_VIEWPORT } from './canvasUtils';
 import { useCanvasContentLod } from './nodes/shared/useCanvasContentLod';
 import { useCanvasDuplication } from './hooks/useCanvasDuplication';
 import { useCanvasNodeMenu } from './hooks/useCanvasNodeMenu';
+import { useCanvasNodeFocusTracking, useFocusedCanvasNodeId } from './hooks/useCanvasNodeFocus';
 import { useCanvasResumePolling } from './hooks/useCanvasResumePolling';
 import { useCanvasShortcuts } from './hooks/useCanvasShortcuts';
 import { nodeTypes } from './nodes';
@@ -345,6 +346,9 @@ export function Canvas() {
   // 应用重启后接着轮询未完成的异步生成任务
   useCanvasResumePolling();
 
+  useCanvasNodeFocusTracking(wrapperRef);
+  const focusedNodeId = useFocusedCanvasNodeId();
+
   useCanvasShortcuts({
     wrapperRef,
     reactFlowInstance,
@@ -352,6 +356,7 @@ export function Canvas() {
     selectedUploadKinds: selectedUploadTarget.kinds,
     selectedNodeIds,
     selectedNodeId,
+    focusedNodeId,
     nodes,
     edges,
     deleteNode,

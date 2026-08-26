@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { useInternalNode, useNodeId, ViewportPortal } from '@xyflow/react';
+import { useInternalNode, useNodeId, useStoreApi, ViewportPortal } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import {
   UI_COLOR_ACCENT_TEXT_CLASS,
@@ -127,6 +127,7 @@ export function NodeHeader({
   const { t } = useTranslation();
   const nodeId = useNodeId();
   const internalNode = useInternalNode(nodeId ?? '');
+  const storeApi = useStoreApi();
   const activeExecution = useCanvasExecutionStateStore(
     (state) => nodeId ? state.activeNodes[nodeId] : undefined,
   );
@@ -361,7 +362,24 @@ export function NodeHeader({
               )}
               style={rightSlot ? { width: 'calc(100% - 2.5rem)' } : undefined}
               onMouseDown={handleDragSurfaceMouseDown}
-              onClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                // 拖动标题会经由上面转发的 mousedown 触发 React Flow 原生选中（跨过
+                // 拖拽阈值后由 XYDrag 内部选中逻辑接管）；纯点击（无位移）不会越过
+                // 该阈值，原生选中不会触发。这里直接调用 React Flow 自己的选中存储
+                // 动作（与其内置点击选中走同一条路径），而不是只设业务层
+                // selectedNodeId——否则会被"按原生选中数组同步"的 effect 立刻纠正回去，
+                // 使点击标题/顶部区域与点击节点其它区域的选中行为保持一致。
+                if (!nodeId) return;
+                const { addSelectedNodes, unselectNodesAndEdges, multiSelectionActive, nodeLookup } = storeApi.getState();
+                const node = nodeLookup.get(nodeId);
+                if (!node) return;
+                if (!node.selected) {
+                  addSelectedNodes([nodeId]);
+                } else if (multiSelectionActive) {
+                  unselectNodesAndEdges({ nodes: [node], edges: [] });
+                }
+              }}
               onDoubleClick={handleDragSurfaceDoubleClick}
             />
           </div>
