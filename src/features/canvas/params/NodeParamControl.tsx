@@ -269,7 +269,7 @@ function CompactAspectRatioControl({
       panelWidth={panelWidth}
       alignment="aboveCenter"
       gap={8}
-      closeOnPanelClick={false}
+      closeOnPanelClick
       renderPanel={() => (
         <div className="p-3">
           <AspectRatioSelector
