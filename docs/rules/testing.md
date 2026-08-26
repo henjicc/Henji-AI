@@ -120,11 +120,17 @@ npx vitest run
 
 当问题必须回答“在真实应用里到底通不通”，统一走 `npm run test:reality`，按证据成本选层，禁止另写一条临时 Electron/Playwright 启动链：
 
-> ⚠️ **`ui` / `ui-audit` 跑的是 `out/` 里的构建产物，而且它不构建、也不检查产物新旧。**
-> 只改源码没重新构建就跑，截图里是**上一次构建的界面**，全绿也毫无意义——它连
-> `out/main/index.cjs` 存不存在都不校验。改了渲染层就先 `npx electron-vite build`
-> 再跑巡检（`npm run electron:build` 会连带跑全部静态检查，只为看界面时用不着）。
-> 判断产物是否够新：`stat -f '%Sm %N' -t '%H:%M:%S' out/renderer/assets/index-*.css` 与你的改动时间比。
+> ⚠️ **这些层跑的是 `out/` 里的构建产物，本身不构建。** 只改源码没重新构建就跑，
+> 截图与断言反映的是**上一次构建的应用**，会得到一个全绿但毫无意义的结果。
+>
+> `scripts/lib/electronLaunch.cjs` 的 `assertBuildFreshness` 会在启动前比对
+> `src/` `electron/` 下最新的源码改动时间与产物时间，**产物更旧就直接失败**并给出
+> 要跑的命令；产物不存在同样失败。这条守卫覆盖全部经 `launchElectronApp` 启动的脚本
+> （巡检、审计、smoke、DPI、更新 e2e、画布压测与基准）。
+>
+> 所以改了渲染层先 `npx electron-vite build` 再跑（`npm run electron:build` 会连带
+> 跑全部静态检查，只为看界面时用不着）。确实要在旧产物上跑，设
+> `HENJI_SKIP_BUILD_FRESHNESS=1`——但那等于放弃结论的有效性，要有明确理由。
 
 | 层 | `--suite` | 使用的真实性 |
 |---|---|---|

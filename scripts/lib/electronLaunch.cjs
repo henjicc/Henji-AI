@@ -130,6 +130,78 @@ async function suppressOnboardingForAutomation(page) {
   }
 }
 
+const ROOT_DIR = path.resolve(__dirname, '..', '..')
+
+/** 只统计会进构建产物的源码；测试与类型声明改了不影响运行时界面。 */
+function isBuiltSource(name) {
+  if (!/\.(ts|tsx|js|jsx|css|json|html)$/.test(name)) return false
+  return !/\.(test|spec)\.[jt]sx?$/.test(name) && !name.endsWith('.d.ts')
+}
+
+function newestSourceMtime(dir, deadlineMs) {
+  let newest = 0
+  let entries
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return newest
+  }
+  for (const entry of entries) {
+    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      newest = Math.max(newest, newestSourceMtime(full, deadlineMs))
+    } else if (isBuiltSource(entry.name)) {
+      try {
+        newest = Math.max(newest, fs.statSync(full).mtimeMs)
+      } catch {
+        /* 文件在遍历途中消失，忽略 */
+      }
+    }
+    if (newest > deadlineMs) return newest
+  }
+  return newest
+}
+
+/**
+ * 构建产物新鲜度守卫。
+ *
+ * 这些脚本跑的是 `out/` 里的构建产物，本身不构建。改了源码不重新构建就跑，
+ * 截图/断言反映的是**上一次构建的应用**，会得到一个看起来全绿、实际毫无意义的结果。
+ * 这不是假设——2026-08-26 就发生过一次：改完设置布局直接跑巡检，6 个场景全过，
+ * 截图里却完全没有那次改动，靠数像素才发现。
+ *
+ * 所以宁可挡住也不能放过去：产物比源码旧就直接失败，并给出该跑哪条命令。
+ */
+function assertBuildFreshness(mainEntry) {
+  if (process.env.HENJI_SKIP_BUILD_FRESHNESS === '1') return
+
+  if (!mainEntry || !fs.existsSync(mainEntry)) {
+    throw new Error(
+      `构建产物不存在：${mainEntry || '(未指定)'}\n`
+      + '真实性测试与巡检跑的是 out/ 里的产物，不会自动构建。请先运行：\n'
+      + '  npx electron-vite build'
+    )
+  }
+
+  const builtAt = fs.statSync(mainEntry).mtimeMs
+  const newest = Math.max(
+    newestSourceMtime(path.join(ROOT_DIR, 'src'), builtAt),
+    newestSourceMtime(path.join(ROOT_DIR, 'electron'), builtAt)
+  )
+  if (newest <= builtAt) return
+
+  const fmt = (ms) => new Date(ms).toTimeString().slice(0, 8)
+  throw new Error(
+    '构建产物比源码旧，跑下去只会验证上一次构建的界面。\n'
+    + `  产物 ${path.relative(ROOT_DIR, mainEntry)}：${fmt(builtAt)}\n`
+    + `  最新源码改动：${fmt(newest)}\n`
+    + '请先重新构建：\n'
+    + '  npx electron-vite build\n'
+    + '（确实要在旧产物上跑，设 HENJI_SKIP_BUILD_FRESHNESS=1）'
+  )
+}
+
 async function launchElectronApp({
   mainEntry,
   cwd,
@@ -138,6 +210,7 @@ async function launchElectronApp({
   useElectronApi = false,
   skipOnboarding = false,
 } = {}) {
+  assertBuildFreshness(mainEntry)
   const userDataDir = isolateUserData ? createIsolatedUserDataDir() : null
   const launchArgs = userDataDir ? [`--user-data-dir=${userDataDir}`, mainEntry] : [mainEntry]
   // LOCALAPPDATA/APPDATA 只在 Windows 上决定数据目录；macOS / Linux 走
