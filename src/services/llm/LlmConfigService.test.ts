@@ -41,6 +41,20 @@ describe('normalizeLlmConfig', () => {
     expect(config.textProcessingPromptTemplates.length).toBeGreaterThan(0)
   })
 
+  it('保存时不改写提示词优化方案选择的供应商与模型', () => {
+    const defaults = normalizeLlmConfig(null)
+    const config = normalizeLlmConfig({
+      ...defaults,
+      promptProfiles: defaults.promptProfiles.map(profile => ({
+        ...profile,
+        providerId: 'deepseek',
+        modelId: 'deepseek-v4-flash',
+      })),
+    })
+    expect(config.promptProfiles[0].providerId).toBe('deepseek')
+    expect(config.promptProfiles[0].modelId).toBe('deepseek-v4-flash')
+  })
+
   it('无效的模型档案选择会回退到首个档案', () => {
     const defaults = normalizeLlmConfig(null)
     const config = normalizeLlmConfig({ ...defaults, selectedAgentProfileId: 'missing' })

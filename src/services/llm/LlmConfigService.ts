@@ -1,12 +1,9 @@
 import { createLogger } from '@/core/logging'
 import {
   DEFAULT_DEEPSEEK_BASE_URL,
-  DEFAULT_DEEPSEEK_MODEL_ID,
   DEFAULT_DEEPSEEK_PROVIDER_ID,
   DEFAULT_PPIO_BASE_URL,
-  DEFAULT_PPIO_MODEL_ID,
   DEFAULT_PPIO_PROVIDER_ID,
-  DEFAULT_PROMPT_PROFILE_ID,
   DEFAULT_AGENT_PROFILE_ID,
   createBuiltInLlmModels,
   createBuiltInLlmProviders,
@@ -200,31 +197,15 @@ export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmCo
     (input.models?.length ? input.models : defaults.models).map(model => normalizeModel(model, providers)),
     providers
   )
+  /*
+   * 归一化不改写提示词优化方案指向的供应商与模型。
+   *
+   * 旧实现按「供应商 + 模型 id」硬编码了几条迁移规则，每次保存都会重跑：用户在配置面板把
+   * 供应商切到 DeepSeek，自动补选的模型正好命中迁移条件，保存时又被改回派欧云，表现为供应商
+   * 根本切不动。指向失效模型的存量方案改由 `promptOptimizationReadiness` 按可用性重新选择。
+   */
   const promptProfiles = (input.promptProfiles ?? defaults.promptProfiles)
     .map(normalizePromptProfileWithBuiltInMigration)
-    .map(profile => {
-      const pointsToDeprecatedDefault = profile.providerId === 'openai' && profile.modelId === 'gpt-4o-mini'
-      const pointsToDeprecatedDeepSeek = profile.providerId === DEFAULT_DEEPSEEK_PROVIDER_ID
-        && ['deepseek-chat', 'deepseek-reasoner'].includes(profile.modelId)
-      if (pointsToDeprecatedDefault || pointsToDeprecatedDeepSeek) {
-        return {
-          ...profile,
-          providerId: DEFAULT_PPIO_PROVIDER_ID,
-          modelId: DEFAULT_PPIO_MODEL_ID,
-        }
-      }
-      const isOldBuiltInDefault = profile.id === DEFAULT_PROMPT_PROFILE_ID
-        && profile.providerId === DEFAULT_DEEPSEEK_PROVIDER_ID
-        && profile.modelId === DEFAULT_DEEPSEEK_MODEL_ID
-      if (isOldBuiltInDefault) {
-        return {
-          ...profile,
-          providerId: DEFAULT_PPIO_PROVIDER_ID,
-          modelId: DEFAULT_PPIO_MODEL_ID,
-        }
-      }
-      return profile
-    })
   const textProcessingPromptTemplates = normalizeTextProcessingPromptTemplates(input.textProcessingPromptTemplates)
   if (!promptProfiles.some(profile => profile.isDefault && profile.enabled)) {
     const firstEnabled = promptProfiles.find(profile => profile.enabled)

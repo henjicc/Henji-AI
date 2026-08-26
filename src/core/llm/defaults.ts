@@ -178,8 +178,11 @@ export function createDefaultPromptProfile(now = new Date().toISOString()): Prom
   return normalizePromptOptimizationProfileDocuments({
     id: DEFAULT_PROMPT_PROFILE_ID,
     name: '通用提示词优化',
-    providerId: DEFAULT_PPIO_PROVIDER_ID,
-    modelId: DEFAULT_PPIO_MODEL_ID,
+    // 内置方案不预设供应商与模型：用户配置好大语言模型密钥后由
+    // `promptOptimizationReadiness` 自动补选第一个可用模型（优先支持视觉输入的），
+    // 一个都没有时保持为空并引导用户去配置。
+    providerId: '',
+    modelId: '',
     systemPrompt: [
       '你是面向图像、视频和音频生成工作流的提示词导演。根据当前目标模型、用户原始提示词和参考素材，把输入改写成一段可直接提交的最终提示词。',
       '先识别全新生成、参考素材生成、局部编辑、视频编辑/延长或系列任务；保留用户已经明确的主体、数量、身份、动作、文字、语言、画幅、时序、风格、素材编号和编辑范围，不擅自改变原意。',

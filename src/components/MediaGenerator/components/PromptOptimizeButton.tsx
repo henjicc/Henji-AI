@@ -2,7 +2,7 @@ import { createLogger } from '@/core/logging'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Sparkles } from 'lucide-react'
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import { UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
+import { AlertDialog, UI_TEXT_META_CLASS, UiButton } from '@/components/ui'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
   renderPromptOptimizationTemplate,
@@ -18,7 +18,13 @@ import type {
   PromptOptimizationProfile,
 } from '@/core/llm/types'
 import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
-import { llmConfigService } from '@/services/llm'
+import {
+  ensurePromptOptimizationModelSelection,
+  llmConfigService,
+  resolvePromptOptimizationReadiness,
+  type PromptOptimizationReadiness,
+} from '@/services/llm'
+import { openSettingsPanel } from '@/stores/uiStore'
 import { UploadService } from '@/services/upload/UploadService'
 import { PromptOptimizationProfilesPanel } from './PromptOptimizationProfilesPanel'
 import { PromptOptimizationSelectorPanel } from './PromptOptimizationSelectorPanel'
@@ -28,6 +34,23 @@ import {
 } from './promptOptimizeRequest'
 const logger = createLogger('components.MediaGenerator.PromptOptimizeButton')
 const PANEL_SWITCH_ANIMATION_MS = 220
+
+type PromptOptimizationGuidance = Exclude<PromptOptimizationReadiness['status'], 'ready'>
+
+/**
+ * 缺配置时的引导文案。两种缺口要去的地方不同：没有密钥去全局设置的大语言模型分区，
+ * 有密钥但没有可用模型去优化配置面板自己选。
+ */
+const PROMPT_OPTIMIZATION_GUIDANCE: Record<PromptOptimizationGuidance, { title: string; message: string }> = {
+  'missing-provider-key': {
+    title: '还没有可用的大语言模型',
+    message: '提示词优化需要大语言模型。请先在设置里填写供应商的 API 密钥，之后会自动选用该供应商下的第一个可用模型。',
+  },
+  'missing-model': {
+    title: '优化配置还没有可用模型',
+    message: '当前提示词优化配置没有可用模型。请在提示词优化配置里选择供应商和模型，或先在设置里启用该供应商下的模型。',
+  },
+}
 
 function createPromptOptimizationRequestId(): string {
   return `prompt-optimizer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -65,6 +88,8 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
   const [output, setOutput] = useState('')
   const [selectedProfileId, setSelectedProfileId] = useState<string>('')
   const [panelMode, setPanelMode] = useState<'selector' | 'editor'>('selector')
+  const [configuredProviderIds, setConfiguredProviderIds] = useState<readonly string[] | undefined>(undefined)
+  const [guidance, setGuidance] = useState<PromptOptimizationGuidance | null>(null)
   const [buttonBehavior, setButtonBehavior] = useState<PromptOptimizationButtonBehavior>(
     readPromptOptimizationButtonBehavior()
   )
@@ -82,10 +107,23 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     return resolvePromptOptimizationProfile(config, selectedProfileId)
   }, [config, selectedProfileId])
 
-  const loadConfig = useCallback(async (): Promise<void> => {
+  /**
+   * `ensureModelSelection` 只在打开面板这类用户主动动作时开启：它要查一次密钥状态，
+   * 而编辑模板时每次输入都会保存配置并触发一次重载，没必要跟着查。
+   */
+  const loadConfig = useCallback(async (
+    options?: { ensureModelSelection?: boolean }
+  ): Promise<void> => {
     try {
-      const nextConfig = await llmConfigService.getConfig()
+      const loadedConfig = await llmConfigService.getConfig()
+      const resolved = options?.ensureModelSelection
+        ? await ensurePromptOptimizationModelSelection(loadedConfig)
+        : { config: loadedConfig, configuredProviderIds: undefined }
+      const nextConfig = resolved.config
       setConfig(nextConfig)
+      if (options?.ensureModelSelection) {
+        setConfiguredProviderIds(resolved.configuredProviderIds)
+      }
       setSelectedProfileId((previousSelectedProfileId) => {
         const profile = resolvePromptOptimizationProfile(nextConfig, previousSelectedProfileId)
         return profile?.id ?? ''
@@ -96,7 +134,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
   }, [])
 
   useEffect(() => {
-    void loadConfig()
+    void loadConfig({ ensureModelSelection: true })
   }, [loadConfig])
 
   useEffect(() => {
@@ -169,6 +207,26 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     }
   }, [config])
 
+  /**
+   * 触发优化前的统一闸门：能用就返回可用的方案（可能已自动补选模型），不能用就弹引导。
+   */
+  const resolveReadiness = useCallback(async (
+    profileOverride?: PromptOptimizationProfile
+  ): Promise<Extract<PromptOptimizationReadiness, { status: 'ready' }> | null> => {
+    const profile = profileOverride
+      ?? selectedProfile
+      ?? resolvePromptOptimizationProfile(config, selectedProfileId)
+    const readiness = await resolvePromptOptimizationReadiness(config, profile)
+    if (readiness.status !== 'ready') {
+      setGuidance(readiness.status)
+      return null
+    }
+    if (readiness.config !== config) {
+      setConfig(readiness.config)
+    }
+    return readiness
+  }, [config, selectedProfile, selectedProfileId])
+
   const runOptimize = useCallback(async (
     profileOverride?: PromptOptimizationProfile
   ): Promise<boolean> => {
@@ -178,13 +236,11 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       return false
     }
 
-    const profile = profileOverride ?? selectedProfile ?? resolvePromptOptimizationProfile(config, selectedProfileId)
-    if (!profile) {
-      onAlert('未配置优化器', '请右键优化按钮创建提示词优化配置。', 'warning')
-      return false
-    }
+    const readiness = await resolveReadiness(profileOverride)
+    if (!readiness) return false
 
-    const provider = config?.providers.find(item => item.providerId === profile.providerId) ?? null
+    const profile = readiness.profile
+    const provider = readiness.config.providers.find(item => item.providerId === profile.providerId) ?? null
     const uploadService = UploadService.getInstance()
     setStreaming(true)
     setOutput('')
@@ -277,14 +333,12 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       return false
     }
   }, [
-    config,
     finishStreaming,
     onAlert,
     onOptimized,
     onStreamPreviewChange,
     prompt,
-    selectedProfile,
-    selectedProfileId,
+    resolveReadiness,
     targetModel,
     uploadedFilePaths,
     uploadedImages,
@@ -294,13 +348,13 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
   ])
 
   const openSelectorPanel = useCallback((openPanel: () => void): void => {
-    void loadConfig()
+    void loadConfig({ ensureModelSelection: true })
     setPanelMode('selector')
     openPanel()
   }, [loadConfig])
 
   const openEditorPanel = useCallback((openPanel?: () => void): void => {
-    void loadConfig()
+    void loadConfig({ ensureModelSelection: true })
     setPanelMode('editor')
     openPanel?.()
   }, [loadConfig])
@@ -312,88 +366,118 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     closePanelRef.current()
     panelSwitchTimerRef.current = window.setTimeout(() => {
       setPanelMode('editor')
-      void loadConfig()
+      void loadConfig({ ensureModelSelection: true })
       openPanelRef.current()
       panelSwitchTimerRef.current = null
     }, PANEL_SWITCH_ANIMATION_MS)
   }, [loadConfig])
 
+  const guidanceContent = guidance ? PROMPT_OPTIMIZATION_GUIDANCE[guidance] : null
+
+  const applyGuidance = useCallback((): void => {
+    const target = guidance
+    setGuidance(null)
+    if (target === 'missing-provider-key') {
+      openSettingsPanel({ tab: 'api', sectionId: 'api-llm' })
+      return
+    }
+    openEditorPanel(openPanelRef.current)
+  }, [guidance, openEditorPanel])
+
   return (
-    <PanelTrigger
-      display={streaming ? '优化中' : '优化'}
-      disabled={disabled || streaming}
-      className="w-auto"
-      panelWidth={panelMode === 'selector' ? 360 : 820}
-      alignment="aboveCenter"
-      stableHeight
-      stableHeightKey={panelMode}
-      closeOnPanelClick={false}
-      renderPanel={() => (
-        panelMode === 'selector'
-          ? (
-            <PromptOptimizationSelectorPanel
-              profiles={enabledProfiles}
-              selectedProfileId={selectedProfile?.id ?? ''}
-              optimizing={streaming}
-              onOpenEditor={switchToEditorPanel}
-              onSelectProfile={(profileId) => {
-                const profile = enabledProfiles.find(item => item.id === profileId)
-                if (!profile) return
-                closePanelRef.current()
-                void rememberSelectedProfile(profileId)
-                void runOptimize(profile)
-              }}
-            />
-            )
-          : (
-            <div className="flex max-h-[min(760px,calc(100vh-96px))] flex-col p-1">
-              <PromptOptimizationProfilesPanel
-                config={config}
-                selectedProfileId={selectedProfileId}
-                onSelectedProfileIdChange={setSelectedProfileId}
-                onConfigChange={setConfig}
+    <>
+      <PanelTrigger
+        display={streaming ? '优化中' : '优化'}
+        disabled={disabled || streaming}
+        className="w-auto"
+        panelWidth={panelMode === 'selector' ? 360 : 820}
+        alignment="aboveCenter"
+        stableHeight
+        stableHeightKey={panelMode}
+        closeOnPanelClick={false}
+        renderPanel={() => (
+          panelMode === 'selector'
+            ? (
+              <PromptOptimizationSelectorPanel
+                profiles={enabledProfiles}
+                selectedProfileId={selectedProfile?.id ?? ''}
+                optimizing={streaming}
+                onOpenEditor={switchToEditorPanel}
+                onSelectProfile={(profileId) => {
+                  const profile = enabledProfiles.find(item => item.id === profileId)
+                  if (!profile) return
+                  closePanelRef.current()
+                  void rememberSelectedProfile(profileId)
+                  void runOptimize(profile)
+                }}
               />
-              {streaming && output ? (
-                <div className={`mx-4 mb-4 rounded-lg border border-border-dark bg-app p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
-                  {output}
-                </div>
-              ) : null}
-            </div>
-            )
-      )}
-    >
-      {({ openPanel, closePanel }) => {
-        closePanelRef.current = closePanel
-        openPanelRef.current = openPanel
-        return (
-          <UiButton
-            type="button"
-            variant="muted"
-            onClick={() => {
-              if (streaming) return
-              if (buttonBehavior === 'select-profile') {
-                openSelectorPanel(openPanel)
-                return
-              }
-              void runOptimize()
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              if (streaming) return
-              openEditorPanel(openPanel)
-            }}
-            disabled={disabled}
-            aria-disabled={disabled || streaming}
-            title={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
-            className={`prompt-optimize-button h-9 px-4 ${streaming ? 'is-streaming' : ''}`}
-            data-panel-trigger-button
-          >
-            <Sparkles size={16} className="prompt-optimize-button__icon mr-2" />
-            <span className="prompt-optimize-button__label">{streaming ? '优化中' : '优化'}</span>
-          </UiButton>
-        )
-      }}
-    </PanelTrigger>
+              )
+            : (
+              <div className="flex max-h-[min(760px,calc(100vh-96px))] flex-col p-1">
+                <PromptOptimizationProfilesPanel
+                  config={config}
+                  configuredProviderIds={configuredProviderIds}
+                  selectedProfileId={selectedProfileId}
+                  onSelectedProfileIdChange={setSelectedProfileId}
+                  onConfigChange={setConfig}
+                />
+                {streaming && output ? (
+                  <div className={`mx-4 mb-4 rounded-lg border border-border-dark bg-app p-3 leading-5 ${UI_TEXT_META_CLASS}`}>
+                    {output}
+                  </div>
+                ) : null}
+              </div>
+              )
+        )}
+      >
+        {({ openPanel, closePanel }) => {
+          closePanelRef.current = closePanel
+          openPanelRef.current = openPanel
+          return (
+            <UiButton
+              type="button"
+              variant="muted"
+              onClick={() => {
+                if (streaming) return
+                if (buttonBehavior !== 'select-profile') {
+                  void runOptimize()
+                  return
+                }
+                // 选择配置模式下先确认有可用模型，缺配置时直接引导，不打开一个选不出结果的面板
+                void resolveReadiness().then((readiness) => {
+                  if (!readiness) return
+                  openSelectorPanel(openPanel)
+                })
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                if (streaming) return
+                openEditorPanel(openPanel)
+              }}
+              disabled={disabled}
+              aria-disabled={disabled || streaming}
+              title={buttonBehavior === 'select-profile' ? '左键先选择配置，右键管理配置' : '左键直接优化，右键管理配置'}
+              className={`prompt-optimize-button h-9 px-4 ${streaming ? 'is-streaming' : ''}`}
+              data-panel-trigger-button
+            >
+              <Sparkles size={16} className="prompt-optimize-button__icon mr-2" />
+              <span className="prompt-optimize-button__label">{streaming ? '优化中' : '优化'}</span>
+            </UiButton>
+          )
+        }}
+      </PanelTrigger>
+      {guidanceContent ? (
+        <AlertDialog
+          isOpen
+          type="warning"
+          title={guidanceContent.title}
+          message={guidanceContent.message}
+          closeLabel="取消"
+          actions={[{ label: '去设置', variant: 'primary', onClick: applyGuidance }]}
+          onClose={() => setGuidance(null)}
+        />
+      ) : null}
+    </>
   )
 }

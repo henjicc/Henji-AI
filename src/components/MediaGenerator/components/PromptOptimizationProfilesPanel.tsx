@@ -14,37 +14,48 @@ import Dropdown from '@/components/ui/Dropdown'
 import { toLegacyPromptString, type PromptDocumentV1 } from '@/core/inputs/promptDocument'
 import { DEFAULT_DEEPSEEK_PROVIDER_ID, createDefaultLlmConfig } from '@/core/llm/defaults'
 import {
+  buildPromptOptimizationCapabilities,
+  listPromptOptimizationModelCandidates,
+  selectPromptOptimizationModel,
+  type PromptOptimizationModelSource,
+} from '@/core/llm/promptOptimizationModelSelection'
+import {
   getDefaultPromptProfile,
   normalizePromptOptimizationProfileDocuments,
   PROMPT_OPTIMIZATION_EDITOR_VARIABLES,
   readPromptOptimizationProfileDocument,
 } from '@/core/llm/promptOptimization'
-import type { LlmConfigState, LlmModelConfig, LlmProviderConfig, PromptOptimizationProfile } from '@/core/llm/types'
+import type { LlmConfigState, LlmProviderConfig, PromptOptimizationProfile } from '@/core/llm/types'
 import { llmConfigService } from '@/services/llm'
 
 interface PromptOptimizationProfilesPanelProps {
   config: LlmConfigState | null
+  /** 已配置密钥的供应商；新增配置时按它挑默认模型。undefined 表示密钥状态未知 */
+  configuredProviderIds?: readonly string[]
   selectedProfileId: string
   onSelectedProfileIdChange: (profileId: string) => void
   onConfigChange: (config: LlmConfigState) => void
 }
 
-function createProfile(config: LlmConfigState): PromptOptimizationProfile {
+function createProfile(
+  config: LlmConfigState,
+  configuredProviderIds?: readonly string[],
+): PromptOptimizationProfile {
   const now = new Date().toISOString()
-  const provider = config.providers.find(item => item.enabled) ?? config.providers[0]
-  const model = config.models.find(item => item.enabled && item.providerId === provider?.providerId)
-    ?? config.models.find(item => item.enabled)
-    ?? config.models[0]
-  const providerId = provider?.providerId ?? DEFAULT_DEEPSEEK_PROVIDER_ID
-  const modelId = model?.modelId ?? createDefaultLlmConfig().models[0].modelId
+  // 新配置沿用统一的选择策略：可用模型里优先支持视觉输入的那个，一个都没有就留空
+  const model = selectPromptOptimizationModel({
+    providers: config.providers,
+    models: config.models,
+    configuredProviderIds,
+  })
   return normalizePromptOptimizationProfileDocuments({
     id: `prompt-profile-${Date.now()}`,
     name: '新的优化提示词',
-    providerId,
-    modelId,
+    providerId: model?.providerId ?? '',
+    modelId: model?.modelId ?? '',
     systemPrompt: '你是提示词优化助手。只输出优化后的提示词。',
     userTemplate: '请优化以下提示词：\n\n{{prompt}}',
-    capabilities: { text: true, image: false, video: false },
+    capabilities: buildPromptOptimizationCapabilities(model),
     isDefault: false,
     enabled: true,
     createdAt: now,
@@ -56,18 +67,6 @@ function buildProviderOptions(config: LlmConfigState): LlmProviderConfig[] {
   const referencedProviderIds = new Set(config.promptProfiles.map(profile => profile.providerId))
   referencedProviderIds.add(DEFAULT_DEEPSEEK_PROVIDER_ID)
   return config.providers.filter(provider => provider.enabled || referencedProviderIds.has(provider.providerId))
-}
-
-function buildModelOptions(config: LlmConfigState, providerId: string): LlmModelConfig[] {
-  return config.models.filter(model => model.providerId === providerId && (model.enabled || model.modelId.length > 0))
-}
-
-function buildProfileCapabilities(model?: LlmModelConfig): PromptOptimizationProfile['capabilities'] {
-  return {
-    text: true,
-    image: model?.capabilities.image === true,
-    video: model?.capabilities.video === true,
-  }
 }
 
 function PromptTemplateEditor({
@@ -98,6 +97,7 @@ function PromptTemplateEditor({
 
 export function PromptOptimizationProfilesPanel({
   config,
+  configuredProviderIds,
   selectedProfileId,
   onSelectedProfileIdChange,
   onConfigChange,
@@ -150,7 +150,7 @@ export function PromptOptimizationProfilesPanel({
 
   const addProfile = (): void => {
     if (!config) return
-    const profile = createProfile(config)
+    const profile = createProfile(config, configuredProviderIds)
     patchConfig(current => ({
       ...current,
       promptProfiles: [...current.promptProfiles, profile],
@@ -184,7 +184,15 @@ export function PromptOptimizationProfilesPanel({
   }
 
   const providerOptions = buildProviderOptions(activeConfig)
-  const modelOptions = buildModelOptions(activeConfig, selectedProfile.providerId)
+  /*
+   * 面板里的模型列表按供应商列出，不按密钥过滤：用户可能正准备换到一个待会儿才填密钥的供应商，
+   * 这里挡住只会让人以为模型丢了。密钥筛选只作用于自动选择。
+   */
+  const modelSource: PromptOptimizationModelSource = {
+    providers: activeConfig.providers,
+    models: activeConfig.models,
+  }
+  const modelOptions = listPromptOptimizationModelCandidates(modelSource, selectedProfile.providerId)
   const systemPromptDocument = readPromptOptimizationProfileDocument(selectedProfile, 'systemPrompt')
   const userTemplateDocument = readPromptOptimizationProfileDocument(selectedProfile, 'userTemplate')
 
@@ -230,7 +238,7 @@ export function PromptOptimizationProfilesPanel({
               <span className="min-w-0">
                 <span className="block truncate text-sm">{profile.name}</span>
                 <span className={`block truncate text-xs ${profile.id === selectedProfile.id ? 'text-white/80' : 'text-text-muted'}`}>
-                  {profile.providerId} / {profile.modelId}
+                  {profile.modelId ? `${profile.providerId} / ${profile.modelId}` : '未选择模型'}
                 </span>
               </span>
               {profile.isDefault ? <Star size={14} className={profile.id === selectedProfile.id ? 'text-white/90' : ''} /> : null}
@@ -253,19 +261,19 @@ export function PromptOptimizationProfilesPanel({
             <Dropdown
               label="供应商"
               value={selectedProfile.providerId}
-              display={providerOptions.find(provider => provider.providerId === selectedProfile.providerId)?.displayName ?? selectedProfile.providerId}
+              display={providerOptions.find(provider => provider.providerId === selectedProfile.providerId)?.displayName
+                ?? (selectedProfile.providerId || '未选择供应商')}
               options={providerOptions.map(provider => ({
                 value: provider.providerId,
                 label: provider.displayName,
               }))}
               onSelect={(providerId) => {
                 const nextProviderId = String(providerId)
-                const model = activeConfig.models.find(item => item.providerId === nextProviderId && item.enabled)
-                  ?? activeConfig.models.find(item => item.providerId === nextProviderId)
+                const model = selectPromptOptimizationModel(modelSource, nextProviderId)
                 patchProfile({
                   providerId: nextProviderId,
                   modelId: model?.modelId ?? '',
-                  capabilities: buildProfileCapabilities(model),
+                  capabilities: buildPromptOptimizationCapabilities(model),
                 })
               }}
               className="w-full"
@@ -274,7 +282,8 @@ export function PromptOptimizationProfilesPanel({
             <Dropdown
               label="模型"
               value={selectedProfile.modelId}
-              display={modelOptions.find(model => model.modelId === selectedProfile.modelId)?.displayName ?? selectedProfile.modelId}
+              display={modelOptions.find(model => model.modelId === selectedProfile.modelId)?.displayName
+                ?? (selectedProfile.modelId || '未选择模型')}
               options={modelOptions.map(model => ({
                 value: model.modelId,
                 label: model.displayName,
@@ -284,7 +293,7 @@ export function PromptOptimizationProfilesPanel({
                 const nextModel = modelOptions.find(model => model.modelId === nextModelId)
                 patchProfile({
                   modelId: nextModelId,
-                  capabilities: buildProfileCapabilities(nextModel),
+                  capabilities: buildPromptOptimizationCapabilities(nextModel),
                 })
               }}
               className="w-full"
