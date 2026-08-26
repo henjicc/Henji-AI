@@ -246,7 +246,8 @@ export function createAssetGroupGraph(
     },
     parentId: sharedParentId,
     extent: sharedParentId ? ('parent' as const) : undefined,
-    style: { width: 220, height: 144 },
+    // 4:3 比例，比早前的宽扁更接近方形，给封面拼接留出纵向空间
+    style: { width: 220, height: 165 },
     selected: true,
     data: {
       ...groupNode.data,
