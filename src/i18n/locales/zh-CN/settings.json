@@ -17,7 +17,8 @@
     "interface-assets": "资产库",
     "interface-canvas": "画布",
     "interface-theme": "主题外观",
-    "models-visibility": "显示与管理"
+    "models-visibility": "显示与管理",
+    "models-alias": "别名"
   },
   "apiKeys": {
     "title": "API 密钥设置",
@@ -429,7 +430,6 @@
     "listTitle": "模型列表",
     "visibleCount": "({{visible}}/{{total}} 可见)",
     "alias": {
-      "sectionTitle": "别名",
       "sectionDescription": "同一模型无论由哪些供应商提供，只需设置一次，别名统一生效",
       "inputLabel": "{{name}} 的别名"
     },

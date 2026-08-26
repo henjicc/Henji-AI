@@ -579,6 +579,17 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     {
+      id: 'settings-models-alias',
+      surface: '设置',
+      name: '设置-模型别名',
+      setup: async (page) => {
+        await setupSettings(page)
+        await clickNamedButton(page, /^(模型|Models)$/i)
+        await clickNamedButton(page, /^(别名|Aliases)$/i)
+        await settlePage(page)
+      },
+    },
+    {
       id: 'settings-llm',
       surface: '设置',
       name: '设置-大语言模型',

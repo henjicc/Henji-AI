@@ -26,6 +26,7 @@ export const SETTINGS_SECTION_IDS = [
   'interface-canvas',
   'interface-theme',
   'models-visibility',
+  'models-alias',
 ] as const
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]

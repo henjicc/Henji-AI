@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { getAvailableProviders } from '../utils/modelHelpers'
 import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
-import { getModelAliases, setModelAlias } from '../config/modelAliases'
 import { useI18n } from '@/hooks/useI18n'
 import {
   UI_TEXT_BODY_CLASS,
@@ -12,19 +11,10 @@ import {
   UiChipButton,
   UiDisclosurePanel,
   UiGroup,
-  UiInput,
   UiPanel,
 } from '@/components/ui'
 import Toggle from '@/components/ui/Toggle'
-
-interface AliasableModel {
-  canonicalModelId: string
-  originalName: string
-  type: 'image' | 'video' | 'audio'
-  providerNames: string[]
-}
-
-const MODEL_TYPE_SORT_ORDER: Record<AliasableModel['type'], number> = { image: 0, video: 1, audio: 2 }
+import ModelTypeBadge from './ModelTypeBadge'
 
 const ModelSettingsPanel: React.FC = () => {
   const { t } = useI18n('settings')
@@ -36,7 +26,6 @@ const ModelSettingsPanel: React.FC = () => {
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => getHiddenModels())
   const [expandedProviders, setExpandedProviders] = useState<Set<string>>(() => new Set())
-  const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>(() => getModelAliases())
 
   const toggleProviderExpanded = (providerId: string): void => {
     setExpandedProviders(prev => {
@@ -45,38 +34,6 @@ const ModelSettingsPanel: React.FC = () => {
       else next.add(providerId)
       return next
     })
-  }
-
-  // 别名按 canonicalModelId 统一生效，不区分供应商，这里把同一模型在各供应商下的
-  // 记录合并成一条，只保留一份原始名称，同时收集它实际由哪些供应商提供。
-  const aliasableModels = useMemo<AliasableModel[]>(() => {
-    const map = new Map<string, AliasableModel>()
-    providers.forEach(provider => {
-      provider.models.forEach(model => {
-        const existing = map.get(model.canonicalModelId)
-        if (existing) {
-          if (!existing.providerNames.includes(provider.name)) existing.providerNames.push(provider.name)
-          return
-        }
-        map.set(model.canonicalModelId, {
-          canonicalModelId: model.canonicalModelId,
-          originalName: model.originalName,
-          type: model.type,
-          providerNames: [provider.name],
-        })
-      })
-    })
-    return Array.from(map.values()).sort((a, b) => {
-      const typeDiff = MODEL_TYPE_SORT_ORDER[a.type] - MODEL_TYPE_SORT_ORDER[b.type]
-      if (typeDiff !== 0) return typeDiff
-      return a.originalName.localeCompare(b.originalName, 'zh')
-    })
-  }, [providers])
-
-  const commitAlias = (canonicalModelId: string): void => {
-    const value = aliasDrafts[canonicalModelId] ?? ''
-    setModelAlias(canonicalModelId, value)
-    setAliasDrafts(getModelAliases())
   }
 
   const toggleModelVisibility = (providerId: string, modelId: string): void => {
@@ -197,15 +154,6 @@ const ModelSettingsPanel: React.FC = () => {
       case 'video': return t('modelSettings.types.video')
       case 'audio': return t('modelSettings.types.audio')
       default: return type
-    }
-  }
-
-  const getTypeBadgeColor = (type: string): string => {
-    switch (type) {
-      case 'image': return 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-      case 'video': return 'bg-purple-500/20 text-purple-400 border-purple-500/30'
-      case 'audio': return 'bg-green-500/20 text-green-400 border-green-500/30'
-      default: return 'bg-layer/40 text-text-muted border-border-dark'
     }
   }
 
@@ -364,9 +312,7 @@ const ModelSettingsPanel: React.FC = () => {
                           >
                             <div className={`flex min-w-0 items-center gap-3 ${isHidden ? 'opacity-60' : ''}`}>
                               <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.name}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded border ${getTypeBadgeColor(model.type)}`}>
-                                {getTypeLabel(model.type)}
-                              </span>
+                              <ModelTypeBadge type={model.type} />
                             </div>
                             <div className="flex shrink-0 items-center gap-3">
                               <span className={UI_TEXT_META_CLASS}>{statusText}</span>
@@ -389,54 +335,8 @@ const ModelSettingsPanel: React.FC = () => {
           })}
         </div>
       </UiGroup>
-
-      <UiGroup
-        title={t('modelSettings.alias.sectionTitle')}
-        description={t('modelSettings.alias.sectionDescription')}
-        titleTone="overline"
-        gap="stack"
-      >
-        <div className="divide-y divide-border-dark/60">
-          {aliasableModels.map(entry => (
-            <div
-              key={entry.canonicalModelId}
-              className="flex min-h-12 items-center justify-between gap-4 py-2.5"
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{entry.originalName}</span>
-                <span className={`shrink-0 text-xs px-2 py-0.5 rounded border ${getTypeBadgeColor(entry.type)}`}>
-                  {getTypeLabel(entry.type)}
-                </span>
-              </div>
-              <span
-                className={`hidden max-w-40 truncate sm:block ${UI_TEXT_META_CLASS}`}
-                title={entry.providerNames.join('、')}
-              >
-                {entry.providerNames.join('、')}
-              </span>
-              <div className="w-40 shrink-0">
-                <UiInput
-                  value={aliasDrafts[entry.canonicalModelId] ?? ''}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setAliasDrafts(prev => ({ ...prev, [entry.canonicalModelId]: value }))
-                  }}
-                  onBlur={() => commitAlias(entry.canonicalModelId)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') e.currentTarget.blur()
-                  }}
-                  placeholder={entry.originalName}
-                  className="h-8 text-xs"
-                  aria-label={t('modelSettings.alias.inputLabel', { name: entry.originalName })}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </UiGroup>
     </div>
   )
 }
 
 export default ModelSettingsPanel
-

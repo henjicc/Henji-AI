@@ -17,7 +17,8 @@
     "interface-assets": "Asset Library",
     "interface-canvas": "Canvas",
     "interface-theme": "Theme & Appearance",
-    "models-visibility": "Visibility & Management"
+    "models-visibility": "Visibility & Management",
+    "models-alias": "Aliases"
   },
   "apiKeys": {
     "title": "API Key Settings",
@@ -429,7 +430,6 @@
     "listTitle": "Model list",
     "visibleCount": "({{visible}}/{{total}} visible)",
     "alias": {
-      "sectionTitle": "Aliases",
       "sectionDescription": "Set once per model — it applies across every provider that offers it",
       "inputLabel": "Alias for {{name}}"
     },

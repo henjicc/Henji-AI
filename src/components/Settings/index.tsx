@@ -36,7 +36,7 @@ const SECTION_MAP: Record<SettingsTab, string[]> = {
   general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance'],
   api: ['api-keys', 'api-upload', 'api-llm', 'api-agent-preferences', 'api-agent-skills'],
   interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],
-  models: ['models-visibility']
+  models: ['models-visibility', 'models-alias']
 }
 
 /** 切换大类后，异步加载的分区（密钥状态、LLM 配置）会改变上方高度，需要补一次定位 */

@@ -93,6 +93,7 @@ const surfaceDefinitions = [
   { id: 'settings.assistant_preferences', kind: 'settings', settingsTarget: { tab: 'api', sectionId: 'api-agent-preferences' }, ...immediate },
   { id: 'settings.assistant_skills', kind: 'settings', settingsTarget: { tab: 'api', sectionId: 'api-agent-skills' }, ...immediate },
   { id: 'settings.models', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-visibility' }, ...immediate },
+  { id: 'settings.models.alias', kind: 'settings', settingsTarget: { tab: 'models', sectionId: 'models-alias' }, ...immediate },
   { id: 'settings.interface', kind: 'settings', settingsTarget: { tab: 'interface' }, ...immediate },
   { id: 'settings.interface.layout', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-layout' }, ...immediate },
   { id: 'settings.interface.theme', kind: 'settings', settingsTarget: { tab: 'interface', sectionId: 'interface-theme' }, ...immediate },
