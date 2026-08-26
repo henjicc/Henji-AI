@@ -311,20 +311,22 @@ export const kling30Model = defineModel({
 
       if (mode === 'motion-control') {
         const characterOrientation = params.ppioKling30CharacterOrientation ?? params.character_orientation
+        // character_orientation=image 时官方固定输出 5 秒；=video 时输出时长跟随参考视频
+        // （最长 30 秒），提交前无法得知，只能按当前时长参数给一个估算值。
         const motionDuration = characterOrientation === 'image' ? 5 : safeDuration
-        const pricePerSecond = resolution === '720P' ? 0.9135 : 1.218
+        const pricePerSecond = resolution === '720P' ? 0.9 : 1.2
         return pricePerSecond * motionDuration
       }
 
       const pricePerSecond = resolution === '4K'
-        ? (sound ? 4.41 : 2.94)
+        ? (sound ? 4.5 : 3.0)
         : (resolution === '1080P'
           ? (sound ? 1.2 : 0.8)
           : (sound ? 0.9 : 0.6))
 
       return pricePerSecond * safeDuration
     },
-    description: '720P(Standard)：无声 ¥0.6/秒，有声 ¥0.9/秒；1080P(Pro)：无声 ¥0.8/秒，有声 ¥1.2/秒；4K：无声 ¥2.94/秒，有声 ¥4.41/秒；动作控制 720P ¥0.9135/秒，1080P ¥1.218/秒'
+    description: '720P(Standard)：无声 ¥0.6/秒，有声 ¥0.9/秒；1080P(Pro)：无声 ¥0.8/秒，有声 ¥1.2/秒；4K：无声 ¥3.0/秒，有声 ¥4.5/秒；动作控制 720P ¥0.9/秒，1080P ¥1.2/秒'
   }
 })
 
