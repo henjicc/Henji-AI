@@ -10,7 +10,6 @@ import {
 } from './model-step'
 import {
   applyDeepSeekUsage,
-  applyModelStepProviderNativeOptions,
   resolveModelStepBaseUrl,
   usesNativeJsonSchema,
 } from './provider'
@@ -262,25 +261,17 @@ describe('resolveModelStepBaseUrl', () => {
       .toBe('https://example.com/v1')
   })
 
-  it('按 Provider 映射原生 reasoning 参数且受能力表约束', () => {
-    const supported = createInput({
+  it('思考参数不再走 providerOptions，只透传调用方显式给的选项', () => {
+    // 思考参数改由 applyProviderReasoningRequestBody 在 transformRequestBody 里按供应商翻译，
+    // 与原生流式路径共用（见 providerReasoningRequest.test.ts）。
+    expect(buildModelStepProviderOptions(createInput({
       adapter: 'openai',
       reasoning: { enabled: true, effort: 'xhigh' },
-    })
-    expect(buildModelStepProviderOptions(supported)).toMatchObject({
-      openaiCompatible: { reasoningEffort: 'xhigh' },
-    })
-    expect(buildModelStepProviderOptions(createInput({
-      ...supported,
-      capabilities: { ...supported.capabilities, reasoning: false },
     }))).toBeUndefined()
-    expect(applyModelStepProviderNativeOptions({ model: 'deepseek-v4' }, {
-      enabled: true,
-      effort: 'xhigh',
-    })).toEqual({
-      model: 'deepseek-v4',
-      thinking: { type: 'enabled' },
-      reasoning_effort: 'max',
+    expect(buildModelStepProviderOptions(createInput({
+      providerOptions: { openaiCompatible: { serviceTier: 'priority' } },
+    }))).toMatchObject({
+      openaiCompatible: { serviceTier: 'priority' },
     })
   })
 

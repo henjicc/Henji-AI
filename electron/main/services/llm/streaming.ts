@@ -11,6 +11,7 @@ import {
   applyProviderRequestBodyQuirks,
   resolveProviderExtraAuthHeaders,
 } from '../../../../src/core/llm/providerProtocol'
+import { applyProviderReasoningRequestBody } from '../../../../src/core/llm/providerReasoningRequest'
 
 interface StreamChatOptions {
   endpoint: string
@@ -60,12 +61,19 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
     payload.tools = request.tools
   }
 
-  const providerOrAdapter = `${request.providerId} ${request.adapter ?? ''}`.toLowerCase()
-  if (request.reasoning !== undefined && providerOrAdapter.includes('deepseek')) {
-    payload.reasoning = request.reasoning.enabled
-  }
+  /*
+   * 思考参数按供应商翻译，与 SDK 模型步骤共用同一份映射。
+   *
+   * 旧实现只认 deepseek，且发的是 `reasoning: true` 而不是官方要求的 `thinking` + `reasoning_effort`：
+   * 画布文本处理和提示词优化的「思考模式」下拉对任何供应商都不生效。
+   * 用模型能力表兜一层，没标"支持思考"的模型仍然一个字段都不发。
+   */
+  const reasoningCapable = request.capabilities?.reasoning === true
+  const withReasoning = reasoningCapable
+    ? applyProviderReasoningRequestBody(request.providerId, request.adapter, payload, request.reasoning)
+    : payload
 
-  return applyProviderRequestBodyQuirks(request.providerId, payload) as JsonObject
+  return applyProviderRequestBodyQuirks(request.providerId, withReasoning) as JsonObject
 }
 
 export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Promise<LlmStreamOutput> {

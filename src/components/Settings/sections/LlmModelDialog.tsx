@@ -1,4 +1,18 @@
-import { Dropdown, UI_TEXT_BODY_CLASS, UI_TEXT_LABEL_CLASS, UiButton, UiCheckbox, UiInput, UiModal } from '@/components/ui'
+import {
+  Dropdown,
+  UI_TEXT_BODY_CLASS,
+  UI_TEXT_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UiButton,
+  UiCheckbox,
+  UiInput,
+  UiModal,
+} from '@/components/ui'
+import {
+  applyLlmModelCatalogEntry,
+  describeCatalogInputModalities,
+  findLlmModelCatalogEntry,
+} from '@/core/llm/modelCatalog'
 import type { LlmCapabilities, LlmModelConfig } from '@/core/llm/types'
 
 const capabilityItems: Array<{
@@ -43,6 +57,29 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
   const updateCapabilities = (patch: Partial<LlmCapabilities>): void => {
     if (model) onChange({ ...model, capabilities: { ...model.capabilities, ...patch, text: true } })
   }
+
+  /*
+   * 模型 ID 命中内置目录时立刻把能力填好，用户不用自己去查"这个模型能不能看图"。
+   *
+   * 填完就盖上 catalogId 戳，之后用户手动改的任何一项都不会被保存时的归一化再覆盖回去。
+   */
+  const updateModelId = (modelId: string): void => {
+    if (!model) return
+    const entry = findLlmModelCatalogEntry(modelId)
+    if (!entry || entry.id === model.catalogId) {
+      onChange({ ...model, modelId })
+      return
+    }
+    onChange({
+      ...model,
+      modelId,
+      displayName: model.displayName.trim() || entry.displayName,
+      capabilities: applyLlmModelCatalogEntry(model.capabilities, entry),
+      catalogId: entry.id,
+    })
+  }
+
+  const catalogEntry = model ? findLlmModelCatalogEntry(model.modelId) : null
   const structuredOutputMode = model?.capabilities.structuredOutputMode ?? 'none'
 
   return (
@@ -61,12 +98,21 @@ const LlmModelDialog = ({ isOpen, model, onChange, onClose, onSave }: LlmModelDi
       <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
         <div className="space-y-1.5">
           <div className={UI_TEXT_LABEL_CLASS}>模型 ID</div>
-          <UiInput value={model?.modelId ?? ''} onChange={event => update({ modelId: event.target.value })} placeholder="例如 deepseek-v4-flash" />
+          <UiInput value={model?.modelId ?? ''} onChange={event => updateModelId(event.target.value)} placeholder="例如 deepseek-v4-flash" />
         </div>
         <div className="space-y-1.5">
           <div className={UI_TEXT_LABEL_CLASS}>模型名称</div>
           <UiInput value={model?.displayName ?? ''} onChange={event => update({ displayName: event.target.value })} placeholder="例如 DeepSeek V4 Flash" />
         </div>
+        {catalogEntry ? (
+          <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
+            <div>
+              已按内置目录标注（{catalogEntry.vendor} · {catalogEntry.displayName}）；
+              支持输入：{describeCatalogInputModalities(catalogEntry)}。下面的选项仍可手动修改。
+            </div>
+            {catalogEntry.note ? <div>{catalogEntry.note}</div> : null}
+          </div>
+        ) : null}
         <div className={`grid grid-cols-2 gap-2 ${UI_TEXT_BODY_CLASS}`}>
           {capabilityItems.map(item => (
             <label key={item.id} className="inline-flex items-center gap-2 rounded-lg border border-border-dark bg-app px-3 py-2">

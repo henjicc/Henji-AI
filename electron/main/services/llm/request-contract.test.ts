@@ -23,21 +23,36 @@ describe('LLM chat request contract', () => {
     expect(parseLlmReasoningConfig(false)).toEqual({ enabled: false, effort: 'high' })
   })
 
-  it('把结构化配置转换为 DeepSeek 接口要求的 boolean reasoning', () => {
+  it('按供应商翻译思考参数，DeepSeek 发官方要求的 thinking 与 reasoning_effort', () => {
     const payload = buildOpenAiCompatiblePayload(createRequest({
+      capabilities: { reasoning: true },
       reasoning: { enabled: true, effort: 'high' },
     }))
 
-    expect(payload.reasoning).toBe(true)
+    expect(payload.thinking).toEqual({ type: 'enabled' })
+    expect(payload.reasoning_effort).toBe('high')
+    // 旧实现发的 `reasoning: true` 不是官方文档里的字段，已经去掉。
+    expect(payload).not.toHaveProperty('reasoning')
   })
 
-  it('OpenAI 兼容网关不声明 DeepSeek adapter 时不发送 reasoning', () => {
+  it('模型没标"支持思考"时一个思考字段都不发', () => {
     const payload = buildOpenAiCompatiblePayload(createRequest({
-      providerId: 'ppio',
-      adapter: 'openai',
       reasoning: { enabled: true, effort: 'high' },
     }))
 
-    expect(payload).not.toHaveProperty('reasoning')
+    expect(payload).not.toHaveProperty('thinking')
+    expect(payload).not.toHaveProperty('reasoning_effort')
+  })
+
+  it('未登记的供应商只发通用 reasoning_effort，不发任何私有开关', () => {
+    const payload = buildOpenAiCompatiblePayload(createRequest({
+      providerId: 'custom-gateway',
+      adapter: 'openai',
+      capabilities: { reasoning: true },
+      reasoning: { enabled: true, effort: 'xhigh' },
+    }))
+
+    expect(payload.reasoning_effort).toBe('xhigh')
+    expect(payload).not.toHaveProperty('thinking')
   })
 })

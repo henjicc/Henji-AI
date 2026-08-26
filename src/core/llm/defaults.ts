@@ -1,4 +1,5 @@
 import { AGENT_MIN_OUTPUT_TOKENS } from './agentProfiles'
+import { applyLlmModelCatalogEntry, findLlmModelCatalogEntry } from './modelCatalog'
 import type {
   LlmCapabilities,
   AgentModelProfile,
@@ -41,12 +42,17 @@ export const DEFAULT_LLM_CAPABILITIES: LlmCapabilities = {
   usage: true,
 }
 
-function createDeepSeekV4Capabilities(): LlmCapabilities {
-  return {
-    ...DEFAULT_LLM_CAPABILITIES,
-    contextWindow: DEEPSEEK_V4_CONTEXT_WINDOW,
-    maxOutputTokens: DEEPSEEK_V4_MAX_OUTPUT_TOKENS,
-  }
+/**
+ * 按内置模型能力目录生成一份能力声明；目录里没有的模型退回通用默认值（纯文本、能力项全关）。
+ *
+ * 添加模型的两个入口（手动添加、获取模型列表）和内置模型清单都走这里，保证"同一个模型 ID
+ * 无论从哪个入口进来，标出来的能力一致"。
+ */
+export function createLlmCapabilitiesForModel(modelId: string): LlmCapabilities {
+  const entry = findLlmModelCatalogEntry(modelId)
+  return entry
+    ? applyLlmModelCatalogEntry(DEFAULT_LLM_CAPABILITIES, entry)
+    : { ...DEFAULT_LLM_CAPABILITIES }
 }
 
 export const DEFAULT_PROMPT_PROFILE_ID = 'default-general-optimizer'
@@ -233,66 +239,39 @@ export function createBuiltInLlmProviders(): LlmProviderConfig[] {
   ]
 }
 
+function createBuiltInLlmModel(
+  providerId: string,
+  adapter: string,
+  baseUrl: string,
+  modelId: string,
+  displayName: string,
+): LlmModelConfig {
+  return {
+    providerId,
+    modelId,
+    displayName,
+    adapter,
+    baseUrl,
+    capabilities: createLlmCapabilitiesForModel(modelId),
+    catalogId: findLlmModelCatalogEntry(modelId)?.id,
+    enabled: true,
+  }
+}
+
 export function createBuiltInLlmModels(): LlmModelConfig[] {
+  const ppio = (modelId: string, displayName: string): LlmModelConfig => (
+    createBuiltInLlmModel(DEFAULT_PPIO_PROVIDER_ID, 'openai', DEFAULT_PPIO_BASE_URL, modelId, displayName)
+  )
+  const deepseek = (modelId: string, displayName: string): LlmModelConfig => (
+    createBuiltInLlmModel(DEFAULT_DEEPSEEK_PROVIDER_ID, 'deepseek', DEFAULT_DEEPSEEK_BASE_URL, modelId, displayName)
+  )
   return [
-    {
-      providerId: DEFAULT_PPIO_PROVIDER_ID,
-      modelId: 'deepseek/deepseek-v4-pro',
-      displayName: 'DeepSeek V4 Pro',
-      adapter: 'openai',
-      baseUrl: DEFAULT_PPIO_BASE_URL,
-      capabilities: createDeepSeekV4Capabilities(),
-      enabled: true,
-    },
-    {
-      providerId: DEFAULT_PPIO_PROVIDER_ID,
-      modelId: DEFAULT_PPIO_MODEL_ID,
-      displayName: 'DeepSeek V4 Flash',
-      adapter: 'openai',
-      baseUrl: DEFAULT_PPIO_BASE_URL,
-      capabilities: createDeepSeekV4Capabilities(),
-      enabled: true,
-    },
-    {
-      providerId: DEFAULT_PPIO_PROVIDER_ID,
-      modelId: 'xiaomimimo/mimo-v2.5-pro',
-      displayName: 'MiMo-V2.5-Pro',
-      adapter: 'openai',
-      baseUrl: DEFAULT_PPIO_BASE_URL,
-      capabilities: DEFAULT_LLM_CAPABILITIES,
-      enabled: true,
-    },
-    {
-      providerId: DEFAULT_PPIO_PROVIDER_ID,
-      modelId: 'moonshotai/kimi-k2.6',
-      displayName: 'Kimi K2.6',
-      adapter: 'openai',
-      baseUrl: DEFAULT_PPIO_BASE_URL,
-      capabilities: {
-        ...DEFAULT_LLM_CAPABILITIES,
-        image: true,
-        video: true,
-      },
-      enabled: true,
-    },
-    {
-      providerId: DEFAULT_DEEPSEEK_PROVIDER_ID,
-      modelId: DEFAULT_DEEPSEEK_MODEL_ID,
-      displayName: 'DeepSeek V4 Flash',
-      adapter: 'deepseek',
-      baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
-      capabilities: createDeepSeekV4Capabilities(),
-      enabled: true,
-    },
-    {
-      providerId: DEFAULT_DEEPSEEK_PROVIDER_ID,
-      modelId: 'deepseek-v4-pro',
-      displayName: 'DeepSeek V4 Pro',
-      adapter: 'deepseek',
-      baseUrl: DEFAULT_DEEPSEEK_BASE_URL,
-      capabilities: createDeepSeekV4Capabilities(),
-      enabled: true,
-    },
+    ppio('deepseek/deepseek-v4-pro', 'DeepSeek V4 Pro'),
+    ppio(DEFAULT_PPIO_MODEL_ID, 'DeepSeek V4 Flash'),
+    ppio('xiaomimimo/mimo-v2.5-pro', 'MiMo-V2.5-Pro'),
+    ppio('moonshotai/kimi-k2.6', 'Kimi K2.6'),
+    deepseek(DEFAULT_DEEPSEEK_MODEL_ID, 'DeepSeek V4 Flash'),
+    deepseek('deepseek-v4-pro', 'DeepSeek V4 Pro'),
   ]
 }
 

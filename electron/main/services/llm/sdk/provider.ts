@@ -14,6 +14,7 @@ import {
   applyProviderRequestBodyQuirks,
   resolveProviderExtraAuthHeaders,
 } from '../../../../../src/core/llm/providerProtocol'
+import { applyProviderReasoningRequestBody } from '../../../../../src/core/llm/providerReasoningRequest'
 import { resolveOpenAiCompatibleEndpoint, resolvePpioChatEndpoint } from '../streaming'
 import {
   modelStepProviderAdapters,
@@ -70,11 +71,11 @@ function createOpenAiCompatibleLanguageModel(
           captureDeepSeekUsage: adapter === 'deepseek',
         })
       : undefined,
-    // 两类差异叠加：deepseek 的 thinking 选项，以及各家对请求体字段的自有要求。
+    // 两类差异叠加：各供应商的思考参数写法，以及各家对请求体字段的自有要求。
     transformRequestBody: (body) => applyProviderRequestBodyQuirks(
       input.providerId,
-      adapter === 'deepseek' && input.capabilities.reasoning && reasoning
-        ? applyModelStepProviderNativeOptions(body, reasoning)
+      input.capabilities.reasoning
+        ? applyProviderReasoningRequestBody(input.providerId, adapter, body, reasoning)
         : body,
     ),
   })
@@ -195,23 +196,6 @@ function isRequest(value: FetchInput): value is Request {
 
 export function usesNativeJsonSchema(input: Pick<ModelStepInput, 'capabilities'>): boolean {
   return input.capabilities.structuredOutputMode === 'schema'
-}
-
-export function applyModelStepProviderNativeOptions(
-  body: Record<string, unknown>,
-  reasoning: NonNullable<ModelStepInput['reasoning']>
-): Record<string, unknown> {
-  return {
-    ...body,
-    thinking: { type: reasoning.enabled ? 'enabled' : 'disabled' },
-    ...(reasoning.enabled ? { reasoning_effort: normalizeDeepSeekReasoningEffort(reasoning.effort) } : {}),
-  }
-}
-
-function normalizeDeepSeekReasoningEffort(
-  effort: NonNullable<ModelStepInput['reasoning']>['effort']
-): 'high' | 'max' {
-  return effort === 'xhigh' || effort === 'max' ? 'max' : 'high'
 }
 
 function toNonNegativeInteger(value: unknown): number | null {

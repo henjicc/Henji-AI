@@ -11,10 +11,17 @@ import type {
 } from '@/core/llm/types'
 import { createModelFromInput } from '@/services/llm/llmDiscoveryService'
 
+/*
+ * 适配器类型只保留真实接通的两种。
+ *
+ * 原来还有一个 `anthropic` 选项，但运行时从来没有对应实现——`provider.ts` 只注册了
+ * `openai-compatible` 协议，选了它发出去的仍然是 Chat Completions 形状的请求，唯一的区别是
+ * 设置页预览文案会骗人地显示成 `/v1/messages`。存量配置由 LlmConfigService 归一化成 openai。
+ * Anthropic Messages 协议按 docs/llm-adaptation/README.md 第三节属于最低优先级，等真正接上再加回来。
+ */
 export const providerTypes = [
   { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'openai', label: 'OpenAI 兼容' },
 ]
 
 export const reasoningEffortOptions: Array<{ value: LlmReasoningEffort; label: string }> = [
@@ -89,8 +96,7 @@ export function resolveApiPreview(provider: LlmProviderConfig): string {
   const baseUrl = provider.baseUrl?.trim()
   if (!baseUrl) return ''
   const normalized = baseUrl.trim().replace(/\/+$/, '')
-  const endpoint = provider.adapter === 'anthropic' ? 'messages' : 'chat/completions'
-  return normalized.endsWith('/v1') ? `${normalized}/${endpoint}` : `${normalized}/v1/${endpoint}`
+  return normalized.endsWith('/v1') ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`
 }
 
 export function getApiKeyHint(provider: LlmProviderConfig): string | undefined {

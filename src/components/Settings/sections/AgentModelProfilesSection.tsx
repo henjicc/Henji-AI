@@ -92,12 +92,45 @@ function getRoleValue(profile: AgentModelProfile, role: AgentModelRole): string 
   return REUSE_PRIMARY
 }
 
+/**
+ * 下拉里直接写清这个模型为什么不适合当前角色。
+ *
+ * 模型能力现在由内置目录自动标注（`src/core/llm/modelCatalog.ts`），所以这些标注是可信的：
+ * 执行类角色要能调工具和出结构化结果，观察模型则只看它能接收哪些媒体输入。
+ */
+function describeRoleSuitability(model: LlmModelConfig, role: AgentModelRole): string {
+  if (role === 'observer') {
+    const modalities = [
+      ...(model.capabilities.image ? ['图片'] : []),
+      ...(model.capabilities.video ? ['视频'] : []),
+      ...(model.capabilities.audio ? ['音频'] : []),
+    ]
+    return modalities.length ? ` · 可看${modalities.join('/')}` : ' · 不支持媒体输入'
+  }
+  const missing = [
+    ...(model.capabilities.toolCall ? [] : ['工具调用']),
+    ...(model.capabilities.structuredOutputMode === 'none' ? ['结构化输出'] : []),
+    ...(model.capabilities.streaming ? [] : ['流式输出']),
+  ]
+  return missing.length ? ` · 不支持${missing.join('、')}` : ''
+}
+
+function isRoleUsable(model: LlmModelConfig, role: AgentModelRole): boolean {
+  return describeRoleSuitability(model, role) === ''
+    || (role === 'observer' && (model.capabilities.image || model.capabilities.video || model.capabilities.audio))
+}
+
 function createOptions(models: LlmModelConfig[], role: AgentModelRole): ModelOption[] {
-  const choices = models.filter(model => model.enabled).map(model => ({
-    value: modelKey(model),
-    label: `${model.displayName} · ${model.providerId}`,
-    reference: { providerId: model.providerId, modelId: model.modelId },
-  }))
+  // 能胜任该角色的排前面，省得用户在一长串里挨个点开详情才知道哪个能用。
+  const choices = models
+    .filter(model => model.enabled)
+    .slice()
+    .sort((left, right) => Number(isRoleUsable(right, role)) - Number(isRoleUsable(left, role)))
+    .map(model => ({
+      value: modelKey(model),
+      label: `${model.displayName} · ${model.providerId}${describeRoleSuitability(model, role)}`,
+      reference: { providerId: model.providerId, modelId: model.modelId },
+    }))
   if (role === 'router' || role === 'summarizer') {
     return [{ value: REUSE_PRIMARY, label: '复用主模型' }, ...choices]
   }
@@ -282,6 +315,11 @@ const AgentModelProfilesSection = ({ config, saveConfig }: AgentModelProfilesSec
                       <div>验证于 {new Date(verification.verifiedAt).toLocaleString()} · {verification.totalLatencyMs} ms · 费用{verification.cost.status === 'known' ? `${verification.cost.amount} ${verification.cost.currency}` : '未知'}</div>
                       <div>{verification.checks.map(check => `${check.id}:${check.status === 'passed' ? '通过' : check.status === 'skipped' ? (check.errorCode === 'manual_declaration_only' ? '仅声明' : '未声明') : '失败'}`).join(' · ')}</div>
                       <div>图片、视频与音频由配置声明；“仅声明”表示协议可表达但尚未用真实媒体验证。</div>
+                      {/*
+                        视频最容易出现"模型支持但这里判失败"：智能助手走 AI SDK 模型步骤，
+                        该协议目前只能表达图片和音频，而画布文本处理走的是另一条原生流式路径，能发视频。
+                      */}
+                      <div>某个模态显示“失败”表示智能助手当前的请求协议带不了它，模型本身仍可能支持——画布文本处理等功能不受影响。</div>
                       <div>Token：输入 {verification.usage.inputTokens ?? '未知'} / 输出 {verification.usage.outputTokens ?? '未知'} / 思考 {verification.usage.reasoningTokens ?? '未知'}</div>
                     </div>
                   ) : <div className="text-xs text-danger">尚未进行动态能力验证</div>}

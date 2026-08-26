@@ -11,6 +11,7 @@ import {
   createDefaultLlmConfig,
 } from '@/core/llm/defaults'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
+import { applyLlmModelCatalogEntry, findLlmModelCatalogEntry } from '@/core/llm/modelCatalog'
 import type {
   AgentModelCapabilityVerification,
   AgentModelProfile,
@@ -43,6 +44,13 @@ function normalizeAdapter(adapter: string, providerId: string): string {
   if (providerId.trim().toLowerCase() === DEFAULT_DEEPSEEK_PROVIDER_ID) {
     return DEFAULT_DEEPSEEK_PROVIDER_ID
   }
+  /*
+   * 存量的 `anthropic` 收敛成 `openai`。
+   *
+   * 这个选项从来没有对应的运行时实现，选中它发出去的一直是 Chat Completions 请求，
+   * 只有设置页预览文案显示成 `/v1/messages`。留着它只会让用户以为自己走的是 Anthropic 协议。
+   */
+  if (normalized === 'anthropic') return 'openai'
   return normalized || 'openai'
 }
 
@@ -158,19 +166,36 @@ function normalizeProvider(provider: LlmProviderConfig): LlmProviderConfig {
   }
 }
 
+/**
+ * 给还没按内置目录标注过的模型补一次标注。
+ *
+ * 只在 `catalogId` 为空时执行一次并盖上戳：目录是"添加时替用户省掉手工勾选"，不是"每次保存都把
+ * 用户改回去"。已经盖过戳的配置一律原样保留，用户后来关掉某项能力的选择必须活下来。
+ */
+function applyModelCatalogOnce(model: LlmModelConfig): LlmModelConfig {
+  if (model.catalogId) return model
+  const entry = findLlmModelCatalogEntry(model.modelId)
+  if (!entry) return model
+  return {
+    ...model,
+    capabilities: applyLlmModelCatalogEntry(model.capabilities, entry),
+    catalogId: entry.id,
+  }
+}
+
 function normalizeModel(model: LlmModelConfig, providers: LlmProviderConfig[]): LlmModelConfig {
   const provider = providers.find(item => item.providerId === model.providerId)
   const adapter = provider?.adapter ?? model.adapter
   const baseUrl = normalizeBaseUrl(model.baseUrl) ?? provider?.baseUrl
+  const withCatalog = applyModelCatalogOnce({ ...model, modelId: model.modelId.trim() })
   return {
-    ...model,
+    ...withCatalog,
     providerId: model.providerId.trim(),
-    modelId: model.modelId.trim(),
     displayName: model.displayName.trim(),
     adapter: normalizeAdapter(adapter, model.providerId),
     apiProtocol: model.apiProtocol ?? provider?.apiProtocol ?? 'openai-compatible',
     baseUrl,
-    capabilities: normalizeCapabilities(model.capabilities),
+    capabilities: normalizeCapabilities(withCatalog.capabilities),
     enabled: model.enabled !== false,
   }
 }

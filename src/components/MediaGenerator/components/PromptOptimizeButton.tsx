@@ -241,6 +241,15 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
 
     const profile = readiness.profile
     const provider = readiness.config.providers.find(item => item.providerId === profile.providerId) ?? null
+    /*
+     * 思考能力要按所选模型如实声明。
+     *
+     * 主进程按 `capabilities.reasoning` 决定要不要下发思考参数（见 providerReasoningRequest.ts），
+     * 这里漏声明的话，供应商的思考模式设置对提示词优化就是不生效的。
+     */
+    const optimizerModel = readiness.config.models.find(item => (
+      item.providerId === profile.providerId && item.modelId === profile.modelId
+    )) ?? null
     const uploadService = UploadService.getInstance()
     setStreaming(true)
     setOutput('')
@@ -284,6 +293,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
           image: profile.capabilities.image,
           video: profile.capabilities.video,
           streaming: true,
+          reasoning: optimizerModel?.capabilities.reasoning === true,
         },
         metadata: {
           source: 'prompt-optimizer',

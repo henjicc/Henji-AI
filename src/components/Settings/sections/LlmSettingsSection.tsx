@@ -14,8 +14,6 @@ import {
   UiIconButton,
   UiInput,
   UiLoading,
-  UiModal,
-  UiOptionButton,
   UiPanel,
   UiSwitch,
 } from '@/components/ui'
@@ -23,18 +21,15 @@ import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import ApiKeyInput from '../components/ApiKeyInput'
 import type { LlmModelConfig, LlmProviderConfig } from '@/core/llm/types'
-import { DEFAULT_DEEPSEEK_BASE_URL, createDefaultProviderReasoning } from '@/core/llm/defaults'
+import { DEFAULT_DEEPSEEK_BASE_URL } from '@/core/llm/defaults'
 import { createModelFromInput, fetchOpenAiCompatibleModels } from '@/services/llm/llmDiscoveryService'
 import AgentModelProfilesSection from './AgentModelProfilesSection'
 import LlmModelDialog from './LlmModelDialog'
+import LlmProviderDialog from './LlmProviderDialog'
 import {
-  createDefaultProvider,
   createEmptyModel,
-  createProviderId,
   getApiKeyHint,
-  getDefaultBaseUrlForAdapter,
   getReasoningModeLabel,
-  providerTypes,
   reasoningModeOptions,
   resolveApiPreview,
   resolveProviderReasoning,
@@ -53,7 +48,6 @@ interface DiscoveredModelDraft {
 const LlmSettingsSection: React.FC = () => {
   const { config, keys, visibility, loading, updateKey, toggleVisibility, saveConfig } = useLlmSettings()
   const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null)
-  const [providerDraft, setProviderDraft] = useState<LlmProviderConfig | null>(null)
   const [modelDraft, setModelDraft] = useState<LlmModelConfig | null>(null)
   const [showProviderManager, setShowProviderManager] = useState(false)
   const [showModelDialog, setShowModelDialog] = useState(false)
@@ -63,14 +57,6 @@ const LlmSettingsSection: React.FC = () => {
   const [syncDiscovered, setSyncDiscovered] = useState<DiscoveredModelDraft[]>([])
 
   const providers = useMemo(() => config.providers ?? [], [config.providers])
-  const setProviderDraftPatch = (patch: Partial<LlmProviderConfig>): void => {
-    setProviderDraft(prev => ({ ...(prev ?? (providers[0] ? { ...providers[0] } : createDefaultProvider())), ...patch }))
-  }
-
-  const openProviderManager = (provider?: LlmProviderConfig): void => {
-    setProviderDraft(provider ? { ...provider } : providers[0] ? { ...providers[0] } : createDefaultProvider())
-    setShowProviderManager(true)
-  }
 
   const openModelDialog = (provider: LlmProviderConfig, model?: LlmModelConfig): void => {
     setExpandedProviderId(provider.providerId)
@@ -82,34 +68,43 @@ const LlmSettingsSection: React.FC = () => {
     await saveConfig(nextConfig)
   }
 
-  const handleSaveProvider = async (): Promise<void> => {
-    if (!providerDraft) return
-    const displayName = providerDraft.displayName.trim()
-    if (!displayName) return
-    const providerId = providerDraft.providerId.trim() || createProviderId(displayName, config.providers)
-    const nextProvider: LlmProviderConfig = {
-      ...providerDraft,
-      providerId,
-      displayName,
-      adapter: providerDraft.adapter.trim() || 'openai',
-      baseUrl: providerDraft.baseUrl?.trim()
-        || (providerDraft.adapter === 'deepseek' ? DEFAULT_DEEPSEEK_BASE_URL : undefined),
-      reasoning: resolveProviderReasoning(providerDraft),
-    }
-    const nextModels = config.models.map(model => (
+  const handleSaveProvider = async (
+    nextProvider: LlmProviderConfig,
+    seedModels: LlmModelConfig[],
+  ): Promise<void> => {
+    const providerId = nextProvider.providerId
+    const baseUrl = nextProvider.baseUrl
+      ?? (nextProvider.adapter === 'deepseek' ? DEFAULT_DEEPSEEK_BASE_URL : undefined)
+    const provider = { ...nextProvider, baseUrl }
+    const existingModels = config.models.map(model => (
       model.providerId === providerId
-        ? { ...model, adapter: nextProvider.adapter, baseUrl: nextProvider.baseUrl }
+        ? { ...model, adapter: provider.adapter, baseUrl: provider.baseUrl }
         : model
     ))
+    // 预设推荐模型只补缺，不覆盖用户已经添加或改过的同名模型。
+    const existingModelIds = new Set(existingModels
+      .filter(model => model.providerId === providerId)
+      .map(model => model.modelId))
+    const addedModels = seedModels
+      .filter(model => !existingModelIds.has(model.modelId))
+      .map(model => ({ ...model, baseUrl: provider.baseUrl }))
     await persistConfig({
       ...config,
       providers: [
         ...config.providers.filter(item => item.providerId !== providerId),
-        nextProvider,
+        provider,
       ],
-      models: nextModels,
+      models: [...existingModels, ...addedModels],
     })
-    setProviderDraft(createDefaultProvider())
+  }
+
+  const handleDeleteProvider = async (providerId: string): Promise<void> => {
+    await persistConfig({
+      ...config,
+      providers: config.providers.filter(provider => provider.providerId !== providerId),
+      models: config.models.filter(model => model.providerId !== providerId),
+    })
+    setExpandedProviderId(prev => prev === providerId ? null : prev)
   }
 
   /*
@@ -203,9 +198,6 @@ const LlmSettingsSection: React.FC = () => {
     return <UiLoading message="正在加载 LLM 配置…" />
   }
 
-  const defaultProviderDraft = providers[0] ? { ...providers[0] } : createDefaultProvider()
-  const activeProviderDraft = providerDraft ?? defaultProviderDraft
-
   return (
     // 外层宽度与内边距由 SettingsSection / 内容区统一给，这里不再自己套一层 max-w + p-4
     <div className={UI_STACK_GAP_CLASS}>
@@ -214,7 +206,7 @@ const LlmSettingsSection: React.FC = () => {
       <UiGroup
         title="供应商配置"
         actions={
-          <UiButton type="button" size="sm" variant="muted" className="px-4" onClick={() => openProviderManager()}>
+          <UiButton type="button" size="sm" variant="muted" className="px-4" onClick={() => setShowProviderManager(true)}>
             <Settings2 size={14} className="mr-1.5" />
             管理供应商
           </UiButton>
@@ -401,108 +393,13 @@ const LlmSettingsSection: React.FC = () => {
         </div>
       </UiGroup>
 
-      <UiModal
+      <LlmProviderDialog
         isOpen={showProviderManager}
-        title="管理供应商"
+        providers={providers}
         onClose={() => setShowProviderManager(false)}
-        size="editor"
-        footer={(
-          <>
-            <UiButton type="button" variant="muted" onClick={() => setShowProviderManager(false)}>关闭</UiButton>
-            <UiButton type="button" variant="primary" onClick={() => void handleSaveProvider()}>
-              {providerDraft?.providerId ? '保存供应商' : '添加供应商'}
-            </UiButton>
-          </>
-        )}
-      >
-        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] gap-4 overflow-hidden">
-          <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
-            {providers.map(provider => (
-              <UiOptionButton
-                key={provider.providerId}
-                type="button"
-                active={providerDraft?.providerId === provider.providerId}
-                variant="menu"
-                className="flex w-full items-center justify-between gap-2 px-3 py-2.5"
-                onClick={() => setProviderDraft({ ...provider })}
-              >
-                <span className="min-w-0 text-left">
-                  <span className="block truncate text-sm">{provider.displayName}</span>
-                  <span className="block truncate text-xs text-text-muted">{provider.adapter}</span>
-                </span>
-                <span className={`text-xs ${provider.enabled ? 'text-green-400' : 'text-text-muted'}`}>{provider.enabled ? 'ON' : 'OFF'}</span>
-              </UiOptionButton>
-            ))}
-            <UiButton type="button" variant="muted" className="w-full" onClick={() => setProviderDraft(createDefaultProvider())}>
-              <Plus size={14} className="mr-1.5" />
-              新建供应商
-            </UiButton>
-          </div>
-
-          <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
-            <UiPanel variant="inset" className="px-3 py-2">
-              <div className={UI_TEXT_META_CLASS}>当前编辑</div>
-              <div className={`truncate ${UI_TEXT_LABEL_CLASS}`}>
-                {activeProviderDraft.displayName || '新建供应商'}
-              </div>
-            </UiPanel>
-            <UiInput
-              value={activeProviderDraft.displayName}
-              onChange={(e) => setProviderDraftPatch({ displayName: e.target.value })}
-              placeholder="供应商名称，例如 DeepSeek"
-            />
-            <Dropdown
-              value={activeProviderDraft.adapter}
-              display={providerTypes.find(type => type.value === activeProviderDraft.adapter)?.label ?? activeProviderDraft.adapter}
-              options={providerTypes}
-              className="w-full"
-              buttonClassName="w-full"
-              onSelect={(adapter) => {
-                setProviderDraftPatch({
-                  adapter,
-                  baseUrl: activeProviderDraft.baseUrl || getDefaultBaseUrlForAdapter(adapter),
-                  reasoning: createDefaultProviderReasoning(adapter),
-                })
-              }}
-            />
-            <UiInput
-              value={activeProviderDraft.baseUrl ?? ''}
-              onChange={(e) => setProviderDraftPatch({ baseUrl: e.target.value })}
-              placeholder="API 地址，例如 https://api.deepseek.com"
-            />
-            <div className={UI_TEXT_META_CLASS}>
-              预览：{resolveApiPreview(activeProviderDraft) || '请先填写 API 地址'}
-            </div>
-            <label className={`inline-flex items-center gap-2 ${UI_TEXT_BODY_CLASS}`}>
-              <UiSwitch
-                checked={activeProviderDraft.enabled !== false}
-                onCheckedChange={(checked) => setProviderDraftPatch({ enabled: checked })}
-              />
-              启用供应商
-            </label>
-            {providerDraft?.providerId ? (
-              <UiButton
-                type="button"
-                variant="ghost"
-                className="text-text-muted hover:text-text-dark"
-                onClick={async () => {
-                  const providerId = providerDraft.providerId
-                  await persistConfig({
-                    ...config,
-                    providers: config.providers.filter(provider => provider.providerId !== providerId),
-                    models: config.models.filter(model => model.providerId !== providerId),
-                  })
-                  setExpandedProviderId(prev => prev === providerId ? null : prev)
-                  setProviderDraft(createDefaultProvider())
-                }}
-              >
-                <Trash2 size={14} className="mr-1.5" />
-                删除该供应商
-              </UiButton>
-            ) : null}
-          </div>
-        </div>
-      </UiModal>
+        onSave={handleSaveProvider}
+        onDelete={handleDeleteProvider}
+      />
 
       <LlmModelDialog
         isOpen={showModelDialog}

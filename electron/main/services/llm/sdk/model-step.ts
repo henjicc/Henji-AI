@@ -128,13 +128,15 @@ function buildTools(input: ModelStepInput): ToolSet | undefined {
 }
 
 export function buildModelStepProviderOptions(input: ModelStepInput): ProviderOptions | undefined {
+  /*
+   * 思考参数不再从这里下发。
+   *
+   * 原来非 deepseek 的供应商在这里塞 `openaiCompatible.reasoningEffort`，发出去的是用户选的原始档位，
+   * 而各家支持的取值集合不同（Kimi/GLM 只有 low/high/max，没有 medium/xhigh），还缺少 `thinking`、
+   * `enable_thinking` 这类开关。现在统一由 `applyProviderReasoningRequestBody` 在 `provider.ts` 的
+   * `transformRequestBody` 里按供应商翻译，和原生流式路径共用一份映射，这里只透传调用方显式给的选项。
+   */
   const options: ProviderOptions = { ...(input.providerOptions as ProviderOptions | undefined) }
-  if (input.capabilities.reasoning && input.reasoning?.enabled && input.adapter?.trim().toLowerCase() !== 'deepseek') {
-    options.openaiCompatible = {
-      ...(options.openaiCompatible ?? {}),
-      reasoningEffort: input.reasoning.effort,
-    }
-  }
   return Object.keys(options).length > 0 ? options : undefined
 }
 

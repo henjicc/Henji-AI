@@ -95,6 +95,45 @@ describe('normalizeLlmConfig', () => {
     ))).toBe(true)
   })
 
+  it('给存量模型按内置目录补一次能力标注，并盖戳避免重复覆盖', () => {
+    const stored = {
+      providers: [{ providerId: 'kimi', displayName: 'Kimi', adapter: 'openai', baseUrl: 'https://api.moonshot.cn/v1', enabled: true }],
+      models: [{
+        providerId: 'kimi',
+        modelId: 'kimi-k3',
+        displayName: 'Kimi K3',
+        adapter: 'openai',
+        // 老配置里添加模型时能力项全是关的
+        capabilities: { text: true, image: false, video: false, audio: false, streaming: true, toolCall: false, jsonOutput: false },
+        enabled: true,
+      }],
+    } as unknown as Partial<LlmConfigState>
+
+    const migrated = normalizeLlmConfig(stored)
+    const model = migrated.models.find(item => item.providerId === 'kimi' && item.modelId === 'kimi-k3')
+    expect(model?.catalogId).toBe('kimi-k3')
+    expect(model?.capabilities).toMatchObject({ image: true, video: true, toolCall: true, sampling: false })
+
+    // 盖过戳之后，用户手动关掉的能力不能在下一次保存时被目录改回去
+    const edited = normalizeLlmConfig({
+      ...migrated,
+      models: migrated.models.map(item => (
+        item.modelId === 'kimi-k3'
+          ? { ...item, capabilities: { ...item.capabilities, video: false } }
+          : item
+      )),
+    })
+    expect(edited.models.find(item => item.modelId === 'kimi-k3')?.capabilities.video).toBe(false)
+  })
+
+  it('把从来没接通过的 anthropic 适配器收敛成 openai', () => {
+    const config = normalizeLlmConfig({
+      providers: [{ providerId: 'legacy', displayName: 'Legacy', adapter: 'anthropic', baseUrl: 'https://example.com', enabled: true }],
+      models: [],
+    } as unknown as Partial<LlmConfigState>)
+    expect(config.providers.find(item => item.providerId === 'legacy')?.adapter).toBe('openai')
+  })
+
   it('保留用户明确清空的文本处理模板，并过滤无名称模板', () => {
     const defaults = normalizeLlmConfig(null)
     expect(normalizeLlmConfig({

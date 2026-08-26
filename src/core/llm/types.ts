@@ -42,6 +42,13 @@ export interface LlmModelConfig {
   apiProtocol?: LlmApiProtocol
   baseUrl?: string
   capabilities: LlmCapabilities
+  /**
+   * 命中的内置模型能力目录条目 id（`src/core/llm/modelCatalog.ts`）。
+   *
+   * 只表示"这条配置已经按目录自动标注过一次"，用来避免归一化在每次保存时反复覆盖用户的手工修改；
+   * 值为空且模型 ID 能查到目录条目时，归一化会补一次标注并写上这个字段。
+   */
+  catalogId?: string
   pricing?: {
     currency: 'USD'
     inputPerMillionTokens: number
