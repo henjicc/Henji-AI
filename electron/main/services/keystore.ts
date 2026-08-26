@@ -2,6 +2,10 @@ import { app, safeStorage } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { createMainLogger } from './logging'
+
+const logger = createMainLogger('main.services.keystore')
+
 const APP_IDENTIFIER = 'com.henji.ai'
 const DATA_DIR_NAME = 'Henji-AI'
 const KEYSTORE_FILE_NAME = 'provider-keys.enc.json'
@@ -102,18 +106,51 @@ export function removeKey(namespace: KeyNamespace, providerId: string): void {
   writeKeystoreFile(data)
 }
 
-export function getKey(namespace: KeyNamespace, providerId: string): string | null {
-  ensureEncryptionAvailable()
-  const encrypted = readKeystoreFile().keys[buildKey(namespace, providerId)]
-  if (!encrypted) {
+/**
+ * 解不开的条目按"没有这个密钥"处理，不抛。
+ *
+ * 密文是用当前设备当前应用身份的密钥加密的，换机器、重置钥匙串、把资料目录拷到另一台机器、
+ * 或以另一种方式启动同一份产物（例如自动化脚本直接跑 `out/main/index.cjs`），都会让
+ * `decryptString` 抛错。此前这个错会一路冒到调用方，启动路径上就成了 unhandled rejection，
+ * **窗口根本不出来**——一条读不出来的旧密钥把整个应用堵死。实测 `check:canvas-visual`
+ * 就是这么起不来的。
+ *
+ * 返回 null 之后表现为"该供应商未配置密钥"，用户重新填一次即可；不主动删掉这条密文，
+ * 因为钥匙串恢复后它还能用，静默删除是不可逆的。
+ */
+function decryptStoredKey(encrypted: string, storeKey: string): string | null {
+  try {
+    return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
+  } catch (error) {
+    logger.warn('已保存的密钥无法解密，按未配置处理', {
+      event: 'keystore.decrypt.failed',
+      context: { storeKey },
+      error,
+    })
     return null
   }
-
-  return safeStorage.decryptString(Buffer.from(encrypted, 'base64'))
 }
 
+function readStoredKey(namespace: KeyNamespace, providerId: string): string | null {
+  const storeKey = buildKey(namespace, providerId)
+  const encrypted = readKeystoreFile().keys[storeKey]
+  return encrypted ? decryptStoredKey(encrypted, storeKey) : null
+}
+
+export function getKey(namespace: KeyNamespace, providerId: string): string | null {
+  ensureEncryptionAvailable()
+  return readStoredKey(namespace, providerId)
+}
+
+/**
+ * "有没有配"要和 `getKey` 读得出来保持一致：解不开的条目在界面上不该显示成已配置，
+ * 否则用户看到"已配置"却怎么都用不了，也不知道该去重填。
+ *
+ * 这里不走 `getKey`，是为了不带上它的 `ensureEncryptionAvailable()`——设备没有可用加密时
+ * 「查询有没有配」应该如实答"没有"，而不是抛错让整张状态列表失败。
+ */
 export function hasKey(namespace: KeyNamespace, providerId: string): boolean {
-  return readKeystoreFile().keys[buildKey(namespace, providerId)] !== undefined
+  return readStoredKey(namespace, providerId) !== null
 }
 
 export function setAiProviderApiKey(providerId: string, apiKey: string): void {
