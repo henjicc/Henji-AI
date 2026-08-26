@@ -38,4 +38,9 @@ describe('ParameterPanel 参数顺序', () => {
     param.name = { key: 'params.fields.channel', absolute: true }
     expect(isPrimarySelectorParam(param)).toBe(false)
   })
+
+  it('自定义标签的产品渠道（未使用共享 apiChannel key）也应显示在比例与分辨率之前', () => {
+    const param = dropdownParam('grsaiNanoBanana2Channel', '渠道', 'Channel')
+    expect(isPrimarySelectorParam(param)).toBe(true)
+  })
 })
