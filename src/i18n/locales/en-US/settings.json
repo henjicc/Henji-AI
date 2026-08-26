@@ -429,9 +429,9 @@
     "listTitle": "Model list",
     "visibleCount": "({{visible}}/{{total}} visible)",
     "alias": {
-      "label": "Alias",
-      "inputLabel": "Alias for {{name}}",
-      "sharedHint": "This alias will also apply to the same model under {{count}} providers"
+      "sectionTitle": "Aliases",
+      "sectionDescription": "Set once per model — it applies across every provider that offers it",
+      "inputLabel": "Alias for {{name}}"
     },
     "status": {
       "hidden": "Hidden",

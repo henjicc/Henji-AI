@@ -429,9 +429,9 @@
     "listTitle": "模型列表",
     "visibleCount": "({{visible}}/{{total}} 可见)",
     "alias": {
-      "label": "别名",
-      "inputLabel": "{{name}} 的别名",
-      "sharedHint": "该别名将同步应用到 {{count}} 个供应商下的同款模型"
+      "sectionTitle": "别名",
+      "sectionDescription": "同一模型无论由哪些供应商提供，只需设置一次，别名统一生效",
+      "inputLabel": "{{name}} 的别名"
     },
     "status": {
       "hidden": "已隐藏",

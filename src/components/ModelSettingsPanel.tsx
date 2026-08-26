@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import { getAvailableProviders } from '../utils/modelHelpers'
 import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
 import { getModelAliases, setModelAlias } from '../config/modelAliases'
@@ -9,10 +10,21 @@ import {
   UI_TEXT_META_CLASS,
   UiButton,
   UiChipButton,
+  UiDisclosurePanel,
   UiGroup,
   UiInput,
+  UiPanel,
 } from '@/components/ui'
 import Toggle from '@/components/ui/Toggle'
+
+interface AliasableModel {
+  canonicalModelId: string
+  originalName: string
+  type: 'image' | 'video' | 'audio'
+  providerNames: string[]
+}
+
+const MODEL_TYPE_SORT_ORDER: Record<AliasableModel['type'], number> = { image: 0, video: 1, audio: 2 }
 
 const ModelSettingsPanel: React.FC = () => {
   const { t } = useI18n('settings')
@@ -23,18 +35,42 @@ const ModelSettingsPanel: React.FC = () => {
   const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(() => getHiddenProviders())
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => getHiddenModels())
+  const [expandedProviders, setExpandedProviders] = useState<Set<string>>(() => new Set())
   const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>(() => getModelAliases())
 
-  // 同一 canonicalModelId 会出现在多个供应商行下，别名按此维度统一生效，
-  // 这里统计一下每个模型在当前列表里出现了几次，用来给用户一个"会同步影响其他供应商"的提示。
-  const canonicalModelCounts = useMemo(() => {
-    const counts = new Map<string, number>()
+  const toggleProviderExpanded = (providerId: string): void => {
+    setExpandedProviders(prev => {
+      const next = new Set(prev)
+      if (next.has(providerId)) next.delete(providerId)
+      else next.add(providerId)
+      return next
+    })
+  }
+
+  // 别名按 canonicalModelId 统一生效，不区分供应商，这里把同一模型在各供应商下的
+  // 记录合并成一条，只保留一份原始名称，同时收集它实际由哪些供应商提供。
+  const aliasableModels = useMemo<AliasableModel[]>(() => {
+    const map = new Map<string, AliasableModel>()
     providers.forEach(provider => {
       provider.models.forEach(model => {
-        counts.set(model.canonicalModelId, (counts.get(model.canonicalModelId) ?? 0) + 1)
+        const existing = map.get(model.canonicalModelId)
+        if (existing) {
+          if (!existing.providerNames.includes(provider.name)) existing.providerNames.push(provider.name)
+          return
+        }
+        map.set(model.canonicalModelId, {
+          canonicalModelId: model.canonicalModelId,
+          originalName: model.originalName,
+          type: model.type,
+          providerNames: [provider.name],
+        })
       })
     })
-    return counts
+    return Array.from(map.values()).sort((a, b) => {
+      const typeDiff = MODEL_TYPE_SORT_ORDER[a.type] - MODEL_TYPE_SORT_ORDER[b.type]
+      if (typeDiff !== 0) return typeDiff
+      return a.originalName.localeCompare(b.originalName, 'zh')
+    })
   }, [providers])
 
   const commitAlias = (canonicalModelId: string): void => {
@@ -264,98 +300,139 @@ const ModelSettingsPanel: React.FC = () => {
       </UiGroup>
 
       <UiGroup title={t('modelSettings.listTitle')} titleTone="overline" gap="stack">
-          {providers.map((provider, providerIndex) => {
+        <div className="space-y-3">
+          {providers.map(provider => {
             const stats = getProviderStats(provider)
+            const expanded = expandedProviders.has(provider.id)
             return (
-              <UiGroup
-                key={provider.id}
-                divided={providerIndex > 0}
-                title={provider.name}
-                description={t('modelSettings.visibleCount', { visible: stats.visible, total: stats.total })}
-                gap="none"
-                actions={(
-                  <>
-                    <UiButton
-                      type="button"
-                      size="sm"
-                      variant="muted"
-                      onClick={() => showAllModelsForProvider(provider.id)}
-                      className="h-7 px-2.5 text-xs"
-                    >
-                      {t('modelSettings.actions.showAll')}
-                    </UiButton>
-                    <UiButton
-                      type="button"
-                      size="sm"
-                      variant="muted"
-                      onClick={() => hideAllModelsForProvider(provider.id)}
-                      className="h-7 px-2.5 text-xs"
-                    >
-                      {t('modelSettings.actions.hideAll')}
-                    </UiButton>
-                  </>
-                )}
-              >
-                <div className="divide-y divide-border-dark/60">
-                  {provider.models.map(model => {
-                    const isHidden = isModelHidden(provider.id, model.id, model.type)
-                    const statusText = isHidden
-                      ? t('modelSettings.status.hidden')
-                      : t('modelSettings.status.visible')
-                    const sharedCount = canonicalModelCounts.get(model.canonicalModelId) ?? 1
-                    return (
-                      <div
-                        key={model.id}
-                        className="flex min-h-12 items-center justify-between gap-4 py-2.5"
+              <UiPanel key={provider.id} variant="inset" className="overflow-hidden">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-layer"
+                  onClick={() => toggleProviderExpanded(provider.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      toggleProviderExpanded(provider.id)
+                    }
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{provider.name}</div>
+                    <div className={UI_TEXT_META_CLASS}>
+                      {t('modelSettings.visibleCount', { visible: stats.visible, total: stats.total })}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+                      <UiButton
+                        type="button"
+                        size="sm"
+                        variant="muted"
+                        onClick={() => showAllModelsForProvider(provider.id)}
+                        className="h-7 px-2.5 text-xs"
                       >
-                        <div className={`flex min-w-0 items-center gap-3 ${isHidden ? 'opacity-60' : ''}`}>
-                          <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.originalName}</span>
-                          <span className={`text-xs px-2 py-0.5 rounded border ${getTypeBadgeColor(model.type)}`}>
-                            {getTypeLabel(model.type)}
-                          </span>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <span className={`shrink-0 whitespace-nowrap ${UI_TEXT_META_CLASS}`}>{t('modelSettings.alias.label')}</span>
-                          <UiInput
-                            value={aliasDrafts[model.canonicalModelId] ?? ''}
-                            onChange={(e) => {
-                              const value = e.target.value
-                              setAliasDrafts(prev => ({ ...prev, [model.canonicalModelId]: value }))
-                            }}
-                            onBlur={() => commitAlias(model.canonicalModelId)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') e.currentTarget.blur()
-                            }}
-                            placeholder={model.originalName}
-                            className="h-8 w-36 text-xs"
-                            aria-label={t('modelSettings.alias.inputLabel', { name: model.originalName })}
-                          />
-                          {sharedCount > 1 && (
-                            <span
-                              className={UI_TEXT_META_CLASS}
-                              title={t('modelSettings.alias.sharedHint', { count: sharedCount })}
-                            >
-                              ×{sharedCount}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <span className={UI_TEXT_META_CLASS}>{statusText}</span>
-                          <Toggle
-                            checked={!isHidden}
-                            onChange={() => toggleModelVisibility(provider.id, model.id)}
-                            onText={t('modelSettings.status.visible')}
-                            offText={t('modelSettings.status.hidden')}
-                            ariaLabel={`${model.name} · ${statusText}`}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
+                        {t('modelSettings.actions.showAll')}
+                      </UiButton>
+                      <UiButton
+                        type="button"
+                        size="sm"
+                        variant="muted"
+                        onClick={() => hideAllModelsForProvider(provider.id)}
+                        className="h-7 px-2.5 text-xs"
+                      >
+                        {t('modelSettings.actions.hideAll')}
+                      </UiButton>
+                    </span>
+                    {expanded ? <ChevronUp size={18} className="shrink-0 text-text-muted" /> : <ChevronDown size={18} className="shrink-0 text-text-muted" />}
+                  </div>
                 </div>
-              </UiGroup>
+
+                <div className="border-t border-border-dark">
+                  <UiDisclosurePanel open={expanded} className="px-4 py-2">
+                    <div className="divide-y divide-border-dark/60">
+                      {provider.models.map(model => {
+                        const isHidden = isModelHidden(provider.id, model.id, model.type)
+                        const statusText = isHidden
+                          ? t('modelSettings.status.hidden')
+                          : t('modelSettings.status.visible')
+                        return (
+                          <div
+                            key={model.id}
+                            className="flex min-h-12 items-center justify-between gap-4 py-2.5"
+                          >
+                            <div className={`flex min-w-0 items-center gap-3 ${isHidden ? 'opacity-60' : ''}`}>
+                              <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.name}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded border ${getTypeBadgeColor(model.type)}`}>
+                                {getTypeLabel(model.type)}
+                              </span>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-3">
+                              <span className={UI_TEXT_META_CLASS}>{statusText}</span>
+                              <Toggle
+                                checked={!isHidden}
+                                onChange={() => toggleModelVisibility(provider.id, model.id)}
+                                onText={t('modelSettings.status.visible')}
+                                offText={t('modelSettings.status.hidden')}
+                                ariaLabel={`${model.name} · ${statusText}`}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </UiDisclosurePanel>
+                </div>
+              </UiPanel>
             )
           })}
+        </div>
+      </UiGroup>
+
+      <UiGroup
+        title={t('modelSettings.alias.sectionTitle')}
+        description={t('modelSettings.alias.sectionDescription')}
+        titleTone="overline"
+        gap="stack"
+      >
+        <div className="divide-y divide-border-dark/60">
+          {aliasableModels.map(entry => (
+            <div
+              key={entry.canonicalModelId}
+              className="flex min-h-12 items-center justify-between gap-4 py-2.5"
+            >
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{entry.originalName}</span>
+                <span className={`shrink-0 text-xs px-2 py-0.5 rounded border ${getTypeBadgeColor(entry.type)}`}>
+                  {getTypeLabel(entry.type)}
+                </span>
+              </div>
+              <span
+                className={`hidden max-w-40 truncate sm:block ${UI_TEXT_META_CLASS}`}
+                title={entry.providerNames.join('、')}
+              >
+                {entry.providerNames.join('、')}
+              </span>
+              <div className="w-40 shrink-0">
+                <UiInput
+                  value={aliasDrafts[entry.canonicalModelId] ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setAliasDrafts(prev => ({ ...prev, [entry.canonicalModelId]: value }))
+                  }}
+                  onBlur={() => commitAlias(entry.canonicalModelId)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur()
+                  }}
+                  placeholder={entry.originalName}
+                  className="h-8 text-xs"
+                  aria-label={t('modelSettings.alias.inputLabel', { name: entry.originalName })}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </UiGroup>
     </div>
   )
