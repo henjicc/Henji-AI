@@ -120,6 +120,12 @@ npx vitest run
 
 当问题必须回答“在真实应用里到底通不通”，统一走 `npm run test:reality`，按证据成本选层，禁止另写一条临时 Electron/Playwright 启动链：
 
+> ⚠️ **`ui` / `ui-audit` 跑的是 `out/` 里的构建产物，而且它不构建、也不检查产物新旧。**
+> 只改源码没重新构建就跑，截图里是**上一次构建的界面**，全绿也毫无意义——它连
+> `out/main/index.cjs` 存不存在都不校验。改了渲染层就先 `npx electron-vite build`
+> 再跑巡检（`npm run electron:build` 会连带跑全部静态检查，只为看界面时用不着）。
+> 判断产物是否够新：`stat -f '%Sm %N' -t '%H:%M:%S' out/renderer/assets/index-*.css` 与你的改动时间比。
+
 | 层 | `--suite` | 使用的真实性 |
 |---|---|---|
 | 精确逻辑 | `unit --test <文件>` | 正式代码与精确输入，不启动应用 |
