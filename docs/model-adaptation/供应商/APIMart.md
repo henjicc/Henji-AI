@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-26 |
 | 供应商类型 | 聚合中转（非模型原厂） |
 | 项目内 providerId | `apimart` |
 | 主域名 | `apimart.ai`（海外主站） |
@@ -33,7 +33,7 @@ https://api.apimart.ai
 
 **实测结论（2026-08-22，未登录 curl）**：四个 `api.*` 主机对 `GET /v1/models` 均返回 `401 {"error":{"message":"API key is required ...","type":"apimart_error"}}`，即**四条线路都是同一套 API，仅域名不同，路径与协议完全一致**；四个 `upload.*` 主机均返回 200。
 
-> 适配含义：Base URL 应当**可配置或有受控备用线路**，而不是只硬编码 `api.apimart.ai`，否则大陆用户在主线路不可达时无法自救。当前代码状态见第 9 节。
+> 适配含义：Base URL 应当**可配置或有受控备用线路**，而不是只硬编码 `api.apimart.ai`，否则大陆用户在主线路不可达时无法自救。当前代码状态见第 9 节（连通性探测 + 进程内记忆，不做地理位置判断）。
 >
 > 注意：生成结果 URL 与上传返回 URL 用的是**请求时那条线路的 `upload.*` 域名**，切换线路后旧结果链接是否仍可访问未验证，转存时按原域名下载。
 
@@ -210,7 +210,7 @@ curl https://api.apimart.ai/v1/user/balance -H "Authorization: Bearer $KEY"   # 
 
 已知差异：
 
-1. Base URL 默认使用 `https://api.apimart.ai`；仅在能证明尚未建立连接的网络故障下，按 `api.apib.ai` → `api.aiuxu.com` → `api.aishuch.com` 受控切换，不对已建立连接的失败重放计费请求
+1. Base URL 默认顺序是 `api.apimart.ai` → `api.apib.ai` → `api.aiuxu.com` → `api.aishuch.com`；仅在能证明尚未建立连接的网络故障下受控切换下一个域名，不对已建立连接的失败重放计费请求。不做地理位置判断，改用**连通性探测 + 进程内记忆**：任意一次请求成功命中某个域名后（含应用启动时的后台预热探测），该域名会被记为本次进程运行期间的优先域名，后续请求直接从它开始尝试，其余域名仍留作 fallback；缓存只在内存中，不持久化，应用重启后重新判断。实现见 [apimart-endpoints.ts](../../../electron/main/services/ai-runtime/apimart-endpoints.ts)，启动预热调用见 [electron/main/index.ts](../../../electron/main/index.ts)（仅在已配置 APIMart Key 时触发，不阻塞启动）
 2. 图片已经接入 `/v1/uploads/images`；APIMart 没有通用视频 / 音频上传端点，公共预处理层会明确拒绝这两类本地文件并提示改用公网 URL，具体模型有专用上传协议时再单独接入
 3. `extractUrls` 已处理 `images[].url` 为数组的情况（`collectDeepUrls` 深挖），无需改
 4. 未使用 Webhook（桌面端合理），不需要改

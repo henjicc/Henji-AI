@@ -1,5 +1,5 @@
 import { AiRuntimeError } from '../errors'
-import { buildApiMartEndpoints } from '../apimart-endpoints'
+import { buildApiMartEndpoints, markApiMartEndpointReachable } from '../apimart-endpoints'
 import { POLL_QUERY_FAILED, pollUntilResult } from '../polling'
 import type { JsonValue, ProviderContinuePollingInput, ProviderExecutionInput, ProviderExecutionResult } from '../types'
 import { collectDeepUrls, getPointer, isJsonObject, readJsonResponse, stringAt } from './helpers'
@@ -50,6 +50,7 @@ async function sendCreateTask(input: ProviderExecutionInput): Promise<JsonValue>
     // 仅在能证明尚未建立连接时切换官方大陆备用线路，避免扩大重放范围。
     retryPreconnectOnce: true,
     fallbackEndpoints: endpoints.slice(1),
+    onEndpointReached: markApiMartEndpointReachable,
   })
   const payload = await readJsonResponse(response, 'APIMart')
   assertPayloadSucceeded(payload, 'APIMart create task failed')
@@ -68,6 +69,7 @@ async function pollTask(input: ProviderContinuePollingInput): Promise<JsonValue>
     }, {
       retryPreconnectOnce: true,
       fallbackEndpoints: endpoints.slice(1),
+      onEndpointReached: markApiMartEndpointReachable,
     })
     const payload = await readJsonResponse(response, 'APIMart')
     const status = extractStatus(payload)

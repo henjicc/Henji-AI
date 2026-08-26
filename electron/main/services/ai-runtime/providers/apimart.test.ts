@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { resetApiMartEndpointPreference } from '../apimart-endpoints'
 import { continuePolling, execute } from './apimart'
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -12,6 +13,7 @@ function jsonResponse(payload: unknown, status = 200): Response {
 describe('APIMart provider', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    resetApiMartEndpointPreference()
   })
 
   it('提交任务时附带鉴权、响应版本与幂等键', async () => {
@@ -102,6 +104,30 @@ describe('APIMart provider', () => {
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       'https://api.apimart.ai/v1/images/generations',
+      'https://api.apib.ai/v1/images/generations',
+    ])
+  })
+
+  it('记住上次成功的备用域名，后续请求直接优先使用它', async () => {
+    const networkError = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('unreachable'), { code: 'ENETUNREACH' }),
+    })
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(networkError)
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'task-cn-1', status: 'submitted' } }, 202))
+      .mockResolvedValueOnce(jsonResponse({ data: { id: 'task-cn-2', status: 'submitted' } }, 202))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await execute({
+      apiKey: 'secret', route: '/v1/images/generations', method: 'POST', body: {}, requestId: 'request-cn-1'
+    })
+    await execute({
+      apiKey: 'secret', route: '/v1/images/generations', method: 'POST', body: {}, requestId: 'request-cn-2'
+    })
+
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      'https://api.apimart.ai/v1/images/generations',
+      'https://api.apib.ai/v1/images/generations',
       'https://api.apib.ai/v1/images/generations',
     ])
   })

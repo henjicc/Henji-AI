@@ -1,6 +1,6 @@
 import { getAiProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
-import { buildApiMartEndpoints } from './apimart-endpoints'
+import { buildApiMartEndpoints, markApiMartEndpointReachable } from './apimart-endpoints'
 import { fetchProvider } from './providers/provider-fetch'
 import type {
   ProviderConnectionStatus,
@@ -11,26 +11,25 @@ const logger = createMainLogger('ai-runtime.provider_connection')
 const CONNECTION_TIMEOUT_MS = 12_000
 
 interface ProviderProbe {
-  endpoint: string
-  fallbackEndpoints?: readonly string[]
+  // 惰性求值：APIMart 的顺序会随连通性缓存变化，不能在模块加载时就固定下来。
+  endpoints: () => readonly string[]
   authorizationPrefix: 'Bearer'
   kind: 'kie_balance' | 'apimart_balance' | 'model_catalog'
 }
 
 const PROVIDER_PROBES: Readonly<Record<string, ProviderProbe>> = {
   kie: {
-    endpoint: 'https://api.kie.ai/api/v1/chat/credit',
+    endpoints: () => ['https://api.kie.ai/api/v1/chat/credit'],
     authorizationPrefix: 'Bearer',
     kind: 'kie_balance',
   },
   apimart: {
-    endpoint: buildApiMartEndpoints('/v1/balance')[0],
-    fallbackEndpoints: buildApiMartEndpoints('/v1/balance').slice(1),
+    endpoints: () => buildApiMartEndpoints('/v1/balance'),
     authorizationPrefix: 'Bearer',
     kind: 'apimart_balance',
   },
   ppio: {
-    endpoint: 'https://api.ppio.com/openai/v1/models',
+    endpoints: () => ['https://api.ppio.com/openai/v1/models'],
     authorizationPrefix: 'Bearer',
     kind: 'model_catalog',
   },
@@ -155,7 +154,8 @@ export async function testProviderConnection(
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT_MS)
   try {
-    const response = await fetchProvider(providerId, probe.endpoint, {
+    const [endpoint, ...fallbackEndpoints] = probe.endpoints()
+    const response = await fetchProvider(providerId, endpoint, {
       method: 'GET',
       headers: {
         Authorization: `${probe.authorizationPrefix} ${apiKey}`,
@@ -164,7 +164,8 @@ export async function testProviderConnection(
       signal: controller.signal,
     }, {
       retryPreconnectOnce: true,
-      fallbackEndpoints: probe.fallbackEndpoints,
+      fallbackEndpoints,
+      onEndpointReached: probe.kind === 'apimart_balance' ? markApiMartEndpointReachable : undefined,
     })
     const payload = probe.kind === 'model_catalog' ? null : await readResponsePayload(response)
     const tested = probe.kind === 'kie_balance'

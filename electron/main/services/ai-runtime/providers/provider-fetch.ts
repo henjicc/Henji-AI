@@ -46,14 +46,20 @@ export async function fetchProvider(
   provider: string,
   endpoint: string,
   init: RequestInit,
-  options: { retryPreconnectOnce: boolean; fallbackEndpoints?: readonly string[] }
+  options: {
+    retryPreconnectOnce: boolean
+    fallbackEndpoints?: readonly string[]
+    onEndpointReached?: (endpoint: string) => void
+  }
 ): Promise<Response> {
   const endpoints = [endpoint, ...(options.fallbackEndpoints ?? []).filter((value) => value !== endpoint)]
   let lastFailure: NetworkFailure | undefined
 
   for (let index = 0; index < endpoints.length; index += 1) {
     try {
-      return await fetch(endpoints[index], init)
+      const response = await fetch(endpoints[index], init)
+      options.onEndpointReached?.(endpoints[index])
+      return response
     } catch (error) {
       if (isAbort(error, init.signal ?? undefined)) throw error
       const failure = describeNetworkFailure(error)
@@ -64,7 +70,9 @@ export async function fetchProvider(
       if (options.retryPreconnectOnce && isSafePreconnectFailure) {
         await new Promise<void>((resolve) => setTimeout(resolve, 250))
         try {
-          return await fetch(endpoints[index], init)
+          const response = await fetch(endpoints[index], init)
+          options.onEndpointReached?.(endpoints[index])
+          return response
         } catch (retryError) {
           if (isAbort(retryError, init.signal ?? undefined)) throw retryError
           lastFailure = describeNetworkFailure(retryError)
