@@ -39,10 +39,17 @@ export function validateModelParamConventions(
     }
   }
 
-  // 漏写 role 的兜底 1：用了共享「渠道」词表，却没声明自己是渠道。
+  // 渠道字段名与 role 必须一一对应：用了共享「渠道」词表就得声明 role，
+  // 声明了 role 就得用共享词表。「渠道」在所有供应商上含义相同（走哪个接入点），
+  // 统一走共享 key 才能集中翻译，也防止叫法漂移成「接入点」「线路」。
+  // 注意这条只约束字段名，不约束选项——选项是供应商自己的产品叫法，见下方说明。
   model.params.forEach((param) => {
-    if (i18nKey(param.name) === 'params.fields.apiChannel' && param.role !== 'channel') {
+    const usesSharedChannelLabel = i18nKey(param.name) === 'params.fields.apiChannel'
+    if (usesSharedChannelLabel && param.role !== 'channel') {
       fail(`Param using the shared Channel label must declare role 'channel': ${param.id}`)
+    }
+    if (param.role === 'channel' && !usesSharedChannelLabel) {
+      fail(`Channel param must use sharedFieldText('apiChannel') as its name: ${param.id}`)
     }
   })
 
@@ -77,15 +84,8 @@ export function validateModelParamConventions(
       fail(`Channel param must be a dropdown or radio: ${channelParam.id}`)
     }
 
-    // 共享「普通 / 官方」词表只覆盖两档渠道，用了它就必须严格是那两个选项；
-    // 渠道多于两档的模型改用自定义标签，选项由模型自己定义，不适用这条。
-    if (i18nKey(channelParam.name) === 'params.fields.apiChannel') {
-      const optionKeys = channelParam.options.map((option) => i18nKey(option.label)).sort()
-      const expectedOptionKeys = ['params.options.official', 'params.options.regular']
-      if (optionKeys.length !== expectedOptionKeys.length
-        || optionKeys.some((key, index) => key !== expectedOptionKeys[index])) {
-        fail(`Channel param options must use shared Regular and Official labels: ${channelParam.id}`)
-      }
-    }
+    // 刻意不校验选项文案。渠道选项是供应商自己的产品叫法（ext / VIP / CL / VT / 4K-VIP…），
+    // 共享「普通 / 官方」词表只在恰好两档、且正好是「第三方 vs 官方」时对得上，
+    // 曾因强制这两档逼得多档渠道绕开共享词表，反而把字段名也带偏了。选项交给模型自己定义。
   })
 }

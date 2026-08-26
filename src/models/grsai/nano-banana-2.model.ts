@@ -27,7 +27,7 @@ export const grsaiNanoBanana2Model = defineModel({
   params: [
     {
       id: 'grsaiNanoBanana2Channel', type: 'dropdown', order: 1, role: 'channel',
-      name: { zh: '渠道', en: 'Channel' }, default: 'standard',
+      name: sharedFieldText('apiChannel'), default: 'standard',
       options: [
         { value: 'standard', label: { zh: '标准', en: 'Standard' } },
         { value: 'cl-1k', label: { zh: 'CL · 1K', en: 'CL · 1K' } },

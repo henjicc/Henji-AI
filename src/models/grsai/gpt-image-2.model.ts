@@ -31,7 +31,7 @@ export const grsaiGptImage2Model = defineModel({
   params: [
     {
       id: 'grsaiGptImage2Channel', type: 'dropdown', order: 1, role: 'channel',
-      name: { zh: '渠道', en: 'Channel' }, default: 'standard',
+      name: sharedFieldText('apiChannel'), default: 'standard',
       options: [
         { value: 'standard', label: { zh: '标准', en: 'Standard' } },
         { value: 'vip', label: { zh: 'VIP', en: 'VIP' } }

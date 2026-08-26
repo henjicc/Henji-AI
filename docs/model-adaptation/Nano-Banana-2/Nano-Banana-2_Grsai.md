@@ -63,7 +63,7 @@
 ## 5. 适配要点
 
 - 本项目默认**绝对不显示**：`seed`、负面提示词。四个渠道文档都没有这两个字段。
-- 四个渠道共享同一套请求/响应结构，只有 `model` 枚举值、可选分辨率档位、价格不同。当前项目的渠道文案约定（`sharedOptionText('regular' | 'official')`）只覆盖两档，这里有 4 个渠道，代码没有套用那套共享词表——字段名仍叫「渠道」（保持跨模型术语一致），但选项标签是模型自定义的「标准 / CL·1K / CL·2K / CL·4K」。
+- 四个渠道共享同一套请求/响应结构，只有 `model` 枚举值、可选分辨率档位、价格不同。渠道参数按项目约定声明 `role: 'channel'` + `sharedFieldText('apiChannel')`（字段名统一显示「渠道」），选项文案则由模型自定义为「标准 / CL·1K / CL·2K / CL·4K」——项目不约束渠道选项文案，`sharedOptionText('regular' | 'official')` 只适用于恰好「第三方 vs 官方」两档的场景。
 - 标准渠道的分辨率（1K/2K/4K）是价格无关的自由选择；`cl` 三档的分辨率是绑死在渠道本身上的独立计价档位，代码直接把「渠道 + 分辨率」压平成 4 个渠道选项，只有选到「标准」时才显示分辨率下拉。
 - `pricing.calculator` 按渠道返回区间上限（无优惠价）：标准 ¥0.12、CL·1K ¥0.6、CL·2K ¥0.9、CL·4K ¥1.3。
 - `nano-banana-2-lite` 属于独立产品「Nano Banana 2 Lite」，不要并入本模型的渠道列表，适配要点见 [Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)。

@@ -30,7 +30,7 @@ export const grsaiNanoBananaProModel = defineModel({
   params: [
     {
       id: 'grsaiNanoBananaProChannel', type: 'dropdown', order: 1, role: 'channel',
-      name: { zh: '渠道', en: 'Channel' }, default: 'standard',
+      name: sharedFieldText('apiChannel'), default: 'standard',
       options: [
         { value: 'standard', label: { zh: '标准', en: 'Standard' } },
         { value: 'vt', label: { zh: 'VT（备用线路）', en: 'VT (Alt Route)' } },

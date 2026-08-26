@@ -11,7 +11,7 @@
 | 价格可见性 | 公开，无需登录（dashboard「模型列表」页） |
 | 项目当前状态 | 已接入，[src/models/grsai/gpt-image-2.model.ts](../../../src/models/grsai/gpt-image-2.model.ts)，`canonicalModelId: gpt-image-2` |
 
-> Grsai 的 GPT-Image-2 只有**两个渠道**，不像 Nano Banana 系列拆出一堆 `-cl`/`-vip` 变体。两个渠道的核心差异是**分辨率参数形态不同**（比例字符串 vs 像素值）和**价格差 3~4 倍**。两个渠道都不是 OpenAI 官方直连，是 Grsai 自己的两条转发线路，因此没有套用项目既有的「普通/官方」渠道文案约定（`sharedOptionText('regular'|'official')` 只支持这两个固定选项），代码里用自定义标签「标准/VIP」，字段名仍是「渠道」以保持跨模型术语一致。
+> Grsai 的 GPT-Image-2 只有**两个渠道**，不像 Nano Banana 系列拆出一堆 `-cl`/`-vip` 变体。两个渠道的核心差异是**分辨率参数形态不同**（比例字符串 vs 像素值）和**价格差 3~4 倍**。两个渠道都不是 OpenAI 官方直连，是 Grsai 自己的两条转发线路，所以选项没有套用「普通/官方」那套文案（那只适用于「第三方 vs 官方」的场景），代码里用自定义标签「标准/VIP」；字段名按项目约定仍走 `sharedFieldText('apiChannel')` 并声明 `role: 'channel'`，统一显示为「渠道」。
 
 ## 1. 请求参数（新版统一接口）
 
