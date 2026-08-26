@@ -2,13 +2,15 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-26 |
 | 模态 | 图片 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `fal-ai/nano-banana-2`、`fal-ai/nano-banana-2/edit` |
 | 接口形态 | 队列异步（推荐）或同步直连 |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录 |
+
+> **Fal 没有 Nano Banana 2 Lite。** 探测过 `fal-ai/nano-banana-2/lite`、`fal-ai/nano-banana-2-lite`、`fal-ai/nano-banana-2/lite/edit`、`fal-ai/nano-banana-2/fast` 均返回 404，主端点 `llms.txt` 全文也没有 "lite" 字样（2026-08-26 实测）。Fal 上想要低成本出图目前只能靠本模型的 `resolution: 0.5K` 档位，不是独立产品，因此本项目没有为 Fal 建 `Nano-Banana-2-Lite_Fal.md`。
 
 ## 1. 接入协议（Fal 通用）
 

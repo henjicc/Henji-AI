@@ -2,15 +2,15 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-26 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
-| 平台模型 ID | 标准版 `gemini-3.1-flash-image-preview`（别名 `nano-banana-2-ext`）<br>官方版 `gemini-3.1-flash-image-preview-official`（别名 `nano-banana-2`）<br>Lite `gemini-3.1-flash-lite-image`（别名 `nano-banana-2-lite`）、`gemini-3.1-flash-lite-image-ext`（别名 `nano-banana-2-lite-ext`） |
+| 平台模型 ID | 标准版 `gemini-3.1-flash-image-preview`（别名 `nano-banana-2-ext`）<br>官方版 `gemini-3.1-flash-image-preview-official`（别名 `nano-banana-2`） |
 | 接口形态 | **异步任务** |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录 |
 
-> APIMart 上 Nano Banana 2 有**两份文档、四个模型名**：主模型（含标准版 / 官方版）与 **Lite**。Lite 是独立文档、独立能力集与独立计费方式，适配时不要合并。
+> **Nano Banana 2 Lite 已拆分为独立文档**：[Nano-Banana-2-Lite_APIMart.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_APIMart.md)。它在代码里对应独立的 `canonicalModelId: nano-banana-2-lite`（[src/models/apimart/nano-banana-2-lite.model.ts](../../../src/models/apimart/nano-banana-2-lite.model.ts)），是独立产品模型，不是本模型的渠道或分辨率选项——本文件只覆盖主模型的标准版 / 官方版两条渠道。
 
 ---
 
@@ -68,51 +68,19 @@
 
 ---
 
-## 3. Lite 模型 `gemini-3.1-flash-lite-image` / `-ext`
+## 3. 适配要点
 
-Gemini 3.1 系列中最快、最便宜的图像模型，主打规模化低成本出图。走 Developer API 的 `interactions` 端点。
-
-### 3.1 与主模型的差异（文档明列）
-
-| 项 | 主模型 | Lite |
-|---|---|---|
-| 分辨率 | 0.5K / 1K / 2K / 4K | **仅 1K**。传 2K/4K/0.5K 会**静默降级为 1K，不报错**，前端无需暴露分辨率选项 |
-| 比例 | 15 个（含 1:4 / 4:1 / 1:8 / 8:1） | **11 个**（`auto`、`1:1`、`3:2`、`2:3`、`4:3`、`3:4`、`16:9`、`9:16`、`5:4`、`4:5`、`21:9`），**无极端比例** |
-| `n` | 只能 1 | **1–4**（`n>1` 后端并发多次上游请求，按实际成功张数计费；文档建议前端固定传 1） |
-| `google_search` / `google_image_search` | 支持 | **不支持**。上游未开放 Search 工具（会返回 "Search as tool is not enabled for this model"），平台适配器也不下发。**传了不报错、照常出图，但没有任何搜索增强效果** |
-| `official_fallback` | 支持 | **不支持**，且无 `-official` 变体 |
-| 计费 | 按张固定价 | **按 token** |
-| `mask_url` 局部重绘 | 不支持 | 不支持（Gemini 系列走 aspect ratio + 参考图，不走蒙版） |
-
-其余字段（`prompt`、`size`、`image_urls` 最多 14 张 / 单张 ≤ 10 MB / jpeg·png·webp、`nsfw_check`）与主模型一致，Lite 额外支持 `webhook`。
-
-### 3.2 Lite 价格
-
-文档说明：输入约 **$0.25/百万 token**、图片输出约 **$30/百万 token**，1K 单张 ≈ 1120 output token ≈ **$0.0336/张**（实际以后台倍率配置为准）。
-
-定价中心另列 `NANO-BANANA-2-LITE-EXT` 按张价：0.125 Credits/张 ≈ **$0.0125/张**（官方价 $0.015625，节省 20%）；`NANO-BANANA-2-LITE` 按 token：文本/图片输入 2 Credits/M ≈ $0.2/M、文本输出 12 Credits/M ≈ $1.2/M、图片输出 240 Credits/M ≈ **$24/M**。
-
-### 3.3 水印
-
-所有 Lite 生成的图片含 Google **SynthID** 隐形水印（上游行为，**无法关闭**）。
-
----
-
-## 4. 适配要点
-
-- 本项目默认**绝对不显示**：`seed`、负面提示词。APIMart 这几个模型都没有这两个字段。
-- **主模型与 Lite 必须拆成不同模型**：分辨率档位、比例集合、`n` 上限、搜索增强、计费方式全都不同。
+- 本项目默认**绝对不显示**：`seed`、负面提示词。APIMart 这两个渠道都没有这两个字段。
 - 主模型 `n` 只能是 1；`n` 必须是数字类型。
 - `size: auto` 在文生图与图生图下行为不同，建议永远显式下发比例。
-- Lite 的「传高分辨率静默降级」和「传 `google_search` 静默无效」两处是**沉默失败**，UI 上不要暴露这些开关，否则用户会以为生效了。
 - `google_image_search` 依赖 `google_search`，两者要做联动。
+- Lite 版本不要并入本模型：分辨率档位、比例集合、`n` 上限、搜索增强、计费方式都不同，是独立产品，见 [Nano-Banana-2-Lite_APIMart.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_APIMart.md)。
 
-## 5. 原始链接索引
+## 4. 原始链接索引
 
 | 信息 | 链接 | 是否需登录 |
 |---|---|---|
 | Nano banana2 图像生成（主模型） | https://docs.apimart.ai/cn/api-reference/images/gemini-3.1-flash/generation | 否 |
-| Nano Banana Lite 图像生成 | https://docs.apimart.ai/cn/api-reference/images/gemini-3.1-flash/generation-lite | 否 |
 | 获取任务状态 | https://docs.apimart.ai/cn/api-reference/tasks/status | 否 |
-| 定价中心（搜 NANO-BANANA-2-EXT / NANO-BANANA-2 / NANO-BANANA-2-LITE） | https://apimart.ai/zh/pricing | 否 |
+| 定价中心（搜 NANO-BANANA-2-EXT / NANO-BANANA-2） | https://apimart.ai/zh/pricing | 否 |
 | API Key 管理 | https://apimart.ai/keys | **是** |

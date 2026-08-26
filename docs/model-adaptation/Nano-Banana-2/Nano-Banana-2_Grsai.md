@@ -5,13 +5,13 @@
 | 最后更新 | 2026-08-26 |
 | 模态 | 图片 |
 | 供应商 | Grsai（聚合中转，详见 [Grsai 基础文档](../供应商/Grsai.md)） |
-| 平台模型 ID（渠道） | `nano-banana-2`、`nano-banana-2-lite`、`nano-banana-fast`、`nano-banana-2-cl`、`nano-banana-2-2k-cl`、`nano-banana-2-4k-cl` |
+| 平台模型 ID（渠道） | `nano-banana-2`、`nano-banana-2-cl`、`nano-banana-2-2k-cl`、`nano-banana-2-4k-cl` |
 | 接口形态 | 提交 `POST /v1/api/generate` + 轮询 `GET /v1/api/result`（新版统一接口，`replyType` 三选一） |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录（dashboard「模型列表」页） |
 | 项目当前状态 | 仅完成调研文档，未接入代码 |
 
-> Grsai 上 Nano Banana 2 拆成 **6 个平台模型名**，本质是同一个底层模型的不同「渠道」：官方渠道级价差可达 **近 30 倍**（`nano-banana-fast` ¥0.022 起 vs `nano-banana-2-4k-cl` 最高 ¥1.3），越贵的 `cl` 系渠道换来更高分辨率与官方公告里暗示的更好稳定性；`cl` 渠道历史上出现过两次专门针对它的调价（见第 4 节），侧面印证「cl 渠道更便宜但更容易被上游限流/降级」的说法。适配时建议做成模型内的「渠道」参数，而不是拆成 6 个模型卡片。
+> Grsai 上 Nano Banana 2 家族在 dashboard 里共有 6 个平台模型名，但其中 `nano-banana-2-lite` 与 `nano-banana-fast` 是**独立产品「Nano Banana 2 Lite」的渠道**，已拆到 [Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)（与 APIMart / KIE 两家供应商把 Lite 当独立模型的处理方式保持一致）。本文件只覆盖 Nano Banana 2 主模型的 **4 个渠道**：官方渠道级价差可达约 **10.8 倍**（`nano-banana-2` ¥0.06 起 vs `nano-banana-2-4k-cl` 最高 ¥1.3），越贵的 `cl` 系渠道换来更高分辨率与官方公告里暗示的更好稳定性；`cl` 渠道历史上出现过两次专门针对它的调价（见第 4 节），侧面印证「cl 渠道更便宜但更容易被上游限流/降级」的说法。适配时建议做成模型内的「渠道」参数，而不是拆成 4 个模型卡片。
 
 ## 1. 请求参数（新版统一接口）
 
@@ -19,7 +19,7 @@
 
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `model` | string | 必填 | 六个渠道枚举之一，见下表 |
+| `model` | string | 必填 | 四个渠道枚举之一，见下表 |
 | `prompt` | string | 必填 | 提示词 |
 | `images` | array\<string\> | 可选 | 参考图，base64 或 URL 混填，无需单独上传 |
 | `aspectRatio` | string | 可选 | 见 1.1 |
@@ -30,26 +30,24 @@
 
 通用 11 档：`auto`、`1:1`、`16:9`、`9:16`、`4:3`、`3:4`、`3:2`、`2:3`、`5:4`、`4:5`、`21:9`
 
-**Nano Banana 2 系列额外支持极端比例**：`1:4`、`4:1`、`1:8`、`8:1`（API 文档原文特别标注这四档是「nano-banana-2 系列额外支持」，未注明是否六个渠道全部适用，还是仅限主渠道，接入前需逐渠道实测）。
+**Nano Banana 2 系列额外支持极端比例**：`1:4`、`4:1`、`1:8`、`8:1`（API 文档原文特别标注这四档是「nano-banana-2 系列额外支持」，未注明是否四个渠道全部适用，接入前需逐渠道实测）。
 
-## 2. 六个渠道对照
+## 2. 四个渠道对照
 
 来源：[dashboard 模型列表](https://grsai.com/zh/dashboard/models)（2026-08-26 实测，未登录可见）。价格区间由「积分消耗 × 积分单价区间」得出，下限对应 ¥999 最高档充值套餐（约 5 折），上限对应无优惠单价，详见 [Grsai 基础文档 §5.1](../供应商/Grsai.md)。
 
 | 渠道 | 积分消耗 | 价格区间 | 支持分辨率 | 相对基准倍率 |
 |---|---|---|---|---|
 | `nano-banana-2` | 1200/次 | ¥0.06~¥0.12/次 | 1K / 2K / 4K | 1×（基准） |
-| `nano-banana-2-lite` | 440/次 | ¥0.022~¥0.044/次 | 未标注分辨率档位（页面无 1K/2K/4K 标签，推断只出默认档） | 0.37× |
-| `nano-banana-fast` | 440/次 | ¥0.022~¥0.044/次 | 未标注分辨率档位（同上） | 0.37× |
 | `nano-banana-2-cl` | 6000/次 | ¥0.3~¥0.6/次 | 1K | 5× |
 | `nano-banana-2-2k-cl` | 9000/次 | ¥0.45~¥0.9/次 | 2K | 7.5× |
 | `nano-banana-2-4k-cl` | 13000/次 | ¥0.65~¥1.3/次 | 4K | 10.8× |
 
-**`nano-banana-2-lite` 与 `nano-banana-fast` 积分消耗、价格区间完全相同，页面上都不带分辨率标签。** 这两个平台模型名是否指向同一个底层实现，还是历史遗留的两个入口，Grsai 文档没有明确说明——2026-07-01 公告提到「谷歌官方下架 gemini-2.5-flash-image（香蕉1）模型」后「切换底层模型」影响了 `nano-banana-fast`，措辞被截断未看到完整对应关系。**接入前必须实测确认二者是否等价**，不要假设可以合并成一个选项直接砍掉一个。
+更便宜的 Lite 定位渠道（`nano-banana-2-lite`、`nano-banana-fast`）属于独立产品「Nano Banana 2 Lite」，见 [Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)。
 
 ## 3. 响应
 
-结构、状态枚举、结果链接有效期等公共部分见 [Grsai 基础文档](../供应商/Grsai.md) 第 3、7 节，六个渠道共用同一套响应格式，不在本文件重复。
+结构、状态枚举、结果链接有效期等公共部分见 [Grsai 基础文档](../供应商/Grsai.md) 第 3、7 节，四个渠道共用同一套响应格式，不在本文件重复。
 
 ## 4. 价格变动历史（公告原文摘录，供判断渠道稳定性参考）
 
@@ -64,10 +62,9 @@
 
 ## 5. 适配要点
 
-- 本项目默认**绝对不显示**：`seed`、负面提示词。六个渠道文档都没有这两个字段。
-- 六个渠道共享同一套请求/响应结构，只有 `model` 枚举值、可选分辨率档位、价格不同，适合做成一个模型内的「渠道」下拉，而不是拆成 6 张模型卡片；但当前项目的渠道文案约定（`sharedOptionText('regular' | 'official')`）只覆盖两档，这里有 6 个渠道，需要先跟用户确认渠道选项的文案与数量如何呈现，再写 schema。
-- `nano-banana-2-lite` 与 `nano-banana-fast` 的关系必须先实测澄清，否则可能在 schema 里重复注册两个等价选项。
-- `imageSize` 参数是否在 `-lite`/`-fast` 渠道上被静默忽略或报错，需要实测（同类问题在其他供应商的 Lite 变体上出现过，例如 APIMart 的 Nano Banana 2 Lite 会静默降级到 1K）。
+- 本项目默认**绝对不显示**：`seed`、负面提示词。四个渠道文档都没有这两个字段。
+- 四个渠道共享同一套请求/响应结构，只有 `model` 枚举值、可选分辨率档位、价格不同，适合做成一个模型内的「渠道」下拉，而不是拆成 4 张模型卡片；但当前项目的渠道文案约定（`sharedOptionText('regular' | 'official')`）只覆盖两档，这里有 4 个渠道，需要先跟用户确认渠道选项的文案与数量如何呈现，再写 schema。
+- `nano-banana-2-lite`、`nano-banana-fast` 属于独立产品「Nano Banana 2 Lite」，不要并入本模型的渠道列表，适配要点见 [Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)。
 
 ## 6. 原始链接索引
 

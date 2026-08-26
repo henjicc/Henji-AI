@@ -6,8 +6,8 @@
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-08-26 |
-| 模型数量 | 主清单 18（图片 9 / 视频 9）+ 供应商专属 5 |
-| 模型供应商文档数量 | 65 |
+| 模型数量 | 主清单 19（图片 10 / 视频 9）+ 供应商专属 5 |
+| 模型供应商文档数量 | 69 |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal、派欧云、魔搭、Grsai（仅完成调研文档，未接入代码） |
 
 ## 一、目录结构约定
@@ -57,7 +57,7 @@ docs/model-adaptation/
 
 ## 三、模型清单
 
-### 图片（9）
+### 图片（10）
 
 | 模型 | 火山引擎 | 百炼 | APIMart | KIE | Fal | 派欧云 | 魔搭 | Grsai |
 |---|---|---|---|---|---|---|---|---|
@@ -67,11 +67,14 @@ docs/model-adaptation/
 | [Z-Image Turbo](Z-Image-Turbo/) | — | [✅ 官方](Z-Image-Turbo/Z-Image-Turbo_百炼.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_APIMart.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_KIE.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_Fal.md) | ❌ 无 | [✅](Z-Image-Turbo/Z-Image-Turbo_魔搭.md) | ❌ 无 |
 | [GPT-Image-2](GPT-Image-2/) | — | — | [✅](GPT-Image-2/GPT-Image-2_APIMart.md) | [✅](GPT-Image-2/GPT-Image-2_KIE.md) | [✅](GPT-Image-2/GPT-Image-2_Fal.md) | ❌ 无 | ❌ 无 | [✅ 调研中](GPT-Image-2/GPT-Image-2_Grsai.md) |
 | [Nano Banana 2](Nano-Banana-2/) | — | — | [✅](Nano-Banana-2/Nano-Banana-2_APIMart.md) | [✅](Nano-Banana-2/Nano-Banana-2_KIE.md) | [✅](Nano-Banana-2/Nano-Banana-2_Fal.md) | ❌ 无 | ❌ 无 | [✅ 调研中](Nano-Banana-2/Nano-Banana-2_Grsai.md) |
+| [Nano Banana 2 Lite](Nano-Banana-2-Lite/) | — | — | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_APIMart.md) | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_KIE.md) | ❌ 无（已探测确认，见 [Fal 文档说明](Nano-Banana-2/Nano-Banana-2_Fal.md)） | ❌ 无 | ❌ 无 | [✅ 调研中](Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md) |
 | [Nano Banana Pro](Nano-Banana-Pro/) | — | — | [✅](Nano-Banana-Pro/Nano-Banana-Pro_APIMart.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_KIE.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Fal.md) | ❌ 无 | ❌ 无 | [✅ 调研中](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md) |
 | [Midjourney](Midjourney/) | — | — | [✅](Midjourney/Midjourney_APIMart.md) | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Grok Imagine 2.0](Grok-Imagine-2.0/) | — | — | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_APIMart.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_KIE.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
 
 「✅ 调研中」表示 Grsai 侧已完成 API/价格调研文档，但尚未接入生成 runtime 代码（见 [Grsai 基础文档](供应商/Grsai.md)）。
+
+**Nano Banana 2 Lite 是独立模型，不是 Nano Banana 2 的分辨率/渠道选项**：代码里两者 `canonicalModelId` 不同（`nano-banana-2` vs `nano-banana-2-lite`），`generationModelDescriptions.ts` 也各自维护一条独立描述，APIMart/KIE 均已用独立 `.model.ts` 文件实现，因此本表把它列为单独一行，不再挂在 Nano Banana 2 文档里。
 
 ### 视频（9）
 
@@ -114,7 +117,8 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Qwen Image 3.0 | `qwen-image-3.0`、`qwen-image-3.0-pro` | `qwen3/{text-to-image,image-to-image}`、`qwen3-pro/text-to-image`、`qwen3/pro-image-to-image` | `alibaba/qwen-image-3/{text-to-image,edit}` |
 | Z-Image Turbo | `z-image-turbo` | `z-image` | `fal-ai/z-image/turbo`、`fal-ai/z-image/turbo/image-to-image`；魔搭 `Tongyi-MAI/Z-Image-Turbo` |
 | GPT-Image-2 | `gpt-image-2`（别名 `gpt-image-2-ext`）、`gpt-image-2-official` | `gpt-image-2-text-to-image`、`gpt-image-2-image-to-image` | `openai/gpt-image-2`、`openai/gpt-image-2/edit` |
-| Nano Banana 2 | `gemini-3.1-flash-image-preview`(-official)、`gemini-3.1-flash-lite-image`(-ext) | `nano-banana-2`、`nano-banana-2-lite` | `fal-ai/nano-banana-2`、`fal-ai/nano-banana-2/edit` |
+| Nano Banana 2 | `gemini-3.1-flash-image-preview`(-official) | `nano-banana-2` | `fal-ai/nano-banana-2`、`fal-ai/nano-banana-2/edit` |
+| Nano Banana 2 Lite | `gemini-3.1-flash-lite-image`(-ext) | `nano-banana-2-lite` | ❌ 无（已探测确认） |
 | Nano Banana Pro | `gemini-3-pro-image-preview`(-official) | `nano-banana-pro` | `fal-ai/nano-banana-pro`、`fal-ai/nano-banana-pro/edit` |
 | Midjourney | `midjourney`（Imagine）、`midjourney-blend`、`midjourney-edit`、`midjourney-video`（新路由均自动注入平台模型 ID） | — | — |
 | Grok Imagine 2.0 | `grok-imagine-2.0-ext`、`grok-imagine-image-2.0` | `grok-imagine-image-2-0/{text-to-image,image-edit,segment-map,segment-edit}` | `xai/grok-imagine-image/v2.0/{text-to-image,edit}` |
@@ -128,7 +132,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Kling 3.0 Omni | `kling-v3-omni` | `kling-3.0-omni/{text-to-video,image-to-video,reference-to-video,transformation}` | `fal-ai/kling-video/o3/{pro,standard}/...` |
 | Gemini Omni Flash | `gemini-omni-flash-preview`、`Omni-Flash-Ext` | `gemini-omni-video` + `/api/v1/omni/audio/create` + `/api/v1/omni/character/create` | `google/gemini-omni-flash/{image-to-video,reference-to-video}` |
 
-Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `model` 字段（如 `nano-banana-2-cl`、`gpt-image-2-vip`），渠道数量比 APIMart/KIE/Fal 常见的 2 档更多（Nano Banana 2 有 6 个、Nano Banana Pro 有 5 个），完整枚举见对应模型文档：[GPT-Image-2_Grsai.md](GPT-Image-2/GPT-Image-2_Grsai.md)、[Nano-Banana-2_Grsai.md](Nano-Banana-2/Nano-Banana-2_Grsai.md)、[Nano-Banana-Pro_Grsai.md](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md)。
+Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `model` 字段（如 `nano-banana-2-cl`、`gpt-image-2-vip`），渠道数量比 APIMart/KIE/Fal 常见的 2 档更多（Nano Banana 2 主模型 4 个、Nano Banana 2 Lite 2 个、Nano Banana Pro 5 个），完整枚举见对应模型文档：[GPT-Image-2_Grsai.md](GPT-Image-2/GPT-Image-2_Grsai.md)、[Nano-Banana-2_Grsai.md](Nano-Banana-2/Nano-Banana-2_Grsai.md)、[Nano-Banana-2-Lite_Grsai.md](Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)、[Nano-Banana-Pro_Grsai.md](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md)。
 
 ## 五、供应商通用协议速查
 
