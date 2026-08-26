@@ -17,6 +17,7 @@ const MODEL_LOCALE_FILES = [
   'models-bailian.json',
   'models-volcengine.json',
   'models-modelscope.json',
+  'models-grsai.json',
 ]
 
 function walkFiles(dir, matcher, results = []) {

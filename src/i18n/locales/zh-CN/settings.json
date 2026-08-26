@@ -101,6 +101,17 @@
           "keys": "API 密钥",
           "docs": "API 文档"
         }
+      },
+      "grsai": {
+        "label": "Grsai API 密钥",
+        "placeholder": "请输入 Grsai API 密钥",
+        "help": "前往 Grsai 控制台获取 API 密钥。",
+        "guide": "先去 {{home}} 了解产品，然后去 {{keys}} 获取密钥；接口说明见 {{docs}}。",
+        "links": {
+          "home": "Grsai 官网",
+          "keys": "API 密钥",
+          "docs": "API 文档"
+        }
       }
     }
   },

@@ -216,6 +216,10 @@ async function rewriteMediaSource(
   if (context.providerId === 'kie' || context.providerId === 'modelscope') {
     return await uploadForHostedUrl(prepared)
   }
+  if (context.providerId === 'grsai') {
+    // Grsai 没有独立上传接口，图片字段直接接受 base64/URL；本地文件转 data URI 内联进请求体即可。
+    return toDataUri(prepared.bytes, prepared.mimeType)
+  }
   return toDataUri(prepared.bytes, prepared.mimeType)
 }
 

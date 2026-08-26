@@ -1,4 +1,4 @@
-export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'apimart' | 'bailian' | 'volcengine'
+export type ApiKeyProvider = 'ppio' | 'fal' | 'modelscope' | 'kie' | 'apimart' | 'bailian' | 'volcengine' | 'grsai'
 export type UploadProvider = 'fal' | 'kie'
 
 export type ProviderLink = {
@@ -68,6 +68,14 @@ export const API_KEY_PROVIDERS: ApiKeyProviderMeta[] = [
       { id: 'home', url: 'https://console.volcengine.com/ark/' },
       { id: 'keys', url: 'https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey', guide: true },
       { id: 'docs', url: 'https://api.volcengine.com/api-docs/view?action=ImageGenerations&serviceCode=ark&version=2024-01-01' }
+    ]
+  },
+  {
+    id: 'grsai',
+    links: [
+      { id: 'home', url: 'https://grsai.ai/' },
+      { id: 'keys', url: 'https://grsai.ai/zh/dashboard/api-keys', guide: true },
+      { id: 'docs', url: 'https://qmy27nhsd9.apifox.cn/452392911e0' }
     ]
   }
 ]

@@ -9,7 +9,7 @@
 | 接口形态 | 提交 `POST /v1/api/generate` + 轮询 `GET /v1/api/result`（新版统一接口，`replyType` 三选一） |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录（dashboard「模型列表」页） |
-| 项目当前状态 | 仅完成调研文档，未接入代码 |
+| 项目当前状态 | 已接入，[src/models/grsai/nano-banana-2.model.ts](../../../src/models/grsai/nano-banana-2.model.ts)，`canonicalModelId: nano-banana-2` |
 
 > Grsai 上 Nano Banana 2 家族在 dashboard 里共有 5 个平台模型名，但其中 `nano-banana-2-lite` 是**独立产品「Nano Banana 2 Lite」的渠道**，已拆到 [Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)（与 APIMart / KIE 两家供应商把 Lite 当独立模型的处理方式保持一致）；另有一个价格/规格与它几乎一样的 `nano-banana-fast`，属于已排除的初代「香蕉」命名，不适配、不出现在任何渠道枚举里，见 [Grsai 基础文档 §7](../供应商/Grsai.md)。本文件只覆盖 Nano Banana 2 主模型的 **4 个渠道**：官方渠道级价差可达约 **10.8 倍**（`nano-banana-2` ¥0.06 起 vs `nano-banana-2-4k-cl` 最高 ¥1.3），越贵的 `cl` 系渠道换来更高分辨率与官方公告里暗示的更好稳定性；`cl` 渠道历史上出现过两次专门针对它的调价（见第 4 节），侧面印证「cl 渠道更便宜但更容易被上游限流/降级」的说法。适配时建议做成模型内的「渠道」参数，而不是拆成 4 个模型卡片。
 
@@ -63,9 +63,12 @@
 ## 5. 适配要点
 
 - 本项目默认**绝对不显示**：`seed`、负面提示词。四个渠道文档都没有这两个字段。
-- 四个渠道共享同一套请求/响应结构，只有 `model` 枚举值、可选分辨率档位、价格不同，适合做成一个模型内的「渠道」下拉，而不是拆成 4 张模型卡片；但当前项目的渠道文案约定（`sharedOptionText('regular' | 'official')`）只覆盖两档，这里有 4 个渠道，需要先跟用户确认渠道选项的文案与数量如何呈现，再写 schema。
+- 四个渠道共享同一套请求/响应结构，只有 `model` 枚举值、可选分辨率档位、价格不同。当前项目的渠道文案约定（`sharedOptionText('regular' | 'official')`）只覆盖两档，这里有 4 个渠道，代码没有套用那套共享词表——字段名仍叫「渠道」（保持跨模型术语一致），但选项标签是模型自定义的「标准 / CL·1K / CL·2K / CL·4K」。
+- 标准渠道的分辨率（1K/2K/4K）是价格无关的自由选择；`cl` 三档的分辨率是绑死在渠道本身上的独立计价档位，代码直接把「渠道 + 分辨率」压平成 4 个渠道选项，只有选到「标准」时才显示分辨率下拉。
+- `pricing.calculator` 按渠道返回区间上限（无优惠价）：标准 ¥0.12、CL·1K ¥0.6、CL·2K ¥0.9、CL·4K ¥1.3。
 - `nano-banana-2-lite` 属于独立产品「Nano Banana 2 Lite」，不要并入本模型的渠道列表，适配要点见 [Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)。
 - `nano-banana-fast` 已被明确排除、不适配，不要出现在本模型或 Lite 模型的任何渠道枚举里，见 [Grsai 基础文档 §7](../供应商/Grsai.md)。
+- 极端比例（1:4/4:1/1:8/8:1）文档未逐渠道确认是否全部支持，代码目前对四个渠道一视同仁地暴露这些选项，接入前建议用真实任务核实 `cl` 系渠道是否真的接受。
 
 ## 6. 原始链接索引
 

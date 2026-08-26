@@ -3,6 +3,7 @@ import type { ProviderContinuePollingInput, ProviderExecutionInput, ProviderExec
 import * as apimart from './apimart'
 import * as bailian from './bailian'
 import * as fal from './fal'
+import * as grsai from './grsai'
 import * as kie from './kie'
 import * as modelscope from './modelscope'
 import * as ppio from './ppio'
@@ -27,6 +28,8 @@ export async function executeGenerate(
       return await modelscope.execute(input)
     case 'fal':
       return await fal.execute(input)
+    case 'grsai':
+      return await grsai.execute(input)
     default:
       throw new AiRuntimeError('unsupported_provider', `Unsupported provider: ${providerId}`)
   }
@@ -51,6 +54,8 @@ export async function executeContinuePolling(
       return await modelscope.continuePolling(input)
     case 'fal':
       return await fal.continuePolling(input)
+    case 'grsai':
+      return await grsai.continuePolling(input)
     default:
       throw new AiRuntimeError('unsupported_provider', `Unsupported provider: ${providerId}`)
   }

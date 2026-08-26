@@ -8,7 +8,8 @@ export const PROVIDER_ORDER: Record<string, number> = {
   bailian: 3,
   volcengine: 4,
   modelscope: 5,
-  fal: 6
+  fal: 6,
+  grsai: 7
 }
 
 /** 生成 tab 模型面板的类型宏观分组顺序 */

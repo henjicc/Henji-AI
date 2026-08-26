@@ -32,6 +32,7 @@ import { registerMediaProtocolHandler, registerMediaProtocolScheme, restoreAllow
 import { configureMacDockIcon } from './app-icon'
 import { disposeAgentRuntimeService } from './services/agent-runtime/runtime'
 import { warmApiMartEndpointPreference } from './services/ai-runtime/apimart-endpoints'
+import { warmGrsaiEndpointPreference } from './services/ai-runtime/grsai-endpoints'
 import { getAiProviderApiKey } from './services/keystore'
 import { runLogRetention } from './services/logging'
 import { initializeUpdater } from './services/updater'
@@ -111,6 +112,10 @@ app.whenReady().then(() => {
   // 后台预热 APIMart 域名连通性，不阻塞启动；没配置 Key 的用户没有意义，跳过。
   if (getAiProviderApiKey('apimart')) {
     void warmApiMartEndpointPreference()
+  }
+  // 后台预热 Grsai 全球/国内节点连通性，同上不阻塞启动。
+  if (getAiProviderApiKey('grsai')) {
+    void warmGrsaiEndpointPreference()
   }
   // 无界面模型能力验证：接新供应商时请求体常要试几轮，不该每轮都让人去点设置界面。
   if (process.argv.includes('--verify-model')) {

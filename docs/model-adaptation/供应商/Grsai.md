@@ -4,14 +4,14 @@
 |---|---|
 | 最后更新 | 2026-08-26 |
 | 供应商类型 | 聚合中转（转发 Google Nano Banana 系列、OpenAI GPT Image 系列等第三方模型，非模型原厂） |
-| 项目内 providerId（拟定，尚未接入代码） | `grsai` |
+| 项目内 providerId | `grsai` |
 | 控制台域名 | `grsai.ai` 与 `grsai.com` 两个域名，页面结构、数据、API 域名完全一致（互为镜像，可视为同一站点） |
-| API 域名 | 全球节点 `grsaiapi.com`；国内直连节点 `grsai.dakka.com.cn` |
+| API 域名 | 全球节点 `grsaiapi.com`；国内直连节点 `grsai.dakka.com.cn`，已接入连通性探测 + 自动切换 |
 | 鉴权 | `Authorization: Bearer <API Key>` |
-| 任务模型 | 提交接口按 `replyType` 三选一：`json`（同步返回结果）/ `stream`（SSE 流）/ `async`（返回 `task_id`，另起轮询） |
+| 任务模型 | 提交接口按 `replyType` 三选一：`json`（同步返回结果）/ `stream`（SSE 流）/ `async`（返回 `task_id`，另起轮询）。本项目在发送边界统一强制 `async`，走轮询模式 |
 | 文档可见性 | 公开，无需登录（Apifox 文档站与 dashboard「模型列表」页均可匿名访问） |
 | 价格可见性 | 公开，无需登录（dashboard「模型列表」页直接给出每个模型的价格区间） |
-| 项目当前状态 | **仅完成本轮 API / 价格调研文档，尚未接入生成 runtime**（无 `electron/main/services/ai-runtime/providers/grsai.ts`，无 `.model.ts`），本文件与下述模型文档只作为后续实现的资料源 |
+| 项目当前状态 | **已接入生成 runtime**（[electron/main/services/ai-runtime/providers/grsai.ts](../../../electron/main/services/ai-runtime/providers/grsai.ts)），已适配 GPT-Image-2 / Nano Banana 2 / Nano Banana 2 Lite / Nano Banana Pro 四个模型的全部渠道，见第 9 节「项目对照」 |
 
 > Grsai 的核心特点是**同一个模型家族在其内部又拆成多个「渠道」**（官方叫法，如 `-cl`、`-vip`、`-vt`、`-lite` 后缀），渠道之间价格差异可达 10 倍以上，越便宜的渠道官方公告历史上出现过越多次限流 / 维护 / 降级事件（见第 8 节）。接入时建议把「渠道」做成模型内的顶层可选参数，而不是把每个渠道拆成独立模型卡片——具体取舍见各模型文档「适配要点」。**本项目只适配 Nano Banana 第 2 代与 Nano Banana Pro 两个家族，初代 Nano Banana 相关的平台模型名已被明确排除，见第 7 节。**
 
@@ -166,18 +166,36 @@ Grsai 用积分计费，dashboard「充值」页给出六档套餐（¥10 起，
 
 本项目适配范围只有 **Nano Banana 2**（[Nano-Banana-2_Grsai.md](../Nano-Banana-2/Nano-Banana-2_Grsai.md)）、**Nano Banana 2 Lite**（[Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)）、**Nano Banana Pro**（[Nano-Banana-Pro_Grsai.md](../Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md)）三个家族，`nano-banana` 与 `nano-banana-fast` 不在其中，不要在渠道枚举、价格对照或 schema 里出现这两个名字。以后如果 Grsai dashboard 上出现新的「香蕉 1」世代衍生渠道（例如再切换底层模型后改个新名字），按同样理由排除，不需要重新讨论。
 
-## 8. 已知不确定项（接入前需要逐条确认，不建议直接照搬实现）
+## 8. 已知不确定项
 
-1. **国内节点与全球节点的关系**：是同账号双活线路，还是各自独立环境，未实测。
-2. **新版接口结果 URL 有效期**：旧接口写 2 小时，新接口未写，两者是否一致未知。
-3. **`replyType: async` 首包与轮询响应字段是否完全一致**：示例数据看起来一致，但没有逐字段的官方说明。
-4. **`getAPIKeyCredits` / `getCredits` 的鉴权方式**：走生成用的 `Authorization: Bearer`，还是账户登录 `token` 字段，文档正文没写清楚。
-5. **Veo3（`veo3.1-fast`）是否可用**：只出现在「在线体验/文档」导航的「Veo API」旧版文档里，**没有出现在 dashboard「模型列表」的定价清单中**，说明它可能是未正式计价 / 未上线 / 已下线的状态，本轮不建议作为可接入模型记录，仅在此存档以免下次调研重复发现。
-6. **`violation`（违规）终态是否返还积分**：公告只写了 `failed` 会返还，`violation` 未提及。
+以下几项在真机核实前仍是假设，不代表官方已确认；代码里已按标注的方式处理，未来发现假设不成立时优先改文档、再改代码。
+
+1. **国内节点与全球节点的关系**：是同账号双活线路，还是各自独立环境，未实测。**处理方式**：已实现连通性探测 + 进程内记忆（[grsai-endpoints.ts](../../../electron/main/services/ai-runtime/grsai-endpoints.ts)，与 APIMart 同款策略），只在能证明尚未建立连接时切换，不重放已建立连接后的失败；底层数据是否互通仍未验证。
+2. **新版接口结果 URL 有效期**：旧接口写 2 小时，新接口未写，两者是否一致未知。**处理方式**：项目在任务完成时立即把结果下载转存到本地（`saveMediaFromUrl`），不依赖长期持有远程链接，实际风险已被规避。
+3. **`replyType: async` 首包与轮询响应字段是否完全一致**：示例数据看起来一致，但没有逐字段的官方说明。**处理方式**：`execute()` 对提交响应做了防御性判断——如果 `status` 已经是 `succeeded` 且带 `results`，直接按完成态返回，不强制走一次多余的轮询。
+4. **`getAPIKeyCredits` / `getCredits` 的鉴权方式**：走生成用的 `Authorization: Bearer`，还是账户登录 `token` 字段，文档正文没写清楚。**处理方式**：本轮**没有**接入余额探测（`provider-connection.ts` 的 `PROVIDER_PROBES` 里没有 `grsai` 条目），保持"已保存未校验"，避免拿不确定契约误判用户 Key 状态；接口方法也对不上（余额是 POST，探测框架统一用 GET）。
+5. **Veo3（`veo3.1-fast`）是否可用**：只出现在「在线体验/文档」导航的「Veo API」旧版文档里，**没有出现在 dashboard「模型列表」的定价清单中**，说明它可能是未正式计价 / 未上线 / 已下线的状态，不作为可接入模型，仅存档以免下次调研重复发现。
+6. **`violation`（违规）终态是否返还积分**：公告只写了 `failed` 会返还，`violation` 未提及，不影响本项目实现（两种状态在轮询里都按终止性失败处理）。
 
 ## 9. 项目对照
 
-尚未接入。后续若确认要做，按 `docs/rules/model-adaptation.md` 场景 A「新增供应商」流程：新建 `electron/main/services/ai-runtime/providers/grsai.ts`、在 `providers/index.ts` 注册分发、在 `keystore.ts` 的 `KNOWN_AI_PROVIDER_IDS` 与 `src/core/config/providers.ts` 补齐元信息、按需接入国际化文案。
+| 层级 | 位置 |
+|---|---|
+| 生成执行 / 轮询 | [electron/main/services/ai-runtime/providers/grsai.ts](../../../electron/main/services/ai-runtime/providers/grsai.ts) |
+| 双线路探测 | [electron/main/services/ai-runtime/grsai-endpoints.ts](../../../electron/main/services/ai-runtime/grsai-endpoints.ts) |
+| Provider 分发注册 | [electron/main/services/ai-runtime/providers/index.ts](../../../electron/main/services/ai-runtime/providers/index.ts) |
+| Key 存储 | [electron/main/services/keystore.ts](../../../electron/main/services/keystore.ts) → `KNOWN_AI_PROVIDER_IDS` |
+| 启动预热 | [electron/main/index.ts](../../../electron/main/index.ts)（仅在已配置 Key 时触发，不阻塞启动） |
+| 前端 Key 元信息 | [src/core/config/providers.ts](../../../src/core/config/providers.ts) |
+| 本地图片上传策略 | [electron/main/services/ai-runtime/upload.ts](../../../electron/main/services/ai-runtime/upload.ts)（内联 base64，无独立上传接口） |
+| 模型定义 | `src/models/grsai/{gpt-image-2,nano-banana-2,nano-banana-2-lite,nano-banana-pro}.model.ts` |
+| 国际化 | `src/i18n/locales/{zh-CN,en-US}/models-grsai.json`、`settings.json` 的 `apiKeys.providers.grsai` |
+| 测试 | `electron/main/services/ai-runtime/grsai-endpoints.test.ts`、`electron/main/services/ai-runtime/providers/grsai.test.ts`、`src/models/grsai/model-adaptation-images.test.ts` |
+
+已知欠账（记录在案，不阻塞当前交付）：
+
+- 余额查询未接入（见第 8 节第 4 项），设置页无法显示 Grsai 账户余额，只能显示"已保存"状态。
+- 未做真实 API Key 下的端到端联调（本地没有可用的 Grsai Key），当前实现完全基于文档与单元测试验证，接入前建议先用真实任务跑一轮 `npm run assistant:cli` 或手动生成核实请求/响应字段。
 
 ## 10. 原始链接索引
 

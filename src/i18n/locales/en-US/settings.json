@@ -101,6 +101,17 @@
           "keys": "API Key",
           "docs": "API Docs"
         }
+      },
+      "grsai": {
+        "label": "Grsai API Key",
+        "placeholder": "Enter Grsai API Key",
+        "help": "Get your API key from the Grsai dashboard.",
+        "guide": "Open {{home}} to learn more, then get a key from {{keys}}; see {{docs}} for API documentation.",
+        "links": {
+          "home": "Grsai Website",
+          "keys": "API Key",
+          "docs": "API Docs"
+        }
       }
     }
   },

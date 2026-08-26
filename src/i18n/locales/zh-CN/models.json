@@ -29,7 +29,8 @@
     "kie": "KIE",
     "apimart": "APIMart",
     "bailian": "百炼",
-    "volcengine": "火山引擎"
+    "volcengine": "火山引擎",
+    "grsai": "Grsai"
   },
   "tags": {
     "text-to-image": "图片生成",

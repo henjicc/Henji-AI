@@ -9,7 +9,7 @@
 | 接口形态 | 提交 `POST /v1/api/generate` + 轮询 `GET /v1/api/result`（新版统一接口，`replyType` 三选一） |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录（dashboard「模型列表」页） |
-| 项目当前状态 | 仅完成调研文档，未接入代码 |
+| 项目当前状态 | 已接入，[src/models/grsai/nano-banana-2-lite.model.ts](../../../src/models/grsai/nano-banana-2-lite.model.ts)，`canonicalModelId: nano-banana-2-lite` |
 
 > 本项目把 Nano Banana 2 Lite 当作独立产品模型（`canonicalModelId: nano-banana-2-lite`），与 [Nano Banana 2](../Nano-Banana-2/Nano-Banana-2_Grsai.md) 主模型分开建档，这个 Grsai 平台模型名原本记录在 Nano Banana 2 的 Grsai 文档里，现拆分到本文件，与 APIMart / KIE 的文档结构保持一致。
 
@@ -31,8 +31,9 @@ dashboard「模型列表」页还有一个 `nano-banana-fast`，积分消耗（4
 | `prompt` | string | 必填 | 提示词 |
 | `images` | array\<string\> | 可选 | 参考图，base64 或 URL 混填，无需单独上传 |
 | `aspectRatio` | string | 可选 | 通用 11 档（`auto`/`1:1`/`16:9`/`9:16`/`4:3`/`3:4`/`3:2`/`2:3`/`5:4`/`4:5`/`21:9`）；极端比例（`1:4`/`4:1`/`1:8`/`8:1`）文档标注为「nano-banana-2 系列额外支持」，Lite 是否包含在内未逐渠道验证 |
-| `imageSize` | string | 可选 | dashboard 页面未给这个渠道标注分辨率档位标签，推断只输出默认档（类比 APIMart/KIE 的 Lite 均固定 1K），**接入前需实测确认传 `2K`/`4K` 时是报错还是静默降级** |
 | `replyType` | string | 可选 | `json` / `stream` / `async` |
+
+代码没有为本模型注册 `imageSize` 参数、也不发送该字段——dashboard 页面未给这个渠道标注分辨率档位标签，类比 APIMart/KIE 的 Lite 均固定 1K，选择不暴露而不是猜一个可能报错的值。若后续证实 Grsai 这一档确实支持可选分辨率，再补参数。
 
 ## 3. 价格
 
@@ -48,7 +49,8 @@ dashboard「模型列表」页还有一个 `nano-banana-fast`，积分消耗（4
 
 - 本项目默认**绝对不显示**：`seed`、负面提示词。本渠道没有这两个字段。
 - **不要把 `nano-banana-fast` 收进本模型的渠道枚举**，它属于已排除的初代「香蕉」命名，见第 1 节与 [Grsai 基础文档 §7](../供应商/Grsai.md)。
-- 分辨率参数在本渠道上的真实行为（报错 / 静默降级 / 直接忽略）需要实测，不要照抄主模型的 `imageSize` 选项集合。
+- 代码没有暴露分辨率参数（见第 2 节），本渠道上分辨率参数的真实行为（报错 / 静默降级 / 直接忽略）未实测，接入前建议先用真实任务核实是否真的可以传 `imageSize` 拿到更高分辨率。
+- `pricing.calculator` 固定返回区间上限（无优惠价）¥0.044。
 - 与 [Nano Banana 2 主模型的 Grsai 文档](../Nano-Banana-2/Nano-Banana-2_Grsai.md) 共享同一套响应结构、状态枚举、结果链接有效期等不确定项，见 [Grsai 基础文档](../供应商/Grsai.md) 第 3、8 节，不在本文件重复。
 
 ## 5. 原始链接索引

@@ -29,7 +29,8 @@
     "kie": "KIE",
     "apimart": "APIMart",
     "bailian": "Alibaba Cloud Model Studio",
-    "volcengine": "Volcengine Ark"
+    "volcengine": "Volcengine Ark",
+    "grsai": "Grsai"
   },
   "tags": {
     "text-to-image": "Image Generation",

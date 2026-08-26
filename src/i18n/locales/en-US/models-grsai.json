@@ -1,0 +1,8 @@
+{
+  "defs": {
+    "grsai-gpt-image-2": { "meta": { "name": "GPT Image 2" } },
+    "grsai-nano-banana-2": { "meta": { "name": "Nano Banana 2" } },
+    "grsai-nano-banana-2-lite": { "meta": { "name": "Nano Banana 2 Lite" } },
+    "grsai-nano-banana-pro": { "meta": { "name": "Nano Banana Pro" } }
+  }
+}

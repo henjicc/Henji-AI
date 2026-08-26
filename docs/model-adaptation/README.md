@@ -8,7 +8,7 @@
 | 最后更新 | 2026-08-26 |
 | 模型数量 | 主清单 19（图片 10 / 视频 9）+ 供应商专属 5 |
 | 模型供应商文档数量 | 69 |
-| 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal、派欧云、魔搭、Grsai（仅完成调研文档，未接入代码） |
+| 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
 ## 一、目录结构约定
 
@@ -30,7 +30,7 @@ docs/model-adaptation/
 ```
 
 - **供应商名**使用项目内统一的中文显示名（`src/i18n/locales/zh-CN/models.json` → `models.providers`）：
-  派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎；Grsai 尚未接入代码，未在该 JSON 里登记，文档里沿用其官方品牌拼写
+  派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎 / Grsai（沿用其官方品牌拼写，未译中文名）
 - 每个供应商文件都是**自包含**的：接入协议、能力清单、请求参数、响应结构、价格、适配要点、原始链接索引，看完这一份就能完成该供应商的适配
 - 每份文件都标注**信息来源链接**以及**该链接是否需要登录**
 
@@ -45,7 +45,7 @@ docs/model-adaptation/
 - [火山引擎](供应商/火山引擎.md)：方舟端点、图片结果与 Files API 使用边界
 - [派欧云](供应商/派欧云.md)：异步任务协议、**无官方上传（借用 KIE）**、实名认证前置、在售清单极小
 - [魔搭](供应商/魔搭.md)：API-Inference 统一接口、**魔粒积分计费**、仅图片、可用性判定方法
-- [Grsai](供应商/Grsai.md)：聚合中转，**同一模型拆多个「渠道」**（`-cl`/`-vip`/`-vt`/`-lite` 等后缀，价差可达 10 倍以上）、无独立上传接口（图片直接 base64/URL 塞进请求体）、**仅完成本轮调研文档，尚未接入生成 runtime**
+- [Grsai](供应商/Grsai.md)：聚合中转，**同一模型拆多个「渠道」**（`-cl`/`-vip`/`-vt`/`-lite` 等后缀，价差可达 10 倍以上）、无独立上传接口（图片直接 base64/URL 塞进请求体）、双线路连通性探测
 
 ## 二、通用适配规则
 
@@ -65,14 +65,12 @@ docs/model-adaptation/
 | [Seedream 5.0 Lite](Seedream-5.0-Lite/) | [✅ 官方](Seedream-5.0-Lite/Seedream-5.0-Lite_火山引擎.md) | — | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_APIMart.md) | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_KIE.md) | [✅](Seedream-5.0-Lite/Seedream-5.0-Lite_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Qwen Image 3.0](Qwen-Image-3.0/) | — | [✅ 官方](Qwen-Image-3.0/Qwen-Image-3.0_百炼.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_APIMart.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_KIE.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Z-Image Turbo](Z-Image-Turbo/) | — | [✅ 官方](Z-Image-Turbo/Z-Image-Turbo_百炼.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_APIMart.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_KIE.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_Fal.md) | ❌ 无 | [✅](Z-Image-Turbo/Z-Image-Turbo_魔搭.md) | ❌ 无 |
-| [GPT-Image-2](GPT-Image-2/) | — | — | [✅](GPT-Image-2/GPT-Image-2_APIMart.md) | [✅](GPT-Image-2/GPT-Image-2_KIE.md) | [✅](GPT-Image-2/GPT-Image-2_Fal.md) | ❌ 无 | ❌ 无 | [✅ 调研中](GPT-Image-2/GPT-Image-2_Grsai.md) |
-| [Nano Banana 2](Nano-Banana-2/) | — | — | [✅](Nano-Banana-2/Nano-Banana-2_APIMart.md) | [✅](Nano-Banana-2/Nano-Banana-2_KIE.md) | [✅](Nano-Banana-2/Nano-Banana-2_Fal.md) | ❌ 无 | ❌ 无 | [✅ 调研中](Nano-Banana-2/Nano-Banana-2_Grsai.md) |
-| [Nano Banana 2 Lite](Nano-Banana-2-Lite/) | — | — | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_APIMart.md) | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_KIE.md) | ❌ 无（已探测确认，见 [Fal 文档说明](Nano-Banana-2/Nano-Banana-2_Fal.md)） | ❌ 无 | ❌ 无 | [✅ 调研中](Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md) |
-| [Nano Banana Pro](Nano-Banana-Pro/) | — | — | [✅](Nano-Banana-Pro/Nano-Banana-Pro_APIMart.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_KIE.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Fal.md) | ❌ 无 | ❌ 无 | [✅ 调研中](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md) |
+| [GPT-Image-2](GPT-Image-2/) | — | — | [✅](GPT-Image-2/GPT-Image-2_APIMart.md) | [✅](GPT-Image-2/GPT-Image-2_KIE.md) | [✅](GPT-Image-2/GPT-Image-2_Fal.md) | ❌ 无 | ❌ 无 | [✅](GPT-Image-2/GPT-Image-2_Grsai.md) |
+| [Nano Banana 2](Nano-Banana-2/) | — | — | [✅](Nano-Banana-2/Nano-Banana-2_APIMart.md) | [✅](Nano-Banana-2/Nano-Banana-2_KIE.md) | [✅](Nano-Banana-2/Nano-Banana-2_Fal.md) | ❌ 无 | ❌ 无 | [✅](Nano-Banana-2/Nano-Banana-2_Grsai.md) |
+| [Nano Banana 2 Lite](Nano-Banana-2-Lite/) | — | — | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_APIMart.md) | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_KIE.md) | ❌ 无（已探测确认，见 [Fal 文档说明](Nano-Banana-2/Nano-Banana-2_Fal.md)） | ❌ 无 | ❌ 无 | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md) |
+| [Nano Banana Pro](Nano-Banana-Pro/) | — | — | [✅](Nano-Banana-Pro/Nano-Banana-Pro_APIMart.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_KIE.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Fal.md) | ❌ 无 | ❌ 无 | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md) |
 | [Midjourney](Midjourney/) | — | — | [✅](Midjourney/Midjourney_APIMart.md) | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Grok Imagine 2.0](Grok-Imagine-2.0/) | — | — | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_APIMart.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_KIE.md) | [✅](Grok-Imagine-2.0/Grok-Imagine-2.0_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
-
-「✅ 调研中」表示 Grsai 侧已完成 API/价格调研文档，但尚未接入生成 runtime 代码（见 [Grsai 基础文档](供应商/Grsai.md)）。
 
 **Nano Banana 2 Lite 是独立模型，不是 Nano Banana 2 的分辨率/渠道选项**：代码里两者 `canonicalModelId` 不同（`nano-banana-2` vs `nano-banana-2-lite`），`generationModelDescriptions.ts` 也各自维护一条独立描述，APIMart/KIE 均已用独立 `.model.ts` 文件实现，因此本表把它列为单独一行，不再挂在 Nano Banana 2 文档里。
 
@@ -132,7 +130,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Kling 3.0 Omni | `kling-v3-omni` | `kling-3.0-omni/{text-to-video,image-to-video,reference-to-video,transformation}` | `fal-ai/kling-video/o3/{pro,standard}/...` |
 | Gemini Omni Flash | `gemini-omni-flash-preview`、`Omni-Flash-Ext` | `gemini-omni-video` + `/api/v1/omni/audio/create` + `/api/v1/omni/character/create` | `google/gemini-omni-flash/{image-to-video,reference-to-video}` |
 
-Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `model` 字段（如 `nano-banana-2-cl`、`gpt-image-2-vip`），渠道数量比 APIMart/KIE/Fal 常见的 2 档更多（Nano Banana 2 主模型 4 个、Nano Banana 2 Lite 2 个、Nano Banana Pro 5 个），完整枚举见对应模型文档：[GPT-Image-2_Grsai.md](GPT-Image-2/GPT-Image-2_Grsai.md)、[Nano-Banana-2_Grsai.md](Nano-Banana-2/Nano-Banana-2_Grsai.md)、[Nano-Banana-2-Lite_Grsai.md](Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)、[Nano-Banana-Pro_Grsai.md](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md)。
+Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `model` 字段（如 `nano-banana-2-cl`、`gpt-image-2-vip`），渠道数量比 APIMart/KIE/Fal 常见的 2 档更多（GPT-Image-2 2 个、Nano Banana 2 主模型 4 个、Nano Banana 2 Lite 1 个、Nano Banana Pro 5 个），完整枚举见对应模型文档：[GPT-Image-2_Grsai.md](GPT-Image-2/GPT-Image-2_Grsai.md)、[Nano-Banana-2_Grsai.md](Nano-Banana-2/Nano-Banana-2_Grsai.md)、[Nano-Banana-2-Lite_Grsai.md](Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)、[Nano-Banana-Pro_Grsai.md](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md)。
 
 ## 五、供应商通用协议速查
 
@@ -145,7 +143,7 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 | **Fal** | `https://fal.run` / `https://queue.fal.run` | `Authorization: Key $FAL_KEY` | `POST https://queue.fal.run/<endpoint-id>` | `GET .../requests/{id}/status`、`GET .../requests/{id}` | `images[]` / `video` |
 | **派欧云** | `https://api.ppio.com/v3`（代码仍用旧域名 `api.ppinfra.com`，待核实） | `Authorization: Bearer <KEY>` | `POST /v3/async/<route>` | `GET /v3/async/task-result?task_id=` | `images[].image_url` / `videos[].video_url` / `audios[].audio_url`（TTL 3600s） |
 | **魔搭** | `https://api-inference.modelscope.cn` | `Authorization: Bearer <TOKEN>` | `POST /v1/images/generations` + 头 `X-ModelScope-Async-Mode: true`（代码写的是 `/api/v1/jobs/createTask`，待核实） | `GET /v1/tasks/{task_id}` + 头 `X-ModelScope-Task-Type: image_generation` | `output_images[]` |
-| **Grsai**（未接入代码） | `https://grsaiapi.com`（全球）/ `https://grsai.dakka.com.cn`（国内直连） | `Authorization: Bearer <API Key>` | `POST /v1/api/generate`（`replyType` 控制同步/流式/异步） | `GET /v1/api/result?id=` | `results[].url` |
+| **Grsai** | `https://grsaiapi.com`（全球）/ `https://grsai.dakka.com.cn`（国内直连，已接入连通性探测+自动切换） | `Authorization: Bearer <API Key>` | `POST /v1/api/generate`（`replyType` 项目侧统一强制 `async`） | `GET /v1/api/result?id=` | `results[].url` |
 
 任务状态枚举：
 - APIMart：`pending` / `processing` / `completed` / `failed` / `cancelled`（Midjourney 另有 MJ 风格状态 `NOT_START` / `SUBMITTED` / `IN_PROGRESS` / `MODAL` / `SUCCESS` / `FAILURE`）

@@ -17,6 +17,9 @@ interface ProviderProbe {
   kind: 'kie_balance' | 'apimart_balance' | 'model_catalog'
 }
 
+// Grsai 暂未加入探测表：其余额接口 `POST /client/openapi/getAPIKeyCredits` 用 POST（这里统一是 GET），
+// 且鉴权走 Authorization Bearer 还是账户 token 字段官方文档没写清楚，接入前需登录控制台核实，
+// 详见 docs/model-adaptation/供应商/Grsai.md §5.2。宁可保持"已保存未校验"，也不要拿一个不确定的契约去误判用户 Key 状态。
 const PROVIDER_PROBES: Readonly<Record<string, ProviderProbe>> = {
   kie: {
     endpoints: () => ['https://api.kie.ai/api/v1/chat/credit'],
