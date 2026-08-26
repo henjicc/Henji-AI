@@ -13,7 +13,7 @@
 | 价格可见性 | 公开，无需登录（dashboard「模型列表」页直接给出每个模型的价格区间） |
 | 项目当前状态 | **仅完成本轮 API / 价格调研文档，尚未接入生成 runtime**（无 `electron/main/services/ai-runtime/providers/grsai.ts`，无 `.model.ts`），本文件与下述模型文档只作为后续实现的资料源 |
 
-> Grsai 的核心特点是**同一个模型家族在其内部又拆成多个「渠道」**（官方叫法，如 `-cl`、`-vip`、`-vt`、`-lite`、`-fast` 后缀），渠道之间价格差异可达 10 倍以上，越便宜的渠道官方公告历史上出现过越多次限流 / 维护 / 降级事件（见第 7 节）。接入时建议把「渠道」做成模型内的顶层可选参数，而不是把每个渠道拆成独立模型卡片——具体取舍见各模型文档「适配要点」。
+> Grsai 的核心特点是**同一个模型家族在其内部又拆成多个「渠道」**（官方叫法，如 `-cl`、`-vip`、`-vt`、`-lite` 后缀），渠道之间价格差异可达 10 倍以上，越便宜的渠道官方公告历史上出现过越多次限流 / 维护 / 降级事件（见第 8 节）。接入时建议把「渠道」做成模型内的顶层可选参数，而不是把每个渠道拆成独立模型卡片——具体取舍见各模型文档「适配要点」。**本项目只适配 Nano Banana 第 2 代与 Nano Banana Pro 两个家族，初代 Nano Banana 相关的平台模型名已被明确排除，见第 7 节。**
 
 ## 1. 端点
 
@@ -34,7 +34,7 @@
 
 | 用途 | 方法与路径 | 说明 |
 |---|---|---|
-| 生成 | `POST /v1/api/generate` | 图片（文档目录标注含视频，但当前 dashboard 定价列表未见任何视频模型，见第 7 节）统一生成入口，`model` 字段决定具体模型与渠道 |
+| 生成 | `POST /v1/api/generate` | 图片（文档目录标注含视频，但当前 dashboard 定价列表未见任何视频模型，见第 8 节）统一生成入口，`model` 字段决定具体模型与渠道 |
 | 查询结果 | `GET /v1/api/result?id=<task_id>` | 统一异步结果查询，返回结构与生成接口一致 |
 
 **旧版分模型接口（官方声明「永久有效」，字段集合与新接口不完全一致，见第 3.5 节差异）**
@@ -43,7 +43,7 @@
 |---|---|---|
 | Nano Banana 系列生成 | `POST /v1/draw/nano-banana` | 早于统一接口的专用入口 |
 | GPT Image 系列生成 | `POST /v1/draw/completions` | 多一个新接口没有的 `quality` 参数，见第 3.5 节 |
-| Veo3 视频生成 | `POST /v1/video/veo` | 仅在 dashboard 文档导航「Veo API」下出现，未见于「模型大全」定价列表，可用性 / 计费未知，见第 7 节 |
+| Veo3 视频生成 | `POST /v1/video/veo` | 仅在 dashboard 文档导航「Veo API」下出现，未见于「模型大全」定价列表，可用性 / 计费未知，见第 8 节 |
 | 旧接口统一结果查询 | `POST /v1/draw/result` | 与 `/v1/api/result` 平行存在，两套接口不要混用 |
 
 **OpenAI 兼容接口（面向能直接换 `base_url` 接入的客户端，文档未详细展开字段，仅作为备选记录）**
@@ -157,7 +157,16 @@ Grsai 用积分计费，dashboard「充值」页给出六档套餐（¥10 起，
 - 部分接口在失败时返回 HTTP `400`，body 结构与 200 成功响应类似（`{id, status, error}`）
 - 文档未提供限流（429）相关说明
 
-## 7. 已知不确定项（接入前需要逐条确认，不建议直接照搬实现）
+## 7. 明确排除的模型（不适配，容易与在售渠道混淆）
+
+| 平台模型名 | 状态 | 排除原因 |
+|---|---|---|
+| `nano-banana` | 已下架（2026-07-01 公告：谷歌官方下架其底层模型 `gemini-2.5-flash-image`，Grsai 随即下架该模型名） | 属于最早期的「香蕉 1」世代，官方已停售，本来就没有可适配的意义 |
+| `nano-banana-fast` | 当前 dashboard「模型列表」页仍在售，**本项目不适配** | 同属「香蕉 1」世代衍生出的命名，2026-07-01 公告显示它在 `nano-banana` 下架后「切换底层模型」，此后实际跑在新的 Gemini 3.1 Lite 底层上。它的积分消耗（440/次）、价格区间（¥0.022~¥0.044/次）与 `nano-banana-2-lite` **完全相同**，两个名字长得像、报价一样，极易在选型或写 schema 时混进来 |
+
+本项目适配范围只有 **Nano Banana 2**（[Nano-Banana-2_Grsai.md](../Nano-Banana-2/Nano-Banana-2_Grsai.md)）、**Nano Banana 2 Lite**（[Nano-Banana-2-Lite_Grsai.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md)）、**Nano Banana Pro**（[Nano-Banana-Pro_Grsai.md](../Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md)）三个家族，`nano-banana` 与 `nano-banana-fast` 不在其中，不要在渠道枚举、价格对照或 schema 里出现这两个名字。以后如果 Grsai dashboard 上出现新的「香蕉 1」世代衍生渠道（例如再切换底层模型后改个新名字），按同样理由排除，不需要重新讨论。
+
+## 8. 已知不确定项（接入前需要逐条确认，不建议直接照搬实现）
 
 1. **国内节点与全球节点的关系**：是同账号双活线路，还是各自独立环境，未实测。
 2. **新版接口结果 URL 有效期**：旧接口写 2 小时，新接口未写，两者是否一致未知。
@@ -166,11 +175,11 @@ Grsai 用积分计费，dashboard「充值」页给出六档套餐（¥10 起，
 5. **Veo3（`veo3.1-fast`）是否可用**：只出现在「在线体验/文档」导航的「Veo API」旧版文档里，**没有出现在 dashboard「模型列表」的定价清单中**，说明它可能是未正式计价 / 未上线 / 已下线的状态，本轮不建议作为可接入模型记录，仅在此存档以免下次调研重复发现。
 6. **`violation`（违规）终态是否返还积分**：公告只写了 `failed` 会返还，`violation` 未提及。
 
-## 8. 项目对照
+## 9. 项目对照
 
 尚未接入。后续若确认要做，按 `docs/rules/model-adaptation.md` 场景 A「新增供应商」流程：新建 `electron/main/services/ai-runtime/providers/grsai.ts`、在 `providers/index.ts` 注册分发、在 `keystore.ts` 的 `KNOWN_AI_PROVIDER_IDS` 与 `src/core/config/providers.ts` 补齐元信息、按需接入国际化文案。
 
-## 9. 原始链接索引
+## 10. 原始链接索引
 
 | 信息 | 链接 | 是否需登录 |
 |---|---|---|

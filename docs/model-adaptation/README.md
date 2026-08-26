@@ -92,7 +92,7 @@ docs/model-adaptation/
 
 视频类模型在**火山引擎与百炼上未纳入本清单**：Seedance 系列的官方接口不在本次适配范围，Kling 官方接口按用户要求**仅作参考、暂不适配**（能力地图：https://www.klingai.com/document-api/guides/capability-map/video ）。
 
-Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.1-fast` 视频模型的端点，但该模型**未出现在 dashboard「模型列表」的定价清单中**，可用性与计价未确认，详见 [Grsai 基础文档 §7](供应商/Grsai.md)。
+Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.1-fast` 视频模型的端点，但该模型**未出现在 dashboard「模型列表」的定价清单中**，可用性与计价未确认，详见 [Grsai 基础文档 §8](供应商/Grsai.md)。
 
 ### 供应商专属模型（5）
 
