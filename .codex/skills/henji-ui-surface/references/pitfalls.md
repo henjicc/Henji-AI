@@ -30,3 +30,36 @@ npx tailwindcss -i src/index.css -o /tmp/x.css && grep -n "^\.bg-panel {\|^\.bg-
 ```
 
 同理，**透明度修饰符只能用 Tailwind 刻度值**（步进 5：`/25` `/35` `/45` 都行，`/42` `/72` 不生成任何 CSS）。
+
+## primitive 自带的 padding，调用点覆盖不掉（4 处已实测失效）
+
+上一节讲的是"同属性叠类"的一般情况，间距工具类是它最容易中招的子类，因为
+**Tailwind 的 `px-*` / `py-*` 是按数值升序输出的**——数值大的排在后面，所以：
+
+> 只有**比基类更大**的值能覆盖成功；更小的值会被基类静默压过。
+
+`UiOptionButton` 基类写死了 `px-2.5 py-2`。实测这四处调用点的覆盖**完全没生效**，
+渲染出来的仍是基类值，作者以为改了密度、实际没有：
+
+| 调用点 | 写的 | 实际 |
+|---|---|---|
+| `cameraStage/panels/ObjectListPanel.tsx` | `py-1.5` | `py-2` |
+| `cameraStage/panels/CharacterPoseSection.tsx` | `py-1` | `py-2` |
+| `canvas/nodes/storyboardSplit/IncomingImagePicker.tsx` | `px-2` | `px-2.5` |
+| `canvas/params/ModelPickerList.tsx` | `py-1.5` | `py-2` |
+
+（同批里 `NodeSelectionMenu` 的 `px-3`、`PresetPanel` 的 `px-3` 是生效的——因为比 2.5 大。）
+
+**所以不要用 className 调 primitive 的内边距。** 需要不同密度时：
+
+1. 首选：把密度做成 primitive 上的**有限枚举**（像 `UiButton` 的 `size`），由 primitive 内部
+   写成互斥分支，根本不产生叠类；
+2. 其次：调整外层容器的间距/负边距，不碰 primitive 自身的 padding；
+3. 实在要覆盖：加 `!`（`!py-1.5`），但这会让下一个人以为 className 覆盖普遍可行，
+   属于最后手段。
+
+验证某个覆盖到底生不生效，看构建产物里两个类谁靠后：
+
+```bash
+grep -bo '\.py-1\.5{\|\.py-2{' out/renderer/assets/index-*.css
+```
