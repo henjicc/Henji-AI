@@ -255,13 +255,18 @@ export const UI_DROPDOWN_OPTION_ACTIVE_CLASS =
  * - compact：确认、重命名、短提示
  * - form：普通表单与配置
  * - editor：需要并排编辑或较长内容的悬浮工作窗
- * - workspace：图片编辑、设置、追踪对比等大工作面
+ * - settings：带常驻目录的配置面板，宽度＝目录 13rem + 限宽内容列 48rem + 留白
+ * - workspace：图片编辑、追踪对比等需要尽量铺开的大工作面
  * - fullscreen：仅 3D 镜头参考等明确需要占满窗口的场景
  */
 export const UI_MODAL_SIZE_CLASS = {
   compact: 'w-[min(92vw,clamp(22rem,32vw,30rem))]',
   form: 'w-[min(92vw,clamp(30rem,44vw,44rem))]',
   editor: 'h-[min(78vh,48rem)] w-[min(92vw,clamp(42rem,62vw,68rem))]',
+  // 66rem 是按内容算出来的，不是随手取的：目录 w-52(13rem) + 内容 max-w-3xl(48rem)
+  // + 内容区左右 px-4 + settings-scroll-body 两侧预留的滚动条位。内容列左对齐，
+  // 右侧只留一条正常留白。改内容列限宽时要回头调这个值，见 settingsLayout.ts。
+  settings: 'h-[min(88vh,64rem)] w-[min(94vw,66rem)]',
   workspace: 'h-[min(88vh,64rem)] w-[min(94vw,clamp(64rem,86vw,96rem))]',
   fullscreen: 'h-full w-full !max-h-none !rounded-none !border-0',
 } as const;

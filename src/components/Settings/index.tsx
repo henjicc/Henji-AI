@@ -164,7 +164,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
       // 遮罩，外层再叠 bg-black/70 会（1）把背景压到近 86% 黑，(2) 因为外层没有过渡，
       // 打开时先闪一帧纯黑、关闭时黑幕又突然消失。
       overlayClassName="p-4"
-      size="workspace"
+      size="settings"
       contentClassName="flex min-h-0 flex-1"
     >
       {/* relative：让内容压在 .ui-glass::after 的噪点层同一层，避免文字被颗粒扰动 */}
