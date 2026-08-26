@@ -90,6 +90,7 @@
     "lucide-react": "^0.562.0",
     "pica": "^9.0.1",
     "pinyin-match": "^1.2.10",
+    "pinyin-pro": "^3.29.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-i18next": "^14.0.0",

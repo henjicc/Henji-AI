@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import { getAvailableProviders } from '../utils/modelHelpers'
+import { compareModelNamesForSettings } from '../utils/modelNameSort'
 import { getModelAliases, setModelAlias } from '../config/modelAliases'
 import { useI18n } from '@/hooks/useI18n'
 import { UI_TEXT_BODY_CLASS, UI_TEXT_META_CLASS, UiInput } from '@/components/ui'
@@ -11,8 +12,6 @@ interface AliasableModel {
   type: ModelMediaType
   providerNames: string[]
 }
-
-const MODEL_TYPE_SORT_ORDER: Record<ModelMediaType, number> = { image: 0, video: 1, audio: 2 }
 
 /**
  * 别名按 canonicalModelId 统一生效，不区分供应商：同一模型在各供应商下的记录
@@ -35,11 +34,8 @@ function buildAliasableModels(providers: ReturnType<typeof getAvailableProviders
       })
     })
   })
-  return Array.from(map.values()).sort((a, b) => {
-    const typeDiff = MODEL_TYPE_SORT_ORDER[a.type] - MODEL_TYPE_SORT_ORDER[b.type]
-    if (typeDiff !== 0) return typeDiff
-    return a.originalName.localeCompare(b.originalName, 'zh')
-  })
+  // 设置页专用排序：中英文混排统一按 A-Z（中文按拼音）排列，不按类型分组。
+  return Array.from(map.values()).sort((a, b) => compareModelNamesForSettings(a.originalName, b.originalName))
 }
 
 const ModelAliasPanel: React.FC = () => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { getAvailableProviders } from '../utils/modelHelpers'
+import { compareModelNamesForSettings } from '../utils/modelNameSort'
 import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
 import { useI18n } from '@/hooks/useI18n'
 import {
@@ -252,6 +253,8 @@ const ModelSettingsPanel: React.FC = () => {
           {providers.map(provider => {
             const stats = getProviderStats(provider)
             const expanded = expandedProviders.has(provider.id)
+            // 设置页专用排序：中英文混排统一按 A-Z（中文按拼音）排列，不影响其他地方的模型顺序。
+            const sortedModels = [...provider.models].sort((a, b) => compareModelNamesForSettings(a.name, b.name))
             return (
               <UiPanel key={provider.id} variant="inset" className="overflow-hidden">
                 <div
@@ -300,7 +303,7 @@ const ModelSettingsPanel: React.FC = () => {
                 <div className="border-t border-border-dark">
                   <UiDisclosurePanel open={expanded} className="px-4 py-2">
                     <div className="divide-y divide-border-dark/60">
-                      {provider.models.map(model => {
+                      {sortedModels.map(model => {
                         const isHidden = isModelHidden(provider.id, model.id, model.type)
                         const statusText = isHidden
                           ? t('modelSettings.status.hidden')
