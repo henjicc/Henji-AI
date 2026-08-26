@@ -1,6 +1,7 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { getAvailableProviders } from '../utils/modelHelpers'
 import { getHiddenProviders, saveHiddenProviders, getHiddenTypes, saveHiddenTypes, getHiddenModels, saveHiddenModels, type Provider } from '../config/providers'
+import { getModelAliases, setModelAlias } from '../config/modelAliases'
 import { useI18n } from '@/hooks/useI18n'
 import {
   UI_TEXT_BODY_CLASS,
@@ -9,6 +10,7 @@ import {
   UiButton,
   UiChipButton,
   UiGroup,
+  UiInput,
 } from '@/components/ui'
 import Toggle from '@/components/ui/Toggle'
 
@@ -21,6 +23,25 @@ const ModelSettingsPanel: React.FC = () => {
   const [hiddenProviders, setHiddenProviders] = useState<Set<string>>(() => getHiddenProviders())
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(() => getHiddenTypes())
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(() => getHiddenModels())
+  const [aliasDrafts, setAliasDrafts] = useState<Record<string, string>>(() => getModelAliases())
+
+  // 同一 canonicalModelId 会出现在多个供应商行下，别名按此维度统一生效，
+  // 这里统计一下每个模型在当前列表里出现了几次，用来给用户一个"会同步影响其他供应商"的提示。
+  const canonicalModelCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    providers.forEach(provider => {
+      provider.models.forEach(model => {
+        counts.set(model.canonicalModelId, (counts.get(model.canonicalModelId) ?? 0) + 1)
+      })
+    })
+    return counts
+  }, [providers])
+
+  const commitAlias = (canonicalModelId: string): void => {
+    const value = aliasDrafts[canonicalModelId] ?? ''
+    setModelAlias(canonicalModelId, value)
+    setAliasDrafts(getModelAliases())
+  }
 
   const toggleModelVisibility = (providerId: string, modelId: string): void => {
     const key = `${providerId}-${modelId}`
@@ -281,16 +302,42 @@ const ModelSettingsPanel: React.FC = () => {
                     const statusText = isHidden
                       ? t('modelSettings.status.hidden')
                       : t('modelSettings.status.visible')
+                    const sharedCount = canonicalModelCounts.get(model.canonicalModelId) ?? 1
                     return (
                       <div
                         key={model.id}
                         className="flex min-h-12 items-center justify-between gap-4 py-2.5"
                       >
                         <div className={`flex min-w-0 items-center gap-3 ${isHidden ? 'opacity-60' : ''}`}>
-                          <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.name}</span>
+                          <span className={`truncate ${UI_TEXT_BODY_CLASS}`}>{model.originalName}</span>
                           <span className={`text-xs px-2 py-0.5 rounded border ${getTypeBadgeColor(model.type)}`}>
                             {getTypeLabel(model.type)}
                           </span>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className={`shrink-0 whitespace-nowrap ${UI_TEXT_META_CLASS}`}>{t('modelSettings.alias.label')}</span>
+                          <UiInput
+                            value={aliasDrafts[model.canonicalModelId] ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setAliasDrafts(prev => ({ ...prev, [model.canonicalModelId]: value }))
+                            }}
+                            onBlur={() => commitAlias(model.canonicalModelId)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur()
+                            }}
+                            placeholder={model.originalName}
+                            className="h-8 w-36 text-xs"
+                            aria-label={t('modelSettings.alias.inputLabel', { name: model.originalName })}
+                          />
+                          {sharedCount > 1 && (
+                            <span
+                              className={UI_TEXT_META_CLASS}
+                              title={t('modelSettings.alias.sharedHint', { count: sharedCount })}
+                            >
+                              ×{sharedCount}
+                            </span>
+                          )}
                         </div>
                         <div className="flex shrink-0 items-center gap-3">
                           <span className={UI_TEXT_META_CLASS}>{statusText}</span>

@@ -2,7 +2,9 @@ import { registry } from '@/core/ModelRegistry'
 import i18n from '@/i18n/config'
 import type { I18nText } from '@/core/types/I18nText'
 import { getI18nText } from '@/core/types/I18nText'
+import type { ModelDefinition } from '@/core/types'
 import { PROVIDER_ORDER, MODEL_TYPE_ORDER, compareModelsBySeries } from '@/core/modelSortOrder'
+import { getModelAlias } from '@/config/modelAliases'
 
 /**
  * 供应商 ID 到显示名称的映射
@@ -14,6 +16,16 @@ const getCurrentLocale = (): string => {
 const getLocalizedText = (text?: I18nText, locale?: string): string => {
   if (!text) return ''
   return getI18nText(text, locale || getCurrentLocale())
+}
+
+/**
+ * 解析模型的最终展示名称：用户设置了别名则优先显示别名（按 canonicalModelId
+ * 统一生效，不区分供应商），否则回退到模型自身的 i18n 名称。
+ */
+export function resolveModelName(model: Pick<ModelDefinition, 'meta'>, locale?: string): string {
+  const alias = getModelAlias(model.meta.canonicalModelId)
+  if (alias) return alias
+  return getLocalizedText(model.meta.name, locale || getCurrentLocale()) || model.meta.id
 }
 
 /**
@@ -35,10 +47,10 @@ export function getProviderDisplayName(providerId: string, locale?: string): str
  * @returns 格式化的显示名称，如 "ppio：可灵视频 2.6 Pro"
  */
 export function getModelDisplayName(modelId: string, locale?: string): string {
-  const modelInfo = registry.getModelInfo(modelId)
-  if (modelInfo) {
-    const providerName = getProviderDisplayName(modelInfo.provider, locale || getCurrentLocale())
-    const modelName = getLocalizedText(modelInfo.name, locale || getCurrentLocale()) || modelId
+  const model = registry.getModel(modelId)
+  if (model) {
+    const providerName = getProviderDisplayName(model.meta.provider, locale || getCurrentLocale())
+    const modelName = resolveModelName(model, locale)
     return `${providerName}：${modelName}`
   }
   return modelId
@@ -57,7 +69,10 @@ export function getAvailableProviders() {
     type: string
     models: Array<{
       id: string
+      canonicalModelId: string
       name: string
+      /** 模型自身的原始名称，不受用户别名覆盖，用于别名编辑场景的占位提示 */
+      originalName: string
       type: 'image' | 'video' | 'audio'
       description: string
       functions: string[]
@@ -80,7 +95,9 @@ export function getAvailableProviders() {
 
     providerMap.get(providerId)!.models.push({
       id: model.meta.id,
-      name: getLocalizedText(model.meta.name, locale),
+      canonicalModelId: model.meta.canonicalModelId,
+      name: resolveModelName(model, locale),
+      originalName: getLocalizedText(model.meta.name, locale) || model.meta.id,
       type: model.meta.type,
       description: model.meta.description ? getLocalizedText(model.meta.description, locale) : '',
       functions: model.meta.tags || [],
@@ -117,18 +134,18 @@ export function getAvailableProviders() {
  */
 export function getModelInfo(modelId: string) {
   const locale = getCurrentLocale()
-  const modelInfo = registry.getModelInfo(modelId)
-  if (!modelInfo) return null
+  const model = registry.getModel(modelId)
+  if (!model) return null
 
-  const name = getLocalizedText(modelInfo.name, locale)
-  const description = modelInfo.description ? getLocalizedText(modelInfo.description, locale) : ''
+  const name = resolveModelName(model, locale)
+  const description = model.meta.description ? getLocalizedText(model.meta.description, locale) : ''
 
   return {
-    id: modelInfo.id,
+    id: model.meta.id,
     name,
-    type: modelInfo.type,
+    type: model.meta.type,
     description,
-    functions: modelInfo.tags || [],
-    tags: modelInfo.tags
+    functions: model.meta.tags || [],
+    tags: model.meta.tags
   }
 }

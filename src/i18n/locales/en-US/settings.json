@@ -428,6 +428,11 @@
     "byType": "By type:",
     "listTitle": "Model list",
     "visibleCount": "({{visible}}/{{total}} visible)",
+    "alias": {
+      "label": "Alias",
+      "inputLabel": "Alias for {{name}}",
+      "sharedHint": "This alias will also apply to the same model under {{count}} providers"
+    },
     "status": {
       "hidden": "Hidden",
       "visible": "Visible"

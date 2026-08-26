@@ -7,7 +7,7 @@ import { getI18nText } from '@/core/types/I18nText';
 import type { ModelTag } from '@/core/types';
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
-import { getProviderDisplayName } from '@/utils/modelHelpers';
+import { getProviderDisplayName, resolveModelName } from '@/utils/modelHelpers';
 
 export interface ProviderFilterOption {
   id: string;
@@ -134,7 +134,7 @@ export function useModelPickerList({ mediaType, modelId, requiredTags = [] }: Us
     [mediaType, requiredTags]
   );
   const modelOptions = useMemo<ModelPickerOption[]>(() => models.map((model) => {
-    const displayName = getI18nText(model.meta.name, i18n.language) || model.meta.id;
+    const displayName = resolveModelName(model, i18n.language);
     const detailLabels = (model.meta.tags ?? [])
       .filter((tag) => FILTERABLE_TAGS.includes(tag))
       .map((tag) => tModels(`tags.${tag}`, { defaultValue: tag }));

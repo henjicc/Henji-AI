@@ -428,6 +428,11 @@
     "byType": "按类型：",
     "listTitle": "模型列表",
     "visibleCount": "({{visible}}/{{total}} 可见)",
+    "alias": {
+      "label": "别名",
+      "inputLabel": "{{name}} 的别名",
+      "sharedHint": "该别名将同步应用到 {{count}} 个供应商下的同款模型"
+    },
     "status": {
       "hidden": "已隐藏",
       "visible": "显示中"

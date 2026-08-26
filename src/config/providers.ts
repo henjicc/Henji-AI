@@ -9,7 +9,9 @@ export interface Provider {
 
 export interface Model {
   id: string
+  canonicalModelId: string
   name: string
+  originalName: string
   type: 'image' | 'video' | 'audio'
   description: string
   functions: string[]
