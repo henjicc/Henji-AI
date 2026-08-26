@@ -33,7 +33,7 @@ export const volcengineSeedream50ProModel = defineModel({
   ],
   params: [
     {
-      id: 'volcengineSeedream50ProMode', type: 'dropdown', order: 1,
+      id: 'volcengineSeedream50ProMode', type: 'dropdown', order: 1, role: 'mode',
       name: { zh: '模式', en: 'Mode' }, default: 'generate',
       options: [
         { value: 'generate', label: { zh: '生成 / 编辑', en: 'Generate / Edit' } },

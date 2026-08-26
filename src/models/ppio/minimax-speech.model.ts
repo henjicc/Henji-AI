@@ -255,6 +255,7 @@ export const minimaxSpeechModel = defineModel({
       id: 'minimaxAudioSpec',
       type: 'dropdown',
       order: 5,
+      role: 'mode',
       name: { zh: '版本', en: 'Version' },
       default: 'hd',
       options: [

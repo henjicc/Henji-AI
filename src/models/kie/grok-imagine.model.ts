@@ -41,6 +41,7 @@ export const kieGrokImagineModel = defineModel({
       id: 'kieGrokImagineMode',
       type: 'dropdown',
       order: 1,
+      role: 'mode',
       name: { zh: '模式', en: 'Mode' },
       default: 'text-to-image',
       options: [

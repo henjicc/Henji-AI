@@ -26,7 +26,7 @@ export const grsaiNanoBanana2Model = defineModel({
   inputLimits: { images: { max: 14 }, videos: { max: 0 } },
   params: [
     {
-      id: 'grsaiNanoBanana2Channel', type: 'dropdown', order: 1,
+      id: 'grsaiNanoBanana2Channel', type: 'dropdown', order: 1, role: 'channel',
       name: { zh: '渠道', en: 'Channel' }, default: 'standard',
       options: [
         { value: 'standard', label: { zh: '标准', en: 'Standard' } },

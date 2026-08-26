@@ -123,6 +123,23 @@ export interface BaseParamDef {
    * 仅在需要特殊连接语义（如细化 INT/FLOAT）时显式声明。
    */
   socketType?: SocketType
+
+  /**
+   * 参数在生成面板中的产品角色（可选）
+   *
+   * 决定参数是否被提到「比例 / 分辨率」合并面板之前渲染。缺省表示普通参数，
+   * 完全按 order 排序。
+   *
+   * - `'channel'`：产品渠道 / 接入点选择。必须严格排在所有其他参数之前，
+   *   且不能收进展示分组；由 modelParamConventionValidator 在模型注册时硬校验。
+   * - `'mode'`：模式 / 版本 / 变体等主选择器。排在渠道之后、比例分辨率面板之前，
+   *   不要求 order 为 1。
+   *
+   * 必须显式声明：面板不再从参数名文案反推角色。文案反推对新写法（例如渠道多于
+   * 两档时使用的自定义标签）会静默失效——参数掉回普通排序且不报错。漏写由
+   * modelParamConventionValidator 拦截。
+   */
+  role?: 'channel' | 'mode'
 }
 
 // ========== 基础组件参数 ==========

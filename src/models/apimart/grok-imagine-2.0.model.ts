@@ -38,7 +38,7 @@ export const apimartGrokImagine20Model = defineModel({
   },
   params: [
     {
-      id: 'apimartGrokImagine20Version', type: 'dropdown', order: 1,
+      id: 'apimartGrokImagine20Version', type: 'dropdown', order: 1, role: 'channel',
       name: sharedFieldText('apiChannel'), default: 'ext',
       options: [
         { value: 'ext', label: sharedOptionText('regular') },

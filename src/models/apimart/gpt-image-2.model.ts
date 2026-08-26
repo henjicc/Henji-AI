@@ -30,7 +30,7 @@ export const apimartGptImage2Model = defineModel({
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },
   params: [
     {
-      id: 'apimartGptImage2Version', type: 'dropdown', order: 1,
+      id: 'apimartGptImage2Version', type: 'dropdown', order: 1, role: 'channel',
       name: sharedFieldText('apiChannel'), default: 'ext',
       options: [
         { value: 'ext', label: sharedOptionText('regular') },

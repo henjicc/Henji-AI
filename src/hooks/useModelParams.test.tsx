@@ -85,6 +85,7 @@ const aliasMergedModel: ModelDefinition = {
       id: 'mode',
       type: 'dropdown',
       order: 1,
+      role: 'mode',
       name: { zh: '模式', en: 'Mode' },
       default: 'generate',
       options: [
@@ -129,6 +130,7 @@ const linkedModel: ModelDefinition = {
       id: 'mode',
       type: 'dropdown',
       order: 1,
+      role: 'mode',
       name: { zh: '模式', en: 'Mode' },
       default: 'basic',
       options: [

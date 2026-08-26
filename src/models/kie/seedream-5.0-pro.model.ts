@@ -46,6 +46,7 @@ export const kieSeedream50ProModel = defineModel({
       id: 'kieSeedream50ProMode',
       type: 'dropdown',
       order: 1,
+      role: 'mode',
       name: { zh: '模式', en: 'Mode' },
       default: 'generate',
       options: [

@@ -50,7 +50,7 @@ export const apimartGeminiOmniFlashModel = defineModel({
   }],
   params: [
     {
-      id: 'apimartGeminiOmniFlashChannel', type: 'dropdown', order: 1,
+      id: 'apimartGeminiOmniFlashChannel', type: 'dropdown', order: 1, role: 'channel',
       name: sharedFieldText('apiChannel'), default: 'official',
       options: [
         { value: 'official', label: sharedOptionText('official') },

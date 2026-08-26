@@ -30,7 +30,7 @@ export const grsaiGptImage2Model = defineModel({
   inputLimits: { images: { max: 16 }, videos: { max: 0 } },
   params: [
     {
-      id: 'grsaiGptImage2Channel', type: 'dropdown', order: 1,
+      id: 'grsaiGptImage2Channel', type: 'dropdown', order: 1, role: 'channel',
       name: { zh: '渠道', en: 'Channel' }, default: 'standard',
       options: [
         { value: 'standard', label: { zh: '标准', en: 'Standard' } },

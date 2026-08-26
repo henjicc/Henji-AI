@@ -34,7 +34,7 @@ export const apimartSeedream50ProModel = defineModel({
   ],
   params: [
     {
-      id: 'apimartSeedream50ProMode', type: 'dropdown', order: 1,
+      id: 'apimartSeedream50ProMode', type: 'dropdown', order: 1, role: 'mode',
       name: { zh: '模式', en: 'Mode' }, default: 'generate',
       options: [
         { value: 'generate', label: { zh: '生成 / 编辑', en: 'Generate / Edit' } },
