@@ -29,6 +29,6 @@ Electron 自动化脚本通过 CDP/Playwright 启动构建产物。需要临时�
 
 ## 历史基线
 
-当前分支基线是 Electron。旧 Tauri/Rust 外壳、依赖、脚本与 PAL adapter 已从工作树移除，需回看只走 Git 历史或 `old-Henji-AI/` 备份对照。迁移收尾状态见 `docs/task/`。
+当前分支基线是 Electron。旧 Tauri/Rust 外壳、依赖、脚本与 PAL adapter 已从工作树移除，需回看只走 Git 历史或 `old-Henji-AI/` 备份对照。
 
 图像水印/分镜文字与旧 Rust 输出的像素级基线对比尚未做（功能 smoke 已过，可后置）。

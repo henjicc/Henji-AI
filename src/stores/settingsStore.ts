@@ -326,7 +326,7 @@ export const useSettingsStore = create<SettingsState>()(
       // v10：BizyAir 上传服务下线，旧值需重新归一化到 KIE
       version: 10,
       // `logCaptureMode` 有意不持久化：应用重启应回落 standard，避免用户忘记关闭
-      // "完整捕获" 导致日志长期膨胀（决策见 docs/task/日志调试中心/decisions.md）。
+      // "完整捕获" 导致日志长期膨胀。
       partialize: (state) => {
         const { logCaptureMode: _logCaptureMode, ...persisted } = state;
         return persisted;
