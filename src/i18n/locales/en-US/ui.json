@@ -245,15 +245,70 @@
     "assets": "Assets"
   },
   "assetLibrary": {
-      "collect": "Add to asset library", "assetShort": "Asset", "collected": "Added", "collectSuccess": "Added to asset library", "alreadyCollected": "This asset is already in the library", "collectFailed": "Failed to add",
-    "all": "All assets", "allTypes": "All types", "image": "Images", "video": "Videos", "audio": "Audio",
-    "search": "Search assets", "newest": "Newest", "recent": "Recently used", "manage": "Full manager",
-    "categories": "Asset libraries", "createLibrary": "New asset library", "libraryName": "Asset library name", "confirmDeleteLibrary": "Click again to confirm deletion", "empty": "Your asset library is empty", "noResults": "No matching assets",
-    "error": "Failed to load assets", "restartRequired": "The asset library backend is not loaded. Restart the Electron development process and retry.", "retry": "Retry", "count": "{{count}} items", "loadedCount": "Loaded {{loaded}} of {{count}}", "loadingMore": "Loading more", "scrollForMore": "Scroll to load more", "allLoaded": "All assets loaded", "back": "Back to workspace",
-    "thumbnailSize": "Thumbnail", "viewSettings": "View settings", "thumbnailFit": "Thumbnail fit", "fitCover": "Fill card", "fitContain": "Show all", "fitCoverHint": "Fills the card and crops edges outside the media ratio.", "fitContainHint": "Shows the complete media with background around unused space.",
-    "renameAsset": "Rename", "relocate": "Relocate file", "removeFromLibrary": "Remove from this library",
-    "addToLibrary": "Add to another library", "deleteAsset": "Delete", "allTags": "All tags", "tags": "Tags", "tagPlaceholder": "Search or enter a new tag", "membership": "Asset libraries", "searchLibraries": "Search libraries",
-    "batchManage": "Batch manage", "batchDone": "Done", "batchSelected": "{{count}} selected", "batchSelectAll": "Select loaded", "batchClear": "Clear selection", "batchHint": "Select assets to update tags, libraries, or delete them in bulk.", "batchTags": "Batch tags", "batchTagAdd": "Add tags", "batchTagRemove": "Remove tags", "batchLibraries": "Batch libraries", "batchLibraryAdd": "Add to library", "batchLibraryRemove": "Remove from library", "batchDelete": "Delete selected assets", "batchConfirmDelete": "Click again to confirm", "batchNoSelection": "Select at least one asset", "batchPartialFailure": "{{count}} items failed. Please retry.", "batchEmptyMenu": "Manage multiple assets"
+    "collect": "Add to asset library",
+    "assetShort": "Asset",
+    "collected": "Added",
+    "collectSuccess": "Added to asset library",
+    "alreadyCollected": "This asset is already in the library",
+    "collectFailed": "Failed to add",
+    "all": "All assets",
+    "allTypes": "All types",
+    "image": "Images",
+    "video": "Videos",
+    "audio": "Audio",
+    "search": "Search assets",
+    "newest": "Newest",
+    "recent": "Recently used",
+    "manage": "Full manager",
+    "categories": "Asset libraries",
+    "createLibrary": "New asset library",
+    "libraryName": "Asset library name",
+    "confirmDeleteLibrary": "Click again to confirm deletion",
+    "empty": "Your asset library is empty",
+    "noResults": "No matching assets",
+    "error": "Failed to load assets",
+    "restartRequired": "The asset library backend is not loaded. Restart the Electron development process and retry.",
+    "retry": "Retry",
+    "count": "{{count}} items",
+    "loadedCount": "Loaded {{loaded}} of {{count}}",
+    "loadingMore": "Loading more",
+    "scrollForMore": "Scroll to load more",
+    "allLoaded": "All assets loaded",
+    "back": "Back to workspace",
+    "thumbnailSize": "Thumbnail",
+    "viewSettings": "View settings",
+    "thumbnailFit": "Thumbnail fit",
+    "fitCover": "Fill card",
+    "fitContain": "Show all",
+    "fitCoverHint": "Fills the card and crops edges outside the media ratio.",
+    "fitContainHint": "Shows the complete media with background around unused space.",
+    "renameAsset": "Rename",
+    "relocate": "Relocate file",
+    "removeFromLibrary": "Remove from this library",
+    "addToLibrary": "Add to another library",
+    "deleteAsset": "Delete",
+    "allTags": "All tags",
+    "tags": "Tags",
+    "tagPlaceholder": "Search or enter a new tag",
+    "membership": "Asset libraries",
+    "searchLibraries": "Search libraries",
+    "batchManage": "Batch manage",
+    "batchDone": "Done",
+    "batchSelected": "{{count}} selected",
+    "batchSelectAll": "Select loaded",
+    "batchClear": "Clear selection",
+    "batchHint": "Select assets to update tags, libraries, or delete them in bulk.",
+    "batchTags": "Batch tags",
+    "batchTagAdd": "Add tags",
+    "batchTagRemove": "Remove tags",
+    "batchLibraries": "Batch libraries",
+    "batchLibraryAdd": "Add to library",
+    "batchLibraryRemove": "Remove from library",
+    "batchDelete": "Delete selected assets",
+    "batchConfirmDelete": "Click again to confirm",
+    "batchNoSelection": "Select at least one asset",
+    "batchPartialFailure": "{{count}} items failed. Please retry.",
+    "batchEmptyMenu": "Manage multiple assets"
   },
   "windowControls": {
     "appName": "Henji AI",
@@ -544,8 +599,8 @@
       "displayName": "Display name",
       "modelType": "Model type",
       "placeholders": {
-        "modelId": "e.g., black-forest-labs/FLUX.1-dev",
-        "displayName": "e.g., FLUX.1 Dev"
+        "modelId": "e.g. Tongyi-MAI/Z-Image-Turbo",
+        "displayName": "e.g. Z-Image Turbo"
       }
     },
     "types": {
@@ -554,7 +609,8 @@
     },
     "actions": {
       "confirmAdd": "Confirm add",
-      "deleteTitle": "Delete model"
+      "deleteTitle": "Delete model",
+      "checking": "Checking…"
     },
     "empty": "No custom models yet",
     "confirmDelete": "Are you sure you want to delete this model?",
@@ -570,6 +626,18 @@
       "nameEmpty": {
         "title": "Incomplete input",
         "message": "Name cannot be empty"
+      },
+      "unavailable": {
+        "title": "Model does not support API calls",
+        "message": "ModelScope API-Inference only covers a subset of models. \"{{modelId}}\" may have a page on ModelScope but is not exposed for API calls, so generation will always fail. Pick a model that supports the inference API in the model library."
+      },
+      "checkFailed": {
+        "title": "Could not verify availability",
+        "message": "Failed to reach ModelScope to check whether \"{{modelId}}\" supports API calls ({{reason}}). It has been added as entered, but generation will fail if the model is not available via API-Inference."
+      },
+      "notFound": {
+        "title": "Model not found",
+        "message": "\"{{modelId}}\" was not found on ModelScope. Check the model ID spelling (it must include the namespace, e.g. Qwen/Qwen-Image). If the ID is correct, ModelScope may be temporarily unavailable — try again later."
       }
     }
   },

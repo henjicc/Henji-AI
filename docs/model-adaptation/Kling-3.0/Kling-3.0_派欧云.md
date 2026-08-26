@@ -24,15 +24,19 @@
 | 4K 图生视频 | `/v3/async/kling-v3.0-4k-i2v` | ¥3.00/秒 | ¥4.50/秒 |
 | 动作控制 | `/v3/async/kling-v3.0-motion-control` | Standard ¥0.90/秒 | Professional ¥1.20/秒 |
 
-### ⚠️ 当前项目只适配了 2 条
+### 项目适配状态：7 条路由全部覆盖
 
-`src/models/ppio/kling-3.0.model.ts` 目前只使用 `/async/kling-v3.0-std-t2v` 与 `/async/kling-v3.0-motion-control`。
+`src/models/ppio/kling-3.0.model.ts` 的 `endpoints.selector` 用模板拼路由——按分辨率档位映射 `std`/`pro`/`4k`，按是否上传图片映射 `t2v`/`i2v`，动作控制单独返回固定路由。源码里只有两条字面量路由字符串，容易被 grep 误判为"只接了 2 条"，实际七条都能命中。
 
-**图生视频完全没有接入，Pro 与 4K 两个档位也没有。** 这是清单模型里适配最不完整的一个，价格跨度从 ¥0.60/秒到 ¥4.50/秒，档位缺失对用户可选范围影响很大。
+`src/models/ppio/kling-3.0.test.ts` 直接跑 manifest 里序列化后的 `selectorJs`，逐条断言 7 种组合的落点。
 
 ## 2. 计价（重要）
 
 **按秒计费，且 `sound` 字段直接决定单价档位**——SKU 计价表达式为 `has(body.sound) && body.sound == true`。开启音频比静音**贵 50%**，不是加价项而是换档。
+
+> 代码此前把 4K 写成 ¥2.94/¥4.41、动作控制写成 ¥0.9135/¥1.218，与定价页的 ¥3.0/¥4.5 与 ¥0.9/¥1.2 不符，已修正。Standard 与 Pro 两档原本就是对的。
+>
+> 动作控制在 `character_orientation=video` 时输出时长跟随参考视频（最长 30 秒），提交前无法得知，计价只能按当前时长参数估算。
 
 计价函数必须同时读取「档位（std/pro/4k）」和「`sound`」两个维度，缺一个就会算错。
 

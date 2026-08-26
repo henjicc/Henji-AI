@@ -14,6 +14,7 @@ import {
 } from '@/components/ui'
 import { openExternal as open } from '@/platform/desktopApi'
 import { useI18n } from '@/hooks/useI18n'
+import { checkModelscopeModelAvailability } from '@/services/modelscopeCustomModels/availability'
 import {
   modelscopeCustomModelService,
   type ModelscopeCustomModelEntry,
@@ -35,6 +36,7 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
   const [editName, setEditName] = useState('')
   const [editModelType, setEditModelType] = useState<'imageGeneration' | 'imageEditing'>('imageGeneration')
   const [isAddingNew, setIsAddingNew] = useState(false)
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false)
   // 弹窗渲染统一收在 App 根部的 GlobalAlertDialog，这里只负责发起
   const showAlert = (title: string, message: string, type: 'info' | 'warning' | 'error' = 'warning') => {
     showAlertDialog({ title, message, type })
@@ -66,9 +68,39 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       showAlert(t('modelscopeCustomModel.alerts.duplicate.title'), t('modelscopeCustomModel.alerts.duplicate.message'), 'warning')
       return
     }
+    const modelId = newModelId.trim()
+
+    // 魔搭 API-Inference 只覆盖平台挑选的一个子集：模型在魔搭有页面不代表能用 API 调。
+    // 不做这步校验的话，用户填任何 ID 都能保存，但生成时必然失败且看不出原因。
+    setIsCheckingAvailability(true)
+    let availability: Awaited<ReturnType<typeof checkModelscopeModelAvailability>>
+    try {
+      availability = await checkModelscopeModelAvailability(modelId)
+    } finally {
+      setIsCheckingAvailability(false)
+    }
+
+    if (availability.state === 'not-found') {
+      showAlert(
+        t('modelscopeCustomModel.alerts.notFound.title'),
+        t('modelscopeCustomModel.alerts.notFound.message', { modelId }),
+        'error'
+      )
+      return
+    }
+
+    if (availability.state === 'unavailable') {
+      showAlert(
+        t('modelscopeCustomModel.alerts.unavailable.title'),
+        t('modelscopeCustomModel.alerts.unavailable.message', { modelId }),
+        'error'
+      )
+      return
+    }
+
     try {
       await modelscopeCustomModelService.addModel({
-        id: newModelId.trim(),
+        id: modelId,
         name: newModelName.trim(),
         modelType: {
           imageGeneration: newModelType === 'imageGeneration',
@@ -81,6 +113,17 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       setNewModelName('')
       setNewModelType('imageGeneration')
       setIsAddingNew(false)
+
+      if (availability.state === 'unknown') {
+        showAlert(
+          t('modelscopeCustomModel.alerts.checkFailed.title'),
+          t('modelscopeCustomModel.alerts.checkFailed.message', {
+            modelId,
+            reason: availability.reason
+          }),
+          'warning'
+        )
+      }
     } catch (e) {
       logger.error('Failed to save custom model:', e)
     }
@@ -222,9 +265,12 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
                 type="button"
                 variant="primary"
                 onClick={() => void handleAdd()}
+                disabled={isCheckingAvailability}
                 className="flex-1"
               >
-                {t('modelscopeCustomModel.actions.confirmAdd')}
+                {isCheckingAvailability
+                  ? t('modelscopeCustomModel.actions.checking')
+                  : t('modelscopeCustomModel.actions.confirmAdd')}
               </UiButton>
               <UiButton
                 type="button"

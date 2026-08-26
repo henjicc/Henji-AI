@@ -245,15 +245,70 @@
     "assets": "资产"
   },
   "assetLibrary": {
-      "collect": "添加到资产库", "assetShort": "资产", "collected": "已添加", "collectSuccess": "已添加到资产库", "alreadyCollected": "该资产已在资产库中", "collectFailed": "添加失败",
-    "all": "全部资产", "allTypes": "全部类型", "image": "图片", "video": "视频", "audio": "音频",
-    "search": "搜索资产", "newest": "最新加入", "recent": "最近使用", "manage": "完整管理",
-    "categories": "资产库", "createLibrary": "新建资产库", "libraryName": "资产库名称", "confirmDeleteLibrary": "再次点击确认删除", "empty": "资产库还是空的", "noResults": "没有符合条件的资产",
-    "error": "资产加载失败", "restartRequired": "资产库后端尚未加载，请重启 Electron 开发进程后重试", "retry": "重试", "count": "共 {{count}} 项", "loadedCount": "已加载 {{loaded}} / {{count}} 项", "loadingMore": "正在加载更多", "scrollForMore": "继续滚动加载", "allLoaded": "已经到底了", "back": "返回原工作区",
-    "thumbnailSize": "缩略图", "viewSettings": "显示设置", "thumbnailFit": "缩略图显示方式", "fitCover": "填满卡片", "fitContain": "完整显示", "fitCoverHint": "填满卡片，超出比例的边缘会被裁切。", "fitContainHint": "完整显示媒体内容，空余区域保留背景。",
-    "renameAsset": "重命名", "relocate": "重新定位文件", "removeFromLibrary": "从当前库移除",
-    "addToLibrary": "加入其他库", "deleteAsset": "删除", "allTags": "全部标签", "tags": "标签", "tagPlaceholder": "搜索或输入新标签", "membership": "所属资产库", "searchLibraries": "搜索资产库",
-    "batchManage": "批量管理", "batchDone": "完成", "batchSelected": "已选择 {{count}} 项", "batchSelectAll": "全选已加载", "batchClear": "清空选择", "batchHint": "点击资产选择，可批量调整标签、所属资产库或删除。", "batchTags": "批量标签", "batchTagAdd": "添加标签", "batchTagRemove": "移除标签", "batchLibraries": "批量资产库", "batchLibraryAdd": "加入资产库", "batchLibraryRemove": "移出资产库", "batchDelete": "删除所选资产", "batchConfirmDelete": "再次点击确认删除", "batchNoSelection": "请先选择资产", "batchPartialFailure": "{{count}} 项处理失败，请重试", "batchEmptyMenu": "管理多个资产"
+    "collect": "添加到资产库",
+    "assetShort": "资产",
+    "collected": "已添加",
+    "collectSuccess": "已添加到资产库",
+    "alreadyCollected": "该资产已在资产库中",
+    "collectFailed": "添加失败",
+    "all": "全部资产",
+    "allTypes": "全部类型",
+    "image": "图片",
+    "video": "视频",
+    "audio": "音频",
+    "search": "搜索资产",
+    "newest": "最新加入",
+    "recent": "最近使用",
+    "manage": "完整管理",
+    "categories": "资产库",
+    "createLibrary": "新建资产库",
+    "libraryName": "资产库名称",
+    "confirmDeleteLibrary": "再次点击确认删除",
+    "empty": "资产库还是空的",
+    "noResults": "没有符合条件的资产",
+    "error": "资产加载失败",
+    "restartRequired": "资产库后端尚未加载，请重启 Electron 开发进程后重试",
+    "retry": "重试",
+    "count": "共 {{count}} 项",
+    "loadedCount": "已加载 {{loaded}} / {{count}} 项",
+    "loadingMore": "正在加载更多",
+    "scrollForMore": "继续滚动加载",
+    "allLoaded": "已经到底了",
+    "back": "返回原工作区",
+    "thumbnailSize": "缩略图",
+    "viewSettings": "显示设置",
+    "thumbnailFit": "缩略图显示方式",
+    "fitCover": "填满卡片",
+    "fitContain": "完整显示",
+    "fitCoverHint": "填满卡片，超出比例的边缘会被裁切。",
+    "fitContainHint": "完整显示媒体内容，空余区域保留背景。",
+    "renameAsset": "重命名",
+    "relocate": "重新定位文件",
+    "removeFromLibrary": "从当前库移除",
+    "addToLibrary": "加入其他库",
+    "deleteAsset": "删除",
+    "allTags": "全部标签",
+    "tags": "标签",
+    "tagPlaceholder": "搜索或输入新标签",
+    "membership": "所属资产库",
+    "searchLibraries": "搜索资产库",
+    "batchManage": "批量管理",
+    "batchDone": "完成",
+    "batchSelected": "已选择 {{count}} 项",
+    "batchSelectAll": "全选已加载",
+    "batchClear": "清空选择",
+    "batchHint": "点击资产选择，可批量调整标签、所属资产库或删除。",
+    "batchTags": "批量标签",
+    "batchTagAdd": "添加标签",
+    "batchTagRemove": "移除标签",
+    "batchLibraries": "批量资产库",
+    "batchLibraryAdd": "加入资产库",
+    "batchLibraryRemove": "移出资产库",
+    "batchDelete": "删除所选资产",
+    "batchConfirmDelete": "再次点击确认删除",
+    "batchNoSelection": "请先选择资产",
+    "batchPartialFailure": "{{count}} 项处理失败，请重试",
+    "batchEmptyMenu": "管理多个资产"
   },
   "windowControls": {
     "appName": "痕迹AI",
@@ -544,8 +599,8 @@
       "displayName": "显示名称",
       "modelType": "模型类型",
       "placeholders": {
-        "modelId": "例如：black-forest-labs/FLUX.1-dev",
-        "displayName": "例如：FLUX.1 Dev"
+        "modelId": "例如：Tongyi-MAI/Z-Image-Turbo",
+        "displayName": "例如：Z-Image Turbo"
       }
     },
     "types": {
@@ -554,7 +609,8 @@
     },
     "actions": {
       "confirmAdd": "确认添加",
-      "deleteTitle": "删除模型"
+      "deleteTitle": "删除模型",
+      "checking": "正在校验…"
     },
     "empty": "暂无自定义模型",
     "confirmDelete": "确定要删除这个模型吗？",
@@ -570,6 +626,18 @@
       "nameEmpty": {
         "title": "输入不完整",
         "message": "名称不能为空"
+      },
+      "unavailable": {
+        "title": "该模型不支持 API 调用",
+        "message": "魔搭的 API-Inference 只开放了平台挑选的一部分模型。「{{modelId}}」在魔搭可能有页面，但没有开放 API 调用，添加后生成一定会失败。请在模型库里筛选支持推理 API 的模型。"
+      },
+      "checkFailed": {
+        "title": "无法校验模型可用性",
+        "message": "没能连上魔搭校验「{{modelId}}」是否支持 API 调用（{{reason}}）。已按你填写的内容添加，但如果该模型未开放 API-Inference，生成时会失败。"
+      },
+      "notFound": {
+        "title": "找不到该模型",
+        "message": "魔搭上查不到「{{modelId}}」。请检查模型 ID 拼写（要带命名空间，例如 Qwen/Qwen-Image）。如果确认没写错，也可能是魔搭服务暂时不可用，稍后再试。"
       }
     }
   },
