@@ -299,7 +299,7 @@ find src electron \( -name '*.ts' -o -name '*.tsx' \) \
   | xargs wc -l | awk '$1 > 500 && $2 != "total"' | sort -rn
 ```
 
-第一条排除了测试替身、`src/components/ui/` 基元层和注释行。**任何剩余命中都是需要处理的违规**——写这条规则时的存量违规是 `src/components/Settings/sections/ModelSyncDialog.tsx` 的分组折叠按钮。
+第一条排除了测试替身、`src/components/ui/` 基元层和注释行。**任何剩余命中都是需要处理的违规**——存量已于 2026-08-26 清零（最后一处是 `ModelSyncDialog` 的分组折叠按钮，已改用 `UiOptionButton variant="menu"`），现在这条命令应当无输出。
 
 不要人工接管用户鼠标做验收。拖拽、点击、悬浮、画布交互优先补入并运行正式 Electron UI 场景；尚未覆盖或必须由用户主观判断的交互，再把具体操作步骤和验证点交给用户。真实 API key 下的生成链路、真实项目包导入导出、macOS 真机行为仍交给用户，除非用户已明确授权对应真实副作用。
 

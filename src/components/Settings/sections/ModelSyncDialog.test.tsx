@@ -91,6 +91,38 @@ describe('ModelSyncDialog', () => {
     expect(screen.queryByText('Kimi K2.7 Code')).toBeNull()
   })
 
+  /*
+   * 组头是可点击的折叠开关。它曾是个裸 <button>（违反"原生控件只许出现在 primitives"），
+   * 改用 UiOptionButton 后要保证行为没变：点一下收起该组的模型行，再点展开，
+   * 且 aria-expanded 跟着变——组头本身始终可见。
+   */
+  it('点组头折叠该组，再点展开', () => {
+    renderDialog()
+    expect(screen.getByText('Kimi K2.7 Code')).toBeTruthy()
+
+    const header = screen.getByText('moonshotai').closest('button')
+    expect(header).toBeTruthy()
+    expect(header?.getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.click(header as HTMLElement)
+    expect(screen.queryByText('Kimi K2.7 Code')).toBeNull()
+    expect(screen.getByText('moonshotai')).toBeTruthy()
+    expect(
+      screen.getByText('moonshotai').closest('button')?.getAttribute('aria-expanded')
+    ).toBe('false')
+
+    fireEvent.click(screen.getByText('moonshotai').closest('button') as HTMLElement)
+    expect(screen.getByText('Kimi K2.7 Code')).toBeTruthy()
+  })
+
+  it('折叠状态下组头的整组添加仍然可用', () => {
+    const { onAdd } = renderDialog()
+    fireEvent.click(screen.getByText('moonshotai').closest('button') as HTMLElement)
+
+    fireEvent.click(screen.getByLabelText('添加 moonshotai 全部模型'))
+    expect(onAdd).toHaveBeenCalledWith(['moonshotai/Kimi-K2.7-Code', 'moonshotai/Kimi-Linear'])
+  })
+
   it('搜不到时给空态而不是空白', () => {
     renderDialog()
     fireEvent.change(screen.getByPlaceholderText('搜索模型…'), { target: { value: '不存在的模型' } })

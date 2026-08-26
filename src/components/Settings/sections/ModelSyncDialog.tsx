@@ -10,6 +10,7 @@ import {
   UiIconButton,
   UiInput,
   UiModal,
+  UiOptionButton,
 } from '@/components/ui'
 
 export interface DiscoveredModelOption {
@@ -136,20 +137,21 @@ export function ModelSyncDialog({
                 if (row.kind === 'group') {
                   const allAdded = row.models.every(item => addedModelIds.has(item.modelId))
                   return (
-                    <div className="flex items-center gap-2 py-1.5">
-                      <button
+                    <div className="flex items-center gap-2">
+                      <UiOptionButton
                         type="button"
-                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                        variant="menu"
+                        className="min-w-0 flex-1 gap-1.5"
                         aria-expanded={!row.collapsed}
                         onClick={() => toggleGroup(row.group)}
                       >
                         <ChevronRight
                           size={14}
-                          className={`text-text-muted transition-transform ${row.collapsed ? '' : 'rotate-90'}`}
+                          className={`shrink-0 text-text-muted transition-transform ${row.collapsed ? '' : 'rotate-90'}`}
                         />
                         <span className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{row.group}</span>
                         <span className={UI_TEXT_META_CLASS}>{row.models.length}</span>
-                      </button>
+                      </UiOptionButton>
                       <UiIconButton
                         type="button"
                         showBorder={false}
