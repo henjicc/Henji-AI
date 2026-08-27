@@ -2,10 +2,11 @@
 
 ## 证据边界
 
-SDK 上游已完成 generation-only IIFE/VM 门禁；Photoshop UXP 真机网络与图层编码仍由插件集成验证。
+SDK 上游已完成 generation-only 与窄 LLM streaming IIFE/VM 门禁；Photoshop UXP 真机网络与图层编码
+仍由插件集成验证。
 
 - UXP 有 `fetch` / `AbortController` / Streams，但未找到官方证据证明长时间 `text/event-stream`
-  在 Photoshop UXP 中稳定；LLM SSE 仍是待真机项。
+  在 Photoshop UXP 中稳定；SDK 已完成 scripted SSE 与取消门禁，真实长流稳定性仍是插件真机项。
 - `requiredPermissions.network.domains` 支持 `https://*.example.com` 子域通配和 `"all"`。
   `requiredPermissions.webview.domains` 是另一套权限，不支持同样的通配，不要混用。
 - `allowCodeGenerationFromStrings` 默认 `false`；UXP 又没有 Node/`node:vm`。SDK 因此只直接调用
@@ -13,11 +14,18 @@ SDK 上游已完成 generation-only IIFE/VM 门禁；Photoshop UXP 真机网络�
 - UXP 没有运行时 Node 模块解析；`@henjicc/ai-sdk` 必须在构建期 bundle。只做少量生成模型时使用
   `@henjicc/ai-sdk/generation/core` + 完整模型 pack；需要全部 99 模型时才使用兼容的
   `@henjicc/ai-sdk/generation`。不要导入带 LLM 的包根。
+- UXP 只做原生流式聊天时导入 `@henjicc/ai-sdk/llm/streaming`，不要导入 `llm` 总入口；后者为了
+  向后兼容还包含 modelStep、Zod 与 Vercel AI SDK。
 
 generation-only 入口公开 `createGenerationClient`，提供 `generate`、`continuePolling`、`cancel`、
 `catalog`、`providers` 与 `dispose`。发布门禁确认其 IIFE 不含 LLM/Vercel AI SDK、Node、动态代码生成、
 global fetch、Streams、File、`btoa`/`atob`，import/create/catalog/dispose 网络调用为 0，目录为 99 个模型；
 宿主不需要 alias 或 shim。
+
+窄 LLM streaming 入口只导出原生 OpenAI-compatible SSE 执行、取消、DTO、运行时类型与稳定错误协议。
+关闭 tree-shaking 的 IIFE/ESM 静态图门禁确认 Zod、modelStep、Vercel `ai`、`@ai-sdk/*`、Node builtin、
+`Buffer`、`process`、global fetch、`eval`/`new Function`、`TransformStream`、`WritableStream` 均为 0。
+`ReadableStream` 与 `TextDecoder` 是读取 SSE 的原生必需能力，不由 SDK 注入 polyfill。
 
 ## manifest v5 网络权限
 
@@ -81,6 +89,36 @@ export function createUxpGenerationClient(exportEncodedLayer: ExportEncodedLayer
   })
 }
 ```
+
+LLM 使用同一个 `RuntimeContext`，密钥 scope 为 `llm`：
+
+```ts
+import {
+  cancelLlmChatTask,
+  runLlmChatStream,
+  type LlmChatRequestDto,
+} from '@henjicc/ai-sdk/llm/streaming'
+
+const request: LlmChatRequestDto = {
+  requestId: 'uxp-chat-1',
+  providerId: 'openai',
+  modelId: 'gpt-5-mini',
+  messages: [{ role: 'user', content: '描述当前图片' }],
+}
+
+const outcome = await runLlmChatStream(request, request.requestId!, (event) => {
+  if (event.type === 'Token') appendText(event.data)
+  if (event.type === 'ReasoningToken') appendReasoning(event.data)
+}, runtime)
+console.log(outcome.usage, outcome.finishReason)
+
+// 用户点击取消时使用同一个 taskId：
+cancelLlmChatTask(request.requestId!)
+```
+
+输入图片/视频/音频时仍通过 `LlmContentPart` 结构与 `RuntimeContext.media` 处理宿主管理引用；不要在插件
+里复制 SSE parser、错误分类或取消登记表。`Transport.fetch` 必须保留 `Response.body` 的原生字节流并尊重
+`init.signal`，不能先把整段响应转为字符串，否则会失去 token 流与及时取消。
 
 `kieZImage` 是完整执行 pack，不只是目录定义；它已包含 KIE adapter 与 KIE 范围内的媒体上传策略。
 选择别的模型时替换或追加对应 `models/<provider>/<model>` pack。不要只拿同路径的低层 `model`

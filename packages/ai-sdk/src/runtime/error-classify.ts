@@ -2,7 +2,7 @@ import {
   ProviderModelStepError,
   type ModelProviderErrorCategory,
   type ProviderErrorContext,
-} from './errors'
+} from './provider-error-core'
 import { shouldRetry as readPortableRetry } from './retry'
 export { describeNetworkFailure, shouldRetry } from './retry'
 export type { NetworkFailure, RetryMode } from './retry'

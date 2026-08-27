@@ -1,5 +1,15 @@
 import { z } from 'zod'
 export { AiRuntimeError, cancelledError } from './AiRuntimeError'
+export {
+  parseModelProviderError,
+  ProviderModelStepError,
+  serializeModelProviderError,
+} from './provider-error-core'
+export type {
+  ModelProviderError,
+  ModelProviderErrorCategory,
+  ProviderErrorContext,
+} from './provider-error-core'
 
 export const modelProviderErrorCategorySchema = z.enum([
   'network',
@@ -14,7 +24,6 @@ export const modelProviderErrorCategorySchema = z.enum([
   'cancelled',
   'unknown',
 ])
-export type ModelProviderErrorCategory = z.infer<typeof modelProviderErrorCategorySchema>
 
 export const modelProviderErrorSchema = z.object({
   code: z.string().min(1).max(200),
@@ -27,43 +36,3 @@ export const modelProviderErrorSchema = z.object({
   requestId: z.string().min(1),
   message: z.string().min(1).max(1_000),
 }).strict()
-export type ModelProviderError = z.infer<typeof modelProviderErrorSchema>
-
-const ERROR_MARKER = '[provider_error]'
-
-export function serializeModelProviderError(error: ModelProviderError): string {
-  return `${ERROR_MARKER}${JSON.stringify(modelProviderErrorSchema.parse(error))}`
-}
-
-export function parseModelProviderError(value: unknown): ModelProviderError | null {
-  const message = value instanceof Error ? value.message : typeof value === 'string' ? value : ''
-  const markerIndex = message.indexOf(ERROR_MARKER)
-  if (markerIndex < 0) return null
-  try {
-    const parsed = JSON.parse(message.slice(markerIndex + ERROR_MARKER.length)) as unknown
-    const result = modelProviderErrorSchema.safeParse(parsed)
-    return result.success ? result.data : null
-  } catch {
-    return null
-  }
-}
-
-export class ProviderModelStepError extends Error {
-  readonly details: ModelProviderError
-  readonly code: string
-  readonly category: ModelProviderErrorCategory
-
-  constructor(details: ModelProviderError, options?: { cause?: unknown }) {
-    super(serializeModelProviderError(details), options)
-    this.name = 'ProviderModelStepError'
-    this.details = modelProviderErrorSchema.parse(details)
-    this.code = this.details.code
-    this.category = this.details.category
-  }
-}
-
-export interface ProviderErrorContext {
-  providerId: string
-  modelId: string
-  requestId: string
-}

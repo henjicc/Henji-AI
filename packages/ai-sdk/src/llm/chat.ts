@@ -1,12 +1,12 @@
-import { preprocessRequestBody } from '../upload'
-import type { RuntimeContext } from '../runtime'
+import { preprocessRequestBody } from '../upload/preprocess'
+import type { RuntimeContext } from '../runtime/RuntimeContext'
+import { normalizeProviderError } from '../runtime/error-classify'
 import {
   cancelTask,
   clearCancelFlag,
   isCancelled,
-  normalizeProviderError,
   registerAbortController,
-} from '../runtime'
+} from '../runtime/task-registry'
 import {
   buildOpenAiCompatiblePayload,
   resolveOpenAiCompatibleEndpoint,
@@ -19,6 +19,7 @@ import type {
   LlmChatMessageDto,
   LlmChatRequestDto,
   LlmStreamEmitter,
+  LlmUsageDto,
 } from './chatTypes'
 
 /**
@@ -49,6 +50,8 @@ export interface LlmChatCompletedInfo {
   outputChars: number
   output: string
   reasoningOutput: string
+  usage: LlmUsageDto | null
+  finishReason: string | null
 }
 
 export interface LlmChatStreamHooks {
@@ -65,6 +68,10 @@ export interface LlmChatStreamOutcome {
   elapsedMs: number
   inputChars: number
   outputChars: number
+  output: string
+  reasoningOutput: string
+  usage: LlmUsageDto | null
+  finishReason: string | null
 }
 
 /** taskId 只应该在一次调用里计算一次（`request.requestId` 缺省时会落到 `Date.now()`），调用方与本函数必须复用同一个值。 */
@@ -133,6 +140,8 @@ export async function runLlmChatStream(
       outputChars,
       output: output.output,
       reasoningOutput: output.reasoningOutput,
+      usage: output.usage,
+      finishReason: output.finishReason,
     })
 
     span?.end()
@@ -143,6 +152,10 @@ export async function runLlmChatStream(
       elapsedMs,
       inputChars,
       outputChars,
+      output: output.output,
+      reasoningOutput: output.reasoningOutput,
+      usage: output.usage,
+      finishReason: output.finishReason,
     }
   } catch (error) {
     span?.end(error)

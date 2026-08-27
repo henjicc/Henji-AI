@@ -23,6 +23,7 @@ describe('published package exports', () => {
       './tool-packs/*',
       './catalog',
       './llm',
+      './llm/streaming',
       './runtime',
       './capabilities',
       './discovery',

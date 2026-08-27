@@ -60,7 +60,18 @@ export type LlmStreamEventDto =
 
 export type LlmStreamEmitter = (event: LlmStreamEventDto) => void
 
+export interface LlmUsageDto {
+  inputTokens: number | null
+  outputTokens: number | null
+  reasoningTokens: number | null
+  cacheReadTokens: number | null
+  cacheWriteTokens: number | null
+  totalTokens: number | null
+}
+
 export interface LlmStreamOutput {
   output: string
   reasoningOutput: string
+  usage: LlmUsageDto | null
+  finishReason: string | null
 }

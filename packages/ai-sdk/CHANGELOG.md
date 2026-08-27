@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+## 0.1.7 - 2026-08-28
+
+- 新增 `@henjicc/ai-sdk/llm/streaming` 受限宿主入口，仅包含原生 OpenAI-compatible SSE、取消、必要类型与错误协议，不静态带入 modelStep、Zod 或 Vercel AI SDK。
+- 原生 SSE 补齐 usage 与 finish reason 结果，保持 reasoning/text 事件与旧入口兼容；覆盖 UTF-8 跨 chunk、`[DONE]`、供应商错误与 Abort。
+- 新增关闭 tree-shaking 的 UXP LLM IIFE/ESM 发布门禁，禁止动态代码生成、Node 全局与非必需 Streams polyfill。
+
 ## 0.1.6 - 2026-08-28
 
 - APIMart Nano Banana 2、Lite、Pro 新增常规/官方双渠道，保持常规渠道为默认，并按渠道切换精确模型 ID 与估价。

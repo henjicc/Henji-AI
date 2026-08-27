@@ -1,7 +1,11 @@
 import { z } from 'zod'
+export {
+  applyProviderRequestBodyQuirks,
+  resolveProviderExtraAuthHeaders,
+} from './providerProtocolCore'
+export type { LlmApiProtocol } from './providerProtocolCore'
 
 export const llmApiProtocolSchema = z.enum(['openai-compatible'])
-export type LlmApiProtocol = z.infer<typeof llmApiProtocolSchema>
 
 /**
  * 供应商在 OpenAI 协议之上的认证差异，按 providerId 声明。
@@ -16,17 +20,6 @@ export type LlmApiProtocol = z.infer<typeof llmApiProtocolSchema>
  *
  * 三条发请求的路径（SDK 模型步、原生流式、模型发现）必须共用这一份，否则改了一处漏两处。
  */
-const PROVIDER_EXTRA_AUTH_HEADERS: Readonly<Record<string, string>> = {
-  mimo: 'api-key',
-}
-
-export function resolveProviderExtraAuthHeaders(
-  providerId: string,
-  apiKey: string
-): Record<string, string> {
-  const headerName = PROVIDER_EXTRA_AUTH_HEADERS[providerId.trim().toLowerCase()]
-  return headerName && apiKey ? { [headerName]: apiKey } : {}
-}
 
 /**
  * 供应商对请求体字段的自有要求，按 providerId 声明。
@@ -37,12 +30,3 @@ export function resolveProviderExtraAuthHeaders(
  *
  * 这里改名而不是两个都发：`max_tokens` 既然被判为非法参数，留着它就还是 400。
  */
-export function applyProviderRequestBodyQuirks(
-  providerId: string,
-  body: Record<string, unknown>
-): Record<string, unknown> {
-  if (providerId.trim().toLowerCase() !== 'mimo') return body
-  if (!('max_tokens' in body)) return body
-  const { max_tokens: maxTokens, ...rest } = body
-  return { ...rest, max_completion_tokens: maxTokens }
-}

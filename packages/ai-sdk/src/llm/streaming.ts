@@ -3,7 +3,7 @@ import { fetchProvider } from '../providers/provider-fetch'
 import {
   applyProviderRequestBodyQuirks,
   resolveProviderExtraAuthHeaders,
-} from './providerProtocol'
+} from './providerProtocolCore'
 import { applyProviderReasoningRequestBody } from './providerReasoningRequest'
 import type {
   JsonObject,
@@ -13,6 +13,7 @@ import type {
   LlmContentPart,
   LlmStreamEmitter,
   LlmStreamOutput,
+  LlmUsageDto,
 } from './chatTypes'
 
 /**
@@ -158,6 +159,8 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
   let pending = ''
   let output = ''
   let reasoningOutput = ''
+  let usage: LlmUsageDto | null = null
+  let finishReason: string | null = null
 
   let streamDone = false
   while (!streamDone) {
@@ -173,8 +176,10 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
     for (const event of parsed.events) {
       const chunk = parseSseData(event)
       if (chunk.done) {
-        return { output, reasoningOutput }
+        return { output, reasoningOutput, usage, finishReason }
       }
+      usage = chunk.usage ?? usage
+      finishReason = chunk.finishReason ?? finishReason
       if (chunk.reasoning) {
         reasoningOutput += chunk.reasoning
         emit({ type: 'ReasoningToken', data: chunk.reasoning })
@@ -193,6 +198,8 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
   const parsed = drainSseEvents(`${pending}\n\n`)
   for (const event of parsed.events) {
     const chunk = parseSseData(event)
+    usage = chunk.usage ?? usage
+    finishReason = chunk.finishReason ?? finishReason
     if (chunk.reasoning) {
       reasoningOutput += chunk.reasoning
       emit({ type: 'ReasoningToken', data: chunk.reasoning })
@@ -202,7 +209,7 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
       emit({ type: 'Token', data: chunk.content })
     }
   }
-  return { output, reasoningOutput }
+  return { output, reasoningOutput, usage, finishReason }
 }
 
 function drainSseEvents(input: string): { events: string[]; remaining: string } {
@@ -231,7 +238,13 @@ function findNextSeparator(input: string): { index: number; length: number } | u
   return { index: lf, length: 2 }
 }
 
-function parseSseData(event: string): { done: boolean; content?: string; reasoning?: string } {
+function parseSseData(event: string): {
+  done: boolean
+  content?: string
+  reasoning?: string
+  usage?: LlmUsageDto
+  finishReason?: string
+} {
   const data = event
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -248,7 +261,30 @@ function parseSseData(event: string): { done: boolean; content?: string; reasoni
     done: false,
     content: readString(delta.content),
     reasoning: readString(delta.reasoning_content ?? delta.reasoning),
+    usage: readUsage(json),
+    finishReason: readFinishReason(json),
   }
+}
+
+function readUsage(value: unknown): LlmUsageDto | undefined {
+  if (!isRecord(value) || !isRecord(value.usage)) return undefined
+  const usage = value.usage
+  const inputDetails = isRecord(usage.prompt_tokens_details) ? usage.prompt_tokens_details : {}
+  const outputDetails = isRecord(usage.completion_tokens_details) ? usage.completion_tokens_details : {}
+  return {
+    inputTokens: readTokenCount(usage.prompt_tokens ?? usage.input_tokens),
+    outputTokens: readTokenCount(usage.completion_tokens ?? usage.output_tokens),
+    reasoningTokens: readTokenCount(outputDetails.reasoning_tokens ?? usage.reasoning_tokens),
+    cacheReadTokens: readTokenCount(inputDetails.cached_tokens ?? usage.cache_read_tokens),
+    cacheWriteTokens: readTokenCount(usage.cache_write_tokens),
+    totalTokens: readTokenCount(usage.total_tokens),
+  }
+}
+
+function readFinishReason(value: unknown): string | undefined {
+  if (!isRecord(value) || !Array.isArray(value.choices)) return undefined
+  const first = value.choices[0]
+  return isRecord(first) ? readString(first.finish_reason) : undefined
 }
 
 function readDelta(value: unknown): Record<string, unknown> {
@@ -266,6 +302,10 @@ function readString(value: unknown): string | undefined {
 
 function readNumber(value: JsonValue | undefined): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function readTokenCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
 function normalizeBaseUrl(input: string | undefined, fallback: string | undefined): string {
