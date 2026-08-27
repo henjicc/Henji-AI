@@ -56,6 +56,9 @@ const requiredEntries = [
   './llm/streaming',
   './runtime',
   './capabilities',
+  './capabilities/speech-recognition',
+  './capabilities/translation',
+  './capabilities/realtime',
   './discovery',
 ]
 for (const entry of requiredEntries) {

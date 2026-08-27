@@ -88,6 +88,21 @@
       "import": "./dist/capabilities/index.js",
       "default": "./dist/capabilities/index.js"
     },
+    "./capabilities/speech-recognition": {
+      "types": "./dist/capabilities/speech-recognition/index.d.ts",
+      "import": "./dist/capabilities/speech-recognition/index.js",
+      "default": "./dist/capabilities/speech-recognition/index.js"
+    },
+    "./capabilities/translation": {
+      "types": "./dist/capabilities/translation/index.d.ts",
+      "import": "./dist/capabilities/translation/index.js",
+      "default": "./dist/capabilities/translation/index.js"
+    },
+    "./capabilities/realtime": {
+      "types": "./dist/capabilities/realtime.d.ts",
+      "import": "./dist/capabilities/realtime.js",
+      "default": "./dist/capabilities/realtime.js"
+    },
     "./discovery": {
       "types": "./dist/discovery/index.d.ts",
       "import": "./dist/discovery/index.js",

@@ -44,6 +44,8 @@ describe('CredentialStore', () => {
       get: (scope, providerId) => {
         if (scope === 'generation' && providerId === 'ppio') return 'gen-key'
         if (scope === 'llm' && providerId === 'openai') return 'llm-key'
+        if (scope === 'speech-recognition' && providerId === 'bailian') return 'asr-key'
+        if (scope === 'translation' && providerId === 'bailian') return 'translation-key'
         if (scope === 'custom-scope' && providerId === 'x') return 'custom-key'
         return undefined
       },
@@ -51,6 +53,8 @@ describe('CredentialStore', () => {
 
     expect(await store.get('generation', 'ppio')).toBe('gen-key')
     expect(await store.get('llm', 'openai')).toBe('llm-key')
+    expect(await store.get('speech-recognition', 'bailian')).toBe('asr-key')
+    expect(await store.get('translation', 'bailian')).toBe('translation-key')
     // 可扩展 scope：不要求 scope 是闭合联合的成员也能编译通过、也能取到值
     expect(await store.get('custom-scope', 'x')).toBe('custom-key')
     expect(await store.get('generation', 'unknown')).toBeUndefined()
@@ -181,6 +185,7 @@ describe('RuntimeContext / resolveRuntimeContext', () => {
     const context: RuntimeContext = { transport, credentials, media }
     expect(context.logger).toBeUndefined()
     expect(context.tracer).toBeUndefined()
+    expect(context.realtime).toBeUndefined()
   })
 
   it('resolveRuntimeContext 用 noop 实现补齐缺省的 logger/tracer', () => {
@@ -189,6 +194,7 @@ describe('RuntimeContext / resolveRuntimeContext', () => {
     expect(resolved.logger).toBe(noopLogger)
     expect(resolved.tracer).toBe(noopTracer)
     expect(resolved.transport).toBe(transport)
+    expect(resolved.realtime).toBeUndefined()
   })
 
   it('已提供 logger/tracer 时保留原值，不被 noop 覆盖', () => {

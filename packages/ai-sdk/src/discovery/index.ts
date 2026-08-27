@@ -1,8 +1,14 @@
-import type { CapabilityDescriptor, CapabilityModule } from '../capabilities'
+import type {
+  CapabilityDescriptor,
+  CapabilityModule,
+  CapabilityRealtimeModule,
+} from '../capabilities'
 import type { GenerationPack } from '../generation/core'
 import type { LlmModelCatalogEntry } from '../llm/modelCatalog'
 import type { LlmModelConfig } from '../llm/types'
 import type { ModelRuntimeDefinition, ModelType, RuntimeInputLimitsConfig } from '../types/model'
+
+type ExtensibleString = string & Record<never, never>
 
 export type StandardModelOperation =
   | 'image-generation'
@@ -16,10 +22,20 @@ export type StandardModelOperation =
   | 'audio-generation'
   | 'chat'
   | 'speech-recognition'
+  | 'speech-to-text'
+  | 'translation'
+  | 'text-translation'
   | 'ocr'
 
-export type ModelOperation = StandardModelOperation | (string & {})
-export type ModelContentKind = 'text' | 'structured-data' | 'image' | 'video' | 'audio' | 'pdf' | (string & {})
+export type ModelOperation = StandardModelOperation | ExtensibleString
+export type ModelContentKind =
+  | 'text'
+  | 'structured-data'
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | ExtensibleString
 
 export interface ModelCapabilityProfile {
   id: string
@@ -59,7 +75,11 @@ export interface CreateCapabilityDiscoveryInput {
   generationModels?: readonly ModelRuntimeDefinition[]
   llmEntries?: readonly LlmModelCatalogEntry[]
   llmModels?: readonly LlmModelConfig[]
-  extensions?: readonly (CapabilityDescriptor | CapabilityModule<unknown, unknown>)[]
+  extensions?: readonly (
+    | CapabilityDescriptor
+    | CapabilityModule<unknown, unknown, unknown>
+    | CapabilityRealtimeModule<unknown, unknown, unknown, unknown>
+  )[]
 }
 
 export interface ModelCapabilityDiscovery {
@@ -146,13 +166,13 @@ export function profileLlmModel(model: LlmModelConfig): ModelCapabilityProfile {
 export function profileCapabilityDescriptor(descriptor: CapabilityDescriptor): ModelCapabilityProfile {
   return {
     id: descriptor.id,
-    providerIds: [],
+    providerIds: descriptor.providerIds ? [...descriptor.providerIds] : [],
     outputModalities: descriptor.contract.output.map((value) => value.kind),
-    operations: [descriptor.kind],
+    operations: descriptor.operations?.length ? [...descriptor.operations] : [descriptor.kind],
     acceptedInputContentKinds: descriptor.contract.input.map((value) => value.kind),
     outputContentKinds: descriptor.contract.output.map((value) => value.kind),
-    features: [],
-    tags: [],
+    features: descriptor.features ? [...descriptor.features] : [],
+    tags: descriptor.tags ? [...descriptor.tags] : [],
   }
 }
 

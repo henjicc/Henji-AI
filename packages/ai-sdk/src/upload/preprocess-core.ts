@@ -1,5 +1,9 @@
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
-import { resolveRuntimeContext, type RuntimeContext } from '../runtime/RuntimeContext'
+import {
+  resolveRuntimeContext,
+  type ResolvedRuntimeContext,
+  type RuntimeContext,
+} from '../runtime/RuntimeContext'
 import type { RuntimeConstraints } from '../types/model'
 import type { JsonObject, JsonValue } from '../types/runtime'
 import { defaultFilename, parseDataUri } from './media-binary'
@@ -36,7 +40,7 @@ export interface ProviderMediaRewriteInput {
   params: JsonObject
   requestId?: string
   signal?: AbortSignal
-  runtime: Required<RuntimeContext>
+  runtime: ResolvedRuntimeContext
 }
 
 export interface ProviderObjectPreprocessInput {
@@ -64,7 +68,7 @@ interface TraversalContext {
   mediaFields: ReadonlyMap<string, Exclude<MediaKind, 'unknown'>>
   requestId?: string
   signal?: AbortSignal
-  runtime: Required<RuntimeContext>
+  runtime: ResolvedRuntimeContext
   strategy: ProviderPreprocessStrategy
 }
 
@@ -162,7 +166,7 @@ async function rewriteMediaSource(
 }
 
 async function prepareMediaBinary(
-  runtime: Required<RuntimeContext>,
+  runtime: ResolvedRuntimeContext,
   source: string,
   mediaKind: Exclude<MediaKind, 'unknown'>
 ): Promise<PreparedMediaBinary> {

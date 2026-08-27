@@ -26,6 +26,9 @@ describe('published package exports', () => {
       './llm/streaming',
       './runtime',
       './capabilities',
+      './capabilities/speech-recognition',
+      './capabilities/translation',
+      './capabilities/realtime',
       './discovery',
     ])
     for (const conditions of Object.values(manifest.exports)) {

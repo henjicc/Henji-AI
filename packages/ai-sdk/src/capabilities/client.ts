@@ -6,31 +6,45 @@ import type {
   CapabilityHandle,
   CapabilityKind,
   CapabilityModule,
+  CapabilityRealtimeModule,
+  CapabilityRealtimeSession,
 } from './types'
 
 export interface CreateCapabilityClientConfig {
   runtime: RuntimeContext
-  modules?: readonly CapabilityModule<unknown, unknown>[]
+  modules?: readonly CapabilityModule<unknown, unknown, unknown>[]
+  realtimeModules?: readonly CapabilityRealtimeModule<unknown, unknown, unknown, unknown>[]
 }
 
 export interface CapabilityClient {
-  register<TInput, TOutput>(
-    module: CapabilityModule<TInput, TOutput>
-  ): CapabilityHandle<TInput, TOutput>
+  register<TInput, TOutput, TEvent = never>(
+    module: CapabilityModule<TInput, TOutput, TEvent>
+  ): CapabilityHandle<TInput, TOutput, TEvent>
+  registerRealtime<TStart, TInput, TEvent, TOutput>(
+    module: CapabilityRealtimeModule<TStart, TInput, TEvent, TOutput>
+  ): CapabilityDescriptor
   unregister(moduleId: string): Promise<boolean>
   list(kind?: CapabilityKind): readonly CapabilityDescriptor[]
-  get<TInput, TOutput>(moduleId: string): CapabilityHandle<TInput, TOutput> | undefined
-  execute<TInput, TOutput>(
+  get<TInput, TOutput, TEvent = never>(moduleId: string): CapabilityHandle<TInput, TOutput, TEvent> | undefined
+  execute<TInput, TOutput, TEvent = never>(
     moduleId: string,
     input: TInput,
-    options?: CapabilityExecuteOptions
+    options?: CapabilityExecuteOptions<TEvent>
   ): Promise<TOutput>
+  openSession<TStart, TInput, TEvent, TOutput>(
+    moduleId: string,
+    input: TStart,
+    options?: CapabilityExecuteOptions<TEvent>
+  ): Promise<CapabilityRealtimeSession<TInput, TOutput>>
   cancel(requestId: string): void
   dispose(): Promise<void>
 }
 
 interface RegisteredModule {
-  module: CapabilityModule<unknown, unknown>
+  module:
+    | CapabilityModule<unknown, unknown, unknown>
+    | CapabilityRealtimeModule<unknown, unknown, unknown, unknown>
+  mode: 'execute' | 'realtime'
   disposed: boolean
 }
 
@@ -52,21 +66,21 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
   }
 
   const client: CapabilityClient = {
-    register<TInput, TOutput>(module: CapabilityModule<TInput, TOutput>) {
+    register<TInput, TOutput, TEvent = never>(module: CapabilityModule<TInput, TOutput, TEvent>) {
       ensureActive()
-      const id = normalizeModuleId(module.descriptor.id)
-      validateDescriptor(module.descriptor)
-      if (modules.has(id)) {
-        throw new AiRuntimeError(
-          'capability_already_registered',
-          `Capability module already registered: ${id}`
-        )
-      }
-      modules.set(id, {
-        module: module as CapabilityModule<unknown, unknown>,
-        disposed: false,
-      })
-      return createHandle<TInput, TOutput>(client, module.descriptor)
+      registerModule(modules, module as CapabilityModule<unknown, unknown, unknown>, 'execute')
+      return createHandle<TInput, TOutput, TEvent>(client, module.descriptor)
+    },
+    registerRealtime<TStart, TInput, TEvent, TOutput>(
+      module: CapabilityRealtimeModule<TStart, TInput, TEvent, TOutput>
+    ) {
+      ensureActive()
+      registerModule(
+        modules,
+        module as CapabilityRealtimeModule<unknown, unknown, unknown, unknown>,
+        'realtime'
+      )
+      return module.descriptor
     },
     async unregister(moduleId) {
       ensureActive()
@@ -85,23 +99,26 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
         .map(({ module }) => module.descriptor)
         .filter((descriptor) => kind === undefined || descriptor.kind === kind)
     },
-    get<TInput, TOutput>(moduleId: string) {
+    get<TInput, TOutput, TEvent = never>(moduleId: string) {
       ensureActive()
       const registered = modules.get(normalizeModuleId(moduleId))
-      return registered
-        ? createHandle<TInput, TOutput>(client, registered.module.descriptor)
+      return registered?.mode === 'execute'
+        ? createHandle<TInput, TOutput, TEvent>(client, registered.module.descriptor)
         : undefined
     },
-    async execute<TInput, TOutput>(
+    async execute<TInput, TOutput, TEvent = never>(
       moduleId: string,
       input: TInput,
-      options: CapabilityExecuteOptions = {}
+      options: CapabilityExecuteOptions<TEvent> = {}
     ): Promise<TOutput> {
       ensureActive()
       const id = normalizeModuleId(moduleId)
       const registered = modules.get(id)
       if (!registered) {
         throw new AiRuntimeError('capability_not_found', `Unknown capability module: ${id}`)
+      }
+      if (registered.mode !== 'execute') {
+        throw new AiRuntimeError('capability_mode_mismatch', `Capability module requires a realtime session: ${id}`)
       }
       const requestId = options.requestId?.trim() || `${id}-${Date.now()}`
       if (active.has(requestId)) {
@@ -118,6 +135,11 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
       const forwardAbort = (): void => controller.abort()
       if (options.signal?.aborted) controller.abort()
       else options.signal?.addEventListener('abort', forwardAbort, { once: true })
+      let timedOut = false
+      const timeout = createTimeout(options.timeoutMs, () => {
+        timedOut = true
+        controller.abort()
+      })
       active.set(requestId, { moduleId: id, controller, finished, markFinished })
       const span = runtime.tracer.startSpan('capability.execute', {
         requestId,
@@ -131,11 +153,13 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
       })
       try {
         if (controller.signal.aborted) throw cancelledError(requestId)
-        const output = await registered.module.execute(input, {
+        const module = registered.module as CapabilityModule<TInput, TOutput, TEvent>
+        const output = await module.execute(input, {
           runtime,
           requestId,
           signal: controller.signal,
-        }) as TOutput
+          emit: async (event) => await options.onEvent?.(event),
+        })
         if (controller.signal.aborted) throw cancelledError(requestId)
         runtime.logger.info('能力模块执行完成', {
           event: 'capability.execute.completed',
@@ -145,8 +169,10 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
         span.end()
         return output
       } catch (error) {
-        const normalized = controller.signal.aborted
-          ? cancelledError(requestId)
+        const normalized = timedOut
+          ? new AiRuntimeError('timeout', `Capability request timed out: ${requestId}`)
+          : controller.signal.aborted
+            ? cancelledError(requestId)
           : normalizeExecutionError(id, error)
         runtime.logger.error('能力模块执行失败', {
           event: 'capability.execute.failed',
@@ -158,8 +184,177 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
         throw normalized
       } finally {
         options.signal?.removeEventListener('abort', forwardAbort)
+        if (timeout !== undefined) clearTimeout(timeout)
         active.delete(requestId)
         markFinished()
+      }
+    },
+    async openSession<TStart, TInput, TEvent, TOutput>(
+      moduleId: string,
+      input: TStart,
+      options: CapabilityExecuteOptions<TEvent> = {}
+    ): Promise<CapabilityRealtimeSession<TInput, TOutput>> {
+      ensureActive()
+      const id = normalizeModuleId(moduleId)
+      const registered = modules.get(id)
+      if (!registered) {
+        throw new AiRuntimeError('capability_not_found', `Unknown capability module: ${id}`)
+      }
+      if (registered.mode !== 'realtime') {
+        throw new AiRuntimeError('capability_mode_mismatch', `Capability module is not realtime: ${id}`)
+      }
+      const requestId = options.requestId?.trim() || `${id}-${Date.now()}`
+      if (active.has(requestId)) {
+        throw new AiRuntimeError('capability_request_active', `Capability request already active: ${requestId}`)
+      }
+      const controller = new AbortController()
+      let markFinished = (): void => undefined
+      const finished = new Promise<void>((resolve) => { markFinished = resolve })
+      const forwardAbort = (): void => controller.abort()
+      if (options.signal?.aborted) controller.abort()
+      else options.signal?.addEventListener('abort', forwardAbort, { once: true })
+      let timedOut = false
+      const timeout = createTimeout(options.timeoutMs, () => {
+        timedOut = true
+        controller.abort()
+      })
+      active.set(requestId, { moduleId: id, controller, finished, markFinished })
+      const span = runtime.tracer.startSpan('capability.session', {
+        requestId,
+        capabilityId: id,
+        capabilityKind: registered.module.descriptor.kind,
+      })
+      runtime.logger.info('能力实时会话开始', {
+        event: 'capability.session.start',
+        requestId,
+        context: { capabilityId: id, capabilityKind: registered.module.descriptor.kind },
+      })
+      try {
+        if (controller.signal.aborted) throw cancelledError(requestId)
+        const module = registered.module as CapabilityRealtimeModule<TStart, TInput, TEvent, TOutput>
+        const driver = await module.open(input, {
+          runtime,
+          requestId,
+          signal: controller.signal,
+          emit: async (event) => await options.onEvent?.(event),
+        })
+        if (controller.signal.aborted) {
+          await driver.close?.()
+          throw timedOut
+            ? new AiRuntimeError('timeout', `Capability session timed out: ${requestId}`)
+            : cancelledError(requestId)
+        }
+        let ended = false
+        let closePromise: Promise<void> | undefined
+        const closeDriver = (): Promise<void> => {
+          closePromise ??= Promise.resolve().then(async () => await driver.close?.())
+          return closePromise
+        }
+        const end = (error?: unknown): void => {
+          if (ended) return
+          ended = true
+          options.signal?.removeEventListener('abort', forwardAbort)
+          if (timeout !== undefined) clearTimeout(timeout)
+          active.delete(requestId)
+          markFinished()
+          span.end(error)
+        }
+        const closeAfterAbort = async (): Promise<void> => {
+          if (ended) return
+          const error = timedOut
+            ? new AiRuntimeError('timeout', `Capability session timed out: ${requestId}`)
+            : cancelledError(requestId)
+          try {
+            await closeDriver()
+          } finally {
+            runtime.logger.error('能力实时会话失败', {
+              event: 'capability.session.failed', requestId, context: { capabilityId: id }, error,
+            })
+            end(error)
+          }
+        }
+        controller.signal.addEventListener('abort', () => { void closeAfterAbort() }, { once: true })
+        const sessionInactiveError = (): AiRuntimeError => timedOut
+          ? new AiRuntimeError('timeout', `Capability session timed out: ${requestId}`)
+          : cancelledError(requestId)
+
+        return {
+          requestId,
+          descriptor: registered.module.descriptor,
+          send: async (value) => {
+            if (ended || controller.signal.aborted) throw sessionInactiveError()
+            await driver.send(value)
+          },
+          finish: async () => {
+            if (ended || controller.signal.aborted) throw sessionInactiveError()
+            let output: TOutput
+            try {
+              output = await driver.finish()
+              if (controller.signal.aborted) throw cancelledError(requestId)
+            } catch (error) {
+              const normalized = controller.signal.aborted
+                ? cancelledError(requestId)
+                : normalizeExecutionError(id, error)
+              try {
+                await closeDriver()
+              } catch {
+                // 保留 finish 的首个失败；close 仅负责尽力释放连接。
+              }
+              runtime.logger.error('能力实时会话失败', {
+                event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
+              })
+              end(normalized)
+              throw normalized
+            }
+            try {
+              await closeDriver()
+            } catch (error) {
+              const normalized = normalizeExecutionError(id, error)
+              runtime.logger.error('能力实时会话失败', {
+                event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
+              })
+              end(normalized)
+              throw normalized
+            }
+            runtime.logger.info('能力实时会话完成', {
+              event: 'capability.session.completed', requestId, context: { capabilityId: id },
+            })
+            end()
+            return output
+          },
+          close: async () => {
+            if (ended) return
+            try {
+              await closeDriver()
+              runtime.logger.info('能力实时会话关闭', {
+                event: 'capability.session.closed', requestId, context: { capabilityId: id },
+              })
+              end()
+            } catch (error) {
+              const normalized = normalizeExecutionError(id, error)
+              runtime.logger.error('能力实时会话失败', {
+                event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
+              })
+              end(normalized)
+              throw normalized
+            }
+          },
+        }
+      } catch (error) {
+        options.signal?.removeEventListener('abort', forwardAbort)
+        if (timeout !== undefined) clearTimeout(timeout)
+        active.delete(requestId)
+        markFinished()
+        const normalized = timedOut
+          ? new AiRuntimeError('timeout', `Capability session timed out: ${requestId}`)
+          : controller.signal.aborted
+            ? cancelledError(requestId)
+            : normalizeExecutionError(id, error)
+        runtime.logger.error('能力实时会话失败', {
+          event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
+        })
+        span.end(normalized)
+        throw normalized
       }
     },
     cancel(requestId) {
@@ -181,6 +376,7 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
 
   try {
     for (const module of config.modules ?? []) client.register(module)
+    for (const module of config.realtimeModules ?? []) client.registerRealtime(module)
   } catch (error) {
     void client.dispose()
     throw error
@@ -188,18 +384,39 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
   return client
 }
 
-function createHandle<TInput, TOutput>(
+function createHandle<TInput, TOutput, TEvent = never>(
   client: CapabilityClient,
   descriptor: CapabilityDescriptor
-): CapabilityHandle<TInput, TOutput> {
+): CapabilityHandle<TInput, TOutput, TEvent> {
   return {
     descriptor,
-    execute: async (input, options) => await client.execute<TInput, TOutput>(
+    execute: async (input, options) => await client.execute<TInput, TOutput, TEvent>(
       descriptor.id,
       input,
       options
     ),
   }
+}
+
+function registerModule(
+  modules: Map<string, RegisteredModule>,
+  module: RegisteredModule['module'],
+  mode: RegisteredModule['mode']
+): void {
+  const id = normalizeModuleId(module.descriptor.id)
+  validateDescriptor(module.descriptor)
+  if (modules.has(id)) {
+    throw new AiRuntimeError('capability_already_registered', `Capability module already registered: ${id}`)
+  }
+  modules.set(id, { module, mode, disposed: false })
+}
+
+function createTimeout(timeoutMs: number | undefined, abort: () => void): ReturnType<typeof setTimeout> | undefined {
+  if (timeoutMs === undefined) return undefined
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new AiRuntimeError('invalid_timeout', 'Capability timeoutMs must be a positive finite number')
+  }
+  return setTimeout(abort, timeoutMs)
 }
 
 function normalizeModuleId(id: string): string {

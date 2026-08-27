@@ -198,6 +198,44 @@ const llm = bundle('LlmOnly', [
   if (forbidden.length > 0) fail(`LLM-only 图带入 generation/catalog/provider：${forbidden.join(', ')}`)
 })
 
+const capabilityCommon = bundle('CapabilityCommon', [
+  "export * from './capabilities/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation') ||
+    input.includes('/src/llm/')
+  ))
+  if (forbidden.length > 0) fail(`capabilities 公共入口带入模型执行内核：${forbidden.join(', ')}`)
+})
+
+const speechCapability = bundle('SpeechRecognitionCapability', [
+  "export * from './capabilities/speech-recognition/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/capabilities/translation/') ||
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation') ||
+    input.includes('/src/llm/')
+  ))
+  if (forbidden.length > 0) fail(`ASR 按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+})
+
+const translationCapability = bundle('TranslationCapability', [
+  "export * from './capabilities/translation/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/capabilities/speech-recognition/') ||
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation') ||
+    input.includes('/src/llm/')
+  ))
+  if (forbidden.length > 0) fail(`翻译按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+})
+
 let networkCalls = 0
 const context = vm.createContext({
   AbortController,
@@ -248,6 +286,9 @@ const metrics = {
   falEraseToolPack: { iife: falErasePack.iife.bytes, esm: falErasePack.esm.bytes, modules: falErasePack.iife.modules },
   defaultGeneration: { iife: defaultGeneration.iife.bytes, esm: defaultGeneration.esm.bytes, modules: defaultGeneration.iife.modules },
   llmOnly: { iife: llm.iife.bytes, esm: llm.esm.bytes, modules: llm.iife.modules },
+  capabilityCommon: { iife: capabilityCommon.iife.bytes, esm: capabilityCommon.esm.bytes, modules: capabilityCommon.iife.modules },
+  speechRecognitionCapability: { iife: speechCapability.iife.bytes, esm: speechCapability.esm.bytes, modules: speechCapability.iife.modules },
+  translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
   networkCalls,
 }
 console.log(`✔ modular bundle 门禁通过：${JSON.stringify(metrics)}`)

@@ -6,10 +6,17 @@
  * 不写成闭合联合 `'generation' | 'llm'`，而是「内置字面量 + 可扩展」——这是
  * docs/task/模型SDK抽离/重要记录.md 记录 005 定的可扩展类型原则：SDK 是要被多个项目消费的
  * 独立包，闭合联合意味着任何新增的凭据空间（例如未来的语音识别模型、或消费方自定义的
- * 私有供应商分组）都要求先改 SDK 类型定义再发版。`(string & {})` 这个技巧保留了内置值的
+ * 私有供应商分组）都要求先改 SDK 类型定义再发版。开放字符串交叉类型保留了内置值的
  * 字面量提示（IDE 能补全 `'generation'`/`'llm'`），同时允许传入任意字符串而不报类型错误。
  */
-export type CredentialScope = 'generation' | 'llm' | (string & {})
+type ExtensibleString = string & Record<never, never>
+
+export type CredentialScope =
+  | 'generation'
+  | 'llm'
+  | 'speech-recognition'
+  | 'translation'
+  | ExtensibleString
 
 /**
  * `CredentialStore` 是 SDK 读取供应商 API Key 的唯一入口。

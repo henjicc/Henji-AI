@@ -28,8 +28,15 @@ export {
 export { describeNetworkFailure, shouldRetry } from './retry'
 export type { NetworkFailure, RetryMode } from './retry'
 export type { Transport } from './Transport'
+export type {
+  RealtimeConnectOptions,
+  RealtimeConnection,
+  RealtimeMessage,
+  RealtimePayload,
+  RealtimeTransport,
+} from './RealtimeTransport'
 export { resolveRuntimeContext } from './RuntimeContext'
-export type { RuntimeContext } from './RuntimeContext'
+export type { ResolvedRuntimeContext, RuntimeContext } from './RuntimeContext'
 export type { CredentialScope, CredentialStore } from './CredentialStore'
 export type { MediaBinary, MediaReader } from './MediaReader'
 export type { LogContext, Logger } from './Logger'

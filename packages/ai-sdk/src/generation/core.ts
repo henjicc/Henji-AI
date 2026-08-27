@@ -4,7 +4,11 @@ import { buildRequest } from '../protocols/request-builder-dsl'
 import { normalizeRequestBody } from '../protocols/request-normalizer'
 import type { ProviderAdapter } from '../providers/types'
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
-import { resolveRuntimeContext, type RuntimeContext } from '../runtime/RuntimeContext'
+import {
+  resolveRuntimeContext,
+  type ResolvedRuntimeContext,
+  type RuntimeContext,
+} from '../runtime/RuntimeContext'
 import {
   cancelTask,
   clearCancelFlag,
@@ -300,7 +304,7 @@ function createProviderIndex(
 async function executeGeneration(
   modelIndex: ModelIndex,
   providers: ReadonlyMap<ProviderId, GenerationClientProviderRegistration>,
-  runtime: Required<RuntimeContext>,
+  runtime: ResolvedRuntimeContext,
   request: AiGenerateRequestDto,
   hooks: GenerationClientHooks
 ): Promise<GenerationClientResult> {
@@ -368,7 +372,7 @@ async function executeGeneration(
 async function executePolling(
   modelIndex: ModelIndex,
   providers: ReadonlyMap<ProviderId, GenerationClientProviderRegistration>,
-  runtime: Required<RuntimeContext>,
+  runtime: ResolvedRuntimeContext,
   request: GenerationClientContinuePollingRequest,
   hooks: GenerationClientHooks
 ): Promise<GenerationClientResult> {
@@ -444,7 +448,7 @@ function collectParamDefaults(params: readonly RuntimeParamDef[]): JsonObject {
 }
 
 async function requireApiKey(
-  runtime: Required<RuntimeContext>,
+  runtime: ResolvedRuntimeContext,
   providerId: ProviderId
 ): Promise<string> {
   const apiKey = await runtime.credentials.get('generation', providerId)
