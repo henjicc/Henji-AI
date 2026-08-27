@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   GROQ_BASE_URL,
+  GROQ_DEFAULT_MODEL_CONFIG,
   GROQ_DEFAULT_MODEL_ID,
   GROQ_PROVIDER_ID,
   GROQ_PROVIDER_PRESET,
@@ -77,7 +78,8 @@ describe('@henjicc/ai-sdk/llm/groq', () => {
       modelIds: ['openai/gpt-oss-20b'],
       reasoning: { enabled: true, effort: 'medium' },
     })
-    expect(createLlmCapabilitiesForModel(GROQ_DEFAULT_MODEL_ID)).toMatchObject({
+    const catalogCapabilities = createLlmCapabilitiesForModel(GROQ_DEFAULT_MODEL_ID)
+    expect(catalogCapabilities).toMatchObject({
       text: true,
       image: false,
       toolCall: true,
@@ -85,6 +87,11 @@ describe('@henjicc/ai-sdk/llm/groq', () => {
       reasoning: true,
       contextWindow: 131_072,
       maxOutputTokens: 65_536,
+    })
+    expect(GROQ_DEFAULT_MODEL_CONFIG).toMatchObject({
+      providerId: 'groq',
+      modelId: GROQ_DEFAULT_MODEL_ID,
+      capabilities: catalogCapabilities,
     })
   })
 

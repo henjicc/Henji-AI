@@ -11,22 +11,21 @@ export interface BailianQwenMtPreset {
   streamingContent: BailianQwenMtStreamingContent
 }
 
+function defineQwenMtPreset(
+  modelId: BailianQwenMtModelId,
+  streamingContent: BailianQwenMtStreamingContent
+): BailianQwenMtPreset {
+  return {
+    moduleId: `bailian.translation.${modelId}`,
+    modelId,
+    streamingContent,
+  }
+}
+
 export const BAILIAN_QWEN_MT_PRESETS = {
-  flash: {
-    moduleId: 'bailian.translation.qwen-mt-flash',
-    modelId: 'qwen-mt-flash',
-    streamingContent: 'incremental',
-  },
-  plus: {
-    moduleId: 'bailian.translation.qwen-mt-plus',
-    modelId: 'qwen-mt-plus',
-    streamingContent: 'cumulative',
-  },
-  lite: {
-    moduleId: 'bailian.translation.qwen-mt-lite',
-    modelId: 'qwen-mt-lite',
-    streamingContent: 'incremental',
-  },
+  flash: defineQwenMtPreset('qwen-mt-flash', 'incremental'),
+  plus: defineQwenMtPreset('qwen-mt-plus', 'cumulative'),
+  lite: defineQwenMtPreset('qwen-mt-lite', 'incremental'),
 } as const satisfies Record<string, BailianQwenMtPreset>
 
 export interface BailianTranslationMemoryItem {

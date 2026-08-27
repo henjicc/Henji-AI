@@ -45,6 +45,7 @@ describe('开放 ASR / 翻译能力协议', () => {
   it('descriptor 携带供应商、operation、执行形态，支持组合发现', () => {
     const asr = defineSpeechRecognitionDescriptor({
       id: 'fixture.bailian-asr',
+      source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
       providerIds: ['bailian'],
       modelId: 'fixture-asr-model',
       streaming: true,
@@ -53,6 +54,7 @@ describe('开放 ASR / 翻译能力协议', () => {
     })
     const translation = defineTranslationDescriptor({
       id: 'fixture.bailian-translation',
+      source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
       providerIds: ['bailian'],
       modelId: 'fixture-translation-model',
     })
@@ -93,7 +95,8 @@ describe('开放 ASR / 翻译能力协议', () => {
     const order: string[] = []
     const speech: SpeechRecognitionModule = {
       descriptor: defineSpeechRecognitionDescriptor({
-        id: 'fixture.asr', providerIds: ['fixture'], streaming: true,
+        id: 'fixture.asr', source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
+        providerIds: ['fixture'], streaming: true,
       }),
       execute: async (input, context) => {
         const media = await readCapabilityMediaSource(input.audio, context.runtime.media)
@@ -103,7 +106,11 @@ describe('开放 ASR / 翻译能力协议', () => {
       },
     }
     const translation: TranslationModule = {
-      descriptor: defineTranslationDescriptor({ id: 'fixture.translation', streaming: true }),
+      descriptor: defineTranslationDescriptor({
+        id: 'fixture.translation',
+        source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
+        streaming: true,
+      }),
       execute: async (input, context) => {
         await context.emit({ type: 'delta', index: 0, text: 'hello' })
         return { translations: [{ text: 'hello', sourceText: String(input.source) }] }
@@ -131,7 +138,10 @@ describe('开放 ASR / 翻译能力协议', () => {
   it('timeout 与 Abort 都收口为稳定错误并结束结构化日志链路', async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const module: SpeechRecognitionModule = {
-      descriptor: defineSpeechRecognitionDescriptor({ id: 'fixture.slow-asr' }),
+      descriptor: defineSpeechRecognitionDescriptor({
+        id: 'fixture.slow-asr',
+        source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
+      }),
       execute: async (_input, context) => await new Promise<SpeechRecognitionOutput>((_resolve, reject) => {
         context.signal.addEventListener('abort', () => reject(new Error('transport aborted')), { once: true })
       }),
@@ -171,7 +181,9 @@ describe('开放实时会话协议', () => {
       SpeechRecognitionOutput
     > = {
       descriptor: defineSpeechRecognitionDescriptor({
-        id: 'fixture.realtime-asr', providerIds: ['fixture'], realtime: true,
+        id: 'fixture.realtime-asr',
+        source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
+        providerIds: ['fixture'], realtime: true,
       }),
       open: async (_input, context) => {
         const connection = await context.runtime.realtime?.connect('wss://fixture.invalid', {
@@ -212,7 +224,11 @@ describe('开放实时会话协议', () => {
   it('cancel 会关闭实时 driver，dispose 不会遗留活动会话', async () => {
     const close = vi.fn(async () => undefined)
     const module: CapabilityRealtimeModule<undefined, Uint8Array, never, SpeechRecognitionOutput> = {
-      descriptor: defineSpeechRecognitionDescriptor({ id: 'fixture.cancel-session', realtime: true }),
+      descriptor: defineSpeechRecognitionDescriptor({
+        id: 'fixture.cancel-session',
+        source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
+        realtime: true,
+      }),
       open: async () => ({
         send: async () => undefined,
         finish: async () => ({ text: 'unused' }),
@@ -232,7 +248,11 @@ describe('开放实时会话协议', () => {
   it('实时会话 timeout 会主动关闭 driver 并向后续调用暴露 timeout', async () => {
     const close = vi.fn(async () => undefined)
     const module: CapabilityRealtimeModule<undefined, Uint8Array, never, SpeechRecognitionOutput> = {
-      descriptor: defineSpeechRecognitionDescriptor({ id: 'fixture.timeout-session', realtime: true }),
+      descriptor: defineSpeechRecognitionDescriptor({
+        id: 'fixture.timeout-session',
+        source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
+        realtime: true,
+      }),
       open: async () => ({
         send: async () => undefined,
         finish: async () => ({ text: 'unused' }),

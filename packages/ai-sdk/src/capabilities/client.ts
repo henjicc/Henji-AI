@@ -9,6 +9,13 @@ import type {
   CapabilityRealtimeModule,
   CapabilityRealtimeSession,
 } from './types'
+import {
+  capabilityModelCoordinates,
+  describeCapabilitySource,
+  normalizeCapabilityStableId,
+  snapshotCapabilityDescriptor,
+  validateCapabilityDescriptor,
+} from './validation'
 
 export interface CreateCapabilityClientConfig {
   runtime: RuntimeContext
@@ -24,6 +31,8 @@ export interface CapabilityClient {
     module: CapabilityRealtimeModule<TStart, TInput, TEvent, TOutput>
   ): CapabilityDescriptor
   unregister(moduleId: string): Promise<boolean>
+  /** 注销同一包/插件命名空间拥有的全部模块，并等待活动请求与资源释放完成。 */
+  unregisterSource(namespace: string): Promise<number>
   list(kind?: CapabilityKind): readonly CapabilityDescriptor[]
   get<TInput, TOutput, TEvent = never>(moduleId: string): CapabilityHandle<TInput, TOutput, TEvent> | undefined
   execute<TInput, TOutput, TEvent = never>(
@@ -58,6 +67,7 @@ interface ActiveExecution {
 export function createCapabilityClient(config: CreateCapabilityClientConfig): CapabilityClient {
   const runtime = resolveRuntimeContext(config.runtime)
   const modules = new Map<string, RegisteredModule>()
+  const modelCoordinates = new Map<string, string>()
   const active = new Map<string, ActiveExecution>()
   let disposed = false
 
@@ -68,19 +78,24 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
   const client: CapabilityClient = {
     register<TInput, TOutput, TEvent = never>(module: CapabilityModule<TInput, TOutput, TEvent>) {
       ensureActive()
-      registerModule(modules, module as CapabilityModule<unknown, unknown, unknown>, 'execute')
-      return createHandle<TInput, TOutput, TEvent>(client, module.descriptor)
+      const descriptor = registerModule(
+        modules,
+        modelCoordinates,
+        module as CapabilityModule<unknown, unknown, unknown>,
+        'execute'
+      )
+      return createHandle<TInput, TOutput, TEvent>(client, descriptor)
     },
     registerRealtime<TStart, TInput, TEvent, TOutput>(
       module: CapabilityRealtimeModule<TStart, TInput, TEvent, TOutput>
     ) {
       ensureActive()
-      registerModule(
+      return registerModule(
         modules,
+        modelCoordinates,
         module as CapabilityRealtimeModule<unknown, unknown, unknown, unknown>,
         'realtime'
       )
-      return module.descriptor
     },
     async unregister(moduleId) {
       ensureActive()
@@ -89,9 +104,23 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
       if (!registered) return false
       const pending = abortModuleExecutions(active, id)
       modules.delete(id)
+      releaseModelCoordinates(modelCoordinates, registered.module.descriptor, id)
       await Promise.all(pending)
       await disposeRegisteredModule(registered)
       return true
+    },
+    async unregisterSource(namespace) {
+      ensureActive()
+      const normalizedNamespace = normalizeCapabilityStableId(
+        namespace,
+        'invalid_capability_source',
+        'Capability source namespace'
+      )
+      const ownedIds = [...modules.entries()]
+        .filter(([, registered]) => registered.module.descriptor.source.namespace === normalizedNamespace)
+        .map(([id]) => id)
+      await Promise.all(ownedIds.map(async (id) => await client.unregister(id)))
+      return ownedIds.length
     },
     list(kind) {
       ensureActive()
@@ -375,6 +404,7 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
       active.clear()
       const registered = [...modules.values()]
       modules.clear()
+      modelCoordinates.clear()
       await Promise.all(registered.map(async (entry) => await disposeRegisteredModule(entry)))
     },
   }
@@ -405,15 +435,40 @@ function createHandle<TInput, TOutput, TEvent = never>(
 
 function registerModule(
   modules: Map<string, RegisteredModule>,
+  modelCoordinates: Map<string, string>,
   module: RegisteredModule['module'],
   mode: RegisteredModule['mode']
-): void {
-  const id = normalizeModuleId(module.descriptor.id)
-  validateDescriptor(module.descriptor)
-  if (modules.has(id)) {
-    throw new AiRuntimeError('capability_already_registered', `Capability module already registered: ${id}`)
+): CapabilityDescriptor {
+  validateCapabilityDescriptor(module.descriptor)
+  const descriptor = snapshotCapabilityDescriptor(module.descriptor)
+  const id = normalizeModuleId(descriptor.id)
+  const existing = modules.get(id)
+  if (existing) {
+    throw new AiRuntimeError(
+      'capability_already_registered',
+      `Capability module id "${id}" from ${describeCapabilitySource(descriptor)} conflicts with ` +
+      `${existing.mode} module from ${describeCapabilitySource(existing.module.descriptor)}`
+    )
   }
-  modules.set(id, { module, mode, disposed: false })
+  for (const coordinate of capabilityModelCoordinates(descriptor)) {
+    const existingId = modelCoordinates.get(coordinate)
+    if (existingId) {
+      const existingModule = modules.get(existingId)
+      throw new AiRuntimeError(
+        'capability_model_already_registered',
+        `Capability model coordinate "${coordinate}" from ${describeCapabilitySource(descriptor)} ` +
+        `is already owned by module "${existingId}" from ${
+          existingModule ? describeCapabilitySource(existingModule.module.descriptor) : 'an unknown source'
+        }`
+      )
+    }
+  }
+  const registeredModule = { ...module, descriptor } as RegisteredModule['module']
+  modules.set(id, { module: registeredModule, mode, disposed: false })
+  for (const coordinate of capabilityModelCoordinates(descriptor)) {
+    modelCoordinates.set(coordinate, id)
+  }
+  return descriptor
 }
 
 function createTimeout(timeoutMs: number | undefined, abort: () => void): ReturnType<typeof setTimeout> | undefined {
@@ -425,20 +480,16 @@ function createTimeout(timeoutMs: number | undefined, abort: () => void): Return
 }
 
 function normalizeModuleId(id: string): string {
-  const normalized = id.trim()
-  if (!normalized) {
-    throw new AiRuntimeError('invalid_capability_id', 'Capability module id must be non-empty')
-  }
-  return normalized
+  return normalizeCapabilityStableId(id, 'invalid_capability_id', 'Capability module id')
 }
 
-function validateDescriptor(descriptor: CapabilityDescriptor): void {
-  normalizeModuleId(descriptor.id)
-  if (!descriptor.kind.trim()) {
-    throw new AiRuntimeError('invalid_capability_kind', 'Capability kind must be non-empty')
-  }
-  if (!Array.isArray(descriptor.contract.input) || !Array.isArray(descriptor.contract.output)) {
-    throw new AiRuntimeError('invalid_capability_contract', 'Capability contract requires input/output arrays')
+function releaseModelCoordinates(
+  coordinates: Map<string, string>,
+  descriptor: CapabilityDescriptor,
+  moduleId: string
+): void {
+  for (const coordinate of capabilityModelCoordinates(descriptor)) {
+    if (coordinates.get(coordinate) === moduleId) coordinates.delete(coordinate)
   }
 }
 

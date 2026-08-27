@@ -131,6 +131,7 @@ function fixtureModule(
     descriptor: {
       id,
       kind,
+      source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
       contract: { input: [{ kind: input }], output: [{ kind: output }] },
     },
     execute: async (value) => value,

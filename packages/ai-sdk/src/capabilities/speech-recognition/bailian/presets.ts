@@ -12,12 +12,15 @@ export interface BailianAsrPreset {
   asyncInputField?: 'file_urls' | 'file_url'
 }
 
-function definePreset(input: Omit<BailianAsrPreset, 'descriptor'>): BailianAsrPreset {
+function definePreset(input: Omit<BailianAsrPreset, 'id' | 'descriptor'>): BailianAsrPreset {
   const asynchronous = input.protocol === 'file-async'
+  const id = `bailian.speech-recognition.${input.modelId}`
   return {
     ...input,
+    id,
     descriptor: defineSpeechRecognitionDescriptor({
-      id: input.id,
+      id,
+      source: { kind: 'builtin', namespace: '@henjicc/ai-sdk' },
       providerIds: ['bailian'],
       modelId: input.modelId,
       streaming: input.protocol === 'fun-short-sse',
@@ -31,35 +34,30 @@ function definePreset(input: Omit<BailianAsrPreset, 'descriptor'>): BailianAsrPr
 }
 
 export const bailianFunAsrFlash20260615 = definePreset({
-  id: 'bailian.fun-asr-flash-2026-06-15',
   modelId: 'fun-asr-flash-2026-06-15',
   protocol: 'fun-short-sse',
   maxInlineBytes: 10 * 1024 * 1024,
 })
 
 export const bailianQwen3AsrFlash = definePreset({
-  id: 'bailian.qwen3-asr-flash',
   modelId: 'qwen3-asr-flash',
   protocol: 'qwen-short',
   maxInlineBytes: 10 * 1024 * 1024,
 })
 
 export const bailianQwen3AsrFlash20260210 = definePreset({
-  id: 'bailian.qwen3-asr-flash-2026-02-10',
   modelId: 'qwen3-asr-flash-2026-02-10',
   protocol: 'qwen-short',
   maxInlineBytes: 10 * 1024 * 1024,
 })
 
 export const bailianFunAsr = definePreset({
-  id: 'bailian.fun-asr',
   modelId: 'fun-asr',
   protocol: 'file-async',
   asyncInputField: 'file_urls',
 })
 
 export const bailianQwen3AsrFlashFiletrans = definePreset({
-  id: 'bailian.qwen3-asr-flash-filetrans',
   modelId: 'qwen3-asr-flash-filetrans',
   protocol: 'file-async',
   asyncInputField: 'file_url',

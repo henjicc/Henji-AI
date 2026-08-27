@@ -45,6 +45,7 @@ function speechModule(): CapabilityModule<SpeechRecognitionInput, SpeechRecognit
     descriptor: {
       id: 'fixture.local-speech-recognition',
       kind: 'speech-recognition',
+      source: { kind: 'external', namespace: '@henjicc/test-fixtures' },
       contract: {
         input: [{ kind: 'audio', required: true, mediaTypes: ['audio/wav'] }],
         output: [{ kind: 'text', required: true }],
@@ -62,6 +63,7 @@ function ocrModule(dispose = vi.fn()): CapabilityModule<OcrInput, OcrOutput> {
     descriptor: {
       id: 'fixture.local-ocr',
       kind: 'ocr',
+      source: { kind: 'plugin', namespace: 'com.henjicc.fixture-ocr' },
       contract: {
         input: [
           { kind: 'image', mediaTypes: ['image/png'] },

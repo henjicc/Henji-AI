@@ -7,6 +7,11 @@ import type { GenerationPack } from '../generation/core'
 import type { LlmModelCatalogEntry } from '../llm/modelCatalog'
 import type { LlmModelConfig } from '../llm/types'
 import type { ModelRuntimeDefinition, ModelType, RuntimeInputLimitsConfig } from '../types/model'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
+import {
+  normalizeCapabilityStableId,
+  validateCapabilityDescriptor,
+} from '../capabilities/validation'
 
 type ExtensibleString = string & Record<never, never>
 
@@ -90,23 +95,48 @@ export interface ModelCapabilityDiscovery {
 /** 只从宿主已导入的候选 pack/module 建立发现索引；不会隐式导入默认 catalog。 */
 export function createModelCapabilityDiscovery(input: CreateCapabilityDiscoveryInput): ModelCapabilityDiscovery {
   const items: CapabilityDiscoveryItem[] = []
+  const itemsById = new Map<string, CapabilityDiscoveryItem>()
+  const add = (item: CapabilityDiscoveryItem): void => {
+    normalizeCapabilityStableId(item.id, 'invalid_capability_discovery_id', 'Capability discovery id')
+    const existing = itemsById.get(item.id)
+    if (existing) {
+      throw new AiRuntimeError(
+        'capability_discovery_id_conflict',
+        `Discovery id "${item.id}" from ${describeDiscoveryItem(item)} conflicts with ` +
+        `${describeDiscoveryItem(existing)}`
+      )
+    }
+    itemsById.set(item.id, item)
+    items.push(item)
+  }
   const generation = dedupeGenerationModels([
     ...(input.generationModels ?? []),
     ...(input.generationPacks ?? []).flatMap((pack) => pack.models),
   ])
   for (const model of generation) {
-    items.push({ sourceKind: 'generation-model', id: model.meta.id, profile: profileGenerationModel(model), source: model })
+    add({ sourceKind: 'generation-model', id: model.meta.id, profile: profileGenerationModel(model), source: model })
   }
   for (const entry of input.llmEntries ?? []) {
-    items.push({ sourceKind: 'llm-model', id: entry.id, profile: profileLlmCatalogEntry(entry), source: entry })
+    add({ sourceKind: 'llm-model', id: entry.id, profile: profileLlmCatalogEntry(entry), source: entry })
   }
   for (const model of input.llmModels ?? []) {
-    const id = `${model.providerId}:${model.modelId}`
-    items.push({ sourceKind: 'llm-model', id, profile: profileLlmModel(model), source: model })
+    const providerId = normalizeCapabilityStableId(
+      model.providerId,
+      'invalid_capability_provider_id',
+      'LLM provider id'
+    )
+    const modelId = normalizeCapabilityStableId(
+      model.modelId,
+      'invalid_capability_model_id',
+      'LLM model id'
+    )
+    const id = `${providerId}:${modelId}`
+    add({ sourceKind: 'llm-model', id, profile: profileLlmModel(model), source: model })
   }
   for (const extension of input.extensions ?? []) {
     const descriptor = 'descriptor' in extension ? extension.descriptor : extension
-    items.push({ sourceKind: 'extension', id: descriptor.id, profile: profileCapabilityDescriptor(descriptor), source: descriptor })
+    validateCapabilityDescriptor(descriptor)
+    add({ sourceKind: 'extension', id: descriptor.id, profile: profileCapabilityDescriptor(descriptor), source: descriptor })
   }
   return {
     list: () => items,
@@ -293,4 +323,9 @@ function llmProfile(
 
 function dedupeGenerationModels(models: readonly ModelRuntimeDefinition[]): ModelRuntimeDefinition[] {
   return [...new Map(models.map((model) => [model.meta.id, model])).values()]
+}
+
+function describeDiscoveryItem(item: CapabilityDiscoveryItem): string {
+  if (item.sourceKind !== 'extension') return `${item.sourceKind}`
+  return `${item.source.source.kind} source "${item.source.source.namespace}"`
 }

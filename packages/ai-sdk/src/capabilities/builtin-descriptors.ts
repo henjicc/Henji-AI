@@ -4,6 +4,7 @@ import type { CapabilityDescriptor } from './types'
 export const GENERATION_CAPABILITY_DESCRIPTOR: CapabilityDescriptor = {
   id: 'builtin.media-generation',
   kind: 'media-generation',
+  source: { kind: 'builtin', namespace: '@henjicc/ai-sdk' },
   contract: {
     input: [
       { kind: 'text' },
@@ -23,6 +24,7 @@ export const GENERATION_CAPABILITY_DESCRIPTOR: CapabilityDescriptor = {
 export const CHAT_CAPABILITY_DESCRIPTOR: CapabilityDescriptor = {
   id: 'builtin.chat',
   kind: 'chat',
+  source: { kind: 'builtin', namespace: '@henjicc/ai-sdk' },
   contract: {
     input: [{ kind: 'text', required: true }],
     output: [

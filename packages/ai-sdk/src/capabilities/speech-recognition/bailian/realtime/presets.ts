@@ -9,16 +9,17 @@ export interface BailianRealtimeAsrPreset {
 }
 
 function definePreset(
-  id: string,
   modelId: string,
   protocol: BailianRealtimeAsrProtocol
 ): BailianRealtimeAsrPreset {
+  const id = `bailian.speech-recognition.${modelId}`
   return {
     id,
     modelId,
     protocol,
     descriptor: defineSpeechRecognitionDescriptor({
       id,
+      source: { kind: 'builtin', namespace: '@henjicc/ai-sdk' },
       providerIds: ['bailian'],
       modelId,
       realtime: true,
@@ -33,16 +34,17 @@ function definePreset(
 }
 
 export const bailianFunAsrRealtime = definePreset(
-  'bailian.fun-asr-realtime', 'fun-asr-realtime', 'fun-duplex'
+  'fun-asr-realtime', 'fun-duplex'
 )
 export const bailianFunAsrRealtime20260228 = definePreset(
-  'bailian.fun-asr-realtime-2026-02-28', 'fun-asr-realtime-2026-02-28', 'fun-duplex'
+  'fun-asr-realtime-2026-02-28',
+  'fun-duplex'
 )
 export const bailianQwen3AsrFlashRealtime = definePreset(
-  'bailian.qwen3-asr-flash-realtime', 'qwen3-asr-flash-realtime', 'qwen-realtime'
+  'qwen3-asr-flash-realtime',
+  'qwen-realtime'
 )
 export const bailianQwen3AsrFlashRealtime20260210 = definePreset(
-  'bailian.qwen3-asr-flash-realtime-2026-02-10',
   'qwen3-asr-flash-realtime-2026-02-10',
   'qwen-realtime'
 )

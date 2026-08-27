@@ -287,6 +287,21 @@ const bailianTranslationCapability = bundle('BailianTranslationCapability', [
   }
 })
 
+const groqLlm = bundle('GroqLlm', [
+  "export * from './llm/groq/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/src/capabilities/') ||
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation')
+  ))
+  if (forbidden.length > 0) fail(`Groq 按需入口带入 ASR/翻译/generation/provider：${forbidden.join(', ')}`)
+  if (!inputs.some((input) => input.includes('/src/llm/groq/preset.ts'))) {
+    fail('Groq 按需入口未包含 Groq preset')
+  }
+})
+
 let networkCalls = 0
 const context = vm.createContext({
   AbortController,
@@ -343,6 +358,7 @@ const metrics = {
   bailianRealtimeAsrCapability: { iife: bailianRealtimeAsrCapability.iife.bytes, esm: bailianRealtimeAsrCapability.esm.bytes, modules: bailianRealtimeAsrCapability.iife.modules },
   translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
   bailianTranslationCapability: { iife: bailianTranslationCapability.iife.bytes, esm: bailianTranslationCapability.esm.bytes, modules: bailianTranslationCapability.iife.modules },
+  groqLlm: { iife: groqLlm.iife.bytes, esm: groqLlm.esm.bytes, modules: groqLlm.iife.modules },
   networkCalls,
 }
 console.log(`✔ modular bundle 门禁通过：${JSON.stringify(metrics)}`)

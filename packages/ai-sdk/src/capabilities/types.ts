@@ -31,9 +31,25 @@ export interface CapabilityContract {
   output: readonly CapabilityValueContract[]
 }
 
+export type CapabilitySourceKind =
+  | 'builtin'
+  | 'external'
+  | 'plugin'
+  | ExtensibleString
+
+/**
+ * 能力来源只用于所有权、冲突诊断与卸载边界，不参与供应商请求。
+ * namespace 应是宿主内稳定且唯一的包/插件标识，例如 npm 包名或插件 manifest id。
+ */
+export interface CapabilitySource {
+  kind: CapabilitySourceKind
+  namespace: string
+}
+
 export interface CapabilityDescriptor {
   id: string
   kind: CapabilityKind
+  source: CapabilitySource
   contract: CapabilityContract
   version?: string
   /** 发现信息只描述事实；不会触发任何供应商或模型的隐式导入。 */

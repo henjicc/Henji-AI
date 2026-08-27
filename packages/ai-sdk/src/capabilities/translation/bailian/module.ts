@@ -48,6 +48,7 @@ export function createBailianQwenMtTranslationModule(
     descriptor: {
       ...defineTranslationDescriptor({
         id: preset.moduleId,
+        source: { kind: 'builtin', namespace: '@henjicc/ai-sdk' },
         version: '1',
         providerIds: ['bailian'],
         modelId: preset.modelId,
