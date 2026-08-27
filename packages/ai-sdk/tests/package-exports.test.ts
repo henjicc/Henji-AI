@@ -27,6 +27,7 @@ describe('published package exports', () => {
       './runtime',
       './capabilities',
       './capabilities/speech-recognition',
+      './capabilities/speech-recognition/bailian',
       './capabilities/translation',
       './capabilities/realtime',
       './discovery',

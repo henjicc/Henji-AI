@@ -1,0 +1,5 @@
+{
+  "kind": "capability",
+  "source": "百炼 Fun-ASR-Flash 官方 SSE 返回示例（字段裁剪，文本脱敏）",
+  "payload": "data:{\"output\":{\"text\":\"你好\",\"sentence\":{\"sentence_id\":1,\"sentence_end\":true,\"begin_time\":0,\"end_time\":520,\"text\":\"你好\"}}}\n\ndata:{\"output\":{\"text\":\"你好世界\",\"sentence\":{\"sentence_id\":2,\"sentence_end\":true,\"begin_time\":520,\"end_time\":1080,\"text\":\"世界\"}},\"usage\":{\"duration\":2}}\n\ndata:[DONE]\n"
+}

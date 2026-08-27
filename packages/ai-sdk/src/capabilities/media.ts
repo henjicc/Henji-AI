@@ -15,8 +15,19 @@ export interface CapabilityMediaReference {
   mediaType?: string
 }
 
-/** 可移植媒体输入：调用方显式给字节，或让宿主解析自己的资源引用。 */
-export type CapabilityMediaSource = CapabilityBytesSource | CapabilityMediaReference
+export interface CapabilityRemoteUrlSource {
+  kind: 'remote-url'
+  /** 供应商可直接读取的 HTTP(S) URL；具体协议是否接受由能力模块校验。 */
+  url: string
+  mediaType?: string
+  filename?: string
+}
+
+/** 可移植媒体输入：显式字节、宿主资源引用，或供应商可直接读取的远端 URL。 */
+export type CapabilityMediaSource =
+  | CapabilityBytesSource
+  | CapabilityMediaReference
+  | CapabilityRemoteUrlSource
 
 export async function readCapabilityMediaSource(
   source: CapabilityMediaSource,
@@ -28,6 +39,12 @@ export async function readCapabilityMediaSource(
       mimeType: source.mediaType,
       filename: source.filename?.trim() || 'input',
     }
+  }
+  if (source.kind === 'remote-url') {
+    throw new AiRuntimeError(
+      'capability_remote_media_requires_provider',
+      'Remote media URL must be handled by the selected capability provider'
+    )
   }
   const media = await reader.read(source.ref)
   if (source.mediaType && media.mimeType !== source.mediaType) {

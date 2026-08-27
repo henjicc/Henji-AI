@@ -1,0 +1,15 @@
+{
+  "kind": "capability",
+  "source": "百炼文件转写官方 transcription_url 结果结构（内容脱敏）",
+  "payload": {
+    "properties": { "original_duration_in_milliseconds": 1080 },
+    "transcripts": [{
+      "channel_id": 0,
+      "text": "你好世界",
+      "sentences": [
+        { "begin_time": 0, "end_time": 520, "text": "你好", "words": [{ "begin_time": 0, "end_time": 520, "text": "你好", "punctuation": "" }] },
+        { "begin_time": 520, "end_time": 1080, "text": "世界", "words": [{ "begin_time": 520, "end_time": 1080, "text": "世界", "punctuation": "。" }] }
+      ]
+    }]
+  }
+}

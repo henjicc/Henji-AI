@@ -1,0 +1,8 @@
+{
+  "kind": "capability",
+  "source": "百炼 Qwen3-ASR-Flash OpenAI 兼容接口官方返回示例（文本脱敏）",
+  "payload": {
+    "id": "chatcmpl-redacted",
+    "choices": [{ "index": 0, "message": { "role": "assistant", "content": "这是一段测试音频。" }, "finish_reason": "stop" }]
+  }
+}

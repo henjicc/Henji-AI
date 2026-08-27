@@ -1,0 +1,11 @@
+{
+  "kind": "capability",
+  "source": "百炼文件转写官方子任务失败示例（标识脱敏）",
+  "payload": {
+    "output": {
+      "task_id": "fixture_task_001",
+      "task_status": "SUCCEEDED",
+      "results": [{ "subtask_status": "FAILED", "code": "FILE_DOWNLOAD_FAILED", "message": "file download failed" }]
+    }
+  }
+}

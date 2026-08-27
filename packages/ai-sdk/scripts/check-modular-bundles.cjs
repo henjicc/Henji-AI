@@ -214,6 +214,7 @@ const speechCapability = bundle('SpeechRecognitionCapability', [
   "export * from './capabilities/speech-recognition/index'",
 ].join('\n'), (inputs) => {
   const forbidden = inputs.filter((input) => (
+    input.includes('/capabilities/speech-recognition/bailian/') ||
     input.includes('/capabilities/translation/') ||
     modelPattern.test(`/${input}`) ||
     providerPattern.test(`/${input}`) ||
@@ -221,6 +222,22 @@ const speechCapability = bundle('SpeechRecognitionCapability', [
     input.includes('/src/llm/')
   ))
   if (forbidden.length > 0) fail(`ASR 按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+})
+
+const bailianAsrCapability = bundle('BailianAsrCapability', [
+  "export * from './capabilities/speech-recognition/bailian/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/capabilities/translation/') ||
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation') ||
+    input.includes('/src/llm/')
+  ))
+  if (forbidden.length > 0) fail(`百炼 ASR 按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+  if (!inputs.some((input) => input.includes('/capabilities/speech-recognition/bailian/module.ts'))) {
+    fail('百炼 ASR 按需入口未包含执行模块')
+  }
 })
 
 const translationCapability = bundle('TranslationCapability', [
@@ -288,6 +305,7 @@ const metrics = {
   llmOnly: { iife: llm.iife.bytes, esm: llm.esm.bytes, modules: llm.iife.modules },
   capabilityCommon: { iife: capabilityCommon.iife.bytes, esm: capabilityCommon.esm.bytes, modules: capabilityCommon.iife.modules },
   speechRecognitionCapability: { iife: speechCapability.iife.bytes, esm: speechCapability.esm.bytes, modules: speechCapability.iife.modules },
+  bailianAsrCapability: { iife: bailianAsrCapability.iife.bytes, esm: bailianAsrCapability.esm.bytes, modules: bailianAsrCapability.iife.modules },
   translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
   networkCalls,
 }

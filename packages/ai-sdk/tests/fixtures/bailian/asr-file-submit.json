@@ -1,0 +1,5 @@
+{
+  "kind": "capability",
+  "source": "百炼文件转写官方异步提交示例（task_id 脱敏）",
+  "payload": { "output": { "task_id": "fixture_task_001", "task_status": "PENDING" }, "request_id": "fixture_request_001" }
+}

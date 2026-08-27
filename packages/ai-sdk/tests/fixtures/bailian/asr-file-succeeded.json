@@ -1,0 +1,12 @@
+{
+  "kind": "capability",
+  "source": "百炼文件转写官方成功结果示例（URL 与标识脱敏）",
+  "payload": {
+    "output": {
+      "task_id": "fixture_task_001",
+      "task_status": "SUCCEEDED",
+      "results": [{ "subtask_status": "SUCCEEDED", "transcription_url": "https://fixture.invalid/transcription.json" }]
+    },
+    "request_id": "fixture_request_001"
+  }
+}

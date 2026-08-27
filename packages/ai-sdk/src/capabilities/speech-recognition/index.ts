@@ -39,6 +39,7 @@ export interface SpeechRecognitionOutput {
 
 export type SpeechRecognitionEvent =
   | { type: 'started'; sessionId?: string }
+  | { type: 'processing'; taskId: string; status: string }
   | { type: 'partial'; text: string; segment?: SpeechRecognitionSegment }
   | { type: 'final'; text: string; segment?: SpeechRecognitionSegment }
   | { type: 'completed'; output: SpeechRecognitionOutput }

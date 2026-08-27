@@ -104,7 +104,9 @@ function loadFixtures(): Array<{ provider: string; file: string; fixture: Fixtur
     }
     for (const file of files) {
       const raw = readFileSync(resolve(providerDir, file), 'utf-8')
-      entries.push({ provider, file, fixture: JSON.parse(raw) as Fixture })
+      const parsed = JSON.parse(raw) as Fixture & { kind?: string }
+      if (parsed.kind === 'capability') continue
+      entries.push({ provider, file, fixture: parsed })
     }
   }
   return entries

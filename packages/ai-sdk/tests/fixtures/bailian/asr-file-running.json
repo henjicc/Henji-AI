@@ -1,0 +1,5 @@
+{
+  "kind": "capability",
+  "source": "百炼文件转写官方轮询处理中示例（标识脱敏）",
+  "payload": { "output": { "task_id": "fixture_task_001", "task_status": "RUNNING" }, "request_id": "fixture_request_001" }
+}
