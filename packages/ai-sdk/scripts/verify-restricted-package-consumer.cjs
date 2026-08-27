@@ -119,7 +119,7 @@ function evaluate(context, artifact, globalName) {
   return vm.runInContext(globalName, context)
 }
 
-function verify() {
+async function verify() {
   const packageId = installPackage()
   const commonForbidden = ['/dist/generation', '/dist/catalog/']
   const asr = bundle(
@@ -146,12 +146,26 @@ function verify() {
     'HenjiPackedGroq',
     [...commonForbidden, '/dist/capabilities/'],
   )
+  const llmModules = bundle(
+    'LlmModules',
+    '@henjicc/ai-sdk/llm/modules',
+    'HenjiPackedLlmModules',
+    [
+      ...commonForbidden,
+      '/dist/capabilities/speech-recognition/',
+      '/dist/capabilities/translation/',
+      '/dist/llm/groq/',
+      '/dist/llm/chat.js',
+      '/dist/llm/streaming.js',
+    ],
+  )
 
   const context = restrictedContext()
   const asrApi = evaluate(context, asr, 'HenjiPackedBailianAsr')
   const realtimeApi = evaluate(context, realtime, 'HenjiPackedBailianRealtimeAsr')
   const translationApi = evaluate(context, translation, 'HenjiPackedBailianTranslation')
   const groqApi = evaluate(context, groq, 'HenjiPackedGroq')
+  const llmModuleApi = evaluate(context, llmModules, 'HenjiPackedLlmModules')
 
   if (asrApi.bailianNonRealtimeAsrPresets.length !== 5) fail('非实时 ASR 不是 5 个')
   if (realtimeApi.bailianRealtimeAsrPresets.length !== 4) fail('实时 ASR 不是 4 个')
@@ -172,6 +186,61 @@ function verify() {
   if (groqRequest.providerId !== 'groq' || groqRequest.modelId !== 'openai/gpt-oss-20b') {
     fail('Groq 请求未使用规范默认坐标')
   }
+  const llmEvents = []
+  const llmClient = llmModuleApi.createLlmModuleClient({
+    runtime: {
+      transport: { fetch: async () => { throw new Error('network forbidden') } },
+      credentials: { get: async () => undefined },
+      media: { read: async () => { throw new Error('media forbidden') } },
+    },
+    modules: [groqApi.createGroqLlmModule(), {
+      descriptor: {
+        id: 'fixture.external.llm',
+        source: { kind: 'plugin', namespace: 'com.example.restricted' },
+        providerId: 'fixture',
+        modelId: 'fixture-model',
+        capabilities: {
+          text: true, image: false, video: false, audio: false, streaming: false,
+          toolCall: false, parallelTools: false, jsonOutput: false,
+          structuredOutputMode: 'none', reasoning: false, sampling: false,
+          contextWindow: null, maxOutputTokens: null, usage: true,
+        },
+        executionModes: ['request-response'],
+      },
+      execute: async () => ({
+        output: 'ok', reasoningOutput: '', finishReason: 'stop',
+        usage: {
+          inputTokens: 1, outputTokens: 1, reasoningTokens: null,
+          cacheReadTokens: null, cacheWriteTokens: null, totalTokens: 2,
+        },
+      }),
+    }],
+  })
+  let rejectedGroqShadow = false
+  try {
+    llmClient.register({
+      descriptor: {
+        ...groqApi.createGroqLlmModule().descriptor,
+        id: 'plugin.shadow.groq',
+        source: { kind: 'plugin', namespace: 'com.example.shadow' },
+      },
+      execute: async () => ({ output: '', reasoningOutput: '', usage: null, finishReason: null }),
+    })
+  } catch (error) {
+    rejectedGroqShadow = String(error).includes('com.example.shadow')
+      && String(error).includes('@henjicc/ai-sdk')
+  }
+  if (!rejectedGroqShadow) fail('外部 LLM module 未拒绝遮蔽内置 Groq')
+  const llmOutcome = await llmClient.execute('fixture.external.llm', {
+    messages: [{ role: 'user', content: 'fixture' }],
+  }, {
+    mode: 'request-response',
+    onEvent: (event) => { llmEvents.push(event.type) },
+  })
+  if (llmOutcome.output !== 'ok' || llmEvents.join(',') !== 'Usage,Finish,Done') {
+    fail(`外部 LLM module 生命周期异常：${JSON.stringify(llmEvents)}`)
+  }
+  await llmClient.dispose()
 
   console.log(`✔ 受限宿主发布包门禁通过：${JSON.stringify({
     packageId,
@@ -181,12 +250,14 @@ function verify() {
     realtimeAsr: { models: 4, bytes: realtime.bytes, modules: realtime.inputs.length },
     translation: { models: 3, bytes: translation.bytes, modules: translation.inputs.length },
     groq: { models: 1, bytes: groq.bytes, modules: groq.inputs.length },
+    llmModules: { models: 1, bytes: llmModules.bytes, modules: llmModules.inputs.length },
     networkCalls: 0,
   })}`)
 }
 
-try {
-  verify()
-} finally {
-  fs.rmSync(temporaryRoot, { recursive: true, force: true })
-}
+verify()
+  .finally(() => fs.rmSync(temporaryRoot, { recursive: true, force: true }))
+  .catch((error) => {
+    console.error(error)
+    process.exit(1)
+  })

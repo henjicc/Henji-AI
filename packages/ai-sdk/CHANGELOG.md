@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+## 0.2.2 - 2026-08-28
+
+- 新增按需入口 `@henjicc/ai-sdk/llm/modules`：外部包、插件与内置 LLM 共用 source-aware 注册、流式/非流式执行、模型发现、取消、drain、namespace 注销和 dispose 生命周期。
+- LLM module 复用现有 Chat DTO、Token/ReasoningToken、usage、Abort/timeout、RuntimeContext、日志、trace 与统一 discovery；client 统一发射 Usage/Finish/Done/Error，插件不需要导入 SDK，也没有第二套插件专用执行器。
+- module ID 与 provider/model 坐标冲突均拒绝覆盖并列出双方 source；新增 `createGroqLlmModule()`，正式验证外部插件不能遮蔽内置 Groq。
+- 新增精确资源/断牙测试、无网络 bundle 隔离门禁，以及远端 Node ESM、strict TypeScript、Vite 和无全局 `TextEncoder` / `TextDecoder` 消费验证。
+
 ## 0.2.1 - 2026-08-28
 
 - 修复构建期 ESM specifier 重写漏掉精确 `.` / `..` 目录导入，确保 Node ESM 消费方可直接加载 ASR、实时 ASR、翻译和 Groq 按需入口。

@@ -21,6 +21,7 @@ import type {
   LlmStreamEmitter,
   LlmUsageDto,
 } from './chatTypes'
+import { countLlmInputChars } from './message-metrics'
 
 /**
  * 原生 SSE 流式聊天路径（`llm:chatStream`）的编排逻辑：取密钥 → 预处理请求体
@@ -112,7 +113,7 @@ export async function runLlmChatStream(
     controller.abort()
   }, execution.timeoutMs)
   const startedAtMs = Date.now()
-  const inputChars = countInputChars(request.messages)
+  const inputChars = countLlmInputChars(request.messages)
   const span = runtime.tracer?.startSpan('llm.chat', {
     requestId: taskId,
     providerId: request.providerId,
@@ -211,16 +212,6 @@ async function preprocessLlmRequest(request: LlmChatRequestDto, runtime: Runtime
     ? processedBody.messages as unknown as LlmChatMessageDto[]
     : request.messages
   return { ...request, messages: processedMessages }
-}
-
-function countInputChars(messages: LlmChatMessageDto[]): number {
-  return messages.reduce((sum, message) => sum + countMessageContent(message.content), 0)
-}
-
-function countMessageContent(content: LlmChatMessageDto['content']): number {
-  if (typeof content === 'string') return content.length
-  if (!Array.isArray(content)) return 0
-  return content.reduce((sum, part) => sum + (typeof part.text === 'string' ? part.text.length : 0), 0)
 }
 
 export function normalizeLlmChatError(

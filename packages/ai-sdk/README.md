@@ -6,7 +6,7 @@
 
 ## 5 分钟快速开始
 
-SDK `0.2.1` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
+SDK `0.2.2` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
 
 ```ini
 @henjicc:registry=https://npm.pkg.github.com
@@ -16,7 +16,7 @@ SDK `0.2.1` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc`
 Token 至少需要 `read:packages` 和私有仓库读取权限。不要把 token 本身写入 `.npmrc` 或提交到 Git。
 
 ```bash
-npm install @henjicc/ai-sdk@0.2.1
+npm install @henjicc/ai-sdk@0.2.2
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -376,9 +376,43 @@ await capabilities.dispose()
 - `capabilities/speech-recognition/bailian/realtime`：4 个百炼 Fun-ASR/Qwen 实时 ASR；
 - `capabilities/translation/bailian`：Qwen-MT Flash/Plus/Lite；
 - `llm/groq`：Groq GPT-OSS 20B 默认配置、流式聊天和模型发现。
+- `llm/modules`：外部包、插件与内置 LLM 共用的注册、执行、发现、取消和 namespace 卸载边界。
 
 百炼 ASR module ID 固定为 `bailian.speech-recognition.<modelId>`，翻译固定为
 `bailian.translation.<modelId>`；供应商 ID 使用 `bailian` / `groq`，没有 `funasr` 兼容供应商别名。
+
+外部 LLM 不属于 ASR/translation `CapabilityModule`。宿主从插件 manifest 构造 `LlmModule`，插件本身
+只实现宿主约定的轻量 ABI，无需导入或打包 SDK：
+
+```ts
+import { createLlmModuleClient, type LlmModule } from '@henjicc/ai-sdk/llm/modules'
+
+const pluginModule: LlmModule = {
+  descriptor: {
+    id: 'com.example.chat',
+    source: { kind: 'plugin', namespace: 'com.example.provider' },
+    providerId: 'example',
+    modelId: 'example-chat',
+    capabilities,
+    executionModes: ['request-response', 'event-stream'],
+  },
+  execute: async (request, context) => pluginAdapter.invoke(request, context),
+  discover: async (context) => pluginAdapter.discover(context),
+  dispose: async () => pluginAdapter.dispose(),
+}
+
+const llmModules = createLlmModuleClient({ runtime, modules: [pluginModule] })
+const result = await llmModules.execute(pluginModule.descriptor.id, { messages }, {
+  requestId: 'chat-1',
+  mode: 'event-stream',
+  onEvent,
+})
+await llmModules.unregisterSource('com.example.provider')
+```
+
+client 统一拥有 Usage/Finish/Done/Error 终态、Abort/timeout、结构化日志、trace、冲突诊断和资源 drain；
+module 只发送 Token/ReasoningToken 增量并返回最终结果。`createGroqLlmModule()` 把现有 Groq 共享内核
+包装成同一注册边界，插件占用 `groq/openai/gpt-oss-20b` 时会列出双方 source 并拒绝覆盖。
 
 ## 已知限制与验证边界
 

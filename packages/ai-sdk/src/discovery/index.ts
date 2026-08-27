@@ -6,12 +6,14 @@ import type {
 import type { GenerationPack } from '../generation/core'
 import type { LlmModelCatalogEntry } from '../llm/modelCatalog'
 import type { LlmModelConfig } from '../llm/types'
+import type { LlmModuleDescriptor } from '../llm/modules/types'
 import type { ModelRuntimeDefinition, ModelType, RuntimeInputLimitsConfig } from '../types/model'
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import {
   normalizeCapabilityStableId,
   validateCapabilityDescriptor,
 } from '../capabilities/validation'
+import { validateLlmModuleDescriptor } from '../llm/modules/validation'
 
 type ExtensibleString = string & Record<never, never>
 
@@ -73,6 +75,7 @@ export interface ModelCapabilityQuery {
 export type CapabilityDiscoveryItem =
   | { sourceKind: 'generation-model'; id: string; profile: ModelCapabilityProfile; source: ModelRuntimeDefinition }
   | { sourceKind: 'llm-model'; id: string; profile: ModelCapabilityProfile; source: LlmModelCatalogEntry | LlmModelConfig }
+  | { sourceKind: 'llm-module'; id: string; profile: ModelCapabilityProfile; source: LlmModuleDescriptor }
   | { sourceKind: 'extension'; id: string; profile: ModelCapabilityProfile; source: CapabilityDescriptor }
 
 export interface CreateCapabilityDiscoveryInput {
@@ -80,6 +83,7 @@ export interface CreateCapabilityDiscoveryInput {
   generationModels?: readonly ModelRuntimeDefinition[]
   llmEntries?: readonly LlmModelCatalogEntry[]
   llmModels?: readonly LlmModelConfig[]
+  llmModules?: readonly LlmModuleDescriptor[]
   extensions?: readonly (
     | CapabilityDescriptor
     | CapabilityModule<unknown, unknown, unknown>
@@ -132,6 +136,11 @@ export function createModelCapabilityDiscovery(input: CreateCapabilityDiscoveryI
     )
     const id = `${providerId}:${modelId}`
     add({ sourceKind: 'llm-model', id, profile: profileLlmModel(model), source: model })
+  }
+  for (const module of input.llmModules ?? []) {
+    validateLlmModuleDescriptor(module)
+    const id = `${module.providerId}:${module.modelId}`
+    add({ sourceKind: 'llm-module', id, profile: profileLlmModule(module), source: module })
   }
   for (const extension of input.extensions ?? []) {
     const descriptor = 'descriptor' in extension ? extension.descriptor : extension
@@ -191,6 +200,18 @@ export function profileLlmModel(model: LlmModelConfig): ModelCapabilityProfile {
     features,
     model.capabilities.structuredOutputMode
   )
+}
+
+export function profileLlmModule(module: LlmModuleDescriptor): ModelCapabilityProfile {
+  const profile = profileLlmModel({
+    providerId: module.providerId,
+    modelId: module.modelId,
+    displayName: module.displayName ?? module.modelId,
+    adapter: 'external-module',
+    capabilities: module.capabilities,
+    enabled: true,
+  })
+  return { ...profile, tags: module.tags ? [...module.tags] : [] }
 }
 
 export function profileCapabilityDescriptor(descriptor: CapabilityDescriptor): ModelCapabilityProfile {
@@ -326,6 +347,9 @@ function dedupeGenerationModels(models: readonly ModelRuntimeDefinition[]): Mode
 }
 
 function describeDiscoveryItem(item: CapabilityDiscoveryItem): string {
+  if (item.sourceKind === 'llm-module') {
+    return `${item.source.source.kind} source "${item.source.source.namespace}" LLM module`
+  }
   if (item.sourceKind !== 'extension') return `${item.sourceKind}`
   return `${item.source.source.kind} source "${item.source.source.namespace}"`
 }

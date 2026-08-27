@@ -58,6 +58,7 @@ const requiredEntries = [
   './llm',
   './llm/streaming',
   './llm/groq',
+  './llm/modules',
   './runtime',
   './capabilities',
   './capabilities/speech-recognition',
@@ -98,7 +99,7 @@ for (const entry of patternEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.1') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.2') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
 if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {

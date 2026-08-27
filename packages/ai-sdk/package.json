@@ -1,6 +1,6 @@
 {
   "name": "@henjicc/ai-sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "痕迹AI 多供应商模型适配 SDK",
   "license": "Apache-2.0",
   "repository": {
@@ -82,6 +82,11 @@
       "types": "./dist/llm/groq/index.d.ts",
       "import": "./dist/llm/groq/index.js",
       "default": "./dist/llm/groq/index.js"
+    },
+    "./llm/modules": {
+      "types": "./dist/llm/modules/index.d.ts",
+      "import": "./dist/llm/modules/index.js",
+      "default": "./dist/llm/modules/index.js"
     },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",

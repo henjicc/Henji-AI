@@ -96,3 +96,9 @@ export type {
   LlmStreamEmitter,
   RuntimeContext,
 }
+
+export {
+  GROQ_LLM_MODULE_DESCRIPTOR,
+  GROQ_LLM_MODULE_ID,
+  createGroqLlmModule,
+} from './module'

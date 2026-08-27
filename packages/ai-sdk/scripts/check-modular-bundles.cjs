@@ -302,6 +302,24 @@ const groqLlm = bundle('GroqLlm', [
   }
 })
 
+const llmModules = bundle('LlmModules', [
+  "export * from './llm/modules/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/src/capabilities/speech-recognition/') ||
+    input.includes('/src/capabilities/translation/') ||
+    input.includes('/src/generation') ||
+    input.includes('/src/catalog/') ||
+    input.includes('/src/llm/groq/') ||
+    input.includes('/src/llm/streaming') ||
+    input.includes('/src/llm/chat.ts')
+  ))
+  if (forbidden.length > 0) fail(`LLM module 按需入口带入具体供应商/ASR/翻译/generation：${forbidden.join(', ')}`)
+  if (!inputs.some((input) => input.includes('/src/llm/modules/client.ts'))) {
+    fail('LLM module 按需入口未包含注册执行 client')
+  }
+})
+
 let networkCalls = 0
 const context = vm.createContext({
   AbortController,
@@ -325,6 +343,32 @@ const client = bareApi.createModularGenerationClient({
 })
 if (client.catalog.list().length !== 0) fail('bare client 不是 0 模型')
 client.dispose()
+new vm.Script(llmModules.iife.code, { filename: 'llm-modules.iife.js' }).runInContext(context)
+const llmModuleApi = vm.runInContext('HenjiLlmModules', context)
+const llmModuleClient = llmModuleApi.createLlmModuleClient({
+  runtime: {
+    transport: { fetch: async () => { networkCalls += 1; throw new Error('network forbidden') } },
+    credentials: { get: async () => undefined },
+    media: { read: async () => { throw new Error('media forbidden') } },
+  },
+})
+llmModuleClient.register({
+  descriptor: {
+    id: 'fixture.llm',
+    source: { kind: 'external', namespace: 'com.example.bundle' },
+    providerId: 'fixture',
+    modelId: 'fixture',
+    capabilities: {
+      text: true, image: false, video: false, audio: false, streaming: false,
+      toolCall: false, parallelTools: false, jsonOutput: false,
+      structuredOutputMode: 'none', reasoning: false, sampling: false,
+      contextWindow: null, maxOutputTokens: null, usage: false,
+    },
+    executionModes: ['request-response'],
+  },
+  execute: async () => ({ output: '', reasoningOutput: '', usage: null, finishReason: null }),
+})
+if (llmModuleClient.list().length !== 1) fail('LLM module 受限生命周期注册失败')
 for (const [name, artifact, globalName] of [
   ['single erase', singleErase, 'HenjiFalFluxErase'],
   ['Fal erase tool pack', falErasePack, 'HenjiFalEraseToolPack'],
@@ -359,6 +403,7 @@ const metrics = {
   translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
   bailianTranslationCapability: { iife: bailianTranslationCapability.iife.bytes, esm: bailianTranslationCapability.esm.bytes, modules: bailianTranslationCapability.iife.modules },
   groqLlm: { iife: groqLlm.iife.bytes, esm: groqLlm.esm.bytes, modules: groqLlm.iife.modules },
+  llmModules: { iife: llmModules.iife.bytes, esm: llmModules.esm.bytes, modules: llmModules.iife.modules },
   networkCalls,
 }
 console.log(`✔ modular bundle 门禁通过：${JSON.stringify(metrics)}`)
