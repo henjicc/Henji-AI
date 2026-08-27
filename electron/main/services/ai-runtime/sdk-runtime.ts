@@ -2,7 +2,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import {
-  createAIClient,
   defaultFilename,
   inferMimeFromPath,
   noopTracer,
@@ -17,6 +16,7 @@ import {
   type Transport,
 } from '@henjicc/ai-sdk'
 
+import { createHenjiAIClient } from '../../../../src/core/modelCatalog/applicationModelProfile'
 import { getAiProviderApiKey, getKey, getLlmProviderApiKey } from '../keystore'
 import { createMainLogger } from '../logging'
 
@@ -144,4 +144,4 @@ export const sdkRuntimeContext: RuntimeContext = {
 }
 
 /** 两类模型运行时共用同一个客户端与同一个 RuntimeContext。 */
-export const sdkAIClient = createAIClient({ runtime: sdkRuntimeContext })
+export const sdkAIClient = createHenjiAIClient(sdkRuntimeContext)

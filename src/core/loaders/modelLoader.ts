@@ -11,7 +11,7 @@ import { registry } from '../ModelRegistry'
 import { getI18nText } from '../types/I18nText'
 import { defineModel as defineApplicationModel } from '../defineModel'
 import { composeModelDefinition } from '../composeModelDefinition'
-import { catalog } from '@henjicc/ai-sdk'
+import { HENJI_GENERATION_MODELS } from '../modelCatalog/applicationModelProfile'
 import { modelPresentations } from '@/models/presentation'
 
 /**
@@ -43,7 +43,7 @@ export async function loadAllModels(): Promise<LoadStats> {
   let errorCount = 0
   const failedModels: Array<{ path: string; error: DynamicValue }> = []
 
-  for (const runtimeModel of catalog) {
+  for (const runtimeModel of HENJI_GENERATION_MODELS) {
     const path = runtimeModel.meta.id
     try {
       const presentation = modelPresentations[runtimeModel.meta.id]

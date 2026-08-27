@@ -7,7 +7,7 @@ import type {
   JsonValue,
   ModelRuntimeDefinition,
 } from '@henjicc/ai-sdk'
-import { catalogIndex } from '@henjicc/ai-sdk'
+import { getHenjiGenerationModel } from '../../../../src/core/modelCatalog/applicationModelProfile'
 
 import { getDb } from '../db'
 
@@ -50,7 +50,7 @@ interface ProgressSeedProfile {
 let progressSeedFile: ProgressSeedFile | null = null
 
 export function getProgressEstimate(modelId: string, params: JsonObject = {}): AiProgressEstimateDto {
-  const model = catalogIndex.get(modelId)
+  const model = getHenjiGenerationModel(modelId)
   if (!model) {
     throw new Error(`Model not found in catalog: ${modelId}`)
   }
@@ -69,7 +69,7 @@ export function recordProgressSample(
     return { actualDurationMs: 0, estimate: getProgressEstimate(modelId, params) }
   }
 
-  const model = catalogIndex.get(modelId)
+  const model = getHenjiGenerationModel(modelId)
   if (model) {
     getDb().prepare(`
       INSERT INTO progress_samples (

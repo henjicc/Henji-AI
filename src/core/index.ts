@@ -16,6 +16,7 @@ export { validateModel, ModelValidationError } from './validators/modelValidator
 // 模型定义辅助函数
 export { defineModel } from './defineModel'
 export * from './modelCatalog/generationModelDescriptions'
+export * from './modelCatalog/applicationModelProfile'
 
 // 标签系统
 export * from './tags'
