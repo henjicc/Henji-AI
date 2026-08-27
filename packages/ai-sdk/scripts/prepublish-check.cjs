@@ -33,6 +33,9 @@ run('SDK 可移植性检查', 'npm', ['run', 'check:sdk'])
 run('SDK 全量测试', 'npm', ['test', '-w', 'packages/ai-sdk'])
 run('SDK 构建', 'npm', ['run', 'build', '-w', 'packages/ai-sdk'])
 run('仓库外标准 Vite dev 消费方解析', process.execPath, [path.join(packageRoot, 'scripts', 'verify-vite-consumer.cjs')])
+run('仓库外无 TextEncoder/TextDecoder 按需能力消费', process.execPath, [
+  path.join(packageRoot, 'scripts', 'verify-restricted-package-consumer.cjs'),
+])
 
 const distRoot = path.join(packageRoot, 'dist')
 if (!fs.existsSync(distRoot)) fail('构建后 packages/ai-sdk/dist 不存在')
@@ -95,7 +98,7 @@ for (const entry of patternEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.1.8') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.1') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
 if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {

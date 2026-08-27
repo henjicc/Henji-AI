@@ -4,6 +4,19 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-08-28
+
+- 修复构建期 ESM specifier 重写漏掉精确 `.` / `..` 目录导入，确保 Node ESM 消费方可直接加载 ASR、实时 ASR、翻译和 Groq 按需入口。
+- 发布门禁新增仓库外 Node ESM 实际执行，连同严格 TypeScript、Vite、无全局 `TextEncoder` / `TextDecoder` 与 bundle 隔离一起验证；发布说明将 `0.2.0` 标记为不建议使用。
+
+## 0.2.0 - 2026-08-28
+
+- 新增供应商无关的 ASR、翻译与实时会话能力协议；宿主按需注入 HTTP、实时连接、媒体读取、凭据、日志、Abort 与超时，不依赖 Node/Electron 或浏览器全局 WebSocket。
+- 新增 5 个百炼短音频/文件 ASR、4 个百炼实时 ASR、Qwen-MT Flash/Plus/Lite，以及 Groq GPT-OSS 20B 流式聊天、静态默认模型与模型发现入口；具体能力均需从独立子路径显式导入。
+- capability descriptor 新增必填 `source.kind/source.namespace`，支持内置/外部/插件所有权、冲突诊断、来源批量卸载和资源释放；module ID、provider/kind/model 坐标与统一 discovery ID 冲突不再静默覆盖。
+- **破坏性变更**：百炼 ASR module ID 从 `bailian.<modelId>` 统一为 `bailian.speech-recognition.<modelId>`，SDK 不保留旧 ID 或 `funasr` provider alias；已有宿主持久化数据需一次性迁移。
+- 新增 ASR、翻译、Groq 与开放 OCR/custom operation 的穷举/断牙测试及独立 bundle 门禁；所有供应商 fixture 均不含真实密钥，本版本发布验证不发起付费模型请求。
+
 ## 0.1.8 - 2026-08-28
 
 - 修复 Photoshop UXP 9.2 缺少全局 `TextDecoder` 时 LLM SSE 无法启动：窄流式入口改用 SDK 内部增量 UTF-8 解码器，不要求宿主注入 DOM 或 Node polyfill。

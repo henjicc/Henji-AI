@@ -33,7 +33,7 @@ function emittedSpecifier(importer, specifier) {
   throw new Error(`构建产物缺少相对导入目标：${path.relative(packageRoot, importer)} -> ${specifier}`)
 }
 
-const specifierPattern = /(\b(?:from|import)\s*\(?\s*['"])(\.{1,2}\/[^'"\n]+)(['"])/g
+const specifierPattern = /(\b(?:from|import)\s*\(?\s*['"])(\.{1,2}(?:\/[^'"\n]+)?)(['"])/g
 for (const file of listModuleFiles(distRoot)) {
   const source = fs.readFileSync(file, 'utf8')
   const rewritten = source.replace(specifierPattern, (_match, prefix, specifier, suffix) => (

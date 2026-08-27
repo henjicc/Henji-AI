@@ -29,14 +29,17 @@ function run(command, args, cwd) {
 async function verify() {
   fs.mkdirSync(packRoot, { recursive: true })
   fs.mkdirSync(consumerRoot, { recursive: true })
-  const packOutput = JSON.parse(run('npm', [
-    'pack',
-    '--json',
-    '--ignore-scripts',
-    '--pack-destination',
-    packRoot,
-  ], packageRoot))
-  const tarballPath = path.join(packRoot, packOutput[0].filename)
+  let installSpec = process.env.HENJI_SDK_INSTALL_SPEC
+  if (!installSpec) {
+    const packOutput = JSON.parse(run('npm', [
+      'pack',
+      '--json',
+      '--ignore-scripts',
+      '--pack-destination',
+      packRoot,
+    ], packageRoot))
+    installSpec = path.join(packRoot, packOutput[0].filename)
+  }
 
   fs.writeFileSync(path.join(consumerRoot, 'package.json'), JSON.stringify({
     name: 'henji-sdk-vite-consumer-probe',
@@ -138,14 +141,52 @@ async function verify() {
     include: ['consumer.ts'],
   }, null, 2))
 
-  run('npm', [
+  const installArgs = [
     'install',
     '--ignore-scripts',
     '--no-audit',
     '--no-fund',
     '--no-package-lock',
-    tarballPath,
-  ], consumerRoot)
+    installSpec,
+  ]
+  if (process.env.HENJI_SDK_NPM_USERCONFIG) {
+    installArgs.push('--userconfig', process.env.HENJI_SDK_NPM_USERCONFIG)
+  }
+  run('npm', installArgs, consumerRoot)
+
+  const installedManifest = JSON.parse(fs.readFileSync(
+    path.join(consumerRoot, 'node_modules', '@henjicc', 'ai-sdk', 'package.json'),
+    'utf8',
+  ))
+  const expectedVersion = JSON.parse(fs.readFileSync(path.join(packageRoot, 'package.json'), 'utf8')).version
+  if (installedManifest.name !== '@henjicc/ai-sdk' || installedManifest.version !== expectedVersion) {
+    throw new Error(`安装坐标不匹配：${installedManifest.name}@${installedManifest.version}`)
+  }
+
+  fs.writeFileSync(path.join(consumerRoot, 'runtime-probe.mjs'), [
+    "import { createModelCapabilityDiscovery } from '@henjicc/ai-sdk/discovery'",
+    "import { bailianNonRealtimeAsrPresets, createBailianAsrModule } from '@henjicc/ai-sdk/capabilities/speech-recognition/bailian'",
+    "import { bailianRealtimeAsrPresets, createBailianRealtimeAsrModule } from '@henjicc/ai-sdk/capabilities/speech-recognition/bailian/realtime'",
+    "import { BAILIAN_QWEN_MT_PRESETS, createBailianQwenMtTranslationModule } from '@henjicc/ai-sdk/capabilities/translation/bailian'",
+    "import { GROQ_DEFAULT_MODEL_CONFIG } from '@henjicc/ai-sdk/llm/groq'",
+    '',
+    'const extensions = [',
+    '  ...bailianNonRealtimeAsrPresets.map(createBailianAsrModule),',
+    '  ...bailianRealtimeAsrPresets.map(createBailianRealtimeAsrModule),',
+    '  ...Object.values(BAILIAN_QWEN_MT_PRESETS).map((preset) => createBailianQwenMtTranslationModule(preset.modelId)),',
+    ']',
+    'const discovery = createModelCapabilityDiscovery({ extensions, llmModels: [GROQ_DEFAULT_MODEL_CONFIG] })',
+    'const ids = discovery.list().map((item) => item.id)',
+    'if (bailianNonRealtimeAsrPresets.length !== 5 || bailianRealtimeAsrPresets.length !== 4 || Object.keys(BAILIAN_QWEN_MT_PRESETS).length !== 3) {',
+    "  throw new Error('内置能力数量与发布契约不一致')",
+    '}',
+    'if (ids.length !== 13 || new Set(ids).size !== ids.length) {',
+    "  throw new Error(`发布能力发现结果不唯一：${JSON.stringify(ids)}`)",
+    '}',
+    "console.log(JSON.stringify({ package: '@henjicc/ai-sdk', nodeRuntime: true, asr: 5, realtime: 4, translation: 3, groq: 1, discovery: ids.length }))",
+  ].join('\n'))
+  const runtimeProbe = run(process.execPath, ['runtime-probe.mjs'], consumerRoot).trim()
+  console.log(`✔ 仓库外 Node ESM 最小消费脚本通过：${runtimeProbe}`)
 
   const typescriptEntry = require.resolve('typescript/bin/tsc', { paths: [repositoryRoot] })
   run(process.execPath, [typescriptEntry, '--project', 'tsconfig.json'], consumerRoot)
