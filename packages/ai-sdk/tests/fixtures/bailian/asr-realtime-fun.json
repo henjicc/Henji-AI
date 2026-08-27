@@ -1,0 +1,13 @@
+{
+  "kind": "capability",
+  "source": {
+    "protocol": "阿里云百炼 Fun-ASR Realtime 官方 task-started/result-generated/task-finished 事件字段",
+    "evidence": "packages/ai-sdk/docs/model-adaptation/Fun-ASR-Realtime/Fun-ASR-Realtime_百炼.md；标识与文本为不可联网占位数据"
+  },
+  "events": {
+    "started": { "header": { "event": "task-started", "task_id": "fixture_task_001" } },
+    "partial": { "header": { "event": "result-generated" }, "payload": { "output": { "sentence": { "sentence_id": 1, "sentence_end": false, "begin_time": 0, "end_time": 420, "text": "你" } } } },
+    "final": { "header": { "event": "result-generated" }, "payload": { "output": { "sentence": { "sentence_id": 1, "sentence_end": true, "begin_time": 0, "end_time": 820, "text": "你好", "words": [{ "begin_time": 0, "end_time": 420, "text": "你", "punctuation": "" }, { "begin_time": 420, "end_time": 820, "text": "好", "punctuation": "。" }] } } }, "usage": { "duration": 1 } },
+    "finished": { "header": { "event": "task-finished", "task_id": "fixture_task_001" }, "payload": { "usage": { "duration": 1 } } }
+  }
+}

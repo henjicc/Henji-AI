@@ -103,6 +103,11 @@
       "import": "./dist/capabilities/speech-recognition/bailian/index.js",
       "default": "./dist/capabilities/speech-recognition/bailian/index.js"
     },
+    "./capabilities/speech-recognition/bailian/realtime": {
+      "types": "./dist/capabilities/speech-recognition/bailian/realtime/index.d.ts",
+      "import": "./dist/capabilities/speech-recognition/bailian/realtime/index.js",
+      "default": "./dist/capabilities/speech-recognition/bailian/realtime/index.js"
+    },
     "./capabilities/translation": {
       "types": "./dist/capabilities/translation/index.d.ts",
       "import": "./dist/capabilities/translation/index.js",

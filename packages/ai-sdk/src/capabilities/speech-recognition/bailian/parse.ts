@@ -42,14 +42,17 @@ function parseWord(value: UnknownRecord): SpeechRecognitionWord | undefined {
   }
 }
 
-function parseSentence(value: UnknownRecord): SpeechRecognitionSegment | undefined {
-  const sentenceText = text(value.text)
+/** 归一化百炼句/词时间戳，供非实时与实时协议共同使用。 */
+export function parseBailianSentence(value: unknown): SpeechRecognitionSegment | undefined {
+  const sentence = record(value)
+  if (!sentence) return undefined
+  const sentenceText = text(sentence.text)
   if (!sentenceText) return undefined
-  const words = records(value.words).map(parseWord).filter((word): word is SpeechRecognitionWord => word !== undefined)
+  const words = records(sentence.words).map(parseWord).filter((word): word is SpeechRecognitionWord => word !== undefined)
   return {
     text: sentenceText,
-    startMs: numberValue(value.begin_time),
-    endMs: numberValue(value.end_time),
+    startMs: numberValue(sentence.begin_time),
+    endMs: numberValue(sentence.end_time),
     ...(words.length ? { words } : {}),
   }
 }
@@ -77,7 +80,7 @@ export function parseFunShortSse(payload: string): SpeechRecognitionOutput {
     if (durationSeconds !== undefined) durationMs = durationSeconds * 1_000
     for (const sentence of recordsOrOne(output?.sentence)) {
       if (sentence.sentence_end !== true) continue
-      const segment = parseSentence(sentence)
+      const segment = parseBailianSentence(sentence)
       if (!segment) continue
       const duplicate = segments.find((candidate) =>
         candidate.startMs === segment.startMs
@@ -171,7 +174,7 @@ export function parseFileTranscript(payload: unknown): SpeechRecognitionOutput {
     const transcriptText = text(transcript.text)
     if (transcriptText) texts.push(transcriptText)
     segments.push(...records(transcript.sentences)
-      .map(parseSentence)
+      .map(parseBailianSentence)
       .filter((segment): segment is SpeechRecognitionSegment => segment !== undefined))
   }
   const combined = texts.join('\n').trim() || segments.map((segment) => segment.text).join('').trim()

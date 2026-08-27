@@ -228,6 +228,7 @@ const bailianAsrCapability = bundle('BailianAsrCapability', [
   "export * from './capabilities/speech-recognition/bailian/index'",
 ].join('\n'), (inputs) => {
   const forbidden = inputs.filter((input) => (
+    input.includes('/capabilities/speech-recognition/bailian/realtime/') ||
     input.includes('/capabilities/translation/') ||
     modelPattern.test(`/${input}`) ||
     providerPattern.test(`/${input}`) ||
@@ -237,6 +238,22 @@ const bailianAsrCapability = bundle('BailianAsrCapability', [
   if (forbidden.length > 0) fail(`百炼 ASR 按需入口带入无关能力/模型：${forbidden.join(', ')}`)
   if (!inputs.some((input) => input.includes('/capabilities/speech-recognition/bailian/module.ts'))) {
     fail('百炼 ASR 按需入口未包含执行模块')
+  }
+})
+
+const bailianRealtimeAsrCapability = bundle('BailianRealtimeAsrCapability', [
+  "export * from './capabilities/speech-recognition/bailian/realtime/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/capabilities/translation/') ||
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation') ||
+    input.includes('/src/llm/')
+  ))
+  if (forbidden.length > 0) fail(`百炼实时 ASR 按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+  if (!inputs.some((input) => input.includes('/capabilities/speech-recognition/bailian/realtime/module.ts'))) {
+    fail('百炼实时 ASR 按需入口未包含执行模块')
   }
 })
 
@@ -323,6 +340,7 @@ const metrics = {
   capabilityCommon: { iife: capabilityCommon.iife.bytes, esm: capabilityCommon.esm.bytes, modules: capabilityCommon.iife.modules },
   speechRecognitionCapability: { iife: speechCapability.iife.bytes, esm: speechCapability.esm.bytes, modules: speechCapability.iife.modules },
   bailianAsrCapability: { iife: bailianAsrCapability.iife.bytes, esm: bailianAsrCapability.esm.bytes, modules: bailianAsrCapability.iife.modules },
+  bailianRealtimeAsrCapability: { iife: bailianRealtimeAsrCapability.iife.bytes, esm: bailianRealtimeAsrCapability.esm.bytes, modules: bailianRealtimeAsrCapability.iife.modules },
   translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
   bailianTranslationCapability: { iife: bailianTranslationCapability.iife.bytes, esm: bailianTranslationCapability.esm.bytes, modules: bailianTranslationCapability.iife.modules },
   networkCalls,

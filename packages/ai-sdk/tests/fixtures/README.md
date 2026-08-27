@@ -1,5 +1,12 @@
 # Provider fixtures（任务 6.1）
 
+## 百炼 ASR capability fixture（任务 9.6/9.7）
+
+`bailian/asr-*.json` 由非实时与实时 ASR 专用测试读取，统一标记 `kind: "capability"`，
+生成 provider 的 `fixtures.test.ts` 会显式跳过。当前没有真实付费 ASR/麦克风 WS 日志，内容来自
+9.4 已核实的百炼官方 HTTP、上传和 WebSocket 事件示例；每份文件都记录来源，标识、文本和 URL
+已替换为不可联网占位值。
+
 ## LLM fixture 补充（任务 9.9）
 
 `groq/*.json` 由 LLM 专用精确测试读取，不进入生成供应商的 `fixtures.test.ts`。本机没有 Groq

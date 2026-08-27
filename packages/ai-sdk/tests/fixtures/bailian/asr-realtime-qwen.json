@@ -1,0 +1,14 @@
+{
+  "kind": "capability",
+  "source": {
+    "protocol": "阿里云百炼 Qwen3-ASR Realtime 官方 session/transcription 事件字段",
+    "evidence": "packages/ai-sdk/docs/model-adaptation/Qwen3-ASR-Flash-Realtime/Qwen3-ASR-Flash-Realtime_百炼.md；会话标识与文本为不可联网占位数据"
+  },
+  "events": {
+    "created": { "type": "session.created", "session": { "id": "fixture_session_001" } },
+    "updated": { "type": "session.updated", "session": { "id": "fixture_session_001" } },
+    "partial": { "type": "conversation.item.input_audio_transcription.text", "text": "你", "stash": "好" },
+    "final": { "type": "conversation.item.input_audio_transcription.completed", "transcript": "你好" },
+    "finished": { "type": "session.finished", "session": { "id": "fixture_session_001" } }
+  }
+}

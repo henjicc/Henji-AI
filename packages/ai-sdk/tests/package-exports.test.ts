@@ -29,6 +29,7 @@ describe('published package exports', () => {
       './capabilities',
       './capabilities/speech-recognition',
       './capabilities/speech-recognition/bailian',
+      './capabilities/speech-recognition/bailian/realtime',
       './capabilities/translation',
       './capabilities/translation/bailian',
       './capabilities/realtime',

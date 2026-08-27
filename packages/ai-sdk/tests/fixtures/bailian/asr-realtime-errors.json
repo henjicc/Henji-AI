@@ -1,0 +1,11 @@
+{
+  "kind": "capability",
+  "source": {
+    "protocol": "阿里云百炼 Fun task-failed 与 Qwen error 官方错误事件字段",
+    "evidence": "9.4 官方协议调研；错误码、消息和标识均为脱敏占位值"
+  },
+  "events": {
+    "fun": { "header": { "event": "task-failed", "error_code": "FIXTURE_FAILURE", "error_message": "fixture realtime failure" } },
+    "qwen": { "type": "error", "error": { "code": "FIXTURE_FAILURE", "message": "fixture realtime failure" } }
+  }
+}

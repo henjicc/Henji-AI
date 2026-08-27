@@ -246,6 +246,7 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
         }
         let ended = false
         let closePromise: Promise<void> | undefined
+        let finishPromise: Promise<TOutput> | undefined
         const closeDriver = (): Promise<void> => {
           closePromise ??= Promise.resolve().then(async () => await driver.close?.())
           return closePromise
@@ -285,42 +286,46 @@ export function createCapabilityClient(config: CreateCapabilityClientConfig): Ca
             if (ended || controller.signal.aborted) throw sessionInactiveError()
             await driver.send(value)
           },
-          finish: async () => {
-            if (ended || controller.signal.aborted) throw sessionInactiveError()
-            let output: TOutput
-            try {
-              output = await driver.finish()
-              if (controller.signal.aborted) throw cancelledError(requestId)
-            } catch (error) {
-              const normalized = controller.signal.aborted
-                ? cancelledError(requestId)
-                : normalizeExecutionError(id, error)
+          finish: () => {
+            if (finishPromise) return finishPromise
+            if (ended || controller.signal.aborted) return Promise.reject(sessionInactiveError())
+            finishPromise = (async (): Promise<TOutput> => {
+              let output: TOutput
+              try {
+                output = await driver.finish()
+                if (controller.signal.aborted) throw cancelledError(requestId)
+              } catch (error) {
+                const normalized = controller.signal.aborted
+                  ? cancelledError(requestId)
+                  : normalizeExecutionError(id, error)
+                try {
+                  await closeDriver()
+                } catch {
+                  // 保留 finish 的首个失败；close 仅负责尽力释放连接。
+                }
+                runtime.logger.error('能力实时会话失败', {
+                  event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
+                })
+                end(normalized)
+                throw normalized
+              }
               try {
                 await closeDriver()
-              } catch {
-                // 保留 finish 的首个失败；close 仅负责尽力释放连接。
+              } catch (error) {
+                const normalized = normalizeExecutionError(id, error)
+                runtime.logger.error('能力实时会话失败', {
+                  event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
+                })
+                end(normalized)
+                throw normalized
               }
-              runtime.logger.error('能力实时会话失败', {
-                event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
+              runtime.logger.info('能力实时会话完成', {
+                event: 'capability.session.completed', requestId, context: { capabilityId: id },
               })
-              end(normalized)
-              throw normalized
-            }
-            try {
-              await closeDriver()
-            } catch (error) {
-              const normalized = normalizeExecutionError(id, error)
-              runtime.logger.error('能力实时会话失败', {
-                event: 'capability.session.failed', requestId, context: { capabilityId: id }, error: normalized,
-              })
-              end(normalized)
-              throw normalized
-            }
-            runtime.logger.info('能力实时会话完成', {
-              event: 'capability.session.completed', requestId, context: { capabilityId: id },
-            })
-            end()
-            return output
+              end()
+              return output
+            })()
+            return finishPromise
           },
           close: async () => {
             if (ended) return
