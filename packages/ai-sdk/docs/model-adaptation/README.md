@@ -6,9 +6,9 @@
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-08-28 |
-| 模型数量 | 主清单 19（图片 10 / 视频 9）+ 供应商专属 5 |
-| 模型供应商文档数量 | 69 |
-| 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
+| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 供应商专属 5 + Say-It 能力模型 13（ASR 9 / 翻译 3 / LLM 1） |
+| 模型供应商文档数量 | 生成/存量 69 + Say-It 13（另有 Fal 工具 3） |
+| 覆盖供应商 | 火山引擎（官方）、百炼（官方）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
 另有 3 个按需分发的 Fal 图像消除工具，不进入默认 99 模型兼容目录：
 [Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、
@@ -26,6 +26,7 @@ docs/model-adaptation/
 │   ├── APIMart.md
 │   ├── KIE.md
 │   ├── Fal.md
+│   ├── Groq.md
 │   ├── 百炼.md
 │   ├── 火山引擎.md
 │   ├── 派欧云.md
@@ -34,14 +35,14 @@ docs/model-adaptation/
 │   └── <模型名>_<供应商名>.md       # 支持该模型的每个供应商一个文件
 ```
 
-- **供应商名**使用项目内统一的中文显示名（`src/i18n/locales/zh-CN/models.json` → `models.providers`）：
-  派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎 / Grsai（沿用其官方品牌拼写，未译中文名）
+- **供应商名**使用项目内统一的显示名：
+  派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎 / Grsai / Groq（Grsai/Groq 沿用官方品牌拼写）
 - 每个供应商文件都是**自包含**的：接入协议、能力清单、请求参数、响应结构、价格、适配要点、原始链接索引，看完这一份就能完成该供应商的适配
 - 每份文件都标注**信息来源链接**以及**该链接是否需要登录**
 
 ### 供应商基础文档
 
-模型适配前先看 [快速适配供应商](供应商/快速适配供应商.md)，确认供应商公共层已经覆盖端点、鉴权、上传、任务查询、结果解析和计价。现有八家基础文档：
+模型适配前先看 [快速适配供应商](供应商/快速适配供应商.md)，确认供应商公共层已经覆盖端点、鉴权、上传、任务查询、结果解析和计价。现有九家基础文档：
 
 - [APIMart](供应商/APIMart.md)：含中国大陆备用线路与图片上传协议
 - [KIE](供应商/KIE.md)：生成任务、文件上传、实际扣费与余额查询
@@ -51,6 +52,7 @@ docs/model-adaptation/
 - [派欧云](供应商/派欧云.md)：异步任务协议、**无官方上传（借用 KIE）**、实名认证前置、在售清单极小
 - [魔搭](供应商/魔搭.md)：API-Inference 统一接口、**魔粒积分计费**、仅图片、可用性判定方法
 - [Grsai](供应商/Grsai.md)：聚合中转，**同一模型拆多个「渠道」**（`-cl`/`-vip`/`-vt`/`-lite` 等后缀，价差可达 10 倍以上）、无独立上传接口（图片直接 base64/URL 塞进请求体）、双线路连通性探测
+- [Groq](供应商/Groq.md)：OpenAI 兼容 LLM、动态模型发现、GPT-OSS 推理参数与错误边界
 
 ## 二、通用适配规则
 
@@ -111,6 +113,36 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 
 魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image`、`Qwen/Qwen-Image-Edit-2509`、`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
 
+### Say-It 语音识别（9）
+
+以下是 Say-It 当前已展示的全部百炼云端 ASR，按用户授权全部保留。它们是后续 SDK 能力实现的资料清单，**不表示当前 SDK 已有真实 ASR 运行时**。
+
+| 模型 | 模式 | 主协议 | 上限 | 文档 |
+|---|---|---|---|---|
+| `fun-asr-realtime-2026-02-28` | 实时 | WebSocket `run-task` | 时长无限制 | [百炼](Fun-ASR-Realtime-2026-02-28/Fun-ASR-Realtime-2026-02-28_百炼.md) |
+| `fun-asr-realtime` | 实时稳定别名 | WebSocket `run-task` | 时长无限制 | [百炼](Fun-ASR-Realtime/Fun-ASR-Realtime_百炼.md) |
+| `qwen3-asr-flash-realtime-2026-02-10` | 实时 | WebSocket session | 时长无限制 | [百炼](Qwen3-ASR-Flash-Realtime-2026-02-10/Qwen3-ASR-Flash-Realtime-2026-02-10_百炼.md) |
+| `qwen3-asr-flash-realtime` | 实时稳定别名 | WebSocket session | 时长无限制 | [百炼](Qwen3-ASR-Flash-Realtime/Qwen3-ASR-Flash-Realtime_百炼.md) |
+| `fun-asr-flash-2026-06-15` | 短音频 | DashScope HTTP/SSE 同步 | 5 分钟 / 2 GB | [百炼](Fun-ASR-Flash-2026-06-15/Fun-ASR-Flash-2026-06-15_百炼.md) |
+| `qwen3-asr-flash` | 短音频稳定别名 | OpenAI 兼容 / DashScope 同步 | 5 分钟 / 10 MB | [百炼](Qwen3-ASR-Flash/Qwen3-ASR-Flash_百炼.md) |
+| `qwen3-asr-flash-2026-02-10` | 短音频快照 | OpenAI 兼容 / DashScope 同步 | 5 分钟 / 10 MB | [百炼](Qwen3-ASR-Flash-2026-02-10/Qwen3-ASR-Flash-2026-02-10_百炼.md) |
+| `fun-asr` | 文件异步 | 提交 + 轮询 + 结果 JSON | 12 小时 / 2 GB | [百炼](Fun-ASR/Fun-ASR_百炼.md) |
+| `qwen3-asr-flash-filetrans` | 文件异步 | 提交 + 轮询 | 12 小时 / 2 GB | [百炼](Qwen3-ASR-Flash-Filetrans/Qwen3-ASR-Flash-Filetrans_百炼.md) |
+
+### Say-It 翻译（3）
+
+| 模型 | 流式语义 | 北京原价（输入/输出，每百万 Token） | 文档 |
+|---|---|---|---|
+| `qwen-mt-flash` | 增量 | 0.7 / 1.95 元 | [百炼](Qwen-MT-Flash/Qwen-MT-Flash_百炼.md) |
+| `qwen-mt-plus` | 累积序列 | 1.8 / 5.4 元 | [百炼](Qwen-MT-Plus/Qwen-MT-Plus_百炼.md) |
+| `qwen-mt-lite` | 增量 | 0.6 / 1.6 元 | [百炼](Qwen-MT-Lite/Qwen-MT-Lite_百炼.md) |
+
+### Say-It LLM（1）
+
+| 模型 | 供应商 | 备注 | 文档 |
+|---|---|---|---|
+| `openai/gpt-oss-20b` | Groq | Say-It 默认；`reasoning_effort=low/medium/high`；不支持 `reasoning_format` | [Groq](GPT-OSS-20B/GPT-OSS-20B_Groq.md) |
+
 ## 四、平台模型 ID 速查
 
 ### 可选工具模型
@@ -153,7 +185,8 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 | 供应商 | Base URL | 鉴权 | 提交 | 查询 | 结果字段 |
 |---|---|---|---|---|---|
 | **火山引擎** | `https://ark.cn-beijing.volces.com` | `Authorization: Bearer $ARK_API_KEY` | `POST /api/v3/images/generations`（**同步**） | — | `data[].url` / `b64_json` |
-| **百炼** | `https://{WorkspaceId}.<region>.maas.aliyuncs.com` | `Authorization: Bearer sk-xxxx` | `POST /api/v1/services/aigc/multimodal-generation/generation`（同步）；异步加头 `X-DashScope-Async: enable` 并换 `image-generation/generation` | `GET /api/v1/tasks/{task_id}` | `output.choices[].message.content[].image` |
+| **百炼** | `https://{WorkspaceId}.<region>.maas.aliyuncs.com` | `Authorization: Bearer sk-xxxx` | 生成/短 ASR/Qwen-MT 为同步 HTTP；实时 ASR 为 `/api-ws/v1/inference` 或 `/api-ws/v1/realtime` WSS；文件 ASR 为 `POST /api/v1/services/audio/asr/transcription` + `X-DashScope-Async: enable` | 异步 `GET /api/v1/tasks/{task_id}` | 按能力分为图像 `content[].image`、转写事件/文本、`transcription_url`、翻译 `choices[].message.content` |
+| **Groq** | `https://api.groq.com/openai/v1` | `Authorization: Bearer <GROQ_API_KEY>` | `POST /chat/completions`（同步/SSE）；`GET /models` 发现 | — | `choices[].message.content/reasoning`；流式 `choices[].delta` |
 | **APIMart** | `https://api.apimart.ai`；大陆备用线路见[基础文档](供应商/APIMart.md) | `Authorization: Bearer <KEY>` | `POST /v1/images/generations`、`POST /v1/videos/generations` | `GET /v1/tasks/{task_id}` | `result.images[]` / `result.videos[]` |
 | **KIE** | `https://api.kie.ai` | `Authorization: Bearer <KEY>` | `POST /api/v1/jobs/createTask` | `GET /api/v1/jobs/recordInfo?taskId=` | `JSON.parse(resultJson).resultUrls` |
 | **Fal** | `https://fal.run` / `https://queue.fal.run` | `Authorization: Key $FAL_KEY` | `POST https://queue.fal.run/<endpoint-id>` | `GET .../requests/{id}/status`、`GET .../requests/{id}` | `images[]` / `video` |
@@ -183,6 +216,11 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 | 火山方舟图片生成 API | https://www.volcengine.com/docs/82379/1541523 | 否 |
 | 火山方舟模型价格 | https://www.volcengine.com/docs/82379/1544106 | 否 |
 | 百炼模型价格 | https://help.aliyun.com/zh/model-studio/model-pricing | 否 |
+| 百炼 ASR 模型与音频规格 | https://help.aliyun.com/zh/model-studio/asr-model/ | 否 |
+| 百炼 Qwen-MT API | https://help.aliyun.com/zh/model-studio/qwen-mt-api | 否 |
+| Groq 模型/价格 | https://console.groq.com/docs/models | 否 |
+| Groq API 参考 | https://console.groq.com/docs/api-reference | 否 |
+| Groq Reasoning | https://console.groq.com/docs/reasoning | 否 |
 | 可灵官方视频能力地图（仅参考） | https://www.klingai.com/document-api/guides/capability-map/video | 否 |
 | 派欧云文档索引 | https://ppio.com/docs/llms.txt | 否 |
 | 派欧云定价页 | https://ppio.com/pricing | 否 |
@@ -193,6 +231,7 @@ Grsai 的平台模型 ID 未并入本表：它把「渠道」直接编码进 `mo
 | Fal API Key | https://fal.ai/dashboard/keys | **是** |
 | 火山方舟 API Key | https://console.volcengine.com/ark/region:cn-beijing/apiKey | **是** |
 | 百炼 API Key | https://bailian.console.aliyun.com/?apiKey=1#/api-key | **是** |
+| Groq API Key | https://console.groq.com/keys | **是** |
 | Grsai 文档总索引（llms.txt） | https://qmy27nhsd9.apifox.cn/llms.txt | 否 |
 | Grsai dashboard 模型列表（权威价格） | https://grsai.com/zh/dashboard/models | 否 |
 | Grsai dashboard 公告（渠道调价历史） | https://grsai.com/zh/dashboard/announcements | 否 |
