@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+## 0.1.8 - 2026-08-28
+
+- 修复 Photoshop UXP 9.2 缺少全局 `TextDecoder` 时 LLM SSE 无法启动：窄流式入口改用 SDK 内部增量 UTF-8 解码器，不要求宿主注入 DOM 或 Node polyfill。
+- UTF-8 解码覆盖中文与 emoji 跨 chunk、畸形/过长/代理项/越界序列的替换字符语义，以及流结束截断尾段 flush；LLM reasoning/text/usage/stop/`[DONE]` 和 Abort 契约不变。
+- UXP 门禁不再向 VM 注入 `TextEncoder` / `TextDecoder`，并禁止重新引入直接 `TextDecoder` 构造。
+
 ## 0.1.7 - 2026-08-28
 
 - 新增 `@henjicc/ai-sdk/llm/streaming` 受限宿主入口，仅包含原生 OpenAI-compatible SSE、取消、必要类型与错误协议，不静态带入 modelStep、Zod 或 Vercel AI SDK。

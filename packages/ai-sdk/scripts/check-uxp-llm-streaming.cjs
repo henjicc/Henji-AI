@@ -52,6 +52,7 @@ function bundle(format) {
     ['Function constructor', /(?:^|[^.$\w])Function\s*\(/],
     ['Buffer', /\bBuffer\b/],
     ['process', /\bprocess\b/],
+    ['direct TextDecoder constructor', /\bnew\s+TextDecoder\b/],
     ['global fetch', /(?:\bglobalThis|\bwindow|\bself)\.fetch\b|(?:^|[^.$\w])fetch\s*\(/],
     ['TransformStream', /\bTransformStream\b/],
     ['WritableStream', /\bWritableStream\b/],
@@ -71,7 +72,7 @@ function utf8Response() {
     'data: [DONE]',
     '',
   ].join('\n')
-  const bytes = new TextEncoder().encode(source)
+  const bytes = encodeUtf8Fixture(source)
   const multiByteStart = bytes.findIndex((value, index) => value === 0xe6 && bytes[index + 1] === 0x80)
   const cuts = [multiByteStart + 1, multiByteStart + 2, multiByteStart + 13, bytes.length]
   let offset = 0
@@ -86,6 +87,32 @@ function utf8Response() {
   }), { status: 200, headers: { 'content-type': 'text/event-stream' } })
 }
 
+function encodeUtf8Fixture(input) {
+  const bytes = []
+  for (const symbol of input) {
+    const codePoint = symbol.codePointAt(0)
+    if (codePoint <= 0x7f) {
+      bytes.push(codePoint)
+    } else if (codePoint <= 0x7ff) {
+      bytes.push(0xc0 | (codePoint >> 6), 0x80 | (codePoint & 0x3f))
+    } else if (codePoint <= 0xffff) {
+      bytes.push(
+        0xe0 | (codePoint >> 12),
+        0x80 | ((codePoint >> 6) & 0x3f),
+        0x80 | (codePoint & 0x3f),
+      )
+    } else {
+      bytes.push(
+        0xf0 | (codePoint >> 18),
+        0x80 | ((codePoint >> 12) & 0x3f),
+        0x80 | ((codePoint >> 6) & 0x3f),
+        0x80 | (codePoint & 0x3f),
+      )
+    }
+  }
+  return Uint8Array.from(bytes)
+}
+
 async function main() {
   const iife = bundle('iife')
   const esm = bundle('esm')
@@ -96,11 +123,14 @@ async function main() {
     Promise,
     ReadableStream,
     Response,
-    TextDecoder,
     Uint8Array,
     setTimeout,
     clearTimeout,
   })
+  const utf8Globals = vm.runInContext('[typeof TextEncoder, typeof TextDecoder]', context)
+  if (JSON.stringify(utf8Globals) !== JSON.stringify(['undefined', 'undefined'])) {
+    fail(`受限 VM 意外提供 UTF-8 DOM 全局：${JSON.stringify(utf8Globals)}`)
+  }
   new vm.Script(iife.code, { filename: 'uxp-llm-streaming.iife.js' }).runInContext(context)
   const api = vm.runInContext('HenjiUxpLlmStreaming', context)
 

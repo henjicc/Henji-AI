@@ -25,7 +25,8 @@ global fetch、Streams、File、`btoa`/`atob`，import/create/catalog/dispose �
 窄 LLM streaming 入口只导出原生 OpenAI-compatible SSE 执行、取消、DTO、运行时类型与稳定错误协议。
 关闭 tree-shaking 的 IIFE/ESM 静态图门禁确认 Zod、modelStep、Vercel `ai`、`@ai-sdk/*`、Node builtin、
 `Buffer`、`process`、global fetch、`eval`/`new Function`、`TransformStream`、`WritableStream` 均为 0。
-`ReadableStream` 与 `TextDecoder` 是读取 SSE 的原生必需能力，不由 SDK 注入 polyfill。
+`ReadableStream` 仍由宿主响应提供；Photoshop 27.5 / UXP 9.2 真机确认没有全局 `TextEncoder` 与
+`TextDecoder`，`0.1.8` 起 SSE 使用 SDK 内部增量 UTF-8 解码器，不要求插件注入 DOM 或 Node polyfill。
 
 ## manifest v5 网络权限
 
@@ -74,12 +75,19 @@ export function createUxpRuntime(
     credentials: {
       async get(scope, providerId) {
         const stored = await secureStorage.getItem(`${scope}:${providerId}`)
-        return stored ? new TextDecoder().decode(stored) : undefined
+        return stored ? decodeAsciiCredential(stored) : undefined
       },
     },
     media: { read: exportEncodedLayer },
     logger,
   }
+}
+
+// API key 按 ASCII 保存；避免 UXP 不存在 TextDecoder 时凭据读取失败。
+function decodeAsciiCredential(bytes: Uint8Array): string {
+  let value = ''
+  for (const byte of bytes) value += String.fromCharCode(byte)
+  return value
 }
 
 export function createUxpGenerationClient(exportEncodedLayer: ExportEncodedLayer) {

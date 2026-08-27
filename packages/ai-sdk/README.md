@@ -6,7 +6,7 @@
 
 ## 5 分钟快速开始
 
-SDK `0.1.7` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
+SDK `0.1.8` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
 
 ```ini
 @henjicc:registry=https://npm.pkg.github.com
@@ -16,7 +16,7 @@ SDK `0.1.7` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc`
 Token 至少需要 `read:packages` 和私有仓库读取权限。不要把 token 本身写入 `.npmrc` 或提交到 Git。
 
 ```bash
-npm install @henjicc/ai-sdk@0.1.7
+npm install @henjicc/ai-sdk@0.1.8
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -371,7 +371,7 @@ await capabilities.dispose()
 ## 已知限制与验证边界
 
 - 私有 GitHub Packages 消费方必须配置 `read:packages` 与对应私有仓库读权限；SDK 不提供无认证的公开 npm 镜像。
-- Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。`0.1.7` 的 generation-only、单工具、Fal erase tool pack 与 UXP LLM streaming IIFE 已通过静态依赖、受限 VM 和零网络生命周期门禁；窄 LLM 入口 fixture 覆盖 UTF-8 跨 chunk、reasoning、text、usage、stop、`[DONE]` 与取消。Photoshop UXP 真机网络稳定性仍由插件集成任务验证，Grayscale/LAB/CMYK 图层字节读取也未真机复验。
+- Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。`0.1.8` 的 generation-only、单工具、Fal erase tool pack 与 UXP LLM streaming IIFE 已通过静态依赖、受限 VM 和零网络生命周期门禁；窄 LLM 入口在完全没有 `TextEncoder` / `TextDecoder` 的 VM 中覆盖 UTF-8 跨 chunk、reasoning、text、usage、stop、`[DONE]` 与取消，并单测畸形和截断序列。Photoshop UXP 真机网络稳定性仍由插件集成任务验证，Grayscale/LAB/CMYK 图层字节读取也未真机复验。
 - Fal 官方存储上传已在 Electron/Node real profile 中用无隐私合成 PNG 跑通真实端到端：119 字节上传与 Range 回读 SHA-256 一致，未触发模型请求或费用。`0.1.4` 将同一 initiate + signed PUT 协议收口到 `RuntimeContext.transport`，不再依赖 `@fal-ai/client` 或构造 `File`，并补齐成功、失败与取消 fixture；真实证据仍来自迁移前已核对的同一官方协议。CDN URL 公开，生产代码未显式设置 lifecycle，保留期依赖 Fal 账户设置。
 - 四个历史 override 模型均已完成真实供应商 create/poll/result URL 验证。KIE Seedream 4.0/4.5 首轮各一次完成；Fal Seedream 4.0 首轮 create 后暴露 `0.1.2` status route 重建 405 并按首败停止，后在新的独立费用授权下，修复后 4.0 completed 才继续 4.5，两者均 completed 且无 create 重试。优先保存供应商完整 `status_url` 的修复已在私有 `0.1.3` 发布，并通过远程干净安装与标准 Vite 五入口回归。
 - KIE、APIMart、PPIO 的正式只读 probe 均已得到 HTTP 200 且分类为 connected/verified；KIE/APIMart 余额已在正式 Electron real-profile 设置页显示，对应截图已实际打开目视。首轮场景选择器失败仍保留在 6.6 交接，没有用后台日志冒充 UI 证据。

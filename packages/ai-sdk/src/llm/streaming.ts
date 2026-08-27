@@ -5,6 +5,7 @@ import {
   resolveProviderExtraAuthHeaders,
 } from './providerProtocolCore'
 import { applyProviderReasoningRequestBody } from './providerReasoningRequest'
+import { createUtf8StreamDecoder } from './utf8-stream-decoder'
 import type {
   JsonObject,
   JsonValue,
@@ -155,7 +156,7 @@ function serializeContentPart(part: LlmContentPart): JsonObject {
 
 async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEmitter): Promise<LlmStreamOutput> {
   const reader = body.getReader()
-  const decoder = new TextDecoder()
+  const decoder = createUtf8StreamDecoder()
   let pending = ''
   let output = ''
   let reasoningOutput = ''
