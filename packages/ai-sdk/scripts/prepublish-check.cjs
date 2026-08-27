@@ -55,6 +55,7 @@ const requiredEntries = [
   './llm',
   './runtime',
   './capabilities',
+  './discovery',
 ]
 for (const entry of requiredEntries) {
   const definition = manifest.exports?.[entry]
@@ -68,7 +69,13 @@ for (const entry of requiredEntries) {
   }
 }
 
-const patternEntries = ['./models/*', './provider-adapters/*', './provider-packs/*']
+const patternEntries = [
+  './models/*',
+  './provider-adapters/*',
+  './provider-packs/*',
+  './tool-models/*',
+  './tool-packs/*',
+]
 for (const entry of patternEntries) {
   const definition = manifest.exports?.[entry]
   if (!definition) fail(`package.json 缺少按需 exports 入口 ${entry}`)
@@ -80,7 +87,7 @@ for (const entry of patternEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.1.4') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.1.5') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
 if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {

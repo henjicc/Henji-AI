@@ -1,0 +1,8 @@
+{
+  "source": "Fal official model API schema, verified 2026-08-28",
+  "endpoint": "fal-ai/finegrain-eraser/mask",
+  "input": { "image_url": "uxp://source", "mask_url": "uxp://mask", "mode": "standard" },
+  "submit": { "request_id": "finegrain-erase-fixture", "status_url": "https://queue.fal.run/fal-ai/finegrain-eraser/mask/requests/finegrain-erase-fixture/status" },
+  "status": { "status": "COMPLETED", "response_url": "https://queue.fal.run/fal-ai/finegrain-eraser/mask/requests/finegrain-erase-fixture" },
+  "result": { "image": { "url": "https://fixture.invalid/finegrain-erase.jpg" } }
+}

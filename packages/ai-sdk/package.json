@@ -1,6 +1,6 @@
 {
   "name": "@henjicc/ai-sdk",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "痕迹AI 多供应商模型适配 SDK",
   "license": "Apache-2.0",
   "repository": {
@@ -53,6 +53,16 @@
       "import": "./dist/packs/provider-packs/*.js",
       "default": "./dist/packs/provider-packs/*.js"
     },
+    "./tool-models/*": {
+      "types": "./dist/packs/tool-models/*.d.ts",
+      "import": "./dist/packs/tool-models/*.js",
+      "default": "./dist/packs/tool-models/*.js"
+    },
+    "./tool-packs/*": {
+      "types": "./dist/packs/tool-packs/*.d.ts",
+      "import": "./dist/packs/tool-packs/*.js",
+      "default": "./dist/packs/tool-packs/*.js"
+    },
     "./catalog": {
       "types": "./dist/catalog/index.d.ts",
       "import": "./dist/catalog/index.js",
@@ -72,6 +82,11 @@
       "types": "./dist/capabilities/index.d.ts",
       "import": "./dist/capabilities/index.js",
       "default": "./dist/capabilities/index.js"
+    },
+    "./discovery": {
+      "types": "./dist/discovery/index.d.ts",
+      "import": "./dist/discovery/index.js",
+      "default": "./dist/discovery/index.js"
     }
   },
   "files": [

@@ -1,0 +1,8 @@
+{
+  "source": "Fal official model API schema, verified 2026-08-28",
+  "endpoint": "fal-ai/flux-pro/v1/erase",
+  "input": { "image_url": "uxp://source", "mask_url": "uxp://mask", "dilate_pixels": 10 },
+  "submit": { "request_id": "flux-erase-fixture", "status_url": "https://queue.fal.run/fal-ai/flux-pro/v1/erase/requests/flux-erase-fixture/status" },
+  "status": { "status": "COMPLETED", "response_url": "https://queue.fal.run/fal-ai/flux-pro/v1/erase/requests/flux-erase-fixture" },
+  "result": { "images": [{ "url": "https://fixture.invalid/flux-erase.jpg" }] }
+}

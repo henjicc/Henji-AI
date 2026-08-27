@@ -4,10 +4,16 @@
 
 ## Unreleased
 
+## 0.1.5 - 2026-08-28
+
 - 新增零内置依赖的 `generation/core`、99 个完整单模型 pack、8 个 provider adapter/pack；默认
   `generation` 仍保持 99 模型兼容行为。
 - 新增 provider-scoped 媒体预处理/上传策略，完整 pack 可独立完成媒体读取、上传与生成生命周期。
 - 新增开放 capability module 协议，支持 ASR/OCR 等非媒体生成能力按模块注册、发现、类型化执行与取消。
+- 新增 3 个不进入默认目录的 Fal 图像消除单模型 pack 与聚合 `tool-packs/fal-image-edit-tools`，复用同一
+  Fal 上传、队列、轮询、错误与取消内核。
+- 新增跨 generation、LLM 与开放扩展的统一能力画像和组合筛选；筛选只作用于宿主已导入候选，
+  静态最小化仍由单模型、供应商或模型集合 pack 的 import 边界决定。
 
 ## 0.1.4 - 2026-08-27
 

@@ -40,3 +40,4 @@ export * from './llm'
 
 // 开放能力模块协议与生成/LLM 执行内核解耦；ASR/OCR 等新种类无需改动根 client switch。
 export * from './capabilities'
+export * from './discovery'

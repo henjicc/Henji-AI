@@ -56,6 +56,9 @@ async function verify() {
     "import '@henjicc/ai-sdk/llm'",
     "import '@henjicc/ai-sdk/runtime'",
     "import '@henjicc/ai-sdk/capabilities'",
+    "import '@henjicc/ai-sdk/discovery'",
+    "import '@henjicc/ai-sdk/tool-models/fal/bria-eraser'",
+    "import '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'",
     'document.body.dataset.sdkResolved = "true"',
   ].join('\n'))
   fs.writeFileSync(path.join(consumerRoot, 'consumer.ts'), [
@@ -63,6 +66,8 @@ async function verify() {
     "import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'",
     "import { pack as zImagePack } from '@henjicc/ai-sdk/models/kie/z-image'",
     "import { createCapabilityClient, type CapabilityModule } from '@henjicc/ai-sdk/capabilities'",
+    "import { createModelCapabilityDiscovery } from '@henjicc/ai-sdk/discovery'",
+    "import { pack as falImageEditTools } from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'",
     "import type { LlmChatRequestDto } from '@henjicc/ai-sdk/llm'",
     '',
     'const runtime = {',
@@ -74,6 +79,8 @@ async function verify() {
     'const modular = createModularGenerationClient({ runtime, packs: [zImagePack] })',
     "modular.catalog.get('kie/z-image')",
     "createAIClient({ runtime, generation: { mode: 'modular', packs: [zImagePack] } })",
+    'const discovery = createModelCapabilityDiscovery({ generationPacks: [falImageEditTools] })',
+    "void discovery.search({ providerIds: 'fal', operations: 'image-edit', features: 'erase' })",
     '',
     'const speechModule: CapabilityModule<{ audio: Uint8Array }, { text: string }> = {',
     "  descriptor: { id: 'fixture-speech', kind: 'speech-recognition', contract: { input: [{ kind: 'audio' }], output: [{ kind: 'text' }] } },",
@@ -141,6 +148,9 @@ async function verify() {
       '@henjicc/ai-sdk/llm',
       '@henjicc/ai-sdk/runtime',
       '@henjicc/ai-sdk/capabilities',
+      '@henjicc/ai-sdk/discovery',
+      '@henjicc/ai-sdk/tool-models/fal/bria-eraser',
+      '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools',
     ]
     const resolved = {}
     for (const specifier of entries) {

@@ -5,10 +5,15 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-27 |
+| 最后更新 | 2026-08-28 |
 | 模型数量 | 主清单 19（图片 10 / 视频 9）+ 供应商专属 5 |
 | 模型供应商文档数量 | 69 |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
+
+另有 3 个按需分发的 Fal 图像消除工具，不进入默认 99 模型兼容目录：
+[Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、
+[Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、
+[Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)。
 
 ## 一、目录结构约定
 
@@ -107,6 +112,17 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image`、`Qwen/Qwen-Image-Edit-2509`、`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
 
 ## 四、平台模型 ID 速查
+
+### 可选工具模型
+
+| 工具 | Fal endpoint ID | SDK 入口 |
+|---|---|---|
+| Flux Pro Erase | `fal-ai/flux-pro/v1/erase` | `tool-models/fal/flux-pro-erase` |
+| Bria Eraser | `fal-ai/bria/eraser` | `tool-models/fal/bria-eraser` |
+| Finegrain Eraser (Mask) | `fal-ai/finegrain-eraser/mask` | `tool-models/fal/finegrain-eraser` |
+
+聚合入口为 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools`。它是 3 个模型的技术分发集合，不是新的执行内核；
+统一能力画像将它们派生为 `operation=image-edit`、`feature=erase`。
 
 | 模型 | APIMart | KIE | Fal |
 |---|---|---|---|

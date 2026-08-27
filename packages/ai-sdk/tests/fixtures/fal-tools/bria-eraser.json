@@ -1,0 +1,8 @@
+{
+  "source": "Fal official model API schema, verified 2026-08-28",
+  "endpoint": "fal-ai/bria/eraser",
+  "input": { "image_url": "uxp://source", "mask_url": "uxp://mask", "mask_type": "manual" },
+  "submit": { "request_id": "bria-erase-fixture", "status_url": "https://queue.fal.run/fal-ai/bria/eraser/requests/bria-erase-fixture/status" },
+  "status": { "status": "COMPLETED", "response_url": "https://queue.fal.run/fal-ai/bria/eraser/requests/bria-erase-fixture" },
+  "result": { "image": { "url": "https://fixture.invalid/bria-erase.png" } }
+}

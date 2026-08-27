@@ -19,10 +19,13 @@ describe('published package exports', () => {
       './models/*',
       './provider-adapters/*',
       './provider-packs/*',
+      './tool-models/*',
+      './tool-packs/*',
       './catalog',
       './llm',
       './runtime',
       './capabilities',
+      './discovery',
     ])
     for (const conditions of Object.values(manifest.exports)) {
       expect(conditions).not.toHaveProperty('development')

@@ -9,6 +9,7 @@ const packageRoot = path.resolve(__dirname, '..')
 const sourceRoot = path.join(packageRoot, 'src')
 const catalogRoot = path.join(sourceRoot, 'catalog')
 const packsRoot = path.join(sourceRoot, 'packs')
+const toolModelRoot = path.join(packsRoot, 'tool-models', 'fal')
 
 function fail(message) {
   console.error(`✘ modular bundle 门禁失败：${message}`)
@@ -60,6 +61,7 @@ const generatedModelPacks = walk(path.join(packsRoot, 'models'), (file) => file.
 const providerDirectories = [...new Set(modelFiles.map((file) => path.relative(catalogRoot, file).split(path.sep)[0]))]
 const generatedProviderAdapters = walk(path.join(packsRoot, 'provider-adapters'), (file) => file.endsWith('.ts'))
 const generatedProviderPacks = walk(path.join(packsRoot, 'provider-packs'), (file) => file.endsWith('.ts'))
+const toolModelPacks = walk(toolModelRoot, (file) => file.endsWith('.ts'))
 if (modelFiles.length !== 99 || generatedModelPacks.length !== 99) {
   fail(`单模型导出不完整：catalog=${modelFiles.length}, packs=${generatedModelPacks.length}`)
 }
@@ -69,6 +71,7 @@ if (generatedProviderAdapters.length !== providerDirectories.length || generated
     `packs=${generatedProviderPacks.length}`
   )
 }
+if (toolModelPacks.length !== 3) fail(`Fal erase 单工具导出不是3：${toolModelPacks.length}`)
 for (const modelFile of modelFiles) {
   const relative = path.relative(catalogRoot, modelFile)
   const provider = relative.split(path.sep)[0]
@@ -101,6 +104,7 @@ for (const provider of providerDirectories) {
 const builtinsPattern = /\/src\/(?:catalog\/[^/]+\/[^/]+\.model\.ts|providers\/(?:apimart|bailian|fal|grsai|kie|modelscope|ppio|volcengine)\.ts)$/
 const modelPattern = /\/src\/catalog\/([^/]+)\/[^/]+\.model\.ts$/
 const providerPattern = /\/src\/providers\/(apimart|bailian|fal|grsai|kie|modelscope|ppio|volcengine)\.ts$/
+const toolModelPattern = /\/src\/tool-packs\/fal-erase\/models\/[^/]+\.model\.ts$/
 
 const bare = bundle('GenerationCore', [
   "import { createModularGenerationClient } from './generation/core'",
@@ -140,11 +144,54 @@ const kiePack = bundle('KieProviderPack', [
   }
 })
 
+const singleErase = bundle('FalFluxErase', [
+  "import { createModularGenerationClient } from './generation/core'",
+  "import { pack } from './packs/tool-models/fal/flux-pro-erase'",
+  'export { createModularGenerationClient, pack }',
+].join('\n'), (inputs) => {
+  const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => toolModelPattern.test(`/${input}`))
+  const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
+  if (ordinaryModels.length !== 0 || tools.length !== 1 || !tools[0].endsWith('/flux-pro-erase.model.ts')) {
+    fail(`单Fal消除工具静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.join(', ')}`)
+  }
+  if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
+    fail(`单Fal消除工具含其他provider：${providers.join(', ')}`)
+  }
+})
+
+const falErasePack = bundle('FalEraseToolPack', [
+  "import { createModularGenerationClient } from './generation/core'",
+  "import { pack } from './packs/tool-packs/fal-image-edit-tools'",
+  'export { createModularGenerationClient, pack }',
+].join('\n'), (inputs) => {
+  const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => toolModelPattern.test(`/${input}`))
+  const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
+  if (ordinaryModels.length !== 0 || tools.length !== 3) {
+    fail(`Fal erase tool pack静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.length}`)
+  }
+  if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
+    fail(`Fal erase tool pack含其他provider：${providers.join(', ')}`)
+  }
+})
+
+const defaultGeneration = bundle('DefaultGeneration', [
+  "export * from './generation'",
+].join('\n'), (inputs) => {
+  const models = inputs.filter((input) => modelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => toolModelPattern.test(`/${input}`))
+  if (models.length !== 99 || tools.length !== 0) {
+    fail(`默认generation目录不再严格99或误入工具：models=${models.length}, tools=${tools.length}`)
+  }
+})
+
 const llm = bundle('LlmOnly', [
   "export * from './llm/index'",
 ].join('\n'), (inputs) => {
   const forbidden = inputs.filter((input) => (
     modelPattern.test(`/${input}`) ||
+    toolModelPattern.test(`/${input}`) ||
     providerPattern.test(`/${input}`) ||
     input.includes('/src/generation')
   ))
@@ -174,12 +221,32 @@ const client = bareApi.createModularGenerationClient({
 })
 if (client.catalog.list().length !== 0) fail('bare client 不是 0 模型')
 client.dispose()
+for (const [name, artifact, globalName] of [
+  ['single erase', singleErase, 'HenjiFalFluxErase'],
+  ['Fal erase tool pack', falErasePack, 'HenjiFalEraseToolPack'],
+]) {
+  new vm.Script(artifact.iife.code, { filename: `${name}.iife.js` }).runInContext(context)
+  const api = vm.runInContext(globalName, context)
+  const modular = api.createModularGenerationClient({
+    runtime: {
+      transport: { fetch: async () => { networkCalls += 1; throw new Error('network forbidden') } },
+      credentials: { get: async () => undefined },
+      media: { read: async () => { throw new Error('media forbidden') } },
+    },
+    packs: [api.pack],
+  })
+  if (modular.catalog.list().length !== (name === 'single erase' ? 1 : 3)) fail(`${name}目录数量异常`)
+  modular.dispose()
+}
 if (networkCalls !== 0) fail(`bare lifecycle 触发 ${networkCalls} 次网络`)
 
 const metrics = {
   bare: { iife: bare.iife.bytes, esm: bare.esm.bytes, modules: bare.iife.modules },
   singleKieZImage: { iife: single.iife.bytes, esm: single.esm.bytes, modules: single.iife.modules },
   kieProviderPack: { iife: kiePack.iife.bytes, esm: kiePack.esm.bytes, modules: kiePack.iife.modules },
+  singleFalErase: { iife: singleErase.iife.bytes, esm: singleErase.esm.bytes, modules: singleErase.iife.modules },
+  falEraseToolPack: { iife: falErasePack.iife.bytes, esm: falErasePack.esm.bytes, modules: falErasePack.iife.modules },
+  defaultGeneration: { iife: defaultGeneration.iife.bytes, esm: defaultGeneration.esm.bytes, modules: defaultGeneration.iife.modules },
   llmOnly: { iife: llm.iife.bytes, esm: llm.esm.bytes, modules: llm.iife.modules },
   networkCalls,
 }

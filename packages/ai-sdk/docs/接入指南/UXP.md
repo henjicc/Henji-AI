@@ -86,6 +86,27 @@ export function createUxpGenerationClient(exportEncodedLayer: ExportEncodedLayer
 选择别的模型时替换或追加对应 `models/<provider>/<model>` pack。不要只拿同路径的低层 `model`
 导出再由插件手拼上传逻辑。需要某供应商全部模型时改用 `provider-packs/<provider>`。
 
+Photoshop 的消除面板应只导入可选模型分发集合，不把工具塞进普通生成目录：
+
+```ts
+import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'
+import { pack as falImageEditTools } from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'
+
+const erase = createModularGenerationClient({ runtime, packs: [falImageEditTools] })
+const created = await erase.generate({
+  modelId: 'fal-finegrain-eraser',
+  params: {
+    image: ['uxp://active-layer'],
+    mask: ['uxp://erase-mask'],
+    mode: 'standard',
+  },
+})
+```
+
+该入口只携带 3 个 Fal 消除模型、Fal adapter 和 Fal CDN 上传；默认 99 目录、其他供应商与 LLM
+不会进入静态依赖图。单模型可改用 `tool-models/fal/<model>` 导出的 `pack`。运行时能力筛选只过滤
+已导入候选；要缩小 UXP bundle，必须从 import 边界选择 pack，不能先导入集合再靠筛选期待 tree-shake。
+
 `ref` 应是你插件自己管理的 `uxp://...` / `managed://...` 文档或图层引用，不是让用户手填 URL。
 这些引用会原样交给 `MediaReader.read()`。`photoshop.imaging.getPixels()`
 可得到 `PhotoshopImageData`，再从 `imageData.getData()` 取像素字节；这是**原始像素**，

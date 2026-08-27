@@ -6,7 +6,7 @@
 
 ## 5 分钟快速开始
 
-SDK `0.1.4` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
+SDK `0.1.5` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
 
 ```ini
 @henjicc:registry=https://npm.pkg.github.com
@@ -16,7 +16,7 @@ SDK `0.1.4` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc`
 Token 至少需要 `read:packages` 和私有仓库读取权限。不要把 token 本身写入 `.npmrc` 或提交到 Git。
 
 ```bash
-npm install @henjicc/ai-sdk@0.1.4
+npm install @henjicc/ai-sdk@0.1.5
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -126,6 +126,32 @@ const client = createAIClient({
 ```
 
 只做 LLM 的宿主应直接导入 `@henjicc/ai-sdk/llm`，不会进入 generation/catalog/provider 依赖图。
+
+### 可选模型分发包与统一能力筛选
+
+图像消除等工具模型不会混入默认 99 模型。宿主可选择单个完整工具模型 pack，也可一次装入 Fal 图片编辑工具模型集合：
+
+```ts
+import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'
+import { createModelCapabilityDiscovery } from '@henjicc/ai-sdk/discovery'
+import { pack as falImageEditTools } from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'
+
+const discovery = createModelCapabilityDiscovery({ generationPacks: [falImageEditTools] })
+const erasers = discovery.search({
+  providerIds: 'fal',
+  outputModalities: 'image',
+  operations: 'image-edit',
+  features: 'erase',
+})
+const client = createModularGenerationClient({ runtime, packs: [falImageEditTools] })
+console.log(erasers.map((item) => item.id))
+```
+
+单模型入口为 `tool-models/fal/flux-pro-erase`、`tool-models/fal/bria-eraser`、
+`tool-models/fal/finegrain-eraser`；每个只导出 `model`、`provider` 与完整 `pack`。
+聚合 `tool-packs/fal-image-edit-tools` 是方便选择的模型分发集合，只携带这 3 个模型、Fal adapter 和 Fal CDN
+上传，不携带其余 99 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，
+不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
 
 ## 两类模型的公共边界
 
@@ -275,6 +301,21 @@ void main()
 Volcengine、PPIO、KIE、ModelScope、Fal、Grsai 八个内置供应商；调用方无需手工初始化。惰性初始化
 避免依赖仅靠模块加载保留的副作用，使 `sideEffects: false` 与 tree-shaking 语义一致。
 
+### 跨模型类型的统一能力画像
+
+`@henjicc/ai-sdk/discovery` 只负责发现和筛选，不改变 generation、LLM 或扩展模块各自的执行协议。
+画像从已导入候选的真实 schema 派生，统一提供 provider、输出模态、operation、输入/输出内容类型、
+features 与原始 tags。顶层查询维度默认 AND，也可设 `mode: 'any'`；单一维度可用
+`{ anyOf: [...] }` / `{ allOf: [...] }` 表达 OR/AND。
+
+标准 operation 覆盖图片生成/编辑、视频文生/图生/参考/编辑、音频生成、chat、语音识别和 OCR，
+同时保留开放字符串。筛选结果用 `sourceKind` 区分 `generation-model`、`llm-model`、`extension`，
+调用方随后交给对应执行 handle；SDK 不提供一个掩盖协议差异的通用 `generate()`。
+
+能力画像是运行时选择层，不是打包器。`createModelCapabilityDiscovery({ generationPacks: [...] })` 只会看
+传入的 pack；它既不会隐式导入默认 99，也不会从 bundle 删除已导入代码。真正的按需分发仍以 import
+单模型/provider/collection pack 为边界。
+
 ### ASR/OCR 等开放能力
 
 ASR、OCR 不属于图片/视频/音频生成的 `ModelType`，SDK 不再要求把它们伪装成媒体生成模型。
@@ -304,13 +345,13 @@ await capabilities.dispose()
 
 `CapabilityKind` 与输入/输出 `CapabilityContentKind` 都是开放字符串；模块执行上下文统一带
 `RuntimeContext`、`AbortSignal`、requestId、Logger 与 Tracer。client 提供注册、发现、类型化执行、取消、
-注销和 dispose，并统一错误边界。内置 generation/chat 只通过公共 descriptor 被发现，执行仍走各自稳定的
-轮询与流式内核，不复制协议。SDK 的测试 ASR/OCR 都是纯 fixture，用来证明扩展机制，不代表已适配真实供应商。
+注销和 dispose，并统一错误边界。跨类型筛选使用上面的 `ModelCapabilityProfile`；执行仍走各自稳定的
+轮询、流式或扩展 handle，不复制协议。SDK 的测试 ASR/OCR 都是纯 fixture，用来证明扩展机制，不代表已适配真实供应商。
 
 ## 已知限制与验证边界
 
 - 私有 GitHub Packages 消费方必须配置 `read:packages` 与对应私有仓库读权限；SDK 不提供无认证的公开 npm 镜像。
-- Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。`0.1.4` 的 generation-only IIFE 已通过静态依赖、受限 VM、99 模型与零网络生命周期门禁；Photoshop UXP 真机请求仍由插件集成任务验证，Grayscale/LAB/CMYK 图层字节读取也未真机复验。
+- Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。`0.1.5` 的 generation-only、单工具与 Fal erase tool pack IIFE 已通过静态依赖、受限 VM、默认 99 / 可选 3 与零网络生命周期门禁；Photoshop UXP 真机请求仍由插件集成任务验证，Grayscale/LAB/CMYK 图层字节读取也未真机复验。
 - Fal 官方存储上传已在 Electron/Node real profile 中用无隐私合成 PNG 跑通真实端到端：119 字节上传与 Range 回读 SHA-256 一致，未触发模型请求或费用。`0.1.4` 将同一 initiate + signed PUT 协议收口到 `RuntimeContext.transport`，不再依赖 `@fal-ai/client` 或构造 `File`，并补齐成功、失败与取消 fixture；真实证据仍来自迁移前已核对的同一官方协议。CDN URL 公开，生产代码未显式设置 lifecycle，保留期依赖 Fal 账户设置。
 - 四个历史 override 模型均已完成真实供应商 create/poll/result URL 验证。KIE Seedream 4.0/4.5 首轮各一次完成；Fal Seedream 4.0 首轮 create 后暴露 `0.1.2` status route 重建 405 并按首败停止，后在新的独立费用授权下，修复后 4.0 completed 才继续 4.5，两者均 completed 且无 create 重试。优先保存供应商完整 `status_url` 的修复已在私有 `0.1.3` 发布，并通过远程干净安装与标准 Vite 五入口回归。
 - KIE、APIMart、PPIO 的正式只读 probe 均已得到 HTTP 200 且分类为 connected/verified；KIE/APIMart 余额已在正式 Electron real-profile 设置页显示，对应截图已实际打开目视。首轮场景选择器失败仍保留在 6.6 交接，没有用后台日志冒充 UI 证据。
