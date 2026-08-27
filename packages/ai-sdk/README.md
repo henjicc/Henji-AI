@@ -96,6 +96,37 @@ SDK 源码不得依赖 `@/`、`node:`、Electron、`import.meta.glob`、`eval`/`
 `@henjicc/ai-sdk/generation` 导入 `createGenerationClient`；该入口不静态带入 LLM、Vercel AI SDK、
 Node 内置模块或 Fal 官方客户端，发布门禁会把它打成 IIFE 并在无网络生命周期中核对 99 个模型。
 
+## 按需装配生成模型
+
+`@henjicc/ai-sdk/generation` 是兼容入口，默认始终装入 99 个模型。真正需要缩小 Photoshop/Tauri
+包体时，从不含任何内置 catalog/provider 的 `generation/core` 创建模块化客户端，并只导入完整 pack：
+
+```ts
+import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'
+import { pack as kieZImage } from '@henjicc/ai-sdk/models/kie/z-image'
+
+const client = createModularGenerationClient({ runtime, packs: [kieZImage] })
+console.log(client.catalog.list().map((model) => model.meta.id)) // ['kie-z-image']
+```
+
+完整单模型 pack 同时携带该模型的唯一真实 schema、provider adapter 与 provider-scoped 媒体预处理/
+上传策略；宿主不需要知道内部上传模块。`@henjicc/ai-sdk/provider-packs/kie` 可一次装入 KIE 的全部
+27 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有 99 个单模型路径和
+8 个供应商路径由 catalog 生成器自动产出并由 bundle 门禁穷举，新增模型不会靠手工维护 exports。
+
+每个 `models/<provider>/<model>` 子路径也导出名为 `model` 的低层定义，供目录分析或高级自定义组合；
+直接传裸 `model` 而不传同文件的 `pack` 不保证媒体上传或供应商执行完整，普通宿主应使用 `pack`。
+包根 `createAIClient` 仍默认 99 模型；若确实需要根 client 的 chat 与按需生成共存，可显式传：
+
+```ts
+const client = createAIClient({
+  runtime,
+  generation: { mode: 'modular', packs: [kieZImage] },
+})
+```
+
+只做 LLM 的宿主应直接导入 `@henjicc/ai-sdk/llm`，不会进入 generation/catalog/provider 依赖图。
+
 ## 两类模型的公共边界
 
 生成模型与 LLM 共用以下基础设施：
@@ -244,10 +275,37 @@ void main()
 Volcengine、PPIO、KIE、ModelScope、Fal、Grsai 八个内置供应商；调用方无需手工初始化。惰性初始化
 避免依赖仅靠模块加载保留的副作用，使 `sideEffects: false` 与 tree-shaking 语义一致。
 
-本次没有加入 `outputKind`：包内 80 份生成模型资料与 9 份 LLM 资料中没有实际 ASR / 语音识别 /
-转写模型需求，现有 MiniMax Speech 是文本转语音并输出音频。等第一个非媒体输出模型真实接入时，
-再按其响应与宿主消费需求设计字段。上传预处理层的 `MediaKind` 描述请求字段中的媒体种类，和模型
-产出分类 `ModelType` 是两个独立概念，不应合并。
+### ASR/OCR 等开放能力
+
+ASR、OCR 不属于图片/视频/音频生成的 `ModelType`，SDK 不再要求把它们伪装成媒体生成模型。
+`@henjicc/ai-sdk/capabilities` 提供独立的开放模块协议：
+
+```ts
+import { createCapabilityClient, type CapabilityModule } from '@henjicc/ai-sdk/capabilities'
+
+const speechRecognition: CapabilityModule<{ audio: Uint8Array }, { text: string }> = {
+  descriptor: {
+    id: 'my.speech-recognition',
+    kind: 'speech-recognition',
+    contract: {
+      input: [{ kind: 'audio', required: true }],
+      output: [{ kind: 'text', required: true }],
+    },
+  },
+  execute: async ({ audio }, { signal }) => runLocalAsr(audio, signal),
+}
+
+const capabilities = createCapabilityClient({ runtime })
+const asr = capabilities.register(speechRecognition)
+const result = await asr.execute({ audio: bytes }, { requestId: 'asr-1' })
+await capabilities.unregister(speechRecognition.descriptor.id)
+await capabilities.dispose()
+```
+
+`CapabilityKind` 与输入/输出 `CapabilityContentKind` 都是开放字符串；模块执行上下文统一带
+`RuntimeContext`、`AbortSignal`、requestId、Logger 与 Tracer。client 提供注册、发现、类型化执行、取消、
+注销和 dispose，并统一错误边界。内置 generation/chat 只通过公共 descriptor 被发现，执行仍走各自稳定的
+轮询与流式内核，不复制协议。SDK 的测试 ASR/OCR 都是纯 fixture，用来证明扩展机制，不代表已适配真实供应商。
 
 ## 已知限制与验证边界
 

@@ -43,6 +43,8 @@ const AUDIO_FIELD_HINTS = [
 ]
 
 const LOCAL_SOURCE_PREFIXES = [
+  // 受限宿主可用不暴露真实路径的受管引用，由 RuntimeContext.media.read 解释。
+  'uxp://', 'managed://',
   'henji-media://local/',
   'http://asset.localhost/', 'https://asset.localhost/',
   'http://tauri.localhost/', 'https://tauri.localhost/',

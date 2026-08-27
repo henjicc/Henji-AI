@@ -48,11 +48,55 @@ async function verify() {
     "import '@henjicc/ai-sdk'",
     "import '@henjicc/ai-sdk/providers'",
     "import '@henjicc/ai-sdk/generation'",
+    "import '@henjicc/ai-sdk/generation/core'",
+    "import '@henjicc/ai-sdk/models/kie/z-image'",
+    "import '@henjicc/ai-sdk/provider-adapters/kie'",
+    "import '@henjicc/ai-sdk/provider-packs/kie'",
     "import '@henjicc/ai-sdk/catalog'",
     "import '@henjicc/ai-sdk/llm'",
     "import '@henjicc/ai-sdk/runtime'",
+    "import '@henjicc/ai-sdk/capabilities'",
     'document.body.dataset.sdkResolved = "true"',
   ].join('\n'))
+  fs.writeFileSync(path.join(consumerRoot, 'consumer.ts'), [
+    "import { createAIClient, type RuntimeContext } from '@henjicc/ai-sdk'",
+    "import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'",
+    "import { pack as zImagePack } from '@henjicc/ai-sdk/models/kie/z-image'",
+    "import { createCapabilityClient, type CapabilityModule } from '@henjicc/ai-sdk/capabilities'",
+    "import type { LlmChatRequestDto } from '@henjicc/ai-sdk/llm'",
+    '',
+    'const runtime = {',
+    "  transport: { fetch: async () => new Response('{}', { status: 200 }) },",
+    '  credentials: { get: async () => undefined },',
+    "  media: { read: async () => ({ bytes: new Uint8Array(), mimeType: 'image/png', filename: 'fixture.png' }) },",
+    '} satisfies RuntimeContext',
+    '',
+    'const modular = createModularGenerationClient({ runtime, packs: [zImagePack] })',
+    "modular.catalog.get('kie/z-image')",
+    "createAIClient({ runtime, generation: { mode: 'modular', packs: [zImagePack] } })",
+    '',
+    'const speechModule: CapabilityModule<{ audio: Uint8Array }, { text: string }> = {',
+    "  descriptor: { id: 'fixture-speech', kind: 'speech-recognition', contract: { input: [{ kind: 'audio' }], output: [{ kind: 'text' }] } },",
+    "  execute: async (_input, context) => ({ text: context.signal.aborted ? '' : 'ok' }),",
+    '}',
+    'const capabilities = createCapabilityClient({ runtime, modules: [speechModule] })',
+    "void capabilities.get<{ audio: Uint8Array }, { text: string }>('fixture-speech')?.execute({ audio: new Uint8Array() })",
+    'const request = {} as LlmChatRequestDto',
+    'void request',
+  ].join('\n'))
+  fs.writeFileSync(path.join(consumerRoot, 'tsconfig.json'), JSON.stringify({
+    compilerOptions: {
+      strict: true,
+      noEmit: true,
+      target: 'ES2022',
+      module: 'ESNext',
+      moduleResolution: 'Bundler',
+      lib: ['ES2022', 'DOM', 'DOM.Iterable'],
+      // `ai` 的声明会引用 Node/json-schema 的环境类型；消费方代码与 SDK API 仍按 strict 检查。
+      skipLibCheck: true,
+    },
+    include: ['consumer.ts'],
+  }, null, 2))
 
   run('npm', [
     'install',
@@ -62,6 +106,10 @@ async function verify() {
     '--no-package-lock',
     tarballPath,
   ], consumerRoot)
+
+  const typescriptEntry = require.resolve('typescript/bin/tsc', { paths: [repositoryRoot] })
+  run(process.execPath, [typescriptEntry, '--project', 'tsconfig.json'], consumerRoot)
+  console.log('✔ 仓库外严格 TypeScript 消费方已通过公开类型检查')
 
   const vitePackage = require.resolve('vite/package.json', { paths: [repositoryRoot] })
   const viteEntry = path.join(path.dirname(vitePackage), 'dist', 'node', 'index.js')
@@ -85,9 +133,14 @@ async function verify() {
       '@henjicc/ai-sdk',
       '@henjicc/ai-sdk/providers',
       '@henjicc/ai-sdk/generation',
+      '@henjicc/ai-sdk/generation/core',
+      '@henjicc/ai-sdk/models/kie/z-image',
+      '@henjicc/ai-sdk/provider-adapters/kie',
+      '@henjicc/ai-sdk/provider-packs/kie',
       '@henjicc/ai-sdk/catalog',
       '@henjicc/ai-sdk/llm',
       '@henjicc/ai-sdk/runtime',
+      '@henjicc/ai-sdk/capabilities',
     ]
     const resolved = {}
     for (const specifier of entries) {
@@ -103,7 +156,7 @@ async function verify() {
       }
       resolved[specifier] = path.relative(consumerRoot, result.id)
     }
-    console.log(`✔ 仓库外标准 Vite dev 已解析 6 个发布入口：${JSON.stringify(resolved)}`)
+    console.log(`✔ 仓库外标准 Vite dev 已解析 ${entries.length} 个发布入口：${JSON.stringify(resolved)}`)
   } finally {
     await server.close()
   }

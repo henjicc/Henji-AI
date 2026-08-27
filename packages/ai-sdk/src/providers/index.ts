@@ -13,6 +13,7 @@ import type {
   ProviderExecutionInput,
   ProviderExecutionResult,
 } from '../types/runtime'
+import type { ProviderAdapter } from './types'
 import {
   BUILTIN_PROVIDER_IDS,
   type BuiltinProviderId,
@@ -35,10 +36,7 @@ export {
   warmGrsaiEndpointPreference,
 } from './endpoints/grsai'
 
-export interface ProviderAdapter {
-  execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult>
-  continuePolling(input: ProviderContinuePollingInput): Promise<ProviderExecutionResult>
-}
+export type { ProviderAdapter } from './types'
 
 const registry = new Map<ProviderId, ProviderAdapter>()
 let builtinProvidersInitialized = false

@@ -1,8 +1,7 @@
 /**
  * @henjicc/ai-sdk 根入口。
  *
- * 五个子路径入口（runtime/providers/catalog/llm 与包根）保留模块边界，包根同时重新导出
- * 公共内容。原因是 `tsconfig.electron.json` 的
+ * 各子路径入口保留模块边界，包根同时重新导出兼容公共内容。原因是 `tsconfig.electron.json` 的
  * `moduleResolution: "node"`（TS 经典 Node10 解析）不识别 package.json 的 `exports`
  * 字段，只认顶层 `main`/`types`，实测子路径导入会直接报
  * `Cannot find module '@henjicc/ai-sdk/runtime'`（见任务 2.1 执行记录 /
@@ -38,3 +37,6 @@ export * from './catalog'
 // `requestContract`/`discovery`）与 Vercel AI SDK 模型步路径（`llm/sdk/`）。均已在
 // `./llm/index.ts` 内部重新导出，这里不需要再单独加一行。
 export * from './llm'
+
+// 开放能力模块协议与生成/LLM 执行内核解耦；ASR/OCR 等新种类无需改动根 client switch。
+export * from './capabilities'

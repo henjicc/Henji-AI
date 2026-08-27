@@ -2,6 +2,13 @@
 
 本项目遵循语义化版本。`0.x` 阶段仍可能包含破坏性调整，升级时请先阅读对应版本说明。
 
+## Unreleased
+
+- 新增零内置依赖的 `generation/core`、99 个完整单模型 pack、8 个 provider adapter/pack；默认
+  `generation` 仍保持 99 模型兼容行为。
+- 新增 provider-scoped 媒体预处理/上传策略，完整 pack 可独立完成媒体读取、上传与生成生命周期。
+- 新增开放 capability module 协议，支持 ASR/OCR 等非媒体生成能力按模块注册、发现、类型化执行与取消。
+
 ## 0.1.4 - 2026-08-27
 
 - 新增 `@henjicc/ai-sdk/generation` 与 `createGenerationClient`，复用根客户端唯一生成内核，不静态带入 LLM/Vercel AI SDK。

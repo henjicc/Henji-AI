@@ -1,7 +1,7 @@
 import type { Transport } from '../runtime/Transport'
 
 import { uploadToFalWithTransport } from './fal-transport'
-import type { PreparedMediaBinary } from './providers'
+import type { PreparedMediaBinary } from './prepared-media'
 
 /**
  * @deprecated 新代码请传入宿主 Transport；生成客户端内部始终使用

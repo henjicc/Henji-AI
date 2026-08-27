@@ -46,7 +46,16 @@ for (const file of listFiles(distRoot)) {
   }
 }
 
-const requiredEntries = ['.', './providers', './generation', './catalog', './llm', './runtime']
+const requiredEntries = [
+  '.',
+  './providers',
+  './generation',
+  './generation/core',
+  './catalog',
+  './llm',
+  './runtime',
+  './capabilities',
+]
 for (const entry of requiredEntries) {
   const definition = manifest.exports?.[entry]
   if (!definition) fail(`package.json 缺少 exports 入口 ${entry}`)
@@ -55,6 +64,18 @@ for (const entry of requiredEntries) {
     if (typeof target !== 'string') fail(`${entry} 缺少 ${condition} 导出`)
     if (!fs.existsSync(path.resolve(packageRoot, target))) {
       fail(`${entry}.${condition} 指向不存在的文件：${target}`)
+    }
+  }
+}
+
+const patternEntries = ['./models/*', './provider-adapters/*', './provider-packs/*']
+for (const entry of patternEntries) {
+  const definition = manifest.exports?.[entry]
+  if (!definition) fail(`package.json 缺少按需 exports 入口 ${entry}`)
+  for (const condition of ['types', 'import', 'default']) {
+    const target = definition[condition]
+    if (typeof target !== 'string' || !target.includes('*')) {
+      fail(`${entry}.${condition} 不是 dist 通配导出`)
     }
   }
 }

@@ -12,6 +12,7 @@ import {
   type ProviderAdapter,
   type RuntimeContext,
 } from '../src'
+import { pack as kieZImagePack } from '../src/packs/models/kie/z-image'
 
 const CLIENT_PROVIDER_ID = 'client-test-provider'
 const SECOND_CLIENT_PROVIDER_ID = 'second-client-test-provider'
@@ -84,6 +85,17 @@ function createTestModel() {
 }
 
 describe('createAIClient', () => {
+  it('显式 modular 选择时根 client 目录严格只装配所选 pack，chat 仍可用', () => {
+    const client = createAIClient({
+      runtime: createRuntime(),
+      generation: { mode: 'modular', packs: [kieZImagePack] },
+    })
+    expect(client.catalog.list().map((model) => model.meta.id)).toEqual(['kie-z-image'])
+    expect(client.providers.list()).toEqual(['kie'])
+    expect(client.chat.stream).toBeTypeOf('function')
+    client.dispose()
+  })
+
   it('通过真实模型索引、builder 与 provider registry 跑通生成和续轮询', async () => {
     const execute = vi.fn<ProviderAdapter['execute']>(async (input) => ({
       status: 'pending',

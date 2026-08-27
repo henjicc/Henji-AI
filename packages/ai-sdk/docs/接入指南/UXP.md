@@ -10,8 +10,9 @@ SDK 上游已完成 generation-only IIFE/VM 门禁；Photoshop UXP 真机网络�
   `requiredPermissions.webview.domains` 是另一套权限，不支持同样的通配，不要混用。
 - `allowCodeGenerationFromStrings` 默认 `false`；UXP 又没有 Node/`node:vm`。SDK 因此只直接调用
   ESM 函数，不用 `eval`/`new Function`。不需要为 SDK 开启这项高风险权限。
-- UXP 没有运行时 Node 模块解析；`@henjicc/ai-sdk` 必须在构建期 bundle。只做生成时使用
-  `@henjicc/ai-sdk/generation`，不要导入带 LLM 的包根。
+- UXP 没有运行时 Node 模块解析；`@henjicc/ai-sdk` 必须在构建期 bundle。只做少量生成模型时使用
+  `@henjicc/ai-sdk/generation/core` + 完整模型 pack；需要全部 99 模型时才使用兼容的
+  `@henjicc/ai-sdk/generation`。不要导入带 LLM 的包根。
 
 generation-only 入口公开 `createGenerationClient`，提供 `generate`、`continuePolling`、`cancel`、
 `catalog`、`providers` 与 `dispose`。发布门禁确认其 IIFE 不含 LLM/Vercel AI SDK、Node、动态代码生成、
@@ -44,7 +45,8 @@ global fetch、Streams、File、`btoa`/`atob`，import/create/catalog/dispose �
 ## RuntimeContext
 
 ```ts
-import { createGenerationClient } from '@henjicc/ai-sdk/generation'
+import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'
+import { pack as kieZImage } from '@henjicc/ai-sdk/models/kie/z-image'
 import type { Logger, RuntimeContext } from '@henjicc/ai-sdk/runtime'
 
 const { secureStorage } = require('uxp').storage
@@ -73,13 +75,19 @@ export function createUxpRuntime(
 }
 
 export function createUxpGenerationClient(exportEncodedLayer: ExportEncodedLayer) {
-  return createGenerationClient({
+  return createModularGenerationClient({
     runtime: createUxpRuntime(exportEncodedLayer),
+    packs: [kieZImage],
   })
 }
 ```
 
-`ref` 应是你插件自己管理的文档/图层引用，不是让用户手填 URL。`photoshop.imaging.getPixels()`
+`kieZImage` 是完整执行 pack，不只是目录定义；它已包含 KIE adapter 与 KIE 范围内的媒体上传策略。
+选择别的模型时替换或追加对应 `models/<provider>/<model>` pack。不要只拿同路径的低层 `model`
+导出再由插件手拼上传逻辑。需要某供应商全部模型时改用 `provider-packs/<provider>`。
+
+`ref` 应是你插件自己管理的 `uxp://...` / `managed://...` 文档或图层引用，不是让用户手填 URL。
+这些引用会原样交给 `MediaReader.read()`。`photoshop.imaging.getPixels()`
 可得到 `PhotoshopImageData`，再从 `imageData.getData()` 取像素字节；这是**原始像素**，
 必须经插件的图像编码/临时文件导出流程得到真正 PNG/JPEG 字节，再从 `MediaReader.read()`
 返回；不得把 RGBA 像素误报成 `image/png`。记录中 Grayscale/LAB 的通道处理与 CMYK

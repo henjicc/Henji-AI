@@ -10,14 +10,19 @@ const manifest = JSON.parse(
 }
 
 describe('published package exports', () => {
-  it('六个入口都只指向随包发布的 dist 文件', () => {
+  it('固定入口与按需通配入口都只指向随包发布的 dist 文件', () => {
     expect(Object.keys(manifest.exports)).toEqual([
       '.',
       './providers',
       './generation',
+      './generation/core',
+      './models/*',
+      './provider-adapters/*',
+      './provider-packs/*',
       './catalog',
       './llm',
       './runtime',
+      './capabilities',
     ])
     for (const conditions of Object.values(manifest.exports)) {
       expect(conditions).not.toHaveProperty('development')

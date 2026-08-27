@@ -9,7 +9,7 @@
 
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
 
-import { fromBase64 } from './providers'
+import { fromBase64 } from './base64'
 import type { MediaKind } from './media-fields'
 
 export interface ParsedDataUri {

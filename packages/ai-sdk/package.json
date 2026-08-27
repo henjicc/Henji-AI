@@ -33,6 +33,26 @@
       "import": "./dist/generation.js",
       "default": "./dist/generation.js"
     },
+    "./generation/core": {
+      "types": "./dist/generation/core.d.ts",
+      "import": "./dist/generation/core.js",
+      "default": "./dist/generation/core.js"
+    },
+    "./models/*": {
+      "types": "./dist/packs/models/*.d.ts",
+      "import": "./dist/packs/models/*.js",
+      "default": "./dist/packs/models/*.js"
+    },
+    "./provider-adapters/*": {
+      "types": "./dist/packs/provider-adapters/*.d.ts",
+      "import": "./dist/packs/provider-adapters/*.js",
+      "default": "./dist/packs/provider-adapters/*.js"
+    },
+    "./provider-packs/*": {
+      "types": "./dist/packs/provider-packs/*.d.ts",
+      "import": "./dist/packs/provider-packs/*.js",
+      "default": "./dist/packs/provider-packs/*.js"
+    },
     "./catalog": {
       "types": "./dist/catalog/index.d.ts",
       "import": "./dist/catalog/index.js",
@@ -47,6 +67,11 @@
       "types": "./dist/runtime/index.d.ts",
       "import": "./dist/runtime/index.js",
       "default": "./dist/runtime/index.js"
+    },
+    "./capabilities": {
+      "types": "./dist/capabilities/index.d.ts",
+      "import": "./dist/capabilities/index.js",
+      "default": "./dist/capabilities/index.js"
     }
   },
   "files": [

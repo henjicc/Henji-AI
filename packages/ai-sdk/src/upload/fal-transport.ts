@@ -2,7 +2,7 @@ import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import type { Transport } from '../runtime/Transport'
 import type { JsonValue } from '../types/runtime'
 
-import type { PreparedMediaBinary } from './providers'
+import type { PreparedMediaBinary } from './prepared-media'
 
 const FAL_UPLOAD_INITIATE_URL = 'https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3'
 const FAL_UPLOAD_TIMEOUT_MS = 120_000

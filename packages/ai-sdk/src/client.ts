@@ -13,6 +13,10 @@ import {
   type GenerationClientResult,
 } from './generation'
 import {
+  createModularGenerationClient,
+  type GenerationPack,
+} from './generation/core'
+import {
   resolveLlmTaskId,
   runLlmChatStream,
   type LlmChatStreamHooks,
@@ -24,7 +28,16 @@ import { runModelStep } from './llm/sdk/runtime'
 import { resolveRuntimeContext } from './runtime'
 
 export type AIClientProviderRegistration = GenerationClientProviderRegistration
-export type CreateAIClientConfig = CreateGenerationClientConfig
+export interface CreateAIClientConfig extends CreateGenerationClientConfig {
+  /**
+   * 缺省不传时保持 99 模型兼容行为。显式选择 modular 后，生成目录只包含顶层
+   * `models/providers` 与这里的 packs，不再自动装入任何内置模型或供应商。
+   */
+  generation?: {
+    mode: 'modular'
+    packs?: readonly GenerationPack[]
+  }
+}
 export type AIClientGenerateResult = GenerationClientResult
 export type AIClientGenerationRequestInfo = GenerationClientRequestInfo
 export type AIClientGenerationCompletedInfo = GenerationClientCompletedInfo
@@ -55,7 +68,14 @@ export interface AIClient extends GenerationClient {
  * {@link createGenerationClient} 的唯一内核；根入口只追加 LLM 能力。
  */
 export function createAIClient(config: CreateAIClientConfig): AIClient {
-  const generation = createGenerationClient(config)
+  const generation = config.generation?.mode === 'modular'
+    ? createModularGenerationClient({
+      runtime: config.runtime,
+      models: config.models,
+      providers: config.providers,
+      packs: config.generation.packs,
+    })
+    : createGenerationClient(config)
   const runtime = resolveRuntimeContext(config.runtime)
 
   const ensureActive = (): void => {
