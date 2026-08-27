@@ -74,6 +74,13 @@ export interface LlmChatStreamOutcome {
   finishReason: string | null
 }
 
+export interface LlmChatExecutionOptions {
+  /** 外部取消会转发到本次请求的 AbortController。 */
+  signal?: AbortSignal
+  /** 正数毫秒；达到截止时间后中止请求，并按供应商超时错误归一。 */
+  timeoutMs?: number
+}
+
 /** taskId 只应该在一次调用里计算一次（`request.requestId` 缺省时会落到 `Date.now()`），调用方与本函数必须复用同一个值。 */
 export function resolveLlmTaskId(request: LlmChatRequestDto): string {
   const fromRequest = request.requestId?.trim()
@@ -89,9 +96,21 @@ export async function runLlmChatStream(
   taskId: string,
   emit: LlmStreamEmitter,
   runtime: RuntimeContext,
-  hooks: LlmChatStreamHooks = {}
+  hooks: LlmChatStreamHooks = {},
+  execution: LlmChatExecutionOptions = {}
 ): Promise<LlmChatStreamOutcome> {
   const controller = new AbortController()
+  if (execution.timeoutMs !== undefined && (!Number.isFinite(execution.timeoutMs) || execution.timeoutMs <= 0)) {
+    throw new Error('LLM timeoutMs must be a positive finite number')
+  }
+  const forwardAbort = (): void => controller.abort()
+  if (execution.signal?.aborted) controller.abort()
+  else execution.signal?.addEventListener('abort', forwardAbort, { once: true })
+  let timedOut = false
+  const timeout = execution.timeoutMs === undefined ? undefined : setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, execution.timeoutMs)
   const startedAtMs = Date.now()
   const inputChars = countInputChars(request.messages)
   const span = runtime.tracer?.startSpan('llm.chat', {
@@ -158,13 +177,21 @@ export async function runLlmChatStream(
       finishReason: output.finishReason,
     }
   } catch (error) {
-    span?.end(error)
-    throw new Error(normalizeLlmChatError(taskId, error, {
+    const normalizedInput = timedOut
+      ? Object.assign(new Error(`LLM request timed out after ${execution.timeoutMs}ms`), {
+          name: 'TimeoutError',
+          code: 'MODEL_REQUEST_TIMEOUT',
+        })
+      : error
+    span?.end(normalizedInput)
+    throw new Error(normalizeLlmChatError(taskId, normalizedInput, {
       providerId: request.providerId,
       modelId: request.modelId,
       requestId: taskId,
     }))
   } finally {
+    execution.signal?.removeEventListener('abort', forwardAbort)
+    if (timeout !== undefined) clearTimeout(timeout)
     clearCancelFlag('llm', taskId)
   }
 }

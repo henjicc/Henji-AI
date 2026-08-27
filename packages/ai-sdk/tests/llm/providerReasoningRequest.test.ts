@@ -58,6 +58,17 @@ describe('applyProviderReasoningRequestBody', () => {
     expect(apply('bailian', { enabled: false, effort: 'max' })).toMatchObject({ enable_thinking: false })
   })
 
+  it('Groq GPT-OSS 只发三档 reasoning_effort 与 include_reasoning，不发送 reasoning_format', () => {
+    const enabled = apply('groq', { enabled: true, effort: 'max' })
+    expect(enabled).toMatchObject({ reasoning_effort: 'high', include_reasoning: true })
+    expect(enabled).not.toHaveProperty('reasoning_format')
+    expect(apply('groq', { enabled: true, effort: 'low' })).toMatchObject({ reasoning_effort: 'low' })
+    expect(apply('groq', { enabled: false, effort: 'high' })).toEqual({
+      model: 'm',
+      include_reasoning: false,
+    })
+  })
+
   it('文档没给出请求侧开关的供应商走通用兜底，不编造私有字段', () => {
     const mimo = apply('mimo', { enabled: true, effort: 'high' })
     expect(mimo).toMatchObject({ reasoning_effort: 'high' })

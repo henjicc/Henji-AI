@@ -1,5 +1,11 @@
 # Provider fixtures（任务 6.1）
 
+## LLM fixture 补充（任务 9.9）
+
+`groq/*.json` 由 LLM 专用精确测试读取，不进入生成供应商的 `fixtures.test.ts`。本机没有 Groq
+真实请求日志，因此三份 fixture 均按既定来源优先级取自 Groq 官方 Models、Chat/Reasoning 与
+Errors 文档的字段说明；每份 `source` 已分别标明，内容与 token 均为不可联网的占位数据。
+
 `tests/fixtures/<供应商>/*.json` 是 8 个供应商适配器的请求/响应回归快照，由 `tests/fixtures.test.ts` 驱动，
 对每个 fixture 做**正向**（`params` → 实际发送的请求体）与**反向**（`response` → 解析出的状态/URL/错误）
 双向断言。这是任务 3.2 迁移 99 个模型定义时唯一能发现"静默请求体差异"的安全网，改动

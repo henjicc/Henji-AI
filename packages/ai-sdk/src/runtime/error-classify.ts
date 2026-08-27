@@ -112,8 +112,12 @@ function categoryFor(
   if (status === 402 || normalizedCode.includes('billing')) return 'billing'
   if (status === 429 && normalizedCode.includes('quota')) return 'quota'
   if (status === 429) return 'rate_limit'
+  if (status === 498) return 'server'
+  if (status === 499) return 'cancelled'
   if (status !== null && status >= 500) return 'server'
-  if (status === 400 || status === 404 || status === 405 || status === 422) return 'invalid_request'
+  if (status === 400 || status === 404 || status === 405 || status === 413 || status === 422) {
+    return 'invalid_request'
+  }
   if (isTimeoutError(records, code) || NETWORK_ERROR_CODES.has(code.toUpperCase())) return 'network'
   if (records.some((record) => record.isRetryable === true)) return 'network'
   return 'unknown'

@@ -54,6 +54,7 @@ const requiredEntries = [
   './catalog',
   './llm',
   './llm/streaming',
+  './llm/groq',
   './runtime',
   './capabilities',
   './capabilities/speech-recognition',

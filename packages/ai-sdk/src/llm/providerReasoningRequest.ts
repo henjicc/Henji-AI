@@ -72,6 +72,15 @@ const PROVIDER_REASONING_BODY: Readonly<Record<string, ReasoningBodyBuilder>> = 
   // 阿里云百炼：布尔开关，没有强度分级。
   bailian: reasoning => ({ enable_thinking: reasoning.enabled }),
 
+  // Groq GPT-OSS：只接受 low / medium / high；不支持 reasoning_format。
+  // include_reasoning 是独立的返回控制开关，关闭时不再发送 reasoning_effort。
+  groq: reasoning => (reasoning.enabled
+    ? {
+        reasoning_effort: pickEffort(reasoning.effort, ['low', 'medium', 'high']),
+        include_reasoning: true,
+      }
+    : { include_reasoning: false }),
+
   // 小米 MiMo、MiniMax：官方文档只约定了思考内容怎么回传，没有给出请求侧的开关或强度字段，
   // 因此不下发任何字段。等文档补齐再加，不要凭字段名相似猜。
 }

@@ -59,4 +59,22 @@ describe('applyProviderRequestBodyQuirks', () => {
       expect(applyProviderRequestBodyQuirks(providerId, body), providerId).toEqual(body)
     }
   })
+
+  it('groq 统一改用 max_completion_tokens 并剔除不支持的 messages[].name', () => {
+    expect(applyProviderRequestBodyQuirks('groq', {
+      model: 'openai/gpt-oss-20b',
+      max_tokens: 256,
+      messages: [
+        { role: 'user', name: 'unsupported', content: 'hello' },
+        { role: 'assistant', content: 'world' },
+      ],
+    })).toEqual({
+      model: 'openai/gpt-oss-20b',
+      max_completion_tokens: 256,
+      messages: [
+        { role: 'user', content: 'hello' },
+        { role: 'assistant', content: 'world' },
+      ],
+    })
+  })
 })

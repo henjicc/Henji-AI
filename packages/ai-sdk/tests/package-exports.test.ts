@@ -24,6 +24,7 @@ describe('published package exports', () => {
       './catalog',
       './llm',
       './llm/streaming',
+      './llm/groq',
       './runtime',
       './capabilities',
       './capabilities/speech-recognition',

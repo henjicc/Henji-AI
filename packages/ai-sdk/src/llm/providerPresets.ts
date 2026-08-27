@@ -6,6 +6,7 @@ import {
   createLlmCapabilitiesForModel,
 } from './defaults'
 import { findLlmModelCatalogEntry } from './modelCatalog'
+import { GROQ_PROVIDER_PRESET } from './groq/preset'
 import type { LlmApiProtocol } from './providerProtocol'
 import type { LlmModelConfig, LlmProviderConfig, LlmReasoningEffort } from './types'
 
@@ -38,6 +39,7 @@ export interface LlmProviderPreset {
 }
 
 export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
+  GROQ_PROVIDER_PRESET,
   {
     providerId: DEFAULT_PPIO_PROVIDER_ID,
     displayName: '派欧云',

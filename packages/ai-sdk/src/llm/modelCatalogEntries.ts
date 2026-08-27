@@ -14,6 +14,23 @@ import type { LlmModelCatalogEntry } from './modelCatalog'
  * 否则用户会得到"勾了但发过去没反应"的静默失效。
  */
 export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
+  // ---------------- OpenAI GPT-OSS（Groq 托管） ----------------
+  {
+    id: 'gpt-oss-20b',
+    displayName: 'GPT-OSS 20B',
+    vendor: 'OpenAI',
+    input: { image: false, video: false, audio: false },
+    toolCall: true,
+    parallelTools: false,
+    structuredOutputMode: 'json',
+    reasoning: true,
+    sampling: true,
+    contextWindow: 131_072,
+    maxOutputTokens: 65_536,
+    note: 'Groq Production 模型；reasoning_effort 仅支持 low / medium / high，且不支持 reasoning_format。',
+    docs: 'docs/model-adaptation/GPT-OSS-20B/GPT-OSS-20B_Groq.md',
+  },
+
   // ---------------- DeepSeek ----------------
   {
     id: 'deepseek-v4-flash',

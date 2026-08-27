@@ -78,6 +78,11 @@
       "import": "./dist/llm/streaming/index.js",
       "default": "./dist/llm/streaming/index.js"
     },
+    "./llm/groq": {
+      "types": "./dist/llm/groq/index.d.ts",
+      "import": "./dist/llm/groq/index.js",
+      "default": "./dist/llm/groq/index.js"
+    },
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
       "import": "./dist/runtime/index.js",

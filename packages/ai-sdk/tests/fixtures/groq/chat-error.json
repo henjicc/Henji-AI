@@ -1,0 +1,18 @@
+{
+  "scenario": "chat-error",
+  "status": 400,
+  "response": {
+    "error": {
+      "message": "The request contains an unsupported field.",
+      "type": "invalid_request_error"
+    }
+  },
+  "expected": {
+    "category": "invalid_request",
+    "status": 400,
+    "retryable": false
+  },
+  "source": {
+    "response": "Groq 官方错误体 error.message/error.type 与 400 状态说明：https://console.groq.com/docs/errors。非真实网络日志。"
+  }
+}

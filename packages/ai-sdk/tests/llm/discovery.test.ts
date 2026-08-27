@@ -24,4 +24,16 @@ describe('parseDiscoveredModel', () => {
     })
     expect(parseDiscoveredModel({ name: 'missing-id' })).toBeNull()
   })
+
+  it('读取 Groq 的 context_window 与单模型 max_completion_tokens 字段', () => {
+    expect(parseDiscoveredModel({
+      id: 'openai/gpt-oss-20b',
+      context_window: 131_072,
+      max_completion_tokens: 65_536,
+    })).toMatchObject({
+      modelId: 'openai/gpt-oss-20b',
+      contextWindow: 131_072,
+      maxOutputTokens: 65_536,
+    })
+  })
 })

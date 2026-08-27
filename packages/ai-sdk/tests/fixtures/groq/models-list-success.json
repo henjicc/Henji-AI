@@ -1,0 +1,34 @@
+{
+  "scenario": "models-list-success",
+  "response": {
+    "object": "list",
+    "data": [
+      {
+        "id": "openai/gpt-oss-20b",
+        "object": "model",
+        "created": 1721690000,
+        "owned_by": "OpenAI",
+        "active": true,
+        "context_window": 131072,
+        "public_apps": null
+      },
+      {
+        "id": "retired-fixture-model",
+        "object": "model",
+        "created": 1700000000,
+        "owned_by": "fixture",
+        "active": false,
+        "context_window": 8192,
+        "public_apps": null
+      }
+    ]
+  },
+  "expected": {
+    "modelId": "openai/gpt-oss-20b",
+    "contextWindow": 131072,
+    "maxOutputTokens": null
+  },
+  "source": {
+    "response": "Groq Models API 官方参考的 object/data 与模型字段说明：https://console.groq.com/docs/api-reference/models/get-models；GPT-OSS 数值来自官方模型页：https://console.groq.com/docs/models。非真实网络日志，退役项仅用于 active=false 契约边界。"
+  }
+}

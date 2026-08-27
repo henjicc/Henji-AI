@@ -51,7 +51,7 @@ describe('LLM_PROVIDER_PRESETS', () => {
 
   it('有专门思考参数写法的供应商，其 providerId 必须与映射表登记的一致', () => {
     // 这两份表按 providerId 对齐；预设改了 id 而映射表没改，思考模式会静默退回通用兜底。
-    for (const providerId of ['deepseek', 'kimi', 'bigmodel', 'volcengine', 'bailian']) {
+    for (const providerId of ['deepseek', 'kimi', 'bigmodel', 'volcengine', 'bailian', 'groq']) {
       expect(findLlmProviderPreset(providerId), providerId).not.toBeNull()
       expect(hasProviderReasoningRule(providerId), providerId).toBe(true)
     }

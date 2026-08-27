@@ -1,0 +1,28 @@
+{
+  "scenario": "chat-stream-success",
+  "request": {
+    "model": "openai/gpt-oss-20b",
+    "reasoningEffort": "medium",
+    "includeReasoning": true,
+    "maxCompletionTokens": 256
+  },
+  "stream": [
+    "data: {\"choices\":[{\"delta\":{\"reasoning\":\"分析\"},\"finish_reason\":null}]}",
+    "data: {\"choices\":[{\"delta\":{\"content\":\"完成\"},\"finish_reason\":null}]}",
+    "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":7,\"total_tokens\":12,\"completion_tokens_details\":{\"reasoning_tokens\":3}}}",
+    "data: [DONE]"
+  ],
+  "expected": {
+    "reasoning": "分析",
+    "content": "完成",
+    "finishReason": "stop",
+    "inputTokens": 5,
+    "outputTokens": 7,
+    "reasoningTokens": 3,
+    "totalTokens": 12
+  },
+  "source": {
+    "request": "Groq Chat Completions 与 Reasoning 官方字段说明：https://console.groq.com/docs/api-reference/openai/chat 与 https://console.groq.com/docs/reasoning。",
+    "response": "Groq OpenAI-compatible SSE 的 choices[].delta、finish_reason、usage 字段说明；非真实网络日志，中文 token 内容为脱敏占位。"
+  }
+}
