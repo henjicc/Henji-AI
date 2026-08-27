@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging'
-import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig } from '@/core/llm/types'
+import type { LlmCapabilities, LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import { createLlmCapabilitiesForModel } from '@/core/llm/defaults'
-import { findLlmModelCatalogEntry } from '@/core/llm/modelCatalog'
+import { findLlmModelCatalogEntry } from '@henjicc/ai-sdk'
 
 const logger = createLogger('services.llm.llmDiscoveryService')
 

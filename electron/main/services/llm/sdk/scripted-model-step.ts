@@ -3,15 +3,15 @@ import {
   modelStepInputSchema,
   modelStepResultSchema,
   modelStepToolCallSchema,
+  ProviderModelStepError,
   type ModelStepEvent,
   type ModelStepFinishReason,
   type ModelStepInput,
   type ModelStepResult,
   type ModelStepToolCall,
   type ModelStepUsage,
-} from '../../../../../src/core/llm/modelStep'
-import type { ModelProviderErrorCategory } from '../../../../../src/core/llm/providerProtocol'
-import { ProviderModelStepError } from './provider-error'
+} from '@henjicc/ai-sdk'
+import type { ModelProviderErrorCategory } from '@henjicc/ai-sdk'
 
 export type ScriptedModelStepAction =
   | { type: 'text'; value: string }

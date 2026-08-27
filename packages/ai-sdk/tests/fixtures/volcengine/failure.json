@@ -1,0 +1,20 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedream-5.0-pro",
+  "scenario": "failure",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v3/images/generations",
+  "params": { "model": "doubao-seedream-5-0-pro-260628", "size": "1536x1536", "response_format": "url" },
+  "response": {
+    "error": { "code": "InvalidParameter.Unsupported", "message": "unsupported image size", "type": "BadRequest" }
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "unsupported image size"
+  },
+  "source": {
+    "response": "字段结构对照 packages/ai-sdk/src/providers/volcengine.ts 的错误判定逻辑（/error/code 与 /error/message 指针），报错文案为占位符示例"
+  }
+}

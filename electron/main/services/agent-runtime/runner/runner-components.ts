@@ -1,6 +1,6 @@
 import type { AgentEventInput } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentToolRegistry } from '../tools/registry'
 import { AgentModelOutputGuard } from './model-output-guard'
 import type { AgentRuntimeModel } from './models'

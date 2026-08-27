@@ -88,7 +88,6 @@ export interface AiRuntimePlatform {
   generate(request: AiGenerateRequestDto): Promise<AiGenerateResponseDto>
   continuePolling(request: AiContinuePollingRequestDto): Promise<AiGenerateResponseDto>
   cancelTask(taskId: string): Promise<void>
-  reloadModelManifest(): Promise<number>
   getProgressEstimate(request: AiGetProgressEstimateRequestDto): Promise<AiProgressEstimateDto>
   recordProgressSample(
     request: AiRecordProgressSampleRequestDto

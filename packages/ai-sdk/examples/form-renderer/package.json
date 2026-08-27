@@ -1,0 +1,16 @@
+{
+  "name": "@henjicc/ai-sdk-example-form-renderer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && node dist/cli.js"
+  },
+  "dependencies": {
+    "@henjicc/ai-sdk": "0.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.2"
+  }
+}

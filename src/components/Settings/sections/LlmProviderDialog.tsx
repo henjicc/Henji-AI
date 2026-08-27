@@ -19,8 +19,8 @@ import {
   createModelsFromPreset,
   createProviderFromPreset,
   findLlmProviderPreset,
-} from '@/core/llm/providerPresets'
-import type { LlmModelConfig, LlmProviderConfig } from '@/core/llm/types'
+} from '@henjicc/ai-sdk'
+import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import {
   createDefaultProvider,
   createProviderId,
@@ -170,7 +170,7 @@ const LlmProviderDialog = ({
 
           {/*
             预设把已核对过的 Base URL、思考参数默认值和推荐模型一次填好，
-            资料出处见 docs/llm-adaptation/供应商/*.md。选完仍可逐项改。
+            资料出处见 packages/ai-sdk/docs/llm-adaptation/供应商/*.md。选完仍可逐项改。
           */}
           <Dropdown<string>
             value={presetId}

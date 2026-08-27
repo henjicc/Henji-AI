@@ -1,0 +1,25 @@
+{
+  "provider": "kie",
+  "modelId": "kie-nano-banana-2",
+  "scenario": "boundary-multi-url",
+  "phase": "continuePolling",
+  "route": "/api/v1/jobs/createTask",
+  "taskId": "kie-fixture-task_005",
+  "notes": "resultUrls 数组内有多个结果，全部要按顺序拼进 |||",
+  "response": {
+    "code": 200,
+    "success": true,
+    "data": {
+      "state": "success",
+      "resultJson": "{\"resultUrls\":[\"https://files.kie.ai/example/multi-1.png\",\"https://files.kie.ai/example/multi-2.png\",\"https://files.kie.ai/example/multi-3.png\"]}"
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://files.kie.ai/example/multi-1.png|||https://files.kie.ai/example/multi-2.png|||https://files.kie.ai/example/multi-3.png"
+  },
+  "source": {
+    "response": "字段结构对照 packages/ai-sdk/docs/model-adaptation/供应商/KIE.md §2.2 的 resultUrls 数组形态，URL 为占位符"
+  }
+}

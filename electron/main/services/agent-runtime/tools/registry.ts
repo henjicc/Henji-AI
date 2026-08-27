@@ -1,6 +1,6 @@
 import { agentToolCatalogEntrySchema, type AgentToolCatalogEntry } from '../../../../../src/core/assistant/toolContracts'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepTool } from '@henjicc/ai-sdk'
 import { assertAgentToolDefinition } from './define-tool'
 import type { AgentToolDefinition, AgentToolRegistration, AgentToolSemantics } from './types'
 

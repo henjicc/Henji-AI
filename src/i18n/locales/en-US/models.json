@@ -20,7 +20,8 @@
   "types": {
     "image": "Image",
     "video": "Video",
-    "audio": "Audio"
+    "audio": "Audio",
+    "other": "Other"
   },
   "providers": {
     "ppio": "PPIO",

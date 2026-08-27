@@ -16,7 +16,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 
 ## 2. 按需补充读取
 
-- 需要核对 API 字段、枚举、输入限制、端点或价格时，先读 `docs/model-adaptation/`——这是项目**唯一的 API 与价格资料源**：`README.md` 是总索引与平台 model ID 速查，`供应商/<供应商名>.md` 是供应商公共协议，`<模型名>/<模型名>_<供应商名>.md` 是逐模型逐供应商的自包含文档。旧的 `docs/api/` 已废弃删除，不要重建或引用。
+- 需要核对 API 字段、枚举、输入限制、端点或价格时，先读 `packages/ai-sdk/docs/model-adaptation/`——这是项目**唯一的 API 与价格资料源**：`README.md` 是总索引与平台 model ID 速查，`供应商/<供应商名>.md` 是供应商公共协议，`<模型名>/<模型名>_<供应商名>.md` 是逐模型逐供应商的自包含文档。旧的 `docs/api/` 已废弃删除，不要重建或引用。
 - 涉及 API/价格调研、适配清单或模型文档整理时，必须先读取 `references/source-research-workflow.md`；按用户给定的平台矩阵控制范围，并完成模型别名、动态 Tab、价格与登录状态核验后再下结论。调研结论按该文件第 7 节的路径与命名约定落盘，并同步 `README.md` 清单。
 - 先做“同模型多端点归并判定”：
   - 若 API 文档里的多个端点共享同一个模型名称/版本，只是输入素材或子能力不同，默认按“一个模型”处理，不默认拆成多个模型文件。
@@ -45,7 +45,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 
 ## 3. 执行规则
 
-- 当前 Henji-AI 生成运行时基线是 Electron + Node/TS，不再走 Tauri/Rust；所有供应商执行、上传、轮询与结果解析都以 `electron/main/services/ai-runtime/**` 为准。
+- 当前 Henji-AI 的宿主基线是 Electron + Node/TS；可移植的供应商执行、上传、轮询与结果解析位于 `packages/ai-sdk/src/{providers,upload,protocols}/`，`electron/main/services/ai-runtime/**` 只保留日志、落盘、取消、进度与 IPC 等宿主薄壳。
 - 在输出确认清单前，先自行归纳：
   - 这是“一个模型多个端点”还是“多个独立模型”；
   - 应采用“自动路由”“显式展示 + 自动切换”还是“显式 `mode`”；
@@ -71,16 +71,11 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 标准生成节点通过 `GenerationNodeShell -> NodeInputRows -> NodeParamRows` 自动读取模型 schema。只改模型参数定义、显隐、联动、计价或请求映射时，默认不修改 `src/features/canvas/**`，也不加载 `canvas-node-builder`。只有新增/改造节点 DOM、端口、节点注册、节点专属交互，或现有 `ParamRenderer` / `NodeParamControl` 无法共同表达新参数类型时，才进入画布节点工作流。
 - 新增或调整复合/特殊参数面板时，必须确认对话/工具面板的 `ParamRenderer` 与画布的 `NodeParamControl` 都能消费同一 schema 和同一值结构；优先修正共享参数面板能力，不为画布复制一份模型专属实现。
 - Henji-AI 当前产品约定：新增模型默认不暴露 `output_format` / `outputFormat`，也不向 API 传递该字段；即使文档支持，也先按“不显示且不请求”处理，除非用户后续明确推翻这条约定。
-- 若参数显隐/联动/计价依赖“是否已上传图片/视频”，必须同时覆盖三种执行场景各自的运行时字段名，不能只查一个：生成提交时是 `uploadedFilePaths`/`uploadedVideoFilePaths`，画布节点实时值是 `images`/`videos`，对话/工具面板实时上传状态是 `uploadedImages`/`uploadedVideos`。只查其中一个键会导致另外两个场景判断错误（参数该隐藏没隐藏、画布里 mode 自动切换不触发、计价按错分支）。优先复用 `src/models/shared/mediaPresence.ts` 的 `hasUploadedImage`/`hasUploadedVideo`/`countUploadedImages`/`countUploadedVideos`（KIE/PPIO 模型可从同目录 `./mediaSources` 导入，已重导出），仅限 `visible.condition`/`linkage`/`pricing.calculator` 使用，不能进 `request.builder`/`endpoints.selector`（会被序列化进独立 VM，import 失效）。
-- 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src/platform/* -> electron/preload/index.ts -> electron/main/ipc/ai-runtime.ts -> electron/main/services/ai-runtime/**`。
+- 若参数显隐/联动/计价依赖“是否已上传图片/视频”，必须同时覆盖三种执行场景各自的运行时字段名，不能只查一个：生成提交时是 `uploadedFilePaths`/`uploadedVideoFilePaths`，画布节点实时值是 `images`/`videos`，对话/工具面板实时上传状态是 `uploadedImages`/`uploadedVideos`。只查其中一个键会导致另外两个场景判断错误（参数该隐藏没隐藏、画布里 mode 自动切换不触发、计价按错分支）。优先复用 `packages/ai-sdk/src/catalog/shared/mediaPresence.ts` 的 `hasUploadedImage`/`hasUploadedVideo`/`countUploadedImages`/`countUploadedVideos`（KIE/PPIO 模型可从同目录 `./mediaSources` 导入，已重导出）。
+- 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src/platform/* -> electron/preload/index.ts -> electron/main/ipc/ai-runtime.ts -> electron/main/services/ai-runtime/**` 宿主薄壳 `-> @henjicc/ai-sdk`。
 - 禁止在业务 UI 写模型/供应商硬编码分支。
-- 牢记 runtime 约束：`endpoints.selector` 与 `request.builder` 会被 `scripts/generate-model-manifest.cjs` 序列化为 `selectorJs` / `builderJs`，再由 `electron/main/services/ai-runtime/js-runtime.ts` 在 Node VM 中独立执行；不能依赖模型文件顶层 helper/闭包变量，除非该 helper 已明确存在于 `JS_PRELUDE`，需要的新工具函数应内联在函数体内或同步更新 manifest/runtime 支撑。
-- **同源分叉是这条链路最容易踩的坑，且不会报错，只会静默失效。** 改任何被 builder/selector 用到的共享常量或 helper 前，先确认它在仓库里有几份副本，全部一起改：
-  - `scripts/generate-model-manifest.cjs` 的 `KNOWN_ENDPOINT_CONSTANTS`：跨文件 `import` 进来的端点常量，manifest 生成时**优先取这份**而不是源码，源码改了这里不改就会写进错的路由；
-  - `scripts/generate-model-manifest.cjs` 的 `CUSTOM_BUILDER_OVERRIDES`：命中的模型直接用手写 builder，源码 builder 完全不生效；
-  - `electron/main/services/ai-runtime/js-runtime.ts` 的 `JS_PRELUDE`：`buildModelscopeRequest`、`resolveModelscopeSize` 这类共享 helper 在这里有一份**手工维护的等价实现**，VM 里执行的是这份，改 `src/models/**/utils.ts` 那份对运行时毫无影响。
-  - 注意这与上一条的"顶层 helper 会 ReferenceError"是**两个相反方向**的问题：helper 不在 PRELUDE 里会报错（看得见），在 PRELUDE 里有副本则不报错但改动失效（看不见）。后者更危险。
-  - 判断改动是否真的生效：跑 `npm run gen:model-manifest` 后直接读 `resources/model-manifest.json` 里该模型的 `builderJs` / `defaultRoute`，或写测试执行序列化后的产物（参考 `src/models/modelscope/utils.test.ts`、`src/models/ppio/kling-3.0.test.ts`），不要只测源码函数。
+- runtime 直接消费 `packages/ai-sdk/src/catalog/` 的真实 `endpoints.selector` 与 `request.builder`，两者都允许同步或异步返回；共享 helper 可以正常 import，但必须位于 SDK 内且满足可移植性检查，禁止反向依赖应用层。
+- 判断改动是否真的生效：运行 `npm run gen:catalog`，并对 catalog 中的真实模型执行 selector/builder 请求契约测试；异步 builder 必须在测试和主进程调用侧统一 `await`。
 - 多端点模型除“自动切路由”外，还要检查“分支参数契约”：
   - 文档只在部分端点定义的参数，应只在对应分支显示/发送；
   - 不要把分支不支持的参数继续展示在 UI 上，再靠 builder 静默忽略；
@@ -96,12 +91,13 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 
 ## 4. 完成标准
 
-- **改了 `.model.ts` 的参数、枚举、输入限制或价格，必须在同一次改动里同步 `docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md`**，并更新该文件与 `README.md` 头部的「最后更新」；下线模型时同步删除文档并从 `README.md` 清单表移除。只改代码不改文档，等于给下一次调研留下错误依据。
+- **改了 `.model.ts` 的参数、枚举、输入限制或价格，必须在同一次改动里同步 `packages/ai-sdk/docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md`**，并更新该文件与 `README.md` 头部的「最后更新」；下线模型时同步删除文档并从 `README.md` 清单表移除。只改代码不改文档，等于给下一次调研留下错误依据。
+- **新增供应商，或改动 `packages/ai-sdk/src/providers/**` 下某供应商的请求构建/响应解析逻辑，必须同步补 `packages/ai-sdk/tests/fixtures/<供应商>/*.json` fixture**（至少创建成功/轮询完成/失败三个场景，同步供应商用等价场景），数据来源优先真实开发日志，其次 `model-adaptation-*.test.ts` 已核对过的请求体断言 + 供应商官方文档记录的响应示例，不得凭空手写；格式与新增供应商的完整要求见 `packages/ai-sdk/tests/fixtures/README.md`，改完跑 `npx vitest run packages/ai-sdk/tests/fixtures.test.ts`。
 - 代码注释里引用的价格/字段来源，必须与对应文档「原始链接索引」里的条目一致；调研中新发现的来源先回填文档再在代码里引用，不允许代码引用一个文档里查不到的出处。
-- 按 `docs/rules/testing.md` 选择最小验证：模型定义改动通常运行 manifest、model i18n 与对应参数/请求构建精确测试，不默认跑全量 lint。
+- 按 `docs/rules/testing.md` 选择最小验证：模型定义改动通常运行 catalog 生成、model i18n 与对应参数/请求构建精确测试，不默认跑全量 lint。
 - 只有改到 Electron 主进程/runtime/provider/upload 的共享契约时才追加主进程类型检查或相关 lint；先跑精确测试，影响边界不清时再升级。
 - 只有需要验证完整 Electron 类型链路、产物或发布链路时，再跑 `npm run electron:build`；构建后需要验收真实桌面能力时再跑 `npm run electron:smoke`。
 - 新增能力不引入跨层调用与 UI 直连模型 API。
 - 新增参数满足顺序约定，并明确“显示/请求”策略。
-- 需要验证运行中的 Electron 进程已加载新 manifest：重启 `npm run electron:dev`，或通过现有 manifest reload 能力确认 `resources/model-manifest.json` 已重新加载。
+- 需要验证运行中的 Electron 进程已加载新 catalog：重新构建 SDK，并重启 `npm run electron:dev`。
 - 默认值改动需通过“冷启动可见验证”：重启开发进程后确认参数面板初始显示值正确（不是仅看请求 builder 兜底）。

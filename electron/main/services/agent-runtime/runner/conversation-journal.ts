@@ -2,7 +2,7 @@ import type {
   ModelStepFinishReason,
   ModelStepMessage,
   ModelStepUsage,
-} from '../../../../../src/core/llm/modelStep'
+} from '@henjicc/ai-sdk'
 import type { AgentRunnerDependencies } from './types'
 
 interface ConversationJournalOptions {

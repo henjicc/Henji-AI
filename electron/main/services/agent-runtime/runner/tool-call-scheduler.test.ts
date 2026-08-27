@@ -8,7 +8,7 @@ import {
   type HostContextSnapshot,
 } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import { AgentToolCatalogPlanner } from '../context/catalog'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolGateway } from '../tools/gateway'

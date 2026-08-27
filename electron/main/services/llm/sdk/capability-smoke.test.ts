@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ModelStepResult } from '../../../../../src/core/llm/modelStep'
-import { serializeModelProviderError } from '../../../../../src/core/llm/providerProtocol'
+import type { ModelStepResult } from '@henjicc/ai-sdk'
+import { serializeModelProviderError } from '@henjicc/ai-sdk'
 
-vi.mock('./runtime', () => ({ runModelStep: vi.fn() }))
+// `runModelStep` 任务 4.2 起从 `@henjicc/ai-sdk` 取得（原来是本地 `./runtime`）。整包 mock 会
+// 连带吞掉 `capability-smoke.ts` 自己需要的 `parseModelProviderError`/`modelStepProviderAdapters`/
+// `cancelTask` 等真实导出，所以用 `importOriginal` 保留其余导出，只替换 `runModelStep` 一项。
+vi.mock('@henjicc/ai-sdk', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@henjicc/ai-sdk')>()
+  return { ...actual, runModelStep: vi.fn() }
+})
 
-import { runModelStep } from './runtime'
+import { runModelStep } from '@henjicc/ai-sdk'
 import { verifyModelCapabilities } from './capability-smoke'
 
 function createResult(patch: Partial<ModelStepResult> = {}): ModelStepResult {

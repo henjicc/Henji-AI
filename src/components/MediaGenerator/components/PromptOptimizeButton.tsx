@@ -16,7 +16,7 @@ import {
 import type {
   LlmConfigState,
   PromptOptimizationProfile,
-} from '@/core/llm/types'
+} from '@henjicc/ai-sdk'
 import { llmCancelTask, llmChatStream } from '@/commands/llmRuntime'
 import {
   ensurePromptOptimizationModelSelection,

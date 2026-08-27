@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    /*
+     * 只含 ES2022 与 DOM：DOM lib 提供 fetch/URL/Headers/AbortController/TextEncoder
+     * 等可移植的 Web 标准类型（Electron、Tauri、UXP 环境均可用），不代表本包渲染 DOM。
+     * 禁止引入 @types/node —— Buffer/process/require/fs 等 Node 专属全局量在 UXP 里不存在，
+     * 一旦类型可见就会诱使实现悄悄依赖它们，等到移植时才会暴露。
+     */
+    "lib": ["ES2022", "DOM"],
+    "types": [],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+    /* 不配置 baseUrl / paths：SDK 是独立源码包，不依赖本仓库的 @ 别名，否则脱离本仓库即无法编译。 */
+  },
+  "include": ["src"]
+}

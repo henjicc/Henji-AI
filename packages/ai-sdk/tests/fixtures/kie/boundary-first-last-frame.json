@@ -1,0 +1,25 @@
+{
+  "provider": "kie",
+  "modelId": "kie-seedance-2.0",
+  "scenario": "boundary-first-last-frame",
+  "phase": "continuePolling",
+  "route": "/api/v1/jobs/createTask",
+  "taskId": "kie-fixture-task_006",
+  "notes": "视频结果附带首尾帧图片：resultUrls 是主视频，firstFrameUrl/lastFrameUrl 是可选的首尾帧数组，三者都要收集",
+  "response": {
+    "code": 200,
+    "success": true,
+    "data": {
+      "state": "success",
+      "resultJson": "{\"resultUrls\":[\"https://files.kie.ai/example/video.mp4\"],\"firstFrameUrl\":[\"https://files.kie.ai/example/first.png\"],\"lastFrameUrl\":[\"https://files.kie.ai/example/last.png\"]}"
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://files.kie.ai/example/video.mp4|||https://files.kie.ai/example/first.png|||https://files.kie.ai/example/last.png"
+  },
+  "source": {
+    "response": "packages/ai-sdk/tests/providers/kie.test.ts 现有 '解析视频结果及可选首尾帧 URL' 用例（任务 2.3 已审核代码），URL 换成占位符"
+  }
+}

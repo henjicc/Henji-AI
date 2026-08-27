@@ -7,6 +7,7 @@
 import type { I18nText } from './I18nText'
 import type { InputPort, OutputPort } from './NodePort'
 import type { ProgressStatus } from '@/core/providers/base'
+import type { BuiltinModelType } from './ModelDefinition'
 
 /**
  * 节点输出
@@ -67,7 +68,7 @@ export interface ModelNode {
     icon?: string
 
     /** 分类 */
-    category: 'image' | 'video' | 'audio'
+    category: BuiltinModelType
 
     /** 标签 */
     tags?: string[]

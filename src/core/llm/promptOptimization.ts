@@ -1,4 +1,4 @@
-import type { PromptOptimizationProfile } from './types'
+import type { PromptOptimizationProfile } from '@henjicc/ai-sdk'
 import {
   readPromptDocument,
   toLegacyPromptString,

@@ -1,6 +1,6 @@
 import { getLogCaptureMode, type LogCaptureMode } from './capture-config'
 import type { MainLogEvent } from './types'
-import type { JsonObject, JsonValue } from '../ai-runtime/types'
+import type { JsonObject, JsonValue } from '@henjicc/ai-sdk'
 
 /**
  * 请求/响应体脱敏 + 截断工具。

@@ -2,8 +2,8 @@ import { registry } from '@/core/ModelRegistry'
 import i18n from '@/i18n/config'
 import type { I18nText } from '@/core/types/I18nText'
 import { getI18nText } from '@/core/types/I18nText'
-import type { ModelDefinition } from '@/core/types'
-import { PROVIDER_ORDER, MODEL_TYPE_ORDER, compareModelsBySeries } from '@/core/modelSortOrder'
+import type { ModelDefinition, ModelType } from '@/core/types'
+import { PROVIDER_ORDER, compareModelsBySeries, getModelTypeOrder } from '@/core/modelSortOrder'
 import { getModelAlias } from '@/config/modelAliases'
 
 /**
@@ -73,7 +73,7 @@ export function getAvailableProviders() {
       name: string
       /** 模型自身的原始名称，不受用户别名覆盖，用于别名编辑场景的占位提示 */
       originalName: string
-      type: 'image' | 'video' | 'audio'
+      type: ModelType
       description: string
       functions: string[]
       tags?: string[]
@@ -111,7 +111,7 @@ export function getAvailableProviders() {
 
   providers.forEach((provider) => {
     provider.models.sort((a, b) => {
-      const typeDiff = MODEL_TYPE_ORDER[a.type] - MODEL_TYPE_ORDER[b.type]
+      const typeDiff = getModelTypeOrder(a.type) - getModelTypeOrder(b.type)
       if (typeDiff !== 0) return typeDiff
       return compareModelsBySeries(a, b)
     })

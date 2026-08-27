@@ -7,7 +7,7 @@ import {
   agentStartRunRequestSchema,
 } from '../../src/core/assistant/runtimeContracts'
 import { agentWorkingSummarySchema } from '../../src/core/assistant/workingContext'
-import { modelStepMessageSchema } from '../../src/core/llm/modelStep'
+import { modelStepMessageSchema } from '@henjicc/ai-sdk'
 
 export const agentUtilityStartPayloadSchema = z.object({
   runId: z.string().min(1),

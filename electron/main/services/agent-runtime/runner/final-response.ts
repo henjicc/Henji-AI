@@ -1,4 +1,4 @@
-import type { ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepResult } from '@henjicc/ai-sdk'
 import type { AgentRouteDecision } from '../context/types'
 import type { AgentRunMetrics } from './budget'
 

@@ -1,4 +1,5 @@
 import { getAvailableProviders } from '@/utils/modelHelpers'
+import type { ModelType } from '@/core/types'
 
 export interface Provider {
   id: string
@@ -12,7 +13,7 @@ export interface Model {
   canonicalModelId: string
   name: string
   originalName: string
-  type: 'image' | 'video' | 'audio'
+  type: ModelType
   description: string
   functions: string[]
   tags?: string[]

@@ -24,9 +24,9 @@ src/
 ├── commands/          # 前端命令桥；对外签名稳定，内部走 platform
 ├── platform/          # PAL 契约 + electron adapter
 ├── components/        # React UI 组件（展示 + 轻交互）
-├── core/              # 模型定义、注册、请求构建、GenerationService
+├── core/              # 应用模型注册/展示合成、GenerationService
 ├── features/          # 领域功能（含主画布实现 features/canvas/）
-├── models/            # 模型定义（*.model.ts）
+├── models/            # 痕迹AI 专属模型 presentation（文案、联动、面板配置）
 ├── services/          # 领域服务（数据库/上传/更新检查/预设等）
 ├── stores/            # Zustand 状态管理
 ├── hooks/             # 可复用 React 逻辑
@@ -34,6 +34,8 @@ src/
 └── workspaces/        # 工作区容器
 
 old-Henji-AI/          # 旧项目代码备份，仅供对照，不参与构建
+
+packages/ai-sdk/       # 可独立发布的模型 SDK：catalog、provider、协议、上传与 LLM 执行
 ```
 
 路径别名：`@/` → `src/`。
@@ -42,10 +44,10 @@ old-Henji-AI/          # 旧项目代码备份，仅供对照，不参与构建
 
 模型生成主链路固定按以下路径执行：
 
-`GenerationService`(`src/core/services/GenerationService.ts`) → `src/commands/aiRuntime.ts` → `src/platform/*` → `electron/preload/index.ts`(`window.henjiNative.ai`) → `electron/main/ipc/ai-runtime.ts` → `electron/main/services/ai-runtime/`
+`GenerationService`(`src/core/services/GenerationService.ts`) → `src/commands/aiRuntime.ts` → `src/platform/*` → `electron/preload/index.ts`(`window.henjiNative.ai`) → `electron/main/ipc/ai-runtime.ts` → `electron/main/services/ai-runtime/` 宿主薄壳 → `@henjicc/ai-sdk`
 
 - **禁止**在业务组件中直接发起模型生成 API 调用（`fetch()` / `axios`）
-- 所有提供商细节（鉴权、路由、请求格式、轮询、结果解析）落在 `electron/main/services/ai-runtime/**`
+- 提供商细节（路由、请求格式、轮询、结果解析与上传协议）落在 `packages/ai-sdk/src/{catalog,providers,protocols,upload}/`；主进程只注入网络、凭据、媒体读取、日志/追踪，并负责落盘、进度、待取结果与 IPC
 - `src/core/providers/` 只承载基类与兼容层（如 `ProviderFactoryRegistry`），不承担真实 provider 执行
 - 非生成场景（更新检查、资源下载/转换）可在服务层封装网络请求，但禁止散落在业务 UI
 
@@ -60,9 +62,9 @@ old-Henji-AI/          # 旧项目代码备份，仅供对照，不参与构建
 
 - 组件不能导入 runtime/provider 实现、Electron 主进程代码或旧 adapters
 - Electron 主进程不能导入 `components/`
-- 模型定义（`src/models/`）不能导入 `services/` 或 `components/`
+- SDK 模型定义（`packages/ai-sdk/src/catalog/`）不能反向导入 `src/`、Electron、Node 专有 API 或 UI；应用 presentation（`src/models/presentation/`）不能导入服务或组件
 - Runtime/Provider 不能导入 UI 组件
-- 层间桥梁只用 `core/`、`commands/`、`platform/`
+- 应用层桥梁只用 `core/`、`commands/`、`platform/`；跨宿主的模型运行时能力统一经 `@henjicc/ai-sdk` 公共入口消费
 
 ## 内部 Application API 边界
 
@@ -114,7 +116,8 @@ PromptEditor 补充：媒体引用、模板变量、兼容字符串解析和模�
 
 - `electron/main/index.ts` / `window.ts` / `protocol.ts` — 主进程入口、无边框标题栏、`henji-media://` 协议
 - `electron/preload/index.ts` — preload 安全桥
-- `src/core/ModelRegistry.ts` / `defineModel.ts` — 模型注册中心与定义辅助
+- `packages/ai-sdk/src/catalog/` — 运行时模型定义、显式清单与索引
+- `src/models/presentation/` / `src/core/composeModelDefinition.ts` / `src/core/defineModel.ts` — 应用展示补丁、合成与注册
 - `src/core/services/GenerationService.ts` — 前端统一生成服务入口
 - `src/commands/aiRuntime.ts` — 前端 AI Runtime 命令桥
 - `src/core/theme/runtimeTheme.ts` — 运行时主题应用逻辑

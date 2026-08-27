@@ -1,5 +1,6 @@
+import type { AiRuntimeTrace, JsonValue } from '@henjicc/ai-sdk'
+
 import { sanitizeJsonValue } from '../logging'
-import type { AiRuntimeTrace, JsonValue } from './types'
 
 export function buildGenerateTrace(
   modelId: string,

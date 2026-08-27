@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import { isContextOverflowError, runSemanticCompaction } from './semantic-compaction'
 
 const model = {

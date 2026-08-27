@@ -7,7 +7,7 @@ import {
   type ModelStepFinishReason,
   type ModelStepResult,
   type ModelStepToolCall,
-} from '../../../../../src/core/llm/modelStep'
+} from '@henjicc/ai-sdk'
 import { AgentToolRegistry } from '../tools/registry'
 import {
   AgentModelOutputGuard,

@@ -109,11 +109,6 @@ export async function aiCancelTask(taskId: string): Promise<void> {
   await getPlatform().aiRuntime.cancelTask(taskId)
 }
 
-export async function aiReloadModelManifest(): Promise<number> {
-  ensureDesktopRuntime()
-  return await getPlatform().aiRuntime.reloadModelManifest()
-}
-
 export async function aiGetProgressEstimate(
   request: AiGetProgressEstimateRequestDto
 ): Promise<AiProgressEstimateDto> {

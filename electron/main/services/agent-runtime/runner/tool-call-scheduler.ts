@@ -6,7 +6,7 @@ import {
   type AgentToolObservation,
 } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentToolCatalogPlanner } from '../context/catalog'
 import { AgentToolGatewayError, type AgentToolGateway } from '../tools/gateway'
 import type { AgentToolRegistry } from '../tools/registry'

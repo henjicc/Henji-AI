@@ -1,0 +1,24 @@
+{
+  "provider": "fal",
+  "modelId": "z-image-turbo",
+  "scenario": "poll-success",
+  "phase": "continuePolling",
+  "route": "fal-ai/z-image-turbo/edit",
+  "taskId": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+  "notes": "continuePolling 对同一个 taskId 先查 status 再取 result，本 fixture 用同一份终态响应覆盖两次 fetch（两次调用都命中 mockResolvedValue 的同一返回值），只对第一次调用的 URL 做请求断言",
+  "response": {
+    "status": "COMPLETED",
+    "request_id": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+    "images": [
+      { "url": "https://v3b.fal.media/files/example/z-image-turbo-result.png", "content_type": "image/png" }
+    ]
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://v3b.fal.media/files/example/z-image-turbo-result.png"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/Fal.md §2.2（COMPLETED 状态枚举 + '图片常见 images[].url' 结果结构描述），URL 为占位符"
+  }
+}

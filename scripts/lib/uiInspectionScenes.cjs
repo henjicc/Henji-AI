@@ -679,7 +679,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       name: '工具箱-入口悬浮',
       setup: async (page) => {
         await setupToolbox(page)
-        await page.locator('[data-ui-page-header] + div button').first().hover()
+        await page.locator('[data-ui-page-header] + div button:visible').first().hover()
         await settlePage(page)
       },
     },

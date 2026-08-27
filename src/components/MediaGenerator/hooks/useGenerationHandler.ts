@@ -1,7 +1,8 @@
 import { createLogger } from '@/core/logging'
 import { useCallback } from 'react'
 import { registry } from '@/core/ModelRegistry'
-import type { ModelType } from '@/core/types'
+import type { BuiltinModelType } from '@/core/types'
+import { isBuiltinModelType } from '@/core/modelSortOrder'
 import {
   toModelPromptText,
   type PromptDocumentV1,
@@ -32,7 +33,7 @@ export const useGenerationHandler = (
   uploadedFilePaths: string[],
   uploadedVideoFilePaths: string[],
   uploadedAudioFilePaths: string[],
-  onGenerate: (input: string, model: string, type: ModelType, options?: DynamicValue) => void | Promise<void>,
+  onGenerate: (input: string, model: string, type: BuiltinModelType, options?: DynamicValue) => void | Promise<void>,
   uploadedVideoTrimStart?: number | null,
   uploadedVideoTrimEnd?: number | null
 ): GenerationHandler => {
@@ -45,8 +46,14 @@ export const useGenerationHandler = (
       return
     }
 
-    const rawType: DynamicValue = modelInfo.type
-    const modelType: ModelType = rawType === 'image' || rawType === 'video' || rawType === 'audio' ? rawType : 'image'
+    const modelType = modelInfo.type
+    if (!isBuiltinModelType(modelType)) {
+      logger.error('[GenerationHandler] Unsupported model type for media generation:', {
+        model: selectedModel,
+        modelType,
+      })
+      return
+    }
 
     // 准备生成选项
     // 直接传递原始参数，让 GenerationService 统一构建请求
@@ -102,4 +109,3 @@ export const useGenerationHandler = (
 
   return { handleGenerate }
 }
-

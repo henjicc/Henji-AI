@@ -45,11 +45,6 @@ async function checkNativeBridge(page) {
       }
     }
 
-    const manifestCount = await native.ai.reloadModelManifest()
-    if (!Number.isInteger(manifestCount) || manifestCount <= 0) {
-      throw new Error('model manifest reload returned no models')
-    }
-
     const status = await native.ai.getProviderKeyStatus()
     if (!Array.isArray(status) || status.length === 0) {
       throw new Error('provider key status is empty')
@@ -108,7 +103,6 @@ async function checkNativeBridge(page) {
     await native.fs.remove(workDir, { recursive: true })
 
     return {
-      manifestCount,
       providerStatusCount: status.length,
       mediaUrl: `henji-media://local/${encodeURIComponent(mediaPath)}`,
     }
@@ -262,7 +256,6 @@ async function main() {
       ok: true,
       launchMode: app.mode,
       nativeResult: {
-        manifestCount: nativeResult.manifestCount,
         providerStatusCount: nativeResult.providerStatusCount,
       },
       canvasMetrics,

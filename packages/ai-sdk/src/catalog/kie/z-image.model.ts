@@ -1,0 +1,68 @@
+import { defineModel } from "../defineModel";
+import type { JsonValue, JsonObject } from "../../types/runtime";
+const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
+export const kieZImageModel = defineModel({
+    meta: {
+        id: 'kie-z-image',
+        canonicalModelId: 'z-image-turbo',
+        provider: 'kie',
+        type: 'image',
+        tags: ['text-to-image', 'provider-kie'],
+        aliases: ['z-image-kie']
+    },
+    inputLimits: {
+        images: { max: 0 },
+        videos: { max: 0 }
+    },
+    params: [
+        {
+            id: 'kieZImageAspectRatio',
+            type: 'dropdown',
+            order: 1,
+            default: 'smart',
+            required: true,
+            options: [
+                { value: 'smart' },
+                { value: '1:1' },
+                { value: '4:3' },
+                { value: '3:4' },
+                { value: '16:9' },
+                { value: '9:16' },
+            ]
+        }
+    ],
+    endpoints: KIE_CREATE_TASK_ENDPOINT,
+    request: {
+        builder: (params) => {
+            const prompt = typeof params.prompt === 'string' ? params.prompt.slice(0, 1000) : '';
+            const rawAspectRatio = String(params.kieZImageAspectRatio || params.aspect_ratio || 'smart');
+            const supportedAspectRatios = ['1:1', '4:3', '3:4', '16:9', '9:16'];
+            const ratioHint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
+                ? params.__firstImageRatio
+                : 1;
+            let aspectRatio = supportedAspectRatios.includes(rawAspectRatio) ? rawAspectRatio : '1:1';
+            if (rawAspectRatio === 'smart' || rawAspectRatio === 'auto') {
+                let bestDiff = Number.POSITIVE_INFINITY;
+                for (const candidate of supportedAspectRatios) {
+                    const pair = candidate.split(':').map(Number);
+                    const difference = Math.abs(pair[0] / pair[1] - ratioHint);
+                    if (difference < bestDiff) {
+                        bestDiff = difference;
+                        aspectRatio = candidate;
+                    }
+                }
+            }
+            const input: JsonObject = { prompt, aspect_ratio: aspectRatio };
+            return {
+                model: 'z-image',
+                input
+            };
+        }
+    },
+    pricing: {
+        currency: '$',
+        calculator: () => 0.004,
+        description: '$0.004/张'
+    }
+});
+export default kieZImageModel;

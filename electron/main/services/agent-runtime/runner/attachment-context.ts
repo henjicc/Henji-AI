@@ -5,10 +5,9 @@ import {
   validateAgentAttachmentLimits,
   type AgentAttachment,
 } from '../../../../../src/core/assistant/attachments'
-import type { ModelInputModality, ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelInputModality, ModelStepMessage } from '@henjicc/ai-sdk'
 import { inspectAsset } from '../../asset-library'
-import { modelStepProviderAdapters } from '../../llm/sdk/provider-adapter'
-import '../../llm/sdk/provider'
+import { resolveModelStepProviderAdapter } from '@henjicc/ai-sdk'
 import {
   selectAgentObservationRuntimeModel,
   selectAgentRuntimeModels,
@@ -58,7 +57,7 @@ export async function validateAgentRunAttachments(request: AgentStartRunRequest)
       const { mimeType } = await inspectAndValidate(attachment)
       const selected = selectAgentObservationRuntimeModel(models, attachment.modality)
       const protocol = selected.model.apiProtocol ?? 'openai-compatible'
-      if (!modelStepProviderAdapters.resolve(protocol).supportedInputModalities.includes(attachment.modality)) {
+      if (!resolveModelStepProviderAdapter(protocol).supportedInputModalities.includes(attachment.modality)) {
         throw new Error(`[unsupported_provider_modality] ${protocol} 协议当前无法安全表达 ${attachment.modality} 输入`)
       }
       assertEncoding(attachment.modality, mimeType)

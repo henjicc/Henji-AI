@@ -1,6 +1,6 @@
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepMessage, ModelStepTool } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage, ModelStepTool } from '@henjicc/ai-sdk'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'

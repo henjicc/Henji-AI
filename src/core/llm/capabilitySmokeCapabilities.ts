@@ -3,7 +3,7 @@ import type {
   ModelCapabilitySmokeRequest,
   ModelCapabilitySmokeResult,
 } from './capabilitySmoke'
-import type { LlmCapabilities } from './types'
+import type { LlmCapabilities } from '@henjicc/ai-sdk'
 
 export function applyCapabilitySmokeToCapabilities(
   capabilities: LlmCapabilities,

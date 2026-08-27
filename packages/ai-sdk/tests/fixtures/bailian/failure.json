@@ -1,0 +1,22 @@
+{
+  "provider": "bailian",
+  "modelId": "bailian-qwen-image-3.0",
+  "scenario": "failure",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v1/services/aigc/multimodal-generation/generation",
+  "params": { "model": "qwen-image-3.0", "input": { "messages": [] }, "parameters": {} },
+  "response": {
+    "code": "InvalidParameter",
+    "message": "image size not supported",
+    "request_id": "example-request-id"
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "image size not supported"
+  },
+  "source": {
+    "response": "字段结构对照 packages/ai-sdk/src/providers/bailian.ts 的错误判定逻辑（/code 与 /message 指针）；DashScope 错误响应的 code/message/request_id 三件套是其平台通用错误契约，报错文案为占位符示例"
+  }
+}

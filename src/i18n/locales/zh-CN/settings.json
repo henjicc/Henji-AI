@@ -440,7 +440,8 @@
     "types": {
       "image": "图片",
       "video": "视频",
-      "audio": "音频"
+      "audio": "音频",
+      "other": "其他"
     }
   }
 }

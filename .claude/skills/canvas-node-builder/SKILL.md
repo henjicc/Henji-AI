@@ -77,7 +77,7 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 
 4. **`nodes/index.ts`**：把新组件加进 `nodeTypes` 映射（key 是 `CANVAS_NODE_TYPES` 里的值）。
 5. **i18n**：补 `node.menu.xxx`、`node.xxx.promptPlaceholder/promptRequired/apiKeyRequired/resultTitle` 等 key（zh-CN / en-US 都要）。
-6. 按 `docs/rules/testing.md` 选择最小验证：运行节点/注册表精确测试；只有改到模型 manifest 或翻译时才运行 `gen:model-manifest` / `check:model-i18n`，不要默认跑全量 lint。
+6. 按 `docs/rules/testing.md` 选择最小验证：运行节点/注册表精确测试；只有改到模型 catalog 或翻译时才运行 `gen:catalog` / `check:model-i18n`，不要默认跑全量 lint。
 
 价格徽标、生成按钮、提示词框、端口、resize 全部由 `GenerationNodeShell` 内置，**不要**在这层重新实现任何一项。
 

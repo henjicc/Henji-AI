@@ -1,0 +1,34 @@
+{
+  "provider": "grsai",
+  "modelId": "grsai-gpt-image-2",
+  "scenario": "domain-fallback",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/api/generate",
+  "params": { "prompt": "test", "model": "gpt-image-2" },
+  "endpointPreference": {
+    "markReachable": "https://grsai.dakka.com.cn/v1/api/result",
+    "expectedOrder": [
+      "https://grsai.dakka.com.cn/v1/api/generate",
+      "https://grsaiapi.com/v1/api/generate"
+    ]
+  },
+  "expectedRequest": {
+    "url": "https://grsai.dakka.com.cn/v1/api/generate",
+    "method": "POST",
+    "body": { "prompt": "test", "model": "gpt-image-2", "replyType": "async" }
+  },
+  "response": {
+    "id": "grsai-fixture-domain-task",
+    "status": "running"
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "grsai-fixture-domain-task"
+  },
+  "notes": "对照 packages/ai-sdk/src/providers/endpoints/grsai.ts 的连通性探测+进程内记忆策略：国内直连节点一旦被标记为可达，后续同进程请求优先走它",
+  "source": {
+    "response": "响应结构与 create-task_success.json 一致（真实日志字段形状），id 为占位符，域名切换行为与响应内容本身无关"
+  }
+}

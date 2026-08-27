@@ -14,19 +14,21 @@ import {
   UI_TEXT_META_CLASS,
 } from '@/components/ui'
 import PinyinMatch from 'pinyin-match'
-import { PROVIDER_ORDER, MODEL_TYPE_ORDER, compareModelsBySeries } from '@/core/modelSortOrder'
+import { PROVIDER_ORDER, compareModelsBySeries, getModelTypeGroup, getModelTypeOrder } from '@/core/modelSortOrder'
+import type { ModelType } from '@/core/types'
+import type { GenerationModelFilterType } from '@/features/generation/domain/generationDraft'
 import { X } from 'lucide-react'
 import { ICON_PRESET } from '@/core/theme/icons'
 interface ModelSelectorPanelProps {
   selectedProvider: string
   selectedModel: string
   modelFilterProvider: string
-  modelFilterType: 'all' | 'favorite' | 'image' | 'video' | 'audio'
+  modelFilterType: GenerationModelFilterType
   modelFilterFunction: string
   favoriteModels: Set<string>
   onModelSelect: (providerId: string, modelId: string) => void
   onFilterProviderChange: (provider: string) => void
-  onFilterTypeChange: (type: 'all' | 'favorite' | 'image' | 'video' | 'audio') => void
+  onFilterTypeChange: (type: GenerationModelFilterType) => void
   onFilterFunctionChange: (func: string) => void
   onToggleFavorite: (e: React.MouseEvent, providerId: string, modelId: string) => void
 }
@@ -58,13 +60,13 @@ const MODEL_CARD_ROW_GAP_CLASS = 'gap-y-1.5'
 const MODEL_CARD_META_TEXT_CLASS = `${UI_TEXT_META_CLASS} leading-4`
 
 function compareModelItems(
-  a: { p: { id: string; name: string }; m: { id: string; type: 'image' | 'video' | 'audio'; name: string; seriesId?: string; seriesRank?: number } },
-  b: { p: { id: string; name: string }; m: { id: string; type: 'image' | 'video' | 'audio'; name: string; seriesId?: string; seriesRank?: number } }
+  a: { p: { id: string; name: string }; m: { id: string; type: ModelType; name: string; seriesId?: string; seriesRank?: number } },
+  b: { p: { id: string; name: string }; m: { id: string; type: ModelType; name: string; seriesId?: string; seriesRank?: number } }
 ): number {
   const providerDiff = (PROVIDER_ORDER[a.p.id] ?? Number.MAX_SAFE_INTEGER) - (PROVIDER_ORDER[b.p.id] ?? Number.MAX_SAFE_INTEGER)
   if (providerDiff !== 0) return providerDiff
 
-  const typeDiff = MODEL_TYPE_ORDER[a.m.type] - MODEL_TYPE_ORDER[b.m.type]
+  const typeDiff = getModelTypeOrder(a.m.type) - getModelTypeOrder(b.m.type)
   if (typeDiff !== 0) return typeDiff
 
   return compareModelsBySeries(a.m, b.m)
@@ -148,7 +150,8 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
         if (modelFilterType === 'favorite') {
           return favoriteModels.has(`${item.p.id}-${item.m.id}`)
         }
-        return modelFilterType === 'all' ? true : item.m.type === modelFilterType
+        if (modelFilterType === 'all') return true
+        return getModelTypeGroup(item.m.type) === modelFilterType
       })
       .filter(item => (modelFilterFunction === 'all' ? true : item.m.functions.includes(modelFilterFunction)))
     if (searchQuery.trim()) {
@@ -296,20 +299,21 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
               </UiOptionButton>
             ))}
             <div className="w-px bg-border-dark mx-1"></div>
-            {[
+            {([
               { label: t('all'), value: 'all' },
               { label: t('favorites'), value: 'favorite' },
               { label: t('types.image'), value: 'image' },
               { label: t('types.video'), value: 'video' },
-              { label: t('types.audio'), value: 'audio' }
-            ].map(typeOption => {
+              { label: t('types.audio'), value: 'audio' },
+              { label: t('types.other'), value: 'other' }
+            ] satisfies Array<{ label: string; value: GenerationModelFilterType }>).map(typeOption => {
               const isTypeHidden = typeOption.value !== 'all' && typeOption.value !== 'favorite' && hiddenTypes.has(typeOption.value)
               return (
                 <UiOptionButton
                   key={typeOption.value}
                   type="button"
                   active={modelFilterType === typeOption.value}
-                  onClick={() => onFilterTypeChange(typeOption.value as 'all' | 'favorite' | 'image' | 'video' | 'audio')}
+                  onClick={() => onFilterTypeChange(typeOption.value)}
                   className={getFilterChipClass(modelFilterType === typeOption.value, isTypeHidden)}
                 >
                   {typeOption.label}
@@ -388,7 +392,9 @@ const ModelSelectorPanel: React.FC<ModelSelectorPanelProps> = ({
                     {p.name}
                   </span>
                   <span className={`col-start-2 row-start-2 justify-self-end self-end text-right ${isSelected ? 'text-xs leading-4 text-white/80' : MODEL_CARD_META_TEXT_CLASS}`}>
-                    {m.type === 'image' ? t('types.image') : m.type === 'video' ? t('types.video') : t('types.audio')}
+                    {getModelTypeGroup(m.type) === 'other'
+                      ? `${t('types.other')} · ${m.type}`
+                      : t(`types.${m.type}`)}
                   </span>
                 </div>
               </UiOptionButton>

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 
 import { createMainLogger } from '../../logging'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import type { AgentAttachment } from '../../../../../src/core/assistant/attachments'
 import {
   adaptAgentContextMessages,

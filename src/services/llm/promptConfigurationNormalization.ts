@@ -4,7 +4,7 @@ import {
   createDefaultTextProcessingPromptTemplates,
 } from '@/core/llm/defaults'
 import { normalizePromptOptimizationProfileDocuments } from '@/core/llm/promptOptimization'
-import type { PromptOptimizationProfile, TextProcessingPromptTemplate } from '@/core/llm/types'
+import type { PromptOptimizationProfile, TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
 
 export function normalizePromptProfile(profile: PromptOptimizationProfile): PromptOptimizationProfile {
   return normalizePromptOptimizationProfileDocuments({

@@ -5,7 +5,7 @@ import {
   listPromptOptimizationModelCandidates,
   type PromptOptimizationModelSource,
 } from '@/core/llm/promptOptimizationModelSelection'
-import type { LlmConfigState, PromptOptimizationProfile } from '@/core/llm/types'
+import type { LlmConfigState, PromptOptimizationProfile } from '@henjicc/ai-sdk'
 import { isDesktopRuntime } from '@/platform/runtime'
 import { llmConfigService } from './LlmConfigService'
 

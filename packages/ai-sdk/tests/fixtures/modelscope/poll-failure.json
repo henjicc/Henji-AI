@@ -1,0 +1,20 @@
+{
+  "provider": "modelscope",
+  "modelId": "modelscope-qwen-image-edit-2509",
+  "scenario": "poll-failure",
+  "phase": "continuePolling",
+  "route": "/v1/images/generations",
+  "taskId": "modelscope-fixture-task_failed",
+  "response": {
+    "task_id": "modelscope-fixture-task_failed",
+    "task_status": "FAILED"
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "ModelScope task failed"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/魔搭.md §1（状态字段 task_status 枚举 FAILED）；错误信息文案是 packages/ai-sdk/src/providers/modelscope.ts 里的固定字符串（魔搭响应体本身不含结构化错误信息）"
+  }
+}

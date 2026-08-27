@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import { toolMessage } from '../runner/runner-results'
 import { buildAgentContextLayers } from './prompt-layers'
 import { skillBuildInput } from './context-test-fixtures'

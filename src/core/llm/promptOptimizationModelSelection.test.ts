@@ -6,7 +6,7 @@ import {
   listPromptOptimizationModelCandidates,
   selectPromptOptimizationModel,
 } from './promptOptimizationModelSelection'
-import type { LlmModelConfig, LlmProviderConfig, PromptOptimizationProfile } from './types'
+import type { LlmModelConfig, LlmProviderConfig, PromptOptimizationProfile } from '@henjicc/ai-sdk'
 
 function createProvider(providerId: string, enabled = true): LlmProviderConfig {
   return { providerId, displayName: providerId, adapter: 'openai', enabled }

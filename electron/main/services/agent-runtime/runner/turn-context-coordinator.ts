@@ -2,7 +2,7 @@ import type { HostContextSnapshot } from '../../../../../src/core/assistant/host
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import type { ModelStepMessage, ModelStepUsage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage, ModelStepUsage } from '@henjicc/ai-sdk'
 import type { AgentTurnSnapshotDraft } from '../../../../../src/core/assistant/turn'
 import type { AssistantSkillMetadata } from '../../../../../src/core/assistant/skills'
 import { listEnabledAssistantSkills } from '../../assistant/skills/registry'

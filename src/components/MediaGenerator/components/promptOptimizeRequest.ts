@@ -1,6 +1,6 @@
 import type { PromptOptimizationTargetModel } from '@/core/llm/promptOptimization'
 import { buildPromptOptimizationUserMessage, getDefaultPromptProfile } from '@/core/llm/promptOptimization'
-import type { LlmChatMessage, LlmConfigState, LlmMessageContentPart, PromptOptimizationProfile } from '@/core/llm/types'
+import type { LlmChatMessage, LlmConfigState, LlmMessageContentPart, PromptOptimizationProfile } from '@henjicc/ai-sdk'
 import { getPathForFile } from '@/platform/desktopApi'
 import { saveUploadVideo } from '@/utils/save'
 

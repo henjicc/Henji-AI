@@ -15,7 +15,7 @@ import type {
   ModelStepInput,
   ModelStepMessage,
   ModelStepResult,
-} from '../../../../../src/core/llm/modelStep'
+} from '@henjicc/ai-sdk'
 import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'

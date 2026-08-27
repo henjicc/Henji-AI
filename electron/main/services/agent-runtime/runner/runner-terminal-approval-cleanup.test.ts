@@ -5,7 +5,7 @@ import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistan
 import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentPermissionAuditFact } from '../../../../../src/core/assistant/permissionAudit'
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
-import type { ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolGateway } from '../tools/gateway'
 import { AgentToolRegistry } from '../tools/registry'

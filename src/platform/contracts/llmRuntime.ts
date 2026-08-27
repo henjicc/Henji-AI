@@ -1,5 +1,5 @@
-import type { LlmChatRequest, LlmStreamEvent } from '@/core/llm/types'
-import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@/core/llm/modelStep'
+import type { LlmChatRequest, LlmStreamEvent } from '@henjicc/ai-sdk'
+import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '@/core/llm/capabilitySmoke'
 
 export interface LlmProviderKeyStatusDto {

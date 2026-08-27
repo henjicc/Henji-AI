@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { modelStepInputSchema, modelStepResultSchema } from '../../../../../src/core/llm/modelStep'
+import { modelStepInputSchema, modelStepResultSchema } from '@henjicc/ai-sdk'
 import { serializedBytes } from '../../../../../src/core/assistant/traceSanitize'
 import {
   AGENT_TRACE_DETAIL_MAX_BYTES,

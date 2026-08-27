@@ -1,0 +1,38 @@
+{
+  "provider": "modelscope",
+  "modelId": "modelscope-qwen-image-edit-2509",
+  "scenario": "create-task_success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/images/generations",
+  "params": {
+    "model": "Qwen/Qwen-Image-Edit-2509",
+    "prompt": "edit this image",
+    "image_url": ["https://example.com/a.png", "https://example.com/b.png"],
+    "size": "1328x1328",
+    "steps": 30,
+    "guidance": 3.5
+  },
+  "expectedRequest": {
+    "url": "https://api-inference.modelscope.cn/v1/images/generations",
+    "method": "POST",
+    "body": {
+      "model": "Qwen/Qwen-Image-Edit-2509",
+      "prompt": "edit this image",
+      "image_url": ["https://example.com/a.png", "https://example.com/b.png"],
+      "size": "1328x1328",
+      "steps": 30,
+      "guidance": 3.5
+    }
+  },
+  "response": { "task_id": "modelscope-fixture-task_001" },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "modelscope-fixture-task_001"
+  },
+  "source": {
+    "params": "packages/ai-sdk/tests/catalog/modelscope.test.ts — 'buildModelscopeRequest 图片来源' 用例（image_url 数组字段真实断言，多图编辑输入 uploadedFilePaths 优先）；model/steps/guidance 取 packages/ai-sdk/docs/model-adaptation/供应商/魔搭.md §4 请求参数表的官方默认值（steps 30、guidance 3.5）",
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/魔搭.md §1（“提交...→ 返回 { \"task_id\": \"...\" }” 为文档原文字面 JSON），task_id 为占位符"
+  }
+}

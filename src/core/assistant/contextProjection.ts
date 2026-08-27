@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { attachmentReferenceMessage } from './attachments'
 
-import { modelStepMessageSchema, type ModelStepMessage } from '../llm/modelStep'
+import { modelStepMessageSchema, type ModelStepMessage } from '@henjicc/ai-sdk'
 import {
   agentSemanticSummarySchema,
   agentSessionInternalMessagePayloadSchema,

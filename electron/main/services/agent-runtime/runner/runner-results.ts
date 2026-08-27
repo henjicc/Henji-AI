@@ -10,8 +10,8 @@ import type { SerializedAgentError } from '../../../../../src/core/assistant/eve
 import type {
   ModelStepMessage,
   ModelStepToolCall,
-} from '../../../../../src/core/llm/modelStep'
-import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
+} from '@henjicc/ai-sdk'
+import { parseModelProviderError } from '@henjicc/ai-sdk'
 import { resolveToolOffloadByteThreshold, shouldOffloadObservation } from '../context/offload'
 import { AGENT_DISCOVERY_LEASE_TOOL_LIMIT } from '../../../../../src/core/assistant/toolBudget'
 import { sanitizeObservationValue } from '../context/sanitize'

@@ -1,0 +1,25 @@
+{
+  "provider": "kie",
+  "modelId": "kie-seedream-5.0-pro",
+  "scenario": "boundary-result-object-deep",
+  "phase": "continuePolling",
+  "route": "/api/v1/jobs/createTask",
+  "taskId": "kie-fixture-task_004",
+  "notes": "结果 URL 深藏在 resultObject.layers_data[].url，必须靠 collectDeepUrls 深度遍历才能收集到，resultUrls/images/videos 等固定指针都取不到",
+  "response": {
+    "code": 200,
+    "success": true,
+    "data": {
+      "state": "success",
+      "resultJson": "{\"resultObject\":{\"layers_data\":[{\"z_index\":0,\"url\":\"https://files.kie.ai/example/layer-base.jpeg\"},{\"z_index\":1,\"url\":\"https://files.kie.ai/example/layer-1.png\"}]}}"
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://files.kie.ai/example/layer-base.jpeg|||https://files.kie.ai/example/layer-1.png"
+  },
+  "source": {
+    "response": "packages/ai-sdk/tests/providers/kie.test.ts 现有 '解析 resultObject 内的图层媒体 URL' 用例（Seedream 5.0 Pro 图层拆分场景，任务 2.3 已审核代码），URL 换成占位符"
+  }
+}

@@ -6,9 +6,9 @@ import {
   selectAgentExecutionModel,
 } from '../../../../../src/core/llm/agentProfiles'
 import type { AgentStartRunRequest, AgentRuntimeModelConfig } from '../../../../../src/core/assistant/runtimeContracts'
-import type { ModelStepCapabilities } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepCapabilities } from '@henjicc/ai-sdk'
 import type { AgentInputModality } from '../../../../../src/core/llm/agentProfiles'
-import type { LlmApiProtocol } from '../../../../../src/core/llm/providerProtocol'
+import type { LlmApiProtocol } from '@henjicc/ai-sdk'
 
 export interface AgentRuntimeModel {
   providerId: string

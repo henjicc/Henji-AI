@@ -1,0 +1,25 @@
+{
+  "provider": "kie",
+  "modelId": "kie-gpt-image-2",
+  "scenario": "poll-success",
+  "phase": "continuePolling",
+  "route": "/api/v1/jobs/createTask",
+  "taskId": "kie-fixture-task_001",
+  "response": {
+    "code": 200,
+    "success": true,
+    "data": {
+      "state": "success",
+      "resultJson": "{\"resultUrls\":[\"https://files.kie.ai/example/result-abc123.png\"]}",
+      "creditsConsumed": 50
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://files.kie.ai/example/result-abc123.png"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/KIE.md §2.2 “最常见的成功结果” 代码块，字段结构逐字照搬，结果 URL 用占位符替换文档中被截断的 https://... 部分"
+  }
+}

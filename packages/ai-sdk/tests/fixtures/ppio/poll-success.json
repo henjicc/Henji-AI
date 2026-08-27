@@ -1,0 +1,25 @@
+{
+  "provider": "ppio",
+  "modelId": "ppio-kling-3.0",
+  "scenario": "poll-success",
+  "phase": "continuePolling",
+  "route": "/async/kling-v3.0-std-t2v",
+  "taskId": "ppio-fixture-task_001",
+  "response": {
+    "task": {
+      "task_id": "ppio-fixture-task_001",
+      "status": "TASK_STATUS_SUCCEED",
+      "output": {
+        "videos": [{ "video_url": "https://ppio-cdn.example.com/output/example-video.mp4" }]
+      }
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://ppio-cdn.example.com/output/example-video.mp4"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/派欧云.md §1（状态字段 /task/status 枚举 TASK_STATUS_SUCCEED，结果字段 videos[].video_url 的路径描述），URL 为占位符"
+  }
+}

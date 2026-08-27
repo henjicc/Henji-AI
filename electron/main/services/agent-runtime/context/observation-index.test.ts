@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import type { AgentContextBuildInput } from './types'
 import { skillBuildInput } from './context-test-fixtures'
 import { AgentArtifactStore } from './offload'

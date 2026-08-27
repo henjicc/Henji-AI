@@ -8,7 +8,7 @@ import type {
   LlmProviderConfig,
   LlmReasoningConfig,
   LlmReasoningEffort,
-} from '@/core/llm/types'
+} from '@henjicc/ai-sdk'
 import { createModelFromInput } from '@/services/llm/llmDiscoveryService'
 
 /*
@@ -17,7 +17,7 @@ import { createModelFromInput } from '@/services/llm/llmDiscoveryService'
  * 原来还有一个 `anthropic` 选项，但运行时从来没有对应实现——`provider.ts` 只注册了
  * `openai-compatible` 协议，选了它发出去的仍然是 Chat Completions 形状的请求，唯一的区别是
  * 设置页预览文案会骗人地显示成 `/v1/messages`。存量配置由 LlmConfigService 归一化成 openai。
- * Anthropic Messages 协议按 docs/llm-adaptation/README.md 第三节属于最低优先级，等真正接上再加回来。
+ * Anthropic Messages 协议按 packages/ai-sdk/docs/llm-adaptation/README.md 第三节属于最低优先级，等真正接上再加回来。
  */
 export const providerTypes = [
   { value: 'deepseek', label: 'DeepSeek' },

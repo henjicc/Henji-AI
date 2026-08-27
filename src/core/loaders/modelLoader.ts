@@ -9,14 +9,10 @@ const logger = createLogger('core.loaders.modelLoader')
 
 import { registry } from '../ModelRegistry'
 import { getI18nText } from '../types/I18nText'
-import type { ModelDefinition } from '../types'
-
-/**
- * 模型模块接口
- */
-interface ModelModule {
-  default: ModelDefinition
-}
+import { defineModel as defineApplicationModel } from '../defineModel'
+import { composeModelDefinition } from '../composeModelDefinition'
+import { catalog } from '@henjicc/ai-sdk'
+import { modelPresentations } from '@/models/presentation'
 
 /**
  * 加载统计信息
@@ -31,8 +27,7 @@ interface LoadStats {
 /**
  * 加载所有模型文件
  *
- * 使用 Vite 的 import.meta.glob 自动扫描所有 .model.ts 文件
- * 并自动注册到 ModelRegistry
+ * 消费 SDK 的显式 catalog 清单，并与应用侧展示补丁组合后注册到 ModelRegistry。
  *
  * @returns 加载统计信息
  */
@@ -44,38 +39,21 @@ export async function loadAllModels(): Promise<LoadStats> {
 
   const startTime = performance.now()
 
-  // 使用 Vite 的 import.meta.glob 扫描所有 .model.ts 文件
-  // eager: true 表示在构建时就加载所有模块（同步加载）
-  const modules = import.meta.glob<ModelModule>(
-    '/src/models/**/*.model.ts',
-    { eager: true }
-  )
-
   let successCount = 0
   let errorCount = 0
   const failedModels: Array<{ path: string; error: DynamicValue }> = []
 
-  // 遍历所有模块并注册
-  for (const [path, module] of Object.entries(modules)) {
+  for (const runtimeModel of catalog) {
+    const path = runtimeModel.meta.id
     try {
-      // 1. 验证模块格式
-      if (!module || !module.default) {
-        throw new Error('Model file must have a default export')
+      const presentation = modelPresentations[runtimeModel.meta.id]
+      if (!presentation) {
+        throw new Error(`Missing model presentation: ${runtimeModel.meta.id}`)
       }
 
-      const model = module.default
-
-      // 2. 验证模型基本结构
-      if (!model.meta) {
-        throw new Error('Model must have a meta property')
-      }
-
-      if (!model.meta.id) {
-        throw new Error('Model meta must have an id')
-      }
-
-      // 3. 注册到 ModelRegistry
-      registry.register(model)
+      const model = composeModelDefinition(runtimeModel, presentation)
+      // 应用侧 defineModel 保留既有的 canonical 描述补丁与 i18nScope 展开，并完成注册。
+      defineApplicationModel(model)
 
       successCount++
     } catch (error) {

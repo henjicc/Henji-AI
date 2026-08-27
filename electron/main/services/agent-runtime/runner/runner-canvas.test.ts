@@ -12,7 +12,7 @@ import {
   HENJI_ENTITY_METHOD_SIGNATURES,
   HENJI_SCRIPT_LANGUAGE_RULES,
 } from '../../../../../src/core/assistant/capabilityDiscovery'
-import type { ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'

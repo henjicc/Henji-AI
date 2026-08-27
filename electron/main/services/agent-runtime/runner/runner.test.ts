@@ -5,14 +5,18 @@ import { AGENT_CONTRACT_VERSION, type HostContextSnapshot } from '../../../../..
 import { AGENT_RUNTIME_SCHEMA_VERSION, type AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
 import type { AgentEvent, AgentRunState } from '../../../../../src/core/assistant/events'
 import { AGENT_SESSION_ENTRY_SCHEMA_VERSION, agentSessionEntrySchema } from '../../../../../src/core/assistant/session'
-import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import {
+  ProviderModelStepError,
+  type ModelStepEvent,
+  type ModelStepInput,
+  type ModelStepResult,
+} from '@henjicc/ai-sdk'
 import { AgentToolGateway } from '../tools/gateway'
 import { defineAgentTool } from '../tools/define-tool'
 import { AgentToolRegistry } from '../tools/registry'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { AgentRunner } from './runner'
 import * as approvalLogging from './approval-logging'
-import { ProviderModelStepError } from '../../llm/sdk/provider-error'
 import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 
 function hostContext(): HostContextSnapshot {
@@ -1063,7 +1067,6 @@ describe('AgentRunner', () => {
     })
   })
 })
-
 
 
 

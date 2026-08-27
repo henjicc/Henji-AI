@@ -2,6 +2,10 @@
  * defineModel 辅助函数
  *
  * 用于定义和注册模型，提供类型安全和自动验证
+ *
+ * SDK 的运行时定义先与 `src/models/presentation/` 合成为应用 `ModelDefinition`，
+ * 再由本函数补齐 canonical 描述、i18n scope、应用校验与 ModelRegistry 注册。
+ * 这组宿主展示职责与 SDK 侧纯函数 `defineModel` 不同，因此保留为应用唯一注册入口。
  */
 
 import { ModelDefinition } from './types/ModelDefinition'

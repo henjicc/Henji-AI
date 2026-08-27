@@ -7,7 +7,7 @@ import {
   createDefaultPromptProfile,
   createDefaultTextProcessingPromptTemplates,
 } from '@/core/llm/defaults'
-import type { LlmConfigState } from '@/core/llm/types'
+import type { LlmConfigState } from '@henjicc/ai-sdk'
 import { normalizeLlmConfig } from './LlmConfigService'
 
 describe('normalizeLlmConfig', () => {

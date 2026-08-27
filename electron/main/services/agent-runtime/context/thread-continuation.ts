@@ -1,4 +1,4 @@
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { AGENT_TOOL_DOMAINS, type AgentIntent, type AgentToolDomain } from './types'
 
 /*

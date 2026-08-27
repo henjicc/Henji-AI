@@ -1,0 +1,38 @@
+{
+  "provider": "fal",
+  "modelId": "z-image-turbo",
+  "scenario": "create-queue-submit",
+  "phase": "execute",
+  "method": "POST",
+  "route": "fal-ai/z-image-turbo/edit",
+  "params": {
+    "prompt": "edit",
+    "image_url": "https://example.com/a.png",
+    "strength": 0.6
+  },
+  "expectedRequest": {
+    "url": "https://queue.fal.run/fal-ai/z-image-turbo/edit",
+    "method": "POST",
+    "body": {
+      "prompt": "edit",
+      "image_url": "https://example.com/a.png",
+      "strength": 0.6
+    }
+  },
+  "response": {
+    "request_id": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+    "response_url": "https://queue.fal.run/fal-ai/z-image-turbo/edit/requests/764cabcf-b745-4b3e-ae38-1200304cf45b",
+    "status_url": "https://queue.fal.run/fal-ai/z-image-turbo/edit/requests/764cabcf-b745-4b3e-ae38-1200304cf45b/status",
+    "cancel_url": "https://queue.fal.run/fal-ai/z-image-turbo/edit/requests/764cabcf-b745-4b3e-ae38-1200304cf45b/cancel",
+    "queue_position": 0
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "https://queue.fal.run/fal-ai/z-image-turbo/edit/requests/764cabcf-b745-4b3e-ae38-1200304cf45b/status"
+  },
+  "source": {
+    "params": "packages/ai-sdk/tests/catalog/fal-targets.test.ts — 'GPT Image 2、Nano Banana Pro 与 Z-Image 使用官方价格和路由'（zImageTurboModel.request.builder 真实断言：image_url/strength）；prompt 字段为该模型统一携带的输入，按 builder 契约补全",
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/Fal.md §2.1 队列提交结果代码块，逐字段照搬（request_id 为文档原始示例值），URL 路径按同一 request_id 补全为完整可读形态"
+  }
+}

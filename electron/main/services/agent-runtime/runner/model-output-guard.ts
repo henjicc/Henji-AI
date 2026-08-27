@@ -10,7 +10,7 @@ import type {
   ModelStepFinishReason,
   ModelStepResult,
   ModelStepToolCall,
-} from '../../../../../src/core/llm/modelStep'
+} from '@henjicc/ai-sdk'
 import type { AgentToolRegistry } from '../tools/registry'
 import { digestJson } from '../tools/security'
 

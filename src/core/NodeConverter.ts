@@ -8,8 +8,9 @@ const logger = createLogger('core.NodeConverter')
  */
 
 import { registry } from './ModelRegistry'
+import { isBuiltinModelType } from './modelSortOrder'
 import type {
-
+  BuiltinModelType,
   ModelDefinition,
   ParamDef,
   ModelNode,
@@ -43,7 +44,13 @@ export class NodeConverter implements INodeConverter {
   /**
    * 将模型定义转换为节点定义
    */
-  modelToNode(model: ModelDefinition): ModelNode {
+  modelToNode(model: ModelDefinition): ModelNode | null {
+    // ReactFlow 画布只声明了三种内置生成节点；扩展类型留在模型目录可见，
+    // 但不会被旧转换器猜成某个媒体节点或污染已知类型。
+    if (!isBuiltinModelType(model.meta.type)) {
+      return null
+    }
+
     // 检查缓存
     if (this.cache.has(model.meta.id)) {
       return this.cache.get(model.meta.id)!
@@ -104,7 +111,7 @@ export class NodeConverter implements INodeConverter {
   /**
    * 根据模型类型生成输出端口
    */
-  getOutputPorts(modelType: 'image' | 'video' | 'audio'): OutputPort[] {
+  getOutputPorts(modelType: BuiltinModelType): OutputPort[] {
     const baseOutput: OutputPort = {
       id: 'output',
       name: this.getOutputName(modelType),
@@ -240,7 +247,7 @@ export class NodeConverter implements INodeConverter {
    */
   convertAllModels(filter?: {
     provider?: string
-    type?: 'image' | 'video' | 'audio'
+    type?: BuiltinModelType
     tags?: string[]
   }): ModelNode[] {
     let models = registry.listAllModels()
@@ -258,7 +265,10 @@ export class NodeConverter implements INodeConverter {
       )
     }
 
-    return models.map(model => this.modelToNode(model))
+    return models.flatMap(model => {
+      const node = this.modelToNode(model)
+      return node ? [node] : []
+    })
   }
 
   /**

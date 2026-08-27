@@ -42,12 +42,9 @@ jobs:
       - name: 安装依赖
         run: npm ci
 
-      # manifest 与 seeds 是自动生成产物（Git 忽略），检查前必须先生成，
-      # 否则 check:model-i18n 与类型检查会因缺文件失败。
-      - name: 生成 manifest 与 seeds
-        run: |
-          npm run gen:progress-seeds
-          npm run gen:model-manifest
+      # progress seeds 是自动生成产物（Git 忽略），检查前必须先生成。
+      - name: 生成 progress seeds
+        run: npm run gen:progress-seeds
 
       - name: 颜色令牌检查
         run: npm run check:colors

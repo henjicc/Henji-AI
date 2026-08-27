@@ -11,7 +11,7 @@ import { getAvailableProviders } from '@/utils/modelHelpers'
  * 部分导出值（uploadedImages/promptReferences/input/promptMediaBindings）是从这 18 项
  * 派生出来的 useMemo，不进 draft——它们的计算逻辑保持不变，只是依赖字段从 draft 上取。
  */
-export type GenerationModelFilterType = 'all' | 'favorite' | 'image' | 'video' | 'audio'
+export type GenerationModelFilterType = 'all' | 'favorite' | 'image' | 'video' | 'audio' | 'other'
 
 export interface GenerationDraft {
   promptDocument: PromptDocumentV1

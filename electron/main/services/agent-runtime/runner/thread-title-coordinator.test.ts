@@ -4,7 +4,7 @@ import type {
   AgentThreadTitleContext,
   AgentThreadTitleUpdate,
 } from '../../../../../src/core/assistant/threadTitle'
-import type { ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { AgentRuntimeModel } from './models'
 import {
   AgentThreadTitleCoordinator,

@@ -1,0 +1,44 @@
+{
+  "provider": "kie",
+  "modelId": "kie-gpt-image-2",
+  "scenario": "create-task_success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v1/jobs/createTask",
+  "params": {
+    "model": "gpt-image-2-image-to-image",
+    "input": {
+      "prompt": "edit",
+      "aspect_ratio": "16:9",
+      "resolution": "4K",
+      "input_urls": ["https://example.com/a.png"]
+    }
+  },
+  "expectedRequest": {
+    "url": "https://api.kie.ai/api/v1/jobs/createTask",
+    "method": "POST",
+    "body": {
+      "model": "gpt-image-2-image-to-image",
+      "input": {
+        "prompt": "edit",
+        "aspect_ratio": "16:9",
+        "resolution": "4K",
+        "input_urls": ["https://example.com/a.png"]
+      }
+    }
+  },
+  "response": {
+    "code": 200,
+    "success": true,
+    "data": { "taskId": "kie-fixture-task_001" }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "kie-fixture-task_001"
+  },
+  "source": {
+    "params": "packages/ai-sdk/tests/catalog/kie-images.test.ts — 'GPT Image 2 按有无图片切换端点并保留完整 1K/2K/4K 价格' （真实 request.builder 断言，原样照抛）",
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/KIE.md §2.1（“成功时返回 data.taskId”）+ code/success 字段形态参照 packages/ai-sdk/tests/providers/kie.test.ts 已有断言结构（任务 2.3 已审核代码），taskId 为占位符"
+  }
+}

@@ -1,5 +1,13 @@
 import type { ModelDefinition } from '@/core/types'
 
+/**
+ * 任务 3.1 说明：这份校验器整体留在应用侧，没有规则搬去 SDK。
+ *
+ * 它检查的是 `role`（渠道/模式选择器）与展示分组（`paramPresentation`）——两者都是
+ * "这个参数在界面里怎么摆放"的产品约定，不是请求构建需要的取值契约，按记录 003
+ * 的归属口径整体划给痕迹AI。唯一引用的运行时字段 `param.order` 只是用来判断相对
+ * 顺序，不需要单独抽出去。
+ */
 type ValidationFailure = (message: string) => never
 
 function i18nKey(value: unknown): string | undefined {

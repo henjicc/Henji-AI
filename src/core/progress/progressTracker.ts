@@ -1,4 +1,10 @@
-import { ModelDefinition, ModelType, ProgressConfig, ProgressCurveConfig } from '@/core/types'
+import type {
+  BuiltinModelType,
+  ModelDefinition,
+  ModelType,
+  ProgressConfig,
+  ProgressCurveConfig,
+} from '@/core/types'
 import type { ProgressStatus } from '@/core/providers/base'
 
 export interface ProgressSpec {
@@ -32,10 +38,29 @@ const DEFAULT_TICK_MS = 300
 const DEFAULT_POLLING_ATTEMPTS = 120
 const DEFAULT_POLLING_INTERVAL = 3000
 
-const DEFAULT_DURATION_BY_TYPE: Record<ModelType, { baseMs: number; minMs: number; maxMs: number }> = {
+interface DurationDefaults {
+  baseMs: number
+  minMs: number
+  maxMs: number
+}
+
+const DEFAULT_DURATION_BY_TYPE: Record<BuiltinModelType, DurationDefaults> = {
   image: { baseMs: 60000, minMs: 15000, maxMs: 240000 },
   video: { baseMs: 120000, minMs: 30000, maxMs: 900000 },
   audio: { baseMs: 10000, minMs: 3000, maxMs: 120000 }
+}
+
+const UNKNOWN_TYPE_DURATION_DEFAULTS: DurationDefaults = {
+  baseMs: 60000,
+  minMs: 15000,
+  maxMs: 240000,
+}
+
+const getDurationDefaults = (modelType: ModelType): DurationDefaults => {
+  if (modelType === 'image') return DEFAULT_DURATION_BY_TYPE.image
+  if (modelType === 'video') return DEFAULT_DURATION_BY_TYPE.video
+  if (modelType === 'audio') return DEFAULT_DURATION_BY_TYPE.audio
+  return UNKNOWN_TYPE_DURATION_DEFAULTS
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value))
@@ -81,7 +106,7 @@ const resolveAudioTextLength = (params: DynamicValueMap): number => {
 const resolveGenericDurationMs = (
   modelType: ModelType,
   params: DynamicValueMap,
-  defaults: { baseMs: number; minMs: number; maxMs: number }
+  defaults: DurationDefaults
 ): number => {
   if (modelType === 'image') {
     const imageCount = Math.max(
@@ -115,10 +140,14 @@ const resolveGenericDurationMs = (
     return clamp(durationMs, defaults.minMs, defaults.maxMs)
   }
 
-  const textLength = resolveAudioTextLength(params)
-  const extraBlocks = Math.max(0, Math.ceil((textLength - 120) / 80))
-  const durationMs = defaults.baseMs + extraBlocks * 800
-  return clamp(durationMs, defaults.minMs, defaults.maxMs)
+  if (modelType === 'audio') {
+    const textLength = resolveAudioTextLength(params)
+    const extraBlocks = Math.max(0, Math.ceil((textLength - 120) / 80))
+    const durationMs = defaults.baseMs + extraBlocks * 800
+    return clamp(durationMs, defaults.minMs, defaults.maxMs)
+  }
+
+  return defaults.baseMs
 }
 
 const getUnitCount = (params: DynamicValueMap, scaleWith?: string): number => {
@@ -156,7 +185,7 @@ const resolveExpectedDurationMs = (
 ): ResolvedProgressShape | null => {
   const progress = model.meta.progress
   const mode: ProgressConfig['mode'] = progress?.mode ?? 'time'
-  const typeDefaults = DEFAULT_DURATION_BY_TYPE[model.meta.type]
+  const typeDefaults = getDurationDefaults(model.meta.type)
 
   if (mode === 'time') {
     const hasModelTimeConfig = progress?.mode === 'time'

@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import type { LlmConfigState } from '@/core/llm/types'
+import type { LlmConfigState } from '@henjicc/ai-sdk'
 import { createDefaultLlmConfig } from '@/core/llm/defaults'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {

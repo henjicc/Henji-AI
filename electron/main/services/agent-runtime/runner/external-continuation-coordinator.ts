@@ -3,7 +3,7 @@ import type { AgentExternalContinuation } from '../../../../../src/core/assistan
 import type { HostContextSnapshot, HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentTurnSnapshotDraft } from '../../../../../src/core/assistant/turn'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentContextBuildResult } from '../context/types'
 import type { AgentToolActivationSnapshot } from '../context/tool-activation'
 import type { AgentRouteDecision } from '../context/types'

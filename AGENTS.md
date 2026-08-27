@@ -17,7 +17,7 @@
 | 改动 `src/features/canvas/**`、节点 DOM、画布卡顿 | [docs/rules/canvas.md](docs/rules/canvas.md) |
 | 新建或改造画布节点 | skill `canvas-node-builder` + 上面的 canvas.md |
 | 传递图片/视频/音频 URL 或路径、接入新媒体消费方、排查 `Failed to fetch` | [docs/rules/media-url.md](docs/rules/media-url.md) |
-| 新增供应商/模型、改参数 schema、改请求构建或轮询、核对 API 字段或价格 | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + [docs/model-adaptation/README.md](docs/model-adaptation/README.md)（API 与价格资料唯一来源）+ skill `henji-model-adaptation` |
+| 新增供应商/模型、改参数 schema、改请求构建或轮询、核对 API 字段或价格 | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + [packages/ai-sdk/docs/model-adaptation/README.md](packages/ai-sdk/docs/model-adaptation/README.md)（API 与价格资料唯一来源）+ skill `henji-model-adaptation` |
 | 新增/改造工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、权限、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability` |
 | 涉及网络请求、文件读写、长耗时任务、导入导出、状态流转、用户可见失败 | [docs/rules/logging.md](docs/rules/logging.md) |
 | 改动 `electron/main/**` 或 `electron/preload/**`、加 IPC、打包配置、自动更新 | [docs/rules/electron-desktop.md](docs/rules/electron-desktop.md) |
@@ -60,8 +60,8 @@ npm run assistant:live:suite -- --only camera --skip-generation
 
 这些对绝大多数任务都成立，细则见 [architecture.md](docs/rules/architecture.md)：
 
-1. **配置驱动**：模型行为写在 `src/models/**.model.ts` 的 schema 里，不是代码分支。需要模型特定行为时扩展 schema。
-2. **生成链路固定**：`GenerationService` → `commands/aiRuntime.ts` → `platform/` → preload → `electron/main/ipc/ai-runtime.ts` → `electron/main/services/ai-runtime/`。
+1. **配置驱动**：可移植的模型运行时行为写在 `packages/ai-sdk/src/catalog/**/*.model.ts` 的 schema 里；痕迹AI 专属文案、联动与面板展示补丁写在 `src/models/presentation/`。需要模型特定行为时扩展 schema，不在 UI 或宿主薄壳加模型分支。
+2. **生成链路固定**：`GenerationService` → `commands/aiRuntime.ts` → `platform/` → preload → `electron/main/ipc/ai-runtime.ts` → `electron/main/services/ai-runtime/` 宿主薄壳 → `@henjicc/ai-sdk` 的 client/catalog/provider/upload。Electron 侧只保留日志、落盘、取消、进度与 IPC 等宿主能力。
 3. **PAL 收口**：渲染层只通过 `src/platform/*`、`src/commands/*`、领域服务访问桌面能力。主进程保持 `contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。
 4. **禁止跨层导入**：组件 ✗→ 主进程/provider 实现；主进程 ✗→ `components/`；模型 ✗→ `services/`/`components/`。桥梁只用 `core/`、`commands/`、`platform/`。
 5. **前后端职责**：移除当前界面后仍然成立、仍需执行或可能被其他界面复用的逻辑，放后端或独立核心模块。不得因前端实现方便就把业务逻辑堆在前端。

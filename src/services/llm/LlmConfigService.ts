@@ -11,7 +11,7 @@ import {
   createDefaultLlmConfig,
 } from '@/core/llm/defaults'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
-import { applyLlmModelCatalogEntry, findLlmModelCatalogEntry } from '@/core/llm/modelCatalog'
+import { applyLlmModelCatalogEntry, findLlmModelCatalogEntry } from '@henjicc/ai-sdk'
 import type {
   AgentModelCapabilityVerification,
   AgentModelProfile,
@@ -23,7 +23,7 @@ import type {
   LlmReasoningConfig,
   LlmReasoningEffort,
   PromptOptimizationProfile,
-} from '@/core/llm/types'
+} from '@henjicc/ai-sdk'
 import { readJsonFromAppData, writeJsonToAppData } from '@/utils/save'
 import {
   normalizePromptProfile,

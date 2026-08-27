@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { catalog } from '@henjicc/ai-sdk'
 
 import {
   GENERATION_MODEL_DESCRIPTIONS,
@@ -6,27 +7,18 @@ import {
   hasGenerationModelDescription,
 } from './generationModelDescriptions'
 
-const modelSources = import.meta.glob('/src/models/**/*.model.ts', {
-  eager: true,
-  import: 'default',
-  query: '?raw',
-}) as Record<string, string>
-
 describe('generationModelDescriptions', () => {
   it('所有供应商模型都引用已登记的通用模型标识', () => {
-    expect(Object.keys(modelSources).length).toBeGreaterThan(0)
-    for (const [file, source] of Object.entries(modelSources)) {
-      const canonicalModelId = source.match(/canonicalModelId:\s*'([^']+)'/)?.[1]
-      expect(canonicalModelId, file).toBeTruthy()
-      expect(hasGenerationModelDescription(canonicalModelId ?? '')).toBe(true)
+    expect(catalog).toHaveLength(99)
+    for (const model of catalog) {
+      expect(model.meta.canonicalModelId, model.meta.id).toBeTruthy()
+      expect(hasGenerationModelDescription(model.meta.canonicalModelId), model.meta.id).toBe(true)
     }
   })
 
   it('供应商模型元数据不再直接声明 description', () => {
-    for (const [file, source] of Object.entries(modelSources)) {
-      const metaBeforeTags = source.match(/meta:\s*\{[\s\S]*?\n\s*tags:/)?.[0] ?? ''
-      expect(metaBeforeTags, file).toContain('canonicalModelId:')
-      expect(metaBeforeTags, file).not.toMatch(/\bdescription\s*:/)
+    for (const model of catalog) {
+      expect(model.meta, model.meta.id).not.toHaveProperty('description')
     }
   })
 

@@ -4,7 +4,7 @@ import type {
   ModelStepResult,
   ModelStepTool,
   ModelStepTraceMetadata,
-} from '../../../../../src/core/llm/modelStep'
+} from '@henjicc/ai-sdk'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentContextBuilder } from '../context/builder'
 import { AGENT_INTENTS, AGENT_TOOL_DOMAINS } from '../context/types'

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ModelStepInput } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepInput } from '@henjicc/ai-sdk'
 import { createScriptedModelStepExecutor } from './scripted-model-step'
 
 function createInput(): ModelStepInput {

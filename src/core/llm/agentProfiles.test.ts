@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { createDefaultAgentModelProfile, DEFAULT_LLM_CAPABILITIES } from './defaults'
 import { resolveAgentRoleReference, selectAgentExecutionModel, selectAgentObservationModel } from './agentProfiles'
-import type { AgentModelCapabilityVerification, LlmModelConfig } from './types'
+import type { AgentModelCapabilityVerification, LlmModelConfig } from '@henjicc/ai-sdk'
 
 function createVerification(providerId: string, modelId: string): AgentModelCapabilityVerification {
   return {

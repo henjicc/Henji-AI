@@ -1,7 +1,7 @@
 import React from 'react'
 import { Settings2, Sparkles } from 'lucide-react'
 import { UI_TEXT_SECTION_CLASS, UiButton, UiEmpty, UiOptionButton } from '@/components/ui'
-import type { PromptOptimizationProfile } from '@/core/llm/types'
+import type { PromptOptimizationProfile } from '@henjicc/ai-sdk'
 
 interface PromptOptimizationSelectorPanelProps {
   profiles: PromptOptimizationProfile[]

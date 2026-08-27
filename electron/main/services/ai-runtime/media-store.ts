@@ -1,8 +1,9 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
+import { AiRuntimeError } from '@henjicc/ai-sdk'
+
 import { getHenjiDataDir } from '../db'
-import { AiRuntimeError } from './errors'
 
 export async function saveMediaFromUrl(url: string): Promise<string | undefined> {
   if (!url.trim()) {

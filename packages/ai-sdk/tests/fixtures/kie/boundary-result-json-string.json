@@ -1,0 +1,25 @@
+{
+  "provider": "kie",
+  "modelId": "kie-seedance-2.0",
+  "scenario": "boundary-result-json-string",
+  "phase": "continuePolling",
+  "route": "/api/v1/jobs/createTask",
+  "taskId": "kie-fixture-task_003",
+  "notes": "resultJson 是 JSON 字符串，extractUrls 必须二次 JSON.parse 才能读到 resultUrls",
+  "response": {
+    "code": 200,
+    "success": true,
+    "data": {
+      "state": "success",
+      "resultJson": "{\"resultUrls\":[\"https://files.kie.ai/example/video-001.mp4\"]}"
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://files.kie.ai/example/video-001.mp4"
+  },
+  "source": {
+    "response": "结构对照 packages/ai-sdk/docs/model-adaptation/供应商/KIE.md §2.2；与 packages/ai-sdk/tests/providers/kie.test.ts 现有 'resultJson' 二次解析用例同构，URL 换成占位符"
+  }
+}

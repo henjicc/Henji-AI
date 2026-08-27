@@ -1,0 +1,25 @@
+{
+  "provider": "kie",
+  "modelId": "kie-gpt-image-2",
+  "scenario": "poll-failure",
+  "phase": "continuePolling",
+  "route": "/api/v1/jobs/createTask",
+  "taskId": "kie-fixture-task_002",
+  "response": {
+    "code": 200,
+    "success": true,
+    "data": {
+      "state": "fail",
+      "failCode": "CONTENT_POLICY",
+      "failMsg": "prompt violates content policy"
+    }
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "prompt violates content policy"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/KIE.md §2.2 字段表（data.state=fail / data.failCode / data.failMsg 的用途描述），具体报错文案为占位符示例"
+  }
+}

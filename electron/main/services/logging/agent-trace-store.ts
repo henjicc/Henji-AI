@@ -17,7 +17,7 @@ import {
   type AgentTraceStatus,
   type AgentTraceStepSummary,
 } from '../../../../src/core/assistant/trace'
-import { modelStepUsageSchema, type ModelStepUsage } from '../../../../src/core/llm/modelStep'
+import { modelStepUsageSchema, type ModelStepUsage } from '@henjicc/ai-sdk'
 import {
   sanitizeAgentTraceDetail,
   sanitizeAgentTraceValue,

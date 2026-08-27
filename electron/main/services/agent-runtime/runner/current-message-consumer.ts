@@ -1,5 +1,5 @@
 import { agentQueuedMessagePayloadSchema } from '../../../../../src/core/assistant/session'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import type { AgentRunnerDependencies } from './types'
 
 export class AgentCurrentMessageConsumer {

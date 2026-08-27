@@ -65,13 +65,13 @@
 
 ## 7. 文档交付
 
-调研结论一律落到 `docs/model-adaptation/`，这是项目**唯一的 API 与价格资料源**（旧的 `docs/api/` 已废弃删除，不要重建）。动手前先读 `docs/model-adaptation/文档采集手册.md`。
+调研结论一律落到 `packages/ai-sdk/docs/model-adaptation/`，这是项目**唯一的 API 与价格资料源**（旧的 `docs/api/` 与 `docs/model-adaptation/` 已废弃删除，不要重建）。动手前先读 `packages/ai-sdk/docs/model-adaptation/文档采集手册.md`。
 
 落盘位置与命名：
 
 ```
-docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md
-docs/model-adaptation/供应商/<供应商名>.md     # 供应商公共协议
+packages/ai-sdk/docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md
+packages/ai-sdk/docs/model-adaptation/供应商/<供应商名>.md     # 供应商公共协议
 ```
 
 - **供应商名**用项目内统一中文显示名（`src/i18n/locales/zh-CN/models.json` → `models.providers`）：派欧云 / Fal / 魔搭 / KIE / APIMart / 百炼 / 火山引擎。

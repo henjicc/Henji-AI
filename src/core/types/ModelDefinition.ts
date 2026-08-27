@@ -15,11 +15,21 @@ import type { Linkage } from './Linkage'
 import type { InputLimits } from './InputLimits'
 import type { GenerationRequirement } from './GenerationRequirements'
 import type { RuntimeConstraints } from './RuntimeConstraints'
+export type BuiltinModelType = 'image' | 'video' | 'audio'
+// eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 保留内置字面量补全，同时允许第三方扩展值。
+export type ModelType = BuiltinModelType | (string & {})
 
-/**
- * 模型类型
- */
-export type ModelType = 'image' | 'video' | 'audio'
+export type BuiltinProviderId =
+  | 'apimart'
+  | 'bailian'
+  | 'volcengine'
+  | 'ppio'
+  | 'kie'
+  | 'modelscope'
+  | 'fal'
+  | 'grsai'
+// eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 避免 `| string` 把 8 个内置 provider 字面量提示坍缩掉。
+export type ProviderId = BuiltinProviderId | (string & {})
 
 /**
  * Progress curve settings
@@ -153,11 +163,6 @@ export interface ProgressPollingConfig {
  * Progress config union
  */
 export type ProgressConfig = ProgressTimeConfig | ProgressPollingConfig
-
-/**
- * Provider ID
- */
-export type ProviderId = 'ppio' | 'fal' | 'kie' | 'modelscope' | string
 
 /**
  * 参数展示分区。

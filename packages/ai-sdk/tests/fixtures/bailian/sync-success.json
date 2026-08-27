@@ -1,0 +1,70 @@
+{
+  "provider": "bailian",
+  "modelId": "bailian-qwen-image-3.0",
+  "scenario": "sync-success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v1/services/aigc/multimodal-generation/generation",
+  "notes": "百炼同步图片模型没有独立的“创建/轮询”两阶段，execute() 一次请求直接返回 completed，用这一个场景同时覆盖“提交成功”与“结果解析成功”",
+  "params": {
+    "model": "qwen-image-3.0",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            { "image": "https://example.com/a.png" },
+            { "image": "https://example.com/b.png" },
+            { "image": "https://example.com/c.png" },
+            { "text": "edit" }
+          ]
+        }
+      ]
+    },
+    "parameters": { "n": 6, "size": "2728*1536", "prompt_extend": true, "watermark": false }
+  },
+  "expectedRequest": {
+    "url": "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+    "method": "POST",
+    "body": {
+      "model": "qwen-image-3.0",
+      "input": {
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              { "image": "https://example.com/a.png" },
+              { "image": "https://example.com/b.png" },
+              { "image": "https://example.com/c.png" },
+              { "text": "edit" }
+            ]
+          }
+        ]
+      },
+      "parameters": { "n": 6, "size": "2728*1536", "prompt_extend": true, "watermark": false }
+    }
+  },
+  "response": {
+    "output": {
+      "choices": [
+        {
+          "message": {
+            "role": "assistant",
+            "content": [{ "image": "https://dashscope-result.example.com/output/example-image.png" }]
+          },
+          "finish_reason": "stop"
+        }
+      ]
+    },
+    "usage": { "width": 2728, "height": 1536 }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://dashscope-result.example.com/output/example-image.png"
+  },
+  "source": {
+    "params": "packages/ai-sdk/tests/catalog/official-images.test.ts — '百炼 Qwen 使用同步多模态契约并限制输入与输出数量'（model/parameters 字段真实断言，content 数组长度=4 已由测试确认；content 内每项的具体键名按 DashScope 多模态消息契约补全）",
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/百炼.md §2.1（结果路径 output.choices[].message.content[].image 的文档描述），URL 为占位符"
+  }
+}

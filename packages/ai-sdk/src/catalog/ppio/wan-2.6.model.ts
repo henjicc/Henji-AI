@@ -1,0 +1,223 @@
+/**
+ * Wan 2.6 模型定义（运行时契约）
+ *
+ * 派欧云万象视频 2.6 - 支持文/图生视频、参考生视频
+ */
+
+import { defineModel } from '../defineModel'
+import { resolvePpioImageSources, resolvePpioPrimaryVideoSource, resolvePpioVideoSources } from './mediaSources'
+import type { JsonObject } from '../../types/runtime'
+
+export const wan26Model = defineModel({
+  meta: {
+    id: 'ppio-wan-2.6',
+    canonicalModelId: 'wan-2.6',
+    seriesId: 'wan',
+    seriesRank: 2.6,
+    provider: 'ppio',
+    type: 'video',
+    tags: ['text-to-video', 'image-to-video', 'reference-mode'],
+    polling: {
+      interval: 3000,
+      maxAttempts: 120,
+      expectedAttempts: 45
+    }
+  },
+  inputLimits: {
+    images: { max: 1 },
+    videos: { max: 0 },
+    rules: [
+      {
+        when: 'ppioWan26Mode === "reference-to-video"',
+        images: { max: 0 },
+        videos: { exact: 1 }
+      }
+    ]
+  },
+  requirements: [
+    {
+      id: 'wan-26-reference-video',
+      when: 'ppioWan26Mode === "reference-to-video"',
+      require: { videos: { exact: 1 } },
+      message: {
+        title: '视频必需',
+        message: '参考生视频模式需要上传视频才能生成',
+        type: 'warning'
+      }
+    }
+  ],
+
+  params: [
+    // 1. Mode selection
+    {
+      id: 'ppioWan26Mode',
+      type: 'dropdown',
+      order: 1,
+      default: 'text-image-to-video',
+      options: [
+        { value: 'text-image-to-video' },
+        { value: 'reference-to-video' }
+      ],
+      apiField: 'mode'
+    },
+
+    // 2. Aspect ratio parameter
+    {
+      id: 'ppioWan26AspectRatio',
+      type: 'dropdown',
+      order: 2,
+      default: '16:9',
+      options: [
+        { value: '16:9' },
+        { value: '9:16' },
+        { value: '1:1' },
+        { value: '4:3' },
+        { value: '3:4' }
+      ],
+      apiField: 'aspect_ratio'
+    },
+
+    // 3. Quality parameter
+    {
+      id: 'ppioWan26Quality',
+      type: 'dropdown',
+      order: 3,
+      default: '720P',
+      options: [
+        { value: '720P' },
+        { value: '1080P' }
+      ],
+      apiField: 'quality'
+    },
+
+    // 4. Duration parameter
+    {
+      id: 'ppioWan26VideoDuration',
+      type: 'dropdown',
+      order: 4,
+      default: 5,
+      options: [
+        { value: 5 },
+        { value: 10 },
+        { value: 15 }
+      ],
+      apiField: 'duration'
+    },
+
+    // 5. Shot type parameter
+    {
+      id: 'ppioWan26ShotType',
+      type: 'dropdown',
+      order: 5,
+      default: 'multi',
+      options: [
+        { value: 'multi' },
+        { value: 'single' }
+      ],
+      apiField: 'shot_type'
+    },
+
+    // 6. Audio parameter
+    {
+      id: 'ppioWan26Audio',
+      type: 'switch',
+      order: 6,
+      default: true,
+      apiField: 'audio'
+    },
+
+    // 7. Prompt extend parameter
+    {
+      id: 'ppioWan26PromptExtend',
+      type: 'switch',
+      order: 7,
+      default: true,
+      apiField: 'prompt_extend'
+    }
+  ],
+  endpoints: {
+    selector: async (params) => {
+      const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
+      const images = resolvePpioImageSources(params)
+
+      if (mode === 'reference-to-video') {
+        return '/async/wan2.6-v2v'
+      }
+      if (images.length > 0) {
+        return '/async/wan2.6-i2v'
+      }
+      return '/async/wan2.6-t2v'
+    }
+  },
+  request: {
+    builder: (params) => {
+      const mode = params.ppioWan26Mode || params.mode || 'text-image-to-video'
+      const images = resolvePpioImageSources(params)
+      const videos = resolvePpioVideoSources(params)
+      const video = resolvePpioPrimaryVideoSource(params) || videos[0]
+      const aspectRatio = params.ppioWan26AspectRatio || params.aspect_ratio || '16:9'
+      const quality = params.ppioWan26Quality || params.quality || '720P'
+      const duration = params.ppioWan26VideoDuration || params.duration || 5
+      const shotType = params.ppioWan26ShotType || params.shot_type || 'multi'
+      const audio = params.ppioWan26Audio !== undefined ? params.ppioWan26Audio : (params.audio !== undefined ? params.audio : true)
+      const promptExtend = params.ppioWan26PromptExtend !== undefined ? params.ppioWan26PromptExtend : (params.prompt_extend !== undefined ? params.prompt_extend : true)
+      const prompt = String(params.prompt || '').slice(0, 2000)
+
+      const resolutionMap: Record<string, Record<string, string>> = {
+        '16:9': { '720P': '1280*720', '1080P': '1920*1080' },
+        '9:16': { '720P': '720*1280', '1080P': '1080*1920' },
+        '1:1': { '720P': '960*960', '1080P': '1440*1440' },
+        '4:3': { '720P': '1088*832', '1080P': '1632*1248' },
+        '3:4': { '720P': '832*1088', '1080P': '1248*1632' }
+      }
+
+      const input: JsonObject = { prompt }
+      if (params.audio_url) {
+        input.audio_url = params.audio_url
+      }
+
+      if (mode === 'reference-to-video') {
+        if (video) {
+          input.reference_video_urls = [video]
+        }
+      } else if (images.length > 0) {
+        input.img_url = images[0]
+        if (params.template) {
+          input.template = params.template
+        }
+      }
+
+      const parameters: JsonObject = {
+        audio: audio as boolean,
+        duration: duration as number,
+        shot_type: shotType as string,
+        watermark: false,
+        prompt_extend: promptExtend as boolean
+      }
+
+      if (params.seed !== undefined) {
+        parameters.seed = params.seed
+      }
+
+      if (mode === 'reference-to-video' || images.length === 0) {
+        parameters.size = resolutionMap[aspectRatio as string]?.[quality as string] || '1280*720'
+      } else {
+        parameters.resolution = quality as string
+      }
+
+      return { input, parameters }
+    }
+  },
+  pricing: {
+    currency: '¥',
+    calculator: (params) => {
+      const duration = Number(params.ppioWan26VideoDuration) || 5
+      const quality = params.ppioWan26Quality || '720P'
+      const pricePerSecond = quality === '1080P' ? 1.0 : 0.6
+      return pricePerSecond * duration
+    },
+    description: '720P ¥0.6/秒，1080P ¥1.0/秒，按生成时长计费'
+  }
+})
+
+export default wan26Model

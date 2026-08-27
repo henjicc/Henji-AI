@@ -1,0 +1,22 @@
+{
+  "provider": "grsai",
+  "modelId": "grsai-gpt-image-2",
+  "scenario": "poll-success",
+  "phase": "continuePolling",
+  "route": "/v1/api/generate",
+  "taskId": "13-6114fc1f-0801-4b46-8eab-bd9ffcd5718b",
+  "response": {
+    "id": "13-6114fc1f-0801-4b46-8eab-bd9ffcd5718b",
+    "status": "succeeded",
+    "results": [{ "url": "https://file7.aitohumanize.com/file/EXAMPLE-RESULT-HASH.png" }],
+    "progress": 100
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://file7.aitohumanize.com/file/EXAMPLE-RESULT-HASH.png"
+  },
+  "source": {
+    "response": "真实开发日志 henji-2026-08-26.log，event=generation.runtime.response_json，requestId=continue-grsai-gpt-image-2-1787745943347（2026-08-26T12:06:44.713Z），taskId 与 create-task_success.json 对应；域名/路径结构原样保留，结果文件名哈希替换为占位符（原文件名本身即具备访问权限，视同签名标识处理）"
+  }
+}

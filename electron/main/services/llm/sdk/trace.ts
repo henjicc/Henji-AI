@@ -8,9 +8,12 @@ import {
   sanitizeAgentTraceHttpResponse,
   serializedBytes,
 } from '../../../../../src/core/assistant/traceSanitize'
-import type { ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
-import type { ModelStepHttpTrace } from './provider'
-import type { ModelStepStreamTrace } from './model-step'
+import type {
+  ModelStepHttpTrace,
+  ModelStepInput,
+  ModelStepResult,
+  ModelStepStreamTrace,
+} from '@henjicc/ai-sdk'
 
 export const AGENT_TRACE_DETAIL_MAX_BYTES = 8 * 1024 * 1024
 const AGENT_TRACE_CAPTURE_RESERVE_BYTES = 8 * 1024

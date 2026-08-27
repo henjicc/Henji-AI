@@ -1,5 +1,5 @@
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import type { ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepResult } from '@henjicc/ai-sdk'
 import type { AgentContextBuildResult } from '../context/types'
 import { isContextOverflowError } from '../context/semantic-compaction'
 import type { AgentConversationCompactor } from './conversation-compactor'

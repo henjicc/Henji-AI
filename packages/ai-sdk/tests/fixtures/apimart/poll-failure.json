@@ -1,0 +1,28 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-gpt-image-2",
+  "scenario": "poll-failure",
+  "phase": "continuePolling",
+  "route": "/v1/images/generations",
+  "taskId": "task_fixture_failed_001",
+  "response": {
+    "code": 200,
+    "data": {
+      "id": "task_fixture_failed_001",
+      "status": "failed",
+      "error": {
+        "code": "content_policy_violation",
+        "message": "prompt rejected by safety filter",
+        "type": "invalid_request_error"
+      }
+    }
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "prompt rejected by safety filter"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/APIMart.md §3.2 字段表（status=failed 时 error.code/message/type）+ §8 错误 type 枚举，报错文案为占位符示例"
+  }
+}

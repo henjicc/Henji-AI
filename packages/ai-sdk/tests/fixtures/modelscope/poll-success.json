@@ -1,0 +1,21 @@
+{
+  "provider": "modelscope",
+  "modelId": "modelscope-qwen-image-edit-2509",
+  "scenario": "poll-success",
+  "phase": "continuePolling",
+  "route": "/v1/images/generations",
+  "taskId": "modelscope-fixture-task_001",
+  "response": {
+    "task_id": "modelscope-fixture-task_001",
+    "task_status": "SUCCEED",
+    "output_images": ["https://modelscope-cdn.example.com/output/example-result.png"]
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://modelscope-cdn.example.com/output/example-result.png"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/魔搭.md §1（状态字段 task_status 枚举 SUCCEED，结果字段 output_images 字符串数组），URL 为占位符"
+  }
+}

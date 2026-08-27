@@ -7,7 +7,7 @@ import {
   UiButton,
   UiOptionButton,
 } from '@/components/ui'
-import type { TextProcessingPromptTemplate } from '@/core/llm/types'
+import type { TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
 import { TEXT_PROCESSING_CUSTOM_TEMPLATE_ID } from '@/features/canvas/application/textProcessing'
 import {
   NODE_CONTROL_CHIP_CLASS,

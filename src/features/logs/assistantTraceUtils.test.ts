@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { agentTraceDetailResultSchema } from '@/core/assistant/trace'
-import type { ModelStepMessage } from '@/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { buildAgentTraceDiff } from './assistantTraceUtils'
 
 const emptyUsage = {

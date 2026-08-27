@@ -6,7 +6,7 @@
 
 import { formatAspectRatioDisplayLabel } from '@/core/params/ratioResolution'
 import { getI18nText, type I18nText } from '@/core/types/I18nText'
-import { getModelscopeCustomModel } from '@/models/modelscope/customModelRegistry'
+import { getModelscopeCustomModel } from '@henjicc/ai-sdk'
 import { voiceLibraryService } from '@/services/voiceLibrary/VoiceLibraryService'
 
 export function resolvePanelWidth(config: DynamicValue, fallbackWidth: number): number {

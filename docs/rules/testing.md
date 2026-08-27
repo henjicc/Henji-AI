@@ -205,7 +205,7 @@ BENCH_MULT=4 npm run electron:pan-bench
 ### 模型 / 参数 schema
 
 ```bash
-npm run gen:model-manifest
+npm run gen:catalog
 npm run check:model-i18n
 ```
 

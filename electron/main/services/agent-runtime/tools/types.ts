@@ -11,7 +11,7 @@ import type {
   AgentToolSide,
 } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentApprovalMode } from '../../../../../src/core/assistant/runtimeContracts'
-import type { ModelStepTool } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepTool } from '@henjicc/ai-sdk'
 import type { ApplicationCapabilityDefinition } from '../../../../../src/core/assistant/applicationCapabilities'
 import type { ToolOutputLimitProfile } from './security'
 

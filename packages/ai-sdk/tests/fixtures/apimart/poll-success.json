@@ -1,0 +1,31 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-gpt-image-2",
+  "scenario": "poll-success",
+  "phase": "continuePolling",
+  "route": "/v1/images/generations",
+  "taskId": "task_01KA040M0HP1GJWBJYZMKX1XS1",
+  "response": {
+    "code": 200,
+    "data": {
+      "id": "task_01KA040M0HP1GJWBJYZMKX1XS1",
+      "status": "completed",
+      "cost": 0.15,
+      "credits_cost": 1.5,
+      "progress": 100,
+      "result": { "images": [{ "url": ["https://upload.apimart.ai/f/image/example-result.png"], "expires_at": 1763174708 }] },
+      "created": 1763088289,
+      "completed": 1763088308,
+      "estimated_time": 60,
+      "actual_time": 19
+    }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://upload.apimart.ai/f/image/example-result.png"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/APIMart.md §3.2 轮询响应代码块，逐字段照搬（含 images[].url 为数组这一真实文档细节），结果文件名换成占位符"
+  }
+}

@@ -1,6 +1,6 @@
 import { createMainLogger } from '../../logging'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import type { ModelStepMessage, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage, ModelStepResult } from '@henjicc/ai-sdk'
 import {
   AGENT_KEEP_RECENT_TOKENS,
   compactConversationMessages,

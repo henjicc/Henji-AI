@@ -1,0 +1,23 @@
+{
+  "provider": "ppio",
+  "modelId": "ppio-kling-3.0",
+  "scenario": "poll-failure",
+  "phase": "continuePolling",
+  "route": "/async/kling-v3.0-std-t2v",
+  "taskId": "ppio-fixture-task_failed",
+  "response": {
+    "task": {
+      "task_id": "ppio-fixture-task_failed",
+      "status": "TASK_STATUS_FAILED",
+      "reason": "input image resolution too low"
+    }
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "input image resolution too low"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/派欧云.md §1（状态枚举 TASK_STATUS_FAILED）；失败原因字段路径参照 packages/ai-sdk/src/providers/ppio.ts 的 extractTaskFailureReason 指针列表（/task/reason 等），报错文案为占位符示例"
+  }
+}

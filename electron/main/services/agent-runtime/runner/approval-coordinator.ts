@@ -4,7 +4,7 @@ import type {
   AgentRunState,
   AgentRunStatus,
 } from '../../../../../src/core/assistant/events'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentToolGateway } from '../tools/gateway'
 import { AgentApprovalWaiter } from './approval-waiter'
 import { logApprovalExpired, logApprovalRequested, logApprovalResolved } from './approval-logging'

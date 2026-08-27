@@ -70,7 +70,7 @@ import { llmConfigService } from '@/services/llm/LlmConfigService'
 import { showAlertDialog } from '@/stores/alertDialogStore'
 import { UiSwitch } from '@/components/ui'
 import { useCanvasStore } from '@/stores/canvasStore'
-import type { LlmConfigState } from '@/core/llm/types'
+import type { LlmConfigState } from '@henjicc/ai-sdk'
 
 const TextProcessingIcon = ICON_NODE_TEXT_PROCESSING
 const logger = createLogger('features.canvas.text_processing')

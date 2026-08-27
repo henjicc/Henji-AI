@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { catalog } from '@henjicc/ai-sdk'
 
 import {
   applicationSchemaRefSchema,
   toApplicationStableIdSegment,
 } from '@/core/application-control'
 import { registry } from '@/core/ModelRegistry'
+import { composeModelDefinition } from '@/core/composeModelDefinition'
 import type { ModelDefinition } from '@/core/types'
+import { modelPresentations } from '@/models/presentation'
 
 import {
   GenerationPreparationError,
@@ -196,11 +198,14 @@ describe('generationPreparation', () => {
   })
 
   it('KIE Z-Image 比例配置与供应商接口文档保持一致', () => {
-    const source = readFileSync('src/models/kie/z-image.model.ts', 'utf8')
-    expect(source).toContain("{ value: '4:3', label: '4:3' }")
-    expect(source).toContain("{ value: '3:4', label: '3:4' }")
-    expect(source).toContain("{ value: '16:9', label: '16:9' }")
-    expect(source).toContain("{ value: '9:16', label: '9:16' }")
-    expect(source).not.toContain("{ value: '2:3', label: '2:3' }")
+    const runtimeModel = catalog.find((model) => model.meta.id === 'kie-z-image')
+    expect(runtimeModel).toBeTruthy()
+    const model = composeModelDefinition(runtimeModel!, modelPresentations['kie-z-image'])
+    const aspectRatio = model.params.find((param) => param.id === 'kieZImageAspectRatio')
+    expect(aspectRatio?.type).toBe('dropdown')
+    const values = aspectRatio?.type === 'dropdown'
+      ? aspectRatio.options.map((option) => option.value)
+      : []
+    expect(values).toEqual(['smart', '1:1', '4:3', '3:4', '16:9', '9:16'])
   })
 })

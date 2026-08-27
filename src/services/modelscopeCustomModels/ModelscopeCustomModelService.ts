@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import { replaceModelscopeCustomModels } from '@/models/modelscope/customModelRegistry'
+import { replaceModelscopeCustomModels } from '@henjicc/ai-sdk'
 import { databaseService } from '@/services/database'
 import type { CustomModelRecord } from '@/services/database'
 

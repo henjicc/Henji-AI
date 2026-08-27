@@ -29,12 +29,12 @@
 
 - 核心关注：文本到语音、音色与音频编码配置。
 - 常见参数：`spec/voice/speed/volume/pitch/sampleRate/format`。
-- 当前仓库基线：`src/models/ppio/minimax-speech.model.ts`（当前 canonical model 为 MiniMax Speech 2.8）。
+- 当前仓库基线：`packages/ai-sdk/src/catalog/ppio/minimax-speech.model.ts`（当前 canonical model 为 MiniMax Speech 2.8）。
 
 ## 上传与媒体处理注意点
 
 - 并非所有供应商都接受同一种媒体输入（URL/data URI/base64）。
-- 若模型要求公网 URL，优先确认 `electron/main/services/ai-runtime/upload.ts` 与 `electron/main/services/ai-runtime/upload-providers.ts` 是否已覆盖。
+- 若模型要求公网 URL，优先确认 `packages/ai-sdk/src/upload/preprocess.ts` 与 `packages/ai-sdk/src/upload/providers.ts` 是否已覆盖。
 
 ## 实操建议
 
@@ -42,6 +42,6 @@
 - 模式复杂的视频模型，优先先做“单模式跑通”，再扩展多模式。
 - 音频模型不要沿用视频的参数顺序与交互假设。
 - 现有归并参考：
-  - 图片自动切换：`src/models/fal/nano-banana.model.ts`、`src/models/kie/nano-banana-pro.model.ts`
-  - 视频显式 mode：`src/models/fal/kling-video-o1.model.ts`
-  - 视频多端点显式 mode：`src/models/ppio/wan-2.7.model.ts`、`src/models/fal/kling-video-v2.6-pro.model.ts`
+  - 图片自动切换：`packages/ai-sdk/src/catalog/fal/nano-banana.model.ts`、`packages/ai-sdk/src/catalog/kie/nano-banana-pro.model.ts`
+  - 视频显式 mode：`packages/ai-sdk/src/catalog/fal/kling-video-o1.model.ts`
+  - 视频多端点显式 mode：`packages/ai-sdk/src/catalog/ppio/wan-2.7.model.ts`、`packages/ai-sdk/src/catalog/fal/kling-video-v2.6-pro.model.ts`

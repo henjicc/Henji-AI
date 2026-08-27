@@ -1,6 +1,6 @@
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentMemoryContextEntry } from '../../../../../src/core/assistant/memory'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { estimateAgentTextTokens } from '../../../../../src/core/assistant/tokenEstimate'
 import { AgentArtifactStore, resolveToolOffloadByteThreshold, shouldOffloadObservation } from './offload'
 import { sanitizeObservationValue } from './sanitize'

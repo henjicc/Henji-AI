@@ -1,0 +1,1317 @@
+[
+  {
+    "id": "apimart-gemini-omni-flash",
+    "canonicalModelId": "gemini-omni-video",
+    "aliases": [
+      "gemini-omni-flash-apimart",
+      "apimart-gemini-omni-flash-ext",
+      "omni-flash-ext",
+      "gemini-omni-flash-ext-apimart"
+    ],
+    "params": [
+      "apimartGeminiOmniFlashChannel",
+      "apimartGeminiOmniFlashAspectRatio",
+      "apimartGeminiOmniFlashResolution",
+      "apimartGeminiOmniFlashOfficialDuration",
+      "apimartGeminiOmniFlashExtDuration",
+      "apimartGeminiOmniFlashGenerationType",
+      "apimartGeminiOmniFlashExtendTaskId"
+    ]
+  },
+  {
+    "id": "apimart-gpt-image-2",
+    "canonicalModelId": "gpt-image-2",
+    "aliases": [
+      "gpt-image-2-apimart",
+      "apimart-gpt-image-2-official",
+      "gpt-image-2-official-apimart"
+    ],
+    "params": [
+      "apimartGptImage2Version",
+      "apimartGptImage2AspectRatio",
+      "apimartGptImage2Resolution",
+      "apimartGptImage2Quality",
+      "apimartGptImage2Background",
+      "apimartGptImage2Count",
+      "apimartGptImage2MaskUrl"
+    ]
+  },
+  {
+    "id": "apimart-grok-imagine-2.0",
+    "canonicalModelId": "grok-imagine-image-2.0",
+    "aliases": [
+      "grok-imagine-2-apimart",
+      "apimart-grok-imagine-2.0-official",
+      "grok-imagine-image-2-official-apimart"
+    ],
+    "params": [
+      "apimartGrokImagine20Version",
+      "apimartGrokImagine20AspectRatio",
+      "apimartGrokImagine20Resolution",
+      "apimartGrokImagine20Quality",
+      "apimartGrokImagine20Count"
+    ]
+  },
+  {
+    "id": "apimart-kling-3.0",
+    "canonicalModelId": "kling-video-3.0",
+    "aliases": [
+      "kling-v3-apimart"
+    ],
+    "params": [
+      "apimartKling30AspectRatio",
+      "apimartKling30Resolution",
+      "apimartKling30Duration",
+      "apimartKling30Audio"
+    ]
+  },
+  {
+    "id": "apimart-kling-3.0-omni",
+    "canonicalModelId": "kling-video-3.0-omni",
+    "aliases": [
+      "kling-v3-omni-apimart"
+    ],
+    "params": [
+      "apimartKling30OmniMode",
+      "apimartKling30OmniAspectRatio",
+      "apimartKling30OmniResolution",
+      "apimartKling30OmniDuration",
+      "apimartKling30OmniAudio",
+      "apimartKling30OmniKeepOriginalSound",
+      "apimartKling30OmniVideoReferenceType"
+    ]
+  },
+  {
+    "id": "apimart-kling-3.0-turbo",
+    "canonicalModelId": "kling-video-3.0-turbo",
+    "aliases": [
+      "kling-3-turbo-apimart"
+    ],
+    "params": [
+      "apimartKling30TurboAspectRatio",
+      "apimartKling30TurboResolution",
+      "apimartKling30TurboDuration"
+    ]
+  },
+  {
+    "id": "apimart-midjourney",
+    "canonicalModelId": "midjourney",
+    "aliases": [
+      "midjourney-apimart",
+      "apimart-midjourney-edit",
+      "midjourney-edit-apimart",
+      "midjourney-edits-apimart",
+      "apimart-midjourney-blend",
+      "midjourney-blend-apimart"
+    ],
+    "params": [
+      "apimartMidjourneyMode",
+      "apimartMidjourneyAspectRatio",
+      "apimartMidjourneySpeed",
+      "apimartMidjourneyQuality",
+      "apimartMidjourneyRepeat",
+      "apimartMidjourneyVersion",
+      "apimartMidjourneyNiji",
+      "apimartMidjourneyStylize",
+      "apimartMidjourneyChaos",
+      "apimartMidjourneyWeird",
+      "apimartMidjourneyImageWeight",
+      "apimartMidjourneyTile",
+      "apimartMidjourneyRaw",
+      "apimartMidjourneyDraft",
+      "apimartMidjourneyHd",
+      "apimartMidjourneyCharacterReference",
+      "apimartMidjourneyStyleReference",
+      "apimartMidjourneyDepthReference",
+      "apimartMidjourneyCharacterWeight",
+      "apimartMidjourneyStyleWeight",
+      "apimartMidjourneyDepthWeight",
+      "apimartMidjourneyStop",
+      "apimartMidjourneyExtra"
+    ]
+  },
+  {
+    "id": "apimart-midjourney-video",
+    "canonicalModelId": "midjourney-video",
+    "aliases": [
+      "midjourney-video-apimart"
+    ],
+    "params": [
+      "apimartMidjourneyVideoTaskId",
+      "apimartMidjourneyVideoIndex",
+      "apimartMidjourneyVideoResolution",
+      "apimartMidjourneyVideoAnimateMode",
+      "apimartMidjourneyVideoMotion",
+      "apimartMidjourneyVideoBatchSize"
+    ]
+  },
+  {
+    "id": "apimart-minimax-h3",
+    "canonicalModelId": "minimax-h3",
+    "aliases": [
+      "minimax-h3-apimart"
+    ],
+    "params": [
+      "apimartMiniMaxH3Mode",
+      "apimartMiniMaxH3AspectRatio",
+      "apimartMiniMaxH3Resolution",
+      "apimartMiniMaxH3Duration"
+    ]
+  },
+  {
+    "id": "apimart-nano-banana-2",
+    "canonicalModelId": "nano-banana-2",
+    "aliases": [
+      "nano-banana-2-apimart"
+    ],
+    "params": [
+      "apimartNanoBanana2AspectRatio",
+      "apimartNanoBanana2Resolution",
+      "apimartNanoBanana2GoogleSearch",
+      "apimartNanoBanana2GoogleImageSearch"
+    ]
+  },
+  {
+    "id": "apimart-nano-banana-2-lite",
+    "canonicalModelId": "nano-banana-2-lite",
+    "aliases": [
+      "nano-banana-2-lite-apimart"
+    ],
+    "params": [
+      "apimartNanoBanana2LiteAspectRatio",
+      "apimartNanoBanana2LiteCount"
+    ]
+  },
+  {
+    "id": "apimart-nano-banana-pro",
+    "canonicalModelId": "nano-banana-pro",
+    "aliases": [
+      "nano-banana-pro-apimart"
+    ],
+    "params": [
+      "apimartNanoBananaProAspectRatio",
+      "apimartNanoBananaProResolution"
+    ]
+  },
+  {
+    "id": "apimart-qwen-image-3.0",
+    "canonicalModelId": "qwen-image-3.0",
+    "aliases": [
+      "qwen-image-3-apimart"
+    ],
+    "params": [
+      "apimartQwenImage30Variant",
+      "apimartQwenImage30AspectRatio",
+      "apimartQwenImage30Resolution",
+      "apimartQwenImage30Count",
+      "apimartQwenImage30PromptExtend"
+    ]
+  },
+  {
+    "id": "apimart-seedance-2.0",
+    "canonicalModelId": "seedance-2.0",
+    "aliases": [
+      "seedance-2-apimart"
+    ],
+    "params": [
+      "apimartSeedance20Mode",
+      "apimartSeedance20AspectRatio",
+      "apimartSeedance20Resolution",
+      "apimartSeedance20Duration",
+      "apimartSeedance20GenerateAudio",
+      "apimartSeedance20ReturnLastFrame",
+      "apimartSeedance20WebSearch"
+    ]
+  },
+  {
+    "id": "apimart-seedance-2.0-fast",
+    "canonicalModelId": "seedance-2.0-fast",
+    "aliases": [
+      "seedance-2-fast-apimart"
+    ],
+    "params": [
+      "apimartSeedance20FastMode",
+      "apimartSeedance20FastAspectRatio",
+      "apimartSeedance20FastResolution",
+      "apimartSeedance20FastDuration",
+      "apimartSeedance20FastGenerateAudio",
+      "apimartSeedance20FastReturnLastFrame",
+      "apimartSeedance20FastWebSearch"
+    ]
+  },
+  {
+    "id": "apimart-seedance-2.0-mini",
+    "canonicalModelId": "seedance-2.0-mini",
+    "aliases": [
+      "seedance-2-mini-apimart"
+    ],
+    "params": [
+      "apimartSeedance20MiniMode",
+      "apimartSeedance20MiniAspectRatio",
+      "apimartSeedance20MiniResolution",
+      "apimartSeedance20MiniDuration",
+      "apimartSeedance20MiniGenerateAudio",
+      "apimartSeedance20MiniReturnLastFrame",
+      "apimartSeedance20MiniWebSearch"
+    ]
+  },
+  {
+    "id": "apimart-seedance-2.5",
+    "canonicalModelId": "seedance-2.5",
+    "aliases": [
+      "seedance-2-5-apimart"
+    ],
+    "params": [
+      "apimartSeedance25Mode",
+      "apimartSeedance25TaskType",
+      "apimartSeedance25AspectRatio",
+      "apimartSeedance25Resolution",
+      "apimartSeedance25Duration",
+      "apimartSeedance25AutoDuration",
+      "apimartSeedance25GenerateAudio",
+      "apimartSeedance25ReturnLastFrame",
+      "apimartSeedance25WebSearch"
+    ]
+  },
+  {
+    "id": "apimart-seedream-5.0-lite",
+    "canonicalModelId": "seedream-5.0-lite",
+    "aliases": [
+      "seedream-5-lite-apimart"
+    ],
+    "params": [
+      "apimartSeedream50LiteAspectRatio",
+      "apimartSeedream50LiteResolution",
+      "apimartSeedream50LiteCount"
+    ]
+  },
+  {
+    "id": "apimart-seedream-5.0-pro",
+    "canonicalModelId": "seedream-5.0-pro",
+    "aliases": [
+      "seedream-5-pro-apimart"
+    ],
+    "params": [
+      "apimartSeedream50ProMode",
+      "apimartSeedream50ProAspectRatio",
+      "apimartSeedream50ProResolution",
+      "apimartSeedream50ProLayerSize",
+      "apimartSeedream50ProBackground"
+    ]
+  },
+  {
+    "id": "apimart-z-image-turbo",
+    "canonicalModelId": "z-image-turbo",
+    "aliases": [
+      "z-image-turbo-apimart"
+    ],
+    "params": [
+      "apimartZImageTurboAspectRatio",
+      "apimartZImageTurboResolution",
+      "apimartZImageTurboPromptExtend"
+    ]
+  },
+  {
+    "id": "bailian-qwen-image-3.0",
+    "canonicalModelId": "qwen-image-3.0",
+    "aliases": [
+      "qwen-image-3-official"
+    ],
+    "params": [
+      "bailianQwenImage30Variant",
+      "bailianQwenImage30AspectRatio",
+      "bailianQwenImage30Resolution",
+      "bailianQwenImage30Count"
+    ]
+  },
+  {
+    "id": "bailian-z-image-turbo",
+    "canonicalModelId": "z-image-turbo",
+    "aliases": [
+      "z-image-turbo-official"
+    ],
+    "params": [
+      "bailianZImageTurboAspectRatio",
+      "bailianZImageTurboResolution",
+      "bailianZImageTurboPromptExtend"
+    ]
+  },
+  {
+    "id": "black-forest-labs/FLUX.1-Krea-dev",
+    "canonicalModelId": "flux-1-krea-dev",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "fal-ai-bytedance-seedance-v1",
+    "canonicalModelId": "seedance-v1",
+    "aliases": [
+      "fal-ai-bytedance-seedance",
+      "bytedance-seedance-v1"
+    ],
+    "params": [
+      "falSeedanceV1Mode",
+      "falSeedanceV1AspectRatio",
+      "falSeedanceV1Resolution",
+      "falSeedanceV1VideoDuration",
+      "falSeedanceV1CameraFixed",
+      "falSeedanceV1FastMode"
+    ]
+  },
+  {
+    "id": "fal-ai-bytedance-seedream-v4",
+    "canonicalModelId": "seedream-4.0",
+    "aliases": [],
+    "params": [
+      "falSeedreamV4AspectRatio",
+      "falSeedreamV4Resolution",
+      "falSeedream40NumImages"
+    ]
+  },
+  {
+    "id": "fal-ai-bytedance-seedream-v4.5",
+    "canonicalModelId": "seedream-4.5",
+    "aliases": [],
+    "params": [
+      "falSeedreamV45AspectRatio",
+      "falSeedreamV45Resolution",
+      "falSeedream45NumImages"
+    ]
+  },
+  {
+    "id": "fal-ai-gemini-omni-flash",
+    "canonicalModelId": "gemini-omni-video",
+    "aliases": [
+      "gemini-omni-flash-fal"
+    ],
+    "params": [
+      "falGeminiOmniFlashMode",
+      "falGeminiOmniFlashAspectRatio",
+      "falGeminiOmniFlashResolution",
+      "falGeminiOmniFlashDuration"
+    ]
+  },
+  {
+    "id": "fal-ai-gpt-image-2",
+    "canonicalModelId": "gpt-image-2",
+    "aliases": [
+      "gpt-image-2-fal"
+    ],
+    "params": [
+      "falGptImage2AspectRatio",
+      "falGptImage2Resolution",
+      "falGptImage2NumImages",
+      "falGptImage2MaskUrl"
+    ]
+  },
+  {
+    "id": "fal-ai-grok-imagine-2.0",
+    "canonicalModelId": "grok-imagine-image-2.0",
+    "aliases": [
+      "grok-imagine-image-2-fal"
+    ],
+    "params": [
+      "falGrokImagine20AspectRatio",
+      "falGrokImagine20Resolution",
+      "falGrokImagine20Quality",
+      "falGrokImagine20NumImages"
+    ]
+  },
+  {
+    "id": "fal-ai-kling-3.0",
+    "canonicalModelId": "kling-video-3.0",
+    "aliases": [
+      "kling-v3-fal"
+    ],
+    "params": [
+      "falKling30AspectRatio",
+      "falKling30Resolution",
+      "falKling30Duration",
+      "falKling30GenerateAudio"
+    ]
+  },
+  {
+    "id": "fal-ai-kling-3.0-omni",
+    "canonicalModelId": "kling-video-3.0-omni",
+    "aliases": [
+      "kling-o3-fal"
+    ],
+    "params": [
+      "falKling30OmniMode",
+      "falKling30OmniAspectRatio",
+      "falKling30OmniResolution",
+      "falKling30OmniDuration",
+      "falKling30OmniGenerateAudio"
+    ]
+  },
+  {
+    "id": "fal-ai-kling-3.0-turbo",
+    "canonicalModelId": "kling-video-3.0-turbo",
+    "aliases": [
+      "kling-v3-turbo-fal"
+    ],
+    "params": [
+      "falKling30TurboAspectRatio",
+      "falKling30TurboResolution",
+      "falKling30TurboDuration"
+    ]
+  },
+  {
+    "id": "fal-ai-kling-image-o1",
+    "canonicalModelId": "kling-image-o1",
+    "aliases": [],
+    "params": [
+      "falKlingImageO1NumImages",
+      "falKlingImageO1AspectRatio",
+      "falKlingImageO1Resolution"
+    ]
+  },
+  {
+    "id": "fal-ai-kling-video-o1",
+    "canonicalModelId": "kling-video-o1",
+    "aliases": [],
+    "params": [
+      "falKlingVideoO1Mode",
+      "falKlingVideoO1VideoDuration",
+      "falKlingVideoO1AspectRatio",
+      "falKlingVideoO1KeepAudio"
+    ]
+  },
+  {
+    "id": "fal-ai-kling-video-v2.6-pro",
+    "canonicalModelId": "kling-video-2.6-pro",
+    "aliases": [],
+    "params": [
+      "falKlingV26ProMode",
+      "falKlingV26ProResolution",
+      "falKlingV26ProCharacterOrientation",
+      "falKlingV26ProKeepOriginalSound",
+      "falKlingV26ProVideoDuration",
+      "falKlingV26ProAspectRatio",
+      "falKlingV26ProCfgScale",
+      "falKlingV26ProGenerateAudio"
+    ]
+  },
+  {
+    "id": "fal-ai-ltx-2",
+    "canonicalModelId": "ltx-2",
+    "aliases": [],
+    "params": [
+      "falLtx2Mode",
+      "falLtx2Resolution",
+      "falLtx2VideoDuration",
+      "falLtx2RetakeDuration",
+      "falLtx2Fps",
+      "falLtx2GenerateAudio",
+      "falLtx2FastMode",
+      "falLtx2RetakeStartTime",
+      "falLtx2RetakeMode"
+    ]
+  },
+  {
+    "id": "fal-ai-minimax-h3",
+    "canonicalModelId": "minimax-h3",
+    "aliases": [
+      "minimax-h3-fal"
+    ],
+    "params": [
+      "falMiniMaxH3Mode",
+      "falMiniMaxH3AspectRatio",
+      "falMiniMaxH3Resolution",
+      "falMiniMaxH3Duration",
+      "falMiniMaxH3PromptExpansion",
+      "falMiniMaxH3PromptExpansionMode"
+    ]
+  },
+  {
+    "id": "fal-ai-minimax-hailuo-02",
+    "canonicalModelId": "hailuo-02",
+    "aliases": [
+      "fal-ai-hailuo-02",
+      "minimax-hailuo-02-fal"
+    ],
+    "params": [
+      "falHailuo02Version",
+      "falHailuo02Duration",
+      "falHailuo02Resolution",
+      "falHailuo02FastMode",
+      "falHailuo02PromptOptimizer"
+    ]
+  },
+  {
+    "id": "fal-ai-minimax-hailuo-2.3",
+    "canonicalModelId": "hailuo-2.3",
+    "aliases": [
+      "fal-ai-hailuo-2.3",
+      "minimax-hailuo-2.3-fal"
+    ],
+    "params": [
+      "falHailuo23Version",
+      "falHailuo23Duration",
+      "falHailuo23FastMode",
+      "falHailuo23PromptOptimizer"
+    ]
+  },
+  {
+    "id": "fal-ai-nano-banana",
+    "canonicalModelId": "nano-banana",
+    "aliases": [],
+    "params": [
+      "falNanoBananaNumImages",
+      "falNanoBananaAspectRatio"
+    ]
+  },
+  {
+    "id": "fal-ai-nano-banana-2",
+    "canonicalModelId": "nano-banana-2",
+    "aliases": [
+      "nano-banana-2-fal"
+    ],
+    "params": [
+      "falNanoBanana2AspectRatio",
+      "falNanoBanana2Resolution",
+      "falNanoBanana2NumImages",
+      "falNanoBanana2WebSearch",
+      "falNanoBanana2Thinking",
+      "falNanoBanana2PdfUrl"
+    ]
+  },
+  {
+    "id": "fal-ai-nano-banana-pro",
+    "canonicalModelId": "nano-banana-pro",
+    "aliases": [
+      "nano-banana-pro-fal"
+    ],
+    "params": [
+      "falNanoBananaProAspectRatio",
+      "falNanoBananaProResolution",
+      "falNanoBananaProNumImages",
+      "falNanoBananaProWebSearch"
+    ]
+  },
+  {
+    "id": "fal-ai-pixverse-v5.5",
+    "canonicalModelId": "pixverse-v5.5",
+    "aliases": [],
+    "params": [
+      "pixverseAspectRatio",
+      "pixverseResolution",
+      "falPixverse55VideoDuration",
+      "pixverseStyle",
+      "pixverseThinkingType",
+      "pixverseGenerateAudio",
+      "pixverseMultiClip"
+    ]
+  },
+  {
+    "id": "fal-ai-qwen-image-3.0",
+    "canonicalModelId": "qwen-image-3.0",
+    "aliases": [
+      "qwen-image-3-fal"
+    ],
+    "params": [
+      "falQwenImage30AspectRatio",
+      "falQwenImage30Resolution",
+      "falQwenImage30NumImages",
+      "falQwenImage30PromptExpansion"
+    ]
+  },
+  {
+    "id": "fal-ai-seedance-2.0",
+    "canonicalModelId": "seedance-2.0",
+    "aliases": [
+      "seedance-2-fal"
+    ],
+    "params": [
+      "falSeedance20Mode",
+      "falSeedance20AspectRatio",
+      "falSeedance20Resolution",
+      "falSeedance20Duration",
+      "falSeedance20GenerateAudio",
+      "falSeedance20Bitrate"
+    ]
+  },
+  {
+    "id": "fal-ai-seedance-2.0-fast",
+    "canonicalModelId": "seedance-2.0-fast",
+    "aliases": [
+      "seedance-2-fast-fal"
+    ],
+    "params": [
+      "falSeedance20FastMode",
+      "falSeedance20FastAspectRatio",
+      "falSeedance20FastResolution",
+      "falSeedance20FastDuration",
+      "falSeedance20FastGenerateAudio",
+      "falSeedance20FastBitrate"
+    ]
+  },
+  {
+    "id": "fal-ai-seedance-2.0-mini",
+    "canonicalModelId": "seedance-2.0-mini",
+    "aliases": [
+      "seedance-2-mini-fal"
+    ],
+    "params": [
+      "falSeedance20MiniMode",
+      "falSeedance20MiniAspectRatio",
+      "falSeedance20MiniResolution",
+      "falSeedance20MiniDuration",
+      "falSeedance20MiniGenerateAudio"
+    ]
+  },
+  {
+    "id": "fal-ai-seedance-2.5",
+    "canonicalModelId": "seedance-2.5",
+    "aliases": [
+      "seedance-2-5-fal"
+    ],
+    "params": [
+      "falSeedance25Mode",
+      "falSeedance25AspectRatio",
+      "falSeedance25Resolution",
+      "falSeedance25Duration",
+      "falSeedance25AutoDuration",
+      "falSeedance25GenerateAudio",
+      "falSeedance25Bitrate"
+    ]
+  },
+  {
+    "id": "fal-ai-seedream-5.0-lite",
+    "canonicalModelId": "seedream-5.0-lite",
+    "aliases": [
+      "seedream-5-lite-fal"
+    ],
+    "params": [
+      "falSeedream50LiteAspectRatio",
+      "falSeedream50LiteResolution",
+      "falSeedream50LiteNumImages",
+      "falSeedream50LiteMaxImages"
+    ]
+  },
+  {
+    "id": "fal-ai-seedream-5.0-pro",
+    "canonicalModelId": "seedream-5.0-pro",
+    "aliases": [
+      "seedream-5-pro-fal"
+    ],
+    "params": [
+      "falSeedream50ProAspectRatio",
+      "falSeedream50ProResolution",
+      "falSeedream50ProNumImages"
+    ]
+  },
+  {
+    "id": "fal-ai-veo-3.1",
+    "canonicalModelId": "veo-3.1",
+    "aliases": [],
+    "params": [
+      "falVeo31Mode",
+      "falVeo31VideoDuration",
+      "falVeo31AspectRatio",
+      "falVeo31Resolution",
+      "falVeo31GenerateAudio",
+      "falVeo31AutoFix",
+      "falVeo31FastMode",
+      "falVeo31EnhancePrompt"
+    ]
+  },
+  {
+    "id": "fal-ai-vidu-q2",
+    "canonicalModelId": "vidu-q2",
+    "aliases": [],
+    "params": [
+      "viduQ2Mode",
+      "falViduQ2VideoDuration",
+      "viduQ2AspectRatio",
+      "viduQ2Resolution",
+      "viduQ2MovementAmplitude",
+      "viduQ2Bgm",
+      "viduQ2FastMode"
+    ]
+  },
+  {
+    "id": "fal-ai-wan-25-preview",
+    "canonicalModelId": "wan-2.5-preview",
+    "aliases": [
+      "fal-ai-wan-2.5-preview",
+      "wan-25-preview"
+    ],
+    "params": [
+      "falWan25VideoDuration",
+      "falWan25AspectRatio",
+      "falWan25Resolution",
+      "falWan25PromptExpansion"
+    ]
+  },
+  {
+    "id": "fal-ai-z-image-turbo",
+    "canonicalModelId": "z-image-turbo",
+    "aliases": [
+      "z-image-turbo-fal"
+    ],
+    "params": [
+      "falZImageTurboAspectRatio",
+      "falZImageTurboResolution",
+      "falZImageTurboNumImages",
+      "falZImageTurboNumInferenceSteps",
+      "falZImageTurboAcceleration",
+      "falZImageTurboPromptExpansion",
+      "falZImageTurboStrength"
+    ]
+  },
+  {
+    "id": "grsai-gpt-image-2",
+    "canonicalModelId": "gpt-image-2",
+    "aliases": [
+      "gpt-image-2-grsai"
+    ],
+    "params": [
+      "grsaiGptImage2Channel",
+      "grsaiGptImage2AspectRatio",
+      "grsaiGptImage2Resolution"
+    ]
+  },
+  {
+    "id": "grsai-nano-banana-2",
+    "canonicalModelId": "nano-banana-2",
+    "aliases": [
+      "nano-banana-2-grsai"
+    ],
+    "params": [
+      "grsaiNanoBanana2Channel",
+      "grsaiNanoBanana2AspectRatio",
+      "grsaiNanoBanana2Resolution"
+    ]
+  },
+  {
+    "id": "grsai-nano-banana-2-lite",
+    "canonicalModelId": "nano-banana-2-lite",
+    "aliases": [
+      "nano-banana-2-lite-grsai"
+    ],
+    "params": [
+      "grsaiNanoBanana2LiteAspectRatio"
+    ]
+  },
+  {
+    "id": "grsai-nano-banana-pro",
+    "canonicalModelId": "nano-banana-pro",
+    "aliases": [
+      "nano-banana-pro-grsai"
+    ],
+    "params": [
+      "grsaiNanoBananaProChannel",
+      "grsaiNanoBananaProAspectRatio",
+      "grsaiNanoBananaProResolution"
+    ]
+  },
+  {
+    "id": "kie-gemini-omni-video",
+    "canonicalModelId": "gemini-omni-video",
+    "aliases": [],
+    "params": [
+      "kieGeminiOmniVideoDuration",
+      "kieGeminiOmniVideoAspectRatio",
+      "kieGeminiOmniVideoResolution",
+      "kieGeminiOmniVideoAudioIds",
+      "kieGeminiOmniVideoCharacterIds"
+    ]
+  },
+  {
+    "id": "kie-gpt-image-2",
+    "canonicalModelId": "gpt-image-2",
+    "aliases": [
+      "gpt-image-2-kie"
+    ],
+    "params": [
+      "kieGptImage2AspectRatio",
+      "kieGptImage2Resolution"
+    ]
+  },
+  {
+    "id": "kie-grok-imagine",
+    "canonicalModelId": "grok-imagine-image",
+    "aliases": [
+      "grok-imagine-kie"
+    ],
+    "params": [
+      "kieGrokImagineMode",
+      "kieGrokImagineQuality",
+      "kieGrokImagineAspectRatio"
+    ]
+  },
+  {
+    "id": "kie-grok-imagine-2.0",
+    "canonicalModelId": "grok-imagine-image-2.0",
+    "aliases": [
+      "grok-imagine-image-2-kie"
+    ],
+    "params": [
+      "kieGrokImagine20AspectRatio"
+    ]
+  },
+  {
+    "id": "kie-grok-imagine-video",
+    "canonicalModelId": "grok-imagine-video",
+    "aliases": [
+      "grok-imagine-video-kie"
+    ],
+    "params": [
+      "kieGrokImagineVideoAspectRatio",
+      "kieGrokImagineVideoMode",
+      "kieGrokImagineVideoDuration",
+      "kieGrokImagineVideoResolution"
+    ]
+  },
+  {
+    "id": "kie-hailuo-02",
+    "canonicalModelId": "hailuo-02",
+    "aliases": [
+      "hailuo-02-kie"
+    ],
+    "params": [
+      "kieHailuo02Duration",
+      "kieHailuo02Resolution",
+      "kieHailuo02PromptOptimizer"
+    ]
+  },
+  {
+    "id": "kie-hailuo-2-3",
+    "canonicalModelId": "hailuo-2.3",
+    "aliases": [
+      "hailuo-2-3-kie"
+    ],
+    "params": [
+      "kieHailuo23Mode",
+      "kieHailuo23Duration",
+      "kieHailuo23Resolution"
+    ]
+  },
+  {
+    "id": "kie-kling-3.0",
+    "canonicalModelId": "kling-video-3.0",
+    "aliases": [],
+    "params": [
+      "kieKling30AspectRatio",
+      "kieKling30Resolution",
+      "kieKling30Duration",
+      "kieKling30Sound"
+    ]
+  },
+  {
+    "id": "kie-kling-3.0-omni",
+    "canonicalModelId": "kling-video-3.0-omni",
+    "aliases": [],
+    "params": [
+      "kieKling30OmniMode",
+      "kieKling30OmniAspectRatio",
+      "kieKling30OmniResolution",
+      "kieKling30OmniDuration",
+      "kieKling30OmniAudio"
+    ]
+  },
+  {
+    "id": "kie-kling-3.0-turbo",
+    "canonicalModelId": "kling-video-3.0-turbo",
+    "aliases": [],
+    "params": [
+      "kieKling30TurboAspectRatio",
+      "kieKling30TurboResolution",
+      "kieKling30TurboDuration"
+    ]
+  },
+  {
+    "id": "kie-kling-v2-6",
+    "canonicalModelId": "kling-video-2.6-pro",
+    "aliases": [
+      "kling-v2-6-kie"
+    ],
+    "params": [
+      "kieKlingV26Mode",
+      "kieKlingV26Duration",
+      "kieKlingV26AspectRatio",
+      "kieKlingV26Resolution",
+      "kieKlingV26EnableAudio",
+      "kieKlingV26CharacterOrientation"
+    ]
+  },
+  {
+    "id": "kie-minimax-h3",
+    "canonicalModelId": "minimax-h3",
+    "aliases": [],
+    "params": [
+      "kieMiniMaxH3Mode",
+      "kieMiniMaxH3AspectRatio",
+      "kieMiniMaxH3Resolution",
+      "kieMiniMaxH3Duration"
+    ]
+  },
+  {
+    "id": "kie-nano-banana-2",
+    "canonicalModelId": "nano-banana-2",
+    "aliases": [
+      "nano-banana-2-kie"
+    ],
+    "params": [
+      "kieNanoBanana2AspectRatio",
+      "kieNanoBanana2Resolution"
+    ]
+  },
+  {
+    "id": "kie-nano-banana-2-lite",
+    "canonicalModelId": "nano-banana-2-lite",
+    "aliases": [
+      "nano-banana-2-lite-kie"
+    ],
+    "params": [
+      "kieNanoBanana2LiteAspectRatio"
+    ]
+  },
+  {
+    "id": "kie-nano-banana-pro",
+    "canonicalModelId": "nano-banana-pro",
+    "aliases": [
+      "nano-banana-pro-kie"
+    ],
+    "params": [
+      "kieNanoBananaAspectRatio",
+      "kieNanoBananaResolution"
+    ]
+  },
+  {
+    "id": "kie-qwen-image-3.0",
+    "canonicalModelId": "qwen-image-3.0",
+    "aliases": [
+      "qwen-image-3-kie"
+    ],
+    "params": [
+      "kieQwenImage30Variant",
+      "kieQwenImage30AspectRatio",
+      "kieQwenImage30Resolution",
+      "kieQwenImage30PromptExtend"
+    ]
+  },
+  {
+    "id": "kie-seedance-1.5-pro",
+    "canonicalModelId": "seedance-1.5-pro",
+    "aliases": [],
+    "params": [
+      "kieSeedance15ProAspectRatio",
+      "kieSeedance15ProResolution",
+      "kieSeedance15ProDuration",
+      "kieSeedance15ProGenerateAudio",
+      "kieSeedance15ProFixedLens"
+    ]
+  },
+  {
+    "id": "kie-seedance-2.0",
+    "canonicalModelId": "seedance-2.0",
+    "aliases": [],
+    "params": [
+      "kieSeedance20Mode",
+      "kieSeedance20AspectRatio",
+      "kieSeedance20Resolution",
+      "kieSeedance20Duration",
+      "kieSeedance20GenerateAudio",
+      "kieSeedance20WebSearch",
+      "kieSeedance20ReturnLastFrame"
+    ]
+  },
+  {
+    "id": "kie-seedance-2.0-fast",
+    "canonicalModelId": "seedance-2.0-fast",
+    "aliases": [],
+    "params": [
+      "kieSeedance20FastMode",
+      "kieSeedance20FastAspectRatio",
+      "kieSeedance20FastResolution",
+      "kieSeedance20FastDuration",
+      "kieSeedance20FastGenerateAudio",
+      "kieSeedance20FastWebSearch",
+      "kieSeedance20FastReturnLastFrame"
+    ]
+  },
+  {
+    "id": "kie-seedance-2.0-mini",
+    "canonicalModelId": "seedance-2.0-mini",
+    "aliases": [],
+    "params": [
+      "kieSeedance20MiniMode",
+      "kieSeedance20MiniAspectRatio",
+      "kieSeedance20MiniResolution",
+      "kieSeedance20MiniDuration",
+      "kieSeedance20MiniGenerateAudio",
+      "kieSeedance20MiniWebSearch"
+    ]
+  },
+  {
+    "id": "kie-seedance-2.5",
+    "canonicalModelId": "seedance-2.5",
+    "aliases": [],
+    "params": [
+      "kieSeedance25Mode",
+      "kieSeedance25AspectRatio",
+      "kieSeedance25Resolution",
+      "kieSeedance25Duration",
+      "kieSeedance25GenerateAudio",
+      "kieSeedance25ReturnLastFrame",
+      "kieSeedance25AutoDuration",
+      "kieSeedance25WebSearch"
+    ]
+  },
+  {
+    "id": "kie-seedance-v1",
+    "canonicalModelId": "seedance-v1",
+    "aliases": [
+      "seedance-v1-kie",
+      "kie-seedance-1.0"
+    ],
+    "params": [
+      "kieSeedanceV1Version",
+      "kieSeedanceV1FastMode",
+      "kieSeedanceV1Duration",
+      "kieSeedanceV1AspectRatio",
+      "kieSeedanceV1Resolution",
+      "kieSeedanceV1CameraFixed"
+    ]
+  },
+  {
+    "id": "kie-seedream-4.0",
+    "canonicalModelId": "seedream-4.0",
+    "aliases": [
+      "seedream-4.0-kie"
+    ],
+    "params": [
+      "kieSeedream40AspectRatio",
+      "kieSeedream40Resolution",
+      "kieSeedream40MaxImages"
+    ]
+  },
+  {
+    "id": "kie-seedream-4.5",
+    "canonicalModelId": "seedream-4.5",
+    "aliases": [
+      "seedream-4.5-kie"
+    ],
+    "params": [
+      "kieSeedreamAspectRatio",
+      "kieSeedreamQuality"
+    ]
+  },
+  {
+    "id": "kie-seedream-5.0-lite",
+    "canonicalModelId": "seedream-5.0-lite",
+    "aliases": [
+      "seedream-5-lite-kie"
+    ],
+    "params": [
+      "kieSeedream50LiteAspectRatio",
+      "kieSeedream50LiteResolution"
+    ]
+  },
+  {
+    "id": "kie-seedream-5.0-pro",
+    "canonicalModelId": "seedream-5.0-pro",
+    "aliases": [
+      "seedream-5-pro-kie"
+    ],
+    "params": [
+      "kieSeedream50ProMode",
+      "kieSeedream50ProAspectRatio",
+      "kieSeedream50ProResolution",
+      "kieSeedream50ProLayerSize"
+    ]
+  },
+  {
+    "id": "kie-z-image",
+    "canonicalModelId": "z-image-turbo",
+    "aliases": [
+      "z-image-kie"
+    ],
+    "params": [
+      "kieZImageAspectRatio"
+    ]
+  },
+  {
+    "id": "modelscope-custom",
+    "canonicalModelId": "modelscope-custom",
+    "aliases": [],
+    "params": [
+      "modelscopeCustomModel",
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance"
+    ]
+  },
+  {
+    "id": "MusePublic/14_ckpt_SD_XL",
+    "canonicalModelId": "sdxl-14-checkpoint",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "MusePublic/majicMIX_realistic",
+    "canonicalModelId": "majicmix-realistic",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "ppio-kling-3.0",
+    "canonicalModelId": "kling-video-3.0",
+    "aliases": [],
+    "params": [
+      "ppioKling30Mode",
+      "ppioKling30Resolution",
+      "ppioKling30Duration",
+      "ppioKling30AspectRatio",
+      "ppioKling30CfgScale",
+      "ppioKling30Sound",
+      "ppioKling30CharacterOrientation",
+      "ppioKling30KeepOriginalSound"
+    ]
+  },
+  {
+    "id": "ppio-minimax-hailuo-2.3",
+    "canonicalModelId": "hailuo-2.3",
+    "aliases": [],
+    "params": [
+      "ppioHailuo23VideoDuration",
+      "ppioHailuo23VideoResolution",
+      "ppioHailuo23FastMode",
+      "ppioHailuo23PromptExtend"
+    ]
+  },
+  {
+    "id": "ppio-minimax-speech",
+    "canonicalModelId": "minimax-speech-2.8",
+    "aliases": [],
+    "params": [
+      "minimaxAudioSpec",
+      "minimaxVoiceId",
+      "minimaxAudioEmotion",
+      "minimaxLanguageBoost",
+      "minimaxAdvancedSettings",
+      "minimaxVoiceClonePanel"
+    ]
+  },
+  {
+    "id": "ppio-wan-2.5-preview",
+    "canonicalModelId": "wan-2.5-preview",
+    "aliases": [],
+    "params": [
+      "ppioWan25VideoDuration",
+      "ppioWan25Size",
+      "ppioWan25Resolution",
+      "ppioWan25PromptExtend",
+      "ppioWan25Audio"
+    ]
+  },
+  {
+    "id": "ppio-wan-2.6",
+    "canonicalModelId": "wan-2.6",
+    "aliases": [],
+    "params": [
+      "ppioWan26Mode",
+      "ppioWan26AspectRatio",
+      "ppioWan26Quality",
+      "ppioWan26VideoDuration",
+      "ppioWan26ShotType",
+      "ppioWan26Audio",
+      "ppioWan26PromptExtend"
+    ]
+  },
+  {
+    "id": "ppio-wan-2.7",
+    "canonicalModelId": "wan-2.7",
+    "aliases": [],
+    "params": [
+      "ppioWan27Mode",
+      "ppioWan27AspectRatio",
+      "ppioWan27EditRatio",
+      "ppioWan27Resolution",
+      "ppioWan27Duration",
+      "ppioWan27ShotType",
+      "ppioWan27Audio",
+      "ppioWan27AudioSetting",
+      "ppioWan27PromptExtend"
+    ]
+  },
+  {
+    "id": "Qwen/Qwen-Image",
+    "canonicalModelId": "qwen-image",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeGuidance",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "Qwen/Qwen-Image-Edit-2509",
+    "canonicalModelId": "qwen-image-edit-2509",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "modelscopeSteps"
+    ]
+  },
+  {
+    "id": "Tongyi-MAI/Z-Image-Turbo",
+    "canonicalModelId": "z-image-turbo",
+    "aliases": [],
+    "params": [
+      "modelscopeImageSize",
+      "resolutionBaseSize",
+      "modelscopeSteps",
+      "modelscopeNegativePrompt"
+    ]
+  },
+  {
+    "id": "volcengine-seedream-5.0-lite",
+    "canonicalModelId": "seedream-5.0-lite",
+    "aliases": [
+      "seedream-5-lite-official"
+    ],
+    "params": [
+      "volcengineSeedream50LiteAspectRatio",
+      "volcengineSeedream50LiteResolution",
+      "volcengineSeedream50LiteCount"
+    ]
+  },
+  {
+    "id": "volcengine-seedream-5.0-pro",
+    "canonicalModelId": "seedream-5.0-pro",
+    "aliases": [
+      "seedream-5-pro-official"
+    ],
+    "params": [
+      "volcengineSeedream50ProMode",
+      "volcengineSeedream50ProAspectRatio",
+      "volcengineSeedream50ProResolution",
+      "volcengineSeedream50ProLayerSize",
+      "volcengineSeedream50ProBackground"
+    ]
+  }
+]

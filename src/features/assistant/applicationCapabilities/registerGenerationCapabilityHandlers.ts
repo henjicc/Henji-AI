@@ -6,6 +6,7 @@ import { toLegacyPromptString } from '@/core/inputs/promptDocument'
 import { generationApplicationService } from '@/features/generation/application/generationApplicationService'
 import { useGenerationDraftStore } from '@/features/generation/store/generationDraftStore'
 import { switchWorkspace } from '@/stores/navigationStore'
+import { isBuiltinModelType } from '@/core/modelSortOrder'
 
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
@@ -64,6 +65,9 @@ function resolveGenerationInput(input: GenerationInput): ResolvedGenerationInput
 
   const mediaType = input.mediaType ?? registry.getModel(modelId)?.meta.type
   if (!mediaType) throw new Error(`INVALID_INPUT:未提供 mediaType，且无法从模型 ${modelId} 推断`)
+  if (!isBuiltinModelType(mediaType)) {
+    throw new Error(`INVALID_INPUT:模型 ${modelId} 的类型 ${mediaType} 尚未被当前生成能力支持`)
+  }
 
   const options = input.params ?? {
     uploadedImages: draft.uploadedPromptImages.map((image) => image.url),

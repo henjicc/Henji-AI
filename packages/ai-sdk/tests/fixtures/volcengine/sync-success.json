@@ -1,0 +1,41 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedream-5.0-pro",
+  "scenario": "sync-success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/api/v3/images/generations",
+  "notes": "火山方舟 Seedream 同步图片模型没有独立的“创建/轮询”两阶段，execute() 一次请求直接返回 completed",
+  "params": {
+    "model": "doubao-seedream-5-0-pro-260628",
+    "size": "1536x1536",
+    "background": "transparent",
+    "image": ["https://example.com/a.png"],
+    "response_format": "url"
+  },
+  "expectedRequest": {
+    "url": "https://ark.cn-beijing.volces.com/api/v3/images/generations",
+    "method": "POST",
+    "body": {
+      "model": "doubao-seedream-5-0-pro-260628",
+      "size": "1536x1536",
+      "background": "transparent",
+      "image": ["https://example.com/a.png"],
+      "response_format": "url"
+    }
+  },
+  "response": {
+    "model": "doubao-seedream-5-0-pro-260628",
+    "created": 1763088300,
+    "data": [{ "url": "https://ark-content-generation.example.com/output/example-result.png", "size": "1536x1536" }]
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "completed",
+    "url": "https://ark-content-generation.example.com/output/example-result.png"
+  },
+  "source": {
+    "params": "packages/ai-sdk/tests/catalog/official-images.test.ts — 'Seedream Pro 使用单图契约并只在请求中发送方舟字段'（真实 request.builder 断言全字段照抄）",
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/火山引擎.md §2.2（response_format=url 时结果在 data[].url，链接 24 小时有效的描述），URL 为占位符"
+  }
+}

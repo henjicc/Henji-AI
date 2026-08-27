@@ -14,7 +14,7 @@ import {
   createPlainTextPromptDocument,
   toLegacyPromptString,
 } from '@/core/inputs/promptDocument'
-import type { TextProcessingPromptTemplate } from '@/core/llm/types'
+import type { TextProcessingPromptTemplate } from '@henjicc/ai-sdk'
 
 interface TextProcessingPromptTemplateManagerProps {
   isOpen: boolean

@@ -1,5 +1,5 @@
 import { createMainLogger } from '../../logging'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import {
   AGENT_KEEP_RECENT_TOKENS,
   compactConversationMessages,

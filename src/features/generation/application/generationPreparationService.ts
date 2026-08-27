@@ -9,7 +9,7 @@ import {
   resolvePricingCurrency,
 } from '@/core/pricing/priceDisplay'
 import { validateParams, type ValidationError } from '@/core/request/paramValidator'
-import { getI18nText, type ModelDefinition, type ParamDef } from '@/core/types'
+import { getI18nText, type ModelDefinition, type ModelType, type ParamDef } from '@/core/types'
 import { APPLICATION_CAPABILITY_CATALOG_VERSION } from '@/core/assistant/applicationCapabilities'
 
 export type GenerationMediaType = 'image' | 'video' | 'audio'
@@ -272,7 +272,7 @@ export function getGenerationModelSchemaRef(modelId: string) {
 export function getGenerationModelCatalogBootstrap(): GenerationModelCatalogBootstrap {
   const groups = new Map<string, {
     canonicalModelId: string
-    mediaType: GenerationMediaType
+    mediaType: ModelType
     name: string
     description: string
     tags: string[]

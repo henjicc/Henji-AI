@@ -1,5 +1,5 @@
 import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { CanvasBatchOperation } from '../../../../../src/core/assistant/capabilities/canvasBatchApplicationCapabilities'
 import type { CanvasNodePlacement } from '../../../../../src/core/assistant/capabilities/canvasMutationApplicationCapabilities'
 import type { AgentToolRegistry } from '../tools/registry'

@@ -20,7 +20,7 @@ import {
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import ApiKeyInput from '../components/ApiKeyInput'
-import type { LlmModelConfig, LlmProviderConfig } from '@/core/llm/types'
+import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import { DEFAULT_DEEPSEEK_BASE_URL } from '@/core/llm/defaults'
 import { createModelFromInput, fetchOpenAiCompatibleModels } from '@/services/llm/llmDiscoveryService'
 import AgentModelProfilesSection from './AgentModelProfilesSection'

@@ -1,4 +1,4 @@
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { AgentConversationJournal } from './conversation-journal'
 import { AgentCurrentMessageConsumer } from './current-message-consumer'
 import type { AgentRunnerOptions } from './types'

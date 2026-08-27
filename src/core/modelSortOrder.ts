@@ -1,4 +1,4 @@
-import type { ModelType } from './types/ModelDefinition'
+import type { BuiltinModelType, ModelType } from './types/ModelDefinition'
 
 /** 生成 tab 模型面板的 provider 宏观分组顺序 */
 export const PROVIDER_ORDER: Record<string, number> = {
@@ -13,10 +13,28 @@ export const PROVIDER_ORDER: Record<string, number> = {
 }
 
 /** 生成 tab 模型面板的类型宏观分组顺序 */
-export const MODEL_TYPE_ORDER: Record<ModelType, number> = {
+export const MODEL_TYPE_ORDER: Record<BuiltinModelType, number> = {
   image: 0,
   video: 1,
   audio: 2
+}
+
+export type ModelTypeGroup = BuiltinModelType | 'other'
+
+/** 未知扩展类型归入可见的“其他”组，不冒充任一内置媒体类型。 */
+export function getModelTypeGroup(type: ModelType): ModelTypeGroup {
+  return isBuiltinModelType(type) ? type : 'other'
+}
+
+/** 内置类型的类型守卫；生成与画布等只支持三类媒体的入口必须先显式收窄。 */
+export function isBuiltinModelType(type: ModelType): type is BuiltinModelType {
+  return type === 'image' || type === 'video' || type === 'audio'
+}
+
+/** 未知扩展类型稳定排在三个内置类型之后。 */
+export function getModelTypeOrder(type: ModelType): number {
+  const group = getModelTypeGroup(type)
+  return group === 'other' ? 3 : MODEL_TYPE_ORDER[group]
 }
 
 export interface SeriesSortable {

@@ -40,7 +40,7 @@ import {
 } from '@/features/assistant/hostContext/hostContext'
 import { executeApplicationCapabilityResult } from '@/features/assistant/applicationCapabilities/registry'
 
-import type { ModelStepInput, ModelStepResult } from '@/core/llm/modelStep'
+import type { ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 
 import { createScriptedModelStepExecutor, type ScriptedModelStepAction } from '../../electron/main/services/llm/sdk/scripted-model-step'
 import { AgentRunner } from '../../electron/main/services/agent-runtime/runner/runner'

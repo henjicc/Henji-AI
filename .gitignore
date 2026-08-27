@@ -118,7 +118,6 @@ jspm_packages/
 # TypeScript cache
 *.tsbuildinfo
 src-tauri/
-resources/model-manifest.json
 resources/progress-seeds.json
 dev-data/
 scratchpad_feed/

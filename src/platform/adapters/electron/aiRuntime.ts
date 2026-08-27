@@ -36,9 +36,6 @@ export function createElectronAiRuntime(): AiRuntimePlatform {
     cancelTask: async (taskId) => {
       await getNativeAi().cancelTask(taskId)
     },
-    reloadModelManifest: async () => {
-      return await getNativeAi().reloadModelManifest()
-    },
     getProgressEstimate: async (request) => {
       return await getNativeAi().getProgressEstimate(request)
     },

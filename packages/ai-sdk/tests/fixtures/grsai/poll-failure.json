@@ -1,0 +1,22 @@
+{
+  "provider": "grsai",
+  "modelId": "grsai-gpt-image-2",
+  "scenario": "poll-failure",
+  "phase": "continuePolling",
+  "route": "/v1/api/generate",
+  "taskId": "grsai-fixture-task_failed",
+  "response": {
+    "id": "grsai-fixture-task_failed",
+    "status": "failed",
+    "results": null,
+    "error": "content policy violation: image contains restricted content"
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "content policy violation"
+  },
+  "source": {
+    "response": "本机日志中无真实失败样本；结构对照 packages/ai-sdk/docs/model-adaptation/供应商/Grsai.md §3.2（id/status/results/error 字段）与 §6（status 枚举含 failed），报错文案为占位符示例"
+  }
+}

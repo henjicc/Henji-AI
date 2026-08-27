@@ -1,0 +1,37 @@
+{
+  "provider": "grsai",
+  "modelId": "grsai-gpt-image-2",
+  "scenario": "create-task_success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/api/generate",
+  "params": {
+    "prompt": "[已脱敏] 示例中文提示词，原始为用户真实生成 prompt",
+    "model": "gpt-image-2",
+    "aspectRatio": "5:4"
+  },
+  "expectedRequest": {
+    "url": "https://grsaiapi.com/v1/api/generate",
+    "method": "POST",
+    "body": {
+      "prompt": "[已脱敏] 示例中文提示词，原始为用户真实生成 prompt",
+      "model": "gpt-image-2",
+      "aspectRatio": "5:4",
+      "replyType": "async"
+    }
+  },
+  "notes": "provider 在发送边界强制覆盖 replyType=async，即便日志里原始请求没有该字段",
+  "response": {
+    "id": "13-6114fc1f-0801-4b46-8eab-bd9ffcd5718b",
+    "status": "running"
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "13-6114fc1f-0801-4b46-8eab-bd9ffcd5718b"
+  },
+  "source": {
+    "params": "真实开发日志 henji-2026-08-26.log，event=generation.runtime.request_json，requestId=grsai-gpt-image-2-d010d63d-c81f-4239-84f1-c4f55c7dcad5（2026-08-26T12:05:42.430Z）。model/aspectRatio 字段原样保留，prompt 原文是用户真实创作提示词，按脱敏要求替换为占位符",
+    "response": "真实开发日志同一条链路的 generation.runtime.response_json 事件（同一 requestId，12:05:43.348Z 记录的 taskId 与本条一致），id/status 字段原样保留"
+  }
+}

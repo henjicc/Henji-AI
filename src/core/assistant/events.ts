@@ -2,8 +2,8 @@ import { z } from 'zod'
 
 import { hostScopeRevisionsSchema } from './hostContracts'
 import { AGENT_ACTIVE_TOOL_LIMIT } from './toolBudget'
-import { modelStepUsageSchema } from '../llm/modelStep'
-import { modelProviderErrorCategorySchema } from '../llm/providerProtocol'
+import { modelStepUsageSchema } from '@henjicc/ai-sdk'
+import { modelProviderErrorCategorySchema } from '@henjicc/ai-sdk'
 import { agentWorkingSummarySchema } from './workingContext'
 import { agentObservedEffectSchema } from './observedEffect'
 

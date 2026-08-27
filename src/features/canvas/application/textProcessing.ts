@@ -5,7 +5,7 @@ import type {
   LlmModelConfig,
   LlmProviderConfig,
   TextProcessingPromptTemplate,
-} from '@/core/llm/types'
+} from '@henjicc/ai-sdk'
 import type { RowMediaKind } from '@/features/canvas/domain/socketTypes'
 
 const MODEL_KEY_SEPARATOR = '\u0000'

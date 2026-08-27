@@ -12,8 +12,8 @@ import {
   applyLlmModelCatalogEntry,
   describeCatalogInputModalities,
   findLlmModelCatalogEntry,
-} from '@/core/llm/modelCatalog'
-import type { LlmCapabilities, LlmModelConfig } from '@/core/llm/types'
+} from '@henjicc/ai-sdk'
+import type { LlmCapabilities, LlmModelConfig } from '@henjicc/ai-sdk'
 
 const capabilityItems: Array<{
   id: keyof Pick<LlmCapabilities, 'image' | 'video' | 'audio' | 'streaming' | 'toolCall' | 'parallelTools' | 'reasoning' | 'sampling' | 'usage'>

@@ -6,12 +6,16 @@ import {
   type ModelCapabilitySmokeRequest,
   type ModelCapabilitySmokeResult,
 } from '../../../../../src/core/llm/capabilitySmoke'
-import type { ModelStepInput, ModelStepResult, ModelStepUsage } from '../../../../../src/core/llm/modelStep'
-import { cancelLlmTask } from '../task-registry'
-import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
-import { runModelStep } from './runtime'
-import { modelStepProviderAdapters } from './provider-adapter'
-import './provider'
+import {
+  cancelModelStepTask,
+  parseModelProviderError,
+  resolveModelStepProviderAdapter,
+  runModelStep,
+  type ModelStepInput,
+  type ModelStepResult,
+  type ModelStepUsage,
+} from '@henjicc/ai-sdk'
+import { sdkRuntimeContext } from '../../ai-runtime/sdk-runtime'
 
 export const MODEL_STEP_ADAPTER_VERSION = 'ai@6.0.234/openai-compatible@2.0.62'
 const logger = createMainLogger('main.llm_capability_smoke')
@@ -124,7 +128,7 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
   const checks: CapabilitySmokeCheck[] = []
 
   const protocol = request.apiProtocol ?? 'openai-compatible'
-  const protocolModalities = new Set(modelStepProviderAdapters.resolve(protocol).supportedInputModalities)
+  const protocolModalities = new Set(resolveModelStepProviderAdapter(protocol).supportedInputModalities)
   for (const modality of ['image', 'video', 'audio'] as const) {
     const declared = request.declaredInputModalities?.[modality] === true
     checks.push({
@@ -152,7 +156,7 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
     textResult = await runModelStep(createStepInput(request, 'text', {
       messages: [{ role: 'user', content: '只回复 OK' }],
       output: { mode: 'text' },
-    }), event => { if (event.type === 'TextDelta') textDeltaCount += 1 })
+    }), event => { if (event.type === 'TextDelta') textDeltaCount += 1 }, sdkRuntimeContext)
     aggregateUsage = mergeUsage(aggregateUsage, textResult.usage)
     return textResult.text.trim().length > 0
   }))
@@ -179,7 +183,7 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
         inputSchema: { type: 'object', properties: { value: { type: 'string' } }, required: ['value'] },
       }],
       output: { mode: 'text' },
-    }), () => undefined)
+    }), () => undefined, sdkRuntimeContext)
     aggregateUsage = mergeUsage(aggregateUsage, result.usage)
     return result.toolCalls.some(call => call.toolName === 'capability_probe')
   }))
@@ -191,7 +195,7 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
         mode: 'object',
         schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] },
       },
-    }), () => undefined)
+    }), () => undefined, sdkRuntimeContext)
     aggregateUsage = mergeUsage(aggregateUsage, result.usage)
     return typeof result.structuredOutput === 'object' && result.structuredOutput !== null
   }))
@@ -201,9 +205,9 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
       messages: [{ role: 'user', content: '回复一个词' }],
       output: { mode: 'text' },
     })
-    const timer = setTimeout(() => cancelLlmTask(input.requestId), 30)
+    const timer = setTimeout(() => cancelModelStepTask(input.requestId), 30)
     try {
-      await runModelStep(input, () => undefined)
+      await runModelStep(input, () => undefined, sdkRuntimeContext)
       return false
     } catch (error) {
       return isCancellationError(error)
@@ -250,4 +254,3 @@ export async function verifyModelCapabilities(rawRequest: ModelCapabilitySmokeRe
   }
   return result
 }
-

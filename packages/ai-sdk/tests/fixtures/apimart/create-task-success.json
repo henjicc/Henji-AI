@@ -1,0 +1,35 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-gpt-image-2",
+  "scenario": "create-task_success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/images/generations",
+  "params": {
+    "model": "gpt-image-2",
+    "prompt": "cat"
+  },
+  "expectedRequest": {
+    "url": "https://api.apimart.ai/v1/images/generations",
+    "method": "POST",
+    "body": {
+      "model": "gpt-image-2",
+      "prompt": "cat",
+      "nsfw_check": false
+    }
+  },
+  "notes": "provider 在发送边界强制覆盖 nsfw_check=false，即便 builder 没填或填了别的值",
+  "response": {
+    "code": 200,
+    "data": { "id": "task_01KA040M0HP1GJWBJYZMKX1XS1", "status": "pending" }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "task_01KA040M0HP1GJWBJYZMKX1XS1"
+  },
+  "source": {
+    "params": "packages/ai-sdk/tests/catalog/apimart-images.test.ts — '所有模型使用 APIMart 对应端点和平台模型 ID'（apimartGptImage2Model.request.builder 真实断言）",
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/APIMart.md §3.2 出现的任务 id 字面量（task_01KA040M0HP1GJWBJYZMKX1XS1，文档轮询示例里的真实 id 字面量），status 按文档 pending/processing/completed/failed/cancelled 枚举取未终态值以贴合“刚创建”场景"
+  }
+}

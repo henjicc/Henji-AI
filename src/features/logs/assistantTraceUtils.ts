@@ -3,7 +3,7 @@ import type {
   AgentTraceDetailResult,
   AgentTraceStepSummary,
 } from '@/core/assistant/trace'
-import type { ModelStepMessage } from '@/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 
 export interface AgentTraceDiff {
   systemChanged: boolean

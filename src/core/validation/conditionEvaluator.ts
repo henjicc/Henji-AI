@@ -1,3 +1,9 @@
+import {
+  evaluateRuntimeCondition,
+  type JsonObject,
+  type RuntimeConditionExpression,
+  type RuntimeConditionFunction,
+} from '@henjicc/ai-sdk'
 import { createLogger } from '@/core/logging'
 import type { ConditionExpression, ConditionFunction } from '@/core/types'
 
@@ -12,26 +18,15 @@ export function evaluateCondition(
 ): boolean {
   if (!condition) return true
 
-  if (typeof condition === 'function') {
-    try {
-      return Boolean(condition(params))
-    } catch (error) {
-      logger.error('[ConditionEvaluator] condition function error:', error)
-      return false
-    }
-  }
-
   try {
-    const fn = new Function(
-      'params',
-      'context',
-      `with (params) { with (context) { return ${condition} } }`
+    return evaluateRuntimeCondition(
+      condition as RuntimeConditionExpression | RuntimeConditionFunction | undefined,
+      params as JsonObject,
+      context as JsonObject
     )
-    return Boolean(fn(params, context))
   } catch (error) {
-    logger.error('[ConditionEvaluator] condition expression error:', error)
+    logger.error('[ConditionEvaluator] condition evaluation error:', error)
     logger.error('[ConditionEvaluator] condition:', condition)
     return false
   }
 }
-

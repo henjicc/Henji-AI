@@ -4,7 +4,7 @@ import type {
   AgentStartRunRequest,
 } from '../../../../../src/core/assistant/runtimeContracts'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
-import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { AgentToolGateway } from '../tools/gateway'
 import type { AgentToolRegistry } from '../tools/registry'
 import type { AgentArtifactStore } from '../context/offload'
@@ -14,7 +14,7 @@ import type {
   AgentMemoryRetrievalResult,
 } from '../../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import type {
   AgentSessionCompactionAppend,
   AgentSessionInternalAppend,

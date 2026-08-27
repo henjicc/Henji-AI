@@ -6,7 +6,7 @@ import {
   modelStepFinishReasonSchema,
   modelStepMessageSchema,
   modelStepUsageSchema,
-} from '../llm/modelStep'
+} from '@henjicc/ai-sdk'
 
 export const AGENT_SESSION_ENTRY_SCHEMA_VERSION = 'agent-session-entry/v1' as const
 

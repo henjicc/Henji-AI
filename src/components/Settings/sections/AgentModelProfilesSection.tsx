@@ -25,7 +25,7 @@ import type {
   AgentModelRole,
   LlmConfigState,
   LlmModelConfig,
-} from '@/core/llm/types'
+} from '@henjicc/ai-sdk'
 
 const logger = createLogger('components.Settings.AgentModelProfilesSection')
 const REUSE_PRIMARY = '__reuse_primary__'

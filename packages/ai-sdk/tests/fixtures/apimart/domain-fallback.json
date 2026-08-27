@@ -1,0 +1,36 @@
+{
+  "provider": "apimart",
+  "modelId": "apimart-gpt-image-2",
+  "scenario": "domain-fallback",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/v1/images/generations",
+  "params": { "model": "gpt-image-2", "prompt": "test" },
+  "endpointPreference": {
+    "markReachable": "https://api.aiuxu.com/v1/balance",
+    "expectedOrder": [
+      "https://api.aiuxu.com/v1/images/generations",
+      "https://api.apimart.ai/v1/images/generations",
+      "https://api.apib.ai/v1/images/generations",
+      "https://api.aishuch.com/v1/images/generations"
+    ]
+  },
+  "expectedRequest": {
+    "url": "https://api.aiuxu.com/v1/images/generations",
+    "method": "POST",
+    "body": { "model": "gpt-image-2", "prompt": "test", "nsfw_check": false }
+  },
+  "response": {
+    "code": 200,
+    "data": { "id": "task_domain_fixture_001", "status": "pending" }
+  },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "task_domain_fixture_001"
+  },
+  "notes": "对照 packages/ai-sdk/src/providers/endpoints/apimart.ts 的连通性探测+进程内记忆策略：一旦某个大陆备用域名被标记为可达，后续同进程请求优先走它，其余域名仍留作 fallback",
+  "source": {
+    "response": "沿用 create-task_success.json 的响应结构，域名切换行为本身与响应内容无关"
+  }
+}

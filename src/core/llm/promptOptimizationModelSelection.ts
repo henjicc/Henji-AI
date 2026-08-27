@@ -1,4 +1,4 @@
-import type { LlmConfigState, LlmModelConfig, PromptOptimizationProfile } from './types'
+import type { LlmConfigState, LlmModelConfig, PromptOptimizationProfile } from '@henjicc/ai-sdk'
 
 /**
  * 提示词优化的模型选择策略。

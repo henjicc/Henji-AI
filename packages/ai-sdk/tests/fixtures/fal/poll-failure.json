@@ -1,0 +1,19 @@
+{
+  "provider": "fal",
+  "modelId": "z-image-turbo",
+  "scenario": "poll-failure",
+  "phase": "continuePolling",
+  "route": "fal-ai/z-image-turbo/edit",
+  "taskId": "764cabcf-b745-4b3e-ae38-1200304cf45b",
+  "response": {
+    "status": "FAILED"
+  },
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "provider_task_failed",
+    "errorMessageIncludes": "Fal task failed"
+  },
+  "source": {
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/Fal.md §2.2 队列状态枚举表（FAILED）"
+  }
+}

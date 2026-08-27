@@ -11,7 +11,7 @@ import {
 
 import { UiButton, UiEmpty, UiLoading, UI_INSET_SURFACE_CLASS } from '@/components/ui'
 import type { AgentTraceDetailResult } from '@/core/assistant/trace'
-import type { ModelStepMessage } from '@/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { copyTextToClipboard } from '../copyFormats'
 import { buildTraceCurl, formatTraceDuration, formatTraceTokens, getTraceStepLabel } from '../assistantTraceUtils'
 import { JsonTree } from './JsonTree'

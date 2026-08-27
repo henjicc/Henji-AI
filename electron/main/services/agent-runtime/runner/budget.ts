@@ -1,4 +1,4 @@
-import type { ModelStepUsage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepUsage } from '@henjicc/ai-sdk'
 import {
   agentBudgetConfigSchema,
   type AgentBudgetConfig,

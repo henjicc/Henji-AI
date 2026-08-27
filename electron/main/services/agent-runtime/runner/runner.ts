@@ -7,7 +7,7 @@ import type {
   AgentRunStatus,
 } from '../../../../../src/core/assistant/events'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import type { HostContextSnapshot } from '../../../../../src/core/assistant/hostContracts'
 import { AgentArtifactStore } from '../context/offload'
 import { AgentContextBuilder } from '../context/builder'

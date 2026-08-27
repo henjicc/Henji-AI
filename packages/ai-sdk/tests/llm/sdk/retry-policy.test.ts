@@ -1,0 +1,126 @@
+import { describe, expect, it, vi } from 'vitest'
+
+import type { ModelStepInput, ModelStepResult } from '../../../src/llm/modelStep'
+import { ProviderModelStepError } from '../../../src/runtime'
+import { executeModelStepWithRetry } from '../../../src/llm/sdk/retryPolicy'
+
+const input = {
+  requestId: 'request-1',
+  runId: 'run-1',
+  stepId: 'step-1',
+  providerId: 'provider-1',
+  modelId: 'model-1',
+  messages: [{ role: 'user', content: '测试' }],
+  output: { mode: 'text' },
+  capabilities: {
+    image: false, video: false, audio: false,
+    streaming: true, toolCall: true, parallelTools: false,
+    structuredOutputMode: 'json', reasoning: false, sampling: true, usage: true,
+  },
+  settings: { maxRetries: 2 },
+} as ModelStepInput
+
+const result = { text: '完成' } as ModelStepResult
+
+function providerError(
+  category: 'server' | 'authentication',
+  retryAfterMs = category === 'server' ? 500 : null
+): ProviderModelStepError {
+  return new ProviderModelStepError({
+    code: category.toUpperCase(), category, status: category === 'server' ? 503 : 401,
+    retryable: category === 'server', retryAfterMs,
+    providerId: 'provider-1', modelId: 'model-1', requestId: 'request-1', message: '安全错误',
+  })
+}
+
+describe('executeModelStepWithRetry', () => {
+  it('只重试未产生输出的瞬态错误并发布可见事件', async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce(providerError('server'))
+      .mockResolvedValueOnce(result)
+    const emit = vi.fn()
+    const sleep = vi.fn().mockResolvedValue(undefined)
+    await expect(executeModelStepWithRetry({
+      input, signal: new AbortController().signal, emit, operation, sleep,
+    })).resolves.toBe(result)
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(sleep).toHaveBeenCalledWith(500, expect.any(AbortSignal))
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'Retrying', layer: 'request', attempt: 1, category: 'server',
+    }))
+  })
+
+  it('鉴权错误不重试', async () => {
+    const operation = vi.fn().mockRejectedValue(providerError('authentication'))
+    await expect(executeModelStepWithRetry({
+      input,
+      signal: new AbortController().signal,
+      emit: vi.fn(),
+      operation,
+      sleep: vi.fn(),
+    })).rejects.toMatchObject({ details: { category: 'authentication' } })
+    expect(operation).toHaveBeenCalledTimes(1)
+  })
+
+  it('未提供 Retry-After 时按 Pi 的 2/4/8 秒最多重试三次', async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce(providerError('server', null))
+      .mockRejectedValueOnce(providerError('server', null))
+      .mockRejectedValueOnce(providerError('server', null))
+      .mockResolvedValueOnce(result)
+    const sleep = vi.fn().mockResolvedValue(undefined)
+    await expect(executeModelStepWithRetry({
+      input: { ...input, settings: { maxRetries: 3 } },
+      signal: new AbortController().signal,
+      emit: vi.fn(),
+      operation,
+      sleep,
+    })).resolves.toBe(result)
+    expect(sleep.mock.calls.map(([delay]) => delay)).toEqual([2_000, 4_000, 8_000])
+    expect(operation).toHaveBeenCalledTimes(4)
+  })
+
+  it('流出部分文本但尚未提交工具调用时仍可安全重试', async () => {
+    const operation = vi.fn()
+      .mockImplementationOnce(async (emit) => {
+        emit({ type: 'TextDelta', text: '部分输出' })
+        throw providerError('server')
+      })
+      .mockResolvedValueOnce(result)
+    const emit = vi.fn()
+    await expect(executeModelStepWithRetry({
+      input,
+      signal: new AbortController().signal,
+      emit,
+      operation,
+      sleep: vi.fn().mockResolvedValue(undefined),
+    })).resolves.toBe(result)
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({ type: 'Retrying' }))
+  })
+
+  it('供应商丢失错误细节时按本地请求截止时间识别超时并重试', async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce({})
+      .mockResolvedValueOnce(result)
+    const now = vi.fn()
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(60_001)
+      .mockReturnValueOnce(60_002)
+    const emit = vi.fn()
+    await expect(executeModelStepWithRetry({
+      input: { ...input, settings: { timeoutMs: 60_000, maxRetries: 1 } },
+      signal: new AbortController().signal,
+      emit,
+      operation,
+      sleep: vi.fn().mockResolvedValue(undefined),
+      now,
+    })).resolves.toBe(result)
+    expect(operation).toHaveBeenCalledTimes(2)
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'Retrying',
+      category: 'network',
+      code: 'MODEL_REQUEST_TIMEOUT',
+    }))
+  })
+})

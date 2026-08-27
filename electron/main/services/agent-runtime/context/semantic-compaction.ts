@@ -6,8 +6,8 @@ import {
 import type {
   ModelStepMessage,
   ModelStepResult,
-} from '../../../../../src/core/llm/modelStep'
-import { parseModelProviderError } from '../../../../../src/core/llm/providerProtocol'
+} from '@henjicc/ai-sdk'
+import { parseModelProviderError } from '@henjicc/ai-sdk'
 import { createMainLogger } from '../../logging'
 import type { AgentRuntimeModel } from '../runner/models'
 import type { AgentModelStepExecutor } from '../runner/types'

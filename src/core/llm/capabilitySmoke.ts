@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { llmApiProtocolSchema } from './providerProtocol'
+import { llmApiProtocolSchema } from '@henjicc/ai-sdk'
 
 export const modelCapabilitySmokeRequestSchema = z.object({
   requestId: z.string().min(1),

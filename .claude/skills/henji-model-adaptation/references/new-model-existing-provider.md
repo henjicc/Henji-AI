@@ -9,17 +9,17 @@
 推荐参考：
 
 - PPIO 图片：**当前没有已适配的 PPIO 图片模型**（原有 5 个已随官方停服下线，PPIO 图像侧只剩 Qwen-Image 未接入）
-- PPIO 视频：`src/models/ppio/wan-2.7.model.ts`、`src/models/ppio/kling-3.0.model.ts`、`src/models/ppio/minimax-hailuo-2.3.model.ts`
-- PPIO 音频：`src/models/ppio/minimax-speech.model.ts`
-- FAL 图片：`src/models/fal/nano-banana-pro.model.ts`、`src/models/fal/z-image-turbo.model.ts`
-- FAL 视频：`src/models/fal/kling-video-v2.6-pro.model.ts`、`src/models/fal/kling-video-o1.model.ts`
-- KIE 图片：`src/models/kie/gpt-image-2.model.ts`、`src/models/kie/nano-banana-pro.model.ts`
-- KIE 视频：`src/models/kie/kling-v2-6.model.ts`
-- ModelScope 图片：`src/models/modelscope/qwen-image.model.ts`
+- PPIO 视频：`packages/ai-sdk/src/catalog/ppio/wan-2.7.model.ts`、`packages/ai-sdk/src/catalog/ppio/kling-3.0.model.ts`、`packages/ai-sdk/src/catalog/ppio/minimax-hailuo-2.3.model.ts`
+- PPIO 音频：`packages/ai-sdk/src/catalog/ppio/minimax-speech.model.ts`
+- FAL 图片：`packages/ai-sdk/src/catalog/fal/nano-banana-pro.model.ts`、`packages/ai-sdk/src/catalog/fal/z-image-turbo.model.ts`
+- FAL 视频：`packages/ai-sdk/src/catalog/fal/kling-video-v2.6-pro.model.ts`、`packages/ai-sdk/src/catalog/fal/kling-video-o1.model.ts`
+- KIE 图片：`packages/ai-sdk/src/catalog/kie/gpt-image-2.model.ts`、`packages/ai-sdk/src/catalog/kie/nano-banana-pro.model.ts`
+- KIE 视频：`packages/ai-sdk/src/catalog/kie/kling-v2-6.model.ts`
+- ModelScope 图片：`packages/ai-sdk/src/catalog/modelscope/qwen-image.model.ts`
 
 ## 2) 新建模型定义
 
-- 新建 `src/models/{provider}/{model-name}.model.ts`
+- 新建 `packages/ai-sdk/src/catalog/{provider}/{model-name}.model.ts`
 - 使用 `defineModel()`，补齐：
   - `meta.id/canonicalModelId/provider/type/i18nScope/name/tags`
   - `params/linkages/endpoints/request/pricing`
@@ -51,7 +51,7 @@
   - 仍要把该能力反映到 `meta.tags`；
   - 仍要通过 `inputLimits` / `requirements` 明确素材数量；
   - 不要求一定暴露 `mode`，但不能因为“没有独立路由”就漏掉功能声明。
-- 若参数显隐/计价/联动依赖"是否已上传图片或视频"，注意同一件事在三种执行场景下活在三个不同运行时字段下：生成提交时是 `uploadedFilePaths`/`uploadedVideoFilePaths`，画布节点实时值是 `images`/`videos`，对话/工具面板实时上传状态是 `uploadedImages`/`uploadedVideos`。`visible.condition`、`linkage.condition`、`pricing.calculator` 这类直接读取活参数的函数会在三种场景下都被调用到，只查其中一个键会导致另外两个场景判断错误（典型表现：某个参数该隐藏却没隐藏、画布里模式自动切换完全不触发、计价该按"有视频"算却按"无视频"算）。**不要自己手写三键判断**，优先复用 `src/models/shared/mediaPresence.ts` 导出的 `hasUploadedImage`/`hasUploadedVideo`/`countUploadedImages`/`countUploadedVideos`（KIE/PPIO 模型可以直接从同目录下的 `./mediaSources` 导入，它们已重导出这几个函数）。注意这几个函数只用于 `visible.condition`/`linkage`/`pricing.calculator`，**不能在 `request.builder`/`endpoints.selector` 里使用**（会被序列化进独立 VM，import 失效）。
+- 若参数显隐/计价/联动依赖"是否已上传图片或视频"，注意同一件事在三种执行场景下活在三个不同运行时字段下：生成提交时是 `uploadedFilePaths`/`uploadedVideoFilePaths`，画布节点实时值是 `images`/`videos`，对话/工具面板实时上传状态是 `uploadedImages`/`uploadedVideos`。`visible.condition`、`linkage.condition`、`pricing.calculator` 这类直接读取活参数的函数会在三种场景下都被调用到，只查其中一个键会导致另外两个场景判断错误（典型表现：某个参数该隐藏却没隐藏、画布里模式自动切换完全不触发、计价该按"有视频"算却按"无视频"算）。**不要自己手写三键判断**，优先复用 `packages/ai-sdk/src/catalog/shared/mediaPresence.ts` 导出的 helper（KIE/PPIO 模型可从同目录 `./mediaSources` 导入）。
 - `output_format` / `outputFormat` 按当前产品约定一律不新增到 `params`；即使 API 文档支持，也默认不展示。
 - 需要媒体输入约束时优先用：
   - `inputLimits`
@@ -79,9 +79,9 @@
 - 在 `request.builder` 内只处理模型请求映射。
 - 以 API 文档为准，不盲拷旧模型字段。
 - 不要把全局 prompt 再定义为模型 params（项目已有统一 prompt 输入）。
-- PPIO / KIE 多媒体源码层可参考 `src/models/ppio/mediaSources.ts`、`src/models/kie/mediaSources.ts`（取实际上传素材路径，如 `resolveKieImageSources`）；"是否已上传图片/视频"这类布尔/计数判断见 `src/models/shared/mediaPresence.ts`（`hasUploadedImage`/`hasUploadedVideo`/`countUploadedImages`/`countUploadedVideos`，跨 provider 通用）。但进入 manifest 后的 `request.builder` / `endpoints.selector` 必须自包含，不能直接依赖这些顶层 helper，除非对应 helper 已存在于 Electron runtime 的 `JS_PRELUDE`。
+- PPIO / KIE 多媒体源码层可参考 `packages/ai-sdk/src/catalog/ppio/mediaSources.ts`、`packages/ai-sdk/src/catalog/kie/mediaSources.ts`；跨 provider 判断见 `packages/ai-sdk/src/catalog/shared/mediaPresence.ts`。catalog 的真实 builder/selector 可直接复用 SDK 内共享 helper。
 - 先确认 `endpoints` 里的 route 是否符合该 provider 在仓库中的既有写法；不要只照着接口文档里的标题或相对路径手填，尤其要检查是否存在统一前缀（例如 `/async`）。
-- builder 必须“自包含”：只使用函数体内可访问的变量/函数，或使用 `electron/main/services/ai-runtime/js-runtime.ts` 的 `JS_PRELUDE` 已提供 helper。不要依赖模型文件顶层 helper（Electron 主进程 Node VM 执行 manifest 中的 `builderJs` 时会 `ReferenceError`）。
+- builder 可调用同一 SDK 包内的顶层 helper；这些依赖必须满足 SDK 可移植性检查，禁止反向导入应用层、Electron 或浏览器专属模块。
 - 比例字段必须发送最终具体值（如 `16:9`），不发送 `smart/auto`。
 - UI 层的复合参数/特殊组合，必须在 builder 转成 API 要求字段后再发送。
 - 禁止把 UI 值未经转换直接透传给 API。
@@ -96,8 +96,7 @@
   - builder 是否按分支输出不同字段；
   - pricing 是否能反映不同 mode/素材组合；
   - 若 provider runtime 对返回结构/轮询状态有差异，是否需要同步改 Electron provider。
-- 若该模型在 `scripts/generate-model-manifest.cjs` 有 `CUSTOM_BUILDER_OVERRIDES`，需要同步更新 override。
-- 若该模型新增或依赖 `runtimeConstraints`，检查生成后的 `resources/model-manifest.json` 是否包含约束，并确认 `electron/main/services/ai-runtime/request-normalizer.ts` 支持对应约束类型。
+- 若该模型新增或依赖 `runtimeConstraints`，确认 `packages/ai-sdk/src/protocols/request-normalizer.ts` 支持对应约束类型，并用真实 catalog 模型覆盖归一化后的请求体。
 
 ## 5) i18n 与文案
 
@@ -117,7 +116,7 @@
   - 价格文案如何展示
 - 拿不到价格时，不提交最终模型定义。
 
-## 7) 何时需要改 Electron provider
+## 7) 何时需要改 SDK provider
 
 默认不改。仅当出现以下情况才改：
 
@@ -127,10 +126,10 @@
 
 ## 8) 验证
 
-- `npm run gen:model-manifest`
+- `npm run gen:catalog`
 - `npm run check:model-i18n`
 - 运行改动模型、参数转换和请求构建的精确/相关测试；其余检查按 `docs/rules/testing.md` 的风险级别选择，不默认追加全量 lint。
-- 若修改 Electron runtime/provider/upload 的共享契约，按风险追加主进程类型检查、相关 lint 或构建。
+- 若修改 SDK provider/upload 的共享契约，先跑 SDK 精确测试与可移植性检查；同时改到 Electron 宿主薄壳时，再按风险追加主进程类型检查、相关 lint 或构建。
 - 需要真实服务验证时再用 `npm run electron:dev` 提交与检查回包；只有完整产物链路相关时才跑 `npm run electron:build`。
-- 若本地已有运行中的 Electron 进程，改完后需重启或触发 manifest reload，确认 runtime 使用最新 `resources/model-manifest.json`。
-- 若出现“UI 仍显示旧参数”或“请求仍打到旧路由”，先排查是否是运行中的 Electron / dev 进程未重载最新 manifest，而不是直接怀疑 builder。
+- 若本地已有运行中的 Electron 进程，改完后需重新构建 SDK 并重启，确认 runtime 使用最新 catalog。
+- 若出现“UI 仍显示旧参数”或“请求仍打到旧路由”，先排查 SDK dist 或运行中的 Electron / dev 进程是否未重载最新 catalog，而不是直接怀疑 builder。

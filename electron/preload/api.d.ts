@@ -22,7 +22,7 @@ import type {
   AgentRetryRunRequest,
   AgentRunSummary,
 } from '../../src/core/assistant/persistence'
-import type { LlmReasoningConfig } from '../../src/core/llm/reasoning'
+import type { LlmReasoningConfig } from '@henjicc/ai-sdk'
 import type {
   AgentListThreadsRequest,
   AgentThreadSummary,
@@ -55,7 +55,7 @@ import type {
   AgentMemoryState,
   AgentMemoryUpdate,
 } from '../../src/core/assistant/memory'
-import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '../../src/core/llm/modelStep'
+import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type {
   AgentCancelExternalWaitRequest,
   GenerationStatusReportRequest,
@@ -462,7 +462,6 @@ export interface HenjiAiApi {
   generate(request: HenjiAiGenerateRequest): Promise<HenjiAiGenerateResponse>
   continuePolling(request: HenjiAiContinuePollingRequest): Promise<HenjiAiGenerateResponse>
   cancelTask(taskId: string): Promise<void>
-  reloadModelManifest(): Promise<number>
   getProgressEstimate(request: HenjiAiGetProgressEstimateRequest): Promise<HenjiAiProgressEstimate>
   recordProgressSample(request: HenjiAiRecordProgressSampleRequest): Promise<HenjiAiRecordProgressSampleResponse>
   consumePendingResult(serverTaskId: string): Promise<{ url?: string; filePath?: string; metadata?: unknown } | null>

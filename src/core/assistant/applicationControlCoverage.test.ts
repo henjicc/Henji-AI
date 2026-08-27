@@ -9,7 +9,7 @@ vi.mock('@/i18n', () => ({
   },
 }))
 
-import modelManifest from '../../../resources/model-manifest.json'
+import { catalog } from '@henjicc/ai-sdk'
 import {
   applicationControlCoverageManifestSchema,
   applicationPublicControlCoverageSchema,
@@ -26,7 +26,7 @@ function createManifest() {
   return createApplicationControlCoverageManifest({
     settings: listApplicationSettingIds(),
     surfaces: listApplicationSurfaces().map((surface) => surface.id),
-    models: modelManifest.models.map((model) => model.modelId),
+    models: catalog.map((model) => model.meta.id),
     imageEditTools: getImageEditorTools().map((tool) => tool.id),
     cameraStageProperties: listAnimatablePropertyPaths(),
     canvasNodes: Object.keys(canvasNodeDefinitions),
@@ -92,12 +92,12 @@ describe('application control coverage', () => {
     expect(manifest.publicControls.filter((item) => item.kind === 'setting'))
       .toHaveLength(listApplicationSettingIds().length)
     expect(manifest.publicControls.filter((item) => item.kind === 'model'))
-      .toHaveLength(modelManifest.models.length)
+      .toHaveLength(catalog.length)
     const summary = {
       capabilities: manifest.capabilityMigrations.length,
       settings: listApplicationSettingIds().length,
       surfaces: manifest.surfaceObservations.length,
-      models: modelManifest.models.length,
+      models: catalog.length,
       imageEditTools: getImageEditorTools().length,
       cameraStageProperties: listAnimatablePropertyPaths().length,
       canvasNodes: Object.keys(canvasNodeDefinitions).length,

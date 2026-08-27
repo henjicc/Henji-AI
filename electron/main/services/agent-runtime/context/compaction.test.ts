@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { createAgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
 import { compactConversationMessages, estimateModelMessagesTokens } from './compaction'
 

@@ -1,4 +1,4 @@
-import type { ModelStepMessage } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import {
   estimateAgentTextTokens,
   truncateToAgentTokenBudget,

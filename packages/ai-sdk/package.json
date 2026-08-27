@@ -1,0 +1,77 @@
+{
+  "name": "@henjicc/ai-sdk",
+  "version": "0.1.3",
+  "description": "痕迹AI 多供应商模型适配 SDK",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henjicc/Henji-AI.git",
+    "directory": "packages/ai-sdk"
+  },
+  "homepage": "https://github.com/henjicc/Henji-AI/tree/main/packages/ai-sdk",
+  "bugs": {
+    "url": "https://github.com/henjicc/Henji-AI/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./providers": {
+      "types": "./dist/providers/index.d.ts",
+      "import": "./dist/providers/index.js",
+      "default": "./dist/providers/index.js"
+    },
+    "./catalog": {
+      "types": "./dist/catalog/index.d.ts",
+      "import": "./dist/catalog/index.js",
+      "default": "./dist/catalog/index.js"
+    },
+    "./llm": {
+      "types": "./dist/llm/index.d.ts",
+      "import": "./dist/llm/index.js",
+      "default": "./dist/llm/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "import": "./dist/runtime/index.js",
+      "default": "./dist/runtime/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "examples/*/README.md",
+    "examples/*/index.ts",
+    "examples/form-renderer/cli.ts",
+    "examples/*/package.json",
+    "examples/*/tsconfig.json",
+    "CHANGELOG.md",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "restricted",
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "test": "vitest run --root ../.. packages/ai-sdk",
+    "prepublishOnly": "node scripts/prepublish-check.cjs"
+  },
+  "dependencies": {
+    "@ai-sdk/openai-compatible": "2.0.62",
+    "@ai-sdk/provider-utils": "4.0.40",
+    "@fal-ai/client": "^1.10.1",
+    "ai": "6.0.234",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.2"
+  }
+}

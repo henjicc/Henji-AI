@@ -149,7 +149,7 @@ npm run gen:progress-seeds
 
 基础 seeds 位于 `resources/progress-seeds.base.json`。如本地存在 `dev-data/progress-seeds.local.json`，执行 `npm run dev`、`npm run electron:dev`、`npm run electron:build`、`npm run electron:dist` 时会自动合并到 `resources/progress-seeds.json`，并作为打包默认值参与构建。
 
-`resources/model-manifest.json` 与 `resources/progress-seeds.json` 是自动生成产物，已在 Git 中忽略。
+`packages/ai-sdk/src/catalog/index.ts` 与 `resources/progress-seeds.json` 是自动生成产物；前者注册 SDK 模型目录，后者作为打包默认进度数据。
 
 ## 架构说明
 
@@ -167,7 +167,7 @@ MediaGenerator/ConversationWorkspace
   → Provider (PPIO / Fal / KIE / ModelScope)
 ```
 
-模型定义集中在 `src/models/**/*.model.ts`，由 `loadAllModels()` 自动扫描注册到 `ModelRegistry`。请求构建由 `RequestBuilder` + `EndpointSelector` 完成。
+运行时模型定义集中在 `packages/ai-sdk/src/catalog/**/*.model.ts`，由显式 `catalog` 清单导出；痕迹AI 的文案、联动与面板配置位于 `src/models/presentation/`。`loadAllModels()` 合成两侧数据后注册到 `ModelRegistry`，主进程通过 `@henjicc/ai-sdk` 直接执行请求构建与供应商协议。
 
 ### 数据存储
 
@@ -187,7 +187,7 @@ MediaGenerator/ConversationWorkspace
 想要添加新的 AI 模型或供应商？
 
 - **[模型与供应商适配规范](docs/rules/model-adaptation.md)**：参数 Schema 定义、联动系统、请求构建、媒体上传约束、manifest 生成
-- **[模型适配资料库](docs/model-adaptation/README.md)**：各模型在各供应商上的 API 契约与价格，是核对字段和价格的唯一来源
+- **[模型适配资料库](packages/ai-sdk/docs/model-adaptation/README.md)**：各模型在各供应商上的 API 契约与价格，是核对字段和价格的唯一来源
 
 ## 许可证
 

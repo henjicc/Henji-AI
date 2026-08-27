@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { agentDataClassSchema } from './toolContracts'
-import { modelInputModalitySchema, type ModelStepMessage } from '../llm/modelStep'
+import { modelInputModalitySchema, type ModelStepMessage } from '@henjicc/ai-sdk'
 
 export const AGENT_ATTACHMENT_SCHEMA_VERSION = 'agent-attachment/v1' as const
 export const AGENT_ATTACHMENT_MAX_COUNT = 8

@@ -15,7 +15,7 @@ import type {
 } from '../../../../src/core/assistant/runtimeContracts'
 import type { AgentMemoryContextEntry } from '../../../../src/core/assistant/memory'
 import type { AgentWorkingSummary } from '../../../../src/core/assistant/workingContext'
-import type { ModelStepMessage } from '../../../../src/core/llm/modelStep'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import type {
   AgentTraceCompleteInput,
   AgentTraceFailInput,

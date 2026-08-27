@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_LLM_CAPABILITIES } from '@/core/llm/defaults'
-import type { LlmConfigState } from '@/core/llm/types'
+import type { LlmConfigState } from '@henjicc/ai-sdk'
 import {
   buildTextProcessingRequest,
   createTextProcessingInputFingerprint,

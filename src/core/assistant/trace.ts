@@ -5,7 +5,7 @@ import {
   modelStepMessageSchema,
   modelStepToolCallSchema,
   modelStepUsageSchema,
-} from '../llm/modelStep'
+} from '@henjicc/ai-sdk'
 
 export const AGENT_TRACE_SCHEMA_VERSION = 'agent-trace/v1' as const
 

@@ -1,14 +1,15 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { getDb } from '../db'
-import { getManifestStore } from './manifest'
 import type {
   AiProgressEstimateDto,
   AiRecordProgressSampleResponseDto,
   JsonObject,
   JsonValue,
-  ModelManifestItem,
-} from './types'
+  ModelRuntimeDefinition,
+} from '@henjicc/ai-sdk'
+import { catalogIndex } from '@henjicc/ai-sdk'
+
+import { getDb } from '../db'
 
 const DEFAULT_PROFILE_KEY = '__default__'
 const GLOBAL_SAMPLE_WINDOW = 30
@@ -49,9 +50,9 @@ interface ProgressSeedProfile {
 let progressSeedFile: ProgressSeedFile | null = null
 
 export function getProgressEstimate(modelId: string, params: JsonObject = {}): AiProgressEstimateDto {
-  const model = getManifestStore().get(modelId)
+  const model = catalogIndex.get(modelId)
   if (!model) {
-    throw new Error(`Model not found in manifest: ${modelId}`)
+    throw new Error(`Model not found in catalog: ${modelId}`)
   }
   return buildEstimate(modelId, model, params, loadSamples(modelId, DEFAULT_PROFILE_KEY), currentTimeBucket())
 }
@@ -68,7 +69,7 @@ export function recordProgressSample(
     return { actualDurationMs: 0, estimate: getProgressEstimate(modelId, params) }
   }
 
-  const model = getManifestStore().get(modelId)
+  const model = catalogIndex.get(modelId)
   if (model) {
     getDb().prepare(`
       INSERT INTO progress_samples (
@@ -77,8 +78,8 @@ export function recordProgressSample(
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       modelId,
-      model.providerId,
-      model.modelType ?? 'unknown',
+      model.meta.provider,
+      model.meta.type,
       DEFAULT_PROFILE_KEY,
       timeBucketFromTimestampMs(finishedAtMs),
       durationMs,
@@ -96,7 +97,7 @@ export function recordProgressSample(
 
 function buildEstimate(
   modelId: string,
-  model: ModelManifestItem,
+  model: ModelRuntimeDefinition,
   params: JsonObject,
   samples: ProgressSampleRow[],
   timeBucket: TimeBucket
@@ -234,7 +235,7 @@ function loadSamples(modelId: string, profileKey: string): ProgressSampleRow[] {
   `).all(modelId, profileKey, QUERY_SAMPLE_WINDOW) as ProgressSampleRow[]
 }
 
-function resolveGlobalDefaultMs(modelId: string, model: ModelManifestItem, params: JsonObject): number {
+function resolveGlobalDefaultMs(modelId: string, model: ModelRuntimeDefinition, params: JsonObject): number {
   return lookupSeedGlobal(modelId, DEFAULT_PROFILE_KEY) ??
     resolveMetaDurationMs(model, params) ??
     resolveGenericDefaultMs(model, params)
@@ -242,7 +243,7 @@ function resolveGlobalDefaultMs(modelId: string, model: ModelManifestItem, param
 
 function resolveDefaultSource(
   modelId: string,
-  model: ModelManifestItem,
+  model: ModelRuntimeDefinition,
   params: JsonObject
 ): AiProgressEstimateDto['source'] {
   if (lookupSeedGlobal(modelId, DEFAULT_PROFILE_KEY) !== undefined) return 'seed'
@@ -250,8 +251,8 @@ function resolveDefaultSource(
   return 'default'
 }
 
-function resolveMetaDurationMs(model: ModelManifestItem, params: JsonObject): number | undefined {
-  const progress = model.progress
+function resolveMetaDurationMs(model: ModelRuntimeDefinition, params: JsonObject): number | undefined {
+  const progress = model.meta.progress
   if (progress?.mode === 'time') {
     const baseDurationMs = progress.baseDurationMs
     if (baseDurationMs === undefined) return undefined
@@ -267,29 +268,32 @@ function resolveMetaDurationMs(model: ModelManifestItem, params: JsonObject): nu
     const unitCount = resolveUnitCount(params, progress.scaleWith)
     const rawAttempts = baseAttempts + (progress.perUnitAttempts ?? 0) * Math.max(0, unitCount - 1)
     const minAttempts = progress.minAttempts ?? 1
-    const maxAttempts = progress.maxAttempts ?? model.polling?.maxAttempts ?? Math.max(rawAttempts, minAttempts)
+    const maxAttempts = progress.maxAttempts ?? model.meta.polling?.maxAttempts ?? Math.max(rawAttempts, minAttempts)
     const attempts = clampNumber(rawAttempts, minAttempts, maxAttempts)
-    const intervalMs = progress.intervalMs ?? model.polling?.interval ?? 3000
+    const intervalMs = progress.intervalMs ?? model.meta.polling?.interval ?? 3000
     const rawDurationMs = attempts * intervalMs
     return clampNumber(rawDurationMs, progress.minDurationMs ?? 1, progress.maxDurationMs ?? Math.max(rawDurationMs, progress.minDurationMs ?? 1))
   }
 
-  if (model.polling) {
-    return (model.polling.expectedAttempts ?? model.polling.maxAttempts) * model.polling.interval
+  if (model.meta.polling) {
+    return (model.meta.polling.expectedAttempts ?? model.meta.polling.maxAttempts) * model.meta.polling.interval
   }
   return undefined
 }
 
-function resolveGenericDefaultMs(model: ModelManifestItem, params: JsonObject): number {
-  if (model.modelType === 'video') {
+function resolveGenericDefaultMs(model: ModelRuntimeDefinition, params: JsonObject): number {
+  if (model.meta.type === 'video') {
     const durationSeconds = pickFirstNumberLike(params, ['duration', 'videoDuration', 'video_duration', 'ppioWan25VideoDuration', 'seconds']) ?? 5
     const scale = clampNumber(clampNumber(durationSeconds, 1, 30) / 5, 0.5, 6)
     return clampNumber(Math.round(120_000 * scale), 30_000, 900_000)
   }
-  if (model.modelType === 'audio') {
+  if (model.meta.type === 'audio') {
     const textLength = resolvePromptTextLength(params)
     const extraBlocks = textLength > 120 ? Math.ceil((textLength - 120) / 80) : 0
     return clampNumber(10_000 + extraBlocks * 800, 3_000, 120_000)
+  }
+  if (model.meta.type !== 'image') {
+    return 60_000
   }
   const imageCount = Math.max(1, Math.round(pickFirstNumberLike(params, ['maxImages', 'max_images', 'numImages', 'num_images', 'imageCount', 'image_count']) ?? 1))
   return clampNumber(60_000 + Math.max(0, imageCount - 1) * 12_000, 15_000, 240_000)

@@ -6,10 +6,10 @@
 
 ## API 与价格资料源（唯一来源）
 
-`docs/model-adaptation/` 是本项目**唯一的模型 API 与价格资料源**。核对字段名、枚举值、输入限制、端点或价格时只读这里，不要凭记忆下结论。
+`packages/ai-sdk/docs/model-adaptation/` 是本项目**唯一的模型 API 与价格资料源**。核对字段名、枚举值、输入限制、端点或价格时只读这里，不要凭记忆下结论。
 
 ```
-docs/model-adaptation/
+packages/ai-sdk/docs/model-adaptation/
 ├── README.md          # 总索引：模型清单、平台 model ID 速查、供应商通用协议
 ├── 文档采集手册.md      # 怎么发现/抓取/处理供应商文档（调研前先看）
 ├── 供应商/<供应商名>.md  # 供应商公共协议：端点、鉴权、上传、轮询、结果解析、计价
@@ -25,27 +25,28 @@ docs/model-adaptation/
 
 改模型代码时的硬要求：
 
-- **改了 `.model.ts` 的参数、枚举、输入限制或价格，必须同步更新对应的 `docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md`**，并更新该文件与 `README.md` 头部的「最后更新」。只改代码不改文档会让下一次调研拿到错误依据。
+- **改了 `.model.ts` 的参数、枚举、输入限制或价格，必须同步更新对应的 `packages/ai-sdk/docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md`**，并更新该文件与 `README.md` 头部的「最后更新」。只改代码不改文档会让下一次调研拿到错误依据。
 - 代码注释里引用价格/字段来源时，来源必须与对应文档「原始链接索引」中的条目一致；调研中新发现的来源要先回填进文档，再在代码里引用。
 - **下线模型时**：删 `.model.ts` 的同时删掉或标注对应的模型文档，并从 `README.md` 清单表里移除该行。
 - 文档与代码冲突时，先按「模型专属页 > 实时价格页 > API 文档正文」重新核实，把结论回写文档，再改代码；不要单方面让代码偏离文档而不留痕。
+- **新增供应商，或改动某供应商在 `packages/ai-sdk/src/providers/**` 下的请求构建/响应解析逻辑时，必须同步补 `packages/ai-sdk/tests/fixtures/<供应商>/*.json` fixture**（至少创建成功/轮询完成/失败三个场景，同步供应商可用等价场景）：数据来源优先真实开发日志，其次该供应商 `model-adaptation-*.test.ts` 里已核对过的请求体断言 + 供应商官方文档记录的响应示例，不得凭空手写。字段格式、正反双向断言机制与新增供应商的完整要求见 `packages/ai-sdk/tests/fixtures/README.md`；改完跑 `npx vitest run packages/ai-sdk/tests/fixtures.test.ts` 确认通过。
 
 ## 配置驱动（最重要）
 
 所有模型特定行为必须在配置中定义，而非代码：
 
-- UI 渲染由 `src/models/{provider}/*.model.ts` 的参数 schema 驱动
-- 用 `defineModel()` 定义，自动注册到 `ModelRegistry`
+- 运行时参数、路由、请求与计价由 `packages/ai-sdk/src/catalog/{provider}/*.model.ts` 的 schema 驱动；痕迹AI 文案、联动与专属面板位于 `src/models/presentation/`
+- SDK 的 `defineModel()` 是纯校验函数；应用启动时由 `catalog + modelPresentations + composeModelDefinition` 合成后注册到 `ModelRegistry`
 - **禁止**在 UI 组件中写 `if (modelId === 'specific-model')`
 - **禁止**在通用组件中硬编码模型特定逻辑
 - 需要模型特定行为时，**扩展 schema**，不要加分支
 
 ## 新增模型
 
-在 `src/models/{provider}/{model-name}.model.ts`：
+在 `packages/ai-sdk/src/catalog/{provider}/{model-name}.model.ts`：
 
 ```typescript
-import { defineModel } from '@/core'
+import { defineModel } from '../defineModel'
 
 export const myModel = defineModel({
   meta: {
@@ -53,7 +54,6 @@ export const myModel = defineModel({
     canonicalModelId: 'common-model-id',
     provider: 'provider-name',
     type: 'video', // 'image' | 'video' | 'audio'
-    name: { zh: '中文名', en: 'English Name' },
     tags: ['text-to-video'],
     polling: { interval: 3000, maxAttempts: 120 }
   },
@@ -62,7 +62,6 @@ export const myModel = defineModel({
       id: 'prompt',
       type: 'text',
       order: 1,
-      name: { zh: '提示词', en: 'Prompt' },
       default: '',
       required: true
     }
@@ -79,20 +78,20 @@ export const myModel = defineModel({
 
 约定：
 
-- 文件必须以 `.model.ts` 结尾且位于 `src/models/` 下，否则不会被注册
-- 供应商模型文件**不填** `meta.description`；通用描述统一维护在 `src/core/modelCatalog/generationModelDescriptions.ts`
+- 运行时模型文件必须以 `.model.ts` 结尾且位于 `packages/ai-sdk/src/catalog/` 下；生成的 `packages/ai-sdk/src/catalog/index.ts` 负责注册
+- 供应商运行时模型文件不填写应用文案或 `meta.description`；名称、参数/选项文案、linkages 与专属面板写入 `src/models/presentation/`，通用描述统一维护在 `src/core/modelCatalog/generationModelDescriptions.ts`
 - 默认**不加随机种子（seed）参数**，归为"不显示且不请求"
 
 验证：
 
 ```bash
-npm run gen:model-manifest
+npm run gen:catalog
 npm run check:model-i18n
 ```
 
 ## 参数类型
 
-以 `src/core/types/ComponentTypes.ts` 为准：
+以 `packages/ai-sdk/src/types/model.ts` 的 `RuntimeParamDef` 为准：
 
 `text`（单行）、`textarea`（多行）、`number`、`dropdown`、`switch`、`radio`、`panel`（分组面板）、`composite`（自定义复合面板）、`image-upload`、`video-upload`、`file-upload`、`resolution`、`aspect-ratio`
 
@@ -132,13 +131,13 @@ npm run check:model-i18n
 
 联动不生效时：验证 `trigger` / `target` 参数 ID，检查 `condition` 函数逻辑。
 
-## Manifest / Seeds
+## Catalog / Seeds
 
-`resources/model-manifest.json` 与 `resources/progress-seeds.json` 是**自动生成产物，不是手写主源**（Git 忽略；`resources/progress-seeds.base.json` 是基础 seeds，是手写源）。
+`packages/ai-sdk/src/catalog/index.ts` 与 `resources/progress-seeds.json` 是**自动生成产物，不是手写主源**（`resources/progress-seeds.base.json` 是基础 seeds，是手写源）。
 
-- 它们在 `gen:model-manifest`、`dev`、`electron:dev`、`electron:build`、`electron:dist` 链路中刷新
-- **单纯"退出并重新打开应用"不会重新生成 manifest**；修改模型定义、请求构建或运行时约束后，必须重跑上述脚本之一
-- 主进程开发态读仓库内生成产物，打包态读随包 `resources/` 副本
+- catalog 索引由 `gen:catalog` 生成，主进程直接消费 SDK 中的真实模型定义与函数，不存在独立 manifest 或动态求值副本
+- 修改模型定义后先跑 `npm run gen:catalog`；当前仅 `electron:build`（以及复用它的 pack/dist/publish）自动刷新 catalog 索引，日常 `dev` / `electron:dev` 不会代跑该生成器
+- 单纯退出并重新打开应用不会生成索引；SDK 源码和索引变更需重新构建或重启开发实例才会加载
 
 ### 进度条预计时间
 
@@ -166,6 +165,6 @@ window.henjiNative          // Electron 安全桥（db/ai/image/media/updater �
 
 ## 常见问题
 
-**模型未显示**：检查文件名以 `.model.ts` 结尾、位置在 `src/models/` 下，然后跑 `npm run gen:model-manifest` 和 `npm run lint`。
+**模型未显示**：检查文件名以 `.model.ts` 结尾、位置在 `packages/ai-sdk/src/catalog/` 下，然后跑 `npm run gen:catalog` 和 `npm run check:model-i18n`。
 
-**请求格式错误**：在 `request.builder()` 中加最小日志定位；对照 `resources/model-manifest.json` 检查 builder 输出；运行时错误看 `electron/main/services/ai-runtime/trace.ts` 相关 trace 与主进程日志。
+**请求格式错误**：为 SDK catalog 的真实 `request.builder()` / `endpoints.selector` 写请求契约测试；运行时错误看 `electron/main/services/ai-runtime/trace.ts` 相关 trace 与主进程日志。

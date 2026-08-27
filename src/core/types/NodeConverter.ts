@@ -4,7 +4,7 @@
  * 定义从 ModelDefinition 到 ModelNode 的转换接口
  */
 
-import type { ModelDefinition } from './ModelDefinition'
+import type { BuiltinModelType, ModelDefinition } from './ModelDefinition'
 import type { ParamDef } from './ParamDef'
 import type { ModelNode } from './ModelNode'
 import type { InputPort, OutputPort } from './NodePort'
@@ -16,7 +16,7 @@ export interface INodeConverter {
   /**
    * 将模型定义转换为节点定义
    */
-  modelToNode(model: ModelDefinition): ModelNode
+  modelToNode(model: ModelDefinition): ModelNode | null
 
   /**
    * 将参数定义转换为输入端口
@@ -26,5 +26,5 @@ export interface INodeConverter {
   /**
    * 根据模型类型生成输出端口
    */
-  getOutputPorts(modelType: 'image' | 'video' | 'audio'): OutputPort[]
+  getOutputPorts(modelType: BuiltinModelType): OutputPort[]
 }

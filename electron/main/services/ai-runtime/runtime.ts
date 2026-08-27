@@ -1,28 +1,24 @@
+import {
+  AiRuntimeError,
+  type AIClientGenerationRequestInfo,
+  type AiContinuePollingRequestDto,
+  type AiGenerateRequestDto,
+  type AiGenerateResponseDto,
+  type AiGetProgressEstimateRequestDto,
+  type AiProgressEstimateDto,
+  type AiRecordProgressSampleRequestDto,
+  type AiRecordProgressSampleResponseDto,
+  type JsonObject,
+  type ProviderKeyStatusDto,
+} from '@henjicc/ai-sdk'
+
 import { getAiProviderApiKey, getAiProviderKeyStatus } from '../keystore'
 import { createMainLogger, sanitizeJsonValue } from '../logging'
-import { AiRuntimeError } from './errors'
-import { getManifestStore, reloadManifestStore } from './manifest'
 import { saveMediaFromUrl } from './media-store'
 import { getProgressEstimate, recordProgressSample } from './progress'
 import { savePendingResult } from './pending-results'
-import { executeContinuePolling, executeGenerate } from './providers'
-import { buildRequest } from './request-builder-dsl'
-import { normalizeRequestBody } from './request-normalizer'
-import { clearCancelFlag, cancelTask, registerAbortController } from './task-registry'
+import { sdkAIClient } from './sdk-runtime'
 import { buildContinuePollingTrace, buildGenerateTrace } from './trace'
-import { preprocessRequestBody } from './upload'
-import type {
-  AiContinuePollingRequestDto,
-  AiGenerateRequestDto,
-  AiGenerateResponseDto,
-  AiGetProgressEstimateRequestDto,
-  AiProgressEstimateDto,
-  AiRecordProgressSampleRequestDto,
-  AiRecordProgressSampleResponseDto,
-  JsonObject,
-  ModelManifestItem,
-  ProviderKeyStatusDto,
-} from './types'
 
 // 主进程直接落盘 henji-*.log（source: 'backend'）；日志窗口（2.1）通过 henji://log-event
 // 实时订阅同一份事件，不再需要 henji://runtime-request-preview 这条给旧查看器用的预览通道。
@@ -56,7 +52,8 @@ function toLogError(error: unknown): unknown {
 export function getProviderKeyStatus(): ProviderKeyStatusDto[] {
   const known = getAiProviderKeyStatus()
   const byProvider = new Map(known.map((item) => [item.providerId, item.configured]))
-  for (const providerId of getManifestStore().providerIds()) {
+  for (const model of sdkAIClient.catalog.list()) {
+    const providerId = model.meta.provider
     if (!byProvider.has(providerId)) {
       byProvider.set(providerId, getAiProviderApiKey(providerId) !== null)
     }
@@ -68,10 +65,6 @@ export async function generate(
   request: AiGenerateRequestDto
 ): Promise<AiGenerateResponseDto> {
   const requestId = resolveRequestId(request)
-  clearCancelFlag(requestId)
-  const abortController = new AbortController()
-  registerAbortController(requestId, abortController)
-
   logger.info('后端开始生成', {
     event: 'ai_runtime.generate.start',
     requestId,
@@ -79,52 +72,31 @@ export async function generate(
   })
 
   try {
-    const model = resolveModel(request.modelId)
-    const effectiveParams = mergeAliasParamDefaults(request.modelId, request.params, model)
-    const providerId = model.providerId
-    const apiKey = requireApiKey(providerId)
-    const builtRequest = buildRequest(effectiveParams, model)
-    const normalizedBody = normalizeRequestBody(builtRequest.body, model.runtimeConstraints)
-    if (!builtRequest.route.trim()) {
-      throw new AiRuntimeError('invalid_route', 'Request route is empty')
-    }
-
-    const preprocessedBody = await preprocessRequestBody(
-      providerId,
-      builtRequest.route,
-      normalizedBody,
-      effectiveParams,
-      model.runtimeConstraints,
-      requestId
-    )
-    logger.info('后端发起生成请求', {
-      event: 'generation.runtime.request_json',
-      requestId,
-      modelId: request.modelId,
-      providerId,
-      context: {
-        method: builtRequest.method,
-        route: builtRequest.route,
-        requestBody: sanitizeJsonValue(preprocessedBody),
+    let requestInfo: AIClientGenerationRequestInfo | undefined
+    const providerResult = await sdkAIClient.generate({ ...request, requestId }, {
+      onRequestBuilt: (info) => {
+        requestInfo = info
+        logger.info('后端发起生成请求', {
+          event: 'generation.runtime.request_json',
+          requestId,
+          modelId: request.modelId,
+          providerId: info.providerId,
+          context: {
+            method: info.method,
+            route: info.route,
+            requestBody: sanitizeJsonValue(info.requestBody),
+          },
+        })
       },
     })
-
-    const providerResult = await executeGenerate(providerId, {
-      apiKey,
-      route: builtRequest.route,
-      method: builtRequest.method,
-      body: preprocessedBody,
-      requestId,
-      polling: model.polling,
-      signal: abortController.signal,
-    })
+    const info = requireRequestInfo(requestInfo)
     const trace = buildGenerateTrace(
       request.modelId,
-      providerId,
+      info.providerId,
       requestId,
-      builtRequest.route,
-      builtRequest.method,
-      preprocessedBody,
+      info.route,
+      info.method,
+      info.requestBody,
       providerResult.metadata
     )
     const filePath = providerResult.status === 'completed'
@@ -135,7 +107,7 @@ export async function generate(
       event: 'generation.runtime.response_json',
       requestId,
       modelId: request.modelId,
-      providerId,
+      providerId: info.providerId,
       context: {
         phase: trace.phase,
         route: trace.route,
@@ -147,11 +119,11 @@ export async function generate(
       event: 'ai_runtime.generate.result',
       requestId,
       modelId: request.modelId,
-      providerId,
+      providerId: info.providerId,
       context: { status: providerResult.status, taskId: providerResult.taskId },
     })
 
-    return {
+    const response = {
       status: providerResult.status,
       url: providerResult.url,
       filePath,
@@ -159,6 +131,7 @@ export async function generate(
       metadata: providerResult.metadata,
       trace,
     }
+    return response
   } catch (error) {
     logger.error('后端生成失败', {
       event: 'ai_runtime.generate.failed',
@@ -167,8 +140,6 @@ export async function generate(
       error: toLogError(error),
     })
     throw error
-  } finally {
-    clearCancelFlag(requestId)
   }
 }
 
@@ -176,52 +147,48 @@ export async function continuePolling(
   request: AiContinuePollingRequestDto
 ): Promise<AiGenerateResponseDto> {
   const requestId = `continue-${request.modelId}-${Date.now()}`
-  clearCancelFlag(requestId)
-  const abortController = new AbortController()
-  registerAbortController(requestId, abortController)
+  const taskId = request.taskId.trim()
+  logger.info('后端开始轮询', {
+    event: 'ai_runtime.poll.start',
+    requestId,
+    taskId,
+    modelId: request.modelId,
+  })
 
   try {
-    const model = resolveModel(request.modelId)
-    const effectiveParams = mergeAliasParamDefaults(request.modelId, request.params ?? {}, model)
-    const providerId = model.providerId
-    const apiKey = requireApiKey(providerId)
-    const builtRequest = buildRequest(effectiveParams, model)
-
-    logger.info('后端发起轮询请求', {
-      event: 'generation.runtime.request_json',
-      requestId,
-      taskId: request.taskId.trim(),
-      modelId: request.modelId,
-      providerId,
-      context: {
-        method: 'GET',
-        route: builtRequest.route,
-        requestBody: sanitizeJsonValue(builtRequest.body),
+    let requestInfo: AIClientGenerationRequestInfo | undefined
+    const providerResult = await sdkAIClient.continuePolling({ ...request, requestId }, {
+      onRequestBuilt: (info) => {
+        requestInfo = info
+        logger.info('后端发起轮询请求', {
+          event: 'generation.runtime.request_json',
+          requestId,
+          taskId,
+          modelId: request.modelId,
+          providerId: info.providerId,
+          context: {
+            method: info.method,
+            route: info.route,
+            requestBody: sanitizeJsonValue(info.requestBody),
+          },
+        })
       },
     })
-
-    const providerResult = await executeContinuePolling(providerId, {
-      apiKey,
-      route: builtRequest.route,
-      taskId: request.taskId.trim(),
-      requestId,
-      polling: model.polling,
-      signal: abortController.signal,
-    })
+    const info = requireRequestInfo(requestInfo)
     const trace = buildContinuePollingTrace(
       request.modelId,
-      providerId,
+      info.providerId,
       requestId,
-      builtRequest.route,
-      request.taskId.trim(),
+      info.route,
+      taskId,
       providerResult.metadata
     )
     logger.info('后端轮询响应', {
       event: 'generation.runtime.response_json',
       requestId,
-      taskId: request.taskId.trim(),
+      taskId,
       modelId: request.modelId,
-      providerId,
+      providerId: info.providerId,
       context: {
         phase: trace.phase,
         route: trace.route,
@@ -238,40 +205,49 @@ export async function continuePolling(
       metadata: providerResult.metadata,
       trace,
     }
-    savePendingResult(request.taskId.trim(), {
+    savePendingResult(taskId, {
       url: providerResult.url,
       filePath,
       metadata: providerResult.metadata,
     })
+    logger.info('后端轮询结果', {
+      event: 'ai_runtime.poll.result',
+      requestId,
+      taskId,
+      modelId: request.modelId,
+      providerId: info.providerId,
+      context: { status: providerResult.status },
+    })
     return responseResult
-  } finally {
-    clearCancelFlag(requestId)
+  } catch (error) {
+    logger.error('后端轮询失败', {
+      event: 'ai_runtime.poll.failed',
+      requestId,
+      taskId,
+      modelId: request.modelId,
+      error: toLogError(error),
+    })
+    throw error
   }
 }
 
 export function cancelRuntimeTask(taskId: string): void {
-  cancelTask(taskId)
-}
-
-export function reloadModelManifest(): number {
-  return reloadManifestStore()
+  sdkAIClient.cancel({ namespace: 'generation', taskId })
 }
 
 export function getEstimate(request: AiGetProgressEstimateRequestDto): AiProgressEstimateDto {
-  const model = resolveModel(request.modelId)
   return getProgressEstimate(
     request.modelId,
-    mergeAliasParamDefaults(request.modelId, request.params ?? {}, model)
+    sdkAIClient.catalog.resolveParams(request.modelId, request.params)
   )
 }
 
 export function recordSample(
   request: AiRecordProgressSampleRequestDto
 ): AiRecordProgressSampleResponseDto {
-  const model = resolveModel(request.modelId)
   return recordProgressSample(
     request.modelId,
-    mergeAliasParamDefaults(request.modelId, request.params ?? {}, model),
+    sdkAIClient.catalog.resolveParams(request.modelId, request.params),
     request.startedAtMs,
     request.finishedAtMs,
     request.source
@@ -282,37 +258,13 @@ function resolveRequestId(request: AiGenerateRequestDto): string {
   return request.requestId?.trim() || `${request.modelId}-${Date.now()}`
 }
 
-function mergeAliasParamDefaults(
-  requestedModelId: string,
-  params: JsonObject,
-  model: ModelManifestItem
-): JsonObject {
-  const normalizedParams: JsonObject = { ...params }
-  for (const mapping of Object.values(model.aliasParamMappings ?? {})) {
-    for (const [legacyParamId, currentParamId] of Object.entries(mapping)) {
-      if (normalizedParams[currentParamId] === undefined && normalizedParams[legacyParamId] !== undefined) {
-        normalizedParams[currentParamId] = normalizedParams[legacyParamId]
-      }
-    }
+function requireRequestInfo(
+  info: AIClientGenerationRequestInfo | undefined
+): AIClientGenerationRequestInfo {
+  if (!info) {
+    throw new AiRuntimeError('invalid_response', 'SDK client did not report request context')
   }
-  const defaults = model.aliasParamDefaults?.[requestedModelId]
-  return defaults ? { ...defaults, ...normalizedParams } : normalizedParams
-}
-
-function resolveModel(modelId: string): ModelManifestItem {
-  const model = getManifestStore().get(modelId)
-  if (!model) {
-    throw new AiRuntimeError('provider_not_found', `Unable to resolve provider for model: ${modelId}`)
-  }
-  return model
-}
-
-function requireApiKey(providerId: string): string {
-  const apiKey = getAiProviderApiKey(providerId)
-  if (!apiKey) {
-    throw new AiRuntimeError('api_key_missing', `API key not configured for provider: ${providerId}`)
-  }
-  return apiKey
+  return info
 }
 
 async function saveMediaPaths(joinedUrls: string): Promise<string | undefined> {

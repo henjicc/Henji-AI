@@ -232,7 +232,6 @@ const aiApi: HenjiAiApi = {
   generate: (request) => nativeInvoke('ai:generate', request),
   continuePolling: (request) => nativeInvoke('ai:continuePolling', request),
   cancelTask: (taskId) => nativeInvoke('ai:cancelTask', { taskId }),
-  reloadModelManifest: () => nativeInvoke('ai:reloadModelManifest'),
   getProgressEstimate: (request) => nativeInvoke('ai:getProgressEstimate', request),
   recordProgressSample: (request) => nativeInvoke('ai:recordProgressSample', request),
   consumePendingResult: (serverTaskId) => nativeInvoke('ai:consumePendingResult', { serverTaskId }),

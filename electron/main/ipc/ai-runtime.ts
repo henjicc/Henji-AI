@@ -6,22 +6,22 @@ import {
   getProviderKeyStatus,
   parseJsonObject,
   recordSample,
-  reloadModelManifest,
 } from '../services/ai-runtime/runtime'
 import { consumePendingResult } from '../services/ai-runtime/pending-results'
 import type { PendingResultPayload } from '../services/ai-runtime/pending-results'
-import type {
-  AiContinuePollingRequestDto,
-  AiGenerateRequestDto,
-  AiGenerateResponseDto,
-  AiGetProgressEstimateRequestDto,
-  AiProgressEstimateDto,
-  AiRecordProgressSampleRequestDto,
-  AiRecordProgressSampleResponseDto,
-  ProviderKeyStatusDto,
-  ProviderConnectionTestResultDto,
-} from '../services/ai-runtime/types'
-import { testProviderConnection } from '../services/ai-runtime/provider-connection'
+import {
+  testProviderConnection,
+  type AiContinuePollingRequestDto,
+  type AiGenerateRequestDto,
+  type AiGenerateResponseDto,
+  type AiGetProgressEstimateRequestDto,
+  type AiProgressEstimateDto,
+  type AiRecordProgressSampleRequestDto,
+  type AiRecordProgressSampleResponseDto,
+  type ProviderKeyStatusDto,
+  type ProviderConnectionTestResultDto,
+} from '@henjicc/ai-sdk'
+import { sdkRuntimeContext } from '../services/ai-runtime/sdk-runtime'
 import { parseRecord, parseStringField, parseVoid, registerIpcHandler } from './registry'
 
 function parseGenerateRequest(input: unknown): AiGenerateRequestDto {
@@ -69,7 +69,7 @@ export function registerAiRuntimeIpc(): void {
   registerIpcHandler<string, ProviderConnectionTestResultDto>(
     'ai:testProviderConnection',
     (input) => parseStringField(input, 'providerId'),
-    (providerId) => testProviderConnection(providerId)
+    (providerId) => testProviderConnection(providerId, sdkRuntimeContext)
   )
 
   registerIpcHandler<AiGenerateRequestDto, AiGenerateResponseDto>('ai:generate', parseGenerateRequest, async (request) => {
@@ -83,8 +83,6 @@ export function registerAiRuntimeIpc(): void {
   registerIpcHandler<string, void>('ai:cancelTask', (input) => parseStringField(input, 'taskId'), (taskId) => {
     cancelRuntimeTask(taskId)
   })
-
-  registerIpcHandler<void, number>('ai:reloadModelManifest', parseVoid, () => reloadModelManifest())
 
   registerIpcHandler<AiGetProgressEstimateRequestDto, AiProgressEstimateDto>('ai:getProgressEstimate', parseEstimateRequest, (request) => {
     return getEstimate(request)

@@ -25,7 +25,7 @@ import {
   PROMPT_OPTIMIZATION_EDITOR_VARIABLES,
   readPromptOptimizationProfileDocument,
 } from '@/core/llm/promptOptimization'
-import type { LlmConfigState, LlmProviderConfig, PromptOptimizationProfile } from '@/core/llm/types'
+import type { LlmConfigState, LlmProviderConfig, PromptOptimizationProfile } from '@henjicc/ai-sdk'
 import { llmConfigService } from '@/services/llm'
 
 interface PromptOptimizationProfilesPanelProps {

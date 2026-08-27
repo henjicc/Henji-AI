@@ -20,17 +20,17 @@
 当前仓库已存在示例：
 
 - `enable_safety_checker: false`
-  - `src/models/fal/seedance.model.ts`
-  - `src/models/fal/seedream-v4.model.ts`
-  - `src/models/fal/seedream-v4.5.model.ts`
-  - `src/models/fal/wan-2.5-preview.model.ts`
-  - `src/models/fal/z-image-turbo.model.ts`
+  - `packages/ai-sdk/src/catalog/fal/seedance.model.ts`
+  - `packages/ai-sdk/src/catalog/fal/seedream-v4.model.ts`
+  - `packages/ai-sdk/src/catalog/fal/seedream-v4.5.model.ts`
+  - `packages/ai-sdk/src/catalog/fal/wan-2.5-preview.model.ts`
+  - `packages/ai-sdk/src/catalog/fal/z-image-turbo.model.ts`
 - `watermark: false`
-  - `src/models/ppio/wan-2.5-preview.model.ts`
-  - `src/models/ppio/wan-2.6.model.ts`
-  - `src/models/ppio/wan-2.7.model.ts`
+  - `packages/ai-sdk/src/catalog/ppio/wan-2.5-preview.model.ts`
+  - `packages/ai-sdk/src/catalog/ppio/wan-2.6.model.ts`
+  - `packages/ai-sdk/src/catalog/ppio/wan-2.7.model.ts`
 - 历史存量里存在输出格式字段，但不要作为新增适配参考：
-  - `output_format: 'png'` in `src/models/fal/z-image-turbo.model.ts`
+  - `output_format: 'png'` in `packages/ai-sdk/src/catalog/fal/z-image-turbo.model.ts`
 
 ## Negative Prompt 现状
 

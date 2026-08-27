@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import { createBuiltinAgentToolRegistry } from '../tools/builtin'
 import { compileActionGroups } from './action-plan-compiler'
 

@@ -1,6 +1,6 @@
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
 import type { AgentWorkingSummary } from '../../../../../src/core/assistant/workingContext'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentToolRegistry } from '../tools/registry'
 
 interface RecoveryGuardState {

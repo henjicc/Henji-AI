@@ -50,11 +50,20 @@ import {
   type AgentUtilityRpcOperation,
 } from '../../src/core/assistant/utilityContracts'
 import {
+  applyDeepSeekUsage,
+  calculateModelStepKnownCostUsd,
+  createCancelledError,
+  createCredentialError,
+  createModelStepLanguageModel,
+  executeModelStepWithModel,
+  executeModelStepWithRetry,
   modelStepInputSchema,
+  normalizeProviderError,
   type ModelStepEvent,
+  type ModelStepHttpTrace,
   type ModelStepInput,
   type ModelStepResult,
-} from '../../src/core/llm/modelStep'
+} from '@henjicc/ai-sdk'
 import { AgentArtifactStore } from './services/agent-runtime/context/offload'
 import { AgentRunner } from './services/agent-runtime/runner/runner'
 import { AgentToolGateway } from './services/agent-runtime/tools/gateway'
@@ -64,21 +73,6 @@ import {
   createHenjiScriptTools,
 } from './services/agent-runtime/henji-script/tools'
 import { createMainLogger } from './services/logging'
-import {
-  calculateModelStepKnownCostUsd,
-  executeModelStepWithModel,
-} from './services/llm/sdk/model-step'
-import {
-  applyDeepSeekUsage,
-  createModelStepLanguageModel,
-  type ModelStepHttpTrace,
-} from './services/llm/sdk/provider'
-import {
-  createCancelledError,
-  createCredentialError,
-  normalizeProviderError,
-} from './services/llm/sdk/provider-error'
-import { executeModelStepWithRetry } from './services/llm/sdk/retry-policy'
 import {
   buildModelStepTraceDetail,
   createModelStepStreamTrace,

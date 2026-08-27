@@ -1,6 +1,6 @@
 import type { HostScopeRevisions } from '../../../../../src/core/assistant/hostContracts'
 import type { AgentToolObservation } from '../../../../../src/core/assistant/toolContracts'
-import type { ModelStepToolCall } from '../../../../../src/core/llm/modelStep'
+import type { ModelStepToolCall } from '@henjicc/ai-sdk'
 import type { AgentRouteDecision } from '../context/types'
 import type { AgentToolRegistry } from '../tools/registry'
 import { buildRecoveryGuidance } from './result-verifier'

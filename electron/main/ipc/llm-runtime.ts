@@ -1,21 +1,24 @@
-import type { JsonObject, JsonValue, LlmChatRequestDto, LlmStreamEventDto } from '../services/llm/types'
 import {
+  discoverModels,
   modelStepInputSchema,
+  parseLlmReasoningConfig,
+  type DiscoveredModelItem,
+  type JsonObject,
+  type JsonValue,
+  type LlmChatRequestDto,
+  type LlmStreamEventDto,
   type ModelStepEvent,
   type ModelStepInput,
   type ModelStepResult,
-} from '../../../src/core/llm/modelStep'
+} from '@henjicc/ai-sdk'
 import {
   modelCapabilitySmokeRequestSchema,
   type ModelCapabilitySmokeRequest,
   type ModelCapabilitySmokeResult,
 } from '../../../src/core/llm/capabilitySmoke'
-import { cancelLlmRuntimeTask, llmChatStream } from '../services/llm/runtime'
-import { runModelStep } from '../services/llm/sdk/runtime'
+import { sdkRuntimeContext } from '../services/ai-runtime/sdk-runtime'
+import { cancelLlmRuntimeTask, llmChatStream, llmModelStep } from '../services/llm/runtime'
 import { verifyModelCapabilities } from '../services/llm/sdk/capability-smoke'
-import { discoverModels } from '../services/llm/discovery'
-import type { DiscoveredModelItem } from '../services/llm/discovery'
-import { parseLlmReasoningConfig } from '../services/llm/request-contract'
 import { parseRecord, parseStringField, registerIpcHandler } from './registry'
 
 interface ChatStreamPayload {
@@ -50,7 +53,7 @@ export function registerLlmRuntimeIpc(): void {
   })
 
   registerIpcHandler<ModelStepPayload, ModelStepResult>('llm:modelStep', parseModelStepPayload, async (payload, event) => {
-    return await runModelStep(payload.input, (stepEvent) => {
+    return await llmModelStep(payload.input, (stepEvent) => {
       const eventPayload: ModelStepEventPayload = { streamId: payload.streamId, event: stepEvent }
       event.sender.send('llm:modelStep:event', eventPayload)
     })
@@ -75,7 +78,7 @@ export function registerLlmRuntimeIpc(): void {
         baseUrl: readString(record, 'baseUrl'),
       }
     },
-    ({ providerId, baseUrl }) => discoverModels(providerId, baseUrl)
+    ({ providerId, baseUrl }) => discoverModels(providerId, baseUrl, sdkRuntimeContext)
   )
 }
 

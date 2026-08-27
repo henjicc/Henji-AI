@@ -1,0 +1,36 @@
+{
+  "provider": "ppio",
+  "modelId": "ppio-kling-3.0",
+  "scenario": "create-task_success",
+  "phase": "execute",
+  "method": "POST",
+  "route": "/async/kling-v3.0-std-t2v",
+  "params": {
+    "prompt": "aerial shot of mountains",
+    "aspect_ratio": "16:9",
+    "duration": 5,
+    "cfg_scale": 0.5,
+    "sound": false
+  },
+  "expectedRequest": {
+    "url": "https://api.ppio.com/v3/async/kling-v3.0-std-t2v",
+    "method": "POST",
+    "body": {
+      "prompt": "aerial shot of mountains",
+      "aspect_ratio": "16:9",
+      "duration": 5,
+      "cfg_scale": 0.5,
+      "sound": false
+    }
+  },
+  "response": { "task_id": "ppio-fixture-task_001" },
+  "expected": {
+    "outcome": "resolve",
+    "status": "pending",
+    "taskId": "ppio-fixture-task_001"
+  },
+  "source": {
+    "params": "packages/ai-sdk/tests/catalog/ppio.test.ts — 'Kling 3.0 请求构建' 用例（aspect_ratio 字段真实断言）；duration/cfg_scale/sound 按 packages/ai-sdk/docs/model-adaptation/Kling-3.0/Kling-3.0_派欧云.md §3 请求参数表的官方默认值补全（5/0.5/false）",
+    "response": "packages/ai-sdk/docs/model-adaptation/供应商/派欧云.md §1（“提交...返回 { \"task_id\": \"...\" }” 为文档原文字面 JSON），task_id 为占位符"
+  }
+}

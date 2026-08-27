@@ -1,0 +1,18 @@
+{
+  "provider": "volcengine",
+  "modelId": "volcengine-seedream-5.0-pro",
+  "scenario": "continuePolling-unsupported",
+  "phase": "continuePolling",
+  "route": "/api/v3/images/generations",
+  "taskId": "volcengine-fixture-unused",
+  "skipRequestAssertion": true,
+  "response": null,
+  "expected": {
+    "outcome": "reject",
+    "errorCode": "unsupported_provider",
+    "errorMessageIncludes": "synchronous generation"
+  },
+  "source": {
+    "response": "无需响应体：packages/ai-sdk/src/providers/volcengine.ts 的 continuePolling 对任何输入都直接同步抛错，不发起网络请求"
+  }
+}

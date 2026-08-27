@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
 import { agentBudgetConfigSchema, agentEventSchema, agentRunStateSchema } from './events'
-import { modelStepCapabilitiesSchema } from '../llm/modelStep'
-import { llmApiProtocolSchema } from '../llm/providerProtocol'
+import { modelStepCapabilitiesSchema } from '@henjicc/ai-sdk'
+import { llmApiProtocolSchema } from '@henjicc/ai-sdk'
 import { agentExternalContinuationSchema } from './externalWait'
 import { agentAttachmentsSchema } from './attachments'
 
