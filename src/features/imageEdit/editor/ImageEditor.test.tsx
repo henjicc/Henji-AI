@@ -209,4 +209,32 @@ describe('ImageEditor 发光预览', () => {
 
     expect(frame.close).toHaveBeenCalledTimes(1);
   });
+
+  it('重新打开编辑器时使用新的预览 scope 和请求 ID', async () => {
+    const initialDocument = createDocument();
+    const firstEditor = render(
+      <ImageEditor sourceImageUrl="source.png" initialDocument={initialDocument} />
+    );
+
+    await waitFor(() => expect(executionMock.execute).toHaveBeenCalledTimes(1));
+    const firstRequest = executionMock.execute.mock.calls[0][0] as {
+      previewScopeId: string;
+      requestId: string;
+      revision: number;
+    };
+    firstEditor.unmount();
+
+    render(<ImageEditor sourceImageUrl="source.png" initialDocument={initialDocument} />);
+    await waitFor(() => expect(executionMock.execute).toHaveBeenCalledTimes(2));
+    const secondRequest = executionMock.execute.mock.calls[1][0] as {
+      previewScopeId: string;
+      requestId: string;
+      revision: number;
+    };
+
+    expect(firstRequest.revision).toBe(1);
+    expect(secondRequest.revision).toBe(1);
+    expect(secondRequest.previewScopeId).not.toBe(firstRequest.previewScopeId);
+    expect(secondRequest.requestId).not.toBe(firstRequest.requestId);
+  });
 });

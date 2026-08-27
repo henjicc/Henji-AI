@@ -9,11 +9,12 @@ import type {
   ImageEditWorkerRequest,
 } from './protocol'
 import { withImageEditWorkerExecutionCapabilities } from './protocol'
+import { PreviewRevisionTracker } from './previewRevisionTracker'
 
 const workerScope = self as DedicatedWorkerGlobalScope
 const runtime = new WorkerWebGpuRuntime()
 const cancelledRequestIds = new Set<string>()
-let latestPreviewRevision = -1
+const previewRevisions = new PreviewRevisionTracker()
 let renderQueue = Promise.resolve()
 
 runtime.onDeviceLost((reason) => {
@@ -38,7 +39,7 @@ workerScope.onmessage = (message: MessageEvent<ImageEditWorkerRequest>): void =>
       })
       return
     case 'preview':
-      latestPreviewRevision = Math.max(latestPreviewRevision, request.revision)
+      previewRevisions.register(request.previewScopeId, request.revision)
       enqueue(() => handlePreview(request))
       return
     case 'export':
@@ -50,6 +51,7 @@ workerScope.onmessage = (message: MessageEvent<ImageEditWorkerRequest>): void =>
     case 'destroy':
       runtime.destroy()
       cancelledRequestIds.clear()
+      previewRevisions.clear()
       workerScope.close()
       return
     default:
@@ -67,15 +69,12 @@ function enqueue(task: () => Promise<void>): void {
 }
 
 async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<void> {
-  // 提前退出也要走 finally 的清理：拖滑块时绝大多数请求都从这里返回，
-  // 少删一次 cancelledRequestIds 就是每拖一下往 Set 里永久留一条。
-  if (request.revision < latestPreviewRevision || isCancelled(request.requestId)) {
-    cancelledRequestIds.delete(request.requestId)
-    postCancelled(request.requestId)
-    return
-  }
   const startedAt = performance.now()
   try {
+    if (previewRevisions.isStale(request.previewScopeId, request.revision) || isCancelled(request.requestId)) {
+      postCancelled(request.requestId)
+      return
+    }
     const result = await runtime.renderPreview(
       request.source,
       request.maxPixels,
@@ -85,7 +84,7 @@ async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<vo
       request.source.kind === 'url' ? request.source.url : request.requestId,
       () => isCancelled(request.requestId)
     )
-    if (request.revision < latestPreviewRevision || isCancelled(request.requestId)) {
+    if (previewRevisions.isStale(request.previewScopeId, request.revision) || isCancelled(request.requestId)) {
       result.bitmap.close()
       postCancelled(request.requestId)
       return
@@ -93,6 +92,7 @@ async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<vo
     postEvent({
       type: 'preview-completed',
       requestId: request.requestId,
+      previewScopeId: request.previewScopeId,
       revision: request.revision,
       bitmap: result.bitmap,
       width: result.width,
@@ -103,6 +103,7 @@ async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<vo
     postError(request.requestId, error)
   } finally {
     cancelledRequestIds.delete(request.requestId)
+    previewRevisions.complete(request.previewScopeId)
   }
 }
 

@@ -109,6 +109,13 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
       }
       return result;
     } catch (error) {
+      if (isAbortError(error)) {
+        logger.info('image_edit.execution.cancelled', { requestId, purpose });
+        if (usesVgpuGlow) {
+          logger.info('image_edit.vgpu_glow.execution.cancelled', { requestId, purpose });
+        }
+        throw error;
+      }
       logger.error('image_edit.execution.failed', {
         requestId,
         purpose,
@@ -187,7 +194,10 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
               recipe,
               vgpuGlowRecipe,
               composition,
-              request.requestId
+              {
+                requestId: request.requestId,
+                previewScopeId: request.previewScopeId,
+              }
             );
             return {
               kind: 'completed',

@@ -44,6 +44,7 @@ export interface ImageEditWorkerInitRequest {
 export interface ImageEditWorkerPreviewRequest {
   type: 'preview'
   requestId: string
+  previewScopeId: string
   revision: number
   source: ImageEditWorkerSource
   recipe?: DiffusionRecipe
@@ -121,6 +122,7 @@ export interface ImageEditWorkerCapabilitiesEvent {
 export interface ImageEditWorkerPreviewCompletedEvent {
   type: 'preview-completed'
   requestId: string
+  previewScopeId: string
   revision: number
   bitmap: ImageBitmap
   width: number

@@ -22,6 +22,8 @@ export interface ImageEditExecutionRequest {
   format?: ImageEditEncodedFormat;
   /** 有损编码质量，范围 0～1；PNG 会忽略该值。 */
   outputQuality?: number;
+  /** 同一个编辑器实例内稳定，用于隔离不同编辑会话的预览 revision。 */
+  previewScopeId?: string;
   revision?: number;
   signal?: AbortSignal;
   onProgress?: (progress: ImageEditExecutionProgress) => void;

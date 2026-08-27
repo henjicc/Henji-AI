@@ -146,8 +146,9 @@ export function ImageEditor({
           purpose: 'preview',
           quality: 'realtime',
           maxPixels: 2_000_000,
+          previewScopeId: session.sessionId,
           revision,
-          requestId: `image-editor-preview-${revision}`,
+          requestId: `${session.sessionId}:preview:${revision}`,
           signal: abortController.signal,
         });
         if (disposed || revision !== revisionRef.current || result.kind !== 'preview-frame') {
@@ -184,7 +185,7 @@ export function ImageEditor({
       disposed = true;
       abortController.abort();
     };
-  }, [blurParams, gpuEffectEnabled, orientation, rasterEffectEnabled, session.document, sourceImageUrl]);
+  }, [blurParams, gpuEffectEnabled, orientation, rasterEffectEnabled, session.document, session.sessionId, sourceImageUrl]);
 
   const documentController = useMemo(() => ({
     ...session.documentController,

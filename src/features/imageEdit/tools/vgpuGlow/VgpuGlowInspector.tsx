@@ -11,6 +11,7 @@ import {
   UI_TEXT_META_CLASS,
   UI_TEXT_SECTION_CLASS,
   UiChipButton,
+  UiError,
   UiGroup,
   UiOptionButton,
   UiRangeInput,
@@ -153,6 +154,14 @@ export function VgpuGlowInspector(): JSX.Element {
           />
         </UiGroup>
       </fieldset>
+
+      {operation?.enabled && controller.previewState?.phase === 'failed' ? (
+        <UiError
+          size="xs"
+          title="辉光预览失败"
+          message="当前图片暂时无法渲染辉光，请调整参数或重新打开图片后重试。"
+        />
+      ) : null}
 
       <div className="mt-4 flex gap-2">
         <UiChipButton

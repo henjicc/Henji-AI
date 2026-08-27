@@ -11,6 +11,7 @@ import type { DiffusionRecipe } from '@/core/imageEdit/diffusionRecipe'
 import type { VgpuGlowRecipe } from '@/core/imageEdit/vgpuGlowRecipe'
 import { createLogger } from '@/core/logging'
 import { toFetchableMediaUrl } from '@/services/imageSource'
+import { PreviewRevisionTracker } from '@/core/imageEdit/worker/previewRevisionTracker'
 
 const logger = createLogger('features.imageEdit.worker')
 
@@ -32,6 +33,11 @@ export interface WorkerImageEditPreviewResult {
   width: number
   height: number
   durationMs: number
+}
+
+export interface WorkerImageEditPreviewOptions {
+  requestId?: string
+  previewScopeId?: string
 }
 
 export interface WorkerImageEditExportResult {
@@ -76,8 +82,8 @@ export class WorkerImageEditClient {
     string,
     NonNullable<WorkerImageEditExportOptions['onProgress']>
   >()
-  private latestRequestedRevision = -1
-  private currentPreviewBitmap: ImageBitmap | null = null
+  private readonly previewRevisions = new PreviewRevisionTracker()
+  private readonly pendingPreviewScopes = new Map<string, string>()
   private destroyed = false
 
   constructor(workerFactory: () => WorkerLike = createDefaultWorker) {
@@ -101,16 +107,23 @@ export class WorkerImageEditClient {
     recipe?: DiffusionRecipe,
     vgpuGlowRecipe?: VgpuGlowRecipe,
     composition?: ImageEditWorkerComposition,
-    explicitRequestId?: string
+    options: WorkerImageEditPreviewOptions = {}
   ): Promise<WorkerImageEditPreviewResult> {
     this.assertActive()
-    this.latestRequestedRevision = Math.max(this.latestRequestedRevision, revision)
-    const requestId = explicitRequestId ?? createRequestId('preview')
-    logger.debug('image_edit.worker.preview.start', { requestId, revision })
+    const requestId = options.requestId ?? createRequestId('preview')
+    const resolvedPreviewScopeId = options.previewScopeId ?? requestId
+    this.previewRevisions.register(resolvedPreviewScopeId, revision)
+    this.pendingPreviewScopes.set(requestId, resolvedPreviewScopeId)
+    logger.debug('image_edit.worker.preview.start', {
+      requestId,
+      revision,
+      previewScopeId: resolvedPreviewScopeId,
+    })
     const promise = createPendingPromise(this.pendingPreviews, requestId)
     this.worker.postMessage({
       type: 'preview',
       requestId,
+      previewScopeId: resolvedPreviewScopeId,
       revision,
       source: normalizeWorkerSource(source),
       recipe,
@@ -158,15 +171,9 @@ export class WorkerImageEditClient {
     this.worker.postMessage({ type: 'cancel', requestId })
   }
 
-  releasePreview(): void {
-    this.currentPreviewBitmap?.close()
-    this.currentPreviewBitmap = null
-  }
-
   destroy(): void {
     if (this.destroyed) return
     this.destroyed = true
-    this.releasePreview()
     this.worker.postMessage({ type: 'destroy' })
     this.worker.removeEventListener('message', this.handleMessage)
     this.worker.terminate()
@@ -174,6 +181,8 @@ export class WorkerImageEditClient {
     rejectAll(this.pendingCapabilities, error)
     rejectAll(this.pendingPreviews, error)
     rejectAll(this.pendingExports, error)
+    this.pendingPreviewScopes.clear()
+    this.previewRevisions.clear()
     this.exportProgress.clear()
   }
 
@@ -261,17 +270,21 @@ export class WorkerImageEditClient {
   private handlePreviewCompleted(
     event: Extract<ImageEditWorkerEvent, { type: 'preview-completed' }>
   ): void {
-    if (event.revision < this.latestRequestedRevision) {
+    const previewScopeId = this.pendingPreviewScopes.get(event.requestId)
+    if (!previewScopeId) {
+      event.bitmap.close()
+      return
+    }
+    if (this.previewRevisions.isStale(previewScopeId, event.revision)) {
       event.bitmap.close()
       settleFailure(
         this.pendingPreviews,
         event.requestId,
-        new Error(`预览 revision ${event.revision} 已过期`)
+        new DOMException(`预览 revision ${event.revision} 已过期`, 'AbortError')
       )
+      this.finishPreviewRequest(event.requestId)
       return
     }
-    this.currentPreviewBitmap?.close()
-    this.currentPreviewBitmap = event.bitmap
     logger.debug('image_edit.worker.preview.completed', {
       requestId: event.requestId,
       revision: event.revision,
@@ -286,6 +299,7 @@ export class WorkerImageEditClient {
       height: event.height,
       durationMs: event.durationMs,
     })
+    this.finishPreviewRequest(event.requestId)
   }
 
   private rejectRequest(requestId: string, error: Error): void {
@@ -293,13 +307,23 @@ export class WorkerImageEditClient {
     settleFailure(this.pendingCapabilities, requestId, error)
     settleFailure(this.pendingPreviews, requestId, error)
     settleFailure(this.pendingExports, requestId, error)
+    this.finishPreviewRequest(requestId)
   }
 
   private rejectAllGpuRequests(error: Error): void {
     rejectAll(this.pendingCapabilities, error)
     rejectAll(this.pendingPreviews, error)
     rejectAll(this.pendingExports, error)
+    this.pendingPreviewScopes.clear()
+    this.previewRevisions.clear()
     this.exportProgress.clear()
+  }
+
+  private finishPreviewRequest(requestId: string): void {
+    const previewScopeId = this.pendingPreviewScopes.get(requestId)
+    if (!previewScopeId) return
+    this.pendingPreviewScopes.delete(requestId)
+    this.previewRevisions.complete(previewScopeId)
   }
 
   private assertActive(): void {

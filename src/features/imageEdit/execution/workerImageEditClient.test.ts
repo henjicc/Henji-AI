@@ -80,8 +80,24 @@ describe('WorkerImageEditClient', () => {
   it('只采纳最新 revision 并关闭过期 ImageBitmap', async () => {
     const worker = new MockWorker()
     const client = new WorkerImageEditClient(() => worker)
-    const first = client.preview({ kind: 'blob', blob: new Blob() }, 1)
-    const second = client.preview({ kind: 'blob', blob: new Blob() }, 2)
+    const first = client.preview(
+      { kind: 'blob', blob: new Blob() },
+      1,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { previewScopeId: 'editor-a' }
+    )
+    const second = client.preview(
+      { kind: 'blob', blob: new Blob() },
+      2,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { previewScopeId: 'editor-a' }
+    )
     const previewRequests = worker.requests.filter(
       (request): request is Extract<ImageEditWorkerRequest, { type: 'preview' }> =>
         request.type === 'preview'
@@ -90,6 +106,7 @@ describe('WorkerImageEditClient', () => {
     worker.emit({
       type: 'preview-completed',
       requestId: previewRequests[0].requestId,
+      previewScopeId: 'editor-a',
       revision: 1,
       bitmap: staleBitmap,
       width: 100,
@@ -103,6 +120,7 @@ describe('WorkerImageEditClient', () => {
     worker.emit({
       type: 'preview-completed',
       requestId: previewRequests[1].requestId,
+      previewScopeId: 'editor-a',
       revision: 2,
       bitmap: currentBitmap,
       width: 100,
@@ -110,8 +128,61 @@ describe('WorkerImageEditClient', () => {
       durationMs: 4,
     })
     await expect(second).resolves.toMatchObject({ revision: 2 })
-    client.releasePreview()
+    expect(currentBitmap.close).not.toHaveBeenCalled()
+    currentBitmap.close()
     expect(currentBitmap.close).toHaveBeenCalledOnce()
+    client.destroy()
+  })
+
+  it('不同图片编辑会话的 revision 互不淘汰', async () => {
+    const worker = new MockWorker()
+    const client = new WorkerImageEditClient(() => worker)
+    const olderSession = client.preview(
+      { kind: 'blob', blob: new Blob() },
+      257,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { requestId: 'editor-a-preview', previewScopeId: 'editor-a' }
+    )
+    const newSession = client.preview(
+      { kind: 'blob', blob: new Blob() },
+      1,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { requestId: 'editor-b-preview', previewScopeId: 'editor-b' }
+    )
+
+    const olderBitmap = fakeBitmap()
+    const newBitmap = fakeBitmap()
+    worker.emit({
+      type: 'preview-completed',
+      requestId: 'editor-a-preview',
+      previewScopeId: 'editor-a',
+      revision: 257,
+      bitmap: olderBitmap,
+      width: 100,
+      height: 100,
+      durationMs: 5,
+    })
+    worker.emit({
+      type: 'preview-completed',
+      requestId: 'editor-b-preview',
+      previewScopeId: 'editor-b',
+      revision: 1,
+      bitmap: newBitmap,
+      width: 100,
+      height: 100,
+      durationMs: 4,
+    })
+
+    await expect(olderSession).resolves.toMatchObject({ revision: 257 })
+    await expect(newSession).resolves.toMatchObject({ revision: 1 })
+    olderBitmap.close()
+    newBitmap.close()
     client.destroy()
   })
 
