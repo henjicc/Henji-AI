@@ -1,0 +1,44 @@
+{
+  "metadata": {
+    "profile": "real",
+    "blocked": []
+  },
+  "scenes": {
+    "1440x900 / 6.6-KIE 真实余额": {
+      "startedAt": "2026-08-27T12:19:32.588Z",
+      "finishedAt": "2026-08-27T12:19:35.803Z",
+      "browserErrors": [],
+      "logErrors": [],
+      "logWarnings": [],
+      "logQuery": {
+        "truncated": false,
+        "corruptedLines": 0
+      },
+      "passed": true
+    },
+    "1440x900 / 6.6-APIMart 真实余额": {
+      "startedAt": "2026-08-27T12:19:35.817Z",
+      "finishedAt": "2026-08-27T12:19:38.401Z",
+      "browserErrors": [],
+      "logErrors": [],
+      "logWarnings": [],
+      "logQuery": {
+        "truncated": false,
+        "corruptedLines": 0
+      },
+      "passed": true
+    },
+    "1440x900 / 6.6-恢复正式设置": {
+      "startedAt": "2026-08-27T12:19:38.417Z",
+      "finishedAt": "2026-08-27T12:19:40.259Z",
+      "browserErrors": [],
+      "logErrors": [],
+      "logWarnings": [],
+      "logQuery": {
+        "truncated": false,
+        "corruptedLines": 0
+      },
+      "passed": true
+    }
+  }
+}

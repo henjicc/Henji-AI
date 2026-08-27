@@ -1,0 +1,76 @@
+{
+  "outcome": "passed",
+  "capturedAt": "2026-08-27T11:28:17.487Z",
+  "host": {
+    "sourceProject": "<user-workspace>/say-it",
+    "isolation": "detached git worktree plus removable minimal Tauri test crate",
+    "bundleId": "com.henjicc.sayit.sdk-e2e",
+    "process": "say-it-sdk-e2e-host",
+    "tauriVersion": "2.11.0",
+    "rustHttpPluginVersion": "2.5.9",
+    "javascriptHttpPluginVersion": "2.5.6",
+    "tauriInternalsPresent": true,
+    "webViewUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)",
+    "webKitProcessesObserved": ["com.apple.WebKit.WebContent", "com.apple.WebKit.Networking"]
+  },
+  "publishedPackage": {
+    "name": "@henjicc/ai-sdk",
+    "version": "0.1.2",
+    "registry": "https://npm.pkg.github.com",
+    "integrity": "sha512-TbuwC2JImu85e5/q4WKeEEXM+M+JAzleshPPwlKOyASe5T0TEPBBiW6BC6nZa7kspUJ/aq0VdMxKs6eLCNZxYw==",
+    "shasum": "52c4b446e6cd42b97ecf3d23461cccde2ac7e7ef",
+    "standardViteConsumerWorkaround": false
+  },
+  "networkBoundary": {
+    "fixture": "http://127.0.0.1:43165",
+    "capabilityAllow": ["http://127.0.0.1:43165", "http://localhost:43165"],
+    "credential": "fixed fake key",
+    "authorizationValueRecorded": false,
+    "externalProviderRequests": 0,
+    "externalRejectedBeforePlugin": 1,
+    "cost": 0
+  },
+  "transport": {
+    "implementation": "SDK RuntimeContext.transport.fetch -> @tauri-apps/plugin-http fetch -> Rust IPC",
+    "sdkPluginInvocations": 5,
+    "directEvidenceReportInvocation": 1,
+    "records": [
+      { "original": "https://api.kie.ai/api/v1/jobs/createTask", "mapped": "http://127.0.0.1:43165/kie/create", "method": "POST" },
+      { "original": "https://api.kie.ai/api/v1/jobs/recordInfo?taskId=tauri-task-001", "mapped": "http://127.0.0.1:43165/kie/poll?taskId=tauri-task-001", "method": "GET", "count": 2 },
+      { "original": "http://127.0.0.1:43165/v1/chat/completions", "mapped": "http://127.0.0.1:43165/v1/chat/completions", "method": "POST", "count": 2 }
+    ]
+  },
+  "fixtureCounts": {
+    "create": 1,
+    "poll": 2,
+    "llmSuccess": 1,
+    "llmAbort": 1,
+    "unknown": 0,
+    "pollStates": ["waiting", "success"]
+  },
+  "generation": {
+    "catalogModel": "kie-z-image",
+    "provider": "kie",
+    "createBodySummary": { "model": "z-image", "promptLength": 19, "aspectRatio": "16:9" },
+    "taskId": "tauri-task-001",
+    "finalUrl": "http://127.0.0.1:43165/result/generated.png"
+  },
+  "llm": {
+    "eventOrder": [
+      "ReasoningDelta:先",
+      "ReasoningDelta:思考",
+      "TextDelta:你好",
+      "TextDelta:，Tauri",
+      "Usage:4/7/2/11",
+      "Completed:stop"
+    ]
+  },
+  "abort": {
+    "cancelIssued": true,
+    "eventsBeforeCancel": ["TextDelta:cancel-me"],
+    "sdkErrorCode": "MODEL_STEP_CANCELLED",
+    "fixtureResponseClosedBeforeEnd": 1,
+    "chunksAttemptedAfterClose": 0,
+    "repeatedCreate": 0
+  }
+}
