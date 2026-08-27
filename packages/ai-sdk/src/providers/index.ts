@@ -7,7 +7,7 @@
  * 文件本身的 switch 分支」的可扩展性铺路——本任务（2.3）只做这一层机制改造，8 个内置供应商
  * 的行为与迁移前完全一致，全部在本文件底部自注册。
  */
-import { AiRuntimeError } from '../runtime/errors'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import type {
   ProviderContinuePollingInput,
   ProviderExecutionInput,

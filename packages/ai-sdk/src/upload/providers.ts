@@ -1,6 +1,4 @@
-import { createFalClient } from '@fal-ai/client'
-
-import { AiRuntimeError } from '../runtime/errors'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import type { Transport } from '../runtime/Transport'
 
 import { buildApiMartEndpoints } from '../providers/endpoints/apimart'
@@ -11,12 +9,7 @@ const KIE_UPLOAD_URL = 'https://kieai.redpandaai.co/api/file-stream-upload'
 const APIMART_MAX_IMAGE_BYTES = 20 * 1024 * 1024
 const APIMART_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 
-/**
- * `String.fromCharCode(...bytes)` 对超大 `Uint8Array` 展开成函数参数时会撞上引擎的调用参数数量
- * 上限（不同 JS 引擎的具体阈值不同，但几万级别就可能触发 `RangeError`/爆栈），必须分块转换。
- * 32KB 是各主流引擎公认安全的分块大小。
- */
-const BASE64_CHUNK_SIZE = 0x8000
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 
 export interface PreparedMediaBinary {
   bytes: Uint8Array
@@ -25,42 +18,53 @@ export interface PreparedMediaBinary {
 }
 
 /**
- * 把字节数组编码成 base64 字符串，不依赖 Node 的 `Buffer`（UXP/浏览器没有）。
- * 分块把字节转成二进制字符串后交给标准 `btoa`。
+ * 把字节数组编码成 base64 字符串，不依赖 Node Buffer 或浏览器 btoa。
  */
 export function toBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (let offset = 0; offset < bytes.length; offset += BASE64_CHUNK_SIZE) {
-    const chunk = bytes.subarray(offset, offset + BASE64_CHUNK_SIZE)
-    binary += String.fromCharCode(...chunk)
+  let encoded = ''
+  for (let offset = 0; offset < bytes.length; offset += 3) {
+    const first = bytes[offset]
+    const second = bytes[offset + 1]
+    const third = bytes[offset + 2]
+    encoded += BASE64_ALPHABET[first >> 2]
+    encoded += BASE64_ALPHABET[((first & 0x03) << 4) | ((second ?? 0) >> 4)]
+    encoded += second === undefined
+      ? '='
+      : BASE64_ALPHABET[((second & 0x0f) << 2) | ((third ?? 0) >> 6)]
+    encoded += third === undefined ? '=' : BASE64_ALPHABET[third & 0x3f]
   }
-  return btoa(binary)
+  return encoded
 }
 
-/** `toBase64` 的逆运算，同样不依赖 `Buffer`。`atob` 本身能处理任意长度的字符串，不需要分块。 */
+/** `toBase64` 的逆运算，同样不依赖 Buffer 或浏览器 atob。 */
 export function fromBase64(base64: string): Uint8Array {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i)
+  const normalized = base64.replace(/\s+/g, '')
+  if (normalized.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(normalized)) {
+    throw new AiRuntimeError('invalid_base64', 'Invalid base64 payload')
+  }
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0
+  const bytes = new Uint8Array((normalized.length / 4) * 3 - padding)
+  let output = 0
+  for (let offset = 0; offset < normalized.length; offset += 4) {
+    const a = decodeBase64Char(normalized[offset])
+    const b = decodeBase64Char(normalized[offset + 1])
+    const c = normalized[offset + 2] === '=' ? 0 : decodeBase64Char(normalized[offset + 2])
+    const d = normalized[offset + 3] === '=' ? 0 : decodeBase64Char(normalized[offset + 3])
+    bytes[output++] = (a << 2) | (b >> 4)
+    if (output < bytes.length) bytes[output++] = ((b & 0x0f) << 4) | (c >> 2)
+    if (output < bytes.length) bytes[output++] = ((c & 0x03) << 6) | d
   }
   return bytes
 }
 
-export function toDataUri(bytes: Uint8Array, mimeType: string): string {
-  return `data:${mimeType};base64,${toBase64(bytes)}`
+function decodeBase64Char(value: string): number {
+  const index = BASE64_ALPHABET.indexOf(value)
+  if (index < 0) throw new AiRuntimeError('invalid_base64', 'Invalid base64 payload')
+  return index
 }
 
-/**
- * Fal 官方存储客户端（`@fal-ai/client`）内部自建鉴权与网络栈，不经过 SDK 的 `Transport` 抽象——
- * 与生成路径 `providers/fal.ts` 的取舍一致：官方客户端已经封装好上传协议，没必要用 `Transport`
- * 重新实现一遍相同的行为，代价是这条路径的网络请求脱离了 `Transport` 的宿主可控范围（Electron
- * 之外的宿主要用这条路径，需要确认 `@fal-ai/client` 在该运行时下可用）。
- */
-export async function uploadToFal(apiKey: string, prepared: PreparedMediaBinary): Promise<string> {
-  const client = createFalClient({ credentials: apiKey })
-  const file = new File([prepared.bytes as BlobPart], prepared.filename, { type: prepared.mimeType })
-  return await client.storage.upload(file)
+export function toDataUri(bytes: Uint8Array, mimeType: string): string {
+  return `data:${mimeType};base64,${toBase64(bytes)}`
 }
 
 export async function uploadToApiMart(

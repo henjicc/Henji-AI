@@ -1,4 +1,4 @@
-import { resolveRuntimeContext, type RuntimeContext } from '../runtime'
+import { resolveRuntimeContext, type RuntimeContext } from '../runtime/RuntimeContext'
 import type {
   ProviderConnectionStatus,
   ProviderConnectionTestResultDto,

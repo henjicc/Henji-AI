@@ -2,6 +2,13 @@
 
 本项目遵循语义化版本。`0.x` 阶段仍可能包含破坏性调整，升级时请先阅读对应版本说明。
 
+## 0.1.4 - 2026-08-27
+
+- 新增 `@henjicc/ai-sdk/generation` 与 `createGenerationClient`，复用根客户端唯一生成内核，不静态带入 LLM/Vercel AI SDK。
+- 新增 generation IIFE/VM 发布门禁：99 模型目录与零网络生命周期通过，禁止 Node、动态代码生成、global fetch、Streams、File、`btoa`/`atob` 等受限宿主风险。
+- Fal CDN 上传改为全程使用 `RuntimeContext.transport` 的 REST initiate + signed PUT，不再依赖 `@fal-ai/client` 或构造 `File`；补齐成功、失败、取消 fixture。
+- 保留 `uploadToFal(apiKey, prepared)` 两参数兼容调用；新宿主应显式传 Transport 或使用生成客户端。
+
 ## 0.1.3 - 2026-08-27
 
 - 修复 Fal 队列任务在提交 alias 与状态查询 canonical route 不一致时轮询失败：优先保存供应商返回的完整 `status_url`，仅缺失时才按 `request_id` 重建。

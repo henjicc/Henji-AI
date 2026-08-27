@@ -1,4 +1,4 @@
-import { AiRuntimeError } from '../runtime/errors'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import type {
   ModelRuntimeDefinition,
   RuntimeEndpointConfig,

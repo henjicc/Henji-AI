@@ -7,7 +7,7 @@
  * （2.1 产出时的注释就说明了这一点），本任务（2.4）统一到这一份，删除宿主侧的重复实现。
  */
 
-import { AiRuntimeError } from '../runtime/errors'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 
 import { fromBase64 } from './providers'
 import type { MediaKind } from './media-fields'

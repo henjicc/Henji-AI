@@ -47,6 +47,7 @@ async function verify() {
   fs.writeFileSync(path.join(consumerRoot, 'entry.js'), [
     "import '@henjicc/ai-sdk'",
     "import '@henjicc/ai-sdk/providers'",
+    "import '@henjicc/ai-sdk/generation'",
     "import '@henjicc/ai-sdk/catalog'",
     "import '@henjicc/ai-sdk/llm'",
     "import '@henjicc/ai-sdk/runtime'",
@@ -83,6 +84,7 @@ async function verify() {
     const entries = [
       '@henjicc/ai-sdk',
       '@henjicc/ai-sdk/providers',
+      '@henjicc/ai-sdk/generation',
       '@henjicc/ai-sdk/catalog',
       '@henjicc/ai-sdk/llm',
       '@henjicc/ai-sdk/runtime',
@@ -101,7 +103,7 @@ async function verify() {
       }
       resolved[specifier] = path.relative(consumerRoot, result.id)
     }
-    console.log(`✔ 仓库外标准 Vite dev 已解析 5 个发布入口：${JSON.stringify(resolved)}`)
+    console.log(`✔ 仓库外标准 Vite dev 已解析 6 个发布入口：${JSON.stringify(resolved)}`)
   } finally {
     await server.close()
   }

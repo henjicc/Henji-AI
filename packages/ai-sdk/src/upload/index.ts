@@ -29,7 +29,8 @@ export {
   toBase64,
   toDataUri,
   uploadToApiMart,
-  uploadToFal,
   uploadToKie,
   type PreparedMediaBinary,
 } from './providers'
+export { uploadToFal } from './fal-legacy'
+export { uploadToFalWithTransport } from './fal-transport'

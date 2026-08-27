@@ -1,20 +1,13 @@
 import {
-  AiRuntimeError,
-  parseModelProviderError,
   ProviderModelStepError,
   type ModelProviderErrorCategory,
   type ProviderErrorContext,
 } from './errors'
+import { shouldRetry as readPortableRetry } from './retry'
+export { describeNetworkFailure, shouldRetry } from './retry'
+export type { NetworkFailure, RetryMode } from './retry'
 
 type ErrorRecord = Record<string, unknown>
-
-const SAFE_PRECONNECT_RETRY_CODES = new Set([
-  'UND_ERR_CONNECT_TIMEOUT',
-  'ENETUNREACH',
-  'EAI_AGAIN',
-  'ENOTFOUND',
-  'ECONNREFUSED',
-])
 
 const NETWORK_ERROR_CODES = new Set([
   'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED', 'ETIMEDOUT', 'ENOTFOUND',
@@ -22,13 +15,6 @@ const NETWORK_ERROR_CODES = new Set([
   'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT',
   'UND_ERR_SOCKET', 'UND_ERR_CLOSED', 'UND_ERR_DESTROYED',
 ])
-
-export type RetryMode = 'safe-preconnect' | 'request' | 'poll-query'
-
-export interface NetworkFailure {
-  code: string
-  message: string
-}
 
 function errorChain(error: unknown): ErrorRecord[] {
   const records: ErrorRecord[] = []
@@ -208,31 +194,6 @@ export function createCancelledError(input: ProviderErrorContext): ProviderModel
   })
 }
 
-export function describeNetworkFailure(error: unknown): NetworkFailure {
-  const records = errorChain(error)
-  const code = records.map(providerCode).find((value) => value !== null)
-    ?? (error instanceof Error ? error.name : 'UNKNOWN_NETWORK_ERROR')
-  const message = records.map((record) => stringValue(record.message)).find((value) => value !== null)
-    ?? (error instanceof Error ? error.message : String(error))
-  return { code, message }
-}
-
-export function shouldRetry(error: unknown, mode: RetryMode = 'request'): boolean {
-  if (mode === 'safe-preconnect') {
-    return SAFE_PRECONNECT_RETRY_CODES.has(describeNetworkFailure(error).code.toUpperCase())
-  }
-  if (error instanceof ProviderModelStepError) return error.details.retryable
-  const structured = parseModelProviderError(error)
-  if (structured) return structured.retryable
-  if (error instanceof AiRuntimeError) {
-    if (mode === 'poll-query') {
-      return !['provider_task_failed', 'cancelled'].includes(error.code)
-    }
-    return ['provider_network_error', 'provider_http_error'].includes(error.code)
-  }
-  return true
-}
-
 export function isAgentSemanticRetryable(error: unknown): boolean {
-  return shouldRetry(error, 'request')
+  return readPortableRetry(error)
 }

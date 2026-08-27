@@ -10,10 +10,11 @@ const manifest = JSON.parse(
 }
 
 describe('published package exports', () => {
-  it('五个入口都只指向随包发布的 dist 文件', () => {
+  it('六个入口都只指向随包发布的 dist 文件', () => {
     expect(Object.keys(manifest.exports)).toEqual([
       '.',
       './providers',
+      './generation',
       './catalog',
       './llm',
       './runtime',

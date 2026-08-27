@@ -40,6 +40,7 @@ function collectRuntimeDomains() {
     'providers/ppio.ts',
     'providers/volcengine.ts',
     'upload/providers.ts',
+    'upload/fal-transport.ts',
     'llm/defaults.ts',
     'llm/streaming.ts',
   ]
@@ -57,13 +58,8 @@ function collectRuntimeDomains() {
     hosts.add('*.cn-beijing.maas.aliyuncs.com')
   }
 
-  // Fal 生成路径在 SDK 源码，上传路径由锁定的官方 client 构造。
-  const falConfig = path.resolve(packageRoot, '..', '..', 'node_modules', '@fal-ai', 'client', 'src', 'config.js')
-  const falRequest = path.resolve(packageRoot, '..', '..', 'node_modules', '@fal-ai', 'client', 'src', 'request.js')
-  if (fs.existsSync(falConfig)) {
-    for (const host of hostsFromUrls(read(falConfig))) hosts.add(host)
-  }
-  if (fs.existsSync(falRequest) && read(falRequest).includes('fal.run')) {
+  // Fal endpoint 支持动态子域，文档用通配形式声明。
+  if (read(path.join(sourceRoot, 'providers', 'fal.ts')).includes('fal.run')) {
     hosts.add('*.fal.run')
   }
 
@@ -79,7 +75,7 @@ function collectAiRuntimeCodes() {
     }
   }
   // cancelledError() 是固定工厂，不是 new AiRuntimeError 调用点。
-  const errors = read(path.join(sourceRoot, 'runtime', 'errors.ts'))
+  const errors = read(path.join(sourceRoot, 'runtime', 'AiRuntimeError.ts'))
   const cancelled = errors.match(/new\s+AiRuntimeError\(\s*['"]([^'"]+)['"]/)?.[1]
   if (cancelled) codes.add(cancelled)
   return [...codes].sort()

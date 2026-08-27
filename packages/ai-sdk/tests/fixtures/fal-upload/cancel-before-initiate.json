@@ -1,0 +1,11 @@
+{
+  "scenario": "cancel-before-initiate",
+  "abortBeforeStart": true,
+  "prepared": { "bytes": [1], "mimeType": "image/png", "filename": "reference.png" },
+  "responses": [],
+  "expected": { "outcome": "reject", "errorCode": "cancelled", "messageIncludes": "cancelled", "calls": 1 },
+  "source": {
+    "protocol": "RuntimeContext.Transport 契约要求尊重 init.signal；Fal 两段上传共用 generation AbortSignal",
+    "evidence": "取消是本地确定性边界测试，不发真实网络"
+  }
+}

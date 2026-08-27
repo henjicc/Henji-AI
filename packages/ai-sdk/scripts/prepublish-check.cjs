@@ -46,7 +46,7 @@ for (const file of listFiles(distRoot)) {
   }
 }
 
-const requiredEntries = ['.', './providers', './catalog', './llm', './runtime']
+const requiredEntries = ['.', './providers', './generation', './catalog', './llm', './runtime']
 for (const entry of requiredEntries) {
   const definition = manifest.exports?.[entry]
   if (!definition) fail(`package.json 缺少 exports 入口 ${entry}`)
@@ -59,7 +59,7 @@ for (const entry of requiredEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.1.3') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.1.4') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
 if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {

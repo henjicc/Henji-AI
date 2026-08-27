@@ -1,5 +1,5 @@
-import { resolveRuntimeContext, type RuntimeContext } from '../runtime'
-import { AiRuntimeError } from '../runtime/errors'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
+import { resolveRuntimeContext, type RuntimeContext } from '../runtime/RuntimeContext'
 import { resolvePpioMediaRewriteMode } from '../providers/ppio-media'
 import type { RuntimeConstraints } from '../types/model'
 import type { JsonObject, JsonValue } from '../types/runtime'
@@ -15,11 +15,11 @@ import {
   type MediaSourceIndex,
 } from './media-fields'
 import { defaultFilename, parseDataUri } from './media-binary'
+import { uploadToFalWithTransport } from './fal-transport'
 import {
   toBase64,
   toDataUri,
   uploadToApiMart,
-  uploadToFal,
   uploadToKie,
   type PreparedMediaBinary,
 } from './providers'
@@ -43,6 +43,7 @@ interface PreprocessContext {
   /** schema 显式声明的特殊上传字段，优先于通用字段名推断。 */
   mediaFields: ReadonlyMap<string, Exclude<MediaKind, 'unknown'>>
   requestId?: string
+  signal?: AbortSignal
   /** 宿主运行时能力，`logger`/`tracer` 已补齐默认值，内部代码不需要再判空。 */
   runtime: Required<RuntimeContext>
 }
@@ -61,7 +62,8 @@ export async function preprocessRequestBody(
   runtime: RuntimeContext,
   params: JsonObject = {},
   constraints?: RuntimeConstraints,
-  requestId?: string
+  requestId?: string,
+  signal?: AbortSignal
 ): Promise<JsonValue> {
   const next = cloneJson(body)
   const context: PreprocessContext = {
@@ -71,6 +73,7 @@ export async function preprocessRequestBody(
     mediaSources: buildMediaSourceIndex(params),
     mediaFields: new Map((constraints?.mediaFields ?? []).map(({ field, kind }) => [field, kind])),
     requestId,
+    signal,
     runtime: resolveRuntimeContext(runtime),
   }
   await preprocessFieldValue(context, 'unknown', undefined, next)
@@ -254,7 +257,12 @@ async function uploadFalFile(
     context: logFields,
   })
   try {
-    const url = await uploadToFal(apiKey, prepared)
+    const url = await uploadToFalWithTransport(
+      apiKey,
+      prepared,
+      context.runtime.transport,
+      context.signal
+    )
     logger.info('Fal 本地文件上传完成', {
       event: 'ai_runtime.upload.fal_completed',
       requestId: context.requestId,

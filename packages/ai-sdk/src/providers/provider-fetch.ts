@@ -1,5 +1,5 @@
-import { AiRuntimeError } from '../runtime/errors'
-import { describeNetworkFailure, shouldRetry, type NetworkFailure } from '../runtime/error-classify'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
+import { describeNetworkFailure, shouldRetry, type NetworkFailure } from '../runtime/retry'
 import type { Transport } from '../runtime/Transport'
 
 function isAbort(error: unknown, signal?: AbortSignal): boolean {

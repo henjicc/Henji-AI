@@ -15,6 +15,7 @@
  * 包名与分发渠道已在任务 6.2 确认为私有 GitHub Packages：`@henjicc/ai-sdk`。
  */
 export * from './client'
+export * from './generation'
 
 export * from './runtime'
 

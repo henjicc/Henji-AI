@@ -1,0 +1,19 @@
+{
+  "scenario": "initiate-put-success",
+  "prepared": { "bytes": [137, 80, 78, 71], "mimeType": "image/png", "filename": "reference.png" },
+  "responses": [
+    {
+      "status": 200,
+      "body": {
+        "upload_url": "https://signed.example/upload?signature=redacted",
+        "file_url": "https://v3b.fal.media/files/b/example/reference.png"
+      }
+    },
+    { "status": 200, "body": null }
+  ],
+  "expected": { "outcome": "resolve", "url": "https://v3b.fal.media/files/b/example/reference.png", "calls": 2 },
+  "source": {
+    "protocol": "@fal-ai/client 1.10.1 storage.js initiateUpload/createStorageClient（已随 6.9 真实链路核对）",
+    "evidence": "docs/task/模型SDK抽离/交接/6.9-交接.md：真实 initiation POST 1 次、signed PUT 1 次；URL 与签名均为占位符"
+  }
+}

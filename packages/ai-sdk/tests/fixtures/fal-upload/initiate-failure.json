@@ -1,0 +1,12 @@
+{
+  "scenario": "initiate-failure",
+  "prepared": { "bytes": [1], "mimeType": "image/png", "filename": "reference.png" },
+  "responses": [
+    { "status": 401, "body": { "detail": "invalid credentials" } }
+  ],
+  "expected": { "outcome": "reject", "errorCode": "upload_failed", "messageIncludes": "HTTP 401", "calls": 1 },
+  "source": {
+    "protocol": "Fal CDN initiate 是 Key 鉴权的 JSON HTTP 接口；非 2xx 必须按上传失败处理",
+    "evidence": "失败体为最小脱敏占位；未冒充真实失败日志，状态契约来自 packages/ai-sdk/docs/model-adaptation/供应商/Fal.md"
+  }
+}

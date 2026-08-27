@@ -1,4 +1,4 @@
-import { AiRuntimeError } from '../runtime/errors'
+import { AiRuntimeError } from '../runtime/AiRuntimeError'
 import { POLL_QUERY_FAILED, pollUntilResult } from '../protocols/polling'
 import type {
   JsonValue,

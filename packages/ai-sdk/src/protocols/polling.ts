@@ -1,6 +1,6 @@
 import { isCancelled } from '../runtime/task-registry'
-import { AiRuntimeError, cancelledError } from '../runtime/errors'
-import { shouldRetry } from '../runtime/error-classify'
+import { AiRuntimeError, cancelledError } from '../runtime/AiRuntimeError'
+import { shouldRetry } from '../runtime/retry'
 
 export async function waitIntervalMs(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {

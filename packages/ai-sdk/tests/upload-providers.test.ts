@@ -1,12 +1,8 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-const falUploadMock = vi.hoisted(() => vi.fn())
-
-vi.mock('@fal-ai/client', () => ({
-  createFalClient: vi.fn(() => ({ storage: { upload: falUploadMock } })),
-}))
-
-import { fromBase64, toBase64, uploadToApiMart, uploadToFal, uploadToKie } from '../src/upload/providers'
+import { uploadToFal } from '../src/upload'
+import { uploadToFalWithTransport } from '../src/upload/fal-transport'
+import { fromBase64, toBase64, uploadToApiMart, uploadToKie } from '../src/upload/providers'
 import { fakeRuntimeContext } from './providers/test-helpers'
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -21,23 +17,56 @@ function transportFor(fetchMock: typeof fetch) {
 }
 
 describe('upload providers', () => {
-  afterEach(() => {
-    falUploadMock.mockReset()
-  })
-
-  it('通过 Fal 官方存储客户端上传文件并返回 CDN URL', async () => {
-    falUploadMock.mockResolvedValue('https://v3b.fal.media/files/b/example/reference.png')
-
-    await expect(uploadToFal('fal-secret', {
+  it('通过 Transport 完成 Fal initiate + signed PUT 并保持两参数兼容 wrapper', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        upload_url: 'https://signed.example/upload?signature=redacted',
+        file_url: 'https://v3b.fal.media/files/b/example/reference.png',
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+    const prepared = {
       bytes: new Uint8Array([1, 2, 3]),
       mimeType: 'image/png',
       filename: 'reference.png',
-    })).resolves.toBe('https://v3b.fal.media/files/b/example/reference.png')
+    }
 
-    const file = falUploadMock.mock.calls[0]?.[0] as File
-    expect(file.name).toBe('reference.png')
-    expect(file.type).toBe('image/png')
-    expect(file.size).toBe(3)
+    await expect(uploadToFalWithTransport(
+      'fal-secret',
+      prepared,
+      transportFor(fetchMock)
+    )).resolves.toBe('https://v3b.fal.media/files/b/example/reference.png')
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1,
+      'https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ Authorization: 'Key fal-secret' }),
+        body: JSON.stringify({ content_type: 'image/png', file_name: 'reference.png' }),
+      })
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(2,
+      'https://signed.example/upload?signature=redacted',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        body: expect.any(ArrayBuffer),
+      })
+    )
+
+    const legacyFetch = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        upload_url: 'https://signed.example/legacy?signature=redacted',
+        file_url: 'https://v3b.fal.media/files/b/example/legacy.png',
+      }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+    vi.stubGlobal('fetch', legacyFetch)
+    try {
+      await expect(uploadToFal('fal-secret', prepared)).resolves.toBe(
+        'https://v3b.fal.media/files/b/example/legacy.png'
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('通过 APIMart 官方 multipart 接口上传图片并返回公网 URL', async () => {

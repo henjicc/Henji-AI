@@ -1,0 +1,19 @@
+{
+  "scenario": "signed-put-failure",
+  "prepared": { "bytes": [1, 2, 3], "mimeType": "image/jpeg", "filename": "reference.jpg" },
+  "responses": [
+    {
+      "status": 200,
+      "body": {
+        "upload_url": "https://signed.example/upload?signature=redacted",
+        "file_url": "https://v3b.fal.media/files/b/example/reference.jpg"
+      }
+    },
+    { "status": 403, "body": null }
+  ],
+  "expected": { "outcome": "reject", "errorCode": "upload_failed", "messageIncludes": "HTTP 403", "calls": 2 },
+  "source": {
+    "protocol": "@fal-ai/client 1.10.1 storage.js：signed PUT 非成功响应交给 responseHandler 拒绝",
+    "evidence": "失败状态为边界断言，不是实际请求；signed URL 与 CDN URL 均为不可访问占位符"
+  }
+}

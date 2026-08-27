@@ -82,6 +82,12 @@ const url = await fal.storage.upload(file)
 | 私有 URL | 需自带 Authorization 的 URL 不能直接作模型输入；改用预签名 URL 或 Fal CDN |
 | Data URI | 部分模型接受，但不是全平台通用契约，不适合较大文件 |
 
+SDK 使用与官方客户端相同的单文件 REST 协议：先向
+`POST https://rest.fal.ai/storage/upload/initiate?storage_type=fal-cdn-v3` 发送
+`content_type` / `file_name`，再把原始编码字节以原 MIME `PUT` 到响应中的签名 `upload_url`，最终返回
+`file_url`。两段网络都通过 `RuntimeContext.transport`，共享取消信号与 120 秒 deadline；不调用全局
+`fetch`，不构造 `File`。当前仍未设置 `X-Fal-Object-Lifecycle`，保持既有账户级保留策略。
+
 Fal CDN URL 无需鉴权即可访问。文件保留期由每次上传的 lifecycle 或账户 media expiration 设置控制；账户未配置时可能长期保留。当前生产 `uploadToFal` 没有显式传 lifecycle，依赖账户设置。需要长期保存的输入/输出要及时转存，敏感媒体不能把公开 CDN URL 当成私有存储。
 
 ## 4. 计价查询
@@ -125,7 +131,7 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 | `queue.fal.run` 队列 | 已接入 | 默认生成路径 |
 | 状态与结果 | 已接入 | 支持 `status_url` 和按 endpoint/request ID 重建 |
 | 结果 URL 解析 | 已接入 | 递归收集模型结果中的 URL |
-| 本地文件 | Electron 真实 E2E 已通过 | `preprocessRequestBody` 经 Electron `MediaReader` 读字节并调用 `@fal-ai/client` 上传 Fal CDN；119 字节 PNG 的 Range 回读与本地 SHA-256 一致。官方客户端不经过 `RuntimeContext.transport`，UXP/自定义 Transport 仍待宿主验证 |
+| 本地文件 | Electron 真实 E2E + Transport fixture 已通过 | 119 字节 PNG 的 Range 回读与本地 SHA-256 一致；当前实现使用 REST initiate + signed PUT，并经 `RuntimeContext.transport` 覆盖成功、initiate失败、PUT失败与取消。UXP 真机网络仍由插件集成验证 |
 | 价格/余额 API | 尚未用于连接检测 | 文档已记录；余额需 Admin Key，优先级低 |
 
 ## 7. 原始链接索引
