@@ -22,7 +22,14 @@ OpenAI 兼容 `POST /compatible-mode/v1/chat/completions` 或 DashScope `POST /a
 
 翻译 capability 单独注册，宿主可只选 Lite 而不引入 Plus/Flash。密钥、待翻译原文、完整译文均默认不记入常规日志。
 
-## 3. 原始链接索引
+## 3. SDK 实现状态
+
+- 按需入口：`@henjicc/ai-sdk/capabilities/translation/bailian`，工厂 `createQwenMtLiteTranslationModule()`。
+- 默认走 OpenAI 兼容 SSE；官方增量块归一为追加事件，使用 SDK 自带 UTF-8 增量解码器，不要求 UXP 等宿主提供 `TextDecoder`。
+- 支持 usage、术语、翻译记忆、领域提示、Say-It 常用语言代码兼容；密钥、原文和译文不写入结构化日志。
+- 未核实的独立最大输出数不设默认值，也不发送 `max_tokens`。当前只有官方示例 fixture/单测证据，尚无真实付费请求证据。
+
+## 4. 原始链接索引
 
 | 信息 | 链接 | 登录 |
 |---|---|---|

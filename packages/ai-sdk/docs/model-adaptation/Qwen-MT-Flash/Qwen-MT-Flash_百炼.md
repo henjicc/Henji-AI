@@ -30,7 +30,14 @@ Authorization: Bearer <API Key>
 
 翻译是独立 capability，不用通用 LLM prompt 伪装；但可复用 OpenAI 兼容传输与 SSE 解析。只在按需注册翻译能力时暴露，不得因为 SDK 内置就强制进入所有宿主。
 
-## 4. 原始链接索引
+## 4. SDK 实现状态
+
+- 按需入口：`@henjicc/ai-sdk/capabilities/translation/bailian`，工厂 `createQwenMtFlashTranslationModule()`。
+- 默认走 OpenAI 兼容 Chat Completions 并开启 SSE；将官方增量块统一成 `delta(mode=append)`，最终输出完整 `item`，Token 计入 `usage`。
+- Say-It 当前保存的常用语言代码会先映射为官方英文语言名；术语表映射到 `terms`，翻译记忆映射到 `tm_list`，通用 `context` 映射到英文领域提示 `domains`。
+- 未核实的独立最大输出数不设默认值，也不发送 `max_tokens`。当前只有官方示例 fixture/单测证据，尚无真实付费请求证据。
+
+## 5. 原始链接索引
 
 | 信息 | 链接 | 登录 |
 |---|---|---|

@@ -245,12 +245,29 @@ const translationCapability = bundle('TranslationCapability', [
 ].join('\n'), (inputs) => {
   const forbidden = inputs.filter((input) => (
     input.includes('/capabilities/speech-recognition/') ||
+    input.includes('/capabilities/translation/bailian/') ||
     modelPattern.test(`/${input}`) ||
     providerPattern.test(`/${input}`) ||
     input.includes('/src/generation') ||
     input.includes('/src/llm/')
   ))
   if (forbidden.length > 0) fail(`翻译按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+})
+
+const bailianTranslationCapability = bundle('BailianTranslationCapability', [
+  "export * from './capabilities/translation/bailian/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/capabilities/speech-recognition/') ||
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation') ||
+    input.includes('/src/llm/')
+  ))
+  if (forbidden.length > 0) fail(`百炼翻译按需入口带入无关能力/模型：${forbidden.join(', ')}`)
+  if (!inputs.some((input) => input.includes('/capabilities/translation/bailian/module.ts'))) {
+    fail('百炼翻译按需入口未包含执行模块')
+  }
 })
 
 let networkCalls = 0
@@ -307,6 +324,7 @@ const metrics = {
   speechRecognitionCapability: { iife: speechCapability.iife.bytes, esm: speechCapability.esm.bytes, modules: speechCapability.iife.modules },
   bailianAsrCapability: { iife: bailianAsrCapability.iife.bytes, esm: bailianAsrCapability.esm.bytes, modules: bailianAsrCapability.iife.modules },
   translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
+  bailianTranslationCapability: { iife: bailianTranslationCapability.iife.bytes, esm: bailianTranslationCapability.esm.bytes, modules: bailianTranslationCapability.iife.modules },
   networkCalls,
 }
 console.log(`✔ modular bundle 门禁通过：${JSON.stringify(metrics)}`)

@@ -30,6 +30,7 @@ describe('published package exports', () => {
       './capabilities/speech-recognition',
       './capabilities/speech-recognition/bailian',
       './capabilities/translation',
+      './capabilities/translation/bailian',
       './capabilities/realtime',
       './discovery',
     ])

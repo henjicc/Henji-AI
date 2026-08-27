@@ -108,6 +108,11 @@
       "import": "./dist/capabilities/translation/index.js",
       "default": "./dist/capabilities/translation/index.js"
     },
+    "./capabilities/translation/bailian": {
+      "types": "./dist/capabilities/translation/bailian/index.d.ts",
+      "import": "./dist/capabilities/translation/bailian/index.js",
+      "default": "./dist/capabilities/translation/bailian/index.js"
+    },
     "./capabilities/realtime": {
       "types": "./dist/capabilities/realtime.d.ts",
       "import": "./dist/capabilities/realtime.js",

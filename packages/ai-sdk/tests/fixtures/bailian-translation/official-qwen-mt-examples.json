@@ -1,0 +1,165 @@
+{
+  "source": {
+    "url": "https://help.aliyun.com/zh/model-studio/qwen-mt-api",
+    "capturedAt": "2026-08-28",
+    "loginRequired": false,
+    "notes": "官方 Qwen-MT API 页字面响应示例的必要片段；ID、文本和 usage 保持原样，未发起真实请求。Flash/Plus 完整示例各有 13 块，本 fixture 保留首块、前三个有效内容块、结束块和 usage 块。"
+  },
+  "nonStreaming": {
+    "id": "chatcmpl-999a5d8a-f646-4039-968a-167743ae0f22",
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "logprobs": null,
+        "message": {
+          "content": "I didn't laugh after watching this video.",
+          "refusal": null,
+          "role": "assistant",
+          "annotations": null,
+          "audio": null,
+          "function_call": null,
+          "tool_calls": null
+        }
+      }
+    ],
+    "created": 1762346157,
+    "model": "qwen-mt-plus",
+    "object": "chat.completion",
+    "service_tier": null,
+    "system_fingerprint": null,
+    "usage": {
+      "completion_tokens": 9,
+      "prompt_tokens": 53,
+      "total_tokens": 62,
+      "completion_tokens_details": null,
+      "prompt_tokens_details": null
+    }
+  },
+  "streaming": {
+    "flash": [
+      {
+        "id": "chatcmpl-d8aa6596-b366-4ed0-9f6d-2e89247f554e",
+        "choices": [{ "delta": { "content": "", "function_call": null, "refusal": null, "role": "assistant", "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762504029,
+        "model": "qwen-mt-flash",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-d8aa6596-b366-4ed0-9f6d-2e89247f554e",
+        "choices": [{ "delta": { "content": "I", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762504029,
+        "model": "qwen-mt-flash",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-d8aa6596-b366-4ed0-9f6d-2e89247f554e",
+        "choices": [{ "delta": { "content": " didn", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762504029,
+        "model": "qwen-mt-flash",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-d8aa6596-b366-4ed0-9f6d-2e89247f554e",
+        "choices": [{ "delta": { "content": "'t", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762504029,
+        "model": "qwen-mt-flash",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-d8aa6596-b366-4ed0-9f6d-2e89247f554e",
+        "choices": [{ "delta": { "content": "", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": "stop", "index": 0, "logprobs": null }],
+        "created": 1762504029,
+        "model": "qwen-mt-flash",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-d8aa6596-b366-4ed0-9f6d-2e89247f554e",
+        "choices": [],
+        "created": 1762504029,
+        "model": "qwen-mt-flash",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": { "completion_tokens": 9, "prompt_tokens": 56, "total_tokens": 65, "completion_tokens_details": null, "prompt_tokens_details": null }
+      }
+    ],
+    "plus": [
+      {
+        "id": "chatcmpl-478e183e-cbdc-4ea0-aeae-4c2ba1d03e4d",
+        "choices": [{ "delta": { "content": "", "function_call": null, "refusal": null, "role": "assistant", "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762346453,
+        "model": "qwen-mt-plus",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-478e183e-cbdc-4ea0-aeae-4c2ba1d03e4d",
+        "choices": [{ "delta": { "content": "I", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762346453,
+        "model": "qwen-mt-plus",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-478e183e-cbdc-4ea0-aeae-4c2ba1d03e4d",
+        "choices": [{ "delta": { "content": "I didn", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762346453,
+        "model": "qwen-mt-plus",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-478e183e-cbdc-4ea0-aeae-4c2ba1d03e4d",
+        "choices": [{ "delta": { "content": "I didn’t", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": null, "index": 0, "logprobs": null }],
+        "created": 1762346453,
+        "model": "qwen-mt-plus",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-478e183e-cbdc-4ea0-aeae-4c2ba1d03e4d",
+        "choices": [{ "delta": { "content": "I didn’t laugh after watching this video.", "function_call": null, "refusal": null, "role": null, "tool_calls": null }, "finish_reason": "stop", "index": 0, "logprobs": null }],
+        "created": 1762346453,
+        "model": "qwen-mt-plus",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": null
+      },
+      {
+        "id": "chatcmpl-478e183e-cbdc-4ea0-aeae-4c2ba1d03e4d",
+        "choices": [],
+        "created": 1762346453,
+        "model": "qwen-mt-plus",
+        "object": "chat.completion.chunk",
+        "service_tier": null,
+        "system_fingerprint": null,
+        "usage": { "completion_tokens": 9, "prompt_tokens": 56, "total_tokens": 65, "completion_tokens_details": null, "prompt_tokens_details": null }
+      }
+    ]
+  }
+}
