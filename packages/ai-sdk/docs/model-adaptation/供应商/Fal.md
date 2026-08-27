@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-27 |
 | 供应商类型 | 模型 API 平台 + Serverless |
 | 项目内 `providerId` | `fal` |
 | 直连 Base URL | `https://fal.run` |
@@ -82,7 +82,7 @@ const url = await fal.storage.upload(file)
 | 私有 URL | 需自带 Authorization 的 URL 不能直接作模型输入；改用预签名 URL 或 Fal CDN |
 | Data URI | 部分模型接受，但不是全平台通用契约，不适合较大文件 |
 
-Fal CDN 会根据账户的 media expiration 设置清理媒体。需要长期保存的输入/输出要及时转存。
+Fal CDN URL 无需鉴权即可访问。文件保留期由每次上传的 lifecycle 或账户 media expiration 设置控制；账户未配置时可能长期保留。当前生产 `uploadToFal` 没有显式传 lifecycle，依赖账户设置。需要长期保存的输入/输出要及时转存，敏感媒体不能把公开 CDN URL 当成私有存储。
 
 ## 4. 计价查询
 
@@ -125,7 +125,7 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 | `queue.fal.run` 队列 | 已接入 | 默认生成路径 |
 | 状态与结果 | 已接入 | 支持 `status_url` 和按 endpoint/request ID 重建 |
 | 结果 URL 解析 | 已接入 | 递归收集模型结果中的 URL |
-| 本地文件 | 已支持当前模型 | 当前转 Data URI；新增不接受 Data URI 或大文件模型时，先补 Fal CDN 公共上传 |
+| 本地文件 | Electron 真实 E2E 已通过 | `preprocessRequestBody` 经 Electron `MediaReader` 读字节并调用 `@fal-ai/client` 上传 Fal CDN；119 字节 PNG 的 Range 回读与本地 SHA-256 一致。官方客户端不经过 `RuntimeContext.transport`，UXP/自定义 Transport 仍待宿主验证 |
 | 价格/余额 API | 尚未用于连接检测 | 文档已记录；余额需 Admin Key，优先级低 |
 
 ## 7. 原始链接索引
@@ -136,6 +136,7 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 | 调用方式总览 | https://fal.ai/docs/documentation/model-apis/inference | 否 |
 | 队列提交/查询/结果 | https://fal.ai/docs/documentation/model-apis/inference/queue | 否 |
 | Fal CDN | https://fal.ai/docs/documentation/model-apis/fal-cdn | 否 |
+| 数据保留与公开访问 | https://fal.ai/docs/documentation/model-apis/media-expiration | 否 |
 | 计价说明 | https://fal.ai/docs/documentation/model-apis/pricing | 否 |
 | 价格 API | https://fal.ai/docs/platform-apis/v1/models/pricing | 否 |
 | 成本预估 API | https://fal.ai/docs/platform-apis/v1/models/pricing/estimate | 否 |

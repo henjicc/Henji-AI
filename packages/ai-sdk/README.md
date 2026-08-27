@@ -251,7 +251,7 @@ Volcengine、PPIO、KIE、ModelScope、Fal、Grsai 八个内置供应商；调�
 
 - 私有 GitHub Packages 消费方必须配置 `read:packages` 与对应私有仓库读权限；SDK 不提供无认证的公开 npm 镜像。
 - Electron 宿主已经完整构建、桌面冒烟与真实 KIE/LLM 请求验证；`0.1.2` 已在真实 macOS Tauri 2.11.0 WebView + Rust `tauri-plugin-http` 中以 loopback fixture 跑通 create/poll、multi-chunk SSE 与 AbortSignal。UXP 仍只有官方文档与打包约束证据，未在 Photoshop UXP 真机跑端到端；Grayscale/LAB/CMYK 图层字节读取也未真机复验。
-- Fal 官方存储上传路径只有精确单测，没有使用真实 Fal Key 做网络端到端。
+- Fal 官方存储上传已在 Electron/Node real profile 中用无隐私合成 PNG 跑通真实端到端：正式 `preprocessRequestBody` + `sdkRuntimeContext` 读取本地字节和真实凭据，经 `@fal-ai/client` 完成一次 initiation + PUT，Range 回读的字节数与 SHA-256 均一致，未触发模型请求或费用。该官方客户端仍使用自身网络栈、不经过 `RuntimeContext.transport`，因此 UXP/自定义 Transport 宿主仍需单独验证；CDN URL 公开，生产代码未显式设置 lifecycle，保留期依赖 Fal 账户设置。
 - 四个历史 override 模型均已完成真实供应商 create/poll/result URL 验证。KIE Seedream 4.0/4.5 首轮各一次完成；Fal Seedream 4.0 首轮 create 后暴露 `0.1.2` status route 重建 405 并按首败停止，后在新的独立费用授权下，修复后 4.0 completed 才继续 4.5，两者均 completed 且无 create 重试。优先保存供应商完整 `status_url` 的修复已在私有 `0.1.3` 发布，并通过远程干净安装与标准 Vite 五入口回归。
 - KIE、APIMart、PPIO 的正式只读 probe 均已得到 HTTP 200 且分类为 connected/verified；KIE/APIMart 余额已在正式 Electron real-profile 设置页显示，对应截图已实际打开目视。首轮场景选择器失败仍保留在 6.6 交接，没有用后台日志冒充 UI 证据。
 - 8 家 provider fixture 中只有 Grsai 来自真实日志；其余按已核对测试断言与供应商文档构建。准确来源逐条记在 `tests/fixtures/README.md`，未冒充真实日志。
