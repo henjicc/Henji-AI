@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-28 |
 | 模态 | 图片 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `fal-ai/z-image/turbo`、`fal-ai/z-image/turbo/image-to-image` |
@@ -76,7 +76,8 @@
 ## 6. 适配要点
 
 - 本项目默认**绝对不显示**：`seed`、负面提示词。Fal 本端点**有 `seed`**（不下发），无负面提示词字段。
-- `output_format`、`sync_mode`、`acceleration`、`num_inference_steps` 按项目约定不展示、不请求（保持默认）。
+- `output_format`、`sync_mode` 按项目约定不展示、不请求；`acceleration` 与 `num_inference_steps` 是已公开的成本/速度控制，SDK 保留为可选参数。
+- SDK 新增独立 `falZImageTurboImageSize` 请求档：默认 `provider` 保持 0.1.5 的长边 1K/2K 语义，显式 `1MP` 则按比例发送约 1024²、16 对齐的对象，供需要精确复刻旧插件尺寸语义的 adapter 使用。
 - 这是唯一有图生图的 Z-Image 供应商，`image_url` 是**单张字符串**，不是数组。
 - `num_images` 最多 4（其他供应商固定 1），是否开放由产品决定。
 - 关闭安全检查时不安全图会返回**黑图**而不是报错，结果解析要能识别。

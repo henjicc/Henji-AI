@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-28 |
 | 模态 | 图片 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `bytedance/seedream/v5/lite/text-to-image`、`bytedance/seedream/v5/lite/edit` |
@@ -75,6 +75,7 @@ Fal 未对 Lite 按分辨率分档，也未标注输入图加价。
 - 本项目默认**绝对不显示**：`seed`、负面提示词。入参无 `seed`；输出里的 `seed` 只做记录，不要暴露成可编辑参数。
 - `sync_mode`、`return_byteplus_urls` 不展示、不请求。
 - 尺寸约束与 Pro 不同（Lite 是 2560×1440 ~ 4096×4096），越界会被**自动缩放**而不是报错，UI 上给出的固定比例需要按 Lite 的面积区间换算。
+- SDK 固定比例覆盖通用 10 档；显式 `1MP` 是旧插件请求兼容档，会发送约 1024²、16 对齐的对象，但该面积低于 Lite 官方下限，Fal 会自动放大。新宿主应优先选择 2K/3K/4K；默认仍保持 0.1.5 的 2K。
 - 组图靠 `max_images`（Fal 独有写法），与 APIMart 的 `n` / 火山的 `sequential_image_generation` 都不一样。
 - `image_urls` 超 10 张静默截断，需前端限制。
 

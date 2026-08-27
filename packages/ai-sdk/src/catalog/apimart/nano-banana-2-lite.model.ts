@@ -20,12 +20,17 @@ export const apimartNanoBanana2LiteModel = defineModel({
   inputLimits: { images: { max: 14 }, videos: { max: 0 } },
   params: [
     {
-      id: 'apimartNanoBanana2LiteAspectRatio', type: 'dropdown', order: 1,
+      id: 'apimartNanoBanana2LiteChannel', type: 'dropdown', order: 1,
+      default: 'standard',
+      options: [{ value: 'standard' }, { value: 'official' }]
+    },
+    {
+      id: 'apimartNanoBanana2LiteAspectRatio', type: 'dropdown', order: 2,
       default: 'smart',
       options: [{ value: 'smart' }, ...ASPECT_RATIOS.map((ratio) => ({ value: ratio }))]
     },
     {
-      id: 'apimartNanoBanana2LiteCount', type: 'number', order: 2,
+      id: 'apimartNanoBanana2LiteCount', type: 'number', order: 3,
       default: 1, min: 1, max: 4, step: 1
     }
   ],
@@ -55,7 +60,9 @@ export const apimartNanoBanana2LiteModel = defineModel({
         }
       }
       const body: JsonObject = {
-        model: 'gemini-3.1-flash-lite-image-ext',
+        model: params.apimartNanoBanana2LiteChannel === 'official'
+          ? 'gemini-3.1-flash-lite-image'
+          : 'gemini-3.1-flash-lite-image-ext',
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size,
         n: Math.min(4, Math.max(1, Math.round(Number(params.apimartNanoBanana2LiteCount || 1))))
@@ -66,8 +73,9 @@ export const apimartNanoBanana2LiteModel = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: (params) => Math.min(4, Math.max(1, Math.round(Number(params.apimartNanoBanana2LiteCount || 1)))) * 0.0125,
-    description: 'Lite EXT 1K $0.0125/张；模型固定 1K，不提供无效的分辨率与搜索开关'
+    calculator: (params) => Math.min(4, Math.max(1, Math.round(Number(params.apimartNanoBanana2LiteCount || 1))))
+      * (params.apimartNanoBanana2LiteChannel === 'official' ? 0.032 : 0.0125),
+    description: '常规渠道 1K $0.0125/张；官方渠道按 token 结算，估算 $0.032/张；两渠道均不提供无效的分辨率与搜索开关'
   }
 })
 

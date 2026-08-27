@@ -92,7 +92,7 @@ describe('catalog consumer contract', () => {
         fields: ['default', 'id', 'order', 'type', 'valueType'],
       },
       dropdown: {
-        count: 285,
+        count: 290,
         fields: ['apiField', 'default', 'id', 'options', 'order', 'required', 'type', 'valueType', 'visible'],
       },
       'file-upload': {

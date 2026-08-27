@@ -35,6 +35,9 @@ export const apimartSeedream50LiteModel = defineModel({
             const images = (uploaded.length > 0 ? uploaded : filterSources(params.images)).slice(0, 14);
             const supported = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '2:1', '1:2', '21:9'];
             const raw = String(params.apimartSeedream50LiteAspectRatio || 'smart');
+            if (raw !== 'smart' && raw !== 'auto' && !supported.includes(raw)) {
+                throw new Error(`Seedream 5.0 Lite 不支持图片比例 ${raw}`);
+            }
             const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0 ? params.__firstImageRatio : 1;
             let size = supported.includes(raw) ? raw : '1:1';
             if (raw === 'smart' || raw === 'auto') {

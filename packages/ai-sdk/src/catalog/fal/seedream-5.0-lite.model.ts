@@ -1,6 +1,7 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
-const SEEDREAM_LITE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const;
+import { FAL_COMMON_IMAGE_RATIOS, falOneMegapixelSize } from './imageSizing';
+const SEEDREAM_LITE_RATIOS = FAL_COMMON_IMAGE_RATIOS;
 export const falSeedream50LiteModel = defineModel({
     meta: {
         id: 'fal-ai-seedream-5.0-lite', canonicalModelId: 'seedream-5.0-lite', seriesId: 'seedream', seriesRank: 5,
@@ -18,7 +19,7 @@ export const falSeedream50LiteModel = defineModel({
         {
             id: 'falSeedream50LiteResolution', type: 'dropdown', order: 2,
             default: '2K',
-            options: ['2K', '3K', '4K'].map((value) => ({ value }))
+            options: ['2K', '3K', '4K', '1MP'].map((value) => ({ value }))
         },
         {
             id: 'falSeedream50LiteNumImages', type: 'number', order: 3,
@@ -42,7 +43,7 @@ export const falSeedream50LiteModel = defineModel({
                 ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : [];
             const uploaded = clean(params.uploadedFilePaths);
             const images = uploaded.length > 0 ? uploaded : clean(params.images);
-            const ratios = ['1:1', '4:3', '3:4', '16:9', '9:16'];
+            const ratios: readonly string[] = FAL_COMMON_IMAGE_RATIOS;
             const raw = String(params.falSeedream50LiteAspectRatio || 'smart');
             const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0 ? params.__firstImageRatio : 1;
             let ratio = ratios.includes(raw) ? raw : '1:1';
@@ -58,8 +59,9 @@ export const falSeedream50LiteModel = defineModel({
                 }
             }
             const resolution = ['3K', '4K'].includes(String(params.falSeedream50LiteResolution)) ? String(params.falSeedream50LiteResolution) : '2K';
-            let imageSize: JsonValue = `auto_${resolution}`;
-            if (raw !== 'smart' && raw !== 'auto') {
+            const oneMegapixel = params.falSeedream50LiteResolution === '1MP';
+            let imageSize: JsonValue = oneMegapixel ? falOneMegapixelSize(ratio) : `auto_${resolution}`;
+            if (!oneMegapixel && raw !== 'smart' && raw !== 'auto') {
                 const longSide = resolution === '4K' ? 4096 : (resolution === '3K' ? 3072 : 2560);
                 const pair = ratio.split(':').map(Number);
                 const width = pair[0] >= pair[1] ? longSide : Math.round(longSide * pair[0] / pair[1]);

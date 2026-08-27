@@ -172,4 +172,57 @@ describe('packages/ai-sdk/docs/model-adaptation Fal 目标模型', () => {
       prompt: 'read context', falNanoBanana2PdfUrl: ['https://example.com/context.pdf']
     })).toMatchObject({ pdf_url: 'https://example.com/context.pdf' })
   })
+
+  it('Fal Seedream Pro/Lite 保留旧默认并可显式选择插件 1MP 请求语义', () => {
+    expect(falSeedream50ProModel.request?.builder?.({ prompt: 'default' }))
+      .toMatchObject({ image_size: 'auto_2K', num_images: 1, enable_safety_checker: true })
+    expect(falSeedream50LiteModel.request?.builder?.({ prompt: 'default' }))
+      .toMatchObject({ image_size: 'auto_2K', num_images: 1, max_images: 1, enable_safety_checker: true })
+    expect(falSeedream50ProModel.request?.builder?.({
+      prompt: 'wide', falSeedream50ProAspectRatio: '21:9', falSeedream50ProResolution: '1MP'
+    })).toMatchObject({ image_size: { width: 1568, height: 672 } })
+    expect(falSeedream50LiteModel.request?.builder?.({
+      prompt: 'portrait', falSeedream50LiteAspectRatio: '4:5', falSeedream50LiteResolution: '1MP'
+    })).toMatchObject({ image_size: { width: 928, height: 1152 } })
+  })
+
+  it('Fal Qwen Image 3 兼容 COMMON10、1MP 与编辑端省略尺寸', async () => {
+    const endpoints = falQwenImage30Model.endpoints as { selector: (params: JsonObject) => Promise<string> }
+    expect(await endpoints.selector({ images: ['input.png'] })).toBe('alibaba/qwen-image-3/edit')
+    expect(falQwenImage30Model.request?.builder?.({
+      prompt: 'text', falQwenImage30AspectRatio: '16:9',
+      falQwenImage30Resolution: '1MP', falQwenImage30PromptExpansion: false
+    })).toMatchObject({
+      image_size: { width: 1376, height: 768 }, enable_prompt_expansion: false
+    })
+    const edit = falQwenImage30Model.request?.builder?.({
+      prompt: 'edit', images: ['input.png'], falQwenImage30AspectRatio: '4:5',
+      falQwenImage30Resolution: '1MP', falQwenImage30PromptExpansion: false
+    })
+    expect(edit).toMatchObject({ image_urls: ['input.png'], enable_prompt_expansion: false })
+    expect(edit).not.toHaveProperty('image_size')
+  })
+
+  it('Fal GPT Image 2 与 Z-Image 显式 1MP 分支不改变旧默认', () => {
+    expect(falGptImage2Model.request?.builder?.({ prompt: 'default' }))
+      .toMatchObject({ image_size: 'square_hd', quality: 'high', num_images: 1 })
+    expect(falGptImage2Model.request?.builder?.({
+      prompt: 'plugin', falGptImage2AspectRatio: '21:9',
+      falGptImage2ImageSize: '1MP', falGptImage2Resolution: 'auto'
+    })).toMatchObject({ image_size: { width: 1568, height: 672 }, quality: 'auto' })
+    expect(zImageTurboModel.request?.builder?.({ prompt: 'default' }))
+      .toMatchObject({ image_size: { width: 1024, height: 1024 } })
+    expect(zImageTurboModel.request?.builder?.({
+      prompt: 'plugin', falZImageTurboAspectRatio: '16:9', falZImageTurboImageSize: '1MP'
+    })).toMatchObject({ image_size: { width: 1376, height: 768 } })
+  })
+
+  it('Fal Nano Banana 隐藏默认与官方 schema 一致', () => {
+    expect(falNanoBanana2Model.request?.builder?.({ prompt: 'default' })).toMatchObject({
+      num_images: 1, limit_generations: true, enable_web_search: false
+    })
+    expect(nanoBananaProModel.request?.builder?.({ prompt: 'default' })).toMatchObject({
+      num_images: 1, limit_generations: true, enable_web_search: false
+    })
+  })
 })

@@ -94,6 +94,13 @@ export const falPresentationPart7: Record<string, ModelPresentation> = {
           }]
         })),
       },
+      "falZImageTurboImageSize": {
+        name: sharedFieldText('imageSize'),
+        optionLabels: {
+          provider: { label: { zh: '供应商预设', en: 'Provider Preset' } },
+          '1MP': { label: { zh: '约 1MP', en: 'Approx. 1MP' } },
+        },
+      },
       "falZImageTurboNumImages": {
         name: sharedFieldText('numberOfImages'),
       },

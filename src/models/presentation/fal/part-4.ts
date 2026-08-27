@@ -128,7 +128,7 @@ export const falPresentationPart4: Record<string, ModelPresentation> = {
       "falQwenImage30AspectRatio": {
         name: sharedFieldText('aspectRatio'),
         optionLabels: Object.fromEntries((
-          [{ value: 'smart', label: sharedOptionText('smart') }, ...(['1:1', '4:3', '3:4', '16:9', '9:16'] as const).map((value) => ({ value, label: value }))]
+          [{ value: 'smart', label: sharedOptionText('smart') }, ...(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const).map((value) => ({ value, label: value }))]
         ).map((rawOption) => {
           const option = rawOption as { value: string | number; label?: I18nText; description?: I18nText }
           return [String(option.value), {
@@ -140,7 +140,7 @@ export const falPresentationPart4: Record<string, ModelPresentation> = {
       "falQwenImage30Resolution": {
         name: sharedFieldText('resolution'),
         optionLabels: Object.fromEntries((
-          ['1K', '2K'].map((value) => ({ value, label: value }))
+          ['1K', '2K', '1MP'].map((value) => ({ value, label: value === '1MP' ? { zh: '约 1MP（兼容）', en: 'Approx. 1MP (Compatibility)' } : value }))
         ).map((rawOption) => {
           const option = rawOption as { value: string | number; label?: I18nText; description?: I18nText }
           return [String(option.value), {

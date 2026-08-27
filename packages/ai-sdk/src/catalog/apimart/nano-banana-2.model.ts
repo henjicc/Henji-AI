@@ -17,21 +17,26 @@ export const apimartNanoBanana2Model = defineModel({
   inputLimits: { images: { max: 14 }, videos: { max: 0 } },
   params: [
     {
-      id: 'apimartNanoBanana2AspectRatio', type: 'dropdown', order: 1,
+      id: 'apimartNanoBanana2Channel', type: 'dropdown', order: 1,
+      default: 'standard',
+      options: [{ value: 'standard' }, { value: 'official' }]
+    },
+    {
+      id: 'apimartNanoBanana2AspectRatio', type: 'dropdown', order: 2,
       default: 'smart',
       options: [{ value: 'smart' }, ...ASPECT_RATIOS.map((ratio) => ({ value: ratio }))]
     },
     {
-      id: 'apimartNanoBanana2Resolution', type: 'dropdown', order: 2,
+      id: 'apimartNanoBanana2Resolution', type: 'dropdown', order: 3,
       default: '1K',
       options: ['0.5K', '1K', '2K', '4K'].map((value) => ({ value }))
     },
     {
-      id: 'apimartNanoBanana2GoogleSearch', type: 'switch', order: 3,
+      id: 'apimartNanoBanana2GoogleSearch', type: 'switch', order: 4,
       default: false
     },
     {
-      id: 'apimartNanoBanana2GoogleImageSearch', type: 'switch', order: 4,
+      id: 'apimartNanoBanana2GoogleImageSearch', type: 'switch', order: 5,
       default: false
     }
   ],
@@ -58,7 +63,9 @@ export const apimartNanoBanana2Model = defineModel({
         ? String(params.apimartNanoBanana2Resolution) : '1K'
       const googleImageSearch = params.apimartNanoBanana2GoogleImageSearch === true
       const body: JsonObject = {
-        model: 'gemini-3.1-flash-image-preview',
+        model: params.apimartNanoBanana2Channel === 'official'
+          ? 'gemini-3.1-flash-image-preview-official'
+          : 'gemini-3.1-flash-image-preview',
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size,
         resolution,
@@ -71,9 +78,15 @@ export const apimartNanoBanana2Model = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: (params) => params.apimartNanoBanana2Resolution === '4K'
-      ? 0.025 : (params.apimartNanoBanana2Resolution === '2K' ? 0.02 : 0.015),
-    description: '0.5K/1K $0.015/张，2K $0.02/张，4K $0.025/张'
+    calculator: (params) => {
+      if (params.apimartNanoBanana2Channel === 'official') {
+        return params.apimartNanoBanana2Resolution === '4K'
+          ? 0.1208 : (params.apimartNanoBanana2Resolution === '2K' ? 0.0808 : 0.0536)
+      }
+      return params.apimartNanoBanana2Resolution === '4K'
+        ? 0.025 : (params.apimartNanoBanana2Resolution === '2K' ? 0.02 : 0.015)
+    },
+    description: '常规渠道：0.5K/1K $0.015、2K $0.02、4K $0.025/张；官方渠道按 token 结算，估算 0.5K/1K $0.0536、2K $0.0808、4K $0.1208/张'
   }
 })
 

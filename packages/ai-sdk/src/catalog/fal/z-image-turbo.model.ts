@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { falOneMegapixelSize } from './imageSizing';
 const Z_IMAGE_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const;
 export const zImageTurboModel = defineModel({
     meta: {
@@ -21,15 +22,20 @@ export const zImageTurboModel = defineModel({
             options: ['1K', '2K'].map((value) => ({ value }))
         },
         {
-            id: 'falZImageTurboNumImages', type: 'number', order: 3,
+            id: 'falZImageTurboImageSize', type: 'dropdown', order: 3,
+            default: 'provider',
+            options: [{ value: 'provider' }, { value: '1MP' }]
+        },
+        {
+            id: 'falZImageTurboNumImages', type: 'number', order: 4,
             default: 1, min: 1, max: 4, step: 1
         },
         {
-            id: 'falZImageTurboNumInferenceSteps', type: 'number', order: 4,
+            id: 'falZImageTurboNumInferenceSteps', type: 'number', order: 5,
             default: 8, min: 1, max: 8, step: 1
         },
         {
-            id: 'falZImageTurboAcceleration', type: 'dropdown', order: 5,
+            id: 'falZImageTurboAcceleration', type: 'dropdown', order: 6,
             default: 'regular',
             options: [
                 { value: 'none' },
@@ -38,11 +44,11 @@ export const zImageTurboModel = defineModel({
             ]
         },
         {
-            id: 'falZImageTurboPromptExpansion', type: 'switch', order: 6,
+            id: 'falZImageTurboPromptExpansion', type: 'switch', order: 7,
             default: false
         },
         {
-            id: 'falZImageTurboStrength', type: 'number', order: 7,
+            id: 'falZImageTurboStrength', type: 'number', order: 8,
             default: 0.6, min: 0, max: 1, step: 0.05,
             visible: { condition: (params: JsonObject) => {
                     const uploaded = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : [];
@@ -85,7 +91,9 @@ export const zImageTurboModel = defineModel({
             const height = pair[1] >= pair[0] ? longSide : Math.round(longSide * pair[1] / pair[0]);
             const body: JsonObject = {
                 prompt: typeof params.prompt === 'string' ? params.prompt : '',
-                image_size: images.length > 0 && raw === 'smart' ? 'auto' : { width, height },
+                image_size: params.falZImageTurboImageSize === '1MP'
+                    ? falOneMegapixelSize(ratio)
+                    : (images.length > 0 && raw === 'smart' ? 'auto' : { width, height }),
                 num_inference_steps: Math.min(8, Math.max(1, Math.round(Number(params.falZImageTurboNumInferenceSteps || 8)))),
                 num_images: Math.min(4, Math.max(1, Math.round(Number(params.falZImageTurboNumImages || 1)))),
                 enable_safety_checker: true,

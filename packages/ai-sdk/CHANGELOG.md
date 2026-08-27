@@ -4,6 +4,13 @@
 
 ## Unreleased
 
+## 0.1.6 - 2026-08-28
+
+- APIMart Nano Banana 2、Lite、Pro 新增常规/官方双渠道，保持常规渠道为默认，并按渠道切换精确模型 ID 与估价。
+- APIMart Seedream 5 Pro 补齐官方合法的 `2:1` / `1:2`；Pro/Lite 对列表外比例显式报错，不再静默降级 1:1。
+- Fal Seedream 5 Pro/Lite、Qwen Image 3、GPT Image 2、Z-Image 补齐通用比例与显式约 1MP 请求档；GPT Image 2 补齐 `quality=auto`，所有 0.1.5 默认保持不变。
+- 补齐 Photoshop adapter 迁移交接；APIMart Midjourney、Z-Image、GPT Image 2 与 Fal Nano 隐藏默认经官方契约核证后维持现实现。
+
 ## 0.1.5 - 2026-08-28
 
 - 新增零内置依赖的 `generation/core`、99 个完整单模型 pack、8 个 provider adapter/pack；默认

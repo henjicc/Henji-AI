@@ -1,7 +1,7 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
 const APIMART_IMAGE_ENDPOINT = '/v1/images/generations';
-const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] as const;
+const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '2:1', '1:2', '21:9'] as const;
 export const apimartSeedream50ProModel = defineModel({
     meta: {
         id: 'apimart-seedream-5.0-pro', canonicalModelId: 'seedream-5.0-pro', seriesId: 'seedream', seriesRank: 5.1,
@@ -91,8 +91,11 @@ export const apimartSeedream50ProModel = defineModel({
                     size: layerSize
                 };
             }
-            const supported = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'];
+            const supported = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '2:1', '1:2', '21:9'];
             const raw = String(params.apimartSeedream50ProAspectRatio || 'smart');
+            if (raw !== 'smart' && raw !== 'auto' && !supported.includes(raw)) {
+                throw new Error(`Seedream 5.0 Pro 不支持图片比例 ${raw}`);
+            }
             const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0 ? params.__firstImageRatio : 1;
             let size = supported.includes(raw) ? raw : '1:1';
             if (raw === 'smart' || raw === 'auto') {

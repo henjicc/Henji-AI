@@ -453,4 +453,83 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
       apimartQwenImage30Variant: 'pro', apimartQwenImage30Resolution: '2K', apimartQwenImage30Count: 2
     })).toBeCloseTo(0.1142864)
   })
+
+  it.each([
+    {
+      model: apimartNanoBanana2Model,
+      paramId: 'apimartNanoBanana2Channel',
+      standardId: 'gemini-3.1-flash-image-preview',
+      officialId: 'gemini-3.1-flash-image-preview-official',
+      standardParams: { apimartNanoBanana2Resolution: '2K' },
+      officialParams: { apimartNanoBanana2Channel: 'official', apimartNanoBanana2Resolution: '2K' },
+      standardPrice: 0.02,
+      officialPrice: 0.0808,
+    },
+    {
+      model: apimartNanoBanana2LiteModel,
+      paramId: 'apimartNanoBanana2LiteChannel',
+      standardId: 'gemini-3.1-flash-lite-image-ext',
+      officialId: 'gemini-3.1-flash-lite-image',
+      standardParams: { apimartNanoBanana2LiteCount: 2 },
+      officialParams: { apimartNanoBanana2LiteChannel: 'official', apimartNanoBanana2LiteCount: 2 },
+      standardPrice: 0.025,
+      officialPrice: 0.064,
+    },
+    {
+      model: apimartNanoBananaProModel,
+      paramId: 'apimartNanoBananaProChannel',
+      standardId: 'gemini-3-pro-image-preview',
+      officialId: 'gemini-3-pro-image-preview-official',
+      standardParams: { apimartNanoBananaProResolution: '4K' },
+      officialParams: { apimartNanoBananaProChannel: 'official', apimartNanoBananaProResolution: '4K' },
+      standardPrice: 0.04,
+      officialPrice: 0.192,
+    },
+  ])('$model.meta.id 以第一顺位渠道参数无损切换 APIMart 双渠道', ({
+    model, paramId, standardId, officialId, standardParams, officialParams, standardPrice, officialPrice,
+  }) => {
+    expect(model.params[0]).toMatchObject({
+      id: paramId,
+      order: 1,
+      default: 'standard',
+      role: 'channel',
+      name: { key: 'params.fields.apiChannel' },
+      options: [
+        { value: 'standard', label: { key: 'params.options.regular' } },
+        { value: 'official', label: { key: 'params.options.official' } },
+      ],
+    })
+    expect(model.request?.builder?.({ prompt: 'default' })).toMatchObject({ model: standardId })
+    expect(model.request?.builder?.({ prompt: 'standard', ...standardParams })).toMatchObject({ model: standardId })
+    expect(model.request?.builder?.({ prompt: 'official', ...officialParams })).toMatchObject({ model: officialId })
+    expect(model.pricing.calculator?.(standardParams)).toBeCloseTo(standardPrice)
+    expect(model.pricing.calculator?.(officialParams)).toBeCloseTo(officialPrice)
+  })
+
+  it('APIMart Seedream 只接受官方比例并拒绝插件旧非法比例', () => {
+    expect(apimartSeedream50ProModel.request?.builder?.({
+      prompt: 'wide', apimartSeedream50ProAspectRatio: '2:1'
+    })).toMatchObject({ size: '2:1' })
+    expect(apimartSeedream50LiteModel.request?.builder?.({
+      prompt: 'tall', apimartSeedream50LiteAspectRatio: '1:2'
+    })).toMatchObject({ size: '1:2' })
+    expect(() => apimartSeedream50ProModel.request?.builder?.({
+      prompt: 'invalid', apimartSeedream50ProAspectRatio: '4:5'
+    })).toThrow(/不支持图片比例/)
+    expect(() => apimartSeedream50LiteModel.request?.builder?.({
+      prompt: 'invalid', apimartSeedream50LiteAspectRatio: '5:4'
+    })).toThrow(/不支持图片比例/)
+  })
+
+  it('APIMart 旧插件边界以官方契约为准', () => {
+    expect(() => apimartMidjourneyModel.request?.builder?.({
+      apimartMidjourneyMode: 'edit', prompt: 'edit',
+      images: Array.from({ length: 7 }, (_, index) => `${index}.png`),
+    })).toThrow(/1–6/)
+    const longPrompt = '图'.repeat(900)
+    expect(apimartZImageTurboModel.request?.builder?.({ prompt: longPrompt })?.prompt).toHaveLength(800)
+    expect(apimartGptImage2Model.request?.builder?.({
+      prompt: 'official edit', images: ['input.png'], apimartGptImage2Version: 'official'
+    })).toMatchObject({ quality: 'auto', background: 'auto', nsfw_check: false })
+  })
 })

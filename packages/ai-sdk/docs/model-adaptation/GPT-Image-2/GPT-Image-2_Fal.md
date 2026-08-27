@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-28 |
 | 模态 | 图片 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `openai/gpt-image-2`、`openai/gpt-image-2/edit` |
@@ -77,6 +77,7 @@
 - `output_format`、`sync_mode` 不展示、不请求。
 - **`quality` 默认 `high` 是成本陷阱**：Fal 与 APIMart 官方渠道（默认 `auto`≈`low`）默认值相反，必须显式下发。
 - `image_size` 的明确尺寸约束很硬（16 的倍数、≤ 3840、比例 ≤ 3:1、总像素区间），画布比例换算必须做对齐，否则报错。
+- SDK 保留旧参数 ID `falGptImage2Resolution` 以兼容 0.1.5，但展示语义已校正为 `quality`，并补齐官方合法的 `auto`；新增独立 `falGptImage2ImageSize`（默认 `provider`，可选 `1MP`）避免把质量与尺寸混为一谈。通用 10 档比例均可用，插件 adapter 应显式选择 `1MP` + 原始 `auto/low/medium/high` 质量值。
 - `edit` 的 `image_urls` 是**必填**；`mask_url` 让 Fal 成为除 APIMart 官方渠道外唯一支持局部重绘的 GPT-Image-2 供应商。
 - 按 token 计费，成本估算不能按张算。
 

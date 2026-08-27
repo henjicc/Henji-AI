@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-08-28 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | 标准版 `gemini-3.1-flash-image-preview`（别名 `nano-banana-2-ext`）<br>官方版 `gemini-3.1-flash-image-preview-official`（别名 `nano-banana-2`） |
@@ -47,7 +47,7 @@
 
 ### 2.3 价格
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)（2026-08-22，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)与[Nano Banana 3 模型页](https://apimart.ai/zh/model/nano-banana-3-api)（2026-08-28，1 Credit ≈ $0.1）。
 
 **NANO-BANANA-2-EXT**（按张，5 档）
 
@@ -66,6 +66,8 @@
 | 文本输出 | 24 Credits/M ≈ $2.4/M | $3/M |
 | 图片输出 | 480 Credits/M ≈ **$48/M** | $60/M |
 
+SDK 对官方渠道采用模型页给出的当前单张估算：0.5K/1K **$0.0536**、2K **$0.0808**、4K **$0.1208**；实际账单仍按 token 结算。
+
 ---
 
 ## 3. 适配要点
@@ -74,6 +76,7 @@
 - 主模型 `n` 只能是 1；`n` 必须是数字类型。
 - `size: auto` 在文生图与图生图下行为不同，建议永远显式下发比例。
 - `google_image_search` 依赖 `google_search`，两者要做联动。
+- SDK 用首位 `apimartNanoBanana2Channel` 参数表达渠道，默认 `standard` 保持 0.1.5 的 EXT 请求；`official` 只切换为精确官方模型 ID，不发送 `official_fallback`。
 - Lite 版本不要并入本模型：分辨率档位、比例集合、`n` 上限、搜索增强、计费方式都不同，是独立产品，见 [Nano-Banana-2-Lite_APIMart.md](../Nano-Banana-2-Lite/Nano-Banana-2-Lite_APIMart.md)。
 
 ## 4. 原始链接索引

@@ -2,10 +2,10 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-08-28 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
-| 平台模型 ID | `gemini-3.1-flash-lite-image`（官方渠道）/ `gemini-3.1-flash-lite-image-ext`（EXT 渠道，本项目当前接入这个） |
+| 平台模型 ID | `gemini-3.1-flash-lite-image`（官方渠道）/ `gemini-3.1-flash-lite-image-ext`（常规 EXT 渠道） |
 | 接口形态 | **异步任务** |
 | 文档可见性 | 公开，无需登录 |
 | 价格可见性 | 公开，无需登录 |
@@ -37,7 +37,7 @@
 
 | 字段 | 类型 | 必填 | 默认 | 取值与说明 |
 |---|---|---|---|---|
-| `model` | string | 必填 | `gemini-3.1-flash-lite-image` | 官方渠道；本项目代码当前用的是 EXT 别名 `gemini-3.1-flash-lite-image-ext`（见「项目对照」） |
+| `model` | string | 必填 | `gemini-3.1-flash-lite-image` | 官方渠道；常规渠道使用 EXT 别名 `gemini-3.1-flash-lite-image-ext` |
 | `prompt` | string | 必填 | — | 图像生成描述 |
 | `size` | string | 可选 | — | 11 个比例（见第 2 节），无极端比例；`auto` 行为与主模型一致，建议始终显式指定 |
 | `n` | integer | 可选 | `1` | 1–4，建议前端固定传 1 |
@@ -47,7 +47,7 @@
 
 ## 4. 价格
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → `NANO-BANANA-2-LITE-EXT` / `NANO-BANANA-2-LITE`（2026-08-22，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)与[Nano Banana 2 模型页的 Lite 档](https://apimart.ai/zh/model/nano-banana-3-api)（2026-08-28，1 Credit ≈ $0.1）。
 
 | 计费口径 | 我们的价格 | 官方价 | 节省 |
 |---|---|---|---|
@@ -56,7 +56,7 @@
 | `NANO-BANANA-2-LITE`（官方渠道，按 token）文本输出 | 12 Credits/M ≈ $1.2/M | — | — |
 | `NANO-BANANA-2-LITE`（官方渠道，按 token）图片输出 | 240 Credits/M ≈ **$24/M** | — | — |
 
-文档另有粗略估算：输入约 $0.25/百万 token、图片输出约 $30/百万 token，1K 单张 ≈ 1120 output token ≈ $0.0336/张（实际以后台倍率配置为准，与上表按张价格对不上，以定价中心的按张价为准）。
+SDK 对官方渠道采用模型页当前估算 **$0.032/张**；实际账单仍按 token 结算。
 
 ## 5. 水印
 
@@ -67,7 +67,7 @@
 - 本项目默认**绝对不显示**：`seed`、负面提示词。本模型没有这两个字段。
 - **必须与 Nano Banana 2 主模型分开建模**：分辨率档位、比例集合、`n` 上限、搜索增强、计费方式全都不同，这点在代码里已经落实（`nano-banana-2-lite.model.ts` 独立文件、独立 `canonicalModelId`），文档现在也拆开，避免下次调研时把两者当成同一模型的参数分支去理解。
 - 「传高分辨率静默降级」和「传 `google_search` 静默无效」两处是**沉默失败**，UI 上不要暴露这些开关，否则用户会以为生效了。
-- 当前代码用的是 EXT 渠道（`gemini-3.1-flash-lite-image-ext`，按张计费），如果之后要接官方渠道（按 token 计费），计价模型需要整个换掉，不是简单加参数。
+- SDK 用首位 `apimartNanoBanana2LiteChannel` 参数表达双渠道，默认 `standard` 保持 0.1.5 的 EXT 请求；`official` 精确映射到无 `-official` 后缀的 `gemini-3.1-flash-lite-image`，估价同步切换为 token 模型页单张估算。
 
 ## 7. 原始链接索引
 

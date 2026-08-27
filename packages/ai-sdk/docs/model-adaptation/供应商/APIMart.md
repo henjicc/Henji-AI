@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-08-28 |
 | 供应商类型 | 聚合中转（非模型原厂） |
 | 项目内 providerId | `apimart` |
 | 主域名 | `apimart.ai`（海外主站） |
@@ -165,6 +165,8 @@ curl -X POST https://api.apimart.ai/v1/uploads/images \
 | 任务返回值 | `data.cost`（美元）、`data.credits_cost`（积分） | **实际扣费**，最可信 |
 | 文档正文价格 | 各模型 API 文档页 | **经常过期**，与定价中心冲突时以定价中心为准（例：Seedream 5.0 Pro 文档写 $0.045/$0.09，定价中心是 $0.02928/$0.05856） |
 | 定价 API | `GET /api/pricing/model` | **仅文本模型**，图片/视频用不上 |
+
+Nano Banana 2 / Lite / Pro 在同一产品模型内各有「常规 EXT」与「官方」两条渠道，路由和 body schema 相同，以 `model` 精确 ID 区分；前者按张、后者按 token。SDK 以第一顺位 `role: 'channel'` 参数表达，默认常规渠道以保持 0.1.5 兼容，估价必须随渠道同步切换。
 
 ## 7. 余额查询
 

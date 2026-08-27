@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-28 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | 标准版 `gemini-3-pro-image-preview`（别名 `nano-banana-pro-ext`）<br>官方版 `gemini-3-pro-image-preview-official`（别名 `nano-banana-pro`） |
@@ -43,7 +43,7 @@
 
 ## 5. 价格
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)（2026-08-22，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)与[Nano Banana 2 模型页](https://apimart.ai/zh/model/nano-banana-2-api)（2026-08-28，1 Credit ≈ $0.1）。
 
 **NANO-BANANA-PRO-EXT**（按张）
 
@@ -61,12 +61,15 @@
 | 文本输出 | 96 Credits/M ≈ $9.6/M | $12/M |
 | 图片输出 | 960 Credits/M ≈ **$96/M** | $120/M |
 
+SDK 对官方渠道采用模型页当前单张估算：1K/2K **$0.1072**、4K **$0.192**；实际账单仍按 token 结算。
+
 ## 6. 适配要点
 
 - 本项目默认**绝对不显示**：`seed`、负面提示词。APIMart 本接口两个字段都没有。
 - `n` 只能是 1；必须是数字类型。
 - 比例集合 11 个，**不包含** Nano Banana 2 的 `1:4` / `4:1` / `1:8` / `8:1`，跨模型不能共用比例集合。
 - 标准版按张计费、官方版按 token 计费，两条渠道的成本模型完全不同。
+- SDK 用首位 `apimartNanoBananaProChannel` 参数表达渠道，默认 `standard` 保持 0.1.5 的 EXT 请求；`official` 只切换精确官方模型 ID，不发送 `official_fallback`。
 - `size: auto` 在文生图与图生图下行为不同，建议永远显式下发。
 - 参考图单张上限 30 MB，比 Nano Banana 2 的 10 MB 宽松。
 

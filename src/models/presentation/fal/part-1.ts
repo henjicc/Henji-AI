@@ -67,9 +67,8 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
         optionLabels: Object.fromEntries((
           [
         { value: 'smart', label: sharedOptionText('smart') },
-        { value: '1:1', label: '1:1' }, { value: '4:3', label: '4:3' },
-        { value: '3:4', label: '3:4' }, { value: '16:9', label: '16:9' },
-        { value: '9:16', label: '9:16' }
+        ...(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const)
+          .map((value) => ({ value, label: value }))
       ]
         ).map((rawOption) => {
           const option = rawOption as { value: string | number; label?: I18nText; description?: I18nText }
@@ -79,10 +78,18 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
           }]
         })),
       },
+      "falGptImage2ImageSize": {
+        name: sharedFieldText('imageSize'),
+        optionLabels: {
+          provider: { label: { zh: '供应商预设', en: 'Provider Preset' } },
+          '1MP': { label: { zh: '约 1MP', en: 'Approx. 1MP' } },
+        },
+      },
       "falGptImage2Resolution": {
-        name: sharedFieldText('resolution'),
+        name: sharedFieldText('quality'),
         optionLabels: Object.fromEntries((
           [
+        { value: 'auto', label: { zh: '自动', en: 'Auto' } },
         { value: 'low', label: { zh: '低质量', en: 'Low' } },
         { value: 'medium', label: { zh: '标准', en: 'Medium' } },
         { value: 'high', label: { zh: '高质量', en: 'High' } }

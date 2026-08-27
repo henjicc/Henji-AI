@@ -17,12 +17,17 @@ export const apimartNanoBananaProModel = defineModel({
   inputLimits: { images: { max: 14 }, videos: { max: 0 } },
   params: [
     {
-      id: 'apimartNanoBananaProAspectRatio', type: 'dropdown', order: 1,
+      id: 'apimartNanoBananaProChannel', type: 'dropdown', order: 1,
+      default: 'standard',
+      options: [{ value: 'standard' }, { value: 'official' }]
+    },
+    {
+      id: 'apimartNanoBananaProAspectRatio', type: 'dropdown', order: 2,
       default: 'smart',
       options: [{ value: 'smart' }, ...ASPECT_RATIOS.map((ratio) => ({ value: ratio }))]
     },
     {
-      id: 'apimartNanoBananaProResolution', type: 'dropdown', order: 2,
+      id: 'apimartNanoBananaProResolution', type: 'dropdown', order: 3,
       default: '1K',
       options: ['1K', '2K', '4K'].map((value) => ({ value }))
     }
@@ -49,7 +54,9 @@ export const apimartNanoBananaProModel = defineModel({
       const resolution = ['2K', '4K'].includes(String(params.apimartNanoBananaProResolution))
         ? String(params.apimartNanoBananaProResolution) : '1K'
       const body: JsonObject = {
-        model: 'gemini-3-pro-image-preview',
+        model: params.apimartNanoBananaProChannel === 'official'
+          ? 'gemini-3-pro-image-preview-official'
+          : 'gemini-3-pro-image-preview',
         prompt: typeof params.prompt === 'string' ? params.prompt : '',
         size,
         resolution
@@ -59,8 +66,13 @@ export const apimartNanoBananaProModel = defineModel({
     }
   },
   pricing: {
-    currency: '$', calculator: (params) => params.apimartNanoBananaProResolution === '4K' ? 0.04 : 0.03,
-    description: '默认/1K/2K $0.03/张，4K $0.04/张'
+    currency: '$', calculator: (params) => {
+      if (params.apimartNanoBananaProChannel === 'official') {
+        return params.apimartNanoBananaProResolution === '4K' ? 0.192 : 0.1072
+      }
+      return params.apimartNanoBananaProResolution === '4K' ? 0.04 : 0.03
+    },
+    description: '常规渠道：1K/2K $0.03、4K $0.04/张；官方渠道按 token 结算，估算 1K/2K $0.1072、4K $0.192/张'
   }
 })
 

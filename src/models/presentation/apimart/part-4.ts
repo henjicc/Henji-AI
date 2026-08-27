@@ -11,6 +11,14 @@ export const apimartPresentationPart4: Record<string, ModelPresentation> = {
       i18nScope: 'models.defs.apimart-nano-banana-2',
     },
     params: {
+      "apimartNanoBanana2LiteChannel": {
+        role: 'channel',
+        name: sharedFieldText('apiChannel'),
+        optionLabels: {
+          standard: { label: sharedOptionText('regular') },
+          official: { label: sharedOptionText('official') },
+        },
+      },
       "apimartNanoBanana2LiteAspectRatio": {
         name: sharedFieldText('aspectRatio'),
         optionLabels: Object.fromEntries((
@@ -35,6 +43,14 @@ export const apimartPresentationPart4: Record<string, ModelPresentation> = {
       i18nScope: 'models.defs.apimart-nano-banana-2',
     },
     params: {
+      "apimartNanoBanana2Channel": {
+        role: 'channel',
+        name: sharedFieldText('apiChannel'),
+        optionLabels: {
+          standard: { label: sharedOptionText('regular') },
+          official: { label: sharedOptionText('official') },
+        },
+      },
       "apimartNanoBanana2AspectRatio": {
         name: sharedFieldText('aspectRatio'),
         optionLabels: Object.fromEntries((
@@ -83,6 +99,14 @@ export const apimartPresentationPart4: Record<string, ModelPresentation> = {
       i18nScope: 'models.defs.apimart-nano-banana-pro',
     },
     params: {
+      "apimartNanoBananaProChannel": {
+        role: 'channel',
+        name: sharedFieldText('apiChannel'),
+        optionLabels: {
+          standard: { label: sharedOptionText('regular') },
+          official: { label: sharedOptionText('official') },
+        },
+      },
       "apimartNanoBananaProAspectRatio": {
         name: sharedFieldText('aspectRatio'),
         optionLabels: Object.fromEntries((

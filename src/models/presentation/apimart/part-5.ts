@@ -206,7 +206,7 @@ export const apimartPresentationPart5: Record<string, ModelPresentation> = {
       "apimartSeedream50ProAspectRatio": {
         name: sharedFieldText('aspectRatio'),
         optionLabels: Object.fromEntries((
-          [{ value: 'smart', label: sharedOptionText('smart') }, ...(['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] as const).map((ratio) => ({ value: ratio, label: ratio }))]
+          [{ value: 'smart', label: sharedOptionText('smart') }, ...(['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '2:1', '1:2', '21:9'] as const).map((ratio) => ({ value: ratio, label: ratio }))]
         ).map((rawOption) => {
           const option = rawOption as { value: string | number; label?: I18nText; description?: I18nText }
           return [String(option.value), {

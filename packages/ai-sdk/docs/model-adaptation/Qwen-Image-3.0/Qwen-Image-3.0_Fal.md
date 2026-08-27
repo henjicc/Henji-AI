@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-28 |
 | 模态 | 图片 |
 | 供应商 | fal.ai（聚合平台） |
 | 平台模型 ID | `alibaba/qwen-image-3/text-to-image`、`alibaba/qwen-image-3/edit` |
@@ -70,6 +70,7 @@
 - `edit` 的 `image_urls` 是**必填**（不像 Seedream 的 edit 可省），且 PNG 不允许带 alpha 通道——透明图需先合成背景。
 - `edit` 的 `image_size` 没有默认值，不传就由模型决定，与文生图行为不同。
 - `enable_prompt_expansion` 默认 `true`，会改变出图结果。
+- SDK 固定比例覆盖通用 10 档并提供显式 `1MP` 请求档；`1MP` 文生图发送约 1024²、16 对齐的对象，编辑分支按官方契约省略 `image_size`。旧默认仍是 1K + 提示词扩写开启；需要复刻插件旧结果时 adapter 必须显式传 `falQwenImage30Resolution: '1MP'` 与 `falQwenImage30PromptExpansion: false`。
 
 ## 7. 原始链接索引
 
