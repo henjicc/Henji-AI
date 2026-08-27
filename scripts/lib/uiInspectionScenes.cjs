@@ -696,6 +696,65 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     {
+      id: 'toolbox-image-edit-vgpu-glow',
+      surface: '工具箱',
+      name: '工具箱-图片编辑辉光 Pro',
+      setup: async (page) => {
+        await setupToolbox(page)
+        await clickNamedButton(page, /^(图片编辑|Image Edit)/i)
+        const surface = page.locator('[data-application-surface-id="tool.image_edit"]:visible')
+        await surface.waitFor({ state: 'visible', timeout: 12000 })
+        const dropTarget = surface.locator('.border-dashed').first()
+        await dropTarget.waitFor({ state: 'visible', timeout: 8000 })
+        await dropTarget.evaluate(async (element) => {
+          const canvas = document.createElement('canvas')
+          canvas.width = 1200
+          canvas.height = 760
+          const context = canvas.getContext('2d')
+          if (!context) throw new Error('辉光夹具画布不可用')
+          const background = context.createRadialGradient(600, 360, 40, 600, 360, 760)
+          background.addColorStop(0, 'rgb(24, 34, 62)')
+          background.addColorStop(1, 'rgb(5, 7, 13)')
+          context.fillStyle = background
+          context.fillRect(0, 0, canvas.width, canvas.height)
+          for (const [x, y, radius, color, core] of [
+            [310, 330, 70, 'rgb(57, 216, 255)', 24],
+            [610, 235, 54, 'rgb(255, 62, 201)', 18],
+            [870, 420, 82, 'rgb(255, 156, 50)', 26],
+          ]) {
+            context.fillStyle = color
+            context.beginPath()
+            context.arc(x, y, radius, 0, Math.PI * 2)
+            context.fill()
+            context.fillStyle = 'white'
+            context.beginPath()
+            context.arc(x, y, core, 0, Math.PI * 2)
+            context.fill()
+          }
+          context.fillStyle = 'rgb(220, 233, 255)'
+          context.font = '48px sans-serif'
+          context.textAlign = 'center'
+          context.fillText('VGPU GLOW', 600, 650)
+          const blob = await new Promise((resolve, reject) => canvas.toBlob(
+            (value) => value ? resolve(value) : reject(new Error('辉光夹具编码失败')),
+            'image/png'
+          ))
+          const transfer = new DataTransfer()
+          transfer.items.add(new File([blob], 'vgpu-glow-fixture.png', { type: 'image/png' }))
+          element.dispatchEvent(new DragEvent('drop', {
+            bubbles: true,
+            cancelable: true,
+            dataTransfer: transfer,
+          }))
+        })
+        await page.getByRole('button', { name: '辉光 Pro' }).waitFor({ state: 'visible', timeout: 12000 })
+        await page.getByRole('button', { name: '辉光 Pro' }).click()
+        await page.getByRole('heading', { name: '辉光 Pro' }).waitFor({ state: 'visible', timeout: 8000 })
+        await page.getByRole('switch', { name: '启用辉光 Pro' }).click()
+        await settlePage(page, 2200)
+      },
+    },
+    {
       id: 'toolbox-camera-stage',
       surface: '工具箱',
       name: '工具箱-3D 镜头工程',

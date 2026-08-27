@@ -34,6 +34,9 @@ async function exportBrowserDocument(sourceImageUrl: string, document: ImageEdit
   if (document.operations.some((operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion && operation.enabled)) {
     throw new Error('当前运行环境尚未提供柔光原生执行器');
   }
+  if (document.operations.some((operation) => operation.operationId === IMAGE_EDIT_OPERATION_IDS.vgpuGlow && operation.enabled)) {
+    throw new Error('辉光 Pro 需要 WebGPU 执行器');
+  }
   const blur = getEnabledBlurParams(document);
   if (blur) {
     const source = await renderBlurredImage(sourceImageUrl, blur, { purpose: 'export' });
@@ -46,24 +49,27 @@ export async function exportImageEditDocument(
   sourceImageUrl: string,
   document: ImageEditDocument
 ): Promise<string> {
-  const hasDiffusion = document.operations.some((operation) =>
-    operation.enabled && operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion
+  const hasGpuEffect = document.operations.some((operation) =>
+    operation.enabled && (
+      operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion
+      || operation.operationId === IMAGE_EDIT_OPERATION_IDS.vgpuGlow
+    )
   );
-  if (hasDiffusion) {
+  if (hasGpuEffect) {
     const blur = getEnabledBlurParams(document);
-    const diffusionDocument = withoutBlurOperation(document);
+    const gpuDocument = withoutBlurOperation(document);
     const preparedSourceUrl = blur
       ? canvasToDataUrl(await renderBlurredImage(sourceImageUrl, blur, { purpose: 'export' }))
       : sourceImageUrl;
     const result = await imageEditExecutionPort.execute({
       sourceImageUrl: preparedSourceUrl,
-      document: diffusionDocument,
+      document: gpuDocument,
       purpose: 'export',
       quality: 'high',
       format: 'image/png',
     });
     if (result.kind !== 'encoded-export') {
-      throw new Error('柔光导出未返回编码结果');
+      throw new Error('GPU 光效导出未返回编码结果');
     }
     if (result.output.kind === 'url') return result.output.url;
     return await persistImageBinary(

@@ -61,8 +61,12 @@ export function ImageEditor({
   const diffusionEnabled = session.document.operations.some((operation) =>
     operation.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion && operation.enabled
   );
+  const vgpuGlowEnabled = session.document.operations.some((operation) =>
+    operation.operationId === IMAGE_EDIT_OPERATION_IDS.vgpuGlow && operation.enabled
+  );
+  const gpuEffectEnabled = diffusionEnabled || vgpuGlowEnabled;
   const blurParams = getEnabledBlurParams(session.document);
-  const rasterEffectEnabled = diffusionEnabled || blurParams !== null;
+  const rasterEffectEnabled = gpuEffectEnabled || blurParams !== null;
   const orientation = session.markDoc.orientation;
   const logicalImageSize = useMemo(() => {
     if (!sourceSize) return undefined;
@@ -124,7 +128,7 @@ export function ImageEditor({
             signal: abortController.signal,
           });
           if (disposed || revision !== revisionRef.current) return;
-          if (!diffusionEnabled) {
+          if (!gpuEffectEnabled) {
             const canvas = renderOrientedCanvas(blurred, orientation);
             previewFrameRef.current = canvas;
             setPreviewFrame(canvas);
@@ -135,7 +139,7 @@ export function ImageEditor({
           executionSourceUrl = canvasToDataUrl(blurred);
           executionDocument = withoutBlurOperation(session.document);
         }
-        if (!diffusionEnabled) return;
+        if (!gpuEffectEnabled) return;
         const result = await imageEditExecutionPort.execute({
           sourceImageUrl: executionSourceUrl,
           document: executionDocument,
@@ -180,7 +184,7 @@ export function ImageEditor({
       disposed = true;
       abortController.abort();
     };
-  }, [blurParams, diffusionEnabled, orientation, rasterEffectEnabled, session.document, sourceImageUrl]);
+  }, [blurParams, gpuEffectEnabled, orientation, rasterEffectEnabled, session.document, sourceImageUrl]);
 
   const documentController = useMemo(() => ({
     ...session.documentController,

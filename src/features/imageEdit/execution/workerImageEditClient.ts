@@ -8,6 +8,7 @@ import {
   type ImageEditWorkerSource,
 } from '@/core/imageEdit/worker/protocol'
 import type { DiffusionRecipe } from '@/core/imageEdit/diffusionRecipe'
+import type { VgpuGlowRecipe } from '@/core/imageEdit/vgpuGlowRecipe'
 import { createLogger } from '@/core/logging'
 import { toFetchableMediaUrl } from '@/services/imageSource'
 
@@ -49,6 +50,7 @@ export interface WorkerImageEditExportOptions {
   renderQuality?: 'realtime' | 'high'
   revision?: number
   recipe?: DiffusionRecipe
+  vgpuGlowRecipe?: VgpuGlowRecipe
   composition?: ImageEditWorkerComposition
   tileSize?: number
   halo?: number
@@ -97,6 +99,7 @@ export class WorkerImageEditClient {
     revision: number,
     maxPixels?: number,
     recipe?: DiffusionRecipe,
+    vgpuGlowRecipe?: VgpuGlowRecipe,
     composition?: ImageEditWorkerComposition,
     explicitRequestId?: string
   ): Promise<WorkerImageEditPreviewResult> {
@@ -111,6 +114,7 @@ export class WorkerImageEditClient {
       revision,
       source: normalizeWorkerSource(source),
       recipe,
+      vgpuGlowRecipe,
       composition,
       maxPixels,
     })
@@ -136,6 +140,7 @@ export class WorkerImageEditClient {
       revision: options.revision,
       source: normalizeWorkerSource(source),
       recipe: options.recipe,
+      vgpuGlowRecipe: options.vgpuGlowRecipe,
       composition: options.composition,
       renderQuality: options.renderQuality,
       format: options.format,

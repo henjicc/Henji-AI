@@ -3,7 +3,7 @@ import { IMAGE_EDIT_OPERATION_IDS } from '@/core/imageEdit'
 import { imageEditOperationSchema, type ImageEditControlOperation } from '../application/imageEditControlCatalog'
 
 export interface ImageEditorToolControlDefinition {
-  id: 'geometry' | 'blur' | 'diffusion'
+  id: 'geometry' | 'blur' | 'diffusion' | 'vgpuGlow'
   label: string
   operationId: string
   operationSchema: typeof imageEditOperationSchema
@@ -29,6 +29,13 @@ export const IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS: readonly ImageEditorToolCont
     id: 'diffusion',
     label: '发光',
     operationId: IMAGE_EDIT_OPERATION_IDS.diffusion,
+    operationSchema: imageEditOperationSchema,
+    kinds: [],
+  },
+  {
+    id: 'vgpuGlow',
+    label: '辉光 Pro',
+    operationId: IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
     operationSchema: imageEditOperationSchema,
     kinds: [],
   },

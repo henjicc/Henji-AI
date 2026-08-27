@@ -179,6 +179,7 @@ describe('图片操作注册与执行端口', () => {
           IMAGE_EDIT_OPERATION_IDS.orientation,
           IMAGE_EDIT_OPERATION_IDS.blur,
           IMAGE_EDIT_OPERATION_IDS.diffusion,
+          IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
           IMAGE_EDIT_OPERATION_IDS.annotations,
           IMAGE_EDIT_OPERATION_IDS.crop,
         ],

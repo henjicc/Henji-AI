@@ -2,8 +2,10 @@ import { Blend, ScanLine, Sparkles } from 'lucide-react';
 import { BlurInspector } from './blur/BlurInspector';
 import { GeometryInspector } from './geometry/GeometryInspector';
 import { DiffusionInspector } from './diffusion/DiffusionInspector';
+import { VgpuGlowInspector } from './vgpuGlow/VgpuGlowInspector';
 import type { ImageEditorToolDefinition } from './types';
 import { IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS } from './controlCatalog';
+import { ICON_IMAGE_GLOW_PRO } from '@/core/theme/icons';
 
 export class ImageEditorToolRegistrationError extends Error {}
 
@@ -30,6 +32,7 @@ export const imageEditorToolRegistry = new ImageEditorToolRegistry();
 const geometry = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'geometry')!;
 const blur = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'blur')!;
 const diffusion = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'diffusion')!;
+const vgpuGlow = IMAGE_EDITOR_TOOL_CONTROL_DEFINITIONS.find((item) => item.id === 'vgpuGlow')!;
 
 imageEditorToolRegistry.register({
   ...geometry,
@@ -48,6 +51,12 @@ imageEditorToolRegistry.register({
   control: diffusion,
   icon: Sparkles,
   inspector: DiffusionInspector,
+});
+imageEditorToolRegistry.register({
+  ...vgpuGlow,
+  control: vgpuGlow,
+  icon: ICON_IMAGE_GLOW_PRO,
+  inspector: VgpuGlowInspector,
 });
 
 export function getImageEditorTools(): ImageEditorToolDefinition[] {

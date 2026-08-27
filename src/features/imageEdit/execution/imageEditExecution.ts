@@ -1,8 +1,10 @@
 import {
   compileDiffusionRecipe,
+  compileVgpuGlowRecipe,
   IMAGE_EDIT_OPERATION_IDS,
   imageEditOperationRegistry,
   type DiffusionOperationParams,
+  type VgpuGlowOperationParams,
   type ImageEditEncodedFormat,
   type ImageEditExecutionCapabilities,
   type ImageEditExecutionDiagnostics,
@@ -41,27 +43,55 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
   async execute(request: ImageEditExecutionRequest): Promise<ImageEditExecutionResult> {
     const requestId = request.requestId ?? createRequestId();
     const purpose = request.purpose ?? 'export';
+    let usesVgpuGlow = false;
     logger.info('image_edit.execution.start', { requestId, purpose });
     try {
       assertOutputQuality(request.outputQuality);
       const document = imageEditOperationRegistry.validateDocument(request.document);
       const params = getEnabledDiffusionParams(document);
+      const vgpuGlowParams = getEnabledVgpuGlowParams(document);
+      usesVgpuGlow = vgpuGlowParams !== null;
+      if (!params && !vgpuGlowParams) {
+        throw new Error('统一 GPU 执行器未收到启用的光效操作');
+      }
+      if (params && vgpuGlowParams) {
+        throw new Error('“发光”和“辉光 Pro”暂不支持叠加，请只启用其中一个以便对比效果');
+      }
+      if (usesVgpuGlow) {
+        logger.info('image_edit.vgpu_glow.execution.start', {
+          requestId,
+          purpose,
+          look: vgpuGlowParams?.look,
+        });
+      }
       const info = await getPlatform().image.readImageInfo(request.sourceImageUrl);
       const composition = createWorkerComposition(document, purpose === 'export');
       const orientedInfo = resolveOrientedSize(info.width, info.height, composition.orientation.rotate);
-      const recipe = compileDiffusionRecipe(params, {
-        width: orientedInfo.width,
-        height: orientedInfo.height,
-        quality: request.quality ?? params.quality,
-      });
+      const recipe = params
+        ? compileDiffusionRecipe(params, {
+          width: orientedInfo.width,
+          height: orientedInfo.height,
+          quality: request.quality ?? params.quality,
+        })
+        : undefined;
+      const vgpuGlowRecipe = vgpuGlowParams
+        ? compileVgpuGlowRecipe(vgpuGlowParams)
+        : undefined;
       logPreviewBudget(requestId, purpose, orientedInfo, request.maxPixels);
       const normalizedRequest = { ...request, requestId, document };
-      const workerResult = await this.tryWorkerExecution(normalizedRequest, recipe, composition);
+      const workerResult = await this.tryWorkerExecution(
+        normalizedRequest,
+        recipe,
+        vgpuGlowRecipe,
+        composition
+      );
       const result = workerResult.kind === 'completed'
         ? workerResult.result
-        : await this.executeSharpFallback(
+        : vgpuGlowParams
+          ? throwVgpuGlowUnavailable(workerResult.diagnostic)
+          : await this.executeSharpFallback(
           normalizedRequest,
-          params,
+          params as DiffusionOperationParams,
           composition,
           workerResult.diagnostic
         );
@@ -70,6 +100,13 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         purpose,
         backend: result.backend,
       });
+      if (usesVgpuGlow) {
+        logger.info('image_edit.vgpu_glow.execution.completed', {
+          requestId,
+          purpose,
+          backend: result.backend,
+        });
+      }
       return result;
     } catch (error) {
       logger.error('image_edit.execution.failed', {
@@ -77,6 +114,13 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
         purpose,
         error: error instanceof Error ? error.message : String(error),
       });
+      if (usesVgpuGlow) {
+        logger.error('image_edit.vgpu_glow.execution.failed', {
+          requestId,
+          purpose,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       throw error;
     }
   }
@@ -100,7 +144,8 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
 
   private async tryWorkerExecution(
     request: ImageEditExecutionRequest & { requestId: string },
-    recipe: ReturnType<typeof compileDiffusionRecipe>,
+    recipe: ReturnType<typeof compileDiffusionRecipe> | undefined,
+    vgpuGlowRecipe: ReturnType<typeof compileVgpuGlowRecipe> | undefined,
     composition: ImageEditWorkerComposition
   ): Promise<WorkerExecutionOutcome> {
     const client = this.workerClient ?? new WorkerImageEditClient();
@@ -140,6 +185,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
               request.revision ?? 0,
               request.maxPixels,
               recipe,
+              vgpuGlowRecipe,
               composition,
               request.requestId
             );
@@ -168,6 +214,7 @@ export class UnifiedImageEditExecution implements ImageEditExecutionPort {
               requestId: request.requestId,
               revision: request.revision,
               recipe,
+              vgpuGlowRecipe,
               composition,
               renderQuality: request.quality,
               format: request.format ?? 'image/png',
@@ -328,12 +375,20 @@ export const imageEditExecutionPort = new UnifiedImageEditExecution();
 
 function getEnabledDiffusionParams(
   document: ImageEditExecutionRequest['document']
-): DiffusionOperationParams {
+): DiffusionOperationParams | null {
   const operation = document.operations.find((entry) =>
     entry.enabled && entry.operationId === IMAGE_EDIT_OPERATION_IDS.diffusion
   );
-  if (!operation) throw new Error('统一柔光执行器未收到启用的 image.diffusion 操作');
-  return operation.params as DiffusionOperationParams;
+  return (operation?.params as DiffusionOperationParams | undefined) ?? null;
+}
+
+function getEnabledVgpuGlowParams(
+  document: ImageEditExecutionRequest['document']
+): VgpuGlowOperationParams | null {
+  const operation = document.operations.find((entry) =>
+    entry.enabled && entry.operationId === IMAGE_EDIT_OPERATION_IDS.vgpuGlow
+  );
+  return (operation?.params as VgpuGlowOperationParams | undefined) ?? null;
 }
 
 function createWorkerComposition(
@@ -361,12 +416,16 @@ function createCapabilities(
   backend: 'webgpu-worker' | 'sharp',
   unsupportedParameters: readonly string[] = []
 ): ImageEditExecutionCapabilities {
+  const fallbackUnsupported = backend === 'webgpu-worker'
+    ? [...unsupportedParameters, IMAGE_EDIT_OPERATION_IDS.vgpuGlow]
+    : unsupportedParameters;
   return {
     executorId: 'image-edit-unified',
     backends: [backend],
     supportedOperationIds: [
       IMAGE_EDIT_OPERATION_IDS.orientation,
       IMAGE_EDIT_OPERATION_IDS.diffusion,
+      IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
       IMAGE_EDIT_OPERATION_IDS.annotations,
       IMAGE_EDIT_OPERATION_IDS.crop,
     ],
@@ -376,10 +435,16 @@ function createCapabilities(
     hardCancellationSupported: backend === 'webgpu-worker',
     fallback: {
       backend: 'sharp',
-      unsupportedParameters,
+      unsupportedParameters: fallbackUnsupported,
       hardCancellationSupported: false,
     },
   };
+}
+
+function throwVgpuGlowUnavailable(diagnostic: WebGpuFallbackDiagnostic): never {
+  throw new Error(
+    `辉光 Pro 需要可用的 WebGPU，当前无法启动 VGPU（${diagnostic.reason}）`
+  );
 }
 
 function createFallbackDiagnostics(

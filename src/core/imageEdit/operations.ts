@@ -12,6 +12,13 @@ import {
   InvalidDiffusionOperationParamsError,
   parseDiffusionOperationParams as parseDiffusionParams,
 } from './diffusionParams';
+import {
+  createDefaultVgpuGlowOperationParams,
+  hasVgpuGlowEffect,
+  InvalidVgpuGlowOperationParamsError,
+  parseVgpuGlowOperationParams as parseVgpuGlowParams,
+  type VgpuGlowOperationParams,
+} from './vgpuGlowParams';
 export {
   createDefaultDiffusionOperationParams,
   hasDiffusionEffect,
@@ -60,6 +67,17 @@ export function parseBlurOperationParams(value: unknown): BlurOperationParams {
     return parseBlurParams(value);
   } catch (error) {
     if (error instanceof InvalidBlurOperationParamsError) {
+      throw new InvalidImageEditOperationParamsError(error.message);
+    }
+    throw error;
+  }
+}
+
+export function parseVgpuGlowOperationParams(value: unknown): VgpuGlowOperationParams {
+  try {
+    return parseVgpuGlowParams(value);
+  } catch (error) {
+    if (error instanceof InvalidVgpuGlowOperationParamsError) {
       throw new InvalidImageEditOperationParamsError(error.message);
     }
     throw error;
@@ -180,6 +198,15 @@ export function createBuiltInImageEditOperationRegistry(): ImageEditOperationReg
     createDefaultParams: createDefaultBlurOperationParams,
     parseParams: parseBlurOperationParams,
     hasEffect: hasBlurEffect,
+  });
+  registry.register<VgpuGlowOperationParams>({
+    id: IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
+    stage: 'effect',
+    order: 160,
+    supportsMultiple: false,
+    createDefaultParams: createDefaultVgpuGlowOperationParams,
+    parseParams: parseVgpuGlowOperationParams,
+    hasEffect: hasVgpuGlowEffect,
   });
   return registry;
 }

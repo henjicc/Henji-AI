@@ -131,8 +131,12 @@ export function DiffusionInspector(): JSX.Element {
   const beginRange = (): void => controller.beginTransaction();
   const commitRange = (): void => controller.commitTransaction();
   const cancelRange = (): void => controller.cancelTransaction();
-  const setEnabled = (enabled: boolean): void =>
+  const setEnabled = (enabled: boolean): void => {
+    controller.beginTransaction();
+    if (enabled) controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.vgpuGlow, false);
     controller.setOperationEnabled(IMAGE_EDIT_OPERATION_IDS.diffusion, enabled);
+    controller.commitTransaction();
+  };
 
   // 同一组数值在黑柔和辉光下观感差别很大，切换模式/档位时套用对应基准，
   // 而不是把上一模式的数值原样留着。

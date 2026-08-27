@@ -1,5 +1,6 @@
 import baselineShaderSource from './baseline.wgsl?raw'
 import type { DiffusionRecipe } from '../diffusionRecipe'
+import type { VgpuGlowRecipe } from '../vgpuGlowRecipe'
 import {
   createRenderPipelineChecked,
   createShaderModuleChecked,
@@ -16,9 +17,11 @@ import {
   renderDiffusionExport,
 } from '../webgpu/exportRenderer'
 import {
+  createImageEditExportPlan,
   fitWithinPixelBudget,
   IMAGE_EDIT_PREVIEW_MAX_PIXELS,
 } from './exportPrototype'
+import { VgpuGlowRenderer } from '../webgpu/vgpuGlowRenderer'
 import { collectRelevantGpuLimits } from './webgpuCapabilities'
 import type {
   ImageEditExportFormat,
@@ -58,6 +61,7 @@ interface RuntimeState {
   linearizePipeline: GpuRenderPipeline
   encodePipeline: GpuRenderPipeline
   diffusionRenderer: WebGpuDiffusionRenderer
+  vgpuGlowRenderer: VgpuGlowRenderer
   canvasFormat: string
 }
 
@@ -75,6 +79,7 @@ export interface WebGpuExportOptions {
   halo?: number
   globalScatterMaxDimension?: number
   recipe?: DiffusionRecipe
+  vgpuGlowRecipe?: VgpuGlowRecipe
   composition?: ImageEditWorkerComposition
   isCancelled: () => boolean
   onProgress: (completedTiles: number, totalTiles: number) => void
@@ -89,6 +94,7 @@ export class WorkerWebGpuRuntime {
   constructor() {
     this.deviceManager.onDeviceLost((reason) => {
       this.state?.diffusionRenderer.destroy()
+      this.state?.vgpuGlowRenderer.destroy()
       this.state = null
       this.deviceLostHandler?.(reason)
     })
@@ -113,6 +119,7 @@ export class WorkerWebGpuRuntime {
     source: ImageEditWorkerSource,
     maxPixels = IMAGE_EDIT_PREVIEW_MAX_PIXELS,
     recipe?: DiffusionRecipe,
+    vgpuGlowRecipe?: VgpuGlowRecipe,
     composition?: ImageEditWorkerComposition,
     cacheKey?: string,
     isCancelled?: () => boolean
@@ -127,6 +134,21 @@ export class WorkerWebGpuRuntime {
         const composed = this.applyOrientation(previewSource.bitmap, composition)
         try {
         const sourceCacheKey = `${cacheKey ?? (source.kind === 'url' ? `url:${source.url}` : `blob:${Date.now()}`)}:${orientationCacheKey(composition)}`
+        if (vgpuGlowRecipe) {
+          const bitmap = await this.renderVgpuGlowBitmap(
+            state,
+            composed.bitmap,
+            composed.bitmap.width,
+            composed.bitmap.height,
+            vgpuGlowRecipe,
+            isCancelled
+          )
+          return {
+            bitmap,
+            width: composed.bitmap.width,
+            height: composed.bitmap.height,
+          }
+        }
         if (recipe) {
           const bitmap = await this.renderDiffusionBitmap(
             state,
@@ -181,6 +203,14 @@ export class WorkerWebGpuRuntime {
     try {
       const composed = this.applyOrientation(decoded.bitmap, options.composition)
       try {
+        if (options.vgpuGlowRecipe) {
+          return await this.exportVgpuGlow(
+            state,
+            composed.bitmap,
+            options,
+            options.vgpuGlowRecipe
+          )
+        }
         const recipe = options.recipe
         if (!recipe) throw new Error('柔光导出请求缺少共享执行配方')
         const exportSourceKey = source.kind === 'url'
@@ -368,6 +398,7 @@ export class WorkerWebGpuRuntime {
       addressModeV: 'clamp-to-edge',
     })
     const diffusionRenderer = await this.createDiffusionRenderer(device, sampler)
+    const vgpuGlowRenderer = await this.createVgpuGlowRenderer(device)
     const state: RuntimeState = {
       provider,
       adapter,
@@ -376,6 +407,7 @@ export class WorkerWebGpuRuntime {
       linearizePipeline,
       encodePipeline,
       diffusionRenderer,
+      vgpuGlowRenderer,
       canvasFormat,
     }
     return state
@@ -456,6 +488,14 @@ export class WorkerWebGpuRuntime {
       return await WebGpuDiffusionRenderer.create(device, sampler)
     } catch (error) {
       throw createInitializationError('webgpu-diffusion-pipeline-failed', error)
+    }
+  }
+
+  private async createVgpuGlowRenderer(device: GpuDevice): Promise<VgpuGlowRenderer> {
+    try {
+      return await VgpuGlowRenderer.create(device)
+    } catch (error) {
+      throw createInitializationError('webgpu-vgpu-glow-pipeline-failed', error)
     }
   }
 
@@ -545,6 +585,119 @@ export class WorkerWebGpuRuntime {
     }
   }
 
+  private async renderVgpuGlowBitmap(
+    state: RuntimeState,
+    decoded: ImageBitmap,
+    width: number,
+    height: number,
+    recipe: VgpuGlowRecipe,
+    isCancelled?: () => boolean
+  ): Promise<ImageBitmap> {
+    this.assertTextureSize(state, width, height)
+    const rendered = await state.vgpuGlowRenderer.render({
+      bitmap: decoded,
+      width,
+      height,
+      recipe,
+      isCancelled,
+    })
+    const canvas = new OffscreenCanvas(width, height)
+    const context = getWebGpuContext(canvas)
+    await this.renderToCanvas(state, rendered, context, {
+      scaleX: 1,
+      scaleY: 1,
+      offsetX: 0,
+      offsetY: 0,
+    })
+    return canvas.transferToImageBitmap()
+  }
+
+  private async exportVgpuGlow(
+    state: RuntimeState,
+    bitmap: ImageBitmap,
+    options: WebGpuExportOptions,
+    recipe: VgpuGlowRecipe
+  ): Promise<{ bytes: Uint8Array; width: number; height: number }> {
+    const width = bitmap.width
+    const height = bitmap.height
+    const plan = createImageEditExportPlan(width, height, {
+      tileSize: options.tileSize,
+      halo: options.halo,
+      globalScatterMaxDimension: options.globalScatterMaxDimension,
+    })
+    const canvas = new OffscreenCanvas(width, height)
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('OffscreenCanvas 2D context 不可用')
+    const textureLimit = state.adapter.limits?.maxTextureDimension2D
+    const singlePass = width * height <= 40_000_000
+      && (typeof textureLimit !== 'number' || Math.max(width, height) <= textureLimit)
+    if (singlePass) {
+      const rendered = await this.renderVgpuGlowBitmap(
+        state,
+        bitmap,
+        width,
+        height,
+        recipe,
+        options.isCancelled
+      )
+      try {
+        context.drawImage(rendered, 0, 0)
+      } finally {
+        rendered.close()
+      }
+      options.onProgress(plan.totalTiles, plan.totalTiles)
+    } else {
+      for (const tile of plan.tiles) {
+        if (options.isCancelled()) throw new DOMException('图片编辑任务已取消', 'AbortError')
+        const tileBitmap = await createImageBitmap(
+          bitmap,
+          tile.expandedX,
+          tile.expandedY,
+          tile.expandedWidth,
+          tile.expandedHeight
+        )
+        try {
+          const rendered = await this.renderVgpuGlowBitmap(
+            state,
+            tileBitmap,
+            tile.expandedWidth,
+            tile.expandedHeight,
+            recipe,
+            options.isCancelled
+          )
+          try {
+            context.drawImage(
+              rendered,
+              tile.cropX,
+              tile.cropY,
+              tile.width,
+              tile.height,
+              tile.x,
+              tile.y,
+              tile.width,
+              tile.height
+            )
+          } finally {
+            rendered.close()
+          }
+        } finally {
+          tileBitmap.close()
+        }
+        options.onProgress(tile.index + 1, plan.totalTiles)
+      }
+    }
+    const finalOutput = await this.applyAnnotationsAndCrop(canvas, options.composition)
+    const blob = await finalOutput.convertToBlob({
+      type: options.format,
+      quality: options.quality,
+    })
+    return {
+      bytes: new Uint8Array(await blob.arrayBuffer()),
+      width: finalOutput.width,
+      height: finalOutput.height,
+    }
+  }
+
   private async renderToCanvas(
     state: RuntimeState,
     intermediate: GpuTexture,
@@ -615,6 +768,7 @@ export class WorkerWebGpuRuntime {
 
   private disposeState(): void {
     this.state?.diffusionRenderer.destroy()
+    this.state?.vgpuGlowRenderer.destroy()
     this.deviceManager.invalidate()
     this.state = null
   }

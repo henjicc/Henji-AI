@@ -1,4 +1,5 @@
 import type { DiffusionRecipe } from '../diffusionRecipe'
+import type { VgpuGlowRecipe } from '../vgpuGlowRecipe'
 import type { ImageEditRenderQuality } from '../execution'
 import { IMAGE_EDIT_OPERATION_IDS, type AnnotationOperationParams, type CropOperationParams, type OrientationOperationParams } from '../types'
 
@@ -20,6 +21,7 @@ export type ImageEditWorkerInitializationFailureCode =
   | 'webgpu-canvas-format-unavailable'
   | 'webgpu-baseline-pipeline-failed'
   | 'webgpu-diffusion-pipeline-failed'
+  | 'webgpu-vgpu-glow-pipeline-failed'
   | 'webgpu-initialization-unknown'
 
 export interface ImageEditWorkerInitializationFailure {
@@ -27,7 +29,7 @@ export interface ImageEditWorkerInitializationFailure {
   detail: string
 }
 
-/** Worker 内可执行的固定操作顺序：朝向 → 柔光 → 标注 → 裁剪。 */
+/** Worker 内可执行的固定操作顺序：朝向 → 柔光或辉光 Pro → 标注 → 裁剪。 */
 export interface ImageEditWorkerComposition {
   orientation: OrientationOperationParams
   annotations?: AnnotationOperationParams
@@ -45,6 +47,7 @@ export interface ImageEditWorkerPreviewRequest {
   revision: number
   source: ImageEditWorkerSource
   recipe?: DiffusionRecipe
+  vgpuGlowRecipe?: VgpuGlowRecipe
   composition?: ImageEditWorkerComposition
   quality?: ImageEditRenderQuality
   maxPixels?: number
@@ -56,6 +59,7 @@ export interface ImageEditWorkerExportRequest {
   revision?: number
   source: ImageEditWorkerSource
   recipe?: DiffusionRecipe
+  vgpuGlowRecipe?: VgpuGlowRecipe
   composition?: ImageEditWorkerComposition
   renderQuality?: ImageEditRenderQuality
   format: ImageEditExportFormat
@@ -141,6 +145,7 @@ export function withImageEditWorkerExecutionCapabilities(
     supportedOperationIds: [
       IMAGE_EDIT_OPERATION_IDS.orientation,
       IMAGE_EDIT_OPERATION_IDS.diffusion,
+      IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
       IMAGE_EDIT_OPERATION_IDS.annotations,
       IMAGE_EDIT_OPERATION_IDS.crop,
     ],
@@ -158,6 +163,7 @@ export function withImageEditWorkerExecutionCapabilities(
         'glowExposure',
         'highlightRolloff',
         'tint',
+        IMAGE_EDIT_OPERATION_IDS.vgpuGlow,
       ],
     },
   }

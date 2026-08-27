@@ -80,6 +80,7 @@ async function handlePreview(request: ImageEditWorkerPreviewRequest): Promise<vo
       request.source,
       request.maxPixels,
       request.recipe,
+      request.vgpuGlowRecipe,
       request.composition,
       request.source.kind === 'url' ? request.source.url : request.requestId,
       () => isCancelled(request.requestId)
@@ -115,6 +116,7 @@ async function handleExport(request: ImageEditWorkerExportRequest): Promise<void
       halo: request.halo,
       globalScatterMaxDimension: request.globalScatterMaxDimension,
       recipe: request.recipe,
+      vgpuGlowRecipe: request.vgpuGlowRecipe,
       composition: request.composition,
       isCancelled: () => isCancelled(request.requestId),
       onProgress: (completedTiles, totalTiles) => {

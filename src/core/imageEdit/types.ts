@@ -137,6 +137,7 @@ export const IMAGE_EDIT_OPERATION_IDS = {
   orientation: 'image.orientation',
   blur: 'image.blur',
   diffusion: 'image.diffusion',
+  vgpuGlow: 'image.vgpu-glow',
   annotations: 'image.annotations',
   crop: 'image.crop',
 } as const;

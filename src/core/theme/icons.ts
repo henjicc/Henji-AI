@@ -22,6 +22,7 @@ import {
   Settings,
   SquarePen,
   Star,
+  SunMedium,
   ToggleLeft,
   Type,
   Upload,
@@ -66,6 +67,8 @@ export const ICON_SETTINGS: LucideIcon = Settings
 export const ICON_TOOL_IMAGE_EDIT: LucideIcon = SquarePen
 /** 3D 镜头参考 */
 export const ICON_TOOL_CAMERA_STAGE: LucideIcon = Clapperboard
+/** 图片编辑中的多级 GPU 辉光。 */
+export const ICON_IMAGE_GLOW_PRO: LucideIcon = SunMedium
 
 /* 媒体类型 ----------------------------------------------------------------- */
 

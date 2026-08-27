@@ -8,6 +8,14 @@ export * from './execution';
 export * from './diffusionRecipe';
 export * from './diffusionPresets';
 export {
+  InvalidVgpuGlowOperationParamsError,
+  applyVgpuGlowLook,
+  createDefaultVgpuGlowOperationParams,
+  hasVgpuGlowEffect,
+} from './vgpuGlowParams';
+export type { VgpuGlowLook, VgpuGlowOperationParams } from './vgpuGlowParams';
+export * from './vgpuGlowRecipe';
+export {
   DEFAULT_IMAGE_BLUR_ALGORITHM,
   IMAGE_BLUR_ALGORITHMS,
   InvalidBlurOperationParamsError,
