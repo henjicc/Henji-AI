@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+## 0.2.5 - 2026-08-28
+
+- 新增 `LlmProviderSetup` 的 preset/custom 来源契约和 `builtin | user` 生命周期；已有配置字段与工厂参数均保持可选，0.2.4 消费代码无需迁移即可继续运行。
+- `createProviderFromPreset()` 现在显式返回稳定 `credentialId` 与 setup 来源，并允许宿主把正式内置记录标为 `builtin`；BigModel cn/global 仍保持区域化 endpoint profile 与凭据隔离。
+- 新增 API Key 管理地址规范化与解析：endpoint profile 官方地址优先，其次 preset 官方地址，custom 只接受不含内嵌凭据、长度不超过 2048 的绝对 HTTP(S) URL。
+
 ## 0.2.4 - 2026-08-28
 
 - 新增 `@henjicc/ai-sdk/llm/bigmodel` 按需入口：保留 `bigmodel` 中国大陆默认实例，并在同一协议族内提供 `cn/global` 两个端点 profile、独立凭据槽和分区价格。
@@ -7,8 +15,6 @@
 - LLM 原生流式与模型步按 `providerFamilyId` 应用协议规则、按 `credentialId` 取密钥，并拒绝 BigModel 跨区端点或凭据错配。
 
 本项目遵循语义化版本。`0.x` 阶段仍可能包含破坏性调整，升级时请先阅读对应版本说明。
-
-## Unreleased
 
 ## 0.2.3 - 2026-08-28
 

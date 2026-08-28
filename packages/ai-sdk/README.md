@@ -6,7 +6,7 @@
 
 ## 5 分钟快速开始
 
-SDK `0.2.4` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
+SDK `0.2.5` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
 
 ```ini
 @henjicc:registry=https://npm.pkg.github.com
@@ -16,7 +16,7 @@ SDK `0.2.4` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc`
 Token 至少需要 `read:packages` 和私有仓库读取权限。不要把 token 本身写入 `.npmrc` 或提交到 Git。
 
 ```bash
-npm install @henjicc/ai-sdk@0.2.4
+npm install @henjicc/ai-sdk@0.2.5
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：

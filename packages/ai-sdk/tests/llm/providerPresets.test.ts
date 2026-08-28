@@ -75,6 +75,25 @@ describe('createProviderFromPreset / createModelsFromPreset', () => {
     expect(createProviderFromPreset(findLlmProviderPreset('kimi')!).baseUrl).toBe('https://api.moonshot.cn/v1')
   })
 
+  it('宿主可显式创建不可永久删除的 builtin 预设记录', () => {
+    expect(createProviderFromPreset(findLlmProviderPreset('ppio')!, { lifecycle: 'builtin' }))
+      .toMatchObject({
+        providerId: 'ppio',
+        credentialId: 'ppio',
+        setup: { kind: 'preset', presetId: 'ppio', lifecycle: 'builtin' },
+      })
+    expect(createProviderFromPreset(findLlmProviderPreset('bigmodel')!, {
+      endpointProfile: 'global',
+      lifecycle: 'builtin',
+    })).toMatchObject({
+      providerId: 'bigmodel-global',
+      providerFamilyId: 'bigmodel',
+      endpointProfile: 'global',
+      credentialId: 'bigmodel-global',
+      setup: { kind: 'preset', presetId: 'bigmodel', lifecycle: 'builtin' },
+    })
+  })
+
   it('推荐模型带上目录标注与 catalogId，避免保存时被再标一次', () => {
     const preset = findLlmProviderPreset('mimo')!
     const provider = createProviderFromPreset(preset)
