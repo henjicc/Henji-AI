@@ -31,6 +31,7 @@ packages/ai-sdk/docs/model-adaptation/
 - **下线模型时**：删 `.model.ts` 的同时删掉或标注对应的模型文档，并从 `README.md` 清单表里移除该行。
 - 文档与代码冲突时，先按「模型专属页 > 实时价格页 > API 文档正文」重新核实，把结论回写文档，再改代码；不要单方面让代码偏离文档而不留痕。
 - **新增或改动请求/响应、轮询、SSE、WebSocket、流式协议 parser 时，必须同步补官方 fixture 与精确契约测试**。事件矩阵、来源标记、负例、资源释放和断牙验证的详细要求只以 [文档采集手册.md](../../packages/ai-sdk/docs/model-adaptation/文档采集手册.md) 第四节及 [fixture README](../../packages/ai-sdk/tests/fixtures/README.md) 为准；不得凭空手写“看起来对”的样本。
+- **SDK 发布后必须读取 [消费项目清单](../../packages/ai-sdk/docs/consumers.md)**，按公共导出、协议与宿主边界的实际影响逐个同步消费者；未使用的新能力不进入宿主。外部消费者必须精确锁定版本与 integrity，并把 commit、验证状态和接入边界回写清单。
 
 ## 配置驱动（最重要）
 

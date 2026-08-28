@@ -47,6 +47,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 
 - 当前 Henji-AI 的宿主基线是 Electron + Node/TS；可移植的供应商执行、上传、轮询与结果解析位于 `packages/ai-sdk/src/{providers,upload,protocols}/`，`electron/main/services/ai-runtime/**` 只保留日志、落盘、取消、进度与 IPC 等宿主薄壳。
 - Henji-AI 是 SDK 主开发仓库与首发验证宿主。先按 `文档采集手册.md` 完成官方资料和事件契约，再在本项目实现、验证、打包回装并发布；消费项目只接入已验证的精确版本。资料不足时暂停，不在消费项目猜协议。
+- SDK 发布后读取 `packages/ai-sdk/docs/consumers.md`，按变更的实际影响逐个同步消费者；未使用的新能力不进入宿主。外部消费者精确锁定版本与 integrity，并把 commit、验证状态和接入边界回写清单。
 - 在输出确认清单前，先自行归纳：
   - 这是“一个模型多个端点”还是“多个独立模型”；
   - 应采用“自动路由”“显式展示 + 自动切换”还是“显式 `mode`”；
