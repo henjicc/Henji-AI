@@ -72,6 +72,7 @@ export default defineConfig({
         'react-virtuoso',
         'three',
         'three-stdlib',
+        'vgpu',
       ],
     },
     build: {
