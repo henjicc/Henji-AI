@@ -152,6 +152,56 @@
     "expand": "Expand",
     "collapse": "Collapse"
   },
+  "imageCapabilities": {
+    "groups": {
+      "generation": "Generation",
+      "enhancement": "Enhancement",
+      "editing": "Editing",
+      "structure": "Structured Output",
+      "local": "Local Processing"
+    },
+    "unavailable": {
+      "planned": "This feature is being prepared"
+    },
+    "items": {
+      "panorama": {
+        "title": "Panorama",
+        "description": "Turn a scene into a panorama for spherical viewing"
+      },
+      "relight": {
+        "title": "Relight",
+        "description": "Adjust the direction, brightness, and color of lighting"
+      },
+      "multiAngle": {
+        "title": "Multi-angle",
+        "description": "Generate a consistent set of views from different angles"
+      },
+      "nineGrid": {
+        "title": "Nine-grid",
+        "description": "Generate a nine-grid set around the same content"
+      },
+      "upscale": {
+        "title": "Upscale",
+        "description": "Increase resolution while preserving the original content"
+      },
+      "portraitTexture": {
+        "title": "Portrait Texture",
+        "description": "Improve portrait detail and overall texture"
+      },
+      "elementEdit": {
+        "title": "Element Edit",
+        "description": "Select a local area and change visual elements as requested"
+      },
+      "layerSeparation": {
+        "title": "Layer Separation",
+        "description": "Separate an image into layers that can be viewed and combined"
+      },
+      "gridSplit": {
+        "title": "Grid Split",
+        "description": "Split an image into multiple frames by rows and columns"
+      }
+    }
+  },
   "node": {
     "menuTitle": "Add Node",
     "menuSections": {

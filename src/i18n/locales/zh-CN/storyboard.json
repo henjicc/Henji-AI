@@ -152,6 +152,56 @@
     "expand": "展开",
     "collapse": "收起"
   },
+  "imageCapabilities": {
+    "groups": {
+      "generation": "生成",
+      "enhancement": "增强",
+      "editing": "编辑",
+      "structure": "结构化",
+      "local": "本地处理"
+    },
+    "unavailable": {
+      "planned": "功能正在准备中"
+    },
+    "items": {
+      "panorama": {
+        "title": "全景",
+        "description": "将场景转换为可球面浏览的全景图"
+      },
+      "relight": {
+        "title": "打光",
+        "description": "调整画面的光照方向、亮度与颜色"
+      },
+      "multiAngle": {
+        "title": "多角度",
+        "description": "从不同视角生成一组一致的画面"
+      },
+      "nineGrid": {
+        "title": "九宫格",
+        "description": "围绕同一内容生成九宫格画面"
+      },
+      "upscale": {
+        "title": "高清",
+        "description": "提升图片分辨率并尽量保留原始内容"
+      },
+      "portraitTexture": {
+        "title": "人像质感",
+        "description": "改善人像细节与整体质感"
+      },
+      "elementEdit": {
+        "title": "元素编辑",
+        "description": "选择局部区域并按要求修改画面元素"
+      },
+      "layerSeparation": {
+        "title": "图层分离",
+        "description": "将画面拆分为可单独查看和组合的图层"
+      },
+      "gridSplit": {
+        "title": "宫格切分",
+        "description": "按行列将图片切分为多个画面"
+      }
+    }
+  },
   "node": {
     "menuTitle": "添加节点",
     "menuSections": {
