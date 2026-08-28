@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Paintbrush, Trash2 } from 'lucide-react'
+import { Paintbrush } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { UiButton, UiIconButton } from '@/components/ui'
+import { UiButton } from '@/components/ui'
 import type { ImageUploadParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import {
@@ -127,7 +127,7 @@ export function DerivedMediaParamControl({
       <UiButton
         type="button"
         variant="muted"
-        size="sm"
+        size={compact ? 'sm' : 'field-sm'}
         className={compact ? '!h-7 gap-1.5 !rounded-md !px-2' : 'gap-1.5'}
         disabled={disabled || !sourceImage}
         onMouseDown={compact ? (event) => event.stopPropagation() : undefined}
@@ -137,22 +137,6 @@ export function DerivedMediaParamControl({
         <Paintbrush className="h-3.5 w-3.5" />
         {actionText}
       </UiButton>
-      {hasMask ? (
-        <UiIconButton
-          type="button"
-          showBorder={false}
-          appearance="hover-only"
-          hoverVariant="danger"
-          className="!h-7 !w-7"
-          aria-label={i18n.language.startsWith('zh') ? '清除遮罩' : 'Clear mask'}
-          title={i18n.language.startsWith('zh') ? '清除遮罩' : 'Clear mask'}
-          disabled={disabled}
-          onMouseDown={compact ? (event) => event.stopPropagation() : undefined}
-          onClick={() => applyChanges({ [param.id]: [], [stateKey]: undefined })}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </UiIconButton>
-      ) : null}
     </div>
   )
 

@@ -9,14 +9,21 @@ export {
   createMaskHistoryState,
   fitMaskStage,
   hasPaintedMask,
+  isMaskShape,
+  isMaskStroke,
   parseMaskEditorDocument,
   reduceMaskHistory,
+  resolveMaskShapeBounds,
   resolveMaskDocument,
 } from './maskDocument';
 export type {
   MaskEditorDocument,
   MaskEditorResult,
   MaskPoint,
+  MaskMark,
+  MaskShape,
+  MaskShapeKind,
   MaskStroke,
   MaskStrokeMode,
+  MaskTool,
 } from './types';

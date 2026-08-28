@@ -16,7 +16,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 describe('参数标签说明入口', () => {
-  it('只把 tooltip 放到可聚焦的标签说明入口，不渲染 description', () => {
+  it('由可聚焦的参数名称直接触发 tooltip，不显示图标或 description', () => {
     const param: TextParamDef = {
       id: 'prompt',
       type: 'text',
@@ -30,12 +30,15 @@ describe('参数标签说明入口', () => {
     render(<TextInput param={param} value="" onChange={() => undefined} />)
 
     expect(screen.queryByText('供智能助手理解的参数语义')).toBeNull()
-    const trigger = screen.getByRole('button', { name: '查看“提示词”说明' })
+    expect(screen.queryByRole('button', { name: /提示词.*说明/ })).toBeNull()
+    const label = screen.getByText('提示词')
+    const trigger = label.closest('[tabindex="0"]')
     const tooltip = screen.getByRole('tooltip', { hidden: true })
-    expect(trigger.getAttribute('aria-describedby')).toBe(tooltip.id)
+    expect(trigger).not.toBeNull()
+    expect(trigger?.getAttribute('aria-describedby')).toBe(tooltip.id)
     expect(tooltip.getAttribute('aria-hidden')).toBe('true')
 
-    fireEvent.focus(trigger)
+    fireEvent.focus(trigger as HTMLElement)
     expect(tooltip.getAttribute('aria-hidden')).toBe('false')
     expect(tooltip.textContent).toBe('描述希望生成的画面。')
   })
@@ -59,6 +62,6 @@ describe('参数标签说明入口', () => {
 
     expect(screen.getByText('参考文档')).toBeTruthy()
     expect(screen.queryByText('供智能助手理解的文件用途')).toBeNull()
-    expect(screen.queryByRole('button', { name: /查看.*说明/ })).toBeNull()
+    expect(screen.getByText('参考文档').closest('[tabindex]')).toBeNull()
   })
 })

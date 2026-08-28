@@ -5,6 +5,7 @@ import { renderMaskDocument } from './maskExport';
 function createRecordingContext() {
   const composites: GlobalCompositeOperation[] = [];
   const lineWidths: number[] = [];
+  const filledRectComposites: GlobalCompositeOperation[] = [];
   const context = {
     globalCompositeOperation: 'source-over' as GlobalCompositeOperation,
     fillStyle: '',
@@ -18,8 +19,12 @@ function createRecordingContext() {
     quadraticCurveTo: vi.fn(),
     bezierCurveTo: vi.fn(),
     arc: vi.fn(),
+    ellipse: vi.fn(),
+    closePath: vi.fn(),
     clearRect: vi.fn(),
-    fillRect: vi.fn(),
+    fillRect: vi.fn(() => {
+      filledRectComposites.push(context.globalCompositeOperation);
+    }),
     save: vi.fn(),
     restore: vi.fn(),
     fill: vi.fn(() => {
@@ -31,7 +36,7 @@ function createRecordingContext() {
       lineWidths.push(context.lineWidth);
     }),
   };
-  return { context, composites, lineWidths };
+  return { context, composites, filledRectComposites, lineWidths };
 }
 
 describe('renderMaskDocument', () => {
@@ -80,5 +85,40 @@ describe('renderMaskDocument', () => {
 
     expect(recording.context.quadraticCurveTo).toHaveBeenCalled();
     expect(recording.context.stroke).toHaveBeenCalledTimes(1);
+  });
+
+  it('矩形、圆形和自由框选都导出为透明区域，自由框选自动闭合', () => {
+    const document = {
+      ...createEmptyMaskDocument('source-a', 200, 160),
+      strokes: [
+        {
+          id: 'rectangle',
+          kind: 'rectangle' as const,
+          mode: 'paint' as const,
+          points: [{ x: 10, y: 20 }, { x: 70, y: 80 }],
+        },
+        {
+          id: 'circle',
+          kind: 'circle' as const,
+          mode: 'paint' as const,
+          points: [{ x: 80, y: 30 }, { x: 160, y: 110 }],
+        },
+        {
+          id: 'lasso',
+          kind: 'lasso' as const,
+          mode: 'paint' as const,
+          points: [{ x: 20, y: 100 }, { x: 60, y: 140 }, { x: 100, y: 120 }],
+        },
+      ],
+    };
+    const recording = createRecordingContext();
+
+    renderMaskDocument(recording.context, document);
+
+    expect(recording.context.fillRect).toHaveBeenCalledWith(10, 20, 60, 60);
+    expect(recording.filledRectComposites).toEqual(['source-over', 'destination-out']);
+    expect(recording.context.ellipse).toHaveBeenCalledWith(120, 70, 40, 40, 0, 0, Math.PI * 2);
+    expect(recording.context.closePath).toHaveBeenCalledTimes(1);
+    expect(recording.composites).toEqual(['destination-out', 'destination-out']);
   });
 });

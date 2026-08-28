@@ -2,7 +2,8 @@ import { createLogger } from '@/core/logging';
 import { WHITE_HEX } from '@/core/theme/colorTokens';
 import { canvasToDataUrl } from '@/services/imageSource';
 import { tracePenPath, type PenPathContext } from '@/features/imageMark/render/tracePenPath';
-import type { MaskEditorDocument, MaskStroke } from './types';
+import { isMaskStroke, resolveMaskShapeBounds } from './maskDocument';
+import type { MaskEditorDocument, MaskMark, MaskShape, MaskStroke } from './types';
 
 const logger = createLogger('features.maskEditor.export');
 
@@ -12,6 +13,8 @@ type MaskRenderContext = PenPathContext & Pick<
   | 'clearRect'
   | 'fill'
   | 'fillRect'
+  | 'ellipse'
+  | 'closePath'
   | 'restore'
   | 'save'
   | 'stroke'
@@ -35,6 +38,53 @@ function traceMaskStroke(context: MaskRenderContext, stroke: MaskStroke): void {
   context.stroke();
 }
 
+function fillMaskShape(context: MaskRenderContext, shape: MaskShape): void {
+  if (shape.kind === 'rectangle') {
+    const [start, end] = shape.points;
+    context.fillRect(
+      Math.min(start.x, end.x),
+      Math.min(start.y, end.y),
+      Math.abs(end.x - start.x),
+      Math.abs(end.y - start.y)
+    );
+    return;
+  }
+  if (shape.kind === 'circle') {
+    const [start, end] = shape.points;
+    const bounds = resolveMaskShapeBounds('circle', start, end);
+    const radius = bounds.width / 2;
+    if (radius === 0) return;
+    context.beginPath();
+    context.ellipse(
+      bounds.x + radius,
+      bounds.y + radius,
+      radius,
+      radius,
+      0,
+      0,
+      Math.PI * 2
+    );
+    context.fill();
+    return;
+  }
+  context.beginPath();
+  context.moveTo(shape.points[0].x, shape.points[0].y);
+  shape.points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
+  context.closePath();
+  context.fill();
+}
+
+function renderMaskMark(context: MaskRenderContext, mark: MaskMark): void {
+  if (isMaskStroke(mark)) {
+    context.globalCompositeOperation = mark.mode === 'paint' ? 'destination-out' : 'source-over';
+    context.lineWidth = mark.size;
+    traceMaskStroke(context, mark);
+    return;
+  }
+  context.globalCompositeOperation = 'destination-out';
+  fillMaskShape(context, mark);
+}
+
 /**
  * GPT Image 遮罩语义：未涂抹区域 alpha=255；用户涂抹区域 alpha=0。
  * 橡皮擦以 source-over 白色恢复不透明区，因而文档可按操作顺序无损重放。
@@ -51,13 +101,11 @@ export function renderMaskDocument(
   document.strokes.forEach((stroke) => {
     if (stroke.points.length === 0) return;
     context.save();
-    context.globalCompositeOperation = stroke.mode === 'paint' ? 'destination-out' : 'source-over';
     context.fillStyle = WHITE_HEX;
     context.strokeStyle = WHITE_HEX;
     context.lineCap = 'round';
     context.lineJoin = 'round';
-    context.lineWidth = stroke.size;
-    traceMaskStroke(context, stroke);
+    renderMaskMark(context, stroke);
     context.restore();
   });
 }

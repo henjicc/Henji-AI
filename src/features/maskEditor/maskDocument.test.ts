@@ -7,6 +7,7 @@ import {
   fitMaskStage,
   parseMaskEditorDocument,
   reduceMaskHistory,
+  resolveMaskShapeBounds,
   resolveMaskDocument,
 } from './maskDocument';
 
@@ -38,24 +39,52 @@ describe('maskDocument', () => {
     });
   });
 
-  it('在持久化边界解析文档并拒绝损坏的笔画', () => {
+  it('在持久化边界兼容旧笔画并解析三种区域标记', () => {
     const raw = {
       version: 1,
       sourceRef: 'source-a',
       width: 320,
       height: 240,
-      strokes: [{
-        id: 'stroke-1',
-        mode: 'erase',
-        size: 18,
-        points: [{ x: 2, y: 3 }, { x: 8, y: 13 }],
-      }],
+      strokes: [
+        {
+          id: 'stroke-1',
+          mode: 'erase',
+          size: 18,
+          points: [{ x: 2, y: 3 }, { x: 8, y: 13 }],
+        },
+        {
+          id: 'rectangle-1',
+          kind: 'rectangle',
+          mode: 'paint',
+          points: [{ x: 10, y: 20 }, { x: 80, y: 90 }],
+        },
+        {
+          id: 'circle-1',
+          kind: 'circle',
+          mode: 'paint',
+          points: [{ x: 30, y: 40 }, { x: 130, y: 140 }],
+        },
+        {
+          id: 'lasso-1',
+          kind: 'lasso',
+          mode: 'paint',
+          points: [{ x: 1, y: 1 }, { x: 40, y: 8 }, { x: 20, y: 50 }],
+        },
+      ],
     };
     expect(parseMaskEditorDocument(raw)).toEqual(raw);
     expect(parseMaskEditorDocument({ ...raw, version: 2 })).toBeNull();
     expect(parseMaskEditorDocument({
       ...raw,
       strokes: [{ ...raw.strokes[0], points: [{ x: 'bad', y: 3 }] }],
+    })).toBeNull();
+    expect(parseMaskEditorDocument({
+      ...raw,
+      strokes: [{ ...raw.strokes[1], points: [{ x: 10, y: 20 }] }],
+    })).toBeNull();
+    expect(parseMaskEditorDocument({
+      ...raw,
+      strokes: [{ ...raw.strokes[3], points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] }],
     })).toBeNull();
   });
 
@@ -89,6 +118,12 @@ describe('maskDocument', () => {
       width: 960,
       height: 540,
       scale: 0.6,
+    });
+    expect(resolveMaskShapeBounds('circle', { x: 80, y: 60 }, { x: 20, y: 30 })).toEqual({
+      x: 20,
+      y: 0,
+      width: 60,
+      height: 60,
     });
   });
 });

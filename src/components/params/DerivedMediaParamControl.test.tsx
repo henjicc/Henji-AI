@@ -93,7 +93,7 @@ describe('派生遮罩参数控件', () => {
     }))
   })
 
-  it('已有遮罩显示编辑与清除，取消编辑不改变状态', () => {
+  it('已有遮罩只显示编辑入口，取消编辑不改变状态', () => {
     const onParamChanges = vi.fn()
     render(
       <DerivedMediaParamControl
@@ -108,11 +108,31 @@ describe('派生遮罩参数控件', () => {
     fireEvent.click(screen.getByRole('button', { name: '编辑' }))
     fireEvent.click(screen.getByRole('button', { name: '取消测试编辑' }))
     expect(onParamChanges).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: '清除遮罩' })).toBeNull()
+  })
 
-    fireEvent.click(screen.getByRole('button', { name: '清除遮罩' }))
-    expect(onParamChanges).toHaveBeenCalledWith({
-      mask_url: [],
-      [derivedMediaStateKey('mask_url')]: undefined,
-    })
+  it('生成页按钮使用参数控件高度，画布按钮保持节点紧凑高度', () => {
+    const { rerender } = render(
+      <DerivedMediaParamControl
+        param={param}
+        value={[]}
+        allValues={{ uploadedImages: ['data:image/png;base64,source'] }}
+        onChange={() => undefined}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '绘制' }).className).toContain('h-[38px]')
+
+    rerender(
+      <DerivedMediaParamControl
+        param={param}
+        value={[]}
+        allValues={{ uploadedImages: ['data:image/png;base64,source'] }}
+        onChange={() => undefined}
+        compact
+      />
+    )
+
+    expect(screen.getByRole('button', { name: '绘制' }).className).toContain('!h-7')
   })
 })

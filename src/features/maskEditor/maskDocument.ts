@@ -1,4 +1,11 @@
-import type { MaskEditorDocument, MaskPoint, MaskStroke } from './types';
+import type {
+  MaskEditorDocument,
+  MaskMark,
+  MaskPoint,
+  MaskShape,
+  MaskShapeKind,
+  MaskStroke,
+} from './types';
 
 export const MASK_HISTORY_LIMIT = 40;
 export const MASK_POINT_MIN_DISTANCE = 0.75;
@@ -22,18 +29,15 @@ export function parseMaskEditorDocument(value: unknown): MaskEditorDocument | nu
     return null;
   }
 
-  const strokes: MaskStroke[] = [];
+  const strokes: MaskMark[] = [];
   for (const rawStroke of value.strokes) {
     if (
       !isRecord(rawStroke)
       || typeof rawStroke.id !== 'string'
-      || (rawStroke.mode !== 'paint' && rawStroke.mode !== 'erase')
       || !Array.isArray(rawStroke.points)
     ) {
       return null;
     }
-    const size = readFiniteNumber(rawStroke.size);
-    if (!size || size <= 0) return null;
     const points: MaskPoint[] = [];
     for (const rawPoint of rawStroke.points) {
       if (!isRecord(rawPoint)) return null;
@@ -42,12 +46,24 @@ export function parseMaskEditorDocument(value: unknown): MaskEditorDocument | nu
       if (x === null || y === null) return null;
       points.push({ x, y });
     }
-    strokes.push({
-      id: rawStroke.id,
-      mode: rawStroke.mode,
-      size,
-      points,
-    });
+    const kind = rawStroke.kind;
+    if (kind === undefined || kind === 'stroke') {
+      if (rawStroke.mode !== 'paint' && rawStroke.mode !== 'erase') return null;
+      const size = readFiniteNumber(rawStroke.size);
+      if (!size || size <= 0 || points.length === 0) return null;
+      strokes.push({
+        id: rawStroke.id,
+        ...(kind === 'stroke' ? { kind } : {}),
+        mode: rawStroke.mode,
+        size,
+        points,
+      });
+      continue;
+    }
+    if (!isMaskShapeKind(kind) || rawStroke.mode !== 'paint' || !isValidShapePoints(kind, points)) {
+      return null;
+    }
+    strokes.push({ id: rawStroke.id, kind, mode: 'paint', points });
   }
 
   return {
@@ -56,6 +72,55 @@ export function parseMaskEditorDocument(value: unknown): MaskEditorDocument | nu
     width: Math.round(width),
     height: Math.round(height),
     strokes,
+  };
+}
+
+function isMaskShapeKind(value: unknown): value is MaskShapeKind {
+  return value === 'rectangle' || value === 'circle' || value === 'lasso';
+}
+
+function isValidShapePoints(kind: MaskShapeKind, points: MaskPoint[]): boolean {
+  if (kind === 'lasso') return points.length >= 3;
+  if (points.length !== 2) return false;
+  const deltaX = Math.abs(points[1].x - points[0].x);
+  const deltaY = Math.abs(points[1].y - points[0].y);
+  return kind === 'circle' ? Math.max(deltaX, deltaY) > 0 : deltaX > 0 && deltaY > 0;
+}
+
+export function isMaskStroke(mark: MaskMark): mark is MaskStroke {
+  return mark.kind === undefined || mark.kind === 'stroke';
+}
+
+export function isMaskShape(mark: MaskMark): mark is MaskShape {
+  return !isMaskStroke(mark);
+}
+
+export interface MaskShapeBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function resolveMaskShapeBounds(
+  kind: 'rectangle' | 'circle',
+  start: MaskPoint,
+  end: MaskPoint
+): MaskShapeBounds {
+  if (kind === 'rectangle') {
+    return {
+      x: Math.min(start.x, end.x),
+      y: Math.min(start.y, end.y),
+      width: Math.abs(end.x - start.x),
+      height: Math.abs(end.y - start.y),
+    };
+  }
+  const diameter = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
+  return {
+    x: end.x >= start.x ? start.x : start.x - diameter,
+    y: end.y >= start.y ? start.y : start.y - diameter,
+    width: diameter,
+    height: diameter,
   };
 }
 
@@ -185,7 +250,7 @@ export function reduceMaskHistory(
 
 export function appendMaskStroke(
   document: MaskEditorDocument,
-  stroke: MaskStroke
+  stroke: MaskMark
 ): MaskEditorDocument {
   return {
     ...document,

@@ -1,8 +1,7 @@
-import { Info } from 'lucide-react'
 import { useId } from 'react'
 
 import Tooltip from '@/components/ui/Tooltip'
-import { UI_FIELD_LABEL_CLASS, UiIconButton } from '@/components/ui'
+import { UI_FIELD_LABEL_CLASS } from '@/components/ui'
 import type { BaseParamDef } from '@/core/types/ParamDef'
 import { getI18nText } from '@/core/types/I18nText'
 
@@ -27,32 +26,29 @@ export function ParamLabel({
   const tooltipId = useId()
   const label = getI18nText(param.name, language)
   const tooltip = param.tooltip ? getI18nText(param.tooltip, language) : ''
-  const infoLabel = language.startsWith('zh')
-    ? `查看“${label}”说明`
-    : `View help for ${label}`
+
+  const labelText = (
+    <>
+      {label}
+      {param.required ? <span className="ml-1 text-danger">*</span> : null}
+    </>
+  )
 
   return (
     <div id={id} className={`${UI_FIELD_LABEL_CLASS} ${className}`}>
-      <span className="inline-flex items-center gap-1">
-        <span>
-          {label}
-          {param.required ? <span className="ml-1 text-danger">*</span> : null}
-        </span>
-        {tooltip ? (
-          <Tooltip content={tooltip} contentId={tooltipId} delay={200}>
-            <UiIconButton
-              type="button"
-              showBorder={false}
-              appearance="hover-only"
-              className="!h-6 !w-6 shrink-0"
-              aria-label={infoLabel}
-              aria-describedby={tooltipId}
-            >
-              <Info className="h-3.5 w-3.5" />
-            </UiIconButton>
-          </Tooltip>
-        ) : null}
-      </span>
+      {tooltip ? (
+        <Tooltip content={tooltip} contentId={tooltipId} delay={200}>
+          <span
+            tabIndex={0}
+            className="inline-block cursor-help rounded-lg outline-none focus-visible:ring-1 focus-visible:ring-accent"
+            aria-describedby={tooltipId}
+          >
+            {labelText}
+          </span>
+        </Tooltip>
+      ) : (
+        <span>{labelText}</span>
+      )}
     </div>
   )
 }
