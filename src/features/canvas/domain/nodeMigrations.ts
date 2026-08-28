@@ -33,6 +33,7 @@ import {
   normalizeRelightSettings,
   prepareRelightRoute,
 } from '../capabilities/relightPolicy';
+import { UPSCALE_MODEL_POLICY } from '../capabilities/upscalePolicy';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
@@ -348,4 +349,47 @@ export function migrateRelightGenerationData(data: DynamicValueMap): void {
     ? [...settings.smart.lightingReferenceImages]
     : [];
   data.relightRouteReasons = [...route.reasons];
+}
+
+/** 恢复高清放大节点的唯一模型、单图输入与本地预检上限。 */
+export function migrateUpscaleGenerationData(data: DynamicValueMap): void {
+  data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.upscale;
+  data.prompt = '';
+  data.promptTemplateVersion = null;
+  data.fixedSemanticParams = {
+    maxOutputMegapixels: 48,
+    maxInputFileBytes: 20 * 1024 * 1024,
+  };
+
+  const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
+    ? data.mediaInputs as DynamicValueMap
+    : {};
+  const inlineImages = Array.isArray(mediaInputs.image)
+    ? mediaInputs.image.filter(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+    ).slice(0, 1)
+    : [];
+  data.mediaInputs = { ...mediaInputs, image: inlineImages };
+
+  const compatibleModels = resolveCanvasCapabilityModelCandidates(
+    registry.getModelsByType('image'),
+    UPSCALE_MODEL_POLICY,
+  ).candidates;
+  const storedModelId = typeof data.modelId === 'string' ? data.modelId.trim() : '';
+  const selectedModel = compatibleModels.find(({ model }) => model.meta.id === storedModelId)?.model
+    ?? compatibleModels[0]?.model;
+  if (!selectedModel) return;
+  data.modelId = selectedModel.meta.id;
+  const storedParams = data.params && typeof data.params === 'object'
+    ? data.params as DynamicValueMap
+    : {};
+  const supportedParamIds = new Set(selectedModel.params.map((param) => param.id));
+  const supportedStoredParams = Object.fromEntries(
+    Object.entries(storedParams).filter(([paramId]) => supportedParamIds.has(paramId)),
+  ) as DynamicValueMap;
+  data.params = mapCanvasCapabilityModelParams(
+    selectedModel,
+    UPSCALE_MODEL_POLICY,
+    supportedStoredParams,
+  ).params;
 }

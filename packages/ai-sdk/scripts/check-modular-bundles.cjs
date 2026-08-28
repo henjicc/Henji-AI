@@ -62,7 +62,7 @@ const providerDirectories = [...new Set(modelFiles.map((file) => path.relative(c
 const generatedProviderAdapters = walk(path.join(packsRoot, 'provider-adapters'), (file) => file.endsWith('.ts'))
 const generatedProviderPacks = walk(path.join(packsRoot, 'provider-packs'), (file) => file.endsWith('.ts'))
 const toolModelPacks = walk(toolModelRoot, (file) => file.endsWith('.ts'))
-if (modelFiles.length !== 99 || generatedModelPacks.length !== 99) {
+if (modelFiles.length !== 101 || generatedModelPacks.length !== 101) {
   fail(`单模型导出不完整：catalog=${modelFiles.length}, packs=${generatedModelPacks.length}`)
 }
 if (generatedProviderAdapters.length !== providerDirectories.length || generatedProviderPacks.length !== providerDirectories.length) {
@@ -181,8 +181,8 @@ const defaultGeneration = bundle('DefaultGeneration', [
 ].join('\n'), (inputs) => {
   const models = inputs.filter((input) => modelPattern.test(`/${input}`))
   const tools = inputs.filter((input) => toolModelPattern.test(`/${input}`))
-  if (models.length !== 99 || tools.length !== 0) {
-    fail(`默认generation目录不再严格99或误入工具：models=${models.length}, tools=${tools.length}`)
+  if (models.length !== 101 || tools.length !== 0) {
+    fail(`默认generation目录不再严格101或误入工具：models=${models.length}, tools=${tools.length}`)
   }
 })
 

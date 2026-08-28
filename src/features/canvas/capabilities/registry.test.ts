@@ -78,6 +78,7 @@ describe('画布图片能力注册表', () => {
       .toEqual([
         CANVAS_IMAGE_CAPABILITY_IDS.panorama,
         CANVAS_IMAGE_CAPABILITY_IDS.relight,
+        CANVAS_IMAGE_CAPABILITY_IDS.upscale,
         CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
       ]);
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode, {
@@ -85,6 +86,7 @@ describe('画布图片能力注册表', () => {
     }).map(({ id }) => id)).toEqual([
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
+      CANVAS_IMAGE_CAPABILITY_IDS.upscale,
     ]);
   });
 
@@ -92,7 +94,7 @@ describe('画布图片能力注册表', () => {
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'image',
       implementationStatus: 'planned',
-    })).toHaveLength(6);
+    })).toHaveLength(5);
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'video',
     })).toEqual([]);
@@ -102,6 +104,7 @@ describe('画布图片能力注册表', () => {
     }).map(({ id }) => id)).toEqual([
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
+      CANVAS_IMAGE_CAPABILITY_IDS.upscale,
       CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
     ]);
     expect(filterCanvasImageCapabilities({
@@ -113,6 +116,7 @@ describe('画布图片能力注册表', () => {
     }).map(({ id }) => id)).toEqual([
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
+      CANVAS_IMAGE_CAPABILITY_IDS.upscale,
     ]);
   });
 

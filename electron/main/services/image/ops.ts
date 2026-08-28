@@ -235,6 +235,10 @@ export async function readImageInfo(source: string): Promise<ImageInfoResultDto>
     extension: normalizeExtension(extension),
     width: Math.max(1, meta.width ?? 1),
     height: Math.max(1, meta.height ?? 1),
+    orientation: typeof meta.orientation === 'number' && meta.orientation >= 1 && meta.orientation <= 8
+      ? meta.orientation
+      : null,
+    hasAlpha: meta.hasAlpha === true,
     fileSizeBytes: bytes.length,
     createdAt: stat ? stat.birthtimeMs : null,
     modifiedAt: stat ? stat.mtimeMs : null,

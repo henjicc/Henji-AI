@@ -209,6 +209,19 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     requiresModelSchema: false,
   },
   {
+    nodeType: CANVAS_NODE_TYPES.upscaleGen,
+    title: '高清放大节点',
+    description: '创建受控 Topaz 忠实放大节点；倍率、处理模式与人脸增强由节点参数维护。',
+    aliases: ['超分节点', '图片放大节点', '高清节点'],
+    dataSchema: imageGenerationNodeDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', maxLength: 120 } },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
+  },
+  {
     nodeType: CANVAS_NODE_TYPES.videoGen,
     title: '视频生成节点',
     description: '创建配置驱动的视频生成节点；模型与参数必须来自目录和 schema。',

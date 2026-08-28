@@ -13,9 +13,9 @@ import {
   ICON_MEDIA_IMAGE,
   ICON_NODE_ASSET_GROUP,
   ICON_NODE_CAMERA_STAGE,
-  ICON_NODE_IMAGE_GENERATION,
   ICON_STORYBOARD,
   ICON_TOOL_IMAGE_EDIT,
+  ICON_UPSCALE,
 } from '@/core/theme/icons'
 import { Z_LAYERS } from '@/core/theme/zLayers'
 import type {
@@ -35,7 +35,7 @@ const CAPABILITY_ICON_MAP: Record<CanvasImageCapabilityIconKey, LucideIcon> = {
   relight: ICON_IMAGE_GLOW_PRO,
   multiAngle: ICON_NODE_CAMERA_STAGE,
   nineGrid: ICON_STORYBOARD,
-  upscale: ICON_NODE_IMAGE_GENERATION,
+  upscale: ICON_UPSCALE,
   portraitTexture: ICON_TOOL_IMAGE_EDIT,
   elementEdit: ICON_TOOL_IMAGE_EDIT,
   layerSeparation: ICON_NODE_ASSET_GROUP,

@@ -650,6 +650,8 @@ export interface HenjiImageInfoResult {
   extension: string
   width: number
   height: number
+  orientation: number | null
+  hasAlpha: boolean
   fileSizeBytes: number
   createdAt: number | null
   modifiedAt: number | null

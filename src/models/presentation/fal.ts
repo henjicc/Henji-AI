@@ -7,6 +7,7 @@ import { falPresentationPart4 } from './fal/part-4'
 import { falPresentationPart5 } from './fal/part-5'
 import { falPresentationPart6 } from './fal/part-6'
 import { falPresentationPart7 } from './fal/part-7'
+import { falPresentationPart8 } from './fal/part-8'
 
 export const falPresentation = {
   ...falPresentationPart1,
@@ -16,4 +17,5 @@ export const falPresentation = {
   ...falPresentationPart5,
   ...falPresentationPart6,
   ...falPresentationPart7,
+  ...falPresentationPart8,
 }

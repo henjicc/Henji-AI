@@ -27,13 +27,14 @@ import model25 from '../../catalog/fal/seedream-5.0-lite.model'
 import model26 from '../../catalog/fal/seedream-5.0-pro.model'
 import model27 from '../../catalog/fal/seedream-v4.5.model'
 import model28 from '../../catalog/fal/seedream-v4.model'
-import model29 from '../../catalog/fal/veo-3.1.model'
-import model30 from '../../catalog/fal/vidu-q2.model'
-import model31 from '../../catalog/fal/wan-2.5-preview.model'
-import model32 from '../../catalog/fal/z-image-turbo.model'
+import model29 from '../../catalog/fal/topaz-image-upscale.model'
+import model30 from '../../catalog/fal/veo-3.1.model'
+import model31 from '../../catalog/fal/vidu-q2.model'
+import model32 from '../../catalog/fal/wan-2.5-preview.model'
+import model33 from '../../catalog/fal/z-image-turbo.model'
 import { provider } from '../provider-adapters/fal'
 import type { GenerationPack } from '../../generation/core'
 
-export const models = [model1, model2, model3, model4, model5, model6, model7, model8, model9, model10, model11, model12, model13, model14, model15, model16, model17, model18, model19, model20, model21, model22, model23, model24, model25, model26, model27, model28, model29, model30, model31, model32] as const
+export const models = [model1, model2, model3, model4, model5, model6, model7, model8, model9, model10, model11, model12, model13, model14, model15, model16, model17, model18, model19, model20, model21, model22, model23, model24, model25, model26, model27, model28, model29, model30, model31, model32, model33] as const
 export const pack: GenerationPack = { models, providers: [provider] }
 export default pack

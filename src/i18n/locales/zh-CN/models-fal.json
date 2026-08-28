@@ -91,6 +91,11 @@
         "name": "Wan 2.5 Preview"
       }
     },
+    "fal-ai-topaz-image-upscale": {
+      "meta": {
+        "name": "Topaz 图片放大"
+      }
+    },
     "fal-ai-z-image-turbo": {
       "meta": {
         "name": "Z-Image Turbo"

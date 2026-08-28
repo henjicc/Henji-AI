@@ -361,6 +361,122 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasUpscaleNode(page) {
+    const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    await page.waitForTimeout(350)
+    let upscaleAction = page.getByRole('button', { name: /^(高清|Upscale)$/i }).filter({ visible: true }).first()
+    if (!(await upscaleAction.count())) {
+      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
+      if (!(await moreButton.count())) {
+        const labels = await page.getByRole('button').filter({ visible: true }).allTextContents()
+        throw new Error(`高清工具入口不可见；当前按钮：${JSON.stringify(labels)}`)
+      }
+      await moreButton.click()
+      upscaleAction = page.getByRole('button', { name: /^(高清|Upscale)$/i }).filter({ visible: true }).first()
+    }
+    await upscaleAction.waitFor({ state: 'visible', timeout: 8000 })
+    await upscaleAction.click()
+
+    const shell = page.locator('[data-generation-node-id][data-generation-node-model-id="fal-ai-topaz-image-upscale"]')
+      .filter({ hasText: /高清放大|Upscale/ }).last()
+    await shell.waitFor({ state: 'visible', timeout: 12000 })
+    const node = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
+    const nodeId = await node.getAttribute('data-id')
+    if (!nodeId || nodeId === '__ui_panorama_source') throw new Error('高清工具条未创建独立相邻节点')
+    if (!(await node.evaluate((element) => element.classList.contains('selected')))) {
+      throw new Error('高清工具条创建后未选中新节点')
+    }
+    if (await page.locator('.react-flow__edge').count() < 1) {
+      throw new Error('高清工具条未创建源图连线')
+    }
+    if (await shell.locator('[contenteditable="true"], textarea').count()) {
+      throw new Error('忠实高清放大节点不应显示提示词编辑器')
+    }
+    await shell.getByText(/^(处理模式|Processing Mode)$/i).waitFor({ state: 'visible', timeout: 8000 })
+    await shell.getByText(/^(放大倍率|Upscale Factor)$/i).waitFor({ state: 'visible', timeout: 8000 })
+    await shell.getByText(/^(人脸增强|Face Enhancement)$/i).waitFor({ state: 'visible', timeout: 8000 })
+
+    await page.waitForTimeout(900)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const target = nodes.find((candidate) => candidate.id === targetNodeId)
+      return {
+        nodeType: target?.type,
+        capabilityId: target?.data?.capabilityId,
+        modelId: target?.data?.modelId,
+        factor: target?.data?.params?.falTopazUpscaleFactor,
+        mode: target?.data?.params?.falTopazUpscaleModel,
+        hasSourceEdge: edges.some((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId),
+      }
+    }, { targetProjectId: projectId, targetNodeId: nodeId })
+    if (persisted.nodeType !== 'upscaleGenNode'
+      || persisted.capabilityId !== 'image.upscale'
+      || persisted.modelId !== 'fal-ai-topaz-image-upscale'
+      || persisted.factor !== 2
+      || persisted.mode !== 'High Fidelity V2'
+      || !persisted.hasSourceEdge) {
+      throw new Error(`高清放大保存语义或连线丢失：${JSON.stringify(persisted)}`)
+    }
+
+    // 不触发供应商请求：以确定性本地图片模拟一次成功输出，验证普通 image 结果和继续连接可持久化。
+    await page.evaluate(async ({ targetProjectId, targetNodeId, resultSource }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const generator = nodes.find((candidate) => candidate.id === targetNodeId)
+      nodes.push({
+        id: '__ui_upscale_result',
+        type: 'exportImageNode',
+        position: { x: (generator?.position?.x ?? 720) + 430, y: generator?.position?.y ?? 80 },
+        width: 384,
+        height: 220,
+        measured: { width: 384, height: 220 },
+        style: { width: 384, height: 220 },
+        data: {
+          displayName: '高清结果（本地模拟）',
+          resultKind: 'image',
+          sourceCapabilityId: 'image.upscale',
+          imageUrl: resultSource,
+          previewImageUrl: resultSource,
+          aspectRatio: '2:1',
+          isGenerating: false,
+        },
+      })
+      edges.push({
+        id: `__ui_upscale_result_edge_${targetNodeId}`,
+        source: targetNodeId,
+        target: '__ui_upscale_result',
+        sourceHandle: 'source',
+        targetHandle: 'target',
+      })
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 80, y: 120, zoom: 0.62 }), targetProjectId]
+      )
+    }, { targetProjectId: projectId, targetNodeId: nodeId, resultSource: panoramaSource })
+
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await page.locator(`[data-generation-node-id="${nodeId}"][data-generation-node-model-id="fal-ai-topaz-image-upscale"]`)
+      .waitFor({ state: 'visible', timeout: 12000 })
+    const resultNode = page.locator('.react-flow__node[data-id="__ui_upscale_result"]')
+    await resultNode.waitFor({ state: 'visible', timeout: 12000 })
+    await resultNode.getByText('高清结果（本地模拟）').waitFor({ state: 'visible', timeout: 8000 })
+    await page.mouse.move(1200, 700)
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasPanoramaViewer(page) {
     const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
     await page.waitForTimeout(900)
@@ -1092,6 +1208,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-图片打光节点与可视化编辑器',
       setup: setupCanvasRelightEditor,
+    },
+    {
+      id: 'canvas-upscale-node',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-高清放大节点与保存重开',
+      setup: setupCanvasUpscaleNode,
     },
     {
       id: 'canvas-midjourney-node',

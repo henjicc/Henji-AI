@@ -83,6 +83,14 @@ import {
 
 export type { GenerationNodeShellData } from './useGenerationPromptDocument';
 
+export interface GenerationNodeRuntimePreparationContext {
+  images: string[];
+  videos: string[];
+  audios: string[];
+  params: DynamicValueMap;
+  modelId: string;
+}
+
 export interface GenerationNodeShellProps {
   id: string;
   nodeType: CanvasNodeType;
@@ -100,6 +108,13 @@ export interface GenerationNodeShellProps {
   resultNodeExtraData?: DynamicValueMap;
   /** 图片产品能力编号；声明后共享壳会统一执行模型筛选、固定语义、模板和结果记录。 */
   capabilityId?: CanvasImageCapabilityId;
+  /** 无提示词工具（如忠实超分）可隐藏编辑器，并跳过文本必填校验。 */
+  showPromptInput?: boolean;
+  requirePrompt?: boolean;
+  /** 在供应商配置/上传/计费前执行的本地预检，可补充仅供运行时使用的隐藏参数。 */
+  prepareRuntimeParams?: (
+    context: GenerationNodeRuntimePreparationContext,
+  ) => Promise<DynamicValueMap> | DynamicValueMap;
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -125,6 +140,9 @@ export const GenerationNodeShell = memo(({
   resultTitleKey,
   resultNodeExtraData,
   capabilityId,
+  showPromptInput = true,
+  requirePrompt = true,
+  prepareRuntimeParams,
   minWidth = 320,
   minHeight = 160,
   maxWidth = 1400,
@@ -347,17 +365,33 @@ export const GenerationNodeShell = memo(({
     return preparation;
   }, [capability, effectiveImages.length, effectiveModel, t]);
 
-  const preflightGenerate = useCallback((): void => {
+  const prepareRuntimeValues = useCallback(async (
+    values: DynamicValueMap,
+  ): Promise<DynamicValueMap> => {
+    if (!prepareRuntimeParams) return values;
+    return {
+      ...values,
+      ...await prepareRuntimeParams({
+        images: effectiveImages,
+        videos: effectiveVideos,
+        audios: effectiveAudios,
+        params: values,
+        modelId: effectiveModelId,
+      }),
+    };
+  }, [effectiveAudios, effectiveImages, effectiveModelId, effectiveVideos, prepareRuntimeParams]);
+
+  const preflightGenerate = useCallback(async (): Promise<void> => {
     const latestCanvas = useCanvasStore.getState();
     const latestValues = collectInputValues(id, latestCanvas.nodes, latestCanvas.edges);
-    const runtimeValues = { ...modelParamValues, ...latestValues };
+    const runtimeValues = await prepareRuntimeValues({ ...modelParamValues, ...latestValues });
     const promptInput = resolveGenerationPromptInput(
       effectiveModel,
       runtimeValues,
       toModelPromptText(effectivePromptDocument, { references: promptReferences }),
       isPromptOverridden ? latestValues[PROMPT_PARAM_ID] : undefined
     );
-    if (!promptInput.hasValidInput) {
+    if (requirePrompt && !promptInput.hasValidInput) {
       setPromptInvalid(true);
       throw new Error(t(promptRequiredKey));
     }
@@ -368,7 +402,7 @@ export const GenerationNodeShell = memo(({
       message: t('common:providerKeyRequired.message'),
       error: t(apiKeyRequiredKey),
     });
-  }, [apiKeyRequiredKey, effectiveModel, effectivePromptDocument, id, isPromptOverridden, modelParamValues, prepareCapabilityGeneration, promptReferences, promptRequiredKey, providerKeyConfigured, t]);
+  }, [apiKeyRequiredKey, effectiveModel, effectivePromptDocument, id, isPromptOverridden, modelParamValues, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, t]);
 
   const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
     const latestCanvas = useCanvasStore.getState();
@@ -377,14 +411,14 @@ export const GenerationNodeShell = memo(({
     const runtimePromptDocument = isPromptOverridden && typeof latestPromptOverride === 'string'
       ? createPlainTextPromptDocument(latestPromptOverride)
       : effectivePromptDocument;
-    const runtimeValues = { ...modelParamValues, ...latestValues };
+    const runtimeValues = await prepareRuntimeValues({ ...modelParamValues, ...latestValues });
     const promptInput = resolveGenerationPromptInput(
       effectiveModel,
       runtimeValues,
       toModelPromptText(runtimePromptDocument, { references: promptReferences }),
       isPromptOverridden ? latestPromptOverride : undefined
     );
-    if (!promptInput.hasValidInput) {
+    if (requirePrompt && !promptInput.hasValidInput) {
       setPromptInvalid(true);
       throw new Error(t(promptRequiredKey));
     }
@@ -517,7 +551,7 @@ export const GenerationNodeShell = memo(({
       setNodeGenerationProgress(newNodeId, null);
     }
     return { status: 'completed', resultNodeIds: [newNodeId] };
-  }, [addEdge, addNode, apiKeyRequiredKey, capability, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, prepareCapabilityGeneration, promptReferences, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, capability, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'standard-generation',
@@ -566,20 +600,22 @@ export const GenerationNodeShell = memo(({
       {/* 数值型下限由参数区实高计算；长提示词只占剩余空间并在内部滚动。 */}
       <div className="canvas-node-lod-detail relative flex min-h-0 flex-1 flex-col gap-1.5">
         {/* 提示词区是唯一的伸缩项：节点拉高多出来的空间全部由它吸收，下方各行保持原高与行距 */}
-        <GenerationPromptEditor
-          nodeId={id}
-          selected={Boolean(selected)}
-          value={effectivePromptDocument}
-          references={promptReferences}
-          readOnly={isPromptOverridden}
-          invalid={promptInvalid}
-          // 漏填时把“请输入提示词”直接顶到空框里当占位，比在节点底部加一行红字更省空间
-          placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
-          onChange={handlePromptChange}
-          onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
-          onEditEnd={promptState.onEditEnd}
-          onSelectNode={setSelectedNode}
-        />
+        {showPromptInput && (
+          <GenerationPromptEditor
+            nodeId={id}
+            selected={Boolean(selected)}
+            value={effectivePromptDocument}
+            references={promptReferences}
+            readOnly={isPromptOverridden}
+            invalid={promptInvalid}
+            // 漏填时把“请输入提示词”直接顶到空框里当占位，比在节点底部加一行红字更省空间
+            placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
+            onChange={handlePromptChange}
+            onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
+            onEditEnd={promptState.onEditEnd}
+            onSelectNode={setSelectedNode}
+          />
+        )}
 
         <div ref={inputRowsRef} className="shrink-0">
           <NodeInputRows

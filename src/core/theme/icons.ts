@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Music,
   Orbit,
+  ScanSearch,
   Sigma,
   Settings,
   SquarePen,
@@ -112,3 +113,5 @@ export const ICON_NODE_BOOLEAN: LucideIcon = ToggleLeft
 export const ICON_NODE_ASSET_GROUP: LucideIcon = Layers3
 /** 完整球面全景（工具入口、结果标识与查看模式共用） */
 export const ICON_PANORAMA: LucideIcon = Orbit
+/** 忠实高清放大（能力工具条与节点共用） */
+export const ICON_UPSCALE: LucideIcon = ScanSearch

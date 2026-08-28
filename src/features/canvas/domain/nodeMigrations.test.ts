@@ -10,6 +10,7 @@ import {
   migrateLegacyGenerationDisplayName,
   migratePanoramaGenerationData,
   migrateRelightGenerationData,
+  migrateUpscaleGenerationData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
 
@@ -127,6 +128,43 @@ describe('migrateRelightGenerationData', () => {
     migrateRelightGenerationData(data);
     expect(data.relightSettings).toEqual({ relightContractVersion: 2 });
     expect(data.relightRouteReasons).toEqual([expect.stringContaining('不支持的打光契约版本')]);
+  });
+});
+
+describe('migrateUpscaleGenerationData', () => {
+  it('保存重开后恢复唯一模型、安全上限和单张内联源图', () => {
+    const data: DynamicValueMap = {
+      capabilityId: 'broken',
+      prompt: 'do not redraw',
+      modelId: 'apimart-gpt-image-2',
+      params: {
+        falTopazUpscaleModel: 'CGI',
+        falTopazUpscaleFactor: 4,
+        falTopazFaceEnhancement: true,
+        unsupported: 'drop-me',
+      },
+      mediaInputs: { image: ['first.png', 'second.png'] },
+    };
+
+    migrateUpscaleGenerationData(data);
+
+    expect(data).toMatchObject({
+      capabilityId: 'image.upscale',
+      prompt: '',
+      promptTemplateVersion: null,
+      modelId: 'fal-ai-topaz-image-upscale',
+      params: {
+        falTopazUpscaleModel: 'CGI',
+        falTopazUpscaleFactor: 4,
+        falTopazFaceEnhancement: true,
+      },
+      mediaInputs: { image: ['first.png'] },
+      fixedSemanticParams: {
+        maxOutputMegapixels: 48,
+        maxInputFileBytes: 20 * 1024 * 1024,
+      },
+    });
+    expect((data.params as DynamicValueMap).unsupported).toBeUndefined();
   });
 });
 

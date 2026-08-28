@@ -1,6 +1,6 @@
 # @henjicc/ai-sdk
 
-痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、99 个图片/视频/音频模型，以及
+痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、101 个图片/视频/音频模型，以及
 7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
 供应商调用、轮询、SSE 与错误归一化；宿主只需注入网络、凭据、媒体读取和日志。
 
@@ -113,11 +113,11 @@ LLM 预设默认使用 SDK 维护的官方地址，并按具体模型选择 Chat
 SDK 源码不得依赖 `@/`、`node:`、Electron、`import.meta.glob`、`eval`/`new Function`/`node:vm`；
 `npm run check:sdk` 会守住这些边界。Photoshop/受限宿主只做生成时应从
 `@henjicc/ai-sdk/generation` 导入 `createGenerationClient`；该入口不静态带入 LLM、Vercel AI SDK、
-Node 内置模块或 Fal 官方客户端，发布门禁会把它打成 IIFE 并在无网络生命周期中核对 99 个模型。
+Node 内置模块或 Fal 官方客户端，发布门禁会把它打成 IIFE 并在无网络生命周期中核对 101 个模型。
 
 ## 按需装配生成模型
 
-`@henjicc/ai-sdk/generation` 是兼容入口，默认始终装入 99 个模型。真正需要缩小 Photoshop/Tauri
+`@henjicc/ai-sdk/generation` 是兼容入口，默认始终装入 101 个模型。真正需要缩小 Photoshop/Tauri
 包体时，从不含任何内置 catalog/provider 的 `generation/core` 创建模块化客户端，并只导入完整 pack：
 
 ```ts
@@ -130,12 +130,12 @@ console.log(client.catalog.list().map((model) => model.meta.id)) // ['kie-z-imag
 
 完整单模型 pack 同时携带该模型的唯一真实 schema、provider adapter 与 provider-scoped 媒体预处理/
 上传策略；宿主不需要知道内部上传模块。`@henjicc/ai-sdk/provider-packs/kie` 可一次装入 KIE 的全部
-27 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有 99 个单模型路径和
+27 个模型；`provider-adapters/kie` 只装入 KIE 执行与上传策略、不装任何模型。所有 101 个单模型路径和
 8 个供应商路径由 catalog 生成器自动产出并由 bundle 门禁穷举，新增模型不会靠手工维护 exports。
 
 每个 `models/<provider>/<model>` 子路径也导出名为 `model` 的低层定义，供目录分析或高级自定义组合；
 直接传裸 `model` 而不传同文件的 `pack` 不保证媒体上传或供应商执行完整，普通宿主应使用 `pack`。
-包根 `createAIClient` 仍默认 99 模型；若确实需要根 client 的 chat 与按需生成共存，可显式传：
+包根 `createAIClient` 仍默认 101 模型；若确实需要根 client 的 chat 与按需生成共存，可显式传：
 
 ```ts
 const client = createAIClient({
@@ -168,7 +168,7 @@ cancelLlmChatTask('chat-1')
 
 ### 可选模型分发包与统一能力筛选
 
-图像消除等工具模型不会混入默认 99 模型。宿主可选择单个完整工具模型 pack，也可一次装入 Fal 图片编辑工具模型集合：
+图像消除等工具模型不会混入默认 101 模型。宿主可选择单个完整工具模型 pack，也可一次装入 Fal 图片编辑工具模型集合：
 
 ```ts
 import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'
@@ -189,7 +189,7 @@ console.log(erasers.map((item) => item.id))
 单模型入口为 `tool-models/fal/flux-pro-erase`、`tool-models/fal/bria-eraser`、
 `tool-models/fal/finegrain-eraser`；每个只导出 `model`、`provider` 与完整 `pack`。
 聚合 `tool-packs/fal-image-edit-tools` 是方便选择的模型分发集合，只携带这 3 个模型、Fal adapter 和 Fal CDN
-上传，不携带其余 99 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，
+上传，不携带其余 101 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，
 不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
 
 ## 两类模型的公共边界
@@ -233,13 +233,13 @@ const price = client.catalog.estimatePrice('fal-ai-gpt-image-2', defaults)
 
 ### 参数类型 → 控件
 
-以下 13 种是 `RuntimeParamDef` 的完整公开联合；括号内是当前真实 99 catalog 的出现数量。未出现不代表
+以下 13 种是 `RuntimeParamDef` 的完整公开联合；括号内是当前真实 101 catalog 的出现数量。未出现不代表
 类型无效，而是当前目录没有对应模型。
 
-| type | 99 catalog | 消费方控件 | 关键运行时字段 |
+| type | 101 catalog | 消费方控件 | 关键运行时字段 |
 |---|---:|---|---|
-| `dropdown` | 285 | 下拉选择 | `options[].value`、`default`、`required?` |
-| `switch` | 89 | 布尔开关 | `default` |
+| `dropdown` | 293 | 下拉选择 | `options[].value`、`default`、`required?` |
+| `switch` | 90 | 布尔开关 | `default` |
 | `number` | 79 | 数值输入/步进器 | `min?`、`max?`、`step?`、`default` |
 | `text` | 7 | 单行文本 | `maxLength?`、`default` |
 | `image-upload` | 5 | 图片上传 | `maxCount?`、`accept?`、`maxSize?`、`format?` |
@@ -253,7 +253,7 @@ const price = client.catalog.estimatePrice('fal-ai-gpt-image-2', defaults)
 | `aspect-ratio` | 0 | 比例选择 | `options[].value` |
 
 所有参数共有 `id`、`type`、`order`、`default`，并可带 `required`、`valueType`、API 映射、
-`transferKey`、`visible`、`disabled`。实际 99 catalog 的字段集合与数量由
+`transferKey`、`visible`、`disabled`。实际 101 catalog 的字段集合与数量由
 `packages/ai-sdk/tests/catalog-consumer-contract.test.ts` 穷举锁定，不以旧 ParamDef 文件或示例推断。
 
 ### 条件与媒体输入
@@ -352,7 +352,7 @@ features 与原始 tags。顶层查询维度默认 AND，也可设 `mode: 'any'`
 调用方随后交给对应执行 handle；SDK 不提供一个掩盖协议差异的通用 `generate()`。
 
 能力画像是运行时选择层，不是打包器。`createModelCapabilityDiscovery({ generationPacks: [...] })` 只会看
-传入的 pack；它既不会隐式导入默认 99，也不会从 bundle 删除已导入代码。真正的按需分发仍以 import
+传入的 pack；它既不会隐式导入默认 101，也不会从 bundle 删除已导入代码。真正的按需分发仍以 import
 单模型/provider/collection pack 为边界。
 
 ### ASR/OCR 等开放能力

@@ -6,11 +6,11 @@
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-08-29 |
-| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 供应商专属 5 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 70 + SDK 跨项目能力 14（另有 Fal 工具 5） |
+| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 供应商专属 6 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
+| 模型供应商文档数量 | 生成/存量 71 + SDK 跨项目能力 14（另有 Fal 工具 5） |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、智谱（官方 LLM）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
-另有 5 个待按能力按需分发的 Fal 图像工具，不进入默认 100 模型兼容目录：
+另有 5 个待按能力按需分发的 Fal 图像工具，不进入默认 101 模型兼容目录：
 [Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、
 [Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、
 [Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)、
@@ -103,7 +103,7 @@ docs/model-adaptation/
 
 Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.1-fast` 视频模型的端点，但该模型**未出现在 dashboard「模型列表」的定价清单中**，可用性与计价未确认，详见 [Grsai 基础文档 §8](供应商/Grsai.md)。
 
-### 供应商专属模型（5）
+### 供应商专属模型（6）
 
 以下模型**不在主清单里**，但已在代码中适配并对用户开放，文档用于维护现有实现。它们只在单一供应商上提供，未来是否纳入主清单待定。
 
@@ -114,6 +114,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Wan 2.6 | 视频 | 派欧云 | [Wan-2.6_派欧云.md](Wan-2.6/Wan-2.6_派欧云.md) |
 | Wan 2.7 | 视频 | 派欧云 | [Wan-2.7_派欧云.md](Wan-2.7/Wan-2.7_派欧云.md) |
 | MiniMax Speech | 音频 | 派欧云 | [MiniMax-Speech_派欧云.md](MiniMax-Speech/MiniMax-Speech_派欧云.md) |
+| Topaz 图片放大 | 图片 | Fal | [Topaz-图片放大_Fal.md](Topaz-图片放大/Topaz-图片放大_Fal.md) |
 
 魔搭侧另有 5 个已适配的开源图像模型（`Qwen/Qwen-Image`、`Qwen/Qwen-Image-Edit-2509`、`black-forest-labs/FLUX.1-Krea-dev`、`MusePublic/majicMIX_realistic`、`MusePublic/14_ckpt_SD_XL`）。它们共用魔搭 API-Inference 的同一套端点与参数，差异只有 model ID、尺寸上限和魔粒档位，因此不单独建文件，统一记在 [供应商/魔搭.md](供应商/魔搭.md) 第 7 节。
 
@@ -171,6 +172,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Z-Image Turbo | `z-image-turbo` | `z-image` | `fal-ai/z-image/turbo`、`fal-ai/z-image/turbo/image-to-image`；魔搭 `Tongyi-MAI/Z-Image-Turbo` |
 | GPT-Image-2 | `gpt-image-2`（别名 `gpt-image-2-ext`）、`gpt-image-2-official` | `gpt-image-2-text-to-image`、`gpt-image-2-image-to-image` | `openai/gpt-image-2`、`openai/gpt-image-2/edit` |
 | IC-Light v2 | — | — | `fal-ai/iclight-v2` |
+| Topaz 图片放大 | — | — | `fal-ai/topaz/upscale/image` |
 | Nano Banana 2 | `gemini-3.1-flash-image-preview`(-official) | `nano-banana-2` | `fal-ai/nano-banana-2`、`fal-ai/nano-banana-2/edit` |
 | Nano Banana 2 Lite | `gemini-3.1-flash-lite-image`(-ext) | `nano-banana-2-lite` | ❌ 无（已探测确认） |
 | Nano Banana Pro | `gemini-3-pro-image-preview`(-official) | `nano-banana-pro` | `fal-ai/nano-banana-pro`、`fal-ai/nano-banana-pro/edit` |

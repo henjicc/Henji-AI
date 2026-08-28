@@ -8,6 +8,7 @@ import {
   RELIGHT_MANUAL_TEMPLATE_VERSION,
   RELIGHT_SMART_TEMPLATE_VERSION,
 } from './relightPolicy';
+import { UPSCALE_MODEL_POLICY } from './upscalePolicy';
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
@@ -177,13 +178,30 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 50,
     source: IMAGE_SOURCE,
     node: { kind: 'standard-generation', editor: 'standard' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    implementation: {
+      status: 'implemented',
+      execution: {
+        kind: 'canvas-node',
+        nodeType: CANVAS_NODE_TYPES.upscaleGen,
+      },
+    },
+    availability: {
+      releaseStage: 'available',
+      defaultEnabled: true,
+      unavailableReasonKey: null,
+    },
+    modelPolicy: UPSCALE_MODEL_POLICY,
     promptPolicy: {
       hiddenTemplateVersion: null,
-      fixedSemanticParams: {},
-      visibleParameterKeys: ['scale', 'fidelity'],
+      fixedSemanticParams: {
+        maxOutputMegapixels: 48,
+        maxInputFileBytes: 20 * 1024 * 1024,
+      },
+      visibleParameterKeys: [
+        'falTopazUpscaleModel',
+        'falTopazUpscaleFactor',
+        'falTopazFaceEnhancement',
+      ],
     },
     outputPolicy: {
       resultKind: 'image',

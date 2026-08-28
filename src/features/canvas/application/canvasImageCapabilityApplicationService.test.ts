@@ -194,4 +194,30 @@ describe('画布图片能力应用服务', () => {
       }),
     ])
   })
+
+  it('高清能力创建受控 Topaz 节点并连接唯一源图', async () => {
+    const execute = createCanvasImageCapabilityExecutor()
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.upscale)
+    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.upscale' })
+    const upscaleNode = useCanvasStore.getState().nodes.find(
+      (node) => node.type === CANVAS_NODE_TYPES.upscaleGen,
+    )
+    expect(upscaleNode?.data).toMatchObject({
+      displayName: '高清放大',
+      capabilityId: 'image.upscale',
+      modelId: 'fal-ai-topaz-image-upscale',
+      params: {
+        falTopazUpscaleModel: 'High Fidelity V2',
+        falTopazUpscaleFactor: 2,
+        falTopazFaceEnhancement: false,
+      },
+    })
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: sourceNodeId,
+        target: upscaleNode?.id,
+        targetHandle: 'param:__image',
+      }),
+    ])
+  })
 })

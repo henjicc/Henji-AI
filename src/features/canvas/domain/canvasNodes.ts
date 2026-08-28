@@ -13,6 +13,7 @@ export const CANVAS_NODE_TYPES = {
   imageEdit: 'imageNode',
   panoramaGen: 'panoramaGenNode',
   relightGen: 'relightGenNode',
+  upscaleGen: 'upscaleGenNode',
   exportImage: 'exportImageNode',
   textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',
@@ -271,6 +272,12 @@ export interface PanoramaGenerationNodeData extends ImageEditNodeData {
   fixedSemanticParams: DynamicValueMap;
 }
 
+export interface UpscaleGenerationNodeData extends ImageEditNodeData {
+  capabilityId: 'image.upscale';
+  promptTemplateVersion: null;
+  fixedSemanticParams: DynamicValueMap;
+}
+
 export interface StoryboardFrameItem {
   id: string;
   imageUrl: string | null;
@@ -426,6 +433,7 @@ export type CanvasNodeData =
   | AssetGroupNodeData
   | ImageEditNodeData
   | PanoramaGenerationNodeData
+  | UpscaleGenerationNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
   | MediaGenNodeData
@@ -505,6 +513,12 @@ export function isPanoramaGenerationNode(
   node: CanvasNode | null | undefined
 ): node is Node<PanoramaGenerationNodeData, typeof CANVAS_NODE_TYPES.panoramaGen> {
   return node?.type === CANVAS_NODE_TYPES.panoramaGen;
+}
+
+export function isUpscaleGenerationNode(
+  node: CanvasNode | null | undefined
+): node is Node<UpscaleGenerationNodeData, typeof CANVAS_NODE_TYPES.upscaleGen> {
+  return node?.type === CANVAS_NODE_TYPES.upscaleGen;
 }
 
 export function isExportImageNode(
