@@ -27,6 +27,8 @@ describe('presentWindow', () => {
     expect(win.maximize).toHaveBeenCalledOnce()
     expect(win.showInactive).toHaveBeenCalledOnce()
     expect(win.show).not.toHaveBeenCalled()
+    expect(win.showInactive.mock.invocationCallOrder[0])
+      .toBeLessThan(win.maximize.mock.invocationCallOrder[0])
   })
 
   it('preserves the normal foreground presentation', () => {
@@ -41,5 +43,7 @@ describe('presentWindow', () => {
     expect(win.maximize).toHaveBeenCalledOnce()
     expect(win.show).toHaveBeenCalledOnce()
     expect(win.showInactive).not.toHaveBeenCalled()
+    expect(win.maximize.mock.invocationCallOrder[0])
+      .toBeLessThan(win.show.mock.invocationCallOrder[0])
   })
 })

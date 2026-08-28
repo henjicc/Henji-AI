@@ -16,10 +16,11 @@ export function presentWindow(
   win: PresentableWindow,
   mode: WindowPresentationMode,
 ): void {
-  win.maximize()
   if (mode === 'background') {
     win.showInactive()
+    win.maximize()
     return
   }
+  win.maximize()
   win.show()
 }
