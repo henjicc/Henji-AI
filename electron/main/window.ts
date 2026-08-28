@@ -8,7 +8,11 @@ import { closeLogWindow } from './windows/log-window'
 import { closeCameraStageRenderWindow } from './services/camera-stage-render'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 import { warmupMediaImportPipeline } from './services/media-import'
-import { presentWindow, type WindowPresentationMode } from './window-presentation'
+import {
+  presentWindow,
+  resolveBackgroundThrottling,
+  type WindowPresentationMode,
+} from './window-presentation'
 
 const logger = createMainLogger('main.window')
 let mainWindow: BrowserWindow | null = null
@@ -44,6 +48,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
       nodeIntegration: false,
       sandbox: true,
       webSecurity: true,
+      backgroundThrottling: resolveBackgroundThrottling(presentation),
     },
   })
   mainWindow = win
@@ -80,7 +85,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
 
   if (!headless && !win.isVisible()) {
     setTimeout(() => {
-      if (!win.isDestroyed() && !win.isVisible()) {
+      if (!win.isDestroyed() && !win.isVisible() && !win.isMinimized()) {
         presentWindow(win, presentation)
       }
     }, 3000)

@@ -9,10 +9,11 @@
 自定义标题栏、窗口控制、preload bridge、SQLite、safeStorage、`henji-media://` 媒体协议、自动更新、原生拖拽/剪贴板。
 
 桌面端调试、测试、助手验证和 Agent 收尾启动一律优先使用
-`npm run electron:dev -- --background`。该模式不是 headless：窗口会正常创建、显示、最大化并持续渲染，
-只是首次显示时使用非激活方式，不把用户正在操作的应用切到后台；之后点击痕迹AI窗口仍可正常取得焦点并交互。
+`npm run electron:dev -- --background`。该模式不是 headless：窗口会正常创建并加载，启动完成后直接最小化；
+同时仅为该窗口设置 `backgroundThrottling: false`，让最小化状态下的动画、定时器继续运行，并持续绘制和交换帧。
+用户从 Dock / 任务栏恢复痕迹AI后仍可正常取得焦点并交互。
 
-只有必须验证“应用启动时主动取得焦点”的行为，或用户明确要求前台弹出时，才使用普通
+只有必须验证“应用启动时主动取得焦点”、观察首屏，或用户明确要求前台弹出时，才使用普通
 `npm run electron:dev`。项目正式 `test:reality` Electron 自动化仍走其统一启动器，不得用开发命令替代。
 
 ## 自动化脚本

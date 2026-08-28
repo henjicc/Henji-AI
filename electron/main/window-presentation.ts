@@ -4,7 +4,7 @@ export const BACKGROUND_WINDOW_SWITCH = '--background'
 
 export type WindowPresentationMode = 'foreground' | 'background'
 
-type PresentableWindow = Pick<BrowserWindow, 'maximize' | 'show' | 'showInactive'>
+type PresentableWindow = Pick<BrowserWindow, 'maximize' | 'minimize' | 'show'>
 
 export function resolveWindowPresentationMode(
   argv: string[] = process.argv.slice(1),
@@ -12,13 +12,16 @@ export function resolveWindowPresentationMode(
   return argv.includes(BACKGROUND_WINDOW_SWITCH) ? 'background' : 'foreground'
 }
 
+export function resolveBackgroundThrottling(mode: WindowPresentationMode): boolean {
+  return mode !== 'background'
+}
+
 export function presentWindow(
   win: PresentableWindow,
   mode: WindowPresentationMode,
 ): void {
   if (mode === 'background') {
-    win.showInactive()
-    win.maximize()
+    win.minimize()
     return
   }
   win.maximize()
