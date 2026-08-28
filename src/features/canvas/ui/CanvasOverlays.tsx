@@ -3,7 +3,9 @@ import type { CanvasMediaKind } from '@/features/canvas/canvasUtils'
 import type { PreviewConnectionVisual } from '@/features/canvas/canvasUtils'
 import { NodeSelectionMenu } from '@/features/canvas/NodeSelectionMenu'
 import { CanvasEmptyHint } from '@/features/canvas/ui/CanvasEmptyHint'
-import { ImageViewerModal } from '@/components/mediaViewer/ImageViewerModal'
+import { CanvasImageViewerRouter } from '@/features/canvas/ui/specialInterfaces/CanvasImageViewerRouter'
+import { CanvasSpecialEditorHost } from '@/features/canvas/ui/specialInterfaces/CanvasSpecialEditorHost'
+import { useCanvasStore } from '@/stores/canvasStore'
 
 interface CanvasOverlaysProps {
   nodesCount: number
@@ -42,6 +44,8 @@ export function CanvasOverlays({
   onCloseImageViewer,
   onNavigateImageViewer,
 }: CanvasOverlaysProps) {
+  const imageViewerMode = useCanvasStore((state) => state.imageViewer.mode)
+
   return (
     <>
       {nodesCount === 0 && <CanvasEmptyHint title={emptyTitle} subtitle={emptySubtitle} />}
@@ -79,7 +83,8 @@ export function CanvasOverlays({
         />
       )}
 
-      <ImageViewerModal
+      <CanvasImageViewerRouter
+        mode={imageViewerMode}
         open={imageViewerOpen}
         imageUrl={imageViewerCurrentUrl}
         imageList={imageViewerList}
@@ -87,6 +92,7 @@ export function CanvasOverlays({
         onClose={onCloseImageViewer}
         onNavigate={onNavigateImageViewer}
       />
+      <CanvasSpecialEditorHost />
     </>
   )
 }

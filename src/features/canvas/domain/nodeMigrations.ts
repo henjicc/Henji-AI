@@ -7,8 +7,10 @@ import {
 
 import {
   CANVAS_NODE_TYPES,
+  CANVAS_IMAGE_RESULT_KINDS,
   type CanvasNode,
   type CanvasNodeType,
+  type ExportImageNodeResultKind,
 } from './canvasNodes';
 import { getDefaultModelId } from './defaultModels';
 import { getCanvasNodeDefinition } from './nodeRegistry';
@@ -23,6 +25,34 @@ const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> =
   [CANVAS_NODE_TYPES.audioGen]: 'AI 音频',
   [CANVAS_NODE_TYPES.textAnnotation]: '文本注释',
 };
+
+const LEGACY_EXPORT_RESULT_KINDS = new Set<ExportImageNodeResultKind>([
+  'generic',
+  'storyboardGenOutput',
+  'storyboardSplitExport',
+  'storyboardFrameEdit',
+]);
+const CANVAS_IMAGE_RESULT_KIND_SET = new Set<ExportImageNodeResultKind>(
+  CANVAS_IMAGE_RESULT_KINDS
+);
+
+/**
+ * 结果节点语义是可持久化契约：旧来源值继续可读，缺失或损坏值降级为普通图片。
+ * 图片组和图层栈只在此层保留语义，不在本迁移中创建对应业务节点。
+ */
+export function migrateExportImageResultKind(data: DynamicValueMap): void {
+  const resultKind = data.resultKind;
+  if (
+    typeof resultKind === 'string'
+    && (
+      LEGACY_EXPORT_RESULT_KINDS.has(resultKind as ExportImageNodeResultKind)
+      || CANVAS_IMAGE_RESULT_KIND_SET.has(resultKind as ExportImageNodeResultKind)
+    )
+  ) {
+    return;
+  }
+  data.resultKind = 'image';
+}
 
 /** 只迁移精确匹配的旧默认标题，用户自行编辑过的标题保持原样。 */
 export function migrateLegacyGenerationDisplayName(

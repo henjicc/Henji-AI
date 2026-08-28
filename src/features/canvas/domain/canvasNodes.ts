@@ -111,11 +111,48 @@ export interface UploadImageNodeData extends NodeImageData {
   sourceFileName?: string | null;
 }
 
-export type ExportImageNodeResultKind =
+export const CANVAS_IMAGE_RESULT_KINDS = [
+  'image',
+  'panorama',
+  'image-group',
+  'layer-stack',
+] as const;
+
+/** 可持久化的图片结果语义；图片组与图层栈在 4.x 任务前只作契约占位。 */
+export type CanvasImageResultKind = (typeof CANVAS_IMAGE_RESULT_KINDS)[number];
+
+/** 旧结果来源值仍保留，用于分镜等节点的默认标题兼容。 */
+export type LegacyExportImageNodeResultKind =
   | 'generic'
   | 'storyboardGenOutput'
   | 'storyboardSplitExport'
   | 'storyboardFrameEdit';
+
+export type ExportImageNodeResultKind =
+  | CanvasImageResultKind
+  | LegacyExportImageNodeResultKind;
+
+export const CANVAS_IMAGE_VIEWER_MODES = ['image', 'panorama'] as const;
+export type CanvasImageViewerMode = (typeof CANVAS_IMAGE_VIEWER_MODES)[number];
+
+export interface CanvasImageViewerRequest {
+  imageUrl: string;
+  imageList?: string[];
+  mode?: CanvasImageViewerMode;
+  /** 有来源节点时用于节点删除后关闭查看器；旧调用可不传。 */
+  sourceNodeId?: string;
+}
+
+export function resolveCanvasImageResultKind(value: unknown): CanvasImageResultKind {
+  if (value === 'panorama' || value === 'image-group' || value === 'layer-stack') {
+    return value;
+  }
+  return 'image';
+}
+
+export function resolveCanvasImageViewerMode(value: unknown): CanvasImageViewerMode {
+  return value === 'panorama' ? 'panorama' : 'image';
+}
 
 export interface ExportImageNodeData extends NodeImageData {
   resultKind?: ExportImageNodeResultKind;

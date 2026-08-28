@@ -27,12 +27,15 @@ import {
   type CanvasNode,
   type CanvasNodeData,
   type CanvasNodeType,
+  type CanvasImageViewerMode,
+  type CanvasImageViewerRequest,
   type ExportImageNodeResultKind,
   type NodeToolType,
   type StoryboardExportOptions,
   type StoryboardFrameItem,
   type UploadPlaceholderResolution,
   isStoryboardSplitNode,
+  resolveCanvasImageViewerMode,
 } from '@/features/canvas/domain/canvasNodes';
 import {
   getCanvasNodeDefinition,
@@ -43,6 +46,7 @@ import { DEFAULT_NODE_DISPLAY_NAME, EXPORT_RESULT_DISPLAY_NAME } from '@/feature
 import {
   migrateGenerationNodeData,
   migrateGenerationPromptData,
+  migrateExportImageResultKind,
   migrateLegacyGenerationDisplayName,
   migrateLegacyTargetHandle,
   resetTransientNodeRuntimeState,
@@ -91,6 +95,31 @@ export interface CanvasHistoryState {
   future: CanvasHistorySnapshot[];
 }
 
+export interface CanvasImageViewerState {
+  isOpen: boolean;
+  currentImageUrl: string | null;
+  imageList: string[];
+  currentIndex: number;
+  mode: CanvasImageViewerMode;
+  sourceNodeId: string | null;
+}
+
+export interface OpenCanvasImageViewer {
+  (imageUrl: string, imageList?: string[]): void;
+  (request: CanvasImageViewerRequest): void;
+}
+
+function createClosedCanvasImageViewerState(): CanvasImageViewerState {
+  return {
+    isOpen: false,
+    currentImageUrl: null,
+    imageList: [],
+    currentIndex: 0,
+    mode: 'image',
+    sourceNodeId: null,
+  };
+}
+
 export interface CanvasHistoryGroupOptions {
   historyGroup?: string;
   /** 惰性数据迁移/稳定 ID 修复使用：更新节点但不制造用户可见的撤销步骤。 */
@@ -110,12 +139,7 @@ interface CanvasState {
   activeHistoryGroup: string | null;
   currentViewport: Viewport;
   canvasViewportSize: { width: number; height: number };
-  imageViewer: {
-    isOpen: boolean;
-    currentImageUrl: string | null;
-    imageList: string[];
-    currentIndex: number;
-  };
+  imageViewer: CanvasImageViewerState;
 
   onNodesChange: (changes: NodeChange<CanvasNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<CanvasEdge>[]) => void;
@@ -201,7 +225,7 @@ interface CanvasState {
   closeToolDialog: () => void;
   setViewportState: (viewport: Viewport) => void;
   setCanvasViewportSize: (size: { width: number; height: number }) => void;
-  openImageViewer: (imageUrl: string, imageList?: string[]) => void;
+  openImageViewer: OpenCanvasImageViewer;
   closeImageViewer: () => void;
   navigateImageViewer: (direction: 'prev' | 'next') => void;
 
@@ -315,6 +339,13 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || node.type === CANVAS_NODE_TYPES.textProcessing
       ) {
         migrateGenerationPromptData(mergedData as DynamicValueMap);
+      }
+
+      if (node.type === CANVAS_NODE_TYPES.exportImage) {
+        if (!Object.prototype.hasOwnProperty.call(node.data, 'resultKind')) {
+          (mergedData as DynamicValueMap).resultKind = 'image';
+        }
+        migrateExportImageResultKind(mergedData as DynamicValueMap);
       }
 
       if ('aspectRatio' in mergedData && !mergedData.aspectRatio) {
@@ -688,12 +719,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   activeHistoryGroup: null,
   currentViewport: { x: 0, y: 0, zoom: 1 },
   canvasViewportSize: { width: 0, height: 0 },
-  imageViewer: {
-    isOpen: false,
-    currentImageUrl: null,
-    imageList: [],
-    currentIndex: 0,
-  },
+  imageViewer: createClosedCanvasImageViewerState(),
 
   onNodesChange: (changes) => {
     set((state) => {
@@ -988,6 +1014,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       history: normalizeHistory(history),
       dragHistorySnapshot: null,
       activeHistoryGroup: null,
+      imageViewer: createClosedCanvasImageViewerState(),
     });
     useCanvasGenerationProgressStore.getState().clearAllProgress();
     useCanvasTextStreamStore.getState().clearAllPreviews();
@@ -1018,8 +1045,17 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set({ canvasViewportSize: size });
   },
 
-  openImageViewer: (imageUrl, imageList = []) => {
-    const list = imageList.length > 0 ? imageList : [imageUrl];
+  openImageViewer: ((requestOrUrl: CanvasImageViewerRequest | string, legacyImageList: string[] = []) => {
+    const request = typeof requestOrUrl === 'string'
+      ? { imageUrl: requestOrUrl, imageList: legacyImageList, mode: 'image' as const }
+      : requestOrUrl;
+    const imageUrl = request.imageUrl.trim();
+    if (!imageUrl) return;
+    const normalizedList = (request.imageList ?? [])
+      .map((item) => item.trim())
+      .filter((item, index, list) => item.length > 0 && list.indexOf(item) === index);
+    const list = normalizedList.length > 0 ? normalizedList : [imageUrl];
+    if (!list.includes(imageUrl)) list.unshift(imageUrl);
     const index = list.indexOf(imageUrl);
     set({
       imageViewer: {
@@ -1027,18 +1063,18 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         currentImageUrl: imageUrl,
         imageList: list,
         currentIndex: index >= 0 ? index : 0,
+        mode: resolveCanvasImageViewerMode(request.mode),
+        sourceNodeId:
+          typeof request.sourceNodeId === 'string' && request.sourceNodeId.trim().length > 0
+            ? request.sourceNodeId.trim()
+            : null,
       },
     });
-  },
+  }) as OpenCanvasImageViewer,
 
   closeImageViewer: () => {
     set({
-      imageViewer: {
-        isOpen: false,
-        currentImageUrl: null,
-        imageList: [],
-        currentIndex: 0,
-      },
+      imageViewer: createClosedCanvasImageViewerState(),
     });
   },
 
@@ -1780,6 +1816,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
           state.activeToolDialog && deleteSet.has(state.activeToolDialog.nodeId)
             ? null
             : state.activeToolDialog,
+        imageViewer:
+          state.imageViewer.sourceNodeId && deleteSet.has(state.imageViewer.sourceNodeId)
+            ? createClosedCanvasImageViewerState()
+            : state.imageViewer,
         history: {
           past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
           future: [],
@@ -2093,7 +2133,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
 
   clearCanvas: () => {
     set((state) => {
-      if (state.nodes.length === 0 && state.edges.length === 0) {
+      if (state.nodes.length === 0 && state.edges.length === 0 && !state.imageViewer.isOpen) {
         return {};
       }
 
@@ -2102,8 +2142,11 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
         edges: [],
         selectedNodeId: null,
         activeToolDialog: null,
+        imageViewer: createClosedCanvasImageViewerState(),
         history: {
-          past: pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges)),
+          past: state.nodes.length > 0 || state.edges.length > 0
+            ? pushSnapshot(state.history.past, createSnapshot(state.nodes, state.edges))
+            : state.history.past,
           future: [],
         },
         dragHistorySnapshot: null,

@@ -3,9 +3,34 @@ import { describe, expect, it } from 'vitest';
 import { CANVAS_NODE_TYPES } from './canvasNodes';
 import {
   migrateGenerationPromptData,
+  migrateExportImageResultKind,
   migrateLegacyGenerationDisplayName,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
+
+describe('migrateExportImageResultKind', () => {
+  it('保留全景与合法旧来源语义', () => {
+    const panorama: DynamicValueMap = { resultKind: 'panorama' };
+    const storyboard: DynamicValueMap = { resultKind: 'storyboardGenOutput' };
+
+    migrateExportImageResultKind(panorama);
+    migrateExportImageResultKind(storyboard);
+
+    expect(panorama.resultKind).toBe('panorama');
+    expect(storyboard.resultKind).toBe('storyboardGenOutput');
+  });
+
+  it('缺失或非法结果语义降级为普通图片', () => {
+    const missing: DynamicValueMap = {};
+    const invalid: DynamicValueMap = { resultKind: 'future-corrupted-kind' };
+
+    migrateExportImageResultKind(missing);
+    migrateExportImageResultKind(invalid);
+
+    expect(missing.resultKind).toBe('image');
+    expect(invalid.resultKind).toBe('image');
+  });
+});
 
 describe('migrateLegacyGenerationDisplayName', () => {
   it('迁移精确匹配的旧默认名，并保留用户自定义标题', () => {
