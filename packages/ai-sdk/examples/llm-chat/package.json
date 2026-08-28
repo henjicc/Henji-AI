@@ -5,13 +5,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dry-run": "npm run build && node dist/index.js --dry-run",
+    "check:bundle": "node scripts/check-bundle.mjs",
     "start": "npm run build && node dist/index.js --live"
   },
   "dependencies": {
-    "@henjicc/ai-sdk": "0.1.1"
+    "@henjicc/ai-sdk": "0.2.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "esbuild": "^0.25.9",
     "typescript": "^5.9.2"
   }
 }

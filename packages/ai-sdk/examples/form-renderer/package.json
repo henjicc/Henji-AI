@@ -7,7 +7,7 @@
     "start": "npm run build && node dist/cli.js"
   },
   "dependencies": {
-    "@henjicc/ai-sdk": "0.1.1"
+    "@henjicc/ai-sdk": "0.2.4"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

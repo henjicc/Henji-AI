@@ -25,13 +25,13 @@
 ## SDK 仓内消费验证面
 
 这些目录是可独立安装、构建的真实示例，但与 SDK 同属 `Henji-AI` 仓库，不重复算外部仓库。
-它们目前都声明 `0.1.1`，且没有锁文件；发布后应精确升级并验证，避免 README 与公开包长期漂移。
+它们均精确声明 `0.2.4`，且没有锁文件；发布后应随 SDK 精确升级并验证，避免 README 与公开包长期漂移。
 
 | 路径 | 用途 / 入口 | 当前版本 | 宿主责任 | 验证命令 | 最后核对 |
 |---|---|---|---|---|---|
-| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/minimal-node` | 包根生成客户端；KIE dry-run/live 闸门 | `0.1.1`（manifest，无 lock） | Node transport、环境凭据、文件媒体读取、日志 | 在目录内 `npm install && npm run dry-run` | 2026-08-28 |
-| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/llm-chat` | 包根 OpenAI-compatible SSE 对话 | `0.1.1`（manifest，无 lock） | Node transport、环境凭据、流事件与取消 | 在目录内 `npm install && npm run dry-run` | 2026-08-28 |
-| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/form-renderer` | 包根 catalog/参数契约与最小 renderer | `0.1.1`（manifest，无 lock） | 零网络 RuntimeContext；仅目录与 renderer | 在目录内 `npm install && npm run build && npm start` | 2026-08-28 |
+| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/minimal-node` | `generation` + `runtime` 按需入口；完整 generation catalog、KIE dry-run/live 闸门，不带 LLM/BigModel | `0.2.4`（manifest，无 lock） | Node transport、环境凭据、文件媒体读取、日志 | 在目录内 `npm install && npm run dry-run` | 2026-08-28 |
+| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/llm-chat` | `llm/streaming` 按需入口；OpenAI-compatible SSE 对话，不带 generation、BigModel preset/models/pricing、Groq 或 LLM modules（保留通用身份解析所需 profiles） | `0.2.4`（manifest，无 lock） | Node transport、环境凭据、流事件与取消 | 在目录内 `npm install && npm run dry-run && npm run check:bundle` | 2026-08-28 |
+| `/Users/henji/Documents/VibeCode/Henji-AI/packages/ai-sdk/examples/form-renderer` | `generation` + `catalog` + `runtime` 按需入口；完整 generation catalog/参数契约与最小 renderer，不带 LLM/BigModel | `0.2.4`（manifest，无 lock） | 零网络 RuntimeContext；仅目录与 renderer | 在目录内 `npm install && npm run build && npm start` | 2026-08-28 |
 
 ## 非消费者证据
 

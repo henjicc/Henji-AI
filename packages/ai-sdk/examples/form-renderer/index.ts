@@ -2,11 +2,12 @@ import {
   evaluateRuntimeCondition,
   flattenRuntimeParams,
   getRuntimeMediaInputContract,
-  type AIClient,
-  type JsonObject,
-  type JsonValue,
-  type RuntimeParamDef,
-} from '@henjicc/ai-sdk'
+} from '@henjicc/ai-sdk/catalog'
+import type { GenerationClient } from '@henjicc/ai-sdk/generation'
+
+type JsonValue = null | boolean | number | string | JsonValue[] | JsonObject
+type JsonObject = { [key: string]: JsonValue }
+type RuntimeParamDef = ReturnType<GenerationClient['catalog']['getParams']>[number]
 
 export type MinimalControlKind =
   | 'text'
@@ -39,7 +40,7 @@ export interface MinimalRenderedForm {
  * 宿主必须按 param id 注入自定义组件。
  */
 export function renderMinimalModelForm(
-  client: AIClient,
+  client: GenerationClient,
   modelId: string,
   values: JsonObject = {}
 ): MinimalRenderedForm {

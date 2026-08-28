@@ -2,12 +2,14 @@ import { readFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
 
 import {
-  createAIClient,
-  type Logger,
-  type MediaReader,
-  type RuntimeContext,
-  type Transport,
-} from '@henjicc/ai-sdk'
+  createGenerationClient,
+} from '@henjicc/ai-sdk/generation'
+import type {
+  Logger,
+  MediaReader,
+  RuntimeContext,
+  Transport,
+} from '@henjicc/ai-sdk/runtime'
 
 const MODEL_ID = 'kie-z-image'
 const CREATE_TASK_PATH = '/api/v1/jobs/createTask'
@@ -73,7 +75,7 @@ async function main(): Promise<void> {
     media,
     logger,
   }
-  const client = createAIClient({ runtime })
+  const client = createGenerationClient({ runtime })
   const params = {
     prompt: 'A tiny blue paper boat on a calm white background, studio light',
     kieZImageAspectRatio: '1:1',

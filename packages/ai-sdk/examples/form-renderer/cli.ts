@@ -1,4 +1,5 @@
-import { createAIClient, type RuntimeContext } from '@henjicc/ai-sdk'
+import { createGenerationClient } from '@henjicc/ai-sdk/generation'
+import type { RuntimeContext } from '@henjicc/ai-sdk/runtime'
 
 import { renderMinimalModelForm } from './index.js'
 
@@ -16,7 +17,7 @@ const modelIds = [
   'ppio-minimax-speech',
 ] as const
 
-const client = createAIClient({ runtime })
+const client = createGenerationClient({ runtime })
 try {
   const forms = modelIds.map((modelId) => renderMinimalModelForm(client, modelId))
   console.log(JSON.stringify(forms.map((form) => ({

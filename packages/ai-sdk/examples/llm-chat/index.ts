@@ -1,9 +1,11 @@
 import {
-  createAIClient,
+  resolveLlmTaskId,
+  runLlmChatStream,
+  type LlmChatRequestDto,
   type MediaReader,
   type RuntimeContext,
   type Transport,
-} from '@henjicc/ai-sdk'
+} from '@henjicc/ai-sdk/llm/streaming'
 
 const live = process.argv.includes('--live')
 const providerId = process.env.LLM_PROVIDER_ID?.trim() || 'deepseek'
@@ -54,45 +56,42 @@ async function main(): Promise<void> {
     },
     media: unusedMedia,
   }
-  const client = createAIClient({ runtime })
   const prompt = '只回复两个英文单词：SDK OK'
+  const request: LlmChatRequestDto = {
+    requestId: live ? `example-llm-${Date.now()}` : 'example-llm-dry-run',
+    providerId,
+    modelId,
+    adapter: providerId === 'deepseek' ? 'deepseek' : 'openai',
+    baseUrl,
+    messages: [{ role: 'user', content: prompt }],
+    capabilities: { reasoning: providerId === 'deepseek' },
+    reasoning: providerId === 'deepseek'
+      ? { enabled: false, effort: 'high' }
+      : undefined,
+    policy: { max_tokens: 16 },
+  }
+  const taskId = resolveLlmTaskId(request)
   let output = ''
 
-  try {
-    const outcome = await client.chat.stream({
-      requestId: live ? `example-llm-${Date.now()}` : 'example-llm-dry-run',
-      providerId,
-      modelId,
-      adapter: providerId === 'deepseek' ? 'deepseek' : 'openai',
-      baseUrl,
-      messages: [{ role: 'user', content: prompt }],
-      capabilities: { reasoning: providerId === 'deepseek' },
-      reasoning: providerId === 'deepseek'
-        ? { enabled: false, effort: 'high' }
-        : undefined,
-      policy: { max_tokens: 16 },
-    }, (event) => {
-      if (event.type === 'Token') output += event.data
-    })
+  const outcome = await runLlmChatStream(request, taskId, (event) => {
+    if (event.type === 'Token') output += event.data
+  }, runtime)
 
-    if (!output.trim()) {
-      throw new Error('LLM completed without a text token')
-    }
-
-    const conservativeCny = ((outcome.inputChars * 3) + (outcome.outputChars * 9)) / 1_000_000
-    console.log(JSON.stringify({
-      mode: live ? 'live' : 'dry-run',
-      networkCalls: live ? 1 : 0,
-      interceptedRequests: live ? undefined : dryTransport.calls,
-      providerId,
-      modelId,
-      output,
-      elapsedMs: outcome.elapsedMs,
-      conservativeCnyEstimate: Number(conservativeCny.toFixed(6)),
-    }))
-  } finally {
-    client.dispose()
+  if (!output.trim()) {
+    throw new Error('LLM completed without a text token')
   }
+
+  const conservativeCny = ((outcome.inputChars * 3) + (outcome.outputChars * 9)) / 1_000_000
+  console.log(JSON.stringify({
+    mode: live ? 'live' : 'dry-run',
+    networkCalls: live ? 1 : 0,
+    interceptedRequests: live ? undefined : dryTransport.calls,
+    providerId,
+    modelId,
+    output,
+    elapsedMs: outcome.elapsedMs,
+    conservativeCnyEstimate: Number(conservativeCny.toFixed(6)),
+  }))
 }
 
 void main().catch((error: unknown) => {
