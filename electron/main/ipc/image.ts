@@ -1,6 +1,7 @@
 import {
   compressImageSource,
   cropImageSource,
+  embedPanoramaImageMetadata,
   embedStoryboardImageMetadata,
   generateImageThumbnailBytes,
   loadImage,
@@ -10,6 +11,7 @@ import {
   prepareNodeImageBinary,
   prepareNodeImageSource,
   readImageInfo,
+  readPanoramaImageMetadata,
   readStoryboardImageMetadata,
   saveImageSourceToAppDebugDir,
   saveImageSourceToDirectory,
@@ -107,6 +109,12 @@ export function registerImageIpc(): void {
   })
   registerIpcHandler<MetadataPayload, string>('image:embedStoryboardImageMetadata', parseMetadataPayload, ({ source, metadata }) => {
     return embedStoryboardImageMetadata(source, metadata)
+  })
+  registerIpcHandler<string, Awaited<ReturnType<typeof readPanoramaImageMetadata>>>('image:readPanoramaImageMetadata', (input) => parseStringField(input, 'source'), (source) => {
+    return readPanoramaImageMetadata(source)
+  })
+  registerIpcHandler<string, Awaited<ReturnType<typeof embedPanoramaImageMetadata>>>('image:embedPanoramaImageMetadata', (input) => parseStringField(input, 'source'), (source) => {
+    return embedPanoramaImageMetadata(source)
   })
   registerIpcHandler<string, string>('image:loadImage', (input) => parseStringField(input, 'filePath'), (filePath) => loadImage(filePath))
   registerIpcHandler<string, string>('image:persistImageSource', (input) => parseStringField(input, 'source'), (source) => persistImageSource(source))

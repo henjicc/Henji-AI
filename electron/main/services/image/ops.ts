@@ -15,13 +15,20 @@ import {
   writeBytesToPath,
 } from './path-utils'
 import { encodePngWithStoryboardMetadata, readStoryboardMetadataFromPng } from './png-metadata'
+import {
+  embedPanoramaMetadataInImage,
+  readPanoramaMetadataFromImage,
+} from './panorama-metadata'
 import { isLocalSource, normalizeLocalSource, resolveSourceBytes } from './source'
+import { createMainLogger } from '../logging'
 import type {
   CropImageSourcePayloadDto,
   ImageInfoResultDto,
   MergeStoryboardImagesPayloadDto,
   MergeStoryboardImagesResultDto,
   PrepareNodeImageSourceResultDto,
+  PanoramaMetadataEmbedResultDto,
+  PanoramaMetadataReadResultDto,
   StoryboardImageMetadataDto,
 } from './types'
 
@@ -29,6 +36,7 @@ import type {
 const DEFAULT_BACKGROUND_COLOR = '#0f172a'
 const DEFAULT_TEXT_COLOR = '#f8fafc'
 /* eslint-enable no-restricted-syntax */
+const logger = createMainLogger('main.image')
 
 export async function loadImage(filePath: string): Promise<string> {
   const localPath = normalizeLocalSource(filePath)
@@ -91,6 +99,59 @@ export async function embedStoryboardImageMetadata(source: string, metadata: Sto
   const { bytes } = await resolveSourceBytes(source)
   const encoded = await encodePngWithStoryboardMetadata(bytes, metadata)
   return persistImageBytes(encoded, 'png')
+}
+
+export async function readPanoramaImageMetadata(source: string): Promise<PanoramaMetadataReadResultDto> {
+  const startedAt = performance.now()
+  logger.info('读取全景元数据开始', {
+    event: 'image.panorama_metadata.read.start',
+  })
+  try {
+    const { bytes, extension } = await resolveSourceBytes(source)
+    const result = await readPanoramaMetadataFromImage(bytes, extension)
+    logger.info('读取全景元数据完成', {
+      event: 'image.panorama_metadata.read.completed',
+      context: { durationMs: Math.round(performance.now() - startedAt), format: result.format, status: result.status },
+    })
+    return result
+  } catch (error) {
+    logger.error('读取全景元数据失败', {
+      event: 'image.panorama_metadata.read.failed',
+      context: { durationMs: Math.round(performance.now() - startedAt) },
+      error,
+    })
+    throw error
+  }
+}
+
+export async function embedPanoramaImageMetadata(source: string): Promise<PanoramaMetadataEmbedResultDto> {
+  const startedAt = performance.now()
+  logger.info('写入全景元数据开始', {
+    event: 'image.panorama_metadata.embed.start',
+  })
+  try {
+    const { bytes, extension } = await resolveSourceBytes(source)
+    const result = await embedPanoramaMetadataInImage(bytes, extension)
+    const outputExtension = result.format === 'jpeg' ? 'jpg' : result.format
+    const imagePath = persistImageBytes(result.bytes, outputExtension)
+    logger.info('写入全景元数据完成', {
+      event: 'image.panorama_metadata.embed.completed',
+      context: {
+        durationMs: Math.round(performance.now() - startedAt),
+        format: result.format,
+        width: result.metadata.fullPanoWidthPixels,
+        height: result.metadata.fullPanoHeightPixels,
+      },
+    })
+    return { imagePath, format: result.format, metadata: result.metadata }
+  } catch (error) {
+    logger.error('写入全景元数据失败', {
+      event: 'image.panorama_metadata.embed.failed',
+      context: { durationMs: Math.round(performance.now() - startedAt) },
+      error,
+    })
+    throw error
+  }
 }
 
 export async function saveImageSourceToDownloads(source: string, suggestedFileName?: string): Promise<string> {

@@ -202,7 +202,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await waitForPageHeader(page)
   }
 
-  async function setupCanvasPanoramaViewer(page) {
+  async function seedAndOpenCanvasPanoramaProject(page) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
       await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
@@ -213,32 +213,104 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await projectCard.waitFor({ state: 'visible', timeout: 12000 })
     const projectId = await projectCard.getAttribute('data-project-id')
     if (!projectId) throw new Error('全景查看器场景找不到专用画布工程')
-    const panoramaSource = `data:image/svg+xml,${encodeURIComponent([
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800">',
-      '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="rgb(24,84,156)"/><stop offset="1" stop-color="rgb(250,180,100)"/></linearGradient></defs>',
-      '<rect width="1600" height="800" fill="url(#sky)"/>',
-      '<circle cx="800" cy="250" r="92" fill="rgb(255,230,170)"/>',
-      '<path d="M0 510 L180 340 L360 500 L560 300 L800 500 L1040 320 L1280 500 L1450 350 L1600 510 V800 H0 Z" fill="rgb(32,75,72)"/>',
-      '<path d="M0 650 Q400 570 800 650 T1600 650 V800 H0 Z" fill="rgb(24,48,58)"/>',
-      '<g fill="rgb(236,245,255)" font-family="sans-serif" font-size="38" font-weight="700">',
-      '<text x="80" y="110">WEST</text><text x="470" y="110">NORTH</text><text x="900" y="110">EAST</text><text x="1320" y="110">SOUTH</text>',
-      '</g></svg>',
-    ].join(''))}`
-    const node = {
-      id: '__ui_panorama_result', type: 'exportImageNode', position: { x: 300, y: 220 },
+    const panoramaSource = await page.evaluate(async () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = 1600
+      canvas.height = 800
+      const context = canvas.getContext('2d')
+      if (!context) throw new Error('全景场景无法创建本地 PNG')
+      const sky = context.createLinearGradient(0, 0, 0, 800)
+      sky.addColorStop(0, 'rgb(24,84,156)')
+      sky.addColorStop(1, 'rgb(250,180,100)')
+      context.fillStyle = sky
+      context.fillRect(0, 0, 1600, 800)
+      context.fillStyle = 'rgb(32,75,72)'
+      context.fillRect(0, 500, 1600, 300)
+      context.fillStyle = 'rgb(24,48,58)'
+      context.fillRect(0, 650, 1600, 150)
+      context.fillStyle = 'rgb(236,245,255)'
+      context.font = '700 38px sans-serif'
+      ;[['WEST', 80], ['NORTH', 470], ['EAST', 900], ['SOUTH', 1320]].forEach(([label, x]) => {
+        context.fillText(String(label), Number(x), 110)
+      })
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((value) => value ? resolve(value) : reject(new Error('PNG 编码失败')), 'image/png')
+      })
+      return await window.henjiNative.image.persistImageBinary(
+        new Uint8Array(await blob.arrayBuffer()),
+        'png'
+      )
+    })
+    const nodes = [{
+      id: '__ui_panorama_source', type: 'uploadNode', position: { x: 100, y: 80 },
+      width: 420, height: 210, measured: { width: 420, height: 210 }, style: { width: 420, height: 210 },
+      data: {
+        displayName: '本地全景参考图', imageUrl: panoramaSource,
+        previewImageUrl: panoramaSource, aspectRatio: '2:1', isGenerating: false,
+      },
+    }, {
+      id: '__ui_panorama_result', type: 'exportImageNode', hidden: true, position: { x: 1400, y: 900 },
       width: 520, height: 260, measured: { width: 520, height: 260 }, style: { width: 520, height: 260 },
       data: {
         displayName: '720°全景', resultKind: 'panorama', imageUrl: panoramaSource,
         previewImageUrl: panoramaSource, aspectRatio: '2:1', isGenerating: false,
       },
-    }
+    }]
     await page.evaluate(async (payload) => {
       await window.henjiNative.db.execute(
-        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
-        [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 130, zoom: 0.9 }), payload.projectId]
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
+        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 100, y: 80, zoom: 0.65 }), JSON.stringify({ past: [], future: [] }), payload.projectId]
       )
-    }, { projectId, node })
+    }, { projectId, nodes })
     await projectCard.click()
+    await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').waitFor({ state: 'visible', timeout: 12000 })
+    return { panoramaSource, projectId }
+  }
+
+  async function setupCanvasPanoramaToolbar(page) {
+    const fixture = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    const panoramaAction = page.getByRole('button', { name: /^720°全景$/i }).filter({ visible: true }).first()
+    await panoramaAction.waitFor({ state: 'visible', timeout: 8000 })
+    await panoramaAction.click()
+    const generatedShell = page.locator('[data-generation-node-id][data-generation-node-model-id]').filter({ hasText: /720°全景/ }).last()
+    await generatedShell.waitFor({ state: 'visible', timeout: 12000 })
+    const generatedNode = generatedShell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
+    const generatedNodeId = await generatedNode.getAttribute('data-id')
+    if (!generatedNodeId || generatedNodeId === '__ui_panorama_source') {
+      throw new Error('全景工具条未创建独立相邻节点')
+    }
+    await generatedNode.waitFor({ state: 'visible', timeout: 8000 })
+    if (!(await generatedNode.evaluate((element) => element.classList.contains('selected')))) {
+      throw new Error('全景工具条创建后未选中新节点')
+    }
+    if (await page.locator('.react-flow__edge').count() < 1) {
+      throw new Error('全景工具条未创建来源连线')
+    }
+    await settlePage(page, 800)
+    return { ...fixture, generatedNodeId }
+  }
+
+  async function setupCanvasPanoramaViewer(page) {
+    const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
+    await page.waitForTimeout(900)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    await page.evaluate(async (payload) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [payload.projectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]').map((node) => (
+        node.id === '__ui_panorama_result' ? { ...node, hidden: false } : node
+      ))
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET nodes_json = ?, viewport_json = ? WHERE id = ?',
+        [JSON.stringify(nodes), JSON.stringify({ x: -920, y: -510, zoom: 0.82 }), payload.projectId]
+      )
+    }, { projectId })
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     const resultNode = page.locator('.react-flow__node[data-id="__ui_panorama_result"]')
     await resultNode.waitFor({ state: 'visible', timeout: 12000 })
     await resultNode.getByRole('button', { name: /进入全景预览|Open panorama viewer/i }).click()
@@ -260,6 +332,108 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await viewer.getByRole('button', { name: /^(球面|Sphere)$/i }).click()
     await sphere.waitFor({ state: 'visible', timeout: 8000 })
     await viewer.getByTitle(/^(重置视图|Reset View)$/i).click()
+
+    await viewer.getByTitle(/^(关闭|Close)$/i).click()
+    await viewer.waitFor({ state: 'hidden', timeout: 8000 })
+    const downloadDir = await page.evaluate(async () => {
+      const root = await window.henjiNative.paths.tempDir()
+      const target = await window.henjiNative.paths.join(root, `henji-panorama-ui-${Date.now()}`)
+      await window.henjiNative.fs.mkdir(target, { recursive: true })
+      localStorage.setItem('enable_quick_download', 'true')
+      localStorage.setItem('quick_download_path', target)
+      return target
+    })
+    await resultNode.click()
+    await page.getByRole('button', { name: /^(下载|Download)$/i }).filter({ visible: true }).first().click()
+    let downloadedPath = null
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      downloadedPath = await page.evaluate(async (targetDir) => {
+        const entries = await window.henjiNative.fs.readDir(targetDir)
+        const file = entries.find((entry) => !entry.isDirectory && /\.png$/i.test(entry.name))
+        return file ? await window.henjiNative.paths.join(targetDir, file.name) : null
+      }, downloadDir)
+      if (downloadedPath) break
+      await page.waitForTimeout(200)
+    }
+    if (!downloadedPath) throw new Error('全景快速下载未落盘')
+    const downloadedMetadata = await page.evaluate(
+      async (source) => await window.henjiNative.image.readPanoramaImageMetadata(source),
+      downloadedPath
+    )
+    if (downloadedMetadata.status !== 'valid' || downloadedMetadata.metadata?.projectionType !== 'equirectangular') {
+      throw new Error(`全景下载文件 GPano 往返失败：${JSON.stringify(downloadedMetadata)}`)
+    }
+
+    const packageRoundTrip = await page.evaluate(async ({ targetDir, mediaPath }) => {
+      const packagePath = await window.henjiNative.paths.join(targetDir, 'panorama-roundtrip.henjiproj')
+      const packageMediaPath = 'media/1-panorama.png'
+      const manifest = {
+        formatVersion: 1,
+        app: 'henji-ai',
+        nodes: [{
+          id: '__ui_panorama_package_result',
+          type: 'exportImageNode',
+          position: { x: 0, y: 0 },
+          data: { imageUrl: packageMediaPath, resultKind: 'panorama', aspectRatio: '2:1' },
+        }],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      }
+      await window.henjiNative.projectPackage.exportProjectPackage(
+        JSON.stringify(manifest),
+        [{ srcPath: mediaPath, packagePath: packageMediaPath }],
+        packagePath
+      )
+      const imported = await window.henjiNative.projectPackage.importProjectPackage(packagePath)
+      const importedManifest = JSON.parse(imported.manifestJson)
+      const importedMediaPath = imported.pathMap[packageMediaPath]
+      const importedMetadata = importedMediaPath
+        ? await window.henjiNative.image.readPanoramaImageMetadata(importedMediaPath)
+        : null
+      return {
+        resultKind: importedManifest.nodes?.[0]?.data?.resultKind,
+        importedMediaPath,
+        metadataStatus: importedMetadata?.status,
+      }
+    }, { targetDir: downloadDir, mediaPath: downloadedPath })
+    if (packageRoundTrip.resultKind !== 'panorama'
+      || !packageRoundTrip.importedMediaPath
+      || packageRoundTrip.metadataStatus !== 'valid') {
+      throw new Error(`全景项目包导出导入往返失败：${JSON.stringify(packageRoundTrip)}`)
+    }
+
+    await page.waitForTimeout(900)
+    const persisted = await page.evaluate(async (payload) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [payload.projectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      return {
+        hasGeneratedNode: nodes.some((node) => node.id === payload.generatedNodeId && node.type === 'panoramaGenNode'),
+        resultKind: nodes.find((node) => node.id === '__ui_panorama_result')?.data?.resultKind,
+        edgeCount: edges.length,
+      }
+    }, { generatedNodeId, projectId })
+    if (!persisted.hasGeneratedNode || persisted.resultKind !== 'panorama' || persisted.edgeCount < 1) {
+      throw new Error(`全景项目保存语义或连线丢失：${JSON.stringify(persisted)}`)
+    }
+
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 600)
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const reopenedResult = page.locator('.react-flow__node[data-id="__ui_panorama_result"]')
+    await reopenedResult.waitFor({ state: 'visible', timeout: 12000 })
+    await page.locator(`.react-flow__node[data-id="${generatedNodeId}"]`).waitFor({ state: 'visible', timeout: 12000 })
+    await reopenedResult.getByRole('button', { name: /进入全景预览|Open panorama viewer/i }).click()
+    await viewer.waitFor({ state: 'visible', timeout: 12000 })
+    await viewer.locator('[data-panorama-surface="sphere"] canvas').waitFor({ state: 'visible', timeout: 12000 })
+    await page.evaluate(async (targetDir) => {
+      localStorage.removeItem('enable_quick_download')
+      localStorage.removeItem('quick_download_path')
+      await window.henjiNative.fs.remove(targetDir, { recursive: true })
+    }, downloadDir)
     await settlePage(page, 900)
   }
 
@@ -829,6 +1003,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
+    {
+      id: 'canvas-panorama-toolbar',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-720°全景工具条与相邻节点',
+      setup: setupCanvasPanoramaToolbar,
+    },
     {
       id: 'canvas-panorama-viewer',
       surface: '画布',

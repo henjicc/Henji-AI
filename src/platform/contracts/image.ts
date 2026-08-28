@@ -39,6 +39,30 @@ export interface StoryboardImageMetadata {
   frameNotes: string[]
 }
 
+export interface PanoramaImageMetadata {
+  projectionType: 'equirectangular'
+  usePanoramaViewer: true
+  fullPanoWidthPixels: number
+  fullPanoHeightPixels: number
+  croppedAreaImageWidthPixels: number
+  croppedAreaImageHeightPixels: number
+  croppedAreaLeftPixels: number
+  croppedAreaTopPixels: number
+}
+
+export interface PanoramaMetadataReadResult {
+  format: 'png' | 'jpeg' | 'webp' | 'unsupported'
+  status: 'valid' | 'absent' | 'invalid' | 'unsupported'
+  metadata: PanoramaImageMetadata | null
+  reason?: string
+}
+
+export interface PanoramaMetadataEmbedResult {
+  imagePath: string
+  format: 'png' | 'jpeg' | 'webp'
+  metadata: PanoramaImageMetadata
+}
+
 export interface PrepareNodeImageSourceResult {
   imagePath: string
   previewImagePath: string
@@ -95,9 +119,7 @@ export interface ImageDiffusionFallbackCapabilities {
   reason?: string
 }
 
-/**
- * 16 个图像处理原生命令（1.1 已核对，不含剪贴板相关 2 个命令，见 contracts/clipboard.ts）。
- */
+/** 图像处理原生命令；剪贴板能力单独归属 contracts/clipboard.ts。 */
 export interface ImagePlatform {
   splitImage(imageBase64: string, rows: number, cols: number, lineThickness: number): Promise<string[]>
   splitImageSource(source: string, rows: number, cols: number, lineThickness: number): Promise<string[]>
@@ -111,6 +133,8 @@ export interface ImagePlatform {
   mergeStoryboardImages(payload: MergeStoryboardImagesPayload): Promise<MergeStoryboardImagesResult>
   readStoryboardImageMetadata(source: string): Promise<StoryboardImageMetadata | null>
   embedStoryboardImageMetadata(source: string, metadata: StoryboardImageMetadata): Promise<string>
+  readPanoramaImageMetadata(source: string): Promise<PanoramaMetadataReadResult>
+  embedPanoramaImageMetadata(source: string): Promise<PanoramaMetadataEmbedResult>
   loadImage(filePath: string): Promise<string>
   persistImageSource(source: string): Promise<string>
   persistImageBinary(bytes: Uint8Array, extension: string): Promise<string>

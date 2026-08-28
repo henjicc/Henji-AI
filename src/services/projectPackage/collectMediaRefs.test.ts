@@ -51,4 +51,38 @@ describe('结构化提示词项目包媒体收集', () => {
       filePath: 'D:\\unpacked\\reference.png',
     })])
   })
+
+  it('全景结果打包和恢复后保留 resultKind 与本地媒体引用', () => {
+    const mediaPath = '/managed/panorama.png'
+    const node = {
+      id: 'panorama-result',
+      type: CANVAS_NODE_TYPES.exportImage,
+      position: { x: 0, y: 0 },
+      data: {
+        imageUrl: mediaPath,
+        previewImageUrl: mediaPath,
+        aspectRatio: '2:1',
+        resultKind: 'panorama',
+      },
+    } as CanvasNode
+
+    const collected = collectAndRewriteMedia([node])
+
+    expect(collected.mediaFiles).toEqual([{
+      srcPath: mediaPath,
+      packagePath: 'media/1-panorama.png',
+    }])
+    expect(collected.nodes[0].data.resultKind).toBe('panorama')
+    expect(collected.nodes[0].data.imageUrl).toBe('media/1-panorama.png')
+    expect(collected.nodes[0].data.previewImageUrl).toBe('media/1-panorama.png')
+
+    const restored = rewritePackagePathsToLocal(collected.nodes, {
+      'media/1-panorama.png': '/unpacked/panorama.png',
+    })
+    expect(restored[0].data).toMatchObject({
+      resultKind: 'panorama',
+      imageUrl: '/unpacked/panorama.png',
+      previewImageUrl: '/unpacked/panorama.png',
+    })
+  })
 })

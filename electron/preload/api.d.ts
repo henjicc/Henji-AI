@@ -605,6 +605,30 @@ export interface HenjiImageStoryboardImageMetadata {
   frameNotes: string[]
 }
 
+export interface HenjiImagePanoramaMetadata {
+  projectionType: 'equirectangular'
+  usePanoramaViewer: true
+  fullPanoWidthPixels: number
+  fullPanoHeightPixels: number
+  croppedAreaImageWidthPixels: number
+  croppedAreaImageHeightPixels: number
+  croppedAreaLeftPixels: number
+  croppedAreaTopPixels: number
+}
+
+export interface HenjiImagePanoramaMetadataReadResult {
+  format: 'png' | 'jpeg' | 'webp' | 'unsupported'
+  status: 'valid' | 'absent' | 'invalid' | 'unsupported'
+  metadata: HenjiImagePanoramaMetadata | null
+  reason?: string
+}
+
+export interface HenjiImagePanoramaMetadataEmbedResult {
+  imagePath: string
+  format: 'png' | 'jpeg' | 'webp'
+  metadata: HenjiImagePanoramaMetadata
+}
+
 export interface HenjiImagePrepareNodeImageSourceResult {
   imagePath: string
   previewImagePath: string
@@ -670,6 +694,8 @@ export interface HenjiImageApi {
   mergeStoryboardImages(payload: HenjiImageMergeStoryboardImagesPayload): Promise<HenjiImageMergeStoryboardImagesResult>
   readStoryboardImageMetadata(source: string): Promise<HenjiImageStoryboardImageMetadata | null>
   embedStoryboardImageMetadata(source: string, metadata: HenjiImageStoryboardImageMetadata): Promise<string>
+  readPanoramaImageMetadata(source: string): Promise<HenjiImagePanoramaMetadataReadResult>
+  embedPanoramaImageMetadata(source: string): Promise<HenjiImagePanoramaMetadataEmbedResult>
   loadImage(filePath: string): Promise<string>
   persistImageSource(source: string): Promise<string>
   persistImageBinary(bytes: Uint8Array, extension: string): Promise<string>

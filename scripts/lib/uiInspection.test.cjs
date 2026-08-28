@@ -110,7 +110,10 @@ test('GPT Image 2 遮罩在生成页与画布都有定向视觉场景', () => {
 })
 
 test('全景结果有独立的真实 Electron 球面交互场景', () => {
+  const toolbarScene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-panorama-toolbar')
   const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-panorama-viewer')
+  assert.ok(toolbarScene)
+  assert.equal(toolbarScene.writesUserData, true)
   assert.ok(scene)
   assert.equal(scene.writesUserData, true)
 })

@@ -24,6 +24,8 @@ export function createElectronImage(): ImagePlatform {
     mergeStoryboardImages: (payload) => getNativeImage().mergeStoryboardImages(payload),
     readStoryboardImageMetadata: (source) => getNativeImage().readStoryboardImageMetadata(source),
     embedStoryboardImageMetadata: (source, metadata) => getNativeImage().embedStoryboardImageMetadata(source, metadata),
+    readPanoramaImageMetadata: (source) => getNativeImage().readPanoramaImageMetadata(source),
+    embedPanoramaImageMetadata: (source) => getNativeImage().embedPanoramaImageMetadata(source),
     loadImage: (filePath) => getNativeImage().loadImage(filePath),
     persistImageSource: (source) => getNativeImage().persistImageSource(source),
     persistImageBinary: (bytes, extension) => getNativeImage().persistImageBinary(bytes, extension),

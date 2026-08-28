@@ -7,6 +7,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   saveImageSourceToDirectory: vi.fn(),
+  embedPanoramaImageMetadata: vi.fn(),
   quickDownloadMediaFile: vi.fn(),
   resolveLocalAssetPath: vi.fn((source: string) => source),
 }))
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/commands/image', () => ({
   saveImageSourceToDirectory: mocks.saveImageSourceToDirectory,
   saveImageSourceToPath: vi.fn(),
+  embedPanoramaImageMetadata: mocks.embedPanoramaImageMetadata,
 }))
 vi.mock('@/features/assets/services/assetCollectionService', () => ({
   resolveLocalAssetPath: mocks.resolveLocalAssetPath,
@@ -69,5 +71,43 @@ describe('canvasMediaDownload', () => {
       savedNodeIds: ['image', 'video'],
       failedNodeIds: ['audio'],
     })
+  })
+
+  it('全景结果下载前写入 GPano，普通图片保持原链路', async () => {
+    mocks.embedPanoramaImageMetadata.mockResolvedValue({
+      imagePath: 'D:/managed/panorama-with-xmp.jpg',
+      format: 'jpeg',
+      metadata: {},
+    })
+    mocks.saveImageSourceToDirectory.mockResolvedValue('D:/downloads/node-panorama.jpg')
+    const targets = resolveNodeDownloadTargets([
+      node('panorama', CANVAS_NODE_TYPES.exportImage, {
+        imageUrl: 'D:/result.jpg',
+        resultKind: 'panorama',
+      }),
+      node('ordinary', CANVAS_NODE_TYPES.exportImage, {
+        imageUrl: 'D:/ordinary.png',
+        resultKind: 'image',
+      }),
+    ])
+
+    expect(targets.map((target) => target.panorama)).toEqual([true, false])
+    const summary = await downloadCanvasMediaTargetsToDirectory(targets, 'D:/downloads', 'preset')
+
+    expect(summary.failedNodeIds).toEqual([])
+    expect(mocks.embedPanoramaImageMetadata).toHaveBeenCalledTimes(1)
+    expect(mocks.embedPanoramaImageMetadata).toHaveBeenCalledWith('D:/result.jpg')
+    expect(mocks.saveImageSourceToDirectory).toHaveBeenNthCalledWith(
+      1,
+      'D:/managed/panorama-with-xmp.jpg',
+      'D:/downloads',
+      'node-panorama',
+    )
+    expect(mocks.saveImageSourceToDirectory).toHaveBeenNthCalledWith(
+      2,
+      'D:/ordinary.png',
+      'D:/downloads',
+      'node-ordinary',
+    )
   })
 })

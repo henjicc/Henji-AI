@@ -1,5 +1,14 @@
 import { createLogger } from '@/core/logging'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime';
+import type {
+  PanoramaMetadataEmbedResult,
+  PanoramaMetadataReadResult,
+} from '@/platform/contracts/image';
+export type {
+  PanoramaImageMetadata,
+  PanoramaMetadataEmbedResult,
+  PanoramaMetadataReadResult,
+} from '@/platform/contracts/image';
 import {
   appLocalDataDir,
   dirname,
@@ -24,6 +33,7 @@ import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 const FILE_URL_PREFIX = 'file://';
 const LOCAL_PATH_PATTERN = /^(?:[A-Za-z]:[\\/]|\\\\|\/)/;
 const storyboardMetadataStore = new Map<string, StoryboardImageMetadata>();
+const panoramaMetadataStore = new Map<string, PanoramaMetadataReadResult>();
 const IMAGE_CMD_LOG_PREFIX = '[ImageCmd]';
 const IMAGE_CMD_LOG_ENABLED = false;
 
@@ -717,6 +727,62 @@ export async function embedStoryboardImageMetadata(
     frameNotes: Array.isArray(metadata.frameNotes) ? metadata.frameNotes : [],
   });
   return source;
+}
+
+export async function readPanoramaImageMetadata(
+  source: string
+): Promise<PanoramaMetadataReadResult> {
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.readPanoramaImageMetadata(source);
+    } catch (error) {
+      throwNativeImageFailure('readPanoramaImageMetadata', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
+    }
+  }
+  return panoramaMetadataStore.get(normalizeSourceKey(source)) ?? {
+    format: 'unsupported',
+    status: 'unsupported',
+    metadata: null,
+  };
+}
+
+export async function embedPanoramaImageMetadata(
+  source: string
+): Promise<PanoramaMetadataEmbedResult> {
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.embedPanoramaImageMetadata(source);
+    } catch (error) {
+      throwNativeImageFailure('embedPanoramaImageMetadata', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
+    }
+  }
+  const image = await loadImageElement(source);
+  if (image.naturalWidth !== image.naturalHeight * 2) {
+    throw new Error(`Panorama image must use an exact 2:1 ratio, received ${image.naturalWidth}×${image.naturalHeight}`);
+  }
+  const metadata = {
+    projectionType: 'equirectangular' as const,
+    usePanoramaViewer: true as const,
+    fullPanoWidthPixels: image.naturalWidth,
+    fullPanoHeightPixels: image.naturalHeight,
+    croppedAreaImageWidthPixels: image.naturalWidth,
+    croppedAreaImageHeightPixels: image.naturalHeight,
+    croppedAreaLeftPixels: 0,
+    croppedAreaTopPixels: 0,
+  };
+  const result = { imagePath: source, format: 'png' as const, metadata };
+  panoramaMetadataStore.set(normalizeSourceKey(source), {
+    format: result.format,
+    status: 'valid',
+    metadata,
+  });
+  return result;
 }
 
 function renderPreviewDataUrl(

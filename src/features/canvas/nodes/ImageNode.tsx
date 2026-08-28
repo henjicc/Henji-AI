@@ -180,7 +180,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
             type="button"
             variant="glass"
             size="sm"
-            className="nodrag nowheel absolute bottom-3 left-3 gap-1.5 !h-7 !rounded-full !px-2.5"
+            className="nodrag nowheel absolute bottom-3 left-3 gap-1.5 !h-7 !rounded-lg !px-2.5"
             title={t('viewer.panorama.open')}
             aria-label={t('viewer.panorama.open')}
             onClick={(event) => {

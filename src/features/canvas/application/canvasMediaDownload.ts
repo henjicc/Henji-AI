@@ -1,8 +1,15 @@
 import { createLogger } from '@/core/logging'
-import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
+import {
+  resolveCanvasImageResultKind,
+  type CanvasNode,
+} from '@/features/canvas/domain/canvasNodes'
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry'
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService'
-import { saveImageSourceToDirectory, saveImageSourceToPath } from '@/commands/image'
+import {
+  embedPanoramaImageMetadata,
+  saveImageSourceToDirectory,
+  saveImageSourceToPath,
+} from '@/commands/image'
 import { saveDialog } from '@/platform/desktopApi'
 import {
   downloadMediaFile,
@@ -20,6 +27,7 @@ export interface CanvasMediaDownloadTarget {
   mediaType: 'image' | 'video' | 'audio'
   source: string
   suggestedFileName: string
+  panorama: boolean
 }
 
 export interface CanvasMediaDownloadSummary {
@@ -46,7 +54,13 @@ export function resolveNodeDownloadTarget(node: CanvasNode): CanvasMediaDownload
       : null
     const source = output?.kind === 'image' ? output.url : previewSource
     return source
-      ? { nodeId: node.id, mediaType: 'image', source, suggestedFileName: `node-${node.id}.png` }
+      ? {
+          nodeId: node.id,
+          mediaType: 'image',
+          source,
+          suggestedFileName: `node-${node.id}.png`,
+          panorama: resolveCanvasImageResultKind(node.data.resultKind) === 'panorama',
+        }
       : null
   }
 
@@ -67,6 +81,7 @@ export function resolveNodeDownloadTarget(node: CanvasNode): CanvasMediaDownload
     mediaType: output.kind,
     source,
     suggestedFileName: `node-${node.id}.${extension}`,
+    panorama: false,
   }
 }
 
@@ -87,6 +102,19 @@ async function resolveMediaFileSource(target: CanvasMediaDownloadTarget): Promis
   return saved.fullPath
 }
 
+async function prepareImageDownloadTarget(
+  target: CanvasMediaDownloadTarget,
+): Promise<CanvasMediaDownloadTarget> {
+  if (target.mediaType !== 'image' || !target.panorama) return target
+  const embedded = await embedPanoramaImageMetadata(target.source)
+  const extension = embedded.format === 'jpeg' ? 'jpg' : embedded.format
+  return {
+    ...target,
+    source: embedded.imagePath,
+    suggestedFileName: target.suggestedFileName.replace(/\.[^.]+$/, `.${extension}`),
+  }
+}
+
 export async function saveCanvasMediaTargetAs(
   target: CanvasMediaDownloadTarget
 ): Promise<string | null> {
@@ -100,9 +128,10 @@ export async function saveCanvasMediaTargetAs(
   try {
     let savedPath: string | null
     if (target.mediaType === 'image') {
-      const selectedPath = await saveDialog({ defaultPath: target.suggestedFileName })
+      const preparedTarget = await prepareImageDownloadTarget(target)
+      const selectedPath = await saveDialog({ defaultPath: preparedTarget.suggestedFileName })
       savedPath = selectedPath
-        ? await saveImageSourceToPath(target.source, selectedPath)
+        ? await saveImageSourceToPath(preparedTarget.source, selectedPath)
         : null
     } else {
       const sourcePath = await resolveMediaFileSource(target)
@@ -135,10 +164,11 @@ async function saveTargetToDirectory(
   targetDir: string
 ): Promise<void> {
   if (target.mediaType === 'image') {
+    const preparedTarget = await prepareImageDownloadTarget(target)
     await saveImageSourceToDirectory(
-      target.source,
+      preparedTarget.source,
       targetDir,
-      target.suggestedFileName.replace(/\.png$/i, '')
+      preparedTarget.suggestedFileName.replace(/\.[^.]+$/i, '')
     )
     return
   }

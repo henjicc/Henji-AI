@@ -37,6 +37,30 @@ export interface StoryboardImageMetadataDto {
   frameNotes: string[]
 }
 
+export interface PanoramaImageMetadataDto {
+  projectionType: 'equirectangular'
+  usePanoramaViewer: true
+  fullPanoWidthPixels: number
+  fullPanoHeightPixels: number
+  croppedAreaImageWidthPixels: number
+  croppedAreaImageHeightPixels: number
+  croppedAreaLeftPixels: number
+  croppedAreaTopPixels: number
+}
+
+export interface PanoramaMetadataReadResultDto {
+  format: 'png' | 'jpeg' | 'webp' | 'unsupported'
+  status: 'valid' | 'absent' | 'invalid' | 'unsupported'
+  metadata: PanoramaImageMetadataDto | null
+  reason?: string
+}
+
+export interface PanoramaMetadataEmbedResultDto {
+  imagePath: string
+  format: 'png' | 'jpeg' | 'webp'
+  metadata: PanoramaImageMetadataDto
+}
+
 export interface PrepareNodeImageSourceResultDto {
   imagePath: string
   previewImagePath: string

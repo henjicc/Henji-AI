@@ -46,6 +46,7 @@ function createFallbackDownloadTarget(
     mediaType: 'image',
     source: imageUrl,
     suggestedFileName: '720-panorama.png',
+    panorama: true,
   };
 }
 
