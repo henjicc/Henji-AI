@@ -10,6 +10,7 @@ import {
   migrateLegacyGenerationDisplayName,
   migratePanoramaGenerationData,
   migrateRelightGenerationData,
+  migrateMultiAngleGenerationData,
   migrateUpscaleGenerationData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
@@ -165,6 +166,38 @@ describe('migrateUpscaleGenerationData', () => {
       },
     });
     expect((data.params as DynamicValueMap).unsupported).toBeUndefined();
+  });
+});
+
+describe('migrateMultiAngleGenerationData', () => {
+  it('保存重开后迁移旧角度字段、恢复隐藏模型并限制单张源图', () => {
+    const data: DynamicValueMap = {
+      capabilityId: 'broken',
+      prompt: '不应保留',
+      modelId: 'wrong-model',
+      params: { prompt: '不应发送' },
+      mediaInputs: { image: ['first.png', 'second.png'] },
+      multiAngleConfig: {
+        views: [{ id: 'legacy', label: '旧角度', azimuth: 40, elevation: 0.2 }],
+      },
+    };
+
+    migrateMultiAngleGenerationData(data);
+
+    expect(data).toMatchObject({
+      capabilityId: 'image.multi-angle',
+      prompt: '',
+      params: {},
+      modelId: 'fal-qwen-image-edit-2509-multiple-angles',
+      mediaInputs: { image: ['first.png'] },
+      multiAngleConfig: {
+        version: 1,
+        controlProfile: 'continuous-v1',
+        concurrency: 2,
+        views: [{ viewId: 'legacy', yawControlDeg: 40, verticalControl: 0.2 }],
+      },
+      multiAngleResultPlaceholderId: null,
+    });
   });
 });
 

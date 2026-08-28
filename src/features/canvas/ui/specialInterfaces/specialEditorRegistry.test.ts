@@ -7,14 +7,15 @@ import {
 
 describe('specialEditorRegistry', () => {
   it('注册懒加载实现并阻止重复注册', () => {
-    const unregister = registerCanvasSpecialEditor('multiAngle', async () => ({
+    expect(getCanvasSpecialEditorDefinition('multiAngle')).toMatchObject({ key: 'multiAngle' });
+    const unregister = registerCanvasSpecialEditor('mask', async () => ({
       default: () => null,
     }));
-    expect(getCanvasSpecialEditorDefinition('multiAngle')).toMatchObject({ key: 'multiAngle' });
-    expect(() => registerCanvasSpecialEditor('multiAngle', async () => ({
+    expect(getCanvasSpecialEditorDefinition('mask')).toMatchObject({ key: 'mask' });
+    expect(() => registerCanvasSpecialEditor('mask', async () => ({
       default: () => null,
     }))).toThrow('重复注册');
     unregister();
-    expect(getCanvasSpecialEditorDefinition('multiAngle')).toBeNull();
+    expect(getCanvasSpecialEditorDefinition('mask')).toBeNull();
   });
 });

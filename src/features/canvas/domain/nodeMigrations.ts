@@ -34,6 +34,12 @@ import {
   prepareRelightRoute,
 } from '../capabilities/relightPolicy';
 import { UPSCALE_MODEL_POLICY } from '../capabilities/upscalePolicy';
+import {
+  MULTI_ANGLE_CONTINUOUS_MODEL_ID,
+  MULTI_ANGLE_DISCRETE_MODEL_ID,
+  createDefaultMultiAngleConfig,
+  normalizeMultiAngleConfig,
+} from '../capabilities/multiAnglePolicy';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
@@ -392,4 +398,35 @@ export function migrateUpscaleGenerationData(data: DynamicValueMap): void {
     UPSCALE_MODEL_POLICY,
     supportedStoredParams,
   ).params;
+}
+
+/** 恢复多角度节点的版本化 profile、隐藏执行模型与单图输入。 */
+export function migrateMultiAngleGenerationData(data: DynamicValueMap): void {
+  data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.multiAngle;
+  data.prompt = '';
+  data.params = {};
+  let config;
+  try {
+    config = normalizeMultiAngleConfig(data.multiAngleConfig);
+  } catch {
+    config = createDefaultMultiAngleConfig();
+    data.multiAngleBatch = null;
+  }
+  data.multiAngleConfig = config;
+  data.modelId = config.controlProfile === 'continuous-v1'
+    ? MULTI_ANGLE_CONTINUOUS_MODEL_ID
+    : MULTI_ANGLE_DISCRETE_MODEL_ID;
+
+  const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
+    ? data.mediaInputs as DynamicValueMap
+    : {};
+  const inlineImages = Array.isArray(mediaInputs.image)
+    ? mediaInputs.image.filter(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+    ).slice(0, 1)
+    : [];
+  data.mediaInputs = { ...mediaInputs, image: inlineImages };
+  if (typeof data.multiAngleResultPlaceholderId !== 'string') {
+    data.multiAngleResultPlaceholderId = null;
+  }
 }

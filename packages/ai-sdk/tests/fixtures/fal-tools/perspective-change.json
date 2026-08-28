@@ -1,0 +1,14 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/image-apps-v2/perspective",
+  "input": { "image_url": "uxp://source", "target_perspective": "back" },
+  "submit": {
+    "request_id": "perspective-change-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/image-apps-v2/perspective/requests/perspective-change-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/image-apps-v2/perspective/requests/perspective-change-fixture"
+  },
+  "result": { "images": [{ "url": "https://fixture.invalid/perspective-change.png" }] }
+}

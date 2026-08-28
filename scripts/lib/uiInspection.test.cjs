@@ -124,6 +124,12 @@ test('图片打光有独立的节点、编辑、保存重开场景', () => {
   assert.equal(scene.writesUserData, true)
 })
 
+test('多角度有独立的节点、草稿取消、相机编辑与保存重开场景', () => {
+  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-multi-angle-editor')
+  assert.ok(scene)
+  assert.equal(scene.writesUserData, true)
+})
+
 test('高清放大有独立的工具条、节点与保存重开场景', () => {
   const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-upscale-node')
   assert.ok(scene)

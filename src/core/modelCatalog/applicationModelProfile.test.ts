@@ -15,6 +15,7 @@ import {
   createHenjiAIClient,
   getHenjiGenerationModel,
   HENJI_GENERATION_MODELS,
+  HENJI_GENERATION_EXECUTION_PACKS,
   HENJI_GENERATION_PROVIDER_IDS,
   HENJI_GENERATION_PROVIDER_PACKS,
   henjiModelCapabilityDiscovery,
@@ -78,9 +79,12 @@ describe('Henji-AI 显式模型选择', () => {
     const client = createHenjiAIClient(createRuntime(fetch))
 
     try {
-      expect(client.catalog.list()).toHaveLength(101)
+      expect(HENJI_GENERATION_EXECUTION_PACKS).toHaveLength(9)
+      expect(client.catalog.list()).toHaveLength(103)
       expect(new Set(client.providers.list())).toEqual(new Set(HENJI_GENERATION_PROVIDER_IDS))
       expect(client.catalog.get('fal-flux-pro-erase')).toBeUndefined()
+      expect(client.catalog.get('fal-qwen-image-edit-2509-multiple-angles')).toBeDefined()
+      expect(client.catalog.get('fal-perspective-change')).toBeDefined()
 
       client.cancel({ namespace: 'generation', taskId: 'application-profile-cancel' })
       expect(isCancelled('generation', 'application-profile-cancel')).toBe(true)

@@ -361,6 +361,97 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasMultiAngleEditor(page) {
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    await page.waitForTimeout(350)
+    let action = page.getByRole('button', { name: /^(多角度|Multi-angle)$/i }).filter({ visible: true }).first()
+    if (!(await action.count())) {
+      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
+      if (!(await moreButton.count())) throw new Error('多角度工具入口不可见')
+      await moreButton.click()
+      action = page.getByRole('button', { name: /^(多角度|Multi-angle)$/i }).filter({ visible: true }).first()
+    }
+    await action.waitFor({ state: 'visible', timeout: 8000 })
+    await action.click()
+
+    const shell = page.locator('[data-multi-angle-node-id][data-multi-angle-profile="continuous-v1"]').last()
+    await shell.waitFor({ state: 'visible', timeout: 12000 })
+    const nodeId = await shell.getAttribute('data-multi-angle-node-id')
+    if (!nodeId) throw new Error('多角度工具条未创建专用节点')
+    if (await page.locator('.react-flow__edge').count() < 1) throw new Error('多角度工具条未创建源图连线')
+    if (await shell.locator('[contenteditable="true"], textarea').count()) {
+      throw new Error('多角度节点不应显示伪提示词编辑器')
+    }
+
+    await shell.getByRole('button', { name: /^(调整角度)$/i }).click()
+    const editor = page.getByRole('dialog', { name: /^(多角度视图)$/i })
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    await editor.locator('[data-multi-angle-orbit="demand"] canvas').waitFor({ state: 'visible', timeout: 12000 })
+    await editor.getByText(/不代表真实相机焦距/).waitFor({ state: 'visible', timeout: 8000 })
+    if (await editor.locator('textarea, [contenteditable="true"]').count()) throw new Error('角度编辑器不应显示提示词')
+
+    // 修改后取消，验证草稿不会污染节点。
+    await editor.getByRole('slider', { name: /水平控制/ }).fill('20')
+    await editor.getByRole('button', { name: /^(取消)$/i }).click()
+    await editor.getByRole('button', { name: /^(放弃更改)$/i }).click()
+    await editor.waitFor({ state: 'hidden', timeout: 12000 })
+    if (await page.locator('[data-multi-angle-orbit="demand"] canvas').count()) {
+      throw new Error('关闭多角度编辑器后 Three 画布未卸载')
+    }
+
+    await shell.getByRole('button', { name: /^(调整角度)$/i }).click()
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    await editor.getByRole('button', { name: /完整方位/ }).click()
+    await editor.getByRole('button', { name: /^顶视$/ }).click()
+    await editor.getByRole('button', { name: /^(应用设置)$/i }).click()
+    await editor.waitFor({ state: 'hidden', timeout: 12000 })
+    await page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)
+      .waitFor({ state: 'visible', timeout: 8000 })
+
+    await page.waitForTimeout(900)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const node = nodes.find((candidate) => candidate.id === targetNodeId)
+      return {
+        nodeType: node?.type,
+        capabilityId: node?.data?.capabilityId,
+        modelId: node?.data?.modelId,
+        profile: node?.data?.multiAngleConfig?.controlProfile,
+        viewCount: node?.data?.multiAngleConfig?.views?.length,
+        hasTopDown: node?.data?.multiAngleConfig?.views?.some((view) => view.preset === 'top_down'),
+        hasPrompt: Boolean(node?.data?.prompt),
+        hasSourceEdge: edges.some((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId),
+      }
+    }, { targetProjectId: projectId, targetNodeId: nodeId })
+    if (persisted.nodeType !== 'multiAngleGenNode'
+      || persisted.capabilityId !== 'image.multi-angle'
+      || persisted.modelId !== 'fal-perspective-change'
+      || persisted.profile !== 'discrete-v1'
+      || persisted.viewCount !== 5
+      || !persisted.hasTopDown
+      || persisted.hasPrompt
+      || !persisted.hasSourceEdge) {
+      throw new Error(`多角度保存语义或连线丢失：${JSON.stringify(persisted)}`)
+    }
+
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const reopened = page.locator(`[data-multi-angle-node-id="${nodeId}"][data-multi-angle-profile="discrete-v1"]`)
+    await reopened.waitFor({ state: 'visible', timeout: 12000 })
+    await reopened.getByRole('button', { name: /^(调整角度)$/i }).click()
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    await editor.getByRole('button', { name: /^顶视$/ }).waitFor({ state: 'visible', timeout: 8000 })
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasUpscaleNode(page) {
     const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
@@ -1208,6 +1299,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-图片打光节点与可视化编辑器',
       setup: setupCanvasRelightEditor,
+    },
+    {
+      id: 'canvas-multi-angle-editor',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-多角度节点与相机编辑器',
+      setup: setupCanvasMultiAngleEditor,
     },
     {
       id: 'canvas-upscale-node',

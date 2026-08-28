@@ -15,7 +15,7 @@
 [Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、
 [Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)、
 [Qwen Image Edit 2509 多角度](Qwen-Image-Edit-2509-多角度/Qwen-Image-Edit-2509-多角度_Fal.md)、
-[透视变换](透视变换/透视变换_Fal.md)。后两项已完成静态契约，待任务 4.4 实现和真实质量验证。
+[透视变换](透视变换/透视变换_Fal.md)。五项均已实现按需 SDK 入口；后两项由多角度画布能力受控使用，真实质量仍待付费验证。
 
 ## 一、目录结构约定
 
@@ -158,11 +158,12 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Flux Pro Erase | `fal-ai/flux-pro/v1/erase` | `tool-models/fal/flux-pro-erase` |
 | Bria Eraser | `fal-ai/bria/eraser` | `tool-models/fal/bria-eraser` |
 | Finegrain Eraser (Mask) | `fal-ai/finegrain-eraser/mask` | `tool-models/fal/finegrain-eraser` |
-| Qwen Image Edit 2509 多角度 | `fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles` | 待任务 4.4 实现 |
-| 透视变换 | `fal-ai/image-apps-v2/perspective` | 待任务 4.4 实现 |
+| Qwen Image Edit 2509 多角度 | `fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles` | `@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2509-multiple-angles` |
+| 透视变换 | `fal-ai/image-apps-v2/perspective` | `@henjicc/ai-sdk/tool-models/fal/perspective-change` |
 
 前三项消除工具的聚合入口为 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools`。它是 3 个模型的技术分发集合，不是新的执行内核；
-统一能力画像将它们派生为 `operation=image-edit`、`feature=erase`。后两项多角度工具尚未实现 SDK 入口，任务 4.4 应按能力单独按需分发，不能误挂到消除工具画像。
+统一能力画像将它们派生为 `operation=image-edit`、`feature=erase`。后两项多角度工具的聚合入口为
+`@henjicc/ai-sdk/tool-packs/fal-multi-angle-tools`，与消除 pack 分开分发，不误挂到消除工具画像。
 
 | 模型 | APIMart | KIE | Fal |
 |---|---|---|---|

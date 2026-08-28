@@ -165,7 +165,8 @@
       "local": "Local Processing"
     },
     "unavailable": {
-      "planned": "This feature is being prepared"
+      "planned": "This feature is being prepared",
+      "experimental": "Experimental results may vary"
     },
     "items": {
       "panorama": {
@@ -225,6 +226,7 @@
       "aiImageGeneration": "Image Generation",
       "panoramaGeneration": "720° Panorama",
       "relightGeneration": "Image Relighting",
+      "multiAngleGeneration": "Multi-angle Views",
       "upscaleGeneration": "Upscale",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
@@ -313,6 +315,10 @@
     "relightGeneration": {
       "apiKeyRequired": "Configure the provider API key required by the current relighting mode",
       "resultTitle": "Relighting Result"
+    },
+    "multiAngleGeneration": {
+      "apiKeyRequired": "Configure your Fal API key first",
+      "resultTitle": "Multi-angle Views"
     },
     "upscaleGeneration": {
       "promptRequired": "Upscaling does not require a prompt",

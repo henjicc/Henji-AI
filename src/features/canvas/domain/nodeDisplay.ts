@@ -11,6 +11,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.imageEdit]: '图片生成',
   [CANVAS_NODE_TYPES.panoramaGen]: '720°全景',
   [CANVAS_NODE_TYPES.relightGen]: '图片打光',
+  [CANVAS_NODE_TYPES.multiAngleGen]: '多角度视图',
   [CANVAS_NODE_TYPES.upscaleGen]: '高清放大',
   [CANVAS_NODE_TYPES.exportImage]: '结果图片',
   [CANVAS_NODE_TYPES.textProcessing]: '文本处理',

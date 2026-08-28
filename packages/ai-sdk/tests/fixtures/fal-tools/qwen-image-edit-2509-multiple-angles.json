@@ -1,0 +1,30 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles",
+  "input": {
+    "image_urls": ["uxp://source"],
+    "image_size": { "width": 1024, "height": 1024 },
+    "rotate_right_left": 45,
+    "vertical_angle": 0,
+    "move_forward": 0,
+    "wide_angle_lens": false,
+    "num_images": 1,
+    "guidance_scale": 1,
+    "num_inference_steps": 6,
+    "acceleration": "regular",
+    "enable_safety_checker": true,
+    "lora_scale": 1.25
+  },
+  "submit": {
+    "request_id": "qwen-multiple-angles-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles/requests/qwen-multiple-angles-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles/requests/qwen-multiple-angles-fixture"
+  },
+  "result": {
+    "images": [{ "url": "https://fixture.invalid/qwen-multiple-angles.png" }],
+    "seed": 1
+  }
+}

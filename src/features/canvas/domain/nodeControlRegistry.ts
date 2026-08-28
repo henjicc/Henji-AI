@@ -66,6 +66,13 @@ const relightSpecialEditorDataSchema = z.object({
   relightRouteReasons: z.array(z.string().max(500)).optional(),
 }).strict()
 
+const multiAngleSpecialEditorDataSchema = z.object({
+  multiAngleConfig: z.record(z.string(), z.unknown()).optional(),
+  modelId: z.string().min(1).optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  prompt: z.literal('').optional(),
+}).strict()
+
 interface CanvasNodeControlConfig {
   nodeType: CanvasNodeType
   title: string
@@ -201,6 +208,20 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     aliases: ['打光节点', '图片重打光节点'],
     dataSchema: imageGenerationNodeDataSchema,
     specialEditorDataSchema: relightSpecialEditorDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', maxLength: 120 } },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
+  },
+  {
+    nodeType: CANVAS_NODE_TYPES.multiAngleGen,
+    title: '多角度视图节点',
+    description: '创建受控多角度批次节点；角度 profile、模型与输出顺序由版本化契约维护。',
+    aliases: ['多视图节点', '相机角度节点', '环绕视图节点'],
+    dataSchema: imageGenerationNodeDataSchema,
+    specialEditorDataSchema: multiAngleSpecialEditorDataSchema,
     aiDataSchema: {
       type: 'object',
       properties: { displayName: { type: 'string', maxLength: 120 } },

@@ -195,6 +195,35 @@ describe('画布图片能力应用服务', () => {
     ])
   })
 
+  it('多角度能力创建默认四视图专用节点并连接唯一源图', async () => {
+    const execute = createCanvasImageCapabilityExecutor()
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.multiAngle)
+    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.multi-angle' })
+    const multiAngleNode = useCanvasStore.getState().nodes.find(
+      (node) => node.type === CANVAS_NODE_TYPES.multiAngleGen,
+    )
+    expect(multiAngleNode?.data).toMatchObject({
+      displayName: '多角度视图',
+      capabilityId: 'image.multi-angle',
+      modelId: 'fal-qwen-image-edit-2509-multiple-angles',
+      prompt: '',
+      params: {},
+      multiAngleConfig: {
+        version: 1,
+        controlProfile: 'continuous-v1',
+        concurrency: 2,
+      },
+    })
+    expect((multiAngleNode?.data as DynamicValueMap).multiAngleConfig.views).toHaveLength(4)
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: sourceNodeId,
+        target: multiAngleNode?.id,
+        targetHandle: 'param:__image',
+      }),
+    ])
+  })
+
   it('高清能力创建受控 Topaz 节点并连接唯一源图', async () => {
     const execute = createCanvasImageCapabilityExecutor()
     const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.upscale)

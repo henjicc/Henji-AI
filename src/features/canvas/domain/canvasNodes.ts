@@ -13,6 +13,7 @@ export const CANVAS_NODE_TYPES = {
   imageEdit: 'imageNode',
   panoramaGen: 'panoramaGenNode',
   relightGen: 'relightGenNode',
+  multiAngleGen: 'multiAngleGenNode',
   upscaleGen: 'upscaleGenNode',
   exportImage: 'exportImageNode',
   textProcessing: 'textProcessingNode',
@@ -278,6 +279,14 @@ export interface UpscaleGenerationNodeData extends ImageEditNodeData {
   fixedSemanticParams: DynamicValueMap;
 }
 
+export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
+  capabilityId: 'image.multi-angle';
+  multiAngleConfig: DynamicValueMap;
+  multiAngleBatch?: DynamicValueMap | null;
+  multiAngleResultPlaceholderId?: string | null;
+  sourceImageUrl?: string | null;
+}
+
 export interface StoryboardFrameItem {
   id: string;
   imageUrl: string | null;
@@ -433,6 +442,7 @@ export type CanvasNodeData =
   | AssetGroupNodeData
   | ImageEditNodeData
   | PanoramaGenerationNodeData
+  | MultiAngleGenerationNodeData
   | UpscaleGenerationNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
@@ -519,6 +529,12 @@ export function isUpscaleGenerationNode(
   node: CanvasNode | null | undefined
 ): node is Node<UpscaleGenerationNodeData, typeof CANVAS_NODE_TYPES.upscaleGen> {
   return node?.type === CANVAS_NODE_TYPES.upscaleGen;
+}
+
+export function isMultiAngleGenerationNode(
+  node: CanvasNode | null | undefined
+): node is Node<MultiAngleGenerationNodeData, typeof CANVAS_NODE_TYPES.multiAngleGen> {
+  return node?.type === CANVAS_NODE_TYPES.multiAngleGen;
 }
 
 export function isExportImageNode(

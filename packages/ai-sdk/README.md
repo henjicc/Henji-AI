@@ -187,10 +187,14 @@ console.log(erasers.map((item) => item.id))
 ```
 
 单模型入口为 `tool-models/fal/flux-pro-erase`、`tool-models/fal/bria-eraser`、
-`tool-models/fal/finegrain-eraser`；每个只导出 `model`、`provider` 与完整 `pack`。
+`tool-models/fal/finegrain-eraser`、`tool-models/fal/qwen-image-edit-2509-multiple-angles` 与
+`tool-models/fal/perspective-change`；每个只导出 `model`、`provider` 与完整 `pack`。
 聚合 `tool-packs/fal-image-edit-tools` 是方便选择的模型分发集合，只携带这 3 个模型、Fal adapter 和 Fal CDN
 上传，不携带其余 101 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，
 不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
+
+多角度能力使用独立聚合入口 `tool-packs/fal-multi-angle-tools`，只包含连续控制与九档方位两个模型。
+Henji-AI 在执行层按需装入该 pack，但普通模型选择器与默认能力发现仍只展示 101 个主目录模型。
 
 ## 两类模型的公共边界
 

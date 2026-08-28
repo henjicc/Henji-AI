@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getCanvasNodeSchema,
   parseCanvasNodeData,
+  parseCanvasSpecialEditorData,
   parseTrustedMediaNodeData,
   searchCanvasNodeTypes,
 } from './nodeControlRegistry'
@@ -60,5 +61,18 @@ describe('nodeControlRegistry assistant contract', () => {
       nodeType: 'uploadNode',
       data,
     })
+  })
+
+  it('多角度编辑器允许提交差量补丁，但仍拒绝伪提示词', () => {
+    expect(parseCanvasSpecialEditorData('multiAngleGenNode', {
+      multiAngleConfig: { version: 'multi-angle-config/v1' },
+      modelId: 'fal-perspective-change',
+    })).toEqual({
+      multiAngleConfig: { version: 'multi-angle-config/v1' },
+      modelId: 'fal-perspective-change',
+    })
+    expect(() => parseCanvasSpecialEditorData('multiAngleGenNode', {
+      prompt: '生成一个视角',
+    })).toThrow()
   })
 })

@@ -9,6 +9,7 @@ import {
   RELIGHT_SMART_TEMPLATE_VERSION,
 } from './relightPolicy';
 import { UPSCALE_MODEL_POLICY } from './upscalePolicy';
+import { MULTI_ANGLE_MAX_VIEW_COUNT } from './multiAnglePolicy';
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
@@ -122,13 +123,30 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 30,
     source: IMAGE_SOURCE,
     node: { kind: 'special-generation', editor: 'multiAngle' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    implementation: {
+      status: 'implemented',
+      execution: { kind: 'canvas-node', nodeType: CANVAS_NODE_TYPES.multiAngleGen },
+    },
+    availability: {
+      releaseStage: 'experimental',
+      defaultEnabled: true,
+      unavailableReasonKey: 'imageCapabilities.unavailable.experimental',
+    },
+    modelPolicy: {
+      mode: 'verified-families',
+      allowedCanonicalFamilies: [
+        'qwen-image-edit-2509-multiple-angles',
+        'perspective-change',
+      ],
+      requiredTags: ['multi-angle'],
+      providerCompatibility: 'verified-combinations-only',
+      allowedProviderConfigurations: [{ providerId: 'fal' }],
+      semanticRequirements: { referenceImages: { min: 1, max: 1 } },
+    },
     promptPolicy: {
-      hiddenTemplateVersion: 'multi-angle-v1-draft',
-      fixedSemanticParams: {},
-      visibleParameterKeys: ['viewPreset', 'azimuth', 'elevation', 'shotSize', 'prompt'],
+      hiddenTemplateVersion: 'multi-angle-controls-v1',
+      fixedSemanticParams: { contractVersion: 1, concurrency: 2 },
+      visibleParameterKeys: [],
     },
     outputPolicy: {
       resultKind: 'image-group',
@@ -137,7 +155,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
         parameterKey: 'viewCount',
         defaultCount: 4,
         minCount: 1,
-        maxCount: 12,
+        maxCount: MULTI_ANGLE_MAX_VIEW_COUNT,
       },
       postProcess: 'assemble-image-group',
       failureMode: 'atomic-results',

@@ -47,6 +47,7 @@ import {
   migrateGenerationNodeData,
   migratePanoramaGenerationData,
   migrateRelightGenerationData,
+  migrateMultiAngleGenerationData,
   migrateUpscaleGenerationData,
   migrateGenerationPromptData,
   migrateExportImageResultKind,
@@ -342,6 +343,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         node.type === CANVAS_NODE_TYPES.imageEdit
         || node.type === CANVAS_NODE_TYPES.panoramaGen
         || node.type === CANVAS_NODE_TYPES.relightGen
+        || node.type === CANVAS_NODE_TYPES.multiAngleGen
         || node.type === CANVAS_NODE_TYPES.upscaleGen
         || node.type === CANVAS_NODE_TYPES.videoGen
         || node.type === CANVAS_NODE_TYPES.audioGen
@@ -356,6 +358,10 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
 
       if (node.type === CANVAS_NODE_TYPES.relightGen) {
         migrateRelightGenerationData(mergedData as DynamicValueMap);
+      }
+
+      if (node.type === CANVAS_NODE_TYPES.multiAngleGen) {
+        migrateMultiAngleGenerationData(mergedData as DynamicValueMap);
       }
 
       if (node.type === CANVAS_NODE_TYPES.upscaleGen) {

@@ -8,6 +8,7 @@ import {
   type GroupNodeData,
   type AssetGroupNodeData,
   type ImageEditNodeData,
+  type MultiAngleGenerationNodeData,
   type PanoramaGenerationNodeData,
   type UpscaleGenerationNodeData,
   type StoryboardSplitNodeData,
@@ -67,6 +68,10 @@ import {
   DEFAULT_RELIGHT_SETTINGS,
   prepareRelightRoute,
 } from '../capabilities/relightPolicy';
+import {
+  MULTI_ANGLE_CONTINUOUS_MODEL_ID,
+  createDefaultMultiAngleConfig,
+} from '../capabilities/multiAnglePolicy';
 import { UPSCALE_MODEL_POLICY } from '../capabilities/upscalePolicy';
 
 /**
@@ -425,6 +430,57 @@ const relightGenerationNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> =
   },
   getOutputs: imageOutputsFromData,
   createDefaultData: createRelightGenerationDefaultData,
+};
+
+function createMultiAngleGenerationDefaultData(): MultiAngleGenerationNodeData {
+  return {
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.multiAngleGen],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: DEFAULT_ASPECT_RATIO,
+    isSizeManuallyAdjusted: false,
+    prompt: '',
+    modelId: MULTI_ANGLE_CONTINUOUS_MODEL_ID,
+    params: {},
+    mediaInputs: {},
+    isGenerating: false,
+    generationStartedAt: null,
+    generationDurationMs: undefined,
+    capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
+    multiAngleConfig: createDefaultMultiAngleConfig() as unknown as DynamicValueMap,
+    multiAngleBatch: null,
+    multiAngleResultPlaceholderId: null,
+  };
+}
+
+const multiAngleGenerationNodeDefinition: CanvasNodeDefinition<MultiAngleGenerationNodeData> = {
+  type: CANVAS_NODE_TYPES.multiAngleGen,
+  menuLabelKey: 'node.menu.multiAngleGeneration',
+  menuIcon: 'imageGeneration',
+  visibleInMenu: false,
+  executionKind: 'standard-generation',
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+    toolbarGenerate: true,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: { fromSource: true, fromTarget: false },
+    targetHandleMode: 'rows',
+  },
+  media: { kind: 'image', role: 'generator' },
+  ports: {
+    source: { emits: 'image' },
+    target: { accepts: ['image'] },
+  },
+  generation: {
+    modelType: 'image',
+    resultNodeType: CANVAS_NODE_TYPES.exportImage,
+  },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: createMultiAngleGenerationDefaultData,
 };
 
 function createUpscaleGenerationDefaultData(): UpscaleGenerationNodeData {
@@ -799,6 +855,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
   [CANVAS_NODE_TYPES.panoramaGen]: panoramaGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.relightGen]: relightGenerationNodeDefinition,
+  [CANVAS_NODE_TYPES.multiAngleGen]: multiAngleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.upscaleGen]: upscaleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
   [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,

@@ -165,7 +165,8 @@
       "local": "本地处理"
     },
     "unavailable": {
-      "planned": "功能正在准备中"
+      "planned": "功能正在准备中",
+      "experimental": "实验能力可能存在结果偏差"
     },
     "items": {
       "panorama": {
@@ -225,6 +226,7 @@
       "aiImageGeneration": "图片生成",
       "panoramaGeneration": "720°全景",
       "relightGeneration": "图片打光",
+      "multiAngleGeneration": "多角度视图",
       "upscaleGeneration": "高清放大",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
@@ -313,6 +315,10 @@
     "relightGeneration": {
       "apiKeyRequired": "请先配置当前打光模式所需的供应商 API Key",
       "resultTitle": "打光结果"
+    },
+    "multiAngleGeneration": {
+      "apiKeyRequired": "请先配置 Fal API Key",
+      "resultTitle": "多角度视图"
     },
     "upscaleGeneration": {
       "promptRequired": "高清放大不需要提示词",
