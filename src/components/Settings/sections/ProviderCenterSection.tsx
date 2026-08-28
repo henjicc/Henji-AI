@@ -239,29 +239,29 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
 
       {selected ? (
         <div className="ui-scrollbar min-w-0 space-y-5 overflow-y-auto overscroll-contain pr-2">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
+          <div>
+            <div className="flex items-start justify-between gap-4">
               <h3 className={UI_TEXT_TITLE_CLASS}>{selected.displayName}</h3>
-              <div className="mt-1">
-                <ProviderCredentialGuide
-                  providerName={selected.displayName}
-                  websiteUrl={metadata?.websiteUrl}
-                  apiKeyUrl={metadata?.apiKeyUrl ?? (selected.llmProvider?.setup?.kind === 'custom'
-                    ? selected.llmProvider.setup.apiKeyManagementUrl
-                    : undefined)}
-                  onOpenUrl={(url) => { void openExternal(url) }}
-                />
+              <div className="flex shrink-0 items-center gap-2">
+                {selected.llmProvider ? (
+                  <UiButton type="button" variant="muted" size="sm" onClick={() => { setProviderDialogCreate(false); setProviderDialogOpen(true) }}>
+                    <Settings2 size={14} className="mr-1.5" />
+                    {t('providerCenter.actions.connectionSettings')}
+                  </UiButton>
+                ) : null}
+                <span className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.enabled')}</span>
+                <UiSwitch checked={selected.enabled} onCheckedChange={enabled => void setProviderEnabled(enabled)} />
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {selected.llmProvider ? (
-                <UiButton type="button" variant="muted" size="sm" onClick={() => { setProviderDialogCreate(false); setProviderDialogOpen(true) }}>
-                  <Settings2 size={14} className="mr-1.5" />
-                  {t('providerCenter.actions.connectionSettings')}
-                </UiButton>
-              ) : null}
-              <span className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.enabled')}</span>
-              <UiSwitch checked={selected.enabled} onCheckedChange={enabled => void setProviderEnabled(enabled)} />
+            <div className="mt-1 min-w-0 overflow-x-auto">
+              <ProviderCredentialGuide
+                providerName={selected.displayName}
+                websiteUrl={metadata?.websiteUrl}
+                apiKeyUrl={metadata?.apiKeyUrl ?? (selected.llmProvider?.setup?.kind === 'custom'
+                  ? selected.llmProvider.setup.apiKeyManagementUrl
+                  : undefined)}
+                onOpenUrl={(url) => { void openExternal(url) }}
+              />
             </div>
           </div>
 

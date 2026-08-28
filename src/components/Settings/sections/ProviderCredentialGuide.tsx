@@ -19,27 +19,27 @@ const ProviderCredentialGuide = ({
   const { t } = useI18n('settings')
   if (!websiteUrl && !apiKeyUrl) return null
 
-  const linkClassName = 'inline-flex h-auto min-h-0 items-center rounded-none px-0 py-0 align-baseline font-medium leading-6 !text-brand-300 hover:bg-transparent hover:!text-brand-300 hover:underline'
+  const linkClassName = 'inline-flex !h-auto !min-h-0 items-center rounded-none !px-0 !py-0 align-baseline !text-sm font-medium leading-6 !text-brand-300 hover:bg-transparent hover:!text-brand-300 hover:underline'
   return (
-    <p className={`flex flex-wrap items-center gap-x-1 gap-y-1 leading-6 ${UI_TEXT_BODY_CLASS}`}>
+    <p className={`whitespace-nowrap leading-6 ${UI_TEXT_BODY_CLASS}`}>
       {websiteUrl ? (
         <>
-          <span>{t('providerCenter.guide.beforeWebsite')}</span>
-          <UiButton type="button" variant="plain" size="sm" className={linkClassName} onClick={() => onOpenUrl(websiteUrl)}>
+          {t('providerCenter.guide.beforeWebsite')}{' '}
+          <UiButton type="button" variant="plain" size="md" className={linkClassName} onClick={() => onOpenUrl(websiteUrl)}>
             {t('apiKeys.providerGuideLinks.website', { provider: providerName })}
             <ExternalLink className="ml-1 h-3 w-3" />
-          </UiButton>
-          <span>{t('providerCenter.guide.afterWebsite')}</span>
+          </UiButton>{' '}
+          {t('providerCenter.guide.afterWebsite')}{' '}
         </>
       ) : null}
       {apiKeyUrl ? (
         <>
-          {websiteUrl ? null : <span>{t('providerCenter.guide.onlyApiKey')}</span>}
-          <UiButton type="button" variant="plain" size="sm" className={linkClassName} onClick={() => onOpenUrl(apiKeyUrl)}>
+          {websiteUrl ? null : <>{t('providerCenter.guide.onlyApiKey')}{' '}</>}
+          <UiButton type="button" variant="plain" size="md" className={linkClassName} onClick={() => onOpenUrl(apiKeyUrl)}>
             {t('apiKeys.providerGuideLinks.apiKey')}
             <ExternalLink className="ml-1 h-3 w-3" />
-          </UiButton>
-          <span>{t('providerCenter.guide.afterApiKey')}</span>
+          </UiButton>{' '}
+          {t('providerCenter.guide.afterApiKey')}
         </>
       ) : null}
     </p>
