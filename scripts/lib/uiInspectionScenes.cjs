@@ -906,12 +906,14 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         await settlePage(page, 1200)
         await page.getByRole('button', { name: '返回工具箱' }).click()
         await openGlowEditor()
+        await page.getByRole('switch', { name: '启用辉光着色' }).click()
         const tint = page.getByLabel('辉光颜色')
         await tint.fill('#ff4bd8')
+        await page.getByRole('switch', { name: '启用辉光着色' }).click()
         const radius = page.getByRole('slider', { name: '发光半径' })
         await radius.fill('0.58')
         const chromaticAberration = page.getByRole('slider', { name: '色差' })
-        await chromaticAberration.fill('0.62')
+        await chromaticAberration.fill('0.75')
         if (await page.getByText('辉光预览失败').count()) {
           throw new Error('重新打开图片编辑器后，辉光预览仍被旧会话 revision 取消')
         }

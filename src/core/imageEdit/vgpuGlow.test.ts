@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IMAGE_EDITOR_GLOW_TINT_HEX, IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
+import { IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import {
   IMAGE_EDIT_OPERATION_IDS,
   InvalidImageEditOperationParamsError,
@@ -24,6 +24,8 @@ describe('VGPU 辉光操作契约', () => {
       expect(recipe.threshold).toBeGreaterThan(0);
       expect(recipe.sigma).toBeGreaterThanOrEqual(0.85);
       expect(recipe.tintLinear).toHaveLength(3);
+      expect(recipe.tintEnabled).toBe(false);
+      expect(recipe.chromaticAberration).toBe(0);
     }
   });
 
@@ -33,6 +35,7 @@ describe('VGPU 辉光操作契约', () => {
       ...defaults,
       radius: 0.1,
       intensity: 0.25,
+      tintEnabled: false,
       tintColor: IMAGE_EDITOR_PRESET_COLORS[1],
       chromaticAberration: 0,
     });
@@ -40,6 +43,7 @@ describe('VGPU 辉光操作契约', () => {
       ...defaults,
       radius: 0.9,
       intensity: 0.25,
+      tintEnabled: true,
       tintColor: IMAGE_EDITOR_PRESET_COLORS[1],
       chromaticAberration: 1,
     });
@@ -47,8 +51,10 @@ describe('VGPU 辉光操作契约', () => {
     expect(wide.sigma).toBeGreaterThan(compact.sigma);
     expect(wide.levelWeights[2]).toBeGreaterThan(compact.levelWeights[2]);
     expect(wide.intensity).toBe(compact.intensity);
-    expect(wide.chromaticOffsetPx).toBeGreaterThan(10);
+    expect(wide.chromaticOffsetPx).toBeGreaterThan(4);
     expect(compact.chromaticOffsetPx).toBe(0);
+    expect(compact.tintEnabled).toBe(false);
+    expect(wide.tintEnabled).toBe(true);
     expect(compact.tintLinear[0]).toBeCloseTo(1, 6);
     expect(compact.tintLinear[1]).toBeGreaterThan(0.1);
     expect(compact.tintLinear[2]).toBe(0);
@@ -78,23 +84,14 @@ describe('VGPU 辉光操作契约', () => {
     expect(decoded.document.operations[0]?.params).toEqual(params);
   });
 
-  it('把旧版辉光参数迁移为半径、着色与色差参数', () => {
-    const migrated = parseVgpuGlowOperationParams({
-      schemaVersion: 1,
-      look: 'dreamy',
-      intensity: 0.7,
-      spread: 0.64,
-      sourceThreshold: 0.3,
-      whiteHeat: 0.6,
+  it('默认关闭着色和 RGB 分离，并拒绝开发期旧参数', () => {
+    const defaults = createDefaultVgpuGlowOperationParams();
+    expect(defaults).toMatchObject({
+      schemaVersion: 3,
+      tintEnabled: false,
+      chromaticAberration: 0,
     });
-
-    expect(migrated).toMatchObject({
-      schemaVersion: 2,
-      look: 'dreamy',
-      intensity: 0.7,
-      radius: 0.64,
-      chromaticAberration: 0.08,
-      tintColor: IMAGE_EDITOR_GLOW_TINT_HEX.dreamy,
-    });
+    expect(() => parseVgpuGlowOperationParams({ ...defaults, schemaVersion: 2 }))
+      .toThrow(InvalidImageEditOperationParamsError);
   });
 });

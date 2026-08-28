@@ -1,7 +1,7 @@
 import type { VgpuGlowOperationParams } from './vgpuGlowParams';
 
 export interface VgpuGlowRecipe {
-  schemaVersion: 2;
+  schemaVersion: 3;
   threshold: number;
   knee: number;
   hdrBoost: number;
@@ -12,6 +12,7 @@ export interface VgpuGlowRecipe {
   shoulder: number;
   rolloff: number;
   tintLinear: readonly [number, number, number];
+  tintEnabled: boolean;
   coreGain: number;
   edgeGain: number;
   chromaticAberration: number;
@@ -32,7 +33,7 @@ export function compileVgpuGlowRecipe(params: VgpuGlowOperationParams): VgpuGlow
       ? { boost: 8.8, exposure: 2.15, shoulder: 0.72, rolloff: 0.9, edge: 1.4 }
       : { boost: 5.8, exposure: 1.75, shoulder: 0.78, rolloff: 0.82, edge: 1.2 };
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     threshold: 0.035 + Math.pow(params.sourceThreshold, 1.8) * 0.72,
     knee: 0.08 + (1 - params.sourceThreshold) * 0.24,
     hdrBoost: look.boost,
@@ -47,10 +48,11 @@ export function compileVgpuGlowRecipe(params: VgpuGlowOperationParams): VgpuGlow
     shoulder: look.shoulder,
     rolloff: look.rolloff,
     tintLinear: parseLinearRgb(params.tintColor),
+    tintEnabled: params.tintEnabled,
     coreGain: 0.7 + params.whiteHeat * 0.75,
     edgeGain: look.edge + (1 - radius) * 0.85,
     chromaticAberration: params.chromaticAberration,
-    chromaticOffsetPx: Math.pow(params.chromaticAberration, 1.25) * (2 + radius * 10),
+    chromaticOffsetPx: Math.pow(params.chromaticAberration, 1.5) * (1.5 + radius * 4.5),
   };
 }
 

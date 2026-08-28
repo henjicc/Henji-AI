@@ -18,10 +18,10 @@ fn extractEmitter(color: vec3f) -> vec3f {
   let softContribution = soft * soft / (4.0 * knee + 0.0001);
   let contribution = max(brightness - threshold, softContribution) / max(brightness, 0.0001);
   let hot = pow(smoothstep(threshold, 1.0, brightness), 1.6);
-  let energy = brightness * contribution * (1.0 + hot * bloom.glow.x);
-  // 辉光的空间分布只传递标量能量，颜色统一在最终合成阶段注入。这样自定义着色不会
-  // 因降采样层级不同而被原图颜色重新污染，RGB 色差也可以作用于同一份光能场。
-  return vec3f(energy);
+  let boosted = color * contribution * (1.0 + hot * bloom.glow.x);
+  let peak = max(boosted.r, max(boosted.g, boosted.b));
+  // 保留光源本来的颜色；只有用户主动开启着色时，最终合成阶段才会替换成自定义颜色。
+  return mix(boosted, vec3f(peak), hot * bloom.glow.y);
 }
 
 fn downsample(uv: vec2f) -> vec3f {

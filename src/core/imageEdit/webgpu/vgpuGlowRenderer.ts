@@ -160,14 +160,14 @@ export class VgpuGlowRenderer {
       composite: {
         params: [recipe.intensity, recipe.shoulder, recipe.rolloff, recipe.whiteHeat],
         weights: [...recipe.levelWeights, recipe.edgeGain],
-        tint: [...recipe.tintLinear, recipe.chromaticAberration],
+        tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
         optics: [
           1 / Math.max(t.scene.size[0], 1),
           1 / Math.max(t.scene.size[1], 1),
           recipe.chromaticOffsetPx,
-          recipe.coreGain,
+          recipe.chromaticAberration,
         ],
-        source: [recipe.threshold, recipe.knee, recipe.hdrBoost, 1.35],
+        source: [recipe.threshold, recipe.knee, recipe.hdrBoost, recipe.coreGain],
       },
     });
   }

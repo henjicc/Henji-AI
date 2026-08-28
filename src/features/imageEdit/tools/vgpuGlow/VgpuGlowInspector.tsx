@@ -81,6 +81,11 @@ export function VgpuGlowInspector(): JSX.Element {
   const setUnit = (key: 'intensity' | 'radius' | 'chromaticAberration' | 'sourceThreshold' | 'whiteHeat') =>
     (value: number): void => update((current) => ({ ...current, [key]: value }));
   const setTintColor = (tintColor: string): void => update((current) => ({ ...current, tintColor }));
+  const setTintEnabled = (tintEnabled: boolean): void => {
+    controller.beginTransaction();
+    update((current) => ({ ...current, tintEnabled }));
+    controller.commitTransaction();
+  };
   const rangeHandlers = {
     onBegin: controller.beginTransaction,
     onCommit: controller.commitTransaction,
@@ -129,12 +134,20 @@ export function VgpuGlowInspector(): JSX.Element {
         <UiGroup gap="row" title="光晕" titleTone="overline" divided>
           <UiFormRow
             label="着色"
-            info="使用所选颜色生成辉光，原图本身的颜色不会被替换。"
+            info="开启后使用所选颜色生成辉光；关闭时跟随光源原本的颜色。"
             inline
           >
-            <span className={UI_TEXT_META_CLASS}>{params.tintColor.toUpperCase()}</span>
+            <UiSwitch
+              checked={params.tintEnabled}
+              onCheckedChange={setTintEnabled}
+              aria-label="启用辉光着色"
+            />
+            <span className={UI_TEXT_META_CLASS}>
+              {params.tintEnabled ? params.tintColor.toUpperCase() : '跟随原图'}
+            </span>
             <UiColorInput
               value={params.tintColor}
+              disabled={!params.tintEnabled}
               aria-label="辉光颜色"
               onFocus={controller.beginTransaction}
               onPointerDown={controller.beginTransaction}
@@ -159,7 +172,7 @@ export function VgpuGlowInspector(): JSX.Element {
           <GlowRangeField
             label="色差"
             value={params.chromaticAberration}
-            info="沿每个发光轮廓分离红、绿、蓝通道，形成镜头像差般的彩色边缘。"
+            info="将辉光的红、绿、蓝通道水平错开，形成利落的故障艺术重影。"
             onChange={setUnit('chromaticAberration')}
             {...rangeHandlers}
           />

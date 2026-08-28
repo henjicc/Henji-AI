@@ -29,16 +29,50 @@ fn emitterEnergy(color: vec3f) -> f32 {
   return brightness * contribution * (1.0 + hot * composite.source.z);
 }
 
-fn sampleNear(uv: vec2f) -> f32 {
-  return textureSampleLevel(bloomNear, linearSampler, uv, 0.0).r;
+fn bloomEnergy(color: vec3f) -> f32 {
+  let luma = dot(color, vec3f(0.2126, 0.7152, 0.0722));
+  return max(luma, max(color.r, max(color.g, color.b)) * 0.82);
 }
 
-fn sampleMedium(uv: vec2f) -> f32 {
-  return textureSampleLevel(bloomMedium, linearSampler, uv, 0.0).r;
+fn sampleNear(uv: vec2f) -> vec3f {
+  return textureSampleLevel(bloomNear, linearSampler, uv, 0.0).rgb;
 }
 
-fn sampleFar(uv: vec2f) -> f32 {
-  return textureSampleLevel(bloomFar, linearSampler, uv, 0.0).r;
+fn sampleMedium(uv: vec2f) -> vec3f {
+  return textureSampleLevel(bloomMedium, linearSampler, uv, 0.0).rgb;
+}
+
+fn sampleFar(uv: vec2f) -> vec3f {
+  return textureSampleLevel(bloomFar, linearSampler, uv, 0.0).rgb;
+}
+
+fn layeredBloom(uv: vec2f) -> vec3f {
+  let near = sampleNear(uv);
+  let medium = sampleMedium(uv);
+  let far = sampleFar(uv);
+  let nearBand = max(near - medium * 0.72, vec3f(0.0));
+  let mediumBand = max(medium - far * 0.72, vec3f(0.0));
+  let haze = near * composite.weights.x
+    + medium * composite.weights.y
+    + far * composite.weights.z;
+  let bands = nearBand * composite.weights.x * 0.75
+    + mediumBand * composite.weights.y * 0.35;
+  return haze + bands * composite.weights.w;
+}
+
+fn tintBloom(color: vec3f) -> vec3f {
+  return mix(color, composite.tint.rgb * bloomEnergy(color), composite.tint.a);
+}
+
+fn coreEmitter(uv: vec2f) -> vec3f {
+  let color = textureSampleLevel(scene, linearSampler, uv, 0.0).rgb;
+  let brightness = emitterBrightness(color);
+  let energy = emitterEnergy(color);
+  let hot = pow(smoothstep(composite.source.x, 1.0, brightness), 1.4);
+  let sourceCore = color * (energy / max(brightness, 0.0001));
+  let naturalCore = mix(sourceCore, vec3f(energy), hot * composite.params.w);
+  let tintedCore = mix(composite.tint.rgb * energy, vec3f(energy), hot * composite.params.w);
+  return mix(naturalCore, tintedCore, composite.tint.a) * composite.source.w;
 }
 
 fn rollHighlight(color: vec3f) -> vec3f {
@@ -55,64 +89,36 @@ fn rollHighlight(color: vec3f) -> vec3f {
 
 @fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
   let base = textureSampleLevel(scene, linearSampler, uv, 0.0);
-  let near = sampleNear(uv);
-  let medium = sampleMedium(uv);
-  let far = sampleFar(uv);
+  let centeredBloom = layeredBloom(uv);
+  let chromaOffset = vec2f(composite.optics.x * composite.optics.z, 0.0);
+  let redBloom = layeredBloom(uv + chromaOffset);
+  let blueBloom = layeredBloom(uv - chromaOffset);
 
-  // 多尺度高斯和近似指数型光学 PSF；DoG 带通项专门恢复紧贴光源的明亮窄边，
-  // 避免三个模糊层直接相加后变成没有层次的一团雾。
-  let nearBand = max(near - medium * 0.72, 0.0);
-  let mediumBand = max(medium - far * 0.72, 0.0);
-  let haze = near * composite.weights.x
-    + medium * composite.weights.y
-    + far * composite.weights.z;
-  let bands = nearBand * composite.weights.x * 0.75
-    + mediumBand * composite.weights.y * 0.35;
-  let layered = haze + bands * composite.weights.w;
-
-  // 根据近场能量梯度沿每个轮廓的法线方向拆分 RGB，而不是把整张图向固定方向错位。
-  // 因此圆环内外缘、文字和任意形状都会得到自己的镜头像差方向。
-  let gradientStep = composite.optics.xy * 2.0;
-  let gradient = vec2f(
-    sampleNear(uv + vec2f(gradientStep.x, 0.0)) - sampleNear(uv - vec2f(gradientStep.x, 0.0)),
-    sampleNear(uv + vec2f(0.0, gradientStep.y)) - sampleNear(uv - vec2f(0.0, gradientStep.y))
+  // Glitch 风格 RGB 分离：R 向右、G 留在原位、B 向左。固定方向能形成清楚的彩色重影，
+  // 不再沿轮廓四周生成一圈杂乱的彩边。着色开启时仍用同一能量场生成纯 RGB 分离。
+  let splitSourceBloom = vec3f(redBloom.r, centeredBloom.g, blueBloom.b);
+  let splitTintedBloom = vec3f(
+    bloomEnergy(redBloom),
+    bloomEnergy(centeredBloom),
+    bloomEnergy(blueBloom)
   );
-  let gradientLength = length(gradient);
-  let direction = select(vec2f(1.0, 0.0), gradient / max(gradientLength, 0.00001), gradientLength > 0.00001);
-  let chromaOffset = direction * composite.optics.xy * composite.optics.z;
-  let chromaticNear = vec3f(
-    sampleNear(uv + chromaOffset),
-    near,
-    sampleNear(uv - chromaOffset)
-  );
-  let chromaticNearBand = max(chromaticNear - vec3f(medium * 0.72), vec3f(0.0));
-  let chromaticLayered = chromaticNear * composite.weights.x
-    + vec3f(medium * composite.weights.y + far * composite.weights.z)
-    + chromaticNearBand * composite.weights.x * 0.75 * composite.weights.w
-    + vec3f(mediumBand * composite.weights.y * 0.35 * composite.weights.w);
-
-  let tint = composite.tint.rgb;
-  // 高色差时适度补回中性光谱，确保即便用户选择单一强色，RGB 分离仍然可见；
-  // 低值几乎完全保持用户着色。
-  let spectralTint = mix(tint, vec3f(1.0), composite.tint.a * 0.45);
-  let diffuseGlow = mix(vec3f(layered) * tint, chromaticLayered * spectralTint, composite.tint.a);
+  let splitBloom = mix(splitSourceBloom, splitTintedBloom, composite.tint.a);
+  let diffuseGlow = mix(tintBloom(centeredBloom), splitBloom, composite.optics.w);
 
   // 全分辨率光源核心和约 1px 的外缘亮边不经过降采样，保住圆环/文字的锐利发光体质感。
   let directEnergy = emitterEnergy(base.rgb);
-  let hot = pow(smoothstep(composite.source.x, 1.0, emitterBrightness(base.rgb)), 1.4);
-  let coreTint = mix(tint, vec3f(1.0), hot * composite.params.w);
-  let chromaticCore = vec3f(
+  let centeredCore = coreEmitter(uv);
+  let redCore = coreEmitter(uv + chromaOffset);
+  let blueCore = coreEmitter(uv - chromaOffset);
+  let splitSourceCore = vec3f(redCore.r, centeredCore.g, blueCore.b);
+  let splitTintedCore = vec3f(
     emitterEnergy(textureSampleLevel(scene, linearSampler, uv + chromaOffset, 0.0).rgb),
     directEnergy,
     emitterEnergy(textureSampleLevel(scene, linearSampler, uv - chromaOffset, 0.0).rgb)
-  );
-  let spectralCoreTint = mix(coreTint, vec3f(1.0), composite.tint.a * 0.75);
-  let core = mix(
-    vec3f(directEnergy) * coreTint,
-    chromaticCore * spectralCoreTint,
-    composite.tint.a
-  ) * composite.optics.w;
-  let rimStep = composite.optics.xy * composite.source.w;
+  ) * composite.source.w;
+  let splitCore = mix(splitSourceCore, splitTintedCore, composite.tint.a);
+  let core = mix(centeredCore, splitCore, composite.optics.w);
+  let rimStep = composite.optics.xy * 1.35;
   let neighborEnergy = max(
     max(emitterEnergy(textureSampleLevel(scene, linearSampler, uv + vec2f(rimStep.x, 0.0), 0.0).rgb),
         emitterEnergy(textureSampleLevel(scene, linearSampler, uv - vec2f(rimStep.x, 0.0), 0.0).rgb)),
@@ -120,6 +126,7 @@ fn rollHighlight(color: vec3f) -> vec3f {
         emitterEnergy(textureSampleLevel(scene, linearSampler, uv - vec2f(0.0, rimStep.y), 0.0).rgb))
   );
   let rim = max(neighborEnergy - directEnergy, 0.0) * composite.weights.w;
-  let emitted = (diffuseGlow + core + rim * tint) * composite.params.x;
+  let rimColor = mix(vec3f(1.0), composite.tint.rgb, composite.tint.a);
+  let emitted = (diffuseGlow + core + rim * rimColor) * composite.params.x;
   return vec4f(rollHighlight(base.rgb + emitted), base.a);
 }
