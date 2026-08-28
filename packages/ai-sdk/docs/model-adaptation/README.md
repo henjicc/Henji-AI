@@ -7,13 +7,15 @@
 |---|---|
 | 最后更新 | 2026-08-29 |
 | 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 供应商专属 5 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 69 + SDK 跨项目能力 14（另有 Fal 工具 3） |
+| 模型供应商文档数量 | 生成/存量 69 + SDK 跨项目能力 14（另有 Fal 工具 5） |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、智谱（官方 LLM）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
-另有 3 个按需分发的 Fal 图像消除工具，不进入默认 99 模型兼容目录：
+另有 5 个待按能力按需分发的 Fal 图像工具，不进入默认 99 模型兼容目录：
 [Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、
 [Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、
-[Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)。
+[Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)、
+[Qwen Image Edit 2509 多角度](Qwen-Image-Edit-2509-多角度/Qwen-Image-Edit-2509-多角度_Fal.md)、
+[透视变换](透视变换/透视变换_Fal.md)。后两项已完成静态契约，待任务 4.4 实现和真实质量验证。
 
 ## 一、目录结构约定
 
@@ -154,9 +156,11 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Flux Pro Erase | `fal-ai/flux-pro/v1/erase` | `tool-models/fal/flux-pro-erase` |
 | Bria Eraser | `fal-ai/bria/eraser` | `tool-models/fal/bria-eraser` |
 | Finegrain Eraser (Mask) | `fal-ai/finegrain-eraser/mask` | `tool-models/fal/finegrain-eraser` |
+| Qwen Image Edit 2509 多角度 | `fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles` | 待任务 4.4 实现 |
+| 透视变换 | `fal-ai/image-apps-v2/perspective` | 待任务 4.4 实现 |
 
-聚合入口为 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools`。它是 3 个模型的技术分发集合，不是新的执行内核；
-统一能力画像将它们派生为 `operation=image-edit`、`feature=erase`。
+前三项消除工具的聚合入口为 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools`。它是 3 个模型的技术分发集合，不是新的执行内核；
+统一能力画像将它们派生为 `operation=image-edit`、`feature=erase`。后两项多角度工具尚未实现 SDK 入口，任务 4.4 应按能力单独按需分发，不能误挂到消除工具画像。
 
 | 模型 | APIMart | KIE | Fal |
 |---|---|---|---|
