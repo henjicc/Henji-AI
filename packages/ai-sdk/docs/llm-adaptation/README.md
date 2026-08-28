@@ -2,9 +2,9 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-08-28 |
 | 覆盖供应商 | 火山引擎（Doubao）、Kimi（Moonshot）、智谱 GLM、DeepSeek、小米 MiMo、阿里云百炼（Qwen）、MiniMax |
-| 覆盖模型 | 7 个（各供应商当前最新旗舰文本/多模态大模型；供应商专属变体见各自文档内的"模型清单"） |
+| 覆盖模型 | 7 家供应商的当前旗舰文本/多模态系列；供应商专属模型见各自文档内的“模型清单” |
 
 ## 一、这是什么，和 `docs/model-adaptation/` 有什么不一样
 
@@ -75,7 +75,7 @@ docs/llm-adaptation/
 |---|---|---|---|---|
 | [火山引擎](供应商/火山引擎.md) | ✅ | ✅ | ❌ 官方未提供 | **仅 Responses API**（Chat API 完全不支持内置工具） |
 | [Kimi](供应商/Kimi.md) | ✅ | ❌ 官方未提供 | ❌ 官方未提供 | Chat Completions（`$web_search`，官方标注"近期不建议用于生产"） |
-| [智谱 GLM](供应商/智谱GLM.md) | ✅ | ✅（仅 `glm-5.3`） | ✅（仅 `glm-5.3`） | Chat Completions 工具 / 独立 Web Search API 均可，GLM-Coding-Plan 订阅账号暂时只能走 Chat Completions |
+| [智谱 GLM](供应商/智谱GLM.md) | ✅（`glm-5.3-flash` 目前仅确认此协议） | ✅（仅 `glm-5.3`） | ✅（仅 `glm-5.3`） | Chat Completions 工具 / 独立 Web Search API 均可，GLM-Coding-Plan 订阅账号暂时只能走 Chat Completions |
 | [DeepSeek](供应商/DeepSeek.md) | ✅ | ✅ | ✅ | **仅 Responses API**（Chat Completions 不支持 `web_search`） |
 | [小米 MiMo](供应商/小米MiMo.md) | ✅ | ❌ 官方未提供 | ✅ | **仅 Chat Completions**（官方原文："其他 API 协议暂不支持"），且需先在控制台激活插件 |
 | [百炼 Qwen](供应商/百炼Qwen.md) | ✅ | ✅ | ❌ 官方未提供 | 两条协议都支持，但 Responses 路径能力更全（额外有 `web_extractor`/`code_interpreter`） |
@@ -93,7 +93,7 @@ docs/llm-adaptation/
 |---|---|---|---|---|
 | 火山引擎 | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-evolving` | 1024K | 6 / 30 |
 | Kimi | `https://api.moonshot.cn/v1` | `kimi-k3` | 1,048,576 | 20 / 100 |
-| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-5.3` | 1M | 8 / 28 |
+| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-5.3` / `glm-5.3-flash`（原生多模态） | 1M | 8 / 28；Flash 标准价 0.8 / 2.8 |
 | DeepSeek | `https://api.deepseek.com` | `deepseek-v4-pro` | 1M | 4.5 / 13.5（闲时） |
 | 小米 MiMo | `https://api.xiaomimimo.com/v1` | `mimo-v2.5-pro` | 1M | 3 / 6 |
 | 百炼 Qwen | `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` | `qwen3.8-max` | ~1M | 12 / 36 |
@@ -107,7 +107,7 @@ docs/llm-adaptation/
 |---|---|---|---|---|
 | 火山引擎 | `reasoning_effort` | `none`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`（7 档） | `high` | 可以（`thinking` 开关） |
 | Kimi | `reasoning_effort` | `low`/`high`/`max` | `max` | **不可以**，K3 始终思考 |
-| 智谱 GLM | `reasoning_effort` | `low`/`high`/`max`（`glm-5.3`） | `max` | GLM-5.3 不可以；GLM-5V-Turbo 可以 |
+| 智谱 GLM | `reasoning_effort` + `thinking` | `low`/`high`/`max`（`glm-5.3`、`glm-5.3-flash`） | `max` | GLM-5.3 / Flash 不可以；GLM-5V-Turbo 可以 |
 | DeepSeek | `reasoning_effort` + `thinking.type` | 字符串透传，无固定枚举 | — | 可以 |
 | 小米 MiMo | 无强度分级，仅 `reasoning_content` 回传约定 | — | — | 未见明确开关文档 |
 | 百炼 Qwen | `enable_thinking`（布尔） | `true`/`false` | 视模型而定 | 可以 |
