@@ -4,7 +4,7 @@
 |---|---|
 | 最后更新 | 2026-08-28 |
 | 模态 | 原生多模态 LLM/VLM：文本、图片、视频、文件输入 → 文本输出 |
-| 供应商 / 项目 providerId | 智谱 BigModel / `bigmodel` |
+| 供应商 / 项目 provider family | 智谱国内 BigModel + 国际 Z.AI / `bigmodel` |
 | 平台模型 ID | `glm-5.3-flash` |
 | API 协议 | OpenAI 兼容 Chat Completions；同步 JSON / SSE |
 | API / 价格资料 | 公开无需登录；API Key 与真实调用需登录/付费 |
@@ -13,19 +13,25 @@
 ## 1. 身份与边界
 
 GLM-5.3-Flash 是 2026-08-26 上线的 GLM-5 系列首个原生多模态模型，是既有
-`bigmodel` 供应商下的**新增独立模型**。它不是文本模型 `glm-5.3` 的别名，也不触发供应商
-重命名。官方展示名是 `GLM-5.3-Flash`，API Model Code 是小写 `glm-5.3-flash`；公开资料
-没有第二个 API alias，`Z.ai`、`zai-sdk`、`zhipu` 都不能注册成运行时 model/provider alias。
+`bigmodel` 供应商族下的**新增独立模型**。它不是文本模型 `glm-5.3` 的别名，也不触发供应商
+重命名。国内 BigModel 与国际 Z.AI 都正式提供该模型，展示名均为 `GLM-5.3-Flash`，API
+Model Code 均为小写 `glm-5.3-flash`；公开资料没有第二个模型 alias。
+
+当前仓库的 `bigmodel` preset 使用 `open.bigmodel.cn` 和国内 API Key 页面，因此它是国内配置，
+不是国际站配置。`Z.AI` 是国际 endpoint profile，不应被当成现有 providerId 的别名直接换域名。
 
 ## 2. 端点与鉴权
 
-```text
-POST https://open.bigmodel.cn/api/paas/v4/chat/completions
-Authorization: Bearer <API Key>
-Content-Type: application/json
-```
+| endpoint profile | Chat Completions 端点 | API Key 管理 | 账号 / 凭据边界 |
+|---|---|---|---|
+| `cn` | `https://open.bigmodel.cn/api/paas/v4/chat/completions` | `https://bigmodel.cn/usercenter/proj-mgmt/apikeys` | 国内 BigModel；现有 preset 与存量 `bigmodel` 凭据归此 profile |
+| `global` | `https://api.z.ai/api/paas/v4/chat/completions` | `https://z.ai/manage-apikey/apikey-list` | 国际 Z.AI；需要独立配置槽，不复用国内 key |
 
-模型页只链接 Chat Completions。相同供应商的 `glm-5.3` 另有 Responses 与 Anthropic 协议，
+两者均使用 `Authorization: Bearer <API Key>` 与 JSON。两个官方 Quick Start 分别要求到各自平台注册/
+登录并创建 Key；官方没有说明账号、余额或 API Key 可以跨区互通。本项目不读取/试投用户真实 key，
+因此互通性保持“未知”，实现必须按不互通处理。
+
+两区模型页都只链接 Chat Completions。国内相同供应商的 `glm-5.3` 另有 Responses 与 Anthropic 协议，
 不能据此外推 Flash。订阅过 GLM Coding Plan（含过期）的账号还可能被限制为只能使用 Chat Completions。
 
 ## 3. 能力与限制
@@ -124,18 +130,16 @@ Content-Type: application/json
 
 当前没有 Flash 模型专属 SSE/工具流响应样本；要取得只能等待官方补充或在用户授权后做真实请求。
 
-## 8. 价格
+## 8. 区域价格
 
-| 价格项 | 标准价（元 / 百万 tokens） | 2026-08-28 可见限时价 |
-|---|---:|---:|
-| 输入 | 0.8 | 0.4 |
-| 输出 | 2.8 | 1.4 |
-| 缓存命中 | 0.23 | 0.115 |
-| 缓存存储 | 价格页未给稳定基础价 | 限时免费 |
+| profile | 币种 | 输入 / M | 输出 / M | 缓存命中 / M | 2026-08-28 促销 |
+|---|---|---:|---:|---:|---|
+| `cn` | CNY | 0.8 | 2.8 | 0.23 | 0.4 / 1.4 / 0.115；页面仅写“5 折限时两周”，无绝对截止日 |
+| `global` | USD | 0.15 | 0.50 | 0.03 | 0.075 / 0.25 / 0.015；截至 2026-09-09 24:00（UTC+8，新加坡时间） |
 
-价格页标“5 折限时两周”，但没有绝对结束日。模型页称标准 API 价为 GLM-5.3 的 1/10、
-限时为 1/20，与数值一致。Coding Plan 3 倍额度扣减是订阅用量规则，不是 token 单价。
-实现或发布前重新核价，不把促销固化为长期价格。
+两区缓存存储均显示限时免费。国内模型页称标准 API 价为 GLM-5.3 的 1/10、限时为 1/20；
+Coding Plan 3 倍额度扣减是订阅用量规则，不是 token 单价。SDK/产品必须让价格随 endpoint profile
+选择，不做静态汇率换算，也不把任何促销固化为长期标准价；实现或发布前分别重新核价。
 
 ## 9. 错误与资源边界
 
@@ -156,6 +160,7 @@ Content-Type: application/json
 | `file_id` 上传 | Chat 接受 file_id；Files API purpose 无 Chat 枚举 | 不实现 file_id 上传；不猜 purpose |
 | 跨模态混合 | 是否可混合和总量限制未说明 | 不承诺/不自动开放任意组合 |
 | Flash 专属事件样本 | 官方流式样本使用其他 GLM 模型 | 通用 parser 可用相关样本测试，但不宣称 Flash 真网事件已验证 |
+| 国内 / 国际 Key 互通 | 两站分别要求到各自平台创建 Key，未声明账号、余额或 Key 可互通 | 分离 credential slot；禁止跨 endpoint 自动试投 |
 
 结论：**完整能力暂不可编码；若 13.2 明确接受上述保守降级，只实现已确认子集，则可编码。**
 
@@ -163,7 +168,12 @@ Content-Type: application/json
 
 - `packages/ai-sdk/src/llm/modelCatalogEntries.ts`：新增独立条目，image/video=true、audio=false、
   1M/128K；结构化输出保持保守值。
-- `packages/ai-sdk/src/llm/providerPresets.ts`：加入 BigModel 预设，不新增 alias。
+- `packages/ai-sdk/src/llm/providerPresets.ts`：保留现有国内 `bigmodel` 默认值，加入 Flash；以同一
+  provider family 声明 `cn` / `global` endpoint profiles，不新增第二套 provider 内核。
+- `packages/ai-sdk/src/llm/types.ts`：增加供应商族/endpoint profile/credential identity 的可移植数据契约；
+  国内存量 `providerId=bigmodel` 默认迁为 `cn`，国际配置必须有不同实例 id 和凭据槽。
+- SDK credential 获取与 Electron keystore：凭据不能只按供应商族共享；按配置实例或显式
+  credential identity 区分国内/国际，且迁移不得移动、删除或拿国内 key 试国际端点。
 - `packages/ai-sdk/src/llm/providerReasoningRequest.ts`：现有规则仅供应商感知；若下发
   clear_thinking=false，先加入模型感知，避免误伤 GLM-5V-Turbo。
 - `packages/ai-sdk/src/llm/streaming.ts` / `chatTypes.ts`：工具增量、合法空块、无 choices、
@@ -190,3 +200,8 @@ Content-Type: application/json
 - [错误码](https://docs.bigmodel.cn/cn/faq/api-code)：认证、参数、限流、内容安全与服务错误。
 - [价格页](https://open.bigmodel.cn/pricing)：标准价与核对日促销价。
 - [官方文档全量索引](https://docs.bigmodel.cn/llms.txt)：相关能力页发现与覆盖复核。
+- [国内 Quick Start](https://docs.bigmodel.cn/cn/guide/start/quick-start)：国内 Base URL、API Key 页面与 Flash 模型入口。
+- [国际 GLM-5.3-Flash](https://docs.z.ai/guides/vlm/glm-5.3-flash)：国际站模型 ID、模态、上下文、参数与能力。
+- [国际 Quick Start](https://docs.z.ai/guides/overview/quick-start)：国际 Base URL、API Key 页面与 Flash 模型入口。
+- [国际 HTTP API](https://docs.z.ai/guides/develop/http/introduction)：国际通用端点与 Bearer 鉴权。
+- [国际价格](https://docs.z.ai/guides/overview/pricing)：USD 标准价、促销价和绝对截止时间。

@@ -1,4 +1,4 @@
-# 智谱 GLM（BigModel / Z.ai）
+# 智谱 GLM（国内 BigModel / 国际 Z.AI）
 
 > 最后核对：2026-08-28。信息来源见文末「官方来源索引」，均为无需登录的官方页面。
 
@@ -10,8 +10,9 @@
 
 | 项目 | 取值 |
 |---|---|
-| `providerId`（项目唯一约定） | `bigmodel` |
-| 品牌与 SDK 名称 | 智谱 / BigModel / Z.ai；官方 Python SDK 已从 `zhipuai` 迁到 `zai-sdk`，**这些都不是项目运行时 provider alias** |
+| 现有 `providerId` | `bigmodel`；当前预设明确指向**国内 BigModel**，不是国际 Z.AI |
+| 供应商族设计 | 继续共用 `bigmodel` provider family / 协议内核，新增 `cn` / `global` endpoint profile；不复制两个 provider 实现 |
+| 品牌与 SDK 名称 | 国内智谱 BigModel 与国际 Z.AI 是两个官方平台入口；官方 Python SDK 名称不是运行时 provider alias |
 | 对应项目 `adapter` | `openai`（Chat Completions）；`glm-5.3` 官方还提供 Responses 与 Anthropic 协议 |
 | 鉴权 | `Authorization: Bearer <API Key>` |
 | `glm-5.3-flash` 接入结论 | 既有 `bigmodel` 供应商下的**新增独立原生多模态模型**，不是 `glm-5.3` 的别名，也不触发供应商重命名 |
@@ -20,13 +21,28 @@
 `glm-5.3-flash` 的展示名为 `GLM-5.3-Flash`，官方 API Model Code 为小写的
 `glm-5.3-flash`。公开资料没有给出第二个 API 别名，不要把展示名、`Z.ai` 或 SDK 包名当成别名注册。
 
-## 2. Base URL 与协议边界
+## 2. 国内 / 国际区域矩阵与协议边界
 
-| 协议 | Base URL | 已确认模型范围 |
+| profile | 官方平台 / 文档 | Chat Base URL | API Key 入口 | `glm-5.3-flash` | 价格币种 |
+|---|---|---|---|---|---|
+| `cn` | 智谱 BigModel / `docs.bigmodel.cn` | `https://open.bigmodel.cn/api/paas/v4` | `https://bigmodel.cn/usercenter/proj-mgmt/apikeys` | 官方模型页与 Quick Start 均列出 | CNY |
+| `global` | Z.AI / `docs.z.ai` | `https://api.z.ai/api/paas/v4` | `https://z.ai/manage-apikey/apikey-list` | 官方模型页、Quick Start 与价格页均列出 | USD |
+
+两站的 Flash 模型页确认相同的 model ID、text/image/video/file → text、1M / 128K、强制思考、
+Chat/SSE、Function Calling、缓存与推荐参数。它们不是同一个 API 域名，价格和账户入口也不同。
+官方没有声明国内与国际账号、余额或 API Key 可以互通；在没有官方依据和真网验证时，必须按
+**不互通**设计，分别保存凭据，不能把国内 key 自动发送到国际端点或反向尝试。
+
+当前仓库 `providerPresets.ts` 的 `bigmodel` 使用国内 Base URL 与国内 Key 页面，现有用户配置、
+凭据和模型调用都属于 `cn` profile。此前文档标题把 BigModel / Z.AI 并列写在一起，容易误读为
+现有预设使用国际站，本轮已纠正；不得把存量 `bigmodel` 默认端点改成国际域名。
+
+国内 `glm-5.3` 另外确认以下协议，Flash 不能从它外推：
+
+| 协议 | 国内 Base URL | 已确认模型范围 |
 |---|---|---|
-| OpenAI Chat Completions | `https://open.bigmodel.cn/api/paas/v4` | `glm-5.3`、`glm-5.3-flash`、`glm-5v-turbo` |
-| OpenAI Responses | `https://open.bigmodel.cn/api/v1` | `glm-5.3`；`glm-5.3-flash` 模型页未列出 |
-| Anthropic Messages | `https://open.bigmodel.cn/api/anthropic` | `glm-5.3`；`glm-5.3-flash` 模型页未列出 |
+| OpenAI Responses | `https://open.bigmodel.cn/api/v1` | `glm-5.3`；Flash 模型页未列出 |
+| Anthropic Messages | `https://open.bigmodel.cn/api/anthropic` | `glm-5.3`；Flash 模型页未列出 |
 
 `glm-5.3-flash` 官方模型页只链接 `POST /paas/v4/chat/completions`，本项目只能把
 Chat Completions 视为已确认协议，不能因同一供应商的 `glm-5.3` 支持另外两种协议而外推。
@@ -36,11 +52,11 @@ Chat Completions 调用模型 API。同一账号在不同协议上的可用性�
 
 ## 3. 模型清单
 
-| 模型 ID | 简介 | 输入 → 输出 | 上下文 / 最大输出 | 标准价格（元/百万 tokens） |
-|---|---|---|---|---|
-| `glm-5.3` | 最新旗舰文本模型，面向软件工程与 Agent 任务 | 文本 → 文本 | 1M / 128K | 输入 8；输出 28；缓存命中 2 |
-| `glm-5.3-flash` | GLM-5 系列首个原生多模态模型；2026-08-26 上线 | 文本、图片、视频、文件 → 文本 | 1M / 128K | 输入 0.8；输出 2.8；缓存命中 0.23 |
-| `glm-5v-turbo` | 面向看图、看视频写代码的多模态 Coding 基座 | 文本、图片、视频、文件 → 文本 | 200K / 128K | 官方模型页未直接列出，发布前重新查价格页 |
+| 模型 ID | 简介 | 输入 → 输出 | 上下文 / 最大输出 | 国内标准价（CNY/M tokens） | 国际标准价（USD/M tokens） |
+|---|---|---|---|---|---|
+| `glm-5.3` | 最新旗舰文本模型，面向软件工程与 Agent 任务 | 文本 → 文本 | 1M / 128K | 输入 8；输出 28；缓存命中 2 | 见国际价格页，发布前核对 |
+| `glm-5.3-flash` | GLM-5 系列首个原生多模态模型；2026-08-26 上线 | 文本、图片、视频、文件 → 文本 | 1M / 128K | 输入 0.8；输出 2.8；缓存命中 0.23 | 输入 0.15；输出 0.50；缓存命中 0.03 |
+| `glm-5v-turbo` | 面向看图、看视频写代码的多模态 Coding 基座 | 文本、图片、视频、文件 → 文本 | 200K / 128K | 官方模型页未直接列出，发布前重新查价格页 | 是否在国际站提供及价格未在本轮核对 |
 
 2026-08-28 价格页对 `glm-5.3-flash` 显示“5 折限时两周”：输入 0.4、输出 1.4、
 缓存命中 0.115 元/百万 tokens，缓存存储限时免费。页面没有显示促销开始日或绝对结束日，
@@ -48,6 +64,10 @@ Chat Completions 调用模型 API。同一账号在不同协议上的可用性�
 
 `glm-5.3-flash` 的模型页还写明 API 价格为 `glm-5.3` 的 1/10、限时价格为 1/20；
 与价格页上述数值一致。Coding Plan 中按 3 倍用量扣减属于订阅额度规则，不是 API token 单价。
+
+国际价格页显示 2026-08-28 的 5 折价为输入 $0.075、输出 $0.25、缓存命中 $0.015 / M tokens，
+并明确促销至 2026-09-09 24:00（UTC+8，新加坡时间）。国内页面只写“限时两周”，没有绝对日期；
+两区价格必须随 endpoint profile 展示，不能换算后合并成一个计价真相。
 
 ## 4. `glm-5.3-flash` 输入契约
 
@@ -167,7 +187,12 @@ schema 未暴露 `tool_stream`，通用字段说明列出的支持模型也未�
 
 - `packages/ai-sdk/src/llm/modelCatalogEntries.ts`：新增独立 `glm-5.3-flash` 条目；
   `image=true`、`video=true`、`audio=false`，1M / 128K；结构化输出保持保守值。
-- `packages/ai-sdk/src/llm/providerPresets.ts`：加入 BigModel 预设模型列表，不新增 `zhipu` alias。
+- `packages/ai-sdk/src/llm/providerPresets.ts`：现有 `bigmodel` 国内 preset 保持原 Base URL 与凭据不变；
+  新增同一供应商族的 `cn` / `global` endpoint profile 数据，国际 profile 使用 Z.AI Base URL 和 Key 页面。
+- `packages/ai-sdk/src/llm/types.ts`：补供应商族、endpoint profile 与 credential identity；不要用模型 ID
+  或 UI 条件分支判断区域。
+- 凭据：当前 SDK 用 `credentials.get('llm', providerId)`，Electron keystore 也按 providerId 存取。
+  13.2 必须让国内/国际配置实例使用不同凭据槽；国内存量 `bigmodel` 原槽原值保留并默认 profile=cn。
 - `packages/ai-sdk/src/llm/providerReasoningRequest.ts`：现有 `bigmodel` 是供应商级规则；需要模型感知后再决定
   `thinking.clear_thinking=false`，不得为 Flash 修改而误伤 `glm-5v-turbo`。
 - `packages/ai-sdk/src/llm/streaming.ts` 与 `packages/ai-sdk/src/llm/chatTypes.ts`：核对工具调用增量、
@@ -199,3 +224,9 @@ schema 未暴露 `tool_stream`，通用字段说明列出的支持模型也未�
 - [GLM-5.3 模型说明](https://docs.bigmodel.cn/cn/guide/models/text/glm-5.3)
 - [GLM-5V-Turbo 模型说明](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-5v-turbo)
 - [联网搜索](https://docs.bigmodel.cn/cn/guide/tools/web-search)
+- [国内 Quick Start](https://docs.bigmodel.cn/cn/guide/start/quick-start)（国内 Base URL、Key 管理入口与 Flash）
+- [国际 GLM-5.3-Flash](https://docs.z.ai/guides/vlm/glm-5.3-flash)（国际站模型身份、模态与参数）
+- [国际 Quick Start](https://docs.z.ai/guides/overview/quick-start)（国际 Base URL、Key 管理入口与 Flash）
+- [国际 HTTP API](https://docs.z.ai/guides/develop/http/introduction)（国际通用端点与 Bearer 鉴权）
+- [国际价格](https://docs.z.ai/guides/overview/pricing)（USD 标准/促销价与截止时间）
+- [国际文档索引](https://docs.z.ai/llms.txt)（国际站页面覆盖）

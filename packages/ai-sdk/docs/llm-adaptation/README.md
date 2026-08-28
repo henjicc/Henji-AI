@@ -93,7 +93,7 @@ docs/llm-adaptation/
 |---|---|---|---|---|
 | 火山引擎 | `https://ark.cn-beijing.volces.com/api/v3` | `doubao-seed-evolving` | 1024K | 6 / 30 |
 | Kimi | `https://api.moonshot.cn/v1` | `kimi-k3` | 1,048,576 | 20 / 100 |
-| 智谱 GLM | `https://open.bigmodel.cn/api/paas/v4` | `glm-5.3` / `glm-5.3-flash`（原生多模态） | 1M | 8 / 28；Flash 标准价 0.8 / 2.8 |
+| 智谱 GLM | 国内 `https://open.bigmodel.cn/api/paas/v4`；国际 `https://api.z.ai/api/paas/v4` | `glm-5.3` / `glm-5.3-flash`（原生多模态） | 1M | 国内 GLM-5.3：8 / 28；Flash：CNY 0.8 / 2.8、USD 0.15 / 0.50 |
 | DeepSeek | `https://api.deepseek.com` | `deepseek-v4-pro` | 1M | 4.5 / 13.5（闲时） |
 | 小米 MiMo | `https://api.xiaomimimo.com/v1` | `mimo-v2.5-pro` | 1M | 3 / 6 |
 | 百炼 Qwen | `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` | `qwen3.8-max` | ~1M | 12 / 36 |
