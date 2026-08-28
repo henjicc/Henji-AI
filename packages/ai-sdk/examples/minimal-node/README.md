@@ -1,6 +1,6 @@
 # minimal-node
 
-用 `@henjicc/ai-sdk@0.2.4` 的 `generation` 与 `runtime` 按需入口调用 KIE `z-image`。
+用 `@henjicc/ai-sdk@0.2.5` 的 `generation` 与 `runtime` 按需入口调用 KIE `z-image`。
 它保留完整 generation catalog，但不会带入 LLM/BigModel。示例不会下载结果文件；成功后只输出供应商返回的 URL。
 
 ## 安装

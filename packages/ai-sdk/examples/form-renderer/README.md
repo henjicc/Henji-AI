@@ -1,6 +1,6 @@
 # form-renderer
 
-无框架、无 DOM 依赖的参数表单契约示例。它从 `client.catalog` 读取真实模型，使用
+无框架、无 DOM 依赖的 `@henjicc/ai-sdk@0.2.5` 参数表单契约示例。它从 `client.catalog` 读取真实模型，使用
 `evaluateRuntimeCondition()` 处理显隐/禁用，使用 `getRuntimeMediaInputContract()` 生成媒体上传入口。
 示例只使用 `generation`、`catalog` 与 `runtime` 按需入口，保留完整 generation catalog，
 但不会带入 LLM/BigModel。
