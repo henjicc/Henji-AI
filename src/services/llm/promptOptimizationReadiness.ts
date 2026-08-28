@@ -35,11 +35,16 @@ export async function loadConfiguredLlmProviderIds(
   config: LlmConfigState,
 ): Promise<string[] | undefined> {
   if (!isDesktopRuntime()) return undefined
-  const providerIds = config.providers.map((provider) => provider.providerId)
-  if (providerIds.length === 0) return []
+  const credentialIds = [...new Set(config.providers.map(provider => provider.credentialId ?? provider.providerId))]
+  if (credentialIds.length === 0) return []
   try {
-    const statuses = await llmGetProviderKeyStatus(providerIds)
-    return statuses.filter((status) => status.configured).map((status) => status.providerId)
+    const statuses = await llmGetProviderKeyStatus(credentialIds)
+    const configuredCredentials = new Set(
+      statuses.filter(status => status.configured).map(status => status.credentialId)
+    )
+    return config.providers
+      .filter(provider => configuredCredentials.has(provider.credentialId ?? provider.providerId))
+      .map(provider => provider.providerId)
   } catch (error) {
     logger.error('读取大语言模型密钥状态失败', error, {
       event: 'prompt_optimization.provider_key_status.failed',

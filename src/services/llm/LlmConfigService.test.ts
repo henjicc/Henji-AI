@@ -39,6 +39,41 @@ describe('normalizeLlmConfig', () => {
       .toBe('openai-compatible')
     expect(model?.apiProtocol).toBe('openai-compatible')
     expect(config.textProcessingPromptTemplates.length).toBeGreaterThan(0)
+    expect(config.providers[0]).toMatchObject({
+      providerFamilyId: 'custom',
+      credentialId: 'custom',
+      setup: { kind: 'custom' },
+    })
+  })
+
+  it('明确清空供应商后不会在保存时复活内置项', () => {
+    const defaults = normalizeLlmConfig(null)
+    const cleared = normalizeLlmConfig({ ...defaults, providers: [], models: [] })
+    expect(cleared.providers).toEqual([])
+    expect(cleared.models).toEqual([])
+  })
+
+  it('只把官方地址上的存量 PPIO 识别成不可删除的内置 preset', () => {
+    const official = normalizeLlmConfig({
+      providers: [{
+        providerId: 'ppio', displayName: 'PPIO', adapter: 'openai',
+        baseUrl: 'https://api.ppio.com/openai', enabled: true,
+      }],
+      models: [],
+    } as unknown as Partial<LlmConfigState>)
+    expect(official.providers[0]).toMatchObject({
+      credentialId: 'ppio',
+      setup: { kind: 'preset', presetId: 'ppio', lifecycle: 'builtin' },
+    })
+
+    const custom = normalizeLlmConfig({
+      providers: [{
+        providerId: 'ppio', displayName: 'Private PPIO Proxy', adapter: 'openai',
+        baseUrl: 'https://proxy.example.com/v1', enabled: true,
+      }],
+      models: [],
+    } as unknown as Partial<LlmConfigState>)
+    expect(custom.providers[0].setup).toEqual({ kind: 'custom' })
   })
 
   it('保存时不改写提示词优化方案选择的供应商与模型', () => {

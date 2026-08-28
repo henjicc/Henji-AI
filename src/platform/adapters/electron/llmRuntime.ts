@@ -12,18 +12,22 @@ function getNativeLlm(): NonNullable<typeof window.henjiNative>['llm'] {
 
 export function createElectronLlmRuntime(): LlmRuntimePlatform {
   return {
-    setProviderApiKey: async (providerId, apiKey) => {
-      await getNativeLlm().setProviderApiKey(providerId, apiKey)
+    setProviderApiKey: async (credentialId, apiKey) => {
+      await getNativeLlm().setProviderApiKey(credentialId, apiKey)
     },
-    removeProviderApiKey: async (providerId) => {
-      await getNativeLlm().removeProviderApiKey(providerId)
+    removeProviderApiKey: async (credentialId) => {
+      await getNativeLlm().removeProviderApiKey(credentialId)
     },
-    getProviderApiKey: async (providerId) => {
-      return await getNativeLlm().getProviderApiKey(providerId)
+    getProviderApiKey: async (credentialId) => {
+      return await getNativeLlm().getProviderApiKey(credentialId)
     },
-    getProviderKeyStatus: async (providerIds) => {
-      return await getNativeLlm().getProviderKeyStatus(providerIds)
+    getProviderKeyStatus: async (credentialIds) => {
+      return await getNativeLlm().getProviderKeyStatus(credentialIds)
     },
+    readConfig: async () => await getNativeLlm().readConfig(),
+    writeConfig: async config => await getNativeLlm().writeConfig(config),
+    commitProviderSettings: async request => await getNativeLlm().commitProviderSettings(request),
+    deleteProviderSettings: async request => await getNativeLlm().deleteProviderSettings(request),
     chatStream: async (request, onEvent) => {
       await getNativeLlm().chatStream(request, onEvent)
     },

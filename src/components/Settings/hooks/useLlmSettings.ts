@@ -5,8 +5,6 @@ import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
   llmGetProviderApiKey,
   llmGetProviderKeyStatus,
-  llmRemoveProviderApiKey,
-  llmSetProviderApiKey,
 } from '@/commands/llmRuntime'
 import { llmConfigService } from '@/services/llm'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -37,7 +35,10 @@ export function useLlmSettings(): UseLlmSettingsResult {
   const [loading, setLoading] = useState(true)
   const timersRef = useRef<Record<string, ReturnType<typeof setTimeout> | undefined>>({})
 
-  const providerIds = useMemo(() => config.providers.map(provider => provider.providerId), [config.providers])
+  const credentialIds = useMemo(
+    () => [...new Set(config.providers.map(provider => provider.credentialId ?? provider.providerId))],
+    [config.providers]
+  )
 
   useEffect(() => {
     let disposed = false
@@ -63,18 +64,21 @@ export function useLlmSettings(): UseLlmSettingsResult {
   }, [])
 
   useEffect(() => {
-    if (providerIds.length === 0) return
+    if (credentialIds.length === 0) return
     let disposed = false
     const loadKeys = async (): Promise<void> => {
       try {
-        const statuses = await llmGetProviderKeyStatus(providerIds)
+        const statuses = await llmGetProviderKeyStatus(credentialIds)
         if (disposed) return
+        const statusByCredential = new Map(statuses.map(item => [item.credentialId, item.configured]))
         const nextStatus: StatusMap = {}
         const nextKeys: KeyMap = {}
-        await Promise.all(statuses.map(async item => {
-          nextStatus[item.providerId] = item.configured
-          if (item.configured) {
-            nextKeys[item.providerId] = await llmGetProviderApiKey(item.providerId) ?? ''
+        await Promise.all(config.providers.map(async provider => {
+          const credentialId = provider.credentialId ?? provider.providerId
+          const configured = statusByCredential.get(credentialId) === true
+          nextStatus[provider.providerId] = configured
+          if (configured) {
+            nextKeys[provider.providerId] = await llmGetProviderApiKey(credentialId) ?? ''
           }
         }))
         if (disposed) return
@@ -86,14 +90,20 @@ export function useLlmSettings(): UseLlmSettingsResult {
     }
     void loadKeys()
     return () => { disposed = true }
-  }, [providerIds])
+  }, [config.providers, credentialIds])
 
   const refreshProviderKey = async (providerId: string): Promise<void> => {
-    const [statusItem] = await llmGetProviderKeyStatus([providerId])
+    const provider = config.providers.find(item => item.providerId === providerId)
+    if (!provider) return
+    const credentialId = provider.credentialId ?? provider.providerId
+    const [statusItem] = await llmGetProviderKeyStatus([credentialId])
     const configured = statusItem?.configured === true
-    const apiKey = configured ? (await llmGetProviderApiKey(providerId)) ?? '' : ''
-    setStatus(prev => ({ ...prev, [providerId]: configured }))
-    setKeys(prev => ({ ...prev, [providerId]: apiKey }))
+    const apiKey = configured ? (await llmGetProviderApiKey(credentialId)) ?? '' : ''
+    const affectedProviderIds = config.providers
+      .filter(item => (item.credentialId ?? item.providerId) === credentialId)
+      .map(item => item.providerId)
+    setStatus(prev => Object.assign({}, prev, ...affectedProviderIds.map(id => ({ [id]: configured }))))
+    setKeys(prev => Object.assign({}, prev, ...affectedProviderIds.map(id => ({ [id]: apiKey }))))
   }
 
   const updateKey = (providerId: string, value: string): void => {
@@ -104,12 +114,13 @@ export function useLlmSettings(): UseLlmSettingsResult {
       void (async () => {
         try {
           const trimmed = value.trim()
-          if (!trimmed) {
-            await llmRemoveProviderApiKey(providerId)
-            await refreshProviderKey(providerId)
-            return
-          }
-          await llmSetProviderApiKey(providerId, trimmed)
+          const provider = config.providers.find(item => item.providerId === providerId)
+          if (!provider) throw new Error(`Provider "${providerId}" is no longer available; reload settings and retry`)
+          await llmConfigService.commitProviderSettings(
+            provider,
+            [],
+            trimmed ? { kind: 'set', apiKey: trimmed } : { kind: 'remove' }
+          )
           await refreshProviderKey(providerId)
         } catch (error) {
           logger.error(`[useLlmSettings] update key failed: ${providerId}`, error)

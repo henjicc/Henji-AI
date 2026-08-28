@@ -30,6 +30,8 @@ export interface LlmProviderConfig {
   endpointProfile?: string
   /** RuntimeContext.credentials 的独立凭据槽；省略时兼容使用 providerId。 */
   credentialId?: string
+  /** 供应商配置来源与生命周期；旧配置缺省值只允许由宿主归一化一次。 */
+  setup?: LlmProviderSetup
   displayName: string
   adapter: string
   apiProtocol?: LlmApiProtocol
@@ -38,6 +40,19 @@ export interface LlmProviderConfig {
   reasoningConfigurable?: boolean
   enabled: boolean
 }
+
+export type LlmProviderSetup =
+  | {
+      kind: 'preset'
+      presetId: string
+      /** 内置记录不可永久删除；user 预设实例可以删除。 */
+      lifecycle: 'builtin' | 'user'
+    }
+  | {
+      kind: 'custom'
+      /** 自定义供应商可选的密钥管理页，只允许 HTTP(S)。 */
+      apiKeyManagementUrl?: string
+    }
 
 export interface LlmModelConfig {
   providerId: string

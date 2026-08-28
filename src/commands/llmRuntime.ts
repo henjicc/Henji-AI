@@ -1,13 +1,18 @@
 import { createLogger } from '@/core/logging'
-import type { LlmChatRequest, LlmStreamEvent } from '@henjicc/ai-sdk'
+import type { LlmChatRequest, LlmConfigState, LlmStreamEvent } from '@henjicc/ai-sdk'
 import type { ModelStepEvent, ModelStepInput, ModelStepResult } from '@henjicc/ai-sdk'
 import type { ModelCapabilitySmokeRequest, ModelCapabilitySmokeResult } from '@/core/llm/capabilitySmoke'
+import type {
+  CommitLlmProviderSettingsDto,
+  DeleteLlmProviderSettingsDto,
+  LlmProviderSettingsResultDto,
+} from '@/platform/contracts/llmRuntime'
 import { getPlatform, isDesktopRuntime } from '@/platform/runtime'
 
 const logger = createLogger('commands.llmRuntime')
 
 export interface LlmProviderKeyStatusDto {
-  providerId: string
+  credentialId: string
   configured: boolean
 }
 
@@ -17,24 +22,48 @@ function ensureDesktopRuntime(): void {
   }
 }
 
-export async function llmSetProviderApiKey(providerId: string, apiKey: string): Promise<void> {
+export async function llmSetProviderApiKey(credentialId: string, apiKey: string): Promise<void> {
   ensureDesktopRuntime()
-  await getPlatform().llmRuntime.setProviderApiKey(providerId, apiKey)
+  await getPlatform().llmRuntime.setProviderApiKey(credentialId, apiKey)
 }
 
-export async function llmRemoveProviderApiKey(providerId: string): Promise<void> {
+export async function llmRemoveProviderApiKey(credentialId: string): Promise<void> {
   ensureDesktopRuntime()
-  await getPlatform().llmRuntime.removeProviderApiKey(providerId)
+  await getPlatform().llmRuntime.removeProviderApiKey(credentialId)
 }
 
-export async function llmGetProviderApiKey(providerId: string): Promise<string | null> {
+export async function llmGetProviderApiKey(credentialId: string): Promise<string | null> {
   ensureDesktopRuntime()
-  return await getPlatform().llmRuntime.getProviderApiKey(providerId)
+  return await getPlatform().llmRuntime.getProviderApiKey(credentialId)
 }
 
-export async function llmGetProviderKeyStatus(providerIds: string[]): Promise<LlmProviderKeyStatusDto[]> {
+export async function llmGetProviderKeyStatus(credentialIds: string[]): Promise<LlmProviderKeyStatusDto[]> {
   ensureDesktopRuntime()
-  return await getPlatform().llmRuntime.getProviderKeyStatus(providerIds)
+  return await getPlatform().llmRuntime.getProviderKeyStatus(credentialIds)
+}
+
+export async function llmReadConfig(): Promise<LlmConfigState | null> {
+  ensureDesktopRuntime()
+  return await getPlatform().llmRuntime.readConfig()
+}
+
+export async function llmWriteConfig(config: LlmConfigState): Promise<void> {
+  ensureDesktopRuntime()
+  await getPlatform().llmRuntime.writeConfig(config)
+}
+
+export async function llmCommitProviderSettings(
+  request: CommitLlmProviderSettingsDto
+): Promise<LlmProviderSettingsResultDto> {
+  ensureDesktopRuntime()
+  return await getPlatform().llmRuntime.commitProviderSettings(request)
+}
+
+export async function llmDeleteProviderSettings(
+  request: DeleteLlmProviderSettingsDto
+): Promise<LlmProviderSettingsResultDto> {
+  ensureDesktopRuntime()
+  return await getPlatform().llmRuntime.deleteProviderSettings(request)
 }
 
 export async function llmChatStream(

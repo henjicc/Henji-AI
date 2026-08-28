@@ -212,6 +212,8 @@ export function createBuiltInLlmProviders(): LlmProviderConfig[] {
   return [
     {
       providerId: DEFAULT_PPIO_PROVIDER_ID,
+      credentialId: DEFAULT_PPIO_PROVIDER_ID,
+      setup: { kind: 'preset', presetId: DEFAULT_PPIO_PROVIDER_ID, lifecycle: 'builtin' },
       displayName: '派欧云',
       adapter: 'openai',
       apiProtocol: 'openai-compatible',
@@ -222,6 +224,8 @@ export function createBuiltInLlmProviders(): LlmProviderConfig[] {
     },
     {
       providerId: DEFAULT_DEEPSEEK_PROVIDER_ID,
+      credentialId: DEFAULT_DEEPSEEK_PROVIDER_ID,
+      setup: { kind: 'preset', presetId: DEFAULT_DEEPSEEK_PROVIDER_ID, lifecycle: 'builtin' },
       displayName: 'DeepSeek',
       adapter: 'deepseek',
       apiProtocol: 'openai-compatible',
@@ -242,6 +246,8 @@ function createBuiltInLlmModel(
 ): LlmModelConfig {
   return {
     providerId,
+    providerFamilyId: providerId,
+    credentialId: providerId,
     modelId,
     displayName,
     adapter,

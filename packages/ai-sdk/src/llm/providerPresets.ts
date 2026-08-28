@@ -161,17 +161,27 @@ export function findLlmProviderPreset(providerId: string): LlmProviderPreset | n
 
 export function createProviderFromPreset(
   preset: LlmProviderPreset,
-  options: { endpointProfile?: string; providerId?: string } = {}
+  options: { endpointProfile?: string; providerId?: string; lifecycle?: 'builtin' | 'user' } = {}
 ): LlmProviderConfig {
   if (preset.providerId === 'bigmodel') {
     const endpointProfile = options.endpointProfile
     if (endpointProfile !== undefined && endpointProfile !== 'cn' && endpointProfile !== 'global') {
       throw new Error(`[llm_endpoint_profile_unknown] bigmodel endpoint profile "${endpointProfile}" is unavailable`)
     }
-    return createBigmodelProvider({ endpointProfile, providerId: options.providerId })
+    return createBigmodelProvider({
+      endpointProfile,
+      providerId: options.providerId,
+      lifecycle: options.lifecycle,
+    })
   }
   return {
     providerId: options.providerId ?? preset.providerId,
+    credentialId: options.providerId ?? preset.providerId,
+    setup: {
+      kind: 'preset',
+      presetId: preset.providerId,
+      lifecycle: options.lifecycle ?? 'user',
+    },
     displayName: preset.displayName,
     adapter: preset.adapter,
     apiProtocol: preset.apiProtocol,

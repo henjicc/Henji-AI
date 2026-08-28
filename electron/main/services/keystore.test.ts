@@ -32,10 +32,16 @@ vi.mock('./logging', () => ({
 
 import {
   AI_KEY_NAMESPACE,
+  LLM_KEY_NAMESPACE,
+  captureEncryptedKeySnapshot,
   getAiProviderKeyStatus,
+  getLlmProviderApiKey,
+  getLlmProviderKeyStatus,
   getKey,
   hasKey,
+  restoreEncryptedKeySnapshot,
   setKey,
+  setLlmProviderApiKey,
 } from './keystore'
 
 const KEYSTORE_RELATIVE_PATH = path.join('com.henji.ai', 'Henji-AI', 'provider-keys.enc.json')
@@ -89,5 +95,39 @@ describe('keystore', () => {
     mocks.isEncryptionAvailable.mockReturnValue(false)
     expect(() => getAiProviderKeyStatus()).not.toThrow()
     expect(getAiProviderKeyStatus().every(item => item.configured === false)).toBe(true)
+  })
+
+  it('LLM 凭据状态按 credentialId 返回，并且只有 ppio 能使用生成侧回退', () => {
+    setKey(AI_KEY_NAMESPACE, 'ppio', 'legacy-ppio')
+    setLlmProviderApiKey('bigmodel-cn', 'cn-secret')
+
+    expect(getLlmProviderKeyStatus(['ppio', 'bigmodel-cn', 'bigmodel-global'])).toEqual([
+      { credentialId: 'ppio', configured: true },
+      { credentialId: 'bigmodel-cn', configured: true },
+      { credentialId: 'bigmodel-global', configured: false },
+    ])
+    expect(getLlmProviderApiKey('ppio')).toBe('legacy-ppio')
+    expect(getLlmProviderApiKey('bigmodel-global')).toBeNull()
+  })
+
+  it('事务快照只包含密文并能恢复旧值', () => {
+    setLlmProviderApiKey('shared-slot', 'old-secret')
+    const snapshot = captureEncryptedKeySnapshot(LLM_KEY_NAMESPACE, 'shared-slot')
+    expect(snapshot.encrypted).not.toContain('old-secret')
+
+    setLlmProviderApiKey('shared-slot', 'new-secret')
+    restoreEncryptedKeySnapshot(snapshot)
+    expect(getLlmProviderApiKey('shared-slot')).toBe('old-secret')
+  })
+
+  it('原子替换失败不会覆盖已有密钥文件', () => {
+    setLlmProviderApiKey('atomic-slot', 'old-secret')
+    const rename = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => {
+      throw new Error('fault: rename')
+    })
+
+    expect(() => setLlmProviderApiKey('atomic-slot', 'new-secret')).toThrow('fault: rename')
+    rename.mockRestore()
+    expect(getLlmProviderApiKey('atomic-slot')).toBe('old-secret')
   })
 })

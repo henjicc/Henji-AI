@@ -10,6 +10,7 @@ export interface CreateBigmodelProviderOptions {
   endpointProfile?: 'cn' | 'global'
   /** 宿主配置实例 id；默认 cn=bigmodel、global=bigmodel-global。 */
   providerId?: string
+  lifecycle?: 'builtin' | 'user'
 }
 
 export function createBigmodelProvider(
@@ -29,6 +30,11 @@ export function createBigmodelProvider(
     providerFamilyId: identity.providerFamilyId,
     endpointProfile: identity.endpointProfile,
     credentialId: identity.credentialId,
+    setup: {
+      kind: 'preset',
+      presetId: BIGMODEL_PROVIDER_FAMILY_ID,
+      lifecycle: options.lifecycle ?? 'user',
+    },
     displayName: profile.displayName,
     adapter: 'openai',
     apiProtocol: 'openai-compatible',

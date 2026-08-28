@@ -132,6 +132,9 @@ describe('AI/LLM IPC 契约', () => {
     const request = {
       requestId: 'chat-request',
       providerId: 'provider-a',
+      providerFamilyId: 'provider-family-a',
+      endpointProfile: 'global',
+      credentialId: 'provider-family-a-global-key',
       modelId: 'model-a',
       adapter: 'openai-compatible',
       baseUrl: 'https://example.com/v1',

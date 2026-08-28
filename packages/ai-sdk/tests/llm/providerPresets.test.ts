@@ -10,6 +10,11 @@ import {
   findLlmProviderPreset,
 } from '../../src/llm/providerPresets'
 import { hasProviderReasoningRule } from '../../src/llm/providerReasoningRequest'
+import {
+  normalizeLlmApiKeyManagementUrl,
+  normalizeLlmProviderSetup,
+  resolveLlmProviderApiKeyUrl,
+} from '../../src/llm/providerSetup'
 
 /**
  * 迁入 SDK 后 `preset.docs` 从仓库根相对路径改成了包内相对路径（不带 `packages/ai-sdk/` 前缀，
@@ -63,6 +68,10 @@ describe('createProviderFromPreset / createModelsFromPreset', () => {
     const bailian = createProviderFromPreset(findLlmProviderPreset('bailian')!)
     expect(bailian.baseUrl).toBeUndefined()
     expect(bailian.enabled).toBe(true)
+    expect(bailian).toMatchObject({
+      credentialId: 'bailian',
+      setup: { kind: 'preset', presetId: 'bailian', lifecycle: 'user' },
+    })
     expect(createProviderFromPreset(findLlmProviderPreset('kimi')!).baseUrl).toBe('https://api.moonshot.cn/v1')
   })
 
@@ -74,5 +83,40 @@ describe('createProviderFromPreset / createModelsFromPreset', () => {
     expect(omni?.catalogId).toBe('mimo-v2.5')
     expect(omni?.capabilities).toMatchObject({ image: true, video: true, audio: true })
     expect(models.every(model => model.providerId === 'mimo' && model.baseUrl === provider.baseUrl)).toBe(true)
+  })
+})
+
+describe('provider setup / API key URL', () => {
+  it('预设返回官方地址，自定义地址只接受无内嵌凭据的 HTTP(S)', () => {
+    const preset = createProviderFromPreset(findLlmProviderPreset('groq')!)
+    expect(resolveLlmProviderApiKeyUrl(preset)).toBe('https://console.groq.com/keys')
+    expect(resolveLlmProviderApiKeyUrl({
+      ...preset,
+      providerId: 'custom-gateway',
+      credentialId: 'custom-gateway',
+      setup: { kind: 'custom', apiKeyManagementUrl: 'https://keys.example.com/manage' },
+    })).toBe('https://keys.example.com/manage')
+    expect(() => normalizeLlmApiKeyManagementUrl('javascript:alert(1)'))
+      .toThrow('unsupported protocol')
+    expect(() => normalizeLlmApiKeyManagementUrl('file:///tmp/key'))
+      .toThrow('unsupported protocol')
+    expect(() => normalizeLlmApiKeyManagementUrl('https://user:secret@example.com/keys'))
+      .toThrow('must not contain embedded credentials')
+    expect(() => normalizeLlmApiKeyManagementUrl(`https://example.com/${'x'.repeat(2_100)}`))
+      .toThrow('exceeds 2048 characters')
+  })
+
+  it('未知 preset 的错误列出可用 preset，便于调用方自行修正', () => {
+    expect(() => normalizeLlmProviderSetup({
+      kind: 'preset', presetId: 'not-a-preset', lifecycle: 'user',
+    })).toThrow(/choose one of: .*groq.*ppio/)
+  })
+
+  it('拒绝畸形 setup 类型与 preset 生命周期', () => {
+    expect(() => normalizeLlmProviderSetup({ kind: 'other' } as never))
+      .toThrow('setup kind must be "preset" or "custom"')
+    expect(() => normalizeLlmProviderSetup({
+      kind: 'preset', presetId: 'ppio', lifecycle: 'temporary',
+    } as never)).toThrow('preset lifecycle must be "builtin" or "user"')
   })
 })

@@ -45,6 +45,7 @@ describe('BigModel endpoint profiles', () => {
       endpointProfile: 'cn',
       credentialId: BIGMODEL_CN_CREDENTIAL_ID,
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      setup: { kind: 'preset', presetId: 'bigmodel', lifecycle: 'user' },
     })
     expect(global).toMatchObject({
       providerId: 'bigmodel-global',

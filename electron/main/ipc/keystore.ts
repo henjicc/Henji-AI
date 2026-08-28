@@ -30,8 +30,16 @@ interface SetNamespacedKeyPayload extends NamespacedKeyPayload {
   apiKey: string
 }
 
-interface ProviderIdsPayload {
-  providerIds: string[]
+interface CredentialPayload {
+  credentialId: string
+}
+
+interface SetCredentialPayload extends CredentialPayload {
+  apiKey: string
+}
+
+interface CredentialIdsPayload {
+  credentialIds: string[]
 }
 
 function readStringField(record: Record<string, unknown>, field: string): string {
@@ -72,16 +80,27 @@ function parseSetNamespacedKeyPayload(input: unknown): SetNamespacedKeyPayload {
   }
 }
 
-function parseProviderIdsPayload(input: unknown): ProviderIdsPayload {
+function parseCredentialPayload(input: unknown): CredentialPayload {
   const record = parseRecord(input)
-  const providerIds = record.providerIds
-  if (
-    !Array.isArray(providerIds) ||
-    !providerIds.every((providerId): providerId is string => typeof providerId === 'string' && providerId.trim().length > 0)
-  ) {
-    throw new Error('Expected providerIds string array')
+  return { credentialId: readStringField(record, 'credentialId') }
+}
+
+function parseSetCredentialPayload(input: unknown): SetCredentialPayload {
+  const record = parseRecord(input)
+  return {
+    credentialId: readStringField(record, 'credentialId'),
+    apiKey: readStringField(record, 'apiKey'),
   }
-  return { providerIds }
+}
+
+function parseCredentialIdsPayload(input: unknown): CredentialIdsPayload {
+  const record = parseRecord(input)
+  const credentialIds = record.credentialIds
+  if (!Array.isArray(credentialIds)
+    || !credentialIds.every((id): id is string => typeof id === 'string' && id.trim().length > 0)) {
+    throw new Error('Expected credentialIds string array')
+  }
+  return { credentialIds }
 }
 
 export function registerKeystoreIpc(): void {
@@ -121,21 +140,21 @@ export function registerKeystoreIpc(): void {
     return getAiProviderKeyStatus()
   })
 
-  registerIpcHandler<SetProviderKeyPayload, void>('llm:setProviderApiKey', parseSetProviderKeyPayload, ({ providerId, apiKey }) => {
-    setLlmProviderApiKey(providerId, apiKey)
+  registerIpcHandler<SetCredentialPayload, void>('llm:setProviderApiKey', parseSetCredentialPayload, ({ credentialId, apiKey }) => {
+    setLlmProviderApiKey(credentialId, apiKey)
   })
 
-  registerIpcHandler<ProviderKeyPayload, void>('llm:removeProviderApiKey', parseProviderKeyPayload, ({ providerId }) => {
-    removeLlmProviderApiKey(providerId)
+  registerIpcHandler<CredentialPayload, void>('llm:removeProviderApiKey', parseCredentialPayload, ({ credentialId }) => {
+    removeLlmProviderApiKey(credentialId)
   })
 
-  registerIpcHandler<ProviderKeyPayload, string | null>('llm:getProviderApiKey', parseProviderKeyPayload, ({ providerId }) => {
-    return getLlmProviderApiKey(providerId)
+  registerIpcHandler<CredentialPayload, string | null>('llm:getProviderApiKey', parseCredentialPayload, ({ credentialId }) => {
+    return getLlmProviderApiKey(credentialId)
   })
 
-  registerIpcHandler<ProviderIdsPayload, Array<{ providerId: string; configured: boolean }>>(
+  registerIpcHandler<CredentialIdsPayload, Array<{ credentialId: string; configured: boolean }>>(
     'llm:getProviderKeyStatus',
-    parseProviderIdsPayload,
-    ({ providerIds }) => getLlmProviderKeyStatus(providerIds)
+    parseCredentialIdsPayload,
+    ({ credentialIds }) => getLlmProviderKeyStatus(credentialIds)
   )
 }

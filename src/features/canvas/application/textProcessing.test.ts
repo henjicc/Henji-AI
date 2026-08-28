@@ -15,7 +15,10 @@ import {
 function createConfig(): LlmConfigState {
   return {
     providers: [
-      { providerId: 'active', displayName: '可用供应商', adapter: 'openai', enabled: true },
+      {
+        providerId: 'active', providerFamilyId: 'bigmodel', endpointProfile: 'global',
+        credentialId: 'bigmodel-global-key', displayName: '可用供应商', adapter: 'openai', enabled: true,
+      },
       { providerId: 'disabled', displayName: '停用供应商', adapter: 'openai', enabled: false },
     ],
     models: [
@@ -79,6 +82,12 @@ describe('textProcessing', () => {
     expect(request.messages[0]).toEqual({
       role: 'system',
       content: '你是一名严谨的素材分析师。',
+    })
+    expect(request).toMatchObject({
+      providerId: 'active',
+      providerFamilyId: 'bigmodel',
+      endpointProfile: 'global',
+      credentialId: 'bigmodel-global-key',
     })
     expect(request.messages[1].content).toEqual([
       { type: 'text', text: '分析这些素材' },

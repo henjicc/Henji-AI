@@ -16,6 +16,7 @@ import { registerDragIpc } from './ipc/drag'
 import { registerImageIpc } from './ipc/image'
 import { registerKeystoreIpc } from './ipc/keystore'
 import { registerLlmRuntimeIpc } from './ipc/llm-runtime'
+import { registerLlmProviderSettingsIpc } from './ipc/llm-provider-settings'
 import { registerLoggingIpc } from './ipc/logging'
 import { registerMediaIpc } from './ipc/media'
 import { registerPingIpc } from './ipc/registry'
@@ -96,6 +97,7 @@ app.whenReady().then(() => {
   registerImageIpc()
   registerKeystoreIpc()
   registerLlmRuntimeIpc()
+  registerLlmProviderSettingsIpc()
   registerLoggingIpc()
   registerMediaIpc()
   registerPingIpc()

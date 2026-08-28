@@ -105,6 +105,9 @@ export function buildTextProcessingRequest(input: {
   return {
     requestId: input.requestId,
     providerId: choice.provider.providerId,
+    providerFamilyId: choice.provider.providerFamilyId,
+    endpointProfile: choice.provider.endpointProfile,
+    credentialId: choice.provider.credentialId,
     modelId: choice.model.modelId,
     adapter: choice.model.adapter || choice.provider.adapter,
     baseUrl: choice.model.baseUrl ?? choice.provider.baseUrl,

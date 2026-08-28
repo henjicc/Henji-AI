@@ -1,5 +1,6 @@
 import { app, safeStorage } from 'electron'
 import fs from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
 import { createMainLogger } from './logging'
@@ -78,8 +79,35 @@ function readKeystoreFile(): KeystoreFile {
 }
 
 function writeKeystoreFile(data: KeystoreFile): void {
-  fs.mkdirSync(getKeystoreDir(), { recursive: true })
-  fs.writeFileSync(getKeystorePath(), `${JSON.stringify(data, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+  const dir = getKeystoreDir()
+  const target = getKeystorePath()
+  const temporary = path.join(dir, `.${KEYSTORE_FILE_NAME}.${process.pid}.${randomUUID()}.tmp`)
+  fs.mkdirSync(dir, { recursive: true })
+  let descriptor: number | null = null
+  try {
+    descriptor = fs.openSync(temporary, 'wx', 0o600)
+    fs.writeFileSync(descriptor, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
+    fs.fsyncSync(descriptor)
+    fs.closeSync(descriptor)
+    descriptor = null
+    fs.renameSync(temporary, target)
+    fs.chmodSync(target, 0o600)
+    fsyncDirectory(dir)
+  } catch (error) {
+    if (descriptor !== null) fs.closeSync(descriptor)
+    try { fs.unlinkSync(temporary) } catch { /* 临时文件可能尚未创建或已 rename。 */ }
+    throw error
+  }
+}
+
+function fsyncDirectory(dir: string): void {
+  if (process.platform === 'win32') return
+  const descriptor = fs.openSync(dir, 'r')
+  try {
+    fs.fsyncSync(descriptor)
+  } finally {
+    fs.closeSync(descriptor)
+  }
 }
 
 function ensureEncryptionAvailable(): void {
@@ -97,6 +125,25 @@ export function setKey(namespace: KeyNamespace, providerId: string, apiKey: stri
 
   const data = readKeystoreFile()
   data.keys[buildKey(namespace, providerId)] = safeStorage.encryptString(trimmedKey).toString('base64')
+  writeKeystoreFile(data)
+}
+
+export interface EncryptedKeySnapshot {
+  storeKey: string
+  encrypted: string | null
+}
+
+/** 只供主进程事务补偿使用；密文不会跨 IPC。 */
+export function captureEncryptedKeySnapshot(namespace: KeyNamespace, providerId: string): EncryptedKeySnapshot {
+  const storeKey = buildKey(namespace, providerId)
+  return { storeKey, encrypted: readKeystoreFile().keys[storeKey] ?? null }
+}
+
+/** 只恢复已经加密的条目，不接触或返回明文。 */
+export function restoreEncryptedKeySnapshot(snapshot: EncryptedKeySnapshot): void {
+  const data = readKeystoreFile()
+  if (snapshot.encrypted === null) delete data.keys[snapshot.storeKey]
+  else data.keys[snapshot.storeKey] = snapshot.encrypted
   writeKeystoreFile(data)
 }
 
@@ -172,28 +219,28 @@ export function getAiProviderKeyStatus(): Array<{ providerId: string; configured
   }))
 }
 
-export function setLlmProviderApiKey(providerId: string, apiKey: string): void {
-  setKey(LLM_KEY_NAMESPACE, providerId, apiKey)
+export function setLlmProviderApiKey(credentialId: string, apiKey: string): void {
+  setKey(LLM_KEY_NAMESPACE, credentialId, apiKey)
 }
 
-export function removeLlmProviderApiKey(providerId: string): void {
-  removeKey(LLM_KEY_NAMESPACE, providerId)
+export function removeLlmProviderApiKey(credentialId: string): void {
+  removeKey(LLM_KEY_NAMESPACE, credentialId)
 }
 
-export function getLlmProviderApiKey(providerId: string): string | null {
-  const scoped = getKey(LLM_KEY_NAMESPACE, providerId)
-  if (scoped !== null || providerId.trim().toLowerCase() !== 'ppio') {
+export function getLlmProviderApiKey(credentialId: string): string | null {
+  const scoped = getKey(LLM_KEY_NAMESPACE, credentialId)
+  if (scoped !== null || credentialId.trim().toLowerCase() !== 'ppio') {
     return scoped
   }
 
   return getAiProviderApiKey('ppio')
 }
 
-export function getLlmProviderKeyStatus(providerIds: string[]): Array<{ providerId: string; configured: boolean }> {
-  return providerIds.map((providerId) => ({
-    providerId,
+export function getLlmProviderKeyStatus(credentialIds: string[]): Array<{ credentialId: string; configured: boolean }> {
+  return credentialIds.map((credentialId) => ({
+    credentialId,
     configured:
-      hasKey(LLM_KEY_NAMESPACE, providerId) ||
-      (providerId.trim().toLowerCase() === 'ppio' && hasKey(AI_KEY_NAMESPACE, 'ppio')),
+      hasKey(LLM_KEY_NAMESPACE, credentialId) ||
+      (credentialId.trim().toLowerCase() === 'ppio' && hasKey(AI_KEY_NAMESPACE, 'ppio')),
   }))
 }

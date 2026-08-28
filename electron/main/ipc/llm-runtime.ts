@@ -69,16 +69,30 @@ export function registerLlmRuntimeIpc(): void {
     cancelLlmRuntimeTask(taskId)
   })
 
-  registerIpcHandler<{ providerId: string; baseUrl: string }, DiscoveredModelItem[]>(
+  registerIpcHandler<{
+    providerId: string
+    providerFamilyId?: string
+    endpointProfile?: string
+    credentialId?: string
+    baseUrl: string
+  }, DiscoveredModelItem[]>(
     'llm:discoverModels',
     (input) => {
       const record = parseRecord(input)
       return {
         providerId: readString(record, 'providerId'),
+        providerFamilyId: readOptionalString(record, 'providerFamilyId'),
+        endpointProfile: readOptionalString(record, 'endpointProfile'),
+        credentialId: readOptionalString(record, 'credentialId'),
         baseUrl: readString(record, 'baseUrl'),
       }
     },
-    ({ providerId, baseUrl }) => discoverModels(providerId, baseUrl, sdkRuntimeContext)
+    ({ providerId, providerFamilyId, endpointProfile, credentialId, baseUrl }) => discoverModels(
+      providerId,
+      baseUrl,
+      sdkRuntimeContext,
+      { providerFamilyId, endpointProfile, credentialId }
+    )
   )
 }
 
@@ -102,6 +116,9 @@ function parseLlmChatRequest(input: unknown): LlmChatRequestDto {
   return {
     requestId: readOptionalString(record, 'requestId'),
     providerId: readString(record, 'providerId'),
+    providerFamilyId: readOptionalString(record, 'providerFamilyId'),
+    endpointProfile: readOptionalString(record, 'endpointProfile'),
+    credentialId: readOptionalString(record, 'credentialId'),
     modelId: readString(record, 'modelId'),
     adapter: readOptionalString(record, 'adapter'),
     baseUrl: readOptionalString(record, 'baseUrl'),

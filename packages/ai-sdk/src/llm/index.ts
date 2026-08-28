@@ -16,6 +16,7 @@ export * from './types'
 export * from './defaults'
 export * from './providerPresets'
 export * from './endpointProfiles'
+export * from './providerSetup'
 
 // 任务 4.2 迁入：LLM 执行层——原生 SSE 流式聊天路径（`chatTypes`/`streaming`/`chat`/
 // `requestContract`/`discovery`）与 Vercel AI SDK 模型步路径（`./sdk`，供应商无关执行逻辑）。

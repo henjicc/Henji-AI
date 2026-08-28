@@ -6,12 +6,15 @@ import {
   DEFAULT_PPIO_PROVIDER_ID,
   DEFAULT_AGENT_PROFILE_ID,
   createBuiltInLlmModels,
-  createBuiltInLlmProviders,
   createDefaultProviderReasoning,
   createDefaultLlmConfig,
 } from '@/core/llm/defaults'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import { applyLlmModelCatalogEntry, findLlmModelCatalogEntry } from '@henjicc/ai-sdk'
+import {
+  normalizeLlmProviderSetup,
+  resolveLlmEndpointIdentity,
+} from '@henjicc/ai-sdk'
 import type {
   AgentModelCapabilityVerification,
   AgentModelProfile,
@@ -24,7 +27,13 @@ import type {
   LlmReasoningEffort,
   PromptOptimizationProfile,
 } from '@henjicc/ai-sdk'
-import { readJsonFromAppData, writeJsonToAppData } from '@/utils/save'
+import {
+  llmCommitProviderSettings,
+  llmDeleteProviderSettings,
+  llmReadConfig,
+  llmWriteConfig,
+} from '@/commands/llmRuntime'
+import type { LlmCredentialMutationDto, LlmProviderSettingsResultDto } from '@/platform/contracts/llmRuntime'
 import {
   normalizePromptProfile,
   normalizePromptProfileWithBuiltInMigration,
@@ -32,7 +41,6 @@ import {
 } from './promptConfigurationNormalization'
 
 const logger = createLogger('services.llm.LlmConfigService')
-const LLM_CONFIG_FILE = 'llm-config.json'
 
 function normalizeBaseUrl(baseUrl?: string): string | undefined {
   const trimmed = baseUrl?.trim()
@@ -153,13 +161,27 @@ function normalizeReasoningConfig(
 
 function normalizeProvider(provider: LlmProviderConfig): LlmProviderConfig {
   const adapter = normalizeAdapter(provider.adapter, provider.providerId)
+  const baseUrl = resolveProviderBaseUrl(provider)
+  const normalizedProviderId = provider.providerId.trim().toLowerCase()
+  const setup = provider.setup
+    ? normalizeLlmProviderSetup(provider.setup)
+    : normalizedProviderId === DEFAULT_PPIO_PROVIDER_ID && baseUrl === DEFAULT_PPIO_BASE_URL
+      ? { kind: 'preset' as const, presetId: DEFAULT_PPIO_PROVIDER_ID, lifecycle: 'builtin' as const }
+      : normalizedProviderId === DEFAULT_DEEPSEEK_PROVIDER_ID && baseUrl === DEFAULT_DEEPSEEK_BASE_URL
+        ? { kind: 'preset' as const, presetId: DEFAULT_DEEPSEEK_PROVIDER_ID, lifecycle: 'builtin' as const }
+        : { kind: 'custom' as const }
+  const identity = resolveLlmEndpointIdentity({ ...provider, baseUrl })
   return {
     ...provider,
-    providerId: provider.providerId.trim(),
+    providerId: identity.providerId,
+    providerFamilyId: identity.providerFamilyId,
+    endpointProfile: identity.endpointProfile,
+    credentialId: identity.credentialId,
+    setup,
     displayName: provider.displayName.trim(),
     adapter,
     apiProtocol: provider.apiProtocol ?? 'openai-compatible',
-    baseUrl: resolveProviderBaseUrl(provider),
+    baseUrl: identity.baseUrl,
     reasoning: normalizeReasoningConfig(provider.reasoning, adapter),
     reasoningConfigurable: provider.reasoningConfigurable !== false,
     enabled: provider.enabled !== false,
@@ -191,6 +213,9 @@ function normalizeModel(model: LlmModelConfig, providers: LlmProviderConfig[]): 
   return {
     ...withCatalog,
     providerId: model.providerId.trim(),
+    providerFamilyId: provider?.providerFamilyId ?? model.providerFamilyId,
+    endpointProfile: provider?.endpointProfile ?? model.endpointProfile,
+    credentialId: provider?.credentialId ?? model.credentialId ?? model.providerId.trim(),
     displayName: model.displayName.trim(),
     adapter: normalizeAdapter(adapter, model.providerId),
     apiProtocol: model.apiProtocol ?? provider?.apiProtocol ?? 'openai-compatible',
@@ -215,13 +240,10 @@ export function normalizeLlmConfig(input: Partial<LlmConfigState> | null): LlmCo
   const defaults = createDefaultLlmConfig()
   if (!input) return defaults
 
-  const providers = ensureBuiltInProviders(
-    (input.providers?.length ? input.providers : defaults.providers).map(normalizeProvider)
-  )
-  const models = ensureBuiltInModels(
-    (input.models?.length ? input.models : defaults.models).map(model => normalizeModel(model, providers)),
-    providers
-  )
+  const providers = (input.providers ?? []).map(normalizeProvider)
+  const models = removeDeprecatedBuiltInModels(input.models ?? [])
+    .map(upgradeBuiltInModelCapabilities)
+    .map(model => normalizeModel(model, providers))
   /*
    * 归一化不改写提示词优化方案指向的供应商与模型。
    *
@@ -268,68 +290,67 @@ function emitConfigChanged(): void {
   window.dispatchEvent(new CustomEvent(LLM_CONFIG_CHANGED_EVENT))
 }
 
-function ensureBuiltInProviders(providers: LlmProviderConfig[]): LlmProviderConfig[] {
-  const builtIns = createBuiltInLlmProviders()
-  const nextProviders = [...providers]
-
-  builtIns.forEach((builtIn) => {
-    const index = nextProviders.findIndex(provider => provider.providerId === builtIn.providerId)
-    if (index < 0) {
-      nextProviders.push(builtIn)
-      return
-    }
-    nextProviders[index] = {
-      ...builtIn,
-      ...nextProviders[index],
-      adapter: builtIn.providerId === DEFAULT_DEEPSEEK_PROVIDER_ID
-        ? DEFAULT_DEEPSEEK_PROVIDER_ID
-        : nextProviders[index].adapter || builtIn.adapter,
-      baseUrl: nextProviders[index].baseUrl ?? builtIn.baseUrl,
-      reasoningConfigurable: nextProviders[index].reasoningConfigurable ?? builtIn.reasoningConfigurable,
-    }
-  })
-
-  return nextProviders
-}
-
-function ensureBuiltInModels(models: LlmModelConfig[], providers: LlmProviderConfig[]): LlmModelConfig[] {
-  const defaults = createBuiltInLlmModels()
-  const withoutDeprecated = models.filter(model => !(
+function removeDeprecatedBuiltInModels(models: LlmModelConfig[]): LlmModelConfig[] {
+  return models.filter(model => !(
     model.providerId === DEFAULT_DEEPSEEK_PROVIDER_ID
     && ['deepseek-chat', 'deepseek-reasoner'].includes(model.modelId)
   ))
-  const nextModels = [...withoutDeprecated]
-  defaults.forEach(defaultModel => {
-    const index = nextModels.findIndex(model => (
-      model.providerId === defaultModel.providerId && model.modelId === defaultModel.modelId
-    ))
-    if (index < 0) {
-      nextModels.push(defaultModel)
-      return
-    }
-    const current = nextModels[index]
-    nextModels[index] = {
-      ...current,
-      capabilities: {
-        ...current.capabilities,
-        contextWindow: defaultModel.capabilities.contextWindow ?? current.capabilities.contextWindow,
-        maxOutputTokens: defaultModel.capabilities.maxOutputTokens ?? current.capabilities.maxOutputTokens,
-      },
-    }
-  })
-  return nextModels.map(model => normalizeModel(model, providers))
+}
+
+function upgradeBuiltInModelCapabilities(model: LlmModelConfig): LlmModelConfig {
+  const builtIn = createBuiltInLlmModels().find(item => (
+    item.providerId === model.providerId && item.modelId === model.modelId
+  ))
+  if (!builtIn) return model
+  return {
+    ...model,
+    capabilities: {
+      ...model.capabilities,
+      contextWindow: builtIn.capabilities.contextWindow ?? model.capabilities.contextWindow,
+      maxOutputTokens: builtIn.capabilities.maxOutputTokens ?? model.capabilities.maxOutputTokens,
+    },
+  }
 }
 
 export class LlmConfigService {
   async getConfig(): Promise<LlmConfigState> {
-    const stored = await readJsonFromAppData<Partial<LlmConfigState>>(LLM_CONFIG_FILE)
+    const stored = await llmReadConfig()
     return normalizeLlmConfig(stored)
   }
 
   async saveConfig(config: LlmConfigState): Promise<void> {
     const nextConfig = normalizeLlmConfig(config)
-    await writeJsonToAppData(LLM_CONFIG_FILE, nextConfig)
+    await llmWriteConfig(nextConfig)
     emitConfigChanged()
+  }
+
+  async commitProviderSettings(
+    provider: LlmProviderConfig,
+    seedModels: LlmModelConfig[],
+    credential: LlmCredentialMutationDto,
+  ): Promise<LlmProviderSettingsResultDto> {
+    const baselineConfig = await this.getConfig()
+    const normalizedProvider = normalizeProvider(provider)
+    const normalizedModels = seedModels.map(model => normalizeModel(model, [normalizedProvider]))
+    const result = await llmCommitProviderSettings({
+      provider: normalizedProvider,
+      seedModels: normalizedModels,
+      baselineConfig,
+      credential,
+    })
+    const normalizedResult = { ...result, config: normalizeLlmConfig(result.config) }
+    emitConfigChanged()
+    return normalizedResult
+  }
+
+  async deleteProviderSettings(providerId: string): Promise<LlmProviderSettingsResultDto> {
+    const result = await llmDeleteProviderSettings({
+      providerId,
+      baselineConfig: await this.getConfig(),
+    })
+    const normalizedResult = { ...result, config: normalizeLlmConfig(result.config) }
+    emitConfigChanged()
+    return normalizedResult
   }
 
   async getDefaultPromptProfile(): Promise<PromptOptimizationProfile | null> {
@@ -377,13 +398,7 @@ export class LlmConfigService {
   }
 
   async upsertProvider(provider: LlmProviderConfig): Promise<LlmConfigState> {
-    const config = await this.getConfig()
-    const nextProvider = normalizeProvider(provider)
-    const nextProviders = config.providers.filter(item => item.providerId !== nextProvider.providerId)
-    nextProviders.push(nextProvider)
-    const nextConfig = normalizeLlmConfig({ ...config, providers: nextProviders })
-    await this.saveConfig(nextConfig)
-    return nextConfig
+    return (await this.commitProviderSettings(provider, [], { kind: 'unchanged' })).config
   }
 
   async upsertModel(model: LlmModelConfig): Promise<LlmConfigState> {

@@ -238,10 +238,14 @@ const aiApi: HenjiAiApi = {
 }
 
 const llmApi: HenjiLlmApi = {
-  setProviderApiKey: (providerId, apiKey) => nativeInvoke('llm:setProviderApiKey', { providerId, apiKey }),
-  removeProviderApiKey: (providerId) => nativeInvoke('llm:removeProviderApiKey', { providerId }),
-  getProviderApiKey: (providerId) => nativeInvoke('llm:getProviderApiKey', { providerId }),
-  getProviderKeyStatus: (providerIds) => nativeInvoke('llm:getProviderKeyStatus', { providerIds }),
+  setProviderApiKey: (credentialId, apiKey) => nativeInvoke('llm:setProviderApiKey', { credentialId, apiKey }),
+  removeProviderApiKey: (credentialId) => nativeInvoke('llm:removeProviderApiKey', { credentialId }),
+  getProviderApiKey: (credentialId) => nativeInvoke('llm:getProviderApiKey', { credentialId }),
+  getProviderKeyStatus: (credentialIds) => nativeInvoke('llm:getProviderKeyStatus', { credentialIds }),
+  readConfig: () => nativeInvoke('llm:providerSettings:readConfig'),
+  writeConfig: config => nativeInvoke('llm:providerSettings:writeConfig', { config }),
+  commitProviderSettings: request => nativeInvoke('llm:providerSettings:commit', request),
+  deleteProviderSettings: request => nativeInvoke('llm:providerSettings:delete', request),
   async chatStream(request, onEvent) {
     const streamId = createStreamId()
     let terminalReceived = false
@@ -287,7 +291,7 @@ const llmApi: HenjiLlmApi = {
   },
   verifyModelCapabilities: request => nativeInvoke('llm:verifyModelCapabilities', request),
   cancelTask: (taskId) => nativeInvoke('llm:cancelTask', { taskId }),
-  discoverModels: (providerId, baseUrl) => nativeInvoke('llm:discoverModels', { providerId, baseUrl }),
+  discoverModels: provider => nativeInvoke('llm:discoverModels', provider),
 }
 
 async function waitForOptionalTerminalEvent(terminalEvent: Promise<void>): Promise<void> {

@@ -22,7 +22,12 @@ import type {
   AgentRetryRunRequest,
   AgentRunSummary,
 } from '../../src/core/assistant/persistence'
-import type { LlmReasoningConfig } from '@henjicc/ai-sdk'
+import type {
+  LlmConfigState,
+  LlmModelConfig,
+  LlmProviderConfig,
+  LlmReasoningConfig,
+} from '@henjicc/ai-sdk'
 import type {
   AgentListThreadsRequest,
   AgentThreadSummary,
@@ -468,20 +473,45 @@ export interface HenjiAiApi {
 }
 
 export interface HenjiLlmApi {
-  setProviderApiKey(providerId: string, apiKey: string): Promise<void>
-  removeProviderApiKey(providerId: string): Promise<void>
-  getProviderApiKey(providerId: string): Promise<string | null>
-  getProviderKeyStatus(providerIds: string[]): Promise<HenjiProviderKeyStatus[]>
+  setProviderApiKey(credentialId: string, apiKey: string): Promise<void>
+  removeProviderApiKey(credentialId: string): Promise<void>
+  getProviderApiKey(credentialId: string): Promise<string | null>
+  getProviderKeyStatus(credentialIds: string[]): Promise<Array<{ credentialId: string; configured: boolean }>>
+  readConfig(): Promise<LlmConfigState | null>
+  writeConfig(config: LlmConfigState): Promise<void>
+  commitProviderSettings(request: {
+    provider: LlmProviderConfig
+    seedModels: LlmModelConfig[]
+    baselineConfig: LlmConfigState
+    credential: { kind: 'unchanged' } | { kind: 'set'; apiKey: string } | { kind: 'remove' }
+  }): Promise<HenjiLlmProviderSettingsResult>
+  deleteProviderSettings(request: {
+    providerId: string
+    baselineConfig: LlmConfigState
+  }): Promise<HenjiLlmProviderSettingsResult>
   chatStream(request: HenjiLlmChatRequest, onEvent: (event: HenjiLlmStreamEvent) => void): Promise<void>
   modelStep(input: ModelStepInput, onEvent: (event: ModelStepEvent) => void): Promise<ModelStepResult>
   verifyModelCapabilities(request: ModelCapabilitySmokeRequest): Promise<ModelCapabilitySmokeResult>
   cancelTask(taskId: string): Promise<void>
-  discoverModels(providerId: string, baseUrl: string): Promise<Array<{
+  discoverModels(provider: Pick<
+    LlmProviderConfig,
+    'providerId' | 'providerFamilyId' | 'endpointProfile' | 'credentialId' | 'baseUrl'
+  >): Promise<Array<{
     modelId: string
     displayName: string
     contextWindow: number | null
     maxOutputTokens: number | null
   }>>
+}
+
+export interface HenjiLlmProviderSettingsResult {
+  config: LlmConfigState
+  providerId: string
+  credentialId: string
+  configured: boolean
+  apiKeyUrl: string | null
+  credentialAction: 'unchanged' | 'set' | 'removed' | 'preserved_shared'
+  rollbackStatus: 'not-needed' | 'completed'
 }
 
 export interface HenjiModelStepEventPayload {
@@ -510,6 +540,9 @@ export interface HenjiLlmChatMessage {
 export interface HenjiLlmChatRequest {
   requestId?: string
   providerId: string
+  providerFamilyId?: string
+  endpointProfile?: string
+  credentialId?: string
   modelId: string
   adapter?: string
   baseUrl?: string

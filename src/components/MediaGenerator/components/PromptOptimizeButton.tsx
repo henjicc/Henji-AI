@@ -280,6 +280,9 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
       await llmChatStream({
         requestId,
         providerId: profile.providerId,
+        providerFamilyId: provider?.providerFamilyId,
+        endpointProfile: provider?.endpointProfile,
+        credentialId: provider?.credentialId,
         modelId: profile.modelId,
         adapter: provider?.adapter ?? profile.providerId,
         baseUrl: provider?.baseUrl,

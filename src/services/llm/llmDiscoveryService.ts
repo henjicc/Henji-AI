@@ -64,7 +64,7 @@ export async function fetchOpenAiCompatibleModels(
   }
 
   try {
-    return await window.henjiNative!.llm.discoverModels(provider.providerId, baseUrl)
+    return await window.henjiNative!.llm.discoverModels({ ...provider, baseUrl })
   } catch (error) {
     logger.error('[llmDiscoveryService] fetchOpenAiCompatibleModels failed', error)
     throw error
