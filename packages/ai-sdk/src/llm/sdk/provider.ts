@@ -1,4 +1,5 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
+import { createOpenAI } from '@ai-sdk/openai'
 import type { FetchFunction } from '@ai-sdk/provider-utils'
 import type { LanguageModel } from 'ai'
 
@@ -18,7 +19,7 @@ import {
   type ModelStepHttpTrace,
   type ModelStepProviderAdapter,
 } from './providerAdapter'
-import { resolveLlmEndpointIdentity } from '../endpointProfiles'
+import { getLlmEndpointProfileFamily, resolveLlmEndpointIdentity } from '../endpointProfiles'
 // `ModelStepHttpTrace` 不在这里重新导出——`./providerAdapter` 是它的唯一定义处，
 // 由 `sdk/index.ts` 的桶文件统一 `export * from './providerAdapter'`。这里再导出一次会与
 // 桶文件里的 `export * from './providerAdapter'` 产生同名重复导出（TS 报 "has already
@@ -50,16 +51,28 @@ interface DeepSeekUsage {
   prompt_tokens?: unknown
 }
 
-function stripChatCompletions(endpoint: string): string {
-  return endpoint.replace(/\/chat\/completions\/?$/, '')
+function stripProtocolEndpoint(endpoint: string): string {
+  return endpoint.replace(/\/(?:chat\/completions|responses)\/?$/, '')
 }
 
-export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId' | 'providerFamilyId' | 'endpointProfile' | 'credentialId' | 'adapter' | 'baseUrl'>): string {
+export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId' | 'providerFamilyId' | 'endpointProfile' | 'credentialId' | 'adapter' | 'apiProtocol' | 'baseUrl'>): string {
   const identity = resolveLlmEndpointIdentity(input)
+  const protocol = input.apiProtocol ?? 'openai-compatible'
+  const family = getLlmEndpointProfileFamily(identity.providerFamilyId)
+  const profile = family?.profiles.find(item => item.id === identity.endpointProfile)
+  const protocolBaseUrl = profile?.protocolBaseUrls?.[protocol]
   const normalizedInput = {
     ...input,
     providerId: identity.providerFamilyId,
-    baseUrl: identity.baseUrl ? stripChatCompletions(identity.baseUrl.replace(/\/+$/, '')) : undefined,
+    baseUrl: protocolBaseUrl
+      ? stripProtocolEndpoint(protocolBaseUrl.replace(/\/+$/, ''))
+      : identity.baseUrl ? stripProtocolEndpoint(identity.baseUrl.replace(/\/+$/, '')) : undefined,
+  }
+  if (protocol === 'openai-responses') {
+    const baseUrl = normalizedInput.baseUrl
+      ?? (identity.providerFamilyId === 'openai' ? 'https://api.openai.com/v1' : undefined)
+    if (!baseUrl) throw new Error('[llm_base_url_required] Responses API requires an explicit baseUrl')
+    return baseUrl
   }
   const endpoint = identity.providerFamilyId === 'ppio'
     ? resolvePpioChatEndpoint(normalizedInput.baseUrl)
@@ -70,7 +83,7 @@ export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId'
         baseUrl: normalizedInput.baseUrl,
         messages: [],
       })
-  return stripChatCompletions(endpoint)
+  return stripProtocolEndpoint(endpoint)
 }
 
 function createOpenAiCompatibleLanguageModel(
@@ -110,12 +123,46 @@ const openAiCompatibleAdapter: ModelStepProviderAdapter = {
   supportedInputModalities: ['image', 'audio'],
   createLanguageModel: createOpenAiCompatibleLanguageModel,
 }
-let openAiCompatibleAdapterInitialized = false
+function createOpenAiResponsesLanguageModel(
+  input: ModelStepInput,
+  apiKey: string,
+  httpTrace?: ModelStepHttpTrace,
+  transport?: Transport
+): LanguageModel {
+  const identity = resolveLlmEndpointIdentity(input)
+  const adapter = input.adapter?.trim().toLowerCase()
+  const provider = createOpenAI({
+    name: 'openai',
+    apiKey,
+    headers: resolveProviderExtraAuthHeaders(identity.providerFamilyId, apiKey),
+    baseURL: resolveModelStepBaseUrl(input),
+    fetch: createModelStepFetch(identity.providerFamilyId, httpTrace, transport, {
+      captureHttp: httpTrace?.captureHttp === true,
+      captureDeepSeekUsage: adapter === 'deepseek',
+      transformRequestBody: body => applyProviderRequestBodyQuirks(
+        identity.providerFamilyId,
+        input.capabilities.reasoning
+          ? applyProviderReasoningRequestBody(identity.providerFamilyId, adapter, body, input.reasoning)
+          : body,
+      ),
+    }),
+  })
+  return provider.responses(input.modelId)
+}
+
+const openAiResponsesAdapter: ModelStepProviderAdapter = {
+  protocol: 'openai-responses',
+  supportedInputModalities: ['image', 'audio'],
+  createLanguageModel: createOpenAiResponsesLanguageModel,
+}
+
+let builtInAdaptersInitialized = false
 
 function ensureOpenAiCompatibleAdapterInitialized(): void {
-  if (openAiCompatibleAdapterInitialized) return
+  if (builtInAdaptersInitialized) return
   modelStepProviderAdapters.register(openAiCompatibleAdapter)
-  openAiCompatibleAdapterInitialized = true
+  modelStepProviderAdapters.register(openAiResponsesAdapter)
+  builtInAdaptersInitialized = true
 }
 
 /**
@@ -145,14 +192,21 @@ function createModelStepFetch(
   providerId: string,
   trace: ModelStepHttpTrace | undefined,
   transport: Transport | undefined,
-  options: { captureHttp: boolean; captureDeepSeekUsage: boolean }
+  options: {
+    captureHttp: boolean
+    captureDeepSeekUsage: boolean
+    transformRequestBody?: (body: Record<string, unknown>) => Record<string, unknown>
+  }
 ): FetchFunction {
   return async (input, init) => {
-    if (options.captureHttp && trace) {
-      trace.request = await buildTraceRequest(input, init)
-    }
     try {
-      const request = await normalizeFetchRequest(input, init)
+      const request = applyFetchRequestBodyTransform(
+        await normalizeFetchRequest(input, init),
+        options.transformRequestBody,
+      )
+      if (options.captureHttp && trace) {
+        trace.request = await buildTraceRequest(request.url, request.init)
+      }
       const response = await fetchProvider(providerId, request.url, request.init ?? {}, {
         transport: transport ?? globalFetchTransport(),
         retryPreconnectOnce: true,
@@ -187,6 +241,23 @@ function createModelStepFetch(
       }
       throw error
     }
+  }
+}
+
+function applyFetchRequestBodyTransform(
+  request: { url: string; init?: RequestInit },
+  transform: ((body: Record<string, unknown>) => Record<string, unknown>) | undefined
+): { url: string; init?: RequestInit } {
+  if (!transform || typeof request.init?.body !== 'string') return request
+  try {
+    const parsed = JSON.parse(request.init.body) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return request
+    return {
+      ...request,
+      init: { ...request.init, body: JSON.stringify(transform(parsed as Record<string, unknown>)) },
+    }
+  } catch {
+    return request
   }
 }
 

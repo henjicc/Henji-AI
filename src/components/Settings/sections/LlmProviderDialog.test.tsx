@@ -73,14 +73,14 @@ function renderDialog({
 }
 
 describe('LlmProviderDialog', () => {
-  it('新建 custom provider 时只提交供应商字段与 key，不提供管理地址输入', async () => {
+  it('新建 custom provider 时提交供应商字段与 key，并允许填写管理地址', async () => {
     const { onSave } = renderDialog()
     fireEvent.change(screen.getByPlaceholderText('例如：我的模型服务'), { target: { value: '团队代理' } })
     fireEvent.change(screen.getByPlaceholderText('例如：https://api.example.com/v1'), {
       target: { value: 'https://proxy.example.com/v1' },
     })
     fireEvent.change(screen.getByLabelText('API 密钥'), { target: { value: 'dialog-secret' } })
-    expect(screen.queryByText('密钥管理地址')).toBeNull()
+    expect(screen.getByText('密钥管理地址')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '添加供应商' }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
@@ -97,8 +97,7 @@ describe('LlmProviderDialog', () => {
 
   it('编辑时不回显旧 key，留空明确发送 unchanged', async () => {
     const { onSave } = renderDialog({ providers: [customProvider()] })
-    expect((screen.getByLabelText('API 密钥') as HTMLInputElement).value).toBe('')
-    expect(screen.getByPlaceholderText('留空则保留现有密钥')).toBeTruthy()
+    expect(screen.queryByLabelText('API 密钥')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '保存供应商' }))
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
@@ -107,17 +106,19 @@ describe('LlmProviderDialog', () => {
 
   it('可自定义的 LLM 供应商界面显示 SDK 官网与密钥入口，纯 custom 不猜地址', async () => {
     const preset = findLlmProviderPreset('ppio')!
-    const builtIn = createProviderFromPreset(preset, { lifecycle: 'builtin' })
     const { unmount } = render(
       <LlmProviderDialog
         isOpen
-        providers={[builtIn]}
+        providers={[]}
         onClose={vi.fn()}
         onSave={vi.fn().mockResolvedValue(undefined)}
         onDelete={vi.fn().mockResolvedValue(undefined)}
       />
     )
-    expect(screen.queryByPlaceholderText('例如：我的模型服务')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '供应商预设' }))
+    fireEvent.click(screen.getByRole('option', { name: '派欧云' }))
+    expect(screen.queryByText('接口协议')).toBeNull()
+    expect(screen.getByText('请求协议由 SDK 按具体模型自动选择，无需手动设置。')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '访问官网' }))
     expect(openExternal).toHaveBeenCalledWith(preset.websiteUrl)
     fireEvent.click(screen.getByRole('button', { name: '获取/管理 API Key' }))
@@ -127,6 +128,20 @@ describe('LlmProviderDialog', () => {
     renderDialog({ providers: [customProvider()] })
     expect(screen.queryByRole('button', { name: '访问官网' })).toBeNull()
     expect(screen.queryByRole('button', { name: '获取/管理 API Key' })).toBeNull()
+  })
+
+  it('预制供应商隐藏底层协议，自定义接口只显示 Chat 与 Responses', () => {
+    renderDialog()
+    expect(screen.getByText('接口协议')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '接口协议' }).textContent).toContain('Chat Completions')
+    expect(screen.queryByText('DeepSeek', { selector: '[role="option"]' })).toBeNull()
+    expect(screen.queryByText(/Anthropic/, { selector: '[role="option"]' })).toBeNull()
+    fireEvent.change(screen.getByPlaceholderText('例如：https://api.example.com/v1'), {
+      target: { value: 'https://api.example.com/v1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '接口协议' }))
+    fireEvent.click(screen.getByRole('option', { name: 'OpenAI Responses' }))
+    expect(screen.getByText('预览：https://api.example.com/v1/responses')).toBeTruthy()
   })
 
   it('移除重复说明并把 builtin 重置/custom 删除放在独立分隔行', () => {

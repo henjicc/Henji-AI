@@ -61,6 +61,10 @@
 `canvas.node.asset_group_cover_member_id` 正式属性反射与写入。界面、快捷键和助手共用同一素材组事务服务，
 容量不足、目标接口变化和成员排除均由该服务确定性重算。
 
+2026-08-29 智能助手模型步骤接通 `openai-responses`：SDK 按“供应商端点 × 具体模型”自动选择
+Responses 或 Chat Completions，预制模型不再要求用户理解协议；DeepSeek、火山引擎、百炼、MiniMax
+以及智谱国内 `glm-5.3` 的已确认组合默认走 Responses。Anthropic 仍未实现，并从设置界面完全隐藏。
+
 验证层（详见 [testing.md](testing.md) 第四节）：
 
 | 层 | 命令 | 规模（2026-08-18） |

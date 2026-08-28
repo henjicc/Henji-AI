@@ -57,7 +57,9 @@ export function createBigmodelModels(provider: LlmProviderConfig): LlmModelConfi
     modelId,
     displayName: modelId === 'glm-5.3-flash' ? 'GLM-5.3-Flash' : modelId,
     adapter: provider.adapter,
-    apiProtocol: provider.apiProtocol,
+    apiProtocol: identity.endpointProfile === 'cn' && modelId === 'glm-5.3'
+      ? 'openai-responses'
+      : 'openai-compatible',
     baseUrl: identity.baseUrl,
     capabilities: createLlmCapabilitiesForModel(modelId),
     catalogId: modelId,

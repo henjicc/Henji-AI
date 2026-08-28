@@ -1,4 +1,5 @@
 import { LLM_MODEL_CATALOG_ENTRIES } from './modelCatalogEntries'
+import type { LlmApiProtocol } from './providerProtocol'
 import type { LlmCapabilities } from './types'
 
 /**
@@ -29,9 +30,18 @@ export interface LlmModelCatalogEntry {
   sampling: boolean
   contextWindow: number | null
   maxOutputTokens: number | null
+  /** 模型原厂已确认支持的协议；最终使用协议还要与接入供应商的端点能力取交集。 */
+  apiProtocols?: readonly LlmApiProtocol[]
   note?: string
   /** 该条目的资料出处，仓库内相对路径 */
   docs: string
+}
+
+export function modelSupportsLlmApiProtocol(
+  entry: LlmModelCatalogEntry,
+  protocol: LlmApiProtocol
+): boolean {
+  return (entry.apiProtocols ?? ['openai-compatible']).includes(protocol)
 }
 
 /**

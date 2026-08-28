@@ -77,14 +77,22 @@ describe('applyLlmModelCatalogEntry', () => {
     expect(capabilities.sampling).toBe(false)
   })
 
-  it('只在本项目当前协议下可用的模态才算支持', () => {
-    // DeepSeek 的视觉模型只在 Responses API 上收图，本项目还没有那条协议；
-    // 走 Chat Completions 发图会被静默替换成占位文本，所以必须保持未勾选。
+  it('协议接通后登记对应模态，并保留模型自身边界', () => {
+    // DeepSeek 的视觉模型只在 Responses API 上收图；该协议接通后可以如实开放图片输入。
     const entry = findLlmModelCatalogEntry('deepseek-v4-flash-vision-exp')!
-    expect(entry.input.image).toBe(false)
+    expect(entry.input.image).toBe(true)
+    expect(entry.apiProtocols?.[0]).toBe('openai-responses')
     expect(entry.note).toContain('Responses API')
     // GLM-5.3 官方明确只支持文本模态
     expect(findLlmModelCatalogEntry('glm-5.3')!.input).toEqual({ image: false, video: false, audio: false })
+  })
+
+  it('只给官方确认支持 Responses 的具体模型登记该协议', () => {
+    expect(findLlmModelCatalogEntry('glm-5.3')?.apiProtocols).toContain('openai-responses')
+    expect(findLlmModelCatalogEntry('glm-5.3-flash')?.apiProtocols ?? ['openai-compatible'])
+      .not.toContain('openai-responses')
+    expect(findLlmModelCatalogEntry('kimi-k3')?.apiProtocols ?? ['openai-compatible'])
+      .toEqual(['openai-compatible'])
   })
 })
 

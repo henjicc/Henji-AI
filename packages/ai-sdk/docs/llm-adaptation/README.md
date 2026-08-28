@@ -34,38 +34,53 @@ docs/llm-adaptation/
 
 ## 二、代码现状（先看这个，再看下面的协议矩阵）
 
-### 2.1 已经落到代码里的（2026-08-26）
+### 2.1 已经落到代码里的（2026-08-29）
 
 | 能力 | 落点 | 说明 |
 |---|---|---|
 | 内置模型能力目录 | [modelCatalog.ts](../../src/llm/modelCatalog.ts) + [modelCatalogEntries.ts](../../src/llm/modelCatalogEntries.ts) | 本目录里核对过的模型按 ID 登记输入模态、工具调用、结构化输出、上下文与输出上限。添加模型（手动、探测、预设三个入口）时自动标好，用户不用自己勾；存量配置在归一化时补标一次并盖 `catalogId` 戳，之后用户的手工修改不再被覆盖 |
 | 内置供应商预设 | [providerPresets.ts](../../src/llm/providerPresets.ts) | 七家供应商 + 派欧云的 Base URL、思考默认值、推荐模型打包，设置页「管理供应商」里选一下即可建好 |
 | 思考参数按供应商翻译 | [providerReasoningRequest.ts](../../src/llm/providerReasoningRequest.ts) | 把统一的五档强度映射到各家实际接受的字段与取值（第六节那张表就是它的数据来源），原生流式与 SDK 模型步骤两条路径共用 |
+| Responses API 运行时 | [provider.ts](../../src/llm/sdk/provider.ts) + [providerPresets.ts](../../src/llm/providerPresets.ts) | `openai-responses` 与 Chat 并存；预制供应商按“供应商端点 × 具体模型”自动选择，用户不需要也不能逐模型手选协议 |
 
 改动前的状态：思考模式下拉**只对 DeepSeek 有效**，其余六家发出去的请求里根本没有对应字段；而且两条路径给 DeepSeek 发的还不一样（原生流式发 `reasoning: true`，不是官方要求的 `thinking` + `reasoning_effort`）。
 
-### 2.2 仍然只有一条协议
+### 2.2 协议选择已经收进 SDK
 
-- `LlmApiProtocol` 目前**只有一个值**：`'openai-compatible'`（[providerProtocol.ts](../../src/llm/providerProtocol.ts)）。
-- `ModelStepProviderAdapterRegistry` 目前**只注册了一个协议适配器**（[provider.ts](../../src/llm/sdk/provider.ts)）。
-- 设置页供应商类型下拉曾经有第三个选项 `anthropic`，但代码里从来没有对应实现，选了它只是预览文案变成 `/v1/messages`，实际发出去的仍是 Chat Completions 请求。该选项**已删除**，存量配置由 `LlmConfigService` 归一化成 `openai`；等 Anthropic 协议真正接上再加回来。
+- `LlmApiProtocol` 已包含 `openai-compatible`（Chat Completions）与 `openai-responses`。
+- `ModelStepProviderAdapterRegistry` 同时注册两条真实运行时；Responses 通过官方 `@ai-sdk/openai` 转换请求与标准 SSE 事件。
+- 协议不是供应商级一刀切：例如智谱国内只有 `glm-5.3` 默认 Responses，`glm-5.3-flash` / `glm-5v-turbo` 保持 Chat；派欧云聚合网关也不会因为底层模型原厂支持 Responses 就被误切换。
+- 预制供应商的协议控件不在界面显示；自定义未知端点才允许选择 Chat / Responses。Anthropic 没有运行时实现，也不在界面显示，存量伪配置继续归一化成 OpenAI Chat。
 
-也就是说，本目录记录的"官方支持 Responses API / Anthropic Messages API"这些信息目前仍是**资料，不是项目已实现的能力**——三个消费方现在都只能通过 `openai-compatible`（Chat Completions）这一条路径访问下表里的全部供应商。好消息是 SDK 的 `modelStep.ts` 执行层完全构建在 AI SDK 的 `LanguageModel` 抽象之上，接一个新协议**不需要碰** `agent-runtime/**`、画布节点、提示词优化任何一行代码，只需要：扩 `LlmApiProtocol` 枚举 → 写一个新的 `ModelStepProviderAdapter` → 注册进 registry → 设置页加一个 adapter 选项。
+当前已自动走 Responses 的预制组合：DeepSeek V4 Pro / Flash / Vision、火山引擎目录内三款 Doubao、百炼 Qwen3.8-Max、MiniMax-M3、智谱中国大陆 GLM-5.3。Kimi、MiMo、Groq、派欧云以及未确认的智谱模型继续走 Chat。
 
-### 2.3 一个容易踩的坑：两条请求路径能表达的输入模态不同
+### 2.3 Responses 事件契约与验证证据
+
+| 官方事件/边界 | SDK 统一结果 | 验证 |
+|---|---|---|
+| `response.created` | 记录 response id，不向业务层制造文本事件 | 官方形状 fixture |
+| `response.output_item.added` + `response.output_text.delta` | `TextDelta` 与最终文本 | [openai-responses-text.json](../../tests/fixtures/llm/openai-responses-text.json) |
+| `response.function_call_arguments.delta` + function item done | 既有 `ToolCall`，工具仍由助手运行时执行 | runtime 工具调用精确测试 |
+| `response.completed` / `response.incomplete` | finish reason、usage、缓存与推理 token | runtime 精确测试 |
+| `response.failed` / SSE `error` | 结构化 provider error，不返回半成功结果 | runtime 负例测试 |
+| AbortSignal / 断流 | 取消请求并释放读取器，统一为 `task_cancelled` | runtime 取消测试 |
+
+Responses 请求统一下发 `store: false`：助手自己的会话存储仍是唯一事实来源，同时兼容 DeepSeek 不支持 `store` / `previous_response_id` 的无状态实现。
+
+### 2.4 一个容易踩的坑：两条请求路径能表达的输入模态不同
 
 - 画布文本处理、提示词优化走**原生流式路径**（[streaming.ts](../../src/llm/streaming.ts)），`image_url` / `video_url` / `input_audio` 三种内容块都能发。
 - 智能助手走 **AI SDK 模型步骤**（[provider.ts](../../src/llm/sdk/provider.ts)），当前转换器只能表达 **image 与 audio**，视频会被 `assertInputModalities` 拦下。
 
-所以模型能力目录里的 `input` 记的是"**本项目当前请求路径下真实可用**"的模态，不是模型宣传的模态：只在尚未实现的协议上可用的模态一律记为 false 并在 `note` 里写明原因（例如 DeepSeek 的视觉模型只在 Responses API 上收图，走 Chat Completions 发图会被静默替换成占位文本）。智能助手的能力验证里视频显示"失败"就是这条的表现，属于预期结果。
+所以模型能力目录里的 `input` 记的是"**本项目当前请求路径下真实可用**"的模态，不是模型宣传的模态。DeepSeek 视觉模型已经因 Responses 接通而开放图片；智能助手的视频输入仍会在协议边界明确阻断，不会降级成文本地址造成静默失效。
 
 ## 三、本项目的协议接入优先级（产品决策，不是能力强弱排序）
 
 新写协议适配器、给某个供应商挑协议时，按下面顺序取舍——这是本项目的既定优先级，**不因某家供应商官方推荐哪个协议就单独提高它的顺序**（MiniMax 官方推荐 Anthropic，但本项目仍按下表顺序执行，见 [MiniMax.md 第 6 节](供应商/MiniMax.md)）：
 
 1. **Responses API 优先**。结构化输出、上下文管理、内置工具（联网搜索等）通常最先在这条协议上落地，是新协议适配器要覆盖的首要目标。
-2. **Chat Completions 兜底**。项目当前唯一已实现的协议，任何供应商至少都能通过它接入；Responses API 做不到的部分（或还没排上的供应商）继续用它兜底，不阻塞任何一家的可用性。
-3. **Anthropic Messages API 最低优先级**。即便官方原生支持（DeepSeek、GLM、小米 MiMo、MiniMax 四家，MiniMax 甚至官方推荐），也不作为下一步要投入的方向——只有当某个协议适配器顺手就能覆盖到它时才简单接一下，不单独立项去做。
+2. **Chat Completions 兜底**。Responses 未确认的供应商/模型继续用它，不阻塞可用性。
+3. **Anthropic Messages API 暂不实现、不显示**。官方支持面只作为未来资料保留，不向用户暴露一个不能工作的选项。
 
 每个供应商文件的「摘要」表里都有一行"接入优先级"，按这三条给出该供应商的具体落点（例如 Kimi/百炼没有 Anthropic，MiMo 没有 Responses API，落点就相应收窄）。
 

@@ -35,6 +35,7 @@ export const BIGMODEL_ENDPOINT_PROFILE_FAMILY: LlmEndpointProfileFamily = {
       id: BIGMODEL_CN_PROFILE_ID,
       displayName: '智谱 GLM（中国大陆）',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+      protocolBaseUrls: { 'openai-responses': 'https://open.bigmodel.cn/api/v1' },
       websiteUrl: BIGMODEL_CN_METADATA.websiteUrl,
       apiKeyUrl: BIGMODEL_CN_METADATA.apiKeyUrl,
       defaultCredentialId: BIGMODEL_CN_CREDENTIAL_ID,

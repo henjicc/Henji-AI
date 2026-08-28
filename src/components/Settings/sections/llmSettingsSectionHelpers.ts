@@ -1,9 +1,9 @@
 import {
-  DEFAULT_DEEPSEEK_BASE_URL,
   DEFAULT_PPIO_PROVIDER_ID,
   createDefaultProviderReasoning,
 } from '@/core/llm/defaults'
 import type {
+  LlmApiProtocol,
   LlmModelConfig,
   LlmProviderConfig,
   LlmReasoningConfig,
@@ -11,17 +11,10 @@ import type {
 } from '@henjicc/ai-sdk'
 import { createModelFromInput } from '@/services/llm/llmDiscoveryService'
 
-/*
- * 适配器类型只保留真实接通的两种。
- *
- * 原来还有一个 `anthropic` 选项，但运行时从来没有对应实现——`provider.ts` 只注册了
- * `openai-compatible` 协议，选了它发出去的仍然是 Chat Completions 形状的请求，唯一的区别是
- * 设置页预览文案会骗人地显示成 `/v1/messages`。存量配置由 LlmConfigService 归一化成 openai。
- * Anthropic Messages 协议按 packages/ai-sdk/docs/llm-adaptation/README.md 第三节属于最低优先级，等真正接上再加回来。
- */
-export const providerTypes = [
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'openai', label: 'OpenAI 兼容' },
+/* 自定义未知端点只暴露真实接通的协议；预制供应商由 SDK 按模型选择，不使用这里的选项。 */
+export const providerProtocolOptions: Array<{ value: LlmApiProtocol; label: string }> = [
+  { value: 'openai-compatible', label: 'OpenAI Chat Completions' },
+  { value: 'openai-responses', label: 'OpenAI Responses' },
 ]
 
 export const reasoningEffortOptions: Array<{ value: LlmReasoningEffort; label: string }> = [
@@ -46,14 +39,11 @@ export function createDefaultProvider(): LlmProviderConfig {
     setup: { kind: 'custom' },
     displayName: '',
     adapter,
+    apiProtocol: 'openai-compatible',
     baseUrl: '',
     reasoning: createDefaultProviderReasoning(adapter),
     enabled: true,
   }
-}
-
-export function getDefaultBaseUrlForAdapter(adapter: string): string {
-  return adapter === 'deepseek' ? DEFAULT_DEEPSEEK_BASE_URL : ''
 }
 
 export function createEmptyModel(provider: LlmProviderConfig): LlmModelConfig {
@@ -97,7 +87,11 @@ export function resolveApiPreview(provider: LlmProviderConfig): string {
   const baseUrl = provider.baseUrl?.trim()
   if (!baseUrl) return ''
   const normalized = baseUrl.trim().replace(/\/+$/, '')
-  return normalized.endsWith('/v1') ? `${normalized}/chat/completions` : `${normalized}/v1/chat/completions`
+  if (/\/(?:responses|chat\/completions)$/.test(normalized)) return normalized
+  if (provider.apiProtocol === 'openai-responses') return `${normalized}/responses`
+  return /\/v\d+$/.test(normalized)
+    ? `${normalized}/chat/completions`
+    : `${normalized}/v1/chat/completions`
 }
 
 export function getApiKeyHint(provider: LlmProviderConfig): string | undefined {

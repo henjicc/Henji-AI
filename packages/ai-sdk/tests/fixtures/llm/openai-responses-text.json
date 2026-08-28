@@ -1,0 +1,38 @@
+{
+  "source": "https://developers.openai.com/api/reference/resources/responses/methods/create",
+  "events": [
+    {
+      "type": "response.created",
+      "response": { "id": "resp_fixture", "created_at": 1, "model": "test-model", "service_tier": null }
+    },
+    {
+      "type": "response.output_item.added",
+      "output_index": 0,
+      "item": { "type": "message", "id": "msg_fixture", "phase": "final_answer" }
+    },
+    {
+      "type": "response.output_text.delta",
+      "item_id": "msg_fixture",
+      "delta": "完成"
+    },
+    {
+      "type": "response.output_item.done",
+      "output_index": 0,
+      "item": { "type": "message", "id": "msg_fixture", "phase": "final_answer" }
+    },
+    {
+      "type": "response.completed",
+      "response": {
+        "incomplete_details": null,
+        "usage": {
+          "input_tokens": 3,
+          "input_tokens_details": { "cached_tokens": 1 },
+          "output_tokens": 2,
+          "output_tokens_details": { "reasoning_tokens": 0 }
+        },
+        "reasoning": null,
+        "service_tier": "default"
+      }
+    }
+  ]
+}

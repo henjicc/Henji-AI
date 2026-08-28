@@ -1,3 +1,5 @@
+import type { LlmApiProtocol } from './providerProtocol'
+
 /**
  * LLM 区域/租户端点身份。
  *
@@ -24,6 +26,8 @@ export interface LlmEndpointProfile {
   id: string
   displayName: string
   baseUrl: string
+  /** 某些协议使用独立网关前缀；未声明时沿用 baseUrl。 */
+  protocolBaseUrls?: Partial<Record<LlmApiProtocol, string>>
   websiteUrl: string
   apiKeyUrl: string
   defaultCredentialId: string

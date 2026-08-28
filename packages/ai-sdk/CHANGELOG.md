@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 新增 `openai-responses` 模型步骤协议，与 Chat Completions 并存；标准 Responses SSE、usage、失败与取消统一落到既有模型步骤事件和错误契约。
+- 预制供应商按“供应商端点 × 具体模型”自动选择协议：DeepSeek、火山引擎、百炼、MiniMax 与智谱国内 GLM-5.3 的已确认组合默认 Responses，聚合网关和未确认模型继续 Chat。
+- Anthropic 协议仍未实现，不再向宿主设置界面提供伪选项；自定义未知端点只需在 Chat / Responses 之间选择。
+
 ## 0.2.6 - 2026-08-28
 
 - 新增统一的 `PROVIDER_METADATA` 与 `findProviderMetadata(providerId, options)` 公共契约，覆盖全部生成供应商、LLM 预设与 BigModel 国内/国际端点的官网和 API Key 入口。

@@ -9,7 +9,7 @@
 | `providerId`（项目内约定） | `minimax` |
 | 对应项目 `adapter` | `openai`（Chat Completions / Responses 均可）。官方推荐的 Anthropic 路径在本项目没有可选的 adapter——那个选项从未接通，已删除，见下方"接入优先级" |
 | 官方协议 | Anthropic Messages（官方推荐）、OpenAI Chat Completions、OpenAI Responses API 三选一，同域名不同路径 |
-| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | **Responses API 优先** → Chat Completions 兜底（已实现）→ Anthropic **最低优先级**——注意这与官方自己的推荐顺序相反，见第 6 节说明 |
+| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | MiniMax-M3 已默认走 **Responses API** → Chat Completions 兼容；Anthropic 暂不实现、不显示 |
 
 MiniMax 是本次调研 7 家里**唯一把 Anthropic 协议列为默认推荐接入方式**的供应商——官方"通过 SDK 接入"快速开始页第一步就是装 `anthropic` SDK，不是 `openai`；原因是 Anthropic 协议能拿到原生 `thinking` 块和 interleaved thinking，Chat/Responses 路径下这部分体验打折扣。**但本项目按统一的协议接入优先级执行，不因为某一家官方推荐就单独提高 Anthropic 的实现顺序**——MiniMax 官方文档自己也说 Chat Completions 与 Responses 两条路径"功能对等，只是拿不到原生 thinking 块"，所以 Responses API 仍然是够用的第一选择。
 
@@ -71,7 +71,7 @@ for block in message.content:
 ## 6. 兼容性说明
 
 - OpenAI Chat Completions 与 Anthropic Messages 是"等价的两套非流式样例"，官方文档明确"如果你的项目已经接入 OpenAI SDK，把 base_url 和 model 换成 MiniMax 的值即可直接复用，无需迁移 SDK"——即两条路径功能对等（除服务端工具的可用面略有差异），选哪个更多是团队已有技术栈的问题，不是能力取舍。这也是本项目仍把 Responses API 排在 Anthropic 前面的依据：不用 Anthropic 也不会丢失核心能力，只是拿不到原生 `thinking` 块和 interleaved thinking 这部分体验加成。
-- 已有项目机制 `LlmProviderConfig.adapter` 目前只有 `deepseek`/`openai` 两个可选值；曾经存在的 `anthropic` 从未接入实际运行时（`provider.ts` 只注册了 `openai-compatible` 协议），已删除。MiniMax 是除 DeepSeek、GLM、MiMo 之外第四家把 Anthropic Messages 列为官方一等协议的供应商，且是唯一"官方推荐首选"的一家——**这一点只作为背景记录**，本项目的实现顺序仍按 README 里统一的 Responses → Chat → Anthropic 优先级执行，不为 MiniMax 单独提前。
+- `LlmProviderConfig.adapter` 只保留内部供应商特性标识；协议由 `apiProtocol` 和预制模型矩阵决定。Anthropic 虽是 MiniMax 官方推荐路径，但项目暂不实现、不显示；MiniMax-M3 由 SDK 自动走 Responses。
 
 ## 原始链接索引（均无需登录）
 

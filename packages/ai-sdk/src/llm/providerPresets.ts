@@ -5,7 +5,7 @@ import {
   DEFAULT_PPIO_PROVIDER_ID,
   createLlmCapabilitiesForModel,
 } from './defaults'
-import { findLlmModelCatalogEntry } from './modelCatalog'
+import { findLlmModelCatalogEntry, modelSupportsLlmApiProtocol } from './modelCatalog'
 import { GROQ_PROVIDER_PRESET } from './groq/preset'
 import { createBigmodelProvider } from './bigmodel/preset'
 import { BIGMODEL_ENDPOINT_PROFILE_FAMILY } from './bigmodel/profiles'
@@ -41,6 +41,8 @@ export interface LlmProviderPreset {
   reasoningConfigurable: boolean
   /** 添加该供应商时一并建好的推荐模型，能力按内置目录自动标注 */
   modelIds: readonly string[]
+  /** 这家供应商已确认可走 Responses 的具体模型；未列出的模型继续走 Chat Completions。 */
+  responsesModelIds?: readonly string[]
   websiteUrl: string
   apiKeyUrl: string
   /** 该预设的资料出处，仓库内相对路径 */
@@ -78,6 +80,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['deepseek-v4-pro', 'deepseek-v4-flash'],
+    responsesModelIds: ['deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v4-flash-vision-exp'],
     websiteUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).websiteUrl,
     apiKeyUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
@@ -91,6 +94,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['doubao-seed-evolving', 'doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo-260628'],
+    responsesModelIds: ['doubao-seed-evolving', 'doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo-260628'],
     websiteUrl: providerMetadata('volcengine').websiteUrl,
     apiKeyUrl: providerMetadata('volcengine').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/火山引擎.md',
@@ -120,6 +124,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'max' },
     reasoningConfigurable: true,
     modelIds: ['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash'],
+    responsesModelIds: ['glm-5.3'],
     websiteUrl: providerMetadata('bigmodel').websiteUrl,
     apiKeyUrl: providerMetadata('bigmodel').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/智谱GLM.md',
@@ -148,6 +153,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['MiniMax-M3'],
+    responsesModelIds: ['MiniMax-M3'],
     websiteUrl: providerMetadata('minimax').websiteUrl,
     apiKeyUrl: providerMetadata('minimax').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/MiniMax.md',
@@ -163,6 +169,7 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['qwen3.8-max'],
+    responsesModelIds: ['qwen3.8-max'],
     websiteUrl: providerMetadata('bailian').websiteUrl,
     apiKeyUrl: providerMetadata('bailian').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/百炼Qwen.md',
@@ -173,6 +180,24 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
 export function findLlmProviderPreset(providerId: string): LlmProviderPreset | null {
   const normalized = providerId.trim().toLowerCase()
   return LLM_PROVIDER_PRESETS.find(preset => preset.providerId === normalized) ?? null
+}
+
+export function resolvePresetModelApiProtocol(
+  preset: LlmProviderPreset,
+  modelId: string,
+  endpointProfile?: string
+): LlmApiProtocol {
+  if (preset.providerId === 'bigmodel' && (endpointProfile ?? 'cn') !== 'cn') {
+    return 'openai-compatible'
+  }
+  const modelEntry = findLlmModelCatalogEntry(modelId)
+  const normalizedModelId = modelEntry?.id ?? modelId.trim().toLowerCase()
+  const supportsResponses = preset.responsesModelIds?.some(candidate => (
+    (findLlmModelCatalogEntry(candidate)?.id ?? candidate.trim().toLowerCase()) === normalizedModelId
+  )) === true
+  return supportsResponses && modelEntry && modelSupportsLlmApiProtocol(modelEntry, 'openai-responses')
+    ? 'openai-responses'
+    : 'openai-compatible'
 }
 
 export function createProviderFromPreset(
@@ -229,6 +254,7 @@ export function createModelsFromPreset(
       modelId,
       displayName: entry?.displayName ?? modelId,
       adapter: provider.adapter,
+      apiProtocol: resolvePresetModelApiProtocol(preset, modelId, provider.endpointProfile),
       baseUrl: provider.baseUrl,
       capabilities: createLlmCapabilitiesForModel(modelId),
       catalogId: entry?.id,

@@ -154,14 +154,14 @@
   "llmProvider": {
     "title": "管理供应商",
     "presetCustom": "自定义（手动填写）",
-    "adapterOptions": {
-      "deepseek": "DeepSeek",
-      "openai": "OpenAI 兼容"
+    "protocolOptions": {
+      "openai-compatible": "OpenAI Chat Completions",
+      "openai-responses": "OpenAI Responses"
     },
     "fields": {
       "preset": "供应商预设",
       "name": "供应商名称",
-      "adapter": "接口类型",
+      "protocol": "接口协议",
       "baseUrl": "API 地址",
       "apiKey": "API 密钥",
       "keyUrl": "密钥管理地址",
@@ -175,7 +175,9 @@
       "keyUrl": "可选，例如：https://example.com/keys"
     },
     "hints": {
-      "keyUrl": "用于显示“获取/管理 API Key”入口；不填写时不显示。"
+      "keyUrl": "用于显示“获取/管理 API Key”入口；不填写时不显示。",
+      "protocol": "只用于未适配的自定义接口；预制供应商会由 SDK 按具体模型自动选择。",
+      "automaticProtocol": "请求协议由 SDK 按具体模型自动选择，无需手动设置。"
     },
     "preview": "预览：{{value}}",
     "previewEmpty": "请先填写 API 地址",

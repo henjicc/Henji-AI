@@ -5,7 +5,7 @@ export {
 } from './providerProtocolCore'
 export type { LlmApiProtocol } from './providerProtocolCore'
 
-export const llmApiProtocolSchema = z.enum(['openai-compatible'])
+export const llmApiProtocolSchema = z.enum(['openai-compatible', 'openai-responses'])
 
 /**
  * 供应商在 OpenAI 协议之上的认证差异，按 providerId 声明。

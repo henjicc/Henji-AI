@@ -45,6 +45,15 @@ describe('LLM_PROVIDER_PRESETS', () => {
     }
   })
 
+  it('Responses 路由清单只能引用目录里明确登记该协议的模型', () => {
+    for (const preset of LLM_PROVIDER_PRESETS) {
+      for (const modelId of preset.responsesModelIds ?? []) {
+        expect(findLlmModelCatalogEntry(modelId)?.apiProtocols, `${preset.providerId} -> ${modelId}`)
+          .toContain('openai-responses')
+      }
+    }
+  })
+
   it('每条都能追溯到仓库里真实存在的资料文件', () => {
     for (const preset of LLM_PROVIDER_PRESETS) {
       expect(existsSync(path.join(PACKAGE_ROOT, preset.docs)), preset.docs).toBe(true)
@@ -152,6 +161,21 @@ describe('createProviderFromPreset / createModelsFromPreset', () => {
     expect(omni?.catalogId).toBe('mimo-v2.5')
     expect(omni?.capabilities).toMatchObject({ image: true, video: true, audio: true })
     expect(models.every(model => model.providerId === 'mimo' && model.baseUrl === provider.baseUrl)).toBe(true)
+  })
+
+  it('按供应商与具体模型的交集自动选择协议，不让聚合网关误继承原厂能力', () => {
+    const deepseekPreset = findLlmProviderPreset('deepseek')!
+    const deepseek = createModelsFromPreset(deepseekPreset, createProviderFromPreset(deepseekPreset))
+    expect(deepseek.every(model => model.apiProtocol === 'openai-responses')).toBe(true)
+
+    const ppioPreset = findLlmProviderPreset('ppio')!
+    const ppio = createModelsFromPreset(ppioPreset, createProviderFromPreset(ppioPreset))
+    expect(ppio.every(model => model.apiProtocol === 'openai-compatible')).toBe(true)
+
+    const bigmodelPreset = findLlmProviderPreset('bigmodel')!
+    const bigmodel = createModelsFromPreset(bigmodelPreset, createProviderFromPreset(bigmodelPreset))
+    expect(bigmodel.find(model => model.modelId === 'glm-5.3')?.apiProtocol).toBe('openai-responses')
+    expect(bigmodel.find(model => model.modelId === 'glm-5.3-flash')?.apiProtocol).toBe('openai-compatible')
   })
 })
 

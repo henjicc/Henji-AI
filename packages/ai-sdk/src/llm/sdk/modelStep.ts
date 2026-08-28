@@ -139,6 +139,13 @@ export function buildModelStepProviderOptions(input: ModelStepInput): ProviderOp
    * `transformRequestBody` 里按供应商翻译，和原生流式路径共用一份映射，这里只透传调用方显式给的选项。
    */
   const options: ProviderOptions = { ...(input.providerOptions as ProviderOptions | undefined) }
+  if (input.apiProtocol === 'openai-responses') {
+    const openai = options.openai && typeof options.openai === 'object'
+      ? options.openai
+      : {}
+    // 助手始终自行保存完整会话；关闭供应商侧托管也兼容 DeepSeek 的无状态 Responses 实现。
+    options.openai = { ...openai, store: false }
+  }
   return Object.keys(options).length > 0 ? options : undefined
 }
 

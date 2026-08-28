@@ -44,6 +44,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 1_000_000,
     maxOutputTokens: 384_000,
+    apiProtocols: ['openai-responses', 'openai-compatible'],
     note: '思考模式下 temperature / top_p 传了也不生效。',
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
   },
@@ -59,15 +60,14 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 1_000_000,
     maxOutputTokens: 384_000,
+    apiProtocols: ['openai-responses', 'openai-compatible'],
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
   },
   {
     id: 'deepseek-v4-flash-vision-exp',
     displayName: 'DeepSeek V4 Flash Vision (实验)',
     vendor: 'DeepSeek',
-    // 官方文档：图片只能通过 Responses API 的 input_image 内容块发送，本项目还没有该协议适配器；
-    // 走 Chat Completions 发图不会报错，而是被替换成占位文本，属于静默失效，因此这里记为不支持。
-    input: { image: false, video: false, audio: false },
+    input: { image: true, video: false, audio: false },
     toolCall: true,
     parallelTools: false,
     structuredOutputMode: 'json',
@@ -75,7 +75,8 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 1_000_000,
     maxOutputTokens: 384_000,
-    note: '模型本身支持图片输入，但官方只开放在 Responses API 上；本项目当前只有 Chat Completions 协议，发图会被静默替换成占位文本，所以未勾选图片输入。',
+    apiProtocols: ['openai-responses', 'openai-compatible'],
+    note: '图片输入只在 Responses API 下可用；SDK 会在直连 DeepSeek 时自动选择 Responses。',
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
   },
 
@@ -142,6 +143,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 1_000_000,
     maxOutputTokens: 128_000,
+    apiProtocols: ['openai-responses', 'openai-compatible'],
     note: '始终开启思考且无法关闭；官方明确只支持文本模态，需要看图看视频请改用 GLM-5V-Turbo。',
     docs: 'docs/llm-adaptation/供应商/智谱GLM.md',
   },
@@ -174,7 +176,8 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 1_048_576,
     maxOutputTokens: 262_144,
-    note: 'Model ID 固定、版本自动滚动；联网搜索等内置工具只在 Responses API 可用，本项目当前协议下拿不到。',
+    apiProtocols: ['openai-responses', 'openai-compatible'],
+    note: 'Model ID 固定、版本自动滚动；SDK 在火山引擎直连时默认使用 Responses API。',
     docs: 'docs/llm-adaptation/供应商/火山引擎.md',
   },
   {
@@ -189,6 +192,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 262_144,
     maxOutputTokens: 262_144,
+    apiProtocols: ['openai-responses', 'openai-compatible'],
     docs: 'docs/llm-adaptation/供应商/火山引擎.md',
   },
   {
@@ -203,6 +207,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 262_144,
     maxOutputTokens: 262_144,
+    apiProtocols: ['openai-responses', 'openai-compatible'],
     docs: 'docs/llm-adaptation/供应商/火山引擎.md',
   },
 
@@ -253,6 +258,7 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     // 官方文档只写"超长文档与长视频"，没有给出可引用的上下文 token 数，留空走回退预算。
     contextWindow: null,
     maxOutputTokens: null,
+    apiProtocols: ['openai-responses', 'openai-compatible'],
     note: '必须走多模态接口：即使是纯文字对话，content 也要写成内容块数组，直接传字符串会报 url error。',
     docs: 'docs/llm-adaptation/供应商/百炼Qwen.md',
   },
@@ -270,7 +276,8 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
     sampling: true,
     contextWindow: 1_000_000,
     maxOutputTokens: 131_072,
-    note: '原生 thinking 块只在 Anthropic Messages 协议下可见，本项目走 Chat Completions 时拿到的是扁平的 reasoning_content。',
+    apiProtocols: ['openai-responses', 'openai-compatible'],
+    note: 'SDK 在 MiniMax 直连时默认使用 Responses API；不向用户暴露底层协议选择。',
     docs: 'docs/llm-adaptation/供应商/MiniMax.md',
   },
 ]

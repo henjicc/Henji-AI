@@ -169,6 +169,24 @@ describe('normalizeLlmConfig', () => {
     expect(config.providers.find(item => item.providerId === 'legacy')?.adapter).toBe('openai')
   })
 
+  it('预制模型自动迁移到确认过的首选协议，且不继承存量手工协议', () => {
+    const defaults = normalizeLlmConfig(null)
+    expect(defaults.models.find(model => (
+      model.providerId === 'deepseek' && model.modelId === 'deepseek-v4-pro'
+    ))?.apiProtocol).toBe('openai-responses')
+    expect(defaults.models.find(model => (
+      model.providerId === 'ppio' && model.modelId === 'deepseek/deepseek-v4-pro'
+    ))?.apiProtocol).toBe('openai-compatible')
+
+    const legacy = normalizeLlmConfig({
+      ...defaults,
+      models: defaults.models.map(model => ({ ...model, apiProtocol: 'openai-compatible' })),
+    })
+    expect(legacy.models.find(model => (
+      model.providerId === 'deepseek' && model.modelId === 'deepseek-v4-pro'
+    ))?.apiProtocol).toBe('openai-responses')
+  })
+
   it('保留用户明确清空的文本处理模板，并过滤无名称模板', () => {
     const defaults = normalizeLlmConfig(null)
     expect(normalizeLlmConfig({

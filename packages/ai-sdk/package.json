@@ -160,6 +160,7 @@
     "prepublishOnly": "node scripts/prepublish-check.cjs"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.89",
     "@ai-sdk/openai-compatible": "2.0.62",
     "@ai-sdk/provider-utils": "4.0.40",
     "ai": "6.0.234",

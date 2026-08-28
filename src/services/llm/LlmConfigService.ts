@@ -10,7 +10,12 @@ import {
   createDefaultLlmConfig,
 } from '@/core/llm/defaults'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
-import { applyLlmModelCatalogEntry, findLlmModelCatalogEntry } from '@henjicc/ai-sdk'
+import {
+  applyLlmModelCatalogEntry,
+  findLlmModelCatalogEntry,
+  findLlmProviderPreset,
+  resolvePresetModelApiProtocol,
+} from '@henjicc/ai-sdk'
 import {
   normalizeLlmProviderSetup,
   resolveLlmEndpointIdentity,
@@ -23,6 +28,7 @@ import type {
   LlmConfigState,
   LlmModelConfig,
   LlmProviderConfig,
+  LlmApiProtocol,
   LlmReasoningConfig,
   LlmReasoningEffort,
   PromptOptimizationProfile,
@@ -60,6 +66,10 @@ function normalizeAdapter(adapter: string, providerId: string): string {
    */
   if (normalized === 'anthropic') return 'openai'
   return normalized || 'openai'
+}
+
+function normalizeApiProtocol(value: unknown): LlmApiProtocol {
+  return value === 'openai-responses' ? 'openai-responses' : 'openai-compatible'
 }
 
 function resolveProviderBaseUrl(provider: LlmProviderConfig): string | undefined {
@@ -180,7 +190,7 @@ function normalizeProvider(provider: LlmProviderConfig): LlmProviderConfig {
     setup,
     displayName: provider.displayName.trim(),
     adapter,
-    apiProtocol: provider.apiProtocol ?? 'openai-compatible',
+    apiProtocol: normalizeApiProtocol(provider.apiProtocol),
     baseUrl: identity.baseUrl,
     reasoning: normalizeReasoningConfig(provider.reasoning, adapter),
     reasoningConfigurable: provider.reasoningConfigurable !== false,
@@ -210,6 +220,12 @@ function normalizeModel(model: LlmModelConfig, providers: LlmProviderConfig[]): 
   const adapter = provider?.adapter ?? model.adapter
   const baseUrl = normalizeBaseUrl(model.baseUrl) ?? provider?.baseUrl
   const withCatalog = applyModelCatalogOnce({ ...model, modelId: model.modelId.trim() })
+  const preset = provider?.setup?.kind === 'preset'
+    ? findLlmProviderPreset(provider.setup.presetId)
+    : null
+  const apiProtocol = preset
+    ? resolvePresetModelApiProtocol(preset, withCatalog.modelId, provider?.endpointProfile)
+    : normalizeApiProtocol(model.apiProtocol ?? provider?.apiProtocol)
   return {
     ...withCatalog,
     providerId: model.providerId.trim(),
@@ -218,7 +234,7 @@ function normalizeModel(model: LlmModelConfig, providers: LlmProviderConfig[]): 
     credentialId: provider?.credentialId ?? model.credentialId ?? model.providerId.trim(),
     displayName: model.displayName.trim(),
     adapter: normalizeAdapter(adapter, model.providerId),
-    apiProtocol: model.apiProtocol ?? provider?.apiProtocol ?? 'openai-compatible',
+    apiProtocol,
     baseUrl,
     capabilities: normalizeCapabilities(withCatalog.capabilities),
     enabled: model.enabled !== false,

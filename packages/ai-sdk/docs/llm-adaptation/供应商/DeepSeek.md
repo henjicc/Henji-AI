@@ -8,10 +8,10 @@
 |---|---|
 | `providerId`（项目内约定） | `deepseek` |
 | 对应项目 `adapter` | `deepseek`（已实现；思考参数映射见 `packages/ai-sdk/src/llm/providerReasoningRequest.ts`，认证与请求体怪癖见 `packages/ai-sdk/src/llm/providerProtocol.ts`） |
-| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | **Responses API 优先** → Chat Completions 兜底（已实现）→ Anthropic Messages **最低优先级**（官方支持，但不作为本项目下一步投入方向） |
+| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | **Responses API 已实现并作为直连默认** → Chat Completions 兜底；Anthropic 暂不实现、不显示 |
 | 鉴权 | `Authorization: Bearer <DEEPSEEK_API_KEY>` |
 | 官方协议 | OpenAI Chat Completions、OpenAI Responses API、**Anthropic Messages API** 三选一，同一 Base URL 域名 |
-| 项目当前实际协议 | 仅 Chat Completions（`ModelStepProviderAdapterRegistry` 目前只注册了 `openai-compatible` 一种协议） |
+| 项目当前实际协议 | 直连预制模型自动使用 Responses；Chat Completions 保留为兼容路径 |
 
 ## 2. Base URL
 
@@ -26,8 +26,8 @@
 
 | 协议 | 官方支持 | 备注 |
 |---|---|---|
-| Chat Completions | ✅ | 项目当前唯一接入路径 |
-| Responses API | ✅ | `client.responses.create(model=..., input=...)`；SSE 事件语义与 OpenAI 官方基本一致，见第 6 节 |
+| Chat Completions | ✅ | SDK 兼容路径 |
+| Responses API | ✅ | SDK 直连默认；`client.responses.create(model=..., input=...)`，见第 6 节 |
 | Anthropic Messages API | ✅ | 把 Claude 模型名映射到 DeepSeek 模型（`claude-opus-*` → `deepseek-v4-pro`；`claude-haiku-*`/`claude-sonnet-*` → `deepseek-v4-flash`），可以不改代码直接把现有 Anthropic 客户端指过来 |
 
 三种协议**同一批新模型会同步支持**，官方没有"新模型先上 Chat 后补 Responses"的滞后期。
@@ -71,7 +71,7 @@
 
 - 沿用 Anthropic 官方字段名（`system`、`messages[].content[].type=text/image/tool_use/tool_result` 等），`thinking` 支持但 `budget_tokens` 被忽略。
 - `output_config.effort` 是 DeepSeek 侧唯一生效的思考强度字段，其余 Anthropic 原生参数（`top_k`、`cache_control`、`disable_parallel_tool_use` 等）大多被忽略。
-- 项目设置页曾经有一个 `adapter: 'anthropic'` 选项，但**从来没有对应的运行时实现**（`packages/ai-sdk/src/llm/sdk/provider.ts` 只注册了 `openai-compatible`），已经删除，存量配置归一化成 `openai`。用 Anthropic 协议能拿到原生 `thinking` 块而不是塞进 Chat Completions 的 `reasoning_content` 字符串，但按本项目约定的接入优先级（见第 1 节），这不是下一步要投入的方向——**先做好 Responses API**，Anthropic 只在顺手时补一下。
+- 项目设置页不显示 Anthropic：它没有运行时实现，存量伪配置会归一化成 OpenAI Chat。官方能力只留作未来资料，不让用户面对无效协议选项。
 
 ## 8. 视觉输入限制（`deepseek-v4-flash-vision-exp`）
 

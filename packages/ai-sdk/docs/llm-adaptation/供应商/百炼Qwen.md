@@ -8,7 +8,7 @@
 |---|---|
 | `providerId`（项目内约定） | `bailian` / `dashscope` |
 | 对应项目 `adapter` | `openai`（Chat Completions）；官方也提供 Responses API |
-| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | **Responses API 优先**（`web_extractor`/`code_interpreter` 只在这条路径有）→ Chat Completions 兜底（已实现）；官方**没有** Anthropic Messages API |
+| 接入优先级（本项目约定，见 [README 第三节](../README.md)） | Qwen3.8-Max 已默认走 **Responses API**；Chat Completions 保留兼容，官方没有 Anthropic Messages API |
 | 鉴权 | `Authorization: Bearer $DASHSCOPE_API_KEY` |
 | Base URL | `https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`（**地域相关，`{WorkspaceId}` 和区域后缀需要从控制台"查看代码"复制当前值，不要硬编码**） |
 | 官方协议 | OpenAI Chat Completions（`/chat/completions`）+ OpenAI Responses API（`/responses`），同一 Base URL 下两个路径 |

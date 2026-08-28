@@ -261,6 +261,17 @@ describe('resolveModelStepBaseUrl', () => {
       .toBe('https://example.com/v1')
   })
 
+  it('Responses 使用协议端点，并为智谱国内模型切到独立 API 前缀', () => {
+    expect(resolveModelStepBaseUrl(createInput({
+      providerId: 'deepseek', adapter: 'deepseek', apiProtocol: 'openai-responses',
+      baseUrl: 'https://api.deepseek.com/responses',
+    }))).toBe('https://api.deepseek.com')
+    expect(resolveModelStepBaseUrl(createInput({
+      providerId: 'bigmodel', providerFamilyId: 'bigmodel', endpointProfile: 'cn', credentialId: 'bigmodel',
+      apiProtocol: 'openai-responses', baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    }))).toBe('https://open.bigmodel.cn/api/v1')
+  })
+
   it('思考参数不再走 providerOptions，只透传调用方显式给的选项', () => {
     // 思考参数改由 applyProviderReasoningRequestBody 在 transformRequestBody 里按供应商翻译，
     // 与原生流式路径共用（见 providerReasoningRequest.test.ts）。
@@ -273,6 +284,8 @@ describe('resolveModelStepBaseUrl', () => {
     }))).toMatchObject({
       openaiCompatible: { serviceTier: 'priority' },
     })
+    expect(buildModelStepProviderOptions(createInput({ apiProtocol: 'openai-responses' })))
+      .toEqual({ openai: { store: false } })
   })
 
   it('DeepSeek 思考模式不发送不会生效的采样参数', async () => {

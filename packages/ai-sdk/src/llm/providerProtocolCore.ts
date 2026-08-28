@@ -1,5 +1,5 @@
-/** UXP 可安全打包的 OpenAI-compatible 协议运行时差异；schema 留在兼容入口。 */
-export type LlmApiProtocol = 'openai-compatible'
+/** UXP 可安全打包的 OpenAI 协议族；schema 留在兼容入口。 */
+export type LlmApiProtocol = 'openai-compatible' | 'openai-responses'
 
 const PROVIDER_EXTRA_AUTH_HEADERS: Readonly<Record<string, string>> = {
   mimo: 'api-key',

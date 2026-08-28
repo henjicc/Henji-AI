@@ -14,7 +14,6 @@ import {
   UiSwitch,
 } from '@/components/ui'
 import { useI18n } from '@/hooks/useI18n'
-import { createDefaultProviderReasoning } from '@/core/llm/defaults'
 import { useExternalLink } from '../hooks/useExternalLink'
 import ApiKeyInput from '../components/ApiKeyInput'
 import {
@@ -29,8 +28,7 @@ import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
 import {
   createDefaultProvider,
   createProviderId,
-  getDefaultBaseUrlForAdapter,
-  providerTypes,
+  providerProtocolOptions,
   resolveApiPreview,
   resolveProviderReasoning,
 } from './llmSettingsSectionHelpers'
@@ -77,9 +75,9 @@ const LlmProviderDialog = ({
     { value: CUSTOM_PRESET, label: t('llmProvider.presetCustom') },
     ...LLM_PROVIDER_PRESETS.map(preset => ({ value: preset.providerId, label: preset.displayName })),
   ]
-  const providerTypeOptions = providerTypes.map(type => ({
+  const protocolOptions = providerProtocolOptions.map(type => ({
     ...type,
-    label: t(`llmProvider.adapterOptions.${type.value}`),
+    label: t(`llmProvider.protocolOptions.${type.value}`),
   }))
 
   useEffect(() => {
@@ -274,7 +272,6 @@ const LlmProviderDialog = ({
             >
               <span className="min-w-0 text-left">
                 <span className="block truncate text-sm">{provider.displayName}</span>
-                <span className="block truncate text-xs text-text-soft">{provider.adapter}</span>
               </span>
               <span className="text-xs text-text-soft">
                 {provider.enabled ? t('llmProvider.status.on') : t('llmProvider.status.off')}
@@ -312,27 +309,20 @@ const LlmProviderDialog = ({
             )}
           </UiFormRow>
 
-          <UiFormRow label={t('llmProvider.fields.adapter')}>
-            {isCustom ? (
+          {isCustom ? (
+            <UiFormRow label={t('llmProvider.fields.protocol')}>
               <Dropdown
-                value={draft.adapter}
-                display={providerTypeOptions.find(type => type.value === draft.adapter)?.label ?? draft.adapter}
-                options={providerTypeOptions}
-                ariaLabel={t('llmProvider.fields.adapter')}
+                value={draft.apiProtocol ?? 'openai-compatible'}
+                display={protocolOptions.find(type => type.value === draft.apiProtocol)?.label ?? protocolOptions[0].label}
+                options={protocolOptions}
+                ariaLabel={t('llmProvider.fields.protocol')}
                 className="w-full"
                 buttonClassName="w-full"
-                onSelect={adapter => patch({
-                  adapter,
-                  baseUrl: draft.baseUrl || getDefaultBaseUrlForAdapter(adapter),
-                  reasoning: createDefaultProviderReasoning(adapter),
-                })}
+                onSelect={apiProtocol => patch({ apiProtocol })}
               />
-            ) : (
-              <div className={UI_TEXT_BODY_CLASS}>
-                {providerTypeOptions.find(type => type.value === draft.adapter)?.label ?? draft.adapter}
-              </div>
-            )}
-          </UiFormRow>
+              <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.protocol')}</div>
+            </UiFormRow>
+          ) : null}
 
           <UiFormRow label={t('llmProvider.fields.baseUrl')}>
             {isCustom ? (
@@ -347,7 +337,9 @@ const LlmProviderDialog = ({
             <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
               {activePreset?.baseUrlHint && !draft.baseUrl?.trim()
                 ? activePreset.baseUrlHint
-                : t('llmProvider.preview', { value: resolveApiPreview(draft) || t('llmProvider.previewEmpty') })}
+                : activePreset
+                  ? t('llmProvider.hints.automaticProtocol')
+                  : t('llmProvider.preview', { value: resolveApiPreview(draft) || t('llmProvider.previewEmpty') })}
             </div>
           </UiFormRow>
 

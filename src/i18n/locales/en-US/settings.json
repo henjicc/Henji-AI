@@ -154,14 +154,14 @@
   "llmProvider": {
     "title": "Manage Providers",
     "presetCustom": "Custom (manual)",
-    "adapterOptions": {
-      "deepseek": "DeepSeek",
-      "openai": "OpenAI-compatible"
+    "protocolOptions": {
+      "openai-compatible": "OpenAI Chat Completions",
+      "openai-responses": "OpenAI Responses"
     },
     "fields": {
       "preset": "Provider preset",
       "name": "Provider name",
-      "adapter": "API type",
+      "protocol": "API protocol",
       "baseUrl": "API URL",
       "apiKey": "API key",
       "keyUrl": "Key management URL",
@@ -175,7 +175,9 @@
       "keyUrl": "Optional, for example: https://example.com/keys"
     },
     "hints": {
-      "keyUrl": "Used for the Get/Manage API Key link. No link is shown when empty."
+      "keyUrl": "Used for the Get/Manage API Key link. No link is shown when empty.",
+      "protocol": "Only for unadapted custom endpoints. Presets let the SDK choose per model automatically.",
+      "automaticProtocol": "The SDK chooses the request protocol for each model automatically."
     },
     "preview": "Preview: {{value}}",
     "previewEmpty": "Enter an API URL first",

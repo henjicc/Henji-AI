@@ -243,6 +243,7 @@ function createBuiltInLlmModel(
   baseUrl: string,
   modelId: string,
   displayName: string,
+  apiProtocol: LlmModelConfig['apiProtocol'] = 'openai-compatible',
 ): LlmModelConfig {
   return {
     providerId,
@@ -251,6 +252,7 @@ function createBuiltInLlmModel(
     modelId,
     displayName,
     adapter,
+    apiProtocol,
     baseUrl,
     capabilities: createLlmCapabilitiesForModel(modelId),
     catalogId: findLlmModelCatalogEntry(modelId)?.id,
@@ -263,7 +265,14 @@ export function createBuiltInLlmModels(): LlmModelConfig[] {
     createBuiltInLlmModel(DEFAULT_PPIO_PROVIDER_ID, 'openai', DEFAULT_PPIO_BASE_URL, modelId, displayName)
   )
   const deepseek = (modelId: string, displayName: string): LlmModelConfig => (
-    createBuiltInLlmModel(DEFAULT_DEEPSEEK_PROVIDER_ID, 'deepseek', DEFAULT_DEEPSEEK_BASE_URL, modelId, displayName)
+    createBuiltInLlmModel(
+      DEFAULT_DEEPSEEK_PROVIDER_ID,
+      'deepseek',
+      DEFAULT_DEEPSEEK_BASE_URL,
+      modelId,
+      displayName,
+      'openai-responses',
+    )
   )
   return [
     ppio('deepseek/deepseek-v4-pro', 'DeepSeek V4 Pro'),
