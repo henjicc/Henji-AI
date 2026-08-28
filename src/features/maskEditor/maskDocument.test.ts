@@ -55,7 +55,7 @@ describe('maskDocument', () => {
         {
           id: 'rectangle-1',
           kind: 'rectangle',
-          mode: 'paint',
+          mode: 'erase',
           points: [{ x: 10, y: 20 }, { x: 80, y: 90 }],
         },
         {
@@ -85,6 +85,10 @@ describe('maskDocument', () => {
     expect(parseMaskEditorDocument({
       ...raw,
       strokes: [{ ...raw.strokes[3], points: [{ x: 1, y: 1 }, { x: 2, y: 2 }] }],
+    })).toBeNull();
+    expect(parseMaskEditorDocument({
+      ...raw,
+      strokes: [{ ...raw.strokes[0], hardness: 1.2 }],
     })).toBeNull();
   });
 

@@ -16,6 +16,7 @@ import {
   WHITE_HEX,
 } from '@/core/theme/colorTokens';
 import { PEN_TENSION } from '@/features/imageMark/domain/penGeometry';
+import { createMaskBrushRenderLayers, normalizeMaskBrushHardness } from './brushHardness';
 import {
   appendMaskPoint,
   clampMaskPoint,
@@ -29,6 +30,7 @@ import type {
   MaskPoint,
   MaskShape,
   MaskStroke,
+  MaskStrokeMode,
   MaskTool,
 } from './types';
 
@@ -36,7 +38,9 @@ interface MaskEditorCanvasProps {
   image: HTMLImageElement;
   document: MaskEditorDocument;
   tool: MaskTool;
+  mode: MaskStrokeMode;
   brushSize: number;
+  brushHardness: number;
   onMarkComplete: (mark: MaskMark) => void;
 }
 
@@ -53,40 +57,54 @@ function flatPoints(points: MaskPoint[]): number[] {
 
 function MaskStrokePreview({ stroke }: { stroke: MaskStroke }): JSX.Element | null {
   const isErase = stroke.mode === 'erase';
-  const shared = {
-    fill: ANNOTATION_DEFAULT_STROKE_HEX,
-    opacity: 0.55,
-    globalCompositeOperation: isErase ? 'destination-out' as const : 'source-over' as const,
-    listening: false,
-  };
-  if (stroke.points.length === 1) {
-    return (
-      <Circle
-        x={stroke.points[0].x}
-        y={stroke.points[0].y}
-        radius={stroke.size / 2}
-        {...shared}
-      />
-    );
-  }
-  if (stroke.points.length < 2) return null;
+  const layers = createMaskBrushRenderLayers(
+    stroke.size,
+    stroke.hardness,
+    isErase ? 1 : 0.55
+  );
+  if (stroke.points.length === 0) return null;
   return (
-    <Line
-      points={flatPoints(stroke.points)}
-      stroke={ANNOTATION_DEFAULT_STROKE_HEX}
-      strokeWidth={stroke.size}
-      lineCap="round"
-      lineJoin="round"
-      tension={PEN_TENSION}
-      {...shared}
-    />
+    <>
+      {layers.map((layer, index) => {
+        const shared = {
+          opacity: layer.opacity,
+          globalCompositeOperation: isErase ? 'destination-out' as const : 'source-over' as const,
+          listening: false,
+        };
+        if (stroke.points.length === 1) {
+          return (
+            <Circle
+              key={`${stroke.id}-layer-${index}`}
+              x={stroke.points[0].x}
+              y={stroke.points[0].y}
+              radius={layer.size / 2}
+              fill={ANNOTATION_DEFAULT_STROKE_HEX}
+              {...shared}
+            />
+          );
+        }
+        return (
+          <Line
+            key={`${stroke.id}-layer-${index}`}
+            points={flatPoints(stroke.points)}
+            stroke={ANNOTATION_DEFAULT_STROKE_HEX}
+            strokeWidth={layer.size}
+            lineCap="round"
+            lineJoin="round"
+            tension={PEN_TENSION}
+            {...shared}
+          />
+        );
+      })}
+    </>
   );
 }
 
 function MaskShapePreview({ shape }: { shape: MaskShape }): JSX.Element | null {
   const shared = {
     fill: ANNOTATION_DEFAULT_STROKE_HEX,
-    opacity: 0.55,
+    opacity: shape.mode === 'erase' ? 1 : 0.55,
+    globalCompositeOperation: shape.mode === 'erase' ? 'destination-out' as const : 'source-over' as const,
     listening: false,
   };
   if (shape.kind === 'lasso') {
@@ -116,20 +134,27 @@ function MaskMarkPreview({ mark }: { mark: MaskMark }): JSX.Element | null {
     : <MaskShapePreview shape={mark} />;
 }
 
-function createDraft(tool: MaskTool, point: MaskPoint, brushSize: number): MaskMark {
-  if (tool === 'brush' || tool === 'eraser') {
+function createDraft(
+  tool: MaskTool,
+  mode: MaskStrokeMode,
+  point: MaskPoint,
+  brushSize: number,
+  brushHardness: number
+): MaskMark {
+  if (tool === 'brush') {
     return {
       id: createMarkId(),
       kind: 'stroke',
-      mode: tool === 'brush' ? 'paint' : 'erase',
+      mode,
       size: brushSize,
+      hardness: normalizeMaskBrushHardness(brushHardness),
       points: [point],
     };
   }
   return {
     id: createMarkId(),
     kind: tool,
-    mode: 'paint',
+    mode,
     points: tool === 'lasso' ? [point] : [point, point],
   };
 }
@@ -155,7 +180,9 @@ export function MaskEditorCanvas({
   image,
   document,
   tool,
+  mode,
   brushSize,
+  brushHardness,
   onMarkComplete,
 }: MaskEditorCanvasProps): JSX.Element {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -183,7 +210,7 @@ export function MaskEditorCanvas({
     draftRef.current = null;
     setDraft(null);
     setCursorPoint(null);
-  }, [document.sourceRef, tool]);
+  }, [document.sourceRef, mode, tool]);
 
   const fit = fitMaskStage(
     viewportSize.width,
@@ -213,8 +240,8 @@ export function MaskEditorCanvas({
     const point = resolvePoint(event);
     if (!point) return;
     if (event.evt instanceof MouseEvent) setCursorPoint(point);
-    updateDraft(createDraft(tool, point, brushSize));
-  }, [brushSize, resolvePoint, tool, updateDraft]);
+    updateDraft(createDraft(tool, mode, point, brushSize, brushHardness));
+  }, [brushHardness, brushSize, mode, resolvePoint, tool, updateDraft]);
 
   const handlePointerMove = useCallback((event: KonvaEventObject<MouseEvent | TouchEvent>) => {
     const point = resolvePoint(event);
@@ -239,7 +266,8 @@ export function MaskEditorCanvas({
     setCursorPoint(null);
   }, [handlePointerUp]);
 
-  const showBrushCursor = cursorPoint && (tool === 'brush' || tool === 'eraser');
+  const showBrushCursor = cursorPoint && tool === 'brush';
+  const normalizedHardness = normalizeMaskBrushHardness(brushHardness);
 
   return (
     <div
@@ -257,7 +285,7 @@ export function MaskEditorCanvas({
         onMouseUp={handlePointerUp}
         onTouchEnd={handlePointerUp}
         onMouseLeave={handleMouseLeave}
-        className={tool === 'brush' || tool === 'eraser' ? 'cursor-none' : 'cursor-crosshair'}
+        className={tool === 'brush' ? 'cursor-none' : 'cursor-crosshair'}
       >
         <Layer listening={false}>
           <KonvaImage image={image} width={fit.width} height={fit.height} />
@@ -292,6 +320,17 @@ export function MaskEditorCanvas({
                   strokeWidth={1 / fit.scale}
                   listening={false}
                 />
+                {normalizedHardness < 0.999 ? (
+                  <Circle
+                    x={cursorPoint.x}
+                    y={cursorPoint.y}
+                    radius={(brushSize * normalizedHardness) / 2}
+                    stroke={mode === 'paint' ? ANNOTATION_DEFAULT_STROKE_HEX : BLACK_HEX}
+                    strokeWidth={1 / fit.scale}
+                    dash={[4 / fit.scale, 3 / fit.scale]}
+                    listening={false}
+                  />
+                ) : null}
               </>
             ) : null}
           </Group>

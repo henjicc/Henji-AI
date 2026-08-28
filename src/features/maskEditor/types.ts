@@ -1,5 +1,5 @@
 export type MaskStrokeMode = 'paint' | 'erase';
-export type MaskTool = 'brush' | 'eraser' | 'rectangle' | 'circle' | 'lasso';
+export type MaskTool = 'brush' | 'rectangle' | 'circle' | 'lasso';
 export type MaskShapeKind = 'rectangle' | 'circle' | 'lasso';
 
 export interface MaskPoint {
@@ -14,13 +14,15 @@ export interface MaskStroke {
   mode: MaskStrokeMode;
   /** 以源图像素为单位，缩放预览不会改变真实笔刷尺寸。 */
   size: number;
+  /** 0~1，1 为硬边；旧文档缺省时按 1 处理。 */
+  hardness?: number;
   points: MaskPoint[];
 }
 
 export interface MaskShape {
   id: string;
   kind: MaskShapeKind;
-  mode: 'paint';
+  mode: MaskStrokeMode;
   /** 矩形/圆形存起止点，自由框选存开放轨迹并在渲染时自动闭合。 */
   points: MaskPoint[];
 }

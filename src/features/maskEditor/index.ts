@@ -2,6 +2,12 @@ export { MaskEditorModal } from './MaskEditorModal';
 export type { MaskEditorModalProps } from './MaskEditorModal';
 export { exportMaskDocumentToPng, renderMaskDocument } from './maskExport';
 export {
+  createMaskBrushRenderLayers,
+  DEFAULT_MASK_BRUSH_HARDNESS,
+  MIN_MASK_BRUSH_HARDNESS,
+  normalizeMaskBrushHardness,
+} from './brushHardness';
+export {
   appendMaskPoint,
   appendMaskStroke,
   cloneMaskDocument,

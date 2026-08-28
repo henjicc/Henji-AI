@@ -4,10 +4,12 @@ import { renderMaskDocument } from './maskExport';
 
 function createRecordingContext() {
   const composites: GlobalCompositeOperation[] = [];
+  const globalAlphas: number[] = [];
   const lineWidths: number[] = [];
   const filledRectComposites: GlobalCompositeOperation[] = [];
   const context = {
     globalCompositeOperation: 'source-over' as GlobalCompositeOperation,
+    globalAlpha: 1,
     fillStyle: '',
     strokeStyle: '',
     lineCap: 'butt' as CanvasLineCap,
@@ -29,14 +31,16 @@ function createRecordingContext() {
     restore: vi.fn(),
     fill: vi.fn(() => {
       composites.push(context.globalCompositeOperation);
+      globalAlphas.push(context.globalAlpha);
       lineWidths.push(context.lineWidth);
     }),
     stroke: vi.fn(() => {
       composites.push(context.globalCompositeOperation);
+      globalAlphas.push(context.globalAlpha);
       lineWidths.push(context.lineWidth);
     }),
   };
-  return { context, composites, filledRectComposites, lineWidths };
+  return { context, composites, filledRectComposites, globalAlphas, lineWidths };
 }
 
 describe('renderMaskDocument', () => {
@@ -65,6 +69,7 @@ describe('renderMaskDocument', () => {
     expect(recording.context.clearRect).toHaveBeenCalledWith(0, 0, 640, 480);
     expect(recording.context.fillRect).toHaveBeenCalledWith(0, 0, 640, 480);
     expect(recording.composites).toEqual(['destination-out', 'source-over']);
+    expect(recording.globalAlphas).toEqual([1, 1]);
     expect(recording.lineWidths).toEqual([40, 12]);
     expect(recording.context.arc).toHaveBeenCalledWith(120, 140, 6, 0, Math.PI * 2);
   });
@@ -87,6 +92,28 @@ describe('renderMaskDocument', () => {
     expect(recording.context.stroke).toHaveBeenCalledTimes(1);
   });
 
+  it('低硬度画笔以多层透明度形成羽化，但硬芯仍完全写入遮罩', () => {
+    const document = {
+      ...createEmptyMaskDocument('source-a', 100, 100),
+      strokes: [{
+        id: 'soft-brush',
+        mode: 'paint' as const,
+        size: 40,
+        hardness: 0.25,
+        points: [{ x: 10, y: 10 }, { x: 80, y: 80 }],
+      }],
+    };
+    const recording = createRecordingContext();
+
+    renderMaskDocument(recording.context, document);
+
+    expect(recording.context.stroke).toHaveBeenCalledTimes(8);
+    expect(recording.lineWidths[0]).toBe(40);
+    expect(recording.lineWidths.at(-1)).toBe(10);
+    expect(recording.globalAlphas[0]).toBeLessThan(recording.globalAlphas.at(-1) ?? 0);
+    expect(recording.globalAlphas.at(-1)).toBe(1);
+  });
+
   it('矩形、圆形和自由框选都导出为透明区域，自由框选自动闭合', () => {
     const document = {
       ...createEmptyMaskDocument('source-a', 200, 160),
@@ -100,7 +127,7 @@ describe('renderMaskDocument', () => {
         {
           id: 'circle',
           kind: 'circle' as const,
-          mode: 'paint' as const,
+          mode: 'erase' as const,
           points: [{ x: 80, y: 30 }, { x: 160, y: 110 }],
         },
         {
@@ -119,6 +146,6 @@ describe('renderMaskDocument', () => {
     expect(recording.filledRectComposites).toEqual(['source-over', 'destination-out']);
     expect(recording.context.ellipse).toHaveBeenCalledWith(120, 70, 40, 40, 0, 0, Math.PI * 2);
     expect(recording.context.closePath).toHaveBeenCalledTimes(1);
-    expect(recording.composites).toEqual(['destination-out', 'destination-out']);
+    expect(recording.composites).toEqual(['source-over', 'destination-out']);
   });
 });

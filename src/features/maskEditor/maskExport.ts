@@ -2,6 +2,7 @@ import { createLogger } from '@/core/logging';
 import { WHITE_HEX } from '@/core/theme/colorTokens';
 import { canvasToDataUrl } from '@/services/imageSource';
 import { tracePenPath, type PenPathContext } from '@/features/imageMark/render/tracePenPath';
+import { createMaskBrushRenderLayers } from './brushHardness';
 import { isMaskStroke, resolveMaskShapeBounds } from './maskDocument';
 import type { MaskEditorDocument, MaskMark, MaskShape, MaskStroke } from './types';
 
@@ -19,6 +20,7 @@ type MaskRenderContext = PenPathContext & Pick<
   | 'save'
   | 'stroke'
   | 'globalCompositeOperation'
+  | 'globalAlpha'
   | 'fillStyle'
   | 'strokeStyle'
   | 'lineCap'
@@ -26,11 +28,11 @@ type MaskRenderContext = PenPathContext & Pick<
   | 'lineWidth'
 >;
 
-function traceMaskStroke(context: MaskRenderContext, stroke: MaskStroke): void {
+function traceMaskStroke(context: MaskRenderContext, stroke: MaskStroke, size: number): void {
   const points = stroke.points.flatMap((point) => [point.x, point.y]);
   if (points.length === 2) {
     context.beginPath();
-    context.arc(points[0], points[1], stroke.size / 2, 0, Math.PI * 2);
+    context.arc(points[0], points[1], size / 2, 0, Math.PI * 2);
     context.fill();
     return;
   }
@@ -75,13 +77,16 @@ function fillMaskShape(context: MaskRenderContext, shape: MaskShape): void {
 }
 
 function renderMaskMark(context: MaskRenderContext, mark: MaskMark): void {
+  context.globalCompositeOperation = mark.mode === 'paint' ? 'destination-out' : 'source-over';
   if (isMaskStroke(mark)) {
-    context.globalCompositeOperation = mark.mode === 'paint' ? 'destination-out' : 'source-over';
-    context.lineWidth = mark.size;
-    traceMaskStroke(context, mark);
+    createMaskBrushRenderLayers(mark.size, mark.hardness).forEach((layer) => {
+      context.globalAlpha = layer.opacity;
+      context.lineWidth = layer.size;
+      traceMaskStroke(context, mark, layer.size);
+    });
     return;
   }
-  context.globalCompositeOperation = 'destination-out';
+  context.globalAlpha = 1;
   fillMaskShape(context, mark);
 }
 
@@ -95,6 +100,7 @@ export function renderMaskDocument(
 ): void {
   context.clearRect(0, 0, document.width, document.height);
   context.globalCompositeOperation = 'source-over';
+  context.globalAlpha = 1;
   context.fillStyle = WHITE_HEX;
   context.fillRect(0, 0, document.width, document.height);
 

@@ -1,21 +1,20 @@
 import { useCallback, useEffect, useReducer, useState } from 'react';
-import { Brush, Circle, Eraser, Lasso, Redo2, Square, Trash2, Undo2 } from 'lucide-react';
+import { Brush, Circle, Lasso, Redo2, Square, Trash2, Undo2 } from 'lucide-react';
 import {
-  UI_TEXT_META_CLASS,
   UI_TEXT_SECTION_CLASS,
   UiButton,
   UiChipButton,
   UiError,
-  UiGroup,
   UiIconButton,
   UiLoading,
   UiModal,
-  UiRangeInput,
 } from '@/components/ui';
 import { createLogger } from '@/core/logging';
 import { ImageEditorShell } from '@/features/imageEdit';
 import { loadImageElement } from '@/services/imageSource';
 import { MaskEditorCanvas } from './MaskEditorCanvas';
+import { MaskEditorInspector } from './MaskEditorInspector';
+import { DEFAULT_MASK_BRUSH_HARDNESS } from './brushHardness';
 import { exportMaskDocumentToPng } from './maskExport';
 import {
   appendMaskStroke,
@@ -30,6 +29,7 @@ import type {
   MaskEditorDocument,
   MaskMark,
   MaskEditorResult,
+  MaskStrokeMode,
   MaskTool,
 } from './types';
 
@@ -66,7 +66,9 @@ export function MaskEditorModal({
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [loadState, setLoadState] = useState<LoadState>({ status: 'idle' });
   const [tool, setTool] = useState<MaskTool>('brush');
+  const [mode, setMode] = useState<MaskStrokeMode>('paint');
   const [brushSize, setBrushSize] = useState(32);
+  const [brushHardness, setBrushHardness] = useState(DEFAULT_MASK_BRUSH_HARDNESS);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [history, dispatchHistory] = useReducer(
@@ -100,7 +102,9 @@ export function MaskEditorModal({
         const resolved = resolveMaskDocument(initialDocument, sourceImage, width, height);
         dispatchHistory({ type: 'reset', document: resolved.document });
         setBrushSize(defaultBrushSize(width, height));
+        setBrushHardness(DEFAULT_MASK_BRUSH_HARDNESS);
         setTool('brush');
+        setMode('paint');
         setLoadState({ status: 'ready', image });
         logger.info('遮罩编辑器加载完成', {
           event: 'mask_editor.load.completed',
@@ -201,10 +205,11 @@ export function MaskEditorModal({
       }
       const key = event.key.toLowerCase();
       if (key === 'b') setTool('brush');
-      if (key === 'e') setTool('eraser');
       if (key === 'r') setTool('rectangle');
       if (key === 'o') setTool('circle');
       if (key === 'l') setTool('lasso');
+      if (key === 'd') setMode('paint');
+      if (key === 'e') setMode('erase');
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -223,16 +228,6 @@ export function MaskEditorModal({
       >
         <Brush className="h-4 w-4" />
         画笔
-      </UiChipButton>
-      <UiChipButton
-        type="button"
-        selectionRole="navigation"
-        active={tool === 'eraser'}
-        onClick={() => setTool('eraser')}
-        title="橡皮擦(E)"
-      >
-        <Eraser className="h-4 w-4" />
-        橡皮擦
       </UiChipButton>
       <UiChipButton
         type="button"
@@ -325,7 +320,9 @@ export function MaskEditorModal({
       image={readyImage}
       document={history.document}
       tool={tool}
+      mode={mode}
       brushSize={brushSize}
+      brushHardness={brushHardness}
       onMarkComplete={commitMark}
     />
   ) : loadState.status === 'failed' ? (
@@ -340,43 +337,17 @@ export function MaskEditorModal({
   );
 
   const sidePanel = (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-      {tool === 'brush' || tool === 'eraser' ? (
-        <UiGroup title="画笔大小" titleTone="overline">
-          <div className="space-y-2">
-            <div className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
-              <span>直径</span>
-              <span className="text-text-dark">{Math.round(brushSize)} px</span>
-            </div>
-            <UiRangeInput
-              aria-label="画笔大小"
-              min={1}
-              max={maxBrushSize(history.document.width, history.document.height)}
-              step={1}
-              value={brushSize}
-              onChange={(event) => setBrushSize(Number(event.target.value))}
-            />
-          </div>
-        </UiGroup>
-      ) : null}
-      <UiGroup
-        divided={tool === 'brush' || tool === 'eraser'}
-        className={tool === 'brush' || tool === 'eraser' ? 'mt-4' : undefined}
-        title="操作说明"
-        titleTone="overline"
-      >
-        <p className={`leading-5 ${UI_TEXT_META_CLASS}`}>
-          {tool === 'brush' ? '拖动圆形画笔涂抹需要重新生成的区域。' : null}
-          {tool === 'eraser' ? '拖动圆形橡皮擦恢复不需要修改的区域。' : null}
-          {tool === 'rectangle' ? '拖动框出矩形区域，松开后加入遮罩。' : null}
-          {tool === 'circle' ? '拖动框出圆形区域，松开后加入遮罩。' : null}
-          {tool === 'lasso' ? '沿目标边缘自由绘制，松开后会自动连接首尾并加入遮罩。' : null}
-        </p>
-      </UiGroup>
-      {confirmError ? (
-        <UiError title="遮罩保存失败" message={confirmError} size="sm" />
-      ) : null}
-    </div>
+    <MaskEditorInspector
+      mode={mode}
+      tool={tool}
+      brushSize={brushSize}
+      brushHardness={brushHardness}
+      maxBrushSize={maxBrushSize(history.document.width, history.document.height)}
+      confirmError={confirmError}
+      onModeChange={setMode}
+      onBrushSizeChange={setBrushSize}
+      onBrushHardnessChange={setBrushHardness}
+    />
   );
 
   return (

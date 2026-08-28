@@ -51,19 +51,30 @@ export function parseMaskEditorDocument(value: unknown): MaskEditorDocument | nu
       if (rawStroke.mode !== 'paint' && rawStroke.mode !== 'erase') return null;
       const size = readFiniteNumber(rawStroke.size);
       if (!size || size <= 0 || points.length === 0) return null;
+      let hardness: number | undefined;
+      if (rawStroke.hardness !== undefined) {
+        const parsedHardness = readFiniteNumber(rawStroke.hardness);
+        if (parsedHardness === null || parsedHardness <= 0 || parsedHardness > 1) return null;
+        hardness = parsedHardness;
+      }
       strokes.push({
         id: rawStroke.id,
         ...(kind === 'stroke' ? { kind } : {}),
         mode: rawStroke.mode,
         size,
+        ...(hardness === undefined ? {} : { hardness }),
         points,
       });
       continue;
     }
-    if (!isMaskShapeKind(kind) || rawStroke.mode !== 'paint' || !isValidShapePoints(kind, points)) {
+    if (
+      !isMaskShapeKind(kind)
+      || (rawStroke.mode !== 'paint' && rawStroke.mode !== 'erase')
+      || !isValidShapePoints(kind, points)
+    ) {
       return null;
     }
-    strokes.push({ id: rawStroke.id, kind, mode: 'paint', points });
+    strokes.push({ id: rawStroke.id, kind, mode: rawStroke.mode, points });
   }
 
   return {
