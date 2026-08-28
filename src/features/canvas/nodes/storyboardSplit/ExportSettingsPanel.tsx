@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 import type { StoryboardExportOptions } from '@/features/canvas/domain/canvasNodes';
+import NumberField from '@/components/ui/NumberInput';
 import {
   UiColorInput,
   UiCheckbox,
@@ -108,26 +109,36 @@ export function StoryboardExportSettingsPanel({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="mb-1">间距</div>
-              <UiInput
-                type="number"
+              <NumberField
                 min={0}
                 max={120}
                 value={exportOptions.cellGap}
-                className="h-8"
-                onChange={(event) => onPatch({ cellGap: Number(event.target.value) || 0 })}
+                onChange={(value) => onPatch({ cellGap: value || 0 })}
                 textHistory={{ onValueChange: (value) => onPatch({ cellGap: Number(value) || 0 }) }}
+                size="compact"
+                align="right"
+                widthClassName="w-full"
+                commitOnChange
+                ariaLabel="分镜间距"
+                increaseLabel="增加分镜间距"
+                decreaseLabel="减少分镜间距"
               />
             </div>
             <div>
               <div className="mb-1">字号(%)</div>
-              <UiInput
-                type="number"
+              <NumberField
                 min={1}
                 max={20}
                 value={exportOptions.fontSize}
-                className="h-8"
-                onChange={(event) => onPatch({ fontSize: Number(event.target.value) || 4 })}
+                onChange={(value) => onPatch({ fontSize: value || 4 })}
                 textHistory={{ onValueChange: (value) => onPatch({ fontSize: Number(value) || 4 }) }}
+                size="compact"
+                align="right"
+                widthClassName="w-full"
+                commitOnChange
+                ariaLabel="分镜字号"
+                increaseLabel="增加分镜字号"
+                decreaseLabel="减少分镜字号"
               />
             </div>
           </div>

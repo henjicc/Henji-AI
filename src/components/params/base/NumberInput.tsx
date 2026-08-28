@@ -1,23 +1,18 @@
 /**
- * NumberInput 组件
- *
- * 支持数字输入，保留范围、步长与快捷刻度能力
+ * Schema 数字参数：标签、单位与快捷刻度由这里编排，输入和竖排步进器复用通用 NumberInput。
  */
 
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ChevronDown, ChevronUp } from 'lucide-react'
-import type { NumberParamDef } from '@/core/types'
-import { getI18nText } from '@/core/types/I18nText'
+
+import NumberField from '@/components/ui/NumberInput'
 import {
-  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
   UI_FIELD_LABEL_CLASS,
-  UI_GLASS_ADAPTIVE_CONTROL_CLASS,
   UI_TEXT_META_CLASS,
-  UiIconButton,
-  UiInput,
   UiOptionButton,
 } from '@/components/ui'
+import type { NumberParamDef } from '@/core/types'
+import { getI18nText } from '@/core/types/I18nText'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -32,7 +27,6 @@ function resolvePrecision(step: number | undefined): number {
   }
 
   const normalized = String(step).toLowerCase()
-
   if (normalized.includes('e-')) {
     const [, exponent = '0'] = normalized.split('e-')
     return Number.parseInt(exponent, 10) || 0
@@ -42,40 +36,30 @@ function resolvePrecision(step: number | undefined): number {
   return fraction ? fraction.length : 0
 }
 
-function roundValue(value: number, step: number | undefined): number {
-  const precision = resolvePrecision(step)
-
-  if (precision <= 0) {
-    return value
-  }
-
-  const factor = 10 ** precision
-  return Math.round(value * factor) / factor
-}
-
 function clampValue(value: number, param: NumberParamDef): number {
   let nextValue = value
 
   if (typeof param.min === 'number') {
     nextValue = Math.max(param.min, nextValue)
   }
-
   if (typeof param.max === 'number') {
     nextValue = Math.min(param.max, nextValue)
   }
 
-  return roundValue(nextValue, param.step)
-}
+  const precision = resolvePrecision(param.step)
+  if (precision <= 0) {
+    return nextValue
+  }
 
-function isTransientInput(raw: string): boolean {
-  return raw === '' || raw === '-' || raw === '.' || raw === '-.'
+  const factor = 10 ** precision
+  return Math.round(nextValue * factor) / factor
 }
 
 export const NumberInput: React.FC<NumberInputProps> = ({
   param,
   value,
   onChange,
-  disabled = false
+  disabled = false,
 }) => {
   const { i18n } = useTranslation()
   const displayName = getI18nText(param.name, i18n.language)
@@ -89,61 +73,6 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     : clampValue(typeof param.default === 'number' ? param.default : param.min ?? 0, param)
   const step = param.step || 1
   const hasMarks = Boolean(param.marks && param.marks.length > 0)
-  const [inputValue, setInputValue] = useState(() => String(safeValue))
-  const [isFocused, setIsFocused] = useState(false)
-
-  useEffect(() => {
-    if (!isFocused) {
-      setInputValue(String(safeValue))
-    }
-  }, [isFocused, safeValue])
-
-  const commitValue = (raw: string) => {
-    const parsedValue = Number.parseFloat(raw)
-
-    if (!Number.isFinite(parsedValue)) {
-      setInputValue(String(safeValue))
-      onChange(safeValue)
-      return
-    }
-
-    const nextValue = clampValue(parsedValue, param)
-    setInputValue(String(nextValue))
-    onChange(nextValue)
-  }
-
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = event.target.value
-    setInputValue(rawValue)
-
-    if (isTransientInput(rawValue)) {
-      return
-    }
-
-    const parsedValue = Number.parseFloat(rawValue)
-    if (!Number.isFinite(parsedValue)) {
-      return
-    }
-
-    onChange(clampValue(parsedValue, param))
-  }
-
-  const handleStepChange = (direction: 1 | -1) => {
-    const nextValue = clampValue(safeValue + step * direction, param)
-    setInputValue(String(nextValue))
-    onChange(nextValue)
-  }
-
-  const handleBlur = () => {
-    setIsFocused(false)
-
-    if (isTransientInput(inputValue)) {
-      setInputValue(String(safeValue))
-      return
-    }
-
-    commitValue(inputValue)
-  }
 
   const isMarkActive = (markValue: number): boolean => {
     const tolerance = Math.max(step / 10, Number.EPSILON)
@@ -154,54 +83,25 @@ export const NumberInput: React.FC<NumberInputProps> = ({
     <div className={hasMarks ? 'w-auto min-w-[200px]' : 'w-fit'}>
       <label className={UI_FIELD_LABEL_CLASS}>
         {displayName}
-        {param.required && <span className="text-red-500 ml-1">*</span>}
+        {param.required && <span className="ml-1 text-red-500">*</span>}
       </label>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative inline-block">
-          <UiInput
-            type="number"
-            value={inputValue}
-            onChange={handleChange}
-            onFocus={() => setIsFocused(true)}
-            onBlur={handleBlur}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.currentTarget.blur()
-              }
-            }}
-            disabled={disabled}
-            min={param.min}
-            max={param.max}
-            step={step}
-            placeholder={placeholderText}
-            className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} w-32 pr-14`}
-          />
-          <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
-            <UiIconButton
-              type="button"
-              showBorder={false}
-              appearance="color-only"
-              onClick={() => handleStepChange(1)}
-              disabled={disabled || (param.max !== undefined && safeValue >= param.max)}
-              className="!h-6 !w-6 rounded-none border-0 p-0 text-text-soft"
-              aria-label={increaseLabel}
-            >
-              <ChevronUp className="h-3.5 w-3.5" />
-            </UiIconButton>
-            <UiIconButton
-              type="button"
-              showBorder={false}
-              appearance="color-only"
-              onClick={() => handleStepChange(-1)}
-              disabled={disabled || (param.min !== undefined && safeValue <= param.min)}
-              className="!h-6 !w-6 rounded-none border-0 p-0 text-text-soft"
-              aria-label={decreaseLabel}
-            >
-              <ChevronDown className="h-3.5 w-3.5" />
-            </UiIconButton>
-          </div>
-        </div>
+        <NumberField
+          value={safeValue}
+          onChange={(nextValue) => onChange(clampValue(nextValue, param))}
+          min={param.min}
+          max={param.max}
+          step={step}
+          precision={resolvePrecision(step)}
+          placeholder={placeholderText}
+          disabled={disabled}
+          widthClassName="w-32"
+          commitOnChange
+          ariaLabel={displayName}
+          increaseLabel={increaseLabel}
+          decreaseLabel={decreaseLabel}
+        />
 
         {param.unit && <span className={UI_TEXT_META_CLASS}>{param.unit}</span>}
       </div>
@@ -215,11 +115,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
               variant="flat"
               active={isMarkActive(mark.value)}
               disabled={disabled}
-              onClick={() => {
-                const nextValue = clampValue(mark.value, param)
-                setInputValue(String(nextValue))
-                onChange(nextValue)
-              }}
+              onClick={() => onChange(clampValue(mark.value, param))}
               className="!h-8 !px-2.5 !py-1 !text-xs"
             >
               {mark.label}

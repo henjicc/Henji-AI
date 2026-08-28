@@ -312,6 +312,9 @@ function auditUiDom(context = {}) {
   for (const element of Array.from(document.querySelectorAll(targetSelector)).filter(isVisible)) {
     const style = getComputedStyle(element)
     if (element.hasAttribute('disabled') || element.getAttribute('aria-disabled') === 'true' || style.pointerEvents === 'none') continue
+    // 数字输入框的竖排步进箭头共享 38px/28px 字段高度，单个箭头无法达到 24px；
+    // 同一控件仍提供满足尺寸要求的直接输入区与 ArrowUp/ArrowDown 等价操作，仅豁免这两个附属按钮。
+    if (element.matches('[data-ui-compact-stepper-button]')) continue
     // 画布视口里的控件会随缩放矩阵一起缩放，getBoundingClientRect 不是其 CSS 命中区尺寸。
     if (element.closest('.react-flow__viewport')) continue
     const rect = element.getBoundingClientRect()

@@ -172,6 +172,10 @@ export const UI_FIELD_LABEL_CLASS = `block ${UI_TEXT_LABEL_CLASS} mb-1.5`;
 export const UI_FIELD_FOCUS_CLASS =
   'outline-none focus:outline-none focus-visible:outline-none focus:ring-inset focus:ring-2 focus:ring-accent focus:ring-offset-0 focus:border-brand-500 transition-shadow duration-300 ease-out';
 
+/** 复合字段把边框画在外壳上时使用，焦点由内部输入框传递给整块控件。 */
+export const UI_FIELD_FOCUS_WITHIN_CLASS =
+  'outline-none focus-within:ring-inset focus-within:ring-2 focus-within:ring-accent focus-within:ring-offset-0 focus-within:border-brand-500 transition-shadow duration-300 ease-out';
+
 export const UI_FIELD_DISABLED_CLASS = 'disabled:opacity-50 disabled:cursor-not-allowed';
 
 export const UI_BUTTON_RESET_CLASS =

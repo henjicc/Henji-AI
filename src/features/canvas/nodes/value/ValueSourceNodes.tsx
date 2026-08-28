@@ -1,10 +1,10 @@
 import { memo, useCallback } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
 import { CANVAS_NODE_TYPES, type ValueSourceNodeData } from '@/features/canvas/domain/canvasNodes';
-import { UiIconButton, UiInput, UiSwitch, UiTextArea } from '@/components/ui';
+import NumberField from '@/components/ui/NumberInput';
+import { UiSwitch, UiTextArea } from '@/components/ui';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { createCanvasTextHistoryGroup, useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 import { ValueSourceShell } from './ValueSourceShell';
@@ -52,9 +52,6 @@ function NumberValueField({
     const next = integer ? Math.round(raw) : raw;
     onCommit(Number.isFinite(next) ? next : 0);
   }, [integer, onCommit]);
-  const stepBy = useCallback((direction: 1 | -1) => {
-    commit(safeValue + direction * (integer ? 1 : 0.1));
-  }, [commit, integer, safeValue]);
   const handleRawChange = useCallback((rawValue: string): void => {
     const parsed = integer
       ? Number.parseInt(rawValue, 10)
@@ -65,55 +62,23 @@ function NumberValueField({
 
   return (
     <div
-      className="nodrag nowheel flex h-8 w-full overflow-hidden rounded-md border border-border-dark bg-surface-dark"
+      className="nodrag nowheel w-full"
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <UiInput
-        type="text"
-        inputMode={integer ? 'numeric' : 'decimal'}
-        value={String(safeValue)}
-        onChange={(event) => textHistory.onValueChange(event.target.value)}
+      <NumberField
+        value={safeValue}
+        onChange={commit}
+        step={integer ? 1 : 0.1}
+        precision={integer ? 0 : 1}
+        size="compact"
+        align="right"
+        widthClassName="w-full"
+        commitOnChange
         textHistory={textHistory}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            stepBy(1);
-          }
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            stepBy(-1);
-          }
-        }}
-        className="!h-full !min-h-0 min-w-0 flex-1 rounded-none !border-0 !bg-transparent px-2 text-right"
+        ariaLabel={integer ? '整数值' : '小数值'}
+        increaseLabel={integer ? '增加整数值' : '增加小数值'}
+        decreaseLabel={integer ? '减少整数值' : '减少小数值'}
       />
-      <div className="flex w-7 shrink-0 flex-col border-l border-border-dark">
-        <UiIconButton
-          type="button"
-          showBorder={false}
-          appearance="color-only"
-          tabIndex={-1}
-          onClick={(event) => {
-            event.stopPropagation();
-            stepBy(1);
-          }}
-          className="!h-4 !w-7 !rounded-none !border-0 !p-0"
-        >
-          <ChevronUp className="h-3.5 w-3.5" />
-        </UiIconButton>
-        <UiIconButton
-          type="button"
-          showBorder={false}
-          appearance="color-only"
-          tabIndex={-1}
-          onClick={(event) => {
-            event.stopPropagation();
-            stepBy(-1);
-          }}
-          className="!h-4 !w-7 !rounded-none !border-0 !p-0"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </UiIconButton>
-      </div>
     </div>
   );
 }

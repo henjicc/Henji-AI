@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type {
@@ -21,10 +20,11 @@ import {
   isSmartAspectValue,
 } from '@/core/params/ratioResolution';
 import Dropdown from '@/components/ui/Dropdown';
+import NumberField from '@/components/ui/NumberInput';
 import PanelTrigger from '@/components/ui/PanelTrigger';
 import { AspectRatioSelector } from '@/components/params/panels/ResolutionPanel/AspectRatioSelector';
 import type { AspectRatioOption } from '@/components/params/panels/ResolutionPanel/types';
-import { PromptEditor, UiIconButton, UiInput, UiSwitch } from '@/components/ui';
+import { PromptEditor, UiInput, UiSwitch } from '@/components/ui';
 import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
 import { FileUpload, ImageUpload } from '@/components/params/upload';
 import { useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
@@ -46,127 +46,41 @@ interface NodeParamControlProps {
 const COMPACT_TRIGGER_CLASS = '!h-7 !w-auto !justify-between !gap-1.5 !rounded-md !px-2 !py-0 !text-xs !font-normal';
 const COMPACT_TRIGGER_LABEL_CLASS = 'text-xs leading-none';
 
-function resolvePrecision(step: number | undefined): number {
-  if (typeof step !== 'number' || !Number.isFinite(step)) {
-    return 0;
-  }
-  const fraction = String(step).split('.')[1];
-  return fraction ? fraction.length : 0;
-}
-
-function clampNumber(raw: number, param: NumberParamDef): number {
-  let next = raw;
-  if (typeof param.min === 'number') {
-    next = Math.max(param.min, next);
-  }
-  if (typeof param.max === 'number') {
-    next = Math.min(param.max, next);
-  }
-  const precision = resolvePrecision(param.step);
-  if (precision <= 0) {
-    return next;
-  }
-  const factor = 10 ** precision;
-  return Math.round(next * factor) / factor;
-}
-
 function CompactNumberControl({
   param,
   value,
   onChange,
   disabled,
 }: { param: NumberParamDef; value: DynamicValue; onChange: (value: number) => void; disabled?: boolean }) {
+  const { i18n } = useTranslation();
   const safeValue = typeof value === 'number' && Number.isFinite(value)
-    ? clampNumber(value, param)
-    : clampNumber(typeof param.default === 'number' ? param.default : (param.min ?? 0), param);
-  const [draft, setDraft] = useState(() => String(safeValue));
-  const [focused, setFocused] = useState(false);
+    ? value
+    : (typeof param.default === 'number' ? param.default : (param.min ?? 0));
   const step = typeof param.step === 'number' && Number.isFinite(param.step) && param.step > 0
     ? param.step
     : 1;
-
-  useEffect(() => {
-    if (!focused) {
-      setDraft(String(safeValue));
-    }
-  }, [focused, safeValue]);
-
-  const commitDraft = () => {
-    setFocused(false);
-    const parsed = Number.parseFloat(draft);
-    const next = Number.isFinite(parsed) ? clampNumber(parsed, param) : safeValue;
-    setDraft(String(next));
-    onChange(next);
-  };
-
-  const stepBy = (direction: 1 | -1) => {
-    const parsed = Number.parseFloat(draft);
-    const base = Number.isFinite(parsed) ? parsed : safeValue;
-    const next = clampNumber(base + direction * step, param);
-    setDraft(String(next));
-    onChange(next);
-  };
+  const displayName = getI18nText(param.name, i18n.language);
 
   return (
     <div
-      data-ui-field-control
-      className="nodrag nowheel flex h-7 w-[72px] overflow-hidden rounded-md border border-border-dark bg-surface-dark"
+      className="nodrag nowheel"
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <UiInput
-        type="text"
-        inputMode="decimal"
-        value={draft}
-        onFocus={() => setFocused(true)}
-        onChange={(event) => setDraft(event.target.value)}
-        textHistory={{ onValueChange: setDraft }}
-        onBlur={commitDraft}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            event.currentTarget.blur();
-          }
-          if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            stepBy(1);
-          }
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            stepBy(-1);
-          }
-        }}
+      <NumberField
+        value={safeValue}
+        onChange={onChange}
+        min={param.min}
+        max={param.max}
+        step={step}
         disabled={disabled}
-        className="!h-full !min-h-0 w-11 min-w-0 rounded-none !border-0 !bg-transparent px-2 text-right text-xs leading-none"
+        size="compact"
+        align="right"
+        widthClassName="w-[72px]"
+        commitOnChange
+        ariaLabel={displayName}
+        increaseLabel={i18n.language.startsWith('zh') ? `增加${displayName}` : `Increase ${displayName}`}
+        decreaseLabel={i18n.language.startsWith('zh') ? `减少${displayName}` : `Decrease ${displayName}`}
       />
-      <div className="flex w-5 shrink-0 flex-col border-l border-border-dark">
-        <UiIconButton
-          type="button"
-          showBorder={false}
-          appearance="color-only"
-          disabled={disabled}
-          tabIndex={-1}
-          onClick={(event) => {
-            event.stopPropagation();
-            stepBy(1);
-          }}
-          className="!h-3.5 !w-5 !rounded-none !border-0 !p-0"
-        >
-          <ChevronUp className="h-3 w-3" />
-        </UiIconButton>
-        <UiIconButton
-          type="button"
-          showBorder={false}
-          appearance="color-only"
-          disabled={disabled}
-          tabIndex={-1}
-          onClick={(event) => {
-            event.stopPropagation();
-            stepBy(-1);
-          }}
-          className="!h-3.5 !w-5 !rounded-none !border-0 !p-0"
-        >
-          <ChevronDown className="h-3 w-3" />
-        </UiIconButton>
-      </div>
     </div>
   );
 }

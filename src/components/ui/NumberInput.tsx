@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react'
-import { Minus, Plus } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
+
 import { UiIconButton, UiInput } from './primitives'
-import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS } from './styleTokens'
+import {
+  UI_FIELD_CONTROL_HEIGHT_SM_CLASS,
+  UI_FIELD_FOCUS_WITHIN_CLASS,
+  UI_FIELD_LABEL_CLASS,
+  UI_FIELD_SURFACE_CLASS,
+  UI_GLASS_ADAPTIVE_CONTROL_CLASS,
+} from './styleTokens'
+import type { ScopedTextHistoryBinding } from './useScopedTextHistory'
 
 type NumberInputProps = {
   label?: string
+  ariaLabel?: string
   value: number | undefined
   onChange: (next: number) => void
   min?: number
@@ -14,10 +23,26 @@ type NumberInputProps = {
   className?: string
   precision?: number
   disabled?: boolean
+  placeholder?: string
+  size?: 'field' | 'compact'
+  align?: 'left' | 'center' | 'right'
+  increaseLabel?: string
+  decreaseLabel?: string
+  textHistory?: ScopedTextHistoryBinding
   /** 输入过程中只要是合法数字就实时提交（默认失焦/回车才提交），适合三维编辑等需要即时反馈的场景 */
   commitOnChange?: boolean
   /** 悬浮时滚轮直接步进并提交（无需先聚焦），会阻止容器滚动 */
   wheelStep?: boolean
+}
+
+function resolvePrecision(step: number): number {
+  const normalized = String(step).toLowerCase()
+  if (normalized.includes('e-')) {
+    const [, exponent = '0'] = normalized.split('e-')
+    return Number.parseInt(exponent, 10) || 0
+  }
+  const fraction = normalized.split('.')[1]
+  return fraction ? fraction.length : 0
 }
 
 function formatNumber(value: number, precision?: number): string {
@@ -29,66 +54,90 @@ function formatNumber(value: number, precision?: number): string {
 }
 
 export default function NumberInput(props: NumberInputProps): ReactElement {
-  const { label, value, onChange, min, max, step = 1, widthClassName = 'w-24', className, precision, disabled = false, commitOnChange = false, wheelStep = false } = props
+  const {
+    label,
+    ariaLabel,
+    value,
+    onChange,
+    min,
+    max,
+    step = 1,
+    widthClassName = 'w-24',
+    className,
+    precision,
+    disabled = false,
+    placeholder,
+    size = 'field',
+    align = 'left',
+    increaseLabel = label ? `增加${label}` : '增加数值',
+    decreaseLabel = label ? `减少${label}` : '减少数值',
+    textHistory,
+    commitOnChange = false,
+    wheelStep = false,
+  } = props
 
-  // 处理 undefined 值，使用 min 或 0 作为默认值
-  const safeValue = value ?? (min ?? 0)
-  const displayValue = formatNumber(safeValue, precision)
-
-  // 使用内部状态存储输入值，允许用户输入过程中的中间状态
+  const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : (min ?? 0)
+  const effectivePrecision = precision ?? resolvePrecision(step)
+  const displayValue = formatNumber(safeValue, effectivePrecision)
   const [inputValue, setInputValue] = useState(displayValue)
   const [isFocused, setIsFocused] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const clamp = (v: number): number => {
-    let x = v
-    if (typeof min === 'number') x = Math.max(min, x)
-    if (typeof max === 'number') x = Math.min(max, x)
-    if (typeof precision === 'number') {
-      const p = Math.pow(10, precision)
-      x = Math.round(x * p) / p
-    }
-    return x
-  }
-  
-  // 失去焦点时验证和修正数值
+  const clamp = useCallback((raw: number): number => {
+    let next = raw
+    if (typeof min === 'number') next = Math.max(min, next)
+    if (typeof max === 'number') next = Math.min(max, next)
+    const factor = 10 ** effectivePrecision
+    return Math.round(next * factor) / factor
+  }, [effectivePrecision, max, min])
+
   const handleBlur = (): void => {
     setIsFocused(false)
-    const raw = parseFloat(inputValue)
-    const next = clamp(isNaN(raw) ? (min ?? 0) : raw)
+    const parsed = Number.parseFloat(inputValue)
+    const next = clamp(Number.isFinite(parsed) ? parsed : (min ?? 0))
     onChange(next)
-    setInputValue(formatNumber(next, precision))
+    setInputValue(formatNumber(next, effectivePrecision))
   }
-  
-  // 获得焦点时更新输入值
+
   const handleFocus = (): void => {
     setIsFocused(true)
     setInputValue(displayValue)
   }
 
-  // 当外部 value 变化且未聚焦时，同步到 inputValue
-  if (!isFocused && displayValue !== inputValue) {
-    setInputValue(displayValue)
-  }
+  useEffect(() => {
+    if (!isFocused) {
+      setInputValue(displayValue)
+    }
+  }, [displayValue, isFocused])
 
   const handleInputChange = (raw: string): void => {
     setInputValue(raw)
-    if (!commitOnChange) return
-    const parsed = parseFloat(raw)
-    // 只有完整合法数字才实时提交，"-"、"1." 之类的中间态留到失焦再处理
-    if (Number.isFinite(parsed) && String(parsed) === raw.trim()) {
+    if (!commitOnChange || raw.trim() === '') return
+    const parsed = Number.parseFloat(raw)
+    if (Number.isFinite(parsed)) {
       onChange(clamp(parsed))
     }
   }
 
-  const stepBy = (direction: 1 | -1): void => {
-    const next = clamp(safeValue + direction * step)
+  const stepBy = useCallback((direction: 1 | -1): void => {
+    const parsed = Number.parseFloat(inputValue)
+    const base = Number.isFinite(parsed) ? parsed : safeValue
+    const next = clamp(base + direction * step)
     onChange(next)
-    setInputValue(formatNumber(next, precision))
-  }
+    setInputValue(formatNumber(next, effectivePrecision))
+  }, [clamp, effectivePrecision, inputValue, onChange, safeValue, step])
 
-  // 悬浮滚轮步进：React 的 onWheel 是 passive 监听，preventDefault 无效，
-  // 必须用原生非 passive 监听阻止容器滚动
+  const scopedTextHistory = useMemo<ScopedTextHistoryBinding | undefined>(() => {
+    if (!textHistory) return undefined
+    return {
+      ...textHistory,
+      onValueChange: (nextValue) => {
+        setInputValue(nextValue)
+        textHistory.onValueChange(nextValue)
+      },
+    }
+  }, [textHistory])
+
   useEffect(() => {
     if (!wheelStep || disabled) return
     const element = inputRef.current
@@ -99,58 +148,97 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     }
     element.addEventListener('wheel', handleWheel, { passive: false })
     return () => element.removeEventListener('wheel', handleWheel)
-  })
+  }, [disabled, stepBy, wheelStep])
+
+  const compact = size === 'compact'
+  const controlHeightClass = compact ? 'h-7' : UI_FIELD_CONTROL_HEIGHT_SM_CLASS
+  const controlRadiusClass = compact ? 'rounded-md' : 'rounded-lg'
+  const stepperWidthClass = compact ? 'w-5' : 'w-7'
+  const stepperButtonWidthClass = compact ? '!w-5' : '!w-7'
+  const iconSizeClass = compact ? 'h-3 w-3' : 'h-3.5 w-3.5'
+  const textSizeClass = compact ? 'text-xs' : 'text-sm'
+  const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
 
   return (
     <div className={className}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
-      {/*
-        宽度加在这个包裹层上，不能透传给内部的 <UiInput>：UiInput 的基础类里就有 `w-full`，
-        两个 `w-*` 抢同一个 CSS 属性时，胜负由 Tailwind 产物顺序决定（`w-full` 排在 `w-48` 之后），
-        所以 `widthClassName` 一直是静默失效的——除非正好传 `w-full`。
-        实测表现是设置面板里数字框比同排下拉窄一截，右边缘对不齐。
-      */}
-      <div className={`relative inline-block ${widthClassName}`}>
+      <div
+        data-ui-field-control
+        className={`inline-flex overflow-hidden ${controlHeightClass} ${controlRadiusClass} ${widthClassName} ${UI_FIELD_SURFACE_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
+      >
         <UiInput
           ref={inputRef}
           type="number"
+          inputMode="decimal"
           value={inputValue}
-          onChange={e => handleInputChange(e.target.value)}
+          onChange={(event) => handleInputChange(event.target.value)}
           onBlur={handleBlur}
           onFocus={handleFocus}
-          onKeyDown={e => {
-            // 按 Enter 键时也触发验证
-            if (e.key === 'Enter') {
-              e.currentTarget.blur()
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur()
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              stepBy(1)
+            }
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              stepBy(-1)
             }
           }}
-          className={`${UI_FIELD_CONTROL_HEIGHT_SM_CLASS} appearance-none pr-14`}
+          textHistory={scopedTextHistory}
+          aria-label={ariaLabel ?? label}
+          placeholder={placeholder}
+          className={`!h-full !min-h-0 !w-auto min-w-0 flex-1 appearance-none rounded-none !border-0 !bg-transparent px-2 py-0 ${textSizeClass} ${alignClass}`}
           min={min}
           max={max}
           step={step}
           disabled={disabled}
         />
-        <div className="absolute inset-y-1 right-1 flex items-stretch">
+        <div className={`flex shrink-0 flex-col border-l border-border-dark ${stepperWidthClass}`}>
           <UiIconButton
             type="button"
             showBorder={false}
-            appearance="hover-only"
-            onClick={() => stepBy(1)}
-            className="h-full w-6 rounded-r-none border-0 p-0 text-text-soft hover:text-text-dark"
-            title="增加"
-            aria-label="增加"
-            disabled={disabled}
-          ><Plus className="h-3 w-3" /></UiIconButton>
+            appearance="color-only"
+            tabIndex={-1}
+            data-ui-compact-stepper-button
+            onMouseDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={(event) => {
+              event.stopPropagation()
+              stepBy(1)
+            }}
+            className={`!h-1/2 !rounded-none !border-0 !p-0 ${stepperButtonWidthClass}`}
+            title={increaseLabel}
+            aria-label={increaseLabel}
+            disabled={disabled || (typeof max === 'number' && safeValue >= max)}
+          >
+            <ChevronUp className={iconSizeClass} />
+          </UiIconButton>
           <UiIconButton
             type="button"
             showBorder={false}
-            appearance="hover-only"
-            onClick={() => stepBy(-1)}
-            className="h-full w-6 rounded-l-none border-0 p-0 text-text-soft hover:text-text-dark"
-            title="减少"
-            aria-label="减少"
-            disabled={disabled}
-          ><Minus className="h-3 w-3" /></UiIconButton>
+            appearance="color-only"
+            tabIndex={-1}
+            data-ui-compact-stepper-button
+            onMouseDown={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            onClick={(event) => {
+              event.stopPropagation()
+              stepBy(-1)
+            }}
+            className={`!h-1/2 !rounded-none !border-0 !p-0 ${stepperButtonWidthClass}`}
+            title={decreaseLabel}
+            aria-label={decreaseLabel}
+            disabled={disabled || (typeof min === 'number' && safeValue <= min)}
+          >
+            <ChevronDown className={iconSizeClass} />
+          </UiIconButton>
         </div>
       </div>
     </div>
