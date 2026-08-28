@@ -24,6 +24,7 @@ describe('NumberInput', () => {
     const increase = screen.getByRole('button', { name: '增加时长' })
     const decrease = screen.getByRole('button', { name: '减少时长' })
     expect(increase.parentElement?.classList.contains('flex-col')).toBe(true)
+    expect(increase.parentElement?.classList.contains('border-l')).toBe(false)
     expect(increase.hasAttribute('data-ui-compact-stepper-button')).toBe(true)
     expect(decrease.hasAttribute('data-ui-compact-stepper-button')).toBe(true)
 
@@ -70,6 +71,7 @@ describe('NumberInput', () => {
         value={1}
         onChange={() => undefined}
         size="compact"
+        align="center"
         widthClassName="w-[72px]"
       />
     )
@@ -77,5 +79,6 @@ describe('NumberInput', () => {
     const input = screen.getByRole('spinbutton', { name: '生成数量' })
     expect(input.parentElement?.classList.contains('h-7')).toBe(true)
     expect(input.parentElement?.classList.contains('w-[72px]')).toBe(true)
+    expect(input.classList.contains('text-center')).toBe(true)
   })
 })

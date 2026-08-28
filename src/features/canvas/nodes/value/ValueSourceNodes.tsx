@@ -71,7 +71,7 @@ function NumberValueField({
         step={integer ? 1 : 0.1}
         precision={integer ? 0 : 1}
         size="compact"
-        align="right"
+        align="center"
         widthClassName="w-full"
         commitOnChange
         textHistory={textHistory}

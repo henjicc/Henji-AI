@@ -196,7 +196,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
           step={step}
           disabled={disabled}
         />
-        <div className={`flex shrink-0 flex-col border-l border-border-dark ${stepperWidthClass}`}>
+        <div className={`flex shrink-0 flex-col ${stepperWidthClass}`}>
           <UiIconButton
             type="button"
             showBorder={false}

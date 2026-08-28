@@ -116,7 +116,7 @@ export function StoryboardExportSettingsPanel({
                 onChange={(value) => onPatch({ cellGap: value || 0 })}
                 textHistory={{ onValueChange: (value) => onPatch({ cellGap: Number(value) || 0 }) }}
                 size="compact"
-                align="right"
+                align="center"
                 widthClassName="w-full"
                 commitOnChange
                 ariaLabel="分镜间距"
@@ -133,7 +133,7 @@ export function StoryboardExportSettingsPanel({
                 onChange={(value) => onPatch({ fontSize: value || 4 })}
                 textHistory={{ onValueChange: (value) => onPatch({ fontSize: Number(value) || 4 }) }}
                 size="compact"
-                align="right"
+                align="center"
                 widthClassName="w-full"
                 commitOnChange
                 ariaLabel="分镜字号"

@@ -74,7 +74,7 @@ function CompactNumberControl({
         step={step}
         disabled={disabled}
         size="compact"
-        align="right"
+        align="center"
         widthClassName="w-[72px]"
         commitOnChange
         ariaLabel={displayName}
