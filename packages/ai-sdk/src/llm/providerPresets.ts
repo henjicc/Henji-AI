@@ -11,6 +11,13 @@ import { createBigmodelProvider } from './bigmodel/preset'
 import { BIGMODEL_ENDPOINT_PROFILE_FAMILY } from './bigmodel/profiles'
 import type { LlmApiProtocol } from './providerProtocol'
 import type { LlmModelConfig, LlmProviderConfig, LlmReasoningEffort } from './types'
+import { findProviderMetadata } from '../providers/metadata'
+
+function providerMetadata(providerId: string): NonNullable<ReturnType<typeof findProviderMetadata>> {
+  const metadata = findProviderMetadata(providerId)
+  if (!metadata) throw new Error(`[provider_metadata_missing] provider "${providerId}" is not registered`)
+  return metadata
+}
 
 /**
  * 内置供应商预设。
@@ -34,6 +41,7 @@ export interface LlmProviderPreset {
   reasoningConfigurable: boolean
   /** 添加该供应商时一并建好的推荐模型，能力按内置目录自动标注 */
   modelIds: readonly string[]
+  websiteUrl: string
   apiKeyUrl: string
   /** 该预设的资料出处，仓库内相对路径 */
   docs: string
@@ -56,7 +64,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
       'moonshotai/kimi-k2.6',
       'xiaomimimo/mimo-v2.5-pro',
     ],
-    apiKeyUrl: 'https://www.ppinfra.com/settings/key-management',
+    websiteUrl: providerMetadata(DEFAULT_PPIO_PROVIDER_ID).websiteUrl,
+    apiKeyUrl: providerMetadata(DEFAULT_PPIO_PROVIDER_ID).apiKeyUrl,
     docs: 'docs/llm-adaptation/README.md',
     note: '聚合网关，模型 ID 带厂商前缀；留空密钥时会复用主生成设置里的派欧云密钥。',
   },
@@ -69,7 +78,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['deepseek-v4-pro', 'deepseek-v4-flash'],
-    apiKeyUrl: 'https://platform.deepseek.com/api_keys',
+    websiteUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).websiteUrl,
+    apiKeyUrl: providerMetadata(DEFAULT_DEEPSEEK_PROVIDER_ID).apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/DeepSeek.md',
   },
   {
@@ -81,7 +91,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['doubao-seed-evolving', 'doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo-260628'],
-    apiKeyUrl: 'https://console.volcengine.com/ark',
+    websiteUrl: providerMetadata('volcengine').websiteUrl,
+    apiKeyUrl: providerMetadata('volcengine').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/火山引擎.md',
     note: 'Base URL 与区域相关，其他区域的地址在方舟控制台查看；联网搜索等内置工具只在 Responses API 可用。',
   },
@@ -95,7 +106,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'max' },
     reasoningConfigurable: true,
     modelIds: ['kimi-k3'],
-    apiKeyUrl: 'https://platform.moonshot.cn/console/api-keys',
+    websiteUrl: providerMetadata('kimi').websiteUrl,
+    apiKeyUrl: providerMetadata('kimi').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/Kimi.md',
     note: '文档站是 platform.kimi.com，但接口域名仍是 moonshot.cn，不要混用；K3 需要充值后才能调用。K3 的思考无法关闭，思考模式选「关闭」时按最低强度发送。',
   },
@@ -108,7 +120,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'max' },
     reasoningConfigurable: true,
     modelIds: ['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash'],
-    apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+    websiteUrl: providerMetadata('bigmodel').websiteUrl,
+    apiKeyUrl: providerMetadata('bigmodel').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/智谱GLM.md',
     note: '默认是中国大陆端点；Global 必须创建独立 endpoint profile 与凭据槽，不会跨区复用或回退密钥。',
   },
@@ -121,7 +134,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['mimo-v2.5-pro', 'mimo-v2.5'],
-    apiKeyUrl: 'https://xiaomimimo.com',
+    websiteUrl: providerMetadata('mimo').websiteUrl,
+    apiKeyUrl: providerMetadata('mimo').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/小米MiMo.md',
     note: '认证头与请求体字段有两处自有约定，已在 providerProtocol.ts 里按 providerId 处理，改这里的 id 会让那两条失效。',
   },
@@ -134,7 +148,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['MiniMax-M3'],
-    apiKeyUrl: 'https://platform.minimaxi.com/user-center/basic-information/interface-key',
+    websiteUrl: providerMetadata('minimax').websiteUrl,
+    apiKeyUrl: providerMetadata('minimax').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/MiniMax.md',
   },
   {
@@ -148,7 +163,8 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     reasoning: { enabled: true, effort: 'high' },
     reasoningConfigurable: true,
     modelIds: ['qwen3.8-max'],
-    apiKeyUrl: 'https://bailian.console.aliyun.com/?tab=model#/api-key',
+    websiteUrl: providerMetadata('bailian').websiteUrl,
+    apiKeyUrl: providerMetadata('bailian').apiKeyUrl,
     docs: 'docs/llm-adaptation/供应商/百炼Qwen.md',
     note: 'qwen3.8-max 必须走多模态消息格式，纯文本也要写成内容块数组。',
   },

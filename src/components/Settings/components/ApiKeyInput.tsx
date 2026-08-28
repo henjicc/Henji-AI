@@ -21,9 +21,11 @@ interface ApiKeyInputProps {
   hint?: string
   disabled?: boolean
   error?: string
+  websiteUrl?: string | null
+  websiteLabel?: string
   managementUrl?: string | null
   managementLabel?: string
-  onOpenManagementUrl?: (url: string) => void
+  onOpenUrl?: (url: string) => void
 }
 
 const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
@@ -38,9 +40,11 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   hint,
   disabled = false,
   error,
+  websiteUrl,
+  websiteLabel,
   managementUrl,
   managementLabel,
-  onOpenManagementUrl,
+  onOpenUrl,
 }) => {
   const inputId = useId()
   const hintId = `${inputId}-hint`
@@ -49,21 +53,35 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   const toggleLabel = visible ? hideLabel : showLabel
   return (
     <div>
-      {label || managementUrl ? (
+      {label || websiteUrl || managementUrl ? (
         <div className="mb-1.5 flex min-h-6 items-center justify-between gap-3">
           {label ? <label htmlFor={inputId} className={UI_FIELD_LABEL_CLASS}>{label}</label> : <span />}
-          {managementUrl && managementLabel && onOpenManagementUrl ? (
-            <UiButton
-              type="button"
-              variant="plain"
-              size="sm"
-              className="h-6 shrink-0 px-1 text-brand-300 hover:bg-transparent hover:text-brand-300 hover:underline"
-              onClick={() => onOpenManagementUrl(managementUrl)}
-            >
-              {managementLabel}
-              <ExternalLink className="ml-1 h-3.5 w-3.5" />
-            </UiButton>
-          ) : null}
+          <div className="flex items-center gap-2">
+            {websiteUrl && websiteLabel && onOpenUrl ? (
+              <UiButton
+                type="button"
+                variant="plain"
+                size="sm"
+                className="h-6 shrink-0 px-1 text-brand-300 hover:bg-transparent hover:text-brand-300 hover:underline"
+                onClick={() => onOpenUrl(websiteUrl)}
+              >
+                {websiteLabel}
+                <ExternalLink className="ml-1 h-3.5 w-3.5" />
+              </UiButton>
+            ) : null}
+            {managementUrl && managementLabel && onOpenUrl ? (
+              <UiButton
+                type="button"
+                variant="plain"
+                size="sm"
+                className="h-6 shrink-0 px-1 text-brand-300 hover:bg-transparent hover:text-brand-300 hover:underline"
+                onClick={() => onOpenUrl(managementUrl)}
+              >
+                {managementLabel}
+                <ExternalLink className="ml-1 h-3.5 w-3.5" />
+              </UiButton>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <div className="relative">

@@ -1,9 +1,13 @@
 import type { LlmProviderPreset } from '../providerPresets'
 import type { LlmModelConfig } from '../types'
+import { findProviderMetadata } from '../../providers/metadata'
 
 export const GROQ_PROVIDER_ID = 'groq'
 export const GROQ_BASE_URL = 'https://api.groq.com/openai/v1'
 export const GROQ_DEFAULT_MODEL_ID = 'openai/gpt-oss-20b'
+
+const GROQ_PROVIDER_METADATA = findProviderMetadata(GROQ_PROVIDER_ID)
+if (!GROQ_PROVIDER_METADATA) throw new Error('[provider_metadata_missing] provider "groq" is not registered')
 
 /** GroqCloud 预设；供应商与 xAI Grok 没有关系。 */
 export const GROQ_PROVIDER_PRESET: LlmProviderPreset = {
@@ -15,7 +19,8 @@ export const GROQ_PROVIDER_PRESET: LlmProviderPreset = {
   reasoning: { enabled: true, effort: 'medium' },
   reasoningConfigurable: true,
   modelIds: [GROQ_DEFAULT_MODEL_ID],
-  apiKeyUrl: 'https://console.groq.com/keys',
+  websiteUrl: GROQ_PROVIDER_METADATA.websiteUrl,
+  apiKeyUrl: GROQ_PROVIDER_METADATA.apiKeyUrl,
   docs: 'docs/model-adaptation/供应商/Groq.md',
   note: 'GroqCloud（providerId=groq）不是 xAI Grok；GPT-OSS 不支持 reasoning_format。',
 }

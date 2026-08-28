@@ -25,7 +25,7 @@ import {
 import ApiKeyInput from '@/components/Settings/components/ApiKeyInput'
 import { useDataPath } from '@/components/Settings/hooks/useDataPath'
 import { aiGetProviderApiKey, aiSetProviderApiKey, aiTestProviderConnection } from '@/commands/aiRuntime'
-import { getApiKeyProviderGuideLink, type ApiKeyProvider } from '@/core/config/providers'
+import { API_KEY_PROVIDERS, type ApiKeyProvider } from '@/core/config/providers'
 import { emitApplicationEvent } from '@/core/events/applicationEvents'
 import { createLogger } from '@/core/logging'
 import { registry } from '@/core/ModelRegistry'
@@ -179,7 +179,7 @@ function ApiKeyStep({
 }): JSX.Element {
   const { t } = useI18n('onboarding')
   const providerName = getProviderDisplayName(providerId)
-  const keyLink = getApiKeyProviderGuideLink(providerId)
+  const provider = API_KEY_PROVIDERS.find(item => item.id === providerId)
   return (
     <div className="min-h-[25rem]">
       <h3 className={UI_TEXT_TITLE_CLASS}>{t('apiKey.headline', { provider: providerName })}</h3>
@@ -198,14 +198,14 @@ function ApiKeyStep({
       </div>
       <div className="flex items-center justify-between gap-3">
         <p className={`leading-5 ${UI_TEXT_META_CLASS}`}>{t('apiKey.testNote')}</p>
-        {keyLink ? (
+        {provider ? (
           <UiButton
             variant="plain"
             size="sm"
             className="shrink-0"
-            onClick={() => void openExternal(keyLink.url)}
+            onClick={() => void openExternal(provider.websiteUrl)}
           >
-            {t('actions.openGuide')}
+            {t('actions.visitWebsite')}
             <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
           </UiButton>
         ) : null}

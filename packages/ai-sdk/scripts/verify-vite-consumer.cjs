@@ -75,7 +75,7 @@ async function verify() {
     'document.body.dataset.sdkResolved = "true"',
   ].join('\n'))
   fs.writeFileSync(path.join(consumerRoot, 'consumer.ts'), [
-    "import { createAIClient, type RuntimeContext } from '@henjicc/ai-sdk'",
+    "import { createAIClient, findProviderMetadata, type RuntimeContext } from '@henjicc/ai-sdk'",
     "import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'",
     "import { pack as zImagePack } from '@henjicc/ai-sdk/models/kie/z-image'",
     "import { createCapabilityClient, type CapabilityModule } from '@henjicc/ai-sdk/capabilities'",
@@ -180,6 +180,7 @@ async function verify() {
   }
 
   fs.writeFileSync(path.join(consumerRoot, 'runtime-probe.mjs'), [
+    "import { findProviderMetadata } from '@henjicc/ai-sdk/providers'",
     "import { createModelCapabilityDiscovery } from '@henjicc/ai-sdk/discovery'",
     "import { bailianNonRealtimeAsrPresets, createBailianAsrModule } from '@henjicc/ai-sdk/capabilities/speech-recognition/bailian'",
     "import { bailianRealtimeAsrPresets, createBailianRealtimeAsrModule } from '@henjicc/ai-sdk/capabilities/speech-recognition/bailian/realtime'",
@@ -207,7 +208,7 @@ async function verify() {
     "if (!groqConflict) throw new Error('远端包未拒绝外部 LLM 遮蔽内置 Groq')",
     "const builtIn = createProviderFromPreset(findLlmProviderPreset('ppio'), { lifecycle: 'builtin' })",
     "const customSetup = normalizeLlmProviderSetup({ kind: 'custom', apiKeyManagementUrl: 'https://keys.example.com/manage' })",
-    "if (builtIn.setup?.lifecycle !== 'builtin' || customSetup.kind !== 'custom' || resolveLlmProviderApiKeyUrl(builtIn) !== 'https://www.ppinfra.com/settings/key-management') throw new Error('供应商设置公共契约不匹配')",
+    "if (builtIn.setup?.lifecycle !== 'builtin' || customSetup.kind !== 'custom' || resolveLlmProviderApiKeyUrl(builtIn) !== findProviderMetadata('ppio')?.apiKeyUrl) throw new Error('供应商设置公共契约不匹配')",
     "const moduleOutcome = await moduleClient.execute('fixture.external.llm', { messages: [] }, { mode: 'request-response' })",
     "if (moduleOutcome.output !== 'ok') throw new Error('外部 LLM module Node ESM 执行失败')",
     'await moduleClient.dispose()',

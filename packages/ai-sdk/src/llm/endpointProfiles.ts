@@ -24,6 +24,7 @@ export interface LlmEndpointProfile {
   id: string
   displayName: string
   baseUrl: string
+  websiteUrl: string
   apiKeyUrl: string
   defaultCredentialId: string
   modelIds: readonly string[]

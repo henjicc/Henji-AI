@@ -28,6 +28,7 @@
       "show": "Show",
       "hide": "Hide"
     },
+    "visitWebsite": "Visit website",
     "providers": {
       "ppio": {
         "label": "PPIO API Key",
@@ -155,6 +156,7 @@
       "save": "Save provider",
       "saving": "Saving…",
       "manageApiKey": "Get/Manage API Key",
+      "website": "Visit website",
       "reset": "Reset provider",
       "delete": "Delete provider"
     },

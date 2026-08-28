@@ -8,7 +8,6 @@ import i18n from '@/i18n/config'
 import {
   createProviderFromPreset,
   findLlmProviderPreset,
-  normalizeLlmProviderSetup,
   type LlmProviderConfig,
 } from '@henjicc/ai-sdk'
 
@@ -74,16 +73,14 @@ function renderDialog({
 }
 
 describe('LlmProviderDialog', () => {
-  it('新建 custom provider 时用一次提交同时发送 key 与管理地址', async () => {
+  it('新建 custom provider 时只提交供应商字段与 key，不提供管理地址输入', async () => {
     const { onSave } = renderDialog()
     fireEvent.change(screen.getByPlaceholderText('例如：我的模型服务'), { target: { value: '团队代理' } })
     fireEvent.change(screen.getByPlaceholderText('例如：https://api.example.com/v1'), {
       target: { value: 'https://proxy.example.com/v1' },
     })
     fireEvent.change(screen.getByLabelText('API 密钥'), { target: { value: 'dialog-secret' } })
-    fireEvent.change(screen.getByPlaceholderText('可选，例如：https://example.com/keys'), {
-      target: { value: 'https://proxy.example.com/keys' },
-    })
+    expect(screen.queryByText('密钥管理地址')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '添加供应商' }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
@@ -92,7 +89,7 @@ describe('LlmProviderDialog', () => {
       providerId: 'provider',
       credentialId: 'provider',
       displayName: '团队代理',
-      setup: { kind: 'custom', apiKeyManagementUrl: 'https://proxy.example.com/keys' },
+      setup: { kind: 'custom' },
     })
     expect(seedModels).toEqual([])
     expect(credential).toEqual({ kind: 'set', apiKey: 'dialog-secret' })
@@ -108,24 +105,7 @@ describe('LlmProviderDialog', () => {
     expect(onSave.mock.calls[0][2]).toEqual({ kind: 'unchanged' })
   })
 
-  it('危险管理地址由正式契约拒绝，错误可理解且草稿不丢失', async () => {
-    const onSave = vi.fn(async (provider: LlmProviderConfig) => {
-      normalizeLlmProviderSetup(provider.setup!)
-    })
-    renderDialog({ onSave })
-    fireEvent.change(screen.getByPlaceholderText('例如：我的模型服务'), { target: { value: '危险代理' } })
-    fireEvent.change(screen.getByPlaceholderText('可选，例如：https://example.com/keys'), {
-      target: { value: 'javascript:alert(1)' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: '添加供应商' }))
-
-    expect((await screen.findByRole('alert')).textContent).toContain('必须是有效的 http:// 或 https:// 地址')
-    expect((screen.getByPlaceholderText('例如：我的模型服务') as HTMLInputElement).value).toBe('危险代理')
-    expect((screen.getByPlaceholderText('可选，例如：https://example.com/keys') as HTMLInputElement).value)
-      .toBe('javascript:alert(1)')
-  })
-
-  it('preset 显示官方密钥入口和只读名称，custom 无 URL 时不显示入口', async () => {
+  it('可自定义的 LLM 供应商界面显示 SDK 官网与密钥入口，纯 custom 不猜地址', async () => {
     const preset = findLlmProviderPreset('ppio')!
     const builtIn = createProviderFromPreset(preset, { lifecycle: 'builtin' })
     const { unmount } = render(
@@ -138,11 +118,14 @@ describe('LlmProviderDialog', () => {
       />
     )
     expect(screen.queryByPlaceholderText('例如：我的模型服务')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '访问官网' }))
+    expect(openExternal).toHaveBeenCalledWith(preset.websiteUrl)
     fireEvent.click(screen.getByRole('button', { name: '获取/管理 API Key' }))
     expect(openExternal).toHaveBeenCalledWith(preset.apiKeyUrl)
     unmount()
 
     renderDialog({ providers: [customProvider()] })
+    expect(screen.queryByRole('button', { name: '访问官网' })).toBeNull()
     expect(screen.queryByRole('button', { name: '获取/管理 API Key' })).toBeNull()
   })
 

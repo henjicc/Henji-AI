@@ -9,7 +9,7 @@ import {
   aiSetProviderApiKey,
   aiTestProviderConnection,
 } from '@/commands/aiRuntime'
-import { getApiKeyProviderGuideLink } from '@/core/config/providers'
+import { API_KEY_PROVIDERS } from '@/core/config/providers'
 import { openExternal } from '@/platform/desktopApi'
 import { onboardingManager } from '../application/onboardingManager'
 import { OnboardingModal } from './OnboardingModal'
@@ -106,13 +106,16 @@ describe('OnboardingModal', () => {
     expect(screen.getByText('HTTP 状态：200')).toBeTruthy()
   })
 
-  it('从统一供应商配置打开 APIMart 注册引导链接', async () => {
+  it('预制生成供应商只显示 SDK 官网入口，不显示管理地址', async () => {
     onboardingManager.setPrimaryProvider('apimart')
     onboardingManager.goToStep('api-key')
     render(<OnboardingModal />)
 
-    fireEvent.click(await screen.findByRole('button', { name: '获取密钥' }))
-
-    expect(openExternal).toHaveBeenCalledWith(getApiKeyProviderGuideLink('apimart')?.url)
+    expect(await screen.findByText('安全保存 APIMart 密钥')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '获取密钥' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '访问官网' }))
+    expect(openExternal).toHaveBeenCalledWith(
+      API_KEY_PROVIDERS.find(provider => provider.id === 'apimart')?.websiteUrl
+    )
   })
 })

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.6 - 2026-08-28
+
+- 新增统一的 `PROVIDER_METADATA` 与 `findProviderMetadata(providerId, options)` 公共契约，覆盖全部生成供应商、LLM 预设与 BigModel 国内/国际端点的官网和 API Key 入口。
+- 派欧云、KIE、APIMart 的 `websiteUrl` 保留项目已有邀请码，其余供应商使用正常官网；未知自定义供应商返回 `null`，宿主无需复制或猜测链接。
+- LLM preset 与 endpoint profile 改为消费统一供应商目录，并更新 Kimi、MiniMax、小米 MiMo、百炼、火山引擎等已变化的控制台入口。
+
 ## 0.2.5 - 2026-08-28
 
 - 新增 `LlmProviderSetup` 的 preset/custom 来源契约和 `builtin | user` 生命周期；已有配置字段与工厂参数均保持可选，0.2.4 消费代码无需迁移即可继续运行。

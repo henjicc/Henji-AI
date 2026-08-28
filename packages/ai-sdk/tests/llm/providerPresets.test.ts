@@ -10,11 +10,14 @@ import {
   findLlmProviderPreset,
 } from '../../src/llm/providerPresets'
 import { hasProviderReasoningRule } from '../../src/llm/providerReasoningRequest'
+import { BIGMODEL_ENDPOINT_PROFILE_FAMILY } from '../../src/llm/bigmodel/profiles'
 import {
   normalizeLlmApiKeyManagementUrl,
   normalizeLlmProviderSetup,
   resolveLlmProviderApiKeyUrl,
 } from '../../src/llm/providerSetup'
+import { BUILTIN_PROVIDER_IDS } from '../../src/types/model'
+import { PROVIDER_METADATA, findProviderMetadata } from '../../src/providers/metadata'
 
 /**
  * 迁入 SDK 后 `preset.docs` 从仓库根相对路径改成了包内相对路径（不带 `packages/ai-sdk/` 前缀，
@@ -48,6 +51,15 @@ describe('LLM_PROVIDER_PRESETS', () => {
     }
   })
 
+  it('官网与密钥入口全部来自统一供应商目录', () => {
+    for (const preset of LLM_PROVIDER_PRESETS) {
+      const metadata = findProviderMetadata(preset.providerId)
+      expect(metadata, preset.providerId).not.toBeNull()
+      expect(preset.websiteUrl).toBe(metadata?.websiteUrl)
+      expect(preset.apiKeyUrl).toBe(metadata?.apiKeyUrl)
+    }
+  })
+
   it('没有通用 Base URL 的供应商必须给出指路说明', () => {
     for (const preset of LLM_PROVIDER_PRESETS) {
       if (!preset.baseUrl) expect(preset.baseUrlHint, preset.providerId).toBeTruthy()
@@ -60,6 +72,44 @@ describe('LLM_PROVIDER_PRESETS', () => {
       expect(findLlmProviderPreset(providerId), providerId).not.toBeNull()
       expect(hasProviderReasoningRule(providerId), providerId).toBe(true)
     }
+  })
+})
+
+describe('PROVIDER_METADATA', () => {
+  it('覆盖全部生成供应商、LLM 预设与 BigModel Global，地址安全且资料存在', () => {
+    const requiredIds = new Set([
+      ...BUILTIN_PROVIDER_IDS,
+      ...LLM_PROVIDER_PRESETS.map(preset => preset.providerId),
+      'bigmodel-global',
+    ])
+    expect(new Set(PROVIDER_METADATA.map(provider => provider.providerId)).size)
+      .toBe(PROVIDER_METADATA.length)
+    for (const providerId of requiredIds) {
+      expect(findProviderMetadata(providerId), providerId).not.toBeNull()
+    }
+    for (const provider of PROVIDER_METADATA) {
+      for (const value of [provider.websiteUrl, provider.apiKeyUrl]) {
+        const url = new URL(value)
+        expect(url.protocol, `${provider.providerId}: ${value}`).toBe('https:')
+        expect(url.username).toBe('')
+        expect(url.password).toBe('')
+      }
+      expect(existsSync(path.join(PACKAGE_ROOT, provider.docs)), provider.docs).toBe(true)
+    }
+  })
+
+  it('保留仓库已配置的邀请码入口，并按 endpoint profile 解析 BigModel', () => {
+    expect(findProviderMetadata('ppio')).toMatchObject({
+      websiteUrlKind: 'referral',
+      websiteUrl: 'https://ppio.com/user/register?invited_by=WGY0DZ',
+    })
+    expect(findProviderMetadata('kie')?.websiteUrl).toContain('ref=')
+    expect(findProviderMetadata('apimart')?.websiteUrl).toContain('aff=')
+    expect(findProviderMetadata('bigmodel', { endpointProfile: 'global' })?.providerId)
+      .toBe('bigmodel-global')
+    const globalProfile = BIGMODEL_ENDPOINT_PROFILE_FAMILY.profiles.find(profile => profile.id === 'global')
+    expect(globalProfile?.websiteUrl).toBe(findProviderMetadata('bigmodel-global')?.websiteUrl)
+    expect(globalProfile?.apiKeyUrl).toBe(findProviderMetadata('bigmodel-global')?.apiKeyUrl)
   })
 })
 

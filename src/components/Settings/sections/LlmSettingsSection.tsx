@@ -21,7 +21,7 @@ import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useLlmSettings } from '../hooks/useLlmSettings'
 import { useExternalLink } from '../hooks/useExternalLink'
 import ApiKeyInput from '../components/ApiKeyInput'
-import { resolveLlmProviderApiKeyUrl, type LlmModelConfig, type LlmProviderConfig } from '@henjicc/ai-sdk'
+import { findProviderMetadata, type LlmModelConfig, type LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
 import { createModelFromInput, fetchOpenAiCompatibleModels } from '@/services/llm/llmDiscoveryService'
 import AgentModelProfilesSection from './AgentModelProfilesSection'
@@ -203,7 +203,9 @@ const LlmSettingsSection: React.FC = () => {
         ) : providers.map(provider => {
           const expanded = expandedProviderId === provider.providerId
           const providerModels = config.models.filter(model => model.providerId === provider.providerId)
-          const apiKeyUrl = resolveLlmProviderApiKeyUrl(provider)
+          const providerMetadata = provider.setup?.kind === 'preset'
+            ? findProviderMetadata(provider.setup.presetId, { endpointProfile: provider.endpointProfile })
+            : null
           const reasoning = resolveProviderReasoning(provider)
           const modelKeyword = (modelSearchMap[provider.providerId] ?? '').trim().toLowerCase()
           const filteredModels = modelKeyword
@@ -259,9 +261,11 @@ const LlmSettingsSection: React.FC = () => {
                         showLabel="显示"
                         hideLabel="隐藏"
                         hint={getApiKeyHint(provider)}
-                        managementUrl={apiKeyUrl}
+                        websiteUrl={providerMetadata?.websiteUrl}
+                        websiteLabel={t('llmProvider.actions.website')}
+                        managementUrl={providerMetadata?.apiKeyUrl}
                         managementLabel={t('llmProvider.actions.manageApiKey')}
-                        onOpenManagementUrl={(url) => { void openExternal(url) }}
+                        onOpenUrl={(url) => { void openExternal(url) }}
                       />
 
                       <UiInput

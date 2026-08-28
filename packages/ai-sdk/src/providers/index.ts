@@ -21,6 +21,12 @@ import {
 } from '../types/model'
 
 export { resolvePpioMediaRewriteMode, type PpioMediaRewriteMode } from './ppio-media'
+export {
+  PROVIDER_METADATA,
+  findProviderMetadata,
+  type ProviderMetadata,
+  type ProviderMetadataLookupOptions,
+} from './metadata'
 export { testProviderConnection } from './connection'
 export { fetchProvider } from './provider-fetch'
 export {

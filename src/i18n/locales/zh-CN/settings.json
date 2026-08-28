@@ -28,6 +28,7 @@
       "show": "显示",
       "hide": "隐藏"
     },
+    "visitWebsite": "访问官网",
     "providers": {
       "ppio": {
         "label": "派欧云 API 密钥",
@@ -155,6 +156,7 @@
       "save": "保存供应商",
       "saving": "保存中…",
       "manageApiKey": "获取/管理 API Key",
+      "website": "访问官网",
       "reset": "重置供应商",
       "delete": "删除该供应商"
     },

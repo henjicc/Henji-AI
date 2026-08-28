@@ -1,10 +1,17 @@
 import type { LlmEndpointProfileFamily } from '../endpointProfiles'
+import { findProviderMetadata } from '../../providers/metadata'
 
 export const BIGMODEL_PROVIDER_FAMILY_ID = 'bigmodel'
 export const BIGMODEL_CN_PROFILE_ID = 'cn'
 export const BIGMODEL_GLOBAL_PROFILE_ID = 'global'
 export const BIGMODEL_CN_CREDENTIAL_ID = 'bigmodel'
 export const BIGMODEL_GLOBAL_CREDENTIAL_ID = 'bigmodel-global'
+
+const BIGMODEL_CN_METADATA = findProviderMetadata(BIGMODEL_PROVIDER_FAMILY_ID)
+const BIGMODEL_GLOBAL_METADATA = findProviderMetadata(BIGMODEL_PROVIDER_FAMILY_ID, { endpointProfile: 'global' })
+if (!BIGMODEL_CN_METADATA || !BIGMODEL_GLOBAL_METADATA) {
+  throw new Error('[provider_metadata_missing] BigModel endpoint metadata is not registered')
+}
 
 export interface BigmodelTokenPricing {
   currency: 'CNY' | 'USD'
@@ -28,7 +35,8 @@ export const BIGMODEL_ENDPOINT_PROFILE_FAMILY: LlmEndpointProfileFamily = {
       id: BIGMODEL_CN_PROFILE_ID,
       displayName: '智谱 GLM（中国大陆）',
       baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-      apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
+      websiteUrl: BIGMODEL_CN_METADATA.websiteUrl,
+      apiKeyUrl: BIGMODEL_CN_METADATA.apiKeyUrl,
       defaultCredentialId: BIGMODEL_CN_CREDENTIAL_ID,
       modelIds: ['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash'],
       docs: 'docs/llm-adaptation/供应商/智谱GLM.md',
@@ -37,7 +45,8 @@ export const BIGMODEL_ENDPOINT_PROFILE_FAMILY: LlmEndpointProfileFamily = {
       id: BIGMODEL_GLOBAL_PROFILE_ID,
       displayName: 'Z.AI GLM（Global）',
       baseUrl: 'https://api.z.ai/api/paas/v4',
-      apiKeyUrl: 'https://z.ai/manage-apikey/apikey-list',
+      websiteUrl: BIGMODEL_GLOBAL_METADATA.websiteUrl,
+      apiKeyUrl: BIGMODEL_GLOBAL_METADATA.apiKeyUrl,
       defaultCredentialId: BIGMODEL_GLOBAL_CREDENTIAL_ID,
       modelIds: ['glm-5.3-flash'],
       docs: 'docs/model-adaptation/GLM-5.3-Flash/GLM-5.3-Flash_智谱.md',

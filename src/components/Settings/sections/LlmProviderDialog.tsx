@@ -21,8 +21,8 @@ import {
   LLM_PROVIDER_PRESETS,
   createModelsFromPreset,
   createProviderFromPreset,
+  findProviderMetadata,
   findLlmProviderPreset,
-  resolveLlmProviderApiKeyUrl,
 } from '@henjicc/ai-sdk'
 import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
@@ -52,14 +52,6 @@ interface LlmProviderDialogProps {
 
 function setupPresetId(provider: LlmProviderConfig): string {
   return provider.setup?.kind === 'preset' ? provider.setup.presetId : CUSTOM_PRESET
-}
-
-function safeApiKeyUrl(provider: LlmProviderConfig): string | null {
-  try {
-    return resolveLlmProviderApiKeyUrl(provider)
-  } catch {
-    return null
-  }
 }
 
 const LlmProviderDialog = ({
@@ -152,7 +144,9 @@ const LlmProviderDialog = ({
   const isCustom = !activePreset
   const isExisting = providers.some(provider => provider.providerId === draft.providerId)
   const isBuiltIn = draft.setup?.kind === 'preset' && draft.setup.lifecycle === 'builtin'
-  const managementUrl = safeApiKeyUrl(draft)
+  const providerMetadata = activePreset
+    ? findProviderMetadata(activePreset.providerId, { endpointProfile: draft.endpointProfile })
+    : null
 
   const describeError = (value: unknown): string => {
     const message = value instanceof Error ? value.message : String(value)
@@ -170,9 +164,6 @@ const LlmProviderDialog = ({
     const providerId = draft.providerId.trim()
       || activePreset?.providerId
       || createProviderId(displayName, providers)
-    const managementValue = draft.setup?.kind === 'custom'
-      ? draft.setup.apiKeyManagementUrl?.trim()
-      : undefined
     const provider: LlmProviderConfig = {
       ...draft,
       providerId,
@@ -183,7 +174,6 @@ const LlmProviderDialog = ({
             : { kind: 'preset', presetId: activePreset.providerId, lifecycle: 'user' })
         : {
             kind: 'custom',
-            ...(managementValue ? { apiKeyManagementUrl: managementValue } : {}),
           },
       displayName,
       adapter: draft.adapter.trim() || 'openai',
@@ -363,25 +353,12 @@ const LlmProviderDialog = ({
             showLabel={t('apiKeys.visibility.show')}
             hideLabel={t('apiKeys.visibility.hide')}
             disabled={saving}
-            managementUrl={managementUrl}
+            websiteUrl={providerMetadata?.websiteUrl}
+            websiteLabel={t('llmProvider.actions.website')}
+            managementUrl={providerMetadata?.apiKeyUrl}
             managementLabel={t('llmProvider.actions.manageApiKey')}
-            onOpenManagementUrl={(url) => { void openExternal(url) }}
+            onOpenUrl={(url) => { void openExternal(url) }}
           />
-
-          {isCustom ? (
-            <UiFormRow label={t('llmProvider.fields.keyUrl')} hint={t('llmProvider.hints.keyUrl')}>
-              <UiInput
-                value={draft.setup?.kind === 'custom' ? draft.setup.apiKeyManagementUrl ?? '' : ''}
-                onChange={event => patch({
-                  setup: {
-                    kind: 'custom',
-                    ...(event.target.value ? { apiKeyManagementUrl: event.target.value } : {}),
-                  },
-                })}
-                placeholder={t('llmProvider.placeholders.keyUrl')}
-              />
-            </UiFormRow>
-          ) : null}
 
           <UiFormRow label={t('llmProvider.fields.enabled')} inline>
             <UiSwitch

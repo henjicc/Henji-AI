@@ -6,7 +6,7 @@
 
 ## 5 分钟快速开始
 
-SDK `0.2.5` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
+SDK `0.2.6` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc` 配置：
 
 ```ini
 @henjicc:registry=https://npm.pkg.github.com
@@ -16,7 +16,7 @@ SDK `0.2.5` 私有发布在 GitHub Packages。先在**消费项目**的 `.npmrc`
 Token 至少需要 `read:packages` 和私有仓库读取权限。不要把 token 本身写入 `.npmrc` 或提交到 Git。
 
 ```bash
-npm install @henjicc/ai-sdk@0.2.5
+npm install @henjicc/ai-sdk@0.2.6
 ```
 
 然后提供 4 个宿主能力（`Transport` / `CredentialStore` / `MediaReader` / `Logger`），创建客户端：
@@ -75,6 +75,21 @@ try {
 生成和 LLM 取消都必须带命名空间：
 `client.cancel({ namespace: 'generation' | 'llm', taskId })`。自定义 provider 使用进程级注册表，
 同 ID 并发注册会拒绝；持有它的 client 退出时必须 `dispose()`。
+
+供应商官网与 API Key 入口由 SDK 统一提供，宿主不需要再维护一份链接表：
+
+```ts
+import { findProviderMetadata } from '@henjicc/ai-sdk'
+
+const provider = findProviderMetadata('kie')
+console.log(provider?.websiteUrl, provider?.apiKeyUrl)
+
+// 同一供应商的区域站点通过 endpointProfile 选择。
+const zAi = findProviderMetadata('bigmodel', { endpointProfile: 'global' })
+```
+
+`websiteUrl` 是面向用户的实际跳转入口；派欧云、KIE、APIMart 会保留项目配置的邀请码，
+其余供应商使用正常官网。未知的自定义供应商返回 `null`，SDK 不猜测地址。
 
 ## 接入文档与示例
 
