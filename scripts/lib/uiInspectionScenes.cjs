@@ -590,6 +590,17 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     {
+      id: 'settings-api-keys',
+      surface: '设置',
+      name: '设置-平台密钥',
+      setup: async (page) => {
+        await setupSettings(page)
+        await clickNamedButton(page, /^(密钥|API Keys)$/i)
+        await clickNamedButton(page, /^(平台密钥|Provider Keys)$/i)
+        await settlePage(page, 700)
+      },
+    },
+    {
       id: 'settings-llm',
       surface: '设置',
       name: '设置-大语言模型',

@@ -29,6 +29,11 @@
       "hide": "Hide"
     },
     "visitWebsite": "Visit website",
+    "providerGuide": "First register or sign in at {{website}}, then open {{apiKey}} to get your key.",
+    "providerGuideLinks": {
+      "website": "{{provider}} website",
+      "apiKey": "key management"
+    },
     "providers": {
       "ppio": {
         "label": "PPIO API Key",

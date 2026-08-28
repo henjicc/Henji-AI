@@ -29,6 +29,11 @@
       "hide": "隐藏"
     },
     "visitWebsite": "访问官网",
+    "providerGuide": "先去 {{website}} 注册或登录，然后去 {{apiKey}} 获取密钥。",
+    "providerGuideLinks": {
+      "website": "{{provider}}官网",
+      "apiKey": "密钥管理页面"
+    },
     "providers": {
       "ppio": {
         "label": "派欧云 API 密钥",
