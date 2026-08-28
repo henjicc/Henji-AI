@@ -5,14 +5,20 @@ import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgr
 import { useCanvasStore } from '@/stores/canvasStore';
 
 import {
+  resolveCanvasImageCapabilityExpectedOutputCount,
   getRegisteredCanvasImageCapabilities,
   validateCanvasCapabilityResultPatch,
   type CanvasImageCapabilityDefinition,
 } from '../capabilities';
 import { getResultNodeMediaType } from '../domain/nodeRegistry';
+import type { CanvasNodeType } from '../domain/canvasNodes';
+import { createDefaultGenerationOutputItems } from '../domain/generationOutputs';
 import { readResumableServerTask } from '../domain/resumableTask';
-import { persistGenerationResult } from '../generation/mediaResultPersist';
 import { resumeCanvasGeneration } from '../generation/runGeneration';
+import {
+  commitCanvasGenerationOutputs,
+  resolveGenerationOutputStrategy,
+} from '../application/generationOutputApplicationService';
 
 const logger = createLogger('features.canvas.hooks.useCanvasResumePolling');
 
@@ -49,6 +55,7 @@ export function useCanvasResumePolling(): void {
       const sourceCapability = sourceCapabilityId
         ? getRegisteredCanvasImageCapabilities().find(({ id }) => id === sourceCapabilityId)
         : undefined;
+      const sourceNodeId = useCanvasStore.getState().edges.find((edge) => edge.target === node.id)?.source;
 
       resumedTaskIdsRef.current.add(task.taskId);
       logger.info('[CanvasResume] 恢复未完成的异步生成', {
@@ -60,6 +67,9 @@ export function useCanvasResumePolling(): void {
 
       void resumeNodeTask({
         nodeId: node.id,
+        sourceNodeId,
+        resultNodeType: node.type,
+        resultNodeData: node.data as DynamicValueMap,
         mediaType,
         taskId: task.taskId,
         modelId: task.modelId,
@@ -73,6 +83,9 @@ export function useCanvasResumePolling(): void {
 
 interface ResumeNodeTaskInput {
   nodeId: string;
+  sourceNodeId?: string;
+  resultNodeType: CanvasNodeType;
+  resultNodeData: DynamicValueMap;
   mediaType: 'image' | 'video' | 'audio';
   taskId: string;
   modelId: string;
@@ -86,6 +99,9 @@ interface ResumeNodeTaskInput {
 async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
   const {
     nodeId,
+    sourceNodeId,
+    resultNodeType,
+    resultNodeData,
     mediaType,
     taskId,
     modelId,
@@ -103,18 +119,47 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       taskId,
       onProgress: (progress) => setNodeGenerationProgress(nodeId, progress),
     });
+    // 兼容旧测试替身与旧进程边界只返回 primary 的形状；正式运行时始终优先消费 outputs。
+    const resultOutputs = Array.isArray(result.outputs) && result.outputs.length > 0
+      ? result.outputs
+      : result.primary ? [result.primary] : [];
 
-    const resultPatch = await persistGenerationResult(mediaType, result.primary);
-    if (sourceCapability) {
-      validateCanvasCapabilityResultPatch(sourceCapability, resultPatch);
-    }
-    updateNodeData(nodeId, {
-      ...resultPatch,
-      isGenerating: false,
-      generationStartedAt: null,
-      generationError: null,
-      serverTaskId: null,
-      serverTaskModelId: null,
+    const outputResultKind = sourceCapability?.outputPolicy.resultKind;
+    const memberResultKind = outputResultKind === 'panorama' ? 'panorama' : mediaType;
+    const strategy = resolveGenerationOutputStrategy({
+      outputCount: resultOutputs.length,
+      resultKind: outputResultKind,
+    });
+    const batchResultKind = strategy === 'assetGroup'
+      ? mediaType === 'image' ? 'image-group' : 'media-group'
+      : memberResultKind;
+    await commitCanvasGenerationOutputs({
+      sourceNodeId,
+      placeholderNodeId: nodeId,
+      resultNodeType,
+      contract: {
+        version: 1,
+        strategy,
+        resultKind: outputResultKind ?? batchResultKind,
+        expectedOutputCount: sourceCapability
+          ? resolveCanvasImageCapabilityExpectedOutputCount(
+            sourceCapability.outputPolicy,
+            resultNodeData.generationMappedParams && typeof resultNodeData.generationMappedParams === 'object'
+              ? resultNodeData.generationMappedParams as DynamicValueMap
+              : {},
+          )
+          : undefined,
+        outputs: createDefaultGenerationOutputItems({
+          sources: resultOutputs,
+          mediaType,
+          resultKind: memberResultKind,
+          semanticKind: outputResultKind === 'panorama' ? 'panorama' : 'generated-media',
+        }),
+      },
+      completionId: `generation-output:${nodeId}`,
+      validateResultPatch: sourceCapability
+        ? (patch) => validateCanvasCapabilityResultPatch(sourceCapability, patch)
+        : undefined,
     });
     logger.info('[CanvasResume] 异步生成恢复完成', {
       event: 'canvas.resume_polling.completed',

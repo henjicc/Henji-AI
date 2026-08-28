@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
+import { useProjectStore, type Project } from '@/stores/projectStore';
 
 import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes';
 import { useCanvasResumePolling } from './useCanvasResumePolling';
@@ -48,11 +49,32 @@ describe('useCanvasResumePolling 全景结果恢复', () => {
     generationMocks.resumeCanvasGeneration.mockReset();
     generationMocks.persistGenerationResult.mockReset();
     useCanvasGenerationProgressStore.getState().clearAllProgress();
+    const nodes = [createResumablePanoramaResult()];
     useCanvasStore.getState().setCanvasData(
-      [createResumablePanoramaResult()],
+      nodes,
       [],
       { past: [], future: [] },
     );
+    const project: Project = {
+      id: 'resume-project',
+      name: '恢复测试',
+      createdAt: 1,
+      updatedAt: 1,
+      nodeCount: 1,
+      coverPath: null,
+      nodes,
+      edges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+      history: { past: [], future: [] },
+    };
+    useProjectStore.setState({
+      projects: [project],
+      currentProjectId: project.id,
+      currentProject: project,
+      isHydrated: true,
+      isOpeningProject: false,
+      saveCurrentProject: vi.fn(),
+    });
     generationMocks.resumeCanvasGeneration.mockResolvedValue({ primary: 'remote-result' });
   });
 

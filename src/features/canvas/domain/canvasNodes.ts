@@ -1,6 +1,11 @@
 import type { Edge, Node, XYPosition } from '@xyflow/react';
 import type { PromptDocumentV1, PromptMediaBinding } from '@/core/inputs/promptDocument';
 import type { RowMediaKind } from './socketTypes';
+import type {
+  CanvasGenerationResultKind,
+  CanvasGenerationOutputDescriptorV1,
+  CanvasGenerationOutputStrategy,
+} from './generationOutputs';
 
 export const CANVAS_NODE_TYPES = {
   universalUpload: 'universalUploadNode',
@@ -98,6 +103,10 @@ export interface NodeGenerationStatus {
   serverTaskId?: string | null;
   /** 续查时需要用原模型发请求，与 serverTaskId 成对写入 */
   serverTaskModelId?: string | null;
+  /** 同一次生成完成回调的幂等键；成员和结果组共享。 */
+  generationOutputCommitId?: string;
+  /** 成员在多结果批次中的稳定顺序与业务语义。 */
+  generationOutputDescriptor?: CanvasGenerationOutputDescriptorV1;
 }
 
 export interface NodeImageData extends NodeDisplayData, NodeGenerationStatus {
@@ -175,6 +184,11 @@ export interface AssetGroupNodeData extends NodeDisplayData {
   memberOrder: string[];
   coverMemberId: string | null;
   bindings: AssetGroupBinding[];
+  /** 生成结果组才有；普通手工素材组保持缺省。 */
+  resultKind?: Extract<CanvasGenerationResultKind, 'image-group' | 'media-group' | 'layer-stack'>;
+  generationOutputCommitId?: string;
+  generationOutputStrategy?: CanvasGenerationOutputStrategy;
+  generationOutputDescriptors?: CanvasGenerationOutputDescriptorV1[];
 }
 
 export interface TextProcessingNodeData extends NodeDisplayData {

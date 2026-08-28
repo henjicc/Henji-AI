@@ -186,6 +186,7 @@ export async function runCanvasTransaction(
   const beforeNodes = structuredClone(canvas.nodes)
   const beforeEdges = structuredClone(canvas.edges)
   const beforeHistory = structuredClone(canvas.history)
+  const beforeSelectedNodeId = canvas.selectedNodeId
   logger.info('画布批量写入开始', {
     event: 'canvas.batch.apply.start', projectId, operationCount, ...logContext,
   })
@@ -195,6 +196,7 @@ export async function runCanvasTransaction(
     results = await execute()
   } catch (error) {
     useCanvasStore.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
+    useCanvasStore.getState().setSelectedNode(beforeSelectedNodeId)
     persistCanvasState()
     logger.error('画布批量写入失败', error, {
       event: 'canvas.batch.apply.failed', projectId, operationCount, ...logContext,
@@ -203,6 +205,7 @@ export async function runCanvasTransaction(
   }
 
   const after = useCanvasStore.getState()
+  const afterSelectedNodeId = after.selectedNodeId
   const undoRef = `canvas-batch-undo:${uuidv4()}`
   undos.set(undoRef, {
     undoRef,
@@ -218,6 +221,7 @@ export async function runCanvasTransaction(
     future: [],
   }
   useCanvasStore.getState().setCanvasData(after.nodes, after.edges, groupedHistory)
+  useCanvasStore.getState().setSelectedNode(afterSelectedNodeId)
   persistCanvasState()
   logger.info('画布批量写入完成', {
     event: 'canvas.batch.apply.completed', projectId, operationCount: results.length, undoRef, ...logContext,

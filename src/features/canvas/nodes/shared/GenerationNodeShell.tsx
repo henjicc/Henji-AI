@@ -40,7 +40,11 @@ import {
   getConnectedParamIds,
 } from '@/features/canvas/application/graphValueResolver';
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration';
-import { persistGenerationResult } from '@/features/canvas/generation/mediaResultPersist';
+import {
+  commitCanvasGenerationOutputs,
+  resolveGenerationOutputStrategy,
+} from '@/features/canvas/application/generationOutputApplicationService';
+import { createDefaultGenerationOutputItems } from '@/features/canvas/domain/generationOutputs';
 import { createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
 import { NodeInputRows } from '@/features/canvas/params/NodeInputRows';
@@ -72,6 +76,7 @@ import {
   prepareCanvasCapabilityGeneration,
   resolveCanvasCapabilityModelCandidates,
   resolveCanvasCapabilityPromptTemplateVersion,
+  resolveCanvasImageCapabilityExpectedOutputCount,
   validateCanvasCapabilityResultPatch,
   type CanvasImageCapabilityId,
 } from '@/features/canvas/capabilities';
@@ -464,18 +469,39 @@ export const GenerationNodeShell = memo(({
         }),
       });
 
-      const resultPatch = await persistGenerationResult(modelType, result.primary);
-      if (capability) {
-        validateCanvasCapabilityResultPatch(capability, resultPatch);
-      }
-      updateNodeData(newNodeId, {
-        ...resultPatch,
-        isGenerating: false,
-        generationStartedAt: null,
-        generationError: null,
-        serverTaskId: null,
-        serverTaskModelId: null,
+      const outputResultKind = capability?.outputPolicy.resultKind;
+      const memberResultKind = outputResultKind === 'panorama' ? 'panorama' : modelType;
+      const strategy = resolveGenerationOutputStrategy({
+        outputCount: result.outputs.length,
+        resultKind: outputResultKind,
       });
+      const batchResultKind = strategy === 'assetGroup'
+        ? modelType === 'image' ? 'image-group' : 'media-group'
+        : memberResultKind;
+      const committed = await commitCanvasGenerationOutputs({
+        sourceNodeId: id,
+        placeholderNodeId: newNodeId,
+        resultNodeType,
+        contract: {
+          version: 1,
+          strategy,
+          resultKind: outputResultKind ?? batchResultKind,
+          expectedOutputCount: capability
+            ? resolveCanvasImageCapabilityExpectedOutputCount(capability.outputPolicy, generationParams)
+            : undefined,
+          outputs: createDefaultGenerationOutputItems({
+            sources: result.outputs,
+            mediaType: modelType,
+            resultKind: memberResultKind,
+            semanticKind: outputResultKind === 'panorama' ? 'panorama' : 'generated-media',
+          }),
+        },
+        completionId: `generation-output:${newNodeId}`,
+        validateResultPatch: capability
+          ? (patch) => validateCanvasCapabilityResultPatch(capability, patch)
+          : undefined,
+      });
+      return { status: 'completed', resultNodeIds: committed.resultNodeIds };
     } catch (generationError) {
       // 失败信息写回输出节点：失败的是那次生成，红边和原因就应该长在它自己身上，
       // 而不是回头挂在发起节点的底部（那里既看不出对应哪次生成，也会把节点撑变形）

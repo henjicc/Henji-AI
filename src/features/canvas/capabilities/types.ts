@@ -167,6 +167,19 @@ export interface CanvasImageCapabilityOutputPolicy {
   failureMode: 'single-result' | 'atomic-results';
 }
 
+/** 从声明式数量策略和本次参数中解析应有输出数，不依赖能力或模型编号。 */
+export function resolveCanvasImageCapabilityExpectedOutputCount(
+  policy: CanvasImageCapabilityOutputPolicy,
+  params: DynamicValueMap,
+): number {
+  if (policy.count.mode === 'single') return 1;
+  if (policy.count.mode === 'fixed') return policy.count.count;
+  const raw = params[policy.count.parameterKey];
+  const parsed = typeof raw === 'number' ? raw : Number(raw);
+  const value = Number.isFinite(parsed) ? Math.round(parsed) : policy.count.defaultCount;
+  return Math.min(policy.count.maxCount, Math.max(policy.count.minCount, value));
+}
+
 export interface CanvasImageCapabilityAvailability {
   releaseStage: CanvasImageCapabilityReleaseStage;
   defaultEnabled: boolean;
