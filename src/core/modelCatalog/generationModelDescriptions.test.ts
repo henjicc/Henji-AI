@@ -9,7 +9,7 @@ import {
 
 describe('generationModelDescriptions', () => {
   it('所有供应商模型都引用已登记的通用模型标识', () => {
-    expect(catalog).toHaveLength(99)
+    expect(catalog).toHaveLength(100)
     for (const model of catalog) {
       expect(model.meta.canonicalModelId, model.meta.id).toBeTruthy()
       expect(hasGenerationModelDescription(model.meta.canonicalModelId), model.meta.id).toBe(true)
@@ -23,7 +23,7 @@ describe('generationModelDescriptions', () => {
   })
 
   it('所有通用模型都有中文定性描述并可注入模型元数据', () => {
-    expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(51)
+    expect(Object.keys(GENERATION_MODEL_DESCRIPTIONS)).toHaveLength(52)
     for (const description of Object.values(GENERATION_MODEL_DESCRIPTIONS)) {
       expect(description.zh.trim()).not.toBe('')
     }

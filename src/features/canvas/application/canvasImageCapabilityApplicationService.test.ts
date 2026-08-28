@@ -169,4 +169,29 @@ describe('画布图片能力应用服务', () => {
       }),
     ])
   })
+
+  it('打光能力创建专用节点、保留契约并连接源图端口', async () => {
+    const execute = createCanvasImageCapabilityExecutor()
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.relight)
+    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.relight' })
+    const relightNode = useCanvasStore.getState().nodes.find(
+      (node) => node.type === CANVAS_NODE_TYPES.relightGen,
+    )
+    expect(relightNode?.data).toMatchObject({
+      displayName: '图片打光',
+      capabilityId: 'image.relight',
+      promptTemplateVersion: 'relight-manual-iclight-v1',
+      relightSettings: {
+        relightContractVersion: 1,
+        lightingMode: 'manual',
+      },
+    })
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: sourceNodeId,
+        target: relightNode?.id,
+        targetHandle: 'param:__image',
+      }),
+    ])
+  })
 })

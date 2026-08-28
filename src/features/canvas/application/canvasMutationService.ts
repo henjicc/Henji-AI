@@ -7,7 +7,11 @@ import {
   type CanvasNodeData,
   type StoryboardFrameItem,
 } from '../domain/canvasNodes'
-import { extractCanvasNodeData, listCanvasNodeDataKeys } from '../domain/nodeControlRegistry'
+import {
+  extractCanvasNodeData,
+  listCanvasNodeDataKeys,
+  parseCanvasSpecialEditorData,
+} from '../domain/nodeControlRegistry'
 import {
   addCanvasNode,
   CanvasApplicationError,
@@ -177,6 +181,22 @@ export function updateCanvasNode(input: {
       { nodeId: node.id }
     )
   }
+  const undoRef = rememberCanvasUndo(input.projectId, 'update_node')
+  return { projectId: input.projectId, nodeId: node.id, updatedKeys: Object.keys(safeData), undoRef }
+}
+
+/**
+ * 专用编辑器确认时的受控写入入口。它使用节点内部白名单，
+ * 不会为了 UI 保存而放宽助手的公开 data schema。
+ */
+export function updateCanvasNodeFromSpecialEditor(input: {
+  projectId: string
+  nodeId: string
+  data: Record<string, unknown>
+}): Record<string, unknown> {
+  const node = requireNode(input.projectId, input.nodeId)
+  const safeData = parseCanvasSpecialEditorData(node.type, input.data)
+  applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }])
   const undoRef = rememberCanvasUndo(input.projectId, 'update_node')
   return { projectId: input.projectId, nodeId: node.id, updatedKeys: Object.keys(safeData), undoRef }
 }

@@ -77,18 +77,22 @@ describe('画布图片能力注册表', () => {
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode).map(({ id }) => id))
       .toEqual([
         CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+        CANVAS_IMAGE_CAPABILITY_IDS.relight,
         CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
       ]);
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode, {
       [CANVAS_IMAGE_CAPABILITY_IDS.gridSplit]: false,
-    }).map(({ id }) => id)).toEqual([CANVAS_IMAGE_CAPABILITY_IDS.panorama]);
+    }).map(({ id }) => id)).toEqual([
+      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+      CANVAS_IMAGE_CAPABILITY_IDS.relight,
+    ]);
   });
 
   it('按媒体类型、发布状态和实现状态筛选同一注册源', () => {
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'image',
       implementationStatus: 'planned',
-    })).toHaveLength(7);
+    })).toHaveLength(6);
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'video',
     })).toEqual([]);
@@ -97,6 +101,7 @@ describe('画布图片能力注册表', () => {
       executableOnly: true,
     }).map(({ id }) => id)).toEqual([
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+      CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
     ]);
     expect(filterCanvasImageCapabilities({
@@ -105,7 +110,10 @@ describe('画布图片能力注册表', () => {
         [CANVAS_IMAGE_CAPABILITY_IDS.gridSplit]: false,
         [CANVAS_IMAGE_CAPABILITY_IDS.panorama]: true,
       },
-    }).map(({ id }) => id)).toEqual([CANVAS_IMAGE_CAPABILITY_IDS.panorama]);
+    }).map(({ id }) => id)).toEqual([
+      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+      CANVAS_IMAGE_CAPABILITY_IDS.relight,
+    ]);
   });
 
   it('中英文名称、分组、说明和不可用原因均有翻译', () => {

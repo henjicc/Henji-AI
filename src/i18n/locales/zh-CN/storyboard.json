@@ -224,6 +224,7 @@
       "uploadImage": "上传图片",
       "aiImageGeneration": "图片生成",
       "panoramaGeneration": "720°全景",
+      "relightGeneration": "图片打光",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
       "textProcessing": "文本处理",
@@ -307,6 +308,10 @@
       "apiKeyRequired": "请在设置中填写 API Key",
       "resultTitle": "720°全景",
       "promptPlaceholder": "描述完整场景；输出固定为可球面浏览的 360°×180°、2:1 全景"
+    },
+    "relightGeneration": {
+      "apiKeyRequired": "请先配置当前打光模式所需的供应商 API Key",
+      "resultTitle": "打光结果"
     },
     "upload": {
       "uploadedAlt": "已上传图片",

@@ -2,6 +2,7 @@
   "defs": {
     "fal-ai-gemini-omni-flash": { "meta": { "name": "Gemini Omni Flash" } },
     "fal-ai-gpt-image-2": { "meta": { "name": "GPT Image 2" } },
+    "fal-ai-ic-light-v2": { "meta": { "name": "IC-Light v2 打光" } },
     "fal-ai-grok-imagine-2.0": { "meta": { "name": "Grok Imagine Image 2.0" } },
     "fal-ai-kling-3.0": { "meta": { "name": "可灵 3.0" } },
     "fal-ai-kling-3.0-turbo": { "meta": { "name": "可灵 3.0 Turbo" } },

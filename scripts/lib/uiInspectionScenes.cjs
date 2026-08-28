@@ -292,6 +292,75 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     return { ...fixture, generatedNodeId }
   }
 
+  async function setupCanvasRelightEditor(page) {
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    const relightAction = page.getByRole('button', { name: /^(打光|Relight)$/i })
+      .filter({ visible: true }).first()
+    await relightAction.waitFor({ state: 'visible', timeout: 8000 })
+    await relightAction.click()
+
+    const relightShell = page.locator('[data-relight-node-id][data-relight-mode="manual"]').last()
+    await relightShell.waitFor({ state: 'visible', timeout: 12000 })
+    const relightNodeId = await relightShell.getAttribute('data-relight-node-id')
+    if (!relightNodeId) throw new Error('图片打光工具条未创建专用节点')
+    if (await page.locator('.react-flow__edge').count() < 1) {
+      throw new Error('图片打光工具条未创建源图连线')
+    }
+
+    await relightShell.getByRole('button', { name: /^(调整打光)$/i }).click()
+    const editor = page.getByRole('dialog', { name: /^(图片打光)$/i })
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    await editor.getByText('主光方向 · 离散偏好', { exact: true })
+      .waitFor({ state: 'visible', timeout: 8000 })
+    await editor.getByRole('button', { name: /智能打光/ }).click()
+    await editor.getByRole('button', { name: /霓虹氛围/ }).click()
+    await editor.getByPlaceholder('例如：在保留背景布局的前提下增强商品高光')
+      .fill('保留主体与文字，只调整光照氛围')
+    await editor.getByRole('button', { name: /^(应用设置)$/i }).click()
+    await editor.waitFor({ state: 'hidden', timeout: 12000 })
+    const smartRelightShell = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
+    await smartRelightShell.getByText(/智能 · neon/).waitFor({ state: 'visible', timeout: 8000 })
+
+    await page.waitForTimeout(900)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const node = nodes.find((candidate) => candidate.id === targetNodeId)
+      return {
+        nodeType: node?.type,
+        lightingMode: node?.data?.relightSettings?.lightingMode,
+        preset: node?.data?.relightSettings?.smart?.preset,
+        templateVersion: node?.data?.promptTemplateVersion,
+        referenceCount: node?.data?.relightSettings?.smart?.lightingReferenceImages?.length,
+        hasSourceEdge: edges.some((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId),
+      }
+    }, { targetProjectId: projectId, targetNodeId: relightNodeId })
+    if (persisted.nodeType !== 'relightGenNode'
+      || persisted.lightingMode !== 'smart'
+      || persisted.preset !== 'neon'
+      || persisted.templateVersion !== 'relight-smart-gpt-image-2-v1'
+      || persisted.referenceCount !== 0
+      || !persisted.hasSourceEdge) {
+      throw new Error(`图片打光保存语义或连线丢失：${JSON.stringify(persisted)}`)
+    }
+
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const reopened = page.locator(`[data-relight-node-id="${relightNodeId}"][data-relight-mode="smart"]`)
+    await reopened.waitFor({ state: 'visible', timeout: 12000 })
+    await reopened.getByRole('button', { name: /^(调整打光)$/i }).click()
+    await editor.waitFor({ state: 'visible', timeout: 12000 })
+    await editor.getByText('氛围预设 · 模型近似').waitFor({ state: 'visible', timeout: 8000 })
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasPanoramaViewer(page) {
     const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
     await page.waitForTimeout(900)
@@ -1016,6 +1085,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-720°全景沉浸式查看器',
       setup: setupCanvasPanoramaViewer,
+    },
+    {
+      id: 'canvas-relight-editor',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-图片打光节点与可视化编辑器',
+      setup: setupCanvasRelightEditor,
     },
     {
       id: 'canvas-midjourney-node',

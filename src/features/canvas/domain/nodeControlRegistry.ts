@@ -55,12 +55,24 @@ const imageGenerationNodeDataSchema = nodeDataBaseSchema.extend({
   params: z.record(z.string(), z.unknown()).optional(),
 }).strict()
 
+const relightSpecialEditorDataSchema = z.object({
+  relightSettings: z.record(z.string(), z.unknown()).optional(),
+  modelId: z.string().min(1).optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  prompt: z.string().max(32 * 1024).optional(),
+  promptDocument: z.unknown().optional(),
+  promptTemplateVersion: z.string().min(1).max(200).optional(),
+  lightingReferenceImages: z.array(z.string().min(1).max(16 * 1024)).max(1).optional(),
+  relightRouteReasons: z.array(z.string().max(500)).optional(),
+}).strict()
+
 interface CanvasNodeControlConfig {
   nodeType: CanvasNodeType
   title: string
   description: string
   aliases?: string[]
   dataSchema: z.ZodType<Record<string, unknown>>
+  specialEditorDataSchema?: z.ZodType<Record<string, unknown>>
   aiDataSchema: Record<string, unknown>
   requiresModelSchema: boolean
   hasPromptHandle?: boolean
@@ -181,6 +193,20 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     },
     requiresModelSchema: true,
     validateData: validateImageGenerationData,
+  },
+  {
+    nodeType: CANVAS_NODE_TYPES.relightGen,
+    title: '图片打光节点',
+    description: '创建使用受控打光编辑器的图片重打光节点；模式、模型和提示词由打光契约维护。',
+    aliases: ['打光节点', '图片重打光节点'],
+    dataSchema: imageGenerationNodeDataSchema,
+    specialEditorDataSchema: relightSpecialEditorDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', maxLength: 120 } },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
   },
   {
     nodeType: CANVAS_NODE_TYPES.videoGen,
@@ -433,6 +459,19 @@ export function parseCanvasNodeData(
   const data = config.dataSchema.parse(input ?? {})
   config.validateData?.(data)
   return { nodeType: config.nodeType, data: data as Partial<CanvasNodeData> }
+}
+
+/** 专用编辑器的内部写入白名单，与助手可写 data schema 严格分离。 */
+export function parseCanvasSpecialEditorData(
+  nodeType: string,
+  input: Record<string, unknown>,
+): Partial<CanvasNodeData> {
+  const config = configByType.get(nodeType as CanvasNodeType)
+  if (!config) throw new Error(`当前闭环不支持节点类型：${nodeType}`)
+  const schema = config.specialEditorDataSchema ?? config.dataSchema
+  const data = schema.parse(input)
+  config.validateData?.(data)
+  return data as Partial<CanvasNodeData>
 }
 
 /** 仅供已经从正式素材或生成结果解析出的媒体导入；不得接收模型或 IPC 原始输入。 */

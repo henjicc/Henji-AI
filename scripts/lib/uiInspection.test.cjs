@@ -118,6 +118,12 @@ test('全景结果有独立的真实 Electron 球面交互场景', () => {
   assert.equal(scene.writesUserData, true)
 })
 
+test('图片打光有独立的节点、编辑、保存重开场景', () => {
+  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-relight-editor')
+  assert.ok(scene)
+  assert.equal(scene.writesUserData, true)
+})
+
 test('画布 Midjourney 场景只操作可清理的专用工程，真实只读巡检会跳过', () => {
   const scenes = UI_INSPECTION_SCENES.filter((scene) => scene.id.startsWith('canvas-midjourney-'))
   assert.deepEqual(scenes.map((scene) => scene.id), [

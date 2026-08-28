@@ -1,5 +1,6 @@
 import { registry } from '@/core/ModelRegistry';
 import type { PromptMediaBinding } from '@/core/inputs/promptDocument';
+import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument';
 import {
   analyzeRatioResolutionParams,
   isSmartAspectValue,
@@ -28,6 +29,10 @@ import {
   PANORAMA_REFERENCE_TEMPLATE_VERSION,
   PANORAMA_TEXT_TEMPLATE_VERSION,
 } from '../capabilities/panoramaPolicy';
+import {
+  normalizeRelightSettings,
+  prepareRelightRoute,
+} from '../capabilities/relightPolicy';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
@@ -305,4 +310,42 @@ export function migratePanoramaGenerationData(data: DynamicValueMap): void {
     PANORAMA_MODEL_POLICY,
     storedParams,
   ).params;
+}
+
+/** 恢复图片打光节点的版本化设置、显式模式路由和普通图片输出语义。 */
+export function migrateRelightGenerationData(data: DynamicValueMap): void {
+  data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.relight;
+  const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
+    ? data.mediaInputs as DynamicValueMap
+    : {};
+  const inlineImages = Array.isArray(mediaInputs.image)
+    ? mediaInputs.image.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    : [];
+  if (inlineImages.length > 1) {
+    data.relightRouteReasons = ['图片打光必须且只能提供 1 张源图'];
+  }
+  data.mediaInputs = { ...mediaInputs, image: inlineImages };
+
+  let settings;
+  try {
+    settings = normalizeRelightSettings(data.relightSettings);
+  } catch (error) {
+    data.relightRouteReasons = [error instanceof Error ? error.message : '打光设置无法迁移'];
+    return;
+  }
+  const route = prepareRelightRoute(
+    settings,
+    registry.getModelsByType('image'),
+    data.params && typeof data.params === 'object' ? data.params as DynamicValueMap : {},
+  );
+  data.relightSettings = settings;
+  data.prompt = route.prompt;
+  data.promptDocument = createPlainTextPromptDocument(route.prompt);
+  data.promptTemplateVersion = route.templateVersion;
+  data.modelId = route.model?.meta.id ?? '';
+  data.params = route.params;
+  data.lightingReferenceImages = settings.lightingMode === 'smart'
+    ? [...settings.smart.lightingReferenceImages]
+    : [];
+  data.relightRouteReasons = [...route.reasons];
 }

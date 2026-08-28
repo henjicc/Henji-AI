@@ -27,6 +27,11 @@ export type CanvasSpecialEditorLoader = () => Promise<{
 
 const editorDefinitions = new Map<CanvasSpecialEditorKey, CanvasSpecialEditorDefinition>();
 
+editorDefinitions.set('relight', {
+  key: 'relight',
+  component: lazy(() => import('./RelightSpecialEditor')),
+});
+
 /**
  * 专用编辑器只在运行时注册懒加载组件；能力声明始终只保存稳定 key。
  */

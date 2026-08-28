@@ -7,10 +7,10 @@
 |---|---|
 | 最后更新 | 2026-08-29 |
 | 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 供应商专属 5 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 69 + SDK 跨项目能力 14（另有 Fal 工具 5） |
+| 模型供应商文档数量 | 生成/存量 70 + SDK 跨项目能力 14（另有 Fal 工具 5） |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、智谱（官方 LLM）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
-另有 5 个待按能力按需分发的 Fal 图像工具，不进入默认 99 模型兼容目录：
+另有 5 个待按能力按需分发的 Fal 图像工具，不进入默认 100 模型兼容目录：
 [Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、
 [Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、
 [Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)、
@@ -76,6 +76,7 @@ docs/model-adaptation/
 | [Qwen Image 3.0](Qwen-Image-3.0/) | — | [✅ 官方](Qwen-Image-3.0/Qwen-Image-3.0_百炼.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_APIMart.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_KIE.md) | [✅](Qwen-Image-3.0/Qwen-Image-3.0_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Z-Image Turbo](Z-Image-Turbo/) | — | [✅ 官方](Z-Image-Turbo/Z-Image-Turbo_百炼.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_APIMart.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_KIE.md) | [✅](Z-Image-Turbo/Z-Image-Turbo_Fal.md) | ❌ 无 | [✅](Z-Image-Turbo/Z-Image-Turbo_魔搭.md) | ❌ 无 |
 | [GPT-Image-2](GPT-Image-2/) | — | — | [✅](GPT-Image-2/GPT-Image-2_APIMart.md) | [✅](GPT-Image-2/GPT-Image-2_KIE.md) | [✅](GPT-Image-2/GPT-Image-2_Fal.md) | ❌ 无 | ❌ 无 | [✅](GPT-Image-2/GPT-Image-2_Grsai.md) |
+| [IC-Light v2](IC-Light-v2/) | — | — | ❌ 无 | ❌ 无 | [✅](IC-Light-v2/IC-Light-v2_Fal.md) | ❌ 无 | ❌ 无 | ❌ 无 |
 | [Nano Banana 2](Nano-Banana-2/) | — | — | [✅](Nano-Banana-2/Nano-Banana-2_APIMart.md) | [✅](Nano-Banana-2/Nano-Banana-2_KIE.md) | [✅](Nano-Banana-2/Nano-Banana-2_Fal.md) | ❌ 无 | ❌ 无 | [✅](Nano-Banana-2/Nano-Banana-2_Grsai.md) |
 | [Nano Banana 2 Lite](Nano-Banana-2-Lite/) | — | — | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_APIMart.md) | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_KIE.md) | ❌ 无（已探测确认，见 [Fal 文档说明](Nano-Banana-2/Nano-Banana-2_Fal.md)） | ❌ 无 | ❌ 无 | [✅](Nano-Banana-2-Lite/Nano-Banana-2-Lite_Grsai.md) |
 | [Nano Banana Pro](Nano-Banana-Pro/) | — | — | [✅](Nano-Banana-Pro/Nano-Banana-Pro_APIMart.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_KIE.md) | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Fal.md) | ❌ 无 | ❌ 无 | [✅](Nano-Banana-Pro/Nano-Banana-Pro_Grsai.md) |
@@ -169,6 +170,7 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Qwen Image 3.0 | `qwen-image-3.0`、`qwen-image-3.0-pro` | `qwen3/{text-to-image,image-to-image}`、`qwen3-pro/text-to-image`、`qwen3/pro-image-to-image` | `alibaba/qwen-image-3/{text-to-image,edit}` |
 | Z-Image Turbo | `z-image-turbo` | `z-image` | `fal-ai/z-image/turbo`、`fal-ai/z-image/turbo/image-to-image`；魔搭 `Tongyi-MAI/Z-Image-Turbo` |
 | GPT-Image-2 | `gpt-image-2`（别名 `gpt-image-2-ext`）、`gpt-image-2-official` | `gpt-image-2-text-to-image`、`gpt-image-2-image-to-image` | `openai/gpt-image-2`、`openai/gpt-image-2/edit` |
+| IC-Light v2 | — | — | `fal-ai/iclight-v2` |
 | Nano Banana 2 | `gemini-3.1-flash-image-preview`(-official) | `nano-banana-2` | `fal-ai/nano-banana-2`、`fal-ai/nano-banana-2/edit` |
 | Nano Banana 2 Lite | `gemini-3.1-flash-lite-image`(-ext) | `nano-banana-2-lite` | ❌ 无（已探测确认） |
 | Nano Banana Pro | `gemini-3-pro-image-preview`(-official) | `nano-banana-pro` | `fal-ai/nano-banana-pro`、`fal-ai/nano-banana-pro/edit` |

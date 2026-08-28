@@ -4,6 +4,11 @@ import {
   PANORAMA_PROMPT_POLICY,
 } from './panoramaPolicy';
 import {
+  RELIGHT_MANUAL_MODEL_POLICY,
+  RELIGHT_MANUAL_TEMPLATE_VERSION,
+  RELIGHT_SMART_TEMPLATE_VERSION,
+} from './relightPolicy';
+import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
 } from './types';
@@ -77,13 +82,27 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 20,
     source: IMAGE_SOURCE,
     node: { kind: 'special-generation', editor: 'relight' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    implementation: {
+      status: 'implemented',
+      execution: {
+        kind: 'canvas-node',
+        nodeType: CANVAS_NODE_TYPES.relightGen,
+      },
+    },
+    availability: {
+      releaseStage: 'available',
+      defaultEnabled: true,
+      unavailableReasonKey: null,
+    },
+    modelPolicy: RELIGHT_MANUAL_MODEL_POLICY,
     promptPolicy: {
-      hiddenTemplateVersion: 'relight-v1-draft',
-      fixedSemanticParams: {},
-      visibleParameterKeys: ['lightingMode', 'lightDirection', 'brightness', 'lightColor'],
+      hiddenTemplateVersion: RELIGHT_MANUAL_TEMPLATE_VERSION,
+      fixedSemanticParams: {
+        relightContractVersion: 1,
+        manualTemplateVersion: RELIGHT_MANUAL_TEMPLATE_VERSION,
+        smartTemplateVersion: RELIGHT_SMART_TEMPLATE_VERSION,
+      },
+      visibleParameterKeys: [],
     },
     outputPolicy: {
       resultKind: 'image',

@@ -62,6 +62,11 @@ import {
   PANORAMA_PROMPT_POLICY,
   PANORAMA_TEXT_TEMPLATE_VERSION,
 } from '../capabilities/panoramaPolicy';
+import {
+  DEFAULT_RELIGHT_SETTINGS,
+  RELIGHT_MANUAL_MODEL_POLICY,
+  prepareRelightRoute,
+} from '../capabilities/relightPolicy';
 
 /**
  * 新增画布节点 SOP：
@@ -361,6 +366,64 @@ const panoramaGenerationNodeDefinition: CanvasNodeDefinition<PanoramaGenerationN
   },
   getOutputs: imageOutputsFromData,
   createDefaultData: createPanoramaGenerationDefaultData,
+};
+
+function createRelightGenerationDefaultData(): ImageEditNodeData {
+  const settings = {
+    ...DEFAULT_RELIGHT_SETTINGS,
+    manual: { ...DEFAULT_RELIGHT_SETTINGS.manual },
+    smart: { ...DEFAULT_RELIGHT_SETTINGS.smart, lightingReferenceImages: [] },
+  };
+  const route = prepareRelightRoute(settings, registry.getModelsByType('image'));
+  return {
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.relightGen],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: DEFAULT_ASPECT_RATIO,
+    isSizeManuallyAdjusted: false,
+    prompt: route.prompt,
+    modelId: route.model?.meta.id ?? '',
+    params: route.params,
+    mediaInputs: {},
+    isGenerating: false,
+    generationStartedAt: null,
+    generationDurationMs: undefined,
+    capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.relight,
+    relightSettings: settings as unknown as DynamicValue,
+    promptTemplateVersion: route.templateVersion,
+    lightingReferenceImages: [],
+    relightRouteReasons: route.reasons,
+  };
+}
+
+const relightGenerationNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
+  type: CANVAS_NODE_TYPES.relightGen,
+  menuLabelKey: 'node.menu.relightGeneration',
+  menuIcon: 'imageGeneration',
+  visibleInMenu: false,
+  executionKind: 'standard-generation',
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+    toolbarGenerate: true,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: { fromSource: true, fromTarget: false },
+    targetHandleMode: 'rows',
+  },
+  media: { kind: 'image', role: 'generator' },
+  ports: {
+    source: { emits: 'image' },
+    target: { accepts: ['image'] },
+  },
+  generation: {
+    modelType: 'image',
+    resultNodeType: CANVAS_NODE_TYPES.exportImage,
+  },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: createRelightGenerationDefaultData,
 };
 
 const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
@@ -668,6 +731,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.upload]: uploadNodeDefinition,
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
   [CANVAS_NODE_TYPES.panoramaGen]: panoramaGenerationNodeDefinition,
+  [CANVAS_NODE_TYPES.relightGen]: relightGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
   [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,

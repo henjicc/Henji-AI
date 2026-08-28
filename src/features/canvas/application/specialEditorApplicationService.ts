@@ -8,7 +8,7 @@ import {
   type CanvasSpecialEditorKey,
 } from './specialEditorController';
 import { CanvasApplicationError, requireCurrentCanvasProject } from './canvasApplicationService';
-import { updateCanvasNode } from './canvasMutationService';
+import { updateCanvasNodeFromSpecialEditor } from './canvasMutationService';
 
 const logger = createLogger('features.canvas.specialEditor');
 
@@ -44,10 +44,13 @@ export function commitCanvasSpecialEditor(sessionId: string): void {
   });
   try {
     if (session.isDirty) {
-      updateCanvasNode({
+      const changedEntries = Object.entries(session.draftState).filter(([key, value]) => (
+        JSON.stringify(value) !== JSON.stringify(session.initialState[key])
+      ));
+      updateCanvasNodeFromSpecialEditor({
         projectId: session.projectId,
         nodeId: session.nodeId,
-        data: { ...session.draftState },
+        data: Object.fromEntries(changedEntries),
       });
     }
     useCanvasSpecialEditorController.getState().complete();

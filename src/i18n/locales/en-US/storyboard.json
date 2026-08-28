@@ -224,6 +224,7 @@
       "uploadImage": "Upload Image",
       "aiImageGeneration": "Image Generation",
       "panoramaGeneration": "720° Panorama",
+      "relightGeneration": "Image Relighting",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textProcessing": "Text Processing",
@@ -307,6 +308,10 @@
       "apiKeyRequired": "Please set API key in Settings",
       "resultTitle": "720° Panorama",
       "promptPlaceholder": "Describe the full scene; output is fixed to a spherical 360°×180°, 2:1 panorama"
+    },
+    "relightGeneration": {
+      "apiKeyRequired": "Configure the provider API key required by the current relighting mode",
+      "resultTitle": "Relighting Result"
     },
     "upload": {
       "uploadedAlt": "Uploaded image",

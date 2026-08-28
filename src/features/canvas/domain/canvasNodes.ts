@@ -12,6 +12,7 @@ export const CANVAS_NODE_TYPES = {
   upload: 'uploadNode',
   imageEdit: 'imageNode',
   panoramaGen: 'panoramaGenNode',
+  relightGen: 'relightGenNode',
   exportImage: 'exportImageNode',
   textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',

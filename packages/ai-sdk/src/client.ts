@@ -30,7 +30,7 @@ import { resolveRuntimeContext } from './runtime'
 export type AIClientProviderRegistration = GenerationClientProviderRegistration
 export interface CreateAIClientConfig extends CreateGenerationClientConfig {
   /**
-   * 缺省不传时保持 99 模型兼容行为。显式选择 modular 后，生成目录只包含顶层
+   * 缺省不传时保持 100 模型兼容行为。显式选择 modular 后，生成目录只包含顶层
    * `models/providers` 与这里的 packs，不再自动装入任何内置模型或供应商。
    */
   generation?: {

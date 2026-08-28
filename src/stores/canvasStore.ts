@@ -46,6 +46,7 @@ import { DEFAULT_NODE_DISPLAY_NAME, EXPORT_RESULT_DISPLAY_NAME } from '@/feature
 import {
   migrateGenerationNodeData,
   migratePanoramaGenerationData,
+  migrateRelightGenerationData,
   migrateGenerationPromptData,
   migrateExportImageResultKind,
   migrateLegacyGenerationDisplayName,
@@ -329,6 +330,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
       if (
         node.type === CANVAS_NODE_TYPES.imageEdit
         || node.type === CANVAS_NODE_TYPES.panoramaGen
+        || node.type === CANVAS_NODE_TYPES.relightGen
         || node.type === CANVAS_NODE_TYPES.storyboardGen
       ) {
         migrateGenerationNodeData(mergedData as DynamicValueMap);
@@ -337,6 +339,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
       if (
         node.type === CANVAS_NODE_TYPES.imageEdit
         || node.type === CANVAS_NODE_TYPES.panoramaGen
+        || node.type === CANVAS_NODE_TYPES.relightGen
         || node.type === CANVAS_NODE_TYPES.videoGen
         || node.type === CANVAS_NODE_TYPES.audioGen
         || node.type === CANVAS_NODE_TYPES.textProcessing
@@ -346,6 +349,10 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
 
       if (node.type === CANVAS_NODE_TYPES.panoramaGen) {
         migratePanoramaGenerationData(mergedData as DynamicValueMap);
+      }
+
+      if (node.type === CANVAS_NODE_TYPES.relightGen) {
+        migrateRelightGenerationData(mergedData as DynamicValueMap);
       }
 
       if (node.type === CANVAS_NODE_TYPES.exportImage) {

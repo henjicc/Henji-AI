@@ -14,7 +14,7 @@ const generationModels = [...catalog, ...falErasePack.models]
 
 describe('统一模型能力画像与筛选', () => {
   it('99默认+3可选generation逐项派生合法画像', () => {
-    expect(catalog).toHaveLength(99)
+    expect(catalog).toHaveLength(100)
     expect(falErasePack.models).toHaveLength(3)
     for (const model of generationModels) {
       const profile = profileGenerationModel(model)

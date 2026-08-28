@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes';
+import { DEFAULT_RELIGHT_SETTINGS } from '@/features/canvas/capabilities/relightPolicy';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore, type Project } from '@/stores/projectStore';
 import { useCanvasSpecialEditorController } from './specialEditorController';
@@ -63,5 +64,45 @@ describe('specialEditorApplicationService', () => {
       .toBe('已确认的提示词');
     expect(useCanvasSpecialEditorController.getState().session).toBeNull();
     expect(useProjectStore.getState().saveCurrentProject).toHaveBeenCalled();
+  });
+
+  it('打光编辑器仅通过内部白名单原子写回契约数据', () => {
+    const nodeId = useCanvasStore.getState().addNode(
+      CANVAS_NODE_TYPES.relightGen,
+      { x: 0, y: 0 },
+      { relightSettings: DEFAULT_RELIGHT_SETTINGS },
+    );
+    const initialState = useCanvasStore.getState().nodes.find((node) => node.id === nodeId)?.data;
+    if (!initialState) throw new Error('打光节点创建失败');
+    const sessionId = openCanvasSpecialEditor({
+      projectId,
+      nodeId,
+      editorKey: 'relight',
+      initialState,
+    });
+    useCanvasSpecialEditorController.getState().updateDraft({
+      ...initialState,
+      relightSettings: {
+        ...DEFAULT_RELIGHT_SETTINGS,
+        lightingMode: 'smart',
+        smart: { ...DEFAULT_RELIGHT_SETTINGS.smart, preset: 'neon' },
+      },
+      modelId: 'fal-ai-gpt-image-2',
+      params: {},
+      prompt: '智能打光',
+      promptTemplateVersion: 'relight-smart-gpt-image-2-v1',
+      lightingReferenceImages: [],
+      relightRouteReasons: [],
+    });
+
+    commitCanvasSpecialEditor(sessionId);
+
+    const data = useCanvasStore.getState().nodes.find((node) => node.id === nodeId)?.data;
+    expect(data).toMatchObject({
+      modelId: 'fal-ai-gpt-image-2',
+      promptTemplateVersion: 'relight-smart-gpt-image-2-v1',
+      relightSettings: { lightingMode: 'smart', smart: { preset: 'neon' } },
+    });
+    expect(useCanvasSpecialEditorController.getState().session).toBeNull();
   });
 });

@@ -136,6 +136,29 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
     },
     linkages: [],
   },
+  "fal-ai-ic-light-v2": {
+    meta: {
+      name: { key: 'meta.name', fallback: 'IC-Light v2 Relighting' },
+      i18nScope: 'models.defs.fal-ai-ic-light-v2',
+    },
+    params: {
+      "falIcLightV2InitialLatent": {
+        name: { zh: '初始光照方向', en: 'Initial Light Direction' },
+        description: {
+          zh: '离散方向偏好，不代表物理精确灯位。',
+          en: 'A discrete direction preference, not a physically precise light position.',
+        },
+        optionLabels: {
+          None: { label: { zh: '不指定', en: 'Unspecified' } },
+          Left: { label: { zh: '左侧', en: 'Left' } },
+          Right: { label: { zh: '右侧', en: 'Right' } },
+          Top: { label: { zh: '上方', en: 'Top' } },
+          Bottom: { label: { zh: '下方', en: 'Bottom' } },
+        },
+      },
+    },
+    linkages: [],
+  },
   "fal-ai-grok-imagine-2.0": {
     meta: {
       name: { key: 'meta.name', fallback: 'Grok Imagine Image 2.0' },

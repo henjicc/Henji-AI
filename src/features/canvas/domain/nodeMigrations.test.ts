@@ -9,6 +9,7 @@ import {
   migrateExportImageResultKind,
   migrateLegacyGenerationDisplayName,
   migratePanoramaGenerationData,
+  migrateRelightGenerationData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
 
@@ -75,6 +76,57 @@ describe('migratePanoramaGenerationData', () => {
         outputCount: 1,
       },
     });
+  });
+});
+
+describe('migrateRelightGenerationData', () => {
+  it('保存重开后恢复手动模式路由、提示词和一张源图', () => {
+    const data: DynamicValueMap = {
+      capabilityId: 'broken',
+      modelId: 'broken',
+      params: {},
+      mediaInputs: { image: ['source.png'] },
+      relightSettings: {
+        relightContractVersion: 1,
+        lightingMode: 'manual',
+        manual: {
+          keyDirection: 'bottom',
+          brightness: -1,
+          colorPreset: 'cool',
+          rimDirection: 'top',
+          extraPrompt: 'keep logo',
+        },
+        smart: {
+          preset: 'natural-studio',
+          prompt: '',
+          lightingReferenceImages: [],
+        },
+      },
+    };
+
+    migrateRelightGenerationData(data);
+
+    expect(data).toMatchObject({
+      capabilityId: 'image.relight',
+      modelId: 'fal-ai-ic-light-v2',
+      promptTemplateVersion: 'relight-manual-iclight-v1',
+      params: { falIcLightV2InitialLatent: 'Bottom' },
+      mediaInputs: { image: ['source.png'] },
+      lightingReferenceImages: [],
+      relightRouteReasons: [],
+    });
+    expect(String(data.prompt)).toContain('slightly darker low-key lighting');
+    expect(String(data.prompt)).toContain('cool white illumination');
+  });
+
+  it('未知契约版本保持数据并标记为不可生成', () => {
+    const data: DynamicValueMap = {
+      relightSettings: { relightContractVersion: 2 },
+      prompt: 'legacy',
+    };
+    migrateRelightGenerationData(data);
+    expect(data.relightSettings).toEqual({ relightContractVersion: 2 });
+    expect(data.relightRouteReasons).toEqual([expect.stringContaining('不支持的打光契约版本')]);
   });
 });
 

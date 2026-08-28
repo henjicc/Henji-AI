@@ -19,7 +19,7 @@ import { preprocessRequestBody } from './upload/preprocess'
 export * from './generation/core'
 
 /**
- * 兼容入口的配置：`models` 与 `providers` 仍在默认 99 模型/8 供应商上追加。
+ * 兼容入口的配置：`models` 与 `providers` 仍在默认 100 模型/8 供应商上追加。
  * 需要真正零内置依赖或严格选择模型时，请改用 `generation/core`。
  */
 export interface CreateGenerationClientConfig {
@@ -29,7 +29,7 @@ export interface CreateGenerationClientConfig {
 }
 
 /**
- * 创建默认含 99 个生成模型的兼容客户端。
+ * 创建默认含 100 个生成模型的兼容客户端。
  *
  * 这里仅负责装配旧的全量 catalog 与进程级 provider registry；所有目录、请求、取消和
  * 生命周期行为都委托 `generation/core` 的唯一生成内核。
