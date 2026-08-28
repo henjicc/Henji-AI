@@ -51,7 +51,7 @@ export function MaskEditorInspector({
             variant="menu"
             active={mode === 'paint'}
             aria-pressed={mode === 'paint'}
-            className="justify-center text-xs"
+            className="justify-center gap-2 text-xs"
             title="绘制模式(D)"
             onClick={() => onModeChange('paint')}
           >
@@ -63,7 +63,7 @@ export function MaskEditorInspector({
             variant="menu"
             active={mode === 'erase'}
             aria-pressed={mode === 'erase'}
-            className="justify-center text-xs"
+            className="justify-center gap-2 text-xs"
             title="擦除模式(E)"
             onClick={() => onModeChange('erase')}
           >
