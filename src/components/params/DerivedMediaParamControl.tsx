@@ -143,7 +143,7 @@ export function DerivedMediaParamControl({
   return (
     <>
       {compact ? action : (
-        <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 flex-col">
           <ParamLabel param={param} language={i18n.language} />
           {action}
         </div>
