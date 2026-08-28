@@ -120,6 +120,9 @@
     "editResultTitle": "编辑结果"
   },
   "nodeToolbar": {
+    "more": "更多",
+    "moreImageCapabilities": "更多图片功能",
+    "imageCapabilityExecutionFailed": "图片功能启动失败，请重试",
     "reupload": "重新上传",
     "copy": "复制",
     "copyText": "复制文本",

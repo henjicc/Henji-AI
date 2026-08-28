@@ -120,6 +120,9 @@
     "editResultTitle": "Edit Result"
   },
   "nodeToolbar": {
+    "more": "More",
+    "moreImageCapabilities": "More image tools",
+    "imageCapabilityExecutionFailed": "Could not start the image tool. Try again.",
     "reupload": "Reupload",
     "copy": "Copy",
     "copyText": "Copy Text",

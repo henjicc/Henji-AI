@@ -20,6 +20,13 @@ import {
   type CanvasNode,
 } from '@/features/canvas/domain/canvasNodes';
 import { canvasEventBus } from '@/features/canvas/application/canvasServices';
+import {
+  executeCanvasImageCapabilityFromSource,
+} from '@/features/canvas/application/canvasImageCapabilityApplicationService';
+import {
+  getExecutableCanvasImageCapabilitiesForSourceNode,
+  type CanvasImageCapabilityId,
+} from '@/features/canvas/capabilities';
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry';
 import { getNodeToolPlugins } from '@/features/canvas/tools';
 import type { ToolIconKey } from '@/features/canvas/tools';
@@ -45,6 +52,8 @@ import { checkAssetPaths } from '@/commands/assetLibrary';
 import { useNodeDownload } from '@/features/canvas/hooks/useNodeDownload';
 import { runCanvasNode } from '@/features/canvas/application/canvasExecutionService';
 import { dissolveAssetGroup } from '@/features/canvas/application/assetGroupApplicationService';
+import { CanvasImageCapabilityActions } from './CanvasImageCapabilityActions';
+import { excludeClaimedLocalTools } from './canvasImageCapabilityLayout';
 
 interface NodeActionToolbarProps {
   node: CanvasNode;
@@ -64,7 +73,14 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   const canCopyStoryboardText = isStoryboardGen || isStoryboardSplit;
   const nodeDefinition = getNodeDefinition(node.type);
   const canTriggerGeneration = Boolean(nodeDefinition.capabilities.toolbarGenerate);
-  const tools = useMemo(() => getNodeToolPlugins(node), [node]);
+  const imageCapabilities = useMemo(
+    () => getExecutableCanvasImageCapabilitiesForSourceNode(node),
+    [node],
+  );
+  const tools = useMemo(
+    () => excludeClaimedLocalTools(getNodeToolPlugins(node), imageCapabilities),
+    [imageCapabilities, node],
+  );
   const deleteNode = useCanvasStore((state) => state.deleteNode);
   const ungroupNode = useCanvasStore((state) => state.ungroupNode);
   const canReupload = nodeDefinition.media?.role === 'source'
@@ -85,6 +101,7 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
   );
   const [isCopySuccess, setIsCopySuccess] = useState(false);
   const [isCopyTextSuccess, setIsCopyTextSuccess] = useState(false);
+  const [pendingCapabilityId, setPendingCapabilityId] = useState<CanvasImageCapabilityId | null>(null);
   const { addMedia, collecting } = useAddToAssetLibrary();
   const copyFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTextFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -215,6 +232,23 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
     }
   }, [storyboardText]);
 
+  const handleExecuteImageCapability = useCallback(async (
+    capabilityId: CanvasImageCapabilityId,
+  ): Promise<void> => {
+    if (pendingCapabilityId !== null) return;
+    setPendingCapabilityId(capabilityId);
+    try {
+      await executeCanvasImageCapabilityFromSource(node.id, capabilityId);
+    } catch {
+      canvasEventBus.publish('canvas/toast', {
+        message: t('nodeToolbar.imageCapabilityExecutionFailed'),
+        type: 'error',
+      });
+    } finally {
+      setPendingCapabilityId(null);
+    }
+  }, [node.id, pendingCapabilityId, t]);
+
   return (
     <ReactFlowNodeToolbar
       nodeId={node.id}
@@ -265,6 +299,13 @@ export const NodeActionToolbar = memo(({ node }: NodeActionToolbarProps) => {
               {t('nodeToolbar.outputVideo')}
             </UiChipButton>
         )}
+        <CanvasImageCapabilityActions
+          capabilities={imageCapabilities}
+          pendingCapabilityId={pendingCapabilityId}
+          onExecute={(capabilityId) => {
+            void handleExecuteImageCapability(capabilityId);
+          }}
+        />
         {!isImageEdit && tools.map((tool) => {
           const Icon = toolIconMap[tool.icon] ?? Crop;
 

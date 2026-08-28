@@ -168,6 +168,63 @@ async function executeOperation(projectId: string, operation: CanvasBatchOperati
   }
 }
 
+type CanvasAtomicExecutor = () => Promise<Record<string, unknown>[]>
+
+/**
+ * 共享画布事务内核。当后续操作需要使用前一步产生的节点 id 时，
+ * 不能预先写成静态 CanvasBatchOperation[]，但仍必须复用这一份
+ * 「抓快照—执行—失败回滚—合并历史—持久化」语义。
+ */
+export async function runCanvasTransaction(
+  projectId: string,
+  operationCount: number,
+  execute: CanvasAtomicExecutor,
+  logContext: Record<string, unknown> = {},
+): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
+  requireCurrentCanvasProject(projectId)
+  const canvas = useCanvasStore.getState()
+  const beforeNodes = structuredClone(canvas.nodes)
+  const beforeEdges = structuredClone(canvas.edges)
+  const beforeHistory = structuredClone(canvas.history)
+  logger.info('画布批量写入开始', {
+    event: 'canvas.batch.apply.start', projectId, operationCount, ...logContext,
+  })
+
+  let results: Record<string, unknown>[]
+  try {
+    results = await execute()
+  } catch (error) {
+    useCanvasStore.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
+    persistCanvasState()
+    logger.error('画布批量写入失败', error, {
+      event: 'canvas.batch.apply.failed', projectId, operationCount, ...logContext,
+    })
+    throw error
+  }
+
+  const after = useCanvasStore.getState()
+  const undoRef = `canvas-batch-undo:${uuidv4()}`
+  undos.set(undoRef, {
+    undoRef,
+    projectId,
+    beforeNodes,
+    beforeEdges,
+    beforeHistory,
+    afterFingerprint: fingerprint(after.nodes, after.edges),
+  })
+  // 整批只留一条撤销记录：步骤内部各自记录的历史在这里合并。
+  const groupedHistory: CanvasHistoryState = {
+    past: [...beforeHistory.past, { nodes: beforeNodes, edges: beforeEdges }],
+    future: [],
+  }
+  useCanvasStore.getState().setCanvasData(after.nodes, after.edges, groupedHistory)
+  persistCanvasState()
+  logger.info('画布批量写入完成', {
+    event: 'canvas.batch.apply.completed', projectId, operationCount: results.length, undoRef, ...logContext,
+  })
+  return { appliedOperations: results, undoRef }
+}
+
 /**
  * 原子地应用一组画布操作，**这是画布批量写入的唯一内核**。
  *
@@ -185,16 +242,8 @@ export async function applyCanvasOperationsAtomically(
   operations: CanvasBatchOperation[],
   logContext: Record<string, unknown> = {},
 ): Promise<{ appliedOperations: Record<string, unknown>[]; undoRef: string }> {
-  requireCurrentCanvasProject(projectId)
-  const canvas = useCanvasStore.getState()
-  const beforeNodes = structuredClone(canvas.nodes)
-  const beforeEdges = structuredClone(canvas.edges)
-  const beforeHistory = structuredClone(canvas.history)
-  const results: Record<string, unknown>[] = []
-  logger.info('画布批量写入开始', {
-    event: 'canvas.batch.apply.start', projectId, operationCount: operations.length, ...logContext,
-  })
-  try {
+  return await runCanvasTransaction(projectId, operations.length, async () => {
+    const results: Record<string, unknown>[] = []
     for (const [index, operation] of operations.entries()) {
       results.push({
         index,
@@ -202,35 +251,8 @@ export async function applyCanvasOperationsAtomically(
         ...await executeOperation(projectId, operation),
       })
     }
-  } catch (error) {
-    useCanvasStore.getState().setCanvasData(beforeNodes, beforeEdges, beforeHistory)
-    persistCanvasState()
-    logger.error('画布批量写入失败', error, {
-      event: 'canvas.batch.apply.failed', projectId, operationCount: operations.length, ...logContext,
-    })
-    throw error
-  }
-  const after = useCanvasStore.getState()
-  const undoRef = `canvas-batch-undo:${uuidv4()}`
-  undos.set(undoRef, {
-    undoRef,
-    projectId,
-    beforeNodes,
-    beforeEdges,
-    beforeHistory,
-    afterFingerprint: fingerprint(after.nodes, after.edges),
-  })
-  // 整批只留一条撤销记录：逐条服务内部各自 rememberCanvasUndo 过，这里把它们合成一条
-  const groupedHistory: CanvasHistoryState = {
-    past: [...beforeHistory.past, { nodes: beforeNodes, edges: beforeEdges }],
-    future: [],
-  }
-  useCanvasStore.getState().setCanvasData(after.nodes, after.edges, groupedHistory)
-  persistCanvasState()
-  logger.info('画布批量写入完成', {
-    event: 'canvas.batch.apply.completed', projectId, operationCount: results.length, undoRef, ...logContext,
-  })
-  return { appliedOperations: results, undoRef }
+    return results
+  }, logContext)
 }
 
 export async function commitCanvasBatch(planRef: string): Promise<Record<string, unknown>> {
