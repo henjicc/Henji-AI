@@ -64,34 +64,41 @@ describe('画布图片能力注册表', () => {
   });
 
   it('只向可执行查询开放已经实现且开关启用的能力', () => {
-    expect(isCanvasImageCapabilityExecutable(panorama, {
-      [CANVAS_IMAGE_CAPABILITY_IDS.panorama]: true,
-    })).toBe(false);
+    expect(isCanvasImageCapabilityExecutable(panorama)).toBe(true);
     expect(getCanvasImageCapability(CANVAS_IMAGE_CAPABILITY_IDS.panorama))
       .toMatchObject({
-        implementation: { status: 'planned' },
-        availability: { releaseStage: 'draft', defaultEnabled: false },
+        implementation: {
+          status: 'implemented',
+          execution: { kind: 'canvas-node', nodeType: CANVAS_NODE_TYPES.panoramaGen },
+        },
+        availability: { releaseStage: 'available', defaultEnabled: true },
       });
 
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode).map(({ id }) => id))
-      .toEqual([CANVAS_IMAGE_CAPABILITY_IDS.gridSplit]);
+      .toEqual([
+        CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+        CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
+      ]);
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode, {
       [CANVAS_IMAGE_CAPABILITY_IDS.gridSplit]: false,
-    })).toEqual([]);
+    }).map(({ id }) => id)).toEqual([CANVAS_IMAGE_CAPABILITY_IDS.panorama]);
   });
 
   it('按媒体类型、发布状态和实现状态筛选同一注册源', () => {
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'image',
       implementationStatus: 'planned',
-    })).toHaveLength(8);
+    })).toHaveLength(7);
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'video',
     })).toEqual([]);
     expect(filterCanvasImageCapabilities({
       releaseStages: ['available'],
       executableOnly: true,
-    }).map(({ id }) => id)).toEqual([CANVAS_IMAGE_CAPABILITY_IDS.gridSplit]);
+    }).map(({ id }) => id)).toEqual([
+      CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+      CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
+    ]);
     expect(filterCanvasImageCapabilities({
       enabledOnly: true,
       featureFlags: {
@@ -148,7 +155,10 @@ describe('画布图片能力注册表', () => {
   });
 
   it('拒绝尚未实现的能力误开放以及已实现能力的无效引用', () => {
-    const mistakenlyAvailable = capabilityWith(panorama, {
+    const plannedPanorama = capabilityWith(panorama, {
+      implementation: { status: 'planned', execution: null },
+    });
+    const mistakenlyAvailable = capabilityWith(plannedPanorama, {
       availability: {
         releaseStage: 'available',
         defaultEnabled: true,

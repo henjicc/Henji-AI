@@ -9,6 +9,7 @@ import { useNodeHandlesSync } from '@/features/canvas/hooks/useNodeHandlesSync';
 import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import type { VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
+import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { MediaInputRow } from './MediaInputRow';
 import { ModelInputRow } from './ModelInputRow';
 import { NodeParamRows } from './NodeParamRows';
@@ -40,6 +41,12 @@ interface NodeInputRowsProps {
   onModelChange: (modelId: string) => void;
   onParamsChange: (params: DynamicValueMap) => void;
   incomingImages?: string[];
+  /** 能力节点的模型白名单；省略时保持普通生成节点行为。 */
+  modelPolicy?: CanvasImageCapabilityModelPolicy;
+  /** 能力级媒体数量上限会与模型 inputLimits 取较小值。 */
+  maxMediaCounts?: Partial<Record<RowMediaKind, number>>;
+  /** 只呈现能力允许用户修改的 schema 参数；模型行和提示词不受此字段影响。 */
+  visibleParamIds?: readonly string[];
   /** 视频媒体行已保存的裁剪选区（若有） */
   videoTrimRange?: VideoTrimRange | null;
   /** 确认裁剪只回传选区，不替换视频引用——完整视频始终保留 */
@@ -70,6 +77,9 @@ export function NodeInputRows({
   onModelChange,
   onParamsChange,
   incomingImages,
+  modelPolicy,
+  maxMediaCounts,
+  visibleParamIds,
   videoTrimRange,
   onVideoTrimRangeChange,
 }: NodeInputRowsProps) {
@@ -79,9 +89,22 @@ export function NodeInputRows({
   const mediaRows = useMemo(
     () => MEDIA_ROW_ORDER
       .filter((kind) => acceptedMediaKinds.includes(kind))
-      .map((kind) => ({ kind, max: limits[MEDIA_LIMIT_KEY[kind]].max }))
+      .map((kind) => ({
+        kind,
+        max: Math.min(
+          limits[MEDIA_LIMIT_KEY[kind]].max,
+          maxMediaCounts?.[kind] ?? Number.POSITIVE_INFINITY,
+        ),
+      }))
       .filter((row) => row.max > 0),
-    [acceptedMediaKinds, limits]
+    [acceptedMediaKinds, limits, maxMediaCounts]
+  );
+
+  const visibleSchema = useMemo(
+    () => visibleParamIds
+      ? schema.filter((param) => visibleParamIds.includes(param.id))
+      : schema,
+    [schema, visibleParamIds],
   );
 
   // 媒体行随模型/模式联动增减（如切到"参考生视频"多出视频行），端口位置随之下移
@@ -97,6 +120,7 @@ export function NodeInputRows({
         onModelChange={onModelChange}
         onParamsChange={onParamsChange}
         incomingImages={incomingImages}
+        modelPolicy={modelPolicy}
       />
 
       {mediaRows.map(({ kind, max }) => (
@@ -118,7 +142,7 @@ export function NodeInputRows({
       <NodeParamRows
         nodeId={nodeId}
         modelId={modelId}
-        schema={schema}
+        schema={visibleSchema}
         values={values}
         setParam={setParam}
         setParams={setParams}

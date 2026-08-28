@@ -148,11 +148,25 @@ describe('画布图片能力应用服务', () => {
     expect(useCanvasStore.getState().history).toEqual({ past: [], future: [] })
   })
 
-  it('未实现的全景能力不能被强行执行', async () => {
+  it('全景能力通过受控节点目录创建并连接专用生成节点', async () => {
     const execute = createCanvasImageCapabilityExecutor()
-    await expect(execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.panorama)).rejects.toMatchObject({
-      code: 'CAPABILITY_REJECTED',
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.panorama)
+    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.panorama' })
+    const panoramaNode = useCanvasStore.getState().nodes.find(
+      (node) => node.type === CANVAS_NODE_TYPES.panoramaGen,
+    )
+    expect(panoramaNode?.data).toMatchObject({
+      displayName: '720°全景',
+      capabilityId: 'image.panorama',
+      promptTemplateVersion: 'panorama-equirectangular-text-v1',
+      fixedSemanticParams: { aspectRatio: '2:1', resolution: '2K', outputCount: 1 },
     })
-    expect(useCanvasStore.getState().nodes).toHaveLength(1)
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: sourceNodeId,
+        target: panoramaNode?.id,
+        targetHandle: 'param:__image',
+      }),
+    ])
   })
 })

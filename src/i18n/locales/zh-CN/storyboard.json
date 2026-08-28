@@ -169,8 +169,8 @@
     },
     "items": {
       "panorama": {
-        "title": "全景",
-        "description": "将场景转换为可球面浏览的全景图"
+        "title": "720°全景",
+        "description": "将场景转换为固定 360°×180°、2:1 的可球面浏览全景图"
       },
       "relight": {
         "title": "打光",
@@ -223,6 +223,7 @@
       "upload": "上传",
       "uploadImage": "上传图片",
       "aiImageGeneration": "图片生成",
+      "panoramaGeneration": "720°全景",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
       "textProcessing": "文本处理",
@@ -300,6 +301,12 @@
       "apiKeyRequired": "请在设置中填写 API Key",
       "resultTitle": "结果图片",
       "promptPlaceholder": "描述任何你想要生成或编辑的内容"
+    },
+    "panoramaGeneration": {
+      "promptRequired": "请描述需要生成的全景场景",
+      "apiKeyRequired": "请在设置中填写 API Key",
+      "resultTitle": "720°全景",
+      "promptPlaceholder": "描述完整场景；输出固定为可球面浏览的 360°×180°、2:1 全景"
     },
     "upload": {
       "uploadedAlt": "已上传图片",

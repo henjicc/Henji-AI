@@ -6,6 +6,7 @@ export const CANVAS_NODE_TYPES = {
   universalUpload: 'universalUploadNode',
   upload: 'uploadNode',
   imageEdit: 'imageNode',
+  panoramaGen: 'panoramaGenNode',
   exportImage: 'exportImageNode',
   textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',
@@ -244,6 +245,17 @@ export interface ImageEditNodeData extends NodeImageData {
   generationDurationMs?: number;
 }
 
+export interface PanoramaGenerationNodeData extends ImageEditNodeData {
+  /** 稳定产品能力编号；损坏或旧值在项目载入时恢复。 */
+  capabilityId: 'image.panorama';
+  /** 当前根据有无参考图选中的隐藏模板版本。 */
+  promptTemplateVersion:
+    | 'panorama-equirectangular-text-v1'
+    | 'panorama-equirectangular-reference-v1';
+  /** 节点创建时固化的能力语义，便于项目重开后解释历史配置。 */
+  fixedSemanticParams: DynamicValueMap;
+}
+
 export interface StoryboardFrameItem {
   id: string;
   imageUrl: string | null;
@@ -398,6 +410,7 @@ export type CanvasNodeData =
   | GroupNodeData
   | AssetGroupNodeData
   | ImageEditNodeData
+  | PanoramaGenerationNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
   | MediaGenNodeData
@@ -471,6 +484,12 @@ export function isImageEditNode(
   node: CanvasNode | null | undefined
 ): node is Node<ImageEditNodeData, typeof CANVAS_NODE_TYPES.imageEdit> {
   return node?.type === CANVAS_NODE_TYPES.imageEdit;
+}
+
+export function isPanoramaGenerationNode(
+  node: CanvasNode | null | undefined
+): node is Node<PanoramaGenerationNodeData, typeof CANVAS_NODE_TYPES.panoramaGen> {
+  return node?.type === CANVAS_NODE_TYPES.panoramaGen;
 }
 
 export function isExportImageNode(

@@ -17,6 +17,17 @@ import { getCanvasNodeDefinition } from './nodeRegistry';
 import { hasResumableServerTask } from './resumableTask';
 import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
+import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types';
+import {
+  mapCanvasCapabilityModelParams,
+  resolveCanvasCapabilityModelCandidates,
+} from '../capabilities/modelCompatibility';
+import {
+  PANORAMA_MODEL_POLICY,
+  PANORAMA_PROMPT_POLICY,
+  PANORAMA_REFERENCE_TEMPLATE_VERSION,
+  PANORAMA_TEXT_TEMPLATE_VERSION,
+} from '../capabilities/panoramaPolicy';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
@@ -259,4 +270,39 @@ export function migrateGenerationNodeData(data: DynamicValueMap): void {
     ...((data.params && typeof data.params === 'object') ? (data.params as DynamicValueMap) : {}),
   };
   stripLegacyKeys(data);
+}
+
+/** 恢复全景节点被旧工程或损坏数据覆盖的能力固定语义。 */
+export function migratePanoramaGenerationData(data: DynamicValueMap): void {
+  data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.panorama;
+  data.fixedSemanticParams = { ...PANORAMA_PROMPT_POLICY.fixedSemanticParams };
+
+  const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
+    ? data.mediaInputs as DynamicValueMap
+    : {};
+  const inlineImages = Array.isArray(mediaInputs.image)
+    ? mediaInputs.image.filter((value): value is string => typeof value === 'string').slice(0, 1)
+    : [];
+  data.mediaInputs = { ...mediaInputs, image: inlineImages };
+  data.promptTemplateVersion = inlineImages.length > 0
+    ? PANORAMA_REFERENCE_TEMPLATE_VERSION
+    : PANORAMA_TEXT_TEMPLATE_VERSION;
+
+  const compatibleModels = resolveCanvasCapabilityModelCandidates(
+    registry.getModelsByType('image'),
+    PANORAMA_MODEL_POLICY,
+  ).candidates;
+  const storedModelId = typeof data.modelId === 'string' ? data.modelId.trim() : '';
+  const selectedModel = compatibleModels.find(({ model }) => model.meta.id === storedModelId)?.model
+    ?? compatibleModels[0]?.model;
+  if (!selectedModel) return;
+  data.modelId = selectedModel.meta.id;
+  const storedParams = data.params && typeof data.params === 'object'
+    ? data.params as DynamicValueMap
+    : {};
+  data.params = mapCanvasCapabilityModelParams(
+    selectedModel,
+    PANORAMA_MODEL_POLICY,
+    storedParams,
+  ).params;
 }

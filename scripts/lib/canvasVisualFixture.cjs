@@ -101,6 +101,20 @@ const MISSING_TYPE_FIXTURES = {
       params: {}, mediaInputs: {}, isGenerating: false, generationStartedAt: null,
     },
   },
+  panoramaGenNode: {
+    data: {
+      displayName: '720°全景', imageUrl: null, previewImageUrl: null, aspectRatio: '2:1',
+      isSizeManuallyAdjusted: false, prompt: '', modelId: 'apimart-gpt-image-2',
+      params: {}, mediaInputs: {}, isGenerating: false, generationStartedAt: null,
+      capabilityId: 'image.panorama',
+      promptTemplateVersion: 'panorama-equirectangular-text-v1',
+      fixedSemanticParams: {
+        projection: 'equirectangular', aspectRatio: '2:1', resolution: '2K',
+        outputCount: 1, quality: 'medium', maxReferenceImages: 1,
+        horizontalCoverageDegrees: 360, verticalCoverageDegrees: 180,
+      },
+    },
+  },
   exportImageNode: {
     data: {
       displayName: '图片结果', imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',

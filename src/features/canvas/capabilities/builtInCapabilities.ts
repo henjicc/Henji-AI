@@ -1,4 +1,8 @@
-import { NODE_TOOL_TYPES } from '../domain/canvasNodes';
+import { CANVAS_NODE_TYPES, NODE_TOOL_TYPES } from '../domain/canvasNodes';
+import {
+  PANORAMA_MODEL_POLICY,
+  PANORAMA_PROMPT_POLICY,
+} from './panoramaPolicy';
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
@@ -18,26 +22,6 @@ const VERIFIED_MODEL_POLICY = {
   providerCompatibility: 'verified-combinations-only',
   allowedProviderConfigurations: [],
   semanticRequirements: {},
-} as const;
-
-const PANORAMA_MODEL_POLICY = {
-  mode: 'verified-families',
-  allowedCanonicalFamilies: ['gpt-image-2'],
-  requiredTags: ['text-to-image', 'image-to-image', 'supports-image-editing'],
-  providerCompatibility: 'verified-combinations-only',
-  allowedProviderConfigurations: [
-    { providerId: 'apimart', allowedChannels: ['ext', 'official'] },
-    { providerId: 'kie' },
-    { providerId: 'grsai', allowedChannels: ['vip'] },
-    { providerId: 'fal' },
-  ],
-  semanticRequirements: {
-    aspectRatio: '2:1',
-    resolution: '2K',
-    referenceImages: { min: 0, max: 1 },
-    outputCount: 1,
-    quality: 'medium',
-  },
 } as const;
 
 const PLANNED_AVAILABILITY = {
@@ -62,27 +46,20 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 10,
     source: IMAGE_SOURCE,
     node: { kind: 'standard-generation', editor: 'standard' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: PANORAMA_MODEL_POLICY,
-    promptPolicy: {
-      hiddenTemplateVersion: 'panorama-equirectangular-text-v1',
-      hiddenTemplateVersions: {
-        text: 'panorama-equirectangular-text-v1',
-        reference: 'panorama-equirectangular-reference-v1',
+    implementation: {
+      status: 'implemented',
+      execution: {
+        kind: 'canvas-node',
+        nodeType: CANVAS_NODE_TYPES.panoramaGen,
       },
-      fixedSemanticParams: {
-        projection: 'equirectangular',
-        aspectRatio: '2:1',
-        resolution: '2K',
-        outputCount: 1,
-        quality: 'medium',
-        maxReferenceImages: 1,
-        horizontalCoverageDegrees: 360,
-        verticalCoverageDegrees: 180,
-      },
-      visibleParameterKeys: ['prompt'],
     },
+    availability: {
+      releaseStage: 'available',
+      defaultEnabled: true,
+      unavailableReasonKey: null,
+    },
+    modelPolicy: PANORAMA_MODEL_POLICY,
+    promptPolicy: PANORAMA_PROMPT_POLICY,
     outputPolicy: {
       resultKind: 'panorama',
       count: { mode: 'single' },

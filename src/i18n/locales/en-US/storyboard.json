@@ -169,8 +169,8 @@
     },
     "items": {
       "panorama": {
-        "title": "Panorama",
-        "description": "Turn a scene into a panorama for spherical viewing"
+        "title": "720° Panorama",
+        "description": "Turn a scene into a fixed 360°×180°, 2:1 panorama for spherical viewing"
       },
       "relight": {
         "title": "Relight",
@@ -223,6 +223,7 @@
       "upload": "Upload",
       "uploadImage": "Upload Image",
       "aiImageGeneration": "Image Generation",
+      "panoramaGeneration": "720° Panorama",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textProcessing": "Text Processing",
@@ -300,6 +301,12 @@
       "apiKeyRequired": "Please set API key in Settings",
       "resultTitle": "Result Image",
       "promptPlaceholder": "Describe anything you want to generate or edit"
+    },
+    "panoramaGeneration": {
+      "promptRequired": "Describe the panorama scene to generate",
+      "apiKeyRequired": "Please set API key in Settings",
+      "resultTitle": "720° Panorama",
+      "promptPlaceholder": "Describe the full scene; output is fixed to a spherical 360°×180°, 2:1 panorama"
     },
     "upload": {
       "uploadedAlt": "Uploaded image",

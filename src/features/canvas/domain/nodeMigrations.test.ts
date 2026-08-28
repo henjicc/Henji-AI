@@ -1,12 +1,20 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment jsdom
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels';
 
 import { CANVAS_NODE_TYPES } from './canvasNodes';
 import {
   migrateGenerationPromptData,
   migrateExportImageResultKind,
   migrateLegacyGenerationDisplayName,
+  migratePanoramaGenerationData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
+
+beforeAll(async () => {
+  await loadRealModelsIntoRegistry();
+});
 
 describe('migrateExportImageResultKind', () => {
   it('保留全景与合法旧来源语义', () => {
@@ -29,6 +37,44 @@ describe('migrateExportImageResultKind', () => {
 
     expect(missing.resultKind).toBe('image');
     expect(invalid.resultKind).toBe('image');
+  });
+});
+
+describe('migratePanoramaGenerationData', () => {
+  it('恢复能力固定字段、兼容模型参数并限制为单张内联参考图', () => {
+    const data: DynamicValueMap = {
+      capabilityId: 'broken-capability',
+      promptTemplateVersion: 'broken-template',
+      modelId: 'apimart-gpt-image-2',
+      params: {
+        apimartGptImage2AspectRatio: '1:1',
+        apimartGptImage2Resolution: '1K',
+        apimartGptImage2Count: 4,
+      },
+      mediaInputs: {
+        image: ['first.png', 'second.png'],
+      },
+    };
+
+    migratePanoramaGenerationData(data);
+
+    expect(data).toMatchObject({
+      capabilityId: 'image.panorama',
+      promptTemplateVersion: 'panorama-equirectangular-reference-v1',
+      modelId: 'apimart-gpt-image-2',
+      params: {
+        apimartGptImage2AspectRatio: '2:1',
+        apimartGptImage2Resolution: '2K',
+        apimartGptImage2Count: 1,
+      },
+      mediaInputs: { image: ['first.png'] },
+      fixedSemanticParams: {
+        projection: 'equirectangular',
+        aspectRatio: '2:1',
+        resolution: '2K',
+        outputCount: 1,
+      },
+    });
   });
 });
 

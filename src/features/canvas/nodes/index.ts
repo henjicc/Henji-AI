@@ -11,6 +11,7 @@ import { AudioNode } from './AudioNode';
 import { GroupNode } from './GroupNode';
 import { AssetGroupNode } from './AssetGroupNode';
 import { ImageEditNode } from './ImageEditNode';
+import { PanoramaGenerationNode } from './PanoramaGenerationNode';
 import { ImageNode } from './ImageNode';
 import { StoryboardGenNode } from './StoryboardGenNode';
 import { StoryboardNode } from './StoryboardNode';
@@ -65,6 +66,7 @@ export const nodeTypes: NodeTypes = {
   groupNode: withNodePaintFrame(GroupNode),
   assetGroupNode: withNodePaintFrame(AssetGroupNode),
   imageNode: withNodePaintFrame(ImageEditNode, { bottom: 60 }),
+  panoramaGenNode: withNodePaintFrame(PanoramaGenerationNode, { bottom: 60 }),
   storyboardGenNode: withNodePaintFrame(StoryboardGenNode, { bottom: 84 }),
   storyboardNode: withNodePaintFrame(StoryboardNode),
   textAnnotationNode: withNodePaintFrame(TextAnnotationNode),
@@ -92,6 +94,7 @@ export {
   GroupNode,
   AssetGroupNode,
   ImageEditNode,
+  PanoramaGenerationNode,
   ImageNode,
   StoryboardGenNode,
   StoryboardNode,

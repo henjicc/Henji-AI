@@ -164,6 +164,25 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     validateData: validateImageGenerationData,
   },
   {
+    nodeType: CANVAS_NODE_TYPES.panoramaGen,
+    title: '720°全景生成节点',
+    description: '创建固定为完整等距柱状投影、2:1、单张输出的全景生成节点。',
+    aliases: ['全景节点', '全景生成节点', '720度全景节点'],
+    dataSchema: imageGenerationNodeDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: {
+        displayName: { type: 'string', maxLength: 120 },
+        prompt: { type: 'string', maxLength: 32 * 1024 },
+        modelId: { type: 'string' },
+        params: { type: 'object', additionalProperties: true },
+      },
+      additionalProperties: false,
+    },
+    requiresModelSchema: true,
+    validateData: validateImageGenerationData,
+  },
+  {
     nodeType: CANVAS_NODE_TYPES.videoGen,
     title: '视频生成节点',
     description: '创建配置驱动的视频生成节点；模型与参数必须来自目录和 schema。',

@@ -8,6 +8,7 @@ import {
   type GroupNodeData,
   type AssetGroupNodeData,
   type ImageEditNodeData,
+  type PanoramaGenerationNodeData,
   type StoryboardSplitNodeData,
   type StoryboardGenNodeData,
   type TextAnnotationNodeData,
@@ -50,6 +51,17 @@ import {
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import { DEFAULT_PPIO_MODEL_ID, DEFAULT_PPIO_PROVIDER_ID } from '@/core/llm/defaults';
 import type { ModelTag } from '@/core/types';
+import { registry } from '@/core/ModelRegistry';
+import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types';
+import {
+  mapCanvasCapabilityModelParams,
+  resolveCanvasCapabilityModelCandidates,
+} from '../capabilities/modelCompatibility';
+import {
+  PANORAMA_MODEL_POLICY,
+  PANORAMA_PROMPT_POLICY,
+  PANORAMA_TEXT_TEMPLATE_VERSION,
+} from '../capabilities/panoramaPolicy';
 
 /**
  * 新增画布节点 SOP：
@@ -287,6 +299,68 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
     generationStartedAt: null,
     generationDurationMs: undefined,
   }),
+};
+
+function createPanoramaGenerationDefaultData(): PanoramaGenerationNodeData {
+  const compatibleModels = resolveCanvasCapabilityModelCandidates(
+    registry.getModelsByType('image'),
+    PANORAMA_MODEL_POLICY,
+  ).candidates;
+  const modelId = compatibleModels[0]?.model.meta.id ?? getDefaultModelId('image');
+  const model = registry.getModel(modelId);
+  const params = model
+    ? mapCanvasCapabilityModelParams(model, PANORAMA_MODEL_POLICY).params
+    : {};
+  return {
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.panoramaGen],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: '2:1',
+    isSizeManuallyAdjusted: false,
+    prompt: '',
+    modelId,
+    params,
+    mediaInputs: {},
+    isGenerating: false,
+    generationStartedAt: null,
+    generationDurationMs: undefined,
+    capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.panorama,
+    promptTemplateVersion: PANORAMA_TEXT_TEMPLATE_VERSION,
+    fixedSemanticParams: { ...PANORAMA_PROMPT_POLICY.fixedSemanticParams },
+  };
+}
+
+const panoramaGenerationNodeDefinition: CanvasNodeDefinition<PanoramaGenerationNodeData> = {
+  type: CANVAS_NODE_TYPES.panoramaGen,
+  menuLabelKey: 'node.menu.panoramaGeneration',
+  menuIcon: 'imageGeneration',
+  visibleInMenu: false,
+  executionKind: 'standard-generation',
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+    toolbarGenerate: true,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: {
+      fromSource: true,
+      fromTarget: false,
+    },
+    targetHandleMode: 'rows',
+  },
+  media: { kind: 'image', role: 'generator' },
+  ports: {
+    source: { emits: 'image' },
+    target: { accepts: ['image'] },
+  },
+  generation: {
+    modelType: 'image',
+    resultNodeType: CANVAS_NODE_TYPES.exportImage,
+  },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: createPanoramaGenerationDefaultData,
 };
 
 const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
@@ -593,6 +667,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.universalUpload]: universalUploadNodeDefinition,
   [CANVAS_NODE_TYPES.upload]: uploadNodeDefinition,
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
+  [CANVAS_NODE_TYPES.panoramaGen]: panoramaGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
   [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,

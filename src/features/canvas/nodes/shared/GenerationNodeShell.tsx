@@ -67,6 +67,14 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { DEFAULT_GENERATION_DURATION_MS, PROMPT_PARAM_IDS, ROW_MEDIA_KINDS, buildResultNodeTitle, ensureGenerationProviderConfigured, resolveGenerationPromptInput } from './generationNodeGuards';
 import { useNodeVideoTrimRange } from './useNodeVideoTrimRange';
+import {
+  getCanvasImageCapability,
+  prepareCanvasCapabilityGeneration,
+  resolveCanvasCapabilityModelCandidates,
+  resolveCanvasCapabilityPromptTemplateVersion,
+  validateCanvasCapabilityResultPatch,
+  type CanvasImageCapabilityId,
+} from '@/features/canvas/capabilities';
 
 export type { GenerationNodeShellData } from './useGenerationPromptDocument';
 
@@ -85,6 +93,8 @@ export interface GenerationNodeShellProps {
   resultTitleKey: string;
   /** 结果节点的附加初始数据（如 resultKind） */
   resultNodeExtraData?: DynamicValueMap;
+  /** 图片产品能力编号；声明后共享壳会统一执行模型筛选、固定语义、模板和结果记录。 */
+  capabilityId?: CanvasImageCapabilityId;
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -109,6 +119,7 @@ export const GenerationNodeShell = memo(({
   apiKeyRequiredKey,
   resultTitleKey,
   resultNodeExtraData,
+  capabilityId,
   minWidth = 320,
   minHeight = 160,
   maxWidth = 1400,
@@ -130,6 +141,10 @@ export const GenerationNodeShell = memo(({
   );
 
   const definition = useMemo(() => getNodeDefinition(nodeType), [nodeType]);
+  const capability = useMemo(
+    () => capabilityId ? getCanvasImageCapability(capabilityId) : null,
+    [capabilityId],
+  );
   const generationSpec = definition.generation;
   const modelType = generationSpec?.modelType ?? 'image';
   const resultNodeType = (generationSpec?.resultNodeType ?? CANVAS_NODE_TYPES.exportImage) as CanvasNodeType;
@@ -198,11 +213,22 @@ export const GenerationNodeShell = memo(({
 
   const selectedModelId = useMemo(() => {
     const stored = typeof data.modelId === 'string' ? data.modelId.trim() : '';
-    if (stored && registry.getModel(stored)) {
+    const compatibleIds = capability
+      ? new Set(resolveCanvasCapabilityModelCandidates(
+        registry.getModelsByType(modelType),
+        capability.modelPolicy,
+      ).candidates.map(({ model }) => model.meta.id))
+      : null;
+    if (stored && registry.getModel(stored) && (!compatibleIds || compatibleIds.has(stored))) {
       return stored;
     }
+    if (compatibleIds) {
+      const defaultModelId = getDefaultModelId(modelType);
+      if (compatibleIds.has(defaultModelId)) return defaultModelId;
+      return compatibleIds.values().next().value ?? defaultModelId;
+    }
     return getDefaultModelId(modelType);
-  }, [data.modelId, modelType]);
+  }, [capability, data.modelId, modelType]);
   const effectiveModelId = overrideModelId ?? selectedModelId;
   const effectiveModel = useMemo(() => registry.getModel(effectiveModelId), [effectiveModelId]);
   const providerKeyConfigured = effectiveModel
@@ -226,11 +252,21 @@ export const GenerationNodeShell = memo(({
       nextModelId,
       modelParamValues,
     );
+    const nextModel = registry.getModel(nextModelId);
+    const nextParams = capability && nextModel
+      ? prepareCanvasCapabilityGeneration({
+        capability,
+        model: nextModel,
+        currentParams: transferredParams,
+        userPrompt: '',
+        referenceImageCount: effectiveImages.length,
+      }).params
+      : transferredParams;
     updateNodeData(id, {
       modelId: nextModelId,
-      params: transferredParams,
+      params: nextParams,
     });
-  }, [effectiveModelId, id, modelParamValues, updateNodeData]);
+  }, [capability, effectiveImages.length, effectiveModelId, id, modelParamValues, updateNodeData]);
 
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(nodeType, data as CanvasNodeData),
@@ -262,6 +298,50 @@ export const GenerationNodeShell = memo(({
     }
   }, [data.modelId, id, selectedModelId, updateNodeData]);
 
+  const activePromptTemplateVersion = capability
+    ? resolveCanvasCapabilityPromptTemplateVersion(
+      capability.promptPolicy,
+      effectiveImages.length,
+    )
+    : null;
+  const capabilityReferenceImageMax = capability?.modelPolicy.mode === 'verified-families'
+    ? capability.modelPolicy.semanticRequirements.referenceImages?.max
+    : undefined;
+
+  useEffect(() => {
+    if (!capability) return;
+    if (
+      data.capabilityId === capability.id
+      && data.promptTemplateVersion === activePromptTemplateVersion
+    ) return;
+    updateNodeData(id, {
+      capabilityId: capability.id,
+      promptTemplateVersion: activePromptTemplateVersion,
+      fixedSemanticParams: { ...capability.promptPolicy.fixedSemanticParams },
+    }, { skipHistory: true });
+  }, [activePromptTemplateVersion, capability, data.capabilityId, data.promptTemplateVersion, id, updateNodeData]);
+
+  const prepareCapabilityGeneration = useCallback((
+    currentParams: DynamicValueMap,
+    userPrompt: string,
+  ) => {
+    if (!capability) return null;
+    if (!effectiveModel) {
+      throw new Error(t('modelPicker.noCompatibleModels'));
+    }
+    const preparation = prepareCanvasCapabilityGeneration({
+      capability,
+      model: effectiveModel,
+      currentParams,
+      userPrompt,
+      referenceImageCount: effectiveImages.length,
+    });
+    if (!preparation.compatible) {
+      throw new Error(preparation.reasons.join('；') || t('modelPicker.noCompatibleModels'));
+    }
+    return preparation;
+  }, [capability, effectiveImages.length, effectiveModel, t]);
+
   const preflightGenerate = useCallback((): void => {
     const latestCanvas = useCanvasStore.getState();
     const latestValues = collectInputValues(id, latestCanvas.nodes, latestCanvas.edges);
@@ -277,12 +357,13 @@ export const GenerationNodeShell = memo(({
       throw new Error(t(promptRequiredKey));
     }
     setPromptInvalid(false);
+    prepareCapabilityGeneration(runtimeValues, promptInput.prompt);
     ensureGenerationProviderConfigured(providerKeyConfigured, {
       title: t('common:providerKeyRequired.title'),
       message: t('common:providerKeyRequired.message'),
       error: t(apiKeyRequiredKey),
     });
-  }, [apiKeyRequiredKey, effectiveModel, effectivePromptDocument, id, isPromptOverridden, modelParamValues, promptReferences, promptRequiredKey, providerKeyConfigured, t]);
+  }, [apiKeyRequiredKey, effectiveModel, effectivePromptDocument, id, isPromptOverridden, modelParamValues, prepareCapabilityGeneration, promptReferences, promptRequiredKey, providerKeyConfigured, t]);
 
   const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
     const latestCanvas = useCanvasStore.getState();
@@ -303,7 +384,8 @@ export const GenerationNodeShell = memo(({
       throw new Error(t(promptRequiredKey));
     }
     setPromptInvalid(false);
-    const { prompt } = promptInput;
+    const capabilityPreparation = prepareCapabilityGeneration(runtimeValues, promptInput.prompt);
+    const prompt = capabilityPreparation?.prompt ?? promptInput.prompt;
 
     // 缺 API Key 是"还没开始生成"的前置失败，不建输出节点；
     // 它有明确的补救动作，所以走带「去设置」的统一弹窗
@@ -317,8 +399,10 @@ export const GenerationNodeShell = memo(({
     const { nodes: graphNodes, edges: graphEdges } = useCanvasStore.getState();
     const injectedParamValues = collectInputValues(id, graphNodes, graphEdges);
     const generationParams: DynamicValueMap = {
-      ...modelParamValues,
-      ...injectedParamValues,
+      ...(capabilityPreparation?.params ?? {
+        ...modelParamValues,
+        ...injectedParamValues,
+      }),
       prompt,
       text: prompt,
       // 裁剪窗口选中的 [start, end]（若用户裁剪过）；GenerationService 在生成提交时
@@ -341,7 +425,7 @@ export const GenerationNodeShell = memo(({
     );
     const generationDurationMs = estimate?.durationMs ?? DEFAULT_GENERATION_DURATION_MS;
     const generationStartedAt = Date.now();
-    const resultNodeTitle = buildResultNodeTitle(prompt, t(resultTitleKey));
+    const resultNodeTitle = buildResultNodeTitle(promptInput.prompt, t(resultTitleKey));
 
     const newNodePosition = findNodePosition(
       id,
@@ -357,6 +441,7 @@ export const GenerationNodeShell = memo(({
         generationDurationMs,
         displayName: resultNodeTitle,
         ...(resultNodeExtraData ?? {}),
+        ...(capabilityPreparation?.resultNodeData ?? {}),
       }
     );
     addEdge(id, newNodeId);
@@ -380,6 +465,9 @@ export const GenerationNodeShell = memo(({
       });
 
       const resultPatch = await persistGenerationResult(modelType, result.primary);
+      if (capability) {
+        validateCanvasCapabilityResultPatch(capability, resultPatch);
+      }
       updateNodeData(newNodeId, {
         ...resultPatch,
         isGenerating: false,
@@ -403,7 +491,7 @@ export const GenerationNodeShell = memo(({
       setNodeGenerationProgress(newNodeId, null);
     }
     return { status: 'completed', resultNodeIds: [newNodeId] };
-  }, [addEdge, addNode, apiKeyRequiredKey, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, promptReferences, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
+  }, [addEdge, addNode, apiKeyRequiredKey, capability, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, prepareCapabilityGeneration, promptReferences, promptRequiredKey, providerKeyConfigured, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);
 
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'standard-generation',
@@ -485,6 +573,11 @@ export const GenerationNodeShell = memo(({
             onModelChange={handleModelChange}
             onParamsChange={handleParamsChange}
             incomingImages={effectiveImages}
+            modelPolicy={capability?.modelPolicy}
+            maxMediaCounts={typeof capabilityReferenceImageMax === 'number'
+              ? { image: capabilityReferenceImageMax }
+              : undefined}
+            visibleParamIds={capability?.promptPolicy.visibleParameterKeys}
             videoTrimRange={videoTrimRange}
             onVideoTrimRangeChange={handleVideoTrimRangeChange}
           />

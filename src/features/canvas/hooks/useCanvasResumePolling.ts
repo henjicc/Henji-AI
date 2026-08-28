@@ -4,6 +4,11 @@ import { createLogger } from '@/core/logging';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 
+import {
+  getRegisteredCanvasImageCapabilities,
+  validateCanvasCapabilityResultPatch,
+  type CanvasImageCapabilityDefinition,
+} from '../capabilities';
 import { getResultNodeMediaType } from '../domain/nodeRegistry';
 import { readResumableServerTask } from '../domain/resumableTask';
 import { persistGenerationResult } from '../generation/mediaResultPersist';
@@ -38,6 +43,12 @@ export function useCanvasResumePolling(): void {
       if (!mediaType) {
         continue;
       }
+      const sourceCapabilityId = typeof node.data.sourceCapabilityId === 'string'
+        ? node.data.sourceCapabilityId
+        : null;
+      const sourceCapability = sourceCapabilityId
+        ? getRegisteredCanvasImageCapabilities().find(({ id }) => id === sourceCapabilityId)
+        : undefined;
 
       resumedTaskIdsRef.current.add(task.taskId);
       logger.info('[CanvasResume] 恢复未完成的异步生成', {
@@ -52,6 +63,7 @@ export function useCanvasResumePolling(): void {
         mediaType,
         taskId: task.taskId,
         modelId: task.modelId,
+        sourceCapability,
         updateNodeData,
         setNodeGenerationProgress,
       });
@@ -64,6 +76,7 @@ interface ResumeNodeTaskInput {
   mediaType: 'image' | 'video' | 'audio';
   taskId: string;
   modelId: string;
+  sourceCapability?: CanvasImageCapabilityDefinition;
   updateNodeData: ReturnType<typeof useCanvasStore.getState>['updateNodeData'];
   setNodeGenerationProgress: ReturnType<
     typeof useCanvasGenerationProgressStore.getState
@@ -71,7 +84,15 @@ interface ResumeNodeTaskInput {
 }
 
 async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
-  const { nodeId, mediaType, taskId, modelId, updateNodeData, setNodeGenerationProgress } = input;
+  const {
+    nodeId,
+    mediaType,
+    taskId,
+    modelId,
+    sourceCapability,
+    updateNodeData,
+    setNodeGenerationProgress,
+  } = input;
 
   updateNodeData(nodeId, { isGenerating: true, generationError: null });
 
@@ -84,6 +105,9 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     });
 
     const resultPatch = await persistGenerationResult(mediaType, result.primary);
+    if (sourceCapability) {
+      validateCanvasCapabilityResultPatch(sourceCapability, resultPatch);
+    }
     updateNodeData(nodeId, {
       ...resultPatch,
       isGenerating: false,

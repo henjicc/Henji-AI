@@ -9,6 +9,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.universalUpload]: '上传',
   [CANVAS_NODE_TYPES.upload]: '上传图片',
   [CANVAS_NODE_TYPES.imageEdit]: '图片生成',
+  [CANVAS_NODE_TYPES.panoramaGen]: '720°全景',
   [CANVAS_NODE_TYPES.exportImage]: '结果图片',
   [CANVAS_NODE_TYPES.textProcessing]: '文本处理',
   [CANVAS_NODE_TYPES.textAnnotation]: '文本展示',
