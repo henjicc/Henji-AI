@@ -8,6 +8,7 @@ import { analyzeRatioResolutionParams } from '@/core/params/ratioResolution';
 import ParameterPanel from '@/components/MediaGenerator/components/ParameterPanel';
 import { UiChipButton, UiPanel } from '@/components/ui';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
+import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getI18nText } from '@/core/types/I18nText';
 import { UI_TRIGGER_PANEL_CLASS } from '@/components/ui/styleTokens';
 import { getProviderDisplayName } from '@/utils/modelHelpers';
@@ -25,6 +26,8 @@ interface NodeModelParamsControlsProps {
   incomingImages?: string[];
   /** 限定可选模型必须同时具备的标签（如仅展示支持图片编辑的模型） */
   requiredTags?: ModelTag[];
+  /** 能力级模型家族、供应商组合与语义参数约束 */
+  modelPolicy?: CanvasImageCapabilityModelPolicy;
   chipClassName?: string;
   modelChipClassName?: string;
   paramsChipClassName?: string;
@@ -94,6 +97,7 @@ export const NodeModelParamsControls = memo(({
   onParamsChange,
   incomingImages = [],
   requiredTags = [],
+  modelPolicy,
   chipClassName = '',
   modelChipClassName = 'max-w-[260px] justify-start',
   paramsChipClassName = 'max-w-[120px] justify-start',
@@ -128,7 +132,8 @@ export const NodeModelParamsControls = memo(({
     selectedModelOption,
     selectedModel,
     selectedModelName,
-  } = useModelPickerList({ mediaType, modelId, requiredTags });
+    hasCompatibleModels,
+  } = useModelPickerList({ mediaType, modelId, requiredTags, modelPolicy });
 
   const desiredModelPanelWidth = (
     modelPanelContentWidth || MODEL_PANEL_FALLBACK_CONTENT_WIDTH
@@ -344,6 +349,11 @@ export const NodeModelParamsControls = memo(({
               onPreferredWidthChange={setModelPanelContentWidth}
               filteredModels={filteredModels}
               selectedModel={selectedModelOption}
+              emptyMessage={!hasCompatibleModels && modelPolicy
+                ? t('modelParams.noCompatibleModels', {
+                  defaultValue: '当前能力没有兼容的模型，请检查供应商或模型配置',
+                })
+                : undefined}
               revealSelectedModel={openPanel === 'model'}
               onModelChange={(nextModelId) => {
                 onModelChange(nextModelId);

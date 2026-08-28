@@ -6,6 +6,7 @@ import { registry } from '@/core/ModelRegistry';
 import { getI18nText } from '@/core/types/I18nText';
 import type { ModelTag } from '@/core/types';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
+import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getSocketColor, modelPortId } from '@/features/canvas/domain/socketTypes';
 import { NodeModelParamsControls } from './NodeModelParamsControls';
 import {
@@ -30,6 +31,8 @@ interface ModelInputRowProps {
   incomingImages?: string[];
   /** 限定可选模型必须同时具备的标签（如仅展示支持图片编辑的模型） */
   requiredTags?: ModelTag[];
+  /** 可选的能力级模型约束；省略时保持历史模型列表行为 */
+  modelPolicy?: CanvasImageCapabilityModelPolicy;
 }
 
 /**
@@ -46,6 +49,7 @@ export function ModelInputRow({
   onParamsChange,
   incomingImages,
   requiredTags,
+  modelPolicy,
 }: ModelInputRowProps) {
   const { t, i18n } = useTranslation();
   const socketColor = getSocketColor('MODEL');
@@ -85,6 +89,7 @@ export function ModelInputRow({
             onParamsChange={onParamsChange}
             incomingImages={incomingImages}
             requiredTags={requiredTags}
+            modelPolicy={modelPolicy}
             chipClassName={NODE_CONTROL_CHIP_CLASS}
             modelChipClassName={NODE_CONTROL_MODEL_CHIP_CLASS}
             showParamsChip={false}

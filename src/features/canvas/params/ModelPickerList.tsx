@@ -26,6 +26,8 @@ interface ModelPickerListProps {
   revealSelectedModel?: boolean;
   /** floating：悬浮面板，列表使用稳定视口高度；inline：节点内嵌正文，列表随可用空间伸展 */
   variant?: 'floating' | 'inline';
+  /** 能力约束筛掉全部候选时展示的稳定原因；搜索无结果仍使用通用文案。 */
+  emptyMessage?: string;
 }
 
 const MODEL_LIST_SCROLLBAR_CHROME = 11;
@@ -72,6 +74,7 @@ export function ModelPickerList({
   onPreferredWidthChange,
   revealSelectedModel = false,
   variant = 'floating',
+  emptyMessage,
 }: ModelPickerListProps) {
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
@@ -451,7 +454,7 @@ export function ModelPickerList({
         })}
         {filteredModels.length === 0 && (
           <div className="px-3 py-8 text-center text-xs text-text-muted">
-            {t('modelParams.noModels', { defaultValue: '没有匹配的模型' })}
+            {emptyMessage ?? t('modelParams.noModels', { defaultValue: '没有匹配的模型' })}
           </div>
         )}
       </div>

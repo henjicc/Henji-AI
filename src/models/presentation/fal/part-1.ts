@@ -67,7 +67,7 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
         optionLabels: Object.fromEntries((
           [
         { value: 'smart', label: sharedOptionText('smart') },
-        ...(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'] as const)
+        ...(['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9', '2:1'] as const)
           .map((value) => ({ value, label: value }))
       ]
         ).map((rawOption) => {
@@ -83,6 +83,7 @@ export const falPresentationPart1: Record<string, ModelPresentation> = {
         optionLabels: {
           provider: { label: { zh: '供应商预设', en: 'Provider Preset' } },
           '1MP': { label: { zh: '约 1MP', en: 'Approx. 1MP' } },
+          '2K': { label: { zh: '2K 自定义尺寸', en: '2K Custom Size' } },
         },
       },
       "falGptImage2Resolution": {

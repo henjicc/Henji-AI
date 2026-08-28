@@ -16,6 +16,28 @@ const VERIFIED_MODEL_POLICY = {
   allowedCanonicalFamilies: [],
   requiredTags: [],
   providerCompatibility: 'verified-combinations-only',
+  allowedProviderConfigurations: [],
+  semanticRequirements: {},
+} as const;
+
+const PANORAMA_MODEL_POLICY = {
+  mode: 'verified-families',
+  allowedCanonicalFamilies: ['gpt-image-2'],
+  requiredTags: ['text-to-image', 'image-to-image', 'supports-image-editing'],
+  providerCompatibility: 'verified-combinations-only',
+  allowedProviderConfigurations: [
+    { providerId: 'apimart', allowedChannels: ['ext', 'official'] },
+    { providerId: 'kie' },
+    { providerId: 'grsai', allowedChannels: ['vip'] },
+    { providerId: 'fal' },
+  ],
+  semanticRequirements: {
+    aspectRatio: '2:1',
+    resolution: '2K',
+    referenceImages: { min: 0, max: 1 },
+    outputCount: 1,
+    quality: 'medium',
+  },
 } as const;
 
 const PLANNED_AVAILABILITY = {
@@ -42,16 +64,24 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     node: { kind: 'standard-generation', editor: 'standard' },
     implementation: PLANNED_IMPLEMENTATION,
     availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    modelPolicy: PANORAMA_MODEL_POLICY,
     promptPolicy: {
-      hiddenTemplateVersion: 'panorama-v1-draft',
+      hiddenTemplateVersion: 'panorama-equirectangular-text-v1',
+      hiddenTemplateVersions: {
+        text: 'panorama-equirectangular-text-v1',
+        reference: 'panorama-equirectangular-reference-v1',
+      },
       fixedSemanticParams: {
         projection: 'equirectangular',
         aspectRatio: '2:1',
+        resolution: '2K',
+        outputCount: 1,
+        quality: 'medium',
+        maxReferenceImages: 1,
         horizontalCoverageDegrees: 360,
         verticalCoverageDegrees: 180,
       },
-      visibleParameterKeys: ['prompt', 'outputSize'],
+      visibleParameterKeys: ['prompt'],
     },
     outputPolicy: {
       resultKind: 'panorama',
@@ -289,4 +319,3 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     },
   },
 ];
-

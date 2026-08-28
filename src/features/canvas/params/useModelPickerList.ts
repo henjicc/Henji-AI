@@ -7,6 +7,8 @@ import { getI18nText } from '@/core/types/I18nText';
 import type { ModelTag } from '@/core/types';
 import { FILTERABLE_TAGS } from '@/core/types/ModelTags';
 import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModels';
+import { resolveCanvasCapabilityModelCandidates } from '@/features/canvas/capabilities/modelCompatibility';
+import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getProviderDisplayName, resolveModelName } from '@/utils/modelHelpers';
 
 export interface ProviderFilterOption {
@@ -121,17 +123,31 @@ interface UseModelPickerListOptions {
   mediaType: CanvasModelMediaType;
   modelId: string;
   requiredTags?: ModelTag[];
+  modelPolicy?: CanvasImageCapabilityModelPolicy;
 }
 
 /** ModelRegistry 模型到统一选择器展示契约的适配层。 */
-export function useModelPickerList({ mediaType, modelId, requiredTags = [] }: UseModelPickerListOptions) {
+export function useModelPickerList({
+  mediaType,
+  modelId,
+  requiredTags = [],
+  modelPolicy,
+}: UseModelPickerListOptions) {
   const { i18n } = useTranslation();
   const { t: tModels } = useTranslation('models');
-  const models = useMemo(
+  const allMatchingMediaModels = useMemo(
     () => registry
       .getModelsByType(mediaType)
       .filter((model) => requiredTags.every((tag) => model.meta.tags?.includes(tag))),
     [mediaType, requiredTags]
+  );
+  const constraintResult = useMemo(
+    () => resolveCanvasCapabilityModelCandidates(allMatchingMediaModels, modelPolicy),
+    [allMatchingMediaModels, modelPolicy]
+  );
+  const models = useMemo(
+    () => constraintResult.candidates.map((candidate) => candidate.model),
+    [constraintResult.candidates]
   );
   const modelOptions = useMemo<ModelPickerOption[]>(() => models.map((model) => {
     const displayName = resolveModelName(model, i18n.language);
@@ -162,6 +178,8 @@ export function useModelPickerList({ mediaType, modelId, requiredTags = [] }: Us
   return {
     ...picker,
     models,
+    rejectedModels: constraintResult.rejected,
+    hasCompatibleModels: models.length > 0,
     selectedModel,
     selectedModelName,
   };

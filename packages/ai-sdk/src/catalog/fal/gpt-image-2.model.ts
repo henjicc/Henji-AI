@@ -1,6 +1,18 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
 import { FAL_COMMON_IMAGE_RATIOS, falOneMegapixelSize } from './imageSizing';
+const FAL_GPT_IMAGE_2_RATIOS = [...FAL_COMMON_IMAGE_RATIOS, '2:1'] as const;
+
+function falGptImage2TwoKSize(ratioText: string): JsonObject {
+    if (ratioText === '2:1') return { width: 2688, height: 1344 };
+    const pair = ratioText.split(':').map(Number);
+    const ratio = pair[0] > 0 && pair[1] > 0 ? pair[0] / pair[1] : 1;
+    const targetArea = 2688 * 1344;
+    return {
+        width: Math.ceil(Math.sqrt(targetArea * ratio) / 16) * 16,
+        height: Math.ceil(Math.sqrt(targetArea / ratio) / 16) * 16,
+    };
+}
 export const falGptImage2Model = defineModel({
     meta: {
         id: 'fal-ai-gpt-image-2', canonicalModelId: 'gpt-image-2', seriesId: 'gpt-image', seriesRank: 2,
@@ -15,13 +27,13 @@ export const falGptImage2Model = defineModel({
             default: 'smart',
             options: [
                 { value: 'smart' },
-                ...FAL_COMMON_IMAGE_RATIOS.map((value) => ({ value }))
+                ...FAL_GPT_IMAGE_2_RATIOS.map((value) => ({ value }))
             ]
         },
         {
             id: 'falGptImage2ImageSize', type: 'dropdown', order: 2,
             default: 'provider',
-            options: [{ value: 'provider' }, { value: '1MP' }]
+            options: [{ value: 'provider' }, { value: '1MP' }, { value: '2K' }]
         },
         {
             id: 'falGptImage2Resolution', type: 'dropdown', order: 3,
@@ -69,7 +81,7 @@ export const falGptImage2Model = defineModel({
             const rawRatio = String(params.falGptImage2AspectRatio || 'smart');
             const hint = typeof params.__firstImageRatio === 'number' && Number.isFinite(params.__firstImageRatio) && params.__firstImageRatio > 0
                 ? params.__firstImageRatio : 1;
-            const candidates: Array<[string, number]> = FAL_COMMON_IMAGE_RATIOS.map((value) => {
+            const candidates: Array<[string, number]> = FAL_GPT_IMAGE_2_RATIOS.map((value) => {
                 const pair = value.split(':').map(Number);
                 return [value, pair[0] / pair[1]];
             });
@@ -93,9 +105,11 @@ export const falGptImage2Model = defineModel({
             const providerSize = sizeMap[ratio];
             const body: JsonObject = {
                 prompt: typeof params.prompt === 'string' ? params.prompt.slice(0, 32000) : '',
-                image_size: params.falGptImage2ImageSize === '1MP' || !providerSize
-                    ? falOneMegapixelSize(ratio)
-                    : (images.length > 0 && rawRatio === 'smart' ? 'auto' : providerSize),
+                image_size: params.falGptImage2ImageSize === '2K'
+                    ? falGptImage2TwoKSize(ratio)
+                    : (params.falGptImage2ImageSize === '1MP' || !providerSize
+                        ? falOneMegapixelSize(ratio)
+                        : (images.length > 0 && rawRatio === 'smart' ? 'auto' : providerSize)),
                 quality,
                 num_images: Math.min(4, Math.max(1, Math.round(Number(params.falGptImage2NumImages || 1))))
             };

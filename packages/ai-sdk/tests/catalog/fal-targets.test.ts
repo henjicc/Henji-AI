@@ -103,6 +103,25 @@ describe('packages/ai-sdk/docs/model-adaptation Fal 目标模型', () => {
     })
   })
 
+  it('GPT Image 2 只在自身 schema 开放 2:1，并把全景 2K 映射为合法自定义尺寸', () => {
+    const ratio = falGptImage2Model.params.find((param) => param.id === 'falGptImage2AspectRatio')
+    const imageSize = falGptImage2Model.params.find((param) => param.id === 'falGptImage2ImageSize')
+    expect(ratio && 'options' in ratio ? ratio.options.map((option) => option.value) : []).toContain('2:1')
+    expect(imageSize && 'options' in imageSize ? imageSize.options.map((option) => option.value) : []).toContain('2K')
+    expect(falGptImage2Model.request?.builder?.({
+      prompt: 'panorama',
+      falGptImage2AspectRatio: '2:1',
+      falGptImage2ImageSize: '2K',
+      falGptImage2Resolution: 'medium',
+      falGptImage2NumImages: 1,
+    })).toEqual({
+      prompt: 'panorama',
+      image_size: { width: 2688, height: 1344 },
+      quality: 'medium',
+      num_images: 1,
+    })
+  })
+
   it('Kling 三个型号按档位与媒体切换 Fal 官方端点', async () => {
     const standard = falKling30Model.endpoints as { selector: (params: JsonObject) => Promise<string> }
     const turbo = falKling30TurboModel.endpoints as { selector: (params: JsonObject) => Promise<string> }

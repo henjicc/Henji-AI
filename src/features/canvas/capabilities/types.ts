@@ -111,12 +111,35 @@ export type CanvasImageCapabilityModelPolicy =
       allowedCanonicalFamilies: readonly string[];
       requiredTags: readonly ModelTag[];
       providerCompatibility: 'verified-combinations-only';
+      allowedProviderConfigurations: readonly CanvasImageCapabilityProviderConfiguration[];
+      semanticRequirements: CanvasImageCapabilityModelSemanticRequirements;
     };
+
+/** 已核验的平台组合。渠道值通过 schema 的 `role: channel` 查找，不泄漏参数 ID 到 UI。 */
+export interface CanvasImageCapabilityProviderConfiguration {
+  providerId: string;
+  allowedChannels?: readonly string[];
+}
+
+export interface CanvasImageCapabilityReferenceImageRequirement {
+  min: number;
+  max: number;
+}
+
+/** 产品能力使用的跨供应商语义；执行前会映射成候选模型自己的参数 ID 与合法值。 */
+export interface CanvasImageCapabilityModelSemanticRequirements {
+  aspectRatio?: string;
+  resolution?: string;
+  referenceImages?: CanvasImageCapabilityReferenceImageRequirement;
+  outputCount?: number;
+  quality?: string;
+}
 
 export type CanvasImageCapabilitySemanticValue = string | number | boolean;
 
 export interface CanvasImageCapabilityPromptPolicy {
   hiddenTemplateVersion: string | null;
+  hiddenTemplateVersions?: Readonly<Partial<Record<'text' | 'reference', string>>>;
   fixedSemanticParams: Readonly<Record<string, CanvasImageCapabilitySemanticValue>>;
   visibleParameterKeys: readonly string[];
 }

@@ -152,6 +152,7 @@
     "allProviders": "All",
     "providerScrollbar": "Scroll provider list",
     "noModels": "No matching models",
+    "noCompatibleModels": "No compatible model is available for this capability. Check provider or model settings.",
     "expand": "Expand",
     "collapse": "Collapse"
   },

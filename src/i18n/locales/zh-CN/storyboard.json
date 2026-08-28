@@ -152,6 +152,7 @@
     "allProviders": "全部",
     "providerScrollbar": "滚动供应商列表",
     "noModels": "没有匹配的模型",
+    "noCompatibleModels": "当前能力没有兼容的模型，请检查供应商或模型配置",
     "expand": "展开",
     "collapse": "收起"
   },
