@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { IMAGE_EDITOR_GLOW_TINT_HEX, IMAGE_EDITOR_PRESET_COLORS } from '@/core/theme/colorTokens';
 import {
   IMAGE_EDIT_OPERATION_IDS,
   InvalidImageEditOperationParamsError,
@@ -21,8 +22,36 @@ describe('VGPU 辉光操作契约', () => {
     for (const recipe of [natural, dreamy, neon]) {
       expect(recipe.levelWeights.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 12);
       expect(recipe.threshold).toBeGreaterThan(0);
-      expect(recipe.sigma).toBeGreaterThanOrEqual(1.15);
+      expect(recipe.sigma).toBeGreaterThanOrEqual(0.85);
+      expect(recipe.tintLinear).toHaveLength(3);
     }
+  });
+
+  it('把发光半径、强度、着色与色差编译成彼此独立的光学量', () => {
+    const defaults = createDefaultVgpuGlowOperationParams();
+    const compact = compileVgpuGlowRecipe({
+      ...defaults,
+      radius: 0.1,
+      intensity: 0.25,
+      tintColor: IMAGE_EDITOR_PRESET_COLORS[1],
+      chromaticAberration: 0,
+    });
+    const wide = compileVgpuGlowRecipe({
+      ...defaults,
+      radius: 0.9,
+      intensity: 0.25,
+      tintColor: IMAGE_EDITOR_PRESET_COLORS[1],
+      chromaticAberration: 1,
+    });
+
+    expect(wide.sigma).toBeGreaterThan(compact.sigma);
+    expect(wide.levelWeights[2]).toBeGreaterThan(compact.levelWeights[2]);
+    expect(wide.intensity).toBe(compact.intensity);
+    expect(wide.chromaticOffsetPx).toBeGreaterThan(10);
+    expect(compact.chromaticOffsetPx).toBe(0);
+    expect(compact.tintLinear[0]).toBeCloseTo(1, 6);
+    expect(compact.tintLinear[1]).toBeGreaterThan(0.1);
+    expect(compact.tintLinear[2]).toBe(0);
   });
 
   it('拒绝越界参数，并由内置注册表按 effect 阶段校验', () => {
@@ -47,5 +76,25 @@ describe('VGPU 辉光操作契约', () => {
     });
     expect(decoded).toMatchObject({ sourceFormat: 'v2', issues: [] });
     expect(decoded.document.operations[0]?.params).toEqual(params);
+  });
+
+  it('把旧版辉光参数迁移为半径、着色与色差参数', () => {
+    const migrated = parseVgpuGlowOperationParams({
+      schemaVersion: 1,
+      look: 'dreamy',
+      intensity: 0.7,
+      spread: 0.64,
+      sourceThreshold: 0.3,
+      whiteHeat: 0.6,
+    });
+
+    expect(migrated).toMatchObject({
+      schemaVersion: 2,
+      look: 'dreamy',
+      intensity: 0.7,
+      radius: 0.64,
+      chromaticAberration: 0.08,
+      tintColor: IMAGE_EDITOR_GLOW_TINT_HEX.dreamy,
+    });
   });
 });

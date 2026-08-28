@@ -11,7 +11,9 @@ import {
   UI_TEXT_META_CLASS,
   UI_TEXT_SECTION_CLASS,
   UiChipButton,
+  UiColorInput,
   UiError,
+  UiFormRow,
   UiGroup,
   UiOptionButton,
   UiRangeInput,
@@ -28,7 +30,7 @@ const LOOK_OPTIONS: readonly { value: VgpuGlowLook; label: string; detail: strin
 interface RangeFieldProps {
   label: string;
   value: number;
-  hint: string;
+  info: string;
   onChange: (value: number) => void;
   onBegin: () => void;
   onCommit: () => void;
@@ -38,7 +40,7 @@ interface RangeFieldProps {
 function GlowRangeField({
   label,
   value,
-  hint,
+  info,
   onChange,
   onBegin,
   onCommit,
@@ -46,26 +48,26 @@ function GlowRangeField({
 }: RangeFieldProps): JSX.Element {
   const handlePointerUp = (_event: PointerEvent<HTMLInputElement>): void => onCommit();
   return (
-    <label className="block space-y-1.5">
-      <span className={`flex items-center justify-between gap-3 ${UI_TEXT_META_CLASS}`}>
-        <span>{label}</span>
-        <span className="shrink-0 text-text-dark">{Math.round(value * 100)}%</span>
-      </span>
-      <UiRangeInput
-        value={value}
-        min={0}
-        max={1}
-        step={0.01}
-        aria-label={label}
-        onFocus={onBegin}
-        onPointerDown={onBegin}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={onCancel}
-        onBlur={onCommit}
-        onChange={(event) => onChange(Number(event.currentTarget.value))}
-      />
-      <span className={UI_TEXT_META_CLASS}>{hint}</span>
-    </label>
+    <UiFormRow label={label} info={info}>
+      <div className="flex items-center gap-2">
+        <UiRangeInput
+          value={value}
+          min={0}
+          max={1}
+          step={0.01}
+          aria-label={label}
+          onFocus={onBegin}
+          onPointerDown={onBegin}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={onCancel}
+          onBlur={onCommit}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
+        <span className={`w-10 shrink-0 text-right text-text-dark ${UI_TEXT_META_CLASS}`}>
+          {Math.round(value * 100)}%
+        </span>
+      </div>
+    </UiFormRow>
   );
 }
 
@@ -76,8 +78,9 @@ export function VgpuGlowInspector(): JSX.Element {
   const update = (patch: (current: VgpuGlowOperationParams) => VgpuGlowOperationParams): void => {
     controller.updateOperation<VgpuGlowOperationParams>(IMAGE_EDIT_OPERATION_IDS.vgpuGlow, patch);
   };
-  const setUnit = (key: 'intensity' | 'spread' | 'sourceThreshold' | 'whiteHeat') =>
+  const setUnit = (key: 'intensity' | 'radius' | 'chromaticAberration' | 'sourceThreshold' | 'whiteHeat') =>
     (value: number): void => update((current) => ({ ...current, [key]: value }));
+  const setTintColor = (tintColor: string): void => update((current) => ({ ...current, tintColor }));
   const rangeHandlers = {
     onBegin: controller.beginTransaction,
     onCommit: controller.commitTransaction,
@@ -123,32 +126,57 @@ export function VgpuGlowInspector(): JSX.Element {
           </div>
         </UiGroup>
 
-        <UiGroup gap="row" divided>
+        <UiGroup gap="row" title="光晕" titleTone="overline" divided>
+          <UiFormRow
+            label="着色"
+            info="使用所选颜色生成辉光，原图本身的颜色不会被替换。"
+            inline
+          >
+            <span className={UI_TEXT_META_CLASS}>{params.tintColor.toUpperCase()}</span>
+            <UiColorInput
+              value={params.tintColor}
+              aria-label="辉光颜色"
+              onFocus={controller.beginTransaction}
+              onPointerDown={controller.beginTransaction}
+              onBlur={controller.commitTransaction}
+              onChange={(event) => setTintColor(event.currentTarget.value)}
+            />
+          </UiFormRow>
           <GlowRangeField
-            label="辉光强度"
+            label="发光半径"
+            value={params.radius}
+            info="控制光线从发光体向外扩散的距离，不改变光源能量。"
+            onChange={setUnit('radius')}
+            {...rangeHandlers}
+          />
+          <GlowRangeField
+            label="发光强度"
             value={params.intensity}
-            hint="控制光晕叠加到原图的能量"
+            info="控制辉光叠加到原图的能量，不改变扩散距离。"
             onChange={setUnit('intensity')}
             {...rangeHandlers}
           />
           <GlowRangeField
-            label="辉光范围"
-            value={params.spread}
-            hint="在近场锐光和远场柔光之间分配"
-            onChange={setUnit('spread')}
+            label="色差"
+            value={params.chromaticAberration}
+            info="沿每个发光轮廓分离红、绿、蓝通道，形成镜头像差般的彩色边缘。"
+            onChange={setUnit('chromaticAberration')}
             {...rangeHandlers}
           />
+        </UiGroup>
+
+        <UiGroup gap="row" title="光源" titleTone="overline" divided>
           <GlowRangeField
             label="亮源门槛"
             value={params.sourceThreshold}
-            hint="越低，画面中越多区域会参与发光"
+            info="数值越低，画面中越多区域会被视为发光体。"
             onChange={setUnit('sourceThreshold')}
             {...rangeHandlers}
           />
           <GlowRangeField
             label="核心白热"
             value={params.whiteHeat}
-            hint="让最亮核心趋近白色，外围保留光源色彩"
+            info="让最亮的光源核心趋近白色，外围仍保留所选辉光颜色。"
             onChange={setUnit('whiteHeat')}
             {...rangeHandlers}
           />

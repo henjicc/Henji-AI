@@ -158,8 +158,16 @@ export class VgpuGlowRenderer {
       bloomFar: t.bloom2,
       linearSampler: this.linearSampler,
       composite: {
-        params: [recipe.intensity, recipe.shoulder, recipe.rolloff, 0],
-        weights: [...recipe.levelWeights, 0],
+        params: [recipe.intensity, recipe.shoulder, recipe.rolloff, recipe.whiteHeat],
+        weights: [...recipe.levelWeights, recipe.edgeGain],
+        tint: [...recipe.tintLinear, recipe.chromaticAberration],
+        optics: [
+          1 / Math.max(t.scene.size[0], 1),
+          1 / Math.max(t.scene.size[1], 1),
+          recipe.chromaticOffsetPx,
+          recipe.coreGain,
+        ],
+        source: [recipe.threshold, recipe.knee, recipe.hdrBoost, 1.35],
       },
     });
   }

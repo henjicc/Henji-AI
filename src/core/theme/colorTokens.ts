@@ -103,6 +103,13 @@ export const IMAGE_EDITOR_PRESET_COLORS = [
   '#000000',
 ] as const;
 
+/** 图片编辑「辉光 Pro」的三种光感预设色；用户仍可在面板中选择任意六位 hex 颜色。 */
+export const IMAGE_EDITOR_GLOW_TINT_HEX = {
+  natural: '#fff1dc',
+  dreamy: '#c7dcff',
+  neon: '#72fff0',
+} as const;
+
 /** 新建空白图片的背景预设；调用侧只负责文案，不自行写颜色字面量。 */
 export const BLANK_IMAGE_BACKGROUND_PRESET_HEX = [
   WHITE_HEX,
