@@ -8,7 +8,7 @@ import {
 describe('surface observation security contract', () => {
   const valid = {
     schemaVersion: SURFACE_OBSERVATION_SCHEMA_VERSION,
-    target: 'settings.api_keys',
+    target: 'settings.providers_models',
     rect: { x: 10, y: 20, width: 800, height: 600 },
     masks: [{ x: 30, y: 40, width: 200, height: 32 }],
     maskPolicyId: 'surface.mask_sensitive_fields',

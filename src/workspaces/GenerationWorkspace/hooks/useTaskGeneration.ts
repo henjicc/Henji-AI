@@ -159,7 +159,7 @@ export function useTaskGeneration({
       title: messages.providerKeyRequiredTitle,
       message: messages.providerKeyRequiredMessage,
       type: 'info',
-      settingsTarget: { tab: 'api', sectionId: 'api-keys' },
+      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
     })
   }, [messages.providerKeyRequiredMessage, messages.providerKeyRequiredTitle])
 

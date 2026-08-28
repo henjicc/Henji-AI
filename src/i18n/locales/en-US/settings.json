@@ -8,16 +8,15 @@
     "general-storage": "Data & Downloads",
     "general-behavior": "Behavior & Concurrency",
     "general-maintenance": "Updates",
-    "api-keys": "Provider Keys",
-    "api-upload": "Upload Strategy",
-    "api-llm": "Language Models",
-    "api-agent-preferences": "Assistant Instructions",
-    "api-agent-skills": "Assistant Skills",
+    "models-providers": "Providers & Models",
+    "models-assistant": "Assistant Models",
+    "models-upload": "Upload Strategy",
+    "assistant-preferences": "Assistant Instructions",
+    "assistant-skills": "Assistant Skills",
     "interface-layout": "Layout Behavior",
     "interface-assets": "Asset Library",
     "interface-canvas": "Canvas",
     "interface-theme": "Theme & Appearance",
-    "models-visibility": "Visibility & Management",
     "models-alias": "Aliases"
   },
   "apiKeys": {
@@ -122,6 +121,36 @@
       }
     }
   },
+  "providerCenter": {
+    "loading": "Loading providers and models…",
+    "searchPlaceholder": "Search providers",
+    "modelCount": "{{count}} models",
+    "enabled": "Enable provider",
+    "apiKey": "API Key",
+    "apiKeyHint": "Generation and language models from the same provider share this key.",
+    "apiKeyPlaceholder": "Enter {{provider}} API Key",
+    "noCredential": "This provider does not currently require a key.",
+    "models": "Models & Capabilities",
+    "modelsHint": "Filter by capability and choose which models are enabled in the app.",
+    "emptyProviders": "No providers yet",
+    "emptyProvidersHint": "Add a provider to manage its key and models together.",
+    "emptyModels": "No models in this category",
+    "emptyModelsHint": "Add a model or choose another capability category.",
+    "categories": { "all": "All", "llm": "Language", "image": "Image", "video": "Video", "audio": "Audio" },
+    "columns": { "model": "Model", "capability": "Capabilities", "visibility": "Enabled" },
+    "capabilities": {
+      "llm": "Language model", "text-input": "Text input", "image-input": "Image input", "video-input": "Video input", "audio-input": "Audio input",
+      "image-generation": "Image generation", "image-edit": "Image editing", "text-to-video": "Text to video", "image-to-video": "Image to video",
+      "reference-to-video": "Reference to video", "video-edit": "Video editing", "video-generation": "Video generation", "audio-generation": "Audio generation"
+    },
+    "guide": {
+      "beforeWebsite": "First visit ", "afterWebsite": " to register or sign in", "beforeApiKey": ", then open ", "onlyApiKey": "Open ", "afterApiKey": " to get your key."
+    },
+    "actions": {
+      "addProvider": "Add provider", "connectionSettings": "Connection settings", "syncModels": "Sync models", "addModel": "Add model",
+      "editModel": "Edit model", "deleteModel": "Delete model"
+    }
+  },
   "llmProvider": {
     "title": "Manage Providers",
     "presetCustom": "Custom (manual)",
@@ -220,6 +249,9 @@
     "api": {
       "label": "API Keys"
     },
+    "assistant": {
+      "label": "Assistant"
+    },
     "interface": {
       "label": "Interface",
       "title": "Interface Settings",
@@ -228,7 +260,7 @@
     "models": {
       "label": "Models",
       "title": "Model Settings",
-      "description": "Manage model visibility and display settings."
+      "description": "Manage providers, keys, and all models in one place."
     }
   },
   "sections": {

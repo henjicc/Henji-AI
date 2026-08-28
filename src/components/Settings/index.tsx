@@ -9,9 +9,9 @@ import {
   UiNavButton,
 } from '@/components/ui'
 import { UI_DIALOG_TRANSITION_MS } from '@/components/ui/motion'
-import { KeyRound, LayoutGrid, Settings2, SlidersHorizontal, X } from 'lucide-react'
+import { Bot, LayoutGrid, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import GeneralTab from './tabs/GeneralTab'
-import ApiKeysTab from './tabs/ApiKeysTab'
+import AssistantTab from './tabs/AssistantTab'
 import InterfaceTab from './tabs/InterfaceTab'
 import ModelsTab from './tabs/ModelsTab'
 import { useSettingsScrollSpy } from './hooks/useSettingsScrollSpy'
@@ -34,9 +34,9 @@ type SettingsTab = SettingsTabId
  */
 const SECTION_MAP: Record<SettingsTab, string[]> = {
   general: ['general-basic', 'general-onboarding', 'general-storage', 'general-behavior', 'general-maintenance'],
-  api: ['api-keys', 'api-upload', 'api-llm', 'api-agent-preferences', 'api-agent-skills'],
+  models: ['models-providers', 'models-assistant', 'models-upload', 'models-alias'],
+  assistant: ['assistant-preferences', 'assistant-skills'],
   interface: ['interface-layout', 'interface-assets', 'interface-canvas', 'interface-theme'],
-  models: ['models-visibility', 'models-alias']
 }
 
 /** 切换大类后，异步加载的分区（密钥状态、LLM 配置）会改变上方高度，需要补一次定位 */
@@ -71,9 +71,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, target }) => {
 
   const tabs = [
     { id: 'general' as const, label: t('tabs.general.label'), icon: Settings2, component: GeneralTab },
-    { id: 'api' as const, label: t('tabs.api.label'), icon: KeyRound, component: ApiKeysTab },
+    { id: 'models' as const, label: t('tabs.models.label'), icon: SlidersHorizontal, component: ModelsTab },
+    { id: 'assistant' as const, label: t('tabs.assistant.label'), icon: Bot, component: AssistantTab },
     { id: 'interface' as const, label: t('tabs.interface.label'), icon: LayoutGrid, component: InterfaceTab },
-    { id: 'models' as const, label: t('tabs.models.label'), icon: SlidersHorizontal, component: ModelsTab }
   ]
 
   const ActiveTabComponent = tabs.find(tab => tab.id === activeTab)?.component

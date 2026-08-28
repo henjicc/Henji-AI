@@ -391,7 +391,7 @@ export const PromptOptimizeButton: React.FC<PromptOptimizeButtonProps> = ({
     const target = guidance
     setGuidance(null)
     if (target === 'missing-provider-key') {
-      openSettingsPanel({ tab: 'api', sectionId: 'api-llm' })
+      openSettingsPanel({ tab: 'models', sectionId: 'models-providers' })
       return
     }
     openEditorPanel(openPanelRef.current)

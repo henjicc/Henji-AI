@@ -1,8 +1,12 @@
 import React from 'react'
+import { UiLoading } from '@/components/ui'
 import SettingsSection from '../components/SettingsSection'
 import { SETTINGS_CONTENT_CLASS } from '../settingsLayout'
 import { useI18n } from '@/hooks/useI18n'
-import ModelSettingsPanel from '../../ModelSettingsPanel'
+import { useLlmSettings } from '../hooks/useLlmSettings'
+import ProviderCenterSection from '../sections/ProviderCenterSection'
+import AgentModelProfilesSection from '../sections/AgentModelProfilesSection'
+import UploadSection from '../sections/UploadSection'
 import ModelAliasPanel from '../../ModelAliasPanel'
 
 /**
@@ -10,10 +14,18 @@ import ModelAliasPanel from '../../ModelAliasPanel'
  */
 const ModelsTab: React.FC = () => {
   const { t } = useI18n('settings')
+  const llm = useLlmSettings()
+  if (llm.loading) return <UiLoading message={t('providerCenter.loading')} />
   return (
     <div className={SETTINGS_CONTENT_CLASS}>
-      <SettingsSection id="models-visibility">
-        <ModelSettingsPanel />
+      <SettingsSection id="models-providers">
+        <ProviderCenterSection llm={llm} />
+      </SettingsSection>
+      <SettingsSection id="models-assistant">
+        <AgentModelProfilesSection config={llm.config} saveConfig={llm.saveConfig} />
+      </SettingsSection>
+      <SettingsSection id="models-upload">
+        <UploadSection />
       </SettingsSection>
       <SettingsSection id="models-alias" description={t('modelSettings.alias.sectionDescription')}>
         <ModelAliasPanel />

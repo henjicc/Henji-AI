@@ -4,7 +4,7 @@
  * 而不产生 stores → components 的反向依赖。
  */
 
-export type SettingsTabId = 'general' | 'api' | 'interface' | 'models'
+export type SettingsTabId = 'general' | 'models' | 'assistant' | 'interface'
 
 /**
  * 设置分区的唯一清单。运行时可枚举，测试和能力门禁据此校验每个分区都有对应
@@ -16,17 +16,16 @@ export const SETTINGS_SECTION_IDS = [
   'general-storage',
   'general-behavior',
   'general-maintenance',
-  'api-keys',
-  'api-upload',
-  'api-llm',
-  'api-agent-preferences',
-  'api-agent-skills',
+  'models-providers',
+  'models-assistant',
+  'models-upload',
+  'models-alias',
+  'assistant-preferences',
+  'assistant-skills',
   'interface-layout',
   'interface-assets',
   'interface-canvas',
   'interface-theme',
-  'models-visibility',
-  'models-alias',
 ] as const
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]

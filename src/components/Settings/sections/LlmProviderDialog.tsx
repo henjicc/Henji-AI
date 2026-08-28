@@ -40,6 +40,8 @@ const CUSTOM_PRESET = '__custom__'
 interface LlmProviderDialogProps {
   isOpen: boolean
   providers: LlmProviderConfig[]
+  initialProviderId?: string
+  startInCreateMode?: boolean
   onClose: () => void
   /** `seedModels` 是预设推荐模型；调用方负责跳过已存在的模型。 */
   onSave: (
@@ -57,6 +59,8 @@ function setupPresetId(provider: LlmProviderConfig): string {
 const LlmProviderDialog = ({
   isOpen,
   providers,
+  initialProviderId,
+  startInCreateMode = false,
   onClose,
   onSave,
   onDelete,
@@ -80,7 +84,10 @@ const LlmProviderDialog = ({
 
   useEffect(() => {
     if (!isOpen) return
-    const initial = providers[0] ? { ...providers[0] } : createDefaultProvider()
+    const selected = startInCreateMode
+      ? undefined
+      : providers.find(provider => provider.providerId === initialProviderId) ?? providers[0]
+    const initial = selected ? { ...selected } : createDefaultProvider()
     setDraft(initial)
     setPresetId(setupPresetId(initial))
     setApiKey('')
@@ -174,6 +181,9 @@ const LlmProviderDialog = ({
             : { kind: 'preset', presetId: activePreset.providerId, lifecycle: 'user' })
         : {
             kind: 'custom',
+            ...(draft.setup?.kind === 'custom' && draft.setup.apiKeyManagementUrl?.trim()
+              ? { apiKeyManagementUrl: draft.setup.apiKeyManagementUrl.trim() }
+              : {}),
           },
       displayName,
       adapter: draft.adapter.trim() || 'openai',
@@ -341,24 +351,37 @@ const LlmProviderDialog = ({
             </div>
           </UiFormRow>
 
-          <ApiKeyInput
-            label={t('llmProvider.fields.apiKey')}
-            value={apiKey}
-            visible={apiKeyVisible}
-            onChange={(value) => { setApiKey(value); setError(null) }}
-            onToggleVisibility={() => setApiKeyVisible(value => !value)}
-            placeholder={isExisting
-              ? t('llmProvider.placeholders.existingApiKey')
-              : t('llmProvider.placeholders.apiKey')}
-            showLabel={t('apiKeys.visibility.show')}
-            hideLabel={t('apiKeys.visibility.hide')}
-            disabled={saving}
-            websiteUrl={providerMetadata?.websiteUrl}
-            websiteLabel={t('llmProvider.actions.website')}
-            managementUrl={providerMetadata?.apiKeyUrl}
-            managementLabel={t('llmProvider.actions.manageApiKey')}
-            onOpenUrl={(url) => { void openExternal(url) }}
-          />
+          {isCustom ? (
+            <UiFormRow label={t('llmProvider.fields.keyUrl')}>
+              <UiInput
+                value={draft.setup?.kind === 'custom' ? draft.setup.apiKeyManagementUrl ?? '' : ''}
+                onChange={event => patch({
+                  setup: { kind: 'custom', ...(event.target.value ? { apiKeyManagementUrl: event.target.value } : {}) },
+                })}
+                placeholder={t('llmProvider.placeholders.keyUrl')}
+              />
+              <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.keyUrl')}</div>
+            </UiFormRow>
+          ) : null}
+
+          {isExisting ? null : (
+            <ApiKeyInput
+              label={t('llmProvider.fields.apiKey')}
+              value={apiKey}
+              visible={apiKeyVisible}
+              onChange={(value) => { setApiKey(value); setError(null) }}
+              onToggleVisibility={() => setApiKeyVisible(value => !value)}
+              placeholder={t('llmProvider.placeholders.apiKey')}
+              showLabel={t('apiKeys.visibility.show')}
+              hideLabel={t('apiKeys.visibility.hide')}
+              disabled={saving}
+              websiteUrl={providerMetadata?.websiteUrl}
+              websiteLabel={t('llmProvider.actions.website')}
+              managementUrl={providerMetadata?.apiKeyUrl}
+              managementLabel={t('llmProvider.actions.manageApiKey')}
+              onOpenUrl={(url) => { void openExternal(url) }}
+            />
+          )}
 
           <UiFormRow label={t('llmProvider.fields.enabled')} inline>
             <UiSwitch

@@ -569,9 +569,9 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     {
-      id: 'settings-models',
+      id: 'settings-provider-center',
       surface: '设置',
-      name: '设置-模型显示管理',
+      name: '设置-供应商与模型',
       setup: async (page) => {
         await setupSettings(page)
         await clickNamedButton(page, /^(模型|Models)$/i)
@@ -590,39 +590,26 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     {
-      id: 'settings-api-keys',
+      id: 'settings-assistant-models',
       surface: '设置',
-      name: '设置-平台密钥',
+      name: '设置-助手模型',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(密钥|API Keys)$/i)
-        await clickNamedButton(page, /^(平台密钥|Provider Keys)$/i)
+        await clickNamedButton(page, /^(模型|Models)$/i)
+        await clickNamedButton(page, /^(助手模型|Assistant Models)$/i)
         await settlePage(page, 700)
       },
     },
     {
-      id: 'settings-llm',
+      id: 'settings-provider-manager',
       surface: '设置',
-      name: '设置-大语言模型',
+      name: '设置-添加供应商',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(密钥|API Keys)$/i)
-        await clickNamedButton(page, /^(大语言模型|Language Models)$/i)
-        await settlePage(page, 700)
-      },
-    },
-    {
-      id: 'settings-llm-provider-manager',
-      surface: '设置',
-      name: '设置-管理大语言模型供应商',
-      setup: async (page) => {
-        await setupSettings(page)
-        await clickNamedButton(page, /^(密钥|API Keys)$/i)
-        await clickNamedButton(page, /^(大语言模型|Language Models)$/i)
-        await clickNamedButton(page, /^(管理供应商|Manage Providers)$/i)
+        await clickNamedButton(page, /^(模型|Models)$/i)
+        await clickNamedButton(page, /^(添加供应商|Add provider)$/i)
         const dialog = page.getByRole('dialog', { name: /管理供应商|Manage Providers/i })
         await dialog.waitFor({ state: 'visible' })
-        await dialog.getByRole('button', { name: /新建供应商|New Provider/i }).click()
         await settlePage(page, 700)
       },
     },
@@ -632,7 +619,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       name: '设置-助手技能',
       setup: async (page) => {
         await setupSettings(page)
-        await clickNamedButton(page, /^(密钥|API Keys)$/i)
+        await clickNamedButton(page, /^(助手|Assistant)$/i)
         await clickNamedButton(page, /^(助手技能|Assistant Skills)$/i)
         await settlePage(page, 700)
       },

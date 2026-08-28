@@ -99,7 +99,7 @@ function surfacesForDomain(domain: string): string[] {
     navigation: [...APPLICATION_SURFACE_IDS],
     settings: APPLICATION_SURFACE_IDS.filter((id) => id.startsWith('settings.')),
     generation: ['workspace.generation'],
-    models: ['workspace.generation', 'settings.models'],
+    models: ['workspace.generation', 'settings.providers_models'],
     image_edit: ['tool.image_edit'],
     image_mark: ['tool.image_edit'],
     assets: ['workspace.assets', 'overlay.assets'],

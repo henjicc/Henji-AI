@@ -20,7 +20,7 @@ describe('surface presentation policy', () => {
     expect(surfaces.every((surface) => surface.observationProviderId.length > 0)).toBe(true)
     expect(surfaces.every((surface) => surface.observationPolicy.maxEdge === 1_600)).toBe(true)
     expect(surfaces.every((surface) => surface.observationPolicy.invalidWhen.length > 0)).toBe(true)
-    expect(getApplicationSurface('settings.api_keys')?.observationPolicy).toMatchObject({
+    expect(getApplicationSurface('settings.providers_models')?.observationPolicy).toMatchObject({
       dataClass: 'C2', maskPolicyId: 'surface.mask_sensitive_fields',
     })
     expect(getApplicationSurface('tool.camera_stage')?.observationProviderId).toBe('camera_stage.viewport_observer')
@@ -47,7 +47,7 @@ describe('surface presentation policy', () => {
     const resolved = SETTINGS_SECTION_IDS.map((sectionId) => {
       const tab = sectionId.startsWith('general-')
         ? 'general' as const
-        : sectionId.startsWith('api-') ? 'api' as const
+        : sectionId.startsWith('assistant-') ? 'assistant' as const
           : sectionId.startsWith('interface-') ? 'interface' as const : 'models' as const
       return { sectionId, surfaceId: resolveSettingsSurfaceId(tab, sectionId) }
     })
@@ -59,9 +59,8 @@ describe('surface presentation policy', () => {
     expect(new Set(resolved.map((item) => item.surfaceId)).size).toBe(resolved.length)
     expect(resolveSettingsSurfaceId('general')).toBe('settings.general')
     expect(resolveSettingsSurfaceId('interface')).toBe('settings.interface')
-    // api/models 没有大类级 Surface，未知分区不得退回不相关的 settings.general。
-    expect(resolveSettingsSurfaceId('api')).toBe('settings.api_keys')
-    expect(resolveSettingsSurfaceId('models')).toBe('settings.models')
+    expect(resolveSettingsSurfaceId('models')).toBe('settings.providers_models')
+    expect(resolveSettingsSurfaceId('assistant')).toBe('settings.assistant_preferences')
   })
 
   it('立即展示普通工作区和设置 Surface', () => {

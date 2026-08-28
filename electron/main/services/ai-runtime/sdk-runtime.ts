@@ -51,9 +51,9 @@ export const electronTransport: Transport = {
 // ---------------------------------------------------------------------------
 
 /**
- * `'generation'`/`'llm'` 两个内置作用域分别对应现有的生成模型密钥与 LLM 密钥两套
- * keystore 函数（`getLlmProviderApiKey` 内部还带着 PPIO 密钥兜底复用逻辑，原样保留）。
- * 其余任意 scope 落到 keystore 的通用 `getKey(namespace, providerId)`——这是
+ * `'generation'`/`'llm'` 两个用途都委托统一供应商凭据槽；scope 只描述 SDK 的消费场景，
+ * 不再决定 Electron 里另存一份密钥。其余任意 scope 落到 keystore 的通用
+ * `getKey(namespace, providerId)`——这是
  * `CredentialScope` 可扩展设计（记录 005）在 Electron 侧的落地：新增一个凭据命名空间
  * 不需要改这个文件。
  */

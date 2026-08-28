@@ -114,7 +114,7 @@ export default function OnboardingSection(): JSX.Element {
           </UiButton>
           <UiButton
             variant="muted"
-            onClick={() => openSettingsPanel({ tab: 'api', sectionId: 'api-keys' })}
+            onClick={() => openSettingsPanel({ tab: 'models', sectionId: 'models-providers' })}
           >
             {t('actions.openApiSettings')}
           </UiButton>

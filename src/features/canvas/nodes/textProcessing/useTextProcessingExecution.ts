@@ -93,7 +93,7 @@ export function useTextProcessingExecution({
         title: t('common:error'),
         message: t('node.textProcessing.noModelConfigured'),
         type: 'warning',
-        settingsTarget: { tab: 'api', sectionId: 'api-llm' },
+        settingsTarget: { tab: 'models', sectionId: 'models-providers' },
       })
       throw new Error(t('node.textProcessing.noModelConfigured'))
     }

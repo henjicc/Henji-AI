@@ -35,12 +35,15 @@ import {
   LLM_KEY_NAMESPACE,
   captureEncryptedKeySnapshot,
   getAiProviderKeyStatus,
+  getAiProviderApiKey,
   getLlmProviderApiKey,
   getLlmProviderKeyStatus,
   getKey,
   hasKey,
   restoreEncryptedKeySnapshot,
+  removeAiProviderApiKey,
   setKey,
+  setAiProviderApiKey,
   setLlmProviderApiKey,
 } from './keystore'
 
@@ -97,8 +100,35 @@ describe('keystore', () => {
     expect(getAiProviderKeyStatus().every(item => item.configured === false)).toBe(true)
   })
 
-  it('LLM 凭据状态按 credentialId 返回，并且只有 ppio 能使用生成侧回退', () => {
-    setKey(AI_KEY_NAMESPACE, 'ppio', 'legacy-ppio')
+  it('生成与 LLM 对同一供应商读写同一个凭据槽', () => {
+    setAiProviderApiKey('bailian', 'shared-from-generation')
+    expect(getLlmProviderApiKey('bailian')).toBe('shared-from-generation')
+
+    setLlmProviderApiKey('bailian', 'shared-from-llm')
+    expect(getAiProviderApiKey('bailian')).toBe('shared-from-llm')
+  })
+
+  it('旧生成与 LLM 密钥首次读取时迁入统一供应商槽', () => {
+    writeRawKeystore({
+      'ai:ppio': Buffer.from('enc:legacy-ppio').toString('base64'),
+      'llm:bigmodel-cn': Buffer.from('enc:cn-secret').toString('base64'),
+    })
+
+    expect(getLlmProviderApiKey('ppio')).toBe('legacy-ppio')
+    expect(getAiProviderApiKey('bigmodel-cn')).toBe('cn-secret')
+
+    const stored = JSON.parse(fs.readFileSync(
+      path.join(mocks.appDataDir, KEYSTORE_RELATIVE_PATH),
+      'utf8'
+    )) as { keys: Record<string, string> }
+    expect(stored.keys['provider:ppio']).toBeTruthy()
+    expect(stored.keys['provider:bigmodel-cn']).toBeTruthy()
+    expect(stored.keys['ai:ppio']).toBeUndefined()
+    expect(stored.keys['llm:bigmodel-cn']).toBeUndefined()
+  })
+
+  it('统一凭据状态按 credentialId 返回', () => {
+    setAiProviderApiKey('ppio', 'legacy-ppio')
     setLlmProviderApiKey('bigmodel-cn', 'cn-secret')
 
     expect(getLlmProviderKeyStatus(['ppio', 'bigmodel-cn', 'bigmodel-global'])).toEqual([
@@ -108,6 +138,17 @@ describe('keystore', () => {
     ])
     expect(getLlmProviderApiKey('ppio')).toBe('legacy-ppio')
     expect(getLlmProviderApiKey('bigmodel-global')).toBeNull()
+  })
+
+  it('任一入口清除密钥后不会被旧分区值重新带回', () => {
+    writeRawKeystore({
+      'ai:bailian': Buffer.from('enc:legacy-generation').toString('base64'),
+      'llm:bailian': Buffer.from('enc:legacy-llm').toString('base64'),
+    })
+    expect(getLlmProviderApiKey('bailian')).toBe('legacy-generation')
+    removeAiProviderApiKey('bailian')
+    expect(getAiProviderApiKey('bailian')).toBeNull()
+    expect(getLlmProviderApiKey('bailian')).toBeNull()
   })
 
   it('事务快照只包含密文并能恢复旧值', () => {

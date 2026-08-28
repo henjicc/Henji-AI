@@ -93,19 +93,19 @@ export const GENERAL_APPLICATION_SETTING_DEFINITIONS: ApplicationSettingDefiniti
   storeSetting({
     id: 'generation.upload_provider', title: '默认上传服务', description: '设置生成任务优先使用的媒体上传服务。',
     aliases: ['上传服务', '上传供应商', 'upload provider'], schema: z.enum(['fal', 'kie']), defaultValue: 'kie',
-    target: { tab: 'api', sectionId: 'api-upload' }, requiresReload: false, requiresRestart: false, sensitive: false,
+    target: { tab: 'models', sectionId: 'models-upload' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().uploadProvider,
   (value) => useSettingsStore.getState().setUploadProvider(value)),
   storeSetting({
     id: 'generation.upload_fallback', title: '上传失败自动切换', description: '首选上传服务不可用时，是否自动尝试兼容服务。',
     aliases: ['上传回退', '自动切换上传', 'fallback'], schema: z.boolean(), defaultValue: true,
-    target: { tab: 'api', sectionId: 'api-upload' }, requiresReload: false, requiresRestart: false, sensitive: false,
+    target: { tab: 'models', sectionId: 'models-upload' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().uploadFallbackEnabled,
   (value) => useSettingsStore.getState().setUploadFallbackEnabled(value)),
   storeSetting({
     id: 'generation.large_upload_strategy', title: '大文件上传策略', description: '控制大文件上传时询问、复制到数据目录或直接引用原文件。',
     aliases: ['大文件', '复制到数据目录', '引用原文件'], schema: z.enum(['ask', 'copy', 'reference']), defaultValue: 'ask',
-    target: { tab: 'api', sectionId: 'api-upload' }, requiresReload: false, requiresRestart: false, sensitive: false,
+    target: { tab: 'models', sectionId: 'models-upload' }, requiresReload: false, requiresRestart: false, sensitive: false,
   }, () => useSettingsStore.getState().largeUploadStrategy,
   (value) => useSettingsStore.getState().setLargeUploadStrategy(value)),
   storeSetting({

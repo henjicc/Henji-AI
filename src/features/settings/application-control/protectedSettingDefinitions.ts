@@ -20,9 +20,9 @@ export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<st
   'security.provider_keys': {
     id: 'security.provider_keys', title: '服务密钥',
     description: '密钥明文一旦进入模型上下文就有泄露风险，助手只能查询各服务是否已配置，'
-      + '密钥值永不返回；输入或修改密钥请用 open_application_surface 把用户带到 api-keys 分区，'
+      + '密钥值永不返回；输入或修改密钥请用 open_application_surface 把用户带到供应商与模型分区，'
       + '由用户自己在密钥输入框里操作。',
-    aliases: ['API Key', '密钥', '供应商密钥'], target: { tab: 'api', sectionId: 'api-keys' }, sensitive: true, writable: false,
+    aliases: ['API Key', '密钥', '供应商密钥'], target: { tab: 'models', sectionId: 'models-providers' }, sensitive: true, writable: false,
   },
   'storage.download_paths': {
     id: 'storage.download_paths', title: '下载目录',
@@ -47,7 +47,7 @@ export const PROTECTED_APPLICATION_SETTING_DEFINITIONS: Record<string, Record<st
   'llm.configuration': {
     id: 'llm.configuration', title: '助手模型配置',
     description: '含密钥的配置字段不会提供给助手；助手可以用 open_application_surface 把用户'
-      + '带到 api-llm 分区，由用户自己完成模型端点与密钥的配置。',
-    aliases: ['大语言模型', '助手模型', 'LLM 配置'], target: { tab: 'api', sectionId: 'api-llm' }, sensitive: true, writable: false,
+      + '带到供应商与模型分区，由用户自己完成模型端点与密钥的配置。',
+    aliases: ['大语言模型', '助手模型', 'LLM 配置'], target: { tab: 'models', sectionId: 'models-providers' }, sensitive: true, writable: false,
   },
 }

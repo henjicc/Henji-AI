@@ -90,7 +90,7 @@ describe('observeApplicationSurface', () => {
 
   it('指定页面时只截该页面，并保留敏感遮罩策略', async () => {
     const surface = document.createElement('div')
-    surface.dataset.applicationSurfaceId = 'settings.api_keys'
+    surface.dataset.applicationSurfaceId = 'settings.providers_models'
     Object.defineProperty(surface, 'getBoundingClientRect', {
       value: () => new DOMRect(20, 40, 800, 600),
     })
@@ -103,17 +103,17 @@ describe('observeApplicationSurface', () => {
     document.body.append(surface)
 
     const result = await observeApplicationSurface(
-      { target: 'settings.api_keys', purpose: '确认密钥配置状态' },
+      { target: 'settings.providers_models', purpose: '确认密钥配置状态' },
       new AbortController().signal
     )
 
     expect(mocks.capture).toHaveBeenCalledWith(expect.objectContaining({
-      target: 'settings.api_keys',
+      target: 'settings.providers_models',
       rect: { x: 20, y: 40, width: 800, height: 600 },
       masks: [{ x: 60, y: 60, width: 240, height: 36 }],
       maskPolicyId: 'surface.mask_sensitive_fields',
     }))
-    expect(result).toMatchObject({ target: 'settings.api_keys', sourceKind: 'surface_region' })
+    expect(result).toMatchObject({ target: 'settings.providers_models', sourceKind: 'surface_region' })
   })
 
   it('滚动到捕获区域之外的敏感元素不产生贴边黑条', async () => {

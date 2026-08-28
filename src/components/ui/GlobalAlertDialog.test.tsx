@@ -22,7 +22,7 @@ describe('GlobalAlertDialog', () => {
       title: '还没有配置密钥',
       message: '你还没有配置密钥，你需要去配置一下。',
       type: 'info',
-      settingsTarget: { tab: 'api', sectionId: 'api-keys' },
+      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
     })
     render(<GlobalAlertDialog onAskAssistant={() => undefined} />)
 
@@ -32,7 +32,7 @@ describe('GlobalAlertDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '去配置' }))
     expect(useUiStore.getState()).toMatchObject({
       isSettingsOpen: true,
-      settingsTarget: { tab: 'api', sectionId: 'api-keys' },
+      settingsTarget: { tab: 'models', sectionId: 'models-providers' },
     })
     expect(useAlertDialogStore.getState().queue).toHaveLength(0)
   })

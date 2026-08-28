@@ -39,7 +39,7 @@ describe('captureApplicationSurface', () => {
   it('只捕获请求区域并在输出前覆盖遮罩', async () => {
     const result = await captureApplicationSurface(sender, {
       schemaVersion: SURFACE_OBSERVATION_SCHEMA_VERSION,
-      target: 'settings.api_keys',
+      target: 'settings.providers_models',
       rect: { x: 20, y: 30, width: 100, height: 80 },
       masks: [{ x: 10, y: 10, width: 20, height: 20 }],
       maskPolicyId: 'surface.mask_sensitive_fields',

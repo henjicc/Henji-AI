@@ -70,7 +70,7 @@ export const GlobalAlertDialog: React.FC<GlobalAlertDialogProps> = ({ onAskAssis
     if (current.settingsTarget) {
       const target = current.settingsTarget
       result.push({
-        label: t(target.sectionId === 'api-keys'
+        label: t(target.sectionId === 'models-providers'
           ? 'alertDialog.goToConfigure'
           : 'alertDialog.goToSettings'),
         variant: 'primary',

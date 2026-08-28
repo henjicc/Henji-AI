@@ -11,9 +11,20 @@ const APP_IDENTIFIER = 'com.henji.ai'
 const DATA_DIR_NAME = 'Henji-AI'
 const KEYSTORE_FILE_NAME = 'provider-keys.enc.json'
 
-export const AI_KEY_NAMESPACE = 'ai'
+/**
+ * 供应商凭据统一空间。
+ *
+ * 生成、LLM、语音识别等能力只描述同一供应商密钥的不同消费方式，不再各存一份。
+ * `AI_KEY_NAMESPACE` / `LLM_KEY_NAMESPACE` 保留为源码兼容别名，实际都指向这里；旧文件里的
+ * `ai:*` / `llm:*` 会在首次读取时无损迁移。
+ */
+export const PROVIDER_KEY_NAMESPACE = 'provider'
+export const AI_KEY_NAMESPACE = PROVIDER_KEY_NAMESPACE
 export const KNOWN_AI_PROVIDER_IDS = ['ppio', 'fal', 'kie', 'apimart', 'bailian', 'volcengine', 'modelscope', 'grsai'] as const
-export const LLM_KEY_NAMESPACE = 'llm'
+export const LLM_KEY_NAMESPACE = PROVIDER_KEY_NAMESPACE
+
+const LEGACY_AI_KEY_NAMESPACE = 'ai'
+const LEGACY_LLM_KEY_NAMESPACE = 'llm'
 
 type KeyNamespace = string
 
@@ -135,6 +146,7 @@ export interface EncryptedKeySnapshot {
 
 /** 只供主进程事务补偿使用；密文不会跨 IPC。 */
 export function captureEncryptedKeySnapshot(namespace: KeyNamespace, providerId: string): EncryptedKeySnapshot {
+  if (namespace === PROVIDER_KEY_NAMESPACE) migrateLegacyProviderCredential(providerId)
   const storeKey = buildKey(namespace, providerId)
   return { storeKey, encrypted: readKeystoreFile().keys[storeKey] ?? null }
 }
@@ -200,22 +212,68 @@ export function hasKey(namespace: KeyNamespace, providerId: string): boolean {
   return readStoredKey(namespace, providerId) !== null
 }
 
+/**
+ * 将旧的生成/LLM 分区密钥提升到统一供应商槽。
+ *
+ * 直接复用原密文，不让明文经过新的持久化步骤；迁移顺序优先旧生成槽，因为此前只有生成侧
+ * 是固定供应商的主配置入口。统一槽一旦存在就永远优先，后续写入不会被旧值覆盖。
+ */
+function migrateLegacyProviderCredential(providerId: string): void {
+  const data = readKeystoreFile()
+  const sharedStoreKey = buildKey(PROVIDER_KEY_NAMESPACE, providerId)
+  const sharedEncrypted = data.keys[sharedStoreKey]
+  if (sharedEncrypted && decryptStoredKey(sharedEncrypted, sharedStoreKey) !== null) return
+
+  const legacyStoreKeys = [
+    buildKey(LEGACY_AI_KEY_NAMESPACE, providerId),
+    buildKey(LEGACY_LLM_KEY_NAMESPACE, providerId),
+  ]
+  const source = legacyStoreKeys.find((storeKey) => {
+    const encrypted = data.keys[storeKey]
+    return encrypted ? decryptStoredKey(encrypted, storeKey) !== null : false
+  })
+  if (!source) return
+
+  data.keys[sharedStoreKey] = data.keys[source]
+  for (const storeKey of legacyStoreKeys) delete data.keys[storeKey]
+  writeKeystoreFile(data)
+}
+
+function getProviderCredential(providerId: string): string | null {
+  ensureEncryptionAvailable()
+  migrateLegacyProviderCredential(providerId)
+  return readStoredKey(PROVIDER_KEY_NAMESPACE, providerId)
+}
+
+function hasProviderCredential(providerId: string): boolean {
+  migrateLegacyProviderCredential(providerId)
+  return readStoredKey(PROVIDER_KEY_NAMESPACE, providerId) !== null
+}
+
+function removeProviderCredential(providerId: string): void {
+  const data = readKeystoreFile()
+  delete data.keys[buildKey(PROVIDER_KEY_NAMESPACE, providerId)]
+  delete data.keys[buildKey(LEGACY_AI_KEY_NAMESPACE, providerId)]
+  delete data.keys[buildKey(LEGACY_LLM_KEY_NAMESPACE, providerId)]
+  writeKeystoreFile(data)
+}
+
 export function setAiProviderApiKey(providerId: string, apiKey: string): void {
   setKey(AI_KEY_NAMESPACE, providerId, apiKey)
 }
 
 export function removeAiProviderApiKey(providerId: string): void {
-  removeKey(AI_KEY_NAMESPACE, providerId)
+  removeProviderCredential(providerId)
 }
 
 export function getAiProviderApiKey(providerId: string): string | null {
-  return getKey(AI_KEY_NAMESPACE, providerId)
+  return getProviderCredential(providerId)
 }
 
 export function getAiProviderKeyStatus(): Array<{ providerId: string; configured: boolean }> {
   return KNOWN_AI_PROVIDER_IDS.map((providerId) => ({
     providerId,
-    configured: hasKey(AI_KEY_NAMESPACE, providerId),
+    configured: hasProviderCredential(providerId),
   }))
 }
 
@@ -224,23 +282,16 @@ export function setLlmProviderApiKey(credentialId: string, apiKey: string): void
 }
 
 export function removeLlmProviderApiKey(credentialId: string): void {
-  removeKey(LLM_KEY_NAMESPACE, credentialId)
+  removeProviderCredential(credentialId)
 }
 
 export function getLlmProviderApiKey(credentialId: string): string | null {
-  const scoped = getKey(LLM_KEY_NAMESPACE, credentialId)
-  if (scoped !== null || credentialId.trim().toLowerCase() !== 'ppio') {
-    return scoped
-  }
-
-  return getAiProviderApiKey('ppio')
+  return getProviderCredential(credentialId)
 }
 
 export function getLlmProviderKeyStatus(credentialIds: string[]): Array<{ credentialId: string; configured: boolean }> {
   return credentialIds.map((credentialId) => ({
     credentialId,
-    configured:
-      hasKey(LLM_KEY_NAMESPACE, credentialId) ||
-      (credentialId.trim().toLowerCase() === 'ppio' && hasKey(AI_KEY_NAMESPACE, 'ppio')),
+    configured: hasProviderCredential(credentialId),
   }))
 }

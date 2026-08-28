@@ -298,7 +298,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         title: t('common:providerKeyRequired.title'),
         message: t('common:providerKeyRequired.message'),
         type: 'info',
-        settingsTarget: { tab: 'api', sectionId: 'api-keys' },
+        settingsTarget: { tab: 'models', sectionId: 'models-providers' },
       })
       return
     }

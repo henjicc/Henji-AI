@@ -59,7 +59,7 @@ function publicResultShape(schema: z.ZodType): { fields: string[]; hasResultRefs
 const surfaceIdsByDomain: Readonly<Record<string, string[]>> = {
   application: [],
   navigation: [],
-  models: ['settings.models', 'workspace.generation'],
+  models: ['settings.providers_models', 'workspace.generation'],
   generation: ['workspace.generation'],
   canvas: ['workspace.canvas'],
   toolbox: ['workspace.tools'],
@@ -488,6 +488,5 @@ export class AgentCapabilityDiscoveryCatalog {
     }
   }
 }
-
 
 
