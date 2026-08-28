@@ -5,7 +5,7 @@
 
 最后核对日期：2026-08-28
 
-当前 SDK 发布版本：`0.2.4`
+当前 SDK 发布版本：`0.2.5`
 
 ## 判定口径
 
@@ -18,14 +18,14 @@
 
 | 仓库 / 开发路径 | 宿主类型 | 当前精确版本 | SDK 入口与构建方式 | 凭据 / transport 责任 | 需同步的变更类型 | 验证命令 | 同步证据与边界 | 最后核对 |
 |---|---|---|---|---|---|---|---|---|
-| `Henji-AI`<br>`/Users/henji/Documents/VibeCode/Henji-AI` | Electron 42 主进程 + React/Vite；SDK 主开发、首发验证宿主 | `0.2.4` workspace 源码链接；`package-lock.json` 指向 `packages/ai-sdk` | 包根、`provider-packs/*`、`tool-packs/*`；根构建先执行 `build:sdk`，再构建 Electron | Electron 主进程注入 HTTP transport、凭据、媒体读取、日志、trace、取消与落盘；渲染层不直接持有密钥 | 公共类型/目录、provider preset、凭据坐标、transport、媒体、包导出、LLM/生成执行协议 | `npm run check:sdk`；相关 Vitest；改主进程后 `npm run electron:build` | SDK/GLM 实现 `0924699f`，发布记录 `377ad925`；作为生产者使用 workspace 源码，不伪装成远端消费锁 | 2026-08-28 |
-| `henji-ai-ps`<br>`/Users/henji/Documents/VibeCode/henji-ai-ps` | Photoshop UXP 插件 + React/Vite IIFE（pnpm） | manifest/lock 均为 `0.2.4`；lock integrity `sha512-k/k7bFj2b0vXc4nDd7VIHJblpp67gD8mivXY9K+Lu5u21BhqSs51vnDfQgG79tQe1qOhboVjrdVDZl1Yak56Gg==` | `generation/core`、单模型/供应商 pack、LLM streaming；Vite 构建与 UXP smoke bundle | UXP 宿主注入受限 `fetch`、provider 凭据、媒体编码读取和脱敏日志；SDK 不读取 Node/文件系统 | 生成 pack/exports、受限环境可移植性、RuntimeContext、凭据 scope、媒体与流式 LLM；不因版本同步自动引入 GLM | `pnpm typecheck:uxp-smoke && pnpm check:uxp-sdk && pnpm smoke:uxp:build && pnpm check:uxp-smoke`；完整 `pnpm check` | `922f704`；正式产品仍仅 39 个图片 generation/erase packs，BigModel 不进入生产或 generation smoke | 2026-08-28 |
-| `say-it`<br>`/Users/henji/Documents/VibeCode/say-it` | Tauri 2 + Rust 管理 QuickJS；WebView 不运行 SDK | manifest/lock 均为 `0.2.4`；lock integrity `sha512-k/k7bFj2b0vXc4nDd7VIHJblpp67gD8mivXY9K+Lu5u21BhqSs51vnDfQgG79tQe1qOhboVjrdVDZl1Yak56Gg==` | 按需打包 capability、Bailian ASR/translation、Groq、LLM modules 为相互隔离 IIFE；Rust 加载 bundle | Rust Host API 注入 HTTP 字节流、WS、media-ref、CredentialStore、日志/trace、Abort/timeout/cancel；QuickJS/插件/WebView 不直取密钥 | capability/LLM 协议、按需 exports、descriptor source/坐标、QuickJS 可移植性、bundle 隔离；不因版本同步自动增加 BigModel bundle | `npm run sdk-runtime:typecheck && npm run sdk-runtime:build`；`npm run test:rust`；完整 `npm run check` | `8fd03b3`；仍只打包百炼 ASR/translation、Groq 与插件 LLM modules，无 BigModel 产品入口 | 2026-08-28 |
+| `Henji-AI`<br>`/Users/henji/Documents/VibeCode/Henji-AI` | Electron 42 主进程 + React/Vite；SDK 主开发、首发验证宿主 | `0.2.5` workspace 源码链接；`package-lock.json` 指向 `packages/ai-sdk` | 包根、`provider-packs/*`、`tool-packs/*`；根构建先执行 `build:sdk`，再构建 Electron | Electron 主进程注入 HTTP transport、凭据、媒体读取、日志、trace、取消与落盘；渲染层不直接持有密钥 | 公共类型/目录、provider preset、凭据坐标、transport、媒体、包导出、LLM/生成执行协议 | `npm run check:sdk`；相关 Vitest；改主进程后 `npm run electron:build` | 供应商设置契约 `b34e62d5`，发布记录 `1140f48d`；作为生产者使用 workspace 源码，不伪装成远端消费锁 | 2026-08-28 |
+| `henji-ai-ps`<br>`/Users/henji/Documents/VibeCode/henji-ai-ps` | Photoshop UXP 插件 + React/Vite IIFE（pnpm） | manifest/lock 均为 `0.2.5`；lock integrity `sha512-6WCgQEWM+EenbBT7njFQEx21jlwrO9KVIdJHHeXula8vImZ3fgcLjnEs+B1W6HaYqv2Cd5DCMk+Ug0wO0eNrLA==` | `generation/core`、单模型/供应商 pack、LLM streaming；Vite 构建与 UXP smoke bundle | UXP 宿主注入受限 `fetch`、provider 凭据、媒体编码读取和脱敏日志；SDK 不读取 Node/文件系统 | 生成 pack/exports、受限环境可移植性、RuntimeContext、凭据 scope、媒体与流式 LLM；不因版本同步自动引入 GLM | `pnpm typecheck:uxp-smoke && pnpm check:uxp-sdk && pnpm smoke:uxp:build && pnpm check:uxp-smoke`；完整 `pnpm check` | `4f61d9a`；正式产品仍仅 39 个图片 generation/erase packs，BigModel、LLM modules 与 provider setup 不进入生产或 generation smoke | 2026-08-28 |
+| `say-it`<br>`/Users/henji/Documents/VibeCode/say-it` | Tauri 2 + Rust 管理 QuickJS；WebView 不运行 SDK | manifest/lock 均为 `0.2.5`；lock integrity `sha512-6WCgQEWM+EenbBT7njFQEx21jlwrO9KVIdJHHeXula8vImZ3fgcLjnEs+B1W6HaYqv2Cd5DCMk+Ug0wO0eNrLA==` | 按需打包 capability、Bailian ASR/translation、Groq、LLM modules 为相互隔离 IIFE；Rust 加载 bundle | Rust Host API 注入 HTTP 字节流、WS、media-ref、CredentialStore、日志/trace、Abort/timeout/cancel；QuickJS/插件/WebView 不直取密钥 | capability/LLM 协议、按需 exports、descriptor source/坐标、QuickJS 可移植性、bundle 隔离；不因版本同步自动增加 BigModel bundle | `npm run sdk-runtime:typecheck && npm run sdk-runtime:build`；`npm run test:rust`；完整 `npm run check` | `77643d0`；仍只打包百炼 ASR/translation、Groq 与插件 LLM modules，无 BigModel、generation 或 provider setup 产品入口 | 2026-08-28 |
 
 ## SDK 仓内消费验证面
 
 这些目录是可独立安装、构建的真实示例，但与 SDK 同属 `Henji-AI` 仓库，不重复算外部仓库。
-它们均精确声明 `0.2.4`，且没有锁文件；发布后应随 SDK 精确升级并验证，避免 README 与公开包长期漂移。
+它们均精确声明 `0.2.5`，且没有锁文件；发布后应随 SDK 精确升级并验证，避免 README 与公开包长期漂移。
 
 | 路径 | 用途 / 入口 | 当前版本 | 宿主责任 | 验证命令 | 同步证据 | 最后核对 |
 |---|---|---|---|---|---|---|
