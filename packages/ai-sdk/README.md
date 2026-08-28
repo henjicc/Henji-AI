@@ -78,6 +78,7 @@ try {
 
 ## 接入文档与示例
 
+- [SDK 消费项目清单](docs/consumers.md)
 - [Electron 主进程适配](docs/接入指南/Electron.md)
 - [Tauri 2 适配](docs/接入指南/Tauri.md)
 - [Photoshop UXP 适配](docs/接入指南/UXP.md)
