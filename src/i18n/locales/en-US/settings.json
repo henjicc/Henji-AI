@@ -153,13 +153,15 @@
   },
   "llmProvider": {
     "title": "Manage Providers",
+    "addTitle": "Add LLM Provider",
+    "addHint": "This area only adds large language model providers. Custom image, video, and audio generation providers are not supported yet.",
     "presetCustom": "Custom (manual)",
     "protocolOptions": {
       "openai-compatible": "OpenAI Chat Completions",
       "openai-responses": "OpenAI Responses"
     },
     "fields": {
-      "preset": "Provider preset",
+      "preset": "Connection type",
       "name": "Provider name",
       "protocol": "API protocol",
       "baseUrl": "API URL",
@@ -175,9 +177,10 @@
       "keyUrl": "Optional, for example: https://example.com/keys"
     },
     "hints": {
+      "preset": "Presets fill in connection details automatically. Providers already added are not shown again.",
       "keyUrl": "Used for the Get/Manage API Key link. No link is shown when empty.",
-      "protocol": "Only for unadapted custom endpoints. Presets let the SDK choose per model automatically.",
-      "automaticProtocol": "The SDK chooses the request protocol for each model automatically."
+      "protocol": "Only for unadapted custom endpoints. Presets choose the appropriate connection automatically for each model.",
+      "automaticProtocol": "The appropriate connection is selected automatically for each model."
     },
     "preview": "Preview: {{value}}",
     "previewEmpty": "Enter an API URL first",
@@ -187,6 +190,7 @@
     },
     "actions": {
       "new": "New provider",
+      "cancel": "Cancel",
       "close": "Close",
       "add": "Add provider",
       "save": "Save provider",

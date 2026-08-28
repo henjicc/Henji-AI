@@ -50,10 +50,12 @@ function customProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProvider
 
 function renderDialog({
   providers = [],
+  startInCreateMode = providers.length === 0,
   onSave = vi.fn(async () => undefined),
   onDelete = vi.fn(async () => undefined),
 }: {
   providers?: LlmProviderConfig[]
+  startInCreateMode?: boolean
   onSave?: SaveHandler
   onDelete?: DeleteHandler
 } = {}) {
@@ -61,6 +63,7 @@ function renderDialog({
     <LlmProviderDialog
       isOpen
       providers={providers}
+      startInCreateMode={startInCreateMode}
       onClose={vi.fn()}
       onSave={onSave}
       onDelete={onDelete}
@@ -110,15 +113,16 @@ describe('LlmProviderDialog', () => {
       <LlmProviderDialog
         isOpen
         providers={[]}
+        startInCreateMode
         onClose={vi.fn()}
         onSave={vi.fn().mockResolvedValue(undefined)}
         onDelete={vi.fn().mockResolvedValue(undefined)}
       />
     )
-    fireEvent.click(screen.getByRole('button', { name: '供应商预设' }))
+    fireEvent.click(screen.getByRole('button', { name: '接入方式' }))
     fireEvent.click(screen.getByRole('option', { name: '派欧云' }))
     expect(screen.queryByText('接口协议')).toBeNull()
-    expect(screen.getByText('请求协议由 SDK 按具体模型自动选择，无需手动设置。')).toBeTruthy()
+    expect(screen.getByText('请求方式会按具体模型自动选择，无需手动设置。')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '访问官网' }))
     expect(openExternal).toHaveBeenCalledWith(preset.websiteUrl)
     fireEvent.click(screen.getByRole('button', { name: '获取/管理 API Key' }))
@@ -142,6 +146,21 @@ describe('LlmProviderDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '接口协议' }))
     fireEvent.click(screen.getByRole('option', { name: 'OpenAI Responses' }))
     expect(screen.getByText('预览：https://api.example.com/v1/responses')).toBeTruthy()
+  })
+
+  it('添加模式只显示添加表单并过滤已经存在的预设供应商', () => {
+    const ppio = createProviderFromPreset(findLlmProviderPreset('ppio')!, { lifecycle: 'builtin' })
+    renderDialog({ providers: [ppio], startInCreateMode: true })
+
+    expect(screen.getByRole('heading', { name: '添加大语言模型供应商' })).toBeTruthy()
+    expect(screen.getByText('此处仅用于添加大语言模型供应商，图片、视频、音频生成的供应商暂无法自定义添加。')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '新建供应商' })).toBeNull()
+    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.getByRole('button', { name: '取消' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '接入方式' }))
+    expect(screen.queryByRole('option', { name: '派欧云' })).toBeNull()
+    expect(screen.getByRole('option', { name: 'DeepSeek' })).toBeTruthy()
   })
 
   it('移除重复说明并把 builtin 重置/custom 删除放在独立分隔行', () => {

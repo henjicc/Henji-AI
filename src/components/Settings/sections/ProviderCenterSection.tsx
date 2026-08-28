@@ -219,10 +219,6 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
     <div className="grid h-[calc(min(88vh,64rem)-8.5rem)] min-h-0 grid-cols-[220px_minmax(0,1fr)] gap-5 overflow-hidden">
       <UiPanel variant="inset" className="flex min-h-0 flex-col overflow-hidden p-2">
         <div className="flex min-h-0 flex-1 flex-col gap-2">
-          <UiButton type="button" variant="primary" className="w-full" onClick={() => { setProviderDialogCreate(true); setProviderDialogOpen(true) }}>
-            <Plus size={15} className="mr-1.5" />
-            {t('providerCenter.actions.addProvider')}
-          </UiButton>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-soft" />
             <UiInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} className="pl-9" placeholder={t('providerCenter.searchPlaceholder')} />
@@ -233,6 +229,12 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
                 <span className="block truncate text-sm font-medium">{group.displayName}</span>
               </UiOptionButton>
             ))}
+          </div>
+          <div className="border-t border-border-dark pt-2">
+            <UiButton type="button" variant="primary" className="w-full" onClick={() => { setProviderDialogCreate(true); setProviderDialogOpen(true) }}>
+              <Plus size={15} className="mr-1.5" />
+              {t('providerCenter.actions.addProvider')}
+            </UiButton>
           </div>
         </div>
       </UiPanel>

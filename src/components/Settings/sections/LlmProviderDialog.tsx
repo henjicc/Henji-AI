@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Info, Plus, RefreshCw, Trash2 } from 'lucide-react'
 
 import {
   Dropdown,
@@ -71,9 +71,15 @@ const LlmProviderDialog = ({
   const [apiKeyVisible, setApiKeyVisible] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const availablePresets = startInCreateMode
+    ? LLM_PROVIDER_PRESETS.filter(preset => !providers.some(provider => (
+        provider.providerId === preset.providerId
+        || (provider.setup?.kind === 'preset' && provider.setup.presetId === preset.providerId)
+      )))
+    : LLM_PROVIDER_PRESETS
   const presetOptions = [
     { value: CUSTOM_PRESET, label: t('llmProvider.presetCustom') },
-    ...LLM_PROVIDER_PRESETS.map(preset => ({ value: preset.providerId, label: preset.displayName })),
+    ...availablePresets.map(preset => ({ value: preset.providerId, label: preset.displayName })),
   ]
   const protocolOptions = providerProtocolOptions.map(type => ({
     ...type,
@@ -237,15 +243,152 @@ const LlmProviderDialog = ({
     }
   }
 
+  const providerForm = (
+    <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+      <UiFormRow label={t('llmProvider.fields.preset')}>
+        <Dropdown<string>
+          value={presetId}
+          display={presetOptions.find(option => option.value === presetId)?.label ?? presetOptions[0].label}
+          options={presetOptions}
+          ariaLabel={t('llmProvider.fields.preset')}
+          className="w-full"
+          buttonClassName="w-full"
+          onSelect={selectPreset}
+        />
+        {startInCreateMode ? (
+          <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.preset')}</div>
+        ) : null}
+      </UiFormRow>
+
+      <UiFormRow label={t('llmProvider.fields.name')}>
+        {isCustom ? (
+          <UiInput
+            value={draft.displayName}
+            onChange={event => patch({ displayName: event.target.value })}
+            placeholder={t('llmProvider.placeholders.name')}
+          />
+        ) : (
+          <div className={UI_TEXT_BODY_CLASS}>{draft.displayName}</div>
+        )}
+      </UiFormRow>
+
+      {isCustom ? (
+        <UiFormRow label={t('llmProvider.fields.protocol')}>
+          <Dropdown
+            value={draft.apiProtocol ?? 'openai-compatible'}
+            display={protocolOptions.find(type => type.value === draft.apiProtocol)?.label ?? protocolOptions[0].label}
+            options={protocolOptions}
+            ariaLabel={t('llmProvider.fields.protocol')}
+            className="w-full"
+            buttonClassName="w-full"
+            onSelect={apiProtocol => patch({ apiProtocol })}
+          />
+          <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.protocol')}</div>
+        </UiFormRow>
+      ) : null}
+
+      <UiFormRow label={t('llmProvider.fields.baseUrl')}>
+        {isCustom ? (
+          <UiInput
+            value={draft.baseUrl ?? ''}
+            onChange={event => patch({ baseUrl: event.target.value })}
+            placeholder={t('llmProvider.placeholders.baseUrl')}
+          />
+        ) : (
+          <div className={`break-all ${UI_TEXT_BODY_CLASS}`}>{draft.baseUrl || '—'}</div>
+        )}
+        <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
+          {activePreset?.baseUrlHint && !draft.baseUrl?.trim()
+            ? activePreset.baseUrlHint
+            : activePreset
+              ? t('llmProvider.hints.automaticProtocol')
+              : t('llmProvider.preview', { value: resolveApiPreview(draft) || t('llmProvider.previewEmpty') })}
+        </div>
+      </UiFormRow>
+
+      {isExisting ? null : (
+        <ApiKeyInput
+          label={t('llmProvider.fields.apiKey')}
+          value={apiKey}
+          visible={apiKeyVisible}
+          onChange={(value) => { setApiKey(value); setError(null) }}
+          onToggleVisibility={() => setApiKeyVisible(value => !value)}
+          placeholder={t('llmProvider.placeholders.apiKey')}
+          showLabel={t('apiKeys.visibility.show')}
+          hideLabel={t('apiKeys.visibility.hide')}
+          disabled={saving}
+          websiteUrl={providerMetadata?.websiteUrl}
+          websiteLabel={t('llmProvider.actions.website')}
+          managementUrl={providerMetadata?.apiKeyUrl}
+          managementLabel={t('llmProvider.actions.manageApiKey')}
+          onOpenUrl={(url) => { void openExternal(url) }}
+        />
+      )}
+
+      {isCustom ? (
+        <UiFormRow label={t('llmProvider.fields.keyUrl')}>
+          <UiInput
+            value={draft.setup?.kind === 'custom' ? draft.setup.apiKeyManagementUrl ?? '' : ''}
+            onChange={event => patch({
+              setup: { kind: 'custom', ...(event.target.value ? { apiKeyManagementUrl: event.target.value } : {}) },
+            })}
+            placeholder={t('llmProvider.placeholders.keyUrl')}
+          />
+          <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.keyUrl')}</div>
+        </UiFormRow>
+      ) : null}
+
+      {startInCreateMode ? null : (
+        <UiFormRow label={t('llmProvider.fields.enabled')} inline>
+          <UiSwitch
+            checked={draft.enabled !== false}
+            onCheckedChange={checked => patch({ enabled: checked })}
+          />
+        </UiFormRow>
+      )}
+
+      {error ? <div role="alert" className="text-sm text-red-400">{error}</div> : null}
+
+      {isExisting ? (
+        <UiGroup divided>
+          {isBuiltIn ? (
+            <UiButton
+              type="button"
+              variant="plain"
+              disabled={saving}
+              onClick={() => void handleReset()}
+            >
+              <RefreshCw size={14} className="mr-1.5" />
+              {t('llmProvider.actions.reset')}
+            </UiButton>
+          ) : (
+            <UiButton
+              type="button"
+              variant="plain"
+              disabled={saving}
+              className="text-text-muted hover:text-red-400"
+              onClick={() => void handleDelete()}
+            >
+              <Trash2 size={14} className="mr-1.5" />
+              {t('llmProvider.actions.delete')}
+            </UiButton>
+          )}
+        </UiGroup>
+      ) : null}
+    </div>
+  )
+
   return (
     <UiModal
       isOpen={isOpen}
-      title={t('llmProvider.title')}
+      title={t(startInCreateMode ? 'llmProvider.addTitle' : 'llmProvider.title')}
       onClose={handleClose}
       size="editor"
       footer={(
         <>
-          <UiButton type="button" variant="muted" onClick={handleClose}>{t('llmProvider.actions.close')}</UiButton>
+          <UiButton type="button" variant="muted" onClick={handleClose}>
+            {t(startInCreateMode ? 'llmProvider.actions.cancel' : 'llmProvider.actions.close')}
+          </UiButton>
           <UiButton
             type="button"
             variant="primary"
@@ -254,164 +397,49 @@ const LlmProviderDialog = ({
           >
             {saving
               ? t('llmProvider.actions.saving')
-              : isExisting ? t('llmProvider.actions.save') : t('llmProvider.actions.add')}
+              : startInCreateMode
+                ? t('llmProvider.actions.add')
+                : isExisting ? t('llmProvider.actions.save') : t('llmProvider.actions.add')}
           </UiButton>
         </>
       )}
     >
-      <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] gap-4 overflow-hidden">
-        <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
-          {providers.map(provider => (
-            <UiOptionButton
-              key={provider.providerId}
-              type="button"
-              active={draft.providerId === provider.providerId}
-              variant="menu"
-              className="flex w-full items-center justify-between gap-2 px-3 py-2.5"
-              onClick={() => selectExisting(provider)}
-            >
-              <span className="min-w-0 text-left">
-                <span className="block truncate text-sm">{provider.displayName}</span>
-              </span>
-              <span className="text-xs text-text-soft">
-                {provider.enabled ? t('llmProvider.status.on') : t('llmProvider.status.off')}
-              </span>
-            </UiOptionButton>
-          ))}
-          <UiButton type="button" variant="muted" className="w-full" onClick={startNew}>
-            <Plus size={14} className="mr-1.5" />
-            {t('llmProvider.actions.new')}
-          </UiButton>
+      {startInCreateMode ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <div className={`flex items-start gap-2 ${UI_TEXT_META_CLASS}`}>
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{t('llmProvider.addHint')}</span>
+          </div>
+          {providerForm}
         </div>
-
-        <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
-          <UiFormRow label={t('llmProvider.fields.preset')}>
-            <Dropdown<string>
-              value={presetId}
-              display={presetOptions.find(option => option.value === presetId)?.label ?? presetOptions[0].label}
-              options={presetOptions}
-              ariaLabel={t('llmProvider.fields.preset')}
-              className="w-full"
-              buttonClassName="w-full"
-              onSelect={selectPreset}
-            />
-          </UiFormRow>
-
-          <UiFormRow label={t('llmProvider.fields.name')}>
-            {isCustom ? (
-              <UiInput
-                value={draft.displayName}
-                onChange={event => patch({ displayName: event.target.value })}
-                placeholder={t('llmProvider.placeholders.name')}
-              />
-            ) : (
-              <div className={UI_TEXT_BODY_CLASS}>{draft.displayName}</div>
-            )}
-          </UiFormRow>
-
-          {isCustom ? (
-            <UiFormRow label={t('llmProvider.fields.protocol')}>
-              <Dropdown
-                value={draft.apiProtocol ?? 'openai-compatible'}
-                display={protocolOptions.find(type => type.value === draft.apiProtocol)?.label ?? protocolOptions[0].label}
-                options={protocolOptions}
-                ariaLabel={t('llmProvider.fields.protocol')}
-                className="w-full"
-                buttonClassName="w-full"
-                onSelect={apiProtocol => patch({ apiProtocol })}
-              />
-              <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.protocol')}</div>
-            </UiFormRow>
-          ) : null}
-
-          <UiFormRow label={t('llmProvider.fields.baseUrl')}>
-            {isCustom ? (
-              <UiInput
-                value={draft.baseUrl ?? ''}
-                onChange={event => patch({ baseUrl: event.target.value })}
-                placeholder={t('llmProvider.placeholders.baseUrl')}
-              />
-            ) : (
-              <div className={`break-all ${UI_TEXT_BODY_CLASS}`}>{draft.baseUrl || '—'}</div>
-            )}
-            <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
-              {activePreset?.baseUrlHint && !draft.baseUrl?.trim()
-                ? activePreset.baseUrlHint
-                : activePreset
-                  ? t('llmProvider.hints.automaticProtocol')
-                  : t('llmProvider.preview', { value: resolveApiPreview(draft) || t('llmProvider.previewEmpty') })}
-            </div>
-          </UiFormRow>
-
-          {isCustom ? (
-            <UiFormRow label={t('llmProvider.fields.keyUrl')}>
-              <UiInput
-                value={draft.setup?.kind === 'custom' ? draft.setup.apiKeyManagementUrl ?? '' : ''}
-                onChange={event => patch({
-                  setup: { kind: 'custom', ...(event.target.value ? { apiKeyManagementUrl: event.target.value } : {}) },
-                })}
-                placeholder={t('llmProvider.placeholders.keyUrl')}
-              />
-              <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.keyUrl')}</div>
-            </UiFormRow>
-          ) : null}
-
-          {isExisting ? null : (
-            <ApiKeyInput
-              label={t('llmProvider.fields.apiKey')}
-              value={apiKey}
-              visible={apiKeyVisible}
-              onChange={(value) => { setApiKey(value); setError(null) }}
-              onToggleVisibility={() => setApiKeyVisible(value => !value)}
-              placeholder={t('llmProvider.placeholders.apiKey')}
-              showLabel={t('apiKeys.visibility.show')}
-              hideLabel={t('apiKeys.visibility.hide')}
-              disabled={saving}
-              websiteUrl={providerMetadata?.websiteUrl}
-              websiteLabel={t('llmProvider.actions.website')}
-              managementUrl={providerMetadata?.apiKeyUrl}
-              managementLabel={t('llmProvider.actions.manageApiKey')}
-              onOpenUrl={(url) => { void openExternal(url) }}
-            />
-          )}
-
-          <UiFormRow label={t('llmProvider.fields.enabled')} inline>
-            <UiSwitch
-              checked={draft.enabled !== false}
-              onCheckedChange={checked => patch({ enabled: checked })}
-            />
-          </UiFormRow>
-
-          {error ? <div role="alert" className="text-sm text-red-400">{error}</div> : null}
-
-          {isExisting ? (
-            <UiGroup divided>
-              {isBuiltIn ? (
-                <UiButton
-                  type="button"
-                  variant="plain"
-                  disabled={saving}
-                  onClick={() => void handleReset()}
-                >
-                  <RefreshCw size={14} className="mr-1.5" />
-                  {t('llmProvider.actions.reset')}
-                </UiButton>
-              ) : (
-                <UiButton
-                  type="button"
-                  variant="plain"
-                  disabled={saving}
-                  className="text-text-muted hover:text-red-400"
-                  onClick={() => void handleDelete()}
-                >
-                  <Trash2 size={14} className="mr-1.5" />
-                  {t('llmProvider.actions.delete')}
-                </UiButton>
-              )}
-            </UiGroup>
-          ) : null}
+      ) : (
+        <div className="grid min-h-0 flex-1 grid-cols-[240px_minmax(0,1fr)] gap-4 overflow-hidden">
+          <div className="min-h-0 space-y-2 overflow-y-auto pr-1">
+            {providers.map(provider => (
+              <UiOptionButton
+                key={provider.providerId}
+                type="button"
+                active={draft.providerId === provider.providerId}
+                variant="menu"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2.5"
+                onClick={() => selectExisting(provider)}
+              >
+                <span className="min-w-0 text-left">
+                  <span className="block truncate text-sm">{provider.displayName}</span>
+                </span>
+                <span className="text-xs text-text-soft">
+                  {provider.enabled ? t('llmProvider.status.on') : t('llmProvider.status.off')}
+                </span>
+              </UiOptionButton>
+            ))}
+            <UiButton type="button" variant="muted" className="w-full" onClick={startNew}>
+              <Plus size={14} className="mr-1.5" />
+              {t('llmProvider.actions.new')}
+            </UiButton>
+          </div>
+          {providerForm}
         </div>
-      </div>
+      )}
     </UiModal>
   )
 }

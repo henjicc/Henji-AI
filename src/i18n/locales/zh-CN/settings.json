@@ -153,13 +153,15 @@
   },
   "llmProvider": {
     "title": "管理供应商",
+    "addTitle": "添加大语言模型供应商",
+    "addHint": "此处仅用于添加大语言模型供应商，图片、视频、音频生成的供应商暂无法自定义添加。",
     "presetCustom": "自定义（手动填写）",
     "protocolOptions": {
       "openai-compatible": "OpenAI Chat Completions",
       "openai-responses": "OpenAI Responses"
     },
     "fields": {
-      "preset": "供应商预设",
+      "preset": "接入方式",
       "name": "供应商名称",
       "protocol": "接口协议",
       "baseUrl": "API 地址",
@@ -175,9 +177,10 @@
       "keyUrl": "可选，例如：https://example.com/keys"
     },
     "hints": {
+      "preset": "预设会自动填写连接信息，已添加的供应商不会重复显示。",
       "keyUrl": "用于显示“获取/管理 API Key”入口；不填写时不显示。",
-      "protocol": "只用于未适配的自定义接口；预制供应商会由 SDK 按具体模型自动选择。",
-      "automaticProtocol": "请求协议由 SDK 按具体模型自动选择，无需手动设置。"
+      "protocol": "只用于未适配的自定义接口；预设供应商会按具体模型自动选择。",
+      "automaticProtocol": "请求方式会按具体模型自动选择，无需手动设置。"
     },
     "preview": "预览：{{value}}",
     "previewEmpty": "请先填写 API 地址",
@@ -187,6 +190,7 @@
     },
     "actions": {
       "new": "新建供应商",
+      "cancel": "取消",
       "close": "关闭",
       "add": "添加供应商",
       "save": "保存供应商",

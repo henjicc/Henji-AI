@@ -609,7 +609,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         await setupSettings(page)
         await clickNamedButton(page, /^(模型|Models)$/i)
         await clickNamedButton(page, /^(添加供应商|Add provider)$/i)
-        const dialog = page.getByRole('dialog', { name: /管理供应商|Manage Providers/i })
+        const dialog = page.getByRole('dialog', { name: /添加大语言模型供应商|Add LLM Provider/i })
         await dialog.waitFor({ state: 'visible' })
         await settlePage(page, 700)
       },
