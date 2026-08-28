@@ -45,6 +45,7 @@ export function CanvasOverlays({
   onNavigateImageViewer,
 }: CanvasOverlaysProps) {
   const imageViewerMode = useCanvasStore((state) => state.imageViewer.mode)
+  const imageViewerSourceNodeId = useCanvasStore((state) => state.imageViewer.sourceNodeId)
 
   return (
     <>
@@ -91,6 +92,7 @@ export function CanvasOverlays({
         currentIndex={imageViewerIndex}
         onClose={onCloseImageViewer}
         onNavigate={onNavigateImageViewer}
+        sourceNodeId={imageViewerSourceNodeId}
       />
       <CanvasSpecialEditorHost />
     </>

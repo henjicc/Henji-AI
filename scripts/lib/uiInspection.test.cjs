@@ -109,6 +109,12 @@ test('GPT Image 2 遮罩在生成页与画布都有定向视觉场景', () => {
   assert.equal(canvasScene.writesUserData, true)
 })
 
+test('全景结果有独立的真实 Electron 球面交互场景', () => {
+  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-panorama-viewer')
+  assert.ok(scene)
+  assert.equal(scene.writesUserData, true)
+})
+
 test('画布 Midjourney 场景只操作可清理的专用工程，真实只读巡检会跳过', () => {
   const scenes = UI_INSPECTION_SCENES.filter((scene) => scene.id.startsWith('canvas-midjourney-'))
   assert.deepEqual(scenes.map((scene) => scene.id), [

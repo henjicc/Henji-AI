@@ -34,7 +34,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
 
 export const EXPORT_RESULT_DISPLAY_NAME: Record<ExportImageNodeResultKind, string> = {
   image: '结果图片',
-  panorama: '全景图',
+  panorama: '720°全景',
   'image-group': '图片组',
   'layer-stack': '图层结果',
   generic: '结果图片',

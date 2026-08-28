@@ -7,7 +7,10 @@ import {
   type CanvasImageViewerMode,
 } from '@/features/canvas/domain/canvasNodes';
 
-export type CanvasImageViewerSurfaceProps = ImageViewerModalProps;
+export interface CanvasImageViewerSurfaceProps extends ImageViewerModalProps {
+  /** 来源结果节点，用于查看器内下载原始受管媒体与日志定位。 */
+  sourceNodeId?: string | null;
+}
 
 export interface CanvasViewerSurfaceDefinition {
   mode: CanvasImageViewerMode;
@@ -18,13 +21,19 @@ export interface CanvasViewerSurfaceDefinition {
 
 const loadFlatImageViewer = async (): Promise<{
   default: ComponentType<CanvasImageViewerSurfaceProps>;
-}> => import('@/components/mediaViewer/ImageViewerModal').then((module) => ({
-  default: module.ImageViewerModal,
+}> => import('./FlatCanvasImageViewerSurface').then((module) => ({
+  default: module.FlatCanvasImageViewerSurface,
+}));
+
+const loadPanoramaViewer = async (): Promise<{
+  default: ComponentType<CanvasImageViewerSurfaceProps>;
+}> => import('./panorama/PanoramaViewerModal').then((module) => ({
+  default: module.PanoramaViewerModal,
 }));
 
 /**
  * 稳定查看模式到懒加载界面的唯一路由。
- * panorama 在 2.3 接入球面实现前故意回落到平面查看，保证旧图片可查看。
+ * 重型查看界面只在请求对应模式后才加载，避免 WebGL 进入画布启动包与节点热路径。
  */
 const VIEWER_SURFACE_REGISTRY: Readonly<Record<CanvasImageViewerMode, CanvasViewerSurfaceDefinition>> = {
   image: {
@@ -34,8 +43,8 @@ const VIEWER_SURFACE_REGISTRY: Readonly<Record<CanvasImageViewerMode, CanvasView
   },
   panorama: {
     mode: 'panorama',
-    component: lazy(loadFlatImageViewer),
-    fallbackMode: 'image',
+    component: lazy(loadPanoramaViewer),
+    fallbackMode: null,
   },
 };
 

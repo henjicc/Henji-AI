@@ -202,6 +202,67 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await waitForPageHeader(page)
   }
 
+  async function setupCanvasPanoramaViewer(page) {
+    await setupCanvas(page)
+    if (await page.locator('.react-flow').count()) {
+      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await settlePage(page)
+    }
+    const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
+    const projectCard = await fixtureCard.count() ? fixtureCard : page.locator('[data-project-id]:visible').first()
+    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
+    const projectId = await projectCard.getAttribute('data-project-id')
+    if (!projectId) throw new Error('全景查看器场景找不到专用画布工程')
+    const panoramaSource = `data:image/svg+xml,${encodeURIComponent([
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="800" viewBox="0 0 1600 800">',
+      '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop stop-color="rgb(24,84,156)"/><stop offset="1" stop-color="rgb(250,180,100)"/></linearGradient></defs>',
+      '<rect width="1600" height="800" fill="url(#sky)"/>',
+      '<circle cx="800" cy="250" r="92" fill="rgb(255,230,170)"/>',
+      '<path d="M0 510 L180 340 L360 500 L560 300 L800 500 L1040 320 L1280 500 L1450 350 L1600 510 V800 H0 Z" fill="rgb(32,75,72)"/>',
+      '<path d="M0 650 Q400 570 800 650 T1600 650 V800 H0 Z" fill="rgb(24,48,58)"/>',
+      '<g fill="rgb(236,245,255)" font-family="sans-serif" font-size="38" font-weight="700">',
+      '<text x="80" y="110">WEST</text><text x="470" y="110">NORTH</text><text x="900" y="110">EAST</text><text x="1320" y="110">SOUTH</text>',
+      '</g></svg>',
+    ].join(''))}`
+    const node = {
+      id: '__ui_panorama_result', type: 'exportImageNode', position: { x: 300, y: 220 },
+      width: 520, height: 260, measured: { width: 520, height: 260 }, style: { width: 520, height: 260 },
+      data: {
+        displayName: '720°全景', resultKind: 'panorama', imageUrl: panoramaSource,
+        previewImageUrl: panoramaSource, aspectRatio: '2:1', isGenerating: false,
+      },
+    }
+    await page.evaluate(async (payload) => {
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 130, zoom: 0.9 }), payload.projectId]
+      )
+    }, { projectId, node })
+    await projectCard.click()
+    const resultNode = page.locator('.react-flow__node[data-id="__ui_panorama_result"]')
+    await resultNode.waitFor({ state: 'visible', timeout: 12000 })
+    await resultNode.getByRole('button', { name: /进入全景预览|Open panorama viewer/i }).click()
+
+    const viewer = page.locator('[data-panorama-viewer="true"]')
+    await viewer.waitFor({ state: 'visible', timeout: 12000 })
+    const sphere = viewer.locator('[data-panorama-surface="sphere"] canvas')
+    await sphere.waitFor({ state: 'visible', timeout: 12000 })
+    const box = await sphere.boundingBox()
+    if (!box) throw new Error('全景球面画布没有可交互区域')
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width * 0.66, box.y + box.height * 0.42, { steps: 8 })
+    await page.mouse.up()
+    await page.mouse.wheel(0, -180)
+
+    await viewer.getByRole('button', { name: /^(平面|Flat)$/i }).click()
+    await viewer.locator('[data-panorama-surface="flat"]').waitFor({ state: 'visible', timeout: 8000 })
+    await viewer.getByRole('button', { name: /^(球面|Sphere)$/i }).click()
+    await sphere.waitFor({ state: 'visible', timeout: 8000 })
+    await viewer.getByTitle(/^(重置视图|Reset View)$/i).click()
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasMidjourneyNode(page, openSettings) {
     await setupCanvas(page)
     if (await page.locator('.react-flow').count()) {
@@ -768,6 +829,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
+    {
+      id: 'canvas-panorama-viewer',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-720°全景沉浸式查看器',
+      setup: setupCanvasPanoramaViewer,
+    },
     {
       id: 'canvas-midjourney-node',
       surface: '画布',

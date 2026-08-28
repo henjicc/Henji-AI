@@ -13,7 +13,7 @@ describe('viewerSurfaceRegistry', () => {
     ]);
     expect(getCanvasViewerSurfaceDefinition('panorama')).toMatchObject({
       mode: 'panorama',
-      fallbackMode: 'image',
+      fallbackMode: null,
     });
   });
 

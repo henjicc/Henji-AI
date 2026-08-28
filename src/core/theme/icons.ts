@@ -18,6 +18,7 @@ import {
   ListChecks,
   MessageCircle,
   Music,
+  Orbit,
   Sigma,
   Settings,
   SquarePen,
@@ -109,3 +110,5 @@ export const ICON_NODE_TEXT: LucideIcon = Type
 export const ICON_NODE_BOOLEAN: LucideIcon = ToggleLeft
 /** 素材组 / 参考素材包 */
 export const ICON_NODE_ASSET_GROUP: LucideIcon = Layers3
+/** 完整球面全景（工具入口、结果标识与查看模式共用） */
+export const ICON_PANORAMA: LucideIcon = Orbit

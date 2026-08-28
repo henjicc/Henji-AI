@@ -389,7 +389,26 @@
     "fileSize": "文件大小",
     "aspectRatio": "宽高比",
     "createdAt": "创建时间",
-    "unknown": "未知"
+    "unknown": "未知",
+    "panorama": {
+      "title": "720°全景",
+      "badge": "720°",
+      "open": "进入全景预览",
+      "spherical": "球面",
+      "flat": "平面",
+      "flatAlt": "全景平面图",
+      "loading": "正在加载全景图…",
+      "loadErrorTitle": "无法加载全景图",
+      "loadErrorMessage": "可以重试、切换到平面查看，或下载原图。",
+      "retry": "重新加载",
+      "download": "下载原图",
+      "downloadFailed": "保存失败，请重试",
+      "fullscreen": "进入全屏",
+      "exitFullscreen": "退出全屏",
+      "invalidRatio": "当前图片为 {{dimensions}}，不是完整全景所需的 2:1，已切换为平面查看",
+      "interactionHint": "拖动环视 · 滚轮缩放",
+      "webglError": "球面浏览暂不可用"
+    }
   },
   "split": {
     "title": "切割",

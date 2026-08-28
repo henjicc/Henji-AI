@@ -389,7 +389,26 @@
     "unknown": "Unknown",
     "prev": "Previous",
     "next": "Next",
-    "reset": "Reset View"
+    "reset": "Reset View",
+    "panorama": {
+      "title": "720° Panorama",
+      "badge": "720°",
+      "open": "Open panorama viewer",
+      "spherical": "Sphere",
+      "flat": "Flat",
+      "flatAlt": "Flat panorama image",
+      "loading": "Loading panorama…",
+      "loadErrorTitle": "Could not load panorama",
+      "loadErrorMessage": "Retry, switch to the flat view, or download the original image.",
+      "retry": "Reload",
+      "download": "Download original",
+      "downloadFailed": "Save failed. Try again.",
+      "fullscreen": "Enter fullscreen",
+      "exitFullscreen": "Exit fullscreen",
+      "invalidRatio": "This image is {{dimensions}}, not the 2:1 format required for a full panorama. Switched to flat view.",
+      "interactionHint": "Drag to look around · Scroll to zoom",
+      "webglError": "Spherical view is unavailable"
+    }
   },
   "split": {
     "title": "Split Storyboard",

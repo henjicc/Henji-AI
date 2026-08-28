@@ -1,10 +1,13 @@
 import { memo, useCallback, type ImgHTMLAttributes, type MouseEvent } from 'react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
+import type { CanvasImageViewerMode } from '@/features/canvas/domain/canvasNodes';
 
 export interface CanvasNodeImageProps extends ImgHTMLAttributes<HTMLImageElement> {
   viewerSourceUrl?: string | null;
   viewerImageList?: Array<string | null | undefined>;
+  viewerMode?: CanvasImageViewerMode;
+  viewerSourceNodeId?: string;
   disableViewer?: boolean;
 }
 
@@ -31,6 +34,8 @@ function normalizeViewerList(
 export const CanvasNodeImage = memo(({
   viewerSourceUrl,
   viewerImageList,
+  viewerMode = 'image',
+  viewerSourceNodeId,
   disableViewer = false,
   onDoubleClick,
   src,
@@ -55,8 +60,22 @@ export const CanvasNodeImage = memo(({
     }
 
     event.stopPropagation();
-    openImageViewer(resolvedSource, normalizeViewerList(viewerImageList, resolvedSource));
-  }, [disableViewer, onDoubleClick, openImageViewer, src, viewerImageList, viewerSourceUrl]);
+    openImageViewer({
+      imageUrl: resolvedSource,
+      imageList: normalizeViewerList(viewerImageList, resolvedSource),
+      mode: viewerMode,
+      sourceNodeId: viewerSourceNodeId,
+    });
+  }, [
+    disableViewer,
+    onDoubleClick,
+    openImageViewer,
+    src,
+    viewerImageList,
+    viewerMode,
+    viewerSourceNodeId,
+    viewerSourceUrl,
+  ]);
 
   return (
     <img
@@ -68,6 +87,7 @@ export const CanvasNodeImage = memo(({
           ? viewerSourceUrl.trim()
           : undefined
       }
+      data-viewer-mode={viewerMode}
       onDoubleClick={handleDoubleClick}
     />
   );
