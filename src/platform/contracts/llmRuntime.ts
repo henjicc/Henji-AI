@@ -41,8 +41,6 @@ export interface LlmProviderSettingsResultDto {
 }
 
 export interface LlmRuntimePlatform {
-  setProviderApiKey(credentialId: string, apiKey: string): Promise<void>
-  removeProviderApiKey(credentialId: string): Promise<void>
   getProviderApiKey(credentialId: string): Promise<string | null>
   getProviderKeyStatus(credentialIds: string[]): Promise<LlmProviderKeyStatusDto[]>
   readConfig(): Promise<LlmConfigState | null>

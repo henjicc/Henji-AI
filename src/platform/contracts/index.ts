@@ -3,7 +3,6 @@ import type { LlmRuntimePlatform } from './llmRuntime'
 import type { DbPlatform } from './db'
 import type { CanvasProjectsPlatform } from './canvasProjects'
 import type { CustomModelsPlatform } from './customModels'
-import type { KeystorePlatform } from './keystore'
 import type { SystemPlatform } from './system'
 import type { MediaPlatform } from './media'
 import type { ImagePlatform } from './image'
@@ -27,7 +26,6 @@ export interface PlatformRuntime {
   db: DbPlatform
   canvasProjects: CanvasProjectsPlatform
   customModels: CustomModelsPlatform
-  keystore: KeystorePlatform
   system: SystemPlatform
   media: MediaPlatform
   image: ImagePlatform
@@ -52,7 +50,6 @@ export type {
   DbPlatform,
   CanvasProjectsPlatform,
   CustomModelsPlatform,
-  KeystorePlatform,
   SystemPlatform,
   MediaPlatform,
   ImagePlatform,
@@ -75,7 +72,6 @@ export * from './llmRuntime'
 export * from './db'
 export * from './canvasProjects'
 export * from './customModels'
-export * from './keystore'
 export * from './system'
 export * from './media'
 export * from './image'

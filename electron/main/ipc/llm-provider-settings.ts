@@ -7,20 +7,8 @@ import {
   type LlmCredentialMutation,
   type LlmProviderSettingsResult,
 } from '../services/llm/provider-settings'
+import { rejectPlaintextCredentialFields } from '../services/llm/provider-settings-validation'
 import { parseRecord, parseVoid, registerIpcHandler } from './registry'
-
-const FORBIDDEN_PLAINTEXT_CREDENTIAL_FIELDS = new Set([
-  'apikey', 'authorization', 'token', 'accesstoken', 'refreshtoken', 'secret', 'clientsecret', 'password',
-])
-
-function rejectPlaintextCredentialFields(record: Record<string, unknown>, label: string): void {
-  const field = Object.keys(record).find(key => (
-    FORBIDDEN_PLAINTEXT_CREDENTIAL_FIELDS.has(key.replace(/[_-]/g, '').toLowerCase())
-  ))
-  if (field) {
-    throw new Error(`[llm_plaintext_credential_forbidden] "${label}.${field}" must use the credential mutation field instead`)
-  }
-}
 
 function parseConfig(input: unknown): LlmConfigState {
   const value = parseRecord(input)
@@ -29,10 +17,12 @@ function parseConfig(input: unknown): LlmConfigState {
       throw new Error(`[llm_config_invalid] expected array field "${field}"; reload settings and retry`)
     }
   }
-  ;(value.providers as unknown[]).forEach((item, index) => rejectPlaintextCredentialFields(
+  const providers = value.providers as unknown[]
+  const models = value.models as unknown[]
+  providers.forEach((item, index) => rejectPlaintextCredentialFields(
     parseRecord(item), `config.providers[${index}]`
   ))
-  ;(value.models as unknown[]).forEach((item, index) => rejectPlaintextCredentialFields(
+  models.forEach((item, index) => rejectPlaintextCredentialFields(
     parseRecord(item), `config.models[${index}]`
   ))
   return value as unknown as LlmConfigState

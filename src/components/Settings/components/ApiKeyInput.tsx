@@ -43,6 +43,9 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   onOpenManagementUrl,
 }) => {
   const inputId = useId()
+  const hintId = `${inputId}-hint`
+  const errorId = `${inputId}-error`
+  const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ') || undefined
   const toggleLabel = visible ? hideLabel : showLabel
   return (
     <div>
@@ -72,6 +75,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           placeholder={placeholder}
           disabled={disabled}
           aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
           data-observation-sensitive={visible ? 'true' : undefined}
           className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} pr-12`}
         />
@@ -83,12 +87,13 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
           className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
           title={toggleLabel}
           aria-label={toggleLabel}
+          aria-pressed={visible}
         >
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
         </UiIconButton>
       </div>
-      {hint ? <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}
-      {error ? <div role="alert" className="mt-2 text-xs text-red-400">{error}</div> : null}
+      {hint ? <div id={hintId} className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}
+      {error ? <div id={errorId} role="alert" className="mt-2 text-xs text-red-400">{error}</div> : null}
     </div>
   )
 }

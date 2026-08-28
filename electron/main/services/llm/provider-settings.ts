@@ -26,11 +26,9 @@ import {
   type ProviderSettingsJournal,
   type ProviderSettingsStorage,
 } from './provider-settings-storage'
+import { rejectPlaintextCredentialFields } from './provider-settings-validation'
 
 const logger = createMainLogger('main.llm.provider-settings')
-const FORBIDDEN_PLAINTEXT_CREDENTIAL_FIELDS = new Set([
-  'apikey', 'authorization', 'token', 'accesstoken', 'refreshtoken', 'secret', 'clientsecret', 'password',
-])
 
 export type LlmCredentialMutation =
   | { kind: 'unchanged' }
@@ -95,15 +93,6 @@ function requireConfigShape(config: LlmConfigState): LlmConfigState {
     model, `config.models[${index}]`
   ))
   return config
-}
-
-function rejectPlaintextCredentialFields(value: object, label: string): void {
-  const field = Object.keys(value).find(key => (
-    FORBIDDEN_PLAINTEXT_CREDENTIAL_FIELDS.has(key.replace(/[_-]/g, '').toLowerCase())
-  ))
-  if (field) {
-    throw new Error(`[llm_plaintext_credential_forbidden] "${label}.${field}" must use the credential mutation field instead`)
-  }
 }
 
 function normalizeProviderForCommit(provider: LlmProviderConfig): LlmProviderConfig {
@@ -205,6 +194,30 @@ function isBuiltIn(provider: LlmProviderConfig): boolean {
     || (!provider.setup && isLegacyBuiltIn(provider))
 }
 
+function assertBuiltInIdentityTransition(
+  current: LlmConfigState,
+  incoming: LlmProviderConfig
+): void {
+  const providerId = incoming.providerId.trim().toLowerCase()
+  const existing = current.providers.find(item => item.providerId.trim().toLowerCase() === providerId)
+  const incomingSetup = incoming.setup ? normalizeLlmProviderSetup(incoming.setup) : undefined
+  if (!existing || !isBuiltIn(existing)) {
+    if (incomingSetup?.kind === 'preset' && incomingSetup.lifecycle === 'builtin') {
+      throw new Error(`[llm_provider_builtin_identity_forbidden] provider "${providerId}" is not an existing built-in; use preset lifecycle "user" or a distinct custom providerId`)
+    }
+    return
+  }
+
+  const expectedPresetId = existing.setup?.kind === 'preset'
+    ? existing.setup.presetId
+    : existing.providerId
+  if (incomingSetup?.kind !== 'preset'
+    || incomingSetup.presetId !== expectedPresetId
+    || incomingSetup.lifecycle !== 'builtin') {
+    throw new Error(`[llm_provider_builtin_identity_forbidden] built-in provider "${providerId}" must remain preset "${expectedPresetId}" with lifecycle "builtin"; disable or reset it instead`)
+  }
+}
+
 export class LlmProviderSettingsService {
   private queue: Promise<void> = Promise.resolve()
 
@@ -268,6 +281,7 @@ export class LlmProviderSettingsService {
     return await this.exclusive(async () => {
       await this.recoverIfNeeded()
       const { current, persistedBefore } = await this.loadConfig(request.baselineConfig)
+      assertBuiltInIdentityTransition(current, request.provider)
       const provider = normalizeProviderForCommit(request.provider)
       const credentialId = provider.credentialId!
       const next = mergeProvider(current, provider, request.seedModels)

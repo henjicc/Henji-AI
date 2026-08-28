@@ -20,7 +20,6 @@ import type {
   HenjiFsApi,
   HenjiHttpApi,
   HenjiImageApi,
-  HenjiKeystoreApi,
   HenjiLlmApi,
   HenjiLlmStreamEventPayload,
   HenjiModelStepEventPayload,
@@ -216,13 +215,6 @@ const customModelsApi: HenjiCustomModelsApi = {
   deleteModel: (modelId) => nativeInvoke('customModels:delete', { modelId }),
 }
 
-const keystoreApi: HenjiKeystoreApi = {
-  setKey: (namespace, providerId, apiKey) => nativeInvoke('keystore:set', { namespace, providerId, apiKey }),
-  removeKey: (namespace, providerId) => nativeInvoke('keystore:remove', { namespace, providerId }),
-  getKey: (namespace, providerId) => nativeInvoke('keystore:get', { namespace, providerId }),
-  hasKey: (namespace, providerId) => nativeInvoke('keystore:has', { namespace, providerId }),
-}
-
 const aiApi: HenjiAiApi = {
   setProviderApiKey: (providerId, apiKey) => nativeInvoke('ai:setProviderApiKey', { providerId, apiKey }),
   removeProviderApiKey: (providerId) => nativeInvoke('ai:removeProviderApiKey', { providerId }),
@@ -238,8 +230,6 @@ const aiApi: HenjiAiApi = {
 }
 
 const llmApi: HenjiLlmApi = {
-  setProviderApiKey: (credentialId, apiKey) => nativeInvoke('llm:setProviderApiKey', { credentialId, apiKey }),
-  removeProviderApiKey: (credentialId) => nativeInvoke('llm:removeProviderApiKey', { credentialId }),
   getProviderApiKey: (credentialId) => nativeInvoke('llm:getProviderApiKey', { credentialId }),
   getProviderKeyStatus: (credentialIds) => nativeInvoke('llm:getProviderKeyStatus', { credentialIds }),
   readConfig: () => nativeInvoke('llm:providerSettings:readConfig'),
@@ -525,7 +515,6 @@ const api: HenjiNativeApi = {
   projectCovers: projectCoversApi,
   cameraStageRender: cameraStageRenderApi,
   customModels: customModelsApi,
-  keystore: keystoreApi,
   fs: fsApi,
   dialog: dialogApi,
   shell: shellApi,

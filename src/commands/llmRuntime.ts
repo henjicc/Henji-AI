@@ -22,16 +22,6 @@ function ensureDesktopRuntime(): void {
   }
 }
 
-export async function llmSetProviderApiKey(credentialId: string, apiKey: string): Promise<void> {
-  ensureDesktopRuntime()
-  await getPlatform().llmRuntime.setProviderApiKey(credentialId, apiKey)
-}
-
-export async function llmRemoveProviderApiKey(credentialId: string): Promise<void> {
-  ensureDesktopRuntime()
-  await getPlatform().llmRuntime.removeProviderApiKey(credentialId)
-}
-
 export async function llmGetProviderApiKey(credentialId: string): Promise<string | null> {
   ensureDesktopRuntime()
   return await getPlatform().llmRuntime.getProviderApiKey(credentialId)

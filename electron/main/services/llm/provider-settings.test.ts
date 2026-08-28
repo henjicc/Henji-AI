@@ -296,6 +296,30 @@ describe('LlmProviderSettingsService', () => {
     expect(state.config?.providers[0]).toMatchObject({ displayName: '派欧云', enabled: true })
   })
 
+  it('拒绝把内置 preset 降级为 user/custom 后绕过永久删除保护', async () => {
+    const provider: LlmProviderConfig = {
+      ...customProvider('ppio', 'ppio'),
+      setup: { kind: 'preset', presetId: 'ppio', lifecycle: 'builtin' },
+    }
+    const initial = { ...baseline, providers: [provider] }
+    const { service, state } = createHarness(initial)
+
+    await expect(service.commit({
+      provider: { ...provider, setup: { kind: 'preset', presetId: 'ppio', lifecycle: 'user' } },
+      seedModels: [],
+      baselineConfig: initial,
+      credential: { kind: 'unchanged' },
+    })).rejects.toThrow('built-in provider "ppio"')
+    await expect(service.commit({
+      provider: { ...provider, setup: { kind: 'custom' } },
+      seedModels: [],
+      baselineConfig: initial,
+      credential: { kind: 'unchanged' },
+    })).rejects.toThrow('built-in provider "ppio"')
+
+    expect(state.config).toEqual(initial)
+  })
+
   it('供应商仍被提示词或 Agent profile 引用时拒绝删除', async () => {
     const provider = customProvider()
     const initial = {
@@ -338,6 +362,20 @@ describe('LlmProviderSettingsService', () => {
     })).rejects.toThrow('must use the credential mutation field instead')
     expect(JSON.stringify(state.config)).not.toContain('must-not-persist')
     expect(state.journal).toBeNull()
+  })
+
+  it('递归拒绝嵌套在 provider 扩展字段里的明文凭据', async () => {
+    const { service, state } = createHarness()
+    const provider = {
+      ...customProvider(),
+      extension: { authentication: { client_secret: 'nested-must-not-persist' } },
+    } as unknown as LlmProviderConfig
+
+    await expect(service.commit({
+      provider, seedModels: [], baselineConfig: baseline, credential: { kind: 'unchanged' },
+    })).rejects.toThrow('must use the credential mutation field instead')
+    expect(JSON.stringify(state.config)).not.toContain('nested-must-not-persist')
+    expect(JSON.stringify(state.journal)).not.toContain('nested-must-not-persist')
   })
 
   it('启动时先恢复遗留 journal，再进行下一次读取', async () => {

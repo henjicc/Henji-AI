@@ -174,12 +174,9 @@ const LlmSettingsSection: React.FC = () => {
   }
 
   const updateProviderField = async (providerId: string, patch: Partial<LlmProviderConfig>): Promise<void> => {
-    const nextProviders = config.providers.map(provider => (
-      provider.providerId === providerId
-        ? { ...provider, ...patch }
-        : provider
-    ))
-    await persistConfig({ ...config, providers: nextProviders })
+    const provider = config.providers.find(item => item.providerId === providerId)
+    if (!provider) return
+    await commitProviderSettings({ ...provider, ...patch }, [], { kind: 'unchanged' })
   }
 
   if (loading) {

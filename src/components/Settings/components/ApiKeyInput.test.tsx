@@ -21,6 +21,8 @@ function StatefulInput({ disabled = false }: { disabled?: boolean }): JSX.Elemen
       placeholder="请输入 API Key"
       showLabel="显示密钥"
       hideLabel="隐藏密钥"
+      hint="仅保存在本机"
+      error={disabled ? '密钥不可用' : undefined}
       disabled={disabled}
     />
   )
@@ -37,6 +39,8 @@ describe('ApiKeyInput', () => {
     expect(toggle.parentElement).toBe(input.parentElement)
     expect(toggle.className).toContain('absolute')
     expect(toggle.className).toContain('border-transparent')
+    expect(input.getAttribute('aria-describedby')).toBeTruthy()
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
 
     toggle.focus()
     fireEvent.keyDown(toggle, { key: 'Enter' })
@@ -44,6 +48,7 @@ describe('ApiKeyInput', () => {
     expect(input.type).toBe('text')
     expect(input.getAttribute('data-observation-sensitive')).toBe('true')
     expect(screen.getByRole('button', { name: '隐藏密钥' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '隐藏密钥' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   it('默认密码圆点不额外标记敏感区域，禁用态同时禁用输入与动作', () => {
@@ -54,5 +59,6 @@ describe('ApiKeyInput', () => {
     expect(input.getAttribute('data-observation-sensitive')).toBeNull()
     expect(input.disabled).toBe(true)
     expect(toggle.disabled).toBe(true)
+    expect(input.getAttribute('aria-describedby')?.split(' ')).toHaveLength(2)
   })
 })

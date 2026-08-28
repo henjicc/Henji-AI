@@ -1,16 +1,10 @@
 import {
   getAiProviderApiKey,
   getAiProviderKeyStatus,
-  getKey,
   getLlmProviderApiKey,
   getLlmProviderKeyStatus,
-  hasKey,
   removeAiProviderApiKey,
-  removeKey,
-  removeLlmProviderApiKey,
   setAiProviderApiKey,
-  setKey,
-  setLlmProviderApiKey,
 } from '../services/keystore'
 import { parseRecord, registerIpcHandler } from './registry'
 
@@ -22,20 +16,8 @@ interface SetProviderKeyPayload extends ProviderKeyPayload {
   apiKey: string
 }
 
-interface NamespacedKeyPayload extends ProviderKeyPayload {
-  namespace: string
-}
-
-interface SetNamespacedKeyPayload extends NamespacedKeyPayload {
-  apiKey: string
-}
-
 interface CredentialPayload {
   credentialId: string
-}
-
-interface SetCredentialPayload extends CredentialPayload {
-  apiKey: string
 }
 
 interface CredentialIdsPayload {
@@ -63,34 +45,9 @@ function parseSetProviderKeyPayload(input: unknown): SetProviderKeyPayload {
   }
 }
 
-function parseNamespacedKeyPayload(input: unknown): NamespacedKeyPayload {
-  const record = parseRecord(input)
-  return {
-    namespace: readStringField(record, 'namespace'),
-    providerId: readStringField(record, 'providerId'),
-  }
-}
-
-function parseSetNamespacedKeyPayload(input: unknown): SetNamespacedKeyPayload {
-  const record = parseRecord(input)
-  return {
-    namespace: readStringField(record, 'namespace'),
-    providerId: readStringField(record, 'providerId'),
-    apiKey: readStringField(record, 'apiKey'),
-  }
-}
-
 function parseCredentialPayload(input: unknown): CredentialPayload {
   const record = parseRecord(input)
   return { credentialId: readStringField(record, 'credentialId') }
-}
-
-function parseSetCredentialPayload(input: unknown): SetCredentialPayload {
-  const record = parseRecord(input)
-  return {
-    credentialId: readStringField(record, 'credentialId'),
-    apiKey: readStringField(record, 'apiKey'),
-  }
 }
 
 function parseCredentialIdsPayload(input: unknown): CredentialIdsPayload {
@@ -104,22 +61,6 @@ function parseCredentialIdsPayload(input: unknown): CredentialIdsPayload {
 }
 
 export function registerKeystoreIpc(): void {
-  registerIpcHandler<SetNamespacedKeyPayload, void>('keystore:set', parseSetNamespacedKeyPayload, ({ namespace, providerId, apiKey }) => {
-    setKey(namespace, providerId, apiKey)
-  })
-
-  registerIpcHandler<NamespacedKeyPayload, void>('keystore:remove', parseNamespacedKeyPayload, ({ namespace, providerId }) => {
-    removeKey(namespace, providerId)
-  })
-
-  registerIpcHandler<NamespacedKeyPayload, string | null>('keystore:get', parseNamespacedKeyPayload, ({ namespace, providerId }) => {
-    return getKey(namespace, providerId)
-  })
-
-  registerIpcHandler<NamespacedKeyPayload, boolean>('keystore:has', parseNamespacedKeyPayload, ({ namespace, providerId }) => {
-    return hasKey(namespace, providerId)
-  })
-
   registerIpcHandler<SetProviderKeyPayload, void>('ai:setProviderApiKey', parseSetProviderKeyPayload, ({ providerId, apiKey }) => {
     setAiProviderApiKey(providerId, apiKey)
   })
@@ -138,14 +79,6 @@ export function registerKeystoreIpc(): void {
     }
   }, () => {
     return getAiProviderKeyStatus()
-  })
-
-  registerIpcHandler<SetCredentialPayload, void>('llm:setProviderApiKey', parseSetCredentialPayload, ({ credentialId, apiKey }) => {
-    setLlmProviderApiKey(credentialId, apiKey)
-  })
-
-  registerIpcHandler<CredentialPayload, void>('llm:removeProviderApiKey', parseCredentialPayload, ({ credentialId }) => {
-    removeLlmProviderApiKey(credentialId)
   })
 
   registerIpcHandler<CredentialPayload, string | null>('llm:getProviderApiKey', parseCredentialPayload, ({ credentialId }) => {

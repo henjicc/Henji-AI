@@ -160,6 +160,7 @@
     },
     "errors": {
       "invalidKeyUrl": "The key management URL must be a valid http:// or https:// URL without embedded credentials.",
+      "builtinIdentity": "A built-in provider's identity cannot be changed. Disable it or reset the provider instead.",
       "inUse": "This provider is still used by a prompt or assistant profile. Switch those models before deleting it.",
       "saveFailed": "Save failed and the previous settings were kept. Check the fields and retry.",
       "deleteFailed": "Delete failed and the previous settings were kept. Reload and retry.",

@@ -157,6 +157,7 @@ const LlmProviderDialog = ({
   const describeError = (value: unknown): string => {
     const message = value instanceof Error ? value.message : String(value)
     if (message.includes('[llm_api_key_url_invalid]')) return t('llmProvider.errors.invalidKeyUrl')
+    if (message.includes('[llm_provider_builtin_identity_forbidden]')) return t('llmProvider.errors.builtinIdentity')
     if (message.includes('[llm_provider_in_use]')) return t('llmProvider.errors.inUse')
     if (message.includes('[llm_provider_settings_delete_failed]')) return t('llmProvider.errors.deleteFailed')
     if (message.includes('[llm_provider_settings_commit_failed]')) return t('llmProvider.errors.saveFailed')

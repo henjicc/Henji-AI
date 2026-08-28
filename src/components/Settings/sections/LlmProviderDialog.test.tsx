@@ -1,7 +1,8 @@
 /** @vitest-environment jsdom */
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi, type MockedFunction } from 'vitest'
+import type { ComponentProps } from 'react'
 
 import i18n from '@/i18n/config'
 import {
@@ -17,6 +18,10 @@ vi.mock('../hooks/useExternalLink', () => ({
 }))
 
 import LlmProviderDialog from './LlmProviderDialog'
+
+type DialogProps = ComponentProps<typeof LlmProviderDialog>
+type SaveHandler = DialogProps['onSave']
+type DeleteHandler = DialogProps['onDelete']
 
 beforeAll(async () => {
   Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -46,12 +51,12 @@ function customProvider(overrides: Partial<LlmProviderConfig> = {}): LlmProvider
 
 function renderDialog({
   providers = [],
-  onSave = vi.fn().mockResolvedValue(undefined),
-  onDelete = vi.fn().mockResolvedValue(undefined),
+  onSave = vi.fn(async () => undefined),
+  onDelete = vi.fn(async () => undefined),
 }: {
   providers?: LlmProviderConfig[]
-  onSave?: ReturnType<typeof vi.fn>
-  onDelete?: ReturnType<typeof vi.fn>
+  onSave?: SaveHandler
+  onDelete?: DeleteHandler
 } = {}) {
   render(
     <LlmProviderDialog
@@ -62,7 +67,10 @@ function renderDialog({
       onDelete={onDelete}
     />
   )
-  return { onSave, onDelete }
+  return {
+    onSave: onSave as MockedFunction<SaveHandler>,
+    onDelete: onDelete as MockedFunction<DeleteHandler>,
+  }
 }
 
 describe('LlmProviderDialog', () => {
@@ -179,5 +187,16 @@ describe('LlmProviderDialog', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('原有设置已保留')
     expect((screen.getByPlaceholderText('例如：我的模型服务') as HTMLInputElement).value).toBe('失败代理')
     expect((screen.getByLabelText('API 密钥') as HTMLInputElement).value).toBe('still-here')
+  })
+
+  it('内置身份被拒绝时引导使用禁用或重置', async () => {
+    const preset = findLlmProviderPreset('ppio')!
+    const builtIn = createProviderFromPreset(preset, { lifecycle: 'builtin' })
+    const onSave = vi.fn().mockRejectedValue(new Error('[llm_provider_builtin_identity_forbidden] rejected'))
+    renderDialog({ providers: [builtIn], onSave })
+
+    fireEvent.click(screen.getByRole('button', { name: '保存供应商' }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('请使用“禁用”或“重置供应商”')
   })
 })

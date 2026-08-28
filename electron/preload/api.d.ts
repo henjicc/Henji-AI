@@ -451,13 +451,6 @@ export interface HenjiProviderConnectionTestResult {
   unlimitedBalance?: boolean
 }
 
-export interface HenjiKeystoreApi {
-  setKey(namespace: string, providerId: string, apiKey: string): Promise<void>
-  removeKey(namespace: string, providerId: string): Promise<void>
-  getKey(namespace: string, providerId: string): Promise<string | null>
-  hasKey(namespace: string, providerId: string): Promise<boolean>
-}
-
 export interface HenjiAiApi {
   setProviderApiKey(providerId: string, apiKey: string): Promise<void>
   removeProviderApiKey(providerId: string): Promise<void>
@@ -473,8 +466,6 @@ export interface HenjiAiApi {
 }
 
 export interface HenjiLlmApi {
-  setProviderApiKey(credentialId: string, apiKey: string): Promise<void>
-  removeProviderApiKey(credentialId: string): Promise<void>
   getProviderApiKey(credentialId: string): Promise<string | null>
   getProviderKeyStatus(credentialIds: string[]): Promise<Array<{ credentialId: string; configured: boolean }>>
   readConfig(): Promise<LlmConfigState | null>
@@ -1050,7 +1041,6 @@ export interface HenjiNativeApi {
   projectCovers: HenjiProjectCoversApi
   cameraStageRender: HenjiCameraStageRenderApi
   customModels: HenjiCustomModelsApi
-  keystore: HenjiKeystoreApi
   fs: HenjiFsApi
   dialog: HenjiDialogApi
   shell: HenjiShellApi

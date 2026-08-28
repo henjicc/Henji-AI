@@ -79,4 +79,20 @@ describe('LLM provider settings IPC', () => {
     expect(JSON.stringify(response)).not.toContain('must-not-leak')
     expect(mocks.commit).not.toHaveBeenCalled()
   })
+
+  it('嵌套明文凭据字段也在进入领域服务前拒绝', async () => {
+    const response = await handler('llm:providerSettings:commit')({}, {
+      provider: {
+        providerId: 'custom', displayName: 'Custom', adapter: 'openai',
+        setup: { kind: 'custom' }, enabled: true,
+        extension: { auth: { refresh_token: 'nested-must-not-leak' } },
+      },
+      seedModels: [], baselineConfig: config,
+      credential: { kind: 'unchanged' },
+    })
+
+    expect(response).toMatchObject({ ok: false })
+    expect(JSON.stringify(response)).not.toContain('nested-must-not-leak')
+    expect(mocks.commit).not.toHaveBeenCalled()
+  })
 })
