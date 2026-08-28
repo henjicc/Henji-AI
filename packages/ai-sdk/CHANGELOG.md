@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.4 - 2026-08-28
+
+- 新增 `@henjicc/ai-sdk/llm/bigmodel` 按需入口：保留 `bigmodel` 中国大陆默认实例，并在同一协议族内提供 `cn/global` 两个端点 profile、独立凭据槽和分区价格。
+- 新增 GLM-5.3-Flash 的保守能力目录与 Chat Completions 文件引用、普通 SSE 工具分片支持；结构化输出、`tool_stream` 与 SDK 未实现的 `file_id` 上传保持关闭。
+- LLM 原生流式与模型步按 `providerFamilyId` 应用协议规则、按 `credentialId` 取密钥，并拒绝 BigModel 跨区端点或凭据错配。
+
 本项目遵循语义化版本。`0.x` 阶段仍可能包含破坏性调整，升级时请先阅读对应版本说明。
 
 ## Unreleased

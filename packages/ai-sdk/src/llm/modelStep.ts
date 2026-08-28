@@ -18,6 +18,7 @@ export const modelStepCapabilitiesSchema = z.object({
   image: z.boolean(),
   video: z.boolean(),
   audio: z.boolean(),
+  file: z.boolean().optional(),
   streaming: z.boolean(),
   toolCall: z.boolean(),
   parallelTools: z.boolean(),
@@ -28,7 +29,7 @@ export const modelStepCapabilitiesSchema = z.object({
 })
 export type ModelStepCapabilities = z.infer<typeof modelStepCapabilitiesSchema>
 
-export const modelInputModalitySchema = z.enum(['image', 'video', 'audio'])
+export const modelInputModalitySchema = z.enum(['image', 'video', 'audio', 'file'])
 export type ModelInputModality = z.infer<typeof modelInputModalitySchema>
 
 function detectPartModality(part: Record<string, unknown>): ModelInputModality | null {
@@ -39,6 +40,7 @@ function detectPartModality(part: Record<string, unknown>): ModelInputModality |
   if (part.type === 'file' && mediaType.startsWith('image/')) return 'image'
   if (part.type === 'file' && mediaType.startsWith('video/')) return 'video'
   if (part.type === 'file' && mediaType.startsWith('audio/')) return 'audio'
+  if (part.type === 'file') return 'file'
   return null
 }
 
@@ -77,7 +79,7 @@ export type ModelStepTool = z.infer<typeof modelStepToolSchema>
  */
 export const modelStepTraceMetadataSchema = z.object({
   kind: z.enum(['router', 'primary', 'summarizer', 'fallback', 'observer', 'other']),
-  inputModalities: z.array(modelInputModalitySchema).max(3).optional(),
+  inputModalities: z.array(modelInputModalitySchema).max(4).optional(),
   turn: z.number().int().positive().optional(),
   snapshotRevision: z.number().int().nonnegative().optional(),
   contextWindowBudget: z.number().int().positive().optional(),
@@ -103,6 +105,9 @@ export const modelStepInputSchema = z.object({
   runId: z.string().min(1),
   stepId: z.string().min(1),
   providerId: z.string().min(1),
+  providerFamilyId: z.string().min(1).optional(),
+  endpointProfile: z.string().min(1).optional(),
+  credentialId: z.string().min(1).optional(),
   modelId: z.string().min(1),
   apiProtocol: llmApiProtocolSchema.optional(),
   adapter: z.string().optional(),

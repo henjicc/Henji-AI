@@ -115,6 +115,21 @@ export const LLM_MODEL_CATALOG_ENTRIES: readonly LlmModelCatalogEntry[] = [
 
   // ---------------- 智谱 GLM ----------------
   {
+    id: 'glm-5.3-flash',
+    displayName: 'GLM-5.3-Flash',
+    vendor: '智谱',
+    input: { image: true, video: true, audio: false, file: true },
+    toolCall: true,
+    parallelTools: false,
+    structuredOutputMode: 'none',
+    reasoning: true,
+    sampling: true,
+    contextWindow: 1_000_000,
+    maxOutputTokens: 131_072,
+    note: '国内与国际端点共用 Chat Completions 协议；文件只接受宿主已持有的 URL/内联内容，不声明上传与 file_id。结构化输出和 tool_stream 未确认，保持关闭。',
+    docs: 'docs/model-adaptation/GLM-5.3-Flash/GLM-5.3-Flash_智谱.md',
+  },
+  {
     id: 'glm-5.3',
     displayName: 'GLM-5.3',
     vendor: '智谱',

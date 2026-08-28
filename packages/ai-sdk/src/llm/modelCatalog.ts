@@ -20,7 +20,7 @@ export interface LlmModelCatalogEntry {
   /** 规范化后仍与 `id` 不同的其他写法（例如同能力的价格变体） */
   aliases?: readonly string[]
   /** 本项目当前请求路径下真实可用的输入模态，取值依据见 `modelCatalogEntries.ts` 顶部注释 */
-  input: { image: boolean; video: boolean; audio: boolean }
+  input: { image: boolean; video: boolean; audio: boolean; file?: boolean }
   toolCall: boolean
   parallelTools: boolean
   structuredOutputMode: LlmCapabilities['structuredOutputMode']
@@ -79,6 +79,7 @@ export function applyLlmModelCatalogEntry(
     image: entry.input.image,
     video: entry.input.video,
     audio: entry.input.audio,
+    file: entry.input.file === true,
     toolCall: entry.toolCall,
     parallelTools: entry.parallelTools,
     structuredOutputMode: entry.structuredOutputMode,
@@ -97,6 +98,7 @@ export function describeCatalogInputModalities(entry: LlmModelCatalogEntry): str
     ...(entry.input.image ? ['图片'] : []),
     ...(entry.input.video ? ['视频'] : []),
     ...(entry.input.audio ? ['音频'] : []),
+    ...(entry.input.file ? ['文件'] : []),
   ]
   return kinds.join(' / ')
 }

@@ -1,0 +1,23 @@
+{
+  "kind": "llm-capability",
+  "providerFamilyId": "bigmodel",
+  "modelId": "glm-5.3-flash",
+  "source": {
+    "request": "智谱官方对话补全 API 的图片、视频、文件字段字面示例；URL 与内容替换为不可联网占位值",
+    "stream": "智谱官方同端点普通 SSE/工具调用字段契约；实际公开流样例为 GLM-5.2/GLM-5.3，不冒充 Flash 原始日志",
+    "capturedAt": "2026-08-28"
+  },
+  "contentParts": {
+    "text": { "type": "text", "text": "fixture" },
+    "image": { "type": "image_url", "imageUrl": { "url": "https://media.invalid/image.png" } },
+    "video": { "type": "video_url", "videoUrl": { "url": "https://media.invalid/video.mp4" } },
+    "file": { "type": "file", "file": { "fileUrl": "https://media.invalid/document.pdf", "filename": "document.pdf" } }
+  },
+  "sse": [
+    "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"分析\"},\"finish_reason\":null}]}",
+    "data: {\"choices\":[]}",
+    "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"q\\\":\"}}]},\"finish_reason\":null}]}",
+    "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"fixture\\\"}\"}}]},\"finish_reason\":\"tool_calls\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":4,\"total_tokens\":14}}",
+    "data: [DONE]"
+  ]
+}

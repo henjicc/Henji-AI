@@ -34,6 +34,7 @@ export const GROQ_DEFAULT_MODEL_CONFIG: LlmModelConfig = {
     image: false,
     video: false,
     audio: false,
+    file: false,
     streaming: true,
     toolCall: true,
     parallelTools: false,

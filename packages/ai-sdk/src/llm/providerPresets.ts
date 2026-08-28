@@ -7,6 +7,8 @@ import {
 } from './defaults'
 import { findLlmModelCatalogEntry } from './modelCatalog'
 import { GROQ_PROVIDER_PRESET } from './groq/preset'
+import { createBigmodelProvider } from './bigmodel/preset'
+import { BIGMODEL_ENDPOINT_PROFILE_FAMILY } from './bigmodel/profiles'
 import type { LlmApiProtocol } from './providerProtocol'
 import type { LlmModelConfig, LlmProviderConfig, LlmReasoningEffort } from './types'
 
@@ -105,10 +107,10 @@ export const LLM_PROVIDER_PRESETS: readonly LlmProviderPreset[] = [
     baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
     reasoning: { enabled: true, effort: 'max' },
     reasoningConfigurable: true,
-    modelIds: ['glm-5.3', 'glm-5v-turbo'],
+    modelIds: ['glm-5.3', 'glm-5v-turbo', 'glm-5.3-flash'],
     apiKeyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
     docs: 'docs/llm-adaptation/供应商/智谱GLM.md',
-    note: 'GLM-5.3 只支持文本，看图看视频要用 GLM-5V-Turbo；订阅过 Coding Plan 的账号只能走 Chat Completions。',
+    note: '默认是中国大陆端点；Global 必须创建独立 endpoint profile 与凭据槽，不会跨区复用或回退密钥。',
   },
   {
     providerId: 'mimo',
@@ -157,9 +159,19 @@ export function findLlmProviderPreset(providerId: string): LlmProviderPreset | n
   return LLM_PROVIDER_PRESETS.find(preset => preset.providerId === normalized) ?? null
 }
 
-export function createProviderFromPreset(preset: LlmProviderPreset): LlmProviderConfig {
+export function createProviderFromPreset(
+  preset: LlmProviderPreset,
+  options: { endpointProfile?: string; providerId?: string } = {}
+): LlmProviderConfig {
+  if (preset.providerId === 'bigmodel') {
+    const endpointProfile = options.endpointProfile
+    if (endpointProfile !== undefined && endpointProfile !== 'cn' && endpointProfile !== 'global') {
+      throw new Error(`[llm_endpoint_profile_unknown] bigmodel endpoint profile "${endpointProfile}" is unavailable`)
+    }
+    return createBigmodelProvider({ endpointProfile, providerId: options.providerId })
+  }
   return {
-    providerId: preset.providerId,
+    providerId: options.providerId ?? preset.providerId,
     displayName: preset.displayName,
     adapter: preset.adapter,
     apiProtocol: preset.apiProtocol,
@@ -175,10 +187,19 @@ export function createModelsFromPreset(
   preset: LlmProviderPreset,
   provider: LlmProviderConfig
 ): LlmModelConfig[] {
-  return preset.modelIds.map((modelId) => {
+  const modelIds = preset.providerId === 'bigmodel'
+    ? BIGMODEL_ENDPOINT_PROFILE_FAMILY.profiles.find(profile => profile.id === (provider.endpointProfile ?? 'cn'))?.modelIds
+    : preset.modelIds
+  if (!modelIds) {
+    throw new Error(`[llm_endpoint_profile_unknown] bigmodel endpoint profile "${provider.endpointProfile}" is unavailable`)
+  }
+  return modelIds.map((modelId) => {
     const entry = findLlmModelCatalogEntry(modelId)
     return {
       providerId: provider.providerId,
+      providerFamilyId: provider.providerFamilyId,
+      endpointProfile: provider.endpointProfile,
+      credentialId: provider.credentialId,
       modelId,
       displayName: entry?.displayName ?? modelId,
       adapter: provider.adapter,

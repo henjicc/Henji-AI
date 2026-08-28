@@ -18,6 +18,7 @@ import {
   type ModelStepHttpTrace,
   type ModelStepProviderAdapter,
 } from './providerAdapter'
+import { resolveLlmEndpointIdentity } from '../endpointProfiles'
 // `ModelStepHttpTrace` 不在这里重新导出——`./providerAdapter` 是它的唯一定义处，
 // 由 `sdk/index.ts` 的桶文件统一 `export * from './providerAdapter'`。这里再导出一次会与
 // 桶文件里的 `export * from './providerAdapter'` 产生同名重复导出（TS 报 "has already
@@ -53,12 +54,14 @@ function stripChatCompletions(endpoint: string): string {
   return endpoint.replace(/\/chat\/completions\/?$/, '')
 }
 
-export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId' | 'adapter' | 'baseUrl'>): string {
+export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId' | 'providerFamilyId' | 'endpointProfile' | 'credentialId' | 'adapter' | 'baseUrl'>): string {
+  const identity = resolveLlmEndpointIdentity(input)
   const normalizedInput = {
     ...input,
-    baseUrl: input.baseUrl ? stripChatCompletions(input.baseUrl.replace(/\/+$/, '')) : undefined,
+    providerId: identity.providerFamilyId,
+    baseUrl: identity.baseUrl ? stripChatCompletions(identity.baseUrl.replace(/\/+$/, '')) : undefined,
   }
-  const endpoint = input.providerId.trim().toLowerCase() === 'ppio'
+  const endpoint = identity.providerFamilyId === 'ppio'
     ? resolvePpioChatEndpoint(normalizedInput.baseUrl)
     : resolveOpenAiCompatibleEndpoint({
         providerId: normalizedInput.providerId,
@@ -77,23 +80,24 @@ function createOpenAiCompatibleLanguageModel(
   transport?: Transport
 ): LanguageModel {
   const adapter = input.adapter?.trim().toLowerCase()
+  const identity = resolveLlmEndpointIdentity(input)
   const reasoning = input.reasoning
   const provider = createOpenAICompatible({
     name: 'openai-compatible',
     apiKey,
-    headers: resolveProviderExtraAuthHeaders(input.providerId, apiKey),
+    headers: resolveProviderExtraAuthHeaders(identity.providerFamilyId, apiKey),
     baseURL: resolveModelStepBaseUrl(input),
     includeUsage: input.capabilities.usage,
     supportsStructuredOutputs: usesNativeJsonSchema(input),
-    fetch: createModelStepFetch(input.providerId, httpTrace, transport, {
+    fetch: createModelStepFetch(identity.providerFamilyId, httpTrace, transport, {
       captureHttp: httpTrace?.captureHttp === true,
       captureDeepSeekUsage: adapter === 'deepseek',
     }),
     // 两类差异叠加：各供应商的思考参数写法，以及各家对请求体字段的自有要求。
     transformRequestBody: (body) => applyProviderRequestBodyQuirks(
-      input.providerId,
+      identity.providerFamilyId,
       input.capabilities.reasoning
-        ? applyProviderReasoningRequestBody(input.providerId, adapter, body, reasoning)
+        ? applyProviderReasoningRequestBody(identity.providerFamilyId, adapter, body, reasoning)
         : body,
     ),
   })

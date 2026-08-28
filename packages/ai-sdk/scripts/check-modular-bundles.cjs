@@ -302,6 +302,23 @@ const groqLlm = bundle('GroqLlm', [
   }
 })
 
+const bigmodelLlm = bundle('BigmodelLlm', [
+  "export * from './llm/bigmodel/index'",
+].join('\n'), (inputs) => {
+  const forbidden = inputs.filter((input) => (
+    input.includes('/src/capabilities/') ||
+    modelPattern.test(`/${input}`) ||
+    providerPattern.test(`/${input}`) ||
+    input.includes('/src/generation') ||
+    input.includes('/src/llm/groq/') ||
+    input.includes('/src/llm/modules/')
+  ))
+  if (forbidden.length > 0) fail(`BigModel 按需入口带入 ASR/翻译/generation/其他供应商：${forbidden.join(', ')}`)
+  if (!inputs.some((input) => input.includes('/src/llm/bigmodel/profiles.ts'))) {
+    fail('BigModel 按需入口未包含 endpoint profiles')
+  }
+})
+
 const llmModules = bundle('LlmModules', [
   "export * from './llm/modules/index'",
 ].join('\n'), (inputs) => {
@@ -403,6 +420,7 @@ const metrics = {
   translationCapability: { iife: translationCapability.iife.bytes, esm: translationCapability.esm.bytes, modules: translationCapability.iife.modules },
   bailianTranslationCapability: { iife: bailianTranslationCapability.iife.bytes, esm: bailianTranslationCapability.esm.bytes, modules: bailianTranslationCapability.iife.modules },
   groqLlm: { iife: groqLlm.iife.bytes, esm: groqLlm.esm.bytes, modules: groqLlm.iife.modules },
+  bigmodelLlm: { iife: bigmodelLlm.iife.bytes, esm: bigmodelLlm.esm.bytes, modules: bigmodelLlm.iife.modules },
   llmModules: { iife: llmModules.iife.bytes, esm: llmModules.esm.bytes, modules: llmModules.iife.modules },
   networkCalls,
 }

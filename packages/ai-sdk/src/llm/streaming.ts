@@ -6,6 +6,7 @@ import {
 } from './providerProtocolCore'
 import { applyProviderReasoningRequestBody } from './providerReasoningRequest'
 import { createUtf8StreamDecoder } from './utf8-stream-decoder'
+import { resolveLlmEndpointIdentity } from './endpointProfiles'
 import type {
   JsonObject,
   JsonValue,
@@ -14,6 +15,7 @@ import type {
   LlmContentPart,
   LlmStreamEmitter,
   LlmStreamOutput,
+  LlmStreamToolCall,
   LlmUsageDto,
 } from './chatTypes'
 
@@ -38,24 +40,25 @@ interface StreamChatOptions {
 
 export function resolvePpioChatEndpoint(baseUrl?: string): string {
   const normalized = normalizeBaseUrl(baseUrl, 'https://api.ppio.com/openai')
-  return normalized.endsWith('/v1')
+  return /\/v\d+$/.test(normalized)
     ? `${normalized}/chat/completions`
     : `${normalized}/v1/chat/completions`
 }
 
 export function resolveOpenAiCompatibleEndpoint(request: LlmChatRequestDto): string {
-  const providerId = request.providerId.trim().toLowerCase()
+  const identity = resolveLlmEndpointIdentity(request)
+  const providerId = identity.providerFamilyId
   const adapter = request.adapter?.trim().toLowerCase()
   const fallbackBaseUrl = providerId === 'openai' || adapter === 'openai'
     ? 'https://api.openai.com'
     : (providerId === 'deepseek' || adapter === 'deepseek' ? 'https://api.deepseek.com' : undefined)
 
-  if (!request.baseUrl && !fallbackBaseUrl) {
+  if (!identity.baseUrl && !fallbackBaseUrl) {
     throw new Error(`LLM provider "${request.providerId}" requires baseUrl.`)
   }
 
-  const normalized = normalizeBaseUrl(request.baseUrl, fallbackBaseUrl)
-  return normalized.endsWith('/v1')
+  const normalized = normalizeBaseUrl(identity.baseUrl, fallbackBaseUrl)
+  return /\/v\d+$/.test(normalized)
     ? `${normalized}/chat/completions`
     : `${normalized}/v1/chat/completions`
 }
@@ -83,21 +86,23 @@ export function buildOpenAiCompatiblePayload(request: LlmChatRequestDto): JsonOb
    * 画布文本处理和提示词优化的「思考模式」下拉对任何供应商都不生效。
    * 用模型能力表兜一层，没标"支持思考"的模型仍然一个字段都不发。
    */
+  const identity = resolveLlmEndpointIdentity(request)
   const reasoningCapable = request.capabilities?.reasoning === true
   const withReasoning = reasoningCapable
-    ? applyProviderReasoningRequestBody(request.providerId, request.adapter, payload, request.reasoning)
+    ? applyProviderReasoningRequestBody(identity.providerFamilyId, request.adapter, payload, request.reasoning)
     : payload
 
-  return applyProviderRequestBodyQuirks(request.providerId, withReasoning) as JsonObject
+  return applyProviderRequestBodyQuirks(identity.providerFamilyId, withReasoning) as JsonObject
 }
 
 export async function streamOpenAiCompatibleChat(options: StreamChatOptions): Promise<LlmStreamOutput> {
-  const response = await fetchProvider(options.request.providerId, options.endpoint, {
+  const identity = resolveLlmEndpointIdentity(options.request)
+  const response = await fetchProvider(identity.providerFamilyId, options.endpoint, {
     method: 'POST',
     headers: {
       Accept: 'text/event-stream',
       Authorization: `Bearer ${options.apiKey}`,
-      ...resolveProviderExtraAuthHeaders(options.request.providerId, options.apiKey),
+      ...resolveProviderExtraAuthHeaders(identity.providerFamilyId, options.apiKey),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(buildOpenAiCompatiblePayload(options.request)),
@@ -141,12 +146,29 @@ function serializeContentPart(part: LlmContentPart): JsonObject {
   const next: JsonObject = {}
   for (const [key, value] of Object.entries(part)) {
     if (value === undefined) continue
+    if (key === 'fileId' || (key === 'file' && isRecord(value) && ('fileId' in value || 'file_id' in value))) {
+      throw new Error('[unsupported_file_reference] LLM SDK does not create or accept provider file_id; use host-supplied fileUrl/fileData')
+    }
     if (key === 'imageUrl') {
       next.image_url = value
     } else if (key === 'videoUrl') {
       next.video_url = value
     } else if (key === 'inputAudio') {
       next.input_audio = value
+    } else if (key === 'file' && isRecord(value)) {
+      const referenceCount = Number(typeof value.fileUrl === 'string' && value.fileUrl.length > 0)
+        + Number(typeof value.fileData === 'string' && value.fileData.length > 0)
+      if (referenceCount !== 1) {
+        throw new Error('[invalid_file_reference] LLM file content requires exactly one of fileUrl or fileData')
+      }
+      const file: JsonObject = {}
+      for (const [fileKey, fileValue] of Object.entries(value)) {
+        if (fileValue === undefined) continue
+        if (fileKey === 'fileUrl') file.file_url = fileValue as JsonValue
+        else if (fileKey === 'fileData') file.file_data = fileValue as JsonValue
+        else file[fileKey] = fileValue as JsonValue
+      }
+      next.file = file
     } else {
       next[key] = value
     }
@@ -162,6 +184,7 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
   let reasoningOutput = ''
   let usage: LlmUsageDto | null = null
   let finishReason: string | null = null
+  const toolCalls = new Map<number, LlmStreamToolCall>()
 
   let streamDone = false
   while (!streamDone) {
@@ -177,10 +200,11 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
     for (const event of parsed.events) {
       const chunk = parseSseData(event)
       if (chunk.done) {
-        return { output, reasoningOutput, usage, finishReason }
+        return { output, reasoningOutput, usage, finishReason, toolCalls: [...toolCalls.values()] }
       }
       usage = chunk.usage ?? usage
       finishReason = chunk.finishReason ?? finishReason
+      mergeToolCallDeltas(toolCalls, chunk.toolCalls)
       if (chunk.reasoning) {
         reasoningOutput += chunk.reasoning
         emit({ type: 'ReasoningToken', data: chunk.reasoning })
@@ -201,6 +225,7 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
     const chunk = parseSseData(event)
     usage = chunk.usage ?? usage
     finishReason = chunk.finishReason ?? finishReason
+    mergeToolCallDeltas(toolCalls, chunk.toolCalls)
     if (chunk.reasoning) {
       reasoningOutput += chunk.reasoning
       emit({ type: 'ReasoningToken', data: chunk.reasoning })
@@ -210,7 +235,7 @@ async function readSseStream(body: ReadableStream<Uint8Array>, emit: LlmStreamEm
       emit({ type: 'Token', data: chunk.content })
     }
   }
-  return { output, reasoningOutput, usage, finishReason }
+  return { output, reasoningOutput, usage, finishReason, toolCalls: [...toolCalls.values()] }
 }
 
 function drainSseEvents(input: string): { events: string[]; remaining: string } {
@@ -245,6 +270,7 @@ function parseSseData(event: string): {
   reasoning?: string
   usage?: LlmUsageDto
   finishReason?: string
+  toolCalls?: LlmStreamToolCall[]
 } {
   const data = event
     .split(/\r?\n/)
@@ -264,6 +290,43 @@ function parseSseData(event: string): {
     reasoning: readString(delta.reasoning_content ?? delta.reasoning),
     usage: readUsage(json),
     finishReason: readFinishReason(json),
+    toolCalls: readToolCallDeltas(delta.tool_calls),
+  }
+}
+
+function readToolCallDeltas(value: unknown): LlmStreamToolCall[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  return value.flatMap((item, arrayIndex) => {
+    if (!isRecord(item)) return []
+    const fn = isRecord(item.function) ? item.function : {}
+    const index = typeof item.index === 'number' && Number.isInteger(item.index) ? item.index : arrayIndex
+    return [{
+      index,
+      id: typeof item.id === 'string' ? item.id : '',
+      type: typeof item.type === 'string' ? item.type : 'function',
+      function: {
+        name: typeof fn.name === 'string' ? fn.name : '',
+        arguments: typeof fn.arguments === 'string' ? fn.arguments : '',
+      },
+    }]
+  })
+}
+
+function mergeToolCallDeltas(
+  target: Map<number, LlmStreamToolCall>,
+  deltas: LlmStreamToolCall[] | undefined
+): void {
+  for (const delta of deltas ?? []) {
+    const current = target.get(delta.index)
+    target.set(delta.index, current ? {
+      index: delta.index,
+      id: delta.id || current.id,
+      type: delta.type || current.type,
+      function: {
+        name: delta.function.name || current.function.name,
+        arguments: current.function.arguments + delta.function.arguments,
+      },
+    } : delta)
   }
 }
 

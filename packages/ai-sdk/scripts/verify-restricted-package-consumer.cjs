@@ -146,6 +146,12 @@ async function verify() {
     'HenjiPackedGroq',
     [...commonForbidden, '/dist/capabilities/'],
   )
+  const bigmodel = bundle(
+    'Bigmodel',
+    '@henjicc/ai-sdk/llm/bigmodel',
+    'HenjiPackedBigmodel',
+    [...commonForbidden, '/dist/capabilities/', '/dist/llm/groq/', '/dist/llm/modules/'],
+  )
   const llmModules = bundle(
     'LlmModules',
     '@henjicc/ai-sdk/llm/modules',
@@ -165,6 +171,7 @@ async function verify() {
   const realtimeApi = evaluate(context, realtime, 'HenjiPackedBailianRealtimeAsr')
   const translationApi = evaluate(context, translation, 'HenjiPackedBailianTranslation')
   const groqApi = evaluate(context, groq, 'HenjiPackedGroq')
+  const bigmodelApi = evaluate(context, bigmodel, 'HenjiPackedBigmodel')
   const llmModuleApi = evaluate(context, llmModules, 'HenjiPackedLlmModules')
 
   if (asrApi.bailianNonRealtimeAsrPresets.length !== 5) fail('非实时 ASR 不是 5 个')
@@ -181,6 +188,12 @@ async function verify() {
   if (groqApi.GROQ_DEFAULT_MODEL_CONFIG.providerId !== 'groq'
     || groqApi.GROQ_DEFAULT_MODEL_CONFIG.modelId !== 'openai/gpt-oss-20b') {
     fail('Groq 默认模型坐标不匹配')
+  }
+  const globalBigmodel = bigmodelApi.createBigmodelProvider({ endpointProfile: 'global' })
+  if (globalBigmodel.providerFamilyId !== 'bigmodel'
+    || globalBigmodel.credentialId !== 'bigmodel-global'
+    || globalBigmodel.baseUrl !== 'https://api.z.ai/api/paas/v4') {
+    fail('BigModel Global endpoint profile 身份不匹配')
   }
   const groqRequest = groqApi.createGroqChatRequest({ messages: [] })
   if (groqRequest.providerId !== 'groq' || groqRequest.modelId !== 'openai/gpt-oss-20b') {
@@ -250,6 +263,7 @@ async function verify() {
     realtimeAsr: { models: 4, bytes: realtime.bytes, modules: realtime.inputs.length },
     translation: { models: 3, bytes: translation.bytes, modules: translation.inputs.length },
     groq: { models: 1, bytes: groq.bytes, modules: groq.inputs.length },
+    bigmodel: { models: 1, bytes: bigmodel.bytes, modules: bigmodel.inputs.length },
     llmModules: { models: 1, bytes: llmModules.bytes, modules: llmModules.inputs.length },
     networkCalls: 0,
   })}`)

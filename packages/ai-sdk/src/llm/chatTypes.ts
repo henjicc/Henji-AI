@@ -20,6 +20,7 @@ export interface LlmContentPart {
   imageUrl?: JsonValue
   videoUrl?: JsonValue
   inputAudio?: JsonValue
+  file?: JsonValue
 }
 
 export interface LlmChatMessageDto {
@@ -31,6 +32,9 @@ export interface LlmChatMessageDto {
 export interface LlmChatRequestDto {
   requestId?: string
   providerId: string
+  providerFamilyId?: string
+  endpointProfile?: string
+  credentialId?: string
   modelId: string
   adapter?: string
   baseUrl?: string
@@ -74,4 +78,12 @@ export interface LlmStreamOutput {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  toolCalls?: LlmStreamToolCall[]
+}
+
+export interface LlmStreamToolCall {
+  index: number
+  id: string
+  type: string
+  function: { name: string; arguments: string }
 }

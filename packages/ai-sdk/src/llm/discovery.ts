@@ -1,5 +1,6 @@
 import type { RuntimeContext } from '../runtime'
 import { resolveProviderExtraAuthHeaders } from './providerProtocol'
+import { resolveLlmEndpointIdentity } from './endpointProfiles'
 
 /**
  * 模型发现（列出供应商可用模型）。任务 4.2 从 `electron/main/services/llm/discovery.ts`
@@ -33,6 +34,9 @@ interface RawDiscoveredModel {
 }
 
 export interface DiscoverModelsOptions {
+  providerFamilyId?: string
+  endpointProfile?: string
+  credentialId?: string
   /** 宿主取消会原样下沉到 Transport.fetch。 */
   signal?: AbortSignal
   /** 正数毫秒；超时中止 Transport.fetch，并抛出不含凭据的安全错误。 */
@@ -86,15 +90,22 @@ export async function discoverModels(
   runtime: RuntimeContext,
   options: DiscoverModelsOptions = {}
 ): Promise<DiscoveredModelItem[]> {
-  const apiKey = await runtime.credentials.get('llm', providerId)
+  const identity = resolveLlmEndpointIdentity({
+    providerId,
+    providerFamilyId: options.providerFamilyId,
+    endpointProfile: options.endpointProfile,
+    credentialId: options.credentialId,
+    baseUrl,
+  })
+  const apiKey = await runtime.credentials.get('llm', identity.credentialId)
   if (options.requireCredential && !apiKey) {
     throw new Error(`[api_key_missing] LLM provider "${providerId}" API key is not configured.`)
   }
-  const url = resolveModelsEndpoint(baseUrl)
+  const url = resolveModelsEndpoint(identity.baseUrl ?? baseUrl)
   const headers: Record<string, string> = { Accept: 'application/json' }
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`
-    Object.assign(headers, resolveProviderExtraAuthHeaders(providerId, apiKey))
+    Object.assign(headers, resolveProviderExtraAuthHeaders(identity.providerFamilyId, apiKey))
   }
 
   const deadline = createDiscoveryDeadline(options)
@@ -120,7 +131,7 @@ export async function discoverModels(
 
 function resolveModelsEndpoint(baseUrl: string): string {
   const normalized = baseUrl.trim().replace(/\/+$/, '')
-  return normalized.endsWith('/v1') ? `${normalized}/models` : `${normalized}/v1/models`
+  return /\/v\d+$/.test(normalized) ? `${normalized}/models` : `${normalized}/v1/models`
 }
 
 function createDiscoveryDeadline(options: DiscoverModelsOptions): {

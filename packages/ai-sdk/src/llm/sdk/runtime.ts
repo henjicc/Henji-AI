@@ -15,6 +15,7 @@ import {
   ProviderModelStepError,
 } from '../../runtime'
 import { executeModelStepWithRetry } from './retryPolicy'
+import { resolveLlmEndpointIdentity } from '../endpointProfiles'
 
 /**
  * 任务 4.2 从 `electron/main/services/llm/sdk/runtime.ts` 迁入。
@@ -86,17 +87,25 @@ export async function runModelStep(
   })
 
   try {
-    const apiKey = await runtime.credentials.get('llm', input.providerId)
+    const identity = resolveLlmEndpointIdentity(input)
+    const resolvedInput: ModelStepInput = modelStepInputSchema.parse({
+      ...input,
+      providerFamilyId: identity.providerFamilyId,
+      endpointProfile: identity.endpointProfile,
+      credentialId: identity.credentialId,
+      baseUrl: identity.baseUrl,
+    })
+    const apiKey = await runtime.credentials.get('llm', identity.credentialId)
     if (!apiKey) {
       throw createCredentialError(input)
     }
     const result = await executeModelStepWithRetry({
-      input,
+      input: resolvedInput,
       signal: controller.signal,
       emit,
       operation: (attemptEmit) => executeModelStepWithModel(
-        input,
-        createModelStepLanguageModel(input, apiKey, undefined, runtime.transport),
+        resolvedInput,
+        createModelStepLanguageModel(resolvedInput, apiKey, undefined, runtime.transport),
         attemptEmit,
         controller.signal
       ),

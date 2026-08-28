@@ -25,6 +25,7 @@ export const DEFAULT_LLM_CAPABILITIES: LlmCapabilities = {
   image: false,
   video: false,
   audio: false,
+  file: false,
   streaming: true,
   toolCall: false,
   parallelTools: false,

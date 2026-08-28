@@ -47,6 +47,7 @@ export function createGroqLlmModule(): LlmModule {
         reasoningOutput: outcome.reasoningOutput,
         usage: outcome.usage,
         finishReason: outcome.finishReason,
+        toolCalls: outcome.toolCalls,
       }
     },
     discover: async (context) => await discoverModels(GROQ_PROVIDER_ID, GROQ_BASE_URL, context.runtime, {

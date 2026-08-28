@@ -8,6 +8,8 @@ export interface LlmCapabilities {
   image: boolean
   video: boolean
   audio: boolean
+  /** 宿主已持有的文件 URL / 内联字节；不表示 SDK 提供供应商文件上传。 */
+  file?: boolean
   streaming: boolean
   toolCall: boolean
   parallelTools: boolean
@@ -22,6 +24,12 @@ export interface LlmCapabilities {
 
 export interface LlmProviderConfig {
   providerId: string
+  /** 供应商协议族；区域化或多租户实例共享同一套协议规则。 */
+  providerFamilyId?: string
+  /** 当前实例选择的端点 profile。 */
+  endpointProfile?: string
+  /** RuntimeContext.credentials 的独立凭据槽；省略时兼容使用 providerId。 */
+  credentialId?: string
   displayName: string
   adapter: string
   apiProtocol?: LlmApiProtocol
@@ -33,6 +41,9 @@ export interface LlmProviderConfig {
 
 export interface LlmModelConfig {
   providerId: string
+  providerFamilyId?: string
+  endpointProfile?: string
+  credentialId?: string
   modelId: string
   displayName: string
   adapter: string
@@ -225,6 +236,17 @@ export interface LlmInputAudioPart {
   }
 }
 
+export interface LlmFilePart {
+  type: 'file'
+  file: {
+    /** 宿主已取得的可访问 URL；SDK 不负责创建或上传 file_id。 */
+    fileUrl?: string
+    /** Base64/供应商已接受的内联内容。 */
+    fileData?: string
+    filename?: string
+  }
+}
+
 export interface LlmTextPart {
   type: 'text'
   text: string
@@ -235,6 +257,7 @@ export type LlmMessageContentPart =
   | LlmImageUrlPart
   | LlmVideoUrlPart
   | LlmInputAudioPart
+  | LlmFilePart
 
 export interface LlmChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -245,6 +268,9 @@ export interface LlmChatMessage {
 export interface LlmChatRequest {
   requestId?: string
   providerId: string
+  providerFamilyId?: string
+  endpointProfile?: string
+  credentialId?: string
   modelId: string
   adapter?: string
   baseUrl?: string

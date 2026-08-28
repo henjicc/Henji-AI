@@ -14,6 +14,13 @@
 
 ## LLM fixture 补充（任务 9.9）
 
+## GLM-5.3-Flash fixture 补充（任务 13.2）
+
+`bigmodel/glm-5.3-flash.json` 记录智谱官方 Chat Completions 图片、视频、文件字段与同端点
+SSE/Function Calling 契约。Flash 多模态请求来自官方字面字段；公开 SSE 字面示例实际使用
+GLM-5.2/GLM-5.3，因此 fixture 明确标为“同端点协议字段”，不冒充 Flash 真实请求日志；媒体 URL
+均为不可联网占位值，本任务未发起真实或付费请求。
+
 `groq/*.json` 由 LLM 专用精确测试读取，不进入生成供应商的 `fixtures.test.ts`。本机没有 Groq
 真实请求日志，因此三份 fixture 均按既定来源优先级取自 Groq 官方 Models、Chat/Reasoning 与
 Errors 文档的字段说明；每份 `source` 已分别标明，内容与 token 均为不可联网的占位数据。

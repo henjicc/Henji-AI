@@ -20,8 +20,10 @@ import type {
   LlmChatRequestDto,
   LlmStreamEmitter,
   LlmUsageDto,
+  LlmStreamToolCall,
 } from './chatTypes'
 import { countLlmInputChars } from './message-metrics'
+import { resolveLlmEndpointIdentity } from './endpointProfiles'
 
 /**
  * 原生 SSE 流式聊天路径（`llm:chatStream`）的编排逻辑：取密钥 → 预处理请求体
@@ -53,6 +55,7 @@ export interface LlmChatCompletedInfo {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  toolCalls?: LlmStreamToolCall[]
 }
 
 export interface LlmChatStreamHooks {
@@ -73,6 +76,7 @@ export interface LlmChatStreamOutcome {
   reasoningOutput: string
   usage: LlmUsageDto | null
   finishReason: string | null
+  toolCalls?: LlmStreamToolCall[]
 }
 
 export interface LlmChatExecutionOptions {
@@ -123,13 +127,21 @@ export async function runLlmChatStream(
   registerAbortController('llm', taskId, controller)
 
   try {
-    const apiKey = await runtime.credentials.get('llm', request.providerId)
+    const identity = resolveLlmEndpointIdentity(request)
+    const resolvedRequest: LlmChatRequestDto = {
+      ...request,
+      providerFamilyId: identity.providerFamilyId,
+      endpointProfile: identity.endpointProfile,
+      credentialId: identity.credentialId,
+      baseUrl: identity.baseUrl,
+    }
+    const apiKey = await runtime.credentials.get('llm', identity.credentialId)
     if (!apiKey) {
       throw new Error(`[api_key_missing] LLM provider "${request.providerId}" API key is not configured.`)
     }
 
-    const processedRequest = await preprocessLlmRequest(request, runtime)
-    const endpoint = processedRequest.providerId.trim().toLowerCase() === 'ppio'
+    const processedRequest = await preprocessLlmRequest(resolvedRequest, runtime)
+    const endpoint = identity.providerFamilyId === 'ppio'
       ? resolvePpioChatEndpoint(processedRequest.baseUrl)
       : resolveOpenAiCompatibleEndpoint(processedRequest)
     const requestPayload = buildOpenAiCompatiblePayload(processedRequest)
@@ -162,6 +174,7 @@ export async function runLlmChatStream(
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
       finishReason: output.finishReason,
+      toolCalls: output.toolCalls,
     })
 
     span?.end()
@@ -176,6 +189,7 @@ export async function runLlmChatStream(
       reasoningOutput: output.reasoningOutput,
       usage: output.usage,
       finishReason: output.finishReason,
+      toolCalls: output.toolCalls,
     }
   } catch (error) {
     const normalizedInput = timedOut
@@ -201,7 +215,7 @@ async function preprocessLlmRequest(request: LlmChatRequestDto, runtime: Runtime
   const body: JsonObject = { messages: request.messages as unknown as JsonValue }
   const params = request.metadata ?? {}
   const processed = await preprocessRequestBody(
-    request.providerId,
+    request.providerFamilyId ?? request.providerId,
     '/v1/chat/completions',
     body,
     runtime,
