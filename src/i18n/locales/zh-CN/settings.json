@@ -124,27 +124,27 @@
   "providerCenter": {
     "loading": "正在加载供应商与模型…",
     "searchPlaceholder": "搜索供应商",
-    "modelCount": "{{count}} 个模型",
     "enabled": "启用供应商",
     "apiKey": "API 密钥",
-    "apiKeyHint": "同一供应商的生成模型和大语言模型共用这一份密钥。",
     "apiKeyPlaceholder": "请输入 {{provider}} API Key",
     "noCredential": "这个供应商当前不需要配置密钥。",
     "models": "模型与能力",
-    "modelsHint": "按能力筛选并选择要在应用中启用的模型。",
     "emptyProviders": "还没有供应商",
     "emptyProvidersHint": "添加供应商后即可统一管理密钥和模型。",
     "emptyModels": "这个分类还没有模型",
     "emptyModelsHint": "可添加模型或切换其他能力分类。",
-    "categories": { "all": "全部", "llm": "大语言模型", "image": "图片", "video": "视频", "audio": "音频" },
+    "providers": { "bigmodel": "智谱" },
+    "categories": {
+      "all": "全部", "image-generation": "图片生成", "video-generation": "视频生成",
+      "audio-generation": "音频生成", "speech-recognition": "语音识别", "ocr": "文字识别", "text-generation": "文本生成"
+    },
     "columns": { "model": "模型", "capability": "能力", "visibility": "启用" },
     "capabilities": {
-      "llm": "大语言模型", "text-input": "文本输入", "image-input": "图片输入", "video-input": "视频输入", "audio-input": "音频输入",
-      "image-generation": "图片生成", "image-edit": "图片编辑", "text-to-video": "文生视频", "image-to-video": "图生视频",
-      "reference-to-video": "参考生视频", "video-edit": "视频编辑", "video-generation": "视频生成", "audio-generation": "音频生成"
+      "image-generation": "图片生成", "video-generation": "视频生成", "audio-generation": "音频生成",
+      "speech-recognition": "语音识别", "ocr": "文字识别", "text-generation": "文本生成"
     },
     "guide": {
-      "beforeWebsite": "先去 ", "afterWebsite": " 注册或登录", "beforeApiKey": "，再去 ", "onlyApiKey": "前往 ", "afterApiKey": " 获取密钥。"
+      "beforeWebsite": "先去", "afterWebsite": "注册或登录，再去", "onlyApiKey": "前往", "afterApiKey": "获取密钥。"
     },
     "actions": {
       "addProvider": "添加供应商", "connectionSettings": "连接设置", "syncModels": "同步模型", "addModel": "添加模型",

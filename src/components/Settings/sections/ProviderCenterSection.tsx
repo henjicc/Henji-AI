@@ -3,7 +3,6 @@ import { Plus, RefreshCw, Search, Settings2 } from 'lucide-react'
 import {
   UI_TEXT_BODY_CLASS,
   UI_TEXT_LABEL_CLASS,
-  UI_TEXT_META_CLASS,
   UI_TEXT_TITLE_CLASS,
   UiButton,
   UiEmpty,
@@ -72,7 +71,11 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
     llmModels: llm.config.models,
     hiddenProviders: generationVisibility.hiddenProviders,
     hiddenModels: generationVisibility.hiddenModels,
-  }), [generationProviders, generationVisibility.hiddenModels, generationVisibility.hiddenProviders, llm.config.models, llm.config.providers])
+  })
+    .filter(group => !(group.canonicalProviderId === 'bigmodel' && group.llmProvider?.endpointProfile === 'global'))
+    .map(group => group.canonicalProviderId === 'bigmodel'
+      ? { ...group, displayName: t('providerCenter.providers.bigmodel') }
+      : group), [generationProviders, generationVisibility.hiddenModels, generationVisibility.hiddenProviders, llm.config.models, llm.config.providers, t])
 
   const filteredGroups = useMemo(() => {
     const query = providerSearch.trim().toLowerCase()
@@ -213,9 +216,9 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
   if (llm.loading) return <UiLoading message={t('providerCenter.loading')} />
 
   return (
-    <div className="grid grid-cols-[220px_minmax(0,1fr)] gap-5">
-      <UiPanel variant="inset" className="min-h-[32rem] p-2">
-        <div className="space-y-2">
+    <div className="grid h-[calc(min(88vh,64rem)-8.5rem)] min-h-0 grid-cols-[220px_minmax(0,1fr)] gap-5 overflow-hidden">
+      <UiPanel variant="inset" className="flex min-h-0 flex-col overflow-hidden p-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
           <UiButton type="button" variant="primary" className="w-full" onClick={() => { setProviderDialogCreate(true); setProviderDialogOpen(true) }}>
             <Plus size={15} className="mr-1.5" />
             {t('providerCenter.actions.addProvider')}
@@ -224,15 +227,10 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-soft" />
             <UiInput value={providerSearch} onChange={event => setProviderSearch(event.target.value)} className="pl-9" placeholder={t('providerCenter.searchPlaceholder')} />
           </div>
-          <div className="space-y-1">
+          <div className="ui-scrollbar min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain">
             {filteredGroups.map(group => (
               <UiOptionButton key={group.id} type="button" variant="menu" active={group.id === selected?.id} className="w-full px-3 py-2.5 text-left" onClick={() => { setSelectedId(group.id); setCategory('all') }}>
-                <span className="flex min-w-0 items-baseline gap-1.5">
-                  <span className="truncate text-sm font-medium">{group.displayName}</span>
-                  <span className={`shrink-0 ${UI_TEXT_META_CLASS}`}>
-                    {t('providerCenter.modelCount', { count: group.models.length })}
-                  </span>
-                </span>
+                <span className="block truncate text-sm font-medium">{group.displayName}</span>
               </UiOptionButton>
             ))}
           </div>
@@ -240,12 +238,11 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
       </UiPanel>
 
       {selected ? (
-        <div className="min-w-0 space-y-5">
+        <div className="ui-scrollbar min-w-0 space-y-5 overflow-y-auto overscroll-contain pr-2">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h3 className={UI_TEXT_TITLE_CLASS}>{selected.displayName}</h3>
-              <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>{selected.canonicalProviderId}</div>
-              <div className="mt-2">
+              <div className="mt-1">
                 <ProviderCredentialGuide
                   providerName={selected.displayName}
                   websiteUrl={metadata?.websiteUrl}
@@ -269,12 +266,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
           </div>
 
           <div className="border-t border-border-dark pt-5">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <div className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.apiKey')}</div>
-                <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>{t('providerCenter.apiKeyHint')}</div>
-              </div>
-            </div>
+            <div className={`mb-3 ${UI_TEXT_LABEL_CLASS}`}>{t('providerCenter.apiKey')}</div>
             {generationCredential || credentialProvider ? (
               <ApiKeyInput
                 value={credentialValue}
@@ -294,10 +286,7 @@ const ProviderCenterSection = ({ llm }: ProviderCenterSectionProps): JSX.Element
 
           <div className="border-t border-border-dark pt-5">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <div className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.models')}</div>
-                <div className={`mt-1 ${UI_TEXT_META_CLASS}`}>{t('providerCenter.modelsHint')}</div>
-              </div>
+              <div className={UI_TEXT_LABEL_CLASS}>{t('providerCenter.models')}</div>
               <div className="flex items-center gap-2">
                 {selected.llmProvider ? (
                   <>

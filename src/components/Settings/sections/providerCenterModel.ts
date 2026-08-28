@@ -1,8 +1,13 @@
 import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { Provider } from '@/config/providers'
-import type { ModelType } from '@/core/types'
 
-export type ProviderCenterCategory = 'llm' | ModelType
+export type ProviderCenterCategory =
+  | 'image-generation'
+  | 'video-generation'
+  | 'audio-generation'
+  | 'speech-recognition'
+  | 'ocr'
+  | 'text-generation'
 
 export interface ProviderCenterModelItem {
   id: string
@@ -50,35 +55,10 @@ function canMergeWithGeneration(provider: LlmProviderConfig, generationProviderI
     && (provider.credentialId ?? provider.providerId) === generationProviderId
 }
 
-function generationCapabilities(model: Provider['models'][number]): string[] {
-  const tags = new Set(model.tags ?? model.functions ?? [])
-  if (model.type === 'image') {
-    const capabilities = ['image-generation']
-    if (tags.has('image-to-image') || tags.has('supports-image-editing')) capabilities.push('image-edit')
-    return capabilities
-  }
-  if (model.type === 'video') {
-    const capabilities: string[] = []
-    if (tags.has('text-to-video')) capabilities.push('text-to-video')
-    if (tags.has('image-to-video')) capabilities.push('image-to-video')
-    if (tags.has('reference-mode') || tags.has('reference-to-video') || tags.has('video-reference')) {
-      capabilities.push('reference-to-video')
-    }
-    if (tags.has('supports-video-editing') || tags.has('video-to-video') || tags.has('video-edit')) {
-      capabilities.push('video-edit')
-    }
-    return capabilities.length > 0 ? capabilities : ['video-generation']
-  }
-  if (model.type === 'audio') return ['audio-generation']
-  return [model.type]
-}
-
-function llmCapabilities(model: LlmModelConfig): string[] {
-  const capabilities = ['llm', 'text-input']
-  if (model.capabilities.image) capabilities.push('image-input')
-  if (model.capabilities.video) capabilities.push('video-input')
-  if (model.capabilities.audio) capabilities.push('audio-input')
-  return capabilities
+function generationCategory(model: Provider['models'][number]): ProviderCenterCategory {
+  if (model.type === 'image') return 'image-generation'
+  if (model.type === 'video') return 'video-generation'
+  return 'audio-generation'
 }
 
 function generationItems(
@@ -86,17 +66,20 @@ function generationItems(
   hiddenProviders: ReadonlySet<string>,
   hiddenModels: ReadonlySet<string>,
 ): ProviderCenterModelItem[] {
-  return provider.models.map(model => ({
-    id: `generation:${provider.id}:${model.id}`,
-    source: 'generation',
-    providerId: provider.id,
-    modelId: model.id,
-    name: model.name,
-    category: model.type,
-    capabilityIds: generationCapabilities(model),
-    enabled: !hiddenProviders.has(provider.id) && !hiddenModels.has(`${provider.id}-${model.id}`),
-    generationModel: model,
-  }))
+  return provider.models.map((model) => {
+    const category = generationCategory(model)
+    return {
+      id: `generation:${provider.id}:${model.id}`,
+      source: 'generation',
+      providerId: provider.id,
+      modelId: model.id,
+      name: model.name,
+      category,
+      capabilityIds: [category],
+      enabled: !hiddenProviders.has(provider.id) && !hiddenModels.has(`${provider.id}-${model.id}`),
+      generationModel: model,
+    }
+  })
 }
 
 function llmItems(provider: LlmProviderConfig, models: LlmModelConfig[]): ProviderCenterModelItem[] {
@@ -108,8 +91,8 @@ function llmItems(provider: LlmProviderConfig, models: LlmModelConfig[]): Provid
       providerId: provider.providerId,
       modelId: model.modelId,
       name: model.displayName,
-      category: 'llm',
-      capabilityIds: llmCapabilities(model),
+      category: 'text-generation',
+      capabilityIds: ['text-generation'],
       enabled: provider.enabled && model.enabled,
       llmModel: model,
     }))

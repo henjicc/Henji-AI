@@ -124,27 +124,27 @@
   "providerCenter": {
     "loading": "Loading providers and models…",
     "searchPlaceholder": "Search providers",
-    "modelCount": "{{count}} models",
     "enabled": "Enable provider",
     "apiKey": "API Key",
-    "apiKeyHint": "Generation and language models from the same provider share this key.",
     "apiKeyPlaceholder": "Enter {{provider}} API Key",
     "noCredential": "This provider does not currently require a key.",
     "models": "Models & Capabilities",
-    "modelsHint": "Filter by capability and choose which models are enabled in the app.",
     "emptyProviders": "No providers yet",
     "emptyProvidersHint": "Add a provider to manage its key and models together.",
     "emptyModels": "No models in this category",
     "emptyModelsHint": "Add a model or choose another capability category.",
-    "categories": { "all": "All", "llm": "Language", "image": "Image", "video": "Video", "audio": "Audio" },
+    "providers": { "bigmodel": "Zhipu AI" },
+    "categories": {
+      "all": "All", "image-generation": "Image generation", "video-generation": "Video generation",
+      "audio-generation": "Audio generation", "speech-recognition": "Speech recognition", "ocr": "OCR", "text-generation": "Text generation"
+    },
     "columns": { "model": "Model", "capability": "Capabilities", "visibility": "Enabled" },
     "capabilities": {
-      "llm": "Language model", "text-input": "Text input", "image-input": "Image input", "video-input": "Video input", "audio-input": "Audio input",
-      "image-generation": "Image generation", "image-edit": "Image editing", "text-to-video": "Text to video", "image-to-video": "Image to video",
-      "reference-to-video": "Reference to video", "video-edit": "Video editing", "video-generation": "Video generation", "audio-generation": "Audio generation"
+      "image-generation": "Image generation", "video-generation": "Video generation", "audio-generation": "Audio generation",
+      "speech-recognition": "Speech recognition", "ocr": "OCR", "text-generation": "Text generation"
     },
     "guide": {
-      "beforeWebsite": "First visit ", "afterWebsite": " to register or sign in", "beforeApiKey": ", then open ", "onlyApiKey": "Open ", "afterApiKey": " to get your key."
+      "beforeWebsite": "First visit", "afterWebsite": "to register or sign in, then open", "onlyApiKey": "Open", "afterApiKey": "to get your key."
     },
     "actions": {
       "addProvider": "Add provider", "connectionSettings": "Connection settings", "syncModels": "Sync models", "addModel": "Add model",

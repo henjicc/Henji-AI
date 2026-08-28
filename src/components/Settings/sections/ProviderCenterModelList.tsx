@@ -26,7 +26,14 @@ interface ProviderCenterModelListProps {
   onDeleteModel: (model: ProviderCenterModelItem) => void | Promise<void>
 }
 
-const CATEGORY_ORDER: ProviderCenterCategory[] = ['llm', 'image', 'video', 'audio']
+const CATEGORY_ORDER: ProviderCenterCategory[] = [
+  'image-generation',
+  'video-generation',
+  'audio-generation',
+  'speech-recognition',
+  'ocr',
+  'text-generation',
+]
 
 function categoryLabel(category: ProviderCenterCategory, t: (key: string) => string): string {
   return t(`providerCenter.categories.${category}`)
@@ -43,10 +50,7 @@ const ProviderCenterModelList = ({
 }: ProviderCenterModelListProps): JSX.Element => {
   const { t } = useI18n('settings')
   const counts = countProviderCategories(group.models)
-  const categories = [
-    ...CATEGORY_ORDER.filter(item => (counts[item] ?? 0) > 0),
-    ...Object.keys(counts).filter(item => !CATEGORY_ORDER.includes(item)).sort(),
-  ]
+  const categories = CATEGORY_ORDER.filter(item => (counts[item] ?? 0) > 0)
   const filtered = category === 'all' ? group.models : group.models.filter(model => model.category === category)
 
   return (

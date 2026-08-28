@@ -575,6 +575,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       setup: async (page) => {
         await setupSettings(page)
         await clickNamedButton(page, /^(模型|Models)$/i)
+        await clickNamedButton(page, /^KIE$/)
         await settlePage(page)
       },
     },

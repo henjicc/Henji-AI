@@ -36,8 +36,8 @@ describe('providerCenterModel', () => {
     })
     expect(group.credentialId).toBe('ppio')
     expect(group.models.map(model => model.source)).toEqual(['generation', 'llm'])
-    expect(group.models[0].capabilityIds).toEqual(['image-generation', 'image-edit'])
-    expect(group.models[1].capabilityIds).toContain('image-input')
+    expect(group.models[0]).toMatchObject({ category: 'image-generation', capabilityIds: ['image-generation'] })
+    expect(group.models[1]).toMatchObject({ category: 'text-generation', capabilityIds: ['text-generation'] })
   })
 
   it('LLM 停用但生成模型仍可用时，供应商总状态保持启用', () => {
