@@ -868,6 +868,10 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
               context.arc(x, y, radius, 0, Math.PI * 2)
               context.stroke()
             }
+            context.fillStyle = 'rgb(37, 232, 198)'
+            context.beginPath()
+            context.arc(145, 590, 58, 0, Math.PI * 2)
+            context.fill()
             context.strokeStyle = 'rgb(235, 241, 255)'
             context.lineWidth = 8
             context.beginPath()
@@ -913,7 +917,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         const radius = page.getByRole('slider', { name: '发光半径' })
         await radius.fill('0.58')
         const chromaticAberration = page.getByRole('slider', { name: '色差' })
-        await chromaticAberration.fill('0.75')
+        await chromaticAberration.fill('0')
         if (await page.getByText('辉光预览失败').count()) {
           throw new Error('重新打开图片编辑器后，辉光预览仍被旧会话 revision 取消')
         }

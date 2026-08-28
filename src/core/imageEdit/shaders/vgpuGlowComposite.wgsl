@@ -50,14 +50,11 @@ fn layeredBloom(uv: vec2f) -> vec3f {
   let near = sampleNear(uv);
   let medium = sampleMedium(uv);
   let far = sampleFar(uv);
-  let nearBand = max(near - medium * 0.72, vec3f(0.0));
-  let mediumBand = max(medium - far * 0.72, vec3f(0.0));
-  let haze = near * composite.weights.x
+  // 近、中、远三层散射直接连续叠加。边缘亮度来自发光体本身与窄高斯层，
+  // 不再用 DoG 带通或形态学外扩重建一条等宽轮廓。
+  return near * composite.weights.x
     + medium * composite.weights.y
     + far * composite.weights.z;
-  let bands = nearBand * composite.weights.x * 0.75
-    + mediumBand * composite.weights.y * 0.35;
-  return haze + bands * composite.weights.w;
 }
 
 fn tintBloom(color: vec3f) -> vec3f {
@@ -105,7 +102,7 @@ fn rollHighlight(color: vec3f) -> vec3f {
   let splitBloom = mix(splitSourceBloom, splitTintedBloom, composite.tint.a);
   let diffuseGlow = mix(tintBloom(centeredBloom), splitBloom, composite.optics.w);
 
-  // 全分辨率光源核心和约 1px 的外缘亮边不经过降采样，保住圆环/文字的锐利发光体质感。
+  // 全分辨率光源核心不经过降采样，保住发光体本身的清晰度；外围只由高斯散射形成。
   let directEnergy = emitterEnergy(base.rgb);
   let centeredCore = coreEmitter(uv);
   let redCore = coreEmitter(uv + chromaOffset);
@@ -118,15 +115,6 @@ fn rollHighlight(color: vec3f) -> vec3f {
   ) * composite.source.w;
   let splitCore = mix(splitSourceCore, splitTintedCore, composite.tint.a);
   let core = mix(centeredCore, splitCore, composite.optics.w);
-  let rimStep = composite.optics.xy * 1.35;
-  let neighborEnergy = max(
-    max(emitterEnergy(textureSampleLevel(scene, linearSampler, uv + vec2f(rimStep.x, 0.0), 0.0).rgb),
-        emitterEnergy(textureSampleLevel(scene, linearSampler, uv - vec2f(rimStep.x, 0.0), 0.0).rgb)),
-    max(emitterEnergy(textureSampleLevel(scene, linearSampler, uv + vec2f(0.0, rimStep.y), 0.0).rgb),
-        emitterEnergy(textureSampleLevel(scene, linearSampler, uv - vec2f(0.0, rimStep.y), 0.0).rgb))
-  );
-  let rim = max(neighborEnergy - directEnergy, 0.0) * composite.weights.w;
-  let rimColor = mix(vec3f(1.0), composite.tint.rgb, composite.tint.a);
-  let emitted = (diffuseGlow + core + rim * rimColor) * composite.params.x;
+  let emitted = (diffuseGlow + core) * composite.params.x;
   return vec4f(rollHighlight(base.rgb + emitted), base.a);
 }

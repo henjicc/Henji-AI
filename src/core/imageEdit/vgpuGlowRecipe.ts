@@ -14,7 +14,6 @@ export interface VgpuGlowRecipe {
   tintLinear: readonly [number, number, number];
   tintEnabled: boolean;
   coreGain: number;
-  edgeGain: number;
   chromaticAberration: number;
   chromaticOffsetPx: number;
 }
@@ -28,10 +27,10 @@ export function compileVgpuGlowRecipe(params: VgpuGlowOperationParams): VgpuGlow
   ] as const;
   const weightSum = rawWeights[0] + rawWeights[1] + rawWeights[2];
   const look = params.look === 'natural'
-    ? { boost: 3.4, exposure: 1.35, shoulder: 0.84, rolloff: 0.72, edge: 1.05 }
+    ? { boost: 3.4, exposure: 1.35, shoulder: 0.84, rolloff: 0.72 }
     : params.look === 'neon'
-      ? { boost: 8.8, exposure: 2.15, shoulder: 0.72, rolloff: 0.9, edge: 1.4 }
-      : { boost: 5.8, exposure: 1.75, shoulder: 0.78, rolloff: 0.82, edge: 1.2 };
+      ? { boost: 8.8, exposure: 2.15, shoulder: 0.72, rolloff: 0.9 }
+      : { boost: 5.8, exposure: 1.75, shoulder: 0.78, rolloff: 0.82 };
   return {
     schemaVersion: 3,
     threshold: 0.035 + Math.pow(params.sourceThreshold, 1.8) * 0.72,
@@ -50,7 +49,6 @@ export function compileVgpuGlowRecipe(params: VgpuGlowOperationParams): VgpuGlow
     tintLinear: parseLinearRgb(params.tintColor),
     tintEnabled: params.tintEnabled,
     coreGain: 0.7 + params.whiteHeat * 0.75,
-    edgeGain: look.edge + (1 - radius) * 0.85,
     chromaticAberration: params.chromaticAberration,
     chromaticOffsetPx: Math.pow(params.chromaticAberration, 1.5) * (1.5 + radius * 4.5),
   };

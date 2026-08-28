@@ -159,7 +159,7 @@ export class VgpuGlowRenderer {
       linearSampler: this.linearSampler,
       composite: {
         params: [recipe.intensity, recipe.shoulder, recipe.rolloff, recipe.whiteHeat],
-        weights: [...recipe.levelWeights, recipe.edgeGain],
+        weights: [...recipe.levelWeights, 0],
         tint: [...recipe.tintLinear, recipe.tintEnabled ? 1 : 0],
         optics: [
           1 / Math.max(t.scene.size[0], 1),
