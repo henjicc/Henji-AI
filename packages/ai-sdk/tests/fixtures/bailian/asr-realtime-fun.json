@@ -2,12 +2,15 @@
   "kind": "capability",
   "source": {
     "protocol": "阿里云百炼 Fun-ASR Realtime 官方 task-started/result-generated/task-finished 事件字段",
-    "evidence": "packages/ai-sdk/docs/model-adaptation/Fun-ASR-Realtime/Fun-ASR-Realtime_百炼.md；标识与文本为不可联网占位数据"
+    "evidence": "https://help.aliyun.com/zh/model-studio/fun-asr-server-events（2026-08-28 核对）；sentenceBegin/finished 保留官方空文本/空 payload 语义，其余标识与文本为不可联网占位数据；malformedPartial/emptyFinal 是由官方必填状态约束派生的合成断牙负例，不代表真实返回"
   },
   "events": {
     "started": { "header": { "event": "task-started", "task_id": "fixture_task_001" } },
+    "sentenceBegin": { "header": { "event": "result-generated", "task_id": "fixture_task_001" }, "payload": { "output": { "sentence": { "sentence_id": 1, "sentence_begin": true, "sentence_end": false, "begin_time": 0, "end_time": null, "text": "", "words": [] } }, "usage": null } },
+    "malformedPartial": { "header": { "event": "result-generated", "task_id": "fixture_task_001" }, "payload": { "output": { "sentence": { "sentence_id": 1, "sentence_end": false, "begin_time": 0, "end_time": null, "text": "", "words": [] } }, "usage": null } },
     "partial": { "header": { "event": "result-generated" }, "payload": { "output": { "sentence": { "sentence_id": 1, "sentence_end": false, "begin_time": 0, "end_time": 420, "text": "你" } } } },
     "final": { "header": { "event": "result-generated" }, "payload": { "output": { "sentence": { "sentence_id": 1, "sentence_end": true, "begin_time": 0, "end_time": 820, "text": "你好", "words": [{ "begin_time": 0, "end_time": 420, "text": "你", "punctuation": "" }, { "begin_time": 420, "end_time": 820, "text": "好", "punctuation": "。" }] } } }, "usage": { "duration": 1 } },
-    "finished": { "header": { "event": "task-finished", "task_id": "fixture_task_001" }, "payload": { "usage": { "duration": 1 } } }
+    "emptyFinal": { "header": { "event": "result-generated", "task_id": "fixture_task_001" }, "payload": { "output": { "sentence": { "sentence_id": 1, "sentence_end": true, "begin_time": 0, "end_time": 0, "text": "", "words": [] } }, "usage": { "duration": 0 } } },
+    "finished": { "header": { "event": "task-finished", "task_id": "fixture_task_001" }, "payload": {} }
   }
 }

@@ -14,6 +14,8 @@
 
 `task-failed` 后 socket 废弃；等 `task-finished` 后可用不同 `task_id` 复用连接，空闲 60 秒自动断开。`result-generated.payload.output.sentence` 提供文本、句末标志和时间戳，句末 `usage.duration` 为计费时长。
 
+官方服务端事件示例明确包含一种合法的空文本中间事件：新句开始时会返回 `sentence_begin=true`、`sentence_end=false`、`text=""`、`words=[]`。客户端应把它当作句子生命周期通知并继续等待，不能报响应无效。相反，`sentence_end=true` 的最终结果仍必须有有效文本；`task-finished` 自身的 `payload` 通常为空，只负责结束任务，也不能覆盖已经累计的最终文本。如果整个任务直到 `task-finished` 都没有任何有效最终文本，SDK 应报 `invalid_response`。
+
 ## 2. 能力、限制与价格
 
 - 格式 `pcm/wav/mp3/opus/speex/aac/amr`，采样率任意，单声道，时长无限制。
@@ -22,7 +24,7 @@
 
 ## 3. 适配要点
 
-Say-It 保留该稳定别名与 2026-02-28 快照供用户选择；SDK 不应自行把稳定别名锁定为某快照。取消时主动关闭 socket，密钥和原始音频不记日志。
+Say-It 保留该稳定别名与 2026-02-28 快照供用户选择；SDK 不应自行把稳定别名锁定为某快照。空 `sentence_begin` 事件只推进状态，不产生 partial/final；重复 final 只累计一次。取消时主动关闭 socket，密钥和原始音频不记日志。
 
 ## 4. 原始链接索引
 

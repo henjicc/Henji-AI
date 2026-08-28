@@ -4,6 +4,12 @@
 
 ## Unreleased
 
+## 0.2.3 - 2026-08-28
+
+- 修复 Fun-ASR Realtime 把官方 `sentence_begin=true`、`sentence_end=false`、`text=""` 句首生命周期事件误报为 `invalid_response`；空句首现在继续等待真实文本。
+- 保持严格终态：空 final 仍报协议错误，任务全程没有有效 final 时在 `task-finished` 报无有效转写；空 `task-finished.payload` 不覆盖已累计结果。
+- 重复 final 只累计并通知一次；补齐官方事件 fixture、用户错误回归、空终态、终态顺序、错误与资源释放断牙测试。
+
 ## 0.2.2 - 2026-08-28
 
 - 新增按需入口 `@henjicc/ai-sdk/llm/modules`：外部包、插件与内置 LLM 共用 source-aware 注册、流式/非流式执行、模型发现、取消、drain、namespace 注销和 dispose 生命周期。

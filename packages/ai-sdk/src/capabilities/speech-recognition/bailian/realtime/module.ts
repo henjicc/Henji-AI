@@ -78,17 +78,30 @@ let taskSequence = 0
 function appendFinal(
   segments: SpeechRecognitionSegment[],
   candidate: SpeechRecognitionSegment
-): void {
+): boolean {
   const previous = segments.at(-1)
   if (previous
+    && previous.startMs !== undefined
+    && candidate.startMs !== undefined
     && previous.startMs === candidate.startMs
     && (previous.text === candidate.text
       || previous.text.startsWith(candidate.text)
       || candidate.text.startsWith(previous.text))) {
-    if (candidate.text.length >= previous.text.length) segments[segments.length - 1] = candidate
-    return
+    if (candidate.text === previous.text) {
+      if ((candidate.words?.length ?? 0) > (previous.words?.length ?? 0)
+        || (candidate.endMs ?? 0) > (previous.endMs ?? 0)) {
+        segments[segments.length - 1] = candidate
+      }
+      return false
+    }
+    if (candidate.text.length > previous.text.length) {
+      segments[segments.length - 1] = candidate
+      return true
+    }
+    return false
   }
   segments.push(candidate)
+  return true
 }
 
 async function apiKey(context: Context): Promise<string> {
@@ -227,9 +240,7 @@ async function openDriver(
       lastPartial = ''
       if (event.durationMs !== undefined) durationMs = Math.max(durationMs ?? 0, event.durationMs)
       const segment = event.segment ?? { text: event.text }
-      const before = segments.length
-      appendFinal(segments, segment)
-      if (segments.length !== before || segments.at(-1) === segment) {
+      if (appendFinal(segments, segment)) {
         await context.emit({ type: 'final', text: segment.text, segment })
       }
       return
@@ -242,6 +253,7 @@ async function openDriver(
     if (event.kind === 'error') {
       throw new AiRuntimeError('provider_task_failed', `${event.code ? `${event.code}: ` : ''}${event.message}`)
     }
+    if (event.kind === 'ignored') return
     context.runtime.logger.warn('忽略百炼实时未知事件', {
       event: 'capability.bailian_realtime.unknown_event', requestId: context.requestId,
       providerId: 'bailian', modelId: preset.modelId, context: { eventType: event.eventType },

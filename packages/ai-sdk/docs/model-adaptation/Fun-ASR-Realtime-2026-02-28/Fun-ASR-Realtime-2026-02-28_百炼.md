@@ -20,11 +20,13 @@
 - 语言：中文（多方言/口音）、英语、日语。
 - 热词：支持。不支持说话人分离和情感识别。
 - `result-generated.payload.output.sentence` 含中间/最终文本与时间戳；句末时 `usage.duration` 为计费时长。
+- 新句开始的首个中间事件可为 `sentence_begin=true`、`sentence_end=false`、`text=""`、`words=[]`；这是官方定义的合法生命周期事件，应继续等待文本。`sentence_end=true` 的 final 仍必须非空。
+- `task-finished.payload` 通常为空，只表示任务正常结束；不能把它当作识别结果，也不能覆盖已累计 final。若此前始终没有有效 final，任务结束时应报无有效转写。
 - 北京原价：0.00033 元/秒，输出不计费；官方页列 36,000 秒/10 小时限时免费额度（以账号实际为准）。
 
 ## 3. 适配要点
 
-与稳定别名 `fun-asr-realtime` 并列保留，不自动改写 ID。两者共用传输实现，但能力元数据和显示名分开注册。取消必须停止送音频、关闭当前 socket，不得把该连接放回池。
+与稳定别名 `fun-asr-realtime` 并列保留，不自动改写 ID。两者共用传输实现，但能力元数据和显示名分开注册。空 `sentence_begin` 不产生 partial/final，重复 final 只累计一次。取消必须停止送音频、关闭当前 socket，不得把该连接放回池。
 
 ## 4. 原始链接索引
 

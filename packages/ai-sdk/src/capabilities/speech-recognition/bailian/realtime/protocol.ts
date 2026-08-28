@@ -17,6 +17,7 @@ export type BailianRealtimeEvent =
   | { kind: 'final'; text: string; segment?: SpeechRecognitionSegment; durationMs?: number }
   | { kind: 'finished'; durationMs?: number }
   | { kind: 'error'; code?: string; message: string }
+  | { kind: 'ignored'; eventType: string }
   | { kind: 'unknown'; eventType: string }
 
 function record(value: unknown): UnknownRecord | undefined {
@@ -164,10 +165,20 @@ function parseFunEvent(root: UnknownRecord): BailianRealtimeEvent {
   }
   if (eventType === 'result-generated') {
     const sentence = record(record(record(root.payload)?.output)?.sentence)
-    if (sentence?.heartbeat === true) return { kind: 'unknown', eventType: 'heartbeat' }
+    if (sentence?.heartbeat === true) return { kind: 'ignored', eventType: 'heartbeat' }
     const segment = parseBailianSentence(sentence)
     const transcript = segment?.text ?? string(sentence?.text)
-    if (!transcript) throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR result has no text')
+    if (!transcript) {
+      // 官方会用 text="" + sentence_begin=true/sentence_end=false 宣告新句开始；
+      // 这是合法的中间生命周期事件，不是识别结果。最终句仍必须带有效文本。
+      if (sentence?.sentence_begin === true && sentence?.sentence_end === false) {
+        return { kind: 'ignored', eventType: 'empty-sentence-begin' }
+      }
+      if (sentence?.sentence_end === true) {
+        throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR final result has no text')
+      }
+      throw new AiRuntimeError('invalid_response', 'Bailian Fun-ASR result has no text or sentence state')
+    }
     const duration = number((record(root.usage) ?? record(record(root.payload)?.usage))?.duration)
     return sentence?.sentence_end === true
       ? { kind: 'final', text: transcript, segment, durationMs: duration === undefined ? undefined : duration * 1_000 }

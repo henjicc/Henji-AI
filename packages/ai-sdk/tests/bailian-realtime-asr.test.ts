@@ -118,7 +118,7 @@ describe('百炼实时 ASR', () => {
 
   it('Fun Duplex 完整处理 start/二进制/partial/final/timestamps/finish，finish 与 close 幂等', async () => {
     const official = fixture<{
-      started: unknown; partial: unknown; final: unknown; finished: unknown
+      started: unknown; sentenceBegin: unknown; partial: unknown; final: unknown; finished: unknown
     }>('asr-realtime-fun.json')
     const events: SpeechRecognitionEvent[] = []
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
@@ -146,6 +146,7 @@ describe('百炼实时 ASR', () => {
       options: { maxSentenceSilenceMs: 900 },
     }, { requestId: 'fun-realtime', onEvent: (event) => { events.push(event) } })
 
+    connection.push(stringify(official.events.sentenceBegin))
     await session.send({ bytes: new Uint8Array([1, 2, 3]) })
     const firstFinish = session.finish()
     const secondFinish = session.finish()
@@ -169,8 +170,78 @@ describe('百炼实时 ASR', () => {
       expect.objectContaining({ headers: { Authorization: 'Bearer fixture-secret-key' } })
     )
     expect(events.map((event) => event.type)).toEqual(['started', 'partial', 'final', 'completed'])
+    expect(logger.warn).toHaveBeenCalledOnce()
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('empty-sentence-begin')
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('DO_NOT_LOG')
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain('fixture-secret-key')
+  })
+
+  it('Fun 官方空 sentence-begin 正常推进；空 final 与全程无文本仍严格失败并释放连接', async () => {
+    const official = fixture<{
+      started: unknown; sentenceBegin: unknown; malformedPartial: unknown; emptyFinal: unknown; finished: unknown
+    }>('asr-realtime-fun.json')
+
+    expect(parseRealtimeMessage(bailianFunAsrRealtime, stringify(official.events.sentenceBegin)))
+      .toEqual({ kind: 'ignored', eventType: 'empty-sentence-begin' })
+    expect(() => parseRealtimeMessage(bailianFunAsrRealtime, stringify(official.events.malformedPartial)))
+      .toThrowError('Bailian Fun-ASR result has no text or sentence state')
+    expect(() => parseRealtimeMessage(bailianFunAsrRealtime, stringify(official.events.emptyFinal)))
+      .toThrowError(expect.objectContaining({ code: 'invalid_response' }))
+
+    const connection = new ScriptedConnection((data) => {
+      if (typeof data !== 'string') return
+      const message = JSON.parse(data) as { header?: { action?: string } }
+      if (message.header?.action === 'run-task') {
+        connection.push(stringify(official.events.started))
+        connection.push(stringify(official.events.sentenceBegin))
+      }
+      if (message.header?.action === 'finish-task') {
+        connection.push(stringify(official.events.finished))
+      }
+    })
+    const client = createCapabilityClient({
+      runtime: runtime(connection),
+      realtimeModules: [createBailianRealtimeAsrModule(bailianFunAsrRealtime)],
+    })
+    const session = await open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, {
+      requestId: 'empty-fun-realtime',
+    })
+
+    await expect(session.finish()).rejects.toMatchObject({
+      code: 'invalid_response',
+      message: expect.stringContaining('without final transcript'),
+    })
+    await vi.waitFor(() => expect(connection.close).toHaveBeenCalledOnce())
+  })
+
+  it('Fun 重复 final 只累计并通知一次，task-finished 空 payload 不覆盖最终文本', async () => {
+    const official = fixture<{
+      started: unknown; final: unknown; finished: unknown
+    }>('asr-realtime-fun.json')
+    const events: SpeechRecognitionEvent[] = []
+    const connection = new ScriptedConnection((data) => {
+      if (typeof data !== 'string') return
+      const message = JSON.parse(data) as { header?: { action?: string } }
+      if (message.header?.action === 'run-task') connection.push(stringify(official.events.started))
+      if (message.header?.action === 'finish-task') {
+        connection.push(stringify(official.events.final))
+        connection.push(stringify(official.events.final))
+        connection.push(stringify(official.events.finished))
+      }
+    })
+    const client = createCapabilityClient({
+      runtime: runtime(connection),
+      realtimeModules: [createBailianRealtimeAsrModule(bailianFunAsrRealtime)],
+    })
+    const session = await open(client, bailianFunAsrRealtime.id, { mediaType: 'audio/pcm' }, {
+      requestId: 'duplicate-final',
+      onEvent: (event) => { events.push(event) },
+    })
+
+    await expect(session.finish()).resolves.toMatchObject({ text: '你好', segments: [{ text: '你好' }] })
+    expect(events.filter((event) => event.type === 'final')).toHaveLength(1)
+    expect(events.at(-1)?.type).toBe('completed')
+    expect(connection.close).toHaveBeenCalledOnce()
   })
 
   it('Qwen Realtime 等 session.created 后 update，Manual 模式 commit 后 finish 并关闭', async () => {
@@ -211,6 +282,38 @@ describe('百炼实时 ASR', () => {
       } })
     )
     expect(connection.close).toHaveBeenCalledOnce()
+  })
+
+  it('Qwen 无时间戳的连续同文 final 不会被 Fun 去重规则静默合并', async () => {
+    const official = fixture<{
+      created: unknown; updated: unknown; final: unknown; finished: unknown
+    }>('asr-realtime-qwen.json')
+    const events: SpeechRecognitionEvent[] = []
+    const connection = new ScriptedConnection((data) => {
+      if (typeof data !== 'string') return
+      const message = JSON.parse(data) as { type?: string }
+      if (message.type === 'session.update') connection.push(stringify(official.events.updated))
+      if (message.type === 'session.finish') {
+        connection.push(stringify(official.events.final))
+        connection.push(stringify(official.events.final))
+        connection.push(stringify(official.events.finished))
+      }
+    })
+    const connect = vi.fn(() => { connection.push(stringify(official.events.created)) })
+    const client = createCapabilityClient({
+      runtime: runtime(connection, connect),
+      realtimeModules: [createBailianRealtimeAsrModule(bailianQwen3AsrFlashRealtime)],
+    })
+    const session = await open(client, bailianQwen3AsrFlashRealtime.id, { mediaType: 'audio/pcm' }, {
+      requestId: 'qwen-same-final',
+      onEvent: (event) => { events.push(event) },
+    })
+
+    await expect(session.finish()).resolves.toMatchObject({
+      text: '你好你好',
+      segments: [{ text: '你好' }, { text: '你好' }],
+    })
+    expect(events.filter((event) => event.type === 'final')).toHaveLength(2)
   })
 
   it('乱序 transcript 在 open 阶段稳定失败并释放连接', async () => {
