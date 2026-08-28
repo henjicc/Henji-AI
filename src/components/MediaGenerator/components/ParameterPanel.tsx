@@ -27,6 +27,7 @@ interface ParameterPanelProps {
   uploadedVideos: string[]
   values: DynamicValueMap
   onChange: (id: string, value: DynamicValue) => void
+  onChanges: (changes: DynamicValueMap) => void
 }
 
 const DURATION_PARAM_HINT = /(duration|video[_\s-]?length|时长|秒)/i
@@ -55,7 +56,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
   uploadedImages,
   uploadedVideos,
   values,
-  onChange
+  onChange,
+  onChanges
 }) => {
   // 从 ModelRegistry 获取模型定义
   const modelDef = registry.getModel(selectedModel)
@@ -166,6 +168,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           allValues={runtimeValues}
           uploadedImages={uploadedImages}
           uploadedVideos={uploadedVideos}
+          onParamChange={onChange}
+          onParamChanges={onChanges}
           disabled={isParamDisabled(param, runtimeValues, linkageEngine)}
         />
       ))}
@@ -187,6 +191,8 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           allValues={runtimeValues}
           uploadedImages={uploadedImages}
           uploadedVideos={uploadedVideos}
+          onParamChange={onChange}
+          onParamChanges={onChanges}
           disabled={isParamDisabled(item.param, runtimeValues, linkageEngine)}
         />
       ) : (
@@ -196,6 +202,7 @@ const ParameterPanel: React.FC<ParameterPanelProps> = ({
           params={item.params}
           values={runtimeValues}
           onChange={onChange}
+          onChanges={onChanges}
           linkageEngine={linkageEngine}
           uploadedImages={uploadedImages}
           uploadedVideos={uploadedVideos}

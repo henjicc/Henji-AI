@@ -167,7 +167,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     updateNodeData(id, { params: nextParams })
   }, [id, updateNodeData])
 
-  const { schema: modelParamSchema, values: modelParamValues, setParam } = useNodeModelParams({
+  const { schema: modelParamSchema, values: modelParamValues, setParam, setParams } = useNodeModelParams({
     modelId: effectiveModelId,
     storedParams: nodeData.params,
     onParamsChange: handleParamsChange,
@@ -472,6 +472,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
           schema={modelParamSchema}
           values={modelParamValues}
           setParam={setParam}
+          setParams={setParams}
           excludeParamIds={PROMPT_PARAM_IDS}
         />
       </div>

@@ -194,7 +194,30 @@ export const apimartPresentationPart1: Record<string, ModelPresentation> = {
       },
       "apimartGptImage2MaskUrl": {
         name: { zh: '局部重绘遮罩', en: 'Inpainting Mask' },
-        description: { zh: '请上传与首张参考图同尺寸、带透明通道的遮罩图', en: 'Upload a mask with alpha matching the first reference image size' },
+        description: {
+          zh: '定义基于首张参考图创建的局部重绘区域；遮罩与源图同尺寸并使用 Alpha 通道。',
+          en: 'Defines the inpainting region derived from the first reference image; the mask matches the source dimensions and uses an alpha channel.',
+        },
+        tooltip: {
+          zh: '先添加参考图，再点击“绘制”在首张图上涂抹需要重绘的区域；遮罩会自动保持与源图同尺寸。',
+          en: 'Add a reference image, then choose “Draw” and paint the area to regenerate on the first image. The mask automatically matches the source dimensions.',
+        },
+        derivedMediaAuthoring: {
+          kind: 'mask',
+          source: { kind: 'first-image' },
+          editor: { kind: 'mask' },
+          output: {
+            format: 'png',
+            maskEncoding: 'alpha',
+            dimensions: 'source',
+            paintMeaning: 'transparent-edit',
+          },
+          onSourceChange: 'invalidate',
+          actions: {
+            create: { zh: '绘制', en: 'Draw' },
+            edit: { zh: '编辑', en: 'Edit' },
+          },
+        },
       },
     },
     linkages: [],

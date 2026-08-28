@@ -14,6 +14,7 @@ interface ParamGroupTriggerProps {
   params: ParamDef[]
   values: DynamicValueMap
   onChange: (paramId: string, value: DynamicValue) => void
+  onChanges?: (changes: DynamicValueMap) => void
   linkageEngine: LinkageEngine | null
   uploadedImages?: string[]
   uploadedVideos?: string[]
@@ -35,6 +36,7 @@ export function ParamGroupTrigger({
   params,
   values,
   onChange,
+  onChanges,
   linkageEngine,
   uploadedImages = [],
   uploadedVideos = [],
@@ -94,6 +96,8 @@ export function ParamGroupTrigger({
                       allValues={values}
                       uploadedImages={uploadedImages}
                       uploadedVideos={uploadedVideos}
+                      onParamChange={onChange}
+                      onParamChanges={onChanges}
                       disabled={disabledParamIds?.has(param.id) === true || isParamDisabled(param, values, linkageEngine)}
                     />
                   </div>

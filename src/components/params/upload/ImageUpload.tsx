@@ -11,11 +11,11 @@ import type { ImageUploadParamDef } from '@/core/types'
 import FileUploader from '@/components/ui/FileUploader'
 import { fileToBase64 } from '@/utils/fileConverter'
 import { calculateAspectRatio } from '@/utils/smartMatch'
-import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
 import { importLocalMedia } from '@/services/localMediaImport'
 import { resolveImageDisplayUrl } from '@/services/imageSource'
 import { isUiInspectionReadOnly } from '@/platform/runtime'
+import { ParamLabel } from '../ParamLabel'
 
 interface ImageUploadProps {
   param: ImageUploadParamDef
@@ -45,9 +45,6 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   const safeValue = Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : (typeof value === 'string' && value.trim() ? [value.trim()] : [])
-
-  // 获取显示名称
-  const displayName = getI18nText(param.name, i18n.language)
 
   // 处理上传
   const handleUpload = async (files: File[]) => {
@@ -106,10 +103,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       {showLabel && (
-        <label className="param-label">
-          {displayName}
-          {param.required && <span className="required-mark">*</span>}
-        </label>
+        <ParamLabel param={param} language={i18n.language} />
       )}
 
       <FileUploader
@@ -124,10 +118,6 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
         onUpload={handleUpload}
         onRemove={handleDelete}
       />
-
-      {param.description && (
-        <div className="param-description">{getI18nText(param.description, i18n.language)}</div>
-      )}
     </div>
   )
 }

@@ -8,7 +8,8 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { RadioParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UI_FIELD_LABEL_CLASS, UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiOptionButton } from '@/components/ui'
+import { UI_TEXT_LABEL_CLASS, UI_TEXT_META_CLASS, UiOptionButton } from '@/components/ui'
+import { ParamLabel } from '../ParamLabel'
 
 interface RadioInputProps {
   param: RadioParamDef
@@ -25,9 +26,6 @@ export const RadioInput: React.FC<RadioInputProps> = ({
 }) => {
   const { i18n } = useTranslation()
 
-  // 获取显示名称
-  const displayName = getI18nText(param.name, i18n.language)
-
   // 获取选项标签
   const getOptionLabel = (opt: typeof param.options[0]) => {
     return getI18nText(opt.label, i18n.language)
@@ -43,10 +41,7 @@ export const RadioInput: React.FC<RadioInputProps> = ({
 
   return (
     <div className="w-auto">
-      <label className={UI_FIELD_LABEL_CLASS}>
-        {displayName}
-        {param.required && <span className="text-red-500 ml-1">*</span>}
-      </label>
+      <ParamLabel param={param} language={i18n.language} />
 
       <div className={`flex gap-3 ${layout === 'vertical' ? 'flex-col' : 'flex-row flex-wrap'}`}>
         {param.options.map((option) => {
@@ -88,4 +83,3 @@ export const RadioInput: React.FC<RadioInputProps> = ({
     </div>
   )
 }
-

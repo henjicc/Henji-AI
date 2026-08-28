@@ -213,7 +213,7 @@ export const GenerationNodeShell = memo(({
     updateNodeData(id, { params: nextParams }, options);
   }, [id, updateNodeData]);
 
-  const { schema, values: modelParamValues, setParam } = useNodeModelParams({
+  const { schema, values: modelParamValues, setParam, setParams } = useNodeModelParams({
     modelId: effectiveModelId,
     storedParams: data.params,
     onParamsChange: handleParamsChange,
@@ -476,6 +476,7 @@ export const GenerationNodeShell = memo(({
             schema={schema}
             values={modelParamValues}
             setParam={setParam}
+            setParams={setParams}
             excludeParamIds={PROMPT_PARAM_IDS}
             mediaInputs={mediaInputs}
             onMediaInputChange={handleMediaInputChange}

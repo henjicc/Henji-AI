@@ -27,6 +27,7 @@ import type { AspectRatioOption } from '@/components/params/panels/ResolutionPan
 import { PromptEditor, UiInput, UiSwitch } from '@/components/ui';
 import { formatPanelDisplayValue, resolvePanelWidth } from '@/components/params/panelDisplay';
 import { FileUpload, ImageUpload } from '@/components/params/upload';
+import { DerivedMediaParamControl } from '@/components/params/DerivedMediaParamControl';
 import { useCanvasTextHistory } from '@/features/canvas/hooks/useCanvasTextHistory';
 import {
   resolveTextParamPromptDocument,
@@ -38,6 +39,9 @@ interface NodeParamControlProps {
   param: ParamDef;
   value: DynamicValue;
   onChange: (value: DynamicValue) => void;
+  allValues: DynamicValueMap;
+  onParamChange: (paramId: string, value: DynamicValue) => void;
+  onParamChanges: (changes: DynamicValueMap) => void;
   historyGroup: string;
   disabled?: boolean;
 }
@@ -358,7 +362,7 @@ function CompactUploadControl({
  * 仅直接复用底层 primitive（Dropdown/UiInput/UiSwitch/PanelTrigger），
  * 不复用 TextInput/NumberInput/DropdownInput/SwitchInput（它们自带整行标签布局）。
  */
-export function NodeParamControl({ param, value, onChange, historyGroup, disabled }: NodeParamControlProps) {
+export function NodeParamControl({ param, value, onChange, allValues, onParamChange, onParamChanges, historyGroup, disabled }: NodeParamControlProps) {
   const { t } = useTranslation();
 
   switch (param.type) {
@@ -424,6 +428,28 @@ export function NodeParamControl({ param, value, onChange, historyGroup, disable
         />
       );
     case 'image-upload':
+      if ((param as ImageUploadParamDef).derivedMediaAuthoring) {
+        return (
+          <DerivedMediaParamControl
+            param={param as ImageUploadParamDef}
+            value={value}
+            allValues={allValues}
+            onChange={onChange as (value: string[]) => void}
+            onParamChange={onParamChange}
+            onParamChanges={onParamChanges}
+            disabled={disabled}
+            compact
+          />
+        );
+      }
+      return (
+        <CompactUploadControl
+          param={param as ImageUploadParamDef}
+          value={value}
+          onChange={onChange as (value: string[]) => void}
+          disabled={disabled}
+        />
+      );
     case 'file-upload':
       return (
         <CompactUploadControl

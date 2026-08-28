@@ -15,7 +15,7 @@ import {
 } from '../domain/metrics';
 import type { LabeledMark, MarkItem } from '../domain/types';
 import { resolveArrowHeadPoints } from '../domain/arrowGeometry';
-import { resolvePenTensionPoints } from '../domain/penGeometry';
+import { tracePenPath } from './tracePenPath';
 import { buildMosaicSource, drawBlurRegion, drawMosaicRegion } from './orientedImage';
 import type { ImageEditCanvas, ImageEditCanvasContext } from './canvasAdapter';
 
@@ -60,42 +60,6 @@ function drawTextBlock(
   }
   context.fillStyle = color;
   lines.forEach((line, index) => context.fillText(line, x, y + index * lineHeight));
-}
-
-function drawPenPath(context: ImageEditCanvasContext, points: number[]): void {
-  context.beginPath();
-  context.moveTo(points[0], points[1]);
-  const tensionPoints = resolvePenTensionPoints(points);
-  if (points.length > 4 && tensionPoints.length >= 6) {
-    context.quadraticCurveTo(
-      tensionPoints[0],
-      tensionPoints[1],
-      tensionPoints[2],
-      tensionPoints[3]
-    );
-    let index = 4;
-    while (index < tensionPoints.length - 2) {
-      context.bezierCurveTo(
-        tensionPoints[index],
-        tensionPoints[index + 1],
-        tensionPoints[index + 2],
-        tensionPoints[index + 3],
-        tensionPoints[index + 4],
-        tensionPoints[index + 5]
-      );
-      index += 6;
-    }
-    context.quadraticCurveTo(
-      tensionPoints[tensionPoints.length - 2],
-      tensionPoints[tensionPoints.length - 1],
-      points[points.length - 2],
-      points[points.length - 1]
-    );
-    return;
-  }
-  for (let index = 2; index < points.length; index += 2) {
-    context.lineTo(points[index], points[index + 1]);
-  }
 }
 
 function drawLabel(context: ImageEditCanvasContext, item: LabeledMark, imageWidth: number, imageHeight: number): void {
@@ -219,7 +183,7 @@ export function drawMarkItems(
     }
     if (item.type === 'pen') {
       context.save(); context.strokeStyle = item.stroke; context.lineWidth = item.lineWidth; context.lineJoin = 'round'; context.lineCap = 'round';
-      drawPenPath(context, item.points);
+      tracePenPath(context, item.points);
       context.stroke(); context.restore(); continue;
     }
     if (item.type === 'text') {

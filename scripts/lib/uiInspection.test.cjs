@@ -68,7 +68,7 @@ test('拒绝格式错误或低于项目下限的尺寸', () => {
 test('only 同时匹配场景 id、界面与中文场景名', () => {
   const generationScenes = filterScenes(UI_INSPECTION_SCENES, ['生成'])
   const focusScenes = filterScenes(UI_INSPECTION_SCENES, ['focus'])
-  assert.equal(generationScenes.length, 9)
+  assert.equal(generationScenes.length, 11)
   assert.deepEqual(focusScenes.map((scene) => scene.id).sort(), [
     'assets-search-focus',
     'assistant-focus',
@@ -96,6 +96,17 @@ test('模型合并与参考图状态都有定向视觉场景', () => {
   assert.equal(sceneIds.includes('generation-model-gemini-omni'), true)
   assert.equal(sceneIds.includes('generation-model-gpt-image-2'), true)
   assert.equal(sceneIds.includes('generation-midjourney-reference'), true)
+  assert.equal(sceneIds.includes('generation-gpt-mask-control'), true)
+  assert.equal(sceneIds.includes('generation-gpt-mask-editor'), true)
+})
+
+test('GPT Image 2 遮罩在生成页与画布都有定向视觉场景', () => {
+  const generationScenes = UI_INSPECTION_SCENES.filter((scene) => scene.id.startsWith('generation-gpt-mask-'))
+  const canvasScene = UI_INSPECTION_SCENES.find((scene) => scene.id === 'canvas-gpt-mask-editor')
+  assert.equal(generationScenes.length, 2)
+  assert.equal(generationScenes.every((scene) => scene.writesUserData !== true), true)
+  assert.ok(canvasScene)
+  assert.equal(canvasScene.writesUserData, true)
 })
 
 test('画布 Midjourney 场景只操作可清理的专用工程，真实只读巡检会跳过', () => {

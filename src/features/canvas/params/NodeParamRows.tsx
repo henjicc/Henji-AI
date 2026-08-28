@@ -30,6 +30,7 @@ import {
 import { NodeParamControl } from './NodeParamControl';
 import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
 import { createCanvasTextHistoryGroup } from '@/features/canvas/hooks/useCanvasTextHistory';
+import { ParamLabel } from '@/components/params/ParamLabel';
 
 interface NodeParamRowsProps {
   /** 节点 id（用于读取连到本节点参数端口的上游值） */
@@ -42,6 +43,7 @@ interface NodeParamRowsProps {
   values: DynamicValueMap;
   /** 参数变化回写 */
   setParam: (key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => void;
+  setParams: (changes: DynamicValueMap, options?: CanvasHistoryGroupOptions) => void;
   /** 不在逐行区渲染的参数（如 prompt，由 shell 单独渲染） */
   excludeParamIds?: string[];
 }
@@ -61,6 +63,7 @@ export const NodeParamRows = memo(({
   schema,
   values,
   setParam,
+  setParams,
   excludeParamIds,
 }: NodeParamRowsProps) => {
   const { i18n } = useTranslation();
@@ -104,7 +107,6 @@ export const NodeParamRows = memo(({
     const isConnected = connectedParamIds.has(param.id);
     const socketType = deriveSocketType(param);
     const socketColor = getSocketColor(socketType);
-    const label = getI18nText(param.name, i18n.language) || param.id;
     const textHistoryGroup = createCanvasTextHistoryGroup(nodeId, `params.${param.id}`);
     const textHistoryOptions = param.type === 'text' || param.type === 'textarea'
       ? { historyGroup: textHistoryGroup }
@@ -121,12 +123,19 @@ export const NodeParamRows = memo(({
           style={{ background: socketColor, left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
           className={`${NODE_PORT_ROW_CLASS} ${isConnected ? NODE_PORT_VISIBLE_CLASS : ''}`}
         />
-        <span className={NODE_ROW_LABEL_CLASS}>{label}</span>
+        <ParamLabel
+          param={param}
+          language={i18n.language}
+          className={`${NODE_ROW_LABEL_CLASS} !mb-0`}
+        />
         <div className={NODE_ROW_CONTROL_SLOT_CLASS}>
           <NodeParamControl
             param={param}
             value={mergedValues[param.id]}
             onChange={(next) => setParam(param.id, next, textHistoryOptions)}
+            allValues={mergedValues}
+            onParamChange={setParam}
+            onParamChanges={setParams}
             historyGroup={textHistoryGroup}
             disabled={isConnected || isParamDisabled(param, mergedValues, linkageEngine)}
           />
@@ -158,6 +167,7 @@ export const NodeParamRows = memo(({
                     : undefined;
                   setParam(paramId, next, options);
                 }}
+                onChanges={setParams}
                 linkageEngine={linkageEngine}
                 disabledParamIds={connectedParamIds}
                 compact

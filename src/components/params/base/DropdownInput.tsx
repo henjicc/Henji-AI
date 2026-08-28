@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next'
 import type { DropdownParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
 import Dropdown from '@/components/ui/Dropdown'
-import { UI_FIELD_LABEL_CLASS } from '@/components/ui'
+import { ParamLabel } from '../ParamLabel'
 
 interface DropdownInputProps {
   param: DropdownParamDef
@@ -45,9 +45,6 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
 }) => {
   const { i18n } = useTranslation()
   const autoFixedRef = useRef<string | null>(null)
-
-  // 获取显示名称（支持 i18n）
-  const displayName = getI18nText(param.name, i18n.language)
 
   // 转换选项格式
   const options = param.options.map((option) => ({
@@ -96,10 +93,7 @@ export const DropdownInput: React.FC<DropdownInputProps> = ({
 
   return (
     <div className="w-auto">
-      <label className={UI_FIELD_LABEL_CLASS}>
-        {displayName}
-        {param.required && <span className="text-red-500 ml-1">*</span>}
-      </label>
+      <ParamLabel param={param} language={i18n.language} />
       <Dropdown
         value={resolvedOption ? resolvedOption.value : ''}
         display={displayValue}

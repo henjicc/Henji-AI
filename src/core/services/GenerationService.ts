@@ -17,6 +17,7 @@ import { UploadService } from '@/services/upload/UploadService'
 import { readImageInfo } from '@/commands/image'
 import { compressVideoToFit, readVideoInfo, trimVideoSource } from '@/commands/video'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
+import { stripDerivedMediaState } from '@/core/params/derivedMediaState'
 import { recordApiTrace } from '@/utils/testMode'
 import {
 
@@ -547,7 +548,7 @@ export class GenerationService {
   ): Promise<GenerateResult> {
     let progressTracker: ReturnType<typeof createProgressTracker> | null = null
     const requestId = createRequestId(modelId)
-    const sourceParams = params as DynamicValueMap
+    let sourceParams = params as DynamicValueMap
     const progressSource = options.progressSource ?? 'generation'
     const startedAtMs = Date.now()
 
@@ -556,6 +557,7 @@ export class GenerationService {
       if (!model) {
         throw new Error(`Model not found: ${modelId}`)
       }
+      sourceParams = stripDerivedMediaState(sourceParams)
 
       const estimate = await this.getProgressEstimate(modelId, sourceParams).catch((error) => {
         logger.warn('[GenerationService] 获取进度估算失败，回退本地默认', error)
@@ -591,7 +593,7 @@ export class GenerationService {
         params: runtimeParams,
         requestId,
       })
-      recordRuntimeTrace(modelId, params, response.trace)
+      recordRuntimeTrace(modelId, runtimeParams, response.trace)
 
       if (response.status === 'pending') {
         if (response.taskId) {
@@ -716,14 +718,15 @@ export class GenerationService {
     const requestId = createRequestId(`${modelId}-continue`)
 
     try {
+      const runtimeParams = stripDerivedMediaState(params)
       const model = registry.getModel(modelId)
       const estimate = model
-        ? await this.getProgressEstimate(modelId, params).catch((error) => {
+        ? await this.getProgressEstimate(modelId, runtimeParams).catch((error) => {
           logger.warn('[GenerationService] 获取继续轮询进度估算失败，回退本地默认', error)
           return null
         })
         : null
-      const progressSpec = model && onProgress ? resolveProgressSpec(model, params, estimate?.durationMs) : null
+      const progressSpec = model && onProgress ? resolveProgressSpec(model, runtimeParams, estimate?.durationMs) : null
       progressTracker = onProgress && progressSpec
         ? createProgressTracker(progressSpec, onProgress)
         : null
@@ -739,9 +742,9 @@ export class GenerationService {
       const response = await aiContinuePolling({
         modelId,
         taskId,
-        params,
+        params: runtimeParams,
       })
-      recordRuntimeTrace(modelId, params, response.trace)
+      recordRuntimeTrace(modelId, runtimeParams, response.trace)
 
       if (response.status !== 'completed') {
         logger.error('[GenerationService] 继续轮询返回非完成状态', {

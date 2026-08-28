@@ -11,7 +11,6 @@ import React, { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { ParamDef, CompositePanelDef } from '@/core/types/ParamDef'
 import { panelRegistry } from '@/core/panels/PanelRegistry'
-import { getI18nText } from '@/core/types/I18nText'
 import type { CompositePanelConfig } from '@/core/types/CompositePanel'
 import { isParamDisabled, isParamVisible } from './paramVisibility'
 import { formatPanelDisplayValue, resolvePanelWidth } from './panelDisplay'
@@ -31,7 +30,8 @@ import { CompositePanel } from './panels/CompositePanel'
 
 // 导入 UI 组件
 import PanelTrigger from '@/components/ui/PanelTrigger'
-import Tooltip from '@/components/ui/Tooltip'
+import { ParamLabel } from './ParamLabel'
+import { DerivedMediaParamControl } from './DerivedMediaParamControl'
 
 function isCompositePanelConfig(value: DynamicValue): value is CompositePanelConfig {
   if (!value || typeof value !== 'object') return false
@@ -60,6 +60,8 @@ interface ParamRendererProps {
   allValues: DynamicValueMap
   uploadedImages?: string[]
   uploadedVideos?: string[]
+  onParamChange?: (paramId: string, value: DynamicValue) => void
+  onParamChanges?: (changes: DynamicValueMap) => void
   disabled?: boolean
 }
 
@@ -73,6 +75,8 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
   value,
   onChange,
   allValues,
+  onParamChange,
+  onParamChanges,
   disabled: externalDisabled = false
 }) => {
   const { i18n } = useTranslation()
@@ -89,6 +93,20 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
   // 如果不可见，返回 null
   if (!visible) {
     return null
+  }
+
+  if (param.type === 'image-upload' && param.derivedMediaAuthoring) {
+    return (
+      <DerivedMediaParamControl
+        param={param}
+        value={value}
+        allValues={allValues}
+        onChange={onChange as (value: string[]) => void}
+        onParamChange={onParamChange}
+        onParamChanges={onParamChanges}
+        disabled={disabled}
+      />
+    )
   }
 
   // 处理 composite 类型（特殊面板）
@@ -111,38 +129,26 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
         })()
         const panelWidth = resolvePanelWidth(compositeParam.config, defaultPanelWidth)
         // 使用 PanelTrigger 包装特殊面板，实现点击展开功能
-        const panelContent = (
-          <PanelTrigger
-            label={getI18nText(param.name, i18n.language) || param.id}
-            display={formatPanelDisplayValue(value, compositeParam.panel, i18n.language, compositeParam.config)}
-            className="w-auto min-w-[100px]"
-            panelWidth={panelWidth}
-            alignment="aboveCenter"
-            closeOnPanelClick={false}
-            freezePositionOnOpen={compositeParam.panel === 'voice-selector'}
-            renderPanel={() => (
-              <PanelComponent
-                value={value}
-                onChange={onChange}
-                config={compositeParam.config}
-              />
-            )}
-          />
+        return (
+          <div className="flex min-w-0 flex-col">
+            <ParamLabel param={param} language={i18n.language} />
+            <PanelTrigger
+              display={formatPanelDisplayValue(value, compositeParam.panel, i18n.language, compositeParam.config)}
+              className="w-auto min-w-[100px]"
+              panelWidth={panelWidth}
+              alignment="aboveCenter"
+              closeOnPanelClick={false}
+              freezePositionOnOpen={compositeParam.panel === 'voice-selector'}
+              renderPanel={() => (
+                <PanelComponent
+                  value={value}
+                  onChange={onChange}
+                  config={compositeParam.config}
+                />
+              )}
+            />
+          </div>
         )
-
-        // 如果有 tooltip，包装 Tooltip
-        if (param.tooltip) {
-          return (
-            <Tooltip
-              content={getI18nText(param.tooltip, i18n.language)}
-              delay={500}
-            >
-              {panelContent}
-            </Tooltip>
-          )
-        }
-
-        return panelContent
       } else {
         logger.warn(`Panel "${compositeParam.panel}" not found in registry`)
       }
@@ -160,26 +166,16 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
     const compositeValue =
       value && typeof value === 'object' ? (value as DynamicValueMap) : {}
 
-    const compositePanel = (
-      <CompositePanel
-        config={compositeParam.config}
-        value={compositeValue}
-        onChange={(nextValue) => onChange(nextValue)}
-      />
+    return (
+      <div className="flex min-w-0 flex-col">
+        <ParamLabel param={param} language={i18n.language} />
+        <CompositePanel
+          config={compositeParam.config}
+          value={compositeValue}
+          onChange={(nextValue) => onChange(nextValue)}
+        />
+      </div>
     )
-
-    if (param.tooltip) {
-      return (
-        <Tooltip
-          content={getI18nText(param.tooltip, i18n.language)}
-          delay={500}
-        >
-          {compositePanel}
-        </Tooltip>
-      )
-    }
-
-    return compositePanel
   }
 
   // 获取组件
@@ -202,18 +198,6 @@ export const ParamRenderer: React.FC<ParamRendererProps> = React.memo(({
       disabled={disabled}
     />
   )
-
-  // 如果有 tooltip，包装 Tooltip
-  if (param.tooltip) {
-    return (
-      <Tooltip
-        content={getI18nText(param.tooltip, i18n.language)}
-        delay={500}
-      >
-        {renderedComponent}
-      </Tooltip>
-    )
-  }
 
   return renderedComponent
 })

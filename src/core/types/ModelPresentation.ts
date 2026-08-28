@@ -13,7 +13,7 @@
 import type { I18nText } from './I18nText'
 import type { Linkage } from './Linkage'
 import type { ModelParamPresentation } from './ModelDefinition'
-import type { TextParamEditorConfig } from './ParamDef'
+import type { DerivedMediaAuthoring, TextParamEditorConfig } from './ParamDef'
 import type { SocketType } from './SocketType'
 import type {
   PanelType,
@@ -69,6 +69,9 @@ export interface ParamPresentationEntry {
 
   // ---- image-upload / video-upload / file-upload ----
   uploadButtonText?: I18nText
+
+  /** 基于前置素材创作遮罩等派生媒体；与普通上传互斥的应用侧展示能力。 */
+  derivedMediaAuthoring?: DerivedMediaAuthoring
 
   // ---- panel（分组容器）----
   collapsible?: boolean

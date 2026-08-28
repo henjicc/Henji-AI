@@ -10,7 +10,8 @@ import React, { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { SwitchParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
-import { UI_FIELD_LABEL_CLASS, UiSwitch } from '@/components/ui'
+import { UiSwitch } from '@/components/ui'
+import { ParamLabel } from '../ParamLabel'
 
 interface SwitchInputProps {
   param: SwitchParamDef
@@ -39,10 +40,7 @@ export const SwitchInput: React.FC<SwitchInputProps> = ({
   return (
     <div className="w-auto">
       {displayName ? (
-        <span id={labelId} className={UI_FIELD_LABEL_CLASS}>
-          {displayName}
-          {param.required && <span className="text-red-500 ml-1">*</span>}
-        </span>
+        <ParamLabel id={labelId} param={param} language={i18n.language} />
       ) : null}
       <UiSwitch
         appearance="segmented"

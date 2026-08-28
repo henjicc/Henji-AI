@@ -138,7 +138,7 @@ export const NodeModelParamsControls = memo(({
     Math.max(0, viewportWidth - MODEL_PANEL_VIEWPORT_GUTTER * 2)
   );
 
-  const { schema, values, setParam } = useNodeModelParams({
+  const { schema, values, setParam, setParams } = useNodeModelParams({
     modelId: selectedModel?.meta.id ?? modelId,
     storedParams,
     onParamsChange,
@@ -372,6 +372,7 @@ export const NodeModelParamsControls = memo(({
                 uploadedVideos={[]}
                 values={values}
                 onChange={setParam}
+                onChanges={setParams}
               />
             </div>
           </UiPanel>

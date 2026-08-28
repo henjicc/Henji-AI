@@ -9,6 +9,7 @@ import {
   normalizeModelAliasParams,
 } from '@/core/params/modelAliasDefaults';
 import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
+import { reconcileDerivedMediaState } from '@/core/params/derivedMediaState';
 
 export interface UseNodeModelParamsOptions {
   modelId: string;
@@ -36,6 +37,7 @@ export interface UseNodeModelParamsResult {
   /** 默认值、持久化参数与当前生效媒体合并后的运行时值 */
   values: DynamicValueMap;
   setParam: (key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => void;
+  setParams: (changes: DynamicValueMap, options?: CanvasHistoryGroupOptions) => void;
   resetParams: () => void;
 }
 
@@ -99,6 +101,19 @@ export function useNodeModelParams({
     if (linkageEngine) {
       nextValues = linkageEngine.execute(key, nextValues, schema);
     }
+    nextValues = reconcileDerivedMediaState(schema, nextValues);
+    onParamsChange(stripMediaKeys(nextValues), options);
+  }, [linkageEngine, onParamsChange, schema, values]);
+
+  const setParams = useCallback((changes: DynamicValueMap, options?: CanvasHistoryGroupOptions) => {
+    const changedKeys = Object.keys(changes);
+    let nextValues: DynamicValueMap = { ...values, ...changes };
+    if (linkageEngine) {
+      for (const key of changedKeys) {
+        nextValues = linkageEngine.execute(key, nextValues, schema);
+      }
+    }
+    nextValues = reconcileDerivedMediaState(schema, nextValues);
     onParamsChange(stripMediaKeys(nextValues), options);
   }, [linkageEngine, onParamsChange, schema, values]);
 
@@ -118,15 +133,19 @@ export function useNodeModelParams({
     // 次要参数面板实例）时不跑这个同步：它对媒体一无所知，images/videos/audios 会一直是
     // 空数组，如果照样跑 execute() 可能会把"没有媒体"误判成真实状态，反过来撤销另一个
     // 真正持有媒体信息的 useNodeModelParams 实例已经做出的自动切换。
-    if (!linkageEngine || !hasMedia) return;
+    if (!hasMedia) return;
     const currentValues = valuesRef.current;
     let next: DynamicValueMap = currentValues;
-    for (const key of MEDIA_KEYS) {
-      next = linkageEngine.execute(key, next, schema);
+    if (linkageEngine) {
+      for (const key of MEDIA_KEYS) {
+        next = linkageEngine.execute(key, next, schema);
+      }
     }
+    next = reconcileDerivedMediaState(schema, next);
     const cleanedNext = stripMediaKeys(next);
     const cleanedBefore = stripMediaKeys(currentValues);
-    const changed = Object.keys(cleanedNext).some((k) => cleanedNext[k] !== cleanedBefore[k]);
+    const changed = [...new Set([...Object.keys(cleanedBefore), ...Object.keys(cleanedNext)])]
+      .some((key) => cleanedNext[key] !== cleanedBefore[key]);
     if (changed) {
       onParamsChangeRef.current(cleanedNext);
     }
@@ -141,6 +160,7 @@ export function useNodeModelParams({
     defaults,
     values,
     setParam,
+    setParams,
     resetParams,
   };
 }

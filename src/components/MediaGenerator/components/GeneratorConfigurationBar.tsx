@@ -78,6 +78,7 @@ export function GeneratorConfigurationBar({
         uploadedVideos={uiState.uploadedVideos}
         values={modelState.params}
         onChange={modelState.setParam}
+        onChanges={modelState.setParams}
       />
     </div>
   )

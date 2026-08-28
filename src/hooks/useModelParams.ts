@@ -20,6 +20,7 @@ import {
   reconcileGenerationParams,
   resolveGenerationParamOptions,
 } from '@/features/generation/domain/generationParams'
+import { reconcileDerivedMediaState } from '@/core/params/derivedMediaState'
 
 /**
  * Hook 返回值接口
@@ -215,6 +216,8 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
         }
       }
 
+      newParams = reconcileDerivedMediaState(schema, newParams)
+
       // 结束追踪
       if (enableTracking && trackerRef.current) {
         trackerRef.current.finishTracking()
@@ -231,16 +234,15 @@ export function useModelParams(modelId: string, enableTracking = false): UseMode
       // 检查是否有嵌套路径
       const hasNestedPaths = Object.keys(normalizedValues).some((key) => key.includes('.'))
 
-      if (hasNestedPaths) {
-        return batchSetNestedValues(prev, normalizedValues)
-      }
-
-      return {
+      const merged = hasNestedPaths
+        ? batchSetNestedValues(prev, normalizedValues)
+        : {
         ...prev,
         ...normalizedValues
       }
+      return reconcileDerivedMediaState(schema, merged)
     })
-  }, [model])
+  }, [model, schema])
 
   // 7. 重置所有参数
   const resetParams = useCallback(() => {

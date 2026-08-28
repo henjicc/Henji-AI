@@ -9,9 +9,9 @@ import { useTranslation } from 'react-i18next'
 import type { VideoUploadParamDef } from '@/core/types'
 import { UploadArea } from './UploadArea'
 import { FilePreview } from './FilePreview'
-import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
 import { importLocalMedia } from '@/services/localMediaImport'
+import { ParamLabel } from '../ParamLabel'
 
 interface VideoUploadProps {
   param: VideoUploadParamDef
@@ -28,9 +28,6 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
 }) => {
   const { i18n, t } = useTranslation('ui')
   const { showNotification } = useNotification()
-
-  // 获取显示名称
-  const displayName = getI18nText(param.name, i18n.language)
 
   // 处理上传
   const handleUpload = async (file: File) => {
@@ -61,10 +58,7 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
 
   return (
     <div className="video-upload-wrapper">
-      <label className="param-label">
-        {displayName}
-        {param.required && <span className="required-mark">*</span>}
-      </label>
+      <ParamLabel param={param} language={i18n.language} />
 
       <div className="upload-container">
         {value.map((url, index) => (
@@ -85,10 +79,6 @@ export const VideoUpload: React.FC<VideoUploadProps> = ({
           />
         )}
       </div>
-
-      {param.description && (
-        <div className="param-description">{getI18nText(param.description, i18n.language)}</div>
-      )}
     </div>
   )
 }

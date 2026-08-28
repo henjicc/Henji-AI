@@ -203,6 +203,7 @@ function composeParam(
         maxSize: runtime.maxSize,
         smartMatch: runtime.smartMatch,
         uploadButtonText: presentation.uploadButtonText,
+        derivedMediaAuthoring: presentation.derivedMediaAuthoring,
       } as ImageUploadParamDef
 
     case 'video-upload':

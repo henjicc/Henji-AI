@@ -6,9 +6,10 @@ type TooltipProps = {
     content: React.ReactNode
     delay?: number // Hover delay in milliseconds
     className?: string
+    contentId?: string
 }
 
-export default function Tooltip({ children, content, delay = 500, className }: TooltipProps) {
+export default function Tooltip({ children, content, delay = 500, className, contentId }: TooltipProps): JSX.Element {
     const [visible, setVisible] = useState(false)
     const [closing, setClosing] = useState(false)
     const [coords, setCoords] = useState({ top: 0, left: 0 })
@@ -88,6 +89,9 @@ export default function Tooltip({ children, content, delay = 500, className }: T
 
     const tooltipContent = (
         <span
+            id={contentId}
+            role="tooltip"
+            aria-hidden={!visible}
             className={`fixed z-tooltip -translate-x-1/2 -translate-y-full w-max max-w-[min(320px,calc(100vw-32px))] whitespace-normal text-left leading-5 bg-surface-dark/90 border border-border-dark/50 rounded-lg shadow-panel text-xs text-white p-3 pointer-events-none ${visible ? (closing ? 'animate-fade-out' : 'animate-fade-in') : 'hidden'
                 } ${className || ''}`}
             style={{

@@ -8,6 +8,7 @@ import { getI18nText } from '@/core/types/I18nText'
 import { useNotification } from '@/contexts/NotificationContext'
 import { getPathForFile } from '@/platform/desktopApi'
 import { fileToBase64 } from '@/utils/fileConverter'
+import { ParamLabel } from '../ParamLabel'
 
 interface FileUploadProps {
   param: FileUploadParamDef
@@ -38,7 +39,6 @@ export function FileUpload({
   const maxCount = param.maxCount ?? 1
   const accept = param.accept ?? ['application/pdf']
   const maxSize = param.maxSize ?? 15 * 1024 * 1024
-  const label = getI18nText(param.name, i18n.language)
   const buttonText = getI18nText(param.uploadButtonText ?? { zh: '上传文件', en: 'Upload File' }, i18n.language)
 
   const handleFiles = async (files: FileList | null): Promise<void> => {
@@ -62,10 +62,7 @@ export function FileUpload({
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       {showLabel && (
-        <label className="param-label">
-          {label}
-          {param.required && <span className="required-mark">*</span>}
-        </label>
+        <ParamLabel param={param} language={i18n.language} />
       )}
       <div className="flex flex-wrap items-center gap-2">
         {safeValue.map((source, index) => (
@@ -110,9 +107,6 @@ export function FileUpload({
           }}
         />
       </div>
-      {param.description && (
-        <div className="param-description">{getI18nText(param.description, i18n.language)}</div>
-      )}
     </div>
   )
 }

@@ -41,6 +41,11 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await button.click({ timeout: 8000 })
   }
 
+  function paramFieldFromLabel(page, name) {
+    return page.getByText(name).filter({ visible: true }).first()
+      .locator('xpath=ancestor::div[.//*[@data-dropdown-button or @data-panel-trigger-button]][1]')
+  }
+
   async function openWorkspace(page, workspace) {
     await closeTransientUi(page)
     await clickNamedButton(page, TAB_NAMES[workspace])
@@ -98,19 +103,54 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     // 生成页草稿是内存态；真实资料巡检时 ImageUpload 也会切换为 data URL 预览，
     // 不会把夹具导入用户媒体目录。
     await selectGenerationModel(page, 'Midjourney', 'apimart-midjourney')
-    const settingsLabel = page.locator('label').filter({ hasText: /^(MJ 设置|MJ Settings)$/i }).first()
-    await settingsLabel.waitFor({ state: 'visible', timeout: 8000 })
-    await settingsLabel.locator('..').locator('[data-panel-trigger-button]').click()
+    const settingsField = paramFieldFromLabel(page, /^(MJ 设置|MJ Settings)$/i)
+    await settingsField.waitFor({ state: 'visible', timeout: 8000 })
+    await settingsField.locator('[data-panel-trigger-button]').click()
     const panel = page.locator('[data-panel-scroll-region]:visible').last()
     await panel.waitFor({ state: 'visible', timeout: 8000 })
     await panel.getByText(/^(参考控制|References)$/i).waitFor({ state: 'visible', timeout: 8000 })
     if (withCharacterReference) {
-      const characterReferenceLabel = panel.locator('label').filter({ hasText: /^(角色参考图|Character Reference)$/i })
-      const characterReference = characterReferenceLabel.locator('..')
+      const characterReference = panel.getByText(/^(角色参考图|Character Reference)$/i).filter({ visible: true }).first()
+        .locator('xpath=ancestor::div[.//input[@type="file"]][1]')
       await characterReference.locator('input[type="file"]').setInputFiles(REFERENCE_FIXTURE_IMAGE)
       await panel.getByText(/^(角色权重|Character Weight)$/i).waitFor({ state: 'visible', timeout: 8000 })
     }
     await settlePage(page)
+  }
+
+  async function setupGenerationGptMask(page, openEditor) {
+    await selectGenerationModel(page, 'GPT Image 2', 'apimart-gpt-image-2')
+    const channelField = paramFieldFromLabel(page, /^(渠道|Channel)$/i)
+    await channelField.locator('[data-dropdown-button]').click()
+    await page.getByRole('option', { name: /^(官方|Official)$/i }).filter({ visible: true }).first().click()
+
+    const promptArea = page.locator('[data-onboarding-target="prompt"]').first().locator('..')
+    await promptArea.locator('input[type="file"]').first().setInputFiles(REFERENCE_FIXTURE_IMAGE)
+    const maskLabel = page.getByText(/^(局部重绘遮罩|Inpainting Mask)$/i).filter({ visible: true }).first()
+    await maskLabel.waitFor({ state: 'visible', timeout: 8000 })
+    if (await page.getByText('定义基于首张参考图创建的局部重绘区域；遮罩与源图同尺寸并使用 Alpha 通道。').count()) {
+      throw new Error('description 不应显示在参数界面')
+    }
+    if (openEditor) {
+      await page.getByRole('button', { name: /^(绘制|Draw)$/i }).filter({ visible: true }).first().click()
+      const dialog = page.getByRole('dialog', { name: /绘制局部重绘遮罩|Draw Inpainting Mask/i })
+      await dialog.waitFor({ state: 'visible', timeout: 12000 })
+      const canvasRegion = dialog.locator('[data-application-observation-region="mask_editor.canvas"]')
+      const box = await canvasRegion.boundingBox()
+      if (!box) throw new Error('遮罩编辑器找不到可绘制区域')
+      await page.mouse.move(box.x + box.width * 0.42, box.y + box.height * 0.45)
+      await page.mouse.down()
+      await page.mouse.move(box.x + box.width * 0.58, box.y + box.height * 0.55, { steps: 8 })
+      await page.mouse.up()
+      await dialog.getByRole('button', { name: /^(完成|Done)$/i }).click()
+      await dialog.waitFor({ state: 'hidden', timeout: 12000 })
+      await page.getByRole('button', { name: /^(编辑|Edit)$/i }).filter({ visible: true }).first().click()
+      await dialog.waitFor({ state: 'visible', timeout: 12000 })
+    } else {
+      await page.getByRole('button', { name: /查看.*局部重绘遮罩.*说明|View help.*Inpainting Mask/i }).focus()
+      await page.getByRole('tooltip').filter({ visible: true }).waitFor({ state: 'visible', timeout: 8000 })
+    }
+    await settlePage(page, 700)
   }
 
   async function setupSettings(page) {
@@ -169,6 +209,48 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       await panel.getByText(/^(参考控制|References)$/i).waitFor({ state: 'visible', timeout: 8000 })
       await settlePage(page)
     }
+  }
+
+  async function setupCanvasGptMaskEditor(page) {
+    await setupCanvas(page)
+    if (await page.locator('.react-flow').count()) {
+      await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+      await settlePage(page)
+    }
+    const fixtureCard = page.locator(`[data-project-id="${canvasFixtureProjectId}"]:visible`)
+    const projectCard = await fixtureCard.count() ? fixtureCard : page.locator('[data-project-id]:visible').first()
+    await projectCard.waitFor({ state: 'visible', timeout: 12000 })
+    const projectId = await projectCard.getAttribute('data-project-id')
+    if (!projectId) throw new Error('GPT Image 2 遮罩场景找不到专用画布工程')
+    const maskSource = `data:image/svg+xml,${encodeURIComponent([
+      '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">',
+      '<rect width="512" height="512" fill="midnightblue"/>',
+      '<circle cx="256" cy="256" r="150" fill="cornflowerblue"/>',
+      '<text x="256" y="278" text-anchor="middle" fill="white" font-family="sans-serif" font-size="54">MASK</text>',
+      '</svg>',
+    ].join(''))}`
+    const nodeData = {
+      id: '__ui_gpt_mask_node', type: 'imageNode', position: { x: 300, y: 100 },
+      width: 380, height: 620, measured: { width: 380, height: 620 }, style: { width: 380, height: 620 },
+      data: {
+        displayName: 'GPT Image 2', prompt: 'replace the painted area', modelId: 'apimart-gpt-image-2',
+        params: { apimartGptImage2Version: 'official' }, mediaInputs: { image: [maskSource] },
+        imageUrl: null, previewImageUrl: null, aspectRatio: '1:1', isGenerating: false, generationStartedAt: null,
+      },
+    }
+    await page.evaluate(async (payload) => {
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [1, JSON.stringify([payload.node]), '[]', JSON.stringify({ x: 180, y: 80, zoom: 0.9 }), payload.projectId]
+      )
+    }, { projectId, node: nodeData })
+    await projectCard.click()
+    const node = page.locator('.react-flow__node:has([data-generation-node-model-id="apimart-gpt-image-2"])').last()
+    await node.waitFor({ state: 'visible', timeout: 12000 })
+    await node.click()
+    await node.getByRole('button', { name: /^(绘制|Draw)$/i }).click()
+    await page.getByRole('dialog', { name: /绘制局部重绘遮罩|Draw Inpainting Mask/i }).waitFor({ state: 'visible', timeout: 12000 })
+    await settlePage(page, 700)
   }
 
   async function setupCanvasAssetGroup(page, expanded) {
@@ -515,8 +597,8 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         )
         await modelButton.click()
         await page.locator('[data-model-selector-panel]:visible').waitFor({ state: 'hidden', timeout: 8000 })
-        const channelField = page.locator('label').filter({ hasText: /^(渠道|Channel)$/i }).first().locator('..')
-        await channelField.getByRole('button', { name: /^(普通|Standard)$/i }).click()
+        const channelField = paramFieldFromLabel(page, /^(渠道|Channel)$/i)
+        await channelField.locator('[data-dropdown-button]').click()
         await page.getByRole('option', { name: /^(普通|Standard)$/i }).waitFor({ state: 'visible', timeout: 8000 })
         await page.getByRole('option', { name: /^(官方|Official)$/i }).waitFor({ state: 'visible', timeout: 8000 })
         await page.keyboard.press('Escape')
@@ -534,6 +616,18 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       surface: '生成',
       name: '生成-Midjourney 参考图与权重',
       setup: async (page) => setupGenerationMidjourneySettings(page, true),
+    },
+    {
+      id: 'generation-gpt-mask-control',
+      surface: '生成',
+      name: '生成-GPT Image 2 遮罩说明与绘制入口',
+      setup: async (page) => setupGenerationGptMask(page, false),
+    },
+    {
+      id: 'generation-gpt-mask-editor',
+      surface: '生成',
+      name: '生成-GPT Image 2 遮罩编辑器',
+      setup: async (page) => setupGenerationGptMask(page, true),
     },
     {
       id: 'generation-prompt-focus',
@@ -654,6 +748,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       setup: async (page) => setupCanvasMidjourneyNode(page, true),
     },
     {
+      id: 'canvas-gpt-mask-editor',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-GPT Image 2 遮罩编辑器',
+      setup: setupCanvasGptMaskEditor,
+    },
+    {
       id: 'canvas-asset-group-collapsed',
       surface: '画布',
       writesUserData: true,
@@ -734,20 +835,23 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
             background.addColorStop(1, 'rgb(5, 7, 13)')
             context.fillStyle = background
             context.fillRect(0, 0, canvas.width, canvas.height)
-            for (const [x, y, radius, color, core] of [
-              [310, 330, 70, 'rgb(57, 216, 255)', 24],
-              [610, 235, 54, 'rgb(255, 62, 201)', 18],
-              [870, 420, 82, 'rgb(255, 156, 50)', 26],
+            for (const [x, y, radius, color, width] of [
+              [310, 330, 70, 'rgb(57, 216, 255)', 14],
+              [610, 235, 54, 'rgb(255, 62, 201)', 11],
+              [870, 420, 82, 'rgb(255, 156, 50)', 16],
             ]) {
-              context.fillStyle = color
+              context.strokeStyle = color
+              context.lineWidth = width
               context.beginPath()
               context.arc(x, y, radius, 0, Math.PI * 2)
-              context.fill()
-              context.fillStyle = 'white'
-              context.beginPath()
-              context.arc(x, y, core, 0, Math.PI * 2)
-              context.fill()
+              context.stroke()
             }
+            context.strokeStyle = 'rgb(235, 241, 255)'
+            context.lineWidth = 8
+            context.beginPath()
+            context.moveTo(260, 530)
+            context.lineTo(940, 530)
+            context.stroke()
             context.fillStyle = 'rgb(220, 233, 255)'
             context.font = '48px sans-serif'
             context.textAlign = 'center'
@@ -774,12 +878,18 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         // 第一轮主动推进多次 revision，再重新打开编辑器。旧实现的 Worker 记住了全局最大值，
         // 第二轮从 revision 1 起步会被永久判旧；这个场景必须在同一 Electron 进程里复现它。
         await openGlowEditor()
-        const intensity = page.getByRole('slider', { name: '辉光强度' })
+        const intensity = page.getByRole('slider', { name: '发光强度' })
         await intensity.focus()
         for (let index = 0; index < 6; index += 1) await intensity.press('ArrowRight')
         await settlePage(page, 1200)
         await page.getByRole('button', { name: '返回工具箱' }).click()
         await openGlowEditor()
+        const tint = page.getByLabel('辉光颜色')
+        await tint.fill('#ff4bd8')
+        const radius = page.getByRole('slider', { name: '发光半径' })
+        await radius.fill('0.58')
+        const chromaticAberration = page.getByRole('slider', { name: '色差' })
+        await chromaticAberration.fill('0.62')
         if (await page.getByText('辉光预览失败').count()) {
           throw new Error('重新打开图片编辑器后，辉光预览仍被旧会话 revision 取消')
         }

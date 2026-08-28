@@ -39,6 +39,7 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
     const {
       params,
       setParam,
+      setParams,
       resetParams,
       getFilteredOptions,
       schema
@@ -110,6 +111,8 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
             value={params[item.param.id]}
             onChange={(value) => setParam(item.param.id, value)}
             allValues={params}
+            onParamChange={setParam}
+            onParamChanges={setParams}
             disabled={isParamDisabled(item.param, params, linkageEngine)}
           />
         ) : (
@@ -119,6 +122,7 @@ export const ParamsPanel = forwardRef<ParamsPanelRef, ParamsPanelProps>(
             params={item.params}
             values={params}
             onChange={setParam}
+            onChanges={setParams}
             linkageEngine={linkageEngine}
           />
         ))}

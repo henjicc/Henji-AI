@@ -7,12 +7,12 @@ import { useTranslation } from 'react-i18next'
 
 import NumberField from '@/components/ui/NumberInput'
 import {
-  UI_FIELD_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiOptionButton,
 } from '@/components/ui'
 import type { NumberParamDef } from '@/core/types'
 import { getI18nText } from '@/core/types/I18nText'
+import { ParamLabel } from '../ParamLabel'
 
 interface NumberInputProps {
   param: NumberParamDef
@@ -81,10 +81,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
 
   return (
     <div className={hasMarks ? 'w-auto min-w-[200px]' : 'w-fit'}>
-      <label className={UI_FIELD_LABEL_CLASS}>
-        {displayName}
-        {param.required && <span className="ml-1 text-red-500">*</span>}
-      </label>
+      <ParamLabel param={param} language={i18n.language} />
 
       <div className="flex flex-wrap items-center gap-2">
         <NumberField

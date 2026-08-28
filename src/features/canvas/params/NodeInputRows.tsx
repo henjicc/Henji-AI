@@ -31,6 +31,7 @@ interface NodeInputRowsProps {
   schema: ParamDef[];
   values: DynamicValueMap;
   setParam: (key: string, value: DynamicValue, options?: CanvasHistoryGroupOptions) => void;
+  setParams: (changes: DynamicValueMap, options?: CanvasHistoryGroupOptions) => void;
   excludeParamIds?: string[];
   mediaInputs: Partial<Record<RowMediaKind, string[]>>;
   onMediaInputChange: (kind: RowMediaKind, next: string[]) => void;
@@ -60,6 +61,7 @@ export function NodeInputRows({
   schema,
   values,
   setParam,
+  setParams,
   excludeParamIds,
   mediaInputs,
   onMediaInputChange,
@@ -119,6 +121,7 @@ export function NodeInputRows({
         schema={schema}
         values={values}
         setParam={setParam}
+        setParams={setParams}
         excludeParamIds={excludeParamIds}
       />
     </div>

@@ -18,6 +18,41 @@ import type {
 import type { CompositePanelConfig as CompositeLayoutConfig } from './CompositePanel'
 
 /**
+ * 基于任务中已有素材现场创作的媒体参数展示契约。
+ *
+ * 这类信息只描述应用侧的创作入口与编辑生命周期，不属于供应商请求 schema；
+ * 运行时最终仍只接收编辑器导出的规范媒体值。
+ */
+export interface DerivedMediaAuthoring {
+  /** 当前仅开放遮罩；后续控制图等派生素材按实际语义扩展。 */
+  kind: 'mask'
+
+  /** 编辑器直接读取当前任务的第一张输入图片，不要求用户再次选择文件。 */
+  source: { kind: 'first-image' }
+
+  /** 使用应用内共享遮罩编辑器。 */
+  editor: { kind: 'mask' }
+
+  /** 编辑确认后的规范媒体输出要求。 */
+  output: {
+    format: 'png'
+    maskEncoding: 'alpha'
+    dimensions: 'source'
+    /** 用户涂抹区导出为 Alpha 0，未涂抹区保持 Alpha 255。 */
+    paintMeaning: 'transparent-edit'
+  }
+
+  /** 来源图片变化后旧派生素材的处理策略。 */
+  onSourceChange: 'invalidate'
+
+  /** 空值与已有值状态下的主操作文案。 */
+  actions: {
+    create: I18nText
+    edit: I18nText
+  }
+}
+
+/**
  * 基础参数定义
  *
  * 所有参数类型的共同字段
@@ -52,14 +87,15 @@ export interface BaseParamDef {
   /**
    * 参数说明（可选，支持国际化）
    *
-   * 鼠标悬停时显示
+   * 通过标签旁可聚焦的说明入口显示，支持鼠标与键盘访问。
    */
   tooltip?: I18nText
 
   /**
    * 详细描述（可选，支持国际化）
    *
-   * 在组件下方显示具体说明
+   * 仅供智能助手、能力反射与语义检索使用，正式参数界面不得渲染。
+   * 给用户看的解释与限制必须使用 tooltip。
    */
   description?: I18nText
 
@@ -534,6 +570,13 @@ export interface ImageUploadParamDef extends BaseParamDef {
    * 上传按钮文本（可选）
    */
   uploadButtonText?: I18nText
+
+  /**
+   * 基于当前任务其他素材现场创作的媒体入口。
+   *
+   * 声明后消费方应按创建/编辑生命周期打开对应共享编辑器，而不是呈现普通上传主操作。
+   */
+  derivedMediaAuthoring?: DerivedMediaAuthoring
 }
 
 /** 不带媒体预览的通用文件上传参数（例如 PDF 上下文）。 */
