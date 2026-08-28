@@ -65,7 +65,7 @@
 
 ## 7. 文档交付
 
-调研结论一律落到 `packages/ai-sdk/docs/model-adaptation/`，这是项目**唯一的 API 与价格资料源**（旧的 `docs/api/` 与 `docs/model-adaptation/` 已废弃删除，不要重建）。动手前先读 `packages/ai-sdk/docs/model-adaptation/文档采集手册.md`。
+调研结论一律落到 `packages/ai-sdk/docs/model-adaptation/`，这是项目唯一资料源（旧的 `docs/api/` 与 `docs/model-adaptation/` 已废弃删除，不要重建）。动手前先读 `packages/ai-sdk/docs/model-adaptation/文档采集手册.md`；官方来源、异步/流式事件矩阵、fixture/test 闭环与 SDK 首发顺序的详细模板和硬门槛只维护在该手册，不在本 workflow 复制。
 
 落盘位置与命名：
 
@@ -80,7 +80,7 @@ packages/ai-sdk/docs/model-adaptation/供应商/<供应商名>.md     # 供应�
 内容要求：
 
 - 每个模型独立文件，开头用表格汇总最后更新日期、平台、model ID、API 文档、价格和登录状态。
-- 正文必须包含足以实现适配的信息：Base URL、认证、提交/轮询/回调、请求字段与枚举、输入限制、结果路径、错误/终态、价格维度和隐藏参数策略。
+- 正文必须包含足以实现适配的信息：Base URL、认证、提交/轮询/回调、请求字段与枚举、输入限制、结果路径、错误/终态、价格维度和隐藏参数策略；涉及 WS/SSE/轮询/流式协议时，按手册完成事件契约矩阵与官方示例 fixture 清单。
 - 每项关键信息都附原始链接，并说明该链接提供了什么；动态模型页和 API Tab 文档都保留。
 - 项目默认隐藏的参数（当前为 `seed`、负面提示词）在文档里明确标注“不显示、不请求”。
 
@@ -90,3 +90,4 @@ packages/ai-sdk/docs/model-adaptation/供应商/<供应商名>.md     # 供应�
 - 更新模型：改对应供应商文件，同时更新该文件与 `README.md` 头部的「最后更新」。
 - 下线模型：从 `README.md` 清单表移除该行，删掉或标注对应模型文档。
 - **改了 `.model.ts` 的参数、枚举、输入限制或价格，必须在同一次改动里同步对应文档**；代码注释引用的来源必须已存在于文档的「原始链接索引」，新发现的来源先回填文档再引用。
+- 模型、端点、价格或事件契约任一项缺少官方依据时，记录未知项并暂停编码；不得在消费项目先猜协议再回填 SDK。

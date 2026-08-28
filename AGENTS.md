@@ -17,7 +17,7 @@
 | 改动 `src/features/canvas/**`、节点 DOM、画布卡顿 | [docs/rules/canvas.md](docs/rules/canvas.md) |
 | 新建或改造画布节点 | skill `canvas-node-builder` + 上面的 canvas.md |
 | 传递图片/视频/音频 URL 或路径、接入新媒体消费方、排查 `Failed to fetch` | [docs/rules/media-url.md](docs/rules/media-url.md) |
-| 新增供应商/模型、改参数 schema、改请求构建或轮询、核对 API 字段或价格 | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + [packages/ai-sdk/docs/model-adaptation/README.md](packages/ai-sdk/docs/model-adaptation/README.md)（API 与价格资料唯一来源）+ skill `henji-model-adaptation` |
+| 新增供应商/模型、改参数 schema、改请求构建/轮询/流式协议、核对 API/价格、发布 SDK | [docs/rules/model-adaptation.md](docs/rules/model-adaptation.md) + [packages/ai-sdk/docs/model-adaptation/README.md](packages/ai-sdk/docs/model-adaptation/README.md)（资料总索引）+ [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)（官方资料、事件契约与 SDK 首发唯一详细规范）+ skill `henji-model-adaptation` |
 | 新增/改造工作区、页面、浮层、工具箱工具、设置项、用户可查询数据、业务操作、权限、宿主上下文 | [docs/rules/assistant-capability.md](docs/rules/assistant-capability.md) + skill `henji-application-capability` |
 | 涉及网络请求、文件读写、长耗时任务、导入导出、状态流转、用户可见失败 | [docs/rules/logging.md](docs/rules/logging.md) |
 | 改动 `electron/main/**` 或 `electron/preload/**`、加 IPC、打包配置、自动更新 | [docs/rules/electron-desktop.md](docs/rules/electron-desktop.md) |
@@ -66,6 +66,7 @@ npm run assistant:live:suite -- --only camera --skip-generation
 4. **禁止跨层导入**：组件 ✗→ 主进程/provider 实现；主进程 ✗→ `components/`；模型 ✗→ `services/`/`components/`。桥梁只用 `core/`、`commands/`、`platform/`。
 5. **前后端职责**：移除当前界面后仍然成立、仍需执行或可能被其他界面复用的逻辑，放后端或独立核心模块。不得因前端实现方便就把业务逻辑堆在前端。
 6. **文件体积**：新文件优先 `<= 400` 行，`400~500` 可接受，`> 500` 禁止继续膨胀且修改即拆分。
+7. **SDK 首发验证宿主**：Henji-AI 是 `@henjicc/ai-sdk` 的主开发仓库与首发验证宿主；官方资料、SDK 实现和完整验证必须先在本项目闭环，再发布版本供其他项目精确锁定。禁止先在消费项目猜协议、写第二套实现，再反向回填 SDK。详细门槛只维护在 [文档采集手册.md](packages/ai-sdk/docs/model-adaptation/文档采集手册.md)。
 
 ## 全局禁止事项
 

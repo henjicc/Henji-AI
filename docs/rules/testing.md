@@ -56,6 +56,8 @@ npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
 
 只有确实跨越渲染层与 Electron 边界时，才同时跑两个 TypeScript 工程。
 
+SDK 的请求/响应、轮询、SSE、WebSocket 或流式 parser 属于 L2 起步；除精确测试与类型/可移植性检查外，必须按 [SDK 文档采集手册](../../packages/ai-sdk/docs/model-adaptation/文档采集手册.md) 的事件矩阵从官方 fixture 推导正反场景，并实际执行断牙验证。SDK 发布再按该手册的首发顺序升级到全量、打包与回装验证。
+
 ### L3：全量验证
 
 仅适用于以下情况：

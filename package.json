@@ -21,6 +21,7 @@
     "check:surface": "node scripts/check-surface-tokens.cjs",
     "check:surface:strict": "node scripts/check-surface-tokens.cjs --strict",
     "check:model-i18n": "node scripts/check-model-i18n.cjs",
+    "check:model-adaptation-skill-sync": "node scripts/check-model-adaptation-skill-sync.cjs",
     "check:main-imports": "node scripts/check-main-imports.cjs",
     "check:sdk": "node scripts/check-sdk-portability.cjs && node packages/ai-sdk/scripts/check-generation-iife.cjs && node packages/ai-sdk/scripts/check-modular-bundles.cjs && node packages/ai-sdk/scripts/check-uxp-llm-streaming.cjs",
     "check:application-control-coverage": "vitest run src/core/assistant/applicationControlCoverage.test.ts",

@@ -16,7 +16,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 
 ## 2. 按需补充读取
 
-- 需要核对 API 字段、枚举、输入限制、端点或价格时，先读 `packages/ai-sdk/docs/model-adaptation/`——这是项目**唯一的 API 与价格资料源**：`README.md` 是总索引与平台 model ID 速查，`供应商/<供应商名>.md` 是供应商公共协议，`<模型名>/<模型名>_<供应商名>.md` 是逐模型逐供应商的自包含文档。旧的 `docs/api/` 已废弃删除，不要重建或引用。
+- 需要核对 API 字段、枚举、输入限制、端点、价格或异步/流式协议时，先读 `packages/ai-sdk/docs/model-adaptation/`——这是项目唯一资料源；其中 `文档采集手册.md` 是官方来源、事件契约、fixture/test 闭环与 SDK 首发顺序的唯一详细规范。旧的 `docs/api/` 已废弃删除，不要重建或引用。
 - 涉及 API/价格调研、适配清单或模型文档整理时，必须先读取 `references/source-research-workflow.md`；按用户给定的平台矩阵控制范围，并完成模型别名、动态 Tab、价格与登录状态核验后再下结论。调研结论按该文件第 7 节的路径与命名约定落盘，并同步 `README.md` 清单。
 - 先做“同模型多端点归并判定”：
   - 若 API 文档里的多个端点共享同一个模型名称/版本，只是输入素材或子能力不同，默认按“一个模型”处理，不默认拆成多个模型文件。
@@ -46,6 +46,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 ## 3. 执行规则
 
 - 当前 Henji-AI 的宿主基线是 Electron + Node/TS；可移植的供应商执行、上传、轮询与结果解析位于 `packages/ai-sdk/src/{providers,upload,protocols}/`，`electron/main/services/ai-runtime/**` 只保留日志、落盘、取消、进度与 IPC 等宿主薄壳。
+- Henji-AI 是 SDK 主开发仓库与首发验证宿主。先按 `文档采集手册.md` 完成官方资料和事件契约，再在本项目实现、验证、打包回装并发布；消费项目只接入已验证的精确版本。资料不足时暂停，不在消费项目猜协议。
 - 在输出确认清单前，先自行归纳：
   - 这是“一个模型多个端点”还是“多个独立模型”；
   - 应采用“自动路由”“显式展示 + 自动切换”还是“显式 `mode`”；
@@ -92,7 +93,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 ## 4. 完成标准
 
 - **改了 `.model.ts` 的参数、枚举、输入限制或价格，必须在同一次改动里同步 `packages/ai-sdk/docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md`**，并更新该文件与 `README.md` 头部的「最后更新」；下线模型时同步删除文档并从 `README.md` 清单表移除。只改代码不改文档，等于给下一次调研留下错误依据。
-- **新增供应商，或改动 `packages/ai-sdk/src/providers/**` 下某供应商的请求构建/响应解析逻辑，必须同步补 `packages/ai-sdk/tests/fixtures/<供应商>/*.json` fixture**（至少创建成功/轮询完成/失败三个场景，同步供应商用等价场景），数据来源优先真实开发日志，其次 `model-adaptation-*.test.ts` 已核对过的请求体断言 + 供应商官方文档记录的响应示例，不得凭空手写；格式与新增供应商的完整要求见 `packages/ai-sdk/tests/fixtures/README.md`，改完跑 `npx vitest run packages/ai-sdk/tests/fixtures.test.ts`。
+- **新增或改动请求/响应、轮询、SSE、WebSocket、流式 parser，必须按 `文档采集手册.md` 同步官方 fixture、事件矩阵、正反精确测试与断牙验证**；格式和目录约定见 `packages/ai-sdk/tests/fixtures/README.md`，不得凭空手写样本。
 - 代码注释里引用的价格/字段来源，必须与对应文档「原始链接索引」里的条目一致；调研中新发现的来源先回填文档再在代码里引用，不允许代码引用一个文档里查不到的出处。
 - 按 `docs/rules/testing.md` 选择最小验证：模型定义改动通常运行 catalog 生成、model i18n 与对应参数/请求构建精确测试，不默认跑全量 lint。
 - 只有改到 Electron 主进程/runtime/provider/upload 的共享契约时才追加主进程类型检查或相关 lint；先跑精确测试，影响边界不清时再升级。

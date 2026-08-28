@@ -55,6 +55,9 @@ jobs:
       - name: 模型 i18n 检查
         run: npm run check:model-i18n
 
+      - name: 模型适配 skill 同步检查
+        run: npm run check:model-adaptation-skill-sync
+
       - name: ESLint（渲染层）
         run: npm run lint
 

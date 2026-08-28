@@ -11,7 +11,7 @@
 ```
 packages/ai-sdk/docs/model-adaptation/
 ├── README.md          # 总索引：模型清单、平台 model ID 速查、供应商通用协议
-├── 文档采集手册.md      # 怎么发现/抓取/处理供应商文档（调研前先看）
+├── 文档采集手册.md      # 官方调研、事件契约、fixture 与 SDK 首发验证的唯一详细规范
 ├── 供应商/<供应商名>.md  # 供应商公共协议：端点、鉴权、上传、轮询、结果解析、计价
 └── <模型名>/<模型名>_<供应商名>.md   # 一个模型一个文件夹，每个支持它的供应商一份自包含文档
 ```
@@ -25,11 +25,12 @@ packages/ai-sdk/docs/model-adaptation/
 
 改模型代码时的硬要求：
 
+- **先文档后代码**：模型、端点、价格和事件契约必须先按 [文档采集手册.md](../../packages/ai-sdk/docs/model-adaptation/文档采集手册.md) 落盘并有官方来源；任一项资料不足就暂停编码。Henji-AI 先完成 SDK 实现与首发验证，发布后消费项目才可精确锁版本接入。
 - **改了 `.model.ts` 的参数、枚举、输入限制或价格，必须同步更新对应的 `packages/ai-sdk/docs/model-adaptation/<模型名>/<模型名>_<供应商名>.md`**，并更新该文件与 `README.md` 头部的「最后更新」。只改代码不改文档会让下一次调研拿到错误依据。
 - 代码注释里引用价格/字段来源时，来源必须与对应文档「原始链接索引」中的条目一致；调研中新发现的来源要先回填进文档，再在代码里引用。
 - **下线模型时**：删 `.model.ts` 的同时删掉或标注对应的模型文档，并从 `README.md` 清单表里移除该行。
 - 文档与代码冲突时，先按「模型专属页 > 实时价格页 > API 文档正文」重新核实，把结论回写文档，再改代码；不要单方面让代码偏离文档而不留痕。
-- **新增供应商，或改动某供应商在 `packages/ai-sdk/src/providers/**` 下的请求构建/响应解析逻辑时，必须同步补 `packages/ai-sdk/tests/fixtures/<供应商>/*.json` fixture**（至少创建成功/轮询完成/失败三个场景，同步供应商可用等价场景）：数据来源优先真实开发日志，其次该供应商 `model-adaptation-*.test.ts` 里已核对过的请求体断言 + 供应商官方文档记录的响应示例，不得凭空手写。字段格式、正反双向断言机制与新增供应商的完整要求见 `packages/ai-sdk/tests/fixtures/README.md`；改完跑 `npx vitest run packages/ai-sdk/tests/fixtures.test.ts` 确认通过。
+- **新增或改动请求/响应、轮询、SSE、WebSocket、流式协议 parser 时，必须同步补官方 fixture 与精确契约测试**。事件矩阵、来源标记、负例、资源释放和断牙验证的详细要求只以 [文档采集手册.md](../../packages/ai-sdk/docs/model-adaptation/文档采集手册.md) 第四节及 [fixture README](../../packages/ai-sdk/tests/fixtures/README.md) 为准；不得凭空手写“看起来对”的样本。
 
 ## 配置驱动（最重要）
 

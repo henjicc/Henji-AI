@@ -1,11 +1,16 @@
 # Provider fixtures（任务 6.1）
 
+协议 fixture 的官方来源、事件契约、负例分类、parser/test 闭环与断牙门禁，以
+[文档采集手册第四节](../../docs/model-adaptation/文档采集手册.md)
+为唯一详细规范；本文件只维护 fixture 的存放、格式和现有数据来源，不复制协议模板。
+
 ## 百炼 ASR capability fixture（任务 9.6/9.7）
 
 `bailian/asr-*.json` 由非实时与实时 ASR 专用测试读取，统一标记 `kind: "capability"`，
 生成 provider 的 `fixtures.test.ts` 会显式跳过。当前没有真实付费 ASR/麦克风 WS 日志，内容来自
 9.4 已核实的百炼官方 HTTP、上传和 WebSocket 事件示例；每份文件都记录来源，标识、文本和 URL
-已替换为不可联网占位值。
+已替换为不可联网占位值。官方字面样本与依据字段表构造的样本必须明确区分；合成负例单独标记，
+不得冒充官方示例。
 
 ## LLM fixture 补充（任务 9.9）
 
