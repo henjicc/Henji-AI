@@ -8,12 +8,14 @@ import { closeLogWindow } from './windows/log-window'
 import { closeCameraStageRenderWindow } from './services/camera-stage-render'
 import { APP_WINDOW_BACKGROUND_HEX } from '../../src/core/theme/colorTokens'
 import { warmupMediaImportPipeline } from './services/media-import'
+import { presentWindow, type WindowPresentationMode } from './window-presentation'
 
 const logger = createMainLogger('main.window')
 let mainWindow: BrowserWindow | null = null
 
 export interface CreateWindowOptions {
   headless?: boolean
+  presentation?: WindowPresentationMode
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -22,6 +24,7 @@ export function getMainWindow(): BrowserWindow | null {
 
 export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   const headless = options.headless === true
+  const presentation = options.presentation ?? 'foreground'
   const allowOversizeForInspection = process.env['HENJI_UI_INSPECTION_ALLOW_OVERSIZE'] === '1'
   const iconPath = resolveAppIconPath()
   const win = new BrowserWindow({
@@ -69,8 +72,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
 
   if (!headless) win.once('ready-to-show', () => {
     if (win.isDestroyed()) return
-    win.maximize()
-    win.show()
+    presentWindow(win, presentation)
     setTimeout(() => {
       if (!win.isDestroyed()) void warmupMediaImportPipeline()
     }, 1500)
@@ -79,8 +81,7 @@ export function createWindow(options: CreateWindowOptions = {}): BrowserWindow {
   if (!headless && !win.isVisible()) {
     setTimeout(() => {
       if (!win.isDestroyed() && !win.isVisible()) {
-        win.maximize()
-        win.show()
+        presentWindow(win, presentation)
       }
     }, 3000)
   }

@@ -38,7 +38,8 @@ Henji-AI（痕迹AI）是 **Electron + React + TypeScript** 桌面应用，聚�
 
 ```bash
 npm install                    # 安装依赖
-npm run electron:dev           # Electron 开发模式（桌面调试用这个）
+npm run electron:dev -- --background  # Electron 开发模式：窗口完整显示与渲染，但启动时不抢焦点（测试优先）
+npm run electron:dev                 # 仅在必须验证启动聚焦行为时使用普通前台启动
 npm run dev                    # 裸 Vite 渲染层（不含主进程能力，不能作桌面验收依据）
 npm run lint                   # 渲染层 lint
 npm run test                   # 全量单元测试（仅 L3 / CI；日常改动按 testing.md 跑精确或相关测试）
@@ -107,9 +108,9 @@ npm run assistant:live:suite -- --only camera --skip-generation
 
 1. 跑完 [testing.md](docs/rules/testing.md) 中与本次改动匹配的检查，如实报告结果
 2. 不要人工接管用户鼠标做验收；拖拽、点击、悬浮、画布交互优先通过项目正式 `npm run test:reality -- --suite ui|ui-audit` 自动化执行。只有正式场景尚未覆盖或必须由用户作主观判断时，才写清操作步骤和验证点交给用户。真实应用视觉审查禁止使用浏览器、ego-browser 或 Chrome 工具代替 Electron；必须使用真实 Electron 窗口、项目正式场景和实际截图，并由 Agent 打开截图目视检查。
-3. **最终回复前必须检查本项目开发环境是否正在运行**，只识别工作目录属于当前仓库的 `npm run electron:dev` 进程，禁止按 `node` / `Electron` 名称宽泛结束其他项目进程：
-   - 未运行：在可持续运行的终端会话中执行 `npm run electron:dev`，确认启动成功后再交付
-   - 已运行且本次改动需要重启：只结束当前仓库对应的完整开发进程树，然后重新执行 `npm run electron:dev`
+3. **最终回复前必须检查本项目开发环境是否正在运行**，只识别工作目录属于当前仓库的 `npm run electron:dev` 进程，禁止按 `node` / `Electron` 名称宽泛结束其他项目进程。测试、助手验证与 Agent 收尾启动一律优先使用 `npm run electron:dev -- --background`：该模式仍创建、显示并持续渲染真实窗口，只是不在首次显示时抢占用户焦点；只有必须验证启动聚焦行为或用户明确要求时，才使用普通前台启动：
+   - 未运行：在可持续运行的终端会话中执行 `npm run electron:dev -- --background`，确认启动成功后再交付
+   - 已运行且本次改动需要重启：只结束当前仓库对应的完整开发进程树，然后重新执行 `npm run electron:dev -- --background`
    - 已运行且无需重启：保持现状，不得重复启动第二个实例
    - 启动或重启失败：不得声称已完成，保留错误输出并如实报告
    - 最终回复明确写出实际状态：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`

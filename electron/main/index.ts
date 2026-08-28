@@ -38,6 +38,7 @@ import { getAiProviderApiKey } from './services/keystore'
 import { runLogRetention } from './services/logging'
 import { initializeUpdater } from './services/updater'
 import { createWindow } from './window'
+import { resolveWindowPresentationMode } from './window-presentation'
 import {
   formatAssistantCliHelp,
   isAssistantCliMode,
@@ -153,7 +154,7 @@ app.whenReady().then(() => {
     return
   }
 
-  createWindow()
+  createWindow({ presentation: resolveWindowPresentationMode() })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
