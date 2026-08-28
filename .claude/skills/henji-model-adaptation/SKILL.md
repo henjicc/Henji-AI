@@ -38,6 +38,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
     - 更重视用户心智可见性时：暴露 `mode`，默认显示“文/图生视频”，上传 2 张图后自动切到“首尾帧”。
   - 一旦再引入“多参考图”“视频编辑”“视频参考”这类分支，则升级为显式 `mode` 主导。
 - 设计参数顺序、分组、特殊面板或“高级设置”时，读取 `references/param-order-patterns.md`；先保留跨模型通用参数的标准交互，再收纳模型特有或低频参数。
+- 参数涉及遮罩、区域选择、深度/控制图等需要基于其他素材创建的派生媒体时，读取 `references/derived-media-authoring.md`；先设计“创建/编辑/继续编辑”闭环，再决定提交时的媒体路径与上传转换。
 - 若实施需要新增/改造 `.tsx` 参数面板，按项目规则同时使用 `henji-ui-surface`；这仍属于共享参数呈现，不因它也会出现在画布里而自动变成画布节点任务。
 - 处理“不展示参数/固定默认请求值”时，读取 `references/hidden-default-params.md`。
 - 判断图片/视频/音频差异时，读取 `references/modality-differences.md`。
@@ -60,7 +61,9 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 供应商模型文件只填写 `meta.canonicalModelId`，禁止填写 `meta.description`。适配前先检查 `src/core/modelCatalog/generationModelDescriptions.ts`：已有同一通用模型标识就直接引用；不存在就新增空描述条目，并在交付时明确告诉用户需要在该文件补充这个模型的定性描述。通用描述只写模型擅长方向或相对定位，不重复 tags 已表达的固有能力。
 - 对接已接入的 provider 时，先核对该 provider 在仓库里的既有 route 写法与 runtime 约定，再决定 `endpoints` 填什么；不要只按文档标题猜路径，也不要漏掉现有 provider 统一前缀（例如部分 PPIO 路由实际要走 `/async/...`）。
 - 参数展示层可以做统一交互，但最终请求参数必须转换为 API 文档要求的字段和值。
-- API 的媒体/文件字段即使名为 `*_url`，参数面板也禁止呈现手动 URL 文本框。角色图、风格图、深度图、遮罩图用 `image-upload`，视频/音频/PDF 等使用对应上传类型或现有上传按钮；由 Electron 主进程调用当前供应商官方上传服务并把返回 URL 写入请求，业务 UI 不直连上传 API。
+- 参数展示补丁中的 `description` 是给智能助手、能力反射与语义检索使用的参数说明，正式参数界面不得渲染它；给用户看的解释、限制和操作后果必须写入 `tooltip`，并按 `henji-ui-surface` 通过标签旁的说明入口呈现。两者受众不同，可以同时存在，界面不得用 `description` 兜底 `tooltip`。
+- API 的媒体/文件字段即使名为 `*_url`，参数面板也禁止呈现手动 URL 文本框。普通已有素材（角色图、风格参考图、视频、音频、PDF 等）使用对应上传类型或现有上传按钮；由 Electron 主进程调用当前供应商官方上传服务并把返回 URL 写入请求，业务 UI 不直连上传 API。
+- 遮罩、区域选择等需要用户基于另一份素材现场制作的**派生媒体**，不得把普通上传按钮作为主操作，也不得要求用户去外部软件制作后再次上传。主操作必须按状态显示“绘制”/“编辑”并打开项目内共享编辑器；确认后生成受管媒体供提交链路上传，已有结果再次进入时必须能够继续编辑。上传或导入只能在产品明确需要兼容外部成品时作为次级入口。
 - 特殊请求字段（如 `cref` / `sref` / `dref` / `mask_url` / `pdf_url`）必须通过 `runtimeConstraints.mediaFields` 声明媒体类型，让公共预处理层识别并上传；禁止在上传运行时添加模型 ID 分支。若供应商没有对应官方上传能力，不得让用户自行填写公网链接，应暂停该能力并向用户确认。
 - 上传参数的新 schema 值使用数组结构，builder 仅可为旧工程兼容读取历史字符串 URL；兼容路径不能重新暴露 URL 输入框。对话/工具面板 `ParamRenderer` 与画布 `NodeParamControl` 必须能消费同一上传 schema。
 - 参数压缩不能破坏用户已经形成的跨模型心智：比例、分辨率、时长、数量、质量等高频通用参数，优先保持同模态模型已有的名称、控件类型、顶层位置和交互方式；不得仅为了“参数更少”把它们吞进供应商/模型专属高级面板。标准交互不等于统一 options/default，合法值和默认值仍以当前 API 契约为准。
@@ -72,6 +75,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 合并或重命名模型时，旧 ID 放进 `meta.aliases` 只是第一步：旧入口隐含的模式/渠道写入 `meta.aliasParamDefaults`，旧参数 ID 迁移写入 `meta.aliasParamMappings`。四个消费方必须一起验证：生成页初始值、模型切换迁移、画布节点参数、主进程 RequestBuilder；禁止出现“能解析旧 ID，但旧工程悄悄换了渠道或丢参数”。
 - 标准生成节点通过 `GenerationNodeShell -> NodeInputRows -> NodeParamRows` 自动读取模型 schema。只改模型参数定义、显隐、联动、计价或请求映射时，默认不修改 `src/features/canvas/**`，也不加载 `canvas-node-builder`。只有新增/改造节点 DOM、端口、节点注册、节点专属交互，或现有 `ParamRenderer` / `NodeParamControl` 无法共同表达新参数类型时，才进入画布节点工作流。
 - 新增或调整复合/特殊参数面板时，必须确认对话/工具面板的 `ParamRenderer` 与画布的 `NodeParamControl` 都能消费同一 schema 和同一值结构；优先修正共享参数面板能力，不为画布复制一份模型专属实现。
+- 派生媒体的来源关系、编辑器类型、创建/编辑状态和输出要求必须由共享展示契约声明并由各参数消费方共同读取；禁止在 UI 中按模型 ID 或供应商写分支。运行时参数仍只接收可上传的规范媒体值，应用专属的编辑文档与交互配置不要反向塞进 SDK 请求契约。
 - Henji-AI 当前产品约定：新增模型默认不暴露 `output_format` / `outputFormat`，也不向 API 传递该字段；即使文档支持，也先按“不显示且不请求”处理，除非用户后续明确推翻这条约定。
 - 若参数显隐/联动/计价依赖“是否已上传图片/视频”，必须同时覆盖三种执行场景各自的运行时字段名，不能只查一个：生成提交时是 `uploadedFilePaths`/`uploadedVideoFilePaths`，画布节点实时值是 `images`/`videos`，对话/工具面板实时上传状态是 `uploadedImages`/`uploadedVideos`。只查其中一个键会导致另外两个场景判断错误（参数该隐藏没隐藏、画布里 mode 自动切换不触发、计价按错分支）。优先复用 `packages/ai-sdk/src/catalog/shared/mediaPresence.ts` 的 `hasUploadedImage`/`hasUploadedVideo`/`countUploadedImages`/`countUploadedVideos`（KIE/PPIO 模型可从同目录 `./mediaSources` 导入，已重导出）。
 - 严格走项目主链路：`GenerationService -> src/commands/aiRuntime.ts -> src/platform/* -> electron/preload/index.ts -> electron/main/ipc/ai-runtime.ts -> electron/main/services/ai-runtime/**` 宿主薄壳 `-> @henjicc/ai-sdk`。
@@ -101,5 +105,7 @@ description: 面向 Henji-AI 的模型与供应商调研、文档整理、参数
 - 只有需要验证完整 Electron 类型链路、产物或发布链路时，再跑 `npm run electron:build`；构建后需要验收真实桌面能力时再跑 `npm run electron:smoke`。
 - 新增能力不引入跨层调用与 UI 直连模型 API。
 - 新增参数满足顺序约定，并明确“显示/请求”策略。
+- 新增媒体参数已区分“已有素材上传”与“基于前置素材创作”；派生媒体必须在应用内完成创建、确认、重新进入继续编辑和前置素材变化后的失效处理，不能以“可以上传文件”代替用户任务闭环。
+- 参数 `description` 已作为助手语义保留但未进入正式界面，所有用户可见说明均通过 `tooltip` 呈现。
 - 需要验证运行中的 Electron 进程已加载新 catalog：重新构建 SDK，并重启 `npm run electron:dev`。
 - 默认值改动需通过“冷启动可见验证”：重启开发进程后确认参数面板初始显示值正确（不是仅看请求 builder 兜底）。

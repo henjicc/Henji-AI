@@ -320,6 +320,29 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 
 分区之间的间距用 `UI_SECTION_STACK_CLASS`，不要每处自己定 `space-y-*`。
 
+## 参数说明的受众：`description` 给助手，`tooltip` 给用户
+
+本节只约束模型 / schema 参数的 `ParamDef`、`ParamPresentation` 等参数元数据，
+不影响 `UiPageHeader description`、`UiGroup description` 这类明确属于页面内容的组件属性。
+
+| 字段 | 受众与用途 | 界面呈现 |
+|---|---|---|
+| `description` | 给智能助手、能力反射、语义检索理解“这个参数做什么、影响什么” | **不得直接渲染到正式界面** |
+| `tooltip` | 给用户解释不明显的含义、输入限制、操作后果 | 标签旁的说明入口触发 tooltip |
+| `placeholder` | 展示输入格式或一个可替换的例子 | 只放在输入控件内部，不承担规则说明 |
+| 校验 / 状态文案 | 当前值为什么不可用、缺什么前置条件、处理是否失败 | 紧邻控件的短状态；只在状态存在时显示 |
+
+**说明性文本只要是给用户看的，就必须进入 `tooltip`。** 不要为了“让用户一定看到”把它
+摊成控件下方的常驻正文；常驻说明会打断参数网格、扩大单个字段的视觉占位，并让一条局部约束
+看起来像整个面板的主要内容。
+
+参数 tooltip 必须由标签旁清晰、可聚焦的说明入口触发（优先复用 `UiFormRow info` 或共享参数标签
+的同类能力），保证鼠标、键盘均可访问；不要把整个输入框、上传区或参数容器包进 `Tooltip`，
+否则用户看不出哪里有说明，移动到控件上还会意外弹出。
+
+`description` 与 `tooltip` 可以同时存在，因为受众不同：前者可以写得更偏语义和能力边界，
+后者应使用用户能直接理解的短文案。界面层不得在 `tooltip` 缺失时自动回退渲染 `description`。
+
 ## 硬性禁止清单
 
 | 禁止 | 正确做法 |
@@ -361,6 +384,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 | 分组 | `UiGroup` | 手写 `border + bg` 的 div |
 | 页面标题区 | `UiPageHeader` | 手写 h2 + p |
 | 表单行 | `UiFormRow` | 手写 label + 间距 |
+| 参数帮助说明 | `UiFormRow info` / 共享参数标签的说明入口 | 把 `description` 渲染成控件下方正文，或用 Tooltip 包住整个控件 |
 | 空/加载/错误 | `UiEmpty` / `UiLoading` / `UiError` | 内联手写状态块 |
 | 按钮/输入/开关等 | `@/components/ui` 的 `Ui*` | 原生 `<button>/<input>` |
 | 提示词编辑 | `PromptEditor` | 自己拼 textarea |
@@ -386,7 +410,7 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
    d. 数实底按钮（应恰好 1 个）、看同组动作是否同档、数分隔线（一条 bar 最多 1 条）
 3. 定级：这块内容属于 Region / Group / Divided / Surface / Card 的哪一级
 4. 查复用表：需要的组件是否已存在 → 存在就复用
-5. 用排版令牌建立层级（标题/正文/元信息），先不加任何容器装饰
+5. 先确认参数文案受众：助手语义写 `description` 但不渲染，用户说明写 `tooltip`；再用排版令牌建立标题/正文/元信息层级
 6. 只在四条准入条件全中时才用 Card
 7. 写代码：颜色用语义类，字号/圆角/阴影/层级用登记令牌
 8. 跑自检清单；高影响 UI 再运行真实 Electron 视觉场景并由 Agent 逐张目视截图
@@ -426,6 +450,8 @@ prominent/bordered/plain、Fluent 的 primary/default/subtle），本项目对�
 - [ ] 有 `setTimeout` 卸载动画组件吗？那个数字必须和 className 里的 `duration-*` 同档
 - [ ] 过渡的是 `opacity`/`transform` 吗？别过渡宽高间距，也别用裸 `transition`
 - [ ] 空/加载/错误三态是否都走了 `UiEmpty/UiLoading/UiError`
+- [ ] 模型 / schema 参数的 `description` 是否没有进入正式界面？给用户看的说明是否全部进入标签旁的 `tooltip`？
+- [ ] 参数 tooltip 是否有清晰且可聚焦的说明入口，而不是包住整个控件或上传区？
 - [ ] 字号是否全部来自登记档位（无 `text-[Npx]`）
 - [ ] 圆角是否只用了 `rounded-lg/xl/full`，且内层不大于外层
 - [ ] 阴影是否只出现在浮层
