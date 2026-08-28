@@ -157,6 +157,7 @@
     "addHint": "This area only adds large language model providers. Custom image, video, and audio generation providers are not supported yet.",
     "presetCustom": "Custom (manual)",
     "protocolOptions": {
+      "automatic": "Automatic (recommended)",
       "openai-compatible": "OpenAI Chat Completions",
       "openai-responses": "OpenAI Responses"
     },
@@ -179,8 +180,9 @@
     "hints": {
       "preset": "Presets fill in connection details automatically. Providers already added are not shown again.",
       "keyUrl": "Used for the Get/Manage API Key link. No link is shown when empty.",
-      "protocol": "Only for unadapted custom endpoints. Presets choose the appropriate connection automatically for each model.",
-      "automaticProtocol": "The appropriate connection is selected automatically for each model."
+      "protocol": "Choose the request format supported by the custom endpoint.",
+      "presetProtocol": "Automatic lets the SDK choose per model. A manual selection overrides every model under this provider.",
+      "presetBaseUrl": "The SDK-maintained provider URL is used by default. Editing this field switches to the new API URL."
     },
     "preview": "Preview: {{value}}",
     "previewEmpty": "Enter an API URL first",

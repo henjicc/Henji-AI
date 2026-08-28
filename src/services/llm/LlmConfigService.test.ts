@@ -187,6 +187,36 @@ describe('normalizeLlmConfig', () => {
     ))?.apiProtocol).toBe('openai-responses')
   })
 
+  it('用户显式覆盖预设连接后，地址与协议应用到该供应商全部模型', () => {
+    const defaults = normalizeLlmConfig(null)
+    const overridden = normalizeLlmConfig({
+      ...defaults,
+      providers: defaults.providers.map(provider => provider.providerId === 'deepseek'
+        ? {
+            ...provider,
+            setup: {
+              kind: 'preset' as const,
+              presetId: 'deepseek',
+              lifecycle: 'builtin' as const,
+              connectionOverrides: {
+                baseUrl: 'https://proxy.example.com/v1',
+                apiProtocol: 'openai-compatible' as const,
+              },
+            },
+          }
+        : provider),
+    })
+    expect(overridden.providers.find(provider => provider.providerId === 'deepseek')).toMatchObject({
+      baseUrl: 'https://proxy.example.com/v1',
+      apiProtocol: 'openai-compatible',
+    })
+    const models = overridden.models.filter(model => model.providerId === 'deepseek')
+    expect(models.every(model => (
+      model.baseUrl === 'https://proxy.example.com/v1'
+      && model.apiProtocol === 'openai-compatible'
+    ))).toBe(true)
+  })
+
   it('保留用户明确清空的文本处理模板，并过滤无名称模板', () => {
     const defaults = normalizeLlmConfig(null)
     expect(normalizeLlmConfig({

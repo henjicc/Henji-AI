@@ -157,6 +157,7 @@
     "addHint": "此处仅用于添加大语言模型供应商，图片、视频、音频生成的供应商暂无法自定义添加。",
     "presetCustom": "自定义（手动填写）",
     "protocolOptions": {
+      "automatic": "自动选择（推荐）",
       "openai-compatible": "OpenAI Chat Completions",
       "openai-responses": "OpenAI Responses"
     },
@@ -179,8 +180,9 @@
     "hints": {
       "preset": "预设会自动填写连接信息，已添加的供应商不会重复显示。",
       "keyUrl": "用于显示“获取/管理 API Key”入口；不填写时不显示。",
-      "protocol": "只用于未适配的自定义接口；预设供应商会按具体模型自动选择。",
-      "automaticProtocol": "请求方式会按具体模型自动选择，无需手动设置。"
+      "protocol": "按自定义接口实际支持的请求方式选择。",
+      "presetProtocol": "保持“自动选择”时，SDK 会按具体模型选择请求方式；手动修改后将对该供应商的全部模型生效。",
+      "presetBaseUrl": "保持默认时使用 SDK 维护的供应商地址；修改后将使用新的 API 地址。"
     },
     "preview": "预览：{{value}}",
     "previewEmpty": "请先填写 API 地址",

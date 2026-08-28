@@ -272,6 +272,13 @@ describe('resolveModelStepBaseUrl', () => {
     }))).toBe('https://open.bigmodel.cn/api/v1')
   })
 
+  it('显式修改区域预设地址后优先使用覆盖地址', () => {
+    expect(resolveModelStepBaseUrl(createInput({
+      providerId: 'bigmodel', providerFamilyId: 'bigmodel', endpointProfile: 'cn', credentialId: 'bigmodel',
+      apiProtocol: 'openai-responses', baseUrl: 'https://proxy.example.com/v1',
+    }))).toBe('https://proxy.example.com/v1')
+  })
+
   it('思考参数不再走 providerOptions，只透传调用方显式给的选项', () => {
     // 思考参数改由 applyProviderReasoningRequestBody 在 transformRequestBody 里按供应商翻译，
     // 与原生流式路径共用（见 providerReasoningRequest.test.ts）。

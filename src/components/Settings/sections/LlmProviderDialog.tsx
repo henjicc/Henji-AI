@@ -3,7 +3,6 @@ import { Info, Plus, RefreshCw, Trash2 } from 'lucide-react'
 
 import {
   Dropdown,
-  UI_TEXT_BODY_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
   UiFormRow,
@@ -23,7 +22,7 @@ import {
   findProviderMetadata,
   findLlmProviderPreset,
 } from '@henjicc/ai-sdk'
-import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
+import type { LlmApiProtocol, LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
 import {
   createDefaultProvider,
@@ -34,6 +33,8 @@ import {
 } from './llmSettingsSectionHelpers'
 
 const CUSTOM_PRESET = '__custom__'
+const AUTOMATIC_PROTOCOL = '__automatic__'
+type ProtocolSelection = LlmApiProtocol | typeof AUTOMATIC_PROTOCOL
 
 interface LlmProviderDialogProps {
   isOpen: boolean
@@ -85,6 +86,10 @@ const LlmProviderDialog = ({
     ...type,
     label: t(`llmProvider.protocolOptions.${type.value}`),
   }))
+  const presetProtocolOptions: Array<{ value: ProtocolSelection; label: string }> = [
+    { value: AUTOMATIC_PROTOCOL, label: t('llmProvider.protocolOptions.automatic') },
+    ...protocolOptions,
+  ]
 
   useEffect(() => {
     if (!isOpen) return
@@ -158,6 +163,49 @@ const LlmProviderDialog = ({
   const providerMetadata = activePreset
     ? findProviderMetadata(activePreset.providerId, { endpointProfile: draft.endpointProfile })
     : null
+  const presetConnectionOverrides = draft.setup?.kind === 'preset'
+    ? draft.setup.connectionOverrides
+    : undefined
+  const protocolSelection: ProtocolSelection = activePreset
+    ? presetConnectionOverrides?.apiProtocol ?? AUTOMATIC_PROTOCOL
+    : draft.apiProtocol ?? 'openai-compatible'
+
+  const patchPresetConnection = (
+    next: { baseUrl?: string; apiProtocol?: LlmApiProtocol },
+  ): void => {
+    if (draft.setup?.kind !== 'preset') return
+    const { connectionOverrides: _previousOverrides, ...presetSetup } = draft.setup
+    const connectionOverrides = {
+      ..._previousOverrides,
+      ...next,
+    }
+    if (!connectionOverrides.baseUrl) delete connectionOverrides.baseUrl
+    if (!connectionOverrides.apiProtocol) delete connectionOverrides.apiProtocol
+    patch({
+      setup: {
+        ...presetSetup,
+        ...(Object.keys(connectionOverrides).length > 0 ? { connectionOverrides } : {}),
+      },
+    })
+  }
+
+  const handleProtocolSelect = (value: ProtocolSelection): void => {
+    if (!activePreset) {
+      patch({ apiProtocol: value === AUTOMATIC_PROTOCOL ? 'openai-compatible' : value })
+      return
+    }
+    patchPresetConnection({
+      apiProtocol: value === AUTOMATIC_PROTOCOL ? undefined : value,
+    })
+    patch({ apiProtocol: value === AUTOMATIC_PROTOCOL ? activePreset.apiProtocol : value })
+  }
+
+  const handleBaseUrlChange = (value: string): void => {
+    patch({ baseUrl: value })
+    if (!activePreset) return
+    const matchesPreset = value.trim().replace(/\/+$/, '') === activePreset.baseUrl.replace(/\/+$/, '')
+    patchPresetConnection({ baseUrl: matchesPreset ? undefined : value })
+  }
 
   const describeError = (value: unknown): string => {
     const message = value instanceof Error ? value.message : String(value)
@@ -170,7 +218,7 @@ const LlmProviderDialog = ({
   }
 
   const handleSave = async (): Promise<void> => {
-    const displayName = activePreset?.displayName ?? draft.displayName.trim()
+    const displayName = draft.displayName.trim() || activePreset?.displayName || ''
     if (!displayName || saving) return
     const providerId = draft.providerId.trim()
       || activePreset?.providerId
@@ -261,47 +309,40 @@ const LlmProviderDialog = ({
       </UiFormRow>
 
       <UiFormRow label={t('llmProvider.fields.name')}>
-        {isCustom ? (
-          <UiInput
-            value={draft.displayName}
-            onChange={event => patch({ displayName: event.target.value })}
-            placeholder={t('llmProvider.placeholders.name')}
-          />
-        ) : (
-          <div className={UI_TEXT_BODY_CLASS}>{draft.displayName}</div>
-        )}
+        <UiInput
+          value={draft.displayName}
+          onChange={event => patch({ displayName: event.target.value })}
+          placeholder={t('llmProvider.placeholders.name')}
+        />
       </UiFormRow>
 
-      {isCustom ? (
-        <UiFormRow label={t('llmProvider.fields.protocol')}>
-          <Dropdown
-            value={draft.apiProtocol ?? 'openai-compatible'}
-            display={protocolOptions.find(type => type.value === draft.apiProtocol)?.label ?? protocolOptions[0].label}
-            options={protocolOptions}
-            ariaLabel={t('llmProvider.fields.protocol')}
-            className="w-full"
-            buttonClassName="w-full"
-            onSelect={apiProtocol => patch({ apiProtocol })}
-          />
-          <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{t('llmProvider.hints.protocol')}</div>
-        </UiFormRow>
-      ) : null}
+      <UiFormRow label={t('llmProvider.fields.protocol')}>
+        <Dropdown<ProtocolSelection>
+          value={protocolSelection}
+          display={(activePreset ? presetProtocolOptions : protocolOptions)
+            .find(type => type.value === protocolSelection)?.label ?? protocolOptions[0].label}
+          options={activePreset ? presetProtocolOptions : protocolOptions}
+          ariaLabel={t('llmProvider.fields.protocol')}
+          className="w-full"
+          buttonClassName="w-full"
+          onSelect={handleProtocolSelect}
+        />
+        <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
+          {t(activePreset ? 'llmProvider.hints.presetProtocol' : 'llmProvider.hints.protocol')}
+        </div>
+      </UiFormRow>
 
       <UiFormRow label={t('llmProvider.fields.baseUrl')}>
-        {isCustom ? (
-          <UiInput
-            value={draft.baseUrl ?? ''}
-            onChange={event => patch({ baseUrl: event.target.value })}
-            placeholder={t('llmProvider.placeholders.baseUrl')}
-          />
-        ) : (
-          <div className={`break-all ${UI_TEXT_BODY_CLASS}`}>{draft.baseUrl || '—'}</div>
-        )}
+        <UiInput
+          value={draft.baseUrl ?? ''}
+          onChange={event => handleBaseUrlChange(event.target.value)}
+          placeholder={t('llmProvider.placeholders.baseUrl')}
+        />
         <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
           {activePreset?.baseUrlHint && !draft.baseUrl?.trim()
             ? activePreset.baseUrlHint
             : activePreset
-              ? t('llmProvider.hints.automaticProtocol')
+              ? t('llmProvider.hints.presetBaseUrl')
               : t('llmProvider.preview', { value: resolveApiPreview(draft) || t('llmProvider.previewEmpty') })}
         </div>
       </UiFormRow>
@@ -392,7 +433,7 @@ const LlmProviderDialog = ({
           <UiButton
             type="button"
             variant="primary"
-            disabled={saving || (isCustom && !draft.displayName.trim())}
+            disabled={saving || !draft.displayName.trim()}
             onClick={() => void handleSave()}
           >
             {saving

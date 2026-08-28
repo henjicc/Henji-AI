@@ -54,15 +54,15 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   return (
     <div>
       {label || websiteUrl || managementUrl ? (
-        <div className="mb-1.5 flex min-h-6 items-center justify-between gap-3">
-          {label ? <label htmlFor={inputId} className={UI_FIELD_LABEL_CLASS}>{label}</label> : <span />}
-          <div className="flex items-center gap-2">
+        <div className="mb-1.5 min-h-6">
+          {label ? <label htmlFor={inputId} className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
+          <div className={`${label ? 'mt-1' : ''} flex items-center justify-start gap-3`}>
             {websiteUrl && websiteLabel && onOpenUrl ? (
               <UiButton
                 type="button"
                 variant="plain"
                 size="sm"
-                className="h-6 shrink-0 px-1 text-brand-300 hover:bg-transparent hover:text-brand-300 hover:underline"
+                className="!h-6 !min-h-0 shrink-0 !px-0 !py-0 !text-sm font-medium !text-brand-300 hover:bg-transparent hover:!text-brand-300 hover:underline"
                 onClick={() => onOpenUrl(websiteUrl)}
               >
                 {websiteLabel}
@@ -74,7 +74,7 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
                 type="button"
                 variant="plain"
                 size="sm"
-                className="h-6 shrink-0 px-1 text-brand-300 hover:bg-transparent hover:text-brand-300 hover:underline"
+                className="!h-6 !min-h-0 shrink-0 !px-0 !py-0 !text-sm font-medium !text-brand-300 hover:bg-transparent hover:!text-brand-300 hover:underline"
                 onClick={() => onOpenUrl(managementUrl)}
               >
                 {managementLabel}

@@ -296,6 +296,43 @@ describe('LlmProviderSettingsService', () => {
     expect(state.config?.providers[0]).toMatchObject({ displayName: '派欧云', enabled: true })
   })
 
+  it('预设供应商保存用户修改的名称、地址与请求方式', async () => {
+    const provider: LlmProviderConfig = {
+      ...customProvider('ppio', 'ppio'),
+      setup: {
+        kind: 'preset',
+        presetId: 'ppio',
+        lifecycle: 'builtin',
+        connectionOverrides: {
+          baseUrl: 'https://proxy.example.com/v1',
+          apiProtocol: 'openai-responses',
+        },
+      },
+      displayName: '我的派欧云',
+      apiProtocol: 'openai-responses',
+      baseUrl: 'https://proxy.example.com/v1',
+    }
+    const initial = { ...baseline, providers: [provider] }
+    const { service, state } = createHarness(initial)
+
+    await service.commit({
+      provider,
+      seedModels: [],
+      baselineConfig: initial,
+      credential: { kind: 'unchanged' },
+    })
+
+    expect(state.config?.providers[0]).toMatchObject({
+      displayName: '我的派欧云',
+      apiProtocol: 'openai-responses',
+      baseUrl: 'https://proxy.example.com/v1',
+      setup: { connectionOverrides: {
+        apiProtocol: 'openai-responses',
+        baseUrl: 'https://proxy.example.com/v1',
+      } },
+    })
+  })
+
   it('拒绝把内置 preset 降级为 user/custom 后绕过永久删除保护', async () => {
     const provider: LlmProviderConfig = {
       ...customProvider('ppio', 'ppio'),

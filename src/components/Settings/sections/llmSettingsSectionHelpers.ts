@@ -11,7 +11,7 @@ import type {
 } from '@henjicc/ai-sdk'
 import { createModelFromInput } from '@/services/llm/llmDiscoveryService'
 
-/* 自定义未知端点只暴露真实接通的协议；预制供应商由 SDK 按模型选择，不使用这里的选项。 */
+/* 自定义端点可直接选协议；预制供应商默认由 SDK 按模型选择，也允许用户显式覆盖。 */
 export const providerProtocolOptions: Array<{ value: LlmApiProtocol; label: string }> = [
   { value: 'openai-compatible', label: 'OpenAI Chat Completions' },
   { value: 'openai-responses', label: 'OpenAI Responses' },

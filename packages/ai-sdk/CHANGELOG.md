@@ -5,6 +5,7 @@
 - 新增 `openai-responses` 模型步骤协议，与 Chat Completions 并存；标准 Responses SSE、usage、失败与取消统一落到既有模型步骤事件和错误契约。
 - 预制供应商按“供应商端点 × 具体模型”自动选择协议：DeepSeek、火山引擎、百炼、MiniMax 与智谱国内 GLM-5.3 的已确认组合默认 Responses，聚合网关和未确认模型继续 Chat。
 - Anthropic 协议仍未实现，不再向宿主设置界面提供伪选项；自定义未知端点只需在 Chat / Responses 之间选择。
+- `LlmProviderSetup` 新增可选 `connectionOverrides`：预设默认继续按具体模型自动路由，只有用户主动修改时才覆盖 API 地址或统一请求协议；供应商身份、凭据槽与模型能力仍保留预设契约。
 
 ## 0.2.6 - 2026-08-28
 

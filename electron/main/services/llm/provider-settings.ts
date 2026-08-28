@@ -112,9 +112,13 @@ function normalizeProviderForCommit(provider: LlmProviderConfig): LlmProviderCon
       endpointProfile: provider.endpointProfile,
       lifecycle: setup.lifecycle,
     })
+    const overrides = setup.connectionOverrides
     return {
       ...canonical,
+      setup,
       displayName: provider.displayName.trim(),
+      apiProtocol: overrides?.apiProtocol ?? canonical.apiProtocol,
+      baseUrl: overrides?.baseUrl ?? canonical.baseUrl,
       enabled: provider.enabled,
       reasoning: provider.reasoning ?? canonical.reasoning,
     }

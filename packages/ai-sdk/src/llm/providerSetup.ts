@@ -52,7 +52,28 @@ export function normalizeLlmProviderSetup(setup: LlmProviderSetup): LlmProviderS
       `[llm_provider_preset_unknown] preset "${presetId || '(empty)'}" is unavailable; choose one of: ${LLM_PROVIDER_PRESETS.map(item => item.providerId).join(', ')}`
     )
   }
-  return { kind: 'preset', presetId, lifecycle: setup.lifecycle }
+  const overrides = setup.connectionOverrides
+  if (overrides !== undefined && (typeof overrides !== 'object' || overrides === null)) {
+    throw new Error('[llm_provider_connection_override_invalid] preset connection overrides must be an object')
+  }
+  if (overrides?.baseUrl !== undefined && typeof overrides.baseUrl !== 'string') {
+    throw new Error('[llm_provider_connection_override_invalid] preset baseUrl override must be a string')
+  }
+  const baseUrl = overrides?.baseUrl?.trim()
+  const apiProtocol = overrides?.apiProtocol
+  if (apiProtocol !== undefined && apiProtocol !== 'openai-compatible' && apiProtocol !== 'openai-responses') {
+    throw new Error('[llm_provider_connection_override_invalid] unsupported preset API protocol override')
+  }
+  const connectionOverrides = {
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(apiProtocol ? { apiProtocol } : {}),
+  }
+  return {
+    kind: 'preset',
+    presetId,
+    lifecycle: setup.lifecycle,
+    ...(Object.keys(connectionOverrides).length > 0 ? { connectionOverrides } : {}),
+  }
 }
 
 /** endpoint profile 官方地址优先，其次 preset，最后才是 custom URL。 */

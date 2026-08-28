@@ -212,4 +212,27 @@ describe('provider setup / API key URL', () => {
       kind: 'preset', presetId: 'ppio', lifecycle: 'temporary',
     } as never)).toThrow('preset lifecycle must be "builtin" or "user"')
   })
+
+  it('只在用户主动修改时保留预设连接覆盖，并清理空白值', () => {
+    expect(normalizeLlmProviderSetup({
+      kind: 'preset',
+      presetId: 'PPIO',
+      lifecycle: 'user',
+      connectionOverrides: {
+        baseUrl: ' https://proxy.example.com/v1/ ',
+        apiProtocol: 'openai-responses',
+      },
+    })).toEqual({
+      kind: 'preset',
+      presetId: 'ppio',
+      lifecycle: 'user',
+      connectionOverrides: {
+        baseUrl: 'https://proxy.example.com/v1/',
+        apiProtocol: 'openai-responses',
+      },
+    })
+    expect(normalizeLlmProviderSetup({
+      kind: 'preset', presetId: 'ppio', lifecycle: 'user', connectionOverrides: { baseUrl: '  ' },
+    })).toEqual({ kind: 'preset', presetId: 'ppio', lifecycle: 'user' })
+  })
 })

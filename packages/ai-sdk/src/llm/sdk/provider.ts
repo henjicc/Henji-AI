@@ -56,16 +56,30 @@ function stripProtocolEndpoint(endpoint: string): string {
 }
 
 export function resolveModelStepBaseUrl(input: Pick<ModelStepInput, 'providerId' | 'providerFamilyId' | 'endpointProfile' | 'credentialId' | 'adapter' | 'apiProtocol' | 'baseUrl'>): string {
-  const identity = resolveLlmEndpointIdentity(input)
   const protocol = input.apiProtocol ?? 'openai-compatible'
-  const family = getLlmEndpointProfileFamily(identity.providerFamilyId)
-  const profile = family?.profiles.find(item => item.id === identity.endpointProfile)
-  const protocolBaseUrl = profile?.protocolBaseUrls?.[protocol]
+  const identityWithoutBaseUrl = resolveLlmEndpointIdentity({ ...input, baseUrl: undefined })
+  const family = getLlmEndpointProfileFamily(identityWithoutBaseUrl.providerFamilyId)
+  const profile = family?.profiles.find(item => item.id === identityWithoutBaseUrl.endpointProfile)
+  const suppliedBaseUrl = input.baseUrl ? stripProtocolEndpoint(input.baseUrl.replace(/\/+$/, '')) : undefined
+  const profileBaseUrl = profile ? stripProtocolEndpoint(profile.baseUrl.replace(/\/+$/, '')) : undefined
+  const selectedProtocolBaseUrl = profile?.protocolBaseUrls?.[protocol]
+    ? stripProtocolEndpoint(profile.protocolBaseUrls[protocol].replace(/\/+$/, ''))
+    : undefined
+  const hasExplicitBaseUrlOverride = Boolean(
+    suppliedBaseUrl
+    && suppliedBaseUrl !== profileBaseUrl
+    && suppliedBaseUrl !== selectedProtocolBaseUrl
+  )
+  const identity = hasExplicitBaseUrlOverride
+    ? identityWithoutBaseUrl
+    : resolveLlmEndpointIdentity(input)
   const normalizedInput = {
     ...input,
     providerId: identity.providerFamilyId,
-    baseUrl: protocolBaseUrl
-      ? stripProtocolEndpoint(protocolBaseUrl.replace(/\/+$/, ''))
+    baseUrl: hasExplicitBaseUrlOverride
+      ? suppliedBaseUrl
+      : selectedProtocolBaseUrl
+        ? selectedProtocolBaseUrl
       : identity.baseUrl ? stripProtocolEndpoint(identity.baseUrl.replace(/\/+$/, '')) : undefined,
   }
   if (protocol === 'openai-responses') {

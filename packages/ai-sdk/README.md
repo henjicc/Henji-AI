@@ -88,6 +88,9 @@ console.log(provider?.websiteUrl, provider?.apiKeyUrl)
 const zAi = findProviderMetadata('bigmodel', { endpointProfile: 'global' })
 ```
 
+LLM 预设默认使用 SDK 维护的官方地址，并按具体模型选择 Chat Completions 或 Responses。宿主若允许高级用户修改连接信息，应把主动修改写入
+`setup.connectionOverrides`；字段缺省时保持自动路由，不要把 SDK 的默认值复制成覆盖值。
+
 `websiteUrl` 是面向用户的实际跳转入口；派欧云、KIE、APIMart 会保留项目配置的邀请码，
 其余供应商使用正常官网。未知的自定义供应商返回 `null`，SDK 不猜测地址。
 

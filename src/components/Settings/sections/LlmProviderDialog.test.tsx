@@ -121,8 +121,9 @@ describe('LlmProviderDialog', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: '接入方式' }))
     fireEvent.click(screen.getByRole('option', { name: '派欧云' }))
-    expect(screen.queryByText('接口协议')).toBeNull()
-    expect(screen.getByText('请求方式会按具体模型自动选择，无需手动设置。')).toBeTruthy()
+    expect(screen.getByText('接口协议')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '接口协议' }).textContent).toContain('自动选择（推荐）')
+    expect(screen.getByText(/SDK 会按具体模型选择请求方式/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '访问官网' }))
     expect(openExternal).toHaveBeenCalledWith(preset.websiteUrl)
     fireEvent.click(screen.getByRole('button', { name: '获取/管理 API Key' }))
@@ -134,7 +135,7 @@ describe('LlmProviderDialog', () => {
     expect(screen.queryByRole('button', { name: '获取/管理 API Key' })).toBeNull()
   })
 
-  it('预制供应商隐藏底层协议，自定义接口只显示 Chat 与 Responses', () => {
+  it('预制供应商默认自动选协议，也允许显式覆盖 Chat 或 Responses', () => {
     renderDialog()
     expect(screen.getByText('接口协议')).toBeTruthy()
     expect(screen.getByRole('button', { name: '接口协议' }).textContent).toContain('Chat Completions')
@@ -146,6 +147,35 @@ describe('LlmProviderDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '接口协议' }))
     fireEvent.click(screen.getByRole('option', { name: 'OpenAI Responses' }))
     expect(screen.getByText('预览：https://api.example.com/v1/responses')).toBeTruthy()
+  })
+
+  it('预制供应商允许修改名称、API 地址和请求方式并真实提交覆盖', async () => {
+    const { onSave } = renderDialog()
+    fireEvent.click(screen.getByRole('button', { name: '接入方式' }))
+    fireEvent.click(screen.getByRole('option', { name: '火山引擎（豆包）' }))
+
+    const nameInput = screen.getByDisplayValue('火山引擎（豆包）')
+    fireEvent.change(nameInput, { target: { value: '我的豆包' } })
+    const baseUrlInput = screen.getByDisplayValue('https://ark.cn-beijing.volces.com/api/v3')
+    fireEvent.change(baseUrlInput, { target: { value: 'https://proxy.example.com/v1' } })
+    fireEvent.click(screen.getByRole('button', { name: '接口协议' }))
+    fireEvent.click(screen.getByRole('option', { name: 'OpenAI Chat Completions' }))
+    fireEvent.click(screen.getByRole('button', { name: '添加供应商' }))
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      displayName: '我的豆包',
+      baseUrl: 'https://proxy.example.com/v1',
+      apiProtocol: 'openai-compatible',
+      setup: {
+        kind: 'preset',
+        presetId: 'volcengine',
+        connectionOverrides: {
+          baseUrl: 'https://proxy.example.com/v1',
+          apiProtocol: 'openai-compatible',
+        },
+      },
+    })
   })
 
   it('添加模式只显示添加表单并过滤已经存在的预设供应商', () => {

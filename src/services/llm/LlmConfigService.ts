@@ -180,7 +180,12 @@ function normalizeProvider(provider: LlmProviderConfig): LlmProviderConfig {
       : normalizedProviderId === DEFAULT_DEEPSEEK_PROVIDER_ID && baseUrl === DEFAULT_DEEPSEEK_BASE_URL
         ? { kind: 'preset' as const, presetId: DEFAULT_DEEPSEEK_PROVIDER_ID, lifecycle: 'builtin' as const }
         : { kind: 'custom' as const }
-  const identity = resolveLlmEndpointIdentity({ ...provider, baseUrl })
+  const connectionOverrides = setup.kind === 'preset' ? setup.connectionOverrides : undefined
+  const identity = resolveLlmEndpointIdentity({
+    ...provider,
+    // 区域 profile 仍负责身份与凭据隔离；用户显式覆盖地址时不再要求它等于官方端点。
+    baseUrl: connectionOverrides?.baseUrl ? undefined : baseUrl,
+  })
   return {
     ...provider,
     providerId: identity.providerId,
@@ -190,8 +195,8 @@ function normalizeProvider(provider: LlmProviderConfig): LlmProviderConfig {
     setup,
     displayName: provider.displayName.trim(),
     adapter,
-    apiProtocol: normalizeApiProtocol(provider.apiProtocol),
-    baseUrl: identity.baseUrl,
+    apiProtocol: connectionOverrides?.apiProtocol ?? normalizeApiProtocol(provider.apiProtocol),
+    baseUrl: connectionOverrides?.baseUrl ?? identity.baseUrl,
     reasoning: normalizeReasoningConfig(provider.reasoning, adapter),
     reasoningConfigurable: provider.reasoningConfigurable !== false,
     enabled: provider.enabled !== false,
@@ -218,13 +223,19 @@ function applyModelCatalogOnce(model: LlmModelConfig): LlmModelConfig {
 function normalizeModel(model: LlmModelConfig, providers: LlmProviderConfig[]): LlmModelConfig {
   const provider = providers.find(item => item.providerId === model.providerId)
   const adapter = provider?.adapter ?? model.adapter
-  const baseUrl = normalizeBaseUrl(model.baseUrl) ?? provider?.baseUrl
+  const baseUrlOverride = provider?.setup?.kind === 'preset'
+    ? provider.setup.connectionOverrides?.baseUrl
+    : undefined
+  const baseUrl = baseUrlOverride ?? normalizeBaseUrl(model.baseUrl) ?? provider?.baseUrl
   const withCatalog = applyModelCatalogOnce({ ...model, modelId: model.modelId.trim() })
   const preset = provider?.setup?.kind === 'preset'
     ? findLlmProviderPreset(provider.setup.presetId)
     : null
+  const protocolOverride = provider?.setup?.kind === 'preset'
+    ? provider.setup.connectionOverrides?.apiProtocol
+    : undefined
   const apiProtocol = preset
-    ? resolvePresetModelApiProtocol(preset, withCatalog.modelId, provider?.endpointProfile)
+    ? protocolOverride ?? resolvePresetModelApiProtocol(preset, withCatalog.modelId, provider?.endpointProfile)
     : normalizeApiProtocol(model.apiProtocol ?? provider?.apiProtocol)
   return {
     ...withCatalog,

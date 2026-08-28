@@ -611,6 +611,8 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         await clickNamedButton(page, /^(添加供应商|Add provider)$/i)
         const dialog = page.getByRole('dialog', { name: /添加大语言模型供应商|Add LLM Provider/i })
         await dialog.waitFor({ state: 'visible' })
+        await clickNamedButton(dialog, /^(接入方式|Connection type)$/i)
+        await page.getByRole('option', { name: /^(火山引擎（豆包）|Volcengine.*)$/i }).click()
         await settlePage(page, 700)
       },
     },

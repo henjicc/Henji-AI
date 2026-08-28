@@ -47,6 +47,14 @@ export type LlmProviderSetup =
       presetId: string
       /** 内置记录不可永久删除；user 预设实例可以删除。 */
       lifecycle: 'builtin' | 'user'
+      /**
+       * 预设连接信息的显式覆盖。缺省时继续使用 SDK 按模型维护的官方地址与首选协议；
+       * 宿主只有在用户主动编辑连接设置后才应写入这里。
+       */
+      connectionOverrides?: {
+        baseUrl?: string
+        apiProtocol?: LlmApiProtocol
+      }
     }
   | {
       kind: 'custom'
