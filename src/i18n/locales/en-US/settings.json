@@ -116,6 +116,56 @@
       }
     }
   },
+  "llmProvider": {
+    "title": "Manage Providers",
+    "presetCustom": "Custom (manual)",
+    "adapterOptions": {
+      "deepseek": "DeepSeek",
+      "openai": "OpenAI-compatible"
+    },
+    "fields": {
+      "preset": "Provider preset",
+      "name": "Provider name",
+      "adapter": "API type",
+      "baseUrl": "API URL",
+      "apiKey": "API key",
+      "keyUrl": "Key management URL",
+      "enabled": "Enable provider"
+    },
+    "placeholders": {
+      "name": "For example: My model service",
+      "baseUrl": "For example: https://api.example.com/v1",
+      "apiKey": "Optional; configure it later",
+      "existingApiKey": "Leave empty to keep the current key",
+      "keyUrl": "Optional, for example: https://example.com/keys"
+    },
+    "hints": {
+      "keyUrl": "Used for the Get/Manage API Key link. No link is shown when empty."
+    },
+    "preview": "Preview: {{value}}",
+    "previewEmpty": "Enter an API URL first",
+    "status": {
+      "on": "On",
+      "off": "Off"
+    },
+    "actions": {
+      "new": "New provider",
+      "close": "Close",
+      "add": "Add provider",
+      "save": "Save provider",
+      "saving": "Saving…",
+      "manageApiKey": "Get/Manage API Key",
+      "reset": "Reset provider",
+      "delete": "Delete provider"
+    },
+    "errors": {
+      "invalidKeyUrl": "The key management URL must be a valid http:// or https:// URL without embedded credentials.",
+      "inUse": "This provider is still used by a prompt or assistant profile. Switch those models before deleting it.",
+      "saveFailed": "Save failed and the previous settings were kept. Check the fields and retry.",
+      "deleteFailed": "Delete failed and the previous settings were kept. Reload and retry.",
+      "unknown": "The operation failed. Your input is still here; check it and retry."
+    }
+  },
   "about": "About",
   "version": "Version",
   "save": "Save Settings",

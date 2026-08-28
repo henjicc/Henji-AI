@@ -1,26 +1,31 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, RefreshCw, Trash2 } from 'lucide-react'
 
 import {
   Dropdown,
   UI_TEXT_BODY_CLASS,
-  UI_TEXT_LABEL_CLASS,
   UI_TEXT_META_CLASS,
   UiButton,
+  UiFormRow,
+  UiGroup,
   UiInput,
   UiModal,
   UiOptionButton,
-  UiPanel,
   UiSwitch,
 } from '@/components/ui'
+import { useI18n } from '@/hooks/useI18n'
 import { createDefaultProviderReasoning } from '@/core/llm/defaults'
+import { useExternalLink } from '../hooks/useExternalLink'
+import ApiKeyInput from '../components/ApiKeyInput'
 import {
   LLM_PROVIDER_PRESETS,
   createModelsFromPreset,
   createProviderFromPreset,
   findLlmProviderPreset,
+  resolveLlmProviderApiKeyUrl,
 } from '@henjicc/ai-sdk'
 import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
+import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
 import {
   createDefaultProvider,
   createProviderId,
@@ -37,14 +42,25 @@ interface LlmProviderDialogProps {
   providers: LlmProviderConfig[]
   onClose: () => void
   /** `seedModels` 是预设推荐模型；调用方负责跳过已存在的模型。 */
-  onSave: (provider: LlmProviderConfig, seedModels: LlmModelConfig[]) => Promise<void>
+  onSave: (
+    provider: LlmProviderConfig,
+    seedModels: LlmModelConfig[],
+    credential: LlmCredentialMutationDto,
+  ) => Promise<void>
   onDelete: (providerId: string) => Promise<void>
 }
 
-const presetOptions = [
-  { value: CUSTOM_PRESET, label: '自定义（手动填写）' },
-  ...LLM_PROVIDER_PRESETS.map(preset => ({ value: preset.providerId, label: preset.displayName })),
-]
+function setupPresetId(provider: LlmProviderConfig): string {
+  return provider.setup?.kind === 'preset' ? provider.setup.presetId : CUSTOM_PRESET
+}
+
+function safeApiKeyUrl(provider: LlmProviderConfig): string | null {
+  try {
+    return resolveLlmProviderApiKeyUrl(provider)
+  } catch {
+    return null
+  }
+}
 
 const LlmProviderDialog = ({
   isOpen,
@@ -53,85 +69,193 @@ const LlmProviderDialog = ({
   onSave,
   onDelete,
 }: LlmProviderDialogProps): JSX.Element => {
+  const { t } = useI18n('settings')
+  const { openExternal } = useExternalLink()
   const [draft, setDraft] = useState<LlmProviderConfig>(() => providers[0] ?? createDefaultProvider())
-  /** 只影响"要不要一并建推荐模型"，选完之后所有字段仍可改。 */
   const [presetId, setPresetId] = useState<string>(CUSTOM_PRESET)
+  const [apiKey, setApiKey] = useState('')
+  const [apiKeyVisible, setApiKeyVisible] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const presetOptions = [
+    { value: CUSTOM_PRESET, label: t('llmProvider.presetCustom') },
+    ...LLM_PROVIDER_PRESETS.map(preset => ({ value: preset.providerId, label: preset.displayName })),
+  ]
+  const providerTypeOptions = providerTypes.map(type => ({
+    ...type,
+    label: t(`llmProvider.adapterOptions.${type.value}`),
+  }))
 
   useEffect(() => {
     if (!isOpen) return
-    setDraft(providers[0] ? { ...providers[0] } : createDefaultProvider())
-    setPresetId(providers[0] ? providers[0].providerId : CUSTOM_PRESET)
+    const initial = providers[0] ? { ...providers[0] } : createDefaultProvider()
+    setDraft(initial)
+    setPresetId(setupPresetId(initial))
+    setApiKey('')
+    setApiKeyVisible(false)
+    setError(null)
     // 只在打开时重置一次，之后的编辑不受外部 providers 变化影响。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 
   const patch = (next: Partial<LlmProviderConfig>): void => {
     setDraft(prev => ({ ...prev, ...next }))
+    setError(null)
+  }
+
+  const resetSensitiveDraft = (): void => {
+    setApiKey('')
+    setApiKeyVisible(false)
   }
 
   const selectExisting = (provider: LlmProviderConfig): void => {
     setDraft({ ...provider })
-    setPresetId(findLlmProviderPreset(provider.providerId) ? provider.providerId : CUSTOM_PRESET)
+    setPresetId(setupPresetId(provider))
+    resetSensitiveDraft()
+    setError(null)
   }
 
   const startNew = (): void => {
     setDraft(createDefaultProvider())
     setPresetId(CUSTOM_PRESET)
+    resetSensitiveDraft()
+    setError(null)
+  }
+
+  const handleClose = (): void => {
+    resetSensitiveDraft()
+    setError(null)
+    onClose()
   }
 
   const selectPreset = (value: string): void => {
     setPresetId(value)
+    resetSensitiveDraft()
+    setError(null)
     const preset = value === CUSTOM_PRESET ? null : findLlmProviderPreset(value)
     if (!preset) {
       setDraft(createDefaultProvider())
       return
     }
-    // 已经配过这家供应商时保留用户已填的 Base URL，避免把改过的地域地址冲掉。
-    const existing = providers.find(provider => provider.providerId === preset.providerId)
-    setDraft({
-      ...createProviderFromPreset(preset),
-      ...(existing ? { baseUrl: existing.baseUrl ?? (preset.baseUrl || undefined), enabled: existing.enabled } : {}),
-    })
+    const existing = providers.find(provider => (
+      provider.setup?.kind === 'preset' && provider.setup.presetId === preset.providerId
+      && provider.providerId === preset.providerId
+    ))
+    setDraft(createProviderFromPreset(preset, {
+      providerId: existing?.providerId,
+      endpointProfile: existing?.endpointProfile,
+      lifecycle: existing?.setup?.kind === 'preset' ? existing.setup.lifecycle : 'user',
+    }))
   }
 
   const activePreset = presetId === CUSTOM_PRESET ? null : findLlmProviderPreset(presetId)
+  const isCustom = !activePreset
   const isExisting = providers.some(provider => provider.providerId === draft.providerId)
+  const isBuiltIn = draft.setup?.kind === 'preset' && draft.setup.lifecycle === 'builtin'
+  const managementUrl = safeApiKeyUrl(draft)
+
+  const describeError = (value: unknown): string => {
+    const message = value instanceof Error ? value.message : String(value)
+    if (message.includes('[llm_api_key_url_invalid]')) return t('llmProvider.errors.invalidKeyUrl')
+    if (message.includes('[llm_provider_in_use]')) return t('llmProvider.errors.inUse')
+    if (message.includes('[llm_provider_settings_delete_failed]')) return t('llmProvider.errors.deleteFailed')
+    if (message.includes('[llm_provider_settings_commit_failed]')) return t('llmProvider.errors.saveFailed')
+    return t('llmProvider.errors.unknown')
+  }
 
   const handleSave = async (): Promise<void> => {
-    const displayName = draft.displayName.trim()
-    if (!displayName) return
+    const displayName = activePreset?.displayName ?? draft.displayName.trim()
+    if (!displayName || saving) return
     const providerId = draft.providerId.trim()
       || activePreset?.providerId
       || createProviderId(displayName, providers)
+    const managementValue = draft.setup?.kind === 'custom'
+      ? draft.setup.apiKeyManagementUrl?.trim()
+      : undefined
     const provider: LlmProviderConfig = {
       ...draft,
       providerId,
+      credentialId: draft.credentialId?.trim() || providerId,
+      setup: activePreset
+        ? (draft.setup?.kind === 'preset'
+            ? draft.setup
+            : { kind: 'preset', presetId: activePreset.providerId, lifecycle: 'user' })
+        : {
+            kind: 'custom',
+            ...(managementValue ? { apiKeyManagementUrl: managementValue } : {}),
+          },
       displayName,
       adapter: draft.adapter.trim() || 'openai',
       baseUrl: draft.baseUrl?.trim() || undefined,
       reasoning: resolveProviderReasoning(draft),
     }
-    /*
-     * 推荐模型只在**新建**这家供应商时补。
-     *
-     * 已存在的供应商再保存一次也补的话，用户特意删掉的推荐模型会被重新塞回来。
-     */
     const seedModels = activePreset && !isExisting ? createModelsFromPreset(activePreset, provider) : []
-    await onSave(provider, seedModels)
-    startNew()
+    const credential: LlmCredentialMutationDto = apiKey.trim()
+      ? { kind: 'set', apiKey: apiKey.trim() }
+      : { kind: 'unchanged' }
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(provider, seedModels, credential)
+      startNew()
+    } catch (saveError) {
+      setError(describeError(saveError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleReset = async (): Promise<void> => {
+    if (!activePreset || !isBuiltIn || saving) return
+    const provider = createProviderFromPreset(activePreset, {
+      providerId: draft.providerId,
+      endpointProfile: draft.endpointProfile,
+      lifecycle: 'builtin',
+    })
+    setSaving(true)
+    setError(null)
+    try {
+      await onSave(provider, createModelsFromPreset(activePreset, provider), { kind: 'unchanged' })
+      selectExisting(provider)
+    } catch (resetError) {
+      setError(describeError(resetError))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (): Promise<void> => {
+    if (!isExisting || isBuiltIn || saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onDelete(draft.providerId)
+      startNew()
+    } catch (deleteError) {
+      setError(describeError(deleteError))
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <UiModal
       isOpen={isOpen}
-      title="管理供应商"
-      onClose={onClose}
+      title={t('llmProvider.title')}
+      onClose={handleClose}
       size="editor"
       footer={(
         <>
-          <UiButton type="button" variant="muted" onClick={onClose}>关闭</UiButton>
-          <UiButton type="button" variant="primary" onClick={() => void handleSave()}>
-            {isExisting ? '保存供应商' : '添加供应商'}
+          <UiButton type="button" variant="muted" onClick={handleClose}>{t('llmProvider.actions.close')}</UiButton>
+          <UiButton
+            type="button"
+            variant="primary"
+            disabled={saving || (isCustom && !draft.displayName.trim())}
+            onClick={() => void handleSave()}
+          >
+            {saving
+              ? t('llmProvider.actions.saving')
+              : isExisting ? t('llmProvider.actions.save') : t('llmProvider.actions.add')}
           </UiButton>
         </>
       )}
@@ -149,94 +273,149 @@ const LlmProviderDialog = ({
             >
               <span className="min-w-0 text-left">
                 <span className="block truncate text-sm">{provider.displayName}</span>
-                <span className="block truncate text-xs text-text-muted">{provider.adapter}</span>
+                <span className="block truncate text-xs text-text-soft">{provider.adapter}</span>
               </span>
-              <span className={`text-xs ${provider.enabled ? 'text-green-400' : 'text-text-muted'}`}>
-                {provider.enabled ? 'ON' : 'OFF'}
+              <span className="text-xs text-text-soft">
+                {provider.enabled ? t('llmProvider.status.on') : t('llmProvider.status.off')}
               </span>
             </UiOptionButton>
           ))}
           <UiButton type="button" variant="muted" className="w-full" onClick={startNew}>
             <Plus size={14} className="mr-1.5" />
-            新建供应商
+            {t('llmProvider.actions.new')}
           </UiButton>
         </div>
 
-        <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
-          <UiPanel variant="inset" className="px-3 py-2">
-            <div className={UI_TEXT_META_CLASS}>当前编辑</div>
-            <div className={`truncate ${UI_TEXT_LABEL_CLASS}`}>{draft.displayName || '新建供应商'}</div>
-          </UiPanel>
+        <div className="min-h-0 space-y-4 overflow-y-auto pr-1">
+          <UiFormRow label={t('llmProvider.fields.preset')}>
+            <Dropdown<string>
+              value={presetId}
+              display={presetOptions.find(option => option.value === presetId)?.label ?? presetOptions[0].label}
+              options={presetOptions}
+              ariaLabel={t('llmProvider.fields.preset')}
+              className="w-full"
+              buttonClassName="w-full"
+              onSelect={selectPreset}
+            />
+          </UiFormRow>
 
-          {/*
-            预设把已核对过的 Base URL、思考参数默认值和推荐模型一次填好，
-            资料出处见 packages/ai-sdk/docs/llm-adaptation/供应商/*.md。选完仍可逐项改。
-          */}
-          <Dropdown<string>
-            value={presetId}
-            display={presetOptions.find(option => option.value === presetId)?.label ?? '自定义（手动填写）'}
-            options={presetOptions}
-            className="w-full"
-            buttonClassName="w-full"
-            onSelect={selectPreset}
-          />
-          {activePreset ? (
-            <div className={`space-y-1 ${UI_TEXT_META_CLASS}`}>
-              <div>
-                推荐模型：{activePreset.modelIds.join('、')}
-                {isExisting ? '（该供应商已存在，不再重复添加）' : '（添加时一并建好，能力已按内置目录标好）'}
+          <UiFormRow label={t('llmProvider.fields.name')}>
+            {isCustom ? (
+              <UiInput
+                value={draft.displayName}
+                onChange={event => patch({ displayName: event.target.value })}
+                placeholder={t('llmProvider.placeholders.name')}
+              />
+            ) : (
+              <div className={UI_TEXT_BODY_CLASS}>{draft.displayName}</div>
+            )}
+          </UiFormRow>
+
+          <UiFormRow label={t('llmProvider.fields.adapter')}>
+            {isCustom ? (
+              <Dropdown
+                value={draft.adapter}
+                display={providerTypeOptions.find(type => type.value === draft.adapter)?.label ?? draft.adapter}
+                options={providerTypeOptions}
+                ariaLabel={t('llmProvider.fields.adapter')}
+                className="w-full"
+                buttonClassName="w-full"
+                onSelect={adapter => patch({
+                  adapter,
+                  baseUrl: draft.baseUrl || getDefaultBaseUrlForAdapter(adapter),
+                  reasoning: createDefaultProviderReasoning(adapter),
+                })}
+              />
+            ) : (
+              <div className={UI_TEXT_BODY_CLASS}>
+                {providerTypeOptions.find(type => type.value === draft.adapter)?.label ?? draft.adapter}
               </div>
-              {activePreset.note ? <div>{activePreset.note}</div> : null}
+            )}
+          </UiFormRow>
+
+          <UiFormRow label={t('llmProvider.fields.baseUrl')}>
+            {isCustom ? (
+              <UiInput
+                value={draft.baseUrl ?? ''}
+                onChange={event => patch({ baseUrl: event.target.value })}
+                placeholder={t('llmProvider.placeholders.baseUrl')}
+              />
+            ) : (
+              <div className={`break-all ${UI_TEXT_BODY_CLASS}`}>{draft.baseUrl || '—'}</div>
+            )}
+            <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>
+              {activePreset?.baseUrlHint && !draft.baseUrl?.trim()
+                ? activePreset.baseUrlHint
+                : t('llmProvider.preview', { value: resolveApiPreview(draft) || t('llmProvider.previewEmpty') })}
             </div>
+          </UiFormRow>
+
+          <ApiKeyInput
+            label={t('llmProvider.fields.apiKey')}
+            value={apiKey}
+            visible={apiKeyVisible}
+            onChange={(value) => { setApiKey(value); setError(null) }}
+            onToggleVisibility={() => setApiKeyVisible(value => !value)}
+            placeholder={isExisting
+              ? t('llmProvider.placeholders.existingApiKey')
+              : t('llmProvider.placeholders.apiKey')}
+            showLabel={t('apiKeys.visibility.show')}
+            hideLabel={t('apiKeys.visibility.hide')}
+            disabled={saving}
+            managementUrl={managementUrl}
+            managementLabel={t('llmProvider.actions.manageApiKey')}
+            onOpenManagementUrl={(url) => { void openExternal(url) }}
+          />
+
+          {isCustom ? (
+            <UiFormRow label={t('llmProvider.fields.keyUrl')} hint={t('llmProvider.hints.keyUrl')}>
+              <UiInput
+                value={draft.setup?.kind === 'custom' ? draft.setup.apiKeyManagementUrl ?? '' : ''}
+                onChange={event => patch({
+                  setup: {
+                    kind: 'custom',
+                    ...(event.target.value ? { apiKeyManagementUrl: event.target.value } : {}),
+                  },
+                })}
+                placeholder={t('llmProvider.placeholders.keyUrl')}
+              />
+            </UiFormRow>
           ) : null}
 
-          <UiInput
-            value={draft.displayName}
-            onChange={event => patch({ displayName: event.target.value })}
-            placeholder="供应商名称，例如 DeepSeek"
-          />
-          <Dropdown
-            value={draft.adapter}
-            display={providerTypes.find(type => type.value === draft.adapter)?.label ?? draft.adapter}
-            options={providerTypes}
-            className="w-full"
-            buttonClassName="w-full"
-            onSelect={adapter => patch({
-              adapter,
-              baseUrl: draft.baseUrl || getDefaultBaseUrlForAdapter(adapter),
-              reasoning: createDefaultProviderReasoning(adapter),
-            })}
-          />
-          <UiInput
-            value={draft.baseUrl ?? ''}
-            onChange={event => patch({ baseUrl: event.target.value })}
-            placeholder="API 地址，例如 https://api.deepseek.com"
-          />
-          <div className={UI_TEXT_META_CLASS}>
-            {activePreset?.baseUrlHint && !draft.baseUrl?.trim()
-              ? activePreset.baseUrlHint
-              : `预览：${resolveApiPreview(draft) || '请先填写 API 地址'}`}
-          </div>
-          <label className={`inline-flex items-center gap-2 ${UI_TEXT_BODY_CLASS}`}>
+          <UiFormRow label={t('llmProvider.fields.enabled')} inline>
             <UiSwitch
               checked={draft.enabled !== false}
               onCheckedChange={checked => patch({ enabled: checked })}
             />
-            启用供应商
-          </label>
+          </UiFormRow>
+
+          {error ? <div role="alert" className="text-sm text-red-400">{error}</div> : null}
+
           {isExisting ? (
-            <UiButton
-              type="button"
-              variant="ghost"
-              className="text-text-muted hover:text-text-dark"
-              onClick={async () => {
-                await onDelete(draft.providerId)
-                startNew()
-              }}
-            >
-              <Trash2 size={14} className="mr-1.5" />
-              删除该供应商
-            </UiButton>
+            <UiGroup divided>
+              {isBuiltIn ? (
+                <UiButton
+                  type="button"
+                  variant="plain"
+                  disabled={saving}
+                  onClick={() => void handleReset()}
+                >
+                  <RefreshCw size={14} className="mr-1.5" />
+                  {t('llmProvider.actions.reset')}
+                </UiButton>
+              ) : (
+                <UiButton
+                  type="button"
+                  variant="plain"
+                  disabled={saving}
+                  className="text-text-muted hover:text-red-400"
+                  onClick={() => void handleDelete()}
+                >
+                  <Trash2 size={14} className="mr-1.5" />
+                  {t('llmProvider.actions.delete')}
+                </UiButton>
+              )}
+            </UiGroup>
           ) : null}
         </div>
       </div>

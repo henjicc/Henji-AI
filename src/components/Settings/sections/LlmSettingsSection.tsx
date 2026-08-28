@@ -19,9 +19,10 @@ import {
 } from '@/components/ui'
 import { SETTINGS_INLINE_CONTROL_CLASS } from '../settingsLayout'
 import { useLlmSettings } from '../hooks/useLlmSettings'
+import { useExternalLink } from '../hooks/useExternalLink'
 import ApiKeyInput from '../components/ApiKeyInput'
-import type { LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
-import { DEFAULT_DEEPSEEK_BASE_URL } from '@/core/llm/defaults'
+import { resolveLlmProviderApiKeyUrl, type LlmModelConfig, type LlmProviderConfig } from '@henjicc/ai-sdk'
+import type { LlmCredentialMutationDto } from '@/platform/contracts/llmRuntime'
 import { createModelFromInput, fetchOpenAiCompatibleModels } from '@/services/llm/llmDiscoveryService'
 import AgentModelProfilesSection from './AgentModelProfilesSection'
 import LlmModelDialog from './LlmModelDialog'
@@ -37,6 +38,7 @@ import {
   type ReasoningModeValue,
 } from './llmSettingsSectionHelpers'
 import { ModelSyncDialog } from './ModelSyncDialog'
+import { useI18n } from '@/hooks/useI18n'
 
 interface DiscoveredModelDraft {
   modelId: string
@@ -46,7 +48,19 @@ interface DiscoveredModelDraft {
 }
 
 const LlmSettingsSection: React.FC = () => {
-  const { config, keys, visibility, loading, updateKey, toggleVisibility, saveConfig } = useLlmSettings()
+  const { t } = useI18n('settings')
+  const {
+    config,
+    keys,
+    visibility,
+    loading,
+    updateKey,
+    toggleVisibility,
+    saveConfig,
+    commitProviderSettings,
+    deleteProviderSettings,
+  } = useLlmSettings()
+  const { openExternal } = useExternalLink()
   const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null)
   const [modelDraft, setModelDraft] = useState<LlmModelConfig | null>(null)
   const [showProviderManager, setShowProviderManager] = useState(false)
@@ -71,39 +85,13 @@ const LlmSettingsSection: React.FC = () => {
   const handleSaveProvider = async (
     nextProvider: LlmProviderConfig,
     seedModels: LlmModelConfig[],
+    credential: LlmCredentialMutationDto,
   ): Promise<void> => {
-    const providerId = nextProvider.providerId
-    const baseUrl = nextProvider.baseUrl
-      ?? (nextProvider.adapter === 'deepseek' ? DEFAULT_DEEPSEEK_BASE_URL : undefined)
-    const provider = { ...nextProvider, baseUrl }
-    const existingModels = config.models.map(model => (
-      model.providerId === providerId
-        ? { ...model, adapter: provider.adapter, baseUrl: provider.baseUrl }
-        : model
-    ))
-    // 预设推荐模型只补缺，不覆盖用户已经添加或改过的同名模型。
-    const existingModelIds = new Set(existingModels
-      .filter(model => model.providerId === providerId)
-      .map(model => model.modelId))
-    const addedModels = seedModels
-      .filter(model => !existingModelIds.has(model.modelId))
-      .map(model => ({ ...model, baseUrl: provider.baseUrl }))
-    await persistConfig({
-      ...config,
-      providers: [
-        ...config.providers.filter(item => item.providerId !== providerId),
-        provider,
-      ],
-      models: [...existingModels, ...addedModels],
-    })
+    await commitProviderSettings(nextProvider, seedModels, credential)
   }
 
   const handleDeleteProvider = async (providerId: string): Promise<void> => {
-    await persistConfig({
-      ...config,
-      providers: config.providers.filter(provider => provider.providerId !== providerId),
-      models: config.models.filter(model => model.providerId !== providerId),
-    })
+    await deleteProviderSettings(providerId)
     setExpandedProviderId(prev => prev === providerId ? null : prev)
   }
 
@@ -218,6 +206,7 @@ const LlmSettingsSection: React.FC = () => {
         ) : providers.map(provider => {
           const expanded = expandedProviderId === provider.providerId
           const providerModels = config.models.filter(model => model.providerId === provider.providerId)
+          const apiKeyUrl = resolveLlmProviderApiKeyUrl(provider)
           const reasoning = resolveProviderReasoning(provider)
           const modelKeyword = (modelSearchMap[provider.providerId] ?? '').trim().toLowerCase()
           const filteredModels = modelKeyword
@@ -273,6 +262,9 @@ const LlmSettingsSection: React.FC = () => {
                         showLabel="显示"
                         hideLabel="隐藏"
                         hint={getApiKeyHint(provider)}
+                        managementUrl={apiKeyUrl}
+                        managementLabel={t('llmProvider.actions.manageApiKey')}
+                        onOpenManagementUrl={(url) => { void openExternal(url) }}
                       />
 
                       <UiInput
@@ -425,4 +417,3 @@ const LlmSettingsSection: React.FC = () => {
 }
 
 export default LlmSettingsSection
-

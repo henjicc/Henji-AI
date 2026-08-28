@@ -1,5 +1,5 @@
 import { createLogger } from '@/core/logging'
-import type { LlmConfigState } from '@henjicc/ai-sdk'
+import type { LlmConfigState, LlmModelConfig, LlmProviderConfig } from '@henjicc/ai-sdk'
 import { createDefaultLlmConfig } from '@/core/llm/defaults'
 import { LLM_CONFIG_CHANGED_EVENT } from '@/core/llm/events'
 import {
@@ -7,6 +7,7 @@ import {
   llmGetProviderKeyStatus,
 } from '@/commands/llmRuntime'
 import { llmConfigService } from '@/services/llm'
+import type { LlmCredentialMutationDto, LlmProviderSettingsResultDto } from '@/platform/contracts/llmRuntime'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const logger = createLogger('components.Settings.hooks.useLlmSettings')
@@ -25,6 +26,12 @@ export interface UseLlmSettingsResult {
   updateKey: (providerId: string, value: string) => void
   toggleVisibility: (providerId: string) => void
   saveConfig: (config: LlmConfigState) => Promise<void>
+  commitProviderSettings: (
+    provider: LlmProviderConfig,
+    seedModels: LlmModelConfig[],
+    credential: LlmCredentialMutationDto,
+  ) => Promise<LlmProviderSettingsResultDto>
+  deleteProviderSettings: (providerId: string) => Promise<LlmProviderSettingsResultDto>
 }
 
 export function useLlmSettings(): UseLlmSettingsResult {
@@ -138,6 +145,33 @@ export function useLlmSettings(): UseLlmSettingsResult {
     setConfig(nextConfig)
   }
 
+  const commitProviderSettings = async (
+    provider: LlmProviderConfig,
+    seedModels: LlmModelConfig[],
+    credential: LlmCredentialMutationDto,
+  ): Promise<LlmProviderSettingsResultDto> => {
+    const result = await llmConfigService.commitProviderSettings(provider, seedModels, credential)
+    setConfig(result.config)
+    setStatus(prev => ({ ...prev, [result.providerId]: result.configured }))
+    return result
+  }
+
+  const deleteProviderSettings = async (providerId: string): Promise<LlmProviderSettingsResultDto> => {
+    const result = await llmConfigService.deleteProviderSettings(providerId)
+    setConfig(result.config)
+    setKeys(prev => {
+      const next = { ...prev }
+      delete next[providerId]
+      return next
+    })
+    setStatus(prev => {
+      const next = { ...prev }
+      delete next[providerId]
+      return next
+    })
+    return result
+  }
+
   useEffect(() => {
     const reloadConfig = (): void => {
       void (async () => {
@@ -153,5 +187,16 @@ export function useLlmSettings(): UseLlmSettingsResult {
     return () => window.removeEventListener(LLM_CONFIG_CHANGED_EVENT, reloadConfig)
   }, [])
 
-  return { config, keys, visibility, status, loading, updateKey, toggleVisibility, saveConfig }
+  return {
+    config,
+    keys,
+    visibility,
+    status,
+    loading,
+    updateKey,
+    toggleVisibility,
+    saveConfig,
+    commitProviderSettings,
+    deleteProviderSettings,
+  }
 }

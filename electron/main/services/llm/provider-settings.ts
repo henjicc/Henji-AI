@@ -151,7 +151,19 @@ function mergeProvider(
 ): LlmConfigState {
   const providers = config.providers.filter(item => item.providerId !== provider.providerId)
   providers.push(provider)
-  const models = [...config.models]
+  const models = config.models.map(model => (
+    model.providerId === provider.providerId
+      ? {
+          ...model,
+          providerFamilyId: provider.providerFamilyId,
+          endpointProfile: provider.endpointProfile,
+          credentialId: provider.credentialId,
+          adapter: provider.adapter,
+          apiProtocol: provider.apiProtocol,
+          baseUrl: provider.baseUrl,
+        }
+      : model
+  ))
   for (const model of seedModels) {
     rejectPlaintextCredentialFields(model, `seedModels:${model.modelId}`)
     if (model.providerId !== provider.providerId) {

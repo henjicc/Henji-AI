@@ -131,6 +131,7 @@ test('场景覆盖六类界面且规则数固定为十一条', () => {
   assert.equal(sceneIds.has('canvas-midjourney-node'), true)
   assert.equal(sceneIds.has('canvas-midjourney-settings'), true)
   assert.equal(sceneIds.has('settings-llm'), true)
+  assert.equal(sceneIds.has('settings-llm-provider-manager'), true)
   assert.equal(sceneIds.has('toolbox-image-edit'), true)
   assert.equal(sceneIds.has('toolbox-camera-stage'), true)
   assert.equal(sceneIds.has('toolbox-camera-stage-lineart'), true)

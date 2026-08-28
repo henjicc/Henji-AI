@@ -1,6 +1,13 @@
-import React from 'react'
-import { Eye, EyeOff } from 'lucide-react'
-import { UI_FIELD_CONTROL_HEIGHT_CLASS, UI_FIELD_LABEL_CLASS, UI_TEXT_META_CLASS, UiButton, UiInput } from '@/components/ui'
+import React, { useId } from 'react'
+import { ExternalLink, Eye, EyeOff } from 'lucide-react'
+import {
+  UI_FIELD_CONTROL_HEIGHT_CLASS,
+  UI_FIELD_LABEL_CLASS,
+  UI_TEXT_META_CLASS,
+  UiButton,
+  UiIconButton,
+  UiInput,
+} from '@/components/ui'
 
 interface ApiKeyInputProps {
   label?: string
@@ -12,6 +19,11 @@ interface ApiKeyInputProps {
   showLabel: string
   hideLabel: string
   hint?: string
+  disabled?: boolean
+  error?: string
+  managementUrl?: string | null
+  managementLabel?: string
+  onOpenManagementUrl?: (url: string) => void
 }
 
 const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
@@ -24,31 +36,59 @@ const ApiKeyInput: React.FC<ApiKeyInputProps> = ({
   showLabel,
   hideLabel,
   hint,
+  disabled = false,
+  error,
+  managementUrl,
+  managementLabel,
+  onOpenManagementUrl,
 }) => {
+  const inputId = useId()
   const toggleLabel = visible ? hideLabel : showLabel
   return (
-    <div className="mb-4">
-      {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
-      <div className="flex gap-2">
+    <div>
+      {label || managementUrl ? (
+        <div className="mb-1.5 flex min-h-6 items-center justify-between gap-3">
+          {label ? <label htmlFor={inputId} className={UI_FIELD_LABEL_CLASS}>{label}</label> : <span />}
+          {managementUrl && managementLabel && onOpenManagementUrl ? (
+            <UiButton
+              type="button"
+              variant="plain"
+              size="sm"
+              className="h-6 shrink-0 px-1 text-brand-300 hover:bg-transparent hover:text-brand-300 hover:underline"
+              onClick={() => onOpenManagementUrl(managementUrl)}
+            >
+              {managementLabel}
+              <ExternalLink className="ml-1 h-3.5 w-3.5" />
+            </UiButton>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="relative">
         <UiInput
+          id={inputId}
           type={visible ? 'text' : 'password'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} flex-1`}
+          disabled={disabled}
+          aria-invalid={error ? true : undefined}
+          data-observation-sensitive={visible ? 'true' : undefined}
+          className={`${UI_FIELD_CONTROL_HEIGHT_CLASS} pr-12`}
         />
-        <UiButton
+        <UiIconButton
+          type="button"
           onClick={onToggleVisibility}
-          variant="muted"
-          size="field"
-          className="w-10 px-0"
+          disabled={disabled}
+          appearance="color-only"
+          className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2"
           title={toggleLabel}
           aria-label={toggleLabel}
         >
           {visible ? <EyeOff size={18} /> : <Eye size={18} />}
-        </UiButton>
+        </UiIconButton>
       </div>
       {hint ? <div className={`mt-2 ${UI_TEXT_META_CLASS}`}>{hint}</div> : null}
+      {error ? <div role="alert" className="mt-2 text-xs text-red-400">{error}</div> : null}
     </div>
   )
 }

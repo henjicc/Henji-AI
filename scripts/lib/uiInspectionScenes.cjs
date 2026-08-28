@@ -601,6 +601,21 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     {
+      id: 'settings-llm-provider-manager',
+      surface: '设置',
+      name: '设置-管理大语言模型供应商',
+      setup: async (page) => {
+        await setupSettings(page)
+        await clickNamedButton(page, /^(密钥|API Keys)$/i)
+        await clickNamedButton(page, /^(大语言模型|Language Models)$/i)
+        await clickNamedButton(page, /^(管理供应商|Manage Providers)$/i)
+        const dialog = page.getByRole('dialog', { name: /管理供应商|Manage Providers/i })
+        await dialog.waitFor({ state: 'visible' })
+        await dialog.getByRole('button', { name: /新建供应商|New Provider/i }).click()
+        await settlePage(page, 700)
+      },
+    },
+    {
       id: 'settings-agent-skills',
       surface: '设置',
       name: '设置-助手技能',

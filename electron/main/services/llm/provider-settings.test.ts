@@ -148,18 +148,40 @@ describe('LlmProviderSettingsService', () => {
 
   it('更新配置时可显式保留旧密钥', async () => {
     const provider = customProvider()
-    const initial = { ...baseline, providers: [provider] }
+    const initial = {
+      ...baseline,
+      providers: [provider],
+      models: [{
+        providerId: provider.providerId,
+        modelId: 'model-one',
+        displayName: 'Model One',
+        adapter: provider.adapter,
+        baseUrl: provider.baseUrl,
+        capabilities: {
+          text: true, image: false, video: false, audio: false, streaming: true,
+          toolCall: false, parallelTools: false, jsonOutput: false,
+          structuredOutputMode: 'none' as const, reasoning: false, sampling: true,
+          contextWindow: null, maxOutputTokens: null, usage: true,
+        },
+        enabled: true,
+      }],
+    }
     const { service, state } = createHarness(initial)
     state.credentials.set('custom-one-credential', 'encrypted:old-secret')
 
     const result = await service.commit({
-      provider: { ...provider, displayName: 'Renamed' },
+      provider: { ...provider, displayName: 'Renamed', baseUrl: 'https://new.example.com/v1' },
       seedModels: [],
       baselineConfig: initial,
       credential: { kind: 'unchanged' },
     })
 
     expect(state.config?.providers[0].displayName).toBe('Renamed')
+    expect(state.config?.models[0]).toMatchObject({
+      adapter: 'openai',
+      baseUrl: 'https://new.example.com/v1',
+      credentialId: 'custom-one-credential',
+    })
     expect(state.credentials.get('custom-one-credential')).toBe('encrypted:old-secret')
     expect(result.credentialAction).toBe('unchanged')
   })

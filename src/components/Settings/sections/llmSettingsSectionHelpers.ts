@@ -43,6 +43,7 @@ export function createDefaultProvider(): LlmProviderConfig {
   const adapter = 'openai'
   return {
     providerId: '',
+    setup: { kind: 'custom' },
     displayName: '',
     adapter,
     baseUrl: '',
