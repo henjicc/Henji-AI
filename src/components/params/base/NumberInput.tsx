@@ -96,7 +96,7 @@ export const NumberInput: React.FC<NumberInputProps> = ({
           precision={resolvePrecision(step)}
           placeholder={placeholderText}
           disabled={disabled}
-          widthClassName="w-28"
+          widthStrategy="content"
           commitOnChange
           ariaLabel={displayName}
           increaseLabel={increaseLabel}

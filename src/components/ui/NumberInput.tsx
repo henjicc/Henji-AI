@@ -26,6 +26,7 @@ type NumberInputProps = {
   placeholder?: string
   size?: 'field' | 'compact'
   align?: 'left' | 'center' | 'right'
+  widthStrategy?: 'fixed' | 'content'
   increaseLabel?: string
   decreaseLabel?: string
   textHistory?: ScopedTextHistoryBinding
@@ -69,6 +70,7 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
     placeholder,
     size = 'field',
     align = 'left',
+    widthStrategy = 'fixed',
     increaseLabel = label ? `增加${label}` : '增加数值',
     decreaseLabel = label ? `减少${label}` : '减少数值',
     textHistory,
@@ -158,13 +160,18 @@ export default function NumberInput(props: NumberInputProps): ReactElement {
   const iconSizeClass = compact ? 'h-3 w-3' : 'h-3.5 w-3.5'
   const textSizeClass = compact ? 'text-xs' : 'text-sm'
   const alignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+  const contentWidthCharacterCount = Math.max(inputValue.length, placeholder?.length ?? 0, 2)
+  const contentWidthChromePx = compact ? 38 : 46
 
   return (
     <div className={className}>
       {label ? <label className={UI_FIELD_LABEL_CLASS}>{label}</label> : null}
       <div
         data-ui-field-control
-        className={`inline-flex overflow-hidden ${controlHeightClass} ${controlRadiusClass} ${widthClassName} ${UI_FIELD_SURFACE_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
+        className={`inline-flex overflow-hidden ${controlHeightClass} ${controlRadiusClass} ${widthStrategy === 'fixed' ? widthClassName : ''} ${UI_FIELD_SURFACE_CLASS} ${UI_GLASS_ADAPTIVE_CONTROL_CLASS} ${UI_FIELD_FOCUS_WITHIN_CLASS}`}
+        style={widthStrategy === 'content'
+          ? { width: `calc(${contentWidthCharacterCount}ch + ${contentWidthChromePx}px)` }
+          : undefined}
       >
         <UiInput
           ref={inputRef}

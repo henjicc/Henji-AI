@@ -81,4 +81,24 @@ describe('NumberInput', () => {
     expect(input.parentElement?.classList.contains('w-[72px]')).toBe(true)
     expect(input.classList.contains('text-center')).toBe(true)
   })
+
+  it('内容宽度策略随当前数字长度收紧和扩展', () => {
+    render(
+      <NumberInput
+        ariaLabel="时长"
+        value={5}
+        onChange={() => undefined}
+        widthStrategy="content"
+      />
+    )
+
+    const input = screen.getByRole('spinbutton', { name: '时长' })
+    expect(input.parentElement?.style.width).toBe('calc(2ch + 46px)')
+
+    fireEvent.change(input, { target: { value: '12' } })
+    expect(input.parentElement?.style.width).toBe('calc(2ch + 46px)')
+
+    fireEvent.change(input, { target: { value: '123' } })
+    expect(input.parentElement?.style.width).toBe('calc(3ch + 46px)')
+  })
 })
