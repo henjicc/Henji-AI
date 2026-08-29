@@ -16,12 +16,14 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
 import { useCanvasSpecialEditorController } from './specialEditorController'
 import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
+import i18n from '@/i18n'
 
 import { undoCanvasBatch, resetCanvasBatchStateForTests } from './canvasBatchService'
 import { resetCanvasApplicationStateForTests } from './canvasApplicationService'
 import { canvasEventBus } from './canvasServices'
 import {
   createCanvasImageCapabilityExecutor,
+  executeCanvasImageCapabilityForProject,
   resetCanvasImageCapabilityApplicationStateForTests,
 } from './canvasImageCapabilityApplicationService'
 
@@ -72,7 +74,8 @@ function capabilityForNode(nodeType: CanvasNodeType): CanvasImageCapabilityDefin
 }
 
 describe('画布图片能力应用服务', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('zh-CN')
     resetCanvasApplicationStateForTests()
     resetCanvasBatchStateForTests()
     resetCanvasImageCapabilityApplicationStateForTests()
@@ -103,6 +106,50 @@ describe('画布图片能力应用服务', () => {
     await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.gridSplit)
 
     expect(opened).toEqual([{ nodeId: sourceNodeId, toolType: 'split-storyboard' }])
+    expect(useCanvasStore.getState().nodes).toHaveLength(1)
+    expect(useCanvasStore.getState().edges).toHaveLength(0)
+    unsubscribe()
+  })
+
+  it('助手项目入口在项目不匹配时零写入拒绝', async () => {
+    await expect(executeCanvasImageCapabilityForProject({
+      projectId: 'other-project',
+      sourceNodeId,
+      capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
+    })).rejects.toThrow('当前画布项目与命令目标不一致')
+    expect(useCanvasStore.getState().nodes).toHaveLength(1)
+    expect(useCanvasStore.getState().edges).toHaveLength(0)
+  })
+
+  it('助手项目入口成功返回项目、节点、连线和事务撤销引用', async () => {
+    const result = await executeCanvasImageCapabilityForProject({
+      projectId,
+      sourceNodeId,
+      capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
+    })
+
+    expect(result).toMatchObject({
+      projectId,
+      kind: 'canvas-node',
+      sourceNodeId,
+      capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
+    })
+    expect(result.nodeId).toBeTruthy()
+    expect(result.edgeId).toBeTruthy()
+    expect(result.undoRef).toBeTruthy()
+  })
+
+  it('助手项目入口在本地工具执行前拒绝，不打开界面也不写入', async () => {
+    const opened: Array<{ nodeId: string; toolType: string }> = []
+    const unsubscribe = canvasEventBus.subscribe('tool-dialog/open', (payload) => opened.push(payload))
+
+    await expect(executeCanvasImageCapabilityForProject({
+      projectId,
+      sourceNodeId,
+      capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
+    })).rejects.toThrow('本地工具界面')
+
+    expect(opened).toEqual([])
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
     expect(useCanvasStore.getState().edges).toHaveLength(0)
     unsubscribe()
@@ -141,6 +188,7 @@ describe('画布图片能力应用服务', () => {
     expect(undoCanvasBatch(projectId, result.undoRef)).toMatchObject({ status: 'undone' })
     expect(useCanvasStore.getState().nodes).toHaveLength(1)
     expect(useCanvasStore.getState().edges).toHaveLength(0)
+    expect(useCanvasStore.getState().selectedNodeId).toBe(sourceNodeId)
   })
 
   it('连线不兼容时回滚创建节点与历史，不留孤立节点', async () => {
@@ -166,7 +214,7 @@ describe('画布图片能力应用服务', () => {
       displayName: '720°全景',
       capabilityId: 'image.panorama',
       promptTemplateVersion: 'panorama-equirectangular-text-v1',
-      fixedSemanticParams: { aspectRatio: '2:1', resolution: '2K', outputCount: 1 },
+      fixedSemanticParams: { aspectRatio: '2:1', outputCount: 1 },
     })
     expect(useCanvasStore.getState().edges).toEqual([
       expect.objectContaining({
@@ -203,13 +251,19 @@ describe('画布图片能力应用服务', () => {
   })
 
   it.each([
-    [CANVAS_IMAGE_CAPABILITY_IDS.presetRelight, 'fal-image-apps-v2-relighting', 'FAL 预设重打光'],
-    [CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement, 'fal-control-light', 'FAL 暗光增强'],
-    [CANVAS_IMAGE_CAPABILITY_IDS.outpaint, 'fal-image-apps-v2-outpaint', 'FAL 智能扩图'],
-    [CANVAS_IMAGE_CAPABILITY_IDS.productPhotography, 'fal-image-apps-v2-product-photography', 'FAL 商品摄影'],
-    [CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration, 'fal-image-apps-v2-photo-restoration', 'FAL 照片修复'],
-    [CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval, 'fal-pixelcut-background-removal', 'FAL 背景移除'],
-  ] as const)('%s 创建固定模型、无提示词的标准工具节点', async (capabilityId, modelId, displayName) => {
+    [CANVAS_IMAGE_CAPABILITY_IDS.presetRelight, 'fal-image-apps-v2-relighting', '预设重打光', 'hidden', undefined],
+    [CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement, 'fal-control-light', '暗光增强', 'hidden', undefined],
+    [CANVAS_IMAGE_CAPABILITY_IDS.outpaint, 'fal-image-apps-v2-outpaint', '智能扩图', 'optional', 500],
+    [CANVAS_IMAGE_CAPABILITY_IDS.productPhotography, 'fal-image-apps-v2-product-photography', '商品摄影', 'hidden', undefined],
+    [CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration, 'fal-image-apps-v2-photo-restoration', '照片修复', 'hidden', undefined],
+    [CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval, 'fal-pixelcut-background-removal', '背景移除', 'hidden', undefined],
+  ] as const)('%s 创建固定模型标准工具节点', async (
+    capabilityId,
+    modelId,
+    displayName,
+    promptMode,
+    promptMaxCharacters,
+  ) => {
     const execute = createCanvasImageCapabilityExecutor()
     const result = await execute(sourceNodeId, capabilityId)
     expect(result.kind).toBe('canvas-node')
@@ -222,9 +276,10 @@ describe('画布图片能力应用服务', () => {
         modelId,
         params: {},
         generationUi: {
-          promptMode: 'hidden',
+          promptMode,
           modelMode: 'locked',
           excludeParamIds: ['image'],
+          ...(promptMaxCharacters ? { promptMaxCharacters } : {}),
         },
       },
     })
@@ -235,6 +290,16 @@ describe('画布图片能力应用服务', () => {
         targetHandle: 'param:__image',
       }),
     ])
+  })
+
+  it('固定工具标题随当前界面语言创建，不把中文名称写死到英文项目', async () => {
+    await i18n.changeLanguage('en-US')
+    const execute = createCanvasImageCapabilityExecutor()
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval)
+    if (result.kind !== 'canvas-node') throw new Error('图片工具必须创建画布节点')
+
+    expect(useCanvasStore.getState().nodes.find((node) => node.id === result.nodeId)?.data.displayName)
+      .toBe('Background Removal')
   })
 
   it('多角度能力创建默认四视图专用节点并连接唯一源图', async () => {
@@ -304,7 +369,6 @@ describe('画布图片能力应用服务', () => {
       capabilityId: 'image.upscale',
       modelId: 'fal-ai-topaz-image-upscale',
       params: {
-        falTopazUpscaleModel: 'High Fidelity V2',
         falTopazUpscaleFactor: 2,
         falTopazFaceEnhancement: false,
       },

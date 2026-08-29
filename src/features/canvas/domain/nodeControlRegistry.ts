@@ -53,6 +53,7 @@ const generationUiSchema = z.object({
   promptMode: z.enum(['required', 'optional', 'hidden']),
   modelMode: z.enum(['selectable', 'locked']),
   excludeParamIds: z.array(z.string().min(1).max(120)).max(40),
+  promptMaxCharacters: z.number().int().positive().max(32 * 1024).optional(),
 }).strict()
 
 const imageGenerationNodeDataSchema = nodeDataBaseSchema.extend({
@@ -101,19 +102,45 @@ interface CanvasNodeControlConfig {
   aiDataSchema: Record<string, unknown>
   requiresModelSchema: boolean
   hasPromptHandle?: boolean
-  validateData?: (data: Record<string, unknown>) => void
+  /** 复制节点时必须保留、但绝不能开放给通用助手写入的受控字段。 */
+  trustedCopyDataKeys?: readonly string[]
+  validateData?: (
+    data: Record<string, unknown>,
+    context: CanvasNodeDataValidationContext,
+  ) => void
 }
 
-function validateImageGenerationData(data: Record<string, unknown>): void {
-  validateGenerationData(data, 'image')
+interface CanvasNodeDataValidationContext {
+  allowHiddenModels: boolean
+}
+
+const PUBLIC_NODE_DATA_VALIDATION: CanvasNodeDataValidationContext = {
+  allowHiddenModels: false,
+}
+
+const CONTROLLED_NODE_DATA_VALIDATION: CanvasNodeDataValidationContext = {
+  allowHiddenModels: true,
+}
+
+function validateImageGenerationData(
+  data: Record<string, unknown>,
+  context: CanvasNodeDataValidationContext,
+): void {
+  validateGenerationData(data, 'image', context)
 }
 
 function validateGenerationData(
   data: Record<string, unknown>,
-  expectedMediaType: 'image' | 'video' | 'audio'
+  expectedMediaType: 'image' | 'video' | 'audio',
+  context: CanvasNodeDataValidationContext,
 ): void {
   if (typeof data.modelId !== 'string') return
-  const model = registry.getModel(data.modelId)
+  const model = context.allowHiddenModels
+    ? registry.getModel(data.modelId)
+    : registry.getDiscoverableModel(data.modelId)
+  if (!model && registry.hasModel(data.modelId) && !context.allowHiddenModels) {
+    throw new Error('受控执行模型不能通过通用画布节点使用，请改用对应的画布图片能力')
+  }
   if (!model || model.meta.type !== expectedMediaType) {
     throw new Error(`画布生成节点只能使用已注册的${expectedMediaType}模型`)
   }
@@ -130,10 +157,16 @@ function validateGenerationData(
 
 function validateModelSelectorData(
   data: Record<string, unknown>,
-  expectedMediaType: 'image' | 'video' | 'audio'
+  expectedMediaType: 'image' | 'video' | 'audio',
+  context: CanvasNodeDataValidationContext,
 ): void {
   if (typeof data.modelId !== 'string') return
-  const model = registry.getModel(data.modelId)
+  const model = context.allowHiddenModels
+    ? registry.getModel(data.modelId)
+    : registry.getDiscoverableModel(data.modelId)
+  if (!model && registry.hasModel(data.modelId) && !context.allowHiddenModels) {
+    throw new Error('受控执行模型不能通过通用模型选择器使用，请改用对应的画布图片能力')
+  }
   if (!model || model.meta.type !== expectedMediaType) {
     throw new Error(`模型选择器只能输出已注册的${expectedMediaType}模型`)
   }
@@ -207,6 +240,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
       additionalProperties: false,
     },
     requiresModelSchema: true,
+    trustedCopyDataKeys: ['generationUi'],
     validateData: validateImageGenerationData,
   },
   {
@@ -334,7 +368,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     dataSchema: generationNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, prompt: { type: 'string', maxLength: 32768 }, modelId: { type: 'string' }, params: { type: 'object', additionalProperties: true } }, additionalProperties: false },
     requiresModelSchema: true,
-    validateData: (data) => validateGenerationData(data, 'video'),
+    validateData: (data, context) => validateGenerationData(data, 'video', context),
   },
   {
     nodeType: CANVAS_NODE_TYPES.audioGen,
@@ -344,7 +378,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     dataSchema: generationNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, prompt: { type: 'string', maxLength: 32768 }, modelId: { type: 'string' }, params: { type: 'object', additionalProperties: true } }, additionalProperties: false },
     requiresModelSchema: true,
-    validateData: (data) => validateGenerationData(data, 'audio'),
+    validateData: (data, context) => validateGenerationData(data, 'audio', context),
   },
   {
     nodeType: CANVAS_NODE_TYPES.storyboardGen,
@@ -366,6 +400,8 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
       properties: {
         displayName: { type: 'string', maxLength: 120 },
         prompt: { type: 'string', maxLength: 32768 },
+        systemPrompt: { type: 'string', maxLength: 32768 },
+        systemPromptTemplateId: { type: 'string', maxLength: 200 },
         providerId: { type: 'string', maxLength: 200 },
         modelId: { type: 'string', maxLength: 500 },
         fixedResult: { type: 'boolean' },
@@ -447,7 +483,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     dataSchema: modelSelectorNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, modelId: { type: 'string' } }, additionalProperties: false },
     requiresModelSchema: true,
-    validateData: (data) => validateModelSelectorData(data, 'image'),
+    validateData: (data, context) => validateModelSelectorData(data, 'image', context),
   },
   {
     nodeType: CANVAS_NODE_TYPES.videoModelSelector,
@@ -456,7 +492,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     dataSchema: modelSelectorNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, modelId: { type: 'string' } }, additionalProperties: false },
     requiresModelSchema: true,
-    validateData: (data) => validateModelSelectorData(data, 'video'),
+    validateData: (data, context) => validateModelSelectorData(data, 'video', context),
   },
   {
     nodeType: CANVAS_NODE_TYPES.audioModelSelector,
@@ -465,7 +501,7 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     dataSchema: modelSelectorNodeDataSchema,
     aiDataSchema: { type: 'object', properties: { displayName: { type: 'string', maxLength: 120 }, modelId: { type: 'string' } }, additionalProperties: false },
     requiresModelSchema: true,
-    validateData: (data) => validateModelSelectorData(data, 'audio'),
+    validateData: (data, context) => validateModelSelectorData(data, 'audio', context),
   },
 ]
 
@@ -574,8 +610,31 @@ export function parseCanvasNodeData(
 ): { nodeType: CanvasNodeType; data: Partial<CanvasNodeData> } {
   const config = configByType.get(nodeType as CanvasNodeType)
   if (!config) throw new Error(`当前闭环不支持节点类型：${nodeType}`)
+  const raw = input ?? {}
+  const publicKeys = new Set(
+    Object.keys((config.aiDataSchema.properties ?? {}) as Record<string, unknown>),
+  )
+  const controlledKeys = Object.keys(raw).filter((key) => !publicKeys.has(key))
+  if (controlledKeys.length > 0) {
+    throw new Error(
+      `通用画布节点不能写入受控字段：${controlledKeys.join('、')}。`
+      + '请使用对应的画布图片能力创建或配置专用节点。',
+    )
+  }
+  const data = config.dataSchema.parse(raw)
+  config.validateData?.(data, PUBLIC_NODE_DATA_VALIDATION)
+  return { nodeType: config.nodeType, data: data as Partial<CanvasNodeData> }
+}
+
+/** 图片能力内部创建固定模型/固定编辑器节点的窄通道，不对助手公共 schema 开放。 */
+export function parseCanvasControlledNodeData(
+  nodeType: string,
+  input: Record<string, unknown> | undefined,
+): { nodeType: CanvasNodeType; data: Partial<CanvasNodeData> } {
+  const config = configByType.get(nodeType as CanvasNodeType)
+  if (!config) throw new Error(`当前闭环不支持节点类型：${nodeType}`)
   const data = config.dataSchema.parse(input ?? {})
-  config.validateData?.(data)
+  config.validateData?.(data, CONTROLLED_NODE_DATA_VALIDATION)
   return { nodeType: config.nodeType, data: data as Partial<CanvasNodeData> }
 }
 
@@ -588,7 +647,7 @@ export function parseCanvasSpecialEditorData(
   if (!config) throw new Error(`当前闭环不支持节点类型：${nodeType}`)
   const schema = config.specialEditorDataSchema ?? config.dataSchema
   const data = schema.parse(input)
-  config.validateData?.(data)
+  config.validateData?.(data, CONTROLLED_NODE_DATA_VALIDATION)
   return data as Partial<CanvasNodeData>
 }
 
@@ -613,14 +672,42 @@ export function parseTrustedMediaNodeData(
 
 export function extractCanvasNodeData(
   nodeType: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  validationBase: Record<string, unknown> = {},
+  allowHiddenModels = false,
 ): Partial<CanvasNodeData> {
   const config = configByType.get(nodeType as CanvasNodeType)
   if (!config) throw new Error(`当前闭环不支持节点类型：${nodeType}`)
   const properties = (config.aiDataSchema.properties ?? {}) as Record<string, unknown>
   const supported = Object.fromEntries(Object.entries(data).filter(([key]) => key in properties))
   const parsed = config.dataSchema.parse(supported)
-  config.validateData?.(parsed)
+  config.validateData?.(
+    { ...validationBase, ...parsed },
+    allowHiddenModels ? CONTROLLED_NODE_DATA_VALIDATION : PUBLIC_NODE_DATA_VALIDATION,
+  )
+  return parsed as Partial<CanvasNodeData>
+}
+
+/**
+ * 复制必须保留固定工具的锁定 UI 契约，但不能因此把 generationUi 开放给通用更新。
+ * 这里只复制每类节点显式声明的可信键，并允许精确解析受控执行模型。
+ */
+export function extractCanvasNodeDataForDuplication(
+  nodeType: string,
+  data: Record<string, unknown>,
+): Partial<CanvasNodeData> {
+  const config = configByType.get(nodeType as CanvasNodeType)
+  if (!config) throw new Error(`当前闭环不支持节点类型：${nodeType}`)
+  const publicProperties = (config.aiDataSchema.properties ?? {}) as Record<string, unknown>
+  const allowed = new Set([
+    ...Object.keys(publicProperties),
+    ...(config.trustedCopyDataKeys ?? []),
+  ])
+  const supported = Object.fromEntries(
+    Object.entries(data).filter(([key]) => allowed.has(key)),
+  )
+  const parsed = config.dataSchema.parse(supported)
+  config.validateData?.(parsed, CONTROLLED_NODE_DATA_VALIDATION)
   return parsed as Partial<CanvasNodeData>
 }
 

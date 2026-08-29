@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { Camera, Settings2 } from 'lucide-react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 
 import { UiButton } from '@/components/ui'
 import { GenerationService } from '@/core/services/GenerationService'
@@ -27,7 +29,6 @@ import {
   createMultiAngleCommitContract,
   normalizeMultiAngleConfig,
   resolveMultiAngleExecutionTarget,
-  summarizeMultiAngleConfig,
   type MultiAngleConfigV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import {
@@ -53,6 +54,7 @@ import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { ensureGenerationProviderConfigured } from './shared/generationNodeGuards'
+import { summarizeLocalizedMultiAngleConfig } from '@/features/canvas/ui/specialInterfaces/multiAngle/multiAngleLocalization'
 
 export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.multi-angle'
@@ -76,12 +78,16 @@ function readSourceImages(nodeId: string, data: MultiAngleGenerationNodeData): s
   return sources.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }
 
-function requireSingleSource(sources: readonly string[]): string {
-  if (sources.length !== 1) throw new Error('多角度生成必须且只能提供 1 张源图')
+function requireSingleSource(sources: readonly string[], errorMessage: string): string {
+  if (sources.length !== 1) throw new Error(errorMessage)
   return sources[0]
 }
 
-function createPlaceholder(sourceNodeId: string, data: MultiAngleGenerationNodeData): string {
+function createPlaceholder(
+  sourceNodeId: string,
+  data: MultiAngleGenerationNodeData,
+  displayName: string,
+): string {
   const canvas = useCanvasStore.getState()
   const config = normalizeMultiAngleConfig(data.multiAngleConfig)
   const executionTarget = resolveMultiAngleExecutionTarget(config.controlProfile)
@@ -100,7 +106,7 @@ function createPlaceholder(sourceNodeId: string, data: MultiAngleGenerationNodeD
     {
       isGenerating: true,
       generationStartedAt: Date.now(),
-      displayName: '多角度视图',
+      displayName,
       resultKind: 'image',
       sourceCapabilityId: CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       generationPrompt: '',
@@ -113,13 +119,22 @@ function createPlaceholder(sourceNodeId: string, data: MultiAngleGenerationNodeD
   return nodeId
 }
 
-function batchStatus(snapshot: MultiAngleBatchSnapshotV1 | null | undefined): string {
-  if (!snapshot) return '尚未生成'
+function batchStatus(
+  snapshot: MultiAngleBatchSnapshotV1 | null | undefined,
+  t: TFunction,
+): string {
+  if (!snapshot) return t('node.multiAngleGeneration.status.notGenerated')
   const success = snapshot.items.filter((item) => item.status === 'succeeded').length
   const failed = snapshot.items.filter((item) => item.status === 'failed').length
-  if (failed > 0) return `${success}/${snapshot.items.length} 已完成 · ${failed} 个待重试`
-  if (snapshot.items.some((item) => item.status === 'running')) return `${success}/${snapshot.items.length} 已完成`
-  return `${success}/${snapshot.items.length} 已缓存`
+  if (failed > 0) return t('node.multiAngleGeneration.status.failed', {
+    success,
+    total: snapshot.items.length,
+    failed,
+  })
+  if (snapshot.items.some((item) => item.status === 'running')) {
+    return t('node.multiAngleGeneration.status.running', { success, total: snapshot.items.length })
+  }
+  return t('node.multiAngleGeneration.status.cached', { success, total: snapshot.items.length })
 }
 
 export const MultiAngleGenerationNode = memo(({
@@ -129,6 +144,7 @@ export const MultiAngleGenerationNode = memo(({
   width,
   height,
 }: MultiAngleGenerationNodeProps) => {
+  const { t } = useTranslation()
   const updateNodeData = useCanvasStore((state) => state.updateNodeData)
   const setSelectedNode = useCanvasStore((state) => state.setSelectedNode)
   const projectId = useProjectStore((state) => state.currentProjectId)
@@ -147,29 +163,36 @@ export const MultiAngleGenerationNode = memo(({
     ? incomingSourceMedia.map((item) => item.url)
     : inlineSources.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
   const config = useMemo(() => normalizeMultiAngleConfig(data.multiAngleConfig), [data.multiAngleConfig])
-  const summary = useMemo(() => summarizeMultiAngleConfig(config), [config])
+  const summary = useMemo(() => summarizeLocalizedMultiAngleConfig(t, config), [config, t])
 
   const prepareExecution = useCallback(() => {
     const latest = useCanvasStore.getState().nodes.find((node) => node.id === id)
     const latestData = (latest?.data ?? data) as MultiAngleGenerationNodeData
     const latestConfig = normalizeMultiAngleConfig(latestData.multiAngleConfig)
-    const sourceImage = requireSingleSource(readSourceImages(id, latestData))
+    const sourceImage = requireSingleSource(
+      readSourceImages(id, latestData),
+      t('node.multiAngleGeneration.errors.singleSource'),
+    )
     ensureGenerationProviderConfigured(useSettingsStore.getState().providerKeyStatus.fal === true, {
-      title: '需要配置 Fal',
-      message: '多角度视图由 Fal 模型执行，请先配置 Fal API Key。',
-      error: 'Fal API Key 未配置',
+      title: t('node.multiAngleGeneration.providerRequiredTitle'),
+      message: t('node.multiAngleGeneration.providerRequiredMessage'),
+      error: t('node.multiAngleGeneration.apiKeyRequired'),
     })
     return { latestData, latestConfig, sourceImage }
-  }, [data, id])
+  }, [data, id, t])
 
   const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
     const generationProjectId = useProjectStore.getState().currentProjectId
-    if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
+    if (!generationProjectId) throw new Error(t('node.multiAngleGeneration.errors.projectMissing'))
     const isGenerationProjectCurrent = (): boolean => (
       isCanvasProjectContextCurrent(generationProjectId)
     )
     const prepared = prepareExecution()
-    const placeholderNodeId = createPlaceholder(id, prepared.latestData)
+    const placeholderNodeId = createPlaceholder(
+      id,
+      prepared.latestData,
+      t('node.multiAngleGeneration.resultTitle'),
+    )
     const controller = new AbortController()
     activeControllerRef.current?.abort()
     activeControllerRef.current = controller
@@ -199,7 +222,9 @@ export const MultiAngleGenerationNode = memo(({
                 onTaskId: context.onProviderRequestId,
               })
           if (generated.outputs.length !== 1) {
-            throw new Error(`多角度单视图预期 1 个输出，实际 ${generated.outputs.length}`)
+            throw new Error(t('node.multiAngleGeneration.errors.singleOutput', {
+              count: generated.outputs.length,
+            }))
           }
           return {
             mediaUrl: generated.outputs[0],
@@ -212,7 +237,7 @@ export const MultiAngleGenerationNode = memo(({
         return { status: 'completed', resultNodeIds: [placeholderNodeId] }
       }
       if (!result.complete) {
-        const error = result.errors.join('；') || '多角度批次未完整完成'
+        const error = result.errors.join('; ') || t('node.multiAngleGeneration.errors.batchIncomplete')
         updateNodeData(placeholderNodeId, {
           isGenerating: false,
           generationStartedAt: null,
@@ -227,7 +252,7 @@ export const MultiAngleGenerationNode = memo(({
         resultNodeType: CANVAS_NODE_TYPES.exportImage,
         contract: createMultiAngleCommitContract(result.completed),
         completionId: `multi-angle:${result.snapshot.batchId}`,
-        groupTitle: `多角度视图 · ${result.completed.length}`,
+        groupTitle: t('node.multiAngleGeneration.groupTitle', { count: result.completed.length }),
       })
       updateNodeData(id, {
         multiAngleBatch: null,
@@ -239,14 +264,16 @@ export const MultiAngleGenerationNode = memo(({
         updateNodeData(placeholderNodeId, {
           isGenerating: false,
           generationStartedAt: null,
-          generationError: error instanceof Error ? error.message : '多角度生成失败',
+          generationError: error instanceof Error
+            ? error.message
+            : t('node.multiAngleGeneration.generationFailed'),
         })
       }
       return { status: 'completed', resultNodeIds: [placeholderNodeId] }
     } finally {
       if (activeControllerRef.current === controller) activeControllerRef.current = null
     }
-  }, [id, prepareExecution, updateNodeData])
+  }, [id, prepareExecution, t, updateNodeData])
 
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'standard-generation',
@@ -286,16 +313,16 @@ export const MultiAngleGenerationNode = memo(({
       <NodeHeader
         className={NODE_HEADER_FLOATING_POSITION_CLASS}
         icon={<Camera className="h-4 w-4" />}
-        titleText={data.displayName ?? '多角度视图'}
+        titleText={data.displayName ?? t('node.multiAngleGeneration.title')}
         editable
         onTitleChange={(displayName) => updateNodeData(id, { displayName })}
       />
-      <NodeLodPlaceholder title={data.displayName ?? '多角度视图'} icon={<Camera className="h-6 w-6" />} />
+      <NodeLodPlaceholder title={data.displayName ?? t('node.multiAngleGeneration.title')} icon={<Camera className="h-6 w-6" />} />
       <div className="canvas-node-lod-detail flex min-h-0 flex-1 flex-col gap-2">
         <MediaInputRow
           nodeId={id}
           mediaKind="image"
-          label="源图"
+          label={t('node.multiAngleGeneration.sourceImage')}
           maxCount={1}
           inlineValue={inlineSources}
           onInlineChange={(images) => updateNodeData(id, {
@@ -305,7 +332,9 @@ export const MultiAngleGenerationNode = memo(({
         <div className="flex min-w-0 items-center justify-between gap-2 rounded-lg border border-veil-subtle px-2.5 py-2">
           <div className="min-w-0">
             <p className="truncate text-xs font-medium text-text-dark">{summary}</p>
-            <p className="truncate text-2xs text-text-muted">{providerConfigured ? batchStatus(data.multiAngleBatch) : 'Fal 未配置'}</p>
+            <p className="truncate text-2xs text-text-muted">{providerConfigured
+              ? batchStatus(data.multiAngleBatch, t)
+              : t('node.multiAngleGeneration.status.falNotConfigured')}</p>
           </div>
           <UiButton
             type="button"
@@ -318,10 +347,10 @@ export const MultiAngleGenerationNode = memo(({
             }}
           >
             <Settings2 className="h-3.5 w-3.5" />
-            调整角度
+            {t('node.multiAngleGeneration.adjustAngles')}
           </UiButton>
         </div>
-        <p className="px-1 text-2xs text-text-muted">每个视图独立生成，并发 2；全部成功后一次性创建结果组。</p>
+        <p className="px-1 text-2xs text-text-muted">{t('node.multiAngleGeneration.executionHint')}</p>
       </div>
       <Handle
         type="source"

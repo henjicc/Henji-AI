@@ -162,6 +162,40 @@ describe('generation.draft 属性写入执行器（5.4）', () => {
     expect(draft.uploadedVideoTrimEnd).toBe(8)
   })
 
+  it('草稿模型属性拒绝受控执行模型引用', async () => {
+    const controlled = {
+      ...testModel,
+      meta: { ...testModel.meta, id: 'generation-draft-controlled-model' },
+    }
+    registry.registerHidden(controlled)
+    const engine = getApplicationControlExecutionEngine()
+    const revision = useGenerationDraftStore.getState().revision
+    const plan = await engine.plan({
+      summary: '尝试选择受控模型',
+      transactionMode: 'atomic',
+      steps: [{
+        kind: 'mutation',
+        target: { kind: 'generation.draft', id: 'singleton' },
+        entityType: 'generation.draft',
+        expectedRevisions: { generation_draft: revision },
+        mutations: [{
+          propertyId: 'generation.draft.selected_model',
+          operation: 'set',
+          value: { kind: 'generation.model', id: controlled.meta.id },
+        }],
+      }],
+    }, context)
+
+    const result = await engine.commit({
+      planRef: plan.planRef,
+      expectedRevisions: { generation_draft: revision },
+      idempotencyKey: 'generation-draft-controlled-commit',
+    }, context)
+    expect(result).toMatchObject({ status: 'failed', code: 'EXECUTION_FAILED' })
+    if (result.status !== 'failed') throw new Error('受控模型写入必须失败')
+    expect(result.message).toMatch(/画布图片能力/)
+  })
+
   it('时长与模型筛选等排除字段仍然只读', async () => {
     const engine = getApplicationControlExecutionEngine()
     const revision = useGenerationDraftStore.getState().revision

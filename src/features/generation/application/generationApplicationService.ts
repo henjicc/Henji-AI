@@ -50,10 +50,16 @@ export function selectExecutableGenerationModel(
   configuredProviderIds: readonly string[],
 ): ResolvedGenerationModel {
   const configuredProviders = new Set(configuredProviderIds)
-  const requested = input.requestedModelId ? registry.getModel(input.requestedModelId) : undefined
+  const requested = input.requestedModelId
+    ? registry.getDiscoverableModel(input.requestedModelId)
+    : undefined
   if (input.requestedModelId && !requested) {
-    throw new GenerationPreparationError('MODEL_NOT_FOUND', '指定的生成模型不存在', {
+    const controlled = registry.hasModel(input.requestedModelId)
+    throw new GenerationPreparationError('MODEL_NOT_FOUND', controlled
+      ? '指定模型仅供受控画布图片能力执行，请改用对应的画布图片能力'
+      : '指定的生成模型不存在', {
       modelId: input.requestedModelId,
+      ...(controlled ? { reason: 'controlled_execution_model' } : {}),
     })
   }
   if (requested && !configuredProviders.has(requested.meta.provider)) {

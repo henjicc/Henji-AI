@@ -9,11 +9,12 @@ import {
 } from '../domain/canvasNodes'
 import {
   extractCanvasNodeData,
+  extractCanvasNodeDataForDuplication,
   listCanvasNodeDataKeys,
   parseCanvasSpecialEditorData,
 } from '../domain/nodeControlRegistry'
 import {
-  addCanvasNode,
+  addControlledCanvasNode,
   CanvasApplicationError,
   persistCanvasState,
   rememberCanvasUndo,
@@ -140,8 +141,11 @@ export function duplicateCanvasNode(input: {
   placement: CanvasNodePlacement
 }): Record<string, unknown> {
   const node = requireNode(input.projectId, input.nodeId)
-  const data = extractCanvasNodeData(node.type, node.data as Record<string, unknown>)
-  const result = addCanvasNode({
+  const data = extractCanvasNodeDataForDuplication(
+    node.type,
+    node.data as Record<string, unknown>,
+  )
+  const result = addControlledCanvasNode({
     projectId: input.projectId,
     nodeType: node.type,
     placement: input.placement,
@@ -156,7 +160,31 @@ export function updateCanvasNode(input: {
   data: Record<string, unknown>
 }): Record<string, unknown> {
   const node = requireNode(input.projectId, input.nodeId)
-  const safeData = extractCanvasNodeData(node.type, input.data)
+  const generationUi = node.data.generationUi
+  const isLockedModel = Boolean(
+    generationUi
+    && typeof generationUi === 'object'
+    && !Array.isArray(generationUi)
+    && (generationUi as Record<string, unknown>).modelMode === 'locked',
+  )
+  if (
+    isLockedModel
+    && typeof input.data.modelId === 'string'
+    && input.data.modelId !== node.data.modelId
+  ) {
+    throw new CanvasApplicationError(
+      'CAPABILITY_REJECTED',
+      '固定图片工具的模型由能力契约锁定，不能通过通用节点更新修改；请重新应用目标画布图片能力。',
+      true,
+      { nodeId: node.id, modelId: node.data.modelId },
+    )
+  }
+  const safeData = extractCanvasNodeData(
+    node.type,
+    input.data,
+    node.data as Record<string, unknown>,
+    isLockedModel,
+  )
   const canvas = useCanvasStore.getState()
   const beforeDepth = canvas.history.past.length
   applyCanvasNodePatches(input.projectId, [{ nodeId: node.id, data: safeData }])

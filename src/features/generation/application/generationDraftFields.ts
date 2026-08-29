@@ -123,7 +123,12 @@ export const GENERATION_DRAFT_FIELDS: ApplicationFieldDefinition<GenerationDraft
         if (!ref || typeof ref.id !== 'string' || ref.kind !== GENERATION_MODEL_ENTITY_REF_KIND) {
           throw new Error('INVALID_INPUT')
         }
-        const model = registry.getModel(ref.id)
+        const model = registry.getDiscoverableModel(ref.id)
+        if (!model && registry.hasModel(ref.id)) {
+          throw new Error(
+            `INVALID_INPUT:${ref.id} 仅供受控画布图片能力执行，请改用 apply_canvas_image_capability`,
+          )
+        }
         if (!model) throw new Error(`NOT_FOUND:${ref.id}`)
         patch.selectedModel = ref.id
         patch.selectedProvider = model.meta.provider

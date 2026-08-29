@@ -63,8 +63,11 @@ describe('SDK catalog 应用侧加载入口', () => {
     expect(registry.listAllModels()).toHaveLength(105)
     for (const model of CONTROLLED_EXECUTION_MODELS) {
       expect(registry.getModel(model.meta.id), model.meta.id).toBeTruthy()
+      expect(registry.getDiscoverableModel(model.meta.id), model.meta.id).toBeUndefined()
+      expect(registry.isModelDiscoverable(model.meta.id), model.meta.id).toBe(false)
       expect(registry.getModelsByType(model.meta.type)).not.toContainEqual(model)
     }
+    expect(registry.getDiscoverableModel(registry.listAllModels()[0].meta.id)).toBeTruthy()
   })
 
   it('五个代表模型保留联动、分组与 composite 面板展示', () => {

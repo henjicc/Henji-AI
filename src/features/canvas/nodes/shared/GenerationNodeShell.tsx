@@ -138,6 +138,8 @@ export interface GenerationNodeShellProps {
   /** 无提示词工具（如忠实超分）可隐藏编辑器，并跳过文本必填校验。 */
   showPromptInput?: boolean;
   requirePrompt?: boolean;
+  /** 供应商对可选提示词有更小上限时，同步约束编辑器与执行前校验。 */
+  promptMaxCharacters?: number;
   /** 固定模型工具隐藏模型行，并忽略历史模型选择器连线覆盖。 */
   showModelInput?: boolean;
   /** 已由主媒体行或能力面板承载、不应重复呈现的 schema 参数。 */
@@ -179,6 +181,7 @@ export const GenerationNodeShell = memo(({
   capabilityId,
   showPromptInput = true,
   requirePrompt = true,
+  promptMaxCharacters,
   showModelInput = true,
   excludeParamIds,
   prepareRuntimeParams,
@@ -721,6 +724,7 @@ export const GenerationNodeShell = memo(({
             invalid={promptInvalid}
             // 漏填时把“请输入提示词”直接顶到空框里当占位，比在节点底部加一行红字更省空间
             placeholder={promptInvalid ? t(promptRequiredKey) : t(promptPlaceholderKey)}
+            maxCharacters={promptMaxCharacters}
             onChange={handlePromptChange}
             onSubmit={() => void runCanvasNode(id).catch(() => undefined)}
             onEditEnd={promptState.onEditEnd}

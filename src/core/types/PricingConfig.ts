@@ -82,6 +82,12 @@ export interface PricingConfig {
    */
   calculator?: (params: DynamicValueMap) => number
 
+  /** calculator 返回的是完整预估总价，还是仅供参考的计价单位单价。 */
+  estimateMode?: 'total' | 'unit'
+
+  /** estimateMode=unit 时展示的单位，例如 MP。 */
+  estimateUnit?: string
+
   /**
    * 价格说明（可选）
    *

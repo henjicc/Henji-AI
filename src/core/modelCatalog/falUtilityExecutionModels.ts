@@ -10,7 +10,8 @@ import type { ModelDefinition } from '@/core/types'
 import type { ModelPresentation } from '@/core/types/ModelPresentation'
 
 const aspectRatioDisplay = {
-  smart: { label: '智能' },
+  // smart 由通用比例选择器按当前语言单独渲染；这里保留无中文泄漏的后备标签。
+  smart: { label: 'Smart' },
   '1:1': { label: '1:1' },
   '16:9': { label: '16:9' },
   '9:16': { label: '9:16' },
@@ -73,6 +74,13 @@ const outpaintPresentation: ModelPresentation = {
   meta: { name: { zh: 'FAL 智能扩图', en: 'FAL Outpaint' } },
   params: {
     image: imageParam,
+    prompt: {
+      name: { zh: '补画提示词', en: 'Outpaint prompt' },
+      placeholder: {
+        zh: '可选：描述希望补画区域出现的内容（最多 500 字符）',
+        en: 'Optional: describe the content to fill outside the image (up to 500 characters)',
+      },
+    },
     expandLeft: { name: { zh: '向左扩展', en: 'Expand left' }, unit: 'px', showInput: true },
     expandRight: { name: { zh: '向右扩展', en: 'Expand right' }, unit: 'px', showInput: true },
     expandTop: { name: { zh: '向上扩展', en: 'Expand top' }, unit: 'px', showInput: true },

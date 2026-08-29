@@ -1,7 +1,16 @@
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 import type { NodeProps } from '@xyflow/react';
+import { useTranslation } from 'react-i18next';
 
+import { readImageInfo } from '@/commands/image';
+import { registry } from '@/core/ModelRegistry';
 import { CANVAS_NODE_TYPES, type ImageEditNodeData } from '@/features/canvas/domain/canvasNodes';
+import {
+  formatAcceptedMediaTypes,
+  GenerationMediaInputConstraintError,
+  resolveGenerationMediaInputConstraints,
+  validateGenerationImageInputs,
+} from '@/features/canvas/application/generationMediaInputConstraints';
 import {
   GenerationNodeShell,
   type GenerationNodeShellData,
@@ -20,6 +29,7 @@ interface ImageEditGenerationUi {
   promptMode: 'required' | 'optional' | 'hidden';
   modelMode: 'selectable' | 'locked';
   excludeParamIds: readonly string[];
+  promptMaxCharacters?: number;
 }
 
 const DEFAULT_GENERATION_UI: ImageEditGenerationUi = {
@@ -39,11 +49,48 @@ function resolveGenerationUi(data: ImageEditNodeData): ImageEditGenerationUi {
   const excludeParamIds = Array.isArray(raw.excludeParamIds)
     ? raw.excludeParamIds.filter((item): item is string => typeof item === 'string')
     : [];
-  return { promptMode, modelMode, excludeParamIds };
+  const promptMaxCharacters = typeof raw.promptMaxCharacters === 'number'
+    && Number.isInteger(raw.promptMaxCharacters)
+    && raw.promptMaxCharacters > 0
+      ? raw.promptMaxCharacters
+      : undefined;
+  return { promptMode, modelMode, excludeParamIds, promptMaxCharacters };
 }
 
 export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageEditNodeProps) => {
+  const { t } = useTranslation();
   const generationUi = resolveGenerationUi(data);
+  const prepareRuntimeParams = useCallback(async ({
+    images,
+    modelId,
+  }: {
+    images: string[];
+    modelId: string;
+  }): Promise<DynamicValueMap> => {
+    const model = registry.getModel(modelId);
+    if (!model) return {};
+    const constraint = resolveGenerationMediaInputConstraints(
+      model.params,
+      generationUi.excludeParamIds,
+    ).image;
+    try {
+      await validateGenerationImageInputs(images, constraint, readImageInfo);
+    } catch (error) {
+      if (!(error instanceof GenerationMediaInputConstraintError)) throw error;
+      if (error.code === 'too-large') {
+        throw new Error(t('node.mediaRow.maxSizeExceeded', {
+          max: Math.max(0.1, (constraint?.maxSizeBytes ?? 0) / 1024 / 1024).toFixed(1),
+        }));
+      }
+      if (error.code === 'unreadable') {
+        throw new Error(t('node.mediaRow.constraintReadFailed'));
+      }
+      throw new Error(t('node.mediaRow.unsupportedFormat', {
+        formats: formatAcceptedMediaTypes(constraint?.accept ?? []),
+      }));
+    }
+    return {};
+  }, [generationUi.excludeParamIds, t]);
   return (
     <GenerationNodeShell
       id={id}
@@ -60,8 +107,10 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
       resultNodeExtraData={{ resultKind: 'generic' }}
       showPromptInput={generationUi.promptMode !== 'hidden'}
       requirePrompt={generationUi.promptMode === 'required'}
+      promptMaxCharacters={generationUi.promptMaxCharacters}
       showModelInput={generationUi.modelMode !== 'locked'}
       excludeParamIds={generationUi.excludeParamIds}
+      prepareRuntimeParams={prepareRuntimeParams}
     />
   );
 });

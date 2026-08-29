@@ -12,7 +12,11 @@ import {
   type CanvasEdge,
   type CanvasNode,
 } from '../domain/canvasNodes'
-import { parseCanvasNodeData, parseTrustedMediaNodeData } from '../domain/nodeControlRegistry'
+import {
+  parseCanvasControlledNodeData,
+  parseCanvasNodeData,
+  parseTrustedMediaNodeData,
+} from '../domain/nodeControlRegistry'
 import {
   getCanvasNodeDefinition,
   isConnectionCompatible,
@@ -212,6 +216,25 @@ export function addCanvasNode(input: {
 }): Record<string, unknown> {
   requireCurrentCanvasProject(input.projectId)
   const parsed = parseCanvasNodeData(input.nodeType, input.data)
+  const position = resolveNodePosition(input.placement)
+  const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
+  const undoRef = rememberCanvasUndo(input.projectId, 'add_node')
+  persistCanvasState()
+  return { projectId: input.projectId, nodeId, nodeType: parsed.nodeType, position, undoRef }
+}
+
+/**
+ * 仅供已登记的产品能力创建固定模型或专用编辑器节点。公共 addCanvasNode 继续只接受
+ * 助手可见 schema，避免任何调用方凭模型 id 绕过受控能力入口。
+ */
+export function addControlledCanvasNode(input: {
+  projectId: string
+  nodeType: string
+  placement: CanvasNodePlacement
+  data?: Record<string, unknown>
+}): Record<string, unknown> {
+  requireCurrentCanvasProject(input.projectId)
+  const parsed = parseCanvasControlledNodeData(input.nodeType, input.data)
   const position = resolveNodePosition(input.placement)
   const nodeId = useCanvasStore.getState().addNode(parsed.nodeType, position, parsed.data)
   const undoRef = rememberCanvasUndo(input.projectId, 'add_node')

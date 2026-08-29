@@ -61,6 +61,7 @@ describe('canvas batch service', () => {
   })
 
   it('把多个操作作为一组提交并通过单一引用撤销', async () => {
+    useCanvasStore.getState().setSelectedNode(nodeId)
     const operations: CanvasBatchOperation[] = [
       { kind: 'update_node', nodeId, data: { displayName: '批量标题' } },
       { kind: 'update_node', nodeId, data: { content: '批量内容' } },
@@ -87,6 +88,7 @@ describe('canvas batch service', () => {
       displayName: '原节点',
       content: '原内容',
     })
+    expect(useCanvasStore.getState().selectedNodeId).toBe(nodeId)
   })
 
   it('批次 Effect 解析器按真实步骤数量结算，而不是把整批保守计为一次', () => {

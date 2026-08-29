@@ -27,6 +27,11 @@ import { VideoTrimModal, type VideoTrimRange } from '@/components/videoTrim/Vide
 import { useReorderDrag } from '@/components/ui/fileUploader/useReorderDrag';
 import { readAssetDragPayload } from '@/features/assets/drag/assetDragPayload';
 import { UI_DURATION, uiTransition } from '@/components/ui/motion';
+import {
+  formatAcceptedMediaTypes,
+  isMediaFileAccepted,
+  type GenerationMediaInputConstraint,
+} from '@/features/canvas/application/generationMediaInputConstraints';
 
 interface MediaInputRowProps {
   nodeId: string;
@@ -35,6 +40,8 @@ interface MediaInputRowProps {
   maxCount: number;
   inlineValue: string[];
   onInlineChange: (next: string[]) => void;
+  acceptedFileTypes?: readonly string[];
+  maxFileSizeBytes?: number;
   /** 视频裁剪能力：来自模型 inputLimits.videoConstraints.trim，仅 mediaKind === 'video' 时有意义 */
   videoTrimMaxClipSeconds?: number;
   /** 视频体积上限（MB），存在时裁剪确认会顺带按需压缩一次完整视频 */
@@ -92,6 +99,8 @@ export function MediaInputRow({
   maxCount,
   inlineValue,
   onInlineChange,
+  acceptedFileTypes,
+  maxFileSizeBytes,
   videoTrimMaxClipSeconds,
   videoTrimMaxSizeMB,
   videoTrimRange,
@@ -101,6 +110,12 @@ export function MediaInputRow({
   const inputRef = useRef<HTMLInputElement>(null);
   const [viewerVideoUrl, setViewerVideoUrl] = useState<string | null>(null);
   const [trimTargetIndex, setTrimTargetIndex] = useState<number | null>(null);
+  const [constraintError, setConstraintError] = useState<string | null>(null);
+  const inputConstraint = useMemo<GenerationMediaInputConstraint | undefined>(() => (
+    acceptedFileTypes?.length || maxFileSizeBytes !== undefined
+      ? { accept: acceptedFileTypes ?? [], maxSizeBytes: maxFileSizeBytes }
+      : undefined
+  ), [acceptedFileTypes, maxFileSizeBytes]);
   // 节点渲染在 React Flow 缩放过的画布坐标系里：CSS transform 是"本地像素"，
   // 画布缩放会把它再放大/缩小一次，所以跟手位移、让位位移都要先除以 zoom 才能在屏幕上 1:1 还原。
   // 用 getZoom() 在拖拽开始那一刻取一次快照（而非 useViewport() 那样订阅视口、每帧重渲染）。
@@ -181,7 +196,26 @@ export function MediaInputRow({
       return;
     }
     const remaining = Math.max(0, maxCount - inlineValue.length);
-    const accepted = Array.from(files).slice(0, remaining);
+    const candidates = Array.from(files).slice(0, remaining);
+    const accepted = candidates.filter((file) => isMediaFileAccepted(inputConstraint, {
+      fileName: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+    }));
+    const rejected = candidates.find((file) => !accepted.includes(file));
+    if (rejected) {
+      setConstraintError(
+        inputConstraint?.maxSizeBytes !== undefined && rejected.size > inputConstraint.maxSizeBytes
+          ? t('node.mediaRow.maxSizeExceeded', {
+              max: Math.max(0.1, inputConstraint.maxSizeBytes / 1024 / 1024).toFixed(1),
+            })
+          : t('node.mediaRow.unsupportedFormat', {
+              formats: formatAcceptedMediaTypes(inputConstraint?.accept ?? []),
+            }),
+      );
+    } else {
+      setConstraintError(null);
+    }
     const uploaded = await Promise.all(accepted.map((file) => fileToMediaUrl(file, mediaKind)));
     for (const item of uploaded) {
       if (item.previewUrl) {
@@ -192,7 +226,7 @@ export function MediaInputRow({
     if (urls.length > 0) {
       onInlineChange([...inlineValue, ...urls]);
     }
-  }, [inlineValue, isConnected, maxCount, mediaKind, onInlineChange]);
+  }, [inlineValue, inputConstraint, isConnected, maxCount, mediaKind, onInlineChange, t]);
 
   const handleRemove = useCallback((index: number) => {
     if (isConnected) {
@@ -220,6 +254,13 @@ export function MediaInputRow({
         if (!isConnected && payload?.type === mediaKind && canAddMore) {
           event.preventDefault();
           event.stopPropagation();
+          if (!isMediaFileAccepted(inputConstraint, { fileName: payload.filePath })) {
+            setConstraintError(t('node.mediaRow.unsupportedFormat', {
+              formats: formatAcceptedMediaTypes(inputConstraint?.accept ?? []),
+            }));
+            return;
+          }
+          setConstraintError(null);
           onInlineChange([...inlineValue, payload.filePath]);
         }
       }}
@@ -357,7 +398,7 @@ export function MediaInputRow({
               event.stopPropagation();
               inputRef.current?.click();
             }}
-            title={t('node.mediaRow.upload')}
+            title={constraintError ?? t('node.mediaRow.upload')}
             showBorder
             className="!h-7 !w-7 shrink-0 !rounded-md !border-dashed hover:!border-accent hover:!text-accent"
           >
@@ -368,7 +409,7 @@ export function MediaInputRow({
       <UiInput
         ref={inputRef}
         type="file"
-        accept={MEDIA_ACCEPT[mediaKind]}
+        accept={acceptedFileTypes?.length ? acceptedFileTypes.join(',') : MEDIA_ACCEPT[mediaKind]}
         multiple
         className="hidden"
         onChange={(event) => {
@@ -376,6 +417,9 @@ export function MediaInputRow({
           event.target.value = '';
         }}
       />
+      {constraintError && (
+        <span className="sr-only" role="alert">{constraintError}</span>
+      )}
       {viewerVideoUrl && (
         <VideoViewerModal
           open

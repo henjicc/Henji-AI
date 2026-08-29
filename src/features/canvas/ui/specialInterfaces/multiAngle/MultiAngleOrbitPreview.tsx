@@ -8,6 +8,7 @@ import {
   type WheelEvent,
 } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
+import { useTranslation } from 'react-i18next'
 
 import { UI_FIELD_FOCUS_CLASS } from '@/components/ui/styleTokens'
 import type {
@@ -23,7 +24,6 @@ import {
 import {
   continuousCameraFromDrag,
   continuousCameraFromKey,
-  describeMultiAngleCamera,
   discretePresetFromPoint,
   fluxCameraFromDrag,
   fluxCameraFromKey,
@@ -32,6 +32,7 @@ import {
   type MultiAngleCameraDragOrigin,
   type MultiAngleFluxCameraDragOrigin,
 } from './multiAngleCameraVisualizerState'
+import { describeLocalizedMultiAngleCamera } from './multiAngleLocalization'
 
 function markerPosition(view: MultiAngleViewV1): [number, number, number] {
   if (view.kind === 'continuous') {
@@ -105,6 +106,7 @@ export function MultiAngleOrbitPreview({
   onDiscretePresetChange: (preset: MultiAngleDiscretePreset) => void
   onFluxChange: (patch: Partial<MultiAngleFluxViewV1>) => void
 }): JSX.Element {
+  const { t } = useTranslation()
   const selected = views.find((view) => view.viewId === selectedViewId) ?? views[0]
   const [dragging, setDragging] = useState(false)
   const [transientView, setTransientView] = useState<MultiAngleContinuousViewV1 | MultiAngleFluxViewV1 | null>(null)
@@ -272,9 +274,15 @@ export function MultiAngleOrbitPreview({
     <div
       role="application"
       tabIndex={0}
-      aria-label="镜头方位控制"
-      aria-roledescription="可拖拽镜头轨道"
-      aria-valuetext={visualSelected ? describeMultiAngleCamera(visualSelected) : '未选择视图'}
+      aria-label={t('node.multiAngleEditor.orbit.ariaLabel')}
+      aria-roledescription={t('node.multiAngleEditor.orbit.roleDescription')}
+      aria-valuetext={visualSelected
+        ? describeLocalizedMultiAngleCamera(
+            t,
+            visualSelected,
+            Math.max(views.findIndex((view) => view.viewId === visualSelected.viewId), 0),
+          )
+        : t('node.multiAngleEditor.noSelection')}
       data-multi-angle-orbit="demand"
       data-multi-angle-camera-control="true"
       data-multi-angle-profile={visualSelected?.kind ?? 'none'}
@@ -305,11 +313,11 @@ export function MultiAngleOrbitPreview({
         <OrbitScene views={visualViews} selectedViewId={selectedViewId} />
       </Canvas>
 
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">左</span>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">右</span>
-      <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">高位</span>
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.left')}</span>
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.right')}</span>
+      <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.high')}</span>
       {visualSelected?.kind !== 'flux' && (
-        <span className="pointer-events-none absolute bottom-12 left-1/2 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">低位</span>
+        <span className="pointer-events-none absolute bottom-12 left-1/2 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">{t('node.multiAngleEditor.orbit.low')}</span>
       )}
     </div>
   )

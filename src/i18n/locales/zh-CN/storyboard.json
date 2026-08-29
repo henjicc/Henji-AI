@@ -311,6 +311,9 @@
       "video": "视频",
       "audio": "音频",
       "upload": "上传",
+      "unsupportedFormat": "仅支持 {{formats}} 文件",
+      "maxSizeExceeded": "文件大小不能超过 {{max}} MB",
+      "constraintReadFailed": "无法读取输入图片，请重新连接或上传",
       "videoTrim": "裁剪",
       "videoTrimTitle": "裁剪视频片段",
       "videoTrimProcessing": "处理中…",
@@ -352,8 +355,119 @@
       "resultTitle": "打光结果"
     },
     "multiAngleGeneration": {
+      "title": "多角度视图",
+      "sourceImage": "源图",
+      "adjustAngles": "调整角度",
+      "executionHint": "每个视图独立生成，并发 2；全部成功后一次性创建结果组。",
       "apiKeyRequired": "请先配置 Fal API Key",
-      "resultTitle": "多角度视图"
+      "providerRequiredTitle": "需要配置 Fal",
+      "providerRequiredMessage": "多角度视图由 Fal 模型执行，请先配置 Fal API Key。",
+      "resultTitle": "多角度视图",
+      "groupTitle": "多角度视图 · {{count}}",
+      "generationFailed": "多角度生成失败",
+      "errors": {
+        "singleSource": "多角度生成必须且只能提供 1 张源图",
+        "projectMissing": "当前没有可执行生成的画布项目",
+        "singleOutput": "多角度单视图预期 1 个输出，实际 {{count}}",
+        "batchIncomplete": "多角度批次未完整完成"
+      },
+      "status": {
+        "notGenerated": "尚未生成",
+        "failed": "{{success}}/{{total}} 已完成 · {{failed}} 个待重试",
+        "running": "{{success}}/{{total}} 已完成",
+        "cached": "{{success}}/{{total}} 已缓存",
+        "falNotConfigured": "Fal 未配置"
+      }
+    },
+    "multiAngleEditor": {
+      "title": "多角度视图",
+      "discardPrompt": "有尚未应用的角度设置，确定放弃吗？",
+      "keepEditing": "继续编辑",
+      "discard": "放弃更改",
+      "apply": "应用设置",
+      "sourceAlt": "多角度源图",
+      "sourceRequired": "请先为节点连接一张源图",
+      "noSelection": "未选择视图",
+      "customView": "自定义视角 {{index}}",
+      "customFluxView": "FLUX 自定义视角 {{index}}",
+      "hints": {
+        "continuous": "拖动改变环绕与俯仰 · 滚轮改变景别",
+        "flux": "拖动改变 FLUX 原生水平/垂直角度 · 滚轮改变 Zoom",
+        "discrete": "拖动或点击，吸附到模型支持的完整方位"
+      },
+      "disclaimer": "可视轨道只编辑模型控制量，不代表真实焦距、物理角度或空间重建精度。",
+      "controlMode": "控制方式",
+      "profiles": {
+        "continuous": { "title": "连续控制", "subtitle": "模型控制量" },
+        "flux": { "title": "FLUX 原生", "subtitle": "0–360°" },
+        "discrete": { "title": "完整方位", "subtitle": "九档吸附" }
+      },
+      "outputViews": "输出视图 · {{count}}/{{max}}",
+      "removeView": "移除当前视图",
+      "addView": "添加视图",
+      "currentContinuous": "当前视图 · 模型控制",
+      "horizontalOrbit": "水平环绕",
+      "verticalPitch": "垂直俯仰",
+      "shotZoom": "景别缩放",
+      "wideAngle": "广角镜头",
+      "currentFlux": "当前视图 · FLUX 原生控制",
+      "horizontalAngle": "水平角度",
+      "verticalAngle": "垂直角度",
+      "zoom": "Zoom",
+      "discretePresets": "可用方位 · 点击吸附",
+      "profileNote": "每个控制档最多 {{max}} 次独立请求；Qwen、完整方位与 FLUX 原生档不会混在同一个结果组。",
+      "summary": "{{profile}} · {{count}} 个视图",
+      "camera": {
+        "highPercent": "高位 {{value}}%",
+        "lowPercent": "低位 {{value}}%",
+        "level": "水平",
+        "panorama": "全景",
+        "longShot": "远景",
+        "mediumShot": "中景",
+        "nearShot": "近景",
+        "closeUp": "特写",
+        "orbitLeft": "左环绕 {{value}}°",
+        "orbitRight": "右环绕 {{value}}°",
+        "front": "正面",
+        "flux": "水平 {{horizontal}}° · 垂直 {{vertical}}° · Zoom {{zoom}}"
+      },
+      "orbit": {
+        "ariaLabel": "镜头方位控制",
+        "roleDescription": "可拖拽镜头轨道",
+        "left": "左",
+        "right": "右",
+        "high": "高位",
+        "low": "低位"
+      },
+      "presets": {
+        "continuous": {
+          "three-quarter-left": "左三分之四",
+          "three-quarter-right": "右三分之四",
+          "left-side": "左侧面",
+          "right-side": "右侧面",
+          "top-oblique": "高位斜俯",
+          "bottom-oblique": "低位斜仰"
+        },
+        "flux": {
+          "front": "正面",
+          "right-side": "右侧面",
+          "back": "背面",
+          "left-side": "左侧面",
+          "high-front": "高位正面",
+          "close-front": "近景正面"
+        },
+        "discrete": {
+          "front": "正面",
+          "left_side": "左侧面",
+          "right_side": "右侧面",
+          "back": "背面",
+          "top_down": "顶视",
+          "bottom_up": "仰视",
+          "birds_eye": "鸟瞰",
+          "three_quarter_left": "左三分之四",
+          "three_quarter_right": "右三分之四"
+        }
+      }
     },
     "upscaleGeneration": {
       "promptRequired": "高清放大不需要提示词",

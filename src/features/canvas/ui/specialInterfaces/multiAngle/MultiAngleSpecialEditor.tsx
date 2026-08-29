@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Aperture, Camera, Plus, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 import {
   UiButton,
@@ -33,12 +34,13 @@ import {
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import type { CanvasSpecialEditorSurfaceProps } from '../specialEditorRegistry'
 import { buildMultiAngleEditorDraft } from './multiAngleEditorState'
-import {
-  describeMultiAngleCamera,
-  describeMultiAngleProximity,
-  describeMultiAngleVertical,
-} from './multiAngleCameraVisualizerState'
 import { MultiAngleOrbitPreview } from './MultiAngleOrbitPreview'
+import {
+  describeLocalizedMultiAngleCamera,
+  describeLocalizedMultiAngleProximity,
+  describeLocalizedMultiAngleVertical,
+  translateMultiAngleViewLabel,
+} from './multiAngleLocalization'
 
 function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
   if (typeof state.sourceImageUrl === 'string' && state.sourceImageUrl.trim()) return state.sourceImageUrl
@@ -123,6 +125,7 @@ export default function MultiAngleSpecialEditor({
   onKeepEditing,
   onDiscard,
 }: CanvasSpecialEditorSurfaceProps): JSX.Element {
+  const { t } = useTranslation()
   const config = useMemo(() => readConfig(session.draftState), [session.draftState])
   const sourceImage = sourceImageFromState(session.draftState)
   const [selectedViewId, setSelectedViewId] = useState(config.views[0]?.viewId ?? '')
@@ -159,7 +162,7 @@ export default function MultiAngleSpecialEditor({
       ...selected,
       ...patch,
       presetId: 'custom',
-      label: `自定义视角 ${index + 1}`,
+      label: t('node.multiAngleEditor.customView', { index: index + 1 }),
     }))
   }
   const chooseDiscretePreset = (preset: MultiAngleDiscretePreset): void => {
@@ -185,7 +188,7 @@ export default function MultiAngleSpecialEditor({
       ...selected,
       ...patch,
       presetId: 'custom',
-      label: `FLUX 自定义视角 ${index + 1}`,
+      label: t('node.multiAngleEditor.customFluxView', { index: index + 1 }),
     }))
   }
   const close = (): void => { onCancel() }
@@ -193,23 +196,23 @@ export default function MultiAngleSpecialEditor({
   return (
     <UiModal
       isOpen
-      title="多角度视图"
+      title={t('node.multiAngleEditor.title')}
       size="workspace"
       surface="glass"
       contentClassName="min-h-0 p-0"
       onClose={close}
       footer={session.discardConfirmationRequested ? (
         <div className="flex w-full items-center justify-between gap-3">
-          <p className={UI_TEXT_META_CLASS}>有尚未应用的角度设置，确定放弃吗？</p>
+          <p className={UI_TEXT_META_CLASS}>{t('node.multiAngleEditor.discardPrompt')}</p>
           <div className="flex items-center gap-2">
-            <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>继续编辑</UiButton>
-            <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>放弃更改</UiButton>
+            <UiButton type="button" variant="ghost" size="sm" onClick={onKeepEditing}>{t('node.multiAngleEditor.keepEditing')}</UiButton>
+            <UiButton type="button" variant="primary" size="sm" onClick={onDiscard}>{t('node.multiAngleEditor.discard')}</UiButton>
           </div>
         </div>
       ) : (
         <>
-          <UiButton type="button" variant="ghost" size="sm" onClick={close}>取消</UiButton>
-          <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>应用设置</UiButton>
+          <UiButton type="button" variant="ghost" size="sm" onClick={close}>{t('common.cancel')}</UiButton>
+          <UiButton type="button" variant="primary" size="sm" onClick={onConfirm}>{t('node.multiAngleEditor.apply')}</UiButton>
         </>
       )}
     >
@@ -217,11 +220,11 @@ export default function MultiAngleSpecialEditor({
         <div className="flex min-h-0 items-center justify-center p-4">
           <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl border border-veil-subtle ${UI_GLASS_ADAPTIVE_SURFACE_CLASS}`}>
             {sourceImage ? (
-              <img src={resolveImageDisplayUrl(sourceImage)} alt="多角度源图" className="max-h-[76%] max-w-[76%] object-contain" />
+              <img src={resolveImageDisplayUrl(sourceImage)} alt={t('node.multiAngleEditor.sourceAlt')} className="max-h-[76%] max-w-[76%] object-contain" />
             ) : (
               <div className="flex flex-col items-center gap-2 text-text-muted">
                 <Camera className="h-8 w-8" />
-                <p className="text-sm">请先为节点连接一张源图</p>
+                <p className="text-sm">{t('node.multiAngleEditor.sourceRequired')}</p>
               </div>
             )}
             <MultiAngleOrbitPreview
@@ -232,22 +235,28 @@ export default function MultiAngleSpecialEditor({
               onFluxChange={patchFlux}
             />
             <div className="pointer-events-none absolute left-3 right-3 top-3 z-sticky rounded-lg bg-overlay px-3 py-2">
-              <p className="truncate text-xs font-medium text-text">{selected ? describeMultiAngleCamera(selected) : '未选择视图'}</p>
+              <p className="truncate text-xs font-medium text-text">{selected
+                ? describeLocalizedMultiAngleCamera(
+                    t,
+                    selected,
+                    Math.max(config.views.findIndex((view) => view.viewId === selected.viewId), 0),
+                  )
+                : t('node.multiAngleEditor.noSelection')}</p>
               <p className="mt-0.5 text-3xs text-text-muted">{selected?.kind === 'continuous'
-                ? '拖动改变环绕与俯仰 · 滚轮改变景别'
+                ? t('node.multiAngleEditor.hints.continuous')
                 : selected?.kind === 'flux'
-                  ? '拖动改变 FLUX 原生水平/垂直角度 · 滚轮改变 Zoom'
-                  : '拖动或点击，吸附到模型支持的完整方位'}</p>
+                  ? t('node.multiAngleEditor.hints.flux')
+                  : t('node.multiAngleEditor.hints.discrete')}</p>
             </div>
             <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-sticky rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
-              可视轨道只编辑模型控制量，不代表真实焦距、物理角度或空间重建精度。
+              {t('node.multiAngleEditor.disclaimer')}
             </div>
           </div>
         </div>
 
         <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>
           <section className="space-y-3">
-            <h3 className={UI_TEXT_SECTION_CLASS}>控制方式</h3>
+            <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.controlMode')}</h3>
             <div className="grid grid-cols-3 gap-2">
               <UiOptionButton
                 type="button"
@@ -255,7 +264,7 @@ export default function MultiAngleSpecialEditor({
                 active={config.controlProfile === 'continuous-v1'}
                 onClick={() => selectProfile('continuous-v1')}
               >
-                <span className="flex flex-col"><span className="text-sm font-medium">连续控制</span><span className="text-xs text-text-soft">模型控制量</span></span>
+                <span className="flex flex-col"><span className="text-sm font-medium">{t('node.multiAngleEditor.profiles.continuous.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.continuous.subtitle')}</span></span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
@@ -263,7 +272,7 @@ export default function MultiAngleSpecialEditor({
                 active={config.controlProfile === 'flux-native-v1'}
                 onClick={() => selectProfile('flux-native-v1')}
               >
-                <span className="flex flex-col"><span className="text-sm font-medium">FLUX 原生</span><span className="text-xs text-text-soft">0–360°</span></span>
+                <span className="flex flex-col"><span className="text-sm font-medium">{t('node.multiAngleEditor.profiles.flux.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.flux.subtitle')}</span></span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
@@ -271,19 +280,19 @@ export default function MultiAngleSpecialEditor({
                 active={config.controlProfile === 'discrete-v1'}
                 onClick={() => selectProfile('discrete-v1')}
               >
-                <span className="flex flex-col"><span className="text-sm font-medium">完整方位</span><span className="text-xs text-text-soft">九档吸附</span></span>
+                <span className="flex flex-col"><span className="text-sm font-medium">{t('node.multiAngleEditor.profiles.discrete.title')}</span><span className="text-xs text-text-soft">{t('node.multiAngleEditor.profiles.discrete.subtitle')}</span></span>
               </UiOptionButton>
             </div>
           </section>
 
           <section className="mt-5 space-y-3">
             <div className="flex items-center justify-between gap-3">
-              <h3 className={UI_TEXT_SECTION_CLASS}>输出视图 · {config.views.length}/{MULTI_ANGLE_MAX_VIEW_COUNT}</h3>
+              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.outputViews', { count: config.views.length, max: MULTI_ANGLE_MAX_VIEW_COUNT })}</h3>
               <div className="flex items-center gap-1">
-                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label="移除当前视图" disabled={config.views.length <= 1} onClick={removeSelected}>
+                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.removeView')} disabled={config.views.length <= 1} onClick={removeSelected}>
                   <Trash2 className="h-4 w-4" />
                 </UiIconButton>
-                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label="添加视图" disabled={!nextUnusedView(config)} onClick={addView}>
+                <UiIconButton type="button" appearance="hover-only" showBorder={false} aria-label={t('node.multiAngleEditor.addView')} disabled={!nextUnusedView(config)} onClick={addView}>
                   <Plus className="h-4 w-4" />
                 </UiIconButton>
               </div>
@@ -297,7 +306,7 @@ export default function MultiAngleSpecialEditor({
                   active={view.viewId === selected?.viewId}
                   onClick={() => setSelectedViewId(view.viewId)}
                 >
-                  <span className="truncate text-xs">{index + 1}. {view.label}</span>
+                  <span className="truncate text-xs">{index + 1}. {translateMultiAngleViewLabel(t, view, index)}</span>
                 </UiOptionButton>
               ))}
             </div>
@@ -305,25 +314,25 @@ export default function MultiAngleSpecialEditor({
 
           {selected?.kind === 'continuous' ? (
             <section className="mt-5 space-y-4">
-              <h3 className={UI_TEXT_SECTION_CLASS}>当前视图 · 模型控制</h3>
-              <RangeField label="水平环绕" value={selected.yawControlDeg} min={-90} max={90} step={1} suffix="°" onChange={(value) => patchContinuous({ yawControlDeg: value })} />
-              <RangeField label="垂直俯仰" value={selected.verticalControl} min={-1} max={1} step={0.05} suffix="" valueText={describeMultiAngleVertical(selected.verticalControl)} onChange={(value) => patchContinuous({ verticalControl: value })} />
-              <RangeField label="景别缩放" value={selected.proximity} min={0} max={10} step={0.5} suffix="" valueText={describeMultiAngleProximity(selected.proximity)} onChange={(value) => patchContinuous({ proximity: value })} />
+              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.currentContinuous')}</h3>
+              <RangeField label={t('node.multiAngleEditor.horizontalOrbit')} value={selected.yawControlDeg} min={-90} max={90} step={1} suffix="°" onChange={(value) => patchContinuous({ yawControlDeg: value })} />
+              <RangeField label={t('node.multiAngleEditor.verticalPitch')} value={selected.verticalControl} min={-1} max={1} step={0.05} suffix="" valueText={describeLocalizedMultiAngleVertical(t, selected.verticalControl)} onChange={(value) => patchContinuous({ verticalControl: value })} />
+              <RangeField label={t('node.multiAngleEditor.shotZoom')} value={selected.proximity} min={0} max={10} step={0.5} suffix="" valueText={describeLocalizedMultiAngleProximity(t, selected.proximity)} onChange={(value) => patchContinuous({ proximity: value })} />
               <div className="flex items-center justify-between gap-3">
-                <span className={UI_TEXT_LABEL_CLASS}>广角镜头</span>
+                <span className={UI_TEXT_LABEL_CLASS}>{t('node.multiAngleEditor.wideAngle')}</span>
                 <UiSwitch checked={selected.wideAngle} onCheckedChange={(checked) => patchContinuous({ wideAngle: checked })} />
               </div>
             </section>
           ) : selected?.kind === 'flux' ? (
             <section className="mt-5 space-y-4">
-              <h3 className={UI_TEXT_SECTION_CLASS}>当前视图 · FLUX 原生控制</h3>
-              <RangeField label="水平角度" value={selected.horizontalAngleDeg} min={0} max={360} step={1} suffix="°" onChange={(value) => patchFlux({ horizontalAngleDeg: value })} />
-              <RangeField label="垂直角度" value={selected.verticalAngleDeg} min={0} max={60} step={1} suffix="°" onChange={(value) => patchFlux({ verticalAngleDeg: value })} />
-              <RangeField label="Zoom" value={selected.zoom} min={0} max={10} step={0.5} suffix="" onChange={(value) => patchFlux({ zoom: value })} />
+              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.currentFlux')}</h3>
+              <RangeField label={t('node.multiAngleEditor.horizontalAngle')} value={selected.horizontalAngleDeg} min={0} max={360} step={1} suffix="°" onChange={(value) => patchFlux({ horizontalAngleDeg: value })} />
+              <RangeField label={t('node.multiAngleEditor.verticalAngle')} value={selected.verticalAngleDeg} min={0} max={60} step={1} suffix="°" onChange={(value) => patchFlux({ verticalAngleDeg: value })} />
+              <RangeField label={t('node.multiAngleEditor.zoom')} value={selected.zoom} min={0} max={10} step={0.5} suffix="" onChange={(value) => patchFlux({ zoom: value })} />
             </section>
           ) : (
             <section className="mt-5 space-y-3">
-              <h3 className={UI_TEXT_SECTION_CLASS}>可用方位 · 点击吸附</h3>
+              <h3 className={UI_TEXT_SECTION_CLASS}>{t('node.multiAngleEditor.discretePresets')}</h3>
               <div className="grid grid-cols-3 gap-2">
                 {MULTI_ANGLE_DISCRETE_VIEW_PRESETS.map((preset) => {
                   const active = config.views.some((view) => view.kind === 'discrete' && view.preset === preset.view.preset)
@@ -345,7 +354,7 @@ export default function MultiAngleSpecialEditor({
                         setSelectedViewId(preset.view.viewId)
                       }}
                     >
-                      {preset.label}
+                      {translateMultiAngleViewLabel(t, preset.view)}
                     </UiOptionButton>
                   )
                 })}
@@ -355,7 +364,7 @@ export default function MultiAngleSpecialEditor({
 
           <div className="mt-5 flex items-start gap-2 rounded-lg bg-layer px-3 py-2 text-xs text-text-soft">
             <Aperture className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>每个控制档最多 6 次独立请求；Qwen、完整方位与 FLUX 原生档不会混在同一个结果组。</span>
+            <span>{t('node.multiAngleEditor.profileNote', { max: MULTI_ANGLE_MAX_VIEW_COUNT })}</span>
           </div>
         </div>
       </div>

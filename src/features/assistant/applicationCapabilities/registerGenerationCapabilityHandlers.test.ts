@@ -122,6 +122,23 @@ describe('generation capability handlers（5.4：放宽提交）', () => {
     expect(submitted.mediaType).toBe('image')
   })
 
+  it('即使知道受控模型 id，也不能通过通用生成处理器提交', async () => {
+    const controlled = {
+      ...testModel,
+      meta: { ...testModel.meta, id: 'generation-handler-controlled-model' },
+    }
+    registry.registerHidden(controlled)
+    const handler = registeredHandlers().get('create_visible_generation_task')
+    if (!handler) throw new Error('HANDLER_NOT_FOUND')
+
+    await expect(handler({
+      modelId: controlled.meta.id,
+      prompt: '绕过能力入口',
+      mediaType: 'image',
+    }, context)).rejects.toThrow(/apply_canvas_image_capability/)
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
+
   it('草稿没有选中模型且未显式传 modelId 时拒绝', async () => {
     // createEmptyGenerationDraft() 会自动选中注册表里第一个可用模型（见 5.1 执行记录），
     // 这里显式清空才是真正的"未选中"状态。

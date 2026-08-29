@@ -4,6 +4,7 @@ import type {
 import type {
   CanvasNodePlacement,
 } from '@/core/assistant/capabilities/canvasMutationApplicationCapabilities'
+import type { AssistantCanvasImageCapabilityId } from '@/core/canvas/imageCapabilityIds'
 import type { CanvasDownloadDestination } from '@/core/assistant/capabilities/canvasExportApplicationCapabilities'
 import {
   CANVAS_NODE_CONTROL_CATALOG_VERSION,
@@ -58,6 +59,9 @@ import {
 import { addAssetToCanvas } from '@/features/assets/application/assetCanvasApplicationService'
 import { addGenerationResultToCanvas } from './generationResultCanvasApplicationService'
 import { downloadCanvasMedia } from '@/features/canvas/application/canvasDownloadService'
+import {
+  executeCanvasImageCapabilityForProject,
+} from '@/features/canvas/application/canvasImageCapabilityApplicationService'
 import { createHostContextSnapshot } from '../hostContext/hostContext'
 import type { ApplicationCapabilityHandlerRegistrar } from './handlerTypes'
 import { parseCapabilityInput, throwIfCapabilityAborted } from './handlerUtils'
@@ -154,6 +158,15 @@ export function registerCanvasCapabilityHandlers(
   registrar.registerHandler('add_canvas_node', (input, context) => {
     throwIfCapabilityAborted(context.signal)
     return addCanvasNode(parseCapabilityInput<AddNodeInput>('add_canvas_node', input))
+  })
+
+  registrar.registerHandler('apply_canvas_image_capability', async (input, context) => {
+    throwIfCapabilityAborted(context.signal)
+    const parsed = parseCapabilityInput<ProjectInput & {
+      sourceNodeId: string
+      capabilityId: AssistantCanvasImageCapabilityId
+    }>('apply_canvas_image_capability', input)
+    return await executeCanvasImageCapabilityForProject(parsed)
   })
 
   registrar.registerHandler('add_asset_to_canvas', async (input, context) => {

@@ -205,6 +205,21 @@ describe('generationPreparation', () => {
     })).toThrow('生成媒体类型与模型能力不匹配')
   })
 
+  it('已知受控模型也不能通过通用 schema 与生成准备入口绕过能力边界', () => {
+    const controlled = {
+      ...testModel,
+      meta: { ...testModel.meta, id: 'controlled-generation-preparation-test' },
+    }
+    registry.registerHidden(controlled)
+
+    expect(() => getGenerationModelSchema(controlled.meta.id)).toThrow('画布图片能力')
+    expect(() => prepareGenerationTask({
+      modelId: controlled.meta.id,
+      prompt: '绕过受控入口',
+      mediaType: 'image',
+    })).toThrow('画布图片能力')
+  })
+
   it('允许父任务 ID 这类自定义参数独立构成输入', () => {
     const taskBasedModel: ModelDefinition = {
       ...testModel,

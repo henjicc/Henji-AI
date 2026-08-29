@@ -176,6 +176,17 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     expect(result.leasedToolNames.length).toBeGreaterThan(0)
   })
 
+  it.each([
+    '把这张图高清放大',
+    '移除这张图片的背景',
+    '调整这张图的镜头角度',
+  ])('图片工具自然语言查询无需 domain 也能发现并租用原生能力：%s', (query) => {
+    const result = discover(request({ queries: [query] }), `run-image-capability-${query}`)
+
+    expect(result.capabilities.map((item) => item.name)).toContain('apply_canvas_image_capability')
+    expect(result.leasedToolNames).toContain('apply_canvas_image_capability')
+  })
+
   it('只读任务可以关闭写能力投影，压缩返回体积', () => {
     const readOnly = discover(request({
       queries: ['查看三维场景当前状态'], domains: ['camera_stage'],
@@ -284,6 +295,5 @@ describe('AgentCapabilityDiscoveryCatalog', () => {
     }
   })
 })
-
 
 

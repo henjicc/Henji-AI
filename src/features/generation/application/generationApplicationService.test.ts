@@ -50,4 +50,12 @@ describe('generationApplicationService 可执行模型解析', () => {
       requestedModelId: 'ppio-image', prompt: '图片', mediaType: 'image', options: {},
     }, ['kie'])).toThrow(/供应商尚未配置/)
   })
+
+  it('显式指定受控执行模型时提示改用画布图片能力', () => {
+    registry.registerHidden(model('controlled-image', 'fal'))
+
+    expect(() => selectExecutableGenerationModel({
+      requestedModelId: 'controlled-image', prompt: '图片', mediaType: 'image', options: {},
+    }, ['fal'])).toThrow(/画布图片能力/)
+  })
 })

@@ -1,22 +1,33 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CANVAS_NODE_TYPES } from '@/features/canvas/domain/canvasNodes'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore, type Project } from '@/stores/projectStore'
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
-import { addCanvasNode, resetCanvasApplicationStateForTests, undoCanvasChange } from './canvasApplicationService'
+import {
+  addCanvasNode,
+  addControlledCanvasNode,
+  resetCanvasApplicationStateForTests,
+  undoCanvasChange,
+} from './canvasApplicationService'
 import {
   clearCanvasProject,
   connectAssetGroupToTarget,
   disconnectAssetGroupFromTarget,
+  duplicateCanvasNode,
   groupCanvasNodes,
   ungroupCanvasNode,
   updateCanvasNode,
 } from './canvasMutationService'
 
 const projectId = 'project-3-1'
+
+beforeAll(async () => {
+  await loadRealModelsIntoRegistry()
+})
 
 function emptyProject(): Project {
   return {
@@ -108,6 +119,40 @@ describe('画布清空与解散分组', () => {
       expect(message).toContain('x、y')
       // 位置有正式通道，必须点名，否则模型只能继续在 data 里试
       expect(message).toContain('canvas.node.position')
+    })
+
+    it('固定图片工具复制后保留模型锁定，通用更新不能换成别的模型', () => {
+      const created = addControlledCanvasNode({
+        projectId,
+        nodeType: CANVAS_NODE_TYPES.imageEdit,
+        placement: { mode: 'viewport_center' },
+        data: {
+          displayName: '背景移除',
+          modelId: 'fal-pixelcut-background-removal',
+          params: {},
+          generationUi: {
+            promptMode: 'hidden',
+            modelMode: 'locked',
+            excludeParamIds: ['image'],
+          },
+        },
+      })
+      const duplicated = duplicateCanvasNode({
+        projectId,
+        nodeId: String(created.nodeId),
+        placement: { mode: 'right_of_node', anchorNodeId: String(created.nodeId) },
+      })
+      const copy = useCanvasStore.getState().nodes.find((node) => node.id === duplicated.nodeId)
+
+      expect(copy?.data).toMatchObject({
+        modelId: 'fal-pixelcut-background-removal',
+        generationUi: { promptMode: 'hidden', modelMode: 'locked' },
+      })
+      expect(() => updateCanvasNode({
+        projectId,
+        nodeId: String(duplicated.nodeId),
+        data: { modelId: 'fal-image-apps-v2-outpaint' },
+      })).toThrow('模型由能力契约锁定')
     })
   })
 

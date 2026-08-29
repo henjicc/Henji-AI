@@ -1,30 +1,16 @@
 import type { ModelTag } from '@/core/types';
+import {
+  CANVAS_IMAGE_CAPABILITY_IDS,
+  type CanvasImageCapabilityId,
+} from '@/core/canvas/imageCapabilityIds';
 import type {
   CanvasNodeType,
   NodeToolType,
 } from '../domain/canvasNodes';
 import type { MediaPortKind } from '../domain/nodePorts';
 
-export const CANVAS_IMAGE_CAPABILITY_IDS = {
-  panorama: 'image.panorama',
-  relight: 'image.relight',
-  presetRelight: 'image.preset-relight',
-  lowLightEnhancement: 'image.low-light-enhancement',
-  outpaint: 'image.outpaint',
-  productPhotography: 'image.product-photography',
-  photoRestoration: 'image.photo-restoration',
-  backgroundRemoval: 'image.background-removal',
-  multiAngle: 'image.multi-angle',
-  nineGrid: 'image.nine-grid',
-  upscale: 'image.upscale',
-  portraitTexture: 'image.portrait-texture',
-  elementEdit: 'image.element-edit',
-  layerSeparation: 'image.layer-separation',
-  gridSplit: 'image.grid-split',
-} as const;
-
-export type CanvasImageCapabilityId =
-  (typeof CANVAS_IMAGE_CAPABILITY_IDS)[keyof typeof CANVAS_IMAGE_CAPABILITY_IDS];
+export { CANVAS_IMAGE_CAPABILITY_IDS };
+export type { CanvasImageCapabilityId };
 
 export type CanvasImageCapabilityGroup =
   | 'generation'
@@ -96,6 +82,8 @@ export type CanvasImageCapabilityExecution =
       nodeType: CanvasNodeType;
       /** 能力创建节点时写入的版本化预设；只允许可序列化业务数据。 */
       initialData?: Readonly<Record<string, unknown>>;
+      /** 新建节点时使用当前语言的能力标题；未声明时保留节点定义自己的稳定默认名。 */
+      useLocalizedDisplayName?: boolean;
     }
   | {
       kind: 'local-tool';

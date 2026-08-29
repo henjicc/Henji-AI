@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS } from '@/core/canvas/imageCapabilityIds'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
   capabilityControl,
@@ -73,6 +74,86 @@ const addCanvasNode = defineApplicationCapability({
     targetRefs: [{ kind: 'canvas.node', id: output.nodeId }], count: 1, verified: false,
     evidence: [`node:${output.nodeId}`],
   }],
+})
+
+const applyCanvasImageCapability = defineApplicationCapability({
+  id: 'apply_canvas_image_capability',
+  version: 1,
+  title: '应用画布图片能力',
+  description: '对明确的图片来源节点应用已登记的画布图片能力，原子创建受控节点和连线。',
+  domain: 'canvas',
+  aliases: [
+    '使用图片工具', '应用图片能力', 'apply canvas image capability',
+    '高清放大', '图片超分', '图片打光 重打光', '暗光增强', '智能扩图',
+    '商品摄影', '照片修复', '背景移除 移除背景', '多角度视图 调整镜头角度',
+    '九宫格', '人像质感', '局部重绘', '图层拆分', '全景图',
+    'upscale relight outpaint remove background background removal multi-angle',
+    '移除这张图片的背景', '调整这张图的镜头角度',
+  ],
+  readOnly: false,
+  risk: 'R1',
+  dataClasses: ['C1'],
+  permission: 'canvas:write',
+  idempotent: false,
+  destructive: false,
+  timeoutMs: 12_000,
+  supportsPreview: false,
+  supportsUndo: true,
+  requiredScopes: ['canvas'],
+  prerequisites: ['sourceNodeId 必须引用当前项目中已有、且能输出已落地图片的节点。'],
+  acceptsRefs: ['canvas.project', 'canvas.node'],
+  producesRefs: ['canvas.node', 'canvas.edge'],
+  inputSchema: z.object({
+    projectId: z.string().min(1),
+    sourceNodeId: z.string().min(1),
+    capabilityId: z.enum(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS),
+  }).strict(),
+  outputSchema: capabilityOutputSchema({
+    projectId: z.string(),
+    kind: z.literal('canvas-node'),
+    capabilityId: z.enum(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS),
+    sourceNodeId: z.string(),
+    nodeId: z.string(),
+    edgeId: z.string(),
+    undoRef: z.string(),
+  }),
+  concurrencyKey: 'canvas',
+  resolveConcurrencyKey: (input) => `canvas:${input.projectId}`,
+  resolveTargetIds: (input) => target(input.projectId, {
+    sourceNodeId: input.sourceNodeId,
+    capabilityId: input.capabilityId,
+  }),
+  summarize: (output) => `已应用图片能力 ${output.capabilityId}，创建节点 ${output.nodeId}。`,
+  createUndo: (output) => ({ kind: 'canvas_history', token: output.undoRef }),
+  control: {
+    execution: { mode: 'immediate', cancelable: false, resultState: 'completed' },
+    impacts: [
+      { effect: 'create', entityTypes: ['canvas.node'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
+      { effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [], revisionScopes: ['canvas'], verificationRequired: true },
+      { effect: 'update', entityTypes: ['canvas.project'], propertyIds: ['canvas.project.selected_node'], revisionScopes: ['canvas'], verificationRequired: false },
+    ],
+  },
+  successEvidence: ['返回实际创建的节点、连线与单次事务撤销引用。'],
+  failureRecovery: [
+    '先用 get_canvas_project / get_canvas_node 确认 sourceNodeId 已产出已落地图片；capabilityId 只能从本能力输入 schema 的枚举中选择。',
+  ],
+  resolveObservedEffects: (_input, output) => [
+    {
+      effect: 'create', entityTypes: ['canvas.node'], propertyIds: [],
+      targetRefs: [{ kind: 'canvas.node', id: output.nodeId }], count: 1, verified: false,
+      evidence: [`node:${output.nodeId}`],
+    },
+    {
+      effect: 'create', entityTypes: ['canvas.edge'], propertyIds: [],
+      targetRefs: [{ kind: 'canvas.edge', id: output.edgeId }], count: 1, verified: false,
+      evidence: [`edge:${output.edgeId}`],
+    },
+    {
+      effect: 'update', entityTypes: ['canvas.project'], propertyIds: ['canvas.project.selected_node'],
+      targetRefs: [{ kind: 'canvas.project', id: output.projectId }], count: 1, verified: false,
+      evidence: [`selected-node:${output.nodeId}`],
+    },
+  ],
 })
 
 const addAssetToCanvas = defineApplicationCapability({
@@ -769,6 +850,7 @@ const disconnectCanvasEdge = defineApplicationCapability({
 
 export const CANVAS_MUTATION_APPLICATION_CAPABILITIES: ApplicationCapabilityDefinition[] = [
   addCanvasNode,
+  applyCanvasImageCapability,
   addAssetToCanvas,
   addGenerationResultToCanvas,
   connectCanvasNodes,

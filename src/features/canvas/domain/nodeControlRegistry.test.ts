@@ -1,12 +1,21 @@
-import { describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+
+import { beforeAll, describe, expect, it } from 'vitest'
+
+import { loadRealModelsIntoRegistry } from '@/tests/loadRealModels'
 
 import {
   getCanvasNodeSchema,
+  parseCanvasControlledNodeData,
   parseCanvasNodeData,
   parseCanvasSpecialEditorData,
   parseTrustedMediaNodeData,
   searchCanvasNodeTypes,
 } from './nodeControlRegistry'
+
+beforeAll(async () => {
+  await loadRealModelsIntoRegistry()
+})
 
 describe('nodeControlRegistry assistant contract', () => {
   it('用用户语言找到文本提示词与图片生成节点', () => {
@@ -74,5 +83,23 @@ describe('nodeControlRegistry assistant contract', () => {
     expect(() => parseCanvasSpecialEditorData('multiAngleGenNode', {
       prompt: '生成一个视角',
     })).toThrow()
+  })
+
+  it('通用节点拒绝受控模型和 generationUi，图片能力窄通道可以精确创建', () => {
+    const controlledData = {
+      modelId: 'fal-pixelcut-background-removal',
+      params: {},
+      generationUi: {
+        promptMode: 'hidden' as const,
+        modelMode: 'locked' as const,
+        excludeParamIds: ['image'],
+      },
+    }
+
+    expect(() => parseCanvasNodeData('imageNode', {
+      modelId: controlledData.modelId,
+    })).toThrow('画布图片能力')
+    expect(() => parseCanvasNodeData('imageNode', controlledData)).toThrow('受控字段')
+    expect(parseCanvasControlledNodeData('imageNode', controlledData).data).toEqual(controlledData)
   })
 })

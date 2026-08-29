@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import i18n from '@/i18n';
+import { ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS } from '@/core/canvas/imageCapabilityIds';
 import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
@@ -110,6 +111,19 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
       CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
     ]);
+  });
+
+  it('助手图片能力枚举与默认开放的画布节点能力保持完全一致，并排除本地弹窗工具', () => {
+    const assistantEligibleIds = getRegisteredCanvasImageCapabilities()
+      .filter((definition) => (
+        isCanvasImageCapabilityExecutable(definition)
+        && definition.implementation.status === 'implemented'
+        && definition.implementation.execution.kind === 'canvas-node'
+      ))
+      .map((definition) => definition.id);
+
+    expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).toEqual(assistantEligibleIds);
+    expect(ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS).not.toContain(CANVAS_IMAGE_CAPABILITY_IDS.gridSplit);
   });
 
   it('按媒体类型、发布状态和实现状态筛选同一注册源', () => {

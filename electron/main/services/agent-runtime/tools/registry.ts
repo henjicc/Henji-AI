@@ -63,6 +63,12 @@ function searchScore(
     .map((item) => item.concept)
   const supportedConcepts = categorySearchConcepts[entry.category] ?? []
   let score = text.includes(normalized) ? 100 : 0
+  // 中文自然句通常没有空格，不能指望 rawTerms 把“把这张图高清放大”切出“高清放大”。
+  // 已登记 alias 反向包含于查询时同样算精确语义命中，不改变任何准入或权限边界。
+  for (const alias of entry.aliases) {
+    const normalizedAlias = normalizeSearchValue(alias)
+    if (normalizedAlias && normalized.includes(normalizedAlias)) score += 100
+  }
   for (const term of rawTerms) {
     if (text.includes(term)) score += 10
   }

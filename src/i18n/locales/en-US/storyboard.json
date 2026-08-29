@@ -311,6 +311,9 @@
       "video": "Video",
       "audio": "Audio",
       "upload": "Upload",
+      "unsupportedFormat": "Only {{formats}} files are supported",
+      "maxSizeExceeded": "File size must not exceed {{max}} MB",
+      "constraintReadFailed": "Could not read the input image. Reconnect or upload it again",
       "videoTrim": "Trim",
       "videoTrimTitle": "Trim Video Clip",
       "videoTrimProcessing": "Processing…",
@@ -352,8 +355,119 @@
       "resultTitle": "Relighting Result"
     },
     "multiAngleGeneration": {
+      "title": "Multi-angle Views",
+      "sourceImage": "Source image",
+      "adjustAngles": "Adjust angles",
+      "executionHint": "Each view is generated independently with concurrency 2; the result group is created only after all views succeed.",
       "apiKeyRequired": "Configure your Fal API key first",
-      "resultTitle": "Multi-angle Views"
+      "providerRequiredTitle": "Fal setup required",
+      "providerRequiredMessage": "Multi-angle views run on Fal models. Configure your Fal API key first.",
+      "resultTitle": "Multi-angle Views",
+      "groupTitle": "Multi-angle Views · {{count}}",
+      "generationFailed": "Multi-angle generation failed",
+      "errors": {
+        "singleSource": "Multi-angle generation requires exactly one source image",
+        "projectMissing": "There is no canvas project available for generation",
+        "singleOutput": "A single multi-angle view must return exactly one output; received {{count}}",
+        "batchIncomplete": "The multi-angle batch did not complete"
+      },
+      "status": {
+        "notGenerated": "Not generated yet",
+        "failed": "{{success}}/{{total}} completed · {{failed}} to retry",
+        "running": "{{success}}/{{total}} completed",
+        "cached": "{{success}}/{{total}} cached",
+        "falNotConfigured": "Fal not configured"
+      }
+    },
+    "multiAngleEditor": {
+      "title": "Multi-angle Views",
+      "discardPrompt": "You have unapplied angle settings. Discard them?",
+      "keepEditing": "Keep editing",
+      "discard": "Discard changes",
+      "apply": "Apply settings",
+      "sourceAlt": "Multi-angle source image",
+      "sourceRequired": "Connect one source image to this node first",
+      "noSelection": "No view selected",
+      "customView": "Custom view {{index}}",
+      "customFluxView": "FLUX custom view {{index}}",
+      "hints": {
+        "continuous": "Drag to orbit and tilt · Scroll to change shot size",
+        "flux": "Drag to change native FLUX horizontal/vertical angles · Scroll to change Zoom",
+        "discrete": "Drag or click to snap to a complete model-supported direction"
+      },
+      "disclaimer": "The visual orbit edits model controls only; it does not represent physical focal length, exact camera angles, or spatial reconstruction accuracy.",
+      "controlMode": "Control mode",
+      "profiles": {
+        "continuous": { "title": "Continuous", "subtitle": "Model controls" },
+        "flux": { "title": "FLUX Native", "subtitle": "0–360°" },
+        "discrete": { "title": "Full Directions", "subtitle": "Nine-way snapping" }
+      },
+      "outputViews": "Output views · {{count}}/{{max}}",
+      "removeView": "Remove current view",
+      "addView": "Add view",
+      "currentContinuous": "Current view · Model controls",
+      "horizontalOrbit": "Horizontal orbit",
+      "verticalPitch": "Vertical pitch",
+      "shotZoom": "Shot size",
+      "wideAngle": "Wide-angle lens",
+      "currentFlux": "Current view · Native FLUX controls",
+      "horizontalAngle": "Horizontal angle",
+      "verticalAngle": "Vertical angle",
+      "zoom": "Zoom",
+      "discretePresets": "Available directions · Click to snap",
+      "profileNote": "Each control profile supports up to {{max}} independent requests; Qwen, full-direction, and native FLUX outputs are never mixed in one result group.",
+      "summary": "{{profile}} · {{count}} views",
+      "camera": {
+        "highPercent": "High {{value}}%",
+        "lowPercent": "Low {{value}}%",
+        "level": "Level",
+        "panorama": "Panorama",
+        "longShot": "Long shot",
+        "mediumShot": "Medium shot",
+        "nearShot": "Near shot",
+        "closeUp": "Close-up",
+        "orbitLeft": "Orbit left {{value}}°",
+        "orbitRight": "Orbit right {{value}}°",
+        "front": "Front",
+        "flux": "Horizontal {{horizontal}}° · Vertical {{vertical}}° · Zoom {{zoom}}"
+      },
+      "orbit": {
+        "ariaLabel": "Camera direction control",
+        "roleDescription": "Draggable camera orbit",
+        "left": "Left",
+        "right": "Right",
+        "high": "High",
+        "low": "Low"
+      },
+      "presets": {
+        "continuous": {
+          "three-quarter-left": "Three-quarter left",
+          "three-quarter-right": "Three-quarter right",
+          "left-side": "Left side",
+          "right-side": "Right side",
+          "top-oblique": "High oblique",
+          "bottom-oblique": "Low oblique"
+        },
+        "flux": {
+          "front": "Front",
+          "right-side": "Right side",
+          "back": "Back",
+          "left-side": "Left side",
+          "high-front": "High front",
+          "close-front": "Close front"
+        },
+        "discrete": {
+          "front": "Front",
+          "left_side": "Left side",
+          "right_side": "Right side",
+          "back": "Back",
+          "top_down": "Top-down",
+          "bottom_up": "Bottom-up",
+          "birds_eye": "Bird's-eye",
+          "three_quarter_left": "Three-quarter left",
+          "three_quarter_right": "Three-quarter right"
+        }
+      }
     },
     "upscaleGeneration": {
       "promptRequired": "Upscaling does not require a prompt",

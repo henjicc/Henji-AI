@@ -49,7 +49,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
     }, [])
 
     // 如果不显示、无配置或价格为null，则不渲染
-    if (!priceSettings.showPriceEstimate || !model || price === null) {
+    if (!priceSettings.showPriceEstimate || !model || price === null || !Number.isFinite(price)) {
         return null
     }
 
@@ -60,14 +60,18 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
         language: i18n.resolvedLanguage ?? i18n.language,
         usdToCnyRate: priceSettings.usdToCnyRate,
     }).display
+    const priceDisplayWithUnit = model.pricing.estimateMode === 'unit'
+        && model.pricing.estimateUnit
+        ? `${priceDisplay}/${model.pricing.estimateUnit}`
+        : priceDisplay
 
     if (variant === 'badge') {
         return (
             <span
                 className="inline-flex shrink-0 items-center whitespace-nowrap rounded-md border border-border-dark/60 bg-bg-dark/65 px-1.5 py-1 text-3xs leading-none text-text-muted"
-                title={`${t('priceEstimate.label')}: ${priceDisplay}`}
+                title={`${t('priceEstimate.label')}: ${priceDisplayWithUnit}`}
             >
-                {priceDisplay}
+                {priceDisplayWithUnit}
             </span>
         )
     }
@@ -76,7 +80,7 @@ const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant 
         <div className={`flex items-center gap-1.5 rounded-lg border border-border-dark/50 bg-surface-dark/50 px-3 py-1.5 text-xs text-text-muted ${UI_GLASS_ADAPTIVE_CONTROL_CLASS}`}>
             <CircleDollarSign className="w-3.5 h-3.5 flex-shrink-0" />
             <span className="whitespace-nowrap">
-                {t('priceEstimate.label')}: <span className="text-text-dark/85">{priceDisplay}</span>
+                {t('priceEstimate.label')}: <span className="text-text-dark/85">{priceDisplayWithUnit}</span>
             </span>
         </div>
     )

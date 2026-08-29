@@ -79,6 +79,17 @@ describe('多角度版本化参数契约', () => {
       ...base,
       views: [base.views[0], { ...base.views[0], viewId: 'another' }],
     })).toThrow(/控制重复/)
+
+    const flux = createDefaultMultiAngleConfig('flux-native-v1')
+    const first = flux.views[0]
+    if (first.kind !== 'flux') throw new Error('缺少 FLUX 视图')
+    expect(() => validateMultiAngleConfig({
+      ...flux,
+      views: [
+        { ...first, viewId: 'front-0', horizontalAngleDeg: 0 },
+        { ...first, viewId: 'front-360', horizontalAngleDeg: 360 },
+      ],
+    })).toThrow(/控制重复/)
   })
 
   it('三个 profile 映射各自固定 Fal 模型、端点与原生参数', () => {

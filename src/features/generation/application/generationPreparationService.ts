@@ -53,6 +53,19 @@ export class GenerationPreparationError extends Error {
   }
 }
 
+function requireDiscoverableGenerationModel(modelId: string): ModelDefinition {
+  const model = registry.getDiscoverableModel(modelId)
+  if (model) return model
+  if (registry.hasModel(modelId)) {
+    throw new GenerationPreparationError(
+      'MODEL_NOT_FOUND',
+      '该模型仅供受控画布图片能力执行，不能通过通用生成入口使用；请改用对应的画布图片能力',
+      { modelId, reason: 'controlled_execution_model' },
+    )
+  }
+  throw new GenerationPreparationError('MODEL_NOT_FOUND', '生成模型不存在', { modelId })
+}
+
 function normalizeTerms(query: string | undefined): string[] {
   return (query ?? '')
     .trim()
@@ -254,8 +267,7 @@ function schemaDigest(modelId: string, params: ParamDef[]): string {
 }
 
 export function getGenerationModelSchemaRef(modelId: string) {
-  const model = registry.getModel(modelId)
-  if (!model) throw new GenerationPreparationError('MODEL_NOT_FOUND', '生成模型不存在', { modelId })
+  const model = requireDiscoverableGenerationModel(modelId)
   return {
     catalogVersion: APPLICATION_CAPABILITY_CATALOG_VERSION,
     kind: 'operation' as const,
@@ -354,8 +366,7 @@ export function searchGenerationModels(input: GenerationModelSearchInput): Array
 }
 
 export function getGenerationModelSchema(modelId: string): Record<string, unknown> {
-  const model = registry.getModel(modelId)
-  if (!model) throw new GenerationPreparationError('MODEL_NOT_FOUND', '生成模型不存在', { modelId })
+  const model = requireDiscoverableGenerationModel(modelId)
   return {
     schemaVersion: 'generation-model-schema/v2',
     schemaRef: getGenerationModelSchemaRef(model.meta.id),
@@ -421,8 +432,7 @@ function validateDynamicConstraints(
 }
 
 export function prepareGenerationTask(input: GenerationPreparationInput): Record<string, unknown> {
-  const model = registry.getModel(input.modelId)
-  if (!model) throw new GenerationPreparationError('MODEL_NOT_FOUND', '生成模型不存在', { modelId: input.modelId })
+  const model = requireDiscoverableGenerationModel(input.modelId)
   if (model.meta.type !== input.mediaType) {
     throw new GenerationPreparationError('INVALID_INPUT', '生成媒体类型与模型能力不匹配', {
       modelId: input.modelId,

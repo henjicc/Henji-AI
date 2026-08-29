@@ -37,6 +37,7 @@ interface CanvasBatchUndo {
   beforeNodes: CanvasNode[]
   beforeEdges: CanvasEdge[]
   beforeHistory: CanvasHistoryState
+  beforeSelectedNodeId: string | null
   afterFingerprint: string
 }
 
@@ -213,6 +214,7 @@ export async function runCanvasTransaction(
     beforeNodes,
     beforeEdges,
     beforeHistory,
+    beforeSelectedNodeId,
     afterFingerprint: fingerprint(after.nodes, after.edges),
   })
   // 整批只留一条撤销记录：步骤内部各自记录的历史在这里合并。
@@ -298,6 +300,7 @@ export function undoCanvasBatch(projectId: string, undoRef: string): Record<stri
     throw new CanvasApplicationError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
   }
   canvas.setCanvasData(record.beforeNodes, record.beforeEdges, record.beforeHistory)
+  canvas.setSelectedNode(record.beforeSelectedNodeId)
   persistCanvasState()
   undos.delete(undoRef)
   return { projectId, undoRef, operation: 'batch', status: 'undone' }

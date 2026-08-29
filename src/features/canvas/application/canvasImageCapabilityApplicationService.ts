@@ -1,8 +1,10 @@
 import { createLogger } from '@/core/logging'
+import i18n from '@/i18n'
 import { useCanvasStore } from '@/stores/canvasStore'
 import { useProjectStore } from '@/stores/projectStore'
 
 import {
+  getCanvasImageCapability,
   getExecutableCanvasImageCapabilitiesForSourceNode,
   type CanvasImageCapabilityDefinition,
   type CanvasImageCapabilityId,
@@ -11,9 +13,10 @@ import {
 import type { CanvasNode } from '../domain/canvasNodes'
 import { canvasEventBus } from './canvasServices'
 import {
-  addCanvasNode,
+  addControlledCanvasNode,
   CanvasApplicationError,
   connectCanvasNodes,
+  requireCurrentCanvasProject,
 } from './canvasApplicationService'
 import { runCanvasTransaction } from './canvasBatchService'
 import { selectCanvasNode } from './canvasMutationService'
@@ -77,14 +80,22 @@ function requireExecutableCapability(
   if (!sourceNode) {
     throw new CanvasApplicationError('NOT_FOUND', '图片能力的来源节点不存在', true, { sourceNodeId })
   }
-  const capability = dependencies.getExecutableCapabilities(sourceNode)
-    .find((definition) => definition.id === capabilityId)
+  const executableCapabilities = dependencies.getExecutableCapabilities(sourceNode)
+  const capability = executableCapabilities.find((definition) => definition.id === capabilityId)
   if (!isImplementedCanvasImageCapability(capability)) {
+    const executableIds = executableCapabilities.map((definition) => definition.id)
     throw new CanvasApplicationError(
       'CAPABILITY_REJECTED',
-      '当前图片或功能状态不支持该操作',
+      executableIds.length > 0
+        ? `当前来源节点不能执行 ${capabilityId}；可执行能力：${executableIds.join('、')}`
+        : '当前来源节点没有可供图片能力使用的已落地图片；请先让该节点产出或连接一张图片',
       true,
-      { sourceNodeId, capabilityId },
+      {
+        sourceNodeId,
+        capabilityId,
+        executableCapabilityIds: executableIds,
+        requiresMaterializedImage: true,
+      },
     )
   }
   return { sourceNode, capability }
@@ -131,11 +142,16 @@ async function executeCanvasImageCapability(
       projectId,
       3,
       async () => {
-        const created = addCanvasNode({
+        const created = addControlledCanvasNode({
           projectId,
           nodeType: execution.nodeType,
           placement: { mode: 'right_of_node', anchorNodeId: sourceNodeId },
-          data: execution.initialData ? { ...execution.initialData } : undefined,
+          data: {
+            ...(execution.initialData ?? {}),
+            ...(execution.useLocalizedDisplayName
+              ? { displayName: i18n.t(capability.titleKey) }
+              : {}),
+          },
         })
         if (typeof created.nodeId !== 'string' || !created.nodeId) {
           throw new CanvasApplicationError('CAPABILITY_REJECTED', '图片能力未能创建目标节点')
@@ -228,6 +244,40 @@ export function createCanvasImageCapabilityExecutor(
 }
 
 export const executeCanvasImageCapabilityFromSource = createCanvasImageCapabilityExecutor()
+
+/** 助手原生能力的项目锚定入口；本地弹窗工具不属于可后台执行的画布写入。 */
+export async function executeCanvasImageCapabilityForProject(input: {
+  projectId: string
+  sourceNodeId: string
+  capabilityId: CanvasImageCapabilityId
+}): Promise<Extract<CanvasImageCapabilityExecutionResult, { kind: 'canvas-node' }> & { projectId: string }> {
+  requireCurrentCanvasProject(input.projectId)
+  const definition = getCanvasImageCapability(input.capabilityId)
+  if (
+    definition?.implementation.status === 'implemented'
+    && definition.implementation.execution.kind === 'local-tool'
+  ) {
+    throw new CanvasApplicationError(
+      'CAPABILITY_REJECTED',
+      '该图片能力需要用户在本地工具界面中操作，不能作为后台画布写入执行',
+      true,
+      { capabilityId: input.capabilityId },
+    )
+  }
+  const result = await executeCanvasImageCapabilityFromSource(
+    input.sourceNodeId,
+    input.capabilityId,
+  )
+  if (result.kind !== 'canvas-node') {
+    throw new CanvasApplicationError(
+      'CAPABILITY_REJECTED',
+      '该图片能力需要用户在本地工具界面中操作，不能作为后台画布写入执行',
+      true,
+      { capabilityId: input.capabilityId },
+    )
+  }
+  return { ...result, projectId: input.projectId }
+}
 
 export function resetCanvasImageCapabilityApplicationStateForTests(): void {
   activeExecutions.clear()

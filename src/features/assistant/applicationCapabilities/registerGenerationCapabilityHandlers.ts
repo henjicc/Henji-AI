@@ -63,7 +63,13 @@ function resolveGenerationInput(input: GenerationInput): ResolvedGenerationInput
     references: createMediaGeneratorPromptReferences(draft.uploadedPromptImages),
   })
 
-  const mediaType = input.mediaType ?? registry.getModel(modelId)?.meta.type
+  const selectedModel = registry.getDiscoverableModel(modelId)
+  if (!selectedModel && registry.hasModel(modelId)) {
+    throw new Error(
+      'INVALID_INPUT:该模型仅供受控画布图片能力执行，请改用 apply_canvas_image_capability',
+    )
+  }
+  const mediaType = input.mediaType ?? selectedModel?.meta.type
   if (!mediaType) throw new Error(`INVALID_INPUT:未提供 mediaType，且无法从模型 ${modelId} 推断`)
   if (!isBuiltinModelType(mediaType)) {
     throw new Error(`INVALID_INPUT:模型 ${modelId} 的类型 ${mediaType} 尚未被当前生成能力支持`)

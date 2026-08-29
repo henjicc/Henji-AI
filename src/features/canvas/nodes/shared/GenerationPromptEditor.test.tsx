@@ -50,6 +50,8 @@ vi.mock('@/components/ui', async () => {
         'data-mode': props.mode,
         'data-auto-focus': String(props.autoFocus ?? false),
         'data-layout': props.layout,
+        'data-max-characters': String(props.maxCharacters ?? ''),
+        'data-show-character-count': String(props.showCharacterCount ?? false),
         'data-outer-class': String(props.className ?? ''),
         'data-editor-class': String(props.editorClassName ?? ''),
         onMouseDown: (event: { clientX: number; clientY: number }) => {
@@ -104,6 +106,7 @@ describe('GenerationPromptEditor', () => {
         readOnly={false}
         invalid={false}
         placeholder="提示词"
+        maxCharacters={500}
         onChange={vi.fn()}
         onSubmit={vi.fn()}
         onEditEnd={vi.fn()}
@@ -119,6 +122,8 @@ describe('GenerationPromptEditor', () => {
     expect(rendered.getByRole('textbox').getAttribute('data-mode')).toBe('edit')
     expect(rendered.getByRole('textbox').getAttribute('data-auto-focus')).toBe('false')
     expect(rendered.getByRole('textbox').getAttribute('data-layout')).toBe('fill-scroll')
+    expect(rendered.getByRole('textbox').getAttribute('data-max-characters')).toBe('500')
+    expect(rendered.getByRole('textbox').getAttribute('data-show-character-count')).toBe('true')
     expect(rendered.getByRole('textbox').getAttribute('data-outer-class')).toBe(staticOuterClass)
     expect(staticOuterClass).toContain('!p-0')
     expect(staticOuterClass).not.toContain('!px-1.5')

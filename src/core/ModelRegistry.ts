@@ -237,6 +237,21 @@ export class ModelRegistry {
   }
 
   /**
+   * 获取普通产品入口可发现、可直接选择的模型。
+   *
+   * 受控执行模型仍可由固定图片工具通过 getModel() 精确解析，但不能借助已知 id
+   * 绕过模型目录、通用生成或助手能力的发现边界。
+   */
+  getDiscoverableModel(id: string): ModelDefinition | undefined {
+    return this.isModelDiscoverable(id) ? this.models.get(id) : undefined
+  }
+
+  /** 判断主 id 或别名是否属于普通产品入口可发现的模型。 */
+  isModelDiscoverable(id: string): boolean {
+    return this.models.has(id) && !this.hiddenModelEntries.has(id)
+  }
+
+  /**
    * 检查模型是否存在
    *
    * @param id - 模型 ID 或别名

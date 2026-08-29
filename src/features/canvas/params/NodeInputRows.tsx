@@ -10,6 +10,9 @@ import { NODE_ROW_GAP_CLASS } from '@/features/canvas/ui/nodeControlStyles';
 import type { VideoTrimRange } from '@/components/videoTrim/VideoTrimModal';
 import type { CanvasHistoryGroupOptions } from '@/stores/canvasStore';
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
+import {
+  resolveGenerationMediaInputConstraints,
+} from '@/features/canvas/application/generationMediaInputConstraints';
 import { MediaInputRow } from './MediaInputRow';
 import { ModelInputRow } from './ModelInputRow';
 import { NodeParamRows } from './NodeParamRows';
@@ -88,6 +91,10 @@ export function NodeInputRows({
 }: NodeInputRowsProps) {
   const { t } = useTranslation();
   const limits = useMemo(() => resolveInputLimits(modelId, values), [modelId, values]);
+  const mediaConstraints = useMemo(
+    () => resolveGenerationMediaInputConstraints(schema, excludeParamIds),
+    [excludeParamIds, schema],
+  );
 
   const mediaRows = useMemo(
     () => MEDIA_ROW_ORDER
@@ -98,9 +105,10 @@ export function NodeInputRows({
           limits[MEDIA_LIMIT_KEY[kind]].max,
           maxMediaCounts?.[kind] ?? Number.POSITIVE_INFINITY,
         ),
+        constraint: mediaConstraints[kind],
       }))
       .filter((row) => row.max > 0),
-    [acceptedMediaKinds, limits, maxMediaCounts]
+    [acceptedMediaKinds, limits, maxMediaCounts, mediaConstraints]
   );
 
   const visibleSchema = useMemo(
@@ -128,7 +136,7 @@ export function NodeInputRows({
         />
       )}
 
-      {mediaRows.map(({ kind, max }) => (
+      {mediaRows.map(({ kind, max, constraint }) => (
         <MediaInputRow
           key={kind}
           nodeId={nodeId}
@@ -137,6 +145,8 @@ export function NodeInputRows({
           maxCount={max}
           inlineValue={mediaInputs[kind] ?? []}
           onInlineChange={(next) => onMediaInputChange(kind, next)}
+          acceptedFileTypes={constraint?.accept}
+          maxFileSizeBytes={constraint?.maxSizeBytes}
           videoTrimMaxClipSeconds={kind === 'video' ? limits.videoConstraints?.trim?.maxClipSeconds : undefined}
           videoTrimMaxSizeMB={kind === 'video' ? limits.videoConstraints?.maxSizeMB : undefined}
           videoTrimRange={kind === 'video' ? videoTrimRange : undefined}

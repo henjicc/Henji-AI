@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   addGenerationResultToCanvas: vi.fn(),
   connectAssetGroupToTarget: vi.fn(),
   disconnectAssetGroupFromTarget: vi.fn(),
+  executeCanvasImageCapabilityForProject: vi.fn(),
 }))
 
 vi.mock('@/features/canvas/domain/nodeControlRegistry', () => ({
@@ -63,6 +64,9 @@ vi.mock('./generationResultCanvasApplicationService', () => ({
 }))
 vi.mock('@/features/canvas/application/canvasDownloadService', () => ({
   downloadCanvasMedia: mocks.downloadCanvasMediaFromAgent,
+}))
+vi.mock('@/features/canvas/application/canvasImageCapabilityApplicationService', () => ({
+  executeCanvasImageCapabilityForProject: mocks.executeCanvasImageCapabilityForProject,
 }))
 vi.mock('../hostContext/hostContext', () => ({
   createHostContextSnapshot: vi.fn(() => ({ scopeRevisions: { canvas: 0 } })),
@@ -134,6 +138,24 @@ describe('canvas capability handlers', () => {
 
     expect(mocks.addGenerationResultToCanvas).toHaveBeenCalledWith(input)
     expect(result).toMatchObject({ nodeId: 'node-1' })
+  })
+
+  it('图片能力处理器把稳定能力编号交给统一画布事务服务', async () => {
+    mocks.executeCanvasImageCapabilityForProject.mockResolvedValue({
+      projectId: 'project-1', kind: 'canvas-node',
+      capabilityId: 'image.background-removal', sourceNodeId: 'source-1',
+      nodeId: 'node-1', edgeId: 'edge-1', undoRef: 'undo-1',
+    })
+    const handler = registeredHandlers().get('apply_canvas_image_capability')
+    const input = {
+      projectId: 'project-1', sourceNodeId: 'source-1',
+      capabilityId: 'image.background-removal' as const,
+    }
+
+    const result = await handler?.(input, context)
+
+    expect(mocks.executeCanvasImageCapabilityForProject).toHaveBeenCalledWith(input)
+    expect(result).toMatchObject({ nodeId: 'node-1', edgeId: 'edge-1' })
   })
 
   it('定位节点时自动载入目标项目、打开画布后再聚焦', async () => {

@@ -39,12 +39,6 @@ const IMAGE_SOURCE = {
   requireMaterializedMedia: true,
 } as const;
 
-const FAL_UTILITY_GENERATION_UI = {
-  promptMode: 'hidden',
-  modelMode: 'locked',
-  excludeParamIds: ['image'],
-} as const;
-
 function falUtilityCapability(options: {
   id: CanvasImageCapabilityDefinition['id'];
   titleKey: string;
@@ -52,8 +46,9 @@ function falUtilityCapability(options: {
   group: CanvasImageCapabilityDefinition['group'];
   icon: CanvasImageCapabilityDefinition['icon'];
   order: number;
-  displayName: string;
   modelId: string;
+  promptMode?: 'optional' | 'hidden';
+  promptMaxCharacters?: number;
 }): CanvasImageCapabilityDefinition {
   return {
     id: options.id,
@@ -70,11 +65,18 @@ function falUtilityCapability(options: {
       execution: {
         kind: 'canvas-node',
         nodeType: CANVAS_NODE_TYPES.imageEdit,
+        useLocalizedDisplayName: true,
         initialData: {
-          displayName: options.displayName,
           modelId: options.modelId,
           params: {},
-          generationUi: FAL_UTILITY_GENERATION_UI,
+          generationUi: {
+            promptMode: options.promptMode ?? 'hidden',
+            modelMode: 'locked',
+            excludeParamIds: ['image'],
+            ...(options.promptMaxCharacters
+              ? { promptMaxCharacters: options.promptMaxCharacters }
+              : {}),
+          },
         },
       },
     },
@@ -176,7 +178,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     group: 'editing',
     icon: 'relight',
     order: 21,
-    displayName: 'FAL 预设重打光',
     modelId: 'fal-image-apps-v2-relighting',
   }),
   falUtilityCapability({
@@ -186,7 +187,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     group: 'enhancement',
     icon: 'relight',
     order: 22,
-    displayName: 'FAL 暗光增强',
     modelId: 'fal-control-light',
   }),
   falUtilityCapability({
@@ -196,8 +196,9 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     group: 'editing',
     icon: 'panorama',
     order: 23,
-    displayName: 'FAL 智能扩图',
     modelId: 'fal-image-apps-v2-outpaint',
+    promptMode: 'optional',
+    promptMaxCharacters: 500,
   }),
   falUtilityCapability({
     id: CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
@@ -206,7 +207,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     group: 'generation',
     icon: 'portraitTexture',
     order: 24,
-    displayName: 'FAL 商品摄影',
     modelId: 'fal-image-apps-v2-product-photography',
   }),
   falUtilityCapability({
@@ -216,7 +216,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     group: 'enhancement',
     icon: 'portraitTexture',
     order: 25,
-    displayName: 'FAL 照片修复',
     modelId: 'fal-image-apps-v2-photo-restoration',
   }),
   falUtilityCapability({
@@ -226,7 +225,6 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     group: 'editing',
     icon: 'elementEdit',
     order: 26,
-    displayName: 'FAL 背景移除',
     modelId: 'fal-pixelcut-background-removal',
   }),
   {

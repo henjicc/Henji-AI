@@ -313,7 +313,7 @@ export function validateMultiAngleConfig(value: unknown): MultiAngleConfigV1 {
       ? `${view.yawControlDeg}/${view.verticalControl}/${view.proximity}/${view.wideAngle}`
       : view.kind === 'discrete'
         ? view.preset
-        : `${view.horizontalAngleDeg}/${view.verticalAngleDeg}/${view.zoom}`
+        : `${view.horizontalAngleDeg === 360 ? 0 : view.horizontalAngleDeg}/${view.verticalAngleDeg}/${view.zoom}`
     if (controls.has(signature)) throw new Error(`多角度视图控制重复：${view.label}`)
     controls.add(signature)
   }
@@ -444,14 +444,4 @@ export function createMultiAngleCommitContract(
       },
     })),
   }
-}
-
-export function summarizeMultiAngleConfig(value: unknown): string {
-  const config = normalizeMultiAngleConfig(value)
-  const profileLabel = config.controlProfile === 'continuous-v1'
-    ? '连续控制'
-    : config.controlProfile === 'discrete-v1'
-      ? '离散方位'
-      : 'FLUX 原生角度'
-  return `${profileLabel} · ${config.views.length} 个视图`
 }

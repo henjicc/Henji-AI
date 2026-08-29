@@ -26,6 +26,7 @@ export interface GenerationPromptEditorProps {
   readOnly: boolean
   invalid: boolean
   placeholder: string
+  maxCharacters?: number
   label?: string
   onChange: (document: PromptDocumentV1) => void
   onSubmit: () => void
@@ -45,6 +46,7 @@ export function GenerationPromptEditor({
   readOnly,
   invalid,
   placeholder,
+  maxCharacters,
   label,
   onChange,
   onSubmit,
@@ -149,6 +151,8 @@ export function GenerationPromptEditor({
           layout="fill-scroll"
           ariaLabel={placeholder}
           placeholder={placeholder}
+          maxCharacters={maxCharacters}
+          showCharacterCount={typeof maxCharacters === 'number'}
           readOnly={readOnly}
           submitShortcut="mod-enter"
           error={invalid}
