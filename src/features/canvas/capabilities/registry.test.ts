@@ -83,6 +83,7 @@ describe('画布图片能力注册表', () => {
         CANVAS_IMAGE_CAPABILITY_IDS.upscale,
         CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
         CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
+        CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
         CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
       ]);
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode, {
@@ -95,6 +96,7 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
       CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
       CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
+      CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
     ]);
   });
 
@@ -131,6 +133,7 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
       CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
       CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
+      CANVAS_IMAGE_CAPABILITY_IDS.layerSeparation,
     ]);
   });
 

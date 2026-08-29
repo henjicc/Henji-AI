@@ -118,6 +118,12 @@ test('全景结果有独立的真实 Electron 球面交互场景', () => {
   assert.equal(scene.writesUserData, true)
 })
 
+test('图片能力工具条有响应式、键盘、禁用原因和相邻节点场景', () => {
+  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-image-capability-toolbar')
+  assert.ok(scene)
+  assert.equal(scene.writesUserData, true)
+})
+
 test('图片打光有独立的节点、编辑、保存重开场景', () => {
   const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-relight-editor')
   assert.ok(scene)

@@ -328,7 +328,7 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     },
     availability: {
       releaseStage: 'experimental',
-      defaultEnabled: false,
+      defaultEnabled: true,
       unavailableReasonKey: 'imageCapabilities.unavailable.layerSeparationValidation',
     },
     modelPolicy: LAYER_SEPARATION_MODEL_POLICY,

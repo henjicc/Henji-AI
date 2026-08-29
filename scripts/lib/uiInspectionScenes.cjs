@@ -267,11 +267,158 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     return { panoramaSource, projectId }
   }
 
+  async function setupCanvasImageCapabilityToolbar(page) {
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    await page.waitForTimeout(350)
+
+    const viewportWidth = await page.evaluate(() => window.innerWidth)
+    const expectedInlineIds = viewportWidth >= 1360
+      ? ['image.element-edit', 'image.upscale', 'image.relight', 'image.panorama']
+      : viewportWidth >= 1080
+        ? ['image.element-edit', 'image.upscale', 'image.relight']
+        : viewportWidth >= 760
+          ? ['image.element-edit', 'image.upscale']
+          : ['image.element-edit']
+    const inlineIds = await page
+      .locator('[data-image-capability-placement="inline"]:visible')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-image-capability-id')))
+    if (JSON.stringify(inlineIds) !== JSON.stringify(expectedInlineIds)) {
+      throw new Error(`图片能力直达项不符合响应式排序：${JSON.stringify({ viewportWidth, inlineIds, expectedInlineIds })}`)
+    }
+    if (await page.locator('[role="separator"][aria-orientation="vertical"]:visible').count() !== 1) {
+      throw new Error('图片能力与基础动作之间必须且只能有一条分隔线')
+    }
+
+    const moreButton = page.locator('[data-image-capability-more="true"]:visible')
+    await moreButton.focus()
+    await page.keyboard.press('Enter')
+    const menu = page.locator('[data-image-capability-menu="true"]:visible')
+    await menu.waitFor({ state: 'visible', timeout: 8000 })
+    const menuItems = menu.getByRole('menuitem')
+    if (await menuItems.count() !== 9 - expectedInlineIds.length) {
+      throw new Error('更多菜单未完整承接非直达能力')
+    }
+    for (const groupName of [/生成与变换|Generate & Transform/i, /结构化|Structured Output/i, /本地处理|Local Processing/i]) {
+      await menu.getByText(groupName).waitFor({ state: 'visible', timeout: 8000 })
+    }
+    if (!(await menu.getByText(/实验|Experimental/i).count())) {
+      throw new Error('实验能力缺少明确状态标识')
+    }
+    const firstMenuItem = menuItems.first()
+    if (!(await firstMenuItem.evaluate((element) => element === document.activeElement))) {
+      throw new Error('更多菜单打开后未聚焦首个菜单项')
+    }
+    await page.keyboard.press('End')
+    if (!(await menuItems.last().evaluate((element) => element === document.activeElement))) {
+      throw new Error('End 未移动到最后一个菜单项')
+    }
+    await page.keyboard.press('Home')
+    if (!(await firstMenuItem.evaluate((element) => element === document.activeElement))) {
+      throw new Error('Home 未返回第一个菜单项')
+    }
+    await page.keyboard.press('Escape')
+    await menu.waitFor({ state: 'hidden', timeout: 8000 })
+    await page.waitForTimeout(240)
+    if (!(await moreButton.evaluate((element) => element === document.activeElement))) {
+      throw new Error('Escape 关闭菜单后未把焦点还给触发按钮')
+    }
+
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    await page.evaluate(async (targetProjectId) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      if (!nodes.some((node) => node.id === '__ui_empty_image_source')) {
+        nodes.push({
+          id: '__ui_empty_image_source', type: 'uploadNode', position: { x: 100, y: 470 },
+          width: 360, height: 180, measured: { width: 360, height: 180 }, style: { width: 360, height: 180 },
+          data: {
+            displayName: '等待图片的节点', imageUrl: null, previewImageUrl: null,
+            aspectRatio: '2:1', isGenerating: false,
+          },
+        })
+      }
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, viewport_json = ? WHERE id = ?',
+        [nodes.length, JSON.stringify(nodes), JSON.stringify({ x: 330, y: 80, zoom: 0.65 }), targetProjectId]
+      )
+    }, projectId)
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const emptyNode = page.locator('.react-flow__node[data-id="__ui_empty_image_source"]')
+    await emptyNode.waitFor({ state: 'visible', timeout: 12000 })
+    await emptyNode.click()
+    await page.locator('[data-image-capability-more="true"]:visible').click()
+    const disabledMenu = page.locator('[data-image-capability-menu="true"]:visible')
+    await disabledMenu.waitFor({ state: 'visible', timeout: 8000 })
+    const disabledItems = disabledMenu.getByRole('menuitem')
+    const disabledStates = await disabledItems.evaluateAll((elements) => (
+      elements.map((element) => element.getAttribute('aria-disabled'))
+    ))
+    if (disabledStates.length !== 9 || disabledStates.some((state) => state !== 'true')) {
+      throw new Error(`等待图片节点的能力禁用状态不完整：${JSON.stringify(disabledStates)}`)
+    }
+    await disabledMenu.getByText(/请先等待图片完成或上传图片|Wait for the image to finish/i)
+      .first().waitFor({ state: 'visible', timeout: 8000 })
+    await disabledItems.first().evaluate((element) => element.click())
+    if (!(await disabledMenu.count())) throw new Error('点击禁用能力不应关闭菜单')
+    await page.keyboard.press('Escape')
+    await disabledMenu.waitFor({ state: 'hidden', timeout: 8000 })
+
+    const reopenedSource = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await reopenedSource.click()
+    const upscaleAction = page.locator('[data-image-capability-id="image.upscale"][data-image-capability-placement="inline"]:visible')
+    await upscaleAction.click()
+    const upscaleShell = page.locator('[data-generation-node-id][data-generation-node-model-id="fal-ai-topaz-image-upscale"]').last()
+    await upscaleShell.waitFor({ state: 'visible', timeout: 12000 })
+    const upscaleNode = upscaleShell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
+    if (!(await upscaleNode.evaluate((element) => element.classList.contains('selected')))) {
+      throw new Error('工具条直达能力创建后未选中新节点')
+    }
+    if (await page.locator('.react-flow__edge').count() < 1) {
+      throw new Error('工具条直达能力未创建来源连线')
+    }
+
+    await reopenedSource.click()
+    await page.locator('[data-image-capability-more="true"]:visible').click()
+    const finalMenu = page.locator('[data-image-capability-menu="true"]:visible')
+    await finalMenu.waitFor({ state: 'visible', timeout: 8000 })
+    const bounds = await finalMenu.evaluate((element) => {
+      const scrollRegion = element.closest('[data-panel-scroll-region]')
+      const rect = (scrollRegion ?? element).getBoundingClientRect()
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        scrollHeight: scrollRegion?.scrollHeight ?? 0,
+        clientHeight: scrollRegion?.clientHeight ?? 0,
+      }
+    })
+    if (bounds.left < 0 || bounds.right > bounds.viewportWidth || bounds.top < 0 || bounds.bottom > bounds.viewportHeight) {
+      throw new Error(`更多菜单超出视口：${JSON.stringify(bounds)}`)
+    }
+    if (bounds.clientHeight <= 0 || bounds.scrollHeight < bounds.clientHeight) {
+      throw new Error(`更多菜单滚动区域无效：${JSON.stringify(bounds)}`)
+    }
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasPanoramaToolbar(page) {
     const fixture = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
-    const panoramaAction = page.getByRole('button', { name: /^720°全景$/i }).filter({ visible: true }).first()
+    let panoramaAction = page.getByRole('button', { name: /^720°全景$/i }).filter({ visible: true }).first()
+    if (!(await panoramaAction.count())) {
+      await page.locator('[data-image-capability-more="true"]:visible').click()
+      panoramaAction = page.getByRole('menuitem', { name: /720°全景/i }).filter({ visible: true }).first()
+    }
     await panoramaAction.waitFor({ state: 'visible', timeout: 8000 })
     await panoramaAction.click()
     const generatedShell = page.locator('[data-generation-node-id][data-generation-node-model-id]').filter({ hasText: /720°全景/ }).last()
@@ -296,8 +443,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
-    const relightAction = page.getByRole('button', { name: /^(打光|Relight)$/i })
+    let relightAction = page.getByRole('button', { name: /^(打光|Relight)$/i })
       .filter({ visible: true }).first()
+    if (!(await relightAction.count())) {
+      await page.locator('[data-image-capability-more="true"]:visible').click()
+      relightAction = page.getByRole('menuitem', { name: /^(打光|Relight)/i })
+        .filter({ visible: true }).first()
+    }
     await relightAction.waitFor({ state: 'visible', timeout: 8000 })
     await relightAction.click()
 
@@ -1676,6 +1828,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       },
     },
     { id: 'canvas-projects', surface: '画布', name: '画布-项目列表', setup: setupCanvas },
+    {
+      id: 'canvas-image-capability-toolbar',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-图片能力工具条信息架构',
+      setup: setupCanvasImageCapabilityToolbar,
+    },
     {
       id: 'canvas-panorama-toolbar',
       surface: '画布',

@@ -158,6 +158,7 @@
   },
   "imageCapabilities": {
     "groups": {
+      "transformation": "生成与变换",
       "generation": "生成",
       "enhancement": "增强",
       "editing": "编辑",
@@ -166,8 +167,12 @@
     },
     "unavailable": {
       "planned": "功能正在准备中",
+      "sourceNotReady": "请先等待图片完成或上传图片",
       "experimental": "实验能力可能存在结果偏差",
       "layerSeparationValidation": "真实图层质量与计费尚待受控验证"
+    },
+    "status": {
+      "experimental": "实验"
     },
     "items": {
       "panorama": {
