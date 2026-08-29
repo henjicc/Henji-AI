@@ -24,12 +24,12 @@ describe('canvasStore 全景图片连线', () => {
     ], [], { past: [], future: [] })
   })
 
-  it('程序化创建的全景查看与 3D 环境连线都落到标准图片输入行', () => {
+  it('程序化创建的全景查看连到左侧单一端口，3D 环境仍落到标准图片输入行', () => {
     useCanvasStore.getState().addEdge('generator', 'panorama')
     useCanvasStore.getState().addEdge('panorama', 'camera-stage')
 
     expect(useCanvasStore.getState().edges).toEqual([
-      expect.objectContaining({ source: 'generator', target: 'panorama', targetHandle: 'param:__image' }),
+      expect.objectContaining({ source: 'generator', target: 'panorama', targetHandle: 'target' }),
       expect.objectContaining({ source: 'panorama', target: 'camera-stage', targetHandle: 'param:__image' }),
     ])
   })

@@ -29,6 +29,41 @@ afterEach(() => {
 });
 
 describe('PanoramaViewerPanel', () => {
+  it('没有图片时在预览区提示用户连接上传节点', () => {
+    render(
+      <PanoramaViewerPanel
+        resource={{ status: 'idle', displayUrl: '' }}
+        viewMode="sphere"
+        viewportAspectRatio="16:9"
+        cameraView={{ yaw: 0, pitch: 0, fov: 70 }}
+        currentViewRef={createRef<PanoramaCameraView>()}
+        frozenPreviewUrl={null}
+        renderSphere={false}
+        isGenerating={false}
+        generationError={null}
+        isCapturing={false}
+        hasWebglFailure={false}
+        captureRef={{ current: null }}
+        onRetry={vi.fn()}
+        onRequestSphere={vi.fn()}
+        onInteractionStart={vi.fn()}
+        onInteractionEnd={vi.fn()}
+        onOpenImmersiveViewer={vi.fn()}
+        onViewModeChange={vi.fn()}
+        onViewportAspectRatioChange={vi.fn()}
+        onCameraViewChangeEnd={vi.fn()}
+        onSphereFramePresented={vi.fn()}
+        onCapture={vi.fn()}
+        onFrozenPreviewReady={vi.fn()}
+        onContextLost={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('viewer.panorama.emptyTitle')).toBeTruthy();
+    expect(screen.getByText('viewer.panorama.emptyDescription')).toBeTruthy();
+    expect(screen.getByTestId('viewer-controls')).toBeTruthy();
+  });
+
   it('释放球面渲染资源后保留最后视角的冻结画面', () => {
     render(
       <PanoramaViewerPanel

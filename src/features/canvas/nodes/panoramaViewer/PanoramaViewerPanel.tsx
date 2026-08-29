@@ -1,7 +1,7 @@
 import { useState, type MutableRefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
+import { UiEmpty, UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
 import type {
   PanoramaCameraView,
   PanoramaViewMode,
@@ -172,6 +172,15 @@ export function PanoramaViewerPanel({
 
         {viewMode === 'sphere' && resource.status === 'loading' ? (
           <UiLoading message={t('viewer.panorama.loading')} className="h-full text-text-muted" />
+        ) : null}
+
+        {resource.status === 'idle' && !isGenerating && !generationError ? (
+          <UiEmpty
+            size="sm"
+            title={t('viewer.panorama.emptyTitle')}
+            description={t('viewer.panorama.emptyDescription')}
+            className="h-full px-6 text-text-muted"
+          />
         ) : null}
 
         {resource.status === 'error' ? (

@@ -452,6 +452,8 @@
       "spherical": "球面",
       "flat": "平面",
       "flatAlt": "全景平面图",
+      "emptyTitle": "请上传一张全景图片",
+      "emptyDescription": "添加上传节点后，从左侧连接到这里",
       "loading": "正在加载全景图…",
       "loadErrorTitle": "无法加载全景图",
       "loadErrorMessage": "可以重试、切换到平面查看，或下载原图。",

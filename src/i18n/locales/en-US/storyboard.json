@@ -452,6 +452,8 @@
       "spherical": "Sphere",
       "flat": "Flat",
       "flatAlt": "Flat panorama image",
+      "emptyTitle": "Upload a panorama image",
+      "emptyDescription": "Add an Upload node, then connect it here from the left",
       "loading": "Loading panorama…",
       "loadErrorTitle": "Could not load panorama",
       "loadErrorMessage": "Retry, switch to the flat view, or download the original image.",

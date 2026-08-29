@@ -58,7 +58,7 @@ describe('720°全景节点定义', () => {
     });
   });
 
-  it('全景查看节点可独立添加，并用标准图片行接收上传或上游图片', () => {
+  it('全景查看节点可独立添加，并用左侧单一图片端口接收上游图片', () => {
     const definition = canvasNodeDefinitions[CANVAS_NODE_TYPES.panoramaViewer];
 
     expect(definition).toMatchObject({
@@ -74,7 +74,7 @@ describe('720°全景节点定义', () => {
         sourceHandle: true,
         targetHandle: true,
         manualSource: true,
-        targetHandleMode: 'rows',
+        targetHandleMode: 'legacy',
       },
       media: { kind: 'image', role: 'result' },
       ports: { source: { emits: 'image' }, target: { accepts: ['image'] } },
@@ -94,7 +94,6 @@ describe('720°全景节点定义', () => {
       previewImageUrl: null,
       aspectRatio: '2:1',
       resultKind: 'panorama',
-      mediaInputs: {},
       panoramaProjectionMode: 'strict-2:1',
       panoramaPreviewImageUrl: null,
       viewMode: 'sphere',

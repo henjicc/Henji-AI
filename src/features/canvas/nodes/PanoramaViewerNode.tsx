@@ -29,7 +29,6 @@ import {
 } from '@/features/canvas/domain/panoramaViewer';
 import { getSocketColor } from '@/features/canvas/domain/socketTypes';
 import { PanoramaViewerPanel } from '@/features/canvas/nodes/panoramaViewer/PanoramaViewerPanel';
-import { MediaInputRow } from '@/features/canvas/params/MediaInputRow';
 import { useCanvasContentLod } from '@/features/canvas/nodes/shared/useCanvasContentLod';
 import { NodeHeader, NODE_HEADER_FLOATING_POSITION_CLASS } from '@/features/canvas/ui/NodeHeader';
 import {
@@ -49,7 +48,6 @@ const logger = createLogger('features.canvas.panoramaViewerNode');
 const DEFAULT_NODE_WIDTH = 448;
 const MIN_NODE_WIDTH = 320;
 const CONTROL_AREA_HEIGHT = 48;
-const MEDIA_INPUT_AREA_HEIGHT = 44;
 
 function resolvePersistedPanoramaPreview(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
@@ -73,9 +71,11 @@ export const PanoramaViewerNode = memo(({
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const openImageViewer = useCanvasStore((state) => state.openImageViewer);
   const isSelectedById = useCanvasStore((state) => state.selectedNodeId === id);
-  const hasSourceConnections = useCanvasStore(
-    (state) => getMainPortConnectionFlags(state.edges).get(id)?.hasMainSource ?? false,
+  const connectionFlags = useCanvasStore(
+    (state) => getMainPortConnectionFlags(state.edges).get(id),
   );
+  const hasTargetConnections = connectionFlags?.hasMainTarget ?? false;
+  const hasSourceConnections = connectionFlags?.hasMainSource ?? false;
   const isContentLodLow = useCanvasContentLod();
   const hasInlineLease = usePanoramaInlineViewerStore((state) => state.activeNodeId === id);
   const claimInlineLease = usePanoramaInlineViewerStore((state) => state.claim);
@@ -103,12 +103,10 @@ export const PanoramaViewerNode = memo(({
     areMediaOutputListsEqual,
   );
   const upstreamSource = upstreamImages[0]?.url ?? null;
-  const inlineImages = data.mediaInputs?.image ?? [];
-  const inlineSource = inlineImages[0] ?? null;
   const lastUpstreamSourceRef = useRef<string | null>(null);
 
   const isActive = Boolean(selected) || isSelectedById;
-  const source = upstreamSource || inlineSource || data.imageUrl || data.previewImageUrl || '';
+  const source = upstreamSource || data.imageUrl || data.previewImageUrl || '';
   const resource = usePanoramaImageResource(
     source,
     Boolean(source),
@@ -119,7 +117,7 @@ export const PanoramaViewerNode = memo(({
   const resolvedWidth = Math.max(MIN_NODE_WIDTH, typeof width === 'number' ? width : DEFAULT_NODE_WIDTH);
   const viewportRatio = parsePanoramaViewportAspectRatio(data.viewportAspectRatio);
   const viewportHeight = Math.round(resolvedWidth / viewportRatio);
-  const resolvedHeight = viewportHeight + CONTROL_AREA_HEIGHT + MEDIA_INPUT_AREA_HEIGHT;
+  const resolvedHeight = viewportHeight + CONTROL_AREA_HEIGHT;
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
   const title = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.panoramaViewer, data),
@@ -140,23 +138,12 @@ export const PanoramaViewerNode = memo(({
     }
     if (previousUpstreamSource && data.imageUrl === previousUpstreamSource) {
       updateNodeData(id, {
-        imageUrl: inlineSource,
-        previewImageUrl: inlineSource,
+        imageUrl: null,
+        previewImageUrl: null,
         panoramaPreviewImageUrl: null,
       }, { skipHistory: true });
     }
-  }, [data.imageUrl, id, inlineSource, updateNodeData, upstreamImages, upstreamSource]);
-
-  const handleInlineImagesChange = useCallback((images: string[]): void => {
-    const imageUrl = images[0] ?? null;
-    updateNodeData(id, {
-      mediaInputs: { ...data.mediaInputs, image: images },
-      imageUrl,
-      previewImageUrl: imageUrl,
-      panoramaPreviewImageUrl: null,
-      panoramaProjectionMode: 'strict-2:1',
-    });
-  }, [data.mediaInputs, id, updateNodeData]);
+  }, [data.imageUrl, id, updateNodeData, upstreamImages, upstreamSource]);
 
   const persistPanoramaPreview = useCallback((previewDataUrl: string): void => {
     const revision = previewPersistRevisionRef.current + 1;
@@ -484,45 +471,40 @@ export const PanoramaViewerNode = memo(({
       />
 
       <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[inherit]">
-        <div className="min-h-0 flex-1">
-          <PanoramaViewerPanel
-            resource={resource}
-            viewMode={data.viewMode}
-            viewportAspectRatio={data.viewportAspectRatio}
-            cameraView={normalizePanoramaCameraView(data.cameraView ?? PANORAMA_DEFAULT_CAMERA_VIEW)}
-            currentViewRef={currentViewRef}
-            frozenPreviewUrl={frozenPreviewUrl}
-            renderSphere={renderSphere}
-            isGenerating={data.isGenerating === true}
-            generationError={generationError}
-            isCapturing={isCapturing}
-            hasWebglFailure={hasWebglFailure}
-            captureRef={captureRef}
-            onRetry={() => setRetryRevision((revision) => revision + 1)}
-            onRequestSphere={requestSphere}
-            onInteractionStart={activateSphere}
-            onInteractionEnd={finishSphereInteraction}
-            onOpenImmersiveViewer={openImmersiveViewer}
-            onViewModeChange={handleViewModeChange}
-            onViewportAspectRatioChange={handleViewportAspectRatioChange}
-            onCameraViewChangeEnd={handleCameraViewChangeEnd}
-            onSphereFramePresented={handleSphereFramePresented}
-            onCapture={() => void handleCapture()}
-            onFrozenPreviewReady={handleFrozenPreviewReady}
-            onContextLost={handleContextLost}
-          />
-        </div>
-        <div className="shrink-0 border-t border-veil-soft px-2 py-1.5">
-          <MediaInputRow
-            nodeId={id}
-            mediaKind="image"
-            label={t('node.mediaRow.image')}
-            maxCount={1}
-            inlineValue={inlineImages}
-            onInlineChange={handleInlineImagesChange}
-          />
-        </div>
+        <PanoramaViewerPanel
+          resource={resource}
+          viewMode={data.viewMode}
+          viewportAspectRatio={data.viewportAspectRatio}
+          cameraView={normalizePanoramaCameraView(data.cameraView ?? PANORAMA_DEFAULT_CAMERA_VIEW)}
+          currentViewRef={currentViewRef}
+          frozenPreviewUrl={frozenPreviewUrl}
+          renderSphere={renderSphere}
+          isGenerating={data.isGenerating === true}
+          generationError={generationError}
+          isCapturing={isCapturing}
+          hasWebglFailure={hasWebglFailure}
+          captureRef={captureRef}
+          onRetry={() => setRetryRevision((revision) => revision + 1)}
+          onRequestSphere={requestSphere}
+          onInteractionStart={activateSphere}
+          onInteractionEnd={finishSphereInteraction}
+          onOpenImmersiveViewer={openImmersiveViewer}
+          onViewModeChange={handleViewModeChange}
+          onViewportAspectRatioChange={handleViewportAspectRatioChange}
+          onCameraViewChangeEnd={handleCameraViewChangeEnd}
+          onSphereFramePresented={handleSphereFramePresented}
+          onCapture={() => void handleCapture()}
+          onFrozenPreviewReady={handleFrozenPreviewReady}
+          onContextLost={handleContextLost}
+        />
       </div>
+      <Handle
+        type="target"
+        id="target"
+        position={Position.Left}
+        className={`${NODE_PORT_NODE_CLASS} ${hasTargetConnections ? NODE_PORT_VISIBLE_CLASS : ''}`}
+        style={{ background: getSocketColor('IMAGE'), left: 0, top: '50%', transform: 'translate(-50%, -50%)' }}
+      />
       <Handle
         type="source"
         id="source"
