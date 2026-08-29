@@ -18,6 +18,8 @@ interface PanoramaViewerPanelProps {
   viewMode: PanoramaViewMode;
   viewportAspectRatio: PanoramaViewportAspectRatio;
   cameraView: PanoramaCameraView;
+  currentViewRef: MutableRefObject<PanoramaCameraView | null>;
+  frozenPreviewUrl: string | null;
   renderSphere: boolean;
   isGenerating: boolean;
   generationError: string | null;
@@ -40,6 +42,8 @@ export function PanoramaViewerPanel({
   viewMode,
   viewportAspectRatio,
   cameraView,
+  currentViewRef,
+  frozenPreviewUrl,
   renderSphere,
   isGenerating,
   generationError,
@@ -61,6 +65,9 @@ export function PanoramaViewerPanel({
   const isReady = resource.status === 'ready';
   const isSphereAvailable = isReady && resource.isEquirectangular;
   const showFlat = viewMode === 'flat' || !renderSphere;
+  const staticPreviewUrl = viewMode === 'sphere' && frozenPreviewUrl
+    ? frozenPreviewUrl
+    : resource.displayUrl;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
@@ -93,6 +100,7 @@ export function PanoramaViewerPanel({
               resetRevision={resetRevision}
               interactionLabel={t('viewer.panorama.directInteractionLabel')}
               initialView={cameraView}
+              currentViewRef={currentViewRef}
               captureRef={captureRef}
               onInteractionStart={onInteractionStart}
               onViewChangeEnd={onCameraViewChangeEnd}
@@ -101,12 +109,15 @@ export function PanoramaViewerPanel({
           </UiErrorBoundary>
         ) : null}
 
-        {showFlat && resource.displayUrl ? (
+        {showFlat && staticPreviewUrl ? (
           <img
-            src={resource.displayUrl}
+            src={staticPreviewUrl}
             alt={t('viewer.panorama.flatAlt')}
+            data-panorama-frozen-preview={
+              viewMode === 'sphere' && frozenPreviewUrl ? 'true' : undefined
+            }
             className={`h-full w-full select-none ${
-              viewMode === 'flat'
+              viewMode === 'flat' || frozenPreviewUrl
               || resource.status !== 'ready'
               || !resource.isEquirectangular
                 ? 'object-contain'
@@ -155,7 +166,7 @@ export function PanoramaViewerPanel({
       <PanoramaViewerControls
         viewMode={viewMode}
         viewportAspectRatio={viewportAspectRatio}
-        canCapture={renderSphere && isSphereAvailable && !isGenerating && !generationError}
+        canCapture={isSphereAvailable && !hasWebglFailure && !isGenerating && !generationError}
         isCapturing={isCapturing}
         onViewModeChange={onViewModeChange}
         onViewportAspectRatioChange={onViewportAspectRatioChange}

@@ -1278,6 +1278,15 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       throw new Error('节点内环视错误带动了 ReactFlow 视口')
     }
 
+    // 指针移出后释放 WebGL，但节点必须冻结在刚才停下的视角，不能回退到原始全景图。
+    await page.mouse.move(20, 80)
+    await primarySphere.waitFor({ state: 'detached', timeout: 8000 })
+    await primarySurface.locator('img[data-panorama-frozen-preview="true"]')
+      .waitFor({ state: 'visible', timeout: 8000 })
+    if (await activeInlineCanvases.count()) throw new Error('指针移出全景节点后仍保留内嵌 WebGL Canvas')
+    await primarySurface.hover()
+    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+
     const flatButton = resultNode.getByRole('button', { name: /^(平面|Flat)$/i })
     const sphereButton = resultNode.getByRole('button', { name: /^(球面|Sphere)$/i })
     await flatButton.click()

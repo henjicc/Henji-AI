@@ -72,9 +72,11 @@ export const PanoramaViewerNode = memo(({
   const claimInlineLease = usePanoramaInlineViewerStore((state) => state.claim);
   const releaseInlineLease = usePanoramaInlineViewerStore((state) => state.release);
   const captureRef = useRef<PanoramaCaptureCurrentView | null>(null);
+  const currentViewRef = useRef<PanoramaCameraView | null>(null);
   const [retryRevision, setRetryRevision] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasWebglFailure, setHasWebglFailure] = useState(false);
+  const [frozenPreviewUrl, setFrozenPreviewUrl] = useState<string | null>(null);
 
   const isActive = Boolean(selected) || isSelectedById;
   const source = data.imageUrl || data.previewImageUrl || '';
@@ -99,15 +101,17 @@ export const PanoramaViewerNode = memo(({
   }, [id, requestSphere, setSelectedNode]);
 
   useEffect(() => {
-    if (isActive && !hasWebglFailure && !isContentLodLow && data.viewMode === 'sphere') {
+    const sphereUnavailable = hasWebglFailure || isContentLodLow || data.viewMode !== 'sphere';
+    if (isActive && !sphereUnavailable) {
       claimInlineLease(id);
-    } else {
+    } else if (sphereUnavailable) {
       releaseInlineLease(id);
     }
   }, [claimInlineLease, data.viewMode, hasWebglFailure, id, isActive, isContentLodLow, releaseInlineLease]);
 
   useEffect(() => {
     setHasWebglFailure(false);
+    setFrozenPreviewUrl(null);
   }, [source]);
 
   useEffect(() => () => releaseInlineLease(id), [id, releaseInlineLease]);
@@ -145,12 +149,42 @@ export const PanoramaViewerNode = memo(({
     updateNodeData(id, { cameraView: normalized });
   }, [data.cameraView, id, updateNodeData]);
 
+  const freezeInlineView = useCallback(() => {
+    if (!hasInlineLease) return;
+    const currentView = currentViewRef.current;
+    if (currentView) handleCameraViewChangeEnd(currentView);
+    const capture = captureRef.current;
+    if (capture) {
+      const previewShortEdge = Math.min(720, Math.max(2, viewportHeight));
+      const previewUrl = capture(resolvePanoramaCaptureSize(
+        data.viewportAspectRatio,
+        previewShortEdge,
+      ));
+      if (previewUrl) setFrozenPreviewUrl(previewUrl);
+    }
+    releaseInlineLease(id);
+  }, [data.viewportAspectRatio, handleCameraViewChangeEnd, hasInlineLease, id, releaseInlineLease, viewportHeight]);
+
   const handleCapture = useCallback(async (): Promise<void> => {
     if (isCapturing) return;
-    const capture = captureRef.current;
-    if (!capture) return;
     setIsCapturing(true);
     try {
+      if (!captureRef.current) {
+        requestSphere();
+        await new Promise<void>((resolve) => {
+          const deadline = performance.now() + 2_000;
+          const waitForCapture = (): void => {
+            if (captureRef.current || performance.now() >= deadline) {
+              resolve();
+              return;
+            }
+            window.requestAnimationFrame(waitForCapture);
+          };
+          waitForCapture();
+        });
+      }
+      const capture = captureRef.current;
+      if (!capture) throw new Error('未能恢复全景视角渲染');
       const dataUrl = capture(resolvePanoramaCaptureSize(data.viewportAspectRatio));
       if (!dataUrl) throw new Error('未获取到当前全景视角');
       await commitPanoramaViewSnapshot({
@@ -170,7 +204,7 @@ export const PanoramaViewerNode = memo(({
     } finally {
       setIsCapturing(false);
     }
-  }, [data.viewportAspectRatio, id, isCapturing, t]);
+  }, [data.viewportAspectRatio, id, isCapturing, requestSphere, t]);
 
   const openImmersiveViewer = useCallback(() => {
     if (!source) return;
@@ -202,8 +236,11 @@ export const PanoramaViewerNode = memo(({
       }`}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}
-      onPointerLeave={() => {
-        if (!isActive) releaseInlineLease(id);
+      onPointerLeave={freezeInlineView}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node | null)) {
+          freezeInlineView();
+        }
       }}
     >
       <NodeHeader
@@ -219,6 +256,8 @@ export const PanoramaViewerNode = memo(({
         viewMode={data.viewMode}
         viewportAspectRatio={data.viewportAspectRatio}
         cameraView={normalizePanoramaCameraView(data.cameraView ?? PANORAMA_DEFAULT_CAMERA_VIEW)}
+        currentViewRef={currentViewRef}
+        frozenPreviewUrl={frozenPreviewUrl}
         renderSphere={renderSphere}
         isGenerating={data.isGenerating === true}
         generationError={generationError}

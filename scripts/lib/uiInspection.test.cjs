@@ -120,6 +120,7 @@ test('全景结果有节点内交互、五档比例、截图、上下文降级�
   for (const marker of [
     'data-panorama-viewer-node-id',
     'data-panorama-inline-surface',
+    'data-panorama-frozen-preview',
     'data-image-capability-more',
     'panoramaViewerNode',
     'exportImageNode',

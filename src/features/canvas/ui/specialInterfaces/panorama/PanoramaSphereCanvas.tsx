@@ -28,6 +28,7 @@ interface PanoramaCameraControlsProps {
   resetRevision: number;
   interactionLabel: string;
   initialView?: PanoramaCameraView;
+  currentViewRef?: MutableRefObject<PanoramaCameraView | null>;
   onInteractionStart?: () => void;
   onViewChangeEnd?: (view: PanoramaCameraView) => void;
 }
@@ -36,6 +37,7 @@ function PanoramaCameraControls({
   resetRevision,
   interactionLabel,
   initialView,
+  currentViewRef,
   onInteractionStart,
   onViewChangeEnd,
 }: PanoramaCameraControlsProps): null {
@@ -59,6 +61,7 @@ function PanoramaCameraControls({
       perspectiveCamera.rotation.set(pitchRef.current, yawRef.current, 0);
       perspectiveCamera.fov = clampPanoramaFov(perspectiveCamera.fov);
       perspectiveCamera.updateProjectionMatrix();
+      if (currentViewRef) currentViewRef.current = readView();
       invalidate();
     };
 
@@ -157,7 +160,7 @@ function PanoramaCameraControls({
       if (wheelCommitTimerRef.current !== null) window.clearTimeout(wheelCommitTimerRef.current);
       wheelCommitTimerRef.current = null;
     };
-  }, [camera, gl, interactionLabel, invalidate, onInteractionStart, onViewChangeEnd, readView]);
+  }, [camera, currentViewRef, gl, interactionLabel, invalidate, onInteractionStart, onViewChangeEnd, readView]);
 
   useEffect(() => {
     const perspectiveCamera = camera as PerspectiveCamera;
@@ -168,8 +171,9 @@ function PanoramaCameraControls({
     perspectiveCamera.rotation.order = 'YXZ';
     perspectiveCamera.rotation.set(nextView.pitch, nextView.yaw, 0);
     perspectiveCamera.updateProjectionMatrix();
+    if (currentViewRef) currentViewRef.current = nextView;
     invalidate();
-  }, [camera, initialView, invalidate, resetRevision]);
+  }, [camera, currentViewRef, initialView, invalidate, resetRevision]);
 
   return null;
 }
@@ -323,6 +327,7 @@ interface PanoramaSphereCanvasProps {
   resetRevision: number;
   interactionLabel: string;
   initialView?: PanoramaCameraView;
+  currentViewRef?: MutableRefObject<PanoramaCameraView | null>;
   captureRef?: MutableRefObject<PanoramaCaptureCurrentView | null>;
   onInteractionStart?: () => void;
   onViewChangeEnd?: (view: PanoramaCameraView) => void;
@@ -334,6 +339,7 @@ export function PanoramaSphereCanvas({
   resetRevision,
   interactionLabel,
   initialView,
+  currentViewRef,
   captureRef,
   onInteractionStart,
   onViewChangeEnd,
@@ -356,6 +362,7 @@ export function PanoramaSphereCanvas({
           resetRevision={resetRevision}
           interactionLabel={interactionLabel}
           initialView={initialView}
+          currentViewRef={currentViewRef}
           onInteractionStart={onInteractionStart}
           onViewChangeEnd={onViewChangeEnd}
         />
