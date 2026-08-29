@@ -115,6 +115,15 @@ const MISSING_TYPE_FIXTURES = {
       },
     },
   },
+  panoramaViewerNode: {
+    data: {
+      displayName: '全景查看', imageUrl: null, previewImageUrl: null, aspectRatio: '2:1',
+      isSizeManuallyAdjusted: false, resultKind: 'panorama', viewMode: 'sphere',
+      viewportAspectRatio: '16:9', cameraView: { yaw: 0, pitch: 0, fov: 70 },
+    },
+    width: 448,
+    height: 300,
+  },
   exportImageNode: {
     data: {
       displayName: '图片结果', imageUrl: null, previewImageUrl: null, aspectRatio: '1:1',

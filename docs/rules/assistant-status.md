@@ -40,7 +40,7 @@
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：
 
 - **判据 1（广度）**：`storeActionCoverage.test.ts` 的 `GAP_BASELINE = 0`，且断言是
-  `gaps.length <= GAP_BASELINE`——**当前实际缺口为 0**。25/25 个 store 全部建账，
+  `gaps.length <= GAP_BASELINE`——**当前实际缺口为 0**。26/26 个 store 全部建账，
   人在界面上能做的每一件事助手都能做。三维 11 项、画布 5 项缺口已全部归零。
   （该文件的长注释里有 `0 → 2`、`2 → 8` 这类**中间态**数字，是任务推进过程的记录，不是现值；
   以文件末尾的常量和断言为准。）
@@ -69,6 +69,10 @@ Responses 或 Chat Completions，预制模型不再要求用户理解协议；De
 放弃都是组件内会话编排，持久业务结果仍归画布节点与派生媒体服务，因此六项动作以可验证的 excluded
 边界建账，不伪造助手逐像素操作。`maskEditor` 同步登记到盲区清单：它只持有面板内位图草稿，确认后
 的蒙版引用由画布节点持久化；这次登记消除了覆盖门禁盲点，但没有扩大助手权限，也没有新增 gap。
+
+2026-08-29 全景节点内嵌 WebGL 租约补入第 26 份正式 StoreLedger：`claim` / `release` 只负责限制
+同时挂载的 GPU 上下文数量，不表达用户业务意图，也不参与工程持久化；相机视角仍由画布节点数据保存。
+两项动作以 `derived` 边界排除，没有扩大助手权限，也没有新增 gap。
 
 验证层（详见 [testing.md](testing.md) 第四节）：
 

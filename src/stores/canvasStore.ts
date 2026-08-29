@@ -56,6 +56,7 @@ import {
   migrateStoryboardGenerationData,
   migrateGenerationPromptData,
   migrateExportImageResultKind,
+  migratePanoramaViewerData,
   migrateLegacyGenerationDisplayName,
   migrateLegacyTargetHandle,
   resetTransientNodeRuntimeState,
@@ -288,13 +289,14 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         return null;
       }
 
-      const definition = nodeCatalog.getDefinition(node.type as CanvasNodeType);
+      const normalizedType = node.type as CanvasNodeType;
+      const definition = nodeCatalog.getDefinition(normalizedType);
       const mergedData = {
         ...definition.createDefaultData(),
         ...(node.data as Partial<CanvasNodeData>),
       } as CanvasNodeData;
 
-      if (node.type === CANVAS_NODE_TYPES.storyboardSplit) {
+      if (normalizedType === CANVAS_NODE_TYPES.storyboardSplit) {
         const frames = (mergedData as { frames?: StoryboardFrameItem[] }).frames ?? [];
         const firstFrameAspectRatio = frames.find((frame) => typeof frame.aspectRatio === 'string')
           ?.aspectRatio;
@@ -335,75 +337,79 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
       }
 
       if (
-        node.type === CANVAS_NODE_TYPES.imageEdit
-        || node.type === CANVAS_NODE_TYPES.panoramaGen
-        || node.type === CANVAS_NODE_TYPES.relightGen
-        || node.type === CANVAS_NODE_TYPES.upscaleGen
-        || node.type === CANVAS_NODE_TYPES.portraitTextureGen
-        || node.type === CANVAS_NODE_TYPES.elementEditGen
-        || node.type === CANVAS_NODE_TYPES.layerSeparationGen
-        || node.type === CANVAS_NODE_TYPES.storyboardGen
+        normalizedType === CANVAS_NODE_TYPES.imageEdit
+        || normalizedType === CANVAS_NODE_TYPES.panoramaGen
+        || normalizedType === CANVAS_NODE_TYPES.relightGen
+        || normalizedType === CANVAS_NODE_TYPES.upscaleGen
+        || normalizedType === CANVAS_NODE_TYPES.portraitTextureGen
+        || normalizedType === CANVAS_NODE_TYPES.elementEditGen
+        || normalizedType === CANVAS_NODE_TYPES.layerSeparationGen
+        || normalizedType === CANVAS_NODE_TYPES.storyboardGen
       ) {
         migrateGenerationNodeData(mergedData as DynamicValueMap);
       }
 
       if (
-        node.type === CANVAS_NODE_TYPES.imageEdit
-        || node.type === CANVAS_NODE_TYPES.panoramaGen
-        || node.type === CANVAS_NODE_TYPES.relightGen
-        || node.type === CANVAS_NODE_TYPES.multiAngleGen
-        || node.type === CANVAS_NODE_TYPES.upscaleGen
-        || node.type === CANVAS_NODE_TYPES.portraitTextureGen
-        || node.type === CANVAS_NODE_TYPES.elementEditGen
-        || node.type === CANVAS_NODE_TYPES.layerSeparationGen
-        || node.type === CANVAS_NODE_TYPES.videoGen
-        || node.type === CANVAS_NODE_TYPES.audioGen
-        || node.type === CANVAS_NODE_TYPES.textProcessing
+        normalizedType === CANVAS_NODE_TYPES.imageEdit
+        || normalizedType === CANVAS_NODE_TYPES.panoramaGen
+        || normalizedType === CANVAS_NODE_TYPES.relightGen
+        || normalizedType === CANVAS_NODE_TYPES.multiAngleGen
+        || normalizedType === CANVAS_NODE_TYPES.upscaleGen
+        || normalizedType === CANVAS_NODE_TYPES.portraitTextureGen
+        || normalizedType === CANVAS_NODE_TYPES.elementEditGen
+        || normalizedType === CANVAS_NODE_TYPES.layerSeparationGen
+        || normalizedType === CANVAS_NODE_TYPES.videoGen
+        || normalizedType === CANVAS_NODE_TYPES.audioGen
+        || normalizedType === CANVAS_NODE_TYPES.textProcessing
       ) {
         migrateGenerationPromptData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.panoramaGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.panoramaGen) {
         migratePanoramaGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.relightGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.relightGen) {
         migrateRelightGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.multiAngleGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.multiAngleGen) {
         migrateMultiAngleGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.upscaleGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.upscaleGen) {
         migrateUpscaleGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.portraitTextureGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.portraitTextureGen) {
         migratePortraitTextureGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.elementEditGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.elementEditGen) {
         migrateElementEditGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.layerSeparationGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.layerSeparationGen) {
         migrateLayerSeparationGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.layerStackResult) {
+      if (normalizedType === CANVAS_NODE_TYPES.layerStackResult) {
         migrateLayerStackResultData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.storyboardGen) {
+      if (normalizedType === CANVAS_NODE_TYPES.storyboardGen) {
         migrateStoryboardGenerationData(mergedData as DynamicValueMap);
       }
 
-      if (node.type === CANVAS_NODE_TYPES.exportImage) {
+      if (normalizedType === CANVAS_NODE_TYPES.exportImage) {
         if (!Object.prototype.hasOwnProperty.call(node.data, 'resultKind')) {
           (mergedData as DynamicValueMap).resultKind = 'image';
         }
         migrateExportImageResultKind(mergedData as DynamicValueMap);
+      }
+
+      if (normalizedType === CANVAS_NODE_TYPES.panoramaViewer) {
+        migratePanoramaViewerData(mergedData as DynamicValueMap);
       }
 
       if ('aspectRatio' in mergedData && !mergedData.aspectRatio) {
@@ -411,21 +417,22 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
       }
 
       migrateLegacyGenerationDisplayName(
-        node.type as CanvasNodeType,
+        normalizedType,
         mergedData as DynamicValueMap
       );
 
       // 后台任务不会跨应用重启恢复，统一清理节点内持久化的瞬时运行态。
       resetTransientNodeRuntimeState(
-        node.type as CanvasNodeType,
+        normalizedType,
         mergedData as DynamicValueMap
       );
 
-      return {
+      const normalizedNode: CanvasNode = {
         ...node,
-        type: node.type as CanvasNodeType,
+        type: normalizedType,
         data: mergedData,
       };
+      return normalizedNode;
     })
     .filter((node): node is CanvasNode => Boolean(node));
 }

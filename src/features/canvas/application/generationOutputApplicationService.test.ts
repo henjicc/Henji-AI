@@ -66,7 +66,10 @@ function emptyProject(nodes: CanvasNode[]): Project {
   };
 }
 
-function setupCanvas(resultKind: 'image' | 'panorama' = 'image'): {
+function setupCanvas(
+  resultKind: 'image' | 'panorama' = 'image',
+  explicitResultNodeType?: CanvasNode['type'],
+): {
   source: CanvasNode;
   placeholder: CanvasNode;
 } {
@@ -74,9 +77,12 @@ function setupCanvas(resultKind: 'image' | 'panorama' = 'image'): {
     displayName: '生成节点',
   });
   source.id = 'source-node';
-  const placeholder = canvasNodeFactory.createNode(CANVAS_NODE_TYPES.exportImage, { x: 420, y: 0 }, {
+  const resultNodeType = explicitResultNodeType ?? (resultKind === 'panorama'
+    ? CANVAS_NODE_TYPES.panoramaViewer
+    : CANVAS_NODE_TYPES.exportImage);
+  const placeholder = canvasNodeFactory.createNode(resultNodeType, { x: 420, y: 0 }, {
     displayName: '生成结果',
-    resultKind,
+    ...(resultNodeType === CANVAS_NODE_TYPES.layerStackResult ? {} : { resultKind }),
     isGenerating: true,
     generationStartedAt: 100,
   });
@@ -188,7 +194,7 @@ describe('generationOutputApplicationService', () => {
     const result = await commitCanvasGenerationOutputs({
       sourceNodeId: 'source-node',
       placeholderNodeId: 'placeholder-node',
-      resultNodeType: CANVAS_NODE_TYPES.exportImage,
+      resultNodeType: CANVAS_NODE_TYPES.panoramaViewer,
       contract: value,
       completionId: 'panorama-completion',
       persistOutput: async (_mediaType, source) => imagePatch(source, '2:1'),
@@ -199,6 +205,7 @@ describe('generationOutputApplicationService', () => {
 
     expect(result).toMatchObject({ resultNodeIds: ['placeholder-node'], groupNodeId: null });
     expect(useCanvasStore.getState().nodes).toHaveLength(2);
+    expect(useCanvasStore.getState().nodes[1].type).toBe(CANVAS_NODE_TYPES.panoramaViewer);
     expect(useCanvasStore.getState().nodes[1].data).toMatchObject({
       resultKind: 'panorama',
       imageUrl: '/managed/result-1.png',
@@ -486,6 +493,7 @@ describe('generationOutputApplicationService', () => {
       angle: { control: { yawControlDeg: 90 } },
     });
 
+    setupCanvas('image', CANVAS_NODE_TYPES.layerStackResult);
     const layerContract = contract(2, 'layer-stack');
     layerContract.resultKind = 'layer-stack';
     layerContract.outputs.forEach((item, index) => {
@@ -499,7 +507,7 @@ describe('generationOutputApplicationService', () => {
     await expect(commitCanvasGenerationOutputs({
       sourceNodeId: 'source-node',
       placeholderNodeId: 'placeholder-node',
-      resultNodeType: CANVAS_NODE_TYPES.exportImage,
+      resultNodeType: CANVAS_NODE_TYPES.layerStackResult,
       contract: layerContract,
       persistOutput: vi.fn(),
     })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
@@ -507,7 +515,7 @@ describe('generationOutputApplicationService', () => {
     const layerResult = await commitCanvasGenerationOutputs({
       sourceNodeId: 'source-node',
       placeholderNodeId: 'placeholder-node',
-      resultNodeType: CANVAS_NODE_TYPES.exportImage,
+      resultNodeType: CANVAS_NODE_TYPES.layerStackResult,
       contract: layerContract,
       completionId,
       preparedLayerStack: layerStackDocument(completionId),

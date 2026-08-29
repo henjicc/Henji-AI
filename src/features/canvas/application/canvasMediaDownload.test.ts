@@ -83,7 +83,7 @@ describe('canvasMediaDownload', () => {
     mocks.savePanoramaImageSourceToDirectory.mockResolvedValue('D:/downloads/node-panorama.jpg')
     mocks.saveImageSourceToDirectory.mockResolvedValue('D:/downloads/node-panorama.jpg')
     const targets = resolveNodeDownloadTargets([
-      node('panorama', CANVAS_NODE_TYPES.exportImage, {
+      node('panorama', CANVAS_NODE_TYPES.panoramaViewer, {
         imageUrl: 'D:/result.jpg',
         resultKind: 'panorama',
       }),
@@ -112,7 +112,7 @@ describe('canvasMediaDownload', () => {
   it('取消全景另存为时不编码或落盘中间文件', async () => {
     mocks.saveDialog.mockResolvedValue(null)
     const target = resolveNodeDownloadTargets([
-      node('panorama', CANVAS_NODE_TYPES.exportImage, {
+      node('panorama', CANVAS_NODE_TYPES.panoramaViewer, {
         imageUrl: 'D:/result.png',
         resultKind: 'panorama',
       }),
@@ -127,7 +127,7 @@ describe('canvasMediaDownload', () => {
     mocks.saveDialog.mockResolvedValue('D:/downloads/panorama.png')
     mocks.savePanoramaImageSourceToPath.mockResolvedValue('D:/downloads/panorama.png')
     const target = resolveNodeDownloadTargets([
-      node('panorama', CANVAS_NODE_TYPES.exportImage, {
+      node('panorama', CANVAS_NODE_TYPES.panoramaViewer, {
         imageUrl: 'D:/result.png',
         resultKind: 'panorama',
       }),

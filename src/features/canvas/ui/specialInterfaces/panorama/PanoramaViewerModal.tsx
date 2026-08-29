@@ -212,7 +212,11 @@ export function PanoramaViewerModal({
             event="panorama.viewer.webgl.failed"
             title={t('viewer.panorama.webglError')}
           >
-            <PanoramaSphereCanvas image={resource.image} resetRevision={resetRevision} />
+            <PanoramaSphereCanvas
+              image={resource.image}
+              resetRevision={resetRevision}
+              interactionLabel={t('viewer.panorama.directInteractionLabel')}
+            />
           </UiErrorBoundary>
         ) : null}
 

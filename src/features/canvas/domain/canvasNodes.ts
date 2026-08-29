@@ -7,12 +7,18 @@ import type {
   CanvasGenerationOutputStrategy,
 } from './generationOutputs';
 import type { LayerStackDocumentV1 } from './layerStack';
+import type {
+  PanoramaCameraView,
+  PanoramaViewMode,
+  PanoramaViewportAspectRatio,
+} from './panoramaViewer';
 
 export const CANVAS_NODE_TYPES = {
   universalUpload: 'universalUploadNode',
   upload: 'uploadNode',
   imageEdit: 'imageNode',
   panoramaGen: 'panoramaGenNode',
+  panoramaViewer: 'panoramaViewerNode',
   relightGen: 'relightGenNode',
   multiAngleGen: 'multiAngleGenNode',
   upscaleGen: 'upscaleGenNode',
@@ -147,7 +153,7 @@ export type LegacyExportImageNodeResultKind =
   | 'storyboardFrameEdit';
 
 export type ExportImageNodeResultKind =
-  | CanvasImageResultKind
+  | 'image'
   | LegacyExportImageNodeResultKind;
 
 export const CANVAS_IMAGE_VIEWER_MODES = ['image', 'panorama'] as const;
@@ -278,6 +284,16 @@ export interface PanoramaGenerationNodeData extends ImageEditNodeData {
   fixedSemanticParams: DynamicValueMap;
   /** 默认可编辑提示词只自动写入一次；用户清空后不会再次回填。 */
   defaultPromptVersion?: 'panorama-user-default-v1';
+}
+
+export interface PanoramaViewerNodeData extends NodeImageData {
+  resultKind: 'panorama';
+  /** 节点内显示方式；不改变源图严格 2:1 的等距柱状投影语义。 */
+  viewMode: PanoramaViewMode;
+  /** 只决定观察窗口与视角截图构图，不能用于全景源图下载或 GPano 判定。 */
+  viewportAspectRatio: PanoramaViewportAspectRatio;
+  /** 拖拽过程中保持本地状态，只在交互结束时低频写回。 */
+  cameraView: PanoramaCameraView;
 }
 
 export interface UpscaleGenerationNodeData extends ImageEditNodeData {
@@ -479,6 +495,7 @@ export type CanvasNodeData =
   | AssetGroupNodeData
   | ImageEditNodeData
   | PanoramaGenerationNodeData
+  | PanoramaViewerNodeData
   | MultiAngleGenerationNodeData
   | UpscaleGenerationNodeData
   | PortraitTextureGenerationNodeData
@@ -564,6 +581,12 @@ export function isPanoramaGenerationNode(
   node: CanvasNode | null | undefined
 ): node is Node<PanoramaGenerationNodeData, typeof CANVAS_NODE_TYPES.panoramaGen> {
   return node?.type === CANVAS_NODE_TYPES.panoramaGen;
+}
+
+export function isPanoramaViewerNode(
+  node: CanvasNode | null | undefined
+): node is Node<PanoramaViewerNodeData, typeof CANVAS_NODE_TYPES.panoramaViewer> {
+  return node?.type === CANVAS_NODE_TYPES.panoramaViewer;
 }
 
 export function isUpscaleGenerationNode(

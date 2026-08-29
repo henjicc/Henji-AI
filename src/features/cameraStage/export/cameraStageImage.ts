@@ -1,4 +1,8 @@
 import { createLogger } from '@/core/logging'
+import {
+  flipWebglRgbaRows,
+  webglRgbaToPngDataUrl,
+} from '@/core/media/webglCaptureImage'
 import { persistSceneScreenshot, type CameraStageFrameResult } from './cameraStageScreenshot'
 import type { StageCaptureFn } from '../scene/StageCaptureBridge'
 
@@ -29,16 +33,7 @@ export function flipRgbaRows(
   width: number,
   height: number,
 ): Uint8ClampedArray {
-  const rowBytes = width * 4
-  if (pixels.byteLength !== rowBytes * height) {
-    throw new Error('3D 镜头静态帧像素长度与目标尺寸不一致')
-  }
-  const flipped = new Uint8ClampedArray(pixels.byteLength)
-  for (let row = 0; row < height; row += 1) {
-    const sourceOffset = (height - row - 1) * rowBytes
-    flipped.set(pixels.subarray(sourceOffset, sourceOffset + rowBytes), row * rowBytes)
-  }
-  return flipped
+  return flipWebglRgbaRows(pixels, width, height)
 }
 
 export function rgbaToPngDataUrl(
@@ -46,15 +41,7 @@ export function rgbaToPngDataUrl(
   width: number,
   height: number,
 ): string {
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const context = canvas.getContext('2d')
-  if (!context) throw new Error('3D 镜头静态帧编码画布初始化失败')
-  const imageData = context.createImageData(width, height)
-  imageData.data.set(flipRgbaRows(pixels, width, height))
-  context.putImageData(imageData, 0, 0)
-  return canvas.toDataURL('image/png')
+  return webglRgbaToPngDataUrl(pixels, width, height)
 }
 
 export async function captureCameraStageImageDataUrl(

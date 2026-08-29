@@ -109,13 +109,28 @@ test('GPT Image 2 遮罩在生成页与画布都有定向视觉场景', () => {
   assert.equal(canvasScene.writesUserData, true)
 })
 
-test('全景结果有独立的真实 Electron 球面交互场景', () => {
+test('全景结果有节点内交互、五档比例、截图、上下文降级与单租约的真实 Electron 场景', () => {
   const toolbarScene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-panorama-toolbar')
   const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-panorama-viewer')
   assert.ok(toolbarScene)
   assert.equal(toolbarScene.writesUserData, true)
   assert.ok(scene)
   assert.equal(scene.writesUserData, true)
+  const source = String(scene.setup)
+  for (const marker of [
+    'data-panorama-viewer-node-id',
+    'data-panorama-inline-surface',
+    'data-image-capability-more',
+    'panoramaViewerNode',
+    'exportImageNode',
+    'snapshotNodeId',
+    'webglcontextlost',
+    'expectedRatioLabels',
+    "viewportAspectRatio !== '4:3'",
+    'activeInlineCanvases.count() > 1',
+  ]) {
+    assert.equal(source.includes(marker), true, `全景 Reality 场景缺少关键验收：${marker}`)
+  }
 })
 
 test('图片能力工具条有响应式、键盘、禁用原因和相邻节点场景', () => {

@@ -108,6 +108,9 @@ export interface CanvasImageCapabilityPartition {
 export function resolveCanvasImageCapabilityActionsForSourceNode(
   sourceNode: CanvasNode,
 ): readonly CanvasImageCapabilityAction[] {
+  if (getNodeDefinition(sourceNode.type).capabilities.toolbarImageCapabilities === false) {
+    return []
+  }
   const outputs = getNodeMediaOutputs(sourceNode.type, sourceNode.data)
   const declaredKind = resolveNodeSourceMediaKind(sourceNode.type, sourceNode.data)
   const mediaRole = getNodeDefinition(sourceNode.type).media?.role

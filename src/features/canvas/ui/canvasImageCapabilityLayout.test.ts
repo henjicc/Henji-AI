@@ -92,6 +92,30 @@ describe('图片能力工具条响应式容量', () => {
     expect(resolveCanvasImageCapabilityActionsForSourceNode(generator)).toEqual([])
   })
 
+  it('专属全景查看节点不把图片派生能力重复塞进顶部工具条', () => {
+    const panoramaViewer: CanvasNode = {
+      id: 'panorama-viewer',
+      type: CANVAS_NODE_TYPES.panoramaViewer,
+      position: { x: 0, y: 0 },
+      data: {
+        ...canvasNodeDefinitions[CANVAS_NODE_TYPES.panoramaViewer].createDefaultData(),
+        imageUrl: '/managed/panorama.png',
+        previewImageUrl: '/managed/panorama-preview.webp',
+      },
+    }
+
+    expect(resolveCanvasImageCapabilityActionsForSourceNode(panoramaViewer)).toEqual([])
+    expect(resolveCanvasImageCapabilityActionsForSourceNode({
+      ...panoramaViewer,
+      id: 'ordinary-result',
+      type: CANVAS_NODE_TYPES.exportImage,
+      data: {
+        ...canvasNodeDefinitions[CANVAS_NODE_TYPES.exportImage].createDefaultData(),
+        imageUrl: '/managed/result.png',
+      },
+    }).length).toBeGreaterThan(0)
+  })
+
   it('完全不适用的非图片节点不显示图片能力', () => {
     const textNode: CanvasNode = {
       id: 'text-source',

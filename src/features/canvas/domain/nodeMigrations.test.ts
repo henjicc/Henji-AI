@@ -15,6 +15,7 @@ import {
   migrateUpscaleGenerationData,
   migrateLayerSeparationGenerationData,
   migrateLayerStackResultData,
+  migratePanoramaViewerData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
 import {
@@ -27,14 +28,14 @@ beforeAll(async () => {
 });
 
 describe('migrateExportImageResultKind', () => {
-  it('保留全景与合法旧来源语义', () => {
+  it('普通图片不再承载全景语义，只保留合法来源语义', () => {
     const panorama: DynamicValueMap = { resultKind: 'panorama' };
     const storyboard: DynamicValueMap = { resultKind: 'storyboardGenOutput' };
 
     migrateExportImageResultKind(panorama);
     migrateExportImageResultKind(storyboard);
 
-    expect(panorama.resultKind).toBe('panorama');
+    expect(panorama.resultKind).toBe('image');
     expect(storyboard.resultKind).toBe('storyboardGenOutput');
   });
 
@@ -47,6 +48,34 @@ describe('migrateExportImageResultKind', () => {
 
     expect(missing.resultKind).toBe('image');
     expect(invalid.resultKind).toBe('image');
+  });
+});
+
+describe('全景查看结果迁移', () => {
+  it('恢复专属节点固定结果语义，并归一化显示比例与相机状态', () => {
+    const data: DynamicValueMap = {
+      resultKind: 'image',
+      viewMode: 'unknown',
+      viewportAspectRatio: '2:1',
+      cameraView: {
+        yaw: Number.NaN,
+        pitch: 99,
+        fov: 999,
+      },
+    };
+
+    migratePanoramaViewerData(data);
+
+    expect(data).toMatchObject({
+      resultKind: 'panorama',
+      viewMode: 'sphere',
+      viewportAspectRatio: '16:9',
+      cameraView: {
+        yaw: 0,
+        fov: 90,
+      },
+    });
+    expect((data.cameraView as DynamicValueMap).pitch).toBeLessThan(Math.PI / 2);
   });
 });
 

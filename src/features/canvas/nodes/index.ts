@@ -12,6 +12,7 @@ import { GroupNode } from './GroupNode';
 import { AssetGroupNode } from './AssetGroupNode';
 import { ImageEditNode } from './ImageEditNode';
 import { PanoramaGenerationNode } from './PanoramaGenerationNode';
+import { PanoramaViewerNode } from './PanoramaViewerNode';
 import { RelightGenerationNode } from './RelightGenerationNode';
 import { MultiAngleGenerationNode } from './MultiAngleGenerationNode';
 import { UpscaleGenerationNode } from './UpscaleGenerationNode';
@@ -74,6 +75,7 @@ export const nodeTypes: NodeTypes = {
   assetGroupNode: withNodePaintFrame(AssetGroupNode),
   imageNode: withNodePaintFrame(ImageEditNode, { bottom: 60 }),
   panoramaGenNode: withNodePaintFrame(PanoramaGenerationNode, { bottom: 60 }),
+  panoramaViewerNode: withNodePaintFrame(PanoramaViewerNode),
   relightGenNode: withNodePaintFrame(RelightGenerationNode, { bottom: 60 }),
   multiAngleGenNode: withNodePaintFrame(MultiAngleGenerationNode, { bottom: 60 }),
   upscaleGenNode: withNodePaintFrame(UpscaleGenerationNode, { bottom: 60 }),
@@ -109,6 +111,7 @@ export {
   AssetGroupNode,
   ImageEditNode,
   PanoramaGenerationNode,
+  PanoramaViewerNode,
   RelightGenerationNode,
   MultiAngleGenerationNode,
   UpscaleGenerationNode,

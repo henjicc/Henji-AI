@@ -1169,9 +1169,36 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         'SELECT nodes_json FROM storyboard_projects WHERE id = ? LIMIT 1',
         [payload.projectId]
       )
-      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]').map((node) => (
-        node.id === '__ui_panorama_result' ? { ...node, hidden: false } : node
-      ))
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]').map((node) => {
+        if (node.id !== '__ui_panorama_result') return node
+        const { height: _height, measured: _measured, ...rest } = node
+        return {
+          ...rest,
+          type: 'panoramaViewerNode',
+          hidden: false,
+          width: 448,
+          style: { width: 448 },
+          data: {
+            ...node.data,
+            displayName: '全景查看',
+            resultKind: 'panorama',
+            viewMode: 'sphere',
+            viewportAspectRatio: '16:9',
+            cameraView: { yaw: 0, pitch: 0, fov: 70 },
+          },
+        }
+      })
+      const primary = nodes.find((node) => node.id === '__ui_panorama_result')
+      if (!primary) throw new Error('全景节点场景缺少专用结果 fixture')
+      if (!nodes.some((node) => node.id === '__ui_panorama_result_secondary')) {
+        nodes.push({
+          ...primary,
+          id: '__ui_panorama_result_secondary',
+          hidden: false,
+          position: { x: 2060, y: 900 },
+          data: { ...primary.data, displayName: '全景查看·次节点' },
+        })
+      }
       await window.henjiNative.db.execute(
         'UPDATE storyboard_projects SET nodes_json = ?, viewport_json = ? WHERE id = ?',
         [JSON.stringify(nodes), JSON.stringify({ x: -920, y: -510, zoom: 0.82 }), payload.projectId]
@@ -1179,19 +1206,125 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     }, { projectId })
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     const resultNode = page.locator('.react-flow__node[data-id="__ui_panorama_result"]')
+    const secondaryResultNode = page.locator('.react-flow__node[data-id="__ui_panorama_result_secondary"]')
     await resultNode.waitFor({ state: 'visible', timeout: 12000 })
-    await resultNode.getByRole('button', { name: /进入全景预览|Open panorama viewer/i }).click()
+    await secondaryResultNode.waitFor({ state: 'visible', timeout: 12000 })
+    const inlineViewer = resultNode.locator('[data-panorama-viewer-node-id="__ui_panorama_result"]')
+    const secondaryInlineViewer = secondaryResultNode.locator('[data-panorama-viewer-node-id="__ui_panorama_result_secondary"]')
+    await inlineViewer.waitFor({ state: 'visible', timeout: 12000 })
+    await secondaryInlineViewer.waitFor({ state: 'visible', timeout: 12000 })
+
+    // 选中时只保留通用工具条，全景派生能力和“更多”不能重复出现。
+    await resultNode.click({ position: { x: 20, y: 20 } })
+    await page.waitForTimeout(320)
+    if (await page.locator('[data-image-capability-more="true"]:visible').count()) {
+      throw new Error('全景查看节点顶部仍显示图片能力“更多”')
+    }
+    if (await page.locator('[data-image-capability-id]:visible').count()) {
+      throw new Error('全景查看节点顶部仍重复显示图片派生能力')
+    }
+
+    const activeInlineCanvases = page.locator(
+      '[data-panorama-inline-surface] [data-panorama-surface="sphere"] canvas'
+    )
+    const primarySurface = inlineViewer.locator('[data-panorama-inline-surface]')
+    const secondarySurface = secondaryInlineViewer.locator('[data-panorama-inline-surface]')
+    await primarySurface.hover()
+    const primarySphere = primarySurface.locator('[data-panorama-surface="sphere"] canvas')
+    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    if (await activeInlineCanvases.count() > 1) throw new Error('全景节点内嵌 WebGL Canvas 超过 1 个')
+    await secondarySurface.hover()
+    await secondarySurface.locator('[data-panorama-surface="sphere"] canvas')
+      .waitFor({ state: 'visible', timeout: 12000 })
+    if (await activeInlineCanvases.count() > 1) throw new Error('租约切换后全景内嵌 Canvas 超过 1 个')
+    await primarySurface.hover()
+    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+
+    await page.waitForTimeout(240)
+    const contextLossResult = await primarySphere.evaluate((canvas) => {
+      const event = new WebGLContextEvent('webglcontextlost', {
+        cancelable: true,
+        statusMessage: 'Reality 主动模拟上下文丢失',
+      })
+      canvas.dispatchEvent(event)
+      return { defaultPrevented: event.defaultPrevented }
+    })
+    if (!contextLossResult.defaultPrevented) throw new Error('WebGL context lost 事件未执行 preventDefault')
+    await primarySphere.waitFor({ state: 'detached', timeout: 8000 })
+    await primarySurface.locator('img').waitFor({ state: 'visible', timeout: 8000 })
+    if (await activeInlineCanvases.count()) throw new Error('WebGL context lost 后仍保留内嵌 Canvas')
+    await resultNode.getByRole('button', { name: /^(球面|Sphere)$/i }).click()
+    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await page.waitForTimeout(240)
+
+    // 节点内第一次指针手势就直接环视，不得带动节点或 ReactFlow 视口。
+    const nodeBoxBeforeDrag = await resultNode.boundingBox()
+    const viewportTransformBeforeDrag = await page.locator('.react-flow__viewport').getAttribute('style')
+    const inlineBox = await primarySphere.boundingBox()
+    if (!nodeBoxBeforeDrag || !inlineBox) throw new Error('全景节点内没有可交互球面区域')
+    await page.mouse.move(inlineBox.x + inlineBox.width * 0.45, inlineBox.y + inlineBox.height * 0.44)
+    await page.mouse.down()
+    await page.mouse.move(inlineBox.x + inlineBox.width * 0.62, inlineBox.y + inlineBox.height * 0.61, { steps: 10 })
+    await page.mouse.up()
+    await page.waitForTimeout(280)
+    const nodeBoxAfterDrag = await resultNode.boundingBox()
+    const viewportTransformAfterDrag = await page.locator('.react-flow__viewport').getAttribute('style')
+    if (!nodeBoxAfterDrag
+      || Math.abs(nodeBoxAfterDrag.x - nodeBoxBeforeDrag.x) > 1
+      || Math.abs(nodeBoxAfterDrag.y - nodeBoxBeforeDrag.y) > 1) {
+      throw new Error('节点内环视错误带动了节点位置')
+    }
+    if (viewportTransformAfterDrag !== viewportTransformBeforeDrag) {
+      throw new Error('节点内环视错误带动了 ReactFlow 视口')
+    }
+
+    const flatButton = resultNode.getByRole('button', { name: /^(平面|Flat)$/i })
+    const sphereButton = resultNode.getByRole('button', { name: /^(球面|Sphere)$/i })
+    await flatButton.click()
+    await primarySurface.locator('img').waitFor({ state: 'visible', timeout: 8000 })
+    if (await primarySphere.count()) throw new Error('平面模式仍保留全景 WebGL Canvas')
+    await sphereButton.click()
+    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+
+    const viewportRatioButton = resultNode.getByRole('button', { name: /^(视口比例|Viewport ratio)$/i })
+    await viewportRatioButton.click()
+    const visibleRatioOptions = page.locator('[data-dropdown-portal="true"] [role="option"]:visible')
+    const ratioLabels = await visibleRatioOptions.evaluateAll((elements) => (
+      elements.map((element) => element.textContent?.trim()).filter(Boolean)
+    ))
+    const expectedRatioLabels = ['21:9', '16:9', '3:2', '4:3', '1:1']
+    if (JSON.stringify(ratioLabels) !== JSON.stringify(expectedRatioLabels)) {
+      throw new Error(`全景视口比例选项不符合五档约定：${JSON.stringify(ratioLabels)}`)
+    }
+    await page.getByRole('option', { name: '4:3', exact: true }).click()
+    await page.waitForFunction(() => (
+      document.querySelector('[data-panorama-viewer-node-id="__ui_panorama_result"]')
+        ?.getAttribute('data-panorama-viewport-ratio') === '4:3'
+    ))
+
+    const exportNodeIdsBeforeCapture = await page.locator('.react-flow__node-exportImageNode')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-id')).filter(Boolean))
+    await resultNode.getByRole('button', { name: /^(截取视角|Capture view)$/i }).click()
+    await page.waitForFunction((knownIds) => (
+      Array.from(document.querySelectorAll('.react-flow__node-exportImageNode'))
+        .some((element) => !knownIds.includes(element.getAttribute('data-id')))
+    ), exportNodeIdsBeforeCapture, { timeout: 20000 })
+    const snapshotNodeId = await page.locator('.react-flow__node-exportImageNode')
+      .evaluateAll((elements, knownIds) => (
+        elements.map((element) => element.getAttribute('data-id'))
+          .find((nodeId) => nodeId && !knownIds.includes(nodeId)) ?? null
+      ), exportNodeIdsBeforeCapture)
+    if (!snapshotNodeId) throw new Error('截取视角未创建普通图片节点')
+
+    // 节点内交互完成后，双击仍可进入沉浸式查看器。
+    await primarySurface.hover()
+    await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await primarySurface.dblclick({ position: { x: 80, y: 80 } })
 
     const viewer = page.locator('[data-panorama-viewer="true"]')
     await viewer.waitFor({ state: 'visible', timeout: 12000 })
     const sphere = viewer.locator('[data-panorama-surface="sphere"] canvas')
     await sphere.waitFor({ state: 'visible', timeout: 12000 })
-    const box = await sphere.boundingBox()
-    if (!box) throw new Error('全景球面画布没有可交互区域')
-    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5)
-    await page.mouse.down()
-    await page.mouse.move(box.x + box.width * 0.66, box.y + box.height * 0.42, { steps: 8 })
-    await page.mouse.up()
     await page.mouse.wheel(0, -180)
 
     await viewer.getByRole('button', { name: /^(平面|Flat)$/i }).click()
@@ -1270,30 +1403,81 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     }
 
     await page.waitForTimeout(900)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 600)
     const persisted = await page.evaluate(async (payload) => {
       const rows = await window.henjiNative.db.select(
-        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        'SELECT nodes_json, edges_json, history_json FROM storyboard_projects WHERE id = ? LIMIT 1',
         [payload.projectId]
       )
       const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
       const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const history = JSON.parse(rows[0]?.history_json ?? '{}')
+      const primary = nodes.find((node) => node.id === '__ui_panorama_result')
+      const secondary = nodes.find((node) => node.id === '__ui_panorama_result_secondary')
+      const snapshot = nodes.find((node) => node.id === payload.snapshotNodeId)
+      const snapshotSourceRef = snapshot?.data?.imageUrl
+      const snapshotSourceIndex = typeof snapshotSourceRef === 'string' && snapshotSourceRef.startsWith('__img_ref__:')
+        ? Number.parseInt(snapshotSourceRef.slice('__img_ref__:'.length), 10)
+        : null
+      const snapshotSource = Number.isInteger(snapshotSourceIndex)
+        ? history.imagePool?.[snapshotSourceIndex]
+        : snapshotSourceRef
       return {
         hasGeneratedNode: nodes.some((node) => node.id === payload.generatedNodeId && node.type === 'panoramaGenNode'),
-        resultKind: nodes.find((node) => node.id === '__ui_panorama_result')?.data?.resultKind,
+        primaryType: primary?.type,
+        secondaryType: secondary?.type,
+        resultKind: primary?.data?.resultKind,
+        viewMode: primary?.data?.viewMode,
+        viewportAspectRatio: primary?.data?.viewportAspectRatio,
+        cameraView: primary?.data?.cameraView,
+        snapshotType: snapshot?.type,
+        snapshotResultKind: snapshot?.data?.resultKind,
+        snapshotAspectRatio: snapshot?.data?.aspectRatio,
+        snapshotSource,
+        hasSnapshotEdge: edges.some((edge) => (
+          edge.source === '__ui_panorama_result' && edge.target === payload.snapshotNodeId
+        )),
         edgeCount: edges.length,
       }
-    }, { generatedNodeId, projectId })
-    if (!persisted.hasGeneratedNode || persisted.resultKind !== 'panorama' || persisted.edgeCount < 1) {
+    }, { generatedNodeId, projectId, snapshotNodeId })
+    if (!persisted.hasGeneratedNode
+      || persisted.primaryType !== 'panoramaViewerNode'
+      || persisted.secondaryType !== 'panoramaViewerNode'
+      || persisted.resultKind !== 'panorama'
+      || persisted.viewMode !== 'sphere'
+      || persisted.viewportAspectRatio !== '4:3'
+      || !(persisted.cameraView?.yaw > 0)
+      || !(persisted.cameraView?.pitch > 0)
+      || persisted.snapshotType !== 'exportImageNode'
+      || persisted.snapshotResultKind !== 'image'
+      || persisted.snapshotAspectRatio !== '4:3'
+      || !persisted.snapshotSource
+      || !persisted.hasSnapshotEdge
+      || persisted.edgeCount < 2) {
       throw new Error(`全景项目保存语义或连线丢失：${JSON.stringify(persisted)}`)
     }
+    const snapshotInfo = await page.evaluate(
+      async (source) => await window.henjiNative.image.readImageInfo(source),
+      persisted.snapshotSource
+    )
+    if (snapshotInfo.width !== 960 || snapshotInfo.height !== 720) {
+      throw new Error(`4:3 全景视角截图尺寸错误：${snapshotInfo.width}×${snapshotInfo.height}`)
+    }
 
-    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
-    await settlePage(page, 600)
     await page.locator(`[data-project-id="${projectId}"]:visible`).click()
     const reopenedResult = page.locator('.react-flow__node[data-id="__ui_panorama_result"]')
     await reopenedResult.waitFor({ state: 'visible', timeout: 12000 })
     await page.locator(`.react-flow__node[data-id="${generatedNodeId}"]`).waitFor({ state: 'visible', timeout: 12000 })
-    await reopenedResult.getByRole('button', { name: /进入全景预览|Open panorama viewer/i }).click()
+    const reopenedInlineViewer = reopenedResult.locator('[data-panorama-viewer-node-id="__ui_panorama_result"]')
+    if (await reopenedInlineViewer.getAttribute('data-panorama-viewport-ratio') !== '4:3') {
+      throw new Error('重开后全景视口比例未恢复')
+    }
+    const reopenedSurface = reopenedInlineViewer.locator('[data-panorama-inline-surface]')
+    await reopenedSurface.hover()
+    await reopenedSurface.locator('[data-panorama-surface="sphere"] canvas')
+      .waitFor({ state: 'visible', timeout: 12000 })
+    await reopenedSurface.dblclick({ position: { x: 80, y: 80 } })
     await viewer.waitFor({ state: 'visible', timeout: 12000 })
     await viewer.locator('[data-panorama-surface="sphere"] canvas').waitFor({ state: 'visible', timeout: 12000 })
     await page.evaluate(async (targetDir) => {
@@ -1888,7 +2072,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       id: 'canvas-panorama-viewer',
       surface: '画布',
       writesUserData: true,
-      name: '画布-720°全景沉浸式查看器',
+      name: '画布-全景查看节点与沉浸式查看器',
       setup: setupCanvasPanoramaViewer,
     },
     {

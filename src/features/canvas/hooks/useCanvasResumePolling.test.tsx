@@ -31,7 +31,7 @@ vi.mock('../application/layerSeparationGenerationService', () => ({
 function createResumablePanoramaResult(): CanvasNode {
   return {
     id: 'panorama-result',
-    type: CANVAS_NODE_TYPES.exportImage,
+    type: CANVAS_NODE_TYPES.panoramaViewer,
     position: { x: 0, y: 0 },
     data: {
       displayName: '720°全景',

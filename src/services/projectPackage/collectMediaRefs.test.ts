@@ -70,7 +70,7 @@ describe('结构化提示词项目包媒体收集', () => {
     const mediaPath = '/managed/panorama.png'
     const node = {
       id: 'panorama-result',
-      type: CANVAS_NODE_TYPES.exportImage,
+      type: CANVAS_NODE_TYPES.panoramaViewer,
       position: { x: 0, y: 0 },
       data: {
         imageUrl: mediaPath,

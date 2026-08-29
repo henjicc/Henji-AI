@@ -6,6 +6,7 @@ import {
   PANORAMA_MAX_FOV,
   PANORAMA_MAX_PITCH,
   PANORAMA_MIN_FOV,
+  applyPanoramaDragDelta,
   clampPanoramaFov,
   clampPanoramaPitch,
   createPanoramaRenderResources,
@@ -25,6 +26,31 @@ describe('全景球面资源', () => {
     expect(clampPanoramaFov(120)).toBe(PANORAMA_MAX_FOV);
     expect(clampPanoramaPitch(Math.PI)).toBe(PANORAMA_MAX_PITCH);
     expect(clampPanoramaPitch(-Math.PI)).toBe(-PANORAMA_MAX_PITCH);
+  });
+
+  it('水平与垂直拖拽都按指针正向更新视角', () => {
+    const nextView = applyPanoramaDragDelta(
+      { yaw: 0.5, pitch: -0.25, fov: 70 },
+      25,
+      50,
+    );
+
+    expect(nextView.yaw).toBeCloseTo(0.6);
+    expect(nextView.pitch).toBeCloseTo(-0.05);
+    expect(nextView.fov).toBe(70);
+  });
+
+  it('拖拽仍限制俯仰和视场角，不将方向修正扩散到缩放语义', () => {
+    expect(applyPanoramaDragDelta(
+      { yaw: 0, pitch: PANORAMA_MAX_PITCH, fov: 999 },
+      -10,
+      10,
+      0.01,
+    )).toEqual({
+      yaw: -0.1,
+      pitch: PANORAMA_MAX_PITCH,
+      fov: PANORAMA_MAX_FOV,
+    });
   });
 
   it('关闭或切图时释放纹理、材质和几何体', () => {

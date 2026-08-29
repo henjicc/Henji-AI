@@ -11,7 +11,6 @@ import {
   type CanvasNodeType,
   type ExportImageNodeData,
   type ImageEditNodeData,
-  resolveCanvasImageResultKind,
 } from '@/features/canvas/domain/canvasNodes';
 import {
   resolveMinEdgeFittedSize,
@@ -38,8 +37,6 @@ import { useMicroThumbnail } from '@/features/canvas/nodes/shared/useMicroThumbn
 import { useDecodedImageSource } from '@/features/canvas/nodes/shared/useDecodedImageSource';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { uiTransition } from '@/components/ui/motion';
-import { UiButton } from '@/components/ui';
-import { ICON_PANORAMA } from '@/core/theme/icons';
 
 type ImageNodeProps = NodeProps & {
   id: string;
@@ -67,11 +64,6 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
   );
   const preferOriginalImage = useOriginalImageLod();
   const isExportResultNode = type === CANVAS_NODE_TYPES.exportImage;
-  const resultKind = isExportResultNode
-    ? resolveCanvasImageResultKind((data as ExportImageNodeData).resultKind)
-    : 'image';
-  const isPanoramaResult = resultKind === 'panorama';
-  const openImageViewer = useCanvasStore((state) => state.openImageViewer);
   const { isGenerating, progress: displayProgress, transitionDurationMs } = useGenerationProgressDisplay(id, data);
   const generationError = typeof data.generationError === 'string' ? data.generationError : null;
   const resolvedAspectRatio = data.aspectRatio || DEFAULT_ASPECT_RATIO;
@@ -146,8 +138,7 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
             src={imageSource ?? ''}
             alt={isExportResultNode ? t('node.imageNode.resultAlt') : t('node.imageNode.generatedAlt')}
             viewerSourceUrl={originalImageUrl}
-            viewerMode={isPanoramaResult ? 'panorama' : 'image'}
-            viewerSourceNodeId={isPanoramaResult ? id : undefined}
+            viewerMode="image"
             className="h-full w-full object-contain"
           />
         ) : (
@@ -175,28 +166,6 @@ export const ImageNode = memo(({ id, data, selected, type, width, height }: Imag
 
         {generationError && <NodeGenerationError message={generationError} />}
 
-        {isPanoramaResult && originalImageUrl && !generationError && (
-          <UiButton
-            type="button"
-            variant="glass"
-            size="sm"
-            className="nodrag nowheel absolute bottom-3 left-3 gap-1.5 !h-7 !rounded-lg !px-2.5"
-            title={t('viewer.panorama.open')}
-            aria-label={t('viewer.panorama.open')}
-            onClick={(event) => {
-              event.stopPropagation();
-              openImageViewer({
-                imageUrl: originalImageUrl,
-                imageList: [originalImageUrl],
-                mode: 'panorama',
-                sourceNodeId: id,
-              });
-            }}
-          >
-            <ICON_PANORAMA className="h-3.5 w-3.5" />
-            <span>{t('viewer.panorama.badge')}</span>
-          </UiButton>
-        )}
       </div>
 
       <Handle

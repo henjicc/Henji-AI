@@ -13,6 +13,7 @@ import {
   type LayerStackResultNodeData,
   type MultiAngleGenerationNodeData,
   type PanoramaGenerationNodeData,
+  type PanoramaViewerNodeData,
   type PortraitTextureGenerationNodeData,
   type UpscaleGenerationNodeData,
   type StoryboardSplitNodeData,
@@ -71,6 +72,11 @@ import {
   PANORAMA_DEFAULT_PROMPT_VERSION,
   PANORAMA_TEXT_TEMPLATE_VERSION,
 } from '../capabilities/panoramaPolicy';
+import {
+  PANORAMA_DEFAULT_CAMERA_VIEW,
+  PANORAMA_DEFAULT_VIEW_MODE,
+  PANORAMA_DEFAULT_VIEWPORT_ASPECT_RATIO,
+} from './panoramaViewer';
 import {
   DEFAULT_RELIGHT_SETTINGS,
   prepareRelightRoute,
@@ -146,6 +152,8 @@ export interface CanvasNodeCapabilities {
    * 仅逐行模式（GenerationNodeShell）节点声明为 true；节点内不再渲染生成按钮。
    */
   toolbarGenerate?: boolean;
+  /** 是否在顶部工具条显示图片派生能力；图片结果默认显示，特殊结果节点可声明关闭。 */
+  toolbarImageCapabilities?: boolean;
 }
 
 export interface CanvasNodeConnectivity {
@@ -338,6 +346,39 @@ const imageEditNodeDefinition: CanvasNodeDefinition<ImageEditNodeData> = {
   }),
 };
 
+const panoramaViewerNodeDefinition: CanvasNodeDefinition<PanoramaViewerNodeData> = {
+  type: CANVAS_NODE_TYPES.panoramaViewer,
+  menuLabelKey: 'node.menu.panoramaViewer',
+  menuIcon: 'imageGeneration',
+  visibleInMenu: false,
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+    toolbarDownload: true,
+    toolbarImageCapabilities: false,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: { fromSource: false, fromTarget: false },
+    manualSource: true,
+  },
+  media: { kind: 'image', role: 'result' },
+  ports: { source: { emits: 'image' } },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: () => ({
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.panoramaViewer],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: '2:1',
+    isSizeManuallyAdjusted: false,
+    resultKind: 'panorama',
+    viewMode: PANORAMA_DEFAULT_VIEW_MODE,
+    viewportAspectRatio: PANORAMA_DEFAULT_VIEWPORT_ASPECT_RATIO,
+    cameraView: { ...PANORAMA_DEFAULT_CAMERA_VIEW },
+  }),
+};
+
 function createPanoramaGenerationDefaultData(): PanoramaGenerationNodeData {
   const compatibleModels = resolveCanvasCapabilityModelCandidates(
     registry.getModelsByType('image'),
@@ -396,7 +437,7 @@ const panoramaGenerationNodeDefinition: CanvasNodeDefinition<PanoramaGenerationN
   },
   generation: {
     modelType: 'image',
-    resultNodeType: CANVAS_NODE_TYPES.exportImage,
+    resultNodeType: CANVAS_NODE_TYPES.panoramaViewer,
   },
   getOutputs: imageOutputsFromData,
   createDefaultData: createPanoramaGenerationDefaultData,
@@ -1068,6 +1109,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.upload]: uploadNodeDefinition,
   [CANVAS_NODE_TYPES.imageEdit]: imageEditNodeDefinition,
   [CANVAS_NODE_TYPES.panoramaGen]: panoramaGenerationNodeDefinition,
+  [CANVAS_NODE_TYPES.panoramaViewer]: panoramaViewerNodeDefinition,
   [CANVAS_NODE_TYPES.relightGen]: relightGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.multiAngleGen]: multiAngleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.upscaleGen]: upscaleGenerationNodeDefinition,

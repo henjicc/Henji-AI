@@ -10,6 +10,7 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
   [CANVAS_NODE_TYPES.upload]: '上传图片',
   [CANVAS_NODE_TYPES.imageEdit]: '图片生成',
   [CANVAS_NODE_TYPES.panoramaGen]: '720°全景',
+  [CANVAS_NODE_TYPES.panoramaViewer]: '全景查看',
   [CANVAS_NODE_TYPES.relightGen]: '图片打光',
   [CANVAS_NODE_TYPES.multiAngleGen]: '多角度视图',
   [CANVAS_NODE_TYPES.upscaleGen]: '高清放大',
@@ -42,9 +43,6 @@ export const DEFAULT_NODE_DISPLAY_NAME: Record<CanvasNodeType, string> = {
 
 export const EXPORT_RESULT_DISPLAY_NAME: Record<ExportImageNodeResultKind, string> = {
   image: '结果图片',
-  panorama: '720°全景',
-  'image-group': '图片组',
-  'layer-stack': '图层结果',
   generic: '结果图片',
   storyboardGenOutput: '分镜输出',
   storyboardSplitExport: '切割导出',

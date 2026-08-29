@@ -18,6 +18,24 @@ function exportImageNode(id: string, resultKind?: DynamicValue): CanvasNode {
   } as CanvasNode;
 }
 
+function panoramaViewerNode(id: string): CanvasNode {
+  return {
+    id,
+    type: CANVAS_NODE_TYPES.panoramaViewer,
+    position: { x: 0, y: 0 },
+    data: {
+      displayName: '全景查看',
+      imageUrl: '/tmp/panorama.png',
+      previewImageUrl: null,
+      aspectRatio: '2:1',
+      resultKind: 'panorama',
+      viewMode: 'sphere',
+      viewportAspectRatio: '16:9',
+      cameraView: { yaw: 0, pitch: 0, fov: 70 },
+    },
+  } as CanvasNode;
+}
+
 describe('canvasStore imageViewer', () => {
   beforeEach(() => {
     useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] });
@@ -55,7 +73,7 @@ describe('canvasStore imageViewer', () => {
   });
 
   it('项目切换与来源节点删除时关闭查看请求', () => {
-    useCanvasStore.getState().setCanvasData([exportImageNode('result-a', 'panorama')], []);
+    useCanvasStore.getState().setCanvasData([panoramaViewerNode('result-a')], []);
     useCanvasStore.getState().openImageViewer({
       imageUrl: 'panorama-a',
       mode: 'panorama',
@@ -69,14 +87,34 @@ describe('canvasStore imageViewer', () => {
     expect(useCanvasStore.getState().imageViewer.isOpen).toBe(false);
   });
 
-  it('导入节点时保留全景语义，损坏值降级为普通图片', () => {
+  it('当前全景节点归一化自身状态，普通图片不会被猜测为全景节点', () => {
+    const panorama = panoramaViewerNode('panorama');
+    panorama.data.viewMode = 'broken';
+    panorama.data.viewportAspectRatio = '2:1';
+    panorama.data.cameraView = { yaw: Number.NaN, pitch: 99, fov: 999 };
     useCanvasStore.getState().setCanvasData([
-      exportImageNode('panorama', 'panorama'),
+      panorama,
+      exportImageNode('old-panorama', 'panorama'),
       exportImageNode('invalid', 'not-a-result-kind'),
-      exportImageNode('missing'),
     ], []);
 
-    const resultKinds = useCanvasStore.getState().nodes.map((node) => node.data.resultKind);
-    expect(resultKinds).toEqual(['panorama', 'image', 'image']);
+    const nodes = useCanvasStore.getState().nodes;
+    expect(nodes.map((node) => node.type)).toEqual([
+      CANVAS_NODE_TYPES.panoramaViewer,
+      CANVAS_NODE_TYPES.exportImage,
+      CANVAS_NODE_TYPES.exportImage,
+    ]);
+    expect(nodes[0]).toMatchObject({
+      id: 'panorama',
+      data: {
+        displayName: '全景查看',
+        imageUrl: '/tmp/panorama.png',
+        aspectRatio: '2:1',
+        viewMode: 'sphere',
+        viewportAspectRatio: '16:9',
+        cameraView: { yaw: 0, fov: 90 },
+      },
+    });
+    expect(nodes.slice(1).map((node) => node.data.resultKind)).toEqual(['image', 'image']);
   });
 });
