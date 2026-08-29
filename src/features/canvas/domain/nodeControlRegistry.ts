@@ -243,6 +243,19 @@ const nodeControlConfigs: CanvasNodeControlConfig[] = [
     requiresModelSchema: false,
   },
   {
+    nodeType: CANVAS_NODE_TYPES.portraitTextureGen,
+    title: '人像质感节点',
+    description: '创建受控的保守人像质感编辑节点；预设、强度与身份保护约束由版本化契约维护。',
+    aliases: ['人像修图节点', '人像质感调节节点'],
+    dataSchema: imageGenerationNodeDataSchema,
+    aiDataSchema: {
+      type: 'object',
+      properties: { displayName: { type: 'string', maxLength: 120 } },
+      additionalProperties: false,
+    },
+    requiresModelSchema: false,
+  },
+  {
     nodeType: CANVAS_NODE_TYPES.videoGen,
     title: '视频生成节点',
     description: '创建配置驱动的视频生成节点；模型与参数必须来自目录和 schema。',

@@ -49,6 +49,7 @@ import {
   migrateRelightGenerationData,
   migrateMultiAngleGenerationData,
   migrateUpscaleGenerationData,
+  migratePortraitTextureGenerationData,
   migrateGenerationPromptData,
   migrateExportImageResultKind,
   migrateLegacyGenerationDisplayName,
@@ -334,6 +335,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || node.type === CANVAS_NODE_TYPES.panoramaGen
         || node.type === CANVAS_NODE_TYPES.relightGen
         || node.type === CANVAS_NODE_TYPES.upscaleGen
+        || node.type === CANVAS_NODE_TYPES.portraitTextureGen
         || node.type === CANVAS_NODE_TYPES.storyboardGen
       ) {
         migrateGenerationNodeData(mergedData as DynamicValueMap);
@@ -345,6 +347,7 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
         || node.type === CANVAS_NODE_TYPES.relightGen
         || node.type === CANVAS_NODE_TYPES.multiAngleGen
         || node.type === CANVAS_NODE_TYPES.upscaleGen
+        || node.type === CANVAS_NODE_TYPES.portraitTextureGen
         || node.type === CANVAS_NODE_TYPES.videoGen
         || node.type === CANVAS_NODE_TYPES.audioGen
         || node.type === CANVAS_NODE_TYPES.textProcessing
@@ -366,6 +369,10 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
 
       if (node.type === CANVAS_NODE_TYPES.upscaleGen) {
         migrateUpscaleGenerationData(mergedData as DynamicValueMap);
+      }
+
+      if (node.type === CANVAS_NODE_TYPES.portraitTextureGen) {
+        migratePortraitTextureGenerationData(mergedData as DynamicValueMap);
       }
 
       if (node.type === CANVAS_NODE_TYPES.exportImage) {

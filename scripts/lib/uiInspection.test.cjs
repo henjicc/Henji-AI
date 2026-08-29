@@ -136,6 +136,12 @@ test('高清放大有独立的工具条、节点与保存重开场景', () => {
   assert.equal(scene.writesUserData, true)
 })
 
+test('人像质感有独立的工具条、节点、诚实文案与保存重开场景', () => {
+  const scene = UI_INSPECTION_SCENES.find((candidate) => candidate.id === 'canvas-portrait-texture-node')
+  assert.ok(scene)
+  assert.equal(scene.writesUserData, true)
+})
+
 test('画布 Midjourney 场景只操作可清理的专用工程，真实只读巡检会跳过', () => {
   const scenes = UI_INSPECTION_SCENES.filter((scene) => scene.id.startsWith('canvas-midjourney-'))
   assert.deepEqual(scenes.map((scene) => scene.id), [

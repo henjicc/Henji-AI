@@ -15,6 +15,7 @@ export const CANVAS_NODE_TYPES = {
   relightGen: 'relightGenNode',
   multiAngleGen: 'multiAngleGenNode',
   upscaleGen: 'upscaleGenNode',
+  portraitTextureGen: 'portraitTextureGenNode',
   exportImage: 'exportImageNode',
   textProcessing: 'textProcessingNode',
   textAnnotation: 'textAnnotationNode',
@@ -279,6 +280,14 @@ export interface UpscaleGenerationNodeData extends ImageEditNodeData {
   fixedSemanticParams: DynamicValueMap;
 }
 
+export interface PortraitTextureGenerationNodeData extends ImageEditNodeData {
+  capabilityId: 'image.portrait-texture';
+  promptTemplateVersion: 'portrait-texture-gpt-image-2-v1';
+  fixedSemanticParams: DynamicValueMap;
+  portraitTextureSettings: DynamicValueMap;
+  portraitTextureRouteReasons?: string[];
+}
+
 export interface MultiAngleGenerationNodeData extends ImageEditNodeData {
   capabilityId: 'image.multi-angle';
   multiAngleConfig: DynamicValueMap;
@@ -444,6 +453,7 @@ export type CanvasNodeData =
   | PanoramaGenerationNodeData
   | MultiAngleGenerationNodeData
   | UpscaleGenerationNodeData
+  | PortraitTextureGenerationNodeData
   | StoryboardSplitNodeData
   | StoryboardGenNodeData
   | MediaGenNodeData
@@ -529,6 +539,12 @@ export function isUpscaleGenerationNode(
   node: CanvasNode | null | undefined
 ): node is Node<UpscaleGenerationNodeData, typeof CANVAS_NODE_TYPES.upscaleGen> {
   return node?.type === CANVAS_NODE_TYPES.upscaleGen;
+}
+
+export function isPortraitTextureGenerationNode(
+  node: CanvasNode | null | undefined
+): node is Node<PortraitTextureGenerationNodeData, typeof CANVAS_NODE_TYPES.portraitTextureGen> {
+  return node?.type === CANVAS_NODE_TYPES.portraitTextureGen;
 }
 
 export function isMultiAngleGenerationNode(

@@ -40,6 +40,12 @@ import {
   createDefaultMultiAngleConfig,
   normalizeMultiAngleConfig,
 } from '../capabilities/multiAnglePolicy';
+import {
+  PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
+  PORTRAIT_TEXTURE_TEMPLATE_VERSION,
+  normalizePortraitTextureSettings,
+  preparePortraitTextureRoute,
+} from '../capabilities/portraitTexturePolicy';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
@@ -398,6 +404,53 @@ export function migrateUpscaleGenerationData(data: DynamicValueMap): void {
     UPSCALE_MODEL_POLICY,
     supportedStoredParams,
   ).params;
+}
+
+/** 恢复人像质感的版本化设置、显式模型路由与单图输入约束。 */
+export function migratePortraitTextureGenerationData(data: DynamicValueMap): void {
+  data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture;
+  data.promptTemplateVersion = PORTRAIT_TEXTURE_TEMPLATE_VERSION;
+  data.fixedSemanticParams = { portraitTextureContractVersion: 1 };
+
+  const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
+    ? data.mediaInputs as DynamicValueMap
+    : {};
+  const inlineImages = Array.isArray(mediaInputs.image)
+    ? mediaInputs.image.filter(
+      (value): value is string => typeof value === 'string' && value.trim().length > 0,
+    )
+    : [];
+  data.mediaInputs = { ...mediaInputs, image: inlineImages };
+  const sourceReasons = inlineImages.length > 1
+    ? ['人像质感调节必须且只能提供 1 张源图']
+    : [];
+
+  let settings;
+  try {
+    settings = normalizePortraitTextureSettings(data.portraitTextureSettings);
+  } catch (error) {
+    data.portraitTextureRouteReasons = [
+      ...sourceReasons,
+      error instanceof Error ? error.message : '人像质感设置无法迁移',
+    ];
+    return;
+  }
+
+  const storedModelId = typeof data.modelId === 'string' && data.modelId.trim()
+    ? data.modelId.trim()
+    : PORTRAIT_TEXTURE_DEFAULT_MODEL_ID;
+  const route = preparePortraitTextureRoute(
+    settings,
+    registry.getModelsByType('image'),
+    storedModelId,
+    data.params && typeof data.params === 'object' ? data.params as DynamicValueMap : {},
+  );
+  data.portraitTextureSettings = settings;
+  data.modelId = storedModelId;
+  data.params = route.params;
+  data.prompt = route.prompt;
+  data.promptDocument = createPlainTextPromptDocument(route.prompt);
+  data.portraitTextureRouteReasons = [...sourceReasons, ...route.reasons];
 }
 
 /** 恢复多角度节点的版本化 profile、隐藏执行模型与单图输入。 */

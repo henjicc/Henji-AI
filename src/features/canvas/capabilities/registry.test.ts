@@ -80,6 +80,7 @@ describe('画布图片能力注册表', () => {
         CANVAS_IMAGE_CAPABILITY_IDS.relight,
         CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
         CANVAS_IMAGE_CAPABILITY_IDS.upscale,
+        CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
         CANVAS_IMAGE_CAPABILITY_IDS.gridSplit,
       ]);
     expect(getExecutableCanvasImageCapabilitiesForSourceNode(imageNode, {
@@ -89,6 +90,7 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
+      CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
     ]);
   });
 
@@ -96,7 +98,7 @@ describe('画布图片能力注册表', () => {
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'image',
       implementationStatus: 'planned',
-    })).toHaveLength(4);
+    })).toHaveLength(3);
     expect(filterCanvasImageCapabilities({
       sourceMediaType: 'video',
     })).toEqual([]);
@@ -120,6 +122,7 @@ describe('画布图片能力注册表', () => {
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
+      CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
     ]);
   });
 

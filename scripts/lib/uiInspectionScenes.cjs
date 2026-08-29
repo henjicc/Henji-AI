@@ -568,6 +568,124 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasPortraitTextureNode(page) {
+    const { panoramaSource, projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    await page.waitForTimeout(350)
+    let action = page.getByRole('button', { name: /^(人像质感|Portrait Texture)$/i }).filter({ visible: true }).first()
+    if (!(await action.count())) {
+      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
+      if (!(await moreButton.count())) throw new Error('人像质感工具入口不可见')
+      await moreButton.click()
+      action = page.getByRole('button', { name: /^(人像质感|Portrait Texture)$/i }).filter({ visible: true }).first()
+    }
+    await action.waitFor({ state: 'visible', timeout: 8000 })
+    await action.click()
+
+    const shell = page.locator('[data-generation-node-id][data-generation-node-model-id="fal-ai-gpt-image-2"]')
+      .filter({ hasText: /人像质感|Portrait Texture/ }).last()
+    await shell.waitFor({ state: 'visible', timeout: 12000 })
+    const node = shell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
+    const nodeId = await node.getAttribute('data-id')
+    if (!nodeId || nodeId === '__ui_panorama_source') throw new Error('人像质感工具条未创建独立相邻节点')
+    if (!(await node.evaluate((element) => element.classList.contains('selected')))) {
+      throw new Error('人像质感工具条创建后未选中新节点')
+    }
+    if (await page.locator('.react-flow__edge').count() < 1) throw new Error('人像质感工具条未创建源图连线')
+    await shell.getByText(/^(质感预设|Finish preset)$/i).waitFor({ state: 'visible', timeout: 8000 })
+    await shell.getByText(/^(处理强度|Edit strength)$/i).waitFor({ state: 'visible', timeout: 8000 })
+    await shell.getByText(/未做人脸检测|No face detection/i).waitFor({ state: 'visible', timeout: 8000 })
+
+    const presetField = paramFieldFromLabel(page, /^(质感预设|Finish preset)$/i)
+    await presetField.locator('[data-dropdown-button]').click()
+    await page.getByRole('option', { name: /^(柔和胶片|Soft film)$/i }).click()
+    const strengthField = paramFieldFromLabel(page, /^(处理强度|Edit strength)$/i)
+    await strengthField.locator('[data-dropdown-button]').click()
+    await page.getByRole('option', { name: /^(适中|Balanced)$/i }).click()
+    await settlePage(page, 900)
+
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const target = nodes.find((candidate) => candidate.id === targetNodeId)
+      return {
+        nodeType: target?.type,
+        capabilityId: target?.data?.capabilityId,
+        modelId: target?.data?.modelId,
+        preset: target?.data?.portraitTextureSettings?.preset,
+        strength: target?.data?.portraitTextureSettings?.strength,
+        templateVersion: target?.data?.promptTemplateVersion,
+        hasSourceEdge: edges.some((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId),
+      }
+    }, { targetProjectId: projectId, targetNodeId: nodeId })
+    if (persisted.nodeType !== 'portraitTextureGenNode'
+      || persisted.capabilityId !== 'image.portrait-texture'
+      || persisted.modelId !== 'fal-ai-gpt-image-2'
+      || persisted.preset !== 'film-soft'
+      || persisted.strength !== 'balanced'
+      || persisted.templateVersion !== 'portrait-texture-gpt-image-2-v1'
+      || !persisted.hasSourceEdge) {
+      throw new Error(`人像质感保存语义或连线丢失：${JSON.stringify(persisted)}`)
+    }
+
+    // 不触发供应商请求：以确定性本地图片模拟成功输出，验证普通 image 语义与后续连接口。
+    await page.evaluate(async ({ targetProjectId, targetNodeId, resultSource }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const generator = nodes.find((candidate) => candidate.id === targetNodeId)
+      nodes.push({
+        id: '__ui_portrait_texture_result',
+        type: 'exportImageNode',
+        position: { x: (generator?.position?.x ?? 720) + 430, y: generator?.position?.y ?? 80 },
+        width: 384,
+        height: 220,
+        measured: { width: 384, height: 220 },
+        style: { width: 384, height: 220 },
+        data: {
+          displayName: '人像质感结果（本地模拟）',
+          resultKind: 'image',
+          sourceCapabilityId: 'image.portrait-texture',
+          imageUrl: resultSource,
+          previewImageUrl: resultSource,
+          aspectRatio: '2:1',
+          isGenerating: false,
+        },
+      })
+      edges.push({
+        id: `__ui_portrait_texture_result_edge_${targetNodeId}`,
+        source: targetNodeId,
+        target: '__ui_portrait_texture_result',
+        sourceHandle: 'source',
+        targetHandle: 'target',
+      })
+      await window.henjiNative.db.execute(
+        'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ? WHERE id = ?',
+        [nodes.length, JSON.stringify(nodes), JSON.stringify(edges), JSON.stringify({ x: 80, y: 120, zoom: 0.62 }), targetProjectId]
+      )
+    }, { targetProjectId: projectId, targetNodeId: nodeId, resultSource: panoramaSource })
+
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    const reopened = page.locator(`[data-generation-node-id="${nodeId}"][data-generation-node-model-id="fal-ai-gpt-image-2"]`)
+    await reopened.waitFor({ state: 'visible', timeout: 12000 })
+    await reopened.getByText(/柔和胶片|Soft film/).waitFor({ state: 'visible', timeout: 8000 })
+    const resultNode = page.locator('.react-flow__node[data-id="__ui_portrait_texture_result"]')
+    await resultNode.waitFor({ state: 'visible', timeout: 12000 })
+    await resultNode.getByText('人像质感结果（本地模拟）').waitFor({ state: 'visible', timeout: 8000 })
+    await page.mouse.move(1200, 700)
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasPanoramaViewer(page) {
     const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
     await page.waitForTimeout(900)
@@ -1313,6 +1431,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-高清放大节点与保存重开',
       setup: setupCanvasUpscaleNode,
+    },
+    {
+      id: 'canvas-portrait-texture-node',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-人像质感节点与保存重开',
+      setup: setupCanvasPortraitTextureNode,
     },
     {
       id: 'canvas-midjourney-node',

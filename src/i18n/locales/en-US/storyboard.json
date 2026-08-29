@@ -191,7 +191,7 @@
       },
       "portraitTexture": {
         "title": "Portrait Texture",
-        "description": "Improve portrait detail and overall texture"
+        "description": "Approximate finish and tone with a generative model, without face detection or identity recognition"
       },
       "elementEdit": {
         "title": "Element Edit",
@@ -228,6 +228,7 @@
       "relightGeneration": "Image Relighting",
       "multiAngleGeneration": "Multi-angle Views",
       "upscaleGeneration": "Upscale",
+      "portraitTextureGeneration": "Portrait Texture",
       "storyboard": "Storyboard Node",
       "storyboardGen": "Storyboard Generation",
       "textProcessing": "Text Processing",
@@ -325,6 +326,13 @@
       "apiKeyRequired": "Configure a Fal API key first",
       "resultTitle": "Upscaled Result",
       "promptPlaceholder": "Upscaling does not require a prompt"
+    },
+    "portraitTextureGeneration": {
+      "promptRequired": "Portrait texture uses controlled presets and does not require a separate prompt",
+      "apiKeyRequired": "Configure the selected GPT Image 2 provider API key first",
+      "resultTitle": "Portrait Texture Result",
+      "promptPlaceholder": "Use the controlled additional-request field in the node",
+      "approximation": "Model approximation · No face detection · Identity is not guaranteed"
     },
     "upload": {
       "uploadedAlt": "Uploaded image",

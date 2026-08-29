@@ -2,6 +2,7 @@ import {
   PANORAMA_REFERENCE_TEMPLATE_VERSION,
   PANORAMA_TEXT_TEMPLATE_VERSION,
 } from './panoramaPolicy';
+import { PORTRAIT_TEXTURE_TEMPLATE_VERSION } from './portraitTexturePolicy';
 import type { CanvasImageCapabilityPromptPolicy } from './types';
 
 type CanvasPromptTemplate = (userPrompt: string) => string;
@@ -43,6 +44,8 @@ ${userPrompt}
 const PROMPT_TEMPLATES: Readonly<Record<string, CanvasPromptTemplate>> = {
   [PANORAMA_TEXT_TEMPLATE_VERSION]: PANORAMA_TEXT_TEMPLATE,
   [PANORAMA_REFERENCE_TEMPLATE_VERSION]: PANORAMA_REFERENCE_TEMPLATE,
+  // 人像质感模块已经按版本编译完整隐藏提示词；通用能力层只登记版本，不重复包裹。
+  [PORTRAIT_TEXTURE_TEMPLATE_VERSION]: (compiledPrompt) => compiledPrompt,
 };
 
 export function resolveCanvasCapabilityPromptTemplateVersion(

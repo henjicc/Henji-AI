@@ -10,6 +10,7 @@ import {
   type ImageEditNodeData,
   type MultiAngleGenerationNodeData,
   type PanoramaGenerationNodeData,
+  type PortraitTextureGenerationNodeData,
   type UpscaleGenerationNodeData,
   type StoryboardSplitNodeData,
   type StoryboardGenNodeData,
@@ -73,6 +74,12 @@ import {
   createDefaultMultiAngleConfig,
 } from '../capabilities/multiAnglePolicy';
 import { UPSCALE_MODEL_POLICY } from '../capabilities/upscalePolicy';
+import {
+  DEFAULT_PORTRAIT_TEXTURE_SETTINGS,
+  PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
+  PORTRAIT_TEXTURE_TEMPLATE_VERSION,
+  preparePortraitTextureRoute,
+} from '../capabilities/portraitTexturePolicy';
 
 /**
  * 新增画布节点 SOP：
@@ -549,6 +556,64 @@ const upscaleGenerationNodeDefinition: CanvasNodeDefinition<UpscaleGenerationNod
   createDefaultData: createUpscaleGenerationDefaultData,
 };
 
+function createPortraitTextureGenerationDefaultData(): PortraitTextureGenerationNodeData {
+  const settings = { ...DEFAULT_PORTRAIT_TEXTURE_SETTINGS };
+  const route = preparePortraitTextureRoute(
+    settings,
+    registry.getModelsByType('image'),
+    PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
+  );
+  return {
+    displayName: DEFAULT_NODE_DISPLAY_NAME[CANVAS_NODE_TYPES.portraitTextureGen],
+    imageUrl: null,
+    previewImageUrl: null,
+    aspectRatio: DEFAULT_ASPECT_RATIO,
+    isSizeManuallyAdjusted: false,
+    prompt: route.prompt,
+    modelId: route.model?.meta.id ?? PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
+    params: route.params,
+    mediaInputs: {},
+    isGenerating: false,
+    generationStartedAt: null,
+    generationDurationMs: undefined,
+    capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.portraitTexture,
+    promptTemplateVersion: PORTRAIT_TEXTURE_TEMPLATE_VERSION,
+    fixedSemanticParams: { portraitTextureContractVersion: 1 },
+    portraitTextureSettings: settings as unknown as DynamicValueMap,
+    portraitTextureRouteReasons: route.reasons,
+  };
+}
+
+const portraitTextureGenerationNodeDefinition: CanvasNodeDefinition<PortraitTextureGenerationNodeData> = {
+  type: CANVAS_NODE_TYPES.portraitTextureGen,
+  menuLabelKey: 'node.menu.portraitTextureGeneration',
+  menuIcon: 'imageGeneration',
+  visibleInMenu: false,
+  executionKind: 'standard-generation',
+  capabilities: {
+    toolbar: true,
+    promptInput: false,
+    toolbarGenerate: true,
+  },
+  connectivity: {
+    sourceHandle: true,
+    targetHandle: true,
+    connectMenu: { fromSource: true, fromTarget: false },
+    targetHandleMode: 'rows',
+  },
+  media: { kind: 'image', role: 'generator' },
+  ports: {
+    source: { emits: 'image' },
+    target: { accepts: ['image'] },
+  },
+  generation: {
+    modelType: 'image',
+    resultNodeType: CANVAS_NODE_TYPES.exportImage,
+  },
+  getOutputs: imageOutputsFromData,
+  createDefaultData: createPortraitTextureGenerationDefaultData,
+};
+
 const exportImageNodeDefinition: CanvasNodeDefinition<ExportImageNodeData> = {
   type: CANVAS_NODE_TYPES.exportImage,
   menuLabelKey: 'node.menu.uploadImage',
@@ -857,6 +922,7 @@ export const canvasNodeDefinitions: Record<CanvasNodeType, CanvasNodeDefinition>
   [CANVAS_NODE_TYPES.relightGen]: relightGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.multiAngleGen]: multiAngleGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.upscaleGen]: upscaleGenerationNodeDefinition,
+  [CANVAS_NODE_TYPES.portraitTextureGen]: portraitTextureGenerationNodeDefinition,
   [CANVAS_NODE_TYPES.exportImage]: exportImageNodeDefinition,
   [CANVAS_NODE_TYPES.textProcessing]: textProcessingNodeDefinition,
   [CANVAS_NODE_TYPES.textAnnotation]: textAnnotationNodeDefinition,

@@ -115,6 +115,8 @@ export interface GenerationNodeShellProps {
   prepareRuntimeParams?: (
     context: GenerationNodeRuntimePreparationContext,
   ) => Promise<DynamicValueMap> | DynamicValueMap;
+  /** 复用标准生成壳时追加的能力语义行；只放产品设置，不复制模型 schema 参数。 */
+  additionalInputRows?: ReactNode;
   minWidth?: number;
   minHeight?: number;
   maxWidth?: number;
@@ -143,6 +145,7 @@ export const GenerationNodeShell = memo(({
   showPromptInput = true,
   requirePrompt = true,
   prepareRuntimeParams,
+  additionalInputRows,
   minWidth = 320,
   minHeight = 160,
   maxWidth = 1400,
@@ -643,6 +646,7 @@ export const GenerationNodeShell = memo(({
             videoTrimRange={videoTrimRange}
             onVideoTrimRangeChange={handleVideoTrimRangeChange}
           />
+          {additionalInputRows}
         </div>
       </div>
       <Handle

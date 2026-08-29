@@ -191,7 +191,7 @@
       },
       "portraitTexture": {
         "title": "人像质感",
-        "description": "改善人像细节与整体质感"
+        "description": "由生成模型近似调整质感与影调，不做人脸检测或身份识别"
       },
       "elementEdit": {
         "title": "元素编辑",
@@ -228,6 +228,7 @@
       "relightGeneration": "图片打光",
       "multiAngleGeneration": "多角度视图",
       "upscaleGeneration": "高清放大",
+      "portraitTextureGeneration": "人像质感",
       "storyboard": "分镜节点",
       "storyboardGen": "分镜生成",
       "textProcessing": "文本处理",
@@ -325,6 +326,13 @@
       "apiKeyRequired": "请先配置 Fal API Key",
       "resultTitle": "高清结果",
       "promptPlaceholder": "高清放大不需要提示词"
+    },
+    "portraitTextureGeneration": {
+      "promptRequired": "人像质感使用受控预设，不需要单独填写提示词",
+      "apiKeyRequired": "请先配置所选 GPT Image 2 供应商的 API Key",
+      "resultTitle": "人像质感结果",
+      "promptPlaceholder": "补充要求请使用节点中的受控入口",
+      "approximation": "模型近似 · 未做人脸检测 · 不保证身份稳定"
     },
     "upload": {
       "uploadedAlt": "已上传图片",

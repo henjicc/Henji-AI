@@ -11,6 +11,10 @@ import {
 import { UPSCALE_MODEL_POLICY } from './upscalePolicy';
 import { MULTI_ANGLE_MAX_VIEW_COUNT } from './multiAnglePolicy';
 import {
+  PORTRAIT_TEXTURE_MODEL_POLICY,
+  PORTRAIT_TEXTURE_TEMPLATE_VERSION,
+} from './portraitTexturePolicy';
+import {
   CANVAS_IMAGE_CAPABILITY_IDS,
   type CanvasImageCapabilityDefinition,
 } from './types';
@@ -238,13 +242,23 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 60,
     source: IMAGE_SOURCE,
     node: { kind: 'standard-generation', editor: 'standard' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    implementation: {
+      status: 'implemented',
+      execution: {
+        kind: 'canvas-node',
+        nodeType: CANVAS_NODE_TYPES.portraitTextureGen,
+      },
+    },
+    availability: {
+      releaseStage: 'experimental',
+      defaultEnabled: true,
+      unavailableReasonKey: 'imageCapabilities.unavailable.experimental',
+    },
+    modelPolicy: PORTRAIT_TEXTURE_MODEL_POLICY,
     promptPolicy: {
-      hiddenTemplateVersion: 'portrait-texture-v1-draft',
-      fixedSemanticParams: {},
-      visibleParameterKeys: ['strength', 'preset'],
+      hiddenTemplateVersion: PORTRAIT_TEXTURE_TEMPLATE_VERSION,
+      fixedSemanticParams: { portraitTextureContractVersion: 1 },
+      visibleParameterKeys: [],
     },
     outputPolicy: {
       resultKind: 'image',
