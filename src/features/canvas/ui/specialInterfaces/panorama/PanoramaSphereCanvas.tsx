@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, type MutableRefObject } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import {
   RGBAFormat,
@@ -335,6 +335,35 @@ function PanoramaContextLossBridge({ onContextLost }: { onContextLost?: () => vo
   return null;
 }
 
+function PanoramaFramePresentedBridge({
+  onFramePresented,
+}: {
+  onFramePresented?: () => void;
+}): null {
+  const callbackRef = useRef(onFramePresented);
+  const reportedRef = useRef(false);
+  const revealFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    callbackRef.current = onFramePresented;
+  }, [onFramePresented]);
+
+  useFrame(() => {
+    if (reportedRef.current) return;
+    reportedRef.current = true;
+    revealFrameRef.current = window.requestAnimationFrame(() => {
+      revealFrameRef.current = null;
+      callbackRef.current?.();
+    });
+  });
+
+  useEffect(() => () => {
+    if (revealFrameRef.current !== null) window.cancelAnimationFrame(revealFrameRef.current);
+  }, []);
+
+  return null;
+}
+
 interface PanoramaSphereCanvasProps {
   image: HTMLImageElement;
   resetRevision: number;
@@ -344,6 +373,7 @@ interface PanoramaSphereCanvasProps {
   captureRef?: MutableRefObject<PanoramaCaptureCurrentView | null>;
   onInteractionStart?: () => void;
   onViewChangeEnd?: (view: PanoramaCameraView) => void;
+  onFramePresented?: () => void;
   onContextLost?: () => void;
 }
 
@@ -356,6 +386,7 @@ export function PanoramaSphereCanvas({
   captureRef,
   onInteractionStart,
   onViewChangeEnd,
+  onFramePresented,
   onContextLost,
 }: PanoramaSphereCanvasProps): JSX.Element {
   return (
@@ -381,6 +412,7 @@ export function PanoramaSphereCanvas({
           onViewChangeEnd={onViewChangeEnd}
         />
         <PanoramaCaptureBridge captureRef={captureRef} />
+        <PanoramaFramePresentedBridge onFramePresented={onFramePresented} />
         <PanoramaContextLossBridge onContextLost={onContextLost} />
       </Canvas>
     </div>

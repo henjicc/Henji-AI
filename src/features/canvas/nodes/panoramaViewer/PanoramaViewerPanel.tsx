@@ -1,4 +1,4 @@
-import { useEffect, useState, type MutableRefObject } from 'react';
+import { useState, type MutableRefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
@@ -64,37 +64,21 @@ export function PanoramaViewerPanel({
 }: PanoramaViewerPanelProps): JSX.Element {
   const { t } = useTranslation();
   const [resetRevision] = useState(0);
+  const [loadedFrozenPreviewUrl, setLoadedFrozenPreviewUrl] = useState<string | null>(null);
   const [readyFrozenPreviewUrl, setReadyFrozenPreviewUrl] = useState<string | null>(null);
   const isReady = resource.status === 'ready';
   const isSphereAvailable = isReady && resource.isEquirectangular;
-  const showFlat = viewMode === 'flat' || !renderSphere;
-  const showSphereTransitionPreview = viewMode === 'sphere'
-    && renderSphere
+  const showStaticResource = viewMode === 'flat'
+    || (viewMode === 'sphere' && !renderSphere && !frozenPreviewUrl);
+  const showFrozenPreview = viewMode === 'sphere' && Boolean(frozenPreviewUrl);
+  const isSphereFramePresented = renderSphere
     && Boolean(frozenPreviewUrl)
-    && readyFrozenPreviewUrl !== frozenPreviewUrl;
-  const staticPreviewUrl = viewMode === 'sphere' && frozenPreviewUrl
-    ? frozenPreviewUrl
-    : resource.displayUrl;
-  const staticPreviewFitClass = viewMode === 'flat' || frozenPreviewUrl
+    && readyFrozenPreviewUrl === frozenPreviewUrl;
+  const staticPreviewFitClass = viewMode === 'flat'
     || resource.status !== 'ready'
     || !resource.isEquirectangular
       ? 'object-contain'
       : 'object-cover';
-
-  useEffect(() => {
-    if (!renderSphere || !frozenPreviewUrl || readyFrozenPreviewUrl === frozenPreviewUrl) return;
-    let revealFrame: number | null = null;
-    const waitForFirstFrame = window.requestAnimationFrame(() => {
-      revealFrame = window.requestAnimationFrame(() => {
-        revealFrame = null;
-        setReadyFrozenPreviewUrl(frozenPreviewUrl);
-      });
-    });
-    return () => {
-      window.cancelAnimationFrame(waitForFirstFrame);
-      if (revealFrame !== null) window.cancelAnimationFrame(revealFrame);
-    };
-  }, [frozenPreviewUrl, readyFrozenPreviewUrl, renderSphere]);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
@@ -103,7 +87,14 @@ export function PanoramaViewerPanel({
         role="region"
         aria-label={t('viewer.panorama.directInteractionLabel')}
         data-panorama-inline-surface={renderSphere ? 'sphere' : 'flat'}
-        onPointerEnter={() => {
+        onPointerEnter={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < bounds.left
+            || event.clientX > bounds.right
+            || event.clientY < bounds.top
+            || event.clientY > bounds.bottom
+          ) return;
           if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) {
             setReadyFrozenPreviewUrl(null);
             onRequestSphere();
@@ -135,34 +126,43 @@ export function PanoramaViewerPanel({
                 captureRef={captureRef}
                 onInteractionStart={onInteractionStart}
                 onViewChangeEnd={onCameraViewChangeEnd}
+                onFramePresented={() => setReadyFrozenPreviewUrl(frozenPreviewUrl)}
                 onContextLost={onContextLost}
               />
             </UiErrorBoundary>
           </div>
         ) : null}
 
-        {showFlat && staticPreviewUrl ? (
+        {showStaticResource && resource.displayUrl ? (
           <img
-            src={staticPreviewUrl}
+            src={resource.displayUrl}
             alt={t('viewer.panorama.flatAlt')}
-            data-panorama-frozen-preview={
-              viewMode === 'sphere' && frozenPreviewUrl ? 'true' : undefined
-            }
             className={`h-full w-full select-none ${staticPreviewFitClass}`}
             draggable={false}
-            onLoad={viewMode === 'sphere' && frozenPreviewUrl ? onFrozenPreviewReady : undefined}
           />
         ) : null}
 
-        {showSphereTransitionPreview && staticPreviewUrl ? (
+        {showFrozenPreview && frozenPreviewUrl ? (
           <img
-            src={staticPreviewUrl}
-            alt=""
-            aria-hidden="true"
-            data-panorama-transition-preview="true"
-            className={`pointer-events-none absolute inset-0 h-full w-full select-none ${staticPreviewFitClass}`}
+            src={frozenPreviewUrl}
+            alt={renderSphere ? '' : t('viewer.panorama.flatAlt')}
+            aria-hidden={renderSphere ? true : undefined}
+            data-panorama-frozen-preview={
+              loadedFrozenPreviewUrl === frozenPreviewUrl ? 'true' : undefined
+            }
+            data-panorama-transition-preview={
+              renderSphere && !isSphereFramePresented ? 'true' : undefined
+            }
+            className={`pointer-events-none absolute inset-0 h-full w-full select-none object-contain ${
+              isSphereFramePresented
+                ? 'opacity-0 transition-opacity duration-150'
+                : 'opacity-100'
+            }`}
             draggable={false}
-            onLoad={onFrozenPreviewReady}
+            onLoad={() => {
+              setLoadedFrozenPreviewUrl(frozenPreviewUrl);
+              onFrozenPreviewReady();
+            }}
           />
         ) : null}
 

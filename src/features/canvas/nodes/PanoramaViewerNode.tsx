@@ -104,12 +104,8 @@ export const PanoramaViewerNode = memo(({
 
   useEffect(() => {
     const sphereUnavailable = hasWebglFailure || isContentLodLow || data.viewMode !== 'sphere';
-    if (isActive && !sphereUnavailable) {
-      claimInlineLease(id);
-    } else if (sphereUnavailable) {
-      releaseInlineLease(id);
-    }
-  }, [claimInlineLease, data.viewMode, hasWebglFailure, id, isActive, isContentLodLow, releaseInlineLease]);
+    if (sphereUnavailable) releaseInlineLease(id);
+  }, [data.viewMode, hasWebglFailure, id, isContentLodLow, releaseInlineLease]);
 
   useEffect(() => {
     pendingFreezeReleaseRef.current = false;

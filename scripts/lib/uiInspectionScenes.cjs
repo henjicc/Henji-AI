@@ -1241,6 +1241,8 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     if (await activeInlineCanvases.count() > 1) throw new Error('租约切换后全景内嵌 Canvas 超过 1 个')
     await primarySurface.hover()
     await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await primarySurface.locator('[data-panorama-transition-preview="true"]')
+      .waitFor({ state: 'detached', timeout: 8000 })
 
     await page.waitForTimeout(240)
     const contextLossResult = await primarySphere.evaluate((canvas) => {
@@ -1283,7 +1285,9 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     // 指针移出后释放 WebGL，但节点必须冻结在刚才停下的视角，不能回退到原始全景图。
     const interactiveFrame = await primarySurface.screenshot({ animations: 'disabled' })
     await page.mouse.move(20, 80)
-    await primarySphere.waitFor({ state: 'detached', timeout: 8000 })
+    await page.waitForFunction(() => (
+      document.querySelectorAll('[data-panorama-inline-surface] [data-panorama-surface="sphere"] canvas').length === 0
+    ), undefined, { timeout: 8000 })
     const frozenPreview = primarySurface.locator('img[data-panorama-frozen-preview="true"]')
     await frozenPreview.waitFor({ state: 'visible', timeout: 8000 })
     const frozenFrame = await primarySurface.screenshot({ animations: 'disabled' })
