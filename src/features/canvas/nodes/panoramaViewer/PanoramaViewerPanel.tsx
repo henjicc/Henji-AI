@@ -7,6 +7,7 @@ import type {
   PanoramaViewMode,
   PanoramaViewportAspectRatio,
 } from '@/features/canvas/domain/panoramaViewer';
+import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import { PanoramaSphereCanvas, type PanoramaCaptureCurrentView } from '@/features/canvas/ui/specialInterfaces/panorama/PanoramaSphereCanvas';
 import type { PanoramaImageResource } from '@/features/canvas/ui/specialInterfaces/panorama/usePanoramaImageResource';
 import { NodeGenerationError } from '@/features/canvas/nodes/shared/NodeGenerationError';
@@ -33,6 +34,7 @@ interface PanoramaViewerPanelProps {
   onViewModeChange: (mode: PanoramaViewMode) => void;
   onViewportAspectRatioChange: (ratio: PanoramaViewportAspectRatio) => void;
   onCameraViewChangeEnd: (view: PanoramaCameraView) => void;
+  onSphereFramePresented: () => void;
   onCapture: () => void;
   onFrozenPreviewReady: () => void;
   onContextLost: () => void;
@@ -58,6 +60,7 @@ export function PanoramaViewerPanel({
   onViewModeChange,
   onViewportAspectRatioChange,
   onCameraViewChangeEnd,
+  onSphereFramePresented,
   onCapture,
   onFrozenPreviewReady,
   onContextLost,
@@ -74,11 +77,6 @@ export function PanoramaViewerPanel({
   const isSphereFramePresented = renderSphere
     && Boolean(frozenPreviewUrl)
     && readyFrozenPreviewUrl === frozenPreviewUrl;
-  const staticPreviewFitClass = viewMode === 'flat'
-    || resource.status !== 'ready'
-    || !resource.isEquirectangular
-      ? 'object-contain'
-      : 'object-cover';
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
@@ -126,7 +124,10 @@ export function PanoramaViewerPanel({
                 captureRef={captureRef}
                 onInteractionStart={onInteractionStart}
                 onViewChangeEnd={onCameraViewChangeEnd}
-                onFramePresented={() => setReadyFrozenPreviewUrl(frozenPreviewUrl)}
+                onFramePresented={() => {
+                  setReadyFrozenPreviewUrl(frozenPreviewUrl);
+                  onSphereFramePresented();
+                }}
                 onContextLost={onContextLost}
               />
             </UiErrorBoundary>
@@ -137,14 +138,14 @@ export function PanoramaViewerPanel({
           <img
             src={resource.displayUrl}
             alt={t('viewer.panorama.flatAlt')}
-            className={`h-full w-full select-none ${staticPreviewFitClass}`}
+            className="h-full w-full select-none object-contain"
             draggable={false}
           />
         ) : null}
 
         {showFrozenPreview && frozenPreviewUrl ? (
           <img
-            src={frozenPreviewUrl}
+            src={resolveImageDisplayUrl(frozenPreviewUrl)}
             alt={renderSphere ? '' : t('viewer.panorama.flatAlt')}
             aria-hidden={renderSphere ? true : undefined}
             data-panorama-frozen-preview={

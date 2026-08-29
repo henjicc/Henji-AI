@@ -1231,9 +1231,23 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     )
     const primarySurface = inlineViewer.locator('[data-panorama-inline-surface]')
     const secondarySurface = secondaryInlineViewer.locator('[data-panorama-inline-surface]')
+    const initialPreview = primarySurface.locator('img[data-panorama-frozen-preview="true"]')
+    await initialPreview.waitFor({ state: 'visible', timeout: 12000 })
+    await page.waitForFunction(() => (
+      document.querySelectorAll('[data-panorama-inline-surface] [data-panorama-surface="sphere"] canvas').length === 0
+    ), undefined, { timeout: 8000 })
+    const initialPreviewFrame = await primarySurface.screenshot({ animations: 'disabled' })
+    await page.mouse.move(20, 80)
     await primarySurface.hover()
     const primarySphere = primarySurface.locator('[data-panorama-surface="sphere"] canvas')
     await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await primarySurface.locator('[data-panorama-transition-preview="true"]')
+      .waitFor({ state: 'detached', timeout: 8000 })
+    const initialSphereFrame = await primarySurface.screenshot({ animations: 'disabled' })
+    const initialPreviewDiff = await diffBuffers(initialPreviewFrame, initialSphereFrame)
+    if (initialPreviewDiff.changedPct > 1) {
+      throw new Error(`全景结果初始预览不是默认球面视角：变化像素 ${initialPreviewDiff.changedPct}%`)
+    }
     if (await activeInlineCanvases.count() > 1) throw new Error('全景节点内嵌 WebGL Canvas 超过 1 个')
     await secondarySurface.hover()
     await secondarySurface.locator('[data-panorama-surface="sphere"] canvas')
@@ -1296,8 +1310,28 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       throw new Error(`全景冻结帧不是所见即所得：变化像素 ${frozenFrameDiff.changedPct}%`)
     }
     if (await activeInlineCanvases.count()) throw new Error('指针移出全景节点后仍保留内嵌 WebGL Canvas')
+
+    // 项目重开后直接显示上次冻结视角，并从同一相机状态继续交互。
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await resultNode.waitFor({ state: 'visible', timeout: 12000 })
+    await frozenPreview.waitFor({ state: 'visible', timeout: 12000 })
+    const reopenedFrozenFrame = await primarySurface.screenshot({ animations: 'disabled' })
+    const reopenedFrozenDiff = await diffBuffers(frozenFrame, reopenedFrozenFrame)
+    if (reopenedFrozenDiff.changedPct > 1) {
+      throw new Error(`项目重开后没有恢复上次全景预览：变化像素 ${reopenedFrozenDiff.changedPct}%`)
+    }
+    await page.mouse.move(20, 80)
     await primarySurface.hover()
     await primarySphere.waitFor({ state: 'visible', timeout: 12000 })
+    await primarySurface.locator('[data-panorama-transition-preview="true"]')
+      .waitFor({ state: 'detached', timeout: 8000 })
+    const reopenedSphereFrame = await primarySurface.screenshot({ animations: 'disabled' })
+    const reopenedSphereDiff = await diffBuffers(frozenFrame, reopenedSphereFrame)
+    if (reopenedSphereDiff.changedPct > 1) {
+      throw new Error(`项目重开后全景相机没有从上次视角继续：变化像素 ${reopenedSphereDiff.changedPct}%`)
+    }
 
     const flatButton = resultNode.getByRole('button', { name: /^(平面|Flat)$/i })
     const sphereButton = resultNode.getByRole('button', { name: /^(球面|Sphere)$/i })

@@ -288,6 +288,8 @@ export interface PanoramaGenerationNodeData extends ImageEditNodeData {
 
 export interface PanoramaViewerNodeData extends NodeImageData {
   resultKind: 'panorama';
+  /** 当前球面相机的节点预览图；与源全景图的等距柱状缩略图分开持久化。 */
+  panoramaPreviewImageUrl?: string | null;
   /** 节点内显示方式；不改变源图严格 2:1 的等距柱状投影语义。 */
   viewMode: PanoramaViewMode;
   /** 只决定观察窗口与视角截图构图，不能用于全景源图下载或 GPano 判定。 */

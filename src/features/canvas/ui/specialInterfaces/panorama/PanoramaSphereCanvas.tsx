@@ -185,7 +185,10 @@ export interface PanoramaCaptureOptions {
 }
 
 /** 不传尺寸时严格沿用当前 WebGL 视口与相机投影，用于所见即所得的节点冻结帧。 */
-export type PanoramaCaptureCurrentView = (options?: PanoramaCaptureOptions) => string | null;
+export type PanoramaCaptureCurrentView = (
+  options?: PanoramaCaptureOptions,
+  view?: PanoramaCameraView,
+) => string | null;
 
 interface PanoramaCaptureResources {
   sceneTarget: WebGLRenderTarget;
@@ -247,8 +250,16 @@ function capturePanoramaView(
   camera: PerspectiveCamera,
   options: PanoramaCaptureOptions,
   preserveCameraProjection: boolean,
+  view?: PanoramaCameraView,
 ): string {
   const captureCamera = camera.clone();
+  if (view) {
+    const normalizedView = normalizePanoramaCameraView(view);
+    captureCamera.rotation.order = 'YXZ';
+    captureCamera.rotation.set(normalizedView.pitch, normalizedView.yaw, 0);
+    captureCamera.fov = normalizedView.fov;
+    captureCamera.updateProjectionMatrix();
+  }
   if (!preserveCameraProjection) {
     captureCamera.clearViewOffset();
     captureCamera.aspect = options.width / options.height;
@@ -275,7 +286,7 @@ function PanoramaCaptureBridge({
   useEffect(() => {
     if (!captureRef) return;
     let resources: PanoramaCaptureResources | null = null;
-    const capture: PanoramaCaptureCurrentView = (options) => {
+    const capture: PanoramaCaptureCurrentView = (options, view) => {
       try {
         const viewportSize = options ?? (() => {
           const size = gl.getDrawingBufferSize(new Vector2());
@@ -292,6 +303,7 @@ function PanoramaCaptureBridge({
           camera as PerspectiveCamera,
           viewportSize,
           options === undefined,
+          view,
         );
       } catch {
         return null;

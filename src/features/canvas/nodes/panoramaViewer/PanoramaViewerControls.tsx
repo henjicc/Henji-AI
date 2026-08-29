@@ -38,7 +38,7 @@ export function PanoramaViewerControls({
 
   return (
     <div
-      className="nodrag nopan nowheel flex min-h-12 items-center gap-2 border-t border-veil-subtle px-2 py-1.5"
+      className="nodrag nopan nowheel relative z-raised flex min-h-12 items-center gap-2 border-t border-veil-subtle px-2 py-1.5"
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >

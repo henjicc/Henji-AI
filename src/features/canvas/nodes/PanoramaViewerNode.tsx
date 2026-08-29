@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { createLogger } from '@/core/logging';
 import { ICON_PANORAMA } from '@/core/theme/icons';
 import { commitPanoramaViewSnapshot } from '@/features/canvas/application/panoramaSnapshotApplicationService';
-import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { persistImageLocally, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
 import {
   CANVAS_NODE_TYPES,
   type PanoramaViewerNodeData,
@@ -43,6 +43,10 @@ const DEFAULT_NODE_WIDTH = 448;
 const MIN_NODE_WIDTH = 320;
 const CONTROL_AREA_HEIGHT = 48;
 
+function resolvePersistedPanoramaPreview(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
 type PanoramaViewerNodeProps = NodeProps & {
   id: string;
   data: PanoramaViewerNodeData;
@@ -73,11 +77,18 @@ export const PanoramaViewerNode = memo(({
   const releaseInlineLease = usePanoramaInlineViewerStore((state) => state.release);
   const captureRef = useRef<PanoramaCaptureCurrentView | null>(null);
   const currentViewRef = useRef<PanoramaCameraView | null>(null);
+  const autoPreviewCaptureRef = useRef(false);
+  const lastSourceRef = useRef<string | null>(null);
+  const previewCaptureFrameRef = useRef<number | null>(null);
+  const previewPersistRevisionRef = useRef(0);
   const pendingFreezeReleaseRef = useRef(false);
   const [retryRevision, setRetryRevision] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasWebglFailure, setHasWebglFailure] = useState(false);
-  const [frozenPreviewUrl, setFrozenPreviewUrl] = useState<string | null>(null);
+  const persistedPanoramaPreview = resolvePersistedPanoramaPreview(data.panoramaPreviewImageUrl);
+  const [frozenPreviewUrl, setFrozenPreviewUrl] = useState<string | null>(
+    () => persistedPanoramaPreview,
+  );
 
   const isActive = Boolean(selected) || isSelectedById;
   const source = data.imageUrl || data.previewImageUrl || '';
@@ -92,7 +103,58 @@ export const PanoramaViewerNode = memo(({
     [data],
   );
 
+  const persistPanoramaPreview = useCallback((previewDataUrl: string): void => {
+    const revision = previewPersistRevisionRef.current + 1;
+    previewPersistRevisionRef.current = revision;
+    logger.debug('全景节点视角预览开始落盘', {
+      event: 'panorama.viewer_preview.persist.start',
+      nodeId: id,
+    });
+    void persistImageLocally(previewDataUrl).then((persistedUrl) => {
+      if (previewPersistRevisionRef.current !== revision) return;
+      const canvas = useCanvasStore.getState();
+      const currentNode = canvas.nodes.find((node) => node.id === id);
+      if (
+        !currentNode
+        || currentNode.type !== CANVAS_NODE_TYPES.panoramaViewer
+        || currentNode.data.panoramaPreviewImageUrl !== previewDataUrl
+      ) return;
+      canvas.updateNodeData(id, { panoramaPreviewImageUrl: persistedUrl }, { skipHistory: true });
+      logger.debug('全景节点视角预览已落盘', {
+        event: 'panorama.viewer_preview.persist.completed',
+        nodeId: id,
+      });
+    }).catch((error: unknown) => {
+      if (previewPersistRevisionRef.current !== revision) return;
+      logger.warn('全景节点视角预览落盘失败，保留内嵌预览', {
+        event: 'panorama.viewer_preview.persist.failed',
+        nodeId: id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, [id]);
+
+  const storePanoramaPreview = useCallback((previewDataUrl: string): void => {
+    updateNodeData(
+      id,
+      { panoramaPreviewImageUrl: previewDataUrl },
+      { skipHistory: true },
+    );
+  }, [id, updateNodeData]);
+
+  const commitCameraView = useCallback((view: PanoramaCameraView): void => {
+    const normalized = normalizePanoramaCameraView(view);
+    const current = normalizePanoramaCameraView(data.cameraView);
+    if (
+      normalized.yaw === current.yaw
+      && normalized.pitch === current.pitch
+      && normalized.fov === current.fov
+    ) return;
+    updateNodeData(id, { cameraView: normalized });
+  }, [data.cameraView, id, updateNodeData]);
+
   const requestSphere = useCallback(() => {
+    autoPreviewCaptureRef.current = false;
     pendingFreezeReleaseRef.current = false;
     if (!hasWebglFailure && !isContentLodLow && data.viewMode === 'sphere') claimInlineLease(id);
   }, [claimInlineLease, data.viewMode, hasWebglFailure, id, isContentLodLow]);
@@ -108,12 +170,48 @@ export const PanoramaViewerNode = memo(({
   }, [data.viewMode, hasWebglFailure, id, isContentLodLow, releaseInlineLease]);
 
   useEffect(() => {
+    if (lastSourceRef.current === source) return;
+    lastSourceRef.current = source;
+    autoPreviewCaptureRef.current = false;
     pendingFreezeReleaseRef.current = false;
     setHasWebglFailure(false);
-    setFrozenPreviewUrl(null);
-  }, [source]);
+    setFrozenPreviewUrl(persistedPanoramaPreview);
+  }, [persistedPanoramaPreview, source]);
+
+  useEffect(() => {
+    if (!persistedPanoramaPreview?.startsWith('data:image/')) return;
+    persistPanoramaPreview(persistedPanoramaPreview);
+  }, [persistPanoramaPreview, persistedPanoramaPreview]);
+
+  useEffect(() => {
+    if (
+      !isActive
+      || persistedPanoramaPreview
+      || data.viewMode !== 'sphere'
+      || hasWebglFailure
+      || isContentLodLow
+      || resource.status !== 'ready'
+      || !resource.isEquirectangular
+    ) return;
+    autoPreviewCaptureRef.current = true;
+    claimInlineLease(id);
+  }, [
+    claimInlineLease,
+    data.viewMode,
+    hasWebglFailure,
+    id,
+    isActive,
+    isContentLodLow,
+    persistedPanoramaPreview,
+    resource,
+  ]);
 
   useEffect(() => () => {
+    if (previewCaptureFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewCaptureFrameRef.current);
+      previewCaptureFrameRef.current = null;
+    }
+    previewPersistRevisionRef.current += 1;
     pendingFreezeReleaseRef.current = false;
     releaseInlineLease(id);
   }, [id, releaseInlineLease]);
@@ -131,10 +229,12 @@ export const PanoramaViewerNode = memo(({
   }, [claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
 
   const handleContextLost = useCallback(() => {
+    autoPreviewCaptureRef.current = false;
     pendingFreezeReleaseRef.current = false;
     setHasWebglFailure(true);
+    setFrozenPreviewUrl(persistedPanoramaPreview);
     releaseInlineLease(id);
-  }, [id, releaseInlineLease]);
+  }, [id, persistedPanoramaPreview, releaseInlineLease]);
 
   const handleViewportAspectRatioChange = useCallback((
     viewportAspectRatio: PanoramaViewportAspectRatio,
@@ -143,23 +243,40 @@ export const PanoramaViewerNode = memo(({
   }, [id, updateNodeData]);
 
   const handleCameraViewChangeEnd = useCallback((view: PanoramaCameraView) => {
-    const normalized = normalizePanoramaCameraView(view);
-    const current = normalizePanoramaCameraView(data.cameraView);
-    if (
-      normalized.yaw === current.yaw
-      && normalized.pitch === current.pitch
-      && normalized.fov === current.fov
-    ) return;
-    updateNodeData(id, { cameraView: normalized });
-  }, [data.cameraView, id, updateNodeData]);
+    commitCameraView(view);
+    if (previewCaptureFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewCaptureFrameRef.current);
+    }
+    previewCaptureFrameRef.current = window.requestAnimationFrame(() => {
+      previewCaptureFrameRef.current = null;
+      const previewUrl = captureRef.current?.(undefined, view);
+      if (previewUrl) storePanoramaPreview(previewUrl);
+    });
+  }, [commitCameraView, storePanoramaPreview]);
+
+  const handleSphereFramePresented = useCallback(() => {
+    if (persistedPanoramaPreview) return;
+    const previewUrl = captureRef.current?.(undefined, currentViewRef.current ?? undefined);
+    if (!previewUrl) return;
+    storePanoramaPreview(previewUrl);
+    if (!autoPreviewCaptureRef.current) return;
+    autoPreviewCaptureRef.current = false;
+    pendingFreezeReleaseRef.current = true;
+    setFrozenPreviewUrl(previewUrl);
+  }, [persistedPanoramaPreview, storePanoramaPreview]);
 
   const freezeInlineView = useCallback(() => {
     if (!hasInlineLease) return;
+    if (previewCaptureFrameRef.current !== null) {
+      window.cancelAnimationFrame(previewCaptureFrameRef.current);
+      previewCaptureFrameRef.current = null;
+    }
     const currentView = currentViewRef.current;
-    if (currentView) handleCameraViewChangeEnd(currentView);
+    if (currentView) commitCameraView(currentView);
     const capture = captureRef.current;
     if (capture) {
-      const previewUrl = capture();
+      const previewUrl = capture(undefined, currentView ?? undefined);
+      if (previewUrl) storePanoramaPreview(previewUrl);
       if (previewUrl && previewUrl !== frozenPreviewUrl) {
         pendingFreezeReleaseRef.current = true;
         setFrozenPreviewUrl(previewUrl);
@@ -167,7 +284,14 @@ export const PanoramaViewerNode = memo(({
       }
     }
     releaseInlineLease(id);
-  }, [frozenPreviewUrl, handleCameraViewChangeEnd, hasInlineLease, id, releaseInlineLease]);
+  }, [
+    commitCameraView,
+    frozenPreviewUrl,
+    hasInlineLease,
+    id,
+    releaseInlineLease,
+    storePanoramaPreview,
+  ]);
 
   const handleFrozenPreviewReady = useCallback(() => {
     if (!pendingFreezeReleaseRef.current) return;
@@ -195,7 +319,10 @@ export const PanoramaViewerNode = memo(({
       }
       const capture = captureRef.current;
       if (!capture) throw new Error('未能恢复全景视角渲染');
-      const dataUrl = capture(resolvePanoramaCaptureSize(data.viewportAspectRatio));
+      const dataUrl = capture(
+        resolvePanoramaCaptureSize(data.viewportAspectRatio),
+        currentViewRef.current ?? undefined,
+      );
       if (!dataUrl) throw new Error('未获取到当前全景视角');
       await commitPanoramaViewSnapshot({
         sourceNodeId: id,
@@ -281,6 +408,7 @@ export const PanoramaViewerNode = memo(({
         onViewModeChange={handleViewModeChange}
         onViewportAspectRatioChange={handleViewportAspectRatioChange}
         onCameraViewChangeEnd={handleCameraViewChangeEnd}
+        onSphereFramePresented={handleSphereFramePresented}
         onCapture={() => void handleCapture()}
         onFrozenPreviewReady={handleFrozenPreviewReady}
         onContextLost={handleContextLost}

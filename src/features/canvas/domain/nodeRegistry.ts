@@ -373,6 +373,7 @@ const panoramaViewerNodeDefinition: CanvasNodeDefinition<PanoramaViewerNodeData>
     aspectRatio: '2:1',
     isSizeManuallyAdjusted: false,
     resultKind: 'panorama',
+    panoramaPreviewImageUrl: null,
     viewMode: PANORAMA_DEFAULT_VIEW_MODE,
     viewportAspectRatio: PANORAMA_DEFAULT_VIEWPORT_ASPECT_RATIO,
     cameraView: { ...PANORAMA_DEFAULT_CAMERA_VIEW },

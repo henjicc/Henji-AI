@@ -58,6 +58,7 @@ describe('PanoramaViewerPanel', () => {
         onViewModeChange={vi.fn()}
         onViewportAspectRatioChange={vi.fn()}
         onCameraViewChangeEnd={vi.fn()}
+        onSphereFramePresented={vi.fn()}
         onCapture={vi.fn()}
         onFrozenPreviewReady={vi.fn()}
         onContextLost={vi.fn()}
@@ -99,6 +100,7 @@ describe('PanoramaViewerPanel', () => {
       onViewModeChange: vi.fn(),
       onViewportAspectRatioChange: vi.fn(),
       onCameraViewChangeEnd: vi.fn(),
+      onSphereFramePresented: vi.fn(),
       onCapture: vi.fn(),
       onFrozenPreviewReady: vi.fn(),
       onContextLost: vi.fn(),

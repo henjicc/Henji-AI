@@ -92,6 +92,7 @@ describe('720°全景节点定义', () => {
       previewImageUrl: null,
       aspectRatio: '2:1',
       resultKind: 'panorama',
+      panoramaPreviewImageUrl: null,
       viewMode: 'sphere',
       viewportAspectRatio: '16:9',
       cameraView: { yaw: 0, pitch: 0, fov: 70 },

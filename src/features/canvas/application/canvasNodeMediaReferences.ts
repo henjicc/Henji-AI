@@ -3,7 +3,13 @@ import { registry } from '@/core/ModelRegistry'
 import { derivedMediaStateKey } from '@/core/params/derivedMediaState'
 import type { ParamDef } from '@/core/types'
 
-const MEDIA_URL_FIELDS = ['imageUrl', 'previewImageUrl', 'videoUrl', 'audioUrl'] as const
+const MEDIA_URL_FIELDS = [
+  'imageUrl',
+  'previewImageUrl',
+  'panoramaPreviewImageUrl',
+  'videoUrl',
+  'audioUrl',
+] as const
 const MEDIA_INPUT_KINDS = ['image', 'video', 'audio'] as const
 const MEDIA_PARAM_TYPES = new Set<ParamDef['type']>([
   'image-upload',
