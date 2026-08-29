@@ -25,7 +25,8 @@ interface CanvasBatchPlan {
   planRef: string
   projectId: string
   createdCanvasRevision: number
-  createdFingerprint: string
+  createdNodes: CanvasNode[]
+  createdEdges: CanvasEdge[]
   operations: CanvasBatchOperation[]
   createdAt: number
   committed: boolean
@@ -38,8 +39,13 @@ interface CanvasBatchUndo {
   beforeEdges: CanvasEdge[]
   beforeHistory: CanvasHistoryState
   beforeSelectedNodeId: string | null
-  afterFingerprint: string
+  afterNodes: CanvasNode[]
+  afterEdges: CanvasEdge[]
 }
+
+// canvasStore 的节点与连线写入始终替换数组引用。事务冲突检测直接保存快照引用即可；
+// 若在这里序列化整张画布，工具条每创建一个轻量节点都会同步遍历全部节点、媒体数据与历史，
+// 其耗时会随项目体量增长，并阻塞 React 提交新节点的首帧。
 
 const plans = new Map<string, CanvasBatchPlan>()
 const undos = new Map<string, CanvasBatchUndo>()
@@ -49,20 +55,6 @@ const logger = createLogger('features.canvas.batch')
 function cleanupExpiredPlans(): void {
   const threshold = Date.now() - PLAN_TTL_MS
   for (const [key, plan] of plans) if (plan.createdAt < threshold || plan.committed) plans.delete(key)
-}
-
-function fingerprint(nodes: CanvasNode[], edges: CanvasEdge[]): string {
-  return JSON.stringify({
-    nodes: nodes.map((node) => ({ id: node.id, type: node.type, position: node.position, data: node.data })),
-    edges: edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      sourceHandle: edge.sourceHandle,
-      targetHandle: edge.targetHandle,
-      data: edge.data,
-    })),
-  })
 }
 
 function requireNode(nodeId: string): CanvasNode {
@@ -121,12 +113,14 @@ export function planCanvasBatch(
   cleanupExpiredPlans()
   requireCurrentCanvasProject(projectId)
   operations.forEach(validateOperation)
+  const canvas = useCanvasStore.getState()
   const planRef = `canvas-plan:${uuidv4()}`
   plans.set(planRef, {
     planRef,
     projectId,
     createdCanvasRevision: canvasRevision,
-    createdFingerprint: fingerprint(useCanvasStore.getState().nodes, useCanvasStore.getState().edges),
+    createdNodes: canvas.nodes,
+    createdEdges: canvas.edges,
     operations: structuredClone(operations),
     createdAt: Date.now(),
     committed: false,
@@ -216,7 +210,8 @@ export async function runCanvasTransaction(
     beforeEdges,
     beforeHistory,
     beforeSelectedNodeId,
-    afterFingerprint: fingerprint(after.nodes, after.edges),
+    afterNodes: after.nodes,
+    afterEdges: after.edges,
   })
   // 整批只留一条撤销记录：步骤内部各自记录的历史在这里合并。
   const groupedPast = [...beforeHistory.past, { nodes: beforeNodes, edges: beforeEdges }]
@@ -275,7 +270,7 @@ export async function commitCanvasBatch(planRef: string): Promise<Record<string,
   if (plan.committed) throw new CanvasApplicationError('CONFLICT', '画布批量计划已经提交')
   requireCurrentCanvasProject(plan.projectId)
   const canvas = useCanvasStore.getState()
-  if (fingerprint(canvas.nodes, canvas.edges) !== plan.createdFingerprint) {
+  if (canvas.nodes !== plan.createdNodes || canvas.edges !== plan.createdEdges) {
     throw new CanvasApplicationError('STALE_CONTEXT', '画布批量计划创建后项目已发生变化，请重新规划', true, {
       planRef,
       projectId: plan.projectId,
@@ -303,7 +298,11 @@ export function undoCanvasBatch(projectId: string, undoRef: string): Record<stri
   if (!record) return null
   requireCurrentCanvasProject(projectId)
   const canvas = useCanvasStore.getState()
-  if (record.projectId !== projectId || fingerprint(canvas.nodes, canvas.edges) !== record.afterFingerprint) {
+  if (
+    record.projectId !== projectId
+    || canvas.nodes !== record.afterNodes
+    || canvas.edges !== record.afterEdges
+  ) {
     throw new CanvasApplicationError('STALE_CONTEXT', '批量操作后画布已发生其它变化，该批量撤销引用失效')
   }
   canvas.setCanvasData(record.beforeNodes, record.beforeEdges, record.beforeHistory)

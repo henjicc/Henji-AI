@@ -141,7 +141,7 @@ describe('canvas batch service', () => {
     ])
   })
 
-  it('计划创建后画布变化会触发 revision 指纹冲突', async () => {
+  it('计划创建后画布数组变化会触发 revision 冲突', async () => {
     const plan = planCanvasBatch(projectId, [
       { kind: 'update_node', nodeId, data: { displayName: '不应提交' } },
     ], 2)
