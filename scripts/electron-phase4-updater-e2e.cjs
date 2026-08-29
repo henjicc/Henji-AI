@@ -28,7 +28,7 @@ async function waitForStatus(page, predicate, timeoutMs) {
 
 async function main() {
   if (!fs.existsSync(MAIN_ENTRY)) {
-    throw new Error('Missing out/main/index.cjs. Run `npm run electron:build` before this test.')
+    throw new Error('Missing out/main/index.cjs. Run `npm run electron:bundle` before this test.')
   }
 
   const consoleErrors = []

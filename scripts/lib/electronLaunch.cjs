@@ -180,7 +180,7 @@ function assertBuildFreshness(mainEntry) {
     throw new Error(
       `构建产物不存在：${mainEntry || '(未指定)'}\n`
       + '真实性测试与巡检跑的是 out/ 里的产物，不会自动构建。请先运行：\n'
-      + '  npx electron-vite build'
+      + '  npm run electron:bundle'
     )
   }
 
@@ -197,7 +197,7 @@ function assertBuildFreshness(mainEntry) {
     + `  产物 ${path.relative(ROOT_DIR, mainEntry)}：${fmt(builtAt)}\n`
     + `  最新源码改动：${fmt(newest)}\n`
     + '请先重新构建：\n'
-    + '  npx electron-vite build\n'
+    + '  npm run electron:bundle\n'
     + '（确实要在旧产物上跑，设 HENJI_SKIP_BUILD_FRESHNESS=1）'
   )
 }

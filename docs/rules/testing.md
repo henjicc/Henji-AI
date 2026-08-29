@@ -35,6 +35,14 @@ npx eslint path/to/changed.ts path/to/changed.tsx --report-unused-disable-direct
 - 只改测试文件时，只运行该测试文件；除非同时改了共享测试设施，不跑全量套件
 - `vitest related` 只接收**源文件**；已知测试路径时优先直接运行测试文件
 
+Agent 日常优先使用统一入口，并显式列出**本次任务自己的文件**：
+
+```bash
+npm run verify:changed -- --level L1 src/path/source.ts src/path/source.test.ts
+```
+
+该命令不会读取整个 `git diff`，因此不会把并行任务留在同一工作区的改动纳入验证。可先加 `--dry-run` 查看计划；不得为了省事省略文件清单后改跑全量。
+
 ### L2：共享或高风险模块改动
 
 适用：导出类型/公共契约、共享 store、持久化/迁移、权限、网络与文件 I/O、重试/取消、异步状态流、跨多个直接消费者的模块。
@@ -51,7 +59,13 @@ npx tsc -p tsconfig.json --noEmit
 
 # Electron 主进程 / preload
 npx tsc -p tsconfig.electron.json --noEmit
-npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
+npm run lint:electron
+```
+
+两套 TypeScript 工程已启用本地增量缓存；仍然只能检查改动所属工程，不能因为第二次更快就无差别跑两套。也可以用显式文件入口让它自动选择所属工程：
+
+```bash
+npm run verify:changed -- --level L2 electron/main/path/to/changed.ts
 ```
 
 只有确实跨越渲染层与 Electron 边界时，才同时跑两个 TypeScript 工程。
@@ -69,13 +83,15 @@ SDK 的请求/响应、轮询、SSE、WebSocket 或流式 parser 属于 L2 起�
 
 ```bash
 npm run lint
-npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
+npm run lint:electron
 npx tsc -p tsconfig.json --noEmit
 npx tsc -p tsconfig.electron.json --noEmit
 npx vitest run
 ```
 
 `npm test` / `npx vitest run` 是全量单测，**不是每次代码改动的默认收尾命令**。`electron:build` 也不是全量单测的替代品。
+
+历史任务文件中的验证清单不具有持续升级权：`docs/task/**` 只记录当时范围和证据。恢复旧任务时仍按本文件重新判级；只有用户明确要求复现原验收、发布或当前改动本身满足 L3，才照搬其中的全量命令。
 
 ## 二、验证范围只能因风险升级
 
@@ -120,9 +136,9 @@ npx vitest run
 
 ### 真实性测试统一入口
 
-当问题必须回答“在真实应用里到底通不通”，统一走 `npm run test:reality`，按证据成本选层，禁止另写一条临时 Electron/Playwright 启动链：
+当问题必须回答“在真实应用里到底通不通”，统一走 `npm run test:reality`，按证据成本选层，禁止另写一条临时 Electron/Playwright 启动链。需要新产物时显式传 `--build`，它只运行轻量 `electron:bundle`，不会附带完整质量门禁：
 
-> ⚠️ **这些层跑的是 `out/` 里的构建产物，本身不构建。** 只改源码没重新构建就跑，
+> ⚠️ **默认直接使用 `out/` 里的构建产物；只有显式 `--build` 才先做轻量构建。** 只改源码没重新构建就跑，
 > 截图与断言反映的是**上一次构建的应用**，会得到一个全绿但毫无意义的结果。
 >
 > `scripts/lib/electronLaunch.cjs` 的 `assertBuildFreshness` 会在启动前比对
@@ -130,8 +146,8 @@ npx vitest run
 > 要跑的命令；产物不存在同样失败。这条守卫覆盖全部经 `launchElectronApp` 启动的脚本
 > （巡检、审计、smoke、DPI、更新 e2e、画布压测与基准）。
 >
-> 所以改了渲染层先 `npx electron-vite build` 再跑（`npm run electron:build` 会连带
-> 跑全部静态检查，只为看界面时用不着）。确实要在旧产物上跑，设
+> 所以改了运行时代码后优先给 `test:reality` 加 `--build`，或单独运行 `npm run electron:bundle`。
+> `npm run electron:build` 会连带全部静态检查，只为看界面时用不着。确实要在旧产物上跑，设
 > `HENJI_SKIP_BUILD_FRESHNESS=1`——但那等于放弃结论的有效性，要有明确理由。
 >
 > ⚠️ **构建会打断正在运行的 `electron:dev`。** 开发模式也是从 `out/` 加载的，
@@ -158,14 +174,14 @@ npx vitest run
 ```bash
 npm run test:reality -- --suite unit --test src/features/example.test.ts
 npm run test:reality -- --suite integration
-npm run test:reality -- --suite ui --only 3D --size 1440x900
-npm run test:reality -- --suite ui --profile real --only 设置
-npm run test:reality -- --suite live --profile real --allow-paid --allow-writes --only camera
+npm run test:reality -- --build --suite ui --only 3D --size 1440x900
+npm run test:reality -- --build --suite ui --profile real --only 设置
+npm run test:reality -- --build --suite live --profile real --allow-paid --allow-writes --only camera
 ```
 
 UI 真实性测试不能只证明“脚本点完了”或“截图生成了”。每个场景同时订阅浏览器 `console error` / `pageerror`，并通过应用正式 logging 查询接口用 `afterTimestamp + level + limit` 截取该场景之后的结构化错误与警告。错误进入失败判据，警告进入 `evidence.json` 供诊断。**不要让测试脚本直接读取整份日志文件**：日志文件仍是唯一持久化来源，主进程接口负责流式过滤、限量和脱敏，脚本只消费窄结果；只有日志 IPC/查询服务本身坏掉时，才把直接读文件作为救援路径。
 
-真实应用视觉审查按固定顺序执行：需要时先 `electron:build` → 确认并暂停占用同一真实资料目录的当前仓库开发实例 → 用 `test:reality --suite ui|ui-audit --profile real` 运行只读场景 → Agent 逐张打开实际截图检查对齐、裁切、层级、颜色与文案 → 核对 `evidence.json` 和结构化日志 → 退出巡检实例 → 按任务完成标准恢复或重启开发环境。禁止用浏览器、ego-browser、Chrome、裸 Vite 或临时 profile 的截图冒充真实用户环境；DOM 断言通过也不能替代目视截图。项目正式 Electron 自动化可以执行点击、悬浮和画布交互，不受下文“不要人工上手”的限制。
+真实应用视觉审查按固定顺序执行：确认并暂停占用同一真实资料目录的当前仓库开发实例 → 用 `test:reality --build --suite ui|ui-audit --profile real` 运行最小只读场景 → Agent 逐张打开实际截图检查对齐、裁切、层级、颜色与文案 → 核对 `evidence.json` 和结构化日志 → 退出巡检实例 → 仅在本次需要交付运行中应用时恢复或重启开发环境。禁止用浏览器、ego-browser、Chrome、裸 Vite 或临时 profile 的截图冒充真实用户环境；DOM 断言通过也不能替代目视截图。项目正式 Electron 自动化可以执行点击、悬浮和画布交互，不受下文“不要人工上手”的限制。
 
 ## 四、按改动类型追加专项检查
 
@@ -331,12 +347,12 @@ find src electron \( -name '*.ts' -o -name '*.tsx' \) \
 2. 该级别中与改动**直接相关**的最小检查已实际执行并通过；不相关命令不需要跑
 3. 有失败的，如实报告失败输出，不隐瞒、不用无关测试数量淡化
 4. 需要用户手动验证的部分，已写出可照做的步骤和验证点
-5. 最终回复前已检查当前仓库的 `npm run electron:dev`：未运行则优先用 `npm run electron:dev -- --background` 启动；已运行且本次需要重启则仅重启当前仓库的开发进程树，并优先使用该最小化启动参数；已运行且无需重启则保持单实例。该模式仍须创建并加载真实 Electron 窗口，启动完成后最小化，并通过 `backgroundThrottling: false` 保持动画、定时器、绘制与帧交换，不能用 headless 或纯后台进程冒充。只有测试启动聚焦行为、观察首屏或用户明确要求时才普通前台启动。进程归属必须通过当前仓库工作目录或明确的命令链确认，禁止宽泛结束其他 `node` / `Electron` 进程。启动后要看到开发服务就绪和 Electron 窗口处于最小化状态的证据，失败必须保留输出并如实报告
+5. 只有本次需要交付运行中应用、改变了 Electron 运行时代码，或实际运行过会中断开发实例的构建/Reality 验收时，最终回复前才检查当前仓库的 `npm run electron:dev`。分析、规则/文档、测试文件、纯 SDK、纯脚本和无需真实窗口的局部逻辑任务跳过本条。触发时：未运行则优先用 `npm run electron:dev -- --background` 启动；已运行且本次需要重启则仅重启当前仓库的开发进程树；已运行且无需重启则保持单实例。进程归属必须通过当前仓库工作目录或明确命令链确认，禁止宽泛结束其他 `node` / `Electron` 进程
 6. 新增/改造的关键业务链路已按 [logging.md](logging.md) 补齐结构化日志
 
 完成报告只列实际执行的检查及结果，不需要为未运行且不相关的全量命令道歉。
 
-开发环境状态统一写成以下四种之一：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`。
+触发开发环境维护时，状态统一写成以下四种之一：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`；未触发时不必报告开发环境。
 
 ## 七、CI 全量兜底
 

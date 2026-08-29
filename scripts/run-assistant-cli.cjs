@@ -6,7 +6,7 @@ const projectRoot = path.resolve(__dirname, '..')
 const mainEntry = path.join(projectRoot, 'out', 'main', 'index.cjs')
 
 if (!existsSync(mainEntry)) {
-  process.stderr.write('未找到 Electron 构建产物。请先执行 npm run electron:build。\n')
+  process.stderr.write('未找到 Electron 构建产物。请先执行 npm run electron:bundle。\n')
   process.exitCode = 1
 } else {
   const electron = require('electron')

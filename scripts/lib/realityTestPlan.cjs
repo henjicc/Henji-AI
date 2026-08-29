@@ -12,6 +12,7 @@ function parseRealityTestArgs(argv) {
   const options = {
     allowPaid: false,
     allowWrites: false,
+    build: false,
     help: false,
     only: [],
     outDir: null,
@@ -28,6 +29,7 @@ function parseRealityTestArgs(argv) {
     if (token === '--help' || token === '-h') options.help = true
     else if (token === '--allow-paid') options.allowPaid = true
     else if (token === '--allow-writes') options.allowWrites = true
+    else if (token === '--build') options.build = true
     else if (token === '--probe') options.probe = true
     else if (token === '--skip-generation') options.skipGeneration = true
     else if (token === '--visible') options.visible = true
@@ -69,6 +71,14 @@ function uiArgs(options) {
 
 function buildRealityTestPlan(options, root) {
   const plans = []
+  const needsElectronArtifact = options.suites.some((suite) => ['ui', 'ui-audit', 'live'].includes(suite))
+  if (options.build && needsElectronArtifact) {
+    plans.push({
+      label: '生成最新 Electron 运行产物',
+      command: process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      args: ['run', 'electron:bundle'],
+    })
+  }
   for (const suite of options.suites) {
     if (suite === 'unit') {
       plans.push({ label: '精确单元测试', command: process.execPath, args: [path.join(root, 'node_modules/vitest/vitest.mjs'), 'run', ...options.tests] })

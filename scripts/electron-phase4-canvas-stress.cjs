@@ -123,7 +123,7 @@ async function cleanupStressData(page, projectId, workDir) {
 
 async function main() {
   if (!fs.existsSync(MAIN_ENTRY)) {
-    throw new Error('Missing out/main/index.cjs. Run `npm run electron:build` before this stress test.')
+    throw new Error('Missing out/main/index.cjs. Run `npm run electron:bundle` before this stress test.')
   }
   if (!fs.existsSync(SAMPLE_VIDEO_PATH)) {
     throw new Error(`Missing sample video asset: ${SAMPLE_VIDEO_PATH}`)

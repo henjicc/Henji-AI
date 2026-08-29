@@ -5,7 +5,7 @@ const path = require('node:path')
 const workspaceRoot = path.resolve(__dirname, '..')
 const utilityEntry = path.join(workspaceRoot, 'out', 'main', 'agent-utility.cjs')
 if (!fs.existsSync(utilityEntry)) {
-  console.error('缺少 out/main/agent-utility.cjs，请先运行 npm run electron:build')
+  console.error('缺少 out/main/agent-utility.cjs，请先运行 npm run electron:bundle')
   process.exit(1)
 }
 

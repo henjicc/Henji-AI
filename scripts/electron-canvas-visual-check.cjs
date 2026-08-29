@@ -340,7 +340,7 @@ async function captureGestureComparison(page, session, startViewport, runDir) {
 }
 
 async function main() {
-  if (!fs.existsSync(MAIN_ENTRY)) throw new Error('缺少 out/main/index.cjs，请先执行 `npm run electron:build`。')
+  if (!fs.existsSync(MAIN_ENTRY)) throw new Error('缺少 out/main/index.cjs，请先执行 `npm run electron:bundle`。')
   for (const name of CONFIG_SET) if (!CONFIGS[name]) throw new Error(`未知配置：${name}`)
   if (!CONFIG_SET.includes('off')) throw new Error('VISUAL_SET 必须包含 off 基线')
 

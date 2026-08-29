@@ -61,11 +61,12 @@ jobs:
       - name: ESLint（渲染层）
         run: npm run lint
 
-      - name: 智能助手应用能力门禁
-        run: npm run check:assistant-capabilities
+      # 这里只跑结构门禁；其中的 Vitest 用例由后面的全量单测覆盖，避免重复执行 153 项。
+      - name: 智能助手应用能力结构门禁
+        run: npm run check:assistant-capabilities:structure
 
       - name: ESLint（主进程）
-        run: npx eslint electron --ext ts --report-unused-disable-directives --max-warnings 0
+        run: npm run lint:electron
 
       - name: 类型检查（渲染层）
         run: npx tsc -p tsconfig.json --noEmit
@@ -75,6 +76,9 @@ jobs:
 
       - name: 单元测试
         run: npx vitest run
+
+      - name: 验证工具自检
+        run: npm run test:validation-tools
 
   # ---------------------------------------------------------------------------
   # 安装包构建：只在推 v* 标签或手动触发时运行。

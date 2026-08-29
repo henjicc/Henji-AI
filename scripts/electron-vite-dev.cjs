@@ -1,7 +1,9 @@
 const { spawn } = require('node:child_process')
 const path = require('node:path')
+const { clearElectronDevState, writeElectronDevState } = require('./lib/electronDevState.cjs')
 
-const electronViteBin = path.resolve(__dirname, '../node_modules/electron-vite/bin/electron-vite.js')
+const root = path.resolve(__dirname, '..')
+const electronViteBin = path.join(root, 'node_modules/electron-vite/bin/electron-vite.js')
 const electronArgs = process.argv.slice(2)
 const electronViteArgs = [electronViteBin, 'dev']
 
@@ -19,10 +21,13 @@ if (env.ELECTRON_RUN_AS_NODE) {
 }
 
 const child = spawn(process.execPath, electronViteArgs, {
-  cwd: path.resolve(__dirname, '..'),
+  cwd: root,
   env,
   stdio: 'inherit',
 })
+
+writeElectronDevState(root)
+process.on('exit', () => clearElectronDevState(root))
 
 child.on('exit', (code, signal) => {
   if (signal) {

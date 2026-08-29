@@ -221,7 +221,7 @@ async function checkWorkspaceShell(page) {
 
 async function main() {
   if (!fs.existsSync(MAIN_ENTRY)) {
-    throw new Error('Missing out/main/index.cjs. Run `npm run electron:build` before this smoke test.')
+    throw new Error('Missing out/main/index.cjs. Run `npm run electron:bundle` before this smoke test.')
   }
 
   const consoleErrors = []

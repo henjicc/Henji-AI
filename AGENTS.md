@@ -43,6 +43,8 @@ npm run electron:dev                 # 仅在必须验证启动聚焦行为时�
 npm run dev                    # 裸 Vite 渲染层（不含主进程能力，不能作桌面验收依据）
 npm run lint                   # 渲染层 lint
 npm run test                   # 全量单元测试（仅 L3 / CI；日常改动按 testing.md 跑精确或相关测试）
+npm run verify:changed -- --level L1 <本次文件...>  # 显式文件清单的局部验证；禁止省略路径扫描整个脏工作区
+npm run electron:bundle        # 只生成最新 SDK/manifest/seeds 与 Electron 运行产物，不跑完整质量门禁
 npm run electron:build         # 完整构建：manifest/seeds + 全部静态检查 + tsc + electron-vite
 npm run electron:dist          # 生成安装包
 npm run electron:smoke         # 构建产物冒烟验收
@@ -53,9 +55,9 @@ npm run assistant:cli -- --goal "任务描述" --trace detailed
 npm run assistant:live:suite -- --only camera --skip-generation
 ```
 
-其余检查命令按改动类型选用，见 [docs/rules/testing.md](docs/rules/testing.md)。`electron:build` / `electron:dist` 费时，不要无必要地频繁执行。
+其余检查命令按改动类型选用，见 [docs/rules/testing.md](docs/rules/testing.md)。日常真实窗口验收需要新产物时用 `electron:bundle`；`electron:build` / `electron:dist` 仅用于构建链本身、发布或 L3，禁止因为“产物旧了”升级到完整构建。
 
-**助手行为要验证就真跑，不要默认写成手动步骤交给用户。** `assistant:cli` 跑在真实配置环境上，完整参数见 [assistant-capability.md](docs/rules/assistant-capability.md)。两条硬约束：改过 `electron/main/**` 必须先 `electron:build`，否则跑的是旧产物；`--approval full_access` 会产生**真实付费与写入**，必须由用户显式确认，默认不要带。
+**助手行为确实需要验证时就真跑，不要默认写成手动步骤交给用户。** `assistant:cli` 跑在真实配置环境上，完整参数见 [assistant-capability.md](docs/rules/assistant-capability.md)。两条硬约束：改过会进入运行产物的代码必须先 `electron:bundle`，否则跑的是旧产物；`--approval full_access` 会产生**真实付费与写入**，必须由用户显式确认，默认不要带。
 
 ## 全局架构边界
 
@@ -87,6 +89,8 @@ npm run assistant:live:suite -- --only camera --skip-generation
 - 以“可独立验证、可独立回滚的一组完整改动”为提交单位。功能、缺陷修复或重构达到明确完成边界，并按 [testing.md](docs/rules/testing.md) 完成匹配验证后，应及时自主提交，不得无故把多个已完成事项长期堆在工作区
 - 不为每次小编辑创建碎片提交：同一目的仍在连续修改、实现尚未闭环或验证未通过时继续完成；需要切换任务、保存可靠阶段成果或开始高风险尝试前，可以提交已验证的阶段成果
 - 测试随完成边界执行：改动进入可验证状态就运行最小匹配验证，失败先修复再提交；提交前检查工作区，避免混入无关文件、临时截图、日志、安装包或非必要生成产物
+- 每条耗时命令执行前必须能指出 [testing.md](docs/rules/testing.md) 中的具体升级条件；“保险起见”“目录重要”“历史任务以前跑过”都不是升级条件。`docs/task/**` 中旧验收清单只记录当时证据，除非用户明确要求恢复该任务或发布验收，否则一律按当前 `testing.md` 重新裁剪
+- 工作区有其他人的未提交改动时，`verify:changed` 必须显式传入本次文件；禁止用整个 `git diff`、全仓时间戳或历史任务清单替代本次影响范围
 - 改代码前先确认现有实现：本项目大量能力已有唯一入口，先找再写
 - 新增通用 UI 组件前，先告诉用户原因和替代方案，等确认后再创建
 - 遇到与规则冲突的需求，先说明冲突点，并给出建议，最终由用户决定
@@ -107,11 +111,11 @@ npm run assistant:live:suite -- --only camera --skip-generation
 每次改完代码：
 
 1. 跑完 [testing.md](docs/rules/testing.md) 中与本次改动匹配的检查，如实报告结果
-2. 不要人工接管用户鼠标做验收；拖拽、点击、悬浮、画布交互优先通过项目正式 `npm run test:reality -- --suite ui|ui-audit` 自动化执行。只有正式场景尚未覆盖或必须由用户作主观判断时，才写清操作步骤和验证点交给用户。真实应用视觉审查禁止使用浏览器、ego-browser 或 Chrome 工具代替 Electron；必须使用真实 Electron 窗口、项目正式场景和实际截图，并由 Agent 打开截图目视检查。
-3. **最终回复前必须检查本项目开发环境是否正在运行**，只识别工作目录属于当前仓库的 `npm run electron:dev` 进程，禁止按 `node` / `Electron` 名称宽泛结束其他项目进程。测试、助手验证与 Agent 收尾启动一律优先使用 `npm run electron:dev -- --background`：该模式仍创建并加载真实窗口，启动完成后直接最小化，同时禁用 Electron 后台节流以持续绘制和交换帧；只有必须验证启动聚焦行为、观察首屏或用户明确要求时，才使用普通前台启动：
+2. 只有本次改变了拖拽、点击、悬浮、窗口、WebGL、IPC 或其他必须在真实容器中证明的行为，才运行项目正式 `npm run test:reality -- --build --suite ui|ui-audit`；普通 TSX、样式、文案、纯逻辑和已有精确测试覆盖的交互不自动升级。需要真实应用视觉审查时禁止使用浏览器、ego-browser 或 Chrome 代替 Electron，并由 Agent 打开实际截图目视检查。
+3. **只有本次改动需要把真实应用交给用户继续查看、改变了 Electron 运行时代码，或实际运行过会中断开发实例的构建/Reality 验收时，最终回复前才检查并维护开发环境。** 分析、规则/文档、测试文件、纯 SDK、纯脚本和无需真实窗口的局部逻辑任务不启动、不重启开发环境。需要维护时只识别工作目录属于当前仓库的 `npm run electron:dev` 进程，禁止按 `node` / `Electron` 名称宽泛结束其他项目进程，并优先使用 `npm run electron:dev -- --background`：
    - 未运行：在可持续运行的终端会话中执行 `npm run electron:dev -- --background`，确认启动成功后再交付
    - 已运行且本次改动需要重启：只结束当前仓库对应的完整开发进程树，然后重新执行 `npm run electron:dev -- --background`
    - 已运行且无需重启：保持现状，不得重复启动第二个实例
    - 启动或重启失败：不得声称已完成，保留错误输出并如实报告
-   - 最终回复明确写出实际状态：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`
+   - 只有触发本条时，最终回复才写实际状态：`🟢 开发环境已启动` / `🔄 开发环境已重启` / `✔️无需重启（开发环境保持运行）` / `🔴 开发环境启动失败`
 4. 助手改动还要多一步：对照 [assistant-status.md](docs/rules/assistant-status.md) 第零节，判断本次是否改变了「通/不通」、增减了欠账，或**推翻了以前已确定做好的内容**——命中任一条就更新那份台账。普通缺陷修复不用动它。

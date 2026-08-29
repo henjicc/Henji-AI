@@ -279,7 +279,7 @@ function summarize(rounds) {
 
 async function main() {
   if (!fs.existsSync(MAIN_ENTRY)) {
-    throw new Error('缺少 out/main/index.cjs，请先执行 `npm run electron:build`。')
+    throw new Error('缺少 out/main/index.cjs，请先执行 `npm run electron:bundle`。')
   }
   for (const name of CONFIG_SET) {
     if (resolveConfigCss(name) === undefined) {

@@ -12,9 +12,9 @@ function printHelp() {
 用法：
   npm run test:reality -- --suite unit --test src/path/example.test.ts
   npm run test:reality -- --suite integration
-  npm run test:reality -- --suite ui --only 3D --size 1440x900
-  npm run test:reality -- --suite ui --profile real --only 设置
-  npm run test:reality -- --suite live --profile real --allow-paid --allow-writes --only camera
+  npm run test:reality -- --build --suite ui --only 3D --size 1440x900
+  npm run test:reality -- --build --suite ui --profile real --only 设置
+  npm run test:reality -- --build --suite live --profile real --allow-paid --allow-writes --only camera
 
 测试层：
   unit        精确、确定、零外部副作用的单元测试
@@ -24,6 +24,7 @@ function printHelp() {
   live        复用真实模型配置、API 密钥和业务数据的真机验收
 
 数据与副作用：
+  --build                   UI / UI Audit / live 前只生成最新 Electron 产物，不跑完整质量门禁
   --profile temporary|real  默认 temporary；real 复用当前应用资料与系统密钥链
   --real-data               --profile real 的别名
   --allow-writes            允许真实资料模式写业务数据

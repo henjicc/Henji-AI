@@ -201,7 +201,7 @@ async function cleanupCanvasInspectionFixtures(page, seededAt) {
 
 async function launchUiInspectionApp({ root, mainEntry, extraEnv = {}, profile = 'temporary', readOnly = true }) {
   if (!fs.existsSync(mainEntry)) {
-    throw new Error(`未找到 Electron 构建产物：${mainEntry}\n请先运行 npm run electron:build`)
+    throw new Error(`未找到 Electron 构建产物：${mainEntry}\n请先运行 npm run electron:bundle`)
   }
   const app = await launchElectronApp({
     mainEntry,

@@ -8,10 +8,10 @@
 
 自定义标题栏、窗口控制、preload bridge、SQLite、safeStorage、`henji-media://` 媒体协议、自动更新、原生拖拽/剪贴板。
 
-桌面端调试、测试、助手验证和 Agent 收尾启动一律优先使用
+只有任务确实需要真实桌面容器、交付运行中应用，或构建/Reality 验收中断了既有实例时，桌面端调试、测试、助手验证和 Agent 收尾启动才使用
 `npm run electron:dev -- --background`。该模式不是 headless：窗口会正常创建并加载，启动完成后直接最小化；
 同时仅为该窗口设置 `backgroundThrottling: false`，让最小化状态下的动画、定时器继续运行，并持续绘制和交换帧。
-用户从 Dock / 任务栏恢复痕迹AI后仍可正常取得焦点并交互。
+用户从 Dock / 任务栏恢复痕迹AI后仍可正常取得焦点并交互。分析、规则/文档、测试文件、纯 SDK、纯脚本和无需真实窗口的局部逻辑任务不得仅为满足收尾格式启动 Electron。
 
 只有必须验证“应用启动时主动取得焦点”、观察首屏，或用户明确要求前台弹出时，才使用普通
 `npm run electron:dev`。项目正式 `test:reality` Electron 自动化仍走其统一启动器，不得用开发命令替代。
