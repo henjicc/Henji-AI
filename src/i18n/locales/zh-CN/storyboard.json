@@ -183,7 +183,7 @@
       },
       "nineGrid": {
         "title": "九宫格",
-        "description": "围绕同一内容生成九宫格画面"
+        "description": "创建固定 3×3 的分镜生成节点；生成会使用节点中选择的图片编辑模型"
       },
       "upscale": {
         "title": "高清",
@@ -203,7 +203,7 @@
       },
       "gridSplit": {
         "title": "宫格切分",
-        "description": "按行列将图片切分为多个画面"
+        "description": "本地按行列切分现有图片并组成素材组，不调用生成模型"
       }
     }
   },

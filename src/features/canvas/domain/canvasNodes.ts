@@ -346,6 +346,10 @@ export interface StoryboardGenFrameItem {
 
 export interface StoryboardGenNodeData {
   displayName?: string;
+  /** 能力入口创建的固定预设；普通分镜节点保持缺省。 */
+  storyboardPreset?: 'nine-grid-v1';
+  capabilityId?: 'image.nine-grid';
+  promptTemplateVersion?: 'nine-grid-storyboard-v1';
   gridRows: number;
   gridCols: number;
   frames: StoryboardGenFrameItem[];

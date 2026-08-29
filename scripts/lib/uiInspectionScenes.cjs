@@ -809,6 +809,110 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await settlePage(page, 900)
   }
 
+  async function setupCanvasNineGrid(page) {
+    const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
+    const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
+    await sourceNode.click()
+    await page.waitForTimeout(350)
+
+    let nineGridAction = page.getByRole('button', { name: /^(九宫格|Nine-grid)$/i }).filter({ visible: true }).first()
+    if (!(await nineGridAction.count())) {
+      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
+      if (!(await moreButton.count())) throw new Error('九宫格工具入口不可见')
+      await moreButton.click()
+      nineGridAction = page.getByRole('button', { name: /^(九宫格|Nine-grid)$/i }).filter({ visible: true }).first()
+    }
+    await nineGridAction.waitFor({ state: 'visible', timeout: 8000 })
+    await nineGridAction.click()
+
+    const presetShell = page.locator('[data-storyboard-preset="nine-grid-v1"]').last()
+    await presetShell.waitFor({ state: 'visible', timeout: 12000 })
+    const storyboardNode = presetShell.locator('xpath=ancestor::*[contains(@class,"react-flow__node")][1]')
+    const storyboardNodeId = await storyboardNode.getAttribute('data-id')
+    if (!storyboardNodeId || storyboardNodeId === '__ui_panorama_source') {
+      throw new Error('九宫格入口未复用现有分镜生成节点创建相邻预设')
+    }
+    if (!(await storyboardNode.evaluate((element) => element.classList.contains('selected')))) {
+      throw new Error('九宫格入口创建后未选中新节点')
+    }
+    await presetShell.getByText(/固定 3×3/).waitFor({ state: 'visible', timeout: 8000 })
+    for (const label of ['行数减少', '行数增加', '列数减少', '列数增加']) {
+      const control = presetShell.getByRole('button', { name: label })
+      if (!(await control.isDisabled())) throw new Error(`固定九宫格仍允许修改：${label}`)
+    }
+    if (await page.locator('.react-flow__edge').count() < 1) throw new Error('九宫格工具条未创建源图连线')
+
+    // 不触发任何供应商请求；在同一真实 Electron 场景中执行现有本地宫格切分。
+    await sourceNode.click()
+    await page.waitForTimeout(350)
+    let splitAction = page.getByRole('button', { name: /^(宫格切分|Grid Split)$/i }).filter({ visible: true }).first()
+    if (!(await splitAction.count())) {
+      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
+      if (!(await moreButton.count())) throw new Error('宫格切分工具入口不可见')
+      await moreButton.click()
+      splitAction = page.getByRole('button', { name: /^(宫格切分|Grid Split)$/i }).filter({ visible: true }).first()
+    }
+    await splitAction.click()
+    const splitDialog = page.getByRole('dialog', { name: /切割工具|Split.*tool/i })
+    await splitDialog.waitFor({ state: 'visible', timeout: 12000 })
+    await splitDialog.getByText(/输出小格数量/).waitFor({ state: 'visible', timeout: 8000 })
+    await splitDialog.getByText('9', { exact: true }).last().waitFor({ state: 'visible', timeout: 8000 })
+    await splitDialog.getByRole('button', { name: /^(应用|Apply)$/i }).click()
+    await splitDialog.waitFor({ state: 'hidden', timeout: 30000 })
+
+    const group = page.locator('.react-flow__node').filter({ hasText: /宫格切分 · 3×3/ }).last()
+    await group.waitFor({ state: 'visible', timeout: 30000 })
+    await group.locator('[data-asset-group-preview-count="9"]').waitFor({ state: 'visible', timeout: 12000 })
+
+    await page.waitForTimeout(900)
+    await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    await settlePage(page, 500)
+    const persisted = await page.evaluate(async ({ targetProjectId, targetNodeId }) => {
+      const rows = await window.henjiNative.db.select(
+        'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
+        [targetProjectId]
+      )
+      const nodes = JSON.parse(rows[0]?.nodes_json ?? '[]')
+      const edges = JSON.parse(rows[0]?.edges_json ?? '[]')
+      const target = nodes.find((candidate) => candidate.id === targetNodeId)
+      const groups = nodes.filter((candidate) => candidate.type === 'assetGroupNode')
+      const splitGroup = groups.find((candidate) => candidate.data?.displayName === '宫格切分 · 3×3')
+      const members = splitGroup ? nodes.filter((candidate) => candidate.parentId === splitGroup.id) : []
+      return {
+        nodeType: target?.type,
+        capabilityId: target?.data?.capabilityId,
+        preset: target?.data?.storyboardPreset,
+        templateVersion: target?.data?.promptTemplateVersion,
+        rows: target?.data?.gridRows,
+        cols: target?.data?.gridCols,
+        frameCount: target?.data?.frames?.length,
+        hasSourceEdge: edges.some((edge) => edge.source === '__ui_panorama_source' && edge.target === targetNodeId),
+        groupCount: groups.length,
+        memberCount: members.length,
+        memberOrderCount: splitGroup?.data?.memberOrder?.length,
+      }
+    }, { targetProjectId: projectId, targetNodeId: storyboardNodeId })
+    if (persisted.nodeType !== 'storyboardGenNode'
+      || persisted.capabilityId !== 'image.nine-grid'
+      || persisted.preset !== 'nine-grid-v1'
+      || persisted.templateVersion !== 'nine-grid-storyboard-v1'
+      || persisted.rows !== 3
+      || persisted.cols !== 3
+      || persisted.frameCount !== 9
+      || !persisted.hasSourceEdge
+      || persisted.groupCount !== 1
+      || persisted.memberCount !== 9
+      || persisted.memberOrderCount !== 9) {
+      throw new Error(`九宫格或宫格切分保存语义丢失：${JSON.stringify(persisted)}`)
+    }
+
+    await page.locator(`[data-project-id="${projectId}"]:visible`).click()
+    await page.locator(`[data-storyboard-preset="nine-grid-v1"]`).waitFor({ state: 'visible', timeout: 12000 })
+    await page.locator('[data-asset-group-preview-count="9"]').waitFor({ state: 'visible', timeout: 12000 })
+    await page.mouse.move(1200, 700)
+    await settlePage(page, 900)
+  }
+
   async function setupCanvasPanoramaViewer(page) {
     const { generatedNodeId, projectId } = await setupCanvasPanoramaToolbar(page)
     await page.waitForTimeout(900)
@@ -1568,6 +1672,13 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       writesUserData: true,
       name: '画布-元素编辑节点与唯一蒙版编辑器',
       setup: setupCanvasElementEditNode,
+    },
+    {
+      id: 'canvas-nine-grid',
+      surface: '画布',
+      writesUserData: true,
+      name: '画布-固定九宫格预设与本地宫格切分',
+      setup: setupCanvasNineGrid,
     },
     {
       id: 'canvas-midjourney-node',

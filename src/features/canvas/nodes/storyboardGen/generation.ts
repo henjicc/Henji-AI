@@ -4,6 +4,11 @@ import type { StoryboardGenNodeData } from '@/features/canvas/domain/canvasNodes
 import { runCanvasGeneration } from '@/features/canvas/generation/runGeneration'
 import { prepareNodeImage } from '@/features/canvas/application/imageData'
 import { sanitizeStoryboardPromptText, sanitizeStoryboardText } from '@/features/canvas/application/storyboardText'
+import {
+  createStoryboardGridOutputContract,
+  isNineGridStoryboard,
+} from '@/features/canvas/capabilities/nineGridPolicy'
+import type { CanvasGenerationOutputBatchContractV1 } from '@/features/canvas/domain/generationOutputs'
 import { generateGridImageDataUrl } from './shared'
 
 const logger = createLogger('features.canvas.nodes.storyboardGen.generation')
@@ -33,9 +38,7 @@ interface GenerateStoryboardImageParams {
 }
 
 export interface GeneratedStoryboardImage {
-  imageUrl: string
-  previewImageUrl: string
-  aspectRatio: string
+  contract: CanvasGenerationOutputBatchContractV1
 }
 
 export function buildStoryboardPrompt({
@@ -49,7 +52,9 @@ export function buildStoryboardPrompt({
   const parts: string[] = []
 
   const promptDirectives: string[] = [
-    `生成一张${gridRows}×${gridCols}的${gridRows * gridCols}宫格分镜图`,
+    isNineGridStoryboard(nodeData)
+      ? '生成一组固定 3×3 的九宫格画面，九格按从左到右、从上到下的顺序表达内容'
+      : `生成一张${gridRows}×${gridCols}的${gridRows * gridCols}宫格分镜图`,
   ]
   if (keepStyleConsistent) {
     promptDirectives.push('图片风格与参考图保持一致')
@@ -102,29 +107,32 @@ export async function generateStoryboardImage({
     onProgress,
   })
 
-  const prepared = await prepareNodeImage(generated.primary)
   const metadataFrameNotes = frames
     .slice(0, gridRows * gridCols)
     .map((frame) => {
       const description = frameDescriptionDrafts[frame.id] ?? frame.description
       return sanitizeStoryboardText(description, ignoreAtTagWhenCopyingAndGenerating)
     })
-  const imageWithMetadata = await embedStoryboardImageMetadata(prepared.imageUrl, {
-    gridRows,
-    gridCols,
-    frameNotes: metadataFrameNotes,
-  }).catch((error) => {
-    logger.warn('[StoryboardMetadata] embed failed on generation output', error)
-    return prepared.imageUrl
-  })
-  const previewWithMetadata = prepared.previewImageUrl === prepared.imageUrl
-    ? imageWithMetadata
-    : prepared.previewImageUrl
+  let sources = generated.outputs
+  if (generated.outputs.length === 1) {
+    const prepared = await prepareNodeImage(generated.primary)
+    const imageWithMetadata = await embedStoryboardImageMetadata(prepared.imageUrl, {
+      gridRows,
+      gridCols,
+      frameNotes: metadataFrameNotes,
+    }).catch((error) => {
+      logger.warn('[StoryboardMetadata] embed failed on generation output', error)
+      return prepared.imageUrl
+    })
+    sources = [imageWithMetadata]
+  }
 
   return {
-    imageUrl: imageWithMetadata,
-    previewImageUrl: previewWithMetadata,
-    aspectRatio: prepared.aspectRatio,
+    contract: createStoryboardGridOutputContract({
+      sources,
+      rows: gridRows,
+      cols: gridCols,
+      frameNotes: metadataFrameNotes,
+    }),
   }
 }
-

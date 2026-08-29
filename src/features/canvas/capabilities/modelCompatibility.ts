@@ -214,6 +214,20 @@ export function mapCanvasCapabilityModelParams(
     return { compatible: true, params: { ...currentParams }, reasons: [] };
   }
 
+  if (policy.mode === 'node-schema') {
+    const reasons = policy.requiredTags
+      .filter((tag) => !model.meta.tags?.includes(tag))
+      .map((tag): CanvasModelCompatibilityReason => ({
+        code: 'required-tag',
+        message: `模型缺少能力标签 ${tag}`,
+      }));
+    return {
+      compatible: reasons.length === 0,
+      params: { ...getModelDefaults(model), ...currentParams },
+      reasons,
+    };
+  }
+
   const reasons: CanvasModelCompatibilityReason[] = [];
   const params = { ...getModelDefaults(model), ...currentParams };
   if (!policy.allowedCanonicalFamilies.includes(model.meta.canonicalModelId)) {

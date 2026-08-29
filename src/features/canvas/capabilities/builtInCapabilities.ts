@@ -11,6 +11,10 @@ import {
 import { UPSCALE_MODEL_POLICY } from './upscalePolicy';
 import { MULTI_ANGLE_MAX_VIEW_COUNT } from './multiAnglePolicy';
 import {
+  createNineGridNodeInitialData,
+  NINE_GRID_PROMPT_TEMPLATE_VERSION,
+} from './nineGridPolicy';
+import {
   PORTRAIT_TEXTURE_MODEL_POLICY,
   PORTRAIT_TEXTURE_TEMPLATE_VERSION,
 } from './portraitTexturePolicy';
@@ -180,11 +184,25 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
     order: 40,
     source: IMAGE_SOURCE,
     node: { kind: 'standard-generation', editor: 'standard' },
-    implementation: PLANNED_IMPLEMENTATION,
-    availability: PLANNED_AVAILABILITY,
-    modelPolicy: VERIFIED_MODEL_POLICY,
+    implementation: {
+      status: 'implemented',
+      execution: {
+        kind: 'canvas-node',
+        nodeType: CANVAS_NODE_TYPES.storyboardGen,
+        initialData: { ...createNineGridNodeInitialData() },
+      },
+    },
+    availability: {
+      releaseStage: 'available',
+      defaultEnabled: true,
+      unavailableReasonKey: null,
+    },
+    modelPolicy: {
+      mode: 'node-schema',
+      requiredTags: ['image-to-image'],
+    },
     promptPolicy: {
-      hiddenTemplateVersion: 'nine-grid-v1-draft',
+      hiddenTemplateVersion: NINE_GRID_PROMPT_TEMPLATE_VERSION,
       fixedSemanticParams: { rows: 3, columns: 3 },
       visibleParameterKeys: ['prompt'],
     },

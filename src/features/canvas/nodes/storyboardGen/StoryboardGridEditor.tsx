@@ -15,6 +15,7 @@ interface StoryboardGridEditorProps {
   frameLayout: StoryboardFrameLayout
   frameDocuments: Readonly<Record<string, PromptDocumentV1>>
   references: readonly PromptReferenceItem[]
+  gridLocked?: boolean
   onSelectNode: () => void
   onRowChange: (delta: number) => void
   onColChange: (delta: number) => void
@@ -74,6 +75,7 @@ export const StoryboardGridEditor = memo(({
   frameLayout,
   frameDocuments,
   references,
+  gridLocked = false,
   onSelectNode,
   onRowChange,
   onColChange,
@@ -96,19 +98,21 @@ export const StoryboardGridEditor = memo(({
           <GridStepperControl
             label="行"
             value={nodeData.gridRows}
+            disabled={gridLocked}
             onDecrease={() => onRowChange(-1)}
             onIncrease={() => onRowChange(1)}
           />
           <GridStepperControl
             label="列"
             value={nodeData.gridCols}
+            disabled={gridLocked}
             onDecrease={() => onColChange(-1)}
             onIncrease={() => onColChange(1)}
           />
         </div>
 
         <div className={GRID_SUMMARY_CLASS}>
-          {totalFrames} 格
+          {gridLocked ? `固定 ${nodeData.gridRows}×${nodeData.gridCols}` : `${totalFrames} 格`}
         </div>
       </div>
 

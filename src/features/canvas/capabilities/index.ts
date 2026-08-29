@@ -5,6 +5,7 @@ export * from './generationPreparation';
 export * from './panoramaPolicy';
 export * from './upscalePolicy';
 export * from './multiAnglePolicy';
+export * from './nineGridPolicy';
 export * from './portraitTexturePolicy';
 export * from './elementEditPolicy';
 export * from './promptTemplates';

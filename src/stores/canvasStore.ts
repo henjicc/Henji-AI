@@ -51,6 +51,7 @@ import {
   migrateUpscaleGenerationData,
   migratePortraitTextureGenerationData,
   migrateElementEditGenerationData,
+  migrateStoryboardGenerationData,
   migrateGenerationPromptData,
   migrateExportImageResultKind,
   migrateLegacyGenerationDisplayName,
@@ -380,6 +381,10 @@ function normalizeNodes(rawNodes: CanvasNode[]): CanvasNode[] {
 
       if (node.type === CANVAS_NODE_TYPES.elementEditGen) {
         migrateElementEditGenerationData(mergedData as DynamicValueMap);
+      }
+
+      if (node.type === CANVAS_NODE_TYPES.storyboardGen) {
+        migrateStoryboardGenerationData(mergedData as DynamicValueMap);
       }
 
       if (node.type === CANVAS_NODE_TYPES.exportImage) {

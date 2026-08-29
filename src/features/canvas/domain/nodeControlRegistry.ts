@@ -145,8 +145,17 @@ const generationNodeDataSchema = nodeDataBaseSchema.extend({
 }).strict()
 
 const storyboardGenerationNodeDataSchema = generationNodeDataSchema.extend({
-  gridRows: z.number().int().min(1).max(8).optional(),
-  gridCols: z.number().int().min(1).max(8).optional(),
+  capabilityId: z.literal('image.nine-grid').optional(),
+  storyboardPreset: z.literal('nine-grid-v1').optional(),
+  promptTemplateVersion: z.literal('nine-grid-storyboard-v1').optional(),
+  gridRows: z.number().int().min(1).max(9).optional(),
+  gridCols: z.number().int().min(1).max(9).optional(),
+  frames: z.array(z.object({
+    id: z.string().min(1).max(200),
+    description: z.string().max(32 * 1024),
+    descriptionDocument: z.unknown().optional(),
+    referenceIndex: z.number().int().nonnegative().nullable(),
+  }).strict()).max(81).optional(),
 }).strict()
 
 const numberSourceNodeDataSchema = nodeDataBaseSchema.extend({ value: z.number().finite().optional() }).strict()

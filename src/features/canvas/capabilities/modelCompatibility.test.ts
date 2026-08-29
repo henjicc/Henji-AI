@@ -21,8 +21,11 @@ function compose(runtime: ModelRuntimeDefinition): ModelDefinition {
 const panorama = builtInCanvasImageCapabilities.find(
   (capability) => capability.id === CANVAS_IMAGE_CAPABILITY_IDS.panorama,
 );
+const nineGrid = builtInCanvasImageCapabilities.find(
+  (capability) => capability.id === CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
+);
 
-if (!panorama) throw new Error('缺少全景能力定义');
+if (!panorama || !nineGrid) throw new Error('缺少全景或九宫格能力定义');
 
 const models = [
   compose(apimartRuntime),
@@ -32,6 +35,25 @@ const models = [
 ];
 
 describe('画布能力模型约束与语义参数映射', () => {
+  it('九宫格复用节点 schema 选择器，仅接受图片编辑标签且不伪造平台白名单', () => {
+    const withoutImageEditing: ModelDefinition = {
+      ...models[0],
+      meta: {
+        ...models[0].meta,
+        id: 'text-only-image',
+        tags: models[0].meta.tags?.filter((tag) => tag !== 'image-to-image'),
+      },
+    };
+    const result = resolveCanvasCapabilityModelCandidates(
+      [models[0], withoutImageEditing],
+      nineGrid.modelPolicy,
+    );
+    expect(result.candidates.map(({ model }) => model.meta.id)).toEqual(['apimart-gpt-image-2']);
+    expect(result.rejected[0].reasons).toEqual([
+      expect.objectContaining({ code: 'required-tag' }),
+    ]);
+  });
+
   it('全景只接受已确认的 GPT Image 2 平台组合', () => {
     const unrelated: ModelDefinition = {
       ...models[0],

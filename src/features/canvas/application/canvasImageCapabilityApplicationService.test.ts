@@ -226,6 +226,32 @@ describe('画布图片能力应用服务', () => {
     ])
   })
 
+  it('九宫格能力复用现有分镜节点并原子写入固定 3×3 预设', async () => {
+    const execute = createCanvasImageCapabilityExecutor()
+    const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.nineGrid)
+    expect(result).toMatchObject({ kind: 'canvas-node', capabilityId: 'image.nine-grid' })
+    const storyboardNode = useCanvasStore.getState().nodes.find(
+      (node) => node.type === CANVAS_NODE_TYPES.storyboardGen,
+    )
+    expect(storyboardNode?.data).toMatchObject({
+      displayName: '九宫格',
+      capabilityId: 'image.nine-grid',
+      storyboardPreset: 'nine-grid-v1',
+      promptTemplateVersion: 'nine-grid-storyboard-v1',
+      gridRows: 3,
+      gridCols: 3,
+    })
+    expect((storyboardNode?.data as DynamicValueMap).frames).toHaveLength(9)
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: sourceNodeId,
+        target: storyboardNode?.id,
+        targetHandle: 'param:__image',
+      }),
+    ])
+    expect(useCanvasStore.getState().history.past).toHaveLength(1)
+  })
+
   it('高清能力创建受控 Topaz 节点并连接唯一源图', async () => {
     const execute = createCanvasImageCapabilityExecutor()
     const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.upscale)

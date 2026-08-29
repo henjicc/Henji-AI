@@ -39,8 +39,11 @@ export class GenerationOutputApplicationError extends Error {
 export interface CommitCanvasGenerationOutputsInput {
   /** 旧工程可能在任务运行期间删除来源连线；缺省时仍恢复结果，但不补来源边。 */
   sourceNodeId?: string;
-  placeholderNodeId: string;
+  /** 模型生成可传已有进度占位节点；本地确定性处理可省略，由本服务在事务内创建首个结果。 */
+  placeholderNodeId?: string;
   resultNodeType: CanvasNodeType;
+  /** 无占位节点时用于初始化首个结果，不得携带媒体路径。 */
+  resultNodeData?: Partial<CanvasNodeData>;
   contract: CanvasGenerationOutputBatchContractV1;
   completionId?: string;
   groupTitle?: string;
@@ -300,6 +303,9 @@ export async function commitCanvasGenerationOutputs(
   }
   const projectId = requireCurrentProjectId();
   requireCurrentCanvasProject(projectId);
+  if (!input.placeholderNodeId && !input.completionId?.trim()) {
+    throw new GenerationOutputApplicationError('INVALID_INPUT', '无占位节点的结果提交必须提供稳定完成键');
+  }
   const completionId = input.completionId?.trim() || `generation-output:${input.placeholderNodeId}`;
   const existing = findExistingCommit(completionId, input.resultNodeType);
   if (existing) {
@@ -316,10 +322,22 @@ export async function commitCanvasGenerationOutputs(
   const sourceNode = input.sourceNodeId
     ? before.nodes.find((node) => node.id === input.sourceNodeId)
     : null;
-  const placeholder = before.nodes.find((node) => node.id === input.placeholderNodeId);
-  if ((input.sourceNodeId && !sourceNode) || !placeholder || placeholder.type !== input.resultNodeType) {
+  const storedPlaceholder = input.placeholderNodeId
+    ? before.nodes.find((node) => node.id === input.placeholderNodeId)
+    : null;
+  if (
+    (input.sourceNodeId && !sourceNode)
+    || (input.placeholderNodeId && (!storedPlaceholder || storedPlaceholder.type !== input.resultNodeType))
+  ) {
     throw new GenerationOutputApplicationError('NOT_FOUND', '生成来源或结果占位节点已不存在');
   }
+  const placeholder = storedPlaceholder ?? canvasNodeFactory.createNode(
+    input.resultNodeType,
+    sourceNode
+      ? before.findNodePosition(input.sourceNodeId as string, 384, 288)
+      : { x: 0, y: 0 },
+    input.resultNodeData,
+  );
   if (ordered.some((item) => item.descriptor.mediaType !== ordered[0].descriptor.mediaType)) {
     throw new GenerationOutputApplicationError('INVALID_INPUT', '同一生成批次不能混合不同媒体类型');
   }
@@ -353,7 +371,7 @@ export async function commitCanvasGenerationOutputs(
     const latest = useCanvasStore.getState();
     if (
       (input.sourceNodeId && !latest.nodes.some((node) => node.id === input.sourceNodeId))
-      || !latest.nodes.some((node) => node.id === input.placeholderNodeId)
+      || (input.placeholderNodeId && !latest.nodes.some((node) => node.id === input.placeholderNodeId))
     ) {
       throw new GenerationOutputApplicationError('CONFLICT', '生成期间画布已变化，结果未落图');
     }
@@ -371,15 +389,26 @@ export async function commitCanvasGenerationOutputs(
           completionId,
           appendLabel,
         );
-        useCanvasStore.getState().updateNodeData(input.placeholderNodeId, firstData);
-        if (input.sourceNodeId) {
-          useCanvasStore.getState().addEdge(input.sourceNodeId, input.placeholderNodeId);
+        const firstNodeId = input.placeholderNodeId ?? useCanvasStore.getState().addNode(
+          input.resultNodeType,
+          placeholder.position,
+          firstData,
+        );
+        if (input.placeholderNodeId) {
+          useCanvasStore.getState().updateNodeData(input.placeholderNodeId, firstData);
         }
-        resultNodeIds.push(input.placeholderNodeId);
+        if (input.sourceNodeId) {
+          useCanvasStore.getState().addEdge(input.sourceNodeId, firstNodeId);
+        }
+        resultNodeIds.push(firstNodeId);
 
         for (let index = 1; index < ordered.length; index += 1) {
           const canvas = useCanvasStore.getState();
-          const position = input.sourceNodeId
+          // 素材组成员完成后都会隐藏在组内；预先把它们叠放在首项位置，避免隐藏成员的
+          // 临时散列坐标把保存重开后的 fitView 边界撑大。独立输出仍保持逐项避让布局。
+          const position = input.contract.strategy === 'assetGroup'
+            ? placeholder.position
+            : input.sourceNodeId
             ? canvas.findNodePosition(input.sourceNodeId, 384, 288)
             : {
                 x: placeholder.position.x,

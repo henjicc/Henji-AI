@@ -135,6 +135,7 @@ async function executeCanvasImageCapability(
           projectId,
           nodeType: execution.nodeType,
           placement: { mode: 'right_of_node', anchorNodeId: sourceNodeId },
+          data: execution.initialData ? { ...execution.initialData } : undefined,
         })
         if (typeof created.nodeId !== 'string' || !created.nodeId) {
           throw new CanvasApplicationError('CAPABILITY_REJECTED', '图片能力未能创建目标节点')

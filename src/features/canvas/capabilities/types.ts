@@ -88,6 +88,8 @@ export type CanvasImageCapabilityExecution =
   | {
       kind: 'canvas-node';
       nodeType: CanvasNodeType;
+      /** 能力创建节点时写入的版本化预设；只允许可序列化业务数据。 */
+      initialData?: Readonly<Record<string, unknown>>;
     }
   | {
       kind: 'local-tool';
@@ -107,6 +109,11 @@ export type CanvasImageCapabilityImplementation =
 export type CanvasImageCapabilityModelPolicy =
   | {
       mode: 'not-applicable';
+    }
+  | {
+      /** 模型仍由复用节点的 schema 选择器管理，能力只声明不可放宽的标签。 */
+      mode: 'node-schema';
+      requiredTags: readonly ModelTag[];
     }
   | {
       mode: 'verified-families';

@@ -54,6 +54,7 @@ import {
   normalizePortraitTextureSettings,
   preparePortraitTextureRoute,
 } from '../capabilities/portraitTexturePolicy';
+import { normalizeNineGridStoryboardData } from '../capabilities/nineGridPolicy';
 
 const LEGACY_TARGET_HANDLE_ID = 'target';
 const LEGACY_GENERATION_DISPLAY_NAMES: Partial<Record<CanvasNodeType, string>> = {
@@ -532,4 +533,9 @@ export function migrateMultiAngleGenerationData(data: DynamicValueMap): void {
   if (typeof data.multiAngleResultPlaceholderId !== 'string') {
     data.multiAngleResultPlaceholderId = null;
   }
+}
+
+/** 固定九宫格预设保存重开后仍保持 3×3、九格和当前提示词契约。 */
+export function migrateStoryboardGenerationData(data: DynamicValueMap): void {
+  normalizeNineGridStoryboardData(data);
 }

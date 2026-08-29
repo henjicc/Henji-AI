@@ -183,7 +183,7 @@
       },
       "nineGrid": {
         "title": "Nine-grid",
-        "description": "Generate a nine-grid set around the same content"
+        "description": "Create a fixed 3×3 storyboard node; generation uses the image-edit model selected in the node"
       },
       "upscale": {
         "title": "Upscale",
@@ -203,7 +203,7 @@
       },
       "gridSplit": {
         "title": "Grid Split",
-        "description": "Split an image into multiple frames by rows and columns"
+        "description": "Split an existing image locally into an asset group without calling a generation model"
       }
     }
   },

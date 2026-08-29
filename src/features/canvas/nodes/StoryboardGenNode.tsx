@@ -64,6 +64,11 @@ import {
 } from '@/features/canvas/nodes/storyboardGen/generation'
 import { GenerationService } from '@/core/services/GenerationService'
 import { registerCanvasNodeExecutor } from '@/features/canvas/application/canvasExecutionService'
+import { commitCanvasGenerationOutputs } from '@/features/canvas/application/generationOutputApplicationService'
+import {
+  isNineGridStoryboard,
+  NINE_GRID_PRESET_ID,
+} from '@/features/canvas/capabilities/nineGridPolicy'
 import { StoryboardGridEditor } from '@/features/canvas/nodes/storyboardGen/StoryboardGridEditor'
 import { useStoryboardFramePrompts } from '@/features/canvas/nodes/storyboardGen/useStoryboardFramePrompts'
 
@@ -104,6 +109,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   )
 
   const nodeData = data as StoryboardGenNodeData
+  const nineGridPreset = isNineGridStoryboard(nodeData)
   const [error, setError] = useState<string | null>(null)
   const resolvedTitle = useMemo(
     () => resolveNodeDisplayName(CANVAS_NODE_TYPES.storyboardGen, nodeData),
@@ -362,13 +368,13 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         onProgress: (progress) => setNodeGenerationProgress(newNodeId, progress),
       })
 
-      updateNodeData(newNodeId, {
-        imageUrl: generated.imageUrl,
-        previewImageUrl: generated.previewImageUrl,
-        aspectRatio: generated.aspectRatio,
-        isGenerating: false,
-        generationStartedAt: null,
-        generationError: null,
+      await commitCanvasGenerationOutputs({
+        sourceNodeId: id,
+        placeholderNodeId: newNodeId,
+        resultNodeType: CANVAS_NODE_TYPES.exportImage,
+        contract: generated.contract,
+        completionId: `storyboard-grid:${newNodeId}`,
+        groupTitle: `${resolvedTitle} · ${generated.contract.outputs.length}`,
       })
     } catch (generationError) {
       // 失败信息写回输出节点，红边 + 原因长在失败的那次生成上
@@ -381,7 +387,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
     } finally {
       setNodeGenerationProgress(newNodeId, null)
     }
-  }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, frameDescriptionDrafts, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, setNodeGenerationProgress, setSelectedNode, t, updateNodeData])
+  }, [addEdge, addNode, buildPrompt, effectiveImages, effectiveModelId, findNodePosition, frameAspectRatioValue, frameDescriptionDrafts, gridResolutionValue, id, ignoreAtTagWhenCopyingAndGenerating, modelParamValues, nodeData.frames, nodeData.gridCols, nodeData.gridRows, providerKeyConfigured, resolvedTitle, setNodeGenerationProgress, setSelectedNode, t, updateNodeData])
 
   useEffect(() => registerCanvasNodeExecutor(id, {
     kind: 'storyboard-generation',
@@ -389,14 +395,16 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
   }), [handleGenerate, id])
 
   const handleRowChange = useCallback((delta: number): void => {
+    if (nineGridPreset) return
     const nextRows = Math.max(1, Math.min(9, nodeData.gridRows + delta))
     updateNodeData(id, { gridRows: nextRows })
-  }, [id, nodeData.gridRows, updateNodeData])
+  }, [id, nineGridPreset, nodeData.gridRows, updateNodeData])
 
   const handleColChange = useCallback((delta: number): void => {
+    if (nineGridPreset) return
     const nextCols = Math.max(1, Math.min(9, nodeData.gridCols + delta))
     updateNodeData(id, { gridCols: nextCols })
-  }, [id, nodeData.gridCols, updateNodeData])
+  }, [id, nineGridPreset, nodeData.gridCols, updateNodeData])
 
   return (
     <div
@@ -408,6 +416,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         }
       `}
       style={{ width: `${resolvedNodeWidth}px`, height: `${resolvedNodeHeight}px` }}
+      data-storyboard-preset={nineGridPreset ? NINE_GRID_PRESET_ID : 'free'}
       onClick={() => setSelectedNode(id)}
     >
       <NodeHeader
@@ -437,6 +446,7 @@ export const StoryboardGenNode = memo(({ id, data, selected, width, height }: St
         frameLayout={frameLayout}
         frameDocuments={frameDocuments}
         references={promptReferences}
+        gridLocked={nineGridPreset}
         onSelectNode={() => setSelectedNode(id)}
         onRowChange={handleRowChange}
         onColChange={handleColChange}

@@ -11,6 +11,7 @@ import {
   migratePanoramaGenerationData,
   migrateRelightGenerationData,
   migrateMultiAngleGenerationData,
+  migrateStoryboardGenerationData,
   migrateUpscaleGenerationData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
@@ -198,6 +199,40 @@ describe('migrateMultiAngleGenerationData', () => {
       },
       multiAngleResultPlaceholderId: null,
     });
+  });
+});
+
+describe('migrateStoryboardGenerationData', () => {
+  it('九宫格预设保存重开后恢复固定 3×3、模板版本与九格顺序', () => {
+    const data: DynamicValueMap = {
+      capabilityId: 'image.nine-grid',
+      storyboardPreset: 'nine-grid-v1',
+      promptTemplateVersion: 'legacy',
+      gridRows: 2,
+      gridCols: 7,
+      frames: [{ id: 'kept', description: '第一格', referenceIndex: 0 }],
+    };
+
+    migrateStoryboardGenerationData(data);
+
+    expect(data).toMatchObject({
+      storyboardPreset: 'nine-grid-v1',
+      promptTemplateVersion: 'nine-grid-storyboard-v1',
+      gridRows: 3,
+      gridCols: 3,
+    });
+    expect(data.frames).toHaveLength(9);
+    expect((data.frames as DynamicValueMap[])[0]).toMatchObject({
+      id: 'kept',
+      description: '第一格',
+      referenceIndex: 0,
+    });
+  });
+
+  it('普通分镜节点不被九宫格迁移改写', () => {
+    const data: DynamicValueMap = { gridRows: 2, gridCols: 4, frames: [] };
+    migrateStoryboardGenerationData(data);
+    expect(data).toEqual({ gridRows: 2, gridCols: 4, frames: [] });
   });
 });
 

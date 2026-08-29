@@ -14,6 +14,7 @@ import {
   canvasToolProcessor,
 } from '@/features/canvas/application/canvasServices';
 import { prepareNodeImage, resolveImageDisplayUrl } from '@/features/canvas/application/imageData';
+import { commitGridSplitResult } from '@/features/canvas/application/gridSplitApplicationService';
 import { readStoryboardImageMetadata } from '@/commands/image';
 import { getToolPlugin, type ToolOptions } from '@/features/canvas/tools';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -27,7 +28,6 @@ export function NodeToolDialog() {
   const { t } = useTranslation();
   const activeToolDialog = useCanvasStore((state) => state.activeToolDialog);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
-  const addStoryboardSplitNode = useCanvasStore((state) => state.addStoryboardSplitNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -205,16 +205,16 @@ export function NodeToolDialog() {
       });
 
       if (result.storyboardFrames && result.rows && result.cols) {
-        const createdNodeId = addStoryboardSplitNode(
-          sourceNode.id,
-          result.rows,
-          result.cols,
-          result.storyboardFrames,
-          result.frameAspectRatio
-        );
-        if (createdNodeId) {
-          addEdge(sourceNode.id, createdNodeId);
-        }
+        await commitGridSplitResult({
+          sourceNodeId: sourceNode.id,
+          sourceImageUrl,
+          rows: result.rows,
+          cols: result.cols,
+          lineThicknessPercent: typeof options.lineThicknessPercent === 'number'
+            ? options.lineThicknessPercent
+            : undefined,
+          frames: result.storyboardFrames,
+        });
       } else if (result.outputImageUrl) {
         const prepared = await prepareNodeImage(result.outputImageUrl);
         const createdNodeId = addDerivedExportNode(
@@ -255,7 +255,6 @@ export function NodeToolDialog() {
     sourceImageUrl,
     activePlugin,
     options,
-    addStoryboardSplitNode,
     addDerivedExportNode,
     addEdge,
     closeDialog,

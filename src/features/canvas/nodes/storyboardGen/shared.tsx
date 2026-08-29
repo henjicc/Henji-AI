@@ -77,6 +77,7 @@ export function computeFrameTextFontSizePx(availableContentWidthPx: number): num
 interface GridStepperControlProps {
   label: string
   value: number
+  disabled?: boolean
   onDecrease: () => void
   onIncrease: () => void
 }
@@ -84,6 +85,7 @@ interface GridStepperControlProps {
 export function GridStepperControl({
   label,
   value,
+  disabled = false,
   onDecrease,
   onIncrease,
 }: GridStepperControlProps): JSX.Element {
@@ -94,6 +96,8 @@ export function GridStepperControl({
         type="button"
         variant="ghost"
         size="sm"
+        disabled={disabled}
+        aria-label={`${label}数减少`}
         className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !rounded !px-0`}
         onClick={(event) => {
           event.stopPropagation()
@@ -107,6 +111,8 @@ export function GridStepperControl({
         type="button"
         variant="ghost"
         size="sm"
+        disabled={disabled}
+        aria-label={`${label}数增加`}
         className={`${GRID_CONTROL_BUTTON_CLASS} !h-3 !w-3 !rounded !px-0`}
         onClick={(event) => {
           event.stopPropagation()

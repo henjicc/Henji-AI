@@ -261,6 +261,50 @@ describe('generationOutputApplicationService', () => {
     expect(useCanvasStore.getState().history.past).toHaveLength(1);
   });
 
+  it('本地处理无需预建占位节点即可原子创建素材组', async () => {
+    useCanvasStore.setState({
+      nodes: useCanvasStore.getState().nodes.filter((node) => node.id !== 'placeholder-node'),
+      edges: [],
+      history: { past: [], future: [] },
+    });
+    const value = contract(9);
+    value.outputs.forEach((item, index) => {
+      item.descriptor.semantic = {
+        kind: 'grid-cell',
+        resultKind: 'image',
+        label: `宫格 ${String(index + 1).padStart(2, '0')}`,
+      };
+    });
+
+    const input = {
+      sourceNodeId: 'source-node',
+      resultNodeType: CANVAS_NODE_TYPES.exportImage,
+      resultNodeData: { displayName: '宫格切分结果' },
+      contract: value,
+      completionId: 'grid-split:source-node:stable',
+      persistOutput: async (_mediaType: RowMediaKind, source: string) => imagePatch(source),
+    } as const;
+    const first = await commitCanvasGenerationOutputs(input);
+    const second = await commitCanvasGenerationOutputs(input);
+
+    expect(first).toMatchObject({ strategy: 'assetGroup', idempotent: false });
+    expect(first.resultNodeIds).toHaveLength(9);
+    expect(first.groupNodeId).toBeTruthy();
+    expect(second).toMatchObject({
+      idempotent: true,
+      resultNodeIds: first.resultNodeIds,
+      groupNodeId: first.groupNodeId,
+    });
+    expect(useCanvasStore.getState().history.past).toHaveLength(1);
+    expect(useCanvasStore.getState().edges.filter((edge) => edge.source === 'source-node')).toHaveLength(9);
+    const group = useCanvasStore.getState().nodes.find((node) => node.id === first.groupNodeId);
+    const members = useCanvasStore.getState().nodes.filter((node) => node.parentId === first.groupNodeId);
+    expect(members).toHaveLength(9);
+    expect(new Set(members.map((node) => `${node.position.x}:${node.position.y}`)).size).toBe(1);
+    expect(members[0].position).toEqual({ x: 0, y: 0 });
+    expect(group?.position).not.toEqual({ x: 0, y: 0 });
+  });
+
   it('一次撤销和重做完整恢复结果组、成员与顺序', async () => {
     const result = await commit(contract(2));
     const completedNodes = structuredClone(useCanvasStore.getState().nodes);

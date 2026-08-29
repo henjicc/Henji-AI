@@ -70,4 +70,46 @@ describe('CanvasToolProcessor 图片编辑分发', () => {
       .rejects.toThrow('不支持的工具类型：unknown');
     expect(splitGateway.split).not.toHaveBeenCalled();
   });
+
+  it('宫格切分复用图片元数据并按行优先顺序返回持久化格子', async () => {
+    const { readStoryboardImageMetadata } = await import('@/commands/image');
+    const { detectAspectRatio } = await import('./imageData');
+    vi.mocked(readStoryboardImageMetadata).mockResolvedValue({
+      gridRows: 3,
+      gridCols: 3,
+      frameNotes: Array.from({ length: 9 }, (_, index) => `镜头 ${index + 1}`),
+    });
+    vi.mocked(detectAspectRatio).mockResolvedValue('1:1');
+    vi.mocked(splitGateway.split).mockResolvedValue(
+      Array.from({ length: 9 }, (_, index) => `/split-${index + 1}.png`),
+    );
+
+    const result = await processor.process(NODE_TOOL_TYPES.splitStoryboard, '/grid.png', {});
+
+    expect(splitGateway.split).toHaveBeenCalledWith('/grid.png', 3, 3, 0);
+    expect(result).toMatchObject({ rows: 3, cols: 3, frameAspectRatio: '1:1' });
+    expect(result.storyboardFrames?.map((frame) => ({
+      imageUrl: frame.imageUrl,
+      note: frame.note,
+      order: frame.order,
+    }))).toEqual(Array.from({ length: 9 }, (_, index) => ({
+      imageUrl: `local:/split-${index + 1}.png`,
+      note: `镜头 ${index + 1}`,
+      order: index,
+    })));
+  });
+
+  it('无元数据时明确回退 3×3，非法数值不会传给底层切分服务', async () => {
+    const { readStoryboardImageMetadata } = await import('@/commands/image');
+    vi.mocked(readStoryboardImageMetadata).mockResolvedValue(null);
+    vi.mocked(splitGateway.split).mockResolvedValue([]);
+
+    const result = await processor.process(NODE_TOOL_TYPES.splitStoryboard, '/plain.png', {
+      rows: 'invalid',
+      cols: Number.NaN,
+    });
+
+    expect(splitGateway.split).toHaveBeenCalledWith('/plain.png', 3, 3, 0);
+    expect(result).toMatchObject({ rows: 3, cols: 3, storyboardFrames: [] });
+  });
 });
