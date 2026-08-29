@@ -244,11 +244,22 @@ export const NodeModelParamsControls = memo(({
       }
     };
 
+    const handleScroll = (event: Event): void => {
+      const target = event.target;
+      if (
+        target instanceof globalThis.Node
+        && (modelPanelRef.current?.contains(target) || paramsPanelRef.current?.contains(target))
+      ) {
+        return;
+      }
+      updateLayout();
+    };
+
     updateLayout();
-    window.addEventListener('scroll', updateLayout, true);
+    window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', updateLayout);
     return () => {
-      window.removeEventListener('scroll', updateLayout, true);
+      window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', updateLayout);
     };
   }, [renderPanel]);
@@ -260,7 +271,9 @@ export const NodeModelParamsControls = memo(({
     const measure = (): void => {
       const height = Math.max(panel.scrollHeight, panel.getBoundingClientRect().height);
       if (renderPanel === 'model') {
-        setModelPanelHeight((current) => current === height ? current : height);
+        // 面板受视口 max-height 约束后，真正滚动的是内部模型列表。这里保留首次测得的
+        // 自然高度，避免 ResizeObserver 把受限高度写回后误判为“上方已放得下”。
+        setModelPanelHeight((current) => Math.max(current, height));
       } else {
         setParamsPanelHeight((current) => current === height ? current : height);
       }
@@ -387,43 +400,42 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'model' && createPortal(
         <div
           ref={modelPanelRef}
-          className={`ui-scrollbar nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
+          className={`${UI_TRIGGER_PANEL_CLASS} nodrag nowheel fixed z-dropdown flex min-h-0 flex-col overflow-hidden p-2 transition-opacity duration-200 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
           style={modelPanelPosition ? {
             left: modelPanelPosition.left,
             top: modelPanelPosition.top,
             width: modelPanelPosition.width,
-            maxHeight: modelPanelPosition.maxHeight,
-            overflowY: 'auto',
+            // 首帧先按自然高度测量，再应用视口约束；否则靠近顶部时会把受限高度
+            // 当成自然高度，面板无法可靠切换到下方。
+            maxHeight: modelPanelHeight > 0 ? modelPanelPosition.maxHeight : undefined,
           } : undefined}
           data-model-panel-placement={modelPanelPosition?.placement}
         >
-          <div className={`${UI_TRIGGER_PANEL_CLASS} w-full p-2`}>
-            <ModelPickerList
-              variant="floating"
-              modelSearchQuery={modelSearchQuery}
-              onSearchChange={setModelSearchQuery}
-              searchInputRef={modelSearchInputRef}
-              providerFilter={providerFilter}
-              onProviderFilterChange={setProviderFilter}
-              providerOptions={providerOptions}
-              modelsForWidthMeasurement={providerModels}
-              onPreferredWidthChange={setModelPanelContentWidth}
-              filteredModels={filteredModels}
-              selectedModel={selectedModelOption}
-              emptyMessage={!hasCompatibleModels && modelPolicy
-                ? t('modelParams.noCompatibleModels', {
-                  defaultValue: '当前能力没有兼容的模型，请检查供应商或模型配置',
-                })
-                : undefined}
-              revealSelectedModel={openPanel === 'model'}
-              onModelChange={(nextModelId) => {
-                onModelChange(nextModelId);
-                setOpenPanel(null);
-              }}
-            />
-          </div>
+          <ModelPickerList
+            variant="floating"
+            modelSearchQuery={modelSearchQuery}
+            onSearchChange={setModelSearchQuery}
+            searchInputRef={modelSearchInputRef}
+            providerFilter={providerFilter}
+            onProviderFilterChange={setProviderFilter}
+            providerOptions={providerOptions}
+            modelsForWidthMeasurement={providerModels}
+            onPreferredWidthChange={setModelPanelContentWidth}
+            filteredModels={filteredModels}
+            selectedModel={selectedModelOption}
+            emptyMessage={!hasCompatibleModels && modelPolicy
+              ? t('modelParams.noCompatibleModels', {
+                defaultValue: '当前能力没有兼容的模型，请检查供应商或模型配置',
+              })
+              : undefined}
+            revealSelectedModel={openPanel === 'model'}
+            onModelChange={(nextModelId) => {
+              onModelChange(nextModelId);
+              setOpenPanel(null);
+            }}
+          />
         </div>,
         document.body
       )}

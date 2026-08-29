@@ -90,7 +90,7 @@ export function ModelPickerList({
   const measuredModels = modelsForWidthMeasurement ?? filteredModels;
   const listClassName = variant === 'inline'
     ? 'ui-scrollbar mt-2 min-h-0 flex-1 space-y-1 overflow-y-auto pr-1'
-    : 'ui-scrollbar mt-2 h-[300px] space-y-1 overflow-y-auto pr-1';
+    : 'ui-scrollbar mt-2 h-[300px] min-h-0 shrink space-y-1 overflow-y-auto overscroll-contain pr-1';
 
   const updateProviderScrollMetrics = useCallback(() => {
     const providerList = providerListRef.current;
@@ -181,7 +181,9 @@ export function ModelPickerList({
   }, [measuredModels, onPreferredWidthChange, providerOptions, searchPlaceholder]);
 
   return (
-    <div className={variant === 'inline' ? 'flex h-full min-h-0 w-full flex-col' : 'relative'}>
+    <div className={variant === 'inline'
+      ? 'flex h-full min-h-0 w-full flex-col'
+      : 'flex min-h-0 w-full flex-1 flex-col'}>
       {onPreferredWidthChange && (
         <div
           ref={widthMeasurementRef}
@@ -220,7 +222,7 @@ export function ModelPickerList({
           </div>
         </div>
       )}
-      <div className="space-y-2 border-b border-border-dark/70 pb-2">
+      <div data-model-picker-static-header className="shrink-0 space-y-2 border-b border-border-dark/70 pb-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
           <UiInput
@@ -421,7 +423,7 @@ export function ModelPickerList({
           )}
         </div>
       </div>
-      <div ref={listRef} className={listClassName}>
+      <div ref={listRef} data-model-list-scroll-region className={listClassName}>
         {filteredModels.map((model) => {
           const active = model.key === selectedModel?.key;
 

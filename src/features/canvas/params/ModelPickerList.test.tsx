@@ -32,6 +32,19 @@ function renderPicker(providerFilter: string) {
 afterEach(cleanup);
 
 describe('ModelPickerList 供应商横向导航', () => {
+  it('浮层只让模型列表纵向滚动，搜索与供应商区域保持固定', () => {
+    const view = renderPicker('all');
+    const staticHeader = view.container.querySelector('[data-model-picker-static-header]');
+    const modelList = view.container.querySelector('[data-model-list-scroll-region]');
+
+    expect(staticHeader).not.toBeNull();
+    expect(staticHeader?.classList.contains('shrink-0')).toBe(true);
+    expect(staticHeader?.classList.contains('overflow-y-auto')).toBe(false);
+    expect(modelList).not.toBeNull();
+    expect(modelList?.classList.contains('overflow-y-auto')).toBe(true);
+    expect(modelList?.classList.contains('overscroll-contain')).toBe(true);
+  });
+
   it('当前供应商使用单选项语义并同步强调数量', () => {
     const view = renderPicker('bailian');
     const activeProvider = view.getByRole('button', { name: /BAILIAN\s*2/ });
