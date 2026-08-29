@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 
+import { UI_DURATION } from '@/components/ui/motion';
 import { createLogger } from '@/core/logging';
 import { ICON_PANORAMA } from '@/core/theme/icons';
 import { commitPanoramaViewSnapshot } from '@/features/canvas/application/panoramaSnapshotApplicationService';
@@ -78,7 +79,9 @@ export const PanoramaViewerNode = memo(({
   const captureRef = useRef<PanoramaCaptureCurrentView | null>(null);
   const currentViewRef = useRef<PanoramaCameraView | null>(null);
   const autoPreviewCaptureRef = useRef(false);
+  const freezeDelayTimerRef = useRef<number | null>(null);
   const lastSourceRef = useRef<string | null>(null);
+  const pointerInsideNodeRef = useRef(false);
   const previewCaptureFrameRef = useRef<number | null>(null);
   const previewPersistRevisionRef = useRef(0);
   const pendingFreezeReleaseRef = useRef(false);
@@ -153,11 +156,18 @@ export const PanoramaViewerNode = memo(({
     updateNodeData(id, { cameraView: normalized });
   }, [data.cameraView, id, updateNodeData]);
 
+  const cancelScheduledFreeze = useCallback((): void => {
+    if (freezeDelayTimerRef.current === null) return;
+    window.clearTimeout(freezeDelayTimerRef.current);
+    freezeDelayTimerRef.current = null;
+  }, []);
+
   const requestSphere = useCallback(() => {
+    cancelScheduledFreeze();
     autoPreviewCaptureRef.current = false;
     pendingFreezeReleaseRef.current = false;
     if (!hasWebglFailure && !isContentLodLow && data.viewMode === 'sphere') claimInlineLease(id);
-  }, [claimInlineLease, data.viewMode, hasWebglFailure, id, isContentLodLow]);
+  }, [cancelScheduledFreeze, claimInlineLease, data.viewMode, hasWebglFailure, id, isContentLodLow]);
 
   const activateSphere = useCallback(() => {
     setSelectedNode(id);
@@ -166,8 +176,10 @@ export const PanoramaViewerNode = memo(({
 
   useEffect(() => {
     const sphereUnavailable = hasWebglFailure || isContentLodLow || data.viewMode !== 'sphere';
-    if (sphereUnavailable) releaseInlineLease(id);
-  }, [data.viewMode, hasWebglFailure, id, isContentLodLow, releaseInlineLease]);
+    if (!sphereUnavailable) return;
+    cancelScheduledFreeze();
+    releaseInlineLease(id);
+  }, [cancelScheduledFreeze, data.viewMode, hasWebglFailure, id, isContentLodLow, releaseInlineLease]);
 
   useEffect(() => {
     if (lastSourceRef.current === source) return;
@@ -207,6 +219,7 @@ export const PanoramaViewerNode = memo(({
   ]);
 
   useEffect(() => () => {
+    cancelScheduledFreeze();
     if (previewCaptureFrameRef.current !== null) {
       window.cancelAnimationFrame(previewCaptureFrameRef.current);
       previewCaptureFrameRef.current = null;
@@ -214,27 +227,29 @@ export const PanoramaViewerNode = memo(({
     previewPersistRevisionRef.current += 1;
     pendingFreezeReleaseRef.current = false;
     releaseInlineLease(id);
-  }, [id, releaseInlineLease]);
+  }, [cancelScheduledFreeze, id, releaseInlineLease]);
 
   useEffect(() => {
     updateNodeInternals(id);
   }, [id, resolvedHeight, resolvedWidth, updateNodeInternals]);
 
   const handleViewModeChange = useCallback((viewMode: PanoramaViewMode) => {
+    cancelScheduledFreeze();
     pendingFreezeReleaseRef.current = false;
     if (viewMode === 'sphere') setHasWebglFailure(false);
     updateNodeData(id, { viewMode });
     if (viewMode === 'flat') releaseInlineLease(id);
     else if (!isContentLodLow) claimInlineLease(id);
-  }, [claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
+  }, [cancelScheduledFreeze, claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
 
   const handleContextLost = useCallback(() => {
+    cancelScheduledFreeze();
     autoPreviewCaptureRef.current = false;
     pendingFreezeReleaseRef.current = false;
     setHasWebglFailure(true);
     setFrozenPreviewUrl(persistedPanoramaPreview);
     releaseInlineLease(id);
-  }, [id, persistedPanoramaPreview, releaseInlineLease]);
+  }, [cancelScheduledFreeze, id, persistedPanoramaPreview, releaseInlineLease]);
 
   const handleViewportAspectRatioChange = useCallback((
     viewportAspectRatio: PanoramaViewportAspectRatio,
@@ -292,6 +307,14 @@ export const PanoramaViewerNode = memo(({
     releaseInlineLease,
     storePanoramaPreview,
   ]);
+
+  const scheduleFreezeInlineView = useCallback((): void => {
+    cancelScheduledFreeze();
+    freezeDelayTimerRef.current = window.setTimeout(() => {
+      freezeDelayTimerRef.current = null;
+      freezeInlineView();
+    }, UI_DURATION.base);
+  }, [cancelScheduledFreeze, freezeInlineView]);
 
   const handleFrozenPreviewReady = useCallback(() => {
     if (!pendingFreezeReleaseRef.current) return;
@@ -373,10 +396,21 @@ export const PanoramaViewerNode = memo(({
       }`}
       style={{ width: resolvedWidth, height: resolvedHeight }}
       onClick={() => setSelectedNode(id)}
-      onPointerLeave={freezeInlineView}
+      onPointerEnter={() => {
+        pointerInsideNodeRef.current = true;
+        cancelScheduledFreeze();
+      }}
+      onPointerLeave={() => {
+        pointerInsideNodeRef.current = false;
+        scheduleFreezeInlineView();
+      }}
       onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as globalThis.Node | null)) {
-          freezeInlineView();
+        const focusStayedInside = event.currentTarget.contains(
+          event.relatedTarget as globalThis.Node | null,
+        );
+        const windowLostFocus = !document.hasFocus();
+        if (!focusStayedInside && (!pointerInsideNodeRef.current || windowLostFocus)) {
+          scheduleFreezeInlineView();
         }
       }}
     >
