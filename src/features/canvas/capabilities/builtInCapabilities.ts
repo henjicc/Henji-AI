@@ -39,6 +39,65 @@ const IMAGE_SOURCE = {
   requireMaterializedMedia: true,
 } as const;
 
+const FAL_UTILITY_GENERATION_UI = {
+  promptMode: 'hidden',
+  modelMode: 'locked',
+  excludeParamIds: ['image'],
+} as const;
+
+function falUtilityCapability(options: {
+  id: CanvasImageCapabilityDefinition['id'];
+  titleKey: string;
+  descriptionKey: string;
+  group: CanvasImageCapabilityDefinition['group'];
+  icon: CanvasImageCapabilityDefinition['icon'];
+  order: number;
+  displayName: string;
+  modelId: string;
+}): CanvasImageCapabilityDefinition {
+  return {
+    id: options.id,
+    titleKey: options.titleKey,
+    descriptionKey: options.descriptionKey,
+    group: options.group,
+    groupLabelKey: `imageCapabilities.groups.${options.group}`,
+    icon: options.icon,
+    order: options.order,
+    source: IMAGE_SOURCE,
+    node: { kind: 'standard-generation', editor: 'standard' },
+    implementation: {
+      status: 'implemented',
+      execution: {
+        kind: 'canvas-node',
+        nodeType: CANVAS_NODE_TYPES.imageEdit,
+        initialData: {
+          displayName: options.displayName,
+          modelId: options.modelId,
+          params: {},
+          generationUi: FAL_UTILITY_GENERATION_UI,
+        },
+      },
+    },
+    availability: {
+      releaseStage: 'available',
+      defaultEnabled: true,
+      unavailableReasonKey: null,
+    },
+    modelPolicy: { mode: 'not-applicable' },
+    promptPolicy: {
+      hiddenTemplateVersion: null,
+      fixedSemanticParams: {},
+      visibleParameterKeys: [],
+    },
+    outputPolicy: {
+      resultKind: 'image',
+      count: { mode: 'single' },
+      postProcess: 'none',
+      failureMode: 'single-result',
+    },
+  };
+}
+
 export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefinition[] = [
   {
     id: CANVAS_IMAGE_CAPABILITY_IDS.panorama,
@@ -110,6 +169,66 @@ export const builtInCanvasImageCapabilities: readonly CanvasImageCapabilityDefin
       failureMode: 'single-result',
     },
   },
+  falUtilityCapability({
+    id: CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
+    titleKey: 'imageCapabilities.items.presetRelight.title',
+    descriptionKey: 'imageCapabilities.items.presetRelight.description',
+    group: 'editing',
+    icon: 'relight',
+    order: 21,
+    displayName: 'FAL 预设重打光',
+    modelId: 'fal-image-apps-v2-relighting',
+  }),
+  falUtilityCapability({
+    id: CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
+    titleKey: 'imageCapabilities.items.lowLightEnhancement.title',
+    descriptionKey: 'imageCapabilities.items.lowLightEnhancement.description',
+    group: 'enhancement',
+    icon: 'relight',
+    order: 22,
+    displayName: 'FAL 暗光增强',
+    modelId: 'fal-control-light',
+  }),
+  falUtilityCapability({
+    id: CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
+    titleKey: 'imageCapabilities.items.outpaint.title',
+    descriptionKey: 'imageCapabilities.items.outpaint.description',
+    group: 'editing',
+    icon: 'panorama',
+    order: 23,
+    displayName: 'FAL 智能扩图',
+    modelId: 'fal-image-apps-v2-outpaint',
+  }),
+  falUtilityCapability({
+    id: CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
+    titleKey: 'imageCapabilities.items.productPhotography.title',
+    descriptionKey: 'imageCapabilities.items.productPhotography.description',
+    group: 'generation',
+    icon: 'portraitTexture',
+    order: 24,
+    displayName: 'FAL 商品摄影',
+    modelId: 'fal-image-apps-v2-product-photography',
+  }),
+  falUtilityCapability({
+    id: CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
+    titleKey: 'imageCapabilities.items.photoRestoration.title',
+    descriptionKey: 'imageCapabilities.items.photoRestoration.description',
+    group: 'enhancement',
+    icon: 'portraitTexture',
+    order: 25,
+    displayName: 'FAL 照片修复',
+    modelId: 'fal-image-apps-v2-photo-restoration',
+  }),
+  falUtilityCapability({
+    id: CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
+    titleKey: 'imageCapabilities.items.backgroundRemoval.title',
+    descriptionKey: 'imageCapabilities.items.backgroundRemoval.description',
+    group: 'editing',
+    icon: 'elementEdit',
+    order: 26,
+    displayName: 'FAL 背景移除',
+    modelId: 'fal-pixelcut-background-removal',
+  }),
   {
     id: CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
     titleKey: 'imageCapabilities.items.multiAngle.title',

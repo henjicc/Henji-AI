@@ -9,7 +9,7 @@ const logger = createLogger('core.services.GenerationService')
  */
 
 import { registry } from '@/core/ModelRegistry'
-import { getMultiAngleExecutionModel } from '@/core/modelCatalog/multiAngleExecutionModels'
+import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecutionModels'
 import { findSquareAspectValue, getAspectChoiceParams, isSmartAspectValue, resolveClosestAspectValue } from '@/core/params/ratioResolution'
 import { createProgressTracker, resolveProgressSpec } from '@/core/progress/progressTracker'
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
@@ -513,7 +513,7 @@ function recordRuntimeTrace(
       ? params.text
       : undefined
 
-  const model = registry.getModel(modelId) ?? getMultiAngleExecutionModel(modelId)
+  const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
   recordApiTrace({
     model: modelId,
     type: model?.meta.type,
@@ -554,7 +554,7 @@ export class GenerationService {
     const startedAtMs = Date.now()
 
     try {
-      const model = registry.getModel(modelId) ?? getMultiAngleExecutionModel(modelId)
+      const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
       if (!model) {
         throw new Error(`Model not found: ${modelId}`)
       }
@@ -722,7 +722,7 @@ export class GenerationService {
 
     try {
       const runtimeParams = stripDerivedMediaState(params)
-      const model = registry.getModel(modelId) ?? getMultiAngleExecutionModel(modelId)
+      const model = registry.getModel(modelId) ?? getControlledExecutionModel(modelId)
       const estimate = model
         ? await this.getProgressEstimate(modelId, runtimeParams).catch((error) => {
           logger.warn('[GenerationService] 获取继续轮询进度估算失败，回退本地默认', error)

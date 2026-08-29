@@ -13,7 +13,9 @@ import type { I18nText } from '../types/I18nText'
  */
 export const GENERATION_MODEL_DESCRIPTIONS = {
   // 图片模型
+  'control-light': { zh: 'FAL 专用暗光增强工具，可在尽量保留主体和构图的前提下提升低照度画面的可见度与光照层次。', en: 'A FAL low-light enhancement tool that brightens dark images while preserving their subject and composition.' },
   'flux-1-krea-dev': { zh: 'Krea 与 Black Forest Labs 联合推出的 12B 开放权重模型，强调自然写实、设计感和较少的“AI 油亮感”；兼容 FLUX.1 Dev 生态，适合本地部署与微调。', en: '' },
+  'flux-2-multiple-angles': { zh: '基于 FLUX.2 的连续镜头角度调整工具，可分别控制水平角度、垂直角度和缩放，适合商品与主体视角探索。', en: 'A FLUX.2 camera-angle tool with continuous horizontal, vertical, and zoom controls.' },
   'gpt-image-2': { zh: '推荐使用！OpenAI 高端通用图像生成与编辑模型，文字排版、多语言、提示遵循和参考图保真表现突出，适合复杂商业视觉、海报及高精度修改。', en: '' },
   'ic-light-v2': { zh: '专用图片重打光模型，支持文字描述与五档离散初始光照方向，适合人物、商品和室内画面的光照重绘；方向仅是生成偏好，不是物理精确灯位。', en: '' },
   'grok-imagine-image': { zh: 'xAI 的对话式图片生成与编辑模型，侧重快速写实出图、风格变化和自然语言修改，分辨率比较低。', en: '' },
@@ -40,6 +42,13 @@ export const GENERATION_MODEL_DESCRIPTIONS = {
   'seedvr2-image-upscale': { zh: '', en: '' },
   'bria-creative-upscale': { zh: '', en: '' },
   'ideogram-upscale': { zh: '', en: '' },
+  'image-apps-v2-outpaint': { zh: 'FAL 智能扩图工具，可按四个方向指定像素扩展，或整体缩小原画面并补全四周内容。', en: 'A FAL outpainting tool with per-side expansion and zoom-out controls.' },
+  'image-apps-v2-photo-restoration': { zh: 'FAL 老照片修复工具，可增强清晰度、校正颜色并去除划痕，适合扫描照片和受损影像。', en: 'A FAL photo restoration tool for resolution enhancement, color repair, and scratch removal.' },
+  'image-apps-v2-product-photography': { zh: 'FAL 商品摄影工具，可基于抠图或商品原图生成更完整的商业棚拍背景与构图。', en: 'A FAL product photography tool for turning product cutouts into commercial studio compositions.' },
+  'image-apps-v2-relighting': { zh: 'FAL 预设重打光工具，提供自然光、棚拍光、逆光、霓虹等多种灯光风格，适合快速统一画面光照。', en: 'A FAL preset relighting tool with natural, studio, backlight, neon, and other lighting styles.' },
+  'perspective-change': { zh: '离散方位视角调整工具，可将主体转换为正面、侧面、背面、俯视、仰视或三分之四等目标视角。', en: 'A discrete perspective tool for front, side, rear, top, bottom, and three-quarter views.' },
+  'pixelcut-background-removal': { zh: '基于 Pixelcut 的 FAL 背景移除工具，可提取前景主体并输出透明背景图片。', en: 'A Pixelcut-powered FAL background removal tool that returns a transparent foreground image.' },
+  'qwen-image-edit-2509-multiple-angles': { zh: '基于 Qwen Image Edit 的连续多角度工具，可控制水平旋转、垂直视角、前后移动和广角倾向。', en: 'A Qwen Image Edit camera-angle tool with rotation, elevation, forward motion, and wide-angle controls.' },
   'z-image': { zh: '6B 开放权重完整模型，兼顾写实画质、风格多样性、中英文字渲染和提示遵循；生成自由度较高，推理速度慢于蒸馏版 Turbo。', en: '' },
   'z-image-turbo': { zh: 'Z-Image 的蒸馏加速版，少量采样步数即可生成，显存要求较低并保留较好的写实及双语文字能力；适合高频本地出图。', en: '' },
 

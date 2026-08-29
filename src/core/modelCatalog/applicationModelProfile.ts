@@ -14,6 +14,8 @@ import {
 import apimartProviderPack from '@henjicc/ai-sdk/provider-packs/apimart'
 import bailianProviderPack from '@henjicc/ai-sdk/provider-packs/bailian'
 import falProviderPack from '@henjicc/ai-sdk/provider-packs/fal'
+import falImageEditTools from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'
+import falImageUtilityTools from '@henjicc/ai-sdk/tool-packs/fal-image-utility-tools'
 import falMultiAngleTools from '@henjicc/ai-sdk/tool-packs/fal-multi-angle-tools'
 import grsaiProviderPack from '@henjicc/ai-sdk/provider-packs/grsai'
 import kieProviderPack from '@henjicc/ai-sdk/provider-packs/kie'
@@ -46,6 +48,8 @@ export const HENJI_GENERATION_PROVIDER_PACKS: readonly GenerationPack[] = [
 /** 运行时额外装载的受控工具模型；不进入普通模型选择器与能力发现。 */
 export const HENJI_GENERATION_EXECUTION_PACKS: readonly GenerationPack[] = [
   ...HENJI_GENERATION_PROVIDER_PACKS,
+  falImageEditTools,
+  falImageUtilityTools,
   falMultiAngleTools,
 ]
 

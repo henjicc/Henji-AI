@@ -1,7 +1,6 @@
 import {
-  MULTI_ANGLE_CONTINUOUS_MODEL_ID,
-  MULTI_ANGLE_DISCRETE_MODEL_ID,
   normalizeMultiAngleConfig,
+  resolveMultiAngleExecutionTarget,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 
 export function buildMultiAngleEditorDraft(
@@ -9,12 +8,11 @@ export function buildMultiAngleEditorDraft(
   value: unknown,
 ): DynamicValueMap {
   const config = normalizeMultiAngleConfig(value)
+  const target = resolveMultiAngleExecutionTarget(config.controlProfile)
   return {
     ...state,
     multiAngleConfig: config,
-    modelId: config.controlProfile === 'continuous-v1'
-      ? MULTI_ANGLE_CONTINUOUS_MODEL_ID
-      : MULTI_ANGLE_DISCRETE_MODEL_ID,
+    modelId: target.modelId,
     params: {},
     prompt: '',
   }

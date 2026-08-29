@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDefaultMultiAngleConfig } from '../capabilities/multiAnglePolicy'
+import {
+  MULTI_ANGLE_FLUX_ENDPOINT_ID,
+  MULTI_ANGLE_FLUX_MODEL_ID,
+  createDefaultMultiAngleConfig,
+  type MultiAngleBatchPlanItem,
+} from '../capabilities/multiAnglePolicy'
 import { executeMultiAngleBatch } from './multiAngleBatchService'
 
 describe('多角度批次执行服务', () => {
@@ -51,6 +56,41 @@ describe('多角度批次执行服务', () => {
     expect(result.snapshot.items).toHaveLength(6)
     expect(maxActive).toBeLessThanOrEqual(2)
     expect(result.complete).toBe(true)
+  })
+
+  it('FLUX 原生档把独立 profile、模型、端点与参数带入批次快照', async () => {
+    const config = createDefaultMultiAngleConfig('flux-native-v1')
+    config.views = config.views.slice(0, 1)
+    const observed: MultiAngleBatchPlanItem[] = []
+    const result = await executeMultiAngleBatch({
+      config,
+      sourceImage: 'source.png',
+      createBatchId: () => 'flux-batch',
+      execute: async (plan, context) => {
+        observed.push(plan)
+        context.onProviderRequestId('flux-request')
+        return { mediaUrl: 'flux.png' }
+      },
+    })
+
+    expect(result.snapshot).toMatchObject({
+      profile: 'flux-native-v1',
+      items: [{
+        modelId: MULTI_ANGLE_FLUX_MODEL_ID,
+        endpointId: MULTI_ANGLE_FLUX_ENDPOINT_ID,
+        providerRequestId: 'flux-request',
+      }],
+    })
+    expect(observed[0]).toMatchObject({
+      profile: 'flux-native-v1',
+      precision: 'numeric-native',
+      params: {
+        image: ['source.png'],
+        horizontalAngle: 0,
+        verticalAngle: 0,
+        zoom: 5,
+      },
+    })
   })
 
   it('部分失败不产生完整输出，重试仅请求失败项并保留成功项', async () => {

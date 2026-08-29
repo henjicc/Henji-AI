@@ -2,6 +2,7 @@ import {
   MULTI_ANGLE_DISCRETE_VIEW_PRESETS,
   type MultiAngleContinuousViewV1,
   type MultiAngleDiscretePreset,
+  type MultiAngleFluxViewV1,
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 
@@ -10,6 +11,13 @@ export interface MultiAngleCameraDragOrigin {
   clientY: number
   yawControlDeg: number
   verticalControl: number
+}
+
+export interface MultiAngleFluxCameraDragOrigin {
+  clientX: number
+  clientY: number
+  horizontalAngleDeg: number
+  verticalAngleDeg: number
 }
 
 export interface MultiAngleStageMetrics {
@@ -25,6 +33,12 @@ const VERTICAL_MIN = -1
 const VERTICAL_MAX = 1
 const PROXIMITY_MIN = 0
 const PROXIMITY_MAX = 10
+const FLUX_HORIZONTAL_MIN = 0
+const FLUX_HORIZONTAL_MAX = 360
+const FLUX_VERTICAL_MIN = 0
+const FLUX_VERTICAL_MAX = 60
+const FLUX_ZOOM_MIN = 0
+const FLUX_ZOOM_MAX = 10
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
@@ -56,6 +70,34 @@ export function proximityFromWheel(proximity: number, deltaY: number): number {
   return clamp(quantize(proximity + direction * 0.5, 0.5), PROXIMITY_MIN, PROXIMITY_MAX)
 }
 
+export function fluxCameraFromDrag(
+  origin: MultiAngleFluxCameraDragOrigin,
+  clientX: number,
+  clientY: number,
+  metrics: Pick<MultiAngleStageMetrics, 'width' | 'height'>,
+): Pick<MultiAngleFluxViewV1, 'horizontalAngleDeg' | 'verticalAngleDeg'> {
+  const width = Math.max(metrics.width, 1)
+  const height = Math.max(metrics.height, 1)
+  return {
+    horizontalAngleDeg: clamp(
+      quantize(origin.horizontalAngleDeg + ((clientX - origin.clientX) / width) * 360, 1),
+      FLUX_HORIZONTAL_MIN,
+      FLUX_HORIZONTAL_MAX,
+    ),
+    verticalAngleDeg: clamp(
+      quantize(origin.verticalAngleDeg - ((clientY - origin.clientY) / height) * 60, 1),
+      FLUX_VERTICAL_MIN,
+      FLUX_VERTICAL_MAX,
+    ),
+  }
+}
+
+export function fluxZoomFromWheel(zoom: number, deltaY: number): number {
+  if (deltaY === 0) return zoom
+  const direction = deltaY < 0 ? 1 : -1
+  return clamp(quantize(zoom + direction * 0.5, 0.5), FLUX_ZOOM_MIN, FLUX_ZOOM_MAX)
+}
+
 export function continuousCameraFromKey(
   view: MultiAngleContinuousViewV1,
   key: string,
@@ -67,6 +109,28 @@ export function continuousCameraFromKey(
   if (key === 'PageUp') return { proximity: clamp(view.proximity + 0.5, PROXIMITY_MIN, PROXIMITY_MAX) }
   if (key === 'PageDown') return { proximity: clamp(view.proximity - 0.5, PROXIMITY_MIN, PROXIMITY_MAX) }
   if (key === 'Home') return { yawControlDeg: 0, verticalControl: 0, proximity: 0 }
+  return null
+}
+
+export function fluxCameraFromKey(
+  view: MultiAngleFluxViewV1,
+  key: string,
+): Partial<MultiAngleFluxViewV1> | null {
+  if (key === 'ArrowLeft') {
+    return { horizontalAngleDeg: clamp(view.horizontalAngleDeg - 15, FLUX_HORIZONTAL_MIN, FLUX_HORIZONTAL_MAX) }
+  }
+  if (key === 'ArrowRight') {
+    return { horizontalAngleDeg: clamp(view.horizontalAngleDeg + 15, FLUX_HORIZONTAL_MIN, FLUX_HORIZONTAL_MAX) }
+  }
+  if (key === 'ArrowUp') {
+    return { verticalAngleDeg: clamp(view.verticalAngleDeg + 5, FLUX_VERTICAL_MIN, FLUX_VERTICAL_MAX) }
+  }
+  if (key === 'ArrowDown') {
+    return { verticalAngleDeg: clamp(view.verticalAngleDeg - 5, FLUX_VERTICAL_MIN, FLUX_VERTICAL_MAX) }
+  }
+  if (key === 'PageUp') return { zoom: clamp(view.zoom + 0.5, FLUX_ZOOM_MIN, FLUX_ZOOM_MAX) }
+  if (key === 'PageDown') return { zoom: clamp(view.zoom - 0.5, FLUX_ZOOM_MIN, FLUX_ZOOM_MAX) }
+  if (key === 'Home') return { horizontalAngleDeg: 0, verticalAngleDeg: 0, zoom: 5 }
   return null
 }
 
@@ -109,6 +173,9 @@ export function describeMultiAngleProximity(value: number): string {
 
 export function describeMultiAngleCamera(view: MultiAngleViewV1): string {
   if (view.kind === 'discrete') return view.label
+  if (view.kind === 'flux') {
+    return `水平 ${view.horizontalAngleDeg}° · 垂直 ${view.verticalAngleDeg}° · Zoom ${view.zoom}`
+  }
   const yaw = view.yawControlDeg > 0 ? `左环绕 ${view.yawControlDeg}°`
     : view.yawControlDeg < 0 ? `右环绕 ${Math.abs(view.yawControlDeg)}°`
       : '正面'

@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import { registry } from '@/core/ModelRegistry'
 import { loadAllModels } from '@/core/loaders/modelLoader'
+import { CONTROLLED_EXECUTION_MODELS } from '@/core/modelCatalog/controlledExecutionModels'
 import type { ParamDef } from '@/core/types'
 
 const migratedStructureDigests = {
@@ -53,13 +54,17 @@ describe('SDK catalog 应用侧加载入口', () => {
     registry.clear()
   })
 
-  it('把 105 个运行时定义与展示补丁完整合成并注册', async () => {
+  it('注册 105 个可选模型与受控执行模型，同时保持普通目录不变', async () => {
     await expect(loadAllModels()).resolves.toMatchObject({
-      total: 105,
-      success: 105,
+      total: 105 + CONTROLLED_EXECUTION_MODELS.length,
+      success: 105 + CONTROLLED_EXECUTION_MODELS.length,
       failed: 0,
     })
     expect(registry.listAllModels()).toHaveLength(105)
+    for (const model of CONTROLLED_EXECUTION_MODELS) {
+      expect(registry.getModel(model.meta.id), model.meta.id).toBeTruthy()
+      expect(registry.getModelsByType(model.meta.type)).not.toContainEqual(model)
+    }
   })
 
   it('五个代表模型保留联动、分组与 composite 面板展示', () => {

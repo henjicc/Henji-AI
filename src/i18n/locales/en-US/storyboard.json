@@ -183,6 +183,30 @@
         "title": "Relight",
         "description": "Adjust the direction, brightness, and color of lighting"
       },
+      "presetRelight": {
+        "title": "Preset Relighting",
+        "description": "Reshape the lighting with 18 official FAL lighting styles"
+      },
+      "lowLightEnhancement": {
+        "title": "Low-light Enhancement",
+        "description": "Brighten low-light images while preserving their structure"
+      },
+      "outpaint": {
+        "title": "Outpaint",
+        "description": "Extend any side of the canvas or zoom out and fill the surroundings"
+      },
+      "productPhotography": {
+        "title": "Product Photography",
+        "description": "Turn a single product image into a professional product photo"
+      },
+      "photoRestoration": {
+        "title": "Photo Restoration",
+        "description": "Enhance resolution, repair colors, and remove scratches from old photos"
+      },
+      "backgroundRemoval": {
+        "title": "Background Removal",
+        "description": "Remove JPEG or PNG backgrounds while preserving transparency"
+      },
       "multiAngle": {
         "title": "Multi-angle",
         "description": "Generate a consistent set of views from different angles"

@@ -183,6 +183,30 @@
         "title": "打光",
         "description": "调整画面的光照方向、亮度与颜色"
       },
+      "presetRelight": {
+        "title": "预设重打光",
+        "description": "使用 FAL 的 18 种官方灯光风格快速重塑画面光照"
+      },
+      "lowLightEnhancement": {
+        "title": "暗光增强",
+        "description": "提亮低照度图片，同时尽量保留原有画面结构"
+      },
+      "outpaint": {
+        "title": "智能扩图",
+        "description": "按四个方向扩展画布，或缩小原图并自动补全周围内容"
+      },
+      "productPhotography": {
+        "title": "商品摄影",
+        "description": "将单张商品图转换为带有专业背景的商品摄影图"
+      },
+      "photoRestoration": {
+        "title": "照片修复",
+        "description": "增强旧照片清晰度、修复颜色并去除划痕"
+      },
+      "backgroundRemoval": {
+        "title": "背景移除",
+        "description": "移除 JPEG 或 PNG 图片背景并保留透明通道"
+      },
       "multiAngle": {
         "title": "多角度",
         "description": "从不同视角生成一组一致的画面"

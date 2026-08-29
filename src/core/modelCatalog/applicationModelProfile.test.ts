@@ -79,10 +79,12 @@ describe('Henji-AI 显式模型选择', () => {
     const client = createHenjiAIClient(createRuntime(fetch))
 
     try {
-      expect(HENJI_GENERATION_EXECUTION_PACKS).toHaveLength(9)
-      expect(client.catalog.list()).toHaveLength(108)
+      expect(HENJI_GENERATION_EXECUTION_PACKS).toHaveLength(11)
+      expect(client.catalog.list()).toHaveLength(117)
       expect(new Set(client.providers.list())).toEqual(new Set(HENJI_GENERATION_PROVIDER_IDS))
-      expect(client.catalog.get('fal-flux-pro-erase')).toBeUndefined()
+      expect(client.catalog.get('fal-flux-pro-erase')).toBeDefined()
+      expect(client.catalog.get('fal-image-apps-v2-relighting')).toBeDefined()
+      expect(client.catalog.get('fal-pixelcut-background-removal')).toBeDefined()
       expect(client.catalog.get('fal-qwen-image-edit-2509-multiple-angles')).toBeDefined()
       expect(client.catalog.get('fal-perspective-change')).toBeDefined()
       expect(client.catalog.get('fal-flux-2-multiple-angles')).toBeDefined()

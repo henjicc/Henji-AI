@@ -252,6 +252,31 @@ describe('migrateMultiAngleGenerationData', () => {
       multiAngleResultPlaceholderId: null,
     });
   });
+
+  it('保存重开 FLUX 原生控制档时恢复对应隐藏模型', () => {
+    const data: DynamicValueMap = {
+      modelId: 'fal-perspective-change',
+      multiAngleConfig: {
+        version: 1,
+        controlProfile: 'flux-native-v1',
+        concurrency: 2,
+        views: [{
+          viewId: 'flux-right',
+          kind: 'flux',
+          label: '右侧面',
+          presetId: 'right-side',
+          horizontalAngleDeg: 90,
+          verticalAngleDeg: 0,
+          zoom: 5,
+        }],
+      },
+    };
+
+    migrateMultiAngleGenerationData(data);
+
+    expect(data.modelId).toBe('fal-flux-2-multiple-angles');
+    expect((data.multiAngleConfig as DynamicValueMap).controlProfile).toBe('flux-native-v1');
+  });
 });
 
 describe('图层拆分迁移', () => {

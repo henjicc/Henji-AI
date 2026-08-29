@@ -9,9 +9,13 @@ const logger = createLogger('core.loaders.modelLoader')
 
 import { registry } from '../ModelRegistry'
 import { getI18nText } from '../types/I18nText'
-import { defineModel as defineApplicationModel } from '../defineModel'
+import {
+  defineHiddenModel,
+  defineModel as defineApplicationModel,
+} from '../defineModel'
 import { composeModelDefinition } from '../composeModelDefinition'
 import { HENJI_GENERATION_MODELS } from '../modelCatalog/applicationModelProfile'
+import { CONTROLLED_EXECUTION_MODELS } from '../modelCatalog/controlledExecutionModels'
 import { modelPresentations } from '@/models/presentation'
 
 /**
@@ -58,6 +62,18 @@ export async function loadAllModels(): Promise<LoadStats> {
       successCount++
     } catch (error) {
       logger.error(`[ModelLoader] ✗ Failed to load ${path}:`, error)
+      failedModels.push({ path, error })
+      errorCount++
+    }
+  }
+
+  for (const model of CONTROLLED_EXECUTION_MODELS) {
+    const path = model.meta.id
+    try {
+      defineHiddenModel(model)
+      successCount++
+    } catch (error) {
+      logger.error(`[ModelLoader] ✗ Failed to load controlled model ${path}:`, error)
       failedModels.push({ path, error })
       errorCount++
     }

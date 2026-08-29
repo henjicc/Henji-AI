@@ -1,3 +1,4 @@
+import { model as flux2MultipleAnglesModel } from '@henjicc/ai-sdk/tool-models/fal/flux-2-multiple-angles'
 import { model as perspectiveChangeModel } from '@henjicc/ai-sdk/tool-models/fal/perspective-change'
 import { model as qwenMultipleAnglesModel } from '@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2509-multiple-angles'
 
@@ -37,9 +38,20 @@ const perspectivePresentation: ModelPresentation = {
   },
 }
 
+const fluxPresentation: ModelPresentation = {
+  meta: { name: { zh: 'FLUX 2 多角度', en: 'FLUX 2 Multiple Angles' } },
+  params: {
+    image: { name: { zh: '源图', en: 'Source image' } },
+    horizontalAngle: { name: { zh: '水平角度', en: 'Horizontal angle' } },
+    verticalAngle: { name: { zh: '垂直角度', en: 'Vertical angle' } },
+    zoom: { name: { zh: '缩放', en: 'Zoom' } },
+  },
+}
+
 export const MULTI_ANGLE_EXECUTION_MODELS: readonly ModelDefinition[] = [
   composeModelDefinition(qwenMultipleAnglesModel, continuousPresentation),
   composeModelDefinition(perspectiveChangeModel, perspectivePresentation),
+  composeModelDefinition(flux2MultipleAnglesModel, fluxPresentation),
 ]
 
 const modelById = new Map(MULTI_ANGLE_EXECUTION_MODELS.map((model) => [model.meta.id, model]))

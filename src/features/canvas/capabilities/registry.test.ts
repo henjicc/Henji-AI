@@ -48,12 +48,12 @@ describe('画布图片能力注册表', () => {
     },
   };
 
-  it('登记九项唯一、稳定且可序列化的能力', () => {
+  it('登记十五项唯一、稳定且可序列化的能力', () => {
     const definitions = getRegisteredCanvasImageCapabilities();
     const expectedIds = Object.values(CANVAS_IMAGE_CAPABILITY_IDS);
 
-    expect(definitions).toHaveLength(9);
-    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(9);
+    expect(definitions).toHaveLength(15);
+    expect(new Set(definitions.map((definition) => definition.id)).size).toBe(15);
     expect(definitions.map((definition) => definition.id)).toEqual(expectedIds);
     expect(JSON.parse(JSON.stringify(definitions))).toEqual(definitions);
     expect(definitions.every((definition) => (
@@ -78,6 +78,12 @@ describe('画布图片能力注册表', () => {
       .toEqual([
         CANVAS_IMAGE_CAPABILITY_IDS.panorama,
         CANVAS_IMAGE_CAPABILITY_IDS.relight,
+        CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
+        CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
+        CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
+        CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
+        CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
+        CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
         CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
         CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
         CANVAS_IMAGE_CAPABILITY_IDS.upscale,
@@ -91,6 +97,12 @@ describe('画布图片能力注册表', () => {
     }).map(({ id }) => id)).toEqual([
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
+      CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
+      CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
+      CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
+      CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
+      CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
+      CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
@@ -114,6 +126,12 @@ describe('画布图片能力注册表', () => {
     }).map(({ id }) => id)).toEqual([
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
+      CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
+      CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
+      CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
+      CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
+      CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
+      CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
       CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,
       CANVAS_IMAGE_CAPABILITY_IDS.elementEdit,
@@ -128,6 +146,12 @@ describe('画布图片能力注册表', () => {
     }).map(({ id }) => id)).toEqual([
       CANVAS_IMAGE_CAPABILITY_IDS.panorama,
       CANVAS_IMAGE_CAPABILITY_IDS.relight,
+      CANVAS_IMAGE_CAPABILITY_IDS.presetRelight,
+      CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement,
+      CANVAS_IMAGE_CAPABILITY_IDS.outpaint,
+      CANVAS_IMAGE_CAPABILITY_IDS.productPhotography,
+      CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration,
+      CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval,
       CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       CANVAS_IMAGE_CAPABILITY_IDS.nineGrid,
       CANVAS_IMAGE_CAPABILITY_IDS.upscale,

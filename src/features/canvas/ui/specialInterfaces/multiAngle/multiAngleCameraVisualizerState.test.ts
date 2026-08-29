@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
-import { MULTI_ANGLE_CONTINUOUS_PRESETS } from '@/features/canvas/capabilities/multiAnglePolicy'
+import {
+  MULTI_ANGLE_CONTINUOUS_PRESETS,
+  MULTI_ANGLE_FLUX_PRESETS,
+} from '@/features/canvas/capabilities/multiAnglePolicy'
 import {
   continuousCameraFromDrag,
   continuousCameraFromKey,
   describeMultiAngleCamera,
   discretePresetFromPoint,
+  fluxCameraFromDrag,
+  fluxCameraFromKey,
+  fluxZoomFromWheel,
   proximityFromWheel,
 } from './multiAngleCameraVisualizerState'
 
@@ -55,5 +61,34 @@ describe('多角度镜头可视化状态', () => {
       verticalControl: -0.6,
       proximity: 7,
     })).toBe('右环绕 45° · 高位 60% · 近景')
+  })
+
+  it('FLUX 拖拽、键盘与滚轮只编辑原生 0–360/0–60/0–10 控制量', () => {
+    expect(fluxCameraFromDrag({
+      clientX: 100,
+      clientY: 100,
+      horizontalAngleDeg: 0,
+      verticalAngleDeg: 0,
+    }, 150, 50, { width: 200, height: 200 })).toEqual({
+      horizontalAngleDeg: 90,
+      verticalAngleDeg: 15,
+    })
+    expect(fluxCameraFromDrag({
+      clientX: 100,
+      clientY: 100,
+      horizontalAngleDeg: 350,
+      verticalAngleDeg: 55,
+    }, 300, -100, { width: 200, height: 200 })).toEqual({
+      horizontalAngleDeg: 360,
+      verticalAngleDeg: 60,
+    })
+
+    const view = MULTI_ANGLE_FLUX_PRESETS[1].view
+    expect(fluxCameraFromKey(view, 'ArrowLeft')).toEqual({ horizontalAngleDeg: 75 })
+    expect(fluxCameraFromKey(view, 'ArrowUp')).toEqual({ verticalAngleDeg: 5 })
+    expect(fluxCameraFromKey(view, 'Escape')).toBeNull()
+    expect(fluxZoomFromWheel(5, -10)).toBe(5.5)
+    expect(fluxZoomFromWheel(0, 10)).toBe(0)
+    expect(describeMultiAngleCamera(view)).toBe('水平 90° · 垂直 0° · Zoom 5')
   })
 })

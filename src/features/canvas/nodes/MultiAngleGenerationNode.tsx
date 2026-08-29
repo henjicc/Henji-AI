@@ -26,6 +26,7 @@ import {
 import {
   createMultiAngleCommitContract,
   normalizeMultiAngleConfig,
+  resolveMultiAngleExecutionTarget,
   summarizeMultiAngleConfig,
   type MultiAngleConfigV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
@@ -82,6 +83,8 @@ function requireSingleSource(sources: readonly string[]): string {
 
 function createPlaceholder(sourceNodeId: string, data: MultiAngleGenerationNodeData): string {
   const canvas = useCanvasStore.getState()
+  const config = normalizeMultiAngleConfig(data.multiAngleConfig)
+  const executionTarget = resolveMultiAngleExecutionTarget(config.controlProfile)
   const previousId = data.multiAngleResultPlaceholderId?.trim()
   if (previousId && canvas.nodes.some((node) => node.id === previousId && node.type === CANVAS_NODE_TYPES.exportImage)) {
     canvas.updateNodeData(previousId, {
@@ -101,8 +104,8 @@ function createPlaceholder(sourceNodeId: string, data: MultiAngleGenerationNodeD
       resultKind: 'image',
       sourceCapabilityId: CANVAS_IMAGE_CAPABILITY_IDS.multiAngle,
       generationPrompt: '',
-      generationModelId: data.modelId,
-      generationMappedParams: { multiAngleConfig: data.multiAngleConfig },
+      generationModelId: executionTarget.modelId,
+      generationMappedParams: { multiAngleConfig: config },
     },
   )
   canvas.addEdge(sourceNodeId, nodeId)

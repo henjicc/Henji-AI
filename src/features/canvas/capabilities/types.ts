@@ -8,6 +8,12 @@ import type { MediaPortKind } from '../domain/nodePorts';
 export const CANVAS_IMAGE_CAPABILITY_IDS = {
   panorama: 'image.panorama',
   relight: 'image.relight',
+  presetRelight: 'image.preset-relight',
+  lowLightEnhancement: 'image.low-light-enhancement',
+  outpaint: 'image.outpaint',
+  productPhotography: 'image.product-photography',
+  photoRestoration: 'image.photo-restoration',
+  backgroundRemoval: 'image.background-removal',
   multiAngle: 'image.multi-angle',
   nineGrid: 'image.nine-grid',
   upscale: 'image.upscale',

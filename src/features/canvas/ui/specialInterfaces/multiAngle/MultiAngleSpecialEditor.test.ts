@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MULTI_ANGLE_DISCRETE_MODEL_ID,
+  MULTI_ANGLE_FLUX_MODEL_ID,
   createDefaultMultiAngleConfig,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import { buildMultiAngleEditorDraft } from './multiAngleEditorState'
@@ -43,5 +44,29 @@ describe('多角度编辑器草稿', () => {
         proximity: 7,
       }],
     })
+  })
+
+  it('切换到 FLUX 原生档时写入独立模型与独立角度语义', () => {
+    const config = createDefaultMultiAngleConfig('flux-native-v1')
+    const draft = buildMultiAngleEditorDraft({ modelId: MULTI_ANGLE_DISCRETE_MODEL_ID }, config)
+
+    expect(draft).toMatchObject({
+      modelId: MULTI_ANGLE_FLUX_MODEL_ID,
+      prompt: '',
+      params: {},
+      multiAngleConfig: {
+        version: 1,
+        controlProfile: 'flux-native-v1',
+        concurrency: 2,
+      },
+    })
+    expect((draft.multiAngleConfig as { views: DynamicValueMap[] }).views).toHaveLength(4)
+    expect((draft.multiAngleConfig as { views: DynamicValueMap[] }).views[0]).toMatchObject({
+      kind: 'flux',
+      horizontalAngleDeg: 0,
+      verticalAngleDeg: 0,
+      zoom: 5,
+    })
+    expect(JSON.stringify(draft.multiAngleConfig)).not.toContain('yawControlDeg')
   })
 })

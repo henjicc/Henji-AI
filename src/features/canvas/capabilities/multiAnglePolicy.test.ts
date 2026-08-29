@@ -5,6 +5,8 @@ import {
   MULTI_ANGLE_CONTINUOUS_MODEL_ID,
   MULTI_ANGLE_DISCRETE_ENDPOINT_ID,
   MULTI_ANGLE_DISCRETE_MODEL_ID,
+  MULTI_ANGLE_FLUX_ENDPOINT_ID,
+  MULTI_ANGLE_FLUX_MODEL_ID,
   createDefaultMultiAngleConfig,
   createMultiAngleBatchPlan,
   createMultiAngleCommitContract,
@@ -38,6 +40,36 @@ describe('多角度版本化参数契约', () => {
     })
   })
 
+  it('FLUX 档只迁移同语义字段，并夹紧原生 0–360/0–60/0–10 范围', () => {
+    const config = normalizeMultiAngleConfig({
+      version: 1,
+      controlProfile: 'flux-native-v1',
+      views: [{
+        id: 'legacy-flux',
+        label: '旧 FLUX 视图',
+        horizontalAngle: 450,
+        verticalAngle: -5,
+        zoom: 12,
+      }],
+    })
+    expect(config).toEqual({
+      version: 1,
+      controlProfile: 'flux-native-v1',
+      concurrency: 2,
+      views: [{
+        viewId: 'legacy-flux',
+        kind: 'flux',
+        label: '旧 FLUX 视图',
+        presetId: 'front',
+        horizontalAngleDeg: 360,
+        verticalAngleDeg: 0,
+        zoom: 10,
+      }],
+    })
+    expect(config.views[0]).not.toHaveProperty('yawControlDeg')
+    expect(config.views[0]).not.toHaveProperty('proximity')
+  })
+
   it('拒绝未知版本、超过 6 视图、重复编号与重复控制', () => {
     expect(() => normalizeMultiAngleConfig({ version: 2 })).toThrow(/不支持/)
     const base = createDefaultMultiAngleConfig()
@@ -49,7 +81,7 @@ describe('多角度版本化参数契约', () => {
     })).toThrow(/控制重复/)
   })
 
-  it('两个 profile 映射固定 Fal 模型与端点，离散档不伪造数值角度', () => {
+  it('三个 profile 映射各自固定 Fal 模型、端点与原生参数', () => {
     const continuous = createMultiAngleBatchPlan(createDefaultMultiAngleConfig('continuous-v1'), 'source.png')
     expect(continuous[0]).toMatchObject({
       modelId: MULTI_ANGLE_CONTINUOUS_MODEL_ID,
@@ -66,6 +98,59 @@ describe('多角度版本化参数契约', () => {
       cameraControl: { kind: 'discrete', preset: 'front' },
     })
     expect(discrete[0].cameraControl).not.toHaveProperty('yawControlDeg')
+
+    const fluxConfig = createDefaultMultiAngleConfig('flux-native-v1')
+    const fluxView = fluxConfig.views[0]
+    if (fluxView.kind !== 'flux') throw new Error('FLUX 默认配置缺少原生视图')
+    fluxConfig.views = [{
+      ...fluxView,
+      horizontalAngleDeg: 360,
+      verticalAngleDeg: 60,
+      zoom: 10,
+    }]
+    const flux = createMultiAngleBatchPlan(fluxConfig, 'source.png')
+    expect(flux[0]).toMatchObject({
+      modelId: MULTI_ANGLE_FLUX_MODEL_ID,
+      endpointId: MULTI_ANGLE_FLUX_ENDPOINT_ID,
+      profile: 'flux-native-v1',
+      precision: 'numeric-native',
+      params: {
+        image: ['source.png'],
+        horizontalAngle: 360,
+        verticalAngle: 60,
+        zoom: 10,
+      },
+      cameraControl: {
+        kind: 'flux',
+        horizontalAngleDeg: 360,
+        verticalAngleDeg: 60,
+        zoom: 10,
+      },
+    })
+    expect(flux[0].params).not.toHaveProperty('rotateRightLeft')
+    expect(flux[0].params).not.toHaveProperty('targetPerspective')
+
+    const contract = createMultiAngleCommitContract([{
+      plan: flux[0],
+      mediaUrl: 'flux.png',
+      providerRequestId: 'req-flux',
+    }])
+    expect(contract.outputs[0].descriptor).toMatchObject({
+      profile: { id: 'flux-native-v1', precision: 'numeric-native' },
+      angle: {
+        control: {
+          kind: 'flux',
+          horizontalAngleDeg: 360,
+          verticalAngleDeg: 60,
+          zoom: 10,
+        },
+      },
+      metadata: {
+        providerId: 'fal',
+        endpointId: MULTI_ANGLE_FLUX_ENDPOINT_ID,
+        providerRequestId: 'req-flux',
+      },
+    })
   })
 
   it('完整输出按用户顺序生成 4.1 image-group 描述，不按完成时间', () => {

@@ -138,6 +138,10 @@ export interface GenerationNodeShellProps {
   /** 无提示词工具（如忠实超分）可隐藏编辑器，并跳过文本必填校验。 */
   showPromptInput?: boolean;
   requirePrompt?: boolean;
+  /** 固定模型工具隐藏模型行，并忽略历史模型选择器连线覆盖。 */
+  showModelInput?: boolean;
+  /** 已由主媒体行或能力面板承载、不应重复呈现的 schema 参数。 */
+  excludeParamIds?: readonly string[];
   /** 在供应商配置/上传/计费前执行的本地预检，可补充仅供运行时使用的隐藏参数。 */
   prepareRuntimeParams?: (
     context: GenerationNodeRuntimePreparationContext,
@@ -175,6 +179,8 @@ export const GenerationNodeShell = memo(({
   capabilityId,
   showPromptInput = true,
   requirePrompt = true,
+  showModelInput = true,
+  excludeParamIds,
   prepareRuntimeParams,
   commitGenerationResult,
   additionalInputRows,
@@ -287,7 +293,7 @@ export const GenerationNodeShell = memo(({
     }
     return getDefaultModelId(modelType);
   }, [capability, data.modelId, modelType]);
-  const effectiveModelId = overrideModelId ?? selectedModelId;
+  const effectiveModelId = showModelInput ? (overrideModelId ?? selectedModelId) : selectedModelId;
   const effectiveModel = useMemo(() => registry.getModel(effectiveModelId), [effectiveModelId]);
   const providerKeyConfigured = effectiveModel
     ? providerKeyStatus[effectiveModel.meta.provider] === true
@@ -312,6 +318,10 @@ export const GenerationNodeShell = memo(({
       capability.promptPolicy,
     );
   }, [capability, effectiveModel]);
+  const excludedSchemaParamIds = useMemo(
+    () => [...new Set([...PROMPT_PARAM_IDS, ...(excludeParamIds ?? [])])],
+    [excludeParamIds],
+  );
 
   const handleModelChange = useCallback((nextModelId: string) => {
     const transferredParams = transferModelParamOverridesBetweenModels(
@@ -728,7 +738,7 @@ export const GenerationNodeShell = memo(({
             values={modelParamValues}
             setParam={setParam}
             setParams={setParams}
-            excludeParamIds={PROMPT_PARAM_IDS}
+            excludeParamIds={excludedSchemaParamIds}
             mediaInputs={mediaInputs}
             onMediaInputChange={handleMediaInputChange}
             overrideModelId={overrideModelId}
@@ -737,6 +747,7 @@ export const GenerationNodeShell = memo(({
             onParamsChange={handleParamsChange}
             incomingImages={effectiveImages}
             modelPolicy={capability?.modelPolicy}
+            showModelInput={showModelInput}
             maxMediaCounts={typeof capabilityReferenceImageMax === 'number'
               ? { image: capabilityReferenceImageMax }
               : undefined}

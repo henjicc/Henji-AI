@@ -43,6 +43,8 @@ interface NodeInputRowsProps {
   incomingImages?: string[];
   /** 能力节点的模型白名单；省略时保持普通生成节点行为。 */
   modelPolicy?: CanvasImageCapabilityModelPolicy;
+  /** 固定模型工具可以隐藏模型选择与模型端口。 */
+  showModelInput?: boolean;
   /** 能力级媒体数量上限会与模型 inputLimits 取较小值。 */
   maxMediaCounts?: Partial<Record<RowMediaKind, number>>;
   /** 只呈现能力允许用户修改的 schema 参数；模型行和提示词不受此字段影响。 */
@@ -78,6 +80,7 @@ export function NodeInputRows({
   onParamsChange,
   incomingImages,
   modelPolicy,
+  showModelInput = true,
   maxMediaCounts,
   visibleParamIds,
   videoTrimRange,
@@ -108,20 +111,22 @@ export function NodeInputRows({
   );
 
   // 媒体行随模型/模式联动增减（如切到"参考生视频"多出视频行），端口位置随之下移
-  useNodeHandlesSync(nodeId, mediaRows.map((row) => row.kind).join('|'));
+  useNodeHandlesSync(nodeId, `${showModelInput ? 'model' : 'fixed'}|${mediaRows.map((row) => row.kind).join('|')}`);
 
   return (
     <div className={`flex flex-col ${NODE_ROW_GAP_CLASS} ${className}`}>
-      <ModelInputRow
-        mediaType={mediaType}
-        modelId={modelId}
-        overrideModelId={overrideModelId}
-        storedParams={storedParams}
-        onModelChange={onModelChange}
-        onParamsChange={onParamsChange}
-        incomingImages={incomingImages}
-        modelPolicy={modelPolicy}
-      />
+      {showModelInput && (
+        <ModelInputRow
+          mediaType={mediaType}
+          modelId={modelId}
+          overrideModelId={overrideModelId}
+          storedParams={storedParams}
+          onModelChange={onModelChange}
+          onParamsChange={onParamsChange}
+          incomingImages={incomingImages}
+          modelPolicy={modelPolicy}
+        />
+      )}
 
       {mediaRows.map(({ kind, max }) => (
         <MediaInputRow

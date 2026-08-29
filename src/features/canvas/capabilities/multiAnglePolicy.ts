@@ -6,14 +6,16 @@ export const MULTI_ANGLE_CONCURRENCY = 2 as const
 export const MULTI_ANGLE_DEFAULT_VIEW_COUNT = 4 as const
 export const MULTI_ANGLE_MAX_VIEW_COUNT = 6 as const
 
-export const MULTI_ANGLE_PROFILES = ['continuous-v1', 'discrete-v1'] as const
+export const MULTI_ANGLE_PROFILES = ['continuous-v1', 'discrete-v1', 'flux-native-v1'] as const
 export type MultiAngleControlProfile = (typeof MULTI_ANGLE_PROFILES)[number]
-export type MultiAngleControlPrecision = 'learned-native' | 'discrete-native'
+export type MultiAngleControlPrecision = 'learned-native' | 'discrete-native' | 'numeric-native'
 
 export const MULTI_ANGLE_CONTINUOUS_MODEL_ID = 'fal-qwen-image-edit-2509-multiple-angles'
 export const MULTI_ANGLE_CONTINUOUS_ENDPOINT_ID = 'fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles'
 export const MULTI_ANGLE_DISCRETE_MODEL_ID = 'fal-perspective-change'
 export const MULTI_ANGLE_DISCRETE_ENDPOINT_ID = 'fal-ai/image-apps-v2/perspective'
+export const MULTI_ANGLE_FLUX_MODEL_ID = 'fal-flux-2-multiple-angles'
+export const MULTI_ANGLE_FLUX_ENDPOINT_ID = 'fal-ai/flux-2-lora-gallery/multiple-angles'
 
 export const MULTI_ANGLE_DISCRETE_PRESETS = [
   'front', 'left_side', 'right_side', 'back', 'top_down', 'bottom_up',
@@ -39,7 +41,20 @@ export interface MultiAngleDiscreteViewV1 {
   preset: MultiAngleDiscretePreset
 }
 
-export type MultiAngleViewV1 = MultiAngleContinuousViewV1 | MultiAngleDiscreteViewV1
+export interface MultiAngleFluxViewV1 {
+  viewId: string
+  kind: 'flux'
+  label: string
+  presetId: string
+  horizontalAngleDeg: number
+  verticalAngleDeg: number
+  zoom: number
+}
+
+export type MultiAngleViewV1 =
+  | MultiAngleContinuousViewV1
+  | MultiAngleDiscreteViewV1
+  | MultiAngleFluxViewV1
 
 export interface MultiAngleConfigV1 {
   version: 1
@@ -62,6 +77,15 @@ export const MULTI_ANGLE_CONTINUOUS_PRESETS: readonly MultiAngleViewPreset<Multi
   continuousPreset('right-side', '右侧面', -90, 0, 0, false, 1, 0),
   continuousPreset('top-oblique', '高位斜俯', 0, -0.6, 0, false, 0, -0.72),
   continuousPreset('bottom-oblique', '低位斜仰', 0, 0.6, 0, false, 0, 0.72),
+] as const
+
+export const MULTI_ANGLE_FLUX_PRESETS: readonly MultiAngleViewPreset<MultiAngleFluxViewV1>[] = [
+  fluxPreset('front', '正面', 0, 0, 5, 0, 0.72),
+  fluxPreset('right-side', '右侧面', 90, 0, 5, 1, 0),
+  fluxPreset('back', '背面', 180, 0, 5, 0, -0.72),
+  fluxPreset('left-side', '左侧面', 270, 0, 5, -1, 0),
+  fluxPreset('high-front', '高位正面', 0, 30, 5, 0, -0.72),
+  fluxPreset('close-front', '近景正面', 0, 0, 10, 0, 0.48),
 ] as const
 
 const DISCRETE_LABELS: Record<MultiAngleDiscretePreset, string> = {
@@ -129,6 +153,31 @@ function continuousPreset(
   }
 }
 
+function fluxPreset(
+  id: string,
+  label: string,
+  horizontalAngleDeg: number,
+  verticalAngleDeg: number,
+  zoom: number,
+  x: number,
+  y: number,
+): MultiAngleViewPreset<MultiAngleFluxViewV1> {
+  return {
+    id,
+    label,
+    visual: { x, y },
+    view: {
+      viewId: `flux-${id}`,
+      kind: 'flux',
+      label,
+      presetId: id,
+      horizontalAngleDeg,
+      verticalAngleDeg,
+      zoom,
+    },
+  }
+}
+
 function copyView<T extends MultiAngleViewV1>(view: T): T {
   return { ...view }
 }
@@ -136,11 +185,13 @@ function copyView<T extends MultiAngleViewV1>(view: T): T {
 export function createDefaultMultiAngleConfig(
   profile: MultiAngleControlProfile = 'continuous-v1',
 ): MultiAngleConfigV1 {
-  const presets = profile === 'continuous-v1'
+  const presets: readonly MultiAngleViewPreset[] = profile === 'continuous-v1'
     ? MULTI_ANGLE_CONTINUOUS_PRESETS
-    : MULTI_ANGLE_DISCRETE_VIEW_PRESETS.filter((preset) => (
-        ['front', 'right_side', 'back', 'left_side'].includes(preset.id)
-      ))
+    : profile === 'discrete-v1'
+      ? MULTI_ANGLE_DISCRETE_VIEW_PRESETS.filter((preset) => (
+          ['front', 'right_side', 'back', 'left_side'].includes(preset.id)
+        ))
+      : MULTI_ANGLE_FLUX_PRESETS
   return {
     version: 1,
     controlProfile: profile,
@@ -188,7 +239,31 @@ function normalizeDiscreteView(value: unknown, index: number): MultiAngleDiscret
   }
 }
 
-/** 旧草案的 id/azimuth/elevation/shotSize 在这里单点迁移。 */
+function normalizeFluxView(value: unknown, index: number): MultiAngleFluxViewV1 {
+  const raw = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const fallback = MULTI_ANGLE_FLUX_PRESETS[index % MULTI_ANGLE_FLUX_PRESETS.length].view
+  return {
+    viewId: stringValue(raw.viewId ?? raw.id, fallback.viewId),
+    kind: 'flux',
+    label: stringValue(raw.label, fallback.label),
+    presetId: stringValue(raw.presetId ?? raw.viewPreset, fallback.presetId),
+    horizontalAngleDeg: numberInRange(
+      raw.horizontalAngleDeg ?? raw.horizontalAngle,
+      0,
+      360,
+      fallback.horizontalAngleDeg,
+    ),
+    verticalAngleDeg: numberInRange(
+      raw.verticalAngleDeg ?? raw.verticalAngle,
+      0,
+      60,
+      fallback.verticalAngleDeg,
+    ),
+    zoom: numberInRange(raw.zoom, 0, 10, fallback.zoom),
+  }
+}
+
+/** 旧草案和请求参数形草案在这里按各自 profile 单点迁移，不跨 profile 换算。 */
 export function normalizeMultiAngleConfig(value: unknown): MultiAngleConfigV1 {
   if (!value || typeof value !== 'object') return createDefaultMultiAngleConfig()
   const raw = value as Record<string, unknown>
@@ -197,7 +272,9 @@ export function normalizeMultiAngleConfig(value: unknown): MultiAngleConfigV1 {
   }
   const profile: MultiAngleControlProfile = raw.controlProfile === 'discrete-v1'
     ? 'discrete-v1'
-    : 'continuous-v1'
+    : raw.controlProfile === 'flux-native-v1'
+      ? 'flux-native-v1'
+      : 'continuous-v1'
   const sourceViews = Array.isArray(raw.views) ? raw.views : createDefaultMultiAngleConfig(profile).views
   return {
     version: 1,
@@ -205,7 +282,9 @@ export function normalizeMultiAngleConfig(value: unknown): MultiAngleConfigV1 {
     views: sourceViews.map((view, index) => (
       profile === 'continuous-v1'
         ? normalizeContinuousView(view, index)
-        : normalizeDiscreteView(view, index)
+        : profile === 'discrete-v1'
+          ? normalizeDiscreteView(view, index)
+          : normalizeFluxView(view, index)
     )),
     concurrency: MULTI_ANGLE_CONCURRENCY,
   }
@@ -227,9 +306,14 @@ export function validateMultiAngleConfig(value: unknown): MultiAngleConfigV1 {
     if (config.controlProfile === 'discrete-v1' && view.kind !== 'discrete') {
       throw new Error('离散档结果组不能混入连续视图')
     }
+    if (config.controlProfile === 'flux-native-v1' && view.kind !== 'flux') {
+      throw new Error('FLUX 原生档结果组不能混入其他控制视图')
+    }
     const signature = view.kind === 'continuous'
       ? `${view.yawControlDeg}/${view.verticalControl}/${view.proximity}/${view.wideAngle}`
-      : view.preset
+      : view.kind === 'discrete'
+        ? view.preset
+        : `${view.horizontalAngleDeg}/${view.verticalAngleDeg}/${view.zoom}`
     if (controls.has(signature)) throw new Error(`多角度视图控制重复：${view.label}`)
     controls.add(signature)
   }
@@ -248,6 +332,57 @@ export interface MultiAngleBatchPlanItem {
   params: DynamicValueMap
 }
 
+export interface MultiAngleExecutionTarget {
+  modelId: string
+  endpointId: string
+  precision: MultiAngleControlPrecision
+}
+
+export function resolveMultiAngleExecutionTarget(
+  profile: MultiAngleControlProfile,
+): MultiAngleExecutionTarget {
+  if (profile === 'continuous-v1') {
+    return {
+      modelId: MULTI_ANGLE_CONTINUOUS_MODEL_ID,
+      endpointId: MULTI_ANGLE_CONTINUOUS_ENDPOINT_ID,
+      precision: 'learned-native',
+    }
+  }
+  if (profile === 'discrete-v1') {
+    return {
+      modelId: MULTI_ANGLE_DISCRETE_MODEL_ID,
+      endpointId: MULTI_ANGLE_DISCRETE_ENDPOINT_ID,
+      precision: 'discrete-native',
+    }
+  }
+  return {
+    modelId: MULTI_ANGLE_FLUX_MODEL_ID,
+    endpointId: MULTI_ANGLE_FLUX_ENDPOINT_ID,
+    precision: 'numeric-native',
+  }
+}
+
+function createMultiAngleViewParams(view: MultiAngleViewV1, source: string): DynamicValueMap {
+  if (view.kind === 'continuous') {
+    return {
+      image: [source],
+      rotateRightLeft: view.yawControlDeg,
+      verticalAngle: view.verticalControl,
+      moveForward: view.proximity,
+      wideAngleLens: view.wideAngle,
+    }
+  }
+  if (view.kind === 'discrete') {
+    return { image: [source], targetPerspective: view.preset }
+  }
+  return {
+    image: [source],
+    horizontalAngle: view.horizontalAngleDeg,
+    verticalAngle: view.verticalAngleDeg,
+    zoom: view.zoom,
+  }
+}
+
 export function createMultiAngleBatchPlan(
   value: unknown,
   sourceImage: string,
@@ -255,28 +390,17 @@ export function createMultiAngleBatchPlan(
   const source = sourceImage.trim()
   if (!source) throw new Error('多角度生成需要 1 张源图')
   const config = validateMultiAngleConfig(value)
+  const target = resolveMultiAngleExecutionTarget(config.controlProfile)
   return config.views.map((view, order) => ({
     viewId: view.viewId,
     order,
     label: view.label,
     profile: config.controlProfile,
-    precision: config.controlProfile === 'continuous-v1' ? 'learned-native' : 'discrete-native',
-    modelId: config.controlProfile === 'continuous-v1'
-      ? MULTI_ANGLE_CONTINUOUS_MODEL_ID
-      : MULTI_ANGLE_DISCRETE_MODEL_ID,
-    endpointId: config.controlProfile === 'continuous-v1'
-      ? MULTI_ANGLE_CONTINUOUS_ENDPOINT_ID
-      : MULTI_ANGLE_DISCRETE_ENDPOINT_ID,
+    precision: target.precision,
+    modelId: target.modelId,
+    endpointId: target.endpointId,
     cameraControl: copyView(view),
-    params: view.kind === 'continuous'
-      ? {
-          image: [source],
-          rotateRightLeft: view.yawControlDeg,
-          verticalAngle: view.verticalControl,
-          moveForward: view.proximity,
-          wideAngleLens: view.wideAngle,
-        }
-      : { image: [source], targetPerspective: view.preset },
+    params: createMultiAngleViewParams(view, source),
   }))
 }
 
@@ -324,5 +448,10 @@ export function createMultiAngleCommitContract(
 
 export function summarizeMultiAngleConfig(value: unknown): string {
   const config = normalizeMultiAngleConfig(value)
-  return `${config.controlProfile === 'continuous-v1' ? '连续控制' : '离散方位'} · ${config.views.length} 个视图`
+  const profileLabel = config.controlProfile === 'continuous-v1'
+    ? '连续控制'
+    : config.controlProfile === 'discrete-v1'
+      ? '离散方位'
+      : 'FLUX 原生角度'
+  return `${profileLabel} · ${config.views.length} 个视图`
 }

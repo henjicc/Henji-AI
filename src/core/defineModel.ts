@@ -90,7 +90,7 @@ function applyI18nScope(model: ModelDefinition): ModelDefinition {
  * })
  * ```
  */
-export function defineModel(model: ModelDefinition): ModelDefinition {
+function prepareModel(model: ModelDefinition): ModelDefinition {
   // 1. 按跨供应商模型标识解析唯一的通用描述
   applyCanonicalDescription(model)
 
@@ -100,9 +100,22 @@ export function defineModel(model: ModelDefinition): ModelDefinition {
   // 3. 验证模型定义
   validateModel(model)
 
+  return model
+}
+
+export function defineModel(model: ModelDefinition): ModelDefinition {
+  prepareModel(model)
+
   // 4. 注册到 ModelRegistry
   registry.register(model)
 
   // 5. 返回验证后的模型定义
+  return model
+}
+
+/** 注册可由产品能力直接执行、但不进入普通模型选择器的模型。 */
+export function defineHiddenModel(model: ModelDefinition): ModelDefinition {
+  prepareModel(model)
+  registry.registerHidden(model)
   return model
 }

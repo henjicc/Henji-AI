@@ -20,6 +20,7 @@ import { resolveImageDisplayUrl } from '@/features/canvas/application/imageData'
 import {
   MULTI_ANGLE_CONTINUOUS_PRESETS,
   MULTI_ANGLE_DISCRETE_VIEW_PRESETS,
+  MULTI_ANGLE_FLUX_PRESETS,
   MULTI_ANGLE_MAX_VIEW_COUNT,
   createDefaultMultiAngleConfig,
   normalizeMultiAngleConfig,
@@ -27,6 +28,7 @@ import {
   type MultiAngleContinuousViewV1,
   type MultiAngleControlProfile,
   type MultiAngleDiscretePreset,
+  type MultiAngleFluxViewV1,
   type MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import type { CanvasSpecialEditorSurfaceProps } from '../specialEditorRegistry'
@@ -69,7 +71,9 @@ function replaceView(config: MultiAngleConfigV1, next: MultiAngleViewV1): MultiA
 function nextUnusedView(config: MultiAngleConfigV1): MultiAngleViewV1 | null {
   const presets = config.controlProfile === 'continuous-v1'
     ? MULTI_ANGLE_CONTINUOUS_PRESETS
-    : MULTI_ANGLE_DISCRETE_VIEW_PRESETS
+    : config.controlProfile === 'discrete-v1'
+      ? MULTI_ANGLE_DISCRETE_VIEW_PRESETS
+      : MULTI_ANGLE_FLUX_PRESETS
   const used = new Set(config.views.map((view) => view.viewId))
   const preset = presets.find((item) => !used.has(item.view.viewId))
   return preset ? { ...preset.view } : null
@@ -174,6 +178,16 @@ export default function MultiAngleSpecialEditor({
     })
     setSelectedViewId(next.viewId)
   }
+  const patchFlux = (patch: Partial<MultiAngleFluxViewV1>): void => {
+    if (!selected || selected.kind !== 'flux') return
+    const index = Math.max(config.views.findIndex((view) => view.viewId === selected.viewId), 0)
+    updateConfig(replaceView(config, {
+      ...selected,
+      ...patch,
+      presetId: 'custom',
+      label: `FLUX 自定义视角 ${index + 1}`,
+    }))
+  }
   const close = (): void => { onCancel() }
 
   return (
@@ -215,10 +229,15 @@ export default function MultiAngleSpecialEditor({
               selectedViewId={selected?.viewId ?? ''}
               onContinuousChange={patchContinuous}
               onDiscretePresetChange={chooseDiscretePreset}
+              onFluxChange={patchFlux}
             />
             <div className="pointer-events-none absolute left-3 right-3 top-3 z-sticky rounded-lg bg-overlay px-3 py-2">
               <p className="truncate text-xs font-medium text-text">{selected ? describeMultiAngleCamera(selected) : '未选择视图'}</p>
-              <p className="mt-0.5 text-3xs text-text-muted">{selected?.kind === 'continuous' ? '拖动改变环绕与俯仰 · 滚轮改变景别' : '拖动或点击，吸附到模型支持的完整方位'}</p>
+              <p className="mt-0.5 text-3xs text-text-muted">{selected?.kind === 'continuous'
+                ? '拖动改变环绕与俯仰 · 滚轮改变景别'
+                : selected?.kind === 'flux'
+                  ? '拖动改变 FLUX 原生水平/垂直角度 · 滚轮改变 Zoom'
+                  : '拖动或点击，吸附到模型支持的完整方位'}</p>
             </div>
             <div className="pointer-events-none absolute bottom-3 left-3 right-3 z-sticky rounded-lg bg-overlay px-3 py-2 text-xs text-text-soft">
               可视轨道只编辑模型控制量，不代表真实焦距、物理角度或空间重建精度。
@@ -229,7 +248,7 @@ export default function MultiAngleSpecialEditor({
         <div className={`min-h-0 overflow-y-auto border-l border-veil-subtle p-4 ${UI_GLASS_ADAPTIVE_REGION_CLASS}`}>
           <section className="space-y-3">
             <h3 className={UI_TEXT_SECTION_CLASS}>控制方式</h3>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <UiOptionButton
                 type="button"
                 variant="flat"
@@ -237,6 +256,14 @@ export default function MultiAngleSpecialEditor({
                 onClick={() => selectProfile('continuous-v1')}
               >
                 <span className="flex flex-col"><span className="text-sm font-medium">连续控制</span><span className="text-xs text-text-soft">模型控制量</span></span>
+              </UiOptionButton>
+              <UiOptionButton
+                type="button"
+                variant="flat"
+                active={config.controlProfile === 'flux-native-v1'}
+                onClick={() => selectProfile('flux-native-v1')}
+              >
+                <span className="flex flex-col"><span className="text-sm font-medium">FLUX 原生</span><span className="text-xs text-text-soft">0–360°</span></span>
               </UiOptionButton>
               <UiOptionButton
                 type="button"
@@ -287,6 +314,13 @@ export default function MultiAngleSpecialEditor({
                 <UiSwitch checked={selected.wideAngle} onCheckedChange={(checked) => patchContinuous({ wideAngle: checked })} />
               </div>
             </section>
+          ) : selected?.kind === 'flux' ? (
+            <section className="mt-5 space-y-4">
+              <h3 className={UI_TEXT_SECTION_CLASS}>当前视图 · FLUX 原生控制</h3>
+              <RangeField label="水平角度" value={selected.horizontalAngleDeg} min={0} max={360} step={1} suffix="°" onChange={(value) => patchFlux({ horizontalAngleDeg: value })} />
+              <RangeField label="垂直角度" value={selected.verticalAngleDeg} min={0} max={60} step={1} suffix="°" onChange={(value) => patchFlux({ verticalAngleDeg: value })} />
+              <RangeField label="Zoom" value={selected.zoom} min={0} max={10} step={0.5} suffix="" onChange={(value) => patchFlux({ zoom: value })} />
+            </section>
           ) : (
             <section className="mt-5 space-y-3">
               <h3 className={UI_TEXT_SECTION_CLASS}>可用方位 · 点击吸附</h3>
@@ -321,7 +355,7 @@ export default function MultiAngleSpecialEditor({
 
           <div className="mt-5 flex items-start gap-2 rounded-lg bg-layer px-3 py-2 text-xs text-text-soft">
             <Aperture className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>连续控制首版最多 6 次独立请求；完整方位档不会与连续档混在同一个结果组。</span>
+            <span>每个控制档最多 6 次独立请求；Qwen、完整方位与 FLUX 原生档不会混在同一个结果组。</span>
           </div>
         </div>
       </div>

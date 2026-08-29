@@ -13,6 +13,7 @@ import { UI_FIELD_FOCUS_CLASS } from '@/components/ui/styleTokens'
 import type {
   MultiAngleContinuousViewV1,
   MultiAngleDiscretePreset,
+  MultiAngleFluxViewV1,
   MultiAngleViewV1,
 } from '@/features/canvas/capabilities/multiAnglePolicy'
 import {
@@ -24,8 +25,12 @@ import {
   continuousCameraFromKey,
   describeMultiAngleCamera,
   discretePresetFromPoint,
+  fluxCameraFromDrag,
+  fluxCameraFromKey,
+  fluxZoomFromWheel,
   proximityFromWheel,
   type MultiAngleCameraDragOrigin,
+  type MultiAngleFluxCameraDragOrigin,
 } from './multiAngleCameraVisualizerState'
 
 function markerPosition(view: MultiAngleViewV1): [number, number, number] {
@@ -36,6 +41,16 @@ function markerPosition(view: MultiAngleViewV1): [number, number, number] {
       -Math.sin(yaw) * radius,
       -view.verticalControl * 0.95,
       Math.cos(yaw) * radius,
+    ]
+  }
+  if (view.kind === 'flux') {
+    const horizontal = (view.horizontalAngleDeg / 180) * Math.PI
+    const vertical = (view.verticalAngleDeg / 180) * Math.PI
+    const radius = 1.62 - view.zoom * 0.052
+    return [
+      Math.sin(horizontal) * Math.cos(vertical) * radius,
+      Math.sin(vertical) * radius,
+      Math.cos(horizontal) * Math.cos(vertical) * radius,
     ]
   }
   const positions: Record<MultiAngleDiscretePreset, [number, number, number]> = {
@@ -82,27 +97,32 @@ export function MultiAngleOrbitPreview({
   selectedViewId,
   onContinuousChange,
   onDiscretePresetChange,
+  onFluxChange,
 }: {
   views: MultiAngleViewV1[]
   selectedViewId: string
   onContinuousChange: (patch: Partial<MultiAngleContinuousViewV1>) => void
   onDiscretePresetChange: (preset: MultiAngleDiscretePreset) => void
+  onFluxChange: (patch: Partial<MultiAngleFluxViewV1>) => void
 }): JSX.Element {
   const selected = views.find((view) => view.viewId === selectedViewId) ?? views[0]
   const [dragging, setDragging] = useState(false)
-  const [transientContinuous, setTransientContinuous] = useState<MultiAngleContinuousViewV1 | null>(null)
+  const [transientView, setTransientView] = useState<MultiAngleContinuousViewV1 | MultiAngleFluxViewV1 | null>(null)
   const activePointerId = useRef<number | null>(null)
-  const dragOrigin = useRef<MultiAngleCameraDragOrigin | null>(null)
-  const transientContinuousRef = useRef<MultiAngleContinuousViewV1 | null>(null)
+  const continuousDragOrigin = useRef<MultiAngleCameraDragOrigin | null>(null)
+  const fluxDragOrigin = useRef<MultiAngleFluxCameraDragOrigin | null>(null)
+  const transientViewRef = useRef<MultiAngleContinuousViewV1 | MultiAngleFluxViewV1 | null>(null)
   const lastEmitted = useRef('')
-  const visualSelected = transientContinuous?.viewId === selected?.viewId ? transientContinuous : selected
-  const visualViews = useMemo(() => transientContinuous
-    ? views.map((view) => view.viewId === transientContinuous.viewId ? transientContinuous : view)
-    : views, [transientContinuous, views])
+  const visualSelected = transientView?.viewId === selected?.viewId ? transientView : selected
+  const visualViews = useMemo(() => transientView
+    ? views.map((view) => view.viewId === transientView.viewId ? transientView : view)
+    : views, [transientView, views])
 
   useEffect(() => {
     if (selected?.kind === 'continuous') {
       lastEmitted.current = `${selected.yawControlDeg}/${selected.verticalControl}/${selected.proximity}`
+    } else if (selected?.kind === 'flux') {
+      lastEmitted.current = `${selected.horizontalAngleDeg}/${selected.verticalAngleDeg}/${selected.zoom}`
     } else {
       lastEmitted.current = selected?.preset ?? ''
     }
@@ -110,8 +130,8 @@ export function MultiAngleOrbitPreview({
 
   useEffect(() => {
     if (dragging) return
-    transientContinuousRef.current = null
-    setTransientContinuous(null)
+    transientViewRef.current = null
+    setTransientView(null)
   }, [dragging, selected])
 
   const emitContinuous = (patch: Partial<MultiAngleContinuousViewV1>): void => {
@@ -121,6 +141,15 @@ export function MultiAngleOrbitPreview({
     if (signature === lastEmitted.current) return
     lastEmitted.current = signature
     onContinuousChange(patch)
+  }
+
+  const emitFlux = (patch: Partial<MultiAngleFluxViewV1>): void => {
+    if (!selected || selected.kind !== 'flux') return
+    const next = { ...selected, ...patch }
+    const signature = `${next.horizontalAngleDeg}/${next.verticalAngleDeg}/${next.zoom}`
+    if (signature === lastEmitted.current) return
+    lastEmitted.current = signature
+    onFluxChange(patch)
   }
 
   const emitDiscrete = (event: PointerEvent<HTMLDivElement>): void => {
@@ -139,11 +168,20 @@ export function MultiAngleOrbitPreview({
     event.currentTarget.setPointerCapture(event.pointerId)
     setDragging(true)
     if (selected.kind === 'continuous') {
-      dragOrigin.current = {
+      continuousDragOrigin.current = {
         clientX: event.clientX,
         clientY: event.clientY,
         yawControlDeg: selected.yawControlDeg,
         verticalControl: selected.verticalControl,
+      }
+      return
+    }
+    if (selected.kind === 'flux') {
+      fluxDragOrigin.current = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        horizontalAngleDeg: selected.horizontalAngleDeg,
+        verticalAngleDeg: selected.verticalAngleDeg,
       }
       return
     }
@@ -156,14 +194,29 @@ export function MultiAngleOrbitPreview({
       emitDiscrete(event)
       return
     }
-    if (!dragOrigin.current) return
     const bounds = event.currentTarget.getBoundingClientRect()
-    const next = {
-      ...selected,
-      ...continuousCameraFromDrag(dragOrigin.current, event.clientX, event.clientY, bounds),
+    if (selected.kind === 'continuous' && continuousDragOrigin.current) {
+      const next = {
+        ...selected,
+        ...continuousCameraFromDrag(
+          continuousDragOrigin.current,
+          event.clientX,
+          event.clientY,
+          bounds,
+        ),
+      }
+      transientViewRef.current = next
+      setTransientView(next)
+      return
     }
-    transientContinuousRef.current = next
-    setTransientContinuous(next)
+    if (selected.kind === 'flux' && fluxDragOrigin.current) {
+      const next = {
+        ...selected,
+        ...fluxCameraFromDrag(fluxDragOrigin.current, event.clientX, event.clientY, bounds),
+      }
+      transientViewRef.current = next
+      setTransientView(next)
+    }
   }
 
   const finishPointer = (event: PointerEvent<HTMLDivElement>): void => {
@@ -172,30 +225,47 @@ export function MultiAngleOrbitPreview({
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     activePointerId.current = null
-    dragOrigin.current = null
+    continuousDragOrigin.current = null
+    fluxDragOrigin.current = null
     setDragging(false)
-    const committed = transientContinuousRef.current
-    transientContinuousRef.current = null
-    if (committed) {
+    const committed = transientViewRef.current
+    transientViewRef.current = null
+    if (committed?.kind === 'continuous') {
       emitContinuous({
         yawControlDeg: committed.yawControlDeg,
         verticalControl: committed.verticalControl,
+      })
+    } else if (committed?.kind === 'flux') {
+      emitFlux({
+        horizontalAngleDeg: committed.horizontalAngleDeg,
+        verticalAngleDeg: committed.verticalAngleDeg,
       })
     }
   }
 
   const handleWheel = (event: WheelEvent<HTMLDivElement>): void => {
-    if (!selected || selected.kind !== 'continuous') return
+    if (!selected || selected.kind === 'discrete') return
     event.preventDefault()
-    emitContinuous({ proximity: proximityFromWheel(selected.proximity, event.deltaY) })
+    if (selected.kind === 'continuous') {
+      emitContinuous({ proximity: proximityFromWheel(selected.proximity, event.deltaY) })
+    } else {
+      emitFlux({ zoom: fluxZoomFromWheel(selected.zoom, event.deltaY) })
+    }
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
-    if (!selected || selected.kind !== 'continuous') return
-    const patch = continuousCameraFromKey(selected, event.key)
+    if (!selected || selected.kind === 'discrete') return
+    if (selected.kind === 'continuous') {
+      const patch = continuousCameraFromKey(selected, event.key)
+      if (!patch) return
+      event.preventDefault()
+      emitContinuous(patch)
+      return
+    }
+    const patch = fluxCameraFromKey(selected, event.key)
     if (!patch) return
     event.preventDefault()
-    emitContinuous(patch)
+    emitFlux(patch)
   }
 
   return (
@@ -209,8 +279,14 @@ export function MultiAngleOrbitPreview({
       data-multi-angle-camera-control="true"
       data-multi-angle-profile={visualSelected?.kind ?? 'none'}
       data-multi-angle-yaw={visualSelected?.kind === 'continuous' ? visualSelected.yawControlDeg : undefined}
-      data-multi-angle-vertical={visualSelected?.kind === 'continuous' ? visualSelected.verticalControl : undefined}
+      data-multi-angle-horizontal={visualSelected?.kind === 'flux' ? visualSelected.horizontalAngleDeg : undefined}
+      data-multi-angle-vertical={visualSelected?.kind === 'continuous'
+        ? visualSelected.verticalControl
+        : visualSelected?.kind === 'flux'
+          ? visualSelected.verticalAngleDeg
+          : undefined}
       data-multi-angle-proximity={visualSelected?.kind === 'continuous' ? visualSelected.proximity : undefined}
+      data-multi-angle-zoom={visualSelected?.kind === 'flux' ? visualSelected.zoom : undefined}
       className={`absolute inset-0 touch-none select-none overflow-hidden rounded-xl ${UI_FIELD_FOCUS_CLASS} ${dragging ? 'cursor-grabbing ring-1 ring-accent/50' : 'cursor-grab'}`}
       onKeyDown={handleKeyDown}
       onPointerDown={handlePointerDown}
@@ -232,7 +308,9 @@ export function MultiAngleOrbitPreview({
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">左</span>
       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-3xs font-medium uppercase tracking-wide text-text-muted">右</span>
       <span className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">高位</span>
-      <span className="pointer-events-none absolute bottom-12 left-1/2 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">低位</span>
+      {visualSelected?.kind !== 'flux' && (
+        <span className="pointer-events-none absolute bottom-12 left-1/2 -translate-x-1/2 text-3xs font-medium tracking-wide text-text-muted">低位</span>
+      )}
     </div>
   )
 }

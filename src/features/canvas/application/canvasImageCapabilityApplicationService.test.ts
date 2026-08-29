@@ -202,6 +202,41 @@ describe('画布图片能力应用服务', () => {
     ])
   })
 
+  it.each([
+    [CANVAS_IMAGE_CAPABILITY_IDS.presetRelight, 'fal-image-apps-v2-relighting', 'FAL 预设重打光'],
+    [CANVAS_IMAGE_CAPABILITY_IDS.lowLightEnhancement, 'fal-control-light', 'FAL 暗光增强'],
+    [CANVAS_IMAGE_CAPABILITY_IDS.outpaint, 'fal-image-apps-v2-outpaint', 'FAL 智能扩图'],
+    [CANVAS_IMAGE_CAPABILITY_IDS.productPhotography, 'fal-image-apps-v2-product-photography', 'FAL 商品摄影'],
+    [CANVAS_IMAGE_CAPABILITY_IDS.photoRestoration, 'fal-image-apps-v2-photo-restoration', 'FAL 照片修复'],
+    [CANVAS_IMAGE_CAPABILITY_IDS.backgroundRemoval, 'fal-pixelcut-background-removal', 'FAL 背景移除'],
+  ] as const)('%s 创建固定模型、无提示词的标准工具节点', async (capabilityId, modelId, displayName) => {
+    const execute = createCanvasImageCapabilityExecutor()
+    const result = await execute(sourceNodeId, capabilityId)
+    expect(result.kind).toBe('canvas-node')
+    if (result.kind !== 'canvas-node') throw new Error('图片工具必须创建画布节点')
+    const toolNode = useCanvasStore.getState().nodes.find((node) => node.id === result.nodeId)
+    expect(toolNode).toMatchObject({
+      type: CANVAS_NODE_TYPES.imageEdit,
+      data: {
+        displayName,
+        modelId,
+        params: {},
+        generationUi: {
+          promptMode: 'hidden',
+          modelMode: 'locked',
+          excludeParamIds: ['image'],
+        },
+      },
+    })
+    expect(useCanvasStore.getState().edges).toEqual([
+      expect.objectContaining({
+        source: sourceNodeId,
+        target: result.nodeId,
+        targetHandle: 'param:__image',
+      }),
+    ])
+  })
+
   it('多角度能力创建默认四视图专用节点并连接唯一源图', async () => {
     const execute = createCanvasImageCapabilityExecutor()
     const result = await execute(sourceNodeId, CANVAS_IMAGE_CAPABILITY_IDS.multiAngle)

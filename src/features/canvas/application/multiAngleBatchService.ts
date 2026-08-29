@@ -6,6 +6,7 @@ import {
   createMultiAngleBatchPlan,
   type MultiAngleBatchPlanItem,
   type MultiAngleCompletedView,
+  type MultiAngleControlProfile,
 } from '../capabilities/multiAnglePolicy'
 
 const logger = createLogger('features.canvas.multi-angle-batch')
@@ -29,7 +30,7 @@ export interface MultiAngleBatchSnapshotV1 {
   version: 1
   batchId: string
   sourceImage: string
-  profile: 'continuous-v1' | 'discrete-v1'
+  profile: MultiAngleControlProfile
   configFingerprint: string
   startedAt: number
   updatedAt: number

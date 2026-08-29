@@ -49,10 +49,17 @@ const trustedAudioUploadNodeDataSchema = nodeDataBaseSchema.extend({
   sourceFileName: z.string().max(512).nullable().optional(),
 }).strict()
 
+const generationUiSchema = z.object({
+  promptMode: z.enum(['required', 'optional', 'hidden']),
+  modelMode: z.enum(['selectable', 'locked']),
+  excludeParamIds: z.array(z.string().min(1).max(120)).max(40),
+}).strict()
+
 const imageGenerationNodeDataSchema = nodeDataBaseSchema.extend({
   prompt: z.string().max(32 * 1024).optional(),
   modelId: z.string().min(1).optional(),
   params: z.record(z.string(), z.unknown()).optional(),
+  generationUi: generationUiSchema.optional(),
 }).strict()
 
 const relightSpecialEditorDataSchema = z.object({

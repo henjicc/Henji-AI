@@ -83,7 +83,8 @@ describe('画布图片能力工具条入口', () => {
     const partition = partitionCanvasImageCapabilities(actions, 2)
 
     expect(partition.inline).toHaveLength(2)
-    expect(partition.overflowGroups.flatMap(({ actions: items }) => items)).toHaveLength(7)
+    expect(partition.overflowGroups.flatMap(({ actions: items }) => items))
+      .toHaveLength(actions.length - partition.inline.length)
     expect(partition.overflowGroups.map(({ group }) => group))
       .toEqual(['transformation', 'structure', 'local'])
   })

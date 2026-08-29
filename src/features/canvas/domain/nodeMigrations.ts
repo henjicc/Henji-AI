@@ -50,10 +50,9 @@ import {
   selectDefaultElementEditModel,
 } from '../capabilities/elementEditPolicy';
 import {
-  MULTI_ANGLE_CONTINUOUS_MODEL_ID,
-  MULTI_ANGLE_DISCRETE_MODEL_ID,
   createDefaultMultiAngleConfig,
   normalizeMultiAngleConfig,
+  resolveMultiAngleExecutionTarget,
 } from '../capabilities/multiAnglePolicy';
 import {
   PORTRAIT_TEXTURE_DEFAULT_MODEL_ID,
@@ -590,9 +589,7 @@ export function migrateMultiAngleGenerationData(data: DynamicValueMap): void {
     data.multiAngleBatch = null;
   }
   data.multiAngleConfig = config;
-  data.modelId = config.controlProfile === 'continuous-v1'
-    ? MULTI_ANGLE_CONTINUOUS_MODEL_ID
-    : MULTI_ANGLE_DISCRETE_MODEL_ID;
+  data.modelId = resolveMultiAngleExecutionTarget(config.controlProfile).modelId;
 
   const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
     ? data.mediaInputs as DynamicValueMap

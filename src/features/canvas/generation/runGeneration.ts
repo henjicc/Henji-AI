@@ -1,6 +1,6 @@
 import { createLogger } from '@/core/logging';
 import { registry } from '@/core/ModelRegistry';
-import { getMultiAngleExecutionModel } from '@/core/modelCatalog/multiAngleExecutionModels';
+import { getControlledExecutionModel } from '@/core/modelCatalog/controlledExecutionModels';
 import { GenerationService } from '@/core/services/GenerationService';
 import type { GenerateResult, ProgressStatus } from '@/core/providers/base';
 import type { StructuredGenerationOutput } from '@henjicc/ai-sdk';
@@ -57,7 +57,7 @@ export interface CanvasGenerationOutput {
  */
 export function resolveCanvasModelId(inputModelId: string, mediaType: CanvasMediaType = 'image'): string {
   const requested = (inputModelId ?? '').trim();
-  if (requested && (registry.getModel(requested) || getMultiAngleExecutionModel(requested))) {
+  if (requested && (registry.getModel(requested) || getControlledExecutionModel(requested))) {
     return requested;
   }
 
