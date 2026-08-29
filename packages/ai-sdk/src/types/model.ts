@@ -26,6 +26,7 @@ export type BuiltinModelType = 'image' | 'video' | 'audio'
  *
  * 它描述模型目录中的产出能力，不等同于上传预处理层的 `MediaKind`。
  */
+// eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 保留内置字面量补全，同时允许第三方扩展值。
 export type ModelType = BuiltinModelType | (string & {})
 
 /** SDK 随包提供的 8 个供应商；同时作为初始化与测试的单一清单。 */
@@ -44,6 +45,7 @@ export const BUILTIN_PROVIDER_IDS = [
 export type BuiltinProviderId = (typeof BUILTIN_PROVIDER_IDS)[number]
 
 /** Provider ID：8 个内置供应商 + 第三方扩展字符串。 */
+// eslint-disable-next-line @typescript-eslint/ban-types -- string & {} 避免开放类型把内置 provider 字面量提示坍缩掉。
 export type ProviderId = BuiltinProviderId | (string & {})
 
 /**
@@ -372,6 +374,40 @@ export interface RuntimeResponseConfig {
 /** 计价单位。非货币单位（如魔搭"魔粒"）的换算规则是展示侧的事，这里只搬类型。 */
 export type Currency = '¥' | '$' | '€' | '£' | '魔粒'
 
+export type RuntimePricingMediaAggregation = 'first' | 'sum'
+
+export type RuntimePricingMediaMultiplier =
+  | {
+      kind: 'fixed'
+      value: number
+      exponent?: number
+    }
+  | {
+      kind: 'parameter'
+      paramId: string
+      fallback: number
+      exponent?: number
+    }
+
+interface RuntimePricingMediaContextRequirementBase {
+  /** 解析结果写入 calculator params 的字段名。 */
+  targetParam: string
+  /** 默认只读取第一份素材；sum 可用于多素材总时长、总像素等计价。 */
+  aggregation?: RuntimePricingMediaAggregation
+  /** 对媒体指标做固定或参数驱动的倍率变换，例如输出 MP = 输入 MP × 放大倍率²。 */
+  multiplier?: RuntimePricingMediaMultiplier
+}
+
+export type RuntimePricingMediaContextRequirement =
+  | (RuntimePricingMediaContextRequirementBase & {
+      mediaType: 'image'
+      metric: 'megapixels' | 'width' | 'height' | 'fileSizeBytes'
+    })
+  | (RuntimePricingMediaContextRequirementBase & {
+      mediaType: 'video'
+      metric: 'durationSeconds' | 'megapixels' | 'width' | 'height'
+    })
+
 export interface RuntimePricingConfig {
   currency: Currency
   fixed?: number
@@ -380,6 +416,11 @@ export interface RuntimePricingConfig {
   estimateMode?: 'total' | 'unit'
   /** `estimateMode: 'unit'` 时用于展示的计费单位，例如 `MP`。 */
   estimateUnit?: string
+  /**
+   * calculator 需要宿主从媒体文件补齐的指标。SDK 只声明契约，不读取文件；
+   * Web/Electron 等宿主可用各自的媒体探针统一解析并注入。
+   */
+  mediaContext?: RuntimePricingMediaContextRequirement[]
   /** 价格说明，纯字符串（非 I18nText），历史上一直是这样 */
   description?: string
 }

@@ -136,7 +136,7 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 | 本地文件 | Electron 真实 E2E + Transport fixture 已通过 | 119 字节 PNG 的 Range 回读与本地 SHA-256 一致；当前实现使用 REST initiate + signed PUT，并经 `RuntimeContext.transport` 覆盖成功、initiate失败、PUT失败与取消。UXP 真机网络仍由插件集成验证 |
 | 价格/余额 API | 尚未用于连接检测 | 文档已记录；余额需 Admin Key，优先级低 |
 | 自定义图片尺寸 | 已接入 | Seedream 5 Pro/Lite、Qwen Image 3、GPT Image 2、Z-Image 可显式选择约 1MP 的 16 对齐对象；各模型默认仍保持 0.1.5 语义，Lite 低于官方面积下限时由 Fal 自动放大 |
-| 图片放大 | 已接入 | Topaz Precision/Creative/Generative、Topaz Transparent、SeedVR2、Bria Creative、Ideogram；共用 Fal 队列与上传，按模型声明倍率、透明通道和计价预检 |
+| 图片放大 | 已接入 | Topaz Precision/Creative/Generative、Topaz Transparent、SeedVR2、Bria Creative、Ideogram；共用 Fal 队列与上传，像素计价统一通过 `pricing.mediaContext` 读取源图尺寸并结合倍率计算，不在节点内复制价格公式 |
 | 图片实用工具 | 已接入 | Image Apps v2 重打光/扩图/商品摄影/照片修复、ControlLight、Pixelcut 背景移除；按需分发，不进入默认模型目录 |
 | 多角度工具 | 已接入 | Qwen Image Edit 2509 Multiple Angles、Image Apps v2 Perspective、FLUX 2 Multiple Angles；受控多结果生成 |
 

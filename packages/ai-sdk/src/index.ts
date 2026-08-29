@@ -30,6 +30,7 @@ export * from './structured-output'
 // 任务 3.1 迁入：模型目录（纯函数 defineModel + 运行时校验）。同样重新导出到包根，
 // 理由同上：`tsconfig.electron.json` 的经典 Node 解析不识别 `exports` 子路径。
 export * from './catalog'
+export * from './pricing'
 
 // 任务 4.1 迁入：LLM（openai-compatible 协议）供应商无关的纯逻辑层——协议差异、思考参数、
 // 模型能力目录、供应商预设、默认值、模型步契约、共享类型。理由同上：`tsconfig.electron.json`

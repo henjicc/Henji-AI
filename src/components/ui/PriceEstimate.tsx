@@ -8,6 +8,7 @@ import {
     readPriceEstimateDisplaySettings,
 } from '@/core/pricing/priceDisplay'
 import { UI_GLASS_ADAPTIVE_CONTROL_CLASS } from './styleTokens'
+import { usePriceEstimateMediaContext } from '@/hooks/usePriceEstimateMediaContext'
 
 interface PriceEstimateProps {
     providerId: string
@@ -20,12 +21,13 @@ interface PriceEstimateProps {
 const PriceEstimate: React.FC<PriceEstimateProps> = ({ modelId, params, variant = 'panel' }) => {
     const model = useMemo(() => registry.getModel(modelId), [modelId])
     const { t, i18n } = useI18n('ui')
+    const resolvedContext = usePriceEstimateMediaContext(model?.pricing.mediaContext, params)
 
     // 计算价格
     const price = useMemo(() => {
-        if (!model) return null
-        return registry.calculatePrice(modelId, params)
-    }, [model, modelId, params])
+        if (!model || !resolvedContext.ready) return null
+        return registry.calculatePrice(modelId, resolvedContext.params)
+    }, [model, modelId, resolvedContext.params, resolvedContext.ready])
 
     // 检查用户是否开启价格显示
     const [priceSettings, setPriceSettings] = useState(() => readPriceEstimateDisplaySettings())

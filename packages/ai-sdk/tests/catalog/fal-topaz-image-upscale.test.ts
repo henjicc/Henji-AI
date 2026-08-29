@@ -140,7 +140,20 @@ describe('Fal Topaz Image Upscale catalog', () => {
       falTopazGenerativeModel: 'Recovery',
       __upscaleOutputMegapixels: 8,
     })).toBe(0.16)
-    expect(calculator?.({})).toBe(0.08)
+    expect(calculator?.({})).toBeNaN()
+    expect(falTopazImageUpscaleModel.pricing.mediaContext).toEqual([
+      {
+        targetParam: '__upscaleOutputMegapixels',
+        mediaType: 'image',
+        metric: 'megapixels',
+        multiplier: {
+          kind: 'parameter',
+          paramId: 'falTopazUpscaleFactor',
+          fallback: 2,
+          exponent: 2,
+        },
+      },
+    ])
   })
 
   it('拒绝缺少源图或多张源图', () => {

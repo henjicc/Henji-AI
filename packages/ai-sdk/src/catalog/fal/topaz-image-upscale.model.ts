@@ -214,6 +214,19 @@ export const falTopazImageUpscaleModel = defineModel({
   pricing: {
     currency: '$',
     calculator: estimateTopazPrice,
+    mediaContext: [
+      {
+        targetParam: '__upscaleOutputMegapixels',
+        mediaType: 'image',
+        metric: 'megapixels',
+        multiplier: {
+          kind: 'parameter',
+          paramId: 'falTopazUpscaleFactor',
+          fallback: 2,
+          exponent: 2,
+        },
+      },
+    ],
     description: '精确模式每开始 24MP $0.08；创意模式每开始 2MP $0.08；生成模式按子模型每开始 4MP 或 8MP $0.08',
   },
 })

@@ -70,7 +70,8 @@ Topaz 主入口在画布侧限制预计输出不超过 48MP，超过时在上传
 
 - SDK canonical ID：`topaz-image-upscale`；应用模型 ID：`fal-ai-topaz-image-upscale`。
 - 模式通过端点选择器路由，不在宿主或画布 UI 里按模型 ID 拼请求。
-- 输出 MP 由画布预检写入 `__upscaleOutputMegapixels`，仅用于本地估价，不发送给 Fal。
+- SDK 通过 `pricing.mediaContext` 声明输入/输出 MP 需求；宿主共享价格层读取源图尺寸并结合倍率计算，生成面板与画布共用，不发送给 Fal。画布执行前预检仍会复核同一输出 MP 与 48MP 上限。
+- 媒体指标尚未读取成功时不显示第一档兜底价，避免 2×/4× 被误报为同价。
 - 已完成端点、请求构建、非法参数回落、单图限制和四种计价档位的离线契约测试；未执行真实付费生成。
 
 ## 一手资料

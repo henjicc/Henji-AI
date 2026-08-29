@@ -128,6 +128,45 @@ describe('SDK defineModel（纯函数）', () => {
     expect(() => defineModel(invalid)).toThrow(/estimateUnit requires estimateMode unit/)
   })
 
+  it('pricing mediaContext 校验媒体指标、目标字段和参数倍率引用', () => {
+    const valid = baseModel({
+      pricing: {
+        currency: '$',
+        calculator: () => 0.1,
+        mediaContext: [{
+          targetParam: '__outputMegapixels',
+          mediaType: 'image',
+          metric: 'megapixels',
+          multiplier: { kind: 'parameter', paramId: 'aspectRatio', fallback: 2, exponent: 2 },
+        }],
+      },
+    })
+    expect(defineModel(valid).pricing.mediaContext).toHaveLength(1)
+
+    const missingCalculator = baseModel({
+      pricing: {
+        currency: '$',
+        fixed: 0.1,
+        mediaContext: [{ targetParam: '__mp', mediaType: 'image', metric: 'megapixels' }],
+      },
+    })
+    expect(() => defineModel(missingCalculator)).toThrow(/mediaContext requires pricing\.calculator/)
+
+    const unknownParam = baseModel({
+      pricing: {
+        currency: '$',
+        calculator: () => 0.1,
+        mediaContext: [{
+          targetParam: '__mp',
+          mediaType: 'image',
+          metric: 'megapixels',
+          multiplier: { kind: 'parameter', paramId: 'missing', fallback: 2 },
+        }],
+      },
+    })
+    expect(() => defineModel(unknownParam)).toThrow(/references unknown param: missing/)
+  })
+
   it('重复参数 ID 时校验失败', () => {
     const model = baseModel({
       params: [

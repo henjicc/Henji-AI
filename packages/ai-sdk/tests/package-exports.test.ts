@@ -22,6 +22,7 @@ describe('published package exports', () => {
       './tool-models/*',
       './tool-packs/*',
       './catalog',
+      './pricing',
       './llm',
       './llm/streaming',
       './llm/groq',

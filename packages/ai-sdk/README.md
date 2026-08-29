@@ -241,6 +241,11 @@ const defaults = client.catalog.getDefaultValues('fal-ai-gpt-image-2')
 const price = client.catalog.estimatePrice('fal-ai-gpt-image-2', defaults)
 ```
 
+价格依赖本地图片像素或视频时长时，模型会在 `pricing.mediaContext` 声明所需指标。消费方从
+`@henjicc/ai-sdk/pricing` 调用 `resolvePricingMediaContext()`，只需注入自身的图片/视频元数据读取器；
+SDK 统一处理媒体来源优先级、首个/求和聚合、固定倍率和参数倍率换算，再把结果交给原模型 calculator。
+指标无法读取时返回 `complete: false`，消费方应隐藏总价，而不是显示最低档兜底价。
+
 `getParams()` 返回纯运行时 `RuntimeParamDef[]`。参数名、选项 label、图标、分组布局、linkages 和
 痕迹AI 特有 composite 面板配置属于应用 presentation，不在 SDK 目录里；通用消费方可以用参数 ID
 作最小标签，也可以在宿主维护自己的本地化展示层。`composite` 只保证值类型/default/API 契约，宿主

@@ -22,6 +22,14 @@ export const falTopazTransparentUpscaleModel = defineModel({
   pricing: {
     currency: '$',
     calculator: (params) => pricePerStartedMegapixels(params, 24, 0.08),
+    mediaContext: [
+      {
+        targetParam: '__upscaleOutputMegapixels',
+        mediaType: 'image',
+        metric: 'megapixels',
+        multiplier: { kind: 'fixed', value: 4, exponent: 2 },
+      },
+    ],
     description: '固定 4× 并保留透明通道；每开始 24MP 输出 $0.08',
   },
 })

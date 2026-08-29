@@ -20,7 +20,8 @@ export function pricePerStartedMegapixels(
   pricePerTier: number,
 ): number {
   const megapixels = readUpscaleOutputMegapixels(params)
-  return (megapixels === null ? 1 : Math.ceil(megapixels / megapixelsPerTier)) * pricePerTier
+  if (megapixels === null) return Number.NaN
+  return Math.ceil(megapixels / megapixelsPerTier) * pricePerTier
 }
 
 function cleanImages(value: JsonValue): string[] {

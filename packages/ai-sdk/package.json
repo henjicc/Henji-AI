@@ -68,6 +68,11 @@
       "import": "./dist/catalog/index.js",
       "default": "./dist/catalog/index.js"
     },
+    "./pricing": {
+      "types": "./dist/pricing/index.d.ts",
+      "import": "./dist/pricing/index.js",
+      "default": "./dist/pricing/index.js"
+    },
     "./llm": {
       "types": "./dist/llm/index.d.ts",
       "import": "./dist/llm/index.js",

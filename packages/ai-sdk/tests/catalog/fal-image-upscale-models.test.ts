@@ -19,6 +19,13 @@ describe('Fal 图片放大扩展模型', () => {
     expect(falTopazTransparentUpscaleModel.pricing.calculator?.({
       __upscaleOutputMegapixels: 24.01,
     })).toBe(0.16)
+    expect(falTopazTransparentUpscaleModel.pricing.calculator?.({})).toBeNaN()
+    expect(falTopazTransparentUpscaleModel.pricing.mediaContext).toEqual([{
+      targetParam: '__upscaleOutputMegapixels',
+      mediaType: 'image',
+      metric: 'megapixels',
+      multiplier: { kind: 'fixed', value: 4, exponent: 2 },
+    }])
   })
 
   it('SeedVR2 只开放 2×/4×并按预计输出 MP 估价', async () => {
@@ -37,6 +44,11 @@ describe('Fal 图片放大扩展模型', () => {
     expect(falSeedvr2ImageUpscaleModel.pricing.calculator?.({
       __upscaleOutputMegapixels: 12.5,
     })).toBeCloseTo(0.0125)
+    expect(falSeedvr2ImageUpscaleModel.pricing.calculator?.({})).toBeNaN()
+    expect(falSeedvr2ImageUpscaleModel.pricing.mediaContext?.[0]).toMatchObject({
+      targetParam: '__upscaleOutputMegapixels',
+      multiplier: { kind: 'parameter', paramId: 'falSeedvr2UpscaleFactor', exponent: 2 },
+    })
   })
 
   it('Bria 固定约 2×且默认保留透明通道', async () => {

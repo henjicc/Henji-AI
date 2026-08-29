@@ -55,6 +55,7 @@ const requiredEntries = [
   './generation',
   './generation/core',
   './catalog',
+  './pricing',
   './llm',
   './llm/streaming',
   './llm/groq',

@@ -359,4 +359,64 @@ function validatePricing(model: ModelRuntimeDefinition, fail: ValidationFailure)
   } else if (pricing.estimateUnit !== undefined) {
     fail('Model pricing.estimateUnit requires estimateMode unit')
   }
+
+  if (pricing.mediaContext === undefined) return
+  if (!Array.isArray(pricing.mediaContext) || pricing.mediaContext.length === 0) {
+    fail('Model pricing.mediaContext must be a non-empty array')
+  }
+  if (!hasCalculator) {
+    fail('Model pricing.mediaContext requires pricing.calculator')
+  }
+
+  const targetParams = new Set<string>()
+  pricing.mediaContext.forEach((requirement, index) => {
+    const prefix = `Model pricing.mediaContext[${index}]`
+    if (typeof requirement.targetParam !== 'string' || requirement.targetParam.trim().length === 0) {
+      fail(`${prefix}.targetParam must be a non-empty string`)
+    }
+    if (targetParams.has(requirement.targetParam)) {
+      fail(`Duplicate pricing media context targetParam: ${requirement.targetParam}`)
+    }
+    targetParams.add(requirement.targetParam)
+
+    if (requirement.aggregation !== undefined
+      && requirement.aggregation !== 'first'
+      && requirement.aggregation !== 'sum') {
+      fail(`${prefix}.aggregation must be first or sum`)
+    }
+
+    const validMetric = requirement.mediaType === 'image'
+      ? ['megapixels', 'width', 'height', 'fileSizeBytes'].includes(requirement.metric)
+      : requirement.mediaType === 'video'
+        ? ['durationSeconds', 'megapixels', 'width', 'height'].includes(requirement.metric)
+        : false
+    if (!validMetric) {
+      fail(`${prefix} has an unsupported mediaType/metric combination`)
+    }
+
+    const multiplier = requirement.multiplier
+    if (!multiplier) return
+    const exponent = multiplier.exponent ?? 1
+    if (!Number.isFinite(exponent) || exponent <= 0) {
+      fail(`${prefix}.multiplier.exponent must be a positive finite number`)
+    }
+    if (multiplier.kind === 'fixed') {
+      if (!Number.isFinite(multiplier.value) || multiplier.value <= 0) {
+        fail(`${prefix}.multiplier.value must be a positive finite number`)
+      }
+      return
+    }
+    if (multiplier.kind !== 'parameter') {
+      fail(`${prefix}.multiplier.kind must be fixed or parameter`)
+    }
+    if (typeof multiplier.paramId !== 'string' || multiplier.paramId.trim().length === 0) {
+      fail(`${prefix}.multiplier.paramId must be a non-empty string`)
+    }
+    if (!model.params.some((param) => param.id === multiplier.paramId)) {
+      fail(`${prefix}.multiplier.paramId references unknown param: ${multiplier.paramId}`)
+    }
+    if (!Number.isFinite(multiplier.fallback) || multiplier.fallback <= 0) {
+      fail(`${prefix}.multiplier.fallback must be a positive finite number`)
+    }
+  })
 }

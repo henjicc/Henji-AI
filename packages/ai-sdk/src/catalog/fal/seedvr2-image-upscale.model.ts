@@ -53,7 +53,23 @@ export const falSeedvr2ImageUpscaleModel = defineModel({
   },
   pricing: {
     currency: '$',
-    calculator: (params) => (readUpscaleOutputMegapixels(params) ?? 1) * 0.001,
+    calculator: (params) => {
+      const outputMegapixels = readUpscaleOutputMegapixels(params)
+      return outputMegapixels === null ? Number.NaN : outputMegapixels * 0.001
+    },
+    mediaContext: [
+      {
+        targetParam: '__upscaleOutputMegapixels',
+        mediaType: 'image',
+        metric: 'megapixels',
+        multiplier: {
+          kind: 'parameter',
+          paramId: 'falSeedvr2UpscaleFactor',
+          fallback: 2,
+          exponent: 2,
+        },
+      },
+    ],
     description: 'Fal 标价 $0.001/MP；应用按预计输出像素显示估价',
   },
 })

@@ -4,6 +4,8 @@
  * 定义模型的价格计算规则
  */
 
+import type { RuntimePricingMediaContextRequirement } from '@henjicc/ai-sdk'
+
 /**
  * 计价单位
  *
@@ -87,6 +89,9 @@ export interface PricingConfig {
 
   /** estimateMode=unit 时展示的单位，例如 MP。 */
   estimateUnit?: string
+
+  /** 由宿主统一解析并注入 calculator 的媒体元数据需求。 */
+  mediaContext?: RuntimePricingMediaContextRequirement[]
 
   /**
    * 价格说明（可选）
