@@ -640,6 +640,7 @@ export interface HenjiImagePrepareNodeImageSourceResult {
   imagePath: string
   previewImagePath: string
   aspectRatio: string
+  createdFilePaths: string[]
 }
 
 export interface HenjiImageCropImageSourcePayload {
@@ -758,7 +759,9 @@ export interface HenjiImageApi {
   persistImageBinary(bytes: Uint8Array, extension: string): Promise<string>
   saveImageSourceToDownloads(source: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToPath(source: string, targetPath: string): Promise<string>
+  savePanoramaImageSourceToPath(source: string, targetPath: string): Promise<string>
   saveImageSourceToDirectory(source: string, targetDir: string, suggestedFileName?: string): Promise<string>
+  savePanoramaImageSourceToDirectory(source: string, targetDir: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToAppDebugDir(source: string, category: string, suggestedFileName?: string): Promise<string>
   readImageInfo(source: string): Promise<HenjiImageInfoResult>
   probeDiffusionFallback(): Promise<HenjiImageDiffusionFallbackCapabilities>
@@ -773,6 +776,7 @@ export interface HenjiImageApi {
   composeLayerStack(payload: HenjiImageComposeLayerStackPayload): Promise<HenjiImageComposeLayerStackResult>
   cancelLayerStackComposition(requestId: string): Promise<void>
   releaseLayerStackResources(filePaths: string[]): Promise<void>
+  releaseManagedGenerationMedia(filePaths: string[]): Promise<void>
 }
 
 export interface HenjiVideoInfoResult {
@@ -884,7 +888,7 @@ export interface HenjiDialogOpenOptions {
 export interface HenjiFsApi {
   readFile(path: string): Promise<Uint8Array>
   readTextFile(path: string): Promise<string>
-  writeFile(path: string, data: Uint8Array): Promise<void>
+  writeFile(path: string, data: Uint8Array, options?: { exclusive?: boolean }): Promise<void>
   writeTextFile(path: string, data: string): Promise<void>
   exists(path: string): Promise<boolean>
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>

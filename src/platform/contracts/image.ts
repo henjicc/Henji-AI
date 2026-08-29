@@ -67,6 +67,7 @@ export interface PrepareNodeImageSourceResult {
   imagePath: string
   previewImagePath: string
   aspectRatio: string
+  createdFilePaths: string[]
 }
 
 export interface CropImageSourcePayload {
@@ -191,7 +192,9 @@ export interface ImagePlatform {
   persistImageBinary(bytes: Uint8Array, extension: string): Promise<string>
   saveImageSourceToDownloads(source: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToPath(source: string, targetPath: string): Promise<string>
+  savePanoramaImageSourceToPath(source: string, targetPath: string): Promise<string>
   saveImageSourceToDirectory(source: string, targetDir: string, suggestedFileName?: string): Promise<string>
+  savePanoramaImageSourceToDirectory(source: string, targetDir: string, suggestedFileName?: string): Promise<string>
   saveImageSourceToAppDebugDir(source: string, category: string, suggestedFileName?: string): Promise<string>
   readImageInfo(source: string): Promise<ImageInfoResult>
   probeDiffusionFallback(): Promise<ImageDiffusionFallbackCapabilities>
@@ -199,4 +202,5 @@ export interface ImagePlatform {
   composeLayerStack(payload: ComposeLayerStackPayload): Promise<ComposeLayerStackResult>
   cancelLayerStackComposition(requestId: string): Promise<void>
   releaseLayerStackResources(filePaths: string[]): Promise<void>
+  releaseManagedGenerationMedia(filePaths: string[]): Promise<void>
 }

@@ -12,6 +12,7 @@ import {
   addTrustedMediaCanvasNode,
   connectCanvasNodes,
   focusCanvasNode,
+  isCanvasProjectContextCurrent,
   redoCanvasChange,
   registerCanvasNodeFocusHandler,
   resetCanvasApplicationStateForTests,
@@ -53,6 +54,12 @@ describe('canvas application service', () => {
       isOpeningProject: false,
       saveCurrentProject: vi.fn(),
     })
+  })
+
+  it('异步执行上下文只允许写回发起项目', () => {
+    expect(isCanvasProjectContextCurrent(projectId, projectId)).toBe(true)
+    expect(isCanvasProjectContextCurrent(projectId, 'project-b')).toBe(false)
+    expect(isCanvasProjectContextCurrent(projectId, null)).toBe(false)
   })
 
   it('按目录 schema 添加、确定性布局、合法连接并逐步撤销', () => {

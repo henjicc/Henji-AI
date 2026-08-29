@@ -123,9 +123,20 @@ function createRuntimeEvidenceCollector(page) {
   }
 }
 
+function finalizeSceneEvidence(evidence, setupError = null) {
+  const message = setupError instanceof Error ? setupError.message : setupError ? String(setupError) : null
+  return {
+    ...evidence,
+    setupPassed: message === null,
+    setupError: message,
+    passed: message === null && evidence.passed,
+  }
+}
+
 module.exports = {
   LOG_QUERY_LIMIT,
   createRuntimeEvidenceCollector,
+  finalizeSceneEvidence,
   isBenignBrowserError,
   queryApplicationLogs,
 }

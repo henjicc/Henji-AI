@@ -174,9 +174,11 @@ describe('结构化提示词项目包媒体收集', () => {
     }
     const node = { id: 'layer-result', type: CANVAS_NODE_TYPES.layerStackResult, position: { x: 0, y: 0 }, data: { displayName: '图层结果', imageUrl: '/managed/composite.png', previewImageUrl: '/managed/thumb.webp', aspectRatio: '1:1', resultKind: 'layer-stack', layerStackDocument: document } } as CanvasNode
     const collected = collectAndRewriteMedia([node])
-    expect(collected.mediaFiles).toHaveLength(3)
+    expect(collected.mediaFiles).toHaveLength(4)
     const packedDocument = collected.nodes[0].data.layerStackDocument as unknown as LayerStackDocumentV1
+    expect(packedDocument.source.inputResourceId).toMatch(/^media\//)
     expect(packedDocument.resources.every((resource) => resource.filePath?.startsWith('media/'))).toBe(true)
+    expect(JSON.stringify(collected.nodes[0])).not.toContain('/managed/')
 
     const compositePackagePath = packedDocument.resources.find((resource) => resource.resourceId === document.compositeResourceId)?.filePath as string
     const thumbPackagePath = packedDocument.resources.find((resource) => resource.resourceId === document.thumbnailResourceId)?.filePath as string
@@ -186,8 +188,23 @@ describe('结构化提示词项目包媒体收集', () => {
     })
     const restoredDocument = restored[0].data.layerStackDocument as unknown as LayerStackDocumentV1
     expect(restoredDocument.status).toBe('degraded')
+    expect(restoredDocument.source).toMatchObject({
+      inputResourceId: packedDocument.source.inputResourceId,
+      inputResourceStatus: 'missing',
+    })
     expect(restoredDocument.resources.find((resource) => resource.resourceId === layerResourceId)).toMatchObject({ status: 'missing', filePath: null, sha256: null })
     expect(restored[0].data.imageUrl).toBe('/unpacked/composite.png')
     expect(restored[0].data.previewImageUrl).toBe('/unpacked/thumb.webp')
+
+    const restoredWithSource = rewritePackagePathsToLocal(collected.nodes, {
+      [packedDocument.source.inputResourceId]: '/unpacked/source.png',
+      [compositePackagePath]: '/unpacked/composite.png',
+      [thumbPackagePath]: '/unpacked/thumb.webp',
+    })
+    const restoredWithSourceDocument = restoredWithSource[0].data.layerStackDocument as unknown as LayerStackDocumentV1
+    expect(restoredWithSourceDocument.source).toMatchObject({
+      inputResourceId: '/unpacked/source.png',
+      inputResourceStatus: 'ready',
+    })
   })
 })

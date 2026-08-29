@@ -4,7 +4,7 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
-const { createRuntimeEvidenceCollector } = require('./lib/runtimeEvidence.cjs')
+const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./lib/runtimeEvidence.cjs')
 const { UI_AUDIT_RULES, auditUiDom } = require('./lib/uiAuditDom.cjs')
 const {
   UI_INSPECTION_SCENES,
@@ -140,6 +140,7 @@ async function main() {
         const resultKey = `${sizeLabel} / ${scene.name}`
         collector.begin(resultKey)
         let sceneFailed = false
+        let sceneError = null
         try {
           await scene.setup(app.page)
           const result = await app.page.evaluate(auditUiDom, {
@@ -150,12 +151,13 @@ async function main() {
           printSceneResult(resultKey, result)
         } catch (error) {
           sceneFailed = true
+          sceneError = error
           const message = error instanceof Error ? error.message : String(error)
           failures.push({ name: scene.name, size: sizeLabel, message })
           console.error(`\n✗ ${resultKey}：${message}`)
         }
         try {
-          runtimeEvidence[resultKey] = await collector.finish()
+          runtimeEvidence[resultKey] = finalizeSceneEvidence(await collector.finish(), sceneError)
           if (!sceneFailed && !runtimeEvidence[resultKey].passed) {
             const runtimeErrorCount = runtimeEvidence[resultKey].browserErrors.length
               + runtimeEvidence[resultKey].logErrors.length

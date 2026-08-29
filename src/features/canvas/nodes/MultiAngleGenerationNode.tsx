@@ -10,6 +10,7 @@ import {
   collectInputMediaByKind,
 } from '@/features/canvas/application/graphMediaResolver'
 import { commitCanvasGenerationOutputs } from '@/features/canvas/application/generationOutputApplicationService'
+import { isCanvasProjectContextCurrent } from '@/features/canvas/application/canvasApplicationService'
 import {
   executeMultiAngleBatch,
   type MultiAngleBatchSnapshotV1,
@@ -159,6 +160,11 @@ export const MultiAngleGenerationNode = memo(({
   }, [data, id])
 
   const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
+    const generationProjectId = useProjectStore.getState().currentProjectId
+    if (!generationProjectId) throw new Error('当前没有可执行生成的画布项目')
+    const isGenerationProjectCurrent = (): boolean => (
+      isCanvasProjectContextCurrent(generationProjectId)
+    )
     const prepared = prepareExecution()
     const placeholderNodeId = createPlaceholder(id, prepared.latestData)
     const controller = new AbortController()
@@ -171,7 +177,9 @@ export const MultiAngleGenerationNode = memo(({
         sourceImage: prepared.sourceImage,
         previous: prepared.latestData.multiAngleBatch,
         signal: controller.signal,
-        onSnapshot: (snapshot) => updateNodeData(id, { multiAngleBatch: snapshot }),
+        onSnapshot: (snapshot) => {
+          if (isGenerationProjectCurrent()) updateNodeData(id, { multiAngleBatch: snapshot })
+        },
         cancelTask: (requestId) => GenerationService.getInstance().cancelTask(requestId),
         execute: async (plan, context) => {
           const generated = context.resumeProviderRequestId
@@ -196,6 +204,10 @@ export const MultiAngleGenerationNode = memo(({
           }
         },
       })
+      if (!isGenerationProjectCurrent()) {
+        controller.abort()
+        return { status: 'completed', resultNodeIds: [placeholderNodeId] }
+      }
       if (!result.complete) {
         const error = result.errors.join('；') || '多角度批次未完整完成'
         updateNodeData(placeholderNodeId, {
@@ -220,11 +232,13 @@ export const MultiAngleGenerationNode = memo(({
       })
       return { status: committed.idempotent ? 'reused' : 'completed', resultNodeIds: committed.resultNodeIds }
     } catch (error) {
-      updateNodeData(placeholderNodeId, {
-        isGenerating: false,
-        generationStartedAt: null,
-        generationError: error instanceof Error ? error.message : '多角度生成失败',
-      })
+      if (isGenerationProjectCurrent()) {
+        updateNodeData(placeholderNodeId, {
+          isGenerating: false,
+          generationStartedAt: null,
+          generationError: error instanceof Error ? error.message : '多角度生成失败',
+        })
+      }
       return { status: 'completed', resultNodeIds: [placeholderNodeId] }
     } finally {
       if (activeControllerRef.current === controller) activeControllerRef.current = null

@@ -3,20 +3,26 @@ import { CANVAS_NODE_TYPES, type CanvasNode } from '../domain/canvasNodes'
 import {
   downloadCanvasMediaTargetsToDirectory,
   resolveNodeDownloadTargets,
+  saveCanvasMediaTargetAs,
 } from './canvasMediaDownload'
 
 const mocks = vi.hoisted(() => ({
   saveImageSourceToDirectory: vi.fn(),
-  embedPanoramaImageMetadata: vi.fn(),
+  saveImageSourceToPath: vi.fn(),
+  savePanoramaImageSourceToDirectory: vi.fn(),
+  savePanoramaImageSourceToPath: vi.fn(),
+  saveDialog: vi.fn(),
   quickDownloadMediaFile: vi.fn(),
   resolveLocalAssetPath: vi.fn((source: string) => source),
 }))
 
 vi.mock('@/commands/image', () => ({
   saveImageSourceToDirectory: mocks.saveImageSourceToDirectory,
-  saveImageSourceToPath: vi.fn(),
-  embedPanoramaImageMetadata: mocks.embedPanoramaImageMetadata,
+  saveImageSourceToPath: mocks.saveImageSourceToPath,
+  savePanoramaImageSourceToDirectory: mocks.savePanoramaImageSourceToDirectory,
+  savePanoramaImageSourceToPath: mocks.savePanoramaImageSourceToPath,
 }))
+vi.mock('@/platform/desktopApi', () => ({ saveDialog: mocks.saveDialog }))
 vi.mock('@/features/assets/services/assetCollectionService', () => ({
   resolveLocalAssetPath: mocks.resolveLocalAssetPath,
 }))
@@ -74,11 +80,7 @@ describe('canvasMediaDownload', () => {
   })
 
   it('全景结果下载前写入 GPano，普通图片保持原链路', async () => {
-    mocks.embedPanoramaImageMetadata.mockResolvedValue({
-      imagePath: 'D:/managed/panorama-with-xmp.jpg',
-      format: 'jpeg',
-      metadata: {},
-    })
+    mocks.savePanoramaImageSourceToDirectory.mockResolvedValue('D:/downloads/node-panorama.jpg')
     mocks.saveImageSourceToDirectory.mockResolvedValue('D:/downloads/node-panorama.jpg')
     const targets = resolveNodeDownloadTargets([
       node('panorama', CANVAS_NODE_TYPES.exportImage, {
@@ -95,19 +97,47 @@ describe('canvasMediaDownload', () => {
     const summary = await downloadCanvasMediaTargetsToDirectory(targets, 'D:/downloads', 'preset')
 
     expect(summary.failedNodeIds).toEqual([])
-    expect(mocks.embedPanoramaImageMetadata).toHaveBeenCalledTimes(1)
-    expect(mocks.embedPanoramaImageMetadata).toHaveBeenCalledWith('D:/result.jpg')
-    expect(mocks.saveImageSourceToDirectory).toHaveBeenNthCalledWith(
-      1,
-      'D:/managed/panorama-with-xmp.jpg',
+    expect(mocks.savePanoramaImageSourceToDirectory).toHaveBeenCalledWith(
+      'D:/result.jpg',
       'D:/downloads',
       'node-panorama',
     )
-    expect(mocks.saveImageSourceToDirectory).toHaveBeenNthCalledWith(
-      2,
+    expect(mocks.saveImageSourceToDirectory).toHaveBeenCalledWith(
       'D:/ordinary.png',
       'D:/downloads',
       'node-ordinary',
     )
+  })
+
+  it('取消全景另存为时不编码或落盘中间文件', async () => {
+    mocks.saveDialog.mockResolvedValue(null)
+    const target = resolveNodeDownloadTargets([
+      node('panorama', CANVAS_NODE_TYPES.exportImage, {
+        imageUrl: 'D:/result.png',
+        resultKind: 'panorama',
+      }),
+    ])[0]
+
+    await expect(saveCanvasMediaTargetAs(target)).resolves.toBeNull()
+    expect(mocks.savePanoramaImageSourceToPath).not.toHaveBeenCalled()
+    expect(mocks.saveImageSourceToPath).not.toHaveBeenCalled()
+  })
+
+  it('全景另存为由主进程直接写最终目标', async () => {
+    mocks.saveDialog.mockResolvedValue('D:/downloads/panorama.png')
+    mocks.savePanoramaImageSourceToPath.mockResolvedValue('D:/downloads/panorama.png')
+    const target = resolveNodeDownloadTargets([
+      node('panorama', CANVAS_NODE_TYPES.exportImage, {
+        imageUrl: 'D:/result.png',
+        resultKind: 'panorama',
+      }),
+    ])[0]
+
+    await expect(saveCanvasMediaTargetAs(target)).resolves.toBe('D:/downloads/panorama.png')
+    expect(mocks.savePanoramaImageSourceToPath).toHaveBeenCalledWith(
+      'D:/result.png',
+      'D:/downloads/panorama.png',
+    )
+    expect(mocks.saveImageSourceToPath).not.toHaveBeenCalled()
   })
 })

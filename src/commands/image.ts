@@ -519,6 +519,7 @@ export interface PrepareNodeImageSourceResult {
   imagePath: string;
   previewImagePath: string;
   aspectRatio: string;
+  createdFilePaths: string[];
 }
 
 export interface CropImageSourcePayload {
@@ -844,6 +845,7 @@ export async function prepareNodeImageSource(
     imagePath,
     previewImagePath,
     aspectRatio,
+    createdFilePaths: [],
   };
 }
 
@@ -1060,6 +1062,24 @@ export async function saveImageSourceToPath(
   return targetPath;
 }
 
+export async function savePanoramaImageSourceToPath(
+  source: string,
+  targetPath: string
+): Promise<string> {
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.savePanoramaImageSourceToPath(source, targetPath);
+    } catch (error) {
+      throwNativeImageFailure('savePanoramaImageSourceToPath', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+      });
+    }
+  }
+  const embedded = await embedPanoramaImageMetadata(source);
+  return await saveImageSourceToPath(embedded.imagePath, targetPath);
+}
+
 export async function saveImageSourceToDirectory(
   source: string,
   targetDir: string,
@@ -1091,6 +1111,26 @@ export async function saveImageSourceToDirectory(
   }
 
   return targetPath;
+}
+
+export async function savePanoramaImageSourceToDirectory(
+  source: string,
+  targetDir: string,
+  suggestedFileName?: string
+): Promise<string> {
+  const startedAt = performance.now();
+  if (isNativeImageRuntime()) {
+    try {
+      return await getPlatform().image.savePanoramaImageSourceToDirectory(source, targetDir, suggestedFileName);
+    } catch (error) {
+      throwNativeImageFailure('savePanoramaImageSourceToDirectory', startedAt, error, {
+        sourceKind: sourceKindForLog(source),
+        suggestedFileName,
+      });
+    }
+  }
+  const embedded = await embedPanoramaImageMetadata(source);
+  return await saveImageSourceToDirectory(embedded.imagePath, targetDir, suggestedFileName);
 }
 
 export async function saveImageSourceToAppDebugDir(

@@ -45,7 +45,7 @@ async function ensureProjectListVisible(page) {
 }
 
 async function createEmptyProject(page, projectName) {
-  await page.getByRole('button', { name: /新建项目|New Project/ }).click()
+  await page.getByRole('button', { name: /新建项目|New Project/ }).filter({ visible: true }).first().click()
   const nameInput = page.getByRole('textbox')
   await nameInput.fill(projectName)
   await nameInput.press('Enter')
@@ -168,7 +168,7 @@ async function main() {
     assert(setupResult.nodeCount === totalNodes, `node count mismatch: ${setupResult.nodeCount}`)
 
     const loadStartedAt = Date.now()
-    await page.getByRole('heading', { name: projectName }).click()
+    await page.locator(`[data-project-id="${setupResult.projectId}"]:visible`).click()
     await page.waitForSelector('.react-flow', { timeout: 20000 })
     await page.waitForFunction(
       (expected) => document.querySelectorAll('.react-flow__node').length >= expected,
@@ -181,12 +181,17 @@ async function main() {
     const renderedNodeCount = await page.evaluate(
       () => document.querySelectorAll('.react-flow__node').length
     )
-    const activePromptEditorCount = await page.evaluate(
-      () => document.querySelectorAll('.ProseMirror[contenteditable="true"]').length
-    )
+    const activePromptEditors = await page.evaluate(() => (
+      Array.from(document.querySelectorAll('.react-flow__node .ProseMirror[contenteditable="true"]')).map((element) => ({
+        nodeId: element.closest('.react-flow__node')?.getAttribute('data-id') ?? null,
+        observationRegion: element.closest('[data-application-observation-region]')
+          ?.getAttribute('data-application-observation-region') ?? null,
+      }))
+    ))
+    const activePromptEditorCount = activePromptEditors.length
     assert(
       activePromptEditorCount === 0,
-      `inactive prompt editors should stay static: ${activePromptEditorCount} active instances`
+      `inactive prompt editors should stay static: ${JSON.stringify(activePromptEditors)}`
     )
 
     const memoryBeforeBytes = await readJsHeapBytes(page)

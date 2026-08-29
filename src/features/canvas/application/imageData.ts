@@ -67,6 +67,7 @@ export interface PreparedNodeImage {
   imageUrl: string;
   previewImageUrl: string;
   aspectRatio: string;
+  createdFilePaths: string[];
 }
 
 const ORIGINAL_IMAGE_ZOOM_THRESHOLD = 1.45;
@@ -136,6 +137,7 @@ export async function prepareNodeImageFromFile(
       imageUrl: prepared.imagePath,
       previewImageUrl: prepared.previewImagePath,
       aspectRatio: prepared.aspectRatio,
+      createdFilePaths: prepared.createdFilePaths,
     };
   }
 
@@ -223,6 +225,7 @@ export async function prepareNodeImage(
       imageUrl: prepared.imagePath,
       previewImageUrl: prepared.previewImagePath,
       aspectRatio: prepared.aspectRatio,
+      createdFilePaths: prepared.createdFilePaths,
     };
   }
 
@@ -243,5 +246,6 @@ export async function prepareNodeImage(
     imageUrl: persistedImagePath,
     previewImageUrl: previewImagePath,
     aspectRatio: reduceAspectRatio(image.naturalWidth, image.naturalHeight),
+    createdFilePaths: [],
   };
 }

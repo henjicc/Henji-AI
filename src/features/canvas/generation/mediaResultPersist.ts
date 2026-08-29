@@ -1,6 +1,7 @@
 import { createLogger } from '@/core/logging';
 import { saveAudioFromUrl, saveVideoFromUrl } from '@/utils/save';
 import { getAudioDuration } from '@/utils/mediaDimensions';
+import { getPlatform } from '@/platform';
 
 import { prepareNodeImage, resolveImageDisplayUrl } from '../application/imageData';
 import { captureVideoPoster } from './videoPoster';
@@ -20,45 +21,67 @@ function isRemoteUrl(value: string): boolean {
 export async function persistGenerationResult(
   mediaType: CanvasMediaType,
   output: string
-): Promise<DynamicValueMap> {
+): Promise<{ patch: DynamicValueMap; createdFilePaths: string[] }> {
   if (mediaType === 'image') {
     const prepared = await prepareNodeImage(output);
     return {
-      imageUrl: prepared.imageUrl,
-      previewImageUrl: prepared.previewImageUrl,
-      aspectRatio: prepared.aspectRatio,
+      patch: {
+        imageUrl: prepared.imageUrl,
+        previewImageUrl: prepared.previewImageUrl,
+        aspectRatio: prepared.aspectRatio,
+      },
+      createdFilePaths: prepared.createdFilePaths,
     };
   }
 
   if (mediaType === 'video') {
     let localUrl = output;
+    const createdFilePaths: string[] = [];
     if (isRemoteUrl(output)) {
       try {
-        localUrl = (await saveVideoFromUrl(output)).fullPath;
+        const saved = await saveVideoFromUrl(output);
+        localUrl = saved.fullPath;
+        if (saved.created) createdFilePaths.push(localUrl);
       } catch (error) {
         logger.warn('[mediaResultPersist] 视频下载失败，保留远程 URL', error);
       }
     }
-    const poster = await captureVideoPoster(localUrl);
-    return {
-      videoUrl: localUrl,
-      previewImageUrl: poster.posterUrl,
-      aspectRatio: poster.aspectRatio,
-      durationSec: poster.durationSec,
-    };
+    try {
+      const poster = await captureVideoPoster(localUrl);
+      createdFilePaths.push(...poster.createdFilePaths);
+      return {
+        patch: {
+          videoUrl: localUrl,
+          previewImageUrl: poster.posterUrl,
+          aspectRatio: poster.aspectRatio,
+          durationSec: poster.durationSec,
+        },
+        createdFilePaths,
+      };
+    } catch (error) {
+      await releaseCreatedGenerationMedia(createdFilePaths);
+      throw error;
+    }
   }
 
   let localAudioUrl = output;
+  const createdFilePaths: string[] = [];
   if (isRemoteUrl(output)) {
     try {
-      localAudioUrl = (await saveAudioFromUrl(output)).fullPath;
+      const saved = await saveAudioFromUrl(output);
+      localAudioUrl = saved.fullPath;
+      if (saved.created) createdFilePaths.push(localAudioUrl);
     } catch (error) {
       logger.warn('[mediaResultPersist] 音频下载失败，保留远程 URL', error);
     }
   }
   const durationSec = await getAudioDuration(resolveImageDisplayUrl(localAudioUrl)).catch(() => null);
-  return {
-    audioUrl: localAudioUrl,
-    durationSec,
-  };
+  return { patch: { audioUrl: localAudioUrl, durationSec }, createdFilePaths };
+}
+
+async function releaseCreatedGenerationMedia(filePaths: readonly string[]): Promise<void> {
+  if (filePaths.length === 0) return;
+  await getPlatform().image.releaseManagedGenerationMedia([...new Set(filePaths)]).catch((error) => {
+    logger.error('[mediaResultPersist] 媒体准备失败后的受管文件回滚失败', error);
+  });
 }

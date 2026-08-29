@@ -5,7 +5,7 @@ import {
   validateAgentAttachmentLimits,
   type AgentAttachment,
 } from '../../../../../src/core/assistant/attachments'
-import type { ModelInputModality, ModelStepMessage } from '@henjicc/ai-sdk'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
 import { inspectAsset } from '../../asset-library'
 import { resolveModelStepProviderAdapter } from '@henjicc/ai-sdk'
 import {
@@ -14,6 +14,7 @@ import {
   type AgentRuntimeModelSet,
 } from './models'
 import type { AgentStartRunRequest } from '../../../../../src/core/assistant/runtimeContracts'
+import type { AgentInputModality } from '../../../../../src/core/llm/agentProfiles'
 import { createMainLogger } from '../../logging'
 
 const MAX_DURATION_SECONDS = { image: null, video: 30 * 60, audio: 60 * 60 } as const
@@ -23,7 +24,7 @@ function assetId(attachment: AgentAttachment): string {
   return attachment.mediaRef.slice('asset:'.length)
 }
 
-function assertEncoding(modality: ModelInputModality, mimeType: string): void {
+function assertEncoding(modality: AgentInputModality, mimeType: string): void {
   if (modality === 'audio' && !['audio/wav', 'audio/mp3', 'audio/mpeg'].includes(mimeType)) {
     throw new Error('[assistant_attachment_encoding_unsupported] 当前模型协议只支持 WAV 或 MP3 音频附件')
   }
@@ -73,7 +74,7 @@ export interface PreparedAgentAttachmentContext {
   referenceMessage: ModelStepMessage
   primaryMessage: ModelStepMessage | null
   observerMessage: ModelStepMessage | null
-  observerModalities: ModelInputModality[]
+  observerModalities: AgentInputModality[]
 }
 
 export async function prepareAgentAttachmentContext(
@@ -84,7 +85,7 @@ export async function prepareAgentAttachmentContext(
   validateAgentAttachmentLimits(attachments)
   const primaryParts: Array<Record<string, unknown>> = []
   const observerParts: Array<Record<string, unknown>> = []
-  const observerModalities = new Set<ModelInputModality>()
+  const observerModalities = new Set<AgentInputModality>()
   for (const attachment of attachments) {
     const { asset, mimeType } = await inspectAndValidate(attachment)
     const selected = selectAgentObservationRuntimeModel(models, attachment.modality)

@@ -16,12 +16,14 @@ import {
   saveImageSourceToAppDebugDir,
   saveImageSourceToDirectory,
   saveImageSourceToDownloads,
+  savePanoramaImageSourceToDirectory,
+  savePanoramaImageSourceToPath,
   saveImageSourceToPath,
   splitImage,
   splitImageSource,
 } from '../services/image/ops'
 import { composeLayerStack } from '../services/image/layer-stack'
-import { releaseManagedImagePaths } from '../services/image/path-utils'
+import { releaseManagedGenerationMediaPaths, releaseManagedImagePaths } from '../services/image/path-utils'
 import {
   probeSharpDiffusionFallback,
   renderSharpDiffusionFallback,
@@ -134,8 +136,14 @@ export function registerImageIpc(): void {
   registerIpcHandler<SavePathPayload, string>('image:saveImageSourceToPath', parseSavePathPayload, ({ source, targetPath }) => {
     return saveImageSourceToPath(source, targetPath)
   })
+  registerIpcHandler<SavePathPayload, string>('image:savePanoramaImageSourceToPath', parseSavePathPayload, ({ source, targetPath }) => {
+    return savePanoramaImageSourceToPath(source, targetPath)
+  })
   registerIpcHandler<SaveDirectoryPayload, string>('image:saveImageSourceToDirectory', parseSaveDirectoryPayload, ({ source, targetDir, suggestedFileName }) => {
     return saveImageSourceToDirectory(source, targetDir, suggestedFileName)
+  })
+  registerIpcHandler<SaveDirectoryPayload, string>('image:savePanoramaImageSourceToDirectory', parseSaveDirectoryPayload, ({ source, targetDir, suggestedFileName }) => {
+    return savePanoramaImageSourceToDirectory(source, targetDir, suggestedFileName)
   })
   registerIpcHandler<SaveDebugPayload, string>('image:saveImageSourceToAppDebugDir', parseSaveDebugPayload, ({ source, category, suggestedFileName }) => {
     return saveImageSourceToAppDebugDir(source, category, suggestedFileName)
@@ -180,6 +188,12 @@ export function registerImageIpc(): void {
     return { filePaths: readStringArray(record, 'filePaths') }
   }, ({ filePaths }) => {
     releaseManagedImagePaths(filePaths)
+  })
+  registerIpcHandler<ReleaseLayerStackResourcesPayload, void>('image:releaseManagedGenerationMedia', (input) => {
+    const record = parseRecord(input)
+    return { filePaths: readStringArray(record, 'filePaths') }
+  }, ({ filePaths }) => {
+    releaseManagedGenerationMediaPaths(filePaths)
   })
 }
 

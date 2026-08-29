@@ -41,6 +41,38 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await button.click({ timeout: 8000 })
   }
 
+  async function firstLocatorInViewport(page, locator) {
+    const viewport = page.viewportSize() ?? await page.evaluate(() => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }))
+    for (let index = 0; index < await locator.count(); index += 1) {
+      const candidate = locator.nth(index)
+      const box = await candidate.boundingBox()
+      if (box && box.x < viewport.width && box.y < viewport.height
+        && box.x + box.width > 0 && box.y + box.height > 0) {
+        return candidate
+      }
+    }
+    return null
+  }
+
+  async function clickCanvasCapabilityAction(page, { directName, menuName, missingMessage }) {
+    const directCandidates = page.getByRole('button', { name: directName }).filter({ visible: true })
+    const directAction = await firstLocatorInViewport(page, directCandidates)
+    if (directAction) {
+      await directAction.click()
+      return
+    }
+
+    const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
+    if (!(await moreButton.count())) throw new Error(missingMessage)
+    await moreButton.click()
+    const menuAction = page.getByRole('menuitem', { name: menuName }).filter({ visible: true }).first()
+    await menuAction.waitFor({ state: 'visible', timeout: 8000 })
+    await menuAction.click()
+  }
+
   function paramFieldFromLabel(page, name) {
     return page.getByText(name).filter({ visible: true }).first()
       .locator('xpath=ancestor::div[.//*[@data-dropdown-button or @data-panel-trigger-button]][1]')
@@ -256,12 +288,14 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
         previewImageUrl: panoramaSource, aspectRatio: '2:1', isGenerating: false,
       },
     }]
+    const viewportWidth = await page.evaluate(() => window.innerWidth)
+    const viewportX = Math.max(80, Math.round(viewportWidth / 2 - 202))
     await page.evaluate(async (payload) => {
       await window.henjiNative.db.execute(
         'UPDATE storyboard_projects SET node_count = ?, nodes_json = ?, edges_json = ?, viewport_json = ?, history_json = ? WHERE id = ?',
-        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: 100, y: 80, zoom: 0.65 }), JSON.stringify({ past: [], future: [] }), payload.projectId]
+        [payload.nodes.length, JSON.stringify(payload.nodes), '[]', JSON.stringify({ x: payload.viewportX, y: 80, zoom: 0.65 }), JSON.stringify({ past: [], future: [] }), payload.projectId]
       )
-    }, { projectId, nodes })
+    }, { projectId, nodes, viewportX })
     await projectCard.click()
     await page.locator('.react-flow__node[data-id="__ui_panorama_source"]').waitFor({ state: 'visible', timeout: 12000 })
     return { panoramaSource, projectId }
@@ -307,6 +341,9 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
       throw new Error('实验能力缺少明确状态标识')
     }
     const firstMenuItem = menuItems.first()
+    await page.waitForFunction(() => document.activeElement?.getAttribute('role') === 'menuitem', undefined, {
+      timeout: 8000,
+    })
     if (!(await firstMenuItem.evaluate((element) => element === document.activeElement))) {
       throw new Error('更多菜单打开后未聚焦首个菜单项')
     }
@@ -518,15 +555,11 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
     await page.waitForTimeout(350)
-    let action = page.getByRole('button', { name: /^(多角度|Multi-angle)$/i }).filter({ visible: true }).first()
-    if (!(await action.count())) {
-      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
-      if (!(await moreButton.count())) throw new Error('多角度工具入口不可见')
-      await moreButton.click()
-      action = page.getByRole('button', { name: /^(多角度|Multi-angle)$/i }).filter({ visible: true }).first()
-    }
-    await action.waitFor({ state: 'visible', timeout: 8000 })
-    await action.click()
+    await clickCanvasCapabilityAction(page, {
+      directName: /^(多角度|Multi-angle)$/i,
+      menuName: /^(多角度|Multi-angle)(?:\s|$)/i,
+      missingMessage: '多角度工具入口不可见',
+    })
 
     const shell = page.locator('[data-multi-angle-node-id][data-multi-angle-profile="continuous-v1"]').last()
     await shell.waitFor({ state: 'visible', timeout: 12000 })
@@ -725,15 +758,11 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
     await page.waitForTimeout(350)
-    let action = page.getByRole('button', { name: /^(人像质感|Portrait Texture)$/i }).filter({ visible: true }).first()
-    if (!(await action.count())) {
-      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
-      if (!(await moreButton.count())) throw new Error('人像质感工具入口不可见')
-      await moreButton.click()
-      action = page.getByRole('button', { name: /^(人像质感|Portrait Texture)$/i }).filter({ visible: true }).first()
-    }
-    await action.waitFor({ state: 'visible', timeout: 8000 })
-    await action.click()
+    await clickCanvasCapabilityAction(page, {
+      directName: /^(人像质感|Portrait Texture)$/i,
+      menuName: /^(人像质感|Portrait Texture)(?:\s|$)/i,
+      missingMessage: '人像质感工具入口不可见',
+    })
 
     const shell = page.locator('[data-generation-node-id][data-generation-node-model-id="fal-ai-gpt-image-2"]')
       .filter({ hasText: /人像质感|Portrait Texture/ }).last()
@@ -843,15 +872,11 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
     await page.waitForTimeout(350)
-    let action = page.getByRole('button', { name: /^(元素编辑|Element Edit)$/i }).filter({ visible: true }).first()
-    if (!(await action.count())) {
-      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
-      if (!(await moreButton.count())) throw new Error('元素编辑工具入口不可见')
-      await moreButton.click()
-      action = page.getByRole('button', { name: /^(元素编辑|Element Edit)$/i }).filter({ visible: true }).first()
-    }
-    await action.waitFor({ state: 'visible', timeout: 8000 })
-    await action.click()
+    await clickCanvasCapabilityAction(page, {
+      directName: /^(元素编辑|Element Edit)$/i,
+      menuName: /^(元素编辑|Element Edit)/i,
+      missingMessage: '元素编辑工具入口不可见',
+    })
 
     const editor = page.getByRole('dialog', { name: /绘制局部重绘遮罩|Draw Inpainting Mask/i })
     await editor.waitFor({ state: 'visible', timeout: 12000 })
@@ -971,6 +996,9 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     }
     const stackId = `layer-stack:${(hash >>> 0).toString(36)}`
     await page.getByRole('button', { name: /返回项目|Back to Projects/ }).click()
+    // 离开画布会异步保存当前节点；必须等保存收口后再注入图层夹具，
+    // 否则旧的 source-only 快照会把刚写入 SQLite 的图层结果覆盖掉。
+    await settlePage(page, 700)
     await page.evaluate(async ({ targetProjectId, source, stackId, completionId }) => {
       const rows = await window.henjiNative.db.select(
         'SELECT nodes_json, edges_json FROM storyboard_projects WHERE id = ? LIMIT 1',
@@ -1019,15 +1047,11 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     await sourceNode.click()
     await page.waitForTimeout(350)
 
-    let nineGridAction = page.getByRole('button', { name: /^(九宫格|Nine-grid)$/i }).filter({ visible: true }).first()
-    if (!(await nineGridAction.count())) {
-      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
-      if (!(await moreButton.count())) throw new Error('九宫格工具入口不可见')
-      await moreButton.click()
-      nineGridAction = page.getByRole('button', { name: /^(九宫格|Nine-grid)$/i }).filter({ visible: true }).first()
-    }
-    await nineGridAction.waitFor({ state: 'visible', timeout: 8000 })
-    await nineGridAction.click()
+    await clickCanvasCapabilityAction(page, {
+      directName: /^(九宫格|Nine-grid)$/i,
+      menuName: /^(九宫格|Nine-grid)(?:\s|$)/i,
+      missingMessage: '九宫格工具入口不可见',
+    })
 
     const presetShell = page.locator('[data-storyboard-preset="nine-grid-v1"]').last()
     await presetShell.waitFor({ state: 'visible', timeout: 12000 })
@@ -1049,14 +1073,11 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     // 不触发任何供应商请求；在同一真实 Electron 场景中执行现有本地宫格切分。
     await sourceNode.click()
     await page.waitForTimeout(350)
-    let splitAction = page.getByRole('button', { name: /^(宫格切分|Grid Split)$/i }).filter({ visible: true }).first()
-    if (!(await splitAction.count())) {
-      const moreButton = page.getByRole('button').filter({ hasText: /^(更多|More)$/i }).filter({ visible: true }).first()
-      if (!(await moreButton.count())) throw new Error('宫格切分工具入口不可见')
-      await moreButton.click()
-      splitAction = page.getByRole('button', { name: /^(宫格切分|Grid Split)$/i }).filter({ visible: true }).first()
-    }
-    await splitAction.click()
+    await clickCanvasCapabilityAction(page, {
+      directName: /^(宫格切分|Grid Split)$/i,
+      menuName: /^(宫格切分|Grid Split)(?:\s|$)/i,
+      missingMessage: '宫格切分工具入口不可见',
+    })
     const splitDialog = page.getByRole('dialog', { name: /切割工具|Split.*tool/i })
     await splitDialog.waitFor({ state: 'visible', timeout: 12000 })
     await splitDialog.getByText(/输出小格数量/).waitFor({ state: 'visible', timeout: 8000 })

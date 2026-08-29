@@ -41,16 +41,18 @@ export async function exportProjectPackage(
     context: { mediaCount: mediaFiles.length },
   })
 
+  const temporaryTarget = `${target}.${crypto.randomUUID()}.tmp`
   try {
     await fsp.mkdir(path.dirname(target), { recursive: true })
     await new Promise<void>((resolve, reject) => {
-      const output = fs.createWriteStream(target)
+      const output = fs.createWriteStream(temporaryTarget, { flags: 'wx' })
       const archive = new ZipArchive({ zlib: { level: 9 } })
       const writtenPaths = new Set<string>()
 
       output.on('close', resolve)
       output.on('error', reject)
       archive.on('error', reject)
+      archive.on('warning', reject)
       archive.pipe(output)
       archive.append(manifestJson, { name: PACKAGE_MANIFEST_NAME })
 
@@ -65,16 +67,40 @@ export async function exportProjectPackage(
 
       archive.finalize().catch(reject)
     })
+    await replaceFileAtomically(temporaryTarget, target)
     logger.info('项目包导出完成', {
       event: 'project_package.export.completed',
       context: { mediaCount: mediaFiles.length },
     })
   } catch (error) {
+    await fsp.rm(temporaryTarget, { force: true }).catch(() => undefined)
     logger.error('项目包导出失败', {
       event: 'project_package.export.failed',
       context: { mediaCount: mediaFiles.length },
       error: toLogError(error),
     })
+    throw error
+  }
+}
+
+export async function replaceFileAtomically(
+  stagedPath: string,
+  targetPath: string,
+  renameFile: (source: string, target: string) => Promise<void> = fsp.rename,
+): Promise<void> {
+  const targetExists = await fsp.access(targetPath).then(() => true).catch(() => false)
+  if (!targetExists) {
+    await renameFile(stagedPath, targetPath)
+    return
+  }
+
+  const backupPath = `${targetPath}.${crypto.randomUUID()}.bak`
+  await renameFile(targetPath, backupPath)
+  try {
+    await renameFile(stagedPath, targetPath)
+    await fsp.rm(backupPath, { force: true })
+  } catch (error) {
+    await renameFile(backupPath, targetPath).catch(() => undefined)
     throw error
   }
 }
@@ -92,43 +118,21 @@ export async function importProjectPackage(zipPath: string): Promise<ImportedPro
 
     const importedDir = path.join(getDataRootDir(), 'Uploads', 'imported')
     await fsp.mkdir(importedDir, { recursive: true })
-    const pathMap: Record<string, string> = {}
-    let totalBytes = 0
-
     const archive = await openZip(source)
     try {
-      for await (const entry of iterateEntries(archive)) {
-        const entryName = entry.fileName
-        if (!entryName.startsWith(PACKAGE_MEDIA_DIR) || entryName.endsWith('/')) {
-          continue
-        }
-        validatePackagePath(entryName)
-        if (entry.uncompressedSize > MAX_SINGLE_MEDIA_BYTES) {
-          throw new Error(`Package media too large: ${entryName}`)
-        }
-        totalBytes += entry.uncompressedSize
-        if (totalBytes > MAX_TOTAL_MEDIA_BYTES) {
-          throw new Error('Package total media size exceeds limit')
-        }
-
-        const bytes = await readEntryBytes(archive, entry, entryName)
-        const hashPrefix = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16)
-        const extension = normalizeMediaExtension(entryName)
-        const destPath = path.join(importedDir, `${hashPrefix}.${extension}`)
-        if (!fs.existsSync(destPath)) {
-          await fsp.writeFile(destPath, bytes)
-        }
-        pathMap[entryName] = destPath
-      }
+      const imported = await importProjectMediaEntriesAtomically(
+        iterateEntries(archive),
+        importedDir,
+        (entry, entryName) => readEntryBytes(archive, entry, entryName),
+      )
+      logger.info('项目包导入完成', {
+        event: 'project_package.import.completed',
+        context: { mediaCount: Object.keys(imported.pathMap).length, totalBytes: imported.totalBytes },
+      })
+      return { manifestJson, pathMap: imported.pathMap }
     } finally {
       archive.close()
     }
-
-    logger.info('项目包导入完成', {
-      event: 'project_package.import.completed',
-      context: { mediaCount: Object.keys(pathMap).length, totalBytes },
-    })
-    return { manifestJson, pathMap }
   } catch (error) {
     logger.error('项目包导入失败', {
       event: 'project_package.import.failed',
@@ -136,6 +140,55 @@ export async function importProjectPackage(zipPath: string): Promise<ImportedPro
     })
     throw error
   }
+}
+
+interface ProjectPackageMediaEntryLike {
+  fileName: string
+  uncompressedSize: number
+}
+
+export async function importProjectMediaEntriesAtomically<TEntry extends ProjectPackageMediaEntryLike>(
+  entries: AsyncIterable<TEntry>,
+  importedDir: string,
+  readBytes: (entry: TEntry, entryName: string) => Promise<Buffer>,
+): Promise<{ pathMap: Record<string, string>; totalBytes: number }> {
+  const pathMap: Record<string, string> = {}
+  const createdPaths: string[] = []
+  let totalBytes = 0
+  try {
+    for await (const entry of entries) {
+      const entryName = entry.fileName
+      if (!entryName.startsWith(PACKAGE_MEDIA_DIR) || entryName.endsWith('/')) continue
+      validatePackagePath(entryName)
+      if (entry.uncompressedSize > MAX_SINGLE_MEDIA_BYTES) {
+        throw new Error(`Package media too large: ${entryName}`)
+      }
+      totalBytes += entry.uncompressedSize
+      if (totalBytes > MAX_TOTAL_MEDIA_BYTES) {
+        throw new Error('Package total media size exceeds limit')
+      }
+
+      const bytes = await readBytes(entry, entryName)
+      const hashPrefix = crypto.createHash('sha256').update(bytes).digest('hex').slice(0, 16)
+      const extension = normalizeMediaExtension(entryName)
+      const destPath = path.join(importedDir, `${hashPrefix}.${extension}`)
+      try {
+        await fsp.writeFile(destPath, bytes, { flag: 'wx' })
+        createdPaths.push(destPath)
+      } catch (error) {
+        if (!isAlreadyExistsError(error)) throw error
+      }
+      pathMap[entryName] = destPath
+    }
+    return { pathMap, totalBytes }
+  } catch (error) {
+    await Promise.all(createdPaths.map((filePath) => fsp.rm(filePath, { force: true })))
+    throw error
+  }
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'EEXIST'
 }
 
 function toLogError(error: unknown): unknown {

@@ -25,6 +25,7 @@ import { CANVAS_NODE_FOCUS_STORE_LEDGER } from '@/features/canvas/application/ca
 import { CANVAS_TEXT_STREAM_STORE_LEDGER } from '@/features/canvas/application/canvasTextStreamStoreLedger'
 import { CANVAS_STORE_LEDGER } from '@/features/canvas/application/canvasStoreLedger'
 import { PROJECT_STORE_LEDGER } from '@/features/canvas/application/projectStoreLedger'
+import { SPECIAL_EDITOR_CONTROLLER_STORE_LEDGER } from '@/features/canvas/application/specialEditorControllerStoreLedger'
 import { GENERATION_DRAFT_STORE_LEDGER } from '@/features/generation/application/generationDraftStoreLedger'
 import { GENERATION_HISTORY_FILTER_STORE_LEDGER } from '@/features/generation/application/generationHistoryFilterStoreLedger'
 import { GENERATION_TASK_PROGRESS_STORE_LEDGER } from '@/features/generation/application/generationTaskProgressStoreLedger'
@@ -48,6 +49,7 @@ import { useCanvasNodeFocusStore } from '@/features/canvas/hooks/useCanvasNodeFo
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore'
 import { useCanvasTextStreamStore } from '@/stores/canvasTextStreamStore'
 import { useCanvasStore } from '@/stores/canvasStore'
+import { useCanvasSpecialEditorController } from '@/features/canvas/application/specialEditorController'
 import { useGenerationHistoryFilterStore } from '@/stores/generationHistoryFilterStore'
 import { useGenerationTaskProgressStore } from '@/stores/generationTaskProgressStore'
 import { useNavigationStore } from '@/stores/navigationStore'
@@ -83,6 +85,7 @@ const LEDGERS: LedgerCase[] = [
   { ledger: CAMERA_STAGE_VIEWPORT_STORE_LEDGER, state: () => useCameraStageViewportStore.getState() },
   { ledger: CAMERA_STAGE_SESSION_STORE_LEDGER, state: () => useCameraStageSessionStore.getState() },
   { ledger: CANVAS_STORE_LEDGER, state: () => useCanvasStore.getState() },
+  { ledger: SPECIAL_EDITOR_CONTROLLER_STORE_LEDGER, state: () => useCanvasSpecialEditorController.getState() },
   { ledger: ASSET_STORE_LEDGER, state: () => useAssetLibraryStore.getState() },
   { ledger: PROJECT_STORE_LEDGER, state: () => useProjectStore.getState() },
   { ledger: NAVIGATION_STORE_LEDGER, state: () => useNavigationStore.getState() },

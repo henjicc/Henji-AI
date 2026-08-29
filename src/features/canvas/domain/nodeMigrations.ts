@@ -16,7 +16,7 @@ import {
 } from './canvasNodes';
 import { getDefaultModelId } from './defaultModels';
 import { getCanvasNodeDefinition } from './nodeRegistry';
-import { hasResumableServerTask } from './resumableTask';
+import { hasGenerationResult, hasResumableServerTask } from './resumableTask';
 import { resolveMediaTargetHandle, type RowMediaKind } from './socketTypes';
 import { DEFAULT_NODE_DISPLAY_NAME } from './nodeDisplay';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types';
@@ -146,6 +146,12 @@ export function resetTransientNodeRuntimeState(
   // 交给 useCanvasResumePolling 接着轮询。
   if (data.isGenerating === true && !hasResumableServerTask(data)) {
     data.isGenerating = false;
+    if (
+      !hasGenerationResult(data)
+      && (typeof data.generationError !== 'string' || data.generationError.trim().length === 0)
+    ) {
+      data.generationError = '生成在项目切换或应用关闭前未返回，请重新生成';
+    }
     if ('generationStartedAt' in data) {
       data.generationStartedAt = null;
     }

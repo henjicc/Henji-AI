@@ -47,6 +47,7 @@ import {
   commitCanvasGenerationOutputs,
   resolveGenerationOutputStrategy,
 } from '@/features/canvas/application/generationOutputApplicationService';
+import { isCanvasProjectContextCurrent } from '@/features/canvas/application/canvasApplicationService';
 import { createDefaultGenerationOutputItems } from '@/features/canvas/domain/generationOutputs';
 import { createPlainTextPromptDocument, toModelPromptText } from '@/core/inputs/promptDocument';
 import { transferModelParamOverridesBetweenModels } from '@/core/params/modelParamTransfer';
@@ -71,6 +72,7 @@ import {
 } from './useGenerationNodeMinimumHeight';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { DEFAULT_GENERATION_DURATION_MS, PROMPT_PARAM_IDS, ROW_MEDIA_KINDS, buildResultNodeTitle, ensureGenerationProviderConfigured, resolveGenerationPromptInput } from './generationNodeGuards';
 import { useNodeVideoTrimRange } from './useNodeVideoTrimRange';
@@ -445,6 +447,14 @@ export const GenerationNodeShell = memo(({
   }, [apiKeyRequiredKey, effectiveModel, effectivePromptDocument, id, isPromptOverridden, modelParamValues, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, t]);
 
   const handleGenerate = useCallback(async (): Promise<CanvasNodeExecutionResult> => {
+    const generationProjectId = useProjectStore.getState().currentProjectId;
+    if (!generationProjectId) {
+      throw new Error('当前没有可执行生成的画布项目');
+    }
+    const isGenerationProjectCurrent = (): boolean => (
+      isCanvasProjectContextCurrent(generationProjectId)
+    );
+    let serverTaskId: string | null = null;
     const latestCanvas = useCanvasStore.getState();
     const latestValues = collectInputValues(id, latestCanvas.nodes, latestCanvas.edges);
     const latestPromptOverride = latestValues[PROMPT_PARAM_ID];
@@ -540,13 +550,28 @@ export const GenerationNodeShell = memo(({
           videos: effectiveVideos,
           audios: effectiveAudios,
         },
-        onProgress: (progress) => setNodeGenerationProgress(newNodeId, progress),
+        onProgress: (progress) => {
+          if (isGenerationProjectCurrent()) setNodeGenerationProgress(newNodeId, progress);
+        },
         // 任务一创建就落到节点上：这是应用中途退出后唯一能把这次生成找回来的凭据
-        onTaskId: (taskId) => updateNodeData(newNodeId, {
-          serverTaskId: taskId,
-          serverTaskModelId: effectiveModelId,
-        }),
+        onTaskId: (taskId) => {
+          serverTaskId = taskId;
+          if (!isGenerationProjectCurrent()) {
+            void GenerationService.getInstance().cancelTask(taskId).catch(() => undefined);
+            return;
+          }
+          updateNodeData(newNodeId, {
+            serverTaskId: taskId,
+            serverTaskModelId: effectiveModelId,
+          });
+        },
       });
+      if (!isGenerationProjectCurrent()) {
+        if (serverTaskId) {
+          await GenerationService.getInstance().cancelTask(serverTaskId).catch(() => undefined);
+        }
+        return { status: 'completed', resultNodeIds: [newNodeId] };
+      }
 
       const completionId = `generation-output:${newNodeId}`;
       if (commitGenerationResult) {
@@ -607,16 +632,18 @@ export const GenerationNodeShell = memo(({
     } catch (generationError) {
       // 失败信息写回输出节点：失败的是那次生成，红边和原因就应该长在它自己身上，
       // 而不是回头挂在发起节点的底部（那里既看不出对应哪次生成，也会把节点撑变形）
-      updateNodeData(newNodeId, {
-        isGenerating: false,
-        generationStartedAt: null,
-        generationError:
-          generationError instanceof Error ? generationError.message : t('ai.error'),
-        serverTaskId: null,
-        serverTaskModelId: null,
-      });
+      if (isGenerationProjectCurrent()) {
+        updateNodeData(newNodeId, {
+          isGenerating: false,
+          generationStartedAt: null,
+          generationError:
+            generationError instanceof Error ? generationError.message : t('ai.error'),
+          serverTaskId: null,
+          serverTaskModelId: null,
+        });
+      }
     } finally {
-      setNodeGenerationProgress(newNodeId, null);
+      if (isGenerationProjectCurrent()) setNodeGenerationProgress(newNodeId, null);
     }
     return { status: 'completed', resultNodeIds: [newNodeId] };
   }, [addEdge, addNode, apiKeyRequiredKey, capability, commitGenerationResult, data.videoTrimEnd, data.videoTrimStart, effectiveAudios, effectiveImages, effectiveModel, effectiveModelId, effectivePromptDocument, effectiveVideos, findNodePosition, id, isPromptOverridden, modelParamValues, modelType, prepareCapabilityGeneration, prepareRuntimeValues, promptReferences, promptRequiredKey, providerKeyConfigured, requirePrompt, resultNodeExtraData, resultNodeType, resultTitleKey, setNodeGenerationProgress, t, updateNodeData]);

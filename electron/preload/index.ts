@@ -296,7 +296,7 @@ async function waitForOptionalTerminalEvent(terminalEvent: Promise<void>): Promi
 const fsApi: HenjiFsApi = {
   readFile: (path) => nativeInvoke('fs:readFile', { path }),
   readTextFile: (path) => nativeInvoke('fs:readTextFile', { path }),
-  writeFile: (path, data) => nativeInvoke('fs:writeFile', { path, data }),
+  writeFile: (path, data, options) => nativeInvoke('fs:writeFile', { path, data, exclusive: options?.exclusive }),
   writeTextFile: (path, data) => nativeInvoke('fs:writeTextFile', { path, data }),
   exists: (path) => nativeInvoke('fs:exists', { path }),
   mkdir: (path, options) => nativeInvoke('fs:mkdir', { path, recursive: options?.recursive }),
@@ -379,7 +379,9 @@ const imageApi: HenjiImageApi = {
   persistImageBinary: (bytes, extension) => nativeInvoke('image:persistImageBinary', { bytes, extension }),
   saveImageSourceToDownloads: (source, suggestedFileName) => nativeInvoke('image:saveImageSourceToDownloads', { source, suggestedFileName }),
   saveImageSourceToPath: (source, targetPath) => nativeInvoke('image:saveImageSourceToPath', { source, targetPath }),
+  savePanoramaImageSourceToPath: (source, targetPath) => nativeInvoke('image:savePanoramaImageSourceToPath', { source, targetPath }),
   saveImageSourceToDirectory: (source, targetDir, suggestedFileName) => nativeInvoke('image:saveImageSourceToDirectory', { source, targetDir, suggestedFileName }),
+  savePanoramaImageSourceToDirectory: (source, targetDir, suggestedFileName) => nativeInvoke('image:savePanoramaImageSourceToDirectory', { source, targetDir, suggestedFileName }),
   saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => nativeInvoke('image:saveImageSourceToAppDebugDir', { source, category, suggestedFileName }),
   readImageInfo: (source) => nativeInvoke('image:readImageInfo', { source }),
   probeDiffusionFallback: () => nativeInvoke('image:probeDiffusionFallback'),
@@ -389,6 +391,7 @@ const imageApi: HenjiImageApi = {
   composeLayerStack: (payload) => nativeInvoke('image:composeLayerStack', payload),
   cancelLayerStackComposition: (requestId) => nativeInvoke('image:cancelLayerStackComposition', { requestId }),
   releaseLayerStackResources: (filePaths) => nativeInvoke('image:releaseLayerStackResources', { filePaths }),
+  releaseManagedGenerationMedia: (filePaths) => nativeInvoke('image:releaseManagedGenerationMedia', { filePaths }),
 }
 
 const videoApi: HenjiVideoApi = {

@@ -104,6 +104,18 @@ export function releaseManagedImagePaths(filePaths: readonly string[]): void {
   }
 }
 
+/** 通用生成事务回滚入口；只接受应用数据根内的 Uploads/Media 受管文件。 */
+export function releaseManagedGenerationMediaPaths(filePaths: readonly string[]): void {
+  const managedRoots = ['Uploads', 'Media'].map((segment) => path.resolve(getDataRootDir(), segment))
+  for (const filePath of new Set(filePaths)) {
+    const resolved = path.resolve(filePath)
+    if (!managedRoots.some((root) => resolved.startsWith(`${root}${path.sep}`))) {
+      throw new Error('只能释放应用数据目录内的受管生成媒体')
+    }
+    fs.rmSync(resolved, { force: true })
+  }
+}
+
 export function sanitizeFileStem(raw: string | undefined): string {
   const trimmed = (raw ?? '').trim()
   if (!trimmed) return 'storyboard-image'

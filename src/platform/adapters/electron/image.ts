@@ -31,7 +31,9 @@ export function createElectronImage(): ImagePlatform {
     persistImageBinary: (bytes, extension) => getNativeImage().persistImageBinary(bytes, extension),
     saveImageSourceToDownloads: (source, suggestedFileName) => getNativeImage().saveImageSourceToDownloads(source, suggestedFileName),
     saveImageSourceToPath: (source, targetPath) => getNativeImage().saveImageSourceToPath(source, targetPath),
+    savePanoramaImageSourceToPath: (source, targetPath) => getNativeImage().savePanoramaImageSourceToPath(source, targetPath),
     saveImageSourceToDirectory: (source, targetDir, suggestedFileName) => getNativeImage().saveImageSourceToDirectory(source, targetDir, suggestedFileName),
+    savePanoramaImageSourceToDirectory: (source, targetDir, suggestedFileName) => getNativeImage().savePanoramaImageSourceToDirectory(source, targetDir, suggestedFileName),
     saveImageSourceToAppDebugDir: (source, category, suggestedFileName) => getNativeImage().saveImageSourceToAppDebugDir(source, category, suggestedFileName),
     readImageInfo: (source) => getNativeImage().readImageInfo(source),
     probeDiffusionFallback: () => getNativeImage().probeDiffusionFallback(),
@@ -39,5 +41,6 @@ export function createElectronImage(): ImagePlatform {
     composeLayerStack: (payload) => getNativeImage().composeLayerStack(payload),
     cancelLayerStackComposition: (requestId) => getNativeImage().cancelLayerStackComposition(requestId),
     releaseLayerStackResources: (filePaths) => getNativeImage().releaseLayerStackResources(filePaths),
+    releaseManagedGenerationMedia: (filePaths) => getNativeImage().releaseManagedGenerationMedia(filePaths),
   }
 }

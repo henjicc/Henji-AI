@@ -1,7 +1,7 @@
 import { createLogger } from '@/core/logging';
 
 import {
-  persistImageLocally,
+  prepareNodeImage,
   reduceAspectRatio,
   resolveImageDisplayUrl,
 } from '../application/imageData';
@@ -17,6 +17,8 @@ export interface VideoPosterInfo {
   posterUrl: string | null;
   aspectRatio: string;
   durationSec: number | null;
+  /** 仅本次抓帧新建的受管 poster 文件，提交失败时由上层释放。 */
+  createdFilePaths: string[];
 }
 
 function drawPosterDataUrl(video: HTMLVideoElement): string | null {
@@ -113,11 +115,12 @@ export async function captureVideoPoster(videoSource: string): Promise<VideoPost
         timeOffsetSeconds: POSTER_CAPTURE_TIME_SEC,
         knownDurationSeconds: info.durationSeconds,
       });
-      const posterUrl = await persistImageLocally(thumbnail.dataUrl);
+      const prepared = await prepareNodeImage(thumbnail.dataUrl);
       return {
-        posterUrl,
+        posterUrl: prepared.imageUrl,
         aspectRatio: reduceAspectRatio(info.width, info.height),
         durationSec: info.durationSeconds,
+        createdFilePaths: prepared.createdFilePaths,
       };
     } catch (error) {
       logger.warn('[videoPoster] 主进程截帧失败，回退渲染层', error);
@@ -171,14 +174,19 @@ async function captureVideoPosterFallback(videoSource: string): Promise<VideoPos
 
   if (!captured.dataUrl) {
     logger.warn('[videoPoster] 首帧抓取失败，使用占位展示', { videoSource });
-    return { posterUrl: null, aspectRatio: captured.aspectRatio, durationSec: captured.durationSec };
+    return { posterUrl: null, aspectRatio: captured.aspectRatio, durationSec: captured.durationSec, createdFilePaths: [] };
   }
 
   try {
-    const posterUrl = await persistImageLocally(captured.dataUrl);
-    return { posterUrl, aspectRatio: captured.aspectRatio, durationSec: captured.durationSec };
+    const prepared = await prepareNodeImage(captured.dataUrl);
+    return {
+      posterUrl: prepared.imageUrl,
+      aspectRatio: captured.aspectRatio,
+      durationSec: captured.durationSec,
+      createdFilePaths: prepared.createdFilePaths,
+    };
   } catch (error) {
     logger.warn('[videoPoster] poster 落盘失败', error);
-    return { posterUrl: null, aspectRatio: captured.aspectRatio, durationSec: captured.durationSec };
+    return { posterUrl: null, aspectRatio: captured.aspectRatio, durationSec: captured.durationSec, createdFilePaths: [] };
   }
 }

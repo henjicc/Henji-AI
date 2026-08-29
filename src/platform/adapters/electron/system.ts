@@ -25,8 +25,8 @@ function createFs(): FsPlatform {
     readTextFile: async (path) => {
       return await getNative().fs.readTextFile(path)
     },
-    writeFile: async (path, data) => {
-      await getNative().fs.writeFile(path, data)
+    writeFile: async (path, data, options) => {
+      await getNative().fs.writeFile(path, data, options)
     },
     writeTextFile: async (path, data) => {
       await getNative().fs.writeTextFile(path, data)

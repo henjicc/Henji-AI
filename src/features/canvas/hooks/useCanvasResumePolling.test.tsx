@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { renderHook, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
@@ -50,6 +50,8 @@ function createResumablePanoramaResult(): CanvasNode {
 }
 
 describe('useCanvasResumePolling 全景结果恢复', () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     generationMocks.resumeCanvasGeneration.mockReset();
     generationMocks.persistGenerationResult.mockReset();
@@ -175,5 +177,28 @@ describe('useCanvasResumePolling 全景结果恢复', () => {
       providerId: 'volcengine',
     })));
     expect(generationMocks.persistGenerationResult).not.toHaveBeenCalled();
+  });
+
+  it('A 项目续查时切到 B 再返回 A 会重新恢复，旧回调不污染新会话', async () => {
+    generationMocks.resumeCanvasGeneration.mockImplementation(() => new Promise(() => undefined));
+    renderHook(() => useCanvasResumePolling());
+    await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(1));
+    const projectA = useProjectStore.getState().currentProject as Project;
+
+    const projectB: Project = {
+      id: 'project-b', name: 'B', createdAt: 1, updatedAt: 1, nodeCount: 0, coverPath: null,
+      nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 }, history: { past: [], future: [] },
+    };
+    await act(async () => {
+      useCanvasStore.getState().setCanvasData([], [], { past: [], future: [] });
+      useProjectStore.setState({ currentProjectId: projectB.id, currentProject: projectB });
+    });
+    await act(async () => {
+      useCanvasStore.getState().setCanvasData(projectA.nodes, projectA.edges, projectA.history);
+      useProjectStore.setState({ currentProjectId: projectA.id, currentProject: projectA });
+    });
+
+    await waitFor(() => expect(generationMocks.resumeCanvasGeneration).toHaveBeenCalledTimes(2));
+    expect(useCanvasStore.getState().nodes[0]?.data.serverTaskId).toBe('panorama-task');
   });
 });

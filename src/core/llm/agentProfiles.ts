@@ -43,7 +43,8 @@ export interface AgentModelConfigLike extends AgentModelReferenceLike {
 }
 
 export type AgentModelRoleLike = 'primary' | 'router' | 'summarizer' | 'fallback' | 'observer'
-export type AgentInputModality = 'image' | 'video' | 'audio'
+export const AGENT_INPUT_MODALITIES = ['image', 'video', 'audio'] as const
+export type AgentInputModality = (typeof AGENT_INPUT_MODALITIES)[number]
 
 const REQUIRED_PRIMARY_CHECKS = ['text', 'toolCall', 'structuredOutput', 'streaming', 'usage', 'cancel'] as const
 

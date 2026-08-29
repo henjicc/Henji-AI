@@ -11,6 +11,8 @@ import {
   mimeFromExtension,
   normalizeExtension,
   persistImageBytes,
+  persistImageBytesTracked,
+  rollbackPersistedImageBytes,
   sanitizeFileStem,
   writeBytesToPath,
 } from './path-utils'
@@ -166,6 +168,16 @@ export async function saveImageSourceToPath(source: string, targetPath: string):
   return outputPath
 }
 
+export async function savePanoramaImageSourceToPath(source: string, targetPath: string): Promise<string> {
+  const { bytes, extension } = await resolveSourceBytes(source)
+  const embedded = await embedPanoramaMetadataInImage(bytes, extension)
+  const outputExtension = embedded.format === 'jpeg' ? 'jpg' : embedded.format
+  const parsed = path.parse(targetPath.trim())
+  const outputPath = path.join(parsed.dir, `${parsed.name}.${normalizeExtension(outputExtension)}`)
+  writeBytesToPath(outputPath, embedded.bytes)
+  return outputPath
+}
+
 export async function saveImageSourceToDirectory(
   source: string,
   targetDir: string,
@@ -176,6 +188,21 @@ export async function saveImageSourceToDirectory(
   const stem = makeOutputStem(suggestedFileName, 'storyboard')
   const outputPath = ensureUniquePath(path.join(targetDir, `${stem}.${normalizeExtension(extension)}`))
   writeBytesToPath(outputPath, bytes)
+  return outputPath
+}
+
+export async function savePanoramaImageSourceToDirectory(
+  source: string,
+  targetDir: string,
+  suggestedFileName?: string
+): Promise<string> {
+  const { bytes, extension } = await resolveSourceBytes(source)
+  const embedded = await embedPanoramaMetadataInImage(bytes, extension)
+  const outputExtension = embedded.format === 'jpeg' ? 'jpg' : embedded.format
+  fs.mkdirSync(targetDir, { recursive: true })
+  const stem = makeOutputStem(suggestedFileName, 'panorama')
+  const outputPath = ensureUniquePath(path.join(targetDir, `${stem}.${normalizeExtension(outputExtension)}`))
+  writeBytesToPath(outputPath, embedded.bytes)
   return outputPath
 }
 
@@ -305,16 +332,29 @@ async function prepareFromBytes(bytes: Buffer, extension: string, maxPreviewDime
   const meta = await sharp(bytes).metadata()
   const width = Math.max(1, meta.width ?? 1)
   const height = Math.max(1, meta.height ?? 1)
-  const imagePath = persistImageBytes(bytes, extension)
-  const safeMax = Math.max(64, Math.floor(maxPreviewDimension))
-  if (Math.max(width, height) <= safeMax) {
-    return { imagePath, previewImagePath: imagePath, aspectRatio: reduceAspectRatio(width, height) }
-  }
-  const preview = await sharp(bytes).resize(safeMax, safeMax, { fit: 'inside' }).jpeg({ quality: 86 }).toBuffer()
-  return {
-    imagePath,
-    previewImagePath: persistImageBytes(preview, 'jpg'),
-    aspectRatio: reduceAspectRatio(width, height),
+  const persisted = [persistImageBytesTracked(bytes, extension)]
+  try {
+    const imagePath = persisted[0].filePath
+    const safeMax = Math.max(64, Math.floor(maxPreviewDimension))
+    if (Math.max(width, height) <= safeMax) {
+      return {
+        imagePath,
+        previewImagePath: imagePath,
+        aspectRatio: reduceAspectRatio(width, height),
+        createdFilePaths: persisted.filter((entry) => entry.created).map((entry) => entry.filePath),
+      }
+    }
+    const preview = await sharp(bytes).resize(safeMax, safeMax, { fit: 'inside' }).jpeg({ quality: 86 }).toBuffer()
+    persisted.push(persistImageBytesTracked(preview, 'jpg'))
+    return {
+      imagePath,
+      previewImagePath: persisted[1].filePath,
+      aspectRatio: reduceAspectRatio(width, height),
+      createdFilePaths: persisted.filter((entry) => entry.created).map((entry) => entry.filePath),
+    }
+  } catch (error) {
+    persisted.reverse().forEach(rollbackPersistedImageBytes)
+    throw error
   }
 }
 

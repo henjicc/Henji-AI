@@ -31,6 +31,7 @@ interface PathPayload {
 
 interface WriteFilePayload extends PathPayload {
   data: Uint8Array
+  exclusive?: boolean
 }
 
 interface WriteTextFilePayload extends PathPayload {
@@ -72,7 +73,7 @@ function parseWriteFilePayload(input: unknown): WriteFilePayload {
   if (!isUint8Array(data)) {
     throw new Error('Expected Uint8Array field "data"')
   }
-  return { path: targetPath, data }
+  return { path: targetPath, data, exclusive: record.exclusive === true }
 }
 
 function parseWriteTextFilePayload(input: unknown): WriteTextFilePayload {
@@ -199,7 +200,7 @@ function parseNativeFetchRequest(input: unknown): NativeFetchRequestDto {
 }
 
 export function registerSystemIpc(): void {
-  registerIpcHandler<WriteFilePayload, void>('fs:writeFile', parseWriteFilePayload, ({ path, data }) => writeFileBytes(path, data))
+  registerIpcHandler<WriteFilePayload, void>('fs:writeFile', parseWriteFilePayload, ({ path, data, exclusive }) => writeFileBytes(path, data, { exclusive }))
   registerIpcHandler<WriteTextFilePayload, void>('fs:writeTextFile', parseWriteTextFilePayload, ({ path, data }) => writeTextFile(path, data))
   registerIpcHandler<PathPayload, Uint8Array>('fs:readFile', parsePathPayload, ({ path }) => readFileBytes(path))
   registerIpcHandler<PathPayload, string>('fs:readTextFile', parsePathPayload, ({ path }) => readTextFile(path))

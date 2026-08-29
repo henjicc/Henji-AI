@@ -45,6 +45,7 @@ export interface LayerStackDocumentV1 {
     capabilityId: 'image.layer-separation';
     sourceNodeId: string;
     inputResourceId: string;
+    inputResourceStatus?: 'ready' | 'missing';
     providerId: string;
     modelId: string;
     providerRequestId?: string;
@@ -97,6 +98,11 @@ export function validateLayerStackDocument(value: LayerStackDocumentV1): LayerSt
   if (value.source.capabilityId !== 'image.layer-separation') throw new LayerStackContractError('图层栈能力编号无效');
   requireString(value.source.sourceNodeId, 'sourceNodeId');
   requireString(value.source.inputResourceId, 'inputResourceId');
+  if (value.source.inputResourceStatus !== undefined
+    && value.source.inputResourceStatus !== 'ready'
+    && value.source.inputResourceStatus !== 'missing') {
+    throw new LayerStackContractError('图层栈来源资源状态无效');
+  }
   requireString(value.source.providerId, 'providerId');
   requireString(value.source.modelId, 'modelId');
   if (value.status !== 'ready' && value.status !== 'degraded') throw new LayerStackContractError('图层栈状态无效');
@@ -190,7 +196,8 @@ export function validateLayerStackDocument(value: LayerStackDocumentV1): LayerSt
   if (!value.compositeResourceId || !resourceById.has(value.compositeResourceId)) throw new LayerStackContractError('图层栈缺少合成资源');
   if (!value.thumbnailResourceId || !resourceById.has(value.thumbnailResourceId)) throw new LayerStackContractError('图层栈缺少缩略图资源');
   if (value.compositeResourceId === value.thumbnailResourceId) throw new LayerStackContractError('合成资源与缩略图资源不能相同');
-  const hasMissing = value.resources.some((resource) => resource.status === 'missing');
+  const hasMissing = value.source.inputResourceStatus === 'missing'
+    || value.resources.some((resource) => resource.status === 'missing');
   if (value.status === 'ready' && hasMissing) throw new LayerStackContractError('ready 图层栈不能包含缺失资源');
   if (value.status === 'degraded' && !hasMissing) throw new LayerStackContractError('degraded 图层栈必须包含缺失资源');
   return value;
@@ -205,7 +212,9 @@ export function reconcileLayerStackMissingResources(
       ? resource
       : { ...resource, status: 'missing' as const, filePath: null, byteLength: null, sha256: null }
   ));
-  return validateLayerStackDocument({ ...document, status: resources.some((item) => item.status === 'missing') ? 'degraded' : 'ready', resources });
+  const degraded = document.source.inputResourceStatus === 'missing'
+    || resources.some((item) => item.status === 'missing');
+  return validateLayerStackDocument({ ...document, status: degraded ? 'degraded' : 'ready', resources });
 }
 
 export function applyLayerStackDraft(

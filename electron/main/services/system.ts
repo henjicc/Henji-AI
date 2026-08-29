@@ -68,10 +68,14 @@ export async function readTextFile(targetPath: string): Promise<string> {
   return await fs.readFile(targetPath, 'utf8')
 }
 
-export async function writeFileBytes(targetPath: string, data: Uint8Array): Promise<void> {
+export async function writeFileBytes(
+  targetPath: string,
+  data: Uint8Array,
+  options?: { exclusive?: boolean },
+): Promise<void> {
   ensureValidPath(targetPath)
   await fs.mkdir(path.dirname(targetPath), { recursive: true })
-  await fs.writeFile(targetPath, data)
+  await fs.writeFile(targetPath, data, options?.exclusive ? { flag: 'wx' } : undefined)
 }
 
 export async function writeTextFile(targetPath: string, data: string): Promise<void> {

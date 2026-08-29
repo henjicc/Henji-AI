@@ -19,7 +19,6 @@ import {
   RELIGHT_RIM_DIRECTIONS,
   RELIGHT_SMART_PRESETS,
   normalizeRelightSettings,
-  prepareRelightRoute,
   type RelightBrightness,
   type RelightColorPreset,
   type RelightKeyDirection,
@@ -27,10 +26,8 @@ import {
   type RelightSettingsV1,
   type RelightSmartPreset,
 } from '@/features/canvas/capabilities/relightPolicy'
-import { registry } from '@/core/ModelRegistry'
-import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument'
-import type { ModelDefinition } from '@/core/types'
 import { importLocalMedia } from '@/services/localMediaImport'
+import { buildRelightEditorDraft } from './relightEditorDraft'
 import type { CanvasSpecialEditorSurfaceProps } from './specialEditorRegistry'
 
 const DIRECTION_LABELS: Record<RelightKeyDirection, string> = {
@@ -65,36 +62,6 @@ function sourceImageFromState(state: Readonly<DynamicValueMap>): string | null {
     : {}
   const images = Array.isArray(mediaInputs.image) ? mediaInputs.image : []
   return images.find((item): item is string => typeof item === 'string' && item.trim().length > 0) ?? null
-}
-
-export function buildRelightEditorDraft(
-  state: Readonly<DynamicValueMap>,
-  settings: RelightSettingsV1,
-  imageModels: readonly ModelDefinition[] = registry.getModelsByType('image'),
-): DynamicValueMap {
-  const route = prepareRelightRoute(
-    settings,
-    imageModels,
-    state.params && typeof state.params === 'object' ? state.params as DynamicValueMap : {},
-  )
-  const lightingReferences = settings.lightingMode === 'smart'
-    ? settings.smart.lightingReferenceImages
-    : []
-  const mediaInputs = state.mediaInputs && typeof state.mediaInputs === 'object'
-    ? state.mediaInputs as DynamicValueMap
-    : {}
-  return {
-    ...state,
-    relightSettings: settings,
-    modelId: route.model?.meta.id ?? '',
-    params: route.params,
-    prompt: route.prompt,
-    promptDocument: createPlainTextPromptDocument(route.prompt),
-    promptTemplateVersion: route.templateVersion,
-    mediaInputs: { ...mediaInputs, image: mediaInputs.image ?? [] },
-    lightingReferenceImages: [...lightingReferences],
-    relightRouteReasons: [...route.reasons],
-  }
 }
 
 function readSettings(state: Readonly<DynamicValueMap>): RelightSettingsV1 {
@@ -205,7 +172,7 @@ export default function RelightSpecialEditor({
               >
                 <span className="flex flex-col">
                   <span className="text-sm font-medium">手动打光</span>
-                  <span className="text-xs text-text-muted">IC-Light v2</span>
+                  <span className="text-xs">IC-Light v2</span>
                 </span>
               </UiOptionButton>
               <UiOptionButton
@@ -216,7 +183,7 @@ export default function RelightSpecialEditor({
               >
                 <span className="flex flex-col">
                   <span className="text-sm font-medium">智能打光</span>
-                  <span className="text-xs text-text-muted">GPT Image 2</span>
+                  <span className="text-xs">GPT Image 2</span>
                 </span>
               </UiOptionButton>
             </div>
@@ -239,7 +206,7 @@ export default function RelightSpecialEditor({
                         onClick={() => patchManual({ keyDirection: direction })}
                       >
                         <Icon className="h-4 w-4" />
-                        <span className="text-[11px]">{DIRECTION_LABELS[direction]}</span>
+                        <span className="text-2xs">{DIRECTION_LABELS[direction]}</span>
                       </UiOptionButton>
                     )
                   })}

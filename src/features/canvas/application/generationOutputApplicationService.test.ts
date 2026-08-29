@@ -231,6 +231,7 @@ describe('generationOutputApplicationService', () => {
 
   it('任一输出落盘失败时不创建成员或空组', async () => {
     const before = structuredClone(useCanvasStore.getState().nodes);
+    const releaseCreatedFiles = vi.fn(async () => undefined);
     await expect(commitCanvasGenerationOutputs({
       sourceNodeId: 'source-node',
       placeholderNodeId: 'placeholder-node',
@@ -238,17 +239,20 @@ describe('generationOutputApplicationService', () => {
       contract: contract(2),
       persistOutput: async (_mediaType, source) => {
         if (source.endsWith('2')) throw new Error('第二项下载失败');
-        return imagePatch(source);
+        return { patch: imagePatch(source), createdFilePaths: ['/managed/created-1.png'] };
       },
+      releaseCreatedFiles,
     })).rejects.toThrow('第二项下载失败');
 
     expect(useCanvasStore.getState().nodes).toEqual(before);
     expect(useCanvasStore.getState().history.past).toHaveLength(0);
     expect(useCanvasStore.getState().nodes.some((node) => node.type === CANVAS_NODE_TYPES.assetGroup)).toBe(false);
+    expect(releaseCreatedFiles).toHaveBeenCalledWith(['/managed/created-1.png']);
   });
 
   it('媒体落盘期间项目被关闭时拒绝提交且不留下画布半成品', async () => {
     const before = structuredClone(useCanvasStore.getState().nodes);
+    const releaseCreatedFiles = vi.fn(async () => undefined);
     await expect(commitCanvasGenerationOutputs({
       sourceNodeId: 'source-node',
       placeholderNodeId: 'placeholder-node',
@@ -256,13 +260,68 @@ describe('generationOutputApplicationService', () => {
       contract: contract(2),
       persistOutput: async (_mediaType, source) => {
         useProjectStore.setState({ currentProjectId: null, currentProject: null });
-        return imagePatch(source);
+        return {
+          patch: imagePatch(source),
+          createdFilePaths: [`/managed/${source.split('/').at(-1)}.png`],
+        };
       },
+      releaseCreatedFiles,
     })).rejects.toMatchObject({ code: 'STALE_CONTEXT' });
 
     expect(useCanvasStore.getState().nodes).toEqual(before);
     expect(useCanvasStore.getState().history.past).toHaveLength(0);
     expect(useCanvasStore.getState().nodes.some((node) => node.type === CANVAS_NODE_TYPES.assetGroup)).toBe(false);
+    expect(releaseCreatedFiles).toHaveBeenCalledWith([
+      '/managed/result-1.png',
+      '/managed/result-2.png',
+    ]);
+  });
+
+  it('画布事务失败时释放本次新建媒体并保留原节点', async () => {
+    const before = structuredClone(useCanvasStore.getState().nodes);
+    const releaseCreatedFiles = vi.fn(async () => undefined);
+    const updateNodeData = vi.spyOn(useCanvasStore.getState(), 'updateNodeData').mockImplementation(() => {
+      throw new Error('事务写入失败');
+    });
+
+    await expect(commitCanvasGenerationOutputs({
+      sourceNodeId: 'source-node',
+      placeholderNodeId: 'placeholder-node',
+      resultNodeType: CANVAS_NODE_TYPES.exportImage,
+      contract: contract(1),
+      persistOutput: async (_mediaType, source) => ({
+        patch: imagePatch(source),
+        createdFilePaths: ['/managed/transaction-output.png'],
+      }),
+      releaseCreatedFiles,
+    })).rejects.toThrow('事务写入失败');
+
+    updateNodeData.mockRestore();
+    expect(useCanvasStore.getState().nodes).toEqual(before);
+    expect(releaseCreatedFiles).toHaveBeenCalledWith(['/managed/transaction-output.png']);
+  });
+
+  it('媒体落盘成功但结果契约校验失败时仍释放本次新建文件', async () => {
+    const releaseCreatedFiles = vi.fn(async () => undefined);
+    await expect(commitCanvasGenerationOutputs({
+      sourceNodeId: 'source-node',
+      placeholderNodeId: 'placeholder-node',
+      resultNodeType: CANVAS_NODE_TYPES.exportImage,
+      contract: contract(1),
+      persistOutput: async (_mediaType, source) => ({
+        patch: imagePatch(source),
+        createdFilePaths: ['/managed/invalid-output.png', '/managed/invalid-preview.png'],
+      }),
+      validateResultPatch: () => {
+        throw new Error('结果比例不符合能力契约');
+      },
+      releaseCreatedFiles,
+    })).rejects.toThrow('结果比例不符合能力契约');
+
+    expect(releaseCreatedFiles).toHaveBeenCalledWith([
+      '/managed/invalid-output.png',
+      '/managed/invalid-preview.png',
+    ]);
   });
 
   it('相同完成键重复回调不再落盘或追加历史', async () => {

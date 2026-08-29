@@ -1,4 +1,5 @@
 import { createLogger } from '@/core/logging';
+import { getPlatform } from '@/platform';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useProjectStore } from '@/stores/projectStore';
 
@@ -50,7 +51,11 @@ export interface CommitCanvasGenerationOutputsInput {
   groupTitle?: string;
   validateResultPatch?: (patch: DynamicValueMap, descriptor: CanvasGenerationOutputDescriptorV1) => void;
   /** 测试与后续本地处理器可注入；生产默认走统一媒体落盘入口。 */
-  persistOutput?: (mediaType: RowMediaKind, source: string) => Promise<DynamicValueMap>;
+  persistOutput?: (mediaType: RowMediaKind, source: string) => Promise<
+    DynamicValueMap | { patch: DynamicValueMap; createdFilePaths: string[] }
+  >;
+  /** 测试可注入；生产复用受管图片资源释放通道。 */
+  releaseCreatedFiles?: (filePaths: string[]) => Promise<void>;
   /** layer-stack 必须由主进程全量验证/合成后注入，通用落图器不会自行猜图层语义。 */
   preparedLayerStack?: LayerStackDocumentV1;
 }
@@ -359,14 +364,36 @@ export async function commitCanvasGenerationOutputs(
     strategy: input.contract.strategy,
   });
 
+  const createdFilePaths: string[] = [];
+  let ownershipTransferred = false;
   try {
     const persistOutput = input.persistOutput ?? persistGenerationResult;
-    const patches = await Promise.all(ordered.map(async (item) => {
-      const patch = await persistOutput(item.descriptor.mediaType, item.source);
-      validatePersistedMediaPatch(item.descriptor.mediaType, patch);
-      input.validateResultPatch?.(patch, item.descriptor);
-      return patch;
+    const persistenceResults = await Promise.allSettled(ordered.map(async (item) => {
+      const persisted = await persistOutput(item.descriptor.mediaType, item.source);
+      return 'patch' in persisted && 'createdFilePaths' in persisted
+        ? persisted
+        : { patch: persisted, createdFilePaths: [] };
     }));
+    for (const result of persistenceResults) {
+      if (result.status === 'fulfilled') {
+        createdFilePaths.push(...result.value.createdFilePaths);
+      }
+    }
+    const failedPersistence = persistenceResults.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (failedPersistence) {
+      throw failedPersistence.reason;
+    }
+    const patches = persistenceResults.map((result, index) => {
+      if (result.status !== 'fulfilled') {
+        throw new GenerationOutputApplicationError('CONFLICT', '生成结果媒体准备未完成');
+      }
+      const patch = result.value.patch;
+      validatePersistedMediaPatch(ordered[index].descriptor.mediaType, patch);
+      input.validateResultPatch?.(patch, ordered[index].descriptor);
+      return patch;
+    });
 
     requireCurrentCanvasProject(projectId);
     const latest = useCanvasStore.getState();
@@ -468,6 +495,7 @@ export async function commitCanvasGenerationOutputs(
       outputCount: resultNodeIds.length,
       groupNodeId,
     });
+    ownershipTransferred = true;
     return {
       projectId,
       completionId,
@@ -484,6 +512,18 @@ export async function commitCanvasGenerationOutputs(
     });
     // runCanvasTransaction 已负责图回滚；这里不删除占位节点，让现有失败态继续承载错误与重试。
     throw error;
+  } finally {
+    if (!ownershipTransferred && createdFilePaths.length > 0) {
+      const releaseCreatedFiles = input.releaseCreatedFiles
+        ?? ((filePaths: string[]) => getPlatform().image.releaseManagedGenerationMedia(filePaths));
+      await releaseCreatedFiles([...new Set(createdFilePaths)]).catch((releaseError) => {
+        logger.error('生成结果媒体回滚失败', releaseError, {
+          event: 'canvas.generation_output.media_rollback.failed',
+          projectId,
+          context: { completionId, createdFileCount: createdFilePaths.length },
+        });
+      });
+    }
   }
 }
 

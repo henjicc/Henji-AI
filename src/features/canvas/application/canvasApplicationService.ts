@@ -66,6 +66,14 @@ export function requireCurrentCanvasProject(projectId: string): void {
   }
 }
 
+/** 异步画布工作只能把进度、任务 ID 与结果写回发起它的项目。 */
+export function isCanvasProjectContextCurrent(
+  expectedProjectId: string,
+  currentProjectId: string | null = useProjectStore.getState().currentProjectId,
+): boolean {
+  return expectedProjectId.length > 0 && currentProjectId === expectedProjectId
+}
+
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw new CanvasApplicationError('ABORTED', '画布操作已取消')
 }

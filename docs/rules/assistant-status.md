@@ -21,7 +21,7 @@
 
 数字带日期戳。看到日期久远又拿不准时，按「取数方式」重新跑一遍，不要直接引用。
 
-## 一、能力盘（快照：2026-08-24）
+## 一、能力盘（快照：2026-08-29）
 
 | 项 | 数 |
 |---|---|
@@ -40,7 +40,7 @@
 对照 [assistant-goal.md](assistant-goal.md) 的四条判据：
 
 - **判据 1（广度）**：`storeActionCoverage.test.ts` 的 `GAP_BASELINE = 0`，且断言是
-  `gaps.length <= GAP_BASELINE`——**当前实际缺口为 0**。19/19 个 store 全部建账，
+  `gaps.length <= GAP_BASELINE`——**当前实际缺口为 0**。25/25 个 store 全部建账，
   人在界面上能做的每一件事助手都能做。三维 11 项、画布 5 项缺口已全部归零。
   （该文件的长注释里有 `0 → 2`、`2 → 8` 这类**中间态**数字，是任务推进过程的记录，不是现值；
   以文件末尾的常量和断言为准。）
@@ -65,11 +65,16 @@
 Responses 或 Chat Completions，预制模型不再要求用户理解协议；DeepSeek、火山引擎、百炼、MiniMax
 以及智谱国内 `glm-5.3` 的已确认组合默认走 Responses。Anthropic 仍未实现，并从设置界面完全隐藏。
 
+2026-08-29 画布专用编辑器控制器补入第 25 份正式 StoreLedger：打开、草稿更新、确认、取消、保留和
+放弃都是组件内会话编排，持久业务结果仍归画布节点与派生媒体服务，因此六项动作以可验证的 excluded
+边界建账，不伪造助手逐像素操作。`maskEditor` 同步登记到盲区清单：它只持有面板内位图草稿，确认后
+的蒙版引用由画布节点持久化；这次登记消除了覆盖门禁盲点，但没有扩大助手权限，也没有新增 gap。
+
 验证层（详见 [testing.md](testing.md) 第四节）：
 
 | 层 | 命令 | 规模（2026-08-18） |
 |---|---|---|
-| L-A 静态不变量 | `npm run check:assistant-capabilities` | 27 文件 / 152 用例 / 19 秒（2026-08-24） |
+| L-A 静态不变量 | `npm run check:assistant-capabilities` | 27 文件 / 153 用例（2026-08-29） |
 | L-B 剧本 harness | `npm run test:assistant-harness` | 9 文件 / 34 用例 / 11 秒（2026-08-25，验伪线 60 秒） |
 | L-C 真机 | `npm run assistant:live:suite` | 分钟级、真实付费 |
 

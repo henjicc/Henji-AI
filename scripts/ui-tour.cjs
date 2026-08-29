@@ -6,7 +6,7 @@
  */
 const fs = require('node:fs')
 const path = require('node:path')
-const { createRuntimeEvidenceCollector } = require('./lib/runtimeEvidence.cjs')
+const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./lib/runtimeEvidence.cjs')
 const {
   UI_INSPECTION_SCENES,
   filterScenes,
@@ -111,6 +111,7 @@ async function main() {
         const evidenceKey = `${sizeLabel} / ${scene.name}`
         collector.begin(evidenceKey)
         let sceneFailed = false
+        let sceneError = null
         try {
           await scene.setup(app.page)
           const fileName = `${sizeLabel}-${scene.id}.png`
@@ -122,12 +123,13 @@ async function main() {
           console.log(`✓ ${sizeLabel} / ${scene.name}`)
         } catch (error) {
           sceneFailed = true
+          sceneError = error
           const message = error instanceof Error ? error.message : String(error)
           failures.push({ name: scene.name, size: sizeLabel, message })
           console.error(`✗ ${sizeLabel} / ${scene.name}：${message}`)
         }
         try {
-          evidence[evidenceKey] = await collector.finish()
+          evidence[evidenceKey] = finalizeSceneEvidence(await collector.finish(), sceneError)
           if (!sceneFailed && !evidence[evidenceKey].passed) {
             const runtimeErrorCount = evidence[evidenceKey].browserErrors.length + evidence[evidenceKey].logErrors.length
             failures.push({ name: scene.name, size: sizeLabel, message: `捕获到 ${runtimeErrorCount} 个运行时错误，详见 evidence.json` })

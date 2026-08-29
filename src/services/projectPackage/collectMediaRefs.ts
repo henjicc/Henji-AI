@@ -72,8 +72,17 @@ export function rewritePackagePathsToLocal(
       return { ...node, data } as CanvasNode;
     }
     try {
+      const rawDocument = data.layerStackDocument as unknown as LayerStackDocumentV1;
+      const sourceMissing = rawDocument.source.inputResourceId.startsWith(PACKAGE_MEDIA_PREFIX);
       const document = reconcileLayerStackMissingResources(
-        validateLayerStackDocument(data.layerStackDocument as unknown as LayerStackDocumentV1),
+        validateLayerStackDocument({
+          ...rawDocument,
+          status: sourceMissing ? 'degraded' : rawDocument.status,
+          source: {
+            ...rawDocument.source,
+            inputResourceStatus: sourceMissing ? 'missing' : 'ready',
+          },
+        }),
         existingPaths,
       );
       const composite = document.resources.find((resource) => resource.resourceId === document.compositeResourceId);

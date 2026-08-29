@@ -4,7 +4,7 @@ import {
   DEFAULT_RELIGHT_SETTINGS,
   normalizeRelightSettings,
 } from '@/features/canvas/capabilities/relightPolicy'
-import { buildRelightEditorDraft } from './RelightSpecialEditor'
+import { buildRelightEditorDraft } from './relightEditorDraft'
 import { composeModelDefinition } from '@/core/composeModelDefinition'
 import { falPresentation } from '@/models/presentation/fal'
 import { falGptImage2Model } from '../../../../../packages/ai-sdk/src/catalog/fal/gpt-image-2.model'

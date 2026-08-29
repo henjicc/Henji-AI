@@ -196,6 +196,9 @@ const ASSISTANT_BLIND_FEATURES = {
     + 'API 密钥继续走受保护的 security.provider_keys，步骤进度与提示显隐属于 view_state，'
     + '不为助手另建专用能力或伪造 StoreLedger。',
   toolbox: '工具目录由工具箱注册表定义，属于应用结构而非用户数据，已有 toolbox.tool 的 writeExclusion。',
+  maskEditor: '蒙版编辑器只管理本次面板内的位图绘制与未确认草稿，没有独立持久化实体或 zustand store；'
+    + '确认后的蒙版引用和编辑文档由画布节点与派生媒体服务持有，入口由画布专用编辑器会话统一编排。'
+    + '助手可读写最终画布节点，但不伪造逐像素鼠标绘制能力。',
 }
 for (const feature of fs.readdirSync(path.join(root, 'src', 'features'), { withFileTypes: true })) {
   if (!feature.isDirectory()) continue

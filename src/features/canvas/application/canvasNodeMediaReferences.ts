@@ -113,6 +113,13 @@ export function mapCanvasNodeMediaReferences(
   const layerStackDocument = next.layerStackDocument
   if (layerStackDocument && typeof layerStackDocument === 'object' && !Array.isArray(layerStackDocument)) {
     const document = { ...(layerStackDocument as DynamicValueMap) }
+    if (document.source && typeof document.source === 'object' && !Array.isArray(document.source)) {
+      const source = { ...(document.source as DynamicValueMap) }
+      if (typeof source.inputResourceId === 'string' && source.inputResourceId) {
+        source.inputResourceId = mapValue(source.inputResourceId)
+      }
+      document.source = source
+    }
     if (Array.isArray(document.resources)) {
       document.resources = document.resources.map((resource) => {
         if (!resource || typeof resource !== 'object' || Array.isArray(resource)) return resource
@@ -122,8 +129,8 @@ export function mapCanvasNodeMediaReferences(
         }
         return nextResource
       })
-      next.layerStackDocument = document
     }
+    next.layerStackDocument = document
   }
 
   return next

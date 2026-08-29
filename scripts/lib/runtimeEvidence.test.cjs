@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict')
 const { EventEmitter } = require('node:events')
 const test = require('node:test')
-const { createRuntimeEvidenceCollector } = require('./runtimeEvidence.cjs')
+const { createRuntimeEvidenceCollector, finalizeSceneEvidence } = require('./runtimeEvidence.cjs')
 
 class FakePage extends EventEmitter {
   constructor() {
@@ -53,4 +53,18 @@ test('ResizeObserver 调度通知不计作应用崩溃', async () => {
 
   assert.equal(evidence.passed, true)
   assert.deepEqual(evidence.browserErrors, [])
+})
+
+test('场景 setup 失败时 evidence 不得伪报通过', () => {
+  const evidence = finalizeSceneEvidence({
+    browserErrors: [],
+    logErrors: [],
+    logWarnings: [],
+    logQuery: { truncated: false, corruptedLines: 0 },
+    passed: true,
+  }, new Error('夹具节点未准备完成'))
+
+  assert.equal(evidence.setupPassed, false)
+  assert.equal(evidence.setupError, '夹具节点未准备完成')
+  assert.equal(evidence.passed, false)
 })

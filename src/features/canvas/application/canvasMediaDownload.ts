@@ -6,7 +6,8 @@ import {
 import { getNodeDefinition } from '@/features/canvas/domain/nodeRegistry'
 import { resolveLocalAssetPath } from '@/features/assets/services/assetCollectionService'
 import {
-  embedPanoramaImageMetadata,
+  savePanoramaImageSourceToDirectory,
+  savePanoramaImageSourceToPath,
   saveImageSourceToDirectory,
   saveImageSourceToPath,
 } from '@/commands/image'
@@ -102,19 +103,6 @@ async function resolveMediaFileSource(target: CanvasMediaDownloadTarget): Promis
   return saved.fullPath
 }
 
-async function prepareImageDownloadTarget(
-  target: CanvasMediaDownloadTarget,
-): Promise<CanvasMediaDownloadTarget> {
-  if (target.mediaType !== 'image' || !target.panorama) return target
-  const embedded = await embedPanoramaImageMetadata(target.source)
-  const extension = embedded.format === 'jpeg' ? 'jpg' : embedded.format
-  return {
-    ...target,
-    source: embedded.imagePath,
-    suggestedFileName: target.suggestedFileName.replace(/\.[^.]+$/, `.${extension}`),
-  }
-}
-
 export async function saveCanvasMediaTargetAs(
   target: CanvasMediaDownloadTarget
 ): Promise<string | null> {
@@ -128,11 +116,12 @@ export async function saveCanvasMediaTargetAs(
   try {
     let savedPath: string | null
     if (target.mediaType === 'image') {
-      const preparedTarget = await prepareImageDownloadTarget(target)
-      const selectedPath = await saveDialog({ defaultPath: preparedTarget.suggestedFileName })
-      savedPath = selectedPath
-        ? await saveImageSourceToPath(preparedTarget.source, selectedPath)
-        : null
+      const selectedPath = await saveDialog({ defaultPath: target.suggestedFileName })
+      savedPath = !selectedPath
+        ? null
+        : target.panorama
+          ? await savePanoramaImageSourceToPath(target.source, selectedPath)
+          : await saveImageSourceToPath(target.source, selectedPath)
     } else {
       const sourcePath = await resolveMediaFileSource(target)
       savedPath = await downloadMediaFile(sourcePath, target.suggestedFileName)
@@ -164,12 +153,12 @@ async function saveTargetToDirectory(
   targetDir: string
 ): Promise<void> {
   if (target.mediaType === 'image') {
-    const preparedTarget = await prepareImageDownloadTarget(target)
-    await saveImageSourceToDirectory(
-      preparedTarget.source,
-      targetDir,
-      preparedTarget.suggestedFileName.replace(/\.[^.]+$/i, '')
-    )
+    const fileStem = target.suggestedFileName.replace(/\.[^.]+$/i, '')
+    if (target.panorama) {
+      await savePanoramaImageSourceToDirectory(target.source, targetDir, fileStem)
+    } else {
+      await saveImageSourceToDirectory(target.source, targetDir, fileStem)
+    }
     return
   }
 

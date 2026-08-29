@@ -379,6 +379,7 @@ describe('resetTransientNodeRuntimeState', () => {
 
     expect(data.isGenerating).toBe(false);
     expect(data.generationStartedAt).toBe(null);
+    expect(data.generationError).toBeUndefined();
   });
 
   it('缺少模型 ID 时无法续查，按旧行为清理生成态', () => {
@@ -393,5 +394,6 @@ describe('resetTransientNodeRuntimeState', () => {
 
     expect(data.isGenerating).toBe(false);
     expect(data.generationStartedAt).toBe(null);
+    expect(data.generationError).toBe('生成在项目切换或应用关闭前未返回，请重新生成');
   });
 });

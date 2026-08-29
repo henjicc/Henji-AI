@@ -1,15 +1,17 @@
 import { z } from 'zod'
 
 import { agentDataClassSchema } from './toolContracts'
-import { modelInputModalitySchema, type ModelStepMessage } from '@henjicc/ai-sdk'
+import type { ModelStepMessage } from '@henjicc/ai-sdk'
+import { AGENT_INPUT_MODALITIES } from '../llm/agentProfiles'
 
 export const AGENT_ATTACHMENT_SCHEMA_VERSION = 'agent-attachment/v1' as const
 export const AGENT_ATTACHMENT_MAX_COUNT = 8
+export const agentAttachmentModalitySchema = z.enum(AGENT_INPUT_MODALITIES)
 
 export const agentAttachmentSchema = z.object({
   schemaVersion: z.literal(AGENT_ATTACHMENT_SCHEMA_VERSION),
   mediaRef: z.string().regex(/^asset:[^\s]+$/),
-  modality: modelInputModalitySchema,
+  modality: agentAttachmentModalitySchema,
   mimeType: z.string().min(1).max(200),
   sizeBytes: z.number().int().nonnegative(),
   width: z.number().int().positive().nullable().optional(),

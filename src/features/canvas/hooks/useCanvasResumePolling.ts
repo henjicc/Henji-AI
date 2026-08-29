@@ -4,6 +4,7 @@ import { createLogger } from '@/core/logging';
 import { registry } from '@/core/ModelRegistry';
 import { useCanvasGenerationProgressStore } from '@/stores/canvasGenerationProgressStore';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 import {
   resolveCanvasImageCapabilityExpectedOutputCount,
@@ -34,16 +35,31 @@ const logger = createLogger('features.canvas.hooks.useCanvasResumePolling');
  */
 export function useCanvasResumePolling(): void {
   const nodes = useCanvasStore((state) => state.nodes);
+  const projectId = useProjectStore((state) => state.currentProjectId);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const setNodeGenerationProgress = useCanvasGenerationProgressStore((state) => state.setProgress);
 
   // 同一个任务只续查一次：nodes 每次变化都会重跑 effect，不去重会叠出多条轮询
-  const resumedTaskIdsRef = useRef<Set<string>>(new Set());
+  const resumeAttemptsRef = useRef<Map<string, symbol>>(new Map());
+  const previousProjectIdRef = useRef<string | null>(projectId);
 
   useEffect(() => {
+    const previousProjectId = previousProjectIdRef.current;
+    if (previousProjectId !== projectId) {
+      if (previousProjectId) {
+        const prefix = `${previousProjectId}:`;
+        for (const key of resumeAttemptsRef.current.keys()) {
+          if (key.startsWith(prefix)) resumeAttemptsRef.current.delete(key);
+        }
+      }
+      previousProjectIdRef.current = projectId;
+    }
+    if (!projectId) return;
+
     for (const node of nodes) {
       const task = readResumableServerTask(node.data as DynamicValueMap);
-      if (!task || resumedTaskIdsRef.current.has(task.taskId)) {
+      const attemptKey = task ? `${projectId}:${task.taskId}` : null;
+      if (!task || !attemptKey || resumeAttemptsRef.current.has(attemptKey)) {
         continue;
       }
 
@@ -59,7 +75,8 @@ export function useCanvasResumePolling(): void {
         : undefined;
       const sourceNodeId = useCanvasStore.getState().edges.find((edge) => edge.target === node.id)?.source;
 
-      resumedTaskIdsRef.current.add(task.taskId);
+      const attemptToken = Symbol(attemptKey);
+      resumeAttemptsRef.current.set(attemptKey, attemptToken);
       logger.info('[CanvasResume] 恢复未完成的异步生成', {
         event: 'canvas.resume_polling.start',
         taskId: task.taskId,
@@ -68,6 +85,7 @@ export function useCanvasResumePolling(): void {
       });
 
       void resumeNodeTask({
+        projectId,
         nodeId: node.id,
         sourceNodeId,
         resultNodeType: node.type,
@@ -78,12 +96,17 @@ export function useCanvasResumePolling(): void {
         sourceCapability,
         updateNodeData,
         setNodeGenerationProgress,
+        isContextCurrent: () => (
+          useProjectStore.getState().currentProjectId === projectId
+          && resumeAttemptsRef.current.get(attemptKey) === attemptToken
+        ),
       });
     }
-  }, [nodes, setNodeGenerationProgress, updateNodeData]);
+  }, [nodes, projectId, setNodeGenerationProgress, updateNodeData]);
 }
 
 interface ResumeNodeTaskInput {
+  projectId: string;
   nodeId: string;
   sourceNodeId?: string;
   resultNodeType: CanvasNodeType;
@@ -96,11 +119,13 @@ interface ResumeNodeTaskInput {
   setNodeGenerationProgress: ReturnType<
     typeof useCanvasGenerationProgressStore.getState
   >['setProgress'];
+  isContextCurrent: () => boolean;
 }
 
 async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
   const {
     nodeId,
+    projectId,
     sourceNodeId,
     resultNodeType,
     resultNodeData,
@@ -110,8 +135,10 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
     sourceCapability,
     updateNodeData,
     setNodeGenerationProgress,
+    isContextCurrent,
   } = input;
 
+  if (!isContextCurrent()) return;
   updateNodeData(nodeId, { isGenerating: true, generationError: null });
 
   try {
@@ -119,8 +146,11 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       modelId,
       mediaType,
       taskId,
-      onProgress: (progress) => setNodeGenerationProgress(nodeId, progress),
+      onProgress: (progress) => {
+        if (isContextCurrent()) setNodeGenerationProgress(nodeId, progress);
+      },
     });
+    if (!isContextCurrent()) return;
     // 兼容旧测试替身与旧进程边界只返回 primary 的形状；正式运行时始终优先消费 outputs。
     const resultOutputs = Array.isArray(result.outputs) && result.outputs.length > 0
       ? result.outputs
@@ -154,6 +184,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         modelId,
         result: { ...result, outputs: resultOutputs },
       });
+      if (!isContextCurrent()) return;
       logger.info('[CanvasResume] 结构化图层生成恢复完成', {
         event: 'canvas.resume_polling.layer_stack.completed',
         taskId,
@@ -200,6 +231,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
         ? (patch) => validateCanvasCapabilityResultPatch(sourceCapability, patch)
         : undefined,
     });
+    if (!isContextCurrent()) return;
     logger.info('[CanvasResume] 异步生成恢复完成', {
       event: 'canvas.resume_polling.completed',
       taskId,
@@ -207,6 +239,7 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       context: { nodeId },
     });
   } catch (error) {
+    if (!isContextCurrent()) return;
     const message = error instanceof Error ? error.message : String(error);
     updateNodeData(nodeId, {
       isGenerating: false,
@@ -222,6 +255,8 @@ async function resumeNodeTask(input: ResumeNodeTaskInput): Promise<void> {
       context: { nodeId, message },
     });
   } finally {
-    setNodeGenerationProgress(nodeId, null);
+    if (isContextCurrent() && useProjectStore.getState().currentProjectId === projectId) {
+      setNodeGenerationProgress(nodeId, null);
+    }
   }
 }

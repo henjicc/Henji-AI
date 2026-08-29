@@ -1,5 +1,6 @@
 import { createLogger } from '@/core/logging'
 import {
+  exists,
   join,
   mkdir,
   nativeFetch as httpFetch,
@@ -13,22 +14,24 @@ const logger = createLogger('utils.save.saveFromUrl')
 
 export async function saveBinary(
   data: Uint8Array,
-  filename: string
-): Promise<{ fullPath: string; webSrc: string }> {
-
+  filename: string,
+  options?: { exclusive?: boolean }
+): Promise<{ fullPath: string; webSrc: string; created: boolean }> {
   const mediaPath = await getMediaPath()
   const fullPath = await join(mediaPath, filename)
   await mkdir(mediaPath, { recursive: true })
-  await writeFile(fullPath, data)
+  const exclusive = options?.exclusive === true
+  const created = exclusive || !(await exists(fullPath))
+  await writeFile(fullPath, data, { exclusive })
   const webSrc = toDisplaySrc(fullPath)
   logger.info('[save] wrote file', fullPath)
-  return { fullPath, webSrc }
+  return { fullPath, webSrc, created }
 }
 
 export async function saveImageFromUrl(
   url: string,
   filename?: string
-): Promise<{ fullPath: string; webSrc: string }> {
+): Promise<{ fullPath: string; webSrc: string; created: boolean }> {
   const res = await httpFetch(url, { method: 'GET' })
   const buf = await res.arrayBuffer()
   const array = new Uint8Array(buf)
@@ -49,8 +52,8 @@ export async function saveImageFromUrl(
     contentType: fileType.mimeType
   })
 
-  const name = filename ?? `image-${Date.now()}.${fileType.extension}`
-  const saved = await saveBinary(array, name)
+  const name = filename ?? `image-${globalThis.crypto.randomUUID()}.${fileType.extension}`
+  const saved = await saveBinary(array, name, { exclusive: filename === undefined })
   logger.info('[save] image saved', saved.fullPath)
   return saved
 }
@@ -58,7 +61,7 @@ export async function saveImageFromUrl(
 export async function saveVideoFromUrl(
   url: string,
   filename?: string
-): Promise<{ fullPath: string; webSrc: string }> {
+): Promise<{ fullPath: string; webSrc: string; created: boolean }> {
   const maxRetries = 5
   let lastError: Error | null = null
 
@@ -86,8 +89,8 @@ export async function saveVideoFromUrl(
         contentType: fileType.mimeType
       })
 
-      const name = filename ?? `video-${Date.now()}.${fileType.extension}`
-      const saved = await saveBinary(array, name)
+      const name = filename ?? `video-${globalThis.crypto.randomUUID()}.${fileType.extension}`
+      const saved = await saveBinary(array, name, { exclusive: filename === undefined })
       logger.info('[save] video saved', saved.fullPath)
       return saved
     } catch (e) {
@@ -121,7 +124,7 @@ export async function saveVideoFromUrl(
 export async function saveAudioFromUrl(
   url: string,
   filename?: string
-): Promise<{ fullPath: string; webSrc: string }> {
+): Promise<{ fullPath: string; webSrc: string; created: boolean }> {
   const res = await httpFetch(url, { method: 'GET' })
   const buf = await res.arrayBuffer()
   const array = new Uint8Array(buf)
@@ -142,9 +145,8 @@ export async function saveAudioFromUrl(
     contentType: fileType.mimeType
   })
 
-  const name = filename ?? `audio-${Date.now()}.${fileType.extension}`
-  const saved = await saveBinary(array, name)
+  const name = filename ?? `audio-${globalThis.crypto.randomUUID()}.${fileType.extension}`
+  const saved = await saveBinary(array, name, { exclusive: filename === undefined })
   logger.info('[save] audio saved', saved.fullPath)
   return saved
 }
-

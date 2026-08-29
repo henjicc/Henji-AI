@@ -65,6 +65,8 @@ export interface PrepareNodeImageSourceResultDto {
   imagePath: string
   previewImagePath: string
   aspectRatio: string
+  /** 仅本次新建的受管文件；画布事务失败时由调用方精确回滚。 */
+  createdFilePaths: string[]
 }
 
 export interface CropImageSourcePayloadDto {

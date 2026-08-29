@@ -72,8 +72,12 @@ export async function readTextFile(path: string): Promise<string> {
   return await getPlatform().system.fs.readTextFile(path)
 }
 
-export async function writeFile(path: string, data: Uint8Array): Promise<void> {
-  await getPlatform().system.fs.writeFile(path, data)
+export async function writeFile(
+  path: string,
+  data: Uint8Array,
+  options?: { exclusive?: boolean },
+): Promise<void> {
+  await getPlatform().system.fs.writeFile(path, data, options)
 }
 
 export async function writeTextFile(path: string, data: string): Promise<void> {

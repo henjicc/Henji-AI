@@ -8,7 +8,6 @@ import {
   DEFAULT_RELIGHT_SETTINGS,
   RELIGHT_MANUAL_TEMPLATE_VERSION,
   RELIGHT_SMART_TEMPLATE_VERSION,
-  compileManualRelightPrompt,
   compileSmartRelightPrompt,
   normalizeRelightSettings,
   prepareRelightGenerationInput,
