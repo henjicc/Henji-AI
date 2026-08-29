@@ -304,6 +304,15 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
   }
 
   async function setupCanvasImageCapabilityToolbar(page) {
+    const expectedCapabilityCount = 15
+    const expectedFalUtilityIds = [
+      'image.preset-relight',
+      'image.low-light-enhancement',
+      'image.outpaint',
+      'image.product-photography',
+      'image.photo-restoration',
+      'image.background-removal',
+    ]
     const { projectId } = await seedAndOpenCanvasPanoramaProject(page)
     const sourceNode = page.locator('.react-flow__node[data-id="__ui_panorama_source"]')
     await sourceNode.click()
@@ -333,8 +342,16 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const menu = page.locator('[data-image-capability-menu="true"]:visible')
     await menu.waitFor({ state: 'visible', timeout: 8000 })
     const menuItems = menu.getByRole('menuitem')
-    if (await menuItems.count() !== 9 - expectedInlineIds.length) {
+    if (await menuItems.count() !== expectedCapabilityCount - expectedInlineIds.length) {
       throw new Error('更多菜单未完整承接非直达能力')
+    }
+    const menuCapabilityIds = await menuItems.evaluateAll((elements) => (
+      elements.map((element) => element.getAttribute('data-image-capability-id'))
+    ))
+    for (const capabilityId of expectedFalUtilityIds) {
+      if (!menuCapabilityIds.includes(capabilityId)) {
+        throw new Error(`更多菜单缺少 FAL 图片工具：${capabilityId}`)
+      }
     }
     for (const groupName of [/生成与变换|Generate & Transform/i, /结构化|Structured Output/i, /本地处理|Local Processing/i]) {
       await menu.getByText(groupName).waitFor({ state: 'visible', timeout: 8000 })
@@ -398,7 +415,7 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     const disabledStates = await disabledItems.evaluateAll((elements) => (
       elements.map((element) => element.getAttribute('aria-disabled'))
     ))
-    if (disabledStates.length !== 9 || disabledStates.some((state) => state !== 'true')) {
+    if (disabledStates.length !== expectedCapabilityCount || disabledStates.some((state) => state !== 'true')) {
       throw new Error(`等待图片节点的能力禁用状态不完整：${JSON.stringify(disabledStates)}`)
     }
     await disabledMenu.getByText(/请先等待图片完成或上传图片|Wait for the image to finish/i)

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS } from '@/core/canvas/imageCapabilityIds'
+import { ASSISTANT_CANVAS_IMAGE_CAPABILITY_IDS } from '../../canvas/imageCapabilityIds'
 import type { ApplicationCapabilityDefinition } from '../applicationCapabilities'
 import {
   capabilityControl,
