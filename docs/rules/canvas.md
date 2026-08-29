@@ -27,7 +27,8 @@
 
 - **通用生成节点**直接复用 `src/features/canvas/nodes/shared/GenerationNodeShell.tsx`（AI 图片/视频/音频节点都是如此），无需单独写节点组件；行为差异全部由 `domain/nodeRegistry.ts` 中的 `CanvasNodeDefinition` 声明驱动（该文件顶部有"新增画布节点 SOP"注释）
 - **特殊节点**（如分镜生成的格子编辑器）在标准行组件基础上**叠加**专属面板，不是推倒重写；面板放节点同名子目录（如 `nodes/storyboardGen/`），节点主文件负责编排接线，不在面板里重复实现模型选择/参数行
-- **媒体输入端口**：声明 `connectivity.targetHandleMode: 'rows'` + `ports.target.accepts` 后，媒体输入按类型生成专属端口并配 `MediaInputRow`；**禁止**手写单一 `id="target"` 的 Handle 来接收媒体
+- **单一主输入不重复画参数行**：整个节点只有一个上游输入槽，且该输入只负责传入一个值、不需要在节点内承载上传列表、缩略图、排序、多值或参数编辑时，只在节点左侧保留一个节点级 `target` Handle，不再为同一输入渲染 `MediaInputRow` 或同名参数行
+- **需要行内状态才使用媒体输入行**：节点有多个可区分输入，或输入本身需要本地上传、缩略图、排序、多值、逐项连接状态时，声明 `connectivity.targetHandleMode: 'rows'` + `ports.target.accepts`，按类型生成专属端口并配 `MediaInputRow` 或对应专属行 UI；`ports.target.accepts` 只声明连接类型，不能单独决定是否需要参数行
 - **禁止**在新节点里重新实现模型选择 chip、媒体上传缩略图、逐行参数布局
 - **复杂参数组不在节点内展开**：schema 的 `panel` / `composite` 统一渲染为单行摘要触发器，点击后在节点布局流之外打开浮动特殊面板；开关面板不得改变节点测量高度。只有已经连接到上游、需要持续展示连线状态的组内参数，才以紧凑参数行留在节点内。
 - **端口保持轻量且按需显现**：端口颜色只能取登记的语义媒体/数据类型 token，视觉核心统一使用共享小尺寸与轻描边（当前为 8 CSS px），透明命中区至少 24 CSS px；禁止在节点调用点自造尺寸或颜色。未连接端口在空闲状态必须隐藏，只在对应行/节点悬浮或正在连线时短暂显现；已连接端口保持可见。新增或改动端口后，用 `check:canvas-visual` 与真实 Electron 截图同时检查空闲未连接、交互显现、已连接和缩放状态。

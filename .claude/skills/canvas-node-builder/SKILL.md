@@ -41,7 +41,11 @@ Henji-AI 画布节点不是各写各的 UI，而是从一组标准化"参数行�
   → 不套用本 skill 的行组件体系，照搬同类节点已有写法即可
 ```
 
-判断"是否需要 'rows' 端口形态"：节点只要声明 `ports.target.accepts` 含 `image`/`video`/`audio` 中任意一种，就必须在 `connectivity` 里加 `targetHandleMode: 'rows'`，并用 `MediaInputRow` 渲染对应媒体行——**禁止**新增节点手写单一 `id="target"` 的 Handle 来接收媒体（旧节点遗留的 legacy 写法，不要再复制）。
+判断“单一主输入还是参数行”时，看输入是否需要独立的行内状态，不要只看媒体类型：
+
+- 整个节点只有一个上游输入槽，而且这个输入只负责把一个值送进节点，不需要在节点内展示上传列表、缩略图、排序、多值或参数编辑 → 只在节点左侧放一个节点级 `id="target"` Handle，不再为它渲染 `MediaInputRow` 或同名参数行；当前注册表用历史命名 `targetHandleMode: 'legacy'` 表示这种节点级单端口形态。
+- 节点有多个可区分输入，或这个输入本身需要承担本地上传、缩略图、排序、多值、逐项连接状态等交互 → 使用 `targetHandleMode: 'rows'`，由 `MediaInputRow` 或对应的专属行 UI 承载。
+- `ports.target.accepts` 只声明连接类型，不能单独决定是否需要参数行。标准生成节点通常需要本地上传和媒体状态，因此仍走 `rows`；纯查看、转换或消费节点的唯一主输入通常走节点级单端口。
 
 判断“参数组如何呈现”：`panel` / `composite` 只能在节点中占一行摘要触发器，详细内容用 `ParamGroupTrigger` 打开节点布局流之外的浮动特殊面板；禁止在节点内部直接展开整组参数并撑高节点。组内只有已经连线、需要持续显示连接状态的参数保留为紧凑行。打开和关闭面板前后，ReactFlow 测量高度必须不变。
 
@@ -150,13 +154,13 @@ export const ImageEditNode = memo(({ id, data, selected, width, height }: ImageE
 - **`useNodeModelParams` 要传 `media`**：调用处补上 `media: { images: effectiveImages, videos: effectiveVideos, audios: effectiveAudios }`（按节点实际支持的媒体类型取舍），否则 `modelParamValues` 里不会有 `images`/`videos`/`audios`，模型 schema 里依赖"是否已上传图片/视频"的 `visible.condition`/`pricing.calculator`/`linkage` 在画布里会静默失效（不报错，只是永远判断成"没有媒体"）。只有节点自己持有真实媒体状态时才传；如果是另一个共享同一份 `storedParams` 的次要 `useNodeModelParams` 实例（如参数摘要 chip），不要传。详见 [references/special-node-pattern.md](references/special-node-pattern.md) 第 2 点。
 - **数量上限**：`resolveInputLimits(effectiveModelId, modelParamValues).images.max` 决定 `MediaInputRow` 的 `maxCount`，同时决定要不要渲染这一行（`max > 0` 才渲染）。
 - **生成按钮**：`nodeRegistry.ts` 里该节点的 `capabilities.toolbarGenerate: true`，节点内部 `useEffect(() => canvasEventBus.subscribe('generation/run', ({nodeId}) => { if (nodeId === id) void handleGenerate() }), [...])`。**不要**在节点内容区画一个"生成"按钮——AI 图片/视频节点都没有，生成由选中节点后浮出的顶部工具条触发。
-- **连接端口**：`nodeRegistry.ts` 加 `connectivity.targetHandleMode: 'rows'`；如果这是从 legacy 单一 `target` Handle 迁移过来的旧节点类型，必须同时检查 `nodeMigrations.ts` 的 `migrateLegacyTargetHandle` 是否已覆盖该类型（它按 `ports.target.accepts` 只有一种媒体类型时自动迁移旧边，多媒体类型节点需要单独处理，不要假设自动生效）。
+- **连接端口**：先按上面的“单一主输入还是参数行”判定。需要媒体行时在 `nodeRegistry.ts` 加 `connectivity.targetHandleMode: 'rows'`；只有一个无行内状态的主输入时使用节点级 `target` Handle。端口形态发生迁移时，再检查 `nodeMigrations.ts` 是否需要同步处理已有边。
 
 ## 检查清单（改完自查）
 
 - [ ] 价格徽标在 `NodeHeader` 的 `rightSlot`，不在内容区
 - [ ] 没有手写的模型选择 chip / 媒体缩略图 / 逐行参数布局（这些是 `ModelInputRow`/`MediaInputRow`/`NodeParamRows` 的职责）
-- [ ] 没有手写单一 `id="target"` 的 Handle 来接收媒体（`targetHandleMode: 'rows'` + `MediaInputRow` 替代）
+- [ ] 已按“单一主输入还是参数行”判断端口形态；唯一且无行内状态的输入没有被重复画成参数行，需要上传/多值/排序等状态的输入没有误用节点级单端口
 - [ ] 没有节点内置"生成"按钮（`capabilities.toolbarGenerate` + `canvasEventBus` 替代）
 - [ ] `panel` / `composite` 使用单行触发器和节点外浮动面板，开关面板不改变节点高度
 - [ ] 接入点复用共享尺寸与语义 token；空闲未连接时隐藏，交互时显现，已连接时保持可见，缩放后仍不过分抢眼

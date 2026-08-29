@@ -39,11 +39,11 @@ interface CanvasNodeConnectivity {
 }
 ```
 
-**`targetHandleMode` 怎么选**（这是最容易选错的字段）：
+**`targetHandleMode` 怎么选**（按用户可见的输入语义判断，不按媒体类型判断）：
 
-- `ports.target.accepts` 包含 `'image'`/`'video'`/`'audio'` 中任意一种 → 必须设 `'rows'`，端口 id 改用 `socketTypes.ts` 的 `mediaPortId('image')`（形如 `param:__image`）。
-- 节点没有媒体输入（纯文本/数值源节点等）→ 不设（等同 `'legacy'`），沿用单一 `target` Handle。
-- **绝对不要**让一个节点选 `'legacy'`（或不设）又同时声明 `ports.target.accepts: ['image']`——这是旧节点遗留的歧义写法（分镜生成节点、分镜分割节点都曾经这样，目前均已修复），不要在新节点上重复。
+- `'legacy'`（历史命名）：整个节点只有一个上游输入槽，输入只负责传入一个值，不需要本地上传列表、缩略图、排序、多值或参数编辑。此时沿用节点左侧单一 `id="target"` Handle，不再渲染同名参数行。纯查看、转换或消费节点常用这种形态。
+- `'rows'`：节点有多个需要区分的输入，或输入行本身要承担本地上传、缩略图、排序、多值、逐项连接状态等交互。媒体端口 id 使用 `socketTypes.ts` 的 `mediaPortId('image')`（形如 `param:__image`）。标准生成节点通常属于这一类。
+- `ports.target.accepts` 只负责声明连接类型与兼容性；即使它包含 `'image'`/`'video'`/`'audio'`，也不能单独推出必须使用 `'rows'`。
 
 **`targetHandleMode: 'rows'` 不等于必须用 `MediaInputRow` 渲染**：两者通常配对，但端口形态（id 用 `mediaPortId`）和 UI 渲染方式是两件独立的事。如果节点的媒体输入语义是"本地上传 + 单一列表 + 缩略图"，用 `MediaInputRow`（分镜生成节点的图片输入）；如果语义是"只读聚合上游所有连线、供多个目标各自挑选引用"（分镜分割节点：图片池喂给每个分镜格子选用），保留节点自己的专属选图 UI，只把 Handle 的 `id` 从 `'target'` 换成 `mediaPortId('image')` 即可，不要为了"看起来标准"强行套用 `MediaInputRow` 的本地上传/缩略图列表样式——那套 UI 表达的是另一种数据模型，会和专属选图 UI 打架。
 
@@ -57,7 +57,7 @@ media?: { kind: MediaKind; role: 'source' | 'generator' | 'result' };
 
 ports?: {
   source?: { emits: MediaKind };        // 输出端口产出的媒体类型
-  target?: { accepts: MediaKind[] };    // 输入端口能接受的媒体类型（决定生成哪些 MediaInputRow）
+  target?: { accepts: MediaKind[] };    // 输入端口能接受的媒体类型；不单独决定是否渲染 MediaInputRow
 };
 ```
 
@@ -84,7 +84,7 @@ generation?: {
 节点新建时的初始 `data`。注意：
 
 - 有模型选择的节点要给 `modelId: getDefaultModelId(modelType)` 和 `params: {}`
-- 有媒体输入的节点要给 `mediaInputs: {}`（哪怕暂时不会立刻用到，避免后续读取时做 `?? {}` 兜底散落各处）
+- 使用媒体输入行或节点内联媒体状态时要给 `mediaInputs: {}`；只有一个纯上游主输入、节点内不保存媒体行状态时不需要该字段
 - 旧字段迁移（如 `model`/`size`/`requestAspectRatio`）不需要在这里处理，那是 `nodeMigrations.ts` 的职责
 
 ## 完整新增节点步骤（摘自文件顶部 SOP 注释）
