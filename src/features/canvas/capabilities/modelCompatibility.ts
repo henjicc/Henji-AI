@@ -3,6 +3,7 @@ import type { ModelDefinition, ParamDef } from '@/core/types';
 import { getI18nText } from '@/core/types';
 import type {
   CanvasImageCapabilityModelPolicy,
+  CanvasImageCapabilityPromptPolicy,
   CanvasImageCapabilityModelSemanticRequirements,
   CanvasImageCapabilityProviderConfiguration,
 } from './types';
@@ -55,6 +56,14 @@ function findExactChoice(param: ParamDef | undefined, semanticValue: string): st
   return choiceOptions(param).find((value) => String(value).trim().toLowerCase() === normalized) ?? null;
 }
 
+function findExactValue(
+  values: readonly (string | number)[],
+  semanticValue: string,
+): string | number | null {
+  const normalized = semanticValue.trim().toLowerCase();
+  return values.find((value) => String(value).trim().toLowerCase() === normalized) ?? null;
+}
+
 function findProviderConfiguration(
   model: ModelDefinition,
   policy: Extract<CanvasImageCapabilityModelPolicy, { mode: 'verified-families' }>,
@@ -80,6 +89,104 @@ function findQualityParam(model: ModelDefinition): ChoiceParam | undefined {
     (param.type === 'dropdown' || param.type === 'radio')
     && /(quality|画质|质量)/i.test(paramSearchText(param))
   ));
+}
+
+function hasOwnValue(values: DynamicValueMap, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(values, key)
+    && values[key] !== undefined
+    && values[key] !== null
+    && String(values[key]).trim().length > 0;
+}
+
+function resolutionRank(value: string | number): number | null {
+  const normalized = String(value).trim().toUpperCase();
+  const dimension = normalized.match(/^(\d+)\s*[X×]\s*(\d+)$/);
+  if (dimension) return Math.sqrt(Number(dimension[1]) * Number(dimension[2]));
+  const megapixels = normalized.match(/^(\d+(?:\.\d+)?)\s*MP$/);
+  if (megapixels) return Math.sqrt(Number(megapixels[1]) * 1_000_000);
+  const kilopixels = normalized.match(/^(\d+(?:\.\d+)?)\s*K$/);
+  if (kilopixels) return Number(kilopixels[1]) * 1_000;
+  return null;
+}
+
+function findClosestResolutionChoice(
+  values: readonly (string | number)[],
+  semanticValue: string,
+): string | number | null {
+  const target = resolutionRank(semanticValue);
+  if (target === null) return null;
+  return values.reduce<{ value: string | number; distance: number } | null>((best, value) => {
+    const rank = resolutionRank(value);
+    if (rank === null) return best;
+    const distance = Math.abs(rank - target);
+    return !best || distance < best.distance ? { value, distance } : best;
+  }, null)?.value ?? null;
+}
+
+function findResolutionParam(model: ModelDefinition): ChoiceParam | undefined {
+  const analyzed = analyzeRatioResolutionParams(model.params, [])?.resolutionParam;
+  const resolved = analyzed && model.params.find((param) => param.id === analyzed.id);
+  if (resolved && (resolved.type === 'dropdown' || resolved.type === 'radio' || resolved.type === 'aspect-ratio')) {
+    return resolved;
+  }
+  return model.params.find((param): param is ChoiceParam => (
+    (param.type === 'dropdown' || param.type === 'radio' || param.type === 'aspect-ratio')
+    && choiceOptions(param).some((value) => resolutionRank(value) !== null)
+  ));
+}
+
+function allowedChoices(
+  param: ChoiceParam,
+  configuredValues: readonly string[] | undefined,
+): Array<string | number> {
+  const options = choiceOptions(param);
+  if (!configuredValues || configuredValues.length === 0) return options;
+  const configured = new Set(configuredValues.map((value) => value.trim().toLowerCase()));
+  return options.filter((value) => configured.has(String(value).trim().toLowerCase()));
+}
+
+function applySemanticDefaults(
+  model: ModelDefinition,
+  policy: Extract<CanvasImageCapabilityModelPolicy, { mode: 'verified-families' }>,
+  configuration: CanvasImageCapabilityProviderConfiguration | undefined,
+  currentParams: DynamicValueMap,
+  params: DynamicValueMap,
+  reasons: CanvasModelCompatibilityReason[],
+): void {
+  const defaults = policy.semanticDefaults;
+  if (!defaults) return;
+  const resolutionParam = findResolutionParam(model);
+  if (defaults.resolution && resolutionParam) {
+    const choices = allowedChoices(
+      resolutionParam,
+      configuration?.allowedSemanticValues?.resolution,
+    );
+    if (choices.length === 0) {
+      reasons.push({ code: 'resolution', message: '模型没有经过全景能力核验的分辨率档位' });
+    } else {
+      const current = hasOwnValue(currentParams, resolutionParam.id)
+        ? findExactValue(choices, String(currentParams[resolutionParam.id]))
+        : null;
+      params[resolutionParam.id] = current
+        ?? findExactValue(choices, defaults.resolution)
+        ?? findClosestResolutionChoice(choices, defaults.resolution)
+        ?? choices[0];
+    }
+  }
+
+  const qualityParam = findQualityParam(model);
+  if (defaults.quality && qualityParam) {
+    const choices = allowedChoices(qualityParam, configuration?.allowedSemanticValues?.quality);
+    if (choices.length > 0) {
+      const current = hasOwnValue(currentParams, qualityParam.id)
+        ? findExactValue(choices, String(currentParams[qualityParam.id]))
+        : null;
+      params[qualityParam.id] = current
+        ?? findExactValue(choices, defaults.quality)
+        ?? findExactValue(choices, String(qualityParam.default))
+        ?? choices[0];
+    }
+  }
 }
 
 function findOutputCountParam(model: ModelDefinition): NumberParam | undefined {
@@ -276,8 +383,46 @@ export function mapCanvasCapabilityModelParams(
     mapChannel(model, configuration, params, reasons);
   }
   mapSemanticRequirements(model, policy.semanticRequirements, params, reasons);
+  applySemanticDefaults(model, policy, configuration, currentParams, params, reasons);
 
   return { compatible: reasons.length === 0, params, reasons };
+}
+
+/** 解析能力允许展示的 schema 参数；只依赖稳定角色与参数语义，不判断节点或模型 ID。 */
+export function resolveCanvasCapabilityVisibleParamIds(
+  model: ModelDefinition,
+  policy: CanvasImageCapabilityModelPolicy,
+  promptPolicy: CanvasImageCapabilityPromptPolicy,
+): string[] {
+  const ids = new Set(promptPolicy.visibleParameterKeys);
+  const transferKeys = new Set(promptPolicy.visibleParameterTransferKeys ?? []);
+  model.params.forEach((param) => {
+    if (param.transferKey && transferKeys.has(param.transferKey)) ids.add(param.id);
+  });
+  if (policy.mode !== 'verified-families') return [...ids];
+
+  const configuration = findProviderConfiguration(model, policy);
+  for (const semantic of promptPolicy.visibleParameterSemantics ?? []) {
+    if (semantic === 'channel') {
+      const channel = findChannelParam(model);
+      if (channel && (configuration?.allowedChannels?.length ?? choiceOptions(channel).length) > 1) {
+        ids.add(channel.id);
+      }
+      continue;
+    }
+    if (semantic === 'quality') {
+      const quality = findQualityParam(model);
+      if (quality && (configuration?.allowedSemanticValues?.quality?.length ?? choiceOptions(quality).length) > 1) {
+        ids.add(quality.id);
+      }
+      continue;
+    }
+    const resolution = findResolutionParam(model);
+    if (resolution && (configuration?.allowedSemanticValues?.resolution?.length ?? choiceOptions(resolution).length) > 1) {
+      ids.add(resolution.id);
+    }
+  }
+  return [...ids];
 }
 
 export function resolveCanvasCapabilityModelCandidates(

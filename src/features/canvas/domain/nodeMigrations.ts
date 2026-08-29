@@ -27,6 +27,8 @@ import {
 import {
   PANORAMA_MODEL_POLICY,
   PANORAMA_PROMPT_POLICY,
+  PANORAMA_DEFAULT_PROMPT,
+  PANORAMA_DEFAULT_PROMPT_VERSION,
   PANORAMA_REFERENCE_TEMPLATE_VERSION,
   PANORAMA_TEXT_TEMPLATE_VERSION,
 } from '../capabilities/panoramaPolicy';
@@ -316,6 +318,14 @@ export function migrateGenerationNodeData(data: DynamicValueMap): void {
 export function migratePanoramaGenerationData(data: DynamicValueMap): void {
   data.capabilityId = CANVAS_IMAGE_CAPABILITY_IDS.panorama;
   data.fixedSemanticParams = { ...PANORAMA_PROMPT_POLICY.fixedSemanticParams };
+  if (data.defaultPromptVersion !== PANORAMA_DEFAULT_PROMPT_VERSION) {
+    const storedPrompt = typeof data.prompt === 'string' ? data.prompt.trim() : '';
+    if (storedPrompt.length === 0) {
+      data.prompt = PANORAMA_DEFAULT_PROMPT;
+      data.promptDocument = createPlainTextPromptDocument(PANORAMA_DEFAULT_PROMPT);
+    }
+    data.defaultPromptVersion = PANORAMA_DEFAULT_PROMPT_VERSION;
+  }
 
   const mediaInputs = data.mediaInputs && typeof data.mediaInputs === 'object'
     ? data.mediaInputs as DynamicValueMap

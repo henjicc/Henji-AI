@@ -317,10 +317,10 @@
       "promptPlaceholder": "描述任何你想要生成或编辑的内容"
     },
     "panoramaGeneration": {
-      "promptRequired": "请描述需要生成的全景场景",
+      "promptRequired": "全景提示词可以留空",
       "apiKeyRequired": "请在设置中填写 API Key",
       "resultTitle": "720°全景",
-      "promptPlaceholder": "描述完整场景；输出固定为可球面浏览的 360°×180°、2:1 全景"
+      "promptPlaceholder": "可补充场景、风格、时间或天气；球面投影与 2:1 比例已经固定"
     },
     "relightGeneration": {
       "apiKeyRequired": "请先配置当前打光模式所需的供应商 API Key",

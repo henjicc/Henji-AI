@@ -317,10 +317,10 @@
       "promptPlaceholder": "Describe anything you want to generate or edit"
     },
     "panoramaGeneration": {
-      "promptRequired": "Describe the panorama scene to generate",
+      "promptRequired": "The panorama prompt may be left empty",
       "apiKeyRequired": "Please set API key in Settings",
       "resultTitle": "720° Panorama",
-      "promptPlaceholder": "Describe the full scene; output is fixed to a spherical 360°×180°, 2:1 panorama"
+      "promptPlaceholder": "Optionally add a scene, style, time, or weather; spherical projection and 2:1 are fixed"
     },
     "relightGeneration": {
       "apiKeyRequired": "Configure the provider API key required by the current relighting mode",

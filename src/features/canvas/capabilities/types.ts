@@ -122,12 +122,16 @@ export type CanvasImageCapabilityModelPolicy =
       providerCompatibility: 'verified-combinations-only';
       allowedProviderConfigurations: readonly CanvasImageCapabilityProviderConfiguration[];
       semanticRequirements: CanvasImageCapabilityModelSemanticRequirements;
+      /** 新建、迁移或模型切换时采用；不得覆盖用户已经保存的合法选择。 */
+      semanticDefaults?: CanvasImageCapabilityModelSemanticDefaults;
     };
 
 /** 已核验的平台组合。渠道值通过 schema 的 `role: channel` 查找，不泄漏参数 ID 到 UI。 */
 export interface CanvasImageCapabilityProviderConfiguration {
   providerId: string;
   allowedChannels?: readonly string[];
+  /** 当前能力在该供应商上经过核验的可编辑语义值。 */
+  allowedSemanticValues?: Readonly<Partial<Record<'resolution' | 'quality', readonly string[]>>>;
 }
 
 export interface CanvasImageCapabilityReferenceImageRequirement {
@@ -146,6 +150,12 @@ export interface CanvasImageCapabilityModelSemanticRequirements {
   parameterValues?: Readonly<Record<string, CanvasImageCapabilitySemanticValue>>;
 }
 
+/** 与固定约束分离的初始偏好；目标模型缺少精确值时选择最接近的合法档位。 */
+export interface CanvasImageCapabilityModelSemanticDefaults {
+  resolution?: string;
+  quality?: string;
+}
+
 export type CanvasImageCapabilitySemanticValue = string | number | boolean;
 
 export interface CanvasImageCapabilityPromptPolicy {
@@ -153,6 +163,8 @@ export interface CanvasImageCapabilityPromptPolicy {
   hiddenTemplateVersions?: Readonly<Partial<Record<'text' | 'reference', string>>>;
   fixedSemanticParams: Readonly<Record<string, CanvasImageCapabilitySemanticValue>>;
   visibleParameterKeys: readonly string[];
+  /** 通过通用 schema 语义发现参数，不泄漏供应商参数 ID。 */
+  visibleParameterSemantics?: readonly ('channel' | 'resolution' | 'quality')[];
   /** 跨供应商参数通过 schema transferKey 暴露，禁止在 UI 列举供应商参数 ID。 */
   visibleParameterTransferKeys?: readonly string[];
 }

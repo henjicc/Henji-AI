@@ -469,6 +469,27 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     if (!(await generatedNode.evaluate((element) => element.classList.contains('selected')))) {
       throw new Error('全景工具条创建后未选中新节点')
     }
+    if (await page.locator('[data-image-capability-more="true"]:visible').count()) {
+      throw new Error('全景生成节点不应显示没有可执行内容的“更多”菜单')
+    }
+    await generatedShell.getByText(
+      '生成一张完整、自然、可沉浸浏览的 360°×180° 等距柱状全景图，左右边缘无缝衔接。',
+      { exact: true },
+    ).waitFor({ state: 'visible', timeout: 8000 })
+    const generatedModelId = await generatedShell.getAttribute('data-generation-node-model-id')
+    if (generatedModelId === 'apimart-gpt-image-2') {
+      const channelField = paramFieldFromLabel(generatedShell, /^(渠道|Channel)$/i)
+      await channelField.waitFor({ state: 'visible', timeout: 8000 })
+      await channelField.locator('[data-dropdown-button]').click()
+      await page.getByRole('option', { name: /^(官方|Official)$/i }).filter({ visible: true }).first().click()
+      await generatedShell.getByText(/^(画质|质量|Quality)$/i)
+        .waitFor({ state: 'visible', timeout: 8000 })
+    }
+    await generatedShell.getByText(/^(分辨率|Resolution)$/i)
+      .waitFor({ state: 'visible', timeout: 8000 })
+    if (await generatedShell.getByText(/^(宽高比|Aspect Ratio)$/i).count()) {
+      throw new Error('全景生成节点不应开放固定的 2:1 比例')
+    }
     if (await page.locator('.react-flow__edge').count() < 1) {
       throw new Error('全景工具条未创建来源连线')
     }

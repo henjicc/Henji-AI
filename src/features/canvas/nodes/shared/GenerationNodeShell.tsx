@@ -80,6 +80,7 @@ import {
   getCanvasImageCapability,
   prepareCanvasCapabilityGeneration,
   resolveCanvasCapabilityModelCandidates,
+  resolveCanvasCapabilityVisibleParamIds,
   resolveCanvasCapabilityPromptTemplateVersion,
   resolveCanvasImageCapabilityExpectedOutputCount,
   validateCanvasCapabilityResultPatch,
@@ -304,12 +305,13 @@ export const GenerationNodeShell = memo(({
   });
   const visibleCapabilityParamIds = useMemo(() => {
     if (!capability) return undefined;
-    const transferKeys = new Set(capability.promptPolicy.visibleParameterTransferKeys ?? []);
-    return [...new Set([
-      ...capability.promptPolicy.visibleParameterKeys,
-      ...schema.filter((param) => param.transferKey && transferKeys.has(param.transferKey)).map((param) => param.id),
-    ])];
-  }, [capability, schema]);
+    if (!effectiveModel) return [...capability.promptPolicy.visibleParameterKeys];
+    return resolveCanvasCapabilityVisibleParamIds(
+      effectiveModel,
+      capability.modelPolicy,
+      capability.promptPolicy,
+    );
+  }, [capability, effectiveModel]);
 
   const handleModelChange = useCallback((nextModelId: string) => {
     const transferredParams = transferModelParamOverridesBetweenModels(

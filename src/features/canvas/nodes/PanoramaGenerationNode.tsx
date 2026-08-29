@@ -41,6 +41,7 @@ export const PanoramaGenerationNode = memo(({
     apiKeyRequiredKey="node.panoramaGeneration.apiKeyRequired"
     resultTitleKey="node.panoramaGeneration.resultTitle"
     resultNodeExtraData={{ resultKind: 'panorama' }}
+    requirePrompt={false}
   />
 ));
 

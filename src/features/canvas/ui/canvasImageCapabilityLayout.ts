@@ -10,6 +10,7 @@ import {
 } from '@/features/canvas/capabilities'
 import type { CanvasNode } from '@/features/canvas/domain/canvasNodes'
 import {
+  getNodeDefinition,
   getNodeMediaOutputs,
   resolveNodeSourceMediaKind,
 } from '@/features/canvas/domain/nodeRegistry'
@@ -109,6 +110,11 @@ export function resolveCanvasImageCapabilityActionsForSourceNode(
 ): readonly CanvasImageCapabilityAction[] {
   const outputs = getNodeMediaOutputs(sourceNode.type, sourceNode.data)
   const declaredKind = resolveNodeSourceMediaKind(sourceNode.type, sourceNode.data)
+  const mediaRole = getNodeDefinition(sourceNode.type).media?.role
+
+  // 生成器只保存输入与参数，真实结果会落到独立结果节点。静态输出端口表示“将来会
+  // 生成图片”，不能据此给尚无结果的生成器展示一整组不可用的派生能力。
+  if (outputs.length === 0 && mediaRole === 'generator') return []
 
   return getRegisteredCanvasImageCapabilities()
     .filter((capability) => capability.implementation.status === 'implemented')

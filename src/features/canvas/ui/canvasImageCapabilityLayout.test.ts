@@ -5,6 +5,7 @@ import {
   getCanvasImageCapability,
 } from '@/features/canvas/capabilities'
 import { CANVAS_NODE_TYPES, type CanvasNode } from '@/features/canvas/domain/canvasNodes'
+import { canvasNodeDefinitions } from '@/features/canvas/domain/nodeRegistry'
 
 import {
   partitionCanvasImageCapabilities,
@@ -69,6 +70,26 @@ describe('图片能力工具条响应式容量', () => {
       disabledReasonKey === 'imageCapabilities.unavailable.sourceNotReady'
     ))).toBe(true)
     expect(partitionCanvasImageCapabilities(actions, 4).inline).toEqual([])
+  })
+
+  it.each([
+    CANVAS_NODE_TYPES.imageEdit,
+    CANVAS_NODE_TYPES.panoramaGen,
+    CANVAS_NODE_TYPES.relightGen,
+    CANVAS_NODE_TYPES.upscaleGen,
+    CANVAS_NODE_TYPES.portraitTextureGen,
+    CANVAS_NODE_TYPES.elementEditGen,
+    CANVAS_NODE_TYPES.storyboardGen,
+    CANVAS_NODE_TYPES.multiAngleGen,
+    CANVAS_NODE_TYPES.layerSeparationGen,
+  ])('%s 尚无结果时不显示空图片能力菜单', (nodeType) => {
+    const generator: CanvasNode = {
+      id: `generator-${nodeType}`,
+      type: nodeType,
+      position: { x: 0, y: 0 },
+      data: canvasNodeDefinitions[nodeType].createDefaultData(),
+    }
+    expect(resolveCanvasImageCapabilityActionsForSourceNode(generator)).toEqual([])
   })
 
   it('完全不适用的非图片节点不显示图片能力', () => {

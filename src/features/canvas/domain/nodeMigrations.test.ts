@@ -17,6 +17,10 @@ import {
   migrateLayerStackResultData,
   resetTransientNodeRuntimeState,
 } from './nodeMigrations';
+import {
+  PANORAMA_DEFAULT_PROMPT,
+  PANORAMA_DEFAULT_PROMPT_VERSION,
+} from '../capabilities/panoramaPolicy';
 
 beforeAll(async () => {
   await loadRealModelsIntoRegistry();
@@ -47,7 +51,7 @@ describe('migrateExportImageResultKind', () => {
 });
 
 describe('migratePanoramaGenerationData', () => {
-  it('恢复能力固定字段、兼容模型参数并限制为单张内联参考图', () => {
+  it('恢复能力固定字段、默认提示词、兼容模型参数并限制为单张内联参考图', () => {
     const data: DynamicValueMap = {
       capabilityId: 'broken-capability',
       promptTemplateVersion: 'broken-template',
@@ -57,6 +61,7 @@ describe('migratePanoramaGenerationData', () => {
         apimartGptImage2Resolution: '1K',
         apimartGptImage2Count: 4,
       },
+      prompt: '',
       mediaInputs: {
         image: ['first.png', 'second.png'],
       },
@@ -70,17 +75,31 @@ describe('migratePanoramaGenerationData', () => {
       modelId: 'apimart-gpt-image-2',
       params: {
         apimartGptImage2AspectRatio: '2:1',
-        apimartGptImage2Resolution: '2K',
+        apimartGptImage2Resolution: '1K',
         apimartGptImage2Count: 1,
       },
       mediaInputs: { image: ['first.png'] },
       fixedSemanticParams: {
         projection: 'equirectangular',
         aspectRatio: '2:1',
-        resolution: '2K',
         outputCount: 1,
       },
+      prompt: PANORAMA_DEFAULT_PROMPT,
+      defaultPromptVersion: PANORAMA_DEFAULT_PROMPT_VERSION,
     });
+  });
+
+  it('默认提示词只迁移一次，用户主动清空后不会再次回填', () => {
+    const data: DynamicValueMap = {
+      modelId: 'apimart-gpt-image-2',
+      prompt: '',
+      defaultPromptVersion: PANORAMA_DEFAULT_PROMPT_VERSION,
+    };
+
+    migratePanoramaGenerationData(data);
+
+    expect(data.prompt).toBe('');
+    expect(data.defaultPromptVersion).toBe(PANORAMA_DEFAULT_PROMPT_VERSION);
   });
 });
 

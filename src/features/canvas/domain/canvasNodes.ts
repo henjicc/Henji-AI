@@ -276,6 +276,8 @@ export interface PanoramaGenerationNodeData extends ImageEditNodeData {
     | 'panorama-equirectangular-reference-v1';
   /** 节点创建时固化的能力语义，便于项目重开后解释历史配置。 */
   fixedSemanticParams: DynamicValueMap;
+  /** 默认可编辑提示词只自动写入一次；用户清空后不会再次回填。 */
+  defaultPromptVersion?: 'panorama-user-default-v1';
 }
 
 export interface UpscaleGenerationNodeData extends ImageEditNodeData {

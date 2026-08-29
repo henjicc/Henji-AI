@@ -48,7 +48,7 @@ describe('全景能力生成准备', () => {
     expect(prepared.prompt).toContain('严格 2:1');
     expect(prepared.params).toMatchObject({
       apimartGptImage2AspectRatio: '2:1',
-      apimartGptImage2Resolution: '2K',
+      apimartGptImage2Resolution: '1K',
       apimartGptImage2Count: 1,
     });
     expect(prepared.params).not.toHaveProperty('output_format');

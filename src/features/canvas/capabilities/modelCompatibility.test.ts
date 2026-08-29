@@ -12,6 +12,7 @@ import { builtInCanvasImageCapabilities } from './builtInCapabilities';
 import {
   mapCanvasCapabilityModelParams,
   resolveCanvasCapabilityModelCandidates,
+  resolveCanvasCapabilityVisibleParamIds,
 } from './modelCompatibility';
 
 function compose(runtime: ModelRuntimeDefinition): ModelDefinition {
@@ -122,6 +123,64 @@ describe('画布能力模型约束与语义参数映射', () => {
     const rejected = mapCanvasCapabilityModelParams(unknownProvider, panorama.modelPolicy);
     expect(rejected.compatible).toBe(false);
     expect(rejected.reasons.map(({ code }) => code)).toContain('provider-configuration');
+  });
+
+  it('保留合法的用户分辨率和质量选择，只固定 2:1 与单张', () => {
+    const apimart = models[0];
+    const mapped = mapCanvasCapabilityModelParams(apimart, panorama.modelPolicy, {
+      apimartGptImage2Version: 'official',
+      apimartGptImage2AspectRatio: '16:9',
+      apimartGptImage2Resolution: '4K',
+      apimartGptImage2Quality: 'high',
+      apimartGptImage2Count: 3,
+    });
+    expect(mapped.params).toMatchObject({
+      apimartGptImage2Version: 'official',
+      apimartGptImage2AspectRatio: '2:1',
+      apimartGptImage2Resolution: '4K',
+      apimartGptImage2Quality: 'high',
+      apimartGptImage2Count: 1,
+    });
+  });
+
+  it('只投影渠道、可选择分辨率和真实质量参数，不暴露固定比例与数量', () => {
+    const [apimart, kie, grsai, fal] = models;
+    expect(resolveCanvasCapabilityVisibleParamIds(
+      apimart,
+      panorama.modelPolicy,
+      panorama.promptPolicy,
+    )).toEqual(expect.arrayContaining([
+      'apimartGptImage2Version',
+      'apimartGptImage2Resolution',
+      'apimartGptImage2Quality',
+    ]));
+    expect(resolveCanvasCapabilityVisibleParamIds(
+      kie,
+      panorama.modelPolicy,
+      panorama.promptPolicy,
+    )).toEqual(['prompt', 'kieGptImage2Resolution']);
+    expect(resolveCanvasCapabilityVisibleParamIds(
+      grsai,
+      panorama.modelPolicy,
+      panorama.promptPolicy,
+    )).toEqual(['prompt', 'grsaiGptImage2Resolution']);
+    expect(resolveCanvasCapabilityVisibleParamIds(
+      fal,
+      panorama.modelPolicy,
+      panorama.promptPolicy,
+    )).toEqual(['prompt', 'falGptImage2Resolution']);
+  });
+
+  it('供应商没有目标默认档时选择最接近的合法分辨率', () => {
+    const synthetic: ModelDefinition = {
+      ...models[1],
+      meta: { ...models[1].meta, id: 'synthetic-kie' },
+      params: models[1].params.map((param) => param.id === 'kieGptImage2Resolution'
+        ? { ...param, options: [{ value: '1K', label: '1K' }, { value: '4K', label: '4K' }] }
+        : param),
+    };
+    const mapped = mapCanvasCapabilityModelParams(synthetic, panorama.modelPolicy);
+    expect(mapped.params.kieGptImage2Resolution).toBe('1K');
   });
 
   it('映射后的请求不发送 smart 或 output_format，并自动走生成/编辑路由', async () => {

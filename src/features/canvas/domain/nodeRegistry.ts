@@ -57,6 +57,7 @@ import {
 import { CANVAS_BG_HEX, CANVAS_TEXT_HEX } from '@/core/theme/colorTokens';
 import { DEFAULT_PPIO_MODEL_ID, DEFAULT_PPIO_PROVIDER_ID } from '@/core/llm/defaults';
 import type { ModelTag } from '@/core/types';
+import { createPlainTextPromptDocument } from '@/core/inputs/promptDocument';
 import { registry } from '@/core/ModelRegistry';
 import { CANVAS_IMAGE_CAPABILITY_IDS } from '../capabilities/types';
 import {
@@ -66,6 +67,8 @@ import {
 import {
   PANORAMA_MODEL_POLICY,
   PANORAMA_PROMPT_POLICY,
+  PANORAMA_DEFAULT_PROMPT,
+  PANORAMA_DEFAULT_PROMPT_VERSION,
   PANORAMA_TEXT_TEMPLATE_VERSION,
 } from '../capabilities/panoramaPolicy';
 import {
@@ -351,7 +354,8 @@ function createPanoramaGenerationDefaultData(): PanoramaGenerationNodeData {
     previewImageUrl: null,
     aspectRatio: '2:1',
     isSizeManuallyAdjusted: false,
-    prompt: '',
+    prompt: PANORAMA_DEFAULT_PROMPT,
+    promptDocument: createPlainTextPromptDocument(PANORAMA_DEFAULT_PROMPT),
     modelId,
     params,
     mediaInputs: {},
@@ -360,6 +364,7 @@ function createPanoramaGenerationDefaultData(): PanoramaGenerationNodeData {
     generationDurationMs: undefined,
     capabilityId: CANVAS_IMAGE_CAPABILITY_IDS.panorama,
     promptTemplateVersion: PANORAMA_TEXT_TEMPLATE_VERSION,
+    defaultPromptVersion: PANORAMA_DEFAULT_PROMPT_VERSION,
     fixedSemanticParams: { ...PANORAMA_PROMPT_POLICY.fixedSemanticParams },
   };
 }
