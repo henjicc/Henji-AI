@@ -1,7 +1,35 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { resolveKieImageSources } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
+
+type Hailuo02Resolution = '512P' | '768P' | '1080P';
+
+function resolveHailuo02Spec(params: JsonObject) {
+    const images = resolveKieImageSources(params);
+    const duration = Number(params.kieHailuo02Duration ?? params.duration) === 10 ? 10 : 6;
+    const requestedResolution = String(params.kieHailuo02Resolution ?? params.resolution ?? '768P');
+    let resolution: Hailuo02Resolution = requestedResolution === '512P' || requestedResolution === '1080P'
+        ? requestedResolution
+        : '768P';
+
+    // KIE 的 512P 只属于 Standard 图生视频；文生视频 Standard 固定按 768P 请求/计价。
+    if (images.length === 0 && resolution === '512P') {
+        resolution = '768P';
+    }
+    // 1080P 只有 6 秒 Pro 档，历史工程的 10s + 1080P 回收到合法的 10s + 768P。
+    if (duration === 10 && resolution === '1080P') {
+        resolution = '768P';
+    }
+
+    return {
+        images,
+        duration,
+        resolution,
+        usePro: duration === 6 && resolution === '1080P'
+    };
+}
+
 export const kieHailuo02Model = defineModel({
     meta: {
         id: 'kie-hailuo-02',
@@ -54,12 +82,9 @@ export const kieHailuo02Model = defineModel({
     endpoints: KIE_CREATE_TASK_ENDPOINT,
     request: {
         builder: (params) => {
-            const images = resolveKieImageSources(params);
+            const { images, duration, resolution, usePro } = resolveHailuo02Spec(params);
             const prompt = params.prompt || '';
-            const duration = params.kieHailuo02Duration || params.duration || 6;
-            const resolution = params.kieHailuo02Resolution || params.resolution || '768P';
             const promptOptimizer = params.kieHailuo02PromptOptimizer ?? params.prompt_optimizer ?? false;
-            const usePro = duration === 6 && resolution === '1080P';
             let model: string;
             if (images.length === 0) {
                 model = usePro
@@ -96,14 +121,12 @@ export const kieHailuo02Model = defineModel({
     pricing: {
         currency: '$',
         calculator: (params) => {
-            const duration = Number(params.kieHailuo02Duration) || 6;
-            const resolution = params.kieHailuo02Resolution || '768P';
-            const usePro = duration === 6 && resolution === '1080P';
+            const { duration, resolution, usePro } = resolveHailuo02Spec(params);
             if (usePro)
-                return 0.0475 * duration;
+                return 0.285;
             return (resolution === '512P' ? 0.01 : 0.025) * duration;
         },
-        description: 'Standard：768P $0.025/秒，512P $0.010/秒；Pro（1080P 固定 6 秒）：$0.0475/秒'
+        description: 'Standard：文生固定 768P $0.025/秒，图生 768P $0.025/秒、512P $0.010/秒；Pro（1080P 固定 6 秒）：$0.285/条'
     }
 });
 export default kieHailuo02Model;

@@ -1,6 +1,13 @@
 import { defineModel } from '../defineModel'
 import type { JsonValue, JsonObject } from '../../types/runtime'
 
+function calculateSpeechCharge(characterCount: number, spec: 'hd' | 'turbo'): number {
+  if (!Number.isFinite(characterCount) || characterCount <= 0) return 0
+
+  const fenPerTenThousandCharacters = spec === 'turbo' ? 200 : 350
+  return Math.ceil((characterCount * fenPerTenThousandCharacters) / 10000) / 100
+}
+
 export const minimaxSpeechModel = defineModel({
   meta: {
     id: 'ppio-minimax-speech',
@@ -353,20 +360,19 @@ export const minimaxSpeechModel = defineModel({
         let total = 9.9
         if (previewText.length > 0) {
           const previewModel = typeof clonePanel.previewModel === 'string' ? clonePanel.previewModel : ''
-          const rate = previewModel.includes('turbo') ? 2.0 : 3.5
-          total += Math.max(0.01, (previewText.length / 10000) * rate)
+          const previewSpec = previewModel.includes('turbo') ? 'turbo' : 'hd'
+          total += calculateSpeechCharge(previewText.length, previewSpec)
         }
-        return total
+        return Math.round(total * 100) / 100
       }
 
       if (text.length === 0) {
         return 0
       }
-      const rate = params.minimaxAudioSpec === 'turbo' ? 2.0 : 3.5
-      const calculated = (text.length / 10000) * rate
-      return calculated < 0.01 ? 0.01 : calculated
+      const spec = params.minimaxAudioSpec === 'turbo' ? 'turbo' : 'hd'
+      return calculateSpeechCharge(text.length, spec)
     },
-    description: 'HD ¥3.5000/万字符，Turbo ¥2.0000/万字符；声音克隆 ¥9.9/音色，同时试听按所选试听模型的 HD/Turbo 单价另计',
+    description: 'HD ¥3.5000/万字符，Turbo ¥2.0000/万字符；每次字符费向上取整到分；声音克隆 ¥9.9/音色，同时试听按所选试听模型的 HD/Turbo 单价另计',
   },
 })
 

@@ -1,6 +1,7 @@
 /** APIMart MiniMax H3 文生、首尾帧与多模态参考视频模型（运行时契约） */
 
 import { defineModel } from '../defineModel'
+import { countUploadedImages, resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence'
 import type { JsonValue, JsonObject } from '../../types/runtime'
 
 export const apimartMiniMaxH3Model = defineModel({
@@ -90,15 +91,9 @@ export const apimartMiniMaxH3Model = defineModel({
     calculator: (params) => {
       const duration = Math.min(15, Math.max(4, Math.round(Number(params.apimartMiniMaxH3Duration || 5))))
       const rate = params.apimartMiniMaxH3Resolution === '2K' ? 0.09144 : 0.05712
-      const uploadedImages = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths : []
-      const images = uploadedImages.length > 0 ? uploadedImages : (Array.isArray(params.images) ? params.images : [])
-      const uploadedVideos = Array.isArray(params.uploadedVideoFilePaths) ? params.uploadedVideoFilePaths : []
-      const videos = uploadedVideos.length > 0 ? uploadedVideos : (Array.isArray(params.videos) ? params.videos : [])
       const referenceMode = params.apimartMiniMaxH3Mode === 'reference-to-video'
-      const inputVideoDuration = referenceMode && typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
-        ? params.__firstVideoDurationSeconds * videos.length
-        : 0
-      const extraImages = referenceMode ? Math.max(0, images.length - 5) : 0
+      const inputVideoDuration = referenceMode ? resolveUploadedVideoDurationSeconds(params) : 0
+      const extraImages = referenceMode ? Math.max(0, countUploadedImages(params) - 5) : 0
       return (duration + inputVideoDuration) * rate + extraImages * 0.02288
     },
     description: '768P $0.05712/秒，2K $0.09144/秒；参考视频按时长同价计费，参考图前 5 张免费，之后 $0.02288/张'

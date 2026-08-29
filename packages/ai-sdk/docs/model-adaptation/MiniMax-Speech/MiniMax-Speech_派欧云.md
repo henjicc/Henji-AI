@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 音频（语音合成 + 声音克隆） |
 | 供应商 | 派欧云 PPIO |
 | 平台路由 | `/v3/[async/]minimax-speech-2.8-{hd,turbo}`、`/v3/minimax-voice-cloning` |
@@ -24,7 +24,7 @@
 
 定价页还列着 `MiniMax speech-2.6-hd` ¥3.5/万字符 与 `speech-2.6-turbo` ¥2/万字符，说明 **2.6 仍在售**，但文档站已不再提供 2.6 的 API 参考页，**路由无法确认**（PPIO 对所有未知路径统一返回 400，无法靠探测区分）。
 
-计费字符数以响应里的 `extra_info.usage_characters` 为准。
+计费字符数以响应里的 `extra_info.usage_characters` 为准。PPIO 公开商品注册表给出的结算表达式为 `(单价 × 字符数 + 999999) / 1000000`，即每次请求按实际字符费**向上取整到人民币分**；不能只做“最低 ¥0.01”而保留分以下的小数。
 
 ## 2. 声音克隆 `/v3/minimax-voice-cloning`
 
@@ -57,7 +57,7 @@ speech-2.6-hd | speech-2.6-turbo | speech-2.8-hd | speech-2.8-turbo
 
 ### 计费
 
-¥9.9 / 音色。**试听单独计费**——文档明确写「试听将根据字符数正常收取语音合成费用，定价与 T2A 各接口一致」，即传了 `text` 会额外按 HD ¥3.5/万字符或 Turbo ¥2/万字符扣费。
+¥9.9 / 音色。**试听单独计费**——文档明确写「试听将根据字符数正常收取语音合成费用，定价与 T2A 各接口一致」，即传了 `text` 会额外按 HD ¥3.5/万字符或 Turbo ¥2/万字符扣费。试听字符费也按单次请求向上取整到分，再与 ¥9.9 音色费相加；例如 Turbo 60 字符原始金额 ¥0.012，实际计为 ¥0.02，总计 ¥9.92。
 
 ## 3. 语音合成（同步）
 
@@ -167,3 +167,4 @@ speech-2.6-hd | speech-2.6-turbo | speech-2.8-hd | speech-2.8-turbo
 | Speech 2.8 Turbo 同步 | https://ppio.com/docs/models/reference-minimax-speech-2.8-turbo | 否 |
 | Speech 2.8 Turbo 异步 | https://ppio.com/docs/models/reference-minimax-speech-2.8-turbo-async | 否 |
 | 定价页（音频 tab） | https://ppio.com/pricing | 否 |
+| 模型注册表（含计费表达式） | https://api-server.ppio.com/v1/product/multimodal-model/list?returnSchema=true | 否 |

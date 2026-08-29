@@ -7,6 +7,7 @@ export interface PriceEstimateParamsInput {
   uploadedFilePaths: string[]
   uploadedVideos: string[]
   uploadedVideoFilePaths: string[]
+  uploadedVideoDurations?: number[]
   uploadedAudios: string[]
   uploadedAudioFilePaths: string[]
   uploadedVideoDuration: number
@@ -37,6 +38,15 @@ export function resolvePriceEstimateVideoDuration(
 }
 
 export function buildPriceEstimateParams(input: PriceEstimateParamsInput): DynamicValueMap {
+  const firstVideoDuration = resolvePriceEstimateVideoDuration(input)
+  const videoCount = Math.max(input.uploadedVideos.length, input.uploadedVideoFilePaths.length)
+  const providedDurations = input.uploadedVideoDurations?.filter(
+    (duration) => Number.isFinite(duration) && duration > 0
+  ) ?? []
+  const videoDurations = providedDurations.length === videoCount
+    ? providedDurations
+    : (videoCount === 1 && firstVideoDuration !== undefined ? [firstVideoDuration] : undefined)
+
   return {
     ...input.modelParams,
     prompt: input.prompt,
@@ -53,7 +63,9 @@ export function buildPriceEstimateParams(input: PriceEstimateParamsInput): Dynam
     uploadedVideoDuration: input.uploadedVideoDuration,
     uploadedVideoTrimStart: input.uploadedVideoTrimStart,
     uploadedVideoTrimEnd: input.uploadedVideoTrimEnd,
-    __firstVideoDurationSeconds: resolvePriceEstimateVideoDuration(input),
+    __firstVideoDurationSeconds: firstVideoDuration,
+    __videoDurationSeconds: videoDurations,
+    __totalVideoDurationSeconds: videoDurations?.reduce((total, duration) => total + duration, 0),
   }
 }
 
@@ -65,6 +77,7 @@ export function usePriceEstimateParams(input: PriceEstimateParamsInput): Dynamic
     uploadedFilePaths,
     uploadedVideos,
     uploadedVideoFilePaths,
+    uploadedVideoDurations,
     uploadedAudios,
     uploadedAudioFilePaths,
     uploadedVideoDuration,
@@ -79,6 +92,7 @@ export function usePriceEstimateParams(input: PriceEstimateParamsInput): Dynamic
     uploadedFilePaths,
     uploadedVideos,
     uploadedVideoFilePaths,
+    uploadedVideoDurations,
     uploadedAudios,
     uploadedAudioFilePaths,
     uploadedVideoDuration,
@@ -91,6 +105,7 @@ export function usePriceEstimateParams(input: PriceEstimateParamsInput): Dynamic
     uploadedFilePaths,
     uploadedVideos,
     uploadedVideoFilePaths,
+    uploadedVideoDurations,
     uploadedAudios,
     uploadedAudioFilePaths,
     uploadedVideoDuration,

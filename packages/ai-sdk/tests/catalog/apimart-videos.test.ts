@@ -327,6 +327,45 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 视频模型', () => {
     })).toBeCloseTo(3.4488)
   })
 
+  it.each([
+    [apimartMiniMaxH3Model, 'apimartMiniMaxH3Mode', 'apimartMiniMaxH3Duration', 'apimartMiniMaxH3Resolution', '2K', 0.09144],
+    [apimartSeedance20Model, 'apimartSeedance20Mode', 'apimartSeedance20Duration', 'apimartSeedance20Resolution', '720p', 0.08584],
+    [apimartSeedance20FastModel, 'apimartSeedance20FastMode', 'apimartSeedance20FastDuration', 'apimartSeedance20FastResolution', '720p', 0.05128],
+    [apimartSeedance20MiniModel, 'apimartSeedance20MiniMode', 'apimartSeedance20MiniDuration', 'apimartSeedance20MiniResolution', '720p', 0.01384],
+    [apimartSeedance25Model, 'apimartSeedance25Mode', 'apimartSeedance25Duration', 'apimartSeedance25Resolution', '1080p', 0.22992],
+  ] as const)('$meta.id 按所有参考视频真实总时长计价并让空数组回退到 uploadedVideos', (
+    model, modeParam, durationParam, resolutionParam, resolution, rate
+  ) => {
+    expect(model.pricing.calculator?.({
+      [modeParam]: 'reference-to-video',
+      [durationParam]: 5,
+      [resolutionParam]: resolution,
+      uploadedVideoFilePaths: [],
+      videos: [],
+      uploadedVideos: ['first.mp4', 'second.mp4'],
+      __videoDurationSeconds: [3, 7],
+    })).toBeCloseTo(15 * rate)
+  })
+
+  it('参考视频逐段时长不完整时使用总时长，并保留旧首段时长兼容', () => {
+    const base = {
+      apimartMiniMaxH3Mode: 'reference-to-video',
+      apimartMiniMaxH3Duration: 5,
+      apimartMiniMaxH3Resolution: '2K',
+      uploadedVideoFilePaths: ['first.mp4', 'second.mp4'],
+    }
+    expect(apimartMiniMaxH3Model.pricing.calculator?.({
+      ...base,
+      __videoDurationSeconds: [3],
+      __totalVideoDurationSeconds: 10,
+      __firstVideoDurationSeconds: 99,
+    })).toBeCloseTo(15 * 0.09144)
+    expect(apimartMiniMaxH3Model.pricing.calculator?.({
+      ...base,
+      __firstVideoDurationSeconds: 4,
+    })).toBeCloseTo(13 * 0.09144)
+  })
+
   it.each(models)('$meta.id 不发送项目隐藏字段', (model) => {
     const request = model.request?.builder?.({ prompt: 'test' })
     expect(request).not.toHaveProperty('seed')

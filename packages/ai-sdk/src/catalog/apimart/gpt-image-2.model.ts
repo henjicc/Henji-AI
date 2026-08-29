@@ -157,14 +157,18 @@ export const apimartGptImage2Model = defineModel({
           ? 0.021 : (params.apimartGptImage2Resolution === '2K' ? 0.014 : 0.0085)
       }
       const quality = String(params.apimartGptImage2Quality || 'auto')
-      const oneK: Record<string, number> = { auto: 0.0048, low: 0.0048, medium: 0.0424, high: 0.1688 }
-      const resolutionMultiplier = params.apimartGptImage2Resolution === '4K'
-        ? 8
-        : (params.apimartGptImage2Resolution === '2K' ? 4 : 1)
+      const estimates: Record<string, Record<string, number>> = {
+        '1K': { auto: 0.00488, low: 0.00488, medium: 0.04232, high: 0.16872 },
+        '2K': { auto: 0.00968, low: 0.00968, medium: 0.08576, high: 0.34264 },
+        '4K': { auto: 0.01592, low: 0.01592, medium: 0.1424, high: 0.56936 }
+      }
+      const resolution = ['2K', '4K'].includes(String(params.apimartGptImage2Resolution))
+        ? String(params.apimartGptImage2Resolution)
+        : '1K'
       const count = Math.min(4, Math.max(1, Math.round(Number(params.apimartGptImage2Count || 1))))
-      return count * (oneK[quality] ?? oneK.auto) * resolutionMultiplier
+      return count * (estimates[resolution][quality] ?? estimates[resolution].auto)
     },
-    description: 'EXT：1K $0.0085、2K $0.014、4K $0.021/张；官方渠道按 token 结算，显示值为不含输入 token 的估算'
+    description: 'EXT：1K $0.0085、2K $0.014、4K $0.021/张；官方渠道按 1K/2K/4K × low/medium/high 当前输出估价，auto 按 low，均不含提示词与参考图输入 token'
   }
 })
 

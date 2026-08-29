@@ -6,6 +6,7 @@ import { kiePresentation } from '@/models/presentation/kie'
 import { catalogIndex, type JsonObject, type ModelRuntimeDefinition } from '@henjicc/ai-sdk'
 import { kieGptImage2Model as kieGptImage2Runtime } from '../../src/catalog/kie/gpt-image-2.model'
 import { kieGrokImagine20Model as kieGrokImagine20Runtime } from '../../src/catalog/kie/grok-imagine-2.0.model'
+import { kieGrokImagineModel as kieGrokImagineRuntime } from '../../src/catalog/kie/grok-imagine.model'
 import { kieNanoBanana2Model as kieNanoBanana2Runtime } from '../../src/catalog/kie/nano-banana-2.model'
 import { kieNanoBanana2LiteModel as kieNanoBanana2LiteRuntime } from '../../src/catalog/kie/nano-banana-2-lite.model'
 import { kieNanoBananaProModel as kieNanoBananaProRuntime } from '../../src/catalog/kie/nano-banana-pro.model'
@@ -19,6 +20,7 @@ const compose = (runtime: ModelRuntimeDefinition) =>
 
 const kieGptImage2Model = compose(kieGptImage2Runtime)
 const kieGrokImagine20Model = compose(kieGrokImagine20Runtime)
+const kieGrokImagineModel = compose(kieGrokImagineRuntime)
 const kieNanoBanana2Model = compose(kieNanoBanana2Runtime)
 const kieNanoBanana2LiteModel = compose(kieNanoBanana2LiteRuntime)
 const kieNanoBananaProModel = compose(kieNanoBananaProRuntime)
@@ -233,6 +235,14 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 图片模型', () => {
       input: { prompt: 'replace sky', aspect_ratio: 'auto', image_urls: ['a.png', 'b.png'] }
     })
     expect(kieGrokImagine20Model.inputLimits).toMatchObject({ images: { max: 5 } })
+  })
+
+  it('Grok Imagine 质量模式按 $0.025 计一次 4 张输出', () => {
+    expect(kieGrokImagineModel.pricing.calculator?.({
+      kieGrokImagineMode: 'text-to-image',
+      kieGrokImagineQuality: 'quality'
+    })).toBe(0.025)
+    expect(kieGrokImagineModel.pricing.description).toContain('输出 4 张')
   })
 
   it('Z-Image 使用 Turbo 通用标识与 KIE 当前美元价格', () => {

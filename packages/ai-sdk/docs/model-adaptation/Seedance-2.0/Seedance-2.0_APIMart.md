@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | `seedance-2.0`（旧名 `seedance-2-0`） |
@@ -83,7 +83,7 @@ Asset URL 支持全部 Seedance 2.0 模型（`seedance-2.0` / `-fast` / `-mini`�
 
 ## 5. 价格
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页 `SEEDANCE-2.0`（2026-08-22，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页 `SEEDANCE-2.0`（2026-08-30 复核，1 Credit ≈ $0.1）。当前定价中心与模型页的秒价口径一致，未发现新的价格冲突。
 
 | 规格 | 我们的价格 |
 |---|---|
@@ -107,6 +107,7 @@ Asset URL 支持全部 Seedance 2.0 模型（`seedance-2.0` / `-fast` / `-mini`�
 - `generate_audio` **默认 `true`**（会出有声视频），与多数模型默认关闭相反。
 - `1080p` / `4k` **仅标准版支持**，Fast / Mini 传了会失败。
 - 有参考视频时计费按「输入 + 输出总时长」，成本估算不能只按输出时长算。
+- SDK 从 `uploadedVideoFilePaths` / `videos` / `uploadedVideos` 取非空且数量最完整的一组；空数组不遮蔽其他字段。宿主按顺序提供完整 `__videoDurationSeconds: number[]` 时求真实总和，数组不完整时改用 `__totalVideoDurationSeconds`，最后才兼容 `__firstVideoDurationSeconds × 视频数` 的旧近似估算。
 - Asset URL 是一整套独立的素材上传 + 审核流程，若要做数字人必须先接 `private-avatar` 端点。
 
 ## 7. 原始链接索引

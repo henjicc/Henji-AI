@@ -1,6 +1,7 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
 import { parseSeedreamLayerStack } from '../../structured-output';
+import { countUploadedImages } from '../shared/mediaPresence';
 const APIMART_IMAGE_ENDPOINT = '/v1/images/generations';
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '2:1', '1:2', '21:9'] as const;
 export const apimartSeedream50ProModel = defineModel({
@@ -133,15 +134,13 @@ export const apimartSeedream50ProModel = defineModel({
         currency: '$',
         calculator: (params) => {
             if (params.apimartSeedream50ProMode === 'layer-decomposition') {
-                return params.apimartSeedream50ProLayerSize === '1K' || params.apimartSeedream50ProLayerSize === '1.5K'
-                    ? 0.01464
-                    : 0.02928;
+                return Number.NaN;
             }
-            return params.apimartSeedream50ProResolution === '2K' ? 0.05856 : 0.02928;
+            const basePrice = params.apimartSeedream50ProResolution === '2K' ? 0.0585 : 0.02925;
+            const referenceImageSurcharge = Math.max(0, countUploadedImages(params) - 1) * 0.00195;
+            return basePrice + referenceImageSurcharge;
         },
-        // 模型专属页（apimart.ai/zh/model/seedream-5-0-pro）价格表：1K 与 1.5K 同价 $0.02928，
-        // 汇总定价页（/zh/pricing）写的 1.5K $0.036 与之矛盾；按调研规范优先取模型专属页的逐档价格。
-        description: '生成/编辑：1K/1.5K $0.02928、2K $0.05856/张；图层拆分：1K/1.5K $0.01464、2K/自动 $0.02928/输出图层'
+        description: '生成/编辑：1K/1.5K $0.02925、2K $0.0585/张；第 2 张起每张参考图加 $0.00195；图层拆分按实际输出层计费（1K/1.5K $0.014625，2K/自动 $0.02925/层），完成前暂不可估算总价'
     }
 });
 export default apimartSeedream50ProModel;

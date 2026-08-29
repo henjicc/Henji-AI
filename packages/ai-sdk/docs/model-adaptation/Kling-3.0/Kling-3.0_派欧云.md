@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | 派欧云 PPIO（聚合平台） |
 | 平台路由 | `/v3/async/kling-v3.0-{std,pro,4k}-{t2v,i2v}` + `/v3/async/kling-v3.0-motion-control` |
@@ -36,7 +36,7 @@
 
 > 代码此前把 4K 写成 ¥2.94/¥4.41、动作控制写成 ¥0.9135/¥1.218，与定价页的 ¥3.0/¥4.5 与 ¥0.9/¥1.2 不符，已修正。Standard 与 Pro 两档原本就是对的。
 >
-> 动作控制在 `character_orientation=video` 时输出时长跟随参考视频（最长 30 秒），提交前无法得知，计价只能按当前时长参数估算。
+> 动作控制在 `character_orientation=video` 时输出时长跟随参考视频（最长 30 秒）。宿主在提交前读取视频元数据，通过运行时计价字段 `__videoDurationSeconds`（优先）、`__totalVideoDurationSeconds`（次选）传入真实时长；SDK 仍兼容旧字段 `__firstVideoDurationSeconds`。这些字段只参与估价，不进入 PPIO 请求体。若视频元数据确实不可读，才退回当前 `duration` 的兜底估计。
 
 计价函数必须同时读取「档位（std/pro/4k）」和「`sound`」两个维度，缺一个就会算错。
 

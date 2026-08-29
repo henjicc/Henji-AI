@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-26 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | 派欧云 PPIO |
 | 平台路由 | `/v3/async/wan2.7-{t2v,i2v,r2v,videoedit}` |
@@ -88,7 +88,7 @@ Wan 2.7 是**扁平结构**，没有 `{input, parameters}` 嵌套。Wan 2.5 与 
 |---|---|---|---|---|
 | `video_url` | string | ✅ | — | mp4/mov，2–10 秒，[240, 4096]px，≤100MB |
 | `prompt` | string | | — | 0–5000，编辑指令 |
-| `duration` | integer | | `0` | **`0` = 沿用原视频时长**；范围 `[0, 10]` |
+| `duration` | integer | | `0` | **`0` = 沿用原视频时长**；范围 `[0, 10]`。此时估价读取宿主探测出的输入视频真实时长。 |
 | `resolution` | string | | `1080P` | `720P` / `1080P` |
 | `ratio` | string | | — | `16:9` / `9:16` / `1:1` / `4:3` / `3:4`；不传则近似原比例 |
 | `audio_setting` | string | | `auto` | `auto` / `origin` |
@@ -108,7 +108,7 @@ Wan 2.7 是**扁平结构**，没有 `{input, parameters}` 嵌套。Wan 2.5 与 
 - 四个变体的参数集合差异很大（`media` 数组 vs 扁平 URL 字段、`duration` 上限 15/10/10、`size` vs `resolution` vs `ratio`），建议用显式 `mode` 参数而不是自动路由。
 - `prompt` 长度上限在四个变体里是 1500 / 5000 / 1500 / 5000，不统一。
 - r2v 的 `audio` 字段影响费用，必须接入计价。
-- `videoedit` 的 `duration=0` 是有意义的默认值（沿用原时长），不能当成「未设置」处理。
+- `videoedit` 的 `duration=0` 是有意义的默认值（沿用原时长），不能当成「未设置」处理。SDK 估价优先读取 `__videoDurationSeconds`，其次读取 `__totalVideoDurationSeconds`，并兼容旧字段 `__firstVideoDurationSeconds`；这些仅是运行时计价字段，不进入供应商请求。视频元数据不可读时才使用 5 秒兜底估计。
 - 项目默认隐藏 `seed` 与负面提示词，按约定**不显示、不请求**。
 
 ## 5. 原始链接索引

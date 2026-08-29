@@ -1,5 +1,6 @@
 import { defineModel } from "../defineModel";
 import type { JsonValue, JsonObject } from "../../types/runtime";
+import { countUploadedImages } from '../shared/mediaPresence';
 const APIMART_IMAGE_ENDPOINT = '/v1/images/generations';
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '2:1', '1:2', '21:9'] as const;
 export const apimartSeedream50LiteModel = defineModel({
@@ -68,11 +69,11 @@ export const apimartSeedream50LiteModel = defineModel({
     pricing: {
         currency: '$',
         calculator: (params) => {
-            const images = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths.length : (Array.isArray(params.images) ? params.images.length : 0);
+            const images = countUploadedImages(params);
             const requested = Math.min(15, Math.max(1, Math.round(Number(params.apimartSeedream50LiteCount || 1))));
-            return Math.max(1, Math.min(requested, 15 - Math.min(14, images))) * 0.0228;
+            return Math.max(1, Math.min(requested, 15 - Math.min(14, images))) * 0.02275;
         },
-        description: '$0.0228/张；参考图数量与生成数量之和不超过 15'
+        description: '$0.02275/张；参考图数量与生成数量之和不超过 15'
     }
 });
 export default apimartSeedream50LiteModel;

@@ -16,10 +16,11 @@ import type { GenerateResult, ProgressStatus } from '@/core/providers/base'
 import type { ModelDefinition, ProviderId } from '@/core/types'
 import { UploadService } from '@/services/upload/UploadService'
 import { readImageInfo } from '@/commands/image'
-import { compressVideoToFit, readVideoInfo, trimVideoSource } from '@/commands/video'
+import { compressVideoToFit, trimVideoSource } from '@/commands/video'
 import { resolveInputLimits } from '@/core/inputs/inputLimits'
 import { stripDerivedMediaState } from '@/core/params/derivedMediaState'
 import { recordApiTrace } from '@/utils/testMode'
+import { attachVideoDurations, resolveGenerationVideoSources } from './generationVideoDurations'
 import {
 
   aiCancelTask,
@@ -123,19 +124,7 @@ function getFirstImageSource(params: DynamicValueMap): string | null {
 }
 
 function getFirstVideoSource(params: DynamicValueMap): string | null {
-  const candidates: DynamicValue[] = [params.uploadedVideoFilePaths, params.videos]
-  for (const candidate of candidates) {
-    if (!isStringArray(candidate)) {
-      continue
-    }
-
-    const first = candidate.find((item) => item.trim().length > 0)
-    if (first) {
-      return first
-    }
-  }
-
-  return null
+  return resolveGenerationVideoSources(params)[0] ?? null
 }
 
 function replaceVideoSourceInParams(params: DynamicValueMap, oldSource: string, newSource: string): DynamicValueMap {
@@ -211,38 +200,6 @@ async function trimFirstVideoIfSelected(params: DynamicValueMap): Promise<Dynami
     logger.warn('[GenerationService] 视频裁剪失败，使用未裁剪版本继续生成', error)
     return params
   }
-}
-
-async function readVideoDurationSeconds(videoSource: string): Promise<number | null> {
-  try {
-    const info = await readVideoInfo(videoSource)
-    return info.durationSeconds > 0 ? info.durationSeconds : null
-  } catch {
-    return null
-  }
-}
-
-/**
- * request.builder 在 Node VM 中执行、无法读取真实视频时长；这里在生成前统一探测
- * "第一个视频输入"的真实时长，写入 __firstVideoDurationSeconds，供需要 start/end
- * 截取秒数的视频模型（如 Gemini Omni 的 video_list）直接读取，而不必各自重复探测。
- */
-async function attachFirstVideoDuration(params: DynamicValueMap): Promise<DynamicValueMap> {
-  const firstVideoSource = getFirstVideoSource(params)
-  if (!firstVideoSource) {
-    if (params.__firstVideoDurationSeconds === undefined) {
-      return params
-    }
-    const next = { ...params }
-    delete next.__firstVideoDurationSeconds
-    return next
-  }
-
-  const durationSeconds = await readVideoDurationSeconds(firstVideoSource)
-  if (durationSeconds === null) {
-    return params
-  }
-  return { ...params, __firstVideoDurationSeconds: durationSeconds }
 }
 
 type SmartAspectResolveReason = 'reference-image' | 'fallback-square' | 'fallback-nearest'
@@ -575,7 +532,7 @@ export class GenerationService {
       const normalized = await normalizeSmartAspectParams(model, sourceParams)
       const paramsWithCompressedVideo = await compressFirstVideoIfNeeded(model, normalized.params)
       const paramsWithTrimmedVideo = await trimFirstVideoIfSelected(paramsWithCompressedVideo)
-      const paramsWithVideoDuration = await attachFirstVideoDuration(paramsWithTrimmedVideo)
+      const paramsWithVideoDuration = await attachVideoDurations(paramsWithTrimmedVideo)
       const runtimeParams = attachUploadRuntimeParams(paramsWithVideoDuration)
       const preflightSummary = buildGeneratePreflightSummary(sourceParams, runtimeParams, normalized.report)
       logger.info('[GenerationService] 开始生成', {

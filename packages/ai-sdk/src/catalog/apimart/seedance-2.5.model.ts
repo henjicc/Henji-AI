@@ -1,4 +1,5 @@
 import { defineModel } from "../defineModel";
+import { countUploadedVideos, resolveUploadedVideoDurationSeconds } from '../shared/mediaPresence';
 import type { JsonValue, JsonObject } from "../../types/runtime";
 export const apimartSeedance25Model = defineModel({
     meta: {
@@ -130,13 +131,8 @@ export const apimartSeedance25Model = defineModel({
                 '1080p': { noVideo: 0.38488, withVideo: 0.22992 }
             };
             const rate = rates[String(params.apimartSeedance25Resolution || '720p')] ?? rates['720p'];
-            const videos = Array.isArray(params.uploadedVideoFilePaths)
-                ? params.uploadedVideoFilePaths
-                : (Array.isArray(params.videos) ? params.videos : []);
-            const hasVideo = params.apimartSeedance25Mode === 'reference-to-video' && videos.length > 0;
-            const inputDuration = typeof params.__firstVideoDurationSeconds === 'number' && params.__firstVideoDurationSeconds > 0
-                ? params.__firstVideoDurationSeconds * videos.length
-                : 0;
+            const hasVideo = params.apimartSeedance25Mode === 'reference-to-video' && countUploadedVideos(params) > 0;
+            const inputDuration = hasVideo ? resolveUploadedVideoDurationSeconds(params) : 0;
             return (duration + (hasVideo ? inputDuration : 0)) * (hasVideo ? rate.withVideo : rate.noVideo);
         },
         description: '无/有视频输入每秒：480p $0.09608/$0.0576，720p $0.216/$0.1296，1080p $0.38488/$0.22992；有视频时按输入与输出总时长计费，自动时长按 30 秒预估'

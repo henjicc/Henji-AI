@@ -5,6 +5,8 @@ import { composeModelDefinition } from '@/core/composeModelDefinition'
 import { kiePresentation } from '@/models/presentation/kie'
 import { catalogIndex, type JsonObject, type ModelRuntimeDefinition } from '@henjicc/ai-sdk'
 import { kieGeminiOmniVideoModel as kieGeminiOmniVideoRuntime } from '../../src/catalog/kie/gemini-omni-video.model'
+import { kieHailuo02Model as kieHailuo02Runtime } from '../../src/catalog/kie/hailuo-02.model'
+import { kieHailuo23Model as kieHailuo23Runtime } from '../../src/catalog/kie/hailuo-2-3.model'
 import { kieKling30Model as kieKling30Runtime } from '../../src/catalog/kie/kling-3.0.model'
 import { kieKling30OmniModel as kieKling30OmniRuntime } from '../../src/catalog/kie/kling-3.0-omni.model'
 import { kieKling30TurboModel as kieKling30TurboRuntime } from '../../src/catalog/kie/kling-3.0-turbo.model'
@@ -18,6 +20,8 @@ const compose = (runtime: ModelRuntimeDefinition) =>
   composeModelDefinition(runtime, kiePresentation[runtime.meta.id])
 
 const kieGeminiOmniVideoModel = compose(kieGeminiOmniVideoRuntime)
+const kieHailuo02Model = compose(kieHailuo02Runtime)
+const kieHailuo23Model = compose(kieHailuo23Runtime)
 const kieKling30Model = compose(kieKling30Runtime)
 const kieKling30OmniModel = compose(kieKling30OmniRuntime)
 const kieKling30TurboModel = compose(kieKling30TurboRuntime)
@@ -69,6 +73,76 @@ describe('packages/ai-sdk/docs/model-adaptation KIE 视频模型', () => {
       uploadedVideoFilePaths: ['video.mp4'],
       kieGeminiOmniVideoResolution: '4k'
     })).toBe(1.26)
+  })
+
+  it('Hailuo 02 文生 512P 按实际 768P 路由计价', () => {
+    const textParams = {
+      prompt: 'text',
+      kieHailuo02Duration: 6,
+      kieHailuo02Resolution: '512P'
+    }
+    expect(kieHailuo02Model.pricing.calculator?.(textParams)).toBeCloseTo(0.15)
+    const textRequest = kieHailuo02Model.request?.builder?.(textParams)
+    expect(textRequest).toMatchObject({
+      model: 'hailuo/02-text-to-video-standard',
+      input: { prompt: 'text', duration: '6' }
+    })
+    expect(textRequest?.input).not.toHaveProperty('resolution')
+
+    const imageParams = { ...textParams, uploadedFilePaths: ['first.png'] }
+    expect(kieHailuo02Model.pricing.calculator?.(imageParams)).toBeCloseTo(0.06)
+    expect(kieHailuo02Model.request?.builder?.(imageParams)).toMatchObject({
+      model: 'hailuo/02-image-to-video-standard',
+      input: { image_url: 'first.png', resolution: '512P' }
+    })
+  })
+
+  it('Hailuo 02 将非法 10s 1080P 回收到 10s 768P', () => {
+    const params = {
+      prompt: 'legacy',
+      uploadedFilePaths: ['first.png'],
+      kieHailuo02Duration: 10,
+      kieHailuo02Resolution: '1080P'
+    }
+    expect(kieHailuo02Model.pricing.calculator?.(params)).toBe(0.25)
+    expect(kieHailuo02Model.request?.builder?.(params)).toMatchObject({
+      model: 'hailuo/02-image-to-video-standard',
+      input: { duration: '10', resolution: '768P' }
+    })
+  })
+
+  it('Hailuo 2.3 只按官方六个合法组合计价', () => {
+    const cases = [
+      ['standard', 6, '768P', 0.15],
+      ['standard', 10, '768P', 0.25],
+      ['standard', 6, '1080P', 0.25],
+      ['pro', 6, '768P', 0.225],
+      ['pro', 10, '768P', 0.45],
+      ['pro', 6, '1080P', 0.4]
+    ] as const
+    for (const [mode, duration, resolution, price] of cases) {
+      expect(kieHailuo23Model.pricing.calculator?.({
+        kieHailuo23Mode: mode,
+        kieHailuo23Duration: duration,
+        kieHailuo23Resolution: resolution
+      })).toBe(price)
+    }
+  })
+
+  it('Hailuo 2.3 将 Standard/Pro 的非法 10s 1080P 回收到 768P', () => {
+    for (const [mode, expectedPrice] of [['standard', 0.25], ['pro', 0.45]] as const) {
+      const params = {
+        prompt: mode,
+        uploadedFilePaths: ['first.png'],
+        kieHailuo23Mode: mode,
+        kieHailuo23Duration: 10,
+        kieHailuo23Resolution: '1080P'
+      }
+      expect(kieHailuo23Model.pricing.calculator?.(params)).toBe(expectedPrice)
+      expect(kieHailuo23Model.request?.builder?.(params)).toMatchObject({
+        input: { duration: '10', resolution: '768P' }
+      })
+    }
   })
 
   it('Seedance 2.0 Fast/Mini 使用是否带视频的最新秒价', () => {

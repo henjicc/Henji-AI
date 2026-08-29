@@ -56,6 +56,45 @@ export function countUploadedVideos(params: JsonObject): number {
   return maxMediaSourceCount([params.uploadedVideoFilePaths, params.videos, params.uploadedVideos])
 }
 
+function cleanPositiveDurations(candidate: JsonValue): number[] {
+  if (!Array.isArray(candidate)) return []
+  return candidate.flatMap((item) => (
+    typeof item === 'number' && Number.isFinite(item) && item > 0 ? [item] : []
+  ))
+}
+
+/**
+ * 返回所有视频输入的计费总时长。完整逐段时长优先，其次使用宿主给出的总时长；
+ * 旧宿主只有首段时长时保留“首段 × 数量”的兼容估算，最后才使用调用方声明的单段兜底。
+ */
+export function resolveUploadedVideoDurationSeconds(
+  params: JsonObject,
+  fallbackPerVideoSeconds = 0
+): number {
+  const videoCount = countUploadedVideos(params)
+  if (videoCount === 0) return 0
+
+  const durations = cleanPositiveDurations(params.__videoDurationSeconds)
+  if (durations.length === videoCount) {
+    return durations.reduce((total, duration) => total + duration, 0)
+  }
+
+  const totalDuration = params.__totalVideoDurationSeconds
+  if (typeof totalDuration === 'number' && Number.isFinite(totalDuration) && totalDuration > 0) {
+    return totalDuration
+  }
+
+  const firstDuration = params.__firstVideoDurationSeconds
+  if (typeof firstDuration === 'number' && Number.isFinite(firstDuration) && firstDuration > 0) {
+    return firstDuration * videoCount
+  }
+
+  const fallback = Number.isFinite(fallbackPerVideoSeconds) && fallbackPerVideoSeconds > 0
+    ? fallbackPerVideoSeconds
+    : 0
+  return fallback * videoCount
+}
+
 export function hasUploadedImage(params: JsonObject): boolean {
   return countUploadedImages(params) > 0
 }

@@ -3,6 +3,7 @@
 import { defineModel } from '../defineModel'
 import type { JsonValue, JsonObject } from '../../types/runtime'
 import { parseSeedreamLayerStack } from '../../structured-output'
+import { countUploadedImages } from '../shared/mediaPresence'
 
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] as const
 
@@ -132,19 +133,16 @@ export const volcengineSeedream50ProModel = defineModel({
     currency: '¥',
     calculator: (params) => {
       if (params.volcengineSeedream50ProMode === 'layer-decomposition') {
-        return params.volcengineSeedream50ProLayerSize === '1K' || params.volcengineSeedream50ProLayerSize === '1.5K'
-          ? 0.15
-          : 0.3
+        // 输出层数及每层实际像素档位都由模型结果决定，提交前不能给出可靠总价。
+        return Number.NaN
       }
       const output = params.volcengineSeedream50ProResolution === '1K' || params.volcengineSeedream50ProResolution === '1.5K'
         ? 0.3
         : 0.6
-      const inputs = Array.isArray(params.uploadedFilePaths)
-        ? params.uploadedFilePaths.length
-        : (Array.isArray(params.images) ? params.images.length : 0)
+      const inputs = countUploadedImages(params)
       return output + Math.max(0, inputs - 1) * 0.02
     },
-    description: '生成/编辑：1K/1.5K ¥0.30、2K ¥0.60/张，第 2 张起输入图 +¥0.02/张；图层拆分：1K/1.5K ¥0.15、2K/自动 ¥0.30/输出图层'
+    description: '生成/编辑：1K/1.5K ¥0.30、2K ¥0.60/张，第 2 张起输入图 +¥0.02/张；图层拆分按实际输出图层与像素档位计费，提交前总价暂不可估算（单层 1K/1.5K ¥0.15、2K/自动 ¥0.30）'
   }
 })
 

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | `seedance-2.0-fast` |
@@ -54,7 +54,7 @@
 
 ## 5. 价格
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页（2026-08-22，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页（2026-08-30 复核，1 Credit ≈ $0.1）。当前定价中心与模型页的秒价口径一致，未发现新的价格冲突。
 
 `SEEDANCE-2.0-FAST`（4 个档位）
 
@@ -76,6 +76,7 @@
 - `generate_audio` **默认 `true`**。
 - **`1080p` / `4k` 在本模型上不可用**，只有标准版 `seedance-2.0` 支持。
 - 有参考视频时计费按「输入 + 输出总时长」。
+- SDK 从 `uploadedVideoFilePaths` / `videos` / `uploadedVideos` 取非空且数量最完整的一组；空数组不遮蔽其他字段。宿主按顺序提供完整 `__videoDurationSeconds: number[]` 时求真实总和，数组不完整时改用 `__totalVideoDurationSeconds`，最后才兼容 `__firstVideoDurationSeconds × 视频数` 的旧近似估算。
 
 ## 7. 原始链接索引
 

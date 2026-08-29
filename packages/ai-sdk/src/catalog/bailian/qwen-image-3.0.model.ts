@@ -2,6 +2,7 @@
 
 import { defineModel } from '../defineModel'
 import type { JsonValue } from '../../types/runtime'
+import { countUploadedImages } from '../shared/mediaPresence'
 
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3'] as const
 
@@ -78,7 +79,7 @@ export const bailianQwenImage30Model = defineModel({
     currency: '¥',
     calculator: (params) => {
       const count = Math.min(6, Math.max(1, Math.round(Number(params.bailianQwenImage30Count || 1))))
-      const images = Array.isArray(params.uploadedFilePaths) ? params.uploadedFilePaths.length : (Array.isArray(params.images) ? params.images.length : 0)
+      const images = countUploadedImages(params)
       const outputPrice = params.bailianQwenImage30Variant === 'pro'
         ? (params.bailianQwenImage30Resolution === '2K' ? 0.5 : 0.25)
         : 0.18

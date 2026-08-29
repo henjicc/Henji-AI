@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
+import { modelscopeCustomModel } from '../../src/catalog/modelscope/modelscope-custom.model'
+import { replaceModelscopeCustomModels } from '../../src/catalog/modelscope/customModelRegistry'
 import { modelscopeQwenImageEdit2509Model } from '../../src/catalog/modelscope/qwen-image-edit-2509.model'
 import { buildModelscopeRequest, MODELSCOPE_CREATE_TASK_ENDPOINT, resolveModelscopeSize } from '../../src/catalog/modelscope/utils'
 
@@ -56,5 +58,35 @@ describe('buildModelscopeRequest 图片来源', () => {
       allowImage: true, baseSize: 1024, sizeBounds: { min: 64, max: 1664 },
     })
     expect(actual).toEqual(expected)
+  })
+})
+
+describe('魔搭自定义模型计价', () => {
+  afterEach(() => replaceModelscopeCustomModels([]))
+
+  it('使用保存模型时取得的 EstimatedMagicGrainCost', () => {
+    replaceModelscopeCustomModels([{
+      id: 'Qwen/Qwen-Image-2512',
+      name: 'Qwen Image 2512',
+      costTier: 'ultra',
+      magicGrainCost: 2,
+      modelType: { imageGeneration: true, imageEditing: false },
+    }])
+
+    expect(modelscopeCustomModel.pricing.calculator?.({
+      modelscopeCustomModel: 'Qwen/Qwen-Image-2512',
+    })).toBe(2)
+  })
+
+  it('旧记录或校验未知时返回不可估算，不再固定显示 1 魔粒', () => {
+    replaceModelscopeCustomModels([{
+      id: 'Acme/Unknown',
+      name: 'Unknown',
+      modelType: { imageGeneration: true, imageEditing: false },
+    }])
+
+    expect(modelscopeCustomModel.pricing.calculator?.({
+      modelscopeCustomModel: 'Acme/Unknown',
+    })).toBeNaN()
   })
 })

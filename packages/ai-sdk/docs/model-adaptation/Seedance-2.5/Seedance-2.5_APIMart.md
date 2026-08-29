@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | `seedance-2.5` |
@@ -156,7 +156,7 @@
 
 ## 7. 价格
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页 `SEEDANCE-2.5`（2026-08-22，标注为**预估价格**，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页 `SEEDANCE-2.5`（2026-08-30 复核，仍标注为**预估价格**，1 Credit ≈ $0.1）。当前定价中心与模型页的秒价口径一致；唯一保留边界是供应商仍把 2.5 标为预估价，后续可能调整。
 
 **按秒**
 
@@ -199,6 +199,7 @@
 - 参考素材上限比 2.0 大一个量级（30 图 / 10 视频 / 10 音频），上传组件的上限要按模型区分。
 - `duration=-1` 会按 30 秒预扣押金，余额预检要按上限算。
 - 真人素材必须走素材库，直接传 URL 会被审核拦截。
+- SDK 从 `uploadedVideoFilePaths` / `videos` / `uploadedVideos` 取非空且数量最完整的一组；空数组不遮蔽其他字段。宿主按顺序提供完整 `__videoDurationSeconds: number[]` 时求真实总和，数组不完整时改用 `__totalVideoDurationSeconds`，最后才兼容 `__firstVideoDurationSeconds × 视频数` 的旧近似估算。2.5 的参考视频真实总时长上限为 30 秒。
 
 ## 10. 原始链接索引
 

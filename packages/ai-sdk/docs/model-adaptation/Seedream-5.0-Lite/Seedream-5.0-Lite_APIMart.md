@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-28 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | `seedream-5-0-lite`（兼容 `seedream-5.0-lite`、`Seedream-5.0-lite`） |
@@ -75,13 +75,13 @@
 
 ## 5. 价格
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)（2026-08-22 读取，图像标签页，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)与 [Seedream 5.0 Lite 模型专属页](https://apimart.ai/zh/model/seedream-5-0-lite)（2026-08-30 读取，图像标签页，1 Credit ≈ $0.1）。
 
 | 规格 | 价格 |
 |---|---|
-| 默认（唯一档位） | 0.228 Credits/张 ≈ **$0.0228/张** |
+| 默认（唯一档位） | 0.2275 Credits/张 ≈ **$0.02275/张** |
 
-定价中心显示 `SEEDREAM-5-0-LITE` 只有 1 个价格档位，未按 2K/3K/4K 分档，也未标注官方价与折扣。
+定价中心显示 `SEEDREAM-5-0-LITE` 只有 1 个价格档位，未按 2K/3K/4K 分档，也未标注官方价与折扣。模型专属页的营销正文仍出现 `$0.025/张`，但同页“定价详情”和总定价中心均为 `$0.02275/张`；按调研优先级采用两个实时价格组件一致的 `$0.02275/张`。
 
 ## 6. 适配要点
 
@@ -98,6 +98,7 @@
 | 信息 | 链接 | 是否需登录 |
 |---|---|---|
 | Seedream-5.0-Lite 图像生成 API | https://docs.apimart.ai/cn/api-reference/images/seedream-5-lite/generation | 否 |
+| Seedream 5.0 Lite 模型专属页（当前定价详情） | https://apimart.ai/zh/model/seedream-5-0-lite | 否 |
 | 同页纯 Markdown | https://docs.apimart.ai/cn/api-reference/images/seedream-5-lite/generation.md | 否 |
 | 获取任务状态 | https://docs.apimart.ai/cn/api-reference/tasks/status | 否 |
 | Webhook 回调 | https://docs.apimart.ai/cn/api-reference/tasks/webhook | 否 |

@@ -1,5 +1,6 @@
 import { defineModel } from '../defineModel'
 import type { JsonValue, JsonObject } from '../../types/runtime'
+import { resolveUploadedVideoDurationSeconds } from './mediaSources'
 
 const WAN27_SIZE_MAP = {
   '16:9': { '720P': '1280*720', '1080P': '1920*1080' },
@@ -359,14 +360,19 @@ export const wan27Model = defineModel({
       const mode = typeof params.ppioWan27Mode === 'string' ? params.ppioWan27Mode : 'text-image-to-video'
       const resolution = params.ppioWan27Resolution === '720P' ? '720P' : '1080P'
       const rawDuration = Number(params.ppioWan27Duration ?? params.duration)
-      const fallbackDuration = mode === 'video-edit' && (!Number.isFinite(rawDuration) || rawDuration <= 0) ? 5 : rawDuration
       const maxDuration = mode === 'reference-to-video' || mode === 'video-edit' ? 10 : 15
       const minDuration = mode === 'video-edit' ? 0 : 2
-      const duration = Number.isFinite(fallbackDuration)
-        ? Math.min(maxDuration, Math.max(minDuration, Math.round(fallbackDuration)))
-        : 5
+      const followsInputDuration = mode === 'video-edit' && (!Number.isFinite(rawDuration) || rawDuration <= 0)
+      const inputVideoDuration = followsInputDuration
+        ? resolveUploadedVideoDurationSeconds(params, 5)
+        : 0
+      const duration = followsInputDuration
+        ? Math.min(maxDuration, Math.max(2, inputVideoDuration || 5))
+        : (Number.isFinite(rawDuration)
+          ? Math.min(maxDuration, Math.max(minDuration, Math.round(rawDuration)))
+          : 5)
       const pricePerSecond = resolution === '720P' ? 0.6 : 1
-      return pricePerSecond * (duration > 0 ? duration : 5)
+      return pricePerSecond * duration
     },
     description: '720P ¥0.6000/秒，1080P ¥1.0000/秒；按生成时长计费。'
   }

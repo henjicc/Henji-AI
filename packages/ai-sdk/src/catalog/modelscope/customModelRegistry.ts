@@ -15,6 +15,8 @@
 export interface ModelscopeCustomModelRegistryEntry {
   id: string
   name: string
+  costTier?: string
+  magicGrainCost?: number
   modelType: {
     imageGeneration: boolean
     imageEditing: boolean
@@ -24,14 +26,27 @@ export interface ModelscopeCustomModelRegistryEntry {
 let customModels: ModelscopeCustomModelRegistryEntry[] = []
 
 export function replaceModelscopeCustomModels(models: ModelscopeCustomModelRegistryEntry[]): void {
-  customModels = models.map((model) => ({
-    id: model.id,
-    name: model.name,
-    modelType: {
-      imageGeneration: model.modelType.imageGeneration,
-      imageEditing: model.modelType.imageEditing,
-    },
-  }))
+  customModels = models.map((model) => {
+    const costTier = typeof model.costTier === 'string' && model.costTier.trim().length > 0
+      ? model.costTier.trim()
+      : undefined
+    const magicGrainCost = typeof model.magicGrainCost === 'number'
+      && Number.isFinite(model.magicGrainCost)
+      && model.magicGrainCost >= 0
+      ? model.magicGrainCost
+      : undefined
+
+    return {
+      id: model.id,
+      name: model.name,
+      ...(costTier ? { costTier } : {}),
+      ...(magicGrainCost !== undefined ? { magicGrainCost } : {}),
+      modelType: {
+        imageGeneration: model.modelType.imageGeneration,
+        imageEditing: model.modelType.imageEditing,
+      },
+    }
+  })
 }
 
 export function getModelscopeCustomModel(modelId: string): ModelscopeCustomModelRegistryEntry | undefined {

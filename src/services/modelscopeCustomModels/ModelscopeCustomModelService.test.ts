@@ -63,12 +63,16 @@ describe('ModelScope 自建模型 SDK 单实例链路', () => {
     await modelscopeCustomModelService.addModel({
       id: 'Acme/Image-Editor',
       name: 'Acme 图片编辑器',
+      costTier: 'ultra',
+      magicGrainCost: 2,
       modelType: { imageGeneration: false, imageEditing: true },
     })
 
     expect(getModelscopeCustomModel('Acme/Image-Editor')).toEqual({
       id: 'Acme/Image-Editor',
       name: 'Acme 图片编辑器',
+      costTier: 'ultra',
+      magicGrainCost: 2,
       modelType: { imageGeneration: false, imageEditing: true },
     })
     expect(formatPanelDisplayValue('Acme/Image-Editor', 'modelscope-custom-model', 'zh-CN')).toBe(
@@ -95,6 +99,20 @@ describe('ModelScope 自建模型 SDK 单实例链路', () => {
       prompt: '修复图片',
       size: '1024x1024',
       image_url: ['https://example.com/input.png'],
+    })
+
+    expect(runtimeModel!.pricing.calculator?.({
+      modelscopeCustomModel: 'Acme/Image-Editor',
+    })).toBe(2)
+
+    await modelscopeCustomModelService.updateModel('Acme/Image-Editor', {
+      name: 'Acme 编辑器（已更新）',
+      modelType: { imageGeneration: false, imageEditing: true },
+    })
+    expect(getModelscopeCustomModel('Acme/Image-Editor')).toMatchObject({
+      name: 'Acme 编辑器（已更新）',
+      costTier: 'ultra',
+      magicGrainCost: 2,
     })
   })
 })

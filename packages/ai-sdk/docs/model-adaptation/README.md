@@ -6,8 +6,8 @@
 | 项目 | 内容 |
 |---|---|
 | 最后更新 | 2026-08-30 |
-| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 主清单外存量 11 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 77 + SDK 跨项目能力 14（另有 Fal 工具 12） |
+| 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 主清单外存量 12 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
+| 模型供应商文档数量 | 生成/存量 80 + SDK 跨项目能力 14（另有 Fal 工具 12） |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、智谱（官方 LLM）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
 另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 105 模型兼容目录：
@@ -106,14 +106,15 @@ docs/model-adaptation/
 
 Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.1-fast` 视频模型的端点，但该模型**未出现在 dashboard「模型列表」的定价清单中**，可用性与计价未确认，详见 [Grsai 基础文档 §8](供应商/Grsai.md)。
 
-### 主清单外存量模型（11）
+### 主清单外存量模型（12）
 
 以下模型**不在主清单里**，但已在代码中适配并对用户开放，文档用于维护现有实现。部分模型已有多个供应商入口，未来是否纳入主清单待定。
 
 | 模型 | 模态 | 供应商 | 文档 |
 |---|---|---|---|
-| MiniMax Hailuo 2.3 | 视频 | 派欧云 / Fal | [派欧云](Hailuo-2.3/Hailuo-2.3_派欧云.md) / [Fal](Hailuo-2.3/Hailuo-2.3_Fal.md) |
-| MiniMax Hailuo 02 | 视频 | Fal | [Hailuo-02_Fal.md](Hailuo-02/Hailuo-02_Fal.md) |
+| MiniMax Hailuo 2.3 | 视频 | 派欧云 / KIE / Fal | [派欧云](Hailuo-2.3/Hailuo-2.3_派欧云.md) / [KIE](Hailuo-2.3/Hailuo-2.3_KIE.md) / [Fal](Hailuo-2.3/Hailuo-2.3_Fal.md) |
+| MiniMax Hailuo 02 | 视频 | KIE / Fal | [KIE](Hailuo-02/Hailuo-02_KIE.md) / [Fal](Hailuo-02/Hailuo-02_Fal.md) |
+| Grok Imagine | 图片 | KIE | [KIE](Grok-Imagine/Grok-Imagine_KIE.md) |
 | Wan 2.5 Preview | 视频 | 派欧云 | [Wan-2.5-Preview_派欧云.md](Wan-2.5-Preview/Wan-2.5-Preview_派欧云.md) |
 | Wan 2.6 | 视频 | 派欧云 | [Wan-2.6_派欧云.md](Wan-2.6/Wan-2.6_派欧云.md) |
 | Wan 2.7 | 视频 | 派欧云 | [Wan-2.7_派欧云.md](Wan-2.7/Wan-2.7_派欧云.md) |
@@ -200,13 +201,14 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Nano Banana Pro | `gemini-3-pro-image-preview`(-official) | `nano-banana-pro` | `fal-ai/nano-banana-pro`、`fal-ai/nano-banana-pro/edit` |
 | Midjourney | `midjourney`（Imagine）、`midjourney-blend`、`midjourney-edit`、`midjourney-video`（新路由均自动注入平台模型 ID） | — | — |
 | Grok Imagine 2.0 | `grok-imagine-2.0-ext`、`grok-imagine-image-2.0` | `grok-imagine-image-2-0/{text-to-image,image-edit,segment-map,segment-edit}` | `xai/grok-imagine-image/v2.0/{text-to-image,edit}` |
+| Grok Imagine | — | `grok-imagine/{text-to-image,image-to-image}` | — |
 | Seedance 2.0 | `seedance-2.0` | `bytedance/seedance-2` | `bytedance/seedance-2.0/{text-to-video,image-to-video,reference-to-video}` |
 | Seedance 2.0 Fast | `seedance-2.0-fast` | `bytedance/seedance-2-fast` | `bytedance/seedance-2.0/fast/...` |
 | Seedance 2.0 Mini | `seedance-2.0-mini` | `bytedance/seedance-2-mini` | `bytedance/seedance-2.0/mini/...` |
 | Seedance 2.5 | `seedance-2.5` | `bytedance/seedance-2-5` | `bytedance/seedance-2.5/...` |
 | MiniMax H3 | `MiniMax-H3`、`MiniMax-H3-Context-IR`、`MiniMax-H3-Regeneration` | `minimax-h3/{text-to-video,image-to-video,reference-to-video}` | `minimax/h3/{text-to-video,image-to-video,reference-to-video}` |
-| MiniMax Hailuo 2.3 | — | — | `fal-ai/minimax/hailuo-2.3/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-2.3-fast/{standard,pro}/image-to-video` |
-| MiniMax Hailuo 02 | — | — | `fal-ai/minimax/hailuo-02/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-02-fast/image-to-video` |
+| MiniMax Hailuo 2.3 | — | `hailuo/2-3-image-to-video-{standard,pro}` | `fal-ai/minimax/hailuo-2.3/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-2.3-fast/{standard,pro}/image-to-video` |
+| MiniMax Hailuo 02 | — | `hailuo/02-{text,image}-to-video-{standard,pro}` | `fal-ai/minimax/hailuo-02/{standard,pro}/{text-to-video,image-to-video}`、`fal-ai/minimax/hailuo-02-fast/image-to-video` |
 | Kling 3.0 | `kling-v3` | `kling-3.0/video` | `fal-ai/kling-video/v3/{pro,standard}/...`；派欧云 `/v3/async/kling-v3.0-{std,pro,4k}-{t2v,i2v}` |
 | Kling 3.0 Turbo | `kling-3.0-turbo` | `kling/v3-turbo-{text,image}-to-video` | `fal-ai/kling-video/v3/turbo/{pro,standard}/...` |
 | Kling 3.0 Omni | `kling-v3-omni` | `kling-3.0-omni/{text-to-video,image-to-video,reference-to-video,transformation}` | `fal-ai/kling-video/o3/{pro,standard}/...` |

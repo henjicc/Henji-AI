@@ -100,7 +100,7 @@ export const kieGrokImagineModel = defineModel({
                 return 0.02;
             return params.kieGrokImagineQuality === 'quality' ? 0.025 : 0.02;
         },
-        description: '文生图：标准 $0.02/次（输出2张），质量 $0.025/次（输出2张）；图生图：$0.02/张'
+        description: '文生图：标准 $0.02/次（输出 2 张），质量 $0.025/次（输出 4 张）；图生图：$0.02/张'
     }
 });
 export default kieGrokImagineModel;

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 图片 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | **两条独立渠道**：`gpt-image-2`（兼容别名 `gpt-image-2-ext`）与 `gpt-image-2-official` |
@@ -128,7 +128,7 @@
 
 ### 3.4 价格（按 token）
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → `GPT-IMAGE-2-OFFICIAL`（2026-08-22，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing)与 [GPT Image 2 模型专属页](https://apimart.ai/zh/model/gpt-image-2)（2026-08-30，1 Credit ≈ $0.1）。
 
 | 计费项 | 我们的价格 | 官方价 | 节省 |
 |---|---|---|---|
@@ -138,13 +138,24 @@
 | 缓存图片输入 | 16 Credits/M ≈ **$1.6/M** | $2/M | 20% |
 | 图片输出 | 240 Credits/M ≈ **$24/M** | $30/M | 20% |
 
-**官方渠道按 token 计费，不是按张**，成本随 `quality` 与分辨率剧烈变化，无法直接换算成「每张多少钱」。
+**官方渠道按 token 计费，不是按张**。模型专属页提供可交互的质量与分辨率估价器；2026-08-30 实际切换 `low` / `medium` / `high` 与 1K / 2K / 4K 后，当前单张输出估价如下：
+
+| 分辨率 | low（`auto` 按 low 估算） | medium | high |
+|---|---:|---:|---:|
+| 1K | **$0.00488** | **$0.04232** | **$0.16872** |
+| 2K | **$0.00968** | **$0.08576** | **$0.34264** |
+| 4K | **$0.01592** | **$0.1424** | **$0.56936** |
+
+这些值是模型页按当前输出 token 预算给出的**单张预估**，不是固定包价；实际账单还受提示词、参考图片输入 token、缓存命中和最终输出 token 影响。不能再用「1K 单价 × 4 / × 8」推算 2K / 4K，该算法会把 2K 与 4K 严重高估。`n > 1` 时 SDK 只把当前单张估价乘输出数量。
+
+> 官方来源冲突：同一模型页的 FAQ 仍写“OpenAI 尚未公布定价”，但页面的定价组件与 APIMart 总定价中心已经公开 `gpt-image-2-official` token 单价和动态估价。当前实现按 APIMart 正在展示的估价器处理，并保留“预估”语义，不把它表述为 OpenAI 最终固定价。
 
 ## 4. 适配要点
 
 - 本项目默认**绝对不显示**：`seed`、负面提示词。两条渠道都没有这两个字段。
 - `output_format` 默认不显示、不请求（官方渠道有该字段）。
 - 两条渠道在产品中合成一个入口，但计费口径（按张 vs 按 token）、参数集合、`n` 上限（1 vs 4）必须随“渠道”分别显隐、校验、构建和计价。
+- 官方渠道估价必须使用上表九个当前档位；`auto` 暂按官方文档所述的常见行为映射为 `low`。不得按分辨率使用固定倍数推算。
 - EXT 渠道 `n` 只能是 1；`n` 必须是数字类型。
 - 图生图不传 `size` 时会**继承输入图分辨率**（EXT 渠道），产品若期望固定比例必须显式下发 `size`。
 - 局部重绘（mask）是官方渠道独有，且对遮罩图有硬性要求（含 Alpha、尺寸与首图一致），要作为独立能力分支处理。
@@ -156,6 +167,7 @@
 |---|---|---|
 | GPT-Image-2 图像生成（EXT 渠道） | https://docs.apimart.ai/cn/api-reference/images/gpt-image-2/generation | 否 |
 | GPT-Image-2 官方渠道 图像生成 | https://docs.apimart.ai/cn/api-reference/images/gpt-image-2/official | 否 |
+| GPT Image 2 模型专属页（动态质量/分辨率估价） | https://apimart.ai/zh/model/gpt-image-2 | 否 |
 | 获取任务状态 | https://docs.apimart.ai/cn/api-reference/tasks/status | 否 |
 | 定价中心（搜 GPT-IMAGE-2-EXT / GPT-IMAGE-2-OFFICIAL） | https://apimart.ai/zh/pricing | 否 |
 | API Key 管理 | https://apimart.ai/keys | **是** |

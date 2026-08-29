@@ -2,6 +2,7 @@
 
 import { defineModel } from '../defineModel'
 import type { JsonValue, JsonObject } from '../../types/runtime'
+import { countUploadedImages } from '../shared/mediaPresence'
 
 const ASPECT_RATIOS = ['1:1', '4:3', '3:4', '16:9', '9:16', '3:2', '2:3', '21:9'] as const
 
@@ -71,9 +72,7 @@ export const volcengineSeedream50LiteModel = defineModel({
   pricing: {
     currency: '¥',
     calculator: (params) => {
-      const images = Array.isArray(params.uploadedFilePaths)
-        ? params.uploadedFilePaths.length
-        : (Array.isArray(params.images) ? params.images.length : 0)
+      const images = countUploadedImages(params)
       const requested = Math.min(15, Math.max(1, Math.round(Number(params.volcengineSeedream50LiteCount || 1))))
       return Math.max(1, Math.min(requested, 15 - Math.min(14, images))) * 0.22
     },

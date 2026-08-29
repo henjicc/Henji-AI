@@ -66,6 +66,9 @@ describe('packages/ai-sdk/docs/model-adaptation 官方图片模型', () => {
     expect(bailianQwenImage30Model.pricing.calculator?.({
       uploadedFilePaths: ['a.png', 'b.png'], bailianQwenImage30Count: 2,
     })).toBeCloseTo(0.4)
+    expect(bailianQwenImage30Model.pricing.calculator?.({
+      uploadedFilePaths: [], uploadedImages: ['fresh-a.png', 'fresh-b.png'], bailianQwenImage30Count: 2,
+    })).toBeCloseTo(0.4)
   })
 
   it('百炼 Qwen Pro 使用官方模型 ID 与 1K/2K 分档价格', () => {
@@ -113,6 +116,10 @@ describe('packages/ai-sdk/docs/model-adaptation 官方图片模型', () => {
     expect(request).not.toHaveProperty('negative_prompt')
     expect(request).not.toHaveProperty('output_format')
     expect(volcengineSeedream50LiteModel.pricing.calculator?.({ volcengineSeedream50LiteCount: 3 })).toBeCloseTo(0.66)
+    expect(volcengineSeedream50LiteModel.pricing.calculator?.({
+      uploadedFilePaths: [], uploadedImages: Array.from({ length: 13 }, (_, index) => `${index}.png`),
+      volcengineSeedream50LiteCount: 3,
+    })).toBeCloseTo(0.44)
   })
 
   it('Seedream Pro 使用单图契约并只在请求中发送方舟字段', () => {
@@ -153,11 +160,14 @@ describe('packages/ai-sdk/docs/model-adaptation 官方图片模型', () => {
       volcengineSeedream50ProMode: 'layer-decomposition',
       uploadedFilePaths: []
     })).toThrow('必须且只能输入 1 张图片')
-    expect(volcengineSeedream50ProModel.pricing.calculator?.({
+    expect(Number.isNaN(volcengineSeedream50ProModel.pricing.calculator?.({
       volcengineSeedream50ProMode: 'layer-decomposition', volcengineSeedream50ProLayerSize: '1.5K'
-    })).toBe(0.15)
+    }) ?? 0)).toBe(true)
     expect(volcengineSeedream50ProModel.pricing.calculator?.({
       volcengineSeedream50ProResolution: '2K', uploadedFilePaths: ['a.png', 'b.png']
+    })).toBeCloseTo(0.62)
+    expect(volcengineSeedream50ProModel.pricing.calculator?.({
+      volcengineSeedream50ProResolution: '2K', uploadedFilePaths: [], uploadedImages: ['a.png', 'b.png']
     })).toBeCloseTo(0.62)
   })
 })

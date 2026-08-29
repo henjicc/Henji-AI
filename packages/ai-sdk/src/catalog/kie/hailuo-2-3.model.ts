@@ -1,7 +1,28 @@
 import { defineModel } from "../defineModel";
-import type { JsonValue, JsonObject } from "../../types/runtime";
+import type { JsonObject } from "../../types/runtime";
 import { resolveKieImageSources } from './mediaSources';
 const KIE_CREATE_TASK_ENDPOINT = '/api/v1/jobs/createTask';
+
+type Hailuo23Mode = 'standard' | 'pro';
+type Hailuo23Resolution = '768P' | '1080P';
+
+function resolveHailuo23Spec(params: JsonObject): {
+    mode: Hailuo23Mode;
+    duration: 6 | 10;
+    resolution: Hailuo23Resolution;
+} {
+    const mode: Hailuo23Mode = params.kieHailuo23Mode === 'pro' || params.mode === 'pro'
+        ? 'pro'
+        : 'standard';
+    const duration: 6 | 10 = Number(params.kieHailuo23Duration ?? params.duration) === 10 ? 10 : 6;
+    const requestedResolution = params.kieHailuo23Resolution ?? params.resolution;
+    // KIE 的 1080P 只有 6 秒档，10 秒历史参数统一回收到 768P。
+    const resolution: Hailuo23Resolution = duration === 6 && requestedResolution === '1080P'
+        ? '1080P'
+        : '768P';
+    return { mode, duration, resolution };
+}
+
 export const kieHailuo23Model = defineModel({
     meta: {
         id: 'kie-hailuo-2-3',
@@ -79,9 +100,7 @@ export const kieHailuo23Model = defineModel({
         builder: (params) => {
             const images = resolveKieImageSources(params);
             const prompt = params.prompt || '';
-            const mode = params.kieHailuo23Mode || params.mode || 'standard';
-            const duration = params.kieHailuo23Duration || params.duration || 6;
-            const resolution = params.kieHailuo23Resolution || params.resolution || '768P';
+            const { mode, duration, resolution } = resolveHailuo23Spec(params);
             const model = mode === 'pro'
                 ? 'hailuo/2-3-image-to-video-pro'
                 : 'hailuo/2-3-image-to-video-standard';
@@ -99,13 +118,15 @@ export const kieHailuo23Model = defineModel({
     pricing: {
         currency: '$',
         calculator: (params) => {
-            const mode = params.kieHailuo23Mode === 'pro' ? 'pro' : 'standard';
-            const duration = Number(params.kieHailuo23Duration) === 10 ? 10 : 6;
-            const resolution = params.kieHailuo23Resolution === '1080P' ? '1080P' : '768P';
+            const { mode, duration, resolution } = resolveHailuo23Spec(params);
             const standardPrices: Record<string, number> = { '6-768P': 0.15, '10-768P': 0.25, '6-1080P': 0.25 };
             const proPrices: Record<string, number> = { '6-768P': 0.225, '10-768P': 0.45, '6-1080P': 0.4 };
             const key = `${duration}-${resolution}`;
-            return (mode === 'pro' ? proPrices : standardPrices)[key] ?? standardPrices['6-768P'];
+            const price = (mode === 'pro' ? proPrices : standardPrices)[key];
+            if (price === undefined) {
+                throw new Error(`Hailuo 2.3 缺少 ${mode} ${key} 的 KIE 价格`);
+            }
+            return price;
         },
         description: 'Standard：6s768P $0.15、10s768P $0.25、6s1080P $0.25；Pro：6s768P $0.225、10s768P $0.45、6s1080P $0.4'
     }

@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 |---|---|
-| 最后更新 | 2026-08-22 |
+| 最后更新 | 2026-08-30 |
 | 模态 | 视频 |
 | 供应商 | APIMart（聚合平台） |
 | 平台模型 ID | `MiniMax-H3`、`MiniMax-H3-Context-IR`、`MiniMax-H3-Regeneration` |
@@ -177,7 +177,7 @@
 
 ## 5. 价格（定价中心）
 
-来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页（2026-08-22，1 Credit ≈ $0.1）。
+来源：[APIMart 定价中心](https://apimart.ai/zh/pricing) → 视频标签页（2026-08-30 复核，1 Credit ≈ $0.1）。定价中心与模型文档对 H3 生成的按秒口径一致；Context-IR 的「按次 / 按 token」冲突仍保留如下，不能混用。
 
 **MINIMAX-H3**（7 个档位）
 
@@ -214,6 +214,13 @@
 - `resolution` **默认 `2K`**（最贵的档），若产品要控成本必须显式下发 `768P`。
 - Context-IR 与 Regeneration 是两条独立能力：前者只产出文本、后者只接受本平台自家的 768P 任务 ID。要做「预览再升级」的省钱链路就必须把三者串起来。
 - 参考视频与生成时长**叠加计费**，成本估算不能只算输出秒数。
+
+### SDK 参考视频时长契约（2026-08-30）
+
+- 估价会从 `uploadedVideoFilePaths`、`videos`、`uploadedVideos` 中选择非空且数量最完整的一组参考视频；空数组不能遮蔽另外两组已有值。
+- 宿主应按参考视频顺序注入 `__videoDurationSeconds: number[]`，SDK 只在数组条目数与参考视频数一致时求和；否则次优先使用宿主注入的 `__totalVideoDurationSeconds`。
+- 为兼容旧宿主，前两项不可用时仍接受 `__firstVideoDurationSeconds`，并按「首段时长 × 视频数」估算；这只是兼容近似值，不代表多段视频的真实总时长。
+- 参考视频模式最终估价为「所有参考视频真实总时长 + 输出时长」× 当前分辨率秒价；普通首尾帧模式不计参考视频输入时长。
 
 ## 7. 原始链接索引
 

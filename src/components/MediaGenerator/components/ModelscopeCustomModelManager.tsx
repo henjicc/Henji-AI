@@ -102,6 +102,12 @@ const ModelscopeCustomModelManager: React.FC<ModelscopeCustomModelManagerProps> 
       await modelscopeCustomModelService.addModel({
         id: modelId,
         name: newModelName.trim(),
+        ...(availability.state === 'available'
+          ? {
+              costTier: availability.costTier,
+              magicGrainCost: availability.magicGrainCost,
+            }
+          : {}),
         modelType: {
           imageGeneration: newModelType === 'imageGeneration',
           imageEditing: newModelType === 'imageEditing'

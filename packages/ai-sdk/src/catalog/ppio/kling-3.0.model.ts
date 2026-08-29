@@ -1,5 +1,5 @@
 import { defineModel } from '../defineModel'
-import { hasUploadedImage } from './mediaSources'
+import { hasUploadedImage, resolveUploadedVideoDurationSeconds } from './mediaSources'
 import type { JsonObject } from '../../types/runtime'
 
 export const kling30Model = defineModel({
@@ -279,8 +279,11 @@ export const kling30Model = defineModel({
       if (mode === 'motion-control') {
         const characterOrientation = params.ppioKling30CharacterOrientation ?? params.character_orientation
         // character_orientation=image 时官方固定输出 5 秒；=video 时输出时长跟随参考视频
-        // （最长 30 秒），提交前无法得知，只能按当前时长参数给一个估算值。
-        const motionDuration = characterOrientation === 'image' ? 5 : safeDuration
+        // （最长 30 秒），优先使用宿主读取到的真实参考视频时长，读取失败才用当前参数兜底。
+        const sourceVideoDuration = resolveUploadedVideoDurationSeconds(params, safeDuration)
+        const motionDuration = characterOrientation === 'image'
+          ? 5
+          : Math.min(30, Math.max(3, sourceVideoDuration || safeDuration))
         const pricePerSecond = resolution === '720P' ? 0.9 : 1.2
         return pricePerSecond * motionDuration
       }

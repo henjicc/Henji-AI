@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { JsonObject } from '../../src/types/runtime'
 import { kling30Model } from '../../src/catalog/ppio/kling-3.0.model'
+import { minimaxSpeechModel } from '../../src/catalog/ppio/minimax-speech.model'
+import { wan27Model } from '../../src/catalog/ppio/wan-2.7.model'
 
 /** 直接执行 SDK catalog 中的真实 selector / builder，覆盖主进程实际消费路径。 */
 async function select(params: JsonObject): Promise<string> {
@@ -60,5 +62,79 @@ describe('Kling 3.0 请求构建', () => {
     const shared = { ppioKling30Mode: 'motion-control', uploadedFilePaths: ['a.png'], uploadedVideoFilePaths: ['v.mp4'] }
     expect((await build({ ...shared, ppioKling30Resolution: '720P' })).model_name).toBe('kling-v3-0-std')
     expect((await build({ ...shared, ppioKling30Resolution: '1080P' })).model_name).toBe('kling-v3-0-pro')
+  })
+})
+
+describe('派欧云按真实输入时长计价', () => {
+  it('Kling 3.0 动作控制优先使用逐段参考视频真实时长', () => {
+    const price = kling30Model.pricing.calculator?.({
+      ppioKling30Mode: 'motion-control',
+      ppioKling30Resolution: '720P',
+      ppioKling30CharacterOrientation: 'video',
+      uploadedVideoFilePaths: ['reference.mp4'],
+      __videoDurationSeconds: [12.5],
+      __totalVideoDurationSeconds: 20,
+      __firstVideoDurationSeconds: 25,
+    })
+    expect(price).toBeCloseTo(11.25)
+  })
+
+  it('Kling 3.0 人物朝向为图片时仍固定按 5 秒计价', () => {
+    const price = kling30Model.pricing.calculator?.({
+      ppioKling30Mode: 'motion-control',
+      ppioKling30Resolution: '1080P',
+      ppioKling30CharacterOrientation: 'image',
+      uploadedVideoFilePaths: ['reference.mp4'],
+      __videoDurationSeconds: [12.5],
+    })
+    expect(price).toBeCloseTo(6)
+  })
+
+  it('Wan 2.7 视频编辑 duration=0 时按输入视频真实时长计价', () => {
+    const price = wan27Model.pricing.calculator?.({
+      ppioWan27Mode: 'video-edit',
+      ppioWan27Resolution: '1080P',
+      ppioWan27Duration: 0,
+      uploadedVideoFilePaths: ['source.mp4'],
+      __videoDurationSeconds: [7.4],
+    })
+    expect(price).toBeCloseTo(7.4)
+  })
+
+  it('Wan 2.7 在逐段时长不完整时回退宿主提供的总时长', () => {
+    const price = wan27Model.pricing.calculator?.({
+      ppioWan27Mode: 'video-edit',
+      ppioWan27Resolution: '720P',
+      ppioWan27Duration: 0,
+      uploadedVideoFilePaths: ['source.mp4'],
+      __videoDurationSeconds: [],
+      __totalVideoDurationSeconds: 6.25,
+    })
+    expect(price).toBeCloseTo(3.75)
+  })
+})
+
+describe('MiniMax Speech 单次请求向上取整到分', () => {
+  it('HD 与 Turbo 都按官方规则向上取整', () => {
+    expect(minimaxSpeechModel.pricing.calculator?.({ text: '甲'.repeat(100), minimaxAudioSpec: 'hd' }))
+      .toBe(0.04)
+    expect(minimaxSpeechModel.pricing.calculator?.({ text: '甲'.repeat(60), minimaxAudioSpec: 'turbo' }))
+      .toBe(0.02)
+  })
+
+  it('声音克隆试听先向上取整字符费，再叠加音色费', () => {
+    const price = minimaxSpeechModel.pricing.calculator?.({
+      minimaxMode: 'voice-clone',
+      minimaxVoiceClonePanel: {
+        previewText: '甲'.repeat(60),
+        previewModel: 'speech-2.8-turbo',
+      },
+    })
+    expect(price).toBe(9.92)
+  })
+
+  it('空文本不产生语音合成字符费，纯克隆仍是固定音色费', () => {
+    expect(minimaxSpeechModel.pricing.calculator?.({ text: '' })).toBe(0)
+    expect(minimaxSpeechModel.pricing.calculator?.({ minimaxMode: 'voice-clone' })).toBe(9.9)
   })
 })

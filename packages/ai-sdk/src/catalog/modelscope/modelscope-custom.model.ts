@@ -100,10 +100,18 @@ export const modelscopeCustomModel = defineModel({
   },
   pricing: {
     currency: '魔粒',
-    // 自定义模型的档位取决于用户填入的模型（轻量 0.5 / 主流 1 / 旗舰 2 魔粒），
-    // 无法在提交前预知，按主流档展示。
-    calculator: () => 1,
-    description: '按模型档位扣魔粒：轻量 0.5、主流 1、旗舰 2 魔粒/次'
+    calculator: (params) => {
+      const customId = typeof params.modelscopeCustomModel === 'string'
+        ? params.modelscopeCustomModel.trim()
+        : ''
+      const magicGrainCost = customId
+        ? getModelscopeCustomModel(customId)?.magicGrainCost
+        : undefined
+      return typeof magicGrainCost === 'number' && Number.isFinite(magicGrainCost)
+        ? magicGrainCost
+        : Number.NaN
+    },
+    description: '按保存模型时查询到的官方档位扣魔粒；档位未知时不显示确定估价'
   }
 })
 

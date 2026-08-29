@@ -17,12 +17,24 @@ export interface ModelscopeCustomModelType {
 export interface ModelscopeCustomModelEntry {
   id: string
   name: string
+  costTier?: string
+  magicGrainCost?: number
   modelType: ModelscopeCustomModelType
 }
 
 interface ModelscopeCustomModelConfig extends DynamicValueMap {
   kind: typeof CONFIG_KIND
   modelType: ModelscopeCustomModelType
+  costTier?: string
+  magicGrainCost?: number
+}
+
+function normalizeCostTier(raw: DynamicValue): string | undefined {
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : undefined
+}
+
+function normalizeMagicGrainCost(raw: DynamicValue): number | undefined {
+  return typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 ? raw : undefined
 }
 
 function normalizeModelType(raw: DynamicValue): ModelscopeCustomModelType {
@@ -57,9 +69,13 @@ function parseLegacyModels(raw: string | null): ModelscopeCustomModelEntry[] {
       const name = typeof record.name === 'string' && record.name.trim()
         ? record.name.trim()
         : id
+      const costTier = normalizeCostTier(record.costTier)
+      const magicGrainCost = normalizeMagicGrainCost(record.magicGrainCost)
       models.push({
         id,
         name,
+        ...(costTier ? { costTier } : {}),
+        ...(magicGrainCost !== undefined ? { magicGrainCost } : {}),
         modelType: normalizeModelType(record.modelType),
       })
     }
@@ -71,10 +87,17 @@ function parseLegacyModels(raw: string | null): ModelscopeCustomModelEntry[] {
   }
 }
 
-function createConfig(modelType: ModelscopeCustomModelType): ModelscopeCustomModelConfig {
+function createConfig(
+  modelType: ModelscopeCustomModelType,
+  pricing: Pick<ModelscopeCustomModelEntry, 'costTier' | 'magicGrainCost'> = {}
+): ModelscopeCustomModelConfig {
+  const costTier = normalizeCostTier(pricing.costTier)
+  const magicGrainCost = normalizeMagicGrainCost(pricing.magicGrainCost)
   return {
     kind: CONFIG_KIND,
     modelType,
+    ...(costTier ? { costTier } : {}),
+    ...(magicGrainCost !== undefined ? { magicGrainCost } : {}),
   }
 }
 
@@ -83,9 +106,13 @@ function isModelscopeCustomModelRecord(record: CustomModelRecord): boolean {
 }
 
 function toEntry(record: CustomModelRecord): ModelscopeCustomModelEntry {
+  const costTier = normalizeCostTier(record.config.costTier)
+  const magicGrainCost = normalizeMagicGrainCost(record.config.magicGrainCost)
   return {
     id: record.id,
     name: record.name,
+    ...(costTier ? { costTier } : {}),
+    ...(magicGrainCost !== undefined ? { magicGrainCost } : {}),
     modelType: normalizeModelType(record.config.modelType),
   }
 }
@@ -120,7 +147,7 @@ class ModelscopeCustomModelService {
       name: model.name,
       providerId: PROVIDER_ID,
       baseModel: model.id,
-      config: createConfig(model.modelType),
+      config: createConfig(model.modelType, model),
       isEnabled: true,
     })
     await this.loadModelsToRegistry()
@@ -128,9 +155,13 @@ class ModelscopeCustomModelService {
 
   async updateModel(id: string, updates: Pick<ModelscopeCustomModelEntry, 'name' | 'modelType'>): Promise<void> {
     await this.ensureReady()
+    const existing = await databaseService.getCustomModelById(id)
+    const existingPricing = existing && isModelscopeCustomModelRecord(existing)
+      ? toEntry(existing)
+      : undefined
     await databaseService.updateCustomModel(id, {
       name: updates.name,
-      config: createConfig(updates.modelType),
+      config: createConfig(updates.modelType, existingPricing),
     })
     await this.loadModelsToRegistry()
   }
@@ -161,7 +192,7 @@ class ModelscopeCustomModelService {
         name: model.name,
         providerId: PROVIDER_ID,
         baseModel: model.id,
-        config: createConfig(model.modelType),
+        config: createConfig(model.modelType, model),
         isEnabled: true,
       })
     }

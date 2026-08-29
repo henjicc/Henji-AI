@@ -43,6 +43,8 @@ describe('price estimate params', () => {
       uploadedAudioFilePaths: ['/local/audio-1.wav'],
       uploadedVideoDuration: 12,
       __firstVideoDurationSeconds: 5,
+      __videoDurationSeconds: [5],
+      __totalVideoDurationSeconds: 5,
     })
   })
 
@@ -82,5 +84,32 @@ describe('price estimate params', () => {
       uploadedVideoTrimStart: null,
       uploadedVideoTrimEnd: null,
     })).toBeUndefined()
+  })
+
+  it('多个视频仅在拿到完整逐段时长时提供精确总时长', () => {
+    expect(buildPriceEstimateParams({
+      ...baseInput,
+      uploadedVideos: ['video-1', 'video-2'],
+      uploadedVideoFilePaths: ['/local/video-1.mp4', '/local/video-2.mp4'],
+      uploadedVideoDurations: [3, 8],
+      uploadedVideoTrimStart: null,
+      uploadedVideoTrimEnd: null,
+    })).toMatchObject({
+      __firstVideoDurationSeconds: 12,
+      __videoDurationSeconds: [3, 8],
+      __totalVideoDurationSeconds: 11,
+    })
+
+    const incomplete = buildPriceEstimateParams({
+      ...baseInput,
+      uploadedVideos: ['video-1', 'video-2'],
+      uploadedVideoFilePaths: ['/local/video-1.mp4', '/local/video-2.mp4'],
+      uploadedVideoDurations: [3],
+      uploadedVideoTrimStart: null,
+      uploadedVideoTrimEnd: null,
+    })
+    expect(incomplete.__videoDurationSeconds).toBeUndefined()
+    expect(incomplete.__totalVideoDurationSeconds).toBeUndefined()
+    expect(incomplete.__firstVideoDurationSeconds).toBe(12)
   })
 })

@@ -277,7 +277,7 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
     expect(apimartGptImage2Model.pricing.calculator?.({
       apimartGptImage2Version: 'official', apimartGptImage2Resolution: '2K',
       apimartGptImage2Quality: 'medium', apimartGptImage2Count: 2
-    })).toBeCloseTo(0.3392)
+    })).toBeCloseTo(0.17152)
     const qualityParam = apimartGptImage2Model.params.find((param) => param.id === 'apimartGptImage2Quality')
     expect(qualityParam).toMatchObject({ order: 4, visible: { condition: expect.any(Function) } })
     const qualityVisible = qualityParam?.visible?.condition
@@ -291,6 +291,33 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
     expect(catalog.some((model) => model.meta.id === 'apimart-gpt-image-2-official')).toBe(false)
   })
 
+  it.each([
+    ['1K', 'low', 0.00488],
+    ['1K', 'medium', 0.04232],
+    ['1K', 'high', 0.16872],
+    ['2K', 'low', 0.00968],
+    ['2K', 'medium', 0.08576],
+    ['2K', 'high', 0.34264],
+    ['4K', 'low', 0.01592],
+    ['4K', 'medium', 0.1424],
+    ['4K', 'high', 0.56936],
+  ] as const)('GPT Image 2 官方渠道 %s × %s 使用当前输出估价', (resolution, quality, expected) => {
+    expect(apimartGptImage2Model.pricing.calculator?.({
+      apimartGptImage2Version: 'official',
+      apimartGptImage2Resolution: resolution,
+      apimartGptImage2Quality: quality,
+    })).toBeCloseTo(expected)
+  })
+
+  it('GPT Image 2 官方渠道 auto 按 low 估算并按输出数量累加', () => {
+    expect(apimartGptImage2Model.pricing.calculator?.({
+      apimartGptImage2Version: 'official',
+      apimartGptImage2Resolution: '4K',
+      apimartGptImage2Quality: 'auto',
+      apimartGptImage2Count: 3,
+    })).toBeCloseTo(3 * 0.01592)
+  })
+
   it('Seedream Lite 强制参考图与输出图总数不超过 15', () => {
     const request = apimartSeedream50LiteModel.request?.builder?.({
       prompt: 'series',
@@ -301,7 +328,11 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
     expect(request).toMatchObject({ n: 3, resolution: '4K', sequential_image_generation: 'auto' })
     expect(apimartSeedream50LiteModel.pricing.calculator?.({
       uploadedFilePaths: Array.from({ length: 12 }, () => 'x.png'), apimartSeedream50LiteCount: 10
-    })).toBeCloseTo(3 * 0.0228)
+    })).toBeCloseTo(3 * 0.02275)
+    expect(apimartSeedream50LiteModel.pricing.calculator?.({
+      uploadedFilePaths: [], images: [], uploadedImages: Array.from({ length: 14 }, () => 'x.png'),
+      apimartSeedream50LiteCount: 10
+    })).toBeCloseTo(0.02275)
   })
 
   it('Nano Banana 2 主模型支持 0.5K 与搜索联动，Lite 使用独立固定 1K 契约', () => {
@@ -338,10 +369,16 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
     expect(apimartSeedream50ProModel.request?.builder?.({
       prompt: 'logo', apimartSeedream50ProResolution: '1.5K', apimartSeedream50ProBackground: 'transparent'
     })).toMatchObject({ resolution: '1.5K', background: 'transparent' })
-    expect(apimartSeedream50ProModel.pricing.calculator?.({ apimartSeedream50ProResolution: '1.5K' })).toBe(0.02928)
+    expect(apimartSeedream50ProModel.pricing.calculator?.({ apimartSeedream50ProResolution: '1.5K' })).toBe(0.02925)
+    expect(apimartSeedream50ProModel.pricing.calculator?.({
+      apimartSeedream50ProResolution: '2K',
+      uploadedFilePaths: [],
+      images: [],
+      uploadedImages: ['a.png', 'b.png', 'c.png'],
+    })).toBeCloseTo(0.0585 + 2 * 0.00195)
   })
 
-  it('Seedream Pro 图层拆分严格使用单图、专属字段和按图层价格', () => {
+  it('Seedream Pro 图层拆分严格使用单图、专属字段并在未知层数时不冒充总价', () => {
     expect(apimartSeedream50ProModel.inputLimits).toMatchObject({
       rules: [{ when: 'apimartSeedream50ProMode === "layer-decomposition"', images: { min: 1, max: 1 } }]
     })
@@ -360,10 +397,12 @@ describe('packages/ai-sdk/docs/model-adaptation APIMart 图片模型', () => {
     expect(() => apimartSeedream50ProModel.request?.builder?.({
       apimartSeedream50ProMode: 'layer-decomposition'
     })).toThrow('必须且只能输入 1 张图片')
-    expect(apimartSeedream50ProModel.pricing.calculator?.({
+    expect(Number.isNaN(apimartSeedream50ProModel.pricing.calculator?.({
       apimartSeedream50ProMode: 'layer-decomposition',
       apimartSeedream50ProLayerSize: '1.5K'
-    })).toBe(0.01464)
+    }) ?? 0)).toBe(true)
+    expect(apimartSeedream50ProModel.pricing.description).toContain('$0.014625')
+    expect(apimartSeedream50ProModel.pricing.description).toContain('/层')
   })
 
   it('Grok EXT 只发送白名单字段并按输出数量计价', () => {
