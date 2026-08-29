@@ -1,7 +1,7 @@
 # @henjicc/ai-sdk
 
 痕迹AI 的多供应商模型 SDK：内含 8 个生成供应商、105 个图片/视频/音频模型，以及
-7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
+7 家 LLM 供应商预设（加上派欧云聚合入口共 8 个预设项）。另有 12 个 FAL 图片工具使用独立按需入口，不进入默认 105 模型目录。预制 LLM 会按供应商与具体模型自动选择 Responses API 或 Chat Completions，宿主不需要暴露逐模型协议设置。SDK 负责目录、请求构建、媒体预处理、
 供应商调用、轮询、SSE 与错误归一化；宿主只需注入网络、凭据、媒体读取和日志。
 
 ## 5 分钟快速开始
@@ -168,33 +168,44 @@ cancelLlmChatTask('chat-1')
 
 ### 可选模型分发包与统一能力筛选
 
-图像消除等工具模型不会混入默认 105 模型。宿主可选择单个完整工具模型 pack，也可一次装入 Fal 图片编辑工具模型集合：
+当前 12 个 FAL 图片工具不会混入默认 105 模型。宿主可选择单个完整工具模型 pack，也可按用户任务装入三个聚合包：
+
+- `tool-packs/fal-image-edit-tools`：3 个消除工具。
+- `tool-packs/fal-image-utility-tools`：6 个重打光、暗光增强、扩图、商品摄影、照片修复和背景移除工具。
+- `tool-packs/fal-multi-angle-tools`：3 个连续镜头控制或离散方位工具。
 
 ```ts
 import { createModularGenerationClient } from '@henjicc/ai-sdk/generation/core'
 import { createModelCapabilityDiscovery } from '@henjicc/ai-sdk/discovery'
 import { pack as falImageEditTools } from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'
+import { pack as falImageUtilityTools } from '@henjicc/ai-sdk/tool-packs/fal-image-utility-tools'
 
-const discovery = createModelCapabilityDiscovery({ generationPacks: [falImageEditTools] })
-const erasers = discovery.search({
+const eraseDiscovery = createModelCapabilityDiscovery({ generationPacks: [falImageEditTools] })
+const utilityDiscovery = createModelCapabilityDiscovery({ generationPacks: [falImageUtilityTools] })
+const erasers = eraseDiscovery.search({
   providerIds: 'fal',
   outputModalities: 'image',
   operations: 'image-edit',
   features: 'erase',
 })
-const client = createModularGenerationClient({ runtime, packs: [falImageEditTools] })
+const utilities = utilityDiscovery.search({ providerIds: 'fal', outputModalities: 'image' })
+const client = createModularGenerationClient({
+  runtime,
+  packs: [falImageEditTools, falImageUtilityTools],
+})
 console.log(erasers.map((item) => item.id))
+console.log(utilities.map((item) => item.id))
 ```
 
-单模型入口为 `tool-models/fal/flux-pro-erase`、`tool-models/fal/bria-eraser`、
-`tool-models/fal/finegrain-eraser`、`tool-models/fal/qwen-image-edit-2509-multiple-angles` 与
-`tool-models/fal/perspective-change`；每个只导出 `model`、`provider` 与完整 `pack`。
-聚合 `tool-packs/fal-image-edit-tools` 是方便选择的模型分发集合，只携带这 3 个模型、Fal adapter 和 Fal CDN
-上传，不携带其余 105 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，
-不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
+单模型入口按集合分为：
 
-多角度能力使用独立聚合入口 `tool-packs/fal-multi-angle-tools`，只包含连续控制与九档方位两个模型。
-Henji-AI 在执行层按需装入该 pack，但普通模型选择器与默认能力发现仍只展示 105 个主目录模型。
+- 消除：`tool-models/fal/flux-pro-erase`、`tool-models/fal/bria-eraser`、`tool-models/fal/finegrain-eraser`。
+- 图片实用工具：`tool-models/fal/relighting`、`tool-models/fal/control-light`、`tool-models/fal/outpaint`、`tool-models/fal/product-photography`、`tool-models/fal/photo-restoration`、`tool-models/fal/pixelcut-background-removal`。
+- 多角度：`tool-models/fal/qwen-image-edit-2509-multiple-angles`、`tool-models/fal/perspective-change`、`tool-models/fal/flux-2-multiple-angles`。
+
+每个单模型入口只导出 `model`、`provider` 与完整 `pack`。三个聚合包只携带各自 3 / 6 / 3 个工具模型、Fal adapter 和 Fal CDN 上传，不携带其余 105 模型或 LLM。能力筛选与分发是两层：`search()` 只过滤已经导入的候选，不会让已经进入 bundle 的代码自动消失；缩小包体仍必须显式选择单模型/provider/collection pack。
+
+Henji-AI 在执行层按需装入工具 pack，但普通模型选择器、`@henjicc/ai-sdk/generation` 与默认能力发现仍只展示 105 个主目录模型。
 
 ## 两类模型的公共边界
 

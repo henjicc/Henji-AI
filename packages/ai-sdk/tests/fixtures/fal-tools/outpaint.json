@@ -1,0 +1,25 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/image-apps-v2/outpaint",
+  "input": {
+    "image_url": "uxp://source",
+    "expand_left": 200,
+    "expand_right": 200,
+    "expand_top": 0,
+    "expand_bottom": 0,
+    "zoom_out_percentage": 20,
+    "prompt": "continue the sunset landscape naturally"
+  },
+  "submit": {
+    "request_id": "outpaint-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/image-apps-v2/outpaint/requests/outpaint-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/image-apps-v2/outpaint/requests/outpaint-fixture"
+  },
+  "result": {
+    "images": [{ "url": "https://fixture.invalid/outpaint.png" }],
+    "seed": 1
+  }
+}

@@ -37,6 +37,29 @@ describe('Fal provider', () => {
     )
   })
 
+  it('队列请求保留模型级 sync_mode=false，便于强制返回 CDN URL', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      request_id: 'fal-request-async-output',
+      status_url: 'https://queue.fal.run/example/requests/fal-request-async-output/status',
+    }))
+
+    await expect(execute({
+      apiKey: 'fal-secret',
+      route: '/pixelcut/background-removal',
+      method: 'POST',
+      body: { image_url: 'https://example.com/input.png', sync_mode: false },
+      requestId: 'local-request-async-output',
+      runtime: fakeRuntimeContext(fetchMock),
+    })).resolves.toMatchObject({ status: 'pending' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://queue.fal.run/pixelcut/background-removal',
+      expect.objectContaining({
+        body: JSON.stringify({ image_url: 'https://example.com/input.png', sync_mode: false }),
+      })
+    )
+  })
+
   it('同步 REST 请求移除本地 sync_mode 后直接发送模型输入', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
       images: [{ url: 'https://example.com/output.png' }],
@@ -55,6 +78,24 @@ describe('Fal provider', () => {
       'https://fal.run/fal-ai/example',
       expect.objectContaining({ body: JSON.stringify({ prompt: 'cat' }) })
     )
+  })
+
+  it('拒绝队列提交响应中伪造的跨域 status_url', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({
+      request_id: 'fal-request-untrusted-submit',
+      status_url: 'https://evil.example/collect-fal-key',
+    }))
+
+    await expect(execute({
+      apiKey: 'fal-secret',
+      route: '/fal-ai/example',
+      method: 'POST',
+      body: { prompt: 'cat' },
+      requestId: 'local-submit-untrusted-status',
+      runtime: fakeRuntimeContext(fetchMock),
+    })).rejects.toMatchObject({ code: 'invalid_endpoint' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('COMPLETED 中携带 error 时按任务失败处理，不误取结果', async () => {
@@ -100,5 +141,40 @@ describe('Fal provider', () => {
       url: 'https://example.com/output.mp4',
     })
     expect(fetchMock).toHaveBeenNthCalledWith(1, statusUrl, expect.any(Object))
+  })
+
+  it('拒绝向非 Fal 队列域名发送续查凭据', async () => {
+    const fetchMock = vi.fn()
+
+    await expect(continuePolling({
+      apiKey: 'fal-secret',
+      route: '/fal-ai/example',
+      taskId: 'https://queue.fal.run.evil.example/requests/stolen/status',
+      requestId: 'local-poll-untrusted-status',
+      polling: { interval: 0, maxAttempts: 1 },
+      runtime: fakeRuntimeContext(fetchMock),
+    })).rejects.toMatchObject({ code: 'invalid_endpoint' })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('拒绝 COMPLETED 状态中的跨域 response_url', async () => {
+    const statusUrl = 'https://queue.fal.run/fal-ai/example/requests/fal-request-untrusted-response/status'
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({
+      status: 'COMPLETED',
+      request_id: 'fal-request-untrusted-response',
+      response_url: 'https://evil.example/collect-fal-key',
+    }))
+
+    await expect(continuePolling({
+      apiKey: 'fal-secret',
+      route: '/fal-ai/example',
+      taskId: statusUrl,
+      requestId: 'local-poll-untrusted-response',
+      polling: { interval: 0, maxAttempts: 1 },
+      runtime: fakeRuntimeContext(fetchMock),
+    })).rejects.toMatchObject({ code: 'invalid_endpoint' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

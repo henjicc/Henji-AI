@@ -1,0 +1,23 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/flux-2-lora-gallery/multiple-angles",
+  "input": {
+    "image_urls": ["uxp://source"],
+    "horizontal_angle": 90,
+    "vertical_angle": 30,
+    "zoom": 5,
+    "image_size": { "width": 1024, "height": 1024 }
+  },
+  "submit": {
+    "request_id": "flux-2-multiple-angles-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/flux-2-lora-gallery/multiple-angles/requests/flux-2-multiple-angles-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/flux-2-lora-gallery/multiple-angles/requests/flux-2-multiple-angles-fixture"
+  },
+  "result": {
+    "images": [{ "url": "https://fixture.invalid/flux-2-multiple-angles.png" }],
+    "prompt": "<server-generated prompt>"
+  }
+}

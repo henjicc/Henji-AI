@@ -18,6 +18,7 @@ interface Fixture {
 const fixtures = Object.fromEntries([
   'qwen-image-edit-2509-multiple-angles',
   'perspective-change',
+  'flux-2-multiple-angles',
 ].map((name) => [
   name,
   JSON.parse(fs.readFileSync(new URL(`./fixtures/fal-tools/${name}.json`, import.meta.url), 'utf8')) as Fixture,
@@ -66,14 +67,38 @@ function fixtureRuntime(fixture: Fixture, builtRequests: JsonObject[]) {
 }
 
 describe('Fal 多角度按需工具 pack', () => {
-  it('不进入默认 catalog，两个 profile 独立分发且都没有提示词参数', () => {
+  it('不进入默认 catalog，三个 profile 独立分发且都没有提示词参数', () => {
     expect(models.map((model) => model.meta.id)).toEqual([
       'fal-qwen-image-edit-2509-multiple-angles',
       'fal-perspective-change',
+      'fal-flux-2-multiple-angles',
     ])
     expect(catalog.some((model) => models.some((tool) => tool.meta.id === model.meta.id))).toBe(false)
     expect(models.every((model) => model.params.every((param) => param.id !== 'prompt'))).toBe(true)
     expect(models.every((model) => model.inputLimits?.images?.exact === 1)).toBe(true)
+  })
+
+  it('FLUX 2 使用官方角度字段、按输入比例生成约 1MP 尺寸并主动拒绝非单图', () => {
+    const model = models.find((candidate) => candidate.meta.id === 'fal-flux-2-multiple-angles')
+    if (!model) throw new Error('Missing fal-flux-2-multiple-angles')
+
+    expect(model.request.builder({
+      image: ['uxp://source'],
+      __firstImageRatio: 16 / 9,
+      horizontalAngle: 999,
+      verticalAngle: -10,
+      zoom: 20,
+      prompt: '这个字段不应进入请求',
+    })).toEqual({
+      image_urls: ['uxp://source'],
+      horizontal_angle: 360,
+      vertical_angle: 0,
+      zoom: 10,
+      image_size: { width: 1376, height: 768 },
+    })
+    expect(() => model.request.builder({ image: [] })).toThrow(/必须且只能提供 1 张源图/)
+    expect(() => model.request.builder({ image: ['one', 'two'] })).toThrow(/必须且只能提供 1 张源图/)
+    expect(model.pricing?.calculator?.({})).toBe(0.021)
   })
 
   it('连续档映射官方控制字段、夹紧范围并固定单张输出', () => {
@@ -127,6 +152,9 @@ describe('Fal 多角度按需工具 pack', () => {
       image: ['uxp://source'], rotateRightLeft: 45, verticalAngle: 0, moveForward: 0, wideAngleLens: false,
     }],
     ['perspective-change', 'fal-perspective-change', { image: ['uxp://source'], targetPerspective: 'back' }],
+    ['flux-2-multiple-angles', 'fal-flux-2-multiple-angles', {
+      image: ['uxp://source'], horizontalAngle: 90, verticalAngle: 30, zoom: 5, __firstImageRatio: 1,
+    }],
   ] as const)('%s 通过 Fal 公共上传、队列、轮询与结果解析完成全链路', async (
     fixtureName,
     modelId,
@@ -160,9 +188,7 @@ describe('Fal 多角度按需工具 pack', () => {
   }, 15_000)
 
   it('任一 profile 都在 schema 层声明且只允许 1 张输入图', () => {
-    expect(models[0].inputLimits?.images).toEqual({ exact: 1 })
-    expect(models[1].inputLimits?.images).toEqual({ exact: 1 })
-    expect(models[0].requirements?.[0].require.images).toEqual({ exact: 1 })
-    expect(models[1].requirements?.[0].require.images).toEqual({ exact: 1 })
+    expect(models.every((model) => model.inputLimits?.images?.exact === 1)).toBe(true)
+    expect(models.every((model) => model.requirements?.[0].require.images?.exact === 1)).toBe(true)
   })
 })

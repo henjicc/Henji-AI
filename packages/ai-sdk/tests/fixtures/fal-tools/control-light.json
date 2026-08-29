@@ -1,0 +1,20 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/control-light",
+  "input": {
+    "image_url": "uxp://source",
+    "lighting_level": 0.75
+  },
+  "submit": {
+    "request_id": "control-light-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/control-light/requests/control-light-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/control-light/requests/control-light-fixture"
+  },
+  "result": {
+    "images": [{ "url": "https://fixture.invalid/control-light.png" }],
+    "seed": 1
+  }
+}

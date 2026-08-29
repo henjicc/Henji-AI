@@ -167,6 +167,115 @@ describe('createAIClient', () => {
     expect(() => resolveProvider(CLIENT_PROVIDER_ID)).toThrow(/unknown_provider/)
   })
 
+  it('续轮询只解析 endpoint，保留别名参数与结构化结果且不重跑生成 builder', async () => {
+    const selector = vi.fn((params) => params.quality === 'high' && params.prompt === 'from-legacy'
+      ? 'high'
+      : 'standard')
+    const builder = vi.fn(() => {
+      throw new Error('polling must not rebuild the generation body')
+    })
+    const structuredOutput = vi.fn(() => ({
+      version: 1 as const,
+      kind: 'layer-stack' as const,
+      primary: {
+        version: 1 as const,
+        sourceOutputIndex: 0,
+        url: 'https://example.com/layer.png',
+        zIndex: 0,
+        role: 'base' as const,
+        width: 1,
+        height: 1,
+        format: 'png' as const,
+      },
+      outputs: [{
+        version: 1 as const,
+        sourceOutputIndex: 0,
+        url: 'https://example.com/layer.png',
+        zIndex: 0,
+        role: 'base' as const,
+        width: 1,
+        height: 1,
+        format: 'png' as const,
+      }],
+      metadata: {
+        colorSpace: 'srgb' as const,
+        alphaMode: 'straight' as const,
+        compositeOperation: 'source-over' as const,
+        order: 'bottom-to-top' as const,
+      },
+    }))
+    const continuePolling = vi.fn<ProviderAdapter['continuePolling']>(async (input) => ({
+      status: 'completed',
+      url: 'https://example.com/result.png',
+      taskId: input.taskId,
+      metadata: { source: 'polling' },
+    }))
+    const client = createAIClient({
+      runtime: createRuntime(),
+      providers: [{
+        id: CLIENT_PROVIDER_ID,
+        adapter: {
+          execute: async () => ({ status: 'pending', url: '', metadata: {} }),
+          continuePolling,
+        },
+      }],
+      models: [defineModel({
+        ...createTestModel(),
+        endpoints: {
+          selector,
+          routes: {
+            high: { path: '/v1/client-test/high', method: 'POST' },
+            standard: { path: '/v1/client-test/standard', method: 'POST' },
+          },
+        },
+        request: { builder },
+        response: { structuredOutput },
+      })],
+    })
+    const built = vi.fn()
+    const completed = vi.fn()
+
+    try {
+      const result = await client.continuePolling({
+        modelId: 'client-test-alias',
+        taskId: 'provider-task-resume',
+        requestId: 'client-poll-selector',
+        params: { legacyPrompt: 'from-legacy' },
+      }, {
+        onRequestBuilt: built,
+        onCompleted: completed,
+      })
+
+      expect(selector).toHaveBeenCalledWith(expect.objectContaining({
+        prompt: 'from-legacy',
+        quality: 'high',
+      }))
+      expect(builder).not.toHaveBeenCalled()
+      expect(built).toHaveBeenCalledWith(expect.objectContaining({
+        method: 'GET',
+        route: '/v1/client-test/high',
+        requestBody: {},
+      }))
+      expect(continuePolling).toHaveBeenCalledWith(expect.objectContaining({
+        route: '/v1/client-test/high',
+        taskId: 'provider-task-resume',
+      }))
+      expect(structuredOutput).toHaveBeenCalledWith(expect.objectContaining({
+        metadata: { source: 'polling' },
+        params: expect.objectContaining({ prompt: 'from-legacy', quality: 'high' }),
+      }))
+      expect(result.structuredOutput).toMatchObject({ kind: 'layer-stack' })
+      expect(completed).toHaveBeenCalledWith(expect.objectContaining({
+        method: 'GET',
+        route: '/v1/client-test/high',
+        requestBody: {},
+        result: expect.objectContaining({ structuredOutput: expect.any(Object) }),
+      }))
+    } finally {
+      client.dispose()
+    }
+  })
+
   it('通过同一假 Transport 跑通 chat.stream 与 chat.modelStep 的真实编排', async () => {
     const fetch = vi.fn(async () => new Response([
       'data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"test-model","choices":[{"index":0,"delta":{"role":"assistant","content":"完成"},"finish_reason":null}]}',

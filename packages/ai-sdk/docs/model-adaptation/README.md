@@ -7,15 +7,16 @@
 |---|---|
 | 最后更新 | 2026-08-29 |
 | 模型数量 | 生成主清单 19（图片 10 / 视频 9）+ 供应商专属 10 + SDK 跨项目能力模型 14（ASR 9 / 翻译 3 / LLM 2） |
-| 模型供应商文档数量 | 生成/存量 75 + SDK 跨项目能力 14（另有 Fal 工具 5） |
+| 模型供应商文档数量 | 生成/存量 75 + SDK 跨项目能力 14（另有 Fal 工具 12） |
 | 覆盖供应商 | 火山引擎（官方）、百炼（官方）、智谱（官方 LLM）、Groq（官方 LLM）、APIMart、KIE、Fal、派欧云、魔搭、Grsai |
 
-另有 5 个待按能力按需分发的 Fal 图像工具，不进入默认 105 模型兼容目录：
-[Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、
-[Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、
-[Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)、
-[Qwen Image Edit 2509 多角度](Qwen-Image-Edit-2509-多角度/Qwen-Image-Edit-2509-多角度_Fal.md)、
-[透视变换](透视变换/透视变换_Fal.md)。五项均已实现按需 SDK 入口；后两项由多角度画布能力受控使用，真实质量仍待付费验证。
+另有 12 个按能力按需分发的 Fal 图像工具，不进入默认 105 模型兼容目录：
+
+- 消除：[Flux Pro Erase](Flux-Pro-Erase/Flux-Pro-Erase_Fal.md)、[Bria Eraser](Bria-Eraser/Bria-Eraser_Fal.md)、[Finegrain Eraser](Finegrain-Eraser/Finegrain-Eraser_Fal.md)。
+- 图片实用工具：[Image Apps v2 重打光](Image-Apps-v2-重打光/Image-Apps-v2-重打光_Fal.md)、[ControlLight](ControlLight/ControlLight_Fal.md)、[Image Apps v2 扩图](Image-Apps-v2-扩图/Image-Apps-v2-扩图_Fal.md)、[Image Apps v2 商品摄影](Image-Apps-v2-商品摄影/Image-Apps-v2-商品摄影_Fal.md)、[Image Apps v2 照片修复](Image-Apps-v2-照片修复/Image-Apps-v2-照片修复_Fal.md)、[Pixelcut 背景移除](Pixelcut-背景移除/Pixelcut-背景移除_Fal.md)。
+- 多角度：[Qwen Image Edit 2509 多角度](Qwen-Image-Edit-2509-多角度/Qwen-Image-Edit-2509-多角度_Fal.md)、[透视变换](透视变换/透视变换_Fal.md)、[FLUX 2 多角度](FLUX-2-多角度/FLUX-2-多角度_Fal.md)。
+
+工具均复用 Fal 队列、上传与结果解析；它们是独立的按需 SDK 入口，不是新的执行内核。真实质量、延迟和账单仍待获得付费授权后验证。
 
 ## 一、目录结构约定
 
@@ -164,10 +165,19 @@ Grsai 暂未在此表出现：其站内「Veo API」旧版文档给出了 `veo3.
 | Finegrain Eraser (Mask) | `fal-ai/finegrain-eraser/mask` | `tool-models/fal/finegrain-eraser` |
 | Qwen Image Edit 2509 多角度 | `fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles` | `@henjicc/ai-sdk/tool-models/fal/qwen-image-edit-2509-multiple-angles` |
 | 透视变换 | `fal-ai/image-apps-v2/perspective` | `@henjicc/ai-sdk/tool-models/fal/perspective-change` |
+| Image Apps v2 重打光 | `fal-ai/image-apps-v2/relighting` | `tool-models/fal/relighting` |
+| ControlLight | `fal-ai/control-light` | `tool-models/fal/control-light` |
+| Image Apps v2 扩图 | `fal-ai/image-apps-v2/outpaint` | `tool-models/fal/outpaint` |
+| Image Apps v2 商品摄影 | `fal-ai/image-apps-v2/product-photography` | `tool-models/fal/product-photography` |
+| Image Apps v2 照片修复 | `fal-ai/image-apps-v2/photo-restoration` | `tool-models/fal/photo-restoration` |
+| Pixelcut 背景移除 | `pixelcut/background-removal` | `tool-models/fal/pixelcut-background-removal` |
+| FLUX 2 多角度 | `fal-ai/flux-2-lora-gallery/multiple-angles` | `tool-models/fal/flux-2-multiple-angles` |
 
-前三项消除工具的聚合入口为 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools`。它是 3 个模型的技术分发集合，不是新的执行内核；
-统一能力画像将它们派生为 `operation=image-edit`、`feature=erase`。后两项多角度工具的聚合入口为
-`@henjicc/ai-sdk/tool-packs/fal-multi-angle-tools`，与消除 pack 分开分发，不误挂到消除工具画像。
+- 3 个消除工具聚合为 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools`，统一能力画像为 `operation=image-edit`、`feature=erase`。
+- 6 个重打光/修复/扩图/商品/抠图工具聚合为 `@henjicc/ai-sdk/tool-packs/fal-image-utility-tools`，再按单模型画像区分具体能力。
+- Qwen 2509、透视变换和 FLUX 2 聚合为 `@henjicc/ai-sdk/tool-packs/fal-multi-angle-tools`，与消除和实用工具 pack 分开分发。
+
+三个 pack 都只是静态分发集合，执行继续走同一生成客户端和 Fal 公共协议。
 
 | 模型 | APIMart | KIE | Fal |
 |---|---|---|---|

@@ -52,7 +52,9 @@ curl -X POST https://queue.fal.run/fal-ai/flux/dev \
 }
 ```
 
-保存 `request_id`；也可保存完整 `status_url`，避免续轮询时重建错误路由。
+保存 `request_id`；也可保存完整 `status_url`，避免续轮询时重建错误路由。SDK 只接受
+`https://queue.fal.run` 同源的 `status_url` / `response_url`，不会把 Fal Key 发送到持久化数据或
+响应中夹带的第三方地址。
 
 ### 2.2 状态和结果
 
@@ -127,22 +129,32 @@ curl "https://api.fal.ai/v1/account/billing?expand=credits" \
 
 | 能力 | 状态 | 说明 |
 |---|---|---|
-| `fal.run` 直连 | 已接入 | 模型请求体含 `sync_mode: true` 时使用 |
-| `queue.fal.run` 队列 | 已接入 | 默认生成路径 |
-| 状态与结果 | 已接入 | 支持 `status_url` 和按 endpoint/request ID 重建 |
+| `fal.run` 直连 | 已接入 | 模型请求体含 `sync_mode: true` 时使用；该本地路由标记不下发给模型 |
+| `queue.fal.run` 队列 | 已接入 | 默认生成路径；模型级 `sync_mode: false` 会保留下发，供 Pixelcut 等端点强制返回 CDN URL |
+| 状态与结果 | 已接入 | 支持同源 `status_url` 和按 endpoint/request ID 重建；跨域状态/结果 URL 会在请求前拒绝 |
 | 结果 URL 解析 | 已接入 | 递归收集模型结果中的 URL |
 | 本地文件 | Electron 真实 E2E + Transport fixture 已通过 | 119 字节 PNG 的 Range 回读与本地 SHA-256 一致；当前实现使用 REST initiate + signed PUT，并经 `RuntimeContext.transport` 覆盖成功、initiate失败、PUT失败与取消。UXP 真机网络仍由插件集成验证 |
 | 价格/余额 API | 尚未用于连接检测 | 文档已记录；余额需 Admin Key，优先级低 |
 | 自定义图片尺寸 | 已接入 | Seedream 5 Pro/Lite、Qwen Image 3、GPT Image 2、Z-Image 可显式选择约 1MP 的 16 对齐对象；各模型默认仍保持 0.1.5 语义，Lite 低于官方面积下限时由 Fal 自动放大 |
 | 图片放大 | 已接入 | Topaz Precision/Creative/Generative、Topaz Transparent、SeedVR2、Bria Creative、Ideogram；共用 Fal 队列与上传，按模型声明倍率、透明通道和计价预检 |
+| 图片实用工具 | 已接入 | Image Apps v2 重打光/扩图/商品摄影/照片修复、ControlLight、Pixelcut 背景移除；按需分发，不进入默认模型目录 |
+| 多角度工具 | 已接入 | Qwen Image Edit 2509 Multiple Angles、Image Apps v2 Perspective、FLUX 2 Multiple Angles；受控多结果生成 |
 
-### 6.1 可选图像编辑模型分发集合
+### 6.1 可选图像工具分发集合
 
 `@henjicc/ai-sdk/tool-packs/fal-image-edit-tools` 按需提供 3 个工具端点：
 `fal-ai/flux-pro/v1/erase`、`fal-ai/bria/eraser`、`fal-ai/finegrain-eraser/mask`。
-它们复用本文件的队列、结果解析和 Fal CDN 上传，不进入默认 105 模型目录，也不进入普通 Fal provider pack。
-该入口只是静态分发集合；运行时按统一能力画像筛选 `operation=image-edit`、`feature=erase`，执行仍走同一生成客户端。
-完整字段与价格见对应单模型文档。
+
+`@henjicc/ai-sdk/tool-packs/fal-image-utility-tools` 按需提供 6 个端点：
+`fal-ai/image-apps-v2/relighting`、`fal-ai/control-light`、`fal-ai/image-apps-v2/outpaint`、
+`fal-ai/image-apps-v2/product-photography`、`fal-ai/image-apps-v2/photo-restoration`、
+`pixelcut/background-removal`。
+
+`@henjicc/ai-sdk/tool-packs/fal-multi-angle-tools` 提供 3 个多角度端点：
+`fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles`、`fal-ai/image-apps-v2/perspective`、
+`fal-ai/flux-2-lora-gallery/multiple-angles`。
+
+三个 pack 都复用本文件的队列、结果解析和 Fal CDN 上传，不进入默认 105 模型目录，也不进入普通 Fal provider pack。它们只是静态分发集合，执行仍走同一生成客户端。完整字段与价格见对应单模型文档。
 
 ## 7. 原始链接索引
 

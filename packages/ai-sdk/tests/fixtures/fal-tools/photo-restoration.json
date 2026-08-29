@@ -1,0 +1,20 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/image-apps-v2/photo-restoration",
+  "input": {
+    "image_url": "uxp://source",
+    "enhance_resolution": true,
+    "fix_colors": true,
+    "remove_scratches": true,
+    "aspect_ratio": { "ratio": "4:3" }
+  },
+  "submit": {
+    "request_id": "photo-restoration-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/image-apps-v2/photo-restoration/requests/photo-restoration-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/image-apps-v2/photo-restoration/requests/photo-restoration-fixture"
+  },
+  "result": { "images": [{ "url": "https://fixture.invalid/photo-restoration.png" }] }
+}

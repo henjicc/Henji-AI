@@ -16,7 +16,7 @@ const FAL_QUEUE_BASE_URL = 'https://queue.fal.run'
 
 export async function execute(input: ProviderExecutionInput): Promise<ProviderExecutionResult> {
   const syncMode = isJsonObject(input.body) && input.body.sync_mode === true
-  const cleanInput = stripSyncMode(input.body)
+  const cleanInput = stripLocalSyncMode(input.body)
   const payload = syncMode
     ? await submit(input, normalizeEndpoint(FAL_SYNC_BASE_URL, input.route), cleanInput)
     : await submit(input, normalizeEndpoint(FAL_QUEUE_BASE_URL, input.route), cleanInput)
@@ -25,7 +25,10 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
     // Fal 会返回服务端解析后的完整 status_url。它可能与本地 catalog route 不同
     // （例如供应商给旧别名做了提交兼容，但查询只认 canonical endpoint），因此必须
     // 优先保存完整 URL；只在响应没有 status_url 时才退回 request_id 并重建路径。
-    const taskId = readString(payload, 'status_url') ?? readString(payload, 'request_id')
+    const returnedStatusUrl = readString(payload, 'status_url')
+    const taskId = returnedStatusUrl
+      ? requireFalQueueUrl(returnedStatusUrl, 'status_url')
+      : readString(payload, 'request_id')
     if (!taskId) {
       throw new AiRuntimeError('empty_result', 'Fal queue response has neither request_id nor status_url')
     }
@@ -42,8 +45,8 @@ export async function execute(input: ProviderExecutionInput): Promise<ProviderEx
 }
 
 export async function continuePolling(input: ProviderContinuePollingInput): Promise<ProviderExecutionResult> {
-  const statusUrl = input.taskId.startsWith('http://') || input.taskId.startsWith('https://')
-    ? input.taskId
+  const statusUrl = /^https?:\/\//i.test(input.taskId)
+    ? requireFalQueueUrl(input.taskId, 'taskId')
     : `${FAL_QUEUE_BASE_URL}/${input.route.replace(/^\/+/, '')}/requests/${input.taskId}/status`
   const finalPayload = await pollByStatusUrl(input, statusUrl)
   const urls = extractUrls(finalPayload)
@@ -80,7 +83,9 @@ async function pollByStatusUrl(input: ProviderContinuePollingInput, statusUrl: s
     if (state === 'COMPLETED') {
       assertFalSucceeded(payload)
       const responseUrl = readString(payload, 'response_url')
-      const resultUrl = responseUrl ?? statusUrl.replace(/\/status(?:\?.*)?$/, '')
+      const resultUrl = responseUrl
+        ? requireFalQueueUrl(responseUrl, 'response_url')
+        : statusUrl.replace(/\/status(?:\?.*)?$/, '')
       const finalResponse = await fetchProvider('Fal', resultUrl, {
         headers: { Authorization: `Key ${input.apiKey}` },
         signal: input.signal,
@@ -110,11 +115,29 @@ function assertFalSucceeded(payload: JsonValue): void {
   }
 }
 
-function stripSyncMode(value: JsonValue): JsonValue {
+function stripLocalSyncMode(value: JsonValue): JsonValue {
   if (!isJsonObject(value)) return value
+  if (value.sync_mode !== true) return value
   const next: JsonObject = { ...value }
   delete next.sync_mode
   return next
+}
+
+/** Fal Key 只能发送到官方队列源，避免持久化或导入的任务 URL 外带凭据。 */
+function requireFalQueueUrl(value: string, field: string): string {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw new AiRuntimeError('invalid_endpoint', `Fal ${field} is not a valid URL`)
+  }
+  if (parsed.origin !== FAL_QUEUE_BASE_URL || parsed.username || parsed.password) {
+    throw new AiRuntimeError(
+      'invalid_endpoint',
+      `Fal ${field} must use ${FAL_QUEUE_BASE_URL}`
+    )
+  }
+  return parsed.toString()
 }
 
 function extractUrls(payload: JsonValue): string[] {

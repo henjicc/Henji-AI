@@ -64,10 +64,17 @@ const generatedProviderPacks = walk(path.join(packsRoot, 'provider-packs'), (fil
 const toolModelPacks = walk(toolModelRoot, (file) => file.endsWith('.ts'))
 const expectedToolModelPacks = new Set([
   'bria-eraser.ts',
+  'control-light.ts',
   'finegrain-eraser.ts',
+  'flux-2-multiple-angles.ts',
   'flux-pro-erase.ts',
+  'outpaint.ts',
   'perspective-change.ts',
+  'photo-restoration.ts',
+  'pixelcut-background-removal.ts',
+  'product-photography.ts',
   'qwen-image-edit-2509-multiple-angles.ts',
+  'relighting.ts',
 ])
 if (modelFiles.length !== 105 || generatedModelPacks.length !== 105) {
   fail(`单模型导出不完整：catalog=${modelFiles.length}, packs=${generatedModelPacks.length}`)
@@ -117,8 +124,9 @@ const builtinsPattern = /\/src\/(?:catalog\/[^/]+\/[^/]+\.model\.ts|providers\/(
 const modelPattern = /\/src\/catalog\/([^/]+)\/[^/]+\.model\.ts$/
 const providerPattern = /\/src\/providers\/(apimart|bailian|fal|grsai|kie|modelscope|ppio|volcengine)\.ts$/
 const toolModelPattern = /\/src\/tool-packs\/fal-erase\/models\/[^/]+\.model\.ts$/
+const utilityModelPattern = /\/src\/tool-packs\/fal-image-utilities\/models\/[^/]+\.model\.ts$/
 const multiAngleModelPattern = /\/src\/tool-packs\/fal-multi-angle\/models\/[^/]+\.model\.ts$/
-const anyToolModelPattern = /\/src\/tool-packs\/(?:fal-erase|fal-multi-angle)\/models\/[^/]+\.model\.ts$/
+const anyToolModelPattern = /\/src\/tool-packs\/[^/]+\/models\/[^/]+\.model\.ts$/
 
 const bare = bundle('GenerationCore', [
   "import { createModularGenerationClient } from './generation/core'",
@@ -164,9 +172,14 @@ const singleErase = bundle('FalFluxErase', [
   'export { createModularGenerationClient, pack }',
 ].join('\n'), (inputs) => {
   const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
-  const tools = inputs.filter((input) => toolModelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
   const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
-  if (ordinaryModels.length !== 0 || tools.length !== 1 || !tools[0].endsWith('/flux-pro-erase.model.ts')) {
+  if (
+    ordinaryModels.length !== 0
+    || tools.length !== 1
+    || !toolModelPattern.test(`/${tools[0]}`)
+    || !tools[0].endsWith('/flux-pro-erase.model.ts')
+  ) {
     fail(`单Fal消除工具静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.join(', ')}`)
   }
   if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
@@ -180,13 +193,50 @@ const falErasePack = bundle('FalEraseToolPack', [
   'export { createModularGenerationClient, pack }',
 ].join('\n'), (inputs) => {
   const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
-  const tools = inputs.filter((input) => toolModelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
   const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
-  if (ordinaryModels.length !== 0 || tools.length !== 3) {
+  if (ordinaryModels.length !== 0 || tools.length !== 3 || tools.some((input) => !toolModelPattern.test(`/${input}`))) {
     fail(`Fal erase tool pack静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.length}`)
   }
   if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
     fail(`Fal erase tool pack含其他provider：${providers.join(', ')}`)
+  }
+})
+
+const singleUtility = bundle('FalRelighting', [
+  "import { createModularGenerationClient } from './generation/core'",
+  "import { pack } from './packs/tool-models/fal/relighting'",
+  'export { createModularGenerationClient, pack }',
+].join('\n'), (inputs) => {
+  const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
+  const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
+  if (
+    ordinaryModels.length !== 0
+    || tools.length !== 1
+    || !utilityModelPattern.test(`/${tools[0]}`)
+    || !tools[0].endsWith('/relighting.model.ts')
+  ) {
+    fail(`单 Fal 图片实用工具静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.join(',')}`)
+  }
+  if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
+    fail(`单 Fal 图片实用工具含其他 provider：${providers.join(',')}`)
+  }
+})
+
+const falUtilityPack = bundle('FalImageUtilityToolPack', [
+  "import { createModularGenerationClient } from './generation/core'",
+  "import { pack } from './packs/tool-packs/fal-image-utility-tools'",
+  'export { createModularGenerationClient, pack }',
+].join('\n'), (inputs) => {
+  const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
+  const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
+  if (ordinaryModels.length !== 0 || tools.length !== 6 || tools.some((input) => !utilityModelPattern.test(`/${input}`))) {
+    fail(`Fal 图片实用 tool pack 静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.length}`)
+  }
+  if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
+    fail(`Fal 图片实用 tool pack 含其他 provider：${providers.join(',')}`)
   }
 })
 
@@ -196,9 +246,14 @@ const singleMultiAngle = bundle('FalMultipleAngles', [
   'export { createModularGenerationClient, pack }',
 ].join('\n'), (inputs) => {
   const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
-  const tools = inputs.filter((input) => multiAngleModelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
   const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
-  if (ordinaryModels.length !== 0 || tools.length !== 1 || !tools[0].endsWith('/qwen-image-edit-2509-multiple-angles.model.ts')) {
+  if (
+    ordinaryModels.length !== 0
+    || tools.length !== 1
+    || !multiAngleModelPattern.test(`/${tools[0]}`)
+    || !tools[0].endsWith('/qwen-image-edit-2509-multiple-angles.model.ts')
+  ) {
     fail(`单 Fal 多角度工具静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.join(',')}`)
   }
   if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
@@ -212,9 +267,9 @@ const falMultiAnglePack = bundle('FalMultiAngleToolPack', [
   'export { createModularGenerationClient, pack }',
 ].join('\n'), (inputs) => {
   const ordinaryModels = inputs.filter((input) => modelPattern.test(`/${input}`))
-  const tools = inputs.filter((input) => multiAngleModelPattern.test(`/${input}`))
+  const tools = inputs.filter((input) => anyToolModelPattern.test(`/${input}`))
   const providers = inputs.filter((input) => providerPattern.test(`/${input}`))
-  if (ordinaryModels.length !== 0 || tools.length !== 2) {
+  if (ordinaryModels.length !== 0 || tools.length !== 3 || tools.some((input) => !multiAngleModelPattern.test(`/${input}`))) {
     fail(`Fal 多角度 tool pack 静态图异常：ordinary=${ordinaryModels.length}, tools=${tools.length}`)
   }
   if (providers.length !== 1 || !providers[0].endsWith('/providers/fal.ts')) {
@@ -435,8 +490,10 @@ if (llmModuleClient.list().length !== 1) fail('LLM module 受限生命周期注�
 for (const [name, artifact, globalName, expectedModelCount] of [
   ['single erase', singleErase, 'HenjiFalFluxErase', 1],
   ['Fal erase tool pack', falErasePack, 'HenjiFalEraseToolPack', 3],
+  ['single image utility', singleUtility, 'HenjiFalRelighting', 1],
+  ['Fal image utility tool pack', falUtilityPack, 'HenjiFalImageUtilityToolPack', 6],
   ['single multi-angle', singleMultiAngle, 'HenjiFalMultipleAngles', 1],
-  ['Fal multi-angle tool pack', falMultiAnglePack, 'HenjiFalMultiAngleToolPack', 2],
+  ['Fal multi-angle tool pack', falMultiAnglePack, 'HenjiFalMultiAngleToolPack', 3],
 ]) {
   new vm.Script(artifact.iife.code, { filename: `${name}.iife.js` }).runInContext(context)
   const api = vm.runInContext(globalName, context)
@@ -459,6 +516,8 @@ const metrics = {
   kieProviderPack: { iife: kiePack.iife.bytes, esm: kiePack.esm.bytes, modules: kiePack.iife.modules },
   singleFalErase: { iife: singleErase.iife.bytes, esm: singleErase.esm.bytes, modules: singleErase.iife.modules },
   falEraseToolPack: { iife: falErasePack.iife.bytes, esm: falErasePack.esm.bytes, modules: falErasePack.iife.modules },
+  singleFalImageUtility: { iife: singleUtility.iife.bytes, esm: singleUtility.esm.bytes, modules: singleUtility.iife.modules },
+  falImageUtilityToolPack: { iife: falUtilityPack.iife.bytes, esm: falUtilityPack.esm.bytes, modules: falUtilityPack.iife.modules },
   singleFalMultiAngle: { iife: singleMultiAngle.iife.bytes, esm: singleMultiAngle.esm.bytes, modules: singleMultiAngle.iife.modules },
   falMultiAngleToolPack: { iife: falMultiAnglePack.iife.bytes, esm: falMultiAnglePack.esm.bytes, modules: falMultiAnglePack.iife.modules },
   defaultGeneration: { iife: defaultGeneration.iife.bytes, esm: defaultGeneration.esm.bytes, modules: defaultGeneration.iife.modules },

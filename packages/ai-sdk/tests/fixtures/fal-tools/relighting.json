@@ -1,0 +1,18 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/image-apps-v2/relighting",
+  "input": {
+    "image_url": "uxp://source",
+    "lighting_style": "golden_hour",
+    "aspect_ratio": { "ratio": "4:3" }
+  },
+  "submit": {
+    "request_id": "relighting-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/image-apps-v2/relighting/requests/relighting-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/image-apps-v2/relighting/requests/relighting-fixture"
+  },
+  "result": { "images": [{ "url": "https://fixture.invalid/relighting.png" }] }
+}

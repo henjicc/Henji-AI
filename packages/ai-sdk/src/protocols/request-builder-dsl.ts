@@ -17,7 +17,7 @@ export async function buildRequest(
   params: JsonObject,
   model: ModelRuntimeDefinition | undefined
 ): Promise<BuiltRequest> {
-  const endpoint = await resolveEndpoint(params, model?.endpoints)
+  const endpoint = await resolveRequestEndpoint(params, model)
   const body = await buildBody(params, model)
   return {
     route: endpoint.route,
@@ -26,15 +26,17 @@ export async function buildRequest(
   }
 }
 
-interface ResolvedEndpoint {
+export interface ResolvedEndpoint {
   route: string
   method: string
 }
 
-async function resolveEndpoint(
+/** 续查任务只需要路由；不应为了轮询再执行一遍可能有严格输入校验的生成 builder。 */
+export async function resolveRequestEndpoint(
   params: JsonObject,
-  endpoints: RuntimeEndpointConfig | undefined
+  model: ModelRuntimeDefinition | undefined
 ): Promise<ResolvedEndpoint> {
+  const endpoints: RuntimeEndpointConfig | undefined = model?.endpoints
   if (typeof endpoints === 'string') {
     return { route: endpoints, method: 'POST' }
   }

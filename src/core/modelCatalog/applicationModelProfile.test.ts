@@ -80,11 +80,12 @@ describe('Henji-AI 显式模型选择', () => {
 
     try {
       expect(HENJI_GENERATION_EXECUTION_PACKS).toHaveLength(9)
-      expect(client.catalog.list()).toHaveLength(107)
+      expect(client.catalog.list()).toHaveLength(108)
       expect(new Set(client.providers.list())).toEqual(new Set(HENJI_GENERATION_PROVIDER_IDS))
       expect(client.catalog.get('fal-flux-pro-erase')).toBeUndefined()
       expect(client.catalog.get('fal-qwen-image-edit-2509-multiple-angles')).toBeDefined()
       expect(client.catalog.get('fal-perspective-change')).toBeDefined()
+      expect(client.catalog.get('fal-flux-2-multiple-angles')).toBeDefined()
 
       client.cancel({ namespace: 'generation', taskId: 'application-profile-cancel' })
       expect(isCancelled('generation', 'application-profile-cancel')).toBe(true)

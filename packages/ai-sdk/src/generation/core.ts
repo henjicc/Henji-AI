@@ -1,6 +1,6 @@
 import { flattenRuntimeParams } from '../catalog/consumer-contract'
 import { createModelIndex, type ModelIndex } from '../catalog/model-index'
-import { buildRequest } from '../protocols/request-builder-dsl'
+import { buildRequest, resolveRequestEndpoint } from '../protocols/request-builder-dsl'
 import { normalizeRequestBody } from '../protocols/request-normalizer'
 import type { ProviderAdapter } from '../providers/types'
 import { AiRuntimeError } from '../runtime/AiRuntimeError'
@@ -396,19 +396,19 @@ async function executePolling(
   registerAbortController('generation', taskId, controller)
   try {
     const apiKey = await requireApiKey(runtime, providerId)
-    const builtRequest = await buildRequest(effectiveParams, model)
+    const endpoint = await resolveRequestEndpoint(effectiveParams, model)
     const info: GenerationClientRequestInfo = {
       requestId,
       requestedModelId: request.modelId,
       providerId,
-      route: builtRequest.route,
+      route: endpoint.route,
       method: 'GET',
-      requestBody: builtRequest.body,
+      requestBody: {},
     }
     hooks.onRequestBuilt?.(info)
     const providerResult = await provider.adapter.continuePolling({
       apiKey,
-      route: builtRequest.route,
+      route: endpoint.route,
       taskId,
       requestId,
       polling: model.meta.polling,

@@ -9,13 +9,23 @@ import {
 } from '../src/discovery'
 import { LLM_MODEL_CATALOG_ENTRIES } from '../src/llm/modelCatalogEntries'
 import { pack as falErasePack } from '../src/packs/tool-packs/fal-image-edit-tools'
+import { pack as falImageUtilityPack } from '../src/packs/tool-packs/fal-image-utility-tools'
+import { pack as falMultiAnglePack } from '../src/packs/tool-packs/fal-multi-angle-tools'
 
-const generationModels = [...catalog, ...falErasePack.models]
+const optionalFalTools = [
+  ...falErasePack.models,
+  ...falImageUtilityPack.models,
+  ...falMultiAnglePack.models,
+]
+const generationModels = [...catalog, ...optionalFalTools]
 
 describe('统一模型能力画像与筛选', () => {
-  it('105默认+3可选generation逐项派生合法画像', () => {
+  it('105默认+12可选generation逐项派生合法画像', () => {
     expect(catalog).toHaveLength(105)
     expect(falErasePack.models).toHaveLength(3)
+    expect(falImageUtilityPack.models).toHaveLength(6)
+    expect(falMultiAnglePack.models).toHaveLength(3)
+    expect(optionalFalTools).toHaveLength(12)
     for (const model of generationModels) {
       const profile = profileGenerationModel(model)
       expect(profile.id).toBe(model.meta.id)
@@ -76,6 +86,38 @@ describe('统一模型能力画像与筛选', () => {
       'fal-flux-pro-erase', 'fal-bria-eraser', 'fal-finegrain-eraser',
     ])
     expect(discovery.search({ providerIds: 'kie' })).toEqual([])
+  })
+
+  it('Fal 图片工具与多角度工具按专用 feature 精确发现', () => {
+    const discovery = createModelCapabilityDiscovery({
+      generationPacks: [falImageUtilityPack, falMultiAnglePack],
+    })
+    const expectedByFeature = {
+      relighting: ['fal-image-apps-v2-relighting'],
+      'low-light-enhancement': ['fal-control-light'],
+      outpainting: ['fal-image-apps-v2-outpaint'],
+      'product-photography': ['fal-image-apps-v2-product-photography'],
+      'photo-restoration': ['fal-image-apps-v2-photo-restoration'],
+      'background-removal': ['fal-pixelcut-background-removal'],
+    } as const
+
+    for (const [feature, expectedIds] of Object.entries(expectedByFeature)) {
+      const matches = discovery.search({
+        providerIds: 'fal',
+        outputModalities: 'image',
+        operations: 'image-edit',
+        acceptedInputContentKinds: 'image',
+        features: feature,
+      })
+      expect(matches.map((item) => item.id)).toEqual(expectedIds)
+    }
+
+    expect(new Set(discovery.search({ features: 'multi-angle' }).map((item) => item.id))).toEqual(new Set([
+      'fal-qwen-image-edit-2509-multiple-angles',
+      'fal-perspective-change',
+      'fal-flux-2-multiple-angles',
+    ]))
+    expect(catalog.some((model) => optionalFalTools.some((tool) => tool.meta.id === model.meta.id))).toBe(false)
   })
 
   it('组合筛选覆盖视频、音频与多模态chat，OR语义明确', () => {

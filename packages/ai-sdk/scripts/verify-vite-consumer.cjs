@@ -71,7 +71,9 @@ async function verify() {
     "import '@henjicc/ai-sdk/capabilities/realtime'",
     "import '@henjicc/ai-sdk/discovery'",
     "import '@henjicc/ai-sdk/tool-models/fal/bria-eraser'",
+    "import '@henjicc/ai-sdk/tool-models/fal/relighting'",
     "import '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'",
+    "import '@henjicc/ai-sdk/tool-packs/fal-image-utility-tools'",
     'document.body.dataset.sdkResolved = "true"',
   ].join('\n'))
   fs.writeFileSync(path.join(consumerRoot, 'consumer.ts'), [
@@ -86,7 +88,9 @@ async function verify() {
     "import { createQwenMtFlashTranslationModule } from '@henjicc/ai-sdk/capabilities/translation/bailian'",
     "import type { CapabilityRealtimeSession } from '@henjicc/ai-sdk/capabilities/realtime'",
     "import { createModelCapabilityDiscovery } from '@henjicc/ai-sdk/discovery'",
+    "import { model as falRelightingModel, pack as falRelightingPack } from '@henjicc/ai-sdk/tool-models/fal/relighting'",
     "import { pack as falImageEditTools } from '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools'",
+    "import { pack as falImageUtilityTools } from '@henjicc/ai-sdk/tool-packs/fal-image-utility-tools'",
     "import { createProviderFromPreset, findLlmProviderPreset, normalizeLlmProviderSetup, resolveLlmProviderApiKeyUrl, type LlmChatRequestDto, type LlmProviderSetup } from '@henjicc/ai-sdk/llm'",
     "import { cancelLlmChatTask, runLlmChatStream, type RuntimeContext as StreamingRuntimeContext } from '@henjicc/ai-sdk/llm/streaming'",
     "import { GROQ_DEFAULT_MODEL_CONFIG, GROQ_DEFAULT_MODEL_ID, createGroqChatRequest, createGroqLlmModule } from '@henjicc/ai-sdk/llm/groq'",
@@ -99,11 +103,14 @@ async function verify() {
     "  media: { read: async () => ({ bytes: new Uint8Array(), mimeType: 'image/png', filename: 'fixture.png' }) },",
     '} satisfies RuntimeContext',
     '',
-    'const modular = createModularGenerationClient({ runtime, packs: [zImagePack] })',
+    'const modular = createModularGenerationClient({ runtime, packs: [zImagePack, falRelightingPack] })',
     "modular.catalog.get('kie/z-image')",
+    'modular.catalog.get(falRelightingModel.meta.id)',
     "createAIClient({ runtime, generation: { mode: 'modular', packs: [zImagePack] } })",
     'const discovery = createModelCapabilityDiscovery({ generationPacks: [falImageEditTools] })',
     "void discovery.search({ providerIds: 'fal', operations: 'image-edit', features: 'erase' })",
+    'const utilityDiscovery = createModelCapabilityDiscovery({ generationPacks: [falImageUtilityTools] })',
+    "void utilityDiscovery.search({ providerIds: 'fal', outputModalities: 'image' })",
     '',
     'const speechModule: CapabilityModule<{ audio: Uint8Array }, { text: string }> = {',
     "  descriptor: { id: 'fixture-speech', kind: 'speech-recognition', source: { kind: 'external', namespace: '@henjicc/vite-fixture' }, contract: { input: [{ kind: 'audio' }], output: [{ kind: 'text' }] } },",
@@ -182,6 +189,8 @@ async function verify() {
   fs.writeFileSync(path.join(consumerRoot, 'runtime-probe.mjs'), [
     "import { findProviderMetadata } from '@henjicc/ai-sdk/providers'",
     "import { createModelCapabilityDiscovery } from '@henjicc/ai-sdk/discovery'",
+    "import { model as falRelightingModel } from '@henjicc/ai-sdk/tool-models/fal/relighting'",
+    "import { pack as falImageUtilityTools } from '@henjicc/ai-sdk/tool-packs/fal-image-utility-tools'",
     "import { bailianNonRealtimeAsrPresets, createBailianAsrModule } from '@henjicc/ai-sdk/capabilities/speech-recognition/bailian'",
     "import { bailianRealtimeAsrPresets, createBailianRealtimeAsrModule } from '@henjicc/ai-sdk/capabilities/speech-recognition/bailian/realtime'",
     "import { BAILIAN_QWEN_MT_PRESETS, createBailianQwenMtTranslationModule } from '@henjicc/ai-sdk/capabilities/translation/bailian'",
@@ -196,11 +205,16 @@ async function verify() {
     ']',
     'const discovery = createModelCapabilityDiscovery({ extensions, llmModels: [GROQ_DEFAULT_MODEL_CONFIG] })',
     'const ids = discovery.list().map((item) => item.id)',
+    'const utilityDiscovery = createModelCapabilityDiscovery({ generationPacks: [falImageUtilityTools] })',
+    "const utilityIds = utilityDiscovery.search({ providerIds: 'fal', outputModalities: 'image' }).map((item) => item.id)",
     'if (bailianNonRealtimeAsrPresets.length !== 5 || bailianRealtimeAsrPresets.length !== 4 || Object.keys(BAILIAN_QWEN_MT_PRESETS).length !== 3) {',
     "  throw new Error('内置能力数量与发布契约不一致')",
     '}',
     'if (ids.length !== 13 || new Set(ids).size !== ids.length) {',
     "  throw new Error(`发布能力发现结果不唯一：${JSON.stringify(ids)}`)",
+    '}',
+    'if (utilityIds.length !== 6 || new Set(utilityIds).size !== 6 || !utilityIds.includes(falRelightingModel.meta.id)) {',
+    "  throw new Error(`Fal 图片实用工具发布发现不完整：${JSON.stringify(utilityIds)}`)",
     '}',
     "const moduleClient = createLlmModuleClient({ runtime: { transport: { fetch: async () => { throw new Error('network forbidden') } }, credentials: { get: async () => undefined }, media: { read: async () => { throw new Error('media forbidden') } } }, modules: [createGroqLlmModule(), { descriptor: { id: 'fixture.external.llm', source: { kind: 'external', namespace: 'com.example.node-probe' }, providerId: 'fixture', modelId: 'fixture-model', capabilities: { text: true, image: false, video: false, audio: false, streaming: false, toolCall: false, parallelTools: false, jsonOutput: false, structuredOutputMode: 'none', reasoning: false, sampling: false, contextWindow: null, maxOutputTokens: null, usage: false }, executionModes: ['request-response'] }, execute: async () => ({ output: 'ok', reasoningOutput: '', usage: null, finishReason: 'stop' }) }] })",
     "let groqConflict = false",
@@ -212,7 +226,7 @@ async function verify() {
     "const moduleOutcome = await moduleClient.execute('fixture.external.llm', { messages: [] }, { mode: 'request-response' })",
     "if (moduleOutcome.output !== 'ok') throw new Error('外部 LLM module Node ESM 执行失败')",
     'await moduleClient.dispose()',
-    "console.log(JSON.stringify({ package: '@henjicc/ai-sdk', nodeRuntime: true, asr: 5, realtime: 4, translation: 3, groq: 1, externalLlm: 1, discovery: ids.length }))",
+    "console.log(JSON.stringify({ package: '@henjicc/ai-sdk', nodeRuntime: true, asr: 5, realtime: 4, translation: 3, falImageUtilities: utilityIds.length, groq: 1, externalLlm: 1, discovery: ids.length }))",
   ].join('\n'))
   const runtimeProbe = run(process.execPath, ['runtime-probe.mjs'], consumerRoot).trim()
   console.log(`✔ 仓库外 Node ESM 最小消费脚本通过：${runtimeProbe}`)
@@ -263,7 +277,9 @@ async function verify() {
       '@henjicc/ai-sdk/capabilities/realtime',
       '@henjicc/ai-sdk/discovery',
       '@henjicc/ai-sdk/tool-models/fal/bria-eraser',
+      '@henjicc/ai-sdk/tool-models/fal/relighting',
       '@henjicc/ai-sdk/tool-packs/fal-image-edit-tools',
+      '@henjicc/ai-sdk/tool-packs/fal-image-utility-tools',
     ]
     const resolved = {}
     for (const specifier of entries) {

@@ -1,0 +1,17 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "fal-ai/image-apps-v2/product-photography",
+  "input": {
+    "product_image_url": "uxp://source",
+    "aspect_ratio": { "ratio": "1:1" }
+  },
+  "submit": {
+    "request_id": "product-photography-fixture",
+    "status_url": "https://queue.fal.run/fal-ai/image-apps-v2/product-photography/requests/product-photography-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/fal-ai/image-apps-v2/product-photography/requests/product-photography-fixture"
+  },
+  "result": { "images": [{ "url": "https://fixture.invalid/product-photography.png" }] }
+}

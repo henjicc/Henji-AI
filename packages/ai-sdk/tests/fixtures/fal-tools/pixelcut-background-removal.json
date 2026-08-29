@@ -1,0 +1,17 @@
+{
+  "source": "Fal official llms.txt and OpenAPI schema, verified 2026-08-29; URLs replaced with non-network fixtures",
+  "endpoint": "pixelcut/background-removal",
+  "input": {
+    "image_url": "uxp://source",
+    "sync_mode": false
+  },
+  "submit": {
+    "request_id": "pixelcut-background-removal-fixture",
+    "status_url": "https://queue.fal.run/pixelcut/background-removal/requests/pixelcut-background-removal-fixture/status"
+  },
+  "status": {
+    "status": "COMPLETED",
+    "response_url": "https://queue.fal.run/pixelcut/background-removal/requests/pixelcut-background-removal-fixture"
+  },
+  "result": { "image": { "url": "https://fixture.invalid/background-removed.png" } }
+}

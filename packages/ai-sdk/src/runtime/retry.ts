@@ -56,7 +56,7 @@ export function shouldRetry(error: unknown, mode: RetryMode = 'request'): boolea
   if (structuredRetryable !== undefined) return structuredRetryable
   if (error instanceof AiRuntimeError) {
     if (mode === 'poll-query') {
-      return !['provider_task_failed', 'cancelled'].includes(error.code)
+      return !['provider_task_failed', 'cancelled', 'invalid_endpoint'].includes(error.code)
     }
     return ['provider_network_error', 'provider_http_error'].includes(error.code)
   }
