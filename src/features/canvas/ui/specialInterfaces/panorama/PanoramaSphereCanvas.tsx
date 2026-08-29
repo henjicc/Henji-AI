@@ -4,6 +4,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import {
   RGBAFormat,
   UnsignedByteType,
+  Vector2,
   Vector4,
   WebGLRenderTarget,
 } from 'three';
@@ -183,7 +184,8 @@ export interface PanoramaCaptureOptions {
   height: number;
 }
 
-export type PanoramaCaptureCurrentView = (options: PanoramaCaptureOptions) => string | null;
+/** 不传尺寸时严格沿用当前 WebGL 视口与相机投影，用于所见即所得的节点冻结帧。 */
+export type PanoramaCaptureCurrentView = (options?: PanoramaCaptureOptions) => string | null;
 
 interface PanoramaCaptureResources {
   sceneTarget: WebGLRenderTarget;
@@ -244,11 +246,14 @@ function capturePanoramaView(
   scene: Scene,
   camera: PerspectiveCamera,
   options: PanoramaCaptureOptions,
+  preserveCameraProjection: boolean,
 ): string {
   const captureCamera = camera.clone();
-  captureCamera.clearViewOffset();
-  captureCamera.aspect = options.width / options.height;
-  captureCamera.updateProjectionMatrix();
+  if (!preserveCameraProjection) {
+    captureCamera.clearViewOffset();
+    captureCamera.aspect = options.width / options.height;
+    captureCamera.updateProjectionMatrix();
+  }
   const { sceneTarget, outputTarget, outputPass, pixels } = resources;
   return withPanoramaRendererState(renderer, () => {
     renderer.setRenderTarget(sceneTarget);
@@ -272,13 +277,21 @@ function PanoramaCaptureBridge({
     let resources: PanoramaCaptureResources | null = null;
     const capture: PanoramaCaptureCurrentView = (options) => {
       try {
-        resources = getPanoramaCaptureResources(resources, options);
+        const viewportSize = options ?? (() => {
+          const size = gl.getDrawingBufferSize(new Vector2());
+          return {
+            width: Math.max(2, Math.round(size.x)),
+            height: Math.max(2, Math.round(size.y)),
+          };
+        })();
+        resources = getPanoramaCaptureResources(resources, viewportSize);
         return capturePanoramaView(
           resources,
           gl,
           scene,
           camera as PerspectiveCamera,
-          options,
+          viewportSize,
+          options === undefined,
         );
       } catch {
         return null;
@@ -348,6 +361,7 @@ export function PanoramaSphereCanvas({
   return (
     <div className="h-full w-full touch-none" data-panorama-surface="sphere">
       <Canvas
+        resize={{ offsetSize: true }}
         frameloop="demand"
         dpr={[1, 2]}
         camera={{ fov: PANORAMA_INITIAL_FOV, near: 0.1, far: 30, position: [0, 0, 0] }}

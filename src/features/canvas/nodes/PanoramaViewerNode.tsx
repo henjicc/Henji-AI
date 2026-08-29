@@ -155,15 +155,11 @@ export const PanoramaViewerNode = memo(({
     if (currentView) handleCameraViewChangeEnd(currentView);
     const capture = captureRef.current;
     if (capture) {
-      const previewShortEdge = Math.min(720, Math.max(2, viewportHeight));
-      const previewUrl = capture(resolvePanoramaCaptureSize(
-        data.viewportAspectRatio,
-        previewShortEdge,
-      ));
+      const previewUrl = capture();
       if (previewUrl) setFrozenPreviewUrl(previewUrl);
     }
     releaseInlineLease(id);
-  }, [data.viewportAspectRatio, handleCameraViewChangeEnd, hasInlineLease, id, releaseInlineLease, viewportHeight]);
+  }, [handleCameraViewChangeEnd, hasInlineLease, id, releaseInlineLease]);
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (isCapturing) return;

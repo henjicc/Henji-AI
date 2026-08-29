@@ -1,3 +1,5 @@
+const { diffBuffers } = require('./canvasVisualDiff.cjs')
+
 const TAB_NAMES = Object.freeze({
   generation: /^(生成|Generation)$/i,
   canvas: /^(画布|Canvas)$/i,
@@ -1279,10 +1281,16 @@ function createUiInspectionScenes({ canvasFixtureProjectId, settlePage }) {
     }
 
     // 指针移出后释放 WebGL，但节点必须冻结在刚才停下的视角，不能回退到原始全景图。
+    const interactiveFrame = await primarySurface.screenshot({ animations: 'disabled' })
     await page.mouse.move(20, 80)
     await primarySphere.waitFor({ state: 'detached', timeout: 8000 })
-    await primarySurface.locator('img[data-panorama-frozen-preview="true"]')
-      .waitFor({ state: 'visible', timeout: 8000 })
+    const frozenPreview = primarySurface.locator('img[data-panorama-frozen-preview="true"]')
+    await frozenPreview.waitFor({ state: 'visible', timeout: 8000 })
+    const frozenFrame = await primarySurface.screenshot({ animations: 'disabled' })
+    const frozenFrameDiff = await diffBuffers(interactiveFrame, frozenFrame)
+    if (frozenFrameDiff.changedPct > 1) {
+      throw new Error(`全景冻结帧不是所见即所得：变化像素 ${frozenFrameDiff.changedPct}%`)
+    }
     if (await activeInlineCanvases.count()) throw new Error('指针移出全景节点后仍保留内嵌 WebGL Canvas')
     await primarySurface.hover()
     await primarySphere.waitFor({ state: 'visible', timeout: 12000 })

@@ -62,5 +62,6 @@ describe('PanoramaViewerPanel', () => {
     const frozenPreview = screen.getByAltText('viewer.panorama.flatAlt');
     expect(frozenPreview.getAttribute('src')).toBe('data:image/png;base64,last-view');
     expect(frozenPreview.getAttribute('data-panorama-frozen-preview')).toBe('true');
+    expect(screen.queryByText('viewer.panorama.directInteractionHint')).toBeNull();
   });
 });

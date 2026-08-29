@@ -153,7 +153,7 @@ export function PanoramaViewerPanel({
           </div>
         ) : null}
 
-        {viewMode === 'sphere' && isSphereAvailable && !renderSphere ? (
+        {viewMode === 'sphere' && isSphereAvailable && !renderSphere && !frozenPreviewUrl ? (
           <div className="ui-glass pointer-events-none absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full px-3 py-1.5 text-2xs text-text-secondary">
             {t(hasWebglFailure ? 'viewer.panorama.webglError' : 'viewer.panorama.directInteractionHint')}
           </div>
