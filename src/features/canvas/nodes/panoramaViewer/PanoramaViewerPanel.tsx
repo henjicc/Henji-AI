@@ -1,4 +1,4 @@
-import { useState, type MutableRefObject } from 'react';
+import { useEffect, useState, type MutableRefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { UiError, UiErrorBoundary, UiLoading } from '@/components/ui';
@@ -34,6 +34,7 @@ interface PanoramaViewerPanelProps {
   onViewportAspectRatioChange: (ratio: PanoramaViewportAspectRatio) => void;
   onCameraViewChangeEnd: (view: PanoramaCameraView) => void;
   onCapture: () => void;
+  onFrozenPreviewReady: () => void;
   onContextLost: () => void;
 }
 
@@ -58,16 +59,42 @@ export function PanoramaViewerPanel({
   onViewportAspectRatioChange,
   onCameraViewChangeEnd,
   onCapture,
+  onFrozenPreviewReady,
   onContextLost,
 }: PanoramaViewerPanelProps): JSX.Element {
   const { t } = useTranslation();
   const [resetRevision] = useState(0);
+  const [readyFrozenPreviewUrl, setReadyFrozenPreviewUrl] = useState<string | null>(null);
   const isReady = resource.status === 'ready';
   const isSphereAvailable = isReady && resource.isEquirectangular;
   const showFlat = viewMode === 'flat' || !renderSphere;
+  const showSphereTransitionPreview = viewMode === 'sphere'
+    && renderSphere
+    && Boolean(frozenPreviewUrl)
+    && readyFrozenPreviewUrl !== frozenPreviewUrl;
   const staticPreviewUrl = viewMode === 'sphere' && frozenPreviewUrl
     ? frozenPreviewUrl
     : resource.displayUrl;
+  const staticPreviewFitClass = viewMode === 'flat' || frozenPreviewUrl
+    || resource.status !== 'ready'
+    || !resource.isEquirectangular
+      ? 'object-contain'
+      : 'object-cover';
+
+  useEffect(() => {
+    if (!renderSphere || !frozenPreviewUrl || readyFrozenPreviewUrl === frozenPreviewUrl) return;
+    let revealFrame: number | null = null;
+    const waitForFirstFrame = window.requestAnimationFrame(() => {
+      revealFrame = window.requestAnimationFrame(() => {
+        revealFrame = null;
+        setReadyFrozenPreviewUrl(frozenPreviewUrl);
+      });
+    });
+    return () => {
+      window.cancelAnimationFrame(waitForFirstFrame);
+      if (revealFrame !== null) window.cancelAnimationFrame(revealFrame);
+    };
+  }, [frozenPreviewUrl, readyFrozenPreviewUrl, renderSphere]);
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-[var(--node-radius)] bg-bg-dark">
@@ -77,7 +104,10 @@ export function PanoramaViewerPanel({
         aria-label={t('viewer.panorama.directInteractionLabel')}
         data-panorama-inline-surface={renderSphere ? 'sphere' : 'flat'}
         onPointerEnter={() => {
-          if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) onRequestSphere();
+          if (viewMode === 'sphere' && isSphereAvailable && !hasWebglFailure) {
+            setReadyFrozenPreviewUrl(null);
+            onRequestSphere();
+          }
         }}
         onPointerDown={(event) => {
           event.stopPropagation();
@@ -90,23 +120,25 @@ export function PanoramaViewerPanel({
         }}
       >
         {renderSphere && resource.status === 'ready' ? (
-          <UiErrorBoundary
-            loggerDomain="features.canvas.panoramaViewerNode"
-            event="panorama.node.webgl.failed"
-            title={t('viewer.panorama.webglError')}
-          >
-            <PanoramaSphereCanvas
-              image={resource.image}
-              resetRevision={resetRevision}
-              interactionLabel={t('viewer.panorama.directInteractionLabel')}
-              initialView={cameraView}
-              currentViewRef={currentViewRef}
-              captureRef={captureRef}
-              onInteractionStart={onInteractionStart}
-              onViewChangeEnd={onCameraViewChangeEnd}
-              onContextLost={onContextLost}
-            />
-          </UiErrorBoundary>
+          <div className="absolute inset-0">
+            <UiErrorBoundary
+              loggerDomain="features.canvas.panoramaViewerNode"
+              event="panorama.node.webgl.failed"
+              title={t('viewer.panorama.webglError')}
+            >
+              <PanoramaSphereCanvas
+                image={resource.image}
+                resetRevision={resetRevision}
+                interactionLabel={t('viewer.panorama.directInteractionLabel')}
+                initialView={cameraView}
+                currentViewRef={currentViewRef}
+                captureRef={captureRef}
+                onInteractionStart={onInteractionStart}
+                onViewChangeEnd={onCameraViewChangeEnd}
+                onContextLost={onContextLost}
+              />
+            </UiErrorBoundary>
+          </div>
         ) : null}
 
         {showFlat && staticPreviewUrl ? (
@@ -116,14 +148,21 @@ export function PanoramaViewerPanel({
             data-panorama-frozen-preview={
               viewMode === 'sphere' && frozenPreviewUrl ? 'true' : undefined
             }
-            className={`h-full w-full select-none ${
-              viewMode === 'flat' || frozenPreviewUrl
-              || resource.status !== 'ready'
-              || !resource.isEquirectangular
-                ? 'object-contain'
-                : 'object-cover'
-            }`}
+            className={`h-full w-full select-none ${staticPreviewFitClass}`}
             draggable={false}
+            onLoad={viewMode === 'sphere' && frozenPreviewUrl ? onFrozenPreviewReady : undefined}
+          />
+        ) : null}
+
+        {showSphereTransitionPreview && staticPreviewUrl ? (
+          <img
+            src={staticPreviewUrl}
+            alt=""
+            aria-hidden="true"
+            data-panorama-transition-preview="true"
+            className={`pointer-events-none absolute inset-0 h-full w-full select-none ${staticPreviewFitClass}`}
+            draggable={false}
+            onLoad={onFrozenPreviewReady}
           />
         ) : null}
 

@@ -73,6 +73,7 @@ export const PanoramaViewerNode = memo(({
   const releaseInlineLease = usePanoramaInlineViewerStore((state) => state.release);
   const captureRef = useRef<PanoramaCaptureCurrentView | null>(null);
   const currentViewRef = useRef<PanoramaCameraView | null>(null);
+  const pendingFreezeReleaseRef = useRef(false);
   const [retryRevision, setRetryRevision] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasWebglFailure, setHasWebglFailure] = useState(false);
@@ -92,6 +93,7 @@ export const PanoramaViewerNode = memo(({
   );
 
   const requestSphere = useCallback(() => {
+    pendingFreezeReleaseRef.current = false;
     if (!hasWebglFailure && !isContentLodLow && data.viewMode === 'sphere') claimInlineLease(id);
   }, [claimInlineLease, data.viewMode, hasWebglFailure, id, isContentLodLow]);
 
@@ -110,17 +112,22 @@ export const PanoramaViewerNode = memo(({
   }, [claimInlineLease, data.viewMode, hasWebglFailure, id, isActive, isContentLodLow, releaseInlineLease]);
 
   useEffect(() => {
+    pendingFreezeReleaseRef.current = false;
     setHasWebglFailure(false);
     setFrozenPreviewUrl(null);
   }, [source]);
 
-  useEffect(() => () => releaseInlineLease(id), [id, releaseInlineLease]);
+  useEffect(() => () => {
+    pendingFreezeReleaseRef.current = false;
+    releaseInlineLease(id);
+  }, [id, releaseInlineLease]);
 
   useEffect(() => {
     updateNodeInternals(id);
   }, [id, resolvedHeight, resolvedWidth, updateNodeInternals]);
 
   const handleViewModeChange = useCallback((viewMode: PanoramaViewMode) => {
+    pendingFreezeReleaseRef.current = false;
     if (viewMode === 'sphere') setHasWebglFailure(false);
     updateNodeData(id, { viewMode });
     if (viewMode === 'flat') releaseInlineLease(id);
@@ -128,6 +135,7 @@ export const PanoramaViewerNode = memo(({
   }, [claimInlineLease, id, isContentLodLow, releaseInlineLease, updateNodeData]);
 
   const handleContextLost = useCallback(() => {
+    pendingFreezeReleaseRef.current = false;
     setHasWebglFailure(true);
     releaseInlineLease(id);
   }, [id, releaseInlineLease]);
@@ -156,10 +164,20 @@ export const PanoramaViewerNode = memo(({
     const capture = captureRef.current;
     if (capture) {
       const previewUrl = capture();
-      if (previewUrl) setFrozenPreviewUrl(previewUrl);
+      if (previewUrl && previewUrl !== frozenPreviewUrl) {
+        pendingFreezeReleaseRef.current = true;
+        setFrozenPreviewUrl(previewUrl);
+        return;
+      }
     }
     releaseInlineLease(id);
-  }, [handleCameraViewChangeEnd, hasInlineLease, id, releaseInlineLease]);
+  }, [frozenPreviewUrl, handleCameraViewChangeEnd, hasInlineLease, id, releaseInlineLease]);
+
+  const handleFrozenPreviewReady = useCallback(() => {
+    if (!pendingFreezeReleaseRef.current) return;
+    pendingFreezeReleaseRef.current = false;
+    releaseInlineLease(id);
+  }, [id, releaseInlineLease]);
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (isCapturing) return;
@@ -268,6 +286,7 @@ export const PanoramaViewerNode = memo(({
         onViewportAspectRatioChange={handleViewportAspectRatioChange}
         onCameraViewChangeEnd={handleCameraViewChangeEnd}
         onCapture={() => void handleCapture()}
+        onFrozenPreviewReady={handleFrozenPreviewReady}
         onContextLost={handleContextLost}
       />
 
