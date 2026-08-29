@@ -4,6 +4,10 @@ import {
   isPanelInteractionPortalTarget,
   shouldClosePanelAfterInternalClick,
 } from './panelTriggerClosePolicy'
+import {
+  resolveFloatingPanelPosition,
+  type FloatingPanelPosition,
+} from './floatingPanelPosition'
 import { UI_FIELD_CONTROL_HEIGHT_SM_CLASS, UI_FIELD_LABEL_CLASS, UI_TRIGGER_BUTTON_CLASS, UI_TRIGGER_PANEL_CLASS } from './styleTokens'
 import { UiButton } from './primitives'
 import { ChevronDown } from 'lucide-react'
@@ -41,6 +45,9 @@ type PanelTriggerControls = {
   togglePanel: () => void
 }
 
+const PANEL_VIEWPORT_GUTTER_PX = 8
+const PANEL_VIEWPORT_TOP_INSET_PX = 48
+
 export default function PanelTrigger(props: PanelTriggerProps): React.ReactElement {
   const {
     label,
@@ -64,7 +71,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   } = props
   const [open, setOpen] = useState(false)
   const [closing, setClosing] = useState(false)
-  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxHeight: number } | null>(null)
+  const [pos, setPos] = useState<FloatingPanelPosition | null>(null)
   const ref = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
   const [ready, setReady] = useState(false)
@@ -75,35 +82,43 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
     maxHeightRef.current = 0
   }, [stableHeightKey])
 
+  const updatePanelPosition = useCallback((rect: DOMRect, reveal: boolean): void => {
+    anchorRectRef.current = rect
+    const measuredPanelHeight = Math.max(
+      _panelHeight ?? 0,
+      panelRef.current?.scrollHeight ?? 0,
+      panelRef.current?.getBoundingClientRect().height ?? 0,
+    )
+    const position = resolveFloatingPanelPosition({
+      anchor: rect,
+      panelWidth: panelWidth || rect.width,
+      panelHeight: measuredPanelHeight,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      preferredPlacement: alignment === 'aboveCenter' ? 'above' : 'below',
+      horizontalAlign: alignment === 'aboveCenter' ? 'center' : 'left',
+      gap: alignment === 'aboveCenter' ? gapProp : 4,
+      viewportGutter: PANEL_VIEWPORT_GUTTER_PX,
+      viewportTopInset: PANEL_VIEWPORT_TOP_INSET_PX,
+    })
+
+    if (panelRef.current && stableHeight) {
+      const height = panelRef.current.offsetHeight
+      if (height > maxHeightRef.current) maxHeightRef.current = height
+    }
+
+    setPos(position)
+    if (reveal) setReady(true)
+  }, [_panelHeight, alignment, gapProp, panelWidth, stableHeight])
+
   const computePanelPosition = useCallback((): void => {
     if (!ref.current) return
     const btn = ref.current.querySelector('[data-panel-trigger-button]') as HTMLElement | null
     const target = btn || ref.current
     const rect = target.getBoundingClientRect()
-    anchorRectRef.current = rect
-
-    const viewportW = window.innerWidth
-    const viewportH = window.innerHeight
-    const margin = 8
-    const titleBarHeight = 40
-    const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-    let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-    left = Math.max(margin, Math.min(left, viewportW - w - margin))
-    const gap = gapProp
-
-    if (alignment === 'aboveCenter') {
-      const bottom = viewportH - rect.top + gap
-      const maxHeight = rect.top - margin - gap - titleBarHeight
-      setReady(false)
-      setPos({ bottom, left, width: w, maxHeight })
-      return
-    }
-
-    const top = rect.bottom + 4
-    const maxHeight = viewportH - top - margin
     setReady(false)
-    setPos({ top, left, width: w, maxHeight })
-  }, [alignment, panelWidth, gapProp])
+    updatePanelPosition(rect, false)
+  }, [updatePanelPosition])
 
   const closePanel = useCallback((): void => {
     setClosing(true)
@@ -159,41 +174,21 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
   }, [closePanel, open])
 
   useEffect(() => {
-    const updateAnchor = () => {
+    const updateAnchor = (reveal: boolean) => {
       if (!ref.current) return
       const btn = ref.current.querySelector('[data-panel-trigger-button]') as HTMLElement | null
       const target = btn || ref.current
       const rect = target.getBoundingClientRect()
-      anchorRectRef.current = rect
-
-      const viewportW = window.innerWidth
-      const viewportH = window.innerHeight
-      const margin = 8
-      const titleBarHeight = 40 // 桌面标题栏高度
-      const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-      let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-      left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = gapProp
-
-      if (alignment === 'aboveCenter') {
-        const bottom = viewportH - rect.top + gap
-        const maxHeight = rect.top - margin - gap - titleBarHeight
-        setPos({ bottom, left, width: w, maxHeight })
-      } else {
-        const top = rect.bottom + 4
-        const maxHeight = viewportH - top - margin
-        setPos({ top, left, width: w, maxHeight })
-      }
-      setReady(!!panelRef.current)
+      updatePanelPosition(rect, reveal && !!panelRef.current)
     }
 
     if (open) {
-      updateAnchor()
+      updateAnchor(false)
       if (freezePositionOnOpen) {
         return
       }
       const onScrollOrResize = () => {
-        updateAnchor()
+        updateAnchor(true)
       }
       window.addEventListener('scroll', onScrollOrResize, true)
       window.addEventListener('resize', onScrollOrResize)
@@ -202,48 +197,13 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
         window.removeEventListener('resize', onScrollOrResize)
       }
     }
-  }, [open, alignment, panelWidth, gapProp, freezePositionOnOpen])
+  }, [freezePositionOnOpen, open, updatePanelPosition])
 
   useLayoutEffect(() => {
-    if (freezePositionOnOpen) return
     if (!open) return
     if (!anchorRectRef.current) return
-
-    const updatePos = () => {
-      if (!anchorRectRef.current) return
-      const rect = anchorRectRef.current
-      const viewportW = window.innerWidth
-      const viewportH = window.innerHeight
-      const margin = 8
-      const titleBarHeight = 40 // 桌面标题栏高度
-      const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-
-      let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-      left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = gapProp
-
-      if (alignment === 'aboveCenter') {
-        const bottom = viewportH - rect.top + gap
-        const maxHeight = rect.top - margin - gap - titleBarHeight
-        setPos({ bottom, left, width: w, maxHeight })
-      } else {
-        const top = rect.bottom + 4
-        const maxHeight = viewportH - top - margin
-        setPos({ top, left, width: w, maxHeight })
-      }
-
-      if (panelRef.current && stableHeight) {
-        const h = panelRef.current.offsetHeight
-        if (h > maxHeightRef.current) {
-          maxHeightRef.current = h
-        }
-      }
-
-      setReady(true)
-    }
-
-    updatePos()
-  }, [open, alignment, panelWidth, gapProp, stableHeight, freezePositionOnOpen])
+    updatePanelPosition(anchorRectRef.current, true)
+  }, [open, updatePanelPosition])
 
   useEffect(() => {
     if (!open || !panelRef.current) return
@@ -256,47 +216,13 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           setPos(prev => prev ? { ...prev } : prev)
         }
       }
+      if (!freezePositionOnOpen && anchorRectRef.current) {
+        updatePanelPosition(anchorRectRef.current, true)
+      }
     })
     obs.observe(panelRef.current)
     return () => obs.disconnect()
-  }, [open, alignment, panelWidth, stableHeight])
-
-  useEffect(() => {
-    if (freezePositionOnOpen) return
-    if (!open) return
-    if (!anchorRectRef.current) return
-    requestAnimationFrame(() => {
-      const rect = anchorRectRef.current!
-      const viewportW = window.innerWidth
-      const viewportH = window.innerHeight
-      const margin = 8
-      const titleBarHeight = 40 // 桌面标题栏高度
-      const w = Math.min(panelWidth || rect.width, viewportW - margin * 2)
-
-      let left = alignment === 'aboveCenter' ? (rect.left + rect.width / 2 - w / 2) : rect.left
-      left = Math.max(margin, Math.min(left, viewportW - w - margin))
-      const gap = gapProp
-
-      if (alignment === 'aboveCenter') {
-        const bottom = viewportH - rect.top + gap
-        const maxHeight = rect.top - margin - gap - titleBarHeight
-        setPos({ bottom, left, width: w, maxHeight })
-      } else {
-        const top = rect.bottom + 4
-        const maxHeight = viewportH - top - margin
-        setPos({ top, left, width: w, maxHeight })
-      }
-
-      if (panelRef.current && stableHeight) {
-        const h = panelRef.current.offsetHeight
-        if (h > maxHeightRef.current) {
-          maxHeightRef.current = h
-        }
-      }
-
-      setReady(true)
-    })
-  }, [open, alignment, panelWidth, gapProp, stableHeight, freezePositionOnOpen])
+  }, [freezePositionOnOpen, open, stableHeight, updatePanelPosition])
 
   return (
     <div className={`relative inline-block ${className || ''}`} ref={ref}>
@@ -321,7 +247,6 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
           style={{
             position: 'fixed',
             top: pos.top,
-            bottom: pos.bottom,
             left: pos.left,
             width: pos.width,
             maxHeight: pos.maxHeight,
@@ -330,6 +255,7 @@ export default function PanelTrigger(props: PanelTriggerProps): React.ReactEleme
             opacity: ready ? 1 : 0,
             visibility: ready ? 'visible' : 'hidden'
           }}
+          data-panel-placement={pos.placement}
         >
           <div
             data-panel-scroll-region

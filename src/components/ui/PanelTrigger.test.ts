@@ -77,4 +77,36 @@ describe('PanelTrigger 面板内部点击关闭策略', () => {
     expect(scrollRegion?.classList.contains('overflow-y-auto')).toBe(true)
     expect(scrollRegion?.classList.contains('overscroll-contain')).toBe(true)
   })
+
+  it('首选的上方空间不足时自动向下展开', () => {
+    vi.stubGlobal('ResizeObserver', class {
+      observe(): void {}
+      disconnect(): void {}
+    })
+
+    const view = render(React.createElement(PanelTrigger, {
+      display: '模型',
+      panelWidth: 320,
+      panelHeight: 260,
+      alignment: 'aboveCenter',
+      gap: 8,
+      renderPanel: () => React.createElement('div', null, '模型列表'),
+    }))
+    const trigger = view.getByRole('button')
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      bottom: 140,
+      height: 40,
+      left: 320,
+      right: 440,
+      top: 100,
+      width: 120,
+      x: 320,
+      y: 100,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.click(trigger)
+
+    expect(document.querySelector('[data-panel-placement="below"]')).not.toBeNull()
+  })
 })

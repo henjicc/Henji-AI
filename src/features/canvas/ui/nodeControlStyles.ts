@@ -31,7 +31,8 @@ export const NODE_ROW_CARD_CLASS =
 export const NODE_ROW_CLASS =
   `group/row relative flex min-h-10 items-center gap-3 px-3 py-1.5 ${NODE_ROW_CARD_CLASS}`;
 
-export const NODE_ROW_LABEL_CLASS = 'w-[64px] shrink-0 text-left text-xs text-text-muted';
+export const NODE_ROW_LABEL_CLASS =
+  'min-w-[64px] max-w-[45%] shrink-0 truncate whitespace-nowrap text-left text-xs font-medium text-text-muted';
 
 export const NODE_ROW_CONTROL_SLOT_CLASS = 'ml-auto flex min-w-0 items-center justify-end';
 

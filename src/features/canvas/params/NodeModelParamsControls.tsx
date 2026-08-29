@@ -11,6 +11,11 @@ import type { CanvasModelMediaType } from '@/features/canvas/domain/defaultModel
 import type { CanvasImageCapabilityModelPolicy } from '@/features/canvas/capabilities/types';
 import { getI18nText } from '@/core/types/I18nText';
 import { UI_TRIGGER_PANEL_CLASS } from '@/components/ui/styleTokens';
+import {
+  resolveFloatingPanelPosition,
+  type FloatingPanelAnchorRect,
+  type FloatingPanelPosition,
+} from '@/components/ui/floatingPanelPosition';
 import { getProviderDisplayName } from '@/utils/modelHelpers';
 import { ModelPickerList } from './ModelPickerList';
 import { useModelPickerList } from './useModelPickerList';
@@ -37,56 +42,48 @@ interface NodeModelParamsControlsProps {
   onModelChipContentWidthChange?: (width: number) => void;
 }
 
-interface PanelAnchor {
-  left: number;
-  top: number;
-}
-
 const MODEL_PANEL_FALLBACK_CONTENT_WIDTH = 302;
 const MODEL_PANEL_HORIZONTAL_CHROME = 18;
 const MODEL_PANEL_VIEWPORT_GUTTER = 12;
+const MODEL_PANEL_VIEWPORT_TOP_INSET = 48;
+const MODEL_PANEL_GAP = 8;
+const PARAMS_PANEL_WIDTH = 440;
 
-function getPanelAnchor(triggerElement: HTMLDivElement | null): PanelAnchor | null {
+function getPanelAnchor(triggerElement: HTMLDivElement | null): FloatingPanelAnchorRect | null {
   if (!triggerElement) {
     return null;
   }
   const rect = triggerElement.getBoundingClientRect();
   return {
-    left: rect.left + rect.width / 2,
-    top: rect.top - 8,
+    left: rect.left,
+    top: rect.top,
+    bottom: rect.bottom,
+    width: rect.width,
   };
 }
 
-function buildPanelStyle(anchor: PanelAnchor | null): React.CSSProperties | undefined {
-  if (!anchor) {
-    return undefined;
-  }
-  return {
-    left: anchor.left,
-    top: anchor.top,
-    transform: 'translateX(-50%) translateY(-100%)',
-  };
-}
-
-function buildAdaptivePanelStyle(
-  anchor: PanelAnchor | null,
+function resolvePanelPosition(
+  anchor: FloatingPanelAnchorRect | null,
   panelWidth: number,
-  viewportWidth: number
-): React.CSSProperties | undefined {
+  panelHeight: number,
+  viewportWidth: number,
+  viewportHeight: number,
+): FloatingPanelPosition | null {
   if (!anchor) {
-    return undefined;
+    return null;
   }
-  const centeredLeft = anchor.left - panelWidth / 2;
-  const maxLeft = Math.max(
-    MODEL_PANEL_VIEWPORT_GUTTER,
-    viewportWidth - panelWidth - MODEL_PANEL_VIEWPORT_GUTTER
-  );
-  return {
-    left: Math.min(Math.max(MODEL_PANEL_VIEWPORT_GUTTER, centeredLeft), maxLeft),
-    top: anchor.top,
-    width: panelWidth,
-    transform: 'translateY(-100%)',
-  };
+  return resolveFloatingPanelPosition({
+    anchor,
+    panelWidth,
+    panelHeight,
+    viewportWidth,
+    viewportHeight,
+    preferredPlacement: 'above',
+    horizontalAlign: 'center',
+    gap: MODEL_PANEL_GAP,
+    viewportGutter: MODEL_PANEL_VIEWPORT_GUTTER,
+    viewportTopInset: MODEL_PANEL_VIEWPORT_TOP_INSET,
+  });
 }
 
 export const NodeModelParamsControls = memo(({
@@ -115,12 +112,15 @@ export const NodeModelParamsControls = memo(({
   const [openPanel, setOpenPanel] = useState<'model' | 'params' | null>(null);
   const [renderPanel, setRenderPanel] = useState<'model' | 'params' | null>(null);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
-  const [modelPanelAnchor, setModelPanelAnchor] = useState<PanelAnchor | null>(null);
-  const [paramsPanelAnchor, setParamsPanelAnchor] = useState<PanelAnchor | null>(null);
+  const [modelPanelAnchor, setModelPanelAnchor] = useState<FloatingPanelAnchorRect | null>(null);
+  const [paramsPanelAnchor, setParamsPanelAnchor] = useState<FloatingPanelAnchorRect | null>(null);
   const [modelPanelContentWidth, setModelPanelContentWidth] = useState(0);
-  const [viewportWidth, setViewportWidth] = useState(() => (
-    typeof window === 'undefined' ? 1024 : window.innerWidth
-  ));
+  const [modelPanelHeight, setModelPanelHeight] = useState(0);
+  const [paramsPanelHeight, setParamsPanelHeight] = useState(0);
+  const [viewportSize, setViewportSize] = useState(() => ({
+    width: typeof window === 'undefined' ? 1024 : window.innerWidth,
+    height: typeof window === 'undefined' ? 768 : window.innerHeight,
+  }));
   const {
     modelSearchQuery,
     setModelSearchQuery,
@@ -140,7 +140,27 @@ export const NodeModelParamsControls = memo(({
   ) + MODEL_PANEL_HORIZONTAL_CHROME;
   const modelPanelWidth = Math.min(
     desiredModelPanelWidth,
-    Math.max(0, viewportWidth - MODEL_PANEL_VIEWPORT_GUTTER * 2)
+    Math.max(0, viewportSize.width - MODEL_PANEL_VIEWPORT_GUTTER * 2)
+  );
+  const modelPanelPosition = useMemo(
+    () => resolvePanelPosition(
+      modelPanelAnchor,
+      modelPanelWidth,
+      modelPanelHeight,
+      viewportSize.width,
+      viewportSize.height,
+    ),
+    [modelPanelAnchor, modelPanelHeight, modelPanelWidth, viewportSize.height, viewportSize.width],
+  );
+  const paramsPanelPosition = useMemo(
+    () => resolvePanelPosition(
+      paramsPanelAnchor,
+      PARAMS_PANEL_WIDTH,
+      paramsPanelHeight,
+      viewportSize.width,
+      viewportSize.height,
+    ),
+    [paramsPanelAnchor, paramsPanelHeight, viewportSize.height, viewportSize.width],
   );
 
   const { schema, values, setParam, setParams } = useNodeModelParams({
@@ -170,12 +190,6 @@ export const NodeModelParamsControls = memo(({
   }, [i18n.language, incomingImages, schema, values]);
 
   const hasConfigurableParams = showParamsChip && schema.length > 0;
-
-  useEffect(() => {
-    const handleResize = (): void => setViewportWidth(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   useEffect(() => {
     const animationDurationMs = 200;
@@ -217,6 +231,46 @@ export const NodeModelParamsControls = memo(({
     startEnterAnimation();
     return cleanup;
   }, [openPanel, renderPanel]);
+
+  useEffect(() => {
+    if (!renderPanel) return;
+
+    const updateLayout = (): void => {
+      setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+      if (renderPanel === 'model') {
+        setModelPanelAnchor(getPanelAnchor(modelTriggerRef.current));
+      } else {
+        setParamsPanelAnchor(getPanelAnchor(paramsTriggerRef.current));
+      }
+    };
+
+    updateLayout();
+    window.addEventListener('scroll', updateLayout, true);
+    window.addEventListener('resize', updateLayout);
+    return () => {
+      window.removeEventListener('scroll', updateLayout, true);
+      window.removeEventListener('resize', updateLayout);
+    };
+  }, [renderPanel]);
+
+  useLayoutEffect(() => {
+    const panel = renderPanel === 'model' ? modelPanelRef.current : paramsPanelRef.current;
+    if (!panel || !renderPanel) return;
+
+    const measure = (): void => {
+      const height = Math.max(panel.scrollHeight, panel.getBoundingClientRect().height);
+      if (renderPanel === 'model') {
+        setModelPanelHeight((current) => current === height ? current : height);
+      } else {
+        setParamsPanelHeight((current) => current === height ? current : height);
+      }
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(panel);
+    return () => observer.disconnect();
+  }, [renderPanel, modelPanelContentWidth]);
 
   useLayoutEffect(() => {
     const measureEl = modelChipMeasureRef.current;
@@ -271,6 +325,7 @@ export const NodeModelParamsControls = memo(({
             }
             setModelSearchQuery('');
             setProviderFilter(selectedModel?.meta.provider ?? 'all');
+            setModelPanelHeight(0);
             setModelPanelAnchor(getPanelAnchor(modelTriggerRef.current));
             setOpenPanel('model');
           }}
@@ -310,6 +365,7 @@ export const NodeModelParamsControls = memo(({
                 return;
               }
               setParamsPanelAnchor(getPanelAnchor(paramsTriggerRef.current));
+              setParamsPanelHeight(0);
               setOpenPanel('params');
             }}
           >
@@ -331,10 +387,17 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'model' && createPortal(
         <div
           ref={modelPanelRef}
-          className={`nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
+          className={`ui-scrollbar nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
-          style={buildAdaptivePanelStyle(modelPanelAnchor, modelPanelWidth, viewportWidth)}
+          style={modelPanelPosition ? {
+            left: modelPanelPosition.left,
+            top: modelPanelPosition.top,
+            width: modelPanelPosition.width,
+            maxHeight: modelPanelPosition.maxHeight,
+            overflowY: 'auto',
+          } : undefined}
+          data-model-panel-placement={modelPanelPosition?.placement}
         >
           <div className={`${UI_TRIGGER_PANEL_CLASS} w-full p-2`}>
             <ModelPickerList
@@ -368,12 +431,19 @@ export const NodeModelParamsControls = memo(({
       {typeof document !== 'undefined' && renderPanel === 'params' && selectedModel && createPortal(
         <div
           ref={paramsPanelRef}
-          className={`nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
+          className={`ui-scrollbar nodrag nowheel fixed z-dropdown transition-opacity duration-200 ease-out ${
             isPanelVisible ? 'opacity-100' : 'pointer-events-none opacity-0'
           }`}
-          style={buildPanelStyle(paramsPanelAnchor)}
+          style={paramsPanelPosition ? {
+            left: paramsPanelPosition.left,
+            top: paramsPanelPosition.top,
+            width: paramsPanelPosition.width,
+            maxHeight: paramsPanelPosition.maxHeight,
+            overflowY: 'auto',
+          } : undefined}
+          data-params-panel-placement={paramsPanelPosition?.placement}
         >
-          <UiPanel className="w-[440px] p-3">
+          <UiPanel className="w-full p-3">
             <div className="ui-scrollbar max-h-[360px] overflow-y-auto pr-1">
               <ParameterPanel
                 currentModel={selectedModel}
