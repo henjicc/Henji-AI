@@ -2,12 +2,22 @@
 
 ## Unreleased
 
-- Fal 图片放大目录新增 Topaz 透明图、SeedVR2、Bria Creative 与 Ideogram 四个单模型 pack；现有 Topaz 入口升级为 Precision / Creative / Generative 显式模式路由。
-- Topaz 计价改为按实时官方输出 MP 阶梯计算，不再将所有超过 48MP 的任务直接估为 `$1.36`。
+## 0.2.7 - 2026-08-29
+
+- 默认生成目录从 99 个扩展到 105 个模型，新增六个 Fal 入口：IC-Light v2 重打光，以及 Topaz、Topaz 透明图、SeedVR2、Bria Creative、Ideogram 高清放大；按需工具仍不混入默认目录。
+- IC-Light v2 固定单图约 1MP 重打光契约，并提供五档官方初始光照方向；Fal GPT Image 2 新增 `2:1` 比例和显式约 2K 输出档。
+- Topaz 图片放大统一为 Precision / Creative / Generative 显式模式路由，按模式裁剪模型、增强和人脸参数；Topaz 计价改为按实时官方输出 MP 阶梯计算，不再将所有超过 48MP 的任务直接估为 `$1.36`。
+- Fal 可选图片工具扩展到 12 个：保留 3 个消除工具，新增 6 个重打光、暗光增强、扩图、商品摄影、照片修复、背景移除工具，以及 Qwen、Perspective、FLUX 2 三个多角度工具；提供 3 / 6 / 3 三个聚合 pack 和对应单模型入口。
+- 多角度工具分别支持九档离散方位、透视水平/垂直旋转与 FLUX 2 连续水平、垂直、缩放控制；图片实用工具保持单图输入、官方字段限制和独立固定/按 MP 估价。
+- 新增可移植的 `StructuredGenerationOutput` / `layer-stack` 响应契约；火山引擎、APIMart、KIE 的 Seedream 5.0 Pro 图层拆分统一解析输出顺序、尺寸、格式、包围盒和原始索引，同时保留供应商原始 metadata。
+- Fal 队列提交现在只把 `sync_mode: true` 当作本地直连路由标记；显式 `sync_mode: false` 会继续发送给队列，保证 Pixelcut 等端点返回可持久化 CDN URL。
+- Fal 返回或恢复的 `status_url` / `response_url` 必须属于官方 `https://queue.fal.run` 源，拒绝带用户信息或第三方源的任务 URL，且 `invalid_endpoint` 不进入轮询重试，避免 API Key 被外带。
+- `continuePolling()` 只解析模型端点，不再为了续查重建并校验完整生成请求体；持久化任务可在没有原始媒体参数时安全恢复轮询。
 - 新增 `openai-responses` 模型步骤协议，与 Chat Completions 并存；标准 Responses SSE、usage、失败与取消统一落到既有模型步骤事件和错误契约。
 - 预制供应商按“供应商端点 × 具体模型”自动选择协议：DeepSeek、火山引擎、百炼、MiniMax 与智谱国内 GLM-5.3 的已确认组合默认 Responses，聚合网关和未确认模型继续 Chat。
 - Anthropic 协议仍未实现，不再向宿主设置界面提供伪选项；自定义未知端点只需在 Chat / Responses 之间选择。
 - `LlmProviderSetup` 新增可选 `connectionOverrides`：预设默认继续按具体模型自动路由，只有用户主动修改时才覆盖 API 地址或统一请求协议；供应商身份、凭据槽与模型能力仍保留预设契约。
+- 发布门禁同步锁定 105 个默认模型、12 个 Fal 工具、三类工具聚合包以及仓库外 Node ESM、严格 TypeScript、Vite 与受限宿主包回装；fixture/scripted 验证不发起付费供应商请求。
 
 ## 0.2.6 - 2026-08-28
 

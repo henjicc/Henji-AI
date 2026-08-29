@@ -16,7 +16,7 @@
 - 图片实用工具：[Image Apps v2 重打光](Image-Apps-v2-重打光/Image-Apps-v2-重打光_Fal.md)、[ControlLight](ControlLight/ControlLight_Fal.md)、[Image Apps v2 扩图](Image-Apps-v2-扩图/Image-Apps-v2-扩图_Fal.md)、[Image Apps v2 商品摄影](Image-Apps-v2-商品摄影/Image-Apps-v2-商品摄影_Fal.md)、[Image Apps v2 照片修复](Image-Apps-v2-照片修复/Image-Apps-v2-照片修复_Fal.md)、[Pixelcut 背景移除](Pixelcut-背景移除/Pixelcut-背景移除_Fal.md)。
 - 多角度：[Qwen Image Edit 2509 多角度](Qwen-Image-Edit-2509-多角度/Qwen-Image-Edit-2509-多角度_Fal.md)、[透视变换](透视变换/透视变换_Fal.md)、[FLUX 2 多角度](FLUX-2-多角度/FLUX-2-多角度_Fal.md)。
 
-工具均复用 Fal 队列、上传与结果解析；它们是独立的按需 SDK 入口，不是新的执行内核。真实质量、延迟和账单仍待获得付费授权后验证。
+工具均复用 Fal 队列、上传与结果解析；它们是独立的按需 SDK 入口，不是新的执行内核。Henji-AI 运行客户端显式装载三个 pack，但普通模型选择器仍固定为 105 个默认模型：六个图片实用工具通过图片能力菜单创建固定模型节点，三个多角度工具由专用多角度节点选择，消除工具保留给后续遮罩能力接入。真实质量、延迟和账单仍待获得付费授权后验证。
 
 ## 一、目录结构约定
 
@@ -57,6 +57,8 @@ docs/model-adaptation/
 - [Grsai](供应商/Grsai.md)：聚合中转，**同一模型拆多个「渠道」**（`-cl`/`-vip`/`-vt`/`-lite` 等后缀，价差可达 10 倍以上）、无独立上传接口（图片直接 base64/URL 塞进请求体）、双线路连通性探测
 - [Groq](供应商/Groq.md)：OpenAI 兼容 LLM、动态模型发现、GPT-OSS 推理参数与错误边界
 - [智谱 GLM](../llm-adaptation/供应商/智谱GLM.md)：国内 BigModel / 国际 Z.AI 两个 endpoint profile、OpenAI 兼容 Chat 与供应商级思考约定；模型专属契约仍以本目录模型文件为准
+
+尚未适配的图片工具供应商候选统一记录在[图片工具候选供应商调研](供应商/候选供应商调研-图片工具.md)：当前优先级为 Segmind / WaveSpeedAI（P0）、PiAPI（P1）、Replicate（P2）、Novita AI（P3）；中国内地访问友好性均需真实网络验证，不能仅凭中文站或支付方式下结论。
 
 ## 二、通用适配规则
 

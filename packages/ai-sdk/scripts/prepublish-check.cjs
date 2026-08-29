@@ -100,7 +100,7 @@ for (const entry of patternEntries) {
   }
 }
 
-if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.6') {
+if (manifest.name !== '@henjicc/ai-sdk' || manifest.version !== '0.2.7') {
   fail(`发布坐标不匹配：${manifest.name}@${manifest.version}`)
 }
 if (manifest.publishConfig?.registry !== 'https://npm.pkg.github.com') {

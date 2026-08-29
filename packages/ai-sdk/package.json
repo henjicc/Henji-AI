@@ -1,6 +1,6 @@
 {
   "name": "@henjicc/ai-sdk",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "痕迹AI 多供应商模型适配 SDK",
   "license": "Apache-2.0",
   "repository": {

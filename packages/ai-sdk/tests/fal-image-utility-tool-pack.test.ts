@@ -210,6 +210,22 @@ describe('Fal 图片实用工具 pack', () => {
     expect(model.pricing.fixed).toBe(0.016)
   })
 
+  it('六个工具都优先读取标准宿主媒体键，不要求重复填写 image 参数', () => {
+    for (const model of models) {
+      const defaults = Object.fromEntries(model.params.map((param) => [param.id, param.default]))
+      const request = model.request.builder({
+        ...defaults,
+        image: [],
+        images: ['legacy-source.png'],
+        uploadedFilePaths: ['managed-source.png'],
+      })
+      const mediaField = model.meta.id.includes('product-photography')
+        ? 'product_image_url'
+        : 'image_url'
+      expect(request[mediaField], model.meta.id).toBe('managed-source.png')
+    }
+  })
+
   it.each([
     ['relighting', 'fal-image-apps-v2-relighting', {
       image: ['uxp://source'], lightingStyle: 'golden_hour', aspectRatio: '4:3',

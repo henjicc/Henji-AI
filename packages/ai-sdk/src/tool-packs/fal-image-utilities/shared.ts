@@ -6,7 +6,9 @@ export const FAL_IMAGE_APP_RATIO_OPTIONS = ['smart', ...FAL_IMAGE_APP_RATIOS] as
 export type FalImageAppRatio = (typeof FAL_IMAGE_APP_RATIOS)[number]
 
 export function requireSingleUtilityImage(params: JsonObject, label: string): string {
-  const images = cleanMedia(params.image)
+  const images = [params.uploadedFilePaths, params.images, params.image]
+    .map(cleanMedia)
+    .find((items) => items.length > 0) ?? []
   if (images.length !== 1) {
     throw new Error(`${label}必须且只能提供 1 张源图`)
   }
